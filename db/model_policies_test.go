@@ -182,7 +182,7 @@ func TestResolverPoliticaModeloEconomicaPorPerfil(t *testing.T) {
 	})
 }
 
-func TestEnsureCapacidadModeloBaseCodexFuerzaXHighEnImplementacion(t *testing.T) {
+func TestEnsureCapacidadModeloBaseCodexFuerzaHighEnImplementacion(t *testing.T) {
 	withTempDBPools(t, func() {
 		if err := SeedPoolsIniciales(); err != nil {
 			t.Fatalf("SeedPoolsIniciales: %v", err)
@@ -213,7 +213,7 @@ func TestEnsureCapacidadModeloBaseCodexFuerzaXHighEnImplementacion(t *testing.T)
 		if res.ModelSlug != "gpt-5.4" {
 			t.Fatalf("modelo inesperado: %+v", res)
 		}
-		if res.ReasoningEffort != "xhigh" {
+		if res.ReasoningEffort != "high" {
 			t.Fatalf("reasoning inesperado: %+v", res)
 		}
 	})

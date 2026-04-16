@@ -274,15 +274,15 @@ func TestPrepararDesdeDatosResuelveXHighPorDefectoParaImplementacion(t *testing.
 	if prep.Plan.Modelo != "gpt-5.4" {
 		t.Fatalf("modelo inesperado: %+v", prep.Plan)
 	}
-	if prep.Plan.Razonamiento != "xhigh" {
+	if prep.Plan.Razonamiento != "high" {
 		t.Fatalf("reasoning inesperado: %+v", prep.Plan)
 	}
 	rendered := runtimeagente.RenderCommand(prep.Plan)
 	if strings.Contains(rendered, "'--reasoning-effort'") {
 		t.Fatalf("comando no deberia usar flag legacy de razonamiento: %s", rendered)
 	}
-	if !strings.Contains(rendered, "'-c'") || !strings.Contains(rendered, `'model_reasoning_effort="xhigh"'`) {
-		t.Fatalf("comando sin xhigh: %s", rendered)
+	if !strings.Contains(rendered, "'-c'") || !strings.Contains(rendered, `'model_reasoning_effort="high"'`) {
+		t.Fatalf("comando sin high: %s", rendered)
 	}
 }
 
@@ -386,7 +386,7 @@ func TestPrepararDesdeDatosOllamaNoPisaPoliticaResueltaConDefaultsDelConector(t 
 	if prep.Plan.Modelo != "gpt-5.4" {
 		t.Fatalf("modelo inesperado: %+v", prep.Plan)
 	}
-	if prep.Plan.Razonamiento != "xhigh" {
+	if prep.Plan.Razonamiento != "high" {
 		t.Fatalf("reasoning inesperado: %+v", prep.Plan)
 	}
 	rendered := runtimeagente.RenderCommand(prep.Plan)

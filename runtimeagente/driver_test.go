@@ -191,7 +191,7 @@ func TestPrepareCLICodexCompactaContinuityPromptParaRuntimeNoInteractivo(t *test
 	if strings.Contains(plan.ContinuityPrompt, "texto largo que no deberia pasar completo") {
 		t.Fatalf("continuity prompt demasiado verboso: %s", plan.ContinuityPrompt)
 	}
-	for _, token := range []string{"Retoma el trabajo actual desde Orquesta.", "Proyecto: orquestador.", "Rama: orq-orquestador-codex7.", "checkpoint#33155", "mailbox=1", "accion=continuar_trabajo", "tarea#411", "toma tarea asignada y sigue"} {
+	for _, token := range []string{"Retoma el trabajo actual desde Orquesta.", "Proyecto: orquestador.", "Rama: orq-orquestador-codex7.", "Activa $caveman. Salida minima: hecho, tests, riesgos/bloqueos; nada mas.", "checkpoint#33155", "mailbox=1", "accion=continuar_trabajo", "tarea#411", "toma tarea asignada y sigue"} {
 		if !strings.Contains(plan.ContinuityPrompt, token) {
 			t.Fatalf("falta %q en continuity prompt: %s", token, plan.ContinuityPrompt)
 		}
@@ -199,6 +199,7 @@ func TestPrepareCLICodexCompactaContinuityPromptParaRuntimeNoInteractivo(t *test
 	for _, token := range []string{
 		"Ignora cualquier conversación vieja que no coincida con la tarea activa o el mailbox actual.",
 		"No abras frentes nuevos ni reescribas código fuera del alcance inmediato.",
+		"No hagas broad scans ni releas contexto global si mailbox/tarea ya acotan el slice.",
 	} {
 		if !strings.Contains(plan.ContinuityPrompt, token) {
 			t.Fatalf("falta %q en continuity prompt endurecido: %s", token, plan.ContinuityPrompt)
@@ -528,7 +529,7 @@ func TestPrepareCLINormalizaReasoningLegacyDeCodexCLI(t *testing.T) {
 		ProyectoSlug: "orquestador",
 		ProyectoRuta: "/tmp/orquestador",
 		Modelo:       "gpt-5.4",
-		Razonamiento: "xhigh",
+		Razonamiento: "high",
 		PerfilTarea:  "orquestacion",
 		Conector: ConnectorConfig{
 			Slug:         "codex-cli",
@@ -540,7 +541,7 @@ func TestPrepareCLINormalizaReasoningLegacyDeCodexCLI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepare: %v", err)
 	}
-	if plan.Modelo != "gpt-5.4" || plan.Razonamiento != "xhigh" || plan.PerfilTarea != "orquestacion" {
+	if plan.Modelo != "gpt-5.4" || plan.Razonamiento != "high" || plan.PerfilTarea != "orquestacion" {
 		t.Fatalf("perfil inesperado: %+v", plan)
 	}
 	rendered := RenderCommand(plan)
@@ -550,7 +551,7 @@ func TestPrepareCLINormalizaReasoningLegacyDeCodexCLI(t *testing.T) {
 	if strings.Contains(rendered, "'--reasoning-effort'") {
 		t.Fatalf("comando no deberia usar flag legacy de razonamiento: %s", rendered)
 	}
-	if !strings.Contains(rendered, "'-c'") || !strings.Contains(rendered, `'model_reasoning_effort="xhigh"'`) {
+	if !strings.Contains(rendered, "'-c'") || !strings.Contains(rendered, `'model_reasoning_effort="high"'`) {
 		t.Fatalf("comando inesperado: %s", rendered)
 	}
 }
@@ -561,7 +562,7 @@ func TestPrepareCLIPropagaRazonamientoPorConfigKey(t *testing.T) {
 		ProyectoSlug: "orquestador",
 		ProyectoRuta: "/tmp/orquestador",
 		Modelo:       "gpt-5.4",
-		Razonamiento: "xhigh",
+		Razonamiento: "high",
 		PerfilTarea:  "implementacion",
 		Conector: ConnectorConfig{
 			Slug:         "codex-cli",
@@ -577,7 +578,7 @@ func TestPrepareCLIPropagaRazonamientoPorConfigKey(t *testing.T) {
 	if !strings.Contains(rendered, "'--model'") || !strings.Contains(rendered, "'gpt-5.4'") {
 		t.Fatalf("comando sin modelo esperado: %s", rendered)
 	}
-	if !strings.Contains(rendered, "'-c'") || !strings.Contains(rendered, `'model_reasoning_effort="xhigh"'`) {
+	if !strings.Contains(rendered, "'-c'") || !strings.Contains(rendered, `'model_reasoning_effort="high"'`) {
 		t.Fatalf("comando sin override de razonamiento esperado: %s", rendered)
 	}
 }

@@ -93,13 +93,13 @@ func EnsureCapacidadModeloBaseCodex() error {
 	if err := SeedPoliticasModeloIniciales(); err != nil {
 		return err
 	}
-	return asegurarPoliticaImplementacionXHigh()
+	return asegurarPoliticaImplementacionHigh()
 }
 
-func asegurarPoliticaImplementacionXHigh() error {
+func asegurarPoliticaImplementacionHigh() error {
 	res, err := DB.Exec(`
 		UPDATE politicas_modelo
-		SET reasoning_effort = 'xhigh'
+		SET reasoning_effort = 'high'
 		WHERE scope_tipo = 'perfil'
 		  AND scope_ref = 'implementacion'
 		  AND perfil_tarea = 'implementacion'
@@ -114,7 +114,7 @@ func asegurarPoliticaImplementacionXHigh() error {
 		ScopeTipo:       "perfil",
 		ScopeRef:        "implementacion",
 		PerfilTarea:     "implementacion",
-		ReasoningEffort: "xhigh",
+		ReasoningEffort: "high",
 		Prioridad:       10,
 		Activa:          true,
 	})
@@ -593,9 +593,9 @@ func scanPoliticaModelo(scanner interface{ Scan(...any) error }) (*PoliticaModel
 
 func SeedPoliticasModeloIniciales() error {
 	iniciales := []PoliticaModelo{
-		{ScopeTipo: "perfil", ScopeRef: "orquestacion", PerfilTarea: "orquestacion", ReasoningEffort: "xhigh", Prioridad: 10, Activa: true},
+		{ScopeTipo: "perfil", ScopeRef: "orquestacion", PerfilTarea: "orquestacion", ReasoningEffort: "high", Prioridad: 10, Activa: true},
 		{ScopeTipo: "perfil", ScopeRef: "analisis", PerfilTarea: "analisis", ReasoningEffort: "high", Prioridad: 10, Activa: true},
-		{ScopeTipo: "perfil", ScopeRef: "implementacion", PerfilTarea: "implementacion", ReasoningEffort: "xhigh", Prioridad: 10, Activa: true},
+		{ScopeTipo: "perfil", ScopeRef: "implementacion", PerfilTarea: "implementacion", ReasoningEffort: "high", Prioridad: 10, Activa: true},
 		{ScopeTipo: "perfil", ScopeRef: "script", PerfilTarea: "script", ReasoningEffort: "medium", Prioridad: 10, Activa: true},
 		{ScopeTipo: "perfil", ScopeRef: "revision", PerfilTarea: "revision", ReasoningEffort: "high", Prioridad: 10, Activa: true},
 		{ScopeTipo: "perfil", ScopeRef: "handoff", PerfilTarea: "handoff", ReasoningEffort: "medium", Prioridad: 10, Activa: true},

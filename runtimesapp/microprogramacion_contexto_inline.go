@@ -69,7 +69,7 @@ func construirMensajeMicroprogramacionInline(rutaProyecto string, req Microprogr
 	if usaBloquesArchivo {
 		salidaObligatoria = "FICHEROS: devuelve uno o varios bloques `// FILE: ruta/relativa` seguidos del contenido completo de cada fichero dentro del WRITE_SET."
 	} else if usaGitWorktree {
-		salidaObligatoria = "ENTREGA_GIT: trabaja dentro de tu worktree activa; modifica solo el WRITE_SET; ejecuta los tests obligatorios; responde solo con resumen breve, tests ejecutados y estado del diff/branch."
+		salidaObligatoria = "ENTREGA_GIT: trabaja dentro de tu worktree activa; modifica solo el WRITE_SET; ejecuta los tests obligatorios; no pegues codigo ni diff; responde solo con resumen breve, tests ejecutados y estado del diff/branch."
 	}
 	modo := "MODO: sin herramientas y sin acceso a filesystem o shell."
 	reglas := "REGLAS: trabaja solo con el contexto inline; no inventes archivos ocultos; no propongas refactors laterales; no cambies nada fuera del WRITE_SET."

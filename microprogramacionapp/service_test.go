@@ -246,7 +246,7 @@ func TestServicioEmitirConstruyeMicrotareaGitWorktree(t *testing.T) {
 	}
 	for _, token := range []string{
 		"ENTREGA_GIT: trabaja dentro de tu worktree activa",
-		"RESPUESTA_ESPERADA: resume breve, tests ejecutados y estado del diff/branch",
+		"RESPUESTA_ESPERADA: si no hay bloqueo, responde solo con resumen breve, tests ejecutados y estado del diff/branch",
 	} {
 		if !strings.Contains(salida.Mensaje, token) {
 			t.Fatalf("mensaje sin %q:\n%s", token, salida.Mensaje)

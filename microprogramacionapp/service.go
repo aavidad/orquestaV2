@@ -636,8 +636,8 @@ func construirMicrotareaEmitida(item *EspecificacionFuncion, entrada EntradaEmit
 	)
 	if FormatoSalidaUsaGitWorktree(item.FormatoSalida) {
 		partes = append(partes,
-			"ENTREGA_GIT: trabaja dentro de tu worktree activa; no pegues el codigo completo en la respuesta.",
-			"RESPUESTA_ESPERADA: resume breve, tests ejecutados y estado del diff/branch para que Orquesta recoja la entrega por git.",
+			"ENTREGA_GIT: trabaja dentro de tu worktree activa; no pegues codigo ni diff en la respuesta.",
+			"RESPUESTA_ESPERADA: si no hay bloqueo, responde solo con resumen breve, tests ejecutados y estado del diff/branch para que Orquesta recoja la entrega por git.",
 		)
 	}
 	if contexto := strings.TrimSpace(entrada.Contexto); contexto != "" {

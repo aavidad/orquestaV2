@@ -1402,9 +1402,11 @@ func construirPromptContinuidad(req LaunchRequest) string {
 		if resumenPayload := resumirResumePayloadCodex(req.Resume.ResumePayloadJSON); resumenPayload != "" {
 			partes = append(partes, resumenPayload+".")
 		}
+		partes = append(partes, "Activa $caveman. Salida minima: hecho, tests, riesgos/bloqueos; nada mas.")
 		if !pipelineLocalPriorizado {
 			partes = append(partes, "Ignora cualquier conversación vieja que no coincida con la tarea activa o el mailbox actual.")
 			partes = append(partes, "No abras frentes nuevos ni reescribas código fuera del alcance inmediato.")
+			partes = append(partes, "No hagas broad scans ni releas contexto global si mailbox/tarea ya acotan el slice.")
 			partes = append(partes, "Empieza por la tarea asignada y consulta Orquesta antes de desviarte.")
 		}
 		return strings.Join(partes, " ")
