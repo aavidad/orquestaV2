@@ -12,6 +12,10 @@ go build -o orquesta main.go
 echo "📁 Preparando carpetas de logs..."
 mkdir -p logs
 
+# 2.1. Provisionar skills por defecto para Codex
+echo "🪓 Provisionando skills de Codex..."
+bash scripts/provision_codex_skills.sh
+
 # 3. Crear el archivo de servicio para systemd locally
 echo "📄 Generando fichero orquesta.service..."
 cat <<EOF > orquesta.service

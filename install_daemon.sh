@@ -22,6 +22,10 @@ chmod +x "$BIN_NAME"
 echo "📁 Creando estructura de logs..."
 mkdir -p "$APP_DIR/logs"
 
+# 2.1. Provisionar skills por defecto para Codex
+echo "🪓 Provisionando skills de Codex..."
+bash "$APP_DIR/scripts/provision_codex_skills.sh"
+
 # 3. Generar el fichero de servicio systemd
 echo "📄 Generando fichero de servicio..."
 sudo tee /etc/systemd/system/$SERVICE_NAME.service > /dev/null <<EOF

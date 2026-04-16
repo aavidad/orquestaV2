@@ -63,6 +63,8 @@ if [[ "${ORQUESTA_SYNC_HOST_CODEX:-1}" != "0" ]]; then
   sync_host_codex_state
 fi
 
+bash "${ROOT_DIR}/scripts/provision_codex_skills.sh" "${STATE_DIR}"
+
 sync_workspace_copy() {
   mkdir -p "${WORKSPACE_DIR}"
 
