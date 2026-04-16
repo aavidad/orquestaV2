@@ -102,7 +102,7 @@ func BuildLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan *runtim
 	if resumenGobernanza = strings.TrimSpace(resumenGobernanza); resumenGobernanza != "" {
 		lines = append(lines, ensurePromptSentence("Gobernanza efectiva: "+resumenGobernanza))
 	}
-	if resumenTareas := resumirTareasBootstrap(tareas); resumenTareas != "" {
+	if resumenTareas := runtimepolicy.RuntimeLaunchBootstrapPromptTaskSummary(runtimeBootstrapCompactTasks(tareas)); resumenTareas != "" {
 		lines = append(lines, resumenTareas)
 	}
 	if resumenPropuestas := resumirPropuestasBootstrap(propuestas); resumenPropuestas != "" {
@@ -212,31 +212,6 @@ func bootstrapPromptDebugf(format string, args ...any) {
 		return
 	}
 	log.Printf("orquesta[prepare-prompt] "+format, args...)
-}
-
-func resumirTareasBootstrap(tareas []*Tarea) string {
-	if len(tareas) == 0 {
-		return "No hay tareas activas asignadas en este proyecto."
-	}
-	items := make([]string, 0, 3)
-	for _, tarea := range tareas {
-		if tarea == nil {
-			continue
-		}
-		switch tarea.Estado {
-		case TareaAsignada, TareaEnProgreso, TareaBloqueada:
-		default:
-			continue
-		}
-		items = append(items, fmt.Sprintf("#%d [%s] %s", tarea.ID, tarea.Estado, strings.TrimSpace(tarea.Titulo)))
-		if len(items) == 3 {
-			break
-		}
-	}
-	if len(items) == 0 {
-		return "No hay tareas activas asignadas en este proyecto."
-	}
-	return "Tareas activas: " + strings.Join(items, " | ") + "."
 }
 
 func resumirPropuestasBootstrap(propuestas []*Propuesta) string {

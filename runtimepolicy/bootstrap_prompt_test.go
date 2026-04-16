@@ -101,6 +101,19 @@ func TestRuntimeLaunchBootstrapPromptCompactTaskSummary(t *testing.T) {
 	}
 }
 
+func TestRuntimeLaunchBootstrapPromptTaskSummary(t *testing.T) {
+	tasks := []RuntimeLaunchBootstrapTask{
+		{ID: 1, Estado: "libre", Titulo: "sin uso"},
+		{ID: 2, Estado: "en_progreso", Titulo: "extraer policy"},
+		{ID: 3, Estado: "bloqueada", Titulo: "bloqueo"},
+	}
+	got := RuntimeLaunchBootstrapPromptTaskSummary(tasks)
+	want := "Tareas activas: #2 [en_progreso] extraer policy | #3 [bloqueada] bloqueo."
+	if got != want {
+		t.Fatalf("task summary mismatch\nwant: %q\ngot:  %q", want, got)
+	}
+}
+
 func TestRuntimeLaunchBootstrapPromptCompactTaskDescriptionPrioritaria(t *testing.T) {
 	raw := "Frente actual: limpiar prompt. Write-set exclusivo: db/runtime_bootstrap_prompt.go. Tests minimos del slice: go test ./db -run 'TestBuildLaunchBootstrapPrompt.*' -count=1 y go test ./runtimesapp -count=1."
 	got := runtimeLaunchBootstrapPromptCompactTaskDescription(raw)

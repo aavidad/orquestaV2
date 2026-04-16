@@ -64,6 +64,21 @@ func TestSelectUsableActiveWorktreePath(t *testing.T) {
 	}
 }
 
+func TestShouldIncludeWorktreeForListing(t *testing.T) {
+	root := filepath.Join("/tmp", "repo", "orquestador")
+	worktree := filepath.Join(root, ".orquesta-worktrees", "orq-codex1")
+
+	if !ShouldIncludeWorktreeForListing(WorktreeActive, worktree, root) {
+		t.Fatalf("la worktree activa coherente deberia incluirse")
+	}
+	if ShouldIncludeWorktreeForListing(WorktreeActive, filepath.Join("/tmp", "otro", "repo"), root) {
+		t.Fatalf("la worktree activa incoherente no deberia incluirse")
+	}
+	if !ShouldIncludeWorktreeForListing(WorktreeClosed, filepath.Join("/tmp", "otro", "repo"), root) {
+		t.Fatalf("las worktrees no activas no deberian filtrarse por coherencia")
+	}
+}
+
 func ensureDir(path string) error {
 	return os.MkdirAll(path, 0o755)
 }

@@ -122,30 +122,21 @@ func (CoordinationWorktreeSQLRepository) List(filter coordinacion.WorktreeFilter
 	}
 	filtradas := make([]*coordinacion.Worktree, 0, len(out))
 	for _, worktree := range out {
-		if !deberiaIncluirWorktree(worktree) {
+		if worktree == nil {
+			filtradas = append(filtradas, worktree)
 			continue
 		}
-		filtradas = append(filtradas, worktree)
+		proyecto, getErr := GetProyecto(jsonNumber(worktree.ProjectID))
+		if getErr != nil || proyecto == nil {
+			filtradas = append(filtradas, worktree)
+			continue
+		}
+		rutaProyectoEfectiva := RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, "")
+		if coordinacion.ShouldIncludeWorktreeForListing(worktree.State, worktree.Path, rutaProyectoEfectiva) {
+			filtradas = append(filtradas, worktree)
+		}
 	}
 	return filtradas, nil
-}
-
-func deberiaIncluirWorktree(worktree *coordinacion.Worktree) bool {
-	if worktree == nil {
-		return true
-	}
-	if worktree.State != coordinacion.WorktreeActive {
-		return true
-	}
-	proyecto, getErr := GetProyecto(jsonNumber(worktree.ProjectID))
-	if getErr != nil || proyecto == nil {
-		return true
-	}
-	rutaProyectoEfectiva := RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, "")
-	if rutaProyectoEfectiva == "" {
-		return true
-	}
-	return coordinacion.ActiveWorktreePathCoherent(worktree.Path, rutaProyectoEfectiva)
 }
 
 func (CoordinationWorktreeSQLRepository) ListRaw(filter coordinacion.WorktreeFilter) ([]*coordinacion.Worktree, error) {

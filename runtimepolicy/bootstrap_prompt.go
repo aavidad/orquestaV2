@@ -85,6 +85,28 @@ func RuntimeLaunchBootstrapPromptCompactTaskSummary(tareas []RuntimeLaunchBootst
 	return "No hay una tarea activa única; consulta Orquesta antes de desviarte."
 }
 
+func RuntimeLaunchBootstrapPromptTaskSummary(tareas []RuntimeLaunchBootstrapTask) string {
+	if len(tareas) == 0 {
+		return "No hay tareas activas asignadas en este proyecto."
+	}
+	items := make([]string, 0, 3)
+	for _, tarea := range tareas {
+		switch strings.ToLower(strings.TrimSpace(tarea.Estado)) {
+		case "asignada", "en_progreso", "bloqueada":
+		default:
+			continue
+		}
+		items = append(items, fmt.Sprintf("#%d [%s] %s", tarea.ID, strings.TrimSpace(tarea.Estado), strings.TrimSpace(tarea.Titulo)))
+		if len(items) == 3 {
+			break
+		}
+	}
+	if len(items) == 0 {
+		return "No hay tareas activas asignadas en este proyecto."
+	}
+	return "Tareas activas: " + strings.Join(items, " | ") + "."
+}
+
 func runtimeLaunchBootstrapPromptLooksLikeOrchestratedAgentCLI(plan *runtimeagente.LaunchPlan) bool {
 	if plan == nil {
 		return false

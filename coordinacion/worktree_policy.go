@@ -76,3 +76,13 @@ func SelectUsableActiveWorktreePath(worktrees []WorktreePathRef, effectiveProjec
 	}
 	return ""
 }
+
+func ShouldIncludeWorktreeForListing(state WorktreeState, path, effectiveProjectPath string) bool {
+	if state != WorktreeActive {
+		return true
+	}
+	if effectiveProjectPath == "" {
+		return true
+	}
+	return ActiveWorktreePathCoherent(path, effectiveProjectPath)
+}
