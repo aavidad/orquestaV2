@@ -699,6 +699,7 @@ func init() {
 		agenteReanimacionesCmd,
 		agenteAdoptarContextoCmd,
 		agentePurgarCmd,
+		agenteRetirarCmd,
 		agentePausarCmd,
 		agenteRehabilitarCmd,
 		agenteFusionarCmd,
@@ -1059,6 +1060,24 @@ var agentePurgarCmd = &cobra.Command{
 			return serverFirstCommandError("agente eliminar")
 		}
 		fmt.Printf("✓ Agente %s eliminado correctamente\n", nombre)
+		return nil
+	},
+}
+
+var agenteRetirarCmd = &cobra.Command{
+	Use:   "retirar <agente>",
+	Short: "Retira un agente del pool operativo sin borrarlo",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		nombre := args[0]
+		ok, err := retirarAgentePorAPI(nombre)
+		if !ok {
+			return serverFirstCommandError("agente retirar")
+		}
+		if err != nil {
+			return fmt.Errorf("error retirando agente: %w", err)
+		}
+		fmt.Printf("✓ Agente %s retirado correctamente del pool operativo.\n", nombre)
 		return nil
 	},
 }

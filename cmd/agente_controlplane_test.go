@@ -109,6 +109,8 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "nombre": nombre, "rol": req.Rol})
 		case r.URL.Path == "/api/agentes/Codex1/reset-reanimacion" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agente": "Codex1"})
+		case r.URL.Path == "/api/agentes/Codex1/retirar" && r.Method == http.MethodPost:
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agente": "Codex1"})
 		case r.URL.Path == "/api/agentes/Codex1/eliminar" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agente": "Codex1"})
 		default:
@@ -173,6 +175,15 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if !strings.Contains(outReset, "rehabilitado correctamente") {
 		t.Fatalf("salida rehabilitar inesperada:\n%s", outReset)
+	}
+
+	outRetirar := capturarStdout(t, func() {
+		if err := agenteRetirarCmd.RunE(agenteRetirarCmd, []string{"Codex1"}); err != nil {
+			t.Fatalf("agente retirar via api: %v", err)
+		}
+	})
+	if !strings.Contains(outRetirar, "retirado correctamente") {
+		t.Fatalf("salida retirar inesperada:\n%s", outRetirar)
 	}
 
 	outEliminar := capturarStdout(t, func() {
@@ -282,6 +293,7 @@ func TestAgenteControlRequiereServidor(t *testing.T) {
 		{nombre: "reasignar-vivo", cmd: func() *cobra.Command { return agenteReasignarVivoCmd }, args: []string{"1", "Codex1", "Codex2"}},
 		{nombre: "registrar", cmd: func() *cobra.Command { return agenteRegistrarCmd }, args: []string{"Qwen1"}},
 		{nombre: "pausar", cmd: func() *cobra.Command { return agentePausarCmd }, args: []string{"Codex1", "15", "rate", "limit"}},
+		{nombre: "retirar", cmd: func() *cobra.Command { return agenteRetirarCmd }, args: []string{"Codex1"}},
 		{nombre: "eliminar", cmd: func() *cobra.Command { return agentePurgarCmd }, args: []string{"Codex1"}},
 		{nombre: "rehabilitar", cmd: func() *cobra.Command { return agenteRehabilitarCmd }, args: []string{"Codex1"}},
 		{nombre: "fusionar", cmd: func() *cobra.Command { return agenteFusionarCmd }, args: []string{"Codex1", "Codex2"}},
