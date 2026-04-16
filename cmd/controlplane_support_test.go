@@ -7171,6 +7171,68 @@ func TestResetReanimacionEncolaResumeCuandoHayHandlePausado(t *testing.T) {
 	}
 }
 
+func TestResetReanimacionNoDuplicaReactivacionSiYaHayPausePendiente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-pause-pendiente",
+		Nombre:  "Orquestador Pause Pendiente",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='pausado' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("pausar handle: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "pause",
+		PayloadJSON: `{"accion":"pause","motivo":"bloqueo_humano","por":"orquesta","proyecto":"orquestador-pause-pendiente"}`,
+	}); err != nil {
+		t.Fatalf("encolar pause: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET reanimar_at=CURRENT_TIMESTAMP, estado_cuota='enfriamiento', motivo_pausa='cuota' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("marcar reanimacion: %v", err)
+	}
+
+	if err := (dbAutomationService{}).ResetReanimacion("Codex1"); err != nil {
+		t.Fatalf("reset reanimacion: %v", err)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "pause" {
+		t.Fatalf("no deberia duplicar reactivacion con pause pendiente: %+v", orders)
+	}
+}
+
 func TestResetReanimacionEncolaStartSiHandlePausadoTMUXBootstrapOnly(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -16489,6 +16551,65 @@ func TestProcesarAutonomiaAgentesBatchReutilizaHandleActivoAlReactivarSesionPaus
 	}
 	if !foundResume {
 		t.Fatalf("deberia encolar resume para una sesion pausada con handle activo: %+v", orders)
+	}
+}
+
+func TestEncolarReactivacionAgenteProyectoConHandleActivoNoDuplicaStart(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexActivo", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-handle-activo",
+		Nombre:  "Orquestador Handle Activo",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexActivo", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexActivo",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("activar handle: %v", err)
+	}
+	proyecto, err := db.GetProyecto("orquestador-handle-activo")
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+
+	encolada, err := encolarReactivacionAgenteProyectoConHandleSiProcede("CodexActivo", proyecto, "reanimacion_automatica", handle)
+	if err != nil {
+		t.Fatalf("encolarReactivacionAgenteProyectoConHandleSiProcede: %v", err)
+	}
+	if encolada {
+		t.Fatal("no deberia encolar control cuando el handle ya esta activo")
+	}
+
+	agente := "CodexActivo"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia crear start/resume redundante con handle activo: %+v", orders)
 	}
 }
 

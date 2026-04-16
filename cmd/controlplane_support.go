@@ -11357,7 +11357,7 @@ func encolarReactivacionAgenteProyectoConHandleSiProcede(agente string, proyecto
 			return false, nil
 		}
 	}
-	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "resume", "start", "handoff"); err != nil {
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "pause", "checkpoint", "resume", "start", "handoff"); err != nil {
 		return false, err
 	} else if pendiente {
 		return false, nil
@@ -11371,6 +11371,8 @@ func encolarReactivacionAgenteProyectoConHandleSiProcede(agente string, proyecto
 	}
 	if handle != nil {
 		switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
+		case "activo":
+			return false, nil
 		case "pausado":
 			accion := agenteControlAccionResume
 			if db.RuntimeHandlePauseRequiresFreshStart(handle) {
