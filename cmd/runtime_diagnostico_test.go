@@ -681,6 +681,41 @@ func TestRuntimeDiagnosticoIssuesNoMarcaProgressStaleSiHaySalidaReciente(t *test
 	}
 }
 
+func TestRuntimeDiagnosticoIssuesDetectaBlockedQuotaStale(t *testing.T) {
+	now := time.Date(2026, 4, 13, 14, 30, 0, 0, time.UTC)
+	runtimeDiagnosticoNow = func() time.Time { return now }
+	t.Cleanup(func() {
+		runtimeDiagnosticoNow = func() time.Time { return time.Now().UTC() }
+	})
+
+	oldHeartbeat := now.Add(-3 * runtimeDiagnosticoWorkerHeartbeatThreshold)
+	oldUpdated := now.Add(-3 * runtimeDiagnosticoWorkerHeartbeatThreshold)
+	rows := []runtimeDiagnosticoWorkerRow{{
+		HandleID:    853,
+		Agent:       "Codex1",
+		Alive:       true,
+		Driver:      "tmux_cli_session",
+		Transport:   "tmux",
+		RuntimeRef:  "orq-codex1/%4",
+		State:       "blocked_quota",
+		HeartbeatAt: &oldHeartbeat,
+		UpdatedAt:   &oldUpdated,
+		TmuxSession: "orq-codex1-150108",
+	}}
+
+	issues := runtimeDiagnosticoIssues(rows, nil, nil, nil)
+	found := false
+	for _, issue := range issues {
+		if issue.Code == "blocked_quota_stale" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("deberia detectar blocked_quota_stale: %+v", issues)
+	}
+}
+
 func TestRuntimeDiagnosticoIssuesDetectaResumeOrderPendingYRestartLoop(t *testing.T) {
 	origNow := runtimeDiagnosticoNow
 	runtimeDiagnosticoNow = func() time.Time {

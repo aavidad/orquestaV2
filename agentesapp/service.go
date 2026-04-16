@@ -2431,15 +2431,23 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 	}
 
 	sinCuotaProveedor := db.AgenteSinCuotaProveedorEfectivo(agente)
+	workerState := strings.ToLower(strings.TrimSpace(row.WorkerState))
+	workerOperativoFresco := row.WorkerAlive &&
+		row.workerHeartbeatRecent(now) &&
+		workerState != "" &&
+		workerState != "blocked_quota" &&
+		workerState != "blocked_auth" &&
+		workerState != "failed" &&
+		workerState != "stopped"
 
-	if !sinCuotaProveedor && estadoCuotaBloqueado(agente.EstadoCuota) {
+	if !sinCuotaProveedor && !workerOperativoFresco && estadoCuotaBloqueado(agente.EstadoCuota) {
 		detalle := strings.TrimSpace(agente.MotivoPausa)
 		if detalle == "" && agente.ReanimarAt != nil && !agente.ReanimarAt.IsZero() {
 			detalle = "reanimacion " + agente.ReanimarAt.Local().Format("15:04")
 		}
 		return "bloqueado_por_cuota", detalle
 	}
-	if !sinCuotaProveedor {
+	if !sinCuotaProveedor && !workerOperativoFresco {
 		if blocked, detalle := row.runtimeCheckpointQuotaBlocked(now); blocked {
 			return "bloqueado_por_cuota", detalle
 		}
@@ -2450,7 +2458,6 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 
 	handleEstado := strings.ToLower(strings.TrimSpace(row.handleState()))
 	runtimeEstado := strings.ToLower(strings.TrimSpace(row.runtimeState()))
-	workerState := strings.ToLower(strings.TrimSpace(row.WorkerState))
 	recentActivity := row.hasRecentOperationalActivity(now)
 	hasActiveTask := row.OpenTasks > 0
 	hasBlockedTask := row.BlockedTasks > 0

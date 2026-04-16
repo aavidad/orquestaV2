@@ -15,50 +15,50 @@ import (
 func timePtr(v time.Time) *time.Time { return &v }
 
 type fakeStore struct {
-	agents             []*db.Agente
-	project            *db.Proyecto
-	connector          *db.Conector
-	assignments        []*db.Asignacion
-	sessions           []*db.Sesion
-	runtimes           []*db.RuntimeInstance
-	handles            []*db.RuntimeHandle
-	canonicalHandles   []*db.RuntimeHandle
-	hotHandles         map[string]*db.RuntimeHandle
-	transcript         []*db.RuntimeTranscriptEntry
-	orders             []*db.RuntimeOrder
-	mailbox            []*db.RuntimeMailboxMessage
-	mailboxCovered     map[int64]bool
-	checkpoints        []*db.RuntimeCheckpoint
-	tasks              []*db.Tarea
-	proposals          []*db.Propuesta
-	latestBudget       *db.PresupuestoSesion
-	rules              []*db.Regla
-	skills             []*db.Skill
-	workflows          []*db.Workflow
-	memory             []*db.EntidadMemoria
-	config             map[string]string
-	accountAvailable   map[string]struct {
-		ok        bool
+	agents           []*db.Agente
+	project          *db.Proyecto
+	connector        *db.Conector
+	assignments      []*db.Asignacion
+	sessions         []*db.Sesion
+	runtimes         []*db.RuntimeInstance
+	handles          []*db.RuntimeHandle
+	canonicalHandles []*db.RuntimeHandle
+	hotHandles       map[string]*db.RuntimeHandle
+	transcript       []*db.RuntimeTranscriptEntry
+	orders           []*db.RuntimeOrder
+	mailbox          []*db.RuntimeMailboxMessage
+	mailboxCovered   map[int64]bool
+	checkpoints      []*db.RuntimeCheckpoint
+	tasks            []*db.Tarea
+	proposals        []*db.Propuesta
+	latestBudget     *db.PresupuestoSesion
+	rules            []*db.Regla
+	skills           []*db.Skill
+	workflows        []*db.Workflow
+	memory           []*db.EntidadMemoria
+	config           map[string]string
+	accountAvailable map[string]struct {
+		ok         bool
 		occupiedBy string
 	}
-	lastConnectorRef   string
-	lastMailboxFilter  []db.FiltroRuntimeMailbox
-	lastTranscript     db.FiltroRuntimeTranscript
-	listSessionsCalls  int
-	getActiveCalls     int
-	getLastCalls       int
-	hotHandlesCalls    int
-	listAssignmentsCalls int
-	listTasksCalls       int
-	listAgentsCalls      int
+	lastConnectorRef       string
+	lastMailboxFilter      []db.FiltroRuntimeMailbox
+	lastTranscript         db.FiltroRuntimeTranscript
+	listSessionsCalls      int
+	getActiveCalls         int
+	getLastCalls           int
+	hotHandlesCalls        int
+	listAssignmentsCalls   int
+	listTasksCalls         int
+	listAgentsCalls        int
 	checkReanimationsCalls int
-	pendingVotesCalls  int
-	openProposalsCalls int
-	pausedAgent        string
-	pausedMinutes      int
-	pausedReason       string
-	retiredAgent       string
-	observedIdentity   struct {
+	pendingVotesCalls      int
+	openProposalsCalls     int
+	pausedAgent            string
+	pausedMinutes          int
+	pausedReason           string
+	retiredAgent           string
+	observedIdentity       struct {
 		nombre string
 		email  string
 		user   string
@@ -1868,6 +1868,76 @@ func TestBuildPanelRowsMarcaOrdenControlPendienteComoBloqueadoPorRuntime(t *test
 	}
 }
 
+func TestBuildPanelRowsPriorizaWorkerFrescoSobreCuotaVisibleObservada(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-codexquota-120000",
+		"tmux_pane_id": "%1",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "ready",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "CodexQuota", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "enfriamiento", MotivoPausa: "cuota visible agotada", ReanimarAt: timePtr(now.Add(30 * time.Minute))},
+		},
+		sessions: []*db.Sesion{
+			{Agente: "CodexQuota", Herramienta: "codex-cli", Estado: "activa", Inicio: now},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "CodexQuota", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "CodexQuota", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("CodexQuota"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo == "bloqueado_por_cuota" {
+		t.Fatalf("worker fresco no deberia quedar secuestrado por cuota visible: %+v", rows[0])
+	}
+	if rows[0].EstadoOperativo != "trabajando" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+}
+
 func TestBuildPanelRowsNoBloqueaSiWorkerYaSeRecuperoTrasOrdenControlPendiente(t *testing.T) {
 	now := time.Now().UTC()
 	tmp := t.TempDir()
@@ -2348,12 +2418,12 @@ func TestBuildDetailCompactReutilizaCacheCorta(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(42)
 	store := &fakeStore{
-		agents: []*db.Agente{{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true}},
-		assignments: []*db.Asignacion{{Agente: "Codex2", ProyectoSlug: "orquestador", Estado: db.AsignacionActiva, Nota: "microciclo_exclusivo"}},
-		sessions: []*db.Sesion{{ID: 9, Agente: "Codex2", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: now}},
-		runtimes: []*db.RuntimeInstance{{ID: 7, Agente: "Codex2", LogicalState: "activo"}},
+		agents:           []*db.Agente{{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true}},
+		assignments:      []*db.Asignacion{{Agente: "Codex2", ProyectoSlug: "orquestador", Estado: db.AsignacionActiva, Nota: "microciclo_exclusivo"}},
+		sessions:         []*db.Sesion{{ID: 9, Agente: "Codex2", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: now}},
+		runtimes:         []*db.RuntimeInstance{{ID: 7, Agente: "Codex2", LogicalState: "activo"}},
 		canonicalHandles: []*db.RuntimeHandle{{ID: 7, Agente: "Codex2", Estado: "activo", Transporte: "tmux", HandleKind: "session"}},
-		tasks: []*db.Tarea{{ID: 41, Titulo: "Frente Codex", Estado: db.EstadoEnProgreso, ProyectoID: &proyectoID, Agente: ptr("Codex2"), Modulo: "cmd"}},
+		tasks:            []*db.Tarea{{ID: 41, Titulo: "Frente Codex", Estado: db.EstadoEnProgreso, ProyectoID: &proyectoID, Agente: ptr("Codex2"), Modulo: "cmd"}},
 	}
 	svc := NewService(store, nil)
 

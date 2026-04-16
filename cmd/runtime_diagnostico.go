@@ -714,6 +714,13 @@ func runtimeDiagnosticoIssues(rows []runtimeDiagnosticoWorkerRow, orders []*db.R
 				Message:  fmt.Sprintf("%s handle=%d heartbeat atrasado (%s)", valorVacio(row.Agent), row.HandleID, valorVacio(row.RuntimeRef)),
 			})
 		}
+		if runtimeDiagnosticoWorkerBlockedQuotaStale(row, now) {
+			issues = append(issues, runtimeDiagnosticoIssue{
+				Severity: "warn",
+				Code:     "blocked_quota_stale",
+				Message:  fmt.Sprintf("%s handle=%d sigue en cuota sin heartbeat reciente (%s)", valorVacio(row.Agent), row.HandleID, valorVacio(row.RuntimeRef)),
+			})
+		}
 		if row.Alive && runtimeDiagnosticoWorkerProgressStale(row, now) {
 			issues = append(issues, runtimeDiagnosticoIssue{
 				Severity: "warn",
@@ -763,6 +770,19 @@ func runtimeDiagnosticoWorkerProgressStale(row runtimeDiagnosticoWorkerRow, now 
 		return false
 	}
 	if row.UpdatedAt != nil && !row.UpdatedAt.IsZero() && now.Sub(row.UpdatedAt.UTC()) <= runtimeDiagnosticoWorkerProgressThreshold {
+		return false
+	}
+	return true
+}
+
+func runtimeDiagnosticoWorkerBlockedQuotaStale(row runtimeDiagnosticoWorkerRow, now time.Time) bool {
+	if !row.Alive || !strings.EqualFold(strings.TrimSpace(row.State), "blocked_quota") {
+		return false
+	}
+	if row.HeartbeatAt != nil && !row.HeartbeatAt.IsZero() && now.Sub(row.HeartbeatAt.UTC()) <= runtimeDiagnosticoWorkerHeartbeatThreshold {
+		return false
+	}
+	if row.UpdatedAt != nil && !row.UpdatedAt.IsZero() && now.Sub(row.UpdatedAt.UTC()) <= runtimeDiagnosticoWorkerHeartbeatThreshold {
 		return false
 	}
 	return true

@@ -63,6 +63,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: `server preparar-sesion` y el bootstrap de servidor filtran la flota oficial a agentes `Codex*`; una config contaminada ya no debe conservar `antigravity`/`claude`/otros perfiles fuera de política en la flota permitida
 - corte operativo adicional fuera de `db`: el monitor TMUX ya autoacepta el prompt interactivo de Codex `Approaching rate limits` eligiendo el modelo alternativo ofrecido, evitando que la sesión quede bloqueada por espera humana en ese menú
 - corte operativo adicional fuera de `db`: tras aceptar el menú de cambio de modelo por rate limit, `waitForTMUXPaneReady` recaptura la pane y permite continuar con el dispatch; evita falsos `quota_blocked` justo después del auto-switch
+- corte operativo adicional fuera de `db`: `agentesapp/status` ya prioriza un worker fresco y operativo sobre la cuota visible observada; si el runtime ya volvió a `ready/running`, no debe seguir secuestrado como `bloqueado_por_cuota` solo por telemetría stale
 
 Estado del frente seguro:
 
