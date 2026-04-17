@@ -503,6 +503,46 @@ func TestArrancarPlanTMUXEscribeArtefactosWorker(t *testing.T) {
 	}
 }
 
+func TestArrancarPlanTMUXTimeoutArranque(t *testing.T) {
+	dir := t.TempDir()
+	fakeTmux := filepath.Join(dir, "fake-tmux-slow")
+	script := `#!/usr/bin/env bash
+set -euo pipefail
+cmd="${1:-}"
+shift || true
+case "$cmd" in
+  new-session)
+    sleep 1
+    printf '%s\n' "orq-timeout|worker|%1|12345"
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`
+	if err := os.WriteFile(fakeTmux, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake tmux slow: %v", err)
+	}
+	t.Setenv("ORQUESTA_TMUX_START_TIMEOUT_MS", "25")
+
+	_, err := ArrancarPlan(SolicitudArranque{
+		Agente:   "CodexTMUXTimeout",
+		Proyecto: "orquestador",
+		Plan: &runtimeagente.LaunchPlan{
+			Comando:    "/bin/echo",
+			Args:       []string{"hola"},
+			WorkingDir: dir,
+			Env: map[string]string{
+				"ORQUESTA_TERMINAL_BACKEND": "tmux",
+				"ORQUESTA_TMUX_BIN":         fakeTmux,
+			},
+		},
+	})
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "timeout arrancando tmux") {
+		t.Fatalf("esperaba timeout de tmux, got=%v", err)
+	}
+}
+
 func TestArrancarPlanPrefiereTMUXPorDefectoParaCodexCLI(t *testing.T) {
 	dir := t.TempDir()
 	fakeTmux := writeFakeTmuxScript(t, dir)

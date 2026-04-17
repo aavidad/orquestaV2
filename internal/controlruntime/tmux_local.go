@@ -1,6 +1,7 @@
 package controlruntime
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -312,13 +313,22 @@ func startTmuxSession(tmuxCommand, sessionName, windowName, workingDir, command 
 		args = append(args, "-c", workingDir)
 	}
 	args = append(args, "bash", "-lc", command)
-	cmd := exec.Command(tmuxCommand, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), tmuxStartCommandTimeout())
+	defer cancel()
+	cmd := exec.CommandContext(ctx, tmuxCommand, args...)
 	cmd.Env = append([]string(nil), os.Environ()...)
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			detail := strings.TrimSpace(string(out))
+			if detail != "" {
+				return nil, fmt.Errorf("timeout arrancando tmux: %s", detail)
+			}
+			return nil, fmt.Errorf("timeout arrancando tmux")
+		}
 		return nil, err
 	}
 	parts := strings.Split(strings.TrimSpace(string(out)), "|")
@@ -332,6 +342,15 @@ func startTmuxSession(tmuxCommand, sessionName, windowName, workingDir, command 
 		PaneID:      strings.TrimSpace(parts[2]),
 		PanePID:     pid,
 	}, nil
+}
+
+func tmuxStartCommandTimeout() time.Duration {
+	if raw := strings.TrimSpace(os.Getenv("ORQUESTA_TMUX_START_TIMEOUT_MS")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return time.Duration(n) * time.Millisecond
+		}
+	}
+	return 15 * time.Second
 }
 
 func tmuxPipePane(tmuxCommand, paneID, logPath string) error {

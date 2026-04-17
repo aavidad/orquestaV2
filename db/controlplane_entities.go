@@ -12,8 +12,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
+
+var runtimeOrdersAsyncLongRunningInFlight atomic.Int32
 
 func boolFromAny(v any) bool {
 	if v == nil {
@@ -2772,10 +2775,7 @@ func MarcarRuntimeOrderEjecutando(order *RuntimeOrder) error {
 	if order == nil {
 		return sql.ErrNoRows
 	}
-	resultadoJSON := strings.TrimSpace(order.ResultadoJSON)
-	if resultadoJSON == "" {
-		resultadoJSON = "{}"
-	}
+	resultadoJSON := runtimeOrderResultJSONForExecuting(order)
 	leaseUntil := runtimeOrderLeaseDeadlineForType(order.Tipo, time.Now().UTC())
 	_, err := DB.Exec(`
 		UPDATE runtime_orders
@@ -2791,10 +2791,34 @@ func MarcarRuntimeOrderEjecutando(order *RuntimeOrder) error {
 	return runtimeOrdersHotIndexSyncByID(order.ID)
 }
 
+func runtimeOrderResultJSONForExecuting(order *RuntimeOrder) string {
+	if order == nil {
+		return "{}"
+	}
+	resultado := mapFromJSON(order.ResultadoJSON)
+	if len(resultado) == 0 {
+		resultado = map[string]any{}
+	}
+	switch strings.ToLower(strings.TrimSpace(order.Tipo)) {
+	case "start", "resume", "restart":
+		delete(resultado, "deferred")
+		delete(resultado, "deferred_reason")
+		delete(resultado, "retry_after")
+		resultado["in_progress"] = true
+		resultado["phase"] = "launching"
+	}
+	data, err := json.Marshal(resultado)
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
+}
+
 func CrearRuntimeCheckpoint(cp *RuntimeCheckpoint) (int64, error) {
 	if cp == nil || strings.TrimSpace(cp.Agente) == "" {
 		return 0, sql.ErrNoRows
 	}
+	cp.CWD = rutaRuntimeCanonicaProyecto(cp.Agente, cp.ProyectoID, cp.CWD)
 	if strings.TrimSpace(cp.PayloadJSON) == "" {
 		cp.PayloadJSON = "{}"
 	}
@@ -2828,6 +2852,9 @@ func UltimoRuntimeCheckpoint(agente string, proyectoID *int64) (*RuntimeCheckpoi
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
+	if cp != nil {
+		cp.CWD = rutaRuntimeCanonicaProyecto(cp.Agente, cp.ProyectoID, cp.CWD)
+	}
 	return cp, err
 }
 
@@ -2837,6 +2864,9 @@ func GetRuntimeCheckpoint(id int64) (*RuntimeCheckpoint, error) {
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
+	if cp != nil {
+		cp.CWD = rutaRuntimeCanonicaProyecto(cp.Agente, cp.ProyectoID, cp.CWD)
+	}
 	return cp, err
 }
 
@@ -2845,6 +2875,9 @@ func GetRuntimeCheckpointBySource(source string) (*RuntimeCheckpoint, error) {
 	cp, err := scanRuntimeCheckpoint(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
+	}
+	if cp != nil {
+		cp.CWD = rutaRuntimeCanonicaProyecto(cp.Agente, cp.ProyectoID, cp.CWD)
 	}
 	return cp, err
 }
@@ -2884,6 +2917,7 @@ func ListarRuntimeCheckpoints(filter FiltroRuntimeCheckpoints) ([]*RuntimeCheckp
 		if err != nil {
 			return nil, err
 		}
+		cp.CWD = rutaRuntimeCanonicaProyecto(cp.Agente, cp.ProyectoID, cp.CWD)
 		out = append(out, cp)
 	}
 	return out, rows.Err()
@@ -3348,7 +3382,9 @@ func procesarRuntimeOrdersBatchTipos(tipos []string) (int, error) {
 	}
 	now := time.Now().UTC()
 	ids := make([]int64, 0, limit)
-	sort.Slice(orders, func(i, j int) bool { return orders[i].ID < orders[j].ID })
+	sort.Slice(orders, func(i, j int) bool {
+		return runtimeOrderBatchLess(orders[i], orders[j])
+	})
 	for _, order := range orders {
 		if order == nil || !runtimeOrderPendingReady(order, now) {
 			continue
@@ -3364,15 +3400,40 @@ func procesarRuntimeOrdersBatchTipos(tipos []string) (int, error) {
 
 	processed := 0
 	for _, id := range ids {
+		asyncReserved := false
+		current, err := GetRuntimeOrder(id)
+		if err != nil && err != sql.ErrNoRows {
+			return processed, err
+		}
+		if runtimeOrderDebeEjecutarseAsync(current) {
+			if !runtimeOrderReservarAsync() {
+				continue
+			}
+			asyncReserved = true
+		}
 		order, err := claimRuntimeOrderByID(id)
 		if err != nil {
+			if asyncReserved {
+				runtimeOrderLiberarAsync()
+			}
 			return processed, err
 		}
 		if order == nil {
+			if asyncReserved {
+				runtimeOrderLiberarAsync()
+			}
 			continue
 		}
 		if err := MarcarRuntimeOrderEjecutando(order); err != nil {
+			if asyncReserved {
+				runtimeOrderLiberarAsync()
+			}
 			return processed, err
+		}
+		if asyncReserved {
+			runtimeOrderLanzarAsync(order)
+			processed++
+			continue
 		}
 		if err := ejecutarRuntimeOrderBasica(order); err != nil {
 			_ = MarcarRuntimeOrderEstado(order.ID, "fallida", `{"ok":false}`, err.Error())
@@ -3382,6 +3443,121 @@ func procesarRuntimeOrdersBatchTipos(tipos []string) (int, error) {
 		processed++
 	}
 	return processed, nil
+}
+
+func runtimeOrderDebeEjecutarseAsync(order *RuntimeOrder) bool {
+	if order == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(order.Tipo)) {
+	case "start", "resume", "restart":
+		return true
+	default:
+		return false
+	}
+}
+
+func runtimeOrderAsyncLimit() int32 {
+	return 4
+}
+
+func runtimeOrderReservarAsync() bool {
+	limit := runtimeOrderAsyncLimit()
+	if limit <= 0 {
+		return false
+	}
+	for {
+		current := runtimeOrdersAsyncLongRunningInFlight.Load()
+		if current >= limit {
+			return false
+		}
+		if runtimeOrdersAsyncLongRunningInFlight.CompareAndSwap(current, current+1) {
+			return true
+		}
+	}
+}
+
+func runtimeOrderLiberarAsync() {
+	for {
+		current := runtimeOrdersAsyncLongRunningInFlight.Load()
+		if current <= 0 {
+			return
+		}
+		if runtimeOrdersAsyncLongRunningInFlight.CompareAndSwap(current, current-1) {
+			return
+		}
+	}
+}
+
+func runtimeOrderLanzarAsync(order *RuntimeOrder) {
+	go func(order *RuntimeOrder) {
+		defer runtimeOrderLiberarAsync()
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				_ = MarcarRuntimeOrderEstado(order.ID, "fallida", `{"ok":false}`, fmt.Sprintf("panic runtime order async: %v", recovered))
+			}
+		}()
+		if err := ejecutarRuntimeOrderBasica(order); err != nil {
+			_ = MarcarRuntimeOrderEstado(order.ID, "fallida", `{"ok":false}`, err.Error())
+		}
+	}(order)
+}
+
+func runtimeOrderBatchLess(left, right *RuntimeOrder) bool {
+	leftPriority := runtimeOrderBatchPriority(left)
+	rightPriority := runtimeOrderBatchPriority(right)
+	if leftPriority != rightPriority {
+		return leftPriority < rightPriority
+	}
+	leftMoment := runtimeOrderBatchMoment(left)
+	rightMoment := runtimeOrderBatchMoment(right)
+	if !leftMoment.Equal(rightMoment) {
+		return leftMoment.Before(rightMoment)
+	}
+	if left == nil {
+		return false
+	}
+	if right == nil {
+		return true
+	}
+	return left.ID < right.ID
+}
+
+func runtimeOrderBatchPriority(order *RuntimeOrder) int {
+	if order == nil {
+		return 99
+	}
+	switch strings.ToLower(strings.TrimSpace(order.Tipo)) {
+	case "stop":
+		return 0
+	case "pause", "restart":
+		return 1
+	case "resume", "start":
+		return 2
+	case "sync_status", "checkpoint":
+		return 3
+	case "send_instruction":
+		return 4
+	case "handoff":
+		return 5
+	case "nudge", "discordia":
+		return 6
+	default:
+		return 10
+	}
+}
+
+func runtimeOrderBatchMoment(order *RuntimeOrder) time.Time {
+	if order == nil {
+		return time.Unix(1<<62, 0).UTC()
+	}
+	if !order.AvailableAt.IsZero() {
+		return order.AvailableAt.UTC()
+	}
+	if !order.UpdatedAt.IsZero() {
+		return order.UpdatedAt.UTC()
+	}
+	return order.CreatedAt.UTC()
 }
 
 func reconciliarRuntimeOrdersPendientesMailboxConsumido() (int, error) {
@@ -3489,6 +3665,30 @@ func reconciliarRuntimeOrdersPendientesControlObsoletas() (int, error) {
 		if order == nil || !strings.EqualFold(strings.TrimSpace(order.Estado), "pendiente") {
 			continue
 		}
+		if strings.EqualFold(strings.TrimSpace(order.Tipo), "start") {
+			if sesionAjena, err := runtimeOrderStartSesionAbiertaAjena(order.Agente, order.ProyectoID); err != nil {
+				return processed, err
+			} else if sesionAjena != nil {
+				proyectoAjenoID := int64(0)
+				if sesionAjena.ProyectoID != nil {
+					proyectoAjenoID = *sesionAjena.ProyectoID
+				}
+				reason := fmt.Sprintf("sesion_activa_en_otro_proyecto:%d", proyectoAjenoID)
+				if !SesionEsOperativa(sesionAjena) {
+					if err := cerrarSesionFantasmaActiva(sesionAjena.ID); err != nil {
+						return processed, err
+					}
+					reason = fmt.Sprintf("sesion_fantasma_en_otro_proyecto:%d", proyectoAjenoID)
+				} else if err := asegurarStopSesionActivaAjena(order, sesionAjena); err != nil {
+					return processed, err
+				}
+				if err := reencolarRuntimeOrderControlAt(order, reason, time.Now().UTC().Add(runtimeOrderControlRetryDelay())); err != nil {
+					return processed, err
+				}
+				processed++
+				continue
+			}
+		}
 		runtime, handle, err := resolverDestinoRuntimeOrderCanonico(order, nil, nil)
 		if err != nil {
 			return processed, err
@@ -3555,6 +3755,9 @@ func runtimeOrderControlEstadoDeseadoSatisfecho(order *RuntimeOrder, runtime *Ru
 		if runtimeHandleActivoAPICompartido(handle, runtime) {
 			return true, "runtime_handle_api_active"
 		}
+		if handle == nil && runtime != nil && runtimeOrderRuntimeOperativoConSesionActiva(order, runtime) {
+			return true, "runtime_already_running"
+		}
 		if runtimeWorkerSnapshotSatisfaceControlActual(orderType, handle, runtimeWorkerSnapshot(handle, runtime), now) {
 			return true, "runtime_worker_already_running"
 		}
@@ -3563,6 +3766,11 @@ func runtimeOrderControlEstadoDeseadoSatisfecho(order *RuntimeOrder, runtime *Ru
 			return true, "runtime_worker_already_stopped"
 		}
 		if handle == nil && runtime == nil {
+			if order != nil {
+				if sesion, err := GetSesionAbierta(strings.TrimSpace(order.Agente), order.ProyectoID); err == nil && sesion != nil {
+					return false, ""
+				}
+			}
 			return true, "runtime_already_stopped"
 		}
 		if handle != nil {
@@ -3581,6 +3789,31 @@ func runtimeOrderControlEstadoDeseadoSatisfecho(order *RuntimeOrder, runtime *Ru
 		}
 	}
 	return false, ""
+}
+
+func runtimeOrderRuntimeOperativoConSesionActiva(order *RuntimeOrder, runtime *RuntimeInstance) bool {
+	if order == nil || runtime == nil {
+		return false
+	}
+	if runtime.SesionID != nil && *runtime.SesionID > 0 {
+		if sesion, err := sesionIfExists(runtime.SesionID); err == nil && sesion != nil {
+			if sesion.Activa && sesionCoincideProyectoOrden(sesion, order.ProyectoID) {
+				return true
+			}
+		}
+	}
+	sesion, err := GetSesionActiva(strings.TrimSpace(order.Agente), order.ProyectoID)
+	return err == nil && sesion != nil
+}
+
+func sesionCoincideProyectoOrden(sesion *Sesion, proyectoID *int64) bool {
+	if sesion == nil {
+		return false
+	}
+	if proyectoID == nil || *proyectoID <= 0 {
+		return sesion.Activa
+	}
+	return sesion.ProyectoID != nil && *sesion.ProyectoID == *proyectoID
 }
 
 func runtimeOrderPromoverEstadoObservadoSiSatisfecha(order *RuntimeOrder, runtime *RuntimeInstance, handle *RuntimeHandle) error {
@@ -4977,6 +5210,61 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) (err error) {
 	if strings.TrimSpace(proyectoRef) == "" {
 		return fmt.Errorf("start sin proyecto")
 	}
+	proyectoTarget, err := GetProyecto(strings.TrimSpace(proyectoRef))
+	if err != nil {
+		return err
+	}
+	runtimeActual, err := resolverRuntimeParaOrden(order)
+	if err != nil {
+		return err
+	}
+	handleActual, err := resolverHandleParaOrden(order)
+	if err != nil {
+		return err
+	}
+	if satisfied, reason := runtimeOrderControlEstadoDeseadoSatisfecho(order, runtimeActual, handleActual); satisfied {
+		if err := runtimeOrderPromoverEstadoObservadoSiSatisfecha(order, runtimeActual, handleActual); err != nil {
+			return err
+		}
+		resultado := map[string]any{
+			"ok":       true,
+			"obsoleta": true,
+			"reason":   reason,
+		}
+		if runtimeActual != nil && runtimeActual.ID > 0 {
+			resultado["runtime_id"] = runtimeActual.ID
+		}
+		if handleActual != nil && handleActual.ID > 0 {
+			resultado["handle_id"] = handleActual.ID
+		}
+		data, _ := json.Marshal(resultado)
+		return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+	}
+	if sesionActual, err := GetSesionAbierta(strings.TrimSpace(order.Agente), order.ProyectoID); err != nil && err != sql.ErrNoRows {
+		return err
+	} else if sesionActual != nil && !SesionEsOperativa(sesionActual) {
+		if err := cerrarSesionFantasmaActiva(sesionActual.ID); err != nil {
+			return err
+		}
+	}
+	if sesionAjena, err := runtimeOrderStartSesionAbiertaAjena(order.Agente, &proyectoTarget.ID); err != nil {
+		return err
+	} else if sesionAjena != nil {
+		proyectoAjenoID := int64(0)
+		if sesionAjena.ProyectoID != nil {
+			proyectoAjenoID = *sesionAjena.ProyectoID
+		}
+		reason := fmt.Sprintf("sesion_activa_en_otro_proyecto:%d", proyectoAjenoID)
+		if !SesionEsOperativa(sesionAjena) {
+			if err := cerrarSesionFantasmaActiva(sesionAjena.ID); err != nil {
+				return err
+			}
+			reason = fmt.Sprintf("sesion_fantasma_en_otro_proyecto:%d", proyectoAjenoID)
+		} else if err := asegurarStopSesionActivaAjena(order, sesionAjena); err != nil {
+			return err
+		}
+		return reencolarRuntimeOrderControlAt(order, reason, time.Now().UTC().Add(runtimeOrderControlRetryDelay()))
+	}
 
 	skipBootstrap := runtimeOrderStartDebeIgnorarBootstrap(payload)
 	agente, proyecto, conector, ultima, resume, bootstrap, plan, err := prepararStartRuntimeOrder(
@@ -5176,6 +5464,181 @@ func runtimeOrderStartDebeIgnorarBootstrap(payload map[string]any) bool {
 	return strings.Contains(motivo, "manual_rehabilitation") ||
 		strings.Contains(motivo, "reanimacion_manual") ||
 		strings.Contains(motivo, "rehabilitacion_manual")
+}
+
+func runtimeOrderControlRetryDelay() time.Duration {
+	seconds := configIntOrDefault("runtime_control_retry_seconds", 5)
+	if seconds <= 0 {
+		seconds = 5
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func runtimeOrderStartSesionAbiertaAjena(agente string, proyectoID *int64) (*Sesion, error) {
+	sesion, err := GetSesionAbierta(strings.TrimSpace(agente), nil)
+	if err == sql.ErrNoRows || sesion == nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if proyectoID == nil || *proyectoID <= 0 || sesion.ProyectoID == nil || *sesion.ProyectoID <= 0 {
+		return nil, nil
+	}
+	if *sesion.ProyectoID == *proyectoID {
+		return nil, nil
+	}
+	return sesion, nil
+}
+
+func cerrarSesionFantasmaActiva(sesionID int64) error {
+	if sesionID <= 0 {
+		return nil
+	}
+	sesion, err := sesionIfExists(&sesionID)
+	if err != nil {
+		return err
+	}
+	_, err = DB.Exec(`
+		UPDATE sesiones
+		SET activa = 0,
+		    estado = 'cerrada',
+		    fin = CURRENT_TIMESTAMP
+		WHERE id = ?
+		  AND activa = 1`, sesionID)
+	if err != nil {
+		return err
+	}
+	if sesion != nil {
+		var activas int
+		if err := DB.QueryRow(`SELECT COUNT(1) FROM sesiones WHERE agente=? AND activa=1`, strings.TrimSpace(sesion.Agente)).Scan(&activas); err != nil {
+			return err
+		}
+		if activas == 0 {
+			if _, err := DB.Exec(`UPDATE agentes SET activo=0, estado_sesion='' WHERE nombre=?`, strings.TrimSpace(sesion.Agente)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func cerrarSesionFantasmaParaStop(order *RuntimeOrder) (bool, error) {
+	if order == nil {
+		return false, nil
+	}
+	sesion, err := GetSesionAbierta(strings.TrimSpace(order.Agente), order.ProyectoID)
+	if err == sql.ErrNoRows || sesion == nil {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if SesionEsOperativa(sesion) {
+		return false, nil
+	}
+	if err := cerrarSesionFantasmaActiva(sesion.ID); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func asegurarStopSesionActivaAjena(startOrder *RuntimeOrder, sesion *Sesion) error {
+	if startOrder == nil || sesion == nil || sesion.ProyectoID == nil || *sesion.ProyectoID <= 0 {
+		return nil
+	}
+	if abierta, err := existeRuntimeOrderAbiertaAgenteProyecto(strings.TrimSpace(startOrder.Agente), sesion.ProyectoID, startOrder.ID, "stop"); err != nil {
+		return err
+	} else if abierta {
+		return nil
+	}
+	proyectoRef := jsonNumber(*sesion.ProyectoID)
+	proyecto, err := GetProyecto(proyectoRef)
+	if err == nil && proyecto != nil && strings.TrimSpace(proyecto.Slug) != "" {
+		proyectoRef = strings.TrimSpace(proyecto.Slug)
+	}
+	payloadJSON, err := json.Marshal(map[string]any{
+		"accion":   "stop",
+		"motivo":   fmt.Sprintf("sesion_activa_en_otro_proyecto:%s", strings.TrimSpace(proyectoRef)),
+		"por":      "orquesta",
+		"proyecto": strings.TrimSpace(proyectoRef),
+	})
+	if err != nil {
+		return err
+	}
+	var handleID *int64
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil {
+		return err
+	}
+	if handle != nil && handle.ID > 0 {
+		handleID = &handle.ID
+	}
+	var runtimeID *int64
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil {
+		return err
+	}
+	if runtime != nil && runtime.ID > 0 {
+		runtimeID = &runtime.ID
+	} else if handle != nil && handle.RuntimeID != nil && *handle.RuntimeID > 0 {
+		runtimeID = handle.RuntimeID
+	}
+	_, err = EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      strings.TrimSpace(startOrder.Agente),
+		ProyectoID:  sesion.ProyectoID,
+		RuntimeID:   runtimeID,
+		HandleID:    handleID,
+		Tipo:        "stop",
+		PayloadJSON: string(payloadJSON),
+	})
+	return err
+}
+
+func reencolarRuntimeOrderControlAt(order *RuntimeOrder, reason string, nextAttempt time.Time) error {
+	if order == nil || order.ID <= 0 {
+		return nil
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "runtime control reencolado"
+	}
+	if nextAttempt.IsZero() {
+		nextAttempt = time.Now().UTC().Add(runtimeOrderControlRetryDelay())
+	}
+	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+		"ok":              false,
+		"deferred":        true,
+		"deferred_reason": reason,
+		"retry_after":     nextAttempt.Format(time.RFC3339Nano),
+	})
+	_, err := DB.Exec(`
+		UPDATE runtime_orders
+		SET estado = 'pendiente',
+		    resultado_json = ?,
+		    error_text = CASE
+		        WHEN TRIM(COALESCE(error_text, '')) = '' THEN ?
+		        ELSE error_text || CHAR(10) || ?
+		    END,
+		    started_at = NULL,
+		    finished_at = NULL,
+		    claimed_by = '',
+		    lease_token = '',
+		    lease_expires_at = NULL,
+		    available_at = ?,
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+		  AND estado NOT IN ('completada','fallida','cancelada','expirada')`,
+		resultado,
+		reason,
+		reason,
+		nextAttempt,
+		order.ID,
+	)
+	if err != nil {
+		return err
+	}
+	return runtimeOrdersHotIndexSyncByID(order.ID)
 }
 
 func reutilizarSesionArranquePoolLocal(agente string, proyectoID *int64, conector *Conector, externalSessionID string, plan *runtimeagente.LaunchPlan, resume runtimeagente.ResumeContext, ultima *Sesion, host string, pid *int64) (*Sesion, bool, error) {
@@ -5545,11 +6008,20 @@ func ejecutarRuntimeOrderStop(order *RuntimeOrder) error {
 	}
 	aplicado, pid, err := controlarProcesoRuntime(order, signaler)
 	yaDetenido := false
+	sesionFantasmaCerrada := false
 	if err != nil || !aplicado {
 		controlErr := err
 		yaDetenido, pid, err = runtimeProcesoLocalYaNoVive(order)
 		if err != nil {
 			return err
+		}
+		if !yaDetenido {
+			if cerrada, closeErr := cerrarSesionFantasmaParaStop(order); closeErr != nil {
+				return closeErr
+			} else if cerrada {
+				sesionFantasmaCerrada = true
+				yaDetenido = true
+			}
 		}
 		if !yaDetenido {
 			if preserveExternalSession {
@@ -5562,6 +6034,23 @@ func ejecutarRuntimeOrderStop(order *RuntimeOrder) error {
 			}
 		}
 		aplicado = false
+	}
+	if sesionFantasmaCerrada {
+		if err := MarcarRuntimeHandlesCerrados(order.Agente, order.ProyectoID); err != nil {
+			return err
+		}
+		if err := cancelarPendientesRuntimeAlDetener(order); err != nil {
+			return err
+		}
+		result := map[string]any{
+			"ok":                     true,
+			"control_real":           false,
+			"already_stopped":        true,
+			"phantom_session_closed": true,
+			"pid":                    pid,
+		}
+		data, _ := json.Marshal(result)
+		return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
 	}
 	checkpointID := int64(0)
 	if aplicado {
@@ -8377,6 +8866,12 @@ func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int
 	if err != nil {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
 	}
+	if agente == nil {
+		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, fmt.Errorf("agente no encontrado")
+	}
+	if !agente.Habilitado {
+		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, fmt.Errorf("agente retirado o deshabilitado")
+	}
 	proyecto, err := GetProyecto(strings.TrimSpace(proyectoRef))
 	if err != nil {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
@@ -9698,7 +10193,7 @@ func claimBootstrapRuntimeOrderParaStart(agente string, proyectoID *int64, exclu
 			FROM runtime_orders
 			WHERE agente = ?
 			  AND estado = 'pendiente'
-			  AND available_at <= CURRENT_TIMESTAMP
+				  AND (available_at IS NULL OR available_at <= CURRENT_TIMESTAMP)
 			  AND tipo IN (` + placeholders + `)`
 		if proyectoID != nil {
 			q += ` AND (proyecto_id = ? OR proyecto_id IS NULL)`
@@ -9884,7 +10379,44 @@ func registrarEvidenciaHandoffReanudadoPorOrden(order *RuntimeOrder, sesionID in
 	}
 	detalle := fmt.Sprintf("origen=%s destino=%s sesion_destino=%d order=%d", payload.AgenteOrigen, payload.AgenteDestino, sesionID, order.ID)
 	Audit(strings.TrimSpace(destino), "handoff_reanudado", "runtime_order", order.ID, detalle)
+	emitirNotificacionHandoffReanudado(order, payload, sesionID)
 	return nil
+}
+
+func emitirNotificacionHandoffReanudado(order *RuntimeOrder, payload HandoffPayload, sesionID int64) {
+	if order == nil {
+		return
+	}
+	proyectoID := int64(0)
+	if order.ProyectoID != nil && *order.ProyectoID > 0 {
+		proyectoID = *order.ProyectoID
+	}
+	destino := strings.TrimSpace(order.Agente)
+	texto := strings.TrimSpace(payload.ResumenContinuidad)
+	if texto == "" {
+		texto = fmt.Sprintf("Handoff %s -> %s reanudado en sesion #%d", strings.TrimSpace(payload.AgenteOrigen), strings.TrimSpace(payload.AgenteDestino), sesionID)
+	} else {
+		texto = fmt.Sprintf("Handoff %s -> %s reanudado en sesion #%d | %s", strings.TrimSpace(payload.AgenteOrigen), strings.TrimSpace(payload.AgenteDestino), sesionID, texto)
+	}
+	payloadNotif := map[string]any{
+		"order_id":            order.ID,
+		"session_id":          sesionID,
+		"source_agent":        strings.TrimSpace(payload.AgenteOrigen),
+		"destination_agent":   strings.TrimSpace(payload.AgenteDestino),
+		"continuity_summary":  strings.TrimSpace(payload.ResumenContinuidad),
+		"external_session_id": strings.TrimSpace(payload.ExternalSessionID),
+	}
+	if payload.TareaID != nil && *payload.TareaID > 0 {
+		payloadNotif["task_id"] = *payload.TareaID
+	}
+	EmitirNotificacion(EventoNotificacion{
+		Tipo:       "runtime_handoff",
+		ID:         order.ID,
+		Agente:     destino,
+		Texto:      texto,
+		ProyectoID: proyectoID,
+		Payload:    payloadNotif,
+	})
 }
 
 func bootstrapResumenJSON(bootstrap *bootstrapRuntimeData) map[string]any {
@@ -10098,7 +10630,9 @@ func claimRuntimeOrderByID(id int64) (*RuntimeOrder, error) {
 		    lease_token = ?,
 		    lease_expires_at = ?,
 		    attempt_count = attempt_count + 1
-		WHERE id = ? AND estado = 'pendiente' AND available_at <= CURRENT_TIMESTAMP`,
+		WHERE id = ?
+		  AND estado = 'pendiente'
+		  AND (available_at IS NULL OR available_at <= CURRENT_TIMESTAMP)`,
 		claimedBy, leaseToken, leaseUntil, id)
 	if err != nil {
 		_ = tx.Rollback()

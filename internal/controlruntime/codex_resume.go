@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -234,6 +235,7 @@ func detectCodexSessionID(renderedCommand, workingDir string, startedAt, now tim
 	if strings.TrimSpace(renderedCommand) == "" || workingDir == "" {
 		return "", nil
 	}
+	deadline := time.Now().UTC().Add(codexSessionDetectBudget())
 	type candidate struct {
 		id        string
 		startedAt time.Time
@@ -241,7 +243,13 @@ func detectCodexSessionID(renderedCommand, workingDir string, startedAt, now tim
 	}
 	var best candidate
 	for _, root := range codexSessionRoots(renderedCommand) {
+		if time.Now().UTC().After(deadline) {
+			break
+		}
 		for _, dir := range codexSessionDayDirs(root, startedAt, now) {
+			if time.Now().UTC().After(deadline) {
+				break
+			}
 			entries, err := os.ReadDir(dir)
 			if err != nil {
 				if os.IsNotExist(err) {
@@ -250,6 +258,9 @@ func detectCodexSessionID(renderedCommand, workingDir string, startedAt, now tim
 				return "", err
 			}
 			for _, entry := range entries {
+				if time.Now().UTC().After(deadline) {
+					return best.id, nil
+				}
 				if entry.IsDir() {
 					continue
 				}
@@ -283,6 +294,15 @@ func detectCodexSessionID(renderedCommand, workingDir string, startedAt, now tim
 		}
 	}
 	return best.id, nil
+}
+
+func codexSessionDetectBudget() time.Duration {
+	if raw := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_SESSION_DETECT_TIMEOUT_MS")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return time.Duration(n) * time.Millisecond
+		}
+	}
+	return 250 * time.Millisecond
 }
 
 func readCodexSessionMeta(path string) (*codexSessionMetaLine, error) {

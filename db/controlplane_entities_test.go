@@ -615,6 +615,48 @@ func TestRuntimeOrdersMailboxYCheckpoint(t *testing.T) {
 	}
 }
 
+func TestClaimNextRuntimeOrderToleraAvailableAtLegacyConZonaHoraria(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar runtime order: %v", err)
+	}
+	legacyAvailableAt := time.Now().UTC().Add(-2 * time.Minute).String()
+	if _, err := DB.Exec(`UPDATE runtime_orders SET available_at=? WHERE id=?`, legacyAvailableAt, orderID); err != nil {
+		t.Fatalf("forzar available_at legacy: %v", err)
+	}
+
+	claimed, err := ClaimNextRuntimeOrder("Codex1")
+	if err != nil {
+		t.Fatalf("claim runtime order legacy timezone: %v", err)
+	}
+	if claimed == nil || claimed.ID != orderID {
+		t.Fatalf("runtime order legacy inesperada: %+v", claimed)
+	}
+	if claimed.Estado != "tomada" {
+		t.Fatalf("estado inesperado tras claim legacy: %s", claimed.Estado)
+	}
+}
+
 func TestEncolarRuntimeOrderRechazaPayloadJSONInvalido(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
@@ -2349,6 +2391,439 @@ func TestEjecutarRuntimeOrderStartNoConsumeMailboxLigadaASendInstruction(t *test
 	}
 }
 
+func TestEjecutarRuntimeOrderStartReencolaSiHaySesionActivaEnOtroProyecto(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	orquestadorID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert orquestador: %v", err)
+	}
+	pluginsID, err := UpsertProyecto(&Proyecto{
+		Slug:    "plugins",
+		Nombre:  "Plugins",
+		RutaAbs: filepath.Join(tmp, "plugins"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert plugins: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "cat-cli",
+		Nombre:     "Cat CLI",
+		Transporte: "cli",
+		Comando:    "cat",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &pluginsID,
+		CWD:         filepath.Join(tmp, "plugins"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion plugins: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex2",
+		ProyectoID:  &orquestadorID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"cat-cli"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start con sesion ajena: %v", err)
+	}
+
+	startOrder, err = GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order final: %v", err)
+	}
+	if startOrder.Estado != "pendiente" {
+		t.Fatalf("la start deberia reencolarse, got=%s", startOrder.Estado)
+	}
+	if !strings.Contains(startOrder.ErrorText, "sesion_activa_en_otro_proyecto") {
+		t.Fatalf("start reencolada sin motivo esperado: %s", startOrder.ErrorText)
+	}
+	if startOrder.AvailableAt.IsZero() || !startOrder.AvailableAt.After(time.Now().UTC().Add(-time.Second)) {
+		t.Fatalf("start reencolada sin retry futuro: %+v", startOrder)
+	}
+	if sesion, err := GetSesionActiva("Codex2", &orquestadorID); err != sql.ErrNoRows || sesion != nil {
+		t.Fatalf("no deberia abrir sesion nueva en orquestador: %+v err=%v", sesion, err)
+	}
+	estadoPendiente := "pendiente"
+	agente := "Codex2"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{
+		Agente:     &agente,
+		ProyectoID: &pluginsID,
+		Estado:     &estadoPendiente,
+		Limit:      10,
+	})
+	if err != nil {
+		t.Fatalf("listar stop plugins: %v", err)
+	}
+	foundStop := false
+	for _, order := range orders {
+		if order != nil && order.Tipo == "stop" {
+			foundStop = true
+			break
+		}
+	}
+	if !foundStop {
+		t.Fatalf("deberia encolar stop para el proyecto ajeno: %+v", orders)
+	}
+}
+
+func TestEjecutarRuntimeOrderStartCierraSesionFantasmaDelMismoProyecto(t *testing.T) {
+	enableLegacyPTYLocalRuntimeForTest(t)
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "cat-cli",
+		Nombre:     "Cat CLI",
+		Transporte: "cli",
+		Comando:    "cat",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+
+	sesionVieja, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion vieja: %v", err)
+	}
+	staleHeartbeat := time.Now().UTC().Add(-4 * time.Hour)
+	if _, err := DB.Exec(`UPDATE sesiones SET heartbeat_at=?, estado='activa', activa=1 WHERE id=?`, staleHeartbeat, sesionVieja.ID); err != nil {
+		t.Fatalf("envejecer sesion vieja: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"cat-cli"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start: %v", err)
+	}
+
+	startOrder, err = GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("reload start order: %v", err)
+	}
+	if startOrder.Estado != "completada" {
+		t.Fatalf("start deberia completar tras cerrar sesion fantasma: %+v", startOrder)
+	}
+
+	var activa int
+	var estado string
+	var fin sql.NullTime
+	if err := DB.QueryRow(`SELECT activa, estado, fin FROM sesiones WHERE id=?`, sesionVieja.ID).Scan(&activa, &estado, &fin); err != nil {
+		t.Fatalf("leer sesion vieja: %v", err)
+	}
+	if activa != 0 || strings.TrimSpace(estado) != "cerrada" || !fin.Valid {
+		t.Fatalf("la sesion vieja deberia quedar cerrada: activa=%d estado=%s fin=%v", activa, estado, fin)
+	}
+
+	sesionNueva, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesionNueva == nil {
+		t.Fatalf("sesion nueva activa: %+v err=%v", sesionNueva, err)
+	}
+	if sesionNueva.ID == sesionVieja.ID {
+		t.Fatalf("deberia crear una sesion nueva, no reutilizar la fantasma: %+v", sesionNueva)
+	}
+}
+
+func TestProcesarRuntimeOrdersBatchReencolaStartSiHaySesionActivaEnOtroProyecto(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	orquestadorID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert orquestador: %v", err)
+	}
+	pluginsID, err := UpsertProyecto(&Proyecto{
+		Slug:    "plugins",
+		Nombre:  "Plugins",
+		RutaAbs: filepath.Join(tmp, "plugins"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert plugins: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "cat-cli",
+		Nombre:     "Cat CLI",
+		Transporte: "cli",
+		Comando:    "cat",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &pluginsID,
+		CWD:         filepath.Join(tmp, "plugins"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion plugins: %v", err)
+	}
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex2",
+		ProyectoID:  &orquestadorID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"cat-cli"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+
+	processed, err := ProcesarRuntimeOrdersBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime orders: %v", err)
+	}
+	if processed < 1 {
+		t.Fatalf("se esperaba procesar al menos una orden de control, got=%d", processed)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order final: %v", err)
+	}
+	if startOrder.Estado != "pendiente" {
+		t.Fatalf("la start deberia seguir pendiente tras reencolarse, got=%s", startOrder.Estado)
+	}
+	if !strings.Contains(startOrder.ErrorText, "sesion_activa_en_otro_proyecto") {
+		t.Fatalf("start reencolada sin motivo esperado: %s", startOrder.ErrorText)
+	}
+	if startOrder.AvailableAt.IsZero() {
+		t.Fatalf("start batch reencolada sin retry futuro: %+v", startOrder)
+	}
+}
+
+func TestProcesarRuntimeOrdersBatchCierraSesionFantasmaAjenaAntesDeStart(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	orquestadorID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert orquestador: %v", err)
+	}
+	pluginsID, err := UpsertProyecto(&Proyecto{
+		Slug:    "plugins",
+		Nombre:  "Plugins",
+		RutaAbs: filepath.Join(tmp, "plugins"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert plugins: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "cat-cli",
+		Nombre:     "Cat CLI",
+		Transporte: "cli",
+		Comando:    "cat",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &pluginsID,
+		CWD:         filepath.Join(tmp, "plugins"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion plugins: %v", err)
+	}
+	staleAt := time.Now().UTC().Add(-10 * time.Minute)
+	if _, err := DB.Exec(`UPDATE sesiones SET heartbeat_at=? WHERE id=?`, staleAt, sesion.ID); err != nil {
+		t.Fatalf("forzar heartbeat stale: %v", err)
+	}
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex2",
+		ProyectoID:  &orquestadorID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"cat-cli"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+
+	processed, err := ProcesarRuntimeOrdersBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime orders: %v", err)
+	}
+	if processed < 1 {
+		t.Fatalf("se esperaba procesar al menos una orden de control, got=%d", processed)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order final: %v", err)
+	}
+	if startOrder.Estado != "pendiente" {
+		t.Fatalf("la start deberia reencolarse, got=%s", startOrder.Estado)
+	}
+	if !strings.Contains(startOrder.ErrorText, "sesion_fantasma_en_otro_proyecto") {
+		t.Fatalf("start reencolada sin motivo fantasma esperado: %s", startOrder.ErrorText)
+	}
+	sesionFantasma, err := GetSesionAbierta("Codex2", &pluginsID)
+	if err != sql.ErrNoRows || sesionFantasma != nil {
+		t.Fatalf("la sesion fantasma deberia quedar cerrada: %+v err=%v", sesionFantasma, err)
+	}
+}
+
+func TestRuntimeOrderBatchLessPriorizaControlSobreGuidance(t *testing.T) {
+	now := time.Now().UTC()
+	stop := &RuntimeOrder{ID: 20, Tipo: "stop", CreatedAt: now}
+	start := &RuntimeOrder{ID: 21, Tipo: "start", CreatedAt: now}
+	nudge := &RuntimeOrder{ID: 22, Tipo: "nudge", CreatedAt: now}
+
+	if !runtimeOrderBatchLess(stop, start) {
+		t.Fatalf("stop deberia priorizar sobre start")
+	}
+	if !runtimeOrderBatchLess(start, nudge) {
+		t.Fatalf("start deberia priorizar sobre nudge")
+	}
+	if runtimeOrderBatchLess(nudge, stop) {
+		t.Fatalf("nudge no deberia priorizar sobre stop")
+	}
+}
+
+func TestAsegurarStopSesionActivaAjenaPropagaHandleYRuntimeSesionObjetivo(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoOrigen, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto origen: %v", err)
+	}
+	proyectoDestino, err := UpsertProyecto(&Proyecto{
+		Slug:    "plugins",
+		Nombre:  "Plugins",
+		RutaAbs: filepath.Join(tmp, "plugins"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto destino: %v", err)
+	}
+	sesionAjena, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoDestino,
+		CWD:         filepath.Join(tmp, "plugins"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion ajena: %v", err)
+	}
+	handleAjeno, err := GetRuntimeHandleBySesionID(sesionAjena.ID)
+	if err != nil || handleAjeno == nil {
+		t.Fatalf("get handle ajeno: %+v err=%v", handleAjeno, err)
+	}
+	runtimeAjeno, err := GetRuntimeBySesionID(sesionAjena.ID)
+	if err != nil || runtimeAjeno == nil {
+		t.Fatalf("get runtime ajeno: %+v err=%v", runtimeAjeno, err)
+	}
+	startOrder := &RuntimeOrder{ID: 17, Agente: "Codex2", ProyectoID: &proyectoOrigen, Tipo: "start"}
+
+	if err := asegurarStopSesionActivaAjena(startOrder, sesionAjena); err != nil {
+		t.Fatalf("asegurar stop ajena: %v", err)
+	}
+
+	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{
+		Agente:     stringPtr("Codex2"),
+		ProyectoID: &proyectoDestino,
+		Estado:     stringPtr("pendiente"),
+		Limit:      10,
+	})
+	if err != nil {
+		t.Fatalf("listar stop ajena: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("esperaba una stop ajena, got=%d", len(orders))
+	}
+	stopOrder := orders[0]
+	if stopOrder.Tipo != "stop" {
+		t.Fatalf("tipo inesperado: %+v", stopOrder)
+	}
+	if stopOrder.HandleID == nil || *stopOrder.HandleID != handleAjeno.ID {
+		t.Fatalf("handle no propagado: %+v", stopOrder)
+	}
+	if stopOrder.RuntimeID == nil || *stopOrder.RuntimeID != runtimeAjeno.ID {
+		t.Fatalf("runtime no propagado: %+v", stopOrder)
+	}
+}
+
 func TestProcesarRuntimeOrdersBatchSyncStatusObservaProcesoLocal(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
@@ -3234,6 +3709,135 @@ func TestRuntimeOrderStopAparcaSesionAbiertaAunqueEsteStale(t *testing.T) {
 	}
 	if sesionFinal.Estado != "pausada" && sesionFinal.Estado != "cerrada" {
 		t.Fatalf("la sesion stale debia quedar reconciliada tras stop: %+v", sesionFinal)
+	}
+}
+
+func TestRuntimeOrderStopCrossProjectConSesionFantasmaSeCompletaSinHandleNiRuntime(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoA, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto A: %v", err)
+	}
+	_, err = UpsertProyecto(&Proyecto{
+		Slug:    "plugins",
+		Nombre:  "Plugins",
+		RutaAbs: filepath.Join(tmp, "plugins"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto B: %v", err)
+	}
+	pidMuerto := int64(999997)
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoA,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		PID:         &pidMuerto,
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	old := time.Now().UTC().Add(-2 * time.Hour)
+	if _, err := DB.Exec(`UPDATE sesiones SET heartbeat_at=? WHERE id=?`, old, sesion.ID); err != nil {
+		t.Fatalf("marcar heartbeat stale: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='cerrado', runtime_id=NULL WHERE sesion_id=?`, sesion.ID); err != nil {
+		t.Fatalf("cerrar handle residual: %v", err)
+	}
+	if _, err := DB.Exec(`DELETE FROM runtime_instances WHERE sesion_id=?`, sesion.ID); err != nil {
+		t.Fatalf("borrar runtime: %v", err)
+	}
+
+	stopID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoA,
+		Tipo:        "stop",
+		PayloadJSON: `{"motivo":"stop cross-project stale"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar stop: %v", err)
+	}
+	stopOrder, err := GetRuntimeOrder(stopID)
+	if err != nil {
+		t.Fatalf("get stop order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStop(stopOrder); err != nil {
+		t.Fatalf("ejecutar stop cross-project stale: %v", err)
+	}
+
+	stopOrder, err = GetRuntimeOrder(stopID)
+	if err != nil {
+		t.Fatalf("get stop order final: %v", err)
+	}
+	if stopOrder.Estado != "completada" {
+		t.Fatalf("stop no completada: %+v", stopOrder)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(stopOrder.ResultadoJSON), &result); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+	if got, _ := result["phantom_session_closed"].(bool); !got {
+		t.Fatalf("faltaba phantom_session_closed en resultado: %+v", result)
+	}
+	sesionAbierta, err := GetSesionAbierta("Codex2", &proyectoA)
+	if err != nil && err != sql.ErrNoRows {
+		t.Fatalf("get sesion abierta tras stop: %v", err)
+	}
+	if sesionAbierta != nil {
+		t.Fatalf("la sesion fantasma debia quedar cerrada: %+v", sesionAbierta)
+	}
+}
+
+func TestEjecutarRuntimeOrderStartRechazaAgenteRetirado(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexRetirado", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := AgenteSetHabilitado("CodexRetirado", false); err != nil {
+		t.Fatalf("retirar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "CodexRetirado",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"accion":"start","por":"orquesta","proyecto":"orquestador"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+	err = ejecutarRuntimeOrderStart(startOrder)
+	if err == nil {
+		t.Fatalf("esperaba rechazo de agente retirado")
+	}
+	if !strings.Contains(err.Error(), "retirado") && !strings.Contains(err.Error(), "deshabilitado") {
+		t.Fatalf("error inesperado: %v", err)
 	}
 }
 
@@ -8111,10 +8715,10 @@ func TestRuntimeBootstrapLeaseLinkedToStart(t *testing.T) {
 	start10.ID = 10
 
 	cases := []struct {
-		name      string
-		order     *RuntimeOrder
+		name       string
+		order      *RuntimeOrder
 		startOrder *RuntimeOrder
-		want      bool
+		want       bool
 	}{
 		{"order nil", nil, start10, false},
 		{"startOrder nil", mkOrder(1, "resume", `{"start_order_id":10}`), nil, false},
@@ -17684,6 +18288,114 @@ func TestRuntimeOrderStartIntegraBootstrapDeHandoffMailboxYCheckpoint(t *testing
 	}
 }
 
+func TestRegistrarEvidenciaHandoffReanudadoPorOrdenEmiteNotificacion(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:     "Continuar handoff",
+		ProyectoID: &proyectoID,
+		Prioridad:  PrioridadAlta,
+		CreadoPor:  "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE tareas SET agente='Codex1', estado='asignada' WHERE id=?`, tareaID); err != nil {
+		t.Fatalf("preparar tarea asignada: %v", err)
+	}
+
+	payloadJSON, err := json.Marshal(HandoffPayload{
+		AgenteOrigen:       "Codex0",
+		AgenteDestino:      "Codex1",
+		TareaID:            &tareaID,
+		ResumenContinuidad: "handoff listo",
+		ExternalSessionID:  "sess-handoff-unit",
+	})
+	if err != nil {
+		t.Fatalf("marshal handoff: %v", err)
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "handoff",
+		PayloadJSON: string(payloadJSON),
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff: %v", err)
+	}
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil || order == nil {
+		t.Fatalf("get order: %+v err=%v", order, err)
+	}
+
+	for {
+		select {
+		case <-CanalNotificaciones:
+		default:
+			goto handoffNotifDrained
+		}
+	}
+
+handoffNotifDrained:
+	if err := registrarEvidenciaHandoffReanudadoPorOrden(order, 1234); err != nil {
+		t.Fatalf("registrarEvidenciaHandoffReanudadoPorOrden: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Estado != TareaEnProgreso {
+		t.Fatalf("tarea sin pasar a progreso: %+v", tarea)
+	}
+	if !strings.Contains(tarea.Notas, "handoff completado por Codex1 en sesion #1234") {
+		t.Fatalf("notas sin evidencia de handoff: %s", tarea.Notas)
+	}
+
+	var notif *EventoNotificacion
+	for {
+		select {
+		case item := <-CanalNotificaciones:
+			if item.Tipo == "runtime_handoff" {
+				copy := item
+				notif = &copy
+			}
+		default:
+			goto handoffNotifChecked
+		}
+	}
+
+handoffNotifChecked:
+	if notif == nil {
+		t.Fatal("faltaba notificacion runtime_handoff")
+	}
+	if notif.Payload == nil {
+		t.Fatalf("runtime_handoff sin payload util: %+v", notif)
+	}
+	if got, _ := notif.Payload["order_id"].(int64); got != orderID {
+		t.Fatalf("runtime_handoff con order_id inesperado: %+v", notif.Payload)
+	}
+	if got, _ := notif.Payload["task_id"].(int64); got != tareaID {
+		t.Fatalf("runtime_handoff con task_id inesperado: %+v", notif.Payload)
+	}
+	if !strings.Contains(notif.Texto, "Codex0 -> Codex1") || !strings.Contains(notif.Texto, "handoff listo") {
+		t.Fatalf("runtime_handoff sin resumen util: %+v", notif)
+	}
+}
+
 func TestRuntimeOrderStartPoolLocalReutilizaSesionActivaExistente(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -18972,6 +19684,67 @@ func TestReconciliarRuntimeOrdersStaleRespetaCutoffConfigurado(t *testing.T) {
 	}
 }
 
+func TestMarcarRuntimeOrderEjecutandoLimpiaDeferredEnStart(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	resultadoPrevio := `{"deferred":true,"deferred_reason":"sesion_fantasma_en_otro_proyecto:10","retry_after":"2026-04-17T22:24:11Z"}`
+	if _, err := DB.Exec(`UPDATE runtime_orders SET resultado_json=? WHERE id=?`, resultadoPrevio, orderID); err != nil {
+		t.Fatalf("sembrar resultado previo: %v", err)
+	}
+
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get order: %v", err)
+	}
+	if err := MarcarRuntimeOrderEjecutando(order); err != nil {
+		t.Fatalf("marcar ejecutando: %v", err)
+	}
+
+	order, err = GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("reload order: %v", err)
+	}
+	resultado := mapFromJSON(order.ResultadoJSON)
+	if boolFromMap(resultado, "deferred") {
+		t.Fatalf("deferred no deberia persistir al volver a ejecutando: %+v", resultado)
+	}
+	if reason := strings.TrimSpace(stringFromMap(resultado, "deferred_reason", "")); reason != "" {
+		t.Fatalf("deferred_reason no deberia persistir al volver a ejecutando: %+v", resultado)
+	}
+	if retry := strings.TrimSpace(stringFromMap(resultado, "retry_after", "")); retry != "" {
+		t.Fatalf("retry_after no deberia persistir al volver a ejecutando: %+v", resultado)
+	}
+	if !boolFromMap(resultado, "in_progress") {
+		t.Fatalf("faltaba in_progress en resultado ejecutando: %+v", resultado)
+	}
+	if phase := strings.TrimSpace(stringFromMap(resultado, "phase", "")); phase != "launching" {
+		t.Fatalf("phase inesperada: %+v", resultado)
+	}
+}
+
 func TestClaimRuntimeOrderSendInstructionUsaLeaseCorta(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
@@ -19192,6 +19965,116 @@ func TestRuntimeOrderControlEstadoDeseadoSatisfechoStartApiActivo(t *testing.T) 
 	ok, reason := runtimeOrderControlEstadoDeseadoSatisfecho(order, runtime, handle)
 	if !ok || reason != "runtime_handle_api_active" {
 		t.Fatalf("deberia satisfacer start para api/session activa, ok=%v reason=%q", ok, reason)
+	}
+}
+
+func TestRuntimeOrderControlEstadoDeseadoSatisfechoStartSinHandlePeroConSesionActiva(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "Codex1",
+		ProyectoID:   &proyectoID,
+		SesionID:     &sesion.ID,
+		Connector:    "codex-cli",
+		LogicalState: "activo",
+		ProcessState: "running",
+	})
+	if err != nil {
+		t.Fatalf("registrar runtime: %v", err)
+	}
+	runtime, err := GetRuntime(runtimeID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime: %+v err=%v", runtime, err)
+	}
+	order := &RuntimeOrder{Agente: "Codex1", ProyectoID: &proyectoID, Tipo: "start"}
+	ok, reason := runtimeOrderControlEstadoDeseadoSatisfecho(order, runtime, nil)
+	if !ok || reason != "runtime_already_running" {
+		t.Fatalf("deberia satisfacer start con runtime+sesion activa sin handle, ok=%v reason=%q", ok, reason)
+	}
+}
+
+func TestEjecutarRuntimeOrderStartCompletaSiRuntimeYaActivoSinHandle(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if _, err := DB.Exec(`DELETE FROM runtime_handles WHERE sesion_id=?`, sesion.ID); err != nil {
+		t.Fatalf("borrar handles: %v", err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime sesion: %+v err=%v", runtime, err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_instances SET logical_state='activo', process_state='running' WHERE id=?`, runtime.ID); err != nil {
+		t.Fatalf("promover runtime: %v", err)
+	}
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"accion":"start","por":"orquesta","proyecto":"orquestador"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start redundante: %v", err)
+	}
+	startOrder, err = GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start final: %v", err)
+	}
+	if startOrder.Estado != "completada" {
+		t.Fatalf("start redundante deberia completarse: %+v", startOrder)
+	}
+	if !strings.Contains(startOrder.ResultadoJSON, `"reason":"runtime_already_running"`) {
+		t.Fatalf("resultado inesperado: %s", startOrder.ResultadoJSON)
 	}
 }
 

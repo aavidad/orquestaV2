@@ -117,6 +117,16 @@ func TestCodexResumeTimeoutDefaultYOverride(t *testing.T) {
 	}
 }
 
+func TestCodexSessionDetectBudgetDefaultYOverride(t *testing.T) {
+	if got := codexSessionDetectBudget(); got != 250*time.Millisecond {
+		t.Fatalf("budget por defecto inesperado: %s", got)
+	}
+	t.Setenv("ORQUESTA_CODEX_SESSION_DETECT_TIMEOUT_MS", "75")
+	if got := codexSessionDetectBudget(); got != 75*time.Millisecond {
+		t.Fatalf("budget override inesperado: %s", got)
+	}
+}
+
 func TestCodexResumeCommandEnvInyectaCODEXBINYPATH(t *testing.T) {
 	tmp := t.TempDir()
 	codexBin := filepath.Join(tmp, "bin", "codex")
