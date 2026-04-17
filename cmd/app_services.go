@@ -30,6 +30,7 @@ var reviewService = reviewapp.NewService(reviewapp.NewRepository())
 var supervisionService = supervisionapp.NewService(supervisionapp.NewRepository())
 
 func init() {
+	orquestacionAgentesService.SetAutonomyStore(orquestacionagentesapp.Repository{})
 	capacidadService.SetPhaseProvider(progresoService)
 	capacidadService.SetReviewGateProvider(reviewService)
 	capacidadService.SetReviewGateManager(reviewService)

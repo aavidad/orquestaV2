@@ -11602,62 +11602,7 @@ func existeRuntimeOrderAutonomiaPendiente(agente string, proyectoID *int64, tipo
 }
 
 func pausaAutonomiaYaSatisfecha(agente string, proyectoID *int64, sesion *db.Sesion) (bool, error) {
-	if pendiente, err := existeRuntimeOrderAutonomiaPendiente(agente, proyectoID, "pause", ""); err != nil {
-		return false, err
-	} else if pendiente {
-		return true, nil
-	}
-	if reciente, err := existeRuntimeOrderAutonomiaReciente(agente, proyectoID, "pause", "", 2*time.Minute); err != nil {
-		return false, err
-	} else if reciente {
-		return true, nil
-	}
-	if sesion != nil && strings.EqualFold(strings.TrimSpace(sesion.Estado), "pausada") {
-		return true, nil
-	}
-	handleSesion, err := runtimeHandleSesionPersistenteAutonomia(sesion)
-	if err != nil {
-		return false, err
-	}
-	estadoCuotaPersistido, err := db.GetPersistedAgentQuotaState(strings.TrimSpace(agente))
-	if err != nil && err != sql.ErrNoRows {
-		return false, err
-	}
-	switch strings.ToLower(strings.TrimSpace(estadoCuotaPersistido)) {
-	case "enfriamiento", "agotado":
-		if runtimeHandleEstadoEsPausado(handleSesion) || handleSesion == nil {
-			return true, nil
-		}
-		handle, err := resolverHandleControlAgente(strings.TrimSpace(agente), proyectoID)
-		if err != nil {
-			return false, err
-		}
-		if handle == nil || strings.EqualFold(strings.TrimSpace(handle.Estado), "pausado") {
-			return true, nil
-		}
-	}
-	if runtimeHandleEstadoEsPausado(handleSesion) {
-		return true, nil
-	}
-	handle, err := resolverHandleControlAgente(strings.TrimSpace(agente), proyectoID)
-	if err != nil {
-		return false, err
-	}
-	if handle != nil && strings.EqualFold(strings.TrimSpace(handle.Estado), "pausado") {
-		return true, nil
-	}
-	return false, nil
-}
-
-func runtimeHandleSesionPersistenteAutonomia(sesion *db.Sesion) (*db.RuntimeHandle, error) {
-	if sesion == nil || sesion.ID <= 0 {
-		return nil, nil
-	}
-	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
-	if err != nil || handle == nil || handle.ID <= 0 {
-		return handle, err
-	}
-	return db.GetRuntimeHandle(handle.ID)
+	return orquestacionAgentesService.PauseAutonomyAlreadySatisfied(strings.TrimSpace(agente), proyectoID, sesion)
 }
 
 func runtimeHandleEstadoEsPausado(handle *db.RuntimeHandle) bool {
@@ -12110,31 +12055,7 @@ func cerrarProyectoAutonomia(proyectoID int64, motivo string, estadoAutonomia db
 }
 
 func pausarSesionAutonomiaPorMotivo(sesion *db.Sesion, proyecto *db.Proyecto, motivo string) (int, error) {
-	if sesion == nil || sesion.ProyectoID == nil || proyecto == nil {
-		return 0, nil
-	}
-	motivo = strings.TrimSpace(motivo)
-	if motivo == "" {
-		return 0, nil
-	}
-	if strings.EqualFold(strings.TrimSpace(sesion.Estado), "pausada") {
-		if err := db.AparcarSesionActiva(sesion.Agente, sesion.ProyectoID); err != nil {
-			return 0, err
-		}
-		if err := db.PausarAsignacion(sesion.Agente, proyecto.ID, motivo); err != nil {
-			return 0, err
-		}
-		return 1, nil
-	}
-	if satisfecha, err := pausaAutonomiaYaSatisfecha(sesion.Agente, &proyecto.ID, sesion); err != nil {
-		return 0, err
-	} else if satisfecha {
-		return 0, nil
-	}
-	if err := encolarControlAutonomiaProyecto(sesion.Agente, proyecto, agenteControlAccionPause, motivo); err != nil {
-		return 0, err
-	}
-	return 1, nil
+	return orquestacionAgentesService.PauseAutonomySessionIfNeeded(sesion, proyecto, strings.TrimSpace(motivo))
 }
 
 func encolarControlAutonomiaProyecto(agente string, proyecto *db.Proyecto, accion, motivo string) error {
