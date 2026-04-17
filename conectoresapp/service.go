@@ -2,14 +2,27 @@ package conectoresapp
 
 import (
 	"strings"
-
-	"orquesta/db"
+	"time"
 )
 
+type Conector struct {
+	ID           int64
+	Slug         string
+	Nombre       string
+	Transporte   string
+	Comando      string
+	ArgsJSON     string
+	EnvJSON      string
+	MetadataJSON string
+	Activo       bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
 type Store interface {
-	ListConnectors() ([]*db.Conector, error)
-	GetConnector(ref string) (*db.Conector, error)
-	SaveConnector(c *db.Conector) (int64, error)
+	ListConnectors() ([]*Conector, error)
+	GetConnector(ref string) (*Conector, error)
+	SaveConnector(c *Conector) (int64, error)
 }
 
 type Service struct {
@@ -31,16 +44,16 @@ type SaveConnectorInput struct {
 	Activo       bool
 }
 
-func (s *Service) ListConnectors() ([]*db.Conector, error) {
+func (s *Service) ListConnectors() ([]*Conector, error) {
 	return s.store.ListConnectors()
 }
 
-func (s *Service) GetConnector(ref string) (*db.Conector, error) {
+func (s *Service) GetConnector(ref string) (*Conector, error) {
 	return s.store.GetConnector(strings.TrimSpace(ref))
 }
 
 func (s *Service) SaveConnector(input SaveConnectorInput) (int64, error) {
-	return s.store.SaveConnector(&db.Conector{
+	return s.store.SaveConnector(&Conector{
 		Slug:         strings.TrimSpace(input.Slug),
 		Nombre:       strings.TrimSpace(input.Nombre),
 		Transporte:   strings.TrimSpace(input.Transporte),
@@ -50,18 +63,4 @@ func (s *Service) SaveConnector(input SaveConnectorInput) (int64, error) {
 		MetadataJSON: strings.TrimSpace(input.MetadataJSON),
 		Activo:       input.Activo,
 	})
-}
-
-type Repository struct{}
-
-func (Repository) ListConnectors() ([]*db.Conector, error) {
-	return db.ListarConectores()
-}
-
-func (Repository) GetConnector(ref string) (*db.Conector, error) {
-	return db.GetConector(strings.TrimSpace(ref))
-}
-
-func (Repository) SaveConnector(c *db.Conector) (int64, error) {
-	return db.UpsertConector(c)
 }
