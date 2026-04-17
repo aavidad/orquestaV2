@@ -295,6 +295,51 @@ func (s *Service) ResolveSessionRecoveryTarget(sesion *db.Sesion) (*db.RuntimeHa
 	return handle, runtime, nil
 }
 
+func (s *Service) HasRecentOperationalRuntimeOtherThanSession(sesion *db.Sesion) (bool, error) {
+	if s == nil || s.runtimes == nil {
+		return false, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
+	}
+	if sesion == nil || sesion.ProyectoID == nil {
+		return false, nil
+	}
+	handle, err := s.runtimes.GetOperationalRuntimeHandleForProject(strings.TrimSpace(sesion.Agente), sesion.ProyectoID)
+	if err != nil || handle == nil {
+		return false, err
+	}
+	if handle.SesionID != nil && sesion.ID > 0 && *handle.SesionID == sesion.ID {
+		return false, nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(handle.Estado), "activo") {
+		return false, nil
+	}
+	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") {
+		return true, nil
+	}
+	meta := parseStringMap(strings.TrimSpace(handle.MetadataJSON))
+	return strings.EqualFold(stringMapValue(meta, "driver"), "tmux_cli_session"), nil
+}
+
+func (s *Service) ShouldSupersedeSessionRecoveryWithRecentTMUX(sesion *db.Sesion, handle *db.RuntimeHandle) bool {
+	if sesion == nil || handle == nil {
+		return false
+	}
+	if handle.SesionID == nil || *handle.SesionID == sesion.ID {
+		return false
+	}
+	if !db.RuntimeHandleSnapshotIsFresh(handle, time.Minute) {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
+		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") {
+		return true
+	}
+	meta := parseStringMap(strings.TrimSpace(handle.MetadataJSON))
+	if strings.EqualFold(stringMapValue(meta, "driver"), "tmux_cli_session") {
+		return true
+	}
+	return stringMapValue(meta, "tmux_session") != ""
+}
+
 func (s *Service) PauseAutonomyAlreadySatisfied(agente string, proyectoID *int64, sesion *db.Sesion) (bool, error) {
 	if s == nil || s.runtimes == nil || s.autonomyStore == nil {
 		return false, fmt.Errorf("servicio de orquestacion de agentes no inicializado")

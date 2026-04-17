@@ -10976,24 +10976,7 @@ func procesarRecuperacionRuntimeRemotoDegradadoSesion(sesion *db.Sesion, proyect
 }
 
 func runtimeTMUXRecienteDebeSuplantarRecuperacionSesion(sesion *db.Sesion, handle *db.RuntimeHandle) bool {
-	if sesion == nil || handle == nil {
-		return false
-	}
-	if handle.SesionID == nil || *handle.SesionID == sesion.ID {
-		return false
-	}
-	if !db.RuntimeHandleSnapshotIsFresh(handle, time.Minute) {
-		return false
-	}
-	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
-		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") {
-		return true
-	}
-	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
-	if strings.EqualFold(strings.TrimSpace(mapStringValue(meta, "driver")), "tmux_cli_session") {
-		return true
-	}
-	return strings.TrimSpace(mapStringValue(meta, "tmux_session")) != ""
+	return orquestacionAgentesService.ShouldSupersedeSessionRecoveryWithRecentTMUX(sesion, handle)
 }
 
 func runtimeRecuperacionSesionObjetivo(sesion *db.Sesion) (*db.RuntimeHandle, *db.RuntimeInstance, error) {
@@ -11133,21 +11116,11 @@ func runtimeRemotoReanudable(sesion *db.Sesion, handle *db.RuntimeHandle) bool {
 }
 
 func runtimeOperativoRecienteDistintoDeSesion(sesion *db.Sesion) bool {
-	if sesion == nil || sesion.ProyectoID == nil {
+	ok, err := orquestacionAgentesService.HasRecentOperationalRuntimeOtherThanSession(sesion)
+	if err != nil {
 		return false
 	}
-	handle, err := db.GetRuntimeHandleOperativoRecienteAgenteProyecto(strings.TrimSpace(sesion.Agente), sesion.ProyectoID)
-	if err != nil || handle == nil {
-		return false
-	}
-	if handle.SesionID != nil && sesion.ID > 0 && *handle.SesionID == sesion.ID {
-		return false
-	}
-	if !strings.EqualFold(strings.TrimSpace(handle.Estado), "activo") {
-		return false
-	}
-	return strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") ||
-		strings.EqualFold(strings.TrimSpace(stringFromMetadataJSON(handle.MetadataJSON, "driver")), "tmux_cli_session")
+	return ok
 }
 
 func reactivarAgenteTrasReanimacion(agente string) error {

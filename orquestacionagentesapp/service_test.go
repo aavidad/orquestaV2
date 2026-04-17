@@ -487,6 +487,98 @@ func TestResolveSessionRecoveryTargetUsesSessionHandleAndRuntime(t *testing.T) {
 	}
 }
 
+func TestHasRecentOperationalRuntimeOtherThanSessionDetectsTMUXHandle(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(9)
+	service := NewService(nil, &stubRuntimeController{
+		operationalHandle: &db.RuntimeHandle{
+			ID:         77,
+			SesionID:   ptrInt64(10),
+			Estado:     "activo",
+			Transporte: "tmux",
+		},
+	})
+
+	ok, err := service.HasRecentOperationalRuntimeOtherThanSession(&db.Sesion{
+		ID:         5,
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("HasRecentOperationalRuntimeOtherThanSession: %v", err)
+	}
+	if !ok {
+		t.Fatal("debería detectar runtime operativo distinto de la sesión")
+	}
+}
+
+func TestHasRecentOperationalRuntimeOtherThanSessionIgnoresSameSession(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(9)
+	service := NewService(nil, &stubRuntimeController{
+		operationalHandle: &db.RuntimeHandle{
+			ID:         77,
+			SesionID:   ptrInt64(5),
+			Estado:     "activo",
+			Transporte: "tmux",
+		},
+	})
+
+	ok, err := service.HasRecentOperationalRuntimeOtherThanSession(&db.Sesion{
+		ID:         5,
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("HasRecentOperationalRuntimeOtherThanSession: %v", err)
+	}
+	if ok {
+		t.Fatal("no debería considerar distinta la misma sesión")
+	}
+}
+
+func TestShouldSupersedeSessionRecoveryWithRecentTMUX(t *testing.T) {
+	t.Parallel()
+
+	ok := NewService(nil, nil).ShouldSupersedeSessionRecoveryWithRecentTMUX(
+		&db.Sesion{ID: 5},
+		&db.RuntimeHandle{
+			SesionID:   ptrInt64(10),
+			Estado:     "activo",
+			Transporte: "tmux",
+			HandleKind: "session",
+			LastSeenAt: ptrTime(time.Now().UTC()),
+		},
+	)
+	if !ok {
+		t.Fatal("debería suplantar la recuperación con handle tmux reciente")
+	}
+}
+
+func TestShouldSupersedeSessionRecoveryWithRecentTMUXIgnoresSameSession(t *testing.T) {
+	t.Parallel()
+
+	ok := NewService(nil, nil).ShouldSupersedeSessionRecoveryWithRecentTMUX(
+		&db.Sesion{ID: 5},
+		&db.RuntimeHandle{
+			SesionID:   ptrInt64(5),
+			Estado:     "activo",
+			Transporte: "tmux",
+			HandleKind: "session",
+			LastSeenAt: ptrTime(time.Now().UTC()),
+		},
+	)
+	if ok {
+		t.Fatal("no debería suplantar si el handle pertenece a la misma sesión")
+	}
+}
+
 func ptrInt64(v int64) *int64 {
+	return &v
+}
+
+func ptrTime(v time.Time) *time.Time {
 	return &v
 }
