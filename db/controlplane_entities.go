@@ -3215,20 +3215,24 @@ func ProcesarRuntimeOrdersBatch() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	controlObsoletas, err := reconciliarRuntimeOrdersPendientesControlObsoletas()
+	controlEjecutando, err := reconciliarRuntimeOrdersEjecutandoControlSatisfechas()
 	if err != nil {
 		return reconciled, err
 	}
+	controlObsoletas, err := reconciliarRuntimeOrdersPendientesControlObsoletas()
+	if err != nil {
+		return reconciled + controlEjecutando, err
+	}
 	processed, err := procesarRuntimeOrdersBatchTipos(runtimeOrderTiposDespachables())
 	if err != nil {
-		return reconciled + controlObsoletas + processed, err
+		return reconciled + controlEjecutando + controlObsoletas + processed, err
 	}
 	promoted, err := procesarBootstrapRuntimeOrdersActivosBatch()
 	if err != nil {
-		return reconciled + controlObsoletas + processed + promoted, err
+		return reconciled + controlEjecutando + controlObsoletas + processed + promoted, err
 	}
 	deferred, err := procesarRuntimeOrdersBatchTipos(runtimeOrderTiposDiferibles())
-	return reconciled + controlObsoletas + processed + promoted + deferred, err
+	return reconciled + controlEjecutando + controlObsoletas + processed + promoted + deferred, err
 }
 func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 	limit := configIntOrDefault("runtime_hygiene_autonomo_batch_size", 10)
@@ -3701,6 +3705,77 @@ func reconciliarRuntimeOrdersPendientesControlObsoletas() (int, error) {
 				continue
 			}
 			reason = "runtime_worker_recovered_after_order"
+		}
+		if err := runtimeOrderPromoverEstadoObservadoSiSatisfecha(order, runtime, handle); err != nil {
+			return processed, err
+		}
+		resultado := map[string]any{
+			"ok":       true,
+			"obsoleta": true,
+			"reason":   reason,
+		}
+		if runtime != nil && runtime.ID > 0 {
+			resultado["runtime_id"] = runtime.ID
+		}
+		if handle != nil && handle.ID > 0 {
+			resultado["handle_id"] = handle.ID
+		}
+		data, _ := json.Marshal(resultado)
+		if err := MarcarRuntimeOrderEstado(order.ID, "completada", string(data), ""); err != nil {
+			return processed, err
+		}
+		processed++
+	}
+	return processed, nil
+}
+
+func reconciliarRuntimeOrdersEjecutandoControlSatisfechas() (int, error) {
+	limit := configIntOrDefault("runtime_order_batch_size", 10)
+	if limit <= 0 {
+		limit = 10
+	}
+	estado := "ejecutando"
+	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{Estado: &estado})
+	if err != nil {
+		return 0, err
+	}
+	ids := make([]int64, 0, limit)
+	sort.Slice(orders, func(i, j int) bool { return orders[i].ID < orders[j].ID })
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch strings.TrimSpace(order.Tipo) {
+		case "start", "resume", "stop":
+			ids = append(ids, order.ID)
+		default:
+			continue
+		}
+		if len(ids) >= limit {
+			break
+		}
+	}
+	processed := 0
+	for _, id := range ids {
+		order, err := GetRuntimeOrder(id)
+		if err != nil {
+			return processed, err
+		}
+		if order == nil || !strings.EqualFold(strings.TrimSpace(order.Estado), "ejecutando") {
+			continue
+		}
+		runtime, handle, err := resolverDestinoRuntimeOrderCanonico(order, nil, nil)
+		if err != nil {
+			return processed, err
+		}
+		reason := ""
+		if satisfied, satisfiedReason := runtimeOrderControlEstadoDeseadoSatisfecho(order, runtime, handle); satisfied {
+			reason = satisfiedReason
+		} else if runtimeOrderControlObsoletaPorWorkerRecuperado(order, runtime, handle) {
+			reason = "runtime_worker_recovered_after_order"
+		}
+		if strings.TrimSpace(reason) == "" {
+			continue
 		}
 		if err := runtimeOrderPromoverEstadoObservadoSiSatisfecha(order, runtime, handle); err != nil {
 			return processed, err

@@ -19745,6 +19745,79 @@ func TestMarcarRuntimeOrderEjecutandoLimpiaDeferredEnStart(t *testing.T) {
 	}
 }
 
+func TestProcesarRuntimeOrdersBatchCompletaStartEjecutandoSiRuntimeYaEstaOperativo(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_instances SET logical_state='activo', process_state='running' WHERE id=?`, runtime.ID); err != nil {
+		t.Fatalf("promover runtime: %v", err)
+	}
+
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	if err := MarcarRuntimeOrderEstado(orderID, "ejecutando", `{"in_progress":true,"phase":"launching"}`, ""); err != nil {
+		t.Fatalf("marcar ejecutando: %v", err)
+	}
+
+	processed, err := ProcesarRuntimeOrdersBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime orders: %v", err)
+	}
+	if processed < 1 {
+		t.Fatalf("deberia reconciliar al menos una orden, got=%d", processed)
+	}
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("reload order: %v", err)
+	}
+	if order.Estado != "completada" {
+		t.Fatalf("la start ejecutando deberia completarse al ver runtime operativo: %+v", order)
+	}
+	if !strings.Contains(order.ResultadoJSON, `"reason":"runtime_worker_already_running"`) &&
+		!strings.Contains(order.ResultadoJSON, `"reason":"runtime_already_running"`) &&
+		!strings.Contains(order.ResultadoJSON, `"reason":"runtime_worker_recovered_after_order"`) {
+		t.Fatalf("resultado inesperado: %s", order.ResultadoJSON)
+	}
+}
+
 func TestClaimRuntimeOrderSendInstructionUsaLeaseCorta(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
