@@ -17,6 +17,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
+	"orquesta/orquestacionagentesapp"
 )
 
 func runtimeErrorServerFirst() error {
@@ -1032,50 +1033,54 @@ var runtimeLimpiarPruebasCmd = &cobra.Command{
 }
 
 func detenerRuntimeActivoDePruebas(agente, proyecto string) error {
-	agente = strings.TrimSpace(agente)
-	if agente == "" {
-		return nil
+	svc := orquestacionagentesapp.NewTestRuntimeCleanupService(orquestacionAgentesService, runtimeTestCleanupOps{})
+	_, err := svc.StopAgentRuntimeIfActive(orquestacionagentesapp.StopAgentRuntimeIfActiveInput{
+		Agente:       strings.TrimSpace(agente),
+		Proyecto:     strings.TrimSpace(proyecto),
+		Actor:        "orquesta",
+		Reason:       "runtime limpiar-pruebas",
+		Timeout:      15 * time.Second,
+		PollInterval: 250 * time.Millisecond,
+	})
+	return err
+}
+
+type runtimeTestCleanupOps struct{}
+
+func (runtimeTestCleanupOps) HasLiveRuntimeActivity(agente, proyecto string, limit int) (bool, error) {
+	data, ok, err := cargarRuntimeDiagnosticoDesdeAPI(strings.TrimSpace(agente), "", limit)
+	if err != nil {
+		return false, err
 	}
-	data, ok, err := cargarRuntimeDiagnosticoDesdeAPI(agente, "", 3)
+	if !ok {
+		return false, serverFirstCommandError("runtime limpiar-pruebas")
+	}
+	return runtimeDiagnosticoTieneActividadViva(data), nil
+}
+
+func (runtimeTestCleanupOps) EnqueueStopControl(req orquestacionagentesapp.ControlRequest) error {
+	_, _, ok, err := encolarControlAgentePorAPI(apiAgenteControlRequest{
+		Agente: strings.TrimSpace(req.Agente),
+		Accion: strings.TrimSpace(req.Accion),
+		Motivo: strings.TrimSpace(req.Motivo),
+		Por:    strings.TrimSpace(req.Por),
+	})
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return serverFirstCommandError("runtime limpiar-pruebas")
 	}
-	if !runtimeDiagnosticoTieneActividadViva(data) {
-		return nil
-	}
-	if _, _, ok, err := encolarControlAgentePorAPI(apiAgenteControlRequest{
-		Agente: agente,
-		Accion: "stop",
-		Motivo: "runtime limpiar-pruebas",
-		Por:    "orquesta",
-	}); err != nil {
+	return nil
+}
+
+func (runtimeTestCleanupOps) WakeRuntimeBatches(orders, mailbox, warm bool) error {
+	if _, ok, err := despertarRuntimePorAPI(orders, mailbox, warm); err != nil {
 		return err
 	} else if !ok {
 		return serverFirstCommandError("runtime limpiar-pruebas")
 	}
-	if _, ok, err := despertarRuntimePorAPI(true, false, true); err != nil {
-		return err
-	} else if !ok {
-		return serverFirstCommandError("runtime limpiar-pruebas")
-	}
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		time.Sleep(250 * time.Millisecond)
-		data, ok, err := cargarRuntimeDiagnosticoDesdeAPI(agente, "", 3)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return serverFirstCommandError("runtime limpiar-pruebas")
-		}
-		if !runtimeDiagnosticoTieneActividadViva(data) {
-			return nil
-		}
-	}
-	return fmt.Errorf("timeout esperando parada de runtime de prueba para %s", agente)
+	return nil
 }
 
 func runtimeDiagnosticoTieneActividadViva(data *runtimeDiagnosticoData) bool {
