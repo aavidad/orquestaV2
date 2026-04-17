@@ -1,7 +1,6 @@
 package reviewapp
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -17,8 +16,7 @@ const (
 )
 
 var (
-	ErrStoreNotImplemented = errors.New("review gate db adapter no implementado")
-	validGateStates        = map[string]struct{}{
+	validGateStates = map[string]struct{}{
 		GateStatePending:      {},
 		GateStateInReview:     {},
 		GateStateChangesAsked: {},
@@ -324,52 +322,4 @@ func (s *Service) Update(input UpdateGateInput) (*Gate, error) {
 		return nil, err
 	}
 	return gate, nil
-}
-
-// Repository adapta reviewapp a la futura persistencia de db.
-//
-// Funciones esperadas en db cuando se integren los gates:
-// - GetProyecto(ref string) (*db.Proyecto, error)
-// - GetReviewGate(id int64) (*reviewapp.Gate, error)
-// - ListReviewGates(filter reviewapp.GateFilter) ([]*reviewapp.Gate, error)
-// - CreateReviewGate(gate *reviewapp.Gate) (int64, error)
-// - UpdateReviewGate(gate *reviewapp.Gate) error
-type Repository struct{}
-
-var (
-	getProjectFn = func(ref string) (*ProjectRef, error) {
-		return nil, ErrStoreNotImplemented
-	}
-	getReviewGateFn = func(id int64) (*Gate, error) {
-		return nil, ErrStoreNotImplemented
-	}
-	listReviewGatesFn = func(filter GateFilter) ([]*Gate, error) {
-		return nil, ErrStoreNotImplemented
-	}
-	createReviewGateFn = func(gate *Gate) (int64, error) {
-		return 0, ErrStoreNotImplemented
-	}
-	updateReviewGateFn = func(gate *Gate) error {
-		return ErrStoreNotImplemented
-	}
-)
-
-func (Repository) GetProject(ref string) (*ProjectRef, error) {
-	return getProjectFn(strings.TrimSpace(ref))
-}
-
-func (Repository) GetReviewGate(id int64) (*Gate, error) {
-	return getReviewGateFn(id)
-}
-
-func (Repository) ListReviewGates(filter GateFilter) ([]*Gate, error) {
-	return listReviewGatesFn(filter)
-}
-
-func (Repository) CreateReviewGate(gate *Gate) (int64, error) {
-	return createReviewGateFn(gate)
-}
-
-func (Repository) UpdateReviewGate(gate *Gate) error {
-	return updateReviewGateFn(gate)
 }

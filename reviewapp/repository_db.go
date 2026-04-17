@@ -8,56 +8,66 @@ import (
 	"orquesta/db"
 )
 
-func init() {
-	getProjectFn = func(ref string) (*ProjectRef, error) {
-		proyecto, err := db.GetProyecto(strings.TrimSpace(ref))
-		if err != nil {
-			return nil, err
-		}
-		if proyecto == nil {
-			return nil, sql.ErrNoRows
-		}
-		return &ProjectRef{ID: proyecto.ID, Slug: strings.TrimSpace(proyecto.Slug)}, nil
-	}
-	getReviewGateFn = func(id int64) (*Gate, error) {
-		item, err := db.GetReviewGate(id)
-		if err != nil || item == nil {
-			return nil, err
-		}
-		return reviewGateFromDB(item), nil
-	}
-	listReviewGatesFn = func(filter GateFilter) ([]*Gate, error) {
-		dbFilter := db.FiltroReviewGates{ProyectoID: filter.ProyectoID, TareaID: nil, Reviewer: filter.ReviewerAgente, Estado: filter.Estado, Limit: filter.Limit}
-		items, err := db.ListarReviewGates(dbFilter)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]*Gate, 0, len(items))
-		for _, item := range items {
-			if item == nil {
-				continue
-			}
-			out = append(out, reviewGateFromDB(item))
-		}
-		return out, nil
-	}
-	createReviewGateFn = func(gate *Gate) (int64, error) {
-		id, err := db.CrearReviewGate(reviewGateToDB(gate))
-		if err != nil {
-			return 0, err
-		}
-		if gate != nil {
-			gate.ID = id
-		}
-		return id, nil
-	}
-	updateReviewGateFn = func(gate *Gate) error {
-		return db.ActualizarReviewGate(reviewGateToDB(gate))
-	}
-}
+type Repository struct{}
 
 func NewRepository() Repository {
 	return Repository{}
+}
+
+func (Repository) GetProject(ref string) (*ProjectRef, error) {
+	proyecto, err := db.GetProyecto(strings.TrimSpace(ref))
+	if err != nil {
+		return nil, err
+	}
+	if proyecto == nil {
+		return nil, sql.ErrNoRows
+	}
+	return &ProjectRef{ID: proyecto.ID, Slug: strings.TrimSpace(proyecto.Slug)}, nil
+}
+
+func (Repository) GetReviewGate(id int64) (*Gate, error) {
+	item, err := db.GetReviewGate(id)
+	if err != nil || item == nil {
+		return nil, err
+	}
+	return reviewGateFromDB(item), nil
+}
+
+func (Repository) ListReviewGates(filter GateFilter) ([]*Gate, error) {
+	dbFilter := db.FiltroReviewGates{
+		ProyectoID: filter.ProyectoID,
+		TareaID:    nil,
+		Reviewer:   filter.ReviewerAgente,
+		Estado:     filter.Estado,
+		Limit:      filter.Limit,
+	}
+	items, err := db.ListarReviewGates(dbFilter)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Gate, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		out = append(out, reviewGateFromDB(item))
+	}
+	return out, nil
+}
+
+func (Repository) CreateReviewGate(gate *Gate) (int64, error) {
+	id, err := db.CrearReviewGate(reviewGateToDB(gate))
+	if err != nil {
+		return 0, err
+	}
+	if gate != nil {
+		gate.ID = id
+	}
+	return id, nil
+}
+
+func (Repository) UpdateReviewGate(gate *Gate) error {
+	return db.ActualizarReviewGate(reviewGateToDB(gate))
 }
 
 func reviewGateFromDB(item *db.ReviewGate) *Gate {
