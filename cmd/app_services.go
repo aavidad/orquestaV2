@@ -32,7 +32,8 @@ var supervisionService = supervisionapp.NewService(supervisionapp.NewRepository(
 func init() {
 	orquestacionAgentesService.SetAutonomyStore(orquestacionagentesapp.Repository{})
 	orquestacionAgentesService.SetStartableWorkChecker(startableWorkChecker{})
-	orquestacionAgentesService.SetRemoteRecoverySupport(remoteRecoverySupport{})
+	orquestacionAgentesService.SetRemoteRecoverySupport(orquestacionagentesapp.Repository{})
+	orquestacionAgentesService.SetRecoveryFlowSupport(recoveryFlowSupport{})
 	capacidadService.SetPhaseProvider(progresoService)
 	capacidadService.SetReviewGateProvider(reviewService)
 	capacidadService.SetReviewGateManager(reviewService)
@@ -59,17 +60,12 @@ func (startableWorkChecker) HasStartableAgentWork(agente string, proyectoID int6
 	return dbAgenteTieneTrabajoArrancable(agente, proyectoID)
 }
 
-type remoteRecoverySupport struct{}
+type recoveryFlowSupport struct{}
 
-func (remoteRecoverySupport) ResolveSessionConnector(sesion *db.Sesion, runtime *db.RuntimeInstance, handle *db.RuntimeHandle) (*db.Conector, error) {
-	return resolverConectorSesionAutonomia(sesion, runtime, handle)
+func (recoveryFlowSupport) SharedAccountAvailable(agente string) (bool, string, error) {
+	return autonomiaCuentaCompartidaDisponible(agente)
 }
 
-func (remoteRecoverySupport) IsConnectorAvailable(conectorID int64) (bool, error) {
-	disponible, _, err := db.ConectorDisponibleParaArranque(conectorID)
-	return disponible, err
-}
-
-func (remoteRecoverySupport) MarkProjectExternallyBlocked(proyectoID int64, motivo string) error {
-	return db.MarcarProyectoBloqueadoExterno(proyectoID, motivo)
+func (recoveryFlowSupport) ReactivateProjectIfNeeded(agente string, proyecto *db.Proyecto, motivo string) (bool, error) {
+	return encolarReactivacionAgenteProyectoSiProcede(agente, proyecto, motivo)
 }

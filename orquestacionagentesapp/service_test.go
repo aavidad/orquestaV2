@@ -185,6 +185,36 @@ func (s *stubRemoteRecoverySupport) MarkProjectExternallyBlocked(proyectoID int6
 	return nil
 }
 
+type stubRecoveryFlowSupport struct {
+	available        bool
+	availableReason  string
+	availableErr     error
+	reactivated      bool
+	reactivateErr    error
+	reactivateAgent  string
+	reactivateMotivo string
+	reactivateProjID int64
+}
+
+func (s *stubRecoveryFlowSupport) SharedAccountAvailable(string) (bool, string, error) {
+	if s.availableErr != nil {
+		return false, "", s.availableErr
+	}
+	return s.available, s.availableReason, nil
+}
+
+func (s *stubRecoveryFlowSupport) ReactivateProjectIfNeeded(agente string, proyecto *db.Proyecto, motivo string) (bool, error) {
+	if s.reactivateErr != nil {
+		return false, s.reactivateErr
+	}
+	s.reactivateAgent = agente
+	s.reactivateMotivo = motivo
+	if proyecto != nil {
+		s.reactivateProjID = proyecto.ID
+	}
+	return s.reactivated, nil
+}
+
 func (s *stubAutonomyStore) GetPersistedAgentQuotaState(string) (string, error) {
 	return s.quotaState, s.quotaErr
 }
@@ -772,6 +802,62 @@ func TestRecoverRemoteDegradedRuntimeSessionPausesWhenConnectorUnavailable(t *te
 	}
 	if runtimes.controlReq.Accion != "pause" || runtimes.controlReq.Motivo != "conector:codex-remote:circuito_abierto" {
 		t.Fatalf("pause inesperada: %+v", runtimes.controlReq)
+	}
+}
+
+func TestRecoverDegradedRuntimeSessionReactivatesWhenHandleMissing(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(31)
+	flow := &stubRecoveryFlowSupport{available: true, reactivated: true}
+	runtimes := &stubRuntimeController{
+		project:          &db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		sessionHandleErr: nil,
+		runtimeErr:       nil,
+	}
+	service := NewService(nil, runtimes)
+	service.SetRecoveryFlowSupport(flow)
+
+	count, err := service.RecoverDegradedRuntimeSession(&db.Sesion{
+		ID:         9,
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("RecoverDegradedRuntimeSession: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("count inesperado: %d", count)
+	}
+	if flow.reactivateAgent != "Codex1" || flow.reactivateProjID != proyectoID || flow.reactivateMotivo != "local_runtime_missing" {
+		t.Fatalf("reactivacion inesperada: %+v", flow)
+	}
+}
+
+func TestRecoverDegradedRuntimeSessionSkipsWhenSharedAccountUnavailable(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(31)
+	flow := &stubRecoveryFlowSupport{available: false}
+	runtimes := &stubRuntimeController{
+		project: &db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+	}
+	service := NewService(nil, runtimes)
+	service.SetRecoveryFlowSupport(flow)
+
+	count, err := service.RecoverDegradedRuntimeSession(&db.Sesion{
+		ID:         9,
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("RecoverDegradedRuntimeSession: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("count inesperado: %d", count)
+	}
+	if flow.reactivateAgent != "" {
+		t.Fatalf("no deberia intentar reactivar: %+v", flow)
 	}
 }
 

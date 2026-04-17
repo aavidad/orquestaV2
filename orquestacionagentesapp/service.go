@@ -63,12 +63,18 @@ type RemoteRecoverySupport interface {
 	MarkProjectExternallyBlocked(proyectoID int64, motivo string) error
 }
 
+type RecoveryFlowSupport interface {
+	SharedAccountAvailable(agente string) (bool, string, error)
+	ReactivateProjectIfNeeded(agente string, proyecto *db.Proyecto, motivo string) (bool, error)
+}
+
 type Service struct {
 	agents        AgentPreparer
 	runtimes      RuntimeController
 	autonomyStore AutonomyStore
 	workChecker   StartableWorkChecker
 	remoteSupport RemoteRecoverySupport
+	recoveryFlow  RecoveryFlowSupport
 }
 
 func NewService(agents AgentPreparer, runtimes RuntimeController) *Service {
@@ -94,6 +100,13 @@ func (s *Service) SetRemoteRecoverySupport(support RemoteRecoverySupport) {
 		return
 	}
 	s.remoteSupport = support
+}
+
+func (s *Service) SetRecoveryFlowSupport(support RecoveryFlowSupport) {
+	if s == nil {
+		return
+	}
+	s.recoveryFlow = support
 }
 
 type ControlRequest struct {
@@ -422,6 +435,52 @@ func (s *Service) RecoverLocalFailedRuntimeSession(sesion *db.Sesion, proyecto *
 		return 0, err
 	}
 	return 1, nil
+}
+
+func (s *Service) RecoverDegradedRuntimeSession(sesion *db.Sesion) (int, error) {
+	if s == nil || s.runtimes == nil || s.recoveryFlow == nil {
+		return 0, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
+	}
+	if sesion == nil || sesion.ProyectoID == nil {
+		return 0, nil
+	}
+	disponible, _, err := s.recoveryFlow.SharedAccountAvailable(strings.TrimSpace(sesion.Agente))
+	if err != nil {
+		return 0, err
+	}
+	if !disponible {
+		return 0, nil
+	}
+	if reciente, err := s.HasRecentOperationalRuntimeOtherThanSession(sesion); err != nil {
+		return 0, err
+	} else if reciente {
+		return 0, nil
+	}
+	proyecto, err := s.runtimes.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	if err != nil {
+		return 0, err
+	}
+	handle, runtime, err := s.ResolveSessionRecoveryTarget(sesion)
+	if err != nil {
+		return 0, err
+	}
+	if handle == nil {
+		reactivado, err := s.recoveryFlow.ReactivateProjectIfNeeded(strings.TrimSpace(sesion.Agente), proyecto, "local_runtime_missing")
+		if err != nil {
+			return 0, err
+		}
+		if reactivado {
+			return 1, nil
+		}
+		return 0, nil
+	}
+	if !isRemoteAutonomyTransport(handle.Transporte) {
+		return s.RecoverLocalFailedRuntimeSession(sesion, proyecto, handle, runtime)
+	}
+	if !remoteRuntimeDegraded(handle, runtime) {
+		return 0, nil
+	}
+	return s.RecoverRemoteDegradedRuntimeSession(sesion, proyecto, handle, runtime)
 }
 
 func (s *Service) RecoverRemoteDegradedRuntimeSession(sesion *db.Sesion, proyecto *db.Proyecto, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (int, error) {
@@ -1014,6 +1073,18 @@ func runtimeIsLocallyFailed(handle *db.RuntimeHandle, runtime *db.RuntimeInstanc
 	logical := strings.ToLower(strings.TrimSpace(runtime.LogicalState))
 	process := strings.ToLower(strings.TrimSpace(runtime.ProcessState))
 	return logical == "fallido" || process == "fallido" || process == "crashed" || process == "exited"
+}
+
+func remoteRuntimeDegraded(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) bool {
+	if handle != nil && strings.EqualFold(strings.TrimSpace(handle.Estado), "fallido") {
+		return true
+	}
+	if runtime == nil {
+		return false
+	}
+	logical := strings.ToLower(strings.TrimSpace(runtime.LogicalState))
+	process := strings.ToLower(strings.TrimSpace(runtime.ProcessState))
+	return logical == "degradado" || process == "remote_status_error"
 }
 
 func remoteRuntimeResumable(sesion *db.Sesion, handle *db.RuntimeHandle) bool {

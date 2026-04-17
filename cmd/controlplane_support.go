@@ -10798,42 +10798,7 @@ func resolverHandleReactivacionAgente(agente string, proyectoID *int64) (*db.Run
 }
 
 func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) {
-	if sesion == nil || sesion.ProyectoID == nil {
-		return 0, nil
-	}
-	if disponible, _, err := autonomiaCuentaCompartidaDisponible(strings.TrimSpace(sesion.Agente)); err != nil {
-		return 0, err
-	} else if !disponible {
-		return 0, nil
-	}
-	if runtimeOperativoRecienteDistintoDeSesion(sesion) {
-		return 0, nil
-	}
-	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
-	if err != nil {
-		return 0, err
-	}
-	handle, runtime, err := runtimeRecuperacionSesionObjetivo(sesion)
-	if err != nil {
-		return 0, err
-	}
-	if handle == nil {
-		reactivado, err := encolarReactivacionAgenteProyectoSiProcede(strings.TrimSpace(sesion.Agente), proyecto, "local_runtime_missing")
-		if err != nil {
-			return 0, err
-		}
-		if reactivado {
-			return 1, nil
-		}
-		return 0, nil
-	}
-	if !esTransporteRemotoAutonomia(handle.Transporte) {
-		return procesarRecuperacionRuntimeLocalSesion(sesion, proyecto, handle, runtime)
-	}
-	if !runtimeRemotoDegradado(handle, runtime) {
-		return 0, nil
-	}
-	return procesarRecuperacionRuntimeRemotoDegradadoSesion(sesion, proyecto, handle, runtime)
+	return orquestacionAgentesService.RecoverDegradedRuntimeSession(sesion)
 }
 
 // procesarRecuperacionRuntimeLocalSesion intenta recuperar una sesión cuyo runtime local
@@ -10910,22 +10875,6 @@ func runtimeLocalFallido(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) 
 	logical := strings.ToLower(strings.TrimSpace(runtime.LogicalState))
 	process := strings.ToLower(strings.TrimSpace(runtime.ProcessState))
 	return logical == "fallido" || process == "fallido" || process == "crashed" || process == "exited"
-}
-
-func resolverConectorSesionAutonomia(sesion *db.Sesion, runtime *db.RuntimeInstance, handle *db.RuntimeHandle) (*db.Conector, error) {
-	if sesion != nil && strings.TrimSpace(sesion.ConectorSlug) != "" {
-		return db.GetConector(strings.TrimSpace(sesion.ConectorSlug))
-	}
-	if runtime != nil && strings.TrimSpace(runtime.Connector) != "" {
-		return db.GetConector(strings.TrimSpace(runtime.Connector))
-	}
-	if handle != nil {
-		slug := strings.TrimSpace(stringFromMetadataJSON(handle.MetadataJSON, "conector"))
-		if slug != "" {
-			return db.GetConector(slug)
-		}
-	}
-	return nil, nil
 }
 
 func stringFromMetadataJSON(raw string, key string) string {

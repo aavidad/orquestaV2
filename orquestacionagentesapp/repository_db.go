@@ -7,7 +7,12 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 package orquestacionagentesapp
 
-import "orquesta/db"
+import (
+	"encoding/json"
+	"strings"
+
+	"orquesta/db"
+)
 
 type Repository struct{}
 
@@ -33,4 +38,40 @@ func (Repository) ParkActiveSession(agente string, proyectoID *int64) error {
 
 func (Repository) PauseAssignment(agente string, proyectoID int64, motivo string) error {
 	return db.PausarAsignacion(agente, proyectoID, motivo)
+}
+
+func (Repository) ResolveSessionConnector(sesion *db.Sesion, runtime *db.RuntimeInstance, handle *db.RuntimeHandle) (*db.Conector, error) {
+	if sesion != nil && strings.TrimSpace(sesion.ConectorSlug) != "" {
+		return db.GetConector(strings.TrimSpace(sesion.ConectorSlug))
+	}
+	if runtime != nil && strings.TrimSpace(runtime.Connector) != "" {
+		return db.GetConector(strings.TrimSpace(runtime.Connector))
+	}
+	if handle != nil {
+		if slug := metadataString(handle.MetadataJSON, "conector"); slug != "" {
+			return db.GetConector(slug)
+		}
+	}
+	return nil, nil
+}
+
+func (Repository) IsConnectorAvailable(conectorID int64) (bool, error) {
+	disponible, _, err := db.ConectorDisponibleParaArranque(conectorID)
+	return disponible, err
+}
+
+func (Repository) MarkProjectExternallyBlocked(proyectoID int64, motivo string) error {
+	return db.MarcarProyectoBloqueadoExterno(proyectoID, motivo)
+}
+
+func metadataString(raw string, key string) string {
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &parsed); err != nil || parsed == nil {
+		return ""
+	}
+	value, ok := parsed[key].(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(value)
 }
