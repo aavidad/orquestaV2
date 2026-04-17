@@ -1,16 +1,166 @@
 package operacionesapp
 
-import "orquesta/db"
+import "time"
+
+type Agente struct {
+	Nombre                    string
+	Rol                       string
+	Activo                    bool
+	Habilitado                bool
+	SinCuotaProveedor         bool
+	EstadoSesion              string
+	UltimaSesion              *time.Time
+	ConsumoDiaSegundos        int
+	ConsumoSemanalSegundos    int
+	LimiteDiaSegundos         int
+	LimiteSemanalSegundos     int
+	LastUsageResetAt          *time.Time
+	EstadoCuota               string
+	ReanimarAt                *time.Time
+	MotivoPausa               string
+	CuotaRestantePct          *int
+	PresupuestoEstado         string
+	PresupuestoFuente         string
+	PresupuestoCheckedAt      *time.Time
+	PresupuestoStale          bool
+	PresupuestoVentana        string
+	PresupuestoResetAt        *time.Time
+	PresupuestoSesionPct      *int
+	PresupuestoSesionResetAt  *time.Time
+	PresupuestoDiarioPct      *int
+	PresupuestoDiarioResetAt  *time.Time
+	PresupuestoSemanalPct     *int
+	PresupuestoSemanalResetAt *time.Time
+	RemainingSeconds          *int64
+	RemainingMessages         *int64
+	RemainingTokens           *int64
+	RemainingCredits          *float64
+	ObservedUsageTokens       *int64
+	ObservedUsageCostUSD      *float64
+	ObservedUsageMessages     *int
+	ObservedUsageTurns        *int
+	ObservedUsageUpdatedAt    *time.Time
+	ObservedSessionPath       string
+	CuentaID                  string
+	CuentaUsuario             string
+	CuentaEmail               string
+	CuentaFuente              string
+	CuentaObservadaAt         *time.Time
+}
+
+type Conector struct {
+	ID           int64
+	Slug         string
+	Nombre       string
+	Transporte   string
+	Comando      string
+	ArgsJSON     string
+	EnvJSON      string
+	MetadataJSON string
+	Activo       bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+type EstadoAsignacion string
+
+type Asignacion struct {
+	ID             int64
+	Agente         string
+	ProyectoID     int64
+	ProyectoSlug   string
+	ProyectoNombre string
+	Estado         EstadoAsignacion
+	Nota           string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	CerradaAt      *time.Time
+}
+
+type SesionActiva struct {
+	ID                 int64
+	Agente             string
+	Inicio             time.Time
+	Fin                *time.Time
+	Activa             bool
+	ConectorID         *int64
+	ConectorSlug       string
+	ProyectoID         *int64
+	ProyectoSlug       string
+	Estado             string
+	Cwd                string
+	Herramienta        string
+	ExternalSessionID  string
+	ResumePayloadJSON  string
+	ResumenContinuidad string
+	Branch             string
+	HeartbeatAt        *time.Time
+	Host               string
+	PID                *int64
+}
+
+type Proyecto struct {
+	ID        int64
+	Slug      string
+	Nombre    string
+	RutaAbs   string
+	Tipo      string
+	ParentID  *int64
+	Activo    bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type FiltroSesionesInspeccion struct {
+	Agente     *string
+	ProyectoID *int64
+	Activa     *bool
+	Estado     *string
+	Limit      int
+}
+
+type Sesion struct {
+	ID                 int64
+	Agente             string
+	ConectorID         *int64
+	ConectorSlug       string
+	ConectorNombre     string
+	ProyectoID         *int64
+	ProyectoSlug       string
+	ProyectoNombre     string
+	Inicio             time.Time
+	Fin                *time.Time
+	Activa             bool
+	Estado             string
+	CWD                string
+	Herramienta        string
+	ExternalSessionID  string
+	ResumePayloadJSON  string
+	ResumenContinuidad string
+	Branch             string
+	HeartbeatAt        *time.Time
+	Host               string
+	PID                *int64
+}
+
+type AuditEntry struct {
+	Agente    string
+	Accion    string
+	Entidad   string
+	EntidadID int64
+	Detalle   string
+	CreatedAt time.Time
+}
 
 type Store interface {
-	ListAgents() ([]*db.Agente, error)
-	ListConnectors() ([]*db.Conector, error)
-	ListAssignments(estado, agente string) ([]*db.Asignacion, error)
-	ListActiveSessions() ([]*db.SesionActiva, error)
-	GetProject(ref string) (*db.Proyecto, error)
-	ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]*db.Sesion, error)
-	GetInspectionSession(id int64) (*db.Sesion, error)
-	AuditLog(limit int) ([]db.AuditEntry, error)
+	ListAgents() ([]*Agente, error)
+	ListConnectors() ([]*Conector, error)
+	ListAssignments(estado, agente string) ([]*Asignacion, error)
+	ListActiveSessions() ([]*SesionActiva, error)
+	GetProject(ref string) (*Proyecto, error)
+	ListInspectionSessions(filtro FiltroSesionesInspeccion) ([]*Sesion, error)
+	GetInspectionSession(id int64) (*Sesion, error)
+	AuditLog(limit int) ([]AuditEntry, error)
 	RegisterAgent(nombre, rol string) error
 	RetireAgent(nombre string) error
 	RehabilitateAgent(nombre string) error
@@ -24,19 +174,19 @@ func NewService(store Store) *Service {
 	return &Service{store: store}
 }
 
-func (s *Service) ListAgents() ([]*db.Agente, error) {
+func (s *Service) ListAgents() ([]*Agente, error) {
 	return s.store.ListAgents()
 }
 
-func (s *Service) ListConnectors() ([]*db.Conector, error) {
+func (s *Service) ListConnectors() ([]*Conector, error) {
 	return s.store.ListConnectors()
 }
 
-func (s *Service) ListAssignments(estado, agente string) ([]*db.Asignacion, error) {
+func (s *Service) ListAssignments(estado, agente string) ([]*Asignacion, error) {
 	return s.store.ListAssignments(estado, agente)
 }
 
-func (s *Service) ListActiveSessions() ([]*db.SesionActiva, error) {
+func (s *Service) ListActiveSessions() ([]*SesionActiva, error) {
 	return s.store.ListActiveSessions()
 }
 
@@ -47,8 +197,8 @@ type ListInspectionSessionsInput struct {
 	Activa      *bool
 }
 
-func (s *Service) ListInspectionSessions(input ListInspectionSessionsInput) ([]*db.Sesion, error) {
-	filtro := db.FiltroSesionesInspeccion{}
+func (s *Service) ListInspectionSessions(input ListInspectionSessionsInput) ([]*Sesion, error) {
+	filtro := FiltroSesionesInspeccion{}
 	if input.Agente != "" {
 		filtro.Agente = &input.Agente
 	}
@@ -68,11 +218,11 @@ func (s *Service) ListInspectionSessions(input ListInspectionSessionsInput) ([]*
 	return s.store.ListInspectionSessions(filtro)
 }
 
-func (s *Service) GetInspectionSession(id int64) (*db.Sesion, error) {
+func (s *Service) GetInspectionSession(id int64) (*Sesion, error) {
 	return s.store.GetInspectionSession(id)
 }
 
-func (s *Service) AuditLog(limit int) ([]db.AuditEntry, error) {
+func (s *Service) AuditLog(limit int) ([]AuditEntry, error) {
 	return s.store.AuditLog(limit)
 }
 
@@ -86,50 +236,4 @@ func (s *Service) RetireAgent(nombre string) error {
 
 func (s *Service) RehabilitateAgent(nombre string) error {
 	return s.store.RehabilitateAgent(nombre)
-}
-
-type Repository struct{}
-
-func (Repository) ListAgents() ([]*db.Agente, error) {
-	return db.ListarAgentes()
-}
-
-func (Repository) ListConnectors() ([]*db.Conector, error) {
-	return db.ListarConectores()
-}
-
-func (Repository) ListAssignments(estado, agente string) ([]*db.Asignacion, error) {
-	return db.ListarAsignacionesOpsView(estado, agente)
-}
-
-func (Repository) ListActiveSessions() ([]*db.SesionActiva, error) {
-	return db.ListarSesionesActivasOpsView()
-}
-
-func (Repository) GetProject(ref string) (*db.Proyecto, error) {
-	return db.GetProyecto(ref)
-}
-
-func (Repository) ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]*db.Sesion, error) {
-	return db.ListarSesionesInspeccion(filtro)
-}
-
-func (Repository) GetInspectionSession(id int64) (*db.Sesion, error) {
-	return db.GetSesionInspeccionByID(id)
-}
-
-func (Repository) AuditLog(limit int) ([]db.AuditEntry, error) {
-	return db.AuditLog(limit)
-}
-
-func (Repository) RegisterAgent(nombre, rol string) error {
-	return db.RegistrarAgente(nombre, rol)
-}
-
-func (Repository) RetireAgent(nombre string) error {
-	return db.RetirarAgente(nombre)
-}
-
-func (Repository) RehabilitateAgent(nombre string) error {
-	return db.RehabilitarAgente(nombre)
 }
