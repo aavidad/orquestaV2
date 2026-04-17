@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"orquesta/db"
+	"orquesta/lenguajeapp"
 )
 
 func TestLenguajeUsaAPIParaLecturas(t *testing.T) {
@@ -25,7 +25,7 @@ func TestLenguajeUsaAPIParaLecturas(t *testing.T) {
 	})
 	mux.HandleFunc("/api/lenguaje/politica", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(apiLenguajePoliticaResponse{
-			Politica: &db.LanguagePolicy{
+			Politica: &lenguajeapp.LanguagePolicy{
 				DefaultLanguage:          "es",
 				DocumentationMultilang:   true,
 				AppsMultilang:            true,
@@ -37,14 +37,14 @@ func TestLenguajeUsaAPIParaLecturas(t *testing.T) {
 	})
 	mux.HandleFunc("/api/lenguaje/matriz", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(apiLenguajeMatrizResponse{
-			Matriz: []*db.LanguageMatrixEntry{
+			Matriz: []*lenguajeapp.LanguageMatrixEntry{
 				{Scope: "project", Selector: "orquestador", Context: "apps", Language: "fr"},
 			},
 		})
 	})
 	mux.HandleFunc("/api/lenguaje/resolver", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(apiLenguajeResolucionResponse{
-			Resolucion: &db.LanguageResolution{
+			Resolucion: &lenguajeapp.LanguageResolution{
 				Idioma:   "fr",
 				Contexto: "apps",
 				Origen:   "matriz",
@@ -102,7 +102,7 @@ func TestLenguajeUsaAPIParaEscrituras(t *testing.T) {
 		switch r.Method {
 		case http.MethodGet:
 			_ = json.NewEncoder(w).Encode(apiLenguajePoliticaResponse{
-				Politica: &db.LanguagePolicy{
+				Politica: &lenguajeapp.LanguagePolicy{
 					DefaultLanguage:          "es",
 					DocumentationMultilang:   true,
 					AppsMultilang:            true,
@@ -211,7 +211,7 @@ func TestLenguajeEsqueletoUsaPoliticaYMaterializaEstructura(t *testing.T) {
 	})
 	mux.HandleFunc("/api/lenguaje/politica", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(apiLenguajePoliticaResponse{
-			Politica: &db.LanguagePolicy{
+			Politica: &lenguajeapp.LanguagePolicy{
 				DefaultLanguage:          "es",
 				DocumentationMultilang:   true,
 				AppsMultilang:            true,

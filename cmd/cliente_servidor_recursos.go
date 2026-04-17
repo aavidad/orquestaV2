@@ -20,6 +20,7 @@ import (
 	"orquesta/db"
 	"orquesta/fabricaapp"
 	"orquesta/gitgobernanza"
+	"orquesta/lenguajeapp"
 )
 
 type apiProyectoResponse struct {
@@ -203,20 +204,20 @@ type apiProyectoOperacionSetRequest struct {
 }
 
 type apiLenguajePoliticaResponse struct {
-	Politica *db.LanguagePolicy `json:"politica"`
+	Politica *lenguajeapp.LanguagePolicy `json:"politica"`
 }
 
 type apiLenguajeMatrizResponse struct {
-	Matriz []*db.LanguageMatrixEntry `json:"matriz"`
+	Matriz []*lenguajeapp.LanguageMatrixEntry `json:"matriz"`
 }
 
 type apiLenguajeResolucionResponse struct {
-	Resolucion *db.LanguageResolution `json:"resolucion"`
+	Resolucion *lenguajeapp.LanguageResolution `json:"resolucion"`
 }
 
 type apiLenguajePoliticaSetRequest struct {
-	Politica *db.LanguagePolicy `json:"politica"`
-	Por      string             `json:"por"`
+	Politica *lenguajeapp.LanguagePolicy `json:"politica"`
+	Por      string                      `json:"por"`
 }
 
 type apiLenguajeMatrizSetRequest struct {
@@ -925,7 +926,7 @@ func guardarPermisoCatalogoPorAPI(req apiPermisoCatalogoSetRequest) (bool, error
 	return apiPost("/api/permisos-catalogo", req, nil)
 }
 
-func cargarPoliticaLenguajeDesdeAPI() (*db.LanguagePolicy, bool, error) {
+func cargarPoliticaLenguajeDesdeAPI() (*lenguajeapp.LanguagePolicy, bool, error) {
 	var resp apiLenguajePoliticaResponse
 	ok, err := apiGet("/api/lenguaje/politica", &resp)
 	if !ok || err != nil {
@@ -934,7 +935,7 @@ func cargarPoliticaLenguajeDesdeAPI() (*db.LanguagePolicy, bool, error) {
 	return resp.Politica, true, nil
 }
 
-func cargarMatrizLenguajeDesdeAPI() ([]*db.LanguageMatrixEntry, bool, error) {
+func cargarMatrizLenguajeDesdeAPI() ([]*lenguajeapp.LanguageMatrixEntry, bool, error) {
 	var resp apiLenguajeMatrizResponse
 	ok, err := apiGet("/api/lenguaje/matriz", &resp)
 	if !ok || err != nil {
@@ -943,7 +944,7 @@ func cargarMatrizLenguajeDesdeAPI() ([]*db.LanguageMatrixEntry, bool, error) {
 	return resp.Matriz, true, nil
 }
 
-func resolverLenguajePorAPI(proyecto string, tareaID *int64, contexto string) (*db.LanguageResolution, bool, error) {
+func resolverLenguajePorAPI(proyecto string, tareaID *int64, contexto string) (*lenguajeapp.LanguageResolution, bool, error) {
 	query := url.Values{}
 	if strings.TrimSpace(proyecto) != "" {
 		query.Set("proyecto", strings.TrimSpace(proyecto))
@@ -962,7 +963,7 @@ func resolverLenguajePorAPI(proyecto string, tareaID *int64, contexto string) (*
 	return resp.Resolucion, true, nil
 }
 
-func fijarPoliticaLenguajePorAPI(policy *db.LanguagePolicy, por string) (bool, error) {
+func fijarPoliticaLenguajePorAPI(policy *lenguajeapp.LanguagePolicy, por string) (bool, error) {
 	ok, err := apiPost("/api/lenguaje/politica", apiLenguajePoliticaSetRequest{
 		Politica: policy,
 		Por:      strings.TrimSpace(por),
