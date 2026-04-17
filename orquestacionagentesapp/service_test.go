@@ -26,8 +26,14 @@ type stubRuntimeController struct {
 	controlID           int64
 	controlAction       string
 	controlErr          error
+	project             *db.Proyecto
+	projectErr          error
+	runtime             *db.RuntimeInstance
+	runtimeErr          error
 	orders              []*db.RuntimeOrder
 	ordersErr           error
+	mailbox             []*db.RuntimeMailboxMessage
+	mailboxErr          error
 	handleByID          map[int64]*db.RuntimeHandle
 	controlHandle       *db.RuntimeHandle
 	controlHandleErr    error
@@ -42,6 +48,14 @@ func (s *stubRuntimeController) EnqueueAgentControl(req runtimesapp.AgentControl
 	return s.controlID, s.controlAction, s.controlErr
 }
 
+func (s *stubRuntimeController) GetProject(string) (*db.Proyecto, error) {
+	return s.project, s.projectErr
+}
+
+func (s *stubRuntimeController) GetRuntime(int64) (*db.RuntimeInstance, error) {
+	return s.runtime, s.runtimeErr
+}
+
 func (s *stubRuntimeController) GetRuntimeHandle(id int64) (*db.RuntimeHandle, error) {
 	if s.handleByID == nil {
 		return nil, nil
@@ -49,8 +63,24 @@ func (s *stubRuntimeController) GetRuntimeHandle(id int64) (*db.RuntimeHandle, e
 	return s.handleByID[id], nil
 }
 
+func (s *stubRuntimeController) GetRuntimeBySessionID(int64) (*db.RuntimeInstance, error) {
+	return s.runtime, s.runtimeErr
+}
+
+func (s *stubRuntimeController) GetPrimaryRuntimeForProject(string, *int64) (*db.RuntimeInstance, error) {
+	return s.runtime, s.runtimeErr
+}
+
+func (s *stubRuntimeController) EnqueueRuntimeOrder(*db.RuntimeOrder) (int64, error) {
+	return s.controlID, s.controlErr
+}
+
 func (s *stubRuntimeController) ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error) {
 	return s.orders, s.ordersErr
+}
+
+func (s *stubRuntimeController) ListRuntimeMailbox(filtro db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error) {
+	return s.mailbox, s.mailboxErr
 }
 
 func (s *stubRuntimeController) ResolveControlHandle(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
@@ -70,6 +100,10 @@ type stubAutonomyStore struct {
 	quotaErr         error
 	sessionHandle    *db.RuntimeHandle
 	sessionHandleErr error
+	auditAction      string
+	auditEntity      string
+	auditEntityID    int64
+	auditDetail      string
 	parkedAgent      string
 	parkedProjectID  *int64
 	pauseAgent       string
@@ -100,6 +134,13 @@ func (s *stubAutonomyStore) PauseAssignment(agente string, proyectoID int64, mot
 	s.pauseProjectID = proyectoID
 	s.pauseReason = motivo
 	return nil
+}
+
+func (s *stubAutonomyStore) Audit(_ string, accion, entidad string, entidadID int64, detalle string) {
+	s.auditAction = accion
+	s.auditEntity = entidad
+	s.auditEntityID = entidadID
+	s.auditDetail = detalle
 }
 
 func TestLaunchBuildsPrepareAndEnqueuesStart(t *testing.T) {
@@ -308,5 +349,75 @@ func TestPauseAutonomySessionIfNeededPropagatesPauseAssignmentError(t *testing.T
 	}, &db.Proyecto{ID: proyectoID, Slug: "infra"}, "stop")
 	if err == nil || err.Error() != "pause failed" {
 		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestEnqueueAutonomyNudgeCreatesRuntimeOrderAndAudit(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(31)
+	runtimeID := int64(44)
+	handleID := int64(9)
+	store := &stubAutonomyStore{}
+	runtimes := &stubRuntimeController{
+		controlID: 77,
+		deliveryHandle: &db.RuntimeHandle{
+			ID:        handleID,
+			RuntimeID: &runtimeID,
+			Estado:    "activo",
+		},
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(store)
+
+	ok, err := service.EnqueueAutonomyNudge(NudgeRequest{
+		Agente:      "Codex1",
+		Proyecto:    &db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		Accion:      "continuar_trabajo",
+		Motivo:      "seguir",
+		Instruction: "continua",
+		Extras:      map[string]any{"tarea_id": int64(88)},
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAutonomyNudge: %v", err)
+	}
+	if !ok {
+		t.Fatal("debería encolar nudge")
+	}
+	if store.auditAction != "autonomia_nudge" || store.auditEntityID != 77 {
+		t.Fatalf("audit inesperada: %+v", store)
+	}
+}
+
+func TestEnqueueAutonomyNudgeSkipsWhenMailboxPending(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(32)
+	runtimes := &stubRuntimeController{
+		deliveryHandle: &db.RuntimeHandle{
+			ID:               3,
+			Estado:           "activo",
+			CapabilitiesJSON: `{"can_send_input":false}`,
+		},
+		mailbox: []*db.RuntimeMailboxMessage{{
+			ID:          1,
+			Kind:        "autonomia",
+			PayloadJSON: `{"accion":"continuar_trabajo"}`,
+		}},
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(&stubAutonomyStore{})
+
+	ok, err := service.EnqueueAutonomyNudge(NudgeRequest{
+		Agente:   "Codex2",
+		Proyecto: &db.Proyecto{ID: proyectoID, Slug: "core"},
+		Accion:   "continuar_trabajo",
+		Motivo:   "seguir",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAutonomyNudge: %v", err)
+	}
+	if ok {
+		t.Fatal("no debería encolar con mailbox pendiente")
 	}
 }

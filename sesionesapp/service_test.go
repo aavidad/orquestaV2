@@ -210,6 +210,19 @@ func TestSaveAndContinueSession(t *testing.T) {
 	}
 }
 
+func TestResolveProjectIDReturnsNilWhenProjectMissing(t *testing.T) {
+	store := &stubStore{}
+	service := NewService(store)
+
+	id, err := service.ResolveProjectID("desconocido")
+	if err != nil {
+		t.Fatalf("ResolveProjectID: %v", err)
+	}
+	if id != nil {
+		t.Fatalf("project id inesperado: %v", *id)
+	}
+}
+
 func TestGetAndRegisterBudget(t *testing.T) {
 	store := &stubStore{
 		active:       &Sesion{ID: 41, Agente: "Codex2"},

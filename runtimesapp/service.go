@@ -30,6 +30,7 @@ type Store interface {
 	ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance, error)
 	BuildRuntimeTree(filtro db.FiltroRuntimes) ([]*db.RuntimeTreeNode, error)
 	GetRuntime(id int64) (*db.RuntimeInstance, error)
+	GetRuntimeBySessionID(sessionID int64) (*db.RuntimeInstance, error)
 	GetPrimaryRuntime(agente string) (*db.RuntimeInstance, error)
 	GetPrimaryRuntimeForProject(agente string, proyectoID *int64) (*db.RuntimeInstance, error)
 	CloseRuntime(id int64) error
@@ -345,6 +346,14 @@ func (s *Service) BuildRuntimeTree(filtro db.FiltroRuntimes) ([]*db.RuntimeTreeN
 
 func (s *Service) GetRuntime(id int64) (*db.RuntimeInstance, error) {
 	return s.store.GetRuntime(id)
+}
+
+func (s *Service) GetRuntimeBySessionID(sessionID int64) (*db.RuntimeInstance, error) {
+	return s.store.GetRuntimeBySessionID(sessionID)
+}
+
+func (s *Service) GetPrimaryRuntimeForProject(agente string, proyectoID *int64) (*db.RuntimeInstance, error) {
+	return s.store.GetPrimaryRuntimeForProject(agente, proyectoID)
 }
 
 func (s *Service) DescribeRuntime(id int64) (*RuntimeDescription, error) {

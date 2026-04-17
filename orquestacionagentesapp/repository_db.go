@@ -11,6 +11,10 @@ import "orquesta/db"
 
 type Repository struct{}
 
+func (Repository) Audit(agente, accion, entidad string, entidadID int64, detalle string) {
+	db.Audit(agente, accion, entidad, entidadID, detalle)
+}
+
 func (Repository) GetPersistedAgentQuotaState(agente string) (string, error) {
 	return db.GetPersistedAgentQuotaState(agente)
 }

@@ -28,6 +28,10 @@ func (Repository) GetRuntime(id int64) (*db.RuntimeInstance, error) {
 	return db.GetRuntime(id)
 }
 
+func (Repository) GetRuntimeBySessionID(sessionID int64) (*db.RuntimeInstance, error) {
+	return db.GetRuntimeBySesionID(sessionID)
+}
+
 func (Repository) GetPrimaryRuntime(agente string) (*db.RuntimeInstance, error) {
 	return db.GetRuntimePrincipalAgente(agente)
 }

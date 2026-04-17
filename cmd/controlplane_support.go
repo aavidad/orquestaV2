@@ -11810,76 +11810,16 @@ func encolarNudgeAutonomiaConInvalidacion(snapshot *autonomiaBatchSnapshot, agen
 }
 
 func encolarNudgeAutonomiaDetallado(agente string, proyecto *db.Proyecto, accion, motivo, instruction string, extras map[string]any) (bool, error) {
-	if proyecto == nil {
-		return false, nil
-	}
-	agente = strings.TrimSpace(agente)
-	accion = strings.TrimSpace(accion)
-	if abierta, err := existeRuntimeOrderAbiertaAutonomia(strings.TrimSpace(agente), &proyecto.ID, "send_instruction"); err != nil {
-		return false, err
-	} else if abierta {
-		return false, nil
-	}
 	cooldown := time.Duration(controlPlaneConfigIntOrDefault("autonomia_nudge_cooldown_seconds", 60)) * time.Second
-	if reciente, err := existeRuntimeOrderAutonomiaReciente(strings.TrimSpace(agente), &proyecto.ID, "nudge", "", cooldown); err != nil {
-		return false, err
-	} else if reciente {
-		return false, nil
-	}
-	var runtimeID *int64
-	var handleID *int64
-	handle, err := resolverHandleEntregaAgente(strings.TrimSpace(agente), &proyecto.ID)
-	if err != nil {
-		return false, err
-	}
-	if handle != nil {
-		handleID = &handle.ID
-		runtimeID, err = runtimeIDCanonicoDesdeHandleAgenteProyecto(handle, strings.TrimSpace(agente), &proyecto.ID)
-		if err != nil {
-			return false, err
-		}
-		if runtimeID == nil && handle.RuntimeID != nil {
-			runtimeID = handle.RuntimeID
-		}
-		if !db.RuntimeHandlePermiteSendInputInteractivo(handle) {
-			if pendiente, err := existeRuntimeMailboxAutonomiaPendiente(agente, &proyecto.ID, accion); err != nil {
-				return false, err
-			} else if pendiente {
-				return false, nil
-			}
-		}
-	}
-	payload := map[string]any{
-		"from_agente": "server",
-		"to_agente":   agente,
-		"kind":        "autonomia",
-		"accion":      accion,
-		"texto":       strings.TrimSpace(motivo),
-	}
-	if strings.TrimSpace(instruction) != "" {
-		payload["instruction"] = strings.TrimSpace(instruction)
-	}
-	for key, value := range extras {
-		payload[key] = value
-	}
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		return false, err
-	}
-	orderID, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
+	return orquestacionAgentesService.EnqueueAutonomyNudge(orquestacionagentesapp.NudgeRequest{
 		Agente:      strings.TrimSpace(agente),
-		ProyectoID:  &proyecto.ID,
-		RuntimeID:   runtimeID,
-		HandleID:    handleID,
-		Tipo:        "nudge",
-		PayloadJSON: string(payloadJSON),
+		Proyecto:    proyecto,
+		Accion:      strings.TrimSpace(accion),
+		Motivo:      motivo,
+		Instruction: instruction,
+		Extras:      extras,
+		Cooldown:    cooldown,
 	})
-	if err != nil {
-		return false, err
-	}
-	db.Audit("orquesta", "autonomia_nudge", "runtime_order", orderID,
-		fmt.Sprintf("agente=%s proyecto=%s accion=%s", agente, proyecto.Slug, accion))
-	return true, nil
 }
 
 func encolarContinuacionTareaReasignada(agente string, proyecto *db.Proyecto, tareaID int64, origen, motivo, instruction string, extras map[string]any) (bool, error) {
@@ -12086,29 +12026,4 @@ func encolarControlAutonomiaProyectoDetallado(req apiAgenteControlRequest) error
 		TareaID:      req.TareaID,
 	})
 	return err
-}
-
-func existeRuntimeMailboxAutonomiaPendiente(agente string, proyectoID *int64, accion string) (bool, error) {
-	estado := "pendiente"
-	agente = strings.TrimSpace(agente)
-	accion = strings.TrimSpace(accion)
-	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
-		ToAgente:   &agente,
-		ProyectoID: proyectoID,
-		Estado:     &estado,
-	})
-	if err != nil {
-		return false, err
-	}
-	for _, msg := range mailbox {
-		if msg == nil || strings.TrimSpace(msg.Kind) != "autonomia" {
-			continue
-		}
-		payload := map[string]any{}
-		_ = json.Unmarshal([]byte(msg.PayloadJSON), &payload)
-		if strings.TrimSpace(stringMapValue(payload, "accion")) == accion {
-			return true, nil
-		}
-	}
-	return false, nil
 }

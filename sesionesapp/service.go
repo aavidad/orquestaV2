@@ -150,6 +150,9 @@ func (s *Service) ResolveProjectID(ref string) (*int64, error) {
 	if err != nil {
 		return nil, err
 	}
+	if proyecto == nil {
+		return nil, nil
+	}
 	return &proyecto.ID, nil
 }
 
@@ -158,7 +161,14 @@ func (s *Service) GetProject(ref string) (*Proyecto, error) {
 	if ref == "" {
 		return nil, fmt.Errorf("proyecto obligatorio")
 	}
-	return s.store.GetProject(ref)
+	proyecto, err := s.store.GetProject(ref)
+	if err != nil {
+		return nil, err
+	}
+	if proyecto == nil {
+		return nil, fmt.Errorf("proyecto no encontrado: %s", ref)
+	}
+	return proyecto, nil
 }
 
 func (s *Service) ActivateAssignment(agente, proyectoRef, nota string) (*Proyecto, error) {
@@ -169,6 +179,9 @@ func (s *Service) ActivateAssignment(agente, proyectoRef, nota string) (*Proyect
 	proyecto, err := s.store.GetProject(proyectoRef)
 	if err != nil {
 		return nil, err
+	}
+	if proyecto == nil {
+		return nil, fmt.Errorf("proyecto no encontrado: %s", proyectoRef)
 	}
 	if err := s.store.ActivateAssignment(strings.TrimSpace(agente), proyecto.ID, strings.TrimSpace(nota)); err != nil {
 		return nil, err

@@ -284,6 +284,10 @@ func (f *fakeStore) GetRuntime(id int64) (*db.RuntimeInstance, error) {
 	f.runtimeID = id
 	return f.runtimeResponse, nil
 }
+
+func (f *fakeStore) GetRuntimeBySessionID(sessionID int64) (*db.RuntimeInstance, error) {
+	return f.runtimeResponse, nil
+}
 func (f *fakeStore) GetPrimaryRuntime(agente string) (*db.RuntimeInstance, error) {
 	f.primaryRuntimeAgent = agente
 	return f.primaryRuntimeResp, nil
