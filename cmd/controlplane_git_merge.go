@@ -53,7 +53,7 @@ func procesarGitMergesBatch() (int, error) {
 	return total, nil
 }
 
-func procesarGitMergeAutonomo(svc *gitgobernanza.Service, merge *db.GitMerge) (bool, error) {
+func procesarGitMergeAutonomo(svc *gitgobernanza.Service, merge *gitgobernanza.GitMerge) (bool, error) {
 	if svc == nil || merge == nil || merge.ProyectoID == 0 {
 		return false, nil
 	}
@@ -103,7 +103,7 @@ func procesarGitMergeAutonomo(svc *gitgobernanza.Service, merge *db.GitMerge) (b
 	return true, nil
 }
 
-func guardarEstadoGitMerge(svc *gitgobernanza.Service, proyectoSlug string, merge *db.GitMerge, estado, commitOrigen, commitMerge, notas string) error {
+func guardarEstadoGitMerge(svc *gitgobernanza.Service, proyectoSlug string, merge *gitgobernanza.GitMerge, estado, commitOrigen, commitMerge, notas string) error {
 	if svc == nil || merge == nil {
 		return nil
 	}

@@ -9,8 +9,8 @@ import (
 
 type fakeStore struct {
 	projectID int64
-	saved     *db.GitMerge
-	listed    []*db.GitMerge
+	saved     *GitMerge
+	listed    []*GitMerge
 	worktrees []*db.Worktree
 	locks     []*db.Lock
 }
@@ -35,7 +35,19 @@ func (f *fakeStore) ResolveProyectoIDBySlug(slug string) (*int64, error) {
 	return &f.projectID, nil
 }
 
-func (f *fakeStore) SaveGitMerge(m *db.GitMerge) (int64, error) {
+func (f *fakeStore) GetGitMerge(id int64) (*GitMerge, error) {
+	if f.saved != nil && f.saved.ID == id {
+		return f.saved, nil
+	}
+	for _, item := range f.listed {
+		if item != nil && item.ID == id {
+			return item, nil
+		}
+	}
+	return nil, nil
+}
+
+func (f *fakeStore) SaveGitMerge(m *GitMerge) (int64, error) {
 	f.saved = m
 	if m.ID != 0 {
 		return m.ID, nil
@@ -43,7 +55,7 @@ func (f *fakeStore) SaveGitMerge(m *db.GitMerge) (int64, error) {
 	return 44, nil
 }
 
-func (f *fakeStore) ListGitMerges(proyectoID *int64, estado string) ([]*db.GitMerge, error) {
+func (f *fakeStore) ListGitMerges(proyectoID *int64, estado string) ([]*GitMerge, error) {
 	return f.listed, nil
 }
 
@@ -82,7 +94,7 @@ func TestListRequestsResuelveProyectoYDelega(t *testing.T) {
 
 	store := &fakeStore{
 		projectID: 3,
-		listed: []*db.GitMerge{
+		listed: []*GitMerge{
 			{ID: 1, ProyectoID: 3, SourceBranch: "feat/a", TargetBranch: "main"},
 		},
 	}
@@ -100,7 +112,7 @@ func TestListRequestsSinProyectoPermiteListadoGlobal(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeStore{
-		listed: []*db.GitMerge{
+		listed: []*GitMerge{
 			{ID: 1, ProyectoID: 3, SourceBranch: "feat/a", TargetBranch: "main"},
 		},
 	}

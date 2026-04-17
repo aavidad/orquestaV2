@@ -9,10 +9,30 @@ package gitgobernanza
 
 import (
 	"strings"
+	"time"
 
 	"orquesta/coordinacion"
 	"orquesta/db"
 )
+
+type GitMerge struct {
+	ID            int64     `json:"id"`
+	ProyectoID    int64     `json:"proyecto_id"`
+	ProyectoSlug  string    `json:"proyecto_slug"`
+	SourceBranch  string    `json:"source_branch"`
+	TargetBranch  string    `json:"target_branch"`
+	RequestedBy   string    `json:"requested_by"`
+	SolicitadoPor string    `json:"solicitado_por"`
+	Estado        string    `json:"estado"`
+	SourceCommit  string    `json:"source_commit"`
+	MergeCommit   string    `json:"merge_commit"`
+	CommitOrigen  string    `json:"commit_origen"`
+	CommitMerge   string    `json:"commit_merge"`
+	Notas         string    `json:"notas"`
+	MetadataJSON  string    `json:"metadata_json"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
 
 type Store interface {
 	ListWorktrees(estado, agente string) ([]*db.Worktree, error)
@@ -20,8 +40,9 @@ type Store interface {
 	GetWorktree(id int64) (*coordinacion.Worktree, error)
 	GetLock(id int64) (*coordinacion.Lock, error)
 	ResolveProyectoIDBySlug(slug string) (*int64, error)
-	SaveGitMerge(m *db.GitMerge) (int64, error)
-	ListGitMerges(proyectoID *int64, estado string) ([]*db.GitMerge, error)
+	GetGitMerge(id int64) (*GitMerge, error)
+	SaveGitMerge(m *GitMerge) (int64, error)
+	ListGitMerges(proyectoID *int64, estado string) ([]*GitMerge, error)
 }
 
 type Service struct {
@@ -61,12 +82,16 @@ func (s *Service) GetLock(id int64) (*coordinacion.Lock, error) {
 	return s.store.GetLock(id)
 }
 
+func (s *Service) GetRequest(id int64) (*GitMerge, error) {
+	return s.store.GetGitMerge(id)
+}
+
 func (s *Service) SaveRequest(input SaveMergeRequestInput) (int64, error) {
 	proyectoID, err := s.store.ResolveProyectoIDBySlug(strings.TrimSpace(input.ProyectoSlug))
 	if err != nil {
 		return 0, err
 	}
-	return s.store.SaveGitMerge(&db.GitMerge{
+	return s.store.SaveGitMerge(&GitMerge{
 		ID:           input.ID,
 		ProyectoID:   derefProyectoID(proyectoID),
 		SourceBranch: strings.TrimSpace(input.SourceBranch),
@@ -80,7 +105,7 @@ func (s *Service) SaveRequest(input SaveMergeRequestInput) (int64, error) {
 	})
 }
 
-func (s *Service) ListRequests(proyectoSlug, estado string) ([]*db.GitMerge, error) {
+func (s *Service) ListRequests(proyectoSlug, estado string) ([]*GitMerge, error) {
 	var proyectoID *int64
 	var err error
 	if strings.TrimSpace(proyectoSlug) != "" {
@@ -121,10 +146,77 @@ func (Repository) ResolveProyectoIDBySlug(slug string) (*int64, error) {
 	return db.ResolveProyectoIDBySlug(slug)
 }
 
-func (Repository) SaveGitMerge(m *db.GitMerge) (int64, error) {
-	return db.GuardarGitMerge(m)
+func (Repository) GetGitMerge(id int64) (*GitMerge, error) {
+	item, err := db.GetGitMerge(id)
+	if err != nil || item == nil {
+		return nil, err
+	}
+	return mapGitMerge(item), nil
 }
 
-func (Repository) ListGitMerges(proyectoID *int64, estado string) ([]*db.GitMerge, error) {
-	return db.ListarGitMerges(proyectoID, estado)
+func (Repository) SaveGitMerge(m *GitMerge) (int64, error) {
+	return db.GuardarGitMerge(mapDBGitMerge(m))
+}
+
+func (Repository) ListGitMerges(proyectoID *int64, estado string) ([]*GitMerge, error) {
+	items, err := db.ListarGitMerges(proyectoID, estado)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*GitMerge, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		out = append(out, mapGitMerge(item))
+	}
+	return out, nil
+}
+
+func mapGitMerge(in *db.GitMerge) *GitMerge {
+	if in == nil {
+		return nil
+	}
+	return &GitMerge{
+		ID:            in.ID,
+		ProyectoID:    in.ProyectoID,
+		ProyectoSlug:  in.ProyectoSlug,
+		SourceBranch:  in.SourceBranch,
+		TargetBranch:  in.TargetBranch,
+		RequestedBy:   in.RequestedBy,
+		SolicitadoPor: in.SolicitadoPor,
+		Estado:        in.Estado,
+		SourceCommit:  in.SourceCommit,
+		MergeCommit:   in.MergeCommit,
+		CommitOrigen:  in.CommitOrigen,
+		CommitMerge:   in.CommitMerge,
+		Notas:         in.Notas,
+		MetadataJSON:  in.MetadataJSON,
+		CreatedAt:     in.CreatedAt,
+		UpdatedAt:     in.UpdatedAt,
+	}
+}
+
+func mapDBGitMerge(in *GitMerge) *db.GitMerge {
+	if in == nil {
+		return nil
+	}
+	return &db.GitMerge{
+		ID:            in.ID,
+		ProyectoID:    in.ProyectoID,
+		ProyectoSlug:  in.ProyectoSlug,
+		SourceBranch:  in.SourceBranch,
+		TargetBranch:  in.TargetBranch,
+		RequestedBy:   in.RequestedBy,
+		SolicitadoPor: in.SolicitadoPor,
+		Estado:        in.Estado,
+		SourceCommit:  in.SourceCommit,
+		MergeCommit:   in.MergeCommit,
+		CommitOrigen:  in.CommitOrigen,
+		CommitMerge:   in.CommitMerge,
+		Notas:         in.Notas,
+		MetadataJSON:  in.MetadataJSON,
+		CreatedAt:     in.CreatedAt,
+		UpdatedAt:     in.UpdatedAt,
+	}
 }

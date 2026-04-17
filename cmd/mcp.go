@@ -2898,7 +2898,7 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		if err != nil {
 			return toolResult(err.Error(), nil, true), nil
 		}
-		merge, err := db.GetGitMerge(id)
+		merge, err := gitgobernanza.NewService(gitgobernanza.Repository{}).GetRequest(id)
 		if err != nil {
 			return nil, err
 		}
@@ -3751,7 +3751,7 @@ func listarMergesRevisionSupervisor(limit int) ([]*db.GitMerge, error) {
 				continue
 			}
 			seen[row.ID] = struct{}{}
-			items = append(items, row)
+			items = append(items, adaptarGitMergeGobernanzaDB(row))
 		}
 	}
 	sort.Slice(items, func(i, j int) bool {
@@ -3761,6 +3761,30 @@ func listarMergesRevisionSupervisor(limit int) ([]*db.GitMerge, error) {
 		items = items[:limit]
 	}
 	return items, nil
+}
+
+func adaptarGitMergeGobernanzaDB(item *gitgobernanza.GitMerge) *db.GitMerge {
+	if item == nil {
+		return nil
+	}
+	return &db.GitMerge{
+		ID:            item.ID,
+		ProyectoID:    item.ProyectoID,
+		ProyectoSlug:  item.ProyectoSlug,
+		SourceBranch:  item.SourceBranch,
+		TargetBranch:  item.TargetBranch,
+		RequestedBy:   item.RequestedBy,
+		SolicitadoPor: item.SolicitadoPor,
+		Estado:        item.Estado,
+		SourceCommit:  item.SourceCommit,
+		MergeCommit:   item.MergeCommit,
+		CommitOrigen:  item.CommitOrigen,
+		CommitMerge:   item.CommitMerge,
+		Notas:         item.Notas,
+		MetadataJSON:  item.MetadataJSON,
+		CreatedAt:     item.CreatedAt,
+		UpdatedAt:     item.UpdatedAt,
+	}
 }
 
 func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {

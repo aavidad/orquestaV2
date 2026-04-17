@@ -16,6 +16,7 @@ import (
 
 	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/gitgobernanza"
 )
 
 type webGitGovData struct {
@@ -25,7 +26,7 @@ type webGitGovData struct {
 	MergeEstado string
 	Worktrees   []webGitWorktreeRow
 	Locks       []webGitLockRow
-	Merges      []*db.GitMerge
+	Merges      []*gitgobernanza.GitMerge
 	Msg         string
 	Err         string
 }
@@ -312,7 +313,7 @@ func webCargarGitLockDetallePorAPI(id int64) (*coordinacion.Lock, error) {
 	return resp.Lock, nil
 }
 
-func webCargarGitMergesPorAPI(proyecto, estado string) ([]*db.GitMerge, error) {
+func webCargarGitMergesPorAPI(proyecto, estado string) ([]*gitgobernanza.GitMerge, error) {
 	query := url.Values{}
 	if proyecto = strings.TrimSpace(proyecto); proyecto != "" {
 		query.Set("proyecto", proyecto)

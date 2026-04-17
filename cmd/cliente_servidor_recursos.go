@@ -75,7 +75,7 @@ type apiAgenteInvestigacionResponse struct {
 }
 
 type apiGitMergesResponse struct {
-	Merges []*db.GitMerge `json:"merges"`
+	Merges []*gitgobernanza.GitMerge `json:"merges"`
 }
 
 type apiGitMergeSaveRequest struct {
@@ -92,9 +92,9 @@ type apiGitMergeSaveRequest struct {
 }
 
 type apiGitMergeSaveResponse struct {
-	OK    bool         `json:"ok"`
-	ID    int64        `json:"id"`
-	Merge *db.GitMerge `json:"merge,omitempty"`
+	OK    bool                    `json:"ok"`
+	ID    int64                   `json:"id"`
+	Merge *gitgobernanza.GitMerge `json:"merge,omitempty"`
 }
 
 func (req apiGitMergeSaveRequest) intoInput() gitgobernanza.SaveMergeRequestInput {

@@ -10494,7 +10494,7 @@ func proyectoIntegracionAutonomaCompletada(proyecto *db.Proyecto) (bool, string,
 	if len(merges) == 0 {
 		return true, "", nil
 	}
-	var latestMerged *db.GitMerge
+	var latestMerged *gitgobernanza.GitMerge
 	for _, merge := range merges {
 		if merge == nil {
 			continue

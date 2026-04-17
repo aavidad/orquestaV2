@@ -4494,7 +4494,7 @@ func apiHandlerGitMerges(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		merge, err := db.GetGitMerge(id)
+		merge, err := svc.GetRequest(id)
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
