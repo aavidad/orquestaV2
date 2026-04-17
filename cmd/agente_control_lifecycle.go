@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"orquesta/agentesapp"
 	"orquesta/db"
-	"orquesta/runtimesapp"
+	"orquesta/orquestacionagentesapp"
 )
 
 const (
@@ -134,7 +134,7 @@ func encolarControlAgentePorAPI(req apiAgenteControlRequest) (int64, string, boo
 }
 
 func encolarControlAgenteLocal(req apiAgenteControlRequest) (int64, string, error) {
-	orderID, accion, err := runtimesService.EnqueueAgentControl(runtimesapp.AgentControlRequest{
+	orderID, accion, err := orquestacionAgentesService.EnqueueControl(orquestacionagentesapp.ControlRequest{
 		Agente:       strings.TrimSpace(req.Agente),
 		Proyecto:     strings.TrimSpace(req.Proyecto),
 		Accion:       strings.TrimSpace(req.Accion),
@@ -166,10 +166,10 @@ type apiAgenteLanzarRequest struct {
 }
 
 type apiAgenteLanzarResponse struct {
-	OK       bool                     `json:"ok"`
-	OrderID  int64                    `json:"order_id"`
-	Agente   string                   `json:"agente"`
-	Proyecto agentesapp.ProjectBundle `json:"proyecto"`
+	OK       bool                       `json:"ok"`
+	OrderID  int64                      `json:"order_id"`
+	Agente   string                     `json:"agente"`
+	Proyecto agentesapp.ProjectBundle   `json:"proyecto"`
 	Conector agentesapp.ConnectorBundle `json:"conector"`
 }
 
@@ -190,58 +190,38 @@ func apiHandlerAgenteLanzar(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, fmt.Errorf("agente y proyecto son obligatorios"))
 		return
 	}
-
-	// Validar y resolver el plan completo antes de encolar.
-	prep, err := agentesService.BuildPrepare(agentesapp.PrepareInput{
+	result, err := orquestacionAgentesService.Launch(orquestacionagentesapp.LaunchRequest{
 		Agente:       req.Agente,
 		Proyecto:     req.Proyecto,
 		Conector:     strings.TrimSpace(req.Conector),
 		Modelo:       strings.TrimSpace(req.Modelo),
 		Razonamiento: strings.TrimSpace(req.Razonamiento),
 		Perfil:       strings.TrimSpace(req.Perfil),
+		Motivo:       strings.TrimSpace(req.Motivo),
+		Por:          strings.TrimSpace(req.Por),
 	})
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
 
-	por := strings.TrimSpace(req.Por)
-	if por == "" {
-		por = "orquesta"
-	}
-	orderID, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
-		Agente:       req.Agente,
-		Proyecto:     req.Proyecto,
-		Accion:       agenteControlAccionStart,
-		Conector:     prep.Conector.Slug,
-		Modelo:       strings.TrimSpace(req.Modelo),
-		Razonamiento: strings.TrimSpace(req.Razonamiento),
-		Perfil:       strings.TrimSpace(req.Perfil),
-		Motivo:       strings.TrimSpace(req.Motivo),
-		Por:          por,
-	})
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-
 	apiWriteJSON(w, http.StatusCreated, apiAgenteLanzarResponse{
 		OK:       true,
-		OrderID:  orderID,
-		Agente:   prep.Agente,
-		Proyecto: prep.Proyecto,
-		Conector: prep.Conector,
+		OrderID:  result.OrderID,
+		Agente:   result.Agente,
+		Proyecto: result.Proyecto,
+		Conector: result.Conector,
 	})
 }
 
 func resolverHandleControlAgente(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
-	return runtimesService.ResolveControlHandle(agente, proyectoID)
+	return orquestacionAgentesService.ResolveControlHandle(agente, proyectoID)
 }
 
 func resolverHandleEntregaAgente(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
-	return runtimesService.ResolveDeliveryHandle(agente, proyectoID)
+	return orquestacionAgentesService.ResolveDeliveryHandle(agente, proyectoID)
 }
 
 func resolverHandleEntregaTranscript(item *db.RuntimeTranscriptEntry) (*db.RuntimeHandle, error) {
-	return runtimesService.ResolveTranscriptDeliveryHandle(item)
+	return orquestacionAgentesService.ResolveTranscriptDeliveryHandle(item)
 }

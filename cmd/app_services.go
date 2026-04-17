@@ -10,6 +10,7 @@ import (
 	"orquesta/gobernanzaapp"
 	"orquesta/lenguajeapp"
 	"orquesta/microprogramacionapp"
+	"orquesta/orquestacionagentesapp"
 	"orquesta/progresoapp"
 	"orquesta/reviewapp"
 	"orquesta/supervisionapp"
@@ -23,6 +24,7 @@ var gitService = gitaplicacion.NewService(db.GitGovRepository{})
 var gobernanzaService = gobernanzaapp.NewService(gobernanzaapp.Repository{})
 var lenguajeService = lenguajeapp.NewService(lenguajeapp.Repository{})
 var microprogramacionService = microprogramacionapp.NewService(db.SqliteMicroprogramacionRepo{})
+var orquestacionAgentesService = orquestacionagentesapp.NewService(agentesService, runtimesService)
 var progresoService = progresoapp.NewService(progresoapp.Repository{})
 var reviewService = reviewapp.NewService(reviewapp.NewRepository())
 var supervisionService = supervisionapp.NewService(supervisionapp.NewRepository())
