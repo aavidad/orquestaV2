@@ -1,17 +1,119 @@
 package panelapp
 
-import (
-	"time"
+import "time"
 
-	"orquesta/db"
+type EstadoPropuesta string
+
+const (
+	PropuestaAbierta EstadoPropuesta = "abierta"
 )
 
+type EstadoTarea string
+
+const (
+	EstadoEnProgreso EstadoTarea = "en_progreso"
+	EstadoCompletada EstadoTarea = "completada"
+)
+
+type PrioridadTarea string
+
+type Agente struct {
+	Nombre                    string
+	Rol                       string
+	Activo                    bool
+	Habilitado                bool
+	SinCuotaProveedor         bool
+	EstadoSesion              string
+	UltimaSesion              *time.Time
+	ConsumoDiaSegundos        int
+	ConsumoSemanalSegundos    int
+	LimiteDiaSegundos         int
+	LimiteSemanalSegundos     int
+	LastUsageResetAt          *time.Time
+	EstadoCuota               string
+	ReanimarAt                *time.Time
+	MotivoPausa               string
+	CuotaRestantePct          *int
+	PresupuestoEstado         string
+	PresupuestoFuente         string
+	PresupuestoCheckedAt      *time.Time
+	PresupuestoStale          bool
+	PresupuestoVentana        string
+	PresupuestoResetAt        *time.Time
+	PresupuestoSesionPct      *int
+	PresupuestoSesionResetAt  *time.Time
+	PresupuestoDiarioPct      *int
+	PresupuestoDiarioResetAt  *time.Time
+	PresupuestoSemanalPct     *int
+	PresupuestoSemanalResetAt *time.Time
+	RemainingSeconds          *int64
+	RemainingMessages         *int64
+	RemainingTokens           *int64
+	RemainingCredits          *float64
+	ObservedUsageTokens       *int64
+	ObservedUsageCostUSD      *float64
+	ObservedUsageMessages     *int
+	ObservedUsageTurns        *int
+	ObservedUsageUpdatedAt    *time.Time
+	ObservedSessionPath       string
+	CuentaID                  string
+	CuentaUsuario             string
+	CuentaEmail               string
+	CuentaFuente              string
+	CuentaObservadaAt         *time.Time
+}
+
+type Propuesta struct {
+	ID           int64
+	Codigo       string
+	Titulo       string
+	Descripcion  string
+	ProyectoID   *int64
+	Tipo         string
+	Estado       EstadoPropuesta
+	PropuestoPor string
+	Distribuidor string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	CerradaAt    *time.Time
+}
+
+type Tarea struct {
+	ID               int64
+	Titulo           string
+	Descripcion      string
+	ProyectoID       *int64
+	Modulo           string
+	Estado           EstadoTarea
+	Agente           *string
+	PropuestaID      *int64
+	Prioridad        PrioridadTarea
+	Dependencias     []int64
+	ContratoDefinido bool
+	BlueprintKey     string
+	CreadoPor        string
+	CommitCierre     string
+	Notas            string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	CompletadaAt     *time.Time
+}
+
+type FiltroTareas struct {
+	Estado      *EstadoTarea
+	Agente      *string
+	ProyectoID  *int64
+	Modulo      *string
+	PropuestaID *int64
+	Libre       bool
+}
+
 type Store interface {
-	ListAgents() ([]*db.Agente, error)
+	ListAgents() ([]*Agente, error)
 	CountTasksByState() (map[string]int, error)
-	ListProposals(estado *db.EstadoPropuesta) ([]*db.Propuesta, error)
+	ListProposals(estado *EstadoPropuesta) ([]*Propuesta, error)
 	CountVotes(propuestaID int64) (int, int, int, int, error)
-	ListTasks(filtro db.FiltroTareas) ([]*db.Tarea, error)
+	ListTasks(filtro FiltroTareas) ([]*Tarea, error)
 }
 
 type Service struct {
@@ -27,13 +129,13 @@ type ProposalSummary struct {
 }
 
 type Summary struct {
-	Agents      []*db.Agente
+	Agents      []*Agente
 	TaskCounts  map[string]int
 	TotalTasks  int
 	DoneTasks   int
 	PercentDone int
 	OpenProps   []ProposalSummary
-	ActiveTasks []*db.Tarea
+	ActiveTasks []*Tarea
 	GeneratedAt time.Time
 }
 
@@ -54,7 +156,7 @@ func (s *Service) BuildSummary() (*Summary, error) {
 	doneTasks := 0
 	for estado, count := range counts {
 		totalTasks += count
-		if estado == string(db.EstadoCompletada) {
+		if estado == string(EstadoCompletada) {
 			doneTasks = count
 		}
 	}
@@ -63,7 +165,7 @@ func (s *Service) BuildSummary() (*Summary, error) {
 		percentDone = doneTasks * 100 / totalTasks
 	}
 
-	openState := db.PropuestaAbierta
+	openState := PropuestaAbierta
 	proposals, err := s.store.ListProposals(&openState)
 	if err != nil {
 		return nil, err
@@ -83,8 +185,8 @@ func (s *Service) BuildSummary() (*Summary, error) {
 		})
 	}
 
-	activeState := db.EstadoEnProgreso
-	activeTasks, err := s.store.ListTasks(db.FiltroTareas{Estado: &activeState})
+	activeState := EstadoEnProgreso
+	activeTasks, err := s.store.ListTasks(FiltroTareas{Estado: &activeState})
 	if err != nil {
 		return nil, err
 	}
@@ -99,26 +201,4 @@ func (s *Service) BuildSummary() (*Summary, error) {
 		ActiveTasks: activeTasks,
 		GeneratedAt: time.Now(),
 	}, nil
-}
-
-type Repository struct{}
-
-func (Repository) ListAgents() ([]*db.Agente, error) {
-	return db.ListarAgentes()
-}
-
-func (Repository) CountTasksByState() (map[string]int, error) {
-	return db.ContarTareasPorEstado()
-}
-
-func (Repository) ListProposals(estado *db.EstadoPropuesta) ([]*db.Propuesta, error) {
-	return db.ListarPropuestas(estado, nil)
-}
-
-func (Repository) CountVotes(propuestaID int64) (int, int, int, int, error) {
-	return db.ContarVotos(propuestaID)
-}
-
-func (Repository) ListTasks(filtro db.FiltroTareas) ([]*db.Tarea, error) {
-	return db.ListarTareas(filtro)
 }

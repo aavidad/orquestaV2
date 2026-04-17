@@ -3,39 +3,37 @@ package panelapp
 import (
 	"testing"
 	"time"
-
-	"orquesta/db"
 )
 
 type stubStore struct{}
 
-func (stubStore) ListAgents() ([]*db.Agente, error) {
-	return []*db.Agente{{Nombre: "Codex2", Rol: "programador", Activo: true}}, nil
+func (stubStore) ListAgents() ([]*Agente, error) {
+	return []*Agente{{Nombre: "Codex2", Rol: "programador", Activo: true}}, nil
 }
 
 func (stubStore) CountTasksByState() (map[string]int, error) {
 	return map[string]int{
-		string(db.EstadoCompletada): 3,
-		string(db.EstadoEnProgreso): 1,
-		string(db.EstadoAsignada):   2,
+		string(EstadoCompletada): 3,
+		string(EstadoEnProgreso): 1,
+		"asignada":               2,
 	}, nil
 }
 
-func (stubStore) ListProposals(estado *db.EstadoPropuesta) ([]*db.Propuesta, error) {
-	return []*db.Propuesta{{ID: 8, Codigo: "OP-080", Titulo: "Servidor unico"}}, nil
+func (stubStore) ListProposals(estado *EstadoPropuesta) ([]*Propuesta, error) {
+	return []*Propuesta{{ID: 8, Codigo: "OP-080", Titulo: "Servidor unico"}}, nil
 }
 
 func (stubStore) CountVotes(propuestaID int64) (int, int, int, int, error) {
 	return 3, 0, 0, 1, nil
 }
 
-func (stubStore) ListTasks(filtro db.FiltroTareas) ([]*db.Tarea, error) {
+func (stubStore) ListTasks(filtro FiltroTareas) ([]*Tarea, error) {
 	agente := "Codex2"
-	return []*db.Tarea{{
+	return []*Tarea{{
 		ID:        7,
 		Titulo:    "Mover dashboard a servicio",
-		Estado:    db.EstadoEnProgreso,
-		Prioridad: db.PrioridadAlta,
+		Estado:    EstadoEnProgreso,
+		Prioridad: PrioridadTarea("alta"),
 		Agente:    &agente,
 		CreatedAt: time.Now(),
 	}}, nil
