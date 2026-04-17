@@ -68,6 +68,10 @@ type RecoveryFlowSupport interface {
 	UsesSharedLocalPoolForReactivation(agente string, proyecto *db.Proyecto) bool
 	PoolLocalActivationAllowed(agente string, proyectoSlug string) (bool, string, error)
 	ProjectHasReactivableBacklog(proyectoID int64) (bool, error)
+	ProjectIDFromAssignedWork(agente string) (int64, error)
+	ActiveProjectID(agente string) (int64, error)
+	OpenSessionProjectID(agente string) (int64, error)
+	LatestSessionProjectID(agente string) (int64, error)
 }
 
 type Service struct {
@@ -529,6 +533,47 @@ func (s *Service) ReactivateProjectIfNeeded(agente string, proyecto *db.Proyecto
 	return true, nil
 }
 
+func (s *Service) ResolveReactivationProject(agente string) (*db.Proyecto, error) {
+	if s == nil || s.runtimes == nil || s.recoveryFlow == nil {
+		return nil, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil, nil
+	}
+	if proyectoID, err := s.recoveryFlow.ActiveProjectID(agente); err != nil {
+		return nil, err
+	} else if proyectoID > 0 {
+		return s.resolveReactivationProjectByID(agente, proyectoID, "asignacion_activa")
+	}
+	if proyectoID, err := s.recoveryFlow.ProjectIDFromAssignedWork(agente); err != nil {
+		return nil, err
+	} else if proyectoID > 0 {
+		return s.resolveReactivationProjectByID(agente, proyectoID, "tarea")
+	}
+	if proyectoID, err := s.projectIDFromPendingMailbox(agente); err != nil {
+		return nil, err
+	} else if proyectoID > 0 {
+		return s.resolveReactivationProjectByID(agente, proyectoID, "mailbox")
+	}
+	if proyectoID, err := s.recoveryFlow.OpenSessionProjectID(agente); err != nil {
+		return nil, err
+	} else if proyectoID > 0 {
+		return s.resolveReactivationProjectByID(agente, proyectoID, "sesion_abierta")
+	}
+	if proyectoID, err := s.recoveryFlow.LatestSessionProjectID(agente); err != nil {
+		return nil, err
+	} else if proyectoID > 0 {
+		return s.resolveReactivationProjectByID(agente, proyectoID, "ultima_sesion")
+	}
+	if handle, err := s.ResolveRecoveryHandle(agente, nil); err != nil {
+		return nil, err
+	} else if handle != nil && handle.ProyectoID != nil && *handle.ProyectoID > 0 {
+		return s.resolveReactivationProjectByID(agente, *handle.ProyectoID, "runtime_handle")
+	}
+	return nil, nil
+}
+
 func (s *Service) RecoverDegradedRuntimeSession(sesion *db.Sesion) (int, error) {
 	if s == nil || s.runtimes == nil || s.recoveryFlow == nil {
 		return 0, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
@@ -907,6 +952,43 @@ func (s *Service) existsRecentAutonomyOrder(agente string, proyectoID *int64, ti
 		return true, nil
 	}
 	return false, nil
+}
+
+func (s *Service) resolveReactivationProjectByID(agente string, proyectoID int64, origen string) (*db.Proyecto, error) {
+	if proyectoID <= 0 {
+		return nil, nil
+	}
+	proyecto, err := s.runtimes.GetProject(strconv.FormatInt(proyectoID, 10))
+	if err != nil {
+		return nil, err
+	}
+	if proyecto == nil {
+		return nil, fmt.Errorf("agente %s con proyecto de reactivacion inconsistente (%s=%d)", strings.TrimSpace(agente), strings.TrimSpace(origen), proyectoID)
+	}
+	return proyecto, nil
+}
+
+func (s *Service) projectIDFromPendingMailbox(agente string) (int64, error) {
+	estado := "pendiente"
+	mailbox, err := s.runtimes.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente: &agente,
+		Estado:   &estado,
+	})
+	if err != nil {
+		return 0, err
+	}
+	bestProjectID := int64(0)
+	bestID := int64(0)
+	for _, msg := range mailbox {
+		if msg == nil || msg.ProyectoID == nil || *msg.ProyectoID <= 0 {
+			continue
+		}
+		if bestProjectID == 0 || msg.ID > bestID {
+			bestProjectID = *msg.ProyectoID
+			bestID = msg.ID
+		}
+	}
+	return bestProjectID, nil
 }
 
 func (s *Service) existsOpenAutonomyOrder(agente string, proyectoID *int64, tipos ...string) (bool, error) {

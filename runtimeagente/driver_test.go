@@ -207,6 +207,111 @@ func TestPrepareCLICodexCompactaContinuityPromptParaRuntimeNoInteractivo(t *test
 	}
 }
 
+func TestPrepareCLICodexProvisionaPerfilCompartido(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_USE_PROFILE_WRAPPER", "true")
+	t.Setenv("CODEX_MULTI_BASE", "/tmp/codex-perfiles")
+
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex2",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    "codex",
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare codex provisioned profile: %v", err)
+	}
+	if got, want := plan.Comando, filepath.Clean("/tmp/codex-perfiles/bin/codex-perfil"); got != want {
+		t.Fatalf("wrapper codex inesperado: got=%q want=%q", got, want)
+	}
+	if len(plan.Args) == 0 || plan.Args[0] != "Codex2" {
+		t.Fatalf("args codex sin perfil canonico: %+v", plan.Args)
+	}
+	if plan.ProvisionedProfile == nil {
+		t.Fatalf("faltaba provisioned profile: %+v", plan)
+	}
+	if got, want := plan.ProvisionedProfile.Strategy, "shared_clone"; got != want {
+		t.Fatalf("strategy inesperada: got=%q want=%q", got, want)
+	}
+	if got, want := plan.Env["HOME"], filepath.Clean("/tmp/codex-perfiles/homes/Codex2"); got != want {
+		t.Fatalf("HOME provisionado inesperado: got=%q want=%q", got, want)
+	}
+	if got, want := plan.Env["XDG_CONFIG_HOME"], filepath.Clean("/tmp/codex-perfiles/homes/Codex2/.config"); got != want {
+		t.Fatalf("XDG_CONFIG_HOME inesperado: got=%q want=%q", got, want)
+	}
+}
+
+func TestPrepareCLIClaudeProvisionaPerfilCompartido(t *testing.T) {
+	t.Setenv("ORQUESTA_ANTHROPIC_PROFILES_BASE", "/tmp/claude-perfiles")
+
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Claude1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:         "claude-code",
+			Transporte:   "cli",
+			Comando:      "claude-code",
+			MetadataJSON: `{"familia":"anthropic","profile_strategy":"shared_clone"}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare claude provisioned profile: %v", err)
+	}
+	if plan.ProvisionedProfile == nil {
+		t.Fatalf("faltaba provisioned profile: %+v", plan)
+	}
+	if got, want := plan.ProvisionedProfile.Family, "anthropic"; got != want {
+		t.Fatalf("family inesperada: got=%q want=%q", got, want)
+	}
+	if got, want := plan.Env["HOME"], filepath.Clean("/tmp/claude-perfiles/homes/Claude1"); got != want {
+		t.Fatalf("HOME provisionado inesperado: got=%q want=%q", got, want)
+	}
+	if got := plan.Env["ORQUESTA_PROFILE_STRATEGY"]; got != "shared_clone" {
+		t.Fatalf("strategy env inesperada: %q", got)
+	}
+}
+
+func TestPrepareCLIGeminiProvisionaPerfilDedicadoConTemplates(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Gemini1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:       "gemini-cli",
+			Transporte: "cli",
+			Comando:    "gemini",
+			EnvJSON:    `{"GEMINI_HOME":"{{profile_home}}","GEMINI_PROFILE":"{{profile_name}}"}`,
+			MetadataJSON: `{
+				"familia":"google",
+				"profile_strategy":"dedicated_profile",
+				"profiles_base_dir":"/srv/orquesta/gemini"
+			}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare gemini provisioned profile: %v", err)
+	}
+	if plan.ProvisionedProfile == nil {
+		t.Fatalf("faltaba provisioned profile: %+v", plan)
+	}
+	if got, want := plan.ProvisionedProfile.Strategy, "dedicated_profile"; got != want {
+		t.Fatalf("strategy inesperada: got=%q want=%q", got, want)
+	}
+	if got, want := plan.Env["HOME"], filepath.Clean("/srv/orquesta/gemini/homes/Gemini1"); got != want {
+		t.Fatalf("HOME provisionado inesperado: got=%q want=%q", got, want)
+	}
+	if got, want := plan.Env["GEMINI_HOME"], filepath.Clean("/srv/orquesta/gemini/homes/Gemini1"); got != want {
+		t.Fatalf("template GEMINI_HOME inesperado: got=%q want=%q", got, want)
+	}
+	if got, want := plan.Env["GEMINI_PROFILE"], "Gemini1"; got != want {
+		t.Fatalf("template GEMINI_PROFILE inesperado: got=%q want=%q", got, want)
+	}
+}
+
 func TestPrepareCLICodexPriorizaSliceEjecutableEnPipelineLocalContinuityPrompt(t *testing.T) {
 	plan, err := DefaultRegistry().Prepare(LaunchRequest{
 		Agente:       "Codex9",

@@ -58,30 +58,43 @@ type LaunchRequest struct {
 	TareaID      *int64
 }
 
+type ProvisionedProfile struct {
+	Strategy      string `json:"strategy,omitempty"`
+	Family        string `json:"family,omitempty"`
+	ProfileName   string `json:"profile_name,omitempty"`
+	BaseDir       string `json:"base_dir,omitempty"`
+	HomeDir       string `json:"home_dir,omitempty"`
+	ConfigHomeDir string `json:"config_home_dir,omitempty"`
+	CacheHomeDir  string `json:"cache_home_dir,omitempty"`
+	DataHomeDir   string `json:"data_home_dir,omitempty"`
+	StatusWrapper string `json:"status_wrapper,omitempty"`
+}
+
 type LaunchPlan struct {
-	Driver               string            `json:"driver"`
-	Transporte           string            `json:"transporte"`
-	Modo                 string            `json:"modo"`
-	Comando              string            `json:"comando"`
-	Args                 []string          `json:"args"`
-	Env                  map[string]string `json:"env"`
-	WorkingDir           string            `json:"working_dir"`
-	Branch               string            `json:"branch,omitempty"`
-	WorktreePath         string            `json:"worktree_path,omitempty"`
-	Modelo               string            `json:"modelo,omitempty"`
-	Razonamiento         string            `json:"razonamiento,omitempty"`
-	PerfilTarea          string            `json:"perfil_tarea,omitempty"`
-	NativeResume         bool              `json:"native_resume"`
-	ContinuityPrompt     string            `json:"continuity_prompt,omitempty"`
-	BootstrapPrompt      string            `json:"bootstrap_prompt,omitempty"`
-	LaunchPromptEmbedded bool              `json:"launch_prompt_embedded,omitempty"`
-	LaunchPromptMode     string            `json:"launch_prompt_mode,omitempty"`
-	LaunchPromptDelayMS  int               `json:"launch_prompt_delay_ms,omitempty"`
-	CanSendInput         *bool             `json:"can_send_input,omitempty"`
-	MailboxDeliveryMode  string            `json:"mailbox_delivery_mode,omitempty"`
-	RemoteConfigJSON     string            `json:"remote_config_json,omitempty"`
-	Notas                []string          `json:"notas,omitempty"`
-	TareaID              *int64            `json:"tarea_id,omitempty"`
+	Driver               string              `json:"driver"`
+	Transporte           string              `json:"transporte"`
+	Modo                 string              `json:"modo"`
+	Comando              string              `json:"comando"`
+	Args                 []string            `json:"args"`
+	Env                  map[string]string   `json:"env"`
+	WorkingDir           string              `json:"working_dir"`
+	Branch               string              `json:"branch,omitempty"`
+	WorktreePath         string              `json:"worktree_path,omitempty"`
+	Modelo               string              `json:"modelo,omitempty"`
+	Razonamiento         string              `json:"razonamiento,omitempty"`
+	PerfilTarea          string              `json:"perfil_tarea,omitempty"`
+	NativeResume         bool                `json:"native_resume"`
+	ContinuityPrompt     string              `json:"continuity_prompt,omitempty"`
+	BootstrapPrompt      string              `json:"bootstrap_prompt,omitempty"`
+	LaunchPromptEmbedded bool                `json:"launch_prompt_embedded,omitempty"`
+	LaunchPromptMode     string              `json:"launch_prompt_mode,omitempty"`
+	LaunchPromptDelayMS  int                 `json:"launch_prompt_delay_ms,omitempty"`
+	CanSendInput         *bool               `json:"can_send_input,omitempty"`
+	MailboxDeliveryMode  string              `json:"mailbox_delivery_mode,omitempty"`
+	RemoteConfigJSON     string              `json:"remote_config_json,omitempty"`
+	ProvisionedProfile   *ProvisionedProfile `json:"provisioned_profile,omitempty"`
+	Notas                []string            `json:"notas,omitempty"`
+	TareaID              *int64              `json:"tarea_id,omitempty"`
 }
 
 type Driver interface {
@@ -172,7 +185,9 @@ func (d commandDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 	}
 	applyExecutionProfile(plan, metadata)
 
-	vars := connectorTemplateVars(req, workingDir)
+	profile := resolveProvisionedProfile(req, metadata, workingDir)
+	plan.ProvisionedProfile = profile
+	vars := connectorTemplateVars(req, workingDir, profile)
 	vars["model"] = plan.Modelo
 	vars["reasoning"] = plan.Razonamiento
 	vars["task_profile"] = plan.PerfilTarea
@@ -186,12 +201,16 @@ func (d commandDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 	plan.Comando = comando
 	plan.Args = expandedArgs
 	plan.Env = expandConnectorEnv(env, vars)
+	applyProvisionedProfileEnv(plan.Env, profile)
 	asegurarEntornoBaseOrquesta(plan.Env, vars)
 	if filepath.Base(strings.TrimSpace(plan.Comando)) == "codex-perfil" {
 		ensureCodexProfileWrapperEnv(plan.Env)
 	}
 	asegurarPathHerramientasBase(plan.Env, "go", "git", "rg")
 	asegurarPathParaComando(plan.Env, plan.Comando)
+	if profile != nil {
+		plan.Notas = append(plan.Notas, fmt.Sprintf("Provisioning de perfil activo: %s/%s.", profile.Family, profile.Strategy))
+	}
 	if applyLocalControlHints(plan, metadata) {
 		plan.Notas = append(plan.Notas, "El conector aporta capacidades locales de control desde metadata_json.")
 	}
@@ -643,6 +662,26 @@ func isOllamaCLIConnector(conector ConnectorConfig) bool {
 	return EsConectorFamiliaOllama(conector.Slug, comando)
 }
 
+func connectorFamily(conector ConnectorConfig, metadata map[string]any) string {
+	if metadata != nil {
+		if familia := strings.ToLower(strings.TrimSpace(stringMetadata(metadata, "familia"))); familia != "" {
+			return familia
+		}
+	}
+	switch familiaConector(conector.Slug, conector.Comando) {
+	case "codex":
+		return "openai"
+	case "claude":
+		return "anthropic"
+	case "gemini":
+		return "google"
+	case "ollama":
+		return "ollama"
+	default:
+		return ""
+	}
+}
+
 func ModeloCompatibleConConector(conector ConnectorConfig, modelo string) bool {
 	modelo = strings.ToLower(strings.TrimSpace(modelo))
 	if modelo == "" {
@@ -655,21 +694,7 @@ func ModeloCompatibleConConector(conector ConnectorConfig, modelo string) bool {
 	metadata, err := parseAnyMapJSON(conector.MetadataJSON)
 	if err == nil {
 		metadata = normalizeConnectorMetadata(conector, metadata)
-		familia = strings.ToLower(strings.TrimSpace(stringMetadata(metadata, "familia")))
-	}
-	if familia == "" {
-		switch {
-		case isCodexCLIConnector(conector):
-			familia = "openai"
-		default:
-			comando := strings.ToLower(strings.TrimSpace(filepath.Base(strings.TrimSpace(conector.Comando))))
-			switch comando {
-			case "claude", "claude-code":
-				familia = "anthropic"
-			case "gemini":
-				familia = "google"
-			}
-		}
+		familia = connectorFamily(conector, metadata)
 	}
 	switch familia {
 	case "openai":
@@ -1005,7 +1030,7 @@ func defaultString(v, fallback string) string {
 	return strings.TrimSpace(v)
 }
 
-func connectorTemplateVars(req LaunchRequest, workingDir string) map[string]string {
+func connectorTemplateVars(req LaunchRequest, workingDir string, profile *ProvisionedProfile) map[string]string {
 	orquestaExecutable, _ := os.Executable()
 	orquestaExecutable = strings.TrimSpace(orquestaExecutable)
 	orquestaBinDir := ""
@@ -1013,7 +1038,7 @@ func connectorTemplateVars(req LaunchRequest, workingDir string) map[string]stri
 		orquestaBinDir = filepath.Dir(orquestaExecutable)
 	}
 	sessionUUID := generateConnectorSessionUUID()
-	return map[string]string{
+	vars := map[string]string{
 		"agent":               strings.TrimSpace(req.Agente),
 		"role":                strings.TrimSpace(req.Rol),
 		"project_slug":        strings.TrimSpace(req.ProyectoSlug),
@@ -1031,6 +1056,176 @@ func connectorTemplateVars(req LaunchRequest, workingDir string) map[string]stri
 		"home":                strings.TrimSpace(os.Getenv("HOME")),
 		"session_uuid":        sessionUUID,
 	}
+	if profile != nil {
+		vars["profile_strategy"] = strings.TrimSpace(profile.Strategy)
+		vars["profile_family"] = strings.TrimSpace(profile.Family)
+		vars["profile_name"] = strings.TrimSpace(profile.ProfileName)
+		vars["profiles_base_dir"] = strings.TrimSpace(profile.BaseDir)
+		vars["profile_home"] = strings.TrimSpace(profile.HomeDir)
+		vars["profile_config_home"] = strings.TrimSpace(profile.ConfigHomeDir)
+		vars["profile_cache_home"] = strings.TrimSpace(profile.CacheHomeDir)
+		vars["profile_data_home"] = strings.TrimSpace(profile.DataHomeDir)
+		vars["profile_status_wrapper"] = strings.TrimSpace(profile.StatusWrapper)
+	}
+	return vars
+}
+
+func resolveProvisionedProfile(req LaunchRequest, metadata map[string]any, workingDir string) *ProvisionedProfile {
+	baseVars := connectorTemplateVars(req, workingDir, nil)
+	family := strings.TrimSpace(connectorFamily(req.Conector, metadata))
+	strategy := strings.TrimSpace(stringMetadata(metadata, "profile_strategy"))
+	if strategy == "" && isCodexCLIRequest(req) && codexDebeUsarWrapperPerfiles() {
+		strategy = "shared_clone"
+	}
+	if strategy == "" {
+		return nil
+	}
+	profileName := strings.TrimSpace(req.Agente)
+	if explicit := strings.TrimSpace(expandConnectorTemplate(stringMetadata(metadata, "profile_name"), baseVars)); explicit != "" {
+		profileName = explicit
+	}
+	if profileName == "" {
+		return nil
+	}
+	baseDir := strings.TrimSpace(expandConnectorTemplate(stringMetadata(metadata, "profiles_base_dir"), baseVars))
+	statusWrapper := strings.TrimSpace(expandConnectorTemplate(stringMetadata(metadata, "profile_status_wrapper"), baseVars))
+	if baseDir == "" {
+		baseDir = defaultProvisionedProfilesBaseDir(req, family, statusWrapper)
+	}
+	if statusWrapper == "" && isCodexCLIRequest(req) {
+		statusWrapper = codexProfileWrapperPath(strings.TrimSpace(req.ProyectoRuta))
+	}
+	if baseDir == "" {
+		return nil
+	}
+	profileHome := strings.TrimSpace(expandConnectorTemplate(stringMetadata(metadata, "profile_home_dir"), mergeConnectorTemplateVars(baseVars, map[string]string{
+		"profiles_base_dir": baseDir,
+		"profile_name":      profileName,
+	})))
+	if profileHome == "" {
+		profileHome = filepath.Join(baseDir, "homes", profileName)
+	}
+	configHome := strings.TrimSpace(expandConnectorTemplate(stringMetadata(metadata, "profile_config_home_dir"), mergeConnectorTemplateVars(baseVars, map[string]string{
+		"profiles_base_dir": baseDir,
+		"profile_name":      profileName,
+		"profile_home":      profileHome,
+	})))
+	if configHome == "" {
+		configHome = filepath.Join(profileHome, ".config")
+	}
+	cacheHome := strings.TrimSpace(expandConnectorTemplate(stringMetadata(metadata, "profile_cache_home_dir"), mergeConnectorTemplateVars(baseVars, map[string]string{
+		"profiles_base_dir": baseDir,
+		"profile_name":      profileName,
+		"profile_home":      profileHome,
+	})))
+	if cacheHome == "" {
+		cacheHome = filepath.Join(profileHome, ".cache")
+	}
+	dataHome := strings.TrimSpace(expandConnectorTemplate(stringMetadata(metadata, "profile_data_home_dir"), mergeConnectorTemplateVars(baseVars, map[string]string{
+		"profiles_base_dir": baseDir,
+		"profile_name":      profileName,
+		"profile_home":      profileHome,
+	})))
+	if dataHome == "" {
+		dataHome = filepath.Join(profileHome, ".local", "share")
+	}
+	return &ProvisionedProfile{
+		Strategy:      strategy,
+		Family:        family,
+		ProfileName:   profileName,
+		BaseDir:       filepath.Clean(baseDir),
+		HomeDir:       filepath.Clean(profileHome),
+		ConfigHomeDir: filepath.Clean(configHome),
+		CacheHomeDir:  filepath.Clean(cacheHome),
+		DataHomeDir:   filepath.Clean(dataHome),
+		StatusWrapper: strings.TrimSpace(statusWrapper),
+	}
+}
+
+func defaultProvisionedProfilesBaseDir(req LaunchRequest, family, statusWrapper string) string {
+	if statusWrapper != "" {
+		base := filepath.Clean(filepath.Dir(filepath.Dir(statusWrapper)))
+		if strings.TrimSpace(base) != "" && base != "." {
+			return base
+		}
+	}
+	switch family {
+	case "openai":
+		if base := strings.TrimSpace(os.Getenv("CODEX_MULTI_BASE")); base != "" {
+			return filepath.Clean(base)
+		}
+	}
+	if key := strings.TrimSpace(profilesBaseEnvKeyForFamily(family)); key != "" {
+		if base := strings.TrimSpace(os.Getenv(key)); base != "" {
+			return filepath.Clean(base)
+		}
+	}
+	if base := strings.TrimSpace(os.Getenv("ORQUESTA_CONNECTOR_PROFILES_BASE")); base != "" {
+		return filepath.Clean(base)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return ""
+	}
+	switch family {
+	case "openai":
+		return filepath.Join(home, "Trabajo", "codex-perfiles")
+	case "anthropic":
+		return filepath.Join(home, "Trabajo", "claude-perfiles")
+	case "google":
+		return filepath.Join(home, "Trabajo", "gemini-perfiles")
+	default:
+		return filepath.Join(home, ".orquesta", "profiles", defaultString(family, "generic"))
+	}
+}
+
+func profilesBaseEnvKeyForFamily(family string) string {
+	switch strings.TrimSpace(family) {
+	case "openai":
+		return "ORQUESTA_OPENAI_PROFILES_BASE"
+	case "anthropic":
+		return "ORQUESTA_ANTHROPIC_PROFILES_BASE"
+	case "google":
+		return "ORQUESTA_GOOGLE_PROFILES_BASE"
+	default:
+		return ""
+	}
+}
+
+func applyProvisionedProfileEnv(env map[string]string, profile *ProvisionedProfile) {
+	if env == nil || profile == nil {
+		return
+	}
+	setIfEmpty := func(key, value string) {
+		if strings.TrimSpace(key) == "" || strings.TrimSpace(value) == "" {
+			return
+		}
+		if strings.TrimSpace(env[key]) == "" {
+			env[key] = strings.TrimSpace(value)
+		}
+	}
+	setIfEmpty("HOME", profile.HomeDir)
+	setIfEmpty("XDG_CONFIG_HOME", profile.ConfigHomeDir)
+	setIfEmpty("XDG_CACHE_HOME", profile.CacheHomeDir)
+	setIfEmpty("XDG_DATA_HOME", profile.DataHomeDir)
+	setIfEmpty("ORQUESTA_PROFILE_STRATEGY", profile.Strategy)
+	setIfEmpty("ORQUESTA_PROFILE_FAMILY", profile.Family)
+	setIfEmpty("ORQUESTA_PROFILE_NAME", profile.ProfileName)
+	setIfEmpty("ORQUESTA_PROFILES_BASE_DIR", profile.BaseDir)
+}
+
+func mergeConnectorTemplateVars(base, extra map[string]string) map[string]string {
+	if len(base) == 0 && len(extra) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(base)+len(extra))
+	for key, value := range base {
+		out[key] = value
+	}
+	for key, value := range extra {
+		out[key] = value
+	}
+	return out
 }
 
 func generateConnectorSessionUUID() string {

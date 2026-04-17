@@ -186,15 +186,23 @@ func (s *stubRemoteRecoverySupport) MarkProjectExternallyBlocked(proyectoID int6
 }
 
 type stubRecoveryFlowSupport struct {
-	available       bool
-	availableReason string
-	availableErr    error
-	usePool         bool
-	poolAllowed     bool
-	poolSlug        string
-	poolErr         error
-	backlog         bool
-	backlogErr      error
+	available        bool
+	availableReason  string
+	availableErr     error
+	usePool          bool
+	poolAllowed      bool
+	poolSlug         string
+	poolErr          error
+	backlog          bool
+	backlogErr       error
+	taskProjectID    int64
+	taskProjectErr   error
+	activeProjectID  int64
+	activeProjectErr error
+	openProjectID    int64
+	openProjectErr   error
+	latestProjectID  int64
+	latestProjectErr error
 }
 
 func (s *stubRecoveryFlowSupport) SharedAccountAvailable(string) (bool, string, error) {
@@ -220,6 +228,34 @@ func (s *stubRecoveryFlowSupport) ProjectHasReactivableBacklog(int64) (bool, err
 		return false, s.backlogErr
 	}
 	return s.backlog, nil
+}
+
+func (s *stubRecoveryFlowSupport) ProjectIDFromAssignedWork(string) (int64, error) {
+	if s.taskProjectErr != nil {
+		return 0, s.taskProjectErr
+	}
+	return s.taskProjectID, nil
+}
+
+func (s *stubRecoveryFlowSupport) ActiveProjectID(string) (int64, error) {
+	if s.activeProjectErr != nil {
+		return 0, s.activeProjectErr
+	}
+	return s.activeProjectID, nil
+}
+
+func (s *stubRecoveryFlowSupport) OpenSessionProjectID(string) (int64, error) {
+	if s.openProjectErr != nil {
+		return 0, s.openProjectErr
+	}
+	return s.openProjectID, nil
+}
+
+func (s *stubRecoveryFlowSupport) LatestSessionProjectID(string) (int64, error) {
+	if s.latestProjectErr != nil {
+		return 0, s.latestProjectErr
+	}
+	return s.latestProjectID, nil
 }
 
 func (s *stubAutonomyStore) GetPersistedAgentQuotaState(string) (string, error) {
@@ -892,6 +928,72 @@ func TestReactivateProjectIfNeededSkipsWhenHandleAlreadyActive(t *testing.T) {
 	}
 	if runtimes.controlReq.Accion != "" {
 		t.Fatalf("no deberia encolar control: %+v", runtimes.controlReq)
+	}
+}
+
+func TestResolveReactivationProjectPrefersActiveAssignment(t *testing.T) {
+	t.Parallel()
+
+	runtimes := &stubRuntimeController{
+		project: &db.Proyecto{ID: 31, Slug: "orquestador"},
+		mailbox: []*db.RuntimeMailboxMessage{{ID: 9, ProyectoID: ptrInt64(55)}},
+	}
+	service := NewService(nil, runtimes)
+	service.SetRecoveryFlowSupport(&stubRecoveryFlowSupport{
+		activeProjectID: 31,
+		taskProjectID:   44,
+		openProjectID:   66,
+		latestProjectID: 77,
+	})
+
+	proyecto, err := service.ResolveReactivationProject("Codex1")
+	if err != nil {
+		t.Fatalf("ResolveReactivationProject: %v", err)
+	}
+	if proyecto == nil || proyecto.ID != 31 {
+		t.Fatalf("proyecto inesperado: %+v", proyecto)
+	}
+}
+
+func TestResolveReactivationProjectFallsBackToMailbox(t *testing.T) {
+	t.Parallel()
+
+	runtimes := &stubRuntimeController{
+		project: &db.Proyecto{ID: 55, Slug: "mailbox-project"},
+		mailbox: []*db.RuntimeMailboxMessage{
+			{ID: 1, ProyectoID: ptrInt64(44)},
+			{ID: 3, ProyectoID: ptrInt64(55)},
+		},
+	}
+	service := NewService(nil, runtimes)
+	service.SetRecoveryFlowSupport(&stubRecoveryFlowSupport{})
+
+	proyecto, err := service.ResolveReactivationProject("Codex1")
+	if err != nil {
+		t.Fatalf("ResolveReactivationProject: %v", err)
+	}
+	if proyecto == nil || proyecto.ID != 55 {
+		t.Fatalf("proyecto inesperado: %+v", proyecto)
+	}
+}
+
+func TestResolveReactivationProjectFallsBackToRecoveryHandleProject(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(88)
+	runtimes := &stubRuntimeController{
+		project:     &db.Proyecto{ID: proyectoID, Slug: "handle-project"},
+		listHandles: []*db.RuntimeHandle{{ID: 5, Estado: "pausado", ProyectoID: &proyectoID}},
+	}
+	service := NewService(nil, runtimes)
+	service.SetRecoveryFlowSupport(&stubRecoveryFlowSupport{})
+
+	proyecto, err := service.ResolveReactivationProject("Codex1")
+	if err != nil {
+		t.Fatalf("ResolveReactivationProject: %v", err)
+	}
+	if proyecto == nil || proyecto.ID != proyectoID {
+		t.Fatalf("proyecto inesperado: %+v", proyecto)
 	}
 }
 

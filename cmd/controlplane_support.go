@@ -527,7 +527,7 @@ func registrarCheckpointRehabilitacionManual(agente string) error {
 	if agente == "" {
 		return nil
 	}
-	proyecto, err := resolverProyectoReactivacionAgente(agente)
+	proyecto, err := orquestacionAgentesService.ResolveReactivationProject(agente)
 	if err != nil {
 		return err
 	}
@@ -4678,7 +4678,7 @@ func resolverProyectoRuntimeMailboxReactivacion(msg *db.RuntimeMailboxMessage, s
 	if agente == "" {
 		return nil, nil
 	}
-	return resolverProyectoReactivacionAgente(agente)
+	return orquestacionAgentesService.ResolveReactivationProject(agente)
 }
 
 func agenteUsaSesionPoolLocalCompartido(agente, proyecto string) bool {
@@ -7454,7 +7454,7 @@ func resolverProyectoAutoasignacionPremiumSinSesion(agente string, row agentesap
 	} else if proyecto != nil {
 		return proyecto, nil
 	}
-	if proyecto, err := resolverProyectoReactivacionAgente(agente); err != nil {
+	if proyecto, err := orquestacionAgentesService.ResolveReactivationProject(agente); err != nil {
 		return nil, err
 	} else if proyecto != nil {
 		return proyecto, nil
@@ -8086,7 +8086,7 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 				}
 			}
 		} else {
-			proyecto, err = resolverProyectoReactivacionAgente(agente)
+			proyecto, err = orquestacionAgentesService.ResolveReactivationProject(agente)
 			if err != nil {
 				return procesadas, err
 			}
@@ -10974,7 +10974,7 @@ func reactivarAgenteTrasReanimacionConMotivo(agente, motivo string) error {
 	} else if !disponible {
 		return nil
 	}
-	proyecto, err := resolverProyectoReactivacionAgente(agente)
+	proyecto, err := orquestacionAgentesService.ResolveReactivationProject(agente)
 	if err != nil {
 		return err
 	}
@@ -11004,148 +11004,6 @@ func encolarReactivacionAgenteProyectoSiProcede(agente string, proyecto *db.Proy
 
 func encolarReactivacionAgenteProyectoConHandleSiProcede(agente string, proyecto *db.Proyecto, motivo string, handle *db.RuntimeHandle) (bool, error) {
 	return orquestacionAgentesService.ReactivateProjectIfNeeded(agente, proyecto, motivo, handle)
-}
-
-func resolverProyectoReactivacionAgente(agente string) (*db.Proyecto, error) {
-	agente = strings.TrimSpace(agente)
-	if agente == "" {
-		return nil, nil
-	}
-	if db.DB == nil || db.DB.DB == nil {
-		return nil, nil
-	}
-	if proyectoID, err := db.ObtenerProyectoActivoAgente(agente); err != nil {
-		return nil, err
-	} else if proyectoID > 0 {
-		return resolverProyectoReactivacionPorID(agente, proyectoID, "asignacion_activa")
-	}
-	if proyectoID, err := proyectoReactivacionDesdeTareas(agente); err != nil {
-		return nil, err
-	} else if proyectoID > 0 {
-		return resolverProyectoReactivacionPorID(agente, proyectoID, "tarea")
-	}
-	if proyectoID, err := proyectoReactivacionDesdeMailbox(agente); err != nil {
-		return nil, err
-	} else if proyectoID > 0 {
-		return resolverProyectoReactivacionPorID(agente, proyectoID, "mailbox")
-	}
-	if sesion, err := db.GetSesionAbierta(agente, nil); err != nil && err != sql.ErrNoRows {
-		return nil, err
-	} else if sesion != nil && sesion.ProyectoID != nil && *sesion.ProyectoID > 0 {
-		return resolverProyectoReactivacionPorID(agente, *sesion.ProyectoID, "sesion_abierta")
-	}
-	if sesion, err := db.ObtenerUltimaSesion(agente, nil); err != nil && err != sql.ErrNoRows {
-		return nil, err
-	} else if sesion != nil && sesion.ProyectoID != nil && *sesion.ProyectoID > 0 {
-		return resolverProyectoReactivacionPorID(agente, *sesion.ProyectoID, "ultima_sesion")
-	}
-	if handle, err := resolverHandleReactivacionAgente(agente, nil); err != nil {
-		return nil, err
-	} else if handle != nil && handle.ProyectoID != nil && *handle.ProyectoID > 0 {
-		return resolverProyectoReactivacionPorID(agente, *handle.ProyectoID, "runtime_handle")
-	}
-	return nil, nil
-}
-
-func resolverProyectoReactivacionPorID(agente string, proyectoID int64, origen string) (*db.Proyecto, error) {
-	if proyectoID <= 0 {
-		return nil, nil
-	}
-	proyecto, err := runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
-	if err != nil {
-		return nil, err
-	}
-	if proyecto == nil {
-		return nil, fmt.Errorf("agente %s con proyecto de reactivacion inconsistente (%s=%d)", strings.TrimSpace(agente), strings.TrimSpace(origen), proyectoID)
-	}
-	return proyecto, nil
-}
-
-func proyectoReactivacionDesdeTareas(agente string) (int64, error) {
-	filtro := db.FiltroTareas{Agente: &agente}
-	tareas, err := tareasService.List(filtro)
-	if err != nil {
-		return 0, err
-	}
-	bestProjectID := int64(0)
-	bestRank := 99
-	bestID := int64(0)
-	rankForState := func(estado db.EstadoTarea) int {
-		switch estado {
-		case db.TareaEnProgreso:
-			return 0
-		case db.TareaAsignada:
-			return 1
-		case db.TareaBloqueada:
-			return 2
-		default:
-			return 99
-		}
-	}
-	for _, tarea := range tareas {
-		if tarea == nil || tarea.ProyectoID == nil || *tarea.ProyectoID <= 0 {
-			continue
-		}
-		rank := rankForState(tarea.Estado)
-		if rank > 2 {
-			continue
-		}
-		if bestProjectID == 0 || rank < bestRank || (rank == bestRank && tarea.ID > bestID) {
-			bestProjectID = *tarea.ProyectoID
-			bestRank = rank
-			bestID = tarea.ID
-		}
-	}
-	return bestProjectID, nil
-}
-
-func proyectoReactivacionDesdeMailbox(agente string) (int64, error) {
-	estado := "pendiente"
-	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
-		ToAgente: &agente,
-		Estado:   &estado,
-	})
-	if err != nil {
-		return 0, err
-	}
-	bestProjectID := int64(0)
-	bestID := int64(0)
-	for _, msg := range mailbox {
-		if msg == nil || msg.ProyectoID == nil || *msg.ProyectoID <= 0 {
-			continue
-		}
-		if bestProjectID == 0 || msg.ID > bestID {
-			bestProjectID = *msg.ProyectoID
-			bestID = msg.ID
-		}
-	}
-	return bestProjectID, nil
-}
-
-func dbProyectoTieneBacklogReactivable(proyectoID int64) (bool, error) {
-	filtro := db.FiltroTareas{ProyectoID: &proyectoID}
-	tareas, err := tareasService.List(filtro)
-	if err != nil {
-		return false, err
-	}
-	for _, tarea := range tareas {
-		if tarea == nil {
-			continue
-		}
-		switch tarea.Estado {
-		case db.TareaLibre:
-			return true, nil
-		case db.TareaBloqueada:
-			recuperable, err := tareaBloqueadaRecuperableParaReanimacion(tarea.ID)
-			if err != nil {
-				return false, err
-			}
-			if recuperable {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
 }
 
 func tareaBloqueadaRecuperableParaReanimacion(tareaID int64) (bool, error) {
