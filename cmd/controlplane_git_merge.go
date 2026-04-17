@@ -10,6 +10,7 @@ import (
 	"orquesta/gitgobernanza"
 	"orquesta/gitoperaciones"
 	"orquesta/progresoapp"
+	"orquesta/supervisionapp"
 )
 
 func (dbAutomationService) ProcesarGitMergesBatch() (int, error) {
@@ -169,7 +170,7 @@ func cerrarWorktreeTrasMerge(worktreeID *int64, motivo string) error {
 	return err
 }
 
-func reflejarCierreIntegracionTrasMerge(proyecto *db.Proyecto, policy *db.ProyectoAutonomia) error {
+func reflejarCierreIntegracionTrasMerge(proyecto *db.Proyecto, policy *supervisionapp.Policy) error {
 	if proyecto == nil {
 		return nil
 	}

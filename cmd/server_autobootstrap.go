@@ -50,7 +50,7 @@ func bootstrapServerAutonomy() error {
 	if err != nil {
 		return err
 	}
-	supervisor, _, err := resolverSupervisorAutonomiaOperativo(proyecto.ID, policy, "server_autobootstrap_supervisor", "")
+	supervisor, _, err := resolverSupervisorAutonomiaOperativo(proyecto.ID, policy != nil && policy.Enabled, policySupervisorAutonomia(policy), "server_autobootstrap_supervisor", "")
 	if err != nil {
 		return err
 	}
@@ -264,7 +264,7 @@ func ensureAutobootstrapAgents(proyectoID int64, cfg serverAutobootstrapConfig) 
 	return nil
 }
 
-func construirInstruccionBootstrapSupervisor(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, supervisor string, workers []string) string {
+func construirInstruccionBootstrapSupervisor(policy *supervisionapp.Policy, proyecto *db.Proyecto, supervisor string, workers []string) string {
 	parts := []string{
 		"Orquesta: has sido arrancado como orquestador autónomo del proyecto.",
 		"Coordina a los demás Codex desde dentro de Orquesta, reparte trabajo real, revisa pruebas, deduplica frentes y no pidas intervención humana salvo que falten credenciales, secretos o un recurso externo real.",
@@ -288,7 +288,7 @@ func construirInstruccionBootstrapSupervisor(policy *db.ProyectoAutonomia, proye
 	return strings.Join(parts, " ")
 }
 
-func construirInstruccionBootstrapWorker(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, supervisor string) string {
+func construirInstruccionBootstrapWorker(policy *supervisionapp.Policy, proyecto *db.Proyecto, supervisor string) string {
 	parts := []string{
 		"Orquesta: has sido arrancado como programador del proyecto.",
 		"No te quedes esperando: revisa Orquesta, coge el siguiente frente útil real, programa, prueba y deja evidencia.",

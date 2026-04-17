@@ -2,6 +2,7 @@ package supervisionapp
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,12 +11,12 @@ import (
 
 type fakeStore struct {
 	projects        map[string]*db.Proyecto
-	autonomyByID    map[int64]*db.ProyectoAutonomia
-	cyclesByProject map[int64][]*db.AutonomiaCiclo
+	autonomyByID    map[int64]*Policy
+	cyclesByProject map[int64][]*Cycle
 	lastEnabled     *bool
-	lastCycleFilter db.FiltroAutonomiaCiclos
-	lastUpsert      *db.ProyectoAutonomia
-	lastCycle       *db.AutonomiaCiclo
+	lastCycleFilter CycleFilter
+	lastUpsert      *Policy
+	lastCycle       *Cycle
 	lastSupervised  struct {
 		projectID int64
 		when      time.Time
@@ -30,8 +31,8 @@ type fakeStore struct {
 func newFakeStore() *fakeStore {
 	return &fakeStore{
 		projects:        map[string]*db.Proyecto{},
-		autonomyByID:    map[int64]*db.ProyectoAutonomia{},
-		cyclesByProject: map[int64][]*db.AutonomiaCiclo{},
+		autonomyByID:    map[int64]*Policy{},
+		cyclesByProject: map[int64][]*Cycle{},
 		nextCycleID:     100,
 	}
 }
@@ -44,7 +45,7 @@ func (f *fakeStore) GetProject(ref string) (*db.Proyecto, error) {
 	return proyecto, nil
 }
 
-func (f *fakeStore) GetProjectAutonomy(proyectoID int64) (*db.ProyectoAutonomia, error) {
+func (f *fakeStore) GetProjectAutonomy(proyectoID int64) (*Policy, error) {
 	item, ok := f.autonomyByID[proyectoID]
 	if !ok {
 		return nil, nil
@@ -53,9 +54,9 @@ func (f *fakeStore) GetProjectAutonomy(proyectoID int64) (*db.ProyectoAutonomia,
 	return &copia, nil
 }
 
-func (f *fakeStore) ListProjectAutonomy(enabled *bool) ([]*db.ProyectoAutonomia, error) {
+func (f *fakeStore) ListProjectAutonomy(enabled *bool) ([]*Policy, error) {
 	f.lastEnabled = enabled
-	out := make([]*db.ProyectoAutonomia, 0, len(f.autonomyByID))
+	out := make([]*Policy, 0, len(f.autonomyByID))
 	for _, item := range f.autonomyByID {
 		if enabled != nil && item.Enabled != *enabled {
 			continue
@@ -66,23 +67,23 @@ func (f *fakeStore) ListProjectAutonomy(enabled *bool) ([]*db.ProyectoAutonomia,
 	return out, nil
 }
 
-func (f *fakeStore) UpsertProjectAutonomy(item *db.ProyectoAutonomia) (int64, error) {
+func (f *fakeStore) UpsertProjectAutonomy(item *Policy) (int64, error) {
 	copia := *item
 	f.lastUpsert = &copia
 	f.autonomyByID[item.ProyectoID] = &copia
 	return item.ProyectoID, nil
 }
 
-func (f *fakeStore) RegisterAutonomyCycle(item *db.AutonomiaCiclo) (int64, error) {
+func (f *fakeStore) RegisterAutonomyCycle(item *Cycle) (int64, error) {
 	copia := *item
 	copia.ID = f.nextCycleID
 	f.nextCycleID++
 	f.lastCycle = &copia
-	f.cyclesByProject[item.ProyectoID] = append([]*db.AutonomiaCiclo{&copia}, f.cyclesByProject[item.ProyectoID]...)
+	f.cyclesByProject[item.ProyectoID] = append([]*Cycle{&copia}, f.cyclesByProject[item.ProyectoID]...)
 	return copia.ID, nil
 }
 
-func (f *fakeStore) ListAutonomyCycles(filter db.FiltroAutonomiaCiclos) ([]*db.AutonomiaCiclo, error) {
+func (f *fakeStore) ListAutonomyCycles(filter CycleFilter) ([]*Cycle, error) {
 	f.lastCycleFilter = filter
 	if filter.ProyectoID == nil {
 		return nil, nil
@@ -92,7 +93,7 @@ func (f *fakeStore) ListAutonomyCycles(filter db.FiltroAutonomiaCiclos) ([]*db.A
 	if limit <= 0 || limit > len(source) {
 		limit = len(source)
 	}
-	out := make([]*db.AutonomiaCiclo, 0, limit)
+	out := make([]*Cycle, 0, limit)
 	for _, item := range source {
 		if filter.Kind != nil && item.Kind != *filter.Kind {
 			continue
@@ -121,7 +122,7 @@ func (f *fakeStore) MarkProjectAutonomyReviewed(proyectoID int64, when time.Time
 func TestGetProjectPolicyResuelveProyectoPorRef(t *testing.T) {
 	store := newFakeStore()
 	store.projects["demo"] = &db.Proyecto{ID: 7, Nombre: "demo"}
-	store.autonomyByID[7] = &db.ProyectoAutonomia{ProyectoID: 7, Enabled: true}
+	store.autonomyByID[7] = &Policy{ProyectoID: 7, Enabled: true}
 
 	svc := NewService(store)
 	got, err := svc.GetProjectPolicy("  demo  ")
@@ -135,8 +136,8 @@ func TestGetProjectPolicyResuelveProyectoPorRef(t *testing.T) {
 
 func TestListEnabledPoliciesPideSoloHabilitadas(t *testing.T) {
 	store := newFakeStore()
-	store.autonomyByID[1] = &db.ProyectoAutonomia{ProyectoID: 1, Enabled: true}
-	store.autonomyByID[2] = &db.ProyectoAutonomia{ProyectoID: 2, Enabled: false}
+	store.autonomyByID[1] = &Policy{ProyectoID: 1, Enabled: true}
+	store.autonomyByID[2] = &Policy{ProyectoID: 2, Enabled: false}
 
 	svc := NewService(store)
 	got, err := svc.ListEnabledPolicies()
@@ -148,6 +149,29 @@ func TestListEnabledPoliciesPideSoloHabilitadas(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].ProyectoID != 1 {
 		t.Fatalf("ListEnabledPolicies = %#v, want only enabled project", got)
+	}
+}
+
+func TestPersistPolicyStateActualizaYValida(t *testing.T) {
+	store := newFakeStore()
+	svc := NewService(store)
+	policy := &Policy{ProyectoID: 7, Enabled: true, EstadoAutonomia: AutonomiaProyectoActiva}
+
+	if err := svc.PersistPolicyState(policy, AutonomiaProyectoCerrando); err != nil {
+		t.Fatalf("PersistPolicyState error: %v", err)
+	}
+	if store.lastUpsert == nil {
+		t.Fatal("PersistPolicyState debería persistir la política")
+	}
+	if store.lastUpsert.EstadoAutonomia != AutonomiaProyectoCerrando {
+		t.Fatalf("EstadoAutonomia persistido = %q, want %q", store.lastUpsert.EstadoAutonomia, AutonomiaProyectoCerrando)
+	}
+	if policy.EstadoAutonomia != AutonomiaProyectoCerrando {
+		t.Fatalf("EstadoAutonomia en memoria = %q, want %q", policy.EstadoAutonomia, AutonomiaProyectoCerrando)
+	}
+
+	if err := svc.PersistPolicyState(policy, "activa"); err == nil {
+		t.Fatal("PersistPolicyState debería rechazar estados inválidos")
 	}
 }
 
@@ -166,7 +190,7 @@ func TestUpsertProjectPolicyNormalizaYRefresca(t *testing.T) {
 		ReviewRequired:       true,
 		AutoCreateTasks:      true,
 		AutoCloseProject:     true,
-		EstadoAutonomia:      db.EstadoAutonomiaProyecto("activa"),
+		EstadoAutonomia:      AutonomiaProyectoActiva,
 	})
 	if err != nil {
 		t.Fatalf("UpsertProjectPolicy error: %v", err)
@@ -182,6 +206,29 @@ func TestUpsertProjectPolicyNormalizaYRefresca(t *testing.T) {
 	}
 	if got == nil || got.ProyectoID != 9 || !got.Enabled {
 		t.Fatalf("UpsertProjectPolicy = %#v, want refreshed stored policy", got)
+	}
+	if store.lastUpsert.EstadoAutonomia != AutonomiaProyectoActiva {
+		t.Fatalf("EstadoAutonomia = %q, want %q", store.lastUpsert.EstadoAutonomia, AutonomiaProyectoActiva)
+	}
+}
+
+func TestUpsertProjectPolicyRechazaEstadoAutonomiaInvalido(t *testing.T) {
+	store := newFakeStore()
+	store.projects["demo"] = &db.Proyecto{ID: 9, Nombre: "demo"}
+
+	svc := NewService(store)
+	_, err := svc.UpsertProjectPolicy("demo", PolicyInput{
+		Enabled:          true,
+		EstadoAutonomia:  "activa",
+		ObjetivoGeneral:  "cerrar la app",
+		AutoCreateTasks:  true,
+		AutoCloseProject: true,
+	})
+	if err == nil {
+		t.Fatal("UpsertProjectPolicy debería rechazar estado_autonomia inválido")
+	}
+	if !strings.Contains(err.Error(), "estado_autonomia inválido") {
+		t.Fatalf("error inesperado: %v", err)
 	}
 }
 
@@ -227,7 +274,7 @@ func TestRegisterCycleExigeKind(t *testing.T) {
 func TestListCyclesYMarcasResuelvenProyecto(t *testing.T) {
 	store := newFakeStore()
 	store.projects["demo"] = &db.Proyecto{ID: 13, Nombre: "demo"}
-	store.cyclesByProject[13] = []*db.AutonomiaCiclo{
+	store.cyclesByProject[13] = []*Cycle{
 		{ID: 2, ProyectoID: 13, Kind: "review"},
 		{ID: 1, ProyectoID: 13, Kind: "supervision"},
 	}

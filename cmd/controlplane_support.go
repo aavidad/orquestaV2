@@ -31,6 +31,7 @@ import (
 	"orquesta/reviewapp"
 	"orquesta/runtimeagente"
 	"orquesta/runtimesapp"
+	"orquesta/supervisionapp"
 	"orquesta/tareasapp"
 )
 
@@ -3981,15 +3982,15 @@ func runtimeTranscriptTieneProyecto(item *db.RuntimeTranscriptEntry) bool {
 	return item != nil && item.ProyectoID != nil && *item.ProyectoID > 0
 }
 
-func contextoSignalTranscriptActivo(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto) bool {
+func contextoSignalTranscriptActivo(item *db.RuntimeTranscriptEntry, policy *supervisionapp.Policy, proyecto *db.Proyecto) bool {
 	return item != nil && policy != nil && proyecto != nil && policy.Enabled
 }
 
-func resolverContextoSignalTranscript(item *db.RuntimeTranscriptEntry) (*db.ProyectoAutonomia, *db.Proyecto, error) {
+func resolverContextoSignalTranscript(item *db.RuntimeTranscriptEntry) (*supervisionapp.Policy, *db.Proyecto, error) {
 	if !runtimeTranscriptTieneProyecto(item) {
 		return nil, nil, nil
 	}
-	policy, err := db.GetProyectoAutonomia(*item.ProyectoID)
+	policy, err := supervisionService.GetProjectPolicy(strconv.FormatInt(*item.ProyectoID, 10))
 	if err != nil || policy == nil || !policy.Enabled {
 		return policy, nil, err
 	}
@@ -4000,14 +4001,14 @@ func resolverContextoSignalTranscript(item *db.RuntimeTranscriptEntry) (*db.Proy
 	return policy, proyecto, nil
 }
 
-func objetivoGeneralAutonomia(policy *db.ProyectoAutonomia) string {
+func objetivoGeneralAutonomia(policy *supervisionapp.Policy) string {
 	if policy == nil {
 		return ""
 	}
 	return strings.TrimSpace(policy.ObjetivoGeneral)
 }
 
-func definitionOfDoneAutonomia(policy *db.ProyectoAutonomia) string {
+func definitionOfDoneAutonomia(policy *supervisionapp.Policy) string {
 	if policy == nil {
 		return ""
 	}
@@ -4165,7 +4166,7 @@ func notificarSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry) (strin
 	return ejecutarPlanSupervisorSignalTranscript(item, policy, proyecto)
 }
 
-func intentarDerivarReviewSignalTranscript(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto) (string, bool, error) {
+func intentarDerivarReviewSignalTranscript(item *db.RuntimeTranscriptEntry, policy *supervisionapp.Policy, proyecto *db.Proyecto) (string, bool, error) {
 	if clasificacionSignalTranscript(item) != "ready_for_review" {
 		return "", false, nil
 	}
@@ -4179,7 +4180,7 @@ func intentarDerivarReviewSignalTranscript(item *db.RuntimeTranscriptEntry, poli
 	return note, true, nil
 }
 
-func ejecutarPlanSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto) (string, error) {
+func ejecutarPlanSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry, policy *supervisionapp.Policy, proyecto *db.Proyecto) (string, error) {
 	notes := make([]string, 0, 3)
 	supervisor, activado, err := resolverAgenteSupervisorSignalTranscript(proyecto.ID, policy, agenteSignalTranscript(item))
 	if err != nil {
@@ -4198,11 +4199,11 @@ func ejecutarPlanSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry, pol
 	return resumenNotasAutonomia(notes), nil
 }
 
-func resolverAgenteSupervisorSignalTranscript(proyectoID int64, policy *db.ProyectoAutonomia, agenteOrigen string) (*db.Agente, bool, error) {
+func resolverAgenteSupervisorSignalTranscript(proyectoID int64, policy *supervisionapp.Policy, agenteOrigen string) (*db.Agente, bool, error) {
 	if policy == nil {
 		return nil, false, nil
 	}
-	return resolverSupervisorAutonomiaOperativo(proyectoID, policy, "supervision_transcript_signal", strings.TrimSpace(agenteOrigen))
+	return resolverSupervisorAutonomiaOperativo(proyectoID, policy.Enabled, policySupervisorAutonomia(policy), "supervision_transcript_signal", strings.TrimSpace(agenteOrigen))
 }
 
 func resolverAgenteReviewSignalTranscript(proyectoID int64, reviewerPreferido, agenteOrigen string) (*db.Agente, bool, error) {
@@ -4229,14 +4230,14 @@ func resolverAgentePreferidoOActivoSignalTranscript(proyectoID int64, preferido,
 	return agente, false, err
 }
 
-func asegurarTareaReplanAutonomiaSignal(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto, supervisor *db.Agente) (string, error) {
+func asegurarTareaReplanAutonomiaSignal(item *db.RuntimeTranscriptEntry, policy *supervisionapp.Policy, proyecto *db.Proyecto, supervisor *db.Agente) (string, error) {
 	if !contextoSignalTranscriptActivo(item, policy, proyecto) {
 		return "", nil
 	}
 	return ejecutarPlanReplanSignalTranscript(item, policy, proyecto, supervisor)
 }
 
-func ejecutarPlanReplanSignalTranscript(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto, supervisor *db.Agente) (string, error) {
+func ejecutarPlanReplanSignalTranscript(item *db.RuntimeTranscriptEntry, policy *supervisionapp.Policy, proyecto *db.Proyecto, supervisor *db.Agente) (string, error) {
 	if clasificacionSignalTranscript(item) != "needs_replan" {
 		return "", nil
 	}
@@ -4255,7 +4256,7 @@ func ejecutarPlanReplanSignalTranscript(item *db.RuntimeTranscriptEntry, policy 
 	return fmt.Sprintf("replan_task_created:%d", id), nil
 }
 
-func resolverAgenteObjetivoReplanAutonomiaSignal(policy *db.ProyectoAutonomia, supervisor *db.Agente, agenteOrigen string) string {
+func resolverAgenteObjetivoReplanAutonomiaSignal(policy *supervisionapp.Policy, supervisor *db.Agente, agenteOrigen string) string {
 	agenteOrigen = strings.TrimSpace(agenteOrigen)
 	if supervisor != nil && !strings.EqualFold(nombreAgenteAutonomia(supervisor), agenteOrigen) {
 		return nombreAgenteAutonomia(supervisor)
@@ -4266,21 +4267,21 @@ func resolverAgenteObjetivoReplanAutonomiaSignal(policy *db.ProyectoAutonomia, s
 	return ""
 }
 
-func supervisorPreferidoAutonomia(policy *db.ProyectoAutonomia) string {
+func supervisorPreferidoAutonomia(policy *supervisionapp.Policy) string {
 	if policy == nil {
 		return ""
 	}
 	return strings.TrimSpace(policy.SupervisorAgente)
 }
 
-func reviewerPreferidoAutonomia(policy *db.ProyectoAutonomia) string {
+func reviewerPreferidoAutonomia(policy *supervisionapp.Policy) string {
 	if policy == nil {
 		return ""
 	}
 	return strings.TrimSpace(policy.ReviewerAgente)
 }
 
-func crearTareaReplanAutonomiaSignal(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, item *db.RuntimeTranscriptEntry, target string) (int64, error) {
+func crearTareaReplanAutonomiaSignal(policy *supervisionapp.Policy, proyecto *db.Proyecto, item *db.RuntimeTranscriptEntry, target string) (int64, error) {
 	if policy == nil || proyecto == nil || item == nil {
 		return 0, nil
 	}
@@ -4343,7 +4344,7 @@ func esTareaReplanAutonomia(tarea *db.Tarea) bool {
 	return strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:needs_replan")
 }
 
-func construirDescripcionTareaReplanAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, item *db.RuntimeTranscriptEntry) string {
+func construirDescripcionTareaReplanAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyecto, item *db.RuntimeTranscriptEntry) string {
 	partes := []string{
 		"Orquesta ha detectado en el transcript una señal de needs_replan: el agente no tiene claro el siguiente paso útil.",
 		"Replanifica backlog, prioridades, propuestas, worktrees y checkpoints para abrir o reforzar el siguiente frente útil sin intervención humana.",
@@ -4366,14 +4367,14 @@ func construirDescripcionTareaReplanAutonomia(policy *db.ProyectoAutonomia, proy
 	return strings.Join(partes, " ")
 }
 
-func notificarReviewerSignalTranscript(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto) (string, error) {
+func notificarReviewerSignalTranscript(item *db.RuntimeTranscriptEntry, policy *supervisionapp.Policy, proyecto *db.Proyecto) (string, error) {
 	if !contextoSignalTranscriptActivo(item, policy, proyecto) {
 		return "", nil
 	}
 	return ejecutarPlanReviewerSignalTranscript(item, policy, proyecto)
 }
 
-func ejecutarPlanReviewerSignalTranscript(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto) (string, error) {
+func ejecutarPlanReviewerSignalTranscript(item *db.RuntimeTranscriptEntry, policy *supervisionapp.Policy, proyecto *db.Proyecto) (string, error) {
 	reviewer, activado, err := resolverAgenteReviewSignalTranscript(proyecto.ID, reviewerPreferidoAutonomia(policy), agenteSignalTranscript(item))
 	if err != nil {
 		return "", err
@@ -4391,7 +4392,7 @@ func resolverEstadoAgenteObjetivoSignalTranscript(agente *db.Agente, activado bo
 	return encolarNudgeSignalTranscriptAutonomia(nombreAgenteAutonomia(agente), proyecto, accion, instruccion, item, prefijoEstado)
 }
 
-func construirInstruccionSupervisionSignalTranscript(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, supervisor string, item *db.RuntimeTranscriptEntry) string {
+func construirInstruccionSupervisionSignalTranscript(policy *supervisionapp.Policy, proyecto *db.Proyecto, supervisor string, item *db.RuntimeTranscriptEntry) string {
 	parts := []string{
 		"Orquesta: un agente del proyecto ha emitido una señal de duda, espera o bloqueo en su transcript.",
 		"Supervisa el frente ahora mismo: revisa el transcript, el contexto del proyecto, las tareas y propuestas activas, y decide el siguiente paso sin escalar a humano salvo que falten credenciales, secretos o un recurso externo real.",
@@ -4424,7 +4425,7 @@ func construirInstruccionSupervisionSignalTranscript(policy *db.ProyectoAutonomi
 	return strings.Join(parts, " ")
 }
 
-func construirInstruccionReviewSignalTranscript(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, reviewer string, item *db.RuntimeTranscriptEntry) string {
+func construirInstruccionReviewSignalTranscript(policy *supervisionapp.Policy, proyecto *db.Proyecto, reviewer string, item *db.RuntimeTranscriptEntry) string {
 	parts := []string{
 		"Orquesta: un agente del proyecto ha indicado en su transcript que el frente está listo para revisión.",
 		"Valida el estado real del código, la definición de terminado, tests, arquitectura e i18n; si el frente está maduro, impulsa o ejecuta la revisión, y si no, pide cambios concretos sin bloquear el proyecto más de lo necesario.",
@@ -12095,7 +12096,7 @@ func desbloquearYReactivarTareaAutonomia(tareaID int64, resolucion, agente, nota
 	return nil
 }
 
-func cerrarProyectoAutonomia(proyectoID int64, motivo string, estadoAutonomia db.EstadoAutonomiaProyecto, policy *db.ProyectoAutonomia) error {
+func cerrarProyectoAutonomia(proyectoID int64, motivo string, estadoAutonomia db.EstadoAutonomiaProyecto, policy *supervisionapp.Policy) error {
 	if proyectoID <= 0 {
 		return nil
 	}

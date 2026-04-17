@@ -51,7 +51,7 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 		if !disponible {
 			continue
 		}
-		agente, _, err := resolverSupervisorAutonomiaOperativo(proyecto.ID, policy, "supervision_automatica", "")
+		agente, _, err := resolverSupervisorAutonomiaOperativo(proyecto.ID, policy != nil && policy.Enabled, policySupervisorAutonomia(policy), "supervision_automatica", "")
 		if err != nil {
 			return total, err
 		}
@@ -152,7 +152,7 @@ type autonomiaAutoCreateResult struct {
 	PlanBacklog int
 }
 
-func asegurarTrabajoAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, agente *db.Agente) (autonomiaAutoCreateResult, error) {
+func asegurarTrabajoAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyecto, agente *db.Agente) (autonomiaAutoCreateResult, error) {
 	var zero autonomiaAutoCreateResult
 	if policy == nil || !policy.Enabled || proyecto == nil || agente == nil {
 		return zero, nil
@@ -244,7 +244,7 @@ func asegurarTrabajoAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyect
 	}, nil
 }
 
-func asegurarTrabajoContinuoPremium(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, agente *db.Agente) (autonomiaAutoCreateResult, error) {
+func asegurarTrabajoContinuoPremium(policy *supervisionapp.Policy, proyecto *db.Proyecto, agente *db.Agente) (autonomiaAutoCreateResult, error) {
 	var zero autonomiaAutoCreateResult
 	if policy == nil || proyecto == nil || agente == nil {
 		return zero, nil
@@ -310,7 +310,7 @@ func esTareaMicrocicloPremium(tarea *db.Tarea) bool {
 		strings.Contains(strings.TrimSpace(tarea.Notas), microcicloRefactorNotasTag)
 }
 
-func crearTareaFrentePremiumMayorAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, agente string) (int64, error) {
+func crearTareaFrentePremiumMayorAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyecto, agente string) (int64, error) {
 	agente = strings.TrimSpace(agente)
 	if proyecto == nil || agente == "" {
 		return 0, nil
@@ -334,7 +334,7 @@ func crearTareaFrentePremiumMayorAutonomia(policy *db.ProyectoAutonomia, proyect
 	return id, nil
 }
 
-func construirDescripcionFrentePremiumMayorAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto) string {
+func construirDescripcionFrentePremiumMayorAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyecto) string {
 	partes := []string{
 		"Tarea semilla creada automáticamente por Orquesta porque ya no quedan microfrentes premium abiertos y el siguiente paso útil debe ser seleccionar o abrir un frente premium mayor pero acotado.",
 		"Objetivo: revisar backlog, propuestas, checkpoints y estado real del código para tomar o abrir exactamente un siguiente frente premium útil, sin volver a reciclar una microtarea cerrada ni abrir varios caminos a la vez.",
@@ -355,7 +355,7 @@ func construirDescripcionFrentePremiumMayorAutonomia(policy *db.ProyectoAutonomi
 	return strings.Join(partes, " ")
 }
 
-func construirSpecFactoryAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto) fabricaapp.AppSpec {
+func construirSpecFactoryAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyecto) fabricaapp.AppSpec {
 	texto := strings.ToLower(strings.Join([]string{
 		strings.TrimSpace(proyectoNombreAutonomia(proyecto)),
 		strings.TrimSpace(proyectoSlugAutonomia(proyecto)),
@@ -435,7 +435,7 @@ func proyectoSlugAutonomia(proyecto *db.Proyecto) string {
 	return strings.TrimSpace(proyecto.Slug)
 }
 
-func descripcionFactoryAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto) string {
+func descripcionFactoryAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyecto) string {
 	if policy != nil && strings.TrimSpace(policy.ObjetivoGeneral) != "" {
 		return strings.TrimSpace(policy.ObjetivoGeneral)
 	}
@@ -652,7 +652,7 @@ func asegurarSolicitudMergeDesdeGateAprobado(proyecto *db.Proyecto, gate *review
 	return true, nil
 }
 
-func construirDescripcionTareaSemillaAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto) string {
+func construirDescripcionTareaSemillaAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyecto) string {
 	partes := []string{
 		"Tarea semilla creada automáticamente por Orquesta porque el proyecto autónomo no tenía ningún frente abierto.",
 		"Objetivo: revisar backlog, contexto, transcript, propuestas y estado real del proyecto para abrir el siguiente frente útil sin intervención humana.",
@@ -910,7 +910,7 @@ func procesarReviewGatesBatch() (int, error) {
 	return total, nil
 }
 
-func supervisionDue(policy *db.ProyectoAutonomia, now time.Time, interval time.Duration) bool {
+func supervisionDue(policy *supervisionapp.Policy, now time.Time, interval time.Duration) bool {
 	if policy == nil || !policy.Enabled {
 		return false
 	}
@@ -966,17 +966,8 @@ func supervisorAutonomiaTieneTrabajoActivo(agente string, proyectoID int64) (boo
 	return false, nil
 }
 
-func persistirEstadoProyectoAutonomia(policy *db.ProyectoAutonomia, estado db.EstadoAutonomiaProyecto) error {
-	if policy == nil || policy.EstadoAutonomia == estado {
-		return nil
-	}
-	cp := *policy
-	cp.EstadoAutonomia = estado
-	if _, err := db.UpsertProyectoAutonomia(&cp); err != nil {
-		return err
-	}
-	policy.EstadoAutonomia = estado
-	return nil
+func persistirEstadoProyectoAutonomia(policy *supervisionapp.Policy, estado db.EstadoAutonomiaProyecto) error {
+	return supervisionService.PersistPolicyState(policy, supervisionapp.EstadoAutonomiaProyecto(estado))
 }
 
 func seleccionarAgenteActivoProyecto(proyectoID int64, preferredRoles []string, exclude string) (*db.Agente, error) {
@@ -1078,11 +1069,11 @@ func resolverAgenteAutonomiaOperativo(nombre string) (*db.Agente, error) {
 	return candidato, nil
 }
 
-func resolverSupervisorAutonomiaOperativo(proyectoID int64, policy *db.ProyectoAutonomia, activationReason, exclude string) (*db.Agente, bool, error) {
-	if policy == nil || !policy.Enabled || proyectoID <= 0 {
+func resolverSupervisorAutonomiaOperativo(proyectoID int64, enabled bool, supervisorAgente, activationReason, exclude string) (*db.Agente, bool, error) {
+	if !enabled || proyectoID <= 0 {
 		return nil, false, nil
 	}
-	preferred := strings.TrimSpace(policy.SupervisorAgente)
+	preferred := strings.TrimSpace(supervisorAgente)
 	if preferred != "" && !strings.EqualFold(preferred, strings.TrimSpace(exclude)) {
 		if agente, activado, err := asegurarAgenteAutonomiaOperativo(proyectoID, preferred, activationReason); err != nil {
 			return nil, false, err
@@ -1098,6 +1089,13 @@ func resolverSupervisorAutonomiaOperativo(proyectoID int64, policy *db.ProyectoA
 		return nil, false, nil
 	}
 	return asegurarAgenteAutonomiaOperativo(proyectoID, strings.TrimSpace(candidato.Nombre), activationReason)
+}
+
+func policySupervisorAutonomia(policy *supervisionapp.Policy) string {
+	if policy == nil {
+		return ""
+	}
+	return strings.TrimSpace(policy.SupervisorAgente)
 }
 
 func seleccionarAgenteActivoProyectoPreferido(proyectoID int64, preferredAgent string, preferredRoles []string, exclude string) (*db.Agente, error) {
@@ -1203,7 +1201,7 @@ func latestApprovedGate(gates []*reviewapp.Gate) *reviewapp.Gate {
 	return approved[0]
 }
 
-func seleccionarAgenteCorreccionReview(proyectoID int64, policy *db.ProyectoAutonomia, reviewer string) (*db.Agente, error) {
+func seleccionarAgenteCorreccionReview(proyectoID int64, policy *supervisionapp.Policy, reviewer string) (*db.Agente, error) {
 	preferredSupervisor := ""
 	if policy != nil {
 		preferredSupervisor = strings.TrimSpace(policy.SupervisorAgente)
@@ -1279,7 +1277,7 @@ func proyectoReviewAutonomoCompletado(proyecto *db.Proyecto) (bool, string, erro
 	return false, "esperando apertura/aprobación de review gate", nil
 }
 
-func construirPayloadCicloAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, agente *db.Agente, contexto map[string]any, kind string, decision map[string]any) (string, string) {
+func construirPayloadCicloAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyecto, agente *db.Agente, contexto map[string]any, kind string, decision map[string]any) (string, string) {
 	input := map[string]any{
 		"kind":              strings.TrimSpace(kind),
 		"proyecto_id":       proyecto.ID,
@@ -1298,7 +1296,7 @@ func construirPayloadCicloAutonomia(policy *db.ProyectoAutonomia, proyecto *db.P
 	return string(rawInput), string(rawDecision)
 }
 
-func construirInstruccionSupervision(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, agente *db.Agente, resumen string) string {
+func construirInstruccionSupervision(policy *supervisionapp.Policy, proyecto *db.Proyecto, agente *db.Agente, resumen string) string {
 	parts := []string{
 		"Orquesta: actúa como supervisor autónomo del proyecto y mantén el trabajo alineado con la planificación aprobada.",
 		"Revisa el estado real del proyecto y empuja el siguiente frente útil sin detenerte.",
@@ -1324,7 +1322,7 @@ func construirInstruccionSupervision(policy *db.ProyectoAutonomia, proyecto *db.
 	return strings.Join(parts, " ")
 }
 
-func construirInstruccionReview(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, reviewer string, gate *reviewapp.Gate, resumen string) string {
+func construirInstruccionReview(policy *supervisionapp.Policy, proyecto *db.Proyecto, reviewer string, gate *reviewapp.Gate, resumen string) string {
 	parts := []string{
 		"Orquesta: actúa como revisor autónomo del proyecto.",
 		"Inspecciona el código, valida arquitectura, tests, i18n y cumplimiento de reglas; documenta findings y aprueba o pide cambios sin bloquear por defecto.",
@@ -1351,7 +1349,7 @@ func construirInstruccionReview(policy *db.ProyectoAutonomia, proyecto *db.Proye
 	return strings.Join(parts, " ")
 }
 
-func construirInstruccionCorreccionReview(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, agente string, gate *reviewapp.Gate) string {
+func construirInstruccionCorreccionReview(policy *supervisionapp.Policy, proyecto *db.Proyecto, agente string, gate *reviewapp.Gate) string {
 	parts := []string{
 		"Orquesta: aplica de forma autónoma los cambios pedidos en la revisión y deja el proyecto listo para re-review sin esperar a un humano.",
 		"Corrige los findings reales, crea o reajusta tareas si hacen falta, ejecuta los tests pertinentes y preserva la arquitectura y la gobernanza efectiva.",

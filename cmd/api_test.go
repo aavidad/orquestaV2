@@ -2741,7 +2741,7 @@ func TestAPIProyectoAutonomiaGetPostYCiclos(t *testing.T) {
 		t.Fatalf("status ciclos inesperado: %d body=%s", recCycles.Code, recCycles.Body.String())
 	}
 	var cyclesResp struct {
-		Cycles []*db.AutonomiaCiclo `json:"cycles"`
+		Cycles []*supervisionapp.Cycle `json:"cycles"`
 	}
 	if err := json.Unmarshal(recCycles.Body.Bytes(), &cyclesResp); err != nil {
 		t.Fatalf("decode ciclos: %v", err)

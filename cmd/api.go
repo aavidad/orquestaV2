@@ -121,8 +121,8 @@ type apiProyectoAutonomiaSaveRequest struct {
 }
 
 type apiProyectoAutonomiaResponse struct {
-	Policy *db.ProyectoAutonomia `json:"policy"`
-	Cycles []*db.AutonomiaCiclo  `json:"cycles,omitempty"`
+	Policy *supervisionapp.Policy  `json:"policy"`
+	Cycles []*supervisionapp.Cycle `json:"cycles,omitempty"`
 }
 
 type apiProyectoMicrocicloRequest struct {
@@ -3289,7 +3289,7 @@ func apiHandlerProyectoAutonomiaGuardar(w http.ResponseWriter, r *http.Request, 
 		ReviewRequired:       req.ReviewRequired,
 		AutoCreateTasks:      req.AutoCreateTasks,
 		AutoCloseProject:     req.AutoCloseProject,
-		EstadoAutonomia:      db.EstadoAutonomiaProyecto(strings.TrimSpace(req.EstadoAutonomia)),
+		EstadoAutonomia:      supervisionapp.EstadoAutonomiaProyecto(strings.TrimSpace(req.EstadoAutonomia)),
 	})
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)

@@ -16,6 +16,7 @@ import (
 	"orquesta/db"
 	"orquesta/memoriaproyecto"
 	"orquesta/reviewapp"
+	"orquesta/supervisionapp"
 )
 
 var memoriaProyectoService = memoriaproyecto.NewService(db.ProjectMemoryRepository{})
@@ -39,8 +40,8 @@ type webProyectoDetalleData struct {
 	Proyecto    *db.Proyecto
 	Cockpit     *apiProyectoCockpit
 	Operacion   *db.ProyectoOperacion
-	Autonomia   *db.ProyectoAutonomia
-	Ciclos      []*db.AutonomiaCiclo
+	Autonomia   *supervisionapp.Policy
+	Ciclos      []*supervisionapp.Cycle
 	ReviewGates []*reviewapp.Gate
 	Votaciones  []*db.HistorialVotacionProyecto
 	Decisiones  []*db.DecisionProyecto
@@ -130,8 +131,8 @@ func webHandlerProyectoDetalle(w http.ResponseWriter, r *http.Request, slug stri
 		})
 		return
 	}
-	var cicloItems []*db.AutonomiaCiclo
-	var autonomiaItem *db.ProyectoAutonomia
+	var cicloItems []*supervisionapp.Cycle
+	var autonomiaItem *supervisionapp.Policy
 	if errAutonomia == nil && autonomia != nil {
 		autonomiaItem = autonomia.Policy
 		cicloItems = autonomia.Cycles
@@ -391,7 +392,7 @@ func webCargarProyectoAutonomiaPorAPI(ref string) (*apiProyectoAutonomiaResponse
 	return &resp, nil
 }
 
-func webGuardarProyectoAutonomiaPorAPI(ref string, req apiProyectoAutonomiaSaveRequest) (*db.ProyectoAutonomia, error) {
+func webGuardarProyectoAutonomiaPorAPI(ref string, req apiProyectoAutonomiaSaveRequest) (*supervisionapp.Policy, error) {
 	var resp apiProyectoAutonomiaResponse
 	path := "/api/proyectos/" + url.PathEscape(strings.TrimSpace(ref)) + "/autonomia"
 	if err := webInvocarAPIJSON(http.MethodPost, path, req, &resp); err != nil {

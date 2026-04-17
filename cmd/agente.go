@@ -27,6 +27,7 @@ import (
 	"orquesta/db"
 	"orquesta/internal/lanzamientoruntime"
 	"orquesta/runtimeagente"
+	"orquesta/supervisionapp"
 )
 
 type agenteBootstrapAck struct {
@@ -254,7 +255,7 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 			tareasByAgentProject:       map[string][]*db.Tarea{},
 			pendingVotesByAgentProject: map[string][]*db.Propuesta{},
 			openProposalsByProject:     map[int64][]*db.Propuesta{},
-			politicasByProject:         map[int64]*db.ProyectoAutonomia{},
+			politicasByProject:         map[int64]*supervisionapp.Policy{},
 			activeProjectByAgent:       map[string]int64{},
 			activeHandleByAgentProject: map[string]bool{},
 			supervisorByProject:        map[int64]*db.Agente{},

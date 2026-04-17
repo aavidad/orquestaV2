@@ -9,6 +9,7 @@ import (
 
 	"orquesta/autonomiapolicy"
 	"orquesta/db"
+	"orquesta/supervisionapp"
 )
 
 type autonomiaBudgetPauseDecision struct {
@@ -36,9 +37,9 @@ type autonomiaBatchSnapshot struct {
 	tareasByAgentProject       map[string][]*db.Tarea
 	pendingVotesByAgentProject map[string][]*db.Propuesta
 	openProposalsByProject     map[int64][]*db.Propuesta
-	politicasByProject         map[int64]*db.ProyectoAutonomia
-	proyectosByID             map[int64]*db.Proyecto
-	proyectosLoaded           map[int64]struct{}
+	politicasByProject         map[int64]*supervisionapp.Policy
+	proyectosByID              map[int64]*db.Proyecto
+	proyectosLoaded            map[int64]struct{}
 	activeProjectByAgent       map[string]int64
 	activeHandleByAgentProject map[string]bool
 	supervisorByProject        map[int64]*db.Agente
@@ -78,7 +79,7 @@ func newAutonomiaBatchSnapshot(sesiones []*db.Sesion) (*autonomiaBatchSnapshot, 
 		tareasByAgentProject:       map[string][]*db.Tarea{},
 		pendingVotesByAgentProject: map[string][]*db.Propuesta{},
 		openProposalsByProject:     map[int64][]*db.Propuesta{},
-		politicasByProject:         map[int64]*db.ProyectoAutonomia{},
+		politicasByProject:         map[int64]*supervisionapp.Policy{},
 		proyectosByID:              map[int64]*db.Proyecto{},
 		proyectosLoaded:            map[int64]struct{}{},
 		activeProjectByAgent:       map[string]int64{},
@@ -428,11 +429,11 @@ func (s *autonomiaBatchSnapshot) selectSupervisor(proyectoID int64) (*db.Agente,
 	return supervisor, nil
 }
 
-func (s *autonomiaBatchSnapshot) projectPolicy(proyectoID int64) (*db.ProyectoAutonomia, error) {
+func (s *autonomiaBatchSnapshot) projectPolicy(proyectoID int64) (*supervisionapp.Policy, error) {
 	if policy, ok := s.politicasByProject[proyectoID]; ok {
 		return policy, nil
 	}
-	policy, err := db.GetProyectoAutonomia(proyectoID)
+	policy, err := supervisionService.GetProjectPolicy(strconv.FormatInt(proyectoID, 10))
 	if err != nil {
 		return nil, err
 	}

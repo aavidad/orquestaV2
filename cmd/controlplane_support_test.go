@@ -22,6 +22,7 @@ import (
 	"orquesta/reviewapp"
 	"orquesta/runtimeagente"
 	"orquesta/runtimesapp"
+	"orquesta/supervisionapp"
 )
 
 func timePtr(v time.Time) *time.Time { return &v }
@@ -3303,7 +3304,7 @@ func TestConstruirInstruccionSupervisionRespetaAutoCreateTasks(t *testing.T) {
 	proyecto := &db.Proyecto{ID: 1, Slug: "orquestador"}
 	supervisor := &db.Agente{Nombre: "CodexSupervisor", Rol: "admin"}
 
-	conBacklog := construirInstruccionSupervision(&db.ProyectoAutonomia{
+	conBacklog := construirInstruccionSupervision(&supervisionapp.Policy{
 		Enabled:         true,
 		ObjetivoGeneral: "Terminar la app",
 		AutoCreateTasks: true,
@@ -3312,7 +3313,7 @@ func TestConstruirInstruccionSupervisionRespetaAutoCreateTasks(t *testing.T) {
 		t.Fatalf("la instrucción debería permitir crear backlog automáticamente: %s", conBacklog)
 	}
 
-	sinBacklog := construirInstruccionSupervision(&db.ProyectoAutonomia{
+	sinBacklog := construirInstruccionSupervision(&supervisionapp.Policy{
 		Enabled:         true,
 		ObjetivoGeneral: "Terminar la app",
 		AutoCreateTasks: false,
@@ -5612,6 +5613,21 @@ func TestAsegurarTrabajoContinuoPremiumNoDeclaraAgotadoSiQuedaMicrocicloAbierto(
 	if err != nil {
 		t.Fatalf("get autonomia: %v", err)
 	}
+	policyDomain := &supervisionapp.Policy{
+		ProyectoID:           policy.ProyectoID,
+		Enabled:              policy.Enabled,
+		ObjetivoGeneral:      policy.ObjetivoGeneral,
+		DefinitionOfDoneJSON: policy.DefinitionOfDoneJSON,
+		MaxWorkers:           policy.MaxWorkers,
+		SupervisorAgente:     policy.SupervisorAgente,
+		ReviewerAgente:       policy.ReviewerAgente,
+		ReserveReviewer:      policy.ReserveReviewer,
+		ReserveSupervisor:    policy.ReserveSupervisor,
+		ReviewRequired:       policy.ReviewRequired,
+		AutoCreateTasks:      policy.AutoCreateTasks,
+		AutoCloseProject:     policy.AutoCloseProject,
+		EstadoAutonomia:      supervisionapp.EstadoAutonomiaProyecto(policy.EstadoAutonomia),
+	}
 	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
 	if err != nil {
 		t.Fatalf("get proyecto: %v", err)
@@ -5656,7 +5672,7 @@ func TestAsegurarTrabajoContinuoPremiumNoDeclaraAgotadoSiQuedaMicrocicloAbierto(
 		t.Fatalf("crear tarea abierta: %v", err)
 	}
 
-	res, err := asegurarTrabajoContinuoPremium(policy, proyecto, agente)
+	res, err := asegurarTrabajoContinuoPremium(policyDomain, proyecto, agente)
 	if err != nil {
 		t.Fatalf("asegurar trabajo continuo premium: %v", err)
 	}
@@ -15948,10 +15964,10 @@ func TestTieneTrabajoOrquestablePendienteDetectaMailboxRuntimeEnProyectoActivoNo
 		t.Fatalf("upsert proyecto: %v", err)
 	}
 	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
-		FromAgente: "server",
-		ToAgente:   "CodexWarm1",
-		ProyectoID: &proyectoID,
-		Kind:       "autonomia",
+		FromAgente:  "server",
+		ToAgente:    "CodexWarm1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
 		PayloadJSON: `{"accion":"continuar_trabajo"}`,
 	}); err != nil {
 		t.Fatalf("crear mailbox: %v", err)
@@ -16084,9 +16100,9 @@ func TestTieneTrabajoOrquestablePendienteDetectaMailboxRuntimeGlobalSinProyecto(
 		t.Fatalf("registrar agente: %v", err)
 	}
 	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
-		FromAgente: "server",
-		ToAgente:   "CodexWarmGlobal1",
-		Kind:       "handoff",
+		FromAgente:  "server",
+		ToAgente:    "CodexWarmGlobal1",
+		Kind:        "handoff",
 		PayloadJSON: `{"accion":"continuar_trabajo"}`,
 	}); err != nil {
 		t.Fatalf("crear mailbox global: %v", err)
@@ -21123,7 +21139,7 @@ func TestAsegurarTareaReplanAutonomiaSignalCreaFrenteParaSupervisor(t *testing.T
 	if err != nil {
 		t.Fatalf("upsert proyecto: %v", err)
 	}
-	policy := &db.ProyectoAutonomia{
+	policy := &supervisionapp.Policy{
 		ProyectoID:           proyectoID,
 		Enabled:              true,
 		ObjetivoGeneral:      "Terminar la app sin intervención humana",

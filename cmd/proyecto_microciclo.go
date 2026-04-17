@@ -36,7 +36,7 @@ type proyectoMicrocicloRequest struct {
 type proyectoMicrocicloResult struct {
 	Proyecto            *db.Proyecto                                      `json:"proyecto"`
 	Operacion           *db.ProyectoOperacion                             `json:"operacion"`
-	Policy              *db.ProyectoAutonomia                             `json:"policy"`
+	Policy              *supervisionapp.Policy                            `json:"policy"`
 	Fase                *progresoapp.FaseProyecto                         `json:"fase"`
 	Tarea               *db.Tarea                                         `json:"tarea"`
 	Dispatch            *capacidadapp.ResultadoEjecucionPasoPipelineLocal `json:"dispatch,omitempty"`
@@ -408,7 +408,7 @@ func activarOperacionMicrociclo(proyectoID int64, maxAgentes int) (*db.ProyectoO
 	return db.GetProyectoOperacion(proyectoID)
 }
 
-func microcicloMaxAgentes(policy *db.ProyectoAutonomia) int {
+func microcicloMaxAgentes(policy *supervisionapp.Policy) int {
 	maxAgentes := controlPlaneConfigIntOrDefault("microciclo_premium_max_agents", 3)
 	if maxAgentes <= 0 {
 		maxAgentes = 3
@@ -436,7 +436,7 @@ func proyectoUsaContinuidadMicrocicloPremium(proyectoID int64) bool {
 	return strings.EqualFold(strings.TrimSpace(op.Motivo), "microrefactor_loop")
 }
 
-func activarPoliticaMicrociclo(proyectoSlug, agente string, req proyectoMicrocicloRequest) (*db.ProyectoAutonomia, error) {
+func activarPoliticaMicrociclo(proyectoSlug, agente string, req proyectoMicrocicloRequest) (*supervisionapp.Policy, error) {
 	return supervisionService.UpsertProjectPolicy(proyectoSlug, supervisionapp.PolicyInput{
 		Enabled:              true,
 		ObjetivoGeneral:      firstNonEmpty(strings.TrimSpace(req.ObjetivoGeneral), objetivoGeneralMicrocicloDefault()),

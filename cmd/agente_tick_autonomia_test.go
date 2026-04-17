@@ -8,6 +8,7 @@ import (
 
 	"orquesta/db"
 	"orquesta/propuestasapp"
+	"orquesta/supervisionapp"
 )
 
 func TestConstruirAgenteTickOutputPriorizaSupervisionParaSupervisorOperativo(t *testing.T) {
@@ -250,7 +251,7 @@ func TestConstruirAgenteTickOutputPausaPorCuotaSiWorkerTMUXBloqueado(t *testing.
 		tareasByAgentProject:       map[string][]*db.Tarea{agentProjectCacheKey("Claude1", proyectoID): {{ID: tareaID, Titulo: "Frente acotado Claude", Estado: db.TareaEnProgreso, ProyectoID: &proyectoID, Agente: &agenteRef}}},
 		pendingVotesByAgentProject: map[string][]*db.Propuesta{},
 		openProposalsByProject:     map[int64][]*db.Propuesta{},
-		politicasByProject:         map[int64]*db.ProyectoAutonomia{},
+		politicasByProject:         map[int64]*supervisionapp.Policy{},
 		activeProjectByAgent:       map[string]int64{},
 		activeHandleByAgentProject: map[string]bool{},
 		supervisorByProject:        map[int64]*db.Agente{},
@@ -483,7 +484,7 @@ func TestConstruirAgenteTickOutputNoContinuaSiRuntimeBloqueado(t *testing.T) {
 		tareasByAgentProject:       map[string][]*db.Tarea{agentProjectCacheKey("Codex1", proyectoID): {{ID: tareaID, Titulo: "Frente caído Codex", Estado: db.TareaEnProgreso, ProyectoID: &proyectoID, Agente: &agenteRef}}},
 		pendingVotesByAgentProject: map[string][]*db.Propuesta{},
 		openProposalsByProject:     map[int64][]*db.Propuesta{},
-		politicasByProject:         map[int64]*db.ProyectoAutonomia{},
+		politicasByProject:         map[int64]*supervisionapp.Policy{},
 		activeProjectByAgent:       map[string]int64{},
 		activeHandleByAgentProject: map[string]bool{},
 		supervisorByProject:        map[int64]*db.Agente{},
