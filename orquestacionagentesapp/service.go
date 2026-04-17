@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,11 +57,18 @@ type StartableWorkChecker interface {
 	HasStartableAgentWork(agente string, proyectoID int64) (bool, error)
 }
 
+type RemoteRecoverySupport interface {
+	ResolveSessionConnector(sesion *db.Sesion, runtime *db.RuntimeInstance, handle *db.RuntimeHandle) (*db.Conector, error)
+	IsConnectorAvailable(conectorID int64) (bool, error)
+	MarkProjectExternallyBlocked(proyectoID int64, motivo string) error
+}
+
 type Service struct {
 	agents        AgentPreparer
 	runtimes      RuntimeController
 	autonomyStore AutonomyStore
 	workChecker   StartableWorkChecker
+	remoteSupport RemoteRecoverySupport
 }
 
 func NewService(agents AgentPreparer, runtimes RuntimeController) *Service {
@@ -79,6 +87,13 @@ func (s *Service) SetStartableWorkChecker(checker StartableWorkChecker) {
 		return
 	}
 	s.workChecker = checker
+}
+
+func (s *Service) SetRemoteRecoverySupport(support RemoteRecoverySupport) {
+	if s == nil {
+		return
+	}
+	s.remoteSupport = support
 }
 
 type ControlRequest struct {
@@ -407,6 +422,107 @@ func (s *Service) RecoverLocalFailedRuntimeSession(sesion *db.Sesion, proyecto *
 		return 0, err
 	}
 	return 1, nil
+}
+
+func (s *Service) RecoverRemoteDegradedRuntimeSession(sesion *db.Sesion, proyecto *db.Proyecto, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (int, error) {
+	if s == nil || s.runtimes == nil || s.remoteSupport == nil {
+		return 0, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
+	}
+	if sesion == nil || sesion.ProyectoID == nil || proyecto == nil || handle == nil {
+		return 0, nil
+	}
+	conector, err := s.remoteSupport.ResolveSessionConnector(sesion, runtime, handle)
+	if err != nil {
+		return 0, err
+	}
+	if conector != nil {
+		disponible, err := s.remoteSupport.IsConnectorAvailable(conector.ID)
+		if err != nil {
+			return 0, err
+		}
+		if !disponible {
+			motivo := "conector:" + strings.TrimSpace(conector.Slug) + ":circuito_abierto"
+			if err := s.remoteSupport.MarkProjectExternallyBlocked(*sesion.ProyectoID, motivo); err != nil {
+				return 0, err
+			}
+			if satisfecha, err := s.PauseAutonomyAlreadySatisfied(strings.TrimSpace(sesion.Agente), sesion.ProyectoID, sesion); err != nil {
+				return 0, err
+			} else if satisfecha {
+				return 1, nil
+			}
+			if _, _, err := s.EnqueueControl(ControlRequest{
+				Agente:   strings.TrimSpace(sesion.Agente),
+				Proyecto: strings.TrimSpace(proyecto.Slug),
+				Accion:   "pause",
+				Motivo:   motivo,
+				Por:      "orquesta",
+			}); err != nil {
+				return 0, err
+			}
+			return 1, nil
+		}
+	}
+	if pendiente, err := s.existsOpenAutonomyOrder(strings.TrimSpace(sesion.Agente), sesion.ProyectoID, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
+		return 0, err
+	} else if pendiente {
+		return 0, nil
+	}
+	checkpointPayload, err := json.Marshal(map[string]any{
+		"checkpoint_kind": "remote_recovery",
+		"resumen":         "Checkpoint automático antes de recuperación de runtime remoto degradado",
+		"motivo":          "remote_runtime_degraded",
+	})
+	if err != nil {
+		return 0, err
+	}
+	runtimeID := func() *int64 {
+		if runtime != nil && runtime.ID > 0 {
+			return &runtime.ID
+		}
+		return handle.RuntimeID
+	}()
+	if _, err := s.runtimes.EnqueueRuntimeOrder(&db.RuntimeOrder{
+		Agente:      strings.TrimSpace(sesion.Agente),
+		ProyectoID:  sesion.ProyectoID,
+		RuntimeID:   runtimeID,
+		HandleID:    &handle.ID,
+		Tipo:        "checkpoint",
+		PayloadJSON: string(checkpointPayload),
+	}); err != nil {
+		return 0, err
+	}
+	if remoteRuntimeResumable(sesion, handle) {
+		payload, err := json.Marshal(map[string]any{
+			"accion":   "resume",
+			"motivo":   "remote_runtime_degraded",
+			"por":      "orquesta",
+			"proyecto": strings.TrimSpace(proyecto.Slug),
+		})
+		if err != nil {
+			return 0, err
+		}
+		if _, err := s.runtimes.EnqueueRuntimeOrder(&db.RuntimeOrder{
+			Agente:      strings.TrimSpace(sesion.Agente),
+			ProyectoID:  sesion.ProyectoID,
+			RuntimeID:   runtimeID,
+			HandleID:    &handle.ID,
+			Tipo:        "resume",
+			PayloadJSON: string(payload),
+		}); err != nil {
+			return 0, err
+		}
+		return 2, nil
+	}
+	if _, _, err := s.EnqueueControl(ControlRequest{
+		Agente:   strings.TrimSpace(sesion.Agente),
+		Proyecto: strings.TrimSpace(proyecto.Slug),
+		Accion:   "start",
+		Motivo:   "remote_runtime_degraded",
+		Por:      "orquesta",
+	}); err != nil {
+		return 0, err
+	}
+	return 2, nil
 }
 
 func (s *Service) PauseAutonomyAlreadySatisfied(agente string, proyectoID *int64, sesion *db.Sesion) (bool, error) {
@@ -898,4 +1014,44 @@ func runtimeIsLocallyFailed(handle *db.RuntimeHandle, runtime *db.RuntimeInstanc
 	logical := strings.ToLower(strings.TrimSpace(runtime.LogicalState))
 	process := strings.ToLower(strings.TrimSpace(runtime.ProcessState))
 	return logical == "fallido" || process == "fallido" || process == "crashed" || process == "exited"
+}
+
+func remoteRuntimeResumable(sesion *db.Sesion, handle *db.RuntimeHandle) bool {
+	if sesion == nil || handle == nil {
+		return false
+	}
+	if !isRemoteAutonomyTransport(handle.Transporte) {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(sesion.Herramienta), "ollama_pool_local") ||
+		strings.EqualFold(strings.TrimSpace(sesion.ConectorSlug), "ollama_pool_local") {
+		return false
+	}
+	meta := parseStringMap(strings.TrimSpace(handle.MetadataJSON))
+	if strings.EqualFold(stringMapValue(meta, "driver"), "ollama_pool_local") {
+		return false
+	}
+	if strings.TrimSpace(sesion.ExternalSessionID) != "" {
+		return true
+	}
+	if stringMapValue(meta, "external_session_id") != "" {
+		return true
+	}
+	if strings.TrimSpace(handle.HandleKind) == "process" {
+		return false
+	}
+	ref := strings.TrimSpace(handle.HandleRef)
+	if ref == "" {
+		return false
+	}
+	return ref != strconv.FormatInt(sesion.ID, 10)
+}
+
+func isRemoteAutonomyTransport(transport string) bool {
+	switch strings.TrimSpace(transport) {
+	case "api", "mcp_http", "otro":
+		return true
+	default:
+		return false
+	}
 }

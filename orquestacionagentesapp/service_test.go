@@ -152,6 +152,39 @@ func (s *stubStartableWorkChecker) HasStartableAgentWork(string, int64) (bool, e
 	return s.ok, nil
 }
 
+type stubRemoteRecoverySupport struct {
+	conector       *db.Conector
+	resolveErr     error
+	available      bool
+	availableErr   error
+	blockProjectID int64
+	blockReason    string
+	blockErr       error
+}
+
+func (s *stubRemoteRecoverySupport) ResolveSessionConnector(*db.Sesion, *db.RuntimeInstance, *db.RuntimeHandle) (*db.Conector, error) {
+	if s.resolveErr != nil {
+		return nil, s.resolveErr
+	}
+	return s.conector, nil
+}
+
+func (s *stubRemoteRecoverySupport) IsConnectorAvailable(int64) (bool, error) {
+	if s.availableErr != nil {
+		return false, s.availableErr
+	}
+	return s.available, nil
+}
+
+func (s *stubRemoteRecoverySupport) MarkProjectExternallyBlocked(proyectoID int64, motivo string) error {
+	if s.blockErr != nil {
+		return s.blockErr
+	}
+	s.blockProjectID = proyectoID
+	s.blockReason = motivo
+	return nil
+}
+
 func (s *stubAutonomyStore) GetPersistedAgentQuotaState(string) (string, error) {
 	return s.quotaState, s.quotaErr
 }
@@ -671,6 +704,74 @@ func TestRecoverLocalFailedRuntimeSessionSkipsWhenPendingOrderExists(t *testing.
 	}
 	if runtimes.controlReq.Accion != "" {
 		t.Fatalf("no deberia encolar start: %+v", runtimes.controlReq)
+	}
+}
+
+func TestRecoverRemoteDegradedRuntimeSessionEnqueuesCheckpointAndResume(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(31)
+	runtimeID := int64(44)
+	runtimes := &stubRuntimeController{
+		runtime:       &db.RuntimeInstance{ID: runtimeID, Agente: "Codex1", ProyectoID: &proyectoID},
+		controlID:     8,
+		controlAction: "start",
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(&stubAutonomyStore{})
+	service.SetRemoteRecoverySupport(&stubRemoteRecoverySupport{
+		conector:  &db.Conector{ID: 5, Slug: "codex-remote"},
+		available: true,
+	})
+
+	count, err := service.RecoverRemoteDegradedRuntimeSession(
+		&db.Sesion{ID: 9, Agente: "Codex1", ProyectoID: &proyectoID, ExternalSessionID: "sess-1"},
+		&db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		&db.RuntimeHandle{ID: 3, Estado: "fallido", Transporte: "api", HandleKind: "session", HandleRef: "remote-1", RuntimeID: &runtimeID},
+		&db.RuntimeInstance{ID: runtimeID, Agente: "Codex1", ProyectoID: &proyectoID, LogicalState: "degradado", ProcessState: "remote_status_error"},
+	)
+	if err != nil {
+		t.Fatalf("RecoverRemoteDegradedRuntimeSession: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("count inesperado: %d", count)
+	}
+	if runtimes.controlReq.Accion != "" {
+		t.Fatalf("no deberia encolar control start: %+v", runtimes.controlReq)
+	}
+}
+
+func TestRecoverRemoteDegradedRuntimeSessionPausesWhenConnectorUnavailable(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(31)
+	store := &stubAutonomyStore{}
+	support := &stubRemoteRecoverySupport{
+		conector:  &db.Conector{ID: 5, Slug: "codex-remote"},
+		available: false,
+	}
+	runtimes := &stubRuntimeController{controlID: 8, controlAction: "pause"}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(store)
+	service.SetRemoteRecoverySupport(support)
+
+	count, err := service.RecoverRemoteDegradedRuntimeSession(
+		&db.Sesion{ID: 9, Agente: "Codex1", ProyectoID: &proyectoID, Estado: "activa"},
+		&db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		&db.RuntimeHandle{ID: 3, Estado: "fallido", Transporte: "api", HandleKind: "session", HandleRef: "remote-1"},
+		&db.RuntimeInstance{ID: 44, Agente: "Codex1", ProyectoID: &proyectoID, LogicalState: "degradado", ProcessState: "remote_status_error"},
+	)
+	if err != nil {
+		t.Fatalf("RecoverRemoteDegradedRuntimeSession: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("count inesperado: %d", count)
+	}
+	if support.blockProjectID != proyectoID || support.blockReason != "conector:codex-remote:circuito_abierto" {
+		t.Fatalf("bloqueo inesperado: %+v", support)
+	}
+	if runtimes.controlReq.Accion != "pause" || runtimes.controlReq.Motivo != "conector:codex-remote:circuito_abierto" {
+		t.Fatalf("pause inesperada: %+v", runtimes.controlReq)
 	}
 }
 

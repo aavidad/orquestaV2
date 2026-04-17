@@ -32,6 +32,7 @@ var supervisionService = supervisionapp.NewService(supervisionapp.NewRepository(
 func init() {
 	orquestacionAgentesService.SetAutonomyStore(orquestacionagentesapp.Repository{})
 	orquestacionAgentesService.SetStartableWorkChecker(startableWorkChecker{})
+	orquestacionAgentesService.SetRemoteRecoverySupport(remoteRecoverySupport{})
 	capacidadService.SetPhaseProvider(progresoService)
 	capacidadService.SetReviewGateProvider(reviewService)
 	capacidadService.SetReviewGateManager(reviewService)
@@ -56,4 +57,19 @@ type startableWorkChecker struct{}
 
 func (startableWorkChecker) HasStartableAgentWork(agente string, proyectoID int64) (bool, error) {
 	return dbAgenteTieneTrabajoArrancable(agente, proyectoID)
+}
+
+type remoteRecoverySupport struct{}
+
+func (remoteRecoverySupport) ResolveSessionConnector(sesion *db.Sesion, runtime *db.RuntimeInstance, handle *db.RuntimeHandle) (*db.Conector, error) {
+	return resolverConectorSesionAutonomia(sesion, runtime, handle)
+}
+
+func (remoteRecoverySupport) IsConnectorAvailable(conectorID int64) (bool, error) {
+	disponible, _, err := db.ConectorDisponibleParaArranque(conectorID)
+	return disponible, err
+}
+
+func (remoteRecoverySupport) MarkProjectExternallyBlocked(proyectoID int64, motivo string) error {
+	return db.MarcarProyectoBloqueadoExterno(proyectoID, motivo)
 }
