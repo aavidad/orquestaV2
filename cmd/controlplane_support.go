@@ -27,6 +27,7 @@ import (
 	"orquesta/gitgobernanza"
 	"orquesta/internal/controlruntime"
 	"orquesta/notificaciones"
+	"orquesta/orquestacionagentesapp"
 	"orquesta/planocontrol"
 	"orquesta/reviewapp"
 	"orquesta/runtimeagente"
@@ -12072,7 +12073,18 @@ func encolarControlAutonomiaProyecto(agente string, proyecto *db.Proyecto, accio
 }
 
 func encolarControlAutonomiaProyectoDetallado(req apiAgenteControlRequest) error {
-	_, _, err := encolarControlAgenteLocal(req)
+	_, _, err := orquestacionAgentesService.EnqueueControl(orquestacionagentesapp.ControlRequest{
+		Agente:       strings.TrimSpace(req.Agente),
+		Proyecto:     strings.TrimSpace(req.Proyecto),
+		Accion:       strings.TrimSpace(req.Accion),
+		Conector:     strings.TrimSpace(req.Conector),
+		Modelo:       strings.TrimSpace(req.Modelo),
+		Razonamiento: strings.TrimSpace(req.Razonamiento),
+		Perfil:       strings.TrimSpace(req.Perfil),
+		Motivo:       strings.TrimSpace(req.Motivo),
+		Por:          strings.TrimSpace(req.Por),
+		TareaID:      req.TareaID,
+	})
 	return err
 }
 
