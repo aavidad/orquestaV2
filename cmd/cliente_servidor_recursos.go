@@ -21,6 +21,7 @@ import (
 	"orquesta/fabricaapp"
 	"orquesta/gitgobernanza"
 	"orquesta/lenguajeapp"
+	"orquesta/progresoapp"
 )
 
 type apiProyectoResponse struct {
@@ -521,7 +522,7 @@ func descargarModelosRuntimeActivosPorAPI() ([]string, bool, error) {
 	return resp.Descargados, true, nil
 }
 
-func cargarResumenProgresoDesdeAPI(proyecto string) (*db.ResumenProgresoProyecto, bool, error) {
+func cargarResumenProgresoDesdeAPI(proyecto string) (*progresoapp.ResumenProgresoProyecto, bool, error) {
 	var resp apiProgresoResumenResponse
 	query := url.Values{}
 	query.Set("proyecto", strings.TrimSpace(proyecto))
@@ -532,7 +533,7 @@ func cargarResumenProgresoDesdeAPI(proyecto string) (*db.ResumenProgresoProyecto
 	return resp.Resumen, true, nil
 }
 
-func cargarFasesProgresoDesdeAPI(proyecto string) ([]*db.FaseProyecto, bool, error) {
+func cargarFasesProgresoDesdeAPI(proyecto string) ([]*progresoapp.FaseProyecto, bool, error) {
 	var resp apiProgresoFasesResponse
 	query := url.Values{}
 	query.Set("proyecto", strings.TrimSpace(proyecto))

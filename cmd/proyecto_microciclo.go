@@ -37,7 +37,7 @@ type proyectoMicrocicloResult struct {
 	Proyecto            *db.Proyecto                                      `json:"proyecto"`
 	Operacion           *db.ProyectoOperacion                             `json:"operacion"`
 	Policy              *db.ProyectoAutonomia                             `json:"policy"`
-	Fase                *db.FaseProyecto                                  `json:"fase"`
+	Fase                *progresoapp.FaseProyecto                         `json:"fase"`
 	Tarea               *db.Tarea                                         `json:"tarea"`
 	Dispatch            *capacidadapp.ResultadoEjecucionPasoPipelineLocal `json:"dispatch,omitempty"`
 	NudgeRuntimeOrderID int64                                             `json:"nudge_runtime_order_id,omitempty"`
@@ -453,12 +453,12 @@ func activarPoliticaMicrociclo(proyectoSlug, agente string, req proyectoMicrocic
 	})
 }
 
-func activarFaseImplementacionMicrociclo(proyectoSlug string) (*db.FaseProyecto, error) {
+func activarFaseImplementacionMicrociclo(proyectoSlug string) (*progresoapp.FaseProyecto, error) {
 	fases, err := progresoService.ListPhases(proyectoSlug)
 	if err != nil {
 		return nil, err
 	}
-	var implementacion *db.FaseProyecto
+	var implementacion *progresoapp.FaseProyecto
 	for _, fase := range fases {
 		if fase == nil {
 			continue

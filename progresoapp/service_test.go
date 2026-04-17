@@ -2,57 +2,55 @@ package progresoapp
 
 import (
 	"testing"
-
-	"orquesta/db"
 )
 
 type stubStore struct {
 	summaryProject string
-	summary        *db.ResumenProgresoProyecto
+	summary        *ResumenProgresoProyecto
 	phasesProject  string
-	phases         []*db.FaseProyecto
-	registerPhase  *db.FaseProyecto
+	phases         []*FaseProyecto
+	registerPhase  *FaseProyecto
 	registerID     int64
 	getPhaseID     int64
-	phase          *db.FaseProyecto
-	updatePhase    *db.FaseProyecto
-	taskProgress   *db.AvanceTarea
+	phase          *FaseProyecto
+	updatePhase    *FaseProyecto
+	taskProgress   *AvanceTarea
 }
 
-func (s *stubStore) CalculateProjectSummary(proyecto string) (*db.ResumenProgresoProyecto, error) {
+func (s *stubStore) CalculateProjectSummary(proyecto string) (*ResumenProgresoProyecto, error) {
 	s.summaryProject = proyecto
 	return s.summary, nil
 }
 
-func (s *stubStore) ListProjectPhases(proyecto string) ([]*db.FaseProyecto, error) {
+func (s *stubStore) ListProjectPhases(proyecto string) ([]*FaseProyecto, error) {
 	s.phasesProject = proyecto
 	return s.phases, nil
 }
 
-func (s *stubStore) RegisterProjectPhase(fase *db.FaseProyecto) (int64, error) {
+func (s *stubStore) RegisterProjectPhase(fase *FaseProyecto) (int64, error) {
 	s.registerPhase = fase
 	return s.registerID, nil
 }
 
-func (s *stubStore) GetProjectPhase(id int64) (*db.FaseProyecto, error) {
+func (s *stubStore) GetProjectPhase(id int64) (*FaseProyecto, error) {
 	s.getPhaseID = id
 	return s.phase, nil
 }
 
-func (s *stubStore) UpdateProjectPhase(fase *db.FaseProyecto) error {
+func (s *stubStore) UpdateProjectPhase(fase *FaseProyecto) error {
 	s.updatePhase = fase
 	return nil
 }
 
-func (s *stubStore) RegisterTaskProgress(avance *db.AvanceTarea) error {
+func (s *stubStore) RegisterTaskProgress(avance *AvanceTarea) error {
 	s.taskProgress = avance
 	return nil
 }
 
 func TestServiceDelegatesSummaryAndPhases(t *testing.T) {
 	store := &stubStore{
-		summary: &db.ResumenProgresoProyecto{Proyecto: "orquestador"},
-		phases:  []*db.FaseProyecto{{ID: 1, Proyecto: "orquestador", Nombre: "Analisis"}},
+		summary: &ResumenProgresoProyecto{Proyecto: "orquestador"},
+		phases:  []*FaseProyecto{{ID: 1, Proyecto: "orquestador", Nombre: "Analisis"}},
 	}
 	service := NewService(store)
 
@@ -80,7 +78,7 @@ func TestRegisterAndUpdatePhase(t *testing.T) {
 	orden := int64(30)
 	store := &stubStore{
 		registerID: 12,
-		phase:      &db.FaseProyecto{ID: 12, Proyecto: proyecto, Nombre: nombre, Descripcion: descripcion, Orden: orden, Peso: peso, Estado: estado},
+		phase:      &FaseProyecto{ID: 12, Proyecto: proyecto, Nombre: nombre, Descripcion: descripcion, Orden: orden, Peso: peso, Estado: estado},
 	}
 	service := NewService(store)
 

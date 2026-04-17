@@ -8,13 +8,14 @@ import (
 	"strings"
 
 	"orquesta/db"
+	"orquesta/progresoapp"
 )
 
 type webProgresoData struct {
 	Proyecto  string
 	Proyectos []*db.Proyecto
-	Resumen   *db.ResumenProgresoProyecto
-	Fases     []*db.FaseProyecto
+	Resumen   *progresoapp.ResumenProgresoProyecto
+	Fases     []*progresoapp.FaseProyecto
 	Msg       string
 	Err       string
 }
@@ -165,7 +166,7 @@ func webCargarProyectosPorAPI(activa ...*bool) ([]*db.Proyecto, error) {
 	return resp.Proyectos, nil
 }
 
-func webCargarProgresoPorAPI(proyecto string) (*db.ResumenProgresoProyecto, []*db.FaseProyecto, error) {
+func webCargarProgresoPorAPI(proyecto string) (*progresoapp.ResumenProgresoProyecto, []*progresoapp.FaseProyecto, error) {
 	var resumenResp apiProgresoResumenResponse
 	if err := webInvocarAPIJSON(http.MethodGet, "/api/progreso?proyecto="+url.QueryEscape(proyecto), nil, &resumenResp); err != nil {
 		return nil, nil, err
@@ -274,10 +275,10 @@ const webTplProgreso = `{{define "content"}}
     <tbody>
       {{range .Tareas}}
       <tr>
-        <td>#{{.Tarea.ID}}</td>
-        <td>{{.Tarea.Titulo}}</td>
+        <td>#{{.TareaID}}</td>
+        <td>{{.TareaTitulo}}</td>
         <td>
-          <form method="post" action="/progreso/tareas/{{.Tarea.ID}}/registrar" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+          <form method="post" action="/progreso/tareas/{{.TareaID}}/registrar" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
             <input type="hidden" name="proyecto" value="{{$.Proyecto}}">
             <input type="hidden" name="fase" value="{{$faseID}}">
             <input name="pct" type="number" min="0" max="100" step="0.1" value="{{printf "%.1f" .ProgresoPct}}" style="width:7rem">
@@ -301,10 +302,10 @@ const webTplProgreso = `{{define "content"}}
     <tbody>
       {{range .Resumen.TareasSinFase}}
       <tr>
-        <td>#{{.Tarea.ID}}</td>
-        <td>{{.Tarea.Titulo}}</td>
+        <td>#{{.TareaID}}</td>
+        <td>{{.TareaTitulo}}</td>
         <td>
-          <form method="post" action="/progreso/tareas/{{.Tarea.ID}}/registrar" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+          <form method="post" action="/progreso/tareas/{{.TareaID}}/registrar" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
             <input type="hidden" name="proyecto" value="{{$.Proyecto}}">
             <select name="fase">
               <option value="">{{tr "progress.no_phase"}}</option>

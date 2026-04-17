@@ -23,6 +23,7 @@ import (
 	"orquesta/capacidadapp"
 	"orquesta/db"
 	"orquesta/internal/rpclocal"
+	"orquesta/progresoapp"
 	"orquesta/sesionesapp"
 )
 
@@ -205,16 +206,16 @@ type apiTareaResponse struct {
 }
 
 type apiProgresoResumenResponse struct {
-	Resumen *db.ResumenProgresoProyecto `json:"resumen"`
+	Resumen *progresoapp.ResumenProgresoProyecto `json:"resumen"`
 }
 
 type apiProgresoFasesResponse struct {
-	Fases []*db.FaseProyecto `json:"fases"`
+	Fases []*progresoapp.FaseProyecto `json:"fases"`
 }
 
 type apiProgresoFaseResponse struct {
-	ID   int64            `json:"id"`
-	Fase *db.FaseProyecto `json:"fase"`
+	ID   int64                     `json:"id"`
+	Fase *progresoapp.FaseProyecto `json:"fase"`
 }
 
 type apiSesionResponse struct {

@@ -55,7 +55,7 @@ var progresoVerCmd = &cobra.Command{
 		if len(resumen.TareasSinFase) > 0 {
 			fmt.Println("Tareas sin fase:")
 			for _, tarea := range resumen.TareasSinFase {
-				fmt.Printf("  #%d %.1f%% %s\n", tarea.Tarea.ID, tarea.ProgresoPct, tarea.Tarea.Titulo)
+				fmt.Printf("  #%d %.1f%% %s\n", tarea.TareaID, tarea.ProgresoPct, tarea.TareaTitulo)
 			}
 		}
 		return nil

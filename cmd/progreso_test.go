@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"orquesta/db"
+	"orquesta/progresoapp"
 )
 
 func TestProgresoVerUsaAPI(t *testing.T) {
@@ -26,13 +26,13 @@ func TestProgresoVerUsaAPI(t *testing.T) {
 			t.Fatalf("proyecto inesperado: %q", got)
 		}
 		_ = json.NewEncoder(w).Encode(apiProgresoResumenResponse{
-			Resumen: &db.ResumenProgresoProyecto{
+			Resumen: &progresoapp.ResumenProgresoProyecto{
 				Proyecto:          "orquestador",
 				ProgresoPct:       62.5,
 				TareasTotales:     8,
 				TareasCompletadas: 5,
-				Fases: []*db.FaseProgresoDetalle{
-					{Fase: &db.FaseProyecto{Orden: 10, Nombre: "Analisis"}, ProgresoPct: 80, TareasCompletadas: 4, TareasTotales: 5},
+				Fases: []*progresoapp.FaseProgresoDetalle{
+					{Fase: &progresoapp.FaseProyecto{Orden: 10, Nombre: "Analisis"}, ProgresoPct: 80, TareasCompletadas: 4, TareasTotales: 5},
 				},
 			},
 		})
@@ -68,7 +68,7 @@ func TestProgresoFaseListarUsaAPI(t *testing.T) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(apiProgresoFasesResponse{
-			Fases: []*db.FaseProyecto{
+			Fases: []*progresoapp.FaseProyecto{
 				{ID: 7, Proyecto: "orquestador", Nombre: "Implementacion", Orden: 20, Peso: 2, Estado: "activa"},
 			},
 		})
