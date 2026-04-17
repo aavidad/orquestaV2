@@ -463,6 +463,91 @@ func TestRunnerStartResidentCoreNoLanzaTrabajoNoResidente(t *testing.T) {
 	}
 }
 
+func TestRunnerStartRuntimeCoreSoloLanzaCarrilRuntime(t *testing.T) {
+	service := &stubAutomationService{
+		processedCount:  1,
+		transcriptCount: 1,
+		mailboxCount:    1,
+		autonomyCount:   1,
+	}
+	r := &Runner{
+		Automation:            service,
+		StartupGrace:          5 * time.Millisecond,
+		ReanimacionCada:       10 * time.Millisecond,
+		SaludCada:             10 * time.Millisecond,
+		PlanificacionCada:     10 * time.Millisecond,
+		RuntimeOrdersCada:     10 * time.Millisecond,
+		RuntimeTranscriptCada: 10 * time.Millisecond,
+		RuntimeMailboxCada:    10 * time.Millisecond,
+		RuntimeBudgetCada:     10 * time.Millisecond,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.StartRuntimeCore(ctx)
+	time.Sleep(40 * time.Millisecond)
+	cancel()
+	r.Wait()
+
+	audits := strings.Join(service.audits, "\n")
+	if !strings.Contains(audits, "runtime_orders_batch|runtime_order|Órdenes procesadas en batch: 1") {
+		t.Fatalf("faltaba runtime_orders en el carril runtime: %s", audits)
+	}
+	if !strings.Contains(audits, "runtime_transcript_batch|runtime_transcript|Conversación/runtime transcript procesado: 1") {
+		t.Fatalf("faltaba runtime_transcript en el carril runtime: %s", audits)
+	}
+	if !strings.Contains(audits, "runtime_mailbox_batch|runtime_mailbox|Mailbox runtime procesado: 1") {
+		t.Fatalf("faltaba runtime_mailbox en el carril runtime: %s", audits)
+	}
+	if strings.Contains(audits, "autonomia_agentes_batch|") || strings.Contains(audits, "reanimar_agente|") {
+		t.Fatalf("el carril runtime no deberia lanzar autonomia ni reanimaciones: %s", audits)
+	}
+}
+
+func TestRunnerStartRuntimeControlCoreEsWakeOnly(t *testing.T) {
+	service := &stubAutomationService{
+		processedCount:  1,
+		transcriptCount: 1,
+		mailboxCount:    1,
+	}
+	r := &Runner{
+		Automation:            service,
+		StartupGrace:          5 * time.Millisecond,
+		RuntimeOrdersCada:     10 * time.Millisecond,
+		RuntimeTranscriptCada: 10 * time.Millisecond,
+		RuntimeMailboxCada:    10 * time.Millisecond,
+		RuntimeBudgetCada:     10 * time.Millisecond,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.StartRuntimeControlCore(ctx)
+	time.Sleep(30 * time.Millisecond)
+	if service.processedCalls != 0 {
+		cancel()
+		r.Wait()
+		t.Fatalf("el núcleo de control no deberia autoejecutar runtime_orders: calls=%d audits=%v", service.processedCalls, service.audits)
+	}
+	if !r.WakeRuntimeOrders() {
+		cancel()
+		r.Wait()
+		t.Fatalf("el wake explicito deberia aceptarse")
+	}
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if service.processedCalls > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	r.Wait()
+
+	audits := strings.Join(service.audits, "\n")
+	if !strings.Contains(audits, "runtime_orders_batch|runtime_order|Órdenes procesadas en batch: 1") {
+		t.Fatalf("faltaba runtime_orders despertado en el núcleo de control: %s", audits)
+	}
+	if strings.Contains(audits, "runtime_transcript_batch|") || strings.Contains(audits, "runtime_mailbox_batch|") || strings.Contains(audits, "runtime_budget_observation_batch|") {
+		t.Fatalf("el núcleo de control no deberia lanzar transcript/mailbox/budget: %s", audits)
+	}
+}
+
 func TestRunnerWakeBatchDespiertaRuntimeOrdersSinEsperarIntervaloNiGrace(t *testing.T) {
 	service := &stubAutomationService{processedCount: 1}
 	r := &Runner{

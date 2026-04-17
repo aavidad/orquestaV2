@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
 
@@ -81,5 +82,71 @@ func TestRegistrarRutasServeMontaSuperficieOperativa(t *testing.T) {
 		if rec.Code == http.StatusNotFound {
 			t.Fatalf("ruta %s no montada", path)
 		}
+	}
+}
+
+func TestLoadUnifiedServerRuntimeOptionsDefaults(t *testing.T) {
+	for _, key := range []string{
+		"ORQUESTA_SERVER_CORE_ONLY",
+		"ORQUESTA_SERVER_DISABLE_NONRESIDENT_WORKER",
+		"ORQUESTA_SERVER_DISABLE_AUTOBOOTSTRAP",
+	} {
+		t.Setenv(key, "")
+	}
+	got := loadUnifiedServerRuntimeOptions()
+	if got.CoreOnly {
+		t.Fatalf("CoreOnly no deberia activarse por defecto")
+	}
+	if got.DisableAutobootstrap {
+		t.Fatalf("DisableAutobootstrap no deberia activarse por defecto")
+	}
+}
+
+func TestLoadUnifiedServerRuntimeOptionsCoreOnlyDesactivaWarmYAutobootstrap(t *testing.T) {
+	t.Setenv("ORQUESTA_SERVER_CORE_ONLY", "1")
+	got := loadUnifiedServerRuntimeOptions()
+	if !got.CoreOnly {
+		t.Fatalf("CoreOnly deberia activarse")
+	}
+	if !got.DisableAutobootstrap {
+		t.Fatalf("DisableAutobootstrap deberia activarse con core-only")
+	}
+}
+
+func TestLoadUnifiedServerRuntimeOptionsAceptaFlagsSeparadas(t *testing.T) {
+	t.Setenv("ORQUESTA_SERVER_DISABLE_NONRESIDENT_WORKER", "true")
+	t.Setenv("ORQUESTA_SERVER_DISABLE_AUTOBOOTSTRAP", "yes")
+	got := loadUnifiedServerRuntimeOptions()
+	if !got.CoreOnly {
+		t.Fatalf("CoreOnly deberia activarse con ORQUESTA_SERVER_DISABLE_NONRESIDENT_WORKER")
+	}
+	if !got.DisableAutobootstrap {
+		t.Fatalf("DisableAutobootstrap deberia activarse con ORQUESTA_SERVER_DISABLE_AUTOBOOTSTRAP")
+	}
+}
+
+func TestEnvBoolServidorUnificadoAceptaValoresVerdaderos(t *testing.T) {
+	for _, value := range []string{"1", "true", "yes", "si", "sí", "on"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("ORQUESTA_SERVER_CORE_ONLY", value)
+			if !envBoolServidorUnificado("ORQUESTA_SERVER_CORE_ONLY") {
+				t.Fatalf("valor %q deberia considerarse verdadero", value)
+			}
+		})
+	}
+}
+
+func TestEnvBoolServidorUnificadoIgnoraValoresFalsos(t *testing.T) {
+	for _, value := range []string{"", "0", "false", "no", "off", "otro"} {
+		t.Run(value, func(t *testing.T) {
+			if value == "" {
+				_ = os.Unsetenv("ORQUESTA_SERVER_CORE_ONLY")
+			} else {
+				t.Setenv("ORQUESTA_SERVER_CORE_ONLY", value)
+			}
+			if envBoolServidorUnificado("ORQUESTA_SERVER_CORE_ONLY") {
+				t.Fatalf("valor %q no deberia considerarse verdadero", value)
+			}
+		})
 	}
 }

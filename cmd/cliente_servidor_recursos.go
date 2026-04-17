@@ -1325,6 +1325,15 @@ func procesarDegradadosPorAPI(wait bool) (*apiRuntimeProcessAutonomiaResponse, b
 	return &resp, true, nil
 }
 
+func procesarHigienePorAPI(wait bool) (*apiRuntimeProcessAutonomiaResponse, bool, error) {
+	var resp apiRuntimeProcessAutonomiaResponse
+	ok, err := apiPost("/api/runtime/process-hygiene", map[string]any{"wait": wait}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
 func procesarReanimacionesPorAPI() (*apiRuntimeProcessReanimationsResponse, bool, error) {
 	var resp apiRuntimeProcessReanimationsResponse
 	ok, err := apiPost("/api/runtime/process-reanimations", map[string]any{}, &resp)
