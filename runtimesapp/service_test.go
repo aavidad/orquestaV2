@@ -2719,6 +2719,45 @@ func TestEnqueueAgentControlStartSupersedesPausedHandleConStopPendiente(t *testi
 	}
 }
 
+func TestEnqueueAgentControlStartConProyectoExplicitoNoUsaFallbackGlobalDeOtroProyecto(t *testing.T) {
+	projectID := int64(9)
+	oldRuntimeID := int64(41)
+	oldHandleRuntimeID := int64(40)
+	ptr := func(v int64) *int64 { return &v }
+	store := &fakeStore{
+		projectResponse:       &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:         &db.Agente{Nombre: "Codex2", Rol: "programador"},
+		operationalHandleResp: &db.RuntimeHandle{ID: 11, RuntimeID: &oldHandleRuntimeID, Estado: "activo", ProyectoID: ptr(77)},
+		handleResponse:        &db.RuntimeHandle{ID: 12, RuntimeID: &oldHandleRuntimeID, Estado: "activo", ProyectoID: ptr(77)},
+		primaryRuntimeResp:    &db.RuntimeInstance{ID: oldRuntimeID, LogicalState: "esperando_io", ProcessState: "running", ProyectoID: ptr(77)},
+		createOrderID:         101,
+	}
+	service := NewService(store)
+
+	orderID, accion, err := service.EnqueueAgentControl(AgentControlRequest{
+		Agente:   "Codex2",
+		Proyecto: "orquestador",
+		Accion:   "arrancar",
+		Motivo:   "test_project_boundary",
+		Por:      "test",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAgentControl start project boundary: %v", err)
+	}
+	if orderID != 101 || accion != "start" {
+		t.Fatalf("orderID=%d accion=%s", orderID, accion)
+	}
+	if store.operationalHandleAgent != "" || store.handleAgent != "" {
+		t.Fatalf("no deberia consultar fallback global: operational=%q active=%q", store.operationalHandleAgent, store.handleAgent)
+	}
+	if store.createOrder == nil || store.createOrder.Tipo != "start" {
+		t.Fatalf("createOrder inesperado: %+v", store.createOrder)
+	}
+	if store.createOrder.HandleID != nil || store.createOrder.RuntimeID != nil {
+		t.Fatalf("start limpio no deberia contaminarse con ids de otro proyecto: %+v", store.createOrder)
+	}
+}
+
 func TestEnqueueAgentControlResumeUsaRuntimePrincipalCanonicoSobreHandleViejo(t *testing.T) {
 	projectID := int64(9)
 	legacyRuntimeID := int64(12)

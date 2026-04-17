@@ -2048,7 +2048,8 @@ func (s *Service) EnqueueAgentControl(req AgentControlRequest) (int64, string, e
 		}
 	}
 
-	handle, err := s.resolveAgentControlHandle(agente, proyectoID)
+	strictProjectBoundary := accion == "start" && proyectoID != nil
+	handle, err := s.resolveAgentControlHandle(agente, proyectoID, strictProjectBoundary)
 	if err != nil {
 		return 0, "", err
 	}
@@ -2310,7 +2311,7 @@ func (s *Service) ResolveTranscriptDeliveryHandle(item *db.RuntimeTranscriptEntr
 	return s.ResolveDeliveryHandle(agente, item.ProyectoID)
 }
 
-func (s *Service) resolveAgentControlHandle(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
+func (s *Service) resolveAgentControlHandle(agente string, proyectoID *int64, strictProjectBoundary bool) (*db.RuntimeHandle, error) {
 	if proyectoID != nil {
 		handle, err := s.store.GetOperationalRuntimeHandleForProject(agente, proyectoID)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -2325,6 +2326,9 @@ func (s *Service) resolveAgentControlHandle(agente string, proyectoID *int64) (*
 		}
 		if handle != nil {
 			return handle, nil
+		}
+		if strictProjectBoundary {
+			return nil, nil
 		}
 	}
 	handle, err := s.store.GetOperationalRuntimeHandle(agente)
