@@ -30,6 +30,8 @@ type RuntimeController interface {
 	GetProject(ref string) (*db.Proyecto, error)
 	ReconcileStaleRuntimeHandles() (int, error)
 	ReconcileStaleRuntimeOrders() (int, error)
+	PurgeInactiveRuntimeHandles(req runtimesapp.RuntimeHandlePurgeRequest) (*db.PurgaRuntimeHandlesResultado, error)
+	PurgeTerminalRuntimeOrders(req runtimesapp.RuntimeOrderPurgeRequest) (*db.PurgaRuntimeOrdersResultado, error)
 	GetRuntime(id int64) (*db.RuntimeInstance, error)
 	GetRuntimeHandle(id int64) (*db.RuntimeHandle, error)
 	GetRuntimeBySessionID(sessionID int64) (*db.RuntimeInstance, error)
@@ -191,6 +193,10 @@ func (s *Service) runSessionHygieneForControl(req ControlRequest) error {
 	if agente == "" || proyecto == "" {
 		return nil
 	}
+	actor := strings.TrimSpace(req.Por)
+	if actor == "" {
+		actor = "orquesta"
+	}
 	staleHandles, err := s.runtimes.ReconcileStaleRuntimeHandles()
 	if err != nil {
 		return err
@@ -199,14 +205,32 @@ func (s *Service) runSessionHygieneForControl(req ControlRequest) error {
 	if err != nil {
 		return err
 	}
-	if s.autonomyStore != nil && (staleHandles > 0 || staleOrders > 0) {
-		actor := strings.TrimSpace(req.Por)
-		if actor == "" {
-			actor = "orquesta"
-		}
+	purgedOrders := 0
+	if resultado, err := s.runtimes.PurgeTerminalRuntimeOrders(runtimesapp.RuntimeOrderPurgeRequest{
+		Agente:   agente,
+		Proyecto: proyecto,
+		Estados:  []string{"completada", "fallida", "expirada", "cancelada"},
+		Actor:    actor,
+	}); err != nil {
+		return err
+	} else if resultado != nil {
+		purgedOrders = resultado.Deleted
+	}
+	purgedHandles := 0
+	if resultado, err := s.runtimes.PurgeInactiveRuntimeHandles(runtimesapp.RuntimeHandlePurgeRequest{
+		Agente:   agente,
+		Proyecto: proyecto,
+		Estados:  []string{"cerrado", "fallido"},
+		Actor:    actor,
+	}); err != nil {
+		return err
+	} else if resultado != nil {
+		purgedHandles = resultado.Deleted
+	}
+	if s.autonomyStore != nil && (staleHandles > 0 || staleOrders > 0 || purgedHandles > 0 || purgedOrders > 0) {
 		s.autonomyStore.Audit(actor, "session_hygiene_start", "runtime", 0,
-			fmt.Sprintf("agente=%s proyecto=%s stale_handles=%d stale_orders=%d",
-				agente, proyecto, staleHandles, staleOrders))
+			fmt.Sprintf("agente=%s proyecto=%s stale_handles=%d stale_orders=%d purged_handles=%d purged_orders=%d",
+				agente, proyecto, staleHandles, staleOrders, purgedHandles, purgedOrders))
 	}
 	return nil
 }

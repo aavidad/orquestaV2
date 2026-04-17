@@ -31,6 +31,12 @@ type stubRuntimeController struct {
 	reconcileHandlesErr  error
 	reconcileOrders      int
 	reconcileOrdersErr   error
+	purgeHandlesReq      runtimesapp.RuntimeHandlePurgeRequest
+	purgeHandlesResult   *db.PurgaRuntimeHandlesResultado
+	purgeHandlesErr      error
+	purgeOrdersReq       runtimesapp.RuntimeOrderPurgeRequest
+	purgeOrdersResult    *db.PurgaRuntimeOrdersResultado
+	purgeOrdersErr       error
 	project              *db.Proyecto
 	projectErr           error
 	runtime              *db.RuntimeInstance
@@ -71,6 +77,28 @@ func (s *stubRuntimeController) ReconcileStaleRuntimeHandles() (int, error) {
 
 func (s *stubRuntimeController) ReconcileStaleRuntimeOrders() (int, error) {
 	return s.reconcileOrders, s.reconcileOrdersErr
+}
+
+func (s *stubRuntimeController) PurgeInactiveRuntimeHandles(req runtimesapp.RuntimeHandlePurgeRequest) (*db.PurgaRuntimeHandlesResultado, error) {
+	s.purgeHandlesReq = req
+	if s.purgeHandlesErr != nil {
+		return nil, s.purgeHandlesErr
+	}
+	if s.purgeHandlesResult != nil {
+		return s.purgeHandlesResult, nil
+	}
+	return &db.PurgaRuntimeHandlesResultado{}, nil
+}
+
+func (s *stubRuntimeController) PurgeTerminalRuntimeOrders(req runtimesapp.RuntimeOrderPurgeRequest) (*db.PurgaRuntimeOrdersResultado, error) {
+	s.purgeOrdersReq = req
+	if s.purgeOrdersErr != nil {
+		return nil, s.purgeOrdersErr
+	}
+	if s.purgeOrdersResult != nil {
+		return s.purgeOrdersResult, nil
+	}
+	return &db.PurgaRuntimeOrdersResultado{}, nil
 }
 
 func (s *stubRuntimeController) GetRuntime(int64) (*db.RuntimeInstance, error) {
@@ -378,6 +406,12 @@ func TestEnqueueControlStartRunsSessionHygieneBeforeEnqueue(t *testing.T) {
 		controlAction:    "start",
 		reconcileHandles: 2,
 		reconcileOrders:  3,
+		purgeHandlesResult: &db.PurgaRuntimeHandlesResultado{
+			Deleted: 1,
+		},
+		purgeOrdersResult: &db.PurgaRuntimeOrdersResultado{
+			Deleted: 4,
+		},
 	}
 	service := NewService(nil, runtimes)
 	service.SetAutonomyStore(store)
@@ -397,8 +431,20 @@ func TestEnqueueControlStartRunsSessionHygieneBeforeEnqueue(t *testing.T) {
 	if store.auditAction != "session_hygiene_start" || store.auditEntity != "runtime" {
 		t.Fatalf("auditoria de hygiene inesperada: %+v", store)
 	}
-	if got := store.auditDetail; got == "" || !strings.Contains(got, "stale_handles=2") || !strings.Contains(got, "stale_orders=3") {
+	if got := store.auditDetail; got == "" || !strings.Contains(got, "stale_handles=2") || !strings.Contains(got, "stale_orders=3") || !strings.Contains(got, "purged_handles=1") || !strings.Contains(got, "purged_orders=4") {
 		t.Fatalf("detalle de hygiene inesperado: %q", got)
+	}
+	if runtimes.purgeHandlesReq.Agente != "Codex2" || runtimes.purgeHandlesReq.Proyecto != "orquestador" {
+		t.Fatalf("purga handles inesperada: %+v", runtimes.purgeHandlesReq)
+	}
+	if got := strings.Join(runtimes.purgeHandlesReq.Estados, ","); got != "cerrado,fallido" {
+		t.Fatalf("estados purge handles inesperados: %s", got)
+	}
+	if runtimes.purgeOrdersReq.Agente != "Codex2" || runtimes.purgeOrdersReq.Proyecto != "orquestador" {
+		t.Fatalf("purga orders inesperada: %+v", runtimes.purgeOrdersReq)
+	}
+	if got := strings.Join(runtimes.purgeOrdersReq.Estados, ","); got != "completada,fallida,expirada,cancelada" {
+		t.Fatalf("estados purge orders inesperados: %s", got)
 	}
 }
 
