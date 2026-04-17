@@ -5470,7 +5470,7 @@ func launchAgentResetReanimation(nombre string) apiAgenteResetReanimacionRespons
 	flag := agentResetReanimationFlag(nombre)
 	started := flag.CompareAndSwap(false, true)
 	if started {
-		go func(agent string, running *atomic.Bool) {
+		func(agent string, running *atomic.Bool) {
 			defer running.Store(false)
 			resultado, err := (dbAutomationService{}).resetReanimacionResultadoConPermisoManual(agent, true)
 			if err != nil {
@@ -5486,7 +5486,7 @@ func launchAgentResetReanimation(nombre string) apiAgenteResetReanimacionRespons
 		OK:       true,
 		Agente:   nombre,
 		Accepted: started,
-		Running:  flag.Load(),
+		Running:  started,
 	}
 }
 

@@ -29,6 +29,8 @@ type fakeStore struct {
 	treeResponse             []*db.RuntimeTreeNode
 	runtimeID                int64
 	runtimeResponse          *db.RuntimeInstance
+	runtimeHandleSessionID   int64
+	runtimeHandleSessionResp *db.RuntimeHandle
 	primaryRuntimeAgent      string
 	primaryRuntimeResp       *db.RuntimeInstance
 	primaryProjRuntimeAgent  string
@@ -287,6 +289,10 @@ func (f *fakeStore) GetRuntime(id int64) (*db.RuntimeInstance, error) {
 
 func (f *fakeStore) GetRuntimeBySessionID(sessionID int64) (*db.RuntimeInstance, error) {
 	return f.runtimeResponse, nil
+}
+func (f *fakeStore) GetRuntimeHandleBySessionID(sessionID int64) (*db.RuntimeHandle, error) {
+	f.runtimeHandleSessionID = sessionID
+	return f.runtimeHandleSessionResp, nil
 }
 func (f *fakeStore) GetPrimaryRuntime(agente string) (*db.RuntimeInstance, error) {
 	f.primaryRuntimeAgent = agente

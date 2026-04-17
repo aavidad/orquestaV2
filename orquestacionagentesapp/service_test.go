@@ -22,25 +22,33 @@ func (s *stubAgentPreparer) BuildPrepare(input agentesapp.PrepareInput) (*agente
 }
 
 type stubRuntimeController struct {
-	controlReq          runtimesapp.AgentControlRequest
-	controlID           int64
-	controlAction       string
-	controlErr          error
-	project             *db.Proyecto
-	projectErr          error
-	runtime             *db.RuntimeInstance
-	runtimeErr          error
-	orders              []*db.RuntimeOrder
-	ordersErr           error
-	mailbox             []*db.RuntimeMailboxMessage
-	mailboxErr          error
-	handleByID          map[int64]*db.RuntimeHandle
-	controlHandle       *db.RuntimeHandle
-	controlHandleErr    error
-	deliveryHandle      *db.RuntimeHandle
-	deliveryHandleErr   error
-	transcriptHandle    *db.RuntimeHandle
-	transcriptHandleErr error
+	controlReq           runtimesapp.AgentControlRequest
+	controlID            int64
+	controlAction        string
+	controlErr           error
+	project              *db.Proyecto
+	projectErr           error
+	runtime              *db.RuntimeInstance
+	runtimeErr           error
+	sessionHandle        *db.RuntimeHandle
+	sessionHandleErr     error
+	listHandles          []*db.RuntimeHandle
+	listHandlesErr       error
+	orders               []*db.RuntimeOrder
+	ordersErr            error
+	mailbox              []*db.RuntimeMailboxMessage
+	mailboxErr           error
+	handleByID           map[int64]*db.RuntimeHandle
+	activeHandle         *db.RuntimeHandle
+	activeHandleErr      error
+	operationalHandle    *db.RuntimeHandle
+	operationalHandleErr error
+	controlHandle        *db.RuntimeHandle
+	controlHandleErr     error
+	deliveryHandle       *db.RuntimeHandle
+	deliveryHandleErr    error
+	transcriptHandle     *db.RuntimeHandle
+	transcriptHandleErr  error
 }
 
 func (s *stubRuntimeController) EnqueueAgentControl(req runtimesapp.AgentControlRequest) (int64, string, error) {
@@ -67,8 +75,24 @@ func (s *stubRuntimeController) GetRuntimeBySessionID(int64) (*db.RuntimeInstanc
 	return s.runtime, s.runtimeErr
 }
 
+func (s *stubRuntimeController) GetRuntimeHandleBySessionID(int64) (*db.RuntimeHandle, error) {
+	return s.sessionHandle, s.sessionHandleErr
+}
+
 func (s *stubRuntimeController) GetPrimaryRuntimeForProject(string, *int64) (*db.RuntimeInstance, error) {
 	return s.runtime, s.runtimeErr
+}
+
+func (s *stubRuntimeController) ListRuntimeHandles(*string) ([]*db.RuntimeHandle, error) {
+	return s.listHandles, s.listHandlesErr
+}
+
+func (s *stubRuntimeController) GetActiveRuntimeHandleForProject(string, *int64) (*db.RuntimeHandle, error) {
+	return s.activeHandle, s.activeHandleErr
+}
+
+func (s *stubRuntimeController) GetOperationalRuntimeHandleForProject(string, *int64) (*db.RuntimeHandle, error) {
+	return s.operationalHandle, s.operationalHandleErr
 }
 
 func (s *stubRuntimeController) EnqueueRuntimeOrder(*db.RuntimeOrder) (int64, error) {
@@ -420,4 +444,49 @@ func TestEnqueueAutonomyNudgeSkipsWhenMailboxPending(t *testing.T) {
 	if ok {
 		t.Fatal("no debería encolar con mailbox pendiente")
 	}
+}
+
+func TestResolveRecoveryHandlePrefersOperationalHandle(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(nil, &stubRuntimeController{
+		listHandles: []*db.RuntimeHandle{{ID: 44, Estado: "activo"}},
+	})
+
+	handle, err := service.ResolveRecoveryHandle("Codex1", nil)
+	if err != nil {
+		t.Fatalf("ResolveRecoveryHandle: %v", err)
+	}
+	if handle == nil || handle.ID != 44 {
+		t.Fatalf("handle inesperado: %+v", handle)
+	}
+}
+
+func TestResolveSessionRecoveryTargetUsesSessionHandleAndRuntime(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(7)
+	service := NewService(nil, &stubRuntimeController{
+		sessionHandle: &db.RuntimeHandle{ID: 12, SesionID: ptrInt64(9), RuntimeID: ptrInt64(15)},
+		runtime:       &db.RuntimeInstance{ID: 15, Agente: "Codex1", ProyectoID: &proyectoID},
+	})
+
+	handle, runtime, err := service.ResolveSessionRecoveryTarget(&db.Sesion{
+		ID:         9,
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("ResolveSessionRecoveryTarget: %v", err)
+	}
+	if handle == nil || handle.ID != 12 {
+		t.Fatalf("handle inesperado: %+v", handle)
+	}
+	if runtime == nil || runtime.ID != 15 {
+		t.Fatalf("runtime inesperado: %+v", runtime)
+	}
+}
+
+func ptrInt64(v int64) *int64 {
+	return &v
 }

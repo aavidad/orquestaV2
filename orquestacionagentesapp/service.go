@@ -30,7 +30,11 @@ type RuntimeController interface {
 	GetRuntime(id int64) (*db.RuntimeInstance, error)
 	GetRuntimeHandle(id int64) (*db.RuntimeHandle, error)
 	GetRuntimeBySessionID(sessionID int64) (*db.RuntimeInstance, error)
+	GetRuntimeHandleBySessionID(sessionID int64) (*db.RuntimeHandle, error)
 	GetPrimaryRuntimeForProject(agente string, proyectoID *int64) (*db.RuntimeInstance, error)
+	GetActiveRuntimeHandleForProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error)
+	GetOperationalRuntimeHandleForProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error)
+	ListRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error)
 	EnqueueRuntimeOrder(order *db.RuntimeOrder) (int64, error)
 	ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error)
 	ListRuntimeMailbox(filtro db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error)
@@ -188,6 +192,107 @@ func (s *Service) ResolveTranscriptDeliveryHandle(item *db.RuntimeTranscriptEntr
 		return nil, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
 	}
 	return s.runtimes.ResolveTranscriptDeliveryHandle(item)
+}
+
+func (s *Service) ResolveRecoveryHandle(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
+	if s == nil || s.runtimes == nil {
+		return nil, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil, nil
+	}
+	var (
+		porProyecto *db.RuntimeHandle
+		fallback    *db.RuntimeHandle
+	)
+	handles, err := s.runtimes.ListRuntimeHandles(&agente)
+	if err != nil {
+		return nil, err
+	}
+	for _, handle := range handles {
+		if handle == nil || runtimeHandleRecoverySkipsLegacyATMUX(handle) {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
+		case "activo", "pausado", "fallido":
+		default:
+			continue
+		}
+		if proyectoID != nil && *proyectoID > 0 && handle.ProyectoID != nil && *handle.ProyectoID == *proyectoID {
+			if runtimeHandlePreferredForRecovery(handle, porProyecto) {
+				porProyecto = handle
+			}
+			continue
+		}
+		if runtimeHandlePreferredForRecovery(handle, fallback) {
+			fallback = handle
+		}
+	}
+	if porProyecto != nil {
+		return porProyecto, nil
+	}
+	return fallback, nil
+}
+
+func (s *Service) ResolveSessionRecoveryTarget(sesion *db.Sesion) (*db.RuntimeHandle, *db.RuntimeInstance, error) {
+	if s == nil || s.runtimes == nil {
+		return nil, nil, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
+	}
+	if sesion == nil {
+		return nil, nil, nil
+	}
+	agente := strings.TrimSpace(sesion.Agente)
+	proyectoID := sesion.ProyectoID
+	var (
+		handle        *db.RuntimeHandle
+		sessionHandle *db.RuntimeHandle
+		runtime       *db.RuntimeInstance
+		err           error
+	)
+	if sesion.ID > 0 {
+		handle, err = s.runtimes.GetRuntimeHandleBySessionID(sesion.ID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, err
+		}
+		sessionHandle = handle
+		runtime, err = s.runtimes.GetRuntimeBySessionID(sesion.ID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, err
+		}
+	}
+	if handle == nil {
+		handle, err = s.ResolveRecoveryHandle(agente, proyectoID)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else if agente != "" {
+		candidate, err := s.ResolveRecoveryHandle(agente, proyectoID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if runtimeHandlePreferredForRecovery(candidate, handle) {
+			handle = candidate
+		}
+	}
+	if handle != nil && runtime != nil && sessionHandle != nil && handle.ID != sessionHandle.ID {
+		runtime = nil
+	} else if handle != nil && runtime != nil && handle.SesionID != nil && sesion.ID > 0 && *handle.SesionID != sesion.ID {
+		runtime = nil
+	}
+	if runtime == nil {
+		runtime, err = s.resolveCanonicalRuntimeForHandle(handle, agente, proyectoID)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if runtime == nil && sesion.ID > 0 {
+		runtime, err = s.runtimes.GetRuntimeBySessionID(sesion.ID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, err
+		}
+	}
+	return handle, runtime, nil
 }
 
 func (s *Service) PauseAutonomyAlreadySatisfied(agente string, proyectoID *int64, sesion *db.Sesion) (bool, error) {
@@ -522,6 +627,73 @@ func runtimeHandleStatePaused(handle *db.RuntimeHandle) bool {
 	return strings.EqualFold(strings.TrimSpace(handle.Estado), "pausado")
 }
 
+func runtimeHandleRecoverySkipsLegacyATMUX(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") {
+		return false
+	}
+	meta := parseStringMap(strings.TrimSpace(handle.MetadataJSON))
+	driver := strings.ToLower(stringMapValue(meta, "driver"))
+	tmuxSession := stringMapValue(meta, "tmux_session")
+	return driver == "" && tmuxSession == ""
+}
+
+func runtimeHandlePreferredForRecovery(candidate, current *db.RuntimeHandle) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	candidateTMUX := runtimeHandleTMUXRecentForRecovery(candidate)
+	currentTMUX := runtimeHandleTMUXRecentForRecovery(current)
+	if candidateTMUX != currentTMUX {
+		return candidateTMUX
+	}
+	candidateFresh := db.RuntimeHandleSnapshotIsFresh(candidate, time.Minute)
+	currentFresh := db.RuntimeHandleSnapshotIsFresh(current, time.Minute)
+	if candidateFresh != currentFresh {
+		return candidateFresh
+	}
+	return runtimeHandleRecoveryRecency(candidate).After(runtimeHandleRecoveryRecency(current))
+}
+
+func runtimeHandleTMUXRecentForRecovery(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	if !db.RuntimeHandleSnapshotIsFresh(handle, time.Minute) {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
+		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") {
+		return true
+	}
+	meta := parseStringMap(strings.TrimSpace(handle.MetadataJSON))
+	if strings.EqualFold(stringMapValue(meta, "driver"), "tmux_cli_session") {
+		return true
+	}
+	return stringMapValue(meta, "tmux_session") != ""
+}
+
+func runtimeHandleRecoveryRecency(handle *db.RuntimeHandle) time.Time {
+	if handle == nil {
+		return time.Time{}
+	}
+	if handle.LastSeenAt != nil && !handle.LastSeenAt.IsZero() {
+		return handle.LastSeenAt.UTC()
+	}
+	if !handle.UpdatedAt.IsZero() {
+		return handle.UpdatedAt.UTC()
+	}
+	return handle.CreatedAt.UTC()
+}
+
 func runtimeOrderHasAutonomyAction(order *db.RuntimeOrder, accion string) bool {
 	if order == nil {
 		return false
@@ -575,4 +747,12 @@ func stringMapValue(payload map[string]any, key string) string {
 		}
 	}
 	return ""
+}
+
+func parseStringMap(raw string) map[string]any {
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &payload); err != nil {
+		return nil
+	}
+	return payload
 }

@@ -432,6 +432,9 @@ func (dbAutomationService) resetReanimacionResultadoConPermisoManual(nombre stri
 	if !dbDisponible() {
 		return resetReanimacionResultadoDbNoLista, nil
 	}
+	if err := db.LimpiarContinuidadAgente(nombre); err != nil {
+		return "", err
+	}
 	if err := db.ResetReanimacion(nombre); err != nil {
 		return "", err
 	}
@@ -10791,40 +10794,7 @@ func tareaCuentaComoFrenteActivoCompactable(tarea *db.Tarea, proyectoID int64, a
 }
 
 func resolverHandleReactivacionAgente(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
-	agente = strings.TrimSpace(agente)
-	if agente == "" {
-		return nil, nil
-	}
-	handles, err := db.ListarRuntimeHandles(&agente)
-	if err != nil {
-		return nil, err
-	}
-	var (
-		fallback    *db.RuntimeHandle
-		porProyecto *db.RuntimeHandle
-	)
-	for _, handle := range handles {
-		if handle == nil || runtimeHandleEsCandidatoLegacyATMUX(handle) {
-			continue
-		}
-		estado := strings.ToLower(strings.TrimSpace(handle.Estado))
-		if estado != "activo" && estado != "pausado" && estado != "fallido" {
-			continue
-		}
-		if proyectoID != nil && *proyectoID > 0 && handle.ProyectoID != nil && *handle.ProyectoID == *proyectoID {
-			if runtimeHandlePreferibleParaRecuperacion(handle, porProyecto) {
-				porProyecto = handle
-			}
-			continue
-		}
-		if runtimeHandlePreferibleParaRecuperacion(handle, fallback) {
-			fallback = handle
-		}
-	}
-	if porProyecto != nil {
-		return porProyecto, nil
-	}
-	return fallback, nil
+	return orquestacionAgentesService.ResolveRecoveryHandle(strings.TrimSpace(agente), proyectoID)
 }
 
 func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) {
@@ -11027,126 +10997,7 @@ func runtimeTMUXRecienteDebeSuplantarRecuperacionSesion(sesion *db.Sesion, handl
 }
 
 func runtimeRecuperacionSesionObjetivo(sesion *db.Sesion) (*db.RuntimeHandle, *db.RuntimeInstance, error) {
-	if sesion == nil {
-		return nil, nil, nil
-	}
-	agente := strings.TrimSpace(sesion.Agente)
-	proyectoID := sesion.ProyectoID
-	var (
-		handle         *db.RuntimeHandle
-		sesionHandle   *db.RuntimeHandle
-		runtime        *db.RuntimeInstance
-		runtimeCargado bool
-		err            error
-	)
-	if sesion.ID > 0 {
-		sesionHandle, err = db.GetRuntimeHandleBySesionID(sesion.ID)
-		if err != nil {
-			return nil, nil, err
-		}
-		handle = sesionHandle
-		runtime, err = db.GetRuntimeBySesionID(sesion.ID)
-		if err != nil && err != sql.ErrNoRows {
-			return nil, nil, err
-		}
-		runtimeCargado = true
-	}
-	if handle == nil && agente != "" {
-		var candidate *db.RuntimeHandle
-		if proyectoID != nil && *proyectoID > 0 {
-			candidate, err = db.GetRuntimeHandleOperativoRecienteAgenteProyecto(agente, proyectoID)
-		} else {
-			candidate, err = db.GetRuntimeHandleOperativoRecienteAgente(agente)
-		}
-		if err != nil {
-			return nil, nil, err
-		}
-		if candidate != nil {
-			handle = candidate
-		}
-	}
-	if agente != "" {
-		canonical, err := db.GetRuntimeHandleCanonicoRecienteAgenteProyecto(agente, proyectoID)
-		if err != nil {
-			return nil, nil, err
-		}
-		if runtimeHandlePreferibleParaRecuperacion(canonical, handle) {
-			handle = canonical
-		}
-	}
-	if handle != nil && sesionHandle != nil && handle.ID != sesionHandle.ID {
-		runtime = nil
-	}
-	if runtime == nil {
-		runtime, err = runtimeCanonicoDesdeHandleAgenteProyecto(handle, agente, proyectoID)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	if runtime == nil && agente != "" {
-		runtime, err = db.GetRuntimePrincipalAgenteProyecto(agente, proyectoID)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	if runtime == nil && sesion.ID > 0 && !runtimeCargado {
-		runtime, err = db.GetRuntimeBySesionID(sesion.ID)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	return handle, runtime, nil
-}
-
-func runtimeHandlePreferibleParaRecuperacion(candidate, current *db.RuntimeHandle) bool {
-	if candidate == nil {
-		return false
-	}
-	if current == nil {
-		return true
-	}
-	candidateTMUX := runtimeHandleTMUXRecienteParaRecuperacion(candidate)
-	currentTMUX := runtimeHandleTMUXRecienteParaRecuperacion(current)
-	if candidateTMUX != currentTMUX {
-		return candidateTMUX
-	}
-	candidateFresh := db.RuntimeHandleSnapshotIsFresh(candidate, time.Minute)
-	currentFresh := db.RuntimeHandleSnapshotIsFresh(current, time.Minute)
-	if candidateFresh != currentFresh {
-		return candidateFresh
-	}
-	return runtimeHandleRecencyAutonomia(candidate).After(runtimeHandleRecencyAutonomia(current))
-}
-
-func runtimeHandleTMUXRecienteParaRecuperacion(handle *db.RuntimeHandle) bool {
-	if handle == nil {
-		return false
-	}
-	if !db.RuntimeHandleSnapshotIsFresh(handle, time.Minute) {
-		return false
-	}
-	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
-		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") {
-		return true
-	}
-	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
-	if strings.EqualFold(strings.TrimSpace(mapStringValue(meta, "driver")), "tmux_cli_session") {
-		return true
-	}
-	return strings.TrimSpace(mapStringValue(meta, "tmux_session")) != ""
-}
-
-func runtimeHandleRecencyAutonomia(handle *db.RuntimeHandle) time.Time {
-	if handle == nil {
-		return time.Time{}
-	}
-	if handle.LastSeenAt != nil && !handle.LastSeenAt.IsZero() {
-		return handle.LastSeenAt.UTC()
-	}
-	if !handle.UpdatedAt.IsZero() {
-		return handle.UpdatedAt.UTC()
-	}
-	return handle.CreatedAt.UTC()
+	return orquestacionAgentesService.ResolveSessionRecoveryTarget(sesion)
 }
 
 func runtimeCanonicoDesdeHandleAgenteProyecto(handle *db.RuntimeHandle, agente string, proyectoID *int64) (*db.RuntimeInstance, error) {
