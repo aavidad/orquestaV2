@@ -127,6 +127,42 @@ func TestBundleReloadUsaConfigJsonComoFallbackDeIdiomas(t *testing.T) {
 	}
 }
 
+func TestBundleReloadMantieneCompatibilidadLegacyConContratoCanonico(t *testing.T) {
+	root := t.TempDir()
+	i18nDir := filepath.Join(root, "i18n")
+	if err := os.MkdirAll(filepath.Join(i18nDir, "en"), 0o755); err != nil {
+		t.Fatalf("mkdir en: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(i18nDir, "config.json"), []byte(`{
+  "version": 1,
+  "default_language": "en",
+  "fallback_language": "en",
+  "languages": ["en"],
+  "domains": ["common"],
+  "domain_mode": "file_per_domain",
+  "path_pattern": "i18n/<lang>/<domain>.json"
+}`), 0o644); err != nil {
+		t.Fatalf("config.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(i18nDir, "en", "common.json"), []byte(`{"hello":"hello"}`), 0o644); err != nil {
+		t.Fatalf("en/common.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(i18nDir, "en.json"), []byte(`{"status.ready":"ready"}`), 0o644); err != nil {
+		t.Fatalf("en.json: %v", err)
+	}
+
+	b := NewBundle(i18nDir, "es")
+	if err := b.Reload(); err != nil {
+		t.Fatalf("Reload con formato mixto: %v", err)
+	}
+	if got := b.T("en", "hello"); got != "hello" {
+		t.Fatalf("clave canónica inesperada: %q", got)
+	}
+	if got := b.T("en", "status.ready"); got != "ready" {
+		t.Fatalf("clave legacy inesperada: %q", got)
+	}
+}
+
 func TestBundleReloadIgnoraConfigJson(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"default_language":"es","languages":["es","en"]}`), 0o644); err != nil {

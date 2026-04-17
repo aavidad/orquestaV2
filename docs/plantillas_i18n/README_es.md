@@ -42,6 +42,13 @@ i18n/
 - las claves deben ser estables y con namespace
 - si falta una clave en un idioma secundario, el fallback inicial es el idioma por defecto
 
+## Contrato canonico y compatibilidad
+
+- el contrato canonico aprobado es `i18n/config.json` mas `i18n/<lang>/<domain>.json`
+- `i18n/bundle.go` debe considerar ese formato como la referencia viva
+- los ficheros legacy planos `i18n/<lang>.json` se mantienen solo por compatibilidad con bundles antiguos de Orquesta
+- cuando convivan ambos formatos, el objetivo es preservar compatibilidad sin volver a declarar el formato plano como estructura recomendada para proyectos nuevos
+
 ## Ficheros base
 
 - `common.json`: textos transversales de app y estados genericos
