@@ -45,7 +45,7 @@ func Materialize(store MaterializeStore, projectID int64, actor string, plan Gen
 			Descripcion:  item.Descripcion,
 			ProyectoID:   &projectID,
 			Modulo:       item.Modulo,
-			Prioridad:    item.Prioridad,
+			Prioridad:    db.PrioridadTarea(item.Prioridad),
 			Dependencias: deps,
 			CreadoPor:    actor,
 			Notas:        buildSOPNotes(item),

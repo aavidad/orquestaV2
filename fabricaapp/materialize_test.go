@@ -45,10 +45,10 @@ func TestMaterializeResolvesDependenciesAndBacklog(t *testing.T) {
 				Fase:             "arquitectura",
 				Entregable:       "Diseño base aprobado",
 				CriteriosCierre:  []string{"Capas definidas"},
-				Prioridad:        db.PrioridadAlta,
+				Prioridad:        PrioridadAlta,
 				ContratoDefinido: true,
 			},
-			{Key: "b", Titulo: "Frontend", Modulo: "frontend", Prioridad: db.PrioridadAlta, Dependencias: []string{"a"}},
+			{Key: "b", Titulo: "Frontend", Modulo: "frontend", Prioridad: PrioridadAlta, Dependencias: []string{"a"}},
 		},
 	}
 
@@ -80,7 +80,7 @@ func TestMaterializeFailsOnUnknownDependency(t *testing.T) {
 	store := &fakeMaterializeStore{}
 	_, err := Materialize(store, 42, "Codex1", GenerationResult{
 		Tasks: []BlueprintTask{
-			{Key: "b", Titulo: "Frontend", Modulo: "frontend", Prioridad: db.PrioridadAlta, Dependencias: []string{"missing"}},
+			{Key: "b", Titulo: "Frontend", Modulo: "frontend", Prioridad: PrioridadAlta, Dependencias: []string{"missing"}},
 		},
 	})
 	if err == nil || !strings.Contains(err.Error(), "dependencia blueprint no resuelta") {
