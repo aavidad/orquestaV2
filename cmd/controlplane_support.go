@@ -4774,7 +4774,7 @@ func procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox []*db.Runti
 		if !runtimeMailboxDebeCoordinarReinicio(strings.TrimSpace(msg.Kind), handle) {
 			continue
 		}
-		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, "stop", "start", "restart", "resume", "handoff"); err != nil {
+		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, "stop", "pause", "checkpoint", "start", "restart", "resume", "handoff"); err != nil {
 			return 0, err
 		} else if pendiente {
 			continue
