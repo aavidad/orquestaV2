@@ -30,6 +30,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	var processMailboxReq map[string]any
 	var processAutonomiaReq map[string]any
 	var processDegradadosReq map[string]any
+	var processHygieneReq map[string]any
 	var processReanimationsReq map[string]any
 	var clearMailboxReq map[string]any
 	var clearTasksReq map[string]any
@@ -247,6 +248,9 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 		case r.URL.Path == "/api/runtime/process-degradados" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&processDegradadosReq)
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 2, "accepted": true, "running": false})
+		case r.URL.Path == "/api/runtime/process-hygiene" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&processHygieneReq)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 5, "accepted": true, "running": false})
 		case r.URL.Path == "/api/runtime/process-reanimations" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&processReanimationsReq)
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 1, "accepted": true, "running": false, "candidates": 2, "reactivated": 1, "cooldown_sustained": 1, "errors": 0})
@@ -402,6 +406,20 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	}
 	if got, ok := processDegradadosReq["wait"].(bool); !ok || got {
 		t.Fatalf("request process degradados deberia enviar wait=false: %+v", processDegradadosReq)
+	}
+
+	outProcessHygiene := capturarStdout(t, func() {
+		if err := runtimeProcesarHigieneCmd.RunE(runtimeProcesarHigieneCmd, nil); err != nil {
+			t.Fatalf("runtime procesar-higiene via api: %v", err)
+		}
+	})
+	for _, token := range []string{"accepted=true", "running=false", "count=5"} {
+		if !strings.Contains(outProcessHygiene, token) {
+			t.Fatalf("salida runtime procesar-higiene sin %q:\n%s", token, outProcessHygiene)
+		}
+	}
+	if got, ok := processHygieneReq["wait"].(bool); !ok || got {
+		t.Fatalf("request process hygiene deberia enviar wait=false: %+v", processHygieneReq)
 	}
 
 	outProcessReanimations := capturarStdout(t, func() {

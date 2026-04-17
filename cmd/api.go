@@ -587,6 +587,10 @@ var runtimeProcessDegradadosBatch = func() (int, error) {
 	return procesarAgentesDegradadosAutonomiaBatchFn()
 }
 
+var runtimeProcessHygieneBatch = func() (int, error) {
+	return (dbAutomationService{}).ProcesarRuntimeHygieneBatch()
+}
+
 var runtimeProcessDegradadosBatchDetailed = func() (runtimeProcessDegradadosSummary, error) {
 	return procesarAgentesDegradadosAutonomiaBatchDetallado()
 }
@@ -818,6 +822,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtime/process-mailbox", apiHandlerRuntimeProcessMailbox)
 	mux.HandleFunc("/api/runtime/process-autonomia", apiHandlerRuntimeProcessAutonomia)
 	mux.HandleFunc("/api/runtime/process-degradados", apiHandlerRuntimeProcessDegradados)
+	mux.HandleFunc("/api/runtime/process-hygiene", apiHandlerRuntimeProcessHygiene)
 	mux.HandleFunc("/api/runtime/process-reanimations", apiHandlerRuntimeProcessReanimaciones)
 	mux.HandleFunc("/api/runtime/ollama-pool/launch", apiHandlerOllamaPoolLaunch)
 	mux.HandleFunc("/api/runtime/ollama-pool/input", apiHandlerOllamaPoolInput)
@@ -5403,6 +5408,46 @@ func apiHandlerRuntimeProcessDegradados(w http.ResponseWriter, r *http.Request) 
 		Count:    0,
 		Accepted: started,
 		Running:  runtimeProcessDegradadosEnCurso.Load(),
+	})
+}
+
+func apiHandlerRuntimeProcessHygiene(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiRuntimeProcessAutonomiaRequest
+	if payload, err := io.ReadAll(r.Body); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	} else if raw := strings.TrimSpace(string(payload)); raw != "" {
+		if err := json.Unmarshal(payload, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+	}
+	if req.Wait {
+		count, err := runtimeProcessHygieneBatch()
+		if err != nil {
+			db.Audit("server", "runtime_process_hygiene_error", "runtime", 0, err.Error())
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
+			OK:    true,
+			Count: count,
+		})
+		return
+	}
+	go func() {
+		if _, err := runtimeProcessHygieneBatch(); err != nil {
+			db.Audit("server", "runtime_process_hygiene_error", "runtime", 0, err.Error())
+		}
+	}()
+	apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
+		OK:       true,
+		Count:    0,
+		Accepted: true,
+		Running:  true,
 	})
 }
 

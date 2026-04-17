@@ -975,6 +975,11 @@ func (dbAutomationService) ProcesarRuntimeOrdersBatch() (int, error) {
 func (dbAutomationService) ProcesarRuntimeHygieneBatch() (int, error) {
 	reclamados, _ := db.ProcesarHigieneRuntimesAutonomosBatch()
 	total := reclamados
+	expiredHandoffs, err := db.ReconciliarRuntimeOrdersPendientesHandoffExpiradas()
+	if err != nil {
+		return total, err
+	}
+	total += expiredHandoffs
 	resultado, err := db.PurgarRuntimeHistorico()
 	if err != nil {
 		return 0, err

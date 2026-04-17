@@ -3210,6 +3210,79 @@ func ReconciliarRuntimeOrdersStale() (int, error) {
 	return recovered, nil
 }
 
+func ReconciliarRuntimeOrdersPendientesHandoffExpiradas() (int, error) {
+	minutes := configIntOrDefault("runtime_pending_handoff_expiry_minutes", 24*60)
+	if minutes <= 0 {
+		minutes = 24 * 60
+	}
+	cutoff := time.Now().UTC().Add(-time.Duration(minutes) * time.Minute)
+	rows, err := DB.Query(runtimeOrderSelectBase()+`
+		WHERE estado = 'pendiente'
+		  AND tipo = 'handoff'
+		  AND created_at <= ?
+		ORDER BY id ASC`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	orders := make([]*RuntimeOrder, 0, 16)
+	for rows.Next() {
+		order, err := scanRuntimeOrder(rows)
+		if err != nil {
+			return 0, err
+		}
+		if order != nil {
+			orders = append(orders, order)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	expired := 0
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		if handle, err := GetRuntimeHandleOperativoRecienteAgenteProyecto(strings.TrimSpace(order.Agente), order.ProyectoID); err != nil {
+			return expired, err
+		} else if handle != nil {
+			continue
+		}
+		if runtime, err := GetRuntimePrincipalAgenteProyecto(strings.TrimSpace(order.Agente), order.ProyectoID); err != nil {
+			return expired, err
+		} else if runtime != nil && !strings.EqualFold(strings.TrimSpace(runtime.LogicalState), "cerrado") {
+			continue
+		}
+		resultado := map[string]any{
+			"ok":      false,
+			"expired": true,
+			"reason":  "pending_handoff_hygiene_timeout",
+		}
+		data, _ := json.Marshal(resultado)
+		if _, err := DB.Exec(`
+			UPDATE runtime_orders
+			SET estado = 'expirada',
+			    resultado_json = ?,
+			    error_text = CASE
+			        WHEN TRIM(COALESCE(error_text, '')) = '' THEN 'handoff pendiente expirada por higiene'
+			        ELSE error_text || CHAR(10) || 'handoff pendiente expirada por higiene'
+			    END,
+			    finished_at = CURRENT_TIMESTAMP,
+			    claimed_by = '',
+			    lease_token = '',
+			    lease_expires_at = NULL
+			WHERE id = ?
+			  AND estado = 'pendiente'
+			  AND tipo = 'handoff'`, string(data), order.ID); err != nil {
+			return expired, err
+		}
+		expired++
+	}
+	return expired, nil
+}
+
 func ProcesarRuntimeOrdersBatch() (int, error) {
 	reconciled, err := reconciliarRuntimeOrdersPendientesMailboxConsumido()
 	if err != nil {
