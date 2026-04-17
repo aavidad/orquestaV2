@@ -981,6 +981,65 @@ func TestRowDebeMigrarRuntimeLegacyATMUXNoMigraTMUXNiCuotaBloqueada(t *testing.T
 	}
 }
 
+func TestProcesarMigracionRuntimeLegacyATMUXNoDuplicaSiHayCheckpointPendiente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexLegacy", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-legacy-checkpoint",
+		Nombre:  "Orquestador Legacy Checkpoint",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexLegacy",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='cli', handle_kind='process', handle_ref='legacy-codex', estado='activo', metadata_json='{"driver":"process_pty_cli"}' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("marcar handle legacy: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "CodexLegacy",
+		ProyectoID:  &proyectoID,
+		Tipo:        "checkpoint",
+		PayloadJSON: `{"motivo":"checkpoint_pendiente"}`,
+	}); err != nil {
+		t.Fatalf("encolar checkpoint: %v", err)
+	}
+	rows := []agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "CodexLegacy"},
+		Asignacion:      &db.Asignacion{Agente: "CodexLegacy", ProyectoID: proyectoID, ProyectoSlug: "orquestador-legacy-checkpoint", Estado: db.AsignacionActiva},
+		Handle:          handle,
+		EstadoOperativo: "trabajando",
+		WorkerState:     "running",
+		WorkerAlive:     true,
+		WorkerHeartbeat: timePtr(time.Now().UTC()),
+	}}
+
+	n, err := procesarMigracionRuntimeLegacyTMUXBatch(rows, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("procesarMigracionRuntimeLegacyTMUXBatch: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia migrar legacy a tmux con checkpoint pendiente, got=%d", n)
+	}
+}
+
 func TestErrorMigracionRuntimeLegacyTMUXIgnorable(t *testing.T) {
 	casosTrue := []error{
 		nil,
@@ -6553,6 +6612,50 @@ func TestProcesarRuntimesFueraDeAsignacionActivaBatchEncolaStopParaProyectoViejo
 	}
 	if len(orders) != 1 || orders[0].Tipo != agenteControlAccionStop {
 		t.Fatalf("deberia encolar stop sobre el runtime del proyecto viejo: %+v", orders)
+	}
+}
+
+func TestEncolarStopRuntimeFueraDeAsignacionActivaNoDuplicaSiHayHandoffPendiente(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexStop", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-stop-handoff",
+		Nombre:  "Orquestador Stop Handoff",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "CodexStop",
+		ProyectoID:  &proyectoID,
+		Tipo:        "handoff",
+		PayloadJSON: `{"agente_destino":"Codex2","resumen_continuidad":"handoff pendiente"}`,
+	}); err != nil {
+		t.Fatalf("encolar handoff: %v", err)
+	}
+
+	ok, err := encolarStopRuntimeFueraDeAsignacionActiva("CodexStop", proyectoID, "otro-proyecto")
+	if err != nil {
+		t.Fatalf("encolarStopRuntimeFueraDeAsignacionActiva: %v", err)
+	}
+	if ok {
+		t.Fatal("no deberia encolar stop si ya hay handoff pendiente")
+	}
+
+	agente := "CodexStop"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "handoff" {
+		t.Fatalf("solo deberia existir la handoff pendiente: %+v", orders)
 	}
 }
 

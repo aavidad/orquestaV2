@@ -7642,7 +7642,7 @@ func procesarRuntimesFueraDeAsignacionActivaBatch(rows []agentesapp.Row, now tim
 		if agente == "" || proyectoActual == nil || *proyectoActual <= 0 {
 			continue
 		}
-		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoActual, "stop", "pause", "restart", "resume"); err != nil {
+		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoActual, "stop", "pause", "checkpoint", "restart", "resume", "start", "handoff"); err != nil {
 			return procesadas, err
 		} else if pendiente {
 			continue
@@ -7801,7 +7801,7 @@ func encolarStopRuntimeFueraDeAsignacionActivaConCache(agente string, proyectoID
 		return false, nil
 	}
 	proyectoIDPtr := proyectoID
-	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyectoIDPtr, "stop", "pause", "restart", "resume"); err != nil {
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyectoIDPtr, "stop", "pause", "checkpoint", "restart", "resume", "start", "handoff"); err != nil {
 		return false, err
 	} else if pendiente {
 		return false, nil
@@ -7925,7 +7925,7 @@ func procesarMigracionRuntimeLegacyTMUXBatch(rows []agentesapp.Row, now time.Tim
 		}
 		agente := strings.TrimSpace(row.Agente.Nombre)
 		proyectoID := rowProyectoIDPreferido(row)
-		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "stop", "start", "restart", "resume"); err != nil {
+		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "stop", "pause", "checkpoint", "start", "restart", "resume", "handoff"); err != nil {
 			return total, err
 		} else if pendiente {
 			continue
@@ -8304,7 +8304,7 @@ func procesarWorkersAtascadosAutonomiaBatch(rows []agentesapp.Row, now time.Time
 			total += escaladas
 			continue
 		}
-		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "stop", "start", "restart", "resume", "handoff"); err != nil {
+		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "stop", "pause", "checkpoint", "start", "restart", "resume", "handoff"); err != nil {
 			return total, err
 		} else if pendiente {
 			continue
