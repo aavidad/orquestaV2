@@ -28,6 +28,8 @@ type AgentPreparer interface {
 type RuntimeController interface {
 	EnqueueAgentControl(req runtimesapp.AgentControlRequest) (int64, string, error)
 	GetProject(ref string) (*db.Proyecto, error)
+	ReconcileStaleRuntimeHandles() (int, error)
+	ReconcileStaleRuntimeOrders() (int, error)
 	GetRuntime(id int64) (*db.RuntimeInstance, error)
 	GetRuntimeHandle(id int64) (*db.RuntimeHandle, error)
 	GetRuntimeBySessionID(sessionID int64) (*db.RuntimeInstance, error)
@@ -160,6 +162,9 @@ func (s *Service) EnqueueControl(req ControlRequest) (int64, string, error) {
 	if s == nil || s.runtimes == nil {
 		return 0, "", fmt.Errorf("servicio de orquestacion de agentes no inicializado")
 	}
+	if err := s.runSessionHygieneForControl(req); err != nil {
+		return 0, "", err
+	}
 	return s.runtimes.EnqueueAgentControl(runtimesapp.AgentControlRequest{
 		Agente:       strings.TrimSpace(req.Agente),
 		Proyecto:     strings.TrimSpace(req.Proyecto),
@@ -172,6 +177,38 @@ func (s *Service) EnqueueControl(req ControlRequest) (int64, string, error) {
 		Por:          strings.TrimSpace(req.Por),
 		TareaID:      req.TareaID,
 	})
+}
+
+func (s *Service) runSessionHygieneForControl(req ControlRequest) error {
+	if s == nil || s.runtimes == nil {
+		return fmt.Errorf("servicio de orquestacion de agentes no inicializado")
+	}
+	if !strings.EqualFold(strings.TrimSpace(req.Accion), "start") {
+		return nil
+	}
+	agente := strings.TrimSpace(req.Agente)
+	proyecto := strings.TrimSpace(req.Proyecto)
+	if agente == "" || proyecto == "" {
+		return nil
+	}
+	staleHandles, err := s.runtimes.ReconcileStaleRuntimeHandles()
+	if err != nil {
+		return err
+	}
+	staleOrders, err := s.runtimes.ReconcileStaleRuntimeOrders()
+	if err != nil {
+		return err
+	}
+	if s.autonomyStore != nil && (staleHandles > 0 || staleOrders > 0) {
+		actor := strings.TrimSpace(req.Por)
+		if actor == "" {
+			actor = "orquesta"
+		}
+		s.autonomyStore.Audit(actor, "session_hygiene_start", "runtime", 0,
+			fmt.Sprintf("agente=%s proyecto=%s stale_handles=%d stale_orders=%d",
+				agente, proyecto, staleHandles, staleOrders))
+	}
+	return nil
 }
 
 func (s *Service) Launch(req LaunchRequest) (*LaunchResult, error) {

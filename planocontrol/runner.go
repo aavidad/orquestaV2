@@ -72,6 +72,7 @@ type Runner struct {
 	mu                          sync.Mutex
 	runningBatches              map[string]runningBatchState
 	batchWake                   map[string]chan struct{}
+	activeBatches               map[string]struct{}
 	nextBatchToken              uint64
 	warmLaneActive              atomic.Bool
 	warmRequeue                 *Throttler
@@ -101,6 +102,34 @@ func (r *Runner) Start(ctx context.Context) {
 	r.StartNonResidentWorker(ctx)
 }
 
+// StartRuntimeCore arranca solo el carril runtime imprescindible para
+// orquestación básica: orders, transcript, mailbox, observación de presupuesto
+// y notificaciones. Excluye reanimaciones, salud, planificación y warm/cold.
+func (r *Runner) StartRuntimeCore(ctx context.Context) {
+	if r == nil || r.Automation == nil {
+		return
+	}
+	r.startLoopAfter(ctx, "control_plane_runtime_orders", r.runtimeOrdersCada(), 0, r.runControlPlaneRuntimeOrders)
+	r.startLoopAfter(ctx, "control_plane_runtime_transcript", r.runtimeTranscriptCada(), r.runtimeTranscriptStartupDelay(), r.runControlPlaneRuntimeTranscript)
+	r.startLoopAfter(ctx, "control_plane_runtime_mailbox", r.runtimeMailboxCada(), 20*time.Second, r.runControlPlaneRuntimeMailbox)
+	r.startLoopAfter(ctx, "control_plane_runtime_budget", r.runtimeBudgetCada(), 30*time.Second, r.runControlPlaneBudget)
+	r.startNotificationLoop(ctx)
+}
+
+// StartRuntimeControlCore arranca el núcleo mínimo para que las órdenes
+// runtime vivas sigan fluyendo sin encender transcript/mailbox/budget.
+func (r *Runner) StartRuntimeControlCore(ctx context.Context) {
+	if r == nil || r.Automation == nil {
+		return
+	}
+	// En modo core-only el carril de órdenes vive en wake-only: evita escaneos
+	// automáticos al arrancar, pero sigue reaccionando en cuanto una nueva orden
+	// despierta explícitamente el batch.
+	const dormant = 24 * time.Hour
+	r.startLoopAfter(ctx, "control_plane_runtime_orders", dormant, dormant, r.runControlPlaneRuntimeOrders)
+	r.startNotificationLoop(ctx)
+}
+
 // StartResidentCore arranca solo el núcleo residente imprescindible del daemon.
 func (r *Runner) StartResidentCore(ctx context.Context) {
 	if r == nil || r.Automation == nil {
@@ -109,10 +138,10 @@ func (r *Runner) StartResidentCore(ctx context.Context) {
 	r.startLoop(ctx, "reanimaciones", r.reanimacionCada(), r.runReanimaciones)
 	r.startLoop(ctx, "salud", r.saludCada(), r.runSalud)
 	r.startLoop(ctx, "planificacion", r.planificacionCada(), r.runPlanificacion)
-	r.startLoopAfter(ctx, "control_plane_runtime_orders", r.runtimeOrdersCada(), 0, r.runControlPlaneRuntimeOrders)
-	r.startLoopAfter(ctx, "control_plane_runtime_transcript", r.runtimeTranscriptCada(), r.runtimeTranscriptStartupDelay(), r.runControlPlaneRuntimeTranscript)
-	r.startLoopAfter(ctx, "control_plane_runtime_mailbox", r.runtimeMailboxCada(), 20*time.Second, r.runControlPlaneRuntimeMailbox)
-	r.startLoopAfter(ctx, "control_plane_runtime_budget", r.runtimeBudgetCada(), 30*time.Second, r.runControlPlaneBudget)
+	r.StartRuntimeCore(ctx)
+}
+
+func (r *Runner) startNotificationLoop(ctx context.Context) {
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
@@ -138,6 +167,7 @@ func (r *Runner) startLoop(ctx context.Context, name string, each time.Duration,
 }
 
 func (r *Runner) startLoopAfter(ctx context.Context, name string, each time.Duration, extraDelay time.Duration, fn func()) {
+	r.registerBatch(name)
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
@@ -197,6 +227,9 @@ func (r *Runner) WakeBatch(name string) bool {
 	if name == "" {
 		return false
 	}
+	if !r.hasBatch(name) {
+		return false
+	}
 	ch := r.batchWakeChannel(name)
 	select {
 	case ch <- struct{}{}:
@@ -227,6 +260,36 @@ func (r *Runner) batchWakeChannel(name string) chan struct{} {
 	ch = make(chan struct{}, 1)
 	r.batchWake[name] = ch
 	return ch
+}
+
+func (r *Runner) registerBatch(name string) {
+	if r == nil {
+		return
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.activeBatches == nil {
+		r.activeBatches = map[string]struct{}{}
+	}
+	r.activeBatches[name] = struct{}{}
+}
+
+func (r *Runner) hasBatch(name string) bool {
+	if r == nil {
+		return false
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.activeBatches[name]
+	return ok
 }
 
 func (r *Runner) applyLoopBackpressure(ctx context.Context, name string, each time.Duration, start time.Time) {

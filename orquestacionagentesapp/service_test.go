@@ -2,6 +2,7 @@ package orquestacionagentesapp
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,6 +27,10 @@ type stubRuntimeController struct {
 	controlID            int64
 	controlAction        string
 	controlErr           error
+	reconcileHandles     int
+	reconcileHandlesErr  error
+	reconcileOrders      int
+	reconcileOrdersErr   error
 	project              *db.Proyecto
 	projectErr           error
 	runtime              *db.RuntimeInstance
@@ -58,6 +63,14 @@ func (s *stubRuntimeController) EnqueueAgentControl(req runtimesapp.AgentControl
 
 func (s *stubRuntimeController) GetProject(string) (*db.Proyecto, error) {
 	return s.project, s.projectErr
+}
+
+func (s *stubRuntimeController) ReconcileStaleRuntimeHandles() (int, error) {
+	return s.reconcileHandles, s.reconcileHandlesErr
+}
+
+func (s *stubRuntimeController) ReconcileStaleRuntimeOrders() (int, error) {
+	return s.reconcileOrders, s.reconcileOrdersErr
 }
 
 func (s *stubRuntimeController) GetRuntime(int64) (*db.RuntimeInstance, error) {
@@ -353,6 +366,66 @@ func TestEnqueueControlNormalizesPayload(t *testing.T) {
 	}
 	if runtimes.controlReq.Agente != "Codex2" || runtimes.controlReq.Proyecto != "core" {
 		t.Fatalf("payload no normalizado: %+v", runtimes.controlReq)
+	}
+}
+
+func TestEnqueueControlStartRunsSessionHygieneBeforeEnqueue(t *testing.T) {
+	t.Parallel()
+
+	store := &stubAutonomyStore{}
+	runtimes := &stubRuntimeController{
+		controlID:        12,
+		controlAction:    "start",
+		reconcileHandles: 2,
+		reconcileOrders:  3,
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(store)
+
+	orderID, accion, err := service.EnqueueControl(ControlRequest{
+		Agente:   "Codex2",
+		Proyecto: "orquestador",
+		Accion:   "start",
+		Por:      "server",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueControl: %v", err)
+	}
+	if orderID != 12 || accion != "start" {
+		t.Fatalf("respuesta inesperada: %d %s", orderID, accion)
+	}
+	if store.auditAction != "session_hygiene_start" || store.auditEntity != "runtime" {
+		t.Fatalf("auditoria de hygiene inesperada: %+v", store)
+	}
+	if got := store.auditDetail; got == "" || !strings.Contains(got, "stale_handles=2") || !strings.Contains(got, "stale_orders=3") {
+		t.Fatalf("detalle de hygiene inesperado: %q", got)
+	}
+}
+
+func TestEnqueueControlNonStartSkipsSessionHygiene(t *testing.T) {
+	t.Parallel()
+
+	store := &stubAutonomyStore{}
+	runtimes := &stubRuntimeController{
+		controlID:        13,
+		controlAction:    "pause",
+		reconcileHandles: 9,
+		reconcileOrders:  9,
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(store)
+
+	_, _, err := service.EnqueueControl(ControlRequest{
+		Agente:   "Codex2",
+		Proyecto: "orquestador",
+		Accion:   "pause",
+		Por:      "server",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueControl: %v", err)
+	}
+	if store.auditAction == "session_hygiene_start" {
+		t.Fatalf("no deberia auditar hygiene en accion no-start: %+v", store)
 	}
 }
 

@@ -25,6 +25,11 @@ import (
 
 var listenServerTCP = net.Listen
 
+type unifiedServerRuntimeOptions struct {
+	CoreOnly             bool
+	DisableAutobootstrap bool
+}
+
 func registrarRutasServe(mux *http.ServeMux) {
 	mux.HandleFunc("/", webHandlerDash)
 	mux.HandleFunc("/tareas", webHandlerTareas)
@@ -147,12 +152,24 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 	controlCtx, cancel := context.WithCancel(context.Background())
 	runner := newControlPlaneRunner(debugLogger, debug.ControlPlane)
 	runner.StartupGrace = 5 * time.Second
+	runtimeOptions := loadUnifiedServerRuntimeOptions()
 	unregisterRunner := registerActiveControlPlaneRunner(runner)
 	defer runner.Wait()
 	defer unregisterRunner()
 	defer cancel()
-	runner.Start(controlCtx)
-	launchBootstrapServerAutonomy(controlCtx, debugLogger)
+	if runtimeOptions.CoreOnly {
+		// Core-only mantiene apagados los carriles residentes pesados, pero el
+		// núcleo runtime debe seguir vivo para consolidar start/resume vía
+		// transcript, mailbox y observación de presupuesto.
+		runner.StartRuntimeCore(controlCtx)
+	} else {
+		runner.Start(controlCtx)
+	}
+	if !runtimeOptions.DisableAutobootstrap {
+		launchBootstrapServerAutonomy(controlCtx, debugLogger)
+	} else if debugLogger != nil {
+		debugLogger.Printf("server_autobootstrap skipped=disabled")
+	}
 	launchWALCheckpointLoop(controlCtx, debugLogger)
 
 	server := &http.Server{
@@ -169,6 +186,25 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 	}
 	server.TLSConfig = tlsConfig
 	return server.ServeTLS(listener, security.TLSCert, security.TLSKey)
+}
+
+func loadUnifiedServerRuntimeOptions() unifiedServerRuntimeOptions {
+	coreOnly := envBoolServidorUnificado("ORQUESTA_SERVER_CORE_ONLY") ||
+		envBoolServidorUnificado("ORQUESTA_SERVER_DISABLE_NONRESIDENT_WORKER")
+	disableAutobootstrap := coreOnly || envBoolServidorUnificado("ORQUESTA_SERVER_DISABLE_AUTOBOOTSTRAP")
+	return unifiedServerRuntimeOptions{
+		CoreOnly:             coreOnly,
+		DisableAutobootstrap: disableAutobootstrap,
+	}
+}
+
+func envBoolServidorUnificado(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes", "si", "sí", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func launchBootstrapServerAutonomy(ctx context.Context, debugLogger *log.Logger) {

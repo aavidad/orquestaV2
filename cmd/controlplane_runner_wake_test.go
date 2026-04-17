@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -202,7 +203,18 @@ func TestWakeControlPlaneWarmReseteaGateAutonomiaSesionesActivas(t *testing.T) {
 	if allowAutonomiaActiveSessionsObservation(time.Now().UTC()) {
 		t.Fatalf("segundo acceso inmediato no deberia permitirse sin reset")
 	}
-	runner := &planocontrol.Runner{}
+	runner := &planocontrol.Runner{
+		Automation:            dbAutomationService{},
+		ControlPlaneWarmCada:  time.Hour,
+		ControlPlaneColdCada:  time.Hour,
+		NotificationRetryCada: time.Hour,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() {
+		cancel()
+		runner.Wait()
+	}()
+	runner.StartNonResidentWorker(ctx)
 	unregister := registerActiveControlPlaneRunner(runner)
 	defer unregister()
 
@@ -211,5 +223,95 @@ func TestWakeControlPlaneWarmReseteaGateAutonomiaSesionesActivas(t *testing.T) {
 	}
 	if !allowAutonomiaActiveSessionsObservation(time.Now().UTC()) {
 		t.Fatalf("el wake warm deberia resetear la observacion de sesiones activas")
+	}
+}
+
+func TestWakeControlPlaneWarmNoReseteaGateSinBatchActivo(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	resetAutonomiaActiveSessionsObservationGate()
+	if !allowAutonomiaActiveSessionsObservation(time.Now().UTC()) {
+		t.Fatalf("primer acceso al gate deberia permitirse")
+	}
+	if allowAutonomiaActiveSessionsObservation(time.Now().UTC()) {
+		t.Fatalf("segundo acceso inmediato no deberia permitirse sin reset")
+	}
+	runner := &planocontrol.Runner{}
+	unregister := registerActiveControlPlaneRunner(runner)
+	defer unregister()
+
+	if wakeControlPlaneWarm() {
+		t.Fatalf("wakeControlPlaneWarm no deberia aceptar sin batch warm activo")
+	}
+	if allowAutonomiaActiveSessionsObservation(time.Now().UTC()) {
+		t.Fatalf("el gate no deberia resetearse si warm no fue aceptado")
+	}
+}
+
+func TestWakeControlPlaneRuntimeOrdersUsaFallbackSinRunnerActivo(t *testing.T) {
+	previous := processRuntimeOrdersWakeFallback
+	done := make(chan struct{}, 1)
+	processRuntimeOrdersWakeFallback = func() {
+		done <- struct{}{}
+	}
+	defer func() {
+		processRuntimeOrdersWakeFallback = previous
+		runtimeOrdersWakeFallbackRunning.Store(false)
+	}()
+	activeControlPlaneRunner.Store(nil)
+
+	if !wakeControlPlaneRuntimeOrders() {
+		t.Fatalf("wakeControlPlaneRuntimeOrders deberia programar fallback si no hay runner activo")
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("fallback runtime_orders no ejecutado")
+	}
+}
+
+func TestWakeControlPlaneRuntimeMailboxUsaFallbackSinRunnerActivo(t *testing.T) {
+	previous := processRuntimeMailboxWakeFallback
+	done := make(chan struct{}, 1)
+	processRuntimeMailboxWakeFallback = func() {
+		done <- struct{}{}
+	}
+	defer func() {
+		processRuntimeMailboxWakeFallback = previous
+		runtimeMailboxWakeFallbackRunning.Store(false)
+	}()
+	activeControlPlaneRunner.Store(nil)
+
+	if !wakeControlPlaneRuntimeMailbox() {
+		t.Fatalf("wakeControlPlaneRuntimeMailbox deberia programar fallback si no hay runner activo")
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("fallback runtime_mailbox no ejecutado")
+	}
+}
+
+func TestWakeControlPlaneRuntimeOrdersLiberaFallbackPegado(t *testing.T) {
+	previous := processRuntimeOrdersWakeFallback
+	done := make(chan struct{}, 1)
+	processRuntimeOrdersWakeFallback = func() {
+		done <- struct{}{}
+	}
+	defer func() {
+		processRuntimeOrdersWakeFallback = previous
+		runtimeOrdersWakeFallbackRunning.Store(false)
+		runtimeOrdersWakeFallbackStartedAt.Store(0)
+	}()
+	activeControlPlaneRunner.Store(nil)
+	runtimeOrdersWakeFallbackRunning.Store(true)
+	runtimeOrdersWakeFallbackStartedAt.Store(time.Now().UTC().Add(-time.Minute).UnixNano())
+
+	if !wakeControlPlaneRuntimeOrders() {
+		t.Fatalf("wakeControlPlaneRuntimeOrders deberia rearmar fallback pegado")
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("fallback runtime_orders no se rearmo tras release")
 	}
 }
