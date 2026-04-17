@@ -31,6 +31,7 @@ type RuntimeController interface {
 	GetRuntimeHandle(id int64) (*db.RuntimeHandle, error)
 	GetRuntimeBySessionID(sessionID int64) (*db.RuntimeInstance, error)
 	GetRuntimeHandleBySessionID(sessionID int64) (*db.RuntimeHandle, error)
+	SyncSupervisedRuntimeHandle(handle *db.RuntimeHandle, source string) (*db.RuntimeHandle, error)
 	GetPrimaryRuntimeForProject(agente string, proyectoID *int64) (*db.RuntimeInstance, error)
 	GetActiveRuntimeHandleForProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error)
 	GetOperationalRuntimeHandleForProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error)
@@ -51,10 +52,15 @@ type AutonomyStore interface {
 	PauseAssignment(agente string, proyectoID int64, motivo string) error
 }
 
+type StartableWorkChecker interface {
+	HasStartableAgentWork(agente string, proyectoID int64) (bool, error)
+}
+
 type Service struct {
 	agents        AgentPreparer
 	runtimes      RuntimeController
 	autonomyStore AutonomyStore
+	workChecker   StartableWorkChecker
 }
 
 func NewService(agents AgentPreparer, runtimes RuntimeController) *Service {
@@ -66,6 +72,13 @@ func (s *Service) SetAutonomyStore(store AutonomyStore) {
 		return
 	}
 	s.autonomyStore = store
+}
+
+func (s *Service) SetStartableWorkChecker(checker StartableWorkChecker) {
+	if s == nil {
+		return
+	}
+	s.workChecker = checker
 }
 
 type ControlRequest struct {
@@ -338,6 +351,62 @@ func (s *Service) ShouldSupersedeSessionRecoveryWithRecentTMUX(sesion *db.Sesion
 		return true
 	}
 	return stringMapValue(meta, "tmux_session") != ""
+}
+
+func (s *Service) RecoverLocalFailedRuntimeSession(sesion *db.Sesion, proyecto *db.Proyecto, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (int, error) {
+	if s == nil || s.runtimes == nil || s.workChecker == nil {
+		return 0, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
+	}
+	if sesion == nil || proyecto == nil {
+		return 0, nil
+	}
+	if s.ShouldSupersedeSessionRecoveryWithRecentTMUX(sesion, handle) {
+		return 0, nil
+	}
+	var err error
+	if handle != nil {
+		handle, err = s.runtimes.SyncSupervisedRuntimeHandle(handle, "autonomia_runtime_recovery")
+		if err != nil {
+			return 0, err
+		}
+	}
+	runtime, err = s.resolveCanonicalRuntimeForHandle(handle, strings.TrimSpace(sesion.Agente), sesion.ProyectoID)
+	if err != nil {
+		return 0, err
+	}
+	if !runtimeIsLocallyFailed(handle, runtime) {
+		return 0, nil
+	}
+	if pending, err := s.existsOpenAutonomyOrder(strings.TrimSpace(sesion.Agente), sesion.ProyectoID, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
+		return 0, err
+	} else if pending {
+		return 0, nil
+	}
+	hasWork, err := s.workChecker.HasStartableAgentWork(strings.TrimSpace(sesion.Agente), proyecto.ID)
+	if err != nil {
+		return 0, err
+	}
+	if !hasWork {
+		return 0, nil
+	}
+	perfil, modelo, razonamiento := resumePayloadExecutionProfile(sesion.ResumePayloadJSON)
+	if strings.Contains(modelo, "gpt-5") || modelo == "" {
+		modelo = ""
+		razonamiento = ""
+	}
+	if _, _, err := s.EnqueueControl(ControlRequest{
+		Agente:       strings.TrimSpace(sesion.Agente),
+		Proyecto:     strings.TrimSpace(proyecto.Slug),
+		Accion:       "start",
+		Modelo:       modelo,
+		Razonamiento: razonamiento,
+		Perfil:       perfil,
+		Motivo:       "local_runtime_failed",
+		Por:          "orquesta",
+	}); err != nil {
+		return 0, err
+	}
+	return 1, nil
 }
 
 func (s *Service) PauseAutonomyAlreadySatisfied(agente string, proyectoID *int64, sesion *db.Sesion) (bool, error) {
@@ -800,4 +869,33 @@ func parseStringMap(raw string) map[string]any {
 		return nil
 	}
 	return payload
+}
+
+func resumePayloadExecutionProfile(raw string) (string, string, string) {
+	payload := parseStringMap(raw)
+	if payload == nil {
+		return "", "", ""
+	}
+	perfil, ok := payload["perfil_ejecucion"].(map[string]any)
+	if !ok {
+		return "", "", ""
+	}
+	return stringMapValue(perfil, "perfil_tarea"),
+		stringMapValue(perfil, "modelo"),
+		stringMapValue(perfil, "razonamiento")
+}
+
+func runtimeIsLocallyFailed(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) bool {
+	if handle == nil || strings.EqualFold(strings.TrimSpace(handle.Transporte), "api") || strings.EqualFold(strings.TrimSpace(handle.Transporte), "mcp_http") || strings.EqualFold(strings.TrimSpace(handle.Transporte), "otro") {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(handle.Estado), "fallido") {
+		return true
+	}
+	if runtime == nil {
+		return false
+	}
+	logical := strings.ToLower(strings.TrimSpace(runtime.LogicalState))
+	process := strings.ToLower(strings.TrimSpace(runtime.ProcessState))
+	return logical == "fallido" || process == "fallido" || process == "crashed" || process == "exited"
 }

@@ -10839,50 +10839,7 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 // procesarRecuperacionRuntimeLocalSesion intenta recuperar una sesión cuyo runtime local
 // ha fallado: sincroniza el handle, verifica si hay trabajo pendiente y encola un start.
 func procesarRecuperacionRuntimeLocalSesion(sesion *db.Sesion, proyecto *db.Proyecto, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (int, error) {
-	if runtimeTMUXRecienteDebeSuplantarRecuperacionSesion(sesion, handle) {
-		return 0, nil
-	}
-	var err error
-	handle, runtime, _, err = db.SincronizarRuntimeHandleSupervisado(handle, runtime, "autonomia_runtime_recovery")
-	if err != nil {
-		return 0, err
-	}
-	if !runtimeLocalFallido(handle, runtime) {
-		return 0, nil
-	}
-	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(sesion.Agente, sesion.ProyectoID, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
-		return 0, err
-	} else if pendiente {
-		return 0, nil
-	}
-	tieneTrabajo, err := dbAgenteTieneTrabajoArrancable(strings.TrimSpace(sesion.Agente), proyecto.ID)
-	if err != nil {
-		return 0, err
-	}
-	if !tieneTrabajo {
-		return 0, nil
-	}
-	perfilPersistido, modeloPersistido, razonamientoPersistido := db.ResumePayloadPerfilEjecucion(sesion.ResumePayloadJSON)
-
-	// Sanear modelo si es legacy/placeholder para forzar re-resolución hexagonal en la recuperación
-	if strings.Contains(modeloPersistido, "gpt-5") || modeloPersistido == "" {
-		modeloPersistido = ""
-		razonamientoPersistido = ""
-	}
-
-	if err := encolarControlAutonomiaProyectoDetallado(apiAgenteControlRequest{
-		Agente:       strings.TrimSpace(sesion.Agente),
-		Proyecto:     proyecto.Slug,
-		Accion:       agenteControlAccionStart,
-		Modelo:       modeloPersistido,
-		Razonamiento: razonamientoPersistido,
-		Perfil:       perfilPersistido,
-		Motivo:       "local_runtime_failed",
-		Por:          "orquesta",
-	}); err != nil {
-		return 0, err
-	}
-	return 1, nil
+	return orquestacionAgentesService.RecoverLocalFailedRuntimeSession(sesion, proyecto, handle, runtime)
 }
 
 // procesarRecuperacionRuntimeRemotoDegradadoSesion emite un checkpoint seguido de un

@@ -357,6 +357,10 @@ func (s *Service) GetRuntimeHandleBySessionID(sessionID int64) (*db.RuntimeHandl
 	return s.store.GetRuntimeHandleBySessionID(sessionID)
 }
 
+func (s *Service) SyncSupervisedRuntimeHandle(handle *db.RuntimeHandle, source string) (*db.RuntimeHandle, error) {
+	return s.store.SyncSupervisedRuntimeHandle(handle, source)
+}
+
 func (s *Service) GetPrimaryRuntimeForProject(agente string, proyectoID *int64) (*db.RuntimeInstance, error) {
 	return s.store.GetPrimaryRuntimeForProject(agente, proyectoID)
 }

@@ -31,6 +31,7 @@ var supervisionService = supervisionapp.NewService(supervisionapp.NewRepository(
 
 func init() {
 	orquestacionAgentesService.SetAutonomyStore(orquestacionagentesapp.Repository{})
+	orquestacionAgentesService.SetStartableWorkChecker(startableWorkChecker{})
 	capacidadService.SetPhaseProvider(progresoService)
 	capacidadService.SetReviewGateProvider(reviewService)
 	capacidadService.SetReviewGateManager(reviewService)
@@ -49,4 +50,10 @@ func init() {
 	runtimesService.SetResolvedorWorktreeActiva(worktreeRuntimeService{})
 	runtimesService.SetAseguradorWorktreeActiva(worktreeRuntimeService{})
 	runtimesService.SetTaskCompleter(tareasService)
+}
+
+type startableWorkChecker struct{}
+
+func (startableWorkChecker) HasStartableAgentWork(agente string, proyectoID int64) (bool, error) {
+	return dbAgenteTieneTrabajoArrancable(agente, proyectoID)
 }
