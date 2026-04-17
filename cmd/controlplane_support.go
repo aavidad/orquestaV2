@@ -11003,68 +11003,7 @@ func encolarReactivacionAgenteProyectoSiProcede(agente string, proyecto *db.Proy
 }
 
 func encolarReactivacionAgenteProyectoConHandleSiProcede(agente string, proyecto *db.Proyecto, motivo string, handle *db.RuntimeHandle) (bool, error) {
-	agente = strings.TrimSpace(agente)
-	if agente == "" || proyecto == nil || proyecto.ID <= 0 {
-		return false, nil
-	}
-	if agenteUsaPoolLocalCompartidoParaReactivacion(agente, proyecto) {
-		if permite, poolSlug, err := db.PoolLocalCompartidoPermiteActivacionAgenteProyecto(agente, proyecto.Slug); err != nil {
-			return false, err
-		} else if !permite {
-			db.Audit("orquesta", "reactivacion_pool_local_sin_capacidad", "agente", 0,
-				fmt.Sprintf("agente=%s proyecto=%s pool=%s", agente, proyecto.Slug, poolSlug))
-			return false, nil
-		}
-	}
-	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "pause", "checkpoint", "resume", "start", "handoff"); err != nil {
-		return false, err
-	} else if pendiente {
-		return false, nil
-	}
-	if handle == nil {
-		var err error
-		handle, err = resolverHandleReactivacionAgente(agente, &proyecto.ID)
-		if err != nil {
-			return false, err
-		}
-	}
-	if handle != nil {
-		switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
-		case "activo":
-			return false, nil
-		case "pausado":
-			accion := agenteControlAccionResume
-			if db.RuntimeHandlePauseRequiresFreshStart(handle) {
-				accion = agenteControlAccionStart
-			}
-			if err := encolarControlAutonomiaProyecto(agente, proyecto, accion, motivo); err != nil {
-				return false, err
-			}
-			return true, nil
-		case "fallido":
-			if err := encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStart, motivo); err != nil {
-				return false, err
-			}
-			return true, nil
-		}
-	}
-	tieneTrabajo, err := dbAgenteTieneTrabajoArrancable(agente, proyecto.ID)
-	if err != nil {
-		return false, err
-	}
-	if !tieneTrabajo {
-		tieneBacklog, err := dbProyectoTieneBacklogReactivable(proyecto.ID)
-		if err != nil {
-			return false, err
-		}
-		if !tieneBacklog {
-			return false, nil
-		}
-	}
-	if err := encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStart, motivo); err != nil {
-		return false, err
-	}
-	return true, nil
+	return orquestacionAgentesService.ReactivateProjectIfNeeded(agente, proyecto, motivo, handle)
 }
 
 func resolverProyectoReactivacionAgente(agente string) (*db.Proyecto, error) {

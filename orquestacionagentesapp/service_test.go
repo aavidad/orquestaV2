@@ -186,14 +186,15 @@ func (s *stubRemoteRecoverySupport) MarkProjectExternallyBlocked(proyectoID int6
 }
 
 type stubRecoveryFlowSupport struct {
-	available        bool
-	availableReason  string
-	availableErr     error
-	reactivated      bool
-	reactivateErr    error
-	reactivateAgent  string
-	reactivateMotivo string
-	reactivateProjID int64
+	available       bool
+	availableReason string
+	availableErr    error
+	usePool         bool
+	poolAllowed     bool
+	poolSlug        string
+	poolErr         error
+	backlog         bool
+	backlogErr      error
 }
 
 func (s *stubRecoveryFlowSupport) SharedAccountAvailable(string) (bool, string, error) {
@@ -203,16 +204,22 @@ func (s *stubRecoveryFlowSupport) SharedAccountAvailable(string) (bool, string, 
 	return s.available, s.availableReason, nil
 }
 
-func (s *stubRecoveryFlowSupport) ReactivateProjectIfNeeded(agente string, proyecto *db.Proyecto, motivo string) (bool, error) {
-	if s.reactivateErr != nil {
-		return false, s.reactivateErr
+func (s *stubRecoveryFlowSupport) UsesSharedLocalPoolForReactivation(string, *db.Proyecto) bool {
+	return s.usePool
+}
+
+func (s *stubRecoveryFlowSupport) PoolLocalActivationAllowed(string, string) (bool, string, error) {
+	if s.poolErr != nil {
+		return false, "", s.poolErr
 	}
-	s.reactivateAgent = agente
-	s.reactivateMotivo = motivo
-	if proyecto != nil {
-		s.reactivateProjID = proyecto.ID
+	return s.poolAllowed, s.poolSlug, nil
+}
+
+func (s *stubRecoveryFlowSupport) ProjectHasReactivableBacklog(int64) (bool, error) {
+	if s.backlogErr != nil {
+		return false, s.backlogErr
 	}
-	return s.reactivated, nil
+	return s.backlog, nil
 }
 
 func (s *stubAutonomyStore) GetPersistedAgentQuotaState(string) (string, error) {
@@ -809,14 +816,15 @@ func TestRecoverDegradedRuntimeSessionReactivatesWhenHandleMissing(t *testing.T)
 	t.Parallel()
 
 	proyectoID := int64(31)
-	flow := &stubRecoveryFlowSupport{available: true, reactivated: true}
+	flow := &stubRecoveryFlowSupport{available: true}
 	runtimes := &stubRuntimeController{
-		project:          &db.Proyecto{ID: proyectoID, Slug: "orquestador"},
-		sessionHandleErr: nil,
-		runtimeErr:       nil,
+		project:       &db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		controlID:     8,
+		controlAction: "start",
 	}
 	service := NewService(nil, runtimes)
 	service.SetRecoveryFlowSupport(flow)
+	service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: true})
 
 	count, err := service.RecoverDegradedRuntimeSession(&db.Sesion{
 		ID:         9,
@@ -829,8 +837,8 @@ func TestRecoverDegradedRuntimeSessionReactivatesWhenHandleMissing(t *testing.T)
 	if count != 1 {
 		t.Fatalf("count inesperado: %d", count)
 	}
-	if flow.reactivateAgent != "Codex1" || flow.reactivateProjID != proyectoID || flow.reactivateMotivo != "local_runtime_missing" {
-		t.Fatalf("reactivacion inesperada: %+v", flow)
+	if runtimes.controlReq.Accion != "start" || runtimes.controlReq.Motivo != "local_runtime_missing" {
+		t.Fatalf("control inesperado: %+v", runtimes.controlReq)
 	}
 }
 
@@ -856,8 +864,34 @@ func TestRecoverDegradedRuntimeSessionSkipsWhenSharedAccountUnavailable(t *testi
 	if count != 0 {
 		t.Fatalf("count inesperado: %d", count)
 	}
-	if flow.reactivateAgent != "" {
-		t.Fatalf("no deberia intentar reactivar: %+v", flow)
+	if runtimes.controlReq.Accion != "" {
+		t.Fatalf("no deberia intentar reactivar: %+v", runtimes.controlReq)
+	}
+}
+
+func TestReactivateProjectIfNeededSkipsWhenHandleAlreadyActive(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(31)
+	runtimes := &stubRuntimeController{}
+	service := NewService(nil, runtimes)
+	service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: true})
+	service.SetRecoveryFlowSupport(&stubRecoveryFlowSupport{available: true})
+
+	ok, err := service.ReactivateProjectIfNeeded(
+		"Codex1",
+		&db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		"reanimacion_automatica",
+		&db.RuntimeHandle{ID: 5, Estado: "activo"},
+	)
+	if err != nil {
+		t.Fatalf("ReactivateProjectIfNeeded: %v", err)
+	}
+	if ok {
+		t.Fatal("no deberia reactivar con handle ya activo")
+	}
+	if runtimes.controlReq.Accion != "" {
+		t.Fatalf("no deberia encolar control: %+v", runtimes.controlReq)
 	}
 }
 

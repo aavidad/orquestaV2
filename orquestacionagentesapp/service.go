@@ -65,7 +65,9 @@ type RemoteRecoverySupport interface {
 
 type RecoveryFlowSupport interface {
 	SharedAccountAvailable(agente string) (bool, string, error)
-	ReactivateProjectIfNeeded(agente string, proyecto *db.Proyecto, motivo string) (bool, error)
+	UsesSharedLocalPoolForReactivation(agente string, proyecto *db.Proyecto) bool
+	PoolLocalActivationAllowed(agente string, proyectoSlug string) (bool, string, error)
+	ProjectHasReactivableBacklog(proyectoID int64) (bool, error)
 }
 
 type Service struct {
@@ -437,6 +439,96 @@ func (s *Service) RecoverLocalFailedRuntimeSession(sesion *db.Sesion, proyecto *
 	return 1, nil
 }
 
+func (s *Service) ReactivateProjectIfNeeded(agente string, proyecto *db.Proyecto, motivo string, handle *db.RuntimeHandle) (bool, error) {
+	if s == nil || s.runtimes == nil || s.workChecker == nil || s.recoveryFlow == nil {
+		return false, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyecto == nil || proyecto.ID <= 0 {
+		return false, nil
+	}
+	if s.recoveryFlow.UsesSharedLocalPoolForReactivation(agente, proyecto) {
+		permite, poolSlug, err := s.recoveryFlow.PoolLocalActivationAllowed(agente, strings.TrimSpace(proyecto.Slug))
+		if err != nil {
+			return false, err
+		}
+		if !permite {
+			if s.autonomyStore != nil {
+				s.autonomyStore.Audit("orquesta", "reactivacion_pool_local_sin_capacidad", "agente", 0,
+					fmt.Sprintf("agente=%s proyecto=%s pool=%s", agente, strings.TrimSpace(proyecto.Slug), poolSlug))
+			}
+			return false, nil
+		}
+	}
+	if pending, err := s.existsOpenAutonomyOrder(agente, &proyecto.ID, "pause", "checkpoint", "resume", "start", "handoff"); err != nil {
+		return false, err
+	} else if pending {
+		return false, nil
+	}
+	if handle == nil {
+		var err error
+		handle, err = s.ResolveRecoveryHandle(agente, &proyecto.ID)
+		if err != nil {
+			return false, err
+		}
+	}
+	if handle != nil {
+		switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
+		case "activo":
+			return false, nil
+		case "pausado":
+			accion := "resume"
+			if db.RuntimeHandlePauseRequiresFreshStart(handle) {
+				accion = "start"
+			}
+			if _, _, err := s.EnqueueControl(ControlRequest{
+				Agente:   agente,
+				Proyecto: strings.TrimSpace(proyecto.Slug),
+				Accion:   accion,
+				Motivo:   strings.TrimSpace(motivo),
+				Por:      "orquesta",
+			}); err != nil {
+				return false, err
+			}
+			return true, nil
+		case "fallido":
+			if _, _, err := s.EnqueueControl(ControlRequest{
+				Agente:   agente,
+				Proyecto: strings.TrimSpace(proyecto.Slug),
+				Accion:   "start",
+				Motivo:   strings.TrimSpace(motivo),
+				Por:      "orquesta",
+			}); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+	}
+	tieneTrabajo, err := s.workChecker.HasStartableAgentWork(agente, proyecto.ID)
+	if err != nil {
+		return false, err
+	}
+	if !tieneTrabajo {
+		tieneBacklog, err := s.recoveryFlow.ProjectHasReactivableBacklog(proyecto.ID)
+		if err != nil {
+			return false, err
+		}
+		if !tieneBacklog {
+			return false, nil
+		}
+	}
+	if _, _, err := s.EnqueueControl(ControlRequest{
+		Agente:   agente,
+		Proyecto: strings.TrimSpace(proyecto.Slug),
+		Accion:   "start",
+		Motivo:   strings.TrimSpace(motivo),
+		Por:      "orquesta",
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (s *Service) RecoverDegradedRuntimeSession(sesion *db.Sesion) (int, error) {
 	if s == nil || s.runtimes == nil || s.recoveryFlow == nil {
 		return 0, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
@@ -465,7 +557,7 @@ func (s *Service) RecoverDegradedRuntimeSession(sesion *db.Sesion) (int, error) 
 		return 0, err
 	}
 	if handle == nil {
-		reactivado, err := s.recoveryFlow.ReactivateProjectIfNeeded(strings.TrimSpace(sesion.Agente), proyecto, "local_runtime_missing")
+		reactivado, err := s.ReactivateProjectIfNeeded(strings.TrimSpace(sesion.Agente), proyecto, "local_runtime_missing", nil)
 		if err != nil {
 			return 0, err
 		}

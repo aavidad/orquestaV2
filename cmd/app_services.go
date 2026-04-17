@@ -66,6 +66,14 @@ func (recoveryFlowSupport) SharedAccountAvailable(agente string) (bool, string, 
 	return autonomiaCuentaCompartidaDisponible(agente)
 }
 
-func (recoveryFlowSupport) ReactivateProjectIfNeeded(agente string, proyecto *db.Proyecto, motivo string) (bool, error) {
-	return encolarReactivacionAgenteProyectoSiProcede(agente, proyecto, motivo)
+func (recoveryFlowSupport) UsesSharedLocalPoolForReactivation(agente string, proyecto *db.Proyecto) bool {
+	return agenteUsaPoolLocalCompartidoParaReactivacion(agente, proyecto)
+}
+
+func (recoveryFlowSupport) PoolLocalActivationAllowed(agente string, proyectoSlug string) (bool, string, error) {
+	return db.PoolLocalCompartidoPermiteActivacionAgenteProyecto(agente, proyectoSlug)
+}
+
+func (recoveryFlowSupport) ProjectHasReactivableBacklog(proyectoID int64) (bool, error) {
+	return dbProyectoTieneBacklogReactivable(proyectoID)
 }
