@@ -7405,6 +7405,11 @@ func procesarAutoasignacionPremiumSinSesionBatch(rows []agentesapp.Row, tareasAc
 		if !proyectoUsaContinuidadMicrocicloPremium(proyecto.ID) {
 			continue
 		}
+		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "pause", "checkpoint", "resume", "start", "handoff"); err != nil {
+			return procesadas, err
+		} else if pendiente {
+			continue
+		}
 		tarea, err := capacidadService.IntentarAutoasignarTareaPipelineLocal(proyecto.Slug, agente)
 		if err != nil {
 			return procesadas, err

@@ -18360,6 +18360,79 @@ func TestProcesarAgentesDegradadosAutonomiaBatchAutoasignaPremiumLibreSinSesion(
 	}
 }
 
+func TestProcesarAgentesDegradadosAutonomiaBatchNoAutoasignaPremiumSinSesionSiHayPausePendiente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("GeminiPause", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-premium-pause-pending",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("GeminiPause", proyectoID, "frente premium"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		INSERT INTO runtime_handles (agente, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at)
+		VALUES ('GeminiPause', ?, 'tmux', 'session', 'orq-geminipause-fallida', 'fallido', '{"driver":"tmux_cli_session"}', CURRENT_TIMESTAMP)
+	`, proyectoID); err != nil {
+		t.Fatalf("insert handle fallido: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      microcicloRefactorTituloDefault,
+		Descripcion: descripcionMicrocicloDefault(&db.Proyecto{Slug: "orquestador-premium-pause-pending", RutaAbs: filepath.Join(tmp, "orquestador")}),
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea libre: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "GeminiPause",
+		ProyectoID:  &proyectoID,
+		Tipo:        "pause",
+		PayloadJSON: `{"accion":"pause","motivo":"bloqueo_humano","por":"orquesta"}`,
+	}); err != nil {
+		t.Fatalf("encolar pause: %v", err)
+	}
+
+	n, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia autoasignar premium sin sesion con pause pendiente, got=%d", n)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Agente != nil || tarea.Estado != db.TareaLibre {
+		t.Fatalf("la tarea deberia seguir libre sin autoasignarse: %+v", tarea)
+	}
+
+	agente := "GeminiPause"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "pause" {
+		t.Fatalf("solo deberia existir la pause pendiente: %+v", orders)
+	}
+}
+
 func TestProcesarAgentesDegradadosAutonomiaBatchAbreFrentePremiumSiNoHayLibreDeterminista(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
