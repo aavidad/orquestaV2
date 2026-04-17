@@ -980,45 +980,18 @@ var runtimeLimpiarPruebasCmd = &cobra.Command{
 		if strings.TrimSpace(agente) == "" && strings.TrimSpace(proyecto) == "" {
 			return fmt.Errorf("debes indicar --agente o --proyecto")
 		}
-		if err := detenerRuntimeActivoDePruebas(strings.TrimSpace(agente), strings.TrimSpace(proyecto)); err != nil {
+		svc := orquestacionagentesapp.NewTestRuntimeCleanupService(orquestacionAgentesService, runtimeTestCleanupOps{})
+		if _, err := svc.CleanupTestRuntimeEnvironment(orquestacionagentesapp.CleanupTestRuntimeEnvironmentInput{
+			Agente:       strings.TrimSpace(agente),
+			Proyecto:     strings.TrimSpace(proyecto),
+			KeepTaskIDs:  keepIDs,
+			MailboxKinds: normalizarSliceFlags(kinds),
+			Actor:        "orquesta",
+			Reason:       "runtime limpiar-pruebas",
+			StopTimeout:  15 * time.Second,
+			PollInterval: 250 * time.Millisecond,
+		}); err != nil {
 			return err
-		}
-		if strings.TrimSpace(proyecto) != "" {
-			var resp apiTareaLimpiarFrenteResponse
-			if ok, err := apiPost("/api/tareas/limpiar-frente", apiTareaLimpiarFrenteRequest{
-				Agente:   strings.TrimSpace(agente),
-				Proyecto: strings.TrimSpace(proyecto),
-				KeepIDs:  keepIDs,
-			}, &resp); err != nil {
-				return err
-			} else if !ok {
-				return serverFirstCommandError("runtime limpiar-pruebas")
-			}
-		}
-		if _, ok, err := limpiarRuntimeMailboxPorAPI(strings.TrimSpace(agente), "", strings.TrimSpace(proyecto), []string{"pendiente"}, normalizarSliceFlags(kinds)); err != nil {
-			return err
-		} else if !ok {
-			return serverFirstCommandError("runtime limpiar-pruebas")
-		}
-		if _, ok, err := purgarRuntimeOrdersDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), []string{"completada", "fallida", "expirada", "cancelada"}, nil, 0, "runtime limpiar-pruebas"); err != nil {
-			return err
-		} else if !ok {
-			return serverFirstCommandError("runtime limpiar-pruebas")
-		}
-		if _, ok, err := cerrarRuntimeHandlesResidualDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), "runtime limpiar-pruebas"); err != nil {
-			return err
-		} else if !ok {
-			return serverFirstCommandError("runtime limpiar-pruebas")
-		}
-		if _, ok, err := purgarRuntimeHandlesDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), []string{"cerrado", "fallido"}, "runtime limpiar-pruebas"); err != nil {
-			return err
-		} else if !ok {
-			return serverFirstCommandError("runtime limpiar-pruebas")
-		}
-		if _, ok, err := cerrarRuntimesResidualDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), "runtime limpiar-pruebas"); err != nil {
-			return err
-		} else if !ok {
-			return serverFirstCommandError("runtime limpiar-pruebas")
 		}
 		fmt.Printf("✓ Entorno de prueba limpiado")
 		if strings.TrimSpace(proyecto) != "" {
@@ -1076,6 +1049,65 @@ func (runtimeTestCleanupOps) EnqueueStopControl(req orquestacionagentesapp.Contr
 
 func (runtimeTestCleanupOps) WakeRuntimeBatches(orders, mailbox, warm bool) error {
 	if _, ok, err := despertarRuntimePorAPI(orders, mailbox, warm); err != nil {
+		return err
+	} else if !ok {
+		return serverFirstCommandError("runtime limpiar-pruebas")
+	}
+	return nil
+}
+
+func (runtimeTestCleanupOps) CleanupTaskFront(agente, proyecto string, keepIDs []int64) error {
+	var resp apiTareaLimpiarFrenteResponse
+	if ok, err := apiPost("/api/tareas/limpiar-frente", apiTareaLimpiarFrenteRequest{
+		Agente:   strings.TrimSpace(agente),
+		Proyecto: strings.TrimSpace(proyecto),
+		KeepIDs:  keepIDs,
+	}, &resp); err != nil {
+		return err
+	} else if !ok {
+		return serverFirstCommandError("runtime limpiar-pruebas")
+	}
+	return nil
+}
+
+func (runtimeTestCleanupOps) ClearPendingRuntimeMailbox(agente, proyecto string, kinds []string) error {
+	if _, ok, err := limpiarRuntimeMailboxPorAPI(strings.TrimSpace(agente), "", strings.TrimSpace(proyecto), []string{"pendiente"}, normalizarSliceFlags(kinds)); err != nil {
+		return err
+	} else if !ok {
+		return serverFirstCommandError("runtime limpiar-pruebas")
+	}
+	return nil
+}
+
+func (runtimeTestCleanupOps) PurgeTerminalRuntimeOrders(agente, proyecto, actor string) error {
+	if _, ok, err := purgarRuntimeOrdersDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), []string{"completada", "fallida", "expirada", "cancelada"}, nil, 0, strings.TrimSpace(actor)); err != nil {
+		return err
+	} else if !ok {
+		return serverFirstCommandError("runtime limpiar-pruebas")
+	}
+	return nil
+}
+
+func (runtimeTestCleanupOps) CloseResidualRuntimeHandles(agente, proyecto, actor string) error {
+	if _, ok, err := cerrarRuntimeHandlesResidualDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), strings.TrimSpace(actor)); err != nil {
+		return err
+	} else if !ok {
+		return serverFirstCommandError("runtime limpiar-pruebas")
+	}
+	return nil
+}
+
+func (runtimeTestCleanupOps) PurgeClosedRuntimeHandles(agente, proyecto, actor string) error {
+	if _, ok, err := purgarRuntimeHandlesDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), []string{"cerrado", "fallido"}, strings.TrimSpace(actor)); err != nil {
+		return err
+	} else if !ok {
+		return serverFirstCommandError("runtime limpiar-pruebas")
+	}
+	return nil
+}
+
+func (runtimeTestCleanupOps) CloseResidualRuntimes(agente, proyecto, actor string) error {
+	if _, ok, err := cerrarRuntimesResidualDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), strings.TrimSpace(actor)); err != nil {
 		return err
 	} else if !ok {
 		return serverFirstCommandError("runtime limpiar-pruebas")

@@ -2,6 +2,7 @@ package orquestacionagentesapp
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -52,6 +53,88 @@ func (s *stubTestRuntimeControlOps) EnqueueStopControl(req ControlRequest) error
 		return s.controlErr
 	}
 	s.controlReq = req
+	return nil
+}
+
+type stubTestRuntimeEnvironmentOps struct {
+	stubTestRuntimeControlOps
+	steps            []string
+	cleanupFrontErr  error
+	mailboxErr       error
+	ordersErr        error
+	closeHandlesErr  error
+	purgeHandlesErr  error
+	closeRuntimesErr error
+	keepIDs          []int64
+	mailboxKinds     []string
+	cleanupAgente    string
+	cleanupProyecto  string
+	cleanupActor     string
+}
+
+func (s *stubTestRuntimeEnvironmentOps) CleanupTaskFront(agente, proyecto string, keepIDs []int64) error {
+	if s.cleanupFrontErr != nil {
+		return s.cleanupFrontErr
+	}
+	s.steps = append(s.steps, "front")
+	s.cleanupAgente = agente
+	s.cleanupProyecto = proyecto
+	s.keepIDs = append([]int64(nil), keepIDs...)
+	return nil
+}
+
+func (s *stubTestRuntimeEnvironmentOps) ClearPendingRuntimeMailbox(agente, proyecto string, kinds []string) error {
+	if s.mailboxErr != nil {
+		return s.mailboxErr
+	}
+	s.steps = append(s.steps, "mailbox")
+	s.cleanupAgente = agente
+	s.cleanupProyecto = proyecto
+	s.mailboxKinds = append([]string(nil), kinds...)
+	return nil
+}
+
+func (s *stubTestRuntimeEnvironmentOps) PurgeTerminalRuntimeOrders(agente, proyecto, actor string) error {
+	if s.ordersErr != nil {
+		return s.ordersErr
+	}
+	s.steps = append(s.steps, "orders")
+	s.cleanupAgente = agente
+	s.cleanupProyecto = proyecto
+	s.cleanupActor = actor
+	return nil
+}
+
+func (s *stubTestRuntimeEnvironmentOps) CloseResidualRuntimeHandles(agente, proyecto, actor string) error {
+	if s.closeHandlesErr != nil {
+		return s.closeHandlesErr
+	}
+	s.steps = append(s.steps, "close_handles")
+	s.cleanupAgente = agente
+	s.cleanupProyecto = proyecto
+	s.cleanupActor = actor
+	return nil
+}
+
+func (s *stubTestRuntimeEnvironmentOps) PurgeClosedRuntimeHandles(agente, proyecto, actor string) error {
+	if s.purgeHandlesErr != nil {
+		return s.purgeHandlesErr
+	}
+	s.steps = append(s.steps, "purge_handles")
+	s.cleanupAgente = agente
+	s.cleanupProyecto = proyecto
+	s.cleanupActor = actor
+	return nil
+}
+
+func (s *stubTestRuntimeEnvironmentOps) CloseResidualRuntimes(agente, proyecto, actor string) error {
+	if s.closeRuntimesErr != nil {
+		return s.closeRuntimesErr
+	}
+	s.steps = append(s.steps, "close_runtimes")
+	s.cleanupAgente = agente
+	s.cleanupProyecto = proyecto
+	s.cleanupActor = actor
 	return nil
 }
 
@@ -147,5 +230,67 @@ func TestStopAgentRuntimeIfActivePropagatesWakeError(t *testing.T) {
 	})
 	if err == nil || err.Error() != "wake failed" {
 		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestCleanupTestRuntimeEnvironmentRunsSequentialCleanup(t *testing.T) {
+	t.Parallel()
+
+	ops := &stubTestRuntimeEnvironmentOps{
+		stubTestRuntimeControlOps: stubTestRuntimeControlOps{
+			stubTestRuntimeOps: stubTestRuntimeOps{activity: []bool{true, false}},
+		},
+	}
+	svc := NewTestRuntimeCleanupService(nil, ops)
+
+	result, err := svc.CleanupTestRuntimeEnvironment(CleanupTestRuntimeEnvironmentInput{
+		Agente:       "Codex2",
+		Proyecto:     "orquestador",
+		KeepTaskIDs:  []int64{3, 9},
+		MailboxKinds: []string{"nudge"},
+		Actor:        "orquesta",
+		Reason:       "runtime limpiar-pruebas",
+		StopTimeout:  200 * time.Millisecond,
+		PollInterval: time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("CleanupTestRuntimeEnvironment: %v", err)
+	}
+	if !result.RuntimeStopAttempted || !result.FrontCleaned || !result.MailboxCleared || !result.OrdersPurged || !result.ResidualHandlesClosed || !result.ClosedHandlesPurged || !result.ResidualRuntimesClosed {
+		t.Fatalf("resultado inesperado: %+v", result)
+	}
+	if ops.controlReq.Agente != "Codex2" || ops.controlReq.Accion != "stop" {
+		t.Fatalf("control inesperado: %+v", ops.controlReq)
+	}
+	if got := strings.Join(ops.steps, ","); got != "front,mailbox,orders,close_handles,purge_handles,close_runtimes" {
+		t.Fatalf("secuencia inesperada: %s", got)
+	}
+	if got := fmt.Sprint(ops.keepIDs); got != "[3 9]" {
+		t.Fatalf("keepIDs inesperados: %v", ops.keepIDs)
+	}
+	if got := fmt.Sprint(ops.mailboxKinds); got != "[nudge]" {
+		t.Fatalf("mailboxKinds inesperados: %v", ops.mailboxKinds)
+	}
+}
+
+func TestCleanupTestRuntimeEnvironmentSkipsTaskFrontWithoutProject(t *testing.T) {
+	t.Parallel()
+
+	ops := &stubTestRuntimeEnvironmentOps{}
+	svc := NewTestRuntimeCleanupService(nil, ops)
+
+	result, err := svc.CleanupTestRuntimeEnvironment(CleanupTestRuntimeEnvironmentInput{
+		Agente:       "Codex2",
+		StopTimeout:  50 * time.Millisecond,
+		PollInterval: time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("CleanupTestRuntimeEnvironment: %v", err)
+	}
+	if result.FrontCleaned {
+		t.Fatalf("no deberia limpiar frente sin proyecto: %+v", result)
+	}
+	if got := strings.Join(ops.steps, ","); got != "mailbox,orders,close_handles,purge_handles,close_runtimes" {
+		t.Fatalf("secuencia inesperada: %s", got)
 	}
 }
