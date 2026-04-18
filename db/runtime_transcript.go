@@ -740,6 +740,9 @@ func descartarRuidoTranscript(stream, texto, normalized, classification string) 
 	if esBannerRuidoCodex(normalized) {
 		return true
 	}
+	if esRuidoProgresoUITranscript(texto, normalized) {
+		return true
+	}
 	alnum := contarRunasSemanticas(normalized)
 	if alnum == 0 {
 		return true
@@ -752,6 +755,41 @@ func descartarRuidoTranscript(stream, texto, normalized, classification string) 
 		return true
 	}
 	if float64(alnum)/float64(total) < 0.25 {
+		return true
+	}
+	return false
+}
+
+func esRuidoProgresoUITranscript(texto, normalized string) bool {
+	texto = strings.TrimSpace(texto)
+	normalized = strings.TrimSpace(normalized)
+	if texto == "" || normalized == "" {
+		return false
+	}
+	markers := []string{
+		"esc to interrupt",
+		"use /skills to list available skills",
+		"use /skill",
+		"waiting for background terminal",
+		"waited for background terminal",
+		"background terminal running",
+		"background terminals running",
+		"/ps to",
+	}
+	for _, marker := range markers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	if strings.Contains(normalized, "working(") &&
+		(strings.Contains(texto, "◦") || strings.Contains(texto, "•") || strings.Contains(texto, "─")) {
+		return true
+	}
+	if strings.Contains(normalized, "explored") &&
+		(strings.Contains(normalized, "└ search ") || strings.Contains(normalized, "└ read ")) {
+		return true
+	}
+	if strings.Count(texto, "◦")+strings.Count(texto, "•") >= 4 && strings.Contains(normalized, "working") {
 		return true
 	}
 	return false

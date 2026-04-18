@@ -1205,3 +1205,67 @@ func TestIngestarRuntimeTranscriptHandleDescartaBannerCodex(t *testing.T) {
 		t.Fatalf("no deberia generar runtime_events para el banner de Codex, got=%d", count)
 	}
 }
+
+func TestIngestarRuntimeTranscriptHandleDescartaRuidoUIYConservaSenal(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex3",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, _ := GetRuntimeHandleBySesionID(sesion.ID)
+
+	logPath := filepath.Join(t.TempDir(), "codex-ui-noise.log")
+	logData := strings.Join([]string{
+		"────────────────────────────────────────────────────────────────────────────────◦working(1m 00s • esc to interrupt)›use /skills to list available skills gpt-5.4 xhigh · /home/alberto/trabajo/orquesta",
+		"• waited for background terminal",
+		"• ran go test ./db -run 'Test(ListarWorktreesCoordCanonizaRelativasYOcultaActivasInexistentes)'",
+		"",
+	}, "\n")
+	if err := os.WriteFile(logPath, []byte(logData), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	n, err := IngestarRuntimeTranscriptHandle(handle.ID)
+	if err != nil {
+		t.Fatalf("ingestar transcript: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia conservar solo la señal útil, got=%d", n)
+	}
+
+	agente := "Codex3"
+	items, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("transcript inesperado: %+v", items)
+	}
+	if got := items[0].NormalizedText; !strings.Contains(got, "ran go test ./db") {
+		t.Fatalf("deberia conservar la linea útil de ejecución, got=%q", got)
+	}
+}
