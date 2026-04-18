@@ -20642,6 +20642,15 @@ func TestProcesarRuntimeTranscriptBatchBlockedReasignaSinAutoGuidanceAlOrigen(t 
 	if continuation == nil {
 		t.Fatalf("faltaba nudge de continuación al relevo: %+v", orders)
 	}
+	for _, fragment := range []string{
+		`"post_remediation":true`,
+		`"remediation_kind":"reassign"`,
+		`"verification_key":"reassign:` + strconv.FormatInt(tareaID, 10) + `:Codex1:Codex2"`,
+	} {
+		if !strings.Contains(continuation.PayloadJSON, fragment) {
+			t.Fatalf("payload de continuación sin %s: %s", fragment, continuation.PayloadJSON)
+		}
+	}
 
 	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
 	if err != nil {
