@@ -178,6 +178,65 @@ func ListarRuntimeTranscript(filter FiltroRuntimeTranscript) ([]*RuntimeTranscri
 	return out, rows.Err()
 }
 
+func PurgarRuntimeTranscriptRuidoHistorico() (int, error) {
+	if DB == nil {
+		return 0, nil
+	}
+	minutes := configIntOrDefault("runtime_transcript_noise_hygiene_min_age_minutes", 15)
+	if minutes <= 0 {
+		minutes = 15
+	}
+	limit := configIntOrDefault("runtime_transcript_noise_hygiene_batch_size", 100)
+	if limit <= 0 {
+		limit = 100
+	}
+	cutoff := time.Now().UTC().Add(-time.Duration(minutes) * time.Minute)
+	rows, err := DB.Query(`
+		SELECT id, runtime_id, handle_id, agente, proyecto_id, '', stream, byte_offset, text,
+		       normalized_text, classification, handling_note, created_at, handled_at
+		FROM runtime_transcript
+		WHERE stream = 'pty_out'
+		  AND TRIM(COALESCE(classification, '')) = ''
+		  AND created_at <= ?
+		ORDER BY id ASC
+		LIMIT ?`, cutoff, limit)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	ids := make([]int64, 0, limit)
+	for rows.Next() {
+		item, err := scanRuntimeTranscript(rows)
+		if err != nil {
+			return 0, err
+		}
+		if item == nil {
+			continue
+		}
+		if !descartarRuidoTranscript(item.Stream, item.Text, item.NormalizedText, item.Classification) {
+			continue
+		}
+		ids = append(ids, item.ID)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	args := make([]any, 0, len(ids))
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	res, err := DB.Exec(`DELETE FROM runtime_transcript WHERE id IN (`+runtimeSQLPlaceholders(len(ids))+`)`, args...)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
 func MarcarRuntimeTranscriptManejado(id int64, note string) error {
 	if id <= 0 {
 		return fmt.Errorf("id inválido")

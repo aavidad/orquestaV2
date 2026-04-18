@@ -980,6 +980,11 @@ func (dbAutomationService) ProcesarRuntimeHygieneBatch() (int, error) {
 		return total, err
 	}
 	total += expiredHandoffs
+	purgedTranscriptNoise, err := db.PurgarRuntimeTranscriptRuidoHistorico()
+	if err != nil {
+		return total, err
+	}
+	total += purgedTranscriptNoise
 	resultado, err := db.PurgarRuntimeHistorico()
 	if err != nil {
 		return 0, err

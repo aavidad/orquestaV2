@@ -1269,3 +1269,104 @@ func TestIngestarRuntimeTranscriptHandleDescartaRuidoUIYConservaSenal(t *testing
 		t.Fatalf("deberia conservar la linea útil de ejecución, got=%q", got)
 	}
 }
+
+func TestPurgarRuntimeTranscriptRuidoHistoricoBorraSoloChromeUI(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("Codex4", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex4",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	handleID := handle.ID
+	old := time.Now().UTC().Add(-20 * time.Minute)
+
+	noiseID, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
+		RuntimeID:      runtime.ID,
+		HandleID:       &handleID,
+		Agente:         "Codex4",
+		ProyectoID:     &proyectoID,
+		Stream:         "pty_out",
+		Text:           "• waited for background terminal",
+		NormalizedText: normalizarTextoTranscript("• waited for background terminal"),
+	})
+	if err != nil {
+		t.Fatalf("registrar ruido: %v", err)
+	}
+	keepID, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
+		RuntimeID:      runtime.ID,
+		HandleID:       &handleID,
+		Agente:         "Codex4",
+		ProyectoID:     &proyectoID,
+		Stream:         "pty_out",
+		Text:           "• ran go test ./db -run TestFoo",
+		NormalizedText: normalizarTextoTranscript("• ran go test ./db -run TestFoo"),
+	})
+	if err != nil {
+		t.Fatalf("registrar señal util: %v", err)
+	}
+	signalID, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
+		RuntimeID:      runtime.ID,
+		HandleID:       &handleID,
+		Agente:         "Codex4",
+		ProyectoID:     &proyectoID,
+		Stream:         "pty_out",
+		Text:           "¿me dejas seguir con el cambio?",
+		NormalizedText: normalizarTextoTranscript("¿me dejas seguir con el cambio?"),
+		Classification: "approval_request",
+	})
+	if err != nil {
+		t.Fatalf("registrar signal: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_transcript SET created_at=? WHERE id IN (?,?,?)`, old, noiseID, keepID, signalID); err != nil {
+		t.Fatalf("envejecer transcript: %v", err)
+	}
+
+	n, err := PurgarRuntimeTranscriptRuidoHistorico()
+	if err != nil {
+		t.Fatalf("purgar ruido historico: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia borrar solo una entrada de ruido, got=%d", n)
+	}
+
+	var count int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM runtime_transcript WHERE id=?`, noiseID).Scan(&count); err != nil {
+		t.Fatalf("count ruido: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("la entrada de ruido deberia desaparecer")
+	}
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM runtime_transcript WHERE id IN (?,?)`, keepID, signalID).Scan(&count); err != nil {
+		t.Fatalf("count restantes: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("deberia conservar señal útil y clasificación, got=%d", count)
+	}
+}
