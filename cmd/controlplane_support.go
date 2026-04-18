@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -3474,7 +3475,7 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 		return procesarSignalFalloRuntime(item, agente)
 	}
 	if strings.EqualFold(clasificacionSignalTranscript(item), "credentials_request") {
-		return procesarSignalSoloSupervision(item)
+		return procesarSignalCredentialsRequest(item)
 	}
 	if strings.EqualFold(clasificacionSignalTranscript(item), "blocked") {
 		return procesarSignalBlocked(item, agente, handle)
@@ -3543,6 +3544,15 @@ func procesarSignalSoloSupervision(item *db.RuntimeTranscriptEntry) (string, err
 	}
 	notes = acumularNotaAutonomia(notes, "signal_supervision_only")
 	return resumenNotasAutonomia(notes), nil
+}
+
+func procesarSignalCredentialsRequest(item *db.RuntimeTranscriptEntry) (string, error) {
+	if note, handled, err := intentarRemediacionAutonomaCredencialesSignalTranscript(item); err != nil {
+		return "", err
+	} else if handled {
+		return note, nil
+	}
+	return procesarSignalSoloSupervision(item)
 }
 
 func procesarSignalBlocked(item *db.RuntimeTranscriptEntry, agente string, handle *db.RuntimeHandle) (string, error) {
@@ -4432,6 +4442,11 @@ func ejecutarPlanCredencialesSignalTranscript(item *db.RuntimeTranscriptEntry, p
 	if clasificacionSignalTranscript(item) != "credentials_request" {
 		return "", nil
 	}
+	if note, handled, err := intentarRemediacionAutonomaCredencialesSignalTranscriptConContexto(item, proyecto); err != nil {
+		return "", err
+	} else if handled {
+		return note, nil
+	}
 	existe, err := existeTareaCredencialesAutonomiaPendiente(proyecto.ID)
 	if err != nil {
 		return "", err
@@ -4498,6 +4513,99 @@ func construirNotasTareaCredencialesAutonomiaSignal(item *db.RuntimeTranscriptEn
 		return "autonomia:credentials_request"
 	}
 	return fmt.Sprintf("autonomia:credentials_request;transcript:%d;agente_origen:%s", idSignalTranscript(item), agenteSignalTranscript(item))
+}
+
+func intentarRemediacionAutonomaCredencialesSignalTranscript(item *db.RuntimeTranscriptEntry) (string, bool, error) {
+	if item == nil || !runtimeTranscriptTieneProyecto(item) {
+		return "", false, nil
+	}
+	policy, proyecto, err := resolverContextoSignalTranscript(item)
+	if err != nil || !contextoSignalTranscriptActivo(item, policy, proyecto) {
+		return "", false, err
+	}
+	return intentarRemediacionAutonomaCredencialesSignalTranscriptConContexto(item, proyecto)
+}
+
+func intentarRemediacionAutonomaCredencialesSignalTranscriptConContexto(item *db.RuntimeTranscriptEntry, proyecto *db.Proyecto) (string, bool, error) {
+	if item == nil || proyecto == nil || proyecto.ID <= 0 {
+		return "", false, nil
+	}
+	agente := strings.TrimSpace(agenteSignalTranscript(item))
+	if agente == "" {
+		return "", false, nil
+	}
+	handle, err := resolverHandleEntregaTranscript(item)
+	if err != nil || handle == nil {
+		return "", false, err
+	}
+	if existe, err := existeRuntimeOrderControlRecienteAutonomia(agente, &proyecto.ID, 2*time.Minute, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
+		return "", false, err
+	} else if existe {
+		return "", false, nil
+	}
+	instruction := construirInstruccionRemediacionCredencialesSignalTranscript(handle, agente)
+	if strings.TrimSpace(instruction) == "" {
+		return "", false, nil
+	}
+	note, err := encolarNudgeSignalTranscriptAutonomia(agente, proyecto, "resolver_credentials_local", instruction, item, "credentials_local")
+	if err != nil {
+		return "", false, err
+	}
+	if strings.TrimSpace(note) == "" {
+		return "", false, nil
+	}
+	return note, true, nil
+}
+
+func construirInstruccionRemediacionCredencialesSignalTranscript(handle *db.RuntimeHandle, agente string) string {
+	if handle == nil {
+		return ""
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if meta == nil {
+		return ""
+	}
+	profileName := firstNonEmpty(
+		mapStringValue(meta, "profile_name"),
+		perfilCredencialesSignalTranscriptDesdeRenderedCommand(mapStringValue(meta, "rendered_command")),
+	)
+	strategy := strings.TrimSpace(mapStringValue(meta, "profile_strategy"))
+	rendered := strings.TrimSpace(mapStringValue(meta, "rendered_command"))
+	if profileName == "" {
+		return ""
+	}
+	partes := []string{
+		"Orquesta: intenta resolver el acceso del proveedor sin escalar todavía a humano.",
+	}
+	if profileName != "" && (strings.EqualFold(strategy, "shared_clone") || strings.Contains(strings.ToLower(rendered), "codex-perfil")) {
+		partes = append(partes, fmt.Sprintf("Revisa el perfil %s y, si falta OAuth del proveedor, ejecuta `codex-perfil %s login`, reintenta el acceso y continúa con la tarea.", profileName, profileName))
+	} else {
+		return ""
+	}
+	if agente = strings.TrimSpace(agente); agente != "" {
+		partes = append(partes, "No inventes secretos externos del proyecto; si el bloqueo real no es del proveedor sino de credenciales externas, deja evidencia breve y espera al supervisor.")
+	}
+	return strings.Join(partes, " ")
+}
+
+func perfilCredencialesSignalTranscriptDesdeRenderedCommand(rendered string) string {
+	rendered = strings.TrimSpace(rendered)
+	if rendered == "" {
+		return ""
+	}
+	patrones := []string{
+		`(?i)codex-perfil'\s+'([^']+)'`,
+		`(?i)codex-perfil\s+([A-Za-z0-9._-]+)`,
+	}
+	for _, patron := range patrones {
+		re := regexp.MustCompile(patron)
+		if match := re.FindStringSubmatch(rendered); len(match) == 2 {
+			if perfil := strings.TrimSpace(match[1]); perfil != "" {
+				return perfil
+			}
+		}
+	}
+	return ""
 }
 
 func ejecutarPlanBlockedSignalTranscript(item *db.RuntimeTranscriptEntry, policy *supervisionapp.Policy, proyecto *db.Proyecto, supervisor *db.Agente) (string, error) {
