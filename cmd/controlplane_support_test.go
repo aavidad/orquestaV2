@@ -21385,6 +21385,94 @@ func TestProcesarRuntimeTranscriptBatchCredentialsRequestNudgeaRemediacionLocalS
 	}
 }
 
+func TestProcesarRuntimeTranscriptBatchCredentialsRequestLocalCierraTareaExistente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar worker: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	credID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      autonomiaCredentialsTaskTitle,
+		Descripcion: "Resolver credenciales previas",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Agente:      ptrString("CodexSupervisor"),
+		Notas:       "autonomia:credentials_request;transcript:55;agente_origen:Codex1",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea credenciales: %v", err)
+	}
+	if err := db.TomarTarea(credID, "CodexSupervisor"); err != nil {
+		t.Fatalf("tomar tarea credenciales: %v", err)
+	}
+	if err := db.IniciarTarea(credID, "CodexSupervisor"); err != nil {
+		t.Fatalf("iniciar tarea credenciales: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion worker: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle worker: %+v err=%v", handle, err)
+	}
+	logPath := filepath.Join(tmp, "codex-transcript-credentials-local-close.log")
+	if err := os.WriteFile(logPath, []byte("missing oauth for provider session\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"log_path":         logPath,
+		"profile_name":     "Codex1",
+		"profile_strategy": "shared_clone",
+		"rendered_command": "/tmp/codex-perfiles/bin/codex-perfil Codex1",
+	})
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	if _, err := procesarRuntimeTranscriptBatch(); err != nil {
+		t.Fatalf("procesar transcript batch: %v", err)
+	}
+
+	credTask, err := db.GetTarea(credID)
+	if err != nil {
+		t.Fatalf("get tarea credenciales: %v", err)
+	}
+	if credTask == nil || credTask.Estado != db.TareaCompletada {
+		t.Fatalf("la tarea de credenciales deberia cerrarse tras remediación local: %+v", credTask)
+	}
+}
+
 func TestProcesarRuntimeTranscriptBatchCredentialsRequestConOrdenAbiertaMantieneFallback(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

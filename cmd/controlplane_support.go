@@ -3558,6 +3558,9 @@ func procesarSignalCredentialsRequest(item *db.RuntimeTranscriptEntry) (string, 
 	if note, handled, err := intentarRemediacionAutonomaCredencialesSignalTranscript(item); err != nil {
 		return "", err
 	} else if handled {
+		if err := cerrarTareasCredencialesAutonomiaResueltas(item); err != nil {
+			return "", err
+		}
 		return note, nil
 	}
 	return procesarSignalSoloSupervision(item)
@@ -5110,6 +5113,50 @@ func esTareaCredencialesAutonomia(tarea *db.Tarea) bool {
 		return true
 	}
 	return strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:credentials_request")
+}
+
+func cerrarTareasCredencialesAutonomiaResueltas(item *db.RuntimeTranscriptEntry) error {
+	if item == nil || item.ProyectoID == nil || *item.ProyectoID <= 0 {
+		return nil
+	}
+	agente := strings.TrimSpace(agenteSignalTranscript(item))
+	if agente == "" {
+		return nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: item.ProyectoID})
+	if err != nil {
+		return err
+	}
+	marcaAgente := "agente_origen:" + agente
+	commit := fmt.Sprintf("resuelto por remediación local de credenciales para %s", agente)
+	for _, candidata := range tareas {
+		if candidata == nil || candidata.ID <= 0 || !esTareaCredencialesAutonomia(candidata) {
+			continue
+		}
+		switch candidata.Estado {
+		case db.TareaCompletada, db.TareaCancelada:
+			continue
+		}
+		if !strings.Contains(strings.TrimSpace(candidata.Notas), marcaAgente) {
+			continue
+		}
+		actor := "orquesta"
+		if candidata.Agente != nil && strings.TrimSpace(*candidata.Agente) != "" {
+			actor = strings.TrimSpace(*candidata.Agente)
+		}
+		if candidata.Estado == db.TareaBloqueada {
+			if err := tareasService.Unblock(candidata.ID, actor, commit); err != nil {
+				return err
+			}
+			if err := tareasService.Take(candidata.ID, actor); err != nil {
+				return err
+			}
+		}
+		if err := tareasService.Complete(candidata.ID, actor, commit); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func construirDescripcionTareaCredencialesAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyecto, item *db.RuntimeTranscriptEntry) string {
