@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -3477,6 +3478,9 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 	if strings.EqualFold(clasificacionSignalTranscript(item), "credentials_request") {
 		return procesarSignalCredentialsRequest(item)
 	}
+	if strings.EqualFold(clasificacionSignalTranscript(item), "cli_query") {
+		return procesarSignalCLIQuery(item, agente, handle)
+	}
 	if strings.EqualFold(clasificacionSignalTranscript(item), "blocked") {
 		return procesarSignalBlocked(item, agente, handle)
 	}
@@ -3553,6 +3557,15 @@ func procesarSignalCredentialsRequest(item *db.RuntimeTranscriptEntry) (string, 
 		return note, nil
 	}
 	return procesarSignalSoloSupervision(item)
+}
+
+func procesarSignalCLIQuery(item *db.RuntimeTranscriptEntry, agente string, handle *db.RuntimeHandle) (string, error) {
+	if note, handled, err := intentarResolverCLIQuerySignalTranscript(item); err != nil {
+		return "", err
+	} else if handled {
+		return note, nil
+	}
+	return procesarSignalAutoGuidance(item, agente, handle)
 }
 
 func procesarSignalBlocked(item *db.RuntimeTranscriptEntry, agente string, handle *db.RuntimeHandle) (string, error) {
@@ -4436,6 +4449,116 @@ func construirNotasTareaReplanAutonomiaSignal(item *db.RuntimeTranscriptEntry) s
 		return "autonomia:needs_replan"
 	}
 	return fmt.Sprintf("autonomia:needs_replan;transcript:%d;agente_origen:%s", idSignalTranscript(item), agenteSignalTranscript(item))
+}
+
+func intentarResolverCLIQuerySignalTranscript(item *db.RuntimeTranscriptEntry) (string, bool, error) {
+	if item == nil || !runtimeTranscriptTieneProyecto(item) {
+		return "", false, nil
+	}
+	agente := strings.TrimSpace(agenteSignalTranscript(item))
+	if agente == "" {
+		return "", false, nil
+	}
+	if proyectoID := item.ProyectoID; proyectoID == nil || *proyectoID <= 0 {
+		return "", false, nil
+	}
+	tarea, err := tareaActivaAutonomiaProyectoAgente(agente, item.ProyectoID)
+	if err != nil || tarea == nil {
+		return "", false, err
+	}
+	if existe, err := existeRuntimeOrderControlRecienteAutonomia(agente, item.ProyectoID, 2*time.Minute, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
+		return "", false, err
+	} else if existe {
+		return "", false, nil
+	}
+	policy, proyecto, err := resolverContextoSignalTranscript(item)
+	if err != nil || !contextoSignalTranscriptActivo(item, policy, proyecto) {
+		return "", false, err
+	}
+	instruction := construirInstruccionCLIQuerySignalTranscript(tarea, item)
+	if strings.TrimSpace(instruction) == "" {
+		return "", false, nil
+	}
+	note, err := encolarNudgeSignalTranscriptAutonomia(agente, proyecto, "resolver_cli_query_local", instruction, item, "cli_query_local")
+	if err != nil {
+		return "", false, err
+	}
+	if strings.TrimSpace(note) == "" {
+		return "", false, nil
+	}
+	return note, true, nil
+}
+
+func construirInstruccionCLIQuerySignalTranscript(tarea *db.Tarea, item *db.RuntimeTranscriptEntry) string {
+	if tarea == nil || item == nil {
+		return ""
+	}
+	normalized := normalizarSignalTranscriptTexto(item)
+	if normalized == "" {
+		return ""
+	}
+	if !strings.Contains(normalized, "test") && !strings.Contains(normalized, "tests") {
+		return ""
+	}
+	cmds := comandosCanonicosCLIQueryDesdeTarea(tarea)
+	if len(cmds) == 0 {
+		return ""
+	}
+	if len(cmds) == 1 {
+		return fmt.Sprintf("Orquesta: para esta tarea el comando canónico declarado es `%s`. Ejecútalo, usa ese resultado como evidencia y continúa sin esperar al supervisor.", cmds[0])
+	}
+	return fmt.Sprintf("Orquesta: para esta tarea los comandos canónicos declarados son `%s`. Ejecútalos en ese orden, usa el resultado como evidencia y continúa sin esperar al supervisor.", strings.Join(cmds, "` y `"))
+}
+
+func comandosCanonicosCLIQueryDesdeTarea(tarea *db.Tarea) []string {
+	if tarea == nil {
+		return nil
+	}
+	out := []string{}
+	for _, raw := range []string{strings.TrimSpace(tarea.Descripcion), strings.TrimSpace(tarea.Notas)} {
+		if raw == "" {
+			continue
+		}
+		for _, line := range strings.Split(raw, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			lower := strings.ToLower(line)
+			prefixMatched := strings.HasPrefix(lower, "tests minimos:") || strings.HasPrefix(lower, "tests mínimos:") || strings.HasPrefix(lower, "tests:")
+			if !prefixMatched {
+				continue
+			}
+			rest := strings.TrimSpace(line[strings.Index(line, ":")+1:])
+			for _, cmd := range separarComandosCanonicosCLIQuery(rest) {
+				if cmd != "" && !slices.Contains(out, cmd) {
+					out = append(out, cmd)
+				}
+			}
+		}
+	}
+	return out
+}
+
+func separarComandosCanonicosCLIQuery(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	re := regexp.MustCompile(`(?i)(go test\s+\.[^.;\n]*|pytest[^.;\n]*|npm test[^.;\n]*|pnpm test[^.;\n]*|yarn test[^.;\n]*|cargo test[^.;\n]*)`)
+	matches := re.FindAllString(raw, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(matches))
+	for _, match := range matches {
+		cmd := strings.TrimSpace(strings.TrimRight(match, ".,;"))
+		if cmd == "" || slices.Contains(out, cmd) {
+			continue
+		}
+		out = append(out, cmd)
+	}
+	return out
 }
 
 func ejecutarPlanCredencialesSignalTranscript(item *db.RuntimeTranscriptEntry, policy *supervisionapp.Policy, proyecto *db.Proyecto, supervisor *db.Agente) (string, error) {
