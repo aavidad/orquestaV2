@@ -5107,6 +5107,30 @@ func TestAutonomiaBatchSnapshotMemoizaProyectoAutocierre(t *testing.T) {
 	}
 }
 
+func TestAutonomiaRuntimeRecoveryShouldAttemptThrottleaSesionesActivas(t *testing.T) {
+	resetAutonomiaRuntimeRecoveryGate()
+	t.Cleanup(resetAutonomiaRuntimeRecoveryGate)
+
+	if !autonomiaRuntimeRecoveryShouldAttempt("Codex1", 3, "activa") {
+		t.Fatalf("el primer intento activo debe permitirse")
+	}
+	if autonomiaRuntimeRecoveryShouldAttempt("Codex1", 3, "activa") {
+		t.Fatalf("el segundo intento activo inmediato debe quedar throttled")
+	}
+}
+
+func TestAutonomiaRuntimeRecoveryShouldAttemptNoThrottleaSesionesPausadas(t *testing.T) {
+	resetAutonomiaRuntimeRecoveryGate()
+	t.Cleanup(resetAutonomiaRuntimeRecoveryGate)
+
+	if !autonomiaRuntimeRecoveryShouldAttempt("Codex1", 3, "pausada") {
+		t.Fatalf("la sesion pausada debe permitirse siempre")
+	}
+	if !autonomiaRuntimeRecoveryShouldAttempt("Codex1", 3, "pausada") {
+		t.Fatalf("la sesion pausada no debe quedar throttled")
+	}
+}
+
 func TestProcesarDerivacionSemillaPremiumSesionActivaConSnapshotUsaTareaActivaInequivoca(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -7491,6 +7515,30 @@ func TestFiltrarSesionesAutonomiaRelevantesDescartaSesionesNoActivasRealesYDedup
 	}
 	if ids["claude1"] != 5 {
 		t.Fatalf("deberia conservar la sesion pausada relevante de claude1: %+v", filtradas)
+	}
+}
+
+func TestFiltrarSesionesAutonomiaRelevantesPriorizaRecientesAntesQueOrdenAlfabetico(t *testing.T) {
+	proyectoID := int64(3)
+	base := time.Date(2026, 4, 15, 9, 0, 0, 0, time.UTC)
+	sesiones := []*db.Sesion{
+		{ID: 10, Agente: "Codex10", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: base.Add(1 * time.Minute)},
+		{ID: 11, Agente: "Codex2", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: base.Add(5 * time.Minute)},
+		{ID: 12, Agente: "claude1", ProyectoID: &proyectoID, Activa: true, Estado: "pausada", Inicio: base.Add(10 * time.Minute)},
+	}
+
+	filtradas := filtrarSesionesAutonomiaRelevantes(sesiones)
+	if len(filtradas) != 3 {
+		t.Fatalf("deberia conservar las tres sesiones relevantes, got=%d", len(filtradas))
+	}
+	if filtradas[0].Agente != "Codex2" {
+		t.Fatalf("la sesion activa mas reciente debe ir primero, got=%s", filtradas[0].Agente)
+	}
+	if filtradas[1].Agente != "Codex10" {
+		t.Fatalf("la siguiente sesion activa debe ir antes que una pausada mas reciente, got=%s", filtradas[1].Agente)
+	}
+	if filtradas[2].Agente != "claude1" {
+		t.Fatalf("la sesion pausada debe ir despues de las activas, got=%s", filtradas[2].Agente)
 	}
 }
 
@@ -26304,6 +26352,41 @@ func TestRuntimeMailboxHandleDeferredBatchError(t *testing.T) {
 	}
 	if runtimeMailboxHandleDeferredBatchError("interactive", fmt.Errorf("otro error")) {
 		t.Fatal("errores ajenos no deberian diferirse a nivel batch")
+	}
+}
+
+func TestProcesarRuntimeMailboxPhasesRespetaBatchBudget(t *testing.T) {
+	runtimeMailboxBatchBudgetOverride = 5 * time.Millisecond
+	t.Cleanup(func() { runtimeMailboxBatchBudgetOverride = 0 })
+
+	ejecutadas := []string{}
+	total, err := procesarRuntimeMailboxPhases([]runtimeMailboxBatchPhase{
+		{
+			name:       "primera",
+			deferStage: "primera",
+			fn: func() (int, error) {
+				ejecutadas = append(ejecutadas, "primera")
+				time.Sleep(10 * time.Millisecond)
+				return 1, nil
+			},
+		},
+		{
+			name:       "segunda",
+			deferStage: "segunda",
+			fn: func() (int, error) {
+				ejecutadas = append(ejecutadas, "segunda")
+				return 1, nil
+			},
+		},
+	}, runtimeMailboxBatchBudget())
+	if err != nil {
+		t.Fatalf("procesarRuntimeMailboxPhases: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("total inesperado=%d", total)
+	}
+	if len(ejecutadas) != 1 || ejecutadas[0] != "primera" {
+		t.Fatalf("deberia cortar tras agotar presupuesto, ejecutadas=%v", ejecutadas)
 	}
 }
 

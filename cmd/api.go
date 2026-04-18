@@ -126,11 +126,12 @@ type apiProyectoAutonomiaResponse struct {
 }
 
 var (
-	apiStatusFetchTimeout         = 3 * time.Second
-	apiAgentOverviewTimeout       = 3 * time.Second
-	apiAgentBudgetRefreshTimeout  = 3 * time.Second
-	apiAgentPrepareTimeout        = 3 * time.Second
-	apiAgentDetailBuilder         = func(nombre string, compact bool) (*agentesapp.Detail, error) {
+	apiStatusFetchTimeout        = 3 * time.Second
+	apiAgentOverviewTimeout      = 3 * time.Second
+	apiAgentBudgetRefreshTimeout = 3 * time.Second
+	apiAgentPrepareTimeout       = 6 * time.Second
+	apiAgentPrepareLimiter       = make(chan struct{}, 1)
+	apiAgentDetailBuilder        = func(nombre string, compact bool) (*agentesapp.Detail, error) {
 		if compact {
 			return agentesService.BuildDetailCompact(nombre)
 		}
@@ -141,6 +142,40 @@ var (
 		return agentesService.BuildPrepare(input)
 	}
 )
+
+func runAPIAgentPrepareLimited(timeout time.Duration, fn func() (*agentesapp.PrepareOutput, error)) (*agentesapp.PrepareOutput, error) {
+	if fn == nil {
+		return nil, fmt.Errorf("prepare builder no inicializado")
+	}
+	type result struct {
+		out *agentesapp.PrepareOutput
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		if timeout <= 0 {
+			timeout = apiAgentPrepareTimeout
+		}
+		select {
+		case apiAgentPrepareLimiter <- struct{}{}:
+		case <-time.After(timeout):
+			done <- result{err: errStatusFetchTimeout}
+			return
+		}
+		defer func() { <-apiAgentPrepareLimiter }()
+		out, err := fn()
+		done <- result{out: out, err: err}
+	}()
+	if timeout <= 0 {
+		timeout = apiAgentPrepareTimeout
+	}
+	select {
+	case res := <-done:
+		return res.out, res.err
+	case <-time.After(timeout):
+		return nil, errStatusFetchTimeout
+	}
+}
 
 type apiProyectoMicrocicloRequest struct {
 	Agente               string `json:"agente"`
@@ -6623,10 +6658,7 @@ func apiHandlerAgentePreparar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := runAPITimeboxed(apiAgentPrepareTimeout, func() (*agentesapp.PrepareOutput, error) {
-		if _, err := agentesService.GetAgent(agenteNombre); err != nil {
-			return nil, err
-		}
+	out, err := runAPIAgentPrepareLimited(apiAgentPrepareTimeout, func() (*agentesapp.PrepareOutput, error) {
 		return apiAgentPrepareBuilder(agentesapp.PrepareInput{
 			Agente:       agenteNombre,
 			Proyecto:     proyectoRef,
@@ -6635,7 +6667,7 @@ func apiHandlerAgentePreparar(w http.ResponseWriter, r *http.Request) {
 			Razonamiento: razonamiento,
 			Perfil:       perfilTarea,
 		})
-	}, errStatusFetchTimeout)
+	})
 	if err != nil {
 		if errors.Is(err, errStatusFetchTimeout) {
 			apiError(w, http.StatusServiceUnavailable, fmt.Errorf("prepare temporalmente degradado"))

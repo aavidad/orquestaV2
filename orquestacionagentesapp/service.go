@@ -490,6 +490,13 @@ func (s *Service) RecoverLocalFailedRuntimeSession(sesion *db.Sesion, proyecto *
 		return 0, nil
 	}
 	var err error
+	runtime, err = s.resolveCanonicalRuntimeForHandle(handle, strings.TrimSpace(sesion.Agente), sesion.ProyectoID)
+	if err != nil {
+		return 0, err
+	}
+	if !runtimeIsLocallyFailed(handle, runtime) {
+		return 0, nil
+	}
 	if handle != nil {
 		handle, err = s.runtimes.SyncSupervisedRuntimeHandle(handle, "autonomia_runtime_recovery")
 		if err != nil {

@@ -27,6 +27,10 @@ type stubRuntimeController struct {
 	controlID            int64
 	controlAction        string
 	controlErr           error
+	syncSource           string
+	syncCount            int
+	syncErr              error
+	syncedHandle         *db.RuntimeHandle
 	enqueuedRuntimeOrder *db.RuntimeOrder
 	reconcileHandles     int
 	reconcileHandlesErr  error
@@ -122,6 +126,14 @@ func (s *stubRuntimeController) GetRuntimeHandleBySessionID(int64) (*db.RuntimeH
 }
 
 func (s *stubRuntimeController) SyncSupervisedRuntimeHandle(handle *db.RuntimeHandle, source string) (*db.RuntimeHandle, error) {
+	s.syncCount++
+	s.syncSource = source
+	if s.syncErr != nil {
+		return nil, s.syncErr
+	}
+	if s.syncedHandle != nil {
+		return s.syncedHandle, nil
+	}
 	return handle, nil
 }
 
@@ -1072,6 +1084,43 @@ func TestRecoverLocalFailedRuntimeSessionSkipsWhenPendingOrderExists(t *testing.
 	}
 	if count != 0 {
 		t.Fatalf("count inesperado: %d", count)
+	}
+	if runtimes.controlReq.Accion != "" {
+		t.Fatalf("no deberia encolar start: %+v", runtimes.controlReq)
+	}
+}
+
+func TestRecoverLocalFailedRuntimeSessionSkipsHealthyRuntimeWithoutSync(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(13)
+	runtimeID := int64(21)
+	runtimes := &stubRuntimeController{
+		runtime: &db.RuntimeInstance{
+			ID:           runtimeID,
+			Agente:       "Codex1",
+			ProyectoID:   &proyectoID,
+			LogicalState: "activo",
+			ProcessState: "running",
+		},
+	}
+	service := NewService(nil, runtimes)
+	service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: true})
+
+	count, err := service.RecoverLocalFailedRuntimeSession(
+		&db.Sesion{ID: 9, Agente: "Codex1", ProyectoID: &proyectoID},
+		&db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		&db.RuntimeHandle{ID: 3, Estado: "activo", Transporte: "cli", HandleKind: "process", RuntimeID: &runtimeID},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("RecoverLocalFailedRuntimeSession: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("count inesperado: %d", count)
+	}
+	if runtimes.syncCount != 0 {
+		t.Fatalf("no deberia sincronizar handle sano, syncs=%d", runtimes.syncCount)
 	}
 	if runtimes.controlReq.Accion != "" {
 		t.Fatalf("no deberia encolar start: %+v", runtimes.controlReq)

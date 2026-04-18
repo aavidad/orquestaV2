@@ -60,6 +60,7 @@ var wakeRuntimeMailboxAfterTranscript = wakeControlPlaneRuntimeMailbox
 var wakeRuntimeOrdersAfterMailbox = wakeControlPlaneRuntimeOrders
 
 var runtimeMailboxReevaluationGate = planocontrol.NewThrottler()
+var runtimeMailboxBatchBudgetOverride time.Duration
 
 func runtimeMailboxReevaluationInterval() time.Duration {
 	seconds := controlPlaneConfigIntOrDefault("runtime_mailbox_reevaluation_interval_seconds", 10)
@@ -79,6 +80,25 @@ func runtimeMailboxShouldReevaluate(lane string, msgID, handleID int64) bool {
 	}
 	key := scope + "|" + strings.TrimSpace(lane) + "|" + strconv.FormatInt(msgID, 10) + "|" + strconv.FormatInt(handleID, 10)
 	return runtimeMailboxReevaluationGate.Allow(key, runtimeMailboxReevaluationInterval())
+}
+
+func runtimeMailboxBatchBudget() time.Duration {
+	if runtimeMailboxBatchBudgetOverride > 0 {
+		return runtimeMailboxBatchBudgetOverride
+	}
+	ms := controlPlaneConfigIntOrDefault("runtime_mailbox_batch_budget_ms", 1200)
+	if ms <= 0 {
+		ms = 1200
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
+func runtimeMailboxBatchDebugf(format string, args ...any) {
+	base := parseBoolDebug(strings.TrimSpace(os.Getenv("ORQUESTA_DEBUG")), false)
+	if !parseBoolDebug(strings.TrimSpace(os.Getenv("ORQUESTA_DEBUG_CONTROL_PLANE")), base) {
+		return
+	}
+	log.Printf("orquesta[runtime-mailbox] "+format, args...)
 }
 
 func resetRuntimeMailboxReevaluationGate() {
@@ -109,6 +129,10 @@ func resetAutonomiaSessionMaintenanceGate() {
 	autonomiaSessionMaintenanceGate.Reset()
 }
 
+func resetAutonomiaRuntimeRecoveryGate() {
+	autonomiaRuntimeRecoveryGate.Reset()
+}
+
 var autonomiaActiveSessionsGate = planocontrol.NewGate()
 var procesarAutonomiaSesionActivaBatchFn = procesarAutonomiaSesionActivaConSnapshot
 var procesarAgentesDegradadosAutonomiaBatchFn = procesarAgentesDegradadosAutonomiaBatch
@@ -137,6 +161,7 @@ const (
 var presupuestoPrimerUsoSesionGate = planocontrol.NewThrottler()
 var autonomiaContinueNudgeGate = planocontrol.NewThrottler()
 var autonomiaSessionMaintenanceGate = planocontrol.NewThrottler()
+var autonomiaRuntimeRecoveryGate = planocontrol.NewThrottler()
 
 func autonomiaIdleAutoassignInterval() time.Duration {
 	seconds := controlPlaneConfigIntOrDefault("autonomia_idle_autoassign_interval_seconds", 300)
@@ -156,6 +181,14 @@ func autonomiaContinueNudgeInterval() time.Duration {
 
 func autonomiaSessionMaintenanceInterval() time.Duration {
 	seconds := controlPlaneConfigIntOrDefault("autonomia_session_maintenance_interval_seconds", 180)
+	if seconds <= 0 {
+		seconds = 180
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func autonomiaRuntimeRecoveryInterval() time.Duration {
+	seconds := controlPlaneConfigIntOrDefault("autonomia_runtime_recovery_interval_seconds", 180)
 	if seconds <= 0 {
 		seconds = 180
 	}
@@ -287,6 +320,18 @@ func autonomiaSessionMaintenanceShouldAttempt(kind, agente string, proyectoID in
 	}
 	key := kind + "|" + agente + "|" + strconv.FormatInt(proyectoID, 10)
 	return autonomiaSessionMaintenanceGate.Allow(key, autonomiaSessionMaintenanceInterval())
+}
+
+func autonomiaRuntimeRecoveryShouldAttempt(agente string, proyectoID int64, estadoSesion string) bool {
+	if strings.EqualFold(strings.TrimSpace(estadoSesion), "pausada") {
+		return true
+	}
+	agente = strings.ToLower(strings.TrimSpace(agente))
+	if agente == "" || proyectoID <= 0 {
+		return false
+	}
+	key := agente + "|" + strconv.FormatInt(proyectoID, 10)
+	return autonomiaRuntimeRecoveryGate.Allow(key, autonomiaRuntimeRecoveryInterval())
 }
 
 func presupuestoPrimerUsoSesion(nombre string) bool {
@@ -2882,6 +2927,43 @@ func procesarRuntimeMailboxBatch() (int, error) {
 	return procesarRuntimeMailboxBatchConFiltro(db.FiltroRuntimeMailbox{Estado: &estado})
 }
 
+type runtimeMailboxBatchPhase struct {
+	name       string
+	deferStage string
+	fn         func() (int, error)
+}
+
+func procesarRuntimeMailboxPhases(phases []runtimeMailboxBatchPhase, budget time.Duration) (int, error) {
+	start := time.Now()
+	total := 0
+	for idx, phase := range phases {
+		if phase.fn == nil {
+			continue
+		}
+		if budget > 0 && time.Since(start) >= budget {
+			db.Audit("orquesta", "runtime_mailbox_batch_deferred", "runtime_mailbox", 0,
+				fmt.Sprintf("budget=%s total=%d phase=%s", budget, total, strings.TrimSpace(phase.name)))
+			return total, nil
+		}
+		phaseStart := time.Now()
+		n, err := phase.fn()
+		total += n
+		runtimeMailboxBatchDebugf("phase=%s duration=%s processed=%d err=%v", strings.TrimSpace(phase.name), time.Since(phaseStart).Round(time.Millisecond), n, err != nil)
+		if err != nil {
+			if runtimeMailboxHandleDeferredBatchError(phase.deferStage, err) {
+				continue
+			}
+			return total, err
+		}
+		if budget > 0 && time.Since(start) >= budget && idx < len(phases)-1 {
+			db.Audit("orquesta", "runtime_mailbox_batch_deferred", "runtime_mailbox", 0,
+				fmt.Sprintf("budget=%s total=%d phase=%s", budget, total, strings.TrimSpace(phase.name)))
+			return total, nil
+		}
+	}
+	return total, nil
+}
+
 func procesarRuntimeMailboxBatchConFiltro(filter db.FiltroRuntimeMailbox) (int, error) {
 	mailbox, err := runtimesService.ListRuntimeMailbox(filter)
 	if err != nil {
@@ -2889,107 +2971,44 @@ func procesarRuntimeMailboxBatchConFiltro(filter db.FiltroRuntimeMailbox) (int, 
 	}
 	consumed := map[int64]struct{}{}
 	snapshot := newRuntimeMailboxBatchSnapshot()
-	quotaPipelineReconciled, err := reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox, consumed, snapshot)
-	if err != nil {
-		if runtimeMailboxHandleDeferredBatchError("quota_pipeline", err) {
-			err = nil
-		} else {
-			return quotaPipelineReconciled, err
-		}
-	}
-	reconciled, err := reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox, consumed, snapshot)
-	if err != nil {
-		if runtimeMailboxHandleDeferredBatchError("agente_sin_vida", err) {
-			err = nil
-		} else {
-			return quotaPipelineReconciled + reconciled, err
-		}
-	}
-	pipelineCooldownReconciled, err := reconciliarRuntimeMailboxPipelineEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
-	if err != nil {
-		if runtimeMailboxHandleDeferredBatchError("pipeline_enfriamiento", err) {
-			err = nil
-		} else {
-			return quotaPipelineReconciled + reconciled + pipelineCooldownReconciled, err
-		}
-	}
-	reconciled += pipelineCooldownReconciled
-	refreshCooldownReconciled, err := reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
-	if err != nil {
-		if runtimeMailboxHandleDeferredBatchError("refresh_enfriamiento", err) {
-			err = nil
-		} else {
-			return quotaPipelineReconciled + reconciled + refreshCooldownReconciled, err
-		}
-	}
-	reconciled += refreshCooldownReconciled
-	instructionCooldownReconciled, err := reconciliarRuntimeMailboxInstructionEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
-	if err != nil {
-		if runtimeMailboxHandleDeferredBatchError("instruction_enfriamiento", err) {
-			err = nil
-		} else {
-			return quotaPipelineReconciled + reconciled + instructionCooldownReconciled, err
-		}
-	}
-	reconciled += instructionCooldownReconciled
-	watchdogReconciled, err := reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox, consumed, snapshot)
-	if err != nil {
-		if runtimeMailboxHandleDeferredBatchError("watchdog_sin_handle", err) {
-			err = nil
-		} else {
-			return quotaPipelineReconciled + reconciled + watchdogReconciled, err
-		}
-	}
-	reconciled += watchdogReconciled
-	interactive, err := procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox, consumed, snapshot)
-	if err != nil {
-		if runtimeMailboxHandleDeferredBatchError("interactive", err) {
-			err = nil
-		} else {
-			return quotaPipelineReconciled + reconciled + interactive, err
-		}
-	}
-	sessionResume, err := procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox, consumed, snapshot)
-	if err != nil {
-		if runtimeMailboxHandleDeferredBatchError("session_resume", err) {
-			err = nil
-		} else {
-			return quotaPipelineReconciled + reconciled + interactive + sessionResume, err
-		}
-	}
-	bootstrapTMUX, err := procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(mailbox, consumed, snapshot)
-	if err != nil {
-		if runtimeMailboxHandleDeferredBatchError("bootstrap_tmux", err) {
-			err = nil
-		} else {
-			return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX, err
-		}
-	}
-	bootstrapPipelineObserved, err := reconciliarRuntimeMailboxPipelineBootstrapActivaBatchConMailbox(mailbox, consumed, snapshot)
-	if err != nil {
-		if runtimeMailboxHandleDeferredBatchError("pipeline_bootstrap_activa", err) {
-			err = nil
-		} else {
-			return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + bootstrapPipelineObserved, err
-		}
-	}
-	guidanceInbox, err := reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox, consumed, snapshot)
-	if err != nil {
-		if runtimeMailboxHandleDeferredBatchError("guidance_inbox", err) {
-			err = nil
-		} else {
-			return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + bootstrapPipelineObserved + guidanceInbox, err
-		}
-	}
-	restarts, err := procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox, consumed, snapshot)
-	if err != nil {
-		if runtimeMailboxHandleDeferredBatchError("coordinated_restart", err) {
-			err = nil
-		} else {
-			return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + bootstrapPipelineObserved + guidanceInbox + restarts, err
-		}
-	}
-	return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + bootstrapPipelineObserved + guidanceInbox + restarts, nil
+	return procesarRuntimeMailboxPhases([]runtimeMailboxBatchPhase{
+		{name: "quota_pipeline", deferStage: "quota_pipeline", fn: func() (int, error) {
+			return reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox, consumed, snapshot)
+		}},
+		{name: "agente_sin_vida", deferStage: "agente_sin_vida", fn: func() (int, error) {
+			return reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox, consumed, snapshot)
+		}},
+		{name: "pipeline_enfriamiento", deferStage: "pipeline_enfriamiento", fn: func() (int, error) {
+			return reconciliarRuntimeMailboxPipelineEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
+		}},
+		{name: "refresh_enfriamiento", deferStage: "refresh_enfriamiento", fn: func() (int, error) {
+			return reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
+		}},
+		{name: "instruction_enfriamiento", deferStage: "instruction_enfriamiento", fn: func() (int, error) {
+			return reconciliarRuntimeMailboxInstructionEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
+		}},
+		{name: "watchdog_sin_handle", deferStage: "watchdog_sin_handle", fn: func() (int, error) {
+			return reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox, consumed, snapshot)
+		}},
+		{name: "interactive", deferStage: "interactive", fn: func() (int, error) {
+			return procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox, consumed, snapshot)
+		}},
+		{name: "session_resume", deferStage: "session_resume", fn: func() (int, error) {
+			return procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox, consumed, snapshot)
+		}},
+		{name: "bootstrap_tmux", deferStage: "bootstrap_tmux", fn: func() (int, error) {
+			return procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(mailbox, consumed, snapshot)
+		}},
+		{name: "pipeline_bootstrap_activa", deferStage: "pipeline_bootstrap_activa", fn: func() (int, error) {
+			return reconciliarRuntimeMailboxPipelineBootstrapActivaBatchConMailbox(mailbox, consumed, snapshot)
+		}},
+		{name: "guidance_inbox", deferStage: "guidance_inbox", fn: func() (int, error) {
+			return reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox, consumed, snapshot)
+		}},
+		{name: "coordinated_restart", deferStage: "coordinated_restart", fn: func() (int, error) {
+			return procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox, consumed, snapshot)
+		}},
+	}, runtimeMailboxBatchBudget())
 }
 
 func reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
@@ -8293,22 +8312,37 @@ func filtrarSesionesAutonomiaRelevantes(sesiones []*db.Sesion) []*db.Sesion {
 		out = append(out, sesion)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
+		if prioridadSesionAutonomia(out[i]) != prioridadSesionAutonomia(out[j]) {
+			return prioridadSesionAutonomia(out[i]) > prioridadSesionAutonomia(out[j])
+		}
+		if !out[i].Inicio.Equal(out[j].Inicio) {
+			return out[i].Inicio.After(out[j].Inicio)
+		}
+		if out[i].ID != out[j].ID {
+			return out[i].ID > out[j].ID
+		}
 		ai := strings.ToLower(strings.TrimSpace(out[i].Agente))
 		aj := strings.ToLower(strings.TrimSpace(out[j].Agente))
 		if ai != aj {
 			return ai < aj
 		}
-		pi := valorProyectoID(out[i].ProyectoID)
-		pj := valorProyectoID(out[j].ProyectoID)
-		if pi != pj {
-			return pi < pj
-		}
-		if !out[i].Inicio.Equal(out[j].Inicio) {
-			return out[i].Inicio.After(out[j].Inicio)
-		}
-		return out[i].ID > out[j].ID
+		return valorProyectoID(out[i].ProyectoID) < valorProyectoID(out[j].ProyectoID)
 	})
 	return out
+}
+
+func prioridadSesionAutonomia(sesion *db.Sesion) int {
+	if sesion == nil {
+		return -1
+	}
+	switch strings.ToLower(strings.TrimSpace(sesion.Estado)) {
+	case "", "activa", "active":
+		return 2
+	case "pausada", "paused":
+		return 1
+	default:
+		return 0
+	}
 }
 
 func sesionAutonomiaRelevante(sesion *db.Sesion) bool {
@@ -10772,10 +10806,12 @@ func procesarAutonomiaSesionActivaConSnapshot(sesion *db.Sesion, snapshot *auton
 	if err != nil {
 		return 0, err
 	}
+	decisionStart := time.Now()
 	out, err := construirAgenteTickOutputConSnapshot(sesion.Agente, proyecto, sesion, 0, snapshot)
 	if err != nil {
 		return 0, err
 	}
+	autonomiaTickDebugf("agente=%s proyecto_id=%d tick_output duration=%s accion=%s", strings.TrimSpace(sesion.Agente), valorProyectoID(sesion.ProyectoID), time.Since(decisionStart).Round(time.Millisecond), strings.TrimSpace(out.AccionRecomendada))
 	switch strings.TrimSpace(out.AccionRecomendada) {
 	case "pausar_por_cuota", "pausar_y_reasignar":
 		return procesarDecisionPausaSesionActivaAutonomia(sesion, proyecto, out, snapshot)
@@ -10797,25 +10833,34 @@ func procesarPrechecksAutonomiaSesionActiva(sesion *db.Sesion, snapshot *autonom
 	if sesion == nil || sesion.ProyectoID == nil {
 		return 0, nil
 	}
-	checks := []func() (int, error){
-		func() (int, error) { return procesarCierreProyectoSesionConSnapshot(sesion, snapshot) },
-		func() (int, error) { return procesarReanudacionAutonomaSesion(sesion, snapshot) },
-		func() (int, error) { return procesarAparcadoAutonomoSesion(sesion, snapshot) },
-		func() (int, error) {
+	type autonomiaPrecheck struct {
+		name string
+		fn   func() (int, error)
+	}
+	checks := []autonomiaPrecheck{
+		{name: "cierre_proyecto", fn: func() (int, error) { return procesarCierreProyectoSesionConSnapshot(sesion, snapshot) }},
+		{name: "reanudacion", fn: func() (int, error) { return procesarReanudacionAutonomaSesion(sesion, snapshot) }},
+		{name: "aparcado", fn: func() (int, error) { return procesarAparcadoAutonomoSesion(sesion, snapshot) }},
+		{name: "recovery_degradado", fn: func() (int, error) {
 			if snapshot != nil &&
 				!strings.EqualFold(strings.TrimSpace(sesion.Estado), "pausada") &&
 				snapshot.hasOperationalHandle(strings.TrimSpace(sesion.Agente), *sesion.ProyectoID) {
 				return 0, nil
 			}
+			if !autonomiaRuntimeRecoveryShouldAttempt(strings.TrimSpace(sesion.Agente), *sesion.ProyectoID, strings.TrimSpace(sesion.Estado)) {
+				return 0, nil
+			}
 			return procesarRecuperacionRuntimeDegradadoSesionFn(sesion)
-		},
-		func() (int, error) { return procesarCompactacionExclusividadPremiumSesionActiva(sesion, snapshot) },
-		func() (int, error) { return procesarRecuperacionTareasBloqueadasSesionActiva(sesion, snapshot) },
-		func() (int, error) { return procesarCompactacionFrentesPremiumSesionActiva(sesion, snapshot) },
-		func() (int, error) { return procesarDerivacionSemillaPremiumSesionActiva(sesion, snapshot) },
+		}},
+		{name: "compactacion_exclusividad", fn: func() (int, error) { return procesarCompactacionExclusividadPremiumSesionActiva(sesion, snapshot) }},
+		{name: "recuperacion_bloqueadas", fn: func() (int, error) { return procesarRecuperacionTareasBloqueadasSesionActiva(sesion, snapshot) }},
+		{name: "compactacion_frentes", fn: func() (int, error) { return procesarCompactacionFrentesPremiumSesionActiva(sesion, snapshot) }},
+		{name: "derivacion_semilla", fn: func() (int, error) { return procesarDerivacionSemillaPremiumSesionActiva(sesion, snapshot) }},
 	}
 	for _, check := range checks {
-		n, err := check()
+		start := time.Now()
+		n, err := check.fn()
+		autonomiaTickDebugf("agente=%s proyecto_id=%d precheck=%s duration=%s procesadas=%d err=%v", strings.TrimSpace(sesion.Agente), valorProyectoID(sesion.ProyectoID), check.name, time.Since(start).Round(time.Millisecond), n, err != nil)
 		if err != nil || n > 0 {
 			if n > 0 {
 				invalidarSnapshotAutonomiaProyecto(snapshot, sesion.Agente, valorProyectoID(sesion.ProyectoID))
