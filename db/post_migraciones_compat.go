@@ -135,6 +135,8 @@ func postMigrationDDLStatements() []string {
 		`CREATE INDEX IF NOT EXISTS idx_propuestas_estado_proyecto_id ON propuestas(estado, proyecto_id, id DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_votos_agente_posicion_propuesta ON votos(agente, posicion, propuesta_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_runtime_mailbox_estado_id ON runtime_mailbox(estado, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_tareas_agente_estado_id ON tareas(agente, estado, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_runtime_instances_agente_updated_id ON runtime_instances(agente, updated_at DESC, id DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_runtime_handles_estado_last_seen ON runtime_handles(estado, last_seen_at, id) WHERE estado IN ('activo','pausado')`,
 		`CREATE INDEX IF NOT EXISTS idx_runtime_handles_estado_id ON runtime_handles(estado, id)`,
 		`CREATE INDEX IF NOT EXISTS idx_runtime_mailbox_destino_estado_id ON runtime_mailbox(to_agente, estado, id DESC)`,

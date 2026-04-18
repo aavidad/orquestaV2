@@ -98,6 +98,8 @@ func TestPostMigrationStatementsForDriverSQLiteConservaDDLComplementario(t *test
 		"CREATE INDEX IF NOT EXISTS idx_presupuestos_sesion_sesion_fuente_checked_id",
 		"CREATE INDEX IF NOT EXISTS idx_propuestas_estado_proyecto_id",
 		"CREATE INDEX IF NOT EXISTS idx_runtime_mailbox_estado_id",
+		"CREATE INDEX IF NOT EXISTS idx_tareas_agente_estado_id",
+		"CREATE INDEX IF NOT EXISTS idx_runtime_instances_agente_updated_id",
 		"CREATE INDEX IF NOT EXISTS idx_votos_agente_posicion_propuesta",
 	} {
 		if !strings.Contains(stmts, required) {

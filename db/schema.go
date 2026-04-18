@@ -441,6 +441,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_instances_sesion
 ON runtime_instances(sesion_id)
 WHERE sesion_id IS NOT NULL;
 
+CREATE INDEX IF NOT EXISTS idx_runtime_instances_agente_updated_id
+ON runtime_instances(agente, updated_at DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS runtime_telemetry_samples (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     runtime_id          INTEGER NOT NULL REFERENCES runtime_instances(id) ON DELETE CASCADE,
@@ -567,6 +570,9 @@ ON runtime_mailbox(to_agente, estado, id DESC);
 
 CREATE INDEX IF NOT EXISTS idx_runtime_mailbox_estado_id
 ON runtime_mailbox(estado, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_tareas_agente_estado_id
+ON tareas(agente, estado, id DESC);
 
 CREATE TABLE IF NOT EXISTS runtime_checkpoints (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
