@@ -173,6 +173,24 @@ type PostRemediationFollowupRequest struct {
 	Cooldown        time.Duration
 }
 
+type PostRemediationStatus struct {
+	Found           bool
+	OrderID         int64
+	Agente          string
+	ProyectoID      int64
+	VerificationKey string
+	RemediationKind string
+	Estado          string
+	DispatchState   string
+	DeliveryState   string
+	ReceiptSource   string
+	BlockedReason   string
+	RetryAfter      string
+	UpdatedAt       time.Time
+	Succeeded       bool
+	Waiting         bool
+}
+
 func (s *Service) EnqueueControl(req ControlRequest) (int64, string, error) {
 	if s == nil || s.runtimes == nil {
 		return 0, "", fmt.Errorf("servicio de orquestacion de agentes no inicializado")
@@ -1026,6 +1044,70 @@ func (s *Service) EnqueuePostRemediationFollowup(req PostRemediationFollowupRequ
 		Extras:      extras,
 		Cooldown:    cooldown,
 	})
+}
+
+func (s *Service) GetPostRemediationStatus(agente string, proyectoID *int64, verificationKey string) (*PostRemediationStatus, error) {
+	if s == nil || s.runtimes == nil {
+		return nil, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
+	}
+	agente = strings.TrimSpace(agente)
+	verificationKey = strings.TrimSpace(verificationKey)
+	if agente == "" || proyectoID == nil || *proyectoID <= 0 || verificationKey == "" {
+		return nil, nil
+	}
+	orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
+		Agente:     &agente,
+		ProyectoID: proyectoID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var best *db.RuntimeOrder
+	bestAt := time.Time{}
+	for _, order := range orders {
+		if order == nil || strings.TrimSpace(order.Tipo) != "nudge" {
+			continue
+		}
+		if !runtimeOrderHasAutonomyAction(order, "continuar_trabajo") || !runtimePayloadHasVerificationKey(order.PayloadJSON, verificationKey) {
+			continue
+		}
+		moment := runtimeOrderMoment(order)
+		if best == nil || moment.After(bestAt) {
+			best = order
+			bestAt = moment
+		}
+	}
+	if best == nil {
+		return nil, nil
+	}
+	result := parseStringMap(strings.TrimSpace(best.ResultadoJSON))
+	status := &PostRemediationStatus{
+		Found:           true,
+		OrderID:         best.ID,
+		Agente:          strings.TrimSpace(agente),
+		ProyectoID:      *proyectoID,
+		VerificationKey: verificationKey,
+		RemediationKind: strings.TrimSpace(stringMapValue(result, "remediation_kind")),
+		Estado:          strings.TrimSpace(best.Estado),
+		DispatchState:   strings.TrimSpace(stringMapValue(result, "dispatch_state")),
+		DeliveryState:   strings.TrimSpace(stringMapValue(result, "delivery_state")),
+		ReceiptSource:   strings.TrimSpace(stringMapValue(result, "receipt_source")),
+		BlockedReason:   strings.TrimSpace(stringMapValue(result, "blocked_reason")),
+		RetryAfter:      strings.TrimSpace(stringMapValue(result, "retry_after")),
+		UpdatedAt:       runtimeOrderMoment(best),
+	}
+	if status.RemediationKind == "" {
+		status.RemediationKind = strings.TrimSpace(stringMapValue(parseStringMap(strings.TrimSpace(best.PayloadJSON)), "remediation_kind"))
+	}
+	switch {
+	case strings.EqualFold(status.Estado, "completada") && status.ReceiptSource != "":
+		status.Succeeded = true
+	case strings.EqualFold(status.Estado, "fallida"), strings.EqualFold(status.DeliveryState, "blocked"):
+		status.Waiting = false
+	case strings.EqualFold(status.DispatchState, "notified"), strings.EqualFold(status.DispatchState, "pending"), strings.EqualFold(status.Estado, "pendiente"), strings.EqualFold(status.Estado, "ejecutando"):
+		status.Waiting = true
+	}
+	return status, nil
 }
 
 func (s *Service) sessionRuntimeHandle(sesion *db.Sesion) (*db.RuntimeHandle, error) {

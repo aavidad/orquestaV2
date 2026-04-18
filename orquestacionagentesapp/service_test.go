@@ -788,6 +788,84 @@ func TestEnqueuePostRemediationFollowupDedupesByVerificationKey(t *testing.T) {
 	}
 }
 
+func TestGetPostRemediationStatusReturnsLatestSuccessfulReceipt(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(35)
+	now := time.Now().UTC()
+	service := NewService(nil, &stubRuntimeController{
+		orders: []*db.RuntimeOrder{
+			{
+				ID:            18,
+				Agente:        "Codex2",
+				ProyectoID:    &proyectoID,
+				Tipo:          "nudge",
+				Estado:        "pendiente",
+				PayloadJSON:   `{"kind":"autonomia","accion":"continuar_trabajo","verification_key":"reassign:41:Codex1:Codex2","remediation_kind":"reassign"}`,
+				ResultadoJSON: `{"dispatch_state":"notified","delivery_state":"notified","verification_key":"reassign:41:Codex1:Codex2","remediation_kind":"reassign"}`,
+				UpdatedAt:     now.Add(-time.Minute),
+			},
+			{
+				ID:            19,
+				Agente:        "Codex2",
+				ProyectoID:    &proyectoID,
+				Tipo:          "nudge",
+				Estado:        "completada",
+				PayloadJSON:   `{"kind":"autonomia","accion":"continuar_trabajo","verification_key":"reassign:41:Codex1:Codex2","remediation_kind":"reassign"}`,
+				ResultadoJSON: `{"dispatch_state":"delivered","delivery_state":"delivered","receipt_source":"tmux_pane_activity","verification_key":"reassign:41:Codex1:Codex2","remediation_kind":"reassign"}`,
+				UpdatedAt:     now,
+			},
+		},
+	})
+
+	status, err := service.GetPostRemediationStatus("Codex2", &proyectoID, "reassign:41:Codex1:Codex2")
+	if err != nil {
+		t.Fatalf("GetPostRemediationStatus: %v", err)
+	}
+	if status == nil || !status.Found {
+		t.Fatalf("faltaba status: %+v", status)
+	}
+	if status.OrderID != 19 || !status.Succeeded || status.Waiting {
+		t.Fatalf("status inesperado: %+v", status)
+	}
+	if status.ReceiptSource != "tmux_pane_activity" || status.RemediationKind != "reassign" {
+		t.Fatalf("status sin receipt/remediation correctos: %+v", status)
+	}
+}
+
+func TestGetPostRemediationStatusReturnsWaitingForNotifiedOrder(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(36)
+	now := time.Now().UTC()
+	service := NewService(nil, &stubRuntimeController{
+		orders: []*db.RuntimeOrder{{
+			ID:            20,
+			Agente:        "Codex2",
+			ProyectoID:    &proyectoID,
+			Tipo:          "nudge",
+			Estado:        "pendiente",
+			PayloadJSON:   `{"kind":"autonomia","accion":"continuar_trabajo","verification_key":"reassign:42:Codex1:Codex2","remediation_kind":"reassign"}`,
+			ResultadoJSON: `{"dispatch_state":"notified","delivery_state":"notified","verification_key":"reassign:42:Codex1:Codex2","remediation_kind":"reassign","retry_after":"2030-01-01T00:00:00Z"}`,
+			UpdatedAt:     now,
+		}},
+	})
+
+	status, err := service.GetPostRemediationStatus("Codex2", &proyectoID, "reassign:42:Codex1:Codex2")
+	if err != nil {
+		t.Fatalf("GetPostRemediationStatus: %v", err)
+	}
+	if status == nil || !status.Found {
+		t.Fatalf("faltaba status: %+v", status)
+	}
+	if status.Succeeded || !status.Waiting {
+		t.Fatalf("status debería seguir esperando: %+v", status)
+	}
+	if status.DispatchState != "notified" || status.RetryAfter == "" {
+		t.Fatalf("status sin dispatch/retry correctos: %+v", status)
+	}
+}
+
 func TestResolveRecoveryHandlePrefersOperationalHandle(t *testing.T) {
 	t.Parallel()
 
