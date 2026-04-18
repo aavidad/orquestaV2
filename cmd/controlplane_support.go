@@ -4336,6 +4336,14 @@ func ejecutarPlanSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry, pol
 		return "", err
 	} else {
 		notes = agregarNotaAutonomia(notes, note)
+		if strings.Contains(note, "_task_exists") {
+			if covered, err := supervisorSignalTranscriptYaCubiertoPorTareaViva(item, supervisor, proyecto.ID); err != nil {
+				return "", err
+			} else if covered {
+				notes = agregarNotaAutonomia(notes, "supervisor_task_active")
+				return resumenNotasAutonomia(notes), nil
+			}
+		}
 	}
 	if note, err := resolverEstadoAgenteObjetivoSignalTranscript(supervisor, activado, agenteSignalTranscript(item), proyecto, accionSupervisorSignalTranscript(item), construirInstruccionSupervisionSignalTranscript(policy, proyecto, nombreAgenteAutonomia(supervisor), item), item, "supervisor", "supervisor_start"); err != nil {
 		return "", err
@@ -4487,6 +4495,45 @@ func existeTareaReplanAutonomiaPendiente(proyectoID int64) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+func supervisorSignalTranscriptYaCubiertoPorTareaViva(item *db.RuntimeTranscriptEntry, supervisor *db.Agente, proyectoID int64) (bool, error) {
+	if item == nil || supervisor == nil || proyectoID <= 0 {
+		return false, nil
+	}
+	agenteSupervisor := nombreAgenteAutonomia(supervisor)
+	if agenteSupervisor == "" || strings.EqualFold(agenteSupervisor, agenteSignalTranscript(item)) {
+		return false, nil
+	}
+	match, ok := matcherTareaSupervisorSignalTranscript(item)
+	if !ok {
+		return false, nil
+	}
+	tarea, err := tareaActivaAutonomiaProyectoAgente(agenteSupervisor, &proyectoID)
+	if err != nil || tarea == nil {
+		return false, err
+	}
+	switch tarea.Estado {
+	case db.TareaCompletada, db.TareaCancelada:
+		return false, nil
+	}
+	if tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), agenteSupervisor) {
+		return false, nil
+	}
+	return match(tarea), nil
+}
+
+func matcherTareaSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry) (func(*db.Tarea) bool, bool) {
+	switch clasificacionSignalTranscript(item) {
+	case "needs_replan":
+		return esTareaReplanAutonomia, true
+	case "credentials_request":
+		return esTareaCredencialesAutonomia, true
+	case "blocked":
+		return esTareaBlockedAutonomia, true
+	default:
+		return nil, false
+	}
 }
 
 func construirNotasTareaReplanAutonomiaSignal(item *db.RuntimeTranscriptEntry) string {
