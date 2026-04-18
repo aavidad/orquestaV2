@@ -15517,6 +15517,12 @@ func TestEncolarContinuacionTareaReasignadaSiCorrespondeEscalaFollowupBloqueadoA
 	if err != nil {
 		t.Fatalf("crear tarea: %v", err)
 	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
 	verificationKey := verificationKeyContinuacionTareaReasignada("Codex1", tareaID, "reassign", "Gemma1")
 	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
 		Agente:        "Codex1",
@@ -15563,8 +15569,22 @@ func TestEncolarContinuacionTareaReasignadaSiCorrespondeEscalaFollowupBloqueadoA
 	if err != nil {
 		t.Fatalf("get tarea: %v", err)
 	}
-	if tarea == nil || !strings.Contains(strings.ToLower(tarea.Notas), "post-remediation bloqueado") {
+	if tarea == nil || tarea.Estado != db.TareaBloqueada || !strings.Contains(strings.ToLower(tarea.Notas), "post-remediation bloqueado") {
 		t.Fatalf("la tarea deberia anotar el bloqueo post-remediation: %+v", tarea)
+	}
+	bloqueos, err := db.ListarResumenBloqueos()
+	if err != nil {
+		t.Fatalf("listar bloqueos: %v", err)
+	}
+	var motivoBloqueo string
+	for _, bloqueo := range bloqueos {
+		if bloqueo.ID == tareaID {
+			motivoBloqueo = strings.TrimSpace(bloqueo.Motivo)
+			break
+		}
+	}
+	if motivoBloqueo == "" || !esBloqueoAutonomiaAgenteRecuperable("Codex1", "Codex1", motivoBloqueo) {
+		t.Fatalf("el bloqueo deberia ser compatible con recuperacion automatica, motivo=%q", motivoBloqueo)
 	}
 	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
 	if err != nil {

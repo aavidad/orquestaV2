@@ -12299,6 +12299,9 @@ func escalarContinuacionPostRemediationBloqueada(proyecto *db.Proyecto, tareaID 
 	if detalle == "" {
 		detalle = "followup_post_remediation_bloqueado"
 	}
+	if err := bloquearTareaPorPostRemediationBloqueadoSiProcede(tareaID, strings.TrimSpace(agente), strings.TrimSpace(verificationKey), detalle); err != nil {
+		return err
+	}
 	_ = tareasService.Note(tareaID, "orquesta", fmt.Sprintf("Follow-up post-remediation bloqueado para %s (%s): %s", strings.TrimSpace(agente), strings.TrimSpace(verificationKey), detalle))
 	existeTarea, err := existeTareaPostRemediationBlockedAutonomiaPendiente(proyecto.ID, verificationKey)
 	if err != nil {
@@ -12360,6 +12363,33 @@ func construirInstruccionSupervisionPostRemediationBloqueada(policy *supervision
 	}
 	parts = append(parts, "Si el mismo agente aún es viable, prepara retry con contexto corregido; si no, mueve el frente a otro agente o cambia el carril.")
 	return strings.Join(parts, " ")
+}
+
+func bloquearTareaPorPostRemediationBloqueadoSiProcede(tareaID int64, agente, verificationKey, detalle string) error {
+	if tareaID <= 0 || strings.TrimSpace(agente) == "" {
+		return nil
+	}
+	tarea, err := tareasService.Get(tareaID)
+	if err != nil || tarea == nil {
+		return err
+	}
+	if tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(agente)) {
+		return nil
+	}
+	switch tarea.Estado {
+	case db.TareaAsignada, db.TareaEnProgreso:
+	default:
+		return nil
+	}
+	motivo := fmt.Sprintf("Agente %s en estado bloqueado_por_runtime: follow-up post-remediation bloqueado", strings.TrimSpace(agente))
+	nota := fmt.Sprintf("Bloqueada automáticamente en %s por follow-up post-remediation bloqueado", strings.TrimSpace(agente))
+	if strings.TrimSpace(verificationKey) != "" {
+		nota += " (" + strings.TrimSpace(verificationKey) + ")"
+	}
+	if strings.TrimSpace(detalle) != "" {
+		nota += ": " + strings.TrimSpace(detalle)
+	}
+	return bloquearTareaAutonomiaSinRelevo(tareaID, strings.TrimSpace(agente), motivo, nota)
 }
 
 func encolarNudgeSignalTranscriptAutonomia(agente string, proyecto *db.Proyecto, accion, instruction string, item *db.RuntimeTranscriptEntry, prefijoEstado string) (string, error) {
