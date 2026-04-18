@@ -23594,6 +23594,123 @@ func TestProcesarPipelineLocalBatchCierraProyectoEnEstadoCerrandoSinSesion(t *te
 	}
 }
 
+func TestProcesarRuntimeTranscriptBatchNeedsReplanResuelveLocalDesdeTareaActiva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar worker: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Cerrar slice útil del control plane",
+		Descripcion: "Cierra el siguiente slice útil del control plane.\nTests mínimos: go test ./cmd -run TestProcesarRuntimeTranscriptBatchNeedsReplanResuelveLocalDesdeTareaActiva",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion worker: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle worker: %+v err=%v", handle, err)
+	}
+	logPath := filepath.Join(tmp, "codex-transcript-needs-replan-local.log")
+	if err := os.WriteFile(logPath, []byte("no tengo claro el siguiente paso útil\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	n, err := procesarRuntimeTranscriptBatch()
+	if err != nil {
+		t.Fatalf("procesar transcript batch: %v", err)
+	}
+	if n < 2 {
+		t.Fatalf("esperaba ingestión + señal procesada, got=%d", n)
+	}
+
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{ProyectoID: &proyectoID, Limit: 20})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	var workerNudge *db.RuntimeOrder
+	var supervisorNudge *db.RuntimeOrder
+	var workerGuide *db.RuntimeOrder
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch {
+		case order.Agente == "Codex1" && order.Tipo == "nudge":
+			workerNudge = order
+		case order.Agente == "CodexSupervisor" && order.Tipo == "nudge":
+			supervisorNudge = order
+		case order.Agente == "Codex1" && order.Tipo == "send_instruction":
+			workerGuide = order
+		}
+	}
+	if workerGuide != nil {
+		t.Fatalf("no deberia emitir auto_guidance genérico si ya resolvió needs_replan localmente: %+v", workerGuide)
+	}
+	if supervisorNudge != nil {
+		t.Fatalf("no deberia nudgear al supervisor si ya hay tarea activa local: %+v", supervisorNudge)
+	}
+	if workerNudge == nil || !strings.Contains(workerNudge.PayloadJSON, `"accion":"resolver_needs_replan_local"`) {
+		t.Fatalf("nudge local needs_replan inesperado: %+v", workerNudge)
+	}
+	if !strings.Contains(workerNudge.PayloadJSON, fmt.Sprintf("Tarea activa: #%d", tareaID)) {
+		t.Fatalf("nudge local needs_replan sin referencia a la tarea activa: %s", workerNudge.PayloadJSON)
+	}
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	if len(tareas) != 1 {
+		t.Fatalf("no deberia abrir tarea de replan extra si ya hay tarea activa local, tareas=%+v", tareas)
+	}
+}
+
 func TestAsegurarTareaReplanAutonomiaSignalCreaFrenteParaSupervisor(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

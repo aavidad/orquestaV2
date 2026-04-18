@@ -3479,6 +3479,9 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 	if strings.EqualFold(clasificacionSignalTranscript(item), "credentials_request") {
 		return procesarSignalCredentialsRequest(item)
 	}
+	if strings.EqualFold(clasificacionSignalTranscript(item), "needs_replan") {
+		return procesarSignalNeedsReplan(item, agente, handle)
+	}
 	if strings.EqualFold(clasificacionSignalTranscript(item), "cli_query") {
 		return procesarSignalCLIQuery(item, agente, handle)
 	}
@@ -3558,6 +3561,15 @@ func procesarSignalCredentialsRequest(item *db.RuntimeTranscriptEntry) (string, 
 		return note, nil
 	}
 	return procesarSignalSoloSupervision(item)
+}
+
+func procesarSignalNeedsReplan(item *db.RuntimeTranscriptEntry, agente string, handle *db.RuntimeHandle) (string, error) {
+	if note, handled, err := intentarResolverNeedsReplanSignalTranscript(item); err != nil {
+		return "", err
+	} else if handled {
+		return note, nil
+	}
+	return procesarSignalAutoGuidance(item, agente, handle)
 }
 
 func procesarSignalCLIQuery(item *db.RuntimeTranscriptEntry, agente string, handle *db.RuntimeHandle) (string, error) {
@@ -4463,6 +4475,71 @@ func intentarResolverCLIQuerySignalTranscript(item *db.RuntimeTranscriptEntry) (
 	}
 	instruction := construirInstruccionCLIQuerySignalTranscript(tarea, item)
 	return intentarNudgeRemediacionLocalSignalTranscript(item, agente, proyecto, "resolver_cli_query_local", "cli_query_local", instruction)
+}
+
+func intentarResolverNeedsReplanSignalTranscript(item *db.RuntimeTranscriptEntry) (string, bool, error) {
+	agente, _, proyecto, ok, err := resolverContextoRemediacionLocalSignalTranscript(item)
+	if err != nil || !ok {
+		return "", false, err
+	}
+	tarea, err := tareaActivaAutonomiaProyectoAgente(agente, item.ProyectoID)
+	if err != nil || tarea == nil {
+		return "", false, err
+	}
+	instruction := construirInstruccionNeedsReplanSignalTranscript(tarea)
+	return intentarNudgeRemediacionLocalSignalTranscript(item, agente, proyecto, "resolver_needs_replan_local", "needs_replan_local", instruction)
+}
+
+func construirInstruccionNeedsReplanSignalTranscript(tarea *db.Tarea) string {
+	if tarea == nil {
+		return ""
+	}
+	partes := []string{
+		"Orquesta: ya tienes una tarea activa concreta; no hace falta esperar un replan del supervisor.",
+	}
+	titulo := strings.TrimSpace(tarea.Titulo)
+	if tarea.ID > 0 && titulo != "" {
+		partes = append(partes, fmt.Sprintf("Tarea activa: #%d %s.", tarea.ID, titulo))
+	} else if tarea.ID > 0 {
+		partes = append(partes, fmt.Sprintf("Tarea activa: #%d.", tarea.ID))
+	} else if titulo != "" {
+		partes = append(partes, "Tarea activa: "+titulo+".")
+	}
+	if resumen := resumenTareaParaNeedsReplan(tarea); resumen != "" {
+		partes = append(partes, "Resumen: "+resumen+".")
+	}
+	if cmds := comandosCanonicosCLIQueryDesdeTarea(tarea); len(cmds) > 0 {
+		if len(cmds) == 1 {
+			partes = append(partes, fmt.Sprintf("Test mínimo declarado: `%s`.", cmds[0]))
+		} else {
+			partes = append(partes, fmt.Sprintf("Tests mínimos declarados: `%s`.", strings.Join(cmds, "` y `")))
+		}
+	}
+	partes = append(partes, "Cierra el siguiente slice útil de esa tarea dentro del write-set y sigue sin detener el flujo.")
+	return strings.Join(partes, " ")
+}
+
+func resumenTareaParaNeedsReplan(tarea *db.Tarea) string {
+	if tarea == nil {
+		return ""
+	}
+	for _, raw := range []string{strings.TrimSpace(tarea.Descripcion), strings.TrimSpace(tarea.Notas)} {
+		if raw == "" {
+			continue
+		}
+		for _, line := range strings.Split(raw, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			lower := strings.ToLower(line)
+			if strings.HasPrefix(lower, "tests minimos:") || strings.HasPrefix(lower, "tests mínimos:") || strings.HasPrefix(lower, "tests:") {
+				continue
+			}
+			return line
+		}
+	}
+	return ""
 }
 
 func construirInstruccionCLIQuerySignalTranscript(tarea *db.Tarea, item *db.RuntimeTranscriptEntry) string {
