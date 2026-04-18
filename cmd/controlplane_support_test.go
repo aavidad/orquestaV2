@@ -3470,6 +3470,74 @@ func TestProcesarCierreProyectoSesionRespetaAutoCloseProject(t *testing.T) {
 	}
 }
 
+func TestProcesarCierreProyectoSesionNoEvaluaCierreSiHayTrabajoActivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexActivo", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-activo",
+		Nombre:  "Orquestador Activo",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		ReviewRequired:       true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexActivo",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Frente activo",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexActivo"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexActivo"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	n, err := procesarCierreProyectoSesion(sesion)
+	if err != nil {
+		t.Fatalf("procesar cierre proyecto: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no debería intentar cierre con trabajo activo, got=%d", n)
+	}
+	op, err := db.GetProyectoOperacion(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto operacion: %v", err)
+	}
+	if op.EstadoOperativo == db.ProyectoOperativoCerrado {
+		t.Fatalf("el proyecto no debería quedar cerrado con trabajo activo: %+v", op)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchEncolaNudgePorPropuestasPendientes(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -4752,6 +4820,60 @@ func TestProcesarRecuperacionTareasBloqueadasSesionActivaConSnapshotSaleSiNoHayB
 	}
 	if n != 0 {
 		t.Fatalf("no deberia actuar si snapshot no trae bloqueadas, got=%d", n)
+	}
+}
+
+func TestAutonomiaSessionMaintenanceGateSkipsHeavySessionChecks(t *testing.T) {
+	resetAutonomiaSessionMaintenanceGate()
+	t.Cleanup(resetAutonomiaSessionMaintenanceGate)
+
+	proyectoID := int64(42)
+	sesion := &db.Sesion{Agente: "CodexHeavy", ProyectoID: &proyectoID}
+	autonomiaSessionMaintenanceGate.Set("premium_exclusividad|codexheavy|42", time.Now().UTC().Add(time.Minute))
+	autonomiaSessionMaintenanceGate.Set("blocked_recovery|codexheavy|42", time.Now().UTC().Add(time.Minute))
+	autonomiaSessionMaintenanceGate.Set("premium_frontiers|codexheavy|42", time.Now().UTC().Add(time.Minute))
+	autonomiaSessionMaintenanceGate.Set("premium_seed|codexheavy|42", time.Now().UTC().Add(time.Minute))
+
+	cases := []struct {
+		name string
+		run  func() (int, error)
+	}{
+		{
+			name: "premium exclusividad",
+			run: func() (int, error) {
+				return procesarCompactacionExclusividadPremiumSesionActiva(sesion, nil)
+			},
+		},
+		{
+			name: "blocked recovery",
+			run: func() (int, error) {
+				return procesarRecuperacionTareasBloqueadasSesionActiva(sesion, nil)
+			},
+		},
+		{
+			name: "premium frontiers",
+			run: func() (int, error) {
+				return procesarCompactacionFrentesPremiumSesionActiva(sesion, nil)
+			},
+		},
+		{
+			name: "premium seed",
+			run: func() (int, error) {
+				return procesarDerivacionSemillaPremiumSesionActiva(sesion, nil)
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			n, err := tc.run()
+			if err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			if n != 0 {
+				t.Fatalf("deberia saltar el check pesado por throttle, got=%d", n)
+			}
+		})
 	}
 }
 
@@ -17464,6 +17586,64 @@ func TestProcesarAutonomiaAgentesBatchAparcaSesionBloqueadaYPausaAsignacion(t *t
 	}
 }
 
+func TestProcesarAparcadoAutonomoSesionOmiteResolverBloqueoConTrabajoActivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexActivo", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-aparcado-activo",
+		Nombre:  "Orquestador Aparcado Activo",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente activo",
+		Descripcion: "Trabajo aún en progreso",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexActivo"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexActivo"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexActivo",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	n, err := procesarAparcadoAutonomoSesion(sesion, nil)
+	if err != nil {
+		t.Fatalf("procesar aparcado: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia aparcar con trabajo activo, got=%d", n)
+	}
+	op, err := db.GetProyectoOperacion(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto operacion: %v", err)
+	}
+	if op.EstadoOperativo != db.ProyectoOperativoActivo {
+		t.Fatalf("el proyecto debe seguir activo con trabajo en curso: %+v", op)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchRespetaEstadoOperativoProyectoEsperandoHumano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -25885,6 +26065,18 @@ func TestRuntimeMailboxCanDeferSupervisedHandleError(t *testing.T) {
 	}
 }
 
+func TestRuntimeMailboxHandleDeferredBatchError(t *testing.T) {
+	if runtimeMailboxHandleDeferredBatchError("interactive", nil) {
+		t.Fatal("nil no deberia diferirse")
+	}
+	if !runtimeMailboxHandleDeferredBatchError("interactive", fmt.Errorf("no se pueden purgar handles con runtime orders vivas asociadas: #1(pendiente)")) {
+		t.Fatal("el batch mailbox deberia diferir este error transitorio")
+	}
+	if runtimeMailboxHandleDeferredBatchError("interactive", fmt.Errorf("otro error")) {
+		t.Fatal("errores ajenos no deberian diferirse a nivel batch")
+	}
+}
+
 func TestReconciliarRuntimeMailboxPipelineBootstrapActivaSiProcedeToleraSupervisionDiferible(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
@@ -25898,10 +26090,10 @@ func TestReconciliarRuntimeMailboxPipelineBootstrapActivaSiProcedeToleraSupervis
 		t.Fatalf("upsert proyecto: %v", err)
 	}
 	handle := &db.RuntimeHandle{
-		ID:        41,
-		Agente:    "Codex1",
+		ID:         41,
+		Agente:     "Codex1",
 		ProyectoID: &proyectoID,
-		Estado:    "activo",
+		Estado:     "activo",
 	}
 	snapshot := &runtimeMailboxBatchSnapshot{
 		activeHandles:        map[string]*db.RuntimeHandle{runtimeMailboxBatchKey("Codex1", &proyectoID): handle},
@@ -25921,6 +26113,40 @@ func TestReconciliarRuntimeMailboxPipelineBootstrapActivaSiProcedeToleraSupervis
 	}
 	if ok {
 		t.Fatal("no deberia marcar reconciliacion activa solo por tolerar el error")
+	}
+}
+
+func TestProcesarRuntimeHygieneBatchDifierePurgadoHistoricoBloqueadoPorOrdersVivas(t *testing.T) {
+	prevHistorical := purgarRuntimeHistoricoFn
+	prevOperational := purgarDatosOperacionalesFn
+	prevTranscriptNoise := purgarRuntimeTranscriptRuidoHistoricoFn
+	prevHigieneAutonoma := procesarHigieneRuntimesAutonomosBatchFn
+	prevHandoffs := reconciliarRuntimeOrdersPendientesHandoffExpiradasFn
+	t.Cleanup(func() {
+		purgarRuntimeHistoricoFn = prevHistorical
+		purgarDatosOperacionalesFn = prevOperational
+		purgarRuntimeTranscriptRuidoHistoricoFn = prevTranscriptNoise
+		procesarHigieneRuntimesAutonomosBatchFn = prevHigieneAutonoma
+		reconciliarRuntimeOrdersPendientesHandoffExpiradasFn = prevHandoffs
+	})
+
+	procesarHigieneRuntimesAutonomosBatchFn = func() (int, error) { return 2, nil }
+	reconciliarRuntimeOrdersPendientesHandoffExpiradasFn = func() (int, error) { return 3, nil }
+	purgarRuntimeTranscriptRuidoHistoricoFn = func() (int, error) { return 5, nil }
+	purgarDatosOperacionalesFn = func() (int, error) {
+		t.Fatal("no deberia llegar a purga operacional si el historico queda diferido")
+		return 0, nil
+	}
+	purgarRuntimeHistoricoFn = func() (*db.PurgaRuntimeHistoricoResultado, error) {
+		return nil, fmt.Errorf("no se pueden purgar handles con runtime orders vivas asociadas: #132403(pendiente)")
+	}
+
+	total, err := procesarRuntimeHygieneBatch(true)
+	if err != nil {
+		t.Fatalf("deberia diferir el purgado historico bloqueado: %v", err)
+	}
+	if total != 10 {
+		t.Fatalf("deberia conservar el trabajo previo al defer, got=%d", total)
 	}
 }
 

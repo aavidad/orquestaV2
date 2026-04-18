@@ -105,6 +105,10 @@ func resetPipelineLocalDispatchGate() {
 	pipelineLocalDispatchGate.Reset()
 }
 
+func resetAutonomiaSessionMaintenanceGate() {
+	autonomiaSessionMaintenanceGate.Reset()
+}
+
 var autonomiaActiveSessionsGate = planocontrol.NewGate()
 var procesarAutonomiaSesionActivaBatchFn = procesarAutonomiaSesionActivaConSnapshot
 var procesarAgentesDegradadosAutonomiaBatchFn = procesarAgentesDegradadosAutonomiaBatch
@@ -131,6 +135,7 @@ const (
 
 var presupuestoPrimerUsoSesionGate = planocontrol.NewThrottler()
 var autonomiaContinueNudgeGate = planocontrol.NewThrottler()
+var autonomiaSessionMaintenanceGate = planocontrol.NewThrottler()
 
 func autonomiaIdleAutoassignInterval() time.Duration {
 	seconds := controlPlaneConfigIntOrDefault("autonomia_idle_autoassign_interval_seconds", 300)
@@ -144,6 +149,14 @@ func autonomiaContinueNudgeInterval() time.Duration {
 	seconds := controlPlaneConfigIntOrDefault("autonomia_continue_nudge_interval_seconds", 60)
 	if seconds <= 0 {
 		seconds = 60
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func autonomiaSessionMaintenanceInterval() time.Duration {
+	seconds := controlPlaneConfigIntOrDefault("autonomia_session_maintenance_interval_seconds", 180)
+	if seconds <= 0 {
+		seconds = 180
 	}
 	return time.Duration(seconds) * time.Second
 }
@@ -263,6 +276,16 @@ func autonomiaContinueNudgeThrottleKey(agente string, proyectoID, tareaID int64)
 		return ""
 	}
 	return agente + "|" + strconv.FormatInt(proyectoID, 10) + "|" + strconv.FormatInt(tareaID, 10)
+}
+
+func autonomiaSessionMaintenanceShouldAttempt(kind, agente string, proyectoID int64) bool {
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	agente = strings.ToLower(strings.TrimSpace(agente))
+	if kind == "" || agente == "" || proyectoID <= 0 {
+		return false
+	}
+	key := kind + "|" + agente + "|" + strconv.FormatInt(proyectoID, 10)
+	return autonomiaSessionMaintenanceGate.Allow(key, autonomiaSessionMaintenanceInterval())
 }
 
 func presupuestoPrimerUsoSesion(nombre string) bool {
@@ -1047,6 +1070,10 @@ func procesarRuntimeHygieneBatch(forceHistorical bool) (int, error) {
 	}
 	resultado, err := purgarRuntimeHistoricoFn()
 	if err != nil {
+		if runtimeCanDeferHandlePurgeBlockedError(err) {
+			db.Audit("orquesta", "runtime_hygiene_historical_deferred", "runtime_handle", 0, err.Error())
+			return total, nil
+		}
 		return total, err
 	}
 	if resultado != nil {
@@ -2818,6 +2845,18 @@ func runtimeMailboxCanDeferSupervisedHandleError(err error) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(err.Error())), "no se pueden purgar handles con runtime orders vivas asociadas")
 }
 
+func runtimeCanDeferHandlePurgeBlockedError(err error) bool {
+	return runtimeMailboxCanDeferSupervisedHandleError(err)
+}
+
+func runtimeMailboxHandleDeferredBatchError(stage string, err error) bool {
+	if !runtimeCanDeferHandlePurgeBlockedError(err) {
+		return false
+	}
+	db.Audit("orquesta", "runtime_mailbox_batch_deferred", "runtime_mailbox", 0, strings.TrimSpace(stage)+": "+err.Error())
+	return true
+}
+
 func (s *runtimeMailboxBatchSnapshot) externalSessionHandle(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (*db.RuntimeHandle, string, error) {
 	if handle == nil {
 		return nil, "", nil
@@ -2851,55 +2890,103 @@ func procesarRuntimeMailboxBatchConFiltro(filter db.FiltroRuntimeMailbox) (int, 
 	snapshot := newRuntimeMailboxBatchSnapshot()
 	quotaPipelineReconciled, err := reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return quotaPipelineReconciled, err
+		if runtimeMailboxHandleDeferredBatchError("quota_pipeline", err) {
+			err = nil
+		} else {
+			return quotaPipelineReconciled, err
+		}
 	}
 	reconciled, err := reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return quotaPipelineReconciled + reconciled, err
+		if runtimeMailboxHandleDeferredBatchError("agente_sin_vida", err) {
+			err = nil
+		} else {
+			return quotaPipelineReconciled + reconciled, err
+		}
 	}
 	pipelineCooldownReconciled, err := reconciliarRuntimeMailboxPipelineEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return quotaPipelineReconciled + reconciled + pipelineCooldownReconciled, err
+		if runtimeMailboxHandleDeferredBatchError("pipeline_enfriamiento", err) {
+			err = nil
+		} else {
+			return quotaPipelineReconciled + reconciled + pipelineCooldownReconciled, err
+		}
 	}
 	reconciled += pipelineCooldownReconciled
 	refreshCooldownReconciled, err := reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return quotaPipelineReconciled + reconciled + refreshCooldownReconciled, err
+		if runtimeMailboxHandleDeferredBatchError("refresh_enfriamiento", err) {
+			err = nil
+		} else {
+			return quotaPipelineReconciled + reconciled + refreshCooldownReconciled, err
+		}
 	}
 	reconciled += refreshCooldownReconciled
 	instructionCooldownReconciled, err := reconciliarRuntimeMailboxInstructionEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return quotaPipelineReconciled + reconciled + instructionCooldownReconciled, err
+		if runtimeMailboxHandleDeferredBatchError("instruction_enfriamiento", err) {
+			err = nil
+		} else {
+			return quotaPipelineReconciled + reconciled + instructionCooldownReconciled, err
+		}
 	}
 	reconciled += instructionCooldownReconciled
 	watchdogReconciled, err := reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return quotaPipelineReconciled + reconciled + watchdogReconciled, err
+		if runtimeMailboxHandleDeferredBatchError("watchdog_sin_handle", err) {
+			err = nil
+		} else {
+			return quotaPipelineReconciled + reconciled + watchdogReconciled, err
+		}
 	}
 	reconciled += watchdogReconciled
 	interactive, err := procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return quotaPipelineReconciled + reconciled + interactive, err
+		if runtimeMailboxHandleDeferredBatchError("interactive", err) {
+			err = nil
+		} else {
+			return quotaPipelineReconciled + reconciled + interactive, err
+		}
 	}
 	sessionResume, err := procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return quotaPipelineReconciled + reconciled + interactive + sessionResume, err
+		if runtimeMailboxHandleDeferredBatchError("session_resume", err) {
+			err = nil
+		} else {
+			return quotaPipelineReconciled + reconciled + interactive + sessionResume, err
+		}
 	}
 	bootstrapTMUX, err := procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX, err
+		if runtimeMailboxHandleDeferredBatchError("bootstrap_tmux", err) {
+			err = nil
+		} else {
+			return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX, err
+		}
 	}
 	bootstrapPipelineObserved, err := reconciliarRuntimeMailboxPipelineBootstrapActivaBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + bootstrapPipelineObserved, err
+		if runtimeMailboxHandleDeferredBatchError("pipeline_bootstrap_activa", err) {
+			err = nil
+		} else {
+			return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + bootstrapPipelineObserved, err
+		}
 	}
 	guidanceInbox, err := reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + bootstrapPipelineObserved + guidanceInbox, err
+		if runtimeMailboxHandleDeferredBatchError("guidance_inbox", err) {
+			err = nil
+		} else {
+			return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + bootstrapPipelineObserved + guidanceInbox, err
+		}
 	}
 	restarts, err := procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + bootstrapPipelineObserved + guidanceInbox + restarts, err
+		if runtimeMailboxHandleDeferredBatchError("coordinated_restart", err) {
+			err = nil
+		} else {
+			return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + bootstrapPipelineObserved + guidanceInbox + restarts, err
+		}
 	}
 	return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + bootstrapPipelineObserved + guidanceInbox + restarts, nil
 }
@@ -10735,6 +10822,9 @@ func procesarCompactacionExclusividadPremiumSesionActiva(sesion *db.Sesion, snap
 	if sesion == nil || sesion.ProyectoID == nil {
 		return 0, nil
 	}
+	if !autonomiaSessionMaintenanceShouldAttempt("premium_exclusividad", sesion.Agente, *sesion.ProyectoID) {
+		return 0, nil
+	}
 	var (
 		asignacion *db.Asignacion
 		err        error
@@ -10857,6 +10947,9 @@ func procesarRecuperacionTareasBloqueadasSesionActiva(sesion *db.Sesion, snapsho
 			return 0, nil
 		}
 	}
+	if !autonomiaSessionMaintenanceShouldAttempt("blocked_recovery", agente, *sesion.ProyectoID) {
+		return 0, nil
+	}
 	detail, err := agentesService.BuildDetailCompact(agente)
 	if err != nil {
 		return 0, err
@@ -10932,6 +11025,9 @@ func procesarCompactacionFrentesPremiumSesionActiva(sesion *db.Sesion, snapshot 
 	}
 	agente := strings.TrimSpace(sesion.Agente)
 	if agente == "" {
+		return 0, nil
+	}
+	if !autonomiaSessionMaintenanceShouldAttempt("premium_frontiers", agente, *sesion.ProyectoID) {
 		return 0, nil
 	}
 	var (
@@ -11076,6 +11172,9 @@ func tareaDBTieneContratoPremiumAcotado(tarea *db.Tarea) bool {
 
 func procesarDerivacionSemillaPremiumSesionActiva(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {
 	if sesion == nil || sesion.ProyectoID == nil {
+		return 0, nil
+	}
+	if !autonomiaSessionMaintenanceShouldAttempt("premium_seed", sesion.Agente, *sesion.ProyectoID) {
 		return 0, nil
 	}
 	tareaID, err := tareaActivaSesionDesdeSnapshot(sesion, snapshot)
@@ -11894,6 +11993,11 @@ func procesarCierreProyectoSesionConSnapshot(sesion *db.Sesion, snapshot *autono
 	if sesion == nil || sesion.ProyectoID == nil {
 		return 0, nil
 	}
+	if tieneTrabajoActivo, err := sesionTieneTrabajoArrancableAutonomia(sesion, snapshot); err != nil {
+		return 0, err
+	} else if tieneTrabajoActivo {
+		return 0, nil
+	}
 	var (
 		proyecto *db.Proyecto
 		err      error
@@ -12028,6 +12132,10 @@ func procesarAparcadoAutonomoSesion(sesion *db.Sesion, snapshot *autonomiaBatchS
 	motivo := strings.TrimSpace(op.Motivo)
 	switch op.EstadoOperativo {
 	case db.ProyectoOperativoActivo:
+		if tieneTrabajoActivo {
+			autonomiaTickDebugf("agente=%s proyecto_id=%d skip_resolver_bloqueo trabajo_activo=true", strings.TrimSpace(sesion.Agente), valorProyectoID(sesion.ProyectoID))
+			return 0, nil
+		}
 		bloqueado, motivoDetectado, err := db.ResolverBloqueoProyecto(*sesion.ProyectoID)
 		if err != nil || !bloqueado {
 			return 0, err
