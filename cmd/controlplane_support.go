@@ -5399,12 +5399,41 @@ func ejecutarPlanReviewerSignalTranscript(item *db.RuntimeTranscriptEntry, polic
 		return "", err
 	}
 	reviewerNombre := nombreAgenteAutonomia(reviewer)
+	if covered, err := reviewerSignalTranscriptYaCubiertoPorGateAbierta(item, reviewer); err != nil {
+		return "", err
+	} else if covered {
+		emitirNotificacionReviewSignalTranscript("ready_for_review", nil, item, reviewerNombre)
+		return "review_gate_open", nil
+	}
 	note, err := resolverEstadoAgenteObjetivoSignalTranscript(reviewer, activado, agenteSignalTranscript(item), proyecto, "inspeccionar_ready_for_review", construirInstruccionReviewSignalTranscript(policy, proyecto, reviewerNombre, item), item, "reviewer", "reviewer_start")
 	if err != nil {
 		return "", err
 	}
 	emitirNotificacionReviewSignalTranscript("ready_for_review", nil, item, reviewerNombre)
 	return note, nil
+}
+
+func reviewerSignalTranscriptYaCubiertoPorGateAbierta(item *db.RuntimeTranscriptEntry, reviewer *db.Agente) (bool, error) {
+	if item == nil || reviewer == nil || clasificacionSignalTranscript(item) != "ready_for_review" {
+		return false, nil
+	}
+	reviewerNombre := nombreAgenteAutonomia(reviewer)
+	if reviewerNombre == "" || strings.EqualFold(reviewerNombre, agenteSignalTranscript(item)) {
+		return false, nil
+	}
+	proyectoRef, err := proyectoRefSignalTranscript(item)
+	if err != nil || strings.TrimSpace(proyectoRef) == "" {
+		return false, err
+	}
+	gates, err := reviewService.List(reviewapp.ListInput{
+		ProyectoRef:    strings.TrimSpace(proyectoRef),
+		ReviewerAgente: reviewerNombre,
+		Limit:          20,
+	})
+	if err != nil {
+		return false, err
+	}
+	return firstOpenGate(gates) != nil, nil
 }
 
 func emitirNotificacionRuntimeFailureSignalTranscript(agente string, item *db.RuntimeTranscriptEntry) {
