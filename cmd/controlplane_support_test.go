@@ -5077,6 +5077,36 @@ func TestAutonomiaBatchSnapshotMemoizaProyectoDisponibleParaAutonomia(t *testing
 	}
 }
 
+func TestAutonomiaBatchSnapshotMemoizaProyectoAutocierre(t *testing.T) {
+	prev := autonomiaProyectoTerminadoFn
+	t.Cleanup(func() { autonomiaProyectoTerminadoFn = prev })
+
+	calls := 0
+	autonomiaProyectoTerminadoFn = func(proyecto *db.Proyecto) (bool, string, error) {
+		calls++
+		return true, "sin trabajo pendiente", nil
+	}
+
+	snapshot := &autonomiaBatchSnapshot{
+		projectAutoCloseByID:   map[int64]autonomiaProjectAutoCloseStatus{},
+		projectAutoCloseLoaded: map[int64]struct{}{},
+	}
+	proyecto := &db.Proyecto{ID: 93, Slug: "memo-autoclose"}
+
+	for i := 0; i < 2; i++ {
+		terminado, motivo, err := snapshot.projectAutoCloseStatus(proyecto)
+		if err != nil {
+			t.Fatalf("projectAutoCloseStatus: %v", err)
+		}
+		if !terminado || motivo != "sin trabajo pendiente" {
+			t.Fatalf("estado autocierre inesperado: terminado=%v motivo=%q", terminado, motivo)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("deberia memoizar proyectoTerminadoAutonomamente, calls=%d", calls)
+	}
+}
+
 func TestProcesarDerivacionSemillaPremiumSesionActivaConSnapshotUsaTareaActivaInequivoca(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

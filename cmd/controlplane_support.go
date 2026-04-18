@@ -12025,7 +12025,13 @@ func procesarCierreProyectoSesionConSnapshot(sesion *db.Sesion, snapshot *autono
 	if policy == nil || !policy.Enabled || !policy.AutoCloseProject {
 		return 0, nil
 	}
-	terminado, motivo, err := proyectoTerminadoAutonomamente(proyecto)
+	terminado := false
+	motivo := ""
+	if snapshot != nil {
+		terminado, motivo, err = snapshot.projectAutoCloseStatus(proyecto)
+	} else {
+		terminado, motivo, err = autonomiaProyectoTerminadoFn(proyecto)
+	}
 	if err != nil || !terminado {
 		return 0, err
 	}

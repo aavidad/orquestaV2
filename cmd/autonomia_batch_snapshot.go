@@ -24,6 +24,11 @@ type autonomiaSupervisorCandidate struct {
 	score     int
 }
 
+type autonomiaProjectAutoCloseStatus struct {
+	finished bool
+	reason   string
+}
+
 type autonomiaBatchSnapshot struct {
 	sesiones []*db.Sesion
 
@@ -44,6 +49,8 @@ type autonomiaBatchSnapshot struct {
 	projectOperationLoaded     map[int64]struct{}
 	projectAvailableByID       map[int64]bool
 	projectAvailableLoaded     map[int64]struct{}
+	projectAutoCloseByID       map[int64]autonomiaProjectAutoCloseStatus
+	projectAutoCloseLoaded     map[int64]struct{}
 	activeProjectByAgent       map[string]int64
 	activeHandleByAgentProject map[string]bool
 	supervisorByProject        map[int64]*db.Agente
@@ -59,6 +66,7 @@ var autonomiaOperationalStateResolver = func(agente string) (string, string, err
 
 var autonomiaGetProyectoOperacionFn = db.GetProyectoOperacion
 var autonomiaProyectoDisponibleParaAutonomiaFn = db.ProyectoDisponibleParaAutonomia
+var autonomiaProyectoTerminadoFn = proyectoTerminadoAutonomamente
 
 func newAutonomiaBatchSnapshot(sesiones []*db.Sesion) (*autonomiaBatchSnapshot, error) {
 	agentNames := preloadAutonomiaBatchAgentNames(sesiones)
@@ -93,6 +101,8 @@ func newAutonomiaBatchSnapshot(sesiones []*db.Sesion) (*autonomiaBatchSnapshot, 
 		projectOperationLoaded:     map[int64]struct{}{},
 		projectAvailableByID:       map[int64]bool{},
 		projectAvailableLoaded:     map[int64]struct{}{},
+		projectAutoCloseByID:       map[int64]autonomiaProjectAutoCloseStatus{},
+		projectAutoCloseLoaded:     map[int64]struct{}{},
 		activeProjectByAgent:       map[string]int64{},
 		activeHandleByAgentProject: map[string]bool{},
 		supervisorByProject:        map[int64]*db.Agente{},
@@ -167,6 +177,8 @@ func (s *autonomiaBatchSnapshot) invalidateProject(proyectoID int64) {
 	delete(s.projectOperationLoaded, proyectoID)
 	delete(s.projectAvailableByID, proyectoID)
 	delete(s.projectAvailableLoaded, proyectoID)
+	delete(s.projectAutoCloseByID, proyectoID)
+	delete(s.projectAutoCloseLoaded, proyectoID)
 	delete(s.supervisorByProject, proyectoID)
 	delete(s.supervisorLoaded, proyectoID)
 	for cacheKey := range s.tareasByAgentProject {
@@ -502,6 +514,26 @@ func (s *autonomiaBatchSnapshot) projectAvailableForAutonomy(proyectoID int64) (
 	s.projectAvailableByID[proyectoID] = disponible
 	s.projectAvailableLoaded[proyectoID] = struct{}{}
 	return disponible, nil
+}
+
+func (s *autonomiaBatchSnapshot) projectAutoCloseStatus(proyecto *db.Proyecto) (bool, string, error) {
+	if s == nil || proyecto == nil || proyecto.ID <= 0 {
+		return false, "", nil
+	}
+	if _, ok := s.projectAutoCloseLoaded[proyecto.ID]; ok {
+		status := s.projectAutoCloseByID[proyecto.ID]
+		return status.finished, status.reason, nil
+	}
+	finished, reason, err := autonomiaProyectoTerminadoFn(proyecto)
+	if err != nil {
+		return false, "", err
+	}
+	s.projectAutoCloseByID[proyecto.ID] = autonomiaProjectAutoCloseStatus{
+		finished: finished,
+		reason:   strings.TrimSpace(reason),
+	}
+	s.projectAutoCloseLoaded[proyecto.ID] = struct{}{}
+	return finished, strings.TrimSpace(reason), nil
 }
 
 func (s *autonomiaBatchSnapshot) projectAssignments(proyectoID int64) ([]*db.Asignacion, error) {
