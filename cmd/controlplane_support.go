@@ -10853,7 +10853,49 @@ func instruccionContinuacionSesionActivaAutonomia(tareaID int64) string {
 	if strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier") {
 		return "Esta semilla premium no autoriza programar un frente amplio. Toma o reanuda exactamente una tarea premium acotada con WRITE_SET y tests mínimos; si no existe, créala por la app/CLI de Orquesta y continúa sobre ese frente derivado."
 	}
+	if esTareaPostRemediationBlockedAutonomia(tarea) {
+		return instruccionContinuacionTareaPostRemediationBlockedAutonomia(tarea)
+	}
 	return "Sigue con la tarea activa y cierra el siguiente slice útil del frente actual dentro del write-set y tests definidos."
+}
+
+func instruccionContinuacionTareaPostRemediationBlockedAutonomia(tarea *db.Tarea) string {
+	if tarea == nil {
+		return "Resuelve el follow-up post-remediation bloqueado: diagnostica retry, nuevo relevo o handoff y deja el frente desbloqueado con trazabilidad."
+	}
+	targetAgente := extraerNotaAutonomiaKV(tarea.Notas, "agente_objetivo")
+	verificationKey := extraerNotaAutonomiaKV(tarea.Notas, "verification_key")
+	remediationKind := extraerNotaAutonomiaKV(tarea.Notas, "remediation_kind")
+	partes := []string{
+		"Resuelve el follow-up post-remediation bloqueado.",
+		"Diagnostica si conviene retry con contexto corregido, nuevo relevo o handoff y deja el frente desbloqueado con trazabilidad.",
+	}
+	if strings.TrimSpace(targetAgente) != "" {
+		partes = append(partes, "Agente objetivo: "+strings.TrimSpace(targetAgente)+".")
+	}
+	if strings.TrimSpace(verificationKey) != "" {
+		partes = append(partes, "Verification key: "+strings.TrimSpace(verificationKey)+".")
+	}
+	if strings.TrimSpace(remediationKind) != "" {
+		partes = append(partes, "Tipo de remediación previa: "+strings.TrimSpace(remediationKind)+".")
+	}
+	partes = append(partes, "Usa la app de Orquesta para decidir y ejecutar el siguiente paso; evita dejarlo en bucle o esperar a humano por defecto.")
+	return strings.Join(partes, " ")
+}
+
+func extraerNotaAutonomiaKV(notas, key string) string {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ""
+	}
+	prefix := key + ":"
+	for _, part := range strings.Split(strings.TrimSpace(notas), ";") {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(strings.ToLower(part), strings.ToLower(prefix)) {
+			return strings.TrimSpace(part[len(prefix):])
+		}
+	}
+	return ""
 }
 
 func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, proyecto *db.Proyecto, snapshot *autonomiaBatchSnapshot) (int, error) {

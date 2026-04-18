@@ -15618,6 +15618,58 @@ func TestEncolarContinuacionTareaReasignadaSiCorrespondeEscalaFollowupBloqueadoA
 	}
 }
 
+func TestInstruccionContinuacionSesionActivaAutonomiaEspecializaPostRemediationBlocked(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      autonomiaPostRemediationBlockedTaskTitle,
+		Descripcion: "Resolver follow-up bloqueado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:post_remediation_blocked;agente_objetivo:Codex2;verification_key:reassign:41:Codex1:Codex2;remediation_kind:reassign",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+
+	instruction := instruccionContinuacionSesionActivaAutonomia(tareaID)
+	for _, fragment := range []string{
+		"follow-up post-remediation bloqueado",
+		"Agente objetivo: Codex2.",
+		"Verification key: reassign:41:Codex1:Codex2.",
+		"Tipo de remediación previa: reassign.",
+		"Usa la app de Orquesta",
+	} {
+		if !strings.Contains(instruction, fragment) {
+			t.Fatalf("instruccion sin %q: %s", fragment, instruction)
+		}
+	}
+}
+
+func TestExtraerNotaAutonomiaKV(t *testing.T) {
+	notas := "autonomia:post_remediation_blocked;agente_objetivo:Codex2;verification_key:reassign:41:Codex1:Codex2;remediation_kind:reassign"
+	if got := extraerNotaAutonomiaKV(notas, "agente_objetivo"); got != "Codex2" {
+		t.Fatalf("agente_objetivo inesperado: %q", got)
+	}
+	if got := extraerNotaAutonomiaKV(notas, "verification_key"); got != "reassign:41:Codex1:Codex2" {
+		t.Fatalf("verification_key inesperada: %q", got)
+	}
+	if got := extraerNotaAutonomiaKV(notas, "missing"); got != "" {
+		t.Fatalf("missing deberia ser vacio, got=%q", got)
+	}
+}
+
 func TestReasignarYArrancarTareaAutonomiaReasignaIniciaYAnota(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
