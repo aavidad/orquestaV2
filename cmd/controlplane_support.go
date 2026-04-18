@@ -12106,12 +12106,99 @@ func encolarContinuacionTareaReasignadaSiCorresponde(agente string, proyectoID *
 	if err != nil || proyecto == nil {
 		return err
 	}
+	kind := "reactivate"
+	if strings.TrimSpace(origen) != "" {
+		kind = "reassign"
+	}
+	verificationKey := verificationKeyContinuacionTareaReasignada(strings.TrimSpace(agente), tareaID, kind, origen)
+	status, err := orquestacionAgentesService.GetPostRemediationStatus(strings.TrimSpace(agente), &proyecto.ID, verificationKey)
+	if err != nil {
+		return err
+	}
+	if status != nil && status.Found {
+		switch {
+		case status.Succeeded, status.Waiting:
+			return nil
+		case strings.TrimSpace(status.BlockedReason) != "" || strings.EqualFold(strings.TrimSpace(status.Estado), "fallida"):
+			return escalarContinuacionPostRemediationBloqueada(proyecto, tareaID, strings.TrimSpace(agente), verificationKey, status)
+		}
+	}
 	pendiente, err := existeRuntimeOrderAutonomiaPendiente(strings.TrimSpace(agente), &proyecto.ID, "nudge", "continuar_trabajo")
 	if err != nil || pendiente {
 		return err
 	}
 	_, err = encolarContinuacionTareaReasignada(strings.TrimSpace(agente), proyecto, tareaID, origen, motivo, instruction, extras)
 	return err
+}
+
+func escalarContinuacionPostRemediationBloqueada(proyecto *db.Proyecto, tareaID int64, agente, verificationKey string, status *orquestacionagentesapp.PostRemediationStatus) error {
+	if proyecto == nil || proyecto.ID <= 0 || tareaID <= 0 || strings.TrimSpace(agente) == "" || status == nil {
+		return nil
+	}
+	policy, err := supervisionService.GetProjectPolicy(proyecto.Slug)
+	if err != nil || policy == nil || !policy.Enabled {
+		return err
+	}
+	supervisor, _, err := resolverAgenteSupervisorSignalTranscript(proyecto.ID, policy, agente)
+	if err != nil || supervisor == nil {
+		return err
+	}
+	if strings.TrimSpace(nombreAgenteAutonomia(supervisor)) == "" || strings.EqualFold(nombreAgenteAutonomia(supervisor), strings.TrimSpace(agente)) {
+		return nil
+	}
+	detalle := strings.TrimSpace(status.BlockedReason)
+	if detalle == "" {
+		detalle = "followup_post_remediation_bloqueado"
+	}
+	_ = tareasService.Note(tareaID, "orquesta", fmt.Sprintf("Follow-up post-remediation bloqueado para %s (%s): %s", strings.TrimSpace(agente), strings.TrimSpace(verificationKey), detalle))
+	extras := map[string]any{
+		"tarea_id":                tareaID,
+		"verification_key":        strings.TrimSpace(verificationKey),
+		"post_remediation":        true,
+		"blocked_reason":          detalle,
+		"target_agente":           strings.TrimSpace(agente),
+		"remediation_kind":        strings.TrimSpace(status.RemediationKind),
+		"post_remediation_status": strings.TrimSpace(status.Estado),
+	}
+	_, err = encolarNudgeAutonomiaDetallado(
+		nombreAgenteAutonomia(supervisor),
+		proyecto,
+		"resolver_post_remediation_blocked",
+		fmt.Sprintf("Follow-up post-remediation bloqueado en tarea #%d", tareaID),
+		construirInstruccionSupervisionPostRemediationBloqueada(policy, proyecto, nombreAgenteAutonomia(supervisor), strings.TrimSpace(agente), tareaID, verificationKey, detalle),
+		extras,
+	)
+	return err
+}
+
+func construirInstruccionSupervisionPostRemediationBloqueada(policy *supervisionapp.Policy, proyecto *db.Proyecto, supervisor, agente string, tareaID int64, verificationKey, detalle string) string {
+	parts := []string{
+		"Orquesta: un follow-up post-remediation ha quedado bloqueado tras una reasignación o reactivación automática.",
+		"Revisa el frente ahora mismo y decide retry, nueva reasignación, ajuste de tarea o handoff. Evita dejar el frente en bucle de reintentos ciegos.",
+	}
+	if slugProyectoAutonomia(proyecto) != "" {
+		parts = append(parts, fmt.Sprintf("Proyecto: %s.", slugProyectoAutonomia(proyecto)))
+	}
+	if strings.TrimSpace(supervisor) != "" {
+		parts = append(parts, "Supervisor responsable: "+strings.TrimSpace(supervisor)+".")
+	}
+	if strings.TrimSpace(agente) != "" {
+		parts = append(parts, "Agente objetivo: "+strings.TrimSpace(agente)+".")
+	}
+	if tareaID > 0 {
+		parts = append(parts, fmt.Sprintf("Tarea afectada: #%d.", tareaID))
+	}
+	if strings.TrimSpace(verificationKey) != "" {
+		parts = append(parts, "Verification key: "+strings.TrimSpace(verificationKey)+".")
+	}
+	if strings.TrimSpace(detalle) != "" {
+		parts = append(parts, "Bloqueo detectado: "+strings.TrimSpace(detalle)+".")
+	}
+	if objetivoGeneralAutonomia(policy) != "" {
+		parts = append(parts, "Objetivo general: "+objetivoGeneralAutonomia(policy)+".")
+	}
+	parts = append(parts, "Si el mismo agente aún es viable, prepara retry con contexto corregido; si no, mueve el frente a otro agente o cambia el carril.")
+	return strings.Join(parts, " ")
 }
 
 func encolarNudgeSignalTranscriptAutonomia(agente string, proyecto *db.Proyecto, accion, instruction string, item *db.RuntimeTranscriptEntry, prefijoEstado string) (string, error) {

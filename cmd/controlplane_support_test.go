@@ -15434,6 +15434,140 @@ func TestEncolarContinuacionTareaReasignadaSiCorrespondeEvitaDuplicadoPendiente(
 	}
 }
 
+func TestEncolarContinuacionTareaReasignadaSiCorrespondeOmiteFollowupWaiting(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	verificationKey := verificationKeyContinuacionTareaReasignada("Codex1", 120, "reassign", "Gemma1")
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:        "Codex1",
+		ProyectoID:    &proyectoID,
+		Tipo:          "nudge",
+		Estado:        "ejecutando",
+		PayloadJSON:   fmt.Sprintf(`{"kind":"autonomia","accion":"continuar_trabajo","verification_key":"%s","remediation_kind":"reassign"}`, verificationKey),
+		ResultadoJSON: fmt.Sprintf(`{"dispatch_state":"notified","delivery_state":"notified","verification_key":"%s","remediation_kind":"reassign"}`, verificationKey),
+	}); err != nil {
+		t.Fatalf("crear follow-up waiting: %v", err)
+	}
+
+	if err := encolarContinuacionTareaReasignadaSiCorresponde("Codex1", &proyectoID, 120, "Gemma1", "worker_degradado", "continúa", nil); err != nil {
+		t.Fatalf("encolar continuacion condicionada: %v", err)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("no deberia duplicar follow-up waiting: %+v", orders)
+	}
+}
+
+func TestEncolarContinuacionTareaReasignadaSiCorrespondeEscalaFollowupBloqueadoAlSupervisor(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente worker: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Frente reactivado bloqueado",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	verificationKey := verificationKeyContinuacionTareaReasignada("Codex1", tareaID, "reassign", "Gemma1")
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:        "Codex1",
+		ProyectoID:    &proyectoID,
+		Tipo:          "nudge",
+		Estado:        "fallida",
+		PayloadJSON:   fmt.Sprintf(`{"kind":"autonomia","accion":"continuar_trabajo","verification_key":"%s","remediation_kind":"reassign"}`, verificationKey),
+		ResultadoJSON: fmt.Sprintf(`{"dispatch_state":"failed","delivery_state":"blocked","verification_key":"%s","remediation_kind":"reassign","blocked_reason":"agent still blocked"}`, verificationKey),
+	}); err != nil {
+		t.Fatalf("crear follow-up bloqueado: %v", err)
+	}
+
+	if err := encolarContinuacionTareaReasignadaSiCorresponde("Codex1", &proyectoID, tareaID, "Gemma1", "worker_degradado", "continúa", nil); err != nil {
+		t.Fatalf("encolar continuacion condicionada: %v", err)
+	}
+
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{ProyectoID: &proyectoID, Limit: 20})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	var supervisorNudge *db.RuntimeOrder
+	var workerPending *db.RuntimeOrder
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch {
+		case order.Agente == "CodexSupervisor" && order.Tipo == "nudge":
+			supervisorNudge = order
+		case order.Agente == "Codex1" && order.Tipo == "nudge" && order.Estado == "pendiente" && strings.Contains(order.PayloadJSON, `"accion":"continuar_trabajo"`):
+			workerPending = order
+		}
+	}
+	if workerPending != nil {
+		t.Fatalf("no deberia reencolar follow-up al mismo agente si ya quedó bloqueado: %+v", workerPending)
+	}
+	if supervisorNudge == nil || !strings.Contains(supervisorNudge.PayloadJSON, `"accion":"resolver_post_remediation_blocked"`) {
+		t.Fatalf("deberia escalar al supervisor, got=%+v", supervisorNudge)
+	}
+	if !strings.Contains(supervisorNudge.PayloadJSON, `"verification_key":"`+verificationKey+`"`) {
+		t.Fatalf("nudge al supervisor sin verification_key: %s", supervisorNudge.PayloadJSON)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || !strings.Contains(strings.ToLower(tarea.Notas), "post-remediation bloqueado") {
+		t.Fatalf("la tarea deberia anotar el bloqueo post-remediation: %+v", tarea)
+	}
+}
+
 func TestReasignarYArrancarTareaAutonomiaReasignaIniciaYAnota(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
