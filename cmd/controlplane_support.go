@@ -11965,6 +11965,10 @@ func tareaBloqueadaRecuperableParaReanimacionDetalle(tarea *db.Tarea) (bool, err
 }
 
 func existeOtraTareaPostRemediationBlockedAbierta(tarea *db.Tarea) (bool, error) {
+	return existeOtraTareaPostRemediationBlockedAbiertaEnMomento(tarea, time.Now().UTC())
+}
+
+func existeOtraTareaPostRemediationBlockedAbiertaEnMomento(tarea *db.Tarea, now time.Time) (bool, error) {
 	if tarea == nil || tarea.ProyectoID == nil || *tarea.ProyectoID <= 0 {
 		return false, nil
 	}
@@ -11984,11 +11988,32 @@ func existeOtraTareaPostRemediationBlockedAbierta(tarea *db.Tarea) (bool, error)
 		case db.TareaCompletada, db.TareaCancelada:
 			continue
 		}
+		if tareaPostRemediationBlockedObsoleta(otra, now) {
+			continue
+		}
 		if strings.EqualFold(strings.TrimSpace(extraerNotaAutonomiaKV(otra.Notas, "verification_key")), verificationKey) {
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+func tareaPostRemediationBlockedObsoleta(tarea *db.Tarea, now time.Time) bool {
+	if tarea == nil {
+		return false
+	}
+	seconds := controlPlaneConfigIntOrDefault("autonomia_post_remediation_duplicate_stale_seconds", 1800)
+	if seconds <= 0 {
+		return false
+	}
+	ref := tarea.UpdatedAt.UTC()
+	if ref.IsZero() {
+		ref = tarea.CreatedAt.UTC()
+	}
+	if ref.IsZero() {
+		return false
+	}
+	return ref.Before(now.UTC().Add(-time.Duration(seconds) * time.Second))
 }
 
 func existeRuntimeOrderAutonomiaPendiente(agente string, proyectoID *int64, tipo string, accion string) (bool, error) {
