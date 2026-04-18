@@ -3167,6 +3167,92 @@ func TestProcesarRuntimeSupervisionBatchSupervisaProcesoLocalSinDuplicar(t *test
 	}
 }
 
+func TestProcesarRuntimeSupervisionBatchRespetaBatchBudget(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	prevFn := runtimeSupervisionHandleFn
+	prevBudget := runtimeSupervisionBatchBudgetOverride
+	t.Cleanup(func() {
+		runtimeSupervisionHandleFn = prevFn
+		runtimeSupervisionBatchBudgetOverride = prevBudget
+	})
+
+	runtimeSupervisionBatchBudgetOverride = 5 * time.Millisecond
+	if err := ConfigSet("runtime_supervision_interval_seconds", "1"); err != nil {
+		t.Fatalf("config supervision interval: %v", err)
+	}
+	if err := ConfigSet("runtime_supervision_batch_size", "10"); err != nil {
+		t.Fatalf("config supervision batch size: %v", err)
+	}
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente 1: %v", err)
+	}
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente 2: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador-budget",
+		Nombre:  "Orquestador Budget",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	pid := int64(os.Getpid())
+	sesion1, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		PID:         &pid,
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion 1: %v", err)
+	}
+	sesion2, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		PID:         &pid,
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion 2: %v", err)
+	}
+	handle1, err := GetRuntimeHandleBySesionID(sesion1.ID)
+	if err != nil || handle1 == nil {
+		t.Fatalf("handle1: %+v err=%v", handle1, err)
+	}
+	handle2, err := GetRuntimeHandleBySesionID(sesion2.ID)
+	if err != nil || handle2 == nil {
+		t.Fatalf("handle2: %+v err=%v", handle2, err)
+	}
+	old := time.Now().UTC().Add(-2 * time.Minute)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET last_seen_at = ? WHERE id IN (?, ?)`, old, handle1.ID, handle2.ID); err != nil {
+		t.Fatalf("envejecer handles: %v", err)
+	}
+
+	calls := 0
+	runtimeSupervisionHandleFn = func(handle *RuntimeHandle, runtime *RuntimeInstance, source string) (map[string]any, error) {
+		calls++
+		time.Sleep(10 * time.Millisecond)
+		return map[string]any{"ok": true}, nil
+	}
+
+	n, err := ProcesarRuntimeSupervisionBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime supervision: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia cortar tras una supervision por budget, got=%d", n)
+	}
+	if calls != 1 {
+		t.Fatalf("deberia supervisar solo un handle antes de diferir, calls=%d", calls)
+	}
+}
+
 func TestReconciliarRuntimeHandlesStaleMarcaHandleActivoConSesionAbierta(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

@@ -3390,6 +3390,20 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 	return processed, nil
 }
 
+var runtimeSupervisionHandleFn = supervisarRuntimeHandle
+var runtimeSupervisionBatchBudgetOverride time.Duration
+
+func runtimeSupervisionBatchBudget() time.Duration {
+	if runtimeSupervisionBatchBudgetOverride > 0 {
+		return runtimeSupervisionBatchBudgetOverride
+	}
+	seconds := configIntOrDefault("runtime_supervision_batch_budget_seconds", 2)
+	if seconds <= 0 {
+		seconds = 2
+	}
+	return time.Duration(seconds) * time.Second
+}
+
 func ProcesarRuntimeSupervisionBatch() (int, error) {
 	limit := configIntOrDefault("runtime_supervision_batch_size", 10)
 	if limit <= 0 {
@@ -3429,9 +3443,16 @@ func ProcesarRuntimeSupervisionBatch() (int, error) {
 	}
 
 	processed := 0
+	start := time.Now()
+	budget := runtimeSupervisionBatchBudget()
 	for _, handle := range handles {
 		if handle == nil {
 			continue
+		}
+		if budget > 0 && time.Since(start) >= budget {
+			Audit("server", "runtime_supervision_batch_deferred", "runtime_handle", 0,
+				fmt.Sprintf("budget=%s processed=%d", budget, processed))
+			break
 		}
 		if abierta, err := existeRuntimeOrderAbiertaAgenteProyecto(strings.TrimSpace(handle.Agente), handle.ProyectoID, 0,
 			"sync_status", "start", "resume", "pause", "stop", "restart", "handoff"); err != nil {
@@ -3443,7 +3464,7 @@ func ProcesarRuntimeSupervisionBatch() (int, error) {
 		if err != nil {
 			return processed, err
 		}
-		if _, err := supervisarRuntimeHandle(handle, runtime, "runtime_supervision"); err != nil {
+		if _, err := runtimeSupervisionHandleFn(handle, runtime, "runtime_supervision"); err != nil {
 			return processed, err
 		}
 		processed++
