@@ -894,6 +894,45 @@ func ListarAgentesCuentasLigero() ([]*Agente, error) {
 	return list, nil
 }
 
+func GetAgentePrepareLite(nombre string) (*Agente, error) {
+	nombreCanonico, _, _, err := resolverAgentePorNombreCI(strings.TrimSpace(nombre))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	dbHandle := DB
+	if dbHandle == nil || dbHandle.DB == nil {
+		return nil, nil
+	}
+	row := dbHandle.QueryRow(`
+		SELECT nombre, rol, activo, habilitado, COALESCE(estado_sesion,''), ultima_sesion,
+		       estado_cuota, reanimar_at, motivo_pausa
+		FROM agentes WHERE nombre = ?`, nombreCanonico)
+	a := &Agente{}
+	var ultima sql.NullTime
+	var reanimar sql.NullTime
+	var motivo sql.NullString
+	if err := row.Scan(
+		&a.Nombre, &a.Rol, &a.Activo, &a.Habilitado, &a.EstadoSesion, &ultima,
+		&a.EstadoCuota, &reanimar, &motivo,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if ultima.Valid {
+		a.UltimaSesion = &ultima.Time
+	}
+	if reanimar.Valid {
+		a.ReanimarAt = &reanimar.Time
+	}
+	a.MotivoPausa = motivo.String
+	return a, nil
+}
+
 func GetAgente(nombre string) (*Agente, error) {
 	nombreCanonico, _, _, err := resolverAgentePorNombreCI(strings.TrimSpace(nombre))
 	if err != nil {

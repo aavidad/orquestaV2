@@ -48,6 +48,10 @@ func (Repository) GetAgent(nombre string) (*db.Agente, error) {
 	return db.GetAgente(nombre)
 }
 
+func (Repository) GetAgentPrepareLite(nombre string) (*db.Agente, error) {
+	return db.GetAgentePrepareLite(nombre)
+}
+
 func (Repository) GetProject(ref string) (*db.Proyecto, error) {
 	return db.GetProyecto(ref)
 }

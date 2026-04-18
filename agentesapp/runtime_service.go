@@ -18,6 +18,10 @@ import (
 
 const liveOperationalStateTimeout = 750 * time.Millisecond
 
+type liteAgentGetter interface {
+	GetAgentPrepareLite(nombre string) (*db.Agente, error)
+}
+
 type ProjectBundle struct {
 	ID      int64  `json:"id"`
 	Slug    string `json:"slug"`
@@ -136,7 +140,7 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	}()
 
 	stepStart := time.Now()
-	agente, err := s.store.GetAgent(agenteNombre)
+	agente, err := s.getAgentForPrepare(agenteNombre)
 	if err != nil {
 		return nil, err
 	}
@@ -305,6 +309,22 @@ func prepareDebugEnabled() bool {
 		}
 	}
 	return false
+}
+
+func (s *Service) getAgentForPrepare(nombre string) (*db.Agente, error) {
+	if s != nil && s.store != nil {
+		if lite, ok := s.store.(liteAgentGetter); ok {
+			agente, err := lite.GetAgentPrepareLite(nombre)
+			if err != nil {
+				return nil, err
+			}
+			if agente != nil {
+				return agente, nil
+			}
+		}
+		return s.store.GetAgent(nombre)
+	}
+	return nil, nil
 }
 
 func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {

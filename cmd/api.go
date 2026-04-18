@@ -130,7 +130,7 @@ var (
 	apiAgentOverviewTimeout      = 3 * time.Second
 	apiAgentBudgetRefreshTimeout = 3 * time.Second
 	apiAgentPrepareTimeout       = 6 * time.Second
-	apiAgentPrepareLimiter       = make(chan struct{}, 1)
+	apiAgentPrepareLimiter       = make(chan struct{}, 4)
 	apiAgentDetailBuilder        = func(nombre string, compact bool) (*agentesapp.Detail, error) {
 		if compact {
 			return agentesService.BuildDetailCompact(nombre)
@@ -147,32 +147,35 @@ func runAPIAgentPrepareLimited(timeout time.Duration, fn func() (*agentesapp.Pre
 	if fn == nil {
 		return nil, fmt.Errorf("prepare builder no inicializado")
 	}
+	if timeout <= 0 {
+		timeout = apiAgentPrepareTimeout
+	}
+	deadline := time.Now().Add(timeout)
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case apiAgentPrepareLimiter <- struct{}{}:
+	case <-timer.C:
+		return nil, errStatusFetchTimeout
+	}
+	defer func() { <-apiAgentPrepareLimiter }()
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return nil, errStatusFetchTimeout
+	}
 	type result struct {
 		out *agentesapp.PrepareOutput
 		err error
 	}
 	done := make(chan result, 1)
 	go func() {
-		if timeout <= 0 {
-			timeout = apiAgentPrepareTimeout
-		}
-		select {
-		case apiAgentPrepareLimiter <- struct{}{}:
-		case <-time.After(timeout):
-			done <- result{err: errStatusFetchTimeout}
-			return
-		}
-		defer func() { <-apiAgentPrepareLimiter }()
 		out, err := fn()
 		done <- result{out: out, err: err}
 	}()
-	if timeout <= 0 {
-		timeout = apiAgentPrepareTimeout
-	}
 	select {
 	case res := <-done:
 		return res.out, res.err
-	case <-time.After(timeout):
+	case <-time.After(remaining):
 		return nil, errStatusFetchTimeout
 	}
 }

@@ -3,6 +3,7 @@ package agentesapp
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,6 +69,13 @@ type fakeStore struct {
 	enqueuedOrders []*db.RuntimeOrder
 }
 
+type fakeStoreWithLiteAgent struct {
+	*fakeStore
+	liteAgent    *db.Agente
+	liteAgentErr error
+	liteCalls    int
+}
+
 func (f *fakeStore) RegisterAgent(nombre, rol string) error { return nil }
 func (f *fakeStore) RegisterAgentAuto(proveedor, rol string) (string, error) {
 	return "Codex1", nil
@@ -99,6 +107,18 @@ func (f *fakeStore) GetAgent(nombre string) (*db.Agente, error) {
 		}
 	}
 	return nil, nil
+}
+
+func (f *fakeStoreWithLiteAgent) GetAgentPrepareLite(nombre string) (*db.Agente, error) {
+	f.liteCalls++
+	if f.liteAgentErr != nil {
+		return nil, f.liteAgentErr
+	}
+	return f.liteAgent, nil
+}
+
+func (f *fakeStoreWithLiteAgent) GetAgent(nombre string) (*db.Agente, error) {
+	return nil, fmt.Errorf("GetAgent pesado no deberia usarse en BuildPrepare")
 }
 
 func (f *fakeStore) GetProject(ref string) (*db.Proyecto, error) { return f.project, nil }
@@ -413,6 +433,29 @@ func (f *fakeStore) SharedAccountAllowsActivation(nombre string) (bool, string, 
 		}
 	}
 	return true, "", nil
+}
+
+func TestGetAgentForPreparePrefiereGetAgentPrepareLiteSiEstaDisponible(t *testing.T) {
+	store := &fakeStoreWithLiteAgent{
+		fakeStore: &fakeStore{},
+		liteAgent: &db.Agente{
+			Nombre:      "Codex2",
+			Rol:         "programador",
+			Habilitado:  true,
+			EstadoCuota: "activo",
+		},
+	}
+
+	out, err := NewService(store, nil).getAgentForPrepare("Codex2")
+	if err != nil {
+		t.Fatalf("getAgentForPrepare: %v", err)
+	}
+	if out == nil || out.Nombre != "Codex2" {
+		t.Fatalf("salida inesperada: %+v", out)
+	}
+	if store.liteCalls != 1 {
+		t.Fatalf("deberia usar GetAgentPrepareLite una vez, got=%d", store.liteCalls)
+	}
 }
 
 func (f *fakeStore) ConfigGet(clave string) (string, error) {

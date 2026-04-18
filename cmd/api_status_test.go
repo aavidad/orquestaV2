@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -221,5 +222,34 @@ func TestAPIAgentePrepararReturns503WhenBuilderHangs(t *testing.T) {
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRunAPIAgentPrepareLimitedTimeoutNoDejaTrabajoEnCola(t *testing.T) {
+	prevLimiter := apiAgentPrepareLimiter
+	apiAgentPrepareLimiter = make(chan struct{}, 1)
+	defer func() { apiAgentPrepareLimiter = prevLimiter }()
+
+	apiAgentPrepareLimiter <- struct{}{}
+	defer func() {
+		select {
+		case <-apiAgentPrepareLimiter:
+		default:
+		}
+	}()
+
+	var calls atomic.Int32
+	_, err := runAPIAgentPrepareLimited(20*time.Millisecond, func() (*agentesapp.PrepareOutput, error) {
+		calls.Add(1)
+		return &agentesapp.PrepareOutput{}, nil
+	})
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+
+	<-apiAgentPrepareLimiter
+	time.Sleep(40 * time.Millisecond)
+	if calls.Load() != 0 {
+		t.Fatalf("builder no deberia ejecutarse tras timeout de cola, got=%d", calls.Load())
 	}
 }
