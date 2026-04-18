@@ -16082,6 +16082,116 @@ func TestIntentarAutoResolverContinuacionPostRemediationReactivateNoActuaConOrde
 	}
 }
 
+func TestIntentarAutoResolverContinuacionPostRemediationReassignReasignaATMUXSano(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"Codex8", "Codex7"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+
+	traceDir := filepath.Join(tmp, "runtime", "codex7")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	now := time.Now().UTC()
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"state":"running","alive":true,"timestamp":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata relevo: %v", err)
+	}
+	sesionSana, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex7",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion relevo: %v", err)
+	}
+	handleSano, err := db.GetRuntimeHandleBySesionID(sesionSana.ID)
+	if err != nil || handleSano == nil {
+		t.Fatalf("handle relevo: %+v err=%v", handleSano, err)
+	}
+	runtimeSano, err := db.GetRuntimeBySesionID(sesionSana.ID)
+	if err != nil || runtimeSano == nil {
+		t.Fatalf("runtime relevo: %+v err=%v", runtimeSano, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, string(metaJSON), handleSano.ID); err != nil {
+		t.Fatalf("activar handle relevo: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='esperando_io', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeSano.ID); err != nil {
+		t.Fatalf("activar runtime relevo: %v", err)
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente bloqueado",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex8"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex8"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "orquesta", "Agente Codex8 en estado bloqueado_por_runtime: pausado"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+	status := &orquestacionagentesapp.PostRemediationStatus{
+		RemediationKind: "reassign",
+		BlockedReason:   "agent still blocked",
+	}
+	ok, err := intentarAutoResolverContinuacionPostRemediationReassign(proyecto, tareaID, "Codex8", "reassign:1:Codex8:Codex7", status)
+	if err != nil {
+		t.Fatalf("intentar auto resolver reassign: %v", err)
+	}
+	if !ok {
+		t.Fatalf("deberia reasignar la tarea al relevo sano")
+	}
+	actual, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if actual == nil || actual.Estado != db.TareaEnProgreso || actual.Agente == nil || *actual.Agente != "Codex7" {
+		t.Fatalf("la tarea deberia quedar en progreso en Codex7: %+v", actual)
+	}
+}
+
 func TestBloquearTareaAutonomiaSinRelevoBloqueaYAnota(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

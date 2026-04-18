@@ -12402,6 +12402,11 @@ func escalarContinuacionPostRemediationBloqueada(proyecto *db.Proyecto, tareaID 
 	if proyecto == nil || proyecto.ID <= 0 || tareaID <= 0 || strings.TrimSpace(agente) == "" || status == nil {
 		return nil
 	}
+	if reasignada, err := intentarAutoResolverContinuacionPostRemediationReassign(proyecto, tareaID, strings.TrimSpace(agente), verificationKey, status); err != nil {
+		return err
+	} else if reasignada {
+		return nil
+	}
 	if reactivada, err := intentarAutoResolverContinuacionPostRemediationReactivate(proyecto, tareaID, strings.TrimSpace(agente), verificationKey, status); err != nil {
 		return err
 	} else if reactivada {
@@ -12456,6 +12461,44 @@ func escalarContinuacionPostRemediationBloqueada(proyecto *db.Proyecto, tareaID 
 		extras,
 	)
 	return err
+}
+
+func intentarAutoResolverContinuacionPostRemediationReassign(proyecto *db.Proyecto, tareaID int64, agente, verificationKey string, status *orquestacionagentesapp.PostRemediationStatus) (bool, error) {
+	if proyecto == nil || proyecto.ID <= 0 || tareaID <= 0 || strings.TrimSpace(agente) == "" || status == nil {
+		return false, nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(status.RemediationKind), "reassign") {
+		return false, nil
+	}
+	abierta, err := existeRuntimeOrderAbiertaAgente(strings.TrimSpace(agente), &proyecto.ID)
+	if err != nil || abierta {
+		return false, err
+	}
+	tarea, err := tareasService.Get(tareaID)
+	if err != nil || tarea == nil || tarea.Estado != db.TareaBloqueada || tarea.Agente == nil {
+		return false, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(agente)) {
+		return false, nil
+	}
+	rows, err := agentesService.BuildPanelRows()
+	if err != nil {
+		return false, err
+	}
+	relevo := seleccionarRelevoAutonomiaBloqueada(rows, openTasksProjectedFromRows(rows), tarea, strings.TrimSpace(agente))
+	if strings.TrimSpace(relevo) == "" {
+		return false, nil
+	}
+	detalle := firstNonEmpty(strings.TrimSpace(status.BlockedReason), "follow-up post-remediation bloqueado")
+	resolucion := fmt.Sprintf("reasignación automática tras follow-up post-remediation bloqueado desde %s (%s)", strings.TrimSpace(agente), detalle)
+	nota := fmt.Sprintf("Reasignada automáticamente desde %s a %s tras follow-up post-remediation bloqueado", strings.TrimSpace(agente), strings.TrimSpace(relevo))
+	if strings.TrimSpace(verificationKey) != "" {
+		nota += " (" + strings.TrimSpace(verificationKey) + ")"
+	}
+	if err := desbloquearYReasignarTareaAutonomia(tarea.ID, resolucion, strings.TrimSpace(relevo), nota); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func intentarAutoResolverContinuacionPostRemediationReactivate(proyecto *db.Proyecto, tareaID int64, agente, verificationKey string, status *orquestacionagentesapp.PostRemediationStatus) (bool, error) {
