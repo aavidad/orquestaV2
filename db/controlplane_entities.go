@@ -12211,6 +12211,9 @@ func SincronizarRuntimeHandleSupervisado(handle *RuntimeHandle, runtime *Runtime
 			}
 		}
 	}
+	if handle == nil {
+		return nil, runtime, "", nil
+	}
 	if runtimepolicy.RuntimeHandleTMUXSessionMissing(handle.MetadataJSON) {
 		if err := marcarProcesoLocalNoDisponible(handle, runtime); err != nil {
 			return nil, nil, "", err

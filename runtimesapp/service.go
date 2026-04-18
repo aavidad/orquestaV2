@@ -412,7 +412,7 @@ func (s *Service) ListRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error
 		if synced >= 1 && !runtimepolicy.RuntimeHandleNeedsFreshSync(handle.Estado) {
 			continue
 		}
-		if refreshed, err := s.store.SyncSupervisedRuntimeHandle(handle, "runtimesapp_list_runtime_handles"); err == nil && refreshed != nil {
+		if refreshed, err := s.store.SyncSupervisedRuntimeHandle(handle, "runtimesapp_list_runtime_handles"); err == nil {
 			handles[i] = refreshed
 		}
 		synced++

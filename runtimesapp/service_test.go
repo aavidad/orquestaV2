@@ -54,6 +54,7 @@ type fakeStore struct {
 	syncHandleCalls          int
 	syncHandleSource         string
 	syncHandleResp           *db.RuntimeHandle
+	syncHandleRespSet        bool
 	purgeFilter              db.FiltroPurgadoRuntimeHandles
 	purgeResponse            *db.PurgaRuntimeHandlesResultado
 	purgeOrdersFilter        db.FiltroPurgadoRuntimeOrders
@@ -350,7 +351,7 @@ func (f *fakeStore) SyncSupervisedRuntimeHandle(handle *db.RuntimeHandle, source
 	f.syncHandleInput = handle
 	f.syncHandleCalls++
 	f.syncHandleSource = source
-	if f.syncHandleResp != nil {
+	if f.syncHandleRespSet {
 		return f.syncHandleResp, nil
 	}
 	return handle, nil
@@ -786,6 +787,30 @@ func TestListRuntimeHandlesCompactPrefiereCanonicosSinSincronizar(t *testing.T) 
 	}
 	if store.syncHandleCalls != 0 {
 		t.Fatalf("syncHandleCalls=%d", store.syncHandleCalls)
+	}
+}
+
+func TestListRuntimeHandlesDescartaHandleSincronizadoANil(t *testing.T) {
+	agent := "Codex2"
+	store := &fakeStore{
+		handlesResponse:   []*db.RuntimeHandle{{ID: 31, Agente: agent, Estado: "activo"}},
+		syncHandleRespSet: true,
+		syncHandleResp:    nil,
+	}
+	service := NewService(store)
+
+	handles, err := service.ListRuntimeHandles(&agent)
+	if err != nil {
+		t.Fatalf("ListRuntimeHandles: %v", err)
+	}
+	if len(handles) != 1 {
+		t.Fatalf("len(handles)=%d", len(handles))
+	}
+	if handles[0] != nil {
+		t.Fatalf("el handle sincronizado a nil no deberia mantenerse: %+v", handles[0])
+	}
+	if store.syncHandleCalls != 1 || store.syncHandleInput == nil || store.syncHandleInput.ID != 31 {
+		t.Fatalf("sync inesperado calls=%d input=%+v", store.syncHandleCalls, store.syncHandleInput)
 	}
 }
 
