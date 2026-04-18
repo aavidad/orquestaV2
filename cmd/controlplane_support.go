@@ -3651,12 +3651,35 @@ func registrarAutoGuidanceSignalTranscript(orderID int64, orderType, agente stri
 
 func completarAutoGuidanceSignalTranscript(item *db.RuntimeTranscriptEntry, orderID int64) (string, error) {
 	notes := []string{fmt.Sprintf("auto_guidance_order:%d", orderID)}
+	if !signalTranscriptDebeEscalarASupervisor(item) {
+		return resumenNotasAutonomia(notes), nil
+	}
 	if supervisorNote, err := notificarSupervisorSignalTranscript(item); err != nil {
 		return "", err
 	} else {
 		notes = acumularNotaAutonomia(notes, supervisorNote)
 	}
 	return resumenNotasAutonomia(notes), nil
+}
+
+func signalTranscriptDebeEscalarASupervisor(item *db.RuntimeTranscriptEntry) bool {
+	if item == nil {
+		return false
+	}
+	clasificacion := strings.TrimSpace(clasificacionSignalTranscript(item))
+	switch clasificacion {
+	case "approval_request", "waiting_human":
+	default:
+		return true
+	}
+	normalized := normalizarSignalTranscriptTexto(item)
+	if textoPareceAccionDestructiva(normalized) || textoPareceDependenciaExterna(normalized) {
+		return true
+	}
+	if textoPareceAccionNormalAutonoma(normalized) {
+		return false
+	}
+	return true
 }
 
 func signalTranscriptDebeIgnorarseAutoGuia(item *db.RuntimeTranscriptEntry) bool {
