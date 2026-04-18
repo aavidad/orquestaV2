@@ -18831,6 +18831,136 @@ func TestDesbloquearTareasBloqueadasRecuperablesSinRuntimeReabreBloqueoSinRelevo
 	}
 }
 
+func TestReactivarTareasBloqueadasRecuperablesAutonomiaReabrePostRemediationBlockedUnica(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "autonomia_post_remediation"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      autonomiaPostRemediationBlockedTaskTitle,
+		Descripcion: "Resolver follow-up bloqueado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:post_remediation_blocked;tarea:41;agente_objetivo:Codex8;verification_key:reassign:41:Codex8:Codex7;remediation_kind:reassign",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea post-remediation: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexSupervisor"); err != nil {
+		t.Fatalf("tomar tarea post-remediation: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexSupervisor"); err != nil {
+		t.Fatalf("iniciar tarea post-remediation: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "orquesta", "Follow-up post-remediation bloqueado"); err != nil {
+		t.Fatalf("bloquear tarea post-remediation: %v", err)
+	}
+
+	n, err := reactivarTareasBloqueadasRecuperablesAutonomia("CodexSupervisor", proyectoID, "Reactivada automáticamente para retomar post-remediation")
+	if err != nil {
+		t.Fatalf("reactivar tareas bloqueadas recuperables autonomia: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia reactivar la tarea post-remediation bloqueada, got=%d", n)
+	}
+	actual, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea post-remediation: %v", err)
+	}
+	if actual == nil || actual.Estado != db.TareaEnProgreso || actual.Agente == nil || *actual.Agente != "CodexSupervisor" {
+		t.Fatalf("la tarea post-remediation deberia quedar en_progreso en el supervisor: %+v", actual)
+	}
+}
+
+func TestReactivarTareasBloqueadasRecuperablesAutonomiaNoReabrePostRemediationDuplicada(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "autonomia_post_remediation"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+
+	verificationKey := "reassign:41:Codex8:Codex7"
+	bloqueadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      autonomiaPostRemediationBlockedTaskTitle,
+		Descripcion: "Resolver follow-up bloqueado 1",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:post_remediation_blocked;tarea:41;agente_objetivo:Codex8;verification_key:" + verificationKey + ";remediation_kind:reassign",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea bloqueada: %v", err)
+	}
+	if err := db.TomarTarea(bloqueadaID, "CodexSupervisor"); err != nil {
+		t.Fatalf("tomar tarea bloqueada: %v", err)
+	}
+	if err := db.IniciarTarea(bloqueadaID, "CodexSupervisor"); err != nil {
+		t.Fatalf("iniciar tarea bloqueada: %v", err)
+	}
+	if err := db.BloquearTarea(bloqueadaID, "orquesta", "Follow-up post-remediation bloqueado"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	duplicadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      autonomiaPostRemediationBlockedTaskTitle,
+		Descripcion: "Resolver follow-up bloqueado 2",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:post_remediation_blocked;tarea:41;agente_objetivo:Codex8;verification_key:" + verificationKey + ";remediation_kind:reassign",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea duplicada: %v", err)
+	}
+	if err := db.TomarTarea(duplicadaID, "CodexSupervisor"); err != nil {
+		t.Fatalf("tomar tarea duplicada: %v", err)
+	}
+
+	n, err := reactivarTareasBloqueadasRecuperablesAutonomia("CodexSupervisor", proyectoID, "No deberia reactivar duplicada")
+	if err != nil {
+		t.Fatalf("reactivar tareas bloqueadas recuperables autonomia: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia reactivar la tarea post-remediation duplicada, got=%d", n)
+	}
+	actual, err := db.GetTarea(bloqueadaID)
+	if err != nil {
+		t.Fatalf("get tarea bloqueada: %v", err)
+	}
+	if actual == nil || actual.Estado != db.TareaBloqueada {
+		t.Fatalf("la tarea bloqueada deberia seguir bloqueada si hay duplicada abierta: %+v", actual)
+	}
+}
+
 func TestProcesarAgentesDegradadosAutonomiaBatchAutoasignaPremiumLibreSinSesion(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
