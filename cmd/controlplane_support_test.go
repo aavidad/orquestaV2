@@ -4911,10 +4911,12 @@ func TestProcesarPrechecksAutonomiaSesionActivaOmiteRecoveryDegradadoConHandleOp
 		politicasByProject:         map[int64]*supervisionapp.Policy{},
 		asignacionesByAgent:        map[string][]*db.Asignacion{},
 		asignacionesByProject:      map[int64][]*db.Asignacion{},
-		projectOperationByID:       map[int64]*db.ProyectoOperacion{},
-		projectOperationLoaded:     map[int64]struct{}{},
-		projectAvailableByID:       map[int64]bool{},
-		projectAvailableLoaded:     map[int64]struct{}{},
+		projectOperationByID: map[int64]*db.ProyectoOperacion{
+			proyectoID: {ProyectoID: proyectoID, EstadoOperativo: db.ProyectoOperativoActivo},
+		},
+		projectOperationLoaded:     map[int64]struct{}{proyectoID: {}},
+		projectAvailableByID:       map[int64]bool{proyectoID: false},
+		projectAvailableLoaded:     map[int64]struct{}{proyectoID: {}},
 		activeProjectByAgent:       map[string]int64{},
 		activeHandleByAgentProject: map[string]bool{},
 		supervisorByProject:        map[int64]*db.Agente{},
@@ -4950,7 +4952,7 @@ func TestProcesarPrechecksAutonomiaSesionActivaOmiteRecoveryDegradadoConHandleOp
 	}
 }
 
-func TestProcesarPrechecksAutonomiaSesionActivaMantieneRecoveryDegradadoSiSesionPausada(t *testing.T) {
+func TestProcesarPrechecksAutonomiaSesionActivaOmiteRecoveryDegradadoSiSesionActiva(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	prev := procesarRecuperacionRuntimeDegradadoSesionFn
 	t.Cleanup(func() { procesarRecuperacionRuntimeDegradadoSesionFn = prev })
@@ -4958,8 +4960,60 @@ func TestProcesarPrechecksAutonomiaSesionActivaMantieneRecoveryDegradadoSiSesion
 	called := 0
 	procesarRecuperacionRuntimeDegradadoSesionFn = func(_ *db.Sesion) (int, error) {
 		called++
-		return 0, nil
+		return 1, nil
 	}
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "autonomia-active",
+		Nombre:  "Autonomia Active",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion := &db.Sesion{Agente: "CodexActive", ProyectoID: &proyectoID, Estado: "activa"}
+	snapshot := &autonomiaBatchSnapshot{
+		agentesByName:              map[string]*db.Agente{},
+		operationalStateByAgent:    map[string]string{},
+		operationalDetailByAgent:   map[string]string{},
+		operationalStateResolved:   map[string]struct{}{},
+		tareasByAgentProject:       map[string][]*db.Tarea{},
+		pendingVotesByAgentProject: map[string][]*db.Propuesta{},
+		openProposalsByProject:     map[int64][]*db.Propuesta{},
+		politicasByProject:         map[int64]*supervisionapp.Policy{},
+		asignacionesByAgent:        map[string][]*db.Asignacion{},
+		asignacionesByProject:      map[int64][]*db.Asignacion{},
+		projectOperationByID: map[int64]*db.ProyectoOperacion{
+			proyectoID: {ProyectoID: proyectoID, EstadoOperativo: db.ProyectoOperativoActivo},
+		},
+		projectOperationLoaded:     map[int64]struct{}{proyectoID: {}},
+		projectAvailableByID:       map[int64]bool{},
+		projectAvailableLoaded:     map[int64]struct{}{},
+		activeProjectByAgent:       map[string]int64{},
+		activeHandleByAgentProject: map[string]bool{},
+		supervisorByProject:        map[int64]*db.Agente{},
+		supervisorLoaded:           map[int64]struct{}{},
+		pauseByAgent:               map[string]autonomiaBudgetPauseDecision{},
+		bloqueosPorTarea:           map[int64]db.ResumenBloqueo{},
+		proyectosByID: map[int64]*db.Proyecto{
+			proyectoID: {ID: proyectoID, Slug: "autonomia-active", RutaAbs: filepath.Join(tmp, "orquestador")},
+		},
+		proyectosLoaded:          map[int64]struct{}{proyectoID: {}},
+		hotHandlesByAgentProject: map[string]*db.RuntimeHandle{},
+	}
+
+	if _, err := procesarPrechecksAutonomiaSesionActiva(sesion, snapshot); err != nil {
+		t.Fatalf("procesarPrechecksAutonomiaSesionActiva: %v", err)
+	}
+	if called != 0 {
+		t.Fatalf("no deberia invocar recovery degradado en sesion activa, called=%d", called)
+	}
+}
+
+func TestAutonomiaShouldAttemptDegradedRecoveryMantieneSesionPausadaConTrabajo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
 
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
 		Slug:    "autonomia-paused",
@@ -4974,11 +5028,15 @@ func TestProcesarPrechecksAutonomiaSesionActivaMantieneRecoveryDegradadoSiSesion
 	now := time.Now().UTC()
 	sesion := &db.Sesion{Agente: "CodexPaused", ProyectoID: &proyectoID, Estado: "pausada"}
 	snapshot := &autonomiaBatchSnapshot{
-		agentesByName:              map[string]*db.Agente{},
-		operationalStateByAgent:    map[string]string{},
-		operationalDetailByAgent:   map[string]string{},
-		operationalStateResolved:   map[string]struct{}{},
-		tareasByAgentProject:       map[string][]*db.Tarea{},
+		agentesByName:            map[string]*db.Agente{},
+		operationalStateByAgent:  map[string]string{},
+		operationalDetailByAgent: map[string]string{},
+		operationalStateResolved: map[string]struct{}{},
+		tareasByAgentProject: map[string][]*db.Tarea{
+			agentProjectCacheKey("CodexPaused", proyectoID): {
+				{ID: 1, Estado: db.TareaAsignada, Agente: strPtr("CodexPaused")},
+			},
+		},
 		pendingVotesByAgentProject: map[string][]*db.Propuesta{},
 		openProposalsByProject:     map[int64][]*db.Propuesta{},
 		politicasByProject:         map[int64]*supervisionapp.Policy{},
@@ -5011,11 +5069,63 @@ func TestProcesarPrechecksAutonomiaSesionActivaMantieneRecoveryDegradadoSiSesion
 		},
 	}
 
-	if _, err := procesarPrechecksAutonomiaSesionActiva(sesion, snapshot); err != nil {
-		t.Fatalf("procesarPrechecksAutonomiaSesionActiva: %v", err)
+	debeIntentar, err := autonomiaShouldAttemptDegradedRecovery(sesion, snapshot)
+	if err != nil {
+		t.Fatalf("autonomiaShouldAttemptDegradedRecovery: %v", err)
 	}
-	if called != 1 {
-		t.Fatalf("deberia mantener recovery degradado para sesion pausada, called=%d", called)
+	if !debeIntentar {
+		t.Fatal("deberia mantener recovery degradado para sesion pausada con trabajo")
+	}
+}
+
+func TestAutonomiaShouldAttemptDegradedRecoveryOmiteSesionPausadaSinTrabajo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "autonomia-paused-idle",
+		Nombre:  "Autonomia Paused Idle",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion := &db.Sesion{Agente: "CodexPausedIdle", ProyectoID: &proyectoID, Estado: "pausada"}
+	snapshot := &autonomiaBatchSnapshot{
+		agentesByName:              map[string]*db.Agente{},
+		operationalStateByAgent:    map[string]string{},
+		operationalDetailByAgent:   map[string]string{},
+		operationalStateResolved:   map[string]struct{}{},
+		tareasByAgentProject:       map[string][]*db.Tarea{},
+		pendingVotesByAgentProject: map[string][]*db.Propuesta{},
+		openProposalsByProject:     map[int64][]*db.Propuesta{},
+		politicasByProject:         map[int64]*supervisionapp.Policy{},
+		asignacionesByAgent:        map[string][]*db.Asignacion{},
+		asignacionesByProject:      map[int64][]*db.Asignacion{},
+		projectOperationByID:       map[int64]*db.ProyectoOperacion{},
+		projectOperationLoaded:     map[int64]struct{}{},
+		projectAvailableByID:       map[int64]bool{},
+		projectAvailableLoaded:     map[int64]struct{}{},
+		activeProjectByAgent:       map[string]int64{},
+		activeHandleByAgentProject: map[string]bool{},
+		supervisorByProject:        map[int64]*db.Agente{},
+		supervisorLoaded:           map[int64]struct{}{},
+		pauseByAgent:               map[string]autonomiaBudgetPauseDecision{},
+		bloqueosPorTarea:           map[int64]db.ResumenBloqueo{},
+		proyectosByID: map[int64]*db.Proyecto{
+			proyectoID: {ID: proyectoID, Slug: "autonomia-paused-idle", RutaAbs: filepath.Join(tmp, "orquestador")},
+		},
+		proyectosLoaded:          map[int64]struct{}{proyectoID: {}},
+		hotHandlesByAgentProject: map[string]*db.RuntimeHandle{},
+	}
+
+	debeIntentar, err := autonomiaShouldAttemptDegradedRecovery(sesion, snapshot)
+	if err != nil {
+		t.Fatalf("autonomiaShouldAttemptDegradedRecovery: %v", err)
+	}
+	if debeIntentar {
+		t.Fatal("no deberia intentar recovery degradado sin trabajo activo")
 	}
 }
 

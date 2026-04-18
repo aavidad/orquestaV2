@@ -10842,12 +10842,11 @@ func procesarPrechecksAutonomiaSesionActiva(sesion *db.Sesion, snapshot *autonom
 		{name: "reanudacion", fn: func() (int, error) { return procesarReanudacionAutonomaSesion(sesion, snapshot) }},
 		{name: "aparcado", fn: func() (int, error) { return procesarAparcadoAutonomoSesion(sesion, snapshot) }},
 		{name: "recovery_degradado", fn: func() (int, error) {
-			if snapshot != nil &&
-				!strings.EqualFold(strings.TrimSpace(sesion.Estado), "pausada") &&
-				snapshot.hasOperationalHandle(strings.TrimSpace(sesion.Agente), *sesion.ProyectoID) {
-				return 0, nil
+			debeIntentar, err := autonomiaShouldAttemptDegradedRecovery(sesion, snapshot)
+			if err != nil {
+				return 0, err
 			}
-			if !autonomiaRuntimeRecoveryShouldAttempt(strings.TrimSpace(sesion.Agente), *sesion.ProyectoID, strings.TrimSpace(sesion.Estado)) {
+			if !debeIntentar {
 				return 0, nil
 			}
 			return procesarRecuperacionRuntimeDegradadoSesionFn(sesion)
@@ -10869,6 +10868,26 @@ func procesarPrechecksAutonomiaSesionActiva(sesion *db.Sesion, snapshot *autonom
 		}
 	}
 	return 0, nil
+}
+
+func autonomiaShouldAttemptDegradedRecovery(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (bool, error) {
+	if sesion == nil || sesion.ProyectoID == nil {
+		return false, nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(sesion.Estado), "pausada") {
+		return false, nil
+	}
+	tieneTrabajoActivo, err := sesionTieneTrabajoArrancableAutonomia(sesion, snapshot)
+	if err != nil {
+		return false, err
+	}
+	if !tieneTrabajoActivo {
+		return false, nil
+	}
+	if !autonomiaRuntimeRecoveryShouldAttempt(strings.TrimSpace(sesion.Agente), *sesion.ProyectoID, strings.TrimSpace(sesion.Estado)) {
+		return false, nil
+	}
+	return true, nil
 }
 
 func procesarCompactacionExclusividadPremiumSesionActiva(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {
