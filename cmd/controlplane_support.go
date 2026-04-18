@@ -111,6 +111,8 @@ var procesarAgentesDegradadosAutonomiaBatchFn = procesarAgentesDegradadosAutonom
 var autonomiaSessionStepTimeoutOverride time.Duration
 var autonomiaDegradedBatchTimeoutOverride time.Duration
 var autonomiaBatchBudgetOverride time.Duration
+var refrescarPresupuestoSesionObservadoHandleFn = refrescarPresupuestoSesionObservadoHandle
+var runtimeBudgetBatchBudgetOverride time.Duration
 
 var autonomiaIdleAutoassignGate = planocontrol.NewThrottler()
 
@@ -1636,6 +1638,8 @@ func procesarPresupuestoSesionObservadoBatch() (int, error) {
 	if !allowRuntimeBudgetBackgroundObservation(time.Now().UTC()) {
 		return 0, nil
 	}
+	started := time.Now()
+	budget := runtimeBudgetBatchBudget()
 	handles, err := db.ListarRuntimeHandlesParaPresupuesto()
 	if err != nil {
 		return 0, err
@@ -1644,7 +1648,11 @@ func procesarPresupuestoSesionObservadoBatch() (int, error) {
 	procesados := 0
 	vistos := map[string]struct{}{}
 	for _, handle := range handles {
-		ok, agente, err := refrescarPresupuestoSesionObservadoHandle(handle)
+		if budget > 0 && time.Since(started) >= budget {
+			controlPlaneBudgetDebugf("runtime_budget batch_budget_agotado=%s procesados=%d handles_vistos=%d", budget, procesados, len(vistos))
+			break
+		}
+		ok, agente, err := refrescarPresupuestoSesionObservadoHandleFn(handle)
 		if err != nil {
 			return procesados, err
 		}
@@ -1714,6 +1722,17 @@ func refrescarPresupuestoSesionObservadoAgente(nombre string) (int, error) {
 }
 
 var budgetRefreshObservationBudget = 2 * time.Second
+
+func runtimeBudgetBatchBudget() time.Duration {
+	if runtimeBudgetBatchBudgetOverride > 0 {
+		return runtimeBudgetBatchBudgetOverride
+	}
+	seconds := controlPlaneConfigIntOrDefault("runtime_budget_batch_budget_seconds", 2)
+	if seconds <= 0 {
+		seconds = 2
+	}
+	return time.Duration(seconds) * time.Second
+}
 
 func listarRuntimeHandlesPresupuestoAgente(nombre string) ([]*db.RuntimeHandle, error) {
 	nombre = strings.TrimSpace(nombre)
@@ -2790,6 +2809,13 @@ func (s *runtimeMailboxBatchSnapshot) supervisedHandle(handle *db.RuntimeHandle)
 		err:               err,
 	}
 	return resultHandle, runtime, externalSessionID, err
+}
+
+func runtimeMailboxCanDeferSupervisedHandleError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(strings.TrimSpace(err.Error())), "no se pueden purgar handles con runtime orders vivas asociadas")
 }
 
 func (s *runtimeMailboxBatchSnapshot) externalSessionHandle(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (*db.RuntimeHandle, string, error) {
@@ -5857,7 +5883,11 @@ func procesarRuntimeMailboxInteractivoMensaje(msg *db.RuntimeMailboxMessage, con
 		return intentarReactivarRuntimeMailboxSinHandle(msg, snapshot)
 	}
 	if refreshed, _, _, err := snapshot.supervisedHandle(handle); err != nil {
-		return false, err
+		if runtimeMailboxCanDeferSupervisedHandleError(err) {
+			db.Audit("orquesta", "runtime_mailbox_supervision_deferred", "runtime_mailbox", msg.ID, err.Error())
+		} else {
+			return false, err
+		}
 	} else if refreshed != nil {
 		handle = refreshed
 	}
@@ -6426,7 +6456,11 @@ func procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(mailbox []*db.RuntimeMai
 			continue
 		}
 		if supervisedHandle, _, _, err := snapshot.supervisedHandle(handle); err != nil {
-			return total, err
+			if runtimeMailboxCanDeferSupervisedHandleError(err) {
+				db.Audit("orquesta", "runtime_mailbox_supervision_deferred", "runtime_mailbox", msg.ID, err.Error())
+			} else {
+				return total, err
+			}
 		} else if supervisedHandle != nil {
 			handle = supervisedHandle
 		}
@@ -6670,7 +6704,11 @@ func reconciliarRuntimeMailboxPipelineBootstrapActivaSiProcede(msg *db.RuntimeMa
 		return false, err
 	}
 	if supervisedHandle, _, _, err := snapshot.supervisedHandle(handle); err != nil {
-		return false, err
+		if runtimeMailboxCanDeferSupervisedHandleError(err) {
+			db.Audit("orquesta", "runtime_mailbox_supervision_deferred", "runtime_mailbox", msg.ID, err.Error())
+		} else {
+			return false, err
+		}
 	} else if supervisedHandle != nil {
 		handle = supervisedHandle
 	}

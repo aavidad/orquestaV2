@@ -25810,6 +25810,120 @@ func TestProcesarPresupuestoSesionObservadoBatchRespetaIntervaloBackground(t *te
 	}
 }
 
+func TestProcesarPresupuestoSesionObservadoBatchRespetaBatchBudget(t *testing.T) {
+	resetRuntimeBudgetObservationBackgroundGate()
+	t.Cleanup(resetRuntimeBudgetObservationBackgroundGate)
+
+	tmp := prepararDBTemporalCmd(t)
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, nombre := range []string{"CodexA", "CodexB", "CodexC"} {
+		if err := db.RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", nombre, err)
+		}
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      nombre,
+			ProyectoID:  &proyectoID,
+			CWD:         filepath.Join(tmp, "orquestador"),
+			Herramienta: "codex-cli",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion %s: %v", nombre, err)
+		}
+		if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+			t.Fatalf("upsert handle %s: %v", nombre, err)
+		}
+	}
+
+	prevFn := refrescarPresupuestoSesionObservadoHandleFn
+	prevBudget := runtimeBudgetBatchBudgetOverride
+	t.Cleanup(func() {
+		refrescarPresupuestoSesionObservadoHandleFn = prevFn
+		runtimeBudgetBatchBudgetOverride = prevBudget
+	})
+
+	runtimeBudgetBatchBudgetOverride = 20 * time.Millisecond
+	calls := 0
+	refrescarPresupuestoSesionObservadoHandleFn = func(handle *db.RuntimeHandle) (bool, string, error) {
+		calls++
+		time.Sleep(15 * time.Millisecond)
+		if handle == nil {
+			return false, "", nil
+		}
+		return true, strings.TrimSpace(handle.Agente), nil
+	}
+
+	procesados, err := procesarPresupuestoSesionObservadoBatch()
+	if err != nil {
+		t.Fatalf("procesar presupuesto observado: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("el batch deberia cortar por presupuesto tras dos handles, got=%d", calls)
+	}
+	if procesados != 2 {
+		t.Fatalf("deberia procesar solo los handles que entran en presupuesto, got=%d", procesados)
+	}
+}
+
+func TestRuntimeMailboxCanDeferSupervisedHandleError(t *testing.T) {
+	if runtimeMailboxCanDeferSupervisedHandleError(nil) {
+		t.Fatal("nil no deberia diferirse")
+	}
+	if !runtimeMailboxCanDeferSupervisedHandleError(fmt.Errorf("no se pueden purgar handles con runtime orders vivas asociadas: #1(pendiente)")) {
+		t.Fatal("el error de purga bloqueada por runtime orders vivas deberia diferirse")
+	}
+	if runtimeMailboxCanDeferSupervisedHandleError(fmt.Errorf("otro error")) {
+		t.Fatal("errores ajenos no deberian diferirse")
+	}
+}
+
+func TestReconciliarRuntimeMailboxPipelineBootstrapActivaSiProcedeToleraSupervisionDiferible(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	handle := &db.RuntimeHandle{
+		ID:        41,
+		Agente:    "Codex1",
+		ProyectoID: &proyectoID,
+		Estado:    "activo",
+	}
+	snapshot := &runtimeMailboxBatchSnapshot{
+		activeHandles:        map[string]*db.RuntimeHandle{runtimeMailboxBatchKey("Codex1", &proyectoID): handle},
+		activeHandleLoaded:   map[string]struct{}{runtimeMailboxBatchKey("Codex1", &proyectoID): {}},
+		supervisedByHandleID: map[int64]runtimeMailboxSupervisedHandleSnapshot{handle.ID: {err: fmt.Errorf("no se pueden purgar handles con runtime orders vivas asociadas: #132403(pendiente)")}},
+	}
+	msg := &db.RuntimeMailboxMessage{
+		ID:         77,
+		ToAgente:   "Codex1",
+		ProyectoID: &proyectoID,
+		Kind:       "pipeline_local",
+	}
+
+	ok, err := reconciliarRuntimeMailboxPipelineBootstrapActivaSiProcede(msg, snapshot, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("no deberia propagar error diferible: %v", err)
+	}
+	if ok {
+		t.Fatal("no deberia marcar reconciliacion activa solo por tolerar el error")
+	}
+}
+
 func TestRefrescarPresupuestoSesionObservadoAgenteUsaUltimaSesionClaudeSinHandle(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetStatusSnapshotCache()
