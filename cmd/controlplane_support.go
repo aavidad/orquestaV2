@@ -41,6 +41,13 @@ type dbAutomationService struct{}
 const autonomiaReplanTaskTitle = "Autonomía: replanificar backlog y abrir siguiente frente útil"
 
 var runtimeBudgetObservationBackgroundGate = planocontrol.NewGate()
+var runtimeHistoricalMaintenanceGate = planocontrol.NewGate()
+
+var procesarHigieneRuntimesAutonomosBatchFn = db.ProcesarHigieneRuntimesAutonomosBatch
+var reconciliarRuntimeOrdersPendientesHandoffExpiradasFn = db.ReconciliarRuntimeOrdersPendientesHandoffExpiradas
+var purgarRuntimeTranscriptRuidoHistoricoFn = db.PurgarRuntimeTranscriptRuidoHistorico
+var purgarRuntimeHistoricoFn = db.PurgarRuntimeHistorico
+var purgarDatosOperacionalesFn = db.PurgarDatosOperacionales
 
 var wakeRuntimeOrdersAfterTranscript = wakeControlPlaneRuntimeOrders
 var wakeRuntimeMailboxAfterTranscript = wakeControlPlaneRuntimeMailbox
@@ -70,6 +77,10 @@ func runtimeMailboxShouldReevaluate(lane string, msgID, handleID int64) bool {
 
 func resetRuntimeMailboxReevaluationGate() {
 	runtimeMailboxReevaluationGate.Reset()
+}
+
+func resetRuntimeHistoricalMaintenanceGate() {
+	runtimeHistoricalMaintenanceGate.Reset()
 }
 
 func resetAutonomiaIdleAutoassignGate() {
@@ -973,21 +984,36 @@ func (dbAutomationService) ProcesarRuntimeOrdersBatch() (int, error) {
 }
 
 func (dbAutomationService) ProcesarRuntimeHygieneBatch() (int, error) {
-	reclamados, _ := db.ProcesarHigieneRuntimesAutonomosBatch()
+	return procesarRuntimeHygieneBatch(false)
+}
+
+func runtimeHistoricalMaintenanceInterval() time.Duration {
+	seconds := controlPlaneConfigIntOrDefault("runtime_hygiene_historical_interval_seconds", 900)
+	if seconds <= 0 {
+		seconds = 900
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func procesarRuntimeHygieneBatch(forceHistorical bool) (int, error) {
+	reclamados, _ := procesarHigieneRuntimesAutonomosBatchFn()
 	total := reclamados
-	expiredHandoffs, err := db.ReconciliarRuntimeOrdersPendientesHandoffExpiradas()
+	expiredHandoffs, err := reconciliarRuntimeOrdersPendientesHandoffExpiradasFn()
 	if err != nil {
 		return total, err
 	}
 	total += expiredHandoffs
-	purgedTranscriptNoise, err := db.PurgarRuntimeTranscriptRuidoHistorico()
+	purgedTranscriptNoise, err := purgarRuntimeTranscriptRuidoHistoricoFn()
 	if err != nil {
 		return total, err
 	}
 	total += purgedTranscriptNoise
-	resultado, err := db.PurgarRuntimeHistorico()
+	if !forceHistorical && !runtimeHistoricalMaintenanceGate.Allow(runtimeHistoricalMaintenanceInterval()) {
+		return total, nil
+	}
+	resultado, err := purgarRuntimeHistoricoFn()
 	if err != nil {
-		return 0, err
+		return total, err
 	}
 	if resultado != nil {
 		if resultado.Handles != nil {
@@ -997,7 +1023,7 @@ func (dbAutomationService) ProcesarRuntimeHygieneBatch() (int, error) {
 			total += resultado.Orders.Deleted
 		}
 	}
-	n, err := db.PurgarDatosOperacionales()
+	n, err := purgarDatosOperacionalesFn()
 	if err != nil {
 		return total, err
 	}

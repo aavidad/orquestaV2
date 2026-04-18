@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -69,11 +70,11 @@ func TestTareaListarAceptaEstadosMultiples(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(apiTareasResponse{
 			Tareas: []*db.Tarea{{
-				ID:        17,
-				Titulo:    "Auditoria",
+				ID:         17,
+				Titulo:     "Auditoria",
 				ProyectoID: ptrInt64(7),
-				Prioridad: db.PrioridadAlta,
-				Estado:    db.EstadoEnProgreso,
+				Prioridad:  db.PrioridadAlta,
+				Estado:     db.EstadoEnProgreso,
 			}},
 		})
 	})
@@ -164,6 +165,36 @@ func TestListarTareasPorEstadosOR(t *testing.T) {
 	got := []string{tareas[0].Titulo, tareas[1].Titulo}
 	if !(containsString(got, "Libre") && containsString(got, "Reservada")) {
 		t.Fatalf("titulos inesperados: %v", got)
+	}
+}
+
+func TestAPIHandlerTareasListarRespetaLimit(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	for i := 0; i < 3; i++ {
+		if _, err := db.CrearTarea(&db.Tarea{
+			Titulo:    "Tarea limit",
+			Modulo:    "controlplane",
+			Prioridad: db.PrioridadMedia,
+			CreadoPor: "test",
+		}); err != nil {
+			t.Fatalf("crear tarea %d: %v", i, err)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/tareas?limit=1", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerTareasListar(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp apiTareasResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Tareas) != 1 {
+		t.Fatalf("len(resp.Tareas)=%d want 1", len(resp.Tareas))
 	}
 }
 

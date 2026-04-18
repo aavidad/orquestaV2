@@ -30,6 +30,13 @@ type unifiedServerRuntimeOptions struct {
 	DisableAutobootstrap bool
 }
 
+type unifiedServerHTTPTimeouts struct {
+	ReadHeader time.Duration
+	Read       time.Duration
+	Write      time.Duration
+	Idle       time.Duration
+}
+
 func registrarRutasServe(mux *http.ServeMux) {
 	mux.HandleFunc("/", webHandlerDash)
 	mux.HandleFunc("/tareas", webHandlerTareas)
@@ -172,9 +179,14 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 	}
 	launchWALCheckpointLoop(controlCtx, debugLogger)
 
+	timeouts := loadUnifiedServerHTTPTimeouts()
 	server := &http.Server{
-		Addr:    advertisedAddr,
-		Handler: wrapServeMuxWithDebug(mux, debug, debugLogger),
+		Addr:              advertisedAddr,
+		Handler:           wrapServeMuxWithDebug(mux, debug, debugLogger),
+		ReadHeaderTimeout: timeouts.ReadHeader,
+		ReadTimeout:       timeouts.Read,
+		WriteTimeout:      timeouts.Write,
+		IdleTimeout:       timeouts.Idle,
 	}
 	if strings.TrimSpace(security.TLSCert) == "" || strings.TrimSpace(security.TLSKey) == "" {
 		return server.Serve(listener)
@@ -195,6 +207,15 @@ func loadUnifiedServerRuntimeOptions() unifiedServerRuntimeOptions {
 	return unifiedServerRuntimeOptions{
 		CoreOnly:             coreOnly,
 		DisableAutobootstrap: disableAutobootstrap,
+	}
+}
+
+func loadUnifiedServerHTTPTimeouts() unifiedServerHTTPTimeouts {
+	return unifiedServerHTTPTimeouts{
+		ReadHeader: 5 * time.Second,
+		Read:       15 * time.Second,
+		Write:      30 * time.Second,
+		Idle:       60 * time.Second,
 	}
 }
 

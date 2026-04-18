@@ -45,3 +45,26 @@ func TestAnotarTareaPortatil(t *testing.T) {
 		}
 	})
 }
+
+func TestListarTareasRespetaLimit(t *testing.T) {
+	withTempDBPools(t, func() {
+		for i := 0; i < 3; i++ {
+			if _, err := CrearTarea(&Tarea{
+				Titulo:    "tarea",
+				Modulo:    "db",
+				Prioridad: PrioridadMedia,
+				CreadoPor: "alberto",
+			}); err != nil {
+				t.Fatalf("CrearTarea %d: %v", i, err)
+			}
+		}
+
+		items, err := ListarTareas(FiltroTareas{Limit: 2})
+		if err != nil {
+			t.Fatalf("ListarTareas limit: %v", err)
+		}
+		if len(items) != 2 {
+			t.Fatalf("len(items)=%d want 2", len(items))
+		}
+	})
+}

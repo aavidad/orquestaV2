@@ -146,6 +146,7 @@ type FiltroTareas struct {
 	Modulo      *string
 	PropuestaID *int64
 	Libre       bool // solo las libre (sin agente)
+	Limit       int
 }
 
 type ResumenBloqueo struct {
@@ -268,6 +269,10 @@ func ListarTareas(f FiltroTareas) ([]*Tarea, error) {
 			args = append(args, *f.PropuestaID)
 		}
 		q += " ORDER BY CASE prioridad WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, id"
+		if f.Limit > 0 {
+			q += " LIMIT ?"
+			args = append(args, f.Limit)
+		}
 
 		rows, err := DB.Query(q, args...)
 		if err != nil {

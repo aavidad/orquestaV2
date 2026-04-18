@@ -588,7 +588,7 @@ var runtimeProcessDegradadosBatch = func() (int, error) {
 }
 
 var runtimeProcessHygieneBatch = func() (int, error) {
-	return (dbAutomationService{}).ProcesarRuntimeHygieneBatch()
+	return procesarRuntimeHygieneBatch(true)
 }
 
 var runtimeProcessDegradadosBatchDetailed = func() (runtimeProcessDegradadosSummary, error) {
@@ -4104,6 +4104,17 @@ func apiHandlerTareasLimpiarFrente(w http.ResponseWriter, r *http.Request) {
 
 func apiHandlerTareasListar(w http.ResponseWriter, r *http.Request) {
 	filtro := db.FiltroTareas{}
+	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
+		limit, err := strconv.Atoi(rawLimit)
+		if err != nil || limit < 0 {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("limit invalido"))
+			return
+		}
+		if limit > 500 {
+			limit = 500
+		}
+		filtro.Limit = limit
+	}
 	if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
 		filtro.Agente = &agente
 	}

@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestNormalizarAddrServidorLocal(t *testing.T) {
@@ -122,6 +123,22 @@ func TestLoadUnifiedServerRuntimeOptionsAceptaFlagsSeparadas(t *testing.T) {
 	}
 	if !got.DisableAutobootstrap {
 		t.Fatalf("DisableAutobootstrap deberia activarse con ORQUESTA_SERVER_DISABLE_AUTOBOOTSTRAP")
+	}
+}
+
+func TestLoadUnifiedServerHTTPTimeoutsDefaults(t *testing.T) {
+	got := loadUnifiedServerHTTPTimeouts()
+	if got.ReadHeader != 5*time.Second {
+		t.Fatalf("ReadHeader=%s want 5s", got.ReadHeader)
+	}
+	if got.Read != 15*time.Second {
+		t.Fatalf("Read=%s want 15s", got.Read)
+	}
+	if got.Write != 30*time.Second {
+		t.Fatalf("Write=%s want 30s", got.Write)
+	}
+	if got.Idle != 60*time.Second {
+		t.Fatalf("Idle=%s want 60s", got.Idle)
 	}
 }
 
