@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/capacidadapp"
 	"orquesta/db"
 )
@@ -18,6 +21,15 @@ type stubStatusService struct {
 
 func (s stubStatusService) FetchStatus() (apiStatusResponse, error) {
 	return s.response, s.err
+}
+
+type blockingStatusService struct {
+	release <-chan struct{}
+}
+
+func (s blockingStatusService) FetchStatus() (apiStatusResponse, error) {
+	<-s.release
+	return apiStatusResponse{}, nil
 }
 
 func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
@@ -108,6 +120,105 @@ func TestAPIHandlerStatusReturns503OnTimeout(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	apiHandlerStatus(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAPIHandlerStatusReturns503WhenServiceHangs(t *testing.T) {
+	prevService := statusService
+	prevTimeout := apiStatusFetchTimeout
+	defer func() {
+		statusService = prevService
+		apiStatusFetchTimeout = prevTimeout
+	}()
+	release := make(chan struct{})
+	statusService = blockingStatusService{release: release}
+	apiStatusFetchTimeout = 20 * time.Millisecond
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	apiHandlerStatus(rec, req)
+	close(release)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAPIAgenteOverviewReturns503WhenBuilderHangs(t *testing.T) {
+	prevBuilder := apiAgentDetailBuilder
+	prevTimeout := apiAgentOverviewTimeout
+	defer func() {
+		apiAgentDetailBuilder = prevBuilder
+		apiAgentOverviewTimeout = prevTimeout
+	}()
+	release := make(chan struct{})
+	apiAgentDetailBuilder = func(nombre string, compact bool) (*agentesapp.Detail, error) {
+		<-release
+		return &agentesapp.Detail{}, nil
+	}
+	apiAgentOverviewTimeout = 20 * time.Millisecond
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/agentes/Codex2/overview?compact=true", nil)
+	apiRouterAgentes(rec, req)
+	close(release)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAPIAgentesPresupuestoRefrescarReturns503WhenRefreshHangs(t *testing.T) {
+	prevExecutor := apiAgentBudgetRefreshExecutor
+	prevTimeout := apiAgentBudgetRefreshTimeout
+	defer func() {
+		apiAgentBudgetRefreshExecutor = prevExecutor
+		apiAgentBudgetRefreshTimeout = prevTimeout
+	}()
+	release := make(chan struct{})
+	apiAgentBudgetRefreshExecutor = func(string) (int, error) {
+		<-release
+		return 0, nil
+	}
+	apiAgentBudgetRefreshTimeout = 20 * time.Millisecond
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/agentes/presupuesto/refrescar", bytes.NewReader([]byte(`{"agente":"Codex2"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	apiHandlerAgentesPresupuestoRefrescar(rec, req)
+	close(release)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAPIAgentePrepararReturns503WhenBuilderHangs(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+
+	prevBuilder := apiAgentPrepareBuilder
+	prevTimeout := apiAgentPrepareTimeout
+	defer func() {
+		apiAgentPrepareBuilder = prevBuilder
+		apiAgentPrepareTimeout = prevTimeout
+	}()
+	release := make(chan struct{})
+	apiAgentPrepareBuilder = func(input agentesapp.PrepareInput) (*agentesapp.PrepareOutput, error) {
+		<-release
+		return &agentesapp.PrepareOutput{}, nil
+	}
+	apiAgentPrepareTimeout = 20 * time.Millisecond
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/agente/preparar?agente=Codex2&proyecto=orquestador", nil)
+	apiHandlerAgentePreparar(rec, req)
+	close(release)
+
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}

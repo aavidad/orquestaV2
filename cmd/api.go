@@ -125,6 +125,23 @@ type apiProyectoAutonomiaResponse struct {
 	Cycles []*supervisionapp.Cycle `json:"cycles,omitempty"`
 }
 
+var (
+	apiStatusFetchTimeout         = 3 * time.Second
+	apiAgentOverviewTimeout       = 3 * time.Second
+	apiAgentBudgetRefreshTimeout  = 3 * time.Second
+	apiAgentPrepareTimeout        = 3 * time.Second
+	apiAgentDetailBuilder         = func(nombre string, compact bool) (*agentesapp.Detail, error) {
+		if compact {
+			return agentesService.BuildDetailCompact(nombre)
+		}
+		return agentesService.BuildDetail(nombre)
+	}
+	apiAgentBudgetRefreshExecutor = refrescarPresupuestoSesionObservadoAgente
+	apiAgentPrepareBuilder        = func(input agentesapp.PrepareInput) (*agentesapp.PrepareOutput, error) {
+		return agentesService.BuildPrepare(input)
+	}
+)
+
 type apiProyectoMicrocicloRequest struct {
 	Agente               string `json:"agente"`
 	ObjetivoGeneral      string `json:"objetivo_general"`
@@ -926,7 +943,7 @@ func apiHandlerServerOperational(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	status, err := statusService.FetchStatus()
+	status, err := fetchStatusForAPI(apiStatusFetchTimeout)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -938,7 +955,7 @@ func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	status, err := statusService.FetchStatus()
+	status, err := fetchStatusForAPI(apiStatusFetchTimeout)
 	if err != nil {
 		if errors.Is(err, errStatusFetchTimeout) {
 			apiError(w, http.StatusServiceUnavailable, fmt.Errorf("status temporalmente degradado"))
@@ -977,6 +994,41 @@ func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 		payload["tareasReservadas"] = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada)
 	}
 	apiWriteJSON(w, http.StatusOK, payload)
+}
+
+func fetchStatusForAPI(timeout time.Duration) (apiStatusResponse, error) {
+	if statusService == nil {
+		return apiStatusResponse{}, fmt.Errorf("status service nil")
+	}
+	return runAPITimeboxed(timeout, statusService.FetchStatus, errStatusFetchTimeout)
+}
+
+func runAPITimeboxed[T any](timeout time.Duration, fn func() (T, error), timeoutErr error) (T, error) {
+	var zero T
+	if fn == nil {
+		return zero, fmt.Errorf("api fn nil")
+	}
+	if timeout <= 0 {
+		return fn()
+	}
+	type result struct {
+		value T
+		err   error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		value, err := fn()
+		ch <- result{value: value, err: err}
+	}()
+	select {
+	case res := <-ch:
+		return res.value, res.err
+	case <-time.After(timeout):
+		if timeoutErr != nil {
+			return zero, timeoutErr
+		}
+		return zero, fmt.Errorf("api timeout")
+	}
 }
 
 func apiHandlerDiagnostico(w http.ResponseWriter, r *http.Request) {
@@ -1071,14 +1123,14 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(parts) == 2 && parts[1] == "overview" {
 			compact := parseBoolDebug(r.URL.Query().Get("compact"), false)
-			var detail *agentesapp.Detail
-			var err error
-			if compact {
-				detail, err = agentesService.BuildDetailCompact(parts[0])
-			} else {
-				detail, err = agentesService.BuildDetail(parts[0])
-			}
+			detail, err := runAPITimeboxed(apiAgentOverviewTimeout, func() (*agentesapp.Detail, error) {
+				return apiAgentDetailBuilder(parts[0], compact)
+			}, errStatusFetchTimeout)
 			if err != nil {
+				if errors.Is(err, errStatusFetchTimeout) {
+					apiError(w, http.StatusServiceUnavailable, fmt.Errorf("overview temporalmente degradado"))
+					return
+				}
 				apiError(w, http.StatusNotFound, err)
 				return
 			}
@@ -1256,8 +1308,14 @@ func apiHandlerAgentesPresupuestoRefrescar(w http.ResponseWriter, r *http.Reques
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	refrescados, err := refrescarPresupuestoSesionObservadoAgente(req.Agente)
+	refrescados, err := runAPITimeboxed(apiAgentBudgetRefreshTimeout, func() (int, error) {
+		return apiAgentBudgetRefreshExecutor(req.Agente)
+	}, errStatusFetchTimeout)
 	if err != nil {
+		if errors.Is(err, errStatusFetchTimeout) {
+			apiError(w, http.StatusServiceUnavailable, fmt.Errorf("presupuesto temporalmente degradado"))
+			return
+		}
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -6565,19 +6623,28 @@ func apiHandlerAgentePreparar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := agentesService.GetAgent(agenteNombre); err != nil {
-		apiError(w, http.StatusNotFound, err)
-		return
-	}
-	out, err := agentesService.BuildPrepare(agentesapp.PrepareInput{
-		Agente:       agenteNombre,
-		Proyecto:     proyectoRef,
-		Conector:     conectorRef,
-		Modelo:       modelo,
-		Razonamiento: razonamiento,
-		Perfil:       perfilTarea,
-	})
+	out, err := runAPITimeboxed(apiAgentPrepareTimeout, func() (*agentesapp.PrepareOutput, error) {
+		if _, err := agentesService.GetAgent(agenteNombre); err != nil {
+			return nil, err
+		}
+		return apiAgentPrepareBuilder(agentesapp.PrepareInput{
+			Agente:       agenteNombre,
+			Proyecto:     proyectoRef,
+			Conector:     conectorRef,
+			Modelo:       modelo,
+			Razonamiento: razonamiento,
+			Perfil:       perfilTarea,
+		})
+	}, errStatusFetchTimeout)
 	if err != nil {
+		if errors.Is(err, errStatusFetchTimeout) {
+			apiError(w, http.StatusServiceUnavailable, fmt.Errorf("prepare temporalmente degradado"))
+			return
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			apiError(w, http.StatusNotFound, err)
+			return
+		}
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
