@@ -4452,41 +4452,16 @@ func construirNotasTareaReplanAutonomiaSignal(item *db.RuntimeTranscriptEntry) s
 }
 
 func intentarResolverCLIQuerySignalTranscript(item *db.RuntimeTranscriptEntry) (string, bool, error) {
-	if item == nil || !runtimeTranscriptTieneProyecto(item) {
-		return "", false, nil
-	}
-	agente := strings.TrimSpace(agenteSignalTranscript(item))
-	if agente == "" {
-		return "", false, nil
-	}
-	if proyectoID := item.ProyectoID; proyectoID == nil || *proyectoID <= 0 {
-		return "", false, nil
+	agente, _, proyecto, ok, err := resolverContextoRemediacionLocalSignalTranscript(item)
+	if err != nil || !ok {
+		return "", false, err
 	}
 	tarea, err := tareaActivaAutonomiaProyectoAgente(agente, item.ProyectoID)
 	if err != nil || tarea == nil {
 		return "", false, err
 	}
-	if existe, err := existeRuntimeOrderControlRecienteAutonomia(agente, item.ProyectoID, 2*time.Minute, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
-		return "", false, err
-	} else if existe {
-		return "", false, nil
-	}
-	policy, proyecto, err := resolverContextoSignalTranscript(item)
-	if err != nil || !contextoSignalTranscriptActivo(item, policy, proyecto) {
-		return "", false, err
-	}
 	instruction := construirInstruccionCLIQuerySignalTranscript(tarea, item)
-	if strings.TrimSpace(instruction) == "" {
-		return "", false, nil
-	}
-	note, err := encolarNudgeSignalTranscriptAutonomia(agente, proyecto, "resolver_cli_query_local", instruction, item, "cli_query_local")
-	if err != nil {
-		return "", false, err
-	}
-	if strings.TrimSpace(note) == "" {
-		return "", false, nil
-	}
-	return note, true, nil
+	return intentarNudgeRemediacionLocalSignalTranscript(item, agente, proyecto, "resolver_cli_query_local", "cli_query_local", instruction)
 }
 
 func construirInstruccionCLIQuerySignalTranscript(tarea *db.Tarea, item *db.RuntimeTranscriptEntry) string {
@@ -4565,7 +4540,7 @@ func ejecutarPlanCredencialesSignalTranscript(item *db.RuntimeTranscriptEntry, p
 	if clasificacionSignalTranscript(item) != "credentials_request" {
 		return "", nil
 	}
-	if note, handled, err := intentarRemediacionAutonomaCredencialesSignalTranscriptConContexto(item, proyecto); err != nil {
+	if note, handled, err := intentarRemediacionAutonomaCredencialesSignalTranscriptConContexto(item, agenteSignalTranscript(item), proyecto); err != nil {
 		return "", err
 	} else if handled {
 		return note, nil
@@ -4639,38 +4614,54 @@ func construirNotasTareaCredencialesAutonomiaSignal(item *db.RuntimeTranscriptEn
 }
 
 func intentarRemediacionAutonomaCredencialesSignalTranscript(item *db.RuntimeTranscriptEntry) (string, bool, error) {
-	if item == nil || !runtimeTranscriptTieneProyecto(item) {
-		return "", false, nil
-	}
-	policy, proyecto, err := resolverContextoSignalTranscript(item)
-	if err != nil || !contextoSignalTranscriptActivo(item, policy, proyecto) {
+	agente, _, proyecto, ok, err := resolverContextoRemediacionLocalSignalTranscript(item)
+	if err != nil || !ok {
 		return "", false, err
 	}
-	return intentarRemediacionAutonomaCredencialesSignalTranscriptConContexto(item, proyecto)
+	return intentarRemediacionAutonomaCredencialesSignalTranscriptConContexto(item, agente, proyecto)
 }
 
-func intentarRemediacionAutonomaCredencialesSignalTranscriptConContexto(item *db.RuntimeTranscriptEntry, proyecto *db.Proyecto) (string, bool, error) {
-	if item == nil || proyecto == nil || proyecto.ID <= 0 {
-		return "", false, nil
-	}
-	agente := strings.TrimSpace(agenteSignalTranscript(item))
-	if agente == "" {
+func intentarRemediacionAutonomaCredencialesSignalTranscriptConContexto(item *db.RuntimeTranscriptEntry, agente string, proyecto *db.Proyecto) (string, bool, error) {
+	if item == nil || proyecto == nil || proyecto.ID <= 0 || strings.TrimSpace(agente) == "" {
 		return "", false, nil
 	}
 	handle, err := resolverHandleEntregaTranscript(item)
 	if err != nil || handle == nil {
 		return "", false, err
 	}
-	if existe, err := existeRuntimeOrderControlRecienteAutonomia(agente, &proyecto.ID, 2*time.Minute, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
-		return "", false, err
-	} else if existe {
-		return "", false, nil
-	}
 	instruction := construirInstruccionRemediacionCredencialesSignalTranscript(handle, agente)
-	if strings.TrimSpace(instruction) == "" {
+	return intentarNudgeRemediacionLocalSignalTranscript(item, agente, proyecto, "resolver_credentials_local", "credentials_local", instruction)
+}
+
+func resolverContextoRemediacionLocalSignalTranscript(item *db.RuntimeTranscriptEntry) (string, *db.RuntimeHandle, *db.Proyecto, bool, error) {
+	if item == nil || !runtimeTranscriptTieneProyecto(item) {
+		return "", nil, nil, false, nil
+	}
+	agente := strings.TrimSpace(agenteSignalTranscript(item))
+	if agente == "" {
+		return "", nil, nil, false, nil
+	}
+	handle, err := resolverHandleEntregaTranscript(item)
+	if err != nil || handle == nil {
+		return "", nil, nil, false, err
+	}
+	policy, proyecto, err := resolverContextoSignalTranscript(item)
+	if err != nil || !contextoSignalTranscriptActivo(item, policy, proyecto) {
+		return "", nil, nil, false, err
+	}
+	if existe, err := existeRuntimeOrderControlRecienteAutonomia(agente, item.ProyectoID, 2*time.Minute, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
+		return "", nil, nil, false, err
+	} else if existe {
+		return "", nil, nil, false, nil
+	}
+	return agente, handle, proyecto, true, nil
+}
+
+func intentarNudgeRemediacionLocalSignalTranscript(item *db.RuntimeTranscriptEntry, agente string, proyecto *db.Proyecto, accion, prefijoEstado, instruction string) (string, bool, error) {
+	if item == nil || proyecto == nil || proyecto.ID <= 0 || strings.TrimSpace(agente) == "" || strings.TrimSpace(instruction) == "" {
 		return "", false, nil
 	}
-	note, err := encolarNudgeSignalTranscriptAutonomia(agente, proyecto, "resolver_credentials_local", instruction, item, "credentials_local")
+	note, err := encolarNudgeSignalTranscriptAutonomia(agente, proyecto, accion, instruction, item, prefijoEstado)
 	if err != nil {
 		return "", false, err
 	}
