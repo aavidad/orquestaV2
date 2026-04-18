@@ -803,11 +803,8 @@ func TestListRuntimeHandlesDescartaHandleSincronizadoANil(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListRuntimeHandles: %v", err)
 	}
-	if len(handles) != 1 {
+	if len(handles) != 0 {
 		t.Fatalf("len(handles)=%d", len(handles))
-	}
-	if handles[0] != nil {
-		t.Fatalf("el handle sincronizado a nil no deberia mantenerse: %+v", handles[0])
 	}
 	if store.syncHandleCalls != 1 || store.syncHandleInput == nil || store.syncHandleInput.ID != 31 {
 		t.Fatalf("sync inesperado calls=%d input=%+v", store.syncHandleCalls, store.syncHandleInput)

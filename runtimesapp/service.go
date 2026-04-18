@@ -417,7 +417,24 @@ func (s *Service) ListRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error
 		}
 		synced++
 	}
-	return handles, nil
+	return compactarRuntimeHandlesNoNil(handles), nil
+}
+
+func compactarRuntimeHandlesNoNil(handles []*db.RuntimeHandle) []*db.RuntimeHandle {
+	if len(handles) == 0 {
+		return handles
+	}
+	out := handles[:0]
+	for _, handle := range handles {
+		if handle == nil {
+			continue
+		}
+		out = append(out, handle)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (s *Service) ListRuntimeHandlesCompact(filtro *string) ([]*db.RuntimeHandle, error) {
