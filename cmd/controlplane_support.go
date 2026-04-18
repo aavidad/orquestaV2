@@ -12046,7 +12046,12 @@ func procesarReanudacionAutonomaSesion(sesion *db.Sesion, snapshot *autonomiaBat
 	if err != nil || !tieneTrabajoActivo {
 		return 0, err
 	}
-	disponible, err := db.ProyectoDisponibleParaAutonomia(*sesion.ProyectoID)
+	disponible := false
+	if snapshot != nil {
+		disponible, err = snapshot.projectAvailableForAutonomy(*sesion.ProyectoID)
+	} else {
+		disponible, err = autonomiaProyectoDisponibleParaAutonomiaFn(*sesion.ProyectoID)
+	}
 	if err != nil || !disponible {
 		return 0, err
 	}
@@ -12133,7 +12138,12 @@ func procesarAparcadoAutonomoSesion(sesion *db.Sesion, snapshot *autonomiaBatchS
 	if err != nil {
 		return 0, err
 	}
-	op, err := db.GetProyectoOperacion(*sesion.ProyectoID)
+	var op *db.ProyectoOperacion
+	if snapshot != nil {
+		op, err = snapshot.projectOperation(*sesion.ProyectoID)
+	} else {
+		op, err = autonomiaGetProyectoOperacionFn(*sesion.ProyectoID)
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -12154,7 +12164,12 @@ func procesarAparcadoAutonomoSesion(sesion *db.Sesion, snapshot *autonomiaBatchS
 		}
 	case db.ProyectoOperativoEsperandoHumano, db.ProyectoOperativoBloqueadoExterno:
 		if tieneTrabajoActivo {
-			disponible, err := db.ProyectoDisponibleParaAutonomia(*sesion.ProyectoID)
+			disponible := false
+			if snapshot != nil {
+				disponible, err = snapshot.projectAvailableForAutonomy(*sesion.ProyectoID)
+			} else {
+				disponible, err = autonomiaProyectoDisponibleParaAutonomiaFn(*sesion.ProyectoID)
+			}
 			if err != nil {
 				return 0, err
 			}

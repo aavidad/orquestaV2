@@ -4911,6 +4911,10 @@ func TestProcesarPrechecksAutonomiaSesionActivaOmiteRecoveryDegradadoConHandleOp
 		politicasByProject:         map[int64]*supervisionapp.Policy{},
 		asignacionesByAgent:        map[string][]*db.Asignacion{},
 		asignacionesByProject:      map[int64][]*db.Asignacion{},
+		projectOperationByID:       map[int64]*db.ProyectoOperacion{},
+		projectOperationLoaded:     map[int64]struct{}{},
+		projectAvailableByID:       map[int64]bool{},
+		projectAvailableLoaded:     map[int64]struct{}{},
 		activeProjectByAgent:       map[string]int64{},
 		activeHandleByAgentProject: map[string]bool{},
 		supervisorByProject:        map[int64]*db.Agente{},
@@ -4980,6 +4984,10 @@ func TestProcesarPrechecksAutonomiaSesionActivaMantieneRecoveryDegradadoSiSesion
 		politicasByProject:         map[int64]*supervisionapp.Policy{},
 		asignacionesByAgent:        map[string][]*db.Asignacion{},
 		asignacionesByProject:      map[int64][]*db.Asignacion{},
+		projectOperationByID:       map[int64]*db.ProyectoOperacion{},
+		projectOperationLoaded:     map[int64]struct{}{},
+		projectAvailableByID:       map[int64]bool{},
+		projectAvailableLoaded:     map[int64]struct{}{},
 		activeProjectByAgent:       map[string]int64{},
 		activeHandleByAgentProject: map[string]bool{},
 		supervisorByProject:        map[int64]*db.Agente{},
@@ -5008,6 +5016,64 @@ func TestProcesarPrechecksAutonomiaSesionActivaMantieneRecoveryDegradadoSiSesion
 	}
 	if called != 1 {
 		t.Fatalf("deberia mantener recovery degradado para sesion pausada, called=%d", called)
+	}
+}
+
+func TestAutonomiaBatchSnapshotMemoizaProyectoOperacion(t *testing.T) {
+	prev := autonomiaGetProyectoOperacionFn
+	t.Cleanup(func() { autonomiaGetProyectoOperacionFn = prev })
+
+	calls := 0
+	autonomiaGetProyectoOperacionFn = func(proyectoID int64) (*db.ProyectoOperacion, error) {
+		calls++
+		return &db.ProyectoOperacion{ProyectoID: proyectoID, EstadoOperativo: db.ProyectoOperativoActivo}, nil
+	}
+
+	snapshot := &autonomiaBatchSnapshot{
+		projectOperationByID:   map[int64]*db.ProyectoOperacion{},
+		projectOperationLoaded: map[int64]struct{}{},
+	}
+
+	for i := 0; i < 2; i++ {
+		op, err := snapshot.projectOperation(91)
+		if err != nil {
+			t.Fatalf("projectOperation: %v", err)
+		}
+		if op == nil || op.ProyectoID != 91 {
+			t.Fatalf("projectOperation inesperada: %+v", op)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("deberia memoizar GetProyectoOperacion, calls=%d", calls)
+	}
+}
+
+func TestAutonomiaBatchSnapshotMemoizaProyectoDisponibleParaAutonomia(t *testing.T) {
+	prev := autonomiaProyectoDisponibleParaAutonomiaFn
+	t.Cleanup(func() { autonomiaProyectoDisponibleParaAutonomiaFn = prev })
+
+	calls := 0
+	autonomiaProyectoDisponibleParaAutonomiaFn = func(proyectoID int64) (bool, error) {
+		calls++
+		return proyectoID == 92, nil
+	}
+
+	snapshot := &autonomiaBatchSnapshot{
+		projectAvailableByID:   map[int64]bool{},
+		projectAvailableLoaded: map[int64]struct{}{},
+	}
+
+	for i := 0; i < 2; i++ {
+		disponible, err := snapshot.projectAvailableForAutonomy(92)
+		if err != nil {
+			t.Fatalf("projectAvailableForAutonomy: %v", err)
+		}
+		if !disponible {
+			t.Fatalf("deberia devolver disponible=true")
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("deberia memoizar ProyectoDisponibleParaAutonomia, calls=%d", calls)
 	}
 }
 
