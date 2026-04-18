@@ -12542,6 +12542,18 @@ func cerrarTareasPostRemediationBlockedResueltas(tareaID int64, commit string) e
 		if candidata.Agente != nil && strings.TrimSpace(*candidata.Agente) != "" {
 			agenteCierre = strings.TrimSpace(*candidata.Agente)
 		}
+		if candidata.Estado == db.TareaBloqueada {
+			resolucion := strings.TrimSpace(commit)
+			if resolucion == "" {
+				resolucion = "resuelto automáticamente por orquesta"
+			}
+			if err := tareasService.Unblock(candidata.ID, agenteCierre, resolucion); err != nil {
+				return err
+			}
+			if err := tareasService.Take(candidata.ID, agenteCierre); err != nil {
+				return err
+			}
+		}
 		if err := tareasService.Complete(candidata.ID, agenteCierre, strings.TrimSpace(commit)); err != nil {
 			return err
 		}

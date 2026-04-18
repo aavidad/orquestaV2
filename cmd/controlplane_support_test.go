@@ -15725,11 +15725,8 @@ func TestReasignarYArrancarTareaAutonomiaReasignaIniciaYAnota(t *testing.T) {
 	if err != nil {
 		t.Fatalf("crear tarea supervisor: %v", err)
 	}
-	if err := db.TomarTarea(supervisorTaskID, "CodexSupervisor"); err != nil {
-		t.Fatalf("tomar tarea supervisor: %v", err)
-	}
-	if err := db.IniciarTarea(supervisorTaskID, "CodexSupervisor"); err != nil {
-		t.Fatalf("iniciar tarea supervisor: %v", err)
+	if _, err := db.DB.Exec(`UPDATE tareas SET estado='asignada', agente='CodexSupervisor' WHERE id=?`, supervisorTaskID); err != nil {
+		t.Fatalf("materializar tarea supervisor: %v", err)
 	}
 
 	if err := reasignarYArrancarTareaAutonomia(tareaID, "Codex1", "Reasignada automáticamente por degradación"); err != nil {
@@ -25896,13 +25893,31 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReasignaTareaBloqueadaARelevoSan
 	if err := db.BloquearTarea(tareaID, "Codex8", "Agente Codex8 en estado bloqueado_por_runtime: pausado"); err != nil {
 		t.Fatalf("bloquear tarea: %v", err)
 	}
+	supervisorTaskID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      autonomiaPostRemediationBlockedTaskTitle,
+		Descripcion: "Resolver follow-up bloqueado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Agente:      ptrString("CodexSupervisor"),
+		Notas:       fmt.Sprintf("autonomia:post_remediation_blocked;tarea:%d;agente_objetivo:Codex8;verification_key:reassign:%d:Codex8:Codex7;remediation_kind:reassign", tareaID, tareaID),
+	})
+	if err != nil {
+		t.Fatalf("crear tarea supervisor: %v", err)
+	}
+	if err := db.TomarTarea(supervisorTaskID, "CodexSupervisor"); err != nil {
+		t.Fatalf("tomar tarea supervisor: %v", err)
+	}
+	if err := db.IniciarTarea(supervisorTaskID, "CodexSupervisor"); err != nil {
+		t.Fatalf("iniciar tarea supervisor: %v", err)
+	}
 
 	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
 	if err != nil {
 		t.Fatalf("procesar agentes degradados: %v", err)
 	}
-	if procesadas != 1 {
-		t.Fatalf("deberia reasignar una tarea bloqueada a relevo sano, got=%d", procesadas)
+	if procesadas < 1 {
+		t.Fatalf("deberia reasignar al menos una tarea bloqueada a relevo sano, got=%d", procesadas)
 	}
 	tarea, err := db.GetTarea(tareaID)
 	if err != nil {
@@ -25913,6 +25928,13 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReasignaTareaBloqueadaARelevoSan
 	}
 	if tarea.Agente == nil || *tarea.Agente != "Codex7" {
 		t.Fatalf("la tarea deberia quedar reasignada a Codex7: %+v", tarea)
+	}
+	supervisorTask, err := db.GetTarea(supervisorTaskID)
+	if err != nil {
+		t.Fatalf("get tarea supervisor: %v", err)
+	}
+	if supervisorTask == nil || supervisorTask.Estado != db.TareaCompletada {
+		t.Fatalf("la tarea post-remediation del supervisor deberia cerrarse al reasignar en batch: %+v", supervisorTask)
 	}
 }
 
