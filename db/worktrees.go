@@ -34,6 +34,7 @@ func (CoordinationWorktreeSQLRepository) Create(worktree *coordinacion.Worktree)
 	if worktree == nil {
 		return nil, fmt.Errorf("worktree nil")
 	}
+	worktree.Path = rutaWorktreeCanonicaProyecto(worktree.ProjectID, worktree.Path)
 	res, err := DB.Exec(`
 		INSERT INTO worktrees (proyecto_id, tarea_id, lock_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
 		VALUES (?,?,?,?,?,?,?,?,?,?)`,
@@ -41,38 +42,7 @@ func (CoordinationWorktreeSQLRepository) Create(worktree *coordinacion.Worktree)
 		worktree.Branch, worktree.BaseRef, string(worktree.State), worktree.Reason,
 	)
 	if err != nil {
-		if !strings.Contains(strings.ToLower(err.Error()), "worktrees.ruta_abs") {
-			return nil, err
-		}
-		existente, getErr := getCoordinationWorktreeByPath(strings.TrimSpace(worktree.Path))
-		if getErr != nil {
-			return nil, getErr
-		}
-		if existente == nil {
-			return nil, err
-		}
-		if existente.State == coordinacion.WorktreeActive {
-			return nil, err
-		}
-		if _, updateErr := DB.Exec(`
-			UPDATE worktrees
-			SET proyecto_id = ?,
-			    tarea_id = ?,
-			    lock_id = ?,
-			    agente = ?,
-			    nombre = ?,
-			    branch = ?,
-			    base_ref = ?,
-			    estado = ?,
-			    motivo = ?,
-			    cerrada_at = NULL
-			WHERE id = ?`,
-			worktree.ProjectID, worktree.TaskID, worktree.LockID, worktree.Agent, worktree.Name,
-			worktree.Branch, worktree.BaseRef, string(worktree.State), worktree.Reason, existente.ID,
-		); updateErr != nil {
-			return nil, updateErr
-		}
-		return (CoordinationWorktreeSQLRepository{}).GetByID(existente.ID)
+		return nil, err
 	}
 	id, _ := res.LastInsertId()
 	return (CoordinationWorktreeSQLRepository{}).GetByID(id)
@@ -84,7 +54,11 @@ func (CoordinationWorktreeSQLRepository) GetByID(id int64) (*coordinacion.Worktr
 		       motivo, created_at, updated_at, cerrada_at
 		FROM worktrees
 		WHERE id = ?`, id)
-	return scanCoordinationWorktree(row)
+	worktree, err := scanCoordinationWorktree(row)
+	if err != nil {
+		return nil, err
+	}
+	return canonizarCoordinationWorktree(worktree), nil
 }
 
 func (CoordinationWorktreeSQLRepository) GetActiveByPath(path string) (*coordinacion.Worktree, error) {
@@ -96,9 +70,26 @@ func (CoordinationWorktreeSQLRepository) GetActiveByPath(path string) (*coordina
 		ORDER BY id DESC LIMIT 1`, path)
 	worktree, err := scanCoordinationWorktree(row)
 	if err == sql.ErrNoRows {
+		estado := coordinacion.WorktreeActive
+		items, listErr := (CoordinationWorktreeSQLRepository{}).ListRaw(coordinacion.WorktreeFilter{State: &estado})
+		if listErr != nil {
+			return nil, listErr
+		}
+		target := normalizarRutaProyecto(path)
+		for _, item := range items {
+			if item == nil {
+				continue
+			}
+			if normalizarRutaProyecto(item.Path) == target {
+				return item, nil
+			}
+		}
 		return nil, nil
 	}
-	return worktree, err
+	if err != nil {
+		return nil, err
+	}
+	return canonizarCoordinationWorktree(worktree), nil
 }
 
 func getCoordinationWorktreeByPath(path string) (*coordinacion.Worktree, error) {
@@ -110,9 +101,25 @@ func getCoordinationWorktreeByPath(path string) (*coordinacion.Worktree, error) 
 		ORDER BY id DESC LIMIT 1`, strings.TrimSpace(path))
 	worktree, err := scanCoordinationWorktree(row)
 	if err == sql.ErrNoRows {
+		items, listErr := (CoordinationWorktreeSQLRepository{}).ListRaw(coordinacion.WorktreeFilter{})
+		if listErr != nil {
+			return nil, listErr
+		}
+		target := normalizarRutaProyecto(path)
+		for _, item := range items {
+			if item == nil {
+				continue
+			}
+			if normalizarRutaProyecto(item.Path) == target {
+				return item, nil
+			}
+		}
 		return nil, nil
 	}
-	return worktree, err
+	if err != nil {
+		return nil, err
+	}
+	return canonizarCoordinationWorktree(worktree), nil
 }
 
 func (CoordinationWorktreeSQLRepository) List(filter coordinacion.WorktreeFilter) ([]*coordinacion.Worktree, error) {
@@ -124,6 +131,9 @@ func (CoordinationWorktreeSQLRepository) List(filter coordinacion.WorktreeFilter
 	for _, worktree := range out {
 		if worktree == nil {
 			filtradas = append(filtradas, worktree)
+			continue
+		}
+		if worktree.State == coordinacion.WorktreeActive && !coordinacion.WorktreePathUsable(worktree.Path) {
 			continue
 		}
 		proyecto, getErr := GetProyectoConRutaEfectiva(jsonNumber(worktree.ProjectID), "")
@@ -162,17 +172,22 @@ func (CoordinationWorktreeSQLRepository) ListRaw(filter coordinacion.WorktreeFil
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	var out []*coordinacion.Worktree
 	for rows.Next() {
 		worktree, err := scanCoordinationWorktree(rows)
 		if err != nil {
+			rows.Close()
 			return nil, err
 		}
 		out = append(out, worktree)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	rowsErr := rows.Err()
+	rows.Close()
+	if rowsErr != nil {
+		return nil, rowsErr
+	}
+	for i, w := range out {
+		out[i] = canonizarCoordinationWorktree(w)
 	}
 	return out, nil
 }
@@ -272,4 +287,13 @@ func scanCoordinationWorktree(s scanner) (*coordinacion.Worktree, error) {
 	}
 	worktree.State = coordinacion.WorktreeState(strings.TrimSpace(state))
 	return &worktree, nil
+}
+
+func canonizarCoordinationWorktree(worktree *coordinacion.Worktree) *coordinacion.Worktree {
+	if worktree == nil {
+		return nil
+	}
+	copia := *worktree
+	copia.Path = rutaWorktreeCanonicaProyecto(copia.ProjectID, copia.Path)
+	return &copia
 }

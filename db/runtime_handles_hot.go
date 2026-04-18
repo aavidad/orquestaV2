@@ -227,11 +227,6 @@ func runtimeHandleHotReplace(handles []*RuntimeHandle) error {
 	for key, grouped := range groupedByAgentProject {
 		if handle := runtimeHandleHotSelectCanonical(grouped); handle != nil {
 			byAgentProject[key] = cloneRuntimeHandle(handle)
-			if len(grouped) > 1 {
-				if err := cerrarRuntimeHandlesActivosSuperseded(handle, grouped); err != nil {
-					return err
-				}
-			}
 		}
 	}
 	bySession := map[int64]*RuntimeHandle{}

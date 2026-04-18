@@ -27,6 +27,8 @@ type Store interface {
 	GetProject(ref string) (*db.Proyecto, error)
 	GetAgent(nombre string) (*db.Agente, error)
 	SharedAccountActivationAllowed(agente string) (bool, string, error)
+	ReconcileStaleRuntimeHandles() (int, error)
+	ReconcileStaleRuntimeOrders() (int, error)
 	ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance, error)
 	BuildRuntimeTree(filtro db.FiltroRuntimes) ([]*db.RuntimeTreeNode, error)
 	GetRuntime(id int64) (*db.RuntimeInstance, error)
@@ -204,6 +206,15 @@ type AgentControlPayload struct {
 	Motivo       string `json:"motivo,omitempty"`
 	Por          string `json:"por,omitempty"`
 	TareaID      *int64 `json:"tarea_id,omitempty"`
+}
+
+type agentControlReuseSignature struct {
+	Proyecto     string
+	Conector     string
+	Modelo       string
+	Razonamiento string
+	Perfil       string
+	TareaID      int64
 }
 
 type RuntimeHandlePurgeRequest struct {
@@ -1998,6 +2009,20 @@ func (s *Service) ListMemoryEntities(filtro db.FiltroEntidadesMemoria) ([]*db.En
 	return s.store.ListMemoryEntities(filtro)
 }
 
+func (s *Service) ReconcileStaleRuntimeHandles() (int, error) {
+	if s == nil || s.store == nil {
+		return 0, fmt.Errorf("servicio de runtimes no inicializado")
+	}
+	return s.store.ReconcileStaleRuntimeHandles()
+}
+
+func (s *Service) ReconcileStaleRuntimeOrders() (int, error) {
+	if s == nil || s.store == nil {
+		return 0, fmt.Errorf("servicio de runtimes no inicializado")
+	}
+	return s.store.ReconcileStaleRuntimeOrders()
+}
+
 func (s *Service) UpsertMemoryEntity(entidad *db.EntidadMemoria) (int64, error) {
 	return s.store.UpsertMemoryEntity(entidad)
 }
@@ -2034,6 +2059,26 @@ func (s *Service) EnqueueAgentControl(req AgentControlRequest) (int64, string, e
 			return 0, "", err
 		}
 		proyectoID = &proyecto.ID
+		proyectoRef = strings.TrimSpace(proyecto.Slug)
+	}
+	if accion == "start" {
+		if _, err := s.store.ReconcileStaleRuntimeOrders(); err != nil {
+			return 0, "", err
+		}
+		reuseSignature := buildAgentControlReuseSignature(req, proyectoRef)
+		if existing, err := s.findExistingLiveAgentControlOrder(agente, proyectoID, accion, reuseSignature); err != nil {
+			return 0, "", err
+		} else if existing != nil {
+			if err := s.cancelSupersededEquivalentLiveControlOrders(agente, proyectoID, accion, existing.ID, valueOrFallback(strings.TrimSpace(req.Por), "orquesta"), proyectoRef); err != nil {
+				return 0, "", err
+			}
+			detalle := fmt.Sprintf("%s agente=%s proyecto=%s reused_order_id=%d", accion, agente, valueOrFallback(proyectoRef, ""), existing.ID)
+			if motivo := strings.TrimSpace(req.Motivo); motivo != "" {
+				detalle += " motivo=" + motivo
+			}
+			s.store.Audit(valueOrFallback(strings.TrimSpace(req.Por), "orquesta"), "control_agente_"+accion+"_reuse", "runtime_order", existing.ID, detalle)
+			return existing.ID, accion, nil
+		}
 	}
 	if accion == "start" || accion == "resume" {
 		permite, ocupadoPor, err := s.store.SharedAccountActivationAllowed(agente)
@@ -2125,6 +2170,11 @@ func (s *Service) EnqueueAgentControl(req AgentControlRequest) (int64, string, e
 	if err != nil {
 		return 0, "", err
 	}
+	if accion == "start" {
+		if err := s.cancelSupersededEquivalentLiveControlOrders(agente, proyectoID, accion, orderID, valueOrFallback(strings.TrimSpace(req.Por), "orquesta"), proyectoRef); err != nil {
+			return 0, "", err
+		}
+	}
 
 	detalle := fmt.Sprintf("%s agente=%s proyecto=%s", accion, agente, valueOrFallback(proyectoRef, ""))
 	if motivo := strings.TrimSpace(req.Motivo); motivo != "" {
@@ -2132,6 +2182,159 @@ func (s *Service) EnqueueAgentControl(req AgentControlRequest) (int64, string, e
 	}
 	s.store.Audit(valueOrFallback(strings.TrimSpace(req.Por), "orquesta"), "control_agente_"+accion, "runtime_order", orderID, detalle)
 	return orderID, accion, nil
+}
+
+func buildAgentControlReuseSignature(req AgentControlRequest, proyectoRef string) agentControlReuseSignature {
+	var tareaID int64
+	if req.TareaID != nil && *req.TareaID > 0 {
+		tareaID = *req.TareaID
+	}
+	return agentControlReuseSignature{
+		Proyecto:     strings.TrimSpace(proyectoRef),
+		Conector:     strings.TrimSpace(req.Conector),
+		Modelo:       strings.TrimSpace(req.Modelo),
+		Razonamiento: strings.TrimSpace(req.Razonamiento),
+		Perfil:       strings.TrimSpace(req.Perfil),
+		TareaID:      tareaID,
+	}
+}
+
+func (s *Service) findExistingLiveAgentControlOrder(agente string, proyectoID *int64, accion string, signature agentControlReuseSignature) (*db.RuntimeOrder, error) {
+	if s == nil || s.store == nil {
+		return nil, fmt.Errorf("servicio de runtimes no inicializado")
+	}
+	if strings.TrimSpace(agente) == "" || strings.TrimSpace(accion) == "" {
+		return nil, nil
+	}
+	// Las órdenes pendientes viejas son baratas de superseder y peligrosas de
+	// reutilizar: pueden venir de un proyecto/sesión anterior y dejar al agente
+	// pegado a un start zombi. Solo reutilizamos órdenes ya reclamadas.
+	for _, estado := range []string{"ejecutando", "tomada"} {
+		estado := estado
+		orders, err := s.store.ListRuntimeOrders(db.FiltroRuntimeOrders{
+			Agente:     &agente,
+			ProyectoID: proyectoID,
+			Estado:     &estado,
+			Limit:      10,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, order := range orders {
+			if order == nil {
+				continue
+			}
+			if !strings.EqualFold(strings.TrimSpace(order.Tipo), accion) {
+				continue
+			}
+			if strings.EqualFold(strings.TrimSpace(accion), "start") && !runtimeOrderMatchesAgentControlSignature(order, signature) {
+				continue
+			}
+			return order, nil
+		}
+	}
+	return nil, nil
+}
+
+func runtimeOrderMatchesAgentControlSignature(order *db.RuntimeOrder, signature agentControlReuseSignature) bool {
+	if order == nil {
+		return false
+	}
+	payload := AgentControlPayload{}
+	_ = json.Unmarshal([]byte(order.PayloadJSON), &payload)
+	var tareaID int64
+	if payload.TareaID != nil && *payload.TareaID > 0 {
+		tareaID = *payload.TareaID
+	}
+	return strings.EqualFold(strings.TrimSpace(payload.Proyecto), strings.TrimSpace(signature.Proyecto)) &&
+		strings.EqualFold(strings.TrimSpace(payload.Conector), strings.TrimSpace(signature.Conector)) &&
+		strings.EqualFold(strings.TrimSpace(payload.Modelo), strings.TrimSpace(signature.Modelo)) &&
+		strings.EqualFold(strings.TrimSpace(payload.Razonamiento), strings.TrimSpace(signature.Razonamiento)) &&
+		strings.EqualFold(strings.TrimSpace(payload.Perfil), strings.TrimSpace(signature.Perfil)) &&
+		tareaID == signature.TareaID
+}
+
+func (s *Service) cancelSupersededEquivalentLiveControlOrders(agente string, proyectoID *int64, accion string, keepID int64, actor, proyectoRef string) error {
+	if strings.TrimSpace(accion) == "" {
+		return nil
+	}
+	orders, err := s.listLiveControlOrders(agente, proyectoID)
+	if err != nil {
+		return err
+	}
+	for _, order := range orders {
+		if order == nil || order.ID == keepID {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(order.Tipo), accion) {
+			continue
+		}
+		if err := s.cancelSupersededControlOrder(order, actor, "duplicate_live_control_order", proyectoRef); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) listLiveControlOrders(agente string, proyectoID *int64) ([]*db.RuntimeOrder, error) {
+	if s == nil || s.store == nil {
+		return nil, fmt.Errorf("servicio de runtimes no inicializado")
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil, nil
+	}
+	out := make([]*db.RuntimeOrder, 0, 8)
+	seen := map[int64]struct{}{}
+	for _, estado := range []string{"ejecutando", "tomada", "pendiente"} {
+		estado := estado
+		orders, err := s.store.ListRuntimeOrders(db.FiltroRuntimeOrders{
+			Agente:     &agente,
+			ProyectoID: proyectoID,
+			Estado:     &estado,
+			Limit:      20,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, order := range orders {
+			if order == nil || !runtimeOrderEsControl(strings.TrimSpace(order.Tipo)) {
+				continue
+			}
+			if _, ok := seen[order.ID]; ok {
+				continue
+			}
+			seen[order.ID] = struct{}{}
+			out = append(out, order)
+		}
+	}
+	return out, nil
+}
+
+func (s *Service) cancelSupersededControlOrder(order *db.RuntimeOrder, actor, reason, proyectoRef string) error {
+	if s == nil || s.store == nil || order == nil || order.ID <= 0 {
+		return nil
+	}
+	resultadoJSON := fmt.Sprintf(`{"ok":false,"dispatch_state":"cancelled","superseded_reason":"%s"}`, strings.TrimSpace(reason))
+	detalle := "orden de control supersedida"
+	if strings.TrimSpace(proyectoRef) != "" {
+		detalle += " proyecto=" + strings.TrimSpace(proyectoRef)
+	}
+	if err := s.store.MarkRuntimeOrderState(order.ID, "cancelada", resultadoJSON, detalle); err != nil {
+		return err
+	}
+	s.store.Audit(valueOrFallback(strings.TrimSpace(actor), "orquesta"), "control_agente_supersede", "runtime_order", order.ID,
+		fmt.Sprintf("agente=%s tipo=%s reason=%s proyecto=%s", strings.TrimSpace(order.Agente), strings.TrimSpace(order.Tipo), strings.TrimSpace(reason), valueOrFallback(strings.TrimSpace(proyectoRef), "")))
+	return nil
+}
+
+func runtimeOrderEsControl(tipo string) bool {
+	switch strings.ToLower(strings.TrimSpace(tipo)) {
+	case "start", "stop", "pause", "resume", "handoff":
+		return true
+	default:
+		return false
+	}
 }
 
 func agentControlResumeRequiresFreshStart(handle *db.RuntimeHandle) bool {
@@ -2445,9 +2648,9 @@ func runtimeHandleShouldSupersedeStart(handle *db.RuntimeHandle, runtime *db.Run
 		return false
 	}
 	if snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON)); err == nil && snap != nil {
-		state := strings.ToLower(strings.TrimSpace(snap.EffectiveState()))
+		state := runtimeHandleCanonicalWorkerState(snap.EffectiveState())
 		switch state {
-		case "stale", "stopped", "failed", "exited", "closed":
+		case "blocked_runtime", "stuck", "stopped":
 			return true
 		}
 		if snap.IsHeartbeatStale(time.Now().UTC(), time.Minute) || !snap.Alive() {
@@ -2531,14 +2734,18 @@ func runtimeHandleCanonicoParaControl(handle *db.RuntimeHandle) bool {
 	if view == nil {
 		return true
 	}
-	switch strings.ToLower(strings.TrimSpace(view.State)) {
-	case "stale", "stopped", "failed", "exited", "closed":
+	switch runtimeHandleCanonicalWorkerState(view.State) {
+	case "blocked_runtime", "stuck", "stopped":
 		return false
 	}
 	if view.HeartbeatStale || !view.Alive {
 		return false
 	}
 	return true
+}
+
+func runtimeHandleCanonicalWorkerState(raw string) string {
+	return db.NormalizeRuntimeWorkerState(raw)
 }
 
 func runtimeHandleEsCandidatoLegacyATMUX(handle *db.RuntimeHandle) bool {

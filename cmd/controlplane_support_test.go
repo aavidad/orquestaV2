@@ -10833,6 +10833,74 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeDespachaConWor
 	}
 }
 
+func TestRuntimeHandleListaParaDispatchSessionResumeTMUXAceptaWorkerWaitingInputCanonico(t *testing.T) {
+	tmp := t.TempDir()
+	runDir := filepath.Join(tmp, "runtime", "waiting-input")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir run dir: %v", err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	writeJSON := func(path string, payload map[string]any) {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	writeJSON(manifestPath, map[string]any{
+		"version":        1,
+		"agent":          "Codex1",
+		"driver":         "tmux_cli_session",
+		"transport":      "tmux",
+		"tmux_session":   "orq-codex1-waiting-input",
+		"tmux_pane_id":   "%78",
+		"status_path":    statusPath,
+		"heartbeat_path": heartbeatPath,
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":          "waiting_input",
+		"updated_at":     now,
+		"alive":          true,
+		"ready_at":       now,
+		"last_output_at": now,
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":          true,
+		"heartbeat_at":   now,
+		"started_at":     now,
+		"ready_at":       now,
+		"last_output_at": now,
+	})
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex1-waiting-input",
+		"tmux_pane_id":          "%78",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	sesionID := int64(78)
+	handle := &db.RuntimeHandle{
+		Agente:       "Codex1",
+		SesionID:     &sesionID,
+		Transporte:   "tmux",
+		HandleKind:   "session",
+		HandleRef:    "orq-codex1-waiting-input/%78",
+		Estado:       "activo",
+		MetadataJSON: string(metaJSON),
+	}
+
+	if !runtimeHandleListaParaDispatchSessionResumeTMUX(handle, nil) {
+		t.Fatal("deberia despachar session_resume con worker state canonico=waiting_input")
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeNoDespachaSiWorkerRunningPeroRuntimeNoEsperandoIO(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()
@@ -19182,6 +19250,69 @@ notificationsChecked:
 	}
 }
 
+func TestProcesarSignalFalloRuntimeEmiteNotificacionOperador(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	item := &db.RuntimeTranscriptEntry{
+		ID:             91,
+		RuntimeID:      11,
+		ProyectoID:     &proyectoID,
+		Agente:         "Codex1",
+		Classification: "runtime_panic",
+		NormalizedText: "panic nil pointer",
+		Text:           "panic nil pointer",
+	}
+
+	note, err := procesarSignalFalloRuntime(item, "Codex1")
+	if err != nil {
+		t.Fatalf("procesarSignalFalloRuntime: %v", err)
+	}
+	if !strings.Contains(note, "runtime_failure_signal") {
+		t.Fatalf("nota de fallo inesperada: %s", note)
+	}
+
+	var notif *db.EventoNotificacion
+	for {
+		select {
+		case item := <-db.CanalNotificaciones:
+			if item.Tipo == "runtime_failure" && item.Agente == "Codex1" {
+				copy := item
+				notif = &copy
+			}
+		default:
+			goto failureNotificationsChecked
+		}
+	}
+
+failureNotificationsChecked:
+	if notif == nil {
+		t.Fatal("faltaba notificacion runtime_failure en el canal")
+	}
+	if !strings.Contains(notif.Texto, "runtime_panic") || !strings.Contains(notif.Texto, "panic nil pointer") {
+		t.Fatalf("notificacion runtime_failure sin contexto util: %+v", notif)
+	}
+	if notif.Payload == nil {
+		t.Fatalf("runtime_failure sin payload util: %+v", notif)
+	}
+	if got, _ := notif.Payload["classification"].(string); got != "runtime_panic" {
+		t.Fatalf("payload de runtime_failure inesperado: %+v", notif.Payload)
+	}
+}
+
 func TestConstruirRespuestaSignalTranscriptAplicaPoliticaPermisos(t *testing.T) {
 	t.Parallel()
 
@@ -19829,6 +19960,35 @@ func TestProcesarRuntimeTranscriptBatchResuelveReviewGateDesdeReviewer(t *testin
 	}
 	if len(orders) != 0 {
 		t.Fatalf("no debería dejar nudges o instrucciones pendientes al resolver el gate directamente: %+v", orders)
+	}
+	var notif *db.EventoNotificacion
+	for {
+		select {
+		case item := <-db.CanalNotificaciones:
+			if item.Tipo == "runtime_review" {
+				copy := item
+				notif = &copy
+			}
+		default:
+			goto reviewNotificationsChecked
+		}
+	}
+
+reviewNotificationsChecked:
+	if notif == nil {
+		t.Fatal("faltaba notificacion runtime_review tras resolver el gate")
+	}
+	if notif.Payload == nil {
+		t.Fatalf("runtime_review sin payload util: %+v", notif)
+	}
+	if got, _ := notif.Payload["stage"].(string); got != "review_approved" {
+		t.Fatalf("stage review inesperado: %+v", notif.Payload)
+	}
+	if got, _ := notif.Payload["gate_id"].(int64); got != 0 && got != gateID {
+		t.Fatalf("gate_id inesperado: %+v", notif.Payload)
+	}
+	if !strings.Contains(notif.Texto, "Review aprobada") {
+		t.Fatalf("runtime_review sin texto util: %+v", notif)
 	}
 }
 
@@ -25049,6 +25209,99 @@ func TestConsumirRuntimeMailboxObsoletaPorWorkerSiProcedeConsumeNudgePrevioAStar
 	}
 	if len(consumidos) != 1 || consumidos[0].ID != msgID {
 		t.Fatalf("el mailbox debería quedar consumido, got=%+v", consumidos)
+	}
+}
+
+func TestConsumirRuntimeMailboxObsoletaPorWorkerSiProcedeConsumeNudgeConWorkerWorkingCanonico(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	startedAt := time.Now().UTC()
+	runDir := filepath.Join(tmp, "tmux-mailbox-working")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir runDir: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	startedRaw := startedAt.Format(time.RFC3339Nano)
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex3","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex3-mailbox-working","tmux_pane_id":"%22","started_at":"`+startedRaw+`","status_path":"`+statusPath+`","heartbeat_path":"`+heartbeatPath+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"working","updated_at":"`+startedRaw+`","alive":true,"last_output_at":"`+startedRaw+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+startedRaw+`","started_at":"`+startedRaw+`","last_output_at":"`+startedRaw+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-codex3-mailbox-working",
+		"tmux_pane_id":          "%22",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	res, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json, capabilities_json, last_seen_at
+	) VALUES (?,?,?,?,?,?,?, '{}', CURRENT_TIMESTAMP)`,
+		"Codex3", proyectoID, "tmux", "session", "orq-codex3-mailbox-working", "activo", string(metaJSON))
+	if err != nil {
+		t.Fatalf("insert handle: %v", err)
+	}
+	handleID, _ := res.LastInsertId()
+	handle, err := db.GetRuntimeHandle(handleID)
+	if err != nil {
+		t.Fatalf("get handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex3",
+		ProyectoID:  &proyectoID,
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"sigue"}`,
+	})
+	if err != nil {
+		t.Fatalf("enviar mailbox: %v", err)
+	}
+	oldCreatedAt := startedAt.Add(-10 * time.Minute)
+	if _, err := db.DB.Exec(`UPDATE runtime_mailbox SET created_at=? WHERE id=?`, oldCreatedAt, msgID); err != nil {
+		t.Fatalf("retroceder created_at: %v", err)
+	}
+	msgs, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: strPtr("Codex3")})
+	if err != nil || len(msgs) == 0 {
+		t.Fatalf("listar mailbox: %v len=%d", err, len(msgs))
+	}
+
+	consumida, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msgs[0], handle, "session_resume", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("consumir mailbox obsoleta: %v", err)
+	}
+	if !consumida {
+		t.Fatalf("deberia consumir el nudge obsoleto con worker state canonico=working")
+	}
+
+	estado := "consumido"
+	consumidos, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: strPtr("Codex3"), Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar consumidos: %v", err)
+	}
+	if len(consumidos) != 1 || consumidos[0].ID != msgID {
+		t.Fatalf("el mailbox deberia quedar consumido, got=%+v", consumidos)
 	}
 }
 

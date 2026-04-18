@@ -139,11 +139,15 @@ func (n *OpenClawGatewayNotificador) EnviarAvisoFinProyecto(proyectoID int64, no
 }
 
 func (n *OpenClawGatewayNotificador) EnviarEvento(ev db.EventoNotificacion) error {
-	entregaID, err := db.CrearEntregaNotificacion("openclaw_gateway", strings.TrimSpace(n.URL), ev)
+	curated, eventType, ok := curateOpenClawEvent(ev)
+	if !ok {
+		return nil
+	}
+	entregaID, err := db.CrearEntregaNotificacion("openclaw_gateway", strings.TrimSpace(n.URL), curated)
 	if err != nil {
 		return err
 	}
-	err = n.enviarEventoHTTP(ev)
+	err = n.enviarEventoHTTP(curated, eventType)
 	if err != nil {
 		nextRetryAt := time.Now().UTC().Add(notificationRetryDelay(1))
 		_ = db.MarcarEntregaNotificacionFallida(entregaID, err.Error(), nextRetryAt)
@@ -153,14 +157,17 @@ func (n *OpenClawGatewayNotificador) EnviarEvento(ev db.EventoNotificacion) erro
 	return nil
 }
 
-func (n *OpenClawGatewayNotificador) enviarEventoHTTP(ev db.EventoNotificacion) error {
+func (n *OpenClawGatewayNotificador) enviarEventoHTTP(ev db.EventoNotificacion, eventType string) error {
 	url := strings.TrimSpace(n.URL)
 	if url == "" {
 		return nil
 	}
+	if strings.TrimSpace(eventType) == "" {
+		eventType = mapNotificationEventType(ev)
+	}
 	payload := map[string]any{
 		"source":     "orquesta",
-		"event_type": mapNotificationEventType(ev.Tipo),
+		"event_type": eventType,
 		"event_id":   ev.ID,
 		"text":       strings.TrimSpace(ev.Texto),
 		"sent_at":    time.Now().UTC().Format(time.RFC3339),
@@ -190,7 +197,7 @@ func (n *OpenClawGatewayNotificador) enviarEventoHTTP(ev db.EventoNotificacion) 
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Orquesta-Source", "orquesta")
-	req.Header.Set("X-Orquesta-Event-Type", mapNotificationEventType(ev.Tipo))
+	req.Header.Set("X-Orquesta-Event-Type", eventType)
 	if token := strings.TrimSpace(n.Token); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -204,6 +211,127 @@ func (n *OpenClawGatewayNotificador) enviarEventoHTTP(ev db.EventoNotificacion) 
 		return fmt.Errorf("error openclaw gateway (status %d): %s", resp.StatusCode, strings.TrimSpace(string(rb)))
 	}
 	return nil
+}
+
+func curateOpenClawEvent(ev db.EventoNotificacion) (db.EventoNotificacion, string, bool) {
+	eventType, ok := openClawEventType(ev)
+	if !ok {
+		return ev, "", false
+	}
+	ev.Tipo = strings.TrimSpace(ev.Tipo)
+	ev.Texto = decorateOpenClawEventText(ev, eventType)
+	return ev, eventType, true
+}
+
+func openClawEventType(ev db.EventoNotificacion) (string, bool) {
+	switch strings.TrimSpace(ev.Tipo) {
+	case "bloqueo", "hook:project_blocked":
+		return "task_blocked", true
+	case "hook:project_unblocked", "progress_summary":
+		return "progress_summary", true
+	case "hook:task_finish":
+		return "task_completed", true
+	case "fin_proyecto":
+		return "project_completed", true
+	case "runtime_handoff":
+		return "handoff_completed", true
+	case "runtime_failure":
+		switch strings.TrimSpace(payloadString(ev.Payload, "classification")) {
+		case "runtime_panic":
+			return "runtime_panic", true
+		case "runtime_crash":
+			return "runtime_crash", true
+		default:
+			return "runtime_failure", true
+		}
+	case "runtime_review":
+		switch strings.TrimSpace(payloadString(ev.Payload, "stage")) {
+		case "ready_for_review":
+			return "review_ready", true
+		case "review_approved", "aprobado":
+			return "review_approved", true
+		case "review_changes_requested", "cambios_pedidos":
+			return "review_changes_requested", true
+		case "review_blocked", "bloqueado":
+			return "review_blocked", true
+		default:
+			return "review_update", true
+		}
+	default:
+		return "", false
+	}
+}
+
+func decorateOpenClawEventText(ev db.EventoNotificacion, eventType string) string {
+	base := strings.TrimSpace(ev.Texto)
+	agente := strings.TrimSpace(ev.Agente)
+	switch eventType {
+	case "task_blocked":
+		prefix := "Bloqueo detectado"
+		if ev.ID > 0 {
+			prefix = fmt.Sprintf("Tarea #%d bloqueada", ev.ID)
+		}
+		return joinOpenClawTextParts(prefix, openClawAgentLabel(agente), base)
+	case "task_completed":
+		prefix := "Tarea completada"
+		if ev.ID > 0 {
+			prefix = fmt.Sprintf("Tarea #%d completada", ev.ID)
+		}
+		return joinOpenClawTextParts(prefix, openClawAgentLabel(agente), base)
+	case "progress_summary":
+		prefix := "Resumen de progreso"
+		if strings.TrimSpace(ev.Tipo) == "hook:project_unblocked" {
+			prefix = "Bloqueo resuelto"
+		}
+		return joinOpenClawTextParts(prefix, openClawAgentLabel(agente), base)
+	case "project_completed":
+		prefix := "Proyecto completado"
+		if ev.ID > 0 {
+			prefix = fmt.Sprintf("Proyecto #%d completado", ev.ID)
+		}
+		return joinOpenClawTextParts(prefix, base)
+	default:
+		if base != "" {
+			return base
+		}
+		return "Notificacion de operador"
+	}
+}
+
+func openClawAgentLabel(agente string) string {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return ""
+	}
+	return "agente=" + agente
+}
+
+func joinOpenClawTextParts(parts ...string) string {
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		out = append(out, part)
+	}
+	return strings.Join(out, " | ")
+}
+
+func payloadString(payload map[string]any, key string) string {
+	if payload == nil {
+		return ""
+	}
+	value, ok := payload[key]
+	if !ok || value == nil {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	default:
+		return strings.TrimSpace(fmt.Sprintf("%v", typed))
+	}
 }
 
 func DescribirConfiguracion() EstadoNotificaciones {
@@ -278,19 +406,11 @@ func formatNotificationMessage(ev db.EventoNotificacion) string {
 	return "Notificación de Orquesta: " + tipo
 }
 
-func mapNotificationEventType(tipo string) string {
-	switch strings.TrimSpace(tipo) {
-	case "bloqueo":
-		return "task_blocked"
-	case "propuesta":
-		return "proposal_vote_requested"
-	case "fin_proyecto":
-		return "project_completed"
-	case "runtime_auto_guidance":
-		return "runtime_auto_guidance"
-	default:
-		return "message"
+func mapNotificationEventType(ev db.EventoNotificacion) string {
+	if eventType, ok := openClawEventType(ev); ok {
+		return eventType
 	}
+	return "message"
 }
 
 func buildConfiguredNotifiers() (Notificador, *TelegramNotificador, []string) {
@@ -350,7 +470,15 @@ func RetryDueGatewayDeliveries(n Notificador, limit int) (int, error) {
 		if err != nil {
 			return processed, err
 		}
-		if err := gateway.enviarEventoHTTP(item.Evento); err != nil {
+		curated, eventType, ok := curateOpenClawEvent(item.Evento)
+		if !ok {
+			if err := db.MarcarEntregaNotificacionEntregada(item.ID); err != nil {
+				return processed, err
+			}
+			processed++
+			continue
+		}
+		if err := gateway.enviarEventoHTTP(curated, eventType); err != nil {
 			nextRetryAt := time.Now().UTC().Add(notificationRetryDelay(intentos))
 			if markErr := db.MarcarEntregaNotificacionFallida(item.ID, err.Error(), nextRetryAt); markErr != nil {
 				return processed, markErr

@@ -127,6 +127,7 @@ func scanWorktree(s scanner) (*Worktree, error) {
 	if cerradaAt.Valid {
 		item.CerradaAt = &cerradaAt.Time
 	}
+	item.RutaAbs = rutaWorktreeCanonicaProyecto(item.ProyectoID, item.RutaAbs)
 	return &item, nil
 }
 

@@ -1997,6 +1997,43 @@ func TestBuildPanelRowsNoBloqueaSiWorkerYaSeRecuperoTrasOrdenControlPendiente(t 
 	}
 }
 
+func TestBuildPanelRowsIgnoraControlOrderDeOtroProyecto(t *testing.T) {
+	now := time.Now().UTC()
+	projectID := int64(3)
+	oldProjectID := int64(10)
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		sessions: []*db.Sesion{
+			{Agente: "Codex2", Herramienta: "codex-cli", Estado: "activa", Inicio: now, ProyectoID: &projectID},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex2", ProyectoID: &projectID, LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: &projectID, Estado: "activo", UpdatedAt: now},
+		},
+		orders: []*db.RuntimeOrder{
+			{ID: 80, Agente: "Codex2", ProyectoID: &oldProjectID, Tipo: "stop", Estado: "pendiente", CreatedAt: now.Add(-30 * time.Second), UpdatedAt: now.Add(-30 * time.Second), AvailableAt: now.Add(-30 * time.Second)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex2"), Estado: db.EstadoEnProgreso, ProyectoID: &projectID},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo == "bloqueado_por_runtime" && strings.Contains(rows[0].DetalleOperativo, "stop") {
+		t.Fatalf("orden de control de otro proyecto no deberia bloquear el estado actual: %+v", rows[0])
+	}
+}
+
 func TestBuildPanelRowsRespetaUmbralConfiguradoDeSalidaStale(t *testing.T) {
 	now := time.Now().UTC()
 	lastOutput := now.Add(-2 * time.Minute)

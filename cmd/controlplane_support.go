@@ -3486,6 +3486,7 @@ func procesarSignalFalloRuntime(item *db.RuntimeTranscriptEntry, agente string) 
 	} else {
 		notes = acumularNotaAutonomia(notes, supervisorNote)
 	}
+	emitirNotificacionRuntimeFailureSignalTranscript(agente, item)
 	notes = acumularNotaAutonomia(notes, "runtime_failure_signal")
 	return resumenNotasAutonomia(notes), nil
 }
@@ -3868,6 +3869,7 @@ func resolverEstadoGateSignalTranscript(gate *reviewapp.Gate, estado string, ite
 		return "", err
 	}
 	detail := auditarResolucionGateSignalTranscript(resolved.ID, item, estado)
+	emitirNotificacionReviewSignalTranscript(clasificacionSignalTranscript(item), resolved, item, reviewerAgenteSignalTranscript(item))
 	return "review_gate_resolved:" + detail, nil
 }
 
@@ -4388,7 +4390,134 @@ func ejecutarPlanReviewerSignalTranscript(item *db.RuntimeTranscriptEntry, polic
 	if err != nil {
 		return "", err
 	}
-	return resolverEstadoAgenteObjetivoSignalTranscript(reviewer, activado, agenteSignalTranscript(item), proyecto, "inspeccionar_ready_for_review", construirInstruccionReviewSignalTranscript(policy, proyecto, nombreAgenteAutonomia(reviewer), item), item, "reviewer", "reviewer_start")
+	reviewerNombre := nombreAgenteAutonomia(reviewer)
+	note, err := resolverEstadoAgenteObjetivoSignalTranscript(reviewer, activado, agenteSignalTranscript(item), proyecto, "inspeccionar_ready_for_review", construirInstruccionReviewSignalTranscript(policy, proyecto, reviewerNombre, item), item, "reviewer", "reviewer_start")
+	if err != nil {
+		return "", err
+	}
+	emitirNotificacionReviewSignalTranscript("ready_for_review", nil, item, reviewerNombre)
+	return note, nil
+}
+
+func emitirNotificacionRuntimeFailureSignalTranscript(agente string, item *db.RuntimeTranscriptEntry) {
+	if item == nil {
+		return
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		agente = agenteSignalTranscript(item)
+	}
+	payload := map[string]any{
+		"classification": clasificacionSignalTranscript(item),
+		"transcript_id":  idSignalTranscript(item),
+		"signal_text":    textoSignalTranscript(item),
+		"runtime_id":     item.RuntimeID,
+	}
+	texto := joinNotificationTextParts(
+		"Runtime failure detectado",
+		notificationAgentPart(agente),
+		notificationKeyValue("clasificacion", clasificacionSignalTranscript(item)),
+		textoSignalTranscript(item),
+	)
+	db.EmitirNotificacion(db.EventoNotificacion{
+		Tipo:       "runtime_failure",
+		ID:         idSignalTranscript(item),
+		Agente:     agente,
+		Texto:      texto,
+		ProyectoID: int64ProyectoRuntimeTranscript(item),
+		Payload:    payload,
+	})
+}
+
+func emitirNotificacionReviewSignalTranscript(stage string, gate *reviewapp.Gate, item *db.RuntimeTranscriptEntry, reviewer string) {
+	stage = strings.TrimSpace(stage)
+	if stage == "" {
+		return
+	}
+	payload := map[string]any{
+		"stage":         stage,
+		"transcript_id": idSignalTranscript(item),
+		"signal_text":   textoSignalTranscript(item),
+	}
+	if gate != nil {
+		payload["gate_id"] = gate.ID
+		if gate.TareaID != nil && *gate.TareaID > 0 {
+			payload["task_id"] = *gate.TareaID
+		}
+	}
+	reviewer = strings.TrimSpace(reviewer)
+	if reviewer != "" {
+		payload["reviewer"] = reviewer
+	}
+	texto := joinNotificationTextParts(
+		notificacionReviewStageLabel(stage),
+		notificationAgentPart(agenteSignalTranscript(item)),
+		notificationKeyValue("reviewer", reviewer),
+		notificationGatePart(gate),
+		textoSignalTranscript(item),
+	)
+	db.EmitirNotificacion(db.EventoNotificacion{
+		Tipo:       "runtime_review",
+		ID:         idSignalTranscript(item),
+		Agente:     agenteSignalTranscript(item),
+		Texto:      texto,
+		ProyectoID: int64ProyectoRuntimeTranscript(item),
+		Payload:    payload,
+	})
+}
+
+func notificacionReviewStageLabel(stage string) string {
+	switch strings.TrimSpace(stage) {
+	case "ready_for_review":
+		return "Frente listo para review"
+	case "review_approved", reviewapp.GateStateApproved:
+		return "Review aprobada"
+	case "review_changes_requested", reviewapp.GateStateChangesAsked:
+		return "Review pide cambios"
+	case "review_blocked", reviewapp.GateStateBlocked:
+		return "Review bloqueada"
+	default:
+		return "Review actualizada"
+	}
+}
+
+func notificationAgentPart(agente string) string {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return ""
+	}
+	return "agente=" + agente
+}
+
+func notificationKeyValue(key, value string) string {
+	key = strings.TrimSpace(key)
+	value = strings.TrimSpace(value)
+	if key == "" || value == "" {
+		return ""
+	}
+	return key + "=" + value
+}
+
+func notificationGatePart(gate *reviewapp.Gate) string {
+	if gate == nil || gate.ID <= 0 {
+		return ""
+	}
+	if gate.TareaID != nil && *gate.TareaID > 0 {
+		return fmt.Sprintf("gate=%d tarea=%d", gate.ID, *gate.TareaID)
+	}
+	return fmt.Sprintf("gate=%d", gate.ID)
+}
+
+func joinNotificationTextParts(parts ...string) string {
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		out = append(out, part)
+	}
+	return strings.Join(out, " | ")
 }
 
 func resolverEstadoAgenteObjetivoSignalTranscript(agente *db.Agente, activado bool, agenteOrigen string, proyecto *db.Proyecto, accion, instruccion string, item *db.RuntimeTranscriptEntry, prefijoEstado, notaArranque string) (string, error) {
@@ -5260,7 +5389,7 @@ func runtimeHandleListaParaDispatchBootstrapTMUX(handle *db.RuntimeHandle) bool 
 		return false
 	}
 	ready, _ := snap.ReadyForTextDispatch(time.Now().UTC(), time.Minute)
-	return ready
+	return ready || runtimeHandleWorkerCanonicalState(view) == "waiting_input"
 }
 
 func runtimeHandleBootstrapTMUXActivo(handle *db.RuntimeHandle) bool {
@@ -5278,8 +5407,8 @@ func runtimeHandleBootstrapTMUXActivo(handle *db.RuntimeHandle) bool {
 	if !strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") {
 		return false
 	}
-	switch strings.ToLower(strings.TrimSpace(view.State)) {
-	case "running", "ready", "working":
+	switch runtimeHandleWorkerCanonicalState(view) {
+	case "starting", "working", "idle", "waiting_input", "blocked_quota":
 		return true
 	default:
 		return false
@@ -5692,10 +5821,10 @@ func runtimeHandleListaParaDispatchInteractivo(handle *db.RuntimeHandle) bool {
 			return false
 		}
 		ready, _ := snap.ReadyForTextDispatch(time.Now().UTC(), time.Minute)
-		return ready
+		return ready || runtimeHandleWorkerCanonicalState(view) == "waiting_input"
 	}
 	ready, _ := snap.ReadyForTextDispatch(time.Now().UTC(), time.Minute)
-	return ready
+	return ready || runtimeHandleWorkerCanonicalState(view) == "waiting_input"
 }
 
 func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) bool {
@@ -5725,13 +5854,15 @@ func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, r
 		!strings.EqualFold(strings.TrimSpace(view.Transport), "tmux") {
 		return false
 	}
+	state := runtimeHandleWorkerCanonicalState(view)
 	ready, _ := snap.ReadyForTextDispatch(time.Now().UTC(), time.Minute)
-	if !ready &&
-		strings.EqualFold(strings.TrimSpace(view.State), "running") &&
-		runtimeTMUXSessionResumePuedeDespacharPorRuntimeCanonico(runtime) {
+	if ready || state == "waiting_input" {
 		return true
 	}
-	return ready
+	if state == "working" && runtimeTMUXSessionResumePuedeDespacharPorRuntimeCanonico(runtime) {
+		return true
+	}
+	return false
 }
 
 func runtimeHandlePermiteInteractivoTmuxSinEstado(handle *db.RuntimeHandle) bool {
@@ -5780,8 +5911,8 @@ func runtimeTMUXSessionResumeWorkerReady(handle *db.RuntimeHandle) bool {
 		!strings.EqualFold(strings.TrimSpace(view.Transport), "tmux") {
 		return false
 	}
-	switch strings.ToLower(strings.TrimSpace(view.State)) {
-	case "ready", "idle":
+	switch runtimeHandleWorkerCanonicalState(view) {
+	case "idle", "waiting_input":
 		return true
 	default:
 		return false
@@ -6205,8 +6336,8 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg *db.RuntimeMailboxMess
 			fmt.Sprintf("lane=%s agente=%s kind=%s %s", strings.TrimSpace(lane), strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), strings.TrimSpace(detalle)))
 		return true, nil
 	}
-	switch strings.ToLower(strings.TrimSpace(view.State)) {
-	case "running", "idle", "waiting_input":
+	switch runtimeHandleWorkerCanonicalState(view) {
+	case "working", "idle", "waiting_input":
 	default:
 		return false, nil
 	}
@@ -8392,8 +8523,8 @@ func runtimeHandleTMUXAliveSession(handle *db.RuntimeHandle, now time.Time) (str
 	if view.HeartbeatStale || !view.Alive {
 		return "", false
 	}
-	switch strings.ToLower(strings.TrimSpace(view.State)) {
-	case "", "failed", "stopped", "exited", "closed", "stale":
+	switch runtimeHandleWorkerCanonicalState(view) {
+	case "", "blocked_runtime", "stuck", "stopped":
 		return "", false
 	}
 	return sessionName, true
@@ -8418,12 +8549,19 @@ func runtimeHandleTMUXOrphanSession(handle *db.RuntimeHandle, now time.Time, ali
 	if !view.Alive || view.HeartbeatStale {
 		return sessionName, true
 	}
-	switch strings.ToLower(strings.TrimSpace(view.State)) {
-	case "failed", "stopped", "exited", "closed", "stale":
+	switch runtimeHandleWorkerCanonicalState(view) {
+	case "blocked_runtime", "stuck", "stopped":
 		return sessionName, true
 	default:
 		return "", false
 	}
+}
+
+func runtimeHandleWorkerCanonicalState(view *runtimeagente.WorkerStatusView) string {
+	if view == nil {
+		return ""
+	}
+	return db.NormalizeRuntimeWorkerState(view.State)
 }
 
 func runtimeHandleTMUXWorkerView(handle *db.RuntimeHandle, now time.Time) (string, *runtimeagente.WorkerStatusView) {
@@ -10277,8 +10415,8 @@ func sesionActivaTMUXStaleParaContinuacion(handle *db.RuntimeHandle, now time.Ti
 	if view == nil || !view.Alive || view.HeartbeatStale {
 		return false
 	}
-	switch strings.ToLower(strings.TrimSpace(view.State)) {
-	case "running", "ready", "idle", "waiting_input":
+	switch runtimeHandleWorkerCanonicalState(view) {
+	case "working", "idle", "waiting_input":
 	default:
 		return false
 	}

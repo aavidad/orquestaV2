@@ -219,15 +219,15 @@ func rutaProyectoEfectivaConContexto(proyectoID int64, fallback, cwdHint string,
 	sessionInsideActiveWorktree := false
 	if sesion != nil {
 		sessionCWD = normalizarRutaProyecto(sesion.cwd)
-		sessionInsideActiveWorktree = rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID, sesion.agente, sessionCWD, worktrees)
+		sessionInsideActiveWorktree = rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID, sesion.agente, sessionCWD, worktrees, fallback)
 	} else if agente, cwd, ok := ultimaRutaSesionProyecto(proyectoID); ok {
 		sessionCWD = normalizarRutaProyecto(cwd)
-		sessionInsideActiveWorktree = rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID, agente, sessionCWD, worktrees)
+		sessionInsideActiveWorktree = rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID, agente, sessionCWD, worktrees, fallback)
 	}
 	return coordinacion.ResolveProjectEffectivePath(
 		fallback,
 		cwdHint,
-		rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID, "", cwdHint, worktrees),
+		rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID, "", cwdHint, worktrees, fallback),
 		sessionCWD,
 		sessionInsideActiveWorktree,
 		tieneMarcadoresRepo,
@@ -242,7 +242,7 @@ func candidataRutaProyectoEfectiva(proyectoID int64, agente, cwd string) string 
 	return coordinacion.ResolveProjectEffectivePath(
 		"",
 		cwd,
-		rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID, agente, cwd, nil),
+		rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID, agente, cwd, nil, ""),
 		"",
 		false,
 		tieneMarcadoresRepo,
@@ -257,7 +257,7 @@ func candidataRutaProyectoEfectivaConWorktrees(proyectoID int64, agente, cwd str
 	return coordinacion.ResolveProjectEffectivePath(
 		"",
 		cwd,
-		rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID, agente, cwd, worktrees),
+		rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID, agente, cwd, worktrees, ""),
 		"",
 		false,
 		tieneMarcadoresRepo,
@@ -380,8 +380,16 @@ func rutaWorktreeActivaAgenteProyecto(proyectoID int64, agente string) string {
 }
 
 func rutaSesionPerteneceAWorktreeActiva(proyectoID int64, agente, cwd string) bool {
+	return rutaSesionPerteneceAWorktreeActivaConRutaProyecto(proyectoID, agente, cwd, "")
+}
+
+func rutaSesionPerteneceAWorktreeActivaConRutaProyecto(proyectoID int64, agente, cwd, rutaProyectoRaw string) bool {
 	if proyectoID <= 0 || DB == nil {
 		return false
+	}
+	rutaProyectoRaw = normalizarRutaProyecto(rutaProyectoRaw)
+	if rutaProyectoRaw == "" {
+		rutaProyectoRaw = rutaProyectoWorktreeRaw(proyectoID)
 	}
 	q := `
 		SELECT ruta_abs
@@ -406,17 +414,17 @@ func rutaSesionPerteneceAWorktreeActiva(proyectoID int64, agente, cwd string) bo
 		}
 		worktrees = append(worktrees, coordinacion.WorktreePathRef{
 			Agent: strings.TrimSpace(agente),
-			Path:  strings.TrimSpace(worktreePath),
+			Path:  rutaProyectoEscopadaCanonica(rutaProyectoRaw, worktreePath),
 		})
 	}
 	return coordinacion.SessionPathInsideActiveWorktree(agente, cwd, worktrees)
 }
 
-func rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID int64, agente, cwd string, worktrees []coordinacion.WorktreePathRef) bool {
+func rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID int64, agente, cwd string, worktrees []coordinacion.WorktreePathRef, rutaProyectoRaw string) bool {
 	if len(worktrees) > 0 {
 		return coordinacion.SessionPathInsideActiveWorktree(agente, cwd, worktrees)
 	}
-	return rutaSesionPerteneceAWorktreeActiva(proyectoID, agente, cwd)
+	return rutaSesionPerteneceAWorktreeActivaConRutaProyecto(proyectoID, agente, cwd, rutaProyectoRaw)
 }
 
 func ResolveProyectoIDBySlug(slug string) (*int64, error) {
@@ -487,6 +495,7 @@ func cargarContextoRutaProyectos(proyectos []*Proyecto) (map[int64]*proyectoRuta
 	}
 	ids := make([]int64, 0, len(proyectos))
 	vistos := make(map[int64]struct{}, len(proyectos))
+	rutasProyecto := make(map[int64]string, len(proyectos))
 	for _, proyecto := range proyectos {
 		id := proyectoIDOrZero(proyecto)
 		if id <= 0 {
@@ -497,6 +506,7 @@ func cargarContextoRutaProyectos(proyectos []*Proyecto) (map[int64]*proyectoRuta
 		}
 		vistos[id] = struct{}{}
 		ids = append(ids, id)
+		rutasProyecto[id] = normalizarRutaProyecto(proyecto.RutaAbs)
 	}
 	if len(ids) == 0 {
 		return sesionesPorProyecto, worktreesPorProyecto
@@ -553,7 +563,7 @@ func cargarContextoRutaProyectos(proyectos []*Proyecto) (map[int64]*proyectoRuta
 			}
 			worktreesPorProyecto[proyectoID] = append(worktreesPorProyecto[proyectoID], coordinacion.WorktreePathRef{
 				Agent: strings.TrimSpace(agente),
-				Path:  strings.TrimSpace(rutaAbs),
+				Path:  rutaProyectoEscopadaCanonica(rutasProyecto[proyectoID], rutaAbs),
 			})
 		}
 	}

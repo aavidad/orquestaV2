@@ -32,7 +32,7 @@ func TestOpenClawGatewayNotificadorEnviarEvento(t *testing.T) {
 		if req.Method != http.MethodPost {
 			t.Fatalf("method inesperado: %s", req.Method)
 		}
-		if got := req.Header.Get("X-Orquesta-Event-Type"); got != "runtime_auto_guidance" {
+		if got := req.Header.Get("X-Orquesta-Event-Type"); got != "runtime_panic" {
 			t.Fatalf("header event type inesperado: %s", got)
 		}
 		if req.URL.String() != "https://openclaw.local/gateway" {
@@ -55,13 +55,13 @@ func TestOpenClawGatewayNotificadorEnviarEvento(t *testing.T) {
 		Client:   client,
 	}
 	err := n.EnviarEvento(db.EventoNotificacion{
-		Tipo:       "runtime_auto_guidance",
+		Tipo:       "runtime_failure",
 		ID:         7,
 		Agente:     "Codex1",
-		Texto:      "Orquesta envió guía automática",
+		Texto:      "Runtime failure detectado | agente=Codex1 | clasificacion=runtime_panic | panic nil pointer",
 		ProyectoID: 42,
 		Payload: map[string]any{
-			"classification": "approval_request",
+			"classification": "runtime_panic",
 			"runtime_id":     9,
 		},
 	})
@@ -74,7 +74,7 @@ func TestOpenClawGatewayNotificadorEnviarEvento(t *testing.T) {
 	if got, _ := gotEvent["source"].(string); got != "orquesta" {
 		t.Fatalf("source inesperado: %+v", gotEvent)
 	}
-	if got, _ := gotEvent["event_type"].(string); got != "runtime_auto_guidance" {
+	if got, _ := gotEvent["event_type"].(string); got != "runtime_panic" {
 		t.Fatalf("event_type inesperado: %+v", gotEvent)
 	}
 	if got, _ := gotEvent["agent"].(string); got != "Codex1" {
@@ -87,8 +87,110 @@ func TestOpenClawGatewayNotificadorEnviarEvento(t *testing.T) {
 	if payload == nil {
 		t.Fatalf("payload inesperado: %+v", gotEvent)
 	}
-	if got, _ := payload["classification"].(string); got != "approval_request" {
+	if got, _ := payload["classification"].(string); got != "runtime_panic" {
 		t.Fatalf("payload.classification inesperado: %+v", payload)
+	}
+}
+
+func TestOpenClawGatewayNotificadorIgnoraEventoBajoValor(t *testing.T) {
+	t.Parallel()
+
+	var calls int
+	n := &OpenClawGatewayNotificador{
+		URL: "https://openclaw.local/gateway",
+		Client: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			calls++
+			return &http.Response{
+				StatusCode: http.StatusAccepted,
+				Body:       io.NopCloser(strings.NewReader("{}")),
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+	if err := n.EnviarEvento(db.EventoNotificacion{
+		Tipo:   "runtime_auto_guidance",
+		Agente: "Codex1",
+		Texto:  "guia automatica",
+	}); err != nil {
+		t.Fatalf("EnviarEvento low value: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("runtime_auto_guidance no deberia salir hacia OpenClaw, calls=%d", calls)
+	}
+}
+
+func TestCurateOpenClawEventSoloDejaEventosOperador(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		nombre   string
+		evento   db.EventoNotificacion
+		wantType string
+		wantText string
+		allow    bool
+	}{
+		{
+			nombre:   "bloqueo_hook",
+			evento:   db.EventoNotificacion{Tipo: "hook:project_blocked", ID: 41, Agente: "Codex1", Texto: "falta credencial"},
+			wantType: "task_blocked",
+			wantText: "Tarea #41 bloqueada | agente=Codex1 | falta credencial",
+			allow:    true,
+		},
+		{
+			nombre:   "cierre_tarea",
+			evento:   db.EventoNotificacion{Tipo: "hook:task_finish", ID: 55, Agente: "Codex2", Texto: "Cerrar review"},
+			wantType: "task_completed",
+			wantText: "Tarea #55 completada | agente=Codex2 | Cerrar review",
+			allow:    true,
+		},
+		{
+			nombre:   "review_ready",
+			evento:   db.EventoNotificacion{Tipo: "runtime_review", Texto: "Frente listo", Payload: map[string]any{"stage": "ready_for_review"}},
+			wantType: "review_ready",
+			wantText: "Frente listo",
+			allow:    true,
+		},
+		{
+			nombre:   "handoff",
+			evento:   db.EventoNotificacion{Tipo: "runtime_handoff", Texto: "Handoff Codex0 -> Codex1"},
+			wantType: "handoff_completed",
+			wantText: "Handoff Codex0 -> Codex1",
+			allow:    true,
+		},
+		{
+			nombre:   "progreso",
+			evento:   db.EventoNotificacion{Tipo: "hook:project_unblocked", Agente: "Codex3", Texto: "review cerrada"},
+			wantType: "progress_summary",
+			wantText: "Bloqueo resuelto | agente=Codex3 | review cerrada",
+			allow:    true,
+		},
+		{
+			nombre:   "ruido",
+			evento:   db.EventoNotificacion{Tipo: "runtime_auto_guidance", Texto: "seguir con refactor"},
+			wantType: "",
+			wantText: "",
+			allow:    false,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.nombre, func(t *testing.T) {
+			t.Parallel()
+			curated, eventType, ok := curateOpenClawEvent(tc.evento)
+			if ok != tc.allow {
+				t.Fatalf("allow inesperado: got=%v want=%v", ok, tc.allow)
+			}
+			if !tc.allow {
+				return
+			}
+			if eventType != tc.wantType {
+				t.Fatalf("event type inesperado: got=%q want=%q", eventType, tc.wantType)
+			}
+			if curated.Texto != tc.wantText {
+				t.Fatalf("texto inesperado: got=%q want=%q", curated.Texto, tc.wantText)
+			}
+		})
 	}
 }
 
@@ -247,7 +349,7 @@ func TestOpenClawGatewayNotificadorPersisteFalloYRetry(t *testing.T) {
 			}, nil
 		}),
 	}
-	err := n.EnviarEvento(db.EventoNotificacion{Tipo: "mensaje", Texto: "hola"})
+	err := n.EnviarEvento(db.EventoNotificacion{Tipo: "bloqueo", ID: 1, Agente: "Codex1", Texto: "falta credencial"})
 	if err == nil {
 		t.Fatalf("deberia fallar el envio inicial")
 	}
@@ -298,7 +400,7 @@ func TestRetryDueGatewayDeliveriesReenviaPendientes(t *testing.T) {
 		t.Fatalf("open db: %v", err)
 	}
 
-	id, err := db.CrearEntregaNotificacion("openclaw_gateway", "https://openclaw.local/gateway", db.EventoNotificacion{Tipo: "mensaje", Texto: "hola"})
+	id, err := db.CrearEntregaNotificacion("openclaw_gateway", "https://openclaw.local/gateway", db.EventoNotificacion{Tipo: "bloqueo", ID: 1, Agente: "Codex1", Texto: "falta credencial"})
 	if err != nil {
 		t.Fatalf("crear entrega: %v", err)
 	}

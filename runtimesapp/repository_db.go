@@ -16,6 +16,14 @@ func (Repository) SharedAccountActivationAllowed(agente string) (bool, string, e
 	return db.CuentaCompartidaPermiteActivacionAgente(agente)
 }
 
+func (Repository) ReconcileStaleRuntimeHandles() (int, error) {
+	return db.ReconciliarRuntimeHandlesStale()
+}
+
+func (Repository) ReconcileStaleRuntimeOrders() (int, error) {
+	return db.ReconciliarRuntimeOrdersStale()
+}
+
 func (Repository) ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance, error) {
 	return db.ListarRuntimes(filtro)
 }

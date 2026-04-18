@@ -23,6 +23,7 @@ type fakeStore struct {
 	sharedAccountAgent       string
 	sharedAccountAllowed     bool
 	sharedAccountOccupiedBy  string
+	reconcileOrdersCalls     int
 	runtimesFilter           db.FiltroRuntimes
 	runtimesResponse         []*db.RuntimeInstance
 	treeFilter               db.FiltroRuntimes
@@ -274,6 +275,16 @@ func (f *fakeStore) SharedAccountActivationAllowed(agente string) (bool, string,
 	}
 	return false, f.sharedAccountOccupiedBy, nil
 }
+
+func (f *fakeStore) ReconcileStaleRuntimeHandles() (int, error) {
+	return 0, nil
+}
+
+func (f *fakeStore) ReconcileStaleRuntimeOrders() (int, error) {
+	f.reconcileOrdersCalls++
+	return 0, nil
+}
+
 func (f *fakeStore) ListRuntimes(filter db.FiltroRuntimes) ([]*db.RuntimeInstance, error) {
 	f.runtimesFilter = filter
 	return f.runtimesResponse, nil
@@ -409,7 +420,28 @@ func (f *fakeStore) GetRuntimeOrder(id int64) (*db.RuntimeOrder, error) {
 }
 func (f *fakeStore) ListRuntimeOrders(filter db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error) {
 	f.ordersFilter = filter
-	return f.ordersResponse, nil
+	if len(f.ordersResponse) == 0 {
+		return nil, nil
+	}
+	out := make([]*db.RuntimeOrder, 0, len(f.ordersResponse))
+	for _, order := range f.ordersResponse {
+		if order == nil {
+			continue
+		}
+		if filter.Agente != nil && strings.TrimSpace(*filter.Agente) != "" && !strings.EqualFold(strings.TrimSpace(order.Agente), strings.TrimSpace(*filter.Agente)) {
+			continue
+		}
+		if filter.Estado != nil && strings.TrimSpace(*filter.Estado) != "" && !strings.EqualFold(strings.TrimSpace(order.Estado), strings.TrimSpace(*filter.Estado)) {
+			continue
+		}
+		if filter.ProyectoID != nil {
+			if order.ProyectoID == nil || *order.ProyectoID != *filter.ProyectoID {
+				continue
+			}
+		}
+		out = append(out, order)
+	}
+	return out, nil
 }
 func (f *fakeStore) MarkRuntimeOrderState(id int64, estado, resultadoJSON, errorText string) error {
 	f.markOrderStateID = id
@@ -816,6 +848,126 @@ func TestRuntimeHandleShouldSupersedeStartNoDevuelveTrueConWorkerEstructuradoSta
 
 	if got := runtimeHandleShouldSupersedeStart(handle, runtime); got {
 		t.Fatalf("runtimeHandleShouldSupersedeStart() = true, want false with structured worker starting")
+	}
+}
+
+func TestRuntimeHandleShouldSupersedeStartDevuelveTrueConWorkerCanonicoBlockedRuntime(t *testing.T) {
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+
+	write := func(path string, payload any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	now := time.Now().UTC()
+	write(manifestPath, map[string]any{
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-codex1-101500",
+		"tmux_pane_id": "%10",
+	})
+	write(statusPath, map[string]any{
+		"state":      "blocked_runtime",
+		"alive":      true,
+		"updated_at": now.Format(time.RFC3339),
+	})
+	write(heartbeatPath, map[string]any{
+		"alive":            true,
+		"heartbeat_at":     now.Format(time.RFC3339),
+		"last_progress_at": now.Format(time.RFC3339),
+	})
+
+	meta, err := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex1-101500",
+		"tmux_pane_id":          "%10",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+
+	handle := &db.RuntimeHandle{
+		Estado:       "activo",
+		MetadataJSON: string(meta),
+	}
+	runtime := &db.RuntimeInstance{
+		LogicalState: "disponible",
+		ProcessState: "running",
+	}
+
+	if got := runtimeHandleShouldSupersedeStart(handle, runtime); !got {
+		t.Fatalf("runtimeHandleShouldSupersedeStart() = false, want true with canonical blocked_runtime")
+	}
+}
+
+func TestRuntimeHandleCanonicoParaControlDevuelveFalseConWorkerCanonicoBlockedRuntime(t *testing.T) {
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+
+	write := func(path string, payload any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	now := time.Now().UTC()
+	write(manifestPath, map[string]any{
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-codex1-101501",
+		"tmux_pane_id": "%11",
+	})
+	write(statusPath, map[string]any{
+		"state":      "blocked_runtime",
+		"alive":      true,
+		"updated_at": now.Format(time.RFC3339),
+	})
+	write(heartbeatPath, map[string]any{
+		"alive":            true,
+		"heartbeat_at":     now.Format(time.RFC3339),
+		"last_progress_at": now.Format(time.RFC3339),
+	})
+
+	meta, err := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex1-101501",
+		"tmux_pane_id":          "%11",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+
+	handle := &db.RuntimeHandle{
+		Estado:       "activo",
+		MetadataJSON: string(meta),
+	}
+
+	if got := runtimeHandleCanonicoParaControl(handle); got {
+		t.Fatalf("runtimeHandleCanonicoParaControl() = true, want false with canonical blocked_runtime")
 	}
 }
 
@@ -2680,6 +2832,178 @@ func TestEnqueueAgentControlStartToleraSinHandleNiRuntimePrevios(t *testing.T) {
 	}
 }
 
+func TestEnqueueAgentControlStartReusesExistingLiveStartOrder(t *testing.T) {
+	projectID := int64(9)
+	store := &fakeStore{
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:   &db.Agente{Nombre: "Codex2", Rol: "programador"},
+		ordersResponse: []*db.RuntimeOrder{
+			{
+				ID:          91,
+				Agente:      "Codex2",
+				ProyectoID:  &projectID,
+				Tipo:        "start",
+				Estado:      "ejecutando",
+				PayloadJSON: `{"accion":"start","proyecto":"orquestador"}`,
+			},
+			{
+				ID:          88,
+				Agente:      "Codex2",
+				ProyectoID:  &projectID,
+				Tipo:        "start",
+				Estado:      "pendiente",
+				PayloadJSON: `{"accion":"start","proyecto":"orquestador"}`,
+			},
+		},
+	}
+	service := NewService(store)
+
+	orderID, accion, err := service.EnqueueAgentControl(AgentControlRequest{
+		Agente:   "Codex2",
+		Proyecto: "orquestador",
+		Accion:   "arrancar",
+		Motivo:   "retry start",
+		Por:      "test",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAgentControl start reuse: %v", err)
+	}
+	if orderID != 91 || accion != "start" {
+		t.Fatalf("orderID=%d accion=%s", orderID, accion)
+	}
+	if store.createOrder != nil {
+		t.Fatalf("no deberia crear orden nueva si ya existe start viva: %+v", store.createOrder)
+	}
+	if store.sharedAccountAgent != "" {
+		t.Fatalf("no deberia reevaluar cuota si ya existe start viva: %q", store.sharedAccountAgent)
+	}
+	if store.auditAction != "control_agente_start_reuse" || store.auditEntityID != 91 {
+		t.Fatalf("audit reuse inesperada: action=%q entityID=%d", store.auditAction, store.auditEntityID)
+	}
+	if len(store.markedOrderStates) != 1 || store.markedOrderStates[0] != 88 || store.markOrderStateEstado != "cancelada" {
+		t.Fatalf("deberia cancelar starts duplicadas mas viejas: ids=%v estado=%q", store.markedOrderStates, store.markOrderStateEstado)
+	}
+}
+
+func TestEnqueueAgentControlStartNoReusesPendingStartOrder(t *testing.T) {
+	projectID := int64(9)
+	store := &fakeStore{
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:   &db.Agente{Nombre: "Codex3", Rol: "programador"},
+		ordersResponse: []*db.RuntimeOrder{
+			{
+				ID:          91,
+				Agente:      "Codex3",
+				ProyectoID:  &projectID,
+				Tipo:        "start",
+				Estado:      "pendiente",
+				PayloadJSON: `{"accion":"start","proyecto":"orquestador"}`,
+			},
+		},
+		createOrderID: 92,
+	}
+	service := NewService(store)
+
+	orderID, accion, err := service.EnqueueAgentControl(AgentControlRequest{
+		Agente:   "Codex3",
+		Proyecto: "orquestador",
+		Accion:   "arrancar",
+		Motivo:   "nuevo intento tras start zombi",
+		Por:      "test",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAgentControl pending start: %v", err)
+	}
+	if orderID != 92 || accion != "start" {
+		t.Fatalf("orderID=%d accion=%s", orderID, accion)
+	}
+	if store.createOrder == nil || store.createOrder.Tipo != "start" {
+		t.Fatalf("deberia crear nueva start y no reutilizar la pendiente: %+v", store.createOrder)
+	}
+	if len(store.markedOrderStates) != 1 || store.markedOrderStates[0] != 91 || store.markOrderStateEstado != "cancelada" {
+		t.Fatalf("deberia cancelar la start pendiente previa: ids=%v estado=%q", store.markedOrderStates, store.markOrderStateEstado)
+	}
+	if store.auditAction != "control_agente_start" || store.auditEntityID != 92 {
+		t.Fatalf("audit final inesperada: action=%q entityID=%d", store.auditAction, store.auditEntityID)
+	}
+}
+
+func TestEnqueueAgentControlStartReconcilesStaleOrdersBeforeReuse(t *testing.T) {
+	projectID := int64(9)
+	store := &fakeStore{
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:   &db.Agente{Nombre: "Codex2", Rol: "programador"},
+		ordersResponse: []*db.RuntimeOrder{
+			{
+				ID:          91,
+				Agente:      "Codex2",
+				ProyectoID:  &projectID,
+				Tipo:        "start",
+				Estado:      "ejecutando",
+				PayloadJSON: `{"accion":"start","proyecto":"orquestador"}`,
+			},
+		},
+	}
+	service := NewService(store)
+
+	orderID, accion, err := service.EnqueueAgentControl(AgentControlRequest{
+		Agente:   "Codex2",
+		Proyecto: "orquestador",
+		Accion:   "arrancar",
+		Por:      "test",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAgentControl start reconcile: %v", err)
+	}
+	if orderID != 91 || accion != "start" {
+		t.Fatalf("orderID=%d accion=%s", orderID, accion)
+	}
+	if store.reconcileOrdersCalls != 1 {
+		t.Fatalf("deberia reconciliar stale antes del reuse, got=%d", store.reconcileOrdersCalls)
+	}
+}
+
+func TestEnqueueAgentControlStartNoReusesLiveOrderWithDifferentExecutionProfile(t *testing.T) {
+	projectID := int64(9)
+	store := &fakeStore{
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:   &db.Agente{Nombre: "Codex4", Rol: "programador"},
+		ordersResponse: []*db.RuntimeOrder{
+			{
+				ID:          91,
+				Agente:      "Codex4",
+				ProyectoID:  &projectID,
+				Tipo:        "start",
+				Estado:      "ejecutando",
+				PayloadJSON: `{"accion":"start","proyecto":"orquestador","modelo":"gpt-5.4","perfil":"spec"}`,
+			},
+		},
+		createOrderID: 92,
+	}
+	service := NewService(store)
+
+	orderID, accion, err := service.EnqueueAgentControl(AgentControlRequest{
+		Agente:   "Codex4",
+		Proyecto: "orquestador",
+		Accion:   "arrancar",
+		Modelo:   "gpt-5.4",
+		Perfil:   "implementacion",
+		Por:      "test",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAgentControl start different profile: %v", err)
+	}
+	if orderID != 92 || accion != "start" {
+		t.Fatalf("orderID=%d accion=%s", orderID, accion)
+	}
+	if store.createOrder == nil || store.createOrder.Tipo != "start" {
+		t.Fatalf("deberia crear nueva start: %+v", store.createOrder)
+	}
+	if len(store.markedOrderStates) != 1 || store.markedOrderStates[0] != 91 || store.markOrderStateEstado != "cancelada" {
+		t.Fatalf("deberia superseder la start viva no equivalente: ids=%v estado=%q", store.markedOrderStates, store.markOrderStateEstado)
+	}
+}
+
 func TestEnqueueAgentControlStartSupersedesPausedHandleConStopPendiente(t *testing.T) {
 	projectID := int64(9)
 	runtimeID := int64(12)
@@ -2687,7 +3011,7 @@ func TestEnqueueAgentControlStartSupersedesPausedHandleConStopPendiente(t *testi
 		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador"},
 		agentResponse:   &db.Agente{Nombre: "Codex8", Rol: "programador"},
 		handleProjResp:  &db.RuntimeHandle{ID: 10, RuntimeID: &runtimeID, Estado: "pausado"},
-		ordersResponse:  []*db.RuntimeOrder{{ID: 91, Agente: "Codex8", Tipo: "stop", Estado: "pendiente"}},
+		ordersResponse:  []*db.RuntimeOrder{{ID: 91, Agente: "Codex8", Tipo: "stop", Estado: "pendiente", ProyectoID: &projectID}},
 		createOrderID:   92,
 	}
 	service := NewService(store)

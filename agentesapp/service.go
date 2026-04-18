@@ -516,38 +516,12 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		}
 	}
 
-	type orderCounters struct {
-		Open              int
-		Failed            int
-		ControlOpen       int
-		LastControlType   string
-		LastControlMoment *time.Time
-	}
-	ordersPorAgente := map[string]orderCounters{}
+	ordersPorAgente := map[string][]*db.RuntimeOrder{}
 	for _, order := range orders {
 		if order == nil {
 			continue
 		}
-		stats := ordersPorAgente[order.Agente]
-		switch strings.TrimSpace(order.Estado) {
-		case "pendiente", "tomada", "ejecutando":
-			stats.Open++
-			if runtimeOrderEsControl(strings.TrimSpace(order.Tipo)) {
-				stats.ControlOpen++
-				moment := runtimeOrderMoment(order)
-				if stats.LastControlMoment == nil || moment.After(*stats.LastControlMoment) {
-					ts := moment
-					stats.LastControlMoment = &ts
-					stats.LastControlType = strings.TrimSpace(order.Tipo)
-				}
-			}
-		case "fallida":
-			stats.Failed++
-		}
-		if strings.TrimSpace(order.ErrorText) != "" {
-			stats.Failed++
-		}
-		ordersPorAgente[order.Agente] = stats
+		ordersPorAgente[order.Agente] = append(ordersPorAgente[order.Agente], order)
 	}
 
 	type mailboxCounters struct {
@@ -621,7 +595,6 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		if agente == nil {
 			continue
 		}
-		orderStats := ordersPorAgente[agente.Nombre]
 		mailboxStats := mailboxPorAgente[agente.Nombre]
 		row := Row{
 			Agente:                   agente,
@@ -629,11 +602,6 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 			Sesion:                   sesionPorAgente[agente.Nombre],
 			Runtime:                  runtimePorAgente[agente.Nombre],
 			Handle:                   handlePorAgente[agente.Nombre],
-			OrdersOpen:               orderStats.Open,
-			OrdersFailed:             orderStats.Failed,
-			ControlOrdersOpen:        orderStats.ControlOpen,
-			LastControlOrderType:     strings.TrimSpace(orderStats.LastControlType),
-			LastControlOrderMoment:   orderStats.LastControlMoment,
 			MailboxPending:           mailboxStats.Pending,
 			MailboxActionablePending: mailboxStats.ActionablePending,
 			MailboxContinuityPending: mailboxStats.ContinuityPending,
@@ -643,6 +611,8 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 			OpenTasks:                openTasksPorAgente[agente.Nombre],
 			BlockedTasks:             blockedTasksPorAgente[agente.Nombre],
 		}
+		row.OrdersOpen, row.OrdersFailed, row.ControlOrdersOpen, row.LastControlOrderType, row.LastControlOrderMoment =
+			summarizeOrdersForRow(row, ordersPorAgente[agente.Nombre])
 		if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
 			if view := structured.View(now, time.Minute); view != nil {
 				row.WorkerState = strings.TrimSpace(view.State)
@@ -831,29 +801,8 @@ func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.Runti
 	if err != nil {
 		return Row{}, err
 	}
-	for _, order := range orders {
-		if order == nil {
-			continue
-		}
-		switch strings.TrimSpace(order.Estado) {
-		case "pendiente", "tomada", "ejecutando":
-			row.OrdersOpen++
-			if runtimeOrderEsControl(strings.TrimSpace(order.Tipo)) {
-				row.ControlOrdersOpen++
-				moment := runtimeOrderMoment(order)
-				if row.LastControlOrderMoment == nil || moment.After(*row.LastControlOrderMoment) {
-					ts := moment
-					row.LastControlOrderMoment = &ts
-					row.LastControlOrderType = strings.TrimSpace(order.Tipo)
-				}
-			}
-		case "fallida":
-			row.OrdersFailed++
-		}
-		if strings.TrimSpace(order.ErrorText) != "" {
-			row.OrdersFailed++
-		}
-	}
+	row.OrdersOpen, row.OrdersFailed, row.ControlOrdersOpen, row.LastControlOrderType, row.LastControlOrderMoment =
+		summarizeOrdersForRow(row, orders)
 
 	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
 	if err != nil {
@@ -3037,6 +2986,61 @@ func runtimeOrderEsControl(tipo string) bool {
 	default:
 		return false
 	}
+}
+
+func summarizeOrdersForRow(row Row, orders []*db.RuntimeOrder) (open int, failed int, controlOpen int, lastControlType string, lastControlMoment *time.Time) {
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch strings.TrimSpace(order.Estado) {
+		case "pendiente", "tomada", "ejecutando":
+			open++
+			if runtimeOrderEsControl(strings.TrimSpace(order.Tipo)) && runtimeOrderMatchesRowProject(row, order) {
+				controlOpen++
+				moment := runtimeOrderMoment(order)
+				if lastControlMoment == nil || moment.After(*lastControlMoment) {
+					ts := moment
+					lastControlMoment = &ts
+					lastControlType = strings.TrimSpace(order.Tipo)
+				}
+			}
+		case "fallida":
+			failed++
+		}
+		if strings.TrimSpace(order.ErrorText) != "" {
+			failed++
+		}
+	}
+	return open, failed, controlOpen, lastControlType, lastControlMoment
+}
+
+func runtimeOrderMatchesRowProject(row Row, order *db.RuntimeOrder) bool {
+	if order == nil || !runtimeOrderEsControl(strings.TrimSpace(order.Tipo)) {
+		return true
+	}
+	rowProjectID := row.projectID()
+	if rowProjectID == nil || order.ProyectoID == nil {
+		return true
+	}
+	return *rowProjectID == *order.ProyectoID
+}
+
+func (r Row) projectID() *int64 {
+	if r.Runtime != nil && r.Runtime.ProyectoID != nil && *r.Runtime.ProyectoID > 0 {
+		return r.Runtime.ProyectoID
+	}
+	if r.Handle != nil && r.Handle.ProyectoID != nil && *r.Handle.ProyectoID > 0 {
+		return r.Handle.ProyectoID
+	}
+	if r.Sesion != nil && r.Sesion.ProyectoID != nil && *r.Sesion.ProyectoID > 0 {
+		return r.Sesion.ProyectoID
+	}
+	if r.Asignacion != nil && r.Asignacion.ProyectoID > 0 {
+		id := r.Asignacion.ProyectoID
+		return &id
+	}
+	return nil
 }
 
 func estadoCuotaBloqueado(estado string) bool {

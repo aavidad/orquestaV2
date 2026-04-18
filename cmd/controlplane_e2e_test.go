@@ -14,15 +14,18 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
 	"orquesta/db"
 	"orquesta/internal/controlruntime"
+	"orquesta/notificaciones"
 )
 
 func TestAPIControlPlaneOrquestacionEndToEnd(t *testing.T) {
@@ -295,8 +298,11 @@ func TestAPIControlPlaneOrquestacionEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get start order tras primer prepare: %v", err)
 	}
-	if startOrder == nil || startOrder.Estado != "pendiente" {
-		t.Fatalf("start order deberia seguir pendiente tras el primer prepare: %+v", startOrder)
+	if startOrder == nil || startOrder.Estado != "completada" {
+		t.Fatalf("start order deberia materializarse tras el primer prepare: %+v", startOrder)
+	}
+	if !strings.Contains(startOrder.ResultadoJSON, `"runtime_id":`) || !strings.Contains(startOrder.ResultadoJSON, `"handle_id":`) {
+		t.Fatalf("start order completada sin ids en resultado_json: %+v", startOrder)
 	}
 
 	var consumedMailbox struct {
@@ -320,8 +326,8 @@ func TestAPIControlPlaneOrquestacionEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get start order final: %v", err)
 	}
-	if startOrder == nil || startOrder.Estado != "pendiente" {
-		t.Fatalf("start order no deberia mutar en preparar: %+v", startOrder)
+	if startOrder == nil || startOrder.Estado != "completada" {
+		t.Fatalf("start order deberia permanecer completada tras el segundo prepare: %+v", startOrder)
 	}
 }
 
@@ -523,6 +529,238 @@ func TestAPIControlPlaneArranqueRealConBootstrapMultilinea(t *testing.T) {
 	}
 }
 
+func TestAPIControlPlaneArranqueRealRecuperaRutaEfectivaLegacyDot(t *testing.T) {
+	if os.Getenv("ORQUESTA_HELPER_LEGACY_DOT") != "1" {
+		base := t.TempDir()
+		homeDir := filepath.Join(base, "daemon-home")
+		if err := os.MkdirAll(homeDir, 0o755); err != nil {
+			t.Fatalf("mkdir helper home: %v", err)
+		}
+		cmd := exec.Command(os.Args[0], "-test.run", "^TestAPIControlPlaneArranqueRealRecuperaRutaEfectivaLegacyDot$")
+		cmd.Dir = homeDir
+		cmd.Env = append(os.Environ(),
+			"ORQUESTA_HELPER_LEGACY_DOT=1",
+			"ORQUESTA_HELPER_LEGACY_DOT_BASE="+base,
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("helper legacy dot falló: %v\n%s", err, string(out))
+		}
+		return
+	}
+
+	prepararDBTemporalCmd(t)
+	base := strings.TrimSpace(os.Getenv("ORQUESTA_HELPER_LEGACY_DOT_BASE"))
+	if base == "" {
+		t.Fatal("ORQUESTA_HELPER_LEGACY_DOT_BASE obligatorio")
+	}
+	rutaProyecto := filepath.Join(base, "actual", "orquesta")
+	rutaWorktree := filepath.Join(rutaProyecto, ".orquesta-worktrees", "orquestador-codex11")
+	rutaLegacy := filepath.Join(base, "legacy-home", "orquesta", ".orquesta-worktrees", "orquestador-codex11")
+	argLog := filepath.Join(base, "launch-argv.log")
+	promptLog := filepath.Join(base, "launch-prompt.log")
+	wdLog := filepath.Join(base, "launch-pwd.log")
+	launcher := filepath.Join(base, "fake-launcher.sh")
+	if err := os.MkdirAll(filepath.Join(rutaProyecto, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir proyecto: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(rutaWorktree, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaProyecto, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod proyecto: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaWorktree, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod worktree: %v", err)
+	}
+	script := "#!/usr/bin/env bash\nset -eu\npwd > " + strconv.Quote(wdLog) + "\nprintf '%s\\n' \"$@\" > " + strconv.Quote(argLog) + "\nprintf '%s' \"${!#}\" > " + strconv.Quote(promptLog) + "\nexec sleep 30\n"
+	if err := os.WriteFile(launcher, []byte(script), 0o755); err != nil {
+		t.Fatalf("write launcher: %v", err)
+	}
+
+	if err := db.RegistrarAgente("Codex11", "programador"); err != nil {
+		t.Fatalf("registrar Codex11: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: ".",
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto legacy dot: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE proyectos SET ruta_abs='.' WHERE id=?`, proyectoID); err != nil {
+		t.Fatalf("forzar ruta legacy dot: %v", err)
+	}
+	if _, err := db.UpsertConector(&db.Conector{
+		Slug:         "codex-launcher-legacy-dot",
+		Nombre:       "Codex Launcher Legacy Dot",
+		Transporte:   "cli",
+		Comando:      launcher,
+		MetadataJSON: `{"launch_prompt_positional":true}`,
+		Activo:       true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		INSERT INTO worktrees (proyecto_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		proyectoID, "Codex11", "orquestador-codex11", ".orquesta-worktrees/orquestador-codex11", "orq-orquestador-codex11", "HEAD", "activa", "legacy-dot",
+	); err != nil {
+		t.Fatalf("insert worktree legacy relativa: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex11",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(rutaProyecto, "cmd"),
+		Herramienta:        "codex-cli",
+		ExternalSessionID:  "sess-codex11-anchor",
+		ResumenContinuidad: "sesion cerrada para anclar ruta efectiva",
+		Branch:             "main",
+	}); err != nil {
+		t.Fatalf("iniciar sesion anchor: %v", err)
+	}
+	if err := db.FinSesion("Codex11"); err != nil {
+		t.Fatalf("fin sesion anchor: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		INSERT INTO runtime_checkpoints (agente, proyecto_id, checkpoint_kind, resumen, branch, cwd, payload_json, resume_strategy, source)
+		VALUES (?,?,?,?,?,?,?,?,?)`,
+		"Codex11", proyectoID, "pause", "legacy cwd relativa heredada", "orq-orquestador-codex11", rutaLegacy, `{}`, "resumen_y_payload", "test:legacy-dot",
+	); err != nil {
+		t.Fatalf("insert checkpoint legacy: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Validar arranque con ruta efectiva legacy dot",
+		Modulo:     "orquestador",
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "test",
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex11"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE tareas SET estado='asignada' WHERE id=?`, tareaID); err != nil {
+		t.Fatalf("marcar tarea asignada: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+	postJSON := func(path string, body any, wantCode int) []byte {
+		t.Helper()
+		data, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
+		mux.ServeHTTP(rec, req)
+		if rec.Code != wantCode {
+			t.Fatalf("status inesperado POST %s: %d body=%s", path, rec.Code, rec.Body.String())
+		}
+		return rec.Body.Bytes()
+	}
+	decodeID := func(body []byte) int64 {
+		t.Helper()
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode id: %v body=%s", err, string(body))
+		}
+		id, _ := payload["id"].(float64)
+		return int64(id)
+	}
+
+	startID := decodeID(postJSON("/api/agente/control", apiAgenteControlRequest{
+		Agente:       "Codex11",
+		Proyecto:     "orquestador",
+		Accion:       "arrancar",
+		Conector:     "codex-launcher-legacy-dot",
+		Modelo:       "gpt-5.4",
+		Razonamiento: "high",
+		Perfil:       "implementacion",
+		Motivo:       "revalidar ruta efectiva legacy dot",
+		Por:          "test",
+	}, http.StatusCreated))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runner := newControlPlaneRunner(nil, false)
+	runner.EnforceSafeFloors = false
+	runner.NotificationFeed = nil
+	runner.InitNotifications = nil
+	runner.Notifier = nil
+	runner.RuntimeOrdersCada = 20 * time.Millisecond
+	t.Cleanup(func() {
+		cancel()
+		runner.Wait()
+	})
+	runner.StartRuntimeControlCore(ctx)
+	if !runner.WakeRuntimeOrders() {
+		t.Fatal("wake runtime_orders no disponible para arranque legacy dot")
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	var (
+		startOrder *db.RuntimeOrder
+		wdData     []byte
+		promptData []byte
+	)
+	for {
+		wdData, err = os.ReadFile(wdLog)
+		if err == nil {
+			startOrder, _ = db.GetRuntimeOrder(startID)
+			if startOrder != nil && startOrder.Estado == "completada" {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			promptData, _ = os.ReadFile(promptLog)
+			startOrder, _ = db.GetRuntimeOrder(startID)
+			t.Fatalf("el launcher no arrancó con ruta efectiva recuperada. order=%+v wd=%q prompt=%q err=%v", startOrder, string(wdData), string(promptData), err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	sesion, err := db.GetSesionActiva("Codex11", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion activa: %+v err=%v", sesion, err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil || runtime.PID == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	t.Cleanup(func() {
+		_, _, _ = controlruntime.DetenerProceso(controlruntime.ObjetivoProceso{PID: runtime.PID})
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			if err := syscall.Kill(int(*runtime.PID), 0); err != nil {
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	})
+
+	gotWD := strings.TrimSpace(string(wdData))
+	if gotWD != rutaWorktree {
+		t.Fatalf("working dir real inesperado: got=%s want=%s", gotWD, rutaWorktree)
+	}
+	if sesion.CWD != rutaWorktree {
+		t.Fatalf("sesion activa con cwd inesperado: got=%s want=%s", sesion.CWD, rutaWorktree)
+	}
+	promptData, _ = os.ReadFile(promptLog)
+	if !strings.Contains(string(promptData), "Directorio de trabajo: "+rutaWorktree+".") {
+		t.Fatalf("bootstrap sin ruta efectiva de worktree: %q", string(promptData))
+	}
+	if startOrder == nil || startOrder.Estado != "completada" {
+		t.Fatalf("start order no completada: %+v", startOrder)
+	}
+}
+
 func TestControlPlaneRunnerExponeEventoAutoGuidancePorAPI(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -653,6 +891,164 @@ func TestControlPlaneRunnerExponeEventoAutoGuidancePorAPI(t *testing.T) {
 	texto, _ := instruction["texto"].(string)
 	if !strings.Contains(texto, "Aprobado automaticamente") {
 		t.Fatalf("instruction.texto sin guía útil para OpenClaw: %+v", instruction)
+	}
+}
+
+func TestControlPlaneRunnerEntregaSoloEventoOperadorAOpenClaw(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador", "sesion-codex1"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtimeInst == nil {
+		t.Fatalf("runtime: %+v err=%v", runtimeInst, err)
+	}
+
+	for {
+		select {
+		case <-db.CanalNotificaciones:
+		default:
+			goto notificationsDrained
+		}
+	}
+
+notificationsDrained:
+	var (
+		mu       sync.Mutex
+		requests []map[string]any
+	)
+	gateway := &notificaciones.OpenClawGatewayNotificador{
+		URL: "https://openclaw.local/gateway",
+		Client: openClawHTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+			var body map[string]any
+			if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			mu.Lock()
+			requests = append(requests, body)
+			mu.Unlock()
+			return &http.Response{
+				StatusCode: http.StatusAccepted,
+				Body:       http.NoBody,
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runner := newControlPlaneRunner(nil, false)
+	runner.InitNotifications = nil
+	runner.Notifier = func() notificaciones.Notificador { return gateway }
+	runner.ReanimacionCada = time.Hour
+	runner.SaludCada = time.Hour
+	runner.PlanificacionCada = time.Hour
+	runner.ControlPlaneCada = time.Hour
+	t.Cleanup(func() {
+		cancel()
+		runner.Wait()
+	})
+	runner.StartResidentCore(ctx)
+
+	autoInstruction := map[string]any{
+		"to_agente": "Codex1",
+		"texto":     "Aprobado automaticamente | sigue con el refactor",
+	}
+	emitirAutoGuidanceSignalTranscript(99, "send_instruction", "Codex1", &db.RuntimeTranscriptEntry{
+		ID:             61,
+		RuntimeID:      runtimeInst.ID,
+		HandleID:       &handle.ID,
+		ProyectoID:     &proyectoID,
+		Agente:         "Codex1",
+		Classification: "approval_request",
+		NormalizedText: "quiero seguir con el refactor",
+		Text:           "quiero seguir con el refactor",
+	}, autoInstruction)
+	time.Sleep(120 * time.Millisecond)
+
+	mu.Lock()
+	gotNoiseRequests := len(requests)
+	mu.Unlock()
+	if gotNoiseRequests != 0 {
+		t.Fatalf("runtime_auto_guidance no deberia salir hacia OpenClaw, requests=%d", gotNoiseRequests)
+	}
+	outbox, err := db.ListarEntregasNotificacion(db.FiltroEntregasNotificacion{Canal: "openclaw_gateway", Limit: 10})
+	if err != nil {
+		t.Fatalf("listar outbox tras ruido: %v", err)
+	}
+	if len(outbox) != 0 {
+		t.Fatalf("runtime_auto_guidance no deberia crear outbox OpenClaw: %+v", outbox)
+	}
+
+	if _, err := procesarSignalFalloRuntime(&db.RuntimeTranscriptEntry{
+		ID:             62,
+		RuntimeID:      runtimeInst.ID,
+		HandleID:       &handle.ID,
+		ProyectoID:     &proyectoID,
+		Agente:         "Codex1",
+		Classification: "runtime_panic",
+		NormalizedText: "panic nil pointer",
+		Text:           "panic nil pointer",
+	}, "Codex1"); err != nil {
+		t.Fatalf("procesarSignalFalloRuntime: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		count := len(requests)
+		mu.Unlock()
+		if count == 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(requests) != 1 {
+		t.Fatalf("se esperaba una sola entrega operativa a OpenClaw, requests=%d", len(requests))
+	}
+	if got, _ := requests[0]["event_type"].(string); got != "runtime_panic" {
+		t.Fatalf("event_type OpenClaw inesperado: %+v", requests[0])
+	}
+	if got, _ := requests[0]["agent"].(string); got != "Codex1" {
+		t.Fatalf("agent OpenClaw inesperado: %+v", requests[0])
+	}
+	if got, _ := requests[0]["text"].(string); !strings.Contains(got, "Runtime failure detectado") {
+		t.Fatalf("texto OpenClaw sin resumen util: %+v", requests[0])
+	}
+
+	outbox, err = db.ListarEntregasNotificacion(db.FiltroEntregasNotificacion{Canal: "openclaw_gateway", Limit: 10})
+	if err != nil {
+		t.Fatalf("listar outbox final: %v", err)
+	}
+	if len(outbox) != 1 || outbox[0].TipoEvento != "runtime_failure" || outbox[0].Estado != db.EntregaNotificacionEntregada {
+		t.Fatalf("outbox OpenClaw final inesperada: %+v", outbox)
 	}
 }
 
@@ -897,4 +1293,10 @@ func getJSONTestNoBusy(t *testing.T, mux *http.ServeMux, path string, wantCode i
 func isSQLiteBusyTestBody(body string) bool {
 	msg := strings.ToLower(strings.TrimSpace(body))
 	return strings.Contains(msg, "database is locked") || strings.Contains(msg, "sqlite_busy")
+}
+
+type openClawHTTPDoerFunc func(req *http.Request) (*http.Response, error)
+
+func (fn openClawHTTPDoerFunc) Do(req *http.Request) (*http.Response, error) {
+	return fn(req)
 }
