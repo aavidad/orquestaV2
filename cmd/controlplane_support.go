@@ -12463,6 +12463,9 @@ func reasignarYArrancarTareaAutonomia(tareaID int64, relevo, nota string) error 
 	if strings.TrimSpace(nota) != "" {
 		_ = tareasService.Note(tareaID, "orquesta", strings.TrimSpace(nota))
 	}
+	if err := cerrarTareasPostRemediationBlockedResueltas(tareaID, fmt.Sprintf("resuelto por reasignación automática a %s", strings.TrimSpace(relevo))); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -12504,6 +12507,44 @@ func desbloquearYReactivarTareaAutonomia(tareaID int64, resolucion, agente, nota
 	}
 	if strings.TrimSpace(nota) != "" {
 		_ = tareasService.Note(tareaID, "orquesta", strings.TrimSpace(nota))
+	}
+	if err := cerrarTareasPostRemediationBlockedResueltas(tareaID, fmt.Sprintf("resuelto por reactivación automática en %s", strings.TrimSpace(agente))); err != nil {
+		return err
+	}
+	return nil
+}
+
+func cerrarTareasPostRemediationBlockedResueltas(tareaID int64, commit string) error {
+	if tareaID <= 0 {
+		return nil
+	}
+	tarea, err := tareasService.Get(tareaID)
+	if err != nil || tarea == nil || tarea.ProyectoID == nil || *tarea.ProyectoID <= 0 {
+		return err
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: tarea.ProyectoID})
+	if err != nil {
+		return err
+	}
+	marcaTarea := fmt.Sprintf("tarea:%d", tareaID)
+	for _, candidata := range tareas {
+		if candidata == nil || candidata.ID <= 0 || !esTareaPostRemediationBlockedAutonomia(candidata) {
+			continue
+		}
+		switch candidata.Estado {
+		case db.TareaCompletada, db.TareaCancelada:
+			continue
+		}
+		if !strings.Contains(strings.TrimSpace(candidata.Notas), marcaTarea) {
+			continue
+		}
+		agenteCierre := "orquesta"
+		if candidata.Agente != nil && strings.TrimSpace(*candidata.Agente) != "" {
+			agenteCierre = strings.TrimSpace(*candidata.Agente)
+		}
+		if err := tareasService.Complete(candidata.ID, agenteCierre, strings.TrimSpace(commit)); err != nil {
+			return err
+		}
 	}
 	return nil
 }

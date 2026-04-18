@@ -15699,6 +15699,9 @@ func TestReasignarYArrancarTareaAutonomiaReasignaIniciaYAnota(t *testing.T) {
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar agente relevo: %v", err)
 	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{Slug: "orquestador", Nombre: "Orquestador", RutaAbs: filepath.Join(t.TempDir(), "orquestador"), Tipo: db.ProyectoRepo, Activo: true})
 	if err != nil {
 		t.Fatalf("upsert proyecto: %v", err)
@@ -15709,6 +15712,24 @@ func TestReasignarYArrancarTareaAutonomiaReasignaIniciaYAnota(t *testing.T) {
 	}
 	if err := db.TomarTarea(tareaID, "Gemma1"); err != nil {
 		t.Fatalf("tomar tarea: %v", err)
+	}
+	supervisorTaskID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      autonomiaPostRemediationBlockedTaskTitle,
+		Descripcion: "Resolver follow-up bloqueado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Agente:      ptrString("CodexSupervisor"),
+		Notas:       fmt.Sprintf("autonomia:post_remediation_blocked;tarea:%d;agente_objetivo:Gemma1;verification_key:reassign:%d:Gemma1:Codex1;remediation_kind:reassign", tareaID, tareaID),
+	})
+	if err != nil {
+		t.Fatalf("crear tarea supervisor: %v", err)
+	}
+	if err := db.TomarTarea(supervisorTaskID, "CodexSupervisor"); err != nil {
+		t.Fatalf("tomar tarea supervisor: %v", err)
+	}
+	if err := db.IniciarTarea(supervisorTaskID, "CodexSupervisor"); err != nil {
+		t.Fatalf("iniciar tarea supervisor: %v", err)
 	}
 
 	if err := reasignarYArrancarTareaAutonomia(tareaID, "Codex1", "Reasignada automáticamente por degradación"); err != nil {
@@ -15724,6 +15745,13 @@ func TestReasignarYArrancarTareaAutonomiaReasignaIniciaYAnota(t *testing.T) {
 	}
 	if !strings.Contains(tarea.Notas, "Reasignada automáticamente por degradación") {
 		t.Fatalf("nota inesperada: %+v", tarea)
+	}
+	supervisorTask, err := db.GetTarea(supervisorTaskID)
+	if err != nil {
+		t.Fatalf("get tarea supervisor: %v", err)
+	}
+	if supervisorTask == nil || supervisorTask.Estado != db.TareaCompletada {
+		t.Fatalf("la tarea post-remediation del supervisor deberia cerrarse al reasignar: %+v", supervisorTask)
 	}
 }
 
