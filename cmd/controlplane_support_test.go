@@ -21084,6 +21084,13 @@ func TestProcesarRuntimeTranscriptBatchDespiertaReviewerPorReadyForReview(t *tes
 	if reviewerNudge == nil || !strings.Contains(reviewerNudge.PayloadJSON, `"accion":"inspeccionar_ready_for_review"`) {
 		t.Fatalf("nudge al reviewer inesperado: %+v", reviewerNudge)
 	}
+	policy, err := db.GetProyectoAutonomia(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto autonomia: %v", err)
+	}
+	if policy == nil || policy.EstadoAutonomia != db.AutonomiaProyectoEsperandoReview {
+		t.Fatalf("la autonomía debería pasar a esperando_review tras ready_for_review: %+v", policy)
+	}
 }
 
 func TestProcesarRuntimeTranscriptBatchReadyForReviewConGateAbiertoNoRedundeaNudgeReviewer(t *testing.T) {
@@ -21175,6 +21182,13 @@ func TestProcesarRuntimeTranscriptBatchReadyForReviewConGateAbiertoNoRedundeaNud
 	}
 	if reviewerNudge != nil {
 		t.Fatalf("no debería reenviar nudge al reviewer si ya hay gate abierto: %+v", reviewerNudge)
+	}
+	policy, err := db.GetProyectoAutonomia(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto autonomia: %v", err)
+	}
+	if policy == nil || policy.EstadoAutonomia != db.AutonomiaProyectoEsperandoReview {
+		t.Fatalf("la autonomía debería seguir en esperando_review con gate abierto: %+v", policy)
 	}
 }
 

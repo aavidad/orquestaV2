@@ -5428,6 +5428,9 @@ func notificarReviewerSignalTranscript(item *db.RuntimeTranscriptEntry, policy *
 }
 
 func ejecutarPlanReviewerSignalTranscript(item *db.RuntimeTranscriptEntry, policy *supervisionapp.Policy, proyecto *db.Proyecto) (string, error) {
+	if err := sincronizarAutonomiaProyectoReadyForReviewSignalTranscript(policy); err != nil {
+		return "", err
+	}
 	reviewer, activado, err := resolverAgenteReviewSignalTranscript(proyecto.ID, reviewerPreferidoAutonomia(policy), agenteSignalTranscript(item))
 	if err != nil {
 		return "", err
@@ -5445,6 +5448,13 @@ func ejecutarPlanReviewerSignalTranscript(item *db.RuntimeTranscriptEntry, polic
 	}
 	emitirNotificacionReviewSignalTranscript("ready_for_review", nil, item, reviewerNombre)
 	return note, nil
+}
+
+func sincronizarAutonomiaProyectoReadyForReviewSignalTranscript(policy *supervisionapp.Policy) error {
+	if policy == nil {
+		return nil
+	}
+	return supervisionService.PersistPolicyState(policy, supervisionapp.EstadoAutonomiaProyecto(db.AutonomiaProyectoEsperandoReview))
 }
 
 func reviewerSignalTranscriptYaCubiertoPorGateAbierta(item *db.RuntimeTranscriptEntry, reviewer *db.Agente) (bool, error) {
