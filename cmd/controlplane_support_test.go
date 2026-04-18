@@ -19938,6 +19938,97 @@ func TestProcesarRuntimeTranscriptBatchCredentialsRequestAbreTareaYNudgeEspecifi
 	}
 }
 
+func TestProcesarSignalTranscriptCredentialsRequestSinHandleSigueSupervision(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexWorker", "programador"); err != nil {
+		t.Fatalf("registrar worker: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	}); err != nil {
+		t.Fatalf("iniciar sesion supervisor: %v", err)
+	}
+
+	item := &db.RuntimeTranscriptEntry{
+		ID:             401,
+		RuntimeID:      999,
+		ProyectoID:     &proyectoID,
+		Agente:         "CodexWorker",
+		Classification: "credentials_request",
+		NormalizedText: "missing credentials for deploy token",
+		Text:           "missing credentials for deploy token",
+	}
+
+	note, err := procesarSignalTranscript(item)
+	if err != nil {
+		t.Fatalf("procesarSignalTranscript: %v", err)
+	}
+	if !strings.Contains(note, "credentials_task_created:") {
+		t.Fatalf("nota inesperada: %s", note)
+	}
+
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{ProyectoID: &proyectoID, Limit: 20})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	var supervisorNudge *db.RuntimeOrder
+	for _, order := range orders {
+		if order != nil && order.Agente == "CodexSupervisor" && order.Tipo == "nudge" {
+			supervisorNudge = order
+			break
+		}
+	}
+	if supervisorNudge == nil || !strings.Contains(supervisorNudge.PayloadJSON, `"accion":"resolver_credentials_request"`) {
+		t.Fatalf("nudge al supervisor inesperado: %+v", supervisorNudge)
+	}
+
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	var credentialsTask *db.Tarea
+	for _, tarea := range tareas {
+		if tarea != nil && tarea.Titulo == autonomiaCredentialsTaskTitle {
+			credentialsTask = tarea
+			break
+		}
+	}
+	if credentialsTask == nil {
+		t.Fatalf("faltaba tarea de credenciales: %+v", tareas)
+	}
+}
+
 func TestProcesarRuntimeTranscriptBatchNoGuiaAlWorkerEnRuntimePanic(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
