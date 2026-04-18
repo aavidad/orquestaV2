@@ -15752,6 +15752,146 @@ func TestReasignarYArrancarTareaAutonomiaReasignaIniciaYAnota(t *testing.T) {
 	}
 }
 
+func TestCerrarTareaPostRemediationBlockedSiResueltaCierraCuandoOriginalYaNoEstaBloqueada(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{Slug: "orquestador", Nombre: "Orquestador", RutaAbs: filepath.Join(t.TempDir(), "orquestador"), Tipo: db.ProyectoRepo, Activo: true})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	originalID, err := db.CrearTarea(&db.Tarea{Titulo: "Frente original", ProyectoID: &proyectoID, Prioridad: db.PrioridadAlta, CreadoPor: "tester"})
+	if err != nil {
+		t.Fatalf("crear original: %v", err)
+	}
+	if err := db.TomarTarea(originalID, "Codex1"); err != nil {
+		t.Fatalf("tomar original: %v", err)
+	}
+	if err := db.IniciarTarea(originalID, "Codex1"); err != nil {
+		t.Fatalf("iniciar original: %v", err)
+	}
+	supervisorTaskID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      autonomiaPostRemediationBlockedTaskTitle,
+		Descripcion: "Resolver follow-up bloqueado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Agente:      ptrString("CodexSupervisor"),
+		Notas:       fmt.Sprintf("autonomia:post_remediation_blocked;tarea:%d;agente_objetivo:Codex1;verification_key:reassign:%d:Codex1:Codex2;remediation_kind:reassign", originalID, originalID),
+	})
+	if err != nil {
+		t.Fatalf("crear supervisor: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE tareas SET estado='asignada', agente='CodexSupervisor' WHERE id=?`, supervisorTaskID); err != nil {
+		t.Fatalf("materializar supervisor: %v", err)
+	}
+
+	cerrada, err := cerrarTareaPostRemediationBlockedSiResuelta(supervisorTaskID, "CodexSupervisor")
+	if err != nil {
+		t.Fatalf("cerrar tarea post-remediation: %v", err)
+	}
+	if !cerrada {
+		t.Fatalf("deberia cerrar la tarea post-remediation si la original ya no esta bloqueada")
+	}
+	supervisorTask, err := db.GetTarea(supervisorTaskID)
+	if err != nil {
+		t.Fatalf("get supervisor: %v", err)
+	}
+	if supervisorTask == nil || supervisorTask.Estado != db.TareaCompletada {
+		t.Fatalf("la tarea del supervisor deberia quedar completada: %+v", supervisorTask)
+	}
+}
+
+func TestCerrarTareaPostRemediationBlockedSiResueltaNoCierraSiOriginalSigueBloqueada(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{Slug: "orquestador", Nombre: "Orquestador", RutaAbs: filepath.Join(t.TempDir(), "orquestador"), Tipo: db.ProyectoRepo, Activo: true})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	originalID, err := db.CrearTarea(&db.Tarea{Titulo: "Frente original", ProyectoID: &proyectoID, Prioridad: db.PrioridadAlta, CreadoPor: "tester"})
+	if err != nil {
+		t.Fatalf("crear original: %v", err)
+	}
+	if err := db.TomarTarea(originalID, "Codex1"); err != nil {
+		t.Fatalf("tomar original: %v", err)
+	}
+	if err := db.IniciarTarea(originalID, "Codex1"); err != nil {
+		t.Fatalf("iniciar original: %v", err)
+	}
+	if err := db.BloquearTarea(originalID, "orquesta", "Follow-up post-remediation bloqueado"); err != nil {
+		t.Fatalf("bloquear original: %v", err)
+	}
+	supervisorTaskID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      autonomiaPostRemediationBlockedTaskTitle,
+		Descripcion: "Resolver follow-up bloqueado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Agente:      ptrString("CodexSupervisor"),
+		Notas:       fmt.Sprintf("autonomia:post_remediation_blocked;tarea:%d;agente_objetivo:Codex1;verification_key:reassign:%d:Codex1:Codex2;remediation_kind:reassign", originalID, originalID),
+	})
+	if err != nil {
+		t.Fatalf("crear supervisor: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE tareas SET estado='asignada', agente='CodexSupervisor' WHERE id=?`, supervisorTaskID); err != nil {
+		t.Fatalf("materializar supervisor: %v", err)
+	}
+
+	cerrada, err := cerrarTareaPostRemediationBlockedSiResuelta(supervisorTaskID, "CodexSupervisor")
+	if err != nil {
+		t.Fatalf("cerrar tarea post-remediation: %v", err)
+	}
+	if cerrada {
+		t.Fatalf("no deberia cerrar la tarea post-remediation si la original sigue bloqueada")
+	}
+	supervisorTask, err := db.GetTarea(supervisorTaskID)
+	if err != nil {
+		t.Fatalf("get supervisor: %v", err)
+	}
+	if supervisorTask == nil || supervisorTask.Estado != db.TareaAsignada {
+		t.Fatalf("la tarea del supervisor deberia seguir asignada: %+v", supervisorTask)
+	}
+}
+
+func TestCerrarTareaPostRemediationBlockedSiResueltaCierraCuandoOriginalNoExiste(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{Slug: "orquestador", Nombre: "Orquestador", RutaAbs: filepath.Join(t.TempDir(), "orquestador"), Tipo: db.ProyectoRepo, Activo: true})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	supervisorTaskID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      autonomiaPostRemediationBlockedTaskTitle,
+		Descripcion: "Resolver follow-up bloqueado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Agente:      ptrString("CodexSupervisor"),
+		Notas:       "autonomia:post_remediation_blocked;tarea:999999;agente_objetivo:Codex1;verification_key:reassign:999999:Codex1:Codex2;remediation_kind:reassign",
+	})
+	if err != nil {
+		t.Fatalf("crear supervisor: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE tareas SET estado='asignada', agente='CodexSupervisor' WHERE id=?`, supervisorTaskID); err != nil {
+		t.Fatalf("materializar supervisor: %v", err)
+	}
+
+	cerrada, err := cerrarTareaPostRemediationBlockedSiResuelta(supervisorTaskID, "CodexSupervisor")
+	if err != nil {
+		t.Fatalf("cerrar tarea post-remediation: %v", err)
+	}
+	if !cerrada {
+		t.Fatalf("deberia cerrar la tarea post-remediation si la original ya no existe")
+	}
+	supervisorTask, err := db.GetTarea(supervisorTaskID)
+	if err != nil {
+		t.Fatalf("get supervisor: %v", err)
+	}
+	if supervisorTask == nil || supervisorTask.Estado != db.TareaCompletada {
+		t.Fatalf("la tarea del supervisor deberia quedar completada: %+v", supervisorTask)
+	}
+}
+
 func TestBloquearTareaAutonomiaSinRelevoBloqueaYAnota(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

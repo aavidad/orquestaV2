@@ -10815,6 +10815,12 @@ func procesarDecisionContinuarTrabajoSesionActivaAutonomia(sesion *db.Sesion, pr
 	if err != nil || !debe {
 		return 0, err
 	}
+	if cerrada, err := cerrarTareaPostRemediationBlockedSiResuelta(tareaID, strings.TrimSpace(sesion.Agente)); err != nil {
+		return 0, err
+	} else if cerrada {
+		invalidarSnapshotAutonomiaProyecto(snapshot, sesion.Agente, proyecto.ID)
+		return 1, nil
+	}
 	throttleKey := autonomiaContinueNudgeThrottleKey(sesion.Agente, proyecto.ID, tareaID)
 	if !autonomiaContinueNudgeShouldAttempt(sesion.Agente, proyecto.ID, tareaID) {
 		return 0, nil
@@ -10840,6 +10846,45 @@ func procesarDecisionContinuarTrabajoSesionActivaAutonomia(sesion *db.Sesion, pr
 		autonomiaContinueNudgeGate.Forget(throttleKey)
 	}
 	return 0, nil
+}
+
+func cerrarTareaPostRemediationBlockedSiResuelta(tareaID int64, agente string) (bool, error) {
+	if tareaID <= 0 {
+		return false, nil
+	}
+	tarea, err := tareasService.Get(tareaID)
+	if err != nil || tarea == nil || !esTareaPostRemediationBlockedAutonomia(tarea) {
+		return false, err
+	}
+	if tarea.Estado == db.TareaCompletada || tarea.Estado == db.TareaCancelada {
+		return false, nil
+	}
+	linkedTaskID, _ := strconv.ParseInt(strings.TrimSpace(extraerNotaAutonomiaKV(tarea.Notas, "tarea")), 10, 64)
+	if linkedTaskID <= 0 {
+		return false, nil
+	}
+	linked, err := tareasService.Get(linkedTaskID)
+	if err != nil && err != sql.ErrNoRows {
+		return false, err
+	}
+	if err == sql.ErrNoRows {
+		linked = nil
+	}
+	if linked != nil && linked.Estado == db.TareaBloqueada {
+		return false, nil
+	}
+	actor := strings.TrimSpace(agente)
+	if actor == "" {
+		actor = "orquesta"
+	}
+	motivo := "cerrada automáticamente: la tarea original ya no requiere intervención post-remediation"
+	if linked == nil {
+		motivo = "cerrada automáticamente: la tarea original ya no existe"
+	}
+	if err := tareasService.Complete(tareaID, actor, motivo); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func instruccionContinuacionSesionActivaAutonomia(tareaID int64) string {
