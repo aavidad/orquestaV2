@@ -3445,40 +3445,25 @@ func procesarRuntimeOrdersBatchTipos(tipos []string) (int, error) {
 	if limit <= 0 {
 		limit = 10
 	}
-	estado := "pendiente"
-	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{Estado: &estado})
+	orders, err := seleccionarRuntimeOrdersBatch(SeleccionRuntimeOrdersBatch{
+		Estado:       "pendiente",
+		Tipos:        tipos,
+		Limit:        limit,
+		Now:          time.Now().UTC(),
+		SortLess:     runtimeOrderBatchLess,
+		RequireReady: true,
+	})
 	if err != nil {
 		return 0, err
 	}
-	tiposWanted := make(map[string]struct{}, len(tipos))
-	for _, tipo := range tipos {
-		tipo = strings.TrimSpace(tipo)
-		if tipo != "" {
-			tiposWanted[tipo] = struct{}{}
-		}
-	}
-	now := time.Now().UTC()
-	ids := make([]int64, 0, limit)
-	sort.Slice(orders, func(i, j int) bool {
-		return runtimeOrderBatchLess(orders[i], orders[j])
-	})
-	for _, order := range orders {
-		if order == nil || !runtimeOrderPendingReady(order, now) {
-			continue
-		}
-		if _, ok := tiposWanted[strings.TrimSpace(order.Tipo)]; !ok {
-			continue
-		}
-		ids = append(ids, order.ID)
-		if len(ids) >= limit {
-			break
-		}
-	}
 
 	processed := 0
-	for _, id := range ids {
+	for _, candidate := range orders {
+		if candidate == nil || candidate.ID <= 0 {
+			continue
+		}
 		asyncReserved := false
-		current, err := GetRuntimeOrder(id)
+		current, err := GetRuntimeOrder(candidate.ID)
 		if err != nil && err != sql.ErrNoRows {
 			return processed, err
 		}
@@ -3488,7 +3473,7 @@ func procesarRuntimeOrdersBatchTipos(tipos []string) (int, error) {
 			}
 			asyncReserved = true
 		}
-		order, err := claimRuntimeOrderByID(id)
+		order, err := claimRuntimeOrderByID(candidate.ID)
 		if err != nil {
 			if asyncReserved {
 				runtimeOrderLiberarAsync()
@@ -3528,10 +3513,43 @@ func runtimeOrderDebeEjecutarseAsync(order *RuntimeOrder) bool {
 	}
 	switch strings.ToLower(strings.TrimSpace(order.Tipo)) {
 	case "start", "resume", "restart":
+		if transporte, ok := runtimeOrderInferirTransporteControl(order); ok {
+			switch strings.ToLower(strings.TrimSpace(transporte)) {
+			case "api", "mcp_http", "otro":
+				return false
+			}
+		}
 		return true
 	default:
 		return false
 	}
+}
+
+func runtimeOrderInferirTransporteControl(order *RuntimeOrder) (string, bool) {
+	if order == nil {
+		return "", false
+	}
+	if handle, err := resolverHandleParaOrden(order); err == nil && handle != nil {
+		if transporte := strings.TrimSpace(handle.Transporte); transporte != "" {
+			return transporte, true
+		}
+	}
+	if runtime, err := resolverRuntimeParaOrden(order); err == nil && runtime != nil {
+		if conector, err := GetConector(strings.TrimSpace(runtime.Connector)); err == nil && conector != nil {
+			if transporte := strings.TrimSpace(conector.Transporte); transporte != "" {
+				return transporte, true
+			}
+		}
+	}
+	payload := mapFromJSON(order.PayloadJSON)
+	if conectorRef := strings.TrimSpace(stringFromMap(payload, "conector", "")); conectorRef != "" {
+		if conector, err := GetConector(conectorRef); err == nil && conector != nil {
+			if transporte := strings.TrimSpace(conector.Transporte); transporte != "" {
+				return transporte, true
+			}
+		}
+	}
+	return "", false
 }
 
 func runtimeOrderAsyncLimit() int32 {
@@ -3711,31 +3729,23 @@ func reconciliarRuntimeOrdersPendientesControlObsoletas() (int, error) {
 	if limit <= 0 {
 		limit = 10
 	}
-	estado := "pendiente"
-	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{Estado: &estado})
+	orders, err := seleccionarRuntimeOrdersBatch(SeleccionRuntimeOrdersBatch{
+		Estado:       "pendiente",
+		Tipos:        []string{"start", "resume", "stop"},
+		Limit:        limit,
+		Now:          time.Now().UTC(),
+		SortLess:     runtimeOrderByIDLess,
+		RequireReady: true,
+	})
 	if err != nil {
 		return 0, err
 	}
-	now := time.Now().UTC()
-	ids := make([]int64, 0, limit)
-	sort.Slice(orders, func(i, j int) bool { return orders[i].ID < orders[j].ID })
-	for _, order := range orders {
-		if order == nil || !runtimeOrderPendingReady(order, now) {
-			continue
-		}
-		switch strings.TrimSpace(order.Tipo) {
-		case "start", "resume", "stop":
-			ids = append(ids, order.ID)
-		default:
-			continue
-		}
-		if len(ids) >= limit {
-			break
-		}
-	}
 	processed := 0
-	for _, id := range ids {
-		order, err := GetRuntimeOrder(id)
+	for _, candidate := range orders {
+		if candidate == nil || candidate.ID <= 0 {
+			continue
+		}
+		order, err := GetRuntimeOrder(candidate.ID)
 		if err != nil {
 			return processed, err
 		}
@@ -3807,30 +3817,21 @@ func reconciliarRuntimeOrdersEjecutandoControlSatisfechas() (int, error) {
 	if limit <= 0 {
 		limit = 10
 	}
-	estado := "ejecutando"
-	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{Estado: &estado})
+	orders, err := seleccionarRuntimeOrdersBatch(SeleccionRuntimeOrdersBatch{
+		Estado:   "ejecutando",
+		Tipos:    []string{"start", "resume", "stop"},
+		Limit:    limit,
+		SortLess: runtimeOrderByIDLess,
+	})
 	if err != nil {
 		return 0, err
 	}
-	ids := make([]int64, 0, limit)
-	sort.Slice(orders, func(i, j int) bool { return orders[i].ID < orders[j].ID })
-	for _, order := range orders {
-		if order == nil {
-			continue
-		}
-		switch strings.TrimSpace(order.Tipo) {
-		case "start", "resume", "stop":
-			ids = append(ids, order.ID)
-		default:
-			continue
-		}
-		if len(ids) >= limit {
-			break
-		}
-	}
 	processed := 0
-	for _, id := range ids {
-		order, err := GetRuntimeOrder(id)
+	for _, candidate := range orders {
+		if candidate == nil || candidate.ID <= 0 {
+			continue
+		}
+		order, err := GetRuntimeOrder(candidate.ID)
 		if err != nil {
 			return processed, err
 		}
@@ -4220,27 +4221,16 @@ func procesarBootstrapRuntimeOrdersActivosBatch() (int, error) {
 	if limit <= 0 {
 		limit = 10
 	}
-	estado := "pendiente"
-	candidates, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{Estado: &estado})
+	orders, err := seleccionarRuntimeOrdersBatch(SeleccionRuntimeOrdersBatch{
+		Estado:       "pendiente",
+		Tipos:        []string{"handoff", "resume"},
+		Limit:        limit,
+		Now:          time.Now().UTC(),
+		SortLess:     runtimeOrderByIDLess,
+		RequireReady: true,
+	})
 	if err != nil {
 		return 0, err
-	}
-	now := time.Now().UTC()
-	orders := make([]*RuntimeOrder, 0, limit)
-	sort.Slice(candidates, func(i, j int) bool { return candidates[i].ID < candidates[j].ID })
-	for _, order := range candidates {
-		if order == nil || !runtimeOrderPendingReady(order, now) {
-			continue
-		}
-		switch strings.TrimSpace(order.Tipo) {
-		case "handoff", "resume":
-			orders = append(orders, order)
-		default:
-			continue
-		}
-		if len(orders) >= limit {
-			break
-		}
 	}
 
 	processed := 0
@@ -4267,6 +4257,72 @@ func procesarBootstrapRuntimeOrdersActivosBatch() (int, error) {
 		processed++
 	}
 	return processed, nil
+}
+
+type SeleccionRuntimeOrdersBatch struct {
+	Estado       string
+	Tipos        []string
+	Limit        int
+	Now          time.Time
+	SortLess     func(left, right *RuntimeOrder) bool
+	RequireReady bool
+}
+
+func seleccionarRuntimeOrdersBatch(input SeleccionRuntimeOrdersBatch) ([]*RuntimeOrder, error) {
+	estado := strings.TrimSpace(input.Estado)
+	if estado == "" {
+		return nil, nil
+	}
+	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{Estado: &estado})
+	if err != nil {
+		return nil, err
+	}
+	tiposWanted := make(map[string]struct{}, len(input.Tipos))
+	for _, tipo := range input.Tipos {
+		tipo = strings.TrimSpace(tipo)
+		if tipo != "" {
+			tiposWanted[tipo] = struct{}{}
+		}
+	}
+	now := input.Now.UTC()
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	selected := make([]*RuntimeOrder, 0, len(orders))
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		if input.RequireReady && !runtimeOrderPendingReady(order, now) {
+			continue
+		}
+		if len(tiposWanted) > 0 {
+			if _, ok := tiposWanted[strings.TrimSpace(order.Tipo)]; !ok {
+				continue
+			}
+		}
+		selected = append(selected, order)
+	}
+	sort.Slice(selected, func(i, j int) bool {
+		if input.SortLess != nil {
+			return input.SortLess(selected[i], selected[j])
+		}
+		return runtimeOrderByIDLess(selected[i], selected[j])
+	})
+	if input.Limit > 0 && len(selected) > input.Limit {
+		selected = selected[:input.Limit]
+	}
+	return selected, nil
+}
+
+func runtimeOrderByIDLess(left, right *RuntimeOrder) bool {
+	if left == nil {
+		return false
+	}
+	if right == nil {
+		return true
+	}
+	return left.ID < right.ID
 }
 
 func runtimeHandleActivoParaBootstrapOrder(order *RuntimeOrder) (*RuntimeHandle, error) {
