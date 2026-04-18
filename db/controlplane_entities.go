@@ -3252,7 +3252,7 @@ func ReconciliarRuntimeOrdersPendientesHandoffExpiradas() (int, error) {
 		}
 		if runtime, err := GetRuntimePrincipalAgenteProyecto(strings.TrimSpace(order.Agente), order.ProyectoID); err != nil {
 			return expired, err
-		} else if runtime != nil && !strings.EqualFold(strings.TrimSpace(runtime.LogicalState), "cerrado") {
+		} else if runtimePendingHandoffStillActive(runtime, cutoff) {
 			continue
 		}
 		resultado := map[string]any{
@@ -3281,6 +3281,21 @@ func ReconciliarRuntimeOrdersPendientesHandoffExpiradas() (int, error) {
 		expired++
 	}
 	return expired, nil
+}
+
+func runtimePendingHandoffStillActive(runtime *RuntimeInstance, cutoff time.Time) bool {
+	if runtime == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(runtime.LogicalState)) {
+	case "", "cerrado", "fallido":
+		return false
+	}
+	last := runtimeMomentForRecovery(runtime)
+	if last.IsZero() {
+		return false
+	}
+	return last.After(cutoff)
 }
 
 func ProcesarRuntimeOrdersBatch() (int, error) {

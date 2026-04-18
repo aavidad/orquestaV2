@@ -1366,6 +1366,117 @@ func TestReconciliarRuntimeOrdersPendientesHandoffExpiradasRespetaDestinoConHand
 	}
 }
 
+func TestReconciliarRuntimeOrdersPendientesHandoffExpiradasExpiraRuntimeEstancadaSinHandle(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	if err := ConfigSet("runtime_pending_handoff_expiry_minutes", "10"); err != nil {
+		t.Fatalf("ConfigSet handoff expiry: %v", err)
+	}
+	sesionID, err := IniciarSesion("Codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesionID)
+	if err != nil || handle == nil {
+		t.Fatalf("GetRuntimeHandleBySesionID: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesionID)
+	if err != nil || runtime == nil {
+		t.Fatalf("GetRuntimeBySesionID: %+v err=%v", runtime, err)
+	}
+	old := time.Now().UTC().Add(-20 * time.Minute)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='cerrado', last_seen_at=?, updated_at=? WHERE id=?`, old, old, handle.ID); err != nil {
+		t.Fatalf("cerrar handle: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_instances SET logical_state='disponible', process_state='running', last_event_at=?, last_heartbeat_at=?, updated_at=? WHERE id=?`, old, old, old, runtime.ID); err != nil {
+		t.Fatalf("envejecer runtime: %v", err)
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		Tipo:        "handoff",
+		PayloadJSON: `{"agente_origen":"Codex0","agente_destino":"Codex1","resumen_continuidad":"handoff estancada"}`,
+	})
+	if err != nil {
+		t.Fatalf("EncolarRuntimeOrder: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET created_at=?, updated_at=?, available_at=? WHERE id=?`, old, old, old, orderID); err != nil {
+		t.Fatalf("envejecer handoff: %v", err)
+	}
+
+	n, err := ReconciliarRuntimeOrdersPendientesHandoffExpiradas()
+	if err != nil {
+		t.Fatalf("ReconciliarRuntimeOrdersPendientesHandoffExpiradas: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia expirar handoff con runtime estancada, got=%d", n)
+	}
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("GetRuntimeOrder: %v", err)
+	}
+	if order == nil || order.Estado != "expirada" {
+		t.Fatalf("handoff no expirada: %+v", order)
+	}
+}
+
+func TestReconciliarRuntimeOrdersPendientesHandoffExpiradasRespetaRuntimeRecienteSinHandle(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	if err := ConfigSet("runtime_pending_handoff_expiry_minutes", "10"); err != nil {
+		t.Fatalf("ConfigSet handoff expiry: %v", err)
+	}
+	sesionID, err := IniciarSesion("Codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesionID)
+	if err != nil || handle == nil {
+		t.Fatalf("GetRuntimeHandleBySesionID: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesionID)
+	if err != nil || runtime == nil {
+		t.Fatalf("GetRuntimeBySesionID: %+v err=%v", runtime, err)
+	}
+	old := time.Now().UTC().Add(-20 * time.Minute)
+	recent := time.Now().UTC().Add(-2 * time.Minute)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='cerrado', last_seen_at=?, updated_at=? WHERE id=?`, old, old, handle.ID); err != nil {
+		t.Fatalf("cerrar handle: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_instances SET logical_state='disponible', process_state='running', last_event_at=?, last_heartbeat_at=?, updated_at=? WHERE id=?`, recent, recent, recent, runtime.ID); err != nil {
+		t.Fatalf("refrescar runtime: %v", err)
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		Tipo:        "handoff",
+		PayloadJSON: `{"agente_origen":"Codex0","agente_destino":"Codex1","resumen_continuidad":"handoff viva por runtime"}`,
+	})
+	if err != nil {
+		t.Fatalf("EncolarRuntimeOrder: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET created_at=?, updated_at=?, available_at=? WHERE id=?`, old, old, old, orderID); err != nil {
+		t.Fatalf("envejecer handoff: %v", err)
+	}
+
+	n, err := ReconciliarRuntimeOrdersPendientesHandoffExpiradas()
+	if err != nil {
+		t.Fatalf("ReconciliarRuntimeOrdersPendientesHandoffExpiradas: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia expirar handoff con runtime reciente, got=%d", n)
+	}
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("GetRuntimeOrder: %v", err)
+	}
+	if order == nil || order.Estado != "pendiente" {
+		t.Fatalf("handoff no deberia cambiar: %+v", order)
+	}
+}
+
 func TestControlarProcesoRuntimeSoportaHandleLegacySinKind(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
