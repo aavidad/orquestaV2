@@ -940,6 +940,10 @@ func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	status, err := statusService.FetchStatus()
 	if err != nil {
+		if errors.Is(err, errStatusFetchTimeout) {
+			apiError(w, http.StatusServiceUnavailable, fmt.Errorf("status temporalmente degradado"))
+			return
+		}
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}

@@ -11539,7 +11539,7 @@ func tareaAutonomiaArrancableParaSesion(agente string, tarea *db.Tarea) (bool, e
 	case db.TareaAsignada, db.TareaEnProgreso:
 		return true, nil
 	case db.TareaBloqueada:
-		return tareaBloqueadaRecuperableParaReanimacion(tarea.ID)
+		return tareaBloqueadaRecuperableParaReanimacionDetalle(tarea)
 	default:
 		return false, nil
 	}
@@ -11562,7 +11562,7 @@ func reactivarTareasBloqueadasRecuperablesAutonomia(agente string, proyectoID in
 		if tarea == nil || tarea.Estado != db.TareaBloqueada || tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), agente) {
 			continue
 		}
-		recuperable, err := tareaBloqueadaRecuperableParaReanimacion(tarea.ID)
+		recuperable, err := tareaBloqueadaRecuperableParaReanimacionDetalle(tarea)
 		if err != nil {
 			return procesadas, err
 		}
@@ -11929,7 +11929,28 @@ func encolarReactivacionAgenteProyectoConHandleSiProcede(agente string, proyecto
 }
 
 func tareaBloqueadaRecuperableParaReanimacion(tareaID int64) (bool, error) {
-	motivo, err := db.MotivoBloqueoActivoTarea(tareaID)
+	if tareaID <= 0 {
+		return false, nil
+	}
+	tarea, err := tareasService.Get(tareaID)
+	if err != nil || tarea == nil {
+		return false, err
+	}
+	return tareaBloqueadaRecuperableParaReanimacionDetalle(tarea)
+}
+
+func tareaBloqueadaRecuperableParaReanimacionDetalle(tarea *db.Tarea) (bool, error) {
+	if tarea == nil || tarea.ID <= 0 {
+		return false, nil
+	}
+	if esTareaPostRemediationBlockedAutonomia(tarea) {
+		duplicada, err := existeOtraTareaPostRemediationBlockedAbierta(tarea)
+		if err != nil || duplicada {
+			return false, err
+		}
+		return true, nil
+	}
+	motivo, err := db.MotivoBloqueoActivoTarea(tarea.ID)
 	if err != nil {
 		return false, err
 	}
@@ -11941,6 +11962,33 @@ func tareaBloqueadaRecuperableParaReanimacion(tareaID int64) (bool, error) {
 		return true, nil
 	}
 	return strings.HasPrefix(texto, "Agente ") || strings.HasPrefix(texto, "Agente degradado:"), nil
+}
+
+func existeOtraTareaPostRemediationBlockedAbierta(tarea *db.Tarea) (bool, error) {
+	if tarea == nil || tarea.ProyectoID == nil || *tarea.ProyectoID <= 0 {
+		return false, nil
+	}
+	verificationKey := strings.TrimSpace(extraerNotaAutonomiaKV(tarea.Notas, "verification_key"))
+	if verificationKey == "" {
+		return false, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: tarea.ProyectoID})
+	if err != nil {
+		return false, err
+	}
+	for _, otra := range tareas {
+		if otra == nil || otra.ID == tarea.ID || !esTareaPostRemediationBlockedAutonomia(otra) {
+			continue
+		}
+		switch otra.Estado {
+		case db.TareaCompletada, db.TareaCancelada:
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(extraerNotaAutonomiaKV(otra.Notas, "verification_key")), verificationKey) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func existeRuntimeOrderAutonomiaPendiente(agente string, proyectoID *int64, tipo string, accion string) (bool, error) {

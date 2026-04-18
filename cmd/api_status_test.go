@@ -100,3 +100,15 @@ func TestAPIHandlerStatusPropagatesError(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 }
+
+func TestAPIHandlerStatusReturns503OnTimeout(t *testing.T) {
+	prev := statusService
+	defer func() { statusService = prev }()
+	statusService = stubStatusService{err: errStatusFetchTimeout}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	apiHandlerStatus(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}

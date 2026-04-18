@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +21,8 @@ var statusService StatusService = dbStatusService{}
 var (
 	statusSnapshotTTL  = time.Minute
 	statusFallbackTTL  = 5 * time.Second
+	statusFreshTimeout = 1500 * time.Millisecond
+	statusFastTimeout  = 750 * time.Millisecond
 	statusFreshFetcher = fetchStatusFresh
 	statusFastFetcher  = fetchStatusFastFallback
 	statusNowFunc      = time.Now
@@ -35,6 +38,8 @@ var (
 )
 
 type dbStatusService struct{}
+
+var errStatusFetchTimeout = errors.New("status fetch timeout")
 
 type deudaDispatchResumen struct {
 	Total       int `json:"total"`
@@ -304,18 +309,28 @@ func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
 		}
 		if refreshing && waitCh != nil {
 			statusCacheState.mu.Unlock()
-			<-waitCh
-			continue
+			if waitStatusRefresh(waitCh, statusFreshTimeout) {
+				continue
+			}
+			if ok {
+				return value, nil
+			}
+			now = statusNowFunc().UTC()
+			if status, fallbackErr := runStatusFetcherWithTimeout(statusFastFetcher, statusFastTimeout); fallbackErr == nil {
+				storeStatusSnapshotWithTTL(status, now, statusFallbackTTL)
+				return status, nil
+			}
+			return apiStatusResponse{}, errStatusFetchTimeout
 		}
 		waitCh = startStatusRefreshLocked()
 		statusCacheState.mu.Unlock()
 
-		status, err := statusFreshFetcher()
+		status, err := runStatusFetcherWithTimeout(statusFreshFetcher, statusFreshTimeout)
 		if err == nil {
 			storeStatusSnapshotAndFinish(waitCh, status, now, statusSnapshotTTL)
 			return status, nil
 		}
-		if status, fallbackErr := statusFastFetcher(); fallbackErr == nil {
+		if status, fallbackErr := runStatusFetcherWithTimeout(statusFastFetcher, statusFastTimeout); fallbackErr == nil {
 			storeStatusSnapshotAndFinish(waitCh, status, now, statusFallbackTTL)
 			return status, nil
 		}
@@ -359,12 +374,52 @@ func refreshStatusSnapshot(ch chan struct{}) {
 		_ = recover()
 	}()
 	now := statusNowFunc().UTC()
-	status, err := statusFreshFetcher()
+	status, err := runStatusFetcherWithTimeout(statusFreshFetcher, statusFreshTimeout)
 	if err != nil {
 		finishStatusRefresh(ch, apiStatusResponse{}, time.Time{}, 0, false)
 		return
 	}
 	storeStatusSnapshotAndFinish(ch, status, now, statusSnapshotTTL)
+}
+
+func runStatusFetcherWithTimeout(fetcher func() (apiStatusResponse, error), timeout time.Duration) (apiStatusResponse, error) {
+	if fetcher == nil {
+		return apiStatusResponse{}, errors.New("status fetcher nil")
+	}
+	if timeout <= 0 {
+		return fetcher()
+	}
+	type result struct {
+		status apiStatusResponse
+		err    error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		status, err := fetcher()
+		ch <- result{status: status, err: err}
+	}()
+	select {
+	case res := <-ch:
+		return res.status, res.err
+	case <-time.After(timeout):
+		return apiStatusResponse{}, errStatusFetchTimeout
+	}
+}
+
+func waitStatusRefresh(ch chan struct{}, timeout time.Duration) bool {
+	if ch == nil {
+		return true
+	}
+	if timeout <= 0 {
+		<-ch
+		return true
+	}
+	select {
+	case <-ch:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
 
 func storeStatusSnapshot(status apiStatusResponse, now time.Time) {

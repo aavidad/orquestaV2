@@ -18,6 +18,8 @@ const (
 	persistenciaBusyBackoff     = 200 * time.Millisecond
 )
 
+var persistenciaBusyBudget = 1500 * time.Millisecond
+
 var DB *Handle
 
 type OpenOptions struct {
@@ -272,12 +274,16 @@ func aplicarSchemaPorDriver(db *sql.DB, driver string) error {
 
 func ejecutarConReintentos(fn func() error) error {
 	var err error
+	inicio := time.Now()
 	for intento := 0; intento < persistenciaBusyMaxIntentos; intento++ {
 		err = fn()
 		if err == nil {
 			return nil
 		}
 		if !esErrorPersistenciaBusy(err) {
+			return err
+		}
+		if !persistenciaBusyDebeReintentar(inicio, intento) {
 			return err
 		}
 		time.Sleep(persistenciaBusyBackoff)
@@ -290,6 +296,7 @@ func consultarConReintentos[T any](fn func() (T, error)) (T, error) {
 		out T
 		err error
 	)
+	inicio := time.Now()
 	for intento := 0; intento < persistenciaBusyMaxIntentos; intento++ {
 		out, err = fn()
 		if err == nil {
@@ -298,9 +305,22 @@ func consultarConReintentos[T any](fn func() (T, error)) (T, error) {
 		if !esErrorPersistenciaBusy(err) {
 			return out, err
 		}
+		if !persistenciaBusyDebeReintentar(inicio, intento) {
+			return out, err
+		}
 		time.Sleep(persistenciaBusyBackoff)
 	}
 	return out, err
+}
+
+func persistenciaBusyDebeReintentar(inicio time.Time, intento int) bool {
+	if intento+1 >= persistenciaBusyMaxIntentos {
+		return false
+	}
+	if persistenciaBusyBudget <= 0 {
+		return true
+	}
+	return time.Since(inicio)+persistenciaBusyBackoff <= persistenciaBusyBudget
 }
 
 func esErrorPersistenciaBusy(err error) bool {

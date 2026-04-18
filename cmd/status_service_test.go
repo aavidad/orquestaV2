@@ -273,6 +273,103 @@ func TestStatusServiceSerializaRefreshSincronoEnCacheMiss(t *testing.T) {
 	}
 }
 
+func TestStatusServiceTimeoutUsaFallbackRapido(t *testing.T) {
+	prevFetcher := statusFreshFetcher
+	prevFastFetcher := statusFastFetcher
+	prevFreshTimeout := statusFreshTimeout
+	prevFastTimeout := statusFastTimeout
+	resetStatusSnapshotCache()
+	defer func() {
+		statusFreshFetcher = prevFetcher
+		statusFastFetcher = prevFastFetcher
+		statusFreshTimeout = prevFreshTimeout
+		statusFastTimeout = prevFastTimeout
+		resetStatusSnapshotCache()
+	}()
+
+	blockFresh := make(chan struct{})
+	statusFreshTimeout = 20 * time.Millisecond
+	statusFastTimeout = 100 * time.Millisecond
+	statusFreshFetcher = func() (apiStatusResponse, error) {
+		<-blockFresh
+		return apiStatusResponse{Generado: "fresh tardio"}, nil
+	}
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{Generado: "fallback"}, nil
+	}
+
+	start := time.Now()
+	status, err := dbStatusService{}.FetchStatus()
+	elapsed := time.Since(start)
+	close(blockFresh)
+	if err != nil {
+		t.Fatalf("fetch status con fallback: %v", err)
+	}
+	if status.Generado != "fallback" {
+		t.Fatalf("deberia devolver fallback rapido, got=%+v", status)
+	}
+	if elapsed > 250*time.Millisecond {
+		t.Fatalf("deberia degradar rapido, elapsed=%s", elapsed)
+	}
+}
+
+func TestStatusServiceNoEsperaIndefinidamenteRefreshEnVuelo(t *testing.T) {
+	prevFetcher := statusFreshFetcher
+	prevFastFetcher := statusFastFetcher
+	prevFreshTimeout := statusFreshTimeout
+	prevFastTimeout := statusFastTimeout
+	prevNow := statusNowFunc
+	prevTTL := statusSnapshotTTL
+	prevAsync := statusAsyncRefresh
+	resetStatusSnapshotCache()
+	defer func() {
+		statusFreshFetcher = prevFetcher
+		statusFastFetcher = prevFastFetcher
+		statusFreshTimeout = prevFreshTimeout
+		statusFastTimeout = prevFastTimeout
+		statusNowFunc = prevNow
+		statusSnapshotTTL = prevTTL
+		statusAsyncRefresh = prevAsync
+		resetStatusSnapshotCache()
+	}()
+
+	current := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return current }
+	statusSnapshotTTL = time.Minute
+	statusAsyncRefresh = true
+	statusFreshTimeout = 20 * time.Millisecond
+	statusFastTimeout = 100 * time.Millisecond
+
+	blockFresh := make(chan struct{})
+	statusFreshFetcher = func() (apiStatusResponse, error) {
+		<-blockFresh
+		return apiStatusResponse{Generado: "fresh"}, nil
+	}
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{Generado: "fallback_wait"}, nil
+	}
+
+	statusCacheState.mu.Lock()
+	statusCacheState.refreshing = true
+	statusCacheState.waitCh = blockFresh
+	statusCacheState.ok = false
+	statusCacheState.mu.Unlock()
+
+	start := time.Now()
+	status, err := dbStatusService{}.FetchStatus()
+	elapsed := time.Since(start)
+	close(blockFresh)
+	if err != nil {
+		t.Fatalf("fetch status con refresh en vuelo: %v", err)
+	}
+	if status.Generado != "fallback_wait" {
+		t.Fatalf("deberia devolver fallback al agotarse waitCh, got=%+v", status)
+	}
+	if elapsed > 250*time.Millisecond {
+		t.Fatalf("no deberia esperar indefinidamente a waitCh, elapsed=%s", elapsed)
+	}
+}
+
 func TestStoreStatusSnapshotUsaTTLReducidoSiNoHayActivosYHayTrabajo(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()

@@ -8,9 +8,11 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"orquesta/agentesapp"
@@ -90,6 +92,12 @@ var agenteControlCmd = &cobra.Command{
 	},
 }
 
+var (
+	agentControlEnqueueTimeout = 2 * time.Second
+	agentControlEnqueueFunc    = encolarControlAgenteLocal
+	errAgentControlTimeout     = errors.New("agent control timeout")
+)
+
 func init() {
 	agenteControlCmd.Flags().String("proyecto", "", "Proyecto destino de la orden")
 	agenteControlCmd.Flags().String("conector", "", "Conector a usar para arrancar")
@@ -111,8 +119,12 @@ func apiHandlerAgenteControl(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	orderID, accion, err := encolarControlAgenteLocal(req)
+	orderID, accion, err := encolarControlAgenteLocalWithTimeout(req)
 	if err != nil {
+		if errors.Is(err, errAgentControlTimeout) {
+			apiError(w, http.StatusServiceUnavailable, fmt.Errorf("control de agente temporalmente saturado"))
+			return
+		}
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -122,6 +134,28 @@ func apiHandlerAgenteControl(w http.ResponseWriter, r *http.Request) {
 		Agente: strings.TrimSpace(req.Agente),
 		Accion: accion,
 	})
+}
+
+func encolarControlAgenteLocalWithTimeout(req apiAgenteControlRequest) (int64, string, error) {
+	if agentControlEnqueueTimeout <= 0 {
+		return agentControlEnqueueFunc(req)
+	}
+	type result struct {
+		orderID int64
+		accion  string
+		err     error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		orderID, accion, err := agentControlEnqueueFunc(req)
+		ch <- result{orderID: orderID, accion: accion, err: err}
+	}()
+	select {
+	case res := <-ch:
+		return res.orderID, res.accion, res.err
+	case <-time.After(agentControlEnqueueTimeout):
+		return 0, "", errAgentControlTimeout
+	}
 }
 
 func encolarControlAgentePorAPI(req apiAgenteControlRequest) (int64, string, bool, error) {

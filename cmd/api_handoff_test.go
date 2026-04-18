@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/db"
 )
@@ -147,5 +148,38 @@ func TestAPIAgenteControl(t *testing.T) {
 	}
 	if !strings.Contains(orders[0].PayloadJSON, `"conector":"codex-cli"`) {
 		t.Fatalf("payload inesperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestAPIAgenteControlReturns503OnTimeout(t *testing.T) {
+	prevEnqueueFunc := agentControlEnqueueFunc
+	prevTimeout := agentControlEnqueueTimeout
+	defer func() {
+		agentControlEnqueueFunc = prevEnqueueFunc
+		agentControlEnqueueTimeout = prevTimeout
+	}()
+	agentControlEnqueueTimeout = 20 * time.Millisecond
+	block := make(chan struct{})
+	agentControlEnqueueFunc = func(req apiAgenteControlRequest) (int64, string, error) {
+		<-block
+		return 0, "", nil
+	}
+
+	body, err := json.Marshal(apiAgenteControlRequest{
+		Agente:   "Codex1",
+		Proyecto: "orquestador",
+		Accion:   "arrancar",
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/agente/control", bytes.NewReader(body))
+	apiHandlerAgenteControl(rec, req)
+	close(block)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
 	}
 }

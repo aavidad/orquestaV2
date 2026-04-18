@@ -155,9 +155,13 @@ func (h *Handle) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		tx  *sql.Tx
 		err error
 	)
+	inicio := time.Now()
 	for intento := 0; intento < persistenciaBusyMaxIntentos; intento++ {
 		tx, err = h.DB.BeginTx(ctx, opts)
 		if err == nil || !esErrorPersistenciaBusy(err) {
+			break
+		}
+		if !persistenciaBusyDebeReintentar(inicio, intento) {
 			break
 		}
 		time.Sleep(persistenciaBusyBackoff)
