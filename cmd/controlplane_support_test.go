@@ -19,6 +19,7 @@ import (
 	"orquesta/db"
 	"orquesta/internal/controlruntime"
 	"orquesta/microprogramacionapp"
+	"orquesta/orquestacionagentesapp"
 	"orquesta/reviewapp"
 	"orquesta/runtimeagente"
 	"orquesta/runtimesapp"
@@ -3496,6 +3497,24 @@ func TestProcesarAutonomiaAgentesBatchEncolaNudgePorPropuestasPendientes(t *test
 	}); err != nil {
 		t.Fatalf("iniciar sesion: %v", err)
 	}
+	sesion, err := db.GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("get sesion activa: %+v err=%v", sesion, err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtimeInst == nil {
+		t.Fatalf("get runtime: %+v err=%v", runtimeInst, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("activar handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='activo', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeInst.ID); err != nil {
+		t.Fatalf("activar runtime: %v", err)
+	}
 	if _, err := db.CrearPropuesta(&db.Propuesta{
 		Titulo:       "Nueva política",
 		Descripcion:  "Pendiente de votar",
@@ -3679,6 +3698,24 @@ func TestProcesarAutonomiaAgentesBatchNoEncolaNudgePorContinuarTrabajoEnSesionAc
 		Herramienta: "codex-cli",
 	}); err != nil {
 		t.Fatalf("iniciar sesion: %v", err)
+	}
+	sesion, err := db.GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("get sesion activa: %+v err=%v", sesion, err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtimeInst == nil {
+		t.Fatalf("get runtime: %+v err=%v", runtimeInst, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("activar handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='activo', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeInst.ID); err != nil {
+		t.Fatalf("activar runtime: %v", err)
 	}
 
 	n, err := procesarAutonomiaAgentesBatch()
@@ -15889,6 +15926,159 @@ func TestCerrarTareaPostRemediationBlockedSiResueltaCierraCuandoOriginalNoExiste
 	}
 	if supervisorTask == nil || supervisorTask.Estado != db.TareaCompletada {
 		t.Fatalf("la tarea del supervisor deberia quedar completada: %+v", supervisorTask)
+	}
+}
+
+func TestIntentarAutoResolverContinuacionPostRemediationReactivateReabreTareaSiAgenteYaEstaSano(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente bloqueado",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "orquesta", "Agente Codex1 en estado bloqueado_por_runtime: pausado"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+	status := &orquestacionagentesapp.PostRemediationStatus{
+		RemediationKind: "reactivate",
+		BlockedReason:   "agent still blocked",
+	}
+	ok, err := intentarAutoResolverContinuacionPostRemediationReactivate(proyecto, tareaID, "Codex1", "reactivate:1:Codex1", status)
+	if err != nil {
+		t.Fatalf("intentar auto resolver reactivate: %v", err)
+	}
+	if !ok {
+		t.Fatalf("deberia reactivar la tarea cuando el agente ya esta sano")
+	}
+	actual, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if actual == nil || actual.Estado != db.TareaEnProgreso || actual.Agente == nil || *actual.Agente != "Codex1" {
+		t.Fatalf("la tarea deberia quedar en progreso en Codex1: %+v", actual)
+	}
+}
+
+func TestIntentarAutoResolverContinuacionPostRemediationReactivateNoActuaConOrdenAbierta(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente bloqueado",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "orquesta", "Agente Codex1 en estado bloqueado_por_runtime: pausado"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		Tipo:       "start",
+		Estado:     "pendiente",
+		PayloadJSON: `{"kind":"control","accion":"start"}`,
+	}); err != nil {
+		t.Fatalf("encolar runtime order: %v", err)
+	}
+
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+	status := &orquestacionagentesapp.PostRemediationStatus{
+		RemediationKind: "reactivate",
+		BlockedReason:   "agent still blocked",
+	}
+	ok, err := intentarAutoResolverContinuacionPostRemediationReactivate(proyecto, tareaID, "Codex1", "reactivate:1:Codex1", status)
+	if err != nil {
+		t.Fatalf("intentar auto resolver reactivate: %v", err)
+	}
+	if ok {
+		t.Fatalf("no deberia actuar si el agente ya tiene orden abierta")
+	}
+	actual, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if actual == nil || actual.Estado != db.TareaBloqueada {
+		t.Fatalf("la tarea deberia seguir bloqueada: %+v", actual)
 	}
 }
 

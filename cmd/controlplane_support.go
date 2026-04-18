@@ -12402,6 +12402,11 @@ func escalarContinuacionPostRemediationBloqueada(proyecto *db.Proyecto, tareaID 
 	if proyecto == nil || proyecto.ID <= 0 || tareaID <= 0 || strings.TrimSpace(agente) == "" || status == nil {
 		return nil
 	}
+	if reactivada, err := intentarAutoResolverContinuacionPostRemediationReactivate(proyecto, tareaID, strings.TrimSpace(agente), verificationKey, status); err != nil {
+		return err
+	} else if reactivada {
+		return nil
+	}
 	policy, err := supervisionService.GetProjectPolicy(proyecto.Slug)
 	if err != nil || policy == nil || !policy.Enabled {
 		return err
@@ -12451,6 +12456,54 @@ func escalarContinuacionPostRemediationBloqueada(proyecto *db.Proyecto, tareaID 
 		extras,
 	)
 	return err
+}
+
+func intentarAutoResolverContinuacionPostRemediationReactivate(proyecto *db.Proyecto, tareaID int64, agente, verificationKey string, status *orquestacionagentesapp.PostRemediationStatus) (bool, error) {
+	if proyecto == nil || proyecto.ID <= 0 || tareaID <= 0 || strings.TrimSpace(agente) == "" || status == nil {
+		return false, nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(status.RemediationKind), "reactivate") {
+		return false, nil
+	}
+	abierta, err := existeRuntimeOrderAbiertaAgente(strings.TrimSpace(agente), &proyecto.ID)
+	if err != nil || abierta {
+		return false, err
+	}
+	sesion, err := db.GetSesionActiva(strings.TrimSpace(agente), &proyecto.ID)
+	if err != nil && err != sql.ErrNoRows {
+		return false, err
+	}
+	if sesion == nil {
+		return false, nil
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil && err != sql.ErrNoRows {
+		return false, err
+	}
+	runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil && err != sql.ErrNoRows {
+		return false, err
+	}
+	if !handleEstaOperativoParaLimpieza(handle) && !runtimeEstaOperativoParaLimpieza(runtimeInst) {
+		return false, nil
+	}
+	tarea, err := tareasService.Get(tareaID)
+	if err != nil || tarea == nil || tarea.Estado != db.TareaBloqueada || tarea.Agente == nil {
+		return false, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(agente)) {
+		return false, nil
+	}
+	detalle := firstNonEmpty(strings.TrimSpace(status.BlockedReason), "follow-up post-remediation bloqueado")
+	resolucion := fmt.Sprintf("reactivación automática tras follow-up post-remediation bloqueado (%s)", detalle)
+	nota := fmt.Sprintf("Reactivada automáticamente en %s tras follow-up post-remediation bloqueado", strings.TrimSpace(agente))
+	if strings.TrimSpace(verificationKey) != "" {
+		nota += " (" + strings.TrimSpace(verificationKey) + ")"
+	}
+	if err := desbloquearYReactivarTareaAutonomia(tarea.ID, resolucion, strings.TrimSpace(agente), nota); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func construirInstruccionSupervisionPostRemediationBloqueada(policy *supervisionapp.Policy, proyecto *db.Proyecto, supervisor, agente string, tareaID int64, verificationKey, detalle string) string {
