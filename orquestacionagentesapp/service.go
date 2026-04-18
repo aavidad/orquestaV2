@@ -160,6 +160,19 @@ type NudgeRequest struct {
 	Cooldown    time.Duration
 }
 
+type PostRemediationFollowupRequest struct {
+	Agente          string
+	Proyecto        *db.Proyecto
+	TareaID         int64
+	RemediationKind string
+	OriginAgent     string
+	VerificationKey string
+	Motivo          string
+	Instruction     string
+	Extras          map[string]any
+	Cooldown        time.Duration
+}
+
 func (s *Service) EnqueueControl(req ControlRequest) (int64, string, error) {
 	if s == nil || s.runtimes == nil {
 		return 0, "", fmt.Errorf("servicio de orquestacion de agentes no inicializado")
@@ -957,6 +970,64 @@ func (s *Service) EnqueueAutonomyNudge(req NudgeRequest) (bool, error) {
 	return true, nil
 }
 
+func (s *Service) EnqueuePostRemediationFollowup(req PostRemediationFollowupRequest) (bool, error) {
+	if s == nil || s.runtimes == nil || s.autonomyStore == nil {
+		return false, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
+	}
+	proyecto := req.Proyecto
+	agente := strings.TrimSpace(req.Agente)
+	if proyecto == nil || proyecto.ID <= 0 || agente == "" || req.TareaID <= 0 {
+		return false, nil
+	}
+	verificationKey := strings.TrimSpace(req.VerificationKey)
+	cooldown := req.Cooldown
+	if cooldown <= 0 {
+		cooldown = 60 * time.Second
+	}
+	if verificationKey != "" {
+		if pendiente, err := s.existsPendingPostRemediationFollowup(agente, &proyecto.ID, verificationKey); err != nil {
+			return false, err
+		} else if pendiente {
+			return false, nil
+		}
+		if reciente, err := s.existsRecentPostRemediationFollowup(agente, &proyecto.ID, verificationKey, cooldown); err != nil {
+			return false, err
+		} else if reciente {
+			return false, nil
+		}
+	}
+	extras := map[string]any{
+		"post_remediation": true,
+		"tarea_id":         req.TareaID,
+	}
+	if kind := strings.TrimSpace(req.RemediationKind); kind != "" {
+		extras["remediation_kind"] = kind
+	}
+	if origin := strings.TrimSpace(req.OriginAgent); origin != "" {
+		extras["origin_agent"] = origin
+		extras["reasignada_desde"] = origin
+	}
+	if verificationKey != "" {
+		extras["verification_key"] = verificationKey
+	}
+	for key, value := range req.Extras {
+		extras[key] = value
+	}
+	motivo := strings.TrimSpace(req.Motivo)
+	if motivo == "" {
+		motivo = fmt.Sprintf("Tarea #%d reactivada automáticamente", req.TareaID)
+	}
+	return s.EnqueueAutonomyNudge(NudgeRequest{
+		Agente:      agente,
+		Proyecto:    proyecto,
+		Accion:      "continuar_trabajo",
+		Motivo:      motivo,
+		Instruction: strings.TrimSpace(req.Instruction),
+		Extras:      extras,
+		Cooldown:    cooldown,
+	})
+}
+
 func (s *Service) sessionRuntimeHandle(sesion *db.Sesion) (*db.RuntimeHandle, error) {
 	if s == nil || s.autonomyStore == nil || sesion == nil || sesion.ID <= 0 {
 		return nil, nil
@@ -1104,6 +1175,94 @@ func (s *Service) existsPendingAutonomyMailbox(agente string, proyectoID *int64,
 	return false, nil
 }
 
+func (s *Service) existsPendingPostRemediationFollowup(agente string, proyectoID *int64, verificationKey string) (bool, error) {
+	if strings.TrimSpace(verificationKey) == "" {
+		return false, nil
+	}
+	if pendiente, err := s.existsPendingAutonomyOrderWithVerificationKey(agente, proyectoID, "continuar_trabajo", verificationKey); err != nil {
+		return false, err
+	} else if pendiente {
+		return true, nil
+	}
+	return s.existsPendingAutonomyMailboxWithVerificationKey(agente, proyectoID, "continuar_trabajo", verificationKey)
+}
+
+func (s *Service) existsRecentPostRemediationFollowup(agente string, proyectoID *int64, verificationKey string, within time.Duration) (bool, error) {
+	if strings.TrimSpace(verificationKey) == "" || within <= 0 {
+		return false, nil
+	}
+	orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
+		Agente:     &agente,
+		ProyectoID: proyectoID,
+	})
+	if err != nil {
+		return false, err
+	}
+	cutoff := time.Now().UTC().Add(-within)
+	for _, order := range orders {
+		if order == nil || strings.TrimSpace(order.Tipo) != "nudge" {
+			continue
+		}
+		if runtimeOrderMoment(order).Before(cutoff) {
+			continue
+		}
+		if !runtimeOrderHasAutonomyAction(order, "continuar_trabajo") || !runtimePayloadHasVerificationKey(order.PayloadJSON, verificationKey) {
+			continue
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+func (s *Service) existsPendingAutonomyOrderWithVerificationKey(agente string, proyectoID *int64, accion, verificationKey string) (bool, error) {
+	estado := "pendiente"
+	orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
+		Agente:     &agente,
+		ProyectoID: proyectoID,
+		Estado:     &estado,
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, order := range orders {
+		if order == nil || strings.TrimSpace(order.Tipo) != "nudge" {
+			continue
+		}
+		if !runtimeOrderHasAutonomyAction(order, accion) || !runtimePayloadHasVerificationKey(order.PayloadJSON, verificationKey) {
+			continue
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+func (s *Service) existsPendingAutonomyMailboxWithVerificationKey(agente string, proyectoID *int64, accion, verificationKey string) (bool, error) {
+	estado := "pendiente"
+	mailbox, err := s.runtimes.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &agente,
+		ProyectoID: proyectoID,
+		Estado:     &estado,
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, msg := range mailbox {
+		if msg == nil || strings.TrimSpace(msg.Kind) != "autonomia" {
+			continue
+		}
+		payload := map[string]any{}
+		_ = json.Unmarshal([]byte(msg.PayloadJSON), &payload)
+		if strings.TrimSpace(stringMapValue(payload, "accion")) != strings.TrimSpace(accion) {
+			continue
+		}
+		if strings.TrimSpace(stringMapValue(payload, "verification_key")) != strings.TrimSpace(verificationKey) {
+			continue
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
 func (s *Service) resolveCanonicalRuntimeIDForHandle(handle *db.RuntimeHandle, agente string, proyectoID *int64) (*int64, error) {
 	runtime, err := s.resolveCanonicalRuntimeForHandle(handle, agente, proyectoID)
 	if err != nil || runtime == nil || runtime.ID <= 0 {
@@ -1243,6 +1402,18 @@ func runtimeOrderHasAction(order *db.RuntimeOrder, accion string) bool {
 		}
 	}
 	return strings.Contains(strings.ToLower(order.PayloadJSON), fmt.Sprintf(`"accion":"%s"`, accion))
+}
+
+func runtimePayloadHasVerificationKey(payloadJSON, verificationKey string) bool {
+	verificationKey = strings.TrimSpace(verificationKey)
+	if verificationKey == "" {
+		return false
+	}
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(payloadJSON)), &payload); err == nil {
+		return strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "verification_key")), verificationKey)
+	}
+	return strings.Contains(strings.ToLower(payloadJSON), fmt.Sprintf(`"verification_key":"%s"`, strings.ToLower(verificationKey)))
 }
 
 func runtimeOrderMoment(order *db.RuntimeOrder) time.Time {

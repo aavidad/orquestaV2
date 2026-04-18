@@ -27,6 +27,7 @@ type stubRuntimeController struct {
 	controlID            int64
 	controlAction        string
 	controlErr           error
+	enqueuedRuntimeOrder *db.RuntimeOrder
 	reconcileHandles     int
 	reconcileHandlesErr  error
 	reconcileOrders      int
@@ -140,7 +141,13 @@ func (s *stubRuntimeController) GetOperationalRuntimeHandleForProject(string, *i
 	return s.operationalHandle, s.operationalHandleErr
 }
 
-func (s *stubRuntimeController) EnqueueRuntimeOrder(*db.RuntimeOrder) (int64, error) {
+func (s *stubRuntimeController) EnqueueRuntimeOrder(order *db.RuntimeOrder) (int64, error) {
+	if order != nil {
+		clone := *order
+		s.enqueuedRuntimeOrder = &clone
+	} else {
+		s.enqueuedRuntimeOrder = nil
+	}
 	return s.controlID, s.controlErr
 }
 
@@ -684,6 +691,100 @@ func TestEnqueueAutonomyNudgeSkipsWhenMailboxPending(t *testing.T) {
 	}
 	if ok {
 		t.Fatal("no debería encolar con mailbox pendiente")
+	}
+}
+
+func TestEnqueuePostRemediationFollowupAddsVerificationMetadata(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(33)
+	runtimeID := int64(45)
+	handleID := int64(10)
+	store := &stubAutonomyStore{}
+	runtimes := &stubRuntimeController{
+		controlID: 91,
+		deliveryHandle: &db.RuntimeHandle{
+			ID:        handleID,
+			RuntimeID: &runtimeID,
+			Estado:    "activo",
+		},
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(store)
+
+	ok, err := service.EnqueuePostRemediationFollowup(PostRemediationFollowupRequest{
+		Agente:          "Codex2",
+		Proyecto:        &db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		TareaID:         41,
+		RemediationKind: "reassign",
+		OriginAgent:     "Codex1",
+		VerificationKey: "reassign:41:Codex1:Codex2",
+		Motivo:          "seguir frente",
+		Instruction:     "continúa con la tarea reasignada y deja evidencia de avance",
+	})
+	if err != nil {
+		t.Fatalf("EnqueuePostRemediationFollowup: %v", err)
+	}
+	if !ok {
+		t.Fatal("debería encolar follow-up post-remediation")
+	}
+	if runtimes.enqueuedRuntimeOrder == nil {
+		t.Fatal("faltaba runtime order encolada")
+	}
+	payload := runtimes.enqueuedRuntimeOrder.PayloadJSON
+	for _, fragment := range []string{
+		`"accion":"continuar_trabajo"`,
+		`"post_remediation":true`,
+		`"tarea_id":41`,
+		`"remediation_kind":"reassign"`,
+		`"origin_agent":"Codex1"`,
+		`"verification_key":"reassign:41:Codex1:Codex2"`,
+	} {
+		if !strings.Contains(payload, fragment) {
+			t.Fatalf("payload sin %s: %s", fragment, payload)
+		}
+	}
+}
+
+func TestEnqueuePostRemediationFollowupDedupesByVerificationKey(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(34)
+	now := time.Now().UTC()
+	store := &stubAutonomyStore{}
+	runtimes := &stubRuntimeController{
+		deliveryHandle: &db.RuntimeHandle{ID: 11, RuntimeID: ptrInt64(46), Estado: "activo"},
+		orders: []*db.RuntimeOrder{{
+			ID:          17,
+			Agente:      "Codex2",
+			ProyectoID:  &proyectoID,
+			Tipo:        "nudge",
+			Estado:      "pendiente",
+			PayloadJSON: `{"kind":"autonomia","accion":"continuar_trabajo","verification_key":"reassign:41:Codex1:Codex2"}`,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}},
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(store)
+
+	ok, err := service.EnqueuePostRemediationFollowup(PostRemediationFollowupRequest{
+		Agente:          "Codex2",
+		Proyecto:        &db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		TareaID:         41,
+		RemediationKind: "reassign",
+		OriginAgent:     "Codex1",
+		VerificationKey: "reassign:41:Codex1:Codex2",
+		Instruction:     "continúa con la tarea reasignada y deja evidencia de avance",
+	})
+	if err != nil {
+		t.Fatalf("EnqueuePostRemediationFollowup: %v", err)
+	}
+	if ok {
+		t.Fatal("no debería duplicar follow-up con la misma verification_key")
+	}
+	if runtimes.enqueuedRuntimeOrder != nil {
+		t.Fatalf("no debería encolar runtime order nueva: %+v", runtimes.enqueuedRuntimeOrder)
 	}
 }
 

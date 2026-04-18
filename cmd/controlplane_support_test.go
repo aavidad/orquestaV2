@@ -20174,6 +20174,132 @@ func TestProcesarRuntimeTranscriptBatchCredentialsRequestNudgeaRemediacionLocalS
 	}
 }
 
+func TestProcesarRuntimeTranscriptBatchCredentialsRequestConOrdenAbiertaMantieneFallback(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar worker: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	}); err != nil {
+		t.Fatalf("iniciar sesion supervisor: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion worker: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle worker: %+v err=%v", handle, err)
+	}
+	logPath := filepath.Join(tmp, "codex-transcript-credentials-open-order.log")
+	if err := os.WriteFile(logPath, []byte("missing oauth for provider session\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"log_path":         logPath,
+		"profile_name":     "Codex1",
+		"profile_strategy": "shared_clone",
+		"rendered_command": "/tmp/codex-perfiles/bin/codex-perfil Codex1",
+	})
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "pause",
+		Estado:      "pendiente",
+		PayloadJSON: `{"motivo":"orden abierta de prueba"}`,
+	}); err != nil {
+		t.Fatalf("crear runtime order abierta: %v", err)
+	}
+
+	n, err := procesarRuntimeTranscriptBatch()
+	if err != nil {
+		t.Fatalf("procesar transcript batch: %v", err)
+	}
+	if n < 2 {
+		t.Fatalf("esperaba ingestión + señal procesada, got=%d", n)
+	}
+
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{ProyectoID: &proyectoID, Limit: 20})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	var localNudge *db.RuntimeOrder
+	var supervisorNudge *db.RuntimeOrder
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch {
+		case order.Agente == "Codex1" && order.Tipo == "nudge" && strings.Contains(order.PayloadJSON, `"accion":"resolver_credentials_local"`):
+			localNudge = order
+		case order.Agente == "CodexSupervisor" && order.Tipo == "nudge":
+			supervisorNudge = order
+		}
+	}
+	if localNudge != nil {
+		t.Fatalf("no debería nudgear remediación local con orden abierta: %+v", localNudge)
+	}
+	if supervisorNudge == nil || !strings.Contains(supervisorNudge.PayloadJSON, `"accion":"resolver_credentials_request"`) {
+		t.Fatalf("debería caer a supervisión con orden abierta, got=%+v", supervisorNudge)
+	}
+
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	var credentialsTask *db.Tarea
+	for _, tarea := range tareas {
+		if tarea != nil && tarea.Titulo == autonomiaCredentialsTaskTitle {
+			credentialsTask = tarea
+			break
+		}
+	}
+	if credentialsTask == nil {
+		t.Fatalf("faltaba tarea de credenciales en fallback, tareas=%+v", tareas)
+	}
+}
+
 func TestProcesarSignalTranscriptCredentialsRequestSinHandleSigueSupervision(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

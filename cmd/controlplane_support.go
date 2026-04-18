@@ -4540,7 +4540,7 @@ func ejecutarPlanCredencialesSignalTranscript(item *db.RuntimeTranscriptEntry, p
 	if clasificacionSignalTranscript(item) != "credentials_request" {
 		return "", nil
 	}
-	if note, handled, err := intentarRemediacionAutonomaCredencialesSignalTranscriptConContexto(item, agenteSignalTranscript(item), proyecto); err != nil {
+	if note, handled, err := intentarRemediacionAutonomaCredencialesSignalTranscript(item); err != nil {
 		return "", err
 	} else if handled {
 		return note, nil
@@ -12060,28 +12060,42 @@ func encolarContinuacionTareaReasignada(agente string, proyecto *db.Proyecto, ta
 	if tareaID <= 0 {
 		return false, nil
 	}
-	payloadExtras := map[string]any{
-		"tarea_id": tareaID,
-	}
 	origen = strings.TrimSpace(origen)
-	if origen != "" {
-		payloadExtras["reasignada_desde"] = origen
-	}
 	motivo = strings.TrimSpace(motivo)
-	if motivo != "" {
-		payloadExtras["motivo"] = motivo
+	kind := "reactivate"
+	if origen != "" {
+		kind = "reassign"
 	}
+	payloadExtras := map[string]any{}
 	for k, v := range extras {
 		payloadExtras[k] = v
 	}
-	return encolarNudgeAutonomiaDetallado(
-		agente,
-		proyecto,
-		"continuar_trabajo",
-		fmt.Sprintf("Tarea #%d reasignada automáticamente", tareaID),
-		instruction,
-		payloadExtras,
-	)
+	return orquestacionAgentesService.EnqueuePostRemediationFollowup(orquestacionagentesapp.PostRemediationFollowupRequest{
+		Agente:          strings.TrimSpace(agente),
+		Proyecto:        proyecto,
+		TareaID:         tareaID,
+		RemediationKind: kind,
+		OriginAgent:     origen,
+		VerificationKey: verificationKeyContinuacionTareaReasignada(strings.TrimSpace(agente), tareaID, kind, origen),
+		Motivo:          fmt.Sprintf("Tarea #%d reasignada automáticamente", tareaID),
+		Instruction:     instruction,
+		Extras:          payloadExtras,
+		Cooldown:        time.Duration(controlPlaneConfigIntOrDefault("autonomia_nudge_cooldown_seconds", 60)) * time.Second,
+	})
+}
+
+func verificationKeyContinuacionTareaReasignada(agente string, tareaID int64, remediationKind, origen string) string {
+	if tareaID <= 0 || strings.TrimSpace(agente) == "" {
+		return ""
+	}
+	kind := strings.TrimSpace(remediationKind)
+	if kind == "" {
+		kind = "reactivate"
+	}
+	if origen = strings.TrimSpace(origen); origen != "" {
+		return fmt.Sprintf("%s:%d:%s:%s", kind, tareaID, origen, strings.TrimSpace(agente))
+	}
+	return fmt.Sprintf("%s:%d:%s", kind, tareaID, strings.TrimSpace(agente))
 }
 
 func encolarContinuacionTareaReasignadaSiCorresponde(agente string, proyectoID *int64, tareaID int64, origen, motivo, instruction string, extras map[string]any) error {
