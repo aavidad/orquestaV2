@@ -15675,6 +15675,272 @@ func TestEncolarContinuacionTareaReasignadaSiCorrespondeEscalaFollowupBloqueadoA
 	}
 }
 
+func TestEncolarContinuacionTareaReasignadaSiCorrespondeReintentaFollowupFallidoSinBloqueo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente worker: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Frente reactivado fallido",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	verificationKey := verificationKeyContinuacionTareaReasignada("Codex1", tareaID, "reassign", "Gemma1")
+	orderID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:        "Codex1",
+		ProyectoID:    &proyectoID,
+		Tipo:          "nudge",
+		Estado:        "fallida",
+		PayloadJSON:   fmt.Sprintf(`{"kind":"autonomia","accion":"continuar_trabajo","verification_key":"%s","remediation_kind":"reassign"}`, verificationKey),
+		ResultadoJSON: fmt.Sprintf(`{"dispatch_state":"failed","delivery_state":"failed","verification_key":"%s","remediation_kind":"reassign"}`, verificationKey),
+	})
+	if err != nil {
+		t.Fatalf("crear follow-up fallido: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET created_at=datetime('now','-2 hours'), updated_at=datetime('now','-2 hours'), started_at=datetime('now','-2 hours'), finished_at=datetime('now','-2 hours') WHERE id=?`, orderID); err != nil {
+		t.Fatalf("envejecer follow-up fallido: %v", err)
+	}
+
+	if err := encolarContinuacionTareaReasignadaSiCorresponde("Codex1", &proyectoID, tareaID, "Gemma1", "worker_degradado", "continúa", nil); err != nil {
+		t.Fatalf("encolar continuacion condicionada: %v", err)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Limit: 20})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	workerPending := 0
+	for _, order := range orders {
+		if order == nil || order.Agente != "Codex1" || order.Tipo != "nudge" || order.Estado != "pendiente" {
+			continue
+		}
+		if strings.Contains(order.PayloadJSON, `"accion":"continuar_trabajo"`) && strings.Contains(order.PayloadJSON, `"verification_key":"`+verificationKey+`"`) {
+			workerPending++
+		}
+	}
+	if workerPending != 1 {
+		t.Fatalf("deberia reencolar un follow-up transitorio, count=%d orders=%+v", workerPending, orders)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea no deberia escalar ni bloquearse por un fallo transitorio: %+v", tarea)
+	}
+}
+
+func TestEncolarContinuacionTareaReasignadaSiCorrespondeEsperaFollowupFallidoConControlReciente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente worker: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Frente reactivado con control reciente",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	verificationKey := verificationKeyContinuacionTareaReasignada("Codex1", tareaID, "reassign", "Gemma1")
+	orderID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:        "Codex1",
+		ProyectoID:    &proyectoID,
+		Tipo:          "nudge",
+		Estado:        "fallida",
+		PayloadJSON:   fmt.Sprintf(`{"kind":"autonomia","accion":"continuar_trabajo","verification_key":"%s","remediation_kind":"reassign"}`, verificationKey),
+		ResultadoJSON: fmt.Sprintf(`{"dispatch_state":"failed","delivery_state":"failed","verification_key":"%s","remediation_kind":"reassign"}`, verificationKey),
+	})
+	if err != nil {
+		t.Fatalf("crear follow-up fallido: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET created_at=datetime('now','-2 hours'), updated_at=datetime('now','-2 hours'), started_at=datetime('now','-2 hours'), finished_at=datetime('now','-2 hours') WHERE id=?`, orderID); err != nil {
+		t.Fatalf("envejecer follow-up fallido: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		Tipo:       "start",
+		Estado:     "completada",
+		PayloadJSON: `{"accion":"start"}`,
+	}); err != nil {
+		t.Fatalf("crear control reciente: %v", err)
+	}
+
+	if err := encolarContinuacionTareaReasignadaSiCorresponde("Codex1", &proyectoID, tareaID, "Gemma1", "worker_degradado", "continúa", nil); err != nil {
+		t.Fatalf("encolar continuacion condicionada: %v", err)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Limit: 20})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	workerPending := 0
+	for _, order := range orders {
+		if order == nil || order.Agente != "Codex1" || order.Tipo != "nudge" || order.Estado != "pendiente" {
+			continue
+		}
+		if strings.Contains(order.PayloadJSON, `"accion":"continuar_trabajo"`) && strings.Contains(order.PayloadJSON, `"verification_key":"`+verificationKey+`"`) {
+			workerPending++
+		}
+	}
+	if workerPending != 0 {
+		t.Fatalf("no deberia reencolar follow-up si hay control reciente, orders=%+v", orders)
+	}
+}
+
+func TestEncolarContinuacionTareaReasignadaSiCorrespondeEscalaFollowupFallidoRepetido(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente worker: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Frente reactivado fallido repetido",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	verificationKey := verificationKeyContinuacionTareaReasignada("Codex1", tareaID, "reassign", "Gemma1")
+	order1, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:        "Codex1",
+		ProyectoID:    &proyectoID,
+		Tipo:          "nudge",
+		Estado:        "fallida",
+		PayloadJSON:   fmt.Sprintf(`{"kind":"autonomia","accion":"continuar_trabajo","verification_key":"%s","remediation_kind":"reassign"}`, verificationKey),
+		ResultadoJSON: fmt.Sprintf(`{"dispatch_state":"failed","delivery_state":"failed","verification_key":"%s","remediation_kind":"reassign"}`, verificationKey),
+	})
+	if err != nil {
+		t.Fatalf("crear follow-up fallido 1: %v", err)
+	}
+	order2, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:        "Codex1",
+		ProyectoID:    &proyectoID,
+		Tipo:          "nudge",
+		Estado:        "fallida",
+		PayloadJSON:   fmt.Sprintf(`{"kind":"autonomia","accion":"continuar_trabajo","verification_key":"%s","remediation_kind":"reassign"}`, verificationKey),
+		ResultadoJSON: fmt.Sprintf(`{"dispatch_state":"failed","delivery_state":"failed","verification_key":"%s","remediation_kind":"reassign"}`, verificationKey),
+	})
+	if err != nil {
+		t.Fatalf("crear follow-up fallido 2: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET created_at=datetime('now','-2 hours'), updated_at=datetime('now','-2 hours'), started_at=datetime('now','-2 hours'), finished_at=datetime('now','-2 hours') WHERE id IN (?,?)`, order1, order2); err != nil {
+		t.Fatalf("envejecer follow-ups fallidos: %v", err)
+	}
+
+	if err := encolarContinuacionTareaReasignadaSiCorresponde("Codex1", &proyectoID, tareaID, "Gemma1", "worker_degradado", "continúa", nil); err != nil {
+		t.Fatalf("encolar continuacion condicionada: %v", err)
+	}
+
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{ProyectoID: &proyectoID, Limit: 20})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	var supervisorNudge *db.RuntimeOrder
+	var workerPending *db.RuntimeOrder
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch {
+		case order.Agente == "CodexSupervisor" && order.Tipo == "nudge":
+			supervisorNudge = order
+		case order.Agente == "Codex1" && order.Tipo == "nudge" && order.Estado == "pendiente" && strings.Contains(order.PayloadJSON, `"accion":"continuar_trabajo"`):
+			workerPending = order
+		}
+	}
+	if workerPending != nil {
+		t.Fatalf("no deberia reencolar follow-up al mismo agente tras fallos repetidos: %+v", workerPending)
+	}
+	if supervisorNudge == nil || !strings.Contains(supervisorNudge.PayloadJSON, `"accion":"resolver_post_remediation_blocked"`) {
+		t.Fatalf("deberia escalar al supervisor tras agotar reintento, got=%+v", supervisorNudge)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Estado != db.TareaBloqueada {
+		t.Fatalf("la tarea original deberia quedar bloqueada tras fallo repetido: %+v", tarea)
+	}
+}
+
 func TestInstruccionContinuacionSesionActivaAutonomiaEspecializaPostRemediationBlocked(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

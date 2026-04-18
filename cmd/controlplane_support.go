@@ -12386,8 +12386,25 @@ func encolarContinuacionTareaReasignadaSiCorresponde(agente string, proyectoID *
 		switch {
 		case status.Succeeded, status.Waiting:
 			return nil
-		case strings.TrimSpace(status.BlockedReason) != "" || strings.EqualFold(strings.TrimSpace(status.Estado), "fallida"):
+		case strings.TrimSpace(status.BlockedReason) != "" || strings.EqualFold(strings.TrimSpace(status.DeliveryState), "blocked"):
 			return escalarContinuacionPostRemediationBloqueada(proyecto, tareaID, strings.TrimSpace(agente), verificationKey, status)
+		case strings.EqualFold(strings.TrimSpace(status.Estado), "fallida"):
+			exhausted, err := followupPostRemediationTransientFailureExhausted(strings.TrimSpace(agente), &proyecto.ID, verificationKey)
+			if err != nil {
+				return err
+			}
+			if exhausted {
+				statusEscalada := *status
+				if strings.TrimSpace(statusEscalada.BlockedReason) == "" {
+					statusEscalada.BlockedReason = "followup_post_remediation_fallida_repetida"
+				}
+				return escalarContinuacionPostRemediationBloqueada(proyecto, tareaID, strings.TrimSpace(agente), verificationKey, &statusEscalada)
+			}
+			if deferir, err := shouldDeferTransientPostRemediationRetry(strings.TrimSpace(agente), &proyecto.ID, status); err != nil {
+				return err
+			} else if deferir {
+				return nil
+			}
 		}
 	}
 	pendiente, err := existeRuntimeOrderAutonomiaPendiente(strings.TrimSpace(agente), &proyecto.ID, "nudge", "continuar_trabajo")
@@ -12396,6 +12413,102 @@ func encolarContinuacionTareaReasignadaSiCorresponde(agente string, proyectoID *
 	}
 	_, err = encolarContinuacionTareaReasignada(strings.TrimSpace(agente), proyecto, tareaID, origen, motivo, instruction, extras)
 	return err
+}
+
+func followupPostRemediationTransientFailureExhausted(agente string, proyectoID *int64, verificationKey string) (bool, error) {
+	maxAttempts := controlPlaneConfigIntOrDefault("autonomia_post_remediation_failed_attempts_max", 2)
+	if maxAttempts <= 0 {
+		maxAttempts = 2
+	}
+	intentos, err := contarFollowupsPostRemediationPorVerificationKey(strings.TrimSpace(agente), proyectoID, strings.TrimSpace(verificationKey))
+	if err != nil {
+		return false, err
+	}
+	return intentos >= maxAttempts, nil
+}
+
+func shouldDeferTransientPostRemediationRetry(agente string, proyectoID *int64, status *orquestacionagentesapp.PostRemediationStatus) (bool, error) {
+	if status == nil {
+		return false, nil
+	}
+	if retryAfter, ok := parsePostRemediationRetryAfter(status.RetryAfter); ok && retryAfter.After(time.Now().UTC()) {
+		return true, nil
+	}
+	if abierta, err := existeRuntimeOrderAbiertaAutonomia(strings.TrimSpace(agente), proyectoID, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
+		return false, err
+	} else if abierta {
+		return true, nil
+	}
+	if reciente, err := existeRuntimeOrderControlRecienteAutonomia(strings.TrimSpace(agente), proyectoID, 2*time.Minute, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
+		return false, err
+	} else if reciente {
+		return true, nil
+	}
+	cooldown := time.Duration(controlPlaneConfigIntOrDefault("autonomia_nudge_cooldown_seconds", 60)) * time.Second
+	if cooldown <= 0 {
+		cooldown = 60 * time.Second
+	}
+	if !status.UpdatedAt.IsZero() && time.Now().UTC().Before(status.UpdatedAt.Add(cooldown)) {
+		return true, nil
+	}
+	return false, nil
+}
+
+func parsePostRemediationRetryAfter(raw string) (time.Time, bool) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return time.Time{}, false
+	}
+	layouts := []string{time.RFC3339Nano, time.RFC3339}
+	for _, layout := range layouts {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed.UTC(), true
+		}
+	}
+	return time.Time{}, false
+}
+
+func contarFollowupsPostRemediationPorVerificationKey(agente string, proyectoID *int64, verificationKey string) (int, error) {
+	agente = strings.TrimSpace(agente)
+	verificationKey = strings.TrimSpace(verificationKey)
+	if agente == "" || proyectoID == nil || *proyectoID <= 0 || verificationKey == "" {
+		return 0, nil
+	}
+	orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
+		Agente:     &agente,
+		ProyectoID: proyectoID,
+	})
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, order := range orders {
+		if order == nil || strings.TrimSpace(order.Tipo) != "nudge" {
+			continue
+		}
+		if !runtimeOrderTieneAccion(order, "continuar_trabajo") || !runtimeOrderTieneVerificationKey(order, verificationKey) {
+			continue
+		}
+		total++
+	}
+	return total, nil
+}
+
+func runtimeOrderTieneVerificationKey(order *db.RuntimeOrder, verificationKey string) bool {
+	if order == nil {
+		return false
+	}
+	verificationKey = strings.TrimSpace(verificationKey)
+	if verificationKey == "" {
+		return false
+	}
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(order.PayloadJSON)), &payload); err == nil {
+		if text, ok := payload["verification_key"].(string); ok && strings.EqualFold(strings.TrimSpace(text), verificationKey) {
+			return true
+		}
+	}
+	return strings.Contains(strings.ToLower(order.PayloadJSON), fmt.Sprintf(`"verification_key":"%s"`, strings.ToLower(verificationKey)))
 }
 
 func escalarContinuacionPostRemediationBloqueada(proyecto *db.Proyecto, tareaID int64, agente, verificationKey string, status *orquestacionagentesapp.PostRemediationStatus) error {
