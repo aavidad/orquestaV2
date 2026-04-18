@@ -39,6 +39,7 @@ import (
 type dbAutomationService struct{}
 
 const autonomiaReplanTaskTitle = "Autonomía: replanificar backlog y abrir siguiente frente útil"
+const autonomiaCredentialsTaskTitle = "Autonomía: desbloquear credenciales o acceso externo"
 
 var runtimeBudgetObservationBackgroundGate = planocontrol.NewGate()
 var runtimeHistoricalMaintenanceGate = planocontrol.NewGate()
@@ -3471,6 +3472,9 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 	if esSignalFalloRuntime(item) {
 		return procesarSignalFalloRuntime(item, agente)
 	}
+	if strings.EqualFold(clasificacionSignalTranscript(item), "credentials_request") {
+		return procesarSignalSoloSupervision(item)
+	}
 	return procesarSignalAutoGuidance(item, agente, handle)
 }
 
@@ -3491,6 +3495,9 @@ func prepararSignalTranscript(item *db.RuntimeTranscriptEntry) (string, *db.Runt
 		return "", nil, "", false, err
 	}
 	if handle == nil {
+		if strings.EqualFold(clasificacionSignalTranscript(item), "credentials_request") {
+			return agente, nil, "", false, nil
+		}
 		return "", nil, "sin_runtime_activo", true, nil
 	}
 	if note, handled, err := resolverReviewGateDesdeSignalTranscript(item); err != nil {
@@ -3520,6 +3527,17 @@ func procesarSignalFalloRuntime(item *db.RuntimeTranscriptEntry, agente string) 
 	}
 	emitirNotificacionRuntimeFailureSignalTranscript(agente, item)
 	notes = acumularNotaAutonomia(notes, "runtime_failure_signal")
+	return resumenNotasAutonomia(notes), nil
+}
+
+func procesarSignalSoloSupervision(item *db.RuntimeTranscriptEntry) (string, error) {
+	notes := make([]string, 0, 2)
+	if supervisorNote, err := notificarSupervisorSignalTranscript(item); err != nil {
+		return "", err
+	} else {
+		notes = acumularNotaAutonomia(notes, supervisorNote)
+	}
+	notes = acumularNotaAutonomia(notes, "signal_supervision_only")
 	return resumenNotasAutonomia(notes), nil
 }
 
@@ -4233,12 +4251,12 @@ func ejecutarPlanSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry, pol
 	if err != nil {
 		return "", err
 	}
-	if note, err := asegurarTareaReplanAutonomiaSignal(item, policy, proyecto, supervisor); err != nil {
+	if note, err := asegurarTareasSignalTranscript(item, policy, proyecto, supervisor); err != nil {
 		return "", err
 	} else {
 		notes = agregarNotaAutonomia(notes, note)
 	}
-	if note, err := resolverEstadoAgenteObjetivoSignalTranscript(supervisor, activado, agenteSignalTranscript(item), proyecto, "inspeccionar_transcript_signal", construirInstruccionSupervisionSignalTranscript(policy, proyecto, nombreAgenteAutonomia(supervisor), item), item, "supervisor", "supervisor_start"); err != nil {
+	if note, err := resolverEstadoAgenteObjetivoSignalTranscript(supervisor, activado, agenteSignalTranscript(item), proyecto, accionSupervisorSignalTranscript(item), construirInstruccionSupervisionSignalTranscript(policy, proyecto, nombreAgenteAutonomia(supervisor), item), item, "supervisor", "supervisor_start"); err != nil {
 		return "", err
 	} else {
 		notes = agregarNotaAutonomia(notes, note)
@@ -4277,11 +4295,22 @@ func resolverAgentePreferidoOActivoSignalTranscript(proyectoID int64, preferido,
 	return agente, false, err
 }
 
-func asegurarTareaReplanAutonomiaSignal(item *db.RuntimeTranscriptEntry, policy *supervisionapp.Policy, proyecto *db.Proyecto, supervisor *db.Agente) (string, error) {
+func asegurarTareasSignalTranscript(item *db.RuntimeTranscriptEntry, policy *supervisionapp.Policy, proyecto *db.Proyecto, supervisor *db.Agente) (string, error) {
 	if !contextoSignalTranscriptActivo(item, policy, proyecto) {
 		return "", nil
 	}
-	return ejecutarPlanReplanSignalTranscript(item, policy, proyecto, supervisor)
+	notes := make([]string, 0, 2)
+	if note, err := ejecutarPlanReplanSignalTranscript(item, policy, proyecto, supervisor); err != nil {
+		return "", err
+	} else {
+		notes = agregarNotaAutonomia(notes, note)
+	}
+	if note, err := ejecutarPlanCredencialesSignalTranscript(item, policy, proyecto, supervisor); err != nil {
+		return "", err
+	} else {
+		notes = agregarNotaAutonomia(notes, note)
+	}
+	return resumenNotasAutonomia(notes), nil
 }
 
 func ejecutarPlanReplanSignalTranscript(item *db.RuntimeTranscriptEntry, policy *supervisionapp.Policy, proyecto *db.Proyecto, supervisor *db.Agente) (string, error) {
@@ -4381,6 +4410,109 @@ func construirNotasTareaReplanAutonomiaSignal(item *db.RuntimeTranscriptEntry) s
 	return fmt.Sprintf("autonomia:needs_replan;transcript:%d;agente_origen:%s", idSignalTranscript(item), agenteSignalTranscript(item))
 }
 
+func ejecutarPlanCredencialesSignalTranscript(item *db.RuntimeTranscriptEntry, policy *supervisionapp.Policy, proyecto *db.Proyecto, supervisor *db.Agente) (string, error) {
+	if clasificacionSignalTranscript(item) != "credentials_request" {
+		return "", nil
+	}
+	existe, err := existeTareaCredencialesAutonomiaPendiente(proyecto.ID)
+	if err != nil {
+		return "", err
+	}
+	if existe {
+		return "credentials_task_exists", nil
+	}
+	target := resolverAgenteObjetivoReplanAutonomiaSignal(policy, supervisor, agenteSignalTranscript(item))
+	id, err := crearTareaCredencialesAutonomiaSignal(policy, proyecto, item, target)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("credentials_task_created:%d", id), nil
+}
+
+func existeTareaCredencialesAutonomiaPendiente(proyectoID int64) (bool, error) {
+	if proyectoID <= 0 {
+		return false, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		return false, err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaCompletada, db.TareaCancelada:
+			continue
+		}
+		if esTareaCredencialesAutonomia(tarea) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func crearTareaCredencialesAutonomiaSignal(policy *supervisionapp.Policy, proyecto *db.Proyecto, item *db.RuntimeTranscriptEntry, target string) (int64, error) {
+	if policy == nil || proyecto == nil || item == nil {
+		return 0, nil
+	}
+	id, err := tareasService.Create(tareasapp.CreateTaskInput{
+		Titulo:      autonomiaCredentialsTaskTitle,
+		Descripcion: construirDescripcionTareaCredencialesAutonomia(policy, proyecto, item),
+		Modulo:      "autonomia",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Agente:      target,
+		Proyecto:    proyecto.Slug,
+		Notas:       construirNotasTareaCredencialesAutonomiaSignal(item),
+	})
+	if err != nil {
+		return 0, err
+	}
+	if err := arrancarTareaAutonomiaSiAsignada(id, target); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func construirNotasTareaCredencialesAutonomiaSignal(item *db.RuntimeTranscriptEntry) string {
+	if item == nil {
+		return "autonomia:credentials_request"
+	}
+	return fmt.Sprintf("autonomia:credentials_request;transcript:%d;agente_origen:%s", idSignalTranscript(item), agenteSignalTranscript(item))
+}
+
+func esTareaCredencialesAutonomia(tarea *db.Tarea) bool {
+	if tarea == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(tarea.Titulo), autonomiaCredentialsTaskTitle) {
+		return true
+	}
+	return strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:credentials_request")
+}
+
+func construirDescripcionTareaCredencialesAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyecto, item *db.RuntimeTranscriptEntry) string {
+	partes := []string{
+		"Orquesta ha detectado en el transcript una señal de credentials_request: el agente declara que faltan credenciales, acceso o un recurso externo.",
+		"Comprueba si el bloqueo puede resolverse de forma autónoma con cuentas compartidas, perfiles seed+clone, OAuth existente, secretos ya provisionados o reasignación a otro agente con acceso.",
+		"Si el recurso externo falta de verdad, deja trazabilidad explícita del bloqueo, evita que el frente se quede parado y abre o mueve el trabajo al siguiente frente útil disponible.",
+	}
+	if slugProyectoAutonomia(proyecto) != "" {
+		partes = append(partes, "Proyecto: "+slugProyectoAutonomia(proyecto)+".")
+	}
+	if item != nil && agenteSignalTranscript(item) != "" {
+		partes = append(partes, "Agente origen: "+agenteSignalTranscript(item)+".")
+	}
+	if item != nil && textoSignalTranscript(item) != "" {
+		partes = append(partes, "Señal transcript: "+textoSignalTranscript(item)+".")
+	}
+	if objetivoGeneralAutonomia(policy) != "" {
+		partes = append(partes, "Objetivo general: "+objetivoGeneralAutonomia(policy)+".")
+	}
+	return strings.Join(partes, " ")
+}
+
 func esTareaReplanAutonomia(tarea *db.Tarea) bool {
 	if tarea == nil {
 		return false
@@ -4412,6 +4544,17 @@ func construirDescripcionTareaReplanAutonomia(policy *supervisionapp.Policy, pro
 		partes = append(partes, "Definition of done: "+definitionOfDoneAutonomia(policy)+".")
 	}
 	return strings.Join(partes, " ")
+}
+
+func accionSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry) string {
+	switch clasificacionSignalTranscript(item) {
+	case "cli_query":
+		return "resolver_cli_query"
+	case "credentials_request":
+		return "resolver_credentials_request"
+	default:
+		return "inspeccionar_transcript_signal"
+	}
 }
 
 func notificarReviewerSignalTranscript(item *db.RuntimeTranscriptEntry, policy *supervisionapp.Policy, proyecto *db.Proyecto) (string, error) {
@@ -4591,12 +4734,26 @@ func construirInstruccionSupervisionSignalTranscript(policy *supervisionapp.Poli
 	if objetivoGeneralAutonomia(policy) != "" {
 		parts = append(parts, "Objetivo general: "+objetivoGeneralAutonomia(policy)+".")
 	}
+	if detalle := detalleSupervisorSignalTranscript(item); detalle != "" {
+		parts = append(parts, detalle)
+	}
 	if policy != nil && policy.AutoCreateTasks {
 		parts = append(parts, "Si basta con una instrucción, emítela; si hace falta, crea o reajusta tareas, propuestas o handoff para que el proyecto no se quede parado.")
 	} else {
 		parts = append(parts, "Si basta con una instrucción, emítela; si hacen falta cambios estructurales, deja el siguiente frente claro sin crear tareas nuevas automáticamente.")
 	}
 	return strings.Join(parts, " ")
+}
+
+func detalleSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry) string {
+	switch clasificacionSignalTranscript(item) {
+	case "cli_query":
+		return "La señal es una consulta operativa sobre comando, flujo o herramienta. Responde con la vía canónica y mantén el trabajo avanzando sin convertirlo en espera humana."
+	case "credentials_request":
+		return "La señal apunta a falta de credenciales o acceso. Comprueba primero si Orquesta puede resolverlo con cuentas compartidas, seeds, clones o reasignación antes de escalar a humano."
+	default:
+		return ""
+	}
 }
 
 func construirInstruccionReviewSignalTranscript(policy *supervisionapp.Policy, proyecto *db.Proyecto, reviewer string, item *db.RuntimeTranscriptEntry) string {
