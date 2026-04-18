@@ -1686,6 +1686,8 @@ func refrescarPresupuestoSesionObservadoAgente(nombre string) (int, error) {
 	return procesados, nil
 }
 
+var budgetRefreshObservationBudget = 2 * time.Second
+
 func listarRuntimeHandlesPresupuestoAgente(nombre string) ([]*db.RuntimeHandle, error) {
 	nombre = strings.TrimSpace(nombre)
 	if nombre == "" {
@@ -1708,6 +1710,7 @@ func refrescarPresupuestoSesionObservadoDesdeSesion(sesion *db.Sesion) (bool, er
 	if sesion == nil || sesion.ID <= 0 {
 		return false, nil
 	}
+	started := time.Now()
 	meta := metadataPresupuestoDesdeSesion(sesion)
 	metaJSON, _ := json.Marshal(meta)
 	handle := &db.RuntimeHandle{
@@ -1724,6 +1727,9 @@ func refrescarPresupuestoSesionObservadoDesdeSesion(sesion *db.Sesion) (bool, er
 		return false, nil
 	} else if observed != nil && !observed.ObservedAt.IsZero() {
 		return true, persistirPresupuestoSesionObservado(handle, observed)
+	}
+	if budgetRefreshObservationBudget > 0 && time.Since(started) >= budgetRefreshObservationBudget {
+		return false, nil
 	}
 	if observed, err := controlruntime.ObserveCodexArtifacts(obj); err != nil {
 		return false, nil
@@ -2025,12 +2031,16 @@ func objetivoProcesoPresupuestoDesdeHandle(handle *db.RuntimeHandle, metadataJSO
 }
 
 func refrescarPresupuestoHandleDesdeObjetivo(handle *db.RuntimeHandle, agente string, obj controlruntime.ObjetivoProceso) (bool, error) {
+	started := time.Now()
 	observed, err := controlruntime.ObserveCodexProfileStatus(obj)
 	if err != nil {
 		controlPlaneBudgetDebugf("agente=%s codex_profile_status error=%v handle_kind=%s handle_ref=%s", agente, err, strings.TrimSpace(handle.HandleKind), strings.TrimSpace(handle.HandleRef))
 		observed = nil
 	}
 	if observed == nil {
+		if budgetRefreshObservationBudget > 0 && time.Since(started) >= budgetRefreshObservationBudget {
+			return false, nil
+		}
 		observed, err = controlruntime.ObserveCodexArtifacts(obj)
 		if err != nil {
 			controlPlaneBudgetDebugf("agente=%s codex_artifacts error=%v", agente, err)

@@ -11,6 +11,8 @@ import (
 	"orquesta/runtimeagente"
 )
 
+var codexProfileStatusCommandTimeout = 1500 * time.Millisecond
+
 type codexProfileStatusEnvelope struct {
 	Source       string `json:"source"`
 	Profile      string `json:"profile"`
@@ -55,7 +57,11 @@ func ObserveCodexProfileStatus(obj ObjetivoProceso) (*CodexObservedArtifacts, er
 	if !ok {
 		return nil, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	timeout := codexProfileStatusCommandTimeout
+	if timeout <= 0 {
+		timeout = 1500 * time.Millisecond
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, wrapper, profile, "status-json")
 	out, err := cmd.Output()

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -82,6 +83,24 @@ var compactDetailCacheTTL = 2 * time.Second
 var compactDetailStaleWhileRevalidateTTL = 15 * time.Second
 var activeReanimationScheduleCacheTTL = 2 * time.Second
 var activeReanimationScheduleStaleWhileRevalidateTTL = 15 * time.Second
+
+func agentDetailDebugf(format string, args ...any) {
+	if !agentDetailDebugEnabled() {
+		return
+	}
+	log.Printf("orquesta[agentes-detail] "+format, args...)
+}
+
+func agentDetailDebugEnabled() bool {
+	for _, key := range []string{"ORQUESTA_DEBUG_AGENT_DETAIL", "ORQUESTA_DEBUG"} {
+		value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+		switch value {
+		case "1", "true", "yes", "on", "si", "sí":
+			return true
+		}
+	}
+	return false
+}
 
 func NewService(store Store, modelPolicyProvider ModelPolicyProvider) *Service {
 	return &Service{
@@ -890,7 +909,10 @@ func (s *Service) buildOperationalRowContextForAgentCompact(nombre string, now t
 	if nombre == "" {
 		return Row{}, nil, nil, fmt.Errorf("agente obligatorio")
 	}
+	start := time.Now()
+	agentDetailDebugf("compact start agente=%s", nombre)
 
+	stepStart := time.Now()
 	agente, err := s.store.GetAgent(nombre)
 	if err != nil {
 		return Row{}, nil, nil, err
@@ -898,9 +920,11 @@ func (s *Service) buildOperationalRowContextForAgentCompact(nombre string, now t
 	if agente == nil {
 		return Row{}, nil, nil, fmt.Errorf("agente no encontrado: %s", nombre)
 	}
+	agentDetailDebugf("compact step=get_agent agente=%s duration=%s", nombre, time.Since(stepStart).Round(time.Millisecond))
 
 	row := Row{Agente: agente}
 
+	stepStart = time.Now()
 	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{Agente: &nombre})
 	if err != nil {
 		return Row{}, nil, nil, err
@@ -911,7 +935,9 @@ func (s *Service) buildOperationalRowContextForAgentCompact(nombre string, now t
 			break
 		}
 	}
+	agentDetailDebugf("compact step=list_assignments agente=%s count=%d duration=%s", nombre, len(asignaciones), time.Since(stepStart).Round(time.Millisecond))
 
+	stepStart = time.Now()
 	sesion, err := s.store.GetActiveSession(nombre, nil)
 	switch {
 	case err == nil:
@@ -919,13 +945,17 @@ func (s *Service) buildOperationalRowContextForAgentCompact(nombre string, now t
 	case err != sql.ErrNoRows:
 		return Row{}, nil, nil, err
 	}
+	agentDetailDebugf("compact step=get_active_session agente=%s duration=%s", nombre, time.Since(stepStart).Round(time.Millisecond))
 
+	stepStart = time.Now()
 	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{Agente: &nombre})
 	if err != nil {
 		return Row{}, nil, nil, err
 	}
 	row.Runtime = latestRuntimeForAgent(runtimes)
+	agentDetailDebugf("compact step=list_runtimes agente=%s count=%d duration=%s", nombre, len(runtimes), time.Since(stepStart).Round(time.Millisecond))
 
+	stepStart = time.Now()
 	handles, err := s.store.ListCanonicalRuntimeHandles(&nombre)
 	if err != nil {
 		return Row{}, nil, nil, err
@@ -938,6 +968,7 @@ func (s *Service) buildOperationalRowContextForAgentCompact(nombre string, now t
 		}
 		row.Handle = latestHandleForAgent(handles)
 	}
+	agentDetailDebugf("compact step=list_handles agente=%s count=%d duration=%s", nombre, len(handles), time.Since(stepStart).Round(time.Millisecond))
 	if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
 		if view := structured.View(now, time.Minute); view != nil {
 			row.WorkerState = strings.TrimSpace(view.State)
@@ -961,6 +992,7 @@ func (s *Service) buildOperationalRowContextForAgentCompact(nombre string, now t
 		}
 	}
 
+	stepStart = time.Now()
 	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
 	if err != nil {
 		return Row{}, nil, nil, err
@@ -978,8 +1010,10 @@ func (s *Service) buildOperationalRowContextForAgentCompact(nombre string, now t
 			row.OpenTasks++
 		}
 	}
+	agentDetailDebugf("compact step=list_tasks agente=%s count=%d duration=%s", nombre, len(tareas), time.Since(stepStart).Round(time.Millisecond))
 
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
+	agentDetailDebugf("compact done agente=%s duration=%s", nombre, time.Since(start).Round(time.Millisecond))
 	return row, asignaciones, tareas, nil
 }
 
