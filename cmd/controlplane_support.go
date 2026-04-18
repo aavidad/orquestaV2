@@ -4051,7 +4051,15 @@ func sincronizarAutonomiaProyectoTrasResolucionReviewSignalTranscript(gate *revi
 		if err := supervisionService.MarkReviewed(proyectoRef, when); err != nil {
 			return err
 		}
-		return supervisionService.PersistPolicyState(policy, supervisionapp.EstadoAutonomiaProyecto(db.AutonomiaProyectoActiva))
+		if err := supervisionService.PersistPolicyState(policy, supervisionapp.EstadoAutonomiaProyecto(db.AutonomiaProyectoActiva)); err != nil {
+			return err
+		}
+		proyecto, err := proyectoIfExists(strconv.FormatInt(*item.ProyectoID, 10))
+		if err != nil || proyecto == nil {
+			return err
+		}
+		_, err = asegurarSolicitudMergeDesdeGateAprobado(proyecto, gate)
+		return err
 	case reviewapp.GateStateChangesAsked:
 		return supervisionService.PersistPolicyState(policy, supervisionapp.EstadoAutonomiaProyecto(db.AutonomiaProyectoActiva))
 	case reviewapp.GateStateBlocked:

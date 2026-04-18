@@ -23210,6 +23210,127 @@ func TestProcesarRuntimeTranscriptBatchReviewBlockedActualizaEstadoAutonomia(t *
 	}
 }
 
+func TestProcesarRuntimeTranscriptBatchReviewApprovedCreaSolicitudMerge(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexReviewer", "admin"); err != nil {
+		t.Fatalf("registrar reviewer: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		ReviewerAgente:       "CodexReviewer",
+		ReviewRequired:       true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoEsperandoReview,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexReviewer", proyectoID, "review"); err != nil {
+		t.Fatalf("activar asignacion reviewer: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Ultimo frente aprobado",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "CodexReviewer", "abc123"); err != nil {
+		t.Fatalf("completar tarea: %v", err)
+	}
+	worktree, err := db.CoordinationWorktreeSQLRepository{}.Create(&coordinacion.Worktree{
+		ProjectID: proyectoID,
+		TaskID:    &tareaID,
+		Agent:     "CodexReviewer",
+		Name:      "orquestador-codexreviewer-transcript-merge",
+		Path:      filepath.Join(tmp, "wt-transcript-merge"),
+		Branch:    "orq/orquestador/CodexReviewer/transcript-merge",
+		BaseRef:   "master",
+		State:     coordinacion.WorktreeActive,
+		Reason:    "review_approved_transcript",
+	})
+	if err != nil {
+		t.Fatalf("crear worktree activa: %v", err)
+	}
+	gateID, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:     &proyectoID,
+		TareaID:        &tareaID,
+		WorktreeID:     &worktree.ID,
+		RequestedBy:    "orquesta",
+		ReviewerAgente: "CodexReviewer",
+		Estado:         db.ReviewGateEnRevision,
+		SeverityMax:    "high",
+	})
+	if err != nil {
+		t.Fatalf("crear review gate: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexReviewer",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion reviewer: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle reviewer: %+v err=%v", handle, err)
+	}
+	logPath := filepath.Join(tmp, "codex-transcript-review-approved-merge.log")
+	if err := os.WriteFile(logPath, []byte("Review aprobada, merge listo\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	if _, err := procesarRuntimeTranscriptBatch(); err != nil {
+		t.Fatalf("procesar transcript batch: %v", err)
+	}
+
+	gate, err := db.GetReviewGate(gateID)
+	if err != nil {
+		t.Fatalf("get review gate: %v", err)
+	}
+	if gate == nil || gate.Estado != db.ReviewGateAprobado {
+		t.Fatalf("gate aprobado inesperado: %+v", gate)
+	}
+	merges, err := db.ListarGitMerges(&proyectoID, "")
+	if err != nil {
+		t.Fatalf("listar git merges: %v", err)
+	}
+	if len(merges) != 1 {
+		t.Fatalf("debería crear una solicitud de merge al aprobar review por transcript, merges=%+v", merges)
+	}
+	if !strings.Contains(merges[0].MetadataJSON, `"source":"review_gate_approved"`) || !strings.Contains(merges[0].MetadataJSON, `"review_gate":`) {
+		t.Fatalf("merge auto-creada sin metadata esperada: %+v", merges[0])
+	}
+}
+
 func TestProcesarRuntimeTranscriptBatchRegistraEntregaGitActiva(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	repoDir := filepath.Join(tmp, "repo-git-transcript")
