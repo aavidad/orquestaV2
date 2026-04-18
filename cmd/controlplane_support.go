@@ -4625,6 +4625,11 @@ func intentarReasignacionAutomaticaBlockedSignalTranscriptConRows(item *db.Runti
 	} else if abierta {
 		return "", false, nil
 	}
+	if reciente, err := existeRuntimeOrderControlRecienteAutonomia(agente, tarea.ProyectoID, 2*time.Minute, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
+		return "", false, err
+	} else if reciente {
+		return "", false, nil
+	}
 	relevo := seleccionarRelevoAutonomiaBloqueada(rows, openTasksProjected, tarea, agente)
 	if strings.TrimSpace(relevo) == "" {
 		return "", false, nil
@@ -11681,6 +11686,23 @@ func runtimeOrderTieneAccion(order *db.RuntimeOrder, accion string) bool {
 		}
 	}
 	return strings.Contains(strings.ToLower(order.PayloadJSON), fmt.Sprintf(`"accion":"%s"`, accion))
+}
+
+func existeRuntimeOrderControlRecienteAutonomia(agente string, proyectoID *int64, within time.Duration, tipos ...string) (bool, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyectoID == nil || *proyectoID <= 0 || within <= 0 || len(tipos) == 0 {
+		return false, nil
+	}
+	for _, tipo := range tipos {
+		total, err := contarRuntimeOrdersRecientes(agente, proyectoID, strings.TrimSpace(tipo), "", within)
+		if err != nil {
+			return false, err
+		}
+		if total > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func runtimeOrderTimestamp(order *db.RuntimeOrder) time.Time {

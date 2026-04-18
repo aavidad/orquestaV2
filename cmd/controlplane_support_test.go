@@ -20292,6 +20292,167 @@ func TestProcesarRuntimeTranscriptBatchBlockedReasignaSinAutoGuidanceAlOrigen(t 
 	}
 }
 
+func TestProcesarRuntimeTranscriptBatchBlockedConOrdenAbiertaMantieneFallback(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar worker origen: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar relevo: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex2", proyectoID, "programacion"); err != nil {
+		t.Fatalf("activar asignacion relevo: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	}); err != nil {
+		t.Fatalf("iniciar sesion supervisor: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	}); err != nil {
+		t.Fatalf("iniciar sesion relevo: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Frente bloqueado con orden abierta",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion worker: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle worker: %+v err=%v", handle, err)
+	}
+	logPath := filepath.Join(tmp, "codex-transcript-blocked-open-order.log")
+	if err := os.WriteFile(logPath, []byte("blocked on missing project context\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "pause",
+		Estado:      "pendiente",
+		PayloadJSON: `{"motivo":"orden abierta de prueba"}`,
+	}); err != nil {
+		t.Fatalf("crear runtime order abierta: %v", err)
+	}
+	if abierta, err := existeRuntimeOrderAbiertaAutonomia("Codex1", &proyectoID, "pause"); err != nil {
+		t.Fatalf("verificar runtime order abierta: %v", err)
+	} else if !abierta {
+		t.Fatalf("la runtime order abierta debería verse antes del batch")
+	}
+
+	n, err := procesarRuntimeTranscriptBatch()
+	if err != nil {
+		t.Fatalf("procesar transcript batch: %v", err)
+	}
+	if n < 2 {
+		t.Fatalf("esperaba ingestión + señal procesada, got=%d", n)
+	}
+
+	actual, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if actual == nil || actual.Agente == nil || *actual.Agente == "Codex2" {
+		t.Fatalf("la tarea no debería pasar al relevo con orden abierta, tarea=%+v", actual)
+	}
+
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{ProyectoID: &proyectoID, Limit: 20})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	var workerGuide *db.RuntimeOrder
+	var continuation *db.RuntimeOrder
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch {
+		case order.Agente == "Codex1" && order.Tipo == "send_instruction":
+			workerGuide = order
+		case order.Agente == "Codex2" && order.Tipo == "nudge" && strings.Contains(order.PayloadJSON, `"accion":"continuar_trabajo"`):
+			continuation = order
+		}
+	}
+	if workerGuide == nil || !strings.Contains(workerGuide.PayloadJSON, `"classification":"blocked"`) {
+		t.Fatalf("debería mantener auto-guidance al origen en fallback, got=%+v", workerGuide)
+	}
+	if continuation != nil {
+		t.Fatalf("no debería nudgear al relevo con orden abierta, order=%+v", continuation)
+	}
+
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	var blockedTask *db.Tarea
+	for _, tarea := range tareas {
+		if tarea != nil && tarea.Titulo == autonomiaBlockedTaskTitle {
+			blockedTask = tarea
+			break
+		}
+	}
+	if blockedTask == nil {
+		t.Fatalf("debería crear tarea blocked en fallback, tareas=%+v", tareas)
+	}
+}
+
 func TestProcesarRuntimeTranscriptBatchNoGuiaAlWorkerEnRuntimePanic(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
