@@ -21962,6 +21962,119 @@ func TestProcesarRuntimeTranscriptBatchBlockedReasignaSinAutoGuidanceAlOrigen(t 
 	}
 }
 
+func TestProcesarRuntimeTranscriptBatchBlockedReasignadoCierraTareaBlockedExistente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar worker origen: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar relevo: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex2", proyectoID, "programacion"); err != nil {
+		t.Fatalf("activar asignacion relevo: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	}); err != nil {
+		t.Fatalf("iniciar sesion relevo: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Frente bloqueado previo",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	blockedID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      autonomiaBlockedTaskTitle,
+		Descripcion: "Resolver bloqueo previo",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Agente:      ptrString("CodexSupervisor"),
+		Notas:       "autonomia:blocked;transcript:42;agente_origen:Codex1",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea blocked: %v", err)
+	}
+	if err := db.TomarTarea(blockedID, "CodexSupervisor"); err != nil {
+		t.Fatalf("tomar tarea blocked: %v", err)
+	}
+	if err := db.IniciarTarea(blockedID, "CodexSupervisor"); err != nil {
+		t.Fatalf("iniciar tarea blocked: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion worker: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle worker: %+v err=%v", handle, err)
+	}
+	logPath := filepath.Join(tmp, "codex-transcript-blocked-reassign-close.log")
+	if err := os.WriteFile(logPath, []byte("blocked on missing project context\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	if _, err := procesarRuntimeTranscriptBatch(); err != nil {
+		t.Fatalf("procesar transcript batch: %v", err)
+	}
+
+	blockedTask, err := db.GetTarea(blockedID)
+	if err != nil {
+		t.Fatalf("get tarea blocked: %v", err)
+	}
+	if blockedTask == nil || blockedTask.Estado != db.TareaCompletada {
+		t.Fatalf("la tarea blocked previa deberia cerrarse tras reasignación automática: %+v", blockedTask)
+	}
+}
+
 func TestProcesarRuntimeTranscriptBatchBlockedConOrdenAbiertaMantieneFallback(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

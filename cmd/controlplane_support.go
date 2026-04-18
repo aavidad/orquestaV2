@@ -3591,6 +3591,9 @@ func procesarSignalBlocked(item *db.RuntimeTranscriptEntry, agente string, handl
 	if note, reassigned, err := intentarReasignacionAutomaticaBlockedSignalTranscriptDesdeSignal(item); err != nil {
 		return "", err
 	} else if reassigned {
+		if err := cerrarTareasBlockedAutonomiaResueltas(item); err != nil {
+			return "", err
+		}
 		return note, nil
 	}
 	return procesarSignalAutoGuidance(item, agente, handle)
@@ -4979,6 +4982,53 @@ func esTareaBlockedAutonomia(tarea *db.Tarea) bool {
 		return true
 	}
 	return strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:blocked")
+}
+
+func cerrarTareasBlockedAutonomiaResueltas(item *db.RuntimeTranscriptEntry) error {
+	if item == nil || item.ProyectoID == nil || *item.ProyectoID <= 0 {
+		return nil
+	}
+	agente := strings.TrimSpace(agenteSignalTranscript(item))
+	if agente == "" {
+		return nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: item.ProyectoID})
+	if err != nil {
+		return err
+	}
+	marcaAgente := "agente_origen:" + agente
+	commit := fmt.Sprintf("resuelto por reasignación automática tras blocked en %s", agente)
+	for _, candidata := range tareas {
+		if candidata == nil || candidata.ID <= 0 {
+			continue
+		}
+		if !strings.Contains(strings.TrimSpace(candidata.Notas), "autonomia:blocked") {
+			continue
+		}
+		switch candidata.Estado {
+		case db.TareaCompletada, db.TareaCancelada:
+			continue
+		}
+		if !strings.Contains(strings.TrimSpace(candidata.Notas), marcaAgente) {
+			continue
+		}
+		actor := "orquesta"
+		if candidata.Agente != nil && strings.TrimSpace(*candidata.Agente) != "" {
+			actor = strings.TrimSpace(*candidata.Agente)
+		}
+		if candidata.Estado == db.TareaBloqueada {
+			if err := tareasService.Unblock(candidata.ID, actor, commit); err != nil {
+				return err
+			}
+			if err := tareasService.Take(candidata.ID, actor); err != nil {
+				return err
+			}
+		}
+		if err := tareasService.Complete(candidata.ID, actor, commit); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func construirDescripcionTareaBlockedAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyecto, item *db.RuntimeTranscriptEntry) string {
