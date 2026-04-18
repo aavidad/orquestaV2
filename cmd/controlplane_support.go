@@ -3999,6 +3999,9 @@ func resolverEstadoGateSignalTranscript(gate *reviewapp.Gate, estado string, ite
 	if err != nil {
 		return "", err
 	}
+	if err := cancelarNudgesReviewGatePendientesSignalTranscript(resolved, item); err != nil {
+		return "", err
+	}
 	detail := auditarResolucionGateSignalTranscript(resolved.ID, item, estado)
 	emitirNotificacionReviewSignalTranscript(clasificacionSignalTranscript(item), resolved, item, reviewerAgenteSignalTranscript(item))
 	return "review_gate_resolved:" + detail, nil
@@ -4025,6 +4028,46 @@ func auditarResolucionGateSignalTranscript(gateID int64, item *db.RuntimeTranscr
 	detail := detalleResolucionGateSignalTranscript(gateID, item, estado)
 	db.Audit("orquesta", "runtime_transcript_review_resolution", "review_gate", gateID, detail)
 	return detail
+}
+
+func cancelarNudgesReviewGatePendientesSignalTranscript(gate *reviewapp.Gate, item *db.RuntimeTranscriptEntry) error {
+	if gate == nil || gate.ID <= 0 || item == nil || item.ProyectoID == nil || *item.ProyectoID <= 0 {
+		return nil
+	}
+	reviewer := reviewerAgenteSignalTranscript(item)
+	if strings.TrimSpace(reviewer) == "" {
+		return nil
+	}
+	estado := "pendiente"
+	orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
+		Agente:     &reviewer,
+		ProyectoID: item.ProyectoID,
+		Estado:     &estado,
+	})
+	if err != nil {
+		return err
+	}
+	for _, order := range orders {
+		if !runtimeOrderEsNudgeReviewGate(order, gate.ID) {
+			continue
+		}
+		if err := runtimesService.CancelRuntimeOrder(order.ID, "orquesta", fmt.Sprintf("review_gate_%d_resuelto_por_transcript", gate.ID)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runtimeOrderEsNudgeReviewGate(order *db.RuntimeOrder, gateID int64) bool {
+	if order == nil || gateID <= 0 || !strings.EqualFold(strings.TrimSpace(order.Tipo), "nudge") {
+		return false
+	}
+	payload := mapFromJSON(order.PayloadJSON)
+	if !strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "accion")), "ejecutar_review_gate") {
+		return false
+	}
+	gateRef := int64PtrFromMap(payload, "gate_id")
+	return gateRef != nil && *gateRef == gateID
 }
 
 func construirFindingsReviewTranscript(item *db.RuntimeTranscriptEntry) (string, error) {

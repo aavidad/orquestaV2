@@ -23013,6 +23013,22 @@ func TestProcesarRuntimeTranscriptBatchResuelveReviewGateDesdeReviewer(t *testin
 	if err != nil {
 		t.Fatalf("crear review gate: %v", err)
 	}
+	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+	if _, err := encolarNudgeAutonomiaDetallado("CodexReviewer", proyecto, "ejecutar_review_gate", fmt.Sprintf("gate=%d", gateID), "resolver gate ya abierto", map[string]any{"gate_id": gateID}); err != nil {
+		t.Fatalf("encolar nudge review gate: %v", err)
+	}
+	agente := "CodexReviewer"
+	estado := "pendiente"
+	pendientesAntes, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders pendientes iniciales: %v", err)
+	}
+	if len(pendientesAntes) == 0 {
+		t.Fatalf("faltaba nudge review gate pendiente antes de procesar transcript")
+	}
 	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
 		Agente:      "CodexReviewer",
 		ProyectoID:  &proyectoID,
@@ -23053,14 +23069,25 @@ func TestProcesarRuntimeTranscriptBatchResuelveReviewGateDesdeReviewer(t *testin
 	if !strings.Contains(gate.FindingsJSON, `"classification":"review_approved"`) {
 		t.Fatalf("los findings deberían reflejar el transcript que resolvió el gate: %s", gate.FindingsJSON)
 	}
-	agente := "CodexReviewer"
-	estado := "pendiente"
 	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
 	if err != nil {
 		t.Fatalf("listar runtime orders: %v", err)
 	}
 	if len(orders) != 0 {
 		t.Fatalf("no debería dejar nudges o instrucciones pendientes al resolver el gate directamente: %+v", orders)
+	}
+	todas, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Limit: 20})
+	if err != nil {
+		t.Fatalf("listar runtime orders totales: %v", err)
+	}
+	for _, order := range todas {
+		if order == nil || order.Tipo != "nudge" || !strings.Contains(order.PayloadJSON, `"accion":"ejecutar_review_gate"`) {
+			continue
+		}
+		switch strings.TrimSpace(order.Estado) {
+		case "pendiente", "tomada", "ejecutando":
+			t.Fatalf("no debería quedar nudge review gate activo tras resolver el gate directamente: %+v", order)
+		}
 	}
 	var notif *db.EventoNotificacion
 	for {
