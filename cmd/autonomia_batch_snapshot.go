@@ -563,6 +563,23 @@ func (s *autonomiaBatchSnapshot) autonomiaActivoEnProyecto(agente string, proyec
 	return activo, nil
 }
 
+func (s *autonomiaBatchSnapshot) hasOperationalHandle(agente string, proyectoID int64) bool {
+	if s == nil || proyectoID <= 0 {
+		return false
+	}
+	key := agentProjectCacheKey(agente, proyectoID)
+	if key == "|" {
+		return false
+	}
+	if activo, ok := s.activeHandleByAgentProject[key]; ok {
+		return activo
+	}
+	handle := s.hotHandlesByAgentProject[key]
+	activo := handle != nil && db.RuntimeHandleSnapshotIsFresh(handle, 2*time.Minute)
+	s.activeHandleByAgentProject[key] = activo
+	return activo
+}
+
 func agentProjectCacheKey(agente string, proyectoID int64) string {
 	return strings.ToLower(strings.TrimSpace(agente)) + "|" + int64CacheKey(proyectoID)
 }

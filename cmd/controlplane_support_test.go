@@ -4877,6 +4877,140 @@ func TestAutonomiaSessionMaintenanceGateSkipsHeavySessionChecks(t *testing.T) {
 	}
 }
 
+func TestProcesarPrechecksAutonomiaSesionActivaOmiteRecoveryDegradadoConHandleOperativoSnapshot(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	prev := procesarRecuperacionRuntimeDegradadoSesionFn
+	t.Cleanup(func() { procesarRecuperacionRuntimeDegradadoSesionFn = prev })
+
+	called := 0
+	procesarRecuperacionRuntimeDegradadoSesionFn = func(_ *db.Sesion) (int, error) {
+		called++
+		return 1, nil
+	}
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "autonomia-ready",
+		Nombre:  "Autonomia Ready",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	now := time.Now().UTC()
+	sesion := &db.Sesion{Agente: "CodexReady", ProyectoID: &proyectoID, Estado: "activa"}
+	snapshot := &autonomiaBatchSnapshot{
+		agentesByName:              map[string]*db.Agente{},
+		operationalStateByAgent:    map[string]string{},
+		operationalDetailByAgent:   map[string]string{},
+		operationalStateResolved:   map[string]struct{}{},
+		tareasByAgentProject:       map[string][]*db.Tarea{},
+		pendingVotesByAgentProject: map[string][]*db.Propuesta{},
+		openProposalsByProject:     map[int64][]*db.Propuesta{},
+		politicasByProject:         map[int64]*supervisionapp.Policy{},
+		asignacionesByAgent:        map[string][]*db.Asignacion{},
+		asignacionesByProject:      map[int64][]*db.Asignacion{},
+		activeProjectByAgent:       map[string]int64{},
+		activeHandleByAgentProject: map[string]bool{},
+		supervisorByProject:        map[int64]*db.Agente{},
+		supervisorLoaded:           map[int64]struct{}{},
+		pauseByAgent:               map[string]autonomiaBudgetPauseDecision{},
+		bloqueosPorTarea:           map[int64]db.ResumenBloqueo{},
+		proyectosByID: map[int64]*db.Proyecto{
+			proyectoID: {ID: proyectoID, Slug: "autonomia-ready", RutaAbs: filepath.Join(tmp, "orquestador")},
+		},
+		proyectosLoaded: map[int64]struct{}{proyectoID: {}},
+		hotHandlesByAgentProject: map[string]*db.RuntimeHandle{
+			agentProjectCacheKey("CodexReady", proyectoID): {
+				ID:         19,
+				Agente:     "CodexReady",
+				ProyectoID: &proyectoID,
+				Estado:     "activo",
+				LastSeenAt: &now,
+				UpdatedAt:  now,
+				CreatedAt:  now,
+			},
+		},
+	}
+
+	n, err := procesarPrechecksAutonomiaSesionActiva(sesion, snapshot)
+	if err != nil {
+		t.Fatalf("procesarPrechecksAutonomiaSesionActiva: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia actuar con handle operativo en snapshot, got=%d", n)
+	}
+	if called != 0 {
+		t.Fatalf("no deberia invocar recovery degradado, called=%d", called)
+	}
+}
+
+func TestProcesarPrechecksAutonomiaSesionActivaMantieneRecoveryDegradadoSiSesionPausada(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	prev := procesarRecuperacionRuntimeDegradadoSesionFn
+	t.Cleanup(func() { procesarRecuperacionRuntimeDegradadoSesionFn = prev })
+
+	called := 0
+	procesarRecuperacionRuntimeDegradadoSesionFn = func(_ *db.Sesion) (int, error) {
+		called++
+		return 0, nil
+	}
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "autonomia-paused",
+		Nombre:  "Autonomia Paused",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	now := time.Now().UTC()
+	sesion := &db.Sesion{Agente: "CodexPaused", ProyectoID: &proyectoID, Estado: "pausada"}
+	snapshot := &autonomiaBatchSnapshot{
+		agentesByName:              map[string]*db.Agente{},
+		operationalStateByAgent:    map[string]string{},
+		operationalDetailByAgent:   map[string]string{},
+		operationalStateResolved:   map[string]struct{}{},
+		tareasByAgentProject:       map[string][]*db.Tarea{},
+		pendingVotesByAgentProject: map[string][]*db.Propuesta{},
+		openProposalsByProject:     map[int64][]*db.Propuesta{},
+		politicasByProject:         map[int64]*supervisionapp.Policy{},
+		asignacionesByAgent:        map[string][]*db.Asignacion{},
+		asignacionesByProject:      map[int64][]*db.Asignacion{},
+		activeProjectByAgent:       map[string]int64{},
+		activeHandleByAgentProject: map[string]bool{},
+		supervisorByProject:        map[int64]*db.Agente{},
+		supervisorLoaded:           map[int64]struct{}{},
+		pauseByAgent:               map[string]autonomiaBudgetPauseDecision{},
+		bloqueosPorTarea:           map[int64]db.ResumenBloqueo{},
+		proyectosByID: map[int64]*db.Proyecto{
+			proyectoID: {ID: proyectoID, Slug: "autonomia-paused", RutaAbs: filepath.Join(tmp, "orquestador")},
+		},
+		proyectosLoaded: map[int64]struct{}{proyectoID: {}},
+		hotHandlesByAgentProject: map[string]*db.RuntimeHandle{
+			agentProjectCacheKey("CodexPaused", proyectoID): {
+				ID:         20,
+				Agente:     "CodexPaused",
+				ProyectoID: &proyectoID,
+				Estado:     "activo",
+				LastSeenAt: &now,
+				UpdatedAt:  now,
+				CreatedAt:  now,
+			},
+		},
+	}
+
+	if _, err := procesarPrechecksAutonomiaSesionActiva(sesion, snapshot); err != nil {
+		t.Fatalf("procesarPrechecksAutonomiaSesionActiva: %v", err)
+	}
+	if called != 1 {
+		t.Fatalf("deberia mantener recovery degradado para sesion pausada, called=%d", called)
+	}
+}
+
 func TestProcesarDerivacionSemillaPremiumSesionActivaConSnapshotUsaTareaActivaInequivoca(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

@@ -112,6 +112,7 @@ func resetAutonomiaSessionMaintenanceGate() {
 var autonomiaActiveSessionsGate = planocontrol.NewGate()
 var procesarAutonomiaSesionActivaBatchFn = procesarAutonomiaSesionActivaConSnapshot
 var procesarAgentesDegradadosAutonomiaBatchFn = procesarAgentesDegradadosAutonomiaBatch
+var procesarRecuperacionRuntimeDegradadoSesionFn = procesarRecuperacionRuntimeDegradadoSesion
 var autonomiaSessionStepTimeoutOverride time.Duration
 var autonomiaDegradedBatchTimeoutOverride time.Duration
 var autonomiaBatchBudgetOverride time.Duration
@@ -10800,7 +10801,14 @@ func procesarPrechecksAutonomiaSesionActiva(sesion *db.Sesion, snapshot *autonom
 		func() (int, error) { return procesarCierreProyectoSesionConSnapshot(sesion, snapshot) },
 		func() (int, error) { return procesarReanudacionAutonomaSesion(sesion, snapshot) },
 		func() (int, error) { return procesarAparcadoAutonomoSesion(sesion, snapshot) },
-		func() (int, error) { return procesarRecuperacionRuntimeDegradadoSesion(sesion) },
+		func() (int, error) {
+			if snapshot != nil &&
+				!strings.EqualFold(strings.TrimSpace(sesion.Estado), "pausada") &&
+				snapshot.hasOperationalHandle(strings.TrimSpace(sesion.Agente), *sesion.ProyectoID) {
+				return 0, nil
+			}
+			return procesarRecuperacionRuntimeDegradadoSesionFn(sesion)
+		},
 		func() (int, error) { return procesarCompactacionExclusividadPremiumSesionActiva(sesion, snapshot) },
 		func() (int, error) { return procesarRecuperacionTareasBloqueadasSesionActiva(sesion, snapshot) },
 		func() (int, error) { return procesarCompactacionFrentesPremiumSesionActiva(sesion, snapshot) },
