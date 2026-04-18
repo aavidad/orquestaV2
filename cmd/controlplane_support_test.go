@@ -23711,6 +23711,106 @@ func TestProcesarRuntimeTranscriptBatchNeedsReplanResuelveLocalDesdeTareaActiva(
 	}
 }
 
+func TestProcesarRuntimeTranscriptBatchNeedsReplanLocalCierraTareaReplanExistente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar worker: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Cerrar slice útil del control plane",
+		Descripcion: "Cierra el siguiente slice útil del control plane.",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	replanID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      autonomiaReplanTaskTitle,
+		Descripcion: "Resolver needs_replan previo",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Agente:      ptrString("CodexSupervisor"),
+		Notas:       "autonomia:needs_replan;transcript:77;agente_origen:Codex1",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea replan: %v", err)
+	}
+	if err := db.TomarTarea(replanID, "CodexSupervisor"); err != nil {
+		t.Fatalf("tomar tarea replan: %v", err)
+	}
+	if err := db.IniciarTarea(replanID, "CodexSupervisor"); err != nil {
+		t.Fatalf("iniciar tarea replan: %v", err)
+	}
+
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion worker: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle worker: %+v err=%v", handle, err)
+	}
+	logPath := filepath.Join(tmp, "codex-transcript-needs-replan-local-close.log")
+	if err := os.WriteFile(logPath, []byte("no tengo claro el siguiente paso útil\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	if _, err := procesarRuntimeTranscriptBatch(); err != nil {
+		t.Fatalf("procesar transcript batch: %v", err)
+	}
+
+	replanTask, err := db.GetTarea(replanID)
+	if err != nil {
+		t.Fatalf("get tarea replan: %v", err)
+	}
+	if replanTask == nil || replanTask.Estado != db.TareaCompletada {
+		t.Fatalf("la tarea de replan deberia cerrarse al resolver needs_replan localmente: %+v", replanTask)
+	}
+}
+
 func TestAsegurarTareaReplanAutonomiaSignalCreaFrenteParaSupervisor(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

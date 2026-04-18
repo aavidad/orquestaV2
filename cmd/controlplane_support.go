@@ -3567,6 +3567,9 @@ func procesarSignalNeedsReplan(item *db.RuntimeTranscriptEntry, agente string, h
 	if note, handled, err := intentarResolverNeedsReplanSignalTranscript(item); err != nil {
 		return "", err
 	} else if handled {
+		if err := cerrarTareasReplanAutonomiaResueltas(item, agente); err != nil {
+			return "", err
+		}
 		return note, nil
 	}
 	return procesarSignalAutoGuidance(item, agente, handle)
@@ -5138,6 +5141,46 @@ func esTareaReplanAutonomia(tarea *db.Tarea) bool {
 		return true
 	}
 	return strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:needs_replan")
+}
+
+func cerrarTareasReplanAutonomiaResueltas(item *db.RuntimeTranscriptEntry, agente string) error {
+	if item == nil || item.ProyectoID == nil || *item.ProyectoID <= 0 || strings.TrimSpace(agente) == "" {
+		return nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: item.ProyectoID})
+	if err != nil {
+		return err
+	}
+	marcaAgente := "agente_origen:" + strings.TrimSpace(agente)
+	commit := fmt.Sprintf("resuelto por instrucción local a %s tras needs_replan", strings.TrimSpace(agente))
+	for _, candidata := range tareas {
+		if candidata == nil || candidata.ID <= 0 || !esTareaReplanAutonomia(candidata) {
+			continue
+		}
+		switch candidata.Estado {
+		case db.TareaCompletada, db.TareaCancelada:
+			continue
+		}
+		if !strings.Contains(strings.TrimSpace(candidata.Notas), marcaAgente) {
+			continue
+		}
+		actor := "orquesta"
+		if candidata.Agente != nil && strings.TrimSpace(*candidata.Agente) != "" {
+			actor = strings.TrimSpace(*candidata.Agente)
+		}
+		if candidata.Estado == db.TareaBloqueada {
+			if err := tareasService.Unblock(candidata.ID, actor, commit); err != nil {
+				return err
+			}
+			if err := tareasService.Take(candidata.ID, actor); err != nil {
+				return err
+			}
+		}
+		if err := tareasService.Complete(candidata.ID, actor, commit); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func construirDescripcionTareaReplanAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyecto, item *db.RuntimeTranscriptEntry) string {
