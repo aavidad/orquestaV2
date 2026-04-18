@@ -3476,6 +3476,9 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 	if strings.EqualFold(clasificacionSignalTranscript(item), "credentials_request") {
 		return procesarSignalSoloSupervision(item)
 	}
+	if strings.EqualFold(clasificacionSignalTranscript(item), "blocked") {
+		return procesarSignalBlocked(item, agente, handle)
+	}
 	return procesarSignalAutoGuidance(item, agente, handle)
 }
 
@@ -3540,6 +3543,15 @@ func procesarSignalSoloSupervision(item *db.RuntimeTranscriptEntry) (string, err
 	}
 	notes = acumularNotaAutonomia(notes, "signal_supervision_only")
 	return resumenNotasAutonomia(notes), nil
+}
+
+func procesarSignalBlocked(item *db.RuntimeTranscriptEntry, agente string, handle *db.RuntimeHandle) (string, error) {
+	if note, reassigned, err := intentarReasignacionAutomaticaBlockedSignalTranscriptDesdeSignal(item); err != nil {
+		return "", err
+	} else if reassigned {
+		return note, nil
+	}
+	return procesarSignalAutoGuidance(item, agente, handle)
 }
 
 func resolverCooldownRuntimePanicSignal(agente string, item *db.RuntimeTranscriptEntry) (string, error) {
@@ -4492,6 +4504,11 @@ func ejecutarPlanBlockedSignalTranscript(item *db.RuntimeTranscriptEntry, policy
 	if clasificacionSignalTranscript(item) != "blocked" {
 		return "", nil
 	}
+	if note, reassigned, err := intentarReasignacionAutomaticaBlockedSignalTranscript(item, proyecto); err != nil {
+		return "", err
+	} else if reassigned {
+		return note, nil
+	}
 	existe, err := existeTareaBlockedAutonomiaPendiente(proyecto.ID)
 	if err != nil {
 		return "", err
@@ -4551,6 +4568,86 @@ func crearTareaBlockedAutonomiaSignal(policy *supervisionapp.Policy, proyecto *d
 		return 0, err
 	}
 	return id, nil
+}
+
+func intentarReasignacionAutomaticaBlockedSignalTranscript(item *db.RuntimeTranscriptEntry, proyecto *db.Proyecto) (string, bool, error) {
+	if item == nil || proyecto == nil || proyecto.ID <= 0 {
+		return "", false, nil
+	}
+	agente := strings.TrimSpace(agenteSignalTranscript(item))
+	if agente == "" {
+		return "", false, nil
+	}
+	tarea, err := tareaActivaAutonomiaProyectoAgente(agente, &proyecto.ID)
+	if err != nil || tarea == nil {
+		return "", false, err
+	}
+	rows, err := agentesService.BuildPanelRows()
+	if err != nil {
+		return "", false, err
+	}
+	return intentarReasignacionAutomaticaBlockedSignalTranscriptConRows(item, proyecto, tarea, rows, openTasksProjectedFromRows(rows))
+}
+
+func intentarReasignacionAutomaticaBlockedSignalTranscriptDesdeSignal(item *db.RuntimeTranscriptEntry) (string, bool, error) {
+	if item == nil || !runtimeTranscriptTieneProyecto(item) {
+		return "", false, nil
+	}
+	policy, proyecto, err := resolverContextoSignalTranscript(item)
+	if err != nil || !contextoSignalTranscriptActivo(item, policy, proyecto) {
+		return "", false, err
+	}
+	return intentarReasignacionAutomaticaBlockedSignalTranscript(item, proyecto)
+}
+
+func intentarReasignacionAutomaticaBlockedSignalTranscriptConRows(item *db.RuntimeTranscriptEntry, proyecto *db.Proyecto, tarea *db.Tarea, rows []agentesapp.Row, openTasksProjected map[string]int) (string, bool, error) {
+	if item == nil || proyecto == nil || tarea == nil {
+		return "", false, nil
+	}
+	if tarea.ProyectoID == nil || *tarea.ProyectoID <= 0 || proyecto.ID != *tarea.ProyectoID {
+		return "", false, nil
+	}
+	agente := strings.TrimSpace(agenteSignalTranscript(item))
+	if agente == "" || tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), agente) {
+		return "", false, nil
+	}
+	switch tarea.Estado {
+	case db.EstadoAsignada, db.EstadoEnProgreso:
+	default:
+		return "", false, nil
+	}
+	now := time.Now().UTC()
+	if taskManualTakeover(tarea) || degradedTaskRecentlyAutoReassigned(tarea, now) {
+		return "", false, nil
+	}
+	if abierta, err := existeRuntimeOrderAbiertaAutonomia(agente, tarea.ProyectoID, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
+		return "", false, err
+	} else if abierta {
+		return "", false, nil
+	}
+	relevo := seleccionarRelevoAutonomiaBloqueada(rows, openTasksProjected, tarea, agente)
+	if strings.TrimSpace(relevo) == "" {
+		return "", false, nil
+	}
+	nota := fmt.Sprintf("Reasignada automáticamente desde %s a %s: bloqueo detectado por transcript", agente, relevo)
+	if err := reasignarYArrancarTareaAutonomia(tarea.ID, relevo, nota); err != nil {
+		return "", false, err
+	}
+	if err := encolarContinuacionTareaReasignadaSiCorresponde(
+		relevo,
+		tarea.ProyectoID,
+		tarea.ID,
+		agente,
+		"blocked_signal",
+		"continúa con la tarea reasignada tras bloqueo detectado en transcript y deja evidencia de avance",
+		map[string]any{
+			"signal_transcript_id":  idSignalTranscript(item),
+			"signal_classification": clasificacionSignalTranscript(item),
+		},
+	); err != nil {
+		return "", false, err
+	}
+	return fmt.Sprintf("blocked_task_reassigned:%d:%s", tarea.ID, relevo), true, nil
 }
 
 func construirNotasTareaBlockedAutonomiaSignal(item *db.RuntimeTranscriptEntry) string {
