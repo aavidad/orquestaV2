@@ -15566,6 +15566,43 @@ func TestEncolarContinuacionTareaReasignadaSiCorrespondeEscalaFollowupBloqueadoA
 	if tarea == nil || !strings.Contains(strings.ToLower(tarea.Notas), "post-remediation bloqueado") {
 		t.Fatalf("la tarea deberia anotar el bloqueo post-remediation: %+v", tarea)
 	}
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	var blockedFollowupTask *db.Tarea
+	for _, item := range tareas {
+		if item != nil && item.Titulo == autonomiaPostRemediationBlockedTaskTitle {
+			blockedFollowupTask = item
+			break
+		}
+	}
+	if blockedFollowupTask == nil {
+		t.Fatalf("deberia crear tarea explicita de post-remediation bloqueado: %+v", tareas)
+	}
+	if blockedFollowupTask.Agente == nil || *blockedFollowupTask.Agente != "CodexSupervisor" {
+		t.Fatalf("la tarea de post-remediation bloqueado deberia quedar en el supervisor: %+v", blockedFollowupTask)
+	}
+	if !strings.Contains(blockedFollowupTask.Notas, "verification_key:"+verificationKey) {
+		t.Fatalf("la tarea de post-remediation bloqueado deberia conservar verification_key: %+v", blockedFollowupTask)
+	}
+
+	if err := encolarContinuacionTareaReasignadaSiCorresponde("Codex1", &proyectoID, tareaID, "Gemma1", "worker_degradado", "continúa", nil); err != nil {
+		t.Fatalf("segunda continuacion condicionada: %v", err)
+	}
+	tareas, err = db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas segunda vez: %v", err)
+	}
+	countBlockedFollowup := 0
+	for _, item := range tareas {
+		if item != nil && item.Titulo == autonomiaPostRemediationBlockedTaskTitle {
+			countBlockedFollowup++
+		}
+	}
+	if countBlockedFollowup != 1 {
+		t.Fatalf("no deberia duplicar tarea de post-remediation bloqueado, count=%d tareas=%+v", countBlockedFollowup, tareas)
+	}
 }
 
 func TestReasignarYArrancarTareaAutonomiaReasignaIniciaYAnota(t *testing.T) {

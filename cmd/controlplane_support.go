@@ -43,6 +43,7 @@ type dbAutomationService struct{}
 const autonomiaReplanTaskTitle = "Autonomía: replanificar backlog y abrir siguiente frente útil"
 const autonomiaCredentialsTaskTitle = "Autonomía: desbloquear credenciales o acceso externo"
 const autonomiaBlockedTaskTitle = "Autonomía: desbloquear frente bloqueado o preparar relevo"
+const autonomiaPostRemediationBlockedTaskTitle = "Autonomía: resolver follow-up post-remediation bloqueado"
 
 var runtimeBudgetObservationBackgroundGate = planocontrol.NewGate()
 var runtimeHistoricalMaintenanceGate = planocontrol.NewGate()
@@ -4908,6 +4909,109 @@ func construirDescripcionTareaBlockedAutonomia(policy *supervisionapp.Policy, pr
 	}
 	if item != nil && textoSignalTranscript(item) != "" {
 		partes = append(partes, "Señal transcript: "+textoSignalTranscript(item)+".")
+	}
+	if objetivoGeneralAutonomia(policy) != "" {
+		partes = append(partes, "Objetivo general: "+objetivoGeneralAutonomia(policy)+".")
+	}
+	return strings.Join(partes, " ")
+}
+
+func existeTareaPostRemediationBlockedAutonomiaPendiente(proyectoID int64, verificationKey string) (bool, error) {
+	if proyectoID <= 0 || strings.TrimSpace(verificationKey) == "" {
+		return false, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		return false, err
+	}
+	marca := "verification_key:" + strings.TrimSpace(verificationKey)
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaCompletada, db.TareaCancelada:
+			continue
+		}
+		if esTareaPostRemediationBlockedAutonomia(tarea) && strings.Contains(strings.TrimSpace(tarea.Notas), marca) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func crearTareaPostRemediationBlockedAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyecto, supervisor *db.Agente, tareaID int64, agente, verificationKey, detalle, remediationKind string) (int64, error) {
+	if policy == nil || proyecto == nil || supervisor == nil || strings.TrimSpace(nombreAgenteAutonomia(supervisor)) == "" {
+		return 0, nil
+	}
+	id, err := tareasService.Create(tareasapp.CreateTaskInput{
+		Titulo:      autonomiaPostRemediationBlockedTaskTitle,
+		Descripcion: construirDescripcionTareaPostRemediationBlockedAutonomia(policy, proyecto, tareaID, agente, verificationKey, detalle, remediationKind),
+		Modulo:      "autonomia",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Agente:      nombreAgenteAutonomia(supervisor),
+		Proyecto:    proyecto.Slug,
+		Notas:       construirNotasTareaPostRemediationBlockedAutonomia(tareaID, agente, verificationKey, remediationKind),
+	})
+	if err != nil {
+		return 0, err
+	}
+	if err := arrancarTareaAutonomiaSiAsignada(id, nombreAgenteAutonomia(supervisor)); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func construirNotasTareaPostRemediationBlockedAutonomia(tareaID int64, agente, verificationKey, remediationKind string) string {
+	partes := []string{"autonomia:post_remediation_blocked"}
+	if tareaID > 0 {
+		partes = append(partes, fmt.Sprintf("tarea:%d", tareaID))
+	}
+	if strings.TrimSpace(agente) != "" {
+		partes = append(partes, "agente_objetivo:"+strings.TrimSpace(agente))
+	}
+	if strings.TrimSpace(verificationKey) != "" {
+		partes = append(partes, "verification_key:"+strings.TrimSpace(verificationKey))
+	}
+	if strings.TrimSpace(remediationKind) != "" {
+		partes = append(partes, "remediation_kind:"+strings.TrimSpace(remediationKind))
+	}
+	return strings.Join(partes, ";")
+}
+
+func esTareaPostRemediationBlockedAutonomia(tarea *db.Tarea) bool {
+	if tarea == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(tarea.Titulo), autonomiaPostRemediationBlockedTaskTitle) {
+		return true
+	}
+	return strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:post_remediation_blocked")
+}
+
+func construirDescripcionTareaPostRemediationBlockedAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyecto, tareaID int64, agente, verificationKey, detalle, remediationKind string) string {
+	partes := []string{
+		"Orquesta ha detectado que un follow-up post-remediation quedó bloqueado tras una reasignación o reactivación automática.",
+		"Diagnostica si conviene retry con contexto corregido, nueva reasignación, handoff o cambio de frente para evitar un bucle ciego.",
+	}
+	if slugProyectoAutonomia(proyecto) != "" {
+		partes = append(partes, "Proyecto: "+slugProyectoAutonomia(proyecto)+".")
+	}
+	if tareaID > 0 {
+		partes = append(partes, fmt.Sprintf("Tarea afectada: #%d.", tareaID))
+	}
+	if strings.TrimSpace(agente) != "" {
+		partes = append(partes, "Agente objetivo: "+strings.TrimSpace(agente)+".")
+	}
+	if strings.TrimSpace(verificationKey) != "" {
+		partes = append(partes, "Verification key: "+strings.TrimSpace(verificationKey)+".")
+	}
+	if strings.TrimSpace(remediationKind) != "" {
+		partes = append(partes, "Tipo de remediación previa: "+strings.TrimSpace(remediationKind)+".")
+	}
+	if strings.TrimSpace(detalle) != "" {
+		partes = append(partes, "Bloqueo detectado: "+strings.TrimSpace(detalle)+".")
 	}
 	if objetivoGeneralAutonomia(policy) != "" {
 		partes = append(partes, "Objetivo general: "+objetivoGeneralAutonomia(policy)+".")
@@ -12151,6 +12255,13 @@ func escalarContinuacionPostRemediationBloqueada(proyecto *db.Proyecto, tareaID 
 		detalle = "followup_post_remediation_bloqueado"
 	}
 	_ = tareasService.Note(tareaID, "orquesta", fmt.Sprintf("Follow-up post-remediation bloqueado para %s (%s): %s", strings.TrimSpace(agente), strings.TrimSpace(verificationKey), detalle))
+	if existe, err := existeTareaPostRemediationBlockedAutonomiaPendiente(proyecto.ID, verificationKey); err != nil {
+		return err
+	} else if !existe {
+		if _, err := crearTareaPostRemediationBlockedAutonomia(policy, proyecto, supervisor, tareaID, strings.TrimSpace(agente), verificationKey, detalle, strings.TrimSpace(status.RemediationKind)); err != nil {
+			return err
+		}
+	}
 	extras := map[string]any{
 		"tarea_id":                tareaID,
 		"verification_key":        strings.TrimSpace(verificationKey),
