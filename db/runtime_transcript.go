@@ -1064,6 +1064,43 @@ func clasificarTextoTranscript(normalized string) string {
 			return "waiting_human"
 		}
 	}
+	cliQueryPhrases := []string{
+		"que comando",
+		"qué comando",
+		"cual es el comando",
+		"cuál es el comando",
+		"como ejecuto",
+		"cómo ejecuto",
+		"como lanzo",
+		"cómo lanzo",
+		"how do i run",
+		"which command should i run",
+		"what command should i run",
+	}
+	for _, phrase := range cliQueryPhrases {
+		if strings.Contains(normalized, phrase) {
+			return "cli_query"
+		}
+	}
+	credentialsPhrases := []string{
+		"faltan credenciales",
+		"falta credencial",
+		"necesito credenciales",
+		"necesito acceso",
+		"me falta acceso",
+		"missing credentials",
+		"need credentials",
+		"need access",
+		"missing access",
+		"missing api key",
+		"missing oauth",
+		"token missing",
+	}
+	for _, phrase := range credentialsPhrases {
+		if strings.Contains(normalized, phrase) {
+			return "credentials_request"
+		}
+	}
 	blockedPhrases := []string{
 		"bloqueado",
 		"no puedo continuar sin",

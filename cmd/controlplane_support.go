@@ -1344,6 +1344,7 @@ func resolverPoliticaEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry) r
 	classification := clasificacionEntregaRuntimeTranscript(item)
 	switch classification {
 	case "approval_request", "waiting_human", "blocked", "needs_replan",
+		"cli_query", "credentials_request",
 		"ready_for_review", "review_approved", "review_changes_requested", "review_blocked",
 		"runtime_panic", "runtime_crash", "runtime_failure_signal":
 		return runtimeTranscriptEntregaPolitica{Escenario: runtimeTranscriptEntregaEscenarioConsulta}
@@ -1452,7 +1453,7 @@ func runtimeTranscriptTextoPareceFinalizacion(normalized, classification string)
 
 func runtimeTranscriptTextoPareceConsultaCLI(normalized, classification string) bool {
 	switch classification {
-	case "approval_request", "waiting_human", "blocked", "needs_replan":
+	case "approval_request", "waiting_human", "blocked", "needs_replan", "cli_query", "credentials_request":
 		return true
 	}
 	markers := []string{
@@ -4078,6 +4079,10 @@ func coletillaRespuestaSignalTranscript(clasificacion, politicaPermisos string) 
 		return strings.TrimSpace(politicaPermisos) + " Si dudas entre varias opciones seguras, elige la mas alineada con el proyecto y continua sin detenerte."
 	case "waiting_human":
 		return strings.TrimSpace(politicaPermisos) + " No te quedes esperando respuesta: formula el siguiente paso razonable, ejecuta y documenta los supuestos."
+	case "cli_query":
+		return "Si preguntas por un comando o una vía de ejecución, resuélvelo consultando tareas, runtime mailbox, help local y estado vivo del proyecto, y continúa sin detener el flujo."
+	case "credentials_request":
+		return "No inventes credenciales ni esperes indefinidamente: deja trazabilidad del acceso que falta, evita acciones bloqueadas y avanza por otro frente útil si existe."
 	case "ready_for_review":
 		return "Deja un resumen breve, asegurate de que el frente queda verificable y sigue disponible para que Orquesta relance review si procede."
 	case "needs_replan":

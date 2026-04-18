@@ -828,6 +828,8 @@ func TestClasificarTextoTranscriptReconoceReviewYReplan(t *testing.T) {
 		{raw: "thread 'main' panicked at src/ui.rs:1:1", want: "runtime_panic"},
 		{raw: "connection reset by peer", want: "runtime_crash"},
 		{raw: "can i continue refactoring without waiting?", want: "approval_request"},
+		{raw: "¿Qué comando tengo que ejecutar para lanzar los tests?", want: "cli_query"},
+		{raw: "missing credentials for the deploy token", want: "credentials_request"},
 		{raw: "can i continue refactoring without waiting", want: ""},
 	}
 	for _, tc := range cases {
