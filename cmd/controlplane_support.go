@@ -4892,6 +4892,9 @@ func esTareaBlockedAutonomia(tarea *db.Tarea) bool {
 	if strings.EqualFold(strings.TrimSpace(tarea.Titulo), autonomiaBlockedTaskTitle) {
 		return true
 	}
+	if esTareaPostRemediationBlockedAutonomia(tarea) {
+		return true
+	}
 	return strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:blocked")
 }
 
@@ -12255,12 +12258,17 @@ func escalarContinuacionPostRemediationBloqueada(proyecto *db.Proyecto, tareaID 
 		detalle = "followup_post_remediation_bloqueado"
 	}
 	_ = tareasService.Note(tareaID, "orquesta", fmt.Sprintf("Follow-up post-remediation bloqueado para %s (%s): %s", strings.TrimSpace(agente), strings.TrimSpace(verificationKey), detalle))
-	if existe, err := existeTareaPostRemediationBlockedAutonomiaPendiente(proyecto.ID, verificationKey); err != nil {
+	existeTarea, err := existeTareaPostRemediationBlockedAutonomiaPendiente(proyecto.ID, verificationKey)
+	if err != nil {
 		return err
-	} else if !existe {
+	}
+	if !existeTarea {
 		if _, err := crearTareaPostRemediationBlockedAutonomia(policy, proyecto, supervisor, tareaID, strings.TrimSpace(agente), verificationKey, detalle, strings.TrimSpace(status.RemediationKind)); err != nil {
 			return err
 		}
+	}
+	if existeTarea {
+		return nil
 	}
 	extras := map[string]any{
 		"tarea_id":                tareaID,

@@ -15603,6 +15603,19 @@ func TestEncolarContinuacionTareaReasignadaSiCorrespondeEscalaFollowupBloqueadoA
 	if countBlockedFollowup != 1 {
 		t.Fatalf("no deberia duplicar tarea de post-remediation bloqueado, count=%d tareas=%+v", countBlockedFollowup, tareas)
 	}
+	orders, err = db.ListarRuntimeOrders(db.FiltroRuntimeOrders{ProyectoID: &proyectoID, Limit: 20})
+	if err != nil {
+		t.Fatalf("listar runtime orders tras segundo intento: %v", err)
+	}
+	countSupervisorNudges := 0
+	for _, order := range orders {
+		if order != nil && order.Agente == "CodexSupervisor" && order.Tipo == "nudge" && strings.Contains(order.PayloadJSON, `"accion":"resolver_post_remediation_blocked"`) {
+			countSupervisorNudges++
+		}
+	}
+	if countSupervisorNudges != 1 {
+		t.Fatalf("no deberia duplicar nudge al supervisor si ya existe tarea post-remediation, count=%d orders=%+v", countSupervisorNudges, orders)
+	}
 }
 
 func TestReasignarYArrancarTareaAutonomiaReasignaIniciaYAnota(t *testing.T) {
