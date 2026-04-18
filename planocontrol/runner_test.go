@@ -284,21 +284,25 @@ func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
 		t.Fatalf("esperaba trazas de debug")
 	}
 	hasHot := false
+	hasRuntimeHygiene := false
 	hasWarm := false
 	hasCold := false
 	for _, tr := range traces {
 		if strings.Contains(tr, "control_plane_runtime_orders count=%d") {
 			hasHot = true
 		}
+		if strings.Contains(tr, "control_plane_runtime_hygiene count=%d") {
+			hasRuntimeHygiene = true
+		}
 		if strings.Contains(tr, "control_plane_warm autonomia=%d pipeline_local=%d runtime_supervision=%d supervision=%d review=%d") {
 			hasWarm = true
 		}
-		if strings.Contains(tr, "control_plane_cold handles_stale=%d orders_stale=%d runtime_hygiene=%d") {
+		if strings.Contains(tr, "control_plane_cold handles_stale=%d orders_stale=%d") {
 			hasCold = true
 		}
 	}
-	if !hasHot || !hasWarm || !hasCold {
-		t.Fatalf("faltan trazas de carriles hot=%v warm=%v cold=%v: %+v", hasHot, hasWarm, hasCold, traces)
+	if !hasHot || !hasRuntimeHygiene || !hasWarm || !hasCold {
+		t.Fatalf("faltan trazas de carriles hot=%v runtime_hygiene=%v warm=%v cold=%v: %+v", hasHot, hasRuntimeHygiene, hasWarm, hasCold, traces)
 	}
 }
 
@@ -310,6 +314,8 @@ func TestRunnerRunControlPlaneWarmDrenaCarrilHotSiGeneraTrabajo(t *testing.T) {
 		processedCount: 3,
 	}
 	r := &Runner{Automation: service}
+	r.registerBatch("control_plane_runtime_mailbox")
+	r.registerBatch("control_plane_runtime_orders")
 
 	r.runControlPlaneWarm()
 
@@ -342,6 +348,7 @@ func TestRunnerRunControlPlaneWarmSeReinyectaSiQuedaTrabajoPendiente(t *testing.
 		Automation:                  service,
 		ControlPlaneWarmRequeueCada: time.Millisecond,
 	}
+	r.registerBatch("control_plane_warm")
 	r.runControlPlaneWarm()
 	select {
 	case <-r.batchWakeChannel("control_plane_warm"):
@@ -356,6 +363,7 @@ func TestRunnerRunControlPlaneWarmNoSeReinyectaSinTrabajoPendiente(t *testing.T)
 		Automation:                  service,
 		ControlPlaneWarmRequeueCada: time.Millisecond,
 	}
+	r.registerBatch("control_plane_warm")
 	r.runControlPlaneWarm()
 	select {
 	case <-r.batchWakeChannel("control_plane_warm"):
@@ -439,14 +447,16 @@ func TestRunnerStartResidentCoreNoLanzaTrabajoNoResidente(t *testing.T) {
 		processedCount: 1,
 		autonomyCount:  1,
 		staleCount:     1,
+		hygieneCount:   1,
 	}
 	r := &Runner{
-		Automation:        service,
-		StartupGrace:      5 * time.Millisecond,
-		ReanimacionCada:   time.Hour,
-		SaludCada:         time.Hour,
-		PlanificacionCada: time.Hour,
-		RuntimeOrdersCada: 10 * time.Millisecond,
+		Automation:         service,
+		StartupGrace:       5 * time.Millisecond,
+		ReanimacionCada:    time.Hour,
+		SaludCada:          time.Hour,
+		PlanificacionCada:  time.Hour,
+		RuntimeOrdersCada:  10 * time.Millisecond,
+		RuntimeHygieneCada: 10 * time.Millisecond,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	r.StartResidentCore(ctx)
@@ -458,6 +468,9 @@ func TestRunnerStartResidentCoreNoLanzaTrabajoNoResidente(t *testing.T) {
 	if !strings.Contains(audits, "runtime_orders_batch|runtime_order|Órdenes procesadas en batch: 1") {
 		t.Fatalf("faltaba el trabajo caliente del núcleo residente: %s", audits)
 	}
+	if !strings.Contains(audits, "runtime_hygiene_batch|runtime|Deuda historica de runtime purgada: 1") {
+		t.Fatalf("faltaba runtime_hygiene en el núcleo residente: %s", audits)
+	}
 	if strings.Contains(audits, "autonomia_agentes_batch|") || strings.Contains(audits, "runtime_handles_stale|") {
 		t.Fatalf("el núcleo residente no debería lanzar trabajo no residente: %s", audits)
 	}
@@ -468,6 +481,7 @@ func TestRunnerStartRuntimeCoreSoloLanzaCarrilRuntime(t *testing.T) {
 		processedCount:  1,
 		transcriptCount: 1,
 		mailboxCount:    1,
+		hygieneCount:    1,
 		autonomyCount:   1,
 	}
 	r := &Runner{
@@ -479,6 +493,7 @@ func TestRunnerStartRuntimeCoreSoloLanzaCarrilRuntime(t *testing.T) {
 		RuntimeOrdersCada:     10 * time.Millisecond,
 		RuntimeTranscriptCada: 10 * time.Millisecond,
 		RuntimeMailboxCada:    10 * time.Millisecond,
+		RuntimeHygieneCada:    10 * time.Millisecond,
 		RuntimeBudgetCada:     10 * time.Millisecond,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -496,6 +511,9 @@ func TestRunnerStartRuntimeCoreSoloLanzaCarrilRuntime(t *testing.T) {
 	}
 	if !strings.Contains(audits, "runtime_mailbox_batch|runtime_mailbox|Mailbox runtime procesado: 1") {
 		t.Fatalf("faltaba runtime_mailbox en el carril runtime: %s", audits)
+	}
+	if !strings.Contains(audits, "runtime_hygiene_batch|runtime|Deuda historica de runtime purgada: 1") {
+		t.Fatalf("faltaba runtime_hygiene en el carril runtime: %s", audits)
 	}
 	if strings.Contains(audits, "autonomia_agentes_batch|") || strings.Contains(audits, "reanimar_agente|") {
 		t.Fatalf("el carril runtime no deberia lanzar autonomia ni reanimaciones: %s", audits)

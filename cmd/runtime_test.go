@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"orquesta/db"
-	"orquesta/planocontrol"
 )
 
 func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
@@ -715,9 +714,6 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 
 func TestWakeControlPlaneRuntimeMailboxReseteaThrottleDeReevaluacion(t *testing.T) {
 	resetRuntimeMailboxReevaluationGate()
-	runner := &planocontrol.Runner{}
-	unregister := registerActiveControlPlaneRunner(runner)
-	defer unregister()
 
 	if !runtimeMailboxShouldReevaluate("session_resume", 41, 33) {
 		t.Fatalf("primer intento deberia permitirse")

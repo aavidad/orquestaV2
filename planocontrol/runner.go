@@ -66,6 +66,7 @@ type Runner struct {
 	RuntimeTranscriptCada       time.Duration
 	RuntimeMailboxCada          time.Duration
 	RuntimeOrdersCada           time.Duration
+	RuntimeHygieneCada          time.Duration
 	RuntimeBudgetCada           time.Duration
 	NotificationRetryCada       time.Duration
 	BatchTimeout                time.Duration
@@ -103,8 +104,9 @@ func (r *Runner) Start(ctx context.Context) {
 }
 
 // StartRuntimeCore arranca solo el carril runtime imprescindible para
-// orquestación básica: orders, transcript, mailbox, observación de presupuesto
-// y notificaciones. Excluye reanimaciones, salud, planificación y warm/cold.
+// orquestación básica: orders, transcript, mailbox, higiene ligera,
+// observación de presupuesto y notificaciones. Excluye reanimaciones,
+// salud, planificación y warm/cold.
 func (r *Runner) StartRuntimeCore(ctx context.Context) {
 	if r == nil || r.Automation == nil {
 		return
@@ -112,6 +114,7 @@ func (r *Runner) StartRuntimeCore(ctx context.Context) {
 	r.startLoopAfter(ctx, "control_plane_runtime_orders", r.runtimeOrdersCada(), 0, r.runControlPlaneRuntimeOrders)
 	r.startLoopAfter(ctx, "control_plane_runtime_transcript", r.runtimeTranscriptCada(), r.runtimeTranscriptStartupDelay(), r.runControlPlaneRuntimeTranscript)
 	r.startLoopAfter(ctx, "control_plane_runtime_mailbox", r.runtimeMailboxCada(), 20*time.Second, r.runControlPlaneRuntimeMailbox)
+	r.startLoopAfter(ctx, "control_plane_runtime_hygiene", r.runtimeHygieneCada(), r.runtimeHygieneStartupDelay(), r.runControlPlaneRuntimeHygiene)
 	r.startLoopAfter(ctx, "control_plane_runtime_budget", r.runtimeBudgetCada(), 30*time.Second, r.runControlPlaneBudget)
 	r.startNotificationLoop(ctx)
 }
@@ -406,6 +409,7 @@ func (r *Runner) runControlPlane() {
 	r.runControlPlaneRuntimeTranscript()
 	r.runControlPlaneRuntimeMailbox()
 	r.runControlPlaneRuntimeOrders()
+	r.runControlPlaneRuntimeHygiene()
 	r.runControlPlaneBudget()
 	r.runControlPlaneWarm()
 	r.runControlPlaneCold()
@@ -468,6 +472,23 @@ func (r *Runner) runControlPlaneBudget() {
 		r.Automation.ProcesarPresupuestoSesionObservadoBatch,
 	)
 	r.debugf("control_plane_runtime_budget count=%d", count)
+}
+
+func (r *Runner) runControlPlaneRuntimeHygiene() {
+	count := r.runControlPlaneBatch(
+		"runtime_hygiene",
+		"runtime",
+		"runtime_hygiene_batch",
+		"runtime_hygiene_batch_error",
+		"runtime_hygiene_batch_panic",
+		"Deuda historica de runtime purgada: %d",
+		r.Automation.ProcesarRuntimeHygieneBatch,
+	)
+	if count > 0 {
+		r.WakeRuntimeOrders()
+		r.WakeRuntimeMailbox()
+	}
+	r.debugf("control_plane_runtime_hygiene count=%d", count)
 }
 
 // runControlPlaneWarm: gestión — autonomia, supervision, review, handoffs, merges, refineria.
@@ -558,7 +579,7 @@ func (r *Runner) runControlPlaneWarm() {
 	r.scheduleWarmFollowUpIfPending()
 }
 
-// runControlPlaneCold: limpieza — stale handles, stale orders, hygiene.
+// runControlPlaneCold: reconciliación pesada — stale handles y stale orders.
 func (r *Runner) runControlPlaneCold() {
 	stale := r.runControlPlaneBatch(
 		"handles_stale",
@@ -578,17 +599,8 @@ func (r *Runner) runControlPlaneCold() {
 		"Órdenes recuperadas por stale: %d",
 		r.Automation.ReconciliarRuntimeOrdersStale,
 	)
-	hygiene := r.runControlPlaneBatch(
-		"runtime_hygiene",
-		"runtime",
-		"runtime_hygiene_batch",
-		"runtime_hygiene_batch_error",
-		"runtime_hygiene_batch_panic",
-		"Deuda historica de runtime purgada: %d",
-		r.Automation.ProcesarRuntimeHygieneBatch,
-	)
-	r.debugf("control_plane_cold handles_stale=%d orders_stale=%d runtime_hygiene=%d",
-		stale, recovered, hygiene)
+	r.debugf("control_plane_cold handles_stale=%d orders_stale=%d",
+		stale, recovered)
 }
 
 func (r *Runner) safeLoopCall(name string, fn func()) {
@@ -783,6 +795,20 @@ func (r *Runner) runtimeOrdersCada() time.Duration {
 		return r.applySafeFloor(r.controlPlaneCada(), 30*time.Second)
 	}
 	return r.applySafeFloor(r.RuntimeOrdersCada, 30*time.Second)
+}
+
+func (r *Runner) runtimeHygieneCada() time.Duration {
+	if r.RuntimeHygieneCada <= 0 {
+		return 10 * time.Minute
+	}
+	return r.applySafeFloor(r.RuntimeHygieneCada, time.Minute)
+}
+
+func (r *Runner) runtimeHygieneStartupDelay() time.Duration {
+	if r.RuntimeHygieneCada > 0 || r.ControlPlaneCada > 0 {
+		return 0
+	}
+	return time.Minute
 }
 
 func (r *Runner) runtimeBudgetCada() time.Duration {
