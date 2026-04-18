@@ -3999,7 +3999,7 @@ func resolverEstadoGateSignalTranscript(gate *reviewapp.Gate, estado string, ite
 	if err != nil {
 		return "", err
 	}
-	if err := cancelarNudgesReviewGatePendientesSignalTranscript(resolved, item); err != nil {
+	if err := sincronizarAutonomiaProyectoTrasResolucionReviewSignalTranscript(resolved, item); err != nil {
 		return "", err
 	}
 	detail := auditarResolucionGateSignalTranscript(resolved.ID, item, estado)
@@ -4030,44 +4030,35 @@ func auditarResolucionGateSignalTranscript(gateID int64, item *db.RuntimeTranscr
 	return detail
 }
 
-func cancelarNudgesReviewGatePendientesSignalTranscript(gate *reviewapp.Gate, item *db.RuntimeTranscriptEntry) error {
-	if gate == nil || gate.ID <= 0 || item == nil || item.ProyectoID == nil || *item.ProyectoID <= 0 {
+func sincronizarAutonomiaProyectoTrasResolucionReviewSignalTranscript(gate *reviewapp.Gate, item *db.RuntimeTranscriptEntry) error {
+	if gate == nil || item == nil || item.ProyectoID == nil || *item.ProyectoID <= 0 {
 		return nil
 	}
-	reviewer := reviewerAgenteSignalTranscript(item)
-	if strings.TrimSpace(reviewer) == "" {
-		return nil
-	}
-	estado := "pendiente"
-	orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
-		Agente:     &reviewer,
-		ProyectoID: item.ProyectoID,
-		Estado:     &estado,
-	})
-	if err != nil {
+	proyectoRef, err := proyectoRefSignalTranscript(item)
+	if err != nil || strings.TrimSpace(proyectoRef) == "" {
 		return err
 	}
-	for _, order := range orders {
-		if !runtimeOrderEsNudgeReviewGate(order, gate.ID) {
-			continue
+	policy, err := supervisionService.GetProjectPolicy(proyectoRef)
+	if err != nil || policy == nil {
+		return err
+	}
+	switch strings.TrimSpace(gate.Estado) {
+	case reviewapp.GateStateApproved:
+		when := time.Now().UTC()
+		if gate.ResolvedAt != nil {
+			when = gate.ResolvedAt.UTC()
 		}
-		if err := runtimesService.CancelRuntimeOrder(order.ID, "orquesta", fmt.Sprintf("review_gate_%d_resuelto_por_transcript", gate.ID)); err != nil {
+		if err := supervisionService.MarkReviewed(proyectoRef, when); err != nil {
 			return err
 		}
+		return supervisionService.PersistPolicyState(policy, supervisionapp.EstadoAutonomiaProyecto(db.AutonomiaProyectoActiva))
+	case reviewapp.GateStateChangesAsked:
+		return supervisionService.PersistPolicyState(policy, supervisionapp.EstadoAutonomiaProyecto(db.AutonomiaProyectoActiva))
+	case reviewapp.GateStateBlocked:
+		return supervisionService.PersistPolicyState(policy, supervisionapp.EstadoAutonomiaProyecto(db.AutonomiaProyectoEsperandoHumano))
+	default:
+		return nil
 	}
-	return nil
-}
-
-func runtimeOrderEsNudgeReviewGate(order *db.RuntimeOrder, gateID int64) bool {
-	if order == nil || gateID <= 0 || !strings.EqualFold(strings.TrimSpace(order.Tipo), "nudge") {
-		return false
-	}
-	payload := mapFromJSON(order.PayloadJSON)
-	if !strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "accion")), "ejecutar_review_gate") {
-		return false
-	}
-	gateRef := int64PtrFromMap(payload, "gate_id")
-	return gateRef != nil && *gateRef == gateID
 }
 
 func construirFindingsReviewTranscript(item *db.RuntimeTranscriptEntry) (string, error) {

@@ -23013,22 +23013,6 @@ func TestProcesarRuntimeTranscriptBatchResuelveReviewGateDesdeReviewer(t *testin
 	if err != nil {
 		t.Fatalf("crear review gate: %v", err)
 	}
-	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
-	if err != nil || proyecto == nil {
-		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
-	}
-	if _, err := encolarNudgeAutonomiaDetallado("CodexReviewer", proyecto, "ejecutar_review_gate", fmt.Sprintf("gate=%d", gateID), "resolver gate ya abierto", map[string]any{"gate_id": gateID}); err != nil {
-		t.Fatalf("encolar nudge review gate: %v", err)
-	}
-	agente := "CodexReviewer"
-	estado := "pendiente"
-	pendientesAntes, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
-	if err != nil {
-		t.Fatalf("listar runtime orders pendientes iniciales: %v", err)
-	}
-	if len(pendientesAntes) == 0 {
-		t.Fatalf("faltaba nudge review gate pendiente antes de procesar transcript")
-	}
 	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
 		Agente:      "CodexReviewer",
 		ProyectoID:  &proyectoID,
@@ -23069,25 +23053,15 @@ func TestProcesarRuntimeTranscriptBatchResuelveReviewGateDesdeReviewer(t *testin
 	if !strings.Contains(gate.FindingsJSON, `"classification":"review_approved"`) {
 		t.Fatalf("los findings deberían reflejar el transcript que resolvió el gate: %s", gate.FindingsJSON)
 	}
-	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	policy, err := db.GetProyectoAutonomia(proyectoID)
 	if err != nil {
-		t.Fatalf("listar runtime orders: %v", err)
+		t.Fatalf("get proyecto autonomia: %v", err)
 	}
-	if len(orders) != 0 {
-		t.Fatalf("no debería dejar nudges o instrucciones pendientes al resolver el gate directamente: %+v", orders)
+	if policy == nil || policy.EstadoAutonomia != db.AutonomiaProyectoActiva {
+		t.Fatalf("la autonomía debería volver a activa tras review aprobada: %+v", policy)
 	}
-	todas, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Limit: 20})
-	if err != nil {
-		t.Fatalf("listar runtime orders totales: %v", err)
-	}
-	for _, order := range todas {
-		if order == nil || order.Tipo != "nudge" || !strings.Contains(order.PayloadJSON, `"accion":"ejecutar_review_gate"`) {
-			continue
-		}
-		switch strings.TrimSpace(order.Estado) {
-		case "pendiente", "tomada", "ejecutando":
-			t.Fatalf("no debería quedar nudge review gate activo tras resolver el gate directamente: %+v", order)
-		}
+	if policy.LastReviewAt == nil {
+		t.Fatalf("la review aprobada debería registrar last_review_at: %+v", policy)
 	}
 	var notif *db.EventoNotificacion
 	for {
@@ -23117,6 +23091,108 @@ reviewNotificationsChecked:
 	}
 	if !strings.Contains(notif.Texto, "Review aprobada") {
 		t.Fatalf("runtime_review sin texto util: %+v", notif)
+	}
+}
+
+func TestProcesarRuntimeTranscriptBatchReviewBlockedActualizaEstadoAutonomia(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexReviewer", "admin"); err != nil {
+		t.Fatalf("registrar reviewer: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		ReviewerAgente:       "CodexReviewer",
+		ReviewRequired:       true,
+		EstadoAutonomia:      db.AutonomiaProyectoEsperandoReview,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexReviewer", proyectoID, "review"); err != nil {
+		t.Fatalf("activar asignacion reviewer: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Cerrar review bloqueada",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "CodexReviewer", "abc123"); err != nil {
+		t.Fatalf("completar tarea: %v", err)
+	}
+	gateID, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:     &proyectoID,
+		TareaID:        &tareaID,
+		RequestedBy:    "orquesta",
+		ReviewerAgente: "CodexReviewer",
+		Estado:         db.ReviewGateEnRevision,
+		SeverityMax:    "high",
+	})
+	if err != nil {
+		t.Fatalf("crear review gate: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexReviewer",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion reviewer: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle reviewer: %+v err=%v", handle, err)
+	}
+	logPath := filepath.Join(tmp, "codex-transcript-review-blocked.log")
+	if err := os.WriteFile(logPath, []byte("Review bloqueada por dependencia externa\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	if _, err := procesarRuntimeTranscriptBatch(); err != nil {
+		t.Fatalf("procesar transcript batch: %v", err)
+	}
+
+	gate, err := db.GetReviewGate(gateID)
+	if err != nil {
+		t.Fatalf("get review gate: %v", err)
+	}
+	if gate == nil || gate.Estado != db.ReviewGateBloqueado {
+		t.Fatalf("el review gate debería quedar bloqueado, gate=%+v", gate)
+	}
+	policy, err := db.GetProyectoAutonomia(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto autonomia: %v", err)
+	}
+	if policy == nil || policy.EstadoAutonomia != db.AutonomiaProyectoEsperandoHumano {
+		t.Fatalf("la autonomía debería pasar a esperando_humano tras review bloqueada: %+v", policy)
 	}
 }
 
