@@ -10,6 +10,7 @@ package cmd
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -109,6 +110,7 @@ var procesarAutonomiaSesionActivaBatchFn = procesarAutonomiaSesionActivaConSnaps
 var procesarAgentesDegradadosAutonomiaBatchFn = procesarAgentesDegradadosAutonomiaBatch
 var autonomiaSessionStepTimeoutOverride time.Duration
 var autonomiaDegradedBatchTimeoutOverride time.Duration
+var autonomiaBatchBudgetOverride time.Duration
 
 var autonomiaIdleAutoassignGate = planocontrol.NewThrottler()
 
@@ -148,9 +150,9 @@ func autonomiaSessionStepTimeout() time.Duration {
 	if autonomiaSessionStepTimeoutOverride > 0 {
 		return autonomiaSessionStepTimeoutOverride
 	}
-	seconds := controlPlaneConfigIntOrDefault("autonomia_session_step_timeout_seconds", 20)
+	seconds := controlPlaneConfigIntOrDefault("autonomia_session_step_timeout_seconds", 3)
 	if seconds <= 0 {
-		seconds = 20
+		seconds = 3
 	}
 	return time.Duration(seconds) * time.Second
 }
@@ -159,11 +161,36 @@ func autonomiaDegradedBatchTimeout() time.Duration {
 	if autonomiaDegradedBatchTimeoutOverride > 0 {
 		return autonomiaDegradedBatchTimeoutOverride
 	}
-	seconds := controlPlaneConfigIntOrDefault("autonomia_degraded_batch_timeout_seconds", 20)
+	seconds := controlPlaneConfigIntOrDefault("autonomia_degraded_batch_timeout_seconds", 3)
 	if seconds <= 0 {
-		seconds = 20
+		seconds = 3
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+func autonomiaBatchBudget() time.Duration {
+	if autonomiaBatchBudgetOverride > 0 {
+		return autonomiaBatchBudgetOverride
+	}
+	seconds := controlPlaneConfigIntOrDefault("autonomia_batch_budget_seconds", 3)
+	if seconds <= 0 {
+		seconds = 3
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+type autonomiaTimeoutError struct {
+	label   string
+	timeout time.Duration
+}
+
+func (e autonomiaTimeoutError) Error() string {
+	return fmt.Sprintf("%s timeout tras %s", strings.TrimSpace(e.label), e.timeout)
+}
+
+func esAutonomiaTimeoutError(err error) bool {
+	var target autonomiaTimeoutError
+	return errors.As(err, &target)
 }
 
 func pipelineLocalDispatchInterval() time.Duration {
@@ -8030,6 +8057,7 @@ func valorID(id *int64) int64 {
 
 func procesarAutonomiaAgentesBatch() (int, error) {
 	start := time.Now()
+	budget := autonomiaBatchBudget()
 	activa := true
 	sessionsStart := time.Now()
 	sesiones, err := sesionesAPIService.ListInspectionSessions(db.FiltroSesionesInspeccion{Activa: &activa})
@@ -8046,9 +8074,14 @@ func procesarAutonomiaAgentesBatch() (int, error) {
 	autonomiaTickDebugf("snapshot agentes=%d duration=%s", len(snapshot.agentesByName), time.Since(snapshotStart).Round(time.Millisecond))
 	procesadas := 0
 	sesionesProcesadas := 0
+	stopAfterSessionTimeout := false
 	for _, sesion := range sesiones {
 		if sesion == nil {
 			continue
+		}
+		if budget > 0 && time.Since(start) >= budget {
+			autonomiaTickDebugf("batch_budget agotado=%s sesiones_procesadas=%d acciones=%d", budget, sesionesProcesadas, procesadas)
+			break
 		}
 		agente := strings.TrimSpace(sesion.Agente)
 		if agente == "" {
@@ -8062,11 +8095,27 @@ func procesarAutonomiaAgentesBatch() (int, error) {
 		)
 		if err != nil {
 			db.Audit("server", "autonomia_agente_error", "agente", 0, fmt.Sprintf("agente=%s error=%s", agente, err.Error()))
+			if esAutonomiaTimeoutError(err) {
+				autonomiaTickDebugf("agente=%s proyecto_id=%d stop_on_timeout duration=%s", agente, valorProyectoID(sesion.ProyectoID), time.Since(sesionStart).Round(time.Millisecond))
+				stopAfterSessionTimeout = true
+				break
+			}
 			continue
 		}
 		procesadas += n
 		sesionesProcesadas++
 		autonomiaTickDebugf("agente=%s proyecto_id=%d duration=%s procesadas=%d", agente, valorProyectoID(sesion.ProyectoID), time.Since(sesionStart).Round(time.Millisecond), n)
+	}
+	if stopAfterSessionTimeout || (budget > 0 && time.Since(start) >= budget) {
+		if stopAfterSessionTimeout {
+			autonomiaTickDebugf("batch_omite_degradados=timeout_sesion sesiones_procesadas=%d acciones=%d", sesionesProcesadas, procesadas)
+		} else {
+			autonomiaTickDebugf("batch_budget omite_degradados=%s sesiones_procesadas=%d acciones=%d", budget, sesionesProcesadas, procesadas)
+		}
+		if procesadas > 0 {
+			resetStatusSnapshotCache()
+		}
+		return procesadas, nil
 	}
 	degradadosStart := time.Now()
 	n, err := ejecutarPasoAutonomiaConTimeout(
@@ -8184,7 +8233,7 @@ func ejecutarPasoAutonomiaConTimeout(etiqueta string, timeout time.Duration, fn 
 	case out := <-done:
 		return out.count, out.err
 	case <-time.After(timeout):
-		return 0, fmt.Errorf("%s timeout tras %s", strings.TrimSpace(etiqueta), timeout)
+		return 0, autonomiaTimeoutError{label: etiqueta, timeout: timeout}
 	}
 }
 

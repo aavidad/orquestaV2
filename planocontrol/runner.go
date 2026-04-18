@@ -76,8 +76,26 @@ type Runner struct {
 	activeBatches               map[string]struct{}
 	nextBatchToken              uint64
 	warmLaneActive              atomic.Bool
+	warmPhase                   atomic.Uint32
 	warmRequeue                 *Throttler
 	wg                          sync.WaitGroup
+}
+
+type NonResidentWorkerOptions struct {
+	Warm              bool
+	Cold              bool
+	NotificationRetry bool
+}
+
+func (o NonResidentWorkerOptions) withDefaults() NonResidentWorkerOptions {
+	if !o.Warm && !o.Cold && !o.NotificationRetry {
+		return NonResidentWorkerOptions{
+			Warm:              true,
+			Cold:              true,
+			NotificationRetry: true,
+		}
+	}
+	return o
 }
 
 type runningBatchState struct {
@@ -155,14 +173,25 @@ func (r *Runner) startNotificationLoop(ctx context.Context) {
 // StartNonResidentWorker arranca el trabajo periódico pesado que no forma parte
 // del núcleo residente mínimo, pero sigue viviendo bajo el mismo daemon.
 func (r *Runner) StartNonResidentWorker(ctx context.Context) {
+	r.StartNonResidentWorkerWithOptions(ctx, NonResidentWorkerOptions{})
+}
+
+func (r *Runner) StartNonResidentWorkerWithOptions(ctx context.Context, opts NonResidentWorkerOptions) {
 	if r == nil || r.Automation == nil {
 		return
 	}
+	opts = opts.withDefaults()
 	r.debugf("runner non_resident warm=%s cold=%s notification_retry=%s",
 		r.controlPlaneWarmCada(), r.controlPlaneColdCada(), r.notificationRetryCada())
-	r.startLoop(ctx, "control_plane_warm", r.controlPlaneWarmCada(), r.runControlPlaneWarm)
-	r.startLoop(ctx, "control_plane_cold", r.controlPlaneColdCada(), r.runControlPlaneCold)
-	r.startLoop(ctx, "notification_retry", r.notificationRetryCada(), r.runNotificationRetry)
+	if opts.Warm {
+		r.startLoop(ctx, "control_plane_warm", r.controlPlaneWarmCada(), r.runControlPlaneWarm)
+	}
+	if opts.Cold {
+		r.startLoop(ctx, "control_plane_cold", r.controlPlaneColdCada(), r.runControlPlaneCold)
+	}
+	if opts.NotificationRetry {
+		r.startLoop(ctx, "notification_retry", r.notificationRetryCada(), r.runNotificationRetry)
+	}
 }
 
 func (r *Runner) startLoop(ctx context.Context, name string, each time.Duration, fn func()) {
@@ -498,81 +527,105 @@ func (r *Runner) runControlPlaneWarm() {
 		return
 	}
 	defer r.warmLaneActive.Store(false)
-	autonomia := r.runControlPlaneBatch(
-		"autonomia",
-		"agente",
-		"autonomia_agentes_batch",
-		"autonomia_agentes_error",
-		"autonomia_agentes_panic",
-		"Decisiones autónomas procesadas: %d",
-		r.Automation.ProcesarAutonomiaAgentesBatch,
+	type warmBatch struct {
+		name       string
+		entity     string
+		auditOK    string
+		auditErr   string
+		auditPanic string
+		successFmt string
+		fn         func() (int, error)
+	}
+	batches := []warmBatch{
+		{
+			name:       "autonomia",
+			entity:     "agente",
+			auditOK:    "autonomia_agentes_batch",
+			auditErr:   "autonomia_agentes_error",
+			auditPanic: "autonomia_agentes_panic",
+			successFmt: "Decisiones autónomas procesadas: %d",
+			fn:         r.Automation.ProcesarAutonomiaAgentesBatch,
+		},
+		{
+			name:       "pipeline_local",
+			entity:     "proyecto",
+			auditOK:    "pipeline_local_batch",
+			auditErr:   "pipeline_local_batch_error",
+			auditPanic: "pipeline_local_batch_panic",
+			successFmt: "Pasos de pipeline local procesados: %d",
+			fn:         r.Automation.ProcesarPipelineLocalBatch,
+		},
+		{
+			name:       "runtime_supervision",
+			entity:     "runtime_handle",
+			auditOK:    "runtime_supervision_batch",
+			auditErr:   "runtime_supervision_error",
+			auditPanic: "runtime_supervision_panic",
+			successFmt: "Supervisiones de runtime procesadas: %d",
+			fn:         r.Automation.ProcesarRuntimeSupervisionBatch,
+		},
+		{
+			name:       "supervision",
+			entity:     "proyecto",
+			auditOK:    "supervision_autonoma_batch",
+			auditErr:   "supervision_autonoma_error",
+			auditPanic: "supervision_autonoma_panic",
+			successFmt: "Supervisiones autónomas procesadas: %d",
+			fn:         r.Automation.ProcesarSupervisionAutonomaBatch,
+		},
+		{
+			name:       "review",
+			entity:     "review_gate",
+			auditOK:    "review_gates_batch",
+			auditErr:   "review_gates_error",
+			auditPanic: "review_gates_panic",
+			successFmt: "Review gates procesados: %d",
+			fn:         r.Automation.ProcesarReviewGatesBatch,
+		},
+		{
+			name:       "git_merges",
+			entity:     "git_merge",
+			auditOK:    "git_merges_batch",
+			auditErr:   "git_merges_batch_error",
+			auditPanic: "git_merges_batch_panic",
+			successFmt: "Solicitudes de merge procesadas: %d",
+			fn:         r.Automation.ProcesarGitMergesBatch,
+		},
+		{
+			name:       "refineria",
+			entity:     "refineria_solicitud",
+			auditOK:    "refineria_batch",
+			auditErr:   "refineria_batch_error",
+			auditPanic: "refineria_batch_panic",
+			successFmt: "Solicitudes de refinería procesadas: %d",
+			fn:         r.Automation.ProcesarRefineriaBatch,
+		},
+		{
+			name:       "handoffs",
+			entity:     "agente",
+			auditOK:    "handoff_batch",
+			auditErr:   "handoff_batch_error",
+			auditPanic: "handoff_batch_panic",
+			successFmt: "Handoffs automáticos procesados: %d",
+			fn:         r.Automation.ProcesarHandoffsBatch,
+		},
+	}
+	idx := 0
+	if len(batches) > 0 {
+		idx = int((r.warmPhase.Add(1) - 1) % uint32(len(batches)))
+	}
+	selected := batches[idx]
+	count := r.runControlPlaneBatch(
+		selected.name,
+		selected.entity,
+		selected.auditOK,
+		selected.auditErr,
+		selected.auditPanic,
+		selected.successFmt,
+		selected.fn,
 	)
-	pipelineLocal := r.runControlPlaneBatch(
-		"pipeline_local",
-		"proyecto",
-		"pipeline_local_batch",
-		"pipeline_local_batch_error",
-		"pipeline_local_batch_panic",
-		"Pasos de pipeline local procesados: %d",
-		r.Automation.ProcesarPipelineLocalBatch,
-	)
-	supervision := r.runControlPlaneBatch(
-		"runtime_supervision",
-		"runtime_handle",
-		"runtime_supervision_batch",
-		"runtime_supervision_error",
-		"runtime_supervision_panic",
-		"Supervisiones de runtime procesadas: %d",
-		r.Automation.ProcesarRuntimeSupervisionBatch,
-	)
-	supervisionAutonoma := r.runControlPlaneBatch(
-		"supervision",
-		"proyecto",
-		"supervision_autonoma_batch",
-		"supervision_autonoma_error",
-		"supervision_autonoma_panic",
-		"Supervisiones autónomas procesadas: %d",
-		r.Automation.ProcesarSupervisionAutonomaBatch,
-	)
-	review := r.runControlPlaneBatch(
-		"review",
-		"review_gate",
-		"review_gates_batch",
-		"review_gates_error",
-		"review_gates_panic",
-		"Review gates procesados: %d",
-		r.Automation.ProcesarReviewGatesBatch,
-	)
-	merged := r.runControlPlaneBatch(
-		"git_merges",
-		"git_merge",
-		"git_merges_batch",
-		"git_merges_batch_error",
-		"git_merges_batch_panic",
-		"Solicitudes de merge procesadas: %d",
-		r.Automation.ProcesarGitMergesBatch,
-	)
-	refined := r.runControlPlaneBatch(
-		"refineria",
-		"refineria_solicitud",
-		"refineria_batch",
-		"refineria_batch_error",
-		"refineria_batch_panic",
-		"Solicitudes de refinería procesadas: %d",
-		r.Automation.ProcesarRefineriaBatch,
-	)
-	handoffs := r.runControlPlaneBatch(
-		"handoffs",
-		"agente",
-		"handoff_batch",
-		"handoff_batch_error",
-		"handoff_batch_panic",
-		"Handoffs automáticos procesados: %d",
-		r.Automation.ProcesarHandoffsBatch,
-	)
-	r.debugf("control_plane_warm autonomia=%d pipeline_local=%d runtime_supervision=%d supervision=%d review=%d git_merges=%d refineria=%d handoffs=%d",
-		autonomia, pipelineLocal, supervision, supervisionAutonoma, review, merged, refined, handoffs)
-	if autonomia > 0 || pipelineLocal > 0 || supervision > 0 || supervisionAutonoma > 0 || review > 0 || merged > 0 || refined > 0 || handoffs > 0 {
+	r.debugf("control_plane_warm phase=%s count=%d", selected.name, count)
+	if count > 0 {
 		r.WakeRuntimeMailbox()
 		r.WakeRuntimeOrders()
 	}
@@ -859,8 +912,7 @@ func (r *Runner) scheduleWarmFollowUpIfPending() {
 	if !r.warmRequeueGate().Allow("control_plane_warm", r.controlPlaneWarmRequeueCada()) {
 		return
 	}
-	r.debugf("control_plane_warm follow_up_pending=%s", strings.TrimSpace(detail))
-	r.WakeBatch("control_plane_warm")
+	r.debugf("control_plane_warm follow_up_pending=%s deferred_until_next_tick=%s", strings.TrimSpace(detail), r.controlPlaneWarmCada())
 }
 
 func (r *Runner) startupGrace() time.Duration {

@@ -91,6 +91,9 @@ func TestLoadUnifiedServerRuntimeOptionsDefaults(t *testing.T) {
 		"ORQUESTA_SERVER_CORE_ONLY",
 		"ORQUESTA_SERVER_DISABLE_NONRESIDENT_WORKER",
 		"ORQUESTA_SERVER_DISABLE_AUTOBOOTSTRAP",
+		"ORQUESTA_SERVER_DISABLE_WARM_WORKER",
+		"ORQUESTA_SERVER_DISABLE_COLD_WORKER",
+		"ORQUESTA_SERVER_DISABLE_NOTIFICATION_RETRY",
 	} {
 		t.Setenv(key, "")
 	}
@@ -100,6 +103,9 @@ func TestLoadUnifiedServerRuntimeOptionsDefaults(t *testing.T) {
 	}
 	if got.DisableAutobootstrap {
 		t.Fatalf("DisableAutobootstrap no deberia activarse por defecto")
+	}
+	if got.DisableWarmWorker || got.DisableColdWorker || got.DisableNotificationRetry {
+		t.Fatalf("los carriles no residentes no deberian desactivarse por defecto: %+v", got)
 	}
 }
 
@@ -112,6 +118,9 @@ func TestLoadUnifiedServerRuntimeOptionsCoreOnlyDesactivaWarmYAutobootstrap(t *t
 	if !got.DisableAutobootstrap {
 		t.Fatalf("DisableAutobootstrap deberia activarse con core-only")
 	}
+	if !got.DisableWarmWorker || !got.DisableColdWorker || !got.DisableNotificationRetry {
+		t.Fatalf("core-only deberia apagar todos los carriles no residentes: %+v", got)
+	}
 }
 
 func TestLoadUnifiedServerRuntimeOptionsAceptaFlagsSeparadas(t *testing.T) {
@@ -123,6 +132,30 @@ func TestLoadUnifiedServerRuntimeOptionsAceptaFlagsSeparadas(t *testing.T) {
 	}
 	if !got.DisableAutobootstrap {
 		t.Fatalf("DisableAutobootstrap deberia activarse con ORQUESTA_SERVER_DISABLE_AUTOBOOTSTRAP")
+	}
+	if !got.DisableWarmWorker || !got.DisableColdWorker || !got.DisableNotificationRetry {
+		t.Fatalf("DisableNonResidentWorker deberia apagar todos los carriles no residentes: %+v", got)
+	}
+}
+
+func TestLoadUnifiedServerRuntimeOptionsAceptaFlagsGranularesNoResidentes(t *testing.T) {
+	t.Setenv("ORQUESTA_SERVER_DISABLE_WARM_WORKER", "1")
+	t.Setenv("ORQUESTA_SERVER_DISABLE_NOTIFICATION_RETRY", "yes")
+	got := loadUnifiedServerRuntimeOptions()
+	if got.CoreOnly {
+		t.Fatalf("flags granulares no deberian forzar core-only")
+	}
+	if !got.DisableWarmWorker {
+		t.Fatalf("DisableWarmWorker deberia activarse")
+	}
+	if got.DisableColdWorker {
+		t.Fatalf("DisableColdWorker no deberia activarse")
+	}
+	if !got.DisableNotificationRetry {
+		t.Fatalf("DisableNotificationRetry deberia activarse")
+	}
+	if got.DisableAutobootstrap {
+		t.Fatalf("DisableAutobootstrap no deberia activarse por flags granulares")
 	}
 }
 

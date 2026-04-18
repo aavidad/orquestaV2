@@ -21,13 +21,17 @@ import (
 
 	"orquesta/db"
 	"orquesta/internal/rpclocal"
+	"orquesta/planocontrol"
 )
 
 var listenServerTCP = net.Listen
 
 type unifiedServerRuntimeOptions struct {
-	CoreOnly             bool
-	DisableAutobootstrap bool
+	CoreOnly                 bool
+	DisableAutobootstrap     bool
+	DisableWarmWorker        bool
+	DisableColdWorker        bool
+	DisableNotificationRetry bool
 }
 
 type unifiedServerHTTPTimeouts struct {
@@ -170,7 +174,12 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 		// transcript, mailbox y observación de presupuesto.
 		runner.StartRuntimeCore(controlCtx)
 	} else {
-		runner.Start(controlCtx)
+		runner.StartResidentCore(controlCtx)
+		runner.StartNonResidentWorkerWithOptions(controlCtx, planocontrol.NonResidentWorkerOptions{
+			Warm:              !runtimeOptions.DisableWarmWorker,
+			Cold:              !runtimeOptions.DisableColdWorker,
+			NotificationRetry: !runtimeOptions.DisableNotificationRetry,
+		})
 	}
 	if !runtimeOptions.DisableAutobootstrap {
 		launchBootstrapServerAutonomy(controlCtx, debugLogger)
@@ -204,9 +213,15 @@ func loadUnifiedServerRuntimeOptions() unifiedServerRuntimeOptions {
 	coreOnly := envBoolServidorUnificado("ORQUESTA_SERVER_CORE_ONLY") ||
 		envBoolServidorUnificado("ORQUESTA_SERVER_DISABLE_NONRESIDENT_WORKER")
 	disableAutobootstrap := coreOnly || envBoolServidorUnificado("ORQUESTA_SERVER_DISABLE_AUTOBOOTSTRAP")
+	disableWarmWorker := coreOnly || envBoolServidorUnificado("ORQUESTA_SERVER_DISABLE_WARM_WORKER")
+	disableColdWorker := coreOnly || envBoolServidorUnificado("ORQUESTA_SERVER_DISABLE_COLD_WORKER")
+	disableNotificationRetry := coreOnly || envBoolServidorUnificado("ORQUESTA_SERVER_DISABLE_NOTIFICATION_RETRY")
 	return unifiedServerRuntimeOptions{
-		CoreOnly:             coreOnly,
-		DisableAutobootstrap: disableAutobootstrap,
+		CoreOnly:                 coreOnly,
+		DisableAutobootstrap:     disableAutobootstrap,
+		DisableWarmWorker:        disableWarmWorker,
+		DisableColdWorker:        disableColdWorker,
+		DisableNotificationRetry: disableNotificationRetry,
 	}
 }
 

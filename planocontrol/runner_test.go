@@ -339,7 +339,7 @@ func TestRunnerRunControlPlaneWarmDrenaCarrilHotSiGeneraTrabajo(t *testing.T) {
 	}
 }
 
-func TestRunnerRunControlPlaneWarmSeReinyectaSiQuedaTrabajoPendiente(t *testing.T) {
+func TestRunnerRunControlPlaneWarmNoSeEncadenaSiQuedaTrabajoPendiente(t *testing.T) {
 	service := &stubAutomationService{
 		pendingWork:       true,
 		pendingWorkDetail: "proyecto=orquestador tareas=libre",
@@ -352,8 +352,8 @@ func TestRunnerRunControlPlaneWarmSeReinyectaSiQuedaTrabajoPendiente(t *testing.
 	r.runControlPlaneWarm()
 	select {
 	case <-r.batchWakeChannel("control_plane_warm"):
+		t.Fatal("no deberia encadenar control_plane_warm inmediatamente")
 	default:
-		t.Fatal("deberia reinyectar control_plane_warm cuando queda trabajo orquestable")
 	}
 }
 
@@ -725,6 +725,62 @@ func TestRunnerStartNonResidentWorkerNoLanzaNucleoResidente(t *testing.T) {
 	}
 	if strings.Contains(audits, "runtime_orders_batch|") {
 		t.Fatalf("el worker no residente no debería lanzar el núcleo caliente: %s", audits)
+	}
+}
+
+func TestRunnerStartNonResidentWorkerWithOptionsPermiteAislarWarm(t *testing.T) {
+	service := &stubAutomationService{
+		processedCount: 1,
+		autonomyCount:  1,
+	}
+	r := &Runner{
+		Automation:            service,
+		StartupGrace:          5 * time.Millisecond,
+		ControlPlaneWarmCada:  10 * time.Millisecond,
+		ControlPlaneColdCada:  10 * time.Millisecond,
+		NotificationRetryCada: 10 * time.Millisecond,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.StartNonResidentWorkerWithOptions(ctx, NonResidentWorkerOptions{
+		Warm:              true,
+		Cold:              false,
+		NotificationRetry: false,
+	})
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+	r.Wait()
+
+	audits := strings.Join(service.audits, "\n")
+	if !strings.Contains(audits, "autonomia_agentes_batch|agente|Decisiones autónomas procesadas: 1") {
+		t.Fatalf("faltaba el carril warm: %s", audits)
+	}
+	if strings.Contains(audits, "runtime_handles_stale|") || strings.Contains(audits, "runtime_orders_stale|") {
+		t.Fatalf("no deberia lanzar cold: %s", audits)
+	}
+	if strings.Contains(audits, "notification_retry|") {
+		t.Fatalf("no deberia lanzar notification_retry: %s", audits)
+	}
+}
+
+func TestRunnerWarmRotaUnaFasePorInvocacion(t *testing.T) {
+	service := &stubAutomationService{
+		autonomyCount: 1,
+		pipelineCount: 2,
+	}
+	r := &Runner{Automation: service}
+
+	r.runControlPlaneWarm()
+	r.runControlPlaneWarm()
+
+	audits := strings.Join(service.audits, "\n")
+	if !strings.Contains(audits, "autonomia_agentes_batch|agente|Decisiones autónomas procesadas: 1") {
+		t.Fatalf("faltaba fase autonomia: %s", audits)
+	}
+	if !strings.Contains(audits, "pipeline_local_batch|proyecto|Pasos de pipeline local procesados: 2") {
+		t.Fatalf("faltaba fase pipeline_local: %s", audits)
+	}
+	if strings.Count(audits, "autonomia_agentes_batch|agente|Decisiones autónomas procesadas: 1") != 1 {
+		t.Fatalf("autonomia no deberia repetirse en dos invocaciones consecutivas: %s", audits)
 	}
 }
 

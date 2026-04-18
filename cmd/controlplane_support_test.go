@@ -7061,7 +7061,7 @@ func TestResolverProyectoAutoasignacionDesdeAsignacionPausadaPrefierePremiumReac
 	}
 }
 
-func TestProcesarAutonomiaAgentesBatchTimeoutSesionNoBloqueaDegradados(t *testing.T) {
+func TestProcesarAutonomiaAgentesBatchTimeoutSesionCortaBatchParaEvitarContencion(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
@@ -7109,8 +7109,8 @@ func TestProcesarAutonomiaAgentesBatchTimeoutSesionNoBloqueaDegradados(t *testin
 	if _, err := procesarAutonomiaAgentesBatch(); err != nil {
 		t.Fatalf("procesar autonomia batch: %v", err)
 	}
-	if degradadosLlamados != 1 {
-		t.Fatalf("el batch de degradados deberia ejecutarse aunque una sesion timeout, got=%d", degradadosLlamados)
+	if degradadosLlamados != 0 {
+		t.Fatalf("el batch de degradados no deberia ejecutarse tras timeout para evitar contencion, got=%d", degradadosLlamados)
 	}
 }
 
