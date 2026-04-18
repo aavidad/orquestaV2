@@ -13298,7 +13298,7 @@ func TestProcesarRuntimeOrdersBatchAutonomiaContinuarTrabajoTMUXSessionResumeAce
 		ProyectoID:  &proyectoID,
 		HandleID:    &handle.ID,
 		Tipo:        "send_instruction",
-		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","accion":"continuar_trabajo","texto":"sigue con el siguiente slice util","mailbox_id":%d,"mailbox_kind":"autonomia","external_session_id":"sess-codex1-autonomia-activity"}`, mailboxID),
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","accion":"continuar_trabajo","texto":"sigue con el siguiente slice util","mailbox_id":%d,"mailbox_kind":"autonomia","external_session_id":"sess-codex1-autonomia-activity","post_remediation":true,"remediation_kind":"reassign","verification_key":"reassign:41:Codex0:Codex1","origin_agent":"Codex0","tarea_id":41}`, mailboxID),
 	})
 	if err != nil {
 		t.Fatalf("encolar send_instruction: %v", err)
@@ -13308,11 +13308,16 @@ func TestProcesarRuntimeOrdersBatchAutonomiaContinuarTrabajoTMUXSessionResumeAce
 		t.Fatalf("get send order: %v", err)
 	}
 	if err := retenerRuntimeOrderSendInstructionNotificada(order, map[string]any{
-		"to_agente":    "Codex1",
-		"accion":       "continuar_trabajo",
-		"texto":        "sigue con el siguiente slice util",
-		"mailbox_id":   mailboxID,
-		"mailbox_kind": "autonomia",
+		"to_agente":        "Codex1",
+		"accion":           "continuar_trabajo",
+		"texto":            "sigue con el siguiente slice util",
+		"mailbox_id":       mailboxID,
+		"mailbox_kind":     "autonomia",
+		"post_remediation": true,
+		"remediation_kind": "reassign",
+		"verification_key": "reassign:41:Codex0:Codex1",
+		"origin_agent":     "Codex0",
+		"tarea_id":         int64(41),
 	}, "session_resume dispatch pending receipt", deliveredAt); err != nil {
 		t.Fatalf("retenerRuntimeOrderSendInstructionNotificada: %v", err)
 	}
@@ -13350,6 +13355,17 @@ func TestProcesarRuntimeOrdersBatchAutonomiaContinuarTrabajoTMUXSessionResumeAce
 	if !strings.Contains(sendOrder.ResultadoJSON, `"receipt_source":"tmux_pane_activity"`) {
 		t.Fatalf("resultado sin receipt_source tmux_pane_activity: %s", sendOrder.ResultadoJSON)
 	}
+	for _, fragment := range []string{
+		`"post_remediation":true`,
+		`"remediation_kind":"reassign"`,
+		`"verification_key":"reassign:41:Codex0:Codex1"`,
+		`"origin_agent":"Codex0"`,
+		`"tarea_id":41`,
+	} {
+		if !strings.Contains(sendOrder.ResultadoJSON, fragment) {
+			t.Fatalf("resultado sin %s: %s", fragment, sendOrder.ResultadoJSON)
+		}
+	}
 	if strings.Contains(sendOrder.ResultadoJSON, `"receipt_source":"last_output"`) {
 		t.Fatalf("autonomia tmux session_resume no deberia cerrarse por last_output: %s", sendOrder.ResultadoJSON)
 	}
@@ -13359,6 +13375,80 @@ func TestProcesarRuntimeOrdersBatchAutonomiaContinuarTrabajoTMUXSessionResumeAce
 	}
 	if msg.Estado != "consumido" {
 		t.Fatalf("mailbox deberia quedar consumido tras actividad de pane: %+v", msg)
+	}
+}
+
+func TestRetenerRuntimeOrderSendInstructionNotificadaPreservaTrackingPostRemediation(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir working dir: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: workingDir,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","texto":"sigue","verification_key":"reassign:41:Codex0:Codex1"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","accion":"continuar_trabajo","mailbox_id":%d,"mailbox_kind":"autonomia","post_remediation":true,"remediation_kind":"reassign","verification_key":"reassign:41:Codex0:Codex1","origin_agent":"Codex0","tarea_id":41}`, mailboxID),
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get send order: %v", err)
+	}
+	notifiedAt := time.Now().UTC()
+	if err := retenerRuntimeOrderSendInstructionNotificada(order, map[string]any{
+		"to_agente":        "Codex1",
+		"accion":           "continuar_trabajo",
+		"mailbox_id":       mailboxID,
+		"mailbox_kind":     "autonomia",
+		"post_remediation": true,
+		"remediation_kind": "reassign",
+		"verification_key": "reassign:41:Codex0:Codex1",
+		"origin_agent":     "Codex0",
+		"tarea_id":         int64(41),
+	}, "waiting receipt", notifiedAt); err != nil {
+		t.Fatalf("retenerRuntimeOrderSendInstructionNotificada: %v", err)
+	}
+	order, err = GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	for _, fragment := range []string{
+		`"dispatch_state":"notified"`,
+		`"post_remediation":true`,
+		`"remediation_kind":"reassign"`,
+		`"verification_key":"reassign:41:Codex0:Codex1"`,
+		`"origin_agent":"Codex0"`,
+		`"tarea_id":41`,
+	} {
+		if !strings.Contains(order.ResultadoJSON, fragment) {
+			t.Fatalf("resultado notificado sin %s: %s", fragment, order.ResultadoJSON)
+		}
 	}
 }
 

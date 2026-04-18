@@ -7975,6 +7975,39 @@ func runtimeOrderSendInstructionTexto(payload map[string]any) string {
 	return instruction
 }
 
+func runtimeOrderSendInstructionTrackingResult(payload map[string]any) map[string]any {
+	if payload == nil {
+		return nil
+	}
+	out := map[string]any{}
+	if mailboxKind := strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")); mailboxKind != "" {
+		out["mailbox_kind"] = mailboxKind
+	}
+	if accion := strings.TrimSpace(stringFromMap(payload, "accion", "")); accion != "" {
+		out["accion"] = accion
+	}
+	if !boolFromMap(payload, "post_remediation") {
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	}
+	out["post_remediation"] = true
+	if verificationKey := strings.TrimSpace(stringFromMap(payload, "verification_key", "")); verificationKey != "" {
+		out["verification_key"] = verificationKey
+	}
+	if remediationKind := strings.TrimSpace(stringFromMap(payload, "remediation_kind", "")); remediationKind != "" {
+		out["remediation_kind"] = remediationKind
+	}
+	if originAgent := strings.TrimSpace(stringFromMap(payload, "origin_agent", "")); originAgent != "" {
+		out["origin_agent"] = originAgent
+	}
+	if taskID := int64FromAny(payload["tarea_id"]); taskID > 0 {
+		out["tarea_id"] = taskID
+	}
+	return out
+}
+
 func runtimeOrderSendInstructionEsMicroprogramacion(payload map[string]any) bool {
 	if payload == nil {
 		return false
@@ -8225,6 +8258,7 @@ func reencolarRuntimeOrderSendInstructionAt(order *RuntimeOrder, payload map[str
 		"retry_after":          nextAttempt.Format(time.RFC3339Nano),
 		"deferred_reason":      reason,
 	})
+	resultado = mergeRuntimeOrderResultJSON(resultado, runtimeOrderSendInstructionTrackingResult(payload))
 	_, err := DB.Exec(`
 		UPDATE runtime_orders
 		SET estado = 'pendiente',
@@ -8291,6 +8325,7 @@ func retenerRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, pay
 		"delivery_state":  "queued",
 		"retry_after":     nextAttempt.Format(time.RFC3339Nano),
 	})
+	resultado = mergeRuntimeOrderResultJSON(resultado, runtimeOrderSendInstructionTrackingResult(payload))
 	_, err = DB.Exec(`
 		UPDATE runtime_orders
 		SET payload_json = ?,
@@ -8350,6 +8385,7 @@ func retenerRuntimeOrderSendInstructionNotificada(order *RuntimeOrder, payload m
 		"receipt_source":       "",
 		"retry_after":          nextAttempt.Format(time.RFC3339Nano),
 	})
+	resultado = mergeRuntimeOrderResultJSON(resultado, runtimeOrderSendInstructionTrackingResult(payload))
 	_, err = DB.Exec(`
 		UPDATE runtime_orders
 		SET estado = 'pendiente',
@@ -8416,6 +8452,7 @@ func completarRuntimeOrderSendInstructionEntregadaPorReceipt(order *RuntimeOrder
 		"delivery_receipt_at": receiptAt.Format(time.RFC3339Nano),
 		"receipt_source":      receiptSource,
 	})
+	resultado = mergeRuntimeOrderResultJSON(resultado, runtimeOrderSendInstructionTrackingResult(payload))
 	if err := MarcarRuntimeOrderEstado(order.ID, "completada", resultado, ""); err != nil {
 		return err
 	}
@@ -8444,6 +8481,7 @@ func fallarRuntimeOrderSendInstructionPorBloqueoAgente(order *RuntimeOrder, payl
 		"delivery_receipt_at": blockedAt.Format(time.RFC3339Nano),
 		"receipt_source":      "transcript_blocked",
 	})
+	resultado = mergeRuntimeOrderResultJSON(resultado, runtimeOrderSendInstructionTrackingResult(payload))
 	if err := MarcarRuntimeOrderEstado(order.ID, "fallida", resultado, detalle); err != nil {
 		return err
 	}
