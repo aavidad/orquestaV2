@@ -4061,12 +4061,72 @@ func sincronizarAutonomiaProyectoTrasResolucionReviewSignalTranscript(gate *revi
 		_, err = asegurarSolicitudMergeDesdeGateAprobado(proyecto, gate)
 		return err
 	case reviewapp.GateStateChangesAsked:
-		return supervisionService.PersistPolicyState(policy, supervisionapp.EstadoAutonomiaProyecto(db.AutonomiaProyectoActiva))
+		if err := supervisionService.PersistPolicyState(policy, supervisionapp.EstadoAutonomiaProyecto(db.AutonomiaProyectoActiva)); err != nil {
+			return err
+		}
+		proyecto, err := proyectoIfExists(strconv.FormatInt(*item.ProyectoID, 10))
+		if err != nil || proyecto == nil {
+			return err
+		}
+		return encolarCorreccionReviewTrasCambiosPedidosSignalTranscript(policy, proyecto, gate)
 	case reviewapp.GateStateBlocked:
 		return supervisionService.PersistPolicyState(policy, supervisionapp.EstadoAutonomiaProyecto(db.AutonomiaProyectoEsperandoHumano))
 	default:
 		return nil
 	}
+}
+
+func encolarCorreccionReviewTrasCambiosPedidosSignalTranscript(policy *supervisionapp.Policy, proyecto *db.Proyecto, gate *reviewapp.Gate) error {
+	if policy == nil || proyecto == nil || gate == nil {
+		return nil
+	}
+	corrector, err := seleccionarAgenteCorreccionReview(proyecto.ID, policy, strings.TrimSpace(gate.ReviewerAgente))
+	if err != nil || corrector == nil {
+		return err
+	}
+	if pendiente, err := existeRuntimeOrderAutonomiaPendiente(corrector.Nombre, &proyecto.ID, "nudge", "resolver_review_feedback"); err != nil {
+		return err
+	} else if pendiente {
+		return nil
+	}
+	reopened, err := reviewService.Update(reviewapp.UpdateGateInput{
+		ID:     gate.ID,
+		Estado: reviewapp.GateStateInReview,
+	})
+	if err != nil {
+		return err
+	}
+	gate = reopened
+	contexto, resumenCtx := db.BuildProjectContextSummary(corrector.Nombre, proyecto)
+	inputJSON, decisionJSON := construirPayloadCicloAutonomia(policy, proyecto, corrector, contexto, "review_feedback", map[string]any{
+		"accion":   "resolver_review_feedback",
+		"gate_id":  gate.ID,
+		"reviewer": strings.TrimSpace(gate.ReviewerAgente),
+		"motivo":   "review solicitó cambios",
+	})
+	instruction := construirInstruccionCorreccionReview(policy, proyecto, corrector.Nombre, gate)
+	if encolada, err := encolarNudgeAutonomiaDetallado(corrector.Nombre, proyecto, "resolver_review_feedback", fmt.Sprintf("gate=%d; review solicitó cambios", gate.ID), instruction, map[string]any{
+		"gate_id":            gate.ID,
+		"reviewer_agente":    strings.TrimSpace(gate.ReviewerAgente),
+		"objetivo_general":   strings.TrimSpace(policy.ObjetivoGeneral),
+		"definition_of_done": strings.TrimSpace(policy.DefinitionOfDoneJSON),
+		"review_findings":    strings.TrimSpace(gate.FindingsJSON),
+	}); err != nil {
+		return err
+	} else if !encolada {
+		return nil
+	}
+	if _, err := supervisionService.RegisterCycle(proyecto.Slug, supervisionapp.CycleInput{
+		Kind:         "review_feedback",
+		Agente:       corrector.Nombre,
+		InputJSON:    inputJSON,
+		DecisionJSON: decisionJSON,
+		Resultado:    "encolado",
+	}); err != nil {
+		return err
+	}
+	_ = resumenCtx
+	return nil
 }
 
 func construirFindingsReviewTranscript(item *db.RuntimeTranscriptEntry) (string, error) {

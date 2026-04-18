@@ -23331,6 +23331,142 @@ func TestProcesarRuntimeTranscriptBatchReviewApprovedCreaSolicitudMerge(t *testi
 	}
 }
 
+func TestProcesarRuntimeTranscriptBatchReviewChangesRequestedEncolaCorreccion(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexReviewer", "admin"); err != nil {
+		t.Fatalf("registrar reviewer: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		ReviewerAgente:       "CodexReviewer",
+		ReviewRequired:       true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoEsperandoReview,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexReviewer", proyectoID, "review"); err != nil {
+		t.Fatalf("activar asignacion reviewer: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	}); err != nil {
+		t.Fatalf("iniciar sesion supervisor: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Ultimo frente con cambios pedidos",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "CodexReviewer", "abc123"); err != nil {
+		t.Fatalf("completar tarea: %v", err)
+	}
+	gateID, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:     &proyectoID,
+		RequestedBy:    "CodexReviewer",
+		ReviewerAgente: "CodexReviewer",
+		Estado:         db.ReviewGateEnRevision,
+		SeverityMax:    "high",
+		FindingsJSON:   `{"findings":["faltan tests","ajustar arquitectura"]}`,
+	})
+	if err != nil {
+		t.Fatalf("crear review gate: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexReviewer",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion reviewer: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle reviewer: %+v err=%v", handle, err)
+	}
+	logPath := filepath.Join(tmp, "codex-transcript-review-changes-requested.log")
+	if err := os.WriteFile(logPath, []byte("Changes requested after review\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	if _, err := procesarRuntimeTranscriptBatch(); err != nil {
+		t.Fatalf("procesar transcript batch: %v", err)
+	}
+
+	agente := "CodexSupervisor"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "nudge" || !strings.Contains(orders[0].PayloadJSON, `"accion":"resolver_review_feedback"`) {
+		t.Fatalf("nudge de corrección inesperado: %+v", orders)
+	}
+	gate, err := db.GetReviewGate(gateID)
+	if err != nil {
+		t.Fatalf("get review gate: %v", err)
+	}
+	if gate == nil || gate.Estado != db.ReviewGateEnRevision {
+		t.Fatalf("gate debería reabrirse a en_revision: %+v", gate)
+	}
+	policy, err := db.GetProyectoAutonomia(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto autonomia: %v", err)
+	}
+	if policy == nil || policy.EstadoAutonomia != db.AutonomiaProyectoActiva {
+		t.Fatalf("estado autonomía debería volver a activo, got=%+v", policy)
+	}
+	kind := "review_feedback"
+	cycles, err := supervisionService.ListCycles("orquestador", &kind, 5)
+	if err != nil {
+		t.Fatalf("listar ciclos review_feedback: %v", err)
+	}
+	if len(cycles) != 1 || cycles[0] == nil || cycles[0].Agente != "CodexSupervisor" {
+		t.Fatalf("ciclo review_feedback inesperado: %+v", cycles)
+	}
+}
+
 func TestProcesarRuntimeTranscriptBatchRegistraEntregaGitActiva(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	repoDir := filepath.Join(tmp, "repo-git-transcript")
