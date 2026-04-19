@@ -57,6 +57,33 @@ func TestGetOrBuildCompactDetailDevuelveStaleMientrasRevalida(t *testing.T) {
 	t.Fatal("el refresh de compact detail no actualizo la cache")
 }
 
+func TestInvalidateCompactDetailCacheBorraEntradas(t *testing.T) {
+	svc := NewService(nil, nil)
+	svc.compactDetailCache["Codex1"] = cachedCompactDetail{detail: &Detail{Row: Row{OpenTasks: 1}}, expires: time.Now().UTC().Add(time.Minute)}
+	svc.compactDetailCache["Codex2"] = cachedCompactDetail{detail: &Detail{Row: Row{OpenTasks: 2}}, expires: time.Now().UTC().Add(time.Minute)}
+
+	svc.InvalidateCompactDetailCache("Codex1")
+
+	svc.cacheMu.Lock()
+	_, codex1 := svc.compactDetailCache["Codex1"]
+	_, codex2 := svc.compactDetailCache["Codex2"]
+	svc.cacheMu.Unlock()
+	if codex1 {
+		t.Fatal("deberia invalidar la entrada pedida")
+	}
+	if !codex2 {
+		t.Fatal("no deberia borrar entradas ajenas")
+	}
+
+	svc.InvalidateCompactDetailCache()
+	svc.cacheMu.Lock()
+	remaining := len(svc.compactDetailCache)
+	svc.cacheMu.Unlock()
+	if remaining != 0 {
+		t.Fatalf("deberia vaciar la cache completa, quedan=%d", remaining)
+	}
+}
+
 func TestGetOrBuildActiveReanimationScheduleDevuelveStaleMientrasRevalida(t *testing.T) {
 	prevTTL := activeReanimationScheduleCacheTTL
 	prevStale := activeReanimationScheduleStaleWhileRevalidateTTL

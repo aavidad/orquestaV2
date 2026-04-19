@@ -778,6 +778,9 @@ func resetStatusSnapshotCache() {
 	statusCacheState.ok = false
 	statusCacheState.refreshing = false
 	statusCacheState.waitCh = nil
+	if agentesService != nil {
+		agentesService.InvalidateCompactDetailCache()
+	}
 }
 
 func reconciliarConteoTareasActivasVisible(cuentas map[string]int, tareasActivas []tareaLite) map[string]int {

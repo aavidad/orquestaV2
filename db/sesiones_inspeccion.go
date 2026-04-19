@@ -31,7 +31,7 @@ func ListarSesionesInspeccion(f FiltroSesionesInspeccion) ([]*Sesion, error) {
 	}
 	if f.Activa != nil {
 		q += ` AND s.activa = ?`
-		args = append(args, *f.Activa)
+		args = append(args, boolToInt(*f.Activa))
 	}
 	if f.Estado != nil && strings.TrimSpace(*f.Estado) != "" {
 		q += ` AND s.estado = ?`

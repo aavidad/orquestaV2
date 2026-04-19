@@ -793,6 +793,25 @@ func (s *Service) BuildDetailCompact(nombre string) (*Detail, error) {
 	})
 }
 
+func (s *Service) InvalidateCompactDetailCache(names ...string) {
+	if s == nil {
+		return
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if len(names) == 0 {
+		s.compactDetailCache = map[string]cachedCompactDetail{}
+		return
+	}
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		delete(s.compactDetailCache, name)
+	}
+}
+
 func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 	nombre = strings.TrimSpace(nombre)
 	if compact {
