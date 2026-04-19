@@ -905,6 +905,10 @@ func (s *Service) buildOperationalRowForAgent(nombre string, now time.Time) (Row
 }
 
 func (s *Service) buildOperationalRowContextForAgentCompact(nombre string, now time.Time) (Row, []*db.Asignacion, []*db.Tarea, error) {
+	return s.buildOperationalRowContextForAgentCompactWithSession(nombre, now, nil)
+}
+
+func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre string, now time.Time, sessionHint *db.Sesion) (Row, []*db.Asignacion, []*db.Tarea, error) {
 	nombre = strings.TrimSpace(nombre)
 	if nombre == "" {
 		return Row{}, nil, nil, fmt.Errorf("agente obligatorio")
@@ -938,12 +942,16 @@ func (s *Service) buildOperationalRowContextForAgentCompact(nombre string, now t
 	agentDetailDebugf("compact step=list_assignments agente=%s count=%d duration=%s", nombre, len(asignaciones), time.Since(stepStart).Round(time.Millisecond))
 
 	stepStart = time.Now()
-	sesion, err := s.store.GetActiveSession(nombre, nil)
-	switch {
-	case err == nil:
-		row.Sesion = sesion
-	case err != sql.ErrNoRows:
-		return Row{}, nil, nil, err
+	if sessionHint != nil {
+		row.Sesion = sessionHint
+	} else {
+		sesion, err := s.store.GetActiveSession(nombre, nil)
+		switch {
+		case err == nil:
+			row.Sesion = sesion
+		case err != sql.ErrNoRows:
+			return Row{}, nil, nil, err
+		}
 	}
 	agentDetailDebugf("compact step=get_active_session agente=%s duration=%s", nombre, time.Since(stepStart).Round(time.Millisecond))
 

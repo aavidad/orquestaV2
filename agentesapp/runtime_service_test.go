@@ -350,7 +350,7 @@ func TestBuildTickOutputNoCuentaBloqueadasComoTareasActivas(t *testing.T) {
 	if err := db.IniciarTarea(tareaID, "Claude1"); err != nil {
 		t.Fatalf("iniciar tarea: %v", err)
 	}
-	if err := db.BloquearTarea(tareaID, "Claude1", "Agente Claude1 en estado bloqueado_por_cuota: worker bloqueado por cuota"); err != nil {
+	if err := db.BloquearTarea(tareaID, "Claude1", "Dependencia externa pendiente de credenciales humanas"); err != nil {
 		t.Fatalf("bloquear tarea: %v", err)
 	}
 	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='worker bloqueado por cuota', reanimar_at=datetime('now','+1 hour') WHERE nombre='Claude1'`); err != nil {
@@ -404,6 +404,111 @@ func TestBuildTickOutputNoContinuaSiRuntimeBloqueado(t *testing.T) {
 	}
 	if strings.TrimSpace(out.Motivo) == "" {
 		t.Fatalf("motivo inesperado: %q", out.Motivo)
+	}
+}
+
+func TestBuildTickOutputConRuntimeSanoNoReleeFallbackPorProyecto(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex1", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex1"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente activo Codex"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 52, Agente: "Codex1", ProyectoID: int64Ptr(7), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		canonicalHandles: []*db.RuntimeHandle{
+			{ID: 62, Agente: "Codex1", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(52), Estado: "activo", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 62, Agente: "Codex1", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(52), Estado: "activo", UpdatedAt: now},
+		},
+	}
+	svc := NewService(store, nil)
+	proyecto := &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()}
+
+	out, err := svc.buildTickOutput("Codex1", proyecto, nil, 100)
+	if err != nil {
+		t.Fatalf("buildTickOutput: %v", err)
+	}
+	if out.AccionRecomendada != "continuar_trabajo" {
+		t.Fatalf("salida inesperada: %+v", out)
+	}
+	if store.listRuntimesCalls != 1 {
+		t.Fatalf("no deberia releer runtimes fuera del contexto compacto: calls=%d", store.listRuntimesCalls)
+	}
+	if store.listPassiveHandlesCalls != 0 {
+		t.Fatalf("no deberia releer handles pasivos con row sano: calls=%d", store.listPassiveHandlesCalls)
+	}
+}
+
+func TestBuildTickOutputConBloqueadaNoReleeAgenteNiAsignaciones(t *testing.T) {
+	prepararDBTemporalRuntimeService(t)
+	tmp := t.TempDir()
+	if err := db.RegistrarAgente("Claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente bloqueado Claude",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Claude1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Claude1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "Claude1", "Agente Claude1 en estado bloqueado_por_cuota: worker bloqueado por cuota"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Claude1", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Claude1", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		tasks: []*db.Tarea{
+			{ID: tareaID, Agente: strPtr("Claude1"), ProyectoID: int64Ptr(proyectoID), Estado: db.EstadoBloqueada, Titulo: "Frente bloqueado Claude"},
+		},
+	}
+	svc := NewService(store, nil)
+	proyecto := &db.Proyecto{ID: proyectoID, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: filepath.Join(tmp, "orquestador")}
+
+	out, err := svc.buildTickOutput("Claude1", proyecto, nil, 100)
+	if err != nil {
+		t.Fatalf("buildTickOutput: %v", err)
+	}
+	if out == nil {
+		t.Fatal("tick output nil")
+	}
+	if store.listAssignmentsCalls != 1 {
+		t.Fatalf("no deberia releer asignaciones para bloqueos: calls=%d", store.listAssignmentsCalls)
+	}
+	if store.getAgentCalls != 1 {
+		t.Fatalf("no deberia releer agente para bloqueos: calls=%d", store.getAgentCalls)
 	}
 }
 
@@ -746,5 +851,46 @@ func TestProcessTickNoPideIntervencionPorBloqueoSinRelevoSanoConAsignacionActiva
 	}
 	if out.AccionRecomendada == "pedir_intervencion" {
 		t.Fatalf("no deberia pedir intervencion por bloqueo premium recuperable sin relevo sano: %+v", out)
+	}
+}
+
+func TestProcessTickReutilizaSesionActivaEnBuilderCompacto(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		project: &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()},
+		agents: []*db.Agente{
+			{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex2", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		sessions: []*db.Sesion{
+			{ID: 11, Agente: "Codex2", ProyectoID: int64Ptr(7), Estado: "activa", Inicio: now},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex2"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente activo"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex2", ProyectoID: int64Ptr(7), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		canonicalHandles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+	}
+	out, err := NewService(store, nil).ProcessTick(TickInput{
+		Agente:   "Codex2",
+		Proyecto: "orquestador",
+	})
+	if err != nil {
+		t.Fatalf("ProcessTick: %v", err)
+	}
+	if out == nil || out.AccionRecomendada != "continuar_trabajo" {
+		t.Fatalf("salida inesperada: %+v", out)
+	}
+	if store.getActiveCalls != 1 {
+		t.Fatalf("deberia reutilizar la sesion activa ya resuelta: calls=%d", store.getActiveCalls)
 	}
 }

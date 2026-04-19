@@ -48,8 +48,11 @@ type fakeStore struct {
 	listSessionsCalls      int
 	getActiveCalls         int
 	getLastCalls           int
+	getAgentCalls          int
 	hotHandlesCalls        int
 	listAssignmentsCalls   int
+	listRuntimesCalls      int
+	listPassiveHandlesCalls int
 	listTasksCalls         int
 	listAgentsCalls        int
 	checkReanimationsCalls int
@@ -101,6 +104,7 @@ func (f *fakeStore) MergeAgents(origen, destino string) (*db.FusionAgentesResult
 func (f *fakeStore) Audit(agente, accion, entidad string, entidadID int64, detalle string) {}
 
 func (f *fakeStore) GetAgent(nombre string) (*db.Agente, error) {
+	f.getAgentCalls++
 	for _, item := range f.agents {
 		if item != nil && item.Nombre == nombre {
 			return item, nil
@@ -201,6 +205,7 @@ func (f *fakeStore) SaveActiveSession(agente string, proyectoID *int64, upd db.S
 }
 
 func (f *fakeStore) ListRuntimes(filter db.FiltroRuntimes) ([]*db.RuntimeInstance, error) {
+	f.listRuntimesCalls++
 	if filter.Agente == nil {
 		return f.runtimes, nil
 	}
@@ -227,6 +232,7 @@ func (f *fakeStore) ListRuntimeHandles(agent *string) ([]*db.RuntimeHandle, erro
 }
 
 func (f *fakeStore) ListPassiveRuntimeHandles(agent *string) ([]*db.RuntimeHandle, error) {
+	f.listPassiveHandlesCalls++
 	return f.ListRuntimeHandles(agent)
 }
 

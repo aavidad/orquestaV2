@@ -397,11 +397,6 @@ func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 		}
 		tickDebugf("ProcessTick step=ack_bootstrap agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
 		stepStart = time.Now()
-		sesionActiva, err = s.store.GetActiveSession(agenteNombre, &proyecto.ID)
-		if err != nil {
-			return nil, err
-		}
-		tickDebugf("ProcessTick step=reload_active_session agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
 	}
 	stepStart = time.Now()
 	out, err := s.buildTickOutput(agenteNombre, proyecto, sesionActiva, input.CuotaPct)
@@ -533,7 +528,7 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 	}
 	now := time.Now().UTC()
 	politica := s.loadPolicy()
-	row, asignaciones, tareas, err := s.buildOperationalRowContextForAgentCompact(agenteNombre, now)
+	row, asignaciones, tareas, err := s.buildOperationalRowContextForAgentCompactWithSession(agenteNombre, now, sesionActiva)
 	if err != nil {
 		return nil, err
 	}
@@ -551,7 +546,7 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 			continue
 		}
 		if tarea.Estado == db.TareaBloqueada {
-			requiereIntervencion, err := s.blockedTaskNeedsIntervention(agenteNombre, proyecto.ID, sesionActiva, tarea)
+			requiereIntervencion, err := s.blockedTaskNeedsInterventionWithContext(agenteNombre, proyecto.ID, asignadoAProyecto, sesionActiva, row.Agente, tarea)
 			if err != nil {
 				return nil, err
 			}
@@ -574,9 +569,13 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 	detalleOperativo := strings.TrimSpace(row.DetalleOperativo)
 	runtimeBloqueado := estadoOperativoBloqueaContinuidad(estadoOperativo)
 	if tieneTrabajo && !runtimeBloqueado {
-		bloqueado, detalle, err := s.runtimeBlockedFallback(agenteNombre, proyecto.ID)
-		if err != nil {
-			return nil, err
+		bloqueado, detalle, resolved := runtimeBlockedFallbackFromRow(row, proyecto.ID)
+		if !resolved {
+			var err error
+			bloqueado, detalle, err = s.runtimeBlockedFallback(agenteNombre, proyecto.ID)
+			if err != nil {
+				return nil, err
+			}
 		}
 		if bloqueado {
 			runtimeBloqueado = true
@@ -676,6 +675,35 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		out.Motivo = "No hay tarea activa asignada en este proyecto"
 	}
 	return out, nil
+}
+
+func runtimeBlockedFallbackFromRow(row Row, proyectoID int64) (bool, string, bool) {
+	if proyectoID <= 0 {
+		return false, "", false
+	}
+	var latestHandle *db.RuntimeHandle
+	if row.Handle != nil && row.Handle.ProyectoID != nil && *row.Handle.ProyectoID == proyectoID {
+		latestHandle = row.Handle
+		switch strings.ToLower(strings.TrimSpace(row.Handle.Estado)) {
+		case "activo", "active", "pausado", "paused":
+			return false, "", true
+		}
+	}
+	var latestRuntime *db.RuntimeInstance
+	if row.Runtime != nil && row.Runtime.ProyectoID != nil && *row.Runtime.ProyectoID == proyectoID {
+		latestRuntime = row.Runtime
+		switch strings.ToLower(strings.TrimSpace(row.Runtime.LogicalState)) {
+		case "activo", "active", "running", "iniciando", "starting", "esperando_io", "waiting_io", "pausado", "paused":
+			return false, "", true
+		}
+	}
+	if latestHandle != nil {
+		return true, firstNonEmpty(strings.TrimSpace(latestHandle.Estado), "handle no operativo"), true
+	}
+	if latestRuntime != nil {
+		return true, firstNonEmpty(strings.TrimSpace(latestRuntime.LogicalState), strings.TrimSpace(latestRuntime.ProcessState), "runtime no operativo"), true
+	}
+	return false, "", false
 }
 
 func (s *Service) runtimeBlockedFallback(agenteNombre string, proyectoID int64) (bool, string, error) {
@@ -783,17 +811,6 @@ func resolveLiveOperationalState(loadRows func() ([]Row, error), agenteNombre st
 }
 
 func (s *Service) blockedTaskNeedsIntervention(agenteNombre string, proyectoID int64, sesionActiva *db.Sesion, tarea *db.Tarea) (bool, error) {
-	if tarea == nil || tarea.Estado != db.TareaBloqueada {
-		return false, nil
-	}
-	motivo, err := db.MotivoBloqueoActivoTarea(tarea.ID)
-	if err != nil {
-		return true, err
-	}
-	agente, err := s.store.GetAgent(agenteNombre)
-	if err != nil {
-		return true, err
-	}
 	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{Agente: &agenteNombre, ProyectoID: &proyectoID})
 	if err != nil {
 		return true, err
@@ -804,6 +821,21 @@ func (s *Service) blockedTaskNeedsIntervention(agenteNombre string, proyectoID i
 			asignadoAProyecto = true
 			break
 		}
+	}
+	agente, err := s.store.GetAgent(agenteNombre)
+	if err != nil {
+		return true, err
+	}
+	return s.blockedTaskNeedsInterventionWithContext(agenteNombre, proyectoID, asignadoAProyecto, sesionActiva, agente, tarea)
+}
+
+func (s *Service) blockedTaskNeedsInterventionWithContext(agenteNombre string, proyectoID int64, asignadoAProyecto bool, sesionActiva *db.Sesion, agente *db.Agente, tarea *db.Tarea) (bool, error) {
+	if tarea == nil || tarea.Estado != db.TareaBloqueada {
+		return false, nil
+	}
+	motivo, err := db.MotivoBloqueoActivoTarea(tarea.ID)
+	if err != nil {
+		return true, err
 	}
 	return BloqueoAutonomiaRequiereIntervencion(agenteNombre, proyectoID, asignadoAProyecto, sesionActiva, agente, strings.TrimSpace(motivo)), nil
 }
