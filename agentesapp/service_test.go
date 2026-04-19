@@ -2637,8 +2637,11 @@ func TestBuildDetailCompactEvitaResumenPesadoDeMailbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildDetailCompact: %v", err)
 	}
-	if detail.MailboxPendingVisible != 0 || detail.MailboxCoveredBootstrap != 0 {
+	if detail.MailboxPendingVisible != 1 || detail.MailboxCoveredBootstrap != 0 {
 		t.Fatalf("mailbox compacto inesperado: pending=%d covered=%d", detail.MailboxPendingVisible, detail.MailboxCoveredBootstrap)
+	}
+	if detail.MailboxTotalCount != 1 {
+		t.Fatalf("mailbox total compacto inesperado: %d", detail.MailboxTotalCount)
 	}
 	if detail.Entity == nil || len(detail.Entity.Leases) != 1 || detail.Entity.Leases[0].TaskID != 200 {
 		t.Fatalf("leases compactas inesperadas: %+v", detail.Entity)
@@ -2649,8 +2652,11 @@ func TestBuildDetailCompactEvitaResumenPesadoDeMailbox(t *testing.T) {
 	if len(detail.Mailbox) != 0 {
 		t.Fatalf("compact no deberia cargar mailbox completa: %+v", detail.Mailbox)
 	}
-	if len(store.lastMailboxFilter) != 0 {
-		t.Fatalf("compact no deberia consultar mailbox: filters=%d", len(store.lastMailboxFilter))
+	if len(store.lastMailboxFilter) != 1 {
+		t.Fatalf("compact deberia consultar solo inbox del agente: filters=%d", len(store.lastMailboxFilter))
+	}
+	if store.lastMailboxFilter[0].ToAgente == nil || *store.lastMailboxFilter[0].ToAgente != "Codex2" || store.lastMailboxFilter[0].FromAgente != nil {
+		t.Fatalf("compact mailbox filter inesperado: %+v", store.lastMailboxFilter[0])
 	}
 	if store.hotHandlesCalls != 0 {
 		t.Fatalf("compact no deberia barrer handles operativos globales: hotHandlesCalls=%d", store.hotHandlesCalls)

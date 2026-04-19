@@ -959,25 +959,7 @@ func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.Runti
 		}
 	}
 
-	for _, msg := range mailbox {
-		if msg == nil {
-			continue
-		}
-		row.MailboxTotal++
-		if !strings.EqualFold(strings.TrimSpace(msg.Estado), "pendiente") {
-			continue
-		}
-		row.MailboxPending++
-		if !strings.EqualFold(strings.TrimSpace(msg.ToAgente), nombre) {
-			continue
-		}
-		if runtimeMailboxCuentaComoTrabajoCanonico(msg, taskByID, nombre) {
-			row.MailboxActionablePending++
-		}
-		if runtimeMailboxEsContinuidadPendiente(msg, taskByID, nombre) {
-			row.MailboxContinuityPending++
-		}
-	}
+	applyMailboxStatsToRow(&row, mailbox, taskByID, nombre)
 
 	checkpoints, err := s.store.ListRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{Agente: &nombre, Limit: 5})
 	if err != nil {
@@ -1137,9 +1119,50 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 	}
 	agentDetailDebugf("compact step=list_tasks agente=%s count=%d duration=%s", nombre, len(tareas), time.Since(stepStart).Round(time.Millisecond))
 
+	stepStart = time.Now()
+	mailbox, err := s.store.ListRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &nombre})
+	if err != nil {
+		return Row{}, nil, nil, err
+	}
+	taskByID := map[int64]*db.Tarea{}
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		taskByID[tarea.ID] = tarea
+	}
+	applyMailboxStatsToRow(&row, mailbox, taskByID, nombre)
+	agentDetailDebugf("compact step=list_mailbox_to agente=%s count=%d duration=%s", nombre, len(mailbox), time.Since(stepStart).Round(time.Millisecond))
+
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
 	agentDetailDebugf("compact done agente=%s duration=%s", nombre, time.Since(start).Round(time.Millisecond))
 	return row, asignaciones, tareas, nil
+}
+
+func applyMailboxStatsToRow(row *Row, mailbox []*db.RuntimeMailboxMessage, taskByID map[int64]*db.Tarea, nombre string) {
+	if row == nil {
+		return
+	}
+	nombre = strings.TrimSpace(nombre)
+	for _, msg := range mailbox {
+		if msg == nil {
+			continue
+		}
+		row.MailboxTotal++
+		if !strings.EqualFold(strings.TrimSpace(msg.Estado), "pendiente") {
+			continue
+		}
+		row.MailboxPending++
+		if !strings.EqualFold(strings.TrimSpace(msg.ToAgente), nombre) {
+			continue
+		}
+		if runtimeMailboxCuentaComoTrabajoCanonico(msg, taskByID, nombre) {
+			row.MailboxActionablePending++
+		}
+		if runtimeMailboxEsContinuidadPendiente(msg, taskByID, nombre) {
+			row.MailboxContinuityPending++
+		}
+	}
 }
 
 func (s *Service) buildOperationalRowContextForAgent(nombre string, now time.Time) (Row, []*db.Asignacion, []*db.Tarea, error) {
