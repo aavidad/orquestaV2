@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE_DIR="${ROOT_DIR}/.codex-docker-home"
 WORKSPACE_DIR="${ROOT_DIR}/.codex-sandbox-workspace"
 TEMPLATE_CONFIG="${ROOT_DIR}/codex-docker/config.toml"
+STATE_SYNC_MANIFEST="${ROOT_DIR}/codex-docker/state-sync-manifest.txt"
 HOST_CODEX_HOME="${HOME}/.codex"
 
 mkdir -p "${STATE_DIR}"
@@ -24,6 +25,7 @@ fi
 
 sync_host_codex_state() {
   [[ -d "${HOST_CODEX_HOME}" ]] || return 0
+  [[ -f "${STATE_SYNC_MANIFEST}" ]] || return 0
 
   copy_file_if_exists() {
     local name="$1"
@@ -40,23 +42,20 @@ sync_host_codex_state() {
     fi
   }
 
-  copy_file_if_exists auth.json
-  copy_file_if_exists history.jsonl
-  copy_file_if_exists models_cache.json
-  copy_file_if_exists version.json
-  copy_file_if_exists state_5.sqlite
-  copy_file_if_exists state_5.sqlite-shm
-  copy_file_if_exists state_5.sqlite-wal
-  copy_file_if_exists logs_1.sqlite
-  copy_file_if_exists logs_1.sqlite-shm
-  copy_file_if_exists logs_1.sqlite-wal
-
-  copy_dir_if_exists sessions
-  copy_dir_if_exists memories
-  copy_dir_if_exists rules
-  copy_dir_if_exists skills
-  copy_dir_if_exists shell_snapshots
-  copy_dir_if_exists log
+  while IFS= read -r entry || [[ -n "${entry}" ]]; do
+    entry="${entry#"${entry%%[![:space:]]*}"}"
+    entry="${entry%"${entry##*[![:space:]]}"}"
+    [[ -n "${entry}" ]] || continue
+    [[ "${entry}" == \#* ]] && continue
+    case "${entry}" in
+      file:*)
+        copy_file_if_exists "${entry#file:}"
+        ;;
+      dir:*)
+        copy_dir_if_exists "${entry#dir:}"
+        ;;
+    esac
+  done < "${STATE_SYNC_MANIFEST}"
 }
 
 if [[ "${ORQUESTA_SYNC_HOST_CODEX:-1}" != "0" ]]; then
