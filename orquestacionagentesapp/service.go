@@ -1351,6 +1351,7 @@ func (s *Service) existsPendingAutonomyOrderWithVerificationKey(agente string, p
 		Agente:     &agente,
 		ProyectoID: proyectoID,
 		Estado:     &estado,
+		Tipos:      []string{"nudge"},
 	})
 	if err != nil {
 		return false, err

@@ -12589,6 +12589,7 @@ func sesionActivaTieneContinuidadDurableVigente(sesion *db.Sesion, handle *db.Ru
 	orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
 		Agente:     stringPtr(agente),
 		ProyectoID: sesion.ProyectoID,
+		Tipos:      []string{"send_instruction"},
 	})
 	if err != nil {
 		return false, err
@@ -13985,6 +13986,7 @@ func contarFollowupsPostRemediationPorVerificationKey(agente string, proyectoID 
 	orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
 		Agente:     &agente,
 		ProyectoID: proyectoID,
+		Tipos:      []string{"nudge"},
 	})
 	if err != nil {
 		return 0, err
