@@ -422,7 +422,9 @@ func reconstruirPoliticasModeloLegacy(db *sql.DB) error {
 
 func tablaExiste(db *sql.DB, nombre string) (bool, error) {
 	var total int
-	err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = ?`, nombre).Scan(&total)
+	driver := CurrentStorageDriver()
+	query := storage.RebindQuery(driver, tableExistsQuery(driver))
+	err := db.QueryRow(query, nombre).Scan(&total)
 	return total > 0, err
 }
 
@@ -452,6 +454,9 @@ func tablaTieneColumna(db *sql.DB, tabla, columna string) (bool, error) {
 }
 
 func tablaSQL(db *sql.DB, nombre string) (string, error) {
+	if normalizedDriverName(CurrentStorageDriver()) != "sqlite" {
+		return "", fmt.Errorf("tablaSQL solo aplica al adapter sqlite heredado")
+	}
 	var sqlText sql.NullString
 	err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE type='table' AND name = ?`, nombre).Scan(&sqlText)
 	if err == sql.ErrNoRows || !sqlText.Valid {

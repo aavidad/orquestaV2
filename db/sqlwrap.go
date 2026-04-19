@@ -104,22 +104,6 @@ func (h *Handle) QueryRow(query string, args ...any) *sql.Row {
 	return h.DB.QueryRow(storage.RebindQuery(h.driver, query), args...)
 }
 
-// WALCheckpoint se mantiene por compatibilidad interna durante la transición
-// del mantenimiento de storage al adapter. En drivers que no son SQLite es un
-// no-op.
-func (h *Handle) WALCheckpoint() (walPages, checkpointedPages int, err error) {
-	if h == nil || h.DB == nil {
-		return 0, 0, nil
-	}
-	if h == nil || normalizedDriverName(h.driver) != "sqlite" {
-		return 0, 0, nil
-	}
-	row := h.DB.QueryRow(`PRAGMA wal_checkpoint(PASSIVE)`)
-	var status int
-	err = row.Scan(&status, &walPages, &checkpointedPages)
-	return walPages, checkpointedPages, err
-}
-
 func (h *Handle) Begin() (*Tx, error) {
 	if h == nil || h.DB == nil {
 		return nil, driver.ErrBadConn
