@@ -311,6 +311,24 @@ func prepareDebugEnabled() bool {
 	return false
 }
 
+func tickDebugf(format string, args ...any) {
+	if !tickDebugEnabled() {
+		return
+	}
+	log.Printf("orquesta[tick] "+format, args...)
+}
+
+func tickDebugEnabled() bool {
+	for _, key := range []string{"ORQUESTA_DEBUG_TICK", "ORQUESTA_DEBUG"} {
+		value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+		switch value {
+		case "1", "true", "yes", "on", "si", "sí":
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Service) getAgentForPrepare(nombre string) (*db.Agente, error) {
 	if s != nil && s.store != nil {
 		if lite, ok := s.store.(liteAgentGetter); ok {
@@ -333,10 +351,18 @@ func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 	if agenteNombre == "" || proyectoRef == "" {
 		return nil, fmt.Errorf("debes indicar agente y proyecto")
 	}
+	start := time.Now()
+	tickDebugf("ProcessTick start agente=%s proyecto=%s", agenteNombre, proyectoRef)
+	defer func() {
+		tickDebugf("ProcessTick done agente=%s proyecto=%s duration=%s", agenteNombre, proyectoRef, time.Since(start).Round(time.Millisecond))
+	}()
+	stepStart := time.Now()
 	proyecto, err := s.store.GetProject(proyectoRef)
 	if err != nil {
 		return nil, err
 	}
+	tickDebugf("ProcessTick step=get_project proyecto=%s duration=%s", proyectoRef, time.Since(stepStart).Round(time.Millisecond))
+	stepStart = time.Now()
 	sesionActiva, err := s.store.GetActiveSession(agenteNombre, &proyecto.ID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
@@ -344,7 +370,9 @@ func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 	if err == sql.ErrNoRows {
 		sesionActiva = nil
 	}
+	tickDebugf("ProcessTick step=get_active_session agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
 	if sesionActiva != nil {
+		stepStart = time.Now()
 		upd := db.SesionUpdate{Heartbeat: true}
 		if host := strings.TrimSpace(input.Host); host != "" {
 			upd.Host = &host
@@ -355,23 +383,32 @@ func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 		if err := s.store.SaveActiveSession(agenteNombre, &proyecto.ID, upd); err != nil {
 			return nil, err
 		}
+		tickDebugf("ProcessTick step=save_active_session agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
 		if input.Finalizado && shouldAutoPauseForBudget(input.CuotaPct, input.Motivo) {
+			stepStart = time.Now()
 			if err := s.autoPause(agenteNombre, 60, "Auto-pausa por agotamiento: "+input.Motivo, "Detección de agotamiento en tick final: "+input.Motivo); err != nil {
 				return nil, err
 			}
+			tickDebugf("ProcessTick step=auto_pause agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
 		}
+		stepStart = time.Now()
 		if err := db.AckBootstrapRuntimeLease(input.AckStartOrderID, input.AckBootstrapOrderID, input.AckMailboxIDs, sesionActiva.ID, "agente_tick"); err != nil {
 			return nil, err
 		}
+		tickDebugf("ProcessTick step=ack_bootstrap agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
+		stepStart = time.Now()
 		sesionActiva, err = s.store.GetActiveSession(agenteNombre, &proyecto.ID)
 		if err != nil {
 			return nil, err
 		}
+		tickDebugf("ProcessTick step=reload_active_session agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
 	}
+	stepStart = time.Now()
 	out, err := s.buildTickOutput(agenteNombre, proyecto, sesionActiva, input.CuotaPct)
 	if err != nil {
 		return nil, err
 	}
+	tickDebugf("ProcessTick step=build_output agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
 	return out, nil
 }
 

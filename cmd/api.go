@@ -130,6 +130,7 @@ var (
 	apiAgentOverviewTimeout      = 3 * time.Second
 	apiAgentBudgetRefreshTimeout = 3 * time.Second
 	apiAgentPrepareTimeout       = 6 * time.Second
+	apiAgentTickTimeout          = 6 * time.Second
 	apiAgentPrepareLimiter       = make(chan struct{}, 4)
 	apiAgentDetailBuilder        = func(nombre string, compact bool) (*agentesapp.Detail, error) {
 		if compact {
@@ -140,6 +141,9 @@ var (
 	apiAgentBudgetRefreshExecutor = refrescarPresupuestoSesionObservadoAgente
 	apiAgentPrepareBuilder        = func(input agentesapp.PrepareInput) (*agentesapp.PrepareOutput, error) {
 		return agentesService.BuildPrepare(input)
+	}
+	apiAgentTickProcessor = func(input agentesapp.TickInput) (*agentesapp.TickOutput, error) {
+		return agentesService.ProcessTick(input)
 	}
 	apiListRuntimeOrdersFn = func(filter db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error) {
 		return runtimesService.ListRuntimeOrders(filter)
@@ -6759,7 +6763,7 @@ func apiHandlerAgenteTick(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, fmt.Errorf("debes indicar agente y proyecto"))
 		return
 	}
-	out, err := agentesService.ProcessTick(agentesapp.TickInput{
+	tickInput := agentesapp.TickInput{
 		Agente:              req.Agente,
 		Proyecto:            req.Proyecto,
 		Host:                req.Host,
@@ -6770,8 +6774,15 @@ func apiHandlerAgenteTick(w http.ResponseWriter, r *http.Request) {
 		AckStartOrderID:     req.AckStartOrderID,
 		AckBootstrapOrderID: req.AckBootstrapOrderID,
 		AckMailboxIDs:       req.AckMailboxIDs,
-	})
+	}
+	out, err := runAPITimeboxed(apiAgentTickTimeout, func() (*agentesapp.TickOutput, error) {
+		return apiAgentTickProcessor(tickInput)
+	}, errStatusFetchTimeout)
 	if err != nil {
+		if errors.Is(err, errStatusFetchTimeout) {
+			apiError(w, http.StatusServiceUnavailable, fmt.Errorf("tick temporalmente degradado"))
+			return
+		}
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}

@@ -253,3 +253,29 @@ func TestRunAPIAgentPrepareLimitedTimeoutNoDejaTrabajoEnCola(t *testing.T) {
 		t.Fatalf("builder no deberia ejecutarse tras timeout de cola, got=%d", calls.Load())
 	}
 }
+
+func TestAPIAgenteTickReturns503WhenProcessorHangs(t *testing.T) {
+	prevProcessor := apiAgentTickProcessor
+	prevTimeout := apiAgentTickTimeout
+	defer func() {
+		apiAgentTickProcessor = prevProcessor
+		apiAgentTickTimeout = prevTimeout
+	}()
+
+	release := make(chan struct{})
+	apiAgentTickProcessor = func(input agentesapp.TickInput) (*agentesapp.TickOutput, error) {
+		<-release
+		return &agentesapp.TickOutput{}, nil
+	}
+	apiAgentTickTimeout = 20 * time.Millisecond
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/agente/tick", bytes.NewReader([]byte(`{"agente":"Codex2","proyecto":"orquestador"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	apiHandlerAgenteTick(rec, req)
+	close(release)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
