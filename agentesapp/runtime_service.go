@@ -145,6 +145,9 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	if err != nil {
 		return nil, err
 	}
+	if agente == nil {
+		return nil, fmt.Errorf("agente %q no encontrado", agenteNombre)
+	}
 	prepareDebugf("BuildPrepare step=get_agent agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
 	agenteRuntime := *agente
 	if strings.EqualFold(strings.TrimSpace(input.Agente), strings.TrimSpace(agente.Nombre)) && strings.TrimSpace(input.Agente) != "" {
@@ -154,6 +157,9 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	proyecto, err := s.getProjectForPrepare(proyectoRef)
 	if err != nil {
 		return nil, err
+	}
+	if proyecto == nil {
+		return nil, fmt.Errorf("proyecto %q no encontrado", proyectoRef)
 	}
 	prepareDebugf("BuildPrepare step=get_project proyecto=%s duration=%s", proyectoRef, time.Since(stepStart).Round(time.Millisecond))
 	stepStart = time.Now()
@@ -661,6 +667,9 @@ func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 	proyecto, err := s.getProjectForPrepare(proyectoRef)
 	if err != nil {
 		return nil, err
+	}
+	if proyecto == nil {
+		return nil, fmt.Errorf("proyecto %q no encontrado", proyectoRef)
 	}
 	tickDebugf("ProcessTick step=get_project proyecto=%s duration=%s", proyectoRef, time.Since(stepStart).Round(time.Millisecond))
 	stepStart = time.Now()

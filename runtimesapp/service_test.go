@@ -2817,6 +2817,37 @@ func TestEnqueueAgentControlRechazaStartSiCuentaCompartidaEstaOcupada(t *testing
 	}
 }
 
+func TestEnqueueAgentControlErrorSiProyectoNoExiste(t *testing.T) {
+	store := &fakeStore{
+		agentResponse: &db.Agente{Nombre: "CodexPg2", Rol: "programador"},
+	}
+	service := NewService(store)
+
+	_, _, err := service.EnqueueAgentControl(AgentControlRequest{
+		Agente:   "CodexPg2",
+		Proyecto: "orquesta",
+		Accion:   "arrancar",
+		Por:      "test",
+	})
+	if err == nil || !strings.Contains(err.Error(), `proyecto "orquesta" no encontrado`) {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestEnqueueAgentControlErrorSiAgenteNoExiste(t *testing.T) {
+	service := NewService(&fakeStore{})
+
+	_, _, err := service.EnqueueAgentControl(AgentControlRequest{
+		Agente:   "CodexPg2",
+		Proyecto: "orquesta",
+		Accion:   "arrancar",
+		Por:      "test",
+	})
+	if err == nil || !strings.Contains(err.Error(), `agente "CodexPg2" no encontrado`) {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
 func TestEnqueueAgentControlStartToleraSinHandleNiRuntimePrevios(t *testing.T) {
 	projectID := int64(9)
 	store := &fakeStore{

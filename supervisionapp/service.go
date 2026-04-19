@@ -133,6 +133,9 @@ func (s *Service) GetProjectPolicy(projectRef string) (*Policy, error) {
 	if err != nil {
 		return nil, err
 	}
+	if proyecto == nil {
+		return nil, fmt.Errorf("proyecto no encontrado: %s", strings.TrimSpace(projectRef))
+	}
 	return s.store.GetProjectAutonomy(proyecto.ID)
 }
 

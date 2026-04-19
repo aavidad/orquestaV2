@@ -70,7 +70,7 @@ func IniciarSesionContexto(in SesionInicio) (*Sesion, error) {
 	}
 
 	// Crear nueva sesión
-	res, err := tx.Exec(`
+	id, err := insertReturningIDWith(tx, `
 		INSERT INTO sesiones (agente, conector_id, proyecto_id, cwd, herramienta, external_session_id, resume_payload_json, resumen_continuidad, branch, heartbeat_at, host, pid)
 		VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?,?)`,
 		agente, in.ConectorID, in.ProyectoID, in.CWD, in.Herramienta, in.ExternalSessionID, in.ResumePayloadJSON, in.ResumenContinuidad, in.Branch, in.Host, in.PID,
@@ -78,7 +78,6 @@ func IniciarSesionContexto(in SesionInicio) (*Sesion, error) {
 	if err != nil {
 		return nil, err
 	}
-	id, _ := res.LastInsertId()
 
 	if err = tx.Commit(); err != nil {
 		return nil, err
@@ -2425,10 +2424,6 @@ func sessionOperationalCutoff() time.Time {
 	return time.Now().UTC().Add(-sessionOperationalGrace())
 }
 
-func sessionOperationalCutoffSQL() string {
-	return sessionOperationalCutoff().Format("2006-01-02 15:04:05")
-}
-
 func GetSesionAbierta(agente string, proyectoID *int64) (*Sesion, error) {
 	q := `
 		SELECT s.id, s.agente, s.conector_id, COALESCE(c.slug,''), COALESCE(c.nombre,''),
@@ -2462,8 +2457,8 @@ func GetSesionActiva(agente string, proyectoID *int64) (*Sesion, error) {
 		LEFT JOIN conectores c ON c.id = s.conector_id
 		LEFT JOIN proyectos p ON p.id = s.proyecto_id
 		WHERE s.agente = ? AND s.activa = 1
-		  AND datetime(COALESCE(s.heartbeat_at, s.inicio)) >= datetime(?)`
-	args := []any{agente, sessionOperationalCutoffSQL()}
+		  AND COALESCE(s.heartbeat_at, s.inicio) >= ?`
+	args := []any{agente, sessionOperationalCutoff()}
 	if proyectoID != nil {
 		q += ` AND s.proyecto_id = ?`
 		args = append(args, *proyectoID)
@@ -2565,11 +2560,11 @@ func RetirarAgente(nombre string) error {
 		SET estado='pausada',
 		    nota=CASE
 		    	WHEN trim(COALESCE(nota,''))='' THEN ?
-		    	ELSE nota || char(10) || ?
+		    	ELSE COALESCE(nota,'') || ?
 		    END,
 		    cerrada_at=NULL
 		WHERE agente=? AND estado IN ('planificada','activa')`,
-		notaAsignacion, notaAsignacion, nombre,
+		notaAsignacion, "\n"+notaAsignacion, nombre,
 	); err != nil {
 		return err
 	}

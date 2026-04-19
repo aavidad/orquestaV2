@@ -134,6 +134,16 @@ func TestGetProjectPolicyResuelveProyectoPorRef(t *testing.T) {
 	}
 }
 
+func TestGetProjectPolicyErrorSiProyectoNoExiste(t *testing.T) {
+	store := newFakeStore()
+	svc := NewService(store)
+
+	_, err := svc.GetProjectPolicy("demo")
+	if err == nil || !strings.Contains(err.Error(), "proyecto no encontrado: demo") {
+		t.Fatalf("GetProjectPolicy error inesperado: %v", err)
+	}
+}
+
 func TestListEnabledPoliciesPideSoloHabilitadas(t *testing.T) {
 	store := newFakeStore()
 	store.autonomyByID[1] = &Policy{ProyectoID: 1, Enabled: true}

@@ -83,22 +83,21 @@ func UpsertProyecto(p *Proyecto) (int64, error) {
 			UPDATE proyectos
 			SET slug=?, nombre=?, ruta_abs=?, tipo=?, parent_id=?, activo=?
 			WHERE id=?`,
-			p.Slug, p.Nombre, p.RutaAbs, p.Tipo, p.ParentID, p.Activo, existenteID,
+			p.Slug, p.Nombre, p.RutaAbs, p.Tipo, p.ParentID, boolToInt(p.Activo), existenteID,
 		)
 		if err != nil {
 			return 0, err
 		}
 		return existenteID, nil
 	case sql.ErrNoRows:
-		res, err := DB.Exec(`
+		id, err := insertReturningID(`
 			INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, parent_id, activo)
 			VALUES (?,?,?,?,?,?)`,
-			p.Slug, p.Nombre, p.RutaAbs, p.Tipo, p.ParentID, p.Activo,
+			p.Slug, p.Nombre, p.RutaAbs, p.Tipo, p.ParentID, boolToInt(p.Activo),
 		)
 		if err != nil {
 			return 0, err
 		}
-		id, _ := res.LastInsertId()
 		return id, nil
 	default:
 		return 0, err
@@ -133,7 +132,7 @@ func UpdateProyecto(p *Proyecto) error {
 		UPDATE proyectos
 		SET slug=?, nombre=?, ruta_abs=?, tipo=?, parent_id=?, activo=?
 		WHERE id=?`,
-		p.Slug, p.Nombre, p.RutaAbs, p.Tipo, p.ParentID, p.Activo, p.ID,
+		p.Slug, p.Nombre, p.RutaAbs, p.Tipo, p.ParentID, boolToInt(p.Activo), p.ID,
 	); err != nil {
 		return err
 	}
@@ -456,7 +455,7 @@ func ListarProyectos(f FiltroProyectos) ([]*Proyecto, error) {
 	}
 	if f.Activo != nil {
 		q += ` AND activo = ?`
-		args = append(args, *f.Activo)
+		args = append(args, boolToInt(*f.Activo))
 	}
 	q += ` ORDER BY ruta_abs`
 

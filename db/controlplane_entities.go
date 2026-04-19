@@ -2122,7 +2122,7 @@ func EncolarRuntimeOrder(order *RuntimeOrder) (int64, error) {
 	if strings.TrimSpace(order.ResultadoJSON) == "" {
 		order.ResultadoJSON = "{}"
 	}
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO runtime_orders (
 			agente, proyecto_id, runtime_id, handle_id, tipo, payload_json, resultado_json,
 			error_text, estado, available_at
@@ -2130,10 +2130,6 @@ func EncolarRuntimeOrder(order *RuntimeOrder) (int64, error) {
 		order.Agente, order.ProyectoID, order.RuntimeID, order.HandleID, order.Tipo,
 		order.PayloadJSON, order.ResultadoJSON, order.ErrorText, defaultRuntimeOrderEstado(order.Estado), nullableTime(order.AvailableAt),
 	)
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
 	if err != nil {
 		return 0, err
 	}
@@ -2307,8 +2303,8 @@ func crearHandoffAgente(origen, destino string, tareaID *int64, motivo, resumenC
 			nota += ": " + payload.Motivo
 		}
 		if _, err := tx.Exec(
-			`UPDATE tareas SET notas = notas || char(10) || ? || ' [' || datetime('now') || ' orquesta]' WHERE id=?`,
-			nota, *tareaID,
+			`UPDATE tareas SET notas = COALESCE(notas,'') || ? WHERE id=?`,
+			formatearAnotacionTarea("orquesta", nota, time.Now().UTC()), *tareaID,
 		); err != nil {
 			return 0, err
 		}
@@ -2340,7 +2336,7 @@ func crearHandoffAgente(origen, destino string, tareaID *int64, motivo, resumenC
 		handleID = &destinoHandle.ID
 	}
 
-	res, err := tx.Exec(`
+	orderID, err := insertReturningIDWith(tx, `
 		INSERT INTO runtime_orders (
 			agente, proyecto_id, runtime_id, handle_id, tipo, payload_json,
 			resultado_json, error_text, estado, available_at
@@ -2350,7 +2346,6 @@ func crearHandoffAgente(origen, destino string, tareaID *int64, motivo, resumenC
 	if err != nil {
 		return 0, err
 	}
-	orderID, _ := res.LastInsertId()
 
 	if err := tx.Commit(); err != nil {
 		return 0, err
@@ -2825,7 +2820,7 @@ func CrearRuntimeCheckpoint(cp *RuntimeCheckpoint) (int64, error) {
 	if strings.TrimSpace(cp.CheckpointKind) == "" {
 		cp.CheckpointKind = "manual"
 	}
-	res, err := DB.Exec(`
+	return insertReturningID(`
 		INSERT INTO runtime_checkpoints (
 			agente, proyecto_id, sesion_id, runtime_id, checkpoint_kind, resumen,
 			branch, cwd, payload_json, resume_strategy, source
@@ -2833,10 +2828,6 @@ func CrearRuntimeCheckpoint(cp *RuntimeCheckpoint) (int64, error) {
 		cp.Agente, cp.ProyectoID, cp.SesionID, cp.RuntimeID, cp.CheckpointKind, cp.Resumen,
 		cp.Branch, cp.CWD, cp.PayloadJSON, cp.ResumeStrategy, cp.Source,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
 }
 
 func UltimoRuntimeCheckpoint(agente string, proyectoID *int64) (*RuntimeCheckpoint, error) {
@@ -2930,16 +2921,12 @@ func EnviarRuntimeMailbox(msg *RuntimeMailboxMessage) (int64, error) {
 	if strings.TrimSpace(msg.PayloadJSON) == "" {
 		msg.PayloadJSON = "{}"
 	}
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO runtime_mailbox (
 			from_agente, to_agente, proyecto_id, runtime_order_id, kind, payload_json, estado
 		) VALUES (?,?,?,?,?,?,?)`,
 		msg.FromAgente, msg.ToAgente, msg.ProyectoID, msg.RuntimeOrderID, msg.Kind, msg.PayloadJSON, defaultMailboxEstado(msg.Estado),
 	)
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
 	if err != nil {
 		return 0, err
 	}
@@ -10672,8 +10659,8 @@ func registrarEvidenciaHandoffReanudadoPorOrden(order *RuntimeOrder, sesionID in
 		if n, _ := res.RowsAffected(); n > 0 {
 			nota := fmt.Sprintf("handoff completado por %s en sesion #%d", strings.TrimSpace(destino), sesionID)
 			if _, err := DB.Exec(
-				`UPDATE tareas SET notas = notas || char(10) || ? || ' [' || datetime('now') || ' orquesta]' WHERE id=?`,
-				nota, *payload.TareaID,
+				`UPDATE tareas SET notas = COALESCE(notas,'') || ? WHERE id=?`,
+				formatearAnotacionTarea("orquesta", nota, time.Now().UTC()), *payload.TareaID,
 			); err != nil {
 				return err
 			}

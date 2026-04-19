@@ -269,6 +269,31 @@ func TestBuildPrepareRecuperaWorktreeActivaSiUltimaSesionTraeCWDObsoleto(t *test
 	}
 }
 
+func TestBuildPrepareErrorSiProyectoNoExiste(t *testing.T) {
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "CodexPg2", Rol: "programador", Activo: true, Habilitado: true},
+		},
+	}
+
+	_, err := NewService(store, nil).BuildPrepare(PrepareInput{
+		Agente:   "CodexPg2",
+		Proyecto: "orquesta",
+	})
+	if err == nil || !strings.Contains(err.Error(), `proyecto "orquesta" no encontrado`) {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestProcessTickErrorSiProyectoNoExiste(t *testing.T) {
+	svc := NewService(&fakeStore{}, nil)
+
+	_, err := svc.ProcessTick(TickInput{Agente: "CodexPg2", Proyecto: "orquesta"})
+	if err == nil || !strings.Contains(err.Error(), `proyecto "orquesta" no encontrado`) {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
 func TestBuildTickOutputPausaPorCuotaSiWorkerTMUXBloqueado(t *testing.T) {
 	now := time.Now().UTC()
 	tmp := t.TempDir()

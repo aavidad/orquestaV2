@@ -404,9 +404,10 @@ func CancelarTarea(id int64, agente, motivo string) error {
 	if err != nil {
 		return fmt.Errorf("tarea #%d no encontrada", id)
 	}
+	anotacion := formatearAnotacionTarea(agente, "CANCELADA: "+motivo, time.Now().UTC())
 	_, err = DB.Exec(
-		`UPDATE tareas SET estado='cancelada', notas = notas || char(10) || 'CANCELADA: ' || ? WHERE id=?`,
-		motivo, id,
+		`UPDATE tareas SET estado='cancelada', notas = COALESCE(notas,'') || ? WHERE id=?`,
+		anotacion, id,
 	)
 	if err == nil {
 		err = defaultTaskTransitioner.AfterCancelarTarea(t, agente, motivo)

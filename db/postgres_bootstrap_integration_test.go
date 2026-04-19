@@ -129,6 +129,143 @@ func TestOpenPostgresBootstrapLimpio(t *testing.T) {
 	defer Close()
 }
 
+func TestPostgresUpsertProyectoAceptaActivoBooleano(t *testing.T) {
+	dsn := strings.TrimSpace(os.Getenv("ORQUESTA_TEST_POSTGRES_DSN"))
+	if dsn == "" {
+		t.Skip("ORQUESTA_TEST_POSTGRES_DSN no definido; se omite el test de integración con Postgres")
+	}
+
+	Close()
+
+	adminDB, err := storage.Open(storage.Config{
+		Driver:       "postgres",
+		DSN:          dsn,
+		MaxOpenConns: 1,
+	})
+	if err != nil {
+		t.Fatalf("abriendo conexion de limpieza: %v", err)
+	}
+	defer adminDB.Close()
+
+	schemaName := fmt.Sprintf("orquesta_test_%d", time.Now().UnixNano())
+	if _, err := adminDB.Exec(`CREATE SCHEMA ` + quotePostgresIdent(schemaName)); err != nil {
+		t.Fatalf("creando schema de prueba: %v", err)
+	}
+	defer func() {
+		_, _ = adminDB.Exec(`DROP SCHEMA IF EXISTS ` + quotePostgresIdent(schemaName) + ` CASCADE`)
+	}()
+
+	schemaDSN, err := postgresTestDSNWithSearchPath(dsn, schemaName)
+	if err != nil {
+		t.Fatalf("construyendo dsn con search_path: %v", err)
+	}
+
+	t.Setenv("ORQUESTA_DB_DRIVER", "postgres")
+	t.Setenv("ORQUESTA_DB_DSN", schemaDSN)
+	t.Setenv("ORQUESTA_DB_BOOTSTRAP", "true")
+	t.Setenv("ORQUESTA_DB_MAX_OPEN_CONNS", "1")
+
+	if err := Open(); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer Close()
+
+	id, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquesta",
+		Nombre:  "Orquesta",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	if id == 0 {
+		t.Fatalf("id de proyecto inesperado: %d", id)
+	}
+
+	activo := true
+	proyectos, err := ListarProyectos(FiltroProyectos{Activo: &activo})
+	if err != nil {
+		t.Fatalf("ListarProyectos: %v", err)
+	}
+	if len(proyectos) != 1 || proyectos[0].Slug != "orquesta" {
+		t.Fatalf("proyectos activos inesperados: %+v", proyectos)
+	}
+}
+
+func TestPostgresIniciarSesionContextoDevuelveSesionCreada(t *testing.T) {
+	dsn := strings.TrimSpace(os.Getenv("ORQUESTA_TEST_POSTGRES_DSN"))
+	if dsn == "" {
+		t.Skip("ORQUESTA_TEST_POSTGRES_DSN no definido; se omite el test de integración con Postgres")
+	}
+
+	Close()
+
+	adminDB, err := storage.Open(storage.Config{
+		Driver:       "postgres",
+		DSN:          dsn,
+		MaxOpenConns: 1,
+	})
+	if err != nil {
+		t.Fatalf("abriendo conexion de limpieza: %v", err)
+	}
+	defer adminDB.Close()
+
+	schemaName := fmt.Sprintf("orquesta_test_%d", time.Now().UnixNano())
+	if _, err := adminDB.Exec(`CREATE SCHEMA ` + quotePostgresIdent(schemaName)); err != nil {
+		t.Fatalf("creando schema de prueba: %v", err)
+	}
+	defer func() {
+		_, _ = adminDB.Exec(`DROP SCHEMA IF EXISTS ` + quotePostgresIdent(schemaName) + ` CASCADE`)
+	}()
+
+	schemaDSN, err := postgresTestDSNWithSearchPath(dsn, schemaName)
+	if err != nil {
+		t.Fatalf("construyendo dsn con search_path: %v", err)
+	}
+
+	t.Setenv("ORQUESTA_DB_DRIVER", "postgres")
+	t.Setenv("ORQUESTA_DB_DSN", schemaDSN)
+	t.Setenv("ORQUESTA_DB_BOOTSTRAP", "true")
+	t.Setenv("ORQUESTA_DB_MAX_OPEN_CONNS", "1")
+
+	if err := Open(); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer Close()
+
+	if err := RegistrarAgente("CodexPg2", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquesta",
+		Nombre:  "Orquesta",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "CodexPg2",
+		ProyectoID:        &proyectoID,
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-postgres",
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
+	if sesion == nil || sesion.ID <= 0 {
+		t.Fatalf("sesion inesperada: %+v", sesion)
+	}
+	if sesion.ProyectoID == nil || *sesion.ProyectoID != proyectoID {
+		t.Fatalf("sesion proyecto inesperado: %+v", sesion)
+	}
+}
+
 func tableRowCount(table string) (int64, error) {
 	var count int64
 	if err := DB.QueryRow(`SELECT COUNT(*) FROM ` + quotePostgresIdent(table)).Scan(&count); err != nil {

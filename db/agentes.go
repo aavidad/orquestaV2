@@ -87,22 +87,23 @@ func ResetEstadoAgentes() error {
 // GarantizarSaludAgentes realiza el mantenimiento automático de los estados y cuotas de los agentes.
 // Se encarga de resetear cuotas a las 2 AM, desactivar agentes agotados y limpiar estados fantasma.
 func GarantizarSaludAgentes() error {
-	ahora := time.Now()
-	
-	// 1. Resetear cuotas si ha pasado de las 2 AM y no se ha reseteado hoy.
-	// Nota: Si last_usage_reset_at es NULL o no es hoy y ya son las 02:XX AM o más.
-	if _, err := DB.Exec(`
-			UPDATE agentes 
-			SET consumo_dia_segundos = 0, 
-			    estado_cuota = 'activo', 
-			    last_usage_reset_at = CURRENT_TIMESTAMP
-			WHERE last_usage_reset_at IS NULL 
-			   OR (
-				 strftime('%Y-%m-%d', last_usage_reset_at) != strftime('%Y-%m-%d', 'now') 
-				 AND strftime('%H', 'now') >= '02'
-			   )
-		`); err != nil {
-		return err
+	ahora := time.Now().UTC()
+
+	// 1. Resetear cuotas si ya hemos pasado el corte diario de las 02:00 UTC y
+	// el último reset es anterior a ese corte.
+	if ahora.Hour() >= 2 {
+		corteReset := time.Date(ahora.Year(), ahora.Month(), ahora.Day(), 2, 0, 0, 0, time.UTC)
+		if _, err := DB.Exec(`
+				UPDATE agentes
+				SET consumo_dia_segundos = 0,
+				    estado_cuota = 'activo',
+				    last_usage_reset_at = CURRENT_TIMESTAMP
+				WHERE last_usage_reset_at IS NULL
+				   OR last_usage_reset_at < ?`,
+			corteReset,
+		); err != nil {
+			return err
+		}
 	}
 
 	// 2. Mandar a dormir (agotado) a los que se pasen del límite diario.

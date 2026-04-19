@@ -2057,8 +2057,12 @@ func (s *Service) EnqueueAgentControl(req AgentControlRequest) (int64, string, e
 	if err != nil {
 		return 0, "", err
 	}
-	if _, err := s.store.GetAgent(agente); err != nil {
+	agenteInfo, err := s.store.GetAgent(agente)
+	if err != nil {
 		return 0, "", err
+	}
+	if agenteInfo == nil {
+		return 0, "", fmt.Errorf("agente %q no encontrado", agente)
 	}
 
 	var (
@@ -2070,14 +2074,17 @@ func (s *Service) EnqueueAgentControl(req AgentControlRequest) (int64, string, e
 	if accion == "start" && proyectoRef == "" {
 		return 0, "", fmt.Errorf("debes indicar proyecto para arrancar el agente")
 	}
-	if proyectoRef != "" {
-		proyecto, err := s.store.GetProject(proyectoRef)
-		if err != nil {
-			return 0, "", err
+		if proyectoRef != "" {
+			proyecto, err := s.store.GetProject(proyectoRef)
+			if err != nil {
+				return 0, "", err
+			}
+			if proyecto == nil {
+				return 0, "", fmt.Errorf("proyecto %q no encontrado", proyectoRef)
+			}
+			proyectoID = &proyecto.ID
+			proyectoRef = strings.TrimSpace(proyecto.Slug)
 		}
-		proyectoID = &proyecto.ID
-		proyectoRef = strings.TrimSpace(proyecto.Slug)
-	}
 	if accion == "start" {
 		if _, err := s.store.ReconcileStaleRuntimeOrders(); err != nil {
 			return 0, "", err
