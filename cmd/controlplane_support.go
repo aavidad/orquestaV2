@@ -2952,7 +2952,7 @@ func procesarRuntimeMailboxPhases(phases []runtimeMailboxBatchPhase, budget time
 		phaseStart := time.Now()
 		n, err := phase.fn()
 		total += n
-		runtimeMailboxBatchDebugf("phase=%s duration=%s processed=%d err=%v", strings.TrimSpace(phase.name), time.Since(phaseStart).Round(time.Millisecond), n, err != nil)
+		runtimeMailboxBatchDebugf("phase=%s duration=%s processed=%d err=%v err_detail=%v", strings.TrimSpace(phase.name), time.Since(phaseStart).Round(time.Millisecond), n, err != nil, err)
 		if err != nil {
 			if runtimeMailboxHandleDeferredBatchError(phase.deferStage, err) {
 				continue
@@ -6071,6 +6071,9 @@ func runtimeMailboxInteractiveWorkerStateForHandle(handle *db.RuntimeHandle, now
 	}
 	snap, err := runtimeMailboxLoadWorkerSnapshotFn(strings.TrimSpace(handle.MetadataJSON))
 	if err != nil {
+		if runtimeHandlePermiteInteractivoTmuxSinEstado(handle) {
+			return &runtimeMailboxInteractiveWorkerState{fallback: true}, nil
+		}
 		return nil, err
 	}
 	if snap == nil {

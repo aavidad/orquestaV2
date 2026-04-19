@@ -10354,6 +10354,94 @@ func TestProcesarRuntimeMailboxInteractivoMensajeReutilizaWorkerState(t *testing
 	}
 }
 
+func TestProcesarRuntimeMailboxInteractivoMensajeToleraSnapshotRotoConFallbackTMUX(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+	t.Cleanup(resetRuntimeMailboxReevaluationGate)
+
+	prevSync := runtimeMailboxSyncSupervisedHandleFn
+	prevLoad := runtimeMailboxLoadWorkerSnapshotFn
+	prevBuild := runtimeMailboxBuildInteractiveInstructionFn
+	t.Cleanup(func() {
+		runtimeMailboxSyncSupervisedHandleFn = prevSync
+		runtimeMailboxLoadWorkerSnapshotFn = prevLoad
+		runtimeMailboxBuildInteractiveInstructionFn = prevBuild
+	})
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"texto":"continua"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: msg=%+v err=%v", msg, err)
+	}
+	now := time.Now().UTC()
+	msg.CreatedAt = now
+
+	handle := &db.RuntimeHandle{
+		ID:               43,
+		Agente:           "Codex1",
+		ProyectoID:       &proyectoID,
+		Estado:           "activo",
+		Transporte:       "tmux",
+		HandleKind:       "session",
+		MetadataJSON:     `{"driver":"tmux_cli_session","tmux_session":"orq-codex1","tmux_pane_id":"%9","can_send_input":true,"mailbox_delivery_mode":"interactive"}`,
+		CapabilitiesJSON: `{"can_send_input":true,"mailbox_delivery_mode":"interactive"}`,
+	}
+	snapshot := &runtimeMailboxBatchSnapshot{
+		activeHandles: map[string]*db.RuntimeHandle{
+			runtimeMailboxBatchKey("Codex1", &proyectoID): handle,
+		},
+		activeHandleLoaded: map[string]struct{}{
+			runtimeMailboxBatchKey("Codex1", &proyectoID): {},
+		},
+		ordersByAgentProject: map[string][]*db.RuntimeOrder{},
+		ordersLoaded: map[string]struct{}{
+			runtimeMailboxBatchKey("Codex1", &proyectoID): {},
+		},
+		supervisedByHandleID: map[int64]runtimeMailboxSupervisedHandleSnapshot{},
+	}
+
+	runtimeMailboxSyncSupervisedHandleFn = func(handle *db.RuntimeHandle, runtime *db.RuntimeInstance, source string) (*db.RuntimeHandle, *db.RuntimeInstance, string, error) {
+		return handle, runtime, "", nil
+	}
+	runtimeMailboxLoadWorkerSnapshotFn = func(raw string) (*runtimeagente.WorkerSnapshot, error) {
+		return nil, fmt.Errorf("snapshot roto")
+	}
+	runtimeMailboxBuildInteractiveInstructionFn = func(msg *db.RuntimeMailboxMessage) (string, bool) {
+		return "continua", true
+	}
+
+	dispatched, err := procesarRuntimeMailboxInteractivoMensaje(msg, map[int64]struct{}{}, snapshot)
+	if err != nil {
+		t.Fatalf("procesarRuntimeMailboxInteractivoMensaje: %v", err)
+	}
+	if !dispatched {
+		t.Fatal("deberia despachar el mensaje interactivo con fallback TMUX")
+	}
+}
+
 func TestProcesarRuntimeMailboxBootstrapTMUXBatchEvitaSupervisionSiNoTocaReevaluar(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()

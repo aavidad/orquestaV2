@@ -648,6 +648,9 @@ func serverBaseURL() string {
 	if v := strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_URL")); v != "" {
 		return strings.TrimRight(v, "/")
 	}
+	if v := configuredServerAddrURL(); v != "" {
+		return v
+	}
 	if strings.TrimSpace(os.Getenv("ORQUESTA_DISABLE_SERVER_CLIENT")) == "1" {
 		return ""
 	}
@@ -658,7 +661,7 @@ func serverBaseURL() string {
 }
 
 func serverURLConfiguredExplicitly() bool {
-	return strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_URL")) != ""
+	return strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_URL")) != "" || strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_ADDR")) != ""
 }
 
 func serverReachable() bool {

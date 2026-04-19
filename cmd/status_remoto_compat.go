@@ -80,6 +80,13 @@ func configuredServerURL() string {
 	return strings.TrimRight(strings.TrimSpace(os.Getenv(serverURLVar)), "/")
 }
 
+func configuredServerAddrURL() string {
+	if addr := strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_ADDR")); addr != "" {
+		return rpclocal.BaseURL(addr)
+	}
+	return ""
+}
+
 func activeServerURL() string {
 	if strings.TrimSpace(os.Getenv("ORQUESTA_DISABLE_SERVER_CLIENT")) == "1" {
 		return ""
@@ -117,6 +124,7 @@ func candidateServerURLs() []string {
 	}
 
 	add(configuredServerURL())
+	add(configuredServerAddrURL())
 	add(rpclocal.ResolveServerAddr())
 	add(defaultServerURL)
 	return candidates

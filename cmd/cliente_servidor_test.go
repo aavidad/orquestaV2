@@ -275,6 +275,40 @@ func TestServerBaseURLUsaHealthzSiFaltaStatefile(t *testing.T) {
 	}
 }
 
+func TestServerBaseURLPrefiereServerAddrExplicitoSobreStatefileMuerto(t *testing.T) {
+	var advertisedAddr string
+	mux := http.NewServeMux()
+	mux.HandleFunc(rpclocal.HealthPath, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(rpclocal.HealthResponse{
+			OK:      true,
+			Addr:    advertisedAddr,
+			PID:     4242,
+			ScopeID: rpclocal.CurrentScopeID(),
+		})
+	})
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+	advertisedAddr = strings.TrimPrefix(srv.URL, "http://")
+
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte(`{"addr":"127.0.0.1:1","pid":1,"scope_id":"`+rpclocal.CurrentScopeID()+`"}`), 0o600); err != nil {
+		t.Fatalf("write stale state: %v", err)
+	}
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_INFO", statePath)()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_STATE", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_ADDR", strings.TrimPrefix(srv.URL, "http://"))()
+
+	if got := serverBaseURL(); got != srv.URL {
+		t.Fatalf("serverBaseURL=%q, want %q", got, srv.URL)
+	}
+	if !serverURLConfiguredExplicitly() {
+		t.Fatalf("se esperaba detectar ORQUESTA_SERVER_ADDR como destino explicito")
+	}
+}
+
 func TestRequireServerForCurrentCommand(t *testing.T) {
 	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "1")()
 	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()

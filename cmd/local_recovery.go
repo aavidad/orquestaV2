@@ -52,9 +52,28 @@ func shouldOpenRecoveryReadOnlyDB(args []string) bool {
 	}
 }
 
+func localRecoveryWriteCommandAllowed(args []string) bool {
+	if !localRecoveryRequested(args) {
+		return false
+	}
+	tokens := commandPathTokens(normalizedCommandArgs(args))
+	if len(tokens) == 0 {
+		return false
+	}
+	switch tokens[0] {
+	case "config":
+		return len(tokens) > 1 && tokens[1] == "set"
+	default:
+		return false
+	}
+}
+
 func localRecoveryCommandAllowed(args []string) bool {
 	if !localRecoveryRequested(args) {
 		return false
+	}
+	if shouldOpenRecoveryReadOnlyDB(args) || localRecoveryWriteCommandAllowed(args) {
+		return true
 	}
 	tokens := commandPathTokens(normalizedCommandArgs(args))
 	if len(tokens) == 0 {
@@ -84,7 +103,7 @@ func localRecoveryCommandAllowed(args []string) bool {
 			}
 		}
 	}
-	return shouldOpenRecoveryReadOnlyDB(args)
+	return false
 }
 
 func localRecoveryUnsupportedError(args []string) error {

@@ -10,11 +10,14 @@ package cmd
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"orquesta/db"
+	"orquesta/internal/rpclocal"
 )
 
 func TestConfigUsaAPI(t *testing.T) {
@@ -126,6 +129,42 @@ func TestConfigRequiereServidor(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "requiere el servidor de Orquesta activo") {
 		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestConfigUsaServerAddrExplicitoAunqueStatefileEsteMuerto(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "metodo no soportado", http.StatusMethodNotAllowed)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	rawState := []byte(`{"addr":"127.0.0.1:1","pid":1,"scope_id":"` + rpclocal.CurrentScopeID() + `"}`)
+	if err := os.WriteFile(statePath, rawState, 0o600); err != nil {
+		t.Fatalf("write stale state: %v", err)
+	}
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_ADDR", strings.TrimPrefix(srv.URL, "http://"))()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_INFO", statePath)()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_STATE", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	outSet := capturarStdout(t, func() {
+		if err := configSetCmd.RunE(configSetCmd, []string{"workspace_root", "/srv/workspace"}); err != nil {
+			t.Fatalf("config set via server addr explicito: %v", err)
+		}
+	})
+	if !strings.Contains(outSet, "workspace_root = /srv/workspace") {
+		t.Fatalf("salida config set inesperada:\n%s", outSet)
 	}
 }
 

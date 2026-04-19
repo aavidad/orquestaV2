@@ -60,12 +60,23 @@ func TestLocalRecovery(t *testing.T) {
 		{"runtime", "listar", "--local"},
 		{"runtime", "diagnostico", "--local"},
 		{"runtime", "transcript", "--local"},
+		{"config", "set", "server_autobootstrap_enabled", "true", "--local"},
 	}
 	for _, args := range permitidos {
 		if !localRecoveryCommandAllowed(args) {
 			t.Errorf("localRecoveryCommandAllowed(%v) = false; esperaba true (comando de lectura)", args)
 		}
 	}
+}
+
+func TestOpenDBForCommandPermiteConfigSetEnLocalExplicito(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "1")()
+
+	db.Close()
+	if err := openDBForCommand([]string{"config", "set", "server_autobootstrap_enabled", "true"}); err != nil {
+		t.Fatalf("se esperaba permitir config set en local explicito: %v", err)
+	}
+	db.Close()
 }
 
 func TestEnsureLocalDBRechazaComandosNoDiagnosticosEnRecuperacionLocal(t *testing.T) {

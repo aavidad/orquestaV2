@@ -106,7 +106,10 @@ func openDBForCommand(args []string) error {
 		if !localRecoveryCommandAllowed(args) {
 			return localRecoveryUnsupportedError(args)
 		}
-		return db.OpenRecoveryReadOnly()
+		if shouldOpenRecoveryReadOnlyDB(args) {
+			return db.OpenRecoveryReadOnly()
+		}
+		return db.Open()
 	}
 	return db.Open()
 }

@@ -129,10 +129,24 @@ var (
 	apiStatusFetchTimeout        = 3 * time.Second
 	apiAgentOverviewTimeout      = 3 * time.Second
 	apiAgentBudgetRefreshTimeout = 3 * time.Second
+	apiConfigTimeout             = 3 * time.Second
 	apiAgentPrepareTimeout       = 6 * time.Second
 	apiAgentTickTimeout          = 6 * time.Second
 	apiAgentPrepareLimiter       = make(chan struct{}, 4)
-	apiAgentDetailBuilder        = func(nombre string, compact bool) (*agentesapp.Detail, error) {
+	apiConfigGetFn               = func(clave string) (string, error) {
+		return configService.Get(clave)
+	}
+	apiConfigListFn = func() (map[string]string, error) {
+		return configService.List()
+	}
+	apiConfigSetFn = func(clave, valor string) error {
+		if err := configService.Set(clave, valor); err != nil {
+			return err
+		}
+		resetControlPlaneConfigCache()
+		return nil
+	}
+	apiAgentDetailBuilder = func(nombre string, compact bool) (*agentesapp.Detail, error) {
 		if compact {
 			return agentesService.BuildDetailCompact(nombre)
 		}
@@ -1609,16 +1623,26 @@ func apiHandlerConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		if clave := strings.TrimSpace(r.URL.Query().Get("clave")); clave != "" {
-			valor, err := configService.Get(clave)
+			valor, err := runAPITimeboxed(apiConfigTimeout, func() (string, error) {
+				return apiConfigGetFn(clave)
+			}, errStatusFetchTimeout)
 			if err != nil {
+				if errors.Is(err, errStatusFetchTimeout) {
+					apiError(w, http.StatusServiceUnavailable, fmt.Errorf("config temporalmente degradado"))
+					return
+				}
 				apiError(w, http.StatusNotFound, err)
 				return
 			}
 			apiWriteJSON(w, http.StatusOK, map[string]any{"clave": clave, "valor": valor})
 			return
 		}
-		config, err := configService.List()
+		config, err := runAPITimeboxed(apiConfigTimeout, apiConfigListFn, errStatusFetchTimeout)
 		if err != nil {
+			if errors.Is(err, errStatusFetchTimeout) {
+				apiError(w, http.StatusServiceUnavailable, fmt.Errorf("config temporalmente degradado"))
+				return
+			}
 			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -1634,7 +1658,13 @@ func apiHandlerConfig(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, fmt.Errorf("clave obligatoria"))
 			return
 		}
-		if err := configService.Set(req.Clave, req.Valor); err != nil {
+		if _, err := runAPITimeboxed(apiConfigTimeout, func() (struct{}, error) {
+			return struct{}{}, apiConfigSetFn(req.Clave, req.Valor)
+		}, errStatusFetchTimeout); err != nil {
+			if errors.Is(err, errStatusFetchTimeout) {
+				apiError(w, http.StatusServiceUnavailable, fmt.Errorf("config temporalmente degradado"))
+				return
+			}
 			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
