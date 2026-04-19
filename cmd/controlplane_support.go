@@ -11986,12 +11986,14 @@ func sesionActivaDebeRecibirNudgeContinuacionConSnapshot(sesion *db.Sesion, proy
 	} else if pendiente {
 		return tareaID, false, nil
 	}
-	if vigente, err := sesionActivaTieneContinuidadDurableVigente(sesion, handle); err != nil {
+	if vigente, err := sesionActivaTieneContinuidadDurableVigente(sesion, handle, tareaID); err != nil {
 		return tareaID, false, err
 	} else if vigente {
 		return tareaID, false, nil
 	}
-	if !sesionActivaTMUXStaleParaContinuacion(handle, time.Now().UTC(), autonomiaContinueNudgeInterval()) {
+	now := time.Now().UTC()
+	if !sesionActivaTMUXListaParaContinuacion(handle, now) &&
+		!sesionActivaTMUXStaleParaContinuacion(handle, now, autonomiaContinueNudgeInterval()) {
 		return tareaID, false, nil
 	}
 	return tareaID, true, nil
@@ -12033,7 +12035,7 @@ func tareaActivaSesionDesdeSnapshot(sesion *db.Sesion, snapshot *autonomiaBatchS
 	return candidata.ID, nil
 }
 
-func sesionActivaTieneContinuidadDurableVigente(sesion *db.Sesion, handle *db.RuntimeHandle) (bool, error) {
+func sesionActivaTieneContinuidadDurableVigente(sesion *db.Sesion, handle *db.RuntimeHandle, tareaID int64) (bool, error) {
 	if sesion == nil || handle == nil || sesion.ProyectoID == nil || *sesion.ProyectoID <= 0 {
 		return false, nil
 	}
@@ -12057,14 +12059,14 @@ func sesionActivaTieneContinuidadDurableVigente(sesion *db.Sesion, handle *db.Ru
 		return false, err
 	}
 	for _, order := range orders {
-		if sesionActivaRuntimeOrderEsContinuidadDurableVigente(order, handle, currentSessionID, currentSignature) {
+		if sesionActivaRuntimeOrderEsContinuidadDurableVigente(order, handle, currentSessionID, currentSignature, tareaID) {
 			return true, nil
 		}
 	}
 	return false, nil
 }
 
-func sesionActivaRuntimeOrderEsContinuidadDurableVigente(order *db.RuntimeOrder, handle *db.RuntimeHandle, currentSessionID, currentSignature string) bool {
+func sesionActivaRuntimeOrderEsContinuidadDurableVigente(order *db.RuntimeOrder, handle *db.RuntimeHandle, currentSessionID, currentSignature string, tareaID int64) bool {
 	if order == nil || handle == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
 		return false
 	}
@@ -12082,18 +12084,25 @@ func sesionActivaRuntimeOrderEsContinuidadDurableVigente(order *db.RuntimeOrder,
 	case "pendiente", "tomada", "ejecutando":
 		return runtimeOrderSigueBloqueandoMailbox(order, time.Now().UTC())
 	case "completada":
-		return runtimeOrderCompletedMailboxAttemptStillBlocksSesionActiva(order, currentSessionID, currentSignature)
+		return runtimeOrderCompletedMailboxAttemptStillBlocksSesionActiva(order, currentSessionID, currentSignature, tareaID)
 	default:
 		return false
 	}
 }
 
-func runtimeOrderCompletedMailboxAttemptStillBlocksSesionActiva(order *db.RuntimeOrder, currentSessionID, currentSignature string) bool {
+func runtimeOrderCompletedMailboxAttemptStillBlocksSesionActiva(order *db.RuntimeOrder, currentSessionID, currentSignature string, tareaID int64) bool {
 	if order == nil || !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
 		return false
 	}
 	if !runtimeOrderMatchesCurrentMailboxDeliveryAttempt(order, currentSessionID, currentSignature) {
 		return false
+	}
+	if tareaID > 0 {
+		payload := mapFromJSON(order.PayloadJSON)
+		orderTaskID := int64PtrFromMap(payload, "tarea_id")
+		if orderTaskID == nil || *orderTaskID != tareaID {
+			return false
+		}
 	}
 	reference := order.UpdatedAt
 	if order.FinishedAt != nil && !order.FinishedAt.IsZero() {
@@ -12159,6 +12168,22 @@ func sesionActivaTMUXStaleParaContinuacion(handle *db.RuntimeHandle, now time.Ti
 		return false
 	}
 	return !lastActivity.After(now.UTC().Add(-staleAfter))
+}
+
+func sesionActivaTMUXListaParaContinuacion(handle *db.RuntimeHandle, now time.Time) bool {
+	if handle == nil {
+		return false
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
+	if err != nil || snap == nil {
+		return false
+	}
+	view := snap.View(now.UTC(), 2*time.Minute)
+	if view == nil || !view.Alive || view.HeartbeatStale {
+		return false
+	}
+	ready, _ := snap.ReadyForTextDispatch(now.UTC(), time.Minute)
+	return ready || runtimeHandleWorkerCanonicalState(view) == "waiting_input"
 }
 
 func runtimeHandleSesionActivaParaContinuacion(sesion *db.Sesion) (*db.RuntimeHandle, error) {
