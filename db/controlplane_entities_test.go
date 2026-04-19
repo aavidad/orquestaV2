@@ -6077,6 +6077,105 @@ func TestResolverBootstrapRuntimeLeasePendienteReconoceStartPendienteConLeaseVig
 	}
 }
 
+func TestResolverBootstrapRuntimeLeasePendienteNoNormalizaLegacyProcessPTYComoTMUX(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	metaJSON := fmt.Sprintf(`{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"%s","external_session_id":"sess-legacy"}`, workingDir)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET transporte='cli', handle_kind='process', handle_ref='legacy-codex1', metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, metaJSON, handle.ID); err != nil {
+		t.Fatalf("marcar handle legacy: %v", err)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"texto":"continua trabajo actual"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		Estado:     "pendiente",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			mailboxID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start lease: %v", err)
+	}
+
+	order, startOrderID, mailboxIDs, sesionID, err := resolverBootstrapRuntimeLeasePendiente(handle, runtime)
+	if err != nil {
+		t.Fatalf("resolverBootstrapRuntimeLeasePendiente: %v", err)
+	}
+	if order == nil || order.ID != startID {
+		t.Fatalf("lease bootstrap pendiente inesperada: %+v", order)
+	}
+	if startOrderID != 0 {
+		t.Fatalf("start_order_id inesperado: %d", startOrderID)
+	}
+	if sesionID != sesion.ID {
+		t.Fatalf("sesion_id inesperado: got=%d want=%d", sesionID, sesion.ID)
+	}
+	if len(mailboxIDs) != 1 || mailboxIDs[0] != mailboxID {
+		t.Fatalf("mailbox_ids inesperados: %+v", mailboxIDs)
+	}
+
+	persistedHandle, err := GetRuntimeHandle(handle.ID)
+	if err != nil || persistedHandle == nil {
+		t.Fatalf("persisted handle: %+v err=%v", persistedHandle, err)
+	}
+	if strings.TrimSpace(persistedHandle.Transporte) != "cli" || strings.TrimSpace(persistedHandle.HandleKind) != "process" {
+		t.Fatalf("resolver lease no deberia normalizar handle legacy a tmux: %+v", persistedHandle)
+	}
+}
+
 func TestRuntimeMailboxCubiertoPorBootstrapPendienteIgnoraLeaseDeliveredSinConsumo(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
