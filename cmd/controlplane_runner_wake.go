@@ -22,7 +22,9 @@ func init() {
 	processRuntimeOrdersWakeFallback = runRuntimeOrdersWakeFallback
 	processRuntimeMailboxWakeFallback = runRuntimeMailboxWakeFallback
 	runtimesService.SetAfterEnqueueRuntimeOrderHook(func(order *db.RuntimeOrder, orderID int64) {
-		wakeControlPlaneRuntimeOrders()
+		if activeControlPlaneRunner.Load() != nil {
+			wakeControlPlaneRuntimeOrders()
+		}
 	})
 	runtimesService.SetAfterCreateRuntimeMailboxHook(func(msg *db.RuntimeMailboxMessage, mailboxID int64) {
 		wakeControlPlaneRuntimeMailbox()

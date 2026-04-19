@@ -269,6 +269,36 @@ func TestWakeControlPlaneRuntimeOrdersUsaFallbackSinRunnerActivo(t *testing.T) {
 	}
 }
 
+func TestAfterEnqueueRuntimeOrderHookNoUsaFallbackSinRunnerActivo(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	previous := processRuntimeOrdersWakeFallback
+	done := make(chan struct{}, 1)
+	processRuntimeOrdersWakeFallback = func() {
+		done <- struct{}{}
+	}
+	defer func() {
+		processRuntimeOrdersWakeFallback = previous
+		runtimeOrdersWakeFallbackRunning.Store(false)
+		runtimeOrdersWakeFallbackStartedAt.Store(0)
+	}()
+	activeControlPlaneRunner.Store(nil)
+
+	if _, err := runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "CodexLibre",
+		Tipo:        "pause",
+		PayloadJSON: `{"accion":"pause","motivo":"test"}`,
+	}); err != nil {
+		t.Fatalf("create runtime order: %v", err)
+	}
+
+	select {
+	case <-done:
+		t.Fatalf("encolar runtime order no deberia drenar fallback sin runner activo")
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
 func TestWakeControlPlaneRuntimeMailboxUsaFallbackSinRunnerActivo(t *testing.T) {
 	previous := processRuntimeMailboxWakeFallback
 	done := make(chan struct{}, 1)

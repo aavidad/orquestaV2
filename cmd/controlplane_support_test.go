@@ -5916,6 +5916,90 @@ func TestSesionActivaDebeRecibirNudgeContinuacionConWorkerReadyAunqueNoEsteStale
 	}
 }
 
+func TestSesionActivaDebeRecibirNudgeContinuacionNoPideNudgeSiTMUXReadyEsInteractivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex11ReadyInteractive", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-ready-interactive",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex11ReadyInteractive", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Slice tmux interactivo listo",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex11ReadyInteractive"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex11ReadyInteractive"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex11ReadyInteractive",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	now := time.Now().UTC()
+	traceDir := filepath.Join(tmp, "runtime", "codex11readyinteractive")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex11ReadyInteractive","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex11readyinteractive","tmux_pane_id":"%44","created_at":"`+now.Format(time.RFC3339Nano)+`","started_at":"`+now.Format(time.RFC3339Nano)+`","can_send_input":true}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"ready","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`","ready_at":"`+now.Format(time.RFC3339Nano)+`","last_output_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now.Format(time.RFC3339Nano)+`","ready_at":"`+now.Format(time.RFC3339Nano)+`","last_output_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON := fmt.Sprintf(`{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex11readyinteractive","tmux_pane_id":"%%44","can_send_input":true,"mailbox_delivery_mode":"interactive","worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`, manifestPath, statusPath, heartbeatPath)
+	capsJSON := `{"can_send_input":true,"mailbox_delivery_mode":"interactive"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex11readyinteractive/%44', capabilities_json=?, metadata_json=?, estado='activo', updated_at=? WHERE id=?`, capsJSON, metaJSON, now, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	gotTaskID, debe, err := sesionActivaDebeRecibirNudgeContinuacion(sesion, &db.Proyecto{ID: proyectoID})
+	if err != nil {
+		t.Fatalf("evaluar continuidad: %v", err)
+	}
+	if gotTaskID != tareaID {
+		t.Fatalf("tarea activa inesperada: got=%d want=%d", gotTaskID, tareaID)
+	}
+	if debe {
+		t.Fatal("no deberia pedir nudge si el TMUX ready ya es interactivo")
+	}
+}
+
 func TestSesionActivaDebeRecibirNudgeContinuacionNoDuplicaSiHayStartPendiente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -14439,8 +14523,6 @@ func TestProcesarRuntimeMailboxSessionResumeBatchNoRematerializaGuidanceCaducada
 		t.Fatalf("no deberia crear una nueva send_instruction guidance: %d", sendCount)
 	}
 }
-
-
 
 func TestProcesarRuntimeMailboxSessionResumeBatchPermiteGuidanceDurableAunqueBootstrapSigaPendiente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)

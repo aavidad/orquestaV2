@@ -12453,11 +12453,18 @@ func sesionActivaDebeRecibirNudgeContinuacionConSnapshot(sesion *db.Sesion, proy
 		return tareaID, false, nil
 	}
 	now := time.Now().UTC()
-	if !sesionActivaTMUXListaParaContinuacion(handle, now) &&
-		!sesionActivaTMUXStaleParaContinuacion(handle, now, autonomiaContinueNudgeInterval()) {
-		return tareaID, false, nil
+	if sesionActivaTMUXStaleParaContinuacion(handle, now, autonomiaContinueNudgeInterval()) {
+		return tareaID, true, nil
 	}
-	return tareaID, true, nil
+	if sesionActivaTMUXListaParaContinuacion(handle, now) {
+		switch runtimeagente.NormalizeMailboxDeliveryMode(db.RuntimeHandleMailboxDeliveryMode(handle)) {
+		case runtimeagente.MailboxDeliverySessionResume, runtimeagente.MailboxDeliveryBootstrapOnly:
+			return tareaID, true, nil
+		default:
+			return tareaID, false, nil
+		}
+	}
+	return tareaID, false, nil
 }
 
 func tareaActivaSesionDesdeSnapshot(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int64, error) {
