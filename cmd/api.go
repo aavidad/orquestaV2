@@ -5652,12 +5652,11 @@ func apiHandlerRuntimeProcessTranscript(w http.ResponseWriter, r *http.Request) 
 	}
 	if agente := strings.TrimSpace(req.Agente); agente != "" {
 		agente = apiNombreAgenteCanonico(agente)
-		handles, err := runtimesService.ListRuntimeHandles(&agente)
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
-		var proyectoID *int64
+		var (
+			handle    *db.RuntimeHandle
+			err       error
+			proyectoID *int64
+		)
 		if proyecto := strings.TrimSpace(req.Proyecto); proyecto != "" {
 			p, err := apiRuntimeProcessMailboxProjectFn(proyecto)
 			if err != nil {
@@ -5665,25 +5664,24 @@ func apiHandlerRuntimeProcessTranscript(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 			proyectoID = &p.ID
+			handle, err = db.GetRuntimeHandleCanonicoRecienteAgenteProyecto(agente, proyectoID)
+		} else {
+			handle, err = db.GetRuntimeHandleCanonicoRecienteAgente(agente)
 		}
-		total := 0
-		for _, handle := range handles {
-			if handle == nil || handle.ID <= 0 {
-				continue
-			}
-			if proyectoID != nil {
-				if handle.ProyectoID == nil || *handle.ProyectoID != *proyectoID {
-					continue
-				}
-			}
-			n, err := db.IngestarRuntimeTranscriptHandle(handle.ID)
-			if err != nil {
-				apiError(w, http.StatusInternalServerError, err)
-				return
-			}
-			total += n
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
 		}
-		apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{OK: true, Count: total})
+		if handle == nil || handle.ID <= 0 {
+			apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{OK: true, Count: 0})
+			return
+		}
+		count, err := db.IngestarRuntimeTranscriptHandle(handle.ID)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{OK: true, Count: count})
 		return
 	}
 	if req.Wait {
