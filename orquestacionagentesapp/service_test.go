@@ -17,6 +17,8 @@ type stubAgentPreparer struct {
 	err   error
 }
 
+func int64Ptr(v int64) *int64 { return &v }
+
 func (s *stubAgentPreparer) BuildPrepare(input agentesapp.PrepareInput) (*agentesapp.PrepareOutput, error) {
 	s.input = input
 	return s.out, s.err
@@ -34,14 +36,18 @@ type stubRuntimeController struct {
 	enqueuedRuntimeOrder *db.RuntimeOrder
 	reconcileHandles     int
 	reconcileHandlesErr  error
+	reconcileHandlesHits int
 	reconcileOrders      int
 	reconcileOrdersErr   error
+	reconcileOrdersHits  int
 	purgeHandlesReq      runtimesapp.RuntimeHandlePurgeRequest
 	purgeHandlesResult   *db.PurgaRuntimeHandlesResultado
 	purgeHandlesErr      error
+	purgeHandlesHits     int
 	purgeOrdersReq       runtimesapp.RuntimeOrderPurgeRequest
 	purgeOrdersResult    *db.PurgaRuntimeOrdersResultado
 	purgeOrdersErr       error
+	purgeOrdersHits      int
 	project              *db.Proyecto
 	projectErr           error
 	runtime              *db.RuntimeInstance
@@ -77,14 +83,17 @@ func (s *stubRuntimeController) GetProject(string) (*db.Proyecto, error) {
 }
 
 func (s *stubRuntimeController) ReconcileStaleRuntimeHandles() (int, error) {
+	s.reconcileHandlesHits++
 	return s.reconcileHandles, s.reconcileHandlesErr
 }
 
 func (s *stubRuntimeController) ReconcileStaleRuntimeOrders() (int, error) {
+	s.reconcileOrdersHits++
 	return s.reconcileOrders, s.reconcileOrdersErr
 }
 
 func (s *stubRuntimeController) PurgeInactiveRuntimeHandles(req runtimesapp.RuntimeHandlePurgeRequest) (*db.PurgaRuntimeHandlesResultado, error) {
+	s.purgeHandlesHits++
 	s.purgeHandlesReq = req
 	if s.purgeHandlesErr != nil {
 		return nil, s.purgeHandlesErr
@@ -96,6 +105,7 @@ func (s *stubRuntimeController) PurgeInactiveRuntimeHandles(req runtimesapp.Runt
 }
 
 func (s *stubRuntimeController) PurgeTerminalRuntimeOrders(req runtimesapp.RuntimeOrderPurgeRequest) (*db.PurgaRuntimeOrdersResultado, error) {
+	s.purgeOrdersHits++
 	s.purgeOrdersReq = req
 	if s.purgeOrdersErr != nil {
 		return nil, s.purgeOrdersErr
@@ -464,6 +474,55 @@ func TestEnqueueControlStartRunsSessionHygieneBeforeEnqueue(t *testing.T) {
 	}
 	if got := strings.Join(runtimes.purgeOrdersReq.Estados, ","); got != "completada,fallida,expirada,cancelada" {
 		t.Fatalf("estados purge orders inesperados: %s", got)
+	}
+}
+
+func TestEnqueueControlStartSkipsSessionHygieneWhenOperationalHandleIsFresh(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	store := &stubAutonomyStore{}
+	runtimes := &stubRuntimeController{
+		controlID:     21,
+		controlAction: "start",
+		project: &db.Proyecto{
+			ID:   7,
+			Slug: "orquestador",
+		},
+		operationalHandle: &db.RuntimeHandle{
+			ID:         99,
+			Agente:     "Codex2",
+			Estado:     "activo",
+			ProyectoID: int64Ptr(7),
+			LastSeenAt: &now,
+		},
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(store)
+
+	orderID, accion, err := service.EnqueueControl(ControlRequest{
+		Agente:   "Codex2",
+		Proyecto: "orquestador",
+		Accion:   "start",
+		Por:      "server",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueControl: %v", err)
+	}
+	if orderID != 21 || accion != "start" {
+		t.Fatalf("respuesta inesperada: %d %s", orderID, accion)
+	}
+	if runtimes.reconcileHandlesHits != 0 || runtimes.reconcileOrdersHits != 0 {
+		t.Fatalf("no deberia reconciliar stale al encontrar handle operativo fresco: handles=%d orders=%d", runtimes.reconcileHandlesHits, runtimes.reconcileOrdersHits)
+	}
+	if runtimes.purgeHandlesHits != 0 || runtimes.purgeOrdersHits != 0 {
+		t.Fatalf("no deberia purgar al encontrar handle operativo fresco: handles=%d orders=%d", runtimes.purgeHandlesHits, runtimes.purgeOrdersHits)
+	}
+	if runtimes.purgeHandlesReq.Agente != "" || runtimes.purgeOrdersReq.Agente != "" {
+		t.Fatalf("no deberia ejecutar purgas cuando ya hay handle operativo fresco: %+v %+v", runtimes.purgeHandlesReq, runtimes.purgeOrdersReq)
+	}
+	if store.auditAction == "session_hygiene_start" {
+		t.Fatalf("no deberia auditar hygiene al saltarse el precheck: %+v", store)
 	}
 }
 

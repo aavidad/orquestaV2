@@ -376,6 +376,73 @@ func TestIngestarRuntimeTranscriptActivosDifiereHandleFallidoEstable(t *testing.
 	}
 }
 
+func TestIngestarRuntimeTranscriptActivosRespetaBatchBudget(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	prevBudget := runtimeTranscriptBatchBudgetOverride
+	prevIngest := ingestRuntimeTranscriptHandleFn
+	t.Cleanup(func() {
+		runtimeTranscriptBatchBudgetOverride = prevBudget
+		ingestRuntimeTranscriptHandleFn = prevIngest
+	})
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente 1: %v", err)
+	}
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente 2: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"Codex1", "Codex2"} {
+		sesion, err := IniciarSesionContexto(SesionInicio{
+			Agente:      agente,
+			ProyectoID:  &proyectoID,
+			CWD:         filepath.Join(t.TempDir(), strings.ToLower(agente)),
+			Herramienta: "codex-cli",
+			Branch:      "main",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion %s: %v", agente, err)
+		}
+		handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+		if err != nil || handle == nil {
+			t.Fatalf("handle %s: %+v err=%v", agente, handle, err)
+		}
+		metaJSON, _ := json.Marshal(map[string]any{"log_path": filepath.Join(t.TempDir(), agente+".log")})
+		if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+			t.Fatalf("update handle metadata %s: %v", agente, err)
+		}
+	}
+
+	runtimeTranscriptBatchBudgetOverride = 5 * time.Millisecond
+	calls := []int64{}
+	ingestRuntimeTranscriptHandleFn = func(handle *RuntimeHandle) (int, error) {
+		calls = append(calls, handle.ID)
+		time.Sleep(8 * time.Millisecond)
+		return 1, nil
+	}
+
+	n, err := IngestarRuntimeTranscriptActivos()
+	if err != nil {
+		t.Fatalf("ingestar transcript activos: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia cortar tras el primer handle al agotar budget, got=%d", n)
+	}
+	if len(calls) != 1 {
+		t.Fatalf("deberia ingerir solo un handle antes de diferir, calls=%v", calls)
+	}
+}
+
 func TestListarRuntimeHandlesParaPresupuestoFiltraSoloOperativosConMetadata(t *testing.T) {
 	abrirDBTemporalRuntimeObservabilidad(t)
 

@@ -93,7 +93,7 @@ var agenteControlCmd = &cobra.Command{
 }
 
 var (
-	agentControlEnqueueTimeout = 2 * time.Second
+	agentControlEnqueueTimeout = 4 * time.Second
 	agentControlEnqueueFunc    = encolarControlAgenteLocal
 	errAgentControlTimeout     = errors.New("agent control timeout")
 )

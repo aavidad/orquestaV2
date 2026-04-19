@@ -224,6 +224,11 @@ func (s *Service) runSessionHygieneForControl(req ControlRequest) error {
 	if agente == "" || proyecto == "" {
 		return nil
 	}
+	if skip, err := s.shouldSkipSessionHygieneForStart(agente, proyecto); err != nil {
+		return err
+	} else if skip {
+		return nil
+	}
 	actor := strings.TrimSpace(req.Por)
 	if actor == "" {
 		actor = "orquesta"
@@ -264,6 +269,26 @@ func (s *Service) runSessionHygieneForControl(req ControlRequest) error {
 				agente, proyecto, staleHandles, staleOrders, purgedHandles, purgedOrders))
 	}
 	return nil
+}
+
+func (s *Service) shouldSkipSessionHygieneForStart(agente, proyectoRef string) (bool, error) {
+	if s == nil || s.runtimes == nil {
+		return false, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
+	}
+	agente = strings.TrimSpace(agente)
+	proyectoRef = strings.TrimSpace(proyectoRef)
+	if agente == "" || proyectoRef == "" {
+		return false, nil
+	}
+	proyecto, err := s.runtimes.GetProject(proyectoRef)
+	if err != nil || proyecto == nil {
+		return false, err
+	}
+	handle, err := s.runtimes.GetOperationalRuntimeHandleForProject(agente, &proyecto.ID)
+	if err != nil || handle == nil {
+		return false, err
+	}
+	return db.RuntimeHandleSnapshotIsFresh(handle, time.Minute), nil
 }
 
 func (s *Service) Launch(req LaunchRequest) (*LaunchResult, error) {

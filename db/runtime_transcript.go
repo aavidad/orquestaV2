@@ -59,6 +59,9 @@ var runtimeTranscriptHotIdleState struct {
 	failedHandleDue map[int64]time.Time
 }
 
+var runtimeTranscriptBatchBudgetOverride time.Duration
+var ingestRuntimeTranscriptHandleFn = ingestarRuntimeTranscriptHandle
+
 func RegistrarRuntimeTranscript(entry *RuntimeTranscriptEntry) (int64, error) {
 	if entry == nil {
 		return 0, fmt.Errorf("runtime transcript nulo")
@@ -330,6 +333,8 @@ func IngestarRuntimeTranscriptActivos() (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	start := time.Now().UTC()
+	budget := runtimeTranscriptBatchBudget()
 	total := 0
 	now := time.Now().UTC()
 	for _, handle := range handles {
@@ -339,13 +344,29 @@ func IngestarRuntimeTranscriptActivos() (int, error) {
 		if runtimeTranscriptHotIdleSkip(handle, now) {
 			continue
 		}
-		n, err := ingestarRuntimeTranscriptHandle(handle)
+		n, err := ingestRuntimeTranscriptHandleFn(handle)
 		if err != nil {
 			return total, err
 		}
 		total += n
+		if budget > 0 && time.Since(start) >= budget {
+			Audit("orquesta", "runtime_transcript_batch_deferred", "runtime_handle", 0,
+				fmt.Sprintf("budget=%s total=%d last_handle=%d", budget, total, handle.ID))
+			return total, nil
+		}
 	}
 	return total, nil
+}
+
+func runtimeTranscriptBatchBudget() time.Duration {
+	if runtimeTranscriptBatchBudgetOverride > 0 {
+		return runtimeTranscriptBatchBudgetOverride
+	}
+	ms := configIntOrDefault("runtime_transcript_batch_budget_ms", 1500)
+	if ms <= 0 {
+		ms = 1500
+	}
+	return time.Duration(ms) * time.Millisecond
 }
 
 func scanRuntimeTranscript(scanner interface{ Scan(dest ...any) error }) (*RuntimeTranscriptEntry, error) {
