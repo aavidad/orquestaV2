@@ -2074,17 +2074,17 @@ func (s *Service) EnqueueAgentControl(req AgentControlRequest) (int64, string, e
 	if accion == "start" && proyectoRef == "" {
 		return 0, "", fmt.Errorf("debes indicar proyecto para arrancar el agente")
 	}
-		if proyectoRef != "" {
-			proyecto, err := s.store.GetProject(proyectoRef)
-			if err != nil {
-				return 0, "", err
-			}
-			if proyecto == nil {
-				return 0, "", fmt.Errorf("proyecto %q no encontrado", proyectoRef)
-			}
-			proyectoID = &proyecto.ID
-			proyectoRef = strings.TrimSpace(proyecto.Slug)
+	if proyectoRef != "" {
+		proyecto, err := s.store.GetProject(proyectoRef)
+		if err != nil {
+			return 0, "", err
 		}
+		if proyecto == nil {
+			return 0, "", fmt.Errorf("proyecto %q no encontrado", proyectoRef)
+		}
+		proyectoID = &proyecto.ID
+		proyectoRef = strings.TrimSpace(proyecto.Slug)
+	}
 	if accion == "start" {
 		if _, err := s.store.ReconcileStaleRuntimeOrders(); err != nil {
 			return 0, "", err
@@ -2471,6 +2471,13 @@ func (s *Service) ResolveDeliveryHandle(agente string, proyectoID *int64) (*db.R
 	} else if handle != nil {
 		return handle, nil
 	}
+	canonicalHandles, err := s.store.ListCanonicalRuntimeHandles(&agente)
+	if err != nil {
+		return nil, err
+	}
+	if handle := pickCanonicalDeliveryHandle(canonicalHandles, agente, proyectoID); handle != nil {
+		return s.rehydrateHandle(handle)
+	}
 	handles, err := s.store.ListRuntimeHandles(&agente)
 	if err != nil {
 		return nil, err
@@ -2479,6 +2486,9 @@ func (s *Service) ResolveDeliveryHandle(agente string, proyectoID *int64) (*db.R
 	bestMoment := time.Time{}
 	for _, handle := range handles {
 		if handle == nil {
+			continue
+		}
+		if !runtimeHandleEligibleForDelivery(handle) {
 			continue
 		}
 		if proyectoID != nil && *proyectoID > 0 {
@@ -2507,6 +2517,57 @@ func (s *Service) ResolveDeliveryHandle(agente string, proyectoID *int64) (*db.R
 		return nil, nil
 	}
 	return s.rehydrateHandle(best)
+}
+
+func pickCanonicalDeliveryHandle(handles []*db.RuntimeHandle, agente string, proyectoID *int64) *db.RuntimeHandle {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || len(handles) == 0 {
+		return nil
+	}
+	var (
+		exactProject         *db.RuntimeHandle
+		fallback             *db.RuntimeHandle
+		hasExactNonLegacy    bool
+		hasFallbackNonLegacy bool
+	)
+	for _, handle := range handles {
+		if handle == nil || strings.TrimSpace(handle.Agente) != agente || !runtimeHandleEligibleForDelivery(handle) {
+			continue
+		}
+		legacy := runtimepolicy.RuntimeHandleUsaLegacyProcessPTY(mapFromJSONRuntimeHandle(handle.MetadataJSON))
+		projectMatch := proyectoID != nil && *proyectoID > 0 && handle.ProyectoID != nil && *handle.ProyectoID == *proyectoID
+		if projectMatch {
+			if exactProject == nil || (hasExactNonLegacy && legacy) || (!hasExactNonLegacy && !legacy) {
+				exactProject = handle
+				if !legacy {
+					hasExactNonLegacy = true
+				}
+			}
+			continue
+		}
+		if fallback == nil || (hasFallbackNonLegacy && legacy) || (!hasFallbackNonLegacy && !legacy) {
+			fallback = handle
+			if !legacy {
+				hasFallbackNonLegacy = true
+			}
+		}
+	}
+	if exactProject != nil {
+		return exactProject
+	}
+	return fallback
+}
+
+func runtimeHandleEligibleForDelivery(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
+	case "activo", "pausado", "fallido":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) ResolveTranscriptDeliveryHandle(item *db.RuntimeTranscriptEntry) (*db.RuntimeHandle, error) {

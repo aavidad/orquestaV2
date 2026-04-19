@@ -3510,6 +3510,51 @@ func TestSelectBestRuntimeHandleAceptaLegacySiNoHayAlternativa(t *testing.T) {
 	}
 }
 
+func TestResolveDeliveryHandlePrefiereCarrilCanonicoAntesQueBarridoAmplio(t *testing.T) {
+	projectID := int64(51)
+	canonical := &db.RuntimeHandle{ID: 91, Agente: "Codex3", ProyectoID: &projectID, Estado: "activo"}
+	store := &fakeStore{
+		canonicalHandlesResponse: []*db.RuntimeHandle{canonical},
+		handlesResponse:          []*db.RuntimeHandle{{ID: 92, Agente: "Codex3", ProyectoID: &projectID, Estado: "activo"}},
+		handleByIDResp:           canonical,
+	}
+	service := NewService(store)
+
+	handle, err := service.ResolveDeliveryHandle("Codex3", &projectID)
+	if err != nil {
+		t.Fatalf("ResolveDeliveryHandle: %v", err)
+	}
+	if handle == nil || handle.ID != canonical.ID {
+		t.Fatalf("deberia resolver por carril canonico: %+v", handle)
+	}
+	if store.canonicalHandlesFilter == nil || *store.canonicalHandlesFilter != "Codex3" {
+		t.Fatalf("deberia consultar handles canonicos del agente: %+v", store.canonicalHandlesFilter)
+	}
+	if store.handlesFilter != nil {
+		t.Fatalf("no deberia caer a ListRuntimeHandles si ya hay handle canonico")
+	}
+}
+
+func TestResolveDeliveryHandlePrefiereProyectoExactoEnCarrilCanonico(t *testing.T) {
+	projectID := int64(51)
+	otherProjectID := int64(77)
+	exact := &db.RuntimeHandle{ID: 101, Agente: "Codex4", ProyectoID: &projectID, Estado: "activo"}
+	other := &db.RuntimeHandle{ID: 102, Agente: "Codex4", ProyectoID: &otherProjectID, Estado: "activo"}
+	store := &fakeStore{
+		canonicalHandlesResponse: []*db.RuntimeHandle{other, exact},
+		handleByIDResp:           exact,
+	}
+	service := NewService(store)
+
+	handle, err := service.ResolveDeliveryHandle("Codex4", &projectID)
+	if err != nil {
+		t.Fatalf("ResolveDeliveryHandle exact project: %v", err)
+	}
+	if handle == nil || handle.ID != exact.ID {
+		t.Fatalf("deberia preferir el handle canónico del proyecto exacto: %+v", handle)
+	}
+}
+
 func TestPurgeInactiveRuntimeHandlesDelegatesAndAudits(t *testing.T) {
 	projectID := int64(9)
 	store := &fakeStore{
