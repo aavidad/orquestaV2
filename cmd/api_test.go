@@ -27,6 +27,7 @@ import (
 	"orquesta/db"
 	"orquesta/internal/a2ui"
 	"orquesta/reviewapp"
+	"orquesta/runtimeagente"
 	"orquesta/supervisionapp"
 	"orquesta/tareasapp"
 )
@@ -427,6 +428,12 @@ func prepararDBTemporalCmd(t *testing.T) string {
 	cmdTestDBMu.Lock()
 	agentesService = agentesapp.NewService(agentesapp.Repository{}, capacidadService)
 	capacidadService.SetAgentResolver(resolvedorAgentePipelineOperativo{rowsProvider: agentesService})
+	runtimeMailboxSyncSupervisedHandleFn = db.SincronizarRuntimeHandleSupervisado
+	runtimeMailboxLoadWorkerSnapshotFn = runtimeagente.LoadWorkerSnapshotFromMetadataJSON
+	runtimeMailboxBuildInteractiveInstructionFn = construirInstruccionMailboxInteractivo
+	wakeRuntimeOrdersAfterMailbox = func() bool { return false }
+	processRuntimeOrdersWakeFallback = func() {}
+	processRuntimeMailboxWakeFallback = func() {}
 	resetStatusSnapshotCache()
 	resetControlPlaneConfigCache()
 	resetRuntimeBudgetObservationBackgroundGate()
@@ -449,6 +456,12 @@ func prepararDBTemporalCmd(t *testing.T) string {
 	t.Cleanup(func() {
 		agentesService = agentesapp.NewService(agentesapp.Repository{}, capacidadService)
 		capacidadService.SetAgentResolver(resolvedorAgentePipelineOperativo{rowsProvider: agentesService})
+		runtimeMailboxSyncSupervisedHandleFn = db.SincronizarRuntimeHandleSupervisado
+		runtimeMailboxLoadWorkerSnapshotFn = runtimeagente.LoadWorkerSnapshotFromMetadataJSON
+		runtimeMailboxBuildInteractiveInstructionFn = construirInstruccionMailboxInteractivo
+		wakeRuntimeOrdersAfterMailbox = wakeControlPlaneRuntimeOrders
+		processRuntimeOrdersWakeFallback = runRuntimeOrdersWakeFallback
+		processRuntimeMailboxWakeFallback = runRuntimeMailboxWakeFallback
 		resetStatusSnapshotCache()
 		resetControlPlaneConfigCache()
 		resetRuntimeBudgetObservationBackgroundGate()

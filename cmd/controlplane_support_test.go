@@ -10101,6 +10101,14 @@ func TestRuntimeMailboxGuidanceDurableUsaInbox(t *testing.T) {
 	if !runtimeMailboxGuidanceDurableUsaInbox(handleTMUX) {
 		t.Error("tmux session_resume sin send_input debe usar inbox")
 	}
+	handleTMUXBootstrapOnly := &db.RuntimeHandle{
+		Transporte:       "tmux",
+		MetadataJSON:     `{"driver":"tmux_cli_session","can_send_input":false,"mailbox_delivery_mode":"bootstrap_only"}`,
+		CapabilitiesJSON: `{"can_send_input":false,"mailbox_delivery_mode":"bootstrap_only"}`,
+	}
+	if runtimeMailboxGuidanceDurableUsaInbox(handleTMUXBootstrapOnly) {
+		t.Error("tmux bootstrap_only no debe usar inbox durable")
+	}
 	// cli + process_pty_cli → false (transporte no es tmux)
 	handleCLI := &db.RuntimeHandle{
 		Transporte:       "cli",

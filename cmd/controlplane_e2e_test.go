@@ -1052,6 +1052,238 @@ notificationsDrained:
 	}
 }
 
+func TestControlPlaneRunnerEntregaHooksCicloVidaAOpenClaw(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: t.TempDir(),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	for {
+		select {
+		case <-db.CanalNotificaciones:
+		default:
+			goto hooksDrained
+		}
+	}
+
+hooksDrained:
+	var (
+		mu       sync.Mutex
+		received []map[string]any
+	)
+	gateway := &notificaciones.OpenClawGatewayNotificador{
+		URL: "https://openclaw.local/gateway",
+		Client: openClawHTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+			var body map[string]any
+			if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			mu.Lock()
+			received = append(received, body)
+			mu.Unlock()
+			return &http.Response{
+				StatusCode: http.StatusAccepted,
+				Body:       http.NoBody,
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runner := newControlPlaneRunner(nil, false)
+	runner.InitNotifications = nil
+	runner.Notifier = func() notificaciones.Notificador { return gateway }
+	runner.ReanimacionCada = time.Hour
+	runner.SaludCada = time.Hour
+	runner.PlanificacionCada = time.Hour
+	runner.ControlPlaneCada = time.Hour
+	t.Cleanup(func() {
+		cancel()
+		runner.Wait()
+	})
+	runner.StartResidentCore(ctx)
+
+	db.EmitirHookCicloVida("Codex1", db.HookTaskFinish, proyectoID, "tarea", 55, "Codex1", "Implementar bootstrap")
+	db.EmitirHookCicloVida("Codex1", db.HookProjectBlocked, proyectoID, "tarea", 41, "Codex1", "falta credencial")
+	db.EmitirHookCicloVida("Codex3", db.HookProjectUnblocked, proyectoID, "tarea", 41, "Codex3", "credencial resuelta")
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		n := len(received)
+		mu.Unlock()
+		if n >= 3 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(received) != 3 {
+		t.Fatalf("se esperaban 3 entregas OpenClaw (task_finish + project_blocked + project_unblocked), got=%d %+v", len(received), received)
+	}
+	byType := map[string]map[string]any{}
+	for _, r := range received {
+		if et, _ := r["event_type"].(string); et != "" {
+			byType[et] = r
+		}
+	}
+	if _, ok := byType["task_completed"]; !ok {
+		t.Fatalf("faltaba event_type=task_completed: %+v", received)
+	}
+	if _, ok := byType["task_blocked"]; !ok {
+		t.Fatalf("faltaba event_type=task_blocked: %+v", received)
+	}
+	if _, ok := byType["progress_summary"]; !ok {
+		t.Fatalf("faltaba event_type=progress_summary: %+v", received)
+	}
+	if got, _ := byType["task_completed"]["agent"].(string); got != "Codex1" {
+		t.Fatalf("agent incorrecto en task_completed: %+v", byType["task_completed"])
+	}
+	if got, _ := byType["task_blocked"]["agent"].(string); got != "Codex1" {
+		t.Fatalf("agent incorrecto en task_blocked: %+v", byType["task_blocked"])
+	}
+	if got, _ := byType["progress_summary"]["agent"].(string); got != "Codex3" {
+		t.Fatalf("agent incorrecto en progress_summary: %+v", byType["progress_summary"])
+	}
+	if got, _ := byType["task_completed"]["text"].(string); !strings.Contains(got, "Tarea #55") {
+		t.Fatalf("texto task_completed sin ID de tarea: %+v", byType["task_completed"])
+	}
+	if got, _ := byType["task_blocked"]["text"].(string); !strings.Contains(got, "Tarea #41") {
+		t.Fatalf("texto task_blocked sin ID de tarea: %+v", byType["task_blocked"])
+	}
+	if got, _ := byType["progress_summary"]["text"].(string); !strings.Contains(got, "Bloqueo resuelto") {
+		t.Fatalf("texto progress_summary sin etiqueta util: %+v", byType["progress_summary"])
+	}
+}
+
+func TestControlPlaneRunnerEntregaReviewYHandoffAOpenClaw(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: t.TempDir(),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	for {
+		select {
+		case <-db.CanalNotificaciones:
+		default:
+			goto reviewDrained
+		}
+	}
+
+reviewDrained:
+	var (
+		mu       sync.Mutex
+		received []map[string]any
+	)
+	gateway := &notificaciones.OpenClawGatewayNotificador{
+		URL: "https://openclaw.local/gateway",
+		Client: openClawHTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+			var body map[string]any
+			if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			mu.Lock()
+			received = append(received, body)
+			mu.Unlock()
+			return &http.Response{
+				StatusCode: http.StatusAccepted,
+				Body:       http.NoBody,
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runner := newControlPlaneRunner(nil, false)
+	runner.InitNotifications = nil
+	runner.Notifier = func() notificaciones.Notificador { return gateway }
+	runner.ReanimacionCada = time.Hour
+	runner.SaludCada = time.Hour
+	runner.PlanificacionCada = time.Hour
+	runner.ControlPlaneCada = time.Hour
+	t.Cleanup(func() {
+		cancel()
+		runner.Wait()
+	})
+	runner.StartResidentCore(ctx)
+
+	db.EmitirNotificacion(db.EventoNotificacion{
+		Tipo:       "runtime_review",
+		ID:         77,
+		Agente:     "Codex1",
+		Texto:      "Frente listo para review",
+		ProyectoID: proyectoID,
+		Payload:    map[string]any{"stage": "ready_for_review", "transcript_id": 77},
+	})
+	db.EmitirNotificacion(db.EventoNotificacion{
+		Tipo:       "runtime_handoff",
+		ID:         88,
+		Agente:     "Codex2",
+		Texto:      "Handoff Codex1 -> Codex2",
+		ProyectoID: proyectoID,
+		Payload:    map[string]any{"source_agent": "Codex1", "destination_agent": "Codex2"},
+	})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		n := len(received)
+		mu.Unlock()
+		if n >= 2 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(received) != 2 {
+		t.Fatalf("se esperaban 2 entregas OpenClaw (review_ready + handoff_completed), got=%d %+v", len(received), received)
+	}
+	byType := map[string]map[string]any{}
+	for _, r := range received {
+		if et, _ := r["event_type"].(string); et != "" {
+			byType[et] = r
+		}
+	}
+	if _, ok := byType["review_ready"]; !ok {
+		t.Fatalf("faltaba event_type=review_ready: %+v", received)
+	}
+	if _, ok := byType["handoff_completed"]; !ok {
+		t.Fatalf("faltaba event_type=handoff_completed: %+v", received)
+	}
+	if got, _ := byType["review_ready"]["agent"].(string); got != "Codex1" {
+		t.Fatalf("agent incorrecto en review_ready: %+v", byType["review_ready"])
+	}
+	if got, _ := byType["handoff_completed"]["agent"].(string); got != "Codex2" {
+		t.Fatalf("agent incorrecto en handoff_completed: %+v", byType["handoff_completed"])
+	}
+}
+
 func TestControlPlaneRunnerRecuperaRuntimeOrderStaleYLaProcesaEndToEnd(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

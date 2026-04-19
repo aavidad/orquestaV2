@@ -6863,15 +6863,6 @@ func procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(mailbox []*db.RuntimeMai
 		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryBootstrapOnly {
 			continue
 		}
-		if supervisedHandle, _, _, err := snapshot.supervisedHandle(handle); err != nil {
-			if runtimeMailboxCanDeferSupervisedHandleError(err) {
-				db.Audit("orquesta", "runtime_mailbox_supervision_deferred", "runtime_mailbox", msg.ID, err.Error())
-			} else {
-				return total, err
-			}
-		} else if supervisedHandle != nil {
-			handle = supervisedHandle
-		}
 		dispatched, err := procesarRuntimeMailboxBootstrapTMUXMensaje(msg, consumed, snapshot, handle, texto)
 		if err != nil {
 			return total, err
@@ -12653,7 +12644,28 @@ func sesionActivaTMUXListaParaContinuacion(handle *db.RuntimeHandle, now time.Ti
 		return false
 	}
 	ready, _ := snap.ReadyForTextDispatch(now.UTC(), time.Minute)
-	return ready || runtimeHandleWorkerCanonicalState(view) == "waiting_input"
+	if !ready && runtimeHandleWorkerCanonicalState(view) != "waiting_input" {
+		return false
+	}
+	lastActivity := time.Time{}
+	switch {
+	case view.LastProgressAt != nil && !view.LastProgressAt.IsZero():
+		lastActivity = view.LastProgressAt.UTC()
+	case view.ReadyAt != nil && !view.ReadyAt.IsZero():
+		lastActivity = view.ReadyAt.UTC()
+	case view.LastOutputAt != nil && !view.LastOutputAt.IsZero():
+		lastActivity = view.LastOutputAt.UTC()
+	case view.UpdatedAt != nil && !view.UpdatedAt.IsZero():
+		lastActivity = view.UpdatedAt.UTC()
+	}
+	if lastActivity.IsZero() {
+		return false
+	}
+	interval := autonomiaContinueNudgeInterval()
+	if interval <= 0 {
+		interval = 5 * time.Minute
+	}
+	return !lastActivity.Before(now.UTC().Add(-interval))
 }
 
 func runtimeHandleSesionActivaParaContinuacion(sesion *db.Sesion) (*db.RuntimeHandle, error) {
