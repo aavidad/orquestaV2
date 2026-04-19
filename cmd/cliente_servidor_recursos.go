@@ -1348,9 +1348,9 @@ func procesarDegradadosPorAPI(wait bool) (*apiRuntimeProcessAutonomiaResponse, b
 	return &resp, true, nil
 }
 
-func purgarTranscriptRuidoPorAPI() (*apiRuntimeProcessAutonomiaResponse, bool, error) {
+func purgarTranscriptRuidoPorAPI(all bool) (*apiRuntimeProcessAutonomiaResponse, bool, error) {
 	var resp apiRuntimeProcessAutonomiaResponse
-	ok, err := apiPost("/api/runtime/purge-transcript-noise", map[string]any{}, &resp)
+	ok, err := apiPost("/api/runtime/purge-transcript-noise", apiRuntimePurgeTranscriptNoiseRequest{All: all}, &resp)
 	if !ok || err != nil {
 		return nil, ok, err
 	}

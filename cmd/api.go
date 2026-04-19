@@ -714,6 +714,10 @@ type apiRuntimeProcessTranscriptRequest struct {
 	Proyecto string `json:"proyecto,omitempty"`
 }
 
+type apiRuntimePurgeTranscriptNoiseRequest struct {
+	All bool `json:"all"`
+}
+
 type apiRuntimeProcessReanimationsResponse struct {
 	OK                bool `json:"ok"`
 	Count             int  `json:"count"`
@@ -5719,14 +5723,37 @@ func apiHandlerRuntimePurgeTranscriptNoise(w http.ResponseWriter, r *http.Reques
 	if !apiRequireMethod(w, r, http.MethodPost) {
 		return
 	}
-	count, err := db.PurgarRuntimeTranscriptRuidoHistorico()
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
+	var req apiRuntimePurgeTranscriptNoiseRequest
+	if payload, err := io.ReadAll(r.Body); err != nil {
+		apiError(w, http.StatusBadRequest, err)
 		return
+	} else if raw := strings.TrimSpace(string(payload)); raw != "" {
+		if err := json.Unmarshal(payload, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+	}
+	total := 0
+	maxBatches := 20
+	purgeFn := db.PurgarRuntimeTranscriptRuidoHistorico
+	if req.All {
+		purgeFn = db.PurgarRuntimeTranscriptRuidoHistoricoCompleto
+		maxBatches = 1
+	}
+	for i := 0; i < maxBatches; i++ {
+		count, err := purgeFn()
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		total += count
+		if !req.All || count == 0 {
+			break
+		}
 	}
 	apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
 		OK:    true,
-		Count: count,
+		Count: total,
 	})
 }
 

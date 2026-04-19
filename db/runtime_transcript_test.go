@@ -2,6 +2,7 @@ package db
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -1496,5 +1497,206 @@ func TestPurgarRuntimeTranscriptRuidoHistoricoBorraSoloChromeUI(t *testing.T) {
 	}
 	if count != 2 {
 		t.Fatalf("deberia conservar señal útil y clasificación, got=%d", count)
+	}
+}
+
+func TestPurgarRuntimeTranscriptRuidoHistoricoEscaneaMasAllaDelPrimerBatch(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("CodexNoise", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexNoise",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	handleID := handle.ID
+	old := time.Now().UTC().Add(-20 * time.Minute)
+
+	if _, err := DB.Exec(`INSERT INTO config (clave, valor) VALUES (?, ?)`, "runtime_transcript_noise_hygiene_batch_size", "1"); err != nil {
+		t.Fatalf("config batch size: %v", err)
+	}
+	if _, err := DB.Exec(`INSERT INTO config (clave, valor) VALUES (?, ?)`, "runtime_transcript_noise_hygiene_scan_limit", "20"); err != nil {
+		t.Fatalf("config scan limit: %v", err)
+	}
+
+	for i := 0; i < 3; i++ {
+		id, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
+			RuntimeID:      runtime.ID,
+			HandleID:       &handleID,
+			Agente:         "CodexNoise",
+			ProyectoID:     &proyectoID,
+			Stream:         "pty_out",
+			Text:           fmt.Sprintf("• ran go test ./db -run TestKeep%d", i),
+			NormalizedText: normalizarTextoTranscript(fmt.Sprintf("• ran go test ./db -run TestKeep%d", i)),
+		})
+		if err != nil {
+			t.Fatalf("registrar señal util %d: %v", i, err)
+		}
+		if _, err := DB.Exec(`UPDATE runtime_transcript SET created_at=? WHERE id=?`, old, id); err != nil {
+			t.Fatalf("envejecer señal útil %d: %v", i, err)
+		}
+	}
+
+	noiseID, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
+		RuntimeID:      runtime.ID,
+		HandleID:       &handleID,
+		Agente:         "CodexNoise",
+		ProyectoID:     &proyectoID,
+		Stream:         "pty_out",
+		Text:           "0mWWoorrk•kiinWng3Wogorrkkiin◦ngg•4W◦WoorrkkiinWng5Wogorrk•kiinngg◦6•WWoorrkkiinWng◦7Wogorrkkiinngg•8◦WWoorrk•kiinWng9Wogorrkkiin◦ngg[14;8",
+		NormalizedText: normalizarTextoTranscript("0mWWoorrk•kiinWng3Wogorrkkiin◦ngg•4W◦WoorrkkiinWng5Wogorrk•kiinngg◦6•WWoorrkkiinWng◦7Wogorrkkiinngg•8◦WWoorrk•kiinWng9Wogorrkkiin◦ngg[14;8"),
+	})
+	if err != nil {
+		t.Fatalf("registrar ruido spinner: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_transcript SET created_at=? WHERE id=?`, old, noiseID); err != nil {
+		t.Fatalf("envejecer ruido: %v", err)
+	}
+
+	n, err := PurgarRuntimeTranscriptRuidoHistorico()
+	if err != nil {
+		t.Fatalf("purgar ruido historico: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia borrar el ruido aunque no este en el primer batch, got=%d", n)
+	}
+
+	var count int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM runtime_transcript WHERE id=?`, noiseID).Scan(&count); err != nil {
+		t.Fatalf("count ruido: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("la entrada de ruido deberia desaparecer")
+	}
+}
+
+func TestPurgarRuntimeTranscriptRuidoHistoricoCompletoAlcanzaRuidoFueraDelScanInicial(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("CodexNoiseFull", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexNoiseFull",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	handleID := handle.ID
+	old := time.Now().UTC().Add(-20 * time.Minute)
+
+	if _, err := DB.Exec(`INSERT INTO config (clave, valor) VALUES (?, ?)`, "runtime_transcript_noise_hygiene_batch_size", "1"); err != nil {
+		t.Fatalf("config batch size: %v", err)
+	}
+	if _, err := DB.Exec(`INSERT INTO config (clave, valor) VALUES (?, ?)`, "runtime_transcript_noise_hygiene_scan_limit", "2"); err != nil {
+		t.Fatalf("config scan limit: %v", err)
+	}
+	if _, err := DB.Exec(`INSERT INTO config (clave, valor) VALUES (?, ?)`, "runtime_transcript_noise_hygiene_full_scan_delete_limit", "10"); err != nil {
+		t.Fatalf("config full delete limit: %v", err)
+	}
+
+	for i := 0; i < 3; i++ {
+		id, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
+			RuntimeID:      runtime.ID,
+			HandleID:       &handleID,
+			Agente:         "CodexNoiseFull",
+			ProyectoID:     &proyectoID,
+			Stream:         "pty_out",
+			Text:           fmt.Sprintf("• ran go test ./db -run TestKeepFull%d", i),
+			NormalizedText: normalizarTextoTranscript(fmt.Sprintf("• ran go test ./db -run TestKeepFull%d", i)),
+		})
+		if err != nil {
+			t.Fatalf("registrar señal util %d: %v", i, err)
+		}
+		if _, err := DB.Exec(`UPDATE runtime_transcript SET created_at=? WHERE id=?`, old, id); err != nil {
+			t.Fatalf("envejecer señal útil %d: %v", i, err)
+		}
+	}
+
+	noiseID, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
+		RuntimeID:      runtime.ID,
+		HandleID:       &handleID,
+		Agente:         "CodexNoiseFull",
+		ProyectoID:     &proyectoID,
+		Stream:         "pty_out",
+		Text:           "0mWWoorrk•kiinWng3Wogorrkkiin◦ngg•4W◦WoorrkkiinWng5Wogorrk•kiinngg◦6•WWoorrkkiinWng◦7Wogorrkkiinngg•8◦WWoorrk•kiinWng9Wogorrkkiin◦ngg[14;8",
+		NormalizedText: normalizarTextoTranscript("0mWWoorrk•kiinWng3Wogorrkkiin◦ngg•4W◦WoorrkkiinWng5Wogorrk•kiinngg◦6•WWoorrkkiinWng◦7Wogorrkkiinngg•8◦WWoorrk•kiinWng9Wogorrkkiin◦ngg[14;8"),
+	})
+	if err != nil {
+		t.Fatalf("registrar ruido spinner: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_transcript SET created_at=? WHERE id=?`, old, noiseID); err != nil {
+		t.Fatalf("envejecer ruido: %v", err)
+	}
+
+	n, err := PurgarRuntimeTranscriptRuidoHistorico()
+	if err != nil {
+		t.Fatalf("purgar ruido historico acotado: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("la pasada acotada no deberia alcanzar el ruido fuera del scan inicial, got=%d", n)
+	}
+
+	n, err = PurgarRuntimeTranscriptRuidoHistoricoCompleto()
+	if err != nil {
+		t.Fatalf("purgar ruido historico completo: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("la pasada completa deberia alcanzar el ruido fuera del scan inicial, got=%d", n)
+	}
+
+	var count int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM runtime_transcript WHERE id=?`, noiseID).Scan(&count); err != nil {
+		t.Fatalf("count ruido: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("la entrada de ruido deberia desaparecer")
 	}
 }

@@ -276,7 +276,8 @@ var runtimePurgarTranscriptRuidoCmd = &cobra.Command{
 	Use:   "purgar-transcript-ruido",
 	Short: "Purge ruido histórico del transcript runtime ya persistido",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		resp, ok, err := purgarTranscriptRuidoPorAPI()
+		all, _ := cmd.Flags().GetBool("all")
+		resp, ok, err := purgarTranscriptRuidoPorAPI(all)
 		if !ok {
 			return serverFirstCommandError("runtime purgar-transcript-ruido")
 		}
@@ -1976,6 +1977,7 @@ func init() {
 	runtimeProcesarTranscriptCmd.Flags().String("agente", "", "Procesar solo transcript de un agente")
 	runtimeProcesarTranscriptCmd.Flags().String("proyecto", "", "Filtrar transcript por proyecto al procesar un agente")
 	runtimeProcesarTranscriptCmd.Flags().Int64("handle-id", 0, "Procesar solo transcript de un runtime handle")
+	runtimePurgarTranscriptRuidoCmd.Flags().Bool("all", true, "Repite lotes hasta drenar el ruido histórico detectable")
 	runtimeProcesarDegradadosCmd.Flags().Bool("wait", false, "Ejecuta la pasada en primer plano y devuelve el recuento real")
 	runtimeProcesarHigieneCmd.Flags().Bool("wait", false, "Ejecuta la pasada en primer plano y devuelve el recuento real")
 	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeDespertarCmd, runtimeProcesarOrdenesCmd, runtimeProcesarMailboxCmd, runtimeProcesarAutonomiaCmd, runtimeProcesarTranscriptCmd, runtimePurgarTranscriptRuidoCmd, runtimeProcesarDegradadosCmd, runtimeProcesarHigieneCmd, runtimeProcesarReanimacionesCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenVerCmd, runtimeOrdenNuevaCmd, runtimeOrdenCancelarCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxVerCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd, runtimeMailboxLimpiarCmd, runtimeLimpiarPruebasCmd)

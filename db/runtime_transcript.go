@@ -192,6 +192,10 @@ func PurgarRuntimeTranscriptRuidoHistorico() (int, error) {
 	if limit <= 0 {
 		limit = 100
 	}
+	scanLimit := configIntOrDefault("runtime_transcript_noise_hygiene_scan_limit", limit*10)
+	if scanLimit < limit {
+		scanLimit = limit
+	}
 	cutoff := time.Now().UTC().Add(-time.Duration(minutes) * time.Minute)
 	rows, err := DB.Query(`
 		SELECT id, runtime_id, handle_id, agente, proyecto_id, '', stream, byte_offset, text,
@@ -201,7 +205,7 @@ func PurgarRuntimeTranscriptRuidoHistorico() (int, error) {
 		  AND TRIM(COALESCE(classification, '')) = ''
 		  AND created_at <= ?
 		ORDER BY id ASC
-		LIMIT ?`, cutoff, limit)
+		LIMIT ?`, cutoff, scanLimit)
 	if err != nil {
 		return 0, err
 	}
@@ -219,10 +223,90 @@ func PurgarRuntimeTranscriptRuidoHistorico() (int, error) {
 		if !descartarRuidoTranscript(item.Stream, item.Text, item.NormalizedText, item.Classification) {
 			continue
 		}
-		ids = append(ids, item.ID)
+		if len(ids) < limit {
+			ids = append(ids, item.ID)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	args := make([]any, 0, len(ids))
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	res, err := DB.Exec(`DELETE FROM runtime_transcript WHERE id IN (`+runtimeSQLPlaceholders(len(ids))+`)`, args...)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
+func PurgarRuntimeTranscriptRuidoHistoricoCompleto() (int, error) {
+	if DB == nil {
+		return 0, nil
+	}
+	minutes := configIntOrDefault("runtime_transcript_noise_hygiene_min_age_minutes", 15)
+	if minutes <= 0 {
+		minutes = 15
+	}
+	pageSize := configIntOrDefault("runtime_transcript_noise_hygiene_scan_limit", 1000)
+	if pageSize <= 0 {
+		pageSize = 1000
+	}
+	deleteLimit := configIntOrDefault("runtime_transcript_noise_hygiene_full_scan_delete_limit", 5000)
+	if deleteLimit <= 0 {
+		deleteLimit = 5000
+	}
+	cutoff := time.Now().UTC().Add(-time.Duration(minutes) * time.Minute)
+	ids := make([]int64, 0, min(deleteLimit, pageSize))
+	lastID := int64(0)
+
+	for len(ids) < deleteLimit {
+		rows, err := DB.Query(`
+			SELECT id, runtime_id, handle_id, agente, proyecto_id, '', stream, byte_offset, text,
+			       normalized_text, classification, handling_note, created_at, handled_at
+			FROM runtime_transcript
+			WHERE stream = 'pty_out'
+			  AND TRIM(COALESCE(classification, '')) = ''
+			  AND created_at <= ?
+			  AND id > ?
+			ORDER BY id ASC
+			LIMIT ?`, cutoff, lastID, pageSize)
+		if err != nil {
+			return 0, err
+		}
+
+		seen := 0
+		for rows.Next() {
+			item, err := scanRuntimeTranscript(rows)
+			if err != nil {
+				rows.Close()
+				return 0, err
+			}
+			if item == nil {
+				continue
+			}
+			seen++
+			lastID = item.ID
+			if !descartarRuidoTranscript(item.Stream, item.Text, item.NormalizedText, item.Classification) {
+				continue
+			}
+			if len(ids) < deleteLimit {
+				ids = append(ids, item.ID)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		rows.Close()
+		if seen < pageSize {
+			break
+		}
 	}
 	if len(ids) == 0 {
 		return 0, nil

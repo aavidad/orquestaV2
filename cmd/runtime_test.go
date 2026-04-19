@@ -440,7 +440,10 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 		t.Fatalf("salida runtime purgar-transcript-ruido inesperada:\n%s", outPurgeTranscriptNoise)
 	}
 	if len(purgeTranscriptNoiseReq) != 0 {
-		t.Fatalf("request purge transcript noise deberia ser vacia: %+v", purgeTranscriptNoiseReq)
+		t.Fatalf("request purge transcript noise deberia llevar payload: %+v", purgeTranscriptNoiseReq)
+	}
+	if got, ok := purgeTranscriptNoiseReq["all"].(bool); !ok || !got {
+		t.Fatalf("request purge transcript noise deberia enviar all=true: %+v", purgeTranscriptNoiseReq)
 	}
 
 	outProcessDegradados := capturarStdout(t, func() {
