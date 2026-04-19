@@ -7110,11 +7110,9 @@ func runtimeMailboxGuidanceDurableUsaInbox(handle *db.RuntimeHandle) bool {
 	}
 	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
 	driver := strings.TrimSpace(stringMapValue(meta, "driver"))
-	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
-		strings.EqualFold(driver, "tmux_cli_session") {
-		return true
-	}
-	return !db.RuntimeHandlePermiteSendInputInteractivo(handle)
+	return strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
+		strings.EqualFold(driver, "tmux_cli_session") &&
+		!db.RuntimeHandlePermiteSendInputInteractivo(handle)
 }
 
 func reconciliarRuntimeMailboxPipelineBootstrapActivaBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {

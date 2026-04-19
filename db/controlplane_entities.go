@@ -1079,11 +1079,23 @@ func ActualizarMetadataRuntimeHandle(id int64, metadataJSON string) error {
 func GetRuntimeHandleActivoAgente(agente string) (*RuntimeHandle, error) {
 	agente = strings.TrimSpace(agente)
 	if cached := runtimeHandleHotLookup(agente, nil); cached != nil {
+		if cached.ID > 0 {
+			refreshed, err := GetRuntimeHandle(cached.ID)
+			if err != nil {
+				return nil, err
+			}
+			if refreshed != nil {
+				cached = refreshed
+			}
+		}
 		validado, err := validarRuntimeHandleActivoSinFallback(cached)
 		if err != nil {
 			return nil, err
 		}
 		if validado != nil {
+			if err := cerrarRuntimeHandlesActivosSupersededPorHandle(validado); err != nil {
+				return nil, err
+			}
 			return validado, nil
 		}
 	}
@@ -1097,11 +1109,23 @@ func GetRuntimeHandleActivoAgente(agente string) (*RuntimeHandle, error) {
 func GetRuntimeHandleActivoAgenteProyecto(agente string, proyectoID *int64) (*RuntimeHandle, error) {
 	agente = strings.TrimSpace(agente)
 	if cached := runtimeHandleHotLookup(agente, proyectoID); cached != nil {
+		if cached.ID > 0 {
+			refreshed, err := GetRuntimeHandle(cached.ID)
+			if err != nil {
+				return nil, err
+			}
+			if refreshed != nil {
+				cached = refreshed
+			}
+		}
 		validado, err := validarRuntimeHandleActivoSinFallback(cached)
 		if err != nil {
 			return nil, err
 		}
 		if validado != nil {
+			if err := cerrarRuntimeHandlesActivosSupersededPorHandle(validado); err != nil {
+				return nil, err
+			}
 			return validado, nil
 		}
 	}
@@ -1137,7 +1161,7 @@ func seleccionarRuntimeHandleActivo(agente string, proyectoID *int64) (*RuntimeH
 	if len(canonicos) > 0 {
 		preferido := elegirRuntimeHandleActivoPreferente(canonicos)
 		if preferido != nil {
-			if err := cerrarRuntimeHandlesActivosSuperseded(preferido, validos); err != nil {
+			if err := cerrarRuntimeHandlesActivosSuperseded(preferido, handles); err != nil {
 				return nil, err
 			}
 			return GetRuntimeHandle(preferido.ID)
@@ -1291,6 +1315,17 @@ func cerrarRuntimeHandlesActivosSuperseded(preferido *RuntimeHandle, candidates 
 		}
 	}
 	return nil
+}
+
+func cerrarRuntimeHandlesActivosSupersededPorHandle(preferido *RuntimeHandle) error {
+	if preferido == nil {
+		return nil
+	}
+	candidates, err := listarRuntimeHandlesActivosCandidatos(preferido.Agente, preferido.ProyectoID)
+	if err != nil {
+		return err
+	}
+	return cerrarRuntimeHandlesActivosSuperseded(preferido, candidates)
 }
 
 func listarRuntimeHandlesActivosCandidatos(agente string, proyectoID *int64) ([]*RuntimeHandle, error) {
@@ -10423,6 +10458,20 @@ func runtimeBootstrapLeaseSelectionMatchesTargetSession(selection bootstrapRunti
 }
 
 func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHandle, runtime *RuntimeInstance, observed bool) (*RuntimeOrder, int64, []int64, int64, error) {
+	if handle != nil {
+		meta := mapFromJSON(handle.MetadataJSON)
+		driver := strings.TrimSpace(stringFromMap(meta, "driver", ""))
+		transport := strings.TrimSpace(stringFromMap(meta, "transport", ""))
+		if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") ||
+			strings.EqualFold(driver, "tmux_cli_session") ||
+			strings.EqualFold(transport, "tmux") {
+			var err error
+			handle, err = normalizarRuntimeHandleTMUXCanonico(handle)
+			if err != nil {
+				return nil, 0, nil, 0, err
+			}
+		}
+	}
 	agente, proyectoID, sesionID := runtimeBootstrapLeaseResolverTarget(handle, runtime)
 	if agente == "" {
 		return nil, 0, nil, 0, nil
@@ -11175,6 +11224,9 @@ func resolverDestinoRuntimeOrderCanonico(order *RuntimeOrder, runtime *RuntimeIn
 			if err := refrescarRuntimeOrderDestinoCanonico(order, runtime, validado); err != nil {
 				return nil, nil, err
 			}
+			if err := cerrarRuntimeHandlesActivosSupersededPorHandle(validado); err != nil {
+				return nil, nil, err
+			}
 			return runtime, validado, nil
 		}
 		if runtimeOrderConservaHandleExplicitoParaControl(order, handle) {
@@ -11203,6 +11255,9 @@ func resolverDestinoRuntimeOrderCanonico(order *RuntimeOrder, runtime *RuntimeIn
 		return nil, nil, err
 	}
 	if err := refrescarRuntimeOrderDestinoCanonico(order, runtime, candidato); err != nil {
+		return nil, nil, err
+	}
+	if err := cerrarRuntimeHandlesActivosSupersededPorHandle(candidato); err != nil {
 		return nil, nil, err
 	}
 	return runtime, candidato, nil
@@ -12060,6 +12115,9 @@ func RuntimeHandleMailboxDeliveryMode(handle *RuntimeHandle) string {
 			return ""
 		}
 		if mode == runtimeagente.MailboxDeliverySessionResume && !externalSessionReady {
+			if runtimepolicy.RuntimeHandleUsaTMUXPreferredCLI(meta) {
+				return runtimeagente.MailboxDeliveryBootstrapOnly
+			}
 			if runtimeHandlePuedeInteractuarAntesDeSessionResume(handle, meta) {
 				return runtimeagente.MailboxDeliveryInteractive
 			}
@@ -12493,6 +12551,9 @@ func normalizarRuntimeHandleTMUXCanonico(handle *RuntimeHandle) (*RuntimeHandle,
 	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
 		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") &&
 		strings.TrimSpace(handle.HandleRef) == canonicalRef {
+		if err := cerrarRuntimeHandlesSupersededPorCanonicoTMUX(handle); err != nil {
+			return nil, err
+		}
 		return handle, nil
 	}
 	if _, err := DB.Exec(`
@@ -12501,11 +12562,41 @@ func normalizarRuntimeHandleTMUXCanonico(handle *RuntimeHandle) (*RuntimeHandle,
 		    handle_kind='session',
 		    handle_ref=?,
 		    last_seen_at=CURRENT_TIMESTAMP
-		WHERE id=?`, canonicalRef, handle.ID); err != nil {
+	WHERE id=?`, canonicalRef, handle.ID); err != nil {
 		return nil, err
 	}
 	runtimeHandleHotReset()
-	return getRuntimeHandleRaw(handle.ID)
+	fresh, err := getRuntimeHandleRaw(handle.ID)
+	if err != nil || fresh == nil {
+		return fresh, err
+	}
+	if err := cerrarRuntimeHandlesSupersededPorCanonicoTMUX(fresh); err != nil {
+		return nil, err
+	}
+	return fresh, nil
+}
+
+func cerrarRuntimeHandlesSupersededPorCanonicoTMUX(handle *RuntimeHandle) error {
+	if handle == nil || handle.ID <= 0 || !runtimeHandleEsTMUXCanonico(handle) {
+		return nil
+	}
+	now := time.Now().UTC()
+	candidatos, err := listarRuntimeHandlesActivosCandidatos(handle.Agente, handle.ProyectoID)
+	if err != nil {
+		return err
+	}
+	for _, candidato := range candidatos {
+		if candidato == nil || candidato.ID == handle.ID {
+			continue
+		}
+		if !runtimeHandlePreferible(handle, candidato, now) {
+			continue
+		}
+		if err := marcarRuntimeHandleSuperseded(candidato); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func compactarMetadataHandleRuntimePersistida(handle *RuntimeHandle) (*RuntimeHandle, error) {

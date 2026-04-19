@@ -4917,8 +4917,8 @@ func TestRuntimeHandleMailboxDeliveryModeRespetaCapacidadesYFallbacks(t *testing
 		HandleKind:       "process",
 		CapabilitiesJSON: `{"mailbox_delivery_mode":"session_resume","can_send_input":false}`,
 		MetadataJSON:     `{"driver":"process_pty_cli","stdin_path":"/tmp/pty.stdin","supervisor_ref":"/tmp/ref","rendered_command":"codex-perfil Codex2","mailbox_delivery_mode":"session_resume","can_send_input":false}`,
-	}); got != runtimeagente.MailboxDeliveryInteractive {
-		t.Fatalf("codex process_pty_cli sin external_session_id deberia caer a interactive transitorio: %s", got)
+	}); got != runtimeagente.MailboxDeliveryBootstrapOnly {
+		t.Fatalf("codex process_pty_cli sin external_session_id deberia forzar bootstrap_only para recuperar TMUX canonico: %s", got)
 	}
 	if got := RuntimeHandleMailboxDeliveryMode(&RuntimeHandle{
 		Transporte:       "tmux",
