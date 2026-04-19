@@ -13560,12 +13560,13 @@ func existeRuntimeOrderAutonomiaPendiente(agente string, proyectoID *int64, tipo
 		Agente:     &agente,
 		ProyectoID: proyectoID,
 		Estado:     &estado,
+		Tipos:      []string{strings.TrimSpace(tipo)},
 	})
 	if err != nil {
 		return false, err
 	}
 	for _, order := range orders {
-		if order == nil || strings.TrimSpace(order.Tipo) != strings.TrimSpace(tipo) {
+		if order == nil {
 			continue
 		}
 		if accion == "" {
@@ -13627,6 +13628,7 @@ func runtimeOrderAutonomiaRecienteMaxTimestamp(agente string, proyectoID *int64,
 	orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
 		Agente:     &agente,
 		ProyectoID: proyectoID,
+		Tipos:      []string{strings.TrimSpace(tipo)},
 	})
 	if err != nil {
 		return time.Time{}, 0, err
@@ -13635,7 +13637,7 @@ func runtimeOrderAutonomiaRecienteMaxTimestamp(agente string, proyectoID *int64,
 	total := 0
 	latest := time.Time{}
 	for _, order := range orders {
-		if order == nil || strings.TrimSpace(order.Tipo) != strings.TrimSpace(tipo) {
+		if order == nil {
 			continue
 		}
 		if accion != "" && !runtimeOrderTieneAccion(order, accion) {
@@ -13714,18 +13716,14 @@ func existeRuntimeOrderAbiertaAutonomia(agente string, proyectoID *int64, tipos 
 			Agente:     &agente,
 			ProyectoID: proyectoID,
 			Estado:     &estado,
+			Tipos:      append([]string(nil), tipos...),
 		})
 		if err != nil {
 			return false, err
 		}
 		for _, order := range orders {
-			if order == nil {
-				continue
-			}
-			for _, tipo := range tipos {
-				if strings.TrimSpace(order.Tipo) == strings.TrimSpace(tipo) {
-					return true, nil
-				}
+			if order != nil {
+				return true, nil
 			}
 		}
 	}

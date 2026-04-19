@@ -166,6 +166,7 @@ type FiltroRuntimeOrders struct {
 	Agente     *string
 	ProyectoID *int64
 	Estado     *string
+	Tipos      []string
 	Limit      int
 }
 
@@ -2783,6 +2784,21 @@ func ListarRuntimeOrders(filter FiltroRuntimeOrders) ([]*RuntimeOrder, error) {
 		if filter.Estado != nil {
 			q += ` AND estado = ?`
 			args = append(args, strings.TrimSpace(*filter.Estado))
+		}
+		if len(filter.Tipos) > 0 {
+			tipos := make([]string, 0, len(filter.Tipos))
+			for _, tipo := range filter.Tipos {
+				tipo = strings.TrimSpace(tipo)
+				if tipo != "" {
+					tipos = append(tipos, tipo)
+				}
+			}
+			if len(tipos) > 0 {
+				q += ` AND tipo IN (` + strings.TrimRight(strings.Repeat("?,", len(tipos)), ",") + `)`
+				for _, tipo := range tipos {
+					args = append(args, tipo)
+				}
+			}
 		}
 		q += ` ORDER BY id DESC`
 		if filter.Limit > 0 {

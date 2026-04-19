@@ -1090,6 +1090,7 @@ func (s *Service) GetPostRemediationStatus(agente string, proyectoID *int64, ver
 	orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
 		Agente:     &agente,
 		ProyectoID: proyectoID,
+		Tipos:      []string{"nudge"},
 	})
 	if err != nil {
 		return nil, err
@@ -1097,7 +1098,7 @@ func (s *Service) GetPostRemediationStatus(agente string, proyectoID *int64, ver
 	var best *db.RuntimeOrder
 	bestAt := time.Time{}
 	for _, order := range orders {
-		if order == nil || strings.TrimSpace(order.Tipo) != "nudge" {
+		if order == nil {
 			continue
 		}
 		if !runtimeOrderHasAutonomyAction(order, "continuar_trabajo") || !runtimePayloadHasVerificationKey(order.PayloadJSON, verificationKey) {
@@ -1155,12 +1156,13 @@ func (s *Service) existsPendingAutonomyOrder(agente string, proyectoID *int64, t
 		Agente:     &agente,
 		ProyectoID: proyectoID,
 		Estado:     &estado,
+		Tipos:      []string{strings.TrimSpace(tipo)},
 	})
 	if err != nil {
 		return false, err
 	}
 	for _, order := range orders {
-		if order == nil || strings.TrimSpace(order.Tipo) != strings.TrimSpace(tipo) {
+		if order == nil {
 			continue
 		}
 		if strings.TrimSpace(accion) == "" {
@@ -1180,13 +1182,14 @@ func (s *Service) existsRecentAutonomyOrder(agente string, proyectoID *int64, ti
 	orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
 		Agente:     &agente,
 		ProyectoID: proyectoID,
+		Tipos:      []string{strings.TrimSpace(tipo)},
 	})
 	if err != nil {
 		return false, err
 	}
 	cutoff := time.Now().UTC().Add(-within)
 	for _, order := range orders {
-		if order == nil || strings.TrimSpace(order.Tipo) != strings.TrimSpace(tipo) {
+		if order == nil {
 			continue
 		}
 		if strings.TrimSpace(accion) != "" && !runtimeOrderHasAction(order, accion) {
@@ -1248,18 +1251,14 @@ func (s *Service) existsOpenAutonomyOrder(agente string, proyectoID *int64, tipo
 			Agente:     &agente,
 			ProyectoID: proyectoID,
 			Estado:     &estado,
+			Tipos:      append([]string(nil), tipos...),
 		})
 		if err != nil {
 			return false, err
 		}
 		for _, order := range orders {
-			if order == nil {
-				continue
-			}
-			for _, tipo := range tipos {
-				if strings.TrimSpace(order.Tipo) == strings.TrimSpace(tipo) {
-					return true, nil
-				}
+			if order != nil {
+				return true, nil
 			}
 		}
 	}
@@ -1325,13 +1324,14 @@ func (s *Service) existsRecentPostRemediationFollowup(agente string, proyectoID 
 	orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
 		Agente:     &agente,
 		ProyectoID: proyectoID,
+		Tipos:      []string{"nudge"},
 	})
 	if err != nil {
 		return false, err
 	}
 	cutoff := time.Now().UTC().Add(-within)
 	for _, order := range orders {
-		if order == nil || strings.TrimSpace(order.Tipo) != "nudge" {
+		if order == nil {
 			continue
 		}
 		if runtimeOrderMoment(order).Before(cutoff) {

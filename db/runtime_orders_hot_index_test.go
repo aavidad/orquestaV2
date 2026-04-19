@@ -215,6 +215,57 @@ func TestRuntimeOrdersHotIndexRecargaCompletaSiHabiaDirtyPrevio(t *testing.T) {
 	}
 }
 
+func TestRuntimeOrdersHotIndexRespetaFiltroPorTipo(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	if _, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "checkpoint",
+		PayloadJSON: `{}`,
+	}); err != nil {
+		t.Fatalf("encolar checkpoint: %v", err)
+	}
+	nudgeID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "nudge",
+		PayloadJSON: `{}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar nudge: %v", err)
+	}
+
+	estadoPendiente := "pendiente"
+	agente := "Codex1"
+	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{
+		Agente:     &agente,
+		ProyectoID: &proyectoID,
+		Estado:     &estadoPendiente,
+		Tipos:      []string{"nudge"},
+	})
+	if err != nil {
+		t.Fatalf("listar runtime orders vivas por tipo: %v", err)
+	}
+	if len(orders) != 1 || orders[0].ID != nudgeID || orders[0].Tipo != "nudge" {
+		t.Fatalf("filtro por tipo inesperado: %+v", orders)
+	}
+}
+
 func assertRuntimeOrdersHotIndexState(t *testing.T, wantDirty bool, id int64, estado string) {
 	t.Helper()
 	runtimeOrdersHotIndex.mu.RLock()

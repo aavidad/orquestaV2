@@ -332,6 +332,21 @@ func runtimeOrderMatchesLiveFilter(order *RuntimeOrder, filter FiltroRuntimeOrde
 	if filter.Estado != nil && strings.TrimSpace(order.Estado) != strings.TrimSpace(*filter.Estado) {
 		return false
 	}
+	if len(filter.Tipos) > 0 {
+		match := false
+		for _, tipo := range filter.Tipos {
+			if strings.TrimSpace(tipo) == "" {
+				continue
+			}
+			if strings.TrimSpace(order.Tipo) == strings.TrimSpace(tipo) {
+				match = true
+				break
+			}
+		}
+		if !match {
+			return false
+		}
+	}
 	return true
 }
 
