@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,6 +30,7 @@ import (
 	"orquesta/db"
 	"orquesta/gitgobernanza"
 	"orquesta/internal/controlruntime"
+	"orquesta/internal/rpclocal"
 	"orquesta/notificaciones"
 	"orquesta/orquestacionagentesapp"
 	"orquesta/planocontrol"
@@ -1455,7 +1457,7 @@ func resolverPoliticaEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry) r
 	classification := clasificacionEntregaRuntimeTranscript(item)
 	switch classification {
 	case "approval_request", "waiting_human", "blocked", "needs_replan",
-		"cli_query", "credentials_request",
+		"cli_query", "credentials_request", "server_url_error",
 		"ready_for_review", "review_approved", "review_changes_requested", "review_blocked",
 		"runtime_panic", "runtime_crash", "runtime_failure_signal":
 		return runtimeTranscriptEntregaPolitica{Escenario: runtimeTranscriptEntregaEscenarioConsulta}
@@ -1564,7 +1566,7 @@ func runtimeTranscriptTextoPareceFinalizacion(normalized, classification string)
 
 func runtimeTranscriptTextoPareceConsultaCLI(normalized, classification string) bool {
 	switch classification {
-	case "approval_request", "waiting_human", "blocked", "needs_replan", "cli_query", "credentials_request":
+	case "approval_request", "waiting_human", "blocked", "needs_replan", "cli_query", "credentials_request", "server_url_error":
 		return true
 	}
 	markers := []string{
@@ -3806,6 +3808,9 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 	if strings.EqualFold(clasificacionSignalTranscript(item), "cli_query") {
 		return procesarSignalCLIQuery(item, agente, handle)
 	}
+	if strings.EqualFold(clasificacionSignalTranscript(item), "server_url_error") {
+		return procesarSignalServerURLError(item, agente, handle)
+	}
 	if strings.EqualFold(clasificacionSignalTranscript(item), "blocked") {
 		return procesarSignalBlocked(item, agente, handle)
 	}
@@ -3901,6 +3906,15 @@ func procesarSignalNeedsReplan(item *db.RuntimeTranscriptEntry, agente string, h
 
 func procesarSignalCLIQuery(item *db.RuntimeTranscriptEntry, agente string, handle *db.RuntimeHandle) (string, error) {
 	if note, handled, err := intentarResolverCLIQuerySignalTranscript(item); err != nil {
+		return "", err
+	} else if handled {
+		return note, nil
+	}
+	return procesarSignalAutoGuidance(item, agente, handle)
+}
+
+func procesarSignalServerURLError(item *db.RuntimeTranscriptEntry, agente string, handle *db.RuntimeHandle) (string, error) {
+	if note, handled, err := intentarResolverServerURLErrorSignalTranscript(item); err != nil {
 		return "", err
 	} else if handled {
 		return note, nil
@@ -4603,6 +4617,8 @@ func coletillaRespuestaSignalTranscript(clasificacion, politicaPermisos string) 
 		return strings.TrimSpace(politicaPermisos) + " No te quedes esperando respuesta: formula el siguiente paso razonable, ejecuta y documenta los supuestos."
 	case "cli_query":
 		return "Si preguntas por un comando o una vía de ejecución, resuélvelo consultando tareas, runtime mailbox, help local y estado vivo del proyecto, y continúa sin detener el flujo."
+	case "server_url_error":
+		return "Si una orden falla contra un servidor local, verifica el endpoint canónico actual y corrige la sesión antes de repetir comandos; no sigas insistiendo contra un daemon viejo."
 	case "credentials_request":
 		return "No inventes credenciales ni esperes indefinidamente: deja trazabilidad del acceso que falta, evita acciones bloqueadas y avanza por otro frente útil si existe."
 	case "ready_for_review":
@@ -4979,6 +4995,18 @@ func intentarResolverCLIQuerySignalTranscript(item *db.RuntimeTranscriptEntry) (
 	return intentarNudgeRemediacionLocalSignalTranscript(item, agente, proyecto, "resolver_cli_query_local", "cli_query_local", instruction)
 }
 
+func intentarResolverServerURLErrorSignalTranscript(item *db.RuntimeTranscriptEntry) (string, bool, error) {
+	agente, _, proyecto, ok, err := resolverContextoRemediacionLocalSignalTranscript(item)
+	if err != nil || !ok {
+		return "", false, err
+	}
+	instruction := construirInstruccionServerURLErrorSignalTranscript(item)
+	if strings.TrimSpace(instruction) == "" {
+		return "", false, nil
+	}
+	return intentarNudgeRemediacionLocalSignalTranscript(item, agente, proyecto, "resolver_server_url_local", "server_url_local", instruction)
+}
+
 func intentarResolverNeedsReplanSignalTranscript(item *db.RuntimeTranscriptEntry) (string, bool, error) {
 	agente, _, proyecto, ok, err := resolverContextoRemediacionLocalSignalTranscript(item)
 	if err != nil || !ok {
@@ -5063,6 +5091,70 @@ func construirInstruccionCLIQuerySignalTranscript(tarea *db.Tarea, item *db.Runt
 		return fmt.Sprintf("Orquesta: para esta tarea el comando canónico declarado es `%s`. Ejecútalo, usa ese resultado como evidencia y continúa sin esperar al supervisor.", cmds[0])
 	}
 	return fmt.Sprintf("Orquesta: para esta tarea los comandos canónicos declarados son `%s`. Ejecútalos en ese orden, usa el resultado como evidencia y continúa sin esperar al supervisor.", strings.Join(cmds, "` y `"))
+}
+
+func construirInstruccionServerURLErrorSignalTranscript(item *db.RuntimeTranscriptEntry) string {
+	if item == nil {
+		return ""
+	}
+	observado := extraerBaseURLServidorLocalSignalTranscript(item.Text)
+	if observado == "" {
+		observado = extraerBaseURLServidorLocalSignalTranscript(item.NormalizedText)
+	}
+	canonico := servidorCanonicoSignalTranscript()
+	if observado == "" || canonico == "" || strings.EqualFold(observado, canonico) {
+		return ""
+	}
+	addrCanonica := serverAddrFromBaseURL(canonico)
+	partes := []string{
+		fmt.Sprintf("Orquesta: estás usando un servidor local antiguo o equivocado (`%s`).", observado),
+		fmt.Sprintf("Usa el servidor canónico actual: `%s`.", canonico),
+	}
+	if addrCanonica != "" {
+		partes = append(partes, fmt.Sprintf("Si vas a relanzar comandos CLI en esta sesión, exporta `ORQUESTA_SERVER_URL=%s` y `ORQUESTA_SERVER_ADDR=%s` antes de repetirlos.", canonico, addrCanonica))
+	} else {
+		partes = append(partes, fmt.Sprintf("Si vas a relanzar comandos CLI en esta sesión, exporta `ORQUESTA_SERVER_URL=%s` antes de repetirlos.", canonico))
+	}
+	partes = append(partes, "Repite solo el comando bloqueado contra ese endpoint y continúa con la tarea sin abrir otro frente.")
+	return strings.Join(partes, " ")
+}
+
+func extraerBaseURLServidorLocalSignalTranscript(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	re := regexp.MustCompile(`https?://(?:127\.0\.0\.1|localhost):\d+`)
+	match := strings.TrimSpace(re.FindString(raw))
+	if match == "" {
+		return ""
+	}
+	return strings.TrimRight(match, "/")
+}
+
+func servidorCanonicoSignalTranscript() string {
+	if value := strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_URL")); value != "" {
+		return strings.TrimRight(value, "/")
+	}
+	if value := strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_ADDR")); value != "" {
+		return strings.TrimRight(rpclocal.BaseURL(value), "/")
+	}
+	if value := strings.TrimSpace(rpclocal.ResolveServerAddr()); value != "" {
+		return strings.TrimRight(rpclocal.BaseURL(value), "/")
+	}
+	return ""
+}
+
+func serverAddrFromBaseURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(u.Host)
 }
 
 func comandosCanonicosCLIQueryDesdeTarea(tarea *db.Tarea) []string {
@@ -5800,6 +5892,8 @@ func accionSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry) string {
 	switch clasificacionSignalTranscript(item) {
 	case "cli_query":
 		return "resolver_cli_query"
+	case "server_url_error":
+		return "resolver_server_url_error"
 	case "credentials_request":
 		return "resolver_credentials_request"
 	case "blocked":

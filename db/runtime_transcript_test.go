@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"orquesta/runtimeagente"
 )
 
 func TestIngestarRuntimeTranscriptHandleClasificaYGeneraEventos(t *testing.T) {
@@ -893,6 +895,7 @@ func TestClasificarTextoTranscriptReconoceReviewYReplan(t *testing.T) {
 		{raw: "connection reset by peer", want: "runtime_crash"},
 		{raw: "can i continue refactoring without waiting?", want: "approval_request"},
 		{raw: "¿Qué comando tengo que ejecutar para lanzar los tests?", want: "cli_query"},
+		{raw: "curl: (28) Operation timed out after 20002 milliseconds with 0 bytes from http://localhost:16543/api/status", want: "server_url_error"},
 		{raw: "missing credentials for the deploy token", want: "credentials_request"},
 		{raw: "can i continue refactoring without waiting", want: ""},
 	}
@@ -1396,6 +1399,76 @@ func TestIngestarRuntimeTranscriptHandleDescartaSpinnerCorruptoYConservaLineaUti
 	}
 	if got := items[0].NormalizedText; !strings.Contains(got, "necesito un repro corto") {
 		t.Fatalf("deberia conservar la línea útil, got=%q", got)
+	}
+}
+
+func TestIngestarRuntimeTranscriptHandleRecuperaLogPathDesdeWorkerSnapshot(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("CodexSnapshot", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexSnapshot",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, _ := GetRuntimeHandleBySesionID(sesion.ID)
+
+	logPath := filepath.Join(t.TempDir(), "codex-snapshot.log")
+	if err := os.WriteFile(logPath, []byte("he terminado el slice útil\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	statusPath := filepath.Join(t.TempDir(), "worker-status.json")
+	statusData, _ := json.Marshal(runtimeagente.WorkerStatus{
+		State:     "running",
+		Alive:     true,
+		LogPath:   logPath,
+		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+	})
+	if err := os.WriteFile(statusPath, statusData, 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_status_path": statusPath,
+	})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	n, err := IngestarRuntimeTranscriptHandle(handle.ID)
+	if err != nil {
+		t.Fatalf("ingestar transcript: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia ingerir desde log_path rescatado del snapshot, got=%d", n)
+	}
+
+	agente := "CodexSnapshot"
+	items, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("transcript inesperado: %+v", items)
+	}
+	if !strings.Contains(items[0].NormalizedText, "he terminado el slice útil") {
+		t.Fatalf("deberia conservar la línea ingerida, got=%q", items[0].NormalizedText)
 	}
 }
 

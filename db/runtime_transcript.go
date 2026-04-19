@@ -14,6 +14,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"orquesta/runtimeagente"
 	"orquesta/runtimepolicy"
 )
 
@@ -507,7 +508,7 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 	}
 	now := time.Now().UTC()
 	meta := mapFromJSON(handle.MetadataJSON)
-	logPath := strings.TrimSpace(stringFromMap(meta, "log_path", ""))
+	logPath := runtimeTranscriptResolveLogPath(handle, meta)
 	if logPath == "" {
 		runtimeTranscriptHotIdleClear(handle)
 		return 0, nil
@@ -515,10 +516,23 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 	info, err := os.Stat(logPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			runtimeTranscriptHotIdleRemember(handle, now)
-			return 0, nil
+			meta["log_path"] = ""
+			logPath = runtimeTranscriptResolveLogPath(handle, meta)
+			if logPath == "" {
+				runtimeTranscriptHotIdleRemember(handle, now)
+				return 0, nil
+			}
+			info, err = os.Stat(logPath)
+			if err != nil {
+				if os.IsNotExist(err) {
+					runtimeTranscriptHotIdleRemember(handle, now)
+					return 0, nil
+				}
+				return 0, err
+			}
+		} else {
+			return 0, err
 		}
-		return 0, err
 	}
 	offset := int64FromMap(meta, "transcript_log_offset")
 	pending := stringFromMap(meta, "transcript_log_pending", "")
@@ -641,6 +655,34 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 	}
 	runtimeHandleHotReset()
 	return total, nil
+}
+
+func runtimeTranscriptResolveLogPath(handle *RuntimeHandle, meta map[string]any) string {
+	if handle == nil {
+		return ""
+	}
+	if logPath := strings.TrimSpace(stringFromMap(meta, "log_path", "")); logPath != "" {
+		return logPath
+	}
+	snapshot, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
+	if err != nil || snapshot == nil {
+		return ""
+	}
+	candidates := []string{}
+	if snapshot.Status != nil {
+		candidates = append(candidates, strings.TrimSpace(snapshot.Status.LogPath))
+	}
+	if snapshot.Manifest != nil {
+		candidates = append(candidates, strings.TrimSpace(snapshot.Manifest.LogPath))
+	}
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		meta["log_path"] = candidate
+		return candidate
+	}
+	return ""
 }
 
 func runtimeTranscriptHotIdleSkip(handle *RuntimeHandle, now time.Time) bool {
@@ -1274,6 +1316,9 @@ func clasificarTextoTranscript(normalized string) string {
 			return "cli_query"
 		}
 	}
+	if pareceErrorServidorLocal(normalized) {
+		return "server_url_error"
+	}
 	credentialsPhrases := []string{
 		"faltan credenciales",
 		"falta credencial",
@@ -1310,6 +1355,35 @@ func clasificarTextoTranscript(normalized string) string {
 		}
 	}
 	return ""
+}
+
+func pareceErrorServidorLocal(normalized string) bool {
+	if normalized == "" {
+		return false
+	}
+	if !strings.Contains(normalized, "http://127.0.0.1:") && !strings.Contains(normalized, "http://localhost:") {
+		return false
+	}
+	markers := []string{
+		"/api/status",
+		"/api/agentes/",
+		"/api/tareas",
+		"/api/sesiones/",
+		"/api/runtime",
+		"consultando servidor",
+		"timeout awaiting response headers",
+		"net/http: timeout",
+		"operation timed out",
+		"curl: (28)",
+		"failed to connect",
+		"connection refused",
+	}
+	for _, marker := range markers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func parecePreguntaAprobacion(normalized string) bool {
