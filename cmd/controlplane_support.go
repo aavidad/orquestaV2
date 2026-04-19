@@ -10335,10 +10335,14 @@ func rowAtascadoPrefiereContinuacionLocal(row agentesapp.Row, now time.Time) boo
 	if !strings.EqualFold(strings.TrimSpace(row.WorkerState), "ready") {
 		return false
 	}
-	if runtimeagente.NormalizeMailboxDeliveryMode(row.WorkerMailboxDeliveryMode) != runtimeagente.MailboxDeliverySessionResume {
+	switch runtimeagente.NormalizeMailboxDeliveryMode(row.WorkerMailboxDeliveryMode) {
+	case runtimeagente.MailboxDeliverySessionResume:
+		return row.WorkerSupportsContinuityRecovery(now)
+	case runtimeagente.MailboxDeliveryBootstrapOnly:
+		return rowHasFreshTMUXWorkerForRecovery(row, now)
+	default:
 		return false
 	}
-	return row.WorkerSupportsContinuityRecovery(now)
 }
 
 func procesarSesionesTMUXHuerfanasAutonomiaBatch(now time.Time) (int, error) {
@@ -14283,3 +14287,5 @@ func encolarControlAutonomiaProyectoDetallado(req apiAgenteControlRequest) error
 	})
 	return err
 }
+
+// TMUX canonical lane handling lives in this file.

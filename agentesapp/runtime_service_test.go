@@ -678,6 +678,79 @@ func TestBuildTickOutputConWorkerReadySessionResumeSanoContinuaTrabajo(t *testin
 	}
 }
 
+func TestBuildTickOutputConWorkerReadyBootstrapOnlySanoContinuaTrabajo(t *testing.T) {
+	now := time.Now().UTC()
+	readyAt := now.Add(-25 * time.Minute)
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex3-120000",
+		"tmux_pane_id":          "%4",
+		"mailbox_delivery_mode": "bootstrap_only",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":                 "ready",
+		"updated_at":            now.Format(time.RFC3339Nano),
+		"alive":                 true,
+		"ready_at":              readyAt.Format(time.RFC3339Nano),
+		"mailbox_delivery_mode": "bootstrap_only",
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":                 true,
+		"heartbeat_at":          now.Format(time.RFC3339Nano),
+		"ready_at":              readyAt.Format(time.RFC3339Nano),
+		"mailbox_delivery_mode": "bootstrap_only",
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"driver":                "tmux_cli_session",
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+		"mailbox_delivery_mode": "bootstrap_only",
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex3", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex3"), ProyectoID: int64Ptr(7), Estado: db.EstadoAsignada, Titulo: "Frente activo Codex"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 52, Agente: "Codex3", ProyectoID: int64Ptr(7), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 62, Agente: "Codex3", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(52), Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+	}
+	svc := NewService(store, nil)
+	proyecto := &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()}
+
+	out, err := svc.buildTickOutput("Codex3", proyecto, nil, 100)
+	if err != nil {
+		t.Fatalf("buildTickOutput: %v", err)
+	}
+	if out.AccionRecomendada != "continuar_trabajo" || out.DebePausar {
+		t.Fatalf("salida inesperada: %+v", out)
+	}
+}
+
 func TestBuildPreparePrefierePoolLocalCompartidoOllama(t *testing.T) {
 	prepararDBTemporalRuntimeService(t)
 	tmp := t.TempDir()

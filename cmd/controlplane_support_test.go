@@ -10031,15 +10031,15 @@ func TestProcesarRuntimeMailboxSessionResumeBatchUsaFallbackInteractivoParaProce
 	}
 }
 
-func TestRuntimeHandleAdmiteFallbackInteractivoTransitorioParaProcessPTYConStdin(t *testing.T) {
+func TestRuntimeHandleAdmiteFallbackInteractivoTransitorioParaCodexTMUXPreferredConStdin(t *testing.T) {
 	handle := &db.RuntimeHandle{
 		Transporte:       "cli",
 		HandleKind:       "process",
 		MetadataJSON:     `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","mailbox_delivery_mode":"session_resume","can_send_input":false,"stdin_path":"/tmp/codex.stdin","supervisor_ref":"/tmp/codex-supervisor"}`,
 		CapabilitiesJSON: `{"can_send_input":false,"mailbox_delivery_mode":"session_resume"}`,
 	}
-	if !runtimeHandleAdmiteFallbackInteractivoTransitorio(handle) {
-		t.Fatal("un process_pty_cli con stdin_path deberia degradar a fallback interactivo transitorio")
+	if runtimeHandleAdmiteFallbackInteractivoTransitorio(handle) {
+		t.Fatal("codex tmux-preferred con stdin_path no debe degradar a fallback interactivo transitorio")
 	}
 }
 
@@ -10165,6 +10165,18 @@ func TestRuntimeHandleAdmiteFallbackInteractivoTransitorioExternalSessionID(t *t
 	}
 	if runtimeHandleAdmiteFallbackInteractivoTransitorio(handle) {
 		t.Error("handle con external_session_id no debe admitir fallback interactivo transitorio")
+	}
+}
+
+func TestRuntimeHandleAdmiteFallbackInteractivoTransitorioCodexTMUXPreferredSinExternalSessionID(t *testing.T) {
+	handle := &db.RuntimeHandle{
+		Transporte:       "cli",
+		HandleKind:       "process",
+		MetadataJSON:     `{"driver":"process_pty_cli","mailbox_delivery_mode":"session_resume","can_send_input":false,"stdin_path":"/tmp/s","supervisor_ref":"/tmp/ref","rendered_command":"codex-perfil Codex1"}`,
+		CapabilitiesJSON: `{"can_send_input":false,"mailbox_delivery_mode":"session_resume"}`,
+	}
+	if runtimeHandleAdmiteFallbackInteractivoTransitorio(handle) {
+		t.Error("codex tmux-preferred sin external_session_id no debe admitir fallback interactivo transitorio")
 	}
 }
 
@@ -14388,6 +14400,99 @@ func TestProcesarRuntimeMailboxSessionResumeBatchNoRematerializaGuidanceCaducada
 	if sendCount != 1 {
 		t.Fatalf("no deberia crear una nueva send_instruction guidance: %d", sendCount)
 	}
+}
+
+func TestDebugBootstrapPendingLegacy(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-bootstrap-resume","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	handle, err = db.GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("refrescar handle: %+v err=%v", handle, err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"texto":"arranque autonomo"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	startID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	resumeID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		Tipo:       "resume",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","start_order_id":%d,"mailbox_ids":[%d],"sesion_id":%d}`,
+			startID, msgID, sesion.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar resume bootstrap: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, resumeID); err != nil {
+		t.Fatalf("marcar resume ejecutando: %v", err)
+	}
+
+	covered, bootstrapOrderID, startOrderID, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(msgID, handle, runtime)
+	if err != nil {
+		t.Fatalf("covered err: %v", err)
+	}
+	observed, observedOrderID, observedStartOrderID, err := db.RuntimeMailboxEntregadoPorBootstrapObservado(msgID, handle, runtime)
+	if err != nil {
+		t.Fatalf("observed err: %v", err)
+	}
+	blocked, err := runtimeMailboxBloqueadaPorBootstrapPendiente(&db.RuntimeMailboxMessage{ID: msgID, ToAgente: "Codex1", ProyectoID: &proyectoID, Kind: "autonomia", PayloadJSON: `{"texto":"arranque autonomo"}`}, handle, runtime)
+	if err != nil {
+		t.Fatalf("blocked err: %v", err)
+	}
+	t.Fatalf("mode=%s covered=%v bootstrapOrderID=%d startOrderID=%d observed=%v observedOrderID=%d observedStartOrderID=%d blocked=%v handle=%+v runtime=%+v", db.RuntimeHandleMailboxDeliveryMode(handle), covered, bootstrapOrderID, startOrderID, observed, observedOrderID, observedStartOrderID, blocked, handle, runtime)
 }
 
 func TestProcesarRuntimeMailboxSessionResumeBatchPermiteGuidanceDurableAunqueBootstrapSigaPendiente(t *testing.T) {
@@ -31211,7 +31316,7 @@ func TestProcesarWorkerAtascadoAutonomiaRowPrefiereContinuacionLocalSessionResum
 	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
 		t.Fatalf("upsert handle: %v", err)
 	}
-	handle, err := db.GetRuntimeHandleActivoAgenteProyecto("CodexReady", &proyectoID)
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
 	if err != nil || handle == nil {
 		t.Fatalf("handle=%+v err=%v", handle, err)
 	}
@@ -31280,6 +31385,115 @@ func TestProcesarWorkerAtascadoAutonomiaRowPrefiereContinuacionLocalSessionResum
 	}
 	if stopCount != 0 || startCount != 0 {
 		t.Fatalf("no deberia reiniciar runtime sano listo para continuidad, stop=%d start=%d orders=%+v", stopCount, startCount, orders)
+	}
+	if nudgeCount != 1 {
+		t.Fatalf("deberia encolar exactamente un nudge de continuidad, got=%d orders=%+v", nudgeCount, orders)
+	}
+}
+
+func TestProcesarWorkerAtascadoAutonomiaRowPrefiereContinuacionLocalBootstrapOnlyTMUX(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	if err := db.ConfigSet("runtime_shared_account_active_ceiling", "4"); err != nil {
+		t.Fatalf("config ceiling: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-worker-bootstrap-ready",
+		Nombre:  "Orquestador Worker Bootstrap Ready",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexBootstrap", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexBootstrap", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexBootstrap",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert handle: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle=%+v err=%v", handle, err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Slice bootstrap-only listo para continuidad local",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexBootstrap"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexBootstrap"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	now := time.Now().UTC()
+	rows := []agentesapp.Row{{
+		Agente:                    &db.Agente{Nombre: "CodexBootstrap"},
+		Asignacion:                &db.Asignacion{Agente: "CodexBootstrap", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+		Sesion:                    sesion,
+		Handle:                    handle,
+		WorkerDriver:              "tmux_cli_session",
+		WorkerTMUXSession:         "orq-codexbootstrap-1",
+		WorkerState:               "ready",
+		WorkerAlive:               true,
+		WorkerCanSendInput:        false,
+		WorkerMailboxDeliveryMode: runtimeagente.MailboxDeliveryBootstrapOnly,
+		WorkerHeartbeat:           ptrTime(now),
+		WorkerUpdatedAt:           ptrTime(now),
+		WorkerReadyAt:             ptrTime(now.Add(-25 * time.Minute)),
+		OpenTasks:                 1,
+		EstadoOperativo:           "atascado",
+		DetalleOperativo:          "sin progreso desde listo",
+	}}
+
+	procesadas, err := procesarWorkerAtascadoAutonomiaRow(rows[0], rows, now)
+	if err != nil {
+		t.Fatalf("procesar worker atascado row: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("procesadas=%d, want 1", procesadas)
+	}
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: ptrString("CodexBootstrap")})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	stopCount := 0
+	startCount := 0
+	nudgeCount := 0
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch strings.TrimSpace(order.Tipo) {
+		case "stop":
+			stopCount++
+		case "start":
+			startCount++
+		case "nudge":
+			nudgeCount++
+		}
+	}
+	if stopCount != 0 || startCount != 0 {
+		t.Fatalf("no deberia reiniciar runtime tmux bootstrap_only sano, stop=%d start=%d orders=%+v", stopCount, startCount, orders)
 	}
 	if nudgeCount != 1 {
 		t.Fatalf("deberia encolar exactamente un nudge de continuidad, got=%d orders=%+v", nudgeCount, orders)
