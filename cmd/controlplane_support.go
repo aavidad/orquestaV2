@@ -2083,6 +2083,34 @@ func mapStringValue(m map[string]any, key string) string {
 	return ""
 }
 
+func boolFromMap(m map[string]any, key string) bool {
+	if m == nil {
+		return false
+	}
+	raw, ok := m[key]
+	if !ok {
+		return false
+	}
+	switch v := raw.(type) {
+	case bool:
+		return v
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(v))
+		return err == nil && parsed
+	case json.Number:
+		if n, err := v.Int64(); err == nil {
+			return n != 0
+		}
+	case float64:
+		return v != 0
+	case int:
+		return v != 0
+	case int64:
+		return v != 0
+	}
+	return false
+}
+
 func refrescarPresupuestoSesionObservadoHandle(handle *db.RuntimeHandle) (bool, string, error) {
 	if handle == nil {
 		return false, "", nil
@@ -6568,7 +6596,7 @@ func procesarRuntimeMailboxSessionResumeMensaje(msg *db.RuntimeMailboxMessage, c
 // procesarRuntimeMailboxSessionResumeFallbackInteractivo gestiona mensajes de resume
 // cuando no hay externalSessionID: usa el canal interactivo transitorio como fallback.
 func procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto, externalSessionID string) (bool, error) {
-	if !runtimeHandleAdmiteFallbackInteractivoTransitorio(handle) {
+	if !runtimeHandleAdmiteFallbackInteractivoTransitorio(handle) && !runtimeMailboxSessionResumePermiteFallbackInteractivoPipelineLocal(msg, handle, externalSessionID) {
 		return false, nil
 	}
 	if !runtimeHandleListaParaDispatchInteractivo(handle) {
@@ -6589,9 +6617,44 @@ func procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg *db.RuntimeMailb
 	return encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID, "runtime_mailbox_session_resume_interactive_fallback", "runtime_mailbox_session_resume_interactive_supersede")
 }
 
+func runtimeMailboxSessionResumePermiteFallbackInteractivoPipelineLocal(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, externalSessionID string) bool {
+	if msg == nil || handle == nil || strings.TrimSpace(externalSessionID) != "" {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") {
+		return false
+	}
+	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
+	caps := mapFromJSON(strings.TrimSpace(handle.CapabilitiesJSON))
+	explicitMode := runtimeagente.NormalizeMailboxDeliveryMode(firstNonEmpty(
+		strings.TrimSpace(stringMapValue(caps, "mailbox_delivery_mode")),
+		strings.TrimSpace(stringMapValue(meta, "mailbox_delivery_mode")),
+	))
+	if explicitMode != runtimeagente.MailboxDeliverySessionResume {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(stringMapValue(meta, "driver")), "process_pty_cli") {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(handle.Transporte), "cli") || !strings.EqualFold(strings.TrimSpace(handle.HandleKind), "process") {
+		return false
+	}
+	for _, key := range []string{"supervisor_ref", "stdin_path", "stdin_raw_path"} {
+		if strings.TrimSpace(stringMapValue(meta, key)) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // procesarRuntimeMailboxSessionResumeConSesion gestiona mensajes de resume cuando
 // hay una externalSessionID: verifica condiciones TMUX y encola el resume normal.
 func procesarRuntimeMailboxSessionResumeConSesion(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto, externalSessionID string) (bool, error) {
+	if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, externalSessionID); err != nil {
+		return false, err
+	} else if dedupe {
+		return false, nil
+	}
 	if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "session_resume", time.Now().UTC()); err != nil {
 		return false, err
 	} else if obsoleta {
@@ -7109,10 +7172,15 @@ func runtimeMailboxGuidanceDurableUsaInbox(handle *db.RuntimeHandle) bool {
 		return false
 	}
 	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
+	caps := mapFromJSON(strings.TrimSpace(handle.CapabilitiesJSON))
 	driver := strings.TrimSpace(stringMapValue(meta, "driver"))
+	metaCanSend := boolFromMap(meta, "can_send_input")
+	capsCanSend := boolFromMap(caps, "can_send_input")
 	return strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
 		strings.EqualFold(driver, "tmux_cli_session") &&
-		!db.RuntimeHandlePermiteSendInputInteractivo(handle)
+		runtimeagente.NormalizeMailboxDeliveryMode(db.RuntimeHandleMailboxDeliveryMode(handle)) == runtimeagente.MailboxDeliverySessionResume &&
+		!metaCanSend &&
+		!capsCanSend
 }
 
 func reconciliarRuntimeMailboxPipelineBootstrapActivaBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
@@ -7520,14 +7588,18 @@ func runtimeHandleListaParaDispatchInteractivoConEstado(handle *db.RuntimeHandle
 		return runtimeHandlePermiteInteractivoTmuxSinEstado(handle) || (state != nil && state.fallback)
 	}
 	view := state.view
+	canonicalState := runtimeHandleWorkerCanonicalState(view)
 	if runtimeHandleEsTmuxLike(handle) {
 		if !strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") &&
 			!strings.EqualFold(strings.TrimSpace(view.Transport), "tmux") {
 			return false
 		}
-		return state.ready || runtimeHandleWorkerCanonicalState(view) == "waiting_input"
+		if canonicalState == "starting" {
+			return false
+		}
+		return state.ready || canonicalState == "waiting_input"
 	}
-	return state.ready || runtimeHandleWorkerCanonicalState(view) == "waiting_input"
+	return state.ready || canonicalState == "waiting_input"
 }
 
 func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) bool {

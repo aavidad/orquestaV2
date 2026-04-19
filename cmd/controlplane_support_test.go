@@ -10084,14 +10084,22 @@ func TestRuntimeMailboxGuidanceDurableUsaInbox(t *testing.T) {
 	if runtimeMailboxGuidanceDurableUsaInbox(handleConInput) {
 		t.Error("handle con can_send_input activo no debe usar inbox")
 	}
+	handleConInputLegacyString := &db.RuntimeHandle{
+		Transporte:       "tmux",
+		MetadataJSON:     `{"driver":"tmux_cli_session","can_send_input":"true","mailbox_delivery_mode":"session_resume","external_session_id":"sess-inbox"}`,
+		CapabilitiesJSON: `{"can_send_input":"true","mailbox_delivery_mode":"session_resume"}`,
+	}
+	if runtimeMailboxGuidanceDurableUsaInbox(handleConInputLegacyString) {
+		t.Error("handle tmux con can_send_input legacy=true no debe usar inbox")
+	}
 	// tmux + tmux_cli_session + sin send_input → true
 	handleTMUX := &db.RuntimeHandle{
 		Transporte:       "tmux",
-		MetadataJSON:     `{"driver":"tmux_cli_session","can_send_input":false}`,
-		CapabilitiesJSON: `{"can_send_input":false}`,
+		MetadataJSON:     `{"driver":"tmux_cli_session","can_send_input":false,"mailbox_delivery_mode":"session_resume","external_session_id":"sess-inbox"}`,
+		CapabilitiesJSON: `{"can_send_input":false,"mailbox_delivery_mode":"session_resume"}`,
 	}
 	if !runtimeMailboxGuidanceDurableUsaInbox(handleTMUX) {
-		t.Error("tmux + tmux_cli_session sin send_input debe usar inbox")
+		t.Error("tmux session_resume sin send_input debe usar inbox")
 	}
 	// cli + process_pty_cli → false (transporte no es tmux)
 	handleCLI := &db.RuntimeHandle{
@@ -10111,6 +10119,28 @@ func TestRuntimeMailboxGuidanceDurableUsaInbox(t *testing.T) {
 	}
 	if runtimeMailboxGuidanceDurableUsaInbox(handleTMUXOtroDriver) {
 		t.Error("tmux con driver distinto a tmux_cli_session no debe usar inbox")
+	}
+}
+
+func TestRuntimeMailboxSessionResumePermiteFallbackInteractivoPipelineLocalSoloSessionResume(t *testing.T) {
+	msg := &db.RuntimeMailboxMessage{Kind: "pipeline_local"}
+	handleSessionResume := &db.RuntimeHandle{
+		Transporte:       "cli",
+		HandleKind:       "process",
+		MetadataJSON:     `{"driver":"process_pty_cli","mailbox_delivery_mode":"session_resume","stdin_path":"/tmp/codex.stdin","supervisor_ref":"codex1-supervisor"}`,
+		CapabilitiesJSON: `{"mailbox_delivery_mode":"session_resume","can_send_input":false}`,
+	}
+	if !runtimeMailboxSessionResumePermiteFallbackInteractivoPipelineLocal(msg, handleSessionResume, "") {
+		t.Fatal("pipeline_local session_resume deberia permitir fallback interactivo controlado")
+	}
+	handleBootstrap := &db.RuntimeHandle{
+		Transporte:       "cli",
+		HandleKind:       "process",
+		MetadataJSON:     `{"driver":"process_pty_cli","mailbox_delivery_mode":"bootstrap_only","stdin_path":"/tmp/codex.stdin","supervisor_ref":"codex1-supervisor"}`,
+		CapabilitiesJSON: `{"mailbox_delivery_mode":"bootstrap_only","can_send_input":false}`,
+	}
+	if runtimeMailboxSessionResumePermiteFallbackInteractivoPipelineLocal(msg, handleBootstrap, "") {
+		t.Fatal("pipeline_local bootstrap_only no debe saltarse el veto de fallback interactivo")
 	}
 }
 
@@ -14401,6 +14431,7 @@ func TestProcesarRuntimeMailboxSessionResumeBatchNoRematerializaGuidanceCaducada
 		t.Fatalf("no deberia crear una nueva send_instruction guidance: %d", sendCount)
 	}
 }
+
 
 
 func TestProcesarRuntimeMailboxSessionResumeBatchPermiteGuidanceDurableAunqueBootstrapSigaPendiente(t *testing.T) {
