@@ -6881,11 +6881,12 @@ func runtimeMailboxGuidanceDurablePersistibleEnInbox(msg *db.RuntimeMailboxMessa
 	if msg == nil {
 		return false
 	}
-	switch strings.TrimSpace(msg.Kind) {
+	kind := strings.TrimSpace(msg.Kind)
+	switch kind {
 	case "autonomia", "nudge", "watchdog", db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
 		return true
 	default:
-		return false
+		return strings.HasPrefix(kind, "autonomia_")
 	}
 }
 
@@ -8137,6 +8138,15 @@ func construirInstruccionMailboxInteractivo(msg *db.RuntimeMailboxMessage) (stri
 	case db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
 		return construirInstruccionRefreshRuntime(msg)
 	default:
+		if strings.HasPrefix(strings.TrimSpace(msg.Kind), "autonomia_") {
+			if instruction := stringMapValue(payload, "instruction"); strings.TrimSpace(instruction) != "" {
+				return strings.TrimSpace(instruction), true
+			}
+			if texto := stringMapValue(payload, "texto"); strings.TrimSpace(texto) != "" {
+				return strings.TrimSpace(texto), true
+			}
+			return "Orquesta: retoma la continuidad autónoma pendiente del proyecto y ejecuta el siguiente slice útil permitido.", true
+		}
 		return "", false
 	}
 }

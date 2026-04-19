@@ -152,6 +152,20 @@ func TestConstruirInstruccionMailboxInteractivoAceptaPipelineLocal(t *testing.T)
 	}
 }
 
+func TestConstruirInstruccionMailboxInteractivoAceptaAutonomiaContinuarTrabajo(t *testing.T) {
+	msg := &db.RuntimeMailboxMessage{
+		Kind:        "autonomia_continuar_trabajo",
+		PayloadJSON: `{"texto":"Microtarea #15: sigue con el slice portable"}`,
+	}
+	got, ok := construirInstruccionMailboxInteractivo(msg)
+	if !ok {
+		t.Fatal("autonomia_continuar_trabajo deberia producir instruccion interactiva")
+	}
+	if !strings.Contains(got, "Microtarea #15") {
+		t.Fatalf("instruccion autonomia_continuar_trabajo inesperada: %q", got)
+	}
+}
+
 func TestRefrescarPresupuestoSesionObservadoDesdeSesionPrefiereHandleTMUXCanonico(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -11183,6 +11197,83 @@ func TestProcesarRuntimeMailboxSessionResumeBatchEncolaSendInstructionParaWatchd
 	}
 	if !strings.Contains(send.PayloadJSON, `"texto":"confirma estado o reanuda tick"`) {
 		t.Fatalf("send_instruction watchdog sin texto: %s", send.PayloadJSON)
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeBatchEncolaSendInstructionParaAutonomiaContinuarTrabajo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-autonomia-cont"}` 
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "orquesta",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia_continuar_trabajo",
+		PayloadJSON: `{"texto":"Microtarea #15: sigue con el slice portable"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox autonomia continuar_trabajo: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia crear una sola send_instruction para autonomia_continuar_trabajo, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var send *db.RuntimeOrder
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			send = order
+			break
+		}
+	}
+	if send == nil {
+		t.Fatalf("faltaba send_instruction")
+	}
+	if !strings.Contains(send.PayloadJSON, `"mailbox_id":`+strconv.FormatInt(msgID, 10)) {
+		t.Fatalf("send_instruction sin mailbox_id: %s", send.PayloadJSON)
+	}
+	if !strings.Contains(send.PayloadJSON, `Microtarea #15: sigue con el slice portable`) {
+		t.Fatalf("send_instruction autonomia_continuar_trabajo sin texto: %s", send.PayloadJSON)
 	}
 }
 
