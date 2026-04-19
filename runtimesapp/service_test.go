@@ -2791,6 +2791,170 @@ func TestEnqueueAgentControlCreatesRuntimeOrder(t *testing.T) {
 	}
 }
 
+func TestEnqueueAgentControlContinuarEncolaNudgeCanonico(t *testing.T) {
+	projectID := int64(9)
+	runtimeID := int64(12)
+	tareaID := int64(17)
+	store := &fakeStore{
+		projectResponse:     &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:       &db.Agente{Nombre: "Codex2", Rol: "programador"},
+		operationalProjResp: &db.RuntimeHandle{ID: 10, RuntimeID: &runtimeID, Estado: "activo"},
+		handleByIDResp:      &db.RuntimeHandle{ID: 10, RuntimeID: &runtimeID, Estado: "activo"},
+		createOrderID:       78,
+	}
+	service := NewService(store)
+
+	orderID, accion, err := service.EnqueueAgentControl(AgentControlRequest{
+		Agente:   "Codex2",
+		Proyecto: "orquestador",
+		Accion:   "continuar",
+		Motivo:   "tick_reorientacion_nucleo",
+		Por:      "test",
+		TareaID:  &tareaID,
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAgentControl continuar: %v", err)
+	}
+	if orderID != 78 || accion != "continue" {
+		t.Fatalf("orderID=%d accion=%s", orderID, accion)
+	}
+	if store.createOrder == nil {
+		t.Fatalf("createOrder nil")
+	}
+	if store.createOrder.Tipo != "nudge" {
+		t.Fatalf("debería encolar nudge, got=%+v", store.createOrder)
+	}
+	if store.createOrder.HandleID == nil || *store.createOrder.HandleID != 10 {
+		t.Fatalf("debería reutilizar handle de entrega activa: %+v", store.createOrder)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(store.createOrder.PayloadJSON), &payload); err != nil {
+		t.Fatalf("payload json: %v", err)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(payload["accion"])); got != "continuar_trabajo" {
+		t.Fatalf("accion inesperada en payload: %q", got)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(payload["kind"])); got != "pipeline_local" {
+		t.Fatalf("kind inesperado en payload: %q", got)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(payload["control_action"])); got != "continue" {
+		t.Fatalf("control_action inesperado en payload: %q", got)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(payload["tarea_id"])); got != "17" {
+		t.Fatalf("tarea_id inesperado en payload: %q", got)
+	}
+	if !strings.Contains(strings.TrimSpace(fmt.Sprint(payload["instruction"])), "tarea #17") {
+		t.Fatalf("instruction inesperada en payload: %q", payload["instruction"])
+	}
+	if store.auditAction != "control_agente_continue" || store.auditEntity != "runtime_order" || store.auditEntityID != 78 {
+		t.Fatalf("audit=%s %s %d", store.auditAction, store.auditEntity, store.auditEntityID)
+	}
+	if store.sharedAccountAgent != "" {
+		t.Fatalf("no deberia consultar cuota compartida para continuar trabajo: %q", store.sharedAccountAgent)
+	}
+}
+
+func TestEnqueueAgentControlContinuarRequiereProyecto(t *testing.T) {
+	store := &fakeStore{
+		agentResponse: &db.Agente{Nombre: "Codex2", Rol: "programador"},
+	}
+	service := NewService(store)
+
+	_, _, err := service.EnqueueAgentControl(AgentControlRequest{
+		Agente: "Codex2",
+		Accion: "continuar",
+		Por:    "test",
+	})
+	if err == nil || !strings.Contains(err.Error(), "debes indicar proyecto para continuar el trabajo del agente") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if store.createOrder != nil {
+		t.Fatalf("no deberia crear orden sin proyecto: %+v", store.createOrder)
+	}
+}
+
+func TestEnqueueAgentControlContinuarReuseOrdenViva(t *testing.T) {
+	projectID := int64(9)
+	tareaID := int64(17)
+	store := &fakeStore{
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:   &db.Agente{Nombre: "Codex2", Rol: "programador"},
+		ordersResponse: []*db.RuntimeOrder{
+			{
+				ID:         91,
+				Agente:     "Codex2",
+				ProyectoID: &projectID,
+				Tipo:       "nudge",
+				Estado:     "ejecutando",
+				PayloadJSON: `{"accion":"continuar_trabajo","control_action":"continue","tarea_id":17}`,
+			},
+		},
+	}
+	service := NewService(store)
+
+	orderID, accion, err := service.EnqueueAgentControl(AgentControlRequest{
+		Agente:   "Codex2",
+		Proyecto: "orquestador",
+		Accion:   "continuar",
+		TareaID:  &tareaID,
+		Por:      "test",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAgentControl continue reuse order: %v", err)
+	}
+	if orderID != 91 || accion != "continue" {
+		t.Fatalf("orderID=%d accion=%s", orderID, accion)
+	}
+	if store.createOrder != nil {
+		t.Fatalf("no deberia crear nudge nueva si ya hay una viva: %+v", store.createOrder)
+	}
+	if store.auditAction != "control_agente_continue_reuse" || store.auditEntityID != 91 {
+		t.Fatalf("audit reuse inesperada: action=%q entityID=%d", store.auditAction, store.auditEntityID)
+	}
+}
+
+func TestEnqueueAgentControlContinuarReuseMailboxPendiente(t *testing.T) {
+	projectID := int64(9)
+	tareaID := int64(17)
+	orderID := int64(91)
+	store := &fakeStore{
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:   &db.Agente{Nombre: "Codex2", Rol: "programador"},
+		mailboxResponse: []*db.RuntimeMailboxMessage{
+			{
+				ID:             501,
+				ToAgente:       "Codex2",
+				ProyectoID:     &projectID,
+				RuntimeOrderID: &orderID,
+				Kind:           "pipeline_local",
+				Estado:         "pendiente",
+				PayloadJSON:    `{"accion":"continuar_trabajo","control_action":"continue","tarea_id":17}`,
+			},
+		},
+	}
+	service := NewService(store)
+
+	gotOrderID, accion, err := service.EnqueueAgentControl(AgentControlRequest{
+		Agente:   "Codex2",
+		Proyecto: "orquestador",
+		Accion:   "continuar",
+		TareaID:  &tareaID,
+		Por:      "test",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAgentControl continue reuse mailbox: %v", err)
+	}
+	if gotOrderID != 91 || accion != "continue" {
+		t.Fatalf("orderID=%d accion=%s", gotOrderID, accion)
+	}
+	if store.createOrder != nil {
+		t.Fatalf("no deberia crear nudge nueva si la mailbox sigue pendiente: %+v", store.createOrder)
+	}
+	if store.auditAction != "control_agente_continue_reuse" || store.auditEntityID != 91 {
+		t.Fatalf("audit reuse inesperada: action=%q entityID=%d", store.auditAction, store.auditEntityID)
+	}
+}
+
 func TestEnqueueAgentControlRechazaStartSiCuentaCompartidaEstaOcupada(t *testing.T) {
 	projectID := int64(9)
 	store := &fakeStore{

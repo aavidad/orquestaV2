@@ -48,8 +48,8 @@ type apiAgenteControlResponse struct {
 }
 
 var agenteControlCmd = &cobra.Command{
-	Use:   "control <arrancar|pausar|continuar|detener> <agente>",
-	Short: "Encola una orden de ciclo de vida del agente en el control plane",
+	Use:   "control <arrancar|pausar|continuar|reanudar|detener> <agente>",
+	Short: "Encola una orden de ciclo de vida o continuidad del agente en el control plane",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		proyecto, _ := cmd.Flags().GetString("proyecto")

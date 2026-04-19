@@ -2085,6 +2085,43 @@ func (s *Service) EnqueueAgentControl(req AgentControlRequest) (int64, string, e
 		proyectoID = &proyecto.ID
 		proyectoRef = strings.TrimSpace(proyecto.Slug)
 	}
+	if accion == "continue" {
+		if proyectoRef == "" {
+			return 0, "", fmt.Errorf("debes indicar proyecto para continuar el trabajo del agente")
+		}
+		if existenteID, ok, err := s.findExistingAgentContinue(agente, proyectoID, req.TareaID); err != nil {
+			return 0, "", err
+		} else if ok {
+			detalle := fmt.Sprintf("continue agente=%s proyecto=%s reused_order_id=%d", agente, valueOrFallback(proyectoRef, ""), existenteID)
+			if motivo := strings.TrimSpace(req.Motivo); motivo != "" {
+				detalle += " motivo=" + motivo
+			}
+			s.store.Audit(valueOrFallback(strings.TrimSpace(req.Por), "orquesta"), "control_agente_continue_reuse", "runtime_order", existenteID, detalle)
+			return existenteID, accion, nil
+		}
+		resultado, err := s.EnqueueAgentNudge(AgentNudgeRequest{
+			Agente:      agente,
+			Proyecto:    proyectoRef,
+			Accion:      "continuar_trabajo",
+			Motivo:      buildAgentContinueMotivo(req),
+			Instruction: buildAgentContinueInstruction(req),
+			Actor:       valueOrFallback(strings.TrimSpace(req.Por), "orquesta"),
+			Metadata:    buildAgentContinueMetadata(req),
+		})
+		if err != nil {
+			return 0, "", err
+		}
+		orderID := int64(0)
+		if resultado != nil {
+			orderID = resultado.RuntimeOrderID
+		}
+		detalle := fmt.Sprintf("continue agente=%s proyecto=%s", agente, valueOrFallback(proyectoRef, ""))
+		if motivo := strings.TrimSpace(req.Motivo); motivo != "" {
+			detalle += " motivo=" + motivo
+		}
+		s.store.Audit(valueOrFallback(strings.TrimSpace(req.Por), "orquesta"), "control_agente_continue", "runtime_order", orderID, detalle)
+		return orderID, accion, nil
+	}
 	if accion == "start" {
 		if _, err := s.store.ReconcileStaleRuntimeOrders(); err != nil {
 			return 0, "", err
@@ -2206,6 +2243,79 @@ func (s *Service) EnqueueAgentControl(req AgentControlRequest) (int64, string, e
 	}
 	s.store.Audit(valueOrFallback(strings.TrimSpace(req.Por), "orquesta"), "control_agente_"+accion, "runtime_order", orderID, detalle)
 	return orderID, accion, nil
+}
+
+func (s *Service) findExistingAgentContinue(agente string, proyectoID *int64, tareaID *int64) (int64, bool, error) {
+	if s == nil || s.store == nil {
+		return 0, false, fmt.Errorf("servicio de runtimes no inicializado")
+	}
+	for _, estado := range []string{"pendiente", "tomada", "ejecutando"} {
+		estado := estado
+		orders, err := s.store.ListRuntimeOrders(db.FiltroRuntimeOrders{
+			Agente:     &agente,
+			ProyectoID: proyectoID,
+			Estado:     &estado,
+			Tipos:      []string{"nudge"},
+		})
+		if err != nil {
+			return 0, false, err
+		}
+		for _, order := range orders {
+			if order == nil || !runtimeOrderMatchesAgentContinue(order, tareaID) {
+				continue
+			}
+			return order.ID, true, nil
+		}
+	}
+	estado := "pendiente"
+	mailbox, err := s.store.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &agente,
+		ProyectoID: proyectoID,
+		Estado:     &estado,
+	})
+	if err != nil {
+		return 0, false, err
+	}
+	for _, msg := range mailbox {
+		if msg == nil || !runtimeMailboxMatchesAgentContinue(msg, tareaID) {
+			continue
+		}
+		if msg.RuntimeOrderID != nil && *msg.RuntimeOrderID > 0 {
+			return *msg.RuntimeOrderID, true, nil
+		}
+	}
+	return 0, false, nil
+}
+
+func runtimeOrderMatchesAgentContinue(order *db.RuntimeOrder, tareaID *int64) bool {
+	if order == nil || strings.TrimSpace(order.Tipo) != "nudge" {
+		return false
+	}
+	payload := map[string]any{}
+	_ = json.Unmarshal([]byte(order.PayloadJSON), &payload)
+	return runtimeContinuePayloadMatches(payload, tareaID)
+}
+
+func runtimeMailboxMatchesAgentContinue(msg *db.RuntimeMailboxMessage, tareaID *int64) bool {
+	if msg == nil || strings.TrimSpace(msg.Kind) != "pipeline_local" {
+		return false
+	}
+	payload := map[string]any{}
+	_ = json.Unmarshal([]byte(msg.PayloadJSON), &payload)
+	return runtimeContinuePayloadMatches(payload, tareaID)
+}
+
+func runtimeContinuePayloadMatches(payload map[string]any, tareaID *int64) bool {
+	if strings.TrimSpace(stringMapValue(payload, "accion")) != "continuar_trabajo" {
+		return false
+	}
+	if controlAction := strings.TrimSpace(stringMapValue(payload, "control_action")); controlAction != "" && controlAction != "continue" {
+		return false
+	}
+	if tareaID != nil && *tareaID > 0 && int64Any(payload["tarea_id"]) != *tareaID {
+		return false
+	}
+	return true
 }
 
 func buildAgentControlReuseSignature(req AgentControlRequest, proyectoRef string) agentControlReuseSignature {
@@ -2774,13 +2884,47 @@ func normalizeAgentControlAction(v string) (string, error) {
 		return "start", nil
 	case "pause", "pausar", "pausa":
 		return "pause", nil
-	case "resume", "continuar", "reanudar":
+	case "continue", "continuar":
+		return "continue", nil
+	case "resume", "reanudar":
 		return "resume", nil
 	case "stop", "detener", "parar":
 		return "stop", nil
 	default:
 		return "", fmt.Errorf("acción de control no soportada: %s", strings.TrimSpace(v))
 	}
+}
+
+func buildAgentContinueMetadata(req AgentControlRequest) map[string]any {
+	metadata := map[string]any{
+		"control_action": "continue",
+	}
+	if req.TareaID != nil && *req.TareaID > 0 {
+		metadata["tarea_id"] = *req.TareaID
+	}
+	return metadata
+}
+
+func buildAgentContinueMotivo(req AgentControlRequest) string {
+	if motivo := strings.TrimSpace(req.Motivo); motivo != "" {
+		return motivo
+	}
+	if req.TareaID != nil && *req.TareaID > 0 {
+		return fmt.Sprintf("retoma la tarea #%d del proyecto activo", *req.TareaID)
+	}
+	return "retoma el frente activo del proyecto"
+}
+
+func buildAgentContinueInstruction(req AgentControlRequest) string {
+	base := "Retoma el trabajo activo del proyecto en la sesión y worktree canónicas actuales."
+	if req.TareaID != nil && *req.TareaID > 0 {
+		base = fmt.Sprintf("Retoma la tarea #%d del proyecto en la sesión y worktree canónicas actuales.", *req.TareaID)
+	}
+	if motivo := strings.TrimSpace(req.Motivo); motivo != "" {
+		base += " Contexto: " + motivo + "."
+	}
+	base += " Si ves contexto viejo, inbox previa o instrucciones que no encajan con la tarea activa, prioriza la tarea actual de Orquesta, la inbox durable vigente y el proyecto activo."
+	return base
 }
 
 func valueOrFallback(v, fallback string) string {
