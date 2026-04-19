@@ -12414,20 +12414,37 @@ func SincronizarRuntimeHandleWorkingDir(handle *RuntimeHandle, runtime *RuntimeI
 	if preferred == "" {
 		preferred = current
 	}
+	sessionID := int64(0)
+	if handle != nil && handle.SesionID != nil && *handle.SesionID > 0 {
+		sessionID = *handle.SesionID
+	}
 	if preferred == current {
-		if handle != nil && metaWorkingDir != "" && strings.TrimSpace(metaWorkingDir) != preferred {
+		handleNeedsRepair := handle != nil && preferred != "" && (strings.TrimSpace(metaWorkingDir) != preferred || strings.TrimSpace(metaCWD) != preferred)
+		runtimeNeedsRepair := runtime != nil && runtime.ID > 0 && preferred != "" && strings.TrimSpace(runtime.CWD) != preferred
+		sessionNeedsRepair := sessionID > 0 && preferred != ""
+		if handleNeedsRepair {
 			meta := mapFromJSON(handle.MetadataJSON)
 			if meta == nil {
 				meta = map[string]any{}
 			}
 			meta["working_dir"] = preferred
-			if metaCWD != "" || preferred != "" {
-				meta["cwd"] = preferred
-			}
+			meta["cwd"] = preferred
 			metaJSON, _ := json.Marshal(meta)
 			if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, string(metaJSON), handle.ID); err != nil {
 				return nil, "", err
 			}
+		}
+		if runtimeNeedsRepair {
+			if _, err := DB.Exec(`UPDATE runtime_instances SET cwd=?, last_event_at=CURRENT_TIMESTAMP WHERE id=?`, preferred, runtime.ID); err != nil {
+				return nil, "", err
+			}
+		}
+		if sessionNeedsRepair {
+			if _, err := DB.Exec(`UPDATE sesiones SET cwd=? WHERE id=?`, preferred, sessionID); err != nil {
+				return nil, "", err
+			}
+		}
+		if handleNeedsRepair || runtimeNeedsRepair || sessionNeedsRepair {
 			runtimeHandleHotReset()
 			fresh, err := GetRuntimeHandle(handle.ID)
 			if err != nil {
@@ -12443,6 +12460,7 @@ func SincronizarRuntimeHandleWorkingDir(handle *RuntimeHandle, runtime *RuntimeI
 			meta = map[string]any{}
 		}
 		meta["working_dir"] = preferred
+		meta["cwd"] = preferred
 		metaJSON, _ := json.Marshal(meta)
 		if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, string(metaJSON), handle.ID); err != nil {
 			return nil, "", err
@@ -12454,8 +12472,8 @@ func SincronizarRuntimeHandleWorkingDir(handle *RuntimeHandle, runtime *RuntimeI
 			return nil, "", err
 		}
 	}
-	if handle != nil && handle.SesionID != nil && *handle.SesionID > 0 {
-		if _, err := DB.Exec(`UPDATE sesiones SET cwd=? WHERE id=?`, preferred, *handle.SesionID); err != nil {
+	if sessionID > 0 {
+		if _, err := DB.Exec(`UPDATE sesiones SET cwd=? WHERE id=?`, preferred, sessionID); err != nil {
 			return nil, "", err
 		}
 	}

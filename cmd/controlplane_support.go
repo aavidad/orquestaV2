@@ -7216,16 +7216,22 @@ func resolverRutaInboxRuntimeMailboxDurable(proyecto *db.Proyecto, agente string
 		return "", nil
 	}
 	agente = strings.TrimSpace(agente)
-	if ruta, err := runtimeMailboxGuidanceDurableWorkingDir(handle); err != nil {
+	proyectoCanonico := db.ProyectoConRutaEfectiva(proyecto, "")
+	if proyecto != nil && proyecto.ID > 0 {
+		if refreshed, err := db.GetProyectoConRutaEfectiva(strconv.FormatInt(proyecto.ID, 10), ""); err == nil && refreshed != nil {
+			proyectoCanonico = refreshed
+		}
+	}
+	if worktree, err := (worktreeRuntimeService{}).ResolveActiveWorktree(strings.TrimSpace(proyectoCanonico.Slug), agente); err == nil && worktree != nil && strings.TrimSpace(worktree.RutaAbs) != "" {
+		return strings.TrimSpace(worktree.RutaAbs), nil
+	}
+	if ruta, err := runtimeMailboxGuidanceDurableWorkingDir(proyectoCanonico, agente, handle); err != nil {
 		return "", err
 	} else if strings.TrimSpace(ruta) != "" {
 		return strings.TrimSpace(ruta), nil
 	}
-	if worktree, err := (worktreeRuntimeService{}).ResolveActiveWorktree(strings.TrimSpace(proyecto.Slug), agente); err == nil && worktree != nil && strings.TrimSpace(worktree.RutaAbs) != "" {
-		return strings.TrimSpace(worktree.RutaAbs), nil
-	}
 	estado := coordinacion.WorktreeActive
-	filter := coordinacion.WorktreeFilter{ProjectID: &proyecto.ID, State: &estado}
+	filter := coordinacion.WorktreeFilter{ProjectID: &proyectoCanonico.ID, State: &estado}
 	if agente != "" {
 		filter.Agent = &agente
 	}
@@ -7247,30 +7253,43 @@ func resolverRutaInboxRuntimeMailboxDurable(proyecto *db.Proyecto, agente string
 		}
 		return ruta, nil
 	}
-	return strings.TrimSpace(proyecto.RutaAbs), nil
+	return strings.TrimSpace(proyectoCanonico.RutaAbs), nil
 }
 
-func runtimeMailboxGuidanceDurableWorkingDir(handle *db.RuntimeHandle) (string, error) {
-	if handle == nil {
+func runtimeMailboxGuidanceDurableWorkingDir(proyecto *db.Proyecto, agente string, handle *db.RuntimeHandle) (string, error) {
+	if proyecto == nil || handle == nil {
 		return "", nil
 	}
+	candidatas := make([]string, 0, 2)
 	if handle.SesionID != nil && *handle.SesionID > 0 {
 		sesion, err := db.GetSesionByID(*handle.SesionID)
 		if err != nil {
 			return "", err
 		}
 		if sesion != nil {
-			cwd := strings.TrimSpace(sesion.CWD)
-			if cwd != "" {
-				if info, err := os.Stat(cwd); err == nil && info.IsDir() {
-					return cwd, nil
-				}
+			if cwd := strings.TrimSpace(sesion.CWD); cwd != "" {
+				candidatas = append(candidatas, cwd)
 			}
 		}
 	}
 	if cwd := strings.TrimSpace(stringFromMetadataJSON(handle.MetadataJSON, "working_dir")); cwd != "" {
-		if info, err := os.Stat(cwd); err == nil && info.IsDir() {
-			return cwd, nil
+		candidatas = append(candidatas, cwd)
+	}
+	for _, raw := range candidatas {
+		cwd := strings.TrimSpace(raw)
+		if cwd == "" {
+			continue
+		}
+		info, err := os.Stat(cwd)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		preferida := strings.TrimSpace(db.RutaTrabajoPreferidaAgenteProyecto(strings.TrimSpace(agente), proyecto, cwd))
+		if preferida == "" {
+			continue
+		}
+		if preferida == cwd {
+			return preferida, nil
 		}
 	}
 	return "", nil

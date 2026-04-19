@@ -248,6 +248,90 @@ func TestSincronizarRuntimeHandleWorkingDirPriorizaRuntimeCWDSobreMetadataStale(
 	}
 }
 
+func TestSincronizarRuntimeHandleWorkingDirReparaSesionStaleAunqueRuntimeYaSeaCanonico(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	rutaProyecto := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(filepath.Join(rutaProyecto, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir git: %v", err)
+	}
+	if err := RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaProyecto,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "Codex3",
+		ProyectoID:        &proyectoID,
+		CWD:               "/tmp/TestStale/orquestador",
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-stale-codex3",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "Codex3",
+		ProyectoID:   &proyectoID,
+		SesionID:     &sesion.ID,
+		Provider:     "openai",
+		Connector:    "codex-cli",
+		LogicalState: "activo",
+		ProcessState: "running",
+		CWD:          rutaProyecto,
+	})
+	if err != nil {
+		t.Fatalf("registrar runtime: %v", err)
+	}
+	if err := UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert handle desde sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %v %+v", err, handle)
+	}
+	if err := ActualizarMetadataRuntimeHandle(handle.ID, `{"working_dir":"/tmp/TestStale/orquestador","cwd":"/tmp/TestStale/orquestador"}`); err != nil {
+		t.Fatalf("actualizar metadata handle: %v", err)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("refresh handle: %v %+v", err, handle)
+	}
+	runtime, err := GetRuntime(runtimeID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime: %v %+v", err, runtime)
+	}
+
+	handle, workingDir, err := SincronizarRuntimeHandleWorkingDir(handle, runtime, "Codex3", &proyectoID)
+	if err != nil {
+		t.Fatalf("sincronizar working dir: %v", err)
+	}
+	if workingDir != rutaProyecto {
+		t.Fatalf("working dir inesperado: got=%q want=%q", workingDir, rutaProyecto)
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if got := strings.TrimSpace(stringFromMap(meta, "working_dir", "")); got != rutaProyecto {
+		t.Fatalf("working_dir del handle no saneado: %q meta=%s", got, handle.MetadataJSON)
+	}
+	if got := strings.TrimSpace(stringFromMap(meta, "cwd", "")); got != rutaProyecto {
+		t.Fatalf("cwd del handle no saneado: %q meta=%s", got, handle.MetadataJSON)
+	}
+	sesionActualizada, err := GetSesionByID(sesion.ID)
+	if err != nil || sesionActualizada == nil {
+		t.Fatalf("get sesion actualizada: %v %+v", err, sesionActualizada)
+	}
+	if sesionActualizada.CWD != rutaProyecto {
+		t.Fatalf("la sesion deberia quedar canonizada: got=%q want=%q", sesionActualizada.CWD, rutaProyecto)
+	}
+}
+
 func TestGetRuntimeOrderDevuelveNilSiNoExiste(t *testing.T) {
 	prepararDBTemporal(t)
 

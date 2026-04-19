@@ -5,7 +5,7 @@ import "orquesta/db"
 type Repository struct{}
 
 func (Repository) GetProject(ref string) (*db.Proyecto, error) {
-	return db.GetProyecto(ref)
+	return db.GetProyectoConRutaEfectiva(ref, "")
 }
 
 func (Repository) GetAgent(nombre string) (*db.Agente, error) {

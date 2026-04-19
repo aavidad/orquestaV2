@@ -12817,6 +12817,9 @@ func TestReconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailboxAceptaAut
 	if err := db.IniciarTarea(tareaID, "Codex3"); err != nil {
 		t.Fatalf("iniciar tarea: %v", err)
 	}
+	if err := db.ActivarAsignacion("Codex3", proyectoID, "test"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
 	if _, err := (db.CoordinationWorktreeSQLRepository{}).Create(&coordinacion.Worktree{
 		ProjectID: proyectoID,
 		TaskID:    &tareaID,
@@ -12908,6 +12911,118 @@ func TestReconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailboxAceptaAut
 	}
 	if !strings.Contains(inbox, "Mensaje vigente del frente actual") {
 		t.Fatalf("la inbox durable deberia materializar la guidance vigente, got=%q", inbox)
+	}
+}
+
+func TestReconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailboxPrefiereWorktreeActivaSobreRutaStale(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	repoStale := filepath.Join(tmp, "repo-stale")
+	worktreeDir := filepath.Join(tmp, "wt-codex3-canonica")
+	if err := os.MkdirAll(repoStale, 0o755); err != nil {
+		t.Fatalf("mkdir repo stale: %v", err)
+	}
+	if err := os.MkdirAll(worktreeDir, 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: repoStale,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Slice canonico",
+		Descripcion: "Escribir guidance durable en la worktree activa.",
+		ProyectoID:  &proyectoID,
+		Modulo:      "cmd",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex3"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex3"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if _, err := (db.CoordinationWorktreeSQLRepository{}).Create(&coordinacion.Worktree{
+		ProjectID: proyectoID,
+		TaskID:    &tareaID,
+		Agent:     "Codex3",
+		Name:      "orquestador-codex3-canonica",
+		Path:      worktreeDir,
+		Branch:    "orq/orquestador/codex3",
+		BaseRef:   "HEAD",
+		State:     coordinacion.WorktreeActive,
+		Reason:    "test",
+	}); err != nil {
+		t.Fatalf("crear worktree activa: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "Codex3",
+		ProyectoID:        &proyectoID,
+		CWD:               repoStale,
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-stale-codex3",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert handle desde sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil {
+		t.Fatalf("get handle: %v", err)
+	}
+	if err := db.ActualizarMetadataRuntimeHandle(handle.ID, fmt.Sprintf(`{"working_dir":%q}`, repoStale)); err != nil {
+		t.Fatalf("actualizar metadata handle: %v", err)
+	}
+	handle, err = db.GetRuntimeHandle(handle.ID)
+	if err != nil {
+		t.Fatalf("refresh handle: %v", err)
+	}
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
+	if err != nil || proyecto == nil {
+		t.Fatalf("get project: %+v err=%v", proyecto, err)
+	}
+	rutaInbox, err := resolverRutaInboxRuntimeMailboxDurable(proyecto, "Codex3", handle)
+	if err != nil {
+		t.Fatalf("resolver ruta inbox durable: %v", err)
+	}
+	if strings.TrimSpace(rutaInbox) != worktreeDir {
+		t.Fatalf("deberia preferir la worktree activa, got=%q want=%q", rutaInbox, worktreeDir)
+	}
+	msg := &db.RuntimeMailboxMessage{
+		FromAgente:  "orquesta",
+		ProyectoID:  &proyectoID,
+		ToAgente:    "Codex3",
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","instruction":"Sigue con la tarea activa"}`,
+		Estado:      "pendiente",
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if err := escribirInboxRuntimeMailboxDurable(proyecto, "Codex3", tarea, msg, handle); err != nil {
+		t.Fatalf("escribir inbox durable: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(worktreeDir, ".orquesta-inbox.md")); err != nil {
+		t.Fatalf("inbox canónica ausente en worktree activa: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repoStale, ".orquesta-inbox.md")); !os.IsNotExist(err) {
+		t.Fatalf("no deberia escribir inbox en la ruta stale, err=%v", err)
 	}
 }
 
