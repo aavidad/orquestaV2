@@ -103,6 +103,23 @@ func TestOpenPostgresBootstrapLimpio(t *testing.T) {
 	if version != "1.0.0" {
 		t.Fatalf("valor version inesperado: %s", version)
 	}
+	for _, column := range []struct {
+		table string
+		name  string
+	}{
+		{table: "agentes", name: "estado_sesion"},
+		{table: "agentes", name: "estado_cuota"},
+		{table: "sesiones", name: "heartbeat_at"},
+		{table: "runtime_orders", name: "available_at"},
+	} {
+		exists, err := ColumnExists(column.table, column.name)
+		if err != nil {
+			t.Fatalf("ColumnExists(%s.%s): %v", column.table, column.name, err)
+		}
+		if !exists {
+			t.Fatalf("columna %s.%s no creada por bootstrap/migracion postgres", column.table, column.name)
+		}
+	}
 
 	Close()
 

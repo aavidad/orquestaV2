@@ -145,7 +145,14 @@ func postMigrationDDLStatements() []string {
 
 func postMigrationStatementsForDriver(driver string) []string {
 	driver = strings.ToLower(strings.TrimSpace(driver))
-	if driver == "postgres" || driver == "postgresql" || driver == "mysql" {
+	if driver == "postgres" || driver == "postgresql" {
+		stmts := append([]string{}, postMigrationStatements()...)
+		for i, stmt := range stmts {
+			stmts[i] = renderDriverColumnSyntax("postgres", stmt)
+		}
+		return stmts
+	}
+	if driver == "mysql" {
 		return nil
 	}
 	stmts := append([]string{}, postMigrationStatements()...)

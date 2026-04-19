@@ -73,11 +73,28 @@ func TestPostMigrationStatementsIncluyenAlterYAjustesDatos(t *testing.T) {
 	}
 }
 
-func TestPostMigrationStatementsForDriverPostgresVacioPorAhora(t *testing.T) {
+func TestPostMigrationStatementsForDriverPostgresRenderizaMigracionesIncrementales(t *testing.T) {
 	t.Parallel()
 
-	if got := postMigrationStatementsForDriver("postgres"); len(got) != 0 {
-		t.Fatalf("postgres no deberia reutilizar post-migraciones sqlite-first por ahora: %v", got)
+	stmts := strings.Join(postMigrationStatementsForDriver("postgres"), "\n")
+	for _, required := range []string{
+		"ALTER TABLE agentes ADD COLUMN estado_sesion TEXT DEFAULT NULL",
+		"ALTER TABLE sesiones ADD COLUMN heartbeat_at TIMESTAMP",
+		"ALTER TABLE runtime_orders ADD COLUMN available_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
+		"UPDATE reglas",
+		"UPDATE workflows",
+	} {
+		if !strings.Contains(stmts, required) {
+			t.Fatalf("postgres deberia incluir %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_tareas_proyecto_blueprint_key",
+		"CREATE INDEX IF NOT EXISTS idx_sesiones_activa_id",
+	} {
+		if strings.Contains(stmts, forbidden) {
+			t.Fatalf("postgres no deberia reutilizar DDL complementario sqlite %q", forbidden)
+		}
 	}
 }
 
