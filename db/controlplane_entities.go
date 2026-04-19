@@ -3392,6 +3392,8 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 
 var runtimeSupervisionHandleFn = supervisarRuntimeHandle
 var runtimeSupervisionBatchBudgetOverride time.Duration
+var runtimeOrdersBatchBudgetOverride time.Duration
+var ejecutarRuntimeOrderBasicaFn = ejecutarRuntimeOrderBasica
 
 func runtimeSupervisionBatchBudget() time.Duration {
 	if runtimeSupervisionBatchBudgetOverride > 0 {
@@ -3476,6 +3478,17 @@ func ProcesarRuntimeOrdersBasicasBatch() (int, error) {
 	return procesarRuntimeOrdersBatchTipos(runtimeOrderTiposBasicos())
 }
 
+func runtimeOrdersBatchBudget() time.Duration {
+	if runtimeOrdersBatchBudgetOverride > 0 {
+		return runtimeOrdersBatchBudgetOverride
+	}
+	seconds := configIntOrDefault("runtime_orders_batch_budget_seconds", 2)
+	if seconds <= 0 {
+		seconds = 2
+	}
+	return time.Duration(seconds) * time.Second
+}
+
 func procesarRuntimeOrdersBatchTipos(tipos []string) (int, error) {
 	limit := configIntOrDefault("runtime_order_batch_size", 10)
 	if limit <= 0 {
@@ -3494,9 +3507,16 @@ func procesarRuntimeOrdersBatchTipos(tipos []string) (int, error) {
 	}
 
 	processed := 0
+	start := time.Now()
+	budget := runtimeOrdersBatchBudget()
 	for _, candidate := range orders {
 		if candidate == nil || candidate.ID <= 0 {
 			continue
+		}
+		if budget > 0 && time.Since(start) >= budget {
+			Audit("server", "runtime_orders_batch_deferred", "runtime_order", 0,
+				fmt.Sprintf("budget=%s processed=%d", budget, processed))
+			break
 		}
 		asyncReserved := false
 		current, err := GetRuntimeOrder(candidate.ID)
@@ -3533,7 +3553,7 @@ func procesarRuntimeOrdersBatchTipos(tipos []string) (int, error) {
 			processed++
 			continue
 		}
-		if err := ejecutarRuntimeOrderBasica(order); err != nil {
+		if err := ejecutarRuntimeOrderBasicaFn(order); err != nil {
 			_ = MarcarRuntimeOrderEstado(order.ID, "fallida", `{"ok":false}`, err.Error())
 			processed++
 			continue

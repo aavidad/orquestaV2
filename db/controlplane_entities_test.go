@@ -2376,6 +2376,71 @@ func TestProcesarRuntimeOrdersBatchCompletaSyncStatusYCheckpoint(t *testing.T) {
 	}
 }
 
+func TestProcesarRuntimeOrdersBatchRespetaBatchBudget(t *testing.T) {
+	prepararDBTemporal(t)
+
+	prevBudget := runtimeOrdersBatchBudgetOverride
+	prevExec := ejecutarRuntimeOrderBasicaFn
+	t.Cleanup(func() {
+		runtimeOrdersBatchBudgetOverride = prevBudget
+		ejecutarRuntimeOrderBasicaFn = prevExec
+	})
+
+	if err := RegistrarAgente("CodexBudget", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "budget-orders",
+		Nombre:  "Budget Orders",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := EncolarRuntimeOrder(&RuntimeOrder{
+			Agente:      "CodexBudget",
+			ProyectoID:  &proyectoID,
+			Tipo:        "stop",
+			PayloadJSON: `{"reason":"test_budget"}`,
+			Estado:      "pendiente",
+		}); err != nil {
+			t.Fatalf("encolar stop[%d]: %v", i, err)
+		}
+	}
+
+	runtimeOrdersBatchBudgetOverride = time.Millisecond
+	execCalls := 0
+	ejecutarRuntimeOrderBasicaFn = func(order *RuntimeOrder) error {
+		execCalls++
+		time.Sleep(3 * time.Millisecond)
+		return nil
+	}
+
+	processed, err := procesarRuntimeOrdersBatchTipos([]string{"stop"})
+	if err != nil {
+		t.Fatalf("procesarRuntimeOrdersBatchTipos: %v", err)
+	}
+	if processed != 1 {
+		t.Fatalf("processed=%d, want=1", processed)
+	}
+	if execCalls != 1 {
+		t.Fatalf("execCalls=%d, want=1", execCalls)
+	}
+
+	agente := "CodexBudget"
+	estadoPendiente := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estadoPendiente})
+	if err != nil {
+		t.Fatalf("listar pending: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("pending=%d, want=1", len(orders))
+	}
+}
+
 func TestEjecutarRuntimeOrderStartNoConsumeMailboxBootstrapSinLease(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

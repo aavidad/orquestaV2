@@ -251,6 +251,60 @@ func TestEnsureCapacidadModeloBaseCodexFuerzaHighEnImplementacion(t *testing.T) 
 	})
 }
 
+func TestEnsureCapacidadModeloBaseCodexMemoizaPorStorageTarget(t *testing.T) {
+	withTempDBPools(t, func() {
+		ensureCapacidadModeloBaseCodexMu.Lock()
+		prevDone := ensureCapacidadModeloBaseCodexDone
+		ensureCapacidadModeloBaseCodexDone = map[string]bool{}
+		ensureCapacidadModeloBaseCodexMu.Unlock()
+
+		prevPools := ensureCapacidadModeloBaseSeedPoolsFn
+		prevModels := ensureCapacidadModeloBaseSeedModelsFn
+		prevPolicies := ensureCapacidadModeloBaseSeedPoliciesFn
+		prevEnsure := ensureCapacidadModeloBaseEnsureImplementationFn
+		t.Cleanup(func() {
+			ensureCapacidadModeloBaseSeedPoolsFn = prevPools
+			ensureCapacidadModeloBaseSeedModelsFn = prevModels
+			ensureCapacidadModeloBaseSeedPoliciesFn = prevPolicies
+			ensureCapacidadModeloBaseEnsureImplementationFn = prevEnsure
+			ensureCapacidadModeloBaseCodexMu.Lock()
+			ensureCapacidadModeloBaseCodexDone = prevDone
+			ensureCapacidadModeloBaseCodexMu.Unlock()
+		})
+
+		poolsCalls := 0
+		modelsCalls := 0
+		policiesCalls := 0
+		ensureCalls := 0
+		ensureCapacidadModeloBaseSeedPoolsFn = func() error {
+			poolsCalls++
+			return nil
+		}
+		ensureCapacidadModeloBaseSeedModelsFn = func() error {
+			modelsCalls++
+			return nil
+		}
+		ensureCapacidadModeloBaseSeedPoliciesFn = func() error {
+			policiesCalls++
+			return nil
+		}
+		ensureCapacidadModeloBaseEnsureImplementationFn = func() error {
+			ensureCalls++
+			return nil
+		}
+
+		if err := EnsureCapacidadModeloBaseCodex(); err != nil {
+			t.Fatalf("primer EnsureCapacidadModeloBaseCodex: %v", err)
+		}
+		if err := EnsureCapacidadModeloBaseCodex(); err != nil {
+			t.Fatalf("segundo EnsureCapacidadModeloBaseCodex: %v", err)
+		}
+		if poolsCalls != 1 || modelsCalls != 1 || policiesCalls != 1 || ensureCalls != 1 {
+			t.Fatalf("memoizacion inesperada pools=%d models=%d policies=%d ensure=%d", poolsCalls, modelsCalls, policiesCalls, ensureCalls)
+		}
+	})
+}
+
 func insertPoolsYModelosTest(t *testing.T) {
 	t.Helper()
 	for _, pool := range []PoolCapacidad{

@@ -63,6 +63,8 @@ var runtimeMailboxReevaluationGate = planocontrol.NewThrottler()
 var runtimeMailboxBatchBudgetOverride time.Duration
 var runtimeMailboxSyncSupervisedHandleFn = db.SincronizarRuntimeHandleSupervisado
 var runtimeMailboxPipelineShouldCompactInBatchFn = runtimeMailboxPipelineDebeCompactarseEnBatch
+var runtimeMailboxLoadWorkerSnapshotFn = runtimeagente.LoadWorkerSnapshotFromMetadataJSON
+var runtimeMailboxBuildInteractiveInstructionFn = construirInstruccionMailboxInteractivo
 
 func runtimeMailboxReevaluationInterval() time.Duration {
 	seconds := controlPlaneConfigIntOrDefault("runtime_mailbox_reevaluation_interval_seconds", 10)
@@ -5980,10 +5982,6 @@ func procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox []*db.RuntimeMailb
 // interactivo para el handle activo del agente destino.
 // Retorna true si el mensaje fue procesado (encolado, reactivado u obsoleto consumido).
 func procesarRuntimeMailboxInteractivoMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
-	texto, ok := construirInstruccionMailboxInteractivo(msg)
-	if !ok {
-		return false, nil
-	}
 	if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
 		return false, err
 	}
@@ -6012,13 +6010,18 @@ func procesarRuntimeMailboxInteractivoMensaje(msg *db.RuntimeMailboxMessage, con
 	} else if refreshed != nil {
 		handle = refreshed
 	}
-	if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "interactive", time.Now().UTC()); err != nil {
+	now := time.Now().UTC()
+	workerState, err := runtimeMailboxInteractiveWorkerStateForHandle(handle, now)
+	if err != nil {
+		return false, err
+	}
+	if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(msg, handle, "interactive", now, workerState); err != nil {
 		return false, err
 	} else if obsoleta {
 		consumed[msg.ID] = struct{}{}
 		return true, nil
 	}
-	if !runtimeHandleListaParaDispatchInteractivo(handle) {
+	if !runtimeHandleListaParaDispatchInteractivoConEstado(handle, workerState) {
 		return false, nil
 	}
 	if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
@@ -6029,6 +6032,10 @@ func procesarRuntimeMailboxInteractivoMensaje(msg *db.RuntimeMailboxMessage, con
 	if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, ""); err != nil {
 		return false, err
 	} else if dedupe {
+		return false, nil
+	}
+	texto, ok := runtimeMailboxBuildInteractiveInstructionFn(msg)
+	if !ok {
 		return false, nil
 	}
 	orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, texto, "")
@@ -6049,6 +6056,39 @@ func procesarRuntimeMailboxInteractivoMensaje(msg *db.RuntimeMailboxMessage, con
 		fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
 	consumed[msg.ID] = struct{}{}
 	return true, nil
+}
+
+type runtimeMailboxInteractiveWorkerState struct {
+	snapshot *runtimeagente.WorkerSnapshot
+	view     *runtimeagente.WorkerStatusView
+	ready    bool
+	fallback bool
+}
+
+func runtimeMailboxInteractiveWorkerStateForHandle(handle *db.RuntimeHandle, now time.Time) (*runtimeMailboxInteractiveWorkerState, error) {
+	if handle == nil || !db.RuntimeHandlePermiteSendInputInteractivo(handle) {
+		return &runtimeMailboxInteractiveWorkerState{}, nil
+	}
+	snap, err := runtimeMailboxLoadWorkerSnapshotFn(strings.TrimSpace(handle.MetadataJSON))
+	if err != nil {
+		return nil, err
+	}
+	if snap == nil {
+		return &runtimeMailboxInteractiveWorkerState{fallback: runtimeHandlePermiteInteractivoTmuxSinEstado(handle)}, nil
+	}
+	view := snap.View(now.UTC(), time.Minute)
+	if view == nil {
+		return &runtimeMailboxInteractiveWorkerState{
+			snapshot: snap,
+			fallback: runtimeHandlePermiteInteractivoTmuxSinEstado(handle),
+		}, nil
+	}
+	ready, _ := snap.ReadyForTextDispatch(now.UTC(), time.Minute)
+	return &runtimeMailboxInteractiveWorkerState{
+		snapshot: snap,
+		view:     view,
+		ready:    ready,
+	}, nil
 }
 
 func intentarReactivarRuntimeMailboxPoolLocalSinHandle(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
@@ -7159,27 +7199,29 @@ func construirInboxRuntimeMailboxDurableMarkdown(proyecto *db.Proyecto, tarea *d
 }
 
 func runtimeHandleListaParaDispatchInteractivo(handle *db.RuntimeHandle) bool {
+	state, err := runtimeMailboxInteractiveWorkerStateForHandle(handle, time.Now().UTC())
+	if err != nil {
+		return runtimeHandlePermiteInteractivoTmuxSinEstado(handle)
+	}
+	return runtimeHandleListaParaDispatchInteractivoConEstado(handle, state)
+}
+
+func runtimeHandleListaParaDispatchInteractivoConEstado(handle *db.RuntimeHandle, state *runtimeMailboxInteractiveWorkerState) bool {
 	if handle == nil || !db.RuntimeHandlePermiteSendInputInteractivo(handle) {
 		return false
 	}
-	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
-	if err != nil || snap == nil {
-		return runtimeHandlePermiteInteractivoTmuxSinEstado(handle)
+	if state == nil || state.snapshot == nil || state.view == nil {
+		return runtimeHandlePermiteInteractivoTmuxSinEstado(handle) || (state != nil && state.fallback)
 	}
-	view := snap.View(time.Now().UTC(), time.Minute)
-	if view == nil {
-		return runtimeHandlePermiteInteractivoTmuxSinEstado(handle)
-	}
+	view := state.view
 	if runtimeHandleEsTmuxLike(handle) {
 		if !strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") &&
 			!strings.EqualFold(strings.TrimSpace(view.Transport), "tmux") {
 			return false
 		}
-		ready, _ := snap.ReadyForTextDispatch(time.Now().UTC(), time.Minute)
-		return ready || runtimeHandleWorkerCanonicalState(view) == "waiting_input"
+		return state.ready || runtimeHandleWorkerCanonicalState(view) == "waiting_input"
 	}
-	ready, _ := snap.ReadyForTextDispatch(time.Now().UTC(), time.Minute)
-	return ready || runtimeHandleWorkerCanonicalState(view) == "waiting_input"
+	return state.ready || runtimeHandleWorkerCanonicalState(view) == "waiting_input"
 }
 
 func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) bool {
@@ -7637,6 +7679,10 @@ func runtimeMailboxSiguePendiente(id int64) bool {
 }
 
 func consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, lane string, now time.Time) (bool, error) {
+	return consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(msg, handle, lane, now, nil)
+}
+
+func consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, lane string, now time.Time, state *runtimeMailboxInteractiveWorkerState) (bool, error) {
 	if msg == nil || handle == nil || !runtimeMailboxKindEphemeral(strings.TrimSpace(msg.Kind)) {
 		return false, nil
 	}
@@ -7658,11 +7704,16 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg *db.RuntimeMailboxMess
 	} else if !canConsume {
 		return false, nil
 	}
-	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
-	if err != nil || snap == nil {
-		return false, err
+	var view *runtimeagente.WorkerStatusView
+	if state != nil {
+		view = state.view
+	} else {
+		snap, err := runtimeMailboxLoadWorkerSnapshotFn(strings.TrimSpace(handle.MetadataJSON))
+		if err != nil || snap == nil {
+			return false, err
+		}
+		view = snap.View(now.UTC(), 90*time.Second)
 	}
-	view := snap.View(now.UTC(), 90*time.Second)
 	if view == nil || !view.Alive || view.HeartbeatStale {
 		return false, nil
 	}

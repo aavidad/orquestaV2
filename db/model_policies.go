@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -51,6 +52,13 @@ type ResolucionModelo struct {
 	PoliticasAplicadas []*PoliticaModelo `json:"politicas_aplicadas,omitempty"`
 }
 
+var ensureCapacidadModeloBaseCodexMu sync.Mutex
+var ensureCapacidadModeloBaseCodexDone = map[string]bool{}
+var ensureCapacidadModeloBaseSeedPoolsFn = SeedPoolsIniciales
+var ensureCapacidadModeloBaseSeedModelsFn = SeedModelosIniciales
+var ensureCapacidadModeloBaseSeedPoliciesFn = SeedPoliticasModeloIniciales
+var ensureCapacidadModeloBaseEnsureImplementationFn = asegurarPoliticaImplementacionHigh
+
 func ResolverPerfilEjecucionLanzamiento(agenteNombre *string, proyectoSlug, perfilTarea, modelo, razonamiento string) (string, string, string, error) {
 	perfilTarea = strings.TrimSpace(perfilTarea)
 	modelo = strings.TrimSpace(modelo)
@@ -84,16 +92,29 @@ func ResolverPerfilEjecucionLanzamiento(agenteNombre *string, proyectoSlug, perf
 }
 
 func EnsureCapacidadModeloBaseCodex() error {
-	if err := SeedPoolsIniciales(); err != nil {
+	scope := strings.TrimSpace(CurrentStorageDisplayTarget())
+	if scope == "" {
+		scope = "global"
+	}
+	ensureCapacidadModeloBaseCodexMu.Lock()
+	defer ensureCapacidadModeloBaseCodexMu.Unlock()
+	if ensureCapacidadModeloBaseCodexDone[scope] {
+		return nil
+	}
+	if err := ensureCapacidadModeloBaseSeedPoolsFn(); err != nil {
 		return err
 	}
-	if err := SeedModelosIniciales(); err != nil {
+	if err := ensureCapacidadModeloBaseSeedModelsFn(); err != nil {
 		return err
 	}
-	if err := SeedPoliticasModeloIniciales(); err != nil {
+	if err := ensureCapacidadModeloBaseSeedPoliciesFn(); err != nil {
 		return err
 	}
-	return asegurarPoliticaImplementacionHigh()
+	if err := ensureCapacidadModeloBaseEnsureImplementationFn(); err != nil {
+		return err
+	}
+	ensureCapacidadModeloBaseCodexDone[scope] = true
+	return nil
 }
 
 func asegurarPoliticaImplementacionHigh() error {
