@@ -10012,6 +10012,199 @@ func TestExisteIntentoSendInstructionMailboxParaHandleEnSnapshotIgnoraEjecutando
 	}
 }
 
+func TestProcesarRuntimeMailboxInteractivoMensajeEvitaSupervisionSiNoTocaReevaluar(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+	t.Cleanup(resetRuntimeMailboxReevaluationGate)
+
+	prevSync := runtimeMailboxSyncSupervisedHandleFn
+	t.Cleanup(func() { runtimeMailboxSyncSupervisedHandleFn = prevSync })
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"instruccion interactiva"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: msg=%+v err=%v", msg, err)
+	}
+
+	handle := &db.RuntimeHandle{
+		ID:               41,
+		Agente:           "Codex1",
+		ProyectoID:       &proyectoID,
+		Estado:           "activo",
+		Transporte:       "tmux",
+		HandleKind:       "session",
+		MetadataJSON:     `{"driver":"tmux_cli_session","tmux_session":"orq-codex1","tmux_pane_id":"%9","can_send_input":true,"mailbox_delivery_mode":"interactive"}`,
+		CapabilitiesJSON: `{"can_send_input":true,"mailbox_delivery_mode":"interactive"}`,
+	}
+	snapshot := &runtimeMailboxBatchSnapshot{
+		activeHandles: map[string]*db.RuntimeHandle{
+			runtimeMailboxBatchKey("Codex1", &proyectoID): handle,
+		},
+		activeHandleLoaded: map[string]struct{}{
+			runtimeMailboxBatchKey("Codex1", &proyectoID): {},
+		},
+		ordersByAgentProject: map[string][]*db.RuntimeOrder{},
+		ordersLoaded: map[string]struct{}{
+			runtimeMailboxBatchKey("Codex1", &proyectoID): {},
+		},
+		supervisedByHandleID: map[int64]runtimeMailboxSupervisedHandleSnapshot{},
+	}
+
+	if !runtimeMailboxShouldReevaluate("interactive", msg.ID, handle.ID) {
+		t.Fatal("la primera reevaluacion deberia abrir el gate")
+	}
+	supervisedCalls := 0
+	runtimeMailboxSyncSupervisedHandleFn = func(handle *db.RuntimeHandle, runtime *db.RuntimeInstance, source string) (*db.RuntimeHandle, *db.RuntimeInstance, string, error) {
+		supervisedCalls++
+		return handle, runtime, "", nil
+	}
+
+	dispatched, err := procesarRuntimeMailboxInteractivoMensaje(msg, map[int64]struct{}{}, snapshot)
+	if err != nil {
+		t.Fatalf("procesarRuntimeMailboxInteractivoMensaje: %v", err)
+	}
+	if dispatched {
+		t.Fatal("no deberia despachar cuando el gate de reevaluacion sigue cerrado")
+	}
+	if supervisedCalls != 0 {
+		t.Fatalf("no deberia supervisar el handle antes de reevaluar, calls=%d", supervisedCalls)
+	}
+}
+
+func TestProcesarRuntimeMailboxInteractivoMensajeOmiteSupervisionParaHandleNoInteractivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+	t.Cleanup(resetRuntimeMailboxReevaluationGate)
+
+	prevSync := runtimeMailboxSyncSupervisedHandleFn
+	t.Cleanup(func() { runtimeMailboxSyncSupervisedHandleFn = prevSync })
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"instruccion interactiva"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: msg=%+v err=%v", msg, err)
+	}
+
+	handle := &db.RuntimeHandle{
+		ID:               42,
+		Agente:           "Codex1",
+		ProyectoID:       &proyectoID,
+		Estado:           "activo",
+		Transporte:       "tmux",
+		HandleKind:       "session",
+		MetadataJSON:     `{"driver":"tmux_cli_session","tmux_session":"orq-codex1","tmux_pane_id":"%9","can_send_input":false,"mailbox_delivery_mode":"session_resume"}`,
+		CapabilitiesJSON: `{"can_send_input":false,"mailbox_delivery_mode":"session_resume"}`,
+	}
+	snapshot := &runtimeMailboxBatchSnapshot{
+		activeHandles: map[string]*db.RuntimeHandle{
+			runtimeMailboxBatchKey("Codex1", &proyectoID): handle,
+		},
+		activeHandleLoaded: map[string]struct{}{
+			runtimeMailboxBatchKey("Codex1", &proyectoID): {},
+		},
+		ordersByAgentProject: map[string][]*db.RuntimeOrder{},
+		ordersLoaded: map[string]struct{}{
+			runtimeMailboxBatchKey("Codex1", &proyectoID): {},
+		},
+		supervisedByHandleID: map[int64]runtimeMailboxSupervisedHandleSnapshot{},
+	}
+
+	supervisedCalls := 0
+	runtimeMailboxSyncSupervisedHandleFn = func(handle *db.RuntimeHandle, runtime *db.RuntimeInstance, source string) (*db.RuntimeHandle, *db.RuntimeInstance, string, error) {
+		supervisedCalls++
+		return handle, runtime, "", nil
+	}
+
+	dispatched, err := procesarRuntimeMailboxInteractivoMensaje(msg, map[int64]struct{}{}, snapshot)
+	if err != nil {
+		t.Fatalf("procesarRuntimeMailboxInteractivoMensaje: %v", err)
+	}
+	if dispatched {
+		t.Fatal("no deberia despachar por interactive cuando el handle es session_resume")
+	}
+	if supervisedCalls != 0 {
+		t.Fatalf("no deberia supervisar handles no interactivos, calls=%d", supervisedCalls)
+	}
+}
+
+func TestReconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchOmiteLookupSiNoHayDuplicado(t *testing.T) {
+	prevCompact := runtimeMailboxPipelineShouldCompactInBatchFn
+	t.Cleanup(func() { runtimeMailboxPipelineShouldCompactInBatchFn = prevCompact })
+
+	calls := 0
+	runtimeMailboxPipelineShouldCompactInBatchFn = func(agente string, proyectoID *int64, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+		calls++
+		return true, nil
+	}
+
+	proyectoID := int64(7)
+	total, err := reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox([]*db.RuntimeMailboxMessage{
+		{
+			ID:         41,
+			ToAgente:   "Codex1",
+			ProyectoID: &proyectoID,
+			Kind:       "pipeline_local",
+		},
+	}, map[int64]struct{}{}, &runtimeMailboxBatchSnapshot{
+		pipelineLocalLatestByKey: map[string]int64{},
+	})
+	if err != nil {
+		t.Fatalf("reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox: %v", err)
+	}
+	if total != 0 {
+		t.Fatalf("no deberia consumir nada sin duplicados, total=%d", total)
+	}
+	if calls != 0 {
+		t.Fatalf("no deberia consultar compactacion si no hay duplicados, calls=%d", calls)
+	}
+}
+
 func TestRuntimeOrderMatchesMailboxSendInstructionAttempt(t *testing.T) {
 	handleID := int64(33)
 	order := &db.RuntimeOrder{

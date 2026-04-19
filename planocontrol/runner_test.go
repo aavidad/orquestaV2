@@ -762,6 +762,41 @@ func TestRunnerStartNonResidentWorkerWithOptionsPermiteAislarWarm(t *testing.T) 
 	}
 }
 
+func TestRunnerStartNonResidentWorkerWithOptionsRespetaTodoApagado(t *testing.T) {
+	service := &stubAutomationService{
+		processedCount: 1,
+		autonomyCount:  1,
+		staleCount:     1,
+	}
+	r := &Runner{
+		Automation:            service,
+		StartupGrace:          5 * time.Millisecond,
+		ControlPlaneWarmCada:  10 * time.Millisecond,
+		ControlPlaneColdCada:  10 * time.Millisecond,
+		NotificationRetryCada: 10 * time.Millisecond,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.StartNonResidentWorkerWithOptions(ctx, NonResidentWorkerOptions{
+		Warm:              false,
+		Cold:              false,
+		NotificationRetry: false,
+	})
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+	r.Wait()
+
+	audits := strings.Join(service.audits, "\n")
+	if strings.Contains(audits, "autonomia_agentes_batch|") {
+		t.Fatalf("no deberia lanzar warm cuando va explicitamente apagado: %s", audits)
+	}
+	if strings.Contains(audits, "runtime_handles_stale|") || strings.Contains(audits, "runtime_orders_stale|") {
+		t.Fatalf("no deberia lanzar cold cuando va explicitamente apagado: %s", audits)
+	}
+	if strings.Contains(audits, "notification_retry|") {
+		t.Fatalf("no deberia lanzar notification_retry cuando va explicitamente apagado: %s", audits)
+	}
+}
+
 func TestRunnerWarmRotaUnaFasePorInvocacion(t *testing.T) {
 	service := &stubAutomationService{
 		autonomyCount: 1,

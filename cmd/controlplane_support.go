@@ -61,6 +61,8 @@ var wakeRuntimeOrdersAfterMailbox = wakeControlPlaneRuntimeOrders
 
 var runtimeMailboxReevaluationGate = planocontrol.NewThrottler()
 var runtimeMailboxBatchBudgetOverride time.Duration
+var runtimeMailboxSyncSupervisedHandleFn = db.SincronizarRuntimeHandleSupervisado
+var runtimeMailboxPipelineShouldCompactInBatchFn = runtimeMailboxPipelineDebeCompactarseEnBatch
 
 func runtimeMailboxReevaluationInterval() time.Duration {
 	seconds := controlPlaneConfigIntOrDefault("runtime_mailbox_reevaluation_interval_seconds", 10)
@@ -2869,12 +2871,12 @@ func (s *runtimeMailboxBatchSnapshot) supervisedHandle(handle *db.RuntimeHandle)
 		return nil, nil, "", nil
 	}
 	if s == nil {
-		return db.SincronizarRuntimeHandleSupervisado(handle, nil, "runtime_mailbox_supervisor_local")
+		return runtimeMailboxSyncSupervisedHandleFn(handle, nil, "runtime_mailbox_supervisor_local")
 	}
 	if cached, ok := s.supervisedByHandleID[handle.ID]; ok {
 		return cached.handle, cached.runtime, cached.externalSessionID, cached.err
 	}
-	resultHandle, runtime, externalSessionID, err := db.SincronizarRuntimeHandleSupervisado(handle, nil, "runtime_mailbox_supervisor_local")
+	resultHandle, runtime, externalSessionID, err := runtimeMailboxSyncSupervisedHandleFn(handle, nil, "runtime_mailbox_supervisor_local")
 	s.supervisedByHandleID[handle.ID] = runtimeMailboxSupervisedHandleSnapshot{
 		handle:            resultHandle,
 		runtime:           runtime,
@@ -3041,6 +3043,7 @@ func reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox []
 		}
 		newestByKey[k] = entry
 	}
+	compactByKey := map[clave]bool{}
 	total := 0
 	for _, msg := range mailbox {
 		if msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") {
@@ -3053,19 +3056,24 @@ func reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox []
 		if agente == "" {
 			continue
 		}
-		compactar, err := runtimeMailboxPipelineDebeCompactarseEnBatch(agente, msg.ProyectoID, snapshot)
-		if err != nil {
-			return total, err
-		}
-		if !compactar {
-			continue
-		}
 		proyectoID := int64(0)
 		if msg.ProyectoID != nil && *msg.ProyectoID > 0 {
 			proyectoID = *msg.ProyectoID
 		}
 		k := clave{agente: agente, proyecto: proyectoID}
 		if newestByKey[k].count <= 1 {
+			continue
+		}
+		compactar, ok := compactByKey[k]
+		if !ok {
+			var err error
+			compactar, err = runtimeMailboxPipelineShouldCompactInBatchFn(agente, msg.ProyectoID, snapshot)
+			if err != nil {
+				return total, err
+			}
+			compactByKey[k] = compactar
+		}
+		if !compactar {
 			continue
 		}
 		if newestByKey[k].latest == msg.ID {
@@ -5989,6 +5997,12 @@ func procesarRuntimeMailboxInteractivoMensaje(msg *db.RuntimeMailboxMessage, con
 	if handle == nil {
 		return intentarReactivarRuntimeMailboxSinHandle(msg, snapshot)
 	}
+	if !runtimeMailboxShouldReevaluate("interactive", msg.ID, handle.ID) {
+		return false, nil
+	}
+	if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryInteractive {
+		return false, nil
+	}
 	if refreshed, _, _, err := snapshot.supervisedHandle(handle); err != nil {
 		if runtimeMailboxCanDeferSupervisedHandleError(err) {
 			db.Audit("orquesta", "runtime_mailbox_supervision_deferred", "runtime_mailbox", msg.ID, err.Error())
@@ -6004,13 +6018,7 @@ func procesarRuntimeMailboxInteractivoMensaje(msg *db.RuntimeMailboxMessage, con
 		consumed[msg.ID] = struct{}{}
 		return true, nil
 	}
-	if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryInteractive {
-		return false, nil
-	}
 	if !runtimeHandleListaParaDispatchInteractivo(handle) {
-		return false, nil
-	}
-	if !runtimeMailboxShouldReevaluate("interactive", msg.ID, handle.ID) {
 		return false, nil
 	}
 	if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {

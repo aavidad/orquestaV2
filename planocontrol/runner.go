@@ -87,17 +87,6 @@ type NonResidentWorkerOptions struct {
 	NotificationRetry bool
 }
 
-func (o NonResidentWorkerOptions) withDefaults() NonResidentWorkerOptions {
-	if !o.Warm && !o.Cold && !o.NotificationRetry {
-		return NonResidentWorkerOptions{
-			Warm:              true,
-			Cold:              true,
-			NotificationRetry: true,
-		}
-	}
-	return o
-}
-
 type runningBatchState struct {
 	token      uint64
 	startedAt  time.Time
@@ -173,14 +162,17 @@ func (r *Runner) startNotificationLoop(ctx context.Context) {
 // StartNonResidentWorker arranca el trabajo periódico pesado que no forma parte
 // del núcleo residente mínimo, pero sigue viviendo bajo el mismo daemon.
 func (r *Runner) StartNonResidentWorker(ctx context.Context) {
-	r.StartNonResidentWorkerWithOptions(ctx, NonResidentWorkerOptions{})
+	r.StartNonResidentWorkerWithOptions(ctx, NonResidentWorkerOptions{
+		Warm:              true,
+		Cold:              true,
+		NotificationRetry: true,
+	})
 }
 
 func (r *Runner) StartNonResidentWorkerWithOptions(ctx context.Context, opts NonResidentWorkerOptions) {
 	if r == nil || r.Automation == nil {
 		return
 	}
-	opts = opts.withDefaults()
 	r.debugf("runner non_resident warm=%s cold=%s notification_retry=%s",
 		r.controlPlaneWarmCada(), r.controlPlaneColdCada(), r.notificationRetryCada())
 	if opts.Warm {
