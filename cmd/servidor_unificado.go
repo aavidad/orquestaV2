@@ -159,7 +159,7 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 		debugLogger = newServerDebugLogger(kind)
 		debugLogger.Printf("startup addr=%s rpc=%s %s", listenAddr, rpclocal.BaseURL(normalizarAddrServidorLocal(listenAddr)), debugDurationsSummary(time.Minute, time.Minute, 30*time.Second, 15*time.Second))
 	}
-	prewarmUnifiedServerModelPolicyCache(debugLogger)
+	prewarmUnifiedServerPrepareCaches(debugLogger)
 
 	controlCtx, cancel := context.WithCancel(context.Background())
 	runner := newControlPlaneRunner(debugLogger, debug.ControlPlane)
@@ -187,6 +187,7 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 	} else if debugLogger != nil {
 		debugLogger.Printf("server_autobootstrap skipped=disabled")
 	}
+	launchPrepareContextPrewarmLoop(controlCtx, debugLogger)
 	launchWALCheckpointLoop(controlCtx, debugLogger)
 
 	timeouts := loadUnifiedServerHTTPTimeouts()
@@ -226,7 +227,7 @@ func loadUnifiedServerRuntimeOptions() unifiedServerRuntimeOptions {
 	}
 }
 
-func prewarmUnifiedServerModelPolicyCache(debugLogger *log.Logger) {
+func prewarmUnifiedServerPrepareCaches(debugLogger *log.Logger) {
 	cfg := loadServerAutobootstrapConfig()
 	if !cfg.Enabled || strings.TrimSpace(cfg.ProjectSlug) == "" {
 		return
@@ -253,10 +254,48 @@ func prewarmUnifiedServerModelPolicyCache(debugLogger *log.Logger) {
 			}
 			continue
 		}
+		if err := agentesService.PrewarmPrepareContext(agente, cfg.ProjectSlug); err != nil {
+			if debugLogger != nil {
+				debugLogger.Printf("prepare_context_prewarm agente=%s proyecto=%s err=%v", agente, cfg.ProjectSlug, err)
+			}
+			continue
+		}
 		if debugLogger != nil {
-			debugLogger.Printf("model_policy_prewarm agente=%s proyecto=%s ok", agente, cfg.ProjectSlug)
+			debugLogger.Printf("prepare_context_prewarm agente=%s proyecto=%s ok", agente, cfg.ProjectSlug)
 		}
 	}
+}
+
+func launchPrepareContextPrewarmLoop(ctx context.Context, debugLogger *log.Logger) {
+	cfg := loadServerAutobootstrapConfig()
+	if !cfg.Enabled || strings.TrimSpace(cfg.ProjectSlug) == "" {
+		return
+	}
+	agents := make([]string, 0, 1+len(cfg.WorkerAgents))
+	if supervisor := strings.TrimSpace(cfg.SupervisorAgent); supervisor != "" {
+		agents = append(agents, supervisor)
+	}
+	agents = append(agents, cfg.WorkerAgents...)
+	go func() {
+		ticker := time.NewTicker(4 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			for _, agente := range agents {
+				agente = strings.TrimSpace(agente)
+				if agente == "" {
+					continue
+				}
+				if err := agentesService.PrewarmPrepareContext(agente, cfg.ProjectSlug); err != nil && debugLogger != nil {
+					debugLogger.Printf("prepare_context_prewarm_loop agente=%s proyecto=%s err=%v", agente, cfg.ProjectSlug, err)
+				}
+			}
+		}
+	}()
 }
 
 func loadUnifiedServerHTTPTimeouts() unifiedServerHTTPTimeouts {

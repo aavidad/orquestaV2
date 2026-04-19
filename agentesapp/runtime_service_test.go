@@ -21,9 +21,11 @@ type stubModelPolicyProvider struct {
 	input      *db.ResolverPoliticaInput
 	resolution *db.ResolucionModelo
 	err        error
+	calls      int
 }
 
 func (s *stubModelPolicyProvider) ResolveModelPolicy(input db.ResolverPoliticaInput) (*db.ResolucionModelo, error) {
+	s.calls++
 	copyInput := input
 	s.input = &copyInput
 	return s.resolution, s.err
@@ -94,6 +96,31 @@ func TestBuildBootstrapPromptIncluyeGobernanzaYTarea(t *testing.T) {
 		if !strings.Contains(prompt, token) {
 			t.Fatalf("bootstrap prompt sin %q:\n%s", token, prompt)
 		}
+	}
+}
+
+func TestGetModelPolicyResolutionForPrepareUsaCacheCorta(t *testing.T) {
+	provider := &stubModelPolicyProvider{
+		resolution: &db.ResolucionModelo{
+			PerfilTarea:     "implementacion",
+			ModelSlug:       "gpt-5.4",
+			ReasoningEffort: "high",
+		},
+	}
+	svc := NewService(&fakeStore{}, provider)
+	first, err := svc.getModelPolicyResolutionForPrepare("Codex2", "orquestador", "")
+	if err != nil {
+		t.Fatalf("primer getModelPolicyResolutionForPrepare: %v", err)
+	}
+	second, err := svc.getModelPolicyResolutionForPrepare("Codex2", "orquestador", "")
+	if err != nil {
+		t.Fatalf("segundo getModelPolicyResolutionForPrepare: %v", err)
+	}
+	if first == nil || second == nil || second.ModelSlug != "gpt-5.4" {
+		t.Fatalf("resolucion inesperada: first=%+v second=%+v", first, second)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("deberia reutilizar cache de model policy, got=%d", provider.calls)
 	}
 }
 

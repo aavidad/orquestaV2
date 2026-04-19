@@ -72,7 +72,17 @@ type Service struct {
 	modelPolicyProvider ModelPolicyProvider
 	cacheMu             sync.Mutex
 	prepareAgentCache   map[string]cachedPrepareAgent
+	prepareAgentFlight  map[string]*prepareAgentFlight
 	prepareProjectCache map[string]cachedPrepareProject
+	prepareProjectFlight map[string]*prepareProjectFlight
+	prepareSessionCache map[string]cachedPrepareSession
+	prepareSessionFlight map[string]*prepareSessionFlight
+	prepareConnectorCache map[string]cachedPrepareConnector
+	prepareConnectorFlight map[string]*prepareConnectorFlight
+	prepareGovCache     map[string]cachedPrepareGovernance
+	prepareGovFlight    map[string]*prepareGovernanceFlight
+	prepareModelPolicyCache map[string]cachedPrepareModelPolicy
+	prepareModelPolicyFlight map[string]*prepareModelPolicyFlight
 	compactDetailCache  map[string]cachedCompactDetail
 	compactDetailFlight map[string]*compactDetailFlight
 	reanimCache         map[string]cachedReanimationSchedule
@@ -85,7 +95,13 @@ var compactDetailCacheTTL = 2 * time.Second
 var compactDetailStaleWhileRevalidateTTL = 15 * time.Second
 var activeReanimationScheduleCacheTTL = 2 * time.Second
 var activeReanimationScheduleStaleWhileRevalidateTTL = 15 * time.Second
-var prepareEntityCacheTTL = 5 * time.Second
+// Prepare usa datos operativos que cambian poco frente al coste de caer a
+// SQLite bajo carga. Mantener una cache algo más larga evita ráfagas de
+// prepare degradadas cuando warm/autonomía pisan la única conexión activa.
+var prepareEntityCacheTTL = 45 * time.Second
+var prepareSessionCacheTTL = 45 * time.Second
+var prepareGovernanceCacheTTL = 45 * time.Second
+var prepareModelPolicyCacheTTL = 45 * time.Second
 
 func agentDetailDebugf(format string, args ...any) {
 	if !agentDetailDebugEnabled() {
@@ -110,7 +126,17 @@ func NewService(store Store, modelPolicyProvider ModelPolicyProvider) *Service {
 		store:               store,
 		modelPolicyProvider: modelPolicyProvider,
 		prepareAgentCache:   map[string]cachedPrepareAgent{},
+		prepareAgentFlight:  map[string]*prepareAgentFlight{},
 		prepareProjectCache: map[string]cachedPrepareProject{},
+		prepareProjectFlight: map[string]*prepareProjectFlight{},
+		prepareSessionCache: map[string]cachedPrepareSession{},
+		prepareSessionFlight: map[string]*prepareSessionFlight{},
+		prepareConnectorCache: map[string]cachedPrepareConnector{},
+		prepareConnectorFlight: map[string]*prepareConnectorFlight{},
+		prepareGovCache:     map[string]cachedPrepareGovernance{},
+		prepareGovFlight:    map[string]*prepareGovernanceFlight{},
+		prepareModelPolicyCache: map[string]cachedPrepareModelPolicy{},
+		prepareModelPolicyFlight: map[string]*prepareModelPolicyFlight{},
 		compactDetailCache:  map[string]cachedCompactDetail{},
 		compactDetailFlight: map[string]*compactDetailFlight{},
 		reanimCache:         map[string]cachedReanimationSchedule{},
@@ -131,6 +157,64 @@ type cachedPrepareAgent struct {
 type cachedPrepareProject struct {
 	project *db.Proyecto
 	expires time.Time
+}
+
+type cachedPrepareGovernance struct {
+	catalog *db.GovernanceCatalog
+	expires time.Time
+}
+
+type cachedPrepareSession struct {
+	session *db.Sesion
+	found   bool
+	expires time.Time
+}
+
+type cachedPrepareConnector struct {
+	connector *db.Conector
+	expires   time.Time
+}
+
+type cachedPrepareModelPolicy struct {
+	resolution *db.ResolucionModelo
+	expires    time.Time
+}
+
+type prepareAgentFlight struct {
+	done  chan struct{}
+	agent *db.Agente
+	err   error
+}
+
+type prepareProjectFlight struct {
+	done    chan struct{}
+	project *db.Proyecto
+	err     error
+}
+
+type prepareGovernanceFlight struct {
+	done    chan struct{}
+	catalog *db.GovernanceCatalog
+	err     error
+}
+
+type prepareSessionFlight struct {
+	done    chan struct{}
+	session *db.Sesion
+	found   bool
+	err     error
+}
+
+type prepareConnectorFlight struct {
+	done      chan struct{}
+	connector *db.Conector
+	err       error
+}
+
+type prepareModelPolicyFlight struct {
+	done       chan struct{}
+	resolution *db.ResolucionModelo
+	err        error
 }
 
 type compactDetailFlight struct {
@@ -1227,6 +1311,540 @@ func (s *Service) cachedPrepareProject(ref string) *db.Proyecto {
 	}
 	clone := *item.project
 	return &clone
+}
+
+func (s *Service) cachedPrepareGovernance(rol string, proyectoID int64, agente string) *db.GovernanceCatalog {
+	if s == nil {
+		return nil
+	}
+	key := prepareGovernanceCacheKey(rol, proyectoID, agente)
+	if key == "" {
+		return nil
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	item, ok := s.prepareGovCache[key]
+	if !ok || item.catalog == nil || time.Now().After(item.expires) {
+		if ok {
+			delete(s.prepareGovCache, key)
+		}
+		return nil
+	}
+	return clonePrepareGovernanceCatalog(item.catalog)
+}
+
+func (s *Service) cachedPrepareSession(agente string, proyectoID int64) (*db.Sesion, bool, bool) {
+	if s == nil {
+		return nil, false, false
+	}
+	key := prepareSessionCacheKey(agente, proyectoID)
+	if key == "" {
+		return nil, false, false
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	item, ok := s.prepareSessionCache[key]
+	if !ok || time.Now().After(item.expires) {
+		if ok {
+			delete(s.prepareSessionCache, key)
+		}
+		return nil, false, false
+	}
+	return clonePrepareSession(item.session), item.found, true
+}
+
+func (s *Service) cachePrepareSession(agente string, proyectoID int64, session *db.Sesion, found bool) {
+	if s == nil {
+		return
+	}
+	key := prepareSessionCacheKey(agente, proyectoID)
+	if key == "" {
+		return
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	s.prepareSessionCache[key] = cachedPrepareSession{
+		session: clonePrepareSession(session),
+		found:   found,
+		expires: time.Now().Add(prepareSessionCacheTTL),
+	}
+}
+
+func (s *Service) cachedPrepareConnector(ref string) *db.Conector {
+	if s == nil {
+		return nil
+	}
+	key := strings.ToLower(strings.TrimSpace(ref))
+	if key == "" {
+		return nil
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	item, ok := s.prepareConnectorCache[key]
+	if !ok || item.connector == nil || time.Now().After(item.expires) {
+		if ok {
+			delete(s.prepareConnectorCache, key)
+		}
+		return nil
+	}
+	return clonePrepareConnector(item.connector)
+}
+
+func (s *Service) cachedPrepareModelPolicy(key string) *db.ResolucionModelo {
+	if s == nil {
+		return nil
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	item, ok := s.prepareModelPolicyCache[key]
+	if !ok || item.resolution == nil || time.Now().After(item.expires) {
+		if ok {
+			delete(s.prepareModelPolicyCache, key)
+		}
+		return nil
+	}
+	return clonePrepareModelResolution(item.resolution)
+}
+
+func (s *Service) cachePrepareModelPolicy(key string, resolution *db.ResolucionModelo) {
+	if s == nil || strings.TrimSpace(key) == "" || resolution == nil {
+		return
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	s.prepareModelPolicyCache[strings.TrimSpace(key)] = cachedPrepareModelPolicy{
+		resolution: clonePrepareModelResolution(resolution),
+		expires:    time.Now().Add(prepareModelPolicyCacheTTL),
+	}
+}
+
+func (s *Service) cachePrepareConnector(connector *db.Conector, refs ...string) {
+	if s == nil || connector == nil {
+		return
+	}
+	keys := map[string]struct{}{}
+	for _, ref := range refs {
+		ref = strings.ToLower(strings.TrimSpace(ref))
+		if ref != "" {
+			keys[ref] = struct{}{}
+		}
+	}
+	if connector.ID > 0 {
+		keys[strconv.FormatInt(connector.ID, 10)] = struct{}{}
+	}
+	if slug := strings.ToLower(strings.TrimSpace(connector.Slug)); slug != "" {
+		keys[slug] = struct{}{}
+	}
+	if len(keys) == 0 {
+		return
+	}
+	expires := time.Now().Add(prepareEntityCacheTTL)
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	for key := range keys {
+		s.prepareConnectorCache[key] = cachedPrepareConnector{
+			connector: clonePrepareConnector(connector),
+			expires:   expires,
+		}
+	}
+}
+
+func (s *Service) cachePrepareGovernance(rol string, proyectoID int64, agente string, catalog *db.GovernanceCatalog) {
+	if s == nil || catalog == nil {
+		return
+	}
+	key := prepareGovernanceCacheKey(rol, proyectoID, agente)
+	if key == "" {
+		return
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	s.prepareGovCache[key] = cachedPrepareGovernance{
+		catalog: clonePrepareGovernanceCatalog(catalog),
+		expires: time.Now().Add(prepareGovernanceCacheTTL),
+	}
+}
+
+func (s *Service) beginPrepareAgentFlight(nombre string) *prepareAgentFlight {
+	if s == nil {
+		return nil
+	}
+	key := strings.ToLower(strings.TrimSpace(nombre))
+	if key == "" {
+		return nil
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if item, ok := s.prepareAgentCache[key]; ok && item.agent != nil && time.Now().Before(item.expires) {
+		return nil
+	}
+	if _, ok := s.prepareAgentFlight[key]; ok {
+		return nil
+	}
+	flight := &prepareAgentFlight{done: make(chan struct{})}
+	s.prepareAgentFlight[key] = flight
+	return flight
+}
+
+func (s *Service) waitPrepareAgentFlight(nombre string) (*db.Agente, error) {
+	if s == nil {
+		return nil, nil
+	}
+	key := strings.ToLower(strings.TrimSpace(nombre))
+	if key == "" {
+		return nil, nil
+	}
+	for {
+		s.cacheMu.Lock()
+		flight, ok := s.prepareAgentFlight[key]
+		s.cacheMu.Unlock()
+		if !ok {
+			return s.cachedPrepareAgent(nombre), nil
+		}
+		<-flight.done
+		if flight.err != nil {
+			return nil, flight.err
+		}
+		if flight.agent != nil {
+			return clonePrepareAgent(flight.agent), nil
+		}
+		return s.cachedPrepareAgent(nombre), nil
+	}
+}
+
+func (s *Service) finishPrepareAgentFlight(nombre string, flight *prepareAgentFlight) {
+	if s == nil || flight == nil {
+		return
+	}
+	key := strings.ToLower(strings.TrimSpace(nombre))
+	if key == "" {
+		return
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	delete(s.prepareAgentFlight, key)
+	close(flight.done)
+}
+
+func (s *Service) beginPrepareProjectFlight(ref string) *prepareProjectFlight {
+	if s == nil {
+		return nil
+	}
+	key := strings.ToLower(strings.TrimSpace(ref))
+	if key == "" {
+		return nil
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if item, ok := s.prepareProjectCache[key]; ok && item.project != nil && time.Now().Before(item.expires) {
+		return nil
+	}
+	if _, ok := s.prepareProjectFlight[key]; ok {
+		return nil
+	}
+	flight := &prepareProjectFlight{done: make(chan struct{})}
+	s.prepareProjectFlight[key] = flight
+	return flight
+}
+
+func (s *Service) waitPrepareProjectFlight(ref string) (*db.Proyecto, error) {
+	if s == nil {
+		return nil, nil
+	}
+	key := strings.ToLower(strings.TrimSpace(ref))
+	if key == "" {
+		return nil, nil
+	}
+	for {
+		s.cacheMu.Lock()
+		flight, ok := s.prepareProjectFlight[key]
+		s.cacheMu.Unlock()
+		if !ok {
+			return s.cachedPrepareProject(ref), nil
+		}
+		<-flight.done
+		if flight.err != nil {
+			return nil, flight.err
+		}
+		if flight.project != nil {
+			return clonePrepareProject(flight.project), nil
+		}
+		return s.cachedPrepareProject(ref), nil
+	}
+}
+
+func (s *Service) finishPrepareProjectFlight(ref string, flight *prepareProjectFlight) {
+	if s == nil || flight == nil {
+		return
+	}
+	key := strings.ToLower(strings.TrimSpace(ref))
+	if key == "" {
+		return
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	delete(s.prepareProjectFlight, key)
+	close(flight.done)
+}
+
+func (s *Service) beginPrepareGovernanceFlight(rol string, proyectoID int64, agente string) *prepareGovernanceFlight {
+	if s == nil {
+		return nil
+	}
+	key := prepareGovernanceCacheKey(rol, proyectoID, agente)
+	if key == "" {
+		return nil
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if item, ok := s.prepareGovCache[key]; ok && item.catalog != nil && time.Now().Before(item.expires) {
+		return nil
+	}
+	if _, ok := s.prepareGovFlight[key]; ok {
+		return nil
+	}
+	flight := &prepareGovernanceFlight{done: make(chan struct{})}
+	s.prepareGovFlight[key] = flight
+	return flight
+}
+
+func (s *Service) waitPrepareGovernanceFlight(rol string, proyectoID int64, agente string) (*db.GovernanceCatalog, error) {
+	if s == nil {
+		return nil, nil
+	}
+	key := prepareGovernanceCacheKey(rol, proyectoID, agente)
+	if key == "" {
+		return nil, nil
+	}
+	for {
+		s.cacheMu.Lock()
+		flight, ok := s.prepareGovFlight[key]
+		s.cacheMu.Unlock()
+		if !ok {
+			return s.cachedPrepareGovernance(rol, proyectoID, agente), nil
+		}
+		<-flight.done
+		if flight.err != nil {
+			return nil, flight.err
+		}
+		if flight.catalog != nil {
+			return clonePrepareGovernanceCatalog(flight.catalog), nil
+		}
+		return s.cachedPrepareGovernance(rol, proyectoID, agente), nil
+	}
+}
+
+func (s *Service) finishPrepareGovernanceFlight(rol string, proyectoID int64, agente string, flight *prepareGovernanceFlight) {
+	if s == nil || flight == nil {
+		return
+	}
+	key := prepareGovernanceCacheKey(rol, proyectoID, agente)
+	if key == "" {
+		return
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	delete(s.prepareGovFlight, key)
+	close(flight.done)
+}
+
+func (s *Service) beginPrepareSessionFlight(agente string, proyectoID int64) *prepareSessionFlight {
+	if s == nil {
+		return nil
+	}
+	key := prepareSessionCacheKey(agente, proyectoID)
+	if key == "" {
+		return nil
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if item, ok := s.prepareSessionCache[key]; ok && time.Now().Before(item.expires) {
+		return nil
+	}
+	if _, ok := s.prepareSessionFlight[key]; ok {
+		return nil
+	}
+	flight := &prepareSessionFlight{done: make(chan struct{})}
+	s.prepareSessionFlight[key] = flight
+	return flight
+}
+
+func (s *Service) waitPrepareSessionFlight(agente string, proyectoID int64) (*db.Sesion, bool, error) {
+	if s == nil {
+		return nil, false, nil
+	}
+	key := prepareSessionCacheKey(agente, proyectoID)
+	if key == "" {
+		return nil, false, nil
+	}
+	for {
+		s.cacheMu.Lock()
+		flight, ok := s.prepareSessionFlight[key]
+		s.cacheMu.Unlock()
+		if !ok {
+			session, found, cached := s.cachedPrepareSession(agente, proyectoID)
+			if !cached {
+				return nil, false, nil
+			}
+			return session, found, nil
+		}
+		<-flight.done
+		if flight.err != nil {
+			return nil, false, flight.err
+		}
+		return clonePrepareSession(flight.session), flight.found, nil
+	}
+}
+
+func (s *Service) finishPrepareSessionFlight(agente string, proyectoID int64, flight *prepareSessionFlight) {
+	if s == nil || flight == nil {
+		return
+	}
+	key := prepareSessionCacheKey(agente, proyectoID)
+	if key == "" {
+		return
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	delete(s.prepareSessionFlight, key)
+	close(flight.done)
+}
+
+func (s *Service) beginPrepareConnectorFlight(ref string) *prepareConnectorFlight {
+	if s == nil {
+		return nil
+	}
+	key := strings.ToLower(strings.TrimSpace(ref))
+	if key == "" {
+		return nil
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if item, ok := s.prepareConnectorCache[key]; ok && item.connector != nil && time.Now().Before(item.expires) {
+		return nil
+	}
+	if _, ok := s.prepareConnectorFlight[key]; ok {
+		return nil
+	}
+	flight := &prepareConnectorFlight{done: make(chan struct{})}
+	s.prepareConnectorFlight[key] = flight
+	return flight
+}
+
+func (s *Service) waitPrepareConnectorFlight(ref string) (*db.Conector, error) {
+	if s == nil {
+		return nil, nil
+	}
+	key := strings.ToLower(strings.TrimSpace(ref))
+	if key == "" {
+		return nil, nil
+	}
+	for {
+		s.cacheMu.Lock()
+		flight, ok := s.prepareConnectorFlight[key]
+		s.cacheMu.Unlock()
+		if !ok {
+			return s.cachedPrepareConnector(ref), nil
+		}
+		<-flight.done
+		if flight.err != nil {
+			return nil, flight.err
+		}
+		return clonePrepareConnector(flight.connector), nil
+	}
+}
+
+func (s *Service) finishPrepareConnectorFlight(ref string, flight *prepareConnectorFlight) {
+	if s == nil || flight == nil {
+		return
+	}
+	key := strings.ToLower(strings.TrimSpace(ref))
+	if key == "" {
+		return
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	delete(s.prepareConnectorFlight, key)
+	close(flight.done)
+}
+
+func (s *Service) beginPrepareModelPolicyFlight(key string) *prepareModelPolicyFlight {
+	if s == nil {
+		return nil
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if item, ok := s.prepareModelPolicyCache[key]; ok && item.resolution != nil && time.Now().Before(item.expires) {
+		return nil
+	}
+	if _, ok := s.prepareModelPolicyFlight[key]; ok {
+		return nil
+	}
+	flight := &prepareModelPolicyFlight{done: make(chan struct{})}
+	s.prepareModelPolicyFlight[key] = flight
+	return flight
+}
+
+func (s *Service) waitPrepareModelPolicyFlight(key string) (*db.ResolucionModelo, error) {
+	if s == nil {
+		return nil, nil
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil, nil
+	}
+	for {
+		s.cacheMu.Lock()
+		flight, ok := s.prepareModelPolicyFlight[key]
+		s.cacheMu.Unlock()
+		if !ok {
+			return s.cachedPrepareModelPolicy(key), nil
+		}
+		<-flight.done
+		if flight.err != nil {
+			return nil, flight.err
+		}
+		return clonePrepareModelResolution(flight.resolution), nil
+	}
+}
+
+func (s *Service) finishPrepareModelPolicyFlight(key string, flight *prepareModelPolicyFlight) {
+	if s == nil || flight == nil {
+		return
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	delete(s.prepareModelPolicyFlight, key)
+	close(flight.done)
+}
+
+func prepareGovernanceCacheKey(rol string, proyectoID int64, agente string) string {
+	rol = strings.ToLower(strings.TrimSpace(rol))
+	agente = strings.ToLower(strings.TrimSpace(agente))
+	if rol == "" || proyectoID <= 0 {
+		return ""
+	}
+	return rol + "|" + strconv.FormatInt(proyectoID, 10) + "|" + agente
+}
+
+func prepareSessionCacheKey(agente string, proyectoID int64) string {
+	agente = strings.ToLower(strings.TrimSpace(agente))
+	if agente == "" || proyectoID <= 0 {
+		return ""
+	}
+	return agente + "|" + strconv.FormatInt(proyectoID, 10)
 }
 
 func latestAssignmentForAgent(items []*db.Asignacion) *db.Asignacion {

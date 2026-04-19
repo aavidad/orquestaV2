@@ -59,6 +59,7 @@ type fakeStore struct {
 	checkReanimationsCalls  int
 	pendingVotesCalls       int
 	openProposalsCalls      int
+	governanceCalls         int
 	pausedAgent             string
 	pausedMinutes           int
 	pausedReason            string
@@ -412,6 +413,7 @@ func (f *fakeStore) GetLatestAgentBudget(agente string) (*db.PresupuestoSesion, 
 }
 
 func (f *fakeStore) ResolveGovernanceCatalog(rol string, proyectoID *int64) (*db.GovernanceCatalog, error) {
+	f.governanceCalls++
 	return &db.GovernanceCatalog{
 		TipoAgente: rol,
 		ProyectoID: proyectoID,
@@ -515,6 +517,111 @@ func TestGetProjectForPrepareUsaCacheCorta(t *testing.T) {
 	}
 	if store.getProjectCalls != 1 {
 		t.Fatalf("deberia reutilizar cache de proyecto, got=%d", store.getProjectCalls)
+	}
+}
+
+func TestGetGovernanceCatalogForPrepareUsaCacheCorta(t *testing.T) {
+	store := &fakeStore{
+		rules:     []*db.Regla{{ID: 1, TipoAgente: "programador"}},
+		skills:    []*db.Skill{{ID: 2, TipoAgente: "programador"}},
+		workflows: []*db.Workflow{{ID: 3, TipoAgente: "programador", Nombre: "flujo"}},
+	}
+	svc := NewService(store, nil)
+
+	first, err := svc.getGovernanceCatalogForPrepare("programador", 7, "Codex2")
+	if err != nil {
+		t.Fatalf("primer getGovernanceCatalogForPrepare: %v", err)
+	}
+	second, err := svc.getGovernanceCatalogForPrepare("programador", 7, "Codex2")
+	if err != nil {
+		t.Fatalf("segundo getGovernanceCatalogForPrepare: %v", err)
+	}
+	if first == nil || second == nil || len(second.Workflows) != 1 {
+		t.Fatalf("catalogo inesperado: first=%+v second=%+v", first, second)
+	}
+	if store.governanceCalls != 1 {
+		t.Fatalf("deberia reutilizar cache de governance, got=%d", store.governanceCalls)
+	}
+}
+
+func TestGetLastSessionForPrepareUsaCacheCorta(t *testing.T) {
+	proyectoID := int64(7)
+	store := &fakeStore{
+		sessions: []*db.Sesion{{ID: 9, Agente: "Codex2", ProyectoID: &proyectoID}},
+	}
+	svc := NewService(store, nil)
+	first, err := svc.getLastSessionForPrepare("Codex2", proyectoID)
+	if err != nil {
+		t.Fatalf("primer getLastSessionForPrepare: %v", err)
+	}
+	second, err := svc.getLastSessionForPrepare("Codex2", proyectoID)
+	if err != nil {
+		t.Fatalf("segundo getLastSessionForPrepare: %v", err)
+	}
+	if first == nil || second == nil || second.ID != 9 {
+		t.Fatalf("sesion inesperada: first=%+v second=%+v", first, second)
+	}
+	if store.getLastCalls != 1 {
+		t.Fatalf("deberia reutilizar cache de sesion, got=%d", store.getLastCalls)
+	}
+}
+
+func TestGetConnectorForPrepareUsaCacheCorta(t *testing.T) {
+	store := &fakeStore{
+		connector: &db.Conector{ID: 5, Slug: "codex-cli", Nombre: "Codex CLI"},
+	}
+	svc := NewService(store, nil)
+	first, err := svc.getConnectorForPrepare("codex-cli")
+	if err != nil {
+		t.Fatalf("primer getConnectorForPrepare: %v", err)
+	}
+	second, err := svc.getConnectorForPrepare("codex-cli")
+	if err != nil {
+		t.Fatalf("segundo getConnectorForPrepare: %v", err)
+	}
+	if first == nil || second == nil || second.Slug != "codex-cli" {
+		t.Fatalf("conector inesperado: first=%+v second=%+v", first, second)
+	}
+	if store.lastConnectorRef != "codex-cli" {
+		t.Fatalf("ref de conector inesperada: %s", store.lastConnectorRef)
+	}
+}
+
+func TestPrewarmPrepareContextCalientaCaches(t *testing.T) {
+	store := &fakeStore{
+		project:   &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()},
+		agents:    []*db.Agente{{Nombre: "Codex2", Rol: "programador", Habilitado: true, EstadoCuota: "activo"}},
+		sessions:  []*db.Sesion{{ID: 9, Agente: "Codex2", ProyectoID: int64Ptr(7), ConectorSlug: "codex-cli"}},
+		connector: &db.Conector{ID: 5, Slug: "codex-cli", Nombre: "Codex CLI"},
+		rules:     []*db.Regla{{ID: 1, TipoAgente: "programador"}},
+		skills:    []*db.Skill{{ID: 2, TipoAgente: "programador"}},
+		workflows: []*db.Workflow{{ID: 3, TipoAgente: "programador", Nombre: "flujo"}},
+	}
+	svc := NewService(store, nil)
+	if err := svc.PrewarmPrepareContext("Codex2", "orquestador"); err != nil {
+		t.Fatalf("PrewarmPrepareContext: %v", err)
+	}
+	beforeAgents := store.getAgentCalls
+	beforeProjects := store.getProjectCalls
+	beforeGovernance := store.governanceCalls
+	if _, err := svc.getAgentForPrepare("Codex2"); err != nil {
+		t.Fatalf("getAgentForPrepare tras prewarm: %v", err)
+	}
+	if _, err := svc.getProjectForPrepare("orquestador"); err != nil {
+		t.Fatalf("getProjectForPrepare tras prewarm: %v", err)
+	}
+	if _, err := svc.getGovernanceCatalogForPrepare("programador", 7, "Codex2"); err != nil {
+		t.Fatalf("getGovernanceCatalogForPrepare tras prewarm: %v", err)
+	}
+	beforeLast := store.getLastCalls
+	if _, err := svc.getLastSessionForPrepare("Codex2", 7); err != nil {
+		t.Fatalf("getLastSessionForPrepare tras prewarm: %v", err)
+	}
+	if _, err := svc.getConnectorForPrepare("codex-cli"); err != nil {
+		t.Fatalf("getConnectorForPrepare tras prewarm: %v", err)
+	}
+	if store.getAgentCalls != beforeAgents || store.getProjectCalls != beforeProjects || store.governanceCalls != beforeGovernance || store.getLastCalls != beforeLast {
+		t.Fatalf("prewarm no reutilizado: agents %d->%d projects %d->%d governance %d->%d last %d->%d", beforeAgents, store.getAgentCalls, beforeProjects, store.getProjectCalls, beforeGovernance, store.governanceCalls, beforeLast, store.getLastCalls)
 	}
 }
 
