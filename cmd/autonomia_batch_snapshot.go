@@ -33,6 +33,7 @@ type autonomiaBatchSnapshot struct {
 	sesiones []*db.Sesion
 
 	agentesByName              map[string]*db.Agente
+	agentBudgetLoaded          map[string]struct{}
 	operationalStateByAgent    map[string]string
 	operationalDetailByAgent   map[string]string
 	operationalStateResolved   map[string]struct{}
@@ -64,6 +65,7 @@ var autonomiaOperationalStateResolver = func(agente string) (string, string, err
 	return agentesService.OperationalStateForAgent(agente)
 }
 
+var autonomiaGetAgenteFn = db.GetAgente
 var autonomiaGetProyectoOperacionFn = db.GetProyectoOperacion
 var autonomiaProyectoDisponibleParaAutonomiaFn = db.ProyectoDisponibleParaAutonomia
 var autonomiaProyectoTerminadoFn = proyectoTerminadoAutonomamente
@@ -71,7 +73,7 @@ var autonomiaProyectoTerminadoFn = proyectoTerminadoAutonomamente
 func newAutonomiaBatchSnapshot(sesiones []*db.Sesion) (*autonomiaBatchSnapshot, error) {
 	agentNames := preloadAutonomiaBatchAgentNames(sesiones)
 	preloadAgentsStart := time.Now()
-	agentesByName, err := db.ListarAgentesConSesionOperativa(agentNames, sesiones)
+	agentesByName, err := db.ListarAgentesConSesionOperativaLigero(agentNames, sesiones)
 	if err != nil {
 		return nil, err
 	}
@@ -85,6 +87,7 @@ func newAutonomiaBatchSnapshot(sesiones []*db.Sesion) (*autonomiaBatchSnapshot, 
 	snapshot := &autonomiaBatchSnapshot{
 		sesiones:                   sesiones,
 		agentesByName:              make(map[string]*db.Agente, len(agentesByName)),
+		agentBudgetLoaded:          map[string]struct{}{},
 		operationalStateByAgent:    map[string]string{},
 		operationalDetailByAgent:   map[string]string{},
 		operationalStateResolved:   map[string]struct{}{},
@@ -284,11 +287,17 @@ func (s *autonomiaBatchSnapshot) agent(agente string) (*db.Agente, error) {
 	if item, ok := s.agentesByName[key]; ok && item != nil {
 		return item, nil
 	}
-	item, err := db.GetAgente(strings.TrimSpace(agente))
+	item, err := autonomiaGetAgenteFn(strings.TrimSpace(agente))
 	if err != nil {
 		return nil, err
 	}
 	s.agentesByName[key] = item
+	if item != nil {
+		if s.agentBudgetLoaded == nil {
+			s.agentBudgetLoaded = map[string]struct{}{}
+		}
+		s.agentBudgetLoaded[key] = struct{}{}
+	}
 	return item, nil
 }
 
@@ -299,6 +308,19 @@ func (s *autonomiaBatchSnapshot) budgetPause(agente string) (bool, string, error
 	}
 	if decision, ok := s.pauseByAgent[key]; ok {
 		return decision.shouldPause, decision.reason, nil
+	}
+	if _, ok := s.agentBudgetLoaded[key]; !ok {
+		cached, err := autonomiaGetAgenteFn(strings.TrimSpace(agente))
+		if err != nil {
+			return false, "", err
+		}
+		if cached != nil {
+			s.agentesByName[key] = cached
+		}
+		if s.agentBudgetLoaded == nil {
+			s.agentBudgetLoaded = map[string]struct{}{}
+		}
+		s.agentBudgetLoaded[key] = struct{}{}
 	}
 	if cached, ok := s.agentesByName[key]; ok && cached != nil {
 		shouldPause, reason := agenteDebePausarPorPresupuestoVisible(cached)

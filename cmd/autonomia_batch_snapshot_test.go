@@ -45,6 +45,47 @@ func TestAutonomiaBatchSnapshotOperationalStateCacheaPorAgente(t *testing.T) {
 	}
 }
 
+func TestAutonomiaBatchSnapshotBudgetPauseCargaPresupuestoSoloUnaVez(t *testing.T) {
+	prev := autonomiaGetAgenteFn
+	t.Cleanup(func() { autonomiaGetAgenteFn = prev })
+
+	calls := 0
+	autonomiaGetAgenteFn = func(agente string) (*db.Agente, error) {
+		calls++
+		return &db.Agente{
+			Nombre:            agente,
+			Habilitado:        true,
+			EstadoCuota:       "activo",
+			PresupuestoEstado: "handoff_preventivo",
+			CuotaRestantePct:  intPtr(12),
+		}, nil
+	}
+
+	snapshot := &autonomiaBatchSnapshot{
+		agentesByName:     map[string]*db.Agente{"codex1": {Nombre: "Codex1", Habilitado: true, EstadoCuota: "activo"}},
+		agentBudgetLoaded: map[string]struct{}{},
+		pauseByAgent:      map[string]autonomiaBudgetPauseDecision{},
+	}
+
+	shouldPause, _, err := snapshot.budgetPause("Codex1")
+	if err != nil {
+		t.Fatalf("budgetPause first: %v", err)
+	}
+	if !shouldPause {
+		t.Fatal("deberia pausar con presupuesto preventivo")
+	}
+	shouldPause, _, err = snapshot.budgetPause("Codex1")
+	if err != nil {
+		t.Fatalf("budgetPause second: %v", err)
+	}
+	if !shouldPause {
+		t.Fatal("deberia reutilizar decision cacheada")
+	}
+	if calls != 1 {
+		t.Fatalf("deberia cargar presupuesto una sola vez, got=%d", calls)
+	}
+}
+
 func TestAutonomiaBatchSnapshotProjectCacheaPorProyecto(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{

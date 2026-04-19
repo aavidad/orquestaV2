@@ -5,11 +5,7 @@ import (
 	"strings"
 )
 
-// ListarAgentesConSesionOperativa carga por lote los agentes pedidos, enriquece
-// presupuesto una sola vez por fila y proyecta el estado visible usando la
-// sesión ya observada por el caller. Evita el patrón N x GetAgente() -> N x
-// GetSesionActivaOperativa() en los batches calientes.
-func ListarAgentesConSesionOperativa(nombres []string, sesiones []*Sesion) (map[string]*Agente, error) {
+func listarAgentesConSesionOperativa(nombres []string, sesiones []*Sesion, enriquecerPresupuesto bool) (map[string]*Agente, error) {
 	seen := make(map[string]string, len(nombres))
 	args := make([]any, 0, len(nombres))
 	for _, nombre := range nombres {
@@ -76,7 +72,9 @@ func ListarAgentesConSesionOperativa(nombres []string, sesiones []*Sesion) (map[
 		return nil, err
 	}
 
-	enriquecerAgentesConPresupuesto(list)
+	if enriquecerPresupuesto {
+		enriquecerAgentesConPresupuesto(list)
+	}
 
 	sesionByAgent := make(map[string]*Sesion, len(sesiones))
 	for _, sesion := range sesiones {
@@ -103,4 +101,20 @@ func ListarAgentesConSesionOperativa(nombres []string, sesiones []*Sesion) (map[
 		out[key] = agente
 	}
 	return out, nil
+}
+
+// ListarAgentesConSesionOperativa carga por lote los agentes pedidos, enriquece
+// presupuesto una sola vez por fila y proyecta el estado visible usando la
+// sesión ya observada por el caller. Evita el patrón N x GetAgente() -> N x
+// GetSesionActivaOperativa() en los batches calientes.
+func ListarAgentesConSesionOperativa(nombres []string, sesiones []*Sesion) (map[string]*Agente, error) {
+	return listarAgentesConSesionOperativa(nombres, sesiones, true)
+}
+
+// ListarAgentesConSesionOperativaLigero carga por lote solo el estado base del
+// agente y proyecta visibilidad con la sesión observada, sin enriquecer
+// presupuesto ni identidad. Está pensado para snapshots calientes que resuelven
+// ese detalle de forma perezosa solo si una decisión concreta lo necesita.
+func ListarAgentesConSesionOperativaLigero(nombres []string, sesiones []*Sesion) (map[string]*Agente, error) {
+	return listarAgentesConSesionOperativa(nombres, sesiones, false)
 }
