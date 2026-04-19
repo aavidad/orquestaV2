@@ -11022,21 +11022,6 @@ func procesarRecuperacionTareasBloqueadasSesionActiva(sesion *db.Sesion, snapsho
 	if !autonomiaSessionMaintenanceShouldAttempt("blocked_recovery", agente, *sesion.ProyectoID) {
 		return 0, nil
 	}
-	detail, err := agentesService.BuildDetailCompact(agente)
-	if err != nil {
-		return 0, err
-	}
-	now := time.Now().UTC()
-	if detail == nil || detail.Row.Agente == nil {
-		return 0, nil
-	}
-	row := detail.Row
-	if proyectoID := rowProyectoIDPreferido(row); proyectoID != nil && *proyectoID != *sesion.ProyectoID {
-		return 0, nil
-	}
-	if !rowPermiteAutoRecuperacion(row, now) {
-		return 0, nil
-	}
 	if snapshot != nil {
 	} else {
 		tareas, err = tareasService.List(db.FiltroTareas{Agente: &agente, ProyectoID: sesion.ProyectoID})
@@ -11062,6 +11047,24 @@ func procesarRecuperacionTareasBloqueadasSesionActiva(sesion *db.Sesion, snapsho
 		for _, bloqueo := range resumenBloqueos {
 			bloqueosPorTarea[bloqueo.ID] = bloqueo
 		}
+	}
+	if !hayTareaBloqueadaRecuperableSesionActiva(agente, tareas, bloqueosPorTarea) {
+		return 0, nil
+	}
+	detail, err := agentesService.BuildDetailCompact(agente)
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().UTC()
+	if detail == nil || detail.Row.Agente == nil {
+		return 0, nil
+	}
+	row := detail.Row
+	if proyectoID := rowProyectoIDPreferido(row); proyectoID != nil && *proyectoID != *sesion.ProyectoID {
+		return 0, nil
+	}
+	if !rowPermiteAutoRecuperacion(row, now) {
+		return 0, nil
 	}
 	procesadas := 0
 	for _, tarea := range tareas {
@@ -11089,6 +11092,29 @@ func procesarRecuperacionTareasBloqueadasSesionActiva(sesion *db.Sesion, snapsho
 		invalidarSnapshotAutonomiaProyecto(snapshot, agente, *sesion.ProyectoID)
 	}
 	return procesadas, nil
+}
+
+func hayTareaBloqueadaRecuperableSesionActiva(agente string, tareas []*db.Tarea, bloqueosPorTarea map[int64]db.ResumenBloqueo) bool {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return false
+	}
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.Estado != db.TareaBloqueada || tarea.Agente == nil {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(*tarea.Agente), agente) {
+			continue
+		}
+		bloqueo, ok := bloqueosPorTarea[tarea.ID]
+		if !ok {
+			continue
+		}
+		if esBloqueoAutonomiaAgenteRecuperable(agente, strings.TrimSpace(bloqueo.Agente), strings.TrimSpace(bloqueo.Motivo)) {
+			return true
+		}
+	}
+	return false
 }
 
 func procesarCompactacionFrentesPremiumSesionActiva(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {

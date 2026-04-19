@@ -4823,6 +4823,53 @@ func TestProcesarRecuperacionTareasBloqueadasSesionActivaConSnapshotSaleSiNoHayB
 	}
 }
 
+func TestProcesarRecuperacionTareasBloqueadasSesionActivaConSnapshotSaleSiNoHayRecuperables(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexBlockedNoRecover", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-blocked-no-recover",
+		Nombre:  "Orquestador Blocked No Recover",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion := &db.Sesion{
+		ID:         901,
+		Agente:     "CodexBlockedNoRecover",
+		ProyectoID: &proyectoID,
+		Estado:     "activa",
+	}
+	tareaID := int64(99)
+	snapshot := &autonomiaBatchSnapshot{
+		tareasByAgentProject: map[string][]*db.Tarea{
+			agentProjectCacheKey("CodexBlockedNoRecover", proyectoID): {{
+				ID:         tareaID,
+				ProyectoID: &proyectoID,
+				Agente:     strPtr("CodexBlockedNoRecover"),
+				Estado:     db.TareaBloqueada,
+			}},
+		},
+		bloqueosPorTarea: map[int64]db.ResumenBloqueo{
+			tareaID: {ID: tareaID, Agente: "otro", Motivo: "bloqueo externo humano"},
+		},
+		bloqueosLoaded: true,
+	}
+
+	n, err := procesarRecuperacionTareasBloqueadasSesionActiva(sesion, snapshot)
+	if err != nil {
+		t.Fatalf("procesarRecuperacionTareasBloqueadasSesionActiva: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia actuar si la bloqueada no es recuperable, got=%d", n)
+	}
+}
+
 func TestAutonomiaSessionMaintenanceGateSkipsHeavySessionChecks(t *testing.T) {
 	resetAutonomiaSessionMaintenanceGate()
 	t.Cleanup(resetAutonomiaSessionMaintenanceGate)
