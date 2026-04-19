@@ -8610,13 +8610,13 @@ func completarRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, p
 		}
 	}
 	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
-		"dispatch_state":  "delivered",
+		"dispatch_state":  "pending",
 		"ok":              true,
 		"mailbox_id":      mailboxID,
 		"deferred":        true,
 		"deferred_reason": reason,
 		"mailbox_only":    true,
-		"delivery_state":  "delivered",
+		"delivery_state":  "queued",
 	})
 	return MarcarRuntimeOrderEstado(order.ID, "completada", resultado, "")
 }

@@ -10069,6 +10069,12 @@ func TestRuntimeOrderSendInstructionNudgeTMUXRetieneNotificadaSiSessionResumeTim
 	if !strings.Contains(sendOrder.ResultadoJSON, `runtime_handle_session_resume_mailbox_only:nudge`) {
 		t.Fatalf("resultado sin razon mailbox_only:nudge: %s", sendOrder.ResultadoJSON)
 	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"delivery_state":"queued"`) {
+		t.Fatalf("resultado mailbox_only deberia quedar queued: %s", sendOrder.ResultadoJSON)
+	}
+	if strings.Contains(sendOrder.ResultadoJSON, `"dispatch_state":"delivered"`) {
+		t.Fatalf("mailbox_only no deberia marcarse delivered sin consumo real: %s", sendOrder.ResultadoJSON)
+	}
 
 	msg, err := GetRuntimeMailbox(mailboxID)
 	if err != nil || msg == nil {
