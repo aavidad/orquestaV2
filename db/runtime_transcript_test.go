@@ -1335,6 +1335,69 @@ func TestIngestarRuntimeTranscriptHandleDescartaRuidoUIYConservaSenal(t *testing
 	}
 }
 
+func TestIngestarRuntimeTranscriptHandleDescartaSpinnerCorruptoYConservaLineaUtil(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("CodexSpinner", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexSpinner",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, _ := GetRuntimeHandleBySesionID(sesion.ID)
+
+	logPath := filepath.Join(t.TempDir(), "codex-spinner-corrupt.log")
+	logData := strings.Join([]string{
+		"0mWWoorrk•kiinWng3Wogorrkkiin◦ngg•4◦WoorrkkiinWng5Wogorrkkiinngg•6◦WWoorrkkiinWng◦7Wogorrkkiinngg•8",
+		"• Necesito un repro corto dentro del mismo paquete para ver covered/observed/blocked. Lo añado temporalmente y luego lo quito.",
+		"",
+	}, "\n")
+	if err := os.WriteFile(logPath, []byte(logData), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	n, err := IngestarRuntimeTranscriptHandle(handle.ID)
+	if err != nil {
+		t.Fatalf("ingestar transcript: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia conservar solo la línea útil tras descartar spinner corrupto, got=%d", n)
+	}
+
+	agente := "CodexSpinner"
+	items, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("transcript inesperado: %+v", items)
+	}
+	if got := items[0].NormalizedText; !strings.Contains(got, "necesito un repro corto") {
+		t.Fatalf("deberia conservar la línea útil, got=%q", got)
+	}
+}
+
 func TestPurgarRuntimeTranscriptRuidoHistoricoBorraSoloChromeUI(t *testing.T) {
 	abrirDBTemporalRuntimeObservabilidad(t)
 

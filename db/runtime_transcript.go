@@ -871,7 +871,95 @@ func esRuidoProgresoUITranscript(texto, normalized string) bool {
 	if strings.Count(texto, "◦")+strings.Count(texto, "•") >= 4 && strings.Contains(normalized, "working") {
 		return true
 	}
+	if transcriptPareceRuidoSpinnerCorrupto(texto) {
+		return true
+	}
 	return false
+}
+
+func transcriptPareceRuidoSpinnerCorrupto(texto string) bool {
+	texto = strings.TrimSpace(texto)
+	if texto == "" {
+		return false
+	}
+	duplicados := contarDuplicadosAdyacentes(texto)
+	if duplicados < 8 {
+		return false
+	}
+	ratioSpinner := ratioRunasSpinner(texto)
+	if ratioSpinner >= 0.75 {
+		return true
+	}
+	colapsado := strings.ToLower(colapsarRunasRepetidas(texto))
+	if strings.Contains(colapsado, "working") && strings.Count(texto, "◦")+strings.Count(texto, "•") >= 2 {
+		return true
+	}
+	semanticas := contarRunasSemanticas(texto)
+	if semanticas <= 30 {
+		return false
+	}
+	if contarSeparadoresTranscript(texto) >= 5 {
+		return false
+	}
+	return ratioSpinner >= 0.55
+}
+
+func colapsarRunasRepetidas(raw string) string {
+	var out strings.Builder
+	var prev rune
+	hasPrev := false
+	for _, r := range raw {
+		if hasPrev && r == prev {
+			continue
+		}
+		out.WriteRune(r)
+		prev = r
+		hasPrev = true
+	}
+	return out.String()
+}
+
+func contarDuplicadosAdyacentes(raw string) int {
+	count := 0
+	var prev rune
+	hasPrev := false
+	for _, r := range raw {
+		if hasPrev && r == prev && (unicode.IsLetter(r) || unicode.IsDigit(r)) {
+			count++
+		}
+		prev = r
+		hasPrev = true
+	}
+	return count
+}
+
+func contarSeparadoresTranscript(raw string) int {
+	count := 0
+	for _, r := range raw {
+		if unicode.IsSpace(r) || r == '•' || r == '◦' || r == '|' || r == '└' || r == '-' {
+			count++
+		}
+	}
+	return count
+}
+
+func ratioRunasSpinner(raw string) float64 {
+	semanticas := 0
+	spinner := 0
+	for _, r := range strings.ToLower(raw) {
+		if !(unicode.IsLetter(r) || unicode.IsDigit(r)) {
+			continue
+		}
+		semanticas++
+		switch r {
+		case 'w', 'o', 'r', 'k', 'i', 'n', 'g':
+			spinner++
+		}
+	}
+	if semanticas == 0 {
+		return 0
+	}
+	return float64(spinner) / float64(semanticas)
 }
 
 func esBannerRuidoCodex(normalized string) bool {

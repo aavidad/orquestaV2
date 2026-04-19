@@ -973,6 +973,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtime/process-orders", apiHandlerRuntimeProcessOrders)
 	mux.HandleFunc("/api/runtime/process-mailbox", apiHandlerRuntimeProcessMailbox)
 	mux.HandleFunc("/api/runtime/process-transcript", apiHandlerRuntimeProcessTranscript)
+	mux.HandleFunc("/api/runtime/purge-transcript-noise", apiHandlerRuntimePurgeTranscriptNoise)
 	mux.HandleFunc("/api/runtime/process-autonomia", apiHandlerRuntimeProcessAutonomia)
 	mux.HandleFunc("/api/runtime/process-degradados", apiHandlerRuntimeProcessDegradados)
 	mux.HandleFunc("/api/runtime/process-hygiene", apiHandlerRuntimeProcessHygiene)
@@ -5711,6 +5712,21 @@ func apiHandlerRuntimeProcessTranscript(w http.ResponseWriter, r *http.Request) 
 		Count:    0,
 		Accepted: started,
 		Running:  runtimeProcessTranscriptEnCurso.Load(),
+	})
+}
+
+func apiHandlerRuntimePurgeTranscriptNoise(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	count, err := db.PurgarRuntimeTranscriptRuidoHistorico()
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
+		OK:    true,
+		Count: count,
 	})
 }
 

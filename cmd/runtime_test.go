@@ -30,6 +30,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	var processMailboxReq map[string]any
 	var processAutonomiaReq map[string]any
 	var processTranscriptReq map[string]any
+	var purgeTranscriptNoiseReq map[string]any
 	var processDegradadosReq map[string]any
 	var processHygieneReq map[string]any
 	var processReanimationsReq map[string]any
@@ -252,6 +253,9 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 		case r.URL.Path == "/api/runtime/process-transcript" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&processTranscriptReq)
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 7, "accepted": false, "running": false})
+		case r.URL.Path == "/api/runtime/purge-transcript-noise" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&purgeTranscriptNoiseReq)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 4})
 		case r.URL.Path == "/api/runtime/process-degradados" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&processDegradadosReq)
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 2, "accepted": true, "running": false})
@@ -425,6 +429,18 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	}
 	if got, ok := processTranscriptReq["wait"].(bool); !ok || got {
 		t.Fatalf("request process transcript deberia enviar wait=false: %+v", processTranscriptReq)
+	}
+
+	outPurgeTranscriptNoise := capturarStdout(t, func() {
+		if err := runtimePurgarTranscriptRuidoCmd.RunE(runtimePurgarTranscriptRuidoCmd, nil); err != nil {
+			t.Fatalf("runtime purgar-transcript-ruido via api: %v", err)
+		}
+	})
+	if !strings.Contains(outPurgeTranscriptNoise, "count=4") {
+		t.Fatalf("salida runtime purgar-transcript-ruido inesperada:\n%s", outPurgeTranscriptNoise)
+	}
+	if len(purgeTranscriptNoiseReq) != 0 {
+		t.Fatalf("request purge transcript noise deberia ser vacia: %+v", purgeTranscriptNoiseReq)
 	}
 
 	outProcessDegradados := capturarStdout(t, func() {

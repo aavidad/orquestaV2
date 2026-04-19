@@ -272,6 +272,22 @@ var runtimeProcesarTranscriptCmd = &cobra.Command{
 	},
 }
 
+var runtimePurgarTranscriptRuidoCmd = &cobra.Command{
+	Use:   "purgar-transcript-ruido",
+	Short: "Purge ruido histórico del transcript runtime ya persistido",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		resp, ok, err := purgarTranscriptRuidoPorAPI()
+		if !ok {
+			return serverFirstCommandError("runtime purgar-transcript-ruido")
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Printf("✓ Runtime transcript ruido purgado count=%d\n", resp.Count)
+		return nil
+	},
+}
+
 var runtimeProcesarDegradadosCmd = &cobra.Command{
 	Use:   "procesar-degradados",
 	Short: "Ejecuta una pasada inmediata del batch de agentes degradados",
@@ -1962,6 +1978,6 @@ func init() {
 	runtimeProcesarTranscriptCmd.Flags().Int64("handle-id", 0, "Procesar solo transcript de un runtime handle")
 	runtimeProcesarDegradadosCmd.Flags().Bool("wait", false, "Ejecuta la pasada en primer plano y devuelve el recuento real")
 	runtimeProcesarHigieneCmd.Flags().Bool("wait", false, "Ejecuta la pasada en primer plano y devuelve el recuento real")
-	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeDespertarCmd, runtimeProcesarOrdenesCmd, runtimeProcesarMailboxCmd, runtimeProcesarAutonomiaCmd, runtimeProcesarTranscriptCmd, runtimeProcesarDegradadosCmd, runtimeProcesarHigieneCmd, runtimeProcesarReanimacionesCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenVerCmd, runtimeOrdenNuevaCmd, runtimeOrdenCancelarCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxVerCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd, runtimeMailboxLimpiarCmd, runtimeLimpiarPruebasCmd)
+	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeDespertarCmd, runtimeProcesarOrdenesCmd, runtimeProcesarMailboxCmd, runtimeProcesarAutonomiaCmd, runtimeProcesarTranscriptCmd, runtimePurgarTranscriptRuidoCmd, runtimeProcesarDegradadosCmd, runtimeProcesarHigieneCmd, runtimeProcesarReanimacionesCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenVerCmd, runtimeOrdenNuevaCmd, runtimeOrdenCancelarCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxVerCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd, runtimeMailboxLimpiarCmd, runtimeLimpiarPruebasCmd)
 	rootCmd.AddCommand(runtimeCmd)
 }
