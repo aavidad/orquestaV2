@@ -45,14 +45,10 @@ func TestResolverHandleYRuntimeParaOrdenPrefierenTMUXCanonicoSobreLegacy(t *test
 		"working_dir":      filepath.Join(tmp, "legacy"),
 		"rendered_command": "codex-perfil CodexResolver",
 	})
-	resLegacy, err := DB.Exec(`INSERT INTO runtime_handles (
+	legacyHandleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
 		"CodexResolver", proyectoID, runtimeLegacyID, "cli", "process", strconv.Itoa(os.Getpid()), string(legacyMetaJSON), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle legacy: %v", err)
-	}
-	legacyHandleID, _ := resLegacy.LastInsertId()
 
 	tmuxDir := filepath.Join(tmp, "tmux-worker")
 	if err := os.MkdirAll(tmuxDir, 0o755); err != nil {
@@ -90,14 +86,10 @@ func TestResolverHandleYRuntimeParaOrdenPrefierenTMUXCanonicoSobreLegacy(t *test
 		"worker_heartbeat_path": heartbeatPath,
 		"rendered_command":      "codex-perfil CodexResolver",
 	})
-	resTMUX, err := DB.Exec(`INSERT INTO runtime_handles (
+	tmuxHandleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
 		"CodexResolver", proyectoID, runtimeTMUXID, "tmux", "session", "orq-codexresolver-1", string(tmuxMetaJSON), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle tmux: %v", err)
-	}
-	tmuxHandleID, _ := resTMUX.LastInsertId()
 
 	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
 		Agente:     "CodexResolver",
@@ -357,23 +349,15 @@ func TestResolverSesionParaOrdenPrefiereSesionDelTMUXCanonico(t *testing.T) {
 		t.Fatalf("upsert proyecto: %v", err)
 	}
 
-	resSesionLegacy, err := DB.Exec(`INSERT INTO sesiones (
+	sesionLegacyID := mustInsertID(t, `INSERT INTO sesiones (
 		agente, proyecto_id, activa, estado, herramienta, host, heartbeat_at
 	) VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
 		"CodexResolver", proyectoID, 0, "cerrada", "codex-cli", "test-host")
-	if err != nil {
-		t.Fatalf("insert sesion legacy: %v", err)
-	}
-	sesionLegacyID, _ := resSesionLegacy.LastInsertId()
 
-	resSesionTMUX, err := DB.Exec(`INSERT INTO sesiones (
+	sesionTMUXID := mustInsertID(t, `INSERT INTO sesiones (
 		agente, proyecto_id, activa, estado, herramienta, host, heartbeat_at
 	) VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
 		"CodexResolver", proyectoID, 1, "activa", "codex-cli", "test-host")
-	if err != nil {
-		t.Fatalf("insert sesion tmux: %v", err)
-	}
-	sesionTMUXID, _ := resSesionTMUX.LastInsertId()
 
 	now := time.Now().UTC()
 	nowText := now.Format(time.RFC3339Nano)
@@ -396,14 +380,10 @@ func TestResolverSesionParaOrdenPrefiereSesionDelTMUXCanonico(t *testing.T) {
 		"working_dir":      filepath.Join(tmp, "legacy"),
 		"rendered_command": "'/tmp/codex-perfiles/bin/codex-perfil' 'CuentaLegacy'",
 	})
-	resLegacy, err := DB.Exec(`INSERT INTO runtime_handles (
+	legacyHandleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, sesion_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?,?, 'activo', ?, ?)`,
 		"CodexResolver", proyectoID, runtimeLegacyID, sesionLegacyID, "cli", "process", strconv.Itoa(os.Getpid()), string(legacyMetaJSON), now)
-	if err != nil {
-		t.Fatalf("insert handle legacy: %v", err)
-	}
-	legacyHandleID, _ := resLegacy.LastInsertId()
 
 	tmuxDir := filepath.Join(tmp, "tmux-worker-sesion")
 	if err := os.MkdirAll(tmuxDir, 0o755); err != nil {
@@ -443,14 +423,10 @@ func TestResolverSesionParaOrdenPrefiereSesionDelTMUXCanonico(t *testing.T) {
 		"worker_heartbeat_path": heartbeatPath,
 		"rendered_command":      "'/tmp/codex-perfiles/bin/codex-perfil' 'CuentaTMUX'",
 	})
-	resTMUX, err := DB.Exec(`INSERT INTO runtime_handles (
+	tmuxHandleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, sesion_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?,?, 'activo', ?, ?)`,
 		"CodexResolver", proyectoID, runtimeTMUXID, sesionTMUXID, "tmux", "session", "orq-codexresolver-sesion", string(tmuxMetaJSON), now)
-	if err != nil {
-		t.Fatalf("insert handle tmux: %v", err)
-	}
-	tmuxHandleID, _ := resTMUX.LastInsertId()
 
 	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
 		Agente:     "CodexResolver",
@@ -517,14 +493,10 @@ func TestRuntimeHandleRuntimeHaceFallbackASesionID(t *testing.T) {
 		t.Fatalf("upsert proyecto: %v", err)
 	}
 
-	resSesion, err := DB.Exec(`INSERT INTO sesiones (
+	sesionID := mustInsertID(t, `INSERT INTO sesiones (
 		agente, proyecto_id, activa, estado, herramienta, host, heartbeat_at
 	) VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
 		"CodexResolver", proyectoID, 1, "activa", "codex-cli", "test-host")
-	if err != nil {
-		t.Fatalf("insert sesion: %v", err)
-	}
-	sesionID, _ := resSesion.LastInsertId()
 
 	pid := int64(os.Getpid())
 	runtimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
@@ -543,14 +515,10 @@ func TestRuntimeHandleRuntimeHaceFallbackASesionID(t *testing.T) {
 		"driver":       "tmux_cli_session",
 		"tmux_session": "orq-codexresolver-runtime-helper",
 	})
-	resHandle, err := DB.Exec(`INSERT INTO runtime_handles (
+	handleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, sesion_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?, CURRENT_TIMESTAMP)`,
 		"CodexResolver", proyectoID, sesionID, "tmux", "session", "orq-codexresolver-runtime-helper", string(metaJSON))
-	if err != nil {
-		t.Fatalf("insert handle: %v", err)
-	}
-	handleID, _ := resHandle.LastInsertId()
 	handle, err := GetRuntimeHandle(handleID)
 	if err != nil {
 		t.Fatalf("get handle: %v", err)

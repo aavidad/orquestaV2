@@ -58,14 +58,10 @@ func TestGetRuntimeHandleActivoAgenteProyectoIgnoraFantasmaMasReciente(t *testin
 	if err != nil {
 		t.Fatalf("crear runtime vivo: %v", err)
 	}
-	resVivo, err := DB.Exec(`INSERT INTO runtime_handles (
+	handleVivoID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?)`,
 		"Codex1", proyectoID, runtimeVivoID, "cli", "process", strconv.Itoa(os.Getpid()), time.Now().UTC().Add(-5*time.Minute))
-	if err != nil {
-		t.Fatalf("insert handle vivo: %v", err)
-	}
-	handleVivoID, _ := resVivo.LastInsertId()
 
 	pidFantasma := int64(99999991)
 	runtimeFantasmaID, err := RegistrarRuntimeInstance(&RuntimeInstance{
@@ -78,14 +74,10 @@ func TestGetRuntimeHandleActivoAgenteProyectoIgnoraFantasmaMasReciente(t *testin
 	if err != nil {
 		t.Fatalf("crear runtime fantasma: %v", err)
 	}
-	resFantasma, err := DB.Exec(`INSERT INTO runtime_handles (
+	handleFantasmaID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?)`,
 		"Codex1", proyectoID, runtimeFantasmaID, "cli", "process", strconv.FormatInt(pidFantasma, 10), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle fantasma: %v", err)
-	}
-	handleFantasmaID, _ := resFantasma.LastInsertId()
 
 	handle, err := GetRuntimeHandleActivoAgenteProyecto("Codex1", &proyectoID)
 	if err != nil {
@@ -181,14 +173,10 @@ func TestGetRuntimeHandleActivoAgenteProyectoPrefiereWorkerEstructuradoFrescoYCi
 		"working_dir":      filepath.Join(tmp, "legacy"),
 		"rendered_command": "codex-perfil Codex8",
 	})
-	resLegacy, err := DB.Exec(`INSERT INTO runtime_handles (
+	legacyHandleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
 		"Codex8", proyectoID, runtimeLegacyID, "cli", "process", strconv.Itoa(os.Getpid()), string(legacyMetaJSON), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle legacy: %v", err)
-	}
-	legacyHandleID, _ := resLegacy.LastInsertId()
 
 	runDir := filepath.Join(tmp, "worker")
 	if err := os.MkdirAll(runDir, 0o755); err != nil {
@@ -228,14 +216,10 @@ func TestGetRuntimeHandleActivoAgenteProyectoPrefiereWorkerEstructuradoFrescoYCi
 		"working_dir":           filepath.Join(tmp, "worker"),
 		"rendered_command":      "codex-perfil Codex8",
 	})
-	resWorker, err := DB.Exec(`INSERT INTO runtime_handles (
+	workerHandleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
 		"Codex8", proyectoID, runtimeWorkerID, "cli", "process", strconv.Itoa(os.Getpid()), string(workerMetaJSON), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle worker: %v", err)
-	}
-	workerHandleID, _ := resWorker.LastInsertId()
 
 	handle, err := GetRuntimeHandleActivoAgenteProyecto("Codex8", &proyectoID)
 	if err != nil {
@@ -428,14 +412,10 @@ func TestRefrescarRuntimeHandleSiSigueVivoNoReviveLegacyTMUXPreferred(t *testing
 		"working_dir":      filepath.Join(tmp, "legacy"),
 		"rendered_command": "codex-perfil CodexLegacyRevive --model gpt-5.4",
 	})
-	res, err := DB.Exec(`INSERT INTO runtime_handles (
+	handleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'fallido', ?, ?)`,
 		"CodexLegacyRevive", proyectoID, runtimeID, "cli", "process", strconv.Itoa(os.Getpid()), string(metaJSON), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle legacy: %v", err)
-	}
-	handleID, _ := res.LastInsertId()
 	handle, err := GetRuntimeHandle(handleID)
 	if err != nil || handle == nil {
 		t.Fatalf("get handle legacy: %+v err=%v", handle, err)
@@ -714,14 +694,10 @@ func TestGetRuntimeHandleActivoAgenteProyectoRecuperaFallidoDesdeWorkerTMUXFresc
 		"working_dir":           filepath.Join(tmp, "worker-recover"),
 		"rendered_command":      "codex-perfil CodexTmuxRecover",
 	})
-	res, err := DB.Exec(`INSERT INTO runtime_handles (
+	handleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'fallido', ?, ?)`,
 		"CodexTmuxRecover", proyectoID, runtimeID, "tmux", "session", "orq-codexrecover-1/%5", string(workerMetaJSON), time.Now().UTC().Add(-10*time.Minute))
-	if err != nil {
-		t.Fatalf("insert handle worker: %v", err)
-	}
-	handleID, _ := res.LastInsertId()
 
 	handle, err := GetRuntimeHandleActivoAgenteProyecto("CodexTmuxRecover", &proyectoID)
 	if err != nil {
@@ -772,14 +748,10 @@ func TestSincronizarRuntimeHandleSupervisadoCierraLegacySiExisteWorkerTMUXFresco
 		"working_dir":      filepath.Join(tmp, "legacy"),
 		"rendered_command": "codex-perfil Codex8",
 	})
-	resLegacy, err := DB.Exec(`INSERT INTO runtime_handles (
+	legacyHandleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
 		"Codex8", proyectoID, runtimeLegacyID, "cli", "process", strconv.Itoa(os.Getpid()), string(legacyMetaJSON), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle legacy: %v", err)
-	}
-	legacyHandleID, _ := resLegacy.LastInsertId()
 
 	runDir := filepath.Join(tmp, "worker-sync")
 	if err := os.MkdirAll(runDir, 0o755); err != nil {
@@ -898,14 +870,10 @@ func TestSincronizarRuntimeHandleSupervisadoNormalizaHandleTMUXCanonico(t *testi
 		"worker_heartbeat_path": heartbeatPath,
 		"working_dir":           filepath.Join(tmp, "orquestador"),
 	})
-	res, err := DB.Exec(`INSERT INTO runtime_handles (
+	handleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
 		"CodexTMUXSync", proyectoID, runtimeID, "cli", "process", strconv.Itoa(os.Getpid()), string(metaJSON), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle tmux legacy: %v", err)
-	}
-	handleID, _ := res.LastInsertId()
 	handle, err := GetRuntimeHandle(handleID)
 	if err != nil {
 		t.Fatalf("get handle inicial: %v", err)
@@ -978,14 +946,10 @@ func TestSincronizarRuntimeHandleSupervisadoNormalizaTMUXDesdeSnapshotEstructura
 		"worker_status_path":    statusPath,
 		"worker_heartbeat_path": heartbeatPath,
 	})
-	res, err := DB.Exec(`INSERT INTO runtime_handles (
+	handleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'fallido', ?, ?)`,
 		"CodexTMUXSnap", proyectoID, runtimeID, "cli", "process", "99999", string(metaJSON), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle snapshot-only: %v", err)
-	}
-	handleID, _ := res.LastInsertId()
 	handle, err := GetRuntimeHandle(handleID)
 	if err != nil {
 		t.Fatalf("get handle inicial: %v", err)
@@ -1052,14 +1016,10 @@ func TestSincronizarRuntimeHandleSupervisadoMarcaTMUXAusenteComoFallido(t *testi
 		"wrapped_command":       mustExecutableRuntimeHandleTest(t),
 		"mailbox_delivery_mode": "interactive",
 	})
-	res, err := DB.Exec(`INSERT INTO runtime_handles (
+	handleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
 		"ClaudeTMUXMissing", proyectoID, runtimeID, "tmux", "session", "orq-claude-missing/%1", string(metaJSON), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle tmux: %v", err)
-	}
-	handleID, _ := res.LastInsertId()
 	handle, err := GetRuntimeHandle(handleID)
 	if err != nil {
 		t.Fatalf("get handle inicial: %v", err)
@@ -1137,14 +1097,10 @@ func TestGetRuntimeHandleActivoAgenteProyectoPrefiereTMUXSobreProcessPTYFresco(t
 		"worker_heartbeat_path": legacyHeartbeatPath,
 		"rendered_command":      "codex-perfil Codex4",
 	})
-	resLegacy, err := DB.Exec(`INSERT INTO runtime_handles (
+	legacyHandleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
 		"Codex4", proyectoID, runtimeLegacyID, "cli", "process", strconv.Itoa(os.Getpid()), string(legacyMetaJSON), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle legacy: %v", err)
-	}
-	legacyHandleID, _ := resLegacy.LastInsertId()
 
 	tmuxDir := filepath.Join(tmp, "tmux-worker")
 	if err := os.MkdirAll(tmuxDir, 0o755); err != nil {
@@ -1181,14 +1137,10 @@ func TestGetRuntimeHandleActivoAgenteProyectoPrefiereTMUXSobreProcessPTYFresco(t
 		"worker_heartbeat_path": tmuxHeartbeatPath,
 		"rendered_command":      "codex-perfil Codex4",
 	})
-	resTMUX, err := DB.Exec(`INSERT INTO runtime_handles (
+	tmuxHandleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
 		"Codex4", proyectoID, runtimeTMUXID, "cli", "process", strconv.Itoa(os.Getpid()), string(tmuxMetaJSON), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle tmux: %v", err)
-	}
-	tmuxHandleID, _ := resTMUX.LastInsertId()
 
 	handle, err := GetRuntimeHandleActivoAgenteProyecto("Codex4", &proyectoID)
 	if err != nil {
@@ -1239,14 +1191,10 @@ func TestNormalizarRuntimeHandleTMUXCanonicoToleraMetadataInvalidaNoTMUX(t *test
 	if err := RegistrarAgente("ProcessBrokenMeta", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
 	}
-	res, err := DB.Exec(`INSERT INTO runtime_handles (
+	handleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?,?)`,
 		"ProcessBrokenMeta", "cli", "process", "12345", "activo", "{not-json", time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle: %v", err)
-	}
-	handleID, _ := res.LastInsertId()
 	handle, err := GetRuntimeHandle(handleID)
 	if err != nil {
 		t.Fatalf("get handle: %v", err)
@@ -1325,14 +1273,10 @@ func TestGetRuntimeHandleActivoAgenteProyectoInvalidatesHotCacheTrasActualizarMe
 		"rendered_command":      "codex-perfil Codex9",
 		"working_dir":           filepath.Join(tmp, "old"),
 	})
-	res, err := DB.Exec(`INSERT INTO runtime_handles (
+	handleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
 		"Codex9", proyectoID, runtimeID, "tmux", "session", "orq-codex9-cache", string(initialMetaJSON), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle: %v", err)
-	}
-	handleID, _ := res.LastInsertId()
 
 	handle, err := GetRuntimeHandleActivoAgenteProyecto("Codex9", &proyectoID)
 	if err != nil {
@@ -1413,14 +1357,10 @@ func TestMarcarRuntimeHandleSupersededDetieneSesionTMUX(t *testing.T) {
 		"tmux_command": fakeTmux,
 		"tmux_session": "orq-codextmux-1",
 	})
-	res, err := DB.Exec(`INSERT INTO runtime_handles (
+	handleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
 		"CodexTMUX", proyectoID, runtimeID, "tmux", "session", "orq-codextmux-1", string(metaJSON), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle: %v", err)
-	}
-	handleID, _ := res.LastInsertId()
 
 	handle, err := GetRuntimeHandle(handleID)
 	if err != nil {
@@ -1489,14 +1429,10 @@ func TestMarcarRuntimeHandleFantasmaDetieneSesionTMUX(t *testing.T) {
 		"tmux_command": fakeTmux,
 		"tmux_session": "orq-codexghost-1",
 	})
-	res, err := DB.Exec(`INSERT INTO runtime_handles (
+	handleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
 		"CodexGhost", proyectoID, runtimeID, "tmux", "session", "orq-codexghost-1", string(metaJSON), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle: %v", err)
-	}
-	handleID, _ := res.LastInsertId()
 
 	handle, err := GetRuntimeHandle(handleID)
 	if err != nil {

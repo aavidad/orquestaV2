@@ -16,16 +16,12 @@ func TestValidarEntregaWriteSet(t *testing.T) {
 	prepararDBTemporal(t)
 
 	// Insertar una especificación con write_set definido
-	res, err := DB.Exec(`
+	especID := mustInsertID(t, `
 		INSERT INTO especificaciones_funcion
 		(titulo, archivo_objetivo, simbolo_objetivo, descripcion, write_set_json, creado_por)
 		VALUES (?,?,?,?,?,?)`,
 		"Test spec", "db/foo.go", "FooFunc", "test", `["db/foo.go","db/bar.go"]`, "test",
 	)
-	if err != nil {
-		t.Fatalf("insertar spec: %v", err)
-	}
-	especID, _ := res.LastInsertId()
 
 	// Todos los ficheros permitidos
 	ok, noPermitidos, err := ValidarEntregaWriteSet(especID, []string{"db/foo.go"})

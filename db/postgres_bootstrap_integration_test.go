@@ -266,6 +266,144 @@ func TestPostgresIniciarSesionContextoDevuelveSesionCreada(t *testing.T) {
 	}
 }
 
+func TestPostgresInsertReturningPathsWriteSet(t *testing.T) {
+	dsn := strings.TrimSpace(os.Getenv("ORQUESTA_TEST_POSTGRES_DSN"))
+	if dsn == "" {
+		t.Skip("ORQUESTA_TEST_POSTGRES_DSN no definido; se omite el test de integración con Postgres")
+	}
+
+	Close()
+
+	adminDB, err := storage.Open(storage.Config{
+		Driver:       "postgres",
+		DSN:          dsn,
+		MaxOpenConns: 1,
+	})
+	if err != nil {
+		t.Fatalf("abriendo conexion de limpieza: %v", err)
+	}
+	defer adminDB.Close()
+
+	schemaName := fmt.Sprintf("orquesta_test_%d", time.Now().UnixNano())
+	if _, err := adminDB.Exec(`CREATE SCHEMA ` + quotePostgresIdent(schemaName)); err != nil {
+		t.Fatalf("creando schema de prueba: %v", err)
+	}
+	defer func() {
+		_, _ = adminDB.Exec(`DROP SCHEMA IF EXISTS ` + quotePostgresIdent(schemaName) + ` CASCADE`)
+	}()
+
+	schemaDSN, err := postgresTestDSNWithSearchPath(dsn, schemaName)
+	if err != nil {
+		t.Fatalf("construyendo dsn con search_path: %v", err)
+	}
+
+	t.Setenv("ORQUESTA_DB_DRIVER", "postgres")
+	t.Setenv("ORQUESTA_DB_DSN", schemaDSN)
+	t.Setenv("ORQUESTA_DB_BOOTSTRAP", "true")
+	t.Setenv("ORQUESTA_DB_MAX_OPEN_CONNS", "1")
+
+	if err := Open(); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer Close()
+
+	if err := RegistrarAgente("CodexPgSlice", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquesta",
+		Nombre:  "Orquesta",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+
+	faseID, err := RegistrarFaseProyecto(&FaseProyecto{
+		Proyecto: "orquesta",
+		Nombre:   "Portabilidad PG",
+		Estado:   "activa",
+	})
+	if err != nil {
+		t.Fatalf("RegistrarFaseProyecto: %v", err)
+	}
+	if faseID <= 0 {
+		t.Fatalf("id de fase inesperado: %d", faseID)
+	}
+
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:     "Validar RETURNING PG",
+		ProyectoID: &proyectoID,
+		Prioridad:  PrioridadAlta,
+		CreadoPor:  "CodexPgSlice",
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "CodexPgSlice"); err != nil {
+		t.Fatalf("TomarTarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "CodexPgSlice"); err != nil {
+		t.Fatalf("IniciarTarea: %v", err)
+	}
+
+	solicitud, err := SolicitarRefineria(tareaID, "CodexPgSlice", "feature/pg-returning", t.TempDir(), "true")
+	if err != nil {
+		t.Fatalf("SolicitarRefineria: %v", err)
+	}
+	if solicitud == nil || solicitud.ID <= 0 {
+		t.Fatalf("solicitud de refineria inesperada: %+v", solicitud)
+	}
+
+	cicloID, err := RegistrarAutonomiaCiclo(&AutonomiaCiclo{
+		ProyectoID: proyectoID,
+		Kind:       "supervision",
+		Agente:     "CodexPgSlice",
+	})
+	if err != nil {
+		t.Fatalf("RegistrarAutonomiaCiclo: %v", err)
+	}
+	if cicloID <= 0 {
+		t.Fatalf("id de autonomia_ciclo inesperado: %d", cicloID)
+	}
+
+	gateID, err := CrearReviewGate(&ReviewGate{
+		ProyectoID:     &proyectoID,
+		TareaID:        &tareaID,
+		RequestedBy:    "orquesta",
+		ReviewerAgente: "CodexPgSlice",
+	})
+	if err != nil {
+		t.Fatalf("CrearReviewGate: %v", err)
+	}
+	if gateID <= 0 {
+		t.Fatalf("id de review_gate inesperado: %d", gateID)
+	}
+
+	entregaID, err := CrearEntregaNotificacion("slack", "#ops", EventoNotificacion{
+		Tipo:   "refineria",
+		ID:     solicitud.ID,
+		Codigo: "PG-SLICE",
+		Texto:  "validacion postgres",
+	})
+	if err != nil {
+		t.Fatalf("CrearEntregaNotificacion: %v", err)
+	}
+	if entregaID <= 0 {
+		t.Fatalf("id de entrega inesperado: %d", entregaID)
+	}
+
+	if gate, err := GetReviewGate(gateID); err != nil || gate == nil {
+		t.Fatalf("GetReviewGate: gate=%+v err=%v", gate, err)
+	}
+	if entrega, err := GetEntregaNotificacion(entregaID); err != nil || entrega == nil {
+		t.Fatalf("GetEntregaNotificacion: entrega=%+v err=%v", entrega, err)
+	}
+}
+
 func tableRowCount(table string) (int64, error) {
 	var count int64
 	if err := DB.QueryRow(`SELECT COUNT(*) FROM ` + quotePostgresIdent(table)).Scan(&count); err != nil {

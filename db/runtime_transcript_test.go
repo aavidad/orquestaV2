@@ -589,14 +589,10 @@ func TestListarRuntimeHandlesParaPresupuestoPrefiereCanonicoTMUXSobreLegacy(t *t
 		"worker_heartbeat_path": heartbeatPath,
 		"working_dir":           filepath.Join(runDir, "cwd"),
 	})
-	res, err := DB.Exec(`INSERT INTO runtime_handles (
+	tmuxHandleID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
 		"CodexBudget", proyectoID, runtimeTMUXID, "tmux", "process", "orq-codexbudget-1/%17", string(tmuxMetaJSON), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("insert handle tmux: %v", err)
-	}
-	tmuxHandleID, _ := res.LastInsertId()
 
 	handles, err := ListarRuntimeHandlesParaPresupuesto()
 	if err != nil {

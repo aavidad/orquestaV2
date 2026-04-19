@@ -496,14 +496,10 @@ func TestDetectarAgentesAgotadosUsaHandleDelProyectoActivoAunqueHayaOtroMasRecie
 		"worker_heartbeat_path": tmuxBHeartbeatPath,
 		"rendered_command":      "codex-perfil Codex1",
 	})
-	resHandleB, err := DB.Exec(`INSERT INTO runtime_handles (
+	handleBID := mustInsertID(t, `INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
 	) VALUES (?,?,?,?,?,?, 'activo', ?, CURRENT_TIMESTAMP)`,
 		"Codex1", proyectoB, runtimeBID, "tmux", "process", "orq-codex1-b", string(metaBJSON))
-	if err != nil {
-		t.Fatalf("insert handle B: %v", err)
-	}
-	handleBID, _ := resHandleB.LastInsertId()
 	if _, err := DB.Exec(`UPDATE runtime_handles SET last_seen_at = datetime('now','+1 minute') WHERE id = ?`, handleBID); err != nil {
 		t.Fatalf("actualizar last_seen_at B: %v", err)
 	}
