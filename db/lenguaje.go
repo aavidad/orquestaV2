@@ -167,12 +167,13 @@ func configCSVOrDefault(key string, fallback []string) []string {
 }
 
 func ensureLanguagePolicyDefaults() {
-	_, _ = DB.Exec(`INSERT OR IGNORE INTO config (clave, valor) VALUES (?, ?)`, languagePolicyDefaultKey, "es")
-	_, _ = DB.Exec(`INSERT OR IGNORE INTO config (clave, valor) VALUES (?, ?)`, languagePolicyDocsMultilangKey, "1")
-	_, _ = DB.Exec(`INSERT OR IGNORE INTO config (clave, valor) VALUES (?, ?)`, languagePolicyAppsMultilangKey, "1")
-	_, _ = DB.Exec(`INSERT OR IGNORE INTO config (clave, valor) VALUES (?, ?)`, languagePolicyDocsDefaultKey, "es")
-	_, _ = DB.Exec(`INSERT OR IGNORE INTO config (clave, valor) VALUES (?, ?)`, languagePolicyAppsDefaultKey, "es")
-	_, _ = DB.Exec(`INSERT OR IGNORE INTO config (clave, valor) VALUES (?, ?)`, languagePolicyAllowedLanguagesKey, strings.Join(i18n.DefaultProjectSkeletonLanguages(), ","))
+	stmt := insertIgnoreValuesSQL("config", []string{"clave", "valor"}, []string{"clave"})
+	_, _ = DB.Exec(stmt, languagePolicyDefaultKey, "es")
+	_, _ = DB.Exec(stmt, languagePolicyDocsMultilangKey, "1")
+	_, _ = DB.Exec(stmt, languagePolicyAppsMultilangKey, "1")
+	_, _ = DB.Exec(stmt, languagePolicyDocsDefaultKey, "es")
+	_, _ = DB.Exec(stmt, languagePolicyAppsDefaultKey, "es")
+	_, _ = DB.Exec(stmt, languagePolicyAllowedLanguagesKey, strings.Join(i18n.DefaultProjectSkeletonLanguages(), ","))
 }
 
 func GetLanguagePolicy() (*LanguagePolicy, error) {

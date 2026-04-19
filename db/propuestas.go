@@ -86,7 +86,7 @@ func CrearPropuesta(p *Propuesta) (int64, error) {
 		_ = DB.QueryRow(`SELECT COALESCE(MAX(CAST(SUBSTR(codigo,4) AS INTEGER)),29) FROM propuestas WHERE codigo LIKE 'OP-%'`).Scan(&max)
 		p.Codigo = fmt.Sprintf("OP-%03d", max+1)
 	}
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO propuestas (codigo, titulo, descripcion, proyecto_id, tipo, propuesto_por, distribuidor)
 		VALUES (?,?,?,?,?,?,?)`,
 		p.Codigo, p.Titulo, p.Descripcion, p.ProyectoID, p.Tipo, p.PropuestoPor, p.Distribuidor,
@@ -94,7 +94,6 @@ func CrearPropuesta(p *Propuesta) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 
 	if _, err := asegurarVotosPendientesPropuesta(id); err != nil {
 		return id, err

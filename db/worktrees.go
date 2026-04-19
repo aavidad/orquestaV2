@@ -35,7 +35,7 @@ func (CoordinationWorktreeSQLRepository) Create(worktree *coordinacion.Worktree)
 		return nil, fmt.Errorf("worktree nil")
 	}
 	worktree.Path = rutaWorktreeCanonicaProyecto(worktree.ProjectID, worktree.Path)
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO worktrees (proyecto_id, tarea_id, lock_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
 		VALUES (?,?,?,?,?,?,?,?,?,?)`,
 		worktree.ProjectID, worktree.TaskID, worktree.LockID, worktree.Agent, worktree.Name, worktree.Path,
@@ -44,7 +44,6 @@ func (CoordinationWorktreeSQLRepository) Create(worktree *coordinacion.Worktree)
 	if err != nil {
 		return nil, err
 	}
-	id, _ := res.LastInsertId()
 	return (CoordinationWorktreeSQLRepository{}).GetByID(id)
 }
 

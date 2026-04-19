@@ -35,7 +35,7 @@ func (MicroprogramacionRepository) CrearEspecificacionFuncion(spec *microprogram
 	if err != nil {
 		return 0, err
 	}
-	res, err := DB.Exec(`
+	return insertReturningID(`
 		INSERT INTO especificaciones_funcion (
 			tarea_id, proyecto_id, titulo, archivo_objetivo, simbolo_objetivo, descripcion,
 			precondiciones_json, postcondiciones_json, dependencias_permitidas_json, dependencias_prohibidas_json,
@@ -58,10 +58,6 @@ func (MicroprogramacionRepository) CrearEspecificacionFuncion(spec *microprogram
 		spec.Version,
 		strings.TrimSpace(spec.CreadoPor),
 	)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
 }
 
 func (MicroprogramacionRepository) ObtenerEspecificacionFuncion(id int64) (*microprogramacionapp.EspecificacionFuncion, error) {

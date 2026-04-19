@@ -174,7 +174,7 @@ func RegistrarAutonomiaCiclo(item *AutonomiaCiclo) (int64, error) {
 	if strings.TrimSpace(item.DecisionJSON) == "" {
 		item.DecisionJSON = "{}"
 	}
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO autonomia_ciclos (
 			proyecto_id, kind, agente, sesion_id, runtime_id, input_json, decision_json, resultado
 		) VALUES (?,?,?,?,?,?,?,?)`,
@@ -184,7 +184,6 @@ func RegistrarAutonomiaCiclo(item *AutonomiaCiclo) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	item.ID = id
 	Audit("orquesta", "registrar_autonomia_ciclo", "autonomia_ciclo", id, strings.TrimSpace(item.Kind))
 	return id, nil

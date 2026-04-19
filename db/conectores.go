@@ -49,7 +49,7 @@ func UpsertConector(c *Conector) (int64, error) {
 		}
 		return existenteID, nil
 	case sql.ErrNoRows:
-		res, err := DB.Exec(`
+		id, err := insertReturningID(`
 			INSERT INTO conectores (slug, nombre, transporte, comando, args_json, env_json, metadata_json, activo)
 			VALUES (?,?,?,?,?,?,?,?)`,
 			c.Slug, c.Nombre, c.Transporte, c.Comando, c.ArgsJSON, c.EnvJSON, c.MetadataJSON, c.Activo,
@@ -57,7 +57,6 @@ func UpsertConector(c *Conector) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		id, _ := res.LastInsertId()
 		return id, nil
 	default:
 		return 0, err

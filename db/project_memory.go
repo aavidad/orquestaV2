@@ -444,7 +444,7 @@ func guardarDecisionProyectoLegacy(d *DecisionProyecto) (int64, error) {
 		}
 		return existenteID, nil
 	case sql.ErrNoRows:
-		res, err := DB.Exec(`
+		id, err := insertReturningID(`
 			INSERT INTO decisiones_proyecto (
 				proyecto, titulo, solucion_elegida, motivo, alternativas_descartadas, impacto,
 				propuesta_codigo, tarea_id, registrado_por
@@ -462,7 +462,6 @@ func guardarDecisionProyectoLegacy(d *DecisionProyecto) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		id, _ := res.LastInsertId()
 		return id, nil
 	default:
 		return 0, err

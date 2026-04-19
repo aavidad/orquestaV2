@@ -60,7 +60,7 @@ func UpsertEntidadMemoria(entidad *EntidadMemoria) (int64, error) {
 		return 0, err
 	}
 	if existente == nil {
-		res, err := DB.Exec(`
+		id, err := insertReturningID(`
 			INSERT INTO entidades_memoria (
 				nombre, tipo, valor_json, metadata_json, ultima_verificacion, verificado_por, proyecto_id
 			) VALUES (?,?,?,?,?,?,?)`,
@@ -70,7 +70,7 @@ func UpsertEntidadMemoria(entidad *EntidadMemoria) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		return res.LastInsertId()
+		return id, nil
 	}
 
 	_, err = DB.Exec(`

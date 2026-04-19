@@ -422,7 +422,7 @@ func RegistrarRuntimeEvent(e *RuntimeEvent) (int64, error) {
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`
+	id, err := insertReturningIDWith(tx, `
 		INSERT INTO runtime_events (runtime_id, kind, level, message, payload_json)
 		VALUES (?,?,?,?,?)`,
 		e.RuntimeID, e.Kind, e.Level, e.Message, e.PayloadJSON,
@@ -430,7 +430,6 @@ func RegistrarRuntimeEvent(e *RuntimeEvent) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	if _, err := tx.Exec(
 		`UPDATE runtime_instances SET last_event_at = CURRENT_TIMESTAMP WHERE id = ?`,
 		e.RuntimeID,
@@ -714,8 +713,9 @@ func logicalStateDesdeSesion(s *Sesion) string {
 
 func registrarRuntimeTelemetrySampleTx(tx interface {
 	Exec(query string, args ...any) (sql.Result, error)
+	QueryRow(query string, args ...any) *sql.Row
 }, sample *RuntimeTelemetrySample) (int64, error) {
-	res, err := tx.Exec(`
+	id, err := insertReturningIDWith(tx, `
 		INSERT INTO runtime_telemetry_samples (
 			runtime_id, cpu_pct, mem_bytes, rss_bytes, open_fds, child_count, thread_count,
 			logical_state, source, sample_json
@@ -726,7 +726,6 @@ func registrarRuntimeTelemetrySampleTx(tx interface {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	return id, nil
 }
 
@@ -760,7 +759,7 @@ func upsertRuntimeInstanceTx(tx *Tx, r *RuntimeInstance) (int64, error) {
 		return r.ID, nil
 	}
 
-	res, err := tx.Exec(`
+	id, err := insertReturningIDWith(tx, `
 		INSERT INTO runtime_instances (
 			agente, proyecto_id, sesion_id, parent_runtime_id, provider, connector, external_session_id,
 			logical_state, process_state, pid, ppid, child_count, thread_count, model, reasoning,
@@ -774,7 +773,6 @@ func upsertRuntimeInstanceTx(tx *Tx, r *RuntimeInstance) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	return id, nil
 }
 
