@@ -150,7 +150,7 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 		agenteRuntime.Nombre = strings.TrimSpace(input.Agente)
 	}
 	stepStart = time.Now()
-	proyecto, err := s.store.GetProject(proyectoRef)
+	proyecto, err := s.getProjectForPrepare(proyectoRef)
 	if err != nil {
 		return nil, err
 	}
@@ -176,24 +176,6 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 		return nil, err
 	}
 	prepareDebugf("BuildPrepare step=resolve_governance duration=%s", time.Since(stepStart).Round(time.Millisecond))
-	stepStart = time.Now()
-	memoria, err := s.store.ListMemoryEntities(db.FiltroEntidadesMemoria{ProyectoID: &proyecto.ID})
-	if err != nil {
-		return nil, err
-	}
-	prepareDebugf("BuildPrepare step=list_memory count=%d duration=%s", len(memoria), time.Since(stepStart).Round(time.Millisecond))
-	stepStart = time.Now()
-	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &agenteNombre, ProyectoID: &proyecto.ID})
-	if err != nil {
-		return nil, err
-	}
-	prepareDebugf("BuildPrepare step=list_tasks count=%d duration=%s", len(tareas), time.Since(stepStart).Round(time.Millisecond))
-	stepStart = time.Now()
-	propuestasPendientes, err := s.store.ListProjectPendingVotes(agenteNombre, proyecto.ID)
-	if err != nil {
-		return nil, err
-	}
-	prepareDebugf("BuildPrepare step=list_pending_votes count=%d duration=%s", len(propuestasPendientes), time.Since(stepStart).Round(time.Millisecond))
 	stepStart = time.Now()
 	// Resolución hexagonal de política de modelo (OP-HEX)
 	modeloSolicitado := strings.TrimSpace(input.Modelo)
@@ -246,15 +228,41 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 		return nil, err
 	}
 	prepareDebugf("BuildPrepare step=prepare_runtime duration=%s", time.Since(stepStart).Round(time.Millisecond))
-	stepStart = time.Now()
-	bootstrapPrompt := buildBootstrapPrompt(&agenteRuntime, proyecto, prep.Plan, catalogo, memoria, tareas, propuestasPendientes)
+	var (
+		memoria              []*db.EntidadMemoria
+		tareas               []*db.Tarea
+		propuestasPendientes []*db.Propuesta
+		bootstrapPrompt      string
+	)
+	if prepareDebeCargarBootstrapContext(prep) {
+		stepStart = time.Now()
+		memoria, err = s.store.ListMemoryEntities(db.FiltroEntidadesMemoria{ProyectoID: &proyecto.ID})
+		if err != nil {
+			return nil, err
+		}
+		prepareDebugf("BuildPrepare step=list_memory count=%d duration=%s", len(memoria), time.Since(stepStart).Round(time.Millisecond))
+		stepStart = time.Now()
+		tareas, err = s.store.ListTasks(db.FiltroTareas{Agente: &agenteNombre, ProyectoID: &proyecto.ID})
+		if err != nil {
+			return nil, err
+		}
+		prepareDebugf("BuildPrepare step=list_tasks count=%d duration=%s", len(tareas), time.Since(stepStart).Round(time.Millisecond))
+		stepStart = time.Now()
+		propuestasPendientes, err = s.store.ListProjectPendingVotes(agenteNombre, proyecto.ID)
+		if err != nil {
+			return nil, err
+		}
+		prepareDebugf("BuildPrepare step=list_pending_votes count=%d duration=%s", len(propuestasPendientes), time.Since(stepStart).Round(time.Millisecond))
+		stepStart = time.Now()
+		bootstrapPrompt = buildBootstrapPrompt(&agenteRuntime, proyecto, prep.Plan, catalogo, memoria, tareas, propuestasPendientes)
+		prepareDebugf("BuildPrepare step=build_prompt duration=%s", time.Since(stepStart).Round(time.Millisecond))
+	}
 	if prep.Plan != nil {
 		prep.Plan.BootstrapPrompt = strings.TrimSpace(bootstrapPrompt)
 		if err := runtimeagente.ApplyLaunchPromptMetadata(prep.Plan, conector.MetadataJSON); err != nil {
 			return nil, fmt.Errorf("metadata_json inválido para '%s': %w", strings.TrimSpace(conector.Slug), err)
 		}
 	}
-	prepareDebugf("BuildPrepare step=build_prompt duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
 	out := &PrepareOutput{
 		Agente: agenteRuntime.Nombre,
@@ -291,6 +299,22 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 		out.UltimaSesion = summarizeSession(ultima)
 	}
 	return out, nil
+}
+
+func prepareDebeCargarBootstrapContext(prep *lanzamientoruntime.Preparacion) bool {
+	if prep == nil || prep.Plan == nil {
+		return false
+	}
+	if prep.Plan.NativeResume {
+		return false
+	}
+	if strings.TrimSpace(prep.Plan.ContinuityPrompt) != "" {
+		return false
+	}
+	if prep.Ultima != nil && strings.TrimSpace(prep.Ultima.ExternalSessionID) != "" {
+		return false
+	}
+	return true
 }
 
 func prepareDebugf(format string, args ...any) {
@@ -330,6 +354,9 @@ func tickDebugEnabled() bool {
 }
 
 func (s *Service) getAgentForPrepare(nombre string) (*db.Agente, error) {
+	if cached := s.cachedPrepareAgent(nombre); cached != nil {
+		return cached, nil
+	}
 	if s != nil && s.store != nil {
 		if lite, ok := s.store.(liteAgentGetter); ok {
 			agente, err := lite.GetAgentPrepareLite(nombre)
@@ -337,10 +364,35 @@ func (s *Service) getAgentForPrepare(nombre string) (*db.Agente, error) {
 				return nil, err
 			}
 			if agente != nil {
+				s.cachePrepareAgent(agente)
 				return agente, nil
 			}
 		}
-		return s.store.GetAgent(nombre)
+		agente, err := s.store.GetAgent(nombre)
+		if err != nil {
+			return nil, err
+		}
+		if agente != nil {
+			s.cachePrepareAgent(agente)
+		}
+		return agente, nil
+	}
+	return nil, nil
+}
+
+func (s *Service) getProjectForPrepare(ref string) (*db.Proyecto, error) {
+	if cached := s.cachedPrepareProject(ref); cached != nil {
+		return cached, nil
+	}
+	if s != nil && s.store != nil {
+		proyecto, err := s.store.GetProject(ref)
+		if err != nil {
+			return nil, err
+		}
+		if proyecto != nil {
+			s.cachePrepareProject(proyecto, ref)
+		}
+		return proyecto, nil
 	}
 	return nil, nil
 }
@@ -357,7 +409,7 @@ func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 		tickDebugf("ProcessTick done agente=%s proyecto=%s duration=%s", agenteNombre, proyectoRef, time.Since(start).Round(time.Millisecond))
 	}()
 	stepStart := time.Now()
-	proyecto, err := s.store.GetProject(proyectoRef)
+	proyecto, err := s.getProjectForPrepare(proyectoRef)
 	if err != nil {
 		return nil, err
 	}

@@ -8348,6 +8348,7 @@ func filtrarSesionesAutonomiaRelevantes(sesiones []*db.Sesion) []*db.Sesion {
 	if len(sesiones) == 0 {
 		return nil
 	}
+	permitidosPorProyecto := autonomiaAllowlistAgentesPorProyecto()
 	type clave struct {
 		agente   string
 		proyecto int64
@@ -8355,6 +8356,9 @@ func filtrarSesionesAutonomiaRelevantes(sesiones []*db.Sesion) []*db.Sesion {
 	mejores := map[clave]*db.Sesion{}
 	for _, sesion := range sesiones {
 		if !sesionAutonomiaRelevante(sesion) {
+			continue
+		}
+		if !sesionAutonomiaAgentePermitido(sesion, permitidosPorProyecto) {
 			continue
 		}
 		key := clave{
@@ -8388,6 +8392,46 @@ func filtrarSesionesAutonomiaRelevantes(sesiones []*db.Sesion) []*db.Sesion {
 		return valorProyectoID(out[i].ProyectoID) < valorProyectoID(out[j].ProyectoID)
 	})
 	return out
+}
+
+func autonomiaAllowlistAgentesPorProyecto() map[int64]map[string]struct{} {
+	projectSlug := strings.TrimSpace(configOrDefault("server_autobootstrap_project_slug", "orquestador"))
+	if projectSlug == "" {
+		return nil
+	}
+	supervisor := strings.TrimSpace(configOrDefault("server_autobootstrap_supervisor_agent", "Codex1"))
+	workers := filtrarFlotaOficialAutobootstrap(splitServerAutobootstrapAgents(configOrDefault("server_autobootstrap_worker_agents", "Codex2,Codex3,Codex4,Codex5")))
+	permitidos := map[string]struct{}{}
+	if supervisor != "" {
+		permitidos[strings.ToLower(supervisor)] = struct{}{}
+	}
+	for _, worker := range workers {
+		worker = strings.TrimSpace(worker)
+		if worker == "" {
+			continue
+		}
+		permitidos[strings.ToLower(worker)] = struct{}{}
+	}
+	if len(permitidos) == 0 {
+		return nil
+	}
+	proyecto, err := db.GetProyecto(projectSlug)
+	if err != nil || proyecto == nil || proyecto.ID <= 0 {
+		return nil
+	}
+	return map[int64]map[string]struct{}{proyecto.ID: permitidos}
+}
+
+func sesionAutonomiaAgentePermitido(sesion *db.Sesion, permitidosPorProyecto map[int64]map[string]struct{}) bool {
+	if sesion == nil || len(permitidosPorProyecto) == 0 || sesion.ProyectoID == nil || *sesion.ProyectoID <= 0 {
+		return true
+	}
+	permitidos, ok := permitidosPorProyecto[*sesion.ProyectoID]
+	if !ok || len(permitidos) == 0 {
+		return true
+	}
+	_, ok = permitidos[strings.ToLower(strings.TrimSpace(sesion.Agente))]
+	return ok
 }
 
 func prioridadSesionAutonomia(sesion *db.Sesion) int {

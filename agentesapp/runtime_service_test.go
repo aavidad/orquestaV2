@@ -733,6 +733,55 @@ func TestBuildPreparePasaAgenteANivelDePoliticaModelo(t *testing.T) {
 	}
 }
 
+func TestBuildPrepareResumeNativoOmiteBootstrapPromptPesado(t *testing.T) {
+	prepararDBTemporalRuntimeService(t)
+	tmp := t.TempDir()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.EnsureCapacidadModeloBaseCodex(); err != nil {
+		t.Fatalf("seed capacidad/modelo base: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "Codex1",
+		ProyectoID:        &proyectoID,
+		CWD:               filepath.Join(tmp, "orquestador"),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-live-resume",
+		Branch:            "main",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	out, err := NewService(Repository{}, nil).BuildPrepare(PrepareInput{
+		Agente:   "Codex1",
+		Proyecto: "orquestador",
+	})
+	if err != nil {
+		t.Fatalf("BuildPrepare: %v", err)
+	}
+	if out == nil || out.Plan == nil {
+		t.Fatalf("salida inesperada: %+v", out)
+	}
+	if strings.TrimSpace(out.Plan.ContinuityPrompt) == "" {
+		t.Fatalf("deberia preparar continuity prompt de resume: %+v", out.Plan)
+	}
+	if strings.TrimSpace(out.BootstrapPrompt) != "" {
+		t.Fatalf("no deberia construir bootstrap prompt pesado en native resume: %q", out.BootstrapPrompt)
+	}
+}
+
 func TestProcessTickNoPideIntervencionPorBloqueoAutorecuperableConSesionActiva(t *testing.T) {
 	prepararDBTemporalRuntimeService(t)
 	tmp := t.TempDir()
@@ -892,5 +941,51 @@ func TestProcessTickReutilizaSesionActivaEnBuilderCompacto(t *testing.T) {
 	}
 	if store.getActiveCalls != 1 {
 		t.Fatalf("deberia reutilizar la sesion activa ya resuelta: calls=%d", store.getActiveCalls)
+	}
+}
+
+func TestProcessTickCalientaCacheLigeraDeAgenteYProyecto(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		project: &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()},
+		agents: []*db.Agente{
+			{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex2", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		sessions: []*db.Sesion{
+			{ID: 11, Agente: "Codex2", ProyectoID: int64Ptr(7), Estado: "activa", Inicio: now},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex2"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente activo"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex2", ProyectoID: int64Ptr(7), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		canonicalHandles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+	}
+	svc := NewService(store, nil)
+	if _, err := svc.ProcessTick(TickInput{Agente: "Codex2", Proyecto: "orquestador"}); err != nil {
+		t.Fatalf("ProcessTick: %v", err)
+	}
+	beforeAgents := store.getAgentCalls
+	beforeProjects := store.getProjectCalls
+	if _, err := svc.getAgentForPrepare("Codex2"); err != nil {
+		t.Fatalf("getAgentForPrepare: %v", err)
+	}
+	if _, err := svc.getProjectForPrepare("orquestador"); err != nil {
+		t.Fatalf("getProjectForPrepare: %v", err)
+	}
+	if store.getAgentCalls != beforeAgents {
+		t.Fatalf("no deberia releer agente tras tick: before=%d after=%d", beforeAgents, store.getAgentCalls)
+	}
+	if store.getProjectCalls != beforeProjects {
+		t.Fatalf("no deberia releer proyecto tras tick: before=%d after=%d", beforeProjects, store.getProjectCalls)
 	}
 }

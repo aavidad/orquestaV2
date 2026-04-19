@@ -42,27 +42,28 @@ type fakeStore struct {
 		ok         bool
 		occupiedBy string
 	}
-	lastConnectorRef       string
-	lastMailboxFilter      []db.FiltroRuntimeMailbox
-	lastTranscript         db.FiltroRuntimeTranscript
-	listSessionsCalls      int
-	getActiveCalls         int
-	getLastCalls           int
-	getAgentCalls          int
-	hotHandlesCalls        int
-	listAssignmentsCalls   int
-	listRuntimesCalls      int
+	lastConnectorRef        string
+	lastMailboxFilter       []db.FiltroRuntimeMailbox
+	lastTranscript          db.FiltroRuntimeTranscript
+	listSessionsCalls       int
+	getActiveCalls          int
+	getLastCalls            int
+	getAgentCalls           int
+	getProjectCalls         int
+	hotHandlesCalls         int
+	listAssignmentsCalls    int
+	listRuntimesCalls       int
 	listPassiveHandlesCalls int
-	listTasksCalls         int
-	listAgentsCalls        int
-	checkReanimationsCalls int
-	pendingVotesCalls      int
-	openProposalsCalls     int
-	pausedAgent            string
-	pausedMinutes          int
-	pausedReason           string
-	retiredAgent           string
-	observedIdentity       struct {
+	listTasksCalls          int
+	listAgentsCalls         int
+	checkReanimationsCalls  int
+	pendingVotesCalls       int
+	openProposalsCalls      int
+	pausedAgent             string
+	pausedMinutes           int
+	pausedReason            string
+	retiredAgent            string
+	observedIdentity        struct {
 		nombre string
 		email  string
 		user   string
@@ -125,7 +126,10 @@ func (f *fakeStoreWithLiteAgent) GetAgent(nombre string) (*db.Agente, error) {
 	return nil, fmt.Errorf("GetAgent pesado no deberia usarse en BuildPrepare")
 }
 
-func (f *fakeStore) GetProject(ref string) (*db.Proyecto, error) { return f.project, nil }
+func (f *fakeStore) GetProject(ref string) (*db.Proyecto, error) {
+	f.getProjectCalls++
+	return f.project, nil
+}
 
 func (f *fakeStore) GetPool(slug string) (*db.PoolCapacidad, error) {
 	return nil, nil
@@ -461,6 +465,56 @@ func TestGetAgentForPreparePrefiereGetAgentPrepareLiteSiEstaDisponible(t *testin
 	}
 	if store.liteCalls != 1 {
 		t.Fatalf("deberia usar GetAgentPrepareLite una vez, got=%d", store.liteCalls)
+	}
+}
+
+func TestGetAgentForPrepareUsaCacheCorta(t *testing.T) {
+	store := &fakeStoreWithLiteAgent{
+		fakeStore: &fakeStore{},
+		liteAgent: &db.Agente{
+			Nombre:      "Codex2",
+			Rol:         "programador",
+			Habilitado:  true,
+			EstadoCuota: "activo",
+		},
+	}
+	svc := NewService(store, nil)
+
+	first, err := svc.getAgentForPrepare("Codex2")
+	if err != nil {
+		t.Fatalf("primer getAgentForPrepare: %v", err)
+	}
+	second, err := svc.getAgentForPrepare("Codex2")
+	if err != nil {
+		t.Fatalf("segundo getAgentForPrepare: %v", err)
+	}
+	if first == nil || second == nil || second.Nombre != "Codex2" {
+		t.Fatalf("salida inesperada: first=%+v second=%+v", first, second)
+	}
+	if store.liteCalls != 1 {
+		t.Fatalf("deberia reutilizar cache de GetAgentPrepareLite, got=%d", store.liteCalls)
+	}
+}
+
+func TestGetProjectForPrepareUsaCacheCorta(t *testing.T) {
+	store := &fakeStore{
+		project: &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()},
+	}
+	svc := NewService(store, nil)
+
+	first, err := svc.getProjectForPrepare("orquestador")
+	if err != nil {
+		t.Fatalf("primer getProjectForPrepare: %v", err)
+	}
+	second, err := svc.getProjectForPrepare("orquestador")
+	if err != nil {
+		t.Fatalf("segundo getProjectForPrepare: %v", err)
+	}
+	if first == nil || second == nil || second.Slug != "orquestador" {
+		t.Fatalf("salida inesperada: first=%+v second=%+v", first, second)
+	}
+	if store.getProjectCalls != 1 {
+		t.Fatalf("deberia reutilizar cache de proyecto, got=%d", store.getProjectCalls)
 	}
 }
 

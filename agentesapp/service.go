@@ -71,6 +71,8 @@ type Service struct {
 	store               Store
 	modelPolicyProvider ModelPolicyProvider
 	cacheMu             sync.Mutex
+	prepareAgentCache   map[string]cachedPrepareAgent
+	prepareProjectCache map[string]cachedPrepareProject
 	compactDetailCache  map[string]cachedCompactDetail
 	compactDetailFlight map[string]*compactDetailFlight
 	reanimCache         map[string]cachedReanimationSchedule
@@ -83,6 +85,7 @@ var compactDetailCacheTTL = 2 * time.Second
 var compactDetailStaleWhileRevalidateTTL = 15 * time.Second
 var activeReanimationScheduleCacheTTL = 2 * time.Second
 var activeReanimationScheduleStaleWhileRevalidateTTL = 15 * time.Second
+var prepareEntityCacheTTL = 5 * time.Second
 
 func agentDetailDebugf(format string, args ...any) {
 	if !agentDetailDebugEnabled() {
@@ -106,6 +109,8 @@ func NewService(store Store, modelPolicyProvider ModelPolicyProvider) *Service {
 	return &Service{
 		store:               store,
 		modelPolicyProvider: modelPolicyProvider,
+		prepareAgentCache:   map[string]cachedPrepareAgent{},
+		prepareProjectCache: map[string]cachedPrepareProject{},
 		compactDetailCache:  map[string]cachedCompactDetail{},
 		compactDetailFlight: map[string]*compactDetailFlight{},
 		reanimCache:         map[string]cachedReanimationSchedule{},
@@ -115,6 +120,16 @@ func NewService(store Store, modelPolicyProvider ModelPolicyProvider) *Service {
 
 type cachedCompactDetail struct {
 	detail  *Detail
+	expires time.Time
+}
+
+type cachedPrepareAgent struct {
+	agent   *db.Agente
+	expires time.Time
+}
+
+type cachedPrepareProject struct {
+	project *db.Proyecto
 	expires time.Time
 }
 
@@ -924,6 +939,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 	if agente == nil {
 		return Row{}, nil, nil, fmt.Errorf("agente no encontrado: %s", nombre)
 	}
+	s.cachePrepareAgent(agente)
 	agentDetailDebugf("compact step=get_agent agente=%s duration=%s", nombre, time.Since(stepStart).Round(time.Millisecond))
 
 	row := Row{Agente: agente}
@@ -1038,6 +1054,7 @@ func (s *Service) buildOperationalRowContextForAgent(nombre string, now time.Tim
 	if agente == nil {
 		return Row{}, nil, nil, fmt.Errorf("agente no encontrado: %s", nombre)
 	}
+	s.cachePrepareAgent(agente)
 
 	row := Row{Agente: agente}
 
@@ -1119,6 +1136,97 @@ func (s *Service) buildOperationalRowContextForAgent(nombre string, now time.Tim
 
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
 	return row, asignaciones, tareas, nil
+}
+
+func (s *Service) cachePrepareAgent(agent *db.Agente) {
+	if s == nil || agent == nil || strings.TrimSpace(agent.Nombre) == "" {
+		return
+	}
+	clone := *agent
+	key := strings.ToLower(strings.TrimSpace(agent.Nombre))
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	s.prepareAgentCache[key] = cachedPrepareAgent{
+		agent:   &clone,
+		expires: time.Now().Add(prepareEntityCacheTTL),
+	}
+}
+
+func (s *Service) cachedPrepareAgent(nombre string) *db.Agente {
+	if s == nil {
+		return nil
+	}
+	key := strings.ToLower(strings.TrimSpace(nombre))
+	if key == "" {
+		return nil
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	item, ok := s.prepareAgentCache[key]
+	if !ok || item.agent == nil || time.Now().After(item.expires) {
+		if ok {
+			delete(s.prepareAgentCache, key)
+		}
+		return nil
+	}
+	clone := *item.agent
+	return &clone
+}
+
+func (s *Service) cachePrepareProject(project *db.Proyecto, refs ...string) {
+	if s == nil || project == nil {
+		return
+	}
+	clone := *project
+	keys := map[string]struct{}{}
+	for _, ref := range refs {
+		ref = strings.ToLower(strings.TrimSpace(ref))
+		if ref != "" {
+			keys[ref] = struct{}{}
+		}
+	}
+	if project.ID > 0 {
+		keys[strconv.FormatInt(project.ID, 10)] = struct{}{}
+	}
+	if slug := strings.ToLower(strings.TrimSpace(project.Slug)); slug != "" {
+		keys[slug] = struct{}{}
+	}
+	if path := strings.ToLower(strings.TrimSpace(project.RutaAbs)); path != "" {
+		keys[path] = struct{}{}
+	}
+	if len(keys) == 0 {
+		return
+	}
+	expires := time.Now().Add(prepareEntityCacheTTL)
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	for key := range keys {
+		s.prepareProjectCache[key] = cachedPrepareProject{
+			project: &clone,
+			expires: expires,
+		}
+	}
+}
+
+func (s *Service) cachedPrepareProject(ref string) *db.Proyecto {
+	if s == nil {
+		return nil
+	}
+	key := strings.ToLower(strings.TrimSpace(ref))
+	if key == "" {
+		return nil
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	item, ok := s.prepareProjectCache[key]
+	if !ok || item.project == nil || time.Now().After(item.expires) {
+		if ok {
+			delete(s.prepareProjectCache, key)
+		}
+		return nil
+	}
+	clone := *item.project
+	return &clone
 }
 
 func latestAssignmentForAgent(items []*db.Asignacion) *db.Asignacion {

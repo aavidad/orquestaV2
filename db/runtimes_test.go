@@ -90,6 +90,72 @@ func TestRuntimesSeSincronizanDesdeSesiones(t *testing.T) {
 	}
 }
 
+func TestGuardarSesionActivaHeartbeatLigeroNoReescribeRuntimeNiHandle(t *testing.T) {
+	tmp := prepararDBTemporalInspeccionSesiones(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "codex-cli",
+		ExternalSessionID:  "sess-runtime-fast-001",
+		ResumenContinuidad: "runtime test",
+		Branch:             "main",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	syncRuntimeCalls := 0
+	syncHandleCalls := 0
+	auditCalls := 0
+	prevSyncRuntime := guardarSesionActivaSyncRuntimeDesdeSesion
+	prevSyncHandle := guardarSesionActivaSyncHandleDesdeSesion
+	prevAudit := guardarSesionActivaAuditFn
+	guardarSesionActivaSyncRuntimeDesdeSesion = func(s *Sesion) error {
+		syncRuntimeCalls++
+		return prevSyncRuntime(s)
+	}
+	guardarSesionActivaSyncHandleDesdeSesion = func(s *Sesion) error {
+		syncHandleCalls++
+		return prevSyncHandle(s)
+	}
+	guardarSesionActivaAuditFn = func(agente, accion, entidad string, entidadID int64, detalle string) {
+		auditCalls++
+		prevAudit(agente, accion, entidad, entidadID, detalle)
+	}
+	defer func() {
+		guardarSesionActivaSyncRuntimeDesdeSesion = prevSyncRuntime
+		guardarSesionActivaSyncHandleDesdeSesion = prevSyncHandle
+		guardarSesionActivaAuditFn = prevAudit
+	}()
+
+	if err := GuardarSesionActiva("Codex1", &proyectoID, SesionUpdate{Heartbeat: true}); err != nil {
+		t.Fatalf("guardar sesion ligera: %v", err)
+	}
+	if syncRuntimeCalls != 0 {
+		t.Fatalf("no deberia resincronizar runtime en heartbeat ligero: calls=%d", syncRuntimeCalls)
+	}
+	if syncHandleCalls != 0 {
+		t.Fatalf("no deberia resincronizar handle en heartbeat ligero: calls=%d", syncHandleCalls)
+	}
+	if auditCalls != 0 {
+		t.Fatalf("no deberia auditar heartbeat ligero: calls=%d", auditCalls)
+	}
+}
+
 func TestObservabilidadRuntimeConUltimaActividad(t *testing.T) {
 	tmp := prepararDBTemporalInspeccionSesiones(t)
 

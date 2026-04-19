@@ -22,6 +22,12 @@ type SesionInicio = sesionesapp.SesionInicio
 type SesionUpdate = sesionesapp.SesionUpdate
 type FiltroSesionesInspeccion = sesionesapp.FiltroInspeccion
 
+var (
+	guardarSesionActivaSyncRuntimeDesdeSesion = UpsertRuntimeDesdeSesion
+	guardarSesionActivaSyncHandleDesdeSesion  = UpsertRuntimeHandleDesdeSesion
+	guardarSesionActivaAuditFn                = Audit
+)
+
 // IniciarSesion marca al agente como activo y crea una sesión.
 func IniciarSesion(agente string) (int64, error) {
 	s, err := IniciarSesionContexto(SesionInicio{Agente: agente})
@@ -255,20 +261,35 @@ func GuardarSesionActiva(agente string, proyectoID *int64, upd SesionUpdate) err
 	updateArgs = append(updateArgs, id)
 	_, err := DB.Exec(`UPDATE sesiones SET `+strings.Join(partes, ", ")+` WHERE id = ?`, updateArgs...)
 	if err == nil {
+		if sesionUpdatePuedeUsarCaminoLigero(upd) {
+			return nil
+		}
 		sesion, getErr := GetSesionByID(id)
 		if getErr != nil {
 			err = getErr
 		} else {
-			err = UpsertRuntimeDesdeSesion(sesion)
+			err = guardarSesionActivaSyncRuntimeDesdeSesion(sesion)
 			if err == nil {
-				err = UpsertRuntimeHandleDesdeSesion(sesion)
+				err = guardarSesionActivaSyncHandleDesdeSesion(sesion)
 			}
 		}
 	}
 	if err == nil {
-		Audit(agente, "guardar_sesion", "sesion", id, "")
+		guardarSesionActivaAuditFn(agente, "guardar_sesion", "sesion", id, "")
 	}
 	return err
+}
+
+func sesionUpdatePuedeUsarCaminoLigero(upd SesionUpdate) bool {
+	if !upd.Heartbeat {
+		return false
+	}
+	if upd.CWD != nil || upd.Herramienta != nil || upd.ExternalSessionID != nil ||
+		upd.ResumePayloadJSON != nil || upd.ResumenContinuidad != nil || upd.Branch != nil ||
+		upd.PID != nil || upd.Estado != nil {
+		return false
+	}
+	return true
 }
 
 func ListarSesionesActivas() ([]*Sesion, error) {
@@ -895,12 +916,9 @@ func ListarAgentesCuentasLigero() ([]*Agente, error) {
 }
 
 func GetAgentePrepareLite(nombre string) (*Agente, error) {
-	nombreCanonico, _, _, err := resolverAgentePorNombreCI(strings.TrimSpace(nombre))
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return nil, nil
 	}
 	dbHandle := DB
 	if dbHandle == nil || dbHandle.DB == nil {
@@ -909,7 +927,10 @@ func GetAgentePrepareLite(nombre string) (*Agente, error) {
 	row := dbHandle.QueryRow(`
 		SELECT nombre, rol, activo, habilitado, COALESCE(estado_sesion,''), ultima_sesion,
 		       estado_cuota, reanimar_at, motivo_pausa
-		FROM agentes WHERE nombre = ?`, nombreCanonico)
+		FROM agentes
+		WHERE nombre = ? OR lower(nombre) = lower(?)
+		ORDER BY CASE WHEN nombre = ? THEN 0 ELSE 1 END
+		LIMIT 1`, nombre, nombre, nombre)
 	a := &Agente{}
 	var ultima sql.NullTime
 	var reanimar sql.NullTime

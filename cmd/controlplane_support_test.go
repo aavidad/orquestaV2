@@ -7699,6 +7699,44 @@ func TestFiltrarSesionesAutonomiaRelevantesPriorizaRecientesAntesQueOrdenAlfabet
 	}
 }
 
+func TestFiltrarSesionesAutonomiaRelevantesRespetaFlotaAutobootstrapOficial(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_project_slug", "orquestador"); err != nil {
+		t.Fatalf("config project slug: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_supervisor_agent", "Codex1"); err != nil {
+		t.Fatalf("config supervisor: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_worker_agents", "Codex2,Codex3,Codex4"); err != nil {
+		t.Fatalf("config workers: %v", err)
+	}
+	base := time.Date(2026, 4, 15, 9, 0, 0, 0, time.UTC)
+	sesiones := []*db.Sesion{
+		{ID: 1, Agente: "Codex1", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: base},
+		{ID: 2, Agente: "Codex2", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: base.Add(1 * time.Minute)},
+		{ID: 3, Agente: "GemmaSmoke1", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: base.Add(2 * time.Minute)},
+		{ID: 4, Agente: "claude1", ProyectoID: &proyectoID, Activa: true, Estado: "pausada", Inicio: base.Add(3 * time.Minute)},
+	}
+
+	filtradas := filtrarSesionesAutonomiaRelevantes(sesiones)
+	if len(filtradas) != 2 {
+		t.Fatalf("deberia conservar solo la flota oficial del proyecto, got=%d", len(filtradas))
+	}
+	if filtradas[0].Agente != "Codex2" || filtradas[1].Agente != "Codex1" {
+		t.Fatalf("orden/filtrado inesperado: %+v", filtradas)
+	}
+}
+
 func TestRowProyectoIDPreferidoPriorizaAsignacionActivaSobreRuntimeViejo(t *testing.T) {
 	asignado := int64(10)
 	runtimeViejo := int64(20)
@@ -10272,13 +10310,13 @@ func TestProcesarRuntimeMailboxInteractivoMensajeReutilizaWorkerState(t *testing
 		heartbeat := now
 		return &runtimeagente.WorkerSnapshot{
 			Manifest: &runtimeagente.WorkerManifest{
-				Driver:             "tmux_cli_session",
-				Transport:          "tmux",
-				TmuxSession:        "orq-codex1",
-				TmuxPaneID:         "%9",
-				StartedAt:          started.Format(time.RFC3339Nano),
+				Driver:              "tmux_cli_session",
+				Transport:           "tmux",
+				TmuxSession:         "orq-codex1",
+				TmuxPaneID:          "%9",
+				StartedAt:           started.Format(time.RFC3339Nano),
 				MailboxDeliveryMode: "interactive",
-				CanSendInput:       true,
+				CanSendInput:        true,
 			},
 			Status: &runtimeagente.WorkerStatus{
 				State:               "ready",
