@@ -3299,28 +3299,32 @@ func runtimePendingHandoffStillActive(runtime *RuntimeInstance, cutoff time.Time
 }
 
 func ProcesarRuntimeOrdersBatch() (int, error) {
-	reconciled, err := reconciliarRuntimeOrdersPendientesMailboxConsumido()
+	stale, err := ReconciliarRuntimeOrdersStale()
 	if err != nil {
 		return 0, err
 	}
+	reconciled, err := reconciliarRuntimeOrdersPendientesMailboxConsumido()
+	if err != nil {
+		return stale, err
+	}
 	controlEjecutando, err := reconciliarRuntimeOrdersEjecutandoControlSatisfechas()
 	if err != nil {
-		return reconciled, err
+		return stale + reconciled, err
 	}
 	controlObsoletas, err := reconciliarRuntimeOrdersPendientesControlObsoletas()
 	if err != nil {
-		return reconciled + controlEjecutando, err
+		return stale + reconciled + controlEjecutando, err
 	}
 	processed, err := procesarRuntimeOrdersBatchTipos(runtimeOrderTiposDespachables())
 	if err != nil {
-		return reconciled + controlEjecutando + controlObsoletas + processed, err
+		return stale + reconciled + controlEjecutando + controlObsoletas + processed, err
 	}
 	promoted, err := procesarBootstrapRuntimeOrdersActivosBatch()
 	if err != nil {
-		return reconciled + controlEjecutando + controlObsoletas + processed + promoted, err
+		return stale + reconciled + controlEjecutando + controlObsoletas + processed + promoted, err
 	}
 	deferred, err := procesarRuntimeOrdersBatchTipos(runtimeOrderTiposDiferibles())
-	return reconciled + controlEjecutando + controlObsoletas + processed + promoted + deferred, err
+	return stale + reconciled + controlEjecutando + controlObsoletas + processed + promoted + deferred, err
 }
 func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 	limit := configIntOrDefault("runtime_hygiene_autonomo_batch_size", 10)

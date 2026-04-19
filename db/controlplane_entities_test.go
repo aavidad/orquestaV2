@@ -20123,6 +20123,61 @@ func TestReconciliarRuntimeOrdersStaleRespetaCutoffConfigurado(t *testing.T) {
 	}
 }
 
+func TestProcesarRuntimeOrdersBatchReconciliarStaleAntesDeDespachar(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "sync_status",
+		PayloadJSON: `{}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar order: %v", err)
+	}
+	if err := MarcarRuntimeOrderEstado(orderID, "ejecutando", `{}`, ""); err != nil {
+		t.Fatalf("marcar ejecutando: %v", err)
+	}
+	old := time.Now().UTC().Add(-10 * time.Minute)
+	if _, err := DB.Exec(`
+		UPDATE runtime_orders
+		SET started_at = ?, updated_at = ?, lease_expires_at = ?
+		WHERE id = ?`,
+		old, old, old, orderID,
+	); err != nil {
+		t.Fatalf("envejecer order: %v", err)
+	}
+
+	processed, err := ProcesarRuntimeOrdersBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime orders: %v", err)
+	}
+	if processed < 1 {
+		t.Fatalf("deberia reconciliar al menos una order stale, got=%d", processed)
+	}
+
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get order: %v", err)
+	}
+	if order.Estado != "pendiente" && order.Estado != "completada" {
+		t.Fatalf("la orden stale no deberia seguir ejecutando: %+v", order)
+	}
+}
+
 func TestMarcarRuntimeOrderEjecutandoLimpiaDeferredEnStart(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

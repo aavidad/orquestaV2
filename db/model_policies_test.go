@@ -1,6 +1,9 @@
 package db
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestGuardarYListarPoliticasModelo(t *testing.T) {
 	withTempDBPools(t, func() {
@@ -303,6 +306,64 @@ func TestEnsureCapacidadModeloBaseCodexMemoizaPorStorageTarget(t *testing.T) {
 			t.Fatalf("memoizacion inesperada pools=%d models=%d policies=%d ensure=%d", poolsCalls, modelsCalls, policiesCalls, ensureCalls)
 		}
 	})
+}
+
+func TestResolverPerfilEjecucionLanzamientoMemoizaResultado(t *testing.T) {
+	prevEnsure := resolverPerfilEnsureBaseFn
+	prevFase := resolverPerfilObtenerFaseFn
+	prevResolver := resolverPerfilResolverPoliticaFn
+	prevTTL := resolverPerfilEjecucionCacheTTL
+	t.Cleanup(func() {
+		resolverPerfilEnsureBaseFn = prevEnsure
+		resolverPerfilObtenerFaseFn = prevFase
+		resolverPerfilResolverPoliticaFn = prevResolver
+		resolverPerfilEjecucionCacheTTL = prevTTL
+		resetResolverPerfilEjecucionLanzamientoCache()
+	})
+
+	resetResolverPerfilEjecucionLanzamientoCache()
+	resolverPerfilEjecucionCacheTTL = time.Minute
+
+	ensureCalls := 0
+	faseCalls := 0
+	resolverCalls := 0
+	resolverPerfilEnsureBaseFn = func() error {
+		ensureCalls++
+		return nil
+	}
+	resolverPerfilObtenerFaseFn = func(proyecto string) (string, error) {
+		faseCalls++
+		return "implementacion", nil
+	}
+	resolverPerfilResolverPoliticaFn = func(input ResolverPoliticaInput) (*ResolucionModelo, error) {
+		resolverCalls++
+		return &ResolucionModelo{
+			PerfilTarea:     "implementacion",
+			ModelSlug:       "gpt-5.4",
+			ReasoningEffort: "high",
+		}, nil
+	}
+
+	agente := "Codex2"
+	for i := 0; i < 2; i++ {
+		perfil, modelo, razonamiento, err := ResolverPerfilEjecucionLanzamiento(&agente, "orquestador", "", "", "")
+		if err != nil {
+			t.Fatalf("ResolverPerfilEjecucionLanzamiento: %v", err)
+		}
+		if perfil != "implementacion" || modelo != "gpt-5.4" || razonamiento != "high" {
+			t.Fatalf("resultado inesperado perfil=%s modelo=%s razonamiento=%s", perfil, modelo, razonamiento)
+		}
+	}
+
+	if ensureCalls != 1 {
+		t.Fatalf("ensureCalls=%d want=1", ensureCalls)
+	}
+	if resolverCalls != 1 {
+		t.Fatalf("resolverCalls=%d want=1", resolverCalls)
+	}
+	if faseCalls != 2 {
+		t.Fatalf("faseCalls=%d want=2", faseCalls)
+	}
 }
 
 func insertPoolsYModelosTest(t *testing.T) {

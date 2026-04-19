@@ -58,6 +58,25 @@ var ensureCapacidadModeloBaseSeedPoolsFn = SeedPoolsIniciales
 var ensureCapacidadModeloBaseSeedModelsFn = SeedModelosIniciales
 var ensureCapacidadModeloBaseSeedPoliciesFn = SeedPoliticasModeloIniciales
 var ensureCapacidadModeloBaseEnsureImplementationFn = asegurarPoliticaImplementacionHigh
+var resolverPerfilEnsureBaseFn = EnsureCapacidadModeloBaseCodex
+var resolverPerfilObtenerFaseFn = ObtenerFaseActivaProyecto
+var resolverPerfilResolverPoliticaFn = ResolverPoliticaModelo
+var resolverPerfilEjecucionCacheTTL = 15 * time.Second
+var resolverPerfilEjecucionCacheMu sync.RWMutex
+var resolverPerfilEjecucionCache = map[string]resolverPerfilEjecucionCacheEntry{}
+
+type resolverPerfilEjecucionCacheEntry struct {
+	PerfilTarea  string
+	Modelo       string
+	Razonamiento string
+	ExpiresAt    time.Time
+}
+
+func resetResolverPerfilEjecucionLanzamientoCache() {
+	resolverPerfilEjecucionCacheMu.Lock()
+	defer resolverPerfilEjecucionCacheMu.Unlock()
+	clear(resolverPerfilEjecucionCache)
+}
 
 func ResolverPerfilEjecucionLanzamiento(agenteNombre *string, proyectoSlug, perfilTarea, modelo, razonamiento string) (string, string, string, error) {
 	perfilTarea = strings.TrimSpace(perfilTarea)
@@ -66,11 +85,32 @@ func ResolverPerfilEjecucionLanzamiento(agenteNombre *string, proyectoSlug, perf
 	if perfilTarea != "" && modelo != "" && razonamiento != "" {
 		return perfilTarea, modelo, razonamiento, nil
 	}
-	if err := EnsureCapacidadModeloBaseCodex(); err != nil {
+	agente := ""
+	if agenteNombre != nil {
+		agente = strings.TrimSpace(*agenteNombre)
+	}
+	fase, _ := resolverPerfilObtenerFaseFn(proyectoSlug)
+	cacheKey := strings.Join([]string{
+		strings.ToLower(strings.TrimSpace(agente)),
+		strings.TrimSpace(proyectoSlug),
+		strings.TrimSpace(fase),
+		perfilTarea,
+		modelo,
+		razonamiento,
+	}, "|")
+	if cacheKey != "" {
+		now := time.Now().UTC()
+		resolverPerfilEjecucionCacheMu.RLock()
+		entry, ok := resolverPerfilEjecucionCache[cacheKey]
+		resolverPerfilEjecucionCacheMu.RUnlock()
+		if ok && entry.ExpiresAt.After(now) {
+			return entry.PerfilTarea, entry.Modelo, entry.Razonamiento, nil
+		}
+	}
+	if err := resolverPerfilEnsureBaseFn(); err != nil {
 		return "", "", "", err
 	}
-	fase, _ := ObtenerFaseActivaProyecto(proyectoSlug)
-	resolucion, err := ResolverPoliticaModelo(ResolverPoliticaInput{
+	resolucion, err := resolverPerfilResolverPoliticaFn(ResolverPoliticaInput{
 		AgenteNombre: agenteNombre,
 		ProyectoSlug: strings.TrimSpace(proyectoSlug),
 		Fase:         fase,
@@ -87,6 +127,16 @@ func ResolverPerfilEjecucionLanzamiento(agenteNombre *string, proyectoSlug, perf
 	}
 	if razonamiento == "" {
 		razonamiento = strings.TrimSpace(strings.ToLower(resolucion.ReasoningEffort))
+	}
+	if cacheKey != "" {
+		resolverPerfilEjecucionCacheMu.Lock()
+		resolverPerfilEjecucionCache[cacheKey] = resolverPerfilEjecucionCacheEntry{
+			PerfilTarea:  perfilTarea,
+			Modelo:       modelo,
+			Razonamiento: razonamiento,
+			ExpiresAt:    time.Now().UTC().Add(resolverPerfilEjecucionCacheTTL),
+		}
+		resolverPerfilEjecucionCacheMu.Unlock()
 	}
 	return perfilTarea, modelo, razonamiento, nil
 }
@@ -202,6 +252,7 @@ func GuardarPoliticaModelo(p *PoliticaModelo) (int64, error) {
 	).Scan(&id); err != nil {
 		return 0, err
 	}
+	resetResolverPerfilEjecucionLanzamientoCache()
 	return id, nil
 }
 

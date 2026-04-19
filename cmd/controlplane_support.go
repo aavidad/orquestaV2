@@ -6001,6 +6001,16 @@ func procesarRuntimeMailboxInteractivoMensaje(msg *db.RuntimeMailboxMessage, con
 	if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryInteractive {
 		return false, nil
 	}
+	if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
+		return false, err
+	} else if abierta {
+		return false, nil
+	}
+	if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, ""); err != nil {
+		return false, err
+	} else if dedupe {
+		return false, nil
+	}
 	if refreshed, _, _, err := snapshot.supervisedHandle(handle); err != nil {
 		if runtimeMailboxCanDeferSupervisedHandleError(err) {
 			db.Audit("orquesta", "runtime_mailbox_supervision_deferred", "runtime_mailbox", msg.ID, err.Error())
@@ -6022,16 +6032,6 @@ func procesarRuntimeMailboxInteractivoMensaje(msg *db.RuntimeMailboxMessage, con
 		return true, nil
 	}
 	if !runtimeHandleListaParaDispatchInteractivoConEstado(handle, workerState) {
-		return false, nil
-	}
-	if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
-		return false, err
-	} else if abierta {
-		return false, nil
-	}
-	if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, ""); err != nil {
-		return false, err
-	} else if dedupe {
 		return false, nil
 	}
 	texto, ok := runtimeMailboxBuildInteractiveInstructionFn(msg)

@@ -159,6 +159,7 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 		debugLogger = newServerDebugLogger(kind)
 		debugLogger.Printf("startup addr=%s rpc=%s %s", listenAddr, rpclocal.BaseURL(normalizarAddrServidorLocal(listenAddr)), debugDurationsSummary(time.Minute, time.Minute, 30*time.Second, 15*time.Second))
 	}
+	prewarmUnifiedServerModelPolicyCache(debugLogger)
 
 	controlCtx, cancel := context.WithCancel(context.Background())
 	runner := newControlPlaneRunner(debugLogger, debug.ControlPlane)
@@ -222,6 +223,39 @@ func loadUnifiedServerRuntimeOptions() unifiedServerRuntimeOptions {
 		DisableWarmWorker:        disableWarmWorker,
 		DisableColdWorker:        disableColdWorker,
 		DisableNotificationRetry: disableNotificationRetry,
+	}
+}
+
+func prewarmUnifiedServerModelPolicyCache(debugLogger *log.Logger) {
+	cfg := loadServerAutobootstrapConfig()
+	if !cfg.Enabled || strings.TrimSpace(cfg.ProjectSlug) == "" {
+		return
+	}
+	agents := make([]string, 0, 1+len(cfg.WorkerAgents))
+	if supervisor := strings.TrimSpace(cfg.SupervisorAgent); supervisor != "" {
+		agents = append(agents, supervisor)
+	}
+	agents = append(agents, cfg.WorkerAgents...)
+	seen := map[string]struct{}{}
+	for _, agente := range agents {
+		agente = strings.TrimSpace(agente)
+		if agente == "" {
+			continue
+		}
+		key := strings.ToLower(agente)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		if _, _, _, err := db.ResolverPerfilEjecucionLanzamiento(&agente, cfg.ProjectSlug, "", "", ""); err != nil {
+			if debugLogger != nil {
+				debugLogger.Printf("model_policy_prewarm agente=%s proyecto=%s err=%v", agente, cfg.ProjectSlug, err)
+			}
+			continue
+		}
+		if debugLogger != nil {
+			debugLogger.Printf("model_policy_prewarm agente=%s proyecto=%s ok", agente, cfg.ProjectSlug)
+		}
 	}
 }
 
