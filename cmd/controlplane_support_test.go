@@ -15275,6 +15275,90 @@ func TestProcesarRuntimeMailboxBatchNoConsumeAgenteSinHandlePeroConTrabajo(t *te
 	}
 }
 
+func TestProcesarRuntimeMailboxBatchConsumeInstructionAutoAprobadaObsoletaPorHandleNuevo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "orquesta",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"classification":"waiting_human","texto":"continua de forma autonoma"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox instruction: %v", err)
+	}
+	old := time.Now().UTC().Add(-2 * time.Hour)
+	if _, err := db.DB.Exec(`UPDATE runtime_mailbox SET created_at=? WHERE id=?`, old, msgID); err != nil {
+		t.Fatalf("backdate mailbox: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	now := time.Now().UTC()
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', updated_at=?, last_seen_at=? WHERE id=?`, now, now, handle.ID); err != nil {
+		t.Fatalf("activar handle: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia consumir exactamente una instruction obsoleta por contexto nuevo, got=%d", n)
+	}
+
+	pendiente := "pendiente"
+	toAgente := "Codex1"
+	pendientes, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: &proyectoID,
+		Estado:     &pendiente,
+	})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	if len(pendientes) != 0 {
+		t.Fatalf("no deberia quedar instruction pendiente obsoleta: %+v", pendientes)
+	}
+
+	consumido := "consumido"
+	consumidos, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: &proyectoID,
+		Estado:     &consumido,
+	})
+	if err != nil {
+		t.Fatalf("listar mailbox consumido: %v", err)
+	}
+	if len(consumidos) != 1 || consumidos[0].ID != msgID {
+		t.Fatalf("instruction consumida inesperada: %+v", consumidos)
+	}
+}
+
 func TestProcesarRuntimeMailboxBatchNoReactivaSinHandleSiHayPausePendiente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

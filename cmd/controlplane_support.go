@@ -2991,6 +2991,9 @@ func procesarRuntimeMailboxBatchConFiltro(filter db.FiltroRuntimeMailbox) (int, 
 		{name: "instruction_enfriamiento", deferStage: "instruction_enfriamiento", fn: func() (int, error) {
 			return reconciliarRuntimeMailboxInstructionEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
 		}},
+		{name: "instruction_obsoleta_contexto", deferStage: "instruction_obsoleta_contexto", fn: func() (int, error) {
+			return reconciliarRuntimeMailboxInstructionObsoletaContextoBatchConMailbox(mailbox, consumed, snapshot)
+		}},
 		{name: "watchdog_sin_handle", deferStage: "watchdog_sin_handle", fn: func() (int, error) {
 			return reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox, consumed, snapshot)
 		}},
@@ -3338,6 +3341,116 @@ func reconciliarRuntimeMailboxInstructionEnfriamientoMensaje(msg *db.RuntimeMail
 			strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
 	consumed[msg.ID] = struct{}{}
 	return true, nil
+}
+
+func reconciliarRuntimeMailboxInstructionObsoletaContextoBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
+	total := 0
+	for _, msg := range mailbox {
+		if msg == nil || !runtimeMailboxInstructionAutoAprobada(msg) {
+			continue
+		}
+		if _, skip := consumed[msg.ID]; skip {
+			continue
+		}
+		dispatched, err := reconciliarRuntimeMailboxInstructionObsoletaContextoMensaje(msg, consumed, snapshot)
+		if err != nil {
+			return total, err
+		}
+		if dispatched {
+			total++
+		}
+	}
+	return total, nil
+}
+
+func reconciliarRuntimeMailboxInstructionObsoletaContextoMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	if msg == nil || snapshot == nil {
+		return false, nil
+	}
+	detalle, obsoleta, err := runtimeMailboxInstructionObsoletaPorContextoActual(msg, snapshot)
+	if err != nil {
+		return false, err
+	}
+	if !obsoleta {
+		return false, nil
+	}
+	if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+		return false, err
+	} else if !canConsume {
+		return false, nil
+	}
+	if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+		return false, err
+	}
+	if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+		return false, err
+	}
+	db.Audit("orquesta", "runtime_mailbox_instruction_contexto_obsoleto", "runtime_mailbox", msg.ID,
+		fmt.Sprintf("agente=%s kind=%s %s", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), strings.TrimSpace(detalle)))
+	consumed[msg.ID] = struct{}{}
+	return true, nil
+}
+
+func runtimeMailboxInstructionAutoAprobada(msg *db.RuntimeMailboxMessage) bool {
+	if msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Kind), "instruction") {
+		return false
+	}
+	payload := mapFromJSON(strings.TrimSpace(msg.PayloadJSON))
+	switch strings.ToLower(strings.TrimSpace(stringMapValue(payload, "classification"))) {
+	case "approval_request", "waiting_human":
+		return true
+	default:
+		return false
+	}
+}
+
+func runtimeMailboxInstructionObsoletaPorContextoActual(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) (string, bool, error) {
+	if msg == nil || snapshot == nil {
+		return "", false, nil
+	}
+	agente := strings.TrimSpace(msg.ToAgente)
+	if agente == "" {
+		return "", false, nil
+	}
+	if handle, err := snapshot.activeHandle(agente, msg.ProyectoID); err != nil {
+		return "", false, err
+	} else if handle != nil {
+		handleAt := handle.CreatedAt.UTC()
+		if handle.LastSeenAt != nil && !handle.LastSeenAt.IsZero() && handle.LastSeenAt.UTC().After(handleAt) {
+			handleAt = handle.LastSeenAt.UTC()
+		}
+		if !handle.UpdatedAt.IsZero() && handle.UpdatedAt.UTC().After(handleAt) {
+			handleAt = handle.UpdatedAt.UTC()
+		}
+		if handleAt.After(msg.CreatedAt.UTC().Add(30 * time.Second)) {
+			return fmt.Sprintf("handle_id=%d handle_at=%s created_at=%s", handle.ID, handleAt.Format(time.RFC3339Nano), msg.CreatedAt.UTC().Format(time.RFC3339Nano)), true, nil
+		}
+	}
+	if msg.ProyectoID == nil {
+		return "", false, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{Agente: &agente, ProyectoID: msg.ProyectoID})
+	if err != nil {
+		return "", false, err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaAsignada, db.TareaEnProgreso:
+		default:
+			continue
+		}
+		taskAt := tarea.CreatedAt.UTC()
+		if !tarea.UpdatedAt.IsZero() && tarea.UpdatedAt.UTC().After(taskAt) {
+			taskAt = tarea.UpdatedAt.UTC()
+		}
+		if taskAt.After(msg.CreatedAt.UTC().Add(30 * time.Second)) {
+			return fmt.Sprintf("task_id=%d task_at=%s created_at=%s", tarea.ID, taskAt.Format(time.RFC3339Nano), msg.CreatedAt.UTC().Format(time.RFC3339Nano)), true, nil
+		}
+	}
+	return "", false, nil
 }
 
 func reconciliarRuntimeMailboxWatchdogSinHandleBatch() (int, error) {
