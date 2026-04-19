@@ -257,9 +257,11 @@ func TestRunAPIAgentPrepareLimitedTimeoutNoDejaTrabajoEnCola(t *testing.T) {
 func TestAPIAgenteTickReturns503WhenProcessorHangs(t *testing.T) {
 	prevProcessor := apiAgentTickProcessor
 	prevTimeout := apiAgentTickTimeout
+	prevLimiter := apiAgentTickLimiter
 	defer func() {
 		apiAgentTickProcessor = prevProcessor
 		apiAgentTickTimeout = prevTimeout
+		apiAgentTickLimiter = prevLimiter
 	}()
 
 	release := make(chan struct{})
@@ -268,6 +270,7 @@ func TestAPIAgenteTickReturns503WhenProcessorHangs(t *testing.T) {
 		return &agentesapp.TickOutput{}, nil
 	}
 	apiAgentTickTimeout = 20 * time.Millisecond
+	apiAgentTickLimiter = make(chan struct{}, 1)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/agente/tick", bytes.NewReader([]byte(`{"agente":"Codex2","proyecto":"orquestador"}`)))
@@ -277,5 +280,34 @@ func TestAPIAgenteTickReturns503WhenProcessorHangs(t *testing.T) {
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRunAPIAgentTickLimitedTimeoutNoDejaTrabajoEnCola(t *testing.T) {
+	prevLimiter := apiAgentTickLimiter
+	apiAgentTickLimiter = make(chan struct{}, 1)
+	defer func() { apiAgentTickLimiter = prevLimiter }()
+
+	apiAgentTickLimiter <- struct{}{}
+	defer func() {
+		select {
+		case <-apiAgentTickLimiter:
+		default:
+		}
+	}()
+
+	var calls atomic.Int32
+	_, err := runAPIAgentTickLimited(20*time.Millisecond, func() (*agentesapp.TickOutput, error) {
+		calls.Add(1)
+		return &agentesapp.TickOutput{}, nil
+	})
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+
+	<-apiAgentTickLimiter
+	time.Sleep(40 * time.Millisecond)
+	if calls.Load() != 0 {
+		t.Fatalf("processor no deberia ejecutarse tras timeout de cola, got=%d", calls.Load())
 	}
 }

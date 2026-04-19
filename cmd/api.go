@@ -135,6 +135,7 @@ var (
 	apiAgentPrepareTimeout          = 15 * time.Second
 	apiAgentTickTimeout             = 6 * time.Second
 	apiAgentPrepareLimiter          = make(chan struct{}, 4)
+	apiAgentTickLimiter             = make(chan struct{}, 2)
 	apiConfigGetFn                  = func(clave string) (string, error) {
 		return configService.Get(clave)
 	}
@@ -206,6 +207,43 @@ func runAPIAgentPrepareLimited(timeout time.Duration, fn func() (*agentesapp.Pre
 	}
 	type result struct {
 		out *agentesapp.PrepareOutput
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		out, err := fn()
+		done <- result{out: out, err: err}
+	}()
+	select {
+	case res := <-done:
+		return res.out, res.err
+	case <-time.After(remaining):
+		return nil, errStatusFetchTimeout
+	}
+}
+
+func runAPIAgentTickLimited(timeout time.Duration, fn func() (*agentesapp.TickOutput, error)) (*agentesapp.TickOutput, error) {
+	if fn == nil {
+		return nil, fmt.Errorf("tick processor no inicializado")
+	}
+	if timeout <= 0 {
+		timeout = apiAgentTickTimeout
+	}
+	deadline := time.Now().Add(timeout)
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case apiAgentTickLimiter <- struct{}{}:
+	case <-timer.C:
+		return nil, errStatusFetchTimeout
+	}
+	defer func() { <-apiAgentTickLimiter }()
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return nil, errStatusFetchTimeout
+	}
+	type result struct {
+		out *agentesapp.TickOutput
 		err error
 	}
 	done := make(chan result, 1)
@@ -5196,21 +5234,21 @@ func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-			payload := strings.TrimSpace(req.Payload)
-			if payload == "" {
-				payload = "{}"
-			}
-			proyectoID, err := apiResolveProjectIDTimeboxed(req.Proyecto)
-			if err != nil {
-				if errors.Is(err, errStatusFetchTimeout) {
-					apiError(w, http.StatusServiceUnavailable, fmt.Errorf("runtime orders temporalmente degradado"))
-					return
-				}
-				apiError(w, http.StatusBadRequest, err)
+		payload := strings.TrimSpace(req.Payload)
+		if payload == "" {
+			payload = "{}"
+		}
+		proyectoID, err := apiResolveProjectIDTimeboxed(req.Proyecto)
+		if err != nil {
+			if errors.Is(err, errStatusFetchTimeout) {
+				apiError(w, http.StatusServiceUnavailable, fmt.Errorf("runtime orders temporalmente degradado"))
 				return
 			}
-			id, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
-				Agente:      apiNombreAgenteCanonico(req.Agente),
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		id, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
+			Agente:      apiNombreAgenteCanonico(req.Agente),
 			ProyectoID:  proyectoID,
 			Tipo:        strings.TrimSpace(req.Tipo),
 			PayloadJSON: payload,
@@ -6855,9 +6893,9 @@ func apiHandlerAgenteTick(w http.ResponseWriter, r *http.Request) {
 		AckBootstrapOrderID: req.AckBootstrapOrderID,
 		AckMailboxIDs:       req.AckMailboxIDs,
 	}
-	out, err := runAPITimeboxed(apiAgentTickTimeout, func() (*agentesapp.TickOutput, error) {
+	out, err := runAPIAgentTickLimited(apiAgentTickTimeout, func() (*agentesapp.TickOutput, error) {
 		return apiAgentTickProcessor(tickInput)
-	}, errStatusFetchTimeout)
+	})
 	if err != nil {
 		if errors.Is(err, errStatusFetchTimeout) {
 			apiError(w, http.StatusServiceUnavailable, fmt.Errorf("tick temporalmente degradado"))
