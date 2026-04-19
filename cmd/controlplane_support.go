@@ -6751,8 +6751,22 @@ func procesarRuntimeMailboxBootstrapTMUXMensaje(msg *db.RuntimeMailboxMessage, c
 
 func reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
 	total := 0
+	latestByKey := map[string]int64{}
 	for _, msg := range mailbox {
 		if msg == nil || !runtimeMailboxGuidanceDurablePersistibleEnInbox(msg) {
+			continue
+		}
+		key := runtimeMailboxGuidanceDurableKey(msg)
+		if key == "" || latestByKey[key] >= msg.ID {
+			continue
+		}
+		latestByKey[key] = msg.ID
+	}
+	for _, msg := range mailbox {
+		if msg == nil || !runtimeMailboxGuidanceDurablePersistibleEnInbox(msg) {
+			continue
+		}
+		if latestID := latestByKey[runtimeMailboxGuidanceDurableKey(msg)]; latestID > 0 && latestID != msg.ID {
 			continue
 		}
 		if _, skip := consumed[msg.ID]; skip {
@@ -6769,10 +6783,31 @@ func reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox []*d
 	return total, nil
 }
 
+func runtimeMailboxGuidanceDurableKey(msg *db.RuntimeMailboxMessage) string {
+	if msg == nil {
+		return ""
+	}
+	return runtimeMailboxBatchKey(strings.TrimSpace(msg.ToAgente), msg.ProyectoID) + "|" + strings.TrimSpace(msg.Kind)
+}
+
 // reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje valida y escribe en inbox
 // un mensaje guidance-durable para el agente destino.
 // Retorna true si el mensaje fue entregado y consumido.
 func reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	if detalle, obsoleta, err := runtimeMailboxObsoletaPorTareaActivaActual(msg); err != nil {
+		return false, err
+	} else if obsoleta {
+		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return false, err
+		}
+		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return false, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_guidance_durable_obsoleta", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("agente=%s kind=%s %s", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), strings.TrimSpace(detalle)))
+		consumed[msg.ID] = struct{}{}
+		return true, nil
+	}
 	handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
 	if err != nil {
 		return false, err
@@ -6783,10 +6818,9 @@ func reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje(msg *db.RuntimeMailb
 	if !runtimeMailboxGuidanceDurableUsaInbox(handle) {
 		return false, nil
 	}
-	if ok, err := runtimeMailboxGuidanceDurableTieneEntregaMailboxOnly(snapshot, msg, handle); err != nil {
+	mailboxOnlyReady, err := runtimeMailboxGuidanceDurableTieneEntregaMailboxOnly(snapshot, msg, handle)
+	if err != nil {
 		return false, err
-	} else if !ok {
-		return false, nil
 	}
 	if msg.ProyectoID == nil || *msg.ProyectoID <= 0 {
 		return false, nil
@@ -6805,11 +6839,16 @@ func reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje(msg *db.RuntimeMailb
 	if err := escribirInboxRuntimeMailboxDurable(proyecto, strings.TrimSpace(msg.ToAgente), tarea, msg, handle); err != nil {
 		return false, err
 	}
+	if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
+		if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
+			return false, err
+		}
+	}
 	if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
 		return false, err
 	}
 	db.Audit("orquesta", "runtime_mailbox_guidance_durable_inbox", "runtime_mailbox", msg.ID,
-		fmt.Sprintf("agente=%s proyecto=%s kind=%s", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(proyecto.Slug), strings.TrimSpace(msg.Kind)))
+		fmt.Sprintf("agente=%s proyecto=%s kind=%s mailbox_only_ready=%t", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(proyecto.Slug), strings.TrimSpace(msg.Kind), mailboxOnlyReady))
 	consumed[msg.ID] = struct{}{}
 	return true, nil
 }
@@ -7711,7 +7750,7 @@ func runtimeMailboxKindCoalescible(kind string) bool {
 	case "instruction", "autonomia", "nudge", "watchdog", db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
 		return true
 	default:
-		return false
+		return strings.HasPrefix(strings.TrimSpace(kind), "autonomia_")
 	}
 }
 
@@ -7720,7 +7759,7 @@ func runtimeMailboxKindEphemeral(kind string) bool {
 	case "autonomia", "nudge", "watchdog", db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
 		return true
 	default:
-		return false
+		return strings.HasPrefix(strings.TrimSpace(kind), "autonomia_")
 	}
 }
 

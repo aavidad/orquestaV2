@@ -380,6 +380,12 @@ func reconciliarMetadataSesion(existenteJSON, inferidoJSON string) string {
 			existente[key] = val
 		}
 	}
+	if cwd := strings.TrimSpace(stringFromMap(inferido, "cwd", "")); cwd != "" {
+		existente["working_dir"] = cwd
+	}
+	if workingDir := strings.TrimSpace(stringFromMap(inferido, "working_dir", "")); workingDir != "" {
+		existente["working_dir"] = workingDir
+	}
 	data, _ := json.Marshal(existente)
 	return string(data)
 }
@@ -3254,7 +3260,7 @@ func ReconciliarRuntimeOrdersPendientesHandoffExpiradas() (int, error) {
 			    resultado_json = ?,
 			    error_text = CASE
 			        WHEN TRIM(COALESCE(error_text, '')) = '' THEN 'handoff pendiente expirada por higiene'
-			        ELSE error_text || CHAR(10) || 'handoff pendiente expirada por higiene'
+			        ELSE error_text || ?
 			    END,
 			    finished_at = CURRENT_TIMESTAMP,
 			    claimed_by = '',
@@ -3262,7 +3268,7 @@ func ReconciliarRuntimeOrdersPendientesHandoffExpiradas() (int, error) {
 			    lease_expires_at = NULL
 			WHERE id = ?
 			  AND estado = 'pendiente'
-			  AND tipo = 'handoff'`, string(data), order.ID); err != nil {
+			  AND tipo = 'handoff'`, string(data), "\nhandoff pendiente expirada por higiene", order.ID); err != nil {
 			return expired, err
 		}
 		expired++
@@ -5869,7 +5875,7 @@ func reencolarRuntimeOrderControlAt(order *RuntimeOrder, reason string, nextAtte
 		    resultado_json = ?,
 		    error_text = CASE
 		        WHEN TRIM(COALESCE(error_text, '')) = '' THEN ?
-		        ELSE error_text || CHAR(10) || ?
+		        ELSE error_text || ?
 		    END,
 		    started_at = NULL,
 		    finished_at = NULL,
@@ -5882,7 +5888,7 @@ func reencolarRuntimeOrderControlAt(order *RuntimeOrder, reason string, nextAtte
 		  AND estado NOT IN ('completada','fallida','cancelada','expirada')`,
 		resultado,
 		reason,
-		reason,
+		"\n"+reason,
 		nextAttempt,
 		order.ID,
 	)
@@ -8297,7 +8303,7 @@ func reencolarRuntimeOrderSendInstructionAt(order *RuntimeOrder, payload map[str
 		    resultado_json = ?,
 		    error_text = CASE
 		        WHEN TRIM(COALESCE(error_text, '')) = '' THEN ?
-		        ELSE error_text || CHAR(10) || ?
+		        ELSE error_text || ?
 		    END,
 		    started_at = NULL,
 		    finished_at = NULL,
@@ -8310,7 +8316,7 @@ func reencolarRuntimeOrderSendInstructionAt(order *RuntimeOrder, payload map[str
 		  AND estado NOT IN ('completada','fallida','cancelada','expirada')`,
 		resultado,
 		reason,
-		reason,
+		"\n"+reason,
 		nextAttempt,
 		order.ID,
 	)
@@ -8365,7 +8371,7 @@ func retenerRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, pay
 		    resultado_json = ?,
 		    error_text = CASE
 		        WHEN TRIM(COALESCE(error_text, '')) = '' THEN ?
-		        ELSE error_text || CHAR(10) || ?
+		        ELSE error_text || ?
 		    END,
 		    started_at = NULL,
 		    finished_at = NULL,
@@ -8378,7 +8384,7 @@ func retenerRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, pay
 		string(updatedPayloadJSON),
 		resultado,
 		reason,
-		reason,
+		"\n"+reason,
 		nextAttempt,
 		order.ID,
 	)
@@ -8424,7 +8430,7 @@ func retenerRuntimeOrderSendInstructionNotificada(order *RuntimeOrder, payload m
 		    resultado_json = ?,
 		    error_text = CASE
 		        WHEN TRIM(COALESCE(error_text, '')) = '' THEN ?
-		        ELSE error_text || CHAR(10) || ?
+		        ELSE error_text || ?
 		    END,
 		    started_at = NULL,
 		    finished_at = NULL,
@@ -8436,7 +8442,7 @@ func retenerRuntimeOrderSendInstructionNotificada(order *RuntimeOrder, payload m
 		WHERE id = ?`,
 		resultado,
 		reason,
-		reason,
+		"\n"+reason,
 		nextAttempt,
 		order.ID,
 	)
@@ -11366,14 +11372,14 @@ func reconciliarRuntimeOrderStale(id int64, tipo string, now, cutoff time.Time) 
 			    available_at = CURRENT_TIMESTAMP,
 			    error_text = CASE
 			        WHEN TRIM(COALESCE(error_text, '')) = '' THEN 'reencolada tras stale del control plane'
-			        ELSE error_text || CHAR(10) || 'reencolada tras stale del control plane'
+			        ELSE error_text || ?
 			    END
 			WHERE id = ?
 			  AND estado IN ('tomada','ejecutando')
 			  AND (
 			        (lease_expires_at IS NOT NULL AND lease_expires_at <= ?)
 			     OR COALESCE(started_at, updated_at, created_at) <= ?
-			  )`, id, now, cutoff)
+			  )`, "\nreencolada tras stale del control plane", id, now, cutoff)
 	} else {
 		res, execErr = DB.Exec(`
 			UPDATE runtime_orders
@@ -11384,14 +11390,14 @@ func reconciliarRuntimeOrderStale(id int64, tipo string, now, cutoff time.Time) 
 			    lease_expires_at = NULL,
 			    error_text = CASE
 			        WHEN TRIM(COALESCE(error_text, '')) = '' THEN 'orden expirada por stale sin dispatcher compatible'
-			        ELSE error_text || CHAR(10) || 'orden expirada por stale sin dispatcher compatible'
+			        ELSE error_text || ?
 			    END
 			WHERE id = ?
 			  AND estado IN ('tomada','ejecutando')
 			  AND (
 			        (lease_expires_at IS NOT NULL AND lease_expires_at <= ?)
 			     OR COALESCE(started_at, updated_at, created_at) <= ?
-			  )`, id, now, cutoff)
+			  )`, "\norden expirada por stale sin dispatcher compatible", id, now, cutoff)
 	}
 	if execErr != nil {
 		return false, execErr
@@ -12351,11 +12357,21 @@ func compactarMetadataHandleRuntimePersistida(handle *RuntimeHandle) (*RuntimeHa
 
 func SincronizarRuntimeHandleWorkingDir(handle *RuntimeHandle, runtime *RuntimeInstance, agente string, proyectoID *int64) (*RuntimeHandle, string, error) {
 	current := ""
+	metaWorkingDir := ""
+	metaCWD := ""
 	if handle != nil {
-		current = strings.TrimSpace(stringFromMap(mapFromJSON(handle.MetadataJSON), "working_dir", ""))
+		meta := mapFromJSON(handle.MetadataJSON)
+		metaCWD = strings.TrimSpace(stringFromMap(meta, "cwd", ""))
+		metaWorkingDir = strings.TrimSpace(stringFromMap(meta, "working_dir", ""))
 	}
-	if current == "" && runtime != nil {
+	if runtime != nil {
 		current = strings.TrimSpace(runtime.CWD)
+	}
+	if current == "" && handle != nil {
+		current = metaCWD
+		if current == "" {
+			current = metaWorkingDir
+		}
 	}
 	if proyectoID == nil && runtime != nil {
 		proyectoID = runtime.ProyectoID
@@ -12368,7 +12384,30 @@ func SincronizarRuntimeHandleWorkingDir(handle *RuntimeHandle, runtime *RuntimeI
 		return handle, current, err
 	}
 	preferred := RutaTrabajoPreferidaAgenteProyecto(strings.TrimSpace(agente), proyecto, current)
-	if preferred == "" || preferred == current {
+	if preferred == "" {
+		preferred = current
+	}
+	if preferred == current {
+		if handle != nil && metaWorkingDir != "" && strings.TrimSpace(metaWorkingDir) != preferred {
+			meta := mapFromJSON(handle.MetadataJSON)
+			if meta == nil {
+				meta = map[string]any{}
+			}
+			meta["working_dir"] = preferred
+			if metaCWD != "" || preferred != "" {
+				meta["cwd"] = preferred
+			}
+			metaJSON, _ := json.Marshal(meta)
+			if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+				return nil, "", err
+			}
+			runtimeHandleHotReset()
+			fresh, err := GetRuntimeHandle(handle.ID)
+			if err != nil {
+				return nil, "", err
+			}
+			return fresh, preferred, nil
+		}
 		return handle, preferred, nil
 	}
 	if handle != nil {

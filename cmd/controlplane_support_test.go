@@ -11229,7 +11229,7 @@ func TestProcesarRuntimeMailboxSessionResumeBatchEncolaSendInstructionParaAutono
 	if err != nil || handle == nil {
 		t.Fatalf("handle: %+v err=%v", handle, err)
 	}
-	metaJSON := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-autonomia-cont"}` 
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-autonomia-cont"}`
 	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
 	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
 		t.Fatalf("update handle: %v", err)
@@ -12773,6 +12773,141 @@ func TestReconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailboxMarcaEntr
 	}
 	if !strings.Contains(inbox, "Guidance Durable") || !strings.Contains(inbox, "Sigue con la tarea activa") {
 		t.Fatalf("la inbox durable deberia incluir la guidance vigente, got=%q", inbox)
+	}
+}
+
+func TestReconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailboxAceptaAutonomiaContinuarTrabajoSinMailboxOnlyYCoalescea(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	repoDir := filepath.Join(tmp, "repo-inbox-durable-autonomia")
+	worktreeDir := filepath.Join(tmp, "wt-codex3-inbox-durable-autonomia")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	if err := os.MkdirAll(worktreeDir, 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: repoDir,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Slice actual",
+		Descripcion: "Frente actual: cerrar portability de Postgres en write-set acotado.",
+		ProyectoID:  &proyectoID,
+		Modulo:      "db",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex3"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex3"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if _, err := (db.CoordinationWorktreeSQLRepository{}).Create(&coordinacion.Worktree{
+		ProjectID: proyectoID,
+		TaskID:    &tareaID,
+		Agent:     "Codex3",
+		Name:      "orquestador-codex3-inbox-durable-autonomia",
+		Path:      worktreeDir,
+		Branch:    "orq/orquestador/codex3/inbox-durable-autonomia",
+		BaseRef:   "main",
+		State:     coordinacion.WorktreeActive,
+		Reason:    "test_runtime_mailbox_guidance_durable_autonomia",
+	}); err != nil {
+		t.Fatalf("crear worktree activa: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex3",
+		ProyectoID:  &proyectoID,
+		CWD:         worktreeDir,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex3-inbox-durable","tmux_pane_id":"%43","mailbox_delivery_mode":"session_resume","can_send_input":false,"external_session_id":"sess-autonomia"}`
+	capsJSON := `{"mailbox_delivery_mode":"session_resume","can_send_input":false}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex3-inbox-durable/%43', estado='activo', metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	msgViejoID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "orquesta",
+		ToAgente:    "Codex3",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia_continuar_trabajo",
+		PayloadJSON: `{"texto":"Mensaje viejo"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox vieja: %v", err)
+	}
+	msgNuevoID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "orquesta",
+		ToAgente:    "Codex3",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia_continuar_trabajo",
+		PayloadJSON: `{"texto":"Mensaje vigente del frente actual"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox nueva: %v", err)
+	}
+
+	pendiente := "pendiente"
+	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: ptrString("Codex3"), ProyectoID: &proyectoID, Estado: &pendiente})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	n, err := reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox, map[int64]struct{}{}, newRuntimeMailboxBatchSnapshot())
+	if err != nil {
+		t.Fatalf("reconciliar guidance durable inbox: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia reconciliar exactamente una guidance durable canonica, got=%d", n)
+	}
+
+	msgNuevo, err := db.GetRuntimeMailbox(msgNuevoID)
+	if err != nil || msgNuevo == nil {
+		t.Fatalf("get mailbox nueva: %+v err=%v", msgNuevo, err)
+	}
+	if msgNuevo.Estado != "entregado" {
+		t.Fatalf("la mailbox nueva deberia quedar entregada, got=%s", msgNuevo.Estado)
+	}
+	msgViejo, err := db.GetRuntimeMailbox(msgViejoID)
+	if err != nil || msgViejo == nil {
+		t.Fatalf("get mailbox vieja: %+v err=%v", msgViejo, err)
+	}
+	if msgViejo.Estado == "pendiente" {
+		t.Fatalf("la mailbox vieja deberia quedar coalescida, got=%s", msgViejo.Estado)
+	}
+	rawInbox, err := os.ReadFile(filepath.Join(worktreeDir, ".orquesta-inbox.md"))
+	if err != nil {
+		t.Fatalf("leer inbox durable: %v", err)
+	}
+	inbox := string(rawInbox)
+	if strings.Contains(inbox, "Mensaje viejo") {
+		t.Fatalf("la inbox no deberia conservar guidance vieja, got=%q", inbox)
+	}
+	if !strings.Contains(inbox, "Mensaje vigente del frente actual") {
+		t.Fatalf("la inbox durable deberia materializar la guidance vigente, got=%q", inbox)
 	}
 }
 
