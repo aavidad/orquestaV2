@@ -6570,6 +6570,12 @@ func procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(mailbox []*db.RuntimeMai
 			}
 			continue
 		}
+		if !runtimeMailboxShouldReevaluate("bootstrap_tmux", msg.ID, handle.ID) {
+			continue
+		}
+		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryBootstrapOnly {
+			continue
+		}
 		if supervisedHandle, _, _, err := snapshot.supervisedHandle(handle); err != nil {
 			if runtimeMailboxCanDeferSupervisedHandleError(err) {
 				db.Audit("orquesta", "runtime_mailbox_supervision_deferred", "runtime_mailbox", msg.ID, err.Error())
@@ -6598,12 +6604,6 @@ func procesarRuntimeMailboxBootstrapTMUXMensaje(msg *db.RuntimeMailboxMessage, c
 	} else if obsoleta {
 		consumed[msg.ID] = struct{}{}
 		return true, nil
-	}
-	if !runtimeMailboxShouldReevaluate("bootstrap_tmux", msg.ID, handle.ID) {
-		return false, nil
-	}
-	if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryBootstrapOnly {
-		return false, nil
 	}
 	if !runtimeHandleListaParaDispatchBootstrapTMUX(handle) {
 		return false, nil

@@ -10173,6 +10173,157 @@ func TestProcesarRuntimeMailboxInteractivoMensajeOmiteSupervisionParaHandleNoInt
 	}
 }
 
+func TestProcesarRuntimeMailboxBootstrapTMUXBatchEvitaSupervisionSiNoTocaReevaluar(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+	t.Cleanup(resetRuntimeMailboxReevaluationGate)
+
+	prevSync := runtimeMailboxSyncSupervisedHandleFn
+	t.Cleanup(func() { runtimeMailboxSyncSupervisedHandleFn = prevSync })
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"bootstrap tmux"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: msg=%+v err=%v", msg, err)
+	}
+
+	handle := &db.RuntimeHandle{
+		ID:               51,
+		Agente:           "Codex1",
+		ProyectoID:       &proyectoID,
+		Estado:           "activo",
+		Transporte:       "tmux",
+		HandleKind:       "session",
+		MetadataJSON:     `{"driver":"tmux_cli_session","tmux_session":"orq-codex1","tmux_pane_id":"%9","can_send_input":true,"mailbox_delivery_mode":"bootstrap_only"}`,
+		CapabilitiesJSON: `{"can_send_input":true,"mailbox_delivery_mode":"bootstrap_only"}`,
+	}
+	snapshot := &runtimeMailboxBatchSnapshot{
+		activeHandles: map[string]*db.RuntimeHandle{
+			runtimeMailboxBatchKey("Codex1", &proyectoID): handle,
+		},
+		activeHandleLoaded: map[string]struct{}{
+			runtimeMailboxBatchKey("Codex1", &proyectoID): {},
+		},
+		supervisedByHandleID: map[int64]runtimeMailboxSupervisedHandleSnapshot{},
+	}
+
+	if !runtimeMailboxShouldReevaluate("bootstrap_tmux", msg.ID, handle.ID) {
+		t.Fatal("la primera reevaluacion bootstrap_tmux deberia abrir el gate")
+	}
+	supervisedCalls := 0
+	runtimeMailboxSyncSupervisedHandleFn = func(handle *db.RuntimeHandle, runtime *db.RuntimeInstance, source string) (*db.RuntimeHandle, *db.RuntimeInstance, string, error) {
+		supervisedCalls++
+		return handle, runtime, "", nil
+	}
+
+	total, err := procesarRuntimeMailboxBootstrapTMUXBatchConMailbox([]*db.RuntimeMailboxMessage{msg}, map[int64]struct{}{}, snapshot)
+	if err != nil {
+		t.Fatalf("procesarRuntimeMailboxBootstrapTMUXBatchConMailbox: %v", err)
+	}
+	if total != 0 {
+		t.Fatalf("no deberia despachar cuando el gate bootstrap_tmux sigue cerrado, total=%d", total)
+	}
+	if supervisedCalls != 0 {
+		t.Fatalf("no deberia supervisar handle bootstrap_tmux antes de reevaluar, calls=%d", supervisedCalls)
+	}
+}
+
+func TestProcesarRuntimeMailboxBootstrapTMUXBatchOmiteSupervisionParaHandleNoBootstrap(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+	t.Cleanup(resetRuntimeMailboxReevaluationGate)
+
+	prevSync := runtimeMailboxSyncSupervisedHandleFn
+	t.Cleanup(func() { runtimeMailboxSyncSupervisedHandleFn = prevSync })
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"bootstrap tmux"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: msg=%+v err=%v", msg, err)
+	}
+
+	handle := &db.RuntimeHandle{
+		ID:               52,
+		Agente:           "Codex1",
+		ProyectoID:       &proyectoID,
+		Estado:           "activo",
+		Transporte:       "tmux",
+		HandleKind:       "session",
+		MetadataJSON:     `{"driver":"tmux_cli_session","tmux_session":"orq-codex1","tmux_pane_id":"%9","can_send_input":true,"mailbox_delivery_mode":"interactive"}`,
+		CapabilitiesJSON: `{"can_send_input":true,"mailbox_delivery_mode":"interactive"}`,
+	}
+	snapshot := &runtimeMailboxBatchSnapshot{
+		activeHandles: map[string]*db.RuntimeHandle{
+			runtimeMailboxBatchKey("Codex1", &proyectoID): handle,
+		},
+		activeHandleLoaded: map[string]struct{}{
+			runtimeMailboxBatchKey("Codex1", &proyectoID): {},
+		},
+		supervisedByHandleID: map[int64]runtimeMailboxSupervisedHandleSnapshot{},
+	}
+
+	supervisedCalls := 0
+	runtimeMailboxSyncSupervisedHandleFn = func(handle *db.RuntimeHandle, runtime *db.RuntimeInstance, source string) (*db.RuntimeHandle, *db.RuntimeInstance, string, error) {
+		supervisedCalls++
+		return handle, runtime, "", nil
+	}
+
+	total, err := procesarRuntimeMailboxBootstrapTMUXBatchConMailbox([]*db.RuntimeMailboxMessage{msg}, map[int64]struct{}{}, snapshot)
+	if err != nil {
+		t.Fatalf("procesarRuntimeMailboxBootstrapTMUXBatchConMailbox: %v", err)
+	}
+	if total != 0 {
+		t.Fatalf("no deberia despachar bootstrap_tmux sobre handle session_resume, total=%d", total)
+	}
+	if supervisedCalls != 0 {
+		t.Fatalf("no deberia supervisar handles no bootstrap_only, calls=%d", supervisedCalls)
+	}
+}
+
 func TestReconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchOmiteLookupSiNoHayDuplicado(t *testing.T) {
 	prevCompact := runtimeMailboxPipelineShouldCompactInBatchFn
 	t.Cleanup(func() { runtimeMailboxPipelineShouldCompactInBatchFn = prevCompact })
