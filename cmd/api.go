@@ -141,6 +141,18 @@ var (
 	apiAgentPrepareBuilder        = func(input agentesapp.PrepareInput) (*agentesapp.PrepareOutput, error) {
 		return agentesService.BuildPrepare(input)
 	}
+	apiListRuntimeOrdersFn = func(filter db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error) {
+		return runtimesService.ListRuntimeOrders(filter)
+	}
+	apiListRuntimeMailboxFn = func(filter db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error) {
+		return runtimesService.ListRuntimeMailbox(filter)
+	}
+	apiGetRuntimeProjectFn = func(ref string) (*db.Proyecto, error) {
+		return runtimesService.GetProject(ref)
+	}
+	apiListRuntimeOrdersTimeout    = 2 * time.Second
+	apiListRuntimeMailboxTimeout   = 2 * time.Second
+	apiRuntimeProjectLookupTimeout = 1500 * time.Millisecond
 )
 
 func runAPIAgentPrepareLimited(timeout time.Duration, fn func() (*agentesapp.PrepareOutput, error)) (*agentesapp.PrepareOutput, error) {
@@ -1067,6 +1079,23 @@ func runAPITimeboxed[T any](timeout time.Duration, fn func() (T, error), timeout
 		}
 		return zero, fmt.Errorf("api timeout")
 	}
+}
+
+func apiResolveProjectIDTimeboxed(proyectoRef string) (*int64, error) {
+	proyectoRef = strings.TrimSpace(proyectoRef)
+	if proyectoRef == "" {
+		return nil, nil
+	}
+	proyecto, err := runAPITimeboxed(apiRuntimeProjectLookupTimeout, func() (*db.Proyecto, error) {
+		return apiGetRuntimeProjectFn(proyectoRef)
+	}, errStatusFetchTimeout)
+	if err != nil {
+		return nil, err
+	}
+	if proyecto == nil {
+		return nil, fmt.Errorf("proyecto no encontrado")
+	}
+	return &proyecto.ID, nil
 }
 
 func apiHandlerDiagnostico(w http.ResponseWriter, r *http.Request) {
@@ -5077,12 +5106,16 @@ func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {
 			filter.Estado = &estado
 		}
 		if proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyecto != "" {
-			p, err := runtimesService.GetProject(proyecto)
+			proyectoID, err := apiResolveProjectIDTimeboxed(proyecto)
 			if err != nil {
+				if errors.Is(err, errStatusFetchTimeout) {
+					apiError(w, http.StatusServiceUnavailable, fmt.Errorf("runtime orders temporalmente degradado"))
+					return
+				}
 				apiError(w, http.StatusBadRequest, err)
 				return
 			}
-			filter.ProyectoID = &p.ID
+			filter.ProyectoID = proyectoID
 		}
 		if limitStr := strings.TrimSpace(r.URL.Query().Get("limit")); limitStr != "" {
 			limit, err := strconv.Atoi(limitStr)
@@ -5094,8 +5127,14 @@ func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {
 		} else {
 			filter.Limit = 50
 		}
-		orders, err := runtimesService.ListRuntimeOrders(filter)
+		orders, err := runAPITimeboxed(apiListRuntimeOrdersTimeout, func() ([]*db.RuntimeOrder, error) {
+			return apiListRuntimeOrdersFn(filter)
+		}, errStatusFetchTimeout)
 		if err != nil {
+			if errors.Is(err, errStatusFetchTimeout) {
+				apiError(w, http.StatusServiceUnavailable, fmt.Errorf("runtime orders temporalmente degradado"))
+				return
+			}
 			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -5231,15 +5270,25 @@ func apiHandlerRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
 			filter.Estado = &estado
 		}
 		if proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyecto != "" {
-			p, err := runtimesService.GetProject(proyecto)
+			proyectoID, err := apiResolveProjectIDTimeboxed(proyecto)
 			if err != nil {
+				if errors.Is(err, errStatusFetchTimeout) {
+					apiError(w, http.StatusServiceUnavailable, fmt.Errorf("runtime mailbox temporalmente degradado"))
+					return
+				}
 				apiError(w, http.StatusBadRequest, err)
 				return
 			}
-			filter.ProyectoID = &p.ID
+			filter.ProyectoID = proyectoID
 		}
-		mailbox, err := runtimesService.ListRuntimeMailbox(filter)
+		mailbox, err := runAPITimeboxed(apiListRuntimeMailboxTimeout, func() ([]*db.RuntimeMailboxMessage, error) {
+			return apiListRuntimeMailboxFn(filter)
+		}, errStatusFetchTimeout)
 		if err != nil {
+			if errors.Is(err, errStatusFetchTimeout) {
+				apiError(w, http.StatusServiceUnavailable, fmt.Errorf("runtime mailbox temporalmente degradado"))
+				return
+			}
 			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
