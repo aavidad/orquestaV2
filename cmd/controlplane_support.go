@@ -8395,6 +8395,9 @@ func filtrarSesionesAutonomiaRelevantes(sesiones []*db.Sesion) []*db.Sesion {
 }
 
 func autonomiaAllowlistAgentesPorProyecto() map[int64]map[string]struct{} {
+	if !controlPlaneConfigBoolOrDefault("server_autobootstrap_enabled", false) {
+		return nil
+	}
 	projectSlug := strings.TrimSpace(configOrDefault("server_autobootstrap_project_slug", "orquestador"))
 	if projectSlug == "" {
 		return nil

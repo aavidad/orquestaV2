@@ -7714,6 +7714,9 @@ func TestFiltrarSesionesAutonomiaRelevantesRespetaFlotaAutobootstrapOficial(t *t
 	if err := db.ConfigSet("server_autobootstrap_project_slug", "orquestador"); err != nil {
 		t.Fatalf("config project slug: %v", err)
 	}
+	if err := db.ConfigSet("server_autobootstrap_enabled", "true"); err != nil {
+		t.Fatalf("config autobootstrap enabled: %v", err)
+	}
 	if err := db.ConfigSet("server_autobootstrap_supervisor_agent", "Codex1"); err != nil {
 		t.Fatalf("config supervisor: %v", err)
 	}
