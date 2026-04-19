@@ -59,6 +59,7 @@ type workerStatus struct {
 	Agent               string `json:"agent,omitempty"`
 	Project             string `json:"project,omitempty"`
 	WorkingDir          string `json:"working_dir,omitempty"`
+	CurrentPath         string `json:"current_path,omitempty"`
 	LogPath             string `json:"log_path,omitempty"`
 	ExternalSessionID   string `json:"external_session_id,omitempty"`
 	MailboxDeliveryMode string `json:"mailbox_delivery_mode,omitempty"`

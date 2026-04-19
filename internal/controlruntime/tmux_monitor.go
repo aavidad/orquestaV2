@@ -107,7 +107,7 @@ func runEmbeddedTmuxMonitor(args []string) error {
 		return fmt.Errorf("tmux monitor sin rutas de status/heartbeat")
 	}
 
-	_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusStarting, true, "", nil, spec.ChildPID, time.Now().UTC(), time.Time{}, time.Time{})
+	_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusStarting, true, "", nil, spec.ChildPID, time.Now().UTC(), time.Time{}, time.Time{}, "")
 
 	ticker := time.NewTicker(embeddedTmuxMonitorHeartbeatInterval)
 	defer ticker.Stop()
@@ -121,7 +121,7 @@ func runEmbeddedTmuxMonitor(args []string) error {
 		if spec.OwnerPID > 0 {
 			if alive, err := procesoVivoPID(spec.OwnerPID); err == nil && !alive {
 				if err := cleanupTMUXSessionOnOwnerExit(spec); err != nil {
-					_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusFailed, false, err.Error(), nil, 0, time.Now().UTC(), lastOutputAt, lastProgressAt)
+					_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusFailed, false, err.Error(), nil, 0, time.Now().UTC(), lastOutputAt, lastProgressAt, "")
 				}
 				return nil
 			}
@@ -129,12 +129,12 @@ func runEmbeddedTmuxMonitor(args []string) error {
 		snap, err := consultarTmuxPane(spec)
 		now := time.Now().UTC()
 		if err != nil {
-			_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusFailed, false, err.Error(), nil, 0, now, lastOutputAt, lastProgressAt)
+			_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusFailed, false, err.Error(), nil, 0, now, lastOutputAt, lastProgressAt, "")
 			return nil
 		}
 		if snap.PaneDead || snap.PanePID <= 0 {
 			state, exitErr := tmuxWorkerStateOnPaneFinalized(lastState)
-			_ = writeEmbeddedTmuxWorkerSnapshot(spec, state, false, exitErr, nil, snap.PanePID, now, lastOutputAt, lastProgressAt)
+			_ = writeEmbeddedTmuxWorkerSnapshot(spec, state, false, exitErr, nil, snap.PanePID, now, lastOutputAt, lastProgressAt, strings.TrimSpace(snap.CurrentPath))
 			return nil
 		}
 		if spec.ChildPID <= 0 {
@@ -142,7 +142,7 @@ func runEmbeddedTmuxMonitor(args []string) error {
 		}
 		state, stateErr := currentTMUXWorkerState(strings.TrimSpace(spec.TmuxCommand), strings.TrimSpace(spec.PaneID))
 		if stateErr != nil {
-			_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusFailed, false, stateErr.Error(), nil, snap.PanePID, now, lastOutputAt, lastProgressAt)
+			_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusFailed, false, stateErr.Error(), nil, snap.PanePID, now, lastOutputAt, lastProgressAt, strings.TrimSpace(snap.CurrentPath))
 			return nil
 		}
 		lastState = state
@@ -161,7 +161,7 @@ func runEmbeddedTmuxMonitor(args []string) error {
 			}
 			lastProgressProbe = now
 		}
-		_ = writeEmbeddedTmuxWorkerSnapshot(spec, state, true, "", nil, snap.PanePID, now, lastOutputAt, lastProgressAt)
+		_ = writeEmbeddedTmuxWorkerSnapshot(spec, state, true, "", nil, snap.PanePID, now, lastOutputAt, lastProgressAt, strings.TrimSpace(snap.CurrentPath))
 		<-ticker.C
 	}
 }
@@ -234,7 +234,7 @@ func consultarTmuxPane(spec embeddedTmuxMonitorSpec) (*tmuxPaneSnapshot, error) 
 	}, nil
 }
 
-func writeEmbeddedTmuxWorkerSnapshot(spec embeddedTmuxMonitorSpec, state string, alive bool, exitError string, exitCode *int, childPID int, now, observedLastOutputAt, lastProgressAt time.Time) error {
+func writeEmbeddedTmuxWorkerSnapshot(spec embeddedTmuxMonitorSpec, state string, alive bool, exitError string, exitCode *int, childPID int, now, observedLastOutputAt, lastProgressAt time.Time, currentPath string) error {
 	lastOutputAt := time.Time{}
 	if info, err := os.Stat(strings.TrimSpace(spec.LogPath)); err == nil {
 		lastOutputAt = info.ModTime().UTC()
@@ -276,6 +276,7 @@ func writeEmbeddedTmuxWorkerSnapshot(spec embeddedTmuxMonitorSpec, state string,
 		Agent:               strings.TrimSpace(spec.Agent),
 		Project:             strings.TrimSpace(spec.Project),
 		WorkingDir:          strings.TrimSpace(spec.WorkingDir),
+		CurrentPath:         strings.TrimSpace(currentPath),
 		LogPath:             strings.TrimSpace(spec.LogPath),
 		ExternalSessionID:   strings.TrimSpace(spec.ExternalSessionID),
 		MailboxDeliveryMode: strings.TrimSpace(spec.MailboxDeliveryMode),

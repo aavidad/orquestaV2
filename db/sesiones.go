@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 )
 
 import (
+	"orquesta/runtimeagente"
 	"orquesta/sesionesapp"
 )
 
@@ -476,6 +478,9 @@ func runtimeHandleSostieneSesionOperativaConCutoff(handle *RuntimeHandle, cutoff
 	if handle == nil {
 		return false
 	}
+	if runtimeHandleTMUXCurrentPathMismatch(handle) {
+		return false
+	}
 	estado := strings.TrimSpace(handle.Estado)
 	if estado != "activo" && estado != "pausado" {
 		return false
@@ -499,6 +504,53 @@ func runtimeHandleSostieneSesionOperativaConCutoff(handle *RuntimeHandle, cutoff
 		return false
 	}
 	return true
+}
+
+func runtimeHandleTMUXCurrentPathMismatch(handle *RuntimeHandle) bool {
+	if handle == nil || handle.ProyectoID == nil || *handle.ProyectoID <= 0 {
+		return false
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	driver := strings.TrimSpace(stringFromMap(meta, "driver", ""))
+	if !strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") && !strings.EqualFold(driver, "tmux_cli_session") {
+		return false
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
+	if err != nil || snap == nil {
+		return false
+	}
+	view := snap.View(time.Now().UTC(), time.Minute)
+	if view == nil {
+		return false
+	}
+	current := strings.TrimSpace(view.CurrentPath)
+	if current == "" {
+		return false
+	}
+	proyecto, err := GetProyectoConRutaEfectiva(strconv.FormatInt(*handle.ProyectoID, 10), "")
+	if err != nil || proyecto == nil {
+		return false
+	}
+	preferred := strings.TrimSpace(RutaTrabajoPreferidaAgenteProyecto(strings.TrimSpace(handle.Agente), proyecto, current))
+	if preferred == "" {
+		return false
+	}
+	return !runtimePathsEqual(current, preferred)
+}
+
+func runtimePathsEqual(a, b string) bool {
+	a = filepath.Clean(strings.TrimSpace(a))
+	b = filepath.Clean(strings.TrimSpace(b))
+	if a == "" || b == "" {
+		return false
+	}
+	if resolvedA, err := filepath.EvalSymlinks(a); err == nil {
+		a = filepath.Clean(resolvedA)
+	}
+	if resolvedB, err := filepath.EvalSymlinks(b); err == nil {
+		b = filepath.Clean(resolvedB)
+	}
+	return a == b
 }
 
 func runtimeSostieneSesionOperativaConCutoff(runtime *RuntimeInstance, cutoff time.Time) bool {

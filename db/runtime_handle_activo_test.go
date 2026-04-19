@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/coordinacion"
 	"orquesta/internal/controlruntime"
 	"orquesta/runtimeagente"
 )
@@ -93,6 +94,108 @@ func TestGetRuntimeHandleActivoAgenteProyectoIgnoraFantasmaMasReciente(t *testin
 	}
 	if fantasma == nil || fantasma.Estado != "fallido" {
 		t.Fatalf("el handle fantasma reciente deberia quedar fallido: %+v", fantasma)
+	}
+}
+
+func TestRuntimeHandlePuedeRepresentarActivoCanonicoOmiteTMUXFueraDeWorktreeCanonica(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex9", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	rutaBase := filepath.Join(tmp, "orquestador")
+	rutaWorktree := filepath.Join(rutaBase, ".orquesta-worktrees", "orquestador-codex9")
+	if err := os.MkdirAll(rutaWorktree, 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := (CoordinationWorktreeSQLRepository{}).Create(&coordinacion.Worktree{
+		ProjectID: proyectoID,
+		Agent:     "Codex9",
+		Name:      "orquestador-codex9",
+		Path:      rutaWorktree,
+		Branch:    "orq-orquestador-codex9",
+		BaseRef:   "HEAD",
+		State:     coordinacion.WorktreeActive,
+		Reason:    "test",
+	}); err != nil {
+		t.Fatalf("crear worktree activa: %v", err)
+	}
+
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "Codex9",
+		ProyectoID:        &proyectoID,
+		CWD:               rutaWorktree,
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-codex9",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	runDir := filepath.Join(tmp, "worker-codex9")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir worker: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex9","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex9-root","tmux_pane_id":"%12","status_path":"`+statusPath+`","heartbeat_path":"`+heartbeatPath+`","working_dir":"`+rutaWorktree+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","updated_at":"`+now+`","alive":true,"child_pid":`+strconv.Itoa(os.Getpid())+`,"working_dir":"`+rutaWorktree+`","current_path":"`+rutaBase+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now+`","started_at":"`+now+`","child_pid":`+strconv.Itoa(os.Getpid())+`}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-codex9-root",
+		"tmux_pane_id":          "%12",
+		"working_dir":           rutaWorktree,
+		"cwd":                   rutaWorktree,
+		"external_session_id":   "sess-codex9",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	capsJSON, _ := json.Marshal(map[string]any{
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliverySessionResume,
+		"can_send_input":        false,
+	})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex9-root/%12', estado='activo', metadata_json=?, capabilities_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, string(metaJSON), string(capsJSON), handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_instances SET cwd=?, logical_state='esperando_io', process_state='running', last_heartbeat_at=CURRENT_TIMESTAMP, last_event_at=CURRENT_TIMESTAMP WHERE id=?`, rutaWorktree, runtime.ID); err != nil {
+		t.Fatalf("update runtime: %v", err)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("refresh handle: %+v err=%v", handle, err)
+	}
+
+	if runtimeHandlePuedeRepresentarActivoCanonico(handle, time.Now().UTC()) {
+		t.Fatal("tmux fuera de la worktree canonica no deberia representar activo canonico")
 	}
 }
 

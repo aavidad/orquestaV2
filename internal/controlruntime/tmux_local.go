@@ -168,7 +168,7 @@ func arrancarPlanLocalTMUX(req SolicitudArranque) (*ProcesoArrancado, error) {
 			return nil, readyErr
 		}
 		if ready {
-			_ = writeEmbeddedTmuxWorkerSnapshot(monitorSpec, workerStatusReady, true, "", nil, paneInfo.PanePID, time.Now().UTC(), time.Time{}, time.Time{})
+			_ = writeEmbeddedTmuxWorkerSnapshot(monitorSpec, workerStatusReady, true, "", nil, paneInfo.PanePID, time.Now().UTC(), time.Time{}, time.Time{}, strings.TrimSpace(monitorSpec.WorkingDir))
 		}
 	}
 

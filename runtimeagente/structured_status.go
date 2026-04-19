@@ -41,6 +41,7 @@ type WorkerStatus struct {
 	Agent               string `json:"agent,omitempty"`
 	Project             string `json:"project,omitempty"`
 	WorkingDir          string `json:"working_dir,omitempty"`
+	CurrentPath         string `json:"current_path,omitempty"`
 	LogPath             string `json:"log_path,omitempty"`
 	ExternalSessionID   string `json:"external_session_id,omitempty"`
 	MailboxDeliveryMode string `json:"mailbox_delivery_mode,omitempty"`
@@ -93,6 +94,7 @@ type WorkerStatusView struct {
 	TmuxSession         string     `json:"tmux_session,omitempty"`
 	TmuxWindow          string     `json:"tmux_window,omitempty"`
 	TmuxPaneID          string     `json:"tmux_pane_id,omitempty"`
+	CurrentPath         string     `json:"current_path,omitempty"`
 	CanSendInput        bool       `json:"can_send_input"`
 	StartedAt           *time.Time `json:"started_at,omitempty"`
 	UpdatedAt           *time.Time `json:"updated_at,omitempty"`
@@ -453,6 +455,9 @@ func (s *WorkerSnapshot) View(now time.Time, heartbeatThreshold time.Duration) *
 		view.TmuxWindow = strings.TrimSpace(s.Manifest.TmuxWindow)
 		view.TmuxPaneID = strings.TrimSpace(s.Manifest.TmuxPaneID)
 		view.CanSendInput = s.Manifest.CanSendInput
+	}
+	if s.Status != nil {
+		view.CurrentPath = strings.TrimSpace(s.Status.CurrentPath)
 	}
 	return view
 }

@@ -1594,6 +1594,9 @@ func runtimeHandlePuedeRepresentarActivoCanonico(handle *RuntimeHandle, now time
 	if handle == nil || runtimeHandleExcluidoDelActivoCanonico(handle) {
 		return false
 	}
+	if runtimeHandleTMUXCurrentPathMismatch(handle) {
+		return false
+	}
 	if runtimeHandleSostieneSesionOperativaConCutoff(handle, sessionOperationalCutoff()) {
 		return true
 	}
