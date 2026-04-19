@@ -53,8 +53,10 @@ type fakeStore struct {
 	hotHandlesCalls         int
 	listAssignmentsCalls    int
 	listRuntimesCalls       int
+	tickRuntimeCalls        int
 	listPassiveHandlesCalls int
 	listTasksCalls          int
+	tickTasksCalls          int
 	listAgentsCalls         int
 	checkReanimationsCalls  int
 	pendingVotesCalls       int
@@ -223,6 +225,22 @@ func (f *fakeStore) ListRuntimes(filter db.FiltroRuntimes) ([]*db.RuntimeInstanc
 	return out, nil
 }
 
+func (f *fakeStore) GetRuntimePrincipalForTick(agente string, proyectoID *int64) (*db.RuntimeInstance, error) {
+	f.tickRuntimeCalls++
+	for _, item := range f.runtimes {
+		if item == nil || !strings.EqualFold(strings.TrimSpace(item.Agente), strings.TrimSpace(agente)) {
+			continue
+		}
+		if proyectoID != nil && *proyectoID > 0 {
+			if item.ProyectoID == nil || *item.ProyectoID != *proyectoID {
+				continue
+			}
+		}
+		return item, nil
+	}
+	return nil, nil
+}
+
 func (f *fakeStore) ListRuntimeHandles(agent *string) ([]*db.RuntimeHandle, error) {
 	if agent == nil {
 		return f.handles, nil
@@ -387,6 +405,21 @@ func (f *fakeStore) ListTasks(filter db.FiltroTareas) ([]*db.Tarea, error) {
 			}
 		}
 		out = append(out, item)
+	}
+	return out, nil
+}
+
+func (f *fakeStore) ListTasksForTick(agente string) ([]*db.Tarea, error) {
+	f.tickTasksCalls++
+	var out []*db.Tarea
+	for _, item := range f.tasks {
+		if item == nil || item.Agente == nil || !strings.EqualFold(strings.TrimSpace(*item.Agente), strings.TrimSpace(agente)) {
+			continue
+		}
+		switch item.Estado {
+		case db.EstadoAsignada, db.EstadoEnProgreso, db.EstadoBloqueada:
+			out = append(out, item)
+		}
 	}
 	return out, nil
 }

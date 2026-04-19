@@ -23,6 +23,14 @@ type liteAgentGetter interface {
 	GetAgentPrepareLite(nombre string) (*db.Agente, error)
 }
 
+type tickRuntimeGetter interface {
+	GetRuntimePrincipalForTick(agente string, proyectoID *int64) (*db.RuntimeInstance, error)
+}
+
+type tickTaskLister interface {
+	ListTasksForTick(agente string) ([]*db.Tarea, error)
+}
+
 type ProjectBundle struct {
 	ID      int64  `json:"id"`
 	Slug    string `json:"slug"`
@@ -235,13 +243,13 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	)
 	if prepareDebeCargarBootstrapContext(prep) {
 		var (
-			loadWG           sync.WaitGroup
-			memErr           error
-			tasksErr         error
-			votesErr         error
-			listMemoryStart  = time.Now()
-			listTasksStart   = time.Now()
-			listVotesStart   = time.Now()
+			loadWG          sync.WaitGroup
+			memErr          error
+			tasksErr        error
+			votesErr        error
+			listMemoryStart = time.Now()
+			listTasksStart  = time.Now()
+			listVotesStart  = time.Now()
 		)
 		loadWG.Add(3)
 		go func() {
@@ -832,13 +840,124 @@ func buildBootstrapPrompt(agente *db.Agente, proyecto *db.Proyecto, plan *runtim
 	return db.BuildLaunchBootstrapPrompt(agente, proyecto, plan, catalogo, memoria, tareas, propuestas, resumenProyecto, resumenGobernanza)
 }
 
+func (s *Service) buildOperationalRowContextForTick(agenteNombre string, proyecto *db.Proyecto, now time.Time, sesionActiva *db.Sesion) (Row, []*db.Asignacion, []*db.Tarea, error) {
+	if proyecto == nil {
+		return Row{}, nil, nil, fmt.Errorf("proyecto obligatorio")
+	}
+	agenteNombre = strings.TrimSpace(agenteNombre)
+	if agenteNombre == "" {
+		return Row{}, nil, nil, fmt.Errorf("agente obligatorio")
+	}
+
+	agente, err := s.getAgentForPrepare(agenteNombre)
+	if err != nil {
+		return Row{}, nil, nil, err
+	}
+	if agente == nil {
+		return Row{}, nil, nil, fmt.Errorf("agente no encontrado: %s", agenteNombre)
+	}
+	row := Row{Agente: agente, Sesion: sesionActiva}
+
+	estadoActiva := db.AsignacionActiva
+	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{Agente: &agenteNombre, Estado: &estadoActiva})
+	if err != nil {
+		return Row{}, nil, nil, err
+	}
+	for _, asignacion := range asignaciones {
+		if asignacion != nil && asignacion.Estado == db.AsignacionActiva {
+			row.Asignacion = asignacion
+			break
+		}
+	}
+
+	projectID := &proyecto.ID
+	if getter, ok := s.store.(tickRuntimeGetter); ok {
+		row.Runtime, err = getter.GetRuntimePrincipalForTick(agenteNombre, projectID)
+		if err != nil {
+			return Row{}, nil, nil, err
+		}
+	} else {
+		runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{Agente: &agenteNombre, ProyectoID: projectID})
+		if err != nil {
+			return Row{}, nil, nil, err
+		}
+		row.Runtime = latestRuntimeForAgent(runtimes)
+	}
+
+	handles, err := s.store.ListCanonicalRuntimeHandles(&agenteNombre)
+	if err != nil {
+		return Row{}, nil, nil, err
+	}
+	row.Handle = latestHandleForProject(handles, projectID)
+	if row.Handle == nil {
+		row.Handle = latestHandleForAgent(handles)
+	}
+	if row.Handle == nil {
+		handles, err = s.store.ListPassiveRuntimeHandles(&agenteNombre)
+		if err != nil {
+			return Row{}, nil, nil, err
+		}
+		row.Handle = latestHandleForProject(handles, projectID)
+		if row.Handle == nil {
+			row.Handle = latestHandleForAgent(handles)
+		}
+	}
+	if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
+		if view := structured.View(now, time.Minute); view != nil {
+			row.WorkerState = strings.TrimSpace(view.State)
+			row.WorkerAlive = view.Alive
+			row.WorkerReadyAt = view.ReadyAt
+			row.WorkerHeartbeat = view.HeartbeatAt
+			row.WorkerUpdatedAt = view.UpdatedAt
+			row.WorkerLastOutput = view.LastOutputAt
+			row.WorkerLastProgress = view.LastProgressAt
+			row.WorkerExitError = strings.TrimSpace(view.ExitError)
+			row.WorkerSessionRef = strings.TrimSpace(view.SessionRef)
+			row.WorkerRuntimeRef = strings.TrimSpace(view.RuntimeRef)
+			row.WorkerDriver = strings.TrimSpace(view.Driver)
+			row.WorkerTransport = strings.TrimSpace(view.Transport)
+			row.WorkerTMUXSession = strings.TrimSpace(view.TmuxSession)
+			row.WorkerTMUXWindow = strings.TrimSpace(view.TmuxWindow)
+			row.WorkerTMUXPaneID = strings.TrimSpace(view.TmuxPaneID)
+			row.WorkerCanSendInput = view.CanSendInput
+			row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
+			row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
+		}
+	}
+
+	var tareas []*db.Tarea
+	if lister, ok := s.store.(tickTaskLister); ok {
+		tareas, err = lister.ListTasksForTick(agenteNombre)
+	} else {
+		tareas, err = s.store.ListTasks(db.FiltroTareas{Agente: &agenteNombre})
+	}
+	if err != nil {
+		return Row{}, nil, nil, err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.EstadoCompletada, db.EstadoCancelada, db.EstadoBacklog:
+			continue
+		case db.EstadoBloqueada:
+			row.BlockedTasks++
+		default:
+			row.OpenTasks++
+		}
+	}
+	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
+	return row, asignaciones, tareas, nil
+}
+
 func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, sesionActiva *db.Sesion, cuotaPct int) (*TickOutput, error) {
 	if proyecto == nil {
 		return nil, fmt.Errorf("proyecto obligatorio")
 	}
 	now := time.Now().UTC()
 	politica := s.loadPolicy()
-	row, asignaciones, tareas, err := s.buildOperationalRowContextForAgentCompactWithSession(agenteNombre, now, sesionActiva)
+	row, asignaciones, tareas, err := s.buildOperationalRowContextForTick(agenteNombre, proyecto, now, sesionActiva)
 	if err != nil {
 		return nil, err
 	}

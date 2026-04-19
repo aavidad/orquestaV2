@@ -210,6 +210,35 @@ func GetTareaActivaIDPorAgenteProyecto(agente string, proyectoID *int64) (int64,
 	return id, err
 }
 
+func ListarTareasNoTerminalesAgente(agente string) ([]*Tarea, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil, nil
+	}
+	rows, err := DB.Query(`
+		SELECT id, titulo, descripcion, proyecto_id, modulo, estado, agente, propuesta_id, prioridad,
+		       dependencias, creado_por, commit_cierre, notas,
+		       created_at, updated_at, completada_at, contrato_definido
+		FROM tareas
+		WHERE agente = ?
+		  AND estado IN ('asignada','en_progreso','bloqueada')
+		ORDER BY updated_at DESC, id DESC`, agente)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*Tarea
+	for rows.Next() {
+		item, err := escanearTarea(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
 // GetTareaIDBlueprintKey devuelve el ID de una tarea por proyecto_id + blueprint_key.
 // Devuelve 0 si no existe.
 func GetTareaIDBlueprintKey(proyectoID int64, key string) int64 {

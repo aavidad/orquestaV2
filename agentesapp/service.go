@@ -1941,6 +1941,22 @@ func latestHandleForAgent(items []*db.RuntimeHandle) *db.RuntimeHandle {
 	return best
 }
 
+func latestHandleForProject(items []*db.RuntimeHandle, proyectoID *int64) *db.RuntimeHandle {
+	if proyectoID == nil || *proyectoID <= 0 {
+		return latestHandleForAgent(items)
+	}
+	var best *db.RuntimeHandle
+	for _, item := range items {
+		if item == nil || item.ProyectoID == nil || *item.ProyectoID != *proyectoID {
+			continue
+		}
+		if best == nil || runtimeHandleMoment(item).After(runtimeHandleMoment(best)) {
+			best = item
+		}
+	}
+	return best
+}
+
 func (s *Service) summarizeMailboxOverview(items []*db.RuntimeMailboxMessage, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (pendingVisible int, coveredBootstrap int, err error) {
 	for _, item := range items {
 		if item == nil {

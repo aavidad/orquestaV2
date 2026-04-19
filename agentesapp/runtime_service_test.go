@@ -1118,3 +1118,52 @@ func TestProcessTickCalientaCacheLigeraDeAgenteYProyecto(t *testing.T) {
 		t.Fatalf("no deberia releer proyecto tras tick: before=%d after=%d", beforeProjects, store.getProjectCalls)
 	}
 }
+
+func TestProcessTickUsaFuentesRapidasParaRuntimeYTareas(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStoreWithLiteAgent{
+		fakeStore: &fakeStore{
+			project: &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()},
+			assignments: []*db.Asignacion{
+				{Agente: "Codex2", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+			},
+			sessions: []*db.Sesion{
+				{ID: 11, Agente: "Codex2", ProyectoID: int64Ptr(7), Estado: "activa", Inicio: now},
+			},
+			tasks: []*db.Tarea{
+				{ID: 42, Agente: strPtr("Codex2"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente activo"},
+				{ID: 43, Agente: strPtr("Codex2"), ProyectoID: int64Ptr(7), Estado: db.EstadoCompletada, Titulo: "Hecha"},
+			},
+			runtimes: []*db.RuntimeInstance{
+				{ID: 21, Agente: "Codex2", ProyectoID: int64Ptr(7), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+			},
+			canonicalHandles: []*db.RuntimeHandle{
+				{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+			},
+			handles: []*db.RuntimeHandle{
+				{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+			},
+		},
+		liteAgent: &db.Agente{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+	}
+
+	out, err := NewService(store, nil).ProcessTick(TickInput{Agente: "Codex2", Proyecto: "orquestador"})
+	if err != nil {
+		t.Fatalf("ProcessTick: %v", err)
+	}
+	if out == nil || out.AccionRecomendada != "continuar_trabajo" {
+		t.Fatalf("salida inesperada: %+v", out)
+	}
+	if store.listRuntimesCalls != 0 {
+		t.Fatalf("no deberia listar runtimes completos: calls=%d", store.listRuntimesCalls)
+	}
+	if store.listTasksCalls != 0 {
+		t.Fatalf("no deberia listar todas las tareas: calls=%d", store.listTasksCalls)
+	}
+	if store.tickRuntimeCalls == 0 || store.tickTasksCalls == 0 {
+		t.Fatalf("deberia usar fuentes rapidas: runtime=%d tareas=%d", store.tickRuntimeCalls, store.tickTasksCalls)
+	}
+	if store.getAgentCalls != 0 || store.liteCalls == 0 {
+		t.Fatalf("deberia usar agente ligero: getAgent=%d lite=%d", store.getAgentCalls, store.liteCalls)
+	}
+}

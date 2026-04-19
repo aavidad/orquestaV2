@@ -1955,6 +1955,40 @@ func reconciliarRuntimeHandlesInvalidosEnLista(handles []*RuntimeHandle) error {
 }
 
 func ListarRuntimeHandlesParaTranscript() ([]*RuntimeHandle, error) {
+	if snapshot, err := runtimeHandleHotSnapshotCanonico(); err == nil && len(snapshot) > 0 {
+		seen := make(map[int64]struct{}, len(snapshot))
+		out := make([]*RuntimeHandle, 0, len(snapshot))
+		for _, handle := range snapshot {
+			if handle == nil {
+				continue
+			}
+			switch strings.TrimSpace(handle.Estado) {
+			case "activo", "pausado", "fallido":
+			default:
+				continue
+			}
+			if strings.TrimSpace(handle.MetadataJSON) == "" || !strings.Contains(handle.MetadataJSON, "log_path") {
+				continue
+			}
+			if handle.ID > 0 {
+				if _, ok := seen[handle.ID]; ok {
+					continue
+				}
+				seen[handle.ID] = struct{}{}
+			}
+			compacted, compactErr := compactarMetadataRuntimeHandleEnMemoria(handle)
+			if compactErr != nil {
+				return nil, compactErr
+			}
+			out = append(out, compacted)
+		}
+		sort.SliceStable(out, func(i, j int) bool {
+			return runtimeHandleRecency(out[i]).After(runtimeHandleRecency(out[j]))
+		})
+		if len(out) > 0 {
+			return out, nil
+		}
+	}
 	rows, err := DB.Query(runtimeHandleSelectBase() + `
 		WHERE estado IN ('activo','pausado','fallido')
 		  AND metadata_json <> ''

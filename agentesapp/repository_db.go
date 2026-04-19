@@ -96,6 +96,10 @@ func (Repository) ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance,
 	return db.ListarRuntimes(filtro)
 }
 
+func (Repository) GetRuntimePrincipalForTick(agente string, proyectoID *int64) (*db.RuntimeInstance, error) {
+	return db.GetRuntimePrincipalAgenteProyecto(agente, proyectoID)
+}
+
 func (Repository) ListRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error) {
 	return db.ListarRuntimeHandles(agente)
 }
@@ -138,6 +142,10 @@ func (Repository) ListRuntimeCheckpoints(filtro db.FiltroRuntimeCheckpoints) ([]
 
 func (Repository) ListTasks(filtro db.FiltroTareas) ([]*db.Tarea, error) {
 	return db.ListarTareas(filtro)
+}
+
+func (Repository) ListTasksForTick(agente string) ([]*db.Tarea, error) {
+	return db.ListarTareasNoTerminalesAgente(agente)
 }
 
 func (Repository) ListProjectPendingVotes(agente string, proyectoID int64) ([]*db.Propuesta, error) {
