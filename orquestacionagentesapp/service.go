@@ -980,7 +980,7 @@ func (s *Service) EnqueueAutonomyNudge(req NudgeRequest) (bool, error) {
 			runtimeID = handle.RuntimeID
 		}
 		if !db.RuntimeHandlePermiteSendInputInteractivo(handle) {
-			if pendiente, err := s.existsPendingAutonomyMailbox(agente, &proyecto.ID, accion); err != nil {
+			if pendiente, err := s.existsPendingAutonomyMailbox(agente, &proyecto.ID, accion, req.Extras); err != nil {
 				return false, err
 			} else if pendiente {
 				return false, nil
@@ -1266,7 +1266,7 @@ func (s *Service) existsOpenAutonomyOrder(agente string, proyectoID *int64, tipo
 	return false, nil
 }
 
-func (s *Service) existsPendingAutonomyMailbox(agente string, proyectoID *int64, accion string) (bool, error) {
+func (s *Service) existsPendingAutonomyMailbox(agente string, proyectoID *int64, accion string, extras map[string]any) (bool, error) {
 	estado := "pendiente"
 	mailbox, err := s.runtimes.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
 		ToAgente:   &agente,
@@ -1282,11 +1282,28 @@ func (s *Service) existsPendingAutonomyMailbox(agente string, proyectoID *int64,
 		}
 		payload := map[string]any{}
 		_ = json.Unmarshal([]byte(msg.PayloadJSON), &payload)
-		if strings.TrimSpace(stringMapValue(payload, "accion")) == strings.TrimSpace(accion) {
+		if autonomyMailboxMatchesActionAndContext(payload, accion, extras) {
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+func autonomyMailboxMatchesActionAndContext(payload map[string]any, accion string, extras map[string]any) bool {
+	if strings.TrimSpace(stringMapValue(payload, "accion")) != strings.TrimSpace(accion) {
+		return false
+	}
+	if verificationKey := strings.TrimSpace(stringMapValue(extras, "verification_key")); verificationKey != "" {
+		if !strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "verification_key")), verificationKey) {
+			return false
+		}
+	}
+	if tareaID := int64MapValue(extras, "tarea_id"); tareaID > 0 {
+		if int64MapValue(payload, "tarea_id") != tareaID {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Service) existsPendingPostRemediationFollowup(agente string, proyectoID *int64, verificationKey string) (bool, error) {
@@ -1556,6 +1573,34 @@ func stringMapValue(payload map[string]any, key string) string {
 		}
 	}
 	return ""
+}
+
+func int64MapValue(payload map[string]any, key string) int64 {
+	if payload == nil {
+		return 0
+	}
+	raw, ok := payload[key]
+	if !ok || raw == nil {
+		return 0
+	}
+	switch v := raw.(type) {
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case int32:
+		return int64(v)
+	case float64:
+		return int64(v)
+	case json.Number:
+		n, _ := v.Int64()
+		return n
+	case string:
+		n, _ := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		return n
+	default:
+		return 0
+	}
 }
 
 func parseStringMap(raw string) map[string]any {

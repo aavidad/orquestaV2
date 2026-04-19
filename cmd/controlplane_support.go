@@ -9954,6 +9954,18 @@ func rowTieneRuntimeOHandleOperativo(row agentesapp.Row) bool {
 }
 
 func procesarWorkersAtascadosAutonomiaBatch(rows []agentesapp.Row, now time.Time) (int, error) {
+	total := 0
+	for _, row := range rows {
+		procesadas, err := procesarWorkerAtascadoAutonomiaRow(row, rows, now)
+		if err != nil {
+			return total, err
+		}
+		total += procesadas
+	}
+	return total, nil
+}
+
+func procesarWorkerAtascadoAutonomiaRow(row agentesapp.Row, rows []agentesapp.Row, now time.Time) (int, error) {
 	cooldown := time.Duration(controlPlaneConfigIntOrDefault("autonomia_stuck_restart_cooldown_seconds", 1800)) * time.Second
 	if cooldown <= 0 {
 		cooldown = 30 * time.Minute
@@ -9966,75 +9978,66 @@ func procesarWorkersAtascadosAutonomiaBatch(rows []agentesapp.Row, now time.Time
 	if escalationCount <= 0 {
 		escalationCount = autonomiaStuckRestartEscalationCountDefault
 	}
-	total := 0
-	for _, row := range rows {
-		if row.Agente == nil || strings.TrimSpace(row.EstadoOperativo) != "atascado" {
-			continue
-		}
-		if !row.WorkerFresh(now) {
-			continue
-		}
-		if row.OpenTasks <= 0 && row.MailboxPending <= 0 {
-			continue
-		}
-		handle := row.Handle
-		if handle == nil {
-			continue
-		}
-		if !rowHasFreshTMUXWorkerForRecovery(row, now) {
-			continue
-		}
-		agente := strings.TrimSpace(row.Agente.Nombre)
-		if agente == "" {
-			continue
-		}
-		if disponible, _, err := autonomiaCuentaCompartidaDisponible(agente); err != nil {
-			return total, err
-		} else if !disponible {
-			continue
-		}
-		proyectoID := rowProyectoIDPreferido(row)
-		stopCount, err := contarRuntimeOrdersRecientes(agente, proyectoID, "stop", "stop", escalationWindow)
-		if err != nil {
-			return total, err
-		}
-		if stopCount >= escalationCount {
-			escaladas, err := escalarTareasWorkerAtascado(row, rows, now)
-			if err != nil {
-				return total, err
-			}
-			total += escaladas
-			continue
-		}
-		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "stop", "pause", "checkpoint", "start", "restart", "resume", "handoff"); err != nil {
-			return total, err
-		} else if pendiente {
-			continue
-		}
-		stopReciente, err := runtimeOrderAutonomiaRecienteBloqueaRecuperacion(row, proyectoID, "stop", "stop", cooldown)
-		if err != nil {
-			return total, err
-		}
-		startReciente, err := runtimeOrderAutonomiaRecienteBloqueaRecuperacion(row, proyectoID, "start", "start", cooldown)
-		if err != nil {
-			return total, err
-		}
-		if stopReciente || startReciente {
-			continue
-		}
-		stopOrderID, startOrderID, err := db.EncolarReinicioCoordinadoRuntimeHandle(handle, proyectoID, "worker_atascado", "orquesta")
-		if err != nil {
-			return total, err
-		}
-		detalleProyecto := "-"
-		if proyectoID != nil && *proyectoID > 0 {
-			detalleProyecto = strconv.FormatInt(*proyectoID, 10)
-		}
-		db.Audit("orquesta", "runtime_restart_stuck_worker", "runtime_handle", handle.ID,
-			fmt.Sprintf("agente=%s proyecto_id=%s stop_order_id=%d start_order_id=%d detalle=%s", agente, detalleProyecto, stopOrderID, startOrderID, firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), "worker atascado")))
-		total++
+	if row.Agente == nil || strings.TrimSpace(row.EstadoOperativo) != "atascado" {
+		return 0, nil
 	}
-	return total, nil
+	if !row.WorkerFresh(now) {
+		return 0, nil
+	}
+	if row.OpenTasks <= 0 && row.MailboxPending <= 0 {
+		return 0, nil
+	}
+	handle := row.Handle
+	if handle == nil {
+		return 0, nil
+	}
+	if !rowHasFreshTMUXWorkerForRecovery(row, now) {
+		return 0, nil
+	}
+	agente := strings.TrimSpace(row.Agente.Nombre)
+	if agente == "" {
+		return 0, nil
+	}
+	if disponible, _, err := autonomiaCuentaCompartidaDisponible(agente); err != nil {
+		return 0, err
+	} else if !disponible {
+		return 0, nil
+	}
+	proyectoID := rowProyectoIDPreferido(row)
+	stopCount, err := contarRuntimeOrdersRecientes(agente, proyectoID, "stop", "stop", escalationWindow)
+	if err != nil {
+		return 0, err
+	}
+	if stopCount >= escalationCount {
+		return escalarTareasWorkerAtascado(row, rows, now)
+	}
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "stop", "pause", "checkpoint", "start", "restart", "resume", "handoff"); err != nil {
+		return 0, err
+	} else if pendiente {
+		return 0, nil
+	}
+	stopReciente, err := runtimeOrderAutonomiaRecienteBloqueaRecuperacion(row, proyectoID, "stop", "stop", cooldown)
+	if err != nil {
+		return 0, err
+	}
+	startReciente, err := runtimeOrderAutonomiaRecienteBloqueaRecuperacion(row, proyectoID, "start", "start", cooldown)
+	if err != nil {
+		return 0, err
+	}
+	if stopReciente || startReciente {
+		return 0, nil
+	}
+	stopOrderID, startOrderID, err := db.EncolarReinicioCoordinadoRuntimeHandle(handle, proyectoID, "worker_atascado", "orquesta")
+	if err != nil {
+		return 0, err
+	}
+	detalleProyecto := "-"
+	if proyectoID != nil && *proyectoID > 0 {
+		detalleProyecto = strconv.FormatInt(*proyectoID, 10)
+	}
+	db.Audit("orquesta", "runtime_restart_stuck_worker", "runtime_handle", handle.ID,
+		fmt.Sprintf("agente=%s proyecto_id=%s stop_order_id=%d start_order_id=%d detalle=%s", agente, detalleProyecto, stopOrderID, startOrderID, firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), "worker atascado")))
+	return 1, nil
 }
 
 func procesarSesionesTMUXHuerfanasAutonomiaBatch(now time.Time) (int, error) {
@@ -10999,6 +11002,8 @@ func procesarAutonomiaSesionActivaConSnapshot(sesion *db.Sesion, snapshot *auton
 		return 0, nil
 	case "votar_propuestas_pendientes", "pedir_intervencion":
 		return procesarDecisionNudgeSesionActivaAutonomia(sesion, proyecto, out, snapshot)
+	case "esperar_recuperacion_runtime":
+		return procesarDecisionEsperarRecuperacionRuntimeSesionActivaAutonomia(sesion, proyecto)
 	case "continuar_trabajo", "esperar_o_pedir_tarea":
 		return procesarDecisionContinuacionSesionActivaAutonomia(sesion, proyecto, out, snapshot)
 	default:
@@ -11704,6 +11709,31 @@ func procesarDecisionContinuacionSesionActivaAutonomia(sesion *db.Sesion, proyec
 	default:
 		return 0, nil
 	}
+}
+
+func procesarDecisionEsperarRecuperacionRuntimeSesionActivaAutonomia(sesion *db.Sesion, proyecto *db.Proyecto) (int, error) {
+	if sesion == nil || proyecto == nil {
+		return 0, nil
+	}
+	if n, err := procesarRecuperacionRuntimeDegradadoSesionFn(sesion); err != nil || n > 0 {
+		return n, err
+	}
+	rows, err := agentesService.BuildPanelRows()
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().UTC()
+	agente := strings.TrimSpace(sesion.Agente)
+	for _, row := range rows {
+		if row.Agente == nil || !strings.EqualFold(strings.TrimSpace(row.Agente.Nombre), agente) {
+			continue
+		}
+		if proyectoID := rowProyectoIDPreferido(row); proyectoID != nil && proyecto.ID > 0 && *proyectoID != proyecto.ID {
+			continue
+		}
+		return procesarWorkerAtascadoAutonomiaRow(row, rows, now)
+	}
+	return 0, nil
 }
 
 func procesarDecisionContinuarTrabajoSesionActivaAutonomia(sesion *db.Sesion, proyecto *db.Proyecto, out agenteTickOutput, snapshot *autonomiaBatchSnapshot) (int, error) {

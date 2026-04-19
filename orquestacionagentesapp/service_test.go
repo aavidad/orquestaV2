@@ -765,6 +765,76 @@ func TestEnqueueAutonomyNudgeSkipsWhenMailboxPending(t *testing.T) {
 	}
 }
 
+func TestEnqueueAutonomyNudgeIgnoresMailboxPendingForDifferentTaskID(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(320)
+	runtimes := &stubRuntimeController{
+		deliveryHandle: &db.RuntimeHandle{
+			ID:               3,
+			Estado:           "activo",
+			CapabilitiesJSON: `{"can_send_input":false}`,
+		},
+		mailbox: []*db.RuntimeMailboxMessage{{
+			ID:          1,
+			Kind:        "autonomia",
+			PayloadJSON: `{"accion":"continuar_trabajo","tarea_id":41}`,
+		}},
+		controlID: 88,
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(&stubAutonomyStore{})
+
+	ok, err := service.EnqueueAutonomyNudge(NudgeRequest{
+		Agente:   "Codex2",
+		Proyecto: &db.Proyecto{ID: proyectoID, Slug: "core"},
+		Accion:   "continuar_trabajo",
+		Motivo:   "seguir",
+		Extras:   map[string]any{"tarea_id": int64(42)},
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAutonomyNudge: %v", err)
+	}
+	if !ok {
+		t.Fatal("debería encolar si la mailbox pendiente apunta a otra tarea")
+	}
+}
+
+func TestEnqueueAutonomyNudgeIgnoresMailboxPendingForDifferentVerificationKey(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(321)
+	runtimes := &stubRuntimeController{
+		deliveryHandle: &db.RuntimeHandle{
+			ID:               3,
+			Estado:           "activo",
+			CapabilitiesJSON: `{"can_send_input":false}`,
+		},
+		mailbox: []*db.RuntimeMailboxMessage{{
+			ID:          1,
+			Kind:        "autonomia",
+			PayloadJSON: `{"accion":"continuar_trabajo","verification_key":"old-key"}`,
+		}},
+		controlID: 89,
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(&stubAutonomyStore{})
+
+	ok, err := service.EnqueueAutonomyNudge(NudgeRequest{
+		Agente:   "Codex2",
+		Proyecto: &db.Proyecto{ID: proyectoID, Slug: "core"},
+		Accion:   "continuar_trabajo",
+		Motivo:   "seguir",
+		Extras:   map[string]any{"verification_key": "new-key"},
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAutonomyNudge: %v", err)
+	}
+	if !ok {
+		t.Fatal("debería encolar si la mailbox pendiente pertenece a otra verification_key")
+	}
+}
+
 func TestEnqueuePostRemediationFollowupAddsVerificationMetadata(t *testing.T) {
 	t.Parallel()
 

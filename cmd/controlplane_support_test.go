@@ -30662,6 +30662,97 @@ func TestProcesarWorkersAtascadosAutonomiaBatchReiniciaConMailboxPendienteAunque
 	}
 }
 
+func TestProcesarWorkerAtascadoAutonomiaRowReiniciaConMailboxPendienteAunqueNoHayaOpenTasks(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	if err := db.ConfigSet("runtime_shared_account_active_ceiling", "4"); err != nil {
+		t.Fatalf("config ceiling: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-stale-mailbox-row",
+		Nombre:  "Orquestador Stale Mailbox Row",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex2Row", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex2Row", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex2Row",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert handle: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleActivoAgenteProyecto("Codex2Row", &proyectoID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle=%+v err=%v", handle, err)
+	}
+	now := time.Now().UTC()
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex2Row",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"pedir_intervencion","texto":"hay trabajo pendiente"}`,
+	}); err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	rows := []agentesapp.Row{{
+		Agente:           &db.Agente{Nombre: "Codex2Row"},
+		Asignacion:       &db.Asignacion{Agente: "Codex2Row", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+		Handle:           handle,
+		WorkerDriver:     "tmux_cli_session",
+		WorkerState:      "running",
+		WorkerAlive:      true,
+		WorkerHeartbeat:  ptrTime(now),
+		WorkerUpdatedAt:  ptrTime(now),
+		MailboxPending:   1,
+		BlockedTasks:     1,
+		EstadoOperativo:  "atascado",
+		DetalleOperativo: "worker sin progreso reciente",
+	}}
+
+	procesadas, err := procesarWorkerAtascadoAutonomiaRow(rows[0], rows, now)
+	if err != nil {
+		t.Fatalf("procesar worker atascado row: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("procesadas=%d, want 1", procesadas)
+	}
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: ptrString("Codex2Row")})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	stopCount := 0
+	startCount := 0
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch strings.TrimSpace(order.Tipo) {
+		case "stop":
+			stopCount++
+		case "start":
+			startCount++
+		}
+	}
+	if stopCount == 0 || startCount == 0 {
+		t.Fatalf("deberia encolar restart coordinado, stop=%d start=%d orders=%+v", stopCount, startCount, orders)
+	}
+}
+
 func TestExisteRuntimeOrderAutonomiaRecienteReconoceStopCoordinadoSinKindAutonomia(t *testing.T) {
 	_ = prepararDBTemporalCmd(t)
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
