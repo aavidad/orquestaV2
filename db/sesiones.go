@@ -527,7 +527,7 @@ func runtimeHandleTMUXCurrentPathMismatch(handle *RuntimeHandle) bool {
 	if current == "" {
 		return false
 	}
-	proyecto, err := GetProyectoConRutaEfectiva(strconv.FormatInt(*handle.ProyectoID, 10), "")
+	proyecto, err := GetProyectoConRutaEfectiva(strconv.FormatInt(*handle.ProyectoID, 10), current)
 	if err != nil || proyecto == nil {
 		return false
 	}
