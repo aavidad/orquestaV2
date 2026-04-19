@@ -88,10 +88,9 @@ func aplicarRetencionRespaldo(destino string, retener int) error {
 		return nil
 	}
 
-	patron := filepath.Join(destino, db.BackupFilenameGlob())
-	ficheros, err := filepath.Glob(patron)
+	ficheros, err := listarRespaldosCompatibles(destino)
 	if err != nil {
-		return fmt.Errorf("listar respaldos: %w", err)
+		return err
 	}
 	if len(ficheros) <= retener {
 		return nil
@@ -105,6 +104,27 @@ func aplicarRetencionRespaldo(destino string, retener int) error {
 		}
 	}
 	return nil
+}
+
+func listarRespaldosCompatibles(destino string) ([]string, error) {
+	seen := map[string]struct{}{}
+	ficheros := make([]string, 0)
+	for _, glob := range db.BackupFilenameGlobs() {
+		patron := filepath.Join(destino, glob)
+		coincidencias, err := filepath.Glob(patron)
+		if err != nil {
+			return nil, fmt.Errorf("listar respaldos: %w", err)
+		}
+		for _, fichero := range coincidencias {
+			if _, ok := seen[fichero]; ok {
+				continue
+			}
+			seen[fichero] = struct{}{}
+			ficheros = append(ficheros, fichero)
+		}
+	}
+	sort.Strings(ficheros)
+	return ficheros, nil
 }
 
 func nombreRespaldoFechable(ts time.Time, etiqueta string) string {

@@ -160,7 +160,17 @@ func postgresForeignKeyAlter(table, column, refTable, refColumn, onDelete string
 	if onDelete != "" {
 		stmt += " ON DELETE " + onDelete
 	}
-	return stmt + ";"
+	return postgresEnsureConstraintBlock(name, stmt)
+}
+
+func postgresEnsureConstraintBlock(name, stmt string) string {
+	return fmt.Sprintf(`DO $$
+BEGIN
+	IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '%s') THEN
+		%s;
+	END IF;
+END
+$$;`, postgresQuoteLiteral(name), stmt)
 }
 
 func renderAuxDDLForDriver(driver string) string {
@@ -173,7 +183,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;`}
 		for _, table := range updatedAtTables() {
-			parts = append(parts, "CREATE TRIGGER trig_"+table+"_updated BEFORE UPDATE ON "+table+" FOR EACH ROW EXECUTE FUNCTION orquesta_set_updated_at();")
+			parts = append(parts, postgresEnsureUpdatedAtTrigger(table))
 		}
 		parts = append(parts,
 			`CREATE UNIQUE INDEX IF NOT EXISTS idx_locks_scope_activo ON locks(scope_type, scope_key) WHERE estado = 'activa';`,
@@ -209,6 +219,21 @@ $$ LANGUAGE plpgsql;`}
 			"CREATE TRIGGER IF NOT EXISTS trig_avance_tareas_updated",
 		)...,
 	)
+}
+
+func postgresEnsureUpdatedAtTrigger(table string) string {
+	name := "trig_" + table + "_updated"
+	return fmt.Sprintf(`DO $$
+BEGIN
+	IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = '%s' AND NOT tgisinternal) THEN
+		CREATE TRIGGER %s BEFORE UPDATE ON %s FOR EACH ROW EXECUTE FUNCTION orquesta_set_updated_at();
+	END IF;
+END
+$$;`, postgresQuoteLiteral(name), name, table)
+}
+
+func postgresQuoteLiteral(value string) string {
+	return strings.ReplaceAll(value, `'`, `''`)
 }
 
 func renderWorkflowDDLForDriver(driver string) string {

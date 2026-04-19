@@ -11,6 +11,7 @@ Type=simple
 User=__USER__
 Group=__USER__
 WorkingDirectory=__ROOT_DIR__
+EnvironmentFile=-__ROOT_DIR__/.orquesta.env
 ExecStart=__ROOT_DIR__/orquesta serve
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure

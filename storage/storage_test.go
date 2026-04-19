@@ -38,6 +38,19 @@ func TestResolveConfigSQLitePorDefectoUsaPathDelCallback(t *testing.T) {
 	}
 }
 
+func TestResolveConfigFallaSinConectorNiTargetExplicito(t *testing.T) {
+	t.Setenv("ORQUESTA_PERSISTENCE_CONNECTOR", "")
+	t.Setenv("ORQUESTA_DB_CONNECTOR", "")
+	t.Setenv("ORQUESTA_DB_DRIVER", "")
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB_DSN", "")
+	t.Setenv("ORQUESTA_DB", "")
+
+	if _, err := ResolveConfig(func() string { return "" }); err == nil {
+		t.Fatalf("se esperaba error sin conector ni target explicito")
+	}
+}
+
 func TestResolveConfigAceptaBackendLegacy(t *testing.T) {
 	t.Setenv("ORQUESTA_DB_DRIVER", "")
 	t.Setenv("ORQUESTA_DB_BACKEND", "sqlite3")

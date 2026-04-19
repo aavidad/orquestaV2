@@ -24,7 +24,7 @@ func TestNombreRespaldoFechableSanitizaEtiqueta(t *testing.T) {
 	if !strings.HasPrefix(got, "2026-03-22_10-11-12.123456789_manual_final") {
 		t.Fatalf("nombre inesperado: %s", got)
 	}
-	if !strings.HasSuffix(got, "_orquesta.db.bak") {
+	if !strings.HasSuffix(got, "_orquesta.sqlite.bak") {
 		t.Fatalf("sufijo inesperado: %s", got)
 	}
 }
@@ -67,7 +67,7 @@ func TestRespaldoBDCreaFicheroYAplicaRetencion(t *testing.T) {
 		}
 	}
 
-	ficheros, err := filepath.Glob(filepath.Join(destino, "*_orquesta.db.bak"))
+	ficheros, err := filepath.Glob(filepath.Join(destino, "*_orquesta.sqlite.bak"))
 	if err != nil {
 		t.Fatalf("glob respaldos: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestAplicarRetencionRespaldoFiltraPorSufijoDelBackendActual(t *testing.T) {
 	ficheros := []string{
 		"2026-03-22_10-00-00_orquesta.postgres.bak",
 		"2026-03-22_10-00-01_orquesta.postgres.bak",
-		"2026-03-22_10-00-02_orquesta.db.bak",
+		"2026-03-22_10-00-02_orquesta.sqlite.bak",
 	}
 	for _, nombre := range ficheros {
 		if err := os.WriteFile(filepath.Join(destino, nombre), []byte("x"), 0o644); err != nil {
@@ -154,7 +154,45 @@ func TestAplicarRetencionRespaldoFiltraPorSufijoDelBackendActual(t *testing.T) {
 		t.Fatalf("retencion postgres inesperada: %v", postgresFicheros)
 	}
 
-	if _, err := os.Stat(filepath.Join(destino, "2026-03-22_10-00-02_orquesta.db.bak")); err != nil {
+	if _, err := os.Stat(filepath.Join(destino, "2026-03-22_10-00-02_orquesta.sqlite.bak")); err != nil {
 		t.Fatalf("el backup sqlite no deberia tocarse: %v", err)
+	}
+}
+
+func TestAplicarRetencionRespaldoSQLiteAceptaSufijoLegado(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "")
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB_DSN", "")
+	t.Setenv("ORQUESTA_DB", filepath.Join(t.TempDir(), "orquesta.db"))
+
+	destino := t.TempDir()
+	for _, nombre := range []string{
+		"2026-03-22_10-00-00_orquesta.db.bak",
+		"2026-03-22_10-00-01_orquesta.sqlite.bak",
+		"2026-03-22_10-00-02_orquesta.sqlite.bak",
+	} {
+		if err := os.WriteFile(filepath.Join(destino, nombre), []byte("x"), 0o644); err != nil {
+			t.Fatalf("write backup %s: %v", nombre, err)
+		}
+	}
+
+	if err := aplicarRetencionRespaldo(destino, 2); err != nil {
+		t.Fatalf("retencion sqlite: %v", err)
+	}
+
+	ficheros, err := listarRespaldosCompatibles(destino)
+	if err != nil {
+		t.Fatalf("listar respaldos compatibles: %v", err)
+	}
+	if len(ficheros) != 2 {
+		t.Fatalf("retencion sqlite inesperada: %v", ficheros)
+	}
+	for _, nombre := range []string{
+		filepath.Join(destino, "2026-03-22_10-00-01_orquesta.sqlite.bak"),
+		filepath.Join(destino, "2026-03-22_10-00-02_orquesta.sqlite.bak"),
+	} {
+		if _, err := os.Stat(nombre); err != nil {
+			t.Fatalf("respaldo esperado ausente %s: %v", nombre, err)
+		}
 	}
 }

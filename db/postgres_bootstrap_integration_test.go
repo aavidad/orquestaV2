@@ -53,7 +53,6 @@ func TestOpenPostgresBootstrapLimpio(t *testing.T) {
 	if err := Open(); err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer Close()
 
 	if got := DriverName(); got != "postgres" {
 		t.Fatalf("DriverName=%q, want postgres", got)
@@ -104,6 +103,13 @@ func TestOpenPostgresBootstrapLimpio(t *testing.T) {
 	if version != "1.0.0" {
 		t.Fatalf("valor version inesperado: %s", version)
 	}
+
+	Close()
+
+	if err := Open(); err != nil {
+		t.Fatalf("Open segundo pase idempotente: %v", err)
+	}
+	defer Close()
 }
 
 func tableRowCount(table string) (int64, error) {

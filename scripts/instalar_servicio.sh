@@ -17,6 +17,7 @@ UNIT_BACKUP_TIMER="orquesta-backup.timer"
 UNIT_TEMPLATE_ORQUESTA="$(dirname "$0")/orquesta.service"
 UNIT_TEMPLATE_BACKUP="$(dirname "$0")/orquesta-backup.service"
 UNIT_TEMPLATE_BACKUP_TIMER="$(dirname "$0")/orquesta-backup.timer"
+ENV_FILE="${ROOT_DIR}/.orquesta.env"
 
 if [[ ! -f "${ROOT_DIR}/orquesta" ]]; then
   echo "❌ No encuentro el binario '${ROOT_DIR}/orquesta'. Compila primero con 'go build ./...'." >&2
@@ -32,8 +33,53 @@ render_unit() {
   sudo chmod 644 "${dest}"
 }
 
+escape_env_file_value() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '%s' "${value}"
+}
+
+write_orquesta_env_file() {
+  local -a keys=(
+    ORQUESTA_PERSISTENCE_CONNECTOR
+    ORQUESTA_DB_CONNECTOR
+    ORQUESTA_DB_DRIVER
+    ORQUESTA_DB_BACKEND
+    ORQUESTA_DB_DSN
+    ORQUESTA_DB
+    ORQUESTA_DB_BOOTSTRAP
+    ORQUESTA_DB_MAX_OPEN_CONNS
+    ORQUESTA_DB_SKIP_POST_MIGRATIONS
+  )
+  local has_values=0
+  local tmp
+  tmp="$(mktemp)"
+  {
+    echo "# Configuracion generada por scripts/instalar_servicio.sh"
+    echo "# Persistencia y overrides del servicio Orquesta"
+    for key in "${keys[@]}"; do
+      if [[ -n "${!key-}" ]]; then
+        has_values=1
+        printf '%s=\"%s\"\n' "${key}" "$(escape_env_file_value "${!key}")"
+      fi
+    done
+  } > "${tmp}"
+
+  if [[ "${has_values}" -eq 1 ]]; then
+    install -m 600 "${tmp}" "${ENV_FILE}"
+    echo "🧩 EnvironmentFile actualizado en ${ENV_FILE}"
+  elif [[ -f "${ENV_FILE}" ]]; then
+    echo "🧩 EnvironmentFile existente conservado en ${ENV_FILE}"
+  else
+    echo "⚠️  No se detectaron variables ORQUESTA_DB_*; el servicio usará solo la configuración resoluble por el binario."
+  fi
+  rm -f "${tmp}"
+}
+
 echo "📦 Instalando servicios systemd en ${UNIT_DIR}"
 render_unit "${UNIT_TEMPLATE_ORQUESTA}" "${UNIT_DIR}/${UNIT_ORQUESTA}"
+write_orquesta_env_file
 BACKEND_DRIVER="$("${ROOT_DIR}/orquesta" persistencia info 2>/dev/null | awk -F': ' '/^Storage driver:/ {print $2; exit}')"
 BACKUP_SUPPORT="$("${ROOT_DIR}/orquesta" persistencia info 2>/dev/null | awk -F': ' '/^Backup support:/ {print $2; exit}')"
 if [[ "${BACKUP_SUPPORT}" == "true" ]]; then

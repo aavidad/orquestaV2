@@ -171,11 +171,11 @@ func Close() {
 }
 
 // Orden de resolución del target por fichero local cuando el backend activo usa
-// persistencia basada en ruta:
+// persistencia basada en ruta. Solo devuelve rutas existentes; no inventa una
+// sqlite implícita por omisión:
 //  1. Variable de entorno ORQUESTA_DB
-//  2. Repositorio `orquesta` del workspace actual (../orquesta/orquesta.db)
-//  3. Si el git-root ya es el repo `orquesta`, <git-root>/orquesta.db
-//  4. ./orquesta.db
+//  2. Repositorio `orquesta`/`orquestador` del workspace actual con fichero existente
+//  3. Si el git-root ya es ese repo, <git-root>/orquesta.db existente
 func resolverRuta() string {
 	if v := os.Getenv("ORQUESTA_DB"); strings.TrimSpace(v) != "" {
 		return v
@@ -189,7 +189,7 @@ func resolverRuta() string {
 			return ruta
 		}
 	}
-	return "orquesta.db"
+	return ""
 }
 
 // postMigraciones ejecuta ALTER TABLE idempotentes para columnas añadidas tras el schema inicial.
@@ -213,15 +213,19 @@ func postMigracionesPorDriver(conn *sql.DB, driver string) error {
 func resolverRutaDesdeGitRoot(root string) string {
 	root = strings.TrimSpace(root)
 	if root == "" {
-		return "orquesta.db"
+		return ""
 	}
 	if filepath.Base(root) == "orquesta" {
-		return filepath.Join(root, "orquesta.db")
+		ruta := filepath.Join(root, "orquesta.db")
+		if existeFichero(ruta) {
+			return ruta
+		}
+		return ""
 	}
 	if ruta := rutaRepoOrquestaEnDirectorio(filepath.Dir(root)); ruta != "" {
 		return ruta
 	}
-	return filepath.Join(root, "orquesta.db")
+	return ""
 }
 
 func buscarRutaRepoOrquesta(inicio string) string {
@@ -241,8 +245,9 @@ func buscarRutaRepoOrquesta(inicio string) string {
 func rutaRepoOrquestaEnDirectorio(base string) string {
 	for _, nombre := range []string{"orquesta", "orquestador"} {
 		candidato := filepath.Join(base, nombre)
-		if existeFichero(filepath.Join(candidato, "go.mod")) {
-			return filepath.Join(candidato, "orquesta.db")
+		rutaDB := filepath.Join(candidato, "orquesta.db")
+		if existeFichero(filepath.Join(candidato, "go.mod")) && existeFichero(rutaDB) {
+			return rutaDB
 		}
 	}
 	return ""

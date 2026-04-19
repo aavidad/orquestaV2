@@ -101,10 +101,14 @@ func CurrentBootstrapSchemaEnabled() bool {
 
 func BackupFilenameSuffix() string {
 	driver := strings.TrimSpace(CurrentStorageDriver())
-	if driver == "" || driver == "sqlite" {
-		return "_orquesta.db.bak"
+	switch driver {
+	case "":
+		return "_orquesta.persistencia.bak"
+	case "sqlite":
+		return "_orquesta.sqlite.bak"
+	default:
+		return "_orquesta." + driver + ".bak"
 	}
-	return "_orquesta." + driver + ".bak"
 }
 
 func CurrentStorageSupportsBackup() bool {
@@ -120,7 +124,33 @@ func CurrentStorageSupportsBackup() bool {
 }
 
 func BackupFilenameGlob() string {
-	return "*" + BackupFilenameSuffix()
+	globs := BackupFilenameGlobs()
+	if len(globs) == 0 {
+		return "*_orquesta.persistencia.bak"
+	}
+	return globs[0]
+}
+
+func BackupFilenameGlobs() []string {
+	suffixes := []string{BackupFilenameSuffix()}
+	if strings.TrimSpace(CurrentStorageDriver()) == "sqlite" {
+		suffixes = append(suffixes, "_orquesta.db.bak")
+	}
+	globs := make([]string, 0, len(suffixes))
+	seen := map[string]struct{}{}
+	for _, suffix := range suffixes {
+		suffix = strings.TrimSpace(suffix)
+		if suffix == "" {
+			continue
+		}
+		glob := "*" + suffix
+		if _, ok := seen[glob]; ok {
+			continue
+		}
+		seen[glob] = struct{}{}
+		globs = append(globs, glob)
+	}
+	return globs
 }
 
 func RegisterBackend(backend Backend) {

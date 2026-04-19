@@ -183,13 +183,27 @@ func TestRegisterBackendIgnoraNil(t *testing.T) {
 	}
 }
 
-func TestBackupFilenameSuffixSQLitePorDefecto(t *testing.T) {
+func TestBackupFilenameSuffixSQLiteExplicito(t *testing.T) {
 	t.Setenv("ORQUESTA_DB_DRIVER", "")
 	t.Setenv("ORQUESTA_DB_BACKEND", "")
 	t.Setenv("ORQUESTA_DB_DSN", "")
 	t.Setenv("ORQUESTA_DB", filepath.Join(t.TempDir(), "orquesta.db"))
 
-	if got := BackupFilenameSuffix(); got != "_orquesta.db.bak" {
+	if got := BackupFilenameSuffix(); got != "_orquesta.sqlite.bak" {
+		t.Fatalf("sufijo inesperado: %s", got)
+	}
+}
+
+func TestBackupFilenameSuffixSinConectorUsaSufijoNeutro(t *testing.T) {
+	t.Setenv("ORQUESTA_PERSISTENCE_CONNECTOR", "")
+	t.Setenv("ORQUESTA_DB_CONNECTOR", "")
+	t.Setenv("ORQUESTA_DB_DRIVER", "")
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB_DSN", "")
+	t.Setenv("ORQUESTA_DB", "")
+	t.Chdir(t.TempDir())
+
+	if got := BackupFilenameSuffix(); got != "_orquesta.persistencia.bak" {
 		t.Fatalf("sufijo inesperado: %s", got)
 	}
 }
@@ -202,6 +216,21 @@ func TestBackupFilenameSuffixUsaDriverActual(t *testing.T) {
 
 	if got := BackupFilenameSuffix(); got != "_orquesta.postgres.bak" {
 		t.Fatalf("sufijo inesperado: %s", got)
+	}
+}
+
+func TestBackupFilenameGlobsSQLiteIncluyeLegado(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "")
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB_DSN", "")
+	t.Setenv("ORQUESTA_DB", filepath.Join(t.TempDir(), "orquesta.db"))
+
+	globs := BackupFilenameGlobs()
+	if len(globs) != 2 {
+		t.Fatalf("globs inesperados: %v", globs)
+	}
+	if globs[0] != "*_orquesta.sqlite.bak" || globs[1] != "*_orquesta.db.bak" {
+		t.Fatalf("globs inesperados: %v", globs)
 	}
 }
 

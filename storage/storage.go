@@ -21,11 +21,14 @@ type Config struct {
 }
 
 func ResolveConfig(pathResolver func() string) (Config, error) {
-	driver := strings.TrimSpace(envFirst("ORQUESTA_DB_DRIVER", "ORQUESTA_DB_BACKEND"))
+	driver := strings.TrimSpace(envFirst("ORQUESTA_PERSISTENCE_CONNECTOR", "ORQUESTA_DB_CONNECTOR", "ORQUESTA_DB_DRIVER", "ORQUESTA_DB_BACKEND"))
 	if driver == "" {
 		driver = inferDriverFromConfiguredTarget(pathResolver)
 	} else {
 		driver = normalizeDriver(driver)
+	}
+	if driver == "" {
+		return Config{}, fmt.Errorf("conector de persistencia no configurado; declara ORQUESTA_DB_DRIVER/ORQUESTA_DB_DSN o un target local ORQUESTA_DB")
 	}
 
 	cfg := Config{
@@ -167,7 +170,9 @@ func redactDSN(dsn string) string {
 
 func normalizeDriver(v string) string {
 	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "", "sqlite", "sqlite3":
+	case "":
+		return ""
+	case "sqlite", "sqlite3":
 		return "sqlite"
 	case "postgresql":
 		return "postgres"
@@ -192,11 +197,11 @@ func inferDriverFromConfiguredTarget(pathResolver func() string) string {
 	if pathResolver != nil && strings.TrimSpace(pathResolver()) != "" {
 		return "sqlite"
 	}
-	return "sqlite"
+	return ""
 }
 
 func defaultMaxOpenConns(driver string) int {
-	if normalizeDriver(driver) == "sqlite" || normalizeDriver(driver) == "" {
+	if normalizeDriver(driver) == "sqlite" {
 		// En la práctica el daemon trabaja mejor con una sola conexión SQLite:
 		// evita SQLITE_BUSY persistentes con bases reales grandes mientras el
 		// control plane escribe y la API sirve lecturas concurrentes.
@@ -207,7 +212,7 @@ func defaultMaxOpenConns(driver string) int {
 
 func defaultBootstrapSchema(driver string) bool {
 	switch normalizeDriver(driver) {
-	case "", "sqlite", "postgres":
+	case "sqlite", "postgres":
 		return true
 	default:
 		return false

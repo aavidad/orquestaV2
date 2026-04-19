@@ -9,8 +9,17 @@ import (
 func TestResolverRutaDesdeGitRootRepoOrquesta(t *testing.T) {
 	t.Parallel()
 
-	got := resolverRutaDesdeGitRoot("/tmp/PlataformaMunicipal/orquesta")
-	want := "/tmp/PlataformaMunicipal/orquesta/orquesta.db"
+	base := t.TempDir()
+	repo := filepath.Join(base, "orquesta")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("MkdirAll repo: %v", err)
+	}
+	want := filepath.Join(repo, "orquesta.db")
+	if err := os.WriteFile(want, []byte("sqlite"), 0o644); err != nil {
+		t.Fatalf("WriteFile db: %v", err)
+	}
+
+	got := resolverRutaDesdeGitRoot(repo)
 	if got != want {
 		t.Fatalf("ruta inesperada: %s", got)
 	}
@@ -31,9 +40,12 @@ func TestResolverRutaDesdeGitRootRepoContaGrxUsaSiblingOrquesta(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(orquestador, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile go.mod: %v", err)
 	}
+	want := filepath.Join(orquestador, "orquesta.db")
+	if err := os.WriteFile(want, []byte("sqlite"), 0o644); err != nil {
+		t.Fatalf("WriteFile db: %v", err)
+	}
 
 	got := resolverRutaDesdeGitRoot(contagrx)
-	want := filepath.Join(orquestador, "orquesta.db")
 	if got != want {
 		t.Fatalf("ruta inesperada: %s", got)
 	}
