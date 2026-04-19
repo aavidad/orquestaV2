@@ -865,6 +865,10 @@ func ListarAgentesConSesionesActivas(sesiones []*Sesion) ([]*Agente, error) {
 		return nil, err
 	}
 	enriquecerAgentesConPresupuesto(list)
+	return aplicarEstadoVisibleAgentesLigero(list, sesiones)
+}
+
+func aplicarEstadoVisibleAgentesLigero(list []*Agente, sesiones []*Sesion) ([]*Agente, error) {
 	aplicarEstadoVisibleAgentes(list, sesiones)
 	agentesConHandleActivo, err := listarAgentesConHandleActivoOperativo()
 	if err != nil {
@@ -895,6 +899,18 @@ func ListarAgentes() ([]*Agente, error) {
 		return nil, err
 	}
 	return ListarAgentesConSesionesActivas(sesionesActivas)
+}
+
+func ListarAgentesEstadoLigero() ([]*Agente, error) {
+	return listarAgentesRaw()
+}
+
+func ListarAgentesEstadoLigeroConSesionesActivas(sesiones []*Sesion) ([]*Agente, error) {
+	list, err := listarAgentesRaw()
+	if err != nil {
+		return nil, err
+	}
+	return aplicarEstadoVisibleAgentesLigero(list, sesiones)
 }
 
 func ListarAgentesCuentasLigero() ([]*Agente, error) {

@@ -23,8 +23,10 @@ var (
 	statusFallbackTTL  = 5 * time.Second
 	statusFreshTimeout = 1500 * time.Millisecond
 	statusFastTimeout  = 750 * time.Millisecond
+	statusRowsTimeout  = 200 * time.Millisecond
 	statusFreshFetcher = fetchStatusFresh
 	statusFastFetcher  = fetchStatusFastFallback
+	statusRowsFetcher  = agentRowsForStatus
 	statusNowFunc      = time.Now
 	statusAsyncRefresh = true
 	statusCacheState   struct {
@@ -132,6 +134,30 @@ func agenteCuentaComoConectado(agente *db.Agente) bool {
 
 func agentRowsForStatus() ([]agentesapp.Row, error) {
 	return agentesService.BuildPanelRows()
+}
+
+func agentRowsForStatusWithinTimeout(timeout time.Duration) ([]agentesapp.Row, error) {
+	if statusRowsFetcher == nil {
+		return nil, errors.New("status rows fetcher nil")
+	}
+	if timeout <= 0 {
+		return statusRowsFetcher()
+	}
+	type result struct {
+		rows []agentesapp.Row
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		rows, err := statusRowsFetcher()
+		ch <- result{rows: rows, err: err}
+	}()
+	select {
+	case res := <-ch:
+		return res.rows, res.err
+	case <-time.After(timeout):
+		return nil, errStatusFetchTimeout
+	}
 }
 
 func agentesVisiblesPorEstadoOperativoRows(agentes []*db.Agente, rows []agentesapp.Row) ([]*db.Agente, []*db.Agente, []*db.Agente, []*db.Agente, []*db.Agente, []*db.Agente, bool) {
@@ -459,7 +485,7 @@ func statusSnapshotNeedsImmediateRefresh(status apiStatusResponse) bool {
 }
 
 func fetchStatusFastFallback() (apiStatusResponse, error) {
-	agentes, err := db.ListarAgentes()
+	agentes, err := db.ListarAgentesEstadoLigero()
 	if err != nil {
 		return apiStatusResponse{}, err
 	}
@@ -533,7 +559,7 @@ func fetchStatusFastFallback() (apiStatusResponse, error) {
 	var agentesQuotaBlocked []*db.Agente
 	poolsLocales, _ := listarPoolsLocalesCompartidosEstado()
 	deudaDispatch, _ := listarDeudaDispatchEstado()
-	if rows, err := agentRowsForStatus(); err == nil {
+	if rows, err := agentRowsForStatusWithinTimeout(statusRowsTimeout); err == nil {
 		aplicarVisibilidadOperativaAgentes(agentes, rows)
 		agentesActivos, agentesTrabajando, agentesSaturados, agentesAtascados, agentesAuthManual, agentesQuotaBlocked, _ = agentesVisiblesPorEstadoOperativoRows(agentes, rows)
 	}
@@ -592,7 +618,7 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 	if err != nil {
 		return apiStatusResponse{}, err
 	}
-	agentes, err := db.ListarAgentes()
+	agentes, err := db.ListarAgentesEstadoLigeroConSesionesActivas(sesiones)
 	if err != nil {
 		return apiStatusResponse{}, err
 	}
@@ -707,7 +733,7 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 			agentesTrabajando = append(agentesTrabajando, agente)
 		}
 	}
-	if rows, rowsErr := agentRowsForStatus(); rowsErr == nil {
+	if rows, rowsErr := agentRowsForStatusWithinTimeout(statusRowsTimeout); rowsErr == nil {
 		aplicarVisibilidadOperativaAgentes(agentes, rows)
 		if activosOperativos, trabajandoOperativos, saturadosOperativos, atascadosOperativos, authManualOperativos, quotaBlockedOperativos, ok := agentesVisiblesPorEstadoOperativoRows(agentes, rows); ok {
 			agentesActivos = activosOperativos

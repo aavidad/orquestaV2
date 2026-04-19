@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"orquesta/storage"
@@ -21,6 +22,19 @@ const (
 var persistenciaBusyBudget = 1500 * time.Millisecond
 
 var DB *Handle
+
+var (
+	configCacheTTL = 5 * time.Second
+	configCache    struct {
+		mu    sync.Mutex
+		items map[string]cachedConfigValue
+	}
+)
+
+type cachedConfigValue struct {
+	val     string
+	expires time.Time
+}
 
 type OpenOptions struct {
 	BootstrapSchema    *bool
@@ -60,6 +74,7 @@ func Open() error {
 func OpenWithOptions(opts OpenOptions) error {
 	runtimeHandleHotReset()
 	resetRuntimeOrdersHotIndex()
+	resetConfigCache()
 	backend, cfg, err := resolveOpenConfig()
 	if err != nil {
 		return err
@@ -168,6 +183,7 @@ func Close() {
 	}
 	runtimeHandleHotReset()
 	resetRuntimeOrdersHotIndex()
+	resetConfigCache()
 }
 
 // Orden de resolución del target por fichero local cuando el backend activo usa
@@ -983,9 +999,15 @@ func ListarAuditoria(f FiltroAuditoria) ([]*LogAuditoria, error) {
 
 // ConfigGet devuelve el valor de una clave de configuración.
 func ConfigGet(clave string) (string, error) {
+	if v, ok := configCachedValue(clave); ok {
+		return v, nil
+	}
 	return consultarConReintentos(func() (string, error) {
 		var v string
 		err := DB.QueryRow(`SELECT valor FROM config WHERE clave = ?`, clave).Scan(&v)
+		if err == nil {
+			storeConfigCachedValue(clave, v)
+		}
 		return v, err
 	})
 }
@@ -996,7 +1018,48 @@ func ConfigSet(clave, valor string) error {
 		`INSERT INTO config (clave, valor) VALUES (?,?) ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor`,
 		clave, valor,
 	)
+	if err == nil {
+		storeConfigCachedValue(clave, valor)
+	}
 	return err
+}
+
+func configCachedValue(clave string) (string, bool) {
+	if strings.TrimSpace(clave) == "" {
+		return "", false
+	}
+	configCache.mu.Lock()
+	defer configCache.mu.Unlock()
+	item, ok := configCache.items[clave]
+	if !ok {
+		return "", false
+	}
+	if time.Now().UTC().After(item.expires) {
+		delete(configCache.items, clave)
+		return "", false
+	}
+	return item.val, true
+}
+
+func storeConfigCachedValue(clave, valor string) {
+	if strings.TrimSpace(clave) == "" {
+		return
+	}
+	configCache.mu.Lock()
+	defer configCache.mu.Unlock()
+	if configCache.items == nil {
+		configCache.items = map[string]cachedConfigValue{}
+	}
+	configCache.items[clave] = cachedConfigValue{
+		val:     valor,
+		expires: time.Now().UTC().Add(configCacheTTL),
+	}
+}
+
+func resetConfigCache() {
+	configCache.mu.Lock()
+	defer configCache.mu.Unlock()
+	configCache.items = map[string]cachedConfigValue{}
 }
 
 // ConfigAll devuelve toda la configuración.

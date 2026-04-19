@@ -287,11 +287,11 @@ func TestRetirarAgentePausaAsignacionesYLiberaTrabajo(t *testing.T) {
 	}
 
 	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
-		FromAgente: "server",
-		ToAgente:   "CodexRetiro",
-		ProyectoID: &proyectoID,
-		Kind:       "autonomia",
-		PayloadJSON:`{"accion":"continuar_trabajo"}`,
+		FromAgente:  "server",
+		ToAgente:    "CodexRetiro",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo"}`,
 	})
 	if err != nil {
 		t.Fatalf("EnviarRuntimeMailbox: %v", err)
@@ -461,6 +461,57 @@ func TestListarAgentesAlineaEstadoVisibleConSesiones(t *testing.T) {
 	}
 	if visible2.Activo || visible2.EstadoSesion != "" {
 		t.Fatalf("GetAgente visible2 inesperado: %+v", visible2)
+	}
+}
+
+func TestListarAgentesEstadoLigeroConSesionesActivasNoEnriquecePresupuesto(t *testing.T) {
+	prepararDBTemporal(t)
+	for _, agente := range []string{"CodexLight1", "CodexLight2"} {
+		if err := RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", agente, err)
+		}
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_cuota='agotado', motivo_pausa='legacy' WHERE nombre='CodexLight1'`); err != nil {
+		t.Fatalf("actualizar cuota legacy: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexLight1",
+		CWD:         "/tmp/orquesta-codex-light1",
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto CodexLight1: %v", err)
+	}
+	if err := UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("UpsertRuntimeHandleDesdeSesion: %v", err)
+	}
+	sesiones, err := ListarSesionesActivasOperativas()
+	if err != nil {
+		t.Fatalf("ListarSesionesActivasOperativas: %v", err)
+	}
+
+	agentes, err := ListarAgentesEstadoLigeroConSesionesActivas(sesiones)
+	if err != nil {
+		t.Fatalf("ListarAgentesEstadoLigeroConSesionesActivas: %v", err)
+	}
+	porNombre := map[string]*Agente{}
+	for _, agente := range agentes {
+		if agente != nil {
+			porNombre[agente.Nombre] = agente
+		}
+	}
+	agente := porNombre["CodexLight1"]
+	if agente == nil {
+		t.Fatalf("faltaba CodexLight1")
+	}
+	if agente.EstadoSesion != "disponible" {
+		t.Fatalf("estado visible inesperado: %+v", agente)
+	}
+	if agente.EstadoCuota != "agotado" {
+		t.Fatalf("estado cuota inesperado: %+v", agente)
+	}
+	if agente.ReanimarAt != nil {
+		t.Fatalf("el listado ligero no deberia rehidratar presupuesto detallado: %+v", agente)
 	}
 }
 

@@ -370,6 +370,33 @@ func TestStatusServiceNoEsperaIndefinidamenteRefreshEnVuelo(t *testing.T) {
 	}
 }
 
+func TestAgentRowsForStatusWithinTimeoutDegradaRapido(t *testing.T) {
+	prevFetcher := statusRowsFetcher
+	prevTimeout := statusRowsTimeout
+	defer func() {
+		statusRowsFetcher = prevFetcher
+		statusRowsTimeout = prevTimeout
+	}()
+
+	block := make(chan struct{})
+	statusRowsFetcher = func() ([]agentesapp.Row, error) {
+		<-block
+		return nil, nil
+	}
+	statusRowsTimeout = 20 * time.Millisecond
+
+	start := time.Now()
+	rows, err := agentRowsForStatusWithinTimeout(statusRowsTimeout)
+	elapsed := time.Since(start)
+	close(block)
+	if !errors.Is(err, errStatusFetchTimeout) {
+		t.Fatalf("deberia devolver timeout, rows=%+v err=%v", rows, err)
+	}
+	if elapsed > 150*time.Millisecond {
+		t.Fatalf("deberia degradar rapido, elapsed=%s", elapsed)
+	}
+}
+
 func TestStoreStatusSnapshotUsaTTLReducidoSiNoHayActivosYHayTrabajo(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()
