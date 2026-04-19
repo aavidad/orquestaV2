@@ -4848,6 +4848,15 @@ func TestRuntimeHandlePermiteSendInputInteractivoRespetaCapacidadesExplicitas(t 
 	}) {
 		t.Fatal("proceso local sin stdin_path no deberia anunciar input interactivo")
 	}
+	if !RuntimeHandlePermiteSendInputInteractivo(&RuntimeHandle{
+		Transporte:       "tmux",
+		HandleKind:       "session",
+		HandleRef:        "orq-codex3/%43",
+		CapabilitiesJSON: `{"can_send_input":false,"mailbox_delivery_mode":"session_resume"}`,
+		MetadataJSON:     `{"driver":"tmux_cli_session","tmux_session":"orq-codex3","tmux_pane_id":"%43","mailbox_delivery_mode":"session_resume","can_send_input":false}`,
+	}) {
+		t.Fatal("tmux session_resume con pane real deberia admitir input interactivo aunque arrastre can_send_input=false legacy")
+	}
 	t.Setenv("ORQUESTA_ALLOW_LEGACY_INTERACTIVE_INPUT", "1")
 	if RuntimeHandlePermiteSendInputInteractivo(&RuntimeHandle{
 		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"claude-perfil Claude1","stdin_path":"/tmp/pty.stdin"}`,

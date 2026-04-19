@@ -12037,6 +12037,9 @@ func RuntimeHandlePermiteSendInputInteractivo(handle *RuntimeHandle) bool {
 	if runtimeHandlePuedeInteractuarAntesDeSessionResume(handle, meta) {
 		return true
 	}
+	if runtimeHandleTMUXSessionResumePuedeInteractuar(handle, meta) {
+		return true
+	}
 	caps := mapFromJSON(handle.CapabilitiesJSON)
 	if _, ok := caps["can_send_input"]; ok && !boolFromMap(caps, "can_send_input") {
 		return false
@@ -12051,6 +12054,31 @@ func RuntimeHandlePermiteSendInputInteractivo(handle *RuntimeHandle) bool {
 		return false
 	}
 	if runtimeHandleLocalProcesoSinCanalInteractivo(handle, meta) {
+		return false
+	}
+	return true
+}
+
+func runtimeHandleTMUXSessionResumePuedeInteractuar(handle *RuntimeHandle, meta map[string]any) bool {
+	if handle == nil {
+		return false
+	}
+	deliveryModeRaw := strings.TrimSpace(stringFromMap(meta, "mailbox_delivery_mode", ""))
+	if deliveryModeRaw == "" {
+		deliveryModeRaw = strings.TrimSpace(stringFromMap(mapFromJSON(handle.CapabilitiesJSON), "mailbox_delivery_mode", ""))
+	}
+	deliveryMode := runtimeagente.NormalizeMailboxDeliveryMode(deliveryModeRaw)
+	if deliveryMode != runtimeagente.MailboxDeliverySessionResume {
+		return false
+	}
+	driver := strings.TrimSpace(stringFromMap(meta, "driver", ""))
+	if !strings.EqualFold(driver, "tmux_cli_session") && !strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") {
+		return false
+	}
+	if strings.TrimSpace(stringFromMap(meta, "tmux_session", "")) == "" && strings.TrimSpace(handle.HandleRef) == "" {
+		return false
+	}
+	if strings.TrimSpace(stringFromMap(meta, "tmux_pane_id", "")) == "" && !strings.Contains(strings.TrimSpace(handle.HandleRef), "/%") {
 		return false
 	}
 	return true

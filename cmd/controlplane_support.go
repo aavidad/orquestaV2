@@ -10066,6 +10066,42 @@ func procesarWorkerAtascadoAutonomiaRow(row agentesapp.Row, rows []agentesapp.Ro
 	if agente == "" {
 		return 0, nil
 	}
+	if rowAtascadoPrefiereContinuacionLocal(row, now) {
+		proyectoID := rowProyectoIDPreferido(row)
+		if proyectoID != nil && *proyectoID > 0 {
+			proyecto, err := runtimesService.GetProject(strconv.FormatInt(*proyectoID, 10))
+			if err != nil {
+				return 0, err
+			}
+			if proyecto != nil {
+				if abierta, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "pause", "checkpoint", "resume", "start", "handoff"); err != nil {
+					return 0, err
+				} else if !abierta {
+					tareaID, err := db.GetTareaActivaIDPorAgenteProyecto(agente, proyectoID)
+					if err != nil {
+						return 0, err
+					}
+					if tareaID > 0 {
+						ok, err := encolarNudgeAutonomiaConInvalidacion(
+							nil,
+							agente,
+							proyecto,
+							"continuar_trabajo",
+							firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), "worker listo sin progreso; reinyectando continuidad"),
+							instruccionContinuacionSesionActivaAutonomia(tareaID),
+							map[string]any{"tarea_id": tareaID, "motivo_autoasignacion": "worker_ready_stale"},
+						)
+						if err != nil {
+							return 0, err
+						}
+						if ok {
+							return 1, nil
+						}
+					}
+				}
+			}
+		}
+	}
 	if disponible, _, err := autonomiaCuentaCompartidaDisponible(agente); err != nil {
 		return 0, err
 	} else if !disponible {
@@ -10106,6 +10142,25 @@ func procesarWorkerAtascadoAutonomiaRow(row agentesapp.Row, rows []agentesapp.Ro
 	db.Audit("orquesta", "runtime_restart_stuck_worker", "runtime_handle", handle.ID,
 		fmt.Sprintf("agente=%s proyecto_id=%s stop_order_id=%d start_order_id=%d detalle=%s", agente, detalleProyecto, stopOrderID, startOrderID, firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), "worker atascado")))
 	return 1, nil
+}
+
+func rowAtascadoPrefiereContinuacionLocal(row agentesapp.Row, now time.Time) bool {
+	if row.Agente == nil || row.OpenTasks <= 0 {
+		return false
+	}
+	if row.Handle == nil || row.MailboxPending > 0 || row.OrdersOpen > 0 {
+		return false
+	}
+	if !row.WorkerAlive || !row.WorkerFresh(now) {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(row.WorkerState), "ready") {
+		return false
+	}
+	if runtimeagente.NormalizeMailboxDeliveryMode(row.WorkerMailboxDeliveryMode) != runtimeagente.MailboxDeliverySessionResume {
+		return false
+	}
+	return row.WorkerSupportsContinuityRecovery(now)
 }
 
 func procesarSesionesTMUXHuerfanasAutonomiaBatch(now time.Time) (int, error) {

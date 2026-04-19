@@ -31094,6 +31094,114 @@ func TestProcesarWorkerAtascadoAutonomiaRowReiniciaConMailboxPendienteAunqueNoHa
 	}
 }
 
+func TestProcesarWorkerAtascadoAutonomiaRowPrefiereContinuacionLocalSessionResume(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	if err := db.ConfigSet("runtime_shared_account_active_ceiling", "4"); err != nil {
+		t.Fatalf("config ceiling: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-worker-ready-stale",
+		Nombre:  "Orquestador Worker Ready Stale",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexReady", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexReady", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexReady",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert handle: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleActivoAgenteProyecto("CodexReady", &proyectoID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle=%+v err=%v", handle, err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Slice listo para continuidad local",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexReady"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexReady"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	now := time.Now().UTC()
+	rows := []agentesapp.Row{{
+		Agente:                    &db.Agente{Nombre: "CodexReady"},
+		Asignacion:                &db.Asignacion{Agente: "CodexReady", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+		Sesion:                    sesion,
+		Handle:                    handle,
+		WorkerDriver:              "tmux_cli_session",
+		WorkerState:               "ready",
+		WorkerAlive:               true,
+		WorkerCanSendInput:        true,
+		WorkerMailboxDeliveryMode: runtimeagente.MailboxDeliverySessionResume,
+		WorkerHeartbeat:           ptrTime(now),
+		WorkerUpdatedAt:           ptrTime(now),
+		WorkerReadyAt:             ptrTime(now.Add(-25 * time.Minute)),
+		OpenTasks:                 1,
+		EstadoOperativo:           "atascado",
+		DetalleOperativo:          "sin progreso desde listo",
+	}}
+
+	procesadas, err := procesarWorkerAtascadoAutonomiaRow(rows[0], rows, now)
+	if err != nil {
+		t.Fatalf("procesar worker atascado row: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("procesadas=%d, want 1", procesadas)
+	}
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: ptrString("CodexReady")})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	stopCount := 0
+	startCount := 0
+	nudgeCount := 0
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch strings.TrimSpace(order.Tipo) {
+		case "stop":
+			stopCount++
+		case "start":
+			startCount++
+		case "nudge":
+			nudgeCount++
+		}
+	}
+	if stopCount != 0 || startCount != 0 {
+		t.Fatalf("no deberia reiniciar runtime sano listo para continuidad, stop=%d start=%d orders=%+v", stopCount, startCount, orders)
+	}
+	if nudgeCount != 1 {
+		t.Fatalf("deberia encolar exactamente un nudge de continuidad, got=%d orders=%+v", nudgeCount, orders)
+	}
+}
+
 func TestEncolarReinicioRuntimeHandleAutonomiaRowReiniciaBloqueadoPorRuntimeSinWorkerFresh(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	if err := db.ConfigSet("runtime_shared_account_active_ceiling", "4"); err != nil {
