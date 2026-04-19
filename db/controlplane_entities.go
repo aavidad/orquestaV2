@@ -4024,6 +4024,33 @@ func runtimeOrderPromoverEstadoObservadoSiSatisfecha(order *RuntimeOrder, runtim
 	}
 	switch strings.ToLower(strings.TrimSpace(order.Tipo)) {
 	case "start", "resume":
+		if handle == nil {
+			sesionID := int64(0)
+			if runtime.SesionID != nil && *runtime.SesionID > 0 {
+				sesionID = *runtime.SesionID
+			}
+			var sesion *Sesion
+			var err error
+			switch {
+			case sesionID > 0:
+				sesion, err = GetSesionByID(sesionID)
+			default:
+				sesion, err = GetSesionActiva(strings.TrimSpace(order.Agente), order.ProyectoID)
+			}
+			if err != nil && err != sql.ErrNoRows {
+				return err
+			}
+			if sesion != nil {
+				if err := UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+					return err
+				}
+				if refreshed, err := GetRuntimeHandleBySesionID(sesion.ID); err != nil {
+					return err
+				} else if refreshed != nil {
+					handle = refreshed
+				}
+			}
+		}
 		return runtimePromoverEstadoObservadoDesdeHandle(handle, runtime)
 	default:
 		return nil

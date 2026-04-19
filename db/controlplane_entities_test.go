@@ -20629,6 +20629,13 @@ func TestEjecutarRuntimeOrderStartCompletaSiRuntimeYaActivoSinHandle(t *testing.
 	if !strings.Contains(startOrder.ResultadoJSON, `"reason":"runtime_already_running"`) {
 		t.Fatalf("resultado inesperado: %s", startOrder.ResultadoJSON)
 	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("deberia materializar handle canónico al completar start: handle=%+v err=%v", handle, err)
+	}
+	if got := strings.TrimSpace(handle.Agente); got != "Codex1" {
+		t.Fatalf("handle materializado con agente inesperado: %+v", handle)
+	}
 }
 
 func TestRuntimeHandleOmitePromptArranqueInteractivoParaOllamaPoolLocal(t *testing.T) {
