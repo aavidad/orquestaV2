@@ -164,7 +164,7 @@ func TestOperationalStateForAgentEvitaPanelCompleto(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OperationalStateForAgent: %v", err)
 	}
-	if estado != "trabajando" {
+	if estado != "arrancando" {
 		t.Fatalf("estado=%q detalle=%q", estado, detalle)
 	}
 	if store.listAgentsCalls != 0 {
@@ -491,7 +491,7 @@ func TestBuildTickOutputConRuntimeSanoNoReleeFallbackPorProyecto(t *testing.T) {
 	if out.AccionRecomendada != "continuar_trabajo" {
 		t.Fatalf("salida inesperada: %+v", out)
 	}
-	if store.listRuntimesCalls != 1 {
+	if store.listRuntimesCalls != 0 {
 		t.Fatalf("no deberia releer runtimes fuera del contexto compacto: calls=%d", store.listRuntimesCalls)
 	}
 	if store.listPassiveHandlesCalls != 0 {
@@ -604,6 +604,7 @@ func TestBuildTickOutputConTrabajoActivoNoConsultaPropuestas(t *testing.T) {
 func TestBuildTickOutputConWorkerReadySessionResumeSanoContinuaTrabajo(t *testing.T) {
 	now := time.Now().UTC()
 	readyAt := now.Add(-25 * time.Minute)
+	lastProgressAt := now.Add(-1 * time.Minute)
 	tmp := t.TempDir()
 	manifestPath := filepath.Join(tmp, "manifest.json")
 	statusPath := filepath.Join(tmp, "status.json")
@@ -622,6 +623,7 @@ func TestBuildTickOutputConWorkerReadySessionResumeSanoContinuaTrabajo(t *testin
 		"updated_at":          now.Format(time.RFC3339Nano),
 		"alive":               true,
 		"ready_at":            readyAt.Format(time.RFC3339Nano),
+		"last_progress_at":    lastProgressAt.Format(time.RFC3339Nano),
 		"external_session_id": "sess-123",
 	})
 	heartbeatRaw, _ := json.Marshal(map[string]any{
@@ -678,9 +680,94 @@ func TestBuildTickOutputConWorkerReadySessionResumeSanoContinuaTrabajo(t *testin
 	}
 }
 
+func TestBuildTickOutputConWorkerReadySessionResumeSinProgresoRecienteEsperaRecuperacion(t *testing.T) {
+	now := time.Now().UTC()
+	readyAt := now.Add(-25 * time.Minute)
+	lastOutputAt := now.Add(-5 * time.Minute)
+	lastProgressAt := now.Add(-25 * time.Minute)
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":                     "tmux_cli_session",
+		"transport":                  "tmux",
+		"tmux_session":               "orq-codex1-120001",
+		"tmux_pane_id":               "%4",
+		"mailbox_delivery_mode":      "session_resume",
+		"external_session_id":        "sess-456",
+		"worker_external_session_id": "sess-456",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":               "ready",
+		"updated_at":          now.Format(time.RFC3339Nano),
+		"alive":               true,
+		"ready_at":            readyAt.Format(time.RFC3339Nano),
+		"last_output_at":      lastOutputAt.Format(time.RFC3339Nano),
+		"last_progress_at":    lastProgressAt.Format(time.RFC3339Nano),
+		"external_session_id": "sess-456",
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":               true,
+		"heartbeat_at":        now.Format(time.RFC3339Nano),
+		"ready_at":            readyAt.Format(time.RFC3339Nano),
+		"external_session_id": "sess-456",
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_manifest_path":       manifestPath,
+		"driver":                     "tmux_cli_session",
+		"worker_status_path":         statusPath,
+		"worker_heartbeat_path":      heartbeatPath,
+		"mailbox_delivery_mode":      "session_resume",
+		"external_session_id":        "sess-456",
+		"worker_external_session_id": "sess-456",
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex1", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex1"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente activo Codex"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 52, Agente: "Codex1", ProyectoID: int64Ptr(7), LogicalState: "esperando_io", ProcessState: "running", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 62, Agente: "Codex1", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(52), Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+	}
+	svc := NewService(store, nil)
+	proyecto := &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()}
+
+	out, err := svc.buildTickOutput("Codex1", proyecto, nil, 100)
+	if err != nil {
+		t.Fatalf("buildTickOutput: %v", err)
+	}
+	if out.AccionRecomendada != "esperar_recuperacion_runtime" || out.DebePausar {
+		t.Fatalf("salida inesperada: %+v", out)
+	}
+	if !strings.Contains(strings.ToLower(out.Motivo), "sin progreso") {
+		t.Fatalf("motivo inesperado: %+v", out)
+	}
+}
+
 func TestBuildTickOutputConWorkerReadyBootstrapOnlySanoContinuaTrabajo(t *testing.T) {
 	now := time.Now().UTC()
 	readyAt := now.Add(-25 * time.Minute)
+	lastProgressAt := now.Add(-1 * time.Minute)
 	tmp := t.TempDir()
 	manifestPath := filepath.Join(tmp, "manifest.json")
 	statusPath := filepath.Join(tmp, "status.json")
@@ -697,6 +784,7 @@ func TestBuildTickOutputConWorkerReadyBootstrapOnlySanoContinuaTrabajo(t *testin
 		"updated_at":            now.Format(time.RFC3339Nano),
 		"alive":                 true,
 		"ready_at":              readyAt.Format(time.RFC3339Nano),
+		"last_progress_at":      lastProgressAt.Format(time.RFC3339Nano),
 		"mailbox_delivery_mode": "bootstrap_only",
 	})
 	heartbeatRaw, _ := json.Marshal(map[string]any{

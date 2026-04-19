@@ -3279,16 +3279,18 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 	if hasActiveTask && row.MailboxContinuityPending == 1 &&
 		(row.WorkerSupportsContinuityRecovery(now) ||
 			(row.workerHeartbeatRecent(now) && strings.EqualFold(strings.TrimSpace(row.handleDriver()), "tmux_cli_session"))) {
-		if row.workerHasRecentWorkSignal(now, workerOutputStaleThreshold) {
-			return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad pendiente útil")
-		}
+		return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad pendiente útil")
 	}
 	if hasActiveTask &&
 		workerRunningFresh &&
 		strings.EqualFold(workerState, "ready") &&
 		runtimeagente.NormalizeMailboxDeliveryMode(row.WorkerMailboxDeliveryMode) == runtimeagente.MailboxDeliverySessionResume &&
 		row.WorkerSupportsContinuityRecovery(now) {
-		return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad session_resume lista")
+		if row.MailboxContinuityPending > 0 ||
+			row.workerProgressRecent(now, workerOutputStaleThreshold) ||
+			row.workerWarmupRecent(now) {
+			return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad session_resume lista")
+		}
 	}
 	if hasActiveTask && workerRunningFresh && workerState == "starting" {
 		return "arrancando", firstNonEmpty(row.activitySummary(), "worker starting")

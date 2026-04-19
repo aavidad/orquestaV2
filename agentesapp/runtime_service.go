@@ -1001,7 +1001,11 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		strings.EqualFold(estadoOperativo, "atascado") &&
 		strings.EqualFold(strings.TrimSpace(row.WorkerState), "ready") &&
 		row.WorkerSupportsContinuityRecovery(now) {
-		runtimeBloqueado = false
+		if row.MailboxContinuityPending > 0 ||
+			row.workerProgressRecent(now, workerOutputStaleThreshold(s.store)) ||
+			row.workerWarmupRecent(now) {
+			runtimeBloqueado = false
+		}
 	}
 	if tieneTrabajo && !runtimeBloqueado {
 		bloqueado, detalle, resolved := runtimeBlockedFallbackFromRow(row, proyecto.ID)
