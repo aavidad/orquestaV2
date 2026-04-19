@@ -11264,6 +11264,168 @@ func TestProcesarRuntimeMailboxSessionResumeBatchUsaRuntimePrincipalCanonicoSiHa
 	}
 }
 
+func TestRuntimeMailboxBatchSnapshotActiveHandlePrefiereTMUXCanonicoSobreLegacy(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle canónico: %+v err=%v", handle, err)
+	}
+
+	tmuxMetaJSON := `{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-canon","tmux_pane_id":"%9","external_session_id":"sess-canonico","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex1-canon/%9', estado='activo', metadata_json=?, capabilities_json=? WHERE id=?`, tmuxMetaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("update handle tmux: %v", err)
+	}
+
+	legacyMetaJSON := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "legacy") + `","external_session_id":"sess-legacy","can_send_input":false}`
+	resLegacy, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, capabilities_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, ?, CURRENT_TIMESTAMP)`,
+		"Codex1", proyectoID, handle.RuntimeID, "cli", "process", strconv.Itoa(os.Getpid()), legacyMetaJSON, capsJSON)
+	if err != nil {
+		t.Fatalf("insert legacy handle: %v", err)
+	}
+	legacyHandleID, _ := resLegacy.LastInsertId()
+	db.ResetRuntimeHandlesHotCache()
+
+	snapshot := newRuntimeMailboxBatchSnapshot()
+	resolvedHandle, err := snapshot.activeHandle("Codex1", &proyectoID)
+	if err != nil || resolvedHandle == nil {
+		t.Fatalf("resolver handle activo: %+v err=%v", resolvedHandle, err)
+	}
+	if resolvedHandle.ID != handle.ID {
+		t.Fatalf("deberia preferir handle tmux canónico, got=%+v want_id=%d legacy_id=%d", resolvedHandle, handle.ID, legacyHandleID)
+	}
+	if strings.TrimSpace(resolvedHandle.Transporte) != "tmux" || strings.TrimSpace(resolvedHandle.HandleKind) != "session" {
+		t.Fatalf("handle resuelto no quedó en carril tmux canónico: %+v", resolvedHandle)
+	}
+	if !strings.Contains(resolvedHandle.MetadataJSON, `"driver":"tmux_cli_session"`) {
+		t.Fatalf("metadata resuelta no es tmux canónica: %s", resolvedHandle.MetadataJSON)
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeBatchPrefiereTMUXCanonicoSobreLegacy(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle canónico: %+v err=%v", handle, err)
+	}
+	if handle.RuntimeID == nil || *handle.RuntimeID <= 0 {
+		t.Fatalf("runtime canónico inesperado: %+v", handle)
+	}
+	tmuxMetaJSON := `{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-canon","tmux_pane_id":"%9","external_session_id":"sess-canonico","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex1-canon/%9', estado='activo', metadata_json=?, capabilities_json=? WHERE id=?`, tmuxMetaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("update handle tmux: %v", err)
+	}
+
+	legacyMetaJSON := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "legacy") + `","external_session_id":"sess-legacy","can_send_input":false}`
+	if _, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, capabilities_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, ?, CURRENT_TIMESTAMP)`,
+		"Codex1", proyectoID, handle.RuntimeID, "cli", "process", strconv.Itoa(os.Getpid()), legacyMetaJSON, capsJSON); err != nil {
+		t.Fatalf("insert legacy handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"usa tmux canónico"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia crear una send_instruction en carril tmux canónico, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var send *db.RuntimeOrder
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			send = order
+			break
+		}
+	}
+	if send == nil {
+		t.Fatalf("faltaba send_instruction")
+	}
+	if send.HandleID == nil || *send.HandleID != handle.ID {
+		t.Fatalf("send_instruction deberia usar handle tmux canónico: %+v", send)
+	}
+	if send.RuntimeID == nil || *send.RuntimeID != *handle.RuntimeID {
+		t.Fatalf("send_instruction deberia usar runtime canónico: %+v", send)
+	}
+	if !strings.Contains(send.PayloadJSON, `"mailbox_id":`+strconv.FormatInt(msgID, 10)) {
+		t.Fatalf("send_instruction sin mailbox_id: %s", send.PayloadJSON)
+	}
+	if !strings.Contains(send.PayloadJSON, `"external_session_id":"sess-canonico"`) {
+		t.Fatalf("send_instruction sin external_session_id canónico: %s", send.PayloadJSON)
+	}
+	if strings.Contains(send.PayloadJSON, `"external_session_id":"sess-legacy"`) {
+		t.Fatalf("send_instruction no deberia caer al legacy: %s", send.PayloadJSON)
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchEncolaSendInstructionParaWatchdog(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

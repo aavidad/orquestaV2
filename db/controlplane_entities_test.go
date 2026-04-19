@@ -8057,6 +8057,141 @@ func TestResolverBootstrapRuntimeLeasePendienteParaMailboxPrefiereResumeDerivada
 	}
 }
 
+func TestResolverBootstrapRuntimeLeasePendienteParaMailboxAislaLeasesConcurrentesPorMailbox(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	mailboxA, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"slice A"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox A: %v", err)
+	}
+	mailboxB, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"slice B"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox B: %v", err)
+	}
+
+	startA, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(`{"lease_state":"acked","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			mailboxA, sesion.ID, runtime.ID, handle.ID),
+	})
+	if err != nil {
+		t.Fatalf("encolar start A: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='completada', started_at=CURRENT_TIMESTAMP, finished_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, startA); err != nil {
+		t.Fatalf("marcar start A completada: %v", err)
+	}
+	resumeA, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "resume",
+		ResultadoJSON: fmt.Sprintf(`{"lease_state":"waiting_for_evidence","start_order_id":%d,"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			startA, sesion.ID, runtime.ID, handle.ID),
+	})
+	if err != nil {
+		t.Fatalf("encolar resume A: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, resumeA); err != nil {
+		t.Fatalf("marcar resume A ejecutando: %v", err)
+	}
+
+	startB, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(`{"lease_state":"acked","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			mailboxB, sesion.ID, runtime.ID, handle.ID),
+	})
+	if err != nil {
+		t.Fatalf("encolar start B: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='completada', started_at=CURRENT_TIMESTAMP, finished_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, startB); err != nil {
+		t.Fatalf("marcar start B completada: %v", err)
+	}
+	resumeB, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "resume",
+		ResultadoJSON: fmt.Sprintf(`{"lease_state":"waiting_for_evidence","start_order_id":%d,"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			startB, sesion.ID, runtime.ID, handle.ID),
+	})
+	if err != nil {
+		t.Fatalf("encolar resume B: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, resumeB); err != nil {
+		t.Fatalf("marcar resume B ejecutando: %v", err)
+	}
+
+	order, startOrderID, mailboxIDs, sesionID, err := resolverBootstrapRuntimeLeasePendienteParaMailbox(mailboxA, handle, runtime)
+	if err != nil {
+		t.Fatalf("resolverBootstrapRuntimeLeasePendienteParaMailbox mailboxA: %v", err)
+	}
+	if order == nil || order.ID != resumeA {
+		t.Fatalf("deberia devolver lease de mailbox A, got=%+v want=%d", order, resumeA)
+	}
+	if startOrderID != startA {
+		t.Fatalf("start_order_id inesperado para mailbox A: got=%d want=%d", startOrderID, startA)
+	}
+	if sesionID != sesion.ID {
+		t.Fatalf("sesion_id inesperado: got=%d want=%d", sesionID, sesion.ID)
+	}
+	if len(mailboxIDs) != 1 || mailboxIDs[0] != mailboxA {
+		t.Fatalf("mailbox_ids inesperados para mailbox A: %+v", mailboxIDs)
+	}
+}
+
 func TestResolverBootstrapRuntimeLeasePendientePrefiereHandoffDerivadaConMailboxHeredado(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
@@ -9215,6 +9350,159 @@ func TestResolverBootstrapRuntimeLeasePendienteParaMailboxRecuperaMailboxVigente
 	}
 	if len(mailboxIDs) != 1 || mailboxIDs[0] != sourceMailboxID {
 		t.Fatalf("mailbox_ids recuperados inesperados (deberian ser los de la start fuente): %+v", mailboxIDs)
+	}
+}
+
+func TestResolverBootstrapRuntimeLeasePendienteParaMailboxAislaHandoffsConcurrentesPorMailbox(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	mailboxA, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"handoff A"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox A: %v", err)
+	}
+	mailboxB, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"handoff B"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox B: %v", err)
+	}
+
+	startA, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(`{"lease_state":"acked","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			mailboxA, sesion.ID, runtime.ID, handle.ID),
+	})
+	if err != nil {
+		t.Fatalf("encolar start A: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='completada', started_at=CURRENT_TIMESTAMP, finished_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, startA); err != nil {
+		t.Fatalf("marcar start A completada: %v", err)
+	}
+	handoffPayloadA, err := json.Marshal(HandoffPayload{
+		AgenteOrigen:       "Codex0",
+		AgenteDestino:      "Codex1",
+		ResumenContinuidad: "handoff A",
+	})
+	if err != nil {
+		t.Fatalf("marshal handoff A: %v", err)
+	}
+	handoffA, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "handoff",
+		PayloadJSON: string(handoffPayloadA),
+		ResultadoJSON: fmt.Sprintf(`{"lease_state":"waiting_for_evidence","start_order_id":%d,"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			startA, sesion.ID, runtime.ID, handle.ID),
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff A: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, handoffA); err != nil {
+		t.Fatalf("marcar handoff A ejecutando: %v", err)
+	}
+
+	startB, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(`{"lease_state":"acked","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			mailboxB, sesion.ID, runtime.ID, handle.ID),
+	})
+	if err != nil {
+		t.Fatalf("encolar start B: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='completada', started_at=CURRENT_TIMESTAMP, finished_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, startB); err != nil {
+		t.Fatalf("marcar start B completada: %v", err)
+	}
+	handoffPayloadB, err := json.Marshal(HandoffPayload{
+		AgenteOrigen:       "Codex9",
+		AgenteDestino:      "Codex1",
+		ResumenContinuidad: "handoff B",
+	})
+	if err != nil {
+		t.Fatalf("marshal handoff B: %v", err)
+	}
+	handoffB, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "handoff",
+		PayloadJSON: string(handoffPayloadB),
+		ResultadoJSON: fmt.Sprintf(`{"lease_state":"waiting_for_evidence","start_order_id":%d,"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			startB, sesion.ID, runtime.ID, handle.ID),
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff B: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, handoffB); err != nil {
+		t.Fatalf("marcar handoff B ejecutando: %v", err)
+	}
+
+	order, startOrderID, mailboxIDs, sesionID, err := resolverBootstrapRuntimeLeasePendienteParaMailbox(mailboxA, handle, runtime)
+	if err != nil {
+		t.Fatalf("resolverBootstrapRuntimeLeasePendienteParaMailbox mailboxA: %v", err)
+	}
+	if order == nil || order.ID != handoffA {
+		t.Fatalf("deberia devolver handoff ligada a mailbox A, got=%+v want=%d", order, handoffA)
+	}
+	if startOrderID != startA {
+		t.Fatalf("start_order_id inesperado para mailbox A: got=%d want=%d", startOrderID, startA)
+	}
+	if sesionID != sesion.ID {
+		t.Fatalf("sesion_id inesperado: got=%d want=%d", sesionID, sesion.ID)
+	}
+	if len(mailboxIDs) != 1 || mailboxIDs[0] != mailboxA {
+		t.Fatalf("mailbox_ids inesperados para mailbox A: %+v", mailboxIDs)
 	}
 }
 
