@@ -3548,6 +3548,49 @@ func TestObservarProcesoLocalRuntimeMarcaFantasmaTMUXConCurrentPathBorrado(t *te
 	}
 }
 
+func TestProcesarHigieneRuntimesAutonomosBatchPurgaTMUXHuerfanaDeleted(t *testing.T) {
+	prepararDBTemporal(t)
+
+	prevCommand := runtimeTMUXCommandPathFn
+	prevList := runtimeTMUXListSessionsFn
+	prevKill := runtimeTMUXKillSessionFn
+	t.Cleanup(func() {
+		runtimeTMUXCommandPathFn = prevCommand
+		runtimeTMUXListSessionsFn = prevList
+		runtimeTMUXKillSessionFn = prevKill
+	})
+
+	runtimeTMUXCommandPathFn = func() (string, error) { return "fake-tmux", nil }
+	runtimeTMUXListSessionsFn = func(string) ([]controlruntime.TMUXSessionInfo, error) {
+		return []controlruntime.TMUXSessionInfo{
+			{SessionName: "orq-codex2-064413", CurrentPath: "/tmp/TestAPI/foo/orquestador (deleted)"},
+			{SessionName: "orq-codex2-live", CurrentPath: "/home/alberto/Trabajo/orquesta"},
+			{SessionName: "user-session", CurrentPath: "/tmp/TestAPI/bar (deleted)"},
+		}, nil
+	}
+	killed := make([]string, 0, 2)
+	runtimeTMUXKillSessionFn = func(_ string, sessionName string) error {
+		killed = append(killed, strings.TrimSpace(sessionName))
+		return nil
+	}
+
+	if _, err := DB.Exec(`INSERT INTO runtime_handles (agente, transporte, handle_kind, handle_ref, estado, metadata_json, created_at, updated_at)
+		VALUES ('Codex2', 'tmux', 'session', 'orq-codex2-live/%1', 'activo', '{"tmux_session":"orq-codex2-live"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("insert runtime handle activo: %v", err)
+	}
+
+	n, err := ProcesarHigieneRuntimesAutonomosBatch()
+	if err != nil {
+		t.Fatalf("procesar higiene runtimes autonomos: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia purgar exactamente una sesion tmux huerfana, got=%d", n)
+	}
+	if got := strings.Join(killed, ","); got != "orq-codex2-064413" {
+		t.Fatalf("kill-session inesperado, got=%q", got)
+	}
+}
+
 func TestReconciliarRuntimeHandlesStaleMarcaHandleActivoConSesionAbierta(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

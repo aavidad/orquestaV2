@@ -3476,13 +3476,105 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 			}
 		}
 	}
-	return processed, nil
+	orphanTMUX, err := purgarSesionesTMUXHuerfanasConCurrentPathBorrado()
+	if err != nil {
+		return processed, err
+	}
+	return processed + orphanTMUX, nil
+}
+
+func purgarSesionesTMUXHuerfanasConCurrentPathBorrado() (int, error) {
+	tmuxCommand, err := runtimeTMUXCommandPathFn()
+	if err != nil || strings.TrimSpace(tmuxCommand) == "" {
+		return 0, nil
+	}
+	sessions, err := runtimeTMUXListSessionsFn(tmuxCommand)
+	if err != nil {
+		return 0, err
+	}
+	referenciadas, err := runtimeTMUXSessionsActivasReferenciadas()
+	if err != nil {
+		return 0, err
+	}
+	purged := 0
+	for _, session := range sessions {
+		sessionName := strings.TrimSpace(session.SessionName)
+		if !strings.HasPrefix(sessionName, "orq-") {
+			continue
+		}
+		if _, ok := referenciadas[sessionName]; ok {
+			continue
+		}
+		currentPath, deleted := controlruntime.NormalizeTMUXCurrentPath(session.CurrentPath)
+		if !deleted {
+			if strings.TrimSpace(currentPath) == "" {
+				continue
+			}
+			if _, statErr := os.Stat(currentPath); statErr != nil {
+				if os.IsNotExist(statErr) {
+					deleted = true
+				} else {
+					continue
+				}
+			}
+		}
+		if !deleted {
+			continue
+		}
+		if err := runtimeTMUXKillSessionFn(tmuxCommand, sessionName); err != nil {
+			return purged, err
+		}
+		Audit("server", "runtime_hygiene_orphan_tmux_killed", "runtime_handle", 0, "tmux_session: "+sessionName)
+		purged++
+	}
+	return purged, nil
+}
+
+func runtimeTMUXSessionsActivasReferenciadas() (map[string]struct{}, error) {
+	rows, err := DB.Query(`SELECT handle_ref, metadata_json FROM runtime_handles WHERE estado='activo' AND LOWER(COALESCE(transporte, ''))='tmux'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]struct{})
+	for rows.Next() {
+		var handleRef, metadataJSON string
+		if err := rows.Scan(&handleRef, &metadataJSON); err != nil {
+			return nil, err
+		}
+		sessionName := strings.TrimSpace(stringFromMap(mapFromJSON(metadataJSON), "tmux_session", ""))
+		if sessionName == "" {
+			sessionName = strings.TrimSpace(runtimeTMUXSessionNameFromHandleRef(handleRef))
+		}
+		if sessionName == "" {
+			continue
+		}
+		out[sessionName] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func runtimeTMUXSessionNameFromHandleRef(handleRef string) string {
+	handleRef = strings.TrimSpace(handleRef)
+	if handleRef == "" {
+		return ""
+	}
+	if idx := strings.Index(handleRef, "/"); idx >= 0 {
+		handleRef = handleRef[:idx]
+	}
+	return strings.TrimSpace(handleRef)
 }
 
 var runtimeSupervisionHandleFn = supervisarRuntimeHandle
 var runtimeSupervisionBatchBudgetOverride time.Duration
 var runtimeOrdersBatchBudgetOverride time.Duration
 var ejecutarRuntimeOrderBasicaFn = ejecutarRuntimeOrderBasica
+var runtimeTMUXCommandPathFn = controlruntime.TMUXCommandPath
+var runtimeTMUXListSessionsFn = controlruntime.ListTMUXSessions
+var runtimeTMUXKillSessionFn = controlruntime.KillTMUXSession
 
 func runtimeSupervisionBatchBudget() time.Duration {
 	if runtimeSupervisionBatchBudgetOverride > 0 {
