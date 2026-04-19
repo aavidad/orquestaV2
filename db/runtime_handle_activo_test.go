@@ -96,6 +96,58 @@ func TestGetRuntimeHandleActivoAgenteProyectoIgnoraFantasmaMasReciente(t *testin
 	}
 }
 
+func TestRuntimeHandleCanonicoRecienteConFallbackOmiteCLISessionSinContinuidad(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexCLIStale", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	sesionID := mustInsertID(t, `INSERT INTO sesiones (
+		agente, proyecto_id, activa, estado, herramienta, host, heartbeat_at
+	) VALUES (?,?,?,?,?,?,?)`,
+		"CodexCLIStale", proyectoID, 0, "cerrada", "codex-cli", "test-host", time.Now().UTC().Add(-2*time.Hour))
+
+	runtimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "CodexCLIStale",
+		ProyectoID:   &proyectoID,
+		SesionID:     &sesionID,
+		LogicalState: "disponible",
+		ProcessState: "desconocido",
+	})
+	if err != nil {
+		t.Fatalf("crear runtime stale: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"herramienta": "codex-cli",
+		"cwd":         filepath.Join(tmp, "stale"),
+		"working_dir": filepath.Join(tmp, "stale"),
+	})
+	mustInsertID(t, `INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, sesion_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		"CodexCLIStale", proyectoID, runtimeID, sesionID, "cli", "session", jsonNumber(sesionID), "activo", string(metaJSON), time.Now().UTC())
+
+	runtimeHandleHotReset()
+	handle, err := runtimeHandleCanonicoRecienteConFallback("CodexCLIStale", &proyectoID)
+	if err != nil {
+		t.Fatalf("runtimeHandleCanonicoRecienteConFallback: %v", err)
+	}
+	if handle != nil {
+		t.Fatalf("el cli/session sin continuidad no deberia contar como canónico: %+v", handle)
+	}
+}
+
 func TestListarRuntimeHandlesActivosOperativosRecientesFiltraStaleYDeduplica(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

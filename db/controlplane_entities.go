@@ -1339,7 +1339,11 @@ func validarRuntimeHandleActivoSinFallback(handle *RuntimeHandle) (*RuntimeHandl
 	if estadoPersistido == "pausado" || estadoPersistido == "cerrado" {
 		return nil, nil
 	}
+	now := time.Now().UTC()
 	if !runtimeHandleSePuedeValidarLocalmente(handle) {
+		if !runtimeHandlePuedeRepresentarActivoCanonico(handle, now) {
+			return nil, nil
+		}
 		return normalizarRuntimeHandleTMUXCanonico(handle)
 	}
 	if superseded, err := supersedeRuntimeHandleSiHaceFalta(handle); err != nil {
@@ -1347,7 +1351,7 @@ func validarRuntimeHandleActivoSinFallback(handle *RuntimeHandle) (*RuntimeHandl
 	} else if superseded {
 		return nil, nil
 	}
-	if fresh, estado, pid := runtimeHandleReviveStateFromStructuredWorker(handle, time.Now().UTC()); fresh {
+	if fresh, estado, pid := runtimeHandleReviveStateFromStructuredWorker(handle, now); fresh {
 		if estado == "pausado" {
 			if _, err := revivirRuntimeHandle(handle, estado, pid); err != nil {
 				return nil, err
@@ -1356,7 +1360,7 @@ func validarRuntimeHandleActivoSinFallback(handle *RuntimeHandle) (*RuntimeHandl
 		}
 		return normalizarRuntimeHandleTMUXCanonico(handle)
 	}
-	if runtimeHandleConfiaEstadoReciente(handle, time.Now().UTC()) {
+	if runtimeHandleConfiaEstadoReciente(handle, now) {
 		return normalizarRuntimeHandleTMUXCanonico(handle)
 	}
 	revived, err := refrescarRuntimeHandleSiSigueVivo(handle)
@@ -1526,7 +1530,7 @@ func runtimeHandleConfiaEstadoReciente(handle *RuntimeHandle, now time.Time) boo
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
 	driver := strings.ToLower(strings.TrimSpace(stringFromMap(meta, "driver", "")))
-	if driver != "tmux_cli_session" && !strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") && !strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") {
+	if driver != "tmux_cli_session" && !strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") {
 		return false
 	}
 	if runtimepolicy.RuntimeHandleUsaLegacyCLITMUXPreferred(meta) {
@@ -1549,6 +1553,22 @@ func runtimeHandleConfiaEstadoReciente(handle *RuntimeHandle, now time.Time) boo
 	default:
 		return true
 	}
+}
+
+func runtimeHandlePuedeRepresentarActivoCanonico(handle *RuntimeHandle, now time.Time) bool {
+	if handle == nil || runtimeHandleExcluidoDelActivoCanonico(handle) {
+		return false
+	}
+	if runtimeHandleSostieneSesionOperativaConCutoff(handle, sessionOperationalCutoff()) {
+		return true
+	}
+	if fresh, _, _ := runtimeHandleReviveStateFromStructuredWorker(handle, now); fresh {
+		return true
+	}
+	if runtimeHandleConfiaEstadoReciente(handle, now) {
+		return true
+	}
+	return runtimeHandleSePuedeValidarLocalmente(handle)
 }
 
 func supersedeRuntimeHandleSiHaceFalta(handle *RuntimeHandle) (bool, error) {
@@ -4005,9 +4025,11 @@ func runtimeOrderRuntimeOperativoConSesionActiva(order *RuntimeOrder, runtime *R
 	if order == nil || runtime == nil {
 		return false
 	}
+	now := time.Now().UTC()
 	if runtime.SesionID != nil && *runtime.SesionID > 0 {
 		if sesion, err := sesionIfExists(runtime.SesionID); err == nil && sesion != nil {
-			if sesion.Activa && sesionCoincideProyectoOrden(sesion, order.ProyectoID) {
+			if sesionCoincideProyectoOrden(sesion, order.ProyectoID) &&
+				sesionOperativaPorHeartbeat(sesion.Activa, sesion.HeartbeatAt, sesion.Inicio, now) {
 				return true
 			}
 		}
@@ -11260,12 +11282,53 @@ func runtimePrincipalAgenteProyecto(agente string, proyectoID *int64) (*RuntimeI
 		q += ` AND r.proyecto_id = ?`
 		args = append(args, *proyectoID)
 	}
-	q += ` ORDER BY ` + runtimeActividadExpr("r") + ` DESC, r.id DESC LIMIT 1`
-	runtime, err := escanearRuntime(DB.QueryRow(q, args...))
-	if err == sql.ErrNoRows {
-		return nil, nil
+	q += ` ORDER BY ` + runtimeActividadExpr("r") + ` DESC, r.id DESC LIMIT 16`
+	items, err := consultarConReintentos(func() ([]*RuntimeInstance, error) {
+		rows, err := DB.Query(q, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var runtimes []*RuntimeInstance
+		for rows.Next() {
+			runtime, err := escanearRuntime(rows)
+			if err != nil {
+				return nil, err
+			}
+			runtimes = append(runtimes, runtime)
+		}
+		return runtimes, rows.Err()
+	})
+	if err != nil {
+		return nil, err
 	}
-	return runtime, err
+	now := time.Now().UTC()
+	for _, runtime := range items {
+		if runtimePuedeSerPrincipalSinHandle(runtime, now) {
+			return runtime, nil
+		}
+	}
+	return nil, nil
+}
+
+func runtimePuedeSerPrincipalSinHandle(runtime *RuntimeInstance, now time.Time) bool {
+	if runtime == nil {
+		return false
+	}
+	if !runtimeSostieneSesionOperativaConCutoff(runtime, sessionOperationalCutoff()) {
+		return false
+	}
+	if strings.TrimSpace(runtime.ExternalSessionID) != "" {
+		return true
+	}
+	if runtime.SesionID == nil || *runtime.SesionID <= 0 {
+		return false
+	}
+	sesion, err := sesionIfExists(runtime.SesionID)
+	if err != nil || sesion == nil {
+		return false
+	}
+	return sesionOperativaPorHeartbeat(sesion.Activa, sesion.HeartbeatAt, sesion.Inicio, now)
 }
 
 func runtimeOrderTiposBasicos() []string {

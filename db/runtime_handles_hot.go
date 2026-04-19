@@ -64,22 +64,28 @@ func runtimeHandleHotRemember(handle *RuntimeHandle) {
 		return
 	}
 	clone := cloneRuntimeHandle(handle)
+	now := time.Now().UTC()
+	canonicalEligible := runtimeHandlePuedeRepresentarActivoCanonico(clone, now)
 	runtimeHandlesHot.mu.Lock()
 	defer runtimeHandlesHot.mu.Unlock()
-	if current := runtimeHandlesHot.byAgent[agente]; current == nil || runtimeHandlePreferible(clone, current, time.Now().UTC()) {
-		runtimeHandlesHot.byAgent[agente] = clone
+	if canonicalEligible {
+		if current := runtimeHandlesHot.byAgent[agente]; current == nil || runtimeHandlePreferible(clone, current, now) {
+			runtimeHandlesHot.byAgent[agente] = clone
+		}
 	}
 	if handle.SesionID != nil && *handle.SesionID > 0 {
-		if current := runtimeHandlesHot.bySession[*handle.SesionID]; current == nil || runtimeHandlePreferible(clone, current, time.Now().UTC()) {
+		if current := runtimeHandlesHot.bySession[*handle.SesionID]; current == nil || runtimeHandlePreferible(clone, current, now) {
 			runtimeHandlesHot.bySession[*handle.SesionID] = clone
 		}
 	}
 	if key, ok := runtimeHandleAgentProjectKey(agente, handle.ProyectoID); ok {
-		if current := runtimeHandlesHot.byAgentProject[key]; current == nil || runtimeHandlePreferible(clone, current, time.Now().UTC()) {
-			runtimeHandlesHot.byAgentProject[key] = clone
+		if canonicalEligible {
+			if current := runtimeHandlesHot.byAgentProject[key]; current == nil || runtimeHandlePreferible(clone, current, now) {
+				runtimeHandlesHot.byAgentProject[key] = clone
+			}
 		}
 		if runtimeHandleSostieneSesionOperativaConCutoff(clone, sessionOperationalCutoff()) {
-			if current := runtimeHandlesHot.operational[key]; current == nil || runtimeHandlePreferible(clone, current, time.Now().UTC()) {
+			if current := runtimeHandlesHot.operational[key]; current == nil || runtimeHandlePreferible(clone, current, now) {
 				runtimeHandlesHot.operational[key] = clone
 			}
 		}
@@ -248,8 +254,9 @@ func runtimeHandleHotReplace(handles []*RuntimeHandle) error {
 
 func runtimeHandleHotSelectCanonical(handles []*RuntimeHandle) *RuntimeHandle {
 	canonicos := make([]*RuntimeHandle, 0, len(handles))
+	now := time.Now().UTC()
 	for _, handle := range handles {
-		if handle == nil || runtimeHandleExcluidoDelActivoCanonico(handle) {
+		if handle == nil || !runtimeHandlePuedeRepresentarActivoCanonico(handle, now) {
 			continue
 		}
 		canonicos = append(canonicos, handle)

@@ -146,7 +146,9 @@ func runtimeHandleCanonicoRecienteConFallback(agente string, proyectoID *int64) 
 		return nil, err
 	}
 	if handle := runtimeHandleSnapshotLookup(snapshot, agente, proyectoID); handle != nil {
-		return handle, nil
+		if runtimeHandlePuedeRepresentarActivoCanonico(handle, time.Now().UTC()) {
+			return handle, nil
+		}
 	}
 	if proyectoID != nil {
 		return GetRuntimeHandleActivoAgenteProyecto(agente, proyectoID)

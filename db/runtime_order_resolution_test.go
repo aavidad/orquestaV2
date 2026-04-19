@@ -123,6 +123,145 @@ func TestResolverHandleYRuntimeParaOrdenPrefierenTMUXCanonicoSobreLegacy(t *test
 	}
 }
 
+func TestRuntimePrincipalAgenteProyectoOmiteRuntimeSinSesionOperativaNiHandleCanonica(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexOrphan", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	sesionID := mustInsertID(t, `INSERT INTO sesiones (
+		agente, proyecto_id, activa, estado, herramienta, host, heartbeat_at
+	) VALUES (?,?,?,?,?,?,?)`,
+		"CodexOrphan", proyectoID, 0, "cerrada", "codex-cli", "test-host", time.Now().UTC().Add(-2*time.Hour))
+
+	runtimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "CodexOrphan",
+		ProyectoID:   &proyectoID,
+		SesionID:     &sesionID,
+		LogicalState: "disponible",
+		ProcessState: "desconocido",
+	})
+	if err != nil {
+		t.Fatalf("crear runtime orphan: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := DB.Exec(`UPDATE runtime_instances
+		SET last_event_at=?, last_heartbeat_at=?, updated_at=?
+		WHERE id=?`, now, now, now, runtimeID); err != nil {
+		t.Fatalf("actualizar runtime orphan: %v", err)
+	}
+
+	runtime, err := runtimePrincipalAgenteProyecto("CodexOrphan", &proyectoID)
+	if err != nil {
+		t.Fatalf("runtimePrincipalAgenteProyecto: %v", err)
+	}
+	if runtime != nil {
+		t.Fatalf("no deberia elegir una runtime sin sesion operativa ni handle canónica: %+v", runtime)
+	}
+}
+
+func TestRuntimePrincipalAgenteProyectoAceptaRuntimeConSesionActivaSinHandle(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexRuntimeOnly", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	sesionID := mustInsertID(t, `INSERT INTO sesiones (
+		agente, proyecto_id, activa, estado, herramienta, host, heartbeat_at
+	) VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
+		"CodexRuntimeOnly", proyectoID, 1, "activa", "codex-cli", "test-host")
+
+	runtimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "CodexRuntimeOnly",
+		ProyectoID:   &proyectoID,
+		SesionID:     &sesionID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+	})
+	if err != nil {
+		t.Fatalf("crear runtime sin handle: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := DB.Exec(`UPDATE runtime_instances
+		SET last_event_at=?, last_heartbeat_at=?, updated_at=?
+		WHERE id=?`, now, now, now, runtimeID); err != nil {
+		t.Fatalf("actualizar runtime activo: %v", err)
+	}
+
+	runtime, err := runtimePrincipalAgenteProyecto("CodexRuntimeOnly", &proyectoID)
+	if err != nil {
+		t.Fatalf("runtimePrincipalAgenteProyecto: %v", err)
+	}
+	if runtime == nil || runtime.ID != runtimeID {
+		t.Fatalf("deberia aceptar la runtime con sesion activa aunque no haya handle: %+v", runtime)
+	}
+}
+
+func TestRuntimeOrderRuntimeOperativoConSesionActivaOmiteHeartbeatStale(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexStartGuard", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	sesionID := mustInsertID(t, `INSERT INTO sesiones (
+		agente, proyecto_id, activa, estado, herramienta, host, heartbeat_at
+	) VALUES (?,?,?,?,?,?,?)`,
+		"CodexStartGuard", proyectoID, 1, "activa", "codex-cli", "test-host", time.Now().UTC().Add(-2*time.Hour))
+
+	runtimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "CodexStartGuard",
+		ProyectoID:   &proyectoID,
+		SesionID:     &sesionID,
+		LogicalState: "activo",
+		ProcessState: "running",
+	})
+	if err != nil {
+		t.Fatalf("crear runtime guard: %v", err)
+	}
+
+	order := &RuntimeOrder{Agente: "CodexStartGuard", ProyectoID: &proyectoID, Tipo: "start"}
+	runtime, err := GetRuntime(runtimeID)
+	if err != nil {
+		t.Fatalf("GetRuntime: %v", err)
+	}
+	if runtimeOrderRuntimeOperativoConSesionActiva(order, runtime) {
+		t.Fatal("una sesion activa sin heartbeat operativo no deberia satisfacer start")
+	}
+}
+
 func TestResolverRuntimeParaOrdenConSoloRuntimeIDPrefiereTMUXCanonico(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
