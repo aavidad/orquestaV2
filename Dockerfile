@@ -35,12 +35,12 @@ WORKDIR /app
 # Copiamos el binario desde la fase anterior
 COPY --from=builder /app/orquesta-bin /app/orquesta
 
-# Creamos directorios para persistencia de datos, logs y workspace montado
-RUN mkdir -p /app/data /app/logs /app/workspace
+# Creamos directorios para logs y workspace montado.
+RUN mkdir -p /app/logs /app/workspace
 
-# Variables de entorno por defecto
-# El backend SQLite de Orquesta lee ORQUESTA_DB como ruta efectiva.
-ENV ORQUESTA_DB=/app/data/orquesta.db
+# Variables de entorno por defecto.
+# El backend de persistencia debe declararse desde fuera del contenedor
+# mediante ORQUESTA_DB_DRIVER + ORQUESTA_DB_DSN/ORQUESTA_DB.
 ENV ORQUESTA_WORKSPACE_ROOT=/app/workspace
 
 # Exponemos el puerto del panel web / API

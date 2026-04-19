@@ -12,7 +12,6 @@ fi
 
 cd "$ROOT_DIR"
 
-export ORQUESTA_DB="${ORQUESTA_DB:-$ROOT_DIR/orquesta.db}"
 export ORQUESTA_SERVER_URL="${ORQUESTA_SERVER_URL:-http://127.0.0.1:16543}"
 
 PROMPT=$(cat <<'EOF'
@@ -21,8 +20,8 @@ Continúa como orquestador autónomo del proyecto Orquesta.
 Contexto operativo:
 - Proyecto canónico: orquestador
 - Repo canónico: Trabajo/orquesta
-- BD canónica: $ORQUESTA_DB
 - Daemon canónico: $ORQUESTA_SERVER_URL
+- Persistencia canónica: la que declare Orquesta en el daemon, no una ruta local asumida
 - claude1 está en una rama propia y no se pisa su frente
 - No borrar nada sin preguntar
 - No reprogramar código ya hecho y validado; antes comprobar código+tests+evidencia
