@@ -2276,12 +2276,26 @@ func (s *Service) findExistingAgentContinue(agente string, proyectoID *int64, ta
 	if err != nil {
 		return 0, false, err
 	}
+	var best *db.RuntimeMailboxMessage
 	for _, msg := range mailbox {
 		if msg == nil || !runtimeMailboxMatchesAgentContinue(msg, tareaID) {
 			continue
 		}
-		if msg.RuntimeOrderID != nil && *msg.RuntimeOrderID > 0 {
-			return *msg.RuntimeOrderID, true, nil
+		if best == nil || msg.ID > best.ID {
+			best = msg
+		}
+	}
+	if best != nil {
+		for _, msg := range mailbox {
+			if msg == nil || msg.ID == best.ID || !runtimeMailboxMatchesAgentContinue(msg, tareaID) {
+				continue
+			}
+			if err := s.store.MarkRuntimeMailboxConsumed(msg.ID); err != nil {
+				return 0, false, err
+			}
+		}
+		if best.RuntimeOrderID != nil && *best.RuntimeOrderID > 0 {
+			return *best.RuntimeOrderID, true, nil
 		}
 	}
 	return 0, false, nil

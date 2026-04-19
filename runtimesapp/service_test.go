@@ -2916,7 +2916,8 @@ func TestEnqueueAgentControlContinuarReuseOrdenViva(t *testing.T) {
 func TestEnqueueAgentControlContinuarReuseMailboxPendiente(t *testing.T) {
 	projectID := int64(9)
 	tareaID := int64(17)
-	orderID := int64(91)
+	oldOrderID := int64(91)
+	newOrderID := int64(92)
 	store := &fakeStore{
 		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador"},
 		agentResponse:   &db.Agente{Nombre: "Codex2", Rol: "programador"},
@@ -2925,7 +2926,16 @@ func TestEnqueueAgentControlContinuarReuseMailboxPendiente(t *testing.T) {
 				ID:             501,
 				ToAgente:       "Codex2",
 				ProyectoID:     &projectID,
-				RuntimeOrderID: &orderID,
+				RuntimeOrderID: &oldOrderID,
+				Kind:           "pipeline_local",
+				Estado:         "pendiente",
+				PayloadJSON:    `{"accion":"continuar_trabajo","control_action":"continue","tarea_id":17}`,
+			},
+			{
+				ID:             502,
+				ToAgente:       "Codex2",
+				ProyectoID:     &projectID,
+				RuntimeOrderID: &newOrderID,
 				Kind:           "pipeline_local",
 				Estado:         "pendiente",
 				PayloadJSON:    `{"accion":"continuar_trabajo","control_action":"continue","tarea_id":17}`,
@@ -2944,13 +2954,16 @@ func TestEnqueueAgentControlContinuarReuseMailboxPendiente(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnqueueAgentControl continue reuse mailbox: %v", err)
 	}
-	if gotOrderID != 91 || accion != "continue" {
+	if gotOrderID != 92 || accion != "continue" {
 		t.Fatalf("orderID=%d accion=%s", gotOrderID, accion)
 	}
 	if store.createOrder != nil {
 		t.Fatalf("no deberia crear nudge nueva si la mailbox sigue pendiente: %+v", store.createOrder)
 	}
-	if store.auditAction != "control_agente_continue_reuse" || store.auditEntityID != 91 {
+	if store.consumedID != 501 {
+		t.Fatalf("deberia consumir la mailbox duplicada vieja: %d", store.consumedID)
+	}
+	if store.auditAction != "control_agente_continue_reuse" || store.auditEntityID != 92 {
 		t.Fatalf("audit reuse inesperada: action=%q entityID=%d", store.auditAction, store.auditEntityID)
 	}
 }
