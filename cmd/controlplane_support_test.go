@@ -10152,6 +10152,13 @@ func TestRuntimeMailboxGuidanceDurablePersistibleEnInbox(t *testing.T) {
 	if runtimeMailboxGuidanceDurablePersistibleEnInbox(nil) {
 		t.Error("nil msg debe devolver false")
 	}
+	manualContinue := &db.RuntimeMailboxMessage{
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"accion":"continuar_trabajo","control_action":"continue","instruction":"Retoma la tarea activa."}`,
+	}
+	if !runtimeMailboxGuidanceDurablePersistibleEnInbox(manualContinue) {
+		t.Fatal("pipeline_local de continuar manual deberia persistir en inbox")
+	}
 }
 
 func TestRuntimeMailboxGuidanceDurableUsaInbox(t *testing.T) {
@@ -14884,6 +14891,101 @@ func TestProcesarRuntimeMailboxSessionResumeBatchPermiteGuidanceDurableAunqueBoo
 	}
 	if sendOrder == nil {
 		t.Fatal("deberia crear una send_instruction para guidance durable")
+	}
+	if !strings.Contains(sendOrder.PayloadJSON, `"mailbox_id":`+strconv.FormatInt(msgID, 10)) {
+		t.Fatalf("payload inesperado: %s", sendOrder.PayloadJSON)
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeBatchPermiteContinuacionManualDurableAunqueBootstrapSigaPendiente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	metaJSON := `{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-continue-bootstrap","tmux_pane_id":"%69","mailbox_delivery_mode":"session_resume","can_send_input":false,"external_session_id":"sess-continue-bootstrap"}`
+	capsJSON := `{"mailbox_delivery_mode":"session_resume","can_send_input":false}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex1-continue-bootstrap/%69', estado='activo', metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente: "server",
+		ToAgente:   "Codex1",
+		ProyectoID: &proyectoID,
+		Kind:       "pipeline_local",
+		PayloadJSON: `{"accion":"continuar_trabajo","control_action":"continue","instruction":"Retoma la tarea activa y cierra el siguiente slice útil.","texto":"seguir frente"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	startID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","mailbox_ids":[%d],"sesion_id":%d,"handle_id":%d,"runtime_id":%d}`,
+			msgID, sesion.ID, handle.ID, runtime.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start bootstrap: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, startID); err != nil {
+		t.Fatalf("marcar start ejecutando: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia rematerializar continuar manual durable aunque bootstrap siga pendiente, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var sendOrder *db.RuntimeOrder
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" && order.ID != startID {
+			sendOrder = order
+		}
+	}
+	if sendOrder == nil {
+		t.Fatal("deberia crear una send_instruction para continuar manual durable")
 	}
 	if !strings.Contains(sendOrder.PayloadJSON, `"mailbox_id":`+strconv.FormatInt(msgID, 10)) {
 		t.Fatalf("payload inesperado: %s", sendOrder.PayloadJSON)

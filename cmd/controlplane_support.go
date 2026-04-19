@@ -7006,7 +7006,7 @@ func reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje(msg *db.RuntimeMailb
 	if err := escribirInboxRuntimeMailboxDurable(proyecto, strings.TrimSpace(msg.ToAgente), tarea, msg, handle); err != nil {
 		return false, err
 	}
-	if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
+	if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) || runtimeMailboxEsContinuacionManualDurable(msg) {
 		if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
 			return false, err
 		}
@@ -7048,7 +7048,7 @@ func runtimeMailboxGuidanceDurableRequiereTriggerCaliente(handle *db.RuntimeHand
 	if handle == nil || msg == nil {
 		return false
 	}
-	if !runtimeMailboxKindEphemeral(strings.TrimSpace(msg.Kind)) {
+	if !runtimeMailboxKindEphemeral(strings.TrimSpace(msg.Kind)) && !runtimeMailboxEsContinuacionManualDurable(msg) {
 		return false
 	}
 	if !db.RuntimeHandlePermiteSendInputInteractivo(handle) {
@@ -7150,6 +7150,9 @@ func runtimeMailboxGuidanceDurablePersistibleEnInbox(msg *db.RuntimeMailboxMessa
 	if msg == nil {
 		return false
 	}
+	if runtimeMailboxEsContinuacionManualDurable(msg) {
+		return true
+	}
 	kind := strings.TrimSpace(msg.Kind)
 	switch kind {
 	case "autonomia", "nudge", "watchdog", db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
@@ -7157,6 +7160,20 @@ func runtimeMailboxGuidanceDurablePersistibleEnInbox(msg *db.RuntimeMailboxMessa
 	default:
 		return strings.HasPrefix(kind, "autonomia_")
 	}
+}
+
+func runtimeMailboxEsContinuacionManualDurable(msg *db.RuntimeMailboxMessage) bool {
+	if msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") {
+		return false
+	}
+	payload := map[string]any{}
+	if strings.TrimSpace(msg.PayloadJSON) != "" {
+		_ = json.Unmarshal([]byte(msg.PayloadJSON), &payload)
+	}
+	if !strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "accion")), "continuar_trabajo") {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "control_action")), "continue")
 }
 
 func runtimeMailboxGuidanceDurableUsaInbox(handle *db.RuntimeHandle) bool {
