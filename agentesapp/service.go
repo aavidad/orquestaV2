@@ -3279,7 +3279,9 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 	if hasActiveTask && row.MailboxContinuityPending == 1 &&
 		(row.WorkerSupportsContinuityRecovery(now) ||
 			(row.workerHeartbeatRecent(now) && strings.EqualFold(strings.TrimSpace(row.handleDriver()), "tmux_cli_session"))) {
-		return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad pendiente útil")
+		if row.workerHasRecentWorkSignal(now, workerOutputStaleThreshold) {
+			return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad pendiente útil")
+		}
 	}
 	if hasActiveTask &&
 		workerRunningFresh &&
@@ -3346,11 +3348,20 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 	if hasActiveTask && hasBlockedTask && recentActivity {
 		return "saturado", fmt.Sprintf("%d activas, %d bloqueadas", row.OpenTasks, row.BlockedTasks)
 	}
-	if hasActiveTask && workerRunningFresh {
+	if hasActiveTask && workerRunningFresh && row.workerHasRecentWorkSignal(now, workerOutputStaleThreshold) {
 		return "trabajando", firstNonEmpty(row.activitySummary(), "worker "+workerState)
 	}
-	if hasActiveTask && recentActivity {
+	if hasActiveTask && workerRunningFresh && row.workerWarmupRecent(now) {
+		return "arrancando", firstNonEmpty(row.activitySummary(), "worker "+workerState)
+	}
+	if hasActiveTask && workerRunningFresh {
+		return "atascado", firstNonEmpty(row.workerLastProgressSummary(), row.workerLastOutputSummary(), "worker sin señal de trabajo reciente")
+	}
+	if hasActiveTask && recentActivity && row.workerHasRecentWorkSignal(now, workerOutputStaleThreshold) {
 		return "trabajando", row.activitySummary()
+	}
+	if hasActiveTask && recentActivity {
+		return "arrancando", row.activitySummary()
 	}
 	if hasActiveTask {
 		return "caido", row.activitySummary()
@@ -3454,6 +3465,19 @@ func (r Row) workerHeartbeatRecent(now time.Time) bool {
 	}
 	if r.WorkerUpdatedAt != nil && !r.WorkerUpdatedAt.IsZero() {
 		return !r.WorkerUpdatedAt.Before(now.Add(-45 * time.Second))
+	}
+	return false
+}
+
+func (r Row) workerWarmupRecent(now time.Time) bool {
+	for _, ts := range []*time.Time{
+		r.WorkerReadyAt,
+		r.WorkerUpdatedAt,
+	} {
+		if ts == nil || ts.IsZero() {
+			continue
+		}
+		return !ts.Before(now.Add(-2 * time.Minute))
 	}
 	return false
 }
@@ -3643,6 +3667,24 @@ func (r Row) workerOutputStale(now time.Time, threshold time.Duration) bool {
 		return false
 	}
 	return baseline.Before(now.Add(-threshold))
+}
+
+func (r Row) workerHasRecentWorkSignal(now time.Time, threshold time.Duration) bool {
+	if threshold <= 0 {
+		threshold = 4 * time.Hour
+	}
+	for _, ts := range []*time.Time{
+		r.WorkerLastProgress,
+		r.WorkerLastOutput,
+	} {
+		if ts == nil || ts.IsZero() {
+			continue
+		}
+		if !ts.Before(now.Add(-threshold)) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r Row) workerProgressRecent(now time.Time, threshold time.Duration) bool {

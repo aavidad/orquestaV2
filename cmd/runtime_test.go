@@ -29,6 +29,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	var processOrdersReq map[string]any
 	var processMailboxReq map[string]any
 	var processAutonomiaReq map[string]any
+	var processTranscriptReq map[string]any
 	var processDegradadosReq map[string]any
 	var processHygieneReq map[string]any
 	var processReanimationsReq map[string]any
@@ -248,6 +249,9 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 		case r.URL.Path == "/api/runtime/process-autonomia" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&processAutonomiaReq)
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 0, "accepted": true, "running": true})
+		case r.URL.Path == "/api/runtime/process-transcript" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&processTranscriptReq)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 7, "accepted": false, "running": false})
 		case r.URL.Path == "/api/runtime/process-degradados" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&processDegradadosReq)
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 2, "accepted": true, "running": false})
@@ -407,6 +411,20 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	}
 	if got, ok := processAutonomiaReq["wait"].(bool); !ok || got {
 		t.Fatalf("request process autonomia deberia enviar wait=false: %+v", processAutonomiaReq)
+	}
+
+	outProcessTranscript := capturarStdout(t, func() {
+		if err := runtimeProcesarTranscriptCmd.RunE(runtimeProcesarTranscriptCmd, nil); err != nil {
+			t.Fatalf("runtime procesar-transcript via api: %v", err)
+		}
+	})
+	for _, token := range []string{"accepted=false", "running=false", "count=7"} {
+		if !strings.Contains(outProcessTranscript, token) {
+			t.Fatalf("salida runtime procesar-transcript sin %q:\n%s", token, outProcessTranscript)
+		}
+	}
+	if got, ok := processTranscriptReq["wait"].(bool); !ok || got {
+		t.Fatalf("request process transcript deberia enviar wait=false: %+v", processTranscriptReq)
 	}
 
 	outProcessDegradados := capturarStdout(t, func() {

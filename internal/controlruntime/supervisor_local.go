@@ -846,6 +846,11 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 		"mailbox_delivery_mode": mailboxDeliveryMode,
 		"can_send_input":        canSendInput,
 	}
+	if paths := workerArtifactsPaths(strings.TrimSpace(traceDir)); strings.TrimSpace(paths.ManifestPath) != "" {
+		meta["worker_manifest_path"] = paths.ManifestPath
+		meta["worker_status_path"] = paths.StatusPath
+		meta["worker_heartbeat_path"] = paths.HeartbeatPath
+	}
 	if strings.TrimSpace(driver) != "" {
 		meta["runtime_driver"] = strings.TrimSpace(driver)
 	}

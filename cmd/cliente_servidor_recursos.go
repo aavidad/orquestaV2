@@ -1325,6 +1325,20 @@ func procesarAutonomiaPorAPI(wait bool) (*apiRuntimeProcessAutonomiaResponse, bo
 	return &resp, true, nil
 }
 
+func procesarTranscriptPorAPI(wait bool, handleID int64, agente, proyecto string) (*apiRuntimeProcessAutonomiaResponse, bool, error) {
+	var resp apiRuntimeProcessAutonomiaResponse
+	ok, err := apiPost("/api/runtime/process-transcript", apiRuntimeProcessTranscriptRequest{
+		Wait:     wait,
+		HandleID: handleID,
+		Agente:   strings.TrimSpace(agente),
+		Proyecto: strings.TrimSpace(proyecto),
+	}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
 func procesarDegradadosPorAPI(wait bool) (*apiRuntimeProcessAutonomiaResponse, bool, error) {
 	var resp apiRuntimeProcessAutonomiaResponse
 	ok, err := apiPost("/api/runtime/process-degradados", map[string]any{"wait": wait}, &resp)

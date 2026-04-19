@@ -2257,8 +2257,79 @@ func TestBuildPanelRowsPriorizaWorkerFrescoSobreCuotaVisibleObservada(t *testing
 	if rows[0].EstadoOperativo == "bloqueado_por_cuota" {
 		t.Fatalf("worker fresco no deberia quedar secuestrado por cuota visible: %+v", rows[0])
 	}
-	if rows[0].EstadoOperativo != "trabajando" {
+	if rows[0].EstadoOperativo != "arrancando" {
 		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+}
+
+func TestBuildPanelRowsNoMarcaTrabajandoSoloPorHeartbeatFrescoSinTrabajoReal(t *testing.T) {
+	now := time.Now().UTC()
+	updatedAt := now.Add(-25 * time.Minute)
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-codex-no-progress",
+		"tmux_pane_id": "%1",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"updated_at": updatedAt.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "CodexNoProgress", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		sessions: []*db.Sesion{
+			{Agente: "CodexNoProgress", Herramienta: "codex-cli", Estado: "activa", Inicio: now},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "CodexNoProgress", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "CodexNoProgress", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("CodexNoProgress"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "atascado" {
+		t.Fatalf("estado operativo=%q detalle=%q", rows[0].EstadoOperativo, rows[0].DetalleOperativo)
+	}
+	if !strings.Contains(rows[0].DetalleOperativo, "sin señal de trabajo reciente") {
+		t.Fatalf("detalle operativo=%q", rows[0].DetalleOperativo)
 	}
 }
 

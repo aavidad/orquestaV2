@@ -252,6 +252,26 @@ var runtimeProcesarAutonomiaCmd = &cobra.Command{
 	},
 }
 
+var runtimeProcesarTranscriptCmd = &cobra.Command{
+	Use:   "procesar-transcript",
+	Short: "Ejecuta una pasada inmediata del batch de runtime transcript",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wait, _ := cmd.Flags().GetBool("wait")
+		handleID, _ := cmd.Flags().GetInt64("handle-id")
+		agente, _ := cmd.Flags().GetString("agente")
+		proyecto, _ := cmd.Flags().GetString("proyecto")
+		resp, ok, err := procesarTranscriptPorAPI(wait, handleID, agente, proyecto)
+		if !ok {
+			return serverFirstCommandError("runtime procesar-transcript")
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Printf("✓ Runtime transcript accepted=%t running=%t count=%d\n", resp.Accepted, resp.Running, resp.Count)
+		return nil
+	},
+}
+
 var runtimeProcesarDegradadosCmd = &cobra.Command{
 	Use:   "procesar-degradados",
 	Short: "Ejecuta una pasada inmediata del batch de agentes degradados",
@@ -1936,8 +1956,12 @@ func init() {
 	runtimeProcesarMailboxCmd.Flags().String("agente", "", "Procesar solo mailbox de un agente destino")
 	runtimeProcesarMailboxCmd.Flags().String("proyecto", "", "Procesar solo mailbox de un proyecto")
 	runtimeProcesarAutonomiaCmd.Flags().Bool("wait", false, "Ejecuta la pasada en primer plano y devuelve el recuento real")
+	runtimeProcesarTranscriptCmd.Flags().Bool("wait", false, "Ejecuta la pasada en primer plano y devuelve el recuento real")
+	runtimeProcesarTranscriptCmd.Flags().String("agente", "", "Procesar solo transcript de un agente")
+	runtimeProcesarTranscriptCmd.Flags().String("proyecto", "", "Filtrar transcript por proyecto al procesar un agente")
+	runtimeProcesarTranscriptCmd.Flags().Int64("handle-id", 0, "Procesar solo transcript de un runtime handle")
 	runtimeProcesarDegradadosCmd.Flags().Bool("wait", false, "Ejecuta la pasada en primer plano y devuelve el recuento real")
 	runtimeProcesarHigieneCmd.Flags().Bool("wait", false, "Ejecuta la pasada en primer plano y devuelve el recuento real")
-	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeDespertarCmd, runtimeProcesarOrdenesCmd, runtimeProcesarMailboxCmd, runtimeProcesarAutonomiaCmd, runtimeProcesarDegradadosCmd, runtimeProcesarHigieneCmd, runtimeProcesarReanimacionesCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenVerCmd, runtimeOrdenNuevaCmd, runtimeOrdenCancelarCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxVerCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd, runtimeMailboxLimpiarCmd, runtimeLimpiarPruebasCmd)
+	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeDespertarCmd, runtimeProcesarOrdenesCmd, runtimeProcesarMailboxCmd, runtimeProcesarAutonomiaCmd, runtimeProcesarTranscriptCmd, runtimeProcesarDegradadosCmd, runtimeProcesarHigieneCmd, runtimeProcesarReanimacionesCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenVerCmd, runtimeOrdenNuevaCmd, runtimeOrdenCancelarCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxVerCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd, runtimeMailboxLimpiarCmd, runtimeLimpiarPruebasCmd)
 	rootCmd.AddCommand(runtimeCmd)
 }

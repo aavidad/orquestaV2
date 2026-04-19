@@ -353,6 +353,15 @@ func TestConsultarEstadoLocalRehidrataMetadataRicaDesdeRuntimeManifest(t *testin
 	if got := stringValueFromMetadata(meta, "rendered_command"); got != "codex-perfil Codex2" {
 		t.Fatalf("rendered_command no rehidratado: %q meta=%+v", got, meta)
 	}
+	if got := stringValueFromMetadata(meta, "worker_manifest_path"); got != filepath.Join(runDir, "manifest.json") {
+		t.Fatalf("worker_manifest_path no rehidratado: %q meta=%+v", got, meta)
+	}
+	if got := stringValueFromMetadata(meta, "worker_status_path"); got != filepath.Join(runDir, "status.json") {
+		t.Fatalf("worker_status_path no rehidratado: %q meta=%+v", got, meta)
+	}
+	if got := stringValueFromMetadata(meta, "worker_heartbeat_path"); got != filepath.Join(runDir, "heartbeat.json") {
+		t.Fatalf("worker_heartbeat_path no rehidratado: %q meta=%+v", got, meta)
+	}
 }
 
 func TestSupervisorLocalEstadoRehabilitaSalidaExternaSiPIDSigueVivo(t *testing.T) {

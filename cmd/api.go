@@ -707,6 +707,13 @@ type apiRuntimeProcessAutonomiaRequest struct {
 	Wait bool `json:"wait"`
 }
 
+type apiRuntimeProcessTranscriptRequest struct {
+	Wait     bool   `json:"wait"`
+	HandleID int64  `json:"handle_id,omitempty"`
+	Agente   string `json:"agente,omitempty"`
+	Proyecto string `json:"proyecto,omitempty"`
+}
+
 type apiRuntimeProcessReanimationsResponse struct {
 	OK                bool `json:"ok"`
 	Count             int  `json:"count"`
@@ -730,6 +737,10 @@ var runtimeProcessHygieneBatch = func() (int, error) {
 	return procesarRuntimeHygieneBatch(true)
 }
 
+var runtimeProcessTranscriptBatch = func() (int, error) {
+	return (dbAutomationService{}).ProcesarRuntimeTranscriptBatch()
+}
+
 var runtimeProcessDegradadosBatchDetailed = func() (runtimeProcessDegradadosSummary, error) {
 	return procesarAgentesDegradadosAutonomiaBatchDetallado()
 }
@@ -745,6 +756,7 @@ type apiAgenteResetReanimacionResponse struct {
 
 var runtimeProcessAutonomiaEnCurso atomic.Bool
 var runtimeProcessDegradadosEnCurso atomic.Bool
+var runtimeProcessTranscriptEnCurso atomic.Bool
 var runtimeProcessReanimacionesEnCurso atomic.Bool
 var apiAgentResetReanimacionEnCurso sync.Map
 
@@ -960,6 +972,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtime/wake", apiHandlerRuntimeWake)
 	mux.HandleFunc("/api/runtime/process-orders", apiHandlerRuntimeProcessOrders)
 	mux.HandleFunc("/api/runtime/process-mailbox", apiHandlerRuntimeProcessMailbox)
+	mux.HandleFunc("/api/runtime/process-transcript", apiHandlerRuntimeProcessTranscript)
 	mux.HandleFunc("/api/runtime/process-autonomia", apiHandlerRuntimeProcessAutonomia)
 	mux.HandleFunc("/api/runtime/process-degradados", apiHandlerRuntimeProcessDegradados)
 	mux.HandleFunc("/api/runtime/process-hygiene", apiHandlerRuntimeProcessHygiene)
@@ -5611,6 +5624,95 @@ func apiHandlerRuntimeProcessAutonomia(w http.ResponseWriter, r *http.Request) {
 		Count:    0,
 		Accepted: started,
 		Running:  runtimeProcessAutonomiaEnCurso.Load(),
+	})
+}
+
+func apiHandlerRuntimeProcessTranscript(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiRuntimeProcessTranscriptRequest
+	if payload, err := io.ReadAll(r.Body); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	} else if raw := strings.TrimSpace(string(payload)); raw != "" {
+		if err := json.Unmarshal(payload, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+	}
+	if req.HandleID > 0 {
+		count, err := db.IngestarRuntimeTranscriptHandle(req.HandleID)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{OK: true, Count: count})
+		return
+	}
+	if agente := strings.TrimSpace(req.Agente); agente != "" {
+		agente = apiNombreAgenteCanonico(agente)
+		handles, err := runtimesService.ListRuntimeHandles(&agente)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		var proyectoID *int64
+		if proyecto := strings.TrimSpace(req.Proyecto); proyecto != "" {
+			p, err := apiRuntimeProcessMailboxProjectFn(proyecto)
+			if err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+			proyectoID = &p.ID
+		}
+		total := 0
+		for _, handle := range handles {
+			if handle == nil || handle.ID <= 0 {
+				continue
+			}
+			if proyectoID != nil {
+				if handle.ProyectoID == nil || *handle.ProyectoID != *proyectoID {
+					continue
+				}
+			}
+			n, err := db.IngestarRuntimeTranscriptHandle(handle.ID)
+			if err != nil {
+				apiError(w, http.StatusInternalServerError, err)
+				return
+			}
+			total += n
+		}
+		apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{OK: true, Count: total})
+		return
+	}
+	if req.Wait {
+		count, err := runtimeProcessTranscriptBatch()
+		if err != nil {
+			db.Audit("server", "runtime_process_transcript_error", "runtime", 0, err.Error())
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
+			OK:    true,
+			Count: count,
+		})
+		return
+	}
+	started := runtimeProcessTranscriptEnCurso.CompareAndSwap(false, true)
+	if started {
+		go func() {
+			defer runtimeProcessTranscriptEnCurso.Store(false)
+			if _, err := runtimeProcessTranscriptBatch(); err != nil {
+				db.Audit("server", "runtime_process_transcript_error", "runtime", 0, err.Error())
+			}
+		}()
+	}
+	apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
+		OK:       true,
+		Count:    0,
+		Accepted: started,
+		Running:  runtimeProcessTranscriptEnCurso.Load(),
 	})
 }
 

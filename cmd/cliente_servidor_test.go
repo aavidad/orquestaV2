@@ -82,6 +82,7 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "runtime despertar", args: []string{"runtime", "despertar"}, want: true},
 		{nombre: "runtime procesar mailbox", args: []string{"runtime", "procesar-mailbox"}, want: true},
 		{nombre: "runtime procesar autonomia", args: []string{"runtime", "procesar-autonomia"}, want: true},
+		{nombre: "runtime procesar transcript", args: []string{"runtime", "procesar-transcript"}, want: true},
 		{nombre: "runtime procesar higiene", args: []string{"runtime", "procesar-higiene"}, want: true},
 		{nombre: "runtime procesar reanimaciones", args: []string{"runtime", "procesar-reanimaciones"}, want: true},
 		{nombre: "runtime limpiar pruebas", args: []string{"runtime", "limpiar-pruebas", "--agente", "Codex1"}, want: true},
