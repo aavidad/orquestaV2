@@ -7097,7 +7097,8 @@ func runtimeMailboxBloqueadaPorBootstrapPendiente(msg *db.RuntimeMailboxMessage,
 	if !covered || runtimeMailboxBootstrapPendientePermiteGuidanceDurable(msg, handle) {
 		return false, nil
 	}
-	if runtimeTMUXSessionResumeWorkerReady(handle) {
+	if runtimeTMUXSessionResumeWorkerReady(handle) ||
+		runtimeTMUXSessionResumeWorkerWorkingEsperandoIO(handle, runtimeInstance) {
 		return false, nil
 	}
 	return true, nil
@@ -7683,6 +7684,29 @@ func runtimeTMUXSessionResumeWorkerReady(handle *db.RuntimeHandle) bool {
 	default:
 		return false
 	}
+}
+
+func runtimeTMUXSessionResumeWorkerWorkingEsperandoIO(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) bool {
+	if handle == nil {
+		return false
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
+	if err != nil || snap == nil {
+		return false
+	}
+	now := time.Now().UTC()
+	view := snap.View(now, time.Minute)
+	if view == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") &&
+		!strings.EqualFold(strings.TrimSpace(view.Transport), "tmux") {
+		return false
+	}
+	if runtimeHandleWorkerCanonicalState(view) != "working" {
+		return false
+	}
+	return runtimeTMUXSessionResumePuedeDespacharPorRuntimeCanonico(runtime)
 }
 
 func runtimeTMUXSessionResumePuedeDespacharPorRuntimeCanonico(runtime *db.RuntimeInstance) bool {

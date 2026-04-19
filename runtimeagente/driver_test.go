@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"orquesta/internal/rpclocal"
 )
 
 func TestPrepareCLISinResumeNativoDevuelvePromptContinuidad(t *testing.T) {
@@ -1356,7 +1358,11 @@ func TestPrepareCLICodexInyectaHerramientasBaseEnPATH(t *testing.T) {
 }
 
 func TestPrepareCLIInyectaEntornoBaseOrquesta(t *testing.T) {
-	t.Setenv("ORQUESTA_SERVER_URL", "http://127.0.0.1:17669")
+	statePath := filepath.Join(t.TempDir(), "orquesta-localrpc.json")
+	if err := rpclocal.SaveState(statePath, &rpclocal.State{Addr: "127.0.0.1:17669"}); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+	t.Setenv("ORQUESTA_SERVER_INFO", statePath)
 	plan, err := DefaultRegistry().Prepare(LaunchRequest{
 		Agente:       "Codex1",
 		ProyectoSlug: "orquestador",
@@ -1375,6 +1381,31 @@ func TestPrepareCLIInyectaEntornoBaseOrquesta(t *testing.T) {
 	}
 	if got := strings.TrimSpace(plan.Env["ORQUESTA_BIN"]); got == "" {
 		t.Fatalf("ORQUESTA_BIN deberia inyectarse por defecto: %+v", plan.Env)
+	}
+}
+
+func TestPrepareCLIIgnoraEnvResidualYUsaServerCanonico(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "orquesta-localrpc.json")
+	if err := rpclocal.SaveState(statePath, &rpclocal.State{Addr: "127.0.0.1:17652"}); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+	t.Setenv("ORQUESTA_SERVER_INFO", statePath)
+	t.Setenv("ORQUESTA_SERVER_URL", "http://127.0.0.1:16543")
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex3",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: t.TempDir(),
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    "/tmp/codex-perfil",
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if got := strings.TrimSpace(plan.Env["ORQUESTA_SERVER_URL"]); got != "http://127.0.0.1:17652" {
+		t.Fatalf("ORQUESTA_SERVER_URL deberia salir del server canonico, got=%q env=%+v", got, plan.Env)
 	}
 }
 

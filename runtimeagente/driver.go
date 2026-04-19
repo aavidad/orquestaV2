@@ -17,6 +17,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"orquesta/internal/rpclocal"
 )
 
 type ConnectorConfig struct {
@@ -427,7 +429,7 @@ func asegurarEntornoBaseOrquesta(env map[string]string, vars map[string]string) 
 		return
 	}
 	if strings.TrimSpace(env["ORQUESTA_SERVER_URL"]) == "" {
-		if value := strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_URL")); value != "" {
+		if value := strings.TrimSpace(rpclocal.ResolveServerAddr()); value != "" {
 			env["ORQUESTA_SERVER_URL"] = value
 		}
 	}

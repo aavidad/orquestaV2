@@ -12543,6 +12543,169 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeDespachaConWor
 	}
 }
 
+func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeDespachaConWorkerRunningYRuntimeEsperandoIOAunqueBootstrapSigaPendiente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+
+	runDir := filepath.Join(tmp, "runtime", "Codex1", "session-resume-bootstrap-esperando-io")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir run dir: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	writeJSON := func(path string, payload map[string]any) {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	stale := time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339Nano)
+	writeJSON(manifestPath, map[string]any{
+		"version":        1,
+		"agent":          "Codex1",
+		"driver":         "tmux_cli_session",
+		"transport":      "tmux",
+		"tmux_session":   "orq-codex1-bootstrap-esperando-io",
+		"tmux_pane_id":   "%67",
+		"status_path":    statusPath,
+		"heartbeat_path": heartbeatPath,
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":      "running",
+		"updated_at": now,
+		"alive":      true,
+		"child_pid":  os.Getpid(),
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":        true,
+		"heartbeat_at": stale,
+		"started_at":   stale,
+		"child_pid":    os.Getpid(),
+	})
+
+	pid := int64(os.Getpid())
+	runtimeID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "Codex1",
+		ProyectoID:   &proyectoID,
+		SesionID:     &sesion.ID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("registrar runtime instance: %v", err)
+	}
+	runtime, err := db.GetRuntime(runtimeID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex1-bootstrap-esperando-io",
+		"tmux_pane_id":          "%67",
+		"external_session_id":   "sess-codex1-bootstrap-esperando-io",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', runtime_id=?, capabilities_json=?, metadata_json=? WHERE id=?`, runtimeID, capsJSON, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle tmux: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"instruction":"continua trabajo","texto":"sigue con la tarea"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	startID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","mailbox_ids":[%d],"sesion_id":%d,"handle_id":%d,"runtime_id":%d}`,
+			msgID, sesion.ID, handle.ID, runtime.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start bootstrap tmux: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, startID); err != nil {
+		t.Fatalf("marcar start ejecutando: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia despachar aunque bootstrap siga pendiente si runtime canonico ya esta esperando_io, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var send *db.RuntimeOrder
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			send = order
+			break
+		}
+	}
+	if send == nil {
+		t.Fatalf("faltaba send_instruction para runtime esperando_io con bootstrap pendiente")
+	}
+	if !strings.Contains(send.PayloadJSON, `"mailbox_id":`+strconv.FormatInt(msgID, 10)) {
+		t.Fatalf("send_instruction sin mailbox_id: %s", send.PayloadJSON)
+	}
+	if !strings.Contains(send.PayloadJSON, `"external_session_id":"sess-codex1-bootstrap-esperando-io"`) {
+		t.Fatalf("send_instruction sin external_session_id: %s", send.PayloadJSON)
+	}
+}
+
 func TestRuntimeHandleListaParaDispatchSessionResumeTMUXAceptaWorkerWaitingInputCanonico(t *testing.T) {
 	tmp := t.TempDir()
 	runDir := filepath.Join(tmp, "runtime", "waiting-input")
