@@ -6169,6 +6169,7 @@ func TestAutonomiaContinueNudgeIntervalDefault(t *testing.T) {
 
 func TestProcesarAutonomiaAgentesBatchAutoasignaTrabajoASesionActivaIdle(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
+	autonomiaIdleAutoassignGate.Reset()
 
 	if err := db.ConfigSet("server_autobootstrap_project_slug", "orquestador"); err != nil {
 		t.Fatalf("config project slug: %v", err)
@@ -6270,8 +6271,114 @@ func TestProcesarAutonomiaAgentesBatchAutoasignaTrabajoASesionActivaIdle(t *test
 	}
 }
 
+func TestProcesarAutonomiaAgentesBatchAutoasignaTrabajoAmplioASesionActivaIdle(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	autonomiaIdleAutoassignGate.Reset()
+	const projectSlug = "orquestador-wide-idle"
+
+	if err := db.ConfigSet("server_autobootstrap_project_slug", projectSlug); err != nil {
+		t.Fatalf("config project slug: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_worker_agents", "Codex1"); err != nil {
+		t.Fatalf("config worker agents: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    projectSlug,
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:        proyectoID,
+		Enabled:           true,
+		MaxWorkers:        1,
+		SupervisorAgente:  "CodexSupervisor",
+		ReserveSupervisor: true,
+		EstadoAutonomia:   db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion supervisor: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "cat-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Auditoria server-first CLI/API/web y transporte real",
+		Descripcion: "Trabajo amplio sin contrato premium acotado. Debe entrar por fallback general de sesión activa idle.",
+		ProyectoID:  &proyectoID,
+		Modulo:      "planocontrol",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+
+	n, err := procesarAutonomiaSesionActiva(sesion)
+	if err != nil {
+		t.Fatalf("procesar autonomia: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia autoasignar la tarea amplia y encolar nudge útil, got=%d", n)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "Codex1" || tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea amplia deberia quedar autoasignada y arrancada en la sesion viva: %+v", tarea)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "nudge" {
+		t.Fatalf("deberia encolar un nudge útil tras autoasignar tarea amplia: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"accion":"continuar_trabajo"`) || !strings.Contains(orders[0].PayloadJSON, `"tarea_id":`+strconv.FormatInt(tareaID, 10)) {
+		t.Fatalf("payload nudge inesperado: %s", orders[0].PayloadJSON)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"motivo_autoasignacion":"sesion_activa_idle_general"`) {
+		t.Fatalf("motivo de autoasignacion general inesperado: %s", orders[0].PayloadJSON)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchSesionActivaIdleAbreFrentePremiumMayorSiMicrocicloAgotado(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
+	autonomiaIdleAutoassignGate.Reset()
 
 	if err := db.ConfigSet("server_autobootstrap_project_slug", "orquestador"); err != nil {
 		t.Fatalf("config project slug: %v", err)
@@ -6560,8 +6667,9 @@ func TestAsegurarTrabajoContinuoPremiumNoDeclaraAgotadoSiQuedaMicrocicloAbierto(
 func TestProcesarAutonomiaAgentesBatchSesionActivaIdleCierraSemillaPremiumSiTomaFrenteAcotado(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	autonomiaIdleAutoassignGate.Reset()
+	const projectSlug = "orquestador-idle-acotado"
 
-	if err := db.ConfigSet("server_autobootstrap_project_slug", "orquestador"); err != nil {
+	if err := db.ConfigSet("server_autobootstrap_project_slug", projectSlug); err != nil {
 		t.Fatalf("config project slug: %v", err)
 	}
 	if err := db.ConfigSet("server_autobootstrap_worker_agents", "Codex1"); err != nil {
@@ -6574,7 +6682,7 @@ func TestProcesarAutonomiaAgentesBatchSesionActivaIdleCierraSemillaPremiumSiToma
 		t.Fatalf("registrar agente: %v", err)
 	}
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
-		Slug:    "orquestador",
+		Slug:    projectSlug,
 		Nombre:  "Orquestador",
 		RutaAbs: filepath.Join(tmp, "orquestador"),
 		Tipo:    db.ProyectoRepo,
@@ -6676,8 +6784,9 @@ func TestProcesarAutonomiaAgentesBatchSesionActivaIdleCierraSemillaPremiumSiToma
 func TestProcesarAutonomiaAgentesBatchSesionActivaIdleCierraSemillaPremiumSiTomaMicrocicloLibre(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	autonomiaIdleAutoassignGate.Reset()
+	const projectSlug = "orquestador-idle-micro"
 
-	if err := db.ConfigSet("server_autobootstrap_project_slug", "orquestador"); err != nil {
+	if err := db.ConfigSet("server_autobootstrap_project_slug", projectSlug); err != nil {
 		t.Fatalf("config project slug: %v", err)
 	}
 	if err := db.ConfigSet("server_autobootstrap_worker_agents", "Codex1"); err != nil {
@@ -6690,7 +6799,7 @@ func TestProcesarAutonomiaAgentesBatchSesionActivaIdleCierraSemillaPremiumSiToma
 		t.Fatalf("registrar agente: %v", err)
 	}
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
-		Slug:    "orquestador",
+		Slug:    projectSlug,
 		Nombre:  "Orquestador",
 		RutaAbs: filepath.Join(tmp, "orquestador"),
 		Tipo:    db.ProyectoRepo,
@@ -6754,7 +6863,7 @@ func TestProcesarAutonomiaAgentesBatchSesionActivaIdleCierraSemillaPremiumSiToma
 
 	tareaMicroID, err := db.CrearTarea(&db.Tarea{
 		Titulo:      microcicloRefactorTituloDefault,
-		Descripcion: descripcionMicrocicloDefault(&db.Proyecto{Slug: "orquestador", RutaAbs: filepath.Join(tmp, "orquestador")}),
+		Descripcion: descripcionMicrocicloDefault(&db.Proyecto{Slug: projectSlug, RutaAbs: filepath.Join(tmp, "orquestador")}),
 		ProyectoID:  &proyectoID,
 		Modulo:      "controlplane",
 		Prioridad:   db.PrioridadAlta,
@@ -15100,10 +15209,10 @@ func TestProcesarRuntimeMailboxSessionResumeBatchPermiteContinuacionManualDurabl
 	db.ResetRuntimeHandlesHotCache()
 
 	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
-		FromAgente: "server",
-		ToAgente:   "Codex1",
-		ProyectoID: &proyectoID,
-		Kind:       "pipeline_local",
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
 		PayloadJSON: `{"accion":"continuar_trabajo","control_action":"continue","instruction":"Retoma la tarea activa y cierra el siguiente slice útil.","texto":"seguir frente"}`,
 	})
 	if err != nil {

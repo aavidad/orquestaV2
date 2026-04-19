@@ -148,6 +148,7 @@ var autonomiaDegradedBatchTimeoutOverride time.Duration
 var autonomiaBatchBudgetOverride time.Duration
 var refrescarPresupuestoSesionObservadoHandleFn = refrescarPresupuestoSesionObservadoHandle
 var runtimeBudgetBatchBudgetOverride time.Duration
+var autoasignarTareaAmpliaIdleFn = db.IntentarAutoasignarTareaAgente
 
 var autonomiaIdleAutoassignGate = planocontrol.NewThrottler()
 
@@ -12475,13 +12476,21 @@ func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, 
 		return 0, nil
 	}
 	tarea, err := capacidadService.IntentarAutoasignarTareaPipelineLocal(proyecto.Slug, sesion.Agente)
+	motivoAutoasignacion := "sesion_activa_idle"
 	if err != nil || tarea == nil {
 		if err != nil {
 			return 0, err
 		}
 		tarea, err = asegurarFrentePremiumSesionActivaIdle(sesion, proyecto)
-		if err != nil || tarea == nil {
+		if err != nil {
 			return 0, err
+		}
+		if tarea == nil {
+			tarea, err = autoasignarTareaAmpliaSesionActivaIdle(sesion, proyecto)
+			if err != nil || tarea == nil {
+				return 0, err
+			}
+			motivoAutoasignacion = "sesion_activa_idle_general"
 		}
 	}
 	if err := cerrarSemillaPremiumSiDerivaAFrenteAcotado(sesion.Agente, proyecto.ID, tarea); err != nil {
@@ -12495,13 +12504,33 @@ func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, 
 		"continuar_trabajo",
 		motivo,
 		"toma tarea asignada y sigue",
-		map[string]any{"tarea_id": tarea.ID, "motivo_autoasignacion": "sesion_activa_idle"},
+		map[string]any{"tarea_id": tarea.ID, "motivo_autoasignacion": motivoAutoasignacion},
 	); err != nil {
 		return 0, err
 	} else if ok {
 		return 1, nil
 	}
 	return 0, nil
+}
+
+func autoasignarTareaAmpliaSesionActivaIdle(sesion *db.Sesion, proyecto *db.Proyecto) (*capacidadapp.TareaPipelineLocal, error) {
+	if sesion == nil || proyecto == nil {
+		return nil, nil
+	}
+	tarea, err := autoasignarTareaAmpliaIdleFn(strings.TrimSpace(sesion.Agente), proyecto.ID)
+	if err != nil || tarea == nil {
+		return nil, err
+	}
+	if tarea.Estado == db.TareaAsignada || tarea.Estado == db.TareaLibre || tarea.Estado == db.TareaBacklog {
+		if err := tareasService.Start(tarea.ID, strings.TrimSpace(sesion.Agente)); err != nil {
+			return nil, err
+		}
+		tarea, err = tareasService.Get(tarea.ID)
+		if err != nil || tarea == nil {
+			return nil, err
+		}
+	}
+	return tareaPipelineLocalDesdeTareaDB(tarea), nil
 }
 
 func cerrarSemillaPremiumSiDerivaAFrenteAcotado(agente string, proyectoID int64, tarea *capacidadapp.TareaPipelineLocal) error {
