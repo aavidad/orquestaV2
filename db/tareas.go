@@ -161,21 +161,20 @@ type ResumenBloqueo struct {
 // devuelve 0, nil (operación idempotente: no es un error, la tarea ya existe).
 func CrearTarea(t *Tarea) (int64, error) {
 	deps, _ := json.Marshal(t.Dependencias)
-	res, err := DB.Exec(`
+	blueprintKey := strings.TrimSpace(t.BlueprintKey)
+	if blueprintKey != "" && t.ProyectoID != nil && *t.ProyectoID > 0 {
+		if existente := GetTareaIDBlueprintKey(*t.ProyectoID, blueprintKey); existente > 0 {
+			return 0, nil
+		}
+	}
+	id, err := insertReturningID(`
 		INSERT INTO tareas (titulo, descripcion, proyecto_id, modulo, prioridad, dependencias, creado_por, notas, propuesta_id, blueprint_key)
-		VALUES (?,?,?,?,?,?,?,?,?,?)
-		ON CONFLICT(proyecto_id, blueprint_key) WHERE blueprint_key != '' DO NOTHING`,
-		t.Titulo, t.Descripcion, t.ProyectoID, t.Modulo, t.Prioridad, string(deps), t.CreadoPor, t.Notas, t.PropuestaID, t.BlueprintKey,
+		VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		t.Titulo, t.Descripcion, t.ProyectoID, t.Modulo, t.Prioridad, string(deps), t.CreadoPor, t.Notas, t.PropuestaID, blueprintKey,
 	)
 	if err != nil {
 		return 0, err
 	}
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
-		// tarea ya existía (blueprint_key duplicado, DO NOTHING) — no es error
-		return 0, nil
-	}
-	id, _ := res.LastInsertId()
 	Audit(t.CreadoPor, "crear_tarea", "tarea", id, t.Titulo)
 	return id, nil
 }

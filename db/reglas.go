@@ -343,7 +343,7 @@ func GetWorkflow(tipoAgente, nombre string) (*Workflow, error) {
 
 // UpsertRegla crea o actualiza una regla por título y tipo de agente.
 func UpsertRegla(r *Regla) (int64, error) {
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO reglas (tipo_agente, categoria, titulo, descripcion, activa)
 		VALUES (?,?,?,?,?)
 		ON CONFLICT(tipo_agente, titulo) DO UPDATE SET
@@ -354,7 +354,6 @@ func UpsertRegla(r *Regla) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	Audit("telegram_admin", "upsert_regla", "regla", id, fmt.Sprintf("%s: %s", r.TipoAgente, r.Titulo))
 	return id, nil
 }
@@ -369,7 +368,7 @@ func UpsertSkill(s *Skill) (int64, error) {
 	} else if existente != nil && !sameSkillNaturalKey(existente, s) {
 		return 0, &SkillEquivalenteError{Existente: existente}
 	}
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO skills (tipo_agente, nombre, descripcion, cuando_usar, escenario, prioridad, aliases_json, herramientas_json, origen, nivel_riesgo, requiere_aprobacion, activa)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(tipo_agente, nombre) DO UPDATE SET
@@ -387,19 +386,13 @@ func UpsertSkill(s *Skill) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
-	if id <= 0 {
-		if err := DB.QueryRow(`SELECT id FROM skills WHERE tipo_agente = ? AND nombre = ?`, s.TipoAgente, s.Nombre).Scan(&id); err != nil {
-			return 0, err
-		}
-	}
 	Audit("telegram_admin", "upsert_skill", "skill", id, fmt.Sprintf("%s: %s", s.TipoAgente, s.Nombre))
 	return id, nil
 }
 
 // UpsertWorkflow crea o actualiza un flujo de trabajo.
 func UpsertWorkflow(w *Workflow) (int64, error) {
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO workflows (tipo_agente, nombre, descripcion, pasos, activo)
 		VALUES (?,?,?,?,?)
 		ON CONFLICT(nombre) DO UPDATE SET
@@ -411,7 +404,6 @@ func UpsertWorkflow(w *Workflow) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	Audit("telegram_admin", "upsert_workflow", "workflow", id, fmt.Sprintf("%s: %s", w.TipoAgente, w.Nombre))
 	return id, nil
 }
@@ -566,7 +558,7 @@ func CrearSkill(actor string, s *Skill) (int64, error) {
 		return 0, err
 	}
 	defer tx.Rollback()
-	res, err := tx.Exec(`
+	id, err := insertReturningIDWith(tx, `
 		INSERT INTO skills (tipo_agente, nombre, descripcion, cuando_usar, escenario, prioridad, aliases_json, herramientas_json, origen, nivel_riesgo, requiere_aprobacion, activa)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
 		s.TipoAgente, s.Nombre, s.Descripcion, s.CuandoUsar, s.Escenario, s.Prioridad, s.AliasesJSON, s.HerramientasJSON, s.Origen, s.NivelRiesgo, boolToInt(s.RequiereAprobacion), s.Activa,
@@ -574,7 +566,6 @@ func CrearSkill(actor string, s *Skill) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	s.ID = id
 	if err := registrarVersionSkillTx(tx, s, actor, "crear"); err != nil {
 		return 0, err

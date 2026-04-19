@@ -121,7 +121,7 @@ func RegistrarFuenteMemoria(f *FuenteMemoria) (int64, error) {
 	if f.Referencia == "" {
 		return 0, fmt.Errorf("la referencia es obligatoria")
 	}
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO memoria_fuentes (proyecto, tipo, referencia, titulo, url, confianza, detalle, registrado_por)
 		VALUES (?,?,?,?,?,?,?,?)`,
 		f.Proyecto, f.Tipo, f.Referencia, f.Titulo, f.URL, f.Confianza, f.Detalle, f.RegistradoPor,
@@ -129,7 +129,6 @@ func RegistrarFuenteMemoria(f *FuenteMemoria) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	Audit(f.RegistradoPor, "registrar_fuente_memoria", "memoria_fuente", id, f.Proyecto+": "+f.Referencia)
 	return id, nil
 }
@@ -166,7 +165,7 @@ func RegistrarHallazgoMemoria(h *HallazgoMemoria) (int64, error) {
 	if h.Titulo == "" {
 		return 0, fmt.Errorf("el título es obligatorio")
 	}
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO memoria_hallazgos (proyecto, fuente_id, tipo, titulo, descripcion, impacto, confianza, registrado_por)
 		VALUES (?,?,?,?,?,?,?,?)`,
 		h.Proyecto, h.FuenteID, h.Tipo, h.Titulo, h.Descripcion, h.Impacto, h.Confianza, h.RegistradoPor,
@@ -174,7 +173,6 @@ func RegistrarHallazgoMemoria(h *HallazgoMemoria) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	Audit(h.RegistradoPor, "registrar_hallazgo_memoria", "memoria_hallazgo", id, h.Proyecto+": "+h.Titulo)
 	return id, nil
 }
@@ -211,7 +209,7 @@ func RegistrarDerivaMemoria(d *DerivaMemoria) (int64, error) {
 	if d.Descripcion == "" {
 		return 0, fmt.Errorf("la descripción es obligatoria")
 	}
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO memoria_derivas (proyecto, hallazgo_id, tipo, severidad, estado, descripcion, evidencia, detectada_por, resolucion, resuelta_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?)`,
 		d.Proyecto, d.HallazgoID, d.Tipo, d.Severidad, d.Estado, d.Descripcion, d.Evidencia, d.DetectadaPor, d.Resolucion, nullableTimePtr(d.ResueltaAt),
@@ -219,7 +217,6 @@ func RegistrarDerivaMemoria(d *DerivaMemoria) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	Audit(d.DetectadaPor, "registrar_deriva_memoria", "memoria_deriva", id, d.Proyecto+": "+d.Descripcion)
 	return id, nil
 }

@@ -82,7 +82,7 @@ func RegistrarPresupuestoSesion(p *PresupuestoSesion) (int64, error) {
 		p.RawSnapshotJSON = "{}"
 	}
 
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO presupuestos_sesion (
 			sesion_id, pool_id, model_slug, window_kind, window_started_at, reset_at,
 			remaining_seconds, remaining_messages, remaining_tokens, remaining_credits,
@@ -95,7 +95,6 @@ func RegistrarPresupuestoSesion(p *PresupuestoSesion) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	Audit("orquesta", "registrar_presupuesto_sesion", "presupuesto_sesion", id, fmt.Sprintf("sesion=%d", p.SesionID))
 	return id, nil
 }

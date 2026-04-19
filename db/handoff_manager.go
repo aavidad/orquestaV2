@@ -417,7 +417,7 @@ func GuardarCheckpointHandoff(c *HandoffCandidato, resumen string) (int64, error
 	}
 	payloadJSON, _ := json.Marshal(payload)
 
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO runtime_checkpoints
 			(agente, proyecto_id, sesion_id, checkpoint_kind, resumen, payload_json, resume_strategy, source)
 		VALUES (?, ?, ?, 'automatic', ?, ?, 'context_injection', 'handoff_manager')`,
@@ -426,7 +426,6 @@ func GuardarCheckpointHandoff(c *HandoffCandidato, resumen string) (int64, error
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	Audit("server", "checkpoint_handoff", "runtime_checkpoint", id,
 		fmt.Sprintf("agente=%s motivo=%s", c.Agente, c.Motivo))
 	return id, nil

@@ -68,3 +68,50 @@ func TestListarTareasRespetaLimit(t *testing.T) {
 		}
 	})
 }
+
+func TestCrearTareaBlueprintKeyEsIdempotenteSinONCONFLICTDeMotor(t *testing.T) {
+	withTempDBPools(t, func() {
+		proyectoID, err := UpsertProyecto(&Proyecto{
+			Slug:    "orquesta",
+			Nombre:  "Orquesta",
+			RutaAbs: t.TempDir(),
+			Tipo:    ProyectoRepo,
+			Activo:  true,
+		})
+		if err != nil {
+			t.Fatalf("UpsertProyecto: %v", err)
+		}
+
+		id, err := CrearTarea(&Tarea{
+			Titulo:       "portabilidad postgres",
+			Descripcion:  "slice acotado",
+			ProyectoID:   &proyectoID,
+			Modulo:       "db",
+			Prioridad:    PrioridadAlta,
+			CreadoPor:    "orquesta",
+			BlueprintKey: "postgres-lastinsertid-slice",
+		})
+		if err != nil {
+			t.Fatalf("CrearTarea primera: %v", err)
+		}
+		if id <= 0 {
+			t.Fatalf("id inesperado: %d", id)
+		}
+
+		duplicada, err := CrearTarea(&Tarea{
+			Titulo:       "portabilidad postgres",
+			Descripcion:  "slice acotado",
+			ProyectoID:   &proyectoID,
+			Modulo:       "db",
+			Prioridad:    PrioridadAlta,
+			CreadoPor:    "orquesta",
+			BlueprintKey: "postgres-lastinsertid-slice",
+		})
+		if err != nil {
+			t.Fatalf("CrearTarea duplicada: %v", err)
+		}
+		if duplicada != 0 {
+			t.Fatalf("duplicada=%d want 0", duplicada)
+		}
+	})
+}

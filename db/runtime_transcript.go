@@ -83,7 +83,7 @@ func RegistrarRuntimeTranscript(entry *RuntimeTranscriptEntry) (int64, error) {
 		entry.Classification = clasificarTextoTranscript(entry.NormalizedText)
 	}
 
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO runtime_transcript (
 			runtime_id, handle_id, agente, proyecto_id, stream, byte_offset,
 			text, normalized_text, classification, handling_note, handled_at
@@ -95,7 +95,6 @@ func RegistrarRuntimeTranscript(entry *RuntimeTranscriptEntry) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	entry.ID = id
 	return id, nil
 }

@@ -52,7 +52,7 @@ func (CoordinationLockSQLRepository) Create(lock *coordinacion.Lock) (*coordinac
 	if lock == nil {
 		return nil, fmt.Errorf("lock nil")
 	}
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO locks (
 			proyecto_id, tarea_id, sesion_id, agente, scope_type, scope_key, ruta_abs, branch,
 			motivo, token_lease, estado, heartbeat_at, expires_at
@@ -63,7 +63,6 @@ func (CoordinationLockSQLRepository) Create(lock *coordinacion.Lock) (*coordinac
 	if err != nil {
 		return nil, err
 	}
-	id, _ := res.LastInsertId()
 	return (CoordinationLockSQLRepository{}).GetByID(id)
 }
 

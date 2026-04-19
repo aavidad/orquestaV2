@@ -50,7 +50,7 @@ func CrearEntregaNotificacion(canal, destino string, ev EventoNotificacion) (int
 	if err != nil {
 		return 0, err
 	}
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO notificaciones_entregas (
 			canal, destino, tipo_evento, estado, intentos, ultimo_error, evento_json
 		) VALUES (?,?,?,?,?,?,?)`,
@@ -65,7 +65,6 @@ func CrearEntregaNotificacion(canal, destino string, ev EventoNotificacion) (int
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	return id, nil
 }
 

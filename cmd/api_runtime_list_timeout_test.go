@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -110,6 +111,33 @@ func TestAPIHandlerRuntimeMailboxReturns503WhenProjectLookupHangs(t *testing.T) 
 		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), "runtime mailbox temporalmente degradado") {
+		t.Fatalf("body inesperado: %s", rec.Body.String())
+	}
+}
+
+func TestAPIHandlerRuntimeOrdersPostRejectsMissingProjectWithoutPanic(t *testing.T) {
+	prevFn := apiGetRuntimeProjectFn
+	t.Cleanup(func() {
+		apiGetRuntimeProjectFn = prevFn
+	})
+
+	apiGetRuntimeProjectFn = func(ref string) (*db.Proyecto, error) {
+		return nil, nil
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/runtime-orders", bytes.NewBufferString(`{
+		"agente":"Codex1",
+		"tipo":"start",
+		"proyecto":"orquesta",
+		"payload":"{}"
+	}`))
+	rec := httptest.NewRecorder()
+	apiHandlerRuntimeOrders(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "proyecto no encontrado") {
 		t.Fatalf("body inesperado: %s", rec.Body.String())
 	}
 }

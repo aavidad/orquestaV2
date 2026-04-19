@@ -95,6 +95,9 @@ func (s *Service) ResolveProjectID(ref string) (*int64, error) {
 	if err != nil {
 		return nil, err
 	}
+	if proyecto == nil {
+		return nil, fmt.Errorf("proyecto no encontrado: %s", ref)
+	}
 	return &proyecto.ID, nil
 }
 

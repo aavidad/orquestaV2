@@ -114,7 +114,7 @@ func RegistrarFaseProyecto(f *FaseProyecto) (int64, error) {
 	if f.Estado == "" {
 		f.Estado = "pendiente"
 	}
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO fases_proyecto (proyecto, nombre, descripcion, orden, peso, estado)
 		VALUES (?,?,?,?,?,?)`,
 		f.Proyecto, f.Nombre, f.Descripcion, f.Orden, f.Peso, f.Estado,
@@ -122,7 +122,6 @@ func RegistrarFaseProyecto(f *FaseProyecto) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	Audit("orquesta", "registrar_fase_proyecto", "fase_proyecto", id, f.Proyecto+":"+f.Nombre)
 	return id, nil
 }

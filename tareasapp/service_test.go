@@ -11,6 +11,7 @@ import (
 type stubStore struct {
 	proposal *db.Propuesta
 	project  *db.Proyecto
+	projectErr error
 	created  *db.Tarea
 	tasks    []*db.Tarea
 	moved    []int64
@@ -85,8 +86,11 @@ func (s *stubStore) MoveTaskToBacklog(id int64) error {
 func (s *stubStore) ReassignTask(id int64, nuevoAgente string) error { return nil }
 func (s *stubStore) ListAgents() ([]*db.Agente, error)               { return nil, nil }
 func (s *stubStore) GetProject(ref string) (*db.Proyecto, error) {
+	if s.projectErr != nil {
+		return nil, s.projectErr
+	}
 	if s.project == nil {
-		return nil, errors.New("not found")
+		return nil, nil
 	}
 	return s.project, nil
 }
@@ -133,6 +137,15 @@ func TestCreateResolvesProposalAndAssignsTask(t *testing.T) {
 	}
 	if store.taken.id != 77 || store.taken.agente != "Codex2" {
 		t.Fatalf("asignacion inesperada: %+v", store.taken)
+	}
+}
+
+func TestResolveProjectIDErrorSiProyectoNoExiste(t *testing.T) {
+	service := NewService(&stubStore{})
+
+	_, err := service.ResolveProjectID("orquesta")
+	if err == nil || err.Error() != "proyecto no encontrado: orquesta" {
+		t.Fatalf("error inesperado: %v", err)
 	}
 }
 

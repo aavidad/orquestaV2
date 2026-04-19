@@ -132,7 +132,7 @@ var (
 	apiConfigTimeout                = 3 * time.Second
 	apiRuntimeProcessOrdersTimeout  = 4 * time.Second
 	apiRuntimeProcessMailboxTimeout = 4 * time.Second
-	apiAgentPrepareTimeout          = 6 * time.Second
+	apiAgentPrepareTimeout          = 15 * time.Second
 	apiAgentTickTimeout             = 6 * time.Second
 	apiAgentPrepareLimiter          = make(chan struct{}, 4)
 	apiConfigGetFn                  = func(clave string) (string, error) {
@@ -5196,21 +5196,21 @@ func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		payload := strings.TrimSpace(req.Payload)
-		if payload == "" {
-			payload = "{}"
-		}
-		var proyectoID *int64
-		if proyecto := strings.TrimSpace(req.Proyecto); proyecto != "" {
-			p, err := runtimesService.GetProject(proyecto)
+			payload := strings.TrimSpace(req.Payload)
+			if payload == "" {
+				payload = "{}"
+			}
+			proyectoID, err := apiResolveProjectIDTimeboxed(req.Proyecto)
 			if err != nil {
+				if errors.Is(err, errStatusFetchTimeout) {
+					apiError(w, http.StatusServiceUnavailable, fmt.Errorf("runtime orders temporalmente degradado"))
+					return
+				}
 				apiError(w, http.StatusBadRequest, err)
 				return
 			}
-			proyectoID = &p.ID
-		}
-		id, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
-			Agente:      apiNombreAgenteCanonico(req.Agente),
+			id, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
+				Agente:      apiNombreAgenteCanonico(req.Agente),
 			ProyectoID:  proyectoID,
 			Tipo:        strings.TrimSpace(req.Tipo),
 			PayloadJSON: payload,

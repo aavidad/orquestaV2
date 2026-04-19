@@ -48,7 +48,7 @@ func CrearReviewGate(item *ReviewGate) (int64, error) {
 		return 0, fmt.Errorf("review_gate nil")
 	}
 	normalizarReviewGate(item)
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO review_gates (
 			proyecto_id, tarea_id, worktree_id, requested_by, reviewer_agente,
 			estado, severity_max, findings_json, resolved_at
@@ -60,7 +60,6 @@ func CrearReviewGate(item *ReviewGate) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	item.ID = id
 	return id, nil
 }

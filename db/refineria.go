@@ -14,9 +14,9 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 //  2. El control plane recoge la solicitud (ProcesarRefineriaBatch), ejecuta el
 //     comando de tests en el directorio de trabajo indicado y:
 //     - Si los tests pasan  → llama a AprobarRefineria: completa la tarea y envía
-//       un mensaje de éxito al buzón del agente.
+//     un mensaje de éxito al buzón del agente.
 //     - Si los tests fallan → llama a RechazarRefineria: deja la tarea en
-//       en_progreso y envía el output de error al buzón del agente.
+//     en_progreso y envía el output de error al buzón del agente.
 //  3. El agente consulta su buzón y actúa en consecuencia.
 package db
 
@@ -64,7 +64,7 @@ func SolicitarRefineria(tareaID int64, agente, rama, dirTrabajo, cmdTest string)
 		cmdTest = "go test ./..."
 	}
 
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO refineria_solicitudes
 			(tarea_id, agente, proyecto_id, rama, dir_trabajo, cmd_test, estado)
 		VALUES (?,?,?,?,?,?,'pendiente')`,
@@ -73,7 +73,6 @@ func SolicitarRefineria(tareaID int64, agente, rama, dirTrabajo, cmdTest string)
 	if err != nil {
 		return nil, err
 	}
-	id, _ := res.LastInsertId()
 	Audit(agente, "solicitar_refineria", "refineria_solicitud", id,
 		fmt.Sprintf("tarea #%d rama=%s dir=%s cmd=%s", tareaID, rama, dirTrabajo, cmdTest))
 
@@ -306,7 +305,7 @@ func (w *rowWrapper) Next() bool {
 	}
 	return false
 }
-func (w *rowWrapper) Close() error { return nil }
+func (w *rowWrapper) Close() error           { return nil }
 func (w *rowWrapper) Scan(dest ...any) error { return w.row.Scan(dest...) }
 
 type solicitudRows interface {
