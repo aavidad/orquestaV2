@@ -6741,7 +6741,7 @@ func consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot *runtimeM
 		return false, err
 	}
 	for _, order := range orders {
-		if !runtimeOrderMatchesMailboxSendInstructionAttempt(order, msg.ID, handle.ID) {
+		if !runtimeOrderMatchesMailboxSendInstructionAttemptForSession(order, msg.ID, handle.ID, currentSessionID) {
 			continue
 		}
 		if !strings.EqualFold(strings.TrimSpace(order.Estado), "completada") {
@@ -6751,7 +6751,7 @@ func consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot *runtimeM
 			continue
 		}
 		if !runtimeOrderMatchesCurrentMailboxDeliveryAttempt(order, currentSessionID, currentSignature) {
-			if runtimeMailboxTieneIntentoSendInstructionAbierto(orders, msg.ID, handle.ID, order.ID) {
+			if runtimeMailboxTieneIntentoSendInstructionAbierto(orders, msg.ID, handle.ID, currentSessionID, order.ID) {
 				continue
 			}
 			if runtimeOrderMailboxOnlyExpired(order) {
@@ -6771,12 +6771,12 @@ func consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot *runtimeM
 	return false, nil
 }
 
-func runtimeMailboxTieneIntentoSendInstructionAbierto(orders []*db.RuntimeOrder, mailboxID, handleID, excludeOrderID int64) bool {
+func runtimeMailboxTieneIntentoSendInstructionAbierto(orders []*db.RuntimeOrder, mailboxID, handleID int64, externalSessionID string, excludeOrderID int64) bool {
 	for _, order := range orders {
 		if order == nil || order.ID == excludeOrderID {
 			continue
 		}
-		if !runtimeOrderMatchesMailboxSendInstructionAttempt(order, mailboxID, handleID) {
+		if !runtimeOrderMatchesMailboxSendInstructionAttemptForSession(order, mailboxID, handleID, externalSessionID) {
 			continue
 		}
 		switch strings.ToLower(strings.TrimSpace(order.Estado)) {
@@ -7366,7 +7366,7 @@ func runtimeMailboxGuidanceDurableTieneEntregaMailboxOnly(snapshot *runtimeMailb
 		return false, err
 	}
 	for _, order := range orders {
-		if !runtimeOrderMatchesMailboxSendInstructionAttempt(order, msg.ID, handle.ID) {
+		if !runtimeOrderMatchesMailboxSendInstructionAttemptForSession(order, msg.ID, handle.ID, currentSessionID) {
 			continue
 		}
 		if strings.EqualFold(strings.TrimSpace(order.Estado), "completada") &&
@@ -7811,7 +7811,7 @@ func existeIntentoSendInstructionMailboxParaHandle(msg *db.RuntimeMailboxMessage
 	currentSessionID := strings.TrimSpace(externalSessionID)
 	currentSignature := runtimeMailboxDeliveryAttemptSignature(handle, externalSessionID)
 	for _, order := range orders {
-		if !runtimeOrderMatchesMailboxSendInstructionAttempt(order, msg.ID, handle.ID) {
+		if !runtimeOrderMatchesMailboxSendInstructionAttemptForSession(order, msg.ID, handle.ID, currentSessionID) {
 			continue
 		}
 		switch strings.TrimSpace(order.Estado) {
@@ -7845,7 +7845,7 @@ func existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot *runtimeMa
 	currentSessionID := strings.TrimSpace(externalSessionID)
 	currentSignature := runtimeMailboxDeliveryAttemptSignature(handle, externalSessionID)
 	for _, order := range orders {
-		if !runtimeOrderMatchesMailboxSendInstructionAttempt(order, msg.ID, handle.ID) {
+		if !runtimeOrderMatchesMailboxSendInstructionAttemptForSession(order, msg.ID, handle.ID, currentSessionID) {
 			continue
 		}
 		switch strings.TrimSpace(order.Estado) {
@@ -7877,15 +7877,41 @@ func runtimeOrderMatchesMailboxSendInstructionAttempt(order *db.RuntimeOrder, ma
 	return true
 }
 
+func runtimeOrderMatchesMailboxSendInstructionAttemptForSession(order *db.RuntimeOrder, mailboxID, handleID int64, externalSessionID string) bool {
+	if !runtimeOrderMatchesMailboxSendInstructionByMailbox(order, mailboxID) {
+		return false
+	}
+	if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
+		return false
+	}
+	if order.HandleID == nil || handleID <= 0 || *order.HandleID == handleID {
+		return true
+	}
+	externalSessionID = strings.TrimSpace(externalSessionID)
+	if externalSessionID == "" {
+		return false
+	}
+	orderSessionID := strings.TrimSpace(runtimeOrderExternalSessionIDFromJSON(order.PayloadJSON))
+	return orderSessionID != "" && orderSessionID == externalSessionID
+}
+
 func runtimeOrderCompletedMailboxAttemptStillBlocks(order *db.RuntimeOrder, currentSessionID, currentSignature string) bool {
 	if order == nil || !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) || runtimeOrderMailboxOnlyExpired(order) {
 		return false
 	}
 	orderSignature := runtimeOrderDeliveryAttemptSignature(order.PayloadJSON)
 	if currentSignature != "" {
-		return orderSignature != "" && currentSignature == orderSignature
+		if orderSignature != "" && currentSignature == orderSignature {
+			return true
+		}
 	}
 	orderSessionID := strings.TrimSpace(runtimeOrderExternalSessionIDFromJSON(order.PayloadJSON))
+	if currentSessionID != "" && orderSessionID != "" && currentSessionID == orderSessionID {
+		return true
+	}
+	if currentSignature != "" {
+		return false
+	}
 	return !(currentSessionID != "" && orderSessionID != "" && currentSessionID != orderSessionID)
 }
 

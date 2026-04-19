@@ -14318,6 +14318,114 @@ func TestProcesarRuntimeMailboxSessionResumeBatchNoRematerializaMailboxOnlyEnMis
 	}
 }
 
+func TestProcesarRuntimeMailboxSessionResumeBatchNoRematerializaMailboxOnlyEnMismaSesionAunqueCambieHandle(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handleVieja, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handleVieja == nil {
+		t.Fatalf("handle vieja: %+v err=%v", handleVieja, err)
+	}
+	metaVieja := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-dedupe","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaVieja, handleVieja.ID); err != nil {
+		t.Fatalf("update handle vieja: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"instruccion durable"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	payload := fmt.Sprintf(`{"to_agente":"Codex1","from_agente":"server","texto":"instruccion durable","mailbox_id":%d,"mailbox_kind":"instruction","external_session_id":"sess-dedupe","delivery_attempt_signature":"session_resume|handle:%d|session:sess-dedupe"}`, msgID, handleVieja.ID)
+	resultado := fmt.Sprintf(`{"ok":true,"mailbox_id":%d,"deferred":true,"deferred_reason":"runtime no disponible para entrega inmediata","mailbox_only":true}`, msgID)
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:        "Codex1",
+		ProyectoID:    &proyectoID,
+		RuntimeID:     handleVieja.RuntimeID,
+		HandleID:      &handleVieja.ID,
+		Tipo:          "send_instruction",
+		PayloadJSON:   payload,
+		ResultadoJSON: resultado,
+		Estado:        "completada",
+	}); err != nil {
+		t.Fatalf("encolar send_instruction previa: %v", err)
+	}
+
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='cerrado' WHERE id=?`, handleVieja.ID); err != nil {
+		t.Fatalf("fantasmizar handle vieja: %v", err)
+	}
+	sesionNueva, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "Codex1",
+		ProyectoID:        &proyectoID,
+		CWD:               filepath.Join(tmp, "orquestador"),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-dedupe",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion nueva: %v", err)
+	}
+	handleNueva, err := db.GetRuntimeHandleBySesionID(sesionNueva.ID)
+	if err != nil || handleNueva == nil {
+		t.Fatalf("handle nueva: %+v err=%v", handleNueva, err)
+	}
+	metaNueva := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-dedupe","can_send_input":false}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=?, handle_ref=? WHERE id=?`, capsJSON, metaNueva, "codex1-rotado", handleNueva.ID); err != nil {
+		t.Fatalf("update handle nueva: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia rematerializar send_instruction mailbox_only si cambia handle pero sigue la misma external_session_id, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var sendCount int
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			sendCount++
+		}
+	}
+	if sendCount != 1 {
+		t.Fatalf("no deberia crear una nueva send_instruction tras rotacion de handle en misma sesion: %d", sendCount)
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchFallbackInteractivoRespetaLeaseBootstrapPendiente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()
