@@ -1533,6 +1533,87 @@ func TestBuildPanelRowsMarcaAtascadoSiWorkerReadyLlevaDemasiadoTiempoSinProgreso
 	}
 }
 
+func TestBuildPanelRowsNoMarcaAtascadoSiWorkerReadySessionResumeSigueSano(t *testing.T) {
+	now := time.Now().UTC()
+	readyAt := now.Add(-25 * time.Minute)
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":                     "tmux_cli_session",
+		"transport":                  "tmux",
+		"tmux_session":               "orq-codex14-120000",
+		"tmux_pane_id":               "%3",
+		"mailbox_delivery_mode":      "session_resume",
+		"external_session_id":        "sess-123",
+		"worker_external_session_id": "sess-123",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":               "ready",
+		"updated_at":          now.Format(time.RFC3339Nano),
+		"alive":               true,
+		"ready_at":            readyAt.Format(time.RFC3339Nano),
+		"external_session_id": "sess-123",
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":               true,
+		"heartbeat_at":        now.Format(time.RFC3339Nano),
+		"ready_at":            readyAt.Format(time.RFC3339Nano),
+		"external_session_id": "sess-123",
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_manifest_path":       manifestPath,
+		"driver":                     "tmux_cli_session",
+		"worker_status_path":         statusPath,
+		"worker_heartbeat_path":      heartbeatPath,
+		"mailbox_delivery_mode":      "session_resume",
+		"external_session_id":        "sess-123",
+		"worker_external_session_id": "sess-123",
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex14", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		sessions: []*db.Sesion{
+			{Agente: "Codex14", Herramienta: "codex-cli", Estado: "activa", Inicio: now},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex14", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex14", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex14"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "trabajando" {
+		t.Fatalf("estado operativo=%q detalle=%q", rows[0].EstadoOperativo, rows[0].DetalleOperativo)
+	}
+	if strings.Contains(rows[0].DetalleOperativo, "sin progreso desde listo") {
+		t.Fatalf("detalle operativo no deberia marcar atascado: %q", rows[0].DetalleOperativo)
+	}
+}
+
 func TestBuildPanelRowsMarcaBloqueadoSiWorkerRequiereAutenticacionManual(t *testing.T) {
 	now := time.Now().UTC()
 	tmp := t.TempDir()

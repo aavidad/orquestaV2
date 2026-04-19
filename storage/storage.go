@@ -201,13 +201,20 @@ func inferDriverFromConfiguredTarget(pathResolver func() string) string {
 }
 
 func defaultMaxOpenConns(driver string) int {
-	if normalizeDriver(driver) == "sqlite" {
+	switch normalizeDriver(driver) {
+	case "sqlite":
 		// En la práctica el daemon trabaja mejor con una sola conexión SQLite:
 		// evita SQLITE_BUSY persistentes con bases reales grandes mientras el
 		// control plane escribe y la API sirve lecturas concurrentes.
 		return 1
+	case "postgres":
+		// El control plane en Postgres dispara varias lanes residentes y API
+		// concurrente; 10 conexiones se queda corto y degrada tick/prepare
+		// por espera en database/sql.(*DB).conn.
+		return 32
+	default:
+		return 10
 	}
-	return 10
 }
 
 func defaultBootstrapSchema(driver string) bool {

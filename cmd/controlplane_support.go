@@ -11799,9 +11799,74 @@ func procesarDecisionEsperarRecuperacionRuntimeSesionActivaAutonomia(sesion *db.
 		if proyectoID := rowProyectoIDPreferido(row); proyectoID != nil && proyecto.ID > 0 && *proyectoID != proyecto.ID {
 			continue
 		}
-		return procesarWorkerAtascadoAutonomiaRow(row, rows, now)
+		if n, err := procesarWorkerAtascadoAutonomiaRow(row, rows, now); err != nil || n > 0 {
+			return n, err
+		}
+		return encolarReinicioRuntimeHandleAutonomiaRow(row, now, "esperar_recuperacion_runtime")
 	}
 	return 0, nil
+}
+
+func encolarReinicioRuntimeHandleAutonomiaRow(row agentesapp.Row, now time.Time, motivo string) (int, error) {
+	if row.Agente == nil {
+		return 0, nil
+	}
+	switch strings.TrimSpace(row.EstadoOperativo) {
+	case "atascado", "bloqueado_por_runtime", "caido":
+	default:
+		return 0, nil
+	}
+	handle := row.Handle
+	if handle == nil {
+		return 0, nil
+	}
+	agente := strings.TrimSpace(row.Agente.Nombre)
+	if agente == "" {
+		return 0, nil
+	}
+	if disponible, _, err := autonomiaCuentaCompartidaDisponible(agente); err != nil {
+		return 0, err
+	} else if !disponible {
+		return 0, nil
+	}
+	proyectoID := rowProyectoIDPreferido(row)
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "stop", "pause", "checkpoint", "start", "restart", "resume", "handoff"); err != nil {
+		return 0, err
+	} else if pendiente {
+		return 0, nil
+	}
+	cooldown := time.Duration(controlPlaneConfigIntOrDefault("autonomia_stuck_restart_cooldown_seconds", 1800)) * time.Second
+	if cooldown <= 0 {
+		cooldown = 30 * time.Minute
+	}
+	stopReciente, err := runtimeOrderAutonomiaRecienteBloqueaRecuperacion(row, proyectoID, "stop", "stop", cooldown)
+	if err != nil {
+		return 0, err
+	}
+	startReciente, err := runtimeOrderAutonomiaRecienteBloqueaRecuperacion(row, proyectoID, "start", "start", cooldown)
+	if err != nil {
+		return 0, err
+	}
+	if stopReciente || startReciente {
+		return 0, nil
+	}
+	stopOrderID, startOrderID, err := db.EncolarReinicioCoordinadoRuntimeHandle(handle, proyectoID, motivo, "orquesta")
+	if err != nil {
+		return 0, err
+	}
+	detalleProyecto := "-"
+	if proyectoID != nil && *proyectoID > 0 {
+		detalleProyecto = strconv.FormatInt(*proyectoID, 10)
+	}
+	db.Audit("orquesta", "runtime_restart_waiting_recovery", "runtime_handle", handle.ID,
+		fmt.Sprintf("agente=%s proyecto_id=%s stop_order_id=%d start_order_id=%d estado=%s detalle=%s",
+			agente,
+			detalleProyecto,
+			stopOrderID,
+			startOrderID,
+			strings.TrimSpace(row.EstadoOperativo),
+			firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), motivo)))
+	return 1, nil
 }
 
 func procesarDecisionContinuarTrabajoSesionActivaAutonomia(sesion *db.Sesion, proyecto *db.Proyecto, out agenteTickOutput, snapshot *autonomiaBatchSnapshot) (int, error) {

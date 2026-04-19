@@ -68,25 +68,27 @@ type ModelPolicyProvider interface {
 }
 
 type Service struct {
-	store               Store
-	modelPolicyProvider ModelPolicyProvider
-	cacheMu             sync.Mutex
-	prepareAgentCache   map[string]cachedPrepareAgent
-	prepareAgentFlight  map[string]*prepareAgentFlight
-	prepareProjectCache map[string]cachedPrepareProject
-	prepareProjectFlight map[string]*prepareProjectFlight
-	prepareSessionCache map[string]cachedPrepareSession
-	prepareSessionFlight map[string]*prepareSessionFlight
-	prepareConnectorCache map[string]cachedPrepareConnector
-	prepareConnectorFlight map[string]*prepareConnectorFlight
-	prepareGovCache     map[string]cachedPrepareGovernance
-	prepareGovFlight    map[string]*prepareGovernanceFlight
-	prepareModelPolicyCache map[string]cachedPrepareModelPolicy
+	store                    Store
+	modelPolicyProvider      ModelPolicyProvider
+	cacheMu                  sync.Mutex
+	prepareAgentCache        map[string]cachedPrepareAgent
+	prepareAgentFlight       map[string]*prepareAgentFlight
+	prepareProjectCache      map[string]cachedPrepareProject
+	prepareProjectFlight     map[string]*prepareProjectFlight
+	prepareSessionCache      map[string]cachedPrepareSession
+	prepareSessionFlight     map[string]*prepareSessionFlight
+	prepareConnectorCache    map[string]cachedPrepareConnector
+	prepareConnectorFlight   map[string]*prepareConnectorFlight
+	prepareGovCache          map[string]cachedPrepareGovernance
+	prepareGovFlight         map[string]*prepareGovernanceFlight
+	prepareModelPolicyCache  map[string]cachedPrepareModelPolicy
 	prepareModelPolicyFlight map[string]*prepareModelPolicyFlight
-	compactDetailCache  map[string]cachedCompactDetail
-	compactDetailFlight map[string]*compactDetailFlight
-	reanimCache         map[string]cachedReanimationSchedule
-	reanimFlight        map[string]*reanimationScheduleFlight
+	prepareOutputCache       map[string]cachedPrepareOutput
+	prepareOutputFlight      map[string]*prepareOutputFlight
+	compactDetailCache       map[string]cachedCompactDetail
+	compactDetailFlight      map[string]*compactDetailFlight
+	reanimCache              map[string]cachedReanimationSchedule
+	reanimFlight             map[string]*reanimationScheduleFlight
 }
 
 const defaultWorkerOutputStaleSeconds = 20 * 60
@@ -95,6 +97,7 @@ var compactDetailCacheTTL = 2 * time.Second
 var compactDetailStaleWhileRevalidateTTL = 15 * time.Second
 var activeReanimationScheduleCacheTTL = 2 * time.Second
 var activeReanimationScheduleStaleWhileRevalidateTTL = 15 * time.Second
+
 // Prepare usa datos operativos que cambian poco frente al coste de caer a
 // SQLite bajo carga. Mantener una cache algo más larga evita ráfagas de
 // prepare degradadas cuando warm/autonomía pisan la única conexión activa.
@@ -102,6 +105,7 @@ var prepareEntityCacheTTL = 45 * time.Second
 var prepareSessionCacheTTL = 45 * time.Second
 var prepareGovernanceCacheTTL = 45 * time.Second
 var prepareModelPolicyCacheTTL = 45 * time.Second
+var prepareOutputCacheTTL = 20 * time.Second
 
 func agentDetailDebugf(format string, args ...any) {
 	if !agentDetailDebugEnabled() {
@@ -123,24 +127,26 @@ func agentDetailDebugEnabled() bool {
 
 func NewService(store Store, modelPolicyProvider ModelPolicyProvider) *Service {
 	return &Service{
-		store:               store,
-		modelPolicyProvider: modelPolicyProvider,
-		prepareAgentCache:   map[string]cachedPrepareAgent{},
-		prepareAgentFlight:  map[string]*prepareAgentFlight{},
-		prepareProjectCache: map[string]cachedPrepareProject{},
-		prepareProjectFlight: map[string]*prepareProjectFlight{},
-		prepareSessionCache: map[string]cachedPrepareSession{},
-		prepareSessionFlight: map[string]*prepareSessionFlight{},
-		prepareConnectorCache: map[string]cachedPrepareConnector{},
-		prepareConnectorFlight: map[string]*prepareConnectorFlight{},
-		prepareGovCache:     map[string]cachedPrepareGovernance{},
-		prepareGovFlight:    map[string]*prepareGovernanceFlight{},
-		prepareModelPolicyCache: map[string]cachedPrepareModelPolicy{},
+		store:                    store,
+		modelPolicyProvider:      modelPolicyProvider,
+		prepareAgentCache:        map[string]cachedPrepareAgent{},
+		prepareAgentFlight:       map[string]*prepareAgentFlight{},
+		prepareProjectCache:      map[string]cachedPrepareProject{},
+		prepareProjectFlight:     map[string]*prepareProjectFlight{},
+		prepareSessionCache:      map[string]cachedPrepareSession{},
+		prepareSessionFlight:     map[string]*prepareSessionFlight{},
+		prepareConnectorCache:    map[string]cachedPrepareConnector{},
+		prepareConnectorFlight:   map[string]*prepareConnectorFlight{},
+		prepareGovCache:          map[string]cachedPrepareGovernance{},
+		prepareGovFlight:         map[string]*prepareGovernanceFlight{},
+		prepareModelPolicyCache:  map[string]cachedPrepareModelPolicy{},
 		prepareModelPolicyFlight: map[string]*prepareModelPolicyFlight{},
-		compactDetailCache:  map[string]cachedCompactDetail{},
-		compactDetailFlight: map[string]*compactDetailFlight{},
-		reanimCache:         map[string]cachedReanimationSchedule{},
-		reanimFlight:        map[string]*reanimationScheduleFlight{},
+		prepareOutputCache:       map[string]cachedPrepareOutput{},
+		prepareOutputFlight:      map[string]*prepareOutputFlight{},
+		compactDetailCache:       map[string]cachedCompactDetail{},
+		compactDetailFlight:      map[string]*compactDetailFlight{},
+		reanimCache:              map[string]cachedReanimationSchedule{},
+		reanimFlight:             map[string]*reanimationScheduleFlight{},
 	}
 }
 
@@ -180,6 +186,11 @@ type cachedPrepareModelPolicy struct {
 	expires    time.Time
 }
 
+type cachedPrepareOutput struct {
+	output  *PrepareOutput
+	expires time.Time
+}
+
 type prepareAgentFlight struct {
 	done  chan struct{}
 	agent *db.Agente
@@ -215,6 +226,12 @@ type prepareModelPolicyFlight struct {
 	done       chan struct{}
 	resolution *db.ResolucionModelo
 	err        error
+}
+
+type prepareOutputFlight struct {
+	done   chan struct{}
+	output *PrepareOutput
+	err    error
 }
 
 type compactDetailFlight struct {
@@ -3224,6 +3241,13 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 		(row.WorkerSupportsContinuityRecovery(now) ||
 			(row.workerHeartbeatRecent(now) && strings.EqualFold(strings.TrimSpace(row.handleDriver()), "tmux_cli_session"))) {
 		return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad pendiente útil")
+	}
+	if hasActiveTask &&
+		workerRunningFresh &&
+		strings.EqualFold(workerState, "ready") &&
+		runtimeagente.NormalizeMailboxDeliveryMode(row.WorkerMailboxDeliveryMode) == runtimeagente.MailboxDeliverySessionResume &&
+		row.WorkerSupportsContinuityRecovery(now) {
+		return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad session_resume lista")
 	}
 	if hasActiveTask && workerRunningFresh && workerState == "starting" {
 		return "arrancando", firstNonEmpty(row.activitySummary(), "worker starting")

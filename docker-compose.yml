@@ -44,6 +44,7 @@ services:
     environment:
       ORQUESTA_DB_DRIVER: postgres
       ORQUESTA_DB_DSN: postgres://${ORQUESTA_POSTGRES_USER:-orquesta}:${ORQUESTA_POSTGRES_PASSWORD:-orquesta}@postgres:5432/${ORQUESTA_POSTGRES_DB:-orquesta}?sslmode=disable
+      ORQUESTA_DB_MAX_OPEN_CONNS: ${ORQUESTA_DB_MAX_OPEN_CONNS:-32}
       ORQUESTA_DB_BOOTSTRAP: "true"
       # Raíz del workspace montado dentro del contenedor
       ORQUESTA_WORKSPACE_ROOT: /app/workspace

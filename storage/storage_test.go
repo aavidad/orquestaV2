@@ -112,6 +112,22 @@ func TestResolveConfigInfierePostgresDesdeDSNYActivaBootstrapPorDefecto(t *testi
 	}
 }
 
+func TestResolveConfigPostgresUsaPoolMasAmplioPorDefecto(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "postgres")
+	t.Setenv("ORQUESTA_DB_DSN", "postgres://user:pass@localhost/orquesta?sslmode=disable")
+	t.Setenv("ORQUESTA_DB", "")
+	t.Setenv("ORQUESTA_DB_BOOTSTRAP", "")
+	t.Setenv("ORQUESTA_DB_MAX_OPEN_CONNS", "")
+
+	cfg, err := ResolveConfig(func() string { return "" })
+	if err != nil {
+		t.Fatalf("ResolveConfig: %v", err)
+	}
+	if cfg.MaxOpenConns != 32 {
+		t.Fatalf("MaxOpenConns inesperado: %d", cfg.MaxOpenConns)
+	}
+}
+
 func TestResolveConfigNormalizaDrivers(t *testing.T) {
 	cases := []struct {
 		envValue string

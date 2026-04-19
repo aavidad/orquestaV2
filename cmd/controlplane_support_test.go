@@ -31094,6 +31094,86 @@ func TestProcesarWorkerAtascadoAutonomiaRowReiniciaConMailboxPendienteAunqueNoHa
 	}
 }
 
+func TestEncolarReinicioRuntimeHandleAutonomiaRowReiniciaBloqueadoPorRuntimeSinWorkerFresh(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	if err := db.ConfigSet("runtime_shared_account_active_ceiling", "4"); err != nil {
+		t.Fatalf("config ceiling: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-runtime-recovery",
+		Nombre:  "Orquestador Runtime Recovery",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex3", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex3",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert handle: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleActivoAgenteProyecto("Codex3", &proyectoID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle=%+v err=%v", handle, err)
+	}
+	now := time.Now().UTC()
+	rows := agentesapp.Row{
+		Agente:           &db.Agente{Nombre: "Codex3"},
+		Asignacion:       &db.Asignacion{Agente: "Codex3", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+		Handle:           handle,
+		WorkerDriver:     "tmux_cli_session",
+		WorkerState:      "stale",
+		WorkerAlive:      false,
+		WorkerHeartbeat:  ptrTime(now.Add(-2 * time.Hour)),
+		WorkerUpdatedAt:  ptrTime(now.Add(-2 * time.Hour)),
+		EstadoOperativo:  "bloqueado_por_runtime",
+		DetalleOperativo: "heartbeat_lag",
+	}
+
+	procesadas, err := encolarReinicioRuntimeHandleAutonomiaRow(rows, now, "esperar_recuperacion_runtime")
+	if err != nil {
+		t.Fatalf("encolar reinicio runtime degradado: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("procesadas=%d, want 1", procesadas)
+	}
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: ptrString("Codex3")})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	stopCount := 0
+	startCount := 0
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch strings.TrimSpace(order.Tipo) {
+		case "stop":
+			stopCount++
+		case "start":
+			startCount++
+		}
+	}
+	if stopCount == 0 || startCount == 0 {
+		t.Fatalf("deberia encolar restart coordinado, stop=%d start=%d orders=%+v", stopCount, startCount, orders)
+	}
+}
+
 func TestExisteRuntimeOrderAutonomiaRecienteReconoceStopCoordinadoSinKindAutonomia(t *testing.T) {
 	_ = prepararDBTemporalCmd(t)
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
