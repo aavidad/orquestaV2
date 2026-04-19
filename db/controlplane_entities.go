@@ -4717,6 +4717,19 @@ func observarProcesoLocalRuntime(handle *RuntimeHandle, runtime *RuntimeInstance
 	if handle == nil {
 		return false, nil, nil
 	}
+	if runtimeHandleTMUXCurrentPathMismatch(handle) && !runtimeHandlePreservesExternalSession(handle) {
+		if err := marcarRuntimeHandleFantasma(handle); err != nil {
+			return true, map[string]any{
+				"process_alive": false,
+				"process_error": strings.TrimSpace(err.Error()),
+			}, err
+		}
+		return true, map[string]any{
+			"process_alive":  false,
+			"observed_local": true,
+			"process_error":  "tmux current_path stale or deleted",
+		}, nil
+	}
 	if repaired, restarted, err := controlruntime.EnsureTMUXMonitorFromMetadataJSON(handle.MetadataJSON); err != nil {
 		return true, map[string]any{
 			"process_alive": false,

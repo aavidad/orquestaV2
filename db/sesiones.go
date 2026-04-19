@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -525,6 +526,12 @@ func runtimeHandleTMUXCurrentPathMismatch(handle *RuntimeHandle) bool {
 	}
 	current := strings.TrimSpace(view.CurrentPath)
 	if current == "" {
+		return false
+	}
+	if _, err := os.Stat(current); err != nil {
+		if os.IsNotExist(err) {
+			return true
+		}
 		return false
 	}
 	proyecto, err := GetProyectoConRutaEfectiva(strconv.FormatInt(*handle.ProyectoID, 10), current)

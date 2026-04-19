@@ -3425,6 +3425,129 @@ func TestProcesarRuntimeSupervisionBatchRespetaBatchBudget(t *testing.T) {
 	}
 }
 
+func TestObservarProcesoLocalRuntimeMarcaFantasmaTMUXConCurrentPathBorrado(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexStaleTMUX", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	rutaBase := filepath.Join(tmp, "orquestador")
+	rutaWorktree := filepath.Join(rutaBase, ".orquesta-worktrees", "orquestador-codexstaletmux")
+	if err := os.MkdirAll(rutaWorktree, 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := (CoordinationWorktreeSQLRepository{}).Create(&coordinacion.Worktree{
+		ProjectID: proyectoID,
+		Agent:     "CodexStaleTMUX",
+		Name:      "orquestador-codexstaletmux",
+		Path:      rutaWorktree,
+		Branch:    "orq-orquestador-codexstaletmux",
+		BaseRef:   "HEAD",
+		State:     coordinacion.WorktreeActive,
+		Reason:    "test",
+	}); err != nil {
+		t.Fatalf("crear worktree activa: %v", err)
+	}
+	pid := int64(os.Getpid())
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexStaleTMUX",
+		ProyectoID:  &proyectoID,
+		CWD:         rutaWorktree,
+		Herramienta: "codex-cli",
+		PID:         &pid,
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	runDir := filepath.Join(tmp, "worker-stale-tmux")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir worker: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	invocations := filepath.Join(tmp, "tmux-stale-kill.log")
+	fakeTmux := writeFakeTMUXPanePatchWithKillScriptDB(t, tmp, invocations)
+	deletedCurrent := filepath.Join(tmp, "deleted-worker-path")
+	now := time.Now().UTC().Add(-2 * time.Minute)
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"CodexStaleTMUX","driver":"tmux_cli_session","transport":"tmux","tmux_command":"`+fakeTmux+`","tmux_session":"orq-codexstaletmux","tmux_pane_id":"%73","status_path":"`+statusPath+`","heartbeat_path":"`+heartbeatPath+`","working_dir":"`+rutaWorktree+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","updated_at":"`+now.Format(time.RFC3339Nano)+`","alive":true,"child_pid":`+strconv.Itoa(os.Getpid())+`,"working_dir":"`+rutaWorktree+`","current_path":"`+deletedCurrent+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now.Format(time.RFC3339Nano)+`","started_at":"`+now.Format(time.RFC3339Nano)+`","child_pid":`+strconv.Itoa(os.Getpid())+`}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON := fmt.Sprintf(`{"driver":"tmux_cli_session","transport":"tmux","tmux_command":"%s","tmux_session":"orq-codexstaletmux","tmux_pane_id":"%%73","working_dir":"%s","cwd":"%s","worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`, fakeTmux, rutaWorktree, rutaWorktree, manifestPath, statusPath, heartbeatPath)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codexstaletmux/%73', estado='activo', metadata_json=?, capabilities_json=?, last_seen_at=? WHERE id=?`,
+		metaJSON, `{"mailbox_delivery_mode":"session_resume","can_send_input":false}`, now, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_instances SET cwd=?, logical_state='esperando_io', process_state='running', last_heartbeat_at=?, last_event_at=? WHERE id=?`,
+		rutaWorktree, now, now, runtime.ID); err != nil {
+		t.Fatalf("update runtime: %v", err)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("refresh handle tras update: %+v err=%v", handle, err)
+	}
+
+	observed, processResult, err := observarProcesoLocalRuntime(handle, runtime, "runtime_supervision")
+	if err != nil {
+		t.Fatalf("observar proceso local: %v", err)
+	}
+	if !observed {
+		t.Fatal("deberia observar el runtime tmux stale")
+	}
+	if alive, _ := processResult["process_alive"].(bool); alive {
+		t.Fatalf("processResult deberia marcar process_alive=false: %+v", processResult)
+	}
+	if got := strings.TrimSpace(stringFromMap(processResult, "process_error", "")); got != "tmux current_path stale or deleted" {
+		t.Fatalf("process_error inesperado: %+v", processResult)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+	if handle.Estado != "fallido" {
+		t.Fatalf("handle tmux stale deberia quedar fallido: %+v", handle)
+	}
+	runtime, err = GetRuntime(runtime.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("reload runtime: %+v err=%v", runtime, err)
+	}
+	if runtime.LogicalState != "fallido" || runtime.ProcessState != "finalizado" {
+		t.Fatalf("runtime stale deberia quedar degradado/finalizado: %+v", runtime)
+	}
+	data, err := os.ReadFile(invocations)
+	if err != nil {
+		t.Fatalf("leer invocaciones fake tmux: %v", err)
+	}
+	if !strings.Contains(string(data), "kill-session -t orq-codexstaletmux") {
+		t.Fatalf("faltaba kill-session del tmux stale: %s", string(data))
+	}
+}
+
 func TestReconciliarRuntimeHandlesStaleMarcaHandleActivoConSesionAbierta(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

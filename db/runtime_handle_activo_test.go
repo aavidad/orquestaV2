@@ -199,6 +199,102 @@ func TestRuntimeHandlePuedeRepresentarActivoCanonicoOmiteTMUXFueraDeWorktreeCano
 	}
 }
 
+func TestRuntimeHandleTMUXCurrentPathMismatchDetectaCurrentPathBorrado(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexDeletedPath", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	rutaBase := filepath.Join(tmp, "orquestador")
+	rutaWorktree := filepath.Join(rutaBase, ".orquesta-worktrees", "orquestador-codexdeleted")
+	if err := os.MkdirAll(rutaWorktree, 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := (CoordinationWorktreeSQLRepository{}).Create(&coordinacion.Worktree{
+		ProjectID: proyectoID,
+		Agent:     "CodexDeletedPath",
+		Name:      "orquestador-codexdeleted",
+		Path:      rutaWorktree,
+		Branch:    "orq-orquestador-codexdeleted",
+		BaseRef:   "HEAD",
+		State:     coordinacion.WorktreeActive,
+		Reason:    "test",
+	}); err != nil {
+		t.Fatalf("crear worktree activa: %v", err)
+	}
+
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "CodexDeletedPath",
+		ProyectoID:        &proyectoID,
+		CWD:               rutaWorktree,
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-codexdeleted",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+
+	runDir := filepath.Join(tmp, "worker-codexdeleted")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir worker: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	deletedCurrent := filepath.Join(tmp, "deleted-current-path")
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"CodexDeletedPath","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codexdeleted","tmux_pane_id":"%44","status_path":"`+statusPath+`","heartbeat_path":"`+heartbeatPath+`","working_dir":"`+rutaWorktree+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","updated_at":"`+now+`","alive":true,"child_pid":`+strconv.Itoa(os.Getpid())+`,"working_dir":"`+rutaWorktree+`","current_path":"`+deletedCurrent+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now+`","started_at":"`+now+`","child_pid":`+strconv.Itoa(os.Getpid())+`}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-codexdeleted",
+		"tmux_pane_id":          "%44",
+		"working_dir":           rutaWorktree,
+		"cwd":                   rutaWorktree,
+		"external_session_id":   "sess-codexdeleted",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	capsJSON, _ := json.Marshal(map[string]any{
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliverySessionResume,
+		"can_send_input":        false,
+	})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codexdeleted/%44', estado='activo', metadata_json=?, capabilities_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, string(metaJSON), string(capsJSON), handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("refresh handle: %+v err=%v", handle, err)
+	}
+
+	if !runtimeHandleTMUXCurrentPathMismatch(handle) {
+		t.Fatal("current_path borrado deberia marcar mismatch tmux")
+	}
+}
+
 func TestRuntimeHandleCanonicoRecienteConFallbackOmiteCLISessionSinContinuidad(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
