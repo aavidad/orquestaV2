@@ -55,6 +55,8 @@ func (postgresBackend) Backup(_ *sql.DB, _ string) error {
 	return fmt.Errorf("respaldo postgres no soportado todavia desde Orquesta; usa pg_dump o un adaptador de backup dedicado")
 }
 
+func (postgresBackend) SupportsBackup() bool { return false }
+
 func (postgresBackend) Verify(raw *sql.DB, cfg storage.Config) *InformePersistencia {
 	informe := nuevoInformePersistencia(cfg)
 	if !verificarConexionPersistencia(informe, raw) {

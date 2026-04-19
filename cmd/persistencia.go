@@ -31,6 +31,7 @@ var persistenciaInfoCmd = &cobra.Command{
 		infoPath := rpclocal.DefaultInfoPath()
 		storageDriver := db.CurrentStorageDriver()
 		storageTarget := db.CurrentStorageDisplayTarget()
+		backupSupported := db.CurrentStorageSupportsBackup()
 		addr := rpclocal.ResolveServerAddr()
 
 		info, recoveredFromHealth, err := loadServerInfoWithHealthFallback(addr)
@@ -38,7 +39,7 @@ var persistenciaInfoCmd = &cobra.Command{
 		defer cancel()
 		pingErr := rpclocal.Ping(ctx, addr)
 
-		renderPersistenciaInfo(cmd.OutOrStdout(), infoPath, storageDriver, storageTarget, addr, info, recoveredFromHealth, err, pingErr)
+		renderPersistenciaInfo(cmd.OutOrStdout(), infoPath, storageDriver, storageTarget, backupSupported, addr, info, recoveredFromHealth, err, pingErr)
 		return nil
 	},
 }
@@ -66,10 +67,11 @@ func init() {
 	rootCmd.AddCommand(persistenciaCmd)
 }
 
-func renderPersistenciaInfo(w io.Writer, infoPath, storageDriver, storageTarget, addr string, info *rpclocal.ServerInfo, recoveredFromHealth bool, infoErr, pingErr error) {
+func renderPersistenciaInfo(w io.Writer, infoPath, storageDriver, storageTarget string, backupSupported bool, addr string, info *rpclocal.ServerInfo, recoveredFromHealth bool, infoErr, pingErr error) {
 	fmt.Fprintf(w, "Modo esperado: servidor local\n")
 	fmt.Fprintf(w, "Storage driver: %s\n", storageDriver)
 	fmt.Fprintf(w, "Storage target: %s\n", storageTarget)
+	fmt.Fprintf(w, "Backup support: %t\n", backupSupported)
 	fmt.Fprintf(w, "Statefile:     %s\n", infoPath)
 	fmt.Fprintf(w, "Addr resuelta: %s\n", addr)
 

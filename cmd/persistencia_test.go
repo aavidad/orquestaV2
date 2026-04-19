@@ -52,6 +52,7 @@ func TestRenderPersistenciaInfoSinServidor(t *testing.T) {
 		"/tmp/orquesta-localrpc.json",
 		"sqlite",
 		"/tmp/orquesta.db",
+		true,
 		"http://127.0.0.1:17899",
 		nil,
 		false,
@@ -64,6 +65,7 @@ func TestRenderPersistenciaInfoSinServidor(t *testing.T) {
 		"Modo esperado: servidor local",
 		"Storage driver: sqlite",
 		"Storage target: /tmp/orquesta.db",
+		"Backup support: true",
 		"Servidor:      sin state",
 		"Health RPC:    KO",
 		"Ruta activa:   sin servidor; local solo con",
@@ -83,6 +85,7 @@ func TestRenderPersistenciaInfoConServidor(t *testing.T) {
 		"/tmp/orquesta-localrpc.json",
 		"sqlite",
 		"/tmp/orquesta.db",
+		true,
 		"http://127.0.0.1:17899",
 		&rpclocal.ServerInfo{
 			Addr:          "127.0.0.1:17899",
@@ -118,6 +121,7 @@ func TestRenderPersistenciaInfoConFallbackHealthz(t *testing.T) {
 		"/tmp/orquesta-localrpc.json",
 		"sqlite",
 		"/tmp/orquesta.db",
+		true,
 		"http://127.0.0.1:17899",
 		&rpclocal.ServerInfo{
 			Addr:          "127.0.0.1:17899",

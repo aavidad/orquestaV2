@@ -14,6 +14,7 @@ type Backend interface {
 	Open(storage.Config) (*sql.DB, error)
 	Prepare(*sql.DB, storage.Config) error
 	Backup(*sql.DB, string) error
+	SupportsBackup() bool
 	Verify(*sql.DB, storage.Config) *InformePersistencia
 	IsBusy(error) bool
 }
@@ -104,6 +105,18 @@ func BackupFilenameSuffix() string {
 		return "_orquesta.db.bak"
 	}
 	return "_orquesta." + driver + ".bak"
+}
+
+func CurrentStorageSupportsBackup() bool {
+	backend, _, _ := currentPersistenceState()
+	if backend != nil {
+		return backend.SupportsBackup()
+	}
+	resolved, _, err := resolveBackend()
+	if err != nil || resolved == nil {
+		return false
+	}
+	return resolved.SupportsBackup()
 }
 
 func BackupFilenameGlob() string {

@@ -18,15 +18,6 @@ UNIT_TEMPLATE_ORQUESTA="$(dirname "$0")/orquesta.service"
 UNIT_TEMPLATE_BACKUP="$(dirname "$0")/orquesta-backup.service"
 UNIT_TEMPLATE_BACKUP_TIMER="$(dirname "$0")/orquesta-backup.timer"
 
-resolve_driver() {
-  local raw="${ORQUESTA_DB_DRIVER:-${ORQUESTA_DB_BACKEND:-sqlite}}"
-  raw="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
-  case "$raw" in
-    ""|sqlite|sqlite3) printf 'sqlite\n' ;;
-    *) printf '%s\n' "$raw" ;;
-  esac
-}
-
 if [[ ! -f "${ROOT_DIR}/orquesta" ]]; then
   echo "❌ No encuentro el binario '${ROOT_DIR}/orquesta'. Compila primero con 'go build ./...'." >&2
   exit 1
@@ -43,8 +34,9 @@ render_unit() {
 
 echo "📦 Instalando servicios systemd en ${UNIT_DIR}"
 render_unit "${UNIT_TEMPLATE_ORQUESTA}" "${UNIT_DIR}/${UNIT_ORQUESTA}"
-BACKEND_DRIVER="$(resolve_driver)"
-if [[ "${BACKEND_DRIVER}" == "sqlite" ]]; then
+BACKEND_DRIVER="$("${ROOT_DIR}/orquesta" persistencia info 2>/dev/null | awk -F': ' '/^Storage driver:/ {print $2; exit}')"
+BACKUP_SUPPORT="$("${ROOT_DIR}/orquesta" persistencia info 2>/dev/null | awk -F': ' '/^Backup support:/ {print $2; exit}')"
+if [[ "${BACKUP_SUPPORT}" == "true" ]]; then
   render_unit "${UNIT_TEMPLATE_BACKUP}" "${UNIT_DIR}/${UNIT_BACKUP}"
   render_unit "${UNIT_TEMPLATE_BACKUP_TIMER}" "${UNIT_DIR}/${UNIT_BACKUP_TIMER}"
 fi
@@ -56,11 +48,11 @@ echo "✅ Habilitando e iniciando ${UNIT_ORQUESTA}..."
 sudo systemctl enable "${UNIT_ORQUESTA}"
 sudo systemctl restart "${UNIT_ORQUESTA}"
 
-if [[ "${BACKEND_DRIVER}" == "sqlite" ]]; then
+if [[ "${BACKUP_SUPPORT}" == "true" ]]; then
   echo "🕒 Habilitando temporizador de respaldo..."
   sudo systemctl enable --now "${UNIT_BACKUP_TIMER}"
 else
-  echo "⚠️  No se instala temporizador de backup para backend '${BACKEND_DRIVER}' porque el adaptador de respaldo no está declarado."
+  echo "⚠️  No se instala temporizador de backup para backend '${BACKEND_DRIVER}' porque el conector de persistencia no declara soporte de backup."
 fi
 
 echo ""
@@ -71,7 +63,7 @@ echo ""
 echo "✅ Orquesta instalada como servicio."
 echo "   Ver logs:   journalctl -u ${UNIT_ORQUESTA} -f"
 echo "   Health:     curl -fsS http://127.0.0.1:16543/api/status"
-if [[ "${BACKEND_DRIVER}" == "sqlite" ]]; then
+if [[ "${BACKUP_SUPPORT}" == "true" ]]; then
   echo "   Backup diario: sudo systemctl status ${UNIT_BACKUP_TIMER}"
 else
   echo "   Backup diario: no configurado por este instalador para backend ${BACKEND_DRIVER}"

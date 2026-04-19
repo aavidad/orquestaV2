@@ -124,6 +124,8 @@ func (sqliteBackend) Backup(db *sql.DB, path string) error {
 	return nil
 }
 
+func (sqliteBackend) SupportsBackup() bool { return true }
+
 func (sqliteBackend) Verify(raw *sql.DB, cfg storage.Config) *InformePersistencia {
 	informe := nuevoInformePersistencia(cfg)
 	if !verificarConexionPersistencia(informe, raw) {

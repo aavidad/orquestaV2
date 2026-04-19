@@ -49,6 +49,8 @@ func (mysqlBackend) Backup(_ *sql.DB, _ string) error {
 	return fmt.Errorf("respaldo mysql no soportado todavia desde Orquesta; usa mysqldump o un adaptador de backup dedicado")
 }
 
+func (mysqlBackend) SupportsBackup() bool { return false }
+
 func (mysqlBackend) Verify(raw *sql.DB, cfg storage.Config) *InformePersistencia {
 	informe := nuevoInformePersistencia(cfg)
 	if !verificarConexionPersistencia(informe, raw) {
