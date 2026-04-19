@@ -3774,39 +3774,13 @@ func reconciliarRuntimeOrdersPendientesMailboxConsumido() (int, error) {
 			continue
 		}
 		payload := mapFromJSON(order.PayloadJSON)
-		if !runtimeOrderSendInstructionProvieneMailbox(payload) {
-			continue
-		}
-		mailboxID := runtimeOrderSendInstructionMailboxID(payload)
-		if mailboxID <= 0 {
-			continue
-		}
-		msg, err := GetRuntimeMailbox(mailboxID)
+		handled, err := reconciliarRuntimeOrderSendInstructionConMailboxActual(order, payload, time.Now().UTC())
 		if err != nil {
 			return processed, err
 		}
-		if msg == nil {
-			if err := retenerRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "mailbox_missing_rearmed"); err != nil {
-				return processed, err
-			}
+		if handled {
 			processed++
-			continue
 		}
-		switch strings.ToLower(strings.TrimSpace(msg.Estado)) {
-		case "pendiente":
-			continue
-		case "entregado":
-			if handled, err := reconciliarRuntimeOrderSendInstructionMailboxEntregado(order, payload, msg, time.Now().UTC()); err != nil {
-				return processed, err
-			} else if handled {
-				processed++
-				continue
-			}
-		}
-		if err := completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "mailbox ya "+strings.TrimSpace(msg.Estado)); err != nil {
-			return processed, err
-		}
-		processed++
 	}
 	return processed, nil
 }
@@ -6950,7 +6924,9 @@ func runtimeOrderSendInstructionDurableOnlyReason(handle *RuntimeHandle, payload
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
 	if runtimeHandleUsaCodexTTYInestable(meta) && runtimeOrderSendInstructionEsGuidanceDurableServidor(payload) {
-		return runtimeOrderSendInstructionMailboxOnlyReason(deliveryMode, payload), true
+		if !runtimeHandleEsTMUXCanonico(handle) {
+			return runtimeOrderSendInstructionMailboxOnlyReason(deliveryMode, payload), true
+		}
 	}
 	if reason := runtimeOrderSendInstructionLongTextReason(handle, payload, texto); reason != "" {
 		return reason, true
@@ -6974,7 +6950,9 @@ func runtimeOrderSendInstructionDebeIntentarSessionResume(handle *RuntimeHandle,
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
 	if runtimeHandleUsaCodexTTYInestable(meta) && runtimeOrderSendInstructionEsGuidanceDurableServidor(payload) {
-		return false
+		if !runtimeHandleEsTMUXCanonico(handle) {
+			return false
+		}
 	}
 	if strings.TrimSpace(externalSessionID) == "" {
 		detected, err := runtimeHandleEffectiveExternalSessionID(handle, runtime)
@@ -8471,13 +8449,14 @@ func retenerRuntimeOrderSendInstructionNotificada(order *RuntimeOrder, payload m
 		notifiedAt = time.Now().UTC()
 	}
 	nextAttempt := time.Now().UTC().Add(runtimeOrderSendInstructionRetryDelay())
+	mailboxOnly := strings.Contains(strings.ToLower(reason), "mailbox_only")
 	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
 		"dispatch_state":       "notified",
 		"ok":                   false,
 		"mailbox_id":           runtimeOrderSendInstructionMailboxID(payload),
 		"deferred":             true,
 		"deferred_reason":      reason,
-		"mailbox_only":         true,
+		"mailbox_only":         mailboxOnly,
 		"delivery_state":       "notified",
 		"delivery_notified_at": notifiedAt.Format(time.RFC3339Nano),
 		"delivery_receipt_at":  "",
@@ -8676,13 +8655,14 @@ func completarRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, p
 			mailboxID = msgID
 		}
 	}
+	mailboxOnly := strings.Contains(strings.ToLower(reason), "mailbox_only")
 	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
 		"dispatch_state":  "pending",
 		"ok":              true,
 		"mailbox_id":      mailboxID,
 		"deferred":        true,
 		"deferred_reason": reason,
-		"mailbox_only":    true,
+		"mailbox_only":    mailboxOnly,
 		"delivery_state":  "queued",
 	})
 	return MarcarRuntimeOrderEstado(order.ID, "completada", resultado, "")
@@ -11409,6 +11389,14 @@ func reconciliarRuntimeOrderStale(id int64, tipo string, now, cutoff time.Time) 
 			}
 		}
 	}
+	if order != nil && strings.TrimSpace(order.Tipo) == "send_instruction" {
+		payload := mapFromJSON(order.PayloadJSON)
+		if handled, err := reconciliarRuntimeOrderSendInstructionConMailboxActual(order, payload, now); err != nil {
+			return false, err
+		} else if handled {
+			return true, nil
+		}
+	}
 	if covered, resultado, detalle, coveredErr := runtimeOrderBootstrapStaleCoveredByFollowup(order); coveredErr != nil {
 		return false, coveredErr
 	} else if covered {
@@ -11465,6 +11453,40 @@ func reconciliarRuntimeOrderStale(id int64, tipo string, now, cutoff time.Time) 
 	}
 	rows, _ := res.RowsAffected()
 	return rows > 0, nil
+}
+
+func reconciliarRuntimeOrderSendInstructionConMailboxActual(order *RuntimeOrder, payload map[string]any, now time.Time) (bool, error) {
+	if order == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) {
+		return false, nil
+	}
+	mailboxID := runtimeOrderSendInstructionMailboxID(payload)
+	if mailboxID <= 0 {
+		return false, nil
+	}
+	msg, err := GetRuntimeMailbox(mailboxID)
+	if err != nil {
+		return false, err
+	}
+	if msg == nil {
+		if err := retenerRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "mailbox_missing_rearmed"); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(msg.Estado)) {
+	case "pendiente":
+		return false, nil
+	case "entregado":
+		if handled, err := reconciliarRuntimeOrderSendInstructionMailboxEntregado(order, payload, msg, now); err != nil {
+			return false, err
+		} else if handled {
+			return true, nil
+		}
+	}
+	if err := completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "mailbox ya "+strings.TrimSpace(msg.Estado)); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func runtimeOrderPlaceholders(tipos []string) (string, []any) {

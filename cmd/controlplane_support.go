@@ -6844,6 +6844,30 @@ func reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje(msg *db.RuntimeMailb
 			return false, err
 		}
 	}
+	if !mailboxOnlyReady && runtimeMailboxGuidanceDurableRequiereTriggerCaliente(handle, msg) {
+		triggerHandle, runtimeInstance, externalSessionID, err := snapshot.supervisedHandle(handle)
+		if err != nil {
+			return false, err
+		}
+		if triggerHandle == nil {
+			triggerHandle = handle
+		}
+		if entregado, err := encolarRuntimeMailboxSessionResumeSiCorresponde(
+			msg,
+			consumed,
+			snapshot,
+			triggerHandle,
+			runtimeInstance,
+			runtimeMailboxGuidanceDurableTriggerText(msg),
+			externalSessionID,
+			"runtime_mailbox_guidance_durable_session_resume",
+			"runtime_mailbox_guidance_durable_session_resume_supersede",
+		); err != nil {
+			return false, err
+		} else if entregado {
+			return true, nil
+		}
+	}
 	if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
 		return false, err
 	}
@@ -6851,6 +6875,44 @@ func reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje(msg *db.RuntimeMailb
 		fmt.Sprintf("agente=%s proyecto=%s kind=%s mailbox_only_ready=%t", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(proyecto.Slug), strings.TrimSpace(msg.Kind), mailboxOnlyReady))
 	consumed[msg.ID] = struct{}{}
 	return true, nil
+}
+
+func runtimeMailboxGuidanceDurableRequiereTriggerCaliente(handle *db.RuntimeHandle, msg *db.RuntimeMailboxMessage) bool {
+	if handle == nil || msg == nil {
+		return false
+	}
+	if !runtimeMailboxKindEphemeral(strings.TrimSpace(msg.Kind)) {
+		return false
+	}
+	if !db.RuntimeHandlePermiteSendInputInteractivo(handle) {
+		return false
+	}
+	if !db.RuntimeHandleSnapshotIsFresh(handle, 2*time.Minute) {
+		return false
+	}
+	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
+	driver := strings.TrimSpace(stringMapValue(meta, "driver"))
+	if !strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") && !strings.EqualFold(driver, "tmux_cli_session") {
+		return false
+	}
+	return runtimeagente.NormalizeMailboxDeliveryMode(db.RuntimeHandleMailboxDeliveryMode(handle)) == runtimeagente.MailboxDeliverySessionResume
+}
+
+func runtimeMailboxGuidanceDurableTriggerText(msg *db.RuntimeMailboxMessage) string {
+	if msg == nil {
+		return "Orquesta: relee .orquesta-inbox.md y aplica la guidance durable vigente."
+	}
+	payload := map[string]any{}
+	if strings.TrimSpace(msg.PayloadJSON) != "" {
+		_ = json.Unmarshal([]byte(msg.PayloadJSON), &payload)
+	}
+	if instruction := strings.TrimSpace(stringMapValue(payload, "instruction")); instruction != "" {
+		return "Orquesta: relee .orquesta-inbox.md y aplica la guidance durable vigente. " + instruction
+	}
+	if texto := strings.TrimSpace(stringMapValue(payload, "texto")); texto != "" {
+		return "Orquesta: relee .orquesta-inbox.md y aplica la guidance durable vigente. " + texto
+	}
+	return "Orquesta: relee .orquesta-inbox.md y aplica la guidance durable vigente."
 }
 
 func runtimeMailboxBootstrapPendientePermiteGuidanceDurable(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle) bool {
@@ -6930,13 +6992,16 @@ func runtimeMailboxGuidanceDurablePersistibleEnInbox(msg *db.RuntimeMailboxMessa
 }
 
 func runtimeMailboxGuidanceDurableUsaInbox(handle *db.RuntimeHandle) bool {
-	if handle == nil || db.RuntimeHandlePermiteSendInputInteractivo(handle) {
+	if handle == nil {
 		return false
 	}
 	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
 	driver := strings.TrimSpace(stringMapValue(meta, "driver"))
-	return strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
-		strings.EqualFold(driver, "tmux_cli_session")
+	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
+		strings.EqualFold(driver, "tmux_cli_session") {
+		return true
+	}
+	return !db.RuntimeHandlePermiteSendInputInteractivo(handle)
 }
 
 func reconciliarRuntimeMailboxPipelineBootstrapActivaBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {

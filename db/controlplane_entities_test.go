@@ -10037,7 +10037,7 @@ func TestRuntimeOrderSendInstructionPipelinePremiumRetieneNotificadaSiSessionRes
 	}
 }
 
-func TestRuntimeOrderSendInstructionNudgeTMUXRetieneNotificadaSiSessionResumeTimeout(t *testing.T) {
+func TestRuntimeOrderSendInstructionNudgeTMUXReencolaSiSessionResumeTimeoutSinWorkerSnapshot(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
@@ -10144,20 +10144,20 @@ func TestRuntimeOrderSendInstructionNudgeTMUXRetieneNotificadaSiSessionResumeTim
 	if err != nil {
 		t.Fatalf("get send order final: %v", err)
 	}
-	if sendOrder.Estado != "completada" {
-		t.Fatalf("nudge codex tmux deberia degradarse a mailbox durable: %+v", sendOrder)
+	if sendOrder.Estado != "pendiente" {
+		t.Fatalf("nudge codex tmux deberia reencolarse si falta worker snapshot: %+v", sendOrder)
 	}
-	if !strings.Contains(sendOrder.ResultadoJSON, `"mailbox_only":true`) {
-		t.Fatalf("resultado sin degradacion mailbox_only: %s", sendOrder.ResultadoJSON)
+	if strings.Contains(sendOrder.ResultadoJSON, `"mailbox_only":true`) {
+		t.Fatalf("tmux canonico no deberia degradar a mailbox_only: %s", sendOrder.ResultadoJSON)
 	}
-	if !strings.Contains(sendOrder.ResultadoJSON, `runtime_handle_session_resume_mailbox_only:nudge`) {
-		t.Fatalf("resultado sin razon mailbox_only:nudge: %s", sendOrder.ResultadoJSON)
+	if strings.Contains(sendOrder.ResultadoJSON, `runtime_handle_session_resume_mailbox_only:nudge`) {
+		t.Fatalf("tmux canonico no deberia marcar mailbox_only:nudge: %s", sendOrder.ResultadoJSON)
 	}
-	if !strings.Contains(sendOrder.ResultadoJSON, `"delivery_state":"queued"`) {
-		t.Fatalf("resultado mailbox_only deberia quedar queued: %s", sendOrder.ResultadoJSON)
+	if !strings.Contains(sendOrder.ResultadoJSON, `"deferred_reason":"worker_snapshot_missing"`) {
+		t.Fatalf("resultado sin reason worker_snapshot_missing: %s", sendOrder.ResultadoJSON)
 	}
-	if strings.Contains(sendOrder.ResultadoJSON, `"dispatch_state":"delivered"`) {
-		t.Fatalf("mailbox_only no deberia marcarse delivered sin consumo real: %s", sendOrder.ResultadoJSON)
+	if !strings.Contains(sendOrder.ResultadoJSON, `"dispatch_state":"pending"`) {
+		t.Fatalf("resultado sin dispatch_state pending: %s", sendOrder.ResultadoJSON)
 	}
 
 	msg, err := GetRuntimeMailbox(mailboxID)
@@ -10627,14 +10627,17 @@ func TestRuntimeOrderSendInstructionNudgeTMUXSessionResumeNoQuedaMailboxOnly(t *
 	if err != nil {
 		t.Fatalf("get send order final: %v", err)
 	}
-	if sendOrder.Estado != "completada" {
-		t.Fatalf("send_instruction session_resume tmux deberia completarse: %+v", sendOrder)
+	if sendOrder.Estado != "pendiente" {
+		t.Fatalf("send_instruction tmux canonico deberia evitar mailbox_only aunque falte snapshot: %+v", sendOrder)
 	}
-	if !strings.Contains(sendOrder.ResultadoJSON, `"mailbox_only":true`) {
-		t.Fatalf("tmux session_resume codex deberia degradar nudge a mailbox_only: %s", sendOrder.ResultadoJSON)
+	if strings.Contains(sendOrder.ResultadoJSON, `"mailbox_only":true`) {
+		t.Fatalf("tmux session_resume canonico no deberia degradar nudge a mailbox_only: %s", sendOrder.ResultadoJSON)
 	}
-	if !strings.Contains(sendOrder.ResultadoJSON, `runtime_handle_session_resume_mailbox_only:nudge`) {
-		t.Fatalf("tmux session_resume codex deberia marcar reason mailbox_only:nudge: %s", sendOrder.ResultadoJSON)
+	if strings.Contains(sendOrder.ResultadoJSON, `runtime_handle_session_resume_mailbox_only:nudge`) {
+		t.Fatalf("tmux session_resume canonico no deberia marcar reason mailbox_only:nudge: %s", sendOrder.ResultadoJSON)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"deferred_reason":"worker_snapshot_missing"`) {
+		t.Fatalf("resultado sin reason worker_snapshot_missing: %s", sendOrder.ResultadoJSON)
 	}
 }
 
@@ -13686,6 +13689,68 @@ func TestRetenerRuntimeOrderSendInstructionNotificadaPreservaTrackingPostRemedia
 		if !strings.Contains(order.ResultadoJSON, fragment) {
 			t.Fatalf("resultado notificado sin %s: %s", fragment, order.ResultadoJSON)
 		}
+	}
+	if strings.Contains(order.ResultadoJSON, `"mailbox_only":true`) {
+		t.Fatalf("retencion notificada no deberia marcar mailbox_only sin reason legacy: %s", order.ResultadoJSON)
+	}
+}
+
+func TestCompletarRuntimeOrderSendInstructionDiferidaAMailboxNoMarcaMailboxOnlySinReasonLegacy(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir working dir: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: workingDir,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"sigue"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","mailbox_id":%d,"mailbox_kind":"nudge","texto":"sigue"}`, mailboxID),
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get send order: %v", err)
+	}
+	if err := completarRuntimeOrderSendInstructionDiferidaAMailbox(order, map[string]any{
+		"to_agente":    "Codex1",
+		"mailbox_id":   mailboxID,
+		"mailbox_kind": "nudge",
+		"texto":        "sigue",
+	}, "mailbox ya consumido"); err != nil {
+		t.Fatalf("completarRuntimeOrderSendInstructionDiferidaAMailbox: %v", err)
+	}
+	order, err = GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if strings.Contains(order.ResultadoJSON, `"mailbox_only":true`) {
+		t.Fatalf("resultado no deberia marcar mailbox_only para cierre no legacy: %s", order.ResultadoJSON)
 	}
 }
 
@@ -20960,6 +21025,83 @@ func TestReconciliarRuntimeOrderStaleNoPisaOrdenReclamadaDeNuevo(t *testing.T) {
 	}
 	if order.Estado != "tomada" || order.FinishedAt != nil {
 		t.Fatalf("orden modificada indebidamente por reconciliacion stale: %+v", order)
+	}
+}
+
+func TestReconciliarRuntimeOrderStaleSendInstructionUsaEstadoActualDeMailbox(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"sigue"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	if err := MarcarRuntimeMailboxEntregado(mailboxID); err != nil {
+		t.Fatalf("entregar mailbox: %v", err)
+	}
+	if err := MarcarRuntimeMailboxConsumido(mailboxID); err != nil {
+		t.Fatalf("consumir mailbox: %v", err)
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","mailbox_id":%d,"mailbox_kind":"nudge","texto":"sigue"}`, mailboxID),
+	})
+	if err != nil {
+		t.Fatalf("encolar order: %v", err)
+	}
+	if err := MarcarRuntimeOrderEstado(orderID, "ejecutando", `{}`, ""); err != nil {
+		t.Fatalf("marcar ejecutando: %v", err)
+	}
+	if _, err := DB.Exec(`
+		UPDATE runtime_orders
+		SET started_at = ?, updated_at = ?
+		WHERE id = ?`,
+		time.Now().UTC().Add(-10*time.Minute),
+		time.Now().UTC().Add(-10*time.Minute),
+		orderID,
+	); err != nil {
+		t.Fatalf("envejecer order: %v", err)
+	}
+
+	applied, err := reconciliarRuntimeOrderStale(orderID, "send_instruction", time.Now().UTC(), time.Now().UTC().Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("reconciliar stale send_instruction: %v", err)
+	}
+	if !applied {
+		t.Fatalf("reconciliar stale deberia resolver la send_instruction desde mailbox consumido")
+	}
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get order: %v", err)
+	}
+	if order.Estado != "completada" {
+		t.Fatalf("estado final inesperado: %+v", order)
+	}
+	if strings.Contains(order.ErrorText, "reencolada tras stale del control plane") {
+		t.Fatalf("no deberia caer en stale generico: %+v", order)
+	}
+	if strings.Contains(order.ResultadoJSON, `"mailbox_only":true`) {
+		t.Fatalf("resultado final no deberia recaer en mailbox_only legacy: %s", order.ResultadoJSON)
 	}
 }
 
