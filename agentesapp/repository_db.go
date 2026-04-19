@@ -53,7 +53,7 @@ func (Repository) GetAgentPrepareLite(nombre string) (*db.Agente, error) {
 }
 
 func (Repository) GetProject(ref string) (*db.Proyecto, error) {
-	return db.GetProyecto(ref)
+	return db.GetProyectoConRutaEfectiva(ref, "")
 }
 
 func (Repository) GetPool(slug string) (*db.PoolCapacidad, error) {

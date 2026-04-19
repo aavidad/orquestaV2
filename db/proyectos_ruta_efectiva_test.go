@@ -121,6 +121,62 @@ func TestGetYListarProyectosConRutaEfectivaPriorizanRutaActual(t *testing.T) {
 	}
 }
 
+func TestRutaProyectoEfectivaOmiteSesionMasRecienteStaleSiOtraSigueSana(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	rutaHistorica := filepath.Join(tmp, "historico", "orquestador")
+	rutaActual := filepath.Join(tmp, "actual", "orquesta")
+	rutaStale := filepath.Join(tmp, "tmp-stale", "orquestador")
+	if err := os.MkdirAll(filepath.Join(rutaActual, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir ruta actual: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaActual, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod actual: %v", err)
+	}
+	if err := os.MkdirAll(rutaStale, 0o755); err != nil {
+		t.Fatalf("mkdir ruta stale: %v", err)
+	}
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := RegistrarAgente("Codex4", "programador"); err != nil {
+		t.Fatalf("registrar Codex4: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaHistorica,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(rutaActual, "cmd"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion sana: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex4",
+		ProyectoID:  &proyectoID,
+		CWD:         rutaStale,
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion stale: %v", err)
+	}
+
+	proyecto, err := GetProyectoConRutaEfectiva("orquestador", "")
+	if err != nil {
+		t.Fatalf("get proyecto efectivo: %v", err)
+	}
+	if proyecto.RutaAbs != rutaActual {
+		t.Fatalf("ruta efectiva inesperada: got=%s want=%s", proyecto.RutaAbs, rutaActual)
+	}
+}
+
 func TestRutaProyectoEfectivaIgnoraCWDNoRepoAjenoAlProyecto(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	rutaBase := filepath.Join(tmp, "orquesta")

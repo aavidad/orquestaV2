@@ -19,10 +19,14 @@ import (
 type WorktreeManager struct{}
 
 func (WorktreeManager) CreateWorktree(repoPath, worktreePath, branch, baseRef string) error {
+	repoRoot, err := canonicalGitRepoPath(repoPath)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(worktreePath), 0o755); err != nil {
 		return err
 	}
-	args := []string{"-C", repoPath, "worktree", "add", "-B", branch, worktreePath}
+	args := []string{"-C", repoRoot, "worktree", "add", "-B", branch, worktreePath}
 	if baseRef != "" {
 		args = append(args, baseRef)
 	}
@@ -35,10 +39,14 @@ func (WorktreeManager) CreateWorktree(repoPath, worktreePath, branch, baseRef st
 }
 
 func (WorktreeManager) CreateDetachedWorktree(repoPath, worktreePath, baseRef string) error {
+	repoRoot, err := canonicalGitRepoPath(repoPath)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(worktreePath), 0o755); err != nil {
 		return err
 	}
-	args := []string{"-C", repoPath, "worktree", "add", "--detach", worktreePath}
+	args := []string{"-C", repoRoot, "worktree", "add", "--detach", worktreePath}
 	if strings.TrimSpace(baseRef) != "" {
 		args = append(args, baseRef)
 	}
@@ -94,4 +102,20 @@ func (WorktreeManager) DeleteBranchDescendants(repoPath, branch string) error {
 		return err
 	}
 	return nil
+}
+
+func canonicalGitRepoPath(repoPath string) (string, error) {
+	repoPath = strings.TrimSpace(repoPath)
+	if repoPath == "" {
+		return "", fmt.Errorf("repoPath obligatorio")
+	}
+	root, err := gitOutput(repoPath, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", fmt.Errorf("ruta repo inválida %s: %w", filepath.Clean(repoPath), err)
+	}
+	root = filepath.Clean(strings.TrimSpace(root))
+	if root == string(filepath.Separator) {
+		return "", fmt.Errorf("ruta repo inválida %s: toplevel git inesperado /", filepath.Clean(repoPath))
+	}
+	return root, nil
 }

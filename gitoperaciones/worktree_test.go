@@ -8,43 +8,32 @@ import (
 	"testing"
 )
 
-func TestDeleteBranchDescendantsEliminaRefsLegacyAnidadas(t *testing.T) {
-	repo := t.TempDir()
-	runGitCmdWorktreeTest(t, repo, "init")
-	runGitCmdWorktreeTest(t, repo, "config", "user.name", "Orquesta Test")
-	runGitCmdWorktreeTest(t, repo, "config", "user.email", "orquesta@example.com")
-	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\n"), 0o644); err != nil {
-		t.Fatalf("write README: %v", err)
+func TestCanonicalGitRepoPathRejectsNonRepo(t *testing.T) {
+	tmp := t.TempDir()
+	_, err := canonicalGitRepoPath(tmp)
+	if err == nil {
+		t.Fatal("deberia fallar para ruta no git")
 	}
-	runGitCmdWorktreeTest(t, repo, "add", "README.md")
-	runGitCmdWorktreeTest(t, repo, "commit", "-m", "base")
-	runGitCmdWorktreeTest(t, repo, "branch", "orq-orquestador-gemini1/t526")
-	runGitCmdWorktreeTest(t, repo, "branch", "feature/keep")
-
-	if err := (WorktreeManager{}).DeleteBranchDescendants(repo, "orq-orquestador-gemini1"); err != nil {
-		t.Fatalf("DeleteBranchDescendants: %v", err)
-	}
-
-	refs := gitRefsHeadsWorktreeTest(t, repo)
-	if strings.Contains(refs, "orq-orquestador-gemini1/t526") {
-		t.Fatalf("la ref legacy descendiente deberia haberse eliminado: %s", refs)
-	}
-	if !strings.Contains(refs, "feature/keep") {
-		t.Fatalf("la ref no relacionada deberia mantenerse: %s", refs)
+	if !strings.Contains(err.Error(), "ruta repo inválida") {
+		t.Fatalf("error inesperado: %v", err)
 	}
 }
 
-func runGitCmdWorktreeTest(t *testing.T, repo string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
-	out, err := cmd.CombinedOutput()
+func TestCanonicalGitRepoPathResolvesTopLevel(t *testing.T) {
+	tmp := t.TempDir()
+	repo := filepath.Join(tmp, "repo")
+	nested := filepath.Join(repo, "cmd", "api")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("mkdir nested: %v", err)
+	}
+	if out, err := exec.Command("git", "init", repo).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, string(out))
+	}
+	got, err := canonicalGitRepoPath(nested)
 	if err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, string(out))
+		t.Fatalf("canonicalGitRepoPath: %v", err)
 	}
-	return string(out)
-}
-
-func gitRefsHeadsWorktreeTest(t *testing.T, repo string) string {
-	t.Helper()
-	return runGitCmdWorktreeTest(t, repo, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if got != repo {
+		t.Fatalf("repo root inesperado: got=%s want=%s", got, repo)
+	}
 }

@@ -219,9 +219,16 @@ func rutaProyectoEfectivaConContexto(proyectoID int64, fallback, cwdHint string,
 	if sesion != nil {
 		sessionCWD = normalizarRutaProyecto(sesion.cwd)
 		sessionInsideActiveWorktree = rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID, sesion.agente, sessionCWD, worktrees, fallback)
-	} else if agente, cwd, ok := ultimaRutaSesionProyecto(proyectoID); ok {
-		sessionCWD = normalizarRutaProyecto(cwd)
-		sessionInsideActiveWorktree = rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID, agente, sessionCWD, worktrees, fallback)
+		if coordinacion.CandidateEffectiveProjectPath(sessionCWD, sessionInsideActiveWorktree, tieneMarcadoresRepo) == "" {
+			sessionCWD = ""
+			sessionInsideActiveWorktree = false
+		}
+	}
+	if sessionCWD == "" {
+		if agente, cwd, ok := mejorRutaSesionProyecto(proyectoID, worktrees, fallback); ok {
+			sessionCWD = normalizarRutaProyecto(cwd)
+			sessionInsideActiveWorktree = rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID, agente, sessionCWD, worktrees, fallback)
+		}
 	}
 	return coordinacion.ResolveProjectEffectivePath(
 		fallback,
@@ -279,6 +286,50 @@ func ultimaRutaSesionProyecto(proyectoID int64) (string, string, bool) {
 		return "", "", false
 	}
 	return strings.TrimSpace(agente), strings.TrimSpace(cwd), true
+}
+
+func mejorRutaSesionProyecto(proyectoID int64, worktrees []coordinacion.WorktreePathRef, fallback string) (string, string, bool) {
+	if proyectoID <= 0 || DB == nil {
+		return "", "", false
+	}
+	rows, err := DB.Query(`
+		SELECT agente, cwd
+		FROM sesiones
+		WHERE proyecto_id = ?
+		  AND trim(cwd) <> ''
+		ORDER BY activa DESC, id DESC`, proyectoID,
+	)
+	if err != nil {
+		return "", "", false
+	}
+	type sesionRuta struct {
+		agente string
+		cwd    string
+	}
+	sesiones := make([]sesionRuta, 0)
+	for rows.Next() {
+		var agente, cwd string
+		if err := rows.Scan(&agente, &cwd); err != nil {
+			rows.Close()
+			return "", "", false
+		}
+		sesiones = append(sesiones, sesionRuta{
+			agente: strings.TrimSpace(agente),
+			cwd:    normalizarRutaProyecto(cwd),
+		})
+	}
+	rows.Close()
+	for _, sesion := range sesiones {
+		if sesion.cwd == "" {
+			continue
+		}
+		inside := rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID, sesion.agente, sesion.cwd, worktrees, fallback)
+		if coordinacion.CandidateEffectiveProjectPath(sesion.cwd, inside, tieneMarcadoresRepo) == "" {
+			continue
+		}
+		return sesion.agente, sesion.cwd, true
+	}
+	return "", "", false
 }
 
 func normalizarRutaProyecto(path string) string {

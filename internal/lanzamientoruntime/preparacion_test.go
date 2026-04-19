@@ -21,6 +21,9 @@ type fakeWorkspaceManager struct {
 }
 
 func (f *fakeWorkspaceManager) CreateWorktree(repoPath, worktreePath, branch, baseRef string) error {
+	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+		return err
+	}
 	f.calls = append(f.calls, struct {
 		repoPath     string
 		worktreePath string
@@ -218,6 +221,122 @@ func TestPrepararDesdeDatosRecuperaWorktreeActivaSiUltimaSesionTraeCWDObsoleto(t
 	}
 	if prep.Plan.WorkingDir == rutaObsoleta {
 		t.Fatalf("working dir no deberia conservar la ruta obsoleta: %s", prep.Plan.WorkingDir)
+	}
+}
+
+func TestPrepararDesdeDatosCreaWorktreeDesdeRutaProyectoEfectivaAunqueLaUltimaSesionSeaStale(t *testing.T) {
+	prepararDBTemporalLanzamiento(t)
+	tmp := t.TempDir()
+	rutaHistorica := filepath.Join(tmp, "historico", "orquestador")
+	rutaActual := filepath.Join(tmp, "actual", "orquesta")
+	rutaStale := filepath.Join(tmp, "tmp-stale", "orquestador")
+	if err := os.MkdirAll(filepath.Join(rutaActual, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir ruta actual: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaActual, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod actual: %v", err)
+	}
+	if err := os.MkdirAll(rutaStale, 0o755); err != nil {
+		t.Fatalf("mkdir ruta stale: %v", err)
+	}
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+		t.Fatalf("registrar Codex4: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaHistorica,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertConector(&db.Conector{
+		Slug:       "codex-cli",
+		Nombre:     "Codex CLI",
+		Transporte: "cli",
+		Comando:    "codex",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Rehabilitar Codex4",
+		Descripcion: "tarea en curso",
+		ProyectoID:  &proyectoID,
+		Modulo:      "runtime",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex4"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(rutaActual, "cmd"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion sana: %v", err)
+	}
+	ultimaID, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex4",
+		ProyectoID:  &proyectoID,
+		CWD:         rutaStale,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion stale: %v", err)
+	}
+	if err := db.FinSesion("Codex4"); err != nil {
+		t.Fatalf("fin sesion Codex4: %v", err)
+	}
+	_ = ultimaID
+
+	agente, err := db.GetAgente("Codex4")
+	if err != nil {
+		t.Fatalf("get agente: %v", err)
+	}
+	proyecto, err := db.GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	conector, err := db.GetConector("codex-cli")
+	if err != nil {
+		t.Fatalf("get conector: %v", err)
+	}
+	ultima, err := db.ObtenerUltimaSesion("Codex4", &proyectoID)
+	if err != nil {
+		t.Fatalf("obtener ultima sesion: %v", err)
+	}
+
+	workspace := &fakeWorkspaceManager{}
+	prep, err := prepararDesdeDatosConWorkspace(agente, proyecto, conector, ultima, "", "", "", workspace)
+	if err != nil {
+		t.Fatalf("preparar desde datos: %v", err)
+	}
+	if prep == nil || prep.Plan == nil {
+		t.Fatalf("preparacion inesperada: %+v", prep)
+	}
+	if len(workspace.calls) != 1 {
+		t.Fatalf("deberia crear una worktree, calls=%d", len(workspace.calls))
+	}
+	if workspace.calls[0].repoPath != rutaActual {
+		t.Fatalf("repoPath inesperado: got=%s want=%s", workspace.calls[0].repoPath, rutaActual)
+	}
+	if prep.Proyecto == nil || prep.Proyecto.RutaAbs != rutaActual {
+		t.Fatalf("proyecto efectivo inesperado: %+v", prep.Proyecto)
+	}
+	if strings.HasPrefix(prep.Plan.WorkingDir, rutaStale) {
+		t.Fatalf("working dir no deberia usar la ruta stale: %s", prep.Plan.WorkingDir)
 	}
 }
 
