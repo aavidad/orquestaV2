@@ -154,6 +154,25 @@ func (sqliteBackend) Verify(raw *sql.DB, cfg storage.Config) *InformePersistenci
 	return informe
 }
 
+func (sqliteBackend) MaintenanceTick(raw *sql.DB, _ storage.Config) (map[string]any, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	row := raw.QueryRow(`PRAGMA wal_checkpoint(PASSIVE)`)
+	var status int
+	var walPages int
+	var checkpointedPages int
+	if err := row.Scan(&status, &walPages, &checkpointedPages); err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"kind":               "wal_checkpoint",
+		"status":             status,
+		"wal_pages":          walPages,
+		"checkpointed_pages": checkpointedPages,
+	}, nil
+}
+
 func (sqliteBackend) IsBusy(err error) bool {
 	if err == nil {
 		return false

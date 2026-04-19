@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -178,5 +179,37 @@ func TestLoadStateScopeMismatch(t *testing.T) {
 
 	if _, err := LoadState(path); err == nil {
 		t.Fatalf("se esperaba error por scope mismatch")
+	}
+}
+
+func TestDefaultStatePathSinStorageExplicitoUsaScopeDelDirectorio(t *testing.T) {
+	prevDB := os.Getenv("ORQUESTA_DB")
+	prevDriver := os.Getenv("ORQUESTA_DB_DRIVER")
+	prevDSN := os.Getenv("ORQUESTA_DB_DSN")
+	t.Cleanup(func() {
+		if prevDB == "" {
+			_ = os.Unsetenv("ORQUESTA_DB")
+		} else {
+			_ = os.Setenv("ORQUESTA_DB", prevDB)
+		}
+		if prevDriver == "" {
+			_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+		} else {
+			_ = os.Setenv("ORQUESTA_DB_DRIVER", prevDriver)
+		}
+		if prevDSN == "" {
+			_ = os.Unsetenv("ORQUESTA_DB_DSN")
+		} else {
+			_ = os.Setenv("ORQUESTA_DB_DSN", prevDSN)
+		}
+	})
+
+	_ = os.Unsetenv("ORQUESTA_DB")
+	_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+	_ = os.Unsetenv("ORQUESTA_DB_DSN")
+
+	path := DefaultStatePath()
+	if strings.Contains(path, "orquesta.db") {
+		t.Fatalf("DefaultStatePath no deberia depender de orquesta.db sin storage explicito: %s", path)
 	}
 }

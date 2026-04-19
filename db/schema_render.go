@@ -13,7 +13,7 @@ func schemaDDL() string {
 func schemaDDLForDriver(driver string) string {
 	driver = normalizedDriverName(driver)
 	if driver == "postgres" || driver == "postgresql" {
-		return joinDDLParts(schemaDDLPartsForDriver(driver)...)
+		return joinDDLParts(renderPostgresBaseDDLFromLegacySchema(), renderAuxDDLForDriver(driver))
 	}
 	statements := schemaStatements(Schema)
 	out := make([]string, 0, len(statements))

@@ -188,7 +188,7 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 		debugLogger.Printf("server_autobootstrap skipped=disabled")
 	}
 	launchPrepareContextPrewarmLoop(controlCtx, debugLogger)
-	launchWALCheckpointLoop(controlCtx, debugLogger)
+	launchStorageMaintenanceLoop(controlCtx, debugLogger)
 
 	timeouts := loadUnifiedServerHTTPTimeouts()
 	server := &http.Server{
@@ -337,7 +337,7 @@ func launchBootstrapServerAutonomy(ctx context.Context, debugLogger *log.Logger)
 	}()
 }
 
-func launchWALCheckpointLoop(ctx context.Context, debugLogger *log.Logger) {
+func launchStorageMaintenanceLoop(ctx context.Context, debugLogger *log.Logger) {
 	go func() {
 		ticker := time.NewTicker(2 * time.Minute)
 		defer ticker.Stop()
@@ -347,18 +347,23 @@ func launchWALCheckpointLoop(ctx context.Context, debugLogger *log.Logger) {
 				return
 			case <-ticker.C:
 				handle := db.CurrentHandle()
-				if handle == nil {
+				backend, cfg, _ := db.CurrentPersistenceState()
+				if handle == nil || backend == nil {
 					continue
 				}
-				walPages, checkpointed, err := handle.WALCheckpoint()
+				maintainer, ok := backend.(db.BackgroundMaintainer)
+				if !ok {
+					continue
+				}
+				outcome, err := maintainer.MaintenanceTick(handle.DB, cfg)
 				if err != nil {
 					if debugLogger != nil {
-						debugLogger.Printf("wal_checkpoint error=%v", err)
+						debugLogger.Printf("storage_maintenance backend=%s error=%v", backend.Name(), err)
 					}
 					continue
 				}
-				if debugLogger != nil && walPages > 0 {
-					debugLogger.Printf("wal_checkpoint wal_pages=%d checkpointed=%d", walPages, checkpointed)
+				if debugLogger != nil && len(outcome) > 0 {
+					debugLogger.Printf("storage_maintenance backend=%s outcome=%v", backend.Name(), outcome)
 				}
 			}
 		}

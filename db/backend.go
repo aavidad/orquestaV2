@@ -18,6 +18,10 @@ type Backend interface {
 	IsBusy(error) bool
 }
 
+type BackgroundMaintainer interface {
+	MaintenanceTick(*sql.DB, storage.Config) (map[string]any, error)
+}
+
 var (
 	backendRegistry = map[string]Backend{}
 	currentBackend  Backend
@@ -40,6 +44,10 @@ func currentPersistenceState() (Backend, storage.Config, string) {
 	persistenceMu.RLock()
 	defer persistenceMu.RUnlock()
 	return currentBackend, currentConfig, currentTarget
+}
+
+func CurrentPersistenceState() (Backend, storage.Config, string) {
+	return currentPersistenceState()
 }
 
 func CurrentDBPath() string {
@@ -114,7 +122,7 @@ func backendName() string {
 	if err == nil && cfg.Driver != "" {
 		return cfg.Driver
 	}
-	return "sqlite"
+	return ""
 }
 
 func configTarget(cfg storage.Config) string {

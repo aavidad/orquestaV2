@@ -143,25 +143,31 @@ func ResolveServerAddr() string {
 }
 
 func currentScopeSource() string {
-	cfg, err := storage.ResolveConfig(func() string {
-		if wd, err := os.Getwd(); err == nil && strings.TrimSpace(wd) != "" {
-			return filepath.Join(wd, "orquesta.db")
-		}
-		return "orquesta.db"
-	})
-	if err == nil {
-		driver := strings.TrimSpace(cfg.Driver)
-		if path := strings.TrimSpace(cfg.Path); path != "" {
-			return "db:" + driver + ":" + filepath.Clean(path)
-		}
-		if dsn := strings.TrimSpace(cfg.DSN); dsn != "" {
-			return "db:" + driver + ":" + dsn
+	if storageExplicitlyConfigured() {
+		cfg, err := storage.ResolveConfig(nil)
+		if err == nil {
+			driver := strings.TrimSpace(cfg.Driver)
+			if path := strings.TrimSpace(cfg.Path); path != "" {
+				return "db:" + driver + ":" + filepath.Clean(path)
+			}
+			if dsn := strings.TrimSpace(cfg.DSN); dsn != "" {
+				return "db:" + driver + ":" + dsn
+			}
 		}
 	}
 	if wd, err := os.Getwd(); err == nil && strings.TrimSpace(wd) != "" {
 		return "cwd:" + filepath.Clean(wd)
 	}
 	return "global"
+}
+
+func storageExplicitlyConfigured() bool {
+	for _, key := range []string{"ORQUESTA_DB_DRIVER", "ORQUESTA_DB_BACKEND", "ORQUESTA_DB_DSN", "ORQUESTA_DB"} {
+		if strings.TrimSpace(os.Getenv(key)) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func scopedStateFile(scopeID string) string {

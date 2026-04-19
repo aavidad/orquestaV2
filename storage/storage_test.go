@@ -80,6 +80,25 @@ func TestResolveConfigUsaDriverYDSNDesdeEntorno(t *testing.T) {
 	}
 }
 
+func TestResolveConfigInfierePostgresDesdeDSNYActivaBootstrapPorDefecto(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "")
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB_DSN", "postgres://user:pass@localhost/orquesta?sslmode=disable")
+	t.Setenv("ORQUESTA_DB", "")
+	t.Setenv("ORQUESTA_DB_BOOTSTRAP", "")
+
+	cfg, err := ResolveConfig(func() string { return "" })
+	if err != nil {
+		t.Fatalf("ResolveConfig: %v", err)
+	}
+	if cfg.Driver != "postgres" {
+		t.Fatalf("driver inesperado: %s", cfg.Driver)
+	}
+	if !cfg.BootstrapSchema {
+		t.Fatalf("postgres deberia arrancar con bootstrap activo por defecto")
+	}
+}
+
 func TestResolveConfigNormalizaDrivers(t *testing.T) {
 	cases := []struct {
 		envValue string

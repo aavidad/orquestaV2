@@ -52,8 +52,9 @@ func parseSchemaSeedGroups(seedSQL string) []schemaSeedGroup {
 	statements := schemaStatements(seedSQL)
 	groups := make([]schemaSeedGroup, 0, len(statements))
 	for _, stmt := range statements {
-		stmt = strings.TrimSpace(stmt)
-		if !strings.HasPrefix(strings.ToUpper(stmt), "INSERT INTO ") {
+		stmt = strings.TrimSpace(stripLeadingSQLComments(stmt))
+		upper := strings.ToUpper(stmt)
+		if !strings.HasPrefix(upper, "INSERT INTO ") && !strings.HasPrefix(upper, "INSERT OR IGNORE INTO ") {
 			continue
 		}
 		table := parseSeedTable(stmt)
@@ -73,14 +74,29 @@ func parseSchemaSeedGroups(seedSQL string) []schemaSeedGroup {
 func parseSeedTable(stmt string) string {
 	upper := strings.ToUpper(stmt)
 	prefix := "INSERT INTO "
+	if idx := strings.Index(upper, prefix); idx >= 0 {
+		rest := stmt[idx+len(prefix):]
+		end := len(rest)
+		if space := strings.Index(rest, " "); space >= 0 && space < end {
+			end = space
+		}
+		if paren := strings.Index(rest, "("); paren >= 0 && paren < end {
+			end = paren
+		}
+		return strings.TrimSpace(rest[:end])
+	}
+	prefix = "INSERT OR IGNORE INTO "
 	idx := strings.Index(upper, prefix)
 	if idx < 0 {
 		return ""
 	}
 	rest := stmt[idx+len(prefix):]
-	end := strings.Index(rest, " ")
-	if end < 0 {
-		return ""
+	end := len(rest)
+	if space := strings.Index(rest, " "); space >= 0 && space < end {
+		end = space
+	}
+	if paren := strings.Index(rest, "("); paren >= 0 && paren < end {
+		end = paren
 	}
 	return strings.TrimSpace(rest[:end])
 }

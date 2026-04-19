@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -29,14 +28,8 @@ var (
 
 func noDBFallbackDB() *sql.DB {
 	noDBFallbackOnce.Do(func() {
-		db, err := sql.Open("sqlite", ":memory:")
+		db, err := sql.Open(noDBDriverName, "")
 		if err != nil {
-			log.Printf("orquesta/db: no se pudo abrir fallback sqlite memoria para consultas sin DB: %v", err)
-			return
-		}
-		if _, err := db.Exec("CREATE TABLE IF NOT EXISTS _orquesta_noop (id INTEGER)"); err != nil {
-			log.Printf("orquesta/db: no se pudo preparar fallback sqlite memoria para consultas sin DB: %v", err)
-			_ = db.Close()
 			return
 		}
 		noDBFallback = db
@@ -111,11 +104,9 @@ func (h *Handle) QueryRow(query string, args ...any) *sql.Row {
 	return h.DB.QueryRow(storage.RebindQuery(h.driver, query), args...)
 }
 
-// WALCheckpoint ejecuta un checkpoint PASSIVE en SQLite para volcar el WAL al
-// archivo principal. Es seguro llamarlo con readers/writers activos: si hay
-// páginas ocupadas simplemente se omiten (sin bloquear). Devuelve el número de
-// páginas volcadas y las que quedaron pendientes. En drivers que no son SQLite
-// es un no-op.
+// WALCheckpoint se mantiene por compatibilidad interna durante la transición
+// del mantenimiento de storage al adapter. En drivers que no son SQLite es un
+// no-op.
 func (h *Handle) WALCheckpoint() (walPages, checkpointedPages int, err error) {
 	if h == nil || h.DB == nil {
 		return 0, 0, nil

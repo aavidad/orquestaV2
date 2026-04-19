@@ -21,9 +21,11 @@ type Config struct {
 }
 
 func ResolveConfig(pathResolver func() string) (Config, error) {
-	driver := normalizeDriver(envFirst("ORQUESTA_DB_DRIVER", "ORQUESTA_DB_BACKEND"))
+	driver := strings.TrimSpace(envFirst("ORQUESTA_DB_DRIVER", "ORQUESTA_DB_BACKEND"))
 	if driver == "" {
-		driver = "sqlite"
+		driver = inferDriverFromConfiguredTarget(pathResolver)
+	} else {
+		driver = normalizeDriver(driver)
 	}
 
 	cfg := Config{
@@ -174,6 +176,25 @@ func normalizeDriver(v string) string {
 	}
 }
 
+func inferDriverFromConfiguredTarget(pathResolver func() string) string {
+	if dsn := strings.TrimSpace(envFirst("ORQUESTA_DB_DSN")); dsn != "" {
+		lower := strings.ToLower(dsn)
+		switch {
+		case strings.HasPrefix(lower, "postgres://"), strings.HasPrefix(lower, "postgresql://"):
+			return "postgres"
+		case strings.HasPrefix(lower, "mysql://"):
+			return "mysql"
+		}
+	}
+	if path := strings.TrimSpace(envFirst("ORQUESTA_DB")); path != "" {
+		return "sqlite"
+	}
+	if pathResolver != nil && strings.TrimSpace(pathResolver()) != "" {
+		return "sqlite"
+	}
+	return "sqlite"
+}
+
 func defaultMaxOpenConns(driver string) int {
 	if normalizeDriver(driver) == "sqlite" || normalizeDriver(driver) == "" {
 		// En la práctica el daemon trabaja mejor con una sola conexión SQLite:
@@ -186,7 +207,7 @@ func defaultMaxOpenConns(driver string) int {
 
 func defaultBootstrapSchema(driver string) bool {
 	switch normalizeDriver(driver) {
-	case "", "sqlite":
+	case "", "sqlite", "postgres":
 		return true
 	default:
 		return false

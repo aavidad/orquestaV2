@@ -1,6 +1,10 @@
 package db
 
-import "strings"
+import (
+	"fmt"
+	"regexp"
+	"strings"
+)
 
 var (
 	schemaWorkflowDDL     = renderWorkflowDDLForDriver("sqlite")
@@ -48,6 +52,10 @@ func schemaDDLPartsForDriver(driver string) []string {
 }
 
 func renderBaseDDLForDriver(driver string) string {
+	driver = normalizedDriverName(driver)
+	if driver == "postgres" || driver == "postgresql" {
+		return renderPostgresBaseDDLFromLegacySchema()
+	}
 	return joinDDLParts(
 		renderBootstrapSectionDDLForDriver(driver),
 		renderWorkflowDDLForDriver(driver),
@@ -56,6 +64,103 @@ func renderBaseDDLForDriver(driver string) string {
 		renderCapacitySectionDDLForDriver(driver),
 		renderKnowledgeDDLForDriver(driver),
 	)
+}
+
+var postgresInlineReferencePattern = regexp.MustCompile(`\s+REFERENCES\s+([A-Za-z0-9_]+)\(([^)]+)\)(?:\s+ON\s+DELETE\s+([A-Z\s]+))?`)
+
+func renderPostgresBaseDDLFromLegacySchema() string {
+	statements := schemaStatements(Schema)
+	createTables := make([]string, 0, len(statements))
+	constraints := make([]string, 0, len(statements))
+	for _, stmt := range statements {
+		trimmed := strings.TrimSpace(stmt)
+		upper := strings.ToUpper(stripLeadingSQLComments(trimmed))
+		if !strings.HasPrefix(upper, "CREATE TABLE IF NOT EXISTS ") {
+			continue
+		}
+		createStmt, alters := splitPostgresCreateTableReferences(trimmed)
+		createTables = append(createTables, createStmt)
+		constraints = append(constraints, alters...)
+	}
+	return joinDDLParts(append(createTables, constraints...)...)
+}
+
+func splitPostgresCreateTableReferences(stmt string) (string, []string) {
+	stmt = stripLeadingSQLComments(stmt)
+	stmt = renderDriverColumnSyntax("postgres", stmt)
+	lines := strings.Split(stmt, "\n")
+	if len(lines) == 0 {
+		return stmt, nil
+	}
+	table := parseCreateTableName(lines[0])
+	if table == "" {
+		return stmt, nil
+	}
+	alters := make([]string, 0, 4)
+	for i, line := range lines {
+		if !strings.Contains(line, " REFERENCES ") {
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "UNIQUE(") || strings.HasPrefix(trimmed, "CHECK (") {
+			continue
+		}
+		matches := postgresInlineReferencePattern.FindStringSubmatch(line)
+		if len(matches) == 0 {
+			continue
+		}
+		column := parseColumnNameFromLine(line)
+		if column == "" {
+			continue
+		}
+		refTable := strings.TrimSpace(matches[1])
+		refColumn := strings.TrimSpace(matches[2])
+		onDelete := strings.TrimSpace(matches[3])
+		lines[i] = postgresInlineReferencePattern.ReplaceAllString(line, "")
+		lines[i] = strings.ReplaceAll(lines[i], " ,", ",")
+		lines[i] = strings.TrimRight(lines[i], " ")
+		alters = append(alters, postgresForeignKeyAlter(table, column, refTable, refColumn, onDelete))
+	}
+	return strings.Join(lines, "\n"), alters
+}
+
+func parseCreateTableName(line string) string {
+	line = strings.TrimSpace(line)
+	line = strings.TrimPrefix(line, "CREATE TABLE IF NOT EXISTS ")
+	line = strings.TrimSpace(strings.TrimSuffix(line, "("))
+	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(fields[0])
+}
+
+func parseColumnNameFromLine(line string) string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return ""
+	}
+	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.TrimSuffix(strings.TrimSpace(fields[0]), ",")
+}
+
+func postgresForeignKeyAlter(table, column, refTable, refColumn, onDelete string) string {
+	name := fmt.Sprintf("fk_%s_%s", table, column)
+	stmt := fmt.Sprintf(
+		"ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s(%s)",
+		table,
+		name,
+		column,
+		refTable,
+		refColumn,
+	)
+	if onDelete != "" {
+		stmt += " ON DELETE " + onDelete
+	}
+	return stmt + ";"
 }
 
 func renderAuxDDLForDriver(driver string) string {

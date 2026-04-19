@@ -88,10 +88,10 @@ func GuardarPool(p *PoolCapacidad) (int64, error) {
 			},
 		),
 		[]any{
-			p.Slug, p.Proveedor, p.Runtime, p.Plan, p.EsDePago, p.CapacidadTotal,
-			p.CapacidadReservada, p.PermiteHijos, p.PermiteModelosMulti,
-			p.PermiteSobrecoste, p.PoliticaHandoff, p.FuenteTelemetria,
-			p.MetadataJSON, p.Activo,
+			p.Slug, p.Proveedor, p.Runtime, p.Plan, boolToInt(p.EsDePago), p.CapacidadTotal,
+			p.CapacidadReservada, boolToInt(p.PermiteHijos), boolToInt(p.PermiteModelosMulti),
+			boolToInt(p.PermiteSobrecoste), p.PoliticaHandoff, p.FuenteTelemetria,
+			p.MetadataJSON, boolToInt(p.Activo),
 		},
 		`SELECT id FROM pools_capacidad WHERE slug = ?`,
 		p.Slug,
@@ -132,7 +132,7 @@ func ListarPools(activo *bool) ([]*PoolCapacidad, error) {
 	var args []any
 	if activo != nil {
 		q += ` WHERE activo = ?`
-		args = append(args, *activo)
+		args = append(args, boolToInt(*activo))
 	}
 	q += ` ORDER BY slug`
 	rows, err := DB.Query(q, args...)
@@ -198,7 +198,7 @@ func GuardarPoolModelo(poolSlug string, modelo *PoolModelo) (int64, error) {
 			},
 		),
 		[]any{
-			pool.ID, modelo.ModelSlug, modelo.Activo, modelo.Prioridad,
+			pool.ID, modelo.ModelSlug, boolToInt(modelo.Activo), modelo.Prioridad,
 			modelo.CosteRelativo, modelo.LimiteConocidoJSON,
 		},
 		`SELECT id FROM pool_modelos WHERE pool_id = ? AND model_slug = ?`,
@@ -421,26 +421,40 @@ func contarSesionesActivasPool(poolID int64) (int, error) {
 
 func scanPool(s scanner) (*PoolCapacidad, error) {
 	p := &PoolCapacidad{}
+	var (
+		esDePago            int
+		permiteHijos        int
+		permiteModelosMulti int
+		permiteSobrecoste   int
+		activo              int
+	)
 	err := s.Scan(
-		&p.ID, &p.Slug, &p.Proveedor, &p.Runtime, &p.Plan, &p.EsDePago,
-		&p.CapacidadTotal, &p.CapacidadReservada, &p.PermiteHijos,
-		&p.PermiteModelosMulti, &p.PermiteSobrecoste, &p.PoliticaHandoff,
-		&p.FuenteTelemetria, &p.MetadataJSON, &p.Activo, &p.CreatedAt, &p.UpdatedAt,
+		&p.ID, &p.Slug, &p.Proveedor, &p.Runtime, &p.Plan, &esDePago,
+		&p.CapacidadTotal, &p.CapacidadReservada, &permiteHijos,
+		&permiteModelosMulti, &permiteSobrecoste, &p.PoliticaHandoff,
+		&p.FuenteTelemetria, &p.MetadataJSON, &activo, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
+	p.EsDePago = esDePago != 0
+	p.PermiteHijos = permiteHijos != 0
+	p.PermiteModelosMulti = permiteModelosMulti != 0
+	p.PermiteSobrecoste = permiteSobrecoste != 0
+	p.Activo = activo != 0
 	return p, nil
 }
 
 func scanPoolModelo(s scanner) (*PoolModelo, error) {
 	m := &PoolModelo{}
+	var activo int
 	err := s.Scan(
-		&m.ID, &m.PoolID, &m.ModelSlug, &m.Activo, &m.Prioridad,
+		&m.ID, &m.PoolID, &m.ModelSlug, &activo, &m.Prioridad,
 		&m.CosteRelativo, &m.LimiteConocidoJSON, &m.CreatedAt, &m.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
+	m.Activo = activo != 0
 	return m, nil
 }

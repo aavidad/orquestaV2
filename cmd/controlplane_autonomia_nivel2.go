@@ -378,9 +378,9 @@ func construirSpecFactoryAutonomia(policy *supervisionapp.Policy, proyecto *db.P
 		Frontend:    tipo == "web" || tipo == "web_api",
 		API:         tipo == "api" || tipo == "web_api",
 		Auth:        contieneAlguno(texto, "auth", "autentic", "oauth", "login", "permiso", "sesion"),
-		Database: contieneAlguno(texto, "base de datos", "persistencia", "sqlite", "postgres", "mysql", "migracion", "migraciones") ||
+		Database: contieneAlguno(texto, "base de datos", "persistencia", "storage", "repositorio", "migracion", "migraciones", "schema") ||
 			proyectoTieneDirAutonomia(proyecto, "db", "migrations", "schema") ||
-			proyectoTieneArchivoAutonomia(proyecto, "orquesta.db"),
+			proyectoTieneArchivoAutonomia(proyecto, "schema.sql", "seed.sql"),
 		Docker: contieneAlguno(texto, "docker", "compose", "container", "contenedor", "deploy", "kubernetes", "k8s") ||
 			proyectoTieneArchivoAutonomia(proyecto, "Dockerfile", "docker-compose.yml", "compose.yml"),
 		I18n: !contieneAlguno(texto, "sin i18n", "solo un idioma", "monolingue") ||

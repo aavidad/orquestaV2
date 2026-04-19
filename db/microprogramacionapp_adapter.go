@@ -8,9 +8,9 @@ import (
 	"orquesta/microprogramacionapp"
 )
 
-type SqliteMicroprogramacionRepo struct{}
+type MicroprogramacionRepository struct{}
 
-func (SqliteMicroprogramacionRepo) CrearEspecificacionFuncion(spec *microprogramacionapp.EspecificacionFuncion) (int64, error) {
+func (MicroprogramacionRepository) CrearEspecificacionFuncion(spec *microprogramacionapp.EspecificacionFuncion) (int64, error) {
 	precondicionesJSON, err := json.Marshal(spec.Precondiciones)
 	if err != nil {
 		return 0, err
@@ -64,7 +64,7 @@ func (SqliteMicroprogramacionRepo) CrearEspecificacionFuncion(spec *microprogram
 	return res.LastInsertId()
 }
 
-func (SqliteMicroprogramacionRepo) ObtenerEspecificacionFuncion(id int64) (*microprogramacionapp.EspecificacionFuncion, error) {
+func (MicroprogramacionRepository) ObtenerEspecificacionFuncion(id int64) (*microprogramacionapp.EspecificacionFuncion, error) {
 	row := DB.QueryRow(`
 		SELECT id, tarea_id, proyecto_id, titulo, archivo_objetivo, simbolo_objetivo, descripcion,
 		       precondiciones_json, postcondiciones_json, dependencias_permitidas_json, dependencias_prohibidas_json,
@@ -74,7 +74,7 @@ func (SqliteMicroprogramacionRepo) ObtenerEspecificacionFuncion(id int64) (*micr
 	return scanEspecificacionFuncion(row)
 }
 
-func (SqliteMicroprogramacionRepo) ListarEspecificacionesFuncion(filtro microprogramacionapp.FiltroEspecificaciones) ([]*microprogramacionapp.EspecificacionFuncion, error) {
+func (MicroprogramacionRepository) ListarEspecificacionesFuncion(filtro microprogramacionapp.FiltroEspecificaciones) ([]*microprogramacionapp.EspecificacionFuncion, error) {
 	query := `
 		SELECT id, tarea_id, proyecto_id, titulo, archivo_objetivo, simbolo_objetivo, descripcion,
 		       precondiciones_json, postcondiciones_json, dependencias_permitidas_json, dependencias_prohibidas_json,
@@ -185,3 +185,5 @@ func nullInt64Micro(value *int64) any {
 	}
 	return *value
 }
+
+type SqliteMicroprogramacionRepo = MicroprogramacionRepository

@@ -12,11 +12,11 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 USUARIO="${USER}"
 UNIT_DIR="/etc/systemd/system"
 UNIT_ORQUESTA="orquesta.service"
-UNIT_BACKUP="orquesta-backup-sqlite.service"
-UNIT_BACKUP_TIMER="orquesta-backup-sqlite.timer"
+UNIT_BACKUP="orquesta-backup.service"
+UNIT_BACKUP_TIMER="orquesta-backup.timer"
 UNIT_TEMPLATE_ORQUESTA="$(dirname "$0")/orquesta.service"
-UNIT_TEMPLATE_BACKUP="$(dirname "$0")/orquesta-backup-sqlite.service"
-UNIT_TEMPLATE_BACKUP_TIMER="$(dirname "$0")/orquesta-backup-sqlite.timer"
+UNIT_TEMPLATE_BACKUP="$(dirname "$0")/orquesta-backup.service"
+UNIT_TEMPLATE_BACKUP_TIMER="$(dirname "$0")/orquesta-backup.timer"
 
 resolve_driver() {
   local raw="${ORQUESTA_DB_DRIVER:-${ORQUESTA_DB_BACKEND:-sqlite}}"
@@ -57,10 +57,10 @@ sudo systemctl enable "${UNIT_ORQUESTA}"
 sudo systemctl restart "${UNIT_ORQUESTA}"
 
 if [[ "${BACKEND_DRIVER}" == "sqlite" ]]; then
-  echo "🕒 Habilitando temporizador de respaldo SQLite..."
+  echo "🕒 Habilitando temporizador de respaldo..."
   sudo systemctl enable --now "${UNIT_BACKUP_TIMER}"
 else
-  echo "⚠️  No se instala backup systemd SQLite para backend '${BACKEND_DRIVER}'."
+  echo "⚠️  No se instala temporizador de backup para backend '${BACKEND_DRIVER}' porque el adaptador de respaldo no está declarado."
 fi
 
 echo ""
@@ -72,7 +72,7 @@ echo "✅ Orquesta instalada como servicio."
 echo "   Ver logs:   journalctl -u ${UNIT_ORQUESTA} -f"
 echo "   Health:     curl -fsS http://127.0.0.1:16543/api/status"
 if [[ "${BACKEND_DRIVER}" == "sqlite" ]]; then
-  echo "   Backup diario SQLite: sudo systemctl status ${UNIT_BACKUP_TIMER}"
+  echo "   Backup diario: sudo systemctl status ${UNIT_BACKUP_TIMER}"
 else
   echo "   Backup diario: no configurado por este instalador para backend ${BACKEND_DRIVER}"
 fi

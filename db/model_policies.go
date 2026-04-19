@@ -238,7 +238,7 @@ func GuardarPoliticaModelo(p *PoliticaModelo) (int64, error) {
 			reasoning_effort, prioridad, activa, metadata_json
 		) VALUES (?,?,?,?,?,?,?,?,?)`,
 		p.ScopeTipo, p.ScopeRef, p.PerfilTarea, p.PoolSlug, p.ModelSlug,
-		p.ReasoningEffort, p.Prioridad, p.Activa, p.MetadataJSON,
+		p.ReasoningEffort, p.Prioridad, boolToInt(p.Activa), p.MetadataJSON,
 	); err != nil {
 		return 0, err
 	}
@@ -273,7 +273,7 @@ func ListarPoliticasModelo(scopeTipo, scopeRef string, activa *bool) ([]*Politic
 	}
 	if activa != nil {
 		q += ` AND activa = ?`
-		args = append(args, *activa)
+		args = append(args, boolToInt(*activa))
 	}
 	q += ` ORDER BY
 		CASE scope_tipo
@@ -650,6 +650,7 @@ func boolPtr(v bool) *bool {
 
 func scanPoliticaModelo(scanner interface{ Scan(...any) error }) (*PoliticaModelo, error) {
 	item := &PoliticaModelo{}
+	var activa int
 	err := scanner.Scan(
 		&item.ID,
 		&item.ScopeTipo,
@@ -659,7 +660,7 @@ func scanPoliticaModelo(scanner interface{ Scan(...any) error }) (*PoliticaModel
 		&item.ModelSlug,
 		&item.ReasoningEffort,
 		&item.Prioridad,
-		&item.Activa,
+		&activa,
 		&item.MetadataJSON,
 		&item.CreatedAt,
 		&item.UpdatedAt,
@@ -667,6 +668,7 @@ func scanPoliticaModelo(scanner interface{ Scan(...any) error }) (*PoliticaModel
 	if err != nil {
 		return nil, err
 	}
+	item.Activa = activa != 0
 	return item, nil
 }
 

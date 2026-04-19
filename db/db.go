@@ -170,7 +170,8 @@ func Close() {
 	resetRuntimeOrdersHotIndex()
 }
 
-// Orden de resolución de la ruta SQLite:
+// Orden de resolución del target por fichero local cuando el backend activo usa
+// persistencia basada en ruta:
 //  1. Variable de entorno ORQUESTA_DB
 //  2. Repositorio `orquesta` del workspace actual (../orquesta/orquesta.db)
 //  3. Si el git-root ya es el repo `orquesta`, <git-root>/orquesta.db

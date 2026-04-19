@@ -2,6 +2,25 @@
 # No sustituye al flujo local principal basado en CLI/daemon del host.
 
 services:
+  postgres:
+    image: postgres:16.1-alpine
+    container_name: orquesta-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${ORQUESTA_POSTGRES_DB:-orquesta}
+      POSTGRES_USER: ${ORQUESTA_POSTGRES_USER:-orquesta}
+      POSTGRES_PASSWORD: ${ORQUESTA_POSTGRES_PASSWORD:-orquesta}
+    ports:
+      - "${ORQUESTA_POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - orquesta-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ORQUESTA_POSTGRES_USER:-orquesta} -d ${ORQUESTA_POSTGRES_DB:-orquesta}"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   # El servidor de Orquesta: gestiona persistencia, API, Web y gobernanza de agentes.
   orquesta:
     build:
@@ -11,19 +30,21 @@ services:
     container_name: orquesta-platform
     init: true
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       # Puerto HTTP externo configurable; por defecto se mantiene 16543.
       - "${ORQUESTA_HTTP_PORT:-16543}:16543"
     volumes:
-      # Persistencia de la base de datos de gobernanza y tareas
-      - orquesta-data:/app/data
       # Logs centrales para auditoría y telemetría de agentes
       - orquesta-logs:/app/logs
       # Workspace visible para que Orquesta pueda resolver rutas de proyectos externos
       - ${ORQUESTA_WORKSPACE_DIR:-..}:/app/workspace
     environment:
-      # Forzamos la ruta de la base de datos dentro del contenedor
-      ORQUESTA_DB: /app/data/orquesta.db
+      ORQUESTA_DB_DRIVER: postgres
+      ORQUESTA_DB_DSN: postgres://${ORQUESTA_POSTGRES_USER:-orquesta}:${ORQUESTA_POSTGRES_PASSWORD:-orquesta}@postgres:5432/${ORQUESTA_POSTGRES_DB:-orquesta}?sslmode=disable
+      ORQUESTA_DB_BOOTSTRAP: "true"
       # Raíz del workspace montado dentro del contenedor
       ORQUESTA_WORKSPACE_ROOT: /app/workspace
     working_dir: /app
@@ -35,8 +56,8 @@ services:
       start_period: 10s
 
 volumes:
-  # Volumen para persistir orquesta.db entre reinicios
-  orquesta-data:
+  # Volumen para persistir PostgreSQL entre reinicios
+  orquesta-postgres-data:
     driver: local
   # Volumen para logs históricos
   orquesta-logs:
