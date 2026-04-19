@@ -6514,6 +6514,12 @@ func encolarRuntimeMailboxSessionResumeSiCorresponde(msg *db.RuntimeMailboxMessa
 	} else if blocked {
 		return false, nil
 	}
+	if mailboxOnlyConsumed, err := consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot, msg, handle, externalSessionID, strings.TrimSpace(auditAction)); err != nil {
+		return false, err
+	} else if mailboxOnlyConsumed {
+		consumed[msg.ID] = struct{}{}
+		return true, nil
+	}
 	if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
 		return false, err
 	} else if abierta {
@@ -6542,6 +6548,68 @@ func encolarRuntimeMailboxSessionResumeSiCorresponde(msg *db.RuntimeMailboxMessa
 		fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
 	consumed[msg.ID] = struct{}{}
 	return true, nil
+}
+
+func consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot *runtimeMailboxBatchSnapshot, msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, externalSessionID, lane string) (bool, error) {
+	if snapshot == nil || msg == nil || handle == nil || !runtimeMailboxKindEphemeral(strings.TrimSpace(msg.Kind)) {
+		return false, nil
+	}
+	agente := strings.TrimSpace(msg.ToAgente)
+	if agente == "" {
+		return false, nil
+	}
+	currentSessionID := strings.TrimSpace(externalSessionID)
+	currentSignature := runtimeMailboxDeliveryAttemptSignature(handle, externalSessionID)
+	orders, err := snapshot.ordersForAgentProject(agente, msg.ProyectoID)
+	if err != nil {
+		return false, err
+	}
+	for _, order := range orders {
+		if !runtimeOrderMatchesMailboxSendInstructionAttempt(order, msg.ID, handle.ID) {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(order.Estado), "completada") {
+			continue
+		}
+		if !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
+			continue
+		}
+		if !runtimeOrderMatchesCurrentMailboxDeliveryAttempt(order, currentSessionID, currentSignature) {
+			if runtimeMailboxTieneIntentoSendInstructionAbierto(orders, msg.ID, handle.ID, order.ID) {
+				continue
+			}
+			if runtimeOrderMailboxOnlyExpired(order) {
+				continue
+			}
+		}
+		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return false, err
+		}
+		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return false, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_mailbox_only_consumed", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("lane=%s agente=%s kind=%s handle_id=%d order_id=%d", lane, agente, strings.TrimSpace(msg.Kind), handle.ID, order.ID))
+		return true, nil
+	}
+	return false, nil
+}
+
+func runtimeMailboxTieneIntentoSendInstructionAbierto(orders []*db.RuntimeOrder, mailboxID, handleID, excludeOrderID int64) bool {
+	for _, order := range orders {
+		if order == nil || order.ID == excludeOrderID {
+			continue
+		}
+		if !runtimeOrderMatchesMailboxSendInstructionAttempt(order, mailboxID, handleID) {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(order.Estado)) {
+		case "completada", "fallida", "cancelada", "expirada":
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func runtimeHandleAdmiteFallbackInteractivoTransitorio(handle *db.RuntimeHandle) bool {

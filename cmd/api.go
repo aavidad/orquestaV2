@@ -126,14 +126,16 @@ type apiProyectoAutonomiaResponse struct {
 }
 
 var (
-	apiStatusFetchTimeout        = 3 * time.Second
-	apiAgentOverviewTimeout      = 3 * time.Second
-	apiAgentBudgetRefreshTimeout = 3 * time.Second
-	apiConfigTimeout             = 3 * time.Second
-	apiAgentPrepareTimeout       = 6 * time.Second
-	apiAgentTickTimeout          = 6 * time.Second
-	apiAgentPrepareLimiter       = make(chan struct{}, 4)
-	apiConfigGetFn               = func(clave string) (string, error) {
+	apiStatusFetchTimeout           = 3 * time.Second
+	apiAgentOverviewTimeout         = 3 * time.Second
+	apiAgentBudgetRefreshTimeout    = 3 * time.Second
+	apiConfigTimeout                = 3 * time.Second
+	apiRuntimeProcessOrdersTimeout  = 4 * time.Second
+	apiRuntimeProcessMailboxTimeout = 4 * time.Second
+	apiAgentPrepareTimeout          = 6 * time.Second
+	apiAgentTickTimeout             = 6 * time.Second
+	apiAgentPrepareLimiter          = make(chan struct{}, 4)
+	apiConfigGetFn                  = func(clave string) (string, error) {
 		return configService.Get(clave)
 	}
 	apiConfigListFn = func() (map[string]string, error) {
@@ -145,6 +147,15 @@ var (
 		}
 		resetControlPlaneConfigCache()
 		return nil
+	}
+	apiRuntimeProcessMailboxProjectFn = func(ref string) (*db.Proyecto, error) {
+		return runtimesService.GetProject(ref)
+	}
+	apiRuntimeProcessOrdersExecutor = func() (int, error) {
+		return (dbAutomationService{}).ProcesarRuntimeOrdersBatch()
+	}
+	apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) {
+		return procesarRuntimeMailboxBatchConFiltro(filter)
 	}
 	apiAgentDetailBuilder = func(nombre string, compact bool) (*agentesapp.Detail, error) {
 		if compact {
@@ -639,6 +650,11 @@ type apiRuntimeProcessMailboxResponse struct {
 	Count int  `json:"count"`
 }
 
+type apiRuntimeProcessOrdersResponse struct {
+	OK    bool `json:"ok"`
+	Count int  `json:"count"`
+}
+
 type apiRuntimeProcessAutonomiaResponse struct {
 	OK                        bool `json:"ok"`
 	Count                     int  `json:"count"`
@@ -904,6 +920,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtime-checkpoints/latest", apiHandlerRuntimeCheckpointLatest)
 	mux.HandleFunc("/api/runtime-checkpoints/", apiRouterRuntimeCheckpoints)
 	mux.HandleFunc("/api/runtime/wake", apiHandlerRuntimeWake)
+	mux.HandleFunc("/api/runtime/process-orders", apiHandlerRuntimeProcessOrders)
 	mux.HandleFunc("/api/runtime/process-mailbox", apiHandlerRuntimeProcessMailbox)
 	mux.HandleFunc("/api/runtime/process-autonomia", apiHandlerRuntimeProcessAutonomia)
 	mux.HandleFunc("/api/runtime/process-degradados", apiHandlerRuntimeProcessDegradados)
@@ -5444,6 +5461,27 @@ func apiHandlerRuntimeWake(w http.ResponseWriter, r *http.Request) {
 	apiWriteJSON(w, http.StatusOK, resp)
 }
 
+func apiHandlerRuntimeProcessOrders(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	count, err := runAPITimeboxed(apiRuntimeProcessOrdersTimeout, func() (int, error) {
+		return apiRuntimeProcessOrdersExecutor()
+	}, errStatusFetchTimeout)
+	if err != nil {
+		if errors.Is(err, errStatusFetchTimeout) {
+			apiError(w, http.StatusServiceUnavailable, fmt.Errorf("runtime orders temporalmente degradado"))
+			return
+		}
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiRuntimeProcessOrdersResponse{
+		OK:    true,
+		Count: count,
+	})
+}
+
 func apiHandlerRuntimeProcessMailbox(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodPost) {
 		return
@@ -5460,16 +5498,28 @@ func apiHandlerRuntimeProcessMailbox(w http.ResponseWriter, r *http.Request) {
 		filter.ToAgente = &toAgente
 	}
 	if proyecto := strings.TrimSpace(req.Proyecto); proyecto != "" {
-		p, err := runtimesService.GetProject(proyecto)
+		p, err := runAPITimeboxed(apiRuntimeProcessMailboxTimeout, func() (*db.Proyecto, error) {
+			return apiRuntimeProcessMailboxProjectFn(proyecto)
+		}, errStatusFetchTimeout)
 		if err != nil {
+			if errors.Is(err, errStatusFetchTimeout) {
+				apiError(w, http.StatusServiceUnavailable, fmt.Errorf("runtime mailbox temporalmente degradado"))
+				return
+			}
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
 		filter.ProyectoID = &p.ID
 	}
 	resetRuntimeMailboxReevaluationGate()
-	count, err := procesarRuntimeMailboxBatchConFiltro(filter)
+	count, err := runAPITimeboxed(apiRuntimeProcessMailboxTimeout, func() (int, error) {
+		return apiRuntimeProcessMailboxExecutor(filter)
+	}, errStatusFetchTimeout)
 	if err != nil {
+		if errors.Is(err, errStatusFetchTimeout) {
+			apiError(w, http.StatusServiceUnavailable, fmt.Errorf("runtime mailbox temporalmente degradado"))
+			return
+		}
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}

@@ -14,7 +14,9 @@ func TestShouldOpenRecoveryReadOnlyDB(t *testing.T) {
 	}{
 		{name: "status local", args: []string{"status", "--local"}, want: true},
 		{name: "runtime ordenes local", args: []string{"runtime", "ordenes", "--local"}, want: true},
+		{name: "runtime orden-ver local", args: []string{"runtime", "orden-ver", "1", "--local"}, want: true},
 		{name: "runtime mailbox local", args: []string{"runtime", "mailbox", "--local"}, want: true},
+		{name: "runtime mailbox-ver local", args: []string{"runtime", "mailbox-ver", "1", "--local"}, want: true},
 		{name: "runtime orden nueva no readonly", args: []string{"runtime", "orden-nueva", "--local"}, want: false},
 		{name: "tarea listar no cubierta", args: []string{"tarea", "listar", "--local"}, want: false},
 	}
@@ -61,6 +63,8 @@ func TestLocalRecovery(t *testing.T) {
 		{"runtime", "diagnostico", "--local"},
 		{"runtime", "transcript", "--local"},
 		{"config", "set", "server_autobootstrap_enabled", "true", "--local"},
+		{"runtime", "procesar-ordenes", "--local"},
+		{"runtime", "procesar-mailbox", "--local"},
 	}
 	for _, args := range permitidos {
 		if !localRecoveryCommandAllowed(args) {
@@ -75,6 +79,26 @@ func TestOpenDBForCommandPermiteConfigSetEnLocalExplicito(t *testing.T) {
 	db.Close()
 	if err := openDBForCommand([]string{"config", "set", "server_autobootstrap_enabled", "true"}); err != nil {
 		t.Fatalf("se esperaba permitir config set en local explicito: %v", err)
+	}
+	db.Close()
+}
+
+func TestOpenDBForCommandPermiteProcesarMailboxEnLocalExplicito(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "1")()
+
+	db.Close()
+	if err := openDBForCommand([]string{"runtime", "procesar-mailbox"}); err != nil {
+		t.Fatalf("se esperaba permitir runtime procesar-mailbox en local explicito: %v", err)
+	}
+	db.Close()
+}
+
+func TestOpenDBForCommandPermiteProcesarOrdenesEnLocalExplicito(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "1")()
+
+	db.Close()
+	if err := openDBForCommand([]string{"runtime", "procesar-ordenes"}); err != nil {
+		t.Fatalf("se esperaba permitir runtime procesar-ordenes en local explicito: %v", err)
 	}
 	db.Close()
 }

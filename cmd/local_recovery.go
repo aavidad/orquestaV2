@@ -42,7 +42,7 @@ func shouldOpenRecoveryReadOnlyDB(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver", "handles", "transcript", "ordenes", "checkpoints", "checkpoint-ver", "mailbox", "diagnostico", "traza":
+		case "listar", "ver", "handles", "transcript", "ordenes", "orden-ver", "checkpoints", "checkpoint-ver", "mailbox", "mailbox-ver", "diagnostico", "traza":
 			return true
 		default:
 			return false
@@ -63,6 +63,8 @@ func localRecoveryWriteCommandAllowed(args []string) bool {
 	switch tokens[0] {
 	case "config":
 		return len(tokens) > 1 && tokens[1] == "set"
+	case "runtime":
+		return len(tokens) > 1 && (tokens[1] == "procesar-mailbox" || tokens[1] == "procesar-ordenes")
 	default:
 		return false
 	}

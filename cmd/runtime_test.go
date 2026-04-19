@@ -26,6 +26,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	var ordersProjectQuery string
 	var ordersLimitQuery string
 	var wakeReq map[string]any
+	var processOrdersReq map[string]any
 	var processMailboxReq map[string]any
 	var processAutonomiaReq map[string]any
 	var processDegradadosReq map[string]any
@@ -238,6 +239,9 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 		case r.URL.Path == "/api/runtime/wake" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&wakeReq)
 			_ = json.NewEncoder(w).Encode(map[string]any{"orders": true, "mailbox": true, "warm": false})
+		case r.URL.Path == "/api/runtime/process-orders" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&processOrdersReq)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 2})
 		case r.URL.Path == "/api/runtime/process-mailbox" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&processMailboxReq)
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 3})
@@ -377,6 +381,18 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	}
 	if got, _ := processMailboxReq["proyecto"].(string); got != "orquestador" {
 		t.Fatalf("request process mailbox sin proyecto esperado: %+v", processMailboxReq)
+	}
+
+	outProcessOrders := capturarStdout(t, func() {
+		if err := runtimeProcesarOrdenesCmd.RunE(runtimeProcesarOrdenesCmd, nil); err != nil {
+			t.Fatalf("runtime procesar-ordenes via api: %v", err)
+		}
+	})
+	if !strings.Contains(outProcessOrders, "count=2") {
+		t.Fatalf("salida runtime procesar-ordenes inesperada:\n%s", outProcessOrders)
+	}
+	if len(processOrdersReq) != 0 {
+		t.Fatalf("request process orders deberia ser vacia: %+v", processOrdersReq)
 	}
 
 	outProcessAutonomia := capturarStdout(t, func() {

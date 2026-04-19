@@ -12541,6 +12541,185 @@ func TestReconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailboxIgnoraMen
 	}
 }
 
+func TestProcesarRuntimeMailboxSessionResumeBatchConsumeAutonomiaConMailboxOnlyCompletada(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+	t.Cleanup(resetRuntimeMailboxReevaluationGate)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	repoDir := filepath.Join(tmp, "repo-session-resume-mailbox-only")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: repoDir,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "Codex1",
+		ProyectoID:        &proyectoID,
+		CWD:               repoDir,
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-mailbox-only",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-mailbox-only","tmux_pane_id":"%70","mailbox_delivery_mode":"session_resume","can_send_input":false,"external_session_id":"sess-mailbox-only"}`
+	capsJSON := `{"mailbox_delivery_mode":"session_resume","can_send_input":false}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex1-mailbox-only/%70', estado='activo', metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","instruction":"Sigue con la tarea activa.","texto":"seguir frente"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	signature := runtimeMailboxDeliveryAttemptSignature(handle, "sess-mailbox-only")
+	payloadJSON := fmt.Sprintf(`{"mailbox_id":%d,"mailbox_kind":"autonomia","external_session_id":"sess-mailbox-only","delivery_attempt_signature":"%s","to_agente":"Codex1"}`, msgID, signature)
+	orderID, err := runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   handle.RuntimeID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: payloadJSON,
+	})
+	if err != nil {
+		t.Fatalf("create send_instruction mailbox_only: %v", err)
+	}
+	if err := db.MarcarRuntimeOrderEstado(orderID, "completada", `{"mailbox_only":true,"delivery_state":"delivered","deferred_reason":"runtime_handle_session_resume_mailbox_only:autonomia"}`, ""); err != nil {
+		t.Fatalf("marcar send_instruction mailbox_only completada: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia consumir exactamente una mailbox efimera cubierta por mailbox_only, got=%d", n)
+	}
+
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("la mailbox autonomia deberia quedar consumida, got=%s", msg.Estado)
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeBatchConsumeAutonomiaConMailboxOnlyCompletadaAunqueCambieSesionActual(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+	t.Cleanup(resetRuntimeMailboxReevaluationGate)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	repoDir := filepath.Join(tmp, "repo-session-resume-mailbox-only-session-shift")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: repoDir,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "Codex1",
+		ProyectoID:        &proyectoID,
+		CWD:               repoDir,
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-mailbox-only-old",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-mailbox-only-shift","tmux_pane_id":"%71","mailbox_delivery_mode":"session_resume","can_send_input":false,"external_session_id":"sess-mailbox-only-old"}`
+	capsJSON := `{"mailbox_delivery_mode":"session_resume","can_send_input":false}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex1-mailbox-only-shift/%71', estado='activo', metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","instruction":"Sigue con la tarea activa.","texto":"seguir frente"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	signature := runtimeMailboxDeliveryAttemptSignature(handle, "sess-mailbox-only-old")
+	payloadJSON := fmt.Sprintf(`{"mailbox_id":%d,"mailbox_kind":"autonomia","external_session_id":"sess-mailbox-only-old","delivery_attempt_signature":"%s","to_agente":"Codex1"}`, msgID, signature)
+	orderID, err := runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   handle.RuntimeID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: payloadJSON,
+	})
+	if err != nil {
+		t.Fatalf("create send_instruction mailbox_only: %v", err)
+	}
+	if err := db.MarcarRuntimeOrderEstado(orderID, "completada", `{"mailbox_only":true,"delivery_state":"delivered","deferred_reason":"runtime_handle_session_resume_mailbox_only:autonomia"}`, ""); err != nil {
+		t.Fatalf("marcar send_instruction mailbox_only completada: %v", err)
+	}
+	metaJSON = `{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-mailbox-only-shift","tmux_pane_id":"%71","mailbox_delivery_mode":"session_resume","can_send_input":false,"external_session_id":"sess-mailbox-only-new"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle session shift: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia consumir exactamente una mailbox efimera cubierta por mailbox_only tras cambio de sesion, got=%d", n)
+	}
+
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("la mailbox autonomia deberia quedar consumida tras cambio de sesion, got=%s", msg.Estado)
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchNoConsumeMailboxCubiertaPorBootstrapSinEvidencia(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()
