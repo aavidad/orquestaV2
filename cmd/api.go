@@ -835,6 +835,7 @@ var runtimeProcessAutonomiaEnCurso atomic.Bool
 var runtimeProcessDegradadosEnCurso atomic.Bool
 var runtimeProcessTranscriptEnCurso atomic.Bool
 var runtimeProcessReanimacionesEnCurso atomic.Bool
+var runtimeProcessReanimationsBatchFn = ejecutarRuntimeProcessReanimationsBatch
 var apiAgentResetReanimacionEnCurso sync.Map
 
 type apiRuntimeProcessMailboxRequest struct {
@@ -5975,7 +5976,7 @@ func apiHandlerRuntimeProcessReanimaciones(w http.ResponseWriter, r *http.Reques
 	if started {
 		go func() {
 			defer runtimeProcessReanimacionesEnCurso.Store(false)
-			resp := ejecutarRuntimeProcessReanimationsBatch()
+			resp := runtimeProcessReanimationsBatchFn()
 			if resp.Errors > 0 {
 				db.Audit("server", "runtime_process_reanimaciones_background_errors", "runtime", 0,
 					fmt.Sprintf("candidates=%d reactivated=%d cooldown_sustained=%d errors=%d", resp.Candidates, resp.Reactivated, resp.CooldownSustained, resp.Errors))

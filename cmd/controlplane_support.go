@@ -9329,6 +9329,11 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 }
 
 func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradadosSummary, error) {
+	reanimaciones := runtimeProcessReanimationsBatchFn()
+	if reanimaciones.Errors > 0 {
+		return runtimeProcessDegradadosSummary{}, fmt.Errorf("reanimaciones automáticas: %d error(es)", reanimaciones.Errors)
+	}
+
 	db.ResetRuntimeHandlesHotCache()
 	rows, err := agentesService.BuildPanelRows()
 	if err != nil {
@@ -9342,6 +9347,7 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 	openTasksProjected := openTasksProjectedFromRows(rows)
 
 	resumen := runtimeProcessDegradadosSummary{}
+	resumen.Count += reanimaciones.Reactivated
 	now := time.Now().UTC()
 	agentesFantasma := agentesAsignacionFantasmaCompactable(rows, tareasActivasPorAgente, tareasBloqueadasPorAgente)
 	asignacionesFantasma, err := procesarAsignacionesPremiumFantasmaBatch(rows, tareasActivasPorAgente, tareasBloqueadasPorAgente)
