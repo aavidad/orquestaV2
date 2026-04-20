@@ -4324,7 +4324,10 @@ func autonomyOrderActionSummary(order *db.RuntimeOrder) (string, string, *time.T
 		source = "runtime_order"
 	}
 	result := runtimeMailboxPayloadMap(order.ResultadoJSON)
-	state := strings.TrimSpace(order.Estado)
+	dispatchState := strings.TrimSpace(stringFromRuntimeMailboxPayload(result, "dispatch_state"))
+	deliveryState := strings.TrimSpace(stringFromRuntimeMailboxPayload(result, "delivery_state"))
+	receiptSource := strings.TrimSpace(stringFromRuntimeMailboxPayload(result, "receipt_source"))
+	state := autonomyOrderObservedState(strings.TrimSpace(order.Estado), dispatchState, deliveryState, receiptSource)
 	reason := strings.TrimSpace(stringFromRuntimeMailboxPayload(payload, "motivo"))
 	if reason == "" {
 		reason = strings.TrimSpace(stringFromRuntimeMailboxPayload(result, "deferred_reason"))
@@ -4335,9 +4338,38 @@ func autonomyOrderActionSummary(order *db.RuntimeOrder) (string, string, *time.T
 		state,
 		reason,
 		strings.TrimSpace(stringFromRuntimeMailboxPayload(payload, "verification_key")),
-		strings.TrimSpace(stringFromRuntimeMailboxPayload(result, "dispatch_state")),
-		strings.TrimSpace(stringFromRuntimeMailboxPayload(result, "delivery_state")),
-		strings.TrimSpace(stringFromRuntimeMailboxPayload(result, "receipt_source"))
+		dispatchState,
+		deliveryState,
+		receiptSource
+}
+
+func autonomyOrderObservedState(orderState, dispatchState, deliveryState, receiptSource string) string {
+	orderState = strings.TrimSpace(orderState)
+	dispatchState = strings.ToLower(strings.TrimSpace(dispatchState))
+	deliveryState = strings.ToLower(strings.TrimSpace(deliveryState))
+	receiptSource = strings.ToLower(strings.TrimSpace(receiptSource))
+	switch {
+	case dispatchState == "delivered" && deliveryState == "delivered" && autonomyReceiptSourceConfirmsWork(receiptSource):
+		return "work_confirmed"
+	case dispatchState == "delivered" && deliveryState == "delivered":
+		return "awaiting_work"
+	default:
+		return orderState
+	}
+}
+
+func autonomyReceiptSourceConfirmsWork(source string) bool {
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "last_progress",
+		"worker_activity",
+		"tmux_transcript_activity",
+		"transcript_patch",
+		"tmux_pane_patch",
+		"git_worktree":
+		return true
+	default:
+		return false
+	}
 }
 
 func runtimeOrderMatchesRowProject(row Row, order *db.RuntimeOrder) bool {

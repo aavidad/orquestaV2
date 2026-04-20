@@ -3466,11 +3466,48 @@ func TestBuildDetailCompactExponeDeliveryYReceiptDelUltimoNudgeAutonomo(t *testi
 	if detail.Row.LastAutonomyAction != "continuar_trabajo" || detail.Row.LastAutonomySource != "send_instruction" {
 		t.Fatalf("ultima accion autonomia inesperada desde order: %+v", detail.Row)
 	}
+	if detail.Row.LastAutonomyState != "awaiting_work" || detail.Entity.LastAutonomyState != "awaiting_work" {
+		t.Fatalf("deberia reflejar receipt debil como awaiting_work: row=%+v entity=%+v", detail.Row, detail.Entity)
+	}
 	if detail.Row.LastAutonomyDispatchState != "delivered" || detail.Row.LastAutonomyDeliveryState != "delivered" || detail.Row.LastAutonomyReceiptSource != "tmux_pane_activity" {
 		t.Fatalf("deberia exponer delivery/receipt del ultimo nudge: %+v", detail.Row)
 	}
 	if detail.Entity.LastAutonomyDispatchState != "delivered" || detail.Entity.LastAutonomyDeliveryState != "delivered" || detail.Entity.LastAutonomyReceiptSource != "tmux_pane_activity" {
 		t.Fatalf("entity sin delivery/receipt esperados: %+v", detail.Entity)
+	}
+}
+
+func TestBuildDetailCompactMarcaWorkConfirmedConReceiptFuerte(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(45)
+	store := &fakeStore{
+		agents:           []*db.Agente{{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true}},
+		assignments:      []*db.Asignacion{{Agente: "Codex2", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva}},
+		sessions:         []*db.Sesion{{ID: 11, Agente: "Codex2", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: now}},
+		runtimes:         []*db.RuntimeInstance{{ID: 9, Agente: "Codex2", ProyectoID: &proyectoID, LogicalState: "activo", ProcessState: "running", UpdatedAt: now}},
+		canonicalHandles: []*db.RuntimeHandle{{ID: 9, Agente: "Codex2", ProyectoID: &proyectoID, Estado: "activo", Transporte: "tmux", HandleKind: "session"}},
+		orders: []*db.RuntimeOrder{{
+			ID:            14,
+			Agente:        "Codex2",
+			ProyectoID:    &proyectoID,
+			Estado:        "completada",
+			Tipo:          "send_instruction",
+			CreatedAt:     now,
+			PayloadJSON:   `{"kind":"autonomia","accion":"continuar_trabajo","motivo":"post_remediation","verification_key":"vk-4"}`,
+			ResultadoJSON: `{"dispatch_state":"delivered","delivery_state":"delivered","receipt_source":"last_progress"}`,
+		}},
+	}
+	svc := NewService(store, nil)
+
+	detail, err := svc.BuildDetailCompact("Codex2")
+	if err != nil {
+		t.Fatalf("BuildDetailCompact: %v", err)
+	}
+	if detail == nil || detail.Entity == nil {
+		t.Fatalf("detail/entity inesperado: %+v", detail)
+	}
+	if detail.Row.LastAutonomyState != "work_confirmed" || detail.Entity.LastAutonomyState != "work_confirmed" {
+		t.Fatalf("deberia reflejar receipt fuerte como work_confirmed: row=%+v entity=%+v", detail.Row, detail.Entity)
 	}
 }
 
