@@ -53,6 +53,12 @@ type deudaDispatchResumen struct {
 	WorkConfirmed int `json:"work_confirmed"`
 }
 
+type autonomiaResumen struct {
+	Supervisando         int `json:"supervising"`
+	Continuando          int `json:"continuing"`
+	ContinuidadPendiente int `json:"continuity_pending"`
+}
+
 func listarDeudaDispatchEstado() (deudaDispatchResumen, error) {
 	out := deudaDispatchResumen{}
 	var allHandles []*db.RuntimeHandle
@@ -163,6 +169,22 @@ func receiptSourceConfirmsWorkStatus(source string) bool {
 	default:
 		return false
 	}
+}
+
+func resumirAutonomiaRows(rows []agentesapp.Row, now time.Time) autonomiaResumen {
+	out := autonomiaResumen{}
+	for _, row := range rows {
+		switch strings.TrimSpace(row.LastAutonomyAction) {
+		case "supervisar_proyecto":
+			out.Supervisando++
+		case "continuar_trabajo":
+			out.Continuando++
+		}
+		if row.MailboxContinuityPending > 0 || row.DurableContinuityPending(now) {
+			out.ContinuidadPendiente++
+		}
+	}
+	return out
 }
 
 func agenteTieneActividadRecienteVisible(agente *db.Agente) bool {
@@ -638,9 +660,11 @@ func fetchStatusFastFallback() (apiStatusResponse, error) {
 	var agentesQuotaBlocked []*db.Agente
 	poolsLocales, _ := listarPoolsLocalesCompartidosEstado()
 	deudaDispatch, _ := listarDeudaDispatchEstado()
+	autonomia := autonomiaResumen{}
 	if rows, err := agentRowsForStatusWithinTimeout(statusRowsTimeout); err == nil {
 		aplicarVisibilidadOperativaAgentes(agentes, rows)
 		agentesActivos, agentesTrabajando, agentesSaturados, agentesAtascados, agentesAuthManual, agentesQuotaBlocked, _ = agentesVisiblesPorEstadoOperativoRows(agentes, rows)
+		autonomia = resumirAutonomiaRows(rows, statusNowFunc().UTC())
 	}
 	return apiStatusResponse{
 		Agentes:             agentes,
@@ -661,6 +685,7 @@ func fetchStatusFastFallback() (apiStatusResponse, error) {
 		PropuestasAbiertas:  abiertas,
 		PoolsLocales:        poolsLocales,
 		DeudaDispatch:       deudaDispatch,
+		Autonomia:           autonomia,
 	}, nil
 }
 
@@ -804,6 +829,7 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 	agentesQuotaBlocked := make([]*db.Agente, 0)
 	poolsLocales, _ := listarPoolsLocalesCompartidosEstado()
 	deudaDispatch, _ := listarDeudaDispatchEstado()
+	autonomia := autonomiaResumen{}
 	for _, agente := range agentesActivos {
 		if agente == nil {
 			continue
@@ -822,6 +848,7 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 			agentesAuthManual = authManualOperativos
 			agentesQuotaBlocked = quotaBlockedOperativos
 		}
+		autonomia = resumirAutonomiaRows(rows, statusNowFunc().UTC())
 	} else if activosOperativos, trabajandoOperativos, ok := agentesVisiblesPorEstadoOperativo(agentes); ok {
 		agentesActivos = activosOperativos
 		agentesTrabajando = trabajandoOperativos
@@ -846,6 +873,7 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 		TareasActivas:       tareasActivas,
 		PoolsLocales:        poolsLocales,
 		DeudaDispatch:       deudaDispatch,
+		Autonomia:           autonomia,
 	}, nil
 }
 

@@ -278,6 +278,26 @@ func TestRenderStatusSummaryMuestraDeudaDispatch(t *testing.T) {
 	}
 }
 
+func TestRenderStatusSummaryMuestraResumenAutonomia(t *testing.T) {
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes:         []*db.Agente{},
+				AgentesActivos:  []*db.Agente{},
+				TareasPorEstado: map[string]int{},
+				Autonomia: autonomiaResumen{
+					Supervisando:         1,
+					Continuando:          2,
+					ContinuidadPendiente: 3,
+				},
+			},
+		})
+	})
+	if !strings.Contains(out, "🤖 Autonomía: supervisando 1 · continuando 2 · continuidad 3") {
+		t.Fatalf("salida sin resumen de autonomia: %s", out)
+	}
+}
+
 func TestShouldBypassLocalDBCaeADefaultSiEnvNoResponde(t *testing.T) {
 	t.Setenv(serverURLVar, "http://remote.invalid:9999")
 	setServerHTTPClientForTest(t, func(req *http.Request) (*http.Response, error) {

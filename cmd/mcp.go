@@ -3063,6 +3063,7 @@ type estadoResumen struct {
 	TareasReservadas    []tareaLite                         `json:"tareasReservadas,omitempty"`
 	PoolsLocales        []*capacidadapp.PoolLocalCompartido `json:"poolsLocales,omitempty"`
 	DeudaDispatch       deudaDispatchResumen                `json:"deudaDispatch,omitempty"`
+	Autonomia           autonomiaResumen                    `json:"autonomia,omitempty"`
 	WorktreesActivas    []map[string]any                    `json:"worktreesActivas"`
 	LocksActivos        []map[string]any                    `json:"locksActivos"`
 	SesionesActivas     []map[string]any                    `json:"sesionesActivas"`

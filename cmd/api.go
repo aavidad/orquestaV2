@@ -69,6 +69,7 @@ type apiStatusResponse struct {
 	TareasReservadas    []tareaLite                         `json:"tareasReservadas,omitempty"`
 	PoolsLocales        []*capacidadapp.PoolLocalCompartido `json:"poolsLocales,omitempty"`
 	DeudaDispatch       deudaDispatchResumen                `json:"deudaDispatch,omitempty"`
+	Autonomia           autonomiaResumen                    `json:"autonomia,omitempty"`
 }
 
 type apiProyectoOverviewResponse struct {
@@ -1199,6 +1200,7 @@ func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 		"tareasReservadas":     status.TareasReservadas,
 		"poolsLocales":         status.PoolsLocales,
 		"deudaDispatch":        status.DeudaDispatch,
+		"autonomia":           status.Autonomia,
 	}
 	if items, _ := payload["tareasEnProgreso"].([]tareaLite); len(items) == 0 {
 		payload["tareasEnProgreso"] = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso)

@@ -352,6 +352,13 @@ func renderStatusSummary(ctx *statusContext) {
 			resumen.DeudaDispatch.WorkConfirmed,
 		)
 	}
+	if resumen.Autonomia.Supervisando > 0 || resumen.Autonomia.Continuando > 0 || resumen.Autonomia.ContinuidadPendiente > 0 {
+		fmt.Printf("🤖 Autonomía: supervisando %d · continuando %d · continuidad %d\n\n",
+			resumen.Autonomia.Supervisando,
+			resumen.Autonomia.Continuando,
+			resumen.Autonomia.ContinuidadPendiente,
+		)
+	}
 
 	totalTareas := 0
 	completadasN := 0
@@ -999,6 +1006,7 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		TareasReservadas         []tareaLite                         `json:"tareasReservadas"`
 		PoolsLocales             []*capacidadapp.PoolLocalCompartido `json:"poolsLocales"`
 		DeudaDispatch            deudaDispatchResumen                `json:"deudaDispatch"`
+		Autonomia                autonomiaResumen                    `json:"autonomia"`
 		AgentesCompat            []*db.Agente                        `json:"agentes"`
 		ConteoTareasCompat       map[string]int                      `json:"conteo_tareas"`
 		PropuestasCompatAbiertas []*db.Propuesta                     `json:"propuestas_abiertas"`
@@ -1026,6 +1034,7 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		TareasReservadas:    payload.TareasReservadas,
 		PoolsLocales:        payload.PoolsLocales,
 		DeudaDispatch:       payload.DeudaDispatch,
+		Autonomia:           payload.Autonomia,
 	}
 	resumen.TareasActivas = filtrarTareasActivasVisibles(resumen.TareasActivas, resumen.Agentes)
 	if len(resumen.TareasPorEstado) == 0 {

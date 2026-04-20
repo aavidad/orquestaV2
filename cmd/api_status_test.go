@@ -64,6 +64,7 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 				{PoolSlug: "ollama-gemma4", ModeloPreferente: "gemma4:26b", SlotsMaximos: 1},
 			},
 			DeudaDispatch: deudaDispatchResumen{Total: 4, Pendientes: 1, Notificadas: 2, Fallidas: 1, WorkConfirmed: 3},
+			Autonomia: autonomiaResumen{Supervisando: 1, Continuando: 2, ContinuidadPendiente: 3},
 		},
 	}
 	rec := httptest.NewRecorder()
@@ -99,6 +100,9 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 	}
 	if payload.DeudaDispatch.Total != 4 || payload.DeudaDispatch.Pendientes != 1 || payload.DeudaDispatch.Notificadas != 2 || payload.DeudaDispatch.Fallidas != 1 || payload.DeudaDispatch.WorkConfirmed != 3 {
 		t.Fatalf("deudaDispatch inesperada: %+v", payload.DeudaDispatch)
+	}
+	if payload.Autonomia.Supervisando != 1 || payload.Autonomia.Continuando != 2 || payload.Autonomia.ContinuidadPendiente != 3 {
+		t.Fatalf("autonomia inesperada: %+v", payload.Autonomia)
 	}
 }
 
