@@ -855,6 +855,80 @@ func TestEnqueueAutonomyNudgeIgnoresMailboxPendingForDifferentVerificationKey(t 
 	}
 }
 
+func TestEnqueueAutonomyNudgeIgnoresOpenSendInstructionForDifferentAction(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(322)
+	runtimes := &stubRuntimeController{
+		deliveryHandle: &db.RuntimeHandle{
+			ID:               3,
+			Estado:           "activo",
+			CapabilitiesJSON: `{"can_send_input":false}`,
+		},
+		orders: []*db.RuntimeOrder{{
+			ID:          91,
+			Agente:      "Codex2",
+			ProyectoID:  &proyectoID,
+			Estado:      "pendiente",
+			Tipo:        "send_instruction",
+			PayloadJSON: `{"kind":"autonomia","accion":"supervisar_proyecto"}`,
+		}},
+		controlID: 90,
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(&stubAutonomyStore{})
+
+	ok, err := service.EnqueueAutonomyNudge(NudgeRequest{
+		Agente:   "Codex2",
+		Proyecto: &db.Proyecto{ID: proyectoID, Slug: "core"},
+		Accion:   "continuar_trabajo",
+		Motivo:   "seguir",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAutonomyNudge: %v", err)
+	}
+	if !ok {
+		t.Fatal("debería encolar si la send_instruction abierta es de otra acción")
+	}
+}
+
+func TestEnqueueAutonomyNudgeSkipsOpenSendInstructionForSameVerificationKey(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(323)
+	runtimes := &stubRuntimeController{
+		deliveryHandle: &db.RuntimeHandle{
+			ID:               3,
+			Estado:           "activo",
+			CapabilitiesJSON: `{"can_send_input":false}`,
+		},
+		orders: []*db.RuntimeOrder{{
+			ID:          92,
+			Agente:      "Codex2",
+			ProyectoID:  &proyectoID,
+			Estado:      "pendiente",
+			Tipo:        "send_instruction",
+			PayloadJSON: `{"kind":"autonomia","accion":"continuar_trabajo","verification_key":"same-key"}`,
+		}},
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(&stubAutonomyStore{})
+
+	ok, err := service.EnqueueAutonomyNudge(NudgeRequest{
+		Agente:   "Codex2",
+		Proyecto: &db.Proyecto{ID: proyectoID, Slug: "core"},
+		Accion:   "continuar_trabajo",
+		Motivo:   "seguir",
+		Extras:   map[string]any{"verification_key": "same-key"},
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAutonomyNudge: %v", err)
+	}
+	if ok {
+		t.Fatal("no debería encolar si ya existe send_instruction equivalente abierta")
+	}
+}
+
 func TestEnqueuePostRemediationFollowupAddsVerificationMetadata(t *testing.T) {
 	t.Parallel()
 

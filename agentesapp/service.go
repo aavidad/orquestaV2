@@ -304,6 +304,9 @@ type Row struct {
 	MailboxActionablePending  int
 	MailboxContinuityPending  int
 	MailboxTotal              int
+	LastAutonomyAction        string
+	LastAutonomySource        string
+	LastAutonomyMoment        *time.Time
 	Checkpoints               int
 	LastCheckpoint            *db.RuntimeCheckpoint
 	OpenTasks                 int
@@ -373,6 +376,9 @@ type AgentEntity struct {
 	MailboxDeliveryMode string      `json:"mailbox_delivery_mode,omitempty"`
 	OperationalState    string      `json:"operational_state,omitempty"`
 	OperationalDetail   string      `json:"operational_detail,omitempty"`
+	LastAutonomyAction  string      `json:"last_autonomy_action,omitempty"`
+	LastAutonomySource  string      `json:"last_autonomy_source,omitempty"`
+	LastAutonomyMoment  *time.Time  `json:"last_autonomy_moment,omitempty"`
 	Leases              []WorkLease `json:"leases,omitempty"`
 }
 
@@ -682,6 +688,9 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		ActionablePending int
 		ContinuityPending int
 		Total             int
+		LastAction        string
+		LastSource        string
+		LastMoment        *time.Time
 	}
 	mailboxPorAgente := map[string]mailboxCounters{}
 	checkpointTotalPorAgente := map[string]int{}
@@ -725,6 +734,13 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 			stats := mailboxPorAgente[agente]
 			stats.Total++
 			if !strings.EqualFold(strings.TrimSpace(msg.Estado), "pendiente") {
+				if action, source, moment := autonomyMailboxActionSummary(msg, agente); strings.TrimSpace(action) != "" {
+					if mailboxCountersShouldReplace(stats.LastMoment, moment) {
+						stats.LastAction = action
+						stats.LastSource = source
+						stats.LastMoment = moment
+					}
+				}
 				mailboxPorAgente[agente] = stats
 				continue
 			}
@@ -735,6 +751,13 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 				}
 				if runtimeMailboxEsContinuidadPendiente(msg, taskByID, agente) {
 					stats.ContinuityPending++
+				}
+			}
+			if action, source, moment := autonomyMailboxActionSummary(msg, agente); strings.TrimSpace(action) != "" {
+				if mailboxCountersShouldReplace(stats.LastMoment, moment) {
+					stats.LastAction = action
+					stats.LastSource = source
+					stats.LastMoment = moment
 				}
 			}
 			mailboxPorAgente[agente] = stats
@@ -759,6 +782,9 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 			MailboxActionablePending: mailboxStats.ActionablePending,
 			MailboxContinuityPending: mailboxStats.ContinuityPending,
 			MailboxTotal:             mailboxStats.Total,
+			LastAutonomyAction:       mailboxStats.LastAction,
+			LastAutonomySource:       mailboxStats.LastSource,
+			LastAutonomyMoment:       mailboxStats.LastMoment,
 			Checkpoints:              checkpointTotalPorAgente[agente.Nombre],
 			LastCheckpoint:           lastCheckpointPorAgente[agente.Nombre],
 			OpenTasks:                openTasksPorAgente[agente.Nombre],
@@ -766,6 +792,13 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		}
 		row.OrdersOpen, row.OrdersFailed, row.ControlOrdersOpen, row.LastControlOrderType, row.LastControlOrderMoment =
 			summarizeOrdersForRow(row, ordersPorAgente[agente.Nombre])
+		if action, source, moment := summarizeAutonomyOrdersForRow(ordersPorAgente[agente.Nombre]); strings.TrimSpace(action) != "" {
+			if mailboxCountersShouldReplace(row.LastAutonomyMoment, moment) {
+				row.LastAutonomyAction = action
+				row.LastAutonomySource = source
+				row.LastAutonomyMoment = moment
+			}
+		}
 		if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
 			if view := structured.View(now, time.Minute); view != nil {
 				row.WorkerState = strings.TrimSpace(view.State)
@@ -976,6 +1009,13 @@ func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.Runti
 	}
 	row.OrdersOpen, row.OrdersFailed, row.ControlOrdersOpen, row.LastControlOrderType, row.LastControlOrderMoment =
 		summarizeOrdersForRow(row, orders)
+	if action, source, moment := summarizeAutonomyOrdersForRow(orders); strings.TrimSpace(action) != "" {
+		if mailboxCountersShouldReplace(row.LastAutonomyMoment, moment) {
+			row.LastAutonomyAction = action
+			row.LastAutonomySource = source
+			row.LastAutonomyMoment = moment
+		}
+	}
 
 	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
 	if err != nil {
@@ -1226,6 +1266,13 @@ func applyMailboxStatsToRow(row *Row, mailbox []*db.RuntimeMailboxMessage, taskB
 		}
 		if runtimeMailboxEsContinuidadPendiente(msg, taskByID, nombre) {
 			row.MailboxContinuityPending++
+		}
+		if action, source, moment := autonomyMailboxActionSummary(msg, nombre); strings.TrimSpace(action) != "" {
+			if mailboxCountersShouldReplace(row.LastAutonomyMoment, moment) {
+				row.LastAutonomyAction = action
+				row.LastAutonomySource = source
+				row.LastAutonomyMoment = moment
+			}
 		}
 	}
 }
@@ -2946,6 +2993,9 @@ func buildAgentEntity(store Store, row Row, tareas []*db.Tarea) *AgentEntity {
 		MailboxDeliveryMode: strings.TrimSpace(row.WorkerMailboxDeliveryMode),
 		OperationalState:    strings.TrimSpace(row.EstadoOperativo),
 		OperationalDetail:   strings.TrimSpace(row.DetalleOperativo),
+		LastAutonomyAction:  strings.TrimSpace(row.LastAutonomyAction),
+		LastAutonomySource:  strings.TrimSpace(row.LastAutonomySource),
+		LastAutonomyMoment:  row.LastAutonomyMoment,
 		Leases:              buildWorkLeases(tareas),
 	}
 	if row.Asignacion != nil {
@@ -4064,6 +4114,65 @@ func summarizeOrdersForRow(row Row, orders []*db.RuntimeOrder) (open int, failed
 		}
 	}
 	return open, failed, controlOpen, lastControlType, lastControlMoment
+}
+
+func summarizeAutonomyOrdersForRow(orders []*db.RuntimeOrder) (lastAutonomyAction string, lastAutonomySource string, lastAutonomyMoment *time.Time) {
+	for _, order := range orders {
+		if action, source, moment := autonomyOrderActionSummary(order); strings.TrimSpace(action) != "" {
+			if mailboxCountersShouldReplace(lastAutonomyMoment, moment) {
+				lastAutonomyAction = action
+				lastAutonomySource = source
+				lastAutonomyMoment = moment
+			}
+		}
+	}
+	return lastAutonomyAction, lastAutonomySource, lastAutonomyMoment
+}
+
+func mailboxCountersShouldReplace(current *time.Time, candidate *time.Time) bool {
+	if candidate == nil || candidate.IsZero() {
+		return current == nil || current.IsZero()
+	}
+	if current == nil || current.IsZero() {
+		return true
+	}
+	return candidate.After(*current)
+}
+
+func autonomyMailboxActionSummary(msg *db.RuntimeMailboxMessage, agente string) (string, string, *time.Time) {
+	if msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Kind), "autonomia") {
+		return "", "", nil
+	}
+	if agente = strings.TrimSpace(agente); agente != "" && !strings.EqualFold(strings.TrimSpace(msg.ToAgente), agente) {
+		return "", "", nil
+	}
+	payload := runtimeMailboxPayloadMap(msg.PayloadJSON)
+	action := strings.TrimSpace(stringFromRuntimeMailboxPayload(payload, "accion"))
+	if action == "" {
+		return "", "", nil
+	}
+	ts := msg.CreatedAt.UTC()
+	return action, "mailbox", &ts
+}
+
+func autonomyOrderActionSummary(order *db.RuntimeOrder) (string, string, *time.Time) {
+	if order == nil {
+		return "", "", nil
+	}
+	payload := runtimeMailboxPayloadMap(order.PayloadJSON)
+	if !strings.EqualFold(strings.TrimSpace(stringFromRuntimeMailboxPayload(payload, "kind")), "autonomia") {
+		return "", "", nil
+	}
+	action := strings.TrimSpace(stringFromRuntimeMailboxPayload(payload, "accion"))
+	if action == "" {
+		return "", "", nil
+	}
+	ts := runtimeOrderMoment(order)
+	source := strings.TrimSpace(order.Tipo)
+	if source == "" {
+		source = "runtime_order"
+	}
+	return action, source, &ts
 }
 
 func runtimeOrderMatchesRowProject(row Row, order *db.RuntimeOrder) bool {

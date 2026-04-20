@@ -951,7 +951,7 @@ func (s *Service) EnqueueAutonomyNudge(req NudgeRequest) (bool, error) {
 	if agente == "" || accion == "" || proyecto.ID <= 0 {
 		return false, nil
 	}
-	if abierta, err := s.existsOpenAutonomyOrder(agente, &proyecto.ID, "send_instruction"); err != nil {
+	if abierta, err := s.existsOpenAutonomyOrderMatchingAutonomyAction(agente, &proyecto.ID, "send_instruction", accion, req.Extras); err != nil {
 		return false, err
 	} else if abierta {
 		return false, nil
@@ -1280,6 +1280,35 @@ func (s *Service) existsOpenAutonomyOrder(agente string, proyectoID *int64, tipo
 	return false, nil
 }
 
+func (s *Service) existsOpenAutonomyOrderMatchingAutonomyAction(agente string, proyectoID *int64, tipo string, accion string, extras map[string]any) (bool, error) {
+	accion = strings.TrimSpace(accion)
+	if strings.TrimSpace(tipo) == "" {
+		return false, nil
+	}
+	if accion == "" {
+		return s.existsOpenAutonomyOrder(agente, proyectoID, tipo)
+	}
+	estados := []string{"pendiente", "tomada", "ejecutando"}
+	for _, estado := range estados {
+		estado := estado
+		orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
+			Agente:     &agente,
+			ProyectoID: proyectoID,
+			Estado:     &estado,
+			Tipos:      []string{strings.TrimSpace(tipo)},
+		})
+		if err != nil {
+			return false, err
+		}
+		for _, order := range orders {
+			if runtimeOrderMatchesAutonomyActionAndContext(order, accion, extras) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 func (s *Service) existsPendingAutonomyMailbox(agente string, proyectoID *int64, accion string, extras map[string]any) (bool, error) {
 	if pendiente, err := s.existsPendingAutonomyDurableAction(agente, proyectoID, accion, extras); err != nil {
 		return false, err
@@ -1599,6 +1628,17 @@ func runtimeOrderHasAutonomyAction(order *db.RuntimeOrder, accion string) bool {
 	accion = strings.ToLower(strings.TrimSpace(accion))
 	return strings.Contains(payload, `"kind":"autonomia"`) &&
 		strings.Contains(payload, fmt.Sprintf(`"accion":"%s"`, accion))
+}
+
+func runtimeOrderMatchesAutonomyActionAndContext(order *db.RuntimeOrder, accion string, extras map[string]any) bool {
+	if !runtimeOrderHasAutonomyAction(order, accion) {
+		return false
+	}
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(order.PayloadJSON)), &payload); err != nil {
+		return false
+	}
+	return autonomyMailboxMatchesActionAndContext(payload, accion, extras)
 }
 
 func runtimeOrderHasAction(order *db.RuntimeOrder, accion string) bool {

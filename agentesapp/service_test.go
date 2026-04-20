@@ -3383,6 +3383,48 @@ func TestBuildDetailCompactUsaWorkQueueDurableParaEvitarBarridoDeTareas(t *testi
 	}
 }
 
+func TestBuildDetailCompactExponeUltimaAccionAutonomiaPendiente(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(42)
+	store := &fakeStore{
+		agents:      []*db.Agente{{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true}},
+		assignments: []*db.Asignacion{{Agente: "Codex2", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva}},
+		sessions:    []*db.Sesion{{ID: 9, Agente: "Codex2", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: now}},
+		runtimes:    []*db.RuntimeInstance{{ID: 7, Agente: "Codex2", ProyectoID: &proyectoID, LogicalState: "activo", ProcessState: "running", UpdatedAt: now}},
+		canonicalHandles: []*db.RuntimeHandle{{ID: 7, Agente: "Codex2", ProyectoID: &proyectoID, Estado: "activo", Transporte: "tmux", HandleKind: "session"}},
+		orders: []*db.RuntimeOrder{{
+			ID:         11,
+			Agente:     "Codex2",
+			ProyectoID: &proyectoID,
+			Estado:     "pendiente",
+			Tipo:       "send_instruction",
+			CreatedAt:  now.Add(-time.Minute),
+			PayloadJSON: `{"kind":"autonomia","accion":"continuar_trabajo"}`,
+		}},
+		mailbox: []*db.RuntimeMailboxMessage{{
+			ID:         12,
+			ToAgente:   "Codex2",
+			ProyectoID: &proyectoID,
+			Estado:     "pendiente",
+			Kind:       "autonomia",
+			CreatedAt:  now,
+			PayloadJSON: `{"accion":"supervisar_proyecto"}`,
+		}},
+	}
+	svc := NewService(store, nil)
+
+	detail, err := svc.BuildDetailCompact("Codex2")
+	if err != nil {
+		t.Fatalf("BuildDetailCompact: %v", err)
+	}
+	if detail == nil || detail.Row.LastAutonomyAction != "supervisar_proyecto" || detail.Row.LastAutonomySource != "mailbox" {
+		t.Fatalf("ultima accion autonomia inesperada: %+v", detail)
+	}
+	if detail.Entity == nil || detail.Entity.LastAutonomyAction != "supervisar_proyecto" || detail.Entity.LastAutonomySource != "mailbox" {
+		t.Fatalf("entity sin ultima accion autonomia esperada: %+v", detail.Entity)
+	}
+}
+
 func TestBuildReanimationScheduleActivosReutilizaCacheCorta(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(7)
