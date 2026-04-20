@@ -1754,6 +1754,172 @@ func TestProcessTickAckBootstrapRuntimeLeaseByEvidenceCompletaHandoff(t *testing
 	}
 }
 
+func TestProcessTickPromueveTareaAsignadaSiContinuidadYaFueAbsorbida(t *testing.T) {
+	prepararDBTemporalRuntimeService(t)
+	tmp := t.TempDir()
+	now := time.Now().UTC()
+
+	rutaProyecto := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(rutaProyecto, 0o755); err != nil {
+		t.Fatalf("mkdir proyecto: %v", err)
+	}
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	workQueuePath := filepath.Join(tmp, "work-queue.json")
+
+	writeJSON := func(path string, payload any) {
+		t.Helper()
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(raw, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	writeJSON(manifestPath, runtimeagente.WorkerManifest{
+		Version:             1,
+		Agent:               "Codex3",
+		Project:             "orquestador",
+		Driver:              "tmux_cli_session",
+		Transport:           "tmux",
+		MailboxDeliveryMode: "session_resume",
+		StatusPath:          statusPath,
+		HeartbeatPath:       heartbeatPath,
+		CreatedAt:           now.Add(-2 * time.Minute).Format(time.RFC3339),
+		StartedAt:           now.Add(-2 * time.Minute).Format(time.RFC3339),
+		WorkingDir:          rutaProyecto,
+	})
+	writeJSON(statusPath, runtimeagente.WorkerStatus{
+		State:               "ready",
+		UpdatedAt:           now.Format(time.RFC3339),
+		Alive:               true,
+		Agent:               "Codex3",
+		Project:             "orquestador",
+		WorkingDir:          rutaProyecto,
+		MailboxDeliveryMode: "session_resume",
+		ReadyAt:             now.Add(-30 * time.Second).Format(time.RFC3339),
+		LastProgressAt:      now.Add(-5 * time.Second).Format(time.RFC3339),
+		LastOutputAt:        now.Add(-5 * time.Second).Format(time.RFC3339),
+	})
+	writeJSON(heartbeatPath, runtimeagente.WorkerHeartbeat{
+		Alive:          true,
+		HeartbeatAt:    now.Format(time.RFC3339),
+		StartedAt:      now.Add(-2 * time.Minute).Format(time.RFC3339),
+		Agent:          "Codex3",
+		Project:        "orquestador",
+		ReadyAt:        now.Add(-30 * time.Second).Format(time.RFC3339),
+		LastProgressAt: now.Add(-5 * time.Second).Format(time.RFC3339),
+		LastOutputAt:   now.Add(-5 * time.Second).Format(time.RFC3339),
+	})
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaProyecto,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex3", proyectoID, "worker"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex3",
+		ProyectoID:  &proyectoID,
+		CWD:         rutaProyecto,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert runtime handle: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get runtime handle: handle=%+v err=%v", handle, err)
+	}
+	runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtimeInst == nil {
+		t.Fatalf("get runtime: runtime=%+v err=%v", runtimeInst, err)
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Promover tarea asignada por continuidad absorbida",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex3"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+
+	writeJSON(workQueuePath, runtimeagente.WorkerWorkQueue{
+		Version:   1,
+		UpdatedAt: now.Add(-15 * time.Second).Format(time.RFC3339),
+		Current: &runtimeagente.WorkerWorkQueueEntry{
+			MailboxID:        1172,
+			Kind:             "autonomia",
+			Action:           "continuar_trabajo",
+			TaskID:           tareaID,
+			State:            "running",
+			VerificationKey:  "vk-codex3",
+			RecordedAt:       now.Add(-15 * time.Second).Format(time.RFC3339),
+			Title:            "Promover tarea asignada por continuidad absorbida",
+		},
+	})
+
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                 "tmux_cli_session",
+		"transport":              "tmux",
+		"worker_manifest_path":   manifestPath,
+		"worker_status_path":     statusPath,
+		"worker_heartbeat_path":  heartbeatPath,
+		"worker_work_queue_path": workQueuePath,
+		"mailbox_delivery_mode":  "session_resume",
+	})
+	if err := db.ActualizarMetadataRuntimeHandle(handle.ID, string(metaJSON)); err != nil {
+		t.Fatalf("actualizar metadata handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='esperando_io', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeInst.ID); err != nil {
+		t.Fatalf("update runtime: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	out, err := NewService(Repository{}, nil).ProcessTick(TickInput{
+		Agente:   "Codex3",
+		Proyecto: "orquestador",
+	})
+	if err != nil {
+		t.Fatalf("ProcessTick: %v", err)
+	}
+	if out == nil {
+		t.Fatal("tick output nil")
+	}
+	if out.AccionRecomendada != "continuar_trabajo" {
+		t.Fatalf("accion inesperada: %+v", out)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoEnProgreso {
+		t.Fatalf("la tarea deberia quedar en progreso tras tick con continuidad absorbida: %+v", tarea)
+	}
+}
+
 func TestProcessTickPriorizaContinuidadAccionableSobreBloqueoResidual(t *testing.T) {
 	prepararDBTemporalRuntimeService(t)
 	tmp := t.TempDir()

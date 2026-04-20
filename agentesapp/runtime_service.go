@@ -1349,6 +1349,46 @@ func (s *Service) durableWorkQueueTaskForAgent(agenteNombre string, proyectoID i
 	}
 }
 
+func (s *Service) promoteAssignedTaskFromTickEvidence(agenteNombre string, proyectoID int64, sesionActiva *db.Sesion, row Row, tareas []*db.Tarea, now time.Time) (int64, error) {
+	if s == nil || sesionActiva == nil || proyectoID <= 0 {
+		return 0, nil
+	}
+	threshold := workerOutputStaleThreshold(s.store)
+	if !(row.autonomyWorkQueueAbsorbedByWorker(now) ||
+		row.autonomyResumePayloadAbsorbedByWorker(now) ||
+		row.WorkerSupportsContinuityRecovery(now) ||
+		row.workerProgressRecent(now, threshold) ||
+		row.workerHasRecentWorkSignal(now, threshold)) {
+		return 0, nil
+	}
+
+	var candidate *db.Tarea
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.ProyectoID == nil || *tarea.ProyectoID != proyectoID {
+			continue
+		}
+		if tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(agenteNombre)) {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaEnProgreso:
+			return 0, nil
+		case db.TareaAsignada:
+			if candidate == nil || tarea.ID > candidate.ID {
+				candidate = tarea
+			}
+		}
+	}
+	if candidate == nil {
+		return 0, nil
+	}
+	if err := db.IniciarTarea(candidate.ID, agenteNombre); err != nil {
+		return 0, err
+	}
+	candidate.Estado = db.TareaEnProgreso
+	return candidate.ID, nil
+}
+
 func applyDurableWorkQueueToTickRow(row *Row, view *runtimeagente.WorkerStatusView) {
 	if row == nil || view == nil {
 		return
@@ -1503,6 +1543,17 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 			runtimeBloqueado = true
 			estadoOperativo = "bloqueado_por_runtime"
 			detalleOperativo = firstNonEmpty(strings.TrimSpace(detalle), strings.TrimSpace(detalleOperativo))
+		}
+	}
+	if tieneTrabajo && !runtimeBloqueado {
+		promotedTaskID, err := s.promoteAssignedTaskFromTickEvidence(agenteNombre, proyecto.ID, sesionActiva, row, tareas, now)
+		if err != nil {
+			return nil, err
+		}
+		for i := range tareasActivas {
+			if promotedTaskID > 0 && tareasActivas[i].ID == promotedTaskID {
+				tareasActivas[i].Estado = string(db.TareaEnProgreso)
+			}
 		}
 	}
 
