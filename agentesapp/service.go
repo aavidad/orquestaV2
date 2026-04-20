@@ -270,50 +270,53 @@ type reanimationScheduleFlight struct {
 }
 
 type Row struct {
-	Agente                    *db.Agente
-	Asignacion                *db.Asignacion
-	Sesion                    *db.Sesion
-	Runtime                   *db.RuntimeInstance
-	Handle                    *db.RuntimeHandle
-	WorkerState               string
-	WorkerAlive               bool
-	WorkerReadyAt             *time.Time
-	WorkerHeartbeat           *time.Time
-	WorkerUpdatedAt           *time.Time
-	WorkerLastOutput          *time.Time
-	WorkerLastProgress        *time.Time
-	WorkerExitError           string
-	WorkerSessionRef          string
-	WorkerRuntimeRef          string
-	WorkerDriver              string
-	WorkerTransport           string
-	WorkerTMUXSession         string
-	WorkerTMUXWindow          string
-	WorkerTMUXPaneID          string
-	WorkerCanSendInput        bool
-	WorkerExternalSessionID   string
-	WorkerMailboxDeliveryMode string
-	EstadoOperativo           string
-	DetalleOperativo          string
-	OrdersOpen                int
-	OrdersFailed              int
-	ControlOrdersOpen         int
-	LastControlOrderType      string
-	LastControlOrderMoment    *time.Time
-	MailboxPending            int
-	MailboxActionablePending  int
-	MailboxContinuityPending  int
-	MailboxTotal              int
-	LastAutonomyAction        string
-	LastAutonomySource        string
-	LastAutonomyMoment        *time.Time
-	LastAutonomyState         string
-	LastAutonomyReason        string
+	Agente                      *db.Agente
+	Asignacion                  *db.Asignacion
+	Sesion                      *db.Sesion
+	Runtime                     *db.RuntimeInstance
+	Handle                      *db.RuntimeHandle
+	WorkerState                 string
+	WorkerAlive                 bool
+	WorkerReadyAt               *time.Time
+	WorkerHeartbeat             *time.Time
+	WorkerUpdatedAt             *time.Time
+	WorkerLastOutput            *time.Time
+	WorkerLastProgress          *time.Time
+	WorkerExitError             string
+	WorkerSessionRef            string
+	WorkerRuntimeRef            string
+	WorkerDriver                string
+	WorkerTransport             string
+	WorkerTMUXSession           string
+	WorkerTMUXWindow            string
+	WorkerTMUXPaneID            string
+	WorkerCanSendInput          bool
+	WorkerExternalSessionID     string
+	WorkerMailboxDeliveryMode   string
+	EstadoOperativo             string
+	DetalleOperativo            string
+	OrdersOpen                  int
+	OrdersFailed                int
+	ControlOrdersOpen           int
+	LastControlOrderType        string
+	LastControlOrderMoment      *time.Time
+	MailboxPending              int
+	MailboxActionablePending    int
+	MailboxContinuityPending    int
+	MailboxTotal                int
+	LastAutonomyAction          string
+	LastAutonomySource          string
+	LastAutonomyMoment          *time.Time
+	LastAutonomyState           string
+	LastAutonomyReason          string
 	LastAutonomyVerificationKey string
-	Checkpoints               int
-	LastCheckpoint            *db.RuntimeCheckpoint
-	OpenTasks                 int
-	BlockedTasks              int
+	LastAutonomyDispatchState   string
+	LastAutonomyDeliveryState   string
+	LastAutonomyReceiptSource   string
+	Checkpoints                 int
+	LastCheckpoint              *db.RuntimeCheckpoint
+	OpenTasks                   int
+	BlockedTasks                int
 }
 
 type Detail struct {
@@ -354,38 +357,41 @@ type ReanimationCandidate struct {
 }
 
 type AgentEntity struct {
-	Name                string      `json:"name"`
-	Role                string      `json:"role,omitempty"`
-	Enabled             bool        `json:"enabled"`
-	ActiveNow           bool        `json:"active_now"`
-	AccountID           string      `json:"account_id,omitempty"`
-	AccountEmail        string      `json:"account_email,omitempty"`
-	AccountUser         string      `json:"account_user,omitempty"`
-	AccountKey          string      `json:"account_key,omitempty"`
-	AccountAvailable    bool        `json:"account_available"`
-	AccountOccupiedBy   string      `json:"account_occupied_by,omitempty"`
-	AssignmentProject   string      `json:"assignment_project,omitempty"`
-	RuntimeAdapter      string      `json:"runtime_adapter,omitempty"`
-	Transport           string      `json:"transport,omitempty"`
-	RuntimeState        string      `json:"runtime_state,omitempty"`
-	HandleState         string      `json:"handle_state,omitempty"`
-	WorkerState         string      `json:"worker_state,omitempty"`
-	WorkerAlive         bool        `json:"worker_alive"`
-	WorkerDriver        string      `json:"worker_driver,omitempty"`
-	WorkerTransport     string      `json:"worker_transport,omitempty"`
-	WorkerSessionRef    string      `json:"worker_session_ref,omitempty"`
-	WorkerRuntimeRef    string      `json:"worker_runtime_ref,omitempty"`
-	ExternalSessionID   string      `json:"external_session_id,omitempty"`
-	MailboxDeliveryMode string      `json:"mailbox_delivery_mode,omitempty"`
-	OperationalState    string      `json:"operational_state,omitempty"`
-	OperationalDetail   string      `json:"operational_detail,omitempty"`
-	LastAutonomyAction  string      `json:"last_autonomy_action,omitempty"`
-	LastAutonomySource  string      `json:"last_autonomy_source,omitempty"`
-	LastAutonomyMoment  *time.Time  `json:"last_autonomy_moment,omitempty"`
-	LastAutonomyState   string      `json:"last_autonomy_state,omitempty"`
-	LastAutonomyReason  string      `json:"last_autonomy_reason,omitempty"`
-	LastAutonomyVerificationKey string `json:"last_autonomy_verification_key,omitempty"`
-	Leases              []WorkLease `json:"leases,omitempty"`
+	Name                        string      `json:"name"`
+	Role                        string      `json:"role,omitempty"`
+	Enabled                     bool        `json:"enabled"`
+	ActiveNow                   bool        `json:"active_now"`
+	AccountID                   string      `json:"account_id,omitempty"`
+	AccountEmail                string      `json:"account_email,omitempty"`
+	AccountUser                 string      `json:"account_user,omitempty"`
+	AccountKey                  string      `json:"account_key,omitempty"`
+	AccountAvailable            bool        `json:"account_available"`
+	AccountOccupiedBy           string      `json:"account_occupied_by,omitempty"`
+	AssignmentProject           string      `json:"assignment_project,omitempty"`
+	RuntimeAdapter              string      `json:"runtime_adapter,omitempty"`
+	Transport                   string      `json:"transport,omitempty"`
+	RuntimeState                string      `json:"runtime_state,omitempty"`
+	HandleState                 string      `json:"handle_state,omitempty"`
+	WorkerState                 string      `json:"worker_state,omitempty"`
+	WorkerAlive                 bool        `json:"worker_alive"`
+	WorkerDriver                string      `json:"worker_driver,omitempty"`
+	WorkerTransport             string      `json:"worker_transport,omitempty"`
+	WorkerSessionRef            string      `json:"worker_session_ref,omitempty"`
+	WorkerRuntimeRef            string      `json:"worker_runtime_ref,omitempty"`
+	ExternalSessionID           string      `json:"external_session_id,omitempty"`
+	MailboxDeliveryMode         string      `json:"mailbox_delivery_mode,omitempty"`
+	OperationalState            string      `json:"operational_state,omitempty"`
+	OperationalDetail           string      `json:"operational_detail,omitempty"`
+	LastAutonomyAction          string      `json:"last_autonomy_action,omitempty"`
+	LastAutonomySource          string      `json:"last_autonomy_source,omitempty"`
+	LastAutonomyMoment          *time.Time  `json:"last_autonomy_moment,omitempty"`
+	LastAutonomyState           string      `json:"last_autonomy_state,omitempty"`
+	LastAutonomyReason          string      `json:"last_autonomy_reason,omitempty"`
+	LastAutonomyVerificationKey string      `json:"last_autonomy_verification_key,omitempty"`
+	LastAutonomyDispatchState   string      `json:"last_autonomy_dispatch_state,omitempty"`
+	LastAutonomyDeliveryState   string      `json:"last_autonomy_delivery_state,omitempty"`
+	LastAutonomyReceiptSource   string      `json:"last_autonomy_receipt_source,omitempty"`
+	Leases                      []WorkLease `json:"leases,omitempty"`
 }
 
 type WorkLease struct {
@@ -798,11 +804,17 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		}
 		row.OrdersOpen, row.OrdersFailed, row.ControlOrdersOpen, row.LastControlOrderType, row.LastControlOrderMoment =
 			summarizeOrdersForRow(row, ordersPorAgente[agente.Nombre])
-		if action, source, moment := summarizeAutonomyOrdersForRow(ordersPorAgente[agente.Nombre]); strings.TrimSpace(action) != "" {
+		if action, source, moment, state, reason, verificationKey, dispatchState, deliveryState, receiptSource := summarizeAutonomyOrdersForRow(ordersPorAgente[agente.Nombre]); strings.TrimSpace(action) != "" {
 			if mailboxCountersShouldReplace(row.LastAutonomyMoment, moment) {
 				row.LastAutonomyAction = action
 				row.LastAutonomySource = source
 				row.LastAutonomyMoment = moment
+				row.LastAutonomyState = state
+				row.LastAutonomyReason = reason
+				row.LastAutonomyVerificationKey = verificationKey
+				row.LastAutonomyDispatchState = dispatchState
+				row.LastAutonomyDeliveryState = deliveryState
+				row.LastAutonomyReceiptSource = receiptSource
 			}
 		}
 		if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
@@ -1016,11 +1028,17 @@ func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.Runti
 	}
 	row.OrdersOpen, row.OrdersFailed, row.ControlOrdersOpen, row.LastControlOrderType, row.LastControlOrderMoment =
 		summarizeOrdersForRow(row, orders)
-	if action, source, moment := summarizeAutonomyOrdersForRow(orders); strings.TrimSpace(action) != "" {
+	if action, source, moment, state, reason, verificationKey, dispatchState, deliveryState, receiptSource := summarizeAutonomyOrdersForRow(orders); strings.TrimSpace(action) != "" {
 		if mailboxCountersShouldReplace(row.LastAutonomyMoment, moment) {
 			row.LastAutonomyAction = action
 			row.LastAutonomySource = source
 			row.LastAutonomyMoment = moment
+			row.LastAutonomyState = state
+			row.LastAutonomyReason = reason
+			row.LastAutonomyVerificationKey = verificationKey
+			row.LastAutonomyDispatchState = dispatchState
+			row.LastAutonomyDeliveryState = deliveryState
+			row.LastAutonomyReceiptSource = receiptSource
 		}
 	}
 
@@ -1203,6 +1221,9 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 					}
 					taskByID := map[int64]*db.Tarea{tarea.ID: tarea}
 					applyMailboxStatsToRow(&row, mailbox, taskByID, nombre)
+					if err := s.applyAutonomyOrdersToRow(&row, nombre); err != nil {
+						return Row{}, nil, nil, err
+					}
 					agentDetailDebugf("compact step=list_mailbox_to agente=%s count=%d duration=%s", nombre, len(mailbox), time.Since(stepStart).Round(time.Millisecond))
 					applyResumePayloadAutonomyToRow(&row)
 					row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
@@ -1246,12 +1267,43 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 		taskByID[tarea.ID] = tarea
 	}
 	applyMailboxStatsToRow(&row, mailbox, taskByID, nombre)
+	if err := s.applyAutonomyOrdersToRow(&row, nombre); err != nil {
+		return Row{}, nil, nil, err
+	}
 	agentDetailDebugf("compact step=list_mailbox_to agente=%s count=%d duration=%s", nombre, len(mailbox), time.Since(stepStart).Round(time.Millisecond))
 
 	applyResumePayloadAutonomyToRow(&row)
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
 	agentDetailDebugf("compact done agente=%s duration=%s", nombre, time.Since(start).Round(time.Millisecond))
 	return row, asignaciones, tareas, nil
+}
+
+func (s *Service) applyAutonomyOrdersToRow(row *Row, agente string) error {
+	if s == nil || s.store == nil || row == nil {
+		return nil
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil
+	}
+	orders, err := s.store.ListRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente})
+	if err != nil {
+		return err
+	}
+	if action, source, moment, state, reason, verificationKey, dispatchState, deliveryState, receiptSource := summarizeAutonomyOrdersForRow(orders); strings.TrimSpace(action) != "" {
+		if mailboxCountersShouldReplace(row.LastAutonomyMoment, moment) {
+			row.LastAutonomyAction = action
+			row.LastAutonomySource = source
+			row.LastAutonomyMoment = moment
+			row.LastAutonomyState = state
+			row.LastAutonomyReason = reason
+			row.LastAutonomyVerificationKey = verificationKey
+			row.LastAutonomyDispatchState = dispatchState
+			row.LastAutonomyDeliveryState = deliveryState
+			row.LastAutonomyReceiptSource = receiptSource
+		}
+	}
+	return nil
 }
 
 func applyMailboxStatsToRow(row *Row, mailbox []*db.RuntimeMailboxMessage, taskByID map[int64]*db.Tarea, nombre string) {
@@ -2979,37 +3031,40 @@ func buildAgentEntity(store Store, row Row, tareas []*db.Tarea) *AgentEntity {
 		}
 	}
 	entity := &AgentEntity{
-		Name:                strings.TrimSpace(row.Agente.Nombre),
-		Role:                strings.TrimSpace(row.Agente.Rol),
-		Enabled:             row.Agente.Habilitado,
-		ActiveNow:           row.Agente.Activo,
-		AccountID:           strings.TrimSpace(row.Agente.CuentaID),
-		AccountEmail:        strings.TrimSpace(row.Agente.CuentaEmail),
-		AccountUser:         strings.TrimSpace(row.Agente.CuentaUsuario),
-		AccountKey:          strings.TrimSpace(db.CuentaClaveAgente(row.Agente)),
-		AccountAvailable:    accountAvailable,
-		AccountOccupiedBy:   accountOccupiedBy,
-		RuntimeAdapter:      strings.TrimSpace(runtimeAdapterName(row)),
-		Transport:           strings.TrimSpace(handleTransportName(row.Handle)),
-		RuntimeState:        strings.TrimSpace(row.runtimeState()),
-		HandleState:         strings.TrimSpace(row.handleState()),
-		WorkerState:         strings.TrimSpace(row.WorkerState),
-		WorkerAlive:         row.WorkerAlive,
-		WorkerDriver:        strings.TrimSpace(row.WorkerDriver),
-		WorkerTransport:     strings.TrimSpace(row.WorkerTransport),
-		WorkerSessionRef:    strings.TrimSpace(row.WorkerSessionRef),
-		WorkerRuntimeRef:    strings.TrimSpace(row.WorkerRuntimeRef),
-		ExternalSessionID:   strings.TrimSpace(row.WorkerExternalSessionID),
-		MailboxDeliveryMode: strings.TrimSpace(row.WorkerMailboxDeliveryMode),
-		OperationalState:    strings.TrimSpace(row.EstadoOperativo),
-		OperationalDetail:   strings.TrimSpace(row.DetalleOperativo),
-		LastAutonomyAction:  strings.TrimSpace(row.LastAutonomyAction),
-		LastAutonomySource:  strings.TrimSpace(row.LastAutonomySource),
-		LastAutonomyMoment:  row.LastAutonomyMoment,
-		LastAutonomyState:   strings.TrimSpace(row.LastAutonomyState),
-		LastAutonomyReason:  strings.TrimSpace(row.LastAutonomyReason),
+		Name:                        strings.TrimSpace(row.Agente.Nombre),
+		Role:                        strings.TrimSpace(row.Agente.Rol),
+		Enabled:                     row.Agente.Habilitado,
+		ActiveNow:                   row.Agente.Activo,
+		AccountID:                   strings.TrimSpace(row.Agente.CuentaID),
+		AccountEmail:                strings.TrimSpace(row.Agente.CuentaEmail),
+		AccountUser:                 strings.TrimSpace(row.Agente.CuentaUsuario),
+		AccountKey:                  strings.TrimSpace(db.CuentaClaveAgente(row.Agente)),
+		AccountAvailable:            accountAvailable,
+		AccountOccupiedBy:           accountOccupiedBy,
+		RuntimeAdapter:              strings.TrimSpace(runtimeAdapterName(row)),
+		Transport:                   strings.TrimSpace(handleTransportName(row.Handle)),
+		RuntimeState:                strings.TrimSpace(row.runtimeState()),
+		HandleState:                 strings.TrimSpace(row.handleState()),
+		WorkerState:                 strings.TrimSpace(row.WorkerState),
+		WorkerAlive:                 row.WorkerAlive,
+		WorkerDriver:                strings.TrimSpace(row.WorkerDriver),
+		WorkerTransport:             strings.TrimSpace(row.WorkerTransport),
+		WorkerSessionRef:            strings.TrimSpace(row.WorkerSessionRef),
+		WorkerRuntimeRef:            strings.TrimSpace(row.WorkerRuntimeRef),
+		ExternalSessionID:           strings.TrimSpace(row.WorkerExternalSessionID),
+		MailboxDeliveryMode:         strings.TrimSpace(row.WorkerMailboxDeliveryMode),
+		OperationalState:            strings.TrimSpace(row.EstadoOperativo),
+		OperationalDetail:           strings.TrimSpace(row.DetalleOperativo),
+		LastAutonomyAction:          strings.TrimSpace(row.LastAutonomyAction),
+		LastAutonomySource:          strings.TrimSpace(row.LastAutonomySource),
+		LastAutonomyMoment:          row.LastAutonomyMoment,
+		LastAutonomyState:           strings.TrimSpace(row.LastAutonomyState),
+		LastAutonomyReason:          strings.TrimSpace(row.LastAutonomyReason),
 		LastAutonomyVerificationKey: strings.TrimSpace(row.LastAutonomyVerificationKey),
-		Leases:              buildWorkLeases(tareas),
+		LastAutonomyDispatchState:   strings.TrimSpace(row.LastAutonomyDispatchState),
+		LastAutonomyDeliveryState:   strings.TrimSpace(row.LastAutonomyDeliveryState),
+		LastAutonomyReceiptSource:   strings.TrimSpace(row.LastAutonomyReceiptSource),
+		Leases:                      buildWorkLeases(tareas),
 	}
 	if row.Asignacion != nil {
 		entity.AssignmentProject = strings.TrimSpace(row.Asignacion.ProyectoSlug)
@@ -4206,17 +4261,23 @@ func summarizeOrdersForRow(row Row, orders []*db.RuntimeOrder) (open int, failed
 	return open, failed, controlOpen, lastControlType, lastControlMoment
 }
 
-func summarizeAutonomyOrdersForRow(orders []*db.RuntimeOrder) (lastAutonomyAction string, lastAutonomySource string, lastAutonomyMoment *time.Time) {
+func summarizeAutonomyOrdersForRow(orders []*db.RuntimeOrder) (lastAutonomyAction string, lastAutonomySource string, lastAutonomyMoment *time.Time, lastAutonomyState string, lastAutonomyReason string, lastAutonomyVerificationKey string, lastAutonomyDispatchState string, lastAutonomyDeliveryState string, lastAutonomyReceiptSource string) {
 	for _, order := range orders {
-		if action, source, moment := autonomyOrderActionSummary(order); strings.TrimSpace(action) != "" {
+		if action, source, moment, state, reason, verificationKey, dispatchState, deliveryState, receiptSource := autonomyOrderActionSummary(order); strings.TrimSpace(action) != "" {
 			if mailboxCountersShouldReplace(lastAutonomyMoment, moment) {
 				lastAutonomyAction = action
 				lastAutonomySource = source
 				lastAutonomyMoment = moment
+				lastAutonomyState = state
+				lastAutonomyReason = reason
+				lastAutonomyVerificationKey = verificationKey
+				lastAutonomyDispatchState = dispatchState
+				lastAutonomyDeliveryState = deliveryState
+				lastAutonomyReceiptSource = receiptSource
 			}
 		}
 	}
-	return lastAutonomyAction, lastAutonomySource, lastAutonomyMoment
+	return lastAutonomyAction, lastAutonomySource, lastAutonomyMoment, lastAutonomyState, lastAutonomyReason, lastAutonomyVerificationKey, lastAutonomyDispatchState, lastAutonomyDeliveryState, lastAutonomyReceiptSource
 }
 
 func mailboxCountersShouldReplace(current *time.Time, candidate *time.Time) bool {
@@ -4245,24 +4306,38 @@ func autonomyMailboxActionSummary(msg *db.RuntimeMailboxMessage, agente string) 
 	return action, "mailbox", &ts
 }
 
-func autonomyOrderActionSummary(order *db.RuntimeOrder) (string, string, *time.Time) {
+func autonomyOrderActionSummary(order *db.RuntimeOrder) (string, string, *time.Time, string, string, string, string, string, string) {
 	if order == nil {
-		return "", "", nil
+		return "", "", nil, "", "", "", "", "", ""
 	}
 	payload := runtimeMailboxPayloadMap(order.PayloadJSON)
 	if !strings.EqualFold(strings.TrimSpace(stringFromRuntimeMailboxPayload(payload, "kind")), "autonomia") {
-		return "", "", nil
+		return "", "", nil, "", "", "", "", "", ""
 	}
 	action := strings.TrimSpace(stringFromRuntimeMailboxPayload(payload, "accion"))
 	if action == "" {
-		return "", "", nil
+		return "", "", nil, "", "", "", "", "", ""
 	}
 	ts := runtimeOrderMoment(order)
 	source := strings.TrimSpace(order.Tipo)
 	if source == "" {
 		source = "runtime_order"
 	}
-	return action, source, &ts
+	result := runtimeMailboxPayloadMap(order.ResultadoJSON)
+	state := strings.TrimSpace(order.Estado)
+	reason := strings.TrimSpace(stringFromRuntimeMailboxPayload(payload, "motivo"))
+	if reason == "" {
+		reason = strings.TrimSpace(stringFromRuntimeMailboxPayload(result, "deferred_reason"))
+	}
+	return action,
+		source,
+		&ts,
+		state,
+		reason,
+		strings.TrimSpace(stringFromRuntimeMailboxPayload(payload, "verification_key")),
+		strings.TrimSpace(stringFromRuntimeMailboxPayload(result, "dispatch_state")),
+		strings.TrimSpace(stringFromRuntimeMailboxPayload(result, "delivery_state")),
+		strings.TrimSpace(stringFromRuntimeMailboxPayload(result, "receipt_source"))
 }
 
 func runtimeOrderMatchesRowProject(row Row, order *db.RuntimeOrder) bool {

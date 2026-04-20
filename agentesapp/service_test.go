@@ -3395,27 +3395,28 @@ func TestBuildDetailCompactExponeUltimaAccionAutonomiaPendiente(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(42)
 	store := &fakeStore{
-		agents:      []*db.Agente{{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true}},
-		assignments: []*db.Asignacion{{Agente: "Codex2", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva}},
-		sessions:    []*db.Sesion{{ID: 9, Agente: "Codex2", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: now}},
-		runtimes:    []*db.RuntimeInstance{{ID: 7, Agente: "Codex2", ProyectoID: &proyectoID, LogicalState: "activo", ProcessState: "running", UpdatedAt: now}},
+		agents:           []*db.Agente{{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true}},
+		assignments:      []*db.Asignacion{{Agente: "Codex2", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva}},
+		sessions:         []*db.Sesion{{ID: 9, Agente: "Codex2", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: now}},
+		runtimes:         []*db.RuntimeInstance{{ID: 7, Agente: "Codex2", ProyectoID: &proyectoID, LogicalState: "activo", ProcessState: "running", UpdatedAt: now}},
 		canonicalHandles: []*db.RuntimeHandle{{ID: 7, Agente: "Codex2", ProyectoID: &proyectoID, Estado: "activo", Transporte: "tmux", HandleKind: "session"}},
 		orders: []*db.RuntimeOrder{{
-			ID:         11,
-			Agente:     "Codex2",
-			ProyectoID: &proyectoID,
-			Estado:     "pendiente",
-			Tipo:       "send_instruction",
-			CreatedAt:  now.Add(-time.Minute),
-			PayloadJSON: `{"kind":"autonomia","accion":"continuar_trabajo"}`,
+			ID:            11,
+			Agente:        "Codex2",
+			ProyectoID:    &proyectoID,
+			Estado:        "pendiente",
+			Tipo:          "send_instruction",
+			CreatedAt:     now.Add(-time.Minute),
+			PayloadJSON:   `{"kind":"autonomia","accion":"continuar_trabajo","motivo":"post_remediation","verification_key":"vk-2"}`,
+			ResultadoJSON: `{"dispatch_state":"delivered","delivery_state":"delivered","receipt_source":"tmux_pane_activity"}`,
 		}},
 		mailbox: []*db.RuntimeMailboxMessage{{
-			ID:         12,
-			ToAgente:   "Codex2",
-			ProyectoID: &proyectoID,
-			Estado:     "pendiente",
-			Kind:       "autonomia",
-			CreatedAt:  now,
+			ID:          12,
+			ToAgente:    "Codex2",
+			ProyectoID:  &proyectoID,
+			Estado:      "pendiente",
+			Kind:        "autonomia",
+			CreatedAt:   now,
 			PayloadJSON: `{"accion":"supervisar_proyecto"}`,
 		}},
 	}
@@ -3433,6 +3434,46 @@ func TestBuildDetailCompactExponeUltimaAccionAutonomiaPendiente(t *testing.T) {
 	}
 }
 
+func TestBuildDetailCompactExponeDeliveryYReceiptDelUltimoNudgeAutonomo(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(44)
+	store := &fakeStore{
+		agents:           []*db.Agente{{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true}},
+		assignments:      []*db.Asignacion{{Agente: "Codex2", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva}},
+		sessions:         []*db.Sesion{{ID: 10, Agente: "Codex2", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: now}},
+		runtimes:         []*db.RuntimeInstance{{ID: 8, Agente: "Codex2", ProyectoID: &proyectoID, LogicalState: "activo", ProcessState: "running", UpdatedAt: now}},
+		canonicalHandles: []*db.RuntimeHandle{{ID: 8, Agente: "Codex2", ProyectoID: &proyectoID, Estado: "activo", Transporte: "tmux", HandleKind: "session"}},
+		orders: []*db.RuntimeOrder{{
+			ID:            13,
+			Agente:        "Codex2",
+			ProyectoID:    &proyectoID,
+			Estado:        "completada",
+			Tipo:          "send_instruction",
+			CreatedAt:     now,
+			PayloadJSON:   `{"kind":"autonomia","accion":"continuar_trabajo","motivo":"post_remediation","verification_key":"vk-3"}`,
+			ResultadoJSON: `{"dispatch_state":"delivered","delivery_state":"delivered","receipt_source":"tmux_pane_activity"}`,
+		}},
+	}
+	svc := NewService(store, nil)
+
+	detail, err := svc.BuildDetailCompact("Codex2")
+	if err != nil {
+		t.Fatalf("BuildDetailCompact: %v", err)
+	}
+	if detail == nil || detail.Entity == nil {
+		t.Fatalf("detail/entity inesperado: %+v", detail)
+	}
+	if detail.Row.LastAutonomyAction != "continuar_trabajo" || detail.Row.LastAutonomySource != "send_instruction" {
+		t.Fatalf("ultima accion autonomia inesperada desde order: %+v", detail.Row)
+	}
+	if detail.Row.LastAutonomyDispatchState != "delivered" || detail.Row.LastAutonomyDeliveryState != "delivered" || detail.Row.LastAutonomyReceiptSource != "tmux_pane_activity" {
+		t.Fatalf("deberia exponer delivery/receipt del ultimo nudge: %+v", detail.Row)
+	}
+	if detail.Entity.LastAutonomyDispatchState != "delivered" || detail.Entity.LastAutonomyDeliveryState != "delivered" || detail.Entity.LastAutonomyReceiptSource != "tmux_pane_activity" {
+		t.Fatalf("entity sin delivery/receipt esperados: %+v", detail.Entity)
+	}
+}
+
 func TestBuildDetailCompactUsaResumePayloadMailboxComoFallbackAutonomia(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(43)
@@ -3441,13 +3482,13 @@ func TestBuildDetailCompactUsaResumePayloadMailboxComoFallbackAutonomia(t *testi
 		agents:      []*db.Agente{{Nombre: "Codex1", Rol: "programador", Activo: true, Habilitado: true}},
 		assignments: []*db.Asignacion{{Agente: "Codex1", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva}},
 		sessions: []*db.Sesion{{
-			ID:               49,
-			Agente:           "Codex1",
-			ProyectoID:       &proyectoID,
-			Activa:           true,
-			Estado:           "activa",
-			Inicio:           now.Add(-time.Minute),
-			HeartbeatAt:      &heartbeatAt,
+			ID:                49,
+			Agente:            "Codex1",
+			ProyectoID:        &proyectoID,
+			Activa:            true,
+			Estado:            "activa",
+			Inicio:            now.Add(-time.Minute),
+			HeartbeatAt:       &heartbeatAt,
 			ResumePayloadJSON: `{"mailbox":[{"kind":"autonomia","payload":{"accion":"supervisar_proyecto","bootstrap_kind":"server_autobootstrap","verification_key":"vk-1"}}]}`,
 		}},
 		runtimes:         []*db.RuntimeInstance{{ID: 7, Agente: "Codex1", ProyectoID: &proyectoID, LogicalState: "activo", ProcessState: "running", UpdatedAt: now}},
