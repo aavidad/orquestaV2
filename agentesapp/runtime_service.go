@@ -498,8 +498,33 @@ func (s *Service) PrewarmPrepareContext(agente, proyecto string) error {
 	if _, err := s.getModelPolicyResolutionForPrepare(agent.Nombre, project.Slug, ""); err != nil {
 		return err
 	}
-	_, err = s.getGovernanceCatalogForPrepare(agent.Rol, project.ID, agent.Nombre)
-	return err
+	if _, err := s.getGovernanceCatalogForPrepare(agent.Rol, project.ID, agent.Nombre); err != nil {
+		return err
+	}
+	return s.prewarmDurableWorkerSnapshot(agent.Nombre, project.ID)
+}
+
+func (s *Service) prewarmDurableWorkerSnapshot(agente string, proyectoID int64) error {
+	if s == nil || s.store == nil {
+		return nil
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil
+	}
+	handles, err := s.store.ListCanonicalRuntimeHandles(&agente)
+	if err != nil {
+		return err
+	}
+	handle := latestHandleForProject(handles, &proyectoID)
+	if handle == nil {
+		handle = latestHandleForAgent(handles)
+	}
+	if handle == nil {
+		return nil
+	}
+	_ = loadStructuredWorkerSnapshot(nil, handle)
+	return nil
 }
 
 func clonePrepareAgent(agent *db.Agente) *db.Agente {

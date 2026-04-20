@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"orquesta/db"
+	"orquesta/runtimeagente"
 )
 
 func timePtr(v time.Time) *time.Time { return &v }
@@ -655,6 +656,76 @@ func TestPrewarmPrepareContextCalientaCaches(t *testing.T) {
 	}
 	if store.getAgentCalls != beforeAgents || store.getProjectCalls != beforeProjects || store.governanceCalls != beforeGovernance || store.getLastCalls != beforeLast {
 		t.Fatalf("prewarm no reutilizado: agents %d->%d projects %d->%d governance %d->%d last %d->%d", beforeAgents, store.getAgentCalls, beforeProjects, store.getProjectCalls, beforeGovernance, store.governanceCalls, beforeLast, store.getLastCalls)
+	}
+}
+
+func TestPrewarmPrepareContextCalientaSnapshotDurableWorker(t *testing.T) {
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+
+	writeJSON := func(path string, payload any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	writeJSON(manifestPath, map[string]any{
+		"version":        1,
+		"agent":          "Codex2",
+		"driver":         "tmux_cli_session",
+		"transport":      "tmux",
+		"tmux_session":   "orq-codex2-hot",
+		"tmux_pane_id":   "%7",
+		"status_path":    statusPath,
+		"heartbeat_path": heartbeatPath,
+	})
+	writeJSON(statusPath, map[string]any{"state": "ready", "alive": true})
+	writeJSON(heartbeatPath, map[string]any{"alive": true})
+
+	proyectoID := int64(7)
+	store := &fakeStore{
+		project:   &db.Proyecto{ID: proyectoID, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()},
+		agents:    []*db.Agente{{Nombre: "Codex2", Rol: "programador", Habilitado: true, EstadoCuota: "activo"}},
+		sessions:  []*db.Sesion{{ID: 9, Agente: "Codex2", ProyectoID: &proyectoID, ConectorSlug: "codex-cli"}},
+		connector: &db.Conector{ID: 5, Slug: "codex-cli", Nombre: "Codex CLI"},
+		canonicalHandles: []*db.RuntimeHandle{{
+			ID:         41,
+			Agente:     "Codex2",
+			ProyectoID: &proyectoID,
+			Estado:     "activo",
+			MetadataJSON: fmt.Sprintf(`{"worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`,
+				manifestPath, statusPath, heartbeatPath),
+		}},
+		rules:     []*db.Regla{{ID: 1, TipoAgente: "programador"}},
+		skills:    []*db.Skill{{ID: 2, TipoAgente: "programador"}},
+		workflows: []*db.Workflow{{ID: 3, TipoAgente: "programador", Nombre: "flujo"}},
+	}
+
+	svc := NewService(store, nil)
+	if err := svc.PrewarmPrepareContext("Codex2", "orquestador"); err != nil {
+		t.Fatalf("PrewarmPrepareContext: %v", err)
+	}
+
+	writeJSON(statusPath, map[string]any{"state": "blocked_quota", "alive": true})
+
+	meta := fmt.Sprintf(`{"worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`,
+		manifestPath, statusPath, heartbeatPath)
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(meta)
+	if err != nil {
+		t.Fatalf("LoadWorkerSnapshotFromMetadataJSON: %v", err)
+	}
+	if snap == nil || snap.Status == nil {
+		t.Fatalf("snapshot inesperado: %+v", snap)
+	}
+	if got := snap.Status.State; got != "ready" {
+		t.Fatalf("el prewarm deberia dejar el snapshot caliente, state=%q", got)
 	}
 }
 

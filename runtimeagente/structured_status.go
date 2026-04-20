@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -118,17 +119,34 @@ type workerMetadataPaths struct {
 	HeartbeatPath string `json:"worker_heartbeat_path"`
 }
 
+type cachedWorkerSnapshot struct {
+	snapshot *WorkerSnapshot
+	expires  time.Time
+}
+
+var workerSnapshotCacheTTL = 1500 * time.Millisecond
+
+var workerSnapshotCache = struct {
+	mu    sync.Mutex
+	items map[string]cachedWorkerSnapshot
+}{
+	items: map[string]cachedWorkerSnapshot{},
+}
+
 func LoadWorkerSnapshotFromMetadataJSON(raw string) (*WorkerSnapshot, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil, nil
 	}
-	var meta workerMetadataPaths
-	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
+	meta, err := workerMetadataPathsFromJSON(raw)
+	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(meta.ManifestPath) == "" && strings.TrimSpace(meta.StatusPath) == "" && strings.TrimSpace(meta.HeartbeatPath) == "" {
+	if workerMetadataPathsEmpty(meta) {
 		return nil, nil
+	}
+	if cached := cachedWorkerSnapshotByPaths(meta); cached != nil {
+		return cached, nil
 	}
 	snap := &WorkerSnapshot{
 		ManifestPath:  strings.TrimSpace(meta.ManifestPath),
@@ -175,7 +193,93 @@ func LoadWorkerSnapshotFromMetadataJSON(raw string) (*WorkerSnapshot, error) {
 			}
 		}
 	}
+	cacheWorkerSnapshotByPaths(meta, snap)
 	return snap, nil
+}
+
+func workerMetadataPathsFromJSON(raw string) (workerMetadataPaths, error) {
+	var meta workerMetadataPaths
+	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
+		return workerMetadataPaths{}, err
+	}
+	meta.ManifestPath = strings.TrimSpace(meta.ManifestPath)
+	meta.StatusPath = strings.TrimSpace(meta.StatusPath)
+	meta.HeartbeatPath = strings.TrimSpace(meta.HeartbeatPath)
+	return meta, nil
+}
+
+func workerMetadataPathsEmpty(meta workerMetadataPaths) bool {
+	return meta.ManifestPath == "" && meta.StatusPath == "" && meta.HeartbeatPath == ""
+}
+
+func workerSnapshotCacheKey(meta workerMetadataPaths) string {
+	return strings.Join([]string{
+		meta.ManifestPath,
+		meta.StatusPath,
+		meta.HeartbeatPath,
+	}, "|")
+}
+
+func cachedWorkerSnapshotByPaths(meta workerMetadataPaths) *WorkerSnapshot {
+	ttl := workerSnapshotCacheTTL
+	if ttl <= 0 || workerMetadataPathsEmpty(meta) {
+		return nil
+	}
+	now := time.Now()
+	key := workerSnapshotCacheKey(meta)
+	workerSnapshotCache.mu.Lock()
+	defer workerSnapshotCache.mu.Unlock()
+	item, ok := workerSnapshotCache.items[key]
+	if !ok {
+		return nil
+	}
+	if now.After(item.expires) {
+		delete(workerSnapshotCache.items, key)
+		return nil
+	}
+	return cloneWorkerSnapshot(item.snapshot)
+}
+
+func cacheWorkerSnapshotByPaths(meta workerMetadataPaths, snap *WorkerSnapshot) {
+	ttl := workerSnapshotCacheTTL
+	if ttl <= 0 || workerMetadataPathsEmpty(meta) || snap == nil {
+		return
+	}
+	key := workerSnapshotCacheKey(meta)
+	workerSnapshotCache.mu.Lock()
+	defer workerSnapshotCache.mu.Unlock()
+	workerSnapshotCache.items[key] = cachedWorkerSnapshot{
+		snapshot: cloneWorkerSnapshot(snap),
+		expires:  time.Now().Add(ttl),
+	}
+}
+
+func cloneWorkerSnapshot(src *WorkerSnapshot) *WorkerSnapshot {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	if src.Manifest != nil {
+		manifest := *src.Manifest
+		dst.Manifest = &manifest
+	}
+	if src.Status != nil {
+		status := *src.Status
+		if src.Status.ExitCode != nil {
+			exitCode := *src.Status.ExitCode
+			status.ExitCode = &exitCode
+		}
+		dst.Status = &status
+	}
+	if src.Heartbeat != nil {
+		heartbeat := *src.Heartbeat
+		if src.Heartbeat.ExitCode != nil {
+			exitCode := *src.Heartbeat.ExitCode
+			heartbeat.ExitCode = &exitCode
+		}
+		dst.Heartbeat = &heartbeat
+	}
+	return &dst
 }
 
 func (s *WorkerSnapshot) EffectiveState() string {
