@@ -7155,16 +7155,19 @@ func TestAutonomiaIdleAutoassignShouldAttemptThrottle(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	autonomiaIdleAutoassignGate.Reset()
 
-	if !autonomiaIdleAutoassignShouldAttempt("Codex1", 1) {
+	if !autonomiaIdleAutoassignShouldAttempt("Codex1", 1, 10) {
 		t.Fatalf("primer intento deberia permitirse")
 	}
-	if autonomiaIdleAutoassignShouldAttempt("Codex1", 1) {
+	if autonomiaIdleAutoassignShouldAttempt("Codex1", 1, 10) {
 		t.Fatalf("segundo intento inmediato no deberia permitirse")
 	}
-	if !autonomiaIdleAutoassignShouldAttempt("Codex1", 2) {
+	if !autonomiaIdleAutoassignShouldAttempt("Codex1", 1, 11) {
+		t.Fatalf("sesion distinta deberia permitir intento")
+	}
+	if !autonomiaIdleAutoassignShouldAttempt("Codex1", 2, 10) {
 		t.Fatalf("proyecto distinto deberia permitir intento")
 	}
-	if !autonomiaIdleAutoassignShouldAttempt("Codex2", 1) {
+	if !autonomiaIdleAutoassignShouldAttempt("Codex2", 1, 10) {
 		t.Fatalf("agente distinto deberia permitir intento")
 	}
 }

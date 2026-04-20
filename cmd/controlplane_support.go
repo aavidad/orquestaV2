@@ -294,12 +294,23 @@ func autonomiaCuentaCompartidaDisponible(agente string) (bool, string, error) {
 	return db.CuentaCompartidaPermiteActivacionAgente(strings.TrimSpace(agente))
 }
 
-func autonomiaIdleAutoassignShouldAttempt(agente string, proyectoID int64) bool {
+func autonomiaIdleAutoassignThrottleKey(agente string, proyectoID, sesionID int64) string {
 	agente = strings.ToLower(strings.TrimSpace(agente))
 	if agente == "" || proyectoID <= 0 {
-		return false
+		return ""
 	}
 	key := agente + "|" + strconv.FormatInt(proyectoID, 10)
+	if sesionID > 0 {
+		key += "|" + strconv.FormatInt(sesionID, 10)
+	}
+	return key
+}
+
+func autonomiaIdleAutoassignShouldAttempt(agente string, proyectoID, sesionID int64) bool {
+	key := autonomiaIdleAutoassignThrottleKey(agente, proyectoID, sesionID)
+	if key == "" {
+		return false
+	}
 	return autonomiaIdleAutoassignGate.Allow(key, autonomiaIdleAutoassignInterval())
 }
 
@@ -12862,7 +12873,7 @@ func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, 
 	if sesion == nil || proyecto == nil {
 		return 0, nil
 	}
-	if !autonomiaIdleAutoassignShouldAttempt(sesion.Agente, proyecto.ID) {
+	if !autonomiaIdleAutoassignShouldAttempt(sesion.Agente, proyecto.ID, sesion.ID) {
 		return 0, nil
 	}
 	if err := revalidarYVerificarAgenteDisponibleParaTrabajo(sesion.Agente); err != nil {

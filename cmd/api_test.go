@@ -4546,10 +4546,10 @@ func TestAPIRuntimeProcessAutonomiaReseteaThrottlesDeAutoasignacionYDegradados(t
 	resetAutonomiaIdleAutoassignGate()
 	resetAutonomiaDegradedTaskGate()
 
-	if !autonomiaIdleAutoassignShouldAttempt("Codex1", 3) {
+	if !autonomiaIdleAutoassignShouldAttempt("Codex1", 3, 0) {
 		t.Fatalf("primer intento idle deberia permitirse")
 	}
-	if autonomiaIdleAutoassignShouldAttempt("Codex1", 3) {
+	if autonomiaIdleAutoassignShouldAttempt("Codex1", 3, 0) {
 		t.Fatalf("segundo intento idle inmediato deberia quedar throttled")
 	}
 	if !autonomiaDegradedTaskGate.AllowAt("41", autonomiaDegradedTaskCooldown, time.Now().UTC()) {
@@ -4566,7 +4566,7 @@ func TestAPIRuntimeProcessAutonomiaReseteaThrottlesDeAutoasignacionYDegradados(t
 		t.Fatalf("status process-autonomia inesperado: %d body=%s", rec.Code, rec.Body.String())
 	}
 
-	if !autonomiaIdleAutoassignShouldAttempt("Codex1", 3) {
+	if !autonomiaIdleAutoassignShouldAttempt("Codex1", 3, 0) {
 		t.Fatalf("process-autonomia deberia limpiar el throttle de autoasignacion idle")
 	}
 	if !autonomiaDegradedTaskGate.AllowAt("41", autonomiaDegradedTaskCooldown, time.Now().UTC()) {
