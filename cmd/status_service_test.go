@@ -606,6 +606,29 @@ func TestAgentesVisiblesPorEstadoOperativoRowsSeparaBloqueadoPorCuota(t *testing
 	}
 }
 
+func TestAplicarVisibilidadOperativaAgentesSincronizaCuotaBloqueadaDerivada(t *testing.T) {
+	agente := &db.Agente{Nombre: "Codex3", Activo: true, EstadoCuota: "activo"}
+	rows := []agentesapp.Row{
+		{
+			Agente:           &db.Agente{Nombre: "Codex3"},
+			EstadoOperativo:  "bloqueado_por_cuota",
+			DetalleOperativo: "Presupuesto agotado observado",
+		},
+	}
+
+	aplicarVisibilidadOperativaAgentes([]*db.Agente{agente}, rows)
+
+	if agente.Activo {
+		t.Fatalf("no deberia seguir activo tras bloqueo por cuota: %+v", agente)
+	}
+	if agente.EstadoCuota != "enfriamiento" {
+		t.Fatalf("estado cuota inesperado: %+v", agente)
+	}
+	if agente.MotivoPausa != "Presupuesto agotado observado" {
+		t.Fatalf("motivo pausa inesperado: %+v", agente)
+	}
+}
+
 func TestAgentesVisiblesPorEstadoOperativoRowsOmiteActivoSiAgenteSigueEnCuotaVisible(t *testing.T) {
 	agente := &db.Agente{
 		Nombre:             "Codex4",

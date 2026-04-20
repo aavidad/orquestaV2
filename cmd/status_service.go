@@ -519,6 +519,14 @@ func aplicarVisibilidadOperativaAgentes(agentes []*db.Agente, rows []agentesapp.
 			continue
 		}
 		switch strings.TrimSpace(row.EstadoOperativo) {
+		case "bloqueado_por_cuota":
+			agente.Activo = false
+			if !agenteBloqueadoPorCuotaVisible(agente) {
+				agente.EstadoCuota = "enfriamiento"
+				if strings.TrimSpace(agente.MotivoPausa) == "" {
+					agente.MotivoPausa = strings.TrimSpace(row.DetalleOperativo)
+				}
+			}
 		case "arrancando", "trabajando", "disponible", "saturado", "atascado", "mailbox_atascada":
 			agente.Activo = rowCountsAsConnected(row)
 		default:
