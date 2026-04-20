@@ -784,7 +784,7 @@ func statusSnapshotNeedsImmediateRefresh(status apiStatusResponse) bool {
 }
 
 func fetchStatusFastFallback() (apiStatusResponse, error) {
-	agentes, err := db.ListarAgentesEstadoLigero()
+	agentes, err := db.ListarAgentes()
 	if err != nil {
 		return apiStatusResponse{}, err
 	}
@@ -922,11 +922,11 @@ func listarTareasActivasRapido() ([]tareaLite, error) {
 }
 
 func fetchStatusFresh() (apiStatusResponse, error) {
-	sesiones, err := sesionesVisiblesParaEstado()
+	agentes, err := db.ListarAgentes()
 	if err != nil {
 		return apiStatusResponse{}, err
 	}
-	agentes, err := db.ListarAgentesEstadoLigeroConSesionesActivas(sesiones)
+	sesiones, err := sesionesVisiblesParaEstado()
 	if err != nil {
 		return apiStatusResponse{}, err
 	}

@@ -895,6 +895,9 @@ func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 		if err != nil {
 			return nil, err
 		}
+		if err := s.reconcileDetailRowWithPanelSnapshot(nombre, &row); err != nil {
+			return nil, err
+		}
 		return &Detail{
 			Row:                     row,
 			Entity:                  buildAgentEntity(s.store, row, tareas),
@@ -910,6 +913,9 @@ func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 	}
 	row, err := s.buildRowForAgentWithMailbox(nombre, mailbox)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.reconcileDetailRowWithPanelSnapshot(nombre, &row); err != nil {
 		return nil, err
 	}
 
@@ -970,6 +976,29 @@ func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 	return detail, nil
 }
 
+func (s *Service) reconcileDetailRowWithPanelSnapshot(nombre string, row *Row) error {
+	if s == nil || row == nil {
+		return nil
+	}
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return nil
+	}
+	agentes, err := s.ListAgents()
+	if err != nil {
+		return err
+	}
+	for _, agente := range agentes {
+		if agente == nil || !strings.EqualFold(strings.TrimSpace(agente.Nombre), nombre) {
+			continue
+		}
+		row.Agente = agente
+		row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(*row, time.Now().UTC(), workerOutputStaleThreshold(s.store))
+		return nil
+	}
+	return nil
+}
+
 func (s *Service) buildRowForAgent(nombre string) (Row, error) {
 	mailbox, err := s.listMailboxForAgent(strings.TrimSpace(nombre))
 	if err != nil {
@@ -983,7 +1012,7 @@ func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.Runti
 	if nombre == "" {
 		return Row{}, fmt.Errorf("agente obligatorio")
 	}
-	agente, err := s.store.GetAgent(nombre)
+	agente, err := s.visibleAgentByName(nombre)
 	if err != nil {
 		return Row{}, err
 	}
@@ -1127,7 +1156,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 	agentDetailDebugf("compact start agente=%s", nombre)
 
 	stepStart := time.Now()
-	agente, err := s.store.GetAgent(nombre)
+	agente, err := s.visibleAgentByName(nombre)
 	if err != nil {
 		return Row{}, nil, nil, err
 	}
@@ -1356,7 +1385,7 @@ func (s *Service) buildOperationalRowContextForAgent(nombre string, now time.Tim
 		return Row{}, nil, nil, fmt.Errorf("agente obligatorio")
 	}
 
-	agente, err := s.store.GetAgent(nombre)
+	agente, err := s.visibleAgentByName(nombre)
 	if err != nil {
 		return Row{}, nil, nil, err
 	}
@@ -1445,6 +1474,23 @@ func (s *Service) buildOperationalRowContextForAgent(nombre string, now time.Tim
 
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
 	return row, asignaciones, tareas, nil
+}
+
+func (s *Service) visibleAgentByName(nombre string) (*db.Agente, error) {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return nil, nil
+	}
+	agentes, err := s.ListAgents()
+	if err != nil {
+		return nil, err
+	}
+	for _, agente := range agentes {
+		if agente != nil && strings.EqualFold(strings.TrimSpace(agente.Nombre), nombre) {
+			return agente, nil
+		}
+	}
+	return s.store.GetAgent(nombre)
 }
 
 func (s *Service) cachePrepareAgent(agent *db.Agente) {

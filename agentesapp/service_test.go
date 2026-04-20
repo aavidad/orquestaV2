@@ -87,6 +87,11 @@ type fakeStoreWithLiteAgent struct {
 	liteCalls    int
 }
 
+type fakeStoreWithStaleGetAgent struct {
+	*fakeStore
+	staleAgent *db.Agente
+}
+
 func (f *fakeStore) RegisterAgent(nombre, rol string) error { return nil }
 func (f *fakeStore) RegisterAgentAuto(proveedor, rol string) (string, error) {
 	return "Codex1", nil
@@ -131,6 +136,13 @@ func (f *fakeStoreWithLiteAgent) GetAgentPrepareLite(nombre string) (*db.Agente,
 
 func (f *fakeStoreWithLiteAgent) GetAgent(nombre string) (*db.Agente, error) {
 	return nil, fmt.Errorf("GetAgent pesado no deberia usarse en BuildPrepare")
+}
+
+func (f *fakeStoreWithStaleGetAgent) GetAgent(nombre string) (*db.Agente, error) {
+	if f.staleAgent != nil && strings.EqualFold(strings.TrimSpace(f.staleAgent.Nombre), strings.TrimSpace(nombre)) {
+		return f.staleAgent, nil
+	}
+	return f.fakeStore.GetAgent(nombre)
 }
 
 func (f *fakeStore) GetProject(ref string) (*db.Proyecto, error) {
@@ -3265,6 +3277,46 @@ func TestBuildDetailCompactOcultaContinuidadAbsorbidaEnMailboxVisible(t *testing
 	}
 }
 
+func TestBuildDetailCompactReconcilesQuotaFromPanelSnapshot(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(420)
+	base := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex3", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		tasks: []*db.Tarea{
+			{ID: 801, Titulo: "Frente en curso", Agente: ptr("Codex3"), Estado: db.EstadoEnProgreso, ProyectoID: &proyectoID},
+		},
+	}
+	store := &fakeStoreWithStaleGetAgent{
+		fakeStore: base,
+		staleAgent: &db.Agente{
+			Nombre:             "Codex3",
+			Rol:                "programador",
+			Activo:             true,
+			Habilitado:         true,
+			EstadoCuota:        "enfriamiento",
+			MotivoPausa:        "worker bloqueado por cuota",
+			PresupuestoResetAt: timePtr(now.Add(30 * time.Minute)),
+			ReanimarAt:         timePtr(now.Add(30 * time.Minute)),
+		},
+	}
+
+	detail, err := NewService(store, nil).BuildDetailCompact("Codex3")
+	if err != nil {
+		t.Fatalf("BuildDetailCompact: %v", err)
+	}
+	if got := strings.TrimSpace(detail.Row.Agente.EstadoCuota); got != "activo" {
+		t.Fatalf("estado_cuota stale en compact detail: %q", got)
+	}
+	if got := strings.TrimSpace(detail.Row.EstadoOperativo); got == "bloqueado_por_cuota" {
+		t.Fatalf("estado operativo no deberia seguir bloqueado por cuota: %+v", detail.Row)
+	}
+}
+
 func TestBuildReanimationScheduleFiltraVencidasYExponeLeases(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(7)
@@ -3825,14 +3877,14 @@ func TestBuildDetailCompactNoRefrescaResumePayloadConHeartbeatDeSesion(t *testin
 		}
 	}
 	writeJSON(manifestPath, map[string]any{
-		"version":         1,
-		"agent":           "Codex3",
-		"driver":          "tmux_cli_session",
-		"transport":       "tmux",
-		"tmux_session":    "orq-codex3-test",
-		"tmux_pane_id":    "%73",
-		"status_path":     statusPath,
-		"heartbeat_path":  heartbeatPath,
+		"version":        1,
+		"agent":          "Codex3",
+		"driver":         "tmux_cli_session",
+		"transport":      "tmux",
+		"tmux_session":   "orq-codex3-test",
+		"tmux_pane_id":   "%73",
+		"status_path":    statusPath,
+		"heartbeat_path": heartbeatPath,
 	})
 	writeJSON(statusPath, map[string]any{
 		"state":                 "ready",
@@ -3906,14 +3958,14 @@ func TestBuildDetailCompactPromueveResumePayloadAbsorbidoAWorkConfirmed(t *testi
 		}
 	}
 	writeJSON(manifestPath, map[string]any{
-		"version":         1,
-		"agent":           "Codex1",
-		"driver":          "tmux_cli_session",
-		"transport":       "tmux",
-		"tmux_session":    "orq-codex1-test",
-		"tmux_pane_id":    "%71",
-		"status_path":     statusPath,
-		"heartbeat_path":  heartbeatPath,
+		"version":        1,
+		"agent":          "Codex1",
+		"driver":         "tmux_cli_session",
+		"transport":      "tmux",
+		"tmux_session":   "orq-codex1-test",
+		"tmux_pane_id":   "%71",
+		"status_path":    statusPath,
+		"heartbeat_path": heartbeatPath,
 	})
 	writeJSON(statusPath, map[string]any{
 		"state":            "ready",
@@ -4094,11 +4146,11 @@ func TestBuildPanelRowsNoMarcaSupervisorConResumePayloadVivoComoAtascado(t *test
 		"mailbox_delivery_mode": "bootstrap_only",
 	})
 	statusRaw, _ := json.Marshal(map[string]any{
-		"state":           "ready",
-		"updated_at":      now.Format(time.RFC3339Nano),
-		"alive":           true,
-		"ready_at":        now.Add(-30 * time.Minute).Format(time.RFC3339Nano),
-		"last_output_at":  now.Format(time.RFC3339Nano),
+		"state":            "ready",
+		"updated_at":       now.Format(time.RFC3339Nano),
+		"alive":            true,
+		"ready_at":         now.Add(-30 * time.Minute).Format(time.RFC3339Nano),
+		"last_output_at":   now.Format(time.RFC3339Nano),
 		"last_progress_at": now.Add(-30 * time.Minute).Format(time.RFC3339Nano),
 	})
 	heartbeatRaw, _ := json.Marshal(map[string]any{
