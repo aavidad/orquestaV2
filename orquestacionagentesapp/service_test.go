@@ -33,6 +33,14 @@ type stubRuntimeController struct {
 	controlID            int64
 	controlAction        string
 	controlErr           error
+	handoffID            int64
+	handoffErr           error
+	handoffOrigen        string
+	handoffDestino       string
+	handoffTareaID       *int64
+	handoffMotivo        string
+	handoffResumen       string
+	handoffExternal      string
 	syncSource           string
 	syncCount            int
 	syncErr              error
@@ -80,6 +88,16 @@ type stubRuntimeController struct {
 func (s *stubRuntimeController) EnqueueAgentControl(req runtimesapp.AgentControlRequest) (int64, string, error) {
 	s.controlReq = req
 	return s.controlID, s.controlAction, s.controlErr
+}
+
+func (s *stubRuntimeController) CreateLiveAgentHandoff(origen, destino string, tareaID *int64, motivo, resumenContinuidad, externalSessionID string) (int64, error) {
+	s.handoffOrigen = origen
+	s.handoffDestino = destino
+	s.handoffTareaID = tareaID
+	s.handoffMotivo = motivo
+	s.handoffResumen = resumenContinuidad
+	s.handoffExternal = externalSessionID
+	return s.handoffID, s.handoffErr
 }
 
 func (s *stubRuntimeController) GetProject(string) (*db.Proyecto, error) {
@@ -1682,4 +1700,29 @@ func ptrInt64(v int64) *int64 {
 
 func ptrTime(v time.Time) *time.Time {
 	return &v
+}
+
+func TestRequestLiveAgentHandoffDelegates(t *testing.T) {
+	t.Parallel()
+
+	tareaID := int64(41)
+	runtimes := &stubRuntimeController{handoffID: 88}
+	service := NewService(nil, runtimes)
+
+	id, err := service.RequestLiveAgentHandoff(" Codex1 ", " Codex2 ", &tareaID, " relevo ", " continuar ", " ext-1 ")
+	if err != nil {
+		t.Fatalf("RequestLiveAgentHandoff: %v", err)
+	}
+	if id != 88 {
+		t.Fatalf("id inesperado: %d", id)
+	}
+	if runtimes.handoffOrigen != "Codex1" || runtimes.handoffDestino != "Codex2" {
+		t.Fatalf("handoff origen/destino inesperados: %q -> %q", runtimes.handoffOrigen, runtimes.handoffDestino)
+	}
+	if runtimes.handoffTareaID == nil || *runtimes.handoffTareaID != tareaID {
+		t.Fatalf("handoff tarea inesperada: %v", runtimes.handoffTareaID)
+	}
+	if runtimes.handoffMotivo != "relevo" || runtimes.handoffResumen != "continuar" || runtimes.handoffExternal != "ext-1" {
+		t.Fatalf("handoff payload inesperado: motivo=%q resumen=%q ext=%q", runtimes.handoffMotivo, runtimes.handoffResumen, runtimes.handoffExternal)
+	}
 }
