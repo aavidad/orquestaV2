@@ -1230,6 +1230,72 @@ func TestProcessTickNoPideIntervencionPorBloqueoAutorecuperableConSesionActiva(t
 	}
 }
 
+func TestProcessTickNoPideIntervencionPorBloqueoAtascadoAutorecuperableConSesionActiva(t *testing.T) {
+	prepararDBTemporalRuntimeService(t)
+	tmp := t.TempDir()
+	rutaProyecto := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(rutaProyecto, 0o755); err != nil {
+		t.Fatalf("mkdir proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaProyecto,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex3", proyectoID, "worker"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex3",
+		ProyectoID:  &proyectoID,
+		CWD:         rutaProyecto,
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente bloqueado por atasco autorecuperable",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex3"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex3"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "Codex3", "Agente Codex3 atascado: sin progreso reciente tras reinicios"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	out, err := NewService(Repository{}, nil).ProcessTick(TickInput{
+		Agente:   "Codex3",
+		Proyecto: "orquestador",
+	})
+	if err != nil {
+		t.Fatalf("ProcessTick: %v", err)
+	}
+	if out == nil {
+		t.Fatal("tick output nil")
+	}
+	if out.AccionRecomendada == "pedir_intervencion" {
+		t.Fatalf("no deberia pedir intervencion por bloqueo autorecuperable de atasco con sesion activa: %+v", out)
+	}
+}
+
 func TestProcessTickNoPideIntervencionPorBloqueoSinRelevoSanoConAsignacionActiva(t *testing.T) {
 	prepararDBTemporalRuntimeService(t)
 	tmp := t.TempDir()

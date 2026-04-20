@@ -18683,6 +18683,13 @@ func TestEncolarContinuacionTareaReasignadaSiCorrespondeEscalaFollowupBloqueadoA
 	}
 }
 
+func TestEsBloqueoAutonomiaAgenteRecuperableAceptaMotivoAtascado(t *testing.T) {
+	motivo := "Agente Codex3 atascado: sin progreso reciente tras reinicios"
+	if !esBloqueoAutonomiaAgenteRecuperable("Codex3", "Codex3", motivo) {
+		t.Fatalf("deberia tratar un atasco del propio agente como autorecuperable: %q", motivo)
+	}
+}
+
 func TestEncolarContinuacionTareaReasignadaSiCorrespondeReintentaFollowupFallidoSinBloqueo(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

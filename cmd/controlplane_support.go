@@ -11325,6 +11325,9 @@ func esBloqueoAutonomiaAgenteRecuperable(agente, bloqueadoPor, motivo string) bo
 	if strings.HasPrefix(motivo, "Agente "+agente+" en estado ") {
 		return true
 	}
+	if strings.HasPrefix(motivo, "Agente "+agente+" atascado:") {
+		return true
+	}
 	if strings.EqualFold(bloqueadoPor, agente) && strings.HasPrefix(motivo, "Agente degradado:") {
 		return true
 	}
