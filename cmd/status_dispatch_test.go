@@ -358,4 +358,25 @@ func TestListarHandoffsAutonomiaEstadoCuentaPendientesYEjecutando(t *testing.T) 
 	}
 }
 
+func TestStatusSnapshotNeedsImmediateRefreshConAutonomiaEnTransicion(t *testing.T) {
+	t.Parallel()
+
+	if !statusSnapshotNeedsImmediateRefresh(apiStatusResponse{
+		Autonomia: autonomiaResumen{ContinuidadPendiente: 1},
+	}) {
+		t.Fatal("deberia refrescar enseguida con continuidad pendiente")
+	}
+	if !statusSnapshotNeedsImmediateRefresh(apiStatusResponse{
+		Autonomia: autonomiaResumen{Handoffs: 1},
+	}) {
+		t.Fatal("deberia refrescar enseguida con handoff vivo")
+	}
+	if statusSnapshotNeedsImmediateRefresh(apiStatusResponse{
+		Autonomia:    autonomiaResumen{WorkConfirmed: 1},
+		AgentesActivos: []*db.Agente{{Nombre: "Codex1"}},
+	}) {
+		t.Fatal("no deberia forzar refresh inmediato solo por autonomia confirmada")
+	}
+}
+
 func ptrTimeStatusDispatch(t time.Time) *time.Time { return &t }
