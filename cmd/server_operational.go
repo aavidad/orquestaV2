@@ -93,7 +93,7 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 		state = "degraded"
 		reason = "workers_stuck"
 		operational = false
-	case tasksInProgress > 0 && workingAgents == 0:
+	case tasksInProgress > 0 && workingAgents == 0 && status.Autonomia.WorkConfirmed == 0:
 		state = "degraded"
 		reason = "tasks_without_workers"
 		operational = false

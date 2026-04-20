@@ -3,7 +3,21 @@ package cmd
 import (
 	"strings"
 	"testing"
+
+	"orquesta/db"
 )
+
+func TestBuildServerOperationalInfoToleraTrabajoConfirmadoSinWorkingAgents(t *testing.T) {
+	info := buildServerOperationalInfo(apiStatusResponse{
+		TareasEnProgreso: []tareaLite{{ID: 1, Estado: db.TareaEnProgreso}},
+		Autonomia: autonomiaResumen{
+			WorkConfirmed: 1,
+		},
+	})
+	if !info.Operational || info.State != "ready" {
+		t.Fatalf("no deberia degradar si la autonomia ya confirmo trabajo: %+v", info)
+	}
+}
 
 func TestFormatServerOperationalSummaryIncluyeDispatch(t *testing.T) {
 	summary := formatServerOperationalSummary(&serverOperationalInfo{
