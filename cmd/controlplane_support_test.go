@@ -10661,6 +10661,46 @@ func TestExisteIntentoSendInstructionMailboxParaHandleEnSnapshotOmiteBloqueoSiDi
 	}
 }
 
+func TestRuntimeMailboxBatchPhaseNamesOmiteFasesIrrelevantesParaAutonomia(t *testing.T) {
+	proyectoID := int64(11)
+	names := runtimeMailboxBatchPhaseNames([]*db.RuntimeMailboxMessage{
+		{ID: 1, ToAgente: "Codex4", ProyectoID: &proyectoID, Kind: "autonomia"},
+		{ID: 2, ToAgente: "Codex4", ProyectoID: &proyectoID, Kind: "nudge"},
+	})
+	got := map[string]bool{}
+	for _, name := range names {
+		got[name] = true
+	}
+	for _, expected := range []string{"agente_sin_vida", "watchdog_sin_handle", "interactive", "session_resume", "bootstrap_tmux", "guidance_inbox", "coordinated_restart"} {
+		if !got[expected] {
+			t.Fatalf("faltaba fase base %q en %+v", expected, names)
+		}
+	}
+	for _, skipped := range []string{"quota_pipeline", "pipeline_enfriamiento", "refresh_enfriamiento", "instruction_enfriamiento", "instruction_obsoleta_contexto", "pipeline_bootstrap_activa"} {
+		if got[skipped] {
+			t.Fatalf("la fase %q no deberia ejecutarse para mailbox de autonomia: %+v", skipped, names)
+		}
+	}
+}
+
+func TestRuntimeMailboxBatchPhaseNamesIncluyeFasesSegunKindsPresentes(t *testing.T) {
+	proyectoID := int64(11)
+	names := runtimeMailboxBatchPhaseNames([]*db.RuntimeMailboxMessage{
+		{ID: 1, ToAgente: "Codex1", ProyectoID: &proyectoID, Kind: "pipeline_local"},
+		{ID: 2, ToAgente: "Codex1", ProyectoID: &proyectoID, Kind: "instruction"},
+		{ID: 3, ToAgente: "Codex1", ProyectoID: &proyectoID, Kind: db.MailboxKindGovernanceRefresh},
+	})
+	got := map[string]bool{}
+	for _, name := range names {
+		got[name] = true
+	}
+	for _, expected := range []string{"quota_pipeline", "pipeline_enfriamiento", "pipeline_bootstrap_activa", "instruction_enfriamiento", "instruction_obsoleta_contexto", "refresh_enfriamiento"} {
+		if !got[expected] {
+			t.Fatalf("faltaba fase %q en %+v", expected, names)
+		}
+	}
+}
+
 func TestProcesarRuntimeMailboxInteractivoMensajeOmiteSupervisionParaHandleNoInteractivo(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()

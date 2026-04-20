@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -130,6 +131,11 @@ func cargarRuntimeDiagnosticoDesdeAPI(agente, proyecto string, limit int) (*runt
 		"to_agente": []string{agente},
 		"estado":    []string{"pendiente"},
 	}
+	mailLimit := 20
+	if limit > 0 && limit < mailLimit {
+		mailLimit = limit
+	}
+	mailQuery.Set("limit", strconv.Itoa(mailLimit))
 	if proyecto != "" {
 		mailQuery.Set("proyecto", proyecto)
 	}

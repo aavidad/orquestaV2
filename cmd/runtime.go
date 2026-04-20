@@ -890,6 +890,7 @@ var runtimeMailboxCmd = &cobra.Command{
 		fromAgente, _ := cmd.Flags().GetString("from")
 		estado, _ := cmd.Flags().GetString("estado")
 		proyectoRef, _ := cmd.Flags().GetString("proyecto")
+		limit, _ := cmd.Flags().GetInt("limit")
 
 		query := url.Values{}
 		if strings.TrimSpace(toAgente) != "" {
@@ -903,6 +904,9 @@ var runtimeMailboxCmd = &cobra.Command{
 		}
 		if strings.TrimSpace(proyectoRef) != "" {
 			query.Set("proyecto", proyectoRef)
+		}
+		if limit > 0 {
+			query.Set("limit", strconv.Itoa(limit))
 		}
 		if mailbox, ok, err := cargarRuntimeMailboxDesdeAPI(query); ok {
 			if err != nil {
@@ -1647,6 +1651,13 @@ func cargarRuntimeMailboxRecuperacionLocal(query url.Values) ([]*db.RuntimeMailb
 		return nil, err
 	}
 	filter := db.FiltroRuntimeMailbox{ProyectoID: proyectoID}
+	if value := strings.TrimSpace(query.Get("limit")); value != "" {
+		limit, err := strconv.Atoi(value)
+		if err != nil || limit <= 0 {
+			return nil, fmt.Errorf("limit inválido")
+		}
+		filter.Limit = limit
+	}
 	if value := strings.TrimSpace(query.Get("to_agente")); value != "" {
 		filter.ToAgente = &value
 	}
@@ -1955,6 +1966,7 @@ func init() {
 	runtimeMailboxCmd.Flags().String("from", "", "Filtrar mensajes por agente origen")
 	runtimeMailboxCmd.Flags().String("estado", "", "Filtrar mensajes por estado")
 	runtimeMailboxCmd.Flags().String("proyecto", "", "Filtrar mensajes por proyecto")
+	runtimeMailboxCmd.Flags().Int("limit", 0, "Limitar mensajes devueltos")
 	runtimeMailboxLimpiarCmd.Flags().String("to", "", "Limpiar mensajes por agente destino")
 	runtimeMailboxLimpiarCmd.Flags().String("from", "", "Limpiar mensajes por agente origen")
 	runtimeMailboxLimpiarCmd.Flags().String("proyecto", "", "Limpiar mensajes por proyecto")

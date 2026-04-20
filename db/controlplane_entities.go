@@ -175,6 +175,7 @@ type FiltroRuntimeMailbox struct {
 	FromAgente *string
 	ProyectoID *int64
 	Estado     *string
+	Limit      int
 }
 
 type FiltroRuntimeCheckpoints struct {
@@ -3072,6 +3073,10 @@ func ListarRuntimeMailbox(filter FiltroRuntimeMailbox) ([]*RuntimeMailboxMessage
 		args = append(args, strings.TrimSpace(*filter.Estado))
 	}
 	q += ` ORDER BY id DESC`
+	if filter.Limit > 0 {
+		q += ` LIMIT ?`
+		args = append(args, filter.Limit)
+	}
 	rows, err := DB.Query(q, args...)
 	if err != nil {
 		return nil, err

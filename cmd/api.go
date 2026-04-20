@@ -5365,6 +5365,14 @@ func apiHandlerRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		filter := db.FiltroRuntimeMailbox{}
+		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+			limit, err := strconv.Atoi(raw)
+			if err != nil || limit <= 0 {
+				apiError(w, http.StatusBadRequest, fmt.Errorf("limit inválido"))
+				return
+			}
+			filter.Limit = limit
+		}
 		if toAgente := strings.TrimSpace(r.URL.Query().Get("to_agente")); toAgente != "" {
 			toAgente = apiNombreAgenteCanonico(toAgente)
 			filter.ToAgente = &toAgente
@@ -5658,8 +5666,8 @@ func apiHandlerRuntimeProcessTranscript(w http.ResponseWriter, r *http.Request) 
 	if agente := strings.TrimSpace(req.Agente); agente != "" {
 		agente = apiNombreAgenteCanonico(agente)
 		var (
-			handle    *db.RuntimeHandle
-			err       error
+			handle     *db.RuntimeHandle
+			err        error
 			proyectoID *int64
 		)
 		if proyecto := strings.TrimSpace(req.Proyecto); proyecto != "" {

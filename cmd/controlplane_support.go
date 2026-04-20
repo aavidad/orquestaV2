@@ -2968,6 +2968,57 @@ type runtimeMailboxBatchPhase struct {
 	fn         func() (int, error)
 }
 
+type runtimeMailboxBatchKindsSummary struct {
+	hasPipeline    bool
+	hasInstruction bool
+	hasRefresh     bool
+}
+
+func resumirKindsRuntimeMailboxBatch(mailbox []*db.RuntimeMailboxMessage) runtimeMailboxBatchKindsSummary {
+	var out runtimeMailboxBatchKindsSummary
+	for _, msg := range mailbox {
+		if msg == nil {
+			continue
+		}
+		switch strings.TrimSpace(msg.Kind) {
+		case "pipeline_local":
+			out.hasPipeline = true
+		case "instruction":
+			out.hasInstruction = true
+		case db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
+			out.hasRefresh = true
+		}
+		if out.hasPipeline && out.hasInstruction && out.hasRefresh {
+			return out
+		}
+	}
+	return out
+}
+
+func runtimeMailboxBatchPhaseNames(mailbox []*db.RuntimeMailboxMessage) []string {
+	summary := resumirKindsRuntimeMailboxBatch(mailbox)
+	names := make([]string, 0, 13)
+	if summary.hasPipeline {
+		names = append(names, "quota_pipeline")
+	}
+	names = append(names, "agente_sin_vida")
+	if summary.hasPipeline {
+		names = append(names, "pipeline_enfriamiento")
+	}
+	if summary.hasRefresh {
+		names = append(names, "refresh_enfriamiento")
+	}
+	if summary.hasInstruction {
+		names = append(names, "instruction_enfriamiento", "instruction_obsoleta_contexto")
+	}
+	names = append(names, "watchdog_sin_handle", "interactive", "session_resume", "bootstrap_tmux")
+	if summary.hasPipeline {
+		names = append(names, "pipeline_bootstrap_activa")
+	}
+	names = append(names, "guidance_inbox", "coordinated_restart")
+	return names
+}
+
 func procesarRuntimeMailboxPhases(phases []runtimeMailboxBatchPhase, budget time.Duration) (int, error) {
 	start := time.Now()
 	total := 0
@@ -3006,47 +3057,65 @@ func procesarRuntimeMailboxBatchConFiltro(filter db.FiltroRuntimeMailbox) (int, 
 	}
 	consumed := map[int64]struct{}{}
 	snapshot := newRuntimeMailboxBatchSnapshot()
-	return procesarRuntimeMailboxPhases([]runtimeMailboxBatchPhase{
-		{name: "quota_pipeline", deferStage: "quota_pipeline", fn: func() (int, error) {
-			return reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox, consumed, snapshot)
-		}},
-		{name: "agente_sin_vida", deferStage: "agente_sin_vida", fn: func() (int, error) {
-			return reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox, consumed, snapshot)
-		}},
-		{name: "pipeline_enfriamiento", deferStage: "pipeline_enfriamiento", fn: func() (int, error) {
-			return reconciliarRuntimeMailboxPipelineEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
-		}},
-		{name: "refresh_enfriamiento", deferStage: "refresh_enfriamiento", fn: func() (int, error) {
-			return reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
-		}},
-		{name: "instruction_enfriamiento", deferStage: "instruction_enfriamiento", fn: func() (int, error) {
-			return reconciliarRuntimeMailboxInstructionEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
-		}},
-		{name: "instruction_obsoleta_contexto", deferStage: "instruction_obsoleta_contexto", fn: func() (int, error) {
-			return reconciliarRuntimeMailboxInstructionObsoletaContextoBatchConMailbox(mailbox, consumed, snapshot)
-		}},
-		{name: "watchdog_sin_handle", deferStage: "watchdog_sin_handle", fn: func() (int, error) {
-			return reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox, consumed, snapshot)
-		}},
-		{name: "interactive", deferStage: "interactive", fn: func() (int, error) {
-			return procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox, consumed, snapshot)
-		}},
-		{name: "session_resume", deferStage: "session_resume", fn: func() (int, error) {
-			return procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox, consumed, snapshot)
-		}},
-		{name: "bootstrap_tmux", deferStage: "bootstrap_tmux", fn: func() (int, error) {
-			return procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(mailbox, consumed, snapshot)
-		}},
-		{name: "pipeline_bootstrap_activa", deferStage: "pipeline_bootstrap_activa", fn: func() (int, error) {
-			return reconciliarRuntimeMailboxPipelineBootstrapActivaBatchConMailbox(mailbox, consumed, snapshot)
-		}},
-		{name: "guidance_inbox", deferStage: "guidance_inbox", fn: func() (int, error) {
-			return reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox, consumed, snapshot)
-		}},
-		{name: "coordinated_restart", deferStage: "coordinated_restart", fn: func() (int, error) {
-			return procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox, consumed, snapshot)
-		}},
-	}, runtimeMailboxBatchBudget())
+	phaseNames := runtimeMailboxBatchPhaseNames(mailbox)
+	phases := make([]runtimeMailboxBatchPhase, 0, len(phaseNames))
+	for _, name := range phaseNames {
+		switch name {
+		case "quota_pipeline":
+			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
+				return reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox, consumed, snapshot)
+			}})
+		case "agente_sin_vida":
+			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
+				return reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox, consumed, snapshot)
+			}})
+		case "pipeline_enfriamiento":
+			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
+				return reconciliarRuntimeMailboxPipelineEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
+			}})
+		case "refresh_enfriamiento":
+			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
+				return reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
+			}})
+		case "instruction_enfriamiento":
+			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
+				return reconciliarRuntimeMailboxInstructionEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
+			}})
+		case "instruction_obsoleta_contexto":
+			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
+				return reconciliarRuntimeMailboxInstructionObsoletaContextoBatchConMailbox(mailbox, consumed, snapshot)
+			}})
+		case "watchdog_sin_handle":
+			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
+				return reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox, consumed, snapshot)
+			}})
+		case "interactive":
+			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
+				return procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox, consumed, snapshot)
+			}})
+		case "session_resume":
+			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
+				return procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox, consumed, snapshot)
+			}})
+		case "bootstrap_tmux":
+			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
+				return procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(mailbox, consumed, snapshot)
+			}})
+		case "pipeline_bootstrap_activa":
+			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
+				return reconciliarRuntimeMailboxPipelineBootstrapActivaBatchConMailbox(mailbox, consumed, snapshot)
+			}})
+		case "guidance_inbox":
+			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
+				return reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox, consumed, snapshot)
+			}})
+		case "coordinated_restart":
+			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
+				return procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox, consumed, snapshot)
+			}})
+		}
+	}
+	return procesarRuntimeMailboxPhases(phases, runtimeMailboxBatchBudget())
 }
 
 func reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
