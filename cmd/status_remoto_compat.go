@@ -445,13 +445,38 @@ func renderStatusSummary(ctx *statusContext) {
 		fmt.Println()
 	}
 	if len(retenidas) > 0 {
+		agentePorNombre := make(map[string]*db.Agente, len(resumen.Agentes)+len(resumen.AgentesQuotaBlocked))
+		for _, agente := range resumen.Agentes {
+			if agente == nil {
+				continue
+			}
+			agentePorNombre[strings.TrimSpace(agente.Nombre)] = agente
+		}
+		for _, agente := range resumen.AgentesQuotaBlocked {
+			if agente == nil {
+				continue
+			}
+			nombre := strings.TrimSpace(agente.Nombre)
+			if nombre == "" {
+				continue
+			}
+			if _, ok := agentePorNombre[nombre]; !ok {
+				agentePorNombre[nombre] = agente
+			}
+		}
 		fmt.Printf("⏸️  Retenidas por cuota:\n")
 		for _, t := range retenidas {
 			agente := "—"
 			if t.Agente != "" {
 				agente = t.Agente
 			}
-			fmt.Printf("   [%d] %-40s → %s\n", t.ID, truncar(t.Titulo, 38), agente)
+			fmt.Printf("   [%d] %-40s → %s", t.ID, truncar(t.Titulo, 38), agente)
+			if info := agentePorNombre[agente]; info != nil {
+				if resetAt := cooldownVisibleAgente(info); resetAt != nil {
+					fmt.Printf(" · reset %s", resetAt.Local().Format("2006-01-02 15:04"))
+				}
+			}
+			fmt.Println()
 		}
 		fmt.Println()
 	}

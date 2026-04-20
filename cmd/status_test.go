@@ -783,6 +783,7 @@ func TestResumenCuotaAgenteOcultaCuotaLegacyEnAgenteLocalSinProveedor(t *testing
 }
 
 func TestRenderStatusSummaryMuestraTareasRetenidasPorCuota(t *testing.T) {
+	resetAt := time.Now().UTC().Add(2 * time.Hour)
 	out := captureOutput(t, func() {
 		renderStatusSummary(&statusContext{
 			resumen: &estadoResumen{
@@ -792,6 +793,7 @@ func TestRenderStatusSummaryMuestraTareasRetenidasPorCuota(t *testing.T) {
 						Rol:         "programador",
 						Activo:      false,
 						EstadoCuota: "enfriamiento",
+						ReanimarAt:  &resetAt,
 					},
 				},
 				TareasActivas: []tareaLite{
@@ -806,6 +808,9 @@ func TestRenderStatusSummaryMuestraTareasRetenidasPorCuota(t *testing.T) {
 	}
 	if !strings.Contains(out, "[416]") || !strings.Contains(out, "Codex1") {
 		t.Fatalf("salida sin tarea retenida visible: %s", out)
+	}
+	if !strings.Contains(out, "reset ") {
+		t.Fatalf("salida sin reset visible para la tarea retenida: %s", out)
 	}
 }
 

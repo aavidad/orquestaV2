@@ -477,6 +477,53 @@ func TestAgentesVisiblesPorEstadoOperativoRowsNoCuentaArrancandoComoTrabajando(t
 	}
 }
 
+func TestResumirAutonomiaLigeraDerivaSupervisorYTrabajoConfirmado(t *testing.T) {
+	out := resumirAutonomiaLigera(
+		[]*db.Agente{
+			{Nombre: "Codex1", Rol: "programador"},
+			{Nombre: "Codex2", Rol: "programador"},
+			{Nombre: "Codex3", Rol: "programador"},
+		},
+		[]*db.Agente{
+			{Nombre: "Codex2", Rol: "programador"},
+		},
+		[]tareaLite{
+			{ID: 17, Estado: db.TareaEnProgreso, Agente: "Codex2"},
+		},
+		time.Now().UTC(),
+	)
+	if out.Supervisando != 1 {
+		t.Fatalf("supervisando inesperado: %+v", out)
+	}
+	if out.Continuando != 1 {
+		t.Fatalf("continuando inesperado: %+v", out)
+	}
+	if out.WorkConfirmed != 1 {
+		t.Fatalf("work_confirmed inesperado: %+v", out)
+	}
+	if out.ContinuidadPendiente != 0 || out.Handoffs != 0 {
+		t.Fatalf("resumen ligero no deberia inflar pendientes/handoffs: %+v", out)
+	}
+}
+
+func TestResumirAutonomiaLigeraCuentaSupervisorTrabajandoComoConfirmado(t *testing.T) {
+	out := resumirAutonomiaLigera(
+		[]*db.Agente{
+			{Nombre: "Codex1", Rol: "programador"},
+		},
+		[]*db.Agente{
+			{Nombre: "Codex1", Rol: "programador"},
+		},
+		[]tareaLite{
+			{ID: 22, Estado: db.TareaEnProgreso, Agente: "Codex1"},
+		},
+		time.Now().UTC(),
+	)
+	if out.Supervisando != 1 || out.Continuando != 0 || out.WorkConfirmed != 1 {
+		t.Fatalf("resumen ligero inesperado: %+v", out)
+	}
+}
+
 func TestAgentesVisiblesPorEstadoOperativoRowsCuentaAtascadoSoloSiTieneRuntimeUtil(t *testing.T) {
 	agente := &db.Agente{Nombre: "Codex11", Rol: "programador"}
 	rows := []agentesapp.Row{

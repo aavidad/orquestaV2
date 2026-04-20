@@ -8242,11 +8242,80 @@ func runtimeOrderSendInstructionDirectaAbsorbidaPorTrabajo(order *RuntimeOrder, 
 	}
 }
 
+func runtimeOrderSendInstructionAutonomiaReasignadaAbsorbidaPorTrabajo(order *RuntimeOrder, payload map[string]any, now time.Time) (string, error) {
+	if order == nil || payload == nil {
+		return "", nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(stringFromMap(payload, "kind", "")), "autonomia") {
+		return "", nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(stringFromMap(payload, "accion", "")), "continuar_trabajo") {
+		return "", nil
+	}
+	if !boolFromMap(payload, "post_remediation") {
+		return "", nil
+	}
+	tareaID := int64FromAny(payload["tarea_id"])
+	if tareaID <= 0 {
+		return "", nil
+	}
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		return "", err
+	}
+	if tarea == nil || tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(order.Agente)) {
+		return "", nil
+	}
+	if tarea.Estado != TareaEnProgreso {
+		return "", nil
+	}
+	var handle *RuntimeHandle
+	if order.HandleID != nil && *order.HandleID > 0 {
+		handle, err = GetRuntimeHandle(*order.HandleID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return "", err
+		}
+	}
+	if handle == nil {
+		handle, err = GetRuntimeHandleCanonicoRecienteAgenteProyecto(strings.TrimSpace(order.Agente), order.ProyectoID)
+		if err != nil {
+			return "", err
+		}
+	}
+	if handle == nil || !RuntimeHandleSnapshotIsFresh(handle, 2*time.Minute) {
+		return "", nil
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
+	if err != nil {
+		return "", err
+	}
+	if snap == nil {
+		return "", nil
+	}
+	view := snap.View(now.UTC(), time.Minute)
+	if view == nil || view.HeartbeatStale || !view.Alive {
+		return "", nil
+	}
+	switch strings.ToLower(strings.TrimSpace(view.State)) {
+	case "ready", "running", "working", "idle":
+		return fmt.Sprintf("mailbox_instruction_absorbed_by_active_task:%d", tareaID), nil
+	default:
+		return "", nil
+	}
+}
+
 func RuntimeOrderSendInstructionAbsorbidaPorTrabajoVivo(order *RuntimeOrder, now time.Time) (bool, string, error) {
 	if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
 		return false, "", nil
 	}
-	reason, err := runtimeOrderSendInstructionDirectaAbsorbidaPorTrabajo(order, mapFromJSON(order.PayloadJSON), now.UTC())
+	payload := mapFromJSON(order.PayloadJSON)
+	reason, err := runtimeOrderSendInstructionDirectaAbsorbidaPorTrabajo(order, payload, now.UTC())
+	if err != nil {
+		return false, "", err
+	}
+	if strings.TrimSpace(reason) == "" {
+		reason, err = runtimeOrderSendInstructionAutonomiaReasignadaAbsorbidaPorTrabajo(order, payload, now.UTC())
+	}
 	if err != nil {
 		return false, "", err
 	}
@@ -8491,6 +8560,17 @@ func reconciliarRuntimeOrderSendInstructionMailboxEntregado(order *RuntimeOrder,
 			return true, err
 		}
 		if err := completarRuntimeOrderSendInstructionEntregadaPorReceipt(order, payload, receiptSource, receiptAt); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+	if absorbed, reason, err := RuntimeOrderSendInstructionAbsorbidaPorTrabajoVivo(order, now); err != nil {
+		return true, err
+	} else if absorbed {
+		if err := MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return true, err
+		}
+		if err := completarRuntimeOrderSendInstructionSupersedida(order, payload, reason); err != nil {
 			return true, err
 		}
 		return true, nil

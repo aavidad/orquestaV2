@@ -259,6 +259,62 @@ func resumirAutonomiaRows(rows []agentesapp.Row, now time.Time) autonomiaResumen
 	return out
 }
 
+func resumirAutonomiaLigera(agentesActivos, agentesTrabajando []*db.Agente, tareasEnProgreso []tareaLite, now time.Time) autonomiaResumen {
+	out := autonomiaResumen{}
+	supervisor := strings.ToLower(strings.TrimSpace(statusSupervisorAgentName()))
+	activos := map[string]*db.Agente{}
+	trabajando := map[string]*db.Agente{}
+	for _, agente := range agentesActivos {
+		if agente == nil {
+			continue
+		}
+		nombre := strings.ToLower(strings.TrimSpace(agente.Nombre))
+		if nombre == "" {
+			continue
+		}
+		activos[nombre] = agente
+	}
+	for _, agente := range agentesTrabajando {
+		if agente == nil {
+			continue
+		}
+		nombre := strings.ToLower(strings.TrimSpace(agente.Nombre))
+		if nombre == "" {
+			continue
+		}
+		if activo := activos[nombre]; activo != nil {
+			trabajando[nombre] = activo
+		}
+	}
+	for _, tarea := range tareasEnProgreso {
+		nombre := strings.ToLower(strings.TrimSpace(tarea.Agente))
+		if nombre == "" {
+			continue
+		}
+		if activo := activos[nombre]; activo != nil {
+			trabajando[nombre] = activo
+		}
+	}
+	if supervisor != "" {
+		if _, ok := activos[supervisor]; ok {
+			out.Supervisando = 1
+		}
+	}
+	for nombre := range trabajando {
+		if supervisor != "" && nombre == supervisor {
+			continue
+		}
+		out.Continuando++
+		out.WorkConfirmed++
+	}
+	if supervisor != "" {
+		if _, ok := trabajando[supervisor]; ok {
+			out.WorkConfirmed++
+		}
+	}
+	return out
+}
+
 func rowCuentaComoAutonomiaActiva(row agentesapp.Row) bool {
 	switch strings.ToLower(strings.TrimSpace(row.EstadoOperativo)) {
 	case "bloqueado_por_cuota",
@@ -792,6 +848,9 @@ func fetchStatusFastFallback() (apiStatusResponse, error) {
 		aplicarVisibilidadOperativaAgentes(agentes, rows)
 		agentesActivos, agentesTrabajando, agentesSaturados, agentesAtascados, agentesAuthManual, agentesQuotaBlocked, _ = agentesVisiblesPorEstadoOperativoRows(agentes, rows)
 		autonomia = resumirAutonomiaRows(rows, statusNowFunc().UTC())
+	} else {
+		agentesQuotaBlocked = agentesNoActivosConCuotaConResumen(agentes, nil)
+		autonomia = resumirAutonomiaLigera(agentesActivos, agentesTrabajando, tareasEnProgreso, statusNowFunc().UTC())
 	}
 	if handoffs, err := listarHandoffsAutonomiaEstado(); err == nil && handoffs > autonomia.Handoffs {
 		autonomia.Handoffs = handoffs
@@ -926,6 +985,7 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 		return apiStatusResponse{}, err
 	}
 	tareasActivas = filtrarTareasActivasVisibles(tareasActivas, agentes)
+	tareasEnProgreso := filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaEnProgreso)
 	cuentas = reconciliarConteoTareasActivasVisible(cuentas, tareasActivas)
 	trabajandoNombres := make(map[string]bool)
 	for _, tarea := range tareasActivas {
@@ -982,6 +1042,8 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 	} else if activosOperativos, trabajandoOperativos, ok := agentesVisiblesPorEstadoOperativo(agentes); ok {
 		agentesActivos = activosOperativos
 		agentesTrabajando = trabajandoOperativos
+		agentesQuotaBlocked = agentesNoActivosConCuotaConResumen(agentes, nil)
+		autonomia = resumirAutonomiaLigera(agentesActivos, agentesTrabajando, tareasEnProgreso, statusNowFunc().UTC())
 	}
 	if handoffs, err := listarHandoffsAutonomiaEstado(); err == nil && handoffs > autonomia.Handoffs {
 		autonomia.Handoffs = handoffs
