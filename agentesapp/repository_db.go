@@ -92,6 +92,14 @@ func (Repository) SaveActiveSession(agente string, proyectoID *int64, upd db.Ses
 	return db.GuardarSesionActiva(agente, proyectoID, upd)
 }
 
+func (Repository) GetRuntimeBySessionID(sessionID int64) (*db.RuntimeInstance, error) {
+	return db.GetRuntimeBySesionID(sessionID)
+}
+
+func (Repository) GetRuntimeHandleBySessionID(sessionID int64) (*db.RuntimeHandle, error) {
+	return db.GetRuntimeHandleBySesionID(sessionID)
+}
+
 func (Repository) ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance, error) {
 	return db.ListarRuntimes(filtro)
 }

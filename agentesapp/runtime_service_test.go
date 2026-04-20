@@ -1599,6 +1599,161 @@ func TestProcessTickNoPideIntervencionPorBloqueoSinRelevoSanoConAsignacionActiva
 	}
 }
 
+func TestProcessTickAckBootstrapRuntimeLeaseByEvidenceCompletaHandoff(t *testing.T) {
+	prepararDBTemporalRuntimeService(t)
+	tmp := t.TempDir()
+	rutaProyecto := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(rutaProyecto, 0o755); err != nil {
+		t.Fatalf("mkdir proyecto: %v", err)
+	}
+	for _, agente := range []string{"Codex0", "Codex3"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaProyecto,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"Codex0", "Codex3"} {
+		if err := db.ActivarAsignacion(agente, proyectoID, "handoff"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex0",
+		ProyectoID:  &proyectoID,
+		CWD:         rutaProyecto,
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion origen: %v", err)
+	}
+	sesionDestino, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex3",
+		ProyectoID:  &proyectoID,
+		CWD:         rutaProyecto,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion destino: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesionDestino.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle destino: %+v err=%v", handle, err)
+	}
+	runtimeInst, err := db.GetRuntimeBySesionID(sesionDestino.ID)
+	if err != nil || runtimeInst == nil {
+		t.Fatalf("runtime destino: %+v err=%v", runtimeInst, err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Continuidad handoff por tick",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex0"); err != nil {
+		t.Fatalf("tomar tarea origen: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex0"); err != nil {
+		t.Fatalf("iniciar tarea origen: %v", err)
+	}
+	handoffID, err := db.CrearHandoffAgenteStale("Codex0", "Codex3", &tareaID, "traspaso", "handoff listo", "")
+	if err != nil {
+		t.Fatalf("crear handoff stale: %v", err)
+	}
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:     "orquesta",
+		ToAgente:       "Codex3",
+		ProyectoID:     &proyectoID,
+		RuntimeOrderID: &handoffID,
+		Kind:           "handoff",
+		PayloadJSON:    `{"texto":"continua el handoff"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox handoff: %v", err)
+	}
+	resultadoHandoff, _ := json.Marshal(map[string]any{
+		"ok":          true,
+		"bootstrap":   true,
+		"lease_state": "waiting_for_evidence",
+		"sesion_id":   sesionDestino.ID,
+		"mailbox_ids": []int64{msgID},
+	})
+	if err := db.MarcarRuntimeOrderEstado(handoffID, "ejecutando", string(resultadoHandoff), ""); err != nil {
+		t.Fatalf("preparar handoff ejecutando: %v", err)
+	}
+
+	traceDir := filepath.Join(tmp, "runtime", "codex3-handoff-tick")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	ackAt := time.Now().UTC().Add(2 * time.Second)
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex3","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex3-handoff","started_at":"`+ackAt.Format(time.RFC3339Nano)+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","alive":true,"ready_at":"`+ackAt.Format(time.RFC3339Nano)+`","updated_at":"`+ackAt.Format(time.RFC3339Nano)+`","last_progress_at":"`+ackAt.Format(time.RFC3339Nano)+`","last_output_at":"`+ackAt.Format(time.RFC3339Nano)+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+ackAt.Format(time.RFC3339Nano)+`","ready_at":"`+ackAt.Format(time.RFC3339Nano)+`","last_progress_at":"`+ackAt.Format(time.RFC3339Nano)+`","last_output_at":"`+ackAt.Format(time.RFC3339Nano)+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='esperando_io', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeInst.ID); err != nil {
+		t.Fatalf("update runtime: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	out, err := NewService(Repository{}, nil).ProcessTick(TickInput{
+		Agente:   "Codex3",
+		Proyecto: "orquestador",
+	})
+	if err != nil {
+		t.Fatalf("ProcessTick: %v", err)
+	}
+	if out == nil {
+		t.Fatal("tick output nil")
+	}
+	order, err := db.GetRuntimeOrder(handoffID)
+	if err != nil || order == nil {
+		t.Fatalf("get handoff: %+v err=%v", order, err)
+	}
+	if order.Estado != "completada" {
+		t.Fatalf("handoff deberia quedar completada tras tick con evidencia: %+v", order)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoEnProgreso {
+		t.Fatalf("la tarea deberia quedar en progreso tras tick con evidencia: %+v", tarea)
+	}
+	if !strings.Contains(tarea.Notas, "handoff completado por Codex3") {
+		t.Fatalf("notas sin evidencia de handoff completado: %s", tarea.Notas)
+	}
+}
+
 func TestProcessTickPriorizaContinuidadAccionableSobreBloqueoResidual(t *testing.T) {
 	prepararDBTemporalRuntimeService(t)
 	tmp := t.TempDir()

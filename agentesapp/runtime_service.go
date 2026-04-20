@@ -1049,6 +1049,19 @@ func (s *Service) processTickUncached(input TickInput) (*TickOutput, error) {
 		}
 		tickDebugf("ProcessTick step=ack_bootstrap agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
 		stepStart = time.Now()
+		handleActiva, err := s.store.GetRuntimeHandleBySessionID(sesionActiva.ID)
+		if err != nil && err != sql.ErrNoRows {
+			return nil, err
+		}
+		runtimeActivo, err := s.store.GetRuntimeBySessionID(sesionActiva.ID)
+		if err != nil && err != sql.ErrNoRows {
+			return nil, err
+		}
+		if err := db.AckBootstrapRuntimeLeaseByEvidence(handleActiva, runtimeActivo, "agente_tick"); err != nil {
+			return nil, err
+		}
+		tickDebugf("ProcessTick step=ack_bootstrap_evidence agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
+		stepStart = time.Now()
 	}
 	stepStart = time.Now()
 	out, err := s.buildTickOutput(agenteNombre, proyecto, sesionActiva, input.CuotaPct)

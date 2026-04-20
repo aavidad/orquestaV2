@@ -220,6 +220,26 @@ func (f *fakeStore) SaveActiveSession(agente string, proyectoID *int64, upd db.S
 	return nil
 }
 
+func (f *fakeStore) GetRuntimeBySessionID(sessionID int64) (*db.RuntimeInstance, error) {
+	for _, item := range f.runtimes {
+		if item == nil || item.SesionID == nil || *item.SesionID != sessionID {
+			continue
+		}
+		return item, nil
+	}
+	return nil, nil
+}
+
+func (f *fakeStore) GetRuntimeHandleBySessionID(sessionID int64) (*db.RuntimeHandle, error) {
+	for _, item := range f.handles {
+		if item == nil || item.SesionID == nil || *item.SesionID != sessionID {
+			continue
+		}
+		return item, nil
+	}
+	return nil, nil
+}
+
 func (f *fakeStore) ListRuntimes(filter db.FiltroRuntimes) ([]*db.RuntimeInstance, error) {
 	f.listRuntimesCalls++
 	if filter.Agente == nil {

@@ -37,6 +37,8 @@ type Store interface {
 	GetLastSession(agente string, proyectoID *int64) (*db.Sesion, error)
 	GetActiveSession(agente string, proyectoID *int64) (*db.Sesion, error)
 	SaveActiveSession(agente string, proyectoID *int64, upd db.SesionUpdate) error
+	GetRuntimeBySessionID(sessionID int64) (*db.RuntimeInstance, error)
+	GetRuntimeHandleBySessionID(sessionID int64) (*db.RuntimeHandle, error)
 	ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance, error)
 	ListRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error)
 	ListPassiveRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error)
