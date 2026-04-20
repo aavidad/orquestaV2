@@ -18,6 +18,7 @@ import (
 
 	"orquesta/agentesapp"
 	"orquesta/db"
+	"orquesta/internal/controlruntime"
 	"orquesta/runtimesapp"
 )
 
@@ -1151,6 +1152,13 @@ func (s *Service) sessionRuntimeHandle(sesion *db.Sesion) (*db.RuntimeHandle, er
 }
 
 func (s *Service) existsPendingAutonomyOrder(agente string, proyectoID *int64, tipo string, accion string) (bool, error) {
+	if strings.TrimSpace(accion) != "" {
+		if pendiente, err := s.existsPendingAutonomyDurableAction(agente, proyectoID, strings.TrimSpace(accion), nil); err != nil {
+			return false, err
+		} else if pendiente {
+			return true, nil
+		}
+	}
 	estado := "pendiente"
 	orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
 		Agente:     &agente,
@@ -1178,6 +1186,13 @@ func (s *Service) existsPendingAutonomyOrder(agente string, proyectoID *int64, t
 func (s *Service) existsRecentAutonomyOrder(agente string, proyectoID *int64, tipo string, accion string, within time.Duration) (bool, error) {
 	if within <= 0 {
 		return false, nil
+	}
+	if strings.TrimSpace(accion) != "" {
+		if reciente, err := s.existsRecentAutonomyDurableAction(agente, proyectoID, strings.TrimSpace(accion), nil, within); err != nil {
+			return false, err
+		} else if reciente {
+			return true, nil
+		}
 	}
 	orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
 		Agente:     &agente,
@@ -1266,6 +1281,11 @@ func (s *Service) existsOpenAutonomyOrder(agente string, proyectoID *int64, tipo
 }
 
 func (s *Service) existsPendingAutonomyMailbox(agente string, proyectoID *int64, accion string, extras map[string]any) (bool, error) {
+	if pendiente, err := s.existsPendingAutonomyDurableAction(agente, proyectoID, accion, extras); err != nil {
+		return false, err
+	} else if pendiente {
+		return true, nil
+	}
 	estado := "pendiente"
 	mailbox, err := s.runtimes.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
 		ToAgente:   &agente,
@@ -1321,6 +1341,11 @@ func (s *Service) existsRecentPostRemediationFollowup(agente string, proyectoID 
 	if strings.TrimSpace(verificationKey) == "" || within <= 0 {
 		return false, nil
 	}
+	if reciente, err := s.existsRecentAutonomyDurableAction(agente, proyectoID, "continuar_trabajo", map[string]any{"verification_key": verificationKey}, within); err != nil {
+		return false, err
+	} else if reciente {
+		return true, nil
+	}
 	orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
 		Agente:     &agente,
 		ProyectoID: proyectoID,
@@ -1346,6 +1371,11 @@ func (s *Service) existsRecentPostRemediationFollowup(agente string, proyectoID 
 }
 
 func (s *Service) existsPendingAutonomyOrderWithVerificationKey(agente string, proyectoID *int64, accion, verificationKey string) (bool, error) {
+	if pendiente, err := s.existsPendingAutonomyDurableAction(agente, proyectoID, accion, map[string]any{"verification_key": verificationKey}); err != nil {
+		return false, err
+	} else if pendiente {
+		return true, nil
+	}
 	estado := "pendiente"
 	orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
 		Agente:     &agente,
@@ -1369,6 +1399,11 @@ func (s *Service) existsPendingAutonomyOrderWithVerificationKey(agente string, p
 }
 
 func (s *Service) existsPendingAutonomyMailboxWithVerificationKey(agente string, proyectoID *int64, accion, verificationKey string) (bool, error) {
+	if pendiente, err := s.existsPendingAutonomyDurableAction(agente, proyectoID, accion, map[string]any{"verification_key": verificationKey}); err != nil {
+		return false, err
+	} else if pendiente {
+		return true, nil
+	}
 	estado := "pendiente"
 	mailbox, err := s.runtimes.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
 		ToAgente:   &agente,
@@ -1393,6 +1428,53 @@ func (s *Service) existsPendingAutonomyMailboxWithVerificationKey(agente string,
 		return true, nil
 	}
 	return false, nil
+}
+
+func (s *Service) existsPendingAutonomyDurableAction(agente string, proyectoID *int64, accion string, extras map[string]any) (bool, error) {
+	match, metaRaw, err := s.autonomyDurableActionMatch(agente, proyectoID, accion, extras, 0)
+	if err != nil || strings.TrimSpace(metaRaw) == "" {
+		return false, err
+	}
+	return controlruntime.HasPendingWorkQueueEntryFromMetadataJSON(metaRaw, match)
+}
+
+func (s *Service) existsRecentAutonomyDurableAction(agente string, proyectoID *int64, accion string, extras map[string]any, within time.Duration) (bool, error) {
+	match, metaRaw, err := s.autonomyDurableActionMatch(agente, proyectoID, accion, extras, within)
+	if err != nil || strings.TrimSpace(metaRaw) == "" {
+		return false, err
+	}
+	return controlruntime.HasRecentWorkQueueEntryFromMetadataJSON(metaRaw, match)
+}
+
+func (s *Service) autonomyDurableActionMatch(agente string, proyectoID *int64, accion string, extras map[string]any, within time.Duration) (controlruntime.WorkQueueMatch, string, error) {
+	match := controlruntime.WorkQueueMatch{
+		Kind:   "autonomia",
+		Action: strings.TrimSpace(accion),
+		Within: within,
+	}
+	if match.Action == "" {
+		return match, "", nil
+	}
+	if extras != nil {
+		match.VerificationKey = strings.TrimSpace(stringMapValue(extras, "verification_key"))
+		match.TaskID = int64MapValue(extras, "tarea_id")
+	}
+	metaRaw, err := s.deliveryHandleMetadata(agente, proyectoID)
+	if err != nil {
+		return match, "", err
+	}
+	return match, metaRaw, nil
+}
+
+func (s *Service) deliveryHandleMetadata(agente string, proyectoID *int64) (string, error) {
+	if s == nil || s.runtimes == nil {
+		return "", fmt.Errorf("servicio de orquestacion de agentes no inicializado")
+	}
+	handle, err := s.ResolveDeliveryHandle(strings.TrimSpace(agente), proyectoID)
+	if err != nil || handle == nil {
+		return "", err
+	}
+	return strings.TrimSpace(handle.MetadataJSON), nil
 }
 
 func (s *Service) resolveCanonicalRuntimeIDForHandle(handle *db.RuntimeHandle, agente string, proyectoID *int64) (*int64, error) {

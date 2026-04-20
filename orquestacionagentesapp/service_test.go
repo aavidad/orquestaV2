@@ -1,13 +1,17 @@
 package orquestacionagentesapp
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"orquesta/agentesapp"
 	"orquesta/db"
+	"orquesta/internal/controlruntime"
 	"orquesta/runtimesapp"
 )
 
@@ -191,6 +195,22 @@ func (s *stubRuntimeController) ResolveDeliveryHandle(agente string, proyectoID 
 
 func (s *stubRuntimeController) ResolveTranscriptDeliveryHandle(item *db.RuntimeTranscriptEntry) (*db.RuntimeHandle, error) {
 	return s.transcriptHandle, s.transcriptHandleErr
+}
+
+func writeWorkQueueMetadataForTest(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	metaRaw, err := json.Marshal(map[string]any{
+		"trace_dir":             dir,
+		"worker_schema_version": 1,
+		"worker_manifest_path":  filepath.Join(dir, "manifest.json"),
+		"worker_status_path":    filepath.Join(dir, "status.json"),
+		"worker_heartbeat_path": filepath.Join(dir, "heartbeat.json"),
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	return string(metaRaw)
 }
 
 type stubAutonomyStore struct {
@@ -1470,6 +1490,82 @@ func TestResolveReactivationProjectFallsBackToRecoveryHandleProject(t *testing.T
 	}
 	if proyecto == nil || proyecto.ID != proyectoID {
 		t.Fatalf("proyecto inesperado: %+v", proyecto)
+	}
+}
+
+func TestExistsPendingAutonomyMailboxUsesDurableWorkQueueBeforeDB(t *testing.T) {
+	t.Parallel()
+
+	projectID := int64(42)
+	metaRaw := writeWorkQueueMetadataForTest(t)
+	workQueueRaw, _ := json.Marshal(map[string]any{
+		"version":    1,
+		"updated_at": time.Now().UTC().Format(time.RFC3339Nano),
+		"current": map[string]any{
+			"mailbox_id":       7,
+			"kind":             "autonomia",
+			"action":           "continuar_trabajo",
+			"task_id":          17,
+			"verification_key": "vk-17",
+			"state":            "pending",
+			"recorded_at":      time.Now().UTC().Format(time.RFC3339Nano),
+		},
+	})
+	dir := filepath.Dir(controlruntime.WorkQueuePathFromMetadataJSON(metaRaw))
+	if err := os.WriteFile(filepath.Join(dir, "work-queue.json"), workQueueRaw, 0o600); err != nil {
+		t.Fatalf("write work-queue: %v", err)
+	}
+	runtimes := &stubRuntimeController{
+		deliveryHandle: &db.RuntimeHandle{ID: 9, MetadataJSON: metaRaw},
+		mailboxErr:     fmt.Errorf("no deberia consultar mailbox"),
+	}
+	service := NewService(nil, runtimes)
+
+	ok, err := service.existsPendingAutonomyMailbox("Codex1", &projectID, "continuar_trabajo", map[string]any{
+		"tarea_id":         int64(17),
+		"verification_key": "vk-17",
+	})
+	if err != nil {
+		t.Fatalf("existsPendingAutonomyMailbox: %v", err)
+	}
+	if !ok {
+		t.Fatal("deberia detectar continuidad pendiente desde work-queue durable")
+	}
+}
+
+func TestExistsRecentAutonomyOrderUsesDurableWorkQueueBeforeDB(t *testing.T) {
+	t.Parallel()
+
+	projectID := int64(42)
+	metaRaw := writeWorkQueueMetadataForTest(t)
+	workQueueRaw, _ := json.Marshal(map[string]any{
+		"version":    1,
+		"updated_at": time.Now().UTC().Format(time.RFC3339Nano),
+		"current": map[string]any{
+			"mailbox_id":  8,
+			"kind":        "autonomia",
+			"action":      "continuar_trabajo",
+			"task_id":     17,
+			"state":       "consumed",
+			"recorded_at": time.Now().UTC().Format(time.RFC3339Nano),
+		},
+	})
+	dir := filepath.Dir(controlruntime.WorkQueuePathFromMetadataJSON(metaRaw))
+	if err := os.WriteFile(filepath.Join(dir, "work-queue.json"), workQueueRaw, 0o600); err != nil {
+		t.Fatalf("write work-queue: %v", err)
+	}
+	runtimes := &stubRuntimeController{
+		deliveryHandle: &db.RuntimeHandle{ID: 10, MetadataJSON: metaRaw},
+		ordersErr:      fmt.Errorf("no deberia consultar orders"),
+	}
+	service := NewService(nil, runtimes)
+
+	ok, err := service.existsRecentAutonomyOrder("Codex1", &projectID, "nudge", "continuar_trabajo", time.Minute)
+	if err != nil {
+		t.Fatalf("existsRecentAutonomyOrder: %v", err)
+	}
+	if !ok {
+		t.Fatal("deberia detectar recent desde work-queue durable")
 	}
 }
 

@@ -193,6 +193,7 @@ func EnsureTMUXMonitorFromMetadataJSON(raw string) (string, bool, error) {
 	meta["tmux_pane_id"] = paneID
 	meta["tmux_monitor_pid"] = monitorPID
 	meta["supervisor_owner_pid"] = os.Getpid()
+	meta["worker_schema_version"] = runtimeagente.WorkerMetadataSchemaVersion
 	meta["worker_manifest_path"] = manifestPath
 	meta["worker_status_path"] = statusPath
 	meta["worker_heartbeat_path"] = heartbeatPath

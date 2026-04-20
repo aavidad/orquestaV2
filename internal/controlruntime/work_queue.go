@@ -41,6 +41,14 @@ type WorkQueueRecordInput struct {
 	RecordedAt      time.Time
 }
 
+type WorkQueueMatch struct {
+	Kind            string
+	Action          string
+	VerificationKey string
+	TaskID          int64
+	Within          time.Duration
+}
+
 func WorkQueuePathFromMetadataJSON(raw string) string {
 	meta := map[string]any{}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &meta); err != nil {
@@ -134,6 +142,46 @@ func MarkWorkQueueStateFromMetadataJSON(raw string, mailboxID int64, state, reas
 	return writeJSONAtomic(path, file)
 }
 
+func HasPendingWorkQueueEntryFromMetadataJSON(raw string, match WorkQueueMatch) (bool, error) {
+	entries, err := readWorkQueueEntriesFromMetadataJSON(raw)
+	if err != nil || len(entries) == 0 {
+		return false, err
+	}
+	for _, entry := range entries {
+		if !workQueueEntryMatches(entry, match) {
+			continue
+		}
+		if workQueueStatePending(entry.State) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func HasRecentWorkQueueEntryFromMetadataJSON(raw string, match WorkQueueMatch) (bool, error) {
+	entries, err := readWorkQueueEntriesFromMetadataJSON(raw)
+	if err != nil || len(entries) == 0 {
+		return false, err
+	}
+	cutoff := time.Time{}
+	if match.Within > 0 {
+		cutoff = time.Now().UTC().Add(-match.Within)
+	}
+	for _, entry := range entries {
+		if !workQueueEntryMatches(entry, match) {
+			continue
+		}
+		moment := workQueueEntryMoment(entry)
+		if !cutoff.IsZero() && moment.Before(cutoff) {
+			continue
+		}
+		if workQueueStateRecentEligible(entry.State) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func loadWorkQueueFile(path string) (*workQueueFile, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -155,6 +203,88 @@ func loadWorkQueueFile(path string) (*workQueueFile, error) {
 	}
 	file.Recent = trimWorkQueueEntries(file.Recent)
 	return &file, nil
+}
+
+func readWorkQueueEntriesFromMetadataJSON(raw string) ([]WorkQueueEntry, error) {
+	path := WorkQueuePathFromMetadataJSON(raw)
+	if strings.TrimSpace(path) == "" {
+		return nil, nil
+	}
+	file, err := loadWorkQueueFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if file == nil {
+		return nil, nil
+	}
+	return enumerateWorkQueueEntries(file), nil
+}
+
+func enumerateWorkQueueEntries(file *workQueueFile) []WorkQueueEntry {
+	if file == nil {
+		return nil
+	}
+	out := make([]WorkQueueEntry, 0, len(file.Recent)+1)
+	if file.Current != nil {
+		out = append(out, *file.Current)
+	}
+	seen := map[int64]bool{}
+	if file.Current != nil && file.Current.MailboxID > 0 {
+		seen[file.Current.MailboxID] = true
+	}
+	for i := len(file.Recent) - 1; i >= 0; i-- {
+		entry := file.Recent[i]
+		if entry.MailboxID > 0 && seen[entry.MailboxID] {
+			continue
+		}
+		if entry.MailboxID > 0 {
+			seen[entry.MailboxID] = true
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+func workQueueEntryMatches(entry WorkQueueEntry, match WorkQueueMatch) bool {
+	if kind := strings.TrimSpace(match.Kind); kind != "" && !strings.EqualFold(strings.TrimSpace(entry.Kind), kind) {
+		return false
+	}
+	if action := strings.TrimSpace(match.Action); action != "" && !strings.EqualFold(strings.TrimSpace(entry.Action), action) {
+		return false
+	}
+	if verificationKey := strings.TrimSpace(match.VerificationKey); verificationKey != "" &&
+		!strings.EqualFold(strings.TrimSpace(entry.VerificationKey), verificationKey) {
+		return false
+	}
+	if match.TaskID > 0 && entry.TaskID != match.TaskID {
+		return false
+	}
+	return true
+}
+
+func workQueueStatePending(state string) bool {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "", "pending", "notified", "delivered", "claimed", "working", "running":
+		return true
+	default:
+		return false
+	}
+}
+
+func workQueueStateRecentEligible(state string) bool {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "superseded", "cancelled", "canceled":
+		return false
+	default:
+		return true
+	}
+}
+
+func workQueueEntryMoment(entry WorkQueueEntry) time.Time {
+	if ts, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(entry.RecordedAt)); err == nil {
+		return ts.UTC()
+	}
+	return time.Time{}
 }
 
 func trimWorkQueueEntries(entries []WorkQueueEntry) []WorkQueueEntry {

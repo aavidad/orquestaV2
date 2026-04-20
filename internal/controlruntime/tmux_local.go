@@ -173,6 +173,7 @@ func arrancarPlanLocalTMUX(req SolicitudArranque) (*ProcesoArrancado, error) {
 	}
 
 	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_schema_version": runtimeagente.WorkerMetadataSchemaVersion,
 		"agente":                strings.TrimSpace(req.Agente),
 		"proyecto":              strings.TrimSpace(req.Proyecto),
 		"log_path":              logPath,

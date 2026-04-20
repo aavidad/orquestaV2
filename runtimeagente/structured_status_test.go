@@ -133,6 +133,23 @@ func TestLoadWorkerSnapshotFromMetadataJSON(t *testing.T) {
 	}
 }
 
+func TestWorkerMetadataPathsFromJSONDefaultVersion(t *testing.T) {
+	meta, err := workerMetadataPathsFromJSON(`{"trace_dir":"/tmp/orquesta"}`)
+	if err != nil {
+		t.Fatalf("workerMetadataPathsFromJSON: %v", err)
+	}
+	if meta.SchemaVersion != WorkerMetadataSchemaVersion {
+		t.Fatalf("schema version inesperada: %d", meta.SchemaVersion)
+	}
+	meta, err = workerMetadataPathsFromJSON(`{"worker_schema_version":7,"trace_dir":"/tmp/orquesta"}`)
+	if err != nil {
+		t.Fatalf("workerMetadataPathsFromJSON custom: %v", err)
+	}
+	if meta.SchemaVersion != 7 {
+		t.Fatalf("schema version custom inesperada: %d", meta.SchemaVersion)
+	}
+}
+
 func TestLoadWorkerSnapshotFromMetadataJSONCompletaTMUXDesdeRuntimeManifest(t *testing.T) {
 	tmp := t.TempDir()
 	manifestPath := filepath.Join(tmp, "manifest.json")

@@ -12,6 +12,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"orquesta/runtimeagente"
 )
 
 const (
@@ -827,6 +829,7 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 	}
 
 	meta := map[string]any{
+		"worker_schema_version": runtimeagente.WorkerMetadataSchemaVersion,
 		"supervisor_driver":     "local_runtime_supervisor",
 		"supervisor_ref":        strings.TrimSpace(s.ref),
 		"agente":                strings.TrimSpace(agente),

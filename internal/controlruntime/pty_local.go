@@ -164,6 +164,7 @@ func arrancarPlanLocalPTY(req SolicitudArranque) (*ProcesoArrancado, error) {
 	spec.ExternalSessionID = externalSessionID
 	supervisorRef := runDir
 	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_schema_version":  runtimeagente.WorkerMetadataSchemaVersion,
 		"agente":                 strings.TrimSpace(req.Agente),
 		"proyecto":               strings.TrimSpace(req.Proyecto),
 		"stdin_path":             stdinPath,

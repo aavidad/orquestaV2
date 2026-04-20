@@ -44,3 +44,49 @@ func TestRecordWorkQueueFromMetadataJSONAndMarkState(t *testing.T) {
 		t.Fatalf("recent inesperado: %+v", data.Recent)
 	}
 }
+
+func TestHasPendingAndRecentWorkQueueEntryFromMetadataJSON(t *testing.T) {
+	dir := t.TempDir()
+	metaRaw, _ := json.Marshal(map[string]any{
+		"trace_dir": dir,
+	})
+	now := time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
+	if err := RecordWorkQueueFromMetadataJSON(string(metaRaw), WorkQueueRecordInput{
+		MailboxID:       41,
+		RuntimeOrderID:  99,
+		Kind:            "autonomia",
+		Action:          "continuar_trabajo",
+		TaskID:          123,
+		VerificationKey: "vk-1",
+		State:           "pending",
+		Title:           "seguir frente",
+		Reason:          "inbox durable",
+		RecordedAt:      now,
+	}); err != nil {
+		t.Fatalf("RecordWorkQueueFromMetadataJSON: %v", err)
+	}
+	match := WorkQueueMatch{
+		Kind:            "autonomia",
+		Action:          "continuar_trabajo",
+		TaskID:          123,
+		VerificationKey: "vk-1",
+		Within:          time.Minute,
+	}
+	if ok, err := HasPendingWorkQueueEntryFromMetadataJSON(string(metaRaw), match); err != nil || !ok {
+		t.Fatalf("HasPendingWorkQueueEntryFromMetadataJSON=%v err=%v", ok, err)
+	}
+	if ok, err := HasRecentWorkQueueEntryFromMetadataJSON(string(metaRaw), match); err != nil || !ok {
+		t.Fatalf("HasRecentWorkQueueEntryFromMetadataJSON=%v err=%v", ok, err)
+	}
+	if err := MarkWorkQueueStateFromMetadataJSON(string(metaRaw), 41, "consumed", "ack", now.Add(30*time.Second)); err != nil {
+		t.Fatalf("MarkWorkQueueStateFromMetadataJSON: %v", err)
+	}
+	if ok, err := HasPendingWorkQueueEntryFromMetadataJSON(string(metaRaw), match); err != nil {
+		t.Fatalf("HasPendingWorkQueueEntryFromMetadataJSON consumed: %v", err)
+	} else if ok {
+		t.Fatalf("no deberia seguir pendiente tras consumed")
+	}
+	if ok, err := HasRecentWorkQueueEntryFromMetadataJSON(string(metaRaw), match); err != nil || !ok {
+		t.Fatalf("HasRecentWorkQueueEntryFromMetadataJSON consumed=%v err=%v", ok, err)
+	}
+}

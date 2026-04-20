@@ -141,7 +141,10 @@ type runtimeManifestOverlay struct {
 	TmuxPaneID  string `json:"tmux_pane_id"`
 }
 
+const WorkerMetadataSchemaVersion = 1
+
 type workerMetadataPaths struct {
+	SchemaVersion int    `json:"worker_schema_version,omitempty"`
 	ManifestPath  string `json:"worker_manifest_path"`
 	StatusPath    string `json:"worker_status_path"`
 	HeartbeatPath string `json:"worker_heartbeat_path"`
@@ -238,6 +241,9 @@ func workerMetadataPathsFromJSON(raw string) (workerMetadataPaths, error) {
 	var meta workerMetadataPaths
 	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
 		return workerMetadataPaths{}, err
+	}
+	if meta.SchemaVersion <= 0 {
+		meta.SchemaVersion = WorkerMetadataSchemaVersion
 	}
 	meta.ManifestPath = strings.TrimSpace(meta.ManifestPath)
 	meta.StatusPath = strings.TrimSpace(meta.StatusPath)
