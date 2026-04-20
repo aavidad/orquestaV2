@@ -3938,9 +3938,19 @@ func (r Row) EffectiveContinuityPending(now time.Time) bool {
 	if r.MailboxContinuityPending <= 0 && !r.DurableContinuityPending(now) {
 		return false
 	}
-	if strings.EqualFold(strings.TrimSpace(r.LastAutonomySource), "resume_payload_mailbox") && r.WorkerFresh(now) {
+	source := strings.ToLower(strings.TrimSpace(r.LastAutonomySource))
+	state := strings.ToLower(strings.TrimSpace(r.LastAutonomyState))
+	if source == "resume_payload_mailbox" && r.WorkerFresh(now) {
 		if r.OpenTasks > 0 || r.supervisorAutonomyLive(now) {
 			return false
+		}
+	}
+	if source == "work_queue" && r.WorkerFresh(now) {
+		switch state {
+		case "delivered", "working", "running":
+			if r.OpenTasks > 0 || r.supervisorAutonomyLive(now) {
+				return false
+			}
 		}
 	}
 	return true

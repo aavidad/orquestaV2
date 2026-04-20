@@ -142,4 +142,38 @@ func TestResumirAutonomiaRowsNoCuentaResumePayloadAbsorbidoComoPendiente(t *test
 	}
 }
 
+func TestResumirAutonomiaRowsNoCuentaWorkQueueYaEnRunningComoPendiente(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	rows := []agentesapp.Row{
+		{
+			LastAutonomyAction:       "continuar_trabajo",
+			LastAutonomySource:       "work_queue",
+			LastAutonomyState:        "delivered",
+			MailboxContinuityPending: 1,
+			OpenTasks:                1,
+			WorkerAlive:              true,
+			WorkerHeartbeat:          ptrTimeStatusDispatch(now),
+		},
+		{
+			LastAutonomyAction:       "continuar_trabajo",
+			LastAutonomySource:       "work_queue",
+			LastAutonomyState:        "pending",
+			MailboxContinuityPending: 1,
+			OpenTasks:                1,
+			WorkerAlive:              true,
+			WorkerHeartbeat:          ptrTimeStatusDispatch(now),
+		},
+	}
+
+	got := resumirAutonomiaRows(rows, now)
+	if got.Continuando != 2 {
+		t.Fatalf("resumen autonomia inesperado: %+v", got)
+	}
+	if got.ContinuidadPendiente != 1 {
+		t.Fatalf("solo la work_queue no absorbida deberia contar como pendiente: %+v", got)
+	}
+}
+
 func ptrTimeStatusDispatch(t time.Time) *time.Time { return &t }
