@@ -1141,6 +1141,11 @@ func procesarRuntimeHygieneBatch(forceHistorical bool) (int, error) {
 		return total, err
 	}
 	total += purgedTranscriptNoise
+	n, err := purgarDatosOperacionalesFn()
+	if err != nil {
+		return total, err
+	}
+	total += n
 	if !forceHistorical && !runtimeHistoricalMaintenanceGate.Allow(runtimeHistoricalMaintenanceInterval()) {
 		return total, nil
 	}
@@ -1160,11 +1165,6 @@ func procesarRuntimeHygieneBatch(forceHistorical bool) (int, error) {
 			total += resultado.Orders.Deleted
 		}
 	}
-	n, err := purgarDatosOperacionalesFn()
-	if err != nil {
-		return total, err
-	}
-	total += n
 	return total, nil
 }
 

@@ -53,14 +53,14 @@ func TestProcesarRuntimeHygieneBatchDifierePurgaHistoricaEnRunner(t *testing.T) 
 	if err != nil {
 		t.Fatalf("second batch: %v", err)
 	}
-	if second != 6 {
-		t.Fatalf("second=%d want 6", second)
+	if second != 12 {
+		t.Fatalf("second=%d want 12", second)
 	}
 	if historicalRuns != 1 {
 		t.Fatalf("historicalRuns=%d want 1", historicalRuns)
 	}
-	if operationalRuns != 1 {
-		t.Fatalf("operationalRuns=%d want 1", operationalRuns)
+	if operationalRuns != 2 {
+		t.Fatalf("operationalRuns=%d want 2", operationalRuns)
 	}
 }
 

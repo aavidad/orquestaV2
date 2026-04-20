@@ -12,7 +12,7 @@ import "time"
 // PurgarDatosOperacionales elimina datos transitorios que se acumulan sin límite
 // y que no son necesarios para orquestar el trabajo de los agentes:
 //
-//   - runtime_mailbox mensajes consumidos hace más de 24h
+//   - runtime_mailbox mensajes terminales hace más de N horas
 //   - presupuestos_sesion, conservando solo el último por sesión
 //   - runtime_telemetry_samples con más de 48h
 //   - audit_log con más de 30 días
@@ -25,9 +25,12 @@ func PurgarDatosOperacionales() (int, error) {
 	}
 	total := 0
 
-	// Mailbox consumido >24h
-	res, err := DB.Exec(`DELETE FROM runtime_mailbox WHERE estado='consumido' AND updated_at < ?`,
-		time.Now().UTC().Add(-24*time.Hour))
+	// Mailbox terminal > retención
+	mailboxCutoff := time.Now().UTC().Add(-runtimeOperationalRetention("runtime_mailbox_terminal_retention_hours", 24))
+	res, err := DB.Exec(`DELETE FROM runtime_mailbox
+		WHERE estado IN ('consumido','cancelado','expirado')
+		  AND COALESCE(consumed_at, delivered_at, created_at) < ?`,
+		mailboxCutoff)
 	if err == nil {
 		n, _ := res.RowsAffected()
 		total += int(n)
@@ -68,4 +71,12 @@ func PurgarDatosOperacionales() (int, error) {
 	}
 
 	return total, nil
+}
+
+func runtimeOperationalRetention(configKey string, defaultHours int) time.Duration {
+	hours := configIntOrDefault(configKey, defaultHours)
+	if hours <= 0 {
+		hours = defaultHours
+	}
+	return time.Duration(hours) * time.Hour
 }
