@@ -29,6 +29,7 @@ type AgentPreparer interface {
 type RuntimeController interface {
 	EnqueueAgentControl(req runtimesapp.AgentControlRequest) (int64, string, error)
 	CreateLiveAgentHandoff(origen, destino string, tareaID *int64, motivo, resumenContinuidad, externalSessionID string) (int64, error)
+	CreateStaleAgentHandoff(origen, destino string, tareaID *int64, motivo, resumenContinuidad, externalSessionID string) (int64, error)
 	GetProject(ref string) (*db.Proyecto, error)
 	ReconcileStaleRuntimeHandles() (int, error)
 	ReconcileStaleRuntimeOrders() (int, error)
@@ -221,6 +222,20 @@ func (s *Service) RequestLiveAgentHandoff(origen, destino string, tareaID *int64
 		return 0, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
 	}
 	return s.runtimes.CreateLiveAgentHandoff(
+		strings.TrimSpace(origen),
+		strings.TrimSpace(destino),
+		tareaID,
+		strings.TrimSpace(motivo),
+		strings.TrimSpace(resumenContinuidad),
+		strings.TrimSpace(externalSessionID),
+	)
+}
+
+func (s *Service) RequestStaleAgentHandoff(origen, destino string, tareaID *int64, motivo, resumenContinuidad, externalSessionID string) (int64, error) {
+	if s == nil || s.runtimes == nil {
+		return 0, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
+	}
+	return s.runtimes.CreateStaleAgentHandoff(
 		strings.TrimSpace(origen),
 		strings.TrimSpace(destino),
 		tareaID,

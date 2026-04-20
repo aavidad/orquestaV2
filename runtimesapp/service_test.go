@@ -98,6 +98,7 @@ type fakeStore struct {
 	handoffResumen           string
 	handoffExternalSessionID string
 	handoffID                int64
+	staleHandoffID           int64
 	createMailbox            *db.RuntimeMailboxMessage
 	createMailboxID          int64
 	mailboxID                int64
@@ -487,6 +488,16 @@ func (f *fakeStore) CreateLiveAgentHandoff(origen, destino string, tareaID *int6
 	f.handoffResumen = resumenContinuidad
 	f.handoffExternalSessionID = externalSessionID
 	return f.handoffID, nil
+}
+
+func (f *fakeStore) CreateStaleAgentHandoff(origen, destino string, tareaID *int64, motivo, resumenContinuidad, externalSessionID string) (int64, error) {
+	f.handoffOrigen = origen
+	f.handoffDestino = destino
+	f.handoffTareaID = tareaID
+	f.handoffMotivo = motivo
+	f.handoffResumen = resumenContinuidad
+	f.handoffExternalSessionID = externalSessionID
+	return f.staleHandoffID, nil
 }
 func (f *fakeStore) CreateRuntimeMailbox(msg *db.RuntimeMailboxMessage) (int64, error) {
 	f.createMailbox = msg
@@ -2269,6 +2280,29 @@ func TestCreateLiveAgentHandoffDelegates(t *testing.T) {
 		t.Fatalf("CreateLiveAgentHandoff: %v", err)
 	}
 	if id != 88 {
+		t.Fatalf("id inesperado: %d", id)
+	}
+	if store.handoffOrigen != "Codex1" || store.handoffDestino != "Codex2" {
+		t.Fatalf("handoff origen/destino inesperados: %q -> %q", store.handoffOrigen, store.handoffDestino)
+	}
+	if store.handoffTareaID == nil || *store.handoffTareaID != tareaID {
+		t.Fatalf("handoffTareaID inesperado: %v", store.handoffTareaID)
+	}
+	if store.handoffMotivo != "relevo" || store.handoffResumen != "continuar" || store.handoffExternalSessionID != "ext-1" {
+		t.Fatalf("handoff payload inesperado: motivo=%q resumen=%q ext=%q", store.handoffMotivo, store.handoffResumen, store.handoffExternalSessionID)
+	}
+}
+
+func TestCreateStaleAgentHandoffDelegates(t *testing.T) {
+	tareaID := int64(41)
+	store := &fakeStore{staleHandoffID: 89}
+	service := NewService(store)
+
+	id, err := service.CreateStaleAgentHandoff(" Codex1 ", " Codex2 ", &tareaID, " relevo ", " continuar ", " ext-1 ")
+	if err != nil {
+		t.Fatalf("CreateStaleAgentHandoff: %v", err)
+	}
+	if id != 89 {
 		t.Fatalf("id inesperado: %d", id)
 	}
 	if store.handoffOrigen != "Codex1" || store.handoffDestino != "Codex2" {

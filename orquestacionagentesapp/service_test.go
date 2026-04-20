@@ -34,7 +34,9 @@ type stubRuntimeController struct {
 	controlAction        string
 	controlErr           error
 	handoffID            int64
+	staleHandoffID       int64
 	handoffErr           error
+	staleHandoffErr      error
 	handoffOrigen        string
 	handoffDestino       string
 	handoffTareaID       *int64
@@ -98,6 +100,16 @@ func (s *stubRuntimeController) CreateLiveAgentHandoff(origen, destino string, t
 	s.handoffResumen = resumenContinuidad
 	s.handoffExternal = externalSessionID
 	return s.handoffID, s.handoffErr
+}
+
+func (s *stubRuntimeController) CreateStaleAgentHandoff(origen, destino string, tareaID *int64, motivo, resumenContinuidad, externalSessionID string) (int64, error) {
+	s.handoffOrigen = origen
+	s.handoffDestino = destino
+	s.handoffTareaID = tareaID
+	s.handoffMotivo = motivo
+	s.handoffResumen = resumenContinuidad
+	s.handoffExternal = externalSessionID
+	return s.staleHandoffID, s.staleHandoffErr
 }
 
 func (s *stubRuntimeController) GetProject(string) (*db.Proyecto, error) {
@@ -1765,6 +1777,31 @@ func TestRequestLiveAgentHandoffDelegates(t *testing.T) {
 		t.Fatalf("RequestLiveAgentHandoff: %v", err)
 	}
 	if id != 88 {
+		t.Fatalf("id inesperado: %d", id)
+	}
+	if runtimes.handoffOrigen != "Codex1" || runtimes.handoffDestino != "Codex2" {
+		t.Fatalf("handoff origen/destino inesperados: %q -> %q", runtimes.handoffOrigen, runtimes.handoffDestino)
+	}
+	if runtimes.handoffTareaID == nil || *runtimes.handoffTareaID != tareaID {
+		t.Fatalf("handoff tarea inesperada: %v", runtimes.handoffTareaID)
+	}
+	if runtimes.handoffMotivo != "relevo" || runtimes.handoffResumen != "continuar" || runtimes.handoffExternal != "ext-1" {
+		t.Fatalf("handoff payload inesperado: motivo=%q resumen=%q ext=%q", runtimes.handoffMotivo, runtimes.handoffResumen, runtimes.handoffExternal)
+	}
+}
+
+func TestRequestStaleAgentHandoffDelegates(t *testing.T) {
+	t.Parallel()
+
+	tareaID := int64(41)
+	runtimes := &stubRuntimeController{staleHandoffID: 89}
+	service := NewService(nil, runtimes)
+
+	id, err := service.RequestStaleAgentHandoff(" Codex1 ", " Codex2 ", &tareaID, " relevo ", " continuar ", " ext-1 ")
+	if err != nil {
+		t.Fatalf("RequestStaleAgentHandoff: %v", err)
+	}
+	if id != 89 {
 		t.Fatalf("id inesperado: %d", id)
 	}
 	if runtimes.handoffOrigen != "Codex1" || runtimes.handoffDestino != "Codex2" {

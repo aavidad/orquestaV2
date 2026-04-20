@@ -14818,10 +14818,16 @@ func intentarHandoffAutonomoTarea(proyecto *db.Proyecto, tareaID int64, origen, 
 	}
 	motivo = firstNonEmpty(strings.TrimSpace(motivo), "handoff_autonomo")
 	if _, err := orquestacionAgentesService.RequestLiveAgentHandoff(origen, relevo, &tareaID, motivo, resumen, ""); err != nil {
-		if handoffPostRemediationCanFallback(err) {
-			return false, nil
+		if handoffCanFallback(err) {
+			if _, staleErr := orquestacionAgentesService.RequestStaleAgentHandoff(origen, relevo, &tareaID, motivo, resumen, ""); staleErr != nil {
+				if handoffCanFallback(staleErr) {
+					return false, nil
+				}
+				return false, staleErr
+			}
+		} else {
+			return false, err
 		}
-		return false, err
 	}
 	nota = strings.TrimSpace(nota)
 	if nota == "" {
@@ -14841,7 +14847,7 @@ func intentarHandoffAutonomoTarea(proyecto *db.Proyecto, tareaID int64, origen, 
 	return true, nil
 }
 
-func handoffPostRemediationCanFallback(err error) bool {
+func handoffCanFallback(err error) bool {
 	if err == nil {
 		return false
 	}

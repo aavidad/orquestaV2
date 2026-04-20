@@ -59,6 +59,7 @@ type Store interface {
 	ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error)
 	MarkRuntimeOrderState(id int64, estado, resultadoJSON, errorText string) error
 	CreateLiveAgentHandoff(origen, destino string, tareaID *int64, motivo, resumenContinuidad, externalSessionID string) (int64, error)
+	CreateStaleAgentHandoff(origen, destino string, tareaID *int64, motivo, resumenContinuidad, externalSessionID string) (int64, error)
 	CreateRuntimeMailbox(msg *db.RuntimeMailboxMessage) (int64, error)
 	GetRuntimeMailbox(id int64) (*db.RuntimeMailboxMessage, error)
 	ListRuntimeMailbox(filtro db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error)
@@ -944,6 +945,17 @@ func (s *Service) CancelRuntimeOrder(id int64, actor, motivo string) error {
 
 func (s *Service) CreateLiveAgentHandoff(origen, destino string, tareaID *int64, motivo, resumenContinuidad, externalSessionID string) (int64, error) {
 	return s.store.CreateLiveAgentHandoff(
+		strings.TrimSpace(origen),
+		strings.TrimSpace(destino),
+		tareaID,
+		strings.TrimSpace(motivo),
+		strings.TrimSpace(resumenContinuidad),
+		strings.TrimSpace(externalSessionID),
+	)
+}
+
+func (s *Service) CreateStaleAgentHandoff(origen, destino string, tareaID *int64, motivo, resumenContinuidad, externalSessionID string) (int64, error) {
+	return s.store.CreateStaleAgentHandoff(
 		strings.TrimSpace(origen),
 		strings.TrimSpace(destino),
 		tareaID,

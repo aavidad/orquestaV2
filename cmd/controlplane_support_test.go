@@ -30137,8 +30137,8 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReasignaATrabajadorSano(t *testi
 	if err != nil {
 		t.Fatalf("get tarea: %v", err)
 	}
-	if tarea.Agente == nil || *tarea.Agente != "CodexSano" || tarea.Estado != db.EstadoEnProgreso {
-		t.Fatalf("tarea no reasignada correctamente: %+v", tarea)
+	if tarea.Agente == nil || *tarea.Agente != "CodexSano" || tarea.Estado != db.EstadoAsignada {
+		t.Fatalf("tarea no relevada correctamente: %+v", tarea)
 	}
 	agente := "CodexSano"
 	estado := "pendiente"
@@ -30146,11 +30146,11 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReasignaATrabajadorSano(t *testi
 	if err != nil {
 		t.Fatalf("listar runtime orders relevo: %v", err)
 	}
-	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "nudge" {
-		t.Fatalf("deberia encolar continuidad al relevo sano: %+v", orders)
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "handoff" {
+		t.Fatalf("deberia encolar handoff al relevo sano: %+v", orders)
 	}
-	if !strings.Contains(orders[0].PayloadJSON, `"accion":"continuar_trabajo"`) {
-		t.Fatalf("payload nudge inesperado: %s", orders[0].PayloadJSON)
+	if !strings.Contains(orders[0].PayloadJSON, `"agente_origen":"CodexBloqueado"`) || !strings.Contains(orders[0].PayloadJSON, `"agente_destino":"CodexSano"`) {
+		t.Fatalf("payload handoff inesperado: %s", orders[0].PayloadJSON)
 	}
 }
 
@@ -31403,8 +31403,8 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReasignaBloqueoPorSobrecargaASiH
 	if err != nil {
 		t.Fatalf("get tarea: %v", err)
 	}
-	if tarea.Estado != db.EstadoEnProgreso || tarea.Agente == nil || *tarea.Agente != "CodexLibre" {
-		t.Fatalf("la tarea deberia reasignarse al relevo sano: %+v", tarea)
+	if tarea.Estado != db.EstadoAsignada || tarea.Agente == nil || *tarea.Agente != "CodexLibre" {
+		t.Fatalf("la tarea deberia relevarse al relevo sano via handoff: %+v", tarea)
 	}
 	agente := "CodexLibre"
 	estado := "pendiente"
@@ -31412,11 +31412,11 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReasignaBloqueoPorSobrecargaASiH
 	if err != nil {
 		t.Fatalf("listar runtime orders relevo: %v", err)
 	}
-	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "nudge" {
-		t.Fatalf("deberia encolar un nudge de continuidad para el relevo: %+v", orders)
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "handoff" {
+		t.Fatalf("deberia encolar un handoff al relevo: %+v", orders)
 	}
-	if !strings.Contains(orders[0].PayloadJSON, `"accion":"continuar_trabajo"`) {
-		t.Fatalf("payload nudge inesperado: %s", orders[0].PayloadJSON)
+	if !strings.Contains(orders[0].PayloadJSON, `"agente_origen":"CodexCargado"`) || !strings.Contains(orders[0].PayloadJSON, `"agente_destino":"CodexLibre"`) {
+		t.Fatalf("payload handoff inesperado: %s", orders[0].PayloadJSON)
 	}
 }
 

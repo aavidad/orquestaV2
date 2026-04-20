@@ -129,6 +129,10 @@ func (Repository) CreateLiveAgentHandoff(origen, destino string, tareaID *int64,
 	return db.CrearHandoffAgenteVivo(origen, destino, tareaID, motivo, resumenContinuidad, externalSessionID)
 }
 
+func (Repository) CreateStaleAgentHandoff(origen, destino string, tareaID *int64, motivo, resumenContinuidad, externalSessionID string) (int64, error) {
+	return db.CrearHandoffAgenteStale(origen, destino, tareaID, motivo, resumenContinuidad, externalSessionID)
+}
+
 func (Repository) ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error) {
 	return db.ListarRuntimeOrders(filtro)
 }
