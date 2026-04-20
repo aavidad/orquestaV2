@@ -16995,7 +16995,7 @@ func TestProcesarRuntimeOrdersBatchCierraPipelineLocalNotificadaSiMailboxFalta(t
 		Agente:      "Codex1",
 		ProyectoID:  &proyectoID,
 		Tipo:        "send_instruction",
-		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","texto":"continuar trabajo","mailbox_id":%d,"mailbox_kind":"pipeline_local","tarea_id":18}`, mailboxID),
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","texto":"continuar trabajo","mailbox_id":%d,"mailbox_kind":"pipeline_local"}`, mailboxID),
 	})
 	if err != nil {
 		t.Fatalf("encolar send_instruction: %v", err)
@@ -17009,7 +17009,6 @@ func TestProcesarRuntimeOrdersBatchCierraPipelineLocalNotificadaSiMailboxFalta(t
 		"texto":        "continuar trabajo",
 		"mailbox_id":   mailboxID,
 		"mailbox_kind": "pipeline_local",
-		"tarea_id":     int64(18),
 	}, "mailbox notificado pendiente de recibo", time.Now().UTC()); err != nil {
 		t.Fatalf("retenerRuntimeOrderSendInstructionNotificada: %v", err)
 	}
@@ -17017,12 +17016,16 @@ func TestProcesarRuntimeOrdersBatchCierraPipelineLocalNotificadaSiMailboxFalta(t
 		t.Fatalf("borrar mailbox: %v", err)
 	}
 
-	processed, err := ProcesarRuntimeOrdersBatch()
+	order, err = GetRuntimeOrder(orderID)
 	if err != nil {
-		t.Fatalf("procesar runtime orders: %v", err)
+		t.Fatalf("recargar send order: %v", err)
 	}
-	if processed < 1 {
-		t.Fatalf("se esperaba reconciliar al menos una orden, obtuvo %d", processed)
+	handled, err := reconciliarRuntimeOrderSendInstructionConMailboxActual(order, mapFromJSON(order.PayloadJSON), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("reconciliarRuntimeOrderSendInstructionConMailboxActual: %v", err)
+	}
+	if !handled {
+		t.Fatal("se esperaba reconciliar la pipeline_local sin mailbox")
 	}
 
 	sendOrder, err := GetRuntimeOrder(orderID)
@@ -17070,11 +17073,25 @@ func TestProcesarRuntimeOrdersBatchSupersedeSendInstructionDuplicadaPorMailbox(t
 	if err != nil {
 		t.Fatalf("crear mailbox: %v", err)
 	}
+	agenteCodex1 := "Codex1"
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:     "Continuar trabajo",
+		Estado:     TareaEnProgreso,
+		Prioridad:  "media",
+		ProyectoID: &proyectoID,
+		Agente:     &agenteCodex1,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE tareas SET estado='en_progreso', agente=? WHERE id=?`, agenteCodex1, tareaID); err != nil {
+		t.Fatalf("forzar tarea asignada: %v", err)
+	}
 	olderID, err := EncolarRuntimeOrder(&RuntimeOrder{
 		Agente:      "Codex1",
 		ProyectoID:  &proyectoID,
 		Tipo:        "send_instruction",
-		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","texto":"continuar trabajo","mailbox_id":%d,"mailbox_kind":"pipeline_local","tarea_id":18}`, mailboxID),
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","texto":"continuar trabajo","mailbox_id":%d,"mailbox_kind":"pipeline_local","tarea_id":%d}`, mailboxID, tareaID),
 	})
 	if err != nil {
 		t.Fatalf("encolar orden antigua: %v", err)
@@ -17083,7 +17100,7 @@ func TestProcesarRuntimeOrdersBatchSupersedeSendInstructionDuplicadaPorMailbox(t
 		Agente:      "Codex1",
 		ProyectoID:  &proyectoID,
 		Tipo:        "send_instruction",
-		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","texto":"continuar trabajo","mailbox_id":%d,"mailbox_kind":"pipeline_local","tarea_id":18}`, mailboxID),
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","texto":"continuar trabajo","mailbox_id":%d,"mailbox_kind":"pipeline_local","tarea_id":%d}`, mailboxID, tareaID),
 	})
 	if err != nil {
 		t.Fatalf("encolar orden nueva: %v", err)
@@ -17098,21 +17115,25 @@ func TestProcesarRuntimeOrdersBatchSupersedeSendInstructionDuplicadaPorMailbox(t
 			"texto":        "continuar trabajo",
 			"mailbox_id":   mailboxID,
 			"mailbox_kind": "pipeline_local",
-			"tarea_id":     int64(18),
+			"tarea_id":     tareaID,
 		}, "mailbox notificado pendiente de recibo", time.Now().UTC()); err != nil {
 			t.Fatalf("retenerRuntimeOrderSendInstructionNotificada %d: %v", orderID, err)
 		}
 	}
 
-	processed, err := ProcesarRuntimeOrdersBatch()
+	older, err := GetRuntimeOrder(olderID)
 	if err != nil {
-		t.Fatalf("procesar runtime orders: %v", err)
+		t.Fatalf("recargar orden antigua: %v", err)
 	}
-	if processed < 1 {
-		t.Fatalf("se esperaba reconciliar al menos una orden, obtuvo %d", processed)
+	handled, err := reconciliarRuntimeOrderSendInstructionConMailboxActual(older, mapFromJSON(older.PayloadJSON), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("reconciliarRuntimeOrderSendInstructionConMailboxActual: %v", err)
+	}
+	if !handled {
+		t.Fatal("se esperaba reconciliar la orden duplicada")
 	}
 
-	older, err := GetRuntimeOrder(olderID)
+	older, err = GetRuntimeOrder(olderID)
 	if err != nil {
 		t.Fatalf("get orden antigua: %v", err)
 	}
@@ -17129,6 +17150,92 @@ func TestProcesarRuntimeOrdersBatchSupersedeSendInstructionDuplicadaPorMailbox(t
 	}
 	if newer.Estado != "pendiente" {
 		t.Fatalf("la orden nueva deberia seguir viva: %+v", newer)
+	}
+}
+
+func TestProcesarRuntimeOrdersBatchCierraPipelineLocalSiLaTareaYaFueReasignada(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := RegistrarAgente("CodexBudget", "programador"); err != nil {
+		t.Fatalf("registrar CodexBudget: %v", err)
+	}
+	agenteBudget := "CodexBudget"
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:     "Forzar carril TMUX canónico para Codex libres",
+		Estado:     TareaEnProgreso,
+		Prioridad:  "media",
+		ProyectoID: &proyectoID,
+		Agente:     &agenteBudget,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE tareas SET estado='en_progreso', agente=? WHERE id=?`, agenteBudget, tareaID); err != nil {
+		t.Fatalf("forzar tarea reasignada: %v", err)
+	}
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"continuar trabajo"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","texto":"continuar trabajo","mailbox_id":%d,"mailbox_kind":"pipeline_local","tarea_objetivo_id":%d}`, mailboxID, tareaID),
+	})
+	if err != nil {
+		t.Fatalf("encolar orden: %v", err)
+	}
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get send order: %v", err)
+	}
+	if err := retenerRuntimeOrderSendInstructionNotificada(order, map[string]any{
+		"to_agente":        "Codex1",
+		"texto":            "continuar trabajo",
+		"mailbox_id":       mailboxID,
+		"mailbox_kind":     "pipeline_local",
+		"tarea_objetivo_id": tareaID,
+	}, "mailbox notificado pendiente de recibo", time.Now().UTC()); err != nil {
+		t.Fatalf("retenerRuntimeOrderSendInstructionNotificada: %v", err)
+	}
+
+	processed, err := ProcesarRuntimeOrdersBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime orders: %v", err)
+	}
+	if processed < 1 {
+		t.Fatalf("se esperaba reconciliar al menos una orden, obtuvo %d", processed)
+	}
+
+	sendOrder, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("la orden deberia cerrarse al detectar la tarea reasignada: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"superseded_reason":"task_reassigned_to:CodexBudget"`) {
+		t.Fatalf("resultado final sin superseded_reason de reasignacion: %s", sendOrder.ResultadoJSON)
 	}
 }
 

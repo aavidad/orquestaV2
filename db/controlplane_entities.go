@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"orquesta/internal/controlruntime"
 	"orquesta/runtimeagente"
@@ -7804,6 +7805,47 @@ func runtimeOrderSendInstructionDuplicadaMasReciente(order *RuntimeOrder, payloa
 	return other, nil
 }
 
+func runtimeOrderSendInstructionTaskID(payload map[string]any) int64 {
+	if payload == nil {
+		return 0
+	}
+	if id := int64FromAny(payload["tarea_id"]); id > 0 {
+		return id
+	}
+	return int64FromAny(payload["tarea_objetivo_id"])
+}
+
+func runtimeOrderSendInstructionObsoletaPorTarea(order *RuntimeOrder, payload map[string]any) (string, error) {
+	if order == nil || !runtimeOrderSendInstructionEsPipelinePremium(payload) {
+		return "", nil
+	}
+	taskID := runtimeOrderSendInstructionTaskID(payload)
+	if taskID <= 0 {
+		return "", nil
+	}
+	tarea, err := GetTarea(taskID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Sprintf("task_missing:%d", taskID), nil
+		}
+		return "", err
+	}
+	if tarea == nil {
+		return fmt.Sprintf("task_missing:%d", taskID), nil
+	}
+	if tarea.Agente != nil {
+		agente := strings.TrimSpace(*tarea.Agente)
+		if agente != "" && !strings.EqualFold(agente, strings.TrimSpace(order.Agente)) {
+			return fmt.Sprintf("task_reassigned_to:%s", agente), nil
+		}
+	}
+	switch tarea.Estado {
+	case TareaCompletada, TareaCancelada, TareaLibre, TareaBacklog:
+		return fmt.Sprintf("task_not_actionable:%s", strings.TrimSpace(string(tarea.Estado))), nil
+	}
+	return "", nil
+}
+
 func runtimeOrderSendInstructionLoadWorkerSnapshotFresh(raw string) (*runtimeagente.WorkerSnapshot, error) {
 	type workerMetadataPaths struct {
 		ManifestPath  string `json:"worker_manifest_path"`
@@ -9051,10 +9093,13 @@ func completarRuntimeOrderSendInstructionSupersedida(order *RuntimeOrder, payloa
 	if err := MarcarRuntimeOrderEstado(order.ID, "completada", resultado, ""); err != nil {
 		return err
 	}
-	if err := registrarDispatchLedgerRuntimeOrder(order, payload, "superseded", "superseded", "", reason); err != nil {
+	if err := registrarDispatchLedgerRuntimeOrder(order, payload, "superseded", "superseded", "", reason); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	return registrarWorkQueueRuntimeOrder(order, payload, "superseded", reason)
+	if err := registrarWorkQueueRuntimeOrder(order, payload, "superseded", reason); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	return nil
 }
 
 func fallarRuntimeOrderSendInstructionPorBloqueoAgente(order *RuntimeOrder, payload map[string]any, detalle string, blockedAt time.Time) error {
@@ -12045,12 +12090,24 @@ func reconciliarRuntimeOrderSendInstructionConMailboxActual(order *RuntimeOrder,
 	if order == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) {
 		return false, nil
 	}
+	if reason, err := runtimeOrderSendInstructionObsoletaPorTarea(order, payload); err != nil {
+		return false, err
+	} else if reason != "" {
+		if err := completarRuntimeOrderSendInstructionSupersedida(order, payload, reason); err != nil {
+			if !errors.Is(err, sql.ErrNoRows) {
+				return false, err
+			}
+		}
+		return true, nil
+	}
 	if newer, err := runtimeOrderSendInstructionDuplicadaMasReciente(order, payload); err != nil {
 		return false, err
 	} else if newer != nil {
 		reason := fmt.Sprintf("covered_by_newer_mailbox_order:%d", newer.ID)
 		if err := completarRuntimeOrderSendInstructionSupersedida(order, payload, reason); err != nil {
-			return false, err
+			if !errors.Is(err, sql.ErrNoRows) {
+				return false, err
+			}
 		}
 		return true, nil
 	}
@@ -12065,7 +12122,9 @@ func reconciliarRuntimeOrderSendInstructionConMailboxActual(order *RuntimeOrder,
 	if msg == nil {
 		if runtimeOrderSendInstructionDebeCerrarMailboxFaltante(order, payload) {
 			if confirmed, receiptSource, receiptAt, err := runtimeOrderSendInstructionReceiptEvidence(order, payload, nil); err != nil {
-				return false, err
+				if !errors.Is(err, sql.ErrNoRows) {
+					return false, err
+				}
 			} else if confirmed {
 				if err := completarRuntimeOrderSendInstructionEntregadaPorReceipt(order, payload, receiptSource, receiptAt); err != nil {
 					return false, err
@@ -12073,7 +12132,9 @@ func reconciliarRuntimeOrderSendInstructionConMailboxActual(order *RuntimeOrder,
 				return true, nil
 			}
 			if err := completarRuntimeOrderSendInstructionSupersedida(order, payload, "mailbox_missing_after_notify"); err != nil {
-				return false, err
+				if !errors.Is(err, sql.ErrNoRows) {
+					return false, err
+				}
 			}
 			return true, nil
 		}
