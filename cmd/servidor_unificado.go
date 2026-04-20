@@ -189,6 +189,7 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 	}
 	launchPrepareContextPrewarmLoop(controlCtx, debugLogger)
 	launchStorageMaintenanceLoop(controlCtx, debugLogger)
+	launchServerAutonomyMaintenanceLoop(controlCtx, debugLogger)
 
 	timeouts := loadUnifiedServerHTTPTimeouts()
 	server := &http.Server{
@@ -366,6 +367,51 @@ func launchStorageMaintenanceLoop(ctx context.Context, debugLogger *log.Logger) 
 					debugLogger.Printf("storage_maintenance backend=%s outcome=%v", backend.Name(), outcome)
 				}
 			}
+		}
+	}()
+}
+
+func serverAutonomyMaintenanceInterval() time.Duration {
+	seconds := controlPlaneConfigIntOrDefault("server_autonomy_maintenance_interval_seconds", 30)
+	if seconds < 30 {
+		seconds = 30
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func launchServerAutonomyMaintenanceLoop(ctx context.Context, debugLogger *log.Logger) {
+	cfg := loadServerAutobootstrapConfig()
+	if !cfg.Enabled {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(serverAutonomyMaintenanceInterval())
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			started := runtimeProcessDegradadosEnCurso.CompareAndSwap(false, true)
+			if !started {
+				continue
+			}
+			func() {
+				defer runtimeProcessDegradadosEnCurso.Store(false)
+				summary, err := runtimeProcessDegradadosBatchDetailed()
+				if err != nil {
+					db.Audit("server", "runtime_process_degradados_loop_error", "runtime", 0, err.Error())
+					if debugLogger != nil {
+						debugLogger.Printf("runtime_process_degradados_loop error=%v", err)
+					}
+					return
+				}
+				if debugLogger != nil && summary.Count > 0 {
+					debugLogger.Printf("runtime_process_degradados_loop count=%d ghost=%d reactivated=%d idle_autoassigned=%d",
+						summary.Count, summary.GhostAssignmentsCompacted, summary.ReactivatedWithoutRuntime, summary.IdleAutoassigned)
+				}
+			}()
 		}
 	}()
 }

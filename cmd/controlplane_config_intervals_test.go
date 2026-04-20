@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"testing"
+	"time"
 
 	"orquesta/db"
 )
@@ -42,5 +43,16 @@ func TestControlPlaneConfigIntOrDefaultConservaValorSano(t *testing.T) {
 	resetControlPlaneConfigCache()
 	if got := controlPlaneConfigIntOrDefault("runtime_budget_background_observation_interval_seconds", 120); got != 180 {
 		t.Fatalf("got %d want 180", got)
+	}
+}
+
+func TestServerAutonomyMaintenanceIntervalAplicaSueloSeguro(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	if err := db.ConfigSet("server_autonomy_maintenance_interval_seconds", "5"); err != nil {
+		t.Fatalf("config set: %v", err)
+	}
+	resetControlPlaneConfigCache()
+	if got := serverAutonomyMaintenanceInterval(); got != 30*time.Second {
+		t.Fatalf("got %s want 30s", got)
 	}
 }
