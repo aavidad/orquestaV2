@@ -42,6 +42,23 @@ func TestAgenteDebeEntrarEnReanimacionAutomaticaNoAceptaCuotaVisibleStale(t *tes
 	}
 }
 
+func TestAgenteDebeEntrarEnReanimacionAutomaticaNoAceptaMargenVisibleDemasiadoBajo(t *testing.T) {
+	now := time.Now().UTC()
+	quota := 4
+	agente := &db.Agente{
+		Nombre:            "Gemini1",
+		Habilitado:        true,
+		EstadoCuota:       "enfriamiento",
+		MotivoPausa:       "worker bloqueado por cuota",
+		ReanimarAt:        timePtr(now.Add(45 * time.Minute)),
+		PresupuestoEstado: "ok",
+		CuotaRestantePct:  &quota,
+	}
+	if agenteDebeEntrarEnReanimacionAutomatica(agente, now) {
+		t.Fatalf("no deberia reanimar antes con margen visible critico: %+v", agente)
+	}
+}
+
 func TestPresupuestoAgenteDebeRevalidarseAhoraSiResetVisibleYaVencio(t *testing.T) {
 	now := time.Now().UTC()
 	quota := 0

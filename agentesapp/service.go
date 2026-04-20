@@ -3895,12 +3895,21 @@ func applyAssignmentHandoffAutonomyToRow(row *Row) {
 		return
 	}
 	notaLower := strings.ToLower(nota)
-	if !strings.Contains(notaLower, "handoff_recibido_desde_") {
+	action := ""
+	source := ""
+	state := ""
+	switch {
+	case strings.Contains(notaLower, "handoff_recibido_desde_"):
+		action = "continuar_trabajo"
+		source = "assignment_handoff"
+		state = "handoff"
+	case notaLower == "reactivacion_automatica_trabajo_activo":
+		action = "continuar_trabajo"
+		source = "assignment_reactivation"
+		state = "reactivated"
+	default:
 		return
 	}
-	action := "continuar_trabajo"
-	source := "assignment_handoff"
-	state := "handoff"
 	reason := nota
 	ts := row.Asignacion.UpdatedAt.UTC()
 	moment := &ts
@@ -3923,6 +3932,10 @@ func promoteObservedAutonomyState(row *Row, now time.Time) {
 	}
 	switch strings.ToLower(strings.TrimSpace(row.LastAutonomySource)) {
 	case "assignment_handoff":
+		if row.WorkerFresh(now) && row.OpenTasks > 0 {
+			row.LastAutonomyState = "work_confirmed"
+		}
+	case "assignment_reactivation":
 		if row.WorkerFresh(now) && row.OpenTasks > 0 {
 			row.LastAutonomyState = "work_confirmed"
 		}

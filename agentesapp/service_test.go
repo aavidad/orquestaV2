@@ -4001,6 +4001,83 @@ func TestBuildDetailCompactExponeHandoffDesdeAsignacionActiva(t *testing.T) {
 	}
 }
 
+func TestBuildDetailCompactPromueveReactivacionAutomaticaDesdeAsignacionActiva(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(53)
+	heartbeatAt := now
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codexbudget-1",
+		"mailbox_delivery_mode": "session_resume",
+		"external_session_id":   "sess-budget",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":            "running",
+		"updated_at":       now.Format(time.RFC3339Nano),
+		"alive":            true,
+		"ready_at":         now.Add(-2 * time.Minute).Format(time.RFC3339Nano),
+		"last_output_at":   now.Format(time.RFC3339Nano),
+		"last_progress_at": now.Format(time.RFC3339Nano),
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+		"ready_at":     now.Add(-2 * time.Minute).Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	store := &fakeStore{
+		agents: []*db.Agente{{Nombre: "CodexBudget", Rol: "programador", Activo: true, Habilitado: true}},
+		assignments: []*db.Asignacion{{
+			Agente:       "CodexBudget",
+			ProyectoID:   proyectoID,
+			ProyectoSlug: "orquestador",
+			Estado:       db.AsignacionActiva,
+			Nota:         "reactivacion_automatica_trabajo_activo",
+			UpdatedAt:    now.Add(-time.Minute),
+		}},
+		sessions: []*db.Sesion{{
+			ID:          80,
+			Agente:      "CodexBudget",
+			ProyectoID:  &proyectoID,
+			Activa:      true,
+			Estado:      "activa",
+			Inicio:      now.Add(-10 * time.Minute),
+			HeartbeatAt: &heartbeatAt,
+		}},
+		tasks:            []*db.Tarea{{ID: 901, Titulo: "Frente reactivado", Estado: db.EstadoEnProgreso, ProyectoID: &proyectoID, Agente: ptr("CodexBudget")}},
+		runtimes:         []*db.RuntimeInstance{{ID: 81, Agente: "CodexBudget", ProyectoID: &proyectoID, LogicalState: "activo", ProcessState: "running", UpdatedAt: now}},
+		canonicalHandles: []*db.RuntimeHandle{{ID: 82, Agente: "CodexBudget", ProyectoID: &proyectoID, Estado: "activo", Transporte: "tmux", HandleKind: "session", MetadataJSON: fmt.Sprintf(`{"worker_manifest_path":%q,"worker_status_path":%q,"worker_heartbeat_path":%q}`, manifestPath, statusPath, heartbeatPath)}},
+	}
+	svc := NewService(store, nil)
+
+	detail, err := svc.BuildDetailCompact("CodexBudget")
+	if err != nil {
+		t.Fatalf("BuildDetailCompact: %v", err)
+	}
+	if detail == nil || detail.Entity == nil {
+		t.Fatalf("detail/entity inesperado: %+v", detail)
+	}
+	if detail.Entity.LastAutonomyAction != "continuar_trabajo" || detail.Entity.LastAutonomySource != "assignment_reactivation" {
+		t.Fatalf("deberia exponer continuidad por reactivacion automatica: %+v", detail.Entity)
+	}
+	if detail.Entity.LastAutonomyState != "work_confirmed" {
+		t.Fatalf("la reactivacion con worker vivo y tarea activa deberia quedar confirmada: %+v", detail.Entity)
+	}
+}
+
 func TestBuildPanelRowsNoMarcaSupervisorConResumePayloadVivoComoAtascado(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(46)

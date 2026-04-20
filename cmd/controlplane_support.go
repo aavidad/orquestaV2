@@ -496,10 +496,18 @@ func agentePuedeReanimarseAntesPorCuotaVisible(agente *db.Agente) bool {
 	if shouldPause {
 		return false
 	}
-	if agente.CuotaRestantePct != nil && *agente.CuotaRestantePct > 0 {
-		return true
+	if agente.CuotaRestantePct != nil {
+		return *agente.CuotaRestantePct >= margenMinimoReactivacionCuotaVisible()
 	}
 	return strings.TrimSpace(agente.PresupuestoEstado) == "ok"
+}
+
+func margenMinimoReactivacionCuotaVisible() int {
+	minPct := controlPlaneConfigIntOrDefault("autonomia_quota_reactivation_min_pct", 10)
+	if minPct < 5 {
+		minPct = 5
+	}
+	return minPct
 }
 
 func (dbAutomationService) ResetReanimacion(nombre string) error {
