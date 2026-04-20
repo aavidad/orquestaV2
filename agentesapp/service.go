@@ -3550,6 +3550,9 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 	if hasActiveTask && workerRunningFresh && row.workerOutputStale(now, workerOutputStaleThreshold) && !row.workerProgressRecent(now, workerOutputStaleThreshold) {
 		return "atascado", firstNonEmpty(row.workerLastOutputSummary(), "worker sin salida reciente")
 	}
+	if !hasActiveTask && row.supervisorAutonomyLive(now) {
+		return "trabajando", firstNonEmpty(row.activitySummary(), "supervision autonoma viva")
+	}
 	if !hasActiveTask && row.MailboxPending > 0 && row.KnownLegacyCLIWorker(now) {
 		return "bloqueado_por_runtime", "runtime CLI legacy sin tmux canónico"
 	}
@@ -3667,6 +3670,24 @@ func (r Row) hasRecentOperationalActivity(now time.Time) bool {
 		return true
 	}
 	return false
+}
+
+func (r Row) supervisorAutonomyLive(now time.Time) bool {
+	if !strings.EqualFold(strings.TrimSpace(r.LastAutonomyAction), "supervisar_proyecto") {
+		return false
+	}
+	if !r.WorkerAlive || !r.workerHeartbeatRecent(now) {
+		return false
+	}
+	if r.LastAutonomyMoment != nil && !r.LastAutonomyMoment.IsZero() && r.LastAutonomyMoment.Before(now.Add(-10*time.Minute)) {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(r.LastAutonomySource)) {
+	case "resume_payload_mailbox", "mailbox", "work_queue", "send_instruction":
+		return true
+	default:
+		return false
+	}
 }
 
 func (r Row) runtimeState() string {

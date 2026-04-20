@@ -1119,6 +1119,57 @@ func TestGetPostRemediationStatusKeepsWaitingForWeakDeliveryReceipt(t *testing.T
 	}
 }
 
+func TestGetPostRemediationStatusPromotesWeakReceiptWhenWorkQueueYaArranco(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(38)
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	metaJSON, _ := json.Marshal(map[string]any{
+		"trace_dir": tmp,
+	})
+	if err := controlruntime.RecordWorkQueueFromMetadataJSON(string(metaJSON), controlruntime.WorkQueueRecordInput{
+		Kind:            "autonomia",
+		Action:          "continuar_trabajo",
+		VerificationKey: "reassign:44:Codex1:Codex2",
+		State:           "working",
+		RecordedAt:      now,
+	}); err != nil {
+		t.Fatalf("RecordWorkQueueFromMetadataJSON: %v", err)
+	}
+	service := NewService(nil, &stubRuntimeController{
+		listHandles: []*db.RuntimeHandle{{
+			ID:           31,
+			Agente:       "Codex2",
+			ProyectoID:   &proyectoID,
+			Estado:       "activo",
+			MetadataJSON: string(metaJSON),
+			UpdatedAt:    now,
+		}},
+		orders: []*db.RuntimeOrder{{
+			ID:            22,
+			Agente:        "Codex2",
+			ProyectoID:    &proyectoID,
+			Tipo:          "nudge",
+			Estado:        "completada",
+			PayloadJSON:   `{"kind":"autonomia","accion":"continuar_trabajo","verification_key":"reassign:44:Codex1:Codex2","remediation_kind":"reassign"}`,
+			ResultadoJSON: `{"dispatch_state":"delivered","delivery_state":"delivered","receipt_source":"tmux_pane_activity","verification_key":"reassign:44:Codex1:Codex2","remediation_kind":"reassign"}`,
+			UpdatedAt:     now,
+		}},
+	})
+
+	status, err := service.GetPostRemediationStatus("Codex2", &proyectoID, "reassign:44:Codex1:Codex2")
+	if err != nil {
+		t.Fatalf("GetPostRemediationStatus: %v", err)
+	}
+	if status == nil || !status.Found {
+		t.Fatalf("faltaba status: %+v", status)
+	}
+	if !status.Succeeded || !status.WorkConfirmed || status.Waiting || status.AwaitingWork {
+		t.Fatalf("status deberia promoverse a work_confirmed por work_queue viva: %+v", status)
+	}
+}
+
 func TestGetPostRemediationStatusReturnsWaitingForNotifiedOrder(t *testing.T) {
 	t.Parallel()
 

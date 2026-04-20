@@ -3548,6 +3548,99 @@ func TestBuildDetailCompactUsaResumePayloadMailboxComoFallbackAutonomia(t *testi
 	}
 }
 
+func TestBuildPanelRowsNoMarcaSupervisorConResumePayloadVivoComoAtascado(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(46)
+	heartbeatAt := now
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex1-090217",
+		"tmux_pane_id":          "%71",
+		"mailbox_delivery_mode": "bootstrap_only",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":           "ready",
+		"updated_at":      now.Format(time.RFC3339Nano),
+		"alive":           true,
+		"ready_at":        now.Add(-30 * time.Minute).Format(time.RFC3339Nano),
+		"last_output_at":  now.Format(time.RFC3339Nano),
+		"last_progress_at": now.Add(-30 * time.Minute).Format(time.RFC3339Nano),
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+		"ready_at":     now.Add(-30 * time.Minute).Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex1", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		sessions: []*db.Sesion{{
+			ID:                50,
+			Agente:            "Codex1",
+			ProyectoID:        &proyectoID,
+			Activa:            true,
+			Estado:            "activa",
+			Inicio:            now.Add(-30 * time.Minute),
+			HeartbeatAt:       &heartbeatAt,
+			ResumePayloadJSON: `{"mailbox":[{"kind":"autonomia","payload":{"accion":"supervisar_proyecto","bootstrap_kind":"server_autobootstrap","verification_key":"vk-supervisor"}}]}`,
+		}},
+		runtimes: []*db.RuntimeInstance{{
+			ID:           10,
+			Agente:       "Codex1",
+			ProyectoID:   &proyectoID,
+			LogicalState: "activo",
+			ProcessState: "running",
+			UpdatedAt:    now,
+		}},
+		handles: []*db.RuntimeHandle{{
+			ID:           10,
+			Agente:       "Codex1",
+			ProyectoID:   &proyectoID,
+			Estado:       "activo",
+			Transporte:   "tmux",
+			HandleKind:   "session",
+			UpdatedAt:    now,
+			MetadataJSON: fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_session":"orq-codex1-090217","mailbox_delivery_mode":"bootstrap_only","can_send_input":false,"worker_manifest_path":%q,"worker_status_path":%q,"worker_heartbeat_path":%q}`, manifestPath, statusPath, heartbeatPath),
+		}},
+		mailbox: []*db.RuntimeMailboxMessage{
+			{ID: 80, ToAgente: "Codex1", ProyectoID: &proyectoID, Estado: "pendiente", Kind: "autonomia"},
+			{ID: 81, ToAgente: "Codex1", ProyectoID: &proyectoID, Estado: "pendiente", Kind: "autonomia"},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "trabajando" {
+		t.Fatalf("estado operativo=%q detalle=%q", rows[0].EstadoOperativo, rows[0].DetalleOperativo)
+	}
+	if rows[0].LastAutonomyAction != "supervisar_proyecto" || rows[0].LastAutonomySource != "resume_payload_mailbox" {
+		t.Fatalf("ultima accion autonomia inesperada: %+v", rows[0])
+	}
+}
+
 func TestBuildReanimationScheduleActivosReutilizaCacheCorta(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(7)

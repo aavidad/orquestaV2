@@ -1156,8 +1156,17 @@ func (s *Service) GetPostRemediationStatus(agente string, proyectoID *int64, ver
 		if status.WorkConfirmed {
 			status.Succeeded = true
 		} else {
-			status.Waiting = true
-			status.AwaitingWork = true
+			started, err := s.postRemediationWorkStartedFromQueue(agente, proyectoID, verificationKey)
+			if err != nil {
+				return nil, err
+			}
+			if started {
+				status.WorkConfirmed = true
+				status.Succeeded = true
+			} else {
+				status.Waiting = true
+				status.AwaitingWork = true
+			}
 		}
 	case strings.EqualFold(status.Estado, "fallida"), strings.EqualFold(status.DeliveryState, "blocked"):
 		status.Waiting = false
@@ -1165,6 +1174,46 @@ func (s *Service) GetPostRemediationStatus(agente string, proyectoID *int64, ver
 		status.Waiting = true
 	}
 	return status, nil
+}
+
+func (s *Service) postRemediationWorkStartedFromQueue(agente string, proyectoID *int64, verificationKey string) (bool, error) {
+	if s == nil || s.runtimes == nil || proyectoID == nil || *proyectoID <= 0 {
+		return false, nil
+	}
+	agente = strings.TrimSpace(agente)
+	verificationKey = strings.TrimSpace(verificationKey)
+	if agente == "" || verificationKey == "" {
+		return false, nil
+	}
+	handles, err := s.runtimes.ListRuntimeHandles(&agente)
+	if err != nil {
+		return false, err
+	}
+	match := controlruntime.WorkQueueMatch{
+		Kind:            "autonomia",
+		Action:          "continuar_trabajo",
+		VerificationKey: verificationKey,
+		Within:          2 * time.Hour,
+	}
+	for _, handle := range handles {
+		if handle == nil || handle.ProyectoID == nil || *handle.ProyectoID != *proyectoID {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(handle.Estado), "activo") {
+			continue
+		}
+		if !db.RuntimeHandleSnapshotIsFresh(handle, 2*time.Minute) {
+			continue
+		}
+		started, err := controlruntime.HasStartedWorkQueueEntryFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON), match)
+		if err != nil {
+			return false, err
+		}
+		if started {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func receiptSourceConfirmsWork(source string) bool {

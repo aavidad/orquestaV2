@@ -182,6 +182,31 @@ func HasRecentWorkQueueEntryFromMetadataJSON(raw string, match WorkQueueMatch) (
 	return false, nil
 }
 
+func HasStartedWorkQueueEntryFromMetadataJSON(raw string, match WorkQueueMatch) (bool, error) {
+	entries, err := readWorkQueueEntriesFromMetadataJSON(raw)
+	if err != nil || len(entries) == 0 {
+		return false, err
+	}
+	cutoff := time.Time{}
+	if match.Within > 0 {
+		cutoff = time.Now().UTC().Add(-match.Within)
+	}
+	for _, entry := range entries {
+		if !workQueueEntryMatches(entry, match) {
+			continue
+		}
+		moment := workQueueEntryMoment(entry)
+		if !cutoff.IsZero() && moment.Before(cutoff) {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(entry.State)) {
+		case "working", "running":
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func loadWorkQueueFile(path string) (*workQueueFile, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
