@@ -235,7 +235,7 @@ func resumirAutonomiaRows(rows []agentesapp.Row, now time.Time) autonomiaResumen
 	out := autonomiaResumen{}
 	supervisor := statusSupervisorAgentName()
 	for _, row := range rows {
-		if strings.EqualFold(strings.TrimSpace(row.EstadoOperativo), "bloqueado_por_cuota") {
+		if !rowCuentaComoAutonomiaActiva(row) {
 			continue
 		}
 		if strings.EqualFold(strings.TrimSpace(row.LastAutonomySource), "assignment_handoff") &&
@@ -257,6 +257,20 @@ func resumirAutonomiaRows(rows []agentesapp.Row, now time.Time) autonomiaResumen
 		}
 	}
 	return out
+}
+
+func rowCuentaComoAutonomiaActiva(row agentesapp.Row) bool {
+	switch strings.ToLower(strings.TrimSpace(row.EstadoOperativo)) {
+	case "bloqueado_por_cuota",
+		"bloqueado_por_runtime",
+		"atascado",
+		"mailbox_atascada",
+		"retirado",
+		"desconocido":
+		return false
+	default:
+		return true
+	}
 }
 
 func listarHandoffsAutonomiaEstado() (int, error) {

@@ -461,6 +461,49 @@ func TestResumirAutonomiaRowsOmiteAgentesBloqueadosPorCuota(t *testing.T) {
 	}
 }
 
+func TestResumirAutonomiaRowsOmiteAgentesBloqueadosPorRuntimeYAtascados(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	rows := []agentesapp.Row{
+		{
+			EstadoOperativo:          "bloqueado_por_runtime",
+			LastAutonomyAction:       "continuar_trabajo",
+			LastAutonomySource:       "work_queue",
+			LastAutonomyState:        "work_confirmed",
+			MailboxContinuityPending: 1,
+			OpenTasks:                1,
+			WorkerAlive:              true,
+			WorkerHeartbeat:          ptrTimeStatusDispatch(now),
+		},
+		{
+			EstadoOperativo:          "atascado",
+			LastAutonomyAction:       "continuar_trabajo",
+			LastAutonomySource:       "assignment_handoff",
+			LastAutonomyState:        "handoff",
+			MailboxContinuityPending: 1,
+			OpenTasks:                1,
+			WorkerAlive:              true,
+			WorkerHeartbeat:          ptrTimeStatusDispatch(now),
+		},
+		{
+			EstadoOperativo:          "trabajando",
+			LastAutonomyAction:       "continuar_trabajo",
+			LastAutonomySource:       "work_queue",
+			LastAutonomyState:        "work_confirmed",
+			MailboxContinuityPending: 1,
+			OpenTasks:                1,
+			WorkerAlive:              true,
+			WorkerHeartbeat:          ptrTimeStatusDispatch(now),
+		},
+	}
+
+	got := resumirAutonomiaRows(rows, now)
+	if got.Continuando != 1 || got.WorkConfirmed != 1 || got.ContinuidadPendiente != 0 || got.Handoffs != 0 {
+		t.Fatalf("los agentes bloqueados por runtime o atascados no deberian contaminar autonomia activa: %+v", got)
+	}
+}
+
 func TestResumirAutonomiaRowsCuentaHandoffVivoDesdeAssignment(t *testing.T) {
 	t.Parallel()
 

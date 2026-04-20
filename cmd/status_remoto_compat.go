@@ -459,6 +459,9 @@ func resolverAgentesActivosDesdeCompatibilidad(resumen *estadoResumen) {
 	if len(resumen.Agentes) == 0 {
 		return
 	}
+	if resumenTieneSemanticaOperativaModerna(resumen) {
+		return
+	}
 	if !resumenRequiereFallbackCompatibilidadCuota(resumen) {
 		return
 	}
@@ -500,6 +503,29 @@ func resumenRequiereFallbackCompatibilidadCuota(resumen *estadoResumen) bool {
 		if strings.TrimSpace(agente.PresupuestoFuente) != "" {
 			return true
 		}
+	}
+	return false
+}
+
+func resumenTieneSemanticaOperativaModerna(resumen *estadoResumen) bool {
+	if resumen == nil {
+		return false
+	}
+	if len(resumen.AgentesQuotaBlocked) > 0 || len(resumen.AgentesAtascados) > 0 || len(resumen.AgentesAuthManual) > 0 {
+		return true
+	}
+	if resumen.Autonomia.Supervisando > 0 || resumen.Autonomia.Continuando > 0 ||
+		resumen.Autonomia.ContinuidadPendiente > 0 || resumen.Autonomia.WorkConfirmed > 0 ||
+		resumen.Autonomia.Handoffs > 0 {
+		return true
+	}
+	if resumen.DeudaDispatch.Total > 0 || resumen.DeudaDispatch.Pendientes > 0 ||
+		resumen.DeudaDispatch.Notificadas > 0 || resumen.DeudaDispatch.Fallidas > 0 ||
+		resumen.DeudaDispatch.WorkConfirmed > 0 {
+		return true
+	}
+	if len(resumen.TareasEnProgreso) > 0 || len(resumen.TareasReservadas) > 0 {
+		return true
 	}
 	return false
 }
@@ -1044,7 +1070,7 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 	}
 	resumen.TareasPorEstado = reconciliarConteoTareasActivasVisible(resumen.TareasPorEstado, resumen.TareasActivas)
 	if len(resumen.AgentesActivos) == 0 {
-		if _, present := raw["agentesActivos"]; !present {
+		if _, present := raw["agentesActivos"]; !present && !resumenTieneSemanticaOperativaModerna(resumen) {
 			resumen.AgentesActivos = payload.AgentesCompat
 		}
 	}

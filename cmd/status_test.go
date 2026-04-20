@@ -499,6 +499,34 @@ func TestFetchServerStatusNoRecuperaAgentesCompatSiAgentesActivosVieneVacioPeroP
 	}
 }
 
+func TestFetchServerStatusNoRecuperaAgentesCompatSiPayloadYaEsModerno(t *testing.T) {
+	prevClient := serverHTTPClient
+	serverHTTPClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch req.URL.Path {
+			case "/api/status":
+				return newJSONResponse(http.StatusOK, `{"generado":"2026-04-01T08:45:00Z","agentes":[{"Nombre":"Codex3","Activo":false,"EstadoCuota":"enfriamiento"}],"agentesQuotaBlocked":[{"Nombre":"Codex3","Activo":false,"EstadoCuota":"enfriamiento"}],"autonomia":{"supervising":0,"continuing":0,"continuity_pending":0,"work_confirmed":0,"handoffing":0},"deudaDispatch":{"total":0,"pending":0,"notified":0,"failed":0,"work_confirmed":0},"tareasPorEstado":{"bloqueada":1}}`), nil
+			default:
+				return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+			}
+		}),
+	}
+	defer func() {
+		serverHTTPClient = prevClient
+	}()
+
+	status, err := fetchServerStatus("http://orquesta.local")
+	if err != nil {
+		t.Fatalf("fetchServerStatus: %v", err)
+	}
+	if len(status.AgentesActivos) != 0 {
+		t.Fatalf("un payload moderno no deberia reconstruir agentes activos por compatibilidad: %+v", status.AgentesActivos)
+	}
+	if len(status.AgentesQuotaBlocked) != 1 || status.AgentesQuotaBlocked[0].Nombre != "Codex3" {
+		t.Fatalf("agentesQuotaBlocked inesperados: %+v", status.AgentesQuotaBlocked)
+	}
+}
+
 func TestRenderStatusSummaryMuestraBackendActivo(t *testing.T) {
 	out := captureOutput(t, func() {
 		renderStatusSummary(&statusContext{
