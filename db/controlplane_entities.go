@@ -7616,6 +7616,11 @@ func runtimeOrderSendInstructionReceiptEvidence(order *RuntimeOrder, payload map
 	if err != nil || handle == nil {
 		return false, "", time.Time{}, err
 	}
+	if confirmed, source, at, err := runtimeOrderSendInstructionDispatchLedgerEvidence(handle, order, payload); err != nil {
+		return false, "", time.Time{}, err
+	} else if confirmed {
+		return true, source, at, nil
+	}
 	baseline := runtimeOrderSendInstructionReceiptBaseline(order, msg)
 	if runtimeOrderSendInstructionEsMicroprogramacion(payload) {
 		if runtimeOrderSendInstructionPermiteReceiptTranscriptPatch(payload) {
@@ -8312,6 +8317,77 @@ func runtimeOrderSendInstructionMailboxID(payload map[string]any) int64 {
 	return int64FromAny(payload["mailbox_id"])
 }
 
+func runtimeOrderSendInstructionDeliveryAttemptSignature(payload map[string]any) string {
+	if payload == nil {
+		return ""
+	}
+	return strings.TrimSpace(stringFromMap(payload, "delivery_attempt_signature", ""))
+}
+
+func runtimeOrderSendInstructionDispatchLedgerEvidence(handle *RuntimeHandle, order *RuntimeOrder, payload map[string]any) (bool, string, time.Time, error) {
+	if handle == nil || order == nil || payload == nil {
+		return false, "", time.Time{}, nil
+	}
+	entry, err := controlruntime.FindDispatchLedgerEntryFromMetadataJSON(
+		strings.TrimSpace(handle.MetadataJSON),
+		runtimeOrderSendInstructionMailboxID(payload),
+		runtimeOrderSendInstructionDeliveryAttemptSignature(payload),
+		runtimeOrderSendInstructionExternalSessionID(payload),
+	)
+	if err != nil || entry == nil {
+		return false, "", time.Time{}, err
+	}
+	switch strings.ToLower(strings.TrimSpace(entry.DeliveryState)) {
+	case "delivered", "consumed":
+	default:
+		return false, "", time.Time{}, nil
+	}
+	receiptAt := time.Now().UTC()
+	if parsed, ok := parseDispatchLedgerRecordedAt(entry.RecordedAt); ok {
+		receiptAt = parsed
+	}
+	source := strings.TrimSpace(entry.ReceiptSource)
+	if source == "" {
+		source = "dispatch_ledger"
+	}
+	return true, source, receiptAt, nil
+}
+
+func parseDispatchLedgerRecordedAt(raw string) (time.Time, bool) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed.UTC(), true
+		}
+	}
+	return time.Time{}, false
+}
+
+func registrarDispatchLedgerRuntimeOrder(order *RuntimeOrder, payload map[string]any, dispatchState, deliveryState, receiptSource, reason string) error {
+	if order == nil {
+		return nil
+	}
+	handle, err := resolverHandleParaOrden(order)
+	if err != nil || handle == nil {
+		return err
+	}
+	return controlruntime.RecordDispatchLedgerFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON), controlruntime.DispatchLedgerRecordInput{
+		RuntimeOrderID:           order.ID,
+		MailboxID:                runtimeOrderSendInstructionMailboxID(payload),
+		HandleID:                 handle.ID,
+		DeliveryAttemptSignature: runtimeOrderSendInstructionDeliveryAttemptSignature(payload),
+		ExternalSessionID:        runtimeOrderSendInstructionExternalSessionID(payload),
+		DispatchState:            strings.TrimSpace(dispatchState),
+		DeliveryState:            strings.TrimSpace(deliveryState),
+		ReceiptSource:            strings.TrimSpace(receiptSource),
+		Reason:                   strings.TrimSpace(reason),
+		RecordedAt:               time.Now().UTC(),
+	})
+}
+
 func actualizarRuntimeOrderPayloadJSON(orderID int64, payload map[string]any) error {
 	if orderID <= 0 || payload == nil {
 		return nil
@@ -8611,7 +8687,10 @@ func retenerRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, pay
 	if err != nil {
 		return err
 	}
-	return runtimeOrdersHotIndexSyncByID(order.ID)
+	if err := runtimeOrdersHotIndexSyncByID(order.ID); err != nil {
+		return err
+	}
+	return registrarDispatchLedgerRuntimeOrder(order, payload, "pending", "queued", "", reason)
 }
 
 func retenerRuntimeOrderSendInstructionNotificada(order *RuntimeOrder, payload map[string]any, reason string, notifiedAt time.Time) error {
@@ -8670,7 +8749,10 @@ func retenerRuntimeOrderSendInstructionNotificada(order *RuntimeOrder, payload m
 	if err != nil {
 		return err
 	}
-	return runtimeOrdersHotIndexSyncByID(order.ID)
+	if err := runtimeOrdersHotIndexSyncByID(order.ID); err != nil {
+		return err
+	}
+	return registrarDispatchLedgerRuntimeOrder(order, payload, "notified", "notified", "", reason)
 }
 
 func runtimeOrderYaTieneEntregaValida(order *RuntimeOrder) bool {
@@ -8713,6 +8795,9 @@ func completarRuntimeOrderSendInstructionEntregadaPorReceipt(order *RuntimeOrder
 	})
 	resultado = mergeRuntimeOrderResultJSON(resultado, runtimeOrderSendInstructionTrackingResult(payload))
 	if err := MarcarRuntimeOrderEstado(order.ID, "completada", resultado, ""); err != nil {
+		return err
+	}
+	if err := registrarDispatchLedgerRuntimeOrder(order, payload, "delivered", "delivered", receiptSource, "receipt confirmado"); err != nil {
 		return err
 	}
 	runtimeOrderSendInstructionAutoStopLocalOllama(order, payload)
@@ -8846,7 +8931,10 @@ func completarRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, p
 		"mailbox_only":    mailboxOnly,
 		"delivery_state":  "queued",
 	})
-	return MarcarRuntimeOrderEstado(order.ID, "completada", resultado, "")
+	if err := MarcarRuntimeOrderEstado(order.ID, "completada", resultado, ""); err != nil {
+		return err
+	}
+	return registrarDispatchLedgerRuntimeOrder(order, payload, "pending", "queued", "", reason)
 }
 
 func gestionarBackoffProveedorRuntimeOrderSendInstruction(order *RuntimeOrder, payload map[string]any, runtimeErr error) (bool, error) {

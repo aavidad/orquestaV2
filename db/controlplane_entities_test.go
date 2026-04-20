@@ -22040,3 +22040,129 @@ esac
 	}
 	return scriptPath
 }
+
+func TestRuntimeOrderSendInstructionReceiptEvidenceReconoceDispatchLedger(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	traceDir := filepath.Join(tmp, "trace-codex1")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "Codex1",
+		ProyectoID:        &proyectoID,
+		CWD:               workingDir,
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-ledger-1",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	metaJSON, err := json.Marshal(map[string]any{
+		"driver":              "tmux_cli_session",
+		"transport":           "tmux",
+		"trace_dir":           traceDir,
+		"external_session_id": "sess-ledger-1",
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, estado='activo' WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"texto":"continuar trabajo"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "send_instruction",
+		PayloadJSON: fmt.Sprintf(
+			`{"mailbox_id":%d,"mailbox_kind":"autonomia","texto":"continuar trabajo","external_session_id":"sess-ledger-1","delivery_attempt_signature":"sig-ledger-1"}`,
+			mailboxID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get runtime order: %v", err)
+	}
+	msg, err := GetRuntimeMailbox(mailboxID)
+	if err != nil {
+		t.Fatalf("get mailbox: %v", err)
+	}
+	payload := mapFromJSON(order.PayloadJSON)
+	recordedAt := time.Date(2026, 4, 20, 10, 11, 12, 0, time.UTC)
+	if err := controlruntime.RecordDispatchLedgerFromMetadataJSON(handle.MetadataJSON, controlruntime.DispatchLedgerRecordInput{
+		RuntimeOrderID:           order.ID,
+		MailboxID:                mailboxID,
+		HandleID:                 handle.ID,
+		DeliveryAttemptSignature: "sig-ledger-1",
+		ExternalSessionID:        "sess-ledger-1",
+		DispatchState:            "delivered",
+		DeliveryState:            "consumed",
+		ReceiptSource:            "dispatch_ledger",
+		Reason:                   "test receipt",
+		RecordedAt:               recordedAt,
+	}); err != nil {
+		t.Fatalf("record dispatch ledger: %v", err)
+	}
+
+	confirmed, source, receiptAt, err := runtimeOrderSendInstructionReceiptEvidence(order, payload, msg)
+	if err != nil {
+		t.Fatalf("runtimeOrderSendInstructionReceiptEvidence: %v", err)
+	}
+	if !confirmed {
+		t.Fatal("deberia reconocer receipt desde dispatch ledger")
+	}
+	if source != "dispatch_ledger" {
+		t.Fatalf("receipt source inesperado: %q", source)
+	}
+	if !receiptAt.Equal(recordedAt) {
+		t.Fatalf("receiptAt inesperado: got=%s want=%s", receiptAt.Format(time.RFC3339Nano), recordedAt.Format(time.RFC3339Nano))
+	}
+}

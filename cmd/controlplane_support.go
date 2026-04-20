@@ -7956,17 +7956,27 @@ func existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot *runtimeMa
 	}
 	currentSessionID := strings.TrimSpace(externalSessionID)
 	currentSignature := runtimeMailboxDeliveryAttemptSignature(handle, externalSessionID)
+	ledgerDelivered, err := runtimeMailboxDispatchLedgerDelivered(handle, msg.ID, currentSignature, currentSessionID)
+	if err != nil {
+		return false, err
+	}
 	for _, order := range orders {
 		if !runtimeOrderMatchesMailboxSendInstructionAttemptForSession(order, msg.ID, handle.ID, currentSessionID) {
 			continue
 		}
 		switch strings.TrimSpace(order.Estado) {
 		case "pendiente", "tomada", "ejecutando":
+			if ledgerDelivered {
+				continue
+			}
 			if !runtimeOrderSigueBloqueandoMailbox(order, time.Now().UTC()) {
 				continue
 			}
 			return true, nil
 		case "completada":
+			if ledgerDelivered {
+				continue
+			}
 			if !runtimeOrderCompletedMailboxAttemptStillBlocks(order, currentSessionID, currentSignature) {
 				continue
 			}
@@ -7974,6 +7984,22 @@ func existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot *runtimeMa
 		}
 	}
 	return false, nil
+}
+
+func runtimeMailboxDispatchLedgerDelivered(handle *db.RuntimeHandle, mailboxID int64, currentSignature, currentSessionID string) (bool, error) {
+	if handle == nil || mailboxID <= 0 {
+		return false, nil
+	}
+	entry, err := controlruntime.FindDispatchLedgerEntryFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON), mailboxID, strings.TrimSpace(currentSignature), strings.TrimSpace(currentSessionID))
+	if err != nil || entry == nil {
+		return false, err
+	}
+	switch strings.ToLower(strings.TrimSpace(entry.DeliveryState)) {
+	case "delivered", "consumed":
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 func runtimeOrderMatchesMailboxSendInstructionAttempt(order *db.RuntimeOrder, mailboxID, handleID int64) bool {

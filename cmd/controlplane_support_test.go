@@ -10596,6 +10596,71 @@ func TestProcesarRuntimeMailboxInteractivoMensajeEvitaSupervisionSiNoTocaReevalu
 	}
 }
 
+func TestExisteIntentoSendInstructionMailboxParaHandleEnSnapshotOmiteBloqueoSiDispatchLedgerYaEntrego(t *testing.T) {
+	traceDir := t.TempDir()
+	metaJSON, err := json.Marshal(map[string]any{
+		"driver":    "tmux_cli_session",
+		"transport": "tmux",
+		"trace_dir": traceDir,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	handle := &db.RuntimeHandle{
+		ID:           7,
+		Agente:       "Codex1",
+		Transporte:   "tmux",
+		HandleKind:   "session",
+		MetadataJSON: string(metaJSON),
+	}
+	proyectoID := int64(11)
+	msg := &db.RuntimeMailboxMessage{
+		ID:         41,
+		ToAgente:   "Codex1",
+		ProyectoID: &proyectoID,
+	}
+	if err := controlruntime.RecordDispatchLedgerFromMetadataJSON(handle.MetadataJSON, controlruntime.DispatchLedgerRecordInput{
+		RuntimeOrderID:           99,
+		MailboxID:                msg.ID,
+		HandleID:                 handle.ID,
+		DeliveryAttemptSignature: runtimeMailboxDeliveryAttemptSignature(handle, "sess-ledger"),
+		ExternalSessionID:        "sess-ledger",
+		DispatchState:            "delivered",
+		DeliveryState:            "consumed",
+		ReceiptSource:            "dispatch_ledger",
+		Reason:                   "test dedupe",
+		RecordedAt:               time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("record dispatch ledger: %v", err)
+	}
+	snapshot := &runtimeMailboxBatchSnapshot{
+		ordersByAgentProject: map[string][]*db.RuntimeOrder{
+			runtimeMailboxBatchKey("Codex1", &proyectoID): {
+				{
+					ID:          99,
+					Agente:      "Codex1",
+					ProyectoID:  &proyectoID,
+					Tipo:        "send_instruction",
+					Estado:      "pendiente",
+					HandleID:    &handle.ID,
+					PayloadJSON: `{"mailbox_id":41,"external_session_id":"sess-ledger","delivery_attempt_signature":"session_resume|handle:7|session:sess-ledger"}`,
+				},
+			},
+		},
+		ordersLoaded: map[string]struct{}{
+			runtimeMailboxBatchKey("Codex1", &proyectoID): {},
+		},
+	}
+
+	got, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, "sess-ledger")
+	if err != nil {
+		t.Fatalf("existeIntentoSendInstructionMailboxParaHandleEnSnapshot: %v", err)
+	}
+	if got {
+		t.Fatal("una send_instruction ya entregada en dispatch ledger no deberia seguir bloqueando dedupe")
+	}
+}
+
 func TestProcesarRuntimeMailboxInteractivoMensajeOmiteSupervisionParaHandleNoInteractivo(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()

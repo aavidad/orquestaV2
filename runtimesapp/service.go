@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"orquesta/db"
+	"orquesta/internal/controlruntime"
 	"orquesta/microprogramacionapp"
 	"orquesta/runtimeagente"
 	"orquesta/runtimepolicy"
@@ -1456,10 +1457,7 @@ func (s *Service) CompletarEntregaMicroprogramacion(runtimeOrderID int64, receip
 }
 
 func (s *Service) completarEntregaSendInstruction(order *db.RuntimeOrder, receiptSource string) error {
-	payload, err := decodePayloadMicroprogramacion(order.PayloadJSON)
-	if err != nil {
-		return err
-	}
+	payload, _ := decodePayloadMicroprogramacion(order.PayloadJSON)
 	if mailboxID := int64Any(payload["mailbox_id"]); mailboxID > 0 {
 		if err := s.store.MarkRuntimeMailboxConsumed(mailboxID); err != nil {
 			return err
@@ -1477,7 +1475,10 @@ func (s *Service) completarEntregaSendInstruction(order *db.RuntimeOrder, receip
 		ReceiptSource:  strings.TrimSpace(receiptSource),
 		UltimaRazon:    "entrega valida confirmada por la app",
 	})
-	return s.store.MarkRuntimeOrderState(order.ID, "completada", resultadoJSON, "")
+	if err := s.store.MarkRuntimeOrderState(order.ID, "completada", resultadoJSON, ""); err != nil {
+		return err
+	}
+	return s.recordDispatchLedgerCompletion(order, payload, "consumed", strings.TrimSpace(receiptSource), "entrega confirmada por la app")
 }
 
 func (s *Service) completarEntregaBootstrapPremium(order *db.RuntimeOrder, receiptSource string) error {
@@ -1485,6 +1486,7 @@ func (s *Service) completarEntregaBootstrapPremium(order *db.RuntimeOrder, recei
 	if !ok {
 		return fmt.Errorf("runtime order %d sin bootstrap lease valida", order.ID)
 	}
+	payload, _ := decodePayloadMicroprogramacion(order.PayloadJSON)
 	for _, mailboxID := range mailboxIDs {
 		if mailboxID <= 0 {
 			continue
@@ -1510,7 +1512,51 @@ func (s *Service) completarEntregaBootstrapPremium(order *db.RuntimeOrder, recei
 		ReceiptSource:  strings.TrimSpace(receiptSource),
 		UltimaRazon:    "entrega bootstrap validada por git/worktree",
 	})
-	return s.store.MarkRuntimeOrderState(order.ID, "completada", resultadoJSON, "")
+	if err := s.store.MarkRuntimeOrderState(order.ID, "completada", resultadoJSON, ""); err != nil {
+		return err
+	}
+	return s.recordDispatchLedgerCompletion(order, payload, "consumed", strings.TrimSpace(receiptSource), "entrega bootstrap validada por la app")
+}
+
+func (s *Service) recordDispatchLedgerCompletion(order *db.RuntimeOrder, payload map[string]any, deliveryState, receiptSource, reason string) error {
+	if s == nil || order == nil {
+		return nil
+	}
+	var handle *db.RuntimeHandle
+	var err error
+	if order.HandleID != nil && *order.HandleID > 0 {
+		handle, err = s.store.GetRuntimeHandle(*order.HandleID)
+		if err != nil {
+			return err
+		}
+	}
+	if handle == nil && order.RuntimeID != nil && *order.RuntimeID > 0 {
+		runtimeInst, err := s.store.GetRuntime(*order.RuntimeID)
+		if err != nil {
+			return err
+		}
+		if runtimeInst != nil && runtimeInst.SesionID != nil && *runtimeInst.SesionID > 0 {
+			handle, err = s.store.GetRuntimeHandleBySessionID(*runtimeInst.SesionID)
+			if err != nil && err != sql.ErrNoRows {
+				return err
+			}
+		}
+	}
+	if handle == nil {
+		return nil
+	}
+	return controlruntime.RecordDispatchLedgerFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON), controlruntime.DispatchLedgerRecordInput{
+		RuntimeOrderID:           order.ID,
+		MailboxID:                int64Any(payload["mailbox_id"]),
+		HandleID:                 handle.ID,
+		DeliveryAttemptSignature: strings.TrimSpace(stringAny(payload["delivery_attempt_signature"])),
+		ExternalSessionID:        strings.TrimSpace(stringAny(payload["external_session_id"])),
+		DispatchState:            "delivered",
+		DeliveryState:            strings.TrimSpace(deliveryState),
+		ReceiptSource:            strings.TrimSpace(receiptSource),
+		Reason:                   strings.TrimSpace(reason),
+		RecordedAt:               time.Now().UTC(),
+	})
 }
 
 func (s *Service) RegistrarEntregaGitMicroprogramacionActiva(agente string, proyectoID *int64, proyectoSlug, evidencia, solicitadoPor string) (*ResultadoEntregaGitMicroprogramacionActiva, error) {
