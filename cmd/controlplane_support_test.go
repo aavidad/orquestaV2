@@ -32328,17 +32328,33 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReasignaTareaBloqueadaARelevoSan
 		t.Fatalf("procesar agentes degradados: %v", err)
 	}
 	if procesadas < 1 {
-		t.Fatalf("deberia reasignar al menos una tarea bloqueada a relevo sano, got=%d", procesadas)
+		t.Fatalf("deberia resolver al menos una tarea bloqueada a relevo sano, got=%d", procesadas)
 	}
 	tarea, err := db.GetTarea(tareaID)
 	if err != nil {
 		t.Fatalf("get tarea: %v", err)
 	}
-	if tarea.Estado != db.EstadoEnProgreso {
-		t.Fatalf("la tarea deberia quedar en_progreso, got=%s", tarea.Estado)
+	if tarea.Estado != db.EstadoAsignada {
+		t.Fatalf("la tarea deberia quedar asignada al relevo durante el handoff, got=%s", tarea.Estado)
 	}
 	if tarea.Agente == nil || *tarea.Agente != "Codex7" {
 		t.Fatalf("la tarea deberia quedar reasignada a Codex7: %+v", tarea)
+	}
+	agenteDestino := "Codex7"
+	estadoPendiente := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agenteDestino, Estado: &estadoPendiente})
+	if err != nil {
+		t.Fatalf("listar runtime orders relevo: %v", err)
+	}
+	foundHandoff := false
+	for _, order := range orders {
+		if order != nil && order.Tipo == "handoff" {
+			foundHandoff = true
+			break
+		}
+	}
+	if !foundHandoff {
+		t.Fatalf("deberia crear handoff pendiente para Codex7: %+v", orders)
 	}
 	supervisorTask, err := db.GetTarea(supervisorTaskID)
 	if err != nil {
