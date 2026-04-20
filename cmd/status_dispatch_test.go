@@ -2,12 +2,16 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"orquesta/agentesapp"
 	"orquesta/db"
 	"orquesta/internal/controlruntime"
+	"orquesta/runtimeagente"
 )
 
 func TestDispatchOrderWorkConfirmedFromHandlesPromotesWeakReceiptWithWorkQueue(t *testing.T) {
@@ -103,6 +107,124 @@ func TestDispatchOrderFailureCountsAsDebtSoloSiEsReciente(t *testing.T) {
 	}
 }
 
+func TestListarDeudaDispatchEstadoPromueveSendInstructionDirectaAbsorbida(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	prevNow := statusNowFunc
+	now := time.Now().UTC()
+	statusNowFunc = func() time.Time { return now }
+	defer func() { statusNowFunc = prevNow }()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir working dir: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: workingDir,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	agente := "Codex1"
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Continuar frente activo",
+		Estado:     db.TareaEnProgreso,
+		Prioridad:  "media",
+		ProyectoID: &proyectoID,
+		Agente:     &agente,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE tareas SET estado='en_progreso', agente=? WHERE id=?`, agente, tareaID); err != nil {
+		t.Fatalf("forzar tarea activa: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      agente,
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	workerDir := filepath.Join(tmp, "worker-codex1-status-dispatch")
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("mkdir worker dir: %v", err)
+	}
+	manifestPath := filepath.Join(workerDir, "manifest.json")
+	statusPath := filepath.Join(workerDir, "status.json")
+	heartbeatPath := filepath.Join(workerDir, "heartbeat.json")
+	writeJSON := func(path string, payload map[string]any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	writeJSON(manifestPath, map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliverySessionResume,
+		"can_send_input":        true,
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":            "running",
+		"alive":            true,
+		"updated_at":       now.Format(time.RFC3339Nano),
+		"last_progress_at": now.Format(time.RFC3339Nano),
+		"last_output_at":   now.Format(time.RFC3339Nano),
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":            true,
+		"heartbeat_at":     now.Format(time.RFC3339Nano),
+		"last_progress_at": now.Format(time.RFC3339Nano),
+		"last_output_at":   now.Format(time.RFC3339Nano),
+	})
+	metaJSON := fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_session":"orq-codex1-status","tmux_pane_id":"%%77","mailbox_delivery_mode":"%s","can_send_input":true,"worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`,
+		runtimeagente.MailboxDeliverySessionResume, manifestPath, statusPath, heartbeatPath)
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', capabilities_json=?, metadata_json=?, updated_at=?, last_seen_at=? WHERE id=?`,
+		`{"can_send_input":true,"mailbox_delivery_mode":"session_resume"}`, metaJSON, now, now, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+	orderID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      agente,
+		ProyectoID:  &proyectoID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"from_agente":"orquesta","to_agente":"Codex1","kind":"instruction","classification":"blocked","transcript_id":10128,"texto":"continua de forma autonoma"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar order: %v", err)
+	}
+	if err := db.MarcarRuntimeOrderEstado(orderID, "fallida", `{"ok":false}`, "session_resume timeout"); err != nil {
+		t.Fatalf("marcar fallida: %v", err)
+	}
+
+	got, err := listarDeudaDispatchEstado()
+	if err != nil {
+		t.Fatalf("listarDeudaDispatchEstado: %v", err)
+	}
+	if got.Fallidas != 0 || got.Pendientes != 0 || got.Notificadas != 0 || got.WorkConfirmed != 0 || got.Total != 0 {
+		t.Fatalf("la send_instruction directa sin mailbox no deberia contar como deuda durable: %+v", got)
+	}
+}
+
 func TestNormalizeDispatchDebtTotalSumaSoloCategoriasVivas(t *testing.T) {
 	t.Parallel()
 
@@ -129,7 +251,7 @@ func TestResumirAutonomiaRowsNoCuentaResumePayloadAbsorbidoComoPendiente(t *test
 	rows := []agentesapp.Row{
 		{
 			Agente:                   &db.Agente{Nombre: "Codex1"},
-			Asignacion:                &db.Asignacion{Estado: db.AsignacionActiva, Nota: "server_autobootstrap"},
+			Asignacion:               &db.Asignacion{Estado: db.AsignacionActiva, Nota: "server_autobootstrap"},
 			LastAutonomyAction:       "supervisar_proyecto",
 			LastAutonomySource:       "resume_payload_mailbox",
 			MailboxContinuityPending: 1,
@@ -176,14 +298,14 @@ func TestResumirAutonomiaRowsCuentaSupervisorPorRolAunqueUltimaAccionSeaContinua
 	now := time.Now().UTC()
 	rows := []agentesapp.Row{
 		{
-			Agente:              &db.Agente{Nombre: "Codex1"},
-			Asignacion:          &db.Asignacion{Estado: db.AsignacionActiva, Nota: "server_autobootstrap"},
-			LastAutonomyAction:  "continuar_trabajo",
-			LastAutonomySource:  "work_queue",
-			LastAutonomyState:   "work_confirmed",
-			OpenTasks:           1,
-			WorkerAlive:         true,
-			WorkerHeartbeat:     ptrTimeStatusDispatch(now),
+			Agente:             &db.Agente{Nombre: "Codex1"},
+			Asignacion:         &db.Asignacion{Estado: db.AsignacionActiva, Nota: "server_autobootstrap"},
+			LastAutonomyAction: "continuar_trabajo",
+			LastAutonomySource: "work_queue",
+			LastAutonomyState:  "work_confirmed",
+			OpenTasks:          1,
+			WorkerAlive:        true,
+			WorkerHeartbeat:    ptrTimeStatusDispatch(now),
 		},
 		{
 			Agente:             &db.Agente{Nombre: "Codex2"},
@@ -372,7 +494,7 @@ func TestStatusSnapshotNeedsImmediateRefreshConAutonomiaEnTransicion(t *testing.
 		t.Fatal("deberia refrescar enseguida con handoff vivo")
 	}
 	if statusSnapshotNeedsImmediateRefresh(apiStatusResponse{
-		Autonomia:    autonomiaResumen{WorkConfirmed: 1},
+		Autonomia:      autonomiaResumen{WorkConfirmed: 1},
 		AgentesActivos: []*db.Agente{{Nombre: "Codex1"}},
 	}) {
 		t.Fatal("no deberia forzar refresh inmediato solo por autonomia confirmada")

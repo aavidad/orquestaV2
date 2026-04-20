@@ -8180,6 +8180,82 @@ func runtimeOrderSendInstructionReceiptBlocked(order *RuntimeOrder, payload map[
 	}
 }
 
+func runtimeOrderSendInstructionEsContinuidadDirectaServidor(payload map[string]any) bool {
+	if payload == nil || runtimeOrderSendInstructionProvieneMailbox(payload) {
+		return false
+	}
+	fromAgente := strings.ToLower(strings.TrimSpace(stringFromMap(payload, "from_agente", "")))
+	if fromAgente != "server" && fromAgente != "orquesta" {
+		return false
+	}
+	kind := strings.ToLower(strings.TrimSpace(stringFromMap(payload, "kind", "")))
+	if kind != "" && kind != "instruction" {
+		return false
+	}
+	classification := strings.ToLower(strings.TrimSpace(stringFromMap(payload, "classification", "")))
+	return classification == "blocked" || int64FromAny(payload["transcript_id"]) > 0
+}
+
+func runtimeOrderSendInstructionDirectaAbsorbidaPorTrabajo(order *RuntimeOrder, payload map[string]any, now time.Time) (string, error) {
+	if order == nil || !runtimeOrderSendInstructionEsContinuidadDirectaServidor(payload) {
+		return "", nil
+	}
+	tareaID, err := GetTareaActivaIDPorAgenteProyecto(strings.TrimSpace(order.Agente), order.ProyectoID)
+	if err != nil {
+		return "", err
+	}
+	if tareaID <= 0 {
+		return "", nil
+	}
+	var handle *RuntimeHandle
+	if order.HandleID != nil && *order.HandleID > 0 {
+		handle, err = GetRuntimeHandle(*order.HandleID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return "", err
+		}
+	}
+	if handle == nil {
+		handle, err = GetRuntimeHandleCanonicoRecienteAgenteProyecto(strings.TrimSpace(order.Agente), order.ProyectoID)
+		if err != nil {
+			return "", err
+		}
+	}
+	if handle == nil || !RuntimeHandleSnapshotIsFresh(handle, 2*time.Minute) {
+		return "", nil
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
+	if err != nil {
+		return "", err
+	}
+	if snap == nil {
+		return "", nil
+	}
+	view := snap.View(now.UTC(), time.Minute)
+	if view == nil || view.HeartbeatStale || !view.Alive {
+		return "", nil
+	}
+	switch strings.ToLower(strings.TrimSpace(view.State)) {
+	case "ready", "running", "idle":
+		return fmt.Sprintf("direct_instruction_absorbed_by_active_task:%d", tareaID), nil
+	default:
+		return "", nil
+	}
+}
+
+func RuntimeOrderSendInstructionAbsorbidaPorTrabajoVivo(order *RuntimeOrder, now time.Time) (bool, string, error) {
+	if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
+		return false, "", nil
+	}
+	reason, err := runtimeOrderSendInstructionDirectaAbsorbidaPorTrabajo(order, mapFromJSON(order.PayloadJSON), now.UTC())
+	if err != nil {
+		return false, "", err
+	}
+	if strings.TrimSpace(reason) == "" {
+		return false, "", nil
+	}
+	return true, reason, nil
+}
+
 func runtimeOrderSendInstructionReceiptBloqueoIgnoraSnapshot(handle *RuntimeHandle) bool {
 	if handle == nil {
 		return false
@@ -12025,6 +12101,16 @@ func reconciliarRuntimeOrderStale(id int64, tipo string, now, cutoff time.Time) 
 		if handled, err := reconciliarRuntimeOrderSendInstructionConMailboxActual(order, payload, now); err != nil {
 			return false, err
 		} else if handled {
+			return true, nil
+		}
+		if reason, err := runtimeOrderSendInstructionDirectaAbsorbidaPorTrabajo(order, payload, now); err != nil {
+			return false, err
+		} else if reason != "" {
+			if err := completarRuntimeOrderSendInstructionSupersedida(order, payload, reason); err != nil {
+				if !errors.Is(err, sql.ErrNoRows) {
+					return false, err
+				}
+			}
 			return true, nil
 		}
 	}

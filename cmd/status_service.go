@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,20 +21,20 @@ type StatusService interface {
 var statusService StatusService = dbStatusService{}
 
 var (
-	statusSnapshotTTL  = time.Minute
-	statusFallbackTTL  = 5 * time.Second
-	statusFreshTimeout = 1500 * time.Millisecond
-	statusFastTimeout  = 750 * time.Millisecond
-	statusRowsTimeout  = 200 * time.Millisecond
-	statusFreshFetcher = fetchStatusFresh
-	statusFastFetcher  = fetchStatusFastFallback
-	statusRowsFetcher  = agentRowsForStatus
+	statusSnapshotTTL           = time.Minute
+	statusFallbackTTL           = 5 * time.Second
+	statusFreshTimeout          = 1500 * time.Millisecond
+	statusFastTimeout           = 750 * time.Millisecond
+	statusRowsTimeout           = 200 * time.Millisecond
+	statusFreshFetcher          = fetchStatusFresh
+	statusFastFetcher           = fetchStatusFastFallback
+	statusRowsFetcher           = agentRowsForStatus
 	statusRuntimeHandlesFetcher = db.ListarRuntimeHandles
 	statusDispatchFailureWindow = 2 * time.Hour
-	statusConfigGet     = db.ConfigGet
-	statusNowFunc      = time.Now
-	statusAsyncRefresh = true
-	statusCacheState   struct {
+	statusConfigGet             = db.ConfigGet
+	statusNowFunc               = time.Now
+	statusAsyncRefresh          = true
+	statusCacheState            struct {
 		mu         sync.Mutex
 		value      apiStatusResponse
 		expires    time.Time
@@ -63,6 +64,23 @@ type autonomiaResumen struct {
 	Handoffs             int `json:"handoffing"`
 }
 
+func int64FromStatusAny(v any) int64 {
+	switch val := v.(type) {
+	case int64:
+		return val
+	case int:
+		return int64(val)
+	case float64:
+		return int64(val)
+	case string:
+		n, err := strconv.ParseInt(strings.TrimSpace(val), 10, 64)
+		if err == nil {
+			return n
+		}
+	}
+	return 0
+}
+
 func normalizeDispatchDebtTotal(out deudaDispatchResumen) deudaDispatchResumen {
 	out.Total = out.Pendientes + out.Notificadas + out.Fallidas + out.WorkConfirmed
 	return out
@@ -82,6 +100,16 @@ func listarDeudaDispatchEstado() (deudaDispatchResumen, error) {
 		}
 		for _, order := range orders {
 			if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
+				continue
+			}
+			payload := mapFromJSON(order.PayloadJSON)
+			if int64FromStatusAny(payload["mailbox_id"]) <= 0 {
+				continue
+			}
+			if absorbed, _, err := db.RuntimeOrderSendInstructionAbsorbidaPorTrabajoVivo(order, now); err != nil {
+				return out, err
+			} else if absorbed {
+				out.WorkConfirmed++
 				continue
 			}
 			result := mapFromJSON(order.ResultadoJSON)

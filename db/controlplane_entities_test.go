@@ -17210,10 +17210,10 @@ func TestProcesarRuntimeOrdersBatchCierraPipelineLocalSiLaTareaYaFueReasignada(t
 		t.Fatalf("get send order: %v", err)
 	}
 	if err := retenerRuntimeOrderSendInstructionNotificada(order, map[string]any{
-		"to_agente":        "Codex1",
-		"texto":            "continuar trabajo",
-		"mailbox_id":       mailboxID,
-		"mailbox_kind":     "pipeline_local",
+		"to_agente":         "Codex1",
+		"texto":             "continuar trabajo",
+		"mailbox_id":        mailboxID,
+		"mailbox_kind":      "pipeline_local",
 		"tarea_objetivo_id": tareaID,
 	}, "mailbox notificado pendiente de recibo", time.Now().UTC()); err != nil {
 		t.Fatalf("retenerRuntimeOrderSendInstructionNotificada: %v", err)
@@ -22109,6 +22109,140 @@ func TestReconciliarRuntimeOrderStaleSendInstructionUsaEstadoActualDeMailbox(t *
 	}
 	if strings.Contains(order.ResultadoJSON, `"mailbox_only":true`) {
 		t.Fatalf("resultado final no deberia recaer en mailbox_only legacy: %s", order.ResultadoJSON)
+	}
+}
+
+func TestReconciliarRuntimeOrderStaleSendInstructionDirectaAbsorbidaPorTrabajoActivo(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir working dir: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: workingDir,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	agente := "Codex1"
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:     "Continuar frente activo",
+		Estado:     TareaEnProgreso,
+		Prioridad:  "media",
+		ProyectoID: &proyectoID,
+		Agente:     &agente,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE tareas SET estado='en_progreso', agente=? WHERE id=?`, agente, tareaID); err != nil {
+		t.Fatalf("forzar tarea activa: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      agente,
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	workerDir := filepath.Join(tmp, "worker-codex1-direct-stale")
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("mkdir worker dir: %v", err)
+	}
+	manifestPath := filepath.Join(workerDir, "manifest.json")
+	statusPath := filepath.Join(workerDir, "status.json")
+	heartbeatPath := filepath.Join(workerDir, "heartbeat.json")
+	writeJSON := func(path string, payload map[string]any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	now := time.Now().UTC()
+	writeJSON(manifestPath, map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliverySessionResume,
+		"can_send_input":        true,
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":            "running",
+		"alive":            true,
+		"updated_at":       now.Format(time.RFC3339Nano),
+		"last_progress_at": now.Format(time.RFC3339Nano),
+		"last_output_at":   now.Format(time.RFC3339Nano),
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":            true,
+		"heartbeat_at":     now.Format(time.RFC3339Nano),
+		"last_progress_at": now.Format(time.RFC3339Nano),
+		"last_output_at":   now.Format(time.RFC3339Nano),
+	})
+	metaJSON := fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_session":"orq-codex1-direct-stale","tmux_pane_id":"%%88","mailbox_delivery_mode":"%s","can_send_input":true,"worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`,
+		runtimeagente.MailboxDeliverySessionResume, manifestPath, statusPath, heartbeatPath)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', capabilities_json=?, metadata_json=?, updated_at=?, last_seen_at=? WHERE id=?`,
+		`{"can_send_input":true,"mailbox_delivery_mode":"session_resume"}`, metaJSON, now, now, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      agente,
+		ProyectoID:  &proyectoID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"from_agente":"orquesta","to_agente":"Codex1","kind":"instruction","classification":"blocked","transcript_id":10128,"texto":"continua de forma autonoma"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar order: %v", err)
+	}
+	if err := MarcarRuntimeOrderEstado(orderID, "ejecutando", `{}`, ""); err != nil {
+		t.Fatalf("marcar ejecutando: %v", err)
+	}
+	if _, err := DB.Exec(`
+		UPDATE runtime_orders
+		SET started_at = ?, updated_at = ?
+		WHERE id = ?`,
+		now.Add(-10*time.Minute),
+		now.Add(-10*time.Minute),
+		orderID,
+	); err != nil {
+		t.Fatalf("envejecer order: %v", err)
+	}
+
+	applied, err := reconciliarRuntimeOrderStale(orderID, "send_instruction", now, now.Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("reconciliar stale send_instruction directa: %v", err)
+	}
+	if !applied {
+		t.Fatal("se esperaba cerrar la send_instruction directa absorbida por trabajo activo")
+	}
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get order: %v", err)
+	}
+	if order.Estado != "completada" {
+		t.Fatalf("estado final inesperado: %+v", order)
+	}
+	if !strings.Contains(order.ResultadoJSON, fmt.Sprintf(`"superseded_reason":"direct_instruction_absorbed_by_active_task:%d"`, tareaID)) {
+		t.Fatalf("resultado sin superseded_reason esperado: %s", order.ResultadoJSON)
 	}
 }
 
