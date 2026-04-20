@@ -239,6 +239,51 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	}
 }
 
+func TestAgenteOverviewMarcaContinuidadEmbebidaEnMailboxCompacta(t *testing.T) {
+	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/status":
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		case r.URL.Path == "/api/agentes/Codex3/overview" && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"detail": map[string]any{
+					"row": map[string]any{
+						"EstadoOperativo":     "trabajando",
+						"DetalleOperativo":    "worker ready",
+						"LastAutonomySource":  "resume_payload_mailbox",
+						"LastAutonomyAction":  "continuar_trabajo",
+						"LastAutonomyState":   "embedded",
+						"MailboxPending":      1,
+						"MailboxTotal":        1,
+					},
+					"entity": map[string]any{
+						"Name":   "Codex3",
+						"Role":   "programador",
+						"Leases": []map[string]any{},
+					},
+					"mailbox_pending_visible":   1,
+					"mailbox_covered_bootstrap": 0,
+					"mailbox_total_count":       1,
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_ADDR", strings.TrimPrefix(srv.URL, "http://"))()
+
+	outOverview := capturarStdout(t, func() {
+		if err := agenteOverviewCmd.RunE(agenteOverviewCmd, []string{"Codex3"}); err != nil {
+			t.Fatalf("agente overview via api: %v", err)
+		}
+	})
+	if !strings.Contains(outOverview, "Mailbox:   1 pendiente(s) · continuidad embebida / 1 total") {
+		t.Fatalf("salida overview sin marca de continuidad embebida:\n%s", outOverview)
+	}
+}
+
 func TestAgenteControlRequiereServidor(t *testing.T) {
 	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
 	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()

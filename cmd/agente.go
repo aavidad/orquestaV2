@@ -1383,6 +1383,14 @@ func imprimirAgenteOverview(out apiAgenteOverviewResponse, jsonOut bool) error {
 	if cubiertas > 0 {
 		fmt.Printf(" · %d cubierta(s)", cubiertas)
 	}
+	if pendientes > 0 {
+		switch strings.TrimSpace(detail.Row.LastAutonomySource) {
+		case "resume_payload_mailbox":
+			fmt.Print(" · continuidad embebida")
+		case "work_queue":
+			fmt.Print(" · continuidad durable")
+		}
+	}
 	fmt.Printf(" / %d total\n", totalMailbox)
 	abiertas, bloqueadas := resumirLeasesOverview(detail.Entity.Leases)
 	fmt.Printf("Tareas:    %d lease(s)", len(detail.Entity.Leases))
