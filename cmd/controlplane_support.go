@@ -800,6 +800,10 @@ func presupuestoAgenteDebeRevalidarseAhora(a *db.Agente, minAge time.Duration, s
 	if soloBloqueadosOStale && !agenteBloqueadoPorCuotaVisible(a) && !a.PresupuestoStale {
 		return false
 	}
+	now := time.Now().UTC()
+	if agenteBloqueadoPorCuotaVisible(a) && a.PresupuestoResetAt != nil && !a.PresupuestoResetAt.IsZero() && !a.PresupuestoResetAt.UTC().After(now) {
+		return true
+	}
 	if minAge <= 0 {
 		minAge = time.Hour
 	}
