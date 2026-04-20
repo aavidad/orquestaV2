@@ -9346,7 +9346,7 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 		rowsPorAgente = rowsPorAgenteMap(rows)
 		openTasksProjected = openTasksProjectedFromRows(rows)
 	}
-	limpiadasFuera, err := procesarTareasActivasFueraDeOrquestacionBatch(tareasActivasPorAgente, rowsPorAgente)
+	limpiadasFuera, err := procesarTareasActivasFueraDeOrquestacionBatch(rows, tareasActivasPorAgente, rowsPorAgente, openTasksProjected)
 	if err != nil {
 		return resumen, err
 	}
@@ -10138,7 +10138,7 @@ func derivarFrentePremiumAccionableSiSemilla(agente string, proyectoID int64, ta
 	return derivada, nil
 }
 
-func procesarTareasActivasFueraDeOrquestacionBatch(tareasActivasPorAgente map[string][]*db.Tarea, rowsPorAgente map[string]agentesapp.Row) (int, error) {
+func procesarTareasActivasFueraDeOrquestacionBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea, rowsPorAgente map[string]agentesapp.Row, openTasksProjected map[string]int) (int, error) {
 	procesadas := 0
 	for agente, tareas := range tareasActivasPorAgente {
 		row, ok := rowsPorAgente[strings.ToLower(strings.TrimSpace(agente))]
@@ -10164,6 +10164,44 @@ func procesarTareasActivasFueraDeOrquestacionBatch(tareasActivasPorAgente map[st
 				continue
 			}
 			if actual.Estado != db.EstadoAsignada && actual.Estado != db.EstadoEnProgreso {
+				continue
+			}
+			relevo := seleccionarRelevoAutonomia(rows, openTasksProjected, actual, strings.TrimSpace(agente))
+			if relevo != "" {
+				if handoff, err := intentarHandoffAutonomoTarea(
+					proyectoLigeroDesdeTarea(actual),
+					actual.ID,
+					strings.TrimSpace(agente),
+					relevo,
+					"",
+					"agente_fuera_orquestacion",
+					fmt.Sprintf("Continuidad automática en tarea #%d tras salida del control plane", actual.ID),
+					fmt.Sprintf("Handoff automático desde %s a %s: agente fuera de orquestación", strings.TrimSpace(agente), relevo),
+					fmt.Sprintf("resuelto por handoff automático a %s", relevo),
+				); err != nil {
+					return procesadas, err
+				} else if handoff {
+					if openTasksProjected[strings.TrimSpace(agente)] > 0 {
+						openTasksProjected[strings.TrimSpace(agente)]--
+					}
+					openTasksProjected[relevo]++
+					if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, actual.ProyectoID, actual.ID, strings.TrimSpace(agente), "agente_fuera_orquestacion", "continúa con la tarea reasignada tras salida del control plane y deja evidencia de avance", nil); err != nil {
+						return procesadas, err
+					}
+					procesadas++
+					continue
+				}
+				if err := reasignarYArrancarTareaAutonomia(actual.ID, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s: agente fuera de orquestación", strings.TrimSpace(agente), relevo)); err != nil {
+					return procesadas, err
+				}
+				if openTasksProjected[strings.TrimSpace(agente)] > 0 {
+					openTasksProjected[strings.TrimSpace(agente)]--
+				}
+				openTasksProjected[relevo]++
+				if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, actual.ProyectoID, actual.ID, strings.TrimSpace(agente), "agente_fuera_orquestacion", "continúa con la tarea reasignada tras salida del control plane y deja evidencia de avance", nil); err != nil {
+					return procesadas, err
+				}
+				procesadas++
 				continue
 			}
 			if err := bloquearTareaAutonomiaSinRelevo(actual.ID, strings.TrimSpace(agente), motivo, fmt.Sprintf("Bloqueada automáticamente: %s", motivo)); err != nil {
