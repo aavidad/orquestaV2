@@ -5618,6 +5618,35 @@ func intentarReasignacionAutomaticaBlockedSignalTranscriptConRows(item *db.Runti
 	if strings.TrimSpace(relevo) == "" {
 		return "", false, nil
 	}
+	if handoff, err := intentarHandoffAutonomoTarea(
+		proyecto,
+		tarea.ID,
+		agente,
+		relevo,
+		"",
+		"blocked_signal",
+		fmt.Sprintf("Continuidad automática tras bloqueo detectado por transcript en tarea #%d", tarea.ID),
+		fmt.Sprintf("Handoff automático desde %s a %s: bloqueo detectado por transcript", agente, relevo),
+		fmt.Sprintf("resuelto por handoff automático a %s", relevo),
+	); err != nil {
+		return "", false, err
+	} else if handoff {
+		if err := encolarContinuacionTareaReasignadaSiCorresponde(
+			relevo,
+			tarea.ProyectoID,
+			tarea.ID,
+			agente,
+			"blocked_signal",
+			"continúa con la tarea reasignada tras bloqueo detectado en transcript y deja evidencia de avance",
+			map[string]any{
+				"signal_transcript_id":  idSignalTranscript(item),
+				"signal_classification": clasificacionSignalTranscript(item),
+			},
+		); err != nil {
+			return "", false, err
+		}
+		return fmt.Sprintf("blocked_task_handoff:%d:%s", tarea.ID, relevo), true, nil
+	}
 	nota := fmt.Sprintf("Reasignada automáticamente desde %s a %s: bloqueo detectado por transcript", agente, relevo)
 	if err := reasignarYArrancarTareaAutonomia(tarea.ID, relevo, nota); err != nil {
 		return "", false, err
@@ -14652,7 +14681,17 @@ func intentarAutoResolverContinuacionPostRemediationReassign(proyecto *db.Proyec
 		return false, nil
 	}
 	detalle := firstNonEmpty(strings.TrimSpace(status.BlockedReason), "follow-up post-remediation bloqueado")
-	if handoff, err := intentarHandoffPostRemediationReassign(proyecto, tareaID, strings.TrimSpace(agente), strings.TrimSpace(relevo), strings.TrimSpace(verificationKey), detalle); err != nil {
+	if handoff, err := intentarHandoffAutonomoTarea(
+		proyecto,
+		tareaID,
+		strings.TrimSpace(agente),
+		strings.TrimSpace(relevo),
+		strings.TrimSpace(verificationKey),
+		detalle,
+		fmt.Sprintf("Continuidad automática tras follow-up post-remediation bloqueado en tarea #%d", tareaID),
+		fmt.Sprintf("Handoff automático desde %s a %s tras follow-up post-remediation bloqueado", strings.TrimSpace(agente), strings.TrimSpace(relevo)),
+		fmt.Sprintf("resuelto por handoff automático a %s", strings.TrimSpace(relevo)),
+	); err != nil {
 		return false, err
 	} else if handoff {
 		return true, nil
@@ -14668,7 +14707,7 @@ func intentarAutoResolverContinuacionPostRemediationReassign(proyecto *db.Proyec
 	return true, nil
 }
 
-func intentarHandoffPostRemediationReassign(proyecto *db.Proyecto, tareaID int64, origen, relevo, verificationKey, detalle string) (bool, error) {
+func intentarHandoffAutonomoTarea(proyecto *db.Proyecto, tareaID int64, origen, relevo, verificationKey, motivo, resumen, nota, cierre string) (bool, error) {
 	if proyecto == nil || proyecto.ID <= 0 || tareaID <= 0 {
 		return false, nil
 	}
@@ -14677,23 +14716,33 @@ func intentarHandoffPostRemediationReassign(proyecto *db.Proyecto, tareaID int64
 	if origen == "" || relevo == "" || strings.EqualFold(origen, relevo) {
 		return false, nil
 	}
-	resumen := fmt.Sprintf("Continuidad automática tras follow-up post-remediation bloqueado en tarea #%d", tareaID)
+	resumen = strings.TrimSpace(resumen)
+	if resumen == "" {
+		resumen = fmt.Sprintf("Continuidad automática en tarea #%d", tareaID)
+	}
 	if strings.TrimSpace(verificationKey) != "" {
 		resumen += " (" + strings.TrimSpace(verificationKey) + ")"
 	}
-	motivo := firstNonEmpty(strings.TrimSpace(detalle), "follow-up post-remediation bloqueado")
+	motivo = firstNonEmpty(strings.TrimSpace(motivo), "handoff_autonomo")
 	if _, err := orquestacionAgentesService.RequestLiveAgentHandoff(origen, relevo, &tareaID, motivo, resumen, ""); err != nil {
 		if handoffPostRemediationCanFallback(err) {
 			return false, nil
 		}
 		return false, err
 	}
-	nota := fmt.Sprintf("Handoff automático desde %s a %s tras follow-up post-remediation bloqueado", origen, relevo)
+	nota = strings.TrimSpace(nota)
+	if nota == "" {
+		nota = fmt.Sprintf("Handoff automático desde %s a %s", origen, relevo)
+	}
 	if strings.TrimSpace(verificationKey) != "" {
 		nota += " (" + strings.TrimSpace(verificationKey) + ")"
 	}
 	_ = tareasService.Note(tareaID, "orquesta", nota)
-	if err := cerrarTareasPostRemediationBlockedResueltas(tareaID, fmt.Sprintf("resuelto por handoff automático a %s", relevo)); err != nil {
+	cierre = strings.TrimSpace(cierre)
+	if cierre == "" {
+		cierre = fmt.Sprintf("resuelto por handoff automático a %s", relevo)
+	}
+	if err := cerrarTareasPostRemediationBlockedResueltas(tareaID, cierre); err != nil {
 		return false, err
 	}
 	return true, nil
