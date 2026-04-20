@@ -173,6 +173,58 @@ func sessionResumePayloadHasMailbox(session *db.Sesion) bool {
 	return len(items) > 0
 }
 
+func int64FromResumePayloadAny(raw any) (int64, bool) {
+	switch v := raw.(type) {
+	case int64:
+		return v, true
+	case int32:
+		return int64(v), true
+	case int:
+		return int64(v), true
+	case float64:
+		return int64(v), true
+	case json.Number:
+		n, err := v.Int64()
+		return n, err == nil
+	case string:
+		n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		return n, err == nil
+	default:
+		return 0, false
+	}
+}
+
+func sessionResumePayloadActiveTasks(session *db.Sesion) []LightItem {
+	if session == nil || strings.TrimSpace(session.ResumePayloadJSON) == "" {
+		return nil
+	}
+	envelope := db.ParseResumePayloadEnvelope(strings.TrimSpace(session.ResumePayloadJSON))
+	projectContext, _ := envelope["project_context"].(map[string]any)
+	items, _ := projectContext["tareas_activas"].([]any)
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]LightItem, 0, len(items))
+	for _, raw := range items {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, _ := int64FromResumePayloadAny(item["id"])
+		estado := strings.TrimSpace(stringFromResumePayloadAny(item["estado"]))
+		titulo := strings.TrimSpace(stringFromResumePayloadAny(item["titulo"]))
+		if id <= 0 || titulo == "" {
+			continue
+		}
+		out = append(out, LightItem{
+			ID:     id,
+			Titulo: titulo,
+			Estado: estado,
+		})
+	}
+	return out
+}
+
 func tickInputCacheable(input TickInput) bool {
 	return !input.Finalizado &&
 		strings.TrimSpace(input.Host) == "" &&
@@ -1348,6 +1400,15 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		tareasActivas = append(tareasActivas, LightItem{ID: tarea.ID, Titulo: tarea.Titulo, Estado: string(tarea.Estado)})
 		if tarea.Estado == db.TareaAsignada || tarea.Estado == db.TareaEnProgreso {
 			tieneTrabajo = true
+		}
+	}
+	if !tieneTrabajo && len(tareasActivas) == 0 {
+		for _, tarea := range sessionResumePayloadActiveTasks(sesionActiva) {
+			tareasActivas = append(tareasActivas, tarea)
+			estado := strings.ToLower(strings.TrimSpace(tarea.Estado))
+			if estado == string(db.TareaAsignada) || estado == string(db.TareaEnProgreso) {
+				tieneTrabajo = true
+			}
 		}
 	}
 	agente := row.Agente

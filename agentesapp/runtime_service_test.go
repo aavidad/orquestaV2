@@ -589,6 +589,45 @@ func TestBuildTickOutputConMailboxEnResumePayloadContinuaTrabajo(t *testing.T) {
 	}
 }
 
+func TestBuildTickOutputReutilizaTareaActivaDesdeResumePayloadProjectContext(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex2", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 52, Agente: "Codex2", ProyectoID: int64Ptr(7), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 62, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(52), Estado: "activo", UpdatedAt: now, MetadataJSON: `{"driver":"tmux_cli_session","mailbox_delivery_mode":"session_resume","external_session_id":"sess-codex2"}`},
+		},
+	}
+	svc := NewService(store, nil)
+	proyecto := &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()}
+	sesionActiva := &db.Sesion{
+		ID:                12,
+		Agente:            "Codex2",
+		ProyectoID:        int64Ptr(7),
+		Estado:            "activa",
+		ExternalSessionID: "sess-codex2",
+		ResumePayloadJSON: `{"mailbox":[{"id":1163,"kind":"autonomia","payload":{"accion":"esperar_o_pedir_tarea"}}],"project_context":{"tareas_activas":[{"id":1,"estado":"asignada","titulo":"Definir briefing funcional de Orquestador"}]}}`,
+	}
+
+	out, err := svc.buildTickOutput("Codex2", proyecto, sesionActiva, 0)
+	if err != nil {
+		t.Fatalf("buildTickOutput: %v", err)
+	}
+	if out.AccionRecomendada != "continuar_trabajo" || out.DebePausar {
+		t.Fatalf("deberia reutilizar tarea activa embebida en resume payload: %+v", out)
+	}
+	if len(out.TareasActivas) != 1 || out.TareasActivas[0].ID != 1 {
+		t.Fatalf("deberia exponer la tarea activa del resume payload: %+v", out.TareasActivas)
+	}
+}
+
 func TestBuildTickOutputSupervisorAutobootstrapSupervisaProyectoSinTareaActiva(t *testing.T) {
 	now := time.Now().UTC()
 	proyecto := &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()}
