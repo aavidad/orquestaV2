@@ -3153,6 +3153,88 @@ func TestBuildDetailCompactReutilizaCacheCorta(t *testing.T) {
 	}
 }
 
+func TestBuildDetailCompactUsaWorkQueueDurableParaEvitarBarridoDeTareas(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(42)
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	workQueuePath := filepath.Join(tmp, "work-queue.json")
+	writeJSON := func(path string, payload any) {
+		t.Helper()
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(raw, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	writeJSON(manifestPath, map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"mailbox_delivery_mode": "session_resume",
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":            "ready",
+		"updated_at":       now.Format(time.RFC3339Nano),
+		"alive":            true,
+		"ready_at":         now.Add(-time.Minute).Format(time.RFC3339Nano),
+		"last_progress_at": now.Add(-5 * time.Second).Format(time.RFC3339Nano),
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":          true,
+		"heartbeat_at":   now.Format(time.RFC3339Nano),
+		"ready_at":       now.Add(-time.Minute).Format(time.RFC3339Nano),
+		"last_progress":  now.Add(-5 * time.Second).Format(time.RFC3339Nano),
+	})
+	writeJSON(workQueuePath, map[string]any{
+		"version":    1,
+		"updated_at": now.Format(time.RFC3339Nano),
+		"current": map[string]any{
+			"mailbox_id":  77,
+			"kind":        "autonomia",
+			"action":      "continuar_trabajo",
+			"task_id":     41,
+			"state":       "pending",
+			"title":       "Frente Codex",
+			"recorded_at": now.Format(time.RFC3339Nano),
+		},
+	})
+	metaJSON, _ := json.Marshal(map[string]any{
+		"trace_dir":             tmp,
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+		"mailbox_delivery_mode": "session_resume",
+	})
+
+	store := &fakeStore{
+		agents:           []*db.Agente{{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true}},
+		assignments:      []*db.Asignacion{{Agente: "Codex2", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva, Nota: "microciclo_exclusivo"}},
+		sessions:         []*db.Sesion{{ID: 9, Agente: "Codex2", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: now}},
+		runtimes:         []*db.RuntimeInstance{{ID: 7, Agente: "Codex2", ProyectoID: &proyectoID, LogicalState: "activo", ProcessState: "running", UpdatedAt: now}},
+		canonicalHandles: []*db.RuntimeHandle{{ID: 7, Agente: "Codex2", ProyectoID: &proyectoID, Estado: "activo", Transporte: "tmux", HandleKind: "session", MetadataJSON: string(metaJSON)}},
+		tasks:            []*db.Tarea{{ID: 41, Titulo: "Frente Codex", Estado: db.EstadoEnProgreso, ProyectoID: &proyectoID, Agente: ptr("Codex2"), Modulo: "cmd"}},
+	}
+	svc := NewService(store, nil)
+
+	detail, err := svc.BuildDetailCompact("Codex2")
+	if err != nil {
+		t.Fatalf("BuildDetailCompact: %v", err)
+	}
+	if detail == nil || detail.Entity == nil || len(detail.Entity.Leases) != 1 || detail.Entity.Leases[0].TaskID != 41 {
+		t.Fatalf("lease inesperada desde work-queue durable: %+v", detail)
+	}
+	if store.getTaskForTickCalls != 1 {
+		t.Fatalf("deberia leer la tarea viva desde work-queue durable: calls=%d", store.getTaskForTickCalls)
+	}
+	if store.listTasksCalls != 0 {
+		t.Fatalf("compact no deberia barrer tareas cuando la work-queue ya marca la tarea activa: listTasksCalls=%d", store.listTasksCalls)
+	}
+}
+
 func TestBuildReanimationScheduleActivosReutilizaCacheCorta(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(7)

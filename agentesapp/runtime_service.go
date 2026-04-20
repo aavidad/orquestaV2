@@ -1055,7 +1055,7 @@ func (s *Service) buildOperationalRowContextForTick(agenteNombre string, proyect
 			row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
 			row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
 			applyDurableWorkQueueToTickRow(&row, view)
-			if tarea, ok, err := s.durableWorkQueueTaskForTick(agenteNombre, proyecto.ID, view); err != nil {
+			if tarea, ok, err := s.durableWorkQueueTaskForAgent(agenteNombre, proyecto.ID, view); err != nil {
 				return Row{}, nil, nil, err
 			} else if ok {
 				tareas := []*db.Tarea{tarea}
@@ -1098,7 +1098,7 @@ func (s *Service) buildOperationalRowContextForTick(agenteNombre string, proyect
 	return row, asignaciones, tareas, nil
 }
 
-func (s *Service) durableWorkQueueTaskForTick(agenteNombre string, proyectoID int64, view *runtimeagente.WorkerStatusView) (*db.Tarea, bool, error) {
+func (s *Service) durableWorkQueueTaskForAgent(agenteNombre string, proyectoID int64, view *runtimeagente.WorkerStatusView) (*db.Tarea, bool, error) {
 	if s == nil || view == nil || proyectoID <= 0 {
 		return nil, false, nil
 	}

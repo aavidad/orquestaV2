@@ -1120,6 +1120,31 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 			row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
 			row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
 			applyDurableWorkQueueToTickRow(&row, view)
+			if row.Asignacion != nil && row.Asignacion.ProyectoID > 0 {
+				if tarea, ok, err := s.durableWorkQueueTaskForAgent(nombre, row.Asignacion.ProyectoID, view); err != nil {
+					return Row{}, nil, nil, err
+				} else if ok {
+					tareas := []*db.Tarea{tarea}
+					switch tarea.Estado {
+					case db.EstadoBloqueada:
+						row.BlockedTasks++
+					case db.EstadoCompletada, db.EstadoCancelada, db.EstadoBacklog:
+					default:
+						row.OpenTasks++
+					}
+					stepStart = time.Now()
+					mailbox, err := s.store.ListRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &nombre})
+					if err != nil {
+						return Row{}, nil, nil, err
+					}
+					taskByID := map[int64]*db.Tarea{tarea.ID: tarea}
+					applyMailboxStatsToRow(&row, mailbox, taskByID, nombre)
+					agentDetailDebugf("compact step=list_mailbox_to agente=%s count=%d duration=%s", nombre, len(mailbox), time.Since(stepStart).Round(time.Millisecond))
+					row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
+					agentDetailDebugf("compact done agente=%s duration=%s", nombre, time.Since(start).Round(time.Millisecond))
+					return row, asignaciones, tareas, nil
+				}
+			}
 		}
 	}
 
