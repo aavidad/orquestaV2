@@ -307,4 +307,31 @@ func TestResumirAutonomiaRowsNoCuentaWorkConfirmedComoContinuidadPendiente(t *te
 	}
 }
 
+func TestListarHandoffsAutonomiaEstadoCuentaPendientesYEjecutando(t *testing.T) {
+	t.Parallel()
+
+	prepararDBTemporalCmd(t)
+	for _, agente := range []string{"Codex1", "Codex2"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{Agente: "Codex2", Tipo: "handoff", Estado: "pendiente"}); err != nil {
+		t.Fatalf("encolar handoff pendiente: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{Agente: "Codex2", Tipo: "handoff", Estado: "ejecutando"}); err != nil {
+		t.Fatalf("encolar handoff ejecutando: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{Agente: "Codex2", Tipo: "nudge", Estado: "pendiente"}); err != nil {
+		t.Fatalf("encolar nudge: %v", err)
+	}
+	got, err := listarHandoffsAutonomiaEstado()
+	if err != nil {
+		t.Fatalf("listarHandoffsAutonomiaEstado: %v", err)
+	}
+	if got != 2 {
+		t.Fatalf("deberia contar solo handoffs abiertos: %d", got)
+	}
+}
+
 func ptrTimeStatusDispatch(t time.Time) *time.Time { return &t }

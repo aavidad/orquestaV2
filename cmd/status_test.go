@@ -290,11 +290,12 @@ func TestRenderStatusSummaryMuestraResumenAutonomia(t *testing.T) {
 					Continuando:          2,
 					ContinuidadPendiente: 3,
 					WorkConfirmed:        4,
+					Handoffs:             5,
 				},
 			},
 		})
 	})
-	if !strings.Contains(out, "🤖 Autonomía: supervisando 1 · continuando 2 · continuidad 3 · confirmados 4") {
+	if !strings.Contains(out, "🤖 Autonomía: supervisando 1 · continuando 2 · continuidad 3 · confirmados 4 · handoffs 5") {
 		t.Fatalf("salida sin resumen de autonomia: %s", out)
 	}
 }

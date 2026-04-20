@@ -60,6 +60,7 @@ type autonomiaResumen struct {
 	Continuando          int `json:"continuing"`
 	ContinuidadPendiente int `json:"continuity_pending"`
 	WorkConfirmed        int `json:"work_confirmed"`
+	Handoffs             int `json:"handoffing"`
 }
 
 func normalizeDispatchDebtTotal(out deudaDispatchResumen) deudaDispatchResumen {
@@ -220,6 +221,29 @@ func resumirAutonomiaRows(rows []agentesapp.Row, now time.Time) autonomiaResumen
 		}
 	}
 	return out
+}
+
+func listarHandoffsAutonomiaEstado() (int, error) {
+	total := 0
+	seen := map[int64]struct{}{}
+	for _, estado := range []string{"pendiente", "ejecutando"} {
+		estadoFiltro := estado
+		orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Estado: &estadoFiltro, Limit: 500})
+		if err != nil {
+			return 0, err
+		}
+		for _, order := range orders {
+			if order == nil || strings.TrimSpace(order.Tipo) != "handoff" {
+				continue
+			}
+			if _, ok := seen[order.ID]; ok {
+				continue
+			}
+			seen[order.ID] = struct{}{}
+			total++
+		}
+	}
+	return total, nil
 }
 
 func statusSupervisorAgentName() string {
@@ -716,6 +740,9 @@ func fetchStatusFastFallback() (apiStatusResponse, error) {
 		agentesActivos, agentesTrabajando, agentesSaturados, agentesAtascados, agentesAuthManual, agentesQuotaBlocked, _ = agentesVisiblesPorEstadoOperativoRows(agentes, rows)
 		autonomia = resumirAutonomiaRows(rows, statusNowFunc().UTC())
 	}
+	if handoffs, err := listarHandoffsAutonomiaEstado(); err == nil {
+		autonomia.Handoffs = handoffs
+	}
 	return apiStatusResponse{
 		Agentes:             agentes,
 		ConteoTareas:        cuentas,
@@ -902,6 +929,9 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 	} else if activosOperativos, trabajandoOperativos, ok := agentesVisiblesPorEstadoOperativo(agentes); ok {
 		agentesActivos = activosOperativos
 		agentesTrabajando = trabajandoOperativos
+	}
+	if handoffs, err := listarHandoffsAutonomiaEstado(); err == nil {
+		autonomia.Handoffs = handoffs
 	}
 	return apiStatusResponse{
 		Agentes:             agentes,
