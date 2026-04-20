@@ -3628,6 +3628,76 @@ func TestBuildDetailCompactUsaResumePayloadMailboxComoFallbackAutonomia(t *testi
 	}
 }
 
+func TestBuildDetailCompactPromueveResumePayloadAbsorbidoAWorkConfirmed(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(47)
+	heartbeatAt := now
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	writeJSON := func(path string, payload any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	writeJSON(manifestPath, map[string]any{
+		"version":         1,
+		"agent":           "Codex1",
+		"driver":          "tmux_cli_session",
+		"transport":       "tmux",
+		"tmux_session":    "orq-codex1-test",
+		"tmux_pane_id":    "%71",
+		"status_path":     statusPath,
+		"heartbeat_path":  heartbeatPath,
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":            "ready",
+		"alive":            true,
+		"updated_at":       now.Format(time.RFC3339Nano),
+		"last_output_at":   now.Format(time.RFC3339Nano),
+		"last_progress_at": now.Format(time.RFC3339Nano),
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	store := &fakeStore{
+		agents:      []*db.Agente{{Nombre: "Codex1", Rol: "programador", Activo: true, Habilitado: true}},
+		assignments: []*db.Asignacion{{Agente: "Codex1", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva}},
+		sessions: []*db.Sesion{{
+			ID:                50,
+			Agente:            "Codex1",
+			ProyectoID:        &proyectoID,
+			Activa:            true,
+			Estado:            "activa",
+			Inicio:            now.Add(-time.Hour),
+			HeartbeatAt:       &heartbeatAt,
+			ResumePayloadJSON: `{"mailbox":[{"kind":"autonomia","payload":{"accion":"supervisar_proyecto"}}]}`,
+		}},
+		tasks:            []*db.Tarea{{ID: 19, Titulo: "Supervisar backlog", Estado: db.EstadoEnProgreso, ProyectoID: &proyectoID, Agente: ptr("Codex1")}},
+		runtimes:         []*db.RuntimeInstance{{ID: 21, Agente: "Codex1", ProyectoID: &proyectoID, LogicalState: "activo", ProcessState: "running", UpdatedAt: now}},
+		canonicalHandles: []*db.RuntimeHandle{{ID: 31, Agente: "Codex1", ProyectoID: &proyectoID, Estado: "activo", Transporte: "tmux", HandleKind: "session", MetadataJSON: fmt.Sprintf(`{"worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`, manifestPath, statusPath, heartbeatPath)}},
+	}
+	svc := NewService(store, nil)
+
+	detail, err := svc.BuildDetailCompact("Codex1")
+	if err != nil {
+		t.Fatalf("BuildDetailCompact: %v", err)
+	}
+	if detail == nil || detail.Entity == nil {
+		t.Fatalf("detail/entity inesperado: %+v", detail)
+	}
+	if detail.Row.LastAutonomyState != "work_confirmed" || detail.Entity.LastAutonomyState != "work_confirmed" {
+		t.Fatalf("deberia promover resume payload absorbido a work_confirmed: row=%+v entity=%+v", detail.Row, detail.Entity)
+	}
+}
+
 func TestBuildPanelRowsNoMarcaSupervisorConResumePayloadVivoComoAtascado(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(46)

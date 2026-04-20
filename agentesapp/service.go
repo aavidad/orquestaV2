@@ -841,6 +841,7 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 			}
 		}
 		applyResumePayloadAutonomyToRow(&row)
+		promoteObservedAutonomyState(&row, now)
 		row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, staleThreshold)
 		rows = append(rows, row)
 	}
@@ -1098,6 +1099,7 @@ func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.Runti
 		}
 	}
 	applyResumePayloadAutonomyToRow(&row)
+	promoteObservedAutonomyState(&row, now)
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
 	return row, nil
 }
@@ -1226,6 +1228,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 					}
 					agentDetailDebugf("compact step=list_mailbox_to agente=%s count=%d duration=%s", nombre, len(mailbox), time.Since(stepStart).Round(time.Millisecond))
 					applyResumePayloadAutonomyToRow(&row)
+					promoteObservedAutonomyState(&row, now)
 					row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
 					agentDetailDebugf("compact done agente=%s duration=%s", nombre, time.Since(start).Round(time.Millisecond))
 					return row, asignaciones, tareas, nil
@@ -1273,6 +1276,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 	agentDetailDebugf("compact step=list_mailbox_to agente=%s count=%d duration=%s", nombre, len(mailbox), time.Since(stepStart).Round(time.Millisecond))
 
 	applyResumePayloadAutonomyToRow(&row)
+	promoteObservedAutonomyState(&row, now)
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
 	agentDetailDebugf("compact done agente=%s duration=%s", nombre, time.Since(start).Round(time.Millisecond))
 	return row, asignaciones, tareas, nil
@@ -3842,6 +3846,22 @@ func applyResumePayloadAutonomyToRow(row *Row) {
 	row.LastAutonomyVerificationKey = verificationKey
 }
 
+func promoteObservedAutonomyState(row *Row, now time.Time) {
+	if row == nil {
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(row.LastAutonomySource)) {
+	case "resume_payload_mailbox":
+		if row.autonomyResumePayloadAbsorbedByWorker(now) {
+			row.LastAutonomyState = "work_confirmed"
+		}
+	case "work_queue":
+		if row.autonomyWorkQueueAbsorbedByWorker(now) && strings.TrimSpace(row.LastAutonomyState) != "work_confirmed" {
+			row.LastAutonomyState = "work_confirmed"
+		}
+	}
+}
+
 func summarizeResumePayloadAutonomy(sesion *db.Sesion) (action, source string, moment *time.Time, state, reason, verificationKey string) {
 	if sesion == nil {
 		return "", "", nil, "", "", ""
@@ -3957,6 +3977,28 @@ func (r Row) EffectiveContinuityPending(now time.Time) bool {
 		return false
 	}
 	return true
+}
+
+func (r Row) autonomyResumePayloadAbsorbedByWorker(now time.Time) bool {
+	if strings.ToLower(strings.TrimSpace(r.LastAutonomySource)) != "resume_payload_mailbox" {
+		return false
+	}
+	moment := r.LastAutonomyMoment
+	if moment == nil || moment.IsZero() {
+		return false
+	}
+	if !(r.OpenTasks > 0 || r.supervisorAutonomyLive(now)) {
+		return false
+	}
+	for _, ts := range []*time.Time{r.WorkerLastProgress, r.WorkerLastOutput} {
+		if ts == nil || ts.IsZero() {
+			continue
+		}
+		if !ts.Before(*moment) && !ts.Before(now.Add(-10*time.Minute)) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r Row) autonomyWorkQueueAbsorbedByWorker(now time.Time) bool {
