@@ -497,9 +497,10 @@ func resolverAgentesActivosDesdeCompatibilidad(resumen *estadoResumen) {
 	}
 	agentesActivos := make([]*db.Agente, 0, len(resumen.Agentes))
 	for _, agente := range resumen.Agentes {
-		if agente != nil {
-			agentesActivos = append(agentesActivos, agente)
+		if agente == nil || agenteBloqueadoPorCuotaVisible(agente) {
+			continue
 		}
+		agentesActivos = append(agentesActivos, agente)
 	}
 	resumen.AgentesActivos = agentesActivos
 	if len(resumen.AgentesTrabajando) == 0 {
@@ -1164,6 +1165,9 @@ func derivarAgentesTrabajando(agentesActivos []*db.Agente, tareasActivas []tarea
 	out := make([]*db.Agente, 0, len(trabajando))
 	for _, agente := range agentesActivos {
 		if agente == nil {
+			continue
+		}
+		if agenteBloqueadoPorCuotaVisible(agente) {
 			continue
 		}
 		if trabajando[strings.TrimSpace(agente.Nombre)] {

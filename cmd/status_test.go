@@ -814,6 +814,44 @@ func TestRenderStatusSummaryMuestraTareasRetenidasPorCuota(t *testing.T) {
 	}
 }
 
+func TestResolverAgentesActivosDesdeCompatibilidadOmiteCuotaVisible(t *testing.T) {
+	resumen := &estadoResumen{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex4", EstadoCuota: "activo"},
+			{Nombre: "Codex2", EstadoCuota: "enfriamiento"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 18, Estado: db.TareaEnProgreso, Agente: "Codex4"},
+			{ID: 19, Estado: db.TareaEnProgreso, Agente: "Codex2"},
+		},
+	}
+
+	resolverAgentesActivosDesdeCompatibilidad(resumen)
+
+	if len(resumen.AgentesActivos) != 1 || resumen.AgentesActivos[0].Nombre != "Codex4" {
+		t.Fatalf("agentesActivos inesperados: %+v", resumen.AgentesActivos)
+	}
+	if len(resumen.AgentesTrabajando) != 1 || resumen.AgentesTrabajando[0].Nombre != "Codex4" {
+		t.Fatalf("agentesTrabajando inesperados: %+v", resumen.AgentesTrabajando)
+	}
+}
+
+func TestDerivarAgentesTrabajandoOmiteCuotaVisible(t *testing.T) {
+	got := derivarAgentesTrabajando(
+		[]*db.Agente{
+			{Nombre: "Codex4", EstadoCuota: "activo"},
+			{Nombre: "Codex2", EstadoCuota: "enfriamiento"},
+		},
+		[]tareaLite{
+			{ID: 3, Estado: db.TareaEnProgreso, Agente: "Codex4"},
+			{ID: 18, Estado: db.TareaEnProgreso, Agente: "Codex2"},
+		},
+	)
+	if len(got) != 1 || got[0].Nombre != "Codex4" {
+		t.Fatalf("agentesTrabajando inesperados: %+v", got)
+	}
+}
+
 func TestRenderStatusSummarySeparaPausaOperativaDeCuota(t *testing.T) {
 	resetAt := time.Now().UTC().Add(6 * time.Hour)
 	pct := 69

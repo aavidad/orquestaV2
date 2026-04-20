@@ -606,6 +606,40 @@ func TestAgentesVisiblesPorEstadoOperativoRowsSeparaBloqueadoPorCuota(t *testing
 	}
 }
 
+func TestAgentesVisiblesPorEstadoOperativoRowsOmiteActivoSiAgenteSigueEnCuotaVisible(t *testing.T) {
+	agente := &db.Agente{
+		Nombre:             "Codex4",
+		Rol:                "programador",
+		EstadoCuota:        "enfriamiento",
+		ReanimarAt:         timePtr(time.Now().UTC().Add(30 * time.Minute)),
+		PresupuestoResetAt: nil,
+	}
+	rows := []agentesapp.Row{
+		{
+			Agente:             agente,
+			EstadoOperativo:    "trabajando",
+			DetalleOperativo:   "worker running",
+			LastAutonomyAction: "continuar_trabajo",
+			LastAutonomyState:  "work_confirmed",
+			OpenTasks:          1,
+		},
+	}
+
+	activos, trabajando, _, _, _, quotaBlocked, ok := agentesVisiblesPorEstadoOperativoRows([]*db.Agente{agente}, rows)
+	if !ok {
+		t.Fatalf("debería resolver filas operativas")
+	}
+	if len(activos) != 0 || len(trabajando) != 0 {
+		t.Fatalf("no deberia seguir activo visible en cuota: activos=%+v trabajando=%+v", activos, trabajando)
+	}
+	if len(quotaBlocked) != 1 || quotaBlocked[0].Nombre != "Codex4" {
+		t.Fatalf("quota bloqueados inesperados: %+v", quotaBlocked)
+	}
+	if got := resumirAutonomiaRows(rows, time.Now().UTC()); got.Continuando != 0 || got.WorkConfirmed != 0 {
+		t.Fatalf("autonomia no deberia contar trabajo en cuota visible: %+v", got)
+	}
+}
+
 func TestReconciliarConteoTareasActivasVisibleUsaSoloLaListaVisible(t *testing.T) {
 	cuentas := map[string]int{
 		string(db.TareaEnProgreso): 4,

@@ -316,6 +316,9 @@ func resumirAutonomiaLigera(agentesActivos, agentesTrabajando []*db.Agente, tare
 }
 
 func rowCuentaComoAutonomiaActiva(row agentesapp.Row) bool {
+	if row.Agente != nil && agenteBloqueadoPorCuotaVisible(row.Agente) {
+		return false
+	}
 	switch strings.ToLower(strings.TrimSpace(row.EstadoOperativo)) {
 	case "bloqueado_por_cuota",
 		"bloqueado_por_runtime",
@@ -464,6 +467,10 @@ func agentesVisiblesPorEstadoOperativoRows(agentes []*db.Agente, rows []agentesa
 		}
 		row, ok := rowPorNombre[strings.ToLower(strings.TrimSpace(agente.Nombre))]
 		if !ok {
+			continue
+		}
+		if agenteBloqueadoPorCuotaVisible(agente) {
+			agentesQuotaBlocked = append(agentesQuotaBlocked, agente)
 			continue
 		}
 		switch strings.TrimSpace(row.EstadoOperativo) {
