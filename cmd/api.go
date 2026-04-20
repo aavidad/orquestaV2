@@ -133,9 +133,9 @@ var (
 	apiRuntimeProcessOrdersTimeout  = 4 * time.Second
 	apiRuntimeProcessMailboxTimeout = 4 * time.Second
 	apiAgentPrepareTimeout          = 15 * time.Second
-	apiAgentTickTimeout             = 6 * time.Second
+	apiAgentTickTimeout             = 10 * time.Second
 	apiAgentPrepareLimiter          = make(chan struct{}, 4)
-	apiAgentTickLimiter             = make(chan struct{}, 2)
+	apiAgentTickLimiter             = make(chan struct{}, 4)
 	apiActivePrepareRequests        atomic.Int32
 	apiActiveTickRequests           atomic.Int32
 	apiConfigGetFn                  = func(clave string) (string, error) {
