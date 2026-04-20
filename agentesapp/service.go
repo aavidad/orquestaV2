@@ -890,7 +890,8 @@ func (s *Service) InvalidateCompactDetailCache(names ...string) {
 func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 	nombre = strings.TrimSpace(nombre)
 	if compact {
-		row, asignaciones, tareas, err := s.buildOperationalRowContextForAgentCompact(nombre, time.Now().UTC())
+		now := time.Now().UTC()
+		row, asignaciones, tareas, err := s.buildOperationalRowContextForAgentCompact(nombre, now)
 		if err != nil {
 			return nil, err
 		}
@@ -899,7 +900,7 @@ func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 			Entity:                  buildAgentEntity(s.store, row, tareas),
 			Asignaciones:            asignaciones,
 			MailboxTotalCount:       row.MailboxTotal,
-			MailboxPendingVisible:   row.MailboxPending,
+			MailboxPendingVisible:   compactMailboxPendingVisible(row, now),
 			MailboxCoveredBootstrap: 0,
 		}, nil
 	}
@@ -3082,6 +3083,20 @@ func buildAgentEntity(store Store, row Row, tareas []*db.Tarea) *AgentEntity {
 	return entity
 }
 
+func compactMailboxPendingVisible(row Row, now time.Time) int {
+	pending := row.MailboxPending
+	if pending <= 0 {
+		return 0
+	}
+	if row.MailboxContinuityPending > 0 && !row.EffectiveContinuityPending(now) {
+		pending -= row.MailboxContinuityPending
+		if pending < 0 {
+			pending = 0
+		}
+	}
+	return pending
+}
+
 func buildWorkLeases(tareas []*db.Tarea) []WorkLease {
 	out := make([]WorkLease, 0, len(tareas))
 	for _, tarea := range tareas {
@@ -3911,6 +3926,10 @@ func promoteObservedAutonomyState(row *Row, now time.Time) {
 		if row.WorkerFresh(now) && row.OpenTasks > 0 {
 			row.LastAutonomyState = "work_confirmed"
 		}
+	case "mailbox":
+		if row.autonomyMailboxAbsorbedByWorker(now) {
+			row.LastAutonomyState = "work_confirmed"
+		}
 	case "send_instruction":
 		if row.WorkerFresh(now) && (row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) {
 			row.LastAutonomyState = "work_confirmed"
@@ -4032,6 +4051,9 @@ func (r Row) EffectiveContinuityPending(now time.Time) bool {
 			return false
 		}
 	}
+	if source == "mailbox" && r.autonomyMailboxAbsorbedByWorker(now) {
+		return false
+	}
 	if source == "work_queue" && r.WorkerFresh(now) {
 		switch state {
 		case "delivered", "working", "running":
@@ -4085,6 +4107,22 @@ func (r Row) autonomyWorkQueueAbsorbedByWorker(now time.Time) bool {
 		}
 	}
 	return false
+}
+
+func (r Row) autonomyMailboxAbsorbedByWorker(now time.Time) bool {
+	if strings.ToLower(strings.TrimSpace(r.LastAutonomySource)) != "mailbox" {
+		return false
+	}
+	if r.MailboxContinuityPending <= 0 && !r.DurableContinuityPending(now) {
+		return false
+	}
+	if !(r.OpenTasks > 0 || r.supervisorAutonomyLive(now)) {
+		return false
+	}
+	if !r.WorkerFresh(now) {
+		return false
+	}
+	return r.workerHasRecentWorkSignal(now, 10*time.Minute) || r.workerWarmupRecent(now)
 }
 
 func (r Row) RequiresStructuredTMUX() bool {
