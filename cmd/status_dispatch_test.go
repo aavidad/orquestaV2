@@ -307,6 +307,30 @@ func TestResumirAutonomiaRowsNoCuentaWorkConfirmedComoContinuidadPendiente(t *te
 	}
 }
 
+func TestResumirAutonomiaRowsCuentaHandoffVivoDesdeAssignment(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	rows := []agentesapp.Row{
+		{
+			LastAutonomyAction: "continuar_trabajo",
+			LastAutonomySource: "assignment_handoff",
+			LastAutonomyState:  "handoff",
+			OpenTasks:          1,
+			WorkerAlive:        true,
+			WorkerHeartbeat:    ptrTimeStatusDispatch(now),
+		},
+	}
+
+	got := resumirAutonomiaRows(rows, now)
+	if got.Handoffs != 1 {
+		t.Fatalf("deberia contar handoff vivo desde assignment: %+v", got)
+	}
+	if got.Continuando != 1 {
+		t.Fatalf("deberia seguir contando continuidad viva: %+v", got)
+	}
+}
+
 func TestListarHandoffsAutonomiaEstadoCuentaPendientesYEjecutando(t *testing.T) {
 	t.Parallel()
 

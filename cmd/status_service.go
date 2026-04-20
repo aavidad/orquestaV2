@@ -207,6 +207,11 @@ func resumirAutonomiaRows(rows []agentesapp.Row, now time.Time) autonomiaResumen
 	out := autonomiaResumen{}
 	supervisor := statusSupervisorAgentName()
 	for _, row := range rows {
+		if strings.EqualFold(strings.TrimSpace(row.LastAutonomySource), "assignment_handoff") &&
+			(row.OpenTasks > 0 || row.SupervisorRoleActive(now)) &&
+			row.WorkerFresh(now) {
+			out.Handoffs++
+		}
 		switch {
 		case supervisor != "" && row.SupervisorRoleActive(now) && row.Agente != nil && strings.EqualFold(strings.TrimSpace(row.Agente.Nombre), supervisor):
 			out.Supervisando++
@@ -740,7 +745,7 @@ func fetchStatusFastFallback() (apiStatusResponse, error) {
 		agentesActivos, agentesTrabajando, agentesSaturados, agentesAtascados, agentesAuthManual, agentesQuotaBlocked, _ = agentesVisiblesPorEstadoOperativoRows(agentes, rows)
 		autonomia = resumirAutonomiaRows(rows, statusNowFunc().UTC())
 	}
-	if handoffs, err := listarHandoffsAutonomiaEstado(); err == nil {
+	if handoffs, err := listarHandoffsAutonomiaEstado(); err == nil && handoffs > autonomia.Handoffs {
 		autonomia.Handoffs = handoffs
 	}
 	return apiStatusResponse{
@@ -930,7 +935,7 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 		agentesActivos = activosOperativos
 		agentesTrabajando = trabajandoOperativos
 	}
-	if handoffs, err := listarHandoffsAutonomiaEstado(); err == nil {
+	if handoffs, err := listarHandoffsAutonomiaEstado(); err == nil && handoffs > autonomia.Handoffs {
 		autonomia.Handoffs = handoffs
 	}
 	return apiStatusResponse{
