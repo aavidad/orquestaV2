@@ -8,30 +8,30 @@ import (
 )
 
 type serverOperationalInfo struct {
-	State             string `json:"state"`
-	Operational       bool   `json:"operational"`
-	Reason            string `json:"reason,omitempty"`
-	Generated         string `json:"generated,omitempty"`
-	RegisteredAgents  int    `json:"registeredAgents"`
-	ActiveAgents      int    `json:"activeAgents"`
-	WorkingAgents     int    `json:"workingAgents"`
-	SaturatedAgents   int    `json:"saturatedAgents"`
-	StuckAgents       int    `json:"stuckAgents"`
-	AuthAgents        int    `json:"authAgents"`
-	QuotaAgents       int    `json:"quotaAgents"`
-	PausedAgents      int    `json:"pausedAgents"`
-	TasksInProgress   int    `json:"tasksInProgress"`
-	ReservedTasks     int    `json:"reservedTasks"`
-	BlockedTasks      int    `json:"blockedTasks"`
-	DispatchPending   int    `json:"dispatchPending"`
-	DispatchNotified  int    `json:"dispatchNotified"`
-	DispatchFailed    int    `json:"dispatchFailed"`
-	DispatchConfirmed int    `json:"dispatchConfirmed"`
-	AutonomySupervising int  `json:"autonomySupervising"`
-	AutonomyContinuing  int  `json:"autonomyContinuing"`
-	AutonomyPending     int  `json:"autonomyPending"`
-	AutonomyConfirmed   int  `json:"autonomyConfirmed"`
-	AutonomyHandoffs    int  `json:"autonomyHandoffs"`
+	State               string `json:"state"`
+	Operational         bool   `json:"operational"`
+	Reason              string `json:"reason,omitempty"`
+	Generated           string `json:"generated,omitempty"`
+	RegisteredAgents    int    `json:"registeredAgents"`
+	ActiveAgents        int    `json:"activeAgents"`
+	WorkingAgents       int    `json:"workingAgents"`
+	SaturatedAgents     int    `json:"saturatedAgents"`
+	StuckAgents         int    `json:"stuckAgents"`
+	AuthAgents          int    `json:"authAgents"`
+	QuotaAgents         int    `json:"quotaAgents"`
+	PausedAgents        int    `json:"pausedAgents"`
+	TasksInProgress     int    `json:"tasksInProgress"`
+	ReservedTasks       int    `json:"reservedTasks"`
+	BlockedTasks        int    `json:"blockedTasks"`
+	DispatchPending     int    `json:"dispatchPending"`
+	DispatchNotified    int    `json:"dispatchNotified"`
+	DispatchFailed      int    `json:"dispatchFailed"`
+	DispatchConfirmed   int    `json:"dispatchConfirmed"`
+	AutonomySupervising int    `json:"autonomySupervising"`
+	AutonomyContinuing  int    `json:"autonomyContinuing"`
+	AutonomyPending     int    `json:"autonomyPending"`
+	AutonomyConfirmed   int    `json:"autonomyConfirmed"`
+	AutonomyHandoffs    int    `json:"autonomyHandoffs"`
 }
 
 func registeredAgentCountFromStatus(status apiStatusResponse) int {
@@ -93,6 +93,9 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 		state = "degraded"
 		reason = "workers_stuck"
 		operational = false
+	case activeAgents == 0 && quotaAgents > 0:
+		state = "idle"
+		reason = "workers_quota_blocked"
 	case tasksInProgress > 0 && workingAgents == 0 && status.Autonomia.WorkConfirmed == 0:
 		state = "degraded"
 		reason = "tasks_without_workers"
@@ -107,25 +110,25 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 	}
 
 	return serverOperationalInfo{
-		State:             state,
-		Operational:       operational,
-		Reason:            reason,
-		Generated:         status.Generado,
-		RegisteredAgents:  registeredAgentCountFromStatus(status),
-		ActiveAgents:      activeAgents,
-		WorkingAgents:     workingAgents,
-		SaturatedAgents:   saturatedAgents,
-		StuckAgents:       stuckAgents,
-		AuthAgents:        authAgents,
-		QuotaAgents:       quotaAgents,
-		PausedAgents:      pausedAgents,
-		TasksInProgress:   tasksInProgress,
-		ReservedTasks:     reservedTasks,
-		BlockedTasks:      blockedTasks,
-		DispatchPending:   status.DeudaDispatch.Pendientes,
-		DispatchNotified:  status.DeudaDispatch.Notificadas,
-		DispatchFailed:    status.DeudaDispatch.Fallidas,
-		DispatchConfirmed: status.DeudaDispatch.WorkConfirmed,
+		State:               state,
+		Operational:         operational,
+		Reason:              reason,
+		Generated:           status.Generado,
+		RegisteredAgents:    registeredAgentCountFromStatus(status),
+		ActiveAgents:        activeAgents,
+		WorkingAgents:       workingAgents,
+		SaturatedAgents:     saturatedAgents,
+		StuckAgents:         stuckAgents,
+		AuthAgents:          authAgents,
+		QuotaAgents:         quotaAgents,
+		PausedAgents:        pausedAgents,
+		TasksInProgress:     tasksInProgress,
+		ReservedTasks:       reservedTasks,
+		BlockedTasks:        blockedTasks,
+		DispatchPending:     status.DeudaDispatch.Pendientes,
+		DispatchNotified:    status.DeudaDispatch.Notificadas,
+		DispatchFailed:      status.DeudaDispatch.Fallidas,
+		DispatchConfirmed:   status.DeudaDispatch.WorkConfirmed,
 		AutonomySupervising: status.Autonomia.Supervisando,
 		AutonomyContinuing:  status.Autonomia.Continuando,
 		AutonomyPending:     status.Autonomia.ContinuidadPendiente,

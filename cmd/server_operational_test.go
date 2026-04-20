@@ -19,14 +19,31 @@ func TestBuildServerOperationalInfoToleraTrabajoConfirmadoSinWorkingAgents(t *te
 	}
 }
 
+func TestBuildServerOperationalInfoExponeQuotaBlockedSinWorkersActivos(t *testing.T) {
+	info := buildServerOperationalInfo(apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento"},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento"},
+		},
+	})
+	if !info.Operational {
+		t.Fatalf("el control plane sigue operativo aunque la flota este en cuota: %+v", info)
+	}
+	if info.State != "idle" || info.Reason != "workers_quota_blocked" || info.QuotaAgents != 1 {
+		t.Fatalf("estado operativo inesperado: %+v", info)
+	}
+}
+
 func TestFormatServerOperationalSummaryIncluyeDispatch(t *testing.T) {
 	summary := formatServerOperationalSummary(&serverOperationalInfo{
-		ActiveAgents:      2,
-		RegisteredAgents:  4,
-		DispatchPending:   1,
-		DispatchNotified:  2,
-		DispatchFailed:    3,
-		DispatchConfirmed: 4,
+		ActiveAgents:        2,
+		RegisteredAgents:    4,
+		DispatchPending:     1,
+		DispatchNotified:    2,
+		DispatchFailed:      3,
+		DispatchConfirmed:   4,
 		AutonomySupervising: 1,
 		AutonomyContinuing:  2,
 		AutonomyPending:     3,
