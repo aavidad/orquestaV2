@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/db"
 	"orquesta/internal/controlruntime"
 )
@@ -101,3 +102,44 @@ func TestDispatchOrderFailureCountsAsDebtSoloSiEsReciente(t *testing.T) {
 		t.Fatalf("fallo historico no deberia contar como deuda viva")
 	}
 }
+
+func TestResumirAutonomiaRowsNoCuentaResumePayloadAbsorbidoComoPendiente(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	rows := []agentesapp.Row{
+		{
+			LastAutonomyAction:       "supervisar_proyecto",
+			LastAutonomySource:       "resume_payload_mailbox",
+			MailboxContinuityPending: 1,
+			WorkerAlive:              true,
+			WorkerHeartbeat:          ptrTimeStatusDispatch(now),
+		},
+		{
+			LastAutonomyAction:       "continuar_trabajo",
+			LastAutonomySource:       "resume_payload_mailbox",
+			MailboxContinuityPending: 1,
+			OpenTasks:                1,
+			WorkerAlive:              true,
+			WorkerHeartbeat:          ptrTimeStatusDispatch(now),
+		},
+		{
+			LastAutonomyAction:       "continuar_trabajo",
+			LastAutonomySource:       "work_queue",
+			MailboxContinuityPending: 1,
+			OpenTasks:                1,
+			WorkerAlive:              true,
+			WorkerHeartbeat:          ptrTimeStatusDispatch(now),
+		},
+	}
+
+	got := resumirAutonomiaRows(rows, now)
+	if got.Supervisando != 1 || got.Continuando != 2 {
+		t.Fatalf("resumen autonomia inesperado: %+v", got)
+	}
+	if got.ContinuidadPendiente != 1 {
+		t.Fatalf("continuidad pendiente deberia contar solo deuda viva: %+v", got)
+	}
+}
+
+func ptrTimeStatusDispatch(t time.Time) *time.Time { return &t }

@@ -3934,6 +3934,18 @@ func (r Row) DurableContinuityPending(now time.Time) bool {
 	}
 }
 
+func (r Row) EffectiveContinuityPending(now time.Time) bool {
+	if r.MailboxContinuityPending <= 0 && !r.DurableContinuityPending(now) {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(r.LastAutonomySource), "resume_payload_mailbox") && r.WorkerFresh(now) {
+		if r.OpenTasks > 0 || r.supervisorAutonomyLive(now) {
+			return false
+		}
+	}
+	return true
+}
+
 func (r Row) RequiresStructuredTMUX() bool {
 	if strings.EqualFold(strings.TrimSpace(r.WorkerDriver), "tmux_cli_session") {
 		return true

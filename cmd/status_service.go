@@ -205,7 +205,7 @@ func resumirAutonomiaRows(rows []agentesapp.Row, now time.Time) autonomiaResumen
 		case "continuar_trabajo":
 			out.Continuando++
 		}
-		if row.MailboxContinuityPending > 0 || row.DurableContinuityPending(now) {
+		if row.EffectiveContinuityPending(now) {
 			out.ContinuidadPendiente++
 		}
 	}
