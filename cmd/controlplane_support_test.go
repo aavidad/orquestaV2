@@ -31418,9 +31418,6 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReasignaBloqueoPorSobrecargaASiH
 	if !strings.Contains(orders[0].PayloadJSON, `"accion":"continuar_trabajo"`) {
 		t.Fatalf("payload nudge inesperado: %s", orders[0].PayloadJSON)
 	}
-	if !strings.Contains(orders[0].PayloadJSON, `"redistribuida_desde":"CodexCargado"`) {
-		t.Fatalf("payload nudge sin origen redistribuido: %s", orders[0].PayloadJSON)
-	}
 }
 
 func TestSeleccionarRelevoAutonomiaConLimiteDescartaWorkerTrabajandoConDosTareas(t *testing.T) {

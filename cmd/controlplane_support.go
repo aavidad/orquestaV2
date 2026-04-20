@@ -9453,6 +9453,27 @@ func procesarRecuperacionTareasBloqueadasSobrecargaBatch(rows []agentesapp.Row, 
 				if relevo == "" {
 					continue
 				}
+				var proyecto *db.Proyecto
+				if actual.ProyectoID != nil && *actual.ProyectoID > 0 {
+					proyecto = &db.Proyecto{ID: *actual.ProyectoID}
+				}
+				if handoff, err := intentarHandoffAutonomoTarea(
+					proyecto,
+					actual.ID,
+					agente,
+					relevo,
+					"",
+					"sobrecarga_operativa",
+					fmt.Sprintf("Continuidad automática tras bloqueo por sobrecarga en tarea #%d", actual.ID),
+					fmt.Sprintf("Handoff automático desde %s a %s tras bloqueo por sobrecarga", agente, relevo),
+					fmt.Sprintf("resuelto por handoff automático a %s", relevo),
+				); err != nil {
+					return count, err
+				} else if handoff {
+					openTasksProjected[relevo]++
+					count++
+					continue
+				}
 				resolucion := fmt.Sprintf("reasignación automática por sobrecarga desde %s", agente)
 				if err := desbloquearYReasignarTareaAutonomia(actual.ID, resolucion, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s tras bloqueo por sobrecarga", agente, relevo)); err != nil {
 					return count, err
@@ -11291,6 +11312,30 @@ func procesarSobrecargaAgentesAutonomiaBatch(rows []agentesapp.Row, tareasActiva
 				if openTasksProjected[agente] > 0 {
 					openTasksProjected[agente]--
 				}
+				procesadas++
+				continue
+			}
+			var proyecto *db.Proyecto
+			if actual.ProyectoID != nil && *actual.ProyectoID > 0 {
+				proyecto = &db.Proyecto{ID: *actual.ProyectoID}
+			}
+			if handoff, err := intentarHandoffAutonomoTarea(
+				proyecto,
+				actual.ID,
+				agente,
+				relevo,
+				"",
+				"sobrecarga_operativa",
+				fmt.Sprintf("Continuidad automática tras redistribución por sobrecarga en tarea #%d", actual.ID),
+				fmt.Sprintf("Handoff automático desde %s a %s por sobrecarga operativa", agente, relevo),
+				fmt.Sprintf("resuelto por handoff automático a %s", relevo),
+			); err != nil {
+				return procesadas, err
+			} else if handoff {
+				if openTasksProjected[agente] > 0 {
+					openTasksProjected[agente]--
+				}
+				openTasksProjected[relevo]++
 				procesadas++
 				continue
 			}
