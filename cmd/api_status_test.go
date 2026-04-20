@@ -63,7 +63,7 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 			PoolsLocales: []*capacidadapp.PoolLocalCompartido{
 				{PoolSlug: "ollama-gemma4", ModeloPreferente: "gemma4:26b", SlotsMaximos: 1},
 			},
-			DeudaDispatch: deudaDispatchResumen{Total: 4, Pendientes: 1, Notificadas: 2, Fallidas: 1},
+			DeudaDispatch: deudaDispatchResumen{Total: 4, Pendientes: 1, Notificadas: 2, Fallidas: 1, WorkConfirmed: 3},
 		},
 	}
 	rec := httptest.NewRecorder()
@@ -97,7 +97,7 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 	if len(payload.PoolsLocales) != 1 || payload.PoolsLocales[0].PoolSlug != "ollama-gemma4" {
 		t.Fatalf("poolsLocales inesperados: %+v", payload.PoolsLocales)
 	}
-	if payload.DeudaDispatch.Total != 4 || payload.DeudaDispatch.Pendientes != 1 || payload.DeudaDispatch.Notificadas != 2 || payload.DeudaDispatch.Fallidas != 1 {
+	if payload.DeudaDispatch.Total != 4 || payload.DeudaDispatch.Pendientes != 1 || payload.DeudaDispatch.Notificadas != 2 || payload.DeudaDispatch.Fallidas != 1 || payload.DeudaDispatch.WorkConfirmed != 3 {
 		t.Fatalf("deudaDispatch inesperada: %+v", payload.DeudaDispatch)
 	}
 }

@@ -44,10 +44,11 @@ type dbStatusService struct{}
 var errStatusFetchTimeout = errors.New("status fetch timeout")
 
 type deudaDispatchResumen struct {
-	Total       int `json:"total"`
-	Pendientes  int `json:"pending"`
-	Notificadas int `json:"notified"`
-	Fallidas    int `json:"failed"`
+	Total         int `json:"total"`
+	Pendientes    int `json:"pending"`
+	Notificadas   int `json:"notified"`
+	Fallidas      int `json:"failed"`
+	WorkConfirmed int `json:"work_confirmed"`
 }
 
 func listarDeudaDispatchEstado() (deudaDispatchResumen, error) {
@@ -73,7 +74,13 @@ func listarDeudaDispatchEstado() (deudaDispatchResumen, error) {
 			if raw, ok := result["delivery_state"].(string); ok {
 				deliveryState = strings.ToLower(strings.TrimSpace(raw))
 			}
+			receiptSource := ""
+			if raw, ok := result["receipt_source"].(string); ok {
+				receiptSource = strings.ToLower(strings.TrimSpace(raw))
+			}
 			switch {
+			case dispatchState == "delivered" && deliveryState == "delivered" && receiptSourceConfirmsWorkStatus(receiptSource):
+				out.WorkConfirmed++
 			case strings.TrimSpace(order.Estado) == "fallida" || dispatchState == "failed" || deliveryState == "failed":
 				out.Fallidas++
 			case dispatchState == "notified" || deliveryState == "notified":
@@ -84,6 +91,20 @@ func listarDeudaDispatchEstado() (deudaDispatchResumen, error) {
 		}
 	}
 	return out, nil
+}
+
+func receiptSourceConfirmsWorkStatus(source string) bool {
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "last_progress",
+		"worker_activity",
+		"tmux_transcript_activity",
+		"transcript_patch",
+		"tmux_pane_patch",
+		"git_worktree":
+		return true
+	default:
+		return false
+	}
 }
 
 func agenteTieneActividadRecienteVisible(agente *db.Agente) bool {
