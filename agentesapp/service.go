@@ -828,6 +828,7 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 				applyDurableWorkQueueToTickRow(&row, view)
 			}
 		}
+		applyResumePayloadAutonomyToRow(&row)
 		row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, staleThreshold)
 		rows = append(rows, row)
 	}
@@ -1078,6 +1079,7 @@ func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.Runti
 			applyDurableWorkQueueToTickRow(&row, view)
 		}
 	}
+	applyResumePayloadAutonomyToRow(&row)
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
 	return row, nil
 }
@@ -1202,6 +1204,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 					taskByID := map[int64]*db.Tarea{tarea.ID: tarea}
 					applyMailboxStatsToRow(&row, mailbox, taskByID, nombre)
 					agentDetailDebugf("compact step=list_mailbox_to agente=%s count=%d duration=%s", nombre, len(mailbox), time.Since(stepStart).Round(time.Millisecond))
+					applyResumePayloadAutonomyToRow(&row)
 					row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
 					agentDetailDebugf("compact done agente=%s duration=%s", nombre, time.Since(start).Round(time.Millisecond))
 					return row, asignaciones, tareas, nil
@@ -1245,6 +1248,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 	applyMailboxStatsToRow(&row, mailbox, taskByID, nombre)
 	agentDetailDebugf("compact step=list_mailbox_to agente=%s count=%d duration=%s", nombre, len(mailbox), time.Since(stepStart).Round(time.Millisecond))
 
+	applyResumePayloadAutonomyToRow(&row)
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
 	agentDetailDebugf("compact done agente=%s duration=%s", nombre, time.Since(start).Round(time.Millisecond))
 	return row, asignaciones, tareas, nil
@@ -3740,6 +3744,83 @@ func (r Row) WorkerSupportsContinuityRecovery(now time.Time) bool {
 		}
 	default:
 		return false
+	}
+}
+
+func applyResumePayloadAutonomyToRow(row *Row) {
+	if row == nil || row.Sesion == nil || strings.TrimSpace(row.Sesion.ResumePayloadJSON) == "" {
+		return
+	}
+	action, source, moment, state, reason, verificationKey := summarizeResumePayloadAutonomy(row.Sesion)
+	if strings.TrimSpace(action) == "" {
+		return
+	}
+	if !mailboxCountersShouldReplace(row.LastAutonomyMoment, moment) {
+		return
+	}
+	row.LastAutonomyAction = action
+	row.LastAutonomySource = source
+	row.LastAutonomyMoment = moment
+	row.LastAutonomyState = state
+	row.LastAutonomyReason = reason
+	row.LastAutonomyVerificationKey = verificationKey
+}
+
+func summarizeResumePayloadAutonomy(sesion *db.Sesion) (action, source string, moment *time.Time, state, reason, verificationKey string) {
+	if sesion == nil {
+		return "", "", nil, "", "", ""
+	}
+	envelope := db.ParseResumePayloadEnvelope(strings.TrimSpace(sesion.ResumePayloadJSON))
+	items, ok := envelope["mailbox"].([]any)
+	if !ok {
+		return "", "", nil, "", "", ""
+	}
+	for i := len(items) - 1; i >= 0; i-- {
+		msg, ok := items[i].(map[string]any)
+		if !ok {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(stringFromResumePayloadAny(msg["kind"])), "autonomia") {
+			continue
+		}
+		payload, ok := msg["payload"].(map[string]any)
+		if !ok {
+			continue
+		}
+		action = strings.TrimSpace(stringFromResumePayloadAny(payload["accion"]))
+		if action == "" {
+			continue
+		}
+		source = "resume_payload_mailbox"
+		state = "embedded"
+		reason = strings.TrimSpace(stringFromResumePayloadAny(payload["motivo"]))
+		if reason == "" {
+			reason = strings.TrimSpace(stringFromResumePayloadAny(payload["bootstrap_kind"]))
+		}
+		verificationKey = strings.TrimSpace(stringFromResumePayloadAny(payload["verification_key"]))
+		switch {
+		case sesion.HeartbeatAt != nil && !sesion.HeartbeatAt.IsZero():
+			ts := sesion.HeartbeatAt.UTC()
+			moment = &ts
+		case !sesion.Inicio.IsZero():
+			ts := sesion.Inicio.UTC()
+			moment = &ts
+		}
+		return action, source, moment, state, reason, verificationKey
+	}
+	return "", "", nil, "", "", ""
+}
+
+func stringFromResumePayloadAny(v any) string {
+	switch value := v.(type) {
+	case string:
+		return value
+	case fmt.Stringer:
+		return value.String()
+	case nil:
+		return ""
+	default:
+		return fmt.Sprint(value)
 	}
 }
 
