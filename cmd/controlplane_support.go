@@ -14358,6 +14358,12 @@ func reactivarAgenteTrasReanimacionConResultado(agente, motivo string) (bool, bo
 	if err != nil {
 		return false, false, err
 	}
+	if proyecto == nil {
+		proyecto, err = resolverProyectoAutoasignacionDesdeAsignacionPausada(agente)
+		if err != nil {
+			return false, false, err
+		}
+	}
 	if proyecto != nil && proyecto.ID > 0 && agenteUsaPoolLocalCompartidoParaReactivacion(agente, proyecto) {
 		permite, _, err := db.PoolLocalCompartidoPermiteActivacionAgenteProyecto(agente, strings.TrimSpace(proyecto.Slug))
 		if err != nil {

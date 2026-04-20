@@ -8824,6 +8824,78 @@ func TestResetReanimacionEncolaStartSiHandlePausadoTMUXBootstrapOnly(t *testing.
 	}
 }
 
+func TestReactivarAgenteTrasReanimacionRecuperaProyectoDesdeAsignacionPausada(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-reactivacion-pausada",
+		Nombre:  "Orquestador Reactivacion Pausada",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ObjetivoPct:      100,
+		MinAgentes:       1,
+		MaxAgentes:       3,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "reactivacion_automatica_trabajo_activo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if err := db.PausarAsignacion("Codex1", proyectoID, "sin_trabajo_reactivacion_automatica"); err != nil {
+		t.Fatalf("pausar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Recuperar frente tras cooldown",
+		Descripcion: "Backlog premium disponible para reactivacion",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea libre: %v", err)
+	}
+
+	if err := reactivarAgenteTrasReanimacion("Codex1"); err != nil {
+		t.Fatalf("reactivar agente: %v", err)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "start" {
+		t.Fatalf("deberia encolar start desde asignacion pausada: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"accion":"start"`) {
+		t.Fatalf("payload start inesperado: %s", orders[0].PayloadJSON)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Estado != db.TareaLibre {
+		t.Fatalf("la reactivacion no deberia tomar la tarea todavia, solo reabrir proyecto: %+v", tarea)
+	}
+}
+
 func TestResetReanimacionEncolaStartSiHandleFallidoConMailboxPendiente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
