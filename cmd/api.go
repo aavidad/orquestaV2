@@ -799,6 +799,7 @@ type apiRuntimeProcessReanimationsResponse struct {
 	Candidates        int  `json:"candidates,omitempty"`
 	Reactivated       int  `json:"reactivated,omitempty"`
 	CooldownSustained int  `json:"cooldown_sustained,omitempty"`
+	CapacityBlocked   int  `json:"capacity_blocked,omitempty"`
 	Errors            int  `json:"errors,omitempty"`
 }
 
@@ -5979,7 +5980,7 @@ func apiHandlerRuntimeProcessReanimaciones(w http.ResponseWriter, r *http.Reques
 			resp := runtimeProcessReanimationsBatchFn()
 			if resp.Errors > 0 {
 				db.Audit("server", "runtime_process_reanimaciones_background_errors", "runtime", 0,
-					fmt.Sprintf("candidates=%d reactivated=%d cooldown_sustained=%d errors=%d", resp.Candidates, resp.Reactivated, resp.CooldownSustained, resp.Errors))
+					fmt.Sprintf("candidates=%d reactivated=%d cooldown_sustained=%d capacity_blocked=%d errors=%d", resp.Candidates, resp.Reactivated, resp.CooldownSustained, resp.CapacityBlocked, resp.Errors))
 			}
 		}()
 	}
@@ -6014,13 +6015,16 @@ func ejecutarRuntimeProcessReanimationsBatch() apiRuntimeProcessReanimationsResp
 		case resetReanimacionResultadoCooldownSostenido:
 			resp.CooldownSustained++
 			db.Audit("server", "runtime_process_reanimaciones_cooldown_sustained", "agente", 0, fmt.Sprintf("agente=%s motivo=%s", strings.TrimSpace(agente.Nombre), strings.TrimSpace(agente.MotivoPausa)))
+		case resetReanimacionResultadoSinCapacidad:
+			resp.CapacityBlocked++
+			db.Audit("server", "runtime_process_reanimaciones_capacity_blocked", "agente", 0, fmt.Sprintf("agente=%s motivo=%s", strings.TrimSpace(agente.Nombre), strings.TrimSpace(agente.MotivoPausa)))
 		case resetReanimacionResultadoReactivado:
 			resp.Reactivated++
 		}
 	}
 	resp.Count = resp.Reactivated
 	db.Audit("server", "runtime_process_reanimaciones", "runtime", 0,
-		fmt.Sprintf("candidates=%d reactivated=%d cooldown_sustained=%d errors=%d", resp.Candidates, resp.Reactivated, resp.CooldownSustained, resp.Errors))
+		fmt.Sprintf("candidates=%d reactivated=%d cooldown_sustained=%d capacity_blocked=%d errors=%d", resp.Candidates, resp.Reactivated, resp.CooldownSustained, resp.CapacityBlocked, resp.Errors))
 	return resp
 }
 

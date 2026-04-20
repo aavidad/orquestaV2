@@ -344,8 +344,8 @@ var runtimeProcesarReanimacionesCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Printf("✓ Reanimaciones accepted=%t running=%t count=%d candidates=%d reactivated=%d cooldown_sustained=%d errors=%d\n",
-			resp.Accepted, resp.Running, resp.Count, resp.Candidates, resp.Reactivated, resp.CooldownSustained, resp.Errors)
+		fmt.Printf("✓ Reanimaciones accepted=%t running=%t count=%d candidates=%d reactivated=%d cooldown_sustained=%d capacity_blocked=%d errors=%d\n",
+			resp.Accepted, resp.Running, resp.Count, resp.Candidates, resp.Reactivated, resp.CooldownSustained, resp.CapacityBlocked, resp.Errors)
 		return nil
 	},
 }

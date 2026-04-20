@@ -8,9 +8,10 @@ func TestProcesarAgentesDegradadosAutonomiaBatchDetalladoIncluyeReanimaciones(t 
 	prev := runtimeProcessReanimationsBatchFn
 	runtimeProcessReanimationsBatchFn = func() apiRuntimeProcessReanimationsResponse {
 		return apiRuntimeProcessReanimationsResponse{
-			OK:          true,
-			Candidates:  2,
-			Reactivated: 2,
+			OK:              true,
+			Candidates:      3,
+			Reactivated:     2,
+			CapacityBlocked: 1,
 		}
 	}
 	t.Cleanup(func() {
