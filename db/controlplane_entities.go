@@ -6371,6 +6371,16 @@ func ejecutarRuntimeOrderPause(order *RuntimeOrder) error {
 			return fmt.Errorf("pause sin control real para %s", order.Agente)
 		}
 	}
+	if pausedViaStop && aplicado {
+		if detenido, pidFinal, err := runtimeProcesoLocalYaNoVive(order); err != nil {
+			return err
+		} else if detenido {
+			yaDetenido = true
+			if pid == 0 {
+				pid = pidFinal
+			}
+		}
+	}
 	runtime, err := actualizarEstadoRuntime(order, "pausado", "")
 	if err != nil {
 		return err
@@ -7680,6 +7690,13 @@ func runtimeOrderSendInstructionReceiptEvidence(order *RuntimeOrder, payload map
 	if err != nil || snap == nil {
 		return false, "", time.Time{}, err
 	}
+	if runtimeOrderSendInstructionUsaTMUXPaneActivityEvidence(handle, payload) {
+		if fresh, freshErr := runtimeOrderSendInstructionLoadWorkerSnapshotFresh(handle.MetadataJSON); freshErr != nil {
+			return false, "", time.Time{}, freshErr
+		} else if fresh != nil {
+			snap = fresh
+		}
+	}
 	if runtimeOrderSendInstructionEsMicroprogramacion(payload) {
 		confirmed, receiptSource, receiptAt, err := runtimeOrderSendInstructionTMUXPanePatchEvidence(handle, snap, baseline)
 		if err != nil {
@@ -7712,6 +7729,49 @@ func runtimeOrderSendInstructionReceiptEvidence(order *RuntimeOrder, payload map
 		}
 	}
 	return false, "", time.Time{}, nil
+}
+
+func runtimeOrderSendInstructionLoadWorkerSnapshotFresh(raw string) (*runtimeagente.WorkerSnapshot, error) {
+	type workerMetadataPaths struct {
+		ManifestPath  string `json:"worker_manifest_path"`
+		StatusPath    string `json:"worker_status_path"`
+		HeartbeatPath string `json:"worker_heartbeat_path"`
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	var meta workerMetadataPaths
+	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(meta.ManifestPath) == "" && strings.TrimSpace(meta.StatusPath) == "" && strings.TrimSpace(meta.HeartbeatPath) == "" {
+		return nil, nil
+	}
+	snap := &runtimeagente.WorkerSnapshot{
+		ManifestPath:  strings.TrimSpace(meta.ManifestPath),
+		StatusPath:    strings.TrimSpace(meta.StatusPath),
+		HeartbeatPath: strings.TrimSpace(meta.HeartbeatPath),
+	}
+	if data, err := os.ReadFile(snap.ManifestPath); err == nil {
+		var manifest runtimeagente.WorkerManifest
+		if json.Unmarshal(data, &manifest) == nil {
+			snap.Manifest = &manifest
+		}
+	}
+	if data, err := os.ReadFile(snap.StatusPath); err == nil {
+		var status runtimeagente.WorkerStatus
+		if json.Unmarshal(data, &status) == nil {
+			snap.Status = &status
+		}
+	}
+	if data, err := os.ReadFile(snap.HeartbeatPath); err == nil {
+		var heartbeat runtimeagente.WorkerHeartbeat
+		if json.Unmarshal(data, &heartbeat) == nil {
+			snap.Heartbeat = &heartbeat
+		}
+	}
+	return snap, nil
 }
 
 func runtimeOrderSendInstructionPermiteReceiptLastOutput(handle *RuntimeHandle, snap *runtimeagente.WorkerSnapshot, payload map[string]any) bool {
@@ -7804,6 +7864,21 @@ func runtimeOrderSendInstructionPremiumActivityEvidence(runtime *RuntimeInstance
 	known, captured, err := controlruntime.CaptureTMUXPaneMetadata(strings.TrimSpace(handle.MetadataJSON))
 	if err != nil {
 		return false, "", time.Time{}, nil
+	}
+	if !known {
+		for _, candidate := range []*time.Time{
+			snap.LastProgressTime(),
+			snap.LastOutputTime(),
+		} {
+			if candidate == nil || candidate.IsZero() {
+				continue
+			}
+			receiptAt := candidate.UTC()
+			if runtimeOrderSendInstructionReceiptAtOrAfter(receiptAt, baseline) {
+				return true, "tmux_pane_activity", receiptAt, nil
+			}
+		}
+		return runtimeOrderSendInstructionTMUXTranscriptActivityEvidence(runtime, handle, baseline)
 	}
 	if !known || !runtimeTMUXPaneShowsInteractiveWork(captured) {
 		return runtimeOrderSendInstructionTMUXTranscriptActivityEvidence(runtime, handle, baseline)
