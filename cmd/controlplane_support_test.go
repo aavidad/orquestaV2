@@ -13409,6 +13409,83 @@ func TestRuntimeHandleListaParaDispatchSessionResumeTMUXAceptaWorkerWaitingInput
 	}
 }
 
+func TestRuntimeHandleListaParaDispatchSessionResumeTMUXAceptaWorkerRunningFrescoConExternalSession(t *testing.T) {
+	tmp := t.TempDir()
+	runDir := filepath.Join(tmp, "runtime", "Codex1", "session-resume-running-fresh")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir run dir: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	writeJSON := func(path string, payload map[string]any) {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	writeJSON(manifestPath, map[string]any{
+		"version":             1,
+		"agent":               "Codex1",
+		"driver":              "tmux_cli_session",
+		"transport":           "tmux",
+		"tmux_session":        "orq-codex1-running-fresh",
+		"tmux_pane_id":        "%79",
+		"external_session_id": "sess-codex1-running-fresh",
+		"status_path":         statusPath,
+		"heartbeat_path":      heartbeatPath,
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":               "running",
+		"updated_at":          now,
+		"alive":               true,
+		"external_session_id": "sess-codex1-running-fresh",
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":               true,
+		"heartbeat_at":        now,
+		"started_at":          now,
+		"external_session_id": "sess-codex1-running-fresh",
+	})
+
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex1-running-fresh",
+		"tmux_pane_id":          "%79",
+		"external_session_id":   "sess-codex1-running-fresh",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	sesionID := int64(79)
+	runtimeID := int64(91)
+	handle := &db.RuntimeHandle{
+		Agente:       "Codex1",
+		SesionID:     &sesionID,
+		RuntimeID:    &runtimeID,
+		Transporte:   "tmux",
+		HandleKind:   "session",
+		HandleRef:    "orq-codex1-running-fresh/%79",
+		Estado:       "activo",
+		MetadataJSON: string(metaJSON),
+	}
+	runtime := &db.RuntimeInstance{
+		ID:           runtimeID,
+		Agente:       "Codex1",
+		LogicalState: "ejecutando",
+		ProcessState: "running",
+	}
+
+	if !runtimeHandleListaParaDispatchSessionResumeTMUX(handle, runtime) {
+		t.Fatal("deberia despachar session_resume con worker running fresco y external_session_id viva")
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeNoDespachaSiWorkerRunningPeroRuntimeNoEsperandoIO(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()

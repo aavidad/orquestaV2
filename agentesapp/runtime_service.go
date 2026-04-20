@@ -140,6 +140,132 @@ type TickOutput struct {
 	CuotaPct             int            `json:"cuota_pct,omitempty"`
 }
 
+func cloneTickOutput(in *TickOutput) *TickOutput {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	if in.SesionActiva != nil {
+		s := *in.SesionActiva
+		out.SesionActiva = &s
+	}
+	if len(in.TareasActivas) > 0 {
+		out.TareasActivas = append([]LightItem(nil), in.TareasActivas...)
+	}
+	if len(in.PropuestasPendientes) > 0 {
+		out.PropuestasPendientes = append([]LightItem(nil), in.PropuestasPendientes...)
+	}
+	if len(in.PropuestasAbiertas) > 0 {
+		out.PropuestasAbiertas = append([]LightItem(nil), in.PropuestasAbiertas...)
+	}
+	return &out
+}
+
+func sessionResumePayloadHasMailbox(session *db.Sesion) bool {
+	if session == nil || strings.TrimSpace(session.ResumePayloadJSON) == "" {
+		return false
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(session.ResumePayloadJSON)), &payload); err != nil {
+		return false
+	}
+	items, _ := payload["mailbox"].([]any)
+	return len(items) > 0
+}
+
+func tickInputCacheable(input TickInput) bool {
+	return !input.Finalizado &&
+		strings.TrimSpace(input.Host) == "" &&
+		input.PID == 0 &&
+		strings.TrimSpace(input.Motivo) == "" &&
+		input.AckStartOrderID == 0 &&
+		input.AckBootstrapOrderID == 0 &&
+		len(input.AckMailboxIDs) == 0
+}
+
+func tickCacheKey(input TickInput) string {
+	return strings.TrimSpace(input.Agente) + "|" +
+		strings.TrimSpace(input.Proyecto) + "|" +
+		strconv.Itoa(input.CuotaPct)
+}
+
+func (s *Service) cachedTickOutput(key string) *TickOutput {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil
+	}
+	now := time.Now()
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	cached, ok := s.tickOutputCache[key]
+	if !ok || cached.output == nil || now.After(cached.expires) {
+		if ok {
+			delete(s.tickOutputCache, key)
+		}
+		return nil
+	}
+	return cloneTickOutput(cached.output)
+}
+
+func (s *Service) cacheTickOutput(key string, out *TickOutput) {
+	key = strings.TrimSpace(key)
+	if key == "" || out == nil {
+		return
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	s.tickOutputCache[key] = cachedTickOutput{
+		output:  cloneTickOutput(out),
+		expires: time.Now().Add(tickOutputCacheTTL),
+	}
+}
+
+func (s *Service) waitTickFlight(key string) (*TickOutput, error, bool) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil, nil, false
+	}
+	s.cacheMu.Lock()
+	flight := s.tickOutputFlight[key]
+	s.cacheMu.Unlock()
+	if flight == nil {
+		return nil, nil, false
+	}
+	<-flight.done
+	return cloneTickOutput(flight.output), flight.err, true
+}
+
+func (s *Service) beginTickFlight(key string) bool {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return false
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if _, ok := s.tickOutputFlight[key]; ok {
+		return false
+	}
+	s.tickOutputFlight[key] = &tickOutputFlight{done: make(chan struct{})}
+	return true
+}
+
+func (s *Service) endTickFlight(key string, out *TickOutput, err error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return
+	}
+	s.cacheMu.Lock()
+	flight := s.tickOutputFlight[key]
+	delete(s.tickOutputFlight, key)
+	s.cacheMu.Unlock()
+	if flight == nil {
+		return
+	}
+	flight.output = cloneTickOutput(out)
+	flight.err = err
+	close(flight.done)
+}
+
 func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	agenteNombre := strings.TrimSpace(input.Agente)
 	proyectoRef := strings.TrimSpace(input.Proyecto)
@@ -788,6 +914,30 @@ func (s *Service) getModelPolicyResolutionForPrepare(agente, proyectoSlug, perfi
 }
 
 func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
+	if tickInputCacheable(input) {
+		key := tickCacheKey(input)
+		if cached := s.cachedTickOutput(key); cached != nil {
+			tickDebugf("ProcessTick step=cache_hit agente=%s proyecto=%s", strings.TrimSpace(input.Agente), strings.TrimSpace(input.Proyecto))
+			return cached, nil
+		}
+		if !s.beginTickFlight(key) {
+			if waited, err, ok := s.waitTickFlight(key); ok {
+				tickDebugf("ProcessTick step=flight_join agente=%s proyecto=%s", strings.TrimSpace(input.Agente), strings.TrimSpace(input.Proyecto))
+				return waited, err
+			}
+		} else {
+			out, err := s.processTickUncached(input)
+			if err == nil && out != nil {
+				s.cacheTickOutput(key, out)
+			}
+			s.endTickFlight(key, out, err)
+			return cloneTickOutput(out), err
+		}
+	}
+	return s.processTickUncached(input)
+}
+
+func (s *Service) processTickUncached(input TickInput) (*TickOutput, error) {
 	agenteNombre := strings.TrimSpace(input.Agente)
 	proyectoRef := strings.TrimSpace(input.Proyecto)
 	if agenteNombre == "" || proyectoRef == "" {
@@ -1197,6 +1347,22 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 	detalleOperativo := strings.TrimSpace(row.DetalleOperativo)
 	runtimeBloqueado := estadoOperativoBloqueaContinuidad(estadoOperativo)
 	continuidadAccionablePendiente := row.MailboxActionablePending > 0 || row.MailboxContinuityPending > 0
+	resumePayloadContinuity := sessionResumePayloadHasMailbox(sesionActiva) &&
+		sesionActiva != nil &&
+		strings.TrimSpace(sesionActiva.ExternalSessionID) != ""
+	if !continuidadAccionablePendiente && sessionResumePayloadHasMailbox(sesionActiva) {
+		continuidadAccionablePendiente = true
+	}
+	if tieneTrabajo &&
+		runtimeBloqueado &&
+		continuidadAccionablePendiente &&
+		((row.DurableContinuityPending(now) || row.MailboxContinuityPending > 0) &&
+			row.WorkerSupportsContinuityRecovery(now) || resumePayloadContinuity) {
+		runtimeBloqueado = false
+		if strings.TrimSpace(detalleOperativo) == "" {
+			detalleOperativo = "continuidad session_resume pendiente"
+		}
+	}
 	if tieneTrabajo &&
 		strings.EqualFold(estadoOperativo, "atascado") &&
 		strings.EqualFold(strings.TrimSpace(row.WorkerState), "ready") &&

@@ -7848,8 +7848,15 @@ func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, r
 	if ready || state == "waiting_input" {
 		return true
 	}
-	if state == "working" && runtimeTMUXSessionResumePuedeDespacharPorRuntimeCanonico(runtime) {
-		return true
+	if state == "working" {
+		if runtimeTMUXSessionResumePuedeDespacharPorRuntimeCanonico(runtime) {
+			return true
+		}
+		if view.Alive && !view.HeartbeatStale &&
+			strings.TrimSpace(view.ExternalSessionID) != "" &&
+			(runtime == nil || strings.EqualFold(strings.TrimSpace(runtime.ProcessState), "running")) {
+			return true
+		}
 	}
 	return false
 }

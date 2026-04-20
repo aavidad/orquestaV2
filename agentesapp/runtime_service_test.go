@@ -459,6 +459,136 @@ func TestBuildTickOutputNoContinuaSiRuntimeBloqueado(t *testing.T) {
 	}
 }
 
+func TestBuildTickOutputConRuntimeBloqueadoYPendienteDurableSessionResumeContinuaTrabajo(t *testing.T) {
+	now := time.Now().UTC()
+	readyAt := now.Add(-10 * time.Minute)
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	workQueuePath := filepath.Join(tmp, "work-queue.json")
+	for path, raw := range map[string]map[string]any{
+		manifestPath: {
+			"driver":                "tmux_cli_session",
+			"transport":             "tmux",
+			"tmux_session":          "orq-codex1-runtime-bloqueado",
+			"tmux_pane_id":          "%9",
+			"mailbox_delivery_mode": "session_resume",
+			"external_session_id":   "sess-bloqueada",
+		},
+		statusPath: {
+			"state":               "ready",
+			"updated_at":          now.Format(time.RFC3339Nano),
+			"alive":               true,
+			"ready_at":            readyAt.Format(time.RFC3339Nano),
+			"last_progress_at":    now.Add(-45 * time.Second).Format(time.RFC3339Nano),
+			"external_session_id": "sess-bloqueada",
+		},
+		heartbeatPath: {
+			"alive":               true,
+			"heartbeat_at":        now.Format(time.RFC3339Nano),
+			"ready_at":            readyAt.Format(time.RFC3339Nano),
+			"external_session_id": "sess-bloqueada",
+		},
+		workQueuePath: {
+			"version":    1,
+			"updated_at": now.Format(time.RFC3339Nano),
+			"current": map[string]any{
+				"mailbox_id":  91,
+				"kind":        "autonomia",
+				"action":      "continuar_trabajo",
+				"task_id":     42,
+				"state":       "pending",
+				"title":       "continuar frente",
+				"recorded_at": now.Format(time.RFC3339Nano),
+			},
+		},
+	} {
+		data, err := json.Marshal(raw)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"trace_dir":             tmp,
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+		"mailbox_delivery_mode": "session_resume",
+		"external_session_id":   "sess-bloqueada",
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex1", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex1"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente activo Codex"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 52, Agente: "Codex1", ProyectoID: int64Ptr(7), LogicalState: "cerrado", ProcessState: "running", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 62, Agente: "Codex1", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(52), Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+	}
+	svc := NewService(store, nil)
+	proyecto := &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()}
+
+	out, err := svc.buildTickOutput("Codex1", proyecto, nil, 0)
+	if err != nil {
+		t.Fatalf("buildTickOutput: %v", err)
+	}
+	if out.AccionRecomendada != "continuar_trabajo" || out.DebePausar {
+		t.Fatalf("deberia priorizar continuidad durable session_resume: %+v", out)
+	}
+}
+
+func TestBuildTickOutputConMailboxEnResumePayloadContinuaTrabajo(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex1", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex1"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente activo Codex"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 52, Agente: "Codex1", ProyectoID: int64Ptr(7), LogicalState: "cerrado", ProcessState: "running", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 62, Agente: "Codex1", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(52), Estado: "activo", UpdatedAt: now, MetadataJSON: `{"driver":"tmux_cli_session","mailbox_delivery_mode":"session_resume","external_session_id":"sess-codex1"}`},
+		},
+	}
+	svc := NewService(store, nil)
+	proyecto := &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()}
+	sesionActiva := &db.Sesion{
+		ID:                11,
+		Agente:            "Codex1",
+		ProyectoID:        int64Ptr(7),
+		Estado:            "activa",
+		ExternalSessionID: "sess-codex1",
+		ResumePayloadJSON: `{"mailbox":[{"id":91,"kind":"autonomia","payload":{"accion":"continuar_trabajo"}}]}`,
+	}
+
+	out, err := svc.buildTickOutput("Codex1", proyecto, sesionActiva, 0)
+	if err != nil {
+		t.Fatalf("buildTickOutput: %v", err)
+	}
+	if out.AccionRecomendada != "continuar_trabajo" || out.DebePausar {
+		t.Fatalf("deberia reutilizar mailbox del resume payload como continuidad: %+v", out)
+	}
+}
+
 func TestBuildTickOutputConRuntimeSanoNoReleeFallbackPorProyecto(t *testing.T) {
 	now := time.Now().UTC()
 	store := &fakeStore{
