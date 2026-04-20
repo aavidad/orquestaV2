@@ -250,6 +250,9 @@ func UpsertRuntimeHandleDesdeSesion(s *Sesion) error {
 	if err != nil {
 		return err
 	}
+	if err := normalizarHandleRefSesionRuntimeLigado(s.ID); err != nil {
+		return err
+	}
 	runtimeHandleHotReset()
 	if h.Estado == "activo" || h.Estado == "pausado" {
 		_, err = DB.Exec(`
