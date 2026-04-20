@@ -634,7 +634,11 @@ func PurgarRuntimeHistorico() (*PurgaRuntimeHistoricoResultado, error) {
 		return nil, err
 	}
 	if err := validarPurgadoRuntimeHandles(handleIDs); err != nil {
-		return nil, err
+		if runtimeHistoricoHandlePurgeSkippable(err) {
+			handleIDs = nil
+		} else {
+			return nil, err
+		}
 	}
 	if err := validarPurgadoRuntimeOrders(orderIDs); err != nil {
 		return nil, err
@@ -707,6 +711,13 @@ func PurgarRuntimeHistorico() (*PurgaRuntimeHistoricoResultado, error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+func runtimeHistoricoHandlePurgeSkippable(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(strings.TrimSpace(err.Error())), "no se pueden purgar handles con runtime orders vivas asociadas")
 }
 
 func runtimeHistoricoRetentionCutoff(now time.Time, minutesKey, hoursKey string, fallbackHours int64) time.Time {
