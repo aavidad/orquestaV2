@@ -30665,6 +30665,115 @@ func TestBloquearTareasActivasPorCuotaAutonomiaUsaHandoffSiHayRelevoSano(t *test
 	}
 }
 
+func TestPersistirPausaPorCuotaAutonomiaRelevaAunqueYaEsteEnEnfriamiento(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-cuota-enfriamiento",
+		Nombre:  "Orquestador Cuota Enfriamiento",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"CodexBloqueado", "CodexLibre"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente bounded"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+	now := time.Now().UTC()
+	writeWorkerMeta := func(dir string) string {
+		t.Helper()
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir trace dir: %v", err)
+		}
+		statusPath := filepath.Join(dir, "status.json")
+		heartbeatPath := filepath.Join(dir, "heartbeat.json")
+		if err := os.WriteFile(statusPath, []byte(`{"state":"running","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+			t.Fatalf("write status: %v", err)
+		}
+		if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+			t.Fatalf("write heartbeat: %v", err)
+		}
+		metaJSON, err := json.Marshal(map[string]any{
+			"worker_status_path":    statusPath,
+			"worker_heartbeat_path": heartbeatPath,
+		})
+		if err != nil {
+			t.Fatalf("marshal metadata: %v", err)
+		}
+		return string(metaJSON)
+	}
+	for _, item := range []struct {
+		agente string
+		dir    string
+	}{
+		{agente: "CodexBloqueado", dir: filepath.Join(tmp, "runtime", "codex-bloqueado-enfriamiento")},
+		{agente: "CodexLibre", dir: filepath.Join(tmp, "runtime", "codex-libre-enfriamiento")},
+	} {
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      item.agente,
+			ProyectoID:  &proyectoID,
+			CWD:         filepath.Join(tmp, "orquestador"),
+			Herramienta: "codex-cli",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion %s: %v", item.agente, err)
+		}
+		handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+		if err != nil || handle == nil {
+			t.Fatalf("handle %s: %+v err=%v", item.agente, handle, err)
+		}
+		runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
+		if err != nil || runtimeInst == nil {
+			t.Fatalf("runtime %s: %+v err=%v", item.agente, runtimeInst, err)
+		}
+		metaJSON := writeWorkerMeta(item.dir)
+		if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, metaJSON, handle.ID); err != nil {
+			t.Fatalf("activar handle %s: %v", item.agente, err)
+		}
+		if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='activo', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeInst.ID); err != nil {
+			t.Fatalf("activar runtime %s: %v", item.agente, err)
+		}
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='cuota visible agotada', reanimar_at=datetime('now','+2 hours') WHERE nombre='CodexBloqueado'`); err != nil {
+		t.Fatalf("marcar cuota agotada: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Relevar aunque ya este enfriado",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexBloqueado"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexBloqueado"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	if err := persistirPausaPorCuotaAutonomia("CodexBloqueado", "cuota visible agotada"); err != nil {
+		t.Fatalf("persistirPausaPorCuotaAutonomia: %v", err)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoAsignada || tarea.Agente == nil || *tarea.Agente != "CodexLibre" {
+		t.Fatalf("la tarea deberia quedar relevada aunque el agente ya estuviera enfriado: %+v", tarea)
+	}
+}
+
 func TestProcesarAgentesDegradadosAutonomiaBatchNoSaturaUnicoRelevoSano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	autonomiaDegradedTaskGate.Reset()

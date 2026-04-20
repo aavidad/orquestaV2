@@ -13457,7 +13457,7 @@ func persistirPausaPorCuotaAutonomia(agente, motivo string) error {
 		return nil
 	}
 	if infoAgente != nil && strings.EqualFold(strings.TrimSpace(infoAgente.EstadoCuota), "enfriamiento") && infoAgente.ReanimarAt != nil && infoAgente.ReanimarAt.After(time.Now().UTC()) {
-		return nil
+		return bloquearTareasActivasPorCuotaAutonomia(agente, motivo)
 	}
 	p, _, err := db.UltimoPresupuestoAgente(agente)
 	if err != nil && err != sql.ErrNoRows {
