@@ -11,6 +11,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -428,15 +429,48 @@ func asegurarEntornoBaseOrquesta(env map[string]string, vars map[string]string) 
 	if env == nil {
 		return
 	}
-	if strings.TrimSpace(env["ORQUESTA_SERVER_URL"]) == "" {
-		if value := strings.TrimSpace(rpclocal.ResolveServerAddr()); value != "" {
-			env["ORQUESTA_SERVER_URL"] = value
+	resolvedServerURL := strings.TrimSpace(rpclocal.ResolveServerAddr())
+	currentServerURL := strings.TrimSpace(env["ORQUESTA_SERVER_URL"])
+	if currentServerURL == "" {
+		if resolvedServerURL != "" {
+			env["ORQUESTA_SERVER_URL"] = resolvedServerURL
 		}
+	} else if shouldReplaceResidualLocalServerURL(currentServerURL, resolvedServerURL) {
+		env["ORQUESTA_SERVER_URL"] = resolvedServerURL
 	}
 	if strings.TrimSpace(env["ORQUESTA_BIN"]) == "" {
 		if value := strings.TrimSpace(vars["orquesta_executable"]); value != "" {
 			env["ORQUESTA_BIN"] = value
 		}
+	}
+}
+
+func shouldReplaceResidualLocalServerURL(current, resolved string) bool {
+	current = strings.TrimRight(strings.TrimSpace(current), "/")
+	resolved = strings.TrimRight(strings.TrimSpace(resolved), "/")
+	if current == "" || resolved == "" || strings.EqualFold(current, resolved) {
+		return false
+	}
+	if !isLocalServerURL(current) || !isLocalServerURL(resolved) {
+		return false
+	}
+	return true
+}
+
+func isLocalServerURL(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(parsed.Hostname())) {
+	case "127.0.0.1", "localhost", "::1":
+		return true
+	default:
+		return false
 	}
 }
 
