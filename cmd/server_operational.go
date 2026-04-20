@@ -8,21 +8,25 @@ import (
 )
 
 type serverOperationalInfo struct {
-	State            string `json:"state"`
-	Operational      bool   `json:"operational"`
-	Reason           string `json:"reason,omitempty"`
-	Generated        string `json:"generated,omitempty"`
-	RegisteredAgents int    `json:"registeredAgents"`
-	ActiveAgents     int    `json:"activeAgents"`
-	WorkingAgents    int    `json:"workingAgents"`
-	SaturatedAgents  int    `json:"saturatedAgents"`
-	StuckAgents      int    `json:"stuckAgents"`
-	AuthAgents       int    `json:"authAgents"`
-	QuotaAgents      int    `json:"quotaAgents"`
-	PausedAgents     int    `json:"pausedAgents"`
-	TasksInProgress  int    `json:"tasksInProgress"`
-	ReservedTasks    int    `json:"reservedTasks"`
-	BlockedTasks     int    `json:"blockedTasks"`
+	State             string `json:"state"`
+	Operational       bool   `json:"operational"`
+	Reason            string `json:"reason,omitempty"`
+	Generated         string `json:"generated,omitempty"`
+	RegisteredAgents  int    `json:"registeredAgents"`
+	ActiveAgents      int    `json:"activeAgents"`
+	WorkingAgents     int    `json:"workingAgents"`
+	SaturatedAgents   int    `json:"saturatedAgents"`
+	StuckAgents       int    `json:"stuckAgents"`
+	AuthAgents        int    `json:"authAgents"`
+	QuotaAgents       int    `json:"quotaAgents"`
+	PausedAgents      int    `json:"pausedAgents"`
+	TasksInProgress   int    `json:"tasksInProgress"`
+	ReservedTasks     int    `json:"reservedTasks"`
+	BlockedTasks      int    `json:"blockedTasks"`
+	DispatchPending   int    `json:"dispatchPending"`
+	DispatchNotified  int    `json:"dispatchNotified"`
+	DispatchFailed    int    `json:"dispatchFailed"`
+	DispatchConfirmed int    `json:"dispatchConfirmed"`
 }
 
 func registeredAgentCountFromStatus(status apiStatusResponse) int {
@@ -98,21 +102,25 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 	}
 
 	return serverOperationalInfo{
-		State:            state,
-		Operational:      operational,
-		Reason:           reason,
-		Generated:        status.Generado,
-		RegisteredAgents: registeredAgentCountFromStatus(status),
-		ActiveAgents:     activeAgents,
-		WorkingAgents:    workingAgents,
-		SaturatedAgents:  saturatedAgents,
-		StuckAgents:      stuckAgents,
-		AuthAgents:       authAgents,
-		QuotaAgents:      quotaAgents,
-		PausedAgents:     pausedAgents,
-		TasksInProgress:  tasksInProgress,
-		ReservedTasks:    reservedTasks,
-		BlockedTasks:     blockedTasks,
+		State:             state,
+		Operational:       operational,
+		Reason:            reason,
+		Generated:         status.Generado,
+		RegisteredAgents:  registeredAgentCountFromStatus(status),
+		ActiveAgents:      activeAgents,
+		WorkingAgents:     workingAgents,
+		SaturatedAgents:   saturatedAgents,
+		StuckAgents:       stuckAgents,
+		AuthAgents:        authAgents,
+		QuotaAgents:       quotaAgents,
+		PausedAgents:      pausedAgents,
+		TasksInProgress:   tasksInProgress,
+		ReservedTasks:     reservedTasks,
+		BlockedTasks:      blockedTasks,
+		DispatchPending:   status.DeudaDispatch.Pendientes,
+		DispatchNotified:  status.DeudaDispatch.Notificadas,
+		DispatchFailed:    status.DeudaDispatch.Fallidas,
+		DispatchConfirmed: status.DeudaDispatch.WorkConfirmed,
 	}
 }
 
@@ -138,6 +146,9 @@ func formatServerOperationalSummary(info *serverOperationalInfo) string {
 	}
 	if info.ReservedTasks > 0 {
 		parts = append(parts, fmt.Sprintf("%d reservadas", info.ReservedTasks))
+	}
+	if info.DispatchConfirmed > 0 || info.DispatchPending > 0 || info.DispatchNotified > 0 || info.DispatchFailed > 0 {
+		parts = append(parts, fmt.Sprintf("dispatch p:%d n:%d f:%d c:%d", info.DispatchPending, info.DispatchNotified, info.DispatchFailed, info.DispatchConfirmed))
 	}
 	if info.TasksInProgress > 0 {
 		parts = append(parts, fmt.Sprintf("%d en_progreso", info.TasksInProgress))

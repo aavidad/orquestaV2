@@ -663,6 +663,9 @@ func TestAPIServerOperationalExponeResumenOperativo(t *testing.T) {
 	if strings.TrimSpace(payload.State) == "" || strings.TrimSpace(payload.Reason) == "" {
 		t.Fatalf("estado operativo incompleto: %+v", payload)
 	}
+	if payload.DispatchPending < 0 || payload.DispatchNotified < 0 || payload.DispatchFailed < 0 || payload.DispatchConfirmed < 0 {
+		t.Fatalf("contadores dispatch invalidos: %+v", payload)
+	}
 }
 
 func TestAPIStatusExponeResumenOperativoCompat(t *testing.T) {

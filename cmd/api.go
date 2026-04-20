@@ -1993,6 +1993,7 @@ type apiOpenClawAgentLite struct {
 type apiOpenClawStatusLite struct {
 	Generado            string                     `json:"generado,omitempty"`
 	TareasPorEstado     map[string]int             `json:"tareasPorEstado,omitempty"`
+	DeudaDispatch       deudaDispatchResumen       `json:"deudaDispatch,omitempty"`
 	AgentesActivos      []apiOpenClawAgentLite     `json:"agentesActivos,omitempty"`
 	AgentesTrabajando   []apiOpenClawAgentLite     `json:"agentesTrabajando,omitempty"`
 	AgentesAuthManual   []apiOpenClawAgentLite     `json:"agentesAuthManual,omitempty"`
@@ -2055,6 +2056,7 @@ func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, 
 	return apiOpenClawStatusLite{
 		Generado:            status.Generado,
 		TareasPorEstado:     status.TareasPorEstado,
+		DeudaDispatch:       status.DeudaDispatch,
 		AgentesActivos:      compactOpenClawAgents(status.AgentesActivos, status.TareasActivas),
 		AgentesTrabajando:   compactOpenClawAgents(status.AgentesTrabajando, status.TareasActivas),
 		AgentesAuthManual:   compactOpenClawAgents(status.AgentesAuthManual, status.TareasActivas),
