@@ -158,6 +158,9 @@ func TestResumirAutonomiaRowsNoCuentaResumePayloadAbsorbidoComoPendiente(t *test
 	if got.Supervisando != 1 || got.Continuando != 2 {
 		t.Fatalf("resumen autonomia inesperado: %+v", got)
 	}
+	if got.WorkConfirmed != 0 {
+		t.Fatalf("no deberia contar work_confirmed en este caso: %+v", got)
+	}
 	if got.ContinuidadPendiente != 1 {
 		t.Fatalf("continuidad pendiente deberia contar solo deuda viva: %+v", got)
 	}
@@ -196,6 +199,9 @@ func TestResumirAutonomiaRowsCuentaSupervisorPorRolAunqueUltimaAccionSeaContinua
 	got := resumirAutonomiaRows(rows, now)
 	if got.Supervisando != 1 || got.Continuando != 1 {
 		t.Fatalf("deberia distinguir supervisor operativo del resto: %+v", got)
+	}
+	if got.WorkConfirmed != 2 {
+		t.Fatalf("deberia contar work_confirmed desde los rows: %+v", got)
 	}
 }
 
@@ -242,6 +248,9 @@ func TestResumirAutonomiaRowsNoCuentaWorkQueueYaEnRunningComoPendiente(t *testin
 	if got.Continuando != 3 {
 		t.Fatalf("resumen autonomia inesperado: %+v", got)
 	}
+	if got.WorkConfirmed != 0 {
+		t.Fatalf("ninguna work_queue deberia estar confirmada aqui: %+v", got)
+	}
 	if got.ContinuidadPendiente != 1 {
 		t.Fatalf("solo la work_queue no absorbida deberia contar como pendiente: %+v", got)
 	}
@@ -270,6 +279,31 @@ func TestResumirAutonomiaRowsCuentaWorkQueueConActividadYaStaleComoPendiente(t *
 	got := resumirAutonomiaRows(rows, now)
 	if got.ContinuidadPendiente != 1 {
 		t.Fatalf("la actividad vieja no deberia absorber continuidad: %+v", got)
+	}
+}
+
+func TestResumirAutonomiaRowsNoCuentaWorkConfirmedComoContinuidadPendiente(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	rows := []agentesapp.Row{
+		{
+			LastAutonomyAction:       "continuar_trabajo",
+			LastAutonomySource:       "work_queue",
+			LastAutonomyState:        "work_confirmed",
+			MailboxContinuityPending: 1,
+			OpenTasks:                1,
+			WorkerAlive:              true,
+			WorkerHeartbeat:          ptrTimeStatusDispatch(now),
+		},
+	}
+
+	got := resumirAutonomiaRows(rows, now)
+	if got.WorkConfirmed != 1 {
+		t.Fatalf("deberia contar work_confirmed: %+v", got)
+	}
+	if got.ContinuidadPendiente != 0 {
+		t.Fatalf("work_confirmed no deberia seguir contando continuidad: %+v", got)
 	}
 }
 

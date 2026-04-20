@@ -352,11 +352,12 @@ func renderStatusSummary(ctx *statusContext) {
 			resumen.DeudaDispatch.WorkConfirmed,
 		)
 	}
-	if resumen.Autonomia.Supervisando > 0 || resumen.Autonomia.Continuando > 0 || resumen.Autonomia.ContinuidadPendiente > 0 {
-		fmt.Printf("🤖 Autonomía: supervisando %d · continuando %d · continuidad %d\n\n",
+	if resumen.Autonomia.Supervisando > 0 || resumen.Autonomia.Continuando > 0 || resumen.Autonomia.ContinuidadPendiente > 0 || resumen.Autonomia.WorkConfirmed > 0 {
+		fmt.Printf("🤖 Autonomía: supervisando %d · continuando %d · continuidad %d · confirmados %d\n\n",
 			resumen.Autonomia.Supervisando,
 			resumen.Autonomia.Continuando,
 			resumen.Autonomia.ContinuidadPendiente,
+			resumen.Autonomia.WorkConfirmed,
 		)
 	}
 

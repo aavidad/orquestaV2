@@ -3979,6 +3979,9 @@ func (r Row) EffectiveContinuityPending(now time.Time) bool {
 	}
 	source := strings.ToLower(strings.TrimSpace(r.LastAutonomySource))
 	state := strings.ToLower(strings.TrimSpace(r.LastAutonomyState))
+	if state == "work_confirmed" {
+		return false
+	}
 	if source == "resume_payload_mailbox" && r.WorkerFresh(now) {
 		if r.OpenTasks > 0 || r.supervisorAutonomyLive(now) {
 			return false

@@ -59,6 +59,7 @@ type autonomiaResumen struct {
 	Supervisando         int `json:"supervising"`
 	Continuando          int `json:"continuing"`
 	ContinuidadPendiente int `json:"continuity_pending"`
+	WorkConfirmed        int `json:"work_confirmed"`
 }
 
 func normalizeDispatchDebtTotal(out deudaDispatchResumen) deudaDispatchResumen {
@@ -210,6 +211,9 @@ func resumirAutonomiaRows(rows []agentesapp.Row, now time.Time) autonomiaResumen
 			out.Supervisando++
 		case strings.TrimSpace(row.LastAutonomyAction) == "continuar_trabajo":
 			out.Continuando++
+		}
+		if strings.EqualFold(strings.TrimSpace(row.LastAutonomyState), "work_confirmed") {
+			out.WorkConfirmed++
 		}
 		if row.EffectiveContinuityPending(now) {
 			out.ContinuidadPendiente++
