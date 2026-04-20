@@ -8393,6 +8393,28 @@ func registrarDispatchLedgerRuntimeOrder(order *RuntimeOrder, payload map[string
 	})
 }
 
+func registrarWorkQueueRuntimeOrder(order *RuntimeOrder, payload map[string]any, state, reason string) error {
+	if order == nil || payload == nil {
+		return nil
+	}
+	handle, err := resolverHandleParaOrden(order)
+	if err != nil || handle == nil {
+		return err
+	}
+	return controlruntime.RecordWorkQueueFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON), controlruntime.WorkQueueRecordInput{
+		MailboxID:       runtimeOrderSendInstructionMailboxID(payload),
+		RuntimeOrderID:  order.ID,
+		Kind:            strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")),
+		Action:          strings.TrimSpace(stringFromMap(payload, "accion", "")),
+		TaskID:          int64FromAny(payload["tarea_id"]),
+		VerificationKey: strings.TrimSpace(stringFromMap(payload, "verification_key", "")),
+		State:           strings.TrimSpace(state),
+		Title:           strings.TrimSpace(runtimeOrderSendInstructionTexto(payload)),
+		Reason:          strings.TrimSpace(reason),
+		RecordedAt:      time.Now().UTC(),
+	})
+}
+
 func actualizarRuntimeOrderPayloadJSON(orderID int64, payload map[string]any) error {
 	if orderID <= 0 || payload == nil {
 		return nil
@@ -8695,7 +8717,10 @@ func retenerRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, pay
 	if err := runtimeOrdersHotIndexSyncByID(order.ID); err != nil {
 		return err
 	}
-	return registrarDispatchLedgerRuntimeOrder(order, payload, "pending", "queued", "", reason)
+	if err := registrarDispatchLedgerRuntimeOrder(order, payload, "pending", "queued", "", reason); err != nil {
+		return err
+	}
+	return registrarWorkQueueRuntimeOrder(order, payload, "queued", reason)
 }
 
 func retenerRuntimeOrderSendInstructionNotificada(order *RuntimeOrder, payload map[string]any, reason string, notifiedAt time.Time) error {
@@ -8757,7 +8782,10 @@ func retenerRuntimeOrderSendInstructionNotificada(order *RuntimeOrder, payload m
 	if err := runtimeOrdersHotIndexSyncByID(order.ID); err != nil {
 		return err
 	}
-	return registrarDispatchLedgerRuntimeOrder(order, payload, "notified", "notified", "", reason)
+	if err := registrarDispatchLedgerRuntimeOrder(order, payload, "notified", "notified", "", reason); err != nil {
+		return err
+	}
+	return registrarWorkQueueRuntimeOrder(order, payload, "notified", reason)
 }
 
 func runtimeOrderYaTieneEntregaValida(order *RuntimeOrder) bool {
@@ -8803,6 +8831,13 @@ func completarRuntimeOrderSendInstructionEntregadaPorReceipt(order *RuntimeOrder
 		return err
 	}
 	if err := registrarDispatchLedgerRuntimeOrder(order, payload, "delivered", "delivered", receiptSource, "receipt confirmado"); err != nil {
+		return err
+	}
+	workReason := strings.TrimSpace(receiptSource)
+	if workReason == "" {
+		workReason = "receipt_confirmado"
+	}
+	if err := registrarWorkQueueRuntimeOrder(order, payload, "delivered", workReason); err != nil {
 		return err
 	}
 	runtimeOrderSendInstructionAutoStopLocalOllama(order, payload)
@@ -8939,7 +8974,10 @@ func completarRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, p
 	if err := MarcarRuntimeOrderEstado(order.ID, "completada", resultado, ""); err != nil {
 		return err
 	}
-	return registrarDispatchLedgerRuntimeOrder(order, payload, "pending", "queued", "", reason)
+	if err := registrarDispatchLedgerRuntimeOrder(order, payload, "pending", "queued", "", reason); err != nil {
+		return err
+	}
+	return registrarWorkQueueRuntimeOrder(order, payload, "queued", reason)
 }
 
 func gestionarBackoffProveedorRuntimeOrderSendInstruction(order *RuntimeOrder, payload map[string]any, runtimeErr error) (bool, error) {
