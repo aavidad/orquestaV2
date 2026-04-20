@@ -11112,6 +11112,30 @@ func escalarTareasWorkerAtascado(row agentesapp.Row, rows []agentesapp.Row, now 
 			procesadas++
 			continue
 		}
+		var proyecto *db.Proyecto
+		if actual.ProyectoID != nil && *actual.ProyectoID > 0 {
+			proyecto = &db.Proyecto{ID: *actual.ProyectoID}
+		}
+		if handoff, err := intentarHandoffAutonomoTarea(
+			proyecto,
+			actual.ID,
+			agente,
+			relevo,
+			"",
+			"atasco_persistente",
+			fmt.Sprintf("Continuidad automática tras atasco persistente en tarea #%d", actual.ID),
+			fmt.Sprintf("Handoff automático desde %s a %s por atasco persistente tras reinicios recientes", agente, relevo),
+			fmt.Sprintf("resuelto por handoff automático a %s", relevo),
+		); err != nil {
+			return procesadas, err
+		} else if handoff {
+			if openTasksProjected[agente] > 0 {
+				openTasksProjected[agente]--
+			}
+			openTasksProjected[relevo]++
+			procesadas++
+			continue
+		}
 		if err := reasignarYArrancarTareaAutonomia(actual.ID, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s por atasco persistente tras reinicios recientes", agente, relevo)); err != nil {
 			return procesadas, err
 		}

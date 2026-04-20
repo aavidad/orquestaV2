@@ -32752,14 +32752,14 @@ func TestProcesarAgentesDegradadosAutonomiaBatchEscalaTareaActivaSiWorkerTMUXAta
 		t.Fatalf("procesar agentes degradados: %v", err)
 	}
 	if procesadas != 1 {
-		t.Fatalf("deberia reasignar la tarea activa del worker reincidente, got=%d", procesadas)
+		t.Fatalf("deberia relevar la tarea activa del worker reincidente, got=%d", procesadas)
 	}
 	tarea, err := db.GetTarea(tareaID)
 	if err != nil {
 		t.Fatalf("get tarea: %v", err)
 	}
-	if tarea.Estado != db.EstadoEnProgreso || tarea.Agente == nil || *tarea.Agente != "CodexLibre" {
-		t.Fatalf("la tarea deberia quedar reasignada al relevo sano: %+v", tarea)
+	if tarea.Estado != db.EstadoAsignada || tarea.Agente == nil || *tarea.Agente != "CodexLibre" {
+		t.Fatalf("la tarea deberia quedar asignada al relevo via handoff: %+v", tarea)
 	}
 	agente := "CodexLibre"
 	estado := "pendiente"
@@ -32767,11 +32767,11 @@ func TestProcesarAgentesDegradadosAutonomiaBatchEscalaTareaActivaSiWorkerTMUXAta
 	if err != nil {
 		t.Fatalf("listar runtime orders relevo: %v", err)
 	}
-	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "nudge" {
-		t.Fatalf("deberia encolar continuidad al relevo tras atasco persistente: %+v", orders)
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "handoff" {
+		t.Fatalf("deberia encolar handoff al relevo tras atasco persistente: %+v", orders)
 	}
-	if !strings.Contains(orders[0].PayloadJSON, `"accion":"continuar_trabajo"`) {
-		t.Fatalf("payload nudge inesperado: %s", orders[0].PayloadJSON)
+	if !strings.Contains(orders[0].PayloadJSON, `"agente_origen":"Codex7"`) || !strings.Contains(orders[0].PayloadJSON, `"agente_destino":"CodexLibre"`) {
+		t.Fatalf("payload handoff inesperado: %s", orders[0].PayloadJSON)
 	}
 }
 
