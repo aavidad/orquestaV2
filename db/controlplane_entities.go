@@ -801,6 +801,32 @@ func listarRuntimeOrdersPurgablesHistoricos(estados []string, cutoff time.Time) 
 	return ids, rows.Err()
 }
 
+func listarRuntimeMailboxPurgablesHistoricos(estados []string, cutoff time.Time) ([]int64, error) {
+	query := `SELECT id FROM runtime_mailbox WHERE estado IN (` + runtimeSQLPlaceholders(len(estados)) + `)
+		AND runtime_order_id IS NULL
+		AND COALESCE(consumed_at, delivered_at, created_at) < ?
+		ORDER BY id DESC`
+	args := make([]any, 0, len(estados)+1)
+	for _, estado := range estados {
+		args = append(args, estado)
+	}
+	args = append(args, cutoff.UTC())
+	rows, err := DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func listarRuntimeInstancesPurgablesHistoricos(estados []string, cutoff time.Time) ([]int64, error) {
 	query := `SELECT id FROM runtime_instances WHERE logical_state IN (` + runtimeSQLPlaceholders(len(estados)) + `)
 		AND COALESCE(last_heartbeat_at, last_event_at, updated_at, created_at) < ?
