@@ -673,6 +673,16 @@ func PurgarRuntimeHistorico() (*PurgaRuntimeHistoricoResultado, error) {
 	}
 	if len(orderIDs) > 0 {
 		args := int64SliceToAny(orderIDs)
+		argsMailboxDelete := make([]any, 0, len(orderIDs)+1)
+		argsMailboxDelete = append(argsMailboxDelete, args...)
+		argsMailboxDelete = append(argsMailboxDelete, ordersCutoff.UTC())
+		if _, err := tx.Exec(`DELETE FROM runtime_mailbox
+			WHERE runtime_order_id IN (`+runtimeSQLPlaceholders(len(orderIDs))+`)
+			  AND estado IN ('consumido','cancelado','expirado')
+			  AND COALESCE(consumed_at, delivered_at, created_at) < ?`, argsMailboxDelete...); err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
 		if _, err := tx.Exec(`UPDATE runtime_mailbox SET runtime_order_id = NULL WHERE runtime_order_id IN (`+runtimeSQLPlaceholders(len(orderIDs))+`)`, args...); err != nil {
 			_ = tx.Rollback()
 			return nil, err
