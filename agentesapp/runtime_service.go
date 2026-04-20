@@ -947,6 +947,7 @@ func (s *Service) buildOperationalRowContextForTick(agenteNombre string, proyect
 			row.WorkerCanSendInput = view.CanSendInput
 			row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
 			row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
+			applyDurableWorkQueueToTickRow(&row, view)
 		}
 	}
 
@@ -974,6 +975,24 @@ func (s *Service) buildOperationalRowContextForTick(agenteNombre string, proyect
 	}
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
 	return row, asignaciones, tareas, nil
+}
+
+func applyDurableWorkQueueToTickRow(row *Row, view *runtimeagente.WorkerStatusView) {
+	if row == nil || view == nil {
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(view.WorkQueueState)) {
+	case "", "consumed", "completed", "superseded", "cancelled", "canceled":
+		return
+	}
+	row.MailboxPending++
+	switch strings.TrimSpace(view.WorkQueueKind) {
+	case "autonomia", "nudge", "watchdog", db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
+		row.MailboxActionablePending++
+		row.MailboxContinuityPending++
+	case "pipeline_local", "instruction":
+		row.MailboxActionablePending++
+	}
 }
 
 func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, sesionActiva *db.Sesion, cuotaPct int) (*TickOutput, error) {

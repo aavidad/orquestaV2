@@ -1545,7 +1545,8 @@ func (s *Service) recordDispatchLedgerCompletion(order *db.RuntimeOrder, payload
 	if handle == nil {
 		return nil
 	}
-	return controlruntime.RecordDispatchLedgerFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON), controlruntime.DispatchLedgerRecordInput{
+	metaRaw := strings.TrimSpace(handle.MetadataJSON)
+	if err := controlruntime.RecordDispatchLedgerFromMetadataJSON(metaRaw, controlruntime.DispatchLedgerRecordInput{
 		RuntimeOrderID:           order.ID,
 		MailboxID:                int64Any(payload["mailbox_id"]),
 		HandleID:                 handle.ID,
@@ -1556,7 +1557,10 @@ func (s *Service) recordDispatchLedgerCompletion(order *db.RuntimeOrder, payload
 		ReceiptSource:            strings.TrimSpace(receiptSource),
 		Reason:                   strings.TrimSpace(reason),
 		RecordedAt:               time.Now().UTC(),
-	})
+	}); err != nil {
+		return err
+	}
+	return controlruntime.MarkWorkQueueStateFromMetadataJSON(metaRaw, int64Any(payload["mailbox_id"]), strings.TrimSpace(deliveryState), strings.TrimSpace(reason), time.Now().UTC())
 }
 
 func (s *Service) RegistrarEntregaGitMicroprogramacionActiva(agente string, proyectoID *int64, proyectoSlug, evidencia, solicitadoPor string) (*ResultadoEntregaGitMicroprogramacionActiva, error) {

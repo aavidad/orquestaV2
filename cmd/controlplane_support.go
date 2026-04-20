@@ -7170,6 +7170,9 @@ func reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje(msg *db.RuntimeMailb
 	if err := escribirInboxRuntimeMailboxDurable(proyecto, strings.TrimSpace(msg.ToAgente), tarea, msg, handle); err != nil {
 		return false, err
 	}
+	if err := registrarRuntimeMailboxWorkQueueLocal(msg, tarea, handle, "pending", "guidance durable escrita en inbox"); err != nil {
+		return false, err
+	}
 	if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) || runtimeMailboxEsContinuacionManualDurable(msg) {
 		if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
 			return false, err
@@ -7626,6 +7629,35 @@ func escribirInboxRuntimeMailboxDurable(proyecto *db.Proyecto, agente string, ta
 	}
 	path := filepath.Join(base, ".orquesta-inbox.md")
 	return os.WriteFile(path, []byte(construirInboxRuntimeMailboxDurableMarkdown(proyecto, tarea, msg)), 0o644)
+}
+
+func registrarRuntimeMailboxWorkQueueLocal(msg *db.RuntimeMailboxMessage, tarea *db.Tarea, handle *db.RuntimeHandle, state, reason string) error {
+	if msg == nil || handle == nil || msg.ID <= 0 {
+		return nil
+	}
+	payload := map[string]any{}
+	if strings.TrimSpace(msg.PayloadJSON) != "" {
+		_ = json.Unmarshal([]byte(msg.PayloadJSON), &payload)
+	}
+	taskID := int64DesdeAny(payload["tarea_id"])
+	if taskID <= 0 && tarea != nil {
+		taskID = tarea.ID
+	}
+	title := strings.TrimSpace(stringMapValue(payload, "titulo"))
+	if title == "" && tarea != nil {
+		title = strings.TrimSpace(tarea.Titulo)
+	}
+	return controlruntime.RecordWorkQueueFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON), controlruntime.WorkQueueRecordInput{
+		MailboxID:       msg.ID,
+		Kind:            strings.TrimSpace(msg.Kind),
+		Action:          strings.TrimSpace(stringMapValue(payload, "accion")),
+		TaskID:          taskID,
+		VerificationKey: strings.TrimSpace(stringMapValue(payload, "verification_key")),
+		State:           strings.TrimSpace(state),
+		Title:           title,
+		Reason:          strings.TrimSpace(reason),
+		RecordedAt:      time.Now().UTC(),
+	})
 }
 
 func resolverRutaInboxRuntimeMailboxDurable(proyecto *db.Proyecto, agente string, handle *db.RuntimeHandle) (string, error) {

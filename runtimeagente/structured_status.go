@@ -3,6 +3,7 @@ package runtimeagente
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -72,9 +73,29 @@ type WorkerSnapshot struct {
 	Manifest      *WorkerManifest
 	Status        *WorkerStatus
 	Heartbeat     *WorkerHeartbeat
+	WorkQueue     *WorkerWorkQueue
 	ManifestPath  string
 	StatusPath    string
 	HeartbeatPath string
+}
+
+type WorkerWorkQueue struct {
+	Version   int                   `json:"version"`
+	UpdatedAt string                `json:"updated_at"`
+	Current   *WorkerWorkQueueEntry `json:"current,omitempty"`
+}
+
+type WorkerWorkQueueEntry struct {
+	MailboxID       int64  `json:"mailbox_id,omitempty"`
+	RuntimeOrderID  int64  `json:"runtime_order_id,omitempty"`
+	Kind            string `json:"kind,omitempty"`
+	Action          string `json:"action,omitempty"`
+	TaskID          int64  `json:"task_id,omitempty"`
+	VerificationKey string `json:"verification_key,omitempty"`
+	State           string `json:"state,omitempty"`
+	Title           string `json:"title,omitempty"`
+	Reason          string `json:"reason,omitempty"`
+	RecordedAt      string `json:"recorded_at"`
 }
 
 type WorkerStatusView struct {
@@ -96,6 +117,13 @@ type WorkerStatusView struct {
 	TmuxWindow          string     `json:"tmux_window,omitempty"`
 	TmuxPaneID          string     `json:"tmux_pane_id,omitempty"`
 	CurrentPath         string     `json:"current_path,omitempty"`
+	WorkQueueMailboxID  int64      `json:"work_queue_mailbox_id,omitempty"`
+	WorkQueueKind       string     `json:"work_queue_kind,omitempty"`
+	WorkQueueAction     string     `json:"work_queue_action,omitempty"`
+	WorkQueueTaskID     int64      `json:"work_queue_task_id,omitempty"`
+	WorkQueueState      string     `json:"work_queue_state,omitempty"`
+	WorkQueueTitle      string     `json:"work_queue_title,omitempty"`
+	WorkQueueUpdatedAt  *time.Time `json:"work_queue_updated_at,omitempty"`
 	CanSendInput        bool       `json:"can_send_input"`
 	StartedAt           *time.Time `json:"started_at,omitempty"`
 	UpdatedAt           *time.Time `json:"updated_at,omitempty"`
@@ -117,6 +145,7 @@ type workerMetadataPaths struct {
 	ManifestPath  string `json:"worker_manifest_path"`
 	StatusPath    string `json:"worker_status_path"`
 	HeartbeatPath string `json:"worker_heartbeat_path"`
+	TraceDir      string `json:"trace_dir"`
 }
 
 type cachedWorkerSnapshot struct {
@@ -171,6 +200,14 @@ func LoadWorkerSnapshotFromMetadataJSON(raw string) (*WorkerSnapshot, error) {
 			snap.Heartbeat = &heartbeat
 		}
 	}
+	if workQueuePath := workerWorkQueuePath(meta); workQueuePath != "" {
+		if data, err := os.ReadFile(workQueuePath); err == nil {
+			var queue WorkerWorkQueue
+			if json.Unmarshal(data, &queue) == nil {
+				snap.WorkQueue = &queue
+			}
+		}
+	}
 	if snap.Manifest != nil && strings.TrimSpace(snap.Manifest.RuntimeManifestPath) != "" {
 		if data, err := os.ReadFile(strings.TrimSpace(snap.Manifest.RuntimeManifestPath)); err == nil {
 			var overlay runtimeManifestOverlay
@@ -205,6 +242,7 @@ func workerMetadataPathsFromJSON(raw string) (workerMetadataPaths, error) {
 	meta.ManifestPath = strings.TrimSpace(meta.ManifestPath)
 	meta.StatusPath = strings.TrimSpace(meta.StatusPath)
 	meta.HeartbeatPath = strings.TrimSpace(meta.HeartbeatPath)
+	meta.TraceDir = strings.TrimSpace(meta.TraceDir)
 	return meta, nil
 }
 
@@ -217,6 +255,7 @@ func workerSnapshotCacheKey(meta workerMetadataPaths) string {
 		meta.ManifestPath,
 		meta.StatusPath,
 		meta.HeartbeatPath,
+		meta.TraceDir,
 	}, "|")
 }
 
@@ -279,7 +318,27 @@ func cloneWorkerSnapshot(src *WorkerSnapshot) *WorkerSnapshot {
 		}
 		dst.Heartbeat = &heartbeat
 	}
+	if src.WorkQueue != nil {
+		queue := *src.WorkQueue
+		if src.WorkQueue.Current != nil {
+			current := *src.WorkQueue.Current
+			queue.Current = &current
+		}
+		dst.WorkQueue = &queue
+	}
 	return &dst
+}
+
+func workerWorkQueuePath(meta workerMetadataPaths) string {
+	if strings.TrimSpace(meta.TraceDir) != "" {
+		return filepath.Join(strings.TrimSpace(meta.TraceDir), "work-queue.json")
+	}
+	for _, path := range []string{meta.ManifestPath, meta.StatusPath, meta.HeartbeatPath} {
+		if strings.TrimSpace(path) != "" {
+			return filepath.Join(filepath.Dir(strings.TrimSpace(path)), "work-queue.json")
+		}
+	}
+	return ""
 }
 
 func (s *WorkerSnapshot) EffectiveState() string {
@@ -562,6 +621,19 @@ func (s *WorkerSnapshot) View(now time.Time, heartbeatThreshold time.Duration) *
 	}
 	if s.Status != nil {
 		view.CurrentPath = strings.TrimSpace(s.Status.CurrentPath)
+	}
+	if s.WorkQueue != nil {
+		if current := s.WorkQueue.Current; current != nil {
+			view.WorkQueueMailboxID = current.MailboxID
+			view.WorkQueueKind = strings.TrimSpace(current.Kind)
+			view.WorkQueueAction = strings.TrimSpace(current.Action)
+			view.WorkQueueTaskID = current.TaskID
+			view.WorkQueueState = strings.TrimSpace(current.State)
+			view.WorkQueueTitle = strings.TrimSpace(current.Title)
+			view.WorkQueueUpdatedAt = parseWorkerTimestamp(current.RecordedAt)
+		} else {
+			view.WorkQueueUpdatedAt = parseWorkerTimestamp(s.WorkQueue.UpdatedAt)
+		}
 	}
 	return view
 }

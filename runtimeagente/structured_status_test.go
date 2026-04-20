@@ -21,6 +21,7 @@ func TestLoadWorkerSnapshotFromMetadataJSON(t *testing.T) {
 	manifestPath := filepath.Join(tmp, "manifest.json")
 	statusPath := filepath.Join(tmp, "status.json")
 	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	workQueuePath := filepath.Join(tmp, "work-queue.json")
 
 	write := func(path string, payload any) {
 		t.Helper()
@@ -59,8 +60,22 @@ func TestLoadWorkerSnapshotFromMetadataJSON(t *testing.T) {
 		ExternalSessionID: "sess-123",
 		LastProgressAt:    now.Add(4 * time.Second).Format(time.RFC3339),
 	})
+	write(workQueuePath, WorkerWorkQueue{
+		Version:   1,
+		UpdatedAt: now.Add(6 * time.Second).Format(time.RFC3339Nano),
+		Current: &WorkerWorkQueueEntry{
+			MailboxID:  77,
+			Kind:       "autonomia",
+			Action:     "continuar_trabajo",
+			TaskID:     42,
+			State:      "pending",
+			Title:      "seguir frente",
+			RecordedAt: now.Add(6 * time.Second).Format(time.RFC3339Nano),
+		},
+	})
 
 	meta, err := json.Marshal(map[string]any{
+		"trace_dir":             tmp,
 		"worker_manifest_path":  manifestPath,
 		"worker_status_path":    statusPath,
 		"worker_heartbeat_path": heartbeatPath,
@@ -108,6 +123,13 @@ func TestLoadWorkerSnapshotFromMetadataJSON(t *testing.T) {
 	}
 	if progress := snap.LastProgressTime(); progress == nil || progress.UTC().Format(time.RFC3339) != now.Add(3*time.Second).Format(time.RFC3339) {
 		t.Fatalf("last progress inesperado: %+v", progress)
+	}
+	if snap.WorkQueue == nil || snap.WorkQueue.Current == nil || snap.WorkQueue.Current.MailboxID != 77 {
+		t.Fatalf("work queue inesperada: %+v", snap.WorkQueue)
+	}
+	view := snap.View(now, time.Minute)
+	if view == nil || view.WorkQueueMailboxID != 77 || view.WorkQueueAction != "continuar_trabajo" || view.WorkQueueState != "pending" {
+		t.Fatalf("view work queue inesperada: %+v", view)
 	}
 }
 
