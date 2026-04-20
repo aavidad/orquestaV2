@@ -1298,6 +1298,13 @@ func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 			apiWriteJSON(w, http.StatusOK, apiAgentesPanelResponse{Rows: rows})
 			return
 		}
+		if snapshot, err := statusService.FetchStatus(); err == nil {
+			apiWriteJSON(w, http.StatusOK, map[string]any{"agentes": snapshot.Agentes})
+			return
+		} else if !errors.Is(err, errStatusFetchTimeout) {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
 		agentes, err := agentesService.ListAgents()
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
