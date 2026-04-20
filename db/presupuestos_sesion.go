@@ -470,7 +470,11 @@ func defaultBudgetSource() string {
 func configInt64Fallback(clave string, fallback int64) int64 {
 	v, err := ConfigGet(clave)
 	if err != nil {
-		return fallback
+		if def, ok := defaultConfigValue(clave); ok {
+			v = def
+		} else {
+			return fallback
+		}
 	}
 	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil {

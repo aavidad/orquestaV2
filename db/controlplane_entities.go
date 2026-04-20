@@ -3560,7 +3560,30 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 	if err != nil {
 		return processed, err
 	}
-	return processed + orphanTMUX, nil
+	processed += orphanTMUX
+	historico, err := PurgarRuntimeHistorico()
+	if err != nil {
+		return processed, err
+	}
+	processed += contarPurgaRuntimeHistorico(historico)
+	return processed, nil
+}
+
+func contarPurgaRuntimeHistorico(resultado *PurgaRuntimeHistoricoResultado) int {
+	if resultado == nil {
+		return 0
+	}
+	total := 0
+	if resultado.Handles != nil {
+		total += resultado.Handles.Deleted
+	}
+	if resultado.Orders != nil {
+		total += resultado.Orders.Deleted
+	}
+	if resultado.Runtimes != nil {
+		total += resultado.Runtimes.Deleted
+	}
+	return total
 }
 
 func purgarSesionesTMUXHuerfanasConCurrentPathBorrado() (int, error) {

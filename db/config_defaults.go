@@ -54,6 +54,15 @@ func defaultConfigEntries() []configDefaultEntry {
 	}
 }
 
+func defaultConfigValue(clave string) (string, bool) {
+	for _, item := range defaultConfigEntries() {
+		if item.Clave == clave {
+			return item.Valor, true
+		}
+	}
+	return "", false
+}
+
 func defaultConfigSeedRows() [][]string {
 	rows := make([][]string, 0, len(defaultConfigEntries()))
 	for _, item := range defaultConfigEntries() {

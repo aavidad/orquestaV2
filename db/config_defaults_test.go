@@ -19,3 +19,17 @@ func TestDefaultConfigSeedRowsReflejanDefaults(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigInt64FallbackUsaDefaultsDeclarados(t *testing.T) {
+	t.Parallel()
+
+	if got := configInt64Fallback("runtime_orders_retention_minutes", -1); got != 30 {
+		t.Fatalf("runtime_orders_retention_minutes default inesperado: %d", got)
+	}
+	if got := configInt64Fallback("runtime_handles_retention_minutes", -1); got != 10 {
+		t.Fatalf("runtime_handles_retention_minutes default inesperado: %d", got)
+	}
+	if got := configInt64Fallback("clave_inexistente_para_test", 77); got != 77 {
+		t.Fatalf("fallback duro inesperado: %d", got)
+	}
+}
