@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"orquesta/db"
 )
@@ -11,6 +12,7 @@ type serverOperationalInfo struct {
 	State               string `json:"state"`
 	Operational         bool   `json:"operational"`
 	Reason              string `json:"reason,omitempty"`
+	NextQuotaResetAt    string `json:"nextQuotaResetAt,omitempty"`
 	Generated           string `json:"generated,omitempty"`
 	RegisteredAgents    int    `json:"registeredAgents"`
 	ActiveAgents        int    `json:"activeAgents"`
@@ -70,10 +72,12 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 	if status.TareasPorEstado != nil {
 		blockedTasks = status.TareasPorEstado[string(db.TareaBloqueada)]
 	}
-	quotaAgents := len(agentesBloqueadosPorCuotaVisibles(&estadoResumen{
+	quotaBlockedVisible := agentesBloqueadosPorCuotaVisibles(&estadoResumen{
 		Agentes:             status.Agentes,
 		AgentesQuotaBlocked: status.AgentesQuotaBlocked,
-	}))
+	})
+	quotaAgents := len(quotaBlockedVisible)
+	nextQuotaResetAt := nextQuotaResetVisible(quotaBlockedVisible)
 	pausedAgents := len(agentesNoActivosEnPausaOperativa(status.Agentes))
 	activeAgents := len(status.AgentesActivos)
 	workingAgents := len(status.AgentesTrabajando)
@@ -113,6 +117,7 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 		State:               state,
 		Operational:         operational,
 		Reason:              reason,
+		NextQuotaResetAt:    nextQuotaResetAt,
 		Generated:           status.Generado,
 		RegisteredAgents:    registeredAgentCountFromStatus(status),
 		ActiveAgents:        activeAgents,
@@ -154,6 +159,9 @@ func formatServerOperationalSummary(info *serverOperationalInfo) string {
 	if info.AuthAgents > 0 {
 		parts = append(parts, fmt.Sprintf("%d requieren_auth", info.AuthAgents))
 	}
+	if info.QuotaAgents > 0 {
+		parts = append(parts, fmt.Sprintf("%d bloqueados_cuota", info.QuotaAgents))
+	}
 	if info.SaturatedAgents > 0 {
 		parts = append(parts, fmt.Sprintf("%d saturados", info.SaturatedAgents))
 	}
@@ -169,5 +177,29 @@ func formatServerOperationalSummary(info *serverOperationalInfo) string {
 	if info.TasksInProgress > 0 {
 		parts = append(parts, fmt.Sprintf("%d en_progreso", info.TasksInProgress))
 	}
+	if info.NextQuotaResetAt != "" {
+		parts = append(parts, "quota_reset "+info.NextQuotaResetAt)
+	}
 	return fmt.Sprintf("%s (%s)", strings.ToUpper(strings.TrimSpace(info.State)), strings.Join(parts, ", "))
+}
+
+func nextQuotaResetVisible(agentes []*db.Agente) string {
+	var earliest time.Time
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		resetAt := cooldownVisibleAgente(agente)
+		if resetAt == nil || resetAt.IsZero() {
+			continue
+		}
+		ts := resetAt.UTC()
+		if earliest.IsZero() || ts.Before(earliest) {
+			earliest = ts
+		}
+	}
+	if earliest.IsZero() {
+		return ""
+	}
+	return earliest.Format(time.RFC3339)
 }
