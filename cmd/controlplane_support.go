@@ -9848,7 +9848,29 @@ func asegurarFrentePremiumAgenteIdle(agente *db.Agente, proyecto *db.Proyecto) (
 	if err != nil || tarea == nil {
 		return nil, err
 	}
+	tarea, err = derivarFrentePremiumAccionableSiSemilla(strings.TrimSpace(agente.Nombre), proyecto.ID, tarea)
+	if err != nil || tarea == nil {
+		return nil, err
+	}
 	return tareaPipelineLocalDesdeTareaDB(tarea), nil
+}
+
+func derivarFrentePremiumAccionableSiSemilla(agente string, proyectoID int64, tarea *db.Tarea) (*db.Tarea, error) {
+	agente = strings.TrimSpace(agente)
+	if proyectoID <= 0 || agente == "" || tarea == nil {
+		return tarea, nil
+	}
+	if !strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier") {
+		return tarea, nil
+	}
+	derivada, err := derivarFrentePremiumAcotadoDesdeSemilla(proyectoID, agente, tarea.ID)
+	if err != nil || derivada == nil {
+		return tarea, err
+	}
+	if err := cerrarSemillaPremiumSiDerivaAFrenteAcotado(agente, proyectoID, tareaPipelineLocalDesdeTareaDB(derivada)); err != nil {
+		return nil, err
+	}
+	return derivada, nil
 }
 
 func procesarTareasActivasFueraDeOrquestacionBatch(tareasActivasPorAgente map[string][]*db.Tarea, rowsPorAgente map[string]agentesapp.Row) (int, error) {
@@ -12744,6 +12766,10 @@ func asegurarFrentePremiumSesionActivaIdle(sesion *db.Sesion, proyecto *db.Proye
 		return nil, err
 	}
 	tarea, err := tareasService.Get(res.SeedTaskID)
+	if err != nil || tarea == nil {
+		return nil, err
+	}
+	tarea, err = derivarFrentePremiumAccionableSiSemilla(strings.TrimSpace(sesion.Agente), proyecto.ID, tarea)
 	if err != nil || tarea == nil {
 		return nil, err
 	}

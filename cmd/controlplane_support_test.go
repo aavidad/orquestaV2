@@ -6664,9 +6664,261 @@ func TestAsegurarTrabajoContinuoPremiumNoDeclaraAgotadoSiQuedaMicrocicloAbierto(
 	}
 }
 
+func resetAutonomiaPremiumTestState() {
+	autonomiaIdleAutoassignGate.Reset()
+	resetAutonomiaSessionMaintenanceGate()
+	resetAutonomiaDegradedTaskGate()
+	resetAutonomiaRuntimeRecoveryGate()
+	resetPresupuestoPrimerUsoSesionGate()
+	resetPipelineLocalDispatchGate()
+	agentesService.InvalidateCompactDetailCache()
+}
+
+func TestAsegurarFrentePremiumSesionActivaIdleDerivaFrenteAcotadoSinTareaActiva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetAutonomiaPremiumTestState()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:      proyectoID,
+		Enabled:         true,
+		MaxWorkers:      1,
+		EstadoAutonomia: db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ObjetivoPct:      100,
+		MinAgentes:       1,
+		MaxAgentes:       1,
+		Prioridad:        100,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+
+	tareaHistoricaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      microcicloRefactorTituloDefault,
+		Descripcion: "Microfrente premium historico",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea historica: %v", err)
+	}
+	if err := db.TomarTarea(tareaHistoricaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea historica: %v", err)
+	}
+	if err := db.IniciarTarea(tareaHistoricaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea historica: %v", err)
+	}
+	if err := db.CompletarTarea(tareaHistoricaID, "Codex1", "hecho"); err != nil {
+		t.Fatalf("completar tarea historica: %v", err)
+	}
+
+	tareaAcotadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Runtime mailbox/session_resume",
+		Descripcion: "Write-set exclusivo: cmd/controlplane_support.go, db/controlplane_entities.go\nTests minimos: go test ./cmd -run 'TestAsegurarFrentePremiumSesionActivaIdleDerivaFrenteAcotadoSinTareaActiva$' -count=1",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear frente acotado: %v", err)
+	}
+
+	tarea, err := asegurarFrentePremiumSesionActivaIdle(sesion, proyecto)
+	if err != nil {
+		t.Fatalf("asegurarFrentePremiumSesionActivaIdle: %v", err)
+	}
+	if tarea == nil || tarea.ID != tareaAcotadaID {
+		t.Fatalf("deberia derivar el frente acotado en vez de dejar semilla: %+v", tarea)
+	}
+	if tarea.Agente != "Codex1" || tarea.Estado != string(db.TareaAsignada) {
+		t.Fatalf("frente acotado inesperado tras derivacion: %+v", tarea)
+	}
+
+	actual, err := db.GetTarea(tareaAcotadaID)
+	if err != nil {
+		t.Fatalf("get tarea acotada: %v", err)
+	}
+	if actual == nil || actual.Agente == nil || strings.TrimSpace(*actual.Agente) != "Codex1" || actual.Estado != db.TareaAsignada {
+		t.Fatalf("frente acotado deberia quedar asignado al agente: %+v", actual)
+	}
+
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	var semilla *db.Tarea
+	for _, candidata := range tareas {
+		if candidata != nil && strings.Contains(strings.TrimSpace(candidata.Notas), "autonomia:premium_frontier") {
+			semilla = candidata
+			break
+		}
+	}
+	if semilla == nil || semilla.Estado != db.TareaCompletada {
+		t.Fatalf("semilla premium deberia cerrarse tras derivar frente acotado: %+v", semilla)
+	}
+}
+
+func TestAsegurarFrentePremiumAgenteIdleDerivaFrenteAcotadoSinTareaActiva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetAutonomiaPremiumTestState()
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:      proyectoID,
+		Enabled:         true,
+		MaxWorkers:      1,
+		EstadoAutonomia: db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ObjetivoPct:      100,
+		MinAgentes:       1,
+		MaxAgentes:       1,
+		Prioridad:        100,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+	agente, err := db.GetAgente("Gemini1")
+	if err != nil || agente == nil {
+		t.Fatalf("get agente: %+v err=%v", agente, err)
+	}
+
+	tareaHistoricaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      microcicloRefactorTituloDefault,
+		Descripcion: "Microfrente premium historico",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea historica: %v", err)
+	}
+	if err := db.TomarTarea(tareaHistoricaID, "Gemini1"); err != nil {
+		t.Fatalf("tomar tarea historica: %v", err)
+	}
+	if err := db.IniciarTarea(tareaHistoricaID, "Gemini1"); err != nil {
+		t.Fatalf("iniciar tarea historica: %v", err)
+	}
+	if err := db.CompletarTarea(tareaHistoricaID, "Gemini1", "hecho"); err != nil {
+		t.Fatalf("completar tarea historica: %v", err)
+	}
+
+	tareaAcotadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Runtime mailbox/session_resume",
+		Descripcion: "Write-set exclusivo: cmd/controlplane_support.go, db/controlplane_entities.go\nTests minimos: go test ./cmd -run 'TestAsegurarFrentePremiumAgenteIdleDerivaFrenteAcotadoSinTareaActiva$' -count=1",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear frente acotado: %v", err)
+	}
+
+	tarea, err := asegurarFrentePremiumAgenteIdle(agente, proyecto)
+	if err != nil {
+		t.Fatalf("asegurarFrentePremiumAgenteIdle: %v", err)
+	}
+	if tarea == nil || tarea.ID != tareaAcotadaID {
+		t.Fatalf("deberia derivar frente acotado para agente idle sin sesion: %+v", tarea)
+	}
+	if tarea.Agente != "Gemini1" || tarea.Estado != string(db.TareaAsignada) {
+		t.Fatalf("frente acotado inesperado tras derivacion: %+v", tarea)
+	}
+
+	actual, err := db.GetTarea(tareaAcotadaID)
+	if err != nil {
+		t.Fatalf("get tarea acotada: %v", err)
+	}
+	if actual == nil || actual.Agente == nil || strings.TrimSpace(*actual.Agente) != "Gemini1" || actual.Estado != db.TareaAsignada {
+		t.Fatalf("frente acotado deberia quedar asignado al agente idle: %+v", actual)
+	}
+
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	var semilla *db.Tarea
+	for _, candidata := range tareas {
+		if candidata != nil && strings.Contains(strings.TrimSpace(candidata.Notas), "autonomia:premium_frontier") {
+			semilla = candidata
+			break
+		}
+	}
+	if semilla == nil || semilla.Estado != db.TareaCompletada {
+		t.Fatalf("semilla premium deberia cerrarse tambien sin sesion activa: %+v", semilla)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchSesionActivaIdleCierraSemillaPremiumSiTomaFrenteAcotado(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
-	autonomiaIdleAutoassignGate.Reset()
+	resetAutonomiaPremiumTestState()
 	const projectSlug = "orquestador-idle-acotado"
 
 	if err := db.ConfigSet("server_autobootstrap_project_slug", projectSlug); err != nil {
@@ -6783,7 +7035,7 @@ func TestProcesarAutonomiaAgentesBatchSesionActivaIdleCierraSemillaPremiumSiToma
 
 func TestProcesarAutonomiaAgentesBatchSesionActivaIdleCierraSemillaPremiumSiTomaMicrocicloLibre(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
-	autonomiaIdleAutoassignGate.Reset()
+	resetAutonomiaPremiumTestState()
 	const projectSlug = "orquestador-idle-micro"
 
 	if err := db.ConfigSet("server_autobootstrap_project_slug", projectSlug); err != nil {
