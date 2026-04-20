@@ -14424,7 +14424,15 @@ func encolarContinuacionTareaReasignadaSiCorresponde(agente string, proyectoID *
 	}
 	if status != nil && status.Found {
 		switch {
-		case status.Succeeded, status.Waiting:
+		case status.WorkConfirmed, status.Succeeded:
+			return nil
+		case status.AwaitingWork:
+			if deferir, err := shouldDeferTransientPostRemediationRetry(strings.TrimSpace(agente), &proyecto.ID, status); err != nil {
+				return err
+			} else if deferir {
+				return nil
+			}
+		case status.Waiting:
 			return nil
 		case strings.TrimSpace(status.BlockedReason) != "" || strings.EqualFold(strings.TrimSpace(status.DeliveryState), "blocked"):
 			return escalarContinuacionPostRemediationBloqueada(proyecto, tareaID, strings.TrimSpace(agente), verificationKey, status)

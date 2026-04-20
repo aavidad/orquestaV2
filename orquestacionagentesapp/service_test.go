@@ -1047,7 +1047,7 @@ func TestGetPostRemediationStatusReturnsLatestSuccessfulReceipt(t *testing.T) {
 				Tipo:          "nudge",
 				Estado:        "completada",
 				PayloadJSON:   `{"kind":"autonomia","accion":"continuar_trabajo","verification_key":"reassign:41:Codex1:Codex2","remediation_kind":"reassign"}`,
-				ResultadoJSON: `{"dispatch_state":"delivered","delivery_state":"delivered","receipt_source":"tmux_pane_activity","verification_key":"reassign:41:Codex1:Codex2","remediation_kind":"reassign"}`,
+				ResultadoJSON: `{"dispatch_state":"delivered","delivery_state":"delivered","receipt_source":"last_progress","verification_key":"reassign:41:Codex1:Codex2","remediation_kind":"reassign"}`,
 				UpdatedAt:     now,
 			},
 		},
@@ -1060,11 +1060,44 @@ func TestGetPostRemediationStatusReturnsLatestSuccessfulReceipt(t *testing.T) {
 	if status == nil || !status.Found {
 		t.Fatalf("faltaba status: %+v", status)
 	}
-	if status.OrderID != 19 || !status.Succeeded || status.Waiting {
+	if status.OrderID != 19 || !status.Succeeded || status.Waiting || !status.WorkConfirmed || status.AwaitingWork {
 		t.Fatalf("status inesperado: %+v", status)
 	}
-	if status.ReceiptSource != "tmux_pane_activity" || status.RemediationKind != "reassign" {
+	if status.ReceiptSource != "last_progress" || status.RemediationKind != "reassign" {
 		t.Fatalf("status sin receipt/remediation correctos: %+v", status)
+	}
+}
+
+func TestGetPostRemediationStatusKeepsWaitingForWeakDeliveryReceipt(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(37)
+	now := time.Now().UTC()
+	service := NewService(nil, &stubRuntimeController{
+		orders: []*db.RuntimeOrder{{
+			ID:            21,
+			Agente:        "Codex2",
+			ProyectoID:    &proyectoID,
+			Tipo:          "nudge",
+			Estado:        "completada",
+			PayloadJSON:   `{"kind":"autonomia","accion":"continuar_trabajo","verification_key":"reassign:43:Codex1:Codex2","remediation_kind":"reassign"}`,
+			ResultadoJSON: `{"dispatch_state":"delivered","delivery_state":"delivered","receipt_source":"tmux_pane_activity","verification_key":"reassign:43:Codex1:Codex2","remediation_kind":"reassign"}`,
+			UpdatedAt:     now,
+		}},
+	})
+
+	status, err := service.GetPostRemediationStatus("Codex2", &proyectoID, "reassign:43:Codex1:Codex2")
+	if err != nil {
+		t.Fatalf("GetPostRemediationStatus: %v", err)
+	}
+	if status == nil || !status.Found {
+		t.Fatalf("faltaba status: %+v", status)
+	}
+	if status.Succeeded || !status.Waiting || status.WorkConfirmed || !status.AwaitingWork {
+		t.Fatalf("status deberia quedar esperando evidencia fuerte de trabajo: %+v", status)
+	}
+	if status.ReceiptSource != "tmux_pane_activity" {
+		t.Fatalf("receipt source inesperado: %+v", status)
 	}
 }
 

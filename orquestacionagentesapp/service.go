@@ -190,6 +190,8 @@ type PostRemediationStatus struct {
 	UpdatedAt       time.Time
 	Succeeded       bool
 	Waiting         bool
+	WorkConfirmed   bool
+	AwaitingWork    bool
 }
 
 func (s *Service) EnqueueControl(req ControlRequest) (int64, string, error) {
@@ -1135,13 +1137,28 @@ func (s *Service) GetPostRemediationStatus(agente string, proyectoID *int64, ver
 	}
 	switch {
 	case strings.EqualFold(status.Estado, "completada") && status.ReceiptSource != "":
-		status.Succeeded = true
+		status.WorkConfirmed = receiptSourceConfirmsWork(status.ReceiptSource)
+		if status.WorkConfirmed {
+			status.Succeeded = true
+		} else {
+			status.Waiting = true
+			status.AwaitingWork = true
+		}
 	case strings.EqualFold(status.Estado, "fallida"), strings.EqualFold(status.DeliveryState, "blocked"):
 		status.Waiting = false
 	case strings.EqualFold(status.DispatchState, "notified"), strings.EqualFold(status.DispatchState, "pending"), strings.EqualFold(status.Estado, "pendiente"), strings.EqualFold(status.Estado, "ejecutando"):
 		status.Waiting = true
 	}
 	return status, nil
+}
+
+func receiptSourceConfirmsWork(source string) bool {
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "last_progress", "worker_activity", "tmux_transcript_activity", "transcript_patch", "tmux_pane_patch", "git_worktree":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) sessionRuntimeHandle(sesion *db.Sesion) (*db.RuntimeHandle, error) {
