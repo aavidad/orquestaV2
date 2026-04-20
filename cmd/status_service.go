@@ -30,6 +30,7 @@ var (
 	statusRowsFetcher  = agentRowsForStatus
 	statusRuntimeHandlesFetcher = db.ListarRuntimeHandles
 	statusDispatchFailureWindow = 2 * time.Hour
+	statusConfigGet     = db.ConfigGet
 	statusNowFunc      = time.Now
 	statusAsyncRefresh = true
 	statusCacheState   struct {
@@ -202,11 +203,12 @@ func receiptSourceConfirmsWorkStatus(source string) bool {
 
 func resumirAutonomiaRows(rows []agentesapp.Row, now time.Time) autonomiaResumen {
 	out := autonomiaResumen{}
+	supervisor := statusSupervisorAgentName()
 	for _, row := range rows {
-		switch strings.TrimSpace(row.LastAutonomyAction) {
-		case "supervisar_proyecto":
+		switch {
+		case supervisor != "" && row.SupervisorRoleActive(now) && row.Agente != nil && strings.EqualFold(strings.TrimSpace(row.Agente.Nombre), supervisor):
 			out.Supervisando++
-		case "continuar_trabajo":
+		case strings.TrimSpace(row.LastAutonomyAction) == "continuar_trabajo":
 			out.Continuando++
 		}
 		if row.EffectiveContinuityPending(now) {
@@ -214,6 +216,21 @@ func resumirAutonomiaRows(rows []agentesapp.Row, now time.Time) autonomiaResumen
 		}
 	}
 	return out
+}
+
+func statusSupervisorAgentName() string {
+	if statusConfigGet == nil {
+		return "Codex1"
+	}
+	value, err := statusConfigGet("server_autobootstrap_supervisor_agent")
+	if err != nil {
+		return "Codex1"
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "Codex1"
+	}
+	return value
 }
 
 func agenteTieneActividadRecienteVisible(agente *db.Agente) bool {

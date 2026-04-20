@@ -121,9 +121,15 @@ func TestNormalizeDispatchDebtTotalSumaSoloCategoriasVivas(t *testing.T) {
 func TestResumirAutonomiaRowsNoCuentaResumePayloadAbsorbidoComoPendiente(t *testing.T) {
 	t.Parallel()
 
+	prevConfigGet := statusConfigGet
+	statusConfigGet = func(string) (string, error) { return "Codex1", nil }
+	defer func() { statusConfigGet = prevConfigGet }()
+
 	now := time.Now().UTC()
 	rows := []agentesapp.Row{
 		{
+			Agente:                   &db.Agente{Nombre: "Codex1"},
+			Asignacion:                &db.Asignacion{Estado: db.AsignacionActiva, Nota: "server_autobootstrap"},
 			LastAutonomyAction:       "supervisar_proyecto",
 			LastAutonomySource:       "resume_payload_mailbox",
 			MailboxContinuityPending: 1,
@@ -154,6 +160,42 @@ func TestResumirAutonomiaRowsNoCuentaResumePayloadAbsorbidoComoPendiente(t *test
 	}
 	if got.ContinuidadPendiente != 1 {
 		t.Fatalf("continuidad pendiente deberia contar solo deuda viva: %+v", got)
+	}
+}
+
+func TestResumirAutonomiaRowsCuentaSupervisorPorRolAunqueUltimaAccionSeaContinuar(t *testing.T) {
+	t.Parallel()
+
+	prevConfigGet := statusConfigGet
+	statusConfigGet = func(string) (string, error) { return "Codex1", nil }
+	defer func() { statusConfigGet = prevConfigGet }()
+
+	now := time.Now().UTC()
+	rows := []agentesapp.Row{
+		{
+			Agente:              &db.Agente{Nombre: "Codex1"},
+			Asignacion:          &db.Asignacion{Estado: db.AsignacionActiva, Nota: "server_autobootstrap"},
+			LastAutonomyAction:  "continuar_trabajo",
+			LastAutonomySource:  "work_queue",
+			LastAutonomyState:   "work_confirmed",
+			OpenTasks:           1,
+			WorkerAlive:         true,
+			WorkerHeartbeat:     ptrTimeStatusDispatch(now),
+		},
+		{
+			Agente:             &db.Agente{Nombre: "Codex2"},
+			LastAutonomyAction: "continuar_trabajo",
+			LastAutonomySource: "work_queue",
+			LastAutonomyState:  "work_confirmed",
+			OpenTasks:          1,
+			WorkerAlive:        true,
+			WorkerHeartbeat:    ptrTimeStatusDispatch(now),
+		},
+	}
+
+	got := resumirAutonomiaRows(rows, now)
+	if got.Supervisando != 1 || got.Continuando != 1 {
+		t.Fatalf("deberia distinguir supervisor operativo del resto: %+v", got)
 	}
 }
 

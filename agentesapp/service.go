@@ -3694,6 +3694,25 @@ func (r Row) supervisorAutonomyLive(now time.Time) bool {
 	}
 }
 
+func (r Row) SupervisorRoleActive(now time.Time) bool {
+	if r.supervisorAutonomyLive(now) {
+		return true
+	}
+	if r.Asignacion == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(string(r.Asignacion.Estado)), string(db.AsignacionActiva)) {
+		return false
+	}
+	if !strings.Contains(strings.ToLower(strings.TrimSpace(r.Asignacion.Nota)), "server_autobootstrap") {
+		return false
+	}
+	if !r.WorkerAlive || !r.workerHeartbeatRecent(now) {
+		return false
+	}
+	return true
+}
+
 func (r Row) runtimeState() string {
 	if r.Runtime == nil {
 		return ""
