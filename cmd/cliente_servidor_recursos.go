@@ -1366,9 +1366,9 @@ func procesarHigienePorAPI(wait bool) (*apiRuntimeProcessAutonomiaResponse, bool
 	return &resp, true, nil
 }
 
-func procesarReanimacionesPorAPI() (*apiRuntimeProcessReanimationsResponse, bool, error) {
+func procesarReanimacionesPorAPI(wait bool) (*apiRuntimeProcessReanimationsResponse, bool, error) {
 	var resp apiRuntimeProcessReanimationsResponse
-	ok, err := apiPost("/api/runtime/process-reanimations", map[string]any{}, &resp)
+	ok, err := apiPost("/api/runtime/process-reanimations", map[string]any{"wait": wait}, &resp)
 	if !ok || err != nil {
 		return nil, ok, err
 	}

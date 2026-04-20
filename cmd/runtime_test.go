@@ -475,17 +475,23 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	}
 
 	outProcessReanimations := capturarStdout(t, func() {
+		if err := runtimeProcesarReanimacionesCmd.Flags().Set("wait", "true"); err != nil {
+			t.Fatalf("set wait process reanimations: %v", err)
+		}
 		if err := runtimeProcesarReanimacionesCmd.RunE(runtimeProcesarReanimacionesCmd, nil); err != nil {
 			t.Fatalf("runtime procesar-reanimaciones via api: %v", err)
 		}
+	})
+	t.Cleanup(func() {
+		_ = runtimeProcesarReanimacionesCmd.Flags().Set("wait", "false")
 	})
 	for _, token := range []string{"accepted=true", "running=false", "count=1", "candidates=2", "reactivated=1", "cooldown_sustained=1", "capacity_blocked=1", "errors=0"} {
 		if !strings.Contains(outProcessReanimations, token) {
 			t.Fatalf("salida runtime procesar-reanimaciones sin %q:\n%s", token, outProcessReanimations)
 		}
 	}
-	if len(processReanimationsReq) != 0 {
-		t.Fatalf("request process reanimations deberia ser vacia: %+v", processReanimationsReq)
+	if got, ok := processReanimationsReq["wait"].(bool); !ok || !got {
+		t.Fatalf("request process reanimations deberia enviar wait=true: %+v", processReanimationsReq)
 	}
 
 	if err := runtimeMailboxLimpiarCmd.Flags().Set("to", "Codex2"); err != nil {

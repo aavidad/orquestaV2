@@ -4723,3 +4723,38 @@ func TestAPIRuntimeProcessReanimacionesDistingueCooldownSostenidoPorCuota(t *tes
 	}
 	t.Fatalf("el cooldown deberia sostenerse hasta el reset visible: %+v", agente)
 }
+
+func TestAPIRuntimeProcessReanimacionesWaitDevuelveContadoresReales(t *testing.T) {
+	prev := runtimeProcessReanimationsBatchFn
+	runtimeProcessReanimationsBatchFn = func() apiRuntimeProcessReanimationsResponse {
+		return apiRuntimeProcessReanimationsResponse{
+			OK:                true,
+			Count:             1,
+			Candidates:        3,
+			Reactivated:       1,
+			CooldownSustained: 1,
+			CapacityBlocked:   1,
+		}
+	}
+	t.Cleanup(func() {
+		runtimeProcessReanimationsBatchFn = prev
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/runtime/process-reanimations", bytes.NewReader([]byte(`{"wait":true}`)))
+	rec := httptest.NewRecorder()
+	apiHandlerRuntimeProcessReanimaciones(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status process-reanimations wait inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp apiRuntimeProcessReanimationsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Count != 1 || resp.Candidates != 3 || resp.Reactivated != 1 || resp.CooldownSustained != 1 || resp.CapacityBlocked != 1 {
+		t.Fatalf("contadores inesperados: %+v", resp)
+	}
+	if resp.Accepted || resp.Running {
+		t.Fatalf("wait no deberia responder como background: %+v", resp)
+	}
+}

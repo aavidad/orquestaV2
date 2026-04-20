@@ -5973,6 +5973,19 @@ func apiHandlerRuntimeProcessReanimaciones(w http.ResponseWriter, r *http.Reques
 	if !apiRequireMethod(w, r, http.MethodPost) {
 		return
 	}
+	var req struct {
+		Wait bool `json:"wait"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	if req.Wait {
+		resp := runtimeProcessReanimationsBatchFn()
+		if resp.Errors > 0 {
+			db.Audit("server", "runtime_process_reanimaciones_wait_errors", "runtime", 0,
+				fmt.Sprintf("candidates=%d reactivated=%d cooldown_sustained=%d capacity_blocked=%d errors=%d", resp.Candidates, resp.Reactivated, resp.CooldownSustained, resp.CapacityBlocked, resp.Errors))
+		}
+		apiWriteJSON(w, http.StatusOK, resp)
+		return
+	}
 	started := runtimeProcessReanimacionesEnCurso.CompareAndSwap(false, true)
 	if started {
 		go func() {

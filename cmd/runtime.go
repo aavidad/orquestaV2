@@ -337,7 +337,8 @@ var runtimeProcesarReanimacionesCmd = &cobra.Command{
 	Use:   "procesar-reanimaciones",
 	Short: "Ejecuta una pasada inmediata del batch de reanimaciones",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		resp, ok, err := procesarReanimacionesPorAPI()
+		wait, _ := cmd.Flags().GetBool("wait")
+		resp, ok, err := procesarReanimacionesPorAPI(wait)
 		if !ok {
 			return serverFirstCommandError("runtime procesar-reanimaciones")
 		}
@@ -1992,6 +1993,7 @@ func init() {
 	runtimePurgarTranscriptRuidoCmd.Flags().Bool("all", true, "Repite lotes hasta drenar el ruido histórico detectable")
 	runtimeProcesarDegradadosCmd.Flags().Bool("wait", false, "Ejecuta la pasada en primer plano y devuelve el recuento real")
 	runtimeProcesarHigieneCmd.Flags().Bool("wait", false, "Ejecuta la pasada en primer plano y devuelve el recuento real")
+	runtimeProcesarReanimacionesCmd.Flags().Bool("wait", false, "Ejecuta la pasada en primer plano y devuelve el recuento real")
 	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeDespertarCmd, runtimeProcesarOrdenesCmd, runtimeProcesarMailboxCmd, runtimeProcesarAutonomiaCmd, runtimeProcesarTranscriptCmd, runtimePurgarTranscriptRuidoCmd, runtimeProcesarDegradadosCmd, runtimeProcesarHigieneCmd, runtimeProcesarReanimacionesCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenVerCmd, runtimeOrdenNuevaCmd, runtimeOrdenCancelarCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxVerCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd, runtimeMailboxLimpiarCmd, runtimeLimpiarPruebasCmd)
 	rootCmd.AddCommand(runtimeCmd)
 }
