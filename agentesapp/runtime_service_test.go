@@ -589,6 +589,79 @@ func TestBuildTickOutputConMailboxEnResumePayloadContinuaTrabajo(t *testing.T) {
 	}
 }
 
+func TestBuildTickOutputSupervisorAutobootstrapSupervisaProyectoSinTareaActiva(t *testing.T) {
+	now := time.Now().UTC()
+	proyecto := &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()}
+	store := &fakeStore{
+		project: proyecto,
+		config: map[string]string{
+			"server_autobootstrap_enabled":        "true",
+			"server_autobootstrap_project_slug":   "orquestador",
+			"server_autobootstrap_supervisor_agent": "Codex1",
+		},
+		agents: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex1", ProyectoID: proyecto.ID, ProyectoSlug: proyecto.Slug, Estado: db.AsignacionActiva, Nota: "server_autobootstrap"},
+		},
+		sessions: []*db.Sesion{
+			{ID: 49, Agente: "Codex1", ProyectoID: int64Ptr(proyecto.ID), Estado: "activa", Activa: true, Inicio: now, ResumePayloadJSON: `{"mailbox":[{"kind":"autonomia","payload":{"accion":"supervisar_proyecto"}}]}`},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex1", ProyectoID: int64Ptr(proyecto.ID), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		canonicalHandles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex1", ProyectoID: int64Ptr(proyecto.ID), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex1", ProyectoID: int64Ptr(proyecto.ID), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+	}
+
+	out, err := NewService(store, nil).buildTickOutput("Codex1", proyecto, store.sessions[0], 100)
+	if err != nil {
+		t.Fatalf("buildTickOutput: %v", err)
+	}
+	if out == nil || out.AccionRecomendada != "supervisar_proyecto" {
+		t.Fatalf("deberia supervisar proyecto al ser supervisor operativo, got=%+v", out)
+	}
+}
+
+func TestBuildTickOutputSupervisaProyectoSiLaContinuidadVivaLoMarca(t *testing.T) {
+	now := time.Now().UTC()
+	proyecto := &db.Proyecto{ID: 8, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()}
+	store := &fakeStore{
+		project: proyecto,
+		agents: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex1", ProyectoID: proyecto.ID, ProyectoSlug: proyecto.Slug, Estado: db.AsignacionActiva, Nota: "server_autobootstrap"},
+		},
+		sessions: []*db.Sesion{
+			{ID: 50, Agente: "Codex1", ProyectoID: int64Ptr(proyecto.ID), Estado: "activa", Activa: true, Inicio: now, ResumePayloadJSON: `{"mailbox":[{"kind":"autonomia","payload":{"accion":"supervisar_proyecto"}}]}`},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 22, Agente: "Codex1", ProyectoID: int64Ptr(proyecto.ID), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		canonicalHandles: []*db.RuntimeHandle{
+			{ID: 32, Agente: "Codex1", ProyectoID: int64Ptr(proyecto.ID), RuntimeID: int64Ptr(22), Estado: "activo", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 32, Agente: "Codex1", ProyectoID: int64Ptr(proyecto.ID), RuntimeID: int64Ptr(22), Estado: "activo", UpdatedAt: now},
+		},
+	}
+
+	out, err := NewService(store, nil).buildTickOutput("Codex1", proyecto, store.sessions[0], 100)
+	if err != nil {
+		t.Fatalf("buildTickOutput: %v", err)
+	}
+	if out == nil || out.AccionRecomendada != "supervisar_proyecto" {
+		t.Fatalf("deberia supervisar proyecto al venir marcado por continuidad viva, got=%+v", out)
+	}
+}
+
 func TestBuildTickOutputConRuntimeSanoNoReleeFallbackPorProyecto(t *testing.T) {
 	now := time.Now().UTC()
 	store := &fakeStore{

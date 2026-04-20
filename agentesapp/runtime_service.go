@@ -1205,6 +1205,7 @@ func (s *Service) buildOperationalRowContextForTick(agenteNombre string, proyect
 			row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
 			row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
 			applyDurableWorkQueueToTickRow(&row, view)
+			applyResumePayloadAutonomyToRow(&row)
 			if tarea, ok, err := s.durableWorkQueueTaskForAgent(agenteNombre, proyecto.ID, view); err != nil {
 				return Row{}, nil, nil, err
 			} else if ok {
@@ -1221,6 +1222,7 @@ func (s *Service) buildOperationalRowContextForTick(agenteNombre string, proyect
 			}
 		}
 	}
+	applyResumePayloadAutonomyToRow(&row)
 
 	var tareas []*db.Tarea
 	if lister, ok := s.store.(tickTaskLister); ok {
@@ -1355,6 +1357,10 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 	}
 	estadoOperativo := strings.TrimSpace(row.EstadoOperativo)
 	detalleOperativo := strings.TrimSpace(row.DetalleOperativo)
+	esSupervisorOperativo := s.serverAutobootstrapSupervisorOperativo(agenteNombre, proyecto, asignadoAProyecto)
+	if !esSupervisorOperativo && strings.EqualFold(strings.TrimSpace(row.LastAutonomyAction), "supervisar_proyecto") {
+		esSupervisorOperativo = true
+	}
 	runtimeBloqueado := estadoOperativoBloqueaContinuidad(estadoOperativo)
 	continuidadAccionablePendiente := row.MailboxActionablePending > 0 || row.MailboxContinuityPending > 0
 	resumePayloadContinuity := sessionResumePayloadHasMailbox(sesionActiva) &&
@@ -1446,6 +1452,9 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		out.AccionRecomendada = "pausar_y_reasignar"
 		out.DebePausar = true
 		out.Motivo = "La asignación activa del agente ha cambiado al proyecto " + proyectoAsignado
+	case esSupervisorOperativo:
+		out.AccionRecomendada = "supervisar_proyecto"
+		out.Motivo = "Eres el supervisor operativo del proyecto y debes coordinar el siguiente frente útil."
 	case tieneTrabajo && continuidadAccionablePendiente:
 		out.AccionRecomendada = "continuar_trabajo"
 		out.Motivo = "Hay continuidad accionable pendiente; prioriza cerrar el frente activo antes de escalar bloqueos residuales"
@@ -1493,6 +1502,21 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		out.Motivo = "No hay tarea activa asignada en este proyecto"
 	}
 	return out, nil
+}
+
+func (s *Service) serverAutobootstrapSupervisorOperativo(agente string, proyecto *db.Proyecto, asignadoAProyecto bool) bool {
+	if s == nil || s.store == nil || proyecto == nil || !asignadoAProyecto {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(s.configOrDefault("server_autobootstrap_enabled", "false")), "true") {
+		return false
+	}
+	projectSlug := strings.TrimSpace(s.configOrDefault("server_autobootstrap_project_slug", "orquestador"))
+	if projectSlug == "" || !strings.EqualFold(projectSlug, strings.TrimSpace(proyecto.Slug)) {
+		return false
+	}
+	supervisor := strings.TrimSpace(s.configOrDefault("server_autobootstrap_supervisor_agent", "Codex1"))
+	return supervisor != "" && strings.EqualFold(supervisor, strings.TrimSpace(agente))
 }
 
 func runtimeBlockedFallbackFromRow(row Row, proyectoID int64) (bool, string, bool) {
