@@ -13484,6 +13484,11 @@ func bloquearTareasActivasPorCuotaAutonomia(agente, motivo string) error {
 	if err != nil {
 		return err
 	}
+	rows, err := agentesService.BuildPanelRows()
+	if err != nil {
+		return err
+	}
+	openTasksProjected := openTasksProjectedFromRows(rows)
 	motivoBloqueo := construirMotivoBloqueoCuotaAutonomia(agente, motivo)
 	nota := fmt.Sprintf("Bloqueada automáticamente en %s por cuota sin relevo sano", agente)
 	for _, tarea := range tareas {
@@ -13498,6 +13503,42 @@ func bloquearTareasActivasPorCuotaAutonomia(agente, motivo string) error {
 			continue
 		}
 		if actual.Estado != db.TareaAsignada && actual.Estado != db.TareaEnProgreso {
+			continue
+		}
+		relevo := seleccionarRelevoAutonomiaBloqueada(rows, openTasksProjected, actual, agente)
+		if relevo != "" {
+			if handoff, err := intentarHandoffAutonomoTarea(
+				proyectoLigeroDesdeTarea(actual),
+				actual.ID,
+				agente,
+				relevo,
+				"",
+				"bloqueado_por_cuota",
+				fmt.Sprintf("Continuidad automática en tarea #%d tras cuota visible agotada", actual.ID),
+				fmt.Sprintf("Handoff automático desde %s a %s por cuota visible agotada", agente, relevo),
+				fmt.Sprintf("resuelto por handoff automático a %s", relevo),
+			); err != nil {
+				return err
+			} else if handoff {
+				if openTasksProjected[agente] > 0 {
+					openTasksProjected[agente]--
+				}
+				openTasksProjected[relevo]++
+				if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, actual.ProyectoID, actual.ID, agente, "bloqueado_por_cuota", "continúa con la tarea reasignada tras cuota visible agotada y deja evidencia de avance", nil); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := reasignarYArrancarTareaAutonomia(actual.ID, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s por cuota visible agotada", agente, relevo)); err != nil {
+				return err
+			}
+			if openTasksProjected[agente] > 0 {
+				openTasksProjected[agente]--
+			}
+			openTasksProjected[relevo]++
+			if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, actual.ProyectoID, actual.ID, agente, "bloqueado_por_cuota", "continúa con la tarea reasignada tras cuota visible agotada y deja evidencia de avance", nil); err != nil {
+				return err
+			}
 			continue
 		}
 		if err := bloquearTareaAutonomiaSinRelevo(actual.ID, agente, motivoBloqueo, nota); err != nil {
