@@ -250,9 +250,6 @@ func UpsertRuntimeHandleDesdeSesion(s *Sesion) error {
 	if err != nil {
 		return err
 	}
-	if err := normalizarHandleRefSesionRuntimeLigado(s.ID); err != nil {
-		return err
-	}
 	runtimeHandleHotReset()
 	if h.Estado == "activo" || h.Estado == "pausado" {
 		_, err = DB.Exec(`
@@ -632,6 +629,10 @@ func PurgarRuntimeHistorico() (*PurgaRuntimeHistoricoResultado, error) {
 	if err != nil {
 		return nil, err
 	}
+	mailboxIDs, err := listarRuntimeMailboxPurgablesHistoricos([]string{"consumido", "cancelado", "expirado"}, ordersCutoff)
+	if err != nil {
+		return nil, err
+	}
 	runtimeIDs, err := listarRuntimeInstancesPurgablesHistoricos([]string{"cerrado", "bloqueado", "degradado"}, runtimesCutoff)
 	if err != nil {
 		return nil, err
@@ -654,7 +655,7 @@ func PurgarRuntimeHistorico() (*PurgaRuntimeHistoricoResultado, error) {
 		Orders:   &PurgaRuntimeOrdersResultado{Estados: []string{"completada", "fallida", "expirada", "cancelada"}},
 		Runtimes: &PurgaRuntimeInstancesResultado{Estados: []string{"cerrado", "bloqueado", "degradado"}},
 	}
-	if len(handleIDs) == 0 && len(orderIDs) == 0 && len(runtimeIDs) == 0 {
+	if len(handleIDs) == 0 && len(orderIDs) == 0 && len(mailboxIDs) == 0 && len(runtimeIDs) == 0 {
 		return result, nil
 	}
 	tx, err := DB.Begin()
@@ -700,6 +701,13 @@ func PurgarRuntimeHistorico() (*PurgaRuntimeHistoricoResultado, error) {
 		}
 		result.Orders.Deleted = len(orderIDs)
 		result.Orders.DeletedIDs = orderIDs
+	}
+	if len(mailboxIDs) > 0 {
+		args := int64SliceToAny(mailboxIDs)
+		if _, err := tx.Exec(`DELETE FROM runtime_mailbox WHERE id IN (`+runtimeSQLPlaceholders(len(mailboxIDs))+`)`, args...); err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
 	}
 	if len(runtimeIDs) > 0 {
 		args := int64SliceToAny(runtimeIDs)
