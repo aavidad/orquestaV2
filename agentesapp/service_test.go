@@ -3628,6 +3628,86 @@ func TestBuildDetailCompactUsaResumePayloadMailboxComoFallbackAutonomia(t *testi
 	}
 }
 
+func TestBuildDetailCompactNoRefrescaResumePayloadConHeartbeatDeSesion(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(48)
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	writeJSON := func(path string, payload any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	writeJSON(manifestPath, map[string]any{
+		"version":         1,
+		"agent":           "Codex3",
+		"driver":          "tmux_cli_session",
+		"transport":       "tmux",
+		"tmux_session":    "orq-codex3-test",
+		"tmux_pane_id":    "%73",
+		"status_path":     statusPath,
+		"heartbeat_path":  heartbeatPath,
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":                 "ready",
+		"alive":                 true,
+		"updated_at":            now.Format(time.RFC3339Nano),
+		"last_output_at":        now.Format(time.RFC3339Nano),
+		"work_queue_kind":       "autonomia",
+		"work_queue_action":     "continuar_trabajo",
+		"work_queue_state":      "pending",
+		"work_queue_updated_at": now.Add(-time.Minute).Format(time.RFC3339Nano),
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	metaJSON := fmt.Sprintf(`{"worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`,
+		manifestPath, statusPath, heartbeatPath)
+	if err := controlruntime.RecordWorkQueueFromMetadataJSON(metaJSON, controlruntime.WorkQueueRecordInput{
+		Kind:       "autonomia",
+		Action:     "continuar_trabajo",
+		State:      "pending",
+		RecordedAt: now.Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("RecordWorkQueueFromMetadataJSON: %v", err)
+	}
+	heartbeatAt := now
+	store := &fakeStore{
+		agents:      []*db.Agente{{Nombre: "Codex3", Rol: "programador", Activo: true, Habilitado: true}},
+		assignments: []*db.Asignacion{{Agente: "Codex3", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva}},
+		sessions: []*db.Sesion{{
+			ID:                51,
+			Agente:            "Codex3",
+			ProyectoID:        &proyectoID,
+			Activa:            true,
+			Estado:            "activa",
+			Inicio:            now.Add(-2 * time.Hour),
+			HeartbeatAt:       &heartbeatAt,
+			ResumePayloadJSON: `{"mailbox":[{"kind":"autonomia","payload":{"accion":"esperar_o_pedir_tarea","bootstrap_kind":"server_autobootstrap"}}]}`,
+		}},
+		tasks:            []*db.Tarea{{ID: 17, Titulo: "Cerrar receipt TMUX", Estado: db.EstadoAsignada, ProyectoID: &proyectoID, Agente: ptr("Codex3")}},
+		runtimes:         []*db.RuntimeInstance{{ID: 22, Agente: "Codex3", ProyectoID: &proyectoID, LogicalState: "activo", ProcessState: "running", UpdatedAt: now}},
+		canonicalHandles: []*db.RuntimeHandle{{ID: 32, Agente: "Codex3", ProyectoID: &proyectoID, Estado: "activo", Transporte: "tmux", HandleKind: "session", MetadataJSON: metaJSON}},
+	}
+	svc := NewService(store, nil)
+
+	detail, err := svc.BuildDetailCompact("Codex3")
+	if err != nil {
+		t.Fatalf("BuildDetailCompact: %v", err)
+	}
+	if detail.Entity.LastAutonomyAction != "continuar_trabajo" || detail.Entity.LastAutonomySource != "work_queue" {
+		t.Fatalf("la work_queue reciente deberia prevalecer sobre resume payload viejo: %+v", detail.Entity)
+	}
+}
+
 func TestBuildDetailCompactPromueveResumePayloadAbsorbidoAWorkConfirmed(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(47)

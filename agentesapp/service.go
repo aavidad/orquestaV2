@@ -3895,11 +3895,11 @@ func summarizeResumePayloadAutonomy(sesion *db.Sesion) (action, source string, m
 		}
 		verificationKey = strings.TrimSpace(stringFromResumePayloadAny(payload["verification_key"]))
 		switch {
-		case sesion.HeartbeatAt != nil && !sesion.HeartbeatAt.IsZero():
-			ts := sesion.HeartbeatAt.UTC()
-			moment = &ts
 		case !sesion.Inicio.IsZero():
 			ts := sesion.Inicio.UTC()
+			moment = &ts
+		case sesion.HeartbeatAt != nil && !sesion.HeartbeatAt.IsZero():
+			ts := sesion.HeartbeatAt.UTC()
 			moment = &ts
 		}
 		return action, source, moment, state, reason, verificationKey
