@@ -6863,6 +6863,12 @@ func runtimeMailboxSessionResumePermiteFallbackInteractivoPipelineLocal(msg *db.
 // procesarRuntimeMailboxSessionResumeConSesion gestiona mensajes de resume cuando
 // hay una externalSessionID: verifica condiciones TMUX y encola el resume normal.
 func procesarRuntimeMailboxSessionResumeConSesion(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto, externalSessionID string) (bool, error) {
+	if mailboxOnlyConsumed, err := consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot, msg, handle, externalSessionID, "runtime_mailbox_session_resume"); err != nil {
+		return false, err
+	} else if mailboxOnlyConsumed {
+		consumed[msg.ID] = struct{}{}
+		return true, nil
+	}
 	if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, externalSessionID); err != nil {
 		return false, err
 	} else if dedupe {
@@ -6961,6 +6967,9 @@ func consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot *runtimeM
 			continue
 		}
 		if !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
+			continue
+		}
+		if !runtimeOrderMailboxOnlyFueEntregada(order) {
 			continue
 		}
 		if !runtimeOrderMatchesCurrentMailboxDeliveryAttempt(order, currentSessionID, currentSignature) {
@@ -8195,12 +8204,16 @@ func runtimeOrderCompletedMailboxAttemptStillBlocks(order *db.RuntimeOrder, curr
 		return false
 	}
 	orderSignature := runtimeOrderDeliveryAttemptSignature(order.PayloadJSON)
-	if currentSignature != "" {
-		if orderSignature != "" && currentSignature == orderSignature {
-			return true
-		}
-	}
 	orderSessionID := strings.TrimSpace(runtimeOrderExternalSessionIDFromJSON(order.PayloadJSON))
+	if currentSignature != "" {
+		if orderSignature != "" {
+			if currentSignature == orderSignature {
+				return true
+			}
+			return currentSessionID != "" && orderSessionID != "" && currentSessionID == orderSessionID
+		}
+		return false
+	}
 	if currentSessionID != "" && orderSessionID != "" && currentSessionID == orderSessionID {
 		return true
 	}
@@ -8208,6 +8221,25 @@ func runtimeOrderCompletedMailboxAttemptStillBlocks(order *db.RuntimeOrder, curr
 		return false
 	}
 	return !(currentSessionID != "" && orderSessionID != "" && currentSessionID != orderSessionID)
+}
+
+func runtimeOrderMailboxOnlyFueEntregada(order *db.RuntimeOrder) bool {
+	if order == nil || !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
+		return false
+	}
+	result := mapFromJSON(order.ResultadoJSON)
+	if len(result) == 0 {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(stringMapValue(result, "delivery_state"))) {
+	case "delivered", "consumed":
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(stringMapValue(result, "dispatch_state"))) {
+	case "delivered", "consumed":
+		return true
+	}
+	return false
 }
 
 func runtimeOrderMailboxOnlyExpired(order *db.RuntimeOrder) bool {
@@ -11862,7 +11894,7 @@ func seleccionarRelevoAutonomiaBloqueada(rows []agentesapp.Row, openTasksProject
 			}
 		}
 		return ceiling
-	})
+	}, true)
 }
 
 func seleccionarRelevoAutonomiaConLimite(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string, maxOpenTasksPerRecoveryWorker int) string {
@@ -11872,10 +11904,10 @@ func seleccionarRelevoAutonomiaConLimite(rows []agentesapp.Row, openTasksProject
 			candidateCeiling = dynamicCeiling
 		}
 		return candidateCeiling
-	})
+	}, false)
 }
 
-func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string, ceilingFn func(agentesapp.Row, time.Time) int) string {
+func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string, ceilingFn func(agentesapp.Row, time.Time) int, allowOverflowFallback bool) string {
 	now := time.Now().UTC()
 	lastReassign, hasLastReassign := latestAutoReassignmentInfo(taskNotes(tarea))
 	tareaPremiumAcotada := tareaDBTieneContratoPremiumAcotado(tarea)
@@ -11886,6 +11918,7 @@ func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjecte
 		openTasks     int
 	}
 	candidates := make([]candidate, 0, len(rows))
+	overflowCandidates := make([]candidate, 0, len(rows))
 	for _, row := range rows {
 		if row.Agente == nil {
 			continue
@@ -11906,7 +11939,10 @@ func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjecte
 			continue
 		}
 		if disponible, _, err := autonomiaCuentaCompartidaDisponible(agente); err == nil && !disponible {
-			continue
+			workerVivo := row.WorkerFresh(now) && (estado == "disponible" || estado == "trabajando")
+			if !workerVivo {
+				continue
+			}
 		}
 		if strings.TrimSpace(row.WorkerState) != "" && !row.WorkerFresh(now) {
 			continue
@@ -11926,6 +11962,14 @@ func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjecte
 			continue
 		}
 		if candidateCeiling > 0 && openTasks >= candidateCeiling {
+			if allowOverflowFallback {
+				overflowCandidates = append(overflowCandidates, candidate{
+					agente:        agente,
+					mismoProyecto: mismoProyecto,
+					estadoRank:    0,
+					openTasks:     openTasks,
+				})
+			}
 			continue
 		}
 		candidates = append(candidates, candidate{
@@ -11948,7 +11992,10 @@ func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjecte
 		return strings.ToLower(candidates[i].agente) < strings.ToLower(candidates[j].agente)
 	})
 	if len(candidates) == 0 {
-		return ""
+		if !allowOverflowFallback || len(overflowCandidates) == 0 {
+			return ""
+		}
+		candidates = overflowCandidates
 	}
 	return candidates[0].agente
 }

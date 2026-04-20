@@ -235,6 +235,9 @@ func resumirAutonomiaRows(rows []agentesapp.Row, now time.Time) autonomiaResumen
 	out := autonomiaResumen{}
 	supervisor := statusSupervisorAgentName()
 	for _, row := range rows {
+		if strings.EqualFold(strings.TrimSpace(row.EstadoOperativo), "bloqueado_por_cuota") {
+			continue
+		}
 		if strings.EqualFold(strings.TrimSpace(row.LastAutonomySource), "assignment_handoff") &&
 			(row.OpenTasks > 0 || row.SupervisorRoleActive(now)) &&
 			row.WorkerFresh(now) {

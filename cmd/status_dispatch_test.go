@@ -429,6 +429,38 @@ func TestResumirAutonomiaRowsNoCuentaWorkConfirmedComoContinuidadPendiente(t *te
 	}
 }
 
+func TestResumirAutonomiaRowsOmiteAgentesBloqueadosPorCuota(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	rows := []agentesapp.Row{
+		{
+			EstadoOperativo:          "bloqueado_por_cuota",
+			LastAutonomyAction:       "continuar_trabajo",
+			LastAutonomySource:       "work_queue",
+			LastAutonomyState:        "work_confirmed",
+			MailboxContinuityPending: 1,
+			OpenTasks:                2,
+			WorkerAlive:              true,
+			WorkerHeartbeat:          ptrTimeStatusDispatch(now),
+		},
+		{
+			LastAutonomyAction:       "continuar_trabajo",
+			LastAutonomySource:       "work_queue",
+			LastAutonomyState:        "work_confirmed",
+			MailboxContinuityPending: 1,
+			OpenTasks:                1,
+			WorkerAlive:              true,
+			WorkerHeartbeat:          ptrTimeStatusDispatch(now),
+		},
+	}
+
+	got := resumirAutonomiaRows(rows, now)
+	if got.Continuando != 1 || got.WorkConfirmed != 1 || got.ContinuidadPendiente != 0 {
+		t.Fatalf("los agentes bloqueados por cuota no deberian contaminar autonomia activa: %+v", got)
+	}
+}
+
 func TestResumirAutonomiaRowsCuentaHandoffVivoDesdeAssignment(t *testing.T) {
 	t.Parallel()
 
