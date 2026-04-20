@@ -60,6 +60,11 @@ type autonomiaResumen struct {
 	ContinuidadPendiente int `json:"continuity_pending"`
 }
 
+func normalizeDispatchDebtTotal(out deudaDispatchResumen) deudaDispatchResumen {
+	out.Total = out.Pendientes + out.Notificadas + out.Fallidas + out.WorkConfirmed
+	return out
+}
+
 func listarDeudaDispatchEstado() (deudaDispatchResumen, error) {
 	out := deudaDispatchResumen{}
 	var allHandles []*db.RuntimeHandle
@@ -76,7 +81,6 @@ func listarDeudaDispatchEstado() (deudaDispatchResumen, error) {
 			if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
 				continue
 			}
-			out.Total++
 			result := mapFromJSON(order.ResultadoJSON)
 			dispatchState := ""
 			deliveryState := ""
@@ -118,7 +122,7 @@ func listarDeudaDispatchEstado() (deudaDispatchResumen, error) {
 			}
 		}
 	}
-	return out, nil
+	return normalizeDispatchDebtTotal(out), nil
 }
 
 func dispatchOrderFailureCountsAsDebt(order *db.RuntimeOrder, now time.Time) bool {

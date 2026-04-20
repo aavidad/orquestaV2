@@ -103,6 +103,21 @@ func TestDispatchOrderFailureCountsAsDebtSoloSiEsReciente(t *testing.T) {
 	}
 }
 
+func TestNormalizeDispatchDebtTotalSumaSoloCategoriasVivas(t *testing.T) {
+	t.Parallel()
+
+	got := normalizeDispatchDebtTotal(deudaDispatchResumen{
+		Total:         99,
+		Pendientes:    1,
+		Notificadas:   2,
+		Fallidas:      0,
+		WorkConfirmed: 3,
+	})
+	if got.Total != 6 {
+		t.Fatalf("total normalizado inesperado: %+v", got)
+	}
+}
+
 func TestResumirAutonomiaRowsNoCuentaResumePayloadAbsorbidoComoPendiente(t *testing.T) {
 	t.Parallel()
 
