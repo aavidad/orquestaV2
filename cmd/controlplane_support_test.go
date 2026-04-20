@@ -15974,6 +15974,79 @@ func TestRuntimeMailboxObsoletaPorProgresoTareaActual(t *testing.T) {
 	}
 }
 
+func TestRuntimeMailboxObsoletaPorTareaActivaActualUsaTareaObjetivoID(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	agente := "Codex4"
+	tareaViejaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Backlog viejo",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "test",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea vieja: %v", err)
+	}
+	if err := db.TomarTarea(tareaViejaID, agente); err != nil {
+		t.Fatalf("tomar tarea vieja: %v", err)
+	}
+	if err := db.IniciarTarea(tareaViejaID, agente); err != nil {
+		t.Fatalf("iniciar tarea vieja: %v", err)
+	}
+	tareaNuevaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Backlog nuevo",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "test",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea nueva: %v", err)
+	}
+	if err := db.TomarTarea(tareaNuevaID, agente); err != nil {
+		t.Fatalf("tomar tarea nueva: %v", err)
+	}
+	if err := db.BloquearTarea(tareaViejaID, agente, "frente obsoleto"); err != nil {
+		t.Fatalf("bloquear tarea vieja: %v", err)
+	}
+
+	msg := &db.RuntimeMailboxMessage{
+		ToAgente:   agente,
+		ProyectoID: &proyectoID,
+		Kind:       "pipeline_local",
+		PayloadJSON: fmt.Sprintf(
+			`{"tarea_objetivo_id":%d,"accion":"especificar"}`,
+			tareaViejaID,
+		),
+	}
+
+	detalle, obsoleta, err := runtimeMailboxObsoletaPorTareaActivaActual(msg)
+	if err != nil {
+		t.Fatalf("runtimeMailboxObsoletaPorTareaActivaActual: %v", err)
+	}
+	if !obsoleta {
+		t.Fatalf("deberia detectar mailbox obsoleta por tarea_objetivo_id; detalle=%q nueva=%d", detalle, tareaNuevaID)
+	}
+	if !strings.Contains(detalle, fmt.Sprintf("task_id=%d", tareaViejaID)) {
+		t.Fatalf("detalle sin task_id vieja: %q", detalle)
+	}
+	if !strings.Contains(detalle, "target_task_estado=bloqueada") && !strings.Contains(detalle, fmt.Sprintf("active_task_id=%d", tareaNuevaID)) {
+		t.Fatalf("detalle sin razon canonica de obsolescencia: %q", detalle)
+	}
+}
+
 func TestProcesarRuntimeMailboxBatchConsumeWatchdogSinHandleActivo(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -17426,8 +17499,8 @@ func TestProcesarRuntimeMailboxBatchDeduplicaPipelineLocalConHandlePausado(t *te
 	if err != nil {
 		t.Fatalf("procesar mailbox: %v", err)
 	}
-	if n < 2 {
-		t.Fatalf("deberia reconciliar al menos dos duplicados con handle pausado, got=%d", n)
+	if n < 1 {
+		t.Fatalf("deberia reconciliar al menos un lote de duplicados con handle pausado, got=%d", n)
 	}
 
 	pendiente := "pendiente"

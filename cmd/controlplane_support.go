@@ -8350,7 +8350,8 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg *db.RuntimeMailboxMess
 }
 
 func consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, lane string, now time.Time, state *runtimeMailboxInteractiveWorkerState) (bool, error) {
-	if msg == nil || handle == nil || !runtimeMailboxKindEphemeral(strings.TrimSpace(msg.Kind)) {
+	kind := strings.TrimSpace(msg.Kind)
+	if msg == nil || handle == nil || (!runtimeMailboxKindEphemeral(kind) && !strings.EqualFold(kind, "pipeline_local")) {
 		return false, nil
 	}
 	if detalle, obsoleta, err := runtimeMailboxObsoletaPorTareaActivaActual(msg); err != nil {
@@ -8434,7 +8435,7 @@ func runtimeMailboxObsoletaPorProgresoTareaActual(msg *db.RuntimeMailboxMessage,
 		return "", false
 	}
 	payload := mapFromJSON(strings.TrimSpace(msg.PayloadJSON))
-	tareaID := int64PtrFromMap(payload, "tarea_id")
+	tareaID := runtimeMailboxTargetTaskID(payload)
 	if tareaID == nil || *tareaID <= 0 || msg.ProyectoID == nil {
 		return "", false
 	}
@@ -8473,7 +8474,7 @@ func runtimeMailboxObsoletaPorTareaActivaActual(msg *db.RuntimeMailboxMessage) (
 		return "", false, nil
 	}
 	payload := mapFromJSON(strings.TrimSpace(msg.PayloadJSON))
-	tareaID := int64PtrFromMap(payload, "tarea_id")
+	tareaID := runtimeMailboxTargetTaskID(payload)
 	if tareaID == nil || *tareaID <= 0 {
 		return "", false, nil
 	}
@@ -8505,6 +8506,19 @@ func runtimeMailboxObsoletaPorTareaActivaActual(msg *db.RuntimeMailboxMessage) (
 		return "", false, nil
 	}
 	return fmt.Sprintf("task_id=%d active_task_id=%d proyecto_id=%d", *tareaID, canonica.ID, *msg.ProyectoID), true, nil
+}
+
+func runtimeMailboxTargetTaskID(payload map[string]any) *int64 {
+	if payload == nil {
+		return nil
+	}
+	if tareaID := int64PtrFromMap(payload, "tarea_id"); tareaID != nil && *tareaID > 0 {
+		return tareaID
+	}
+	if tareaID := int64PtrFromMap(payload, "tarea_objetivo_id"); tareaID != nil && *tareaID > 0 {
+		return tareaID
+	}
+	return nil
 }
 
 func consumirRuntimeMailboxBootstrapObservadoSiProcede(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, runtime *db.RuntimeInstance, lane string) (bool, error) {
