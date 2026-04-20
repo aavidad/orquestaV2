@@ -30089,7 +30089,7 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReasignaATrabajadorSano(t *testi
 	if err := db.UpsertRuntimeHandleDesdeSesion(sesionBloqueada); err != nil {
 		t.Fatalf("upsert handle bloqueado: %v", err)
 	}
-	handleBloqueado, err := db.GetRuntimeHandleActivoAgenteProyecto("CodexBloqueado", &proyectoID)
+	handleBloqueado, err := db.GetRuntimeHandleBySesionID(sesionBloqueada.ID)
 	if err != nil || handleBloqueado == nil {
 		t.Fatalf("get handle bloqueado: %+v err=%v", handleBloqueado, err)
 	}
@@ -30139,6 +30139,18 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReasignaATrabajadorSano(t *testi
 	}
 	if tarea.Agente == nil || *tarea.Agente != "CodexSano" || tarea.Estado != db.EstadoEnProgreso {
 		t.Fatalf("tarea no reasignada correctamente: %+v", tarea)
+	}
+	agente := "CodexSano"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders relevo: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "nudge" {
+		t.Fatalf("deberia encolar continuidad al relevo sano: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"accion":"continuar_trabajo"`) {
+		t.Fatalf("payload nudge inesperado: %s", orders[0].PayloadJSON)
 	}
 }
 

@@ -9532,6 +9532,30 @@ func procesarIntervencionTareasActivasDegradadasBatch(rows []agentesapp.Row, tar
 				}
 				continue
 			}
+			var proyecto *db.Proyecto
+			if actual.ProyectoID != nil && *actual.ProyectoID > 0 {
+				proyecto = &db.Proyecto{ID: *actual.ProyectoID}
+			}
+			if handoff, err := intentarHandoffAutonomoTarea(
+				proyecto,
+				actual.ID,
+				agente,
+				relevo,
+				"",
+				row.EstadoOperativo,
+				fmt.Sprintf("Continuidad automática tras degradación de %s en tarea #%d", agente, actual.ID),
+				fmt.Sprintf("Handoff automático desde %s a %s: %s", agente, relevo, motivo),
+				fmt.Sprintf("resuelto por handoff automático a %s", relevo),
+			); err != nil {
+				return count, err
+			} else if handoff {
+				if openTasksProjected[agente] > 0 {
+					openTasksProjected[agente]--
+				}
+				openTasksProjected[relevo]++
+				count++
+				continue
+			}
 
 			if err := reasignarYArrancarTareaAutonomia(actual.ID, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s: %s", agente, relevo, motivo)); err != nil {
 				return count, err
