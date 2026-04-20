@@ -146,6 +146,8 @@ func TestResumirAutonomiaRowsNoCuentaWorkQueueYaEnRunningComoPendiente(t *testin
 	t.Parallel()
 
 	now := time.Now().UTC()
+	absorbed := now.Add(-2 * time.Minute)
+	progress := now.Add(-time.Minute)
 	rows := []agentesapp.Row{
 		{
 			LastAutonomyAction:       "continuar_trabajo",
@@ -160,6 +162,18 @@ func TestResumirAutonomiaRowsNoCuentaWorkQueueYaEnRunningComoPendiente(t *testin
 			LastAutonomyAction:       "continuar_trabajo",
 			LastAutonomySource:       "work_queue",
 			LastAutonomyState:        "pending",
+			LastAutonomyMoment:       &absorbed,
+			MailboxContinuityPending: 1,
+			OpenTasks:                1,
+			WorkerAlive:              true,
+			WorkerHeartbeat:          ptrTimeStatusDispatch(now),
+			WorkerLastProgress:       &progress,
+		},
+		{
+			LastAutonomyAction:       "continuar_trabajo",
+			LastAutonomySource:       "work_queue",
+			LastAutonomyState:        "pending",
+			LastAutonomyMoment:       ptrTimeStatusDispatch(now),
 			MailboxContinuityPending: 1,
 			OpenTasks:                1,
 			WorkerAlive:              true,
@@ -168,11 +182,37 @@ func TestResumirAutonomiaRowsNoCuentaWorkQueueYaEnRunningComoPendiente(t *testin
 	}
 
 	got := resumirAutonomiaRows(rows, now)
-	if got.Continuando != 2 {
+	if got.Continuando != 3 {
 		t.Fatalf("resumen autonomia inesperado: %+v", got)
 	}
 	if got.ContinuidadPendiente != 1 {
 		t.Fatalf("solo la work_queue no absorbida deberia contar como pendiente: %+v", got)
+	}
+}
+
+func TestResumirAutonomiaRowsCuentaWorkQueueConActividadYaStaleComoPendiente(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	absorbed := now.Add(-20 * time.Minute)
+	progress := now.Add(-11 * time.Minute)
+	rows := []agentesapp.Row{
+		{
+			LastAutonomyAction:       "continuar_trabajo",
+			LastAutonomySource:       "work_queue",
+			LastAutonomyState:        "pending",
+			LastAutonomyMoment:       &absorbed,
+			MailboxContinuityPending: 1,
+			OpenTasks:                1,
+			WorkerAlive:              true,
+			WorkerHeartbeat:          ptrTimeStatusDispatch(now),
+			WorkerLastProgress:       &progress,
+		},
+	}
+
+	got := resumirAutonomiaRows(rows, now)
+	if got.ContinuidadPendiente != 1 {
+		t.Fatalf("la actividad vieja no deberia absorber continuidad: %+v", got)
 	}
 }
 

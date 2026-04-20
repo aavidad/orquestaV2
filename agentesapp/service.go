@@ -3953,7 +3953,29 @@ func (r Row) EffectiveContinuityPending(now time.Time) bool {
 			}
 		}
 	}
+	if source == "work_queue" && r.autonomyWorkQueueAbsorbedByWorker(now) && (r.OpenTasks > 0 || r.supervisorAutonomyLive(now)) {
+		return false
+	}
 	return true
+}
+
+func (r Row) autonomyWorkQueueAbsorbedByWorker(now time.Time) bool {
+	if strings.ToLower(strings.TrimSpace(r.LastAutonomySource)) != "work_queue" {
+		return false
+	}
+	moment := r.LastAutonomyMoment
+	if moment == nil || moment.IsZero() {
+		return false
+	}
+	for _, ts := range []*time.Time{r.WorkerLastProgress, r.WorkerLastOutput} {
+		if ts == nil || ts.IsZero() {
+			continue
+		}
+		if !ts.Before(*moment) && !ts.Before(now.Add(-10*time.Minute)) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r Row) RequiresStructuredTMUX() bool {
