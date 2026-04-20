@@ -384,34 +384,36 @@ func launchServerAutonomyMaintenanceLoop(ctx context.Context, debugLogger *log.L
 	if !cfg.Enabled {
 		return
 	}
+	runOnce := func() {
+		started := runtimeProcessDegradadosEnCurso.CompareAndSwap(false, true)
+		if !started {
+			return
+		}
+		defer runtimeProcessDegradadosEnCurso.Store(false)
+		summary, err := runtimeProcessDegradadosBatchDetailed()
+		if err != nil {
+			db.Audit("server", "runtime_process_degradados_loop_error", "runtime", 0, err.Error())
+			if debugLogger != nil {
+				debugLogger.Printf("runtime_process_degradados_loop error=%v", err)
+			}
+			return
+		}
+		if debugLogger != nil && summary.Count > 0 {
+			debugLogger.Printf("runtime_process_degradados_loop count=%d ghost=%d reactivated=%d idle_autoassigned=%d",
+				summary.Count, summary.GhostAssignmentsCompacted, summary.ReactivatedWithoutRuntime, summary.IdleAutoassigned)
+		}
+	}
 	go func() {
 		ticker := time.NewTicker(serverAutonomyMaintenanceInterval())
 		defer ticker.Stop()
+		runOnce()
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
 			}
-			started := runtimeProcessDegradadosEnCurso.CompareAndSwap(false, true)
-			if !started {
-				continue
-			}
-			func() {
-				defer runtimeProcessDegradadosEnCurso.Store(false)
-				summary, err := runtimeProcessDegradadosBatchDetailed()
-				if err != nil {
-					db.Audit("server", "runtime_process_degradados_loop_error", "runtime", 0, err.Error())
-					if debugLogger != nil {
-						debugLogger.Printf("runtime_process_degradados_loop error=%v", err)
-					}
-					return
-				}
-				if debugLogger != nil && summary.Count > 0 {
-					debugLogger.Printf("runtime_process_degradados_loop count=%d ghost=%d reactivated=%d idle_autoassigned=%d",
-						summary.Count, summary.GhostAssignmentsCompacted, summary.ReactivatedWithoutRuntime, summary.IdleAutoassigned)
-				}
-			}()
+			runOnce()
 		}
 	}()
 }
