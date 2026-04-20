@@ -9647,28 +9647,22 @@ func procesarIntervencionTareasBloqueadasDegradadasBatch(rows []agentesapp.Row, 
 			}
 
 			motivo := construirMotivoAutonomiaAgenteDegradado(row)
-			if actual.ProyectoID != nil && *actual.ProyectoID > 0 {
-				if proyecto, err := db.GetProyecto(strconv.FormatInt(*actual.ProyectoID, 10)); err != nil {
-					return count, err
-				} else if proyecto != nil {
-					if handoff, err := intentarHandoffAutonomoTarea(
-						proyecto,
-						actual.ID,
-						agente,
-						relevo,
-						"",
-						motivo,
-						fmt.Sprintf("Continuidad automática en tarea #%d tras degradación de %s", actual.ID, agente),
-						fmt.Sprintf("Handoff automático desde %s a %s: %s", agente, relevo, motivo),
-						fmt.Sprintf("resuelto por handoff automático a %s", relevo),
-					); err != nil {
-						return count, err
-					} else if handoff {
-						openTasksProjected[relevo]++
-						count++
-						continue
-					}
-				}
+			if handoff, err := intentarHandoffAutonomoTarea(
+				proyectoLigeroDesdeTarea(actual),
+				actual.ID,
+				agente,
+				relevo,
+				"",
+				motivo,
+				fmt.Sprintf("Continuidad automática en tarea #%d tras degradación de %s", actual.ID, agente),
+				fmt.Sprintf("Handoff automático desde %s a %s: %s", agente, relevo, motivo),
+				fmt.Sprintf("resuelto por handoff automático a %s", relevo),
+			); err != nil {
+				return count, err
+			} else if handoff {
+				openTasksProjected[relevo]++
+				count++
+				continue
 			}
 			resolucion := fmt.Sprintf("reasignación automática desde %s tras %s (%s)", agente, row.EstadoOperativo, firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), "worker degradado"))
 			if err := desbloquearYReasignarTareaAutonomia(actual.ID, resolucion, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s: %s", agente, relevo, motivo)); err != nil {
@@ -11466,6 +11460,13 @@ func rowProyectoSlugPreferido(row agentesapp.Row) string {
 		return strings.TrimSpace(row.Asignacion.ProyectoSlug)
 	}
 	return ""
+}
+
+func proyectoLigeroDesdeTarea(tarea *db.Tarea) *db.Proyecto {
+	if tarea == nil || tarea.ProyectoID == nil || *tarea.ProyectoID <= 0 {
+		return nil
+	}
+	return &db.Proyecto{ID: *tarea.ProyectoID}
 }
 
 func rowDurableContinuityTaskID(row agentesapp.Row, now time.Time) int64 {
