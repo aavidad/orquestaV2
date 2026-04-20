@@ -770,6 +770,7 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 				row.WorkerCanSendInput = view.CanSendInput
 				row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
 				row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
+				applyDurableWorkQueueToTickRow(&row, view)
 			}
 		}
 		row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, staleThreshold)
@@ -1012,6 +1013,7 @@ func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.Runti
 			row.WorkerCanSendInput = view.CanSendInput
 			row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
 			row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
+			applyDurableWorkQueueToTickRow(&row, view)
 		}
 	}
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
@@ -1117,6 +1119,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 			row.WorkerCanSendInput = view.CanSendInput
 			row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
 			row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
+			applyDurableWorkQueueToTickRow(&row, view)
 		}
 	}
 
@@ -3322,6 +3325,7 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 	recentActivity := row.hasRecentOperationalActivity(now)
 	hasActiveTask := row.OpenTasks > 0
 	hasBlockedTask := row.BlockedTasks > 0
+	continuidadAccionablePendiente := row.MailboxActionablePending > 0 || row.MailboxContinuityPending > 0
 	pausedRuntime := estadoRuntimePausado(runtimeEstado) || estadoHandlePausado(handleEstado)
 	runtimeStale := row.runtimePrincipalStale(now)
 	workerRunningFresh := false
@@ -3428,6 +3432,9 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 	}
 	if hasActiveTask && (estadoRuntimeRoto(runtimeEstado) || estadoHandleRoto(handleEstado)) {
 		return "bloqueado_por_runtime", firstNonEmpty(row.runtimeState(), row.handleState())
+	}
+	if hasActiveTask && hasBlockedTask && continuidadAccionablePendiente && workerRunningFresh {
+		return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad accionable pendiente")
 	}
 	if hasActiveTask && hasBlockedTask && recentActivity {
 		return "saturado", fmt.Sprintf("%d activas, %d bloqueadas", row.OpenTasks, row.BlockedTasks)

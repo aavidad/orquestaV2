@@ -1144,6 +1144,7 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 	estadoOperativo := strings.TrimSpace(row.EstadoOperativo)
 	detalleOperativo := strings.TrimSpace(row.DetalleOperativo)
 	runtimeBloqueado := estadoOperativoBloqueaContinuidad(estadoOperativo)
+	continuidadAccionablePendiente := row.MailboxActionablePending > 0 || row.MailboxContinuityPending > 0
 	if tieneTrabajo &&
 		strings.EqualFold(estadoOperativo, "atascado") &&
 		strings.EqualFold(strings.TrimSpace(row.WorkerState), "ready") &&
@@ -1217,6 +1218,9 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		out.AccionRecomendada = "pausar_y_reasignar"
 		out.DebePausar = true
 		out.Motivo = "La asignación activa del agente ha cambiado al proyecto " + proyectoAsignado
+	case tieneTrabajo && continuidadAccionablePendiente:
+		out.AccionRecomendada = "continuar_trabajo"
+		out.Motivo = "Hay continuidad accionable pendiente; prioriza cerrar el frente activo antes de escalar bloqueos residuales"
 	case tieneBloqueos:
 		out.AccionRecomendada = "pedir_intervencion"
 		out.Motivo = "Hay tareas bloqueadas que requieren resolución"

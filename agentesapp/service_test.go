@@ -2556,6 +2556,108 @@ func TestBuildPanelRowsNoBloqueaSiWorkerYaSeRecuperoTrasOrdenControlPendiente(t 
 	}
 }
 
+func TestBuildPanelRowsPriorizaContinuidadAccionableSobreSaturacionResidual(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	workQueuePath := filepath.Join(tmp, "work-queue.json")
+
+	writeJSON := func(path string, payload any) {
+		t.Helper()
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(raw, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	writeJSON(manifestPath, runtimeagente.WorkerManifest{
+		Version:             1,
+		Agent:               "Codex3",
+		Project:             "orquestador",
+		Driver:              "tmux_cli_session",
+		Transport:           "tmux",
+		MailboxDeliveryMode: "session_resume",
+		StatusPath:          statusPath,
+		HeartbeatPath:       heartbeatPath,
+		CreatedAt:           now.Add(-2 * time.Minute).Format(time.RFC3339),
+		StartedAt:           now.Add(-2 * time.Minute).Format(time.RFC3339),
+	})
+	writeJSON(statusPath, runtimeagente.WorkerStatus{
+		State:               "ready",
+		UpdatedAt:           now.Format(time.RFC3339),
+		Alive:               true,
+		Agent:               "Codex3",
+		Project:             "orquestador",
+		MailboxDeliveryMode: "session_resume",
+		ReadyAt:             now.Add(-20 * time.Second).Format(time.RFC3339),
+		LastProgressAt:      now.Add(-3 * time.Second).Format(time.RFC3339),
+	})
+	writeJSON(heartbeatPath, runtimeagente.WorkerHeartbeat{
+		Alive:          true,
+		HeartbeatAt:    now.Format(time.RFC3339),
+		StartedAt:      now.Add(-2 * time.Minute).Format(time.RFC3339),
+		Agent:          "Codex3",
+		Project:        "orquestador",
+		ReadyAt:        now.Add(-20 * time.Second).Format(time.RFC3339),
+		LastProgressAt: now.Add(-3 * time.Second).Format(time.RFC3339),
+	})
+	writeJSON(workQueuePath, runtimeagente.WorkerWorkQueue{
+		Version:   1,
+		UpdatedAt: now.Format(time.RFC3339),
+		Current: &runtimeagente.WorkerWorkQueueEntry{
+			MailboxID:  1129,
+			Kind:       "pipeline_local",
+			Action:     "especificar",
+			TaskID:     19,
+			State:      "pending",
+			Title:      "Frente activo",
+			RecordedAt: now.Format(time.RFC3339),
+		},
+	})
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	projectID := int64(7)
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		sessions: []*db.Sesion{
+			{Agente: "Codex3", Herramienta: "codex-cli", Estado: "activa", Inicio: now, ProyectoID: &projectID},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex3", ProyectoID: &projectID, LogicalState: "esperando_io", ProcessState: "running", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex3", ProyectoID: &projectID, RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 17, Agente: ptr("Codex3"), ProyectoID: &projectID, Estado: db.EstadoBloqueada, Titulo: "Bloqueo residual"},
+			{ID: 19, Agente: ptr("Codex3"), ProyectoID: &projectID, Estado: db.EstadoEnProgreso, Titulo: "Frente activo"},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "trabajando" {
+		t.Fatalf("estado operativo=%q detalle=%q", rows[0].EstadoOperativo, rows[0].DetalleOperativo)
+	}
+}
+
 func TestBuildPanelRowsIgnoraControlOrderDeOtroProyecto(t *testing.T) {
 	now := time.Now().UTC()
 	projectID := int64(3)
