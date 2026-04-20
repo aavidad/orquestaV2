@@ -29,6 +29,7 @@ var (
 	statusFastFetcher  = fetchStatusFastFallback
 	statusRowsFetcher  = agentRowsForStatus
 	statusRuntimeHandlesFetcher = db.ListarRuntimeHandles
+	statusDispatchFailureWindow = 2 * time.Hour
 	statusNowFunc      = time.Now
 	statusAsyncRefresh = true
 	statusCacheState   struct {
@@ -63,6 +64,7 @@ func listarDeudaDispatchEstado() (deudaDispatchResumen, error) {
 	out := deudaDispatchResumen{}
 	var allHandles []*db.RuntimeHandle
 	var handlesLoaded bool
+	now := statusNowFunc().UTC()
 	estados := []string{"pendiente", "ejecutando", "fallida"}
 	for _, estado := range estados {
 		estadoFiltro := estado
@@ -106,7 +108,9 @@ func listarDeudaDispatchEstado() (deudaDispatchResumen, error) {
 					out.Pendientes++
 				}
 			case strings.TrimSpace(order.Estado) == "fallida" || dispatchState == "failed" || deliveryState == "failed":
-				out.Fallidas++
+				if dispatchOrderFailureCountsAsDebt(order, now) {
+					out.Fallidas++
+				}
 			case dispatchState == "notified" || deliveryState == "notified":
 				out.Notificadas++
 			default:
@@ -115,6 +119,27 @@ func listarDeudaDispatchEstado() (deudaDispatchResumen, error) {
 		}
 	}
 	return out, nil
+}
+
+func dispatchOrderFailureCountsAsDebt(order *db.RuntimeOrder, now time.Time) bool {
+	if order == nil {
+		return false
+	}
+	window := statusDispatchFailureWindow
+	if window <= 0 {
+		return true
+	}
+	last := order.UpdatedAt.UTC()
+	if order.FinishedAt != nil && !order.FinishedAt.IsZero() && order.FinishedAt.UTC().After(last) {
+		last = order.FinishedAt.UTC()
+	}
+	if last.IsZero() {
+		last = order.CreatedAt.UTC()
+	}
+	if last.IsZero() {
+		return true
+	}
+	return !last.Before(now.Add(-window))
 }
 
 func dispatchOrderWorkConfirmedFromHandles(order *db.RuntimeOrder, handles []*db.RuntimeHandle) bool {

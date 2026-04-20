@@ -80,3 +80,24 @@ func TestDispatchOrderWorkConfirmedFromHandlesIgnoresMismatchedHandle(t *testing
 		t.Fatalf("no deberia confirmar trabajo con handle de otro agente")
 	}
 }
+
+func TestDispatchOrderFailureCountsAsDebtSoloSiEsReciente(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 20, 12, 0, 0, 0, time.UTC)
+	recent := &db.RuntimeOrder{
+		CreatedAt: now.Add(-30 * time.Minute),
+		UpdatedAt: now.Add(-20 * time.Minute),
+	}
+	old := &db.RuntimeOrder{
+		CreatedAt: now.Add(-6 * time.Hour),
+		UpdatedAt: now.Add(-5 * time.Hour),
+	}
+
+	if !dispatchOrderFailureCountsAsDebt(recent, now) {
+		t.Fatalf("fallo reciente deberia contar como deuda")
+	}
+	if dispatchOrderFailureCountsAsDebt(old, now) {
+		t.Fatalf("fallo historico no deberia contar como deuda viva")
+	}
+}
