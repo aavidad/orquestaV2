@@ -7609,6 +7609,13 @@ func runtimeOrderSendInstructionReceiptEvidence(order *RuntimeOrder, payload map
 	if order == nil || msg == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) {
 		return false, "", time.Time{}, nil
 	}
+	baseline := runtimeOrderSendInstructionReceiptBaseline(order, msg)
+	if msg.ConsumedAt != nil && !msg.ConsumedAt.IsZero() {
+		consumedAt := msg.ConsumedAt.UTC()
+		if consumedAt.After(baseline) || consumedAt.Equal(baseline) {
+			return true, "runtime_mailbox_consumed", consumedAt, nil
+		}
+	}
 	handle, err := resolverHandleParaOrden(order)
 	if err != nil {
 		return false, "", time.Time{}, err
@@ -7626,7 +7633,6 @@ func runtimeOrderSendInstructionReceiptEvidence(order *RuntimeOrder, payload map
 	} else if confirmed {
 		return true, source, at, nil
 	}
-	baseline := runtimeOrderSendInstructionReceiptBaseline(order, msg)
 	if runtimeOrderSendInstructionEsMicroprogramacion(payload) {
 		if runtimeOrderSendInstructionPermiteReceiptTranscriptPatch(payload) {
 			confirmed, receiptSource, receiptAt, err := runtimeOrderSendInstructionTranscriptPatchEvidence(runtime, handle, baseline)

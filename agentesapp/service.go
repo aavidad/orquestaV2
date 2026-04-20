@@ -75,6 +75,7 @@ type Service struct {
 	prepareAgentFlight       map[string]*prepareAgentFlight
 	prepareProjectCache      map[string]cachedPrepareProject
 	prepareProjectFlight     map[string]*prepareProjectFlight
+	tickProjectFlight        map[string]*prepareProjectFlight
 	prepareSessionCache      map[string]cachedPrepareSession
 	prepareSessionFlight     map[string]*prepareSessionFlight
 	prepareConnectorCache    map[string]cachedPrepareConnector
@@ -133,6 +134,7 @@ func NewService(store Store, modelPolicyProvider ModelPolicyProvider) *Service {
 		prepareAgentFlight:       map[string]*prepareAgentFlight{},
 		prepareProjectCache:      map[string]cachedPrepareProject{},
 		prepareProjectFlight:     map[string]*prepareProjectFlight{},
+		tickProjectFlight:        map[string]*prepareProjectFlight{},
 		prepareSessionCache:      map[string]cachedPrepareSession{},
 		prepareSessionFlight:     map[string]*prepareSessionFlight{},
 		prepareConnectorCache:    map[string]cachedPrepareConnector{},
@@ -1610,6 +1612,27 @@ func (s *Service) beginPrepareProjectFlight(ref string) *prepareProjectFlight {
 	return flight
 }
 
+func (s *Service) beginTickProjectFlight(ref string) *prepareProjectFlight {
+	if s == nil {
+		return nil
+	}
+	key := strings.ToLower(strings.TrimSpace(ref))
+	if key == "" {
+		return nil
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if item, ok := s.prepareProjectCache[key]; ok && item.project != nil && time.Now().Before(item.expires) {
+		return nil
+	}
+	if _, ok := s.tickProjectFlight[key]; ok {
+		return nil
+	}
+	flight := &prepareProjectFlight{done: make(chan struct{})}
+	s.tickProjectFlight[key] = flight
+	return flight
+}
+
 func (s *Service) waitPrepareProjectFlight(ref string) (*db.Proyecto, error) {
 	if s == nil {
 		return nil, nil
@@ -1636,6 +1659,32 @@ func (s *Service) waitPrepareProjectFlight(ref string) (*db.Proyecto, error) {
 	}
 }
 
+func (s *Service) waitTickProjectFlight(ref string) (*db.Proyecto, error) {
+	if s == nil {
+		return nil, nil
+	}
+	key := strings.ToLower(strings.TrimSpace(ref))
+	if key == "" {
+		return nil, nil
+	}
+	for {
+		s.cacheMu.Lock()
+		flight, ok := s.tickProjectFlight[key]
+		s.cacheMu.Unlock()
+		if !ok {
+			return s.cachedPrepareProject(ref), nil
+		}
+		<-flight.done
+		if flight.err != nil {
+			return nil, flight.err
+		}
+		if flight.project != nil {
+			return clonePrepareProject(flight.project), nil
+		}
+		return s.cachedPrepareProject(ref), nil
+	}
+}
+
 func (s *Service) finishPrepareProjectFlight(ref string, flight *prepareProjectFlight) {
 	if s == nil || flight == nil {
 		return
@@ -1647,6 +1696,20 @@ func (s *Service) finishPrepareProjectFlight(ref string, flight *prepareProjectF
 	s.cacheMu.Lock()
 	defer s.cacheMu.Unlock()
 	delete(s.prepareProjectFlight, key)
+	close(flight.done)
+}
+
+func (s *Service) finishTickProjectFlight(ref string, flight *prepareProjectFlight) {
+	if s == nil || flight == nil {
+		return
+	}
+	key := strings.ToLower(strings.TrimSpace(ref))
+	if key == "" {
+		return
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	delete(s.tickProjectFlight, key)
 	close(flight.done)
 }
 

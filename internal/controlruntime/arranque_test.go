@@ -895,6 +895,43 @@ func TestDetenerProcesoTMUXUsaKillSession(t *testing.T) {
 	}
 }
 
+func TestDetenerProcesoTMUXIgnoraSesionYaAusente(t *testing.T) {
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "fake-tmux-missing")
+	script := fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+state_dir=%q
+mkdir -p "$state_dir"
+printf '%%s\n' "$*" >> "$state_dir/invocations.log"
+if [[ "${1:-}" == "kill-session" ]]; then
+  echo "can't find session: orq-codex7-111552" >&2
+  exit 1
+fi
+exit 0
+`, filepath.Join(dir, "fake-tmux-state"))
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake tmux missing script: %v", err)
+	}
+
+	pid := int64(os.Getpid())
+	meta := fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_command":"%s","tmux_session":"orq-codex7-111552"}`, scriptPath)
+	aplicado, gotPID, err := DetenerProceso(ObjetivoProceso{
+		PID:          &pid,
+		HandleKind:   "process",
+		HandleRef:    "0",
+		MetadataJSON: meta,
+	})
+	if err != nil {
+		t.Fatalf("DetenerProceso tmux missing session: %v", err)
+	}
+	if !aplicado {
+		t.Fatal("deberia tratar la sesion tmux ausente como stop aplicado")
+	}
+	if gotPID != int(pid) {
+		t.Fatalf("pid inesperado: got=%d want=%d", gotPID, pid)
+	}
+}
+
 func TestDetenerProcesoTMUXBuscaTmuxEnPATHSiFaltaEnMetadata(t *testing.T) {
 	dir := t.TempDir()
 	fakeTmux := writeFakeTmuxScript(t, dir)

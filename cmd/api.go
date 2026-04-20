@@ -136,6 +136,8 @@ var (
 	apiAgentTickTimeout             = 6 * time.Second
 	apiAgentPrepareLimiter          = make(chan struct{}, 4)
 	apiAgentTickLimiter             = make(chan struct{}, 2)
+	apiActivePrepareRequests        atomic.Int32
+	apiActiveTickRequests           atomic.Int32
 	apiConfigGetFn                  = func(clave string) (string, error) {
 		return configService.Get(clave)
 	}
@@ -177,13 +179,71 @@ var (
 	apiListRuntimeMailboxFn = func(filter db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error) {
 		return runtimesService.ListRuntimeMailbox(filter)
 	}
+	apiGetAgentFn = func(ref string) (*db.Agente, error) {
+		return agentesService.GetAgent(ref)
+	}
 	apiGetRuntimeProjectFn = func(ref string) (*db.Proyecto, error) {
 		return runtimesService.GetProject(ref)
 	}
 	apiListRuntimeOrdersTimeout    = 2 * time.Second
 	apiListRuntimeMailboxTimeout   = 2 * time.Second
 	apiRuntimeProjectLookupTimeout = 1500 * time.Millisecond
+	apiAgentCanonicalCacheTTL      = 30 * time.Second
+	apiAgentCanonicalCacheMu       sync.Mutex
+	apiAgentCanonicalCache         = map[string]apiCanonicalAgentCacheEntry{}
 )
+
+func init() {
+	agentesapp.ShouldPersistTickHeartbeatDB = func() bool {
+		return !agentAPIHotPathBursting()
+	}
+}
+
+type apiCanonicalAgentCacheEntry struct {
+	nombre  string
+	expires time.Time
+}
+
+func apiCanonicalAgentCacheKey(raw string) string {
+	return strings.ToLower(strings.TrimSpace(raw))
+}
+
+func apiCanonicalAgentCacheGet(raw string) (string, bool) {
+	key := apiCanonicalAgentCacheKey(raw)
+	if key == "" {
+		return "", false
+	}
+	apiAgentCanonicalCacheMu.Lock()
+	defer apiAgentCanonicalCacheMu.Unlock()
+	item, ok := apiAgentCanonicalCache[key]
+	if !ok || strings.TrimSpace(item.nombre) == "" || time.Now().After(item.expires) {
+		if ok {
+			delete(apiAgentCanonicalCache, key)
+		}
+		return "", false
+	}
+	return item.nombre, true
+}
+
+func apiCanonicalAgentCachePut(raw, nombre string) {
+	key := apiCanonicalAgentCacheKey(raw)
+	nombre = strings.TrimSpace(nombre)
+	if key == "" || nombre == "" {
+		return
+	}
+	apiAgentCanonicalCacheMu.Lock()
+	defer apiAgentCanonicalCacheMu.Unlock()
+	apiAgentCanonicalCache[key] = apiCanonicalAgentCacheEntry{
+		nombre:  nombre,
+		expires: time.Now().Add(apiAgentCanonicalCacheTTL),
+	}
+}
+
+func apiResetAgentCanonicalCache() {
+	apiAgentCanonicalCacheMu.Lock()
+	defer apiAgentCanonicalCacheMu.Unlock()
+	apiAgentCanonicalCache = map[string]apiCanonicalAgentCacheEntry{}
+}
 
 func runAPIAgentPrepareLimited(timeout time.Duration, fn func() (*agentesapp.PrepareOutput, error)) (*agentesapp.PrepareOutput, error) {
 	if fn == nil {
@@ -211,6 +271,8 @@ func runAPIAgentPrepareLimited(timeout time.Duration, fn func() (*agentesapp.Pre
 	}
 	done := make(chan result, 1)
 	go func() {
+		apiActivePrepareRequests.Add(1)
+		defer apiActivePrepareRequests.Add(-1)
 		out, err := fn()
 		done <- result{out: out, err: err}
 	}()
@@ -248,6 +310,8 @@ func runAPIAgentTickLimited(timeout time.Duration, fn func() (*agentesapp.TickOu
 	}
 	done := make(chan result, 1)
 	go func() {
+		apiActiveTickRequests.Add(1)
+		defer apiActiveTickRequests.Add(-1)
 		out, err := fn()
 		done <- result{out: out, err: err}
 	}()
@@ -257,6 +321,14 @@ func runAPIAgentTickLimited(timeout time.Duration, fn func() (*agentesapp.TickOu
 	case <-time.After(remaining):
 		return nil, errStatusFetchTimeout
 	}
+}
+
+func agentAPIHotPathBusy() bool {
+	return apiActivePrepareRequests.Load() > 0 || apiActiveTickRequests.Load() > 0
+}
+
+func agentAPIHotPathBursting() bool {
+	return apiActivePrepareRequests.Load()+apiActiveTickRequests.Load() > 1
 }
 
 type apiProyectoMicrocicloRequest struct {
@@ -4918,10 +4990,17 @@ func apiNombreAgenteCanonico(raw string) string {
 	if raw == "" {
 		return ""
 	}
-	agente, err := agentesService.GetAgent(raw)
-	if err == nil && agente != nil && strings.TrimSpace(agente.Nombre) != "" {
-		return strings.TrimSpace(agente.Nombre)
+	if cached, ok := apiCanonicalAgentCacheGet(raw); ok {
+		return cached
 	}
+	agente, err := apiGetAgentFn(raw)
+	if err == nil && agente != nil && strings.TrimSpace(agente.Nombre) != "" {
+		canonico := strings.TrimSpace(agente.Nombre)
+		apiCanonicalAgentCachePut(raw, canonico)
+		apiCanonicalAgentCachePut(canonico, canonico)
+		return canonico
+	}
+	apiCanonicalAgentCachePut(raw, raw)
 	return raw
 }
 

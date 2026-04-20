@@ -446,6 +446,104 @@ func (s *Service) getProjectForPrepare(ref string) (*db.Proyecto, error) {
 	return nil, nil
 }
 
+func (s *Service) getProjectForTick(ref string) (*db.Proyecto, error) {
+	if cached := s.cachedPrepareProject(ref); cached != nil {
+		tickDebugf("ProcessTick step=get_project_cache_hit proyecto=%s", strings.TrimSpace(ref))
+		return cached, nil
+	}
+	flight := s.beginTickProjectFlight(ref)
+	if flight == nil {
+		tickDebugf("ProcessTick step=get_project_wait_tick_flight proyecto=%s", strings.TrimSpace(ref))
+		return s.waitTickProjectFlight(ref)
+	}
+	defer s.finishTickProjectFlight(ref, flight)
+	if s != nil && s.store != nil {
+		proyecto, err := s.store.GetProject(ref)
+		if err != nil {
+			flight.err = err
+			return nil, err
+		}
+		if proyecto != nil {
+			s.cachePrepareProject(proyecto, ref)
+			flight.project = clonePrepareProject(proyecto)
+		}
+		tickDebugf("ProcessTick step=get_project_direct_load proyecto=%s", strings.TrimSpace(ref))
+		return proyecto, nil
+	}
+	return nil, nil
+}
+
+func (s *Service) getActiveSessionForTick(agente string, proyectoID int64) (*db.Sesion, error) {
+	if cached, found, ok := s.cachedPrepareSession(agente, proyectoID); ok {
+		if found {
+			tickDebugf("ProcessTick step=get_active_session_cache_hit agente=%s proyecto_id=%d", strings.TrimSpace(agente), proyectoID)
+			return cached, nil
+		}
+		tickDebugf("ProcessTick step=get_active_session_cache_hit agente=%s proyecto_id=%d valor=nil", strings.TrimSpace(agente), proyectoID)
+		return nil, sql.ErrNoRows
+	}
+	if s == nil || s.store == nil {
+		return nil, sql.ErrNoRows
+	}
+	sesion, err := s.store.GetActiveSession(agente, &proyectoID)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	if err == sql.ErrNoRows {
+		s.cachePrepareSession(agente, proyectoID, nil, false)
+		return nil, sql.ErrNoRows
+	}
+	s.cachePrepareSession(agente, proyectoID, sesion, sesion != nil)
+	tickDebugf("ProcessTick step=get_active_session_direct_load agente=%s proyecto_id=%d", strings.TrimSpace(agente), proyectoID)
+	return sesion, nil
+}
+
+var ShouldPersistTickHeartbeatDB = func() bool { return true }
+
+func shouldPersistActiveSessionTick(session *db.Sesion, input TickInput) bool {
+	if session == nil {
+		return false
+	}
+	if input.Finalizado {
+		return true
+	}
+	host := strings.TrimSpace(input.Host)
+	if host != "" && !strings.EqualFold(strings.TrimSpace(session.Host), host) {
+		return true
+	}
+	if input.PID > 0 && (session.PID == nil || *session.PID != input.PID) {
+		return true
+	}
+	if ShouldPersistTickHeartbeatDB != nil && !ShouldPersistTickHeartbeatDB() {
+		return false
+	}
+	ultimo := session.Inicio
+	if session.HeartbeatAt != nil && !session.HeartbeatAt.IsZero() {
+		ultimo = *session.HeartbeatAt
+	}
+	return time.Since(ultimo) >= 30*time.Second
+}
+
+func applyActiveSessionTickToCache(s *Service, agente string, proyectoID int64, session *db.Sesion, input TickInput) {
+	if s == nil || session == nil {
+		return
+	}
+	clone := clonePrepareSession(session)
+	if clone == nil {
+		return
+	}
+	now := time.Now().UTC()
+	clone.HeartbeatAt = &now
+	if host := strings.TrimSpace(input.Host); host != "" {
+		clone.Host = host
+	}
+	if input.PID > 0 {
+		pid := input.PID
+		clone.PID = &pid
+	}
+	s.cachePrepareSession(agente, proyectoID, clone, true)
+}
+
 func (s *Service) getGovernanceCatalogForPrepare(rol string, proyectoID int64, agente string) (*db.GovernanceCatalog, error) {
 	if cached := s.cachedPrepareGovernance(rol, proyectoID, agente); cached != nil {
 		prepareDebugf("BuildPrepare step=resolve_governance_cache_hit agente=%s proyecto_id=%d", strings.TrimSpace(agente), proyectoID)
@@ -697,7 +795,7 @@ func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 		tickDebugf("ProcessTick done agente=%s proyecto=%s duration=%s", agenteNombre, proyectoRef, time.Since(start).Round(time.Millisecond))
 	}()
 	stepStart := time.Now()
-	proyecto, err := s.getProjectForPrepare(proyectoRef)
+	proyecto, err := s.getProjectForTick(proyectoRef)
 	if err != nil {
 		return nil, err
 	}
@@ -706,7 +804,7 @@ func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 	}
 	tickDebugf("ProcessTick step=get_project proyecto=%s duration=%s", proyectoRef, time.Since(stepStart).Round(time.Millisecond))
 	stepStart = time.Now()
-	sesionActiva, err := s.store.GetActiveSession(agenteNombre, &proyecto.ID)
+	sesionActiva, err := s.getActiveSessionForTick(agenteNombre, proyecto.ID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
@@ -716,17 +814,22 @@ func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 	tickDebugf("ProcessTick step=get_active_session agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
 	if sesionActiva != nil {
 		stepStart = time.Now()
-		upd := db.SesionUpdate{Heartbeat: true}
-		if host := strings.TrimSpace(input.Host); host != "" {
-			upd.Host = &host
+		if shouldPersistActiveSessionTick(sesionActiva, input) {
+			upd := db.SesionUpdate{Heartbeat: true}
+			if host := strings.TrimSpace(input.Host); host != "" {
+				upd.Host = &host
+			}
+			if input.PID > 0 {
+				upd.PID = &input.PID
+			}
+			if err := s.store.SaveActiveSession(agenteNombre, &proyecto.ID, upd); err != nil {
+				return nil, err
+			}
+			applyActiveSessionTickToCache(s, agenteNombre, proyecto.ID, sesionActiva, input)
+			tickDebugf("ProcessTick step=save_active_session agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
+		} else {
+			tickDebugf("ProcessTick step=save_active_session_skip agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
 		}
-		if input.PID > 0 {
-			upd.PID = &input.PID
-		}
-		if err := s.store.SaveActiveSession(agenteNombre, &proyecto.ID, upd); err != nil {
-			return nil, err
-		}
-		tickDebugf("ProcessTick step=save_active_session agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
 		if input.Finalizado && shouldAutoPauseForBudget(input.CuotaPct, input.Motivo) {
 			stepStart = time.Now()
 			if err := s.autoPause(agenteNombre, 60, "Auto-pausa por agotamiento: "+input.Motivo, "Detección de agotamiento en tick final: "+input.Motivo); err != nil {

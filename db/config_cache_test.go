@@ -18,3 +18,20 @@ func TestConfigSetActualizaCacheCorta(t *testing.T) {
 		t.Fatalf("ConfigGet actualizado got=%q err=%v", got, err)
 	}
 }
+
+func TestConfigSetInvalidaCacheEnteraDerivada(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := ConfigSet("runtime_transcript_batch_budget_ms", "1500"); err != nil {
+		t.Fatalf("ConfigSet inicial: %v", err)
+	}
+	if got := configIntOrDefault("runtime_transcript_batch_budget_ms", 0); got != 1500 {
+		t.Fatalf("configIntOrDefault inicial=%d", got)
+	}
+	if err := ConfigSet("runtime_transcript_batch_budget_ms", "900"); err != nil {
+		t.Fatalf("ConfigSet actualizado: %v", err)
+	}
+	if got := configIntOrDefault("runtime_transcript_batch_budget_ms", 0); got != 900 {
+		t.Fatalf("configIntOrDefault actualizado=%d", got)
+	}
+}

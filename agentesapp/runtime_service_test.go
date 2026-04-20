@@ -1372,6 +1372,211 @@ func TestProcessTickCalientaCacheLigeraDeAgenteYProyecto(t *testing.T) {
 	}
 }
 
+func TestProcessTickNoEsperaProjectFlightDePrepare(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		project: &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()},
+		agents: []*db.Agente{
+			{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex2", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		sessions: []*db.Sesion{
+			{ID: 11, Agente: "Codex2", ProyectoID: int64Ptr(7), Estado: "activa", Inicio: now},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex2"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente activo"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex2", ProyectoID: int64Ptr(7), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		canonicalHandles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+	}
+	svc := NewService(store, nil)
+	svc.prepareProjectFlight["orquestador"] = &prepareProjectFlight{done: make(chan struct{})}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := svc.ProcessTick(TickInput{Agente: "Codex2", Proyecto: "orquestador"})
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("ProcessTick: %v", err)
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("ProcessTick no deberia esperar al project flight de prepare")
+	}
+
+	if store.getProjectCalls != 1 {
+		t.Fatalf("deberia resolver proyecto directamente una vez, calls=%d", store.getProjectCalls)
+	}
+}
+
+func TestProcessTickCacheaSesionActivaLigera(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		project: &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()},
+		agents: []*db.Agente{
+			{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex2", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		sessions: []*db.Sesion{
+			{ID: 11, Agente: "Codex2", ProyectoID: int64Ptr(7), Estado: "activa", Inicio: now, HeartbeatAt: timePtr(now)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex2"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente activo"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex2", ProyectoID: int64Ptr(7), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		canonicalHandles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+	}
+	svc := NewService(store, nil)
+
+	if _, err := svc.ProcessTick(TickInput{Agente: "Codex2", Proyecto: "orquestador"}); err != nil {
+		t.Fatalf("ProcessTick primera: %v", err)
+	}
+	before := store.getActiveCalls
+	if _, err := svc.ProcessTick(TickInput{Agente: "Codex2", Proyecto: "orquestador"}); err != nil {
+		t.Fatalf("ProcessTick segunda: %v", err)
+	}
+	if store.getActiveCalls != before {
+		t.Fatalf("no deberia releer sesion activa en segundo tick: before=%d after=%d", before, store.getActiveCalls)
+	}
+}
+
+func TestProcessTickThrottleaWriteHeartbeatSesionActivaReciente(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		project: &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()},
+		agents: []*db.Agente{
+			{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex2", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		sessions: []*db.Sesion{
+			{ID: 11, Agente: "Codex2", ProyectoID: int64Ptr(7), Estado: "activa", Inicio: now, HeartbeatAt: timePtr(now)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex2"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente activo"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex2", ProyectoID: int64Ptr(7), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		canonicalHandles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+	}
+	svc := NewService(store, nil)
+
+	if _, err := svc.ProcessTick(TickInput{Agente: "Codex2", Proyecto: "orquestador"}); err != nil {
+		t.Fatalf("ProcessTick: %v", err)
+	}
+	if store.saveActiveCalls != 0 {
+		t.Fatalf("no deberia persistir heartbeat reciente, calls=%d", store.saveActiveCalls)
+	}
+}
+
+func TestProcessTickPersisteWriteHeartbeatSesionActivaVieja(t *testing.T) {
+	now := time.Now().UTC()
+	oldHeartbeat := now.Add(-45 * time.Second)
+	store := &fakeStore{
+		project: &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()},
+		agents: []*db.Agente{
+			{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex2", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		sessions: []*db.Sesion{
+			{ID: 11, Agente: "Codex2", ProyectoID: int64Ptr(7), Estado: "activa", Inicio: now.Add(-time.Minute), HeartbeatAt: timePtr(oldHeartbeat)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex2"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente activo"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex2", ProyectoID: int64Ptr(7), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		canonicalHandles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+	}
+	svc := NewService(store, nil)
+
+	if _, err := svc.ProcessTick(TickInput{Agente: "Codex2", Proyecto: "orquestador"}); err != nil {
+		t.Fatalf("ProcessTick: %v", err)
+	}
+	if store.saveActiveCalls != 1 {
+		t.Fatalf("deberia persistir heartbeat viejo, calls=%d", store.saveActiveCalls)
+	}
+}
+
+func TestProcessTickOmiteWriteHeartbeatViejaSiBurstDesactivaPersistenciaDB(t *testing.T) {
+	now := time.Now().UTC()
+	oldHeartbeat := now.Add(-45 * time.Second)
+	prev := ShouldPersistTickHeartbeatDB
+	ShouldPersistTickHeartbeatDB = func() bool { return false }
+	t.Cleanup(func() {
+		ShouldPersistTickHeartbeatDB = prev
+	})
+
+	store := &fakeStore{
+		project: &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()},
+		agents: []*db.Agente{
+			{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex2", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		sessions: []*db.Sesion{
+			{ID: 11, Agente: "Codex2", ProyectoID: int64Ptr(7), Estado: "activa", Inicio: now.Add(-time.Minute), HeartbeatAt: timePtr(oldHeartbeat)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex2"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente activo"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex2", ProyectoID: int64Ptr(7), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		canonicalHandles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+	}
+	svc := NewService(store, nil)
+
+	if _, err := svc.ProcessTick(TickInput{Agente: "Codex2", Proyecto: "orquestador"}); err != nil {
+		t.Fatalf("ProcessTick: %v", err)
+	}
+	if store.saveActiveCalls != 0 {
+		t.Fatalf("no deberia persistir heartbeat viejo durante burst, calls=%d", store.saveActiveCalls)
+	}
+}
+
 func TestProcessTickUsaFuentesRapidasParaRuntimeYTareas(t *testing.T) {
 	now := time.Now().UTC()
 	store := &fakeStoreWithLiteAgent{

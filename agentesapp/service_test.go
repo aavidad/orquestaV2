@@ -48,6 +48,7 @@ type fakeStore struct {
 	lastTranscript          db.FiltroRuntimeTranscript
 	listSessionsCalls       int
 	getActiveCalls          int
+	saveActiveCalls         int
 	getLastCalls            int
 	getAgentCalls           int
 	getProjectCalls         int
@@ -209,6 +210,11 @@ func (f *fakeStore) GetActiveSession(agente string, proyectoID *int64) (*db.Sesi
 }
 
 func (f *fakeStore) SaveActiveSession(agente string, proyectoID *int64, upd db.SesionUpdate) error {
+	f.saveActiveCalls++
+	if len(f.sessions) > 0 && f.sessions[0] != nil && upd.Heartbeat {
+		now := time.Now().UTC()
+		f.sessions[0].HeartbeatAt = &now
+	}
 	return nil
 }
 

@@ -22166,3 +22166,72 @@ func TestRuntimeOrderSendInstructionReceiptEvidenceReconoceDispatchLedger(t *tes
 		t.Fatalf("receiptAt inesperado: got=%s want=%s", receiptAt.Format(time.RFC3339Nano), recordedAt.Format(time.RFC3339Nano))
 	}
 }
+
+func TestRuntimeOrderSendInstructionReceiptEvidenceReconoceMailboxConsumida(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"continuar trabajo"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	if err := MarcarRuntimeMailboxEntregado(mailboxID); err != nil {
+		t.Fatalf("entregar mailbox: %v", err)
+	}
+	if err := MarcarRuntimeMailboxConsumido(mailboxID); err != nil {
+		t.Fatalf("consumir mailbox: %v", err)
+	}
+
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: fmt.Sprintf(`{"mailbox_id":%d,"mailbox_kind":"pipeline_local","texto":"continuar trabajo"}`, mailboxID),
+	})
+	if err != nil {
+		t.Fatalf("encolar order: %v", err)
+	}
+
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get runtime order: %v", err)
+	}
+	msg, err := GetRuntimeMailbox(mailboxID)
+	if err != nil {
+		t.Fatalf("get mailbox: %v", err)
+	}
+	payload := mapFromJSON(order.PayloadJSON)
+
+	confirmed, source, receiptAt, err := runtimeOrderSendInstructionReceiptEvidence(order, payload, msg)
+	if err != nil {
+		t.Fatalf("runtimeOrderSendInstructionReceiptEvidence: %v", err)
+	}
+	if !confirmed {
+		t.Fatal("deberia reconocer receipt desde mailbox consumida")
+	}
+	if source != "runtime_mailbox_consumed" {
+		t.Fatalf("receipt source inesperado: %q", source)
+	}
+	if msg.ConsumedAt == nil || receiptAt.IsZero() || !receiptAt.Equal(msg.ConsumedAt.UTC()) {
+		t.Fatalf("receiptAt inesperado: got=%s consumedAt=%v", receiptAt.Format(time.RFC3339Nano), msg.ConsumedAt)
+	}
+}

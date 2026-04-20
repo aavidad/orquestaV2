@@ -1113,12 +1113,25 @@ func detenerSesionTMUXDesdeMetadata(raw string) (bool, error) {
 	cmd := exec.Command(tmuxCommand, "kill-session", "-t", sessionName)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		detalle := strings.TrimSpace(string(out))
+		if tmuxKillSessionIgnorable(detalle) {
+			return true, nil
+		}
 		if detalle != "" {
 			return true, fmt.Errorf("tmux kill-session: %s", detalle)
 		}
 		return true, err
 	}
 	return true, nil
+}
+
+func tmuxKillSessionIgnorable(detalle string) bool {
+	raw := strings.ToLower(strings.TrimSpace(detalle))
+	if raw == "" {
+		return false
+	}
+	return strings.Contains(raw, "can't find session") ||
+		strings.Contains(raw, "no server running") ||
+		strings.Contains(raw, "failed to connect to server")
 }
 
 func metadataLooksLikeTMUXRuntime(payload map[string]any) bool {

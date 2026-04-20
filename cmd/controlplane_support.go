@@ -1191,6 +1191,9 @@ func controlPlaneBatchTimeoutEfectivo() time.Duration {
 }
 
 func procesarRuntimeTranscriptBatch() (int, error) {
+	if agentAPIHotPathBusy() {
+		return 0, nil
+	}
 	ingested, err := db.IngestarRuntimeTranscriptActivos()
 	if err != nil {
 		return ingested, err
@@ -1715,6 +1718,9 @@ func resolverContextoCorreccionMicroprogramacionDesdeTranscript(agente string, p
 }
 
 func procesarPresupuestoSesionObservadoBatch() (int, error) {
+	if agentAPIHotPathBusy() {
+		return 0, nil
+	}
 	if !allowRuntimeBudgetBackgroundObservation(time.Now().UTC()) {
 		return 0, nil
 	}
@@ -3051,6 +3057,9 @@ func procesarRuntimeMailboxPhases(phases []runtimeMailboxBatchPhase, budget time
 }
 
 func procesarRuntimeMailboxBatchConFiltro(filter db.FiltroRuntimeMailbox) (int, error) {
+	if agentAPIHotPathBusy() {
+		return 0, nil
+	}
 	mailbox, err := runtimesService.ListRuntimeMailbox(filter)
 	if err != nil {
 		return 0, err

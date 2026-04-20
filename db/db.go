@@ -1020,6 +1020,7 @@ func ConfigSet(clave, valor string) error {
 	)
 	if err == nil {
 		storeConfigCachedValue(clave, valor)
+		invalidateConfigIntCachedValue(clave)
 	}
 	return err
 }

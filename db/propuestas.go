@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -32,6 +33,17 @@ type Propuesta struct {
 	CerradaAt    *time.Time
 	Votos        []*Voto // cargados aparte
 }
+
+type configIntCachedValue struct {
+	valor   int
+	expires time.Time
+}
+
+var (
+	configIntCacheTTL = 15 * time.Second
+	configIntCacheMu  sync.Mutex
+	configIntCache    = map[string]configIntCachedValue{}
+)
 
 type PropuestaPatch struct {
 	Titulo            *string
@@ -378,6 +390,20 @@ func puedeCerrarEnConsenso(propuestaID int64) (bool, string, error) {
 }
 
 func configIntOrDefault(key string, defaultValue int) int {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return defaultValue
+	}
+	configIntCacheMu.Lock()
+	item, ok := configIntCache[key]
+	if ok && time.Now().UTC().Before(item.expires) {
+		configIntCacheMu.Unlock()
+		return item.valor
+	}
+	if ok {
+		delete(configIntCache, key)
+	}
+	configIntCacheMu.Unlock()
 	raw, err := ConfigGet(key)
 	if err != nil {
 		return defaultValue
@@ -386,7 +412,23 @@ func configIntOrDefault(key string, defaultValue int) int {
 	if err != nil || n < 0 {
 		return defaultValue
 	}
+	configIntCacheMu.Lock()
+	configIntCache[key] = configIntCachedValue{
+		valor:   n,
+		expires: time.Now().UTC().Add(configIntCacheTTL),
+	}
+	configIntCacheMu.Unlock()
 	return n
+}
+
+func invalidateConfigIntCachedValue(key string) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return
+	}
+	configIntCacheMu.Lock()
+	defer configIntCacheMu.Unlock()
+	delete(configIntCache, key)
 }
 
 // PropuestasPendientesVoto devuelve las propuestas donde el agente tiene voto pendiente.
