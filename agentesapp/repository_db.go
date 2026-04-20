@@ -148,6 +148,10 @@ func (Repository) ListTasksForTick(agente string) ([]*db.Tarea, error) {
 	return db.ListarTareasNoTerminalesAgente(agente)
 }
 
+func (Repository) GetTaskForTick(id int64) (*db.Tarea, error) {
+	return db.GetTarea(id)
+}
+
 func (Repository) ListProjectPendingVotes(agente string, proyectoID int64) ([]*db.Propuesta, error) {
 	return db.PropuestasPendientesVotoProyecto(agente, &proyectoID)
 }

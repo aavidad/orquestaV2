@@ -31,6 +31,10 @@ type tickTaskLister interface {
 	ListTasksForTick(agente string) ([]*db.Tarea, error)
 }
 
+type tickTaskGetter interface {
+	GetTaskForTick(id int64) (*db.Tarea, error)
+}
+
 type ProjectBundle struct {
 	ID      int64  `json:"id"`
 	Slug    string `json:"slug"`
@@ -1051,6 +1055,20 @@ func (s *Service) buildOperationalRowContextForTick(agenteNombre string, proyect
 			row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
 			row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
 			applyDurableWorkQueueToTickRow(&row, view)
+			if tarea, ok, err := s.durableWorkQueueTaskForTick(agenteNombre, proyecto.ID, view); err != nil {
+				return Row{}, nil, nil, err
+			} else if ok {
+				tareas := []*db.Tarea{tarea}
+				switch tarea.Estado {
+				case db.EstadoBloqueada:
+					row.BlockedTasks++
+				case db.EstadoCompletada, db.EstadoCancelada, db.EstadoBacklog:
+				default:
+					row.OpenTasks++
+				}
+				row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
+				return row, asignaciones, tareas, nil
+			}
 		}
 	}
 
@@ -1078,6 +1096,40 @@ func (s *Service) buildOperationalRowContextForTick(agenteNombre string, proyect
 	}
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
 	return row, asignaciones, tareas, nil
+}
+
+func (s *Service) durableWorkQueueTaskForTick(agenteNombre string, proyectoID int64, view *runtimeagente.WorkerStatusView) (*db.Tarea, bool, error) {
+	if s == nil || view == nil || proyectoID <= 0 {
+		return nil, false, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(view.WorkQueueState)) {
+	case "", "consumed", "completed", "superseded", "cancelled", "canceled":
+		return nil, false, nil
+	}
+	taskID := view.WorkQueueTaskID
+	if taskID <= 0 {
+		return nil, false, nil
+	}
+	getter, ok := s.store.(tickTaskGetter)
+	if !ok {
+		return nil, false, nil
+	}
+	tarea, err := getter.GetTaskForTick(taskID)
+	if err != nil || tarea == nil {
+		return nil, false, err
+	}
+	if tarea.ProyectoID == nil || *tarea.ProyectoID != proyectoID {
+		return nil, false, nil
+	}
+	if tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(agenteNombre)) {
+		return nil, false, nil
+	}
+	switch tarea.Estado {
+	case db.EstadoAsignada, db.EstadoEnProgreso, db.EstadoBloqueada:
+		return tarea, true, nil
+	default:
+		return nil, false, nil
+	}
 }
 
 func applyDurableWorkQueueToTickRow(row *Row, view *runtimeagente.WorkerStatusView) {

@@ -59,6 +59,7 @@ type fakeStore struct {
 	listPassiveHandlesCalls int
 	listTasksCalls          int
 	tickTasksCalls          int
+	getTaskForTickCalls     int
 	listAgentsCalls         int
 	checkReanimationsCalls  int
 	pendingVotesCalls       int
@@ -429,6 +430,16 @@ func (f *fakeStore) ListTasksForTick(agente string) ([]*db.Tarea, error) {
 		}
 	}
 	return out, nil
+}
+
+func (f *fakeStore) GetTaskForTick(id int64) (*db.Tarea, error) {
+	f.getTaskForTickCalls++
+	for _, item := range f.tasks {
+		if item != nil && item.ID == id {
+			return item, nil
+		}
+	}
+	return nil, nil
 }
 
 func (f *fakeStore) ListProjectPendingVotes(agente string, proyectoID int64) ([]*db.Propuesta, error) {

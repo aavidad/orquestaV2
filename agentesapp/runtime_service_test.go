@@ -854,6 +854,12 @@ func TestBuildTickOutputConWorkQueueDurableMantieneContinuidad(t *testing.T) {
 	if out.AccionRecomendada != "continuar_trabajo" || out.DebePausar {
 		t.Fatalf("salida inesperada: %+v", out)
 	}
+	if store.getTaskForTickCalls != 1 {
+		t.Fatalf("deberia leer la tarea viva desde work-queue durable: calls=%d", store.getTaskForTickCalls)
+	}
+	if store.tickTasksCalls != 0 {
+		t.Fatalf("no deberia barrer todas las tareas si la work-queue ya identifica la tarea activa: tickTasksCalls=%d", store.tickTasksCalls)
+	}
 }
 
 func TestBuildTickOutputConWorkerReadyBootstrapOnlySanoContinuaTrabajo(t *testing.T) {
