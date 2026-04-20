@@ -19875,6 +19875,161 @@ func TestIntentarAutoResolverContinuacionPostRemediationReassignReasignaATMUXSan
 	}
 }
 
+func TestIntentarAutoResolverContinuacionPostRemediationReassignUsaHandoffSiOrigenSigueVivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"Codex8", "Codex7"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+
+	writeWorkerFiles := func(dir string, state string) string {
+		t.Helper()
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir trace dir: %v", err)
+		}
+		now := time.Now().UTC()
+		statusPath := filepath.Join(dir, "status.json")
+		heartbeatPath := filepath.Join(dir, "heartbeat.json")
+		if err := os.WriteFile(statusPath, []byte(`{"state":"`+state+`","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+			t.Fatalf("write status: %v", err)
+		}
+		if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+			t.Fatalf("write heartbeat: %v", err)
+		}
+		metaJSON, err := json.Marshal(map[string]any{
+			"worker_status_path":    statusPath,
+			"worker_heartbeat_path": heartbeatPath,
+		})
+		if err != nil {
+			t.Fatalf("marshal metadata: %v", err)
+		}
+		return string(metaJSON)
+	}
+
+	sesionOrigen, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex8",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion origen: %v", err)
+	}
+	handleOrigen, err := db.GetRuntimeHandleBySesionID(sesionOrigen.ID)
+	if err != nil || handleOrigen == nil {
+		t.Fatalf("handle origen: %+v err=%v", handleOrigen, err)
+	}
+	runtimeOrigen, err := db.GetRuntimeBySesionID(sesionOrigen.ID)
+	if err != nil || runtimeOrigen == nil {
+		t.Fatalf("runtime origen: %+v err=%v", runtimeOrigen, err)
+	}
+	metaOrigen := writeWorkerFiles(filepath.Join(tmp, "runtime", "codex8"), "running")
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, metaOrigen, handleOrigen.ID); err != nil {
+		t.Fatalf("activar handle origen: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='activo', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeOrigen.ID); err != nil {
+		t.Fatalf("activar runtime origen: %v", err)
+	}
+
+	sesionDestino, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex7",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion relevo: %v", err)
+	}
+	handleDestino, err := db.GetRuntimeHandleBySesionID(sesionDestino.ID)
+	if err != nil || handleDestino == nil {
+		t.Fatalf("handle relevo: %+v err=%v", handleDestino, err)
+	}
+	runtimeDestino, err := db.GetRuntimeBySesionID(sesionDestino.ID)
+	if err != nil || runtimeDestino == nil {
+		t.Fatalf("runtime relevo: %+v err=%v", runtimeDestino, err)
+	}
+	metaDestino := writeWorkerFiles(filepath.Join(tmp, "runtime", "codex7"), "running")
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, metaDestino, handleDestino.ID); err != nil {
+		t.Fatalf("activar handle relevo: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='esperando_io', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeDestino.ID); err != nil {
+		t.Fatalf("activar runtime relevo: %v", err)
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente bloqueado con origen vivo",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex8"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex8"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "orquesta", "Agente Codex8 en estado bloqueado_por_runtime: pausado"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+	status := &orquestacionagentesapp.PostRemediationStatus{
+		RemediationKind: "reassign",
+		BlockedReason:   "agent still blocked",
+	}
+	ok, err := intentarAutoResolverContinuacionPostRemediationReassign(proyecto, tareaID, "Codex8", "reassign:1:Codex8:Codex7", status)
+	if err != nil {
+		t.Fatalf("intentar auto resolver reassign con handoff: %v", err)
+	}
+	if !ok {
+		t.Fatalf("deberia resolver con handoff")
+	}
+	actual, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if actual == nil || actual.Estado != db.TareaAsignada || actual.Agente == nil || *actual.Agente != "Codex7" {
+		t.Fatalf("la tarea deberia quedar asignada al relevo via handoff: %+v", actual)
+	}
+	agenteDestino := "Codex7"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agenteDestino, ProyectoID: &proyectoID, Limit: 20})
+	if err != nil {
+		t.Fatalf("listar runtime orders destino: %v", err)
+	}
+	foundHandoff := false
+	for _, order := range orders {
+		if order != nil && order.Tipo == "handoff" && strings.Contains(order.PayloadJSON, `"agente_origen":"Codex8"`) {
+			foundHandoff = true
+			break
+		}
+	}
+	if !foundHandoff {
+		t.Fatalf("deberia crear runtime order handoff: %+v", orders)
+	}
+}
+
 func TestBloquearTareaAutonomiaSinRelevoBloqueaYAnota(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

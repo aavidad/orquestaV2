@@ -14652,6 +14652,11 @@ func intentarAutoResolverContinuacionPostRemediationReassign(proyecto *db.Proyec
 		return false, nil
 	}
 	detalle := firstNonEmpty(strings.TrimSpace(status.BlockedReason), "follow-up post-remediation bloqueado")
+	if handoff, err := intentarHandoffPostRemediationReassign(proyecto, tareaID, strings.TrimSpace(agente), strings.TrimSpace(relevo), strings.TrimSpace(verificationKey), detalle); err != nil {
+		return false, err
+	} else if handoff {
+		return true, nil
+	}
 	resolucion := fmt.Sprintf("reasignación automática tras follow-up post-remediation bloqueado desde %s (%s)", strings.TrimSpace(agente), detalle)
 	nota := fmt.Sprintf("Reasignada automáticamente desde %s a %s tras follow-up post-remediation bloqueado", strings.TrimSpace(agente), strings.TrimSpace(relevo))
 	if strings.TrimSpace(verificationKey) != "" {
@@ -14661,6 +14666,54 @@ func intentarAutoResolverContinuacionPostRemediationReassign(proyecto *db.Proyec
 		return false, err
 	}
 	return true, nil
+}
+
+func intentarHandoffPostRemediationReassign(proyecto *db.Proyecto, tareaID int64, origen, relevo, verificationKey, detalle string) (bool, error) {
+	if proyecto == nil || proyecto.ID <= 0 || tareaID <= 0 {
+		return false, nil
+	}
+	origen = strings.TrimSpace(origen)
+	relevo = strings.TrimSpace(relevo)
+	if origen == "" || relevo == "" || strings.EqualFold(origen, relevo) {
+		return false, nil
+	}
+	resumen := fmt.Sprintf("Continuidad automática tras follow-up post-remediation bloqueado en tarea #%d", tareaID)
+	if strings.TrimSpace(verificationKey) != "" {
+		resumen += " (" + strings.TrimSpace(verificationKey) + ")"
+	}
+	motivo := firstNonEmpty(strings.TrimSpace(detalle), "follow-up post-remediation bloqueado")
+	if _, err := orquestacionAgentesService.RequestLiveAgentHandoff(origen, relevo, &tareaID, motivo, resumen, ""); err != nil {
+		if handoffPostRemediationCanFallback(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	nota := fmt.Sprintf("Handoff automático desde %s a %s tras follow-up post-remediation bloqueado", origen, relevo)
+	if strings.TrimSpace(verificationKey) != "" {
+		nota += " (" + strings.TrimSpace(verificationKey) + ")"
+	}
+	_ = tareasService.Note(tareaID, "orquesta", nota)
+	if err := cerrarTareasPostRemediationBlockedResueltas(tareaID, fmt.Sprintf("resuelto por handoff automático a %s", relevo)); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func handoffPostRemediationCanFallback(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(err.Error()))
+	switch {
+	case strings.Contains(text, "no tiene sesión abierta"):
+		return true
+	case strings.Contains(text, "no tiene sesion abierta"):
+		return true
+	case strings.Contains(text, "no tiene runtime handle activo"):
+		return true
+	default:
+		return false
+	}
 }
 
 func intentarAutoResolverContinuacionPostRemediationReactivate(proyecto *db.Proyecto, tareaID int64, agente, verificationKey string, status *orquestacionagentesapp.PostRemediationStatus) (bool, error) {
