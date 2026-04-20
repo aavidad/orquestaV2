@@ -3341,13 +3341,15 @@ func TestBuildDetailCompactUsaWorkQueueDurableParaEvitarBarridoDeTareas(t *testi
 		"version":    1,
 		"updated_at": now.Format(time.RFC3339Nano),
 		"current": map[string]any{
-			"mailbox_id":  77,
-			"kind":        "autonomia",
-			"action":      "continuar_trabajo",
-			"task_id":     41,
-			"state":       "pending",
-			"title":       "Frente Codex",
-			"recorded_at": now.Format(time.RFC3339Nano),
+			"mailbox_id":       77,
+			"kind":             "autonomia",
+			"action":           "continuar_trabajo",
+			"task_id":          41,
+			"verification_key": "reassign:41:Codex1:Codex2",
+			"state":            "pending",
+			"title":            "Frente Codex",
+			"reason":           "post_remediation",
+			"recorded_at":      now.Format(time.RFC3339Nano),
 		},
 	})
 	metaJSON, _ := json.Marshal(map[string]any{
@@ -3374,6 +3376,12 @@ func TestBuildDetailCompactUsaWorkQueueDurableParaEvitarBarridoDeTareas(t *testi
 	}
 	if detail == nil || detail.Entity == nil || len(detail.Entity.Leases) != 1 || detail.Entity.Leases[0].TaskID != 41 {
 		t.Fatalf("lease inesperada desde work-queue durable: %+v", detail)
+	}
+	if detail.Entity.LastAutonomyAction != "continuar_trabajo" || detail.Entity.LastAutonomySource != "work_queue" || detail.Entity.LastAutonomyState != "pending" {
+		t.Fatalf("deberia exponer accion/state desde work-queue durable: %+v", detail.Entity)
+	}
+	if detail.Entity.LastAutonomyReason != "post_remediation" || detail.Entity.LastAutonomyVerificationKey != "reassign:41:Codex1:Codex2" {
+		t.Fatalf("deberia exponer reason/verification desde work-queue durable: %+v", detail.Entity)
 	}
 	if store.getTaskForTickCalls != 1 {
 		t.Fatalf("deberia leer la tarea viva desde work-queue durable: calls=%d", store.getTaskForTickCalls)

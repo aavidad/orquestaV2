@@ -1286,6 +1286,16 @@ func applyDurableWorkQueueToTickRow(row *Row, view *runtimeagente.WorkerStatusVi
 	if row == nil || view == nil {
 		return
 	}
+	if strings.EqualFold(strings.TrimSpace(view.WorkQueueKind), "autonomia") && strings.TrimSpace(view.WorkQueueAction) != "" {
+		if mailboxCountersShouldReplace(row.LastAutonomyMoment, view.WorkQueueUpdatedAt) {
+			row.LastAutonomyAction = strings.TrimSpace(view.WorkQueueAction)
+			row.LastAutonomySource = "work_queue"
+			row.LastAutonomyMoment = view.WorkQueueUpdatedAt
+			row.LastAutonomyState = strings.TrimSpace(view.WorkQueueState)
+			row.LastAutonomyReason = strings.TrimSpace(view.WorkQueueReason)
+			row.LastAutonomyVerificationKey = strings.TrimSpace(view.WorkQueueVerificationKey)
+		}
+	}
 	switch strings.ToLower(strings.TrimSpace(view.WorkQueueState)) {
 	case "", "consumed", "completed", "superseded", "cancelled", "canceled":
 		return

@@ -307,6 +307,9 @@ type Row struct {
 	LastAutonomyAction        string
 	LastAutonomySource        string
 	LastAutonomyMoment        *time.Time
+	LastAutonomyState         string
+	LastAutonomyReason        string
+	LastAutonomyVerificationKey string
 	Checkpoints               int
 	LastCheckpoint            *db.RuntimeCheckpoint
 	OpenTasks                 int
@@ -379,6 +382,9 @@ type AgentEntity struct {
 	LastAutonomyAction  string      `json:"last_autonomy_action,omitempty"`
 	LastAutonomySource  string      `json:"last_autonomy_source,omitempty"`
 	LastAutonomyMoment  *time.Time  `json:"last_autonomy_moment,omitempty"`
+	LastAutonomyState   string      `json:"last_autonomy_state,omitempty"`
+	LastAutonomyReason  string      `json:"last_autonomy_reason,omitempty"`
+	LastAutonomyVerificationKey string `json:"last_autonomy_verification_key,omitempty"`
 	Leases              []WorkLease `json:"leases,omitempty"`
 }
 
@@ -2996,6 +3002,9 @@ func buildAgentEntity(store Store, row Row, tareas []*db.Tarea) *AgentEntity {
 		LastAutonomyAction:  strings.TrimSpace(row.LastAutonomyAction),
 		LastAutonomySource:  strings.TrimSpace(row.LastAutonomySource),
 		LastAutonomyMoment:  row.LastAutonomyMoment,
+		LastAutonomyState:   strings.TrimSpace(row.LastAutonomyState),
+		LastAutonomyReason:  strings.TrimSpace(row.LastAutonomyReason),
+		LastAutonomyVerificationKey: strings.TrimSpace(row.LastAutonomyVerificationKey),
 		Leases:              buildWorkLeases(tareas),
 	}
 	if row.Asignacion != nil {

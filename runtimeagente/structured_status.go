@@ -121,8 +121,10 @@ type WorkerStatusView struct {
 	WorkQueueKind       string     `json:"work_queue_kind,omitempty"`
 	WorkQueueAction     string     `json:"work_queue_action,omitempty"`
 	WorkQueueTaskID     int64      `json:"work_queue_task_id,omitempty"`
+	WorkQueueVerificationKey string `json:"work_queue_verification_key,omitempty"`
 	WorkQueueState      string     `json:"work_queue_state,omitempty"`
 	WorkQueueTitle      string     `json:"work_queue_title,omitempty"`
+	WorkQueueReason     string     `json:"work_queue_reason,omitempty"`
 	WorkQueueUpdatedAt  *time.Time `json:"work_queue_updated_at,omitempty"`
 	CanSendInput        bool       `json:"can_send_input"`
 	StartedAt           *time.Time `json:"started_at,omitempty"`
@@ -634,8 +636,10 @@ func (s *WorkerSnapshot) View(now time.Time, heartbeatThreshold time.Duration) *
 			view.WorkQueueKind = strings.TrimSpace(current.Kind)
 			view.WorkQueueAction = strings.TrimSpace(current.Action)
 			view.WorkQueueTaskID = current.TaskID
+			view.WorkQueueVerificationKey = strings.TrimSpace(current.VerificationKey)
 			view.WorkQueueState = strings.TrimSpace(current.State)
 			view.WorkQueueTitle = strings.TrimSpace(current.Title)
+			view.WorkQueueReason = strings.TrimSpace(current.Reason)
 			view.WorkQueueUpdatedAt = parseWorkerTimestamp(current.RecordedAt)
 		} else {
 			view.WorkQueueUpdatedAt = parseWorkerTimestamp(s.WorkQueue.UpdatedAt)

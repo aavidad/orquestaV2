@@ -64,13 +64,15 @@ func TestLoadWorkerSnapshotFromMetadataJSON(t *testing.T) {
 		Version:   1,
 		UpdatedAt: now.Add(6 * time.Second).Format(time.RFC3339Nano),
 		Current: &WorkerWorkQueueEntry{
-			MailboxID:  77,
-			Kind:       "autonomia",
-			Action:     "continuar_trabajo",
-			TaskID:     42,
-			State:      "pending",
-			Title:      "seguir frente",
-			RecordedAt: now.Add(6 * time.Second).Format(time.RFC3339Nano),
+			MailboxID:       77,
+			Kind:            "autonomia",
+			Action:          "continuar_trabajo",
+			TaskID:          42,
+			VerificationKey: "reassign:42:Codex1:Codex8",
+			State:           "pending",
+			Title:           "seguir frente",
+			Reason:          "post_remediation",
+			RecordedAt:      now.Add(6 * time.Second).Format(time.RFC3339Nano),
 		},
 	})
 
@@ -130,6 +132,9 @@ func TestLoadWorkerSnapshotFromMetadataJSON(t *testing.T) {
 	view := snap.View(now, time.Minute)
 	if view == nil || view.WorkQueueMailboxID != 77 || view.WorkQueueAction != "continuar_trabajo" || view.WorkQueueState != "pending" {
 		t.Fatalf("view work queue inesperada: %+v", view)
+	}
+	if view.WorkQueueVerificationKey != "reassign:42:Codex1:Codex8" || view.WorkQueueReason != "post_remediation" {
+		t.Fatalf("view work queue sin verification/reason: %+v", view)
 	}
 }
 
