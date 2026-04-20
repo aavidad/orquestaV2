@@ -3911,6 +3911,10 @@ func promoteObservedAutonomyState(row *Row, now time.Time) {
 		if row.WorkerFresh(now) && row.OpenTasks > 0 {
 			row.LastAutonomyState = "work_confirmed"
 		}
+	case "send_instruction":
+		if row.WorkerFresh(now) && (row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) {
+			row.LastAutonomyState = "work_confirmed"
+		}
 	case "resume_payload_mailbox":
 		if row.autonomyResumePayloadAbsorbedByWorker(now) {
 			row.LastAutonomyState = "work_confirmed"
