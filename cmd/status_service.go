@@ -9,6 +9,7 @@ import (
 	"orquesta/agentesapp"
 	"orquesta/capacidadapp"
 	"orquesta/db"
+	"orquesta/internal/controlruntime"
 )
 
 // StatusService encapsulates the data needed by /api/status.
@@ -27,6 +28,7 @@ var (
 	statusFreshFetcher = fetchStatusFresh
 	statusFastFetcher  = fetchStatusFastFallback
 	statusRowsFetcher  = agentRowsForStatus
+	statusRuntimeHandlesFetcher = db.ListarRuntimeHandles
 	statusNowFunc      = time.Now
 	statusAsyncRefresh = true
 	statusCacheState   struct {
@@ -53,6 +55,8 @@ type deudaDispatchResumen struct {
 
 func listarDeudaDispatchEstado() (deudaDispatchResumen, error) {
 	out := deudaDispatchResumen{}
+	var allHandles []*db.RuntimeHandle
+	var handlesLoaded bool
 	estados := []string{"pendiente", "ejecutando", "fallida"}
 	for _, estado := range estados {
 		estadoFiltro := estado
@@ -81,6 +85,20 @@ func listarDeudaDispatchEstado() (deudaDispatchResumen, error) {
 			switch {
 			case dispatchState == "delivered" && deliveryState == "delivered" && receiptSourceConfirmsWorkStatus(receiptSource):
 				out.WorkConfirmed++
+			case dispatchState == "delivered" && deliveryState == "delivered":
+				if !handlesLoaded {
+					handlesLoaded = true
+					handles, err := statusRuntimeHandlesFetcher(nil)
+					if err != nil {
+						return out, err
+					}
+					allHandles = handles
+				}
+				if dispatchOrderWorkConfirmedFromHandles(order, allHandles) {
+					out.WorkConfirmed++
+				} else {
+					out.Pendientes++
+				}
 			case strings.TrimSpace(order.Estado) == "fallida" || dispatchState == "failed" || deliveryState == "failed":
 				out.Fallidas++
 			case dispatchState == "notified" || deliveryState == "notified":
@@ -91,6 +109,46 @@ func listarDeudaDispatchEstado() (deudaDispatchResumen, error) {
 		}
 	}
 	return out, nil
+}
+
+func dispatchOrderWorkConfirmedFromHandles(order *db.RuntimeOrder, handles []*db.RuntimeHandle) bool {
+	if order == nil {
+		return false
+	}
+	payload := mapFromJSON(order.PayloadJSON)
+	result := mapFromJSON(order.ResultadoJSON)
+	verificationKey := strings.TrimSpace(stringMapValue(result, "verification_key"))
+	if verificationKey == "" {
+		verificationKey = strings.TrimSpace(stringMapValue(payload, "verification_key"))
+	}
+	if verificationKey == "" {
+		return false
+	}
+	match := controlruntime.WorkQueueMatch{
+		Kind:            "autonomia",
+		Action:          "continuar_trabajo",
+		VerificationKey: verificationKey,
+		Within:          2 * time.Hour,
+	}
+	for _, handle := range handles {
+		if handle == nil || handle.ProyectoID == nil || order.ProyectoID == nil || *handle.ProyectoID != *order.ProyectoID {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(handle.Agente), strings.TrimSpace(order.Agente)) {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(handle.Estado), "activo") {
+			continue
+		}
+		if !db.RuntimeHandleSnapshotIsFresh(handle, 2*time.Minute) {
+			continue
+		}
+		started, err := controlruntime.HasStartedWorkQueueEntryFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON), match)
+		if err == nil && started {
+			return true
+		}
+	}
+	return false
 }
 
 func receiptSourceConfirmsWorkStatus(source string) bool {
