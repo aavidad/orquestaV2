@@ -2508,6 +2508,79 @@ func TestBuildPanelRowsNoMarcaTrabajandoSoloPorHeartbeatFrescoSinTrabajoReal(t *
 	}
 }
 
+func TestBuildPanelRowsIgnoraSnapshotDurableDeRuntimeYCierreStale(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-codex2-stale",
+		"tmux_pane_id": "%9",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":            "running",
+		"updated_at":       now.Format(time.RFC3339Nano),
+		"alive":            true,
+		"ready_at":         now.Add(-time.Minute).Format(time.RFC3339Nano),
+		"last_progress_at": now.Add(-5 * time.Second).Format(time.RFC3339Nano),
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	for path, raw := range map[string][]byte{
+		manifestPath:  manifestRaw,
+		statusPath:    statusRaw,
+		heartbeatPath: heartbeatRaw,
+	} {
+		if err := os.WriteFile(path, append(raw, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	proyectoID := int64(42)
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex2", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex2", ProyectoID: &proyectoID, LogicalState: "cerrado", ProcessState: "stopped", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: &proyectoID, Estado: "cerrado", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex2"), ProyectoID: &proyectoID, Estado: db.EstadoAsignada, Titulo: "Frente sin sesion"},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].WorkerState != "" || rows[0].WorkerAlive {
+		t.Fatalf("no deberia cargar snapshot durable de fuentes cerradas: %+v", rows[0])
+	}
+	if rows[0].EstadoOperativo == "trabajando" {
+		t.Fatalf("no deberia marcar trabajando con runtime/handle cerradas: %+v", rows[0])
+	}
+}
+
 func TestBuildPanelRowsNoBloqueaSiWorkerYaSeRecuperoTrasOrdenControlPendiente(t *testing.T) {
 	now := time.Now().UTC()
 	tmp := t.TempDir()

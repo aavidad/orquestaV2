@@ -3912,10 +3912,14 @@ func (r Row) runtimePrincipalStale(now time.Time) bool {
 }
 
 func loadStructuredWorkerSnapshot(runtime *db.RuntimeInstance, handle *db.RuntimeHandle) *runtimeagente.WorkerSnapshot {
-	for _, metaJSON := range []string{
-		metadataFromHandle(handle),
-		metadataFromRuntime(runtime),
-	} {
+	var metas []string
+	if handle != nil && !estadoHandleRoto(handle.Estado) && !estadoHandlePausado(handle.Estado) {
+		metas = append(metas, metadataFromHandle(handle))
+	}
+	if runtime != nil && !estadoRuntimeRoto(runtime.LogicalState) && !estadoRuntimePausado(runtime.LogicalState) {
+		metas = append(metas, metadataFromRuntime(runtime))
+	}
+	for _, metaJSON := range metas {
 		snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(metaJSON)
 		if err == nil && snap != nil {
 			return snap
