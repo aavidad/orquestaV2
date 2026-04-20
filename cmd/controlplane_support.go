@@ -10691,6 +10691,7 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 	procesadas := 0
 	proyectosByID := map[int64]*db.Proyecto{}
 	now := time.Now().UTC()
+	openTasksProjected := openTasksProjectedFromRows(rows)
 	for _, row := range rows {
 		if row.Agente == nil {
 			continue
@@ -10707,7 +10708,12 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 		if agente == "" {
 			continue
 		}
-		if !rowTieneTrabajoReactivableSinRuntime(row, tareasActivasPorAgente[agente], tareasBloqueadasPorAgente[agente], bloqueosPorTarea, now) {
+		activasRestantes, relevadas, err := relevarTareasActivasSinRuntimeSiCorresponde(rows, openTasksProjected, agente, tareasActivasPorAgente[agente])
+		if err != nil {
+			return procesadas, err
+		}
+		procesadas += relevadas
+		if !rowTieneTrabajoReactivableSinRuntime(row, activasRestantes, tareasBloqueadasPorAgente[agente], bloqueosPorTarea, now) {
 			continue
 		}
 		if disponible, _, err := autonomiaCuentaCompartidaDisponible(agente); err != nil {
@@ -10753,6 +10759,70 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 		procesadas += 1 + desbloqueadas
 	}
 	return procesadas, nil
+}
+
+func relevarTareasActivasSinRuntimeSiCorresponde(rows []agentesapp.Row, openTasksProjected map[string]int, agente string, tareas []*db.Tarea) ([]*db.Tarea, int, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || len(tareas) == 0 {
+		return tareas, 0, nil
+	}
+	restantes := make([]*db.Tarea, 0, len(tareas))
+	procesadas := 0
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		actual, err := db.GetTarea(tarea.ID)
+		if err != nil {
+			return restantes, procesadas, err
+		}
+		if actual == nil || actual.Agente == nil || !strings.EqualFold(strings.TrimSpace(*actual.Agente), agente) {
+			continue
+		}
+		if actual.Estado != db.EstadoAsignada && actual.Estado != db.EstadoEnProgreso {
+			continue
+		}
+		relevo := seleccionarRelevoAutonomia(rows, openTasksProjected, actual, agente)
+		if relevo == "" {
+			restantes = append(restantes, actual)
+			continue
+		}
+		if handoff, err := intentarHandoffAutonomoTarea(
+			proyectoLigeroDesdeTarea(actual),
+			actual.ID,
+			agente,
+			relevo,
+			"",
+			"agente_sin_runtime_activo",
+			fmt.Sprintf("Continuidad automática en tarea #%d tras pérdida de runtime", actual.ID),
+			fmt.Sprintf("Handoff automático desde %s a %s: agente sin runtime activo", agente, relevo),
+			fmt.Sprintf("resuelto por handoff automático a %s", relevo),
+		); err != nil {
+			return restantes, procesadas, err
+		} else if handoff {
+			if openTasksProjected[agente] > 0 {
+				openTasksProjected[agente]--
+			}
+			openTasksProjected[relevo]++
+			if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, actual.ProyectoID, actual.ID, agente, "agente_sin_runtime_activo", "continúa con la tarea reasignada tras pérdida de runtime y deja evidencia de avance", nil); err != nil {
+				return restantes, procesadas, err
+			}
+			procesadas++
+			continue
+		}
+		if err := reasignarYArrancarTareaAutonomia(actual.ID, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s: agente sin runtime activo", agente, relevo)); err != nil {
+			return restantes, procesadas, err
+		}
+		if openTasksProjected[agente] > 0 {
+			openTasksProjected[agente]--
+		}
+		openTasksProjected[relevo]++
+		if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, actual.ProyectoID, actual.ID, agente, "agente_sin_runtime_activo", "continúa con la tarea reasignada tras pérdida de runtime y deja evidencia de avance", nil); err != nil {
+			return restantes, procesadas, err
+		}
+		procesadas++
+	}
+	return restantes, procesadas, nil
 }
 
 func filtrarTareasActivasReactivacionSinRuntimeBatch(tareasActivasPorAgente map[string][]*db.Tarea) map[string][]*db.Tarea {

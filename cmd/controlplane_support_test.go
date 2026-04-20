@@ -30816,6 +30816,129 @@ func TestProcesarTareasActivasFueraDeOrquestacionBatchUsaHandoffSiHayRelevoSano(
 	}
 }
 
+func TestProcesarAgentesDegradadosAutonomiaBatchRelevaActivoSinRuntimeSiHayRelevoSano(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("QwenCoder1", "programador"); err != nil {
+		t.Fatalf("registrar agente origen: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexLibre", "programador"); err != nil {
+		t.Fatalf("registrar agente relevo: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-sin-runtime-con-relevo",
+		Nombre:  "Orquestador Sin Runtime con Relevo",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("QwenCoder1", proyectoID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion origen: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexLibre", proyectoID, "frente bounded"); err != nil {
+		t.Fatalf("activar asignacion relevo: %v", err)
+	}
+	now := time.Now().UTC()
+	statusPath := filepath.Join(tmp, "codexlibre-status.json")
+	heartbeatPath := filepath.Join(tmp, "codexlibre-heartbeat.json")
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status relevo: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat relevo: %v", err)
+	}
+	sesionLibre, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexLibre",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion relevo: %v", err)
+	}
+	handleLibre, err := db.GetRuntimeHandleBySesionID(sesionLibre.ID)
+	if err != nil || handleLibre == nil {
+		t.Fatalf("get handle relevo: %+v err=%v", handleLibre, err)
+	}
+	runtimeLibre, err := db.GetRuntimeBySesionID(sesionLibre.ID)
+	if err != nil || runtimeLibre == nil {
+		t.Fatalf("get runtime relevo: %+v err=%v", runtimeLibre, err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata relevo: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, string(metaJSON), handleLibre.ID); err != nil {
+		t.Fatalf("activar handle relevo: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='activo', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeLibre.ID); err != nil {
+		t.Fatalf("activar runtime relevo: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Relevar activo sin runtime",
+		Descripcion: "Trabajo premium ya asignado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "QwenCoder1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "QwenCoder1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	n, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("deberia relevar activo sin runtime, got=%d", n)
+	}
+
+	actual, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if actual.Agente == nil || *actual.Agente != "CodexLibre" || actual.Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea deberia quedar reasignada al relevo sano sin reactivar el origen: %+v", actual)
+	}
+	agente := "CodexLibre"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders relevo: %v", err)
+	}
+	foundContinuation := false
+	foundStart := false
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		if order.Tipo == "nudge" && strings.Contains(order.PayloadJSON, `"accion":"continuar_trabajo"`) {
+			foundContinuation = true
+		}
+		if order.Tipo == "start" {
+			foundStart = true
+		}
+	}
+	if !foundContinuation {
+		t.Fatalf("faltaba continuidad al relevo: %+v", orders)
+	}
+	if foundStart {
+		t.Fatalf("no deberia arrancar de nuevo al agente sin runtime si ya pudo relevar: %+v", orders)
+	}
+}
+
 func TestPersistirPausaPorCuotaAutonomiaRelevaAunqueYaEsteEnEnfriamiento(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
