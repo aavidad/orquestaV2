@@ -842,6 +842,7 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 				applyDurableWorkQueueToTickRow(&row, view)
 			}
 		}
+		applyAssignmentHandoffAutonomyToRow(&row)
 		applyResumePayloadAutonomyToRow(&row)
 		promoteObservedAutonomyState(&row, now)
 		row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, staleThreshold)
@@ -1100,6 +1101,7 @@ func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.Runti
 			applyDurableWorkQueueToTickRow(&row, view)
 		}
 	}
+	applyAssignmentHandoffAutonomyToRow(&row)
 	applyResumePayloadAutonomyToRow(&row)
 	promoteObservedAutonomyState(&row, now)
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
@@ -1229,6 +1231,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 						return Row{}, nil, nil, err
 					}
 					agentDetailDebugf("compact step=list_mailbox_to agente=%s count=%d duration=%s", nombre, len(mailbox), time.Since(stepStart).Round(time.Millisecond))
+					applyAssignmentHandoffAutonomyToRow(&row)
 					applyResumePayloadAutonomyToRow(&row)
 					promoteObservedAutonomyState(&row, now)
 					row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
@@ -1277,6 +1280,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 	}
 	agentDetailDebugf("compact step=list_mailbox_to agente=%s count=%d duration=%s", nombre, len(mailbox), time.Since(stepStart).Round(time.Millisecond))
 
+	applyAssignmentHandoffAutonomyToRow(&row)
 	applyResumePayloadAutonomyToRow(&row)
 	promoteObservedAutonomyState(&row, now)
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
@@ -3867,11 +3871,46 @@ func applyResumePayloadAutonomyToRow(row *Row) {
 	row.LastAutonomyVerificationKey = verificationKey
 }
 
+func applyAssignmentHandoffAutonomyToRow(row *Row) {
+	if row == nil || row.Asignacion == nil {
+		return
+	}
+	nota := strings.TrimSpace(row.Asignacion.Nota)
+	if nota == "" {
+		return
+	}
+	notaLower := strings.ToLower(nota)
+	if !strings.Contains(notaLower, "handoff_recibido_desde_") {
+		return
+	}
+	action := "continuar_trabajo"
+	source := "assignment_handoff"
+	state := "handoff"
+	reason := nota
+	ts := row.Asignacion.UpdatedAt.UTC()
+	moment := &ts
+	if ts.IsZero() {
+		moment = nil
+	}
+	if !mailboxCountersShouldReplace(row.LastAutonomyMoment, moment) {
+		return
+	}
+	row.LastAutonomyAction = action
+	row.LastAutonomySource = source
+	row.LastAutonomyMoment = moment
+	row.LastAutonomyState = state
+	row.LastAutonomyReason = reason
+}
+
 func promoteObservedAutonomyState(row *Row, now time.Time) {
 	if row == nil {
 		return
 	}
 	switch strings.ToLower(strings.TrimSpace(row.LastAutonomySource)) {
+	case "assignment_handoff":
+		if row.WorkerFresh(now) && row.OpenTasks > 0 {
+			row.LastAutonomyState = "work_confirmed"
+		}
 	case "resume_payload_mailbox":
 		if row.autonomyResumePayloadAbsorbedByWorker(now) {
 			row.LastAutonomyState = "work_confirmed"

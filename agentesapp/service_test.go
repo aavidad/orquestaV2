@@ -3798,6 +3798,50 @@ func TestBuildDetailCompactPromueveResumePayloadAbsorbidoAWorkConfirmed(t *testi
 	}
 }
 
+func TestBuildDetailCompactExponeHandoffDesdeAsignacionActiva(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(52)
+	heartbeatAt := now
+	store := &fakeStore{
+		agents: []*db.Agente{{Nombre: "Codex7", Rol: "programador", Activo: true, Habilitado: true}},
+		assignments: []*db.Asignacion{{
+			Agente:       "Codex7",
+			ProyectoID:   proyectoID,
+			ProyectoSlug: "orquestador",
+			Estado:       db.AsignacionActiva,
+			Nota:         "handoff_recibido_desde_Codex8",
+			UpdatedAt:    now.Add(-time.Minute),
+		}},
+		sessions: []*db.Sesion{{
+			ID:          70,
+			Agente:      "Codex7",
+			ProyectoID:  &proyectoID,
+			Activa:      true,
+			Estado:      "activa",
+			Inicio:      now.Add(-10 * time.Minute),
+			HeartbeatAt: &heartbeatAt,
+		}},
+		tasks:            []*db.Tarea{{ID: 801, Titulo: "Continuidad recibida", Estado: db.EstadoEnProgreso, ProyectoID: &proyectoID, Agente: ptr("Codex7")}},
+		runtimes:         []*db.RuntimeInstance{{ID: 71, Agente: "Codex7", ProyectoID: &proyectoID, LogicalState: "activo", ProcessState: "running", UpdatedAt: now}},
+		canonicalHandles: []*db.RuntimeHandle{{ID: 72, Agente: "Codex7", ProyectoID: &proyectoID, Estado: "activo", Transporte: "tmux", HandleKind: "session"}},
+	}
+	svc := NewService(store, nil)
+
+	detail, err := svc.BuildDetailCompact("Codex7")
+	if err != nil {
+		t.Fatalf("BuildDetailCompact: %v", err)
+	}
+	if detail == nil || detail.Entity == nil {
+		t.Fatalf("detail/entity inesperado: %+v", detail)
+	}
+	if detail.Entity.LastAutonomyAction != "continuar_trabajo" || detail.Entity.LastAutonomySource != "assignment_handoff" {
+		t.Fatalf("deberia exponer continuidad por handoff activo: %+v", detail.Entity)
+	}
+	if detail.Entity.LastAutonomyState != "handoff" {
+		t.Fatalf("sin evidencia viva del worker deberia mantenerse como handoff: %+v", detail.Entity)
+	}
+}
+
 func TestBuildPanelRowsNoMarcaSupervisorConResumePayloadVivoComoAtascado(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(46)

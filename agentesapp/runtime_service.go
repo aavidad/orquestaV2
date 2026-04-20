@@ -1287,6 +1287,7 @@ func (s *Service) buildOperationalRowContextForTick(agenteNombre string, proyect
 			}
 		}
 	}
+	applyAssignmentHandoffAutonomyToRow(&row)
 	applyResumePayloadAutonomyToRow(&row)
 
 	var tareas []*db.Tarea
