@@ -16964,6 +16964,174 @@ func TestProcesarRuntimeOrdersBatchRearMaMailboxFaltantePendiente(t *testing.T) 
 	}
 }
 
+func TestProcesarRuntimeOrdersBatchCierraPipelineLocalNotificadaSiMailboxFalta(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"continuar trabajo"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","texto":"continuar trabajo","mailbox_id":%d,"mailbox_kind":"pipeline_local","tarea_id":18}`, mailboxID),
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get send order: %v", err)
+	}
+	if err := retenerRuntimeOrderSendInstructionNotificada(order, map[string]any{
+		"to_agente":    "Codex1",
+		"texto":        "continuar trabajo",
+		"mailbox_id":   mailboxID,
+		"mailbox_kind": "pipeline_local",
+		"tarea_id":     int64(18),
+	}, "mailbox notificado pendiente de recibo", time.Now().UTC()); err != nil {
+		t.Fatalf("retenerRuntimeOrderSendInstructionNotificada: %v", err)
+	}
+	if _, err := DB.Exec(`DELETE FROM runtime_mailbox WHERE id = ?`, mailboxID); err != nil {
+		t.Fatalf("borrar mailbox: %v", err)
+	}
+
+	processed, err := ProcesarRuntimeOrdersBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime orders: %v", err)
+	}
+	if processed < 1 {
+		t.Fatalf("se esperaba reconciliar al menos una orden, obtuvo %d", processed)
+	}
+
+	sendOrder, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("la orden deberia cerrarse como superseded al faltar mailbox notificada: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"superseded":true`) {
+		t.Fatalf("resultado final sin superseded=true: %s", sendOrder.ResultadoJSON)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"superseded_reason":"mailbox_missing_after_notify"`) {
+		t.Fatalf("resultado final sin superseded_reason esperado: %s", sendOrder.ResultadoJSON)
+	}
+	if strings.Contains(sendOrder.ErrorText, "mailbox_missing_rearmed") {
+		t.Fatalf("no deberia rearmar la mailbox pipeline_local: %+v", sendOrder)
+	}
+}
+
+func TestProcesarRuntimeOrdersBatchSupersedeSendInstructionDuplicadaPorMailbox(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"continuar trabajo"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	olderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","texto":"continuar trabajo","mailbox_id":%d,"mailbox_kind":"pipeline_local","tarea_id":18}`, mailboxID),
+	})
+	if err != nil {
+		t.Fatalf("encolar orden antigua: %v", err)
+	}
+	newerID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","texto":"continuar trabajo","mailbox_id":%d,"mailbox_kind":"pipeline_local","tarea_id":18}`, mailboxID),
+	})
+	if err != nil {
+		t.Fatalf("encolar orden nueva: %v", err)
+	}
+	for _, orderID := range []int64{olderID, newerID} {
+		order, err := GetRuntimeOrder(orderID)
+		if err != nil {
+			t.Fatalf("get send order %d: %v", orderID, err)
+		}
+		if err := retenerRuntimeOrderSendInstructionNotificada(order, map[string]any{
+			"to_agente":    "Codex1",
+			"texto":        "continuar trabajo",
+			"mailbox_id":   mailboxID,
+			"mailbox_kind": "pipeline_local",
+			"tarea_id":     int64(18),
+		}, "mailbox notificado pendiente de recibo", time.Now().UTC()); err != nil {
+			t.Fatalf("retenerRuntimeOrderSendInstructionNotificada %d: %v", orderID, err)
+		}
+	}
+
+	processed, err := ProcesarRuntimeOrdersBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime orders: %v", err)
+	}
+	if processed < 1 {
+		t.Fatalf("se esperaba reconciliar al menos una orden, obtuvo %d", processed)
+	}
+
+	older, err := GetRuntimeOrder(olderID)
+	if err != nil {
+		t.Fatalf("get orden antigua: %v", err)
+	}
+	if older.Estado != "completada" {
+		t.Fatalf("la orden antigua deberia quedar superseded: %+v", older)
+	}
+	if !strings.Contains(older.ResultadoJSON, fmt.Sprintf(`"superseded_reason":"covered_by_newer_mailbox_order:%d"`, newerID)) {
+		t.Fatalf("resultado final sin referencia a la orden nueva: %s", older.ResultadoJSON)
+	}
+
+	newer, err := GetRuntimeOrder(newerID)
+	if err != nil {
+		t.Fatalf("get orden nueva: %v", err)
+	}
+	if newer.Estado != "pendiente" {
+		t.Fatalf("la orden nueva deberia seguir viva: %+v", newer)
+	}
+}
+
 func TestProcesarRuntimeOrdersBatchMantienePendienteSiMailboxYaFueEntregado(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

@@ -7648,11 +7648,11 @@ func runtimeOrderSendInstructionReceiptBaseline(order *RuntimeOrder, msg *Runtim
 }
 
 func runtimeOrderSendInstructionReceiptEvidence(order *RuntimeOrder, payload map[string]any, msg *RuntimeMailboxMessage) (bool, string, time.Time, error) {
-	if order == nil || msg == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) {
+	if order == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) {
 		return false, "", time.Time{}, nil
 	}
 	baseline := runtimeOrderSendInstructionReceiptBaseline(order, msg)
-	if msg.ConsumedAt != nil && !msg.ConsumedAt.IsZero() {
+	if msg != nil && msg.ConsumedAt != nil && !msg.ConsumedAt.IsZero() {
 		consumedAt := msg.ConsumedAt.UTC()
 		if consumedAt.After(baseline) || consumedAt.Equal(baseline) {
 			return true, "runtime_mailbox_consumed", consumedAt, nil
@@ -7729,6 +7729,79 @@ func runtimeOrderSendInstructionReceiptEvidence(order *RuntimeOrder, payload map
 		}
 	}
 	return false, "", time.Time{}, nil
+}
+
+func runtimeOrderSendInstructionEstaNotificada(order *RuntimeOrder) bool {
+	if order == nil {
+		return false
+	}
+	if !runtimeOrderSendInstructionExplicitNotifiedAt(order).IsZero() {
+		return true
+	}
+	result := mapFromJSON(order.ResultadoJSON)
+	if len(result) == 0 {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(stringFromMap(result, "dispatch_state", ""))) {
+	case "notified", "delivered":
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(stringFromMap(result, "delivery_state", ""))) {
+	case "notified", "delivered":
+		return true
+	}
+	return false
+}
+
+func runtimeOrderSendInstructionDebeCerrarMailboxFaltante(order *RuntimeOrder, payload map[string]any) bool {
+	if order == nil || !runtimeOrderSendInstructionEsPipelinePremium(payload) {
+		return false
+	}
+	return runtimeOrderSendInstructionEstaNotificada(order)
+}
+
+func runtimeOrderSendInstructionDuplicadaMasReciente(order *RuntimeOrder, payload map[string]any) (*RuntimeOrder, error) {
+	if order == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) {
+		return nil, nil
+	}
+	mailboxID := runtimeOrderSendInstructionMailboxID(payload)
+	if mailboxID <= 0 {
+		return nil, nil
+	}
+	args := []any{
+		strings.TrimSpace(order.Agente),
+		order.ID,
+		`%"mailbox_id":` + strconv.FormatInt(mailboxID, 10) + `%`,
+	}
+	query := `
+		SELECT id, agente, proyecto_id, runtime_id, handle_id, tipo, payload_json, resultado_json,
+		       error_text, estado, claimed_by, lease_token, attempt_count, lease_expires_at,
+		       available_at, created_at, started_at, finished_at, updated_at
+		FROM runtime_orders
+		WHERE tipo = 'send_instruction'
+		  AND TRIM(agente) = ?
+		  AND id <> ?
+		  AND estado IN ('pendiente','tomada','ejecutando')
+		  AND payload_json LIKE ?`
+	if order.ProyectoID != nil && *order.ProyectoID > 0 {
+		query += ` AND proyecto_id = ?`
+		args = append(args, *order.ProyectoID)
+	}
+	query += `
+		ORDER BY created_at DESC, id DESC
+		LIMIT 1`
+	row := DB.QueryRow(query, args...)
+	other, err := scanRuntimeOrder(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if other == nil || other.ID <= order.ID {
+		return nil, nil
+	}
+	return other, nil
 }
 
 func runtimeOrderSendInstructionLoadWorkerSnapshotFresh(raw string) (*runtimeagente.WorkerSnapshot, error) {
@@ -8955,6 +9028,33 @@ func completarRuntimeOrderSendInstructionEntregadaPorReceipt(order *RuntimeOrder
 	}
 	runtimeOrderSendInstructionAutoStopLocalOllama(order, payload)
 	return nil
+}
+
+func completarRuntimeOrderSendInstructionSupersedida(order *RuntimeOrder, payload map[string]any, reason string) error {
+	if order == nil {
+		return nil
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "mailbox_missing_after_notify"
+	}
+	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+		"ok":                true,
+		"obsoleta":          true,
+		"superseded":        true,
+		"superseded_reason": reason,
+		"mailbox_id":        runtimeOrderSendInstructionMailboxID(payload),
+		"delivery_state":    "superseded",
+		"dispatch_state":    "superseded",
+	})
+	resultado = mergeRuntimeOrderResultJSON(resultado, runtimeOrderSendInstructionTrackingResult(payload))
+	if err := MarcarRuntimeOrderEstado(order.ID, "completada", resultado, ""); err != nil {
+		return err
+	}
+	if err := registrarDispatchLedgerRuntimeOrder(order, payload, "superseded", "superseded", "", reason); err != nil {
+		return err
+	}
+	return registrarWorkQueueRuntimeOrder(order, payload, "superseded", reason)
 }
 
 func fallarRuntimeOrderSendInstructionPorBloqueoAgente(order *RuntimeOrder, payload map[string]any, detalle string, blockedAt time.Time) error {
@@ -11945,6 +12045,15 @@ func reconciliarRuntimeOrderSendInstructionConMailboxActual(order *RuntimeOrder,
 	if order == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) {
 		return false, nil
 	}
+	if newer, err := runtimeOrderSendInstructionDuplicadaMasReciente(order, payload); err != nil {
+		return false, err
+	} else if newer != nil {
+		reason := fmt.Sprintf("covered_by_newer_mailbox_order:%d", newer.ID)
+		if err := completarRuntimeOrderSendInstructionSupersedida(order, payload, reason); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
 	mailboxID := runtimeOrderSendInstructionMailboxID(payload)
 	if mailboxID <= 0 {
 		return false, nil
@@ -11954,6 +12063,20 @@ func reconciliarRuntimeOrderSendInstructionConMailboxActual(order *RuntimeOrder,
 		return false, err
 	}
 	if msg == nil {
+		if runtimeOrderSendInstructionDebeCerrarMailboxFaltante(order, payload) {
+			if confirmed, receiptSource, receiptAt, err := runtimeOrderSendInstructionReceiptEvidence(order, payload, nil); err != nil {
+				return false, err
+			} else if confirmed {
+				if err := completarRuntimeOrderSendInstructionEntregadaPorReceipt(order, payload, receiptSource, receiptAt); err != nil {
+					return false, err
+				}
+				return true, nil
+			}
+			if err := completarRuntimeOrderSendInstructionSupersedida(order, payload, "mailbox_missing_after_notify"); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
 		if err := retenerRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "mailbox_missing_rearmed"); err != nil {
 			return false, err
 		}
