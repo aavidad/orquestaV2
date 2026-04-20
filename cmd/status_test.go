@@ -264,15 +264,16 @@ func TestRenderStatusSummaryMuestraDeudaDispatch(t *testing.T) {
 				AgentesActivos:  []*db.Agente{},
 				TareasPorEstado: map[string]int{},
 				DeudaDispatch: deudaDispatchResumen{
-					Total:       4,
-					Pendientes:  1,
-					Notificadas: 2,
-					Fallidas:    1,
+					Total:         4,
+					Pendientes:    1,
+					Notificadas:   2,
+					Fallidas:      1,
+					WorkConfirmed: 3,
 				},
 			},
 		})
 	})
-	if !strings.Contains(out, "📮 Dispatch durable: 4 total · pending 1 · notified 2 · failed 1") {
+	if !strings.Contains(out, "📮 Dispatch durable: 4 total · pending 1 · notified 2 · failed 1 · confirmed 3") {
 		t.Fatalf("salida sin resumen de deuda dispatch: %s", out)
 	}
 }

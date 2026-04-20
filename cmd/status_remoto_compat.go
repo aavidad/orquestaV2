@@ -344,11 +344,12 @@ func renderStatusSummary(ctx *statusContext) {
 	}
 
 	if resumen.DeudaDispatch.Total > 0 {
-		fmt.Printf("📮 Dispatch durable: %d total · pending %d · notified %d · failed %d\n\n",
+		fmt.Printf("📮 Dispatch durable: %d total · pending %d · notified %d · failed %d · confirmed %d\n\n",
 			resumen.DeudaDispatch.Total,
 			resumen.DeudaDispatch.Pendientes,
 			resumen.DeudaDispatch.Notificadas,
 			resumen.DeudaDispatch.Fallidas,
+			resumen.DeudaDispatch.WorkConfirmed,
 		)
 	}
 
