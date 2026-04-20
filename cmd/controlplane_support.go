@@ -10644,19 +10644,28 @@ func procesarWorkerAtascadoAutonomiaRow(row agentesapp.Row, rows []agentesapp.Ro
 	if rowAtascadoPrefiereContinuacionLocal(row, now) {
 		proyectoID := rowProyectoIDPreferido(row)
 		if proyectoID != nil && *proyectoID > 0 {
-			proyecto, err := runtimesService.GetProject(strconv.FormatInt(*proyectoID, 10))
-			if err != nil {
-				return 0, err
+			if rowDurableContinuityPending(row, now) {
+				return 0, nil
 			}
-			if proyecto != nil {
-				if abierta, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "pause", "checkpoint", "resume", "start", "handoff"); err != nil {
-					return 0, err
-				} else if !abierta {
-					tareaID, err := db.GetTareaActivaIDPorAgenteProyecto(agente, proyectoID)
+			if abierta, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "pause", "checkpoint", "resume", "start", "handoff"); err != nil {
+				return 0, err
+			} else if !abierta {
+				tareaID := rowDurableContinuityTaskID(row, now)
+				if tareaID <= 0 {
+					tareaID, err = db.GetTareaActivaIDPorAgenteProyecto(agente, proyectoID)
 					if err != nil {
 						return 0, err
 					}
-					if tareaID > 0 {
+				}
+				if tareaID > 0 {
+					proyecto := &db.Proyecto{ID: *proyectoID, Slug: rowProyectoSlugPreferido(row)}
+					if strings.TrimSpace(proyecto.Slug) == "" {
+						proyecto, err = runtimesService.GetProject(strconv.FormatInt(*proyectoID, 10))
+						if err != nil {
+							return 0, err
+						}
+					}
+					if proyecto != nil {
 						ok, err := encolarNudgeAutonomiaConInvalidacion(
 							nil,
 							agente,
@@ -11131,6 +11140,50 @@ func rowProyectoIDPreferido(row agentesapp.Row) *int64 {
 		}
 	}
 	return nil
+}
+
+func rowProyectoSlugPreferido(row agentesapp.Row) string {
+	if row.Asignacion != nil && strings.TrimSpace(row.Asignacion.ProyectoSlug) != "" {
+		return strings.TrimSpace(row.Asignacion.ProyectoSlug)
+	}
+	return ""
+}
+
+func rowDurableContinuityTaskID(row agentesapp.Row, now time.Time) int64 {
+	_, taskID := rowDurableContinuityState(row, now)
+	return taskID
+}
+
+func rowDurableContinuityPending(row agentesapp.Row, now time.Time) bool {
+	pending, _ := rowDurableContinuityState(row, now)
+	return pending
+}
+
+func rowDurableContinuityState(row agentesapp.Row, now time.Time) (bool, int64) {
+	handle := row.Handle
+	if handle == nil {
+		return false, 0
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
+	if err != nil || snap == nil {
+		return false, 0
+	}
+	view := snap.View(now, time.Minute)
+	if view == nil {
+		return false, 0
+	}
+	if !strings.EqualFold(strings.TrimSpace(view.WorkQueueKind), "autonomia") {
+		return false, 0
+	}
+	if !strings.EqualFold(strings.TrimSpace(view.WorkQueueAction), "continuar_trabajo") {
+		return false, 0
+	}
+	switch strings.ToLower(strings.TrimSpace(view.WorkQueueState)) {
+	case "", "pending", "notified", "delivered", "claimed", "working", "running":
+		return true, view.WorkQueueTaskID
+	default:
+		return false, 0
+	}
 }
 
 func rowHandleProyectoID(handle *db.RuntimeHandle) *int64 {

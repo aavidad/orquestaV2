@@ -32603,6 +32603,89 @@ func TestProcesarWorkerAtascadoAutonomiaRowPrefiereContinuacionLocalSessionResum
 	}
 }
 
+func TestProcesarWorkerAtascadoAutonomiaRowNoDuplicaNudgeSiWorkQueueYaLoMarcaPendiente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	if err := db.ConfigSet("runtime_shared_account_active_ceiling", "4"); err != nil {
+		t.Fatalf("config ceiling: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-worker-durable-queue",
+		Nombre:  "Orquestador Worker Durable Queue",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexDurable", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexDurable", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+
+	traceDir := filepath.Join(tmp, "runtime-codexdurable")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	workQueueRaw, _ := json.Marshal(map[string]any{
+		"version":    1,
+		"updated_at": time.Now().UTC().Format(time.RFC3339Nano),
+		"current": map[string]any{
+			"mailbox_id":  77,
+			"kind":        "autonomia",
+			"action":      "continuar_trabajo",
+			"task_id":     9991,
+			"state":       "pending",
+			"recorded_at": time.Now().UTC().Format(time.RFC3339Nano),
+		},
+	})
+	if err := os.WriteFile(filepath.Join(traceDir, "work-queue.json"), workQueueRaw, 0o600); err != nil {
+		t.Fatalf("write work-queue: %v", err)
+	}
+	metaRaw, _ := json.Marshal(map[string]any{
+		"trace_dir":             traceDir,
+		"worker_schema_version": runtimeagente.WorkerMetadataSchemaVersion,
+		"worker_manifest_path":  filepath.Join(traceDir, "manifest.json"),
+		"worker_status_path":    filepath.Join(traceDir, "status.json"),
+		"worker_heartbeat_path": filepath.Join(traceDir, "heartbeat.json"),
+	})
+
+	now := time.Now().UTC()
+	row := agentesapp.Row{
+		Agente:                    &db.Agente{Nombre: "CodexDurable"},
+		Asignacion:                &db.Asignacion{Agente: "CodexDurable", ProyectoID: proyectoID, ProyectoSlug: "orquestador-worker-durable-queue", Estado: db.AsignacionActiva},
+		Handle:                    &db.RuntimeHandle{ID: 77, MetadataJSON: string(metaRaw)},
+		WorkerDriver:              "tmux_cli_session",
+		WorkerState:               "ready",
+		WorkerAlive:               true,
+		WorkerCanSendInput:        true,
+		WorkerMailboxDeliveryMode: runtimeagente.MailboxDeliverySessionResume,
+		WorkerHeartbeat:           ptrTime(now),
+		WorkerUpdatedAt:           ptrTime(now),
+		WorkerReadyAt:             ptrTime(now.Add(-25 * time.Minute)),
+		OpenTasks:                 1,
+		EstadoOperativo:           "atascado",
+		DetalleOperativo:          "sin progreso desde listo",
+	}
+
+	procesadas, err := procesarWorkerAtascadoAutonomiaRow(row, []agentesapp.Row{row}, now)
+	if err != nil {
+		t.Fatalf("procesar worker atascado row: %v", err)
+	}
+	if procesadas != 0 {
+		t.Fatalf("procesadas=%d, want 0", procesadas)
+	}
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: ptrString("CodexDurable")})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia duplicar nudge si la work-queue durable ya marca continuidad pendiente: %+v", orders)
+	}
+}
+
 func TestProcesarWorkerAtascadoAutonomiaRowPrefiereContinuacionLocalBootstrapOnlyTMUX(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	if err := db.ConfigSet("runtime_shared_account_active_ceiling", "4"); err != nil {
