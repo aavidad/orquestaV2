@@ -656,6 +656,9 @@ func TestRenderStatusSummaryMuestraAgentesEnEnfriamiento(t *testing.T) {
 	if !strings.Contains(out, "cuota:agotado") {
 		t.Fatalf("salida sin estado de cuota del agente pausado: %s", out)
 	}
+	if !strings.Contains(out, "Próximo reset visible:") {
+		t.Fatalf("salida sin próximo reset visible agregado: %s", out)
+	}
 }
 
 func TestRenderStatusSummaryUsaResetPresupuestoComoCooldownVisibleSiReanimarAtNoSirve(t *testing.T) {

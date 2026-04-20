@@ -297,6 +297,11 @@ func renderStatusSummary(ctx *statusContext) {
 			}
 			fmt.Println()
 		}
+		if nextQuotaReset := nextQuotaResetVisible(agentesEnCuota); nextQuotaReset != "" {
+			if resetAt, err := time.Parse(time.RFC3339, nextQuotaReset); err == nil {
+				fmt.Printf("      Próximo reset visible: %s\n", resetAt.Local().Format("2006-01-02 15:04"))
+			}
+		}
 	}
 	agentesEnPausa := agentesNoActivosEnPausaOperativaConResumen(resumen.Agentes, resumen)
 	if len(agentesEnPausa) > 0 {
