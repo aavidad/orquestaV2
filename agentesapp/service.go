@@ -3351,6 +3351,10 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 	hasActiveTask := row.OpenTasks > 0
 	hasBlockedTask := row.BlockedTasks > 0
 	continuidadAccionablePendiente := row.MailboxActionablePending > 0 || row.MailboxContinuityPending > 0
+	if !continuidadAccionablePendiente && hasActiveTask && row.DurableContinuityPending(now) {
+		continuidadAccionablePendiente = true
+		row.MailboxContinuityPending++
+	}
 	pausedRuntime := estadoRuntimePausado(runtimeEstado) || estadoHandlePausado(handleEstado)
 	runtimeStale := row.runtimePrincipalStale(now)
 	workerRunningFresh := false
@@ -3455,11 +3459,15 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 	if hasActiveTask && row.MailboxPending > 0 && !recentActivity {
 		return "mailbox_atascada", "pendiente sin avance reciente"
 	}
+	if hasActiveTask && continuidadAccionablePendiente &&
+		(row.DurableContinuityPending(now) ||
+			workerRunningFresh ||
+			row.WorkerSupportsContinuityRecovery(now) ||
+			(row.workerHeartbeatRecent(now) && strings.EqualFold(strings.TrimSpace(row.handleDriver()), "tmux_cli_session"))) {
+		return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad accionable pendiente")
+	}
 	if hasActiveTask && (estadoRuntimeRoto(runtimeEstado) || estadoHandleRoto(handleEstado)) {
 		return "bloqueado_por_runtime", firstNonEmpty(row.runtimeState(), row.handleState())
-	}
-	if hasActiveTask && hasBlockedTask && continuidadAccionablePendiente && workerRunningFresh {
-		return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad accionable pendiente")
 	}
 	if hasActiveTask && hasBlockedTask && recentActivity {
 		return "saturado", fmt.Sprintf("%d activas, %d bloqueadas", row.OpenTasks, row.BlockedTasks)
@@ -3655,6 +3663,40 @@ func (r Row) WorkerSupportsContinuityRecovery(now time.Time) bool {
 		default:
 			return false
 		}
+	default:
+		return false
+	}
+}
+
+func (r Row) durableWorkQueueView(now time.Time) *runtimeagente.WorkerStatusView {
+	if r.Handle == nil || strings.TrimSpace(r.Handle.MetadataJSON) == "" {
+		return nil
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(r.Handle.MetadataJSON))
+	if err != nil || snap == nil {
+		return nil
+	}
+	view := snap.View(now, time.Minute)
+	if view == nil || strings.TrimSpace(view.WorkQueueAction) == "" {
+		return nil
+	}
+	return view
+}
+
+func (r Row) DurableContinuityPending(now time.Time) bool {
+	view := r.durableWorkQueueView(now)
+	if view == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(view.WorkQueueKind), "autonomia") {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(view.WorkQueueAction), "continuar_trabajo") {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(view.WorkQueueState)) {
+	case "", "pending", "notified", "delivered", "claimed", "working", "running":
+		return true
 	default:
 		return false
 	}

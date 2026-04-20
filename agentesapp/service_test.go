@@ -2990,6 +2990,81 @@ func TestBuildPanelRowsNoMarcaAtascadoConContinuidadPendienteUtil(t *testing.T) 
 	}
 }
 
+func TestBuildPanelRowsPrefiereContinuidadDurableSobreRuntimeRota(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	workQueuePath := filepath.Join(tmp, "work-queue.json")
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":                 "ready",
+		"updated_at":            now.Format(time.RFC3339Nano),
+		"alive":                 true,
+		"external_session_id":   "sess-codex-runtime",
+		"mailbox_delivery_mode": "session_resume",
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":                 true,
+		"heartbeat_at":          now.Format(time.RFC3339Nano),
+		"external_session_id":   "sess-codex-runtime",
+		"mailbox_delivery_mode": "session_resume",
+	})
+	workQueueRaw, _ := json.Marshal(map[string]any{
+		"version":    1,
+		"updated_at": now.Format(time.RFC3339Nano),
+		"current": map[string]any{
+			"mailbox_id":  96,
+			"kind":        "autonomia",
+			"action":      "continuar_trabajo",
+			"task_id":     76,
+			"state":       "pending",
+			"recorded_at": now.Format(time.RFC3339Nano),
+		},
+	})
+	for path, raw := range map[string][]byte{
+		statusPath:    statusRaw,
+		heartbeatPath: heartbeatRaw,
+		workQueuePath: workQueueRaw,
+	} {
+		if err := os.WriteFile(path, append(raw, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"trace_dir":             tmp,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+		"mailbox_delivery_mode": "session_resume",
+		"driver":                "tmux_cli_session",
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex16", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 26, Agente: "Codex16", LogicalState: "degradado", ProcessState: "stopped", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 36, Agente: "Codex16", Estado: "fallido", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 76, Agente: ptr("Codex16"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "trabajando" {
+		t.Fatalf("deberia priorizar continuidad durable sobre runtime rota: %+v", rows[0])
+	}
+}
+
 func TestBuildDetailMergesMailboxWithoutDuplicates(t *testing.T) {
 	store := &fakeStore{
 		agents: []*db.Agente{{Nombre: "Codex2", Rol: "programador"}},
@@ -3257,10 +3332,10 @@ func TestBuildDetailCompactUsaWorkQueueDurableParaEvitarBarridoDeTareas(t *testi
 		"last_progress_at": now.Add(-5 * time.Second).Format(time.RFC3339Nano),
 	})
 	writeJSON(heartbeatPath, map[string]any{
-		"alive":          true,
-		"heartbeat_at":   now.Format(time.RFC3339Nano),
-		"ready_at":       now.Add(-time.Minute).Format(time.RFC3339Nano),
-		"last_progress":  now.Add(-5 * time.Second).Format(time.RFC3339Nano),
+		"alive":         true,
+		"heartbeat_at":  now.Format(time.RFC3339Nano),
+		"ready_at":      now.Add(-time.Minute).Format(time.RFC3339Nano),
+		"last_progress": now.Add(-5 * time.Second).Format(time.RFC3339Nano),
 	})
 	writeJSON(workQueuePath, map[string]any{
 		"version":    1,
