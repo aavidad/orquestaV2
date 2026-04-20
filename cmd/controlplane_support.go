@@ -462,6 +462,7 @@ type resetReanimacionResultado string
 const (
 	resetReanimacionResultadoReactivado        resetReanimacionResultado = "reactivado"
 	resetReanimacionResultadoCooldownSostenido resetReanimacionResultado = "cooldown_sostenido"
+	resetReanimacionResultadoSinCapacidad      resetReanimacionResultado = "sin_capacidad"
 	resetReanimacionResultadoDbNoLista         resetReanimacionResultado = "db_no_disponible"
 )
 
@@ -566,8 +567,12 @@ func (dbAutomationService) resetReanimacionResultadoConPermisoManual(nombre stri
 	if !dbDisponible() {
 		return resetReanimacionResultadoDbNoLista, nil
 	}
-	if err := reactivarAgenteTrasReanimacionConMotivo(nombre, "manual_rehabilitation"); err != nil {
+	_, bloqueadoPorCapacidad, err := reactivarAgenteTrasReanimacionConResultado(nombre, "manual_rehabilitation")
+	if err != nil {
 		return "", err
+	}
+	if bloqueadoPorCapacidad {
+		return resetReanimacionResultadoSinCapacidad, nil
 	}
 	if !dbDisponible() {
 		return resetReanimacionResultadoDbNoLista, nil
@@ -14316,36 +14321,51 @@ func runtimeOperativoRecienteDistintoDeSesion(sesion *db.Sesion) bool {
 }
 
 func reactivarAgenteTrasReanimacion(agente string) error {
-	return reactivarAgenteTrasReanimacionConMotivo(agente, "reanimacion_automatica")
+	_, _, err := reactivarAgenteTrasReanimacionConResultado(agente, "reanimacion_automatica")
+	return err
 }
 
 func reactivarAgenteTrasReanimacionConMotivo(agente, motivo string) error {
+	_, _, err := reactivarAgenteTrasReanimacionConResultado(agente, motivo)
+	return err
+}
+
+func reactivarAgenteTrasReanimacionConResultado(agente, motivo string) (bool, bool, error) {
 	agente = strings.TrimSpace(agente)
 	if agente == "" {
-		return nil
+		return false, false, nil
 	}
 	if db.DB == nil || db.DB.DB == nil {
-		return nil
+		return false, false, nil
 	}
 	infoAgente, err := db.GetAgente(agente)
 	if err != nil {
-		return err
+		return false, false, err
 	}
 	if infoAgente == nil || !infoAgente.Habilitado {
-		return nil
+		return false, false, nil
 	}
 	motivo = strings.TrimSpace(motivo)
 	if motivo == "" {
 		motivo = "reanimacion_automatica"
 	}
 	if disponible, _, err := autonomiaCuentaCompartidaDisponible(agente); err != nil {
-		return err
+		return false, false, err
 	} else if !disponible {
-		return nil
+		return false, true, nil
 	}
 	proyecto, err := orquestacionAgentesService.ResolveReactivationProject(agente)
 	if err != nil {
-		return err
+		return false, false, err
+	}
+	if proyecto != nil && proyecto.ID > 0 && agenteUsaPoolLocalCompartidoParaReactivacion(agente, proyecto) {
+		permite, _, err := db.PoolLocalCompartidoPermiteActivacionAgenteProyecto(agente, strings.TrimSpace(proyecto.Slug))
+		if err != nil {
+			return false, false, err
+		}
+		if !permite {
+			return false, true, nil
+		}
 	}
 	if proyecto != nil && proyecto.ID > 0 {
 		if _, err := reactivarTareasBloqueadasRecuperablesAutonomia(
@@ -14353,18 +14373,18 @@ func reactivarAgenteTrasReanimacionConMotivo(agente, motivo string) error {
 			proyecto.ID,
 			fmt.Sprintf("Reactivada automáticamente en %s al salir de cuota o enfriamiento", agente),
 		); err != nil {
-			return err
+			return false, false, err
 		}
 	}
 	var handle *db.RuntimeHandle
 	if proyecto != nil && proyecto.ID > 0 {
 		handle, err = resolverHandleReactivacionAgente(agente, &proyecto.ID)
 		if err != nil {
-			return err
+			return false, false, err
 		}
 	}
-	_, err = encolarReactivacionAgenteProyectoConHandleSiProcede(agente, proyecto, motivo, handle)
-	return err
+	reactivado, err := encolarReactivacionAgenteProyectoConHandleSiProcede(agente, proyecto, motivo, handle)
+	return reactivado, false, err
 }
 
 func encolarReactivacionAgenteProyectoSiProcede(agente string, proyecto *db.Proyecto, motivo string) (bool, error) {

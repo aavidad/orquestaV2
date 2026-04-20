@@ -20334,7 +20334,7 @@ func TestResetReanimacionSostieneCooldownSiLaCuotaVisibleSigueAgotada(t *testing
 	}
 }
 
-func TestResetReanimacionNoArrancaSiLaCuentaCompartidaYaEstaOcupada(t *testing.T) {
+func TestResetReanimacionNoArrancaNiLimpiaEstadoSiLaCuentaCompartidaYaEstaOcupada(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
 	if err := db.ConfigSet("runtime_shared_account_active_ceiling", "1"); err != nil {
@@ -20406,8 +20406,12 @@ func TestResetReanimacionNoArrancaSiLaCuentaCompartidaYaEstaOcupada(t *testing.T
 		t.Fatalf("marcar reanimacion: %v", err)
 	}
 
-	if err := (dbAutomationService{}).ResetReanimacion("Codex1"); err != nil {
+	resultado, err := (dbAutomationService{}).ResetReanimacionResultado("Codex1")
+	if err != nil {
 		t.Fatalf("reset reanimacion: %v", err)
+	}
+	if resultado != resetReanimacionResultadoSinCapacidad {
+		t.Fatalf("resultado inesperado: %s", resultado)
 	}
 
 	agente := "Codex1"
@@ -20418,6 +20422,16 @@ func TestResetReanimacionNoArrancaSiLaCuentaCompartidaYaEstaOcupada(t *testing.T
 	}
 	if len(orders) != 0 {
 		t.Fatalf("no deberia reactivar si la cuenta compartida ya esta ocupada: %+v", orders)
+	}
+	infoAgente, err := db.GetAgente("Codex1")
+	if err != nil {
+		t.Fatalf("get agente: %v", err)
+	}
+	if infoAgente == nil || infoAgente.ReanimarAt == nil || infoAgente.ReanimarAt.IsZero() {
+		t.Fatalf("deberia conservar reanimar_at para reintentar mas tarde: %+v", infoAgente)
+	}
+	if strings.TrimSpace(infoAgente.EstadoCuota) != "activo" {
+		t.Fatalf("no deberia inventar otro estado de cuota: %+v", infoAgente)
 	}
 }
 
