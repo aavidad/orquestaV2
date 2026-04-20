@@ -89,6 +89,43 @@ func TestProcesarRuntimeTranscriptBatchDespiertaRuntimeOrdersSiIngresaSalida(t *
 	}
 }
 
+func TestWakeRuntimeOrdersAfterTranscriptEntryThrottlePorHandle(t *testing.T) {
+	runtimeTranscriptDirectWakeGate.Reset()
+	previousRunner := activeControlPlaneRunner.Load()
+	activeControlPlaneRunner.Store(&planocontrol.Runner{})
+	defer activeControlPlaneRunner.Store(previousRunner)
+
+	wakeCalls := 0
+	previousWake := wakeRuntimeOrdersAfterTranscriptEntryFn
+	wakeRuntimeOrdersAfterTranscriptEntryFn = func() bool {
+		wakeCalls++
+		return true
+	}
+	defer func() {
+		wakeRuntimeOrdersAfterTranscriptEntryFn = previousWake
+		runtimeTranscriptDirectWakeGate.Reset()
+	}()
+
+	handleID := int64(77)
+	entry := &db.RuntimeTranscriptEntry{HandleID: &handleID, Agente: "Codex3"}
+	if !wakeRuntimeOrdersAfterTranscriptEntry(entry) {
+		t.Fatalf("primer wake transcript deberia permitirse")
+	}
+	if wakeRuntimeOrdersAfterTranscriptEntry(entry) {
+		t.Fatalf("segundo wake transcript inmediato no deberia permitirse")
+	}
+	if wakeCalls != 1 {
+		t.Fatalf("wake transcript throttled inesperado: %d", wakeCalls)
+	}
+	time.Sleep(runtimeTranscriptDirectWakeInterval())
+	if !wakeRuntimeOrdersAfterTranscriptEntry(entry) {
+		t.Fatalf("wake transcript tras cooldown deberia permitirse")
+	}
+	if wakeCalls != 2 {
+		t.Fatalf("wake transcript tras cooldown inesperado: %d", wakeCalls)
+	}
+}
+
 func TestProcesarRuntimeTranscriptBatchDespiertaRuntimeMailboxTrasEntregaGitPremiumBootstrap(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	repoDir := filepath.Join(tmp, "repo-git-transcript-premium-bootstrap-wake")

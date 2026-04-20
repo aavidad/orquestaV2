@@ -278,7 +278,7 @@ func launchPrepareContextPrewarmLoop(ctx context.Context, debugLogger *log.Logge
 	}
 	agents = append(agents, cfg.WorkerAgents...)
 	go func() {
-		ticker := time.NewTicker(4 * time.Second)
+		ticker := time.NewTicker(serverPrepareContextPrewarmInterval())
 		defer ticker.Stop()
 		for {
 			select {
@@ -297,6 +297,14 @@ func launchPrepareContextPrewarmLoop(ctx context.Context, debugLogger *log.Logge
 			}
 		}
 	}()
+}
+
+func serverPrepareContextPrewarmInterval() time.Duration {
+	seconds := controlPlaneConfigIntOrDefault("server_prepare_context_prewarm_interval_seconds", 60)
+	if seconds < 30 {
+		seconds = 30
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func loadUnifiedServerHTTPTimeouts() unifiedServerHTTPTimeouts {

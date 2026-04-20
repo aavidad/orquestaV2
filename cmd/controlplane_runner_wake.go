@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -14,9 +16,11 @@ var runtimeOrdersWakeFallbackRunning atomic.Bool
 var runtimeMailboxWakeFallbackRunning atomic.Bool
 var runtimeOrdersWakeFallbackStartedAt atomic.Int64
 var runtimeMailboxWakeFallbackStartedAt atomic.Int64
+var runtimeTranscriptDirectWakeGate = planocontrol.NewThrottler()
 
 var processRuntimeOrdersWakeFallback func()
 var processRuntimeMailboxWakeFallback func()
+var wakeRuntimeOrdersAfterTranscriptEntryFn = wakeControlPlaneRuntimeOrders
 
 func init() {
 	processRuntimeOrdersWakeFallback = runRuntimeOrdersWakeFallback
@@ -30,7 +34,7 @@ func init() {
 		wakeControlPlaneRuntimeMailbox()
 	})
 	runtimesService.SetAfterRegisterRuntimeTranscriptHook(func(entry *db.RuntimeTranscriptEntry, transcriptID int64) {
-		wakeControlPlaneRuntimeOrders()
+		wakeRuntimeOrdersAfterTranscriptEntry(entry)
 	})
 }
 
@@ -71,6 +75,36 @@ func wakeControlPlaneWarm() bool {
 	}
 	resetAutonomiaActiveSessionsObservationGate()
 	return true
+}
+
+func wakeRuntimeOrdersAfterTranscriptEntry(entry *db.RuntimeTranscriptEntry) bool {
+	if activeControlPlaneRunner.Load() == nil {
+		return wakeRuntimeOrdersAfterTranscriptEntryFn()
+	}
+	if !runtimeTranscriptDirectWakeGate.Allow(runtimeTranscriptDirectWakeKey(entry), runtimeTranscriptDirectWakeInterval()) {
+		return false
+	}
+	return wakeRuntimeOrdersAfterTranscriptEntryFn()
+}
+
+func runtimeTranscriptDirectWakeInterval() time.Duration {
+	return 2 * time.Second
+}
+
+func runtimeTranscriptDirectWakeKey(entry *db.RuntimeTranscriptEntry) string {
+	if entry == nil {
+		return "global"
+	}
+	if entry.HandleID != nil && *entry.HandleID > 0 {
+		return "handle:" + strconv.FormatInt(*entry.HandleID, 10)
+	}
+	if entry.RuntimeID > 0 {
+		return "runtime:" + strconv.FormatInt(entry.RuntimeID, 10)
+	}
+	if agente := strings.TrimSpace(entry.Agente); agente != "" {
+		return "agente:" + strings.ToLower(agente)
+	}
+	return "global"
 }
 
 func triggerRuntimeOrdersWakeFallback() bool {

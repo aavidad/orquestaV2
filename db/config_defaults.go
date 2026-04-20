@@ -47,6 +47,7 @@ func defaultConfigEntries() []configDefaultEntry {
 		{Clave: "server_autobootstrap_project_name", Valor: "Orquestador"},
 		{Clave: "server_autobootstrap_supervisor_agent", Valor: "Codex1"},
 		{Clave: "server_autobootstrap_worker_agents", Valor: "Codex2,Codex3,Codex4,Codex5"},
+		{Clave: "server_prepare_context_prewarm_interval_seconds", Valor: "60"},
 		{Clave: "server_autobootstrap_objective_general", Valor: "Terminar la app al completo, revisando el codigo real, reparando fallos de raiz y validando con pruebas reales."},
 		{Clave: "server_autobootstrap_definition_of_done_json", Valor: "{\"estado\":\"app_completa\",\"criterios\":[\"codigo_real_y_funcional\",\"sin_humo\",\"pruebas_reales_en_verde\",\"frentes_cerrados\"]}"},
 		{Clave: "model_policy_default_profile", Valor: "implementacion"},
