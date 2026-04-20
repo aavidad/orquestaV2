@@ -8416,7 +8416,9 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(msg *db.RuntimeMa
 		return false, nil
 	}
 	startedAt := view.StartedAt.UTC()
-	if !msg.CreatedAt.UTC().Before(startedAt) {
+	// Los artefactos del worker y la persistencia pueden no coincidir al subsegundo.
+	// Evita consumir una mailbox recién creada por caer en el mismo segundo del arranque.
+	if !msg.CreatedAt.UTC().Before(startedAt.Add(-1 * time.Second)) {
 		return false, nil
 	}
 	if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {

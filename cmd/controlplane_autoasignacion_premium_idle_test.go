@@ -169,6 +169,107 @@ func TestProcesarAutoasignacionPremiumSinSesionBatchUsaAsignacionActivaSinRuntim
 	}
 }
 
+func TestProcesarAutoasignacionPremiumSinSesionBatchAbreMicrotareaParaAsignacionActivaSinRuntimeNiTareaActiva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("GeminiSeed", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-seed-idle-direct",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ObjetivoPct:      100,
+		MinAgentes:       1,
+		MaxAgentes:       3,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:       proyectoID,
+		Enabled:          true,
+		MaxWorkers:       1,
+		SupervisorAgente: "orquesta",
+		EstadoAutonomia:  db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("GeminiSeed", proyectoID, "frente nucleo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	asignacion, err := db.GetAsignacionActivaAgente("GeminiSeed")
+	if err != nil {
+		t.Fatalf("get asignacion activa: %v", err)
+	}
+
+	n, err := procesarAutoasignacionPremiumSinSesionBatch([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "GeminiSeed"},
+		Asignacion:      asignacion,
+		EstadoOperativo: "sin_tarea",
+	}}, map[string][]*db.Tarea{})
+	if err != nil {
+		t.Fatalf("procesarAutoasignacionPremiumSinSesionBatch: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("deberia abrir backlog premium util para asignado sin tarea activa, got=%d", n)
+	}
+
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	var abierta *db.Tarea
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		if tarea.Agente != nil && strings.TrimSpace(*tarea.Agente) == "GeminiSeed" && strings.Contains(strings.TrimSpace(tarea.Notas), microcicloRefactorNotasTag) {
+			abierta = tarea
+			break
+		}
+	}
+	if abierta == nil {
+		t.Fatalf("deberia dejar una microtarea premium activa para GeminiSeed, tareas=%+v", tareas)
+	}
+	if abierta.Estado != db.TareaAsignada && abierta.Estado != db.TareaEnProgreso {
+		t.Fatalf("la microtarea premium deberia quedar activa para GeminiSeed: %+v", abierta)
+	}
+	if (!strings.Contains(abierta.Descripcion, "WRITE_SET:") && !strings.Contains(abierta.Descripcion, "Write-set exclusivo:")) ||
+		(!strings.Contains(abierta.Descripcion, "Tests minimos:") && !strings.Contains(abierta.Descripcion, "Tests minimos del slice:")) {
+		t.Fatalf("la microtarea premium deberia nacer con contrato accionable: %+v", abierta)
+	}
+	if !strings.Contains(abierta.Descripcion, "cmd/controlplane_support.go") ||
+		!strings.Contains(abierta.Descripcion, "db/controlplane_entities.go") ||
+		!strings.Contains(abierta.Descripcion, "runtimeagente/driver.go") ||
+		!strings.Contains(abierta.Descripcion, "TestResolverBootstrapRuntimeLeasePendiente") {
+		t.Fatalf("la microtarea premium deberia apuntar al write-set y tests del nucleo: %+v", abierta)
+	}
+
+	agente := "GeminiSeed"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "start" {
+		t.Fatalf("deberia encolar start para backlog premium generado, got=%+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"motivo":"premium_idle_autoassigned"`) {
+		t.Fatalf("start sin motivo esperado: %s", orders[0].PayloadJSON)
+	}
+}
+
 func TestResolverProyectoAutoasignacionPremiumSinSesionPrefiereProyectoPremiumSobrePausaMasReciente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
