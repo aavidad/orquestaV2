@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"orquesta/db"
+	"orquesta/internal/controlruntime"
 	"orquesta/runtimeagente"
 )
 
@@ -3388,6 +3389,85 @@ func TestBuildDetailCompactUsaWorkQueueDurableParaEvitarBarridoDeTareas(t *testi
 	}
 	if store.listTasksCalls != 0 {
 		t.Fatalf("compact no deberia barrer tareas cuando la work-queue ya marca la tarea activa: listTasksCalls=%d", store.listTasksCalls)
+	}
+}
+
+func TestBuildDetailCompactPromueveWorkQueueAbsorbidaAWorkConfirmed(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(46)
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	writeJSON := func(path string, payload any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	writeJSON(manifestPath, map[string]any{
+		"version":           1,
+		"agent":             "Codex2",
+		"driver":            "tmux_cli_session",
+		"transport":         "tmux",
+		"tmux_session":      "orq-codex2-test",
+		"tmux_pane_id":      "%7",
+		"status_path":       statusPath,
+		"heartbeat_path":    heartbeatPath,
+		"work_queue_kind":   "autonomia",
+		"work_queue_action": "continuar_trabajo",
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":                 "ready",
+		"alive":                 true,
+		"updated_at":            now.Format(time.RFC3339Nano),
+		"last_output_at":        now.Format(time.RFC3339Nano),
+		"last_progress_at":      now.Format(time.RFC3339Nano),
+		"work_queue_kind":       "autonomia",
+		"work_queue_action":     "continuar_trabajo",
+		"work_queue_state":      "pending",
+		"work_queue_reason":     "guidance durable escrita en inbox",
+		"work_queue_updated_at": now.Add(-time.Minute).Format(time.RFC3339Nano),
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	metaJSON := []byte(fmt.Sprintf(`{"worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`,
+		manifestPath, statusPath, heartbeatPath))
+	if err := controlruntime.RecordWorkQueueFromMetadataJSON(string(metaJSON), controlruntime.WorkQueueRecordInput{
+		Kind:       "autonomia",
+		Action:     "continuar_trabajo",
+		State:      "pending",
+		Reason:     "guidance durable escrita en inbox",
+		RecordedAt: now.Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("RecordWorkQueueFromMetadataJSON: %v", err)
+	}
+
+	store := &fakeStore{
+		agents:           []*db.Agente{{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true}},
+		assignments:      []*db.Asignacion{{Agente: "Codex2", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva}},
+		sessions:         []*db.Sesion{{ID: 12, Agente: "Codex2", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: now}},
+		runtimes:         []*db.RuntimeInstance{{ID: 10, Agente: "Codex2", ProyectoID: &proyectoID, LogicalState: "activo", ProcessState: "running", UpdatedAt: now}},
+		canonicalHandles: []*db.RuntimeHandle{{ID: 10, Agente: "Codex2", ProyectoID: &proyectoID, Estado: "activo", Transporte: "tmux", HandleKind: "session", MetadataJSON: string(metaJSON)}},
+		tasks:            []*db.Tarea{{ID: 41, Titulo: "Frente Codex", Estado: db.EstadoEnProgreso, ProyectoID: &proyectoID, Agente: ptr("Codex2"), Modulo: "cmd"}},
+	}
+	svc := NewService(store, nil)
+
+	detail, err := svc.BuildDetailCompact("Codex2")
+	if err != nil {
+		t.Fatalf("BuildDetailCompact: %v", err)
+	}
+	if detail == nil || detail.Entity == nil {
+		t.Fatalf("detail/entity inesperado: %+v", detail)
+	}
+	if detail.Row.LastAutonomyState != "work_confirmed" || detail.Entity.LastAutonomyState != "work_confirmed" {
+		t.Fatalf("deberia promover work_queue absorbida a work_confirmed: row=%+v entity=%+v", detail.Row, detail.Entity)
 	}
 }
 

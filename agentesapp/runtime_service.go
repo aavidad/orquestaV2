@@ -1342,10 +1342,14 @@ func applyDurableWorkQueueToTickRow(row *Row, view *runtimeagente.WorkerStatusVi
 	}
 	if strings.EqualFold(strings.TrimSpace(view.WorkQueueKind), "autonomia") && strings.TrimSpace(view.WorkQueueAction) != "" {
 		if mailboxCountersShouldReplace(row.LastAutonomyMoment, view.WorkQueueUpdatedAt) {
+			state := strings.TrimSpace(view.WorkQueueState)
+			if autonomyWorkQueueStateConfirmsWork(row, view) {
+				state = "work_confirmed"
+			}
 			row.LastAutonomyAction = strings.TrimSpace(view.WorkQueueAction)
 			row.LastAutonomySource = "work_queue"
 			row.LastAutonomyMoment = view.WorkQueueUpdatedAt
-			row.LastAutonomyState = strings.TrimSpace(view.WorkQueueState)
+			row.LastAutonomyState = state
 			row.LastAutonomyReason = strings.TrimSpace(view.WorkQueueReason)
 			row.LastAutonomyVerificationKey = strings.TrimSpace(view.WorkQueueVerificationKey)
 		}
@@ -1362,6 +1366,29 @@ func applyDurableWorkQueueToTickRow(row *Row, view *runtimeagente.WorkerStatusVi
 	case "pipeline_local", "instruction":
 		row.MailboxActionablePending++
 	}
+}
+
+func autonomyWorkQueueStateConfirmsWork(row *Row, view *runtimeagente.WorkerStatusView) bool {
+	if row == nil || view == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(view.WorkQueueState)) {
+	case "working", "running", "completed":
+		return true
+	}
+	moment := view.WorkQueueUpdatedAt
+	if moment == nil || moment.IsZero() {
+		return false
+	}
+	for _, ts := range []*time.Time{row.WorkerLastProgress, row.WorkerLastOutput} {
+		if ts == nil || ts.IsZero() {
+			continue
+		}
+		if !ts.Before(*moment) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, sesionActiva *db.Sesion, cuotaPct int) (*TickOutput, error) {
