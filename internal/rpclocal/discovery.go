@@ -1,6 +1,7 @@
 package rpclocal
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"orquesta/storage"
 )
@@ -137,9 +139,22 @@ func MatchesCurrentScope(state *State) bool {
 func ResolveServerAddr() string {
 	info, err := LoadServerInfo()
 	if err == nil && strings.TrimSpace(info.Addr) != "" {
-		return BaseURL(info.Addr)
+		addr := strings.TrimSpace(info.Addr)
+		if serverAddrReachable(addr) {
+			return BaseURL(addr)
+		}
 	}
 	return DefaultAddr()
+}
+
+func serverAddrReachable(addr string) bool {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	return Ping(ctx, addr) == nil
 }
 
 func currentScopeSource() string {

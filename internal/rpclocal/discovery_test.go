@@ -213,3 +213,47 @@ func TestDefaultStatePathSinStorageExplicitoUsaScopeDelDirectorio(t *testing.T) 
 		t.Fatalf("DefaultStatePath no deberia depender de orquesta.db sin storage explicito: %s", path)
 	}
 }
+
+func TestResolveServerAddrIgnoraStatefileStale(t *testing.T) {
+	prevState := os.Getenv(envStatePath)
+	prevInfo := os.Getenv(envInfoPath)
+	prevAddr := os.Getenv(envAddr)
+	t.Cleanup(func() {
+		if prevState == "" {
+			_ = os.Unsetenv(envStatePath)
+		} else {
+			_ = os.Setenv(envStatePath, prevState)
+		}
+		if prevInfo == "" {
+			_ = os.Unsetenv(envInfoPath)
+		} else {
+			_ = os.Setenv(envInfoPath, prevInfo)
+		}
+		if prevAddr == "" {
+			_ = os.Unsetenv(envAddr)
+		} else {
+			_ = os.Setenv(envAddr, prevAddr)
+		}
+	})
+
+	statePath := filepath.Join(t.TempDir(), "rpc-state.json")
+	if err := os.Setenv(envStatePath, statePath); err != nil {
+		t.Fatalf("Setenv state: %v", err)
+	}
+	_ = os.Unsetenv(envInfoPath)
+	if err := os.Setenv(envAddr, "127.0.0.1:19999"); err != nil {
+		t.Fatalf("Setenv addr: %v", err)
+	}
+	if err := SaveState(statePath, &State{
+		Addr:      "127.0.0.1:1",
+		PID:       42,
+		ScopeID:   CurrentScopeID(),
+		StartedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("SaveState: %v", err)
+	}
+
+	if got := ResolveServerAddr(); got != "http://127.0.0.1:19999" {
+		t.Fatalf("ResolveServerAddr deberia caer al default al detectar state stale: %s", got)
+	}
+}
