@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/agentesapp"
 	"orquesta/db"
@@ -166,6 +167,133 @@ func TestProcesarAutoasignacionPremiumSinSesionBatchUsaAsignacionActivaSinRuntim
 	}
 	if !strings.Contains(orders[0].PayloadJSON, `"motivo":"premium_idle_autoassigned"`) {
 		t.Fatalf("start sin motivo esperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestProcesarAutoasignacionPremiumSinSesionBatchNoBloqueaPorHandleActivaStale(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ObjetivoPct:      100,
+		MinAgentes:       1,
+		MaxAgentes:       3,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "reactivacion_automatica"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Retomar frente premium con handle stale",
+		Descripcion: "El batch no debe tratar una handle antigua como runtime util.",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea libre: %v", err)
+	}
+	asignacion, err := db.GetAsignacionActivaAgente("Gemini1")
+	if err != nil {
+		t.Fatalf("get asignacion activa: %v", err)
+	}
+
+	n, err := procesarAutoasignacionPremiumSinSesionBatch([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "Gemini1"},
+		Asignacion:      asignacion,
+		EstadoOperativo: "sin_tarea",
+		Handle: &db.RuntimeHandle{
+			ID:        91,
+			Agente:    "Gemini1",
+			ProyectoID: &proyectoID,
+			Estado:    "activo",
+			UpdatedAt:  time.Now().UTC().Add(-20 * time.Minute),
+		},
+	}}, map[string][]*db.Tarea{})
+	if err != nil {
+		t.Fatalf("procesarAutoasignacionPremiumSinSesionBatch: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("deberia ignorar handle stale y autoasignar igual, got=%d", n)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Agente == nil || strings.TrimSpace(*tarea.Agente) != "Gemini1" || tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea libre deberia quedar tomada y arrancada en Gemini1: %+v", tarea)
+	}
+}
+
+func TestResolverProyectoAutoasignacionPremiumSinSesionUsaAutobootstrapParaSupervisor(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.ConfigSet("server_autobootstrap_enabled", "true"); err != nil {
+		t.Fatalf("config enabled: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_project_slug", "orquestador"); err != nil {
+		t.Fatalf("config slug: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_project_name", "Orquestador"); err != nil {
+		t.Fatalf("config name: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_project_path", filepath.Join(tmp, "orquestador")); err != nil {
+		t.Fatalf("config path: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_supervisor_agent", "Codex1"); err != nil {
+		t.Fatalf("config supervisor: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_worker_agents", "Codex2,Codex3,Codex4"); err != nil {
+		t.Fatalf("config workers: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:       proyectoID,
+		Enabled:          true,
+		MaxWorkers:       3,
+		SupervisorAgente: "Codex1",
+		EstadoAutonomia:  db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+
+	proyecto, err := resolverProyectoAutoasignacionPremiumSinSesion("Codex1", agentesapp.Row{
+		Agente:          &db.Agente{Nombre: "Codex1"},
+		EstadoOperativo: "disponible",
+	})
+	if err != nil {
+		t.Fatalf("resolver proyecto: %v", err)
+	}
+	if proyecto == nil || proyecto.ID != proyectoID {
+		t.Fatalf("deberia resolver proyecto autobootstrap para supervisor, got=%+v", proyecto)
 	}
 }
 

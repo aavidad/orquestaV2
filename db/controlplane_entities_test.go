@@ -15882,6 +15882,82 @@ func TestRuntimeOrderControlEstadoDeseadoSatisfechoCuentaWorkerStartingComoArran
 	}
 }
 
+func TestRuntimeOrderControlEstadoDeseadoSatisfechoNoCuentaWorkerRunningSiHayStopVivaPrevia(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	statusPath := filepath.Join(tmp, "helper-worker-status-running-stop-previa.json")
+	heartbeatPath := filepath.Join(tmp, "helper-worker-heartbeat-running-stop-previa.json")
+	now := time.Now().UTC()
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"alive":      true,
+		"updated_at": now.Format(time.RFC3339Nano),
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	stopID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "stop",
+		PayloadJSON: `{"accion":"stop","por":"orquesta","motivo":"restart"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar stop: %v", err)
+	}
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"accion":"start","por":"orquesta","motivo":"restart","proyecto":"orquestador"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	if stopID >= startID {
+		t.Fatalf("esperaba stop previa a start, stop=%d start=%d", stopID, startID)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+	handle := &RuntimeHandle{
+		Agente:       "Codex1",
+		ProyectoID:   &proyectoID,
+		Estado:       "activo",
+		Transporte:   "tmux",
+		MetadataJSON: string(metaJSON),
+	}
+	satisfied, reason := runtimeOrderControlEstadoDeseadoSatisfecho(startOrder, nil, handle)
+	if satisfied {
+		t.Fatalf("start no deberia satisfacerse con worker running si hay stop viva previa: reason=%s", reason)
+	}
+}
+
 func TestRuntimeObservedLogicalStateFromStructuredWorkerPromueveTMUXReadyARuntimeActivo(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	statusPath := filepath.Join(tmp, "worker-observed-status.json")
@@ -21276,6 +21352,109 @@ func TestRuntimeOrderControlEstadoDeseadoSatisfechoStartSinHandlePeroConSesionAc
 	ok, reason := runtimeOrderControlEstadoDeseadoSatisfecho(order, runtime, nil)
 	if !ok || reason != "runtime_already_running" {
 		t.Fatalf("deberia satisfacer start con runtime+sesion activa sin handle, ok=%v reason=%q", ok, reason)
+	}
+}
+
+func TestReconciliarRuntimeOrdersPendientesControlObsoletasNoCompletaStartSiHayStopVivaPrevia(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	workerDir := filepath.Join(tmp, "worker-running-stop-previa")
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("mkdir worker dir: %v", err)
+	}
+	statusPath := filepath.Join(workerDir, "status.json")
+	heartbeatPath := filepath.Join(workerDir, "heartbeat.json")
+	now := time.Now().UTC()
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"alive":      true,
+		"updated_at": now.Format(time.RFC3339Nano),
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime: %+v err=%v", runtime, err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_instances SET logical_state='activo', process_state='running' WHERE id=?`, runtime.ID); err != nil {
+		t.Fatalf("promover runtime: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("actualizar handle: %v", err)
+	}
+	stopID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "stop",
+		PayloadJSON: `{"accion":"stop","por":"orquesta","motivo":"restart"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar stop: %v", err)
+	}
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"accion":"start","por":"orquesta","motivo":"restart","proyecto":"orquestador"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	if stopID >= startID {
+		t.Fatalf("esperaba stop previa a start, stop=%d start=%d", stopID, startID)
+	}
+	processed, err := reconciliarRuntimeOrdersPendientesControlObsoletas()
+	if err != nil {
+		t.Fatalf("reconciliar stale: %v", err)
+	}
+	if processed != 0 {
+		t.Fatalf("no deberia completar start con stop viva previa, processed=%d", processed)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start final: %v", err)
+	}
+	if startOrder.Estado != "pendiente" {
+		t.Fatalf("start no deberia completarse: %+v", startOrder)
 	}
 }
 

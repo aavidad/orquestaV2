@@ -8963,15 +8963,50 @@ func procesarAutonomiaAgentesBatch() (int, error) {
 	budget := autonomiaBatchBudget()
 	activa := true
 	sessionsStart := time.Now()
-	sesiones, err := sesionesAPIService.ListInspectionSessions(db.FiltroSesionesInspeccion{Activa: &activa})
+	var sesiones []*db.Sesion
+	_, err := ejecutarPasoAutonomiaConTimeout(
+		"listar_sesiones_autonomia",
+		autonomiaSessionStepTimeout(),
+		func() (int, error) {
+			var innerErr error
+			sesiones, innerErr = sesionesAPIService.ListInspectionSessions(db.FiltroSesionesInspeccion{Activa: &activa})
+			if innerErr != nil {
+				return 0, innerErr
+			}
+			return len(sesiones), nil
+		},
+	)
 	if err != nil {
+		if esAutonomiaTimeoutError(err) {
+			db.Audit("server", "autonomia_listar_sesiones_timeout", "runtime", 0, err.Error())
+			return 0, nil
+		}
 		return 0, err
 	}
 	sesiones = filtrarSesionesAutonomiaRelevantes(sesiones)
 	autonomiaTickDebugf("listar_sesiones sesiones=%d duration=%s", len(sesiones), time.Since(sessionsStart).Round(time.Millisecond))
 	snapshotStart := time.Now()
-	snapshot, err := newAutonomiaBatchSnapshot(sesiones)
+	var snapshot *autonomiaBatchSnapshot
+	_, err = ejecutarPasoAutonomiaConTimeout(
+		"snapshot_autonomia",
+		autonomiaSessionStepTimeout(),
+		func() (int, error) {
+			var innerErr error
+			snapshot, innerErr = newAutonomiaBatchSnapshot(sesiones)
+			if innerErr != nil {
+				return 0, innerErr
+			}
+			if snapshot == nil {
+				return 0, nil
+			}
+			return len(snapshot.agentesByName), nil
+		},
+	)
 	if err != nil {
+		if esAutonomiaTimeoutError(err) {
+			db.Audit("server", "autonomia_snapshot_timeout", "runtime", 0, err.Error())
+			return 0, nil
+		}
 		return 0, err
 	}
 	autonomiaTickDebugf("snapshot agentes=%d duration=%s", len(snapshot.agentesByName), time.Since(snapshotStart).Round(time.Millisecond))
@@ -9784,7 +9819,36 @@ func resolverProyectoAutoasignacionPremiumSinSesion(agente string, row agentesap
 	} else if proyecto != nil {
 		return proyecto, nil
 	}
+	if proyecto, err := resolverProyectoAutoasignacionDesdeAutobootstrap(agente); err != nil {
+		return nil, err
+	} else if proyecto != nil {
+		return proyecto, nil
+	}
 	return nil, nil
+}
+
+func resolverProyectoAutoasignacionDesdeAutobootstrap(agente string) (*db.Proyecto, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil, nil
+	}
+	cfg := loadServerAutobootstrapConfig()
+	if !cfg.Enabled || strings.TrimSpace(cfg.ProjectSlug) == "" {
+		return nil, nil
+	}
+	if !strings.EqualFold(agente, strings.TrimSpace(cfg.SupervisorAgent)) {
+		match := false
+		for _, worker := range cfg.WorkerAgents {
+			if strings.EqualFold(agente, strings.TrimSpace(worker)) {
+				match = true
+				break
+			}
+		}
+		if !match {
+			return nil, nil
+		}
+	}
+	return runtimesService.GetProject(strings.TrimSpace(cfg.ProjectSlug))
 }
 
 func resolverProyectoAutoasignacionDesdeAsignacionPausada(agente string) (*db.Proyecto, error) {
@@ -9825,18 +9889,110 @@ func resolverProyectoAutoasignacionDesdeAsignacionPausada(agente string) (*db.Pr
 }
 
 func rowTieneRuntimeUtilParaAutoasignacionPremium(row agentesapp.Row) bool {
-	if row.Runtime != nil {
+	now := time.Now().UTC()
+	if row.WorkerFresh(now) {
 		return true
+	}
+	if row.MailboxPending > 0 || row.OrdersOpen > 0 {
+		return true
+	}
+	if row.Runtime != nil {
+		switch strings.ToLower(strings.TrimSpace(row.Runtime.LogicalState)) {
+		case "activo", "active", "running", "iniciando", "starting", "esperando_io", "waiting_io", "pausado", "paused":
+			if !rowRuntimePrincipalStaleParaAutoasignacion(row, now) || rowTieneActividadOperativaRecienteParaAutoasignacion(row, now) {
+				return true
+			}
+		}
 	}
 	if row.Handle == nil {
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(row.Handle.Estado)) {
 	case "activo", "active", "pausado", "paused":
-		return true
+		return rowTieneActividadOperativaRecienteParaAutoasignacion(row, now)
 	default:
 		return false
 	}
+}
+
+func rowRuntimePrincipalStaleParaAutoasignacion(row agentesapp.Row, now time.Time) bool {
+	if row.Runtime == nil {
+		return false
+	}
+	moment := row.Runtime.UpdatedAt
+	if row.Runtime.UltimaActividadAt != nil && !row.Runtime.UltimaActividadAt.IsZero() {
+		moment = row.Runtime.UltimaActividadAt.UTC()
+	} else if row.Runtime.LastHeartbeatAt != nil && !row.Runtime.LastHeartbeatAt.IsZero() {
+		moment = row.Runtime.LastHeartbeatAt.UTC()
+	} else if row.Runtime.LastEventAt != nil && !row.Runtime.LastEventAt.IsZero() {
+		moment = row.Runtime.LastEventAt.UTC()
+	}
+	if moment.IsZero() {
+		return false
+	}
+	if !moment.Before(now.Add(-10 * time.Minute)) {
+		return false
+	}
+	if strings.TrimSpace(row.WorkerState) != "" {
+		return !row.WorkerAlive || row.WorkerHeartbeat == nil || row.WorkerHeartbeat.Before(now.Add(-45*time.Second))
+	}
+	return true
+}
+
+func rowTieneActividadOperativaRecienteParaAutoasignacion(row agentesapp.Row, now time.Time) bool {
+	cutoff := now.Add(-10 * time.Minute)
+	if row.Runtime != nil {
+		for _, ts := range []time.Time{
+			row.Runtime.UpdatedAt,
+			func() time.Time {
+				if row.Runtime.UltimaActividadAt != nil {
+					return row.Runtime.UltimaActividadAt.UTC()
+				}
+				return time.Time{}
+			}(),
+			func() time.Time {
+				if row.Runtime.LastHeartbeatAt != nil {
+					return row.Runtime.LastHeartbeatAt.UTC()
+				}
+				return time.Time{}
+			}(),
+			func() time.Time {
+				if row.Runtime.LastEventAt != nil {
+					return row.Runtime.LastEventAt.UTC()
+				}
+				return time.Time{}
+			}(),
+		} {
+			if !ts.IsZero() && !ts.Before(cutoff) {
+				return true
+			}
+		}
+	}
+	if row.Handle != nil {
+		for _, ts := range []time.Time{
+			row.Handle.UpdatedAt,
+			func() time.Time {
+				if row.Handle.LastSeenAt != nil {
+					return row.Handle.LastSeenAt.UTC()
+				}
+				return time.Time{}
+			}(),
+		} {
+			if !ts.IsZero() && !ts.Before(cutoff) {
+				return true
+			}
+		}
+	}
+	if row.WorkerHeartbeat != nil && !row.WorkerHeartbeat.IsZero() && !row.WorkerHeartbeat.Before(now.Add(-45*time.Second)) {
+		return true
+	}
+	if row.WorkerUpdatedAt != nil && !row.WorkerUpdatedAt.IsZero() && !row.WorkerUpdatedAt.Before(now.Add(-45*time.Second)) {
+		return true
+	}
+	if row.WorkerLastProgress != nil && !row.WorkerLastProgress.IsZero() && !row.WorkerLastProgress.Before(cutoff) {
+		return true
+	}
+	return false
 }
 
 func asegurarFrentePremiumAgenteIdle(agente *db.Agente, proyecto *db.Proyecto) (*capacidadapp.TareaPipelineLocal, error) {

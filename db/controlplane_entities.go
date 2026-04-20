@@ -4133,6 +4133,9 @@ func runtimeOrderControlEstadoDeseadoSatisfecho(order *RuntimeOrder, runtime *Ru
 				return false, ""
 			}
 		}
+		if runtimeOrderTieneStopVivaPrevia(order) {
+			return false, ""
+		}
 		if runtimeHandleActivoAPICompartido(handle, runtime) {
 			return true, "runtime_handle_api_active"
 		}
@@ -4170,6 +4173,35 @@ func runtimeOrderControlEstadoDeseadoSatisfecho(order *RuntimeOrder, runtime *Ru
 		}
 	}
 	return false, ""
+}
+
+func runtimeOrderTieneStopVivaPrevia(order *RuntimeOrder) bool {
+	if order == nil || order.ID <= 0 {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(order.Tipo), "start") && !strings.EqualFold(strings.TrimSpace(order.Tipo), "resume") {
+		return false
+	}
+	query := `
+SELECT 1
+FROM runtime_orders
+WHERE agente = ?
+  AND lower(trim(tipo)) = 'stop'
+  AND lower(trim(estado)) IN ('pendiente', 'ejecutando')
+  AND id < ?`
+	args := []any{strings.TrimSpace(order.Agente), order.ID}
+	if order.ProyectoID != nil {
+		query += ` AND proyecto_id = ?`
+		args = append(args, *order.ProyectoID)
+	} else {
+		query += ` AND proyecto_id IS NULL`
+	}
+	query += ` LIMIT 1`
+	var marker int
+	if err := DB.QueryRow(query, args...).Scan(&marker); err != nil {
+		return false
+	}
+	return marker == 1
 }
 
 func runtimeOrderRuntimeOperativoConSesionActiva(order *RuntimeOrder, runtime *RuntimeInstance) bool {
