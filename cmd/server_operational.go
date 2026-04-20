@@ -30,6 +30,8 @@ type serverOperationalInfo struct {
 	AutonomySupervising int  `json:"autonomySupervising"`
 	AutonomyContinuing  int  `json:"autonomyContinuing"`
 	AutonomyPending     int  `json:"autonomyPending"`
+	AutonomyConfirmed   int  `json:"autonomyConfirmed"`
+	AutonomyHandoffs    int  `json:"autonomyHandoffs"`
 }
 
 func registeredAgentCountFromStatus(status apiStatusResponse) int {
@@ -127,6 +129,8 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 		AutonomySupervising: status.Autonomia.Supervisando,
 		AutonomyContinuing:  status.Autonomia.Continuando,
 		AutonomyPending:     status.Autonomia.ContinuidadPendiente,
+		AutonomyConfirmed:   status.Autonomia.WorkConfirmed,
+		AutonomyHandoffs:    status.Autonomia.Handoffs,
 	}
 }
 
@@ -156,8 +160,8 @@ func formatServerOperationalSummary(info *serverOperationalInfo) string {
 	if info.DispatchConfirmed > 0 || info.DispatchPending > 0 || info.DispatchNotified > 0 || info.DispatchFailed > 0 {
 		parts = append(parts, fmt.Sprintf("dispatch p:%d n:%d f:%d c:%d", info.DispatchPending, info.DispatchNotified, info.DispatchFailed, info.DispatchConfirmed))
 	}
-	if info.AutonomySupervising > 0 || info.AutonomyContinuing > 0 || info.AutonomyPending > 0 {
-		parts = append(parts, fmt.Sprintf("autonomia s:%d c:%d p:%d", info.AutonomySupervising, info.AutonomyContinuing, info.AutonomyPending))
+	if info.AutonomySupervising > 0 || info.AutonomyContinuing > 0 || info.AutonomyPending > 0 || info.AutonomyConfirmed > 0 || info.AutonomyHandoffs > 0 {
+		parts = append(parts, fmt.Sprintf("autonomia s:%d c:%d p:%d ok:%d h:%d", info.AutonomySupervising, info.AutonomyContinuing, info.AutonomyPending, info.AutonomyConfirmed, info.AutonomyHandoffs))
 	}
 	if info.TasksInProgress > 0 {
 		parts = append(parts, fmt.Sprintf("%d en_progreso", info.TasksInProgress))

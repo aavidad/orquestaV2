@@ -666,6 +666,9 @@ func TestAPIServerOperationalExponeResumenOperativo(t *testing.T) {
 	if payload.DispatchPending < 0 || payload.DispatchNotified < 0 || payload.DispatchFailed < 0 || payload.DispatchConfirmed < 0 {
 		t.Fatalf("contadores dispatch invalidos: %+v", payload)
 	}
+	if payload.AutonomySupervising < 0 || payload.AutonomyContinuing < 0 || payload.AutonomyPending < 0 || payload.AutonomyConfirmed < 0 || payload.AutonomyHandoffs < 0 {
+		t.Fatalf("contadores autonomia invalidos: %+v", payload)
+	}
 }
 
 func TestAPIStatusExponeResumenOperativoCompat(t *testing.T) {
