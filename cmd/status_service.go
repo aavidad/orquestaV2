@@ -762,6 +762,15 @@ func storeStatusSnapshotWithTTL(status apiStatusResponse, now time.Time, ttl tim
 	statusCacheState.waitCh = nil
 }
 
+func readStatusSnapshotAny() (apiStatusResponse, bool) {
+	statusCacheState.mu.Lock()
+	defer statusCacheState.mu.Unlock()
+	if !statusCacheState.ok {
+		return apiStatusResponse{}, false
+	}
+	return statusCacheState.value, true
+}
+
 func statusSnapshotNeedsImmediateRefresh(status apiStatusResponse) bool {
 	if len(status.AgentesAuthManual) > 0 {
 		return true

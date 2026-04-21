@@ -142,6 +142,62 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 	}
 }
 
+func buildServerOperationalInfoFastFromDB() (serverOperationalInfo, error) {
+	sesiones, err := sesionesVisiblesParaEstado()
+	if err != nil {
+		return serverOperationalInfo{}, err
+	}
+	agentes, err := db.ListarAgentesEstadoLigeroConSesionesActivas(sesiones)
+	if err != nil {
+		return serverOperationalInfo{}, err
+	}
+	tareasActivas, err := listarTareasActivasRapido()
+	if err != nil {
+		return serverOperationalInfo{}, err
+	}
+	tareasActivas = filtrarTareasActivasVisibles(tareasActivas, agentes)
+	tareasEnProgreso := filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaEnProgreso)
+	tareasReservadas := filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaAsignada)
+
+	agentesActivos := make([]*db.Agente, 0, len(agentes))
+	agentesTrabajando := make([]*db.Agente, 0, len(agentes))
+	trabajandoPorNombre := map[string]struct{}{}
+	for _, tarea := range tareasEnProgreso {
+		if nombre := strings.ToLower(strings.TrimSpace(tarea.Agente)); nombre != "" {
+			trabajandoPorNombre[nombre] = struct{}{}
+		}
+	}
+	for _, agente := range agentes {
+		if agente == nil || !agenteCuentaComoConectado(agente) {
+			continue
+		}
+		agentesActivos = append(agentesActivos, agente)
+		if _, ok := trabajandoPorNombre[strings.ToLower(strings.TrimSpace(agente.Nombre))]; ok {
+			agentesTrabajando = append(agentesTrabajando, agente)
+		}
+	}
+
+	status := apiStatusResponse{
+		Agentes:             agentes,
+		AgentesActivos:      agentesActivos,
+		AgentesTrabajando:   agentesTrabajando,
+		AgentesQuotaBlocked: agentesNoActivosConCuotaConResumen(agentes, nil),
+		TareasActivas:       tareasActivas,
+		TareasEnProgreso:    tareasEnProgreso,
+		TareasReservadas:    tareasReservadas,
+		Generado:            time.Now().UTC().Format(time.RFC3339),
+	}
+	if snapshot, ok := readStatusSnapshotAny(); ok {
+		status.DeudaDispatch = snapshot.DeudaDispatch
+		status.Autonomia = snapshot.Autonomia
+		status.AgentesSaturados = snapshot.AgentesSaturados
+		status.AgentesAtascados = snapshot.AgentesAtascados
+		status.AgentesAuthManual = snapshot.AgentesAuthManual
+		status.TareasPorEstado = snapshot.TareasPorEstado
+	}
+	return buildServerOperationalInfo(status), nil
+}
+
 func formatServerOperationalSummary(info *serverOperationalInfo) string {
 	if info == nil {
 		return "desconocida"

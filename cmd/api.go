@@ -1159,12 +1159,12 @@ func apiHandlerServerOperational(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	status, err := fetchStatusForAPI(apiStatusFetchTimeout)
+	info, err := buildServerOperationalInfoFastFromDB()
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
-	apiWriteJSON(w, http.StatusOK, buildServerOperationalInfo(status))
+	apiWriteJSON(w, http.StatusOK, info)
 }
 
 func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
