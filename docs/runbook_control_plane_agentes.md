@@ -41,6 +41,17 @@ No cubre:
 - La observabilidad primaria debe ser pasiva.
 - El handoff y la continuidad deben dejar trazabilidad explícita.
 - Si una operación no existe por CLI, API o web, no debe improvisarse por acceso lateral a la BD.
+- Workers: salida mínima y evidencia mínima suficiente.
+- Si el flujo lo permite, preferir `caveman`/`compact` o compresión equivalente antes que subir modelo.
+- Escalar a `prime` solo con evidencia operativa, no por intuición.
+
+Politica consolidada de operacion:
+
+- mantener `supervisor residente` por proyecto como capacidad de gobierno, no como worker generico
+- dejar que el `control plane` opere de forma `event-driven`; si no hay incidencia real, debe tender a `standby`, no a churn
+- intentar primero `repair-helper` local y estrecho
+- relevar a otro worker barato antes de escalar
+- subir a `prime` solo con evidencia operativa clara
 
 ## Preflight de operador
 
@@ -55,6 +66,8 @@ Antes de tocar agentes vivos:
 Comandos útiles:
 
 ```bash
+./orquesta server status
+./orquesta server doctor
 ./orquesta status
 ./orquesta runtime listar
 ./orquesta runtime handles
@@ -80,11 +93,63 @@ Flujo recomendado:
 Ejemplos:
 
 ```bash
+./orquesta server status
 ./orquesta status
 ./orquesta runtime ordenes
 ./orquesta agente preparar Codex1 --proyecto orquestador --perfil implementacion --json
 ./orquesta runtime listar
 ```
+
+## Estado actual del daemon
+
+Contrato operativo vigente:
+
+- la via oficial para dejar Orquesta residente es `./orquesta server start`; `./orquesta server run` queda como ejecucion foreground
+- un daemon sano no se considera listo solo por arrancar proceso: debe responder `healthz`, publicar `statefile` coherente y devolver `/api/status` decodificable
+- `./orquesta server status` y `./orquesta server doctor` ya pueden recuperar el daemon vivo por `healthz` cuando el `statefile` falta o esta stale, siempre sobre el mismo `scope` y el mismo storage
+- el control plane real drena `runtime_orders` desde el daemon; el modo local queda solo para recuperacion explicita
+
+Comprobacion minima recomendada:
+
+```bash
+./orquesta server status
+./orquesta server doctor
+./orquesta status
+```
+
+Interpretacion:
+
+- si `server doctor` muestra `Health RPC (daemon): OK` y `API server: OK`, el plano server-first esta vivo
+- si `server status` informa recuperacion por `healthz`, el daemon sigue siendo valido pero conviene revisar por que el `statefile` no estaba utilizable
+- si `status` responde pero `server doctor` no llega a `API server: OK`, no des por buena la operacion continua del daemon
+
+## Telemetria visible en `status`
+
+`status` y `/api/status` publican ya una foto compacta de capacidad visible:
+
+- `workersConectados`: workers visibles conectados y disponibles; descuenta supervisores reservados para no inflar el cupo ejecutor
+- `workersTrabajando`: workers visibles con trabajo real activo; tambien descuenta supervisores reservados
+- `supervisoresActivos`: supervisores visibles en rol de supervision activa, publicados aparte del cupo de workers
+
+Reglas de lectura:
+
+- `agentesActivos` sigue siendo la lista detallada; `workersConectados` es su resumen operativo para workers reales
+- `agentesTrabajando` sigue siendo la lista detallada; `workersTrabajando` resume cuantos workers estan ejecutando ahora
+- `supervisoresActivos` no se suma a workers: es capacidad de gobierno, no capacidad ejecutora
+- estos contadores son la semantica operativa visible canónica y deben reutilizarse tal cual en CLI, web, MCP y briefing de supervisor
+- no se deben reinterpretar como simple longitud de `agentesActivos` o `agentesTrabajando`
+
+Lectura operativa rapida:
+
+- `workersConectados > workersTrabajando` indica capacidad visible libre
+- `workersTrabajando = 0` con `supervisoresActivos > 0` indica supervision presente sin ejecucion visible
+- si `workersConectados = 0`, no asumas que no hay daemon; primero valida `server doctor` y revisa si la flota esta bloqueada por cuota, enfriamiento o degradacion
+
+Lectura de politica:
+
+- `supervisoresActivos > 0` con `workersConectados = 0` no es necesariamente error; puede significar supervisor residente en espera de trabajo o en fase de gobierno
+- `workersConectados > 0` con `workersTrabajando = 0` describe capacidad libre
+- `workersTrabajando > 0` con `autonomyPending = 0` y `autonomyContinuing = 0` describe ejecucion ya absorbida y confirmada
 
 ## Inspección diaria
 
@@ -114,6 +179,51 @@ Señales sanas:
 - hay checkpoints recientes cuando el flujo exige continuidad
 
 Señales de degradación:
+
+## Control total y estadisticas
+
+Objetivo operativo:
+
+- poder responder sin shell manual que ha hecho un agente en una ventana temporal
+- poder ver por proyecto que ramas, worktrees, diffs y merges estan activos
+- poder correlacionar tarea, agente, runtime, worktree y evidencia Git
+
+Estado real hoy:
+
+- ya existe control total por proyecto en `/api/proyectos/{slug}/cockpit`
+- ya existe control total por agente con `orquesta agente actividad <agente> --desde <ventana>`
+- ya existen `GET /api/audit` y `GET /api/runtime-transcript` para reconstruccion server-first de actividad
+- ya existe base de estadisticas Git por repo/cwd con ficheros tocados y lineas añadidas/borradas
+- supervisor y reviewer ya se tratan como reservas; los workers reales son el cupo ejecutor visible
+- la foto operativa estable que debe esperarse hoy es `autonomyPending=0`
+- lo pendiente queda en la capa final unificada de timeline/estadisticas globales de `OP 096`
+
+Contrato deseado de observabilidad:
+
+- por agente: tarea actual, tiempo activo, handoffs, repairs, archivos tocados, lineas añadidas/borradas, presupuesto y ultima evidencia real
+- por proyecto: fase, porcentaje, timeline, hotspots Git, flota, bloqueos y coste agregado
+- global: capacidad real, throughput, bloqueos recurrentes y consumo total
+
+Regla:
+
+- si para responder `que ha hecho Codex1 en la ultima hora` hace falta shell manual, la app aun no esta cerrada
+- la respuesta correcta debe salir del cockpit, timeline y estadisticas canónicas de Orquesta
+
+Comandos ya utiles en el estado actual:
+
+```bash
+./orquesta agente actividad Codex1 --desde 1h
+./orquesta agente actividad Codex1 --proyecto orquestador --desde 24h --json
+./orquesta runtime transcript --agente Codex1 --proyecto orquestador
+./orquesta logs --agente Codex1 --desde 1h
+```
+
+Politica operativa de coste en supervision:
+
+- preferir salida compacta y evidencia corta
+- si el runtime lo permite, usar `caveman`/`compact` o equivalente
+- probar `repair-helper` local o relevo barato antes de promover un frente normal a `prime`
+- reservar `prime` para bloqueo real, reinicio reincidente, review repetidamente fallida o criticidad alta
 
 - runtime ausente pero sesión supuestamente activa
 - órdenes acumuladas sin progreso

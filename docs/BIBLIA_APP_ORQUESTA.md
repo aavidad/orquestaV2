@@ -33,6 +33,7 @@ Este archivo consolida y resume, entre otros, estos documentos:
 - `docs/op_093_refineria_merge_queue.md`
 - `docs/op_094_ui_declarativa_agentes.md`
 - `docs/op_095_orquestacion_mixta.md`
+- `docs/op_096_control_total_estado_proyecto_y_estadisticas.md`
 - `docs/informe_autonomia_orquestador_2026-03-25.md`
 - `docs/informe_revision_hexagonal.md`
 - `docs/inventario_pendientes_orquestacion_autonoma_2026-03-24.md`
@@ -45,9 +46,36 @@ Todo agente, humano o autonomo, debe:
 2. Consultar despues el estado vivo en Orquesta.
 3. Trabajar segun esta doctrina y no segun recuerdos parciales de conversaciones anteriores.
 
+## Estado real consolidado a 2026-04-23
+
+Este documento fija doctrina, pero en esta sesion ya hay cambios de implementacion que obligan a dejar claro el punto real del proyecto.
+
+Ya existe y debe documentarse como estado operativo actual:
+
+- `repo add`, `repo revisar` y `repo mejorar` por via server-first
+- `repo mejorar` ya puede sembrar una mejora con `finish_app`, `autonomia_persistente`, supervisor residente, reviewer reservado y `max_workers`
+- `max_workers` ya no mezcla gobernanza con ejecucion: supervisor/reviewer no cuentan como workers reales
+- el control plane ya opera autonomia persistente de nivel 2 con auto-creacion de trabajo, compactacion de frentes premium, drenaje de `prime` y `repair-helper` barato antes de escalado caro
+- ya existe control total por proyecto en `/api/proyectos/{slug}/cockpit`
+- ya existe control total por agente en CLI con `orquesta agente actividad <agente> --desde ...`
+- ya existe correlacion operativa suficiente entre estado, runtime y Git para gobierno por agente/proyecto
+- la foto estable actual de continuidad se documenta con `autonomyPending=0`
+- la semantica visible de capacidad ya distingue `workersConectados`, `workersTrabajando` y `supervisoresActivos`
+
+No debe documentarse como cerrado todavia:
+
+- control total global del workspace en una sola proyeccion agregada
+- timeline canonica global por ventana
+- API global de estadisticas tal como la define `OP 096`
+- coste/tokens global y homogéneo entre proveedores
+
+Regla de redaccion a partir de este punto:
+
+- cuando la documentacion hable de autonomia total o control total, debe dejar explicito que `agente/proyecto` ya esta operativo hoy y que lo pendiente queda en el plano `global`
+
 ## Que es Orquesta
 
-Orquesta no es un conjunto de scripts ni una base SQLite con CLI encima.
+Orquesta no es un conjunto de scripts ni un simple front-end de base de datos con CLI encima.
 Orquesta es el plano de control de agentes, proyectos, sesiones, tareas, propuestas, runtimes y continuidad del workspace.
 
 Sus principios estructurales son:
@@ -103,8 +131,35 @@ Regla operativa adicional:
 - el slug canónico de proyecto no se asume por el nombre del repositorio en disco
 - antes de filtrar `runtime`, `mailbox`, `checkpoints`, `tareas` o `propuestas` por proyecto, hay que consultar el estado vivo en Orquesta
 - la ruta física del repositorio puede cambiar entre máquinas o despliegues; el proyecto operativo vigente debe consultarse siempre en Orquesta y nunca deducirse de la ruta en disco
+- el origen de un repo puede ser local o remoto, pero el proyecto operativo solo existe cuando Orquesta lo ha registrado y materializado
+- una URL git no es un proyecto operativo por sí sola; primero debe convertirse en copia local canónica gobernada por Orquesta
+- una ruta local tampoco es un proyecto operativo por sí sola; primero debe descubrirse o adjuntarse a Orquesta y quedar registrada
+- `review`, mejora, handoff, merge y `worktrees` siempre se ejecutan sobre la copia local materializada del proyecto, no contra el remoto en abstracto
 
 ## Doctrina operativa obligatoria
+
+### Politica consolidada de autonomia
+
+La autonomia persistente de Orquesta se gobierna ya con este contrato:
+
+- `supervisor residente` por proyecto: ligero, estable y reservado para gobierno
+- `control plane event-driven`: reaccion a estado durable, mailbox, checkpoints, runtime y transcript, no a churn ciego
+- `repair-helper local primero`: reparacion barata y acotada antes de relevo caro
+- `prime solo por evidencia`: escalado costoso solo cuando el caso lo justifica tecnicamente
+
+Esto implica:
+
+- `supervisor` y `reviewer` reservados no cuentan dentro de `max_workers`
+- el supervisor no debe reciclarse como worker generico salvo recuperacion explicita y justificada
+- una guidance durable o un transcript de bajo valor no deben inflar `continuity_pending`
+- si no hay incidencia real, el control plane debe tender a `standby event-driven`, no a reinyectar actividad por pulso
+
+Escalera canonica de recuperacion:
+
+1. observar si el atasco es real
+2. abrir `repair-helper` local, barato y estrecho
+3. relevar a otro worker no-prime si el helper no resuelve
+4. escalar a `prime` solo con evidencia
 
 ### Server-first
 
@@ -120,10 +175,27 @@ Regla dura:
 - no hay operacion normal contra la BD local
 - el modo local queda solo para recuperacion explicita o diagnostico de bloqueo real
 - `ORQUESTA_FORCE_LOCAL_DB` y `--local` no autorizan mutaciones de negocio; solo inspeccion/diagnostico de solo lectura en los comandos explicitamente cubiertos
+- el alta o ingestión de repositorios entra por el daemon oficial, la API o la CLI server-first; no por clones manuales como camino operativo principal
+- si el origen es remoto, Orquesta clona o prepara la copia local bajo el workspace canónico antes de abrir tareas o sesiones
+- si el origen es local, Orquesta registra y normaliza esa ruta como proyecto repo antes de permitir revisión o mejora
+- los comandos de revisión y mejora no operan directamente sobre una URL remota; siempre operan sobre el proyecto ya materializado en local
+- no se admiten dos flujos de negocio distintos para repo local y repo remoto; solo cambia la fase de ingestión, no el pipeline posterior
+- la web debe usar la misma superficie canonica de repos del daemon:
+  - `POST /api/repos/materializar`
+  - `POST /api/repos/revisar`
+  - `POST /api/repos/mejorar`
+- esos endpoints aceptan un `proyecto` ya existente o un `path/git` para materializar al vuelo; la UI no debe clonar ni descubrir repos por su cuenta
 - las superficies externas nuevas tambien entran por el daemon oficial: si Orquesta expone MCP por HTTP, debe hacerlo como endpoint server-first del mismo servidor (`/api/mcp`), no como proceso lateral con otra verdad operativa
 - A2UI no es una excepcion: su superficie canonica por API debe colgar del mismo daemon, reutilizar la proyeccion existente de `serve` y exponer el detalle de runtime en `/api/runtimes/{id}/a2ui` antes de abrir cualquier edicion humana o flujo paralelo
 - OpenClaw Gateway y el resto de canales de notificacion tambien son estado operativo del daemon: se exponen por lectura server-first en `/api/notificaciones` y en el dashboard web del mismo servidor, no se infieren solo de claves de configuracion ni de scripts externos
 - OpenClaw Gateway no puede quedarse en `push best-effort`: el servidor mantiene un outbox persistente (`notificaciones_entregas`) con estado, intentos, error y `next_retry_at`; la entrega y el retry salen del mismo daemon y la observabilidad canonica se publica por `/api/notificaciones` y dashboard
+
+Semantica visible de contadores:
+
+- `workersConectados` mide capacidad ejecutora visible y descuenta supervisores reservados
+- `workersTrabajando` mide workers reales ocupados y tambien descuenta supervisores reservados
+- `supervisoresActivos` mide capacidad de gobierno y se publica aparte
+- esos contadores mandan sobre rederivaciones oportunistas en cliente, MCP o UI; no deben reinterpretarse como simple longitud de listas de agentes
 
 ### Single-writer
 
@@ -136,9 +208,9 @@ La arquitectura objetivo de operacion es:
 
 Consecuencia:
 
-- `SQLITE_BUSY` no se arregla a base de mas reintentos
-- se arregla cerrando caminos hibridos, escrituras laterales y segundos planos de control
-- el servidor oficial no puede tocar la BD antes de poseer el listener/puerto que lo convierte en autoridad
+- la concurrencia delegada al motor (como PostgreSQL) no es excusa para crear segundos planos de control
+- se deben cerrar caminos hibridos y escrituras laterales para mantener la integridad
+- el servidor oficial no puede operar antes de poseer el listener/puerto que lo convierte en autoridad
 - `serve` y `server run` no deben abrir persistencia desde el arranque generico de CLI; su ciclo de vida de BD pertenece al propio proceso servidor
 - un proceso hijo del daemon no puede heredar flags de recuperacion local ni semantica de solo lectura
 - el daemon sano debe publicar `healthz` y `statefile` coherentes del mismo scope; si una de las dos piezas falta, hay que tratarlo como incoherencia operativa y repararlo
@@ -189,8 +261,8 @@ Regla operativa minima:
 
 ### Persistencia como adaptador
 
-La app no puede depender semanticamente de SQLite.
-El backend de persistencia debe poder ser SQLite, MySQL/MariaDB o el que se soporte por conector de almacenamiento.
+La persistencia principal actual corre sobre PostgreSQL.
+No obstante, la app no debe depender semánticamente de un motor SQL concreto en la lógica de negocio; la persistencia entra a través de adaptadores e interfaces.
 
 Reglas:
 
@@ -218,7 +290,7 @@ Regla adicional:
 
 - si un script o unit solo cubre un backend concreto o un flujo legacy, debe declararlo de forma explicita o salir del camino oficial; no se mantiene como plantilla “generica” si ya no lo es
 - la observabilidad y verificacion operativa de persistencia se hacen desde Orquesta (`persistencia info`, `persistencia verificar`); los scripts backend-especificos quedan solo para rescate o forense
-- si se automatiza backup por systemd y el backend es SQLite, la unit debe nombrarse de forma explicita como SQLite; no se aceptan nombres genericos para unidades que no son multi-backend
+- si se automatiza backup por systemd o cron, la unit debe nombrarse de forma explícita según el motor (ej. Postgres); no se aceptan nombres genéricos para dependencias específicas del motor
 - las operaciones de limpieza o purga de pruebas tambien deben entrar por el daemon: `runtime purgar-handles` para handles inactivos y `runtime purgar-ordenes` solo para ordenes terminales; no se autorizan borrados manuales directos en la BD
 
 ## Doctrina de agentes y runtimes
@@ -268,6 +340,44 @@ Regla operativa:
 - si otra app resuelve mejor un problema equivalente, se copia su patrón útil
 - la copia se hace sobre la arquitectura hexagonal de Orquesta
 - no se aceptan reimplementaciones “creativas” de un patrón ya probado sin una razón técnica concreta
+
+### Wizard de nueva app
+
+El wizard de nueva app no puede limitarse a pedir `nombre + tipo + checkboxes`.
+
+Regla:
+
+- debe guiar por fases de decisión reales
+- cada fase debe ofrecer opciones concretas y compatibles con el backlog generado
+- las respuestas no son decorativas: viajan al `AppSpec` y condicionan arquitectura, operación y documentación
+
+Mínimos obligatorios:
+
+- fase de `briefing/brainstorming`
+- fase de `arquitectura del núcleo`
+- fase de `interfaces y acceso`
+  - si existe UI, aquí también se decide el `frontend_stack`
+  - si existe UI, aquí también se declara soporte de temas y branding desacoplado
+  - si el proyecto ya existe, aquí también se pueden añadir idiomas nuevos para backlog incremental de i18n
+  - si existe UI, la estructura generada debe reservar una superficie visual explícita (`web/` o `adaptadores/web/` según el caso), no dispersar la UI por módulos de negocio
+- fase de `datos y persistencia`
+- fase de `delivery/operación`
+- fase de `calidad`
+
+Regla adicional para apps con UI:
+
+- cambiar de tema o branding no puede exigir tocar la lógica de negocio
+- la app debe poder cargar o definir temas como capacidad explícita del producto
+- no se aceptan estilos duros repartidos por la UI como sustituto de theming real
+
+Además, toda app generada debe salir con documentación mínima para tres públicos:
+
+- usuarios
+- técnicos/desarrollo
+- sistemas/operación
+
+Si el proyecto declara varios idiomas, esos manuales deben generarse también en los idiomas elegidos; no vale dejar i18n solo en la UI y la documentación en un único idioma.
+Si más adelante se añaden idiomas nuevos, deben sembrarse también tareas incrementales de i18n, documentación y QA para esos idiomas.
 
 Referencias activas:
 
@@ -339,6 +449,30 @@ Referencia de diseño:
 Regla canonica para promocion de modelos locales:
 
 - la evaluacion de workers locales se hace por `perfil_tarea`, no por nombres libres de rol
+- la puntuacion de agentes locales no es una nota unica ni fija; se mantiene como matriz mutable por materias
+- las materias canonicas minimas son:
+  - `codigo`
+  - `documentacion`
+  - `orquestacion`
+  - `brainstorming`
+  - `analisis`
+  - `revision`
+  - `frontend`
+  - `testing`
+  - `arquitectura`
+  - `infraestructura`
+- y el sistema debe poder ampliarse con materias operativas como:
+  - `seguridad`
+  - `integraciones`
+  - `depuracion`
+  - `datos`
+  - `producto`
+- el primer alta de un agente local crea scores neutros bootstrap, no aprobaciones implicitas
+- el benchmark inicial solo ajusta `score_base`; el trabajo real posterior puede subir o bajar el agente
+- la seleccion del worker no se hace por una media plana:
+  - cada tarea calcula pesos por materia segun su fase y carril
+  - una tarea de infraestructura debe ponderar `infraestructura` mas que `brainstorming`
+  - una tarea de brainstorming puede ponderar `brainstorming` mas que `codigo`
 - los perfiles minimos obligatorios para promocion son:
   - `implementacion`
   - `revision`
@@ -358,6 +492,90 @@ Regla operativa derivada:
 - cuando Orquesta pruebe o promueva modelos locales, debe hacerlo siempre sobre microtareas cerradas, `write_set` explicito y validacion de entrega desde la app
 - no se acepta una promocion basada solo en “parece responder bien” o en prompts manuales fuera del flujo canonico
 - si un modelo local pasa pruebas manuales pero filtra razonamiento, incumple formato o degrada calidad en la smoke canonica por la app, no se promociona
+- el orquestador debe poder registrar observaciones mutables tras entregas reales:
+  - una entrega buena puede subir un agente
+  - una entrega floja puede bajarlo
+  - el sistema debe recordar tambien la confianza y el numero de muestras, no solo el ultimo numero
+
+### Contexto compartido selectivo
+
+Orquesta no debe copiar un “contexto global compartido” entre agentes.
+
+La regla correcta es:
+
+- contexto vivo aislado por agente
+- memoria durable auditable
+- estado operativo durable
+- contexto compartido pequeno y selectivo recuperado antes del prompt
+
+Ese contexto compartido sirve para transportar hechos pequenos y valiosos entre agentes, sidecars y revisores:
+
+- decisiones vigentes
+- restricciones del proyecto
+- filosofia o arquitectura a preservar
+- hallazgos relevantes
+- follow-ups de sidecars
+- bloqueos actuales
+- evidencias de revision o integracion
+
+Reglas duras:
+
+- no se comparte transcript bruto completo entre agentes como via normal
+- el contexto compartido debe ser pequeno, tipado, ponderado y opcionalmente expirado
+- la recuperacion ocurre antes de construir prompt, no como blob permanente en cada sesion
+- la memoria compartida nunca sustituye al estado durable de Orquesta
+
+### Fork de funcion en fase mejorar/refactor
+
+La fase `mejorar` o `refactorizar` debe poder abrir `forks de funcion`.
+
+Un `fork de funcion` es:
+
+- la misma funcion, simbolo o contrato
+- varias variantes aisladas en worktrees o ramas separadas
+- uno o varios modelos proponiendo mejoras
+- una comparacion posterior gobernada por Orquesta
+
+Su objetivo es:
+
+- mejorar eficiencia
+- mejorar mantenibilidad
+- mejorar claridad
+- o reducir complejidad accidental
+
+Sin perder:
+
+- seguridad
+- arquitectura del proyecto
+- invariantes de dominio
+- observabilidad
+- estilo estructural del repo
+
+Reglas duras:
+
+- todo fork nace de una `especificacion de funcion`
+- el `write_set` sigue siendo cerrado
+- si el proyecto es hexagonal, la mejora no puede degradar esa hexagonalidad
+- la comparacion se hace sobre la misma bateria de tests, benchmarks y restricciones
+- varios modelos pueden participar, pero no como debate libre:
+  - cada uno propone sobre el mismo contrato
+  - cada uno trabaja aislado
+  - Orquesta compara y decide
+
+El uso de varios modelos aqui no es adorno.
+Es una forma de aumentar cobertura de soluciones:
+
+- lo que no vea un modelo puede verlo otro
+- pero el merge sigue siendo determinista y gobernado por Orquesta
+
+Orden de evaluacion obligatorio para elegir ganador:
+
+1. correccion
+2. seguridad
+3. preservacion de arquitectura y filosofia del proyecto
+4. regresion cero de observabilidad y contratos
+5. rendimiento
+6. mantenibilidad
 
 Regla operativa para agentes premium:
 
@@ -493,6 +711,16 @@ Regla operativa para `server_autobootstrap`:
 - reiniciar el servidor no puede equivaler a “volver a arrancar” a todos los workers ni a reinyectar el mismo `esperar_o_pedir_tarea`
 - una sesion activa del supervisor no debe recibir `supervisar_proyecto` pasivo en cada tick de autonomia; la supervision rica pertenece al batch de supervision y a las señales de transcript/review, no al pulso generico de sesion viva
 - la supervision autonoma periodica tampoco debe reinyectar `supervisar_proyecto` si el supervisor ya sigue operativo en ese proyecto; el primer bootstrap de supervision es valido, pero los ciclos posteriores deben apoyarse en actividad viva y señales reales, no en repetir la misma guidance cada intervalo
+- la estrategia canónica de coste para autonomía persistente es: `supervisor ligero siempre online`, `worker rápido/barato por defecto` y `prime` solo por escalado con evidencia de atasco, review fallida repetida o criticidad alta
+- un agente reservado como `supervisor` o `reviewer` no puede reutilizarse como relevo worker genérico mientras siga reservado en ese proyecto; mezclar esos roles degrada la gobernanza del bucle
+- los workers de implementación deben arrancar con prompt austero y token-frugal: salida corta, sin narración larga, sin eco ornamental de consola y con evidencia mínima suficiente para que Orquesta pueda validar progreso o fallo
+- cuando el runtime o la skill lo permitan, Orquesta debe preferir protocolos compactos (`caveman`, `compact` o compresión equivalente de briefing/memoria) antes que aumentar modelo o razonamiento
+- `prime` o razonamiento alto no se activan por preferencia ni por comodidad del operador: solo por evidencia operativa de atasco real, review fallida repetida, criticidad alta o riesgo técnico demostrado
+- si un worker queda atascado, la primera respuesta no es subir modelo: Orquesta debe abrir `repair-helper` corto, barato y con objetivo quirúrgico de desbloqueo, mientras el supervisor sigue coordinando
+- la escalera canónica de recuperación es: `repair-helper local rápido` primero; si no resuelve o reincide, `relevo worker`; solo después `prime` o modelo caro
+- los `repair-helper` deben arrancar con briefing comprimido, skill/protocolo compacto y salida mínima: reproducir atasco, aislar causa, aplicar parche mínimo o devolver diagnóstico de escalado
+- en pool local compartido, la política de memoria es `un solo modelo residente cada vez`: pueden existir varios agentes sobre ese mismo modelo, pero Orquesta no debe cargar varios modelos Ollama en paralelo salvo excepción explícita
+- la consola del worker no es un canal narrativo: si no hay humano mirando, Orquesta debe evitar eco de logs, prosa ornamental o salidas largas que no cambien la decisión del control plane
 - los `upsert` de politica/autonomia no pueden borrar timestamps operativos como `last_supervision_at` o `last_review_at`; reiniciar el daemon no debe reabrir un ciclo de supervision “por olvido” del estado persistido
 - un agente en `estado_cuota=enfriamiento` con handle `pausado` no es candidato watchdog ni debe recibir `sync_status/watchdog`; el cooldown es ya una decision explicita del plano de control
 - el watchdog de handoff no puede decidir agotamiento solo por `sesiones.heartbeat_at`; si el runtime activo sigue emitiendo `last_event_at` o `last_heartbeat_at` recientes, esa actividad invalida el stale de la sesion y no debe encolarse `sync_status/watchdog`
@@ -636,6 +864,17 @@ El nucleo de orquestacion de agentes debe rehacerse, si hace falta, hasta dejar 
 - `runtime_mailbox` como mensajeria persistente tipada, no como mezcla ambigua de señales y entregas
 - `runtime_handles` y `runtime_instances` como estado observado del runtime, no como autoridad de negocio
 - un mensaje o una orden no termina hasta `ack` real por evidencia operativa
+- `finish_app` en modo persistente debe promover una `policy` durable de proyecto, no solo una nota en la tarea:
+  - `SupervisorAgente` y `ReviewerAgente` explícitos
+  - `ReserveSupervisor` y `ReserveReviewer` activados
+  - `AutoCreateTasks` activado
+  - cuota máxima de workers explícita
+- ese modo persistente equivale a `until done or hard blocker`:
+  - sigue enlazando frentes hasta cerrar la app
+  - pero debe parar ante bloqueo real, cruce de proyecto, falta de progreso neto o sobreconsumo sin trabajo útil
+- estado real de la sesion:
+  - esta promocion durable de `finish_app` ya esta entrando en CLI/API y tests
+  - el hueco pendiente no es la existencia de la policy, sino la observabilidad total y la explicabilidad temporal de todo el ciclo
 
 Semantica objetivo de `runtime_orders`:
 
@@ -1543,6 +1782,36 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `worktree_drift` filtrada a los agentes relevantes del proyecto
   - esto permite que `/api/proyectos/{slug}/cockpit` y `/proyectos/{slug}` funcionen como cockpit operativo ligero sin depender de cargar OpenClaw completo
   - la fuente sigue siendo canónica: `status`, `runtime_mailbox` y `worktree_drift`, nunca una agregación paralela local
+- ese cockpit ya no puede quedarse en presencia y deuda mínima; debe evolucionar a `control total del estado de proyecto`:
+  - fecha de alta y de inicio real de trabajo
+  - fase actual y porcentaje calculado
+  - timeline por ventana (`ultima hora`, `24h`, ciclo actual)
+  - flota por proyecto (`supervisor`, `reviewer`, `workers`, conectados, trabajando, pausados, retirados)
+  - hotspots Git por fichero/carpeta/modulo
+  - lineas añadidas, borradas y netas por agente/proyecto/ventana
+  - worktrees, ramas y merges asociados a cada frente
+  - presupuesto/tokens/cuota por agente y agregado
+  - bloqueos, repairs, relevo y handoffs recientes
+- Orquesta debe poder responder desde la API canonica preguntas del tipo:
+  - `que ha programado Codex1 en la ultima hora`
+  - `que archivos ha tocado Codex4 hoy`
+  - `cuantas lineas ha modificado este proyecto esta semana`
+  - `que porcentaje real queda para terminar`
+  - esto no se resuelve recomponiendo shell; debe salir del cockpit, timeline y estadisticas server-first
+- estado real actual del cockpit:
+  - ya existe un cockpit de control total por proyecto con tareas, asignaciones, agentes activos, mailbox pendiente, drift, propuestas, review gates, deuda de runtime y correlacion operativa suficiente para gobernanza
+  - la separacion canonica es explicita: `supervisor` y `reviewer` reservados no cuentan como workers reales; `max_workers` y la cuota visible miden solo ejecutores
+  - la deuda abierta ya no es cerrar el control total por proyecto, sino extender la agregacion global, la timeline global y la telemetria economica homogénea del workspace
+- la API Git canónica es obligatoria:
+  - repos, ramas, worktrees, diffs, commits, merges y hotspots por proyecto
+  - `files_changed`, `insertions`, `deletions` y `lines_net` por agente, proyecto y ventana
+  - la capa Git entra por puertos hexagonales y se expone por CLI, API, web y MCP sin rutas paralelas ni acoplar la app a shell como contrato principal
+- estado real del frente Git/estadisticas:
+  - ya hay servicio de estadisticas Git reutilizable y una vista CLI de actividad por agente que lo usa
+  - falta elevar esa base a proyeccion canonica completa por proyecto/global y a endpoints dedicados de estadisticas
+- toda superficie nueva de control, estadisticas y Git debe nacer preparada para i18n:
+  - claves públicas, etiquetas, filtros y estados no se hardcodean fuera del contrato de traducción
+  - no se admite crear un cockpit potente en un solo idioma y “ya se internacionalizará luego”
 - cuando una superficie de lectura admite varios estados del mismo recurso, la semántica debe ser OR y no AND accidental:
   - `tarea listar --estado ... --estado ...` y `GET /api/tareas?estado=...&estado=...` deben devolver la unión deduplicada
   - el `status` canónico no puede contradecir a la CLI por una limitación del parser de flags
