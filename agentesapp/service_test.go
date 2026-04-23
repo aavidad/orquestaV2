@@ -611,10 +611,12 @@ func TestPromoteObservedAutonomyStatePromueveWorkQueueConActividadRecienteAunque
 			Activo:      true,
 			EstadoCuota: "activo",
 		},
-		Handle:             &db.RuntimeHandle{Estado: "fallido", Transporte: "tmux", LastSeenAt: &recent},
+		Runtime:            &db.RuntimeInstance{LogicalState: "activo", ProcessState: "running", UpdatedAt: recent},
+		Handle:             &db.RuntimeHandle{Estado: "activo", Transporte: "tmux", LastSeenAt: &recent},
 		WorkerAlive:        true,
 		WorkerHeartbeat:    timePtr(stale),
 		WorkerUpdatedAt:    timePtr(stale),
+		WorkerLastProgress: timePtr(recent),
 		WorkerLastOutput:   timePtr(recent),
 		LastAutonomyAction: "continuar_trabajo",
 		LastAutonomySource: "work_queue",
@@ -626,6 +628,38 @@ func TestPromoteObservedAutonomyStatePromueveWorkQueueConActividadRecienteAunque
 
 	if row.LastAutonomyState != "work_confirmed" {
 		t.Fatalf("deberia promover work_queue con actividad reciente aunque heartbeat no este fresh: %+v", row)
+	}
+}
+
+func TestPromoteObservedAutonomyStateNoPromueveWorkQueueConActividadRecienteSiRuntimeEstaDegradado(t *testing.T) {
+	now := time.Now().UTC()
+	recent := now.Add(-2 * time.Minute)
+	stale := now.Add(-12 * time.Minute)
+	row := Row{
+		Agente: &db.Agente{
+			Nombre:      "Codex4",
+			Rol:         "programador",
+			Habilitado:  true,
+			Activo:      true,
+			EstadoCuota: "activo",
+		},
+		Runtime:            &db.RuntimeInstance{LogicalState: "degradado", ProcessState: "missing", UpdatedAt: recent},
+		Handle:             &db.RuntimeHandle{Estado: "fallido", Transporte: "tmux", LastSeenAt: &recent},
+		WorkerAlive:        true,
+		WorkerHeartbeat:    timePtr(stale),
+		WorkerUpdatedAt:    timePtr(stale),
+		WorkerLastProgress: timePtr(recent),
+		WorkerLastOutput:   timePtr(recent),
+		LastAutonomyAction: "continuar_trabajo",
+		LastAutonomySource: "work_queue",
+		LastAutonomyState:  "pending",
+		OpenTasks:          1,
+	}
+
+	promoteObservedAutonomyState(&row, now)
+
+	if row.LastAutonomyState == "work_confirmed" {
+		t.Fatalf("no deberia promover work_queue si runtime/handle ya estan degradados: %+v", row)
 	}
 }
 
@@ -684,6 +718,38 @@ func TestPromoteObservedAutonomyStatePromueveMailboxConActividadRecienteAunqueHe
 
 	if row.LastAutonomyState != "work_confirmed" {
 		t.Fatalf("deberia promover mailbox con actividad reciente aunque heartbeat no este fresh: %+v", row)
+	}
+}
+
+func TestPromoteObservedAutonomyStateNoPromueveMailboxConActividadRecienteSiRuntimeEstaDegradado(t *testing.T) {
+	now := time.Now().UTC()
+	recent := now.Add(-2 * time.Minute)
+	stale := now.Add(-12 * time.Minute)
+	row := Row{
+		Agente: &db.Agente{
+			Nombre:      "Codex4",
+			Rol:         "programador",
+			Habilitado:  true,
+			Activo:      true,
+			EstadoCuota: "activo",
+		},
+		Runtime:                  &db.RuntimeInstance{LogicalState: "degradado", ProcessState: "missing", UpdatedAt: recent},
+		Handle:                   &db.RuntimeHandle{Estado: "fallido", Transporte: "tmux", LastSeenAt: &recent},
+		WorkerAlive:              true,
+		WorkerHeartbeat:          timePtr(stale),
+		WorkerUpdatedAt:          timePtr(stale),
+		WorkerLastProgress:       timePtr(recent),
+		LastAutonomyAction:       "continuar_trabajo",
+		LastAutonomySource:       "mailbox",
+		LastAutonomyState:        "pending",
+		MailboxContinuityPending: 1,
+		OpenTasks:                1,
+	}
+
+	promoteObservedAutonomyState(&row, now)
+
+	if row.LastAutonomyState == "work_confirmed" {
+		t.Fatalf("no deberia promover mailbox si runtime/handle ya estan degradados: %+v", row)
 	}
 }
 

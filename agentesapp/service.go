@@ -4011,7 +4011,9 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 		}
 		return "disponible", firstNonEmpty(row.activitySummary(), "worker "+workerState)
 	}
-	recentOperationalOverride := recentActivity && (hasActiveTask || row.MailboxPending > 0 || row.SupervisorRoleActive(now))
+	recentOperationalOverride := recentActivity &&
+		row.autonomyOperationalHealthSufficient(now, workerOutputStaleThreshold) &&
+		(hasActiveTask || row.MailboxPending > 0 || row.SupervisorRoleActive(now))
 	if !hasActiveTask && (estadoRuntimeRoto(runtimeEstado) || estadoHandleRoto(handleEstado)) && !recentOperationalOverride {
 		return "bloqueado_por_runtime", firstNonEmpty(row.runtimeState(), row.handleState(), "runtime degradado")
 	}
@@ -4344,13 +4346,14 @@ func promoteObservedAutonomyState(row *Row, now time.Time) {
 	if row == nil {
 		return
 	}
+	healthyForAutonomy := row.autonomyOperationalHealthSufficient(now, 10*time.Minute)
 	switch strings.ToLower(strings.TrimSpace(row.LastAutonomySource)) {
 	case "assignment_handoff":
-		if row.WorkerFresh(now) && row.OpenTasks > 0 {
+		if row.WorkerFresh(now) && healthyForAutonomy && row.OpenTasks > 0 {
 			row.LastAutonomyState = "work_confirmed"
 		}
 	case "assignment_reactivation":
-		if row.WorkerFresh(now) && row.OpenTasks > 0 {
+		if row.WorkerFresh(now) && healthyForAutonomy && row.OpenTasks > 0 {
 			row.LastAutonomyState = "work_confirmed"
 		}
 	case "mailbox":
@@ -4358,28 +4361,28 @@ func promoteObservedAutonomyState(row *Row, now time.Time) {
 			row.LastAutonomyState = "work_confirmed"
 		}
 	case "nudge":
-		if row.WorkerFresh(now) && (row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) {
+		if row.WorkerFresh(now) && healthyForAutonomy && (row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) {
 			row.LastAutonomyState = "work_confirmed"
-		} else if row.WorkerAlive && row.hasRecentOperationalActivity(now) &&
+		} else if healthyForAutonomy && row.WorkerAlive && row.hasRecentOperationalActivity(now) &&
 			(row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) {
 			row.LastAutonomyState = "work_confirmed"
 		}
 	case "send_instruction":
-		if row.WorkerFresh(now) && (row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) {
+		if row.WorkerFresh(now) && healthyForAutonomy && (row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) {
 			row.LastAutonomyState = "work_confirmed"
-		} else if row.WorkerAlive && row.hasRecentOperationalActivity(now) &&
+		} else if healthyForAutonomy && row.WorkerAlive && row.hasRecentOperationalActivity(now) &&
 			(row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) {
 			row.LastAutonomyState = "work_confirmed"
 		}
 	case "resume_payload_mailbox":
-		if row.autonomyResumePayloadAbsorbedByWorker(now) {
+		if healthyForAutonomy && row.autonomyResumePayloadAbsorbedByWorker(now) {
 			row.LastAutonomyState = "work_confirmed"
 		}
 	case "work_queue":
-		if row.WorkerFresh(now) && (row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) &&
+		if row.WorkerFresh(now) && healthyForAutonomy && (row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) &&
 			strings.TrimSpace(row.LastAutonomyState) != "work_confirmed" {
 			row.LastAutonomyState = "work_confirmed"
-		} else if row.WorkerAlive && row.hasRecentOperationalActivity(now) &&
+		} else if healthyForAutonomy && row.WorkerAlive && row.hasRecentOperationalActivity(now) &&
 			(row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) &&
 			strings.TrimSpace(row.LastAutonomyState) != "work_confirmed" {
 			row.LastAutonomyState = "work_confirmed"
@@ -4654,6 +4657,9 @@ func (r Row) autonomyWorkQueueAbsorbedByWorker(now time.Time) bool {
 	if strings.ToLower(strings.TrimSpace(r.LastAutonomySource)) != "work_queue" {
 		return false
 	}
+	if !r.autonomyOperationalHealthSufficient(now, 10*time.Minute) {
+		return false
+	}
 	moment := r.LastAutonomyMoment
 	if moment == nil || moment.IsZero() {
 		return false
@@ -4671,6 +4677,9 @@ func (r Row) autonomyWorkQueueAbsorbedByWorker(now time.Time) bool {
 
 func (r Row) autonomyMailboxAbsorbedByWorker(now time.Time) bool {
 	if strings.ToLower(strings.TrimSpace(r.LastAutonomySource)) != "mailbox" {
+		return false
+	}
+	if !r.autonomyOperationalHealthSufficient(now, 10*time.Minute) {
 		return false
 	}
 	if strings.EqualFold(strings.TrimSpace(r.LastAutonomyAction), "continuar_trabajo") &&
@@ -4699,6 +4708,24 @@ func autonomyWorkerSignalAbsorbsMoment(signal *time.Time, moment *time.Time, now
 	}
 	const skew = 5 * time.Second
 	return !signal.Before(moment.Add(-skew))
+}
+
+func (r Row) autonomyOperationalHealthSufficient(now time.Time, threshold time.Duration) bool {
+	if threshold <= 0 {
+		threshold = 10 * time.Minute
+	}
+	runtimeBroken := estadoRuntimeRoto(strings.ToLower(strings.TrimSpace(r.runtimeState())))
+	handleBroken := estadoHandleRoto(strings.ToLower(strings.TrimSpace(r.handleState())))
+	if !runtimeBroken && !handleBroken {
+		return true
+	}
+	if !rowShouldSyncSupervisedRuntimeHandle(r, now) {
+		return false
+	}
+	if r.workerHeartbeatRecent(now) || r.workerWarmupRecent(now) || r.workerProgressRecent(now, threshold) {
+		return true
+	}
+	return false
 }
 
 func (r Row) RequiresStructuredTMUX() bool {
@@ -4847,6 +4874,9 @@ func (r Row) workerHasRecentWorkSignal(now time.Time, threshold time.Duration) b
 func (r Row) workerHasRecentSemanticProgress(now time.Time, threshold time.Duration) bool {
 	if threshold <= 0 {
 		threshold = 4 * time.Hour
+	}
+	if !r.autonomyOperationalHealthSufficient(now, threshold) {
+		return false
 	}
 	if !strings.EqualFold(strings.TrimSpace(r.LastAutonomyState), "work_confirmed") {
 		return false
