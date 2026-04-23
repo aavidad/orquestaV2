@@ -60,6 +60,7 @@ Ya existe y debe documentarse como estado operativo actual:
 - ya existe control total por agente en CLI con `orquesta agente actividad <agente> --desde ...`
 - ya existe correlacion operativa suficiente entre estado, runtime y Git para gobierno por agente/proyecto
 - la foto estable actual de continuidad se documenta con `autonomyPending=0`
+- la foto estable actual del loop vivo se documenta como `ready`, `autonomyContinuing=0`, `autonomyPending=0`
 - la semantica visible de capacidad ya distingue `workersConectados`, `workersTrabajando` y `supervisoresActivos`
 
 No debe documentarse como cerrado todavia:
@@ -68,6 +69,7 @@ No debe documentarse como cerrado todavia:
 - timeline canonica global por ventana
 - API global de estadisticas tal como la define `OP 096`
 - coste/tokens global y homogéneo entre proveedores
+- la revalidacion estricta de salud operativa para sostener `work_confirmed` en todos los caminos del loop vivo
 
 Regla de redaccion a partir de este punto:
 
@@ -153,6 +155,9 @@ Esto implica:
 - el supervisor no debe reciclarse como worker generico salvo recuperacion explicita y justificada
 - una guidance durable o un transcript de bajo valor no deben inflar `continuity_pending`
 - si no hay incidencia real, el control plane debe tender a `standby event-driven`, no a reinyectar actividad por pulso
+- `work_confirmed` no es solo evidencia historica: exige salud operativa actual suficiente del worker que sostiene el frente
+- actividad superficial, transcript util viejo o mailbox absorbida no pueden tapar indefinidamente `runtime/handle` degradados
+- si un frente sigue marcado como `work_confirmed` pero ya no hay salud operativa actual, la clasificacion correcta deja de ser "sano" y pasa a "recuperable"
 
 Escalera canonica de recuperacion:
 
@@ -196,6 +201,12 @@ Semantica visible de contadores:
 - `workersTrabajando` mide workers reales ocupados y tambien descuenta supervisores reservados
 - `supervisoresActivos` mide capacidad de gobierno y se publica aparte
 - esos contadores mandan sobre rederivaciones oportunistas en cliente, MCP o UI; no deben reinterpretarse como simple longitud de listas de agentes
+
+Lectura de estado real a `2026-04-23`:
+
+- si el loop esta `ready`, con `autonomyContinuing=0` y `autonomyPending=0`, la continuidad ya esta absorbida y el supervisor no debe contaminar el resumen como pendiente
+- el cuello operativo siguiente no esta en mantener vivo el daemon ni el supervisor, sino en no maquillar como `work_confirmed` un worker ya degradado
+- la autonomía total exige que salud operativa y trabajo confirmado converjan, no que una tape a la otra
 
 ### Single-writer
 

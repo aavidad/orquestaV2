@@ -144,12 +144,14 @@ Lectura operativa rapida:
 - `workersConectados > workersTrabajando` indica capacidad visible libre
 - `workersTrabajando = 0` con `supervisoresActivos > 0` indica supervision presente sin ejecucion visible
 - si `workersConectados = 0`, no asumas que no hay daemon; primero valida `server doctor` y revisa si la flota esta bloqueada por cuota, enfriamiento o degradacion
+- una foto sana actual del loop se reconoce por `ready`, `autonomyContinuing=0` y `autonomyPending=0`
 
 Lectura de politica:
 
 - `supervisoresActivos > 0` con `workersConectados = 0` no es necesariamente error; puede significar supervisor residente en espera de trabajo o en fase de gobierno
 - `workersConectados > 0` con `workersTrabajando = 0` describe capacidad libre
 - `workersTrabajando > 0` con `autonomyPending = 0` y `autonomyContinuing = 0` describe ejecucion ya absorbida y confirmada
+- `autonomyConfirmed > 0` no basta por si solo para declarar el frente sano si la salud operativa actual del worker ya no sostiene ese trabajo
 
 ## Inspección diaria
 
@@ -179,6 +181,26 @@ Señales sanas:
 - hay checkpoints recientes cuando el flujo exige continuidad
 
 Señales de degradación:
+
+- `runtime logical_state=degradado` o `fallido`
+- `handle.estado=fallido`, `cerrado` o `session missing`
+- `heartbeat` y `last_progress` caducados a la vez
+- tarea abierta y `LastAutonomyState=work_confirmed`, pero sin salud operativa actual suficiente
+- diferencia persistente entre trabajo confirmado y workers realmente sanos
+
+Checklist corto del caso malo:
+
+1. abrir panel por agente y confirmar `EstadoOperativo`, `LastAutonomySource` y `LastAutonomyState`
+2. revisar runtime y handle asociados al agente
+3. comprobar `heartbeat` y `last_progress`
+4. confirmar si existe tarea abierta real y proyecto objetivo correcto
+5. si coexisten tarea viva + `work_confirmed` + runtime/handle degradados, tratar el frente como recuperable
+
+Consecuencia operativa:
+
+- no aceptar ese caso como "worker sano"
+- debe dispararse `repair-helper`, reinicio coordinado o relevo barato
+- el cuello real actual del loop ya no es `liveness` base; es salud operativa frente a `work_confirmed`
 
 ## Control total y estadisticas
 

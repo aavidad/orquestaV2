@@ -67,6 +67,20 @@ Contrato vivo ya validado por el codigo:
 - la telemetria compacta visible incluye `workersConectados`, `workersTrabajando` y `supervisoresActivos`
 - esos contadores no equivalen a "agentes visibles en bruto": los `workers*` descuentan supervisores reservados y `supervisoresActivos` se publica aparte como capacidad de gobierno
 
+Foto viva consolidada a `2026-04-23`:
+
+- el loop autonomo estable se documenta como `ready`
+- la convergencia actual correcta es `autonomyContinuing=0` y `autonomyPending=0`
+- el resumen sano esperado publica `autonomyConfirmed>0` solo cuando hay frentes realmente absorbidos
+- la telemetria visible debe leerse siempre junto a `workersConectados`, `workersTrabajando` y `supervisoresActivos`, no como simple recuento bruto de filas
+
+Cuello real siguiente:
+
+- el problema principal ya no es `liveness` base del daemon ni del supervisor residente
+- el siguiente cuello esta en separar salud operativa real de `work_confirmed`
+- un worker con `runtime/handle` degradados y heartbeat/progreso caducados no debe seguir contando como trabajo confirmado solo por evidencia vieja o actividad superficial
+- la autocuracion correcta depende de que ese frente decaiga a estado recuperable para disparar `repair-helper`, reinicio coordinado o relevo barato
+
 ## Politica consolidada de autonomia operativa
 
 La politica canonica ya no debe leerse como varias heuristicas sueltas. El contrato vigente es este:

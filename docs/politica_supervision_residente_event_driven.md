@@ -53,6 +53,7 @@ Senal operativa estable:
 - Las decisiones deben apoyarse en `runtime_orders`, `runtime_handles`, `runtime_mailbox`, `checkpoints`, `heartbeat`, `last_event_at` y evidencia de transcript.
 - Reiniciar el daemon no puede equivaler a reinstruir toda la flota ni a repetir bootstrap pasivo.
 - Si la flota esta sana y sin incidencia, el comportamiento correcto es `standby event-driven`: no-op, observacion y espera de señal relevante.
+- La foto sana actual del loop debe converger a `ready`, `autonomyContinuing=0` y `autonomyPending=0`.
 
 ### 3. Recuperacion local-first
 
@@ -75,6 +76,13 @@ Reglas:
 - `prime` no se usa por preferencia del operador ni por comodidad
 - `prime` requiere evidencia de atasco real, review fallida repetida, criticidad alta o riesgo tecnico demostrado
 - si existe una alternativa local no-prime equivalente para continuidad normal, esa alternativa debe ganar
+
+### 5. `work_confirmed` exige salud operativa actual
+
+- `work_confirmed` no puede sostenerse solo con evidencia vieja, transcript superficial o mailbox absorbida si el worker ya no conserva salud operativa suficiente
+- `runtime/handle` degradados, junto con heartbeat/progreso caducados, deben pesar mas que una confirmacion historica
+- `tmux` reciente o actividad operativa debil pueden servir para permitir autocuracion, pero no para maquillar indefinidamente un frente roto como sano
+- cuando salud operativa actual y `work_confirmed` divergen, la politica correcta es degradar a estado recuperable para disparar `repair-helper`, reinicio coordinado o relevo barato
 
 ## Regla compacta de decision
 
