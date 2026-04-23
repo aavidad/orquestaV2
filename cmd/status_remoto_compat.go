@@ -238,6 +238,10 @@ func renderStatusSummary(ctx *statusContext) {
 		fmt.Printf(" · %d bloqueados por cuota", len(agentesEnCuota))
 	}
 	fmt.Println()
+	workersConectados, workersTrabajando, supervisoresActivos := resumenVisibleWorkerCounters(resumen)
+	if workersConectados > 0 || workersTrabajando > 0 || supervisoresActivos > 0 {
+		fmt.Printf("   Workers conectados %d · workers trabajando %d · supervisores activos %d\n", workersConectados, workersTrabajando, supervisoresActivos)
+	}
 	saturados := make(map[string]bool, len(resumen.AgentesSaturados))
 	for _, a := range resumen.AgentesSaturados {
 		if a != nil {
@@ -480,6 +484,16 @@ func renderStatusSummary(ctx *statusContext) {
 		}
 		fmt.Println()
 	}
+}
+
+func resumenVisibleWorkerCounters(resumen *estadoResumen) (int, int, int) {
+	if resumen == nil {
+		return 0, 0, 0
+	}
+	if resumen.WorkersConectados > 0 || resumen.WorkersTrabajando > 0 || resumen.SupervisoresActivos > 0 {
+		return resumen.WorkersConectados, resumen.WorkersTrabajando, resumen.SupervisoresActivos
+	}
+	return statusVisibleWorkerCounters(resumen.AgentesActivos, resumen.AgentesTrabajando, resumen.Autonomia)
 }
 
 func resolverAgentesActivosDesdeCompatibilidad(resumen *estadoResumen) {
@@ -846,6 +860,9 @@ func agenteBloqueadoPorCuotaVisible(a *db.Agente) bool {
 	if db.AgenteSinCuotaProveedorEfectivo(a) {
 		return false
 	}
+	if !agenteTieneSenalesCuotaVisible(a) {
+		return false
+	}
 	if strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "activo") {
 		return false
 	}
@@ -892,6 +909,33 @@ func agenteBloqueadoPorCuotaVisible(a *db.Agente) bool {
 		return false
 	}
 	return true
+}
+
+func agenteTieneSenalesCuotaVisible(a *db.Agente) bool {
+	if a == nil {
+		return false
+	}
+	if strings.TrimSpace(a.EstadoCuota) != "" {
+		return true
+	}
+	if strings.TrimSpace(a.MotivoPausa) != "" ||
+		strings.TrimSpace(a.PresupuestoEstado) != "" ||
+		strings.TrimSpace(a.PresupuestoVentana) != "" ||
+		strings.TrimSpace(a.PresupuestoFuente) != "" {
+		return true
+	}
+	if a.ReanimarAt != nil || a.PresupuestoCheckedAt != nil || a.PresupuestoResetAt != nil ||
+		a.PresupuestoSemanalResetAt != nil || a.PresupuestoDiarioResetAt != nil || a.PresupuestoSesionResetAt != nil {
+		return true
+	}
+	return a.CuotaRestantePct != nil ||
+		a.PresupuestoSesionPct != nil ||
+		a.PresupuestoDiarioPct != nil ||
+		a.PresupuestoSemanalPct != nil ||
+		a.RemainingCredits != nil ||
+		a.RemainingMessages != nil ||
+		a.RemainingTokens != nil ||
+		a.RemainingSeconds != nil
 }
 
 func bloqueoCuotaEstimadoVisible(a *db.Agente) bool {
@@ -1066,6 +1110,9 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		PoolsLocales             []*capacidadapp.PoolLocalCompartido `json:"poolsLocales"`
 		DeudaDispatch            deudaDispatchResumen                `json:"deudaDispatch"`
 		Autonomia                autonomiaResumen                    `json:"autonomia"`
+		WorkersConectados        int                                 `json:"workersConectados"`
+		WorkersTrabajando        int                                 `json:"workersTrabajando"`
+		SupervisoresActivos      int                                 `json:"supervisoresActivos"`
 		AgentesCompat            []*db.Agente                        `json:"agentes"`
 		ConteoTareasCompat       map[string]int                      `json:"conteo_tareas"`
 		PropuestasCompatAbiertas []*db.Propuesta                     `json:"propuestas_abiertas"`
@@ -1094,6 +1141,9 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		PoolsLocales:        payload.PoolsLocales,
 		DeudaDispatch:       payload.DeudaDispatch,
 		Autonomia:           payload.Autonomia,
+		WorkersConectados:   payload.WorkersConectados,
+		WorkersTrabajando:   payload.WorkersTrabajando,
+		SupervisoresActivos: payload.SupervisoresActivos,
 	}
 	resumen.TareasActivas = filtrarTareasActivasVisibles(resumen.TareasActivas, resumen.Agentes)
 	if len(resumen.TareasPorEstado) == 0 {
@@ -1113,6 +1163,9 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 	}
 	if len(resumen.TareasReservadas) == 0 {
 		resumen.TareasReservadas = filtrarOpenClawTareasPorEstado(resumen.TareasActivas, db.TareaAsignada)
+	}
+	if resumen.WorkersConectados == 0 && resumen.WorkersTrabajando == 0 && resumen.SupervisoresActivos == 0 {
+		resumen.WorkersConectados, resumen.WorkersTrabajando, resumen.SupervisoresActivos = statusVisibleWorkerCounters(resumen.AgentesActivos, resumen.AgentesTrabajando, resumen.Autonomia)
 	}
 	if len(resumen.PropuestasAbiertas) == 0 && len(payload.PropuestasCompatAbiertas) > 0 {
 		resumen.PropuestasAbiertas = make([]propuestaLite, 0, len(payload.PropuestasCompatAbiertas))

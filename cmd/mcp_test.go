@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"orquesta/agentesapp"
+	"orquesta/capacidadapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/microprogramacionapp"
@@ -351,6 +352,52 @@ func TestMCPPromptGuidanceSupervisorExponeContratoCanonico(t *testing.T) {
 		} {
 			if !strings.Contains(text, token) {
 				t.Fatalf("falta %q en guidance supervisor: %s", token, text)
+			}
+		}
+	})
+}
+
+func TestSupervisorBriefingYGuidanceUsanContadoresVisiblesDeWorkersYSupervisor(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex2", Rol: "supervisor", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex2", Rol: "supervisor", Activo: true, EstadoCuota: "activo"},
+			},
+			WorkersConectados:   1,
+			WorkersTrabajando:   1,
+			SupervisoresActivos: 1,
+		}}
+
+		briefing, err := buildSupervisorBriefing("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorBriefing: %v", err)
+		}
+		if !strings.Contains(briefing, "- Conectados y disponibles: 1") || !strings.Contains(briefing, "- Supervisores activos: 1") || !strings.Contains(briefing, "- Con trabajo activo: 1") {
+			t.Fatalf("briefing sin contadores visibles: %s", briefing)
+		}
+
+		guidance, err := buildSupervisorGuidance("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorGuidance: %v", err)
+		}
+		for _, token := range []string{
+			"- Flota conectada ahora: 1.",
+			"- Flota trabajando ahora: 1.",
+			"- Supervisores activos ahora: 1.",
+		} {
+			if !strings.Contains(guidance, token) {
+				t.Fatalf("guidance sin contador visible %q: %s", token, guidance)
 			}
 		}
 	})
@@ -1683,6 +1730,220 @@ func TestMCPSubagentesSupervisorRecogeEntregaGitDesdeWorktree(t *testing.T) {
 	})
 }
 
+func TestBuildSupervisorSubagentActionsPriorizaSlicePipelineParalela(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		item, err := db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
+			Supervisor:   "OpenClaw",
+			ProyectoSlug: "orquestador",
+			SessionID:    "sess-pipeline-slice-1",
+			ThreadID:     "slice-done-1",
+			SubagentName: "OpenClaw-orquestador-implementacion-slice-1",
+			SubagentType: "general-purpose",
+			Status:       "completed",
+			MetadataJSON: `{"source":"pipeline_local_parallel","slice_index":1,"slice_total":2,"task_title":"Frente amplio del control plane","write_set_slice":["cmd/controlplane_support.go","db/controlplane_entities.go"]}`,
+		})
+		if err != nil {
+			t.Fatalf("crear subagente completado: %v", err)
+		}
+		actions := buildSupervisorSubagentActions(map[string]any{
+			"subagents": []*db.SupervisorSubagent{item},
+			"store":     supervisorSubagentStoreSummary{},
+		})
+		if len(actions) != 1 {
+			t.Fatalf("actions inesperadas: %+v", actions)
+		}
+		if actions[0].Priority != "alta" {
+			t.Fatalf("priority inesperada: %+v", actions[0])
+		}
+		if !strings.Contains(actions[0].Reason, "slice=1/2") || !strings.Contains(actions[0].Reason, "Frente amplio del control plane") {
+			t.Fatalf("reason sin contexto de slice: %+v", actions[0])
+		}
+	})
+}
+
+func TestBuildSupervisorSubagentsSnapshotExponeFollowupsCompactos(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		_, err := db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
+			Supervisor:   "OpenClaw",
+			ProyectoSlug: "orquestador",
+			SessionID:    "sess-subagents-followup",
+			ThreadID:     "slice-subagents-followup-1",
+			SubagentName: "OpenClaw-orquestador-implementacion-slice-followup",
+			SubagentType: "general-purpose",
+			Status:       "completed",
+			MetadataJSON: `{"source":"pipeline_local_parallel","task_id":530,"task_title":"Frente amplio del control plane","slice_index":1,"slice_total":2,"pipeline_parent_followup_dispatched":true,"pipeline_parent_followup_phase":"revision","pipeline_parent_followup_action":"avanzar_fase","pipeline_parent_followup_git_merge_id":91}`,
+		})
+		if err != nil {
+			t.Fatalf("crear subagente completado: %v", err)
+		}
+		snapshot, err := buildSupervisorSubagentsSnapshot("OpenClaw", "orquestador", "", 20)
+		if err != nil {
+			t.Fatalf("buildSupervisorSubagentsSnapshot: %v", err)
+		}
+		followups, _ := snapshot["followups"].([]map[string]any)
+		if len(followups) != 1 {
+			t.Fatalf("followups inesperados: %#v", snapshot["followups"])
+		}
+		if followups[0]["source"] != "pipeline_local_parallel" || followups[0]["followup_phase"] != "revision" {
+			t.Fatalf("followup compacta inesperada: %#v", followups[0])
+		}
+	})
+}
+
+func TestApplySupervisorRecommendedActionDevuelveMetadataSlicePipeline(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		subagente, err := db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
+			Supervisor:   "OpenClaw",
+			ProyectoSlug: "orquestador",
+			SessionID:    "sess-pipeline-slice-2",
+			ThreadID:     "slice-done-2",
+			SubagentName: "OpenClaw-orquestador-implementacion-slice-2",
+			SubagentType: "general-purpose",
+			Status:       "completed",
+			MetadataJSON: `{"source":"pipeline_local_parallel","slice_index":2,"slice_total":2,"task_title":"Frente amplio del control plane","write_set_slice":["cmd/controlplane_support_test.go","db/controlplane_entities_test.go"]}`,
+		})
+		if err != nil {
+			t.Fatalf("crear subagente completado: %v", err)
+		}
+		result, err := applySupervisorRecommendedAction("OpenClaw", "recoger_resultado_subagente", fmt.Sprintf("subagente:%d", subagente.ID), "OpenClaw")
+		if err != nil {
+			t.Fatalf("applySupervisorRecommendedAction: %v", err)
+		}
+		slice, _ := result["pipeline_slice"].(map[string]any)
+		if slice == nil {
+			t.Fatalf("pipeline_slice ausente: %#v", result)
+		}
+		if got := int64SupervisorSubagente(slice["slice_index"]); got != 2 {
+			t.Fatalf("slice_index inesperado: %+v", slice)
+		}
+		if got := stringSliceSupervisorSubagente(slice["write_set_slice"]); len(got) != 2 || got[0] != "cmd/controlplane_support_test.go" {
+			t.Fatalf("write_set_slice inesperado: %+v", slice)
+		}
+	})
+}
+
+func TestApplySupervisorRecommendedActionPromuevePipelineTrasEntregaSidecar(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		subagente, err := db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
+			Supervisor:   "OpenClaw",
+			ProyectoSlug: "orquestador",
+			SessionID:    "sess-pipeline-slice-followup",
+			ThreadID:     "slice-followup-1",
+			SubagentName: "OpenClaw-orquestador-implementacion-slice-followup",
+			SubagentType: "general-purpose",
+			Status:       "completed",
+			MetadataJSON: `{"source":"pipeline_local_parallel","slice_index":1,"slice_total":2,"task_title":"Frente amplio del control plane","write_set_slice":["cmd/controlplane_support.go"]}`,
+		})
+		if err != nil {
+			t.Fatalf("crear subagente completado: %v", err)
+		}
+
+		oldRecoger := mcpRecogerResultadoGitSubagenteFn
+		oldDispatch := mcpPipelineDispatchFn
+		defer func() {
+			mcpRecogerResultadoGitSubagenteFn = oldRecoger
+			mcpPipelineDispatchFn = oldDispatch
+		}()
+
+		mcpRecogerResultadoGitSubagenteFn = func(item *db.SupervisorSubagent) (map[string]any, error) {
+			return map[string]any{
+				"git_merge_id":     int64(91),
+				"runtime_order_id": int64(77),
+			}, nil
+		}
+
+		var proyectoLlamado string
+		mcpPipelineDispatchFn = func(proyectoSlug string) (*capacidadapp.ResultadoEjecucionPasoPipelineLocal, error) {
+			proyectoLlamado = strings.TrimSpace(proyectoSlug)
+			return &capacidadapp.ResultadoEjecucionPasoPipelineLocal{
+				Paso: &capacidadapp.PasoPipelineLocalDeterminista{
+					ProyectoSlug: proyectoSlug,
+					FaseObjetivo: "revision",
+				},
+			}, nil
+		}
+
+		result, err := applySupervisorRecommendedAction("OpenClaw", "recoger_resultado_subagente", fmt.Sprintf("subagente:%d", subagente.ID), "OpenClaw")
+		if err != nil {
+			t.Fatalf("applySupervisorRecommendedAction: %v", err)
+		}
+		if proyectoLlamado != "orquestador" {
+			t.Fatalf("pipeline dispatch no llamado con proyecto esperado: %q", proyectoLlamado)
+		}
+		followup, _ := result["pipeline_followup"].(*capacidadapp.ResultadoEjecucionPasoPipelineLocal)
+		if followup == nil || followup.Paso == nil || followup.Paso.FaseObjetivo != "revision" {
+			t.Fatalf("pipeline_followup inesperado: %#v", result["pipeline_followup"])
+		}
+	})
+}
+
+func TestApplySupervisorRecommendedActionNoDuplicaFollowupPipelineSidecar(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		subagente, err := db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
+			Supervisor:   "OpenClaw",
+			ProyectoSlug: "orquestador",
+			SessionID:    "sess-pipeline-slice-followup-once",
+			ThreadID:     "slice-followup-once-1",
+			SubagentName: "OpenClaw-orquestador-implementacion-slice-once",
+			SubagentType: "general-purpose",
+			Status:       "completed",
+			MetadataJSON: `{"source":"pipeline_local_parallel","slice_index":1,"slice_total":2,"task_title":"Frente amplio del control plane","write_set_slice":["cmd/controlplane_support.go"]}`,
+		})
+		if err != nil {
+			t.Fatalf("crear subagente completado: %v", err)
+		}
+
+		oldRecoger := mcpRecogerResultadoGitSubagenteFn
+		oldDispatch := mcpPipelineDispatchFn
+		defer func() {
+			mcpRecogerResultadoGitSubagenteFn = oldRecoger
+			mcpPipelineDispatchFn = oldDispatch
+		}()
+
+		mcpRecogerResultadoGitSubagenteFn = func(item *db.SupervisorSubagent) (map[string]any, error) {
+			return map[string]any{"git_merge_id": int64(91)}, nil
+		}
+
+		calls := 0
+		mcpPipelineDispatchFn = func(proyectoSlug string) (*capacidadapp.ResultadoEjecucionPasoPipelineLocal, error) {
+			calls++
+			return &capacidadapp.ResultadoEjecucionPasoPipelineLocal{
+				Paso: &capacidadapp.PasoPipelineLocalDeterminista{
+					ProyectoSlug: proyectoSlug,
+					FaseObjetivo: "revision",
+				},
+			}, nil
+		}
+
+		for i := 0; i < 2; i++ {
+			result, err := applySupervisorRecommendedAction("OpenClaw", "recoger_resultado_subagente", fmt.Sprintf("subagente:%d", subagente.ID), "OpenClaw")
+			if err != nil {
+				t.Fatalf("applySupervisorRecommendedAction iter=%d: %v", i, err)
+			}
+			if i == 0 {
+				if result["pipeline_followup"] == nil {
+					t.Fatalf("faltó pipeline_followup en primera recogida: %#v", result)
+				}
+			} else {
+				if result["pipeline_followup"] != nil {
+					t.Fatalf("no debería repetir pipeline_followup: %#v", result["pipeline_followup"])
+				}
+			}
+		}
+		if calls != 1 {
+			t.Fatalf("dispatch duplicado, calls=%d", calls)
+		}
+
+		refrescado, err := db.GetSupervisorSubagentByID(subagente.ID)
+		if err != nil || refrescado == nil {
+			t.Fatalf("GetSupervisorSubagentByID: %+v err=%v", refrescado, err)
+		}
+		if !strings.Contains(refrescado.MetadataJSON, `"pipeline_parent_followup_dispatched":true`) {
+			t.Fatalf("metadata sin marca durable de followup: %s", refrescado.MetadataJSON)
+		}
+	})
+}
+
 func TestLaunchClaudeSubagentExternalPreparaWorktreeYExponeEntornoGit(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		repoDir := t.TempDir()
@@ -1764,6 +2025,84 @@ printf 'ok\n'
 		}
 		if !strings.Contains(items[0].MetadataJSON, `"worktree_id"`) || !strings.Contains(items[0].MetadataJSON, rutaWorktree) {
 			t.Fatalf("metadata del subagente sin worktree persistida: %s", items[0].MetadataJSON)
+		}
+	})
+}
+
+func TestLaunchClaudeSubagentExternalPersisteMetadataAdicional(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		tmp := t.TempDir()
+		repo := filepath.Join(tmp, "repo-launch-meta")
+		runGitCmdAPITest(t, tmp, "init", repo)
+		runGitCmdAPITest(t, repo, "config", "user.email", "repo@test")
+		runGitCmdAPITest(t, repo, "config", "user.name", "Repo Test")
+		if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("hola\n"), 0o644); err != nil {
+			t.Fatalf("write readme: %v", err)
+		}
+		runGitCmdAPITest(t, repo, "add", "README.md")
+		runGitCmdAPITest(t, repo, "commit", "-m", "init")
+		if _, err := db.UpsertProyecto(&db.Proyecto{
+			Slug:    "orquestador",
+			Nombre:  "Orquestador",
+			RutaAbs: repo,
+			Tipo:    db.ProyectoRepo,
+			Activo:  true,
+		}); err != nil {
+			t.Fatalf("upsert proyecto: %v", err)
+		}
+
+		storeDir := filepath.Join(tmp, ".clawd-agents")
+		t.Setenv("CLAWD_AGENT_STORE", storeDir)
+		launcherPath := filepath.Join(t.TempDir(), "launcher-meta.sh")
+		script := `#!/usr/bin/env bash
+set -euo pipefail
+id="agent-test-meta-001"
+manifest="${ORQUESTA_SUBAGENT_STORE}/${id}.json"
+output="${ORQUESTA_SUBAGENT_STORE}/${id}.md"
+mkdir -p "${ORQUESTA_SUBAGENT_STORE}"
+printf 'ok\n' > "${output}"
+cat > "${manifest}" <<JSON
+{"agentId":"${id}","name":"${ORQUESTA_SUBAGENT_NAME}","description":"${ORQUESTA_SUBAGENT_DESCRIPTION}","subagentType":"${ORQUESTA_SUBAGENT_TYPE}","model":"${ORQUESTA_SUBAGENT_MODEL}","status":"running","outputFile":"${output}","manifestFile":"${manifest}","createdAt":"2026-04-02T12:00:00Z","startedAt":"2026-04-02T12:00:00Z"}
+JSON
+printf 'ok\n'
+`
+		if err := os.WriteFile(launcherPath, []byte(script), 0o755); err != nil {
+			t.Fatalf("write launcher: %v", err)
+		}
+		t.Setenv("ORQUESTA_CLAUDE_SUBAGENT_LAUNCHER", launcherPath)
+
+		_, err := launchClaudeSubagentExternal(supervisorSubagentLaunchRequest{
+			Supervisor:   "OpenClaw",
+			Proyecto:     "orquestador",
+			Name:         "OpenClaw-Pipeline-Slice-1",
+			Description:  "slice 1",
+			Prompt:       "trabaja el slice 1",
+			SubagentType: "general-purpose",
+			Metadata: map[string]any{
+				"source":          "pipeline_local_parallel",
+				"slice_index":     1,
+				"slice_total":     2,
+				"write_set_slice": []string{"cmd/controlplane_support.go", "cmd/controlplane_support_test.go"},
+			},
+		})
+		if err != nil {
+			t.Fatalf("launchClaudeSubagentExternal: %v", err)
+		}
+		items, err := db.ListarSupervisorSubagents(db.FiltroSupervisorSubagents{
+			Supervisor:   "OpenClaw",
+			ProyectoSlug: "orquestador",
+			Limit:        10,
+		})
+		if err != nil {
+			t.Fatalf("listar subagentes: %v", err)
+		}
+		if len(items) != 1 {
+			t.Fatalf("subagentes inesperados: %+v", items)
+		}
+		for _, token := range []string{`"source":"pipeline_local_parallel"`, `"slice_index":1`, `"slice_total":2`, `"write_set_slice":["cmd/controlplane_support.go","cmd/controlplane_support_test.go"]`} {
+			if !strings.Contains(items[0].MetadataJSON, token) {
+				t.Fatalf("metadata sin token %s: %s", token, items[0].MetadataJSON)
+			}
 		}
 	})
 }

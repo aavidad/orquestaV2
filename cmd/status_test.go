@@ -527,6 +527,138 @@ func TestFetchServerStatusNoRecuperaAgentesCompatSiPayloadYaEsModerno(t *testing
 	}
 }
 
+func TestFetchServerStatusRecuperaContadoresVisiblesDeWorkersYSupervisor(t *testing.T) {
+	prevClient := serverHTTPClient
+	serverHTTPClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch req.URL.Path {
+			case "/api/status":
+				return newJSONResponse(http.StatusOK, `{"generado":"2026-04-23T19:20:00Z","agentesActivos":[{"Nombre":"Codex1","Activo":true,"EstadoCuota":"activo"},{"Nombre":"Codex2","Activo":true,"EstadoCuota":"activo"}],"agentesTrabajando":[{"Nombre":"Codex1","Activo":true,"EstadoCuota":"activo"}],"autonomia":{"supervising":1,"continuing":0,"continuity_pending":0,"work_confirmed":1,"handoffing":0},"workersConectados":1,"workersTrabajando":1,"supervisoresActivos":1}`), nil
+			default:
+				return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+			}
+		}),
+	}
+	defer func() {
+		serverHTTPClient = prevClient
+	}()
+
+	status, err := fetchServerStatus("http://orquesta.local")
+	if err != nil {
+		t.Fatalf("fetchServerStatus: %v", err)
+	}
+	if status.WorkersConectados != 1 || status.WorkersTrabajando != 1 || status.SupervisoresActivos != 1 {
+		t.Fatalf("contadores visibles inesperados: %+v", status)
+	}
+}
+
+func TestFetchStatusFreshIncluyeTareasEnProgresoYReservadas(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "status-fresh",
+		Nombre:  "Status Fresh",
+		RutaAbs: tmp,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexFresh", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	tareaEnProgresoID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Tarea viva",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea viva: %v", err)
+	}
+	if err := db.TomarTarea(tareaEnProgresoID, "CodexFresh"); err != nil {
+		t.Fatalf("tomar tarea viva: %v", err)
+	}
+	if err := db.IniciarTarea(tareaEnProgresoID, "CodexFresh"); err != nil {
+		t.Fatalf("iniciar tarea viva: %v", err)
+	}
+	tareaReservadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Tarea reservada",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadMedia,
+		CreadoPor:  "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea reservada: %v", err)
+	}
+	if err := db.TomarTarea(tareaReservadaID, "CodexFresh"); err != nil {
+		t.Fatalf("tomar tarea reservada: %v", err)
+	}
+
+	status, err := fetchStatusFresh()
+	if err != nil {
+		t.Fatalf("fetchStatusFresh: %v", err)
+	}
+	if len(status.TareasEnProgreso) != 1 || status.TareasEnProgreso[0].ID != tareaEnProgresoID {
+		t.Fatalf("tareasEnProgreso inesperadas: %+v", status.TareasEnProgreso)
+	}
+	if len(status.TareasReservadas) != 1 || status.TareasReservadas[0].ID != tareaReservadaID {
+		t.Fatalf("tareasReservadas inesperadas: %+v", status.TareasReservadas)
+	}
+}
+
+func TestFetchStatusFreshIncluyeTareaEnProgresoSinProyectoResuelto(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("CodexSinProyecto", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:    "Tarea viva sin proyecto resuelto",
+		Prioridad: db.PrioridadAlta,
+		CreadoPor: "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexSinProyecto"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexSinProyecto"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	status, err := fetchStatusFresh()
+	if err != nil {
+		t.Fatalf("fetchStatusFresh: %v", err)
+	}
+	if len(status.TareasEnProgreso) != 1 || status.TareasEnProgreso[0].ID != tareaID {
+		t.Fatalf("tareasEnProgreso inesperadas: %+v", status.TareasEnProgreso)
+	}
+}
+
+func TestFiltrarOpenClawTareasPorEstadoDescartaTareaLiteVacia(t *testing.T) {
+	items := []tareaLite{
+		{},
+		{ID: 24, Estado: db.TareaEnProgreso, Agente: "Codex1", Titulo: "Real"},
+	}
+	out := filtrarOpenClawTareasPorEstado(items, db.TareaEnProgreso)
+	if len(out) != 1 || out[0].ID != 24 {
+		t.Fatalf("filtro inesperado: %+v", out)
+	}
+}
+
+func TestFiltrarTareasActivasVisiblesDescartaTareaLiteVacia(t *testing.T) {
+	agentes := []*db.Agente{{Nombre: "Codex1", Habilitado: true}}
+	items := []tareaLite{
+		{},
+		{ID: 24, Estado: db.TareaEnProgreso, Agente: "Codex1", Titulo: "Real"},
+	}
+	out := filtrarTareasActivasVisibles(items, agentes)
+	if len(out) != 1 || out[0].ID != 24 {
+		t.Fatalf("tareas visibles inesperadas: %+v", out)
+	}
+}
+
 func TestRenderStatusSummaryMuestraBackendActivo(t *testing.T) {
 	out := captureOutput(t, func() {
 		renderStatusSummary(&statusContext{
@@ -615,6 +747,34 @@ func TestRenderStatusSummaryMuestraCuotaAgente(t *testing.T) {
 	}
 	if !strings.Contains(out, "semanal 12%") {
 		t.Fatalf("salida sin porcentaje semanal: %s", out)
+	}
+}
+
+func TestRenderStatusSummaryMuestraContadoresVisiblesDeWorkersYSupervisor(t *testing.T) {
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes: []*db.Agente{
+					{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+					{Nombre: "Codex2", Rol: "supervisor", Activo: true, EstadoCuota: "activo"},
+				},
+				AgentesActivos: []*db.Agente{
+					{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+					{Nombre: "Codex2", Rol: "supervisor", Activo: true, EstadoCuota: "activo"},
+				},
+				AgentesTrabajando: []*db.Agente{
+					{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				},
+				Autonomia: autonomiaResumen{Supervisando: 1, WorkConfirmed: 1},
+				WorkersConectados:   1,
+				WorkersTrabajando:   1,
+				SupervisoresActivos: 1,
+				TareasPorEstado:     map[string]int{},
+			},
+		})
+	})
+	if !strings.Contains(out, "Workers conectados 1 · workers trabajando 1 · supervisores activos 1") {
+		t.Fatalf("salida sin contadores visibles: %s", out)
 	}
 }
 

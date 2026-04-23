@@ -52,6 +52,8 @@ var propuestasService = propuestasapp.NewService(propuestasapp.Repository{})
 var runtimesService = runtimesapp.NewService(runtimesapp.Repository{})
 var sesionesAPIService = sesionesapp.NewService(db.SqliteSesionesRepo{})
 var tareasService = tareasapp.NewService(tareasapp.Repository{})
+var mcpRecogerResultadoGitSubagenteFn = recogerResultadoGitSubagente
+var mcpPipelineDispatchFn = capacidadService.EjecutarYDespacharSiguientePasoPipelineLocalDeterminista
 
 type mcpRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -3064,6 +3066,9 @@ type estadoResumen struct {
 	PoolsLocales        []*capacidadapp.PoolLocalCompartido `json:"poolsLocales,omitempty"`
 	DeudaDispatch       deudaDispatchResumen                `json:"deudaDispatch,omitempty"`
 	Autonomia           autonomiaResumen                    `json:"autonomia,omitempty"`
+	WorkersConectados   int                                 `json:"workersConectados,omitempty"`
+	WorkersTrabajando   int                                 `json:"workersTrabajando,omitempty"`
+	SupervisoresActivos int                                 `json:"supervisoresActivos,omitempty"`
 	WorktreesActivas    []map[string]any                    `json:"worktreesActivas"`
 	LocksActivos        []map[string]any                    `json:"locksActivos"`
 	SesionesActivas     []map[string]any                    `json:"sesionesActivas"`
@@ -3148,13 +3153,40 @@ func buildEstadoResumen() (*estadoResumen, error) {
 		LocksActivos:        locks,
 		SesionesActivas:     sesiones,
 		Conectores:          conectores,
+		WorkersConectados:   status.WorkersConectados,
+		WorkersTrabajando:   status.WorkersTrabajando,
+		SupervisoresActivos: status.SupervisoresActivos,
 	}, nil
 }
 
 func buildEstadoResumenLigero() (*estadoResumen, error) {
-	status, err := statusService.FetchStatus()
-	if err != nil {
-		return nil, err
+	status := degradedAPIStatusResponse()
+	switch {
+	case func() bool {
+		snapshot, ok := readStatusSnapshotFresh()
+		if ok {
+			status = snapshot
+		}
+		return ok
+	}():
+	case func() bool {
+		snapshot, ok := fetchStatusReadOnlyLiteDirect(statusFastTimeout)
+		if ok {
+			status = snapshot
+			storeStatusSnapshot(snapshot, statusNowFunc().UTC())
+		}
+		return ok
+	}():
+	case func() bool {
+		snapshot, ok := readStatusSnapshotAny()
+		if ok {
+			status = snapshot
+			ensureStatusRefreshAsync()
+		}
+		return ok
+	}():
+	default:
+		ensureStatusRefreshAsync()
 	}
 	return &estadoResumen{
 		Generado:            time.Now().UTC().Format(time.RFC3339),
@@ -3171,6 +3203,9 @@ func buildEstadoResumenLigero() (*estadoResumen, error) {
 		TareasEnProgreso:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada),
 		TareasReservadas:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
 		PoolsLocales:        status.PoolsLocales,
+		WorkersConectados:   status.WorkersConectados,
+		WorkersTrabajando:   status.WorkersTrabajando,
+		SupervisoresActivos: status.SupervisoresActivos,
 	}, nil
 }
 
@@ -3346,6 +3381,7 @@ func buildSupervisorBriefing(supervisor string) (string, error) {
 	conectados := status.AgentesActivos
 	enCuota := agentesNoActivosConCuota(status.Agentes)
 	retenidas := tareasRetenidasPorCuota(status.TareasActivas, status.Agentes, status.AgentesQuotaBlocked)
+	workersConectados, workersTrabajando, supervisoresActivos := apiStatusVisibleCounters(status)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Briefing de supervisor: %s\n\n", supervisor)
@@ -3355,9 +3391,10 @@ func buildSupervisorBriefing(supervisor string) (string, error) {
 	b.WriteString("- El supervisor no recompone estado desde documentos sueltos ni desde rutas locales; decide sobre el estado vivo del daemon.\n\n")
 
 	fmt.Fprintf(&b, "## Estado de flota\n")
-	fmt.Fprintf(&b, "- Conectados y disponibles: %d\n", len(conectados))
+	fmt.Fprintf(&b, "- Conectados y disponibles: %d\n", workersConectados)
+	fmt.Fprintf(&b, "- Supervisores activos: %d\n", supervisoresActivos)
 	fmt.Fprintf(&b, "- En enfriamiento/cuota: %d\n", len(enCuota))
-	fmt.Fprintf(&b, "- Con trabajo activo: %d\n\n", len(status.AgentesTrabajando))
+	fmt.Fprintf(&b, "- Con trabajo activo: %d\n\n", workersTrabajando)
 
 	if len(conectados) > 0 {
 		b.WriteString("### Workers disponibles\n")
@@ -3437,6 +3474,7 @@ func buildSupervisorGuidance(supervisor string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	workersConectados, workersTrabajando, supervisoresActivos := apiStatusVisibleCounters(status)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Guidance canónica del supervisor: %s\n\n", supervisor)
@@ -3452,8 +3490,9 @@ func buildSupervisorGuidance(supervisor string) (string, error) {
 	b.WriteString("- Integra por la vía canónica: review gates, merge queue, MCP y web server-first.\n\n")
 
 	b.WriteString("## Execution Protocol\n")
-	fmt.Fprintf(&b, "- Flota conectada ahora: %d.\n", len(status.AgentesActivos))
-	fmt.Fprintf(&b, "- Flota trabajando ahora: %d.\n", len(status.AgentesTrabajando))
+	fmt.Fprintf(&b, "- Flota conectada ahora: %d.\n", workersConectados)
+	fmt.Fprintf(&b, "- Flota trabajando ahora: %d.\n", workersTrabajando)
+	fmt.Fprintf(&b, "- Supervisores activos ahora: %d.\n", supervisoresActivos)
 	b.WriteString("- Lee briefing, guidance y cola de revisión antes de tomar decisiones.\n")
 	b.WriteString("- Usa `next_action`, `action_queue` y `eventos_normalizados` como resumen operativo, no como sustituto de la verdad viva.\n")
 	b.WriteString("- Si un gate, señal o merge necesita acción, prioriza arbitraje e integración antes que abrir nuevos frentes.\n\n")
@@ -3475,6 +3514,13 @@ func buildSupervisorGuidance(supervisor string) (string, error) {
 	b.WriteString("- Si la integración queda bloqueada, usa review queue y eventos normalizados para arbitrar la siguiente acción.\n")
 
 	return strings.TrimSpace(b.String()) + "\n", nil
+}
+
+func apiStatusVisibleCounters(status apiStatusResponse) (int, int, int) {
+	if status.WorkersConectados > 0 || status.WorkersTrabajando > 0 || status.SupervisoresActivos > 0 {
+		return status.WorkersConectados, status.WorkersTrabajando, status.SupervisoresActivos
+	}
+	return statusVisibleWorkerCounters(status.AgentesActivos, status.AgentesTrabajando, status.Autonomia)
 }
 
 func resumenSupervisorAgente(a *db.Agente) string {
@@ -3816,16 +3862,46 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	status, err := statusService.FetchStatus()
-	if err != nil {
-		return nil, err
+	status := degradedAPIStatusResponse()
+	switch {
+	case func() bool {
+		snapshot, ok := readStatusSnapshotFresh()
+		if ok {
+			status = snapshot
+		}
+		return ok
+	}():
+	case func() bool {
+		snapshot, ok := fetchStatusReadOnlyLiteDirect(statusFastTimeout)
+		if ok {
+			status = snapshot
+			storeStatusSnapshot(snapshot, statusNowFunc().UTC())
+		}
+		return ok
+	}():
+	case func() bool {
+		snapshot, ok := readStatusSnapshotAny()
+		if ok {
+			status = snapshot
+			ensureStatusRefreshAsync()
+		}
+		return ok
+	}():
+	default:
+		ensureStatusRefreshAsync()
 	}
 	conflicts := listarSupervisorModuleConflictsFromTasks(status.TareasActivas)
 	mailboxPendiente, err := buildOpenClawPendingMailbox(status.Agentes)
 	if err != nil {
 		return nil, err
 	}
-	normalizedEvents := buildOpenClawNormalizedEventsFromData(openGates, signals, merges, notificaciones.DescribirOutbox(20).Recientes, 20)
+	outbox := notificaciones.OutboxSummary{}
+	if snapshot, timeoutErr := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.OutboxSummary, error) {
+		return notificaciones.DescribirOutbox(20), nil
+	}, errStatusFetchTimeout); timeoutErr == nil {
+		outbox = snapshot
+	}
+	normalizedEvents := buildOpenClawNormalizedEventsFromData(openGates, signals, merges, outbox.Recientes, 20)
 	threadSessions, err := buildSupervisorThreadsSnapshot(supervisor, "", 100)
 	if err != nil {
 		return nil, err
@@ -4350,6 +4426,8 @@ func buildSupervisorSubagentActions(snapshot map[string]any) []supervisorRecomme
 		actionName := ""
 		reason := ""
 		priority := "baja"
+		metadata := metadataSupervisorSubagente(item)
+		isPipelineParallel := strings.EqualFold(strings.TrimSpace(stringSupervisorSubagente(metadata["source"])), "pipeline_local_parallel")
 		switch strings.TrimSpace(item.Status) {
 		case "failed":
 			actionName = "revisar_subagente_fallido"
@@ -4359,6 +4437,9 @@ func buildSupervisorSubagentActions(snapshot map[string]any) []supervisorRecomme
 			actionName = "recoger_resultado_subagente"
 			reason = "El subagente completó su trabajo; recoger resultado y decidir integración."
 			priority = "media"
+			if isPipelineParallel {
+				priority = "alta"
+			}
 		case "cancelled":
 			actionName = "limpiar_subagente_cancelado"
 			reason = "El subagente quedó cancelado; confirmar limpieza y estado terminal."
@@ -4368,6 +4449,22 @@ func buildSupervisorSubagentActions(snapshot map[string]any) []supervisorRecomme
 		}
 		if name := strings.TrimSpace(item.SubagentName); name != "" {
 			reason = fmt.Sprintf("%s (subagente=%s tipo=%s)", reason, name, strings.TrimSpace(item.SubagentType))
+		}
+		if isPipelineParallel {
+			sliceInfo := ""
+			if idx := int64SupervisorSubagente(metadata["slice_index"]); idx > 0 {
+				if total := int64SupervisorSubagente(metadata["slice_total"]); total > 0 {
+					sliceInfo = fmt.Sprintf(" slice=%d/%d", idx, total)
+				} else {
+					sliceInfo = fmt.Sprintf(" slice=%d", idx)
+				}
+			}
+			taskTitle := strings.TrimSpace(stringSupervisorSubagente(metadata["task_title"]))
+			if taskTitle != "" {
+				reason = fmt.Sprintf("%s%s tarea=%s", reason, sliceInfo, taskTitle)
+			} else if sliceInfo != "" {
+				reason = reason + sliceInfo
+			}
 		}
 		actions = append(actions, supervisorRecommendedAction{
 			Kind:     "subagent",
@@ -4486,6 +4583,8 @@ func countLibreTasks(status apiStatusResponse) int {
 }
 
 func idleSupervisorWorkers(conectados, trabajando []*db.Agente) []string {
+	conectados = visibleNonSupervisorAgents(conectados)
+	trabajando = visibleNonSupervisorAgents(trabajando)
 	trabajandoSet := make(map[string]struct{}, len(trabajando))
 	for _, agente := range trabajando {
 		if agente == nil {
@@ -4522,15 +4621,17 @@ func firstIdleSupervisorWorker(idle []string) string {
 }
 
 func preferredSupervisorWorker(status apiStatusResponse) string {
-	idle := idleSupervisorWorkers(status.AgentesActivos, status.AgentesTrabajando)
+	workersActivos := visibleNonSupervisorAgents(status.AgentesActivos)
+	workersTrabajando := visibleNonSupervisorAgents(status.AgentesTrabajando)
+	idle := idleSupervisorWorkers(workersActivos, workersTrabajando)
 	if len(idle) > 0 {
 		return firstIdleSupervisorWorker(idle)
 	}
-	if len(status.AgentesActivos) == 0 {
+	if len(workersActivos) == 0 {
 		return ""
 	}
-	load := make(map[string]int, len(status.AgentesActivos))
-	for _, agente := range status.AgentesActivos {
+	load := make(map[string]int, len(workersActivos))
+	for _, agente := range workersActivos {
 		if agente == nil {
 			continue
 		}
@@ -4878,18 +4979,28 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 		if item == nil {
 			return nil, fmt.Errorf("subagente #%d no encontrado", subagentID)
 		}
-		entregaGit, err := recogerResultadoGitSubagente(item)
+		entregaGit, err := mcpRecogerResultadoGitSubagenteFn(item)
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{
-			"ok":          true,
-			"supervisor":  supervisor,
-			"action":      selected,
-			"assignee":    worker,
-			"subagente":   item,
-			"entrega_git": entregaGit,
-		}, nil
+		pipelineSlice := metadataSupervisorSubagente(item)
+		pipelineFollowup, err := maybePromoverPipelineTrasEntregaSidecar(item, entregaGit, pipelineSlice)
+		if err != nil {
+			return nil, err
+		}
+		out := map[string]any{
+			"ok":             true,
+			"supervisor":     supervisor,
+			"action":         selected,
+			"assignee":       worker,
+			"subagente":      item,
+			"entrega_git":    entregaGit,
+			"pipeline_slice": pipelineSlice,
+		}
+		if pipelineFollowup != nil {
+			out["pipeline_followup"] = pipelineFollowup
+		}
+		return out, nil
 	case "refrescar_store_subagentes":
 		result, err := refreshSupervisorSubagentsFromStore(supervisor, "")
 		if err != nil {
@@ -4905,6 +5016,90 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 	default:
 		return nil, fmt.Errorf("acción no aplicable automáticamente: %s", strings.TrimSpace(selected.Action))
 	}
+}
+
+func maybePromoverPipelineTrasEntregaSidecar(item *db.SupervisorSubagent, entregaGit map[string]any, pipelineSlice map[string]any) (*capacidadapp.ResultadoEjecucionPasoPipelineLocal, error) {
+	if item == nil || entregaGit == nil || len(pipelineSlice) == 0 {
+		return nil, nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(stringSupervisorSubagente(pipelineSlice["source"])), "pipeline_local_parallel") {
+		return nil, nil
+	}
+	if sidecarPipelineFollowupYaDespachado(pipelineSlice) {
+		return nil, nil
+	}
+	proyectoSlug := strings.TrimSpace(item.ProyectoSlug)
+	if proyectoSlug == "" || mcpPipelineDispatchFn == nil {
+		return nil, nil
+	}
+	resultado, err := mcpPipelineDispatchFn(proyectoSlug)
+	if err != nil {
+		return nil, err
+	}
+	if err := persistirFollowupPipelineSidecar(item, pipelineSlice, entregaGit, resultado); err != nil {
+		return nil, err
+	}
+	return resultado, nil
+}
+
+func sidecarPipelineFollowupYaDespachado(metadata map[string]any) bool {
+	if len(metadata) == 0 {
+		return false
+	}
+	switch v := metadata["pipeline_parent_followup_dispatched"].(type) {
+	case bool:
+		return v
+	case string:
+		v = strings.TrimSpace(strings.ToLower(v))
+		return v == "true" || v == "1" || v == "yes"
+	}
+	return false
+}
+
+func persistirFollowupPipelineSidecar(item *db.SupervisorSubagent, metadata map[string]any, entregaGit map[string]any, resultado *capacidadapp.ResultadoEjecucionPasoPipelineLocal) error {
+	if item == nil {
+		return nil
+	}
+	next := make(map[string]any, len(metadata)+6)
+	for k, v := range metadata {
+		next[k] = v
+	}
+	next["pipeline_parent_followup_dispatched"] = true
+	next["pipeline_parent_followup_dispatched_at"] = time.Now().UTC().Format(time.RFC3339)
+	if mergeID := int64SupervisorSubagente(entregaGit["git_merge_id"]); mergeID > 0 {
+		next["pipeline_parent_followup_git_merge_id"] = mergeID
+	}
+	if resultado != nil && resultado.Paso != nil {
+		if fase := strings.TrimSpace(resultado.Paso.FaseObjetivo); fase != "" {
+			next["pipeline_parent_followup_phase"] = fase
+		}
+		if accion := strings.TrimSpace(resultado.Paso.Accion); accion != "" {
+			next["pipeline_parent_followup_action"] = accion
+		}
+	}
+	raw, err := json.Marshal(next)
+	if err != nil {
+		return err
+	}
+	_, err = db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
+		Supervisor:      strings.TrimSpace(item.Supervisor),
+		ProyectoSlug:    strings.TrimSpace(item.ProyectoSlug),
+		SessionID:       strings.TrimSpace(item.SessionID),
+		ParentThreadID:  strings.TrimSpace(item.ParentThreadID),
+		ThreadID:        strings.TrimSpace(item.ThreadID),
+		SubagentName:    strings.TrimSpace(item.SubagentName),
+		SubagentType:    strings.TrimSpace(item.SubagentType),
+		ToolProfileJSON: strings.TrimSpace(item.ToolProfileJSON),
+		Status:          strings.TrimSpace(item.Status),
+		ManifestPath:    strings.TrimSpace(item.ManifestPath),
+		OutputPath:      strings.TrimSpace(item.OutputPath),
+		ErrorMessage:    strings.TrimSpace(item.ErrorMessage),
+		MetadataJSON:    string(raw),
+		CreatedAt:       &item.CreatedAt,
+		StartedAt:       &item.StartedAt,
+		CompletedAt:     item.CompletedAt,
+	})
+	return err
 }
 
 func resolveSupervisorActionProjectForAgent(agente string) (*db.Proyecto, error) {
@@ -5808,7 +6003,7 @@ func arquitecturaMCPText() string {
 MCP se implementa como adaptador de entrada, no como nucleo.
 
 ## Principios
-- El nucleo de Orquesta no debe depender de MCP, SQLite ni de un proveedor concreto.
+- El nucleo de Orquesta no debe depender de MCP, del backend local heredado ni de un proveedor concreto.
 - MCP sirve para exponer contexto y acciones controladas al agente.
 - La base de datos sigue siendo un adaptador; las mutaciones deben apoyarse en reglas ya existentes.
 - La evolucion debe ser aditiva e idempotente.
