@@ -53,6 +53,7 @@ type stubAutomationService struct {
 	pendingWork       bool
 	pendingWorkDetail string
 	pendingWorkErr    error
+	skipLoops         map[string]string
 }
 
 func (s *stubAutomationService) CheckReanimaciones() ([]*db.Agente, error) {
@@ -76,6 +77,13 @@ func (s *stubAutomationService) GarantizarSaludAgentes() error          { return
 func (s *stubAutomationService) PlanificarTareasAutomaticamente() error { return nil }
 func (s *stubAutomationService) TieneTrabajoOrquestablePendiente() (bool, string, error) {
 	return s.pendingWork, s.pendingWorkDetail, s.pendingWorkErr
+}
+func (s *stubAutomationService) ShouldSkipLoop(name string) (bool, string, error) {
+	if s.skipLoops == nil {
+		return false, "", nil
+	}
+	motivo, ok := s.skipLoops[strings.TrimSpace(name)]
+	return ok, motivo, nil
 }
 func (s *stubAutomationService) ProcesarAutonomiaAgentesBatch() (int, error) {
 	return s.autonomyCount, s.autonomyErr
@@ -155,8 +163,18 @@ func TestRunnerRunControlPlaneAuditaTrabajoProcesado(t *testing.T) {
 	r := &Runner{Automation: service}
 	r.runControlPlane()
 
-	if len(service.audits) != 14 {
-		t.Fatalf("esperaba 14 auditorias, got=%d", len(service.audits))
+	audits := strings.Join(service.audits, "\n")
+	for _, expected := range []string{
+		"runtime_transcript_batch|runtime_transcript|Conversación/runtime transcript procesado: 1",
+		"runtime_mailbox_batch|runtime_mailbox|Mailbox runtime procesado: 1",
+		"runtime_orders_batch|runtime_order|Órdenes procesadas en batch: 3",
+		"runtime_hygiene_batch|runtime|Deuda historica de runtime purgada: 1",
+		"runtime_handles_stale|runtime_handle|Handles reconciliados como stale: 2",
+		"runtime_orders_stale|runtime_order|Órdenes recuperadas por stale: 1",
+	} {
+		if !strings.Contains(audits, expected) {
+			t.Fatalf("faltaba auditoria esperada %q en %s", expected, audits)
+		}
 	}
 }
 
@@ -167,6 +185,149 @@ func TestRunnerRunControlPlaneSinTrabajoNoAudita(t *testing.T) {
 
 	if len(service.audits) != 0 {
 		t.Fatalf("no esperaba auditorias, got=%d", len(service.audits))
+	}
+}
+
+func TestRunnerRunControlPlaneBatchAuditaLentitud(t *testing.T) {
+	service := &stubAutomationService{
+		transcriptCount: 1,
+	}
+	r := &Runner{
+		Automation:         service,
+		SlowBatchThreshold: 5 * time.Millisecond,
+	}
+
+	r.runControlPlaneBatch(
+		"runtime_transcript",
+		"runtime_transcript",
+		"runtime_transcript_batch",
+		"runtime_transcript_batch_error",
+		"runtime_transcript_batch_panic",
+		"Conversación/runtime transcript procesado: %d",
+		func() (int, error) {
+			time.Sleep(10 * time.Millisecond)
+			return 1, nil
+		},
+	)
+
+	audits := strings.Join(service.audits, "\n")
+	if !strings.Contains(audits, "control_plane_batch_slow|runtime_transcript|batch=runtime_transcript") {
+		t.Fatalf("deberia auditar el batch lento, got=%s", audits)
+	}
+}
+
+func TestRunnerWarmStartupDelayDefault(t *testing.T) {
+	r := &Runner{}
+	if got := r.warmStartupDelay(); got != 15*time.Second {
+		t.Fatalf("warmStartupDelay default inesperado: %s", got)
+	}
+	r.WarmStartupDelay = 7 * time.Second
+	if got := r.warmStartupDelay(); got != 7*time.Second {
+		t.Fatalf("warmStartupDelay override inesperado: %s", got)
+	}
+}
+
+func TestRunnerResidentStartupDelayDefaults(t *testing.T) {
+	r := &Runner{}
+	if got := r.reanimacionStartupDelay(); got != 10*time.Second {
+		t.Fatalf("reanimacionStartupDelay default inesperado: %s", got)
+	}
+	if got := r.saludStartupDelay(); got != 20*time.Second {
+		t.Fatalf("saludStartupDelay default inesperado: %s", got)
+	}
+	if got := r.planificacionStartupDelay(); got != 30*time.Second {
+		t.Fatalf("planificacionStartupDelay default inesperado: %s", got)
+	}
+}
+
+func TestRunnerResidentStartupDelayOverrides(t *testing.T) {
+	r := &Runner{
+		ReanimacionCada:   5 * time.Second,
+		SaludCada:         7 * time.Second,
+		PlanificacionCada: 9 * time.Second,
+	}
+	if got := r.reanimacionStartupDelay(); got != 0 {
+		t.Fatalf("reanimacionStartupDelay con override inesperado: %s", got)
+	}
+	if got := r.saludStartupDelay(); got != 0 {
+		t.Fatalf("saludStartupDelay con override inesperado: %s", got)
+	}
+	if got := r.planificacionStartupDelay(); got != 0 {
+		t.Fatalf("planificacionStartupDelay con override inesperado: %s", got)
+	}
+}
+
+func TestRunnerRuntimeOrdersStartupDelayDefault(t *testing.T) {
+	r := &Runner{}
+	if got := r.runtimeOrdersStartupDelay(); got != 5*time.Second {
+		t.Fatalf("runtimeOrdersStartupDelay default inesperado: %s", got)
+	}
+	r.RuntimeOrdersCada = 7 * time.Second
+	if got := r.runtimeOrdersStartupDelay(); got != 0 {
+		t.Fatalf("runtimeOrdersStartupDelay con override inesperado: %s", got)
+	}
+}
+
+func TestRunnerColdStartupDelayDefault(t *testing.T) {
+	r := &Runner{}
+	if got := r.coldStartupDelay(); got != 60*time.Second {
+		t.Fatalf("coldStartupDelay default inesperado: %s", got)
+	}
+	r.ControlPlaneColdCada = 7 * time.Second
+	if got := r.coldStartupDelay(); got != 0 {
+		t.Fatalf("coldStartupDelay con override inesperado: %s", got)
+	}
+}
+
+func TestRunnerNotificationRetryStartupDelayDefault(t *testing.T) {
+	r := &Runner{}
+	if got := r.notificationRetryStartupDelay(); got != 30*time.Second {
+		t.Fatalf("notificationRetryStartupDelay default inesperado: %s", got)
+	}
+	r.NotificationRetryCada = 7 * time.Second
+	if got := r.notificationRetryStartupDelay(); got != 0 {
+		t.Fatalf("notificationRetryStartupDelay con override inesperado: %s", got)
+	}
+}
+
+func TestRunnerAutoWakeRuntimeMailboxThrottle(t *testing.T) {
+	r := &Runner{}
+	r.registerBatch("control_plane_runtime_mailbox")
+
+	if !r.autoWakeRuntimeMailbox() {
+		t.Fatal("primer auto wake de mailbox debería aceptarse")
+	}
+	select {
+	case <-r.batchWakeChannel("control_plane_runtime_mailbox"):
+	default:
+		t.Fatal("debería haber wake pendiente en mailbox")
+	}
+	if r.autoWakeRuntimeMailbox() {
+		t.Fatal("segundo auto wake inmediato de mailbox no debería aceptarse")
+	}
+}
+
+func TestRunnerAutoWakeRuntimeOrdersThrottle(t *testing.T) {
+	r := &Runner{}
+	r.registerBatch("control_plane_runtime_orders")
+
+	if !r.autoWakeRuntimeOrders() {
+		t.Fatal("primer auto wake de orders debería aceptarse")
+	}
+	select {
+	case <-r.batchWakeChannel("control_plane_runtime_orders"):
+	default:
+		t.Fatal("debería haber wake pendiente en orders")
+	}
+	if r.autoWakeRuntimeOrders() {
+		t.Fatal("segundo auto wake inmediato de orders no debería aceptarse")
+	}
+}
+
+func TestRunnerRuntimeWakeThrottleDefaultMenosAgresivo(t *testing.T) {
+	r := &Runner{}
+	if got := r.runtimeWakeThrottle(); got != 10*time.Second {
+		t.Fatalf("runtimeWakeThrottle default inesperado: %s", got)
 	}
 }
 
@@ -689,6 +850,37 @@ func TestRunnerRunControlPlaneRuntimeMailboxNoSeBloqueaPorWarmActive(t *testing.
 	}
 }
 
+func TestRunnerRunControlPlaneWarmRespetaSkipGuard(t *testing.T) {
+	service := &stubAutomationService{
+		autonomyCount: 1,
+		skipLoops:     map[string]string{"control_plane_warm": "workers_quota_blocked"},
+	}
+	r := &Runner{Automation: service}
+
+	r.runControlPlaneWarm()
+
+	if len(service.audits) != 0 {
+		t.Fatalf("warm no deberia auditar si el guard lo salta: %+v", service.audits)
+	}
+}
+
+func TestRunnerRunControlPlaneRuntimeMailboxRespetaSkipGuard(t *testing.T) {
+	service := &stubAutomationService{
+		mailboxCount: 1,
+		skipLoops:    map[string]string{"control_plane_runtime_mailbox": "workers_quota_blocked"},
+	}
+	r := &Runner{Automation: service}
+
+	r.runControlPlaneRuntimeMailbox()
+
+	if service.mailboxCalls != 0 {
+		t.Fatalf("runtime_mailbox no deberia ejecutarse si el guard lo salta: calls=%d", service.mailboxCalls)
+	}
+	if len(service.audits) != 0 {
+		t.Fatalf("runtime_mailbox no deberia auditar si el guard lo salta: %+v", service.audits)
+	}
+}
+
 func TestRunnerRunControlPlaneRuntimeTranscriptNoSeBloqueaPorWarmActive(t *testing.T) {
 	service := &stubAutomationService{transcriptCount: 1}
 	r := &Runner{Automation: service}
@@ -710,6 +902,7 @@ func TestRunnerStartNonResidentWorkerNoLanzaNucleoResidente(t *testing.T) {
 		Automation:            service,
 		StartupGrace:          5 * time.Millisecond,
 		ControlPlaneWarmCada:  10 * time.Millisecond,
+		WarmStartupDelay:      1 * time.Millisecond,
 		ControlPlaneColdCada:  time.Hour,
 		NotificationRetryCada: time.Hour,
 	}
@@ -737,6 +930,7 @@ func TestRunnerStartNonResidentWorkerWithOptionsPermiteAislarWarm(t *testing.T) 
 		Automation:            service,
 		StartupGrace:          5 * time.Millisecond,
 		ControlPlaneWarmCada:  10 * time.Millisecond,
+		WarmStartupDelay:      1 * time.Millisecond,
 		ControlPlaneColdCada:  10 * time.Millisecond,
 		NotificationRetryCada: 10 * time.Millisecond,
 	}

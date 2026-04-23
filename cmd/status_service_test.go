@@ -18,6 +18,15 @@ func TestAgenteCuentaComoConectadoRespetaEstadoCuotaVisible(t *testing.T) {
 	if agenteCuentaComoConectado(&db.Agente{Nombre: "Codex1", Activo: false, EstadoCuota: "activo"}) {
 		t.Fatalf("un agente sin sesion activa no deberia contar como conectado")
 	}
+	if agenteCuentaComoConectado(&db.Agente{
+		Nombre:       "CodexStale",
+		Activo:       false,
+		EstadoCuota:  "activo",
+		EstadoSesion: "",
+		UltimaSesion: timePtr(time.Now().UTC()),
+	}) {
+		t.Fatalf("una ultima sesion reciente sin sesion operativa no deberia contar como conectado")
+	}
 	if agenteCuentaComoConectado(&db.Agente{Nombre: "Codex2", Activo: true, EstadoCuota: "agotado"}) {
 		t.Fatalf("un agente agotado no deberia contar como conectado visible")
 	}
@@ -51,6 +60,171 @@ func TestAgenteCuentaComoConectadoRespetaEstadoCuotaVisible(t *testing.T) {
 		EstadoCuota: "enfriamiento",
 	}) {
 		t.Fatalf("un agente local detectado por nombre no deberia caer por enfriamiento legacy")
+	}
+}
+
+func TestStatusSnapshotNeedsImmediateRefreshSiActivoVisibleVieneConFlagInactivo(t *testing.T) {
+	if !statusSnapshotNeedsImmediateRefresh(apiStatusResponse{
+		AgentesActivos: []*db.Agente{{Nombre: "CodexBudget", Activo: false, EstadoCuota: "activo"}},
+	}) {
+		t.Fatalf("un snapshot con agentesActivos pero flag Activo=false debe forzar refresh")
+	}
+}
+
+func TestStatusSnapshotCanStayLightSiSoloHayCuotaBloqueando(t *testing.T) {
+	now := time.Now().UTC()
+	resetAt := now.Add(20 * time.Minute)
+	status := apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		TareasEnProgreso: []tareaLite{{ID: 24, Estado: db.TareaEnProgreso}},
+		Autonomia: autonomiaResumen{
+			Supervisando:  1,
+			WorkConfirmed: 1,
+		},
+	}
+	if !statusSnapshotCanStayLight(status) {
+		t.Fatalf("deberia poder quedarse en snapshot ligero: %+v", status)
+	}
+	if statusSnapshotNeedsImmediateRefresh(status) {
+		t.Fatalf("no deberia forzar refresh inmediato en cuota bloqueada idle")
+	}
+}
+
+func TestStatusSnapshotCanStayLightNoAplicaSiHayContinuidadPendiente(t *testing.T) {
+	now := time.Now().UTC()
+	resetAt := now.Add(20 * time.Minute)
+	status := apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		TareasEnProgreso: []tareaLite{{ID: 24, Estado: db.TareaEnProgreso}},
+		Autonomia: autonomiaResumen{
+			Supervisando:         1,
+			ContinuidadPendiente: 1,
+		},
+	}
+	if statusSnapshotCanStayLight(status) {
+		t.Fatalf("no deberia quedarse light si hay continuidad pendiente: %+v", status)
+	}
+}
+
+func TestStatusSnapshotCanStayLightNoAplicaSiHayReservadasODispatch(t *testing.T) {
+	now := time.Now().UTC()
+	resetAt := now.Add(20 * time.Minute)
+	base := apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+	}
+	withReserved := base
+	withReserved.TareasReservadas = []tareaLite{{ID: 2, Estado: db.TareaAsignada}}
+	if statusSnapshotCanStayLight(withReserved) {
+		t.Fatalf("no deberia quedarse light con reservadas: %+v", withReserved)
+	}
+	withDispatch := base
+	withDispatch.DeudaDispatch = deudaDispatchResumen{Pendientes: 1, Total: 1}
+	if statusSnapshotCanStayLight(withDispatch) {
+		t.Fatalf("no deberia quedarse light con dispatch pendiente: %+v", withDispatch)
+	}
+}
+
+func TestNormalizarAgentesVisiblesStatusDescartaActivosInconsistentes(t *testing.T) {
+	activos, trabajando, saturados := normalizarAgentesVisiblesStatus(
+		[]*db.Agente{
+			{Nombre: "CodexBudget", Activo: false, EstadoCuota: "activo"},
+			{Nombre: "Codex1", Activo: true, EstadoCuota: "activo"},
+		},
+		[]*db.Agente{
+			{Nombre: "CodexBudget", Activo: false, EstadoCuota: "activo"},
+			{Nombre: "Codex1", Activo: true, EstadoCuota: "activo"},
+		},
+		[]*db.Agente{
+			{Nombre: "CodexBudget", Activo: false, EstadoCuota: "activo"},
+		},
+	)
+	if len(activos) != 1 || activos[0].Nombre != "Codex1" {
+		t.Fatalf("activos normalizados inesperados: %+v", activos)
+	}
+	if len(trabajando) != 1 || trabajando[0].Nombre != "Codex1" {
+		t.Fatalf("trabajando normalizados inesperados: %+v", trabajando)
+	}
+	if len(saturados) != 0 {
+		t.Fatalf("saturados normalizados inesperados: %+v", saturados)
+	}
+}
+
+func TestStatusRowsForSnapshotPrefierePanelSnapshotFresco(t *testing.T) {
+	prevFetcher := statusRowsFetcher
+	defer func() {
+		statusRowsFetcher = prevFetcher
+		resetAgentPanelSnapshotCache()
+	}()
+	resetAgentPanelSnapshotCache()
+	storeAgentPanelSnapshot([]agentesapp.Row{{Agente: &db.Agente{Nombre: "CodexPanel"}, EstadoOperativo: "trabajando"}}, time.Now().UTC())
+	statusRowsFetcher = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{Agente: &db.Agente{Nombre: "CodexFetcher"}, EstadoOperativo: "trabajando"}}, nil
+	}
+	rows, err := statusRowsForSnapshot(20 * time.Millisecond)
+	if err != nil {
+		t.Fatalf("statusRowsForSnapshot: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Agente == nil || rows[0].Agente.Nombre != "CodexPanel" {
+		t.Fatalf("deberia preferir panel snapshot fresco, rows=%+v", rows)
+	}
+}
+
+func TestStatusRowsForSnapshotUsaStatusLigeroEnQuotaBlockedIdle(t *testing.T) {
+	prevFetcher := statusRowsFetcher
+	defer func() {
+		statusRowsFetcher = prevFetcher
+		resetAgentPanelSnapshotCache()
+		resetStatusSnapshotCache()
+	}()
+	resetAgentPanelSnapshotCache()
+	resetStatusSnapshotCache()
+
+	now := time.Now().UTC()
+	resetAt := now.Add(20 * time.Minute)
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		TareasEnProgreso: []tareaLite{{ID: 24, Estado: db.TareaEnProgreso}},
+		Autonomia: autonomiaResumen{
+			Supervisando:  1,
+			WorkConfirmed: 1,
+		},
+	}, now, time.Minute)
+
+	calls := 0
+	statusRowsFetcher = func() ([]agentesapp.Row, error) {
+		calls++
+		return []agentesapp.Row{{Agente: &db.Agente{Nombre: "CodexFetcher"}, EstadoOperativo: "trabajando"}}, nil
+	}
+
+	rows, err := statusRowsForSnapshot(20 * time.Millisecond)
+	if err != nil {
+		t.Fatalf("statusRowsForSnapshot: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("no deberia pedir filas ricas en quota_blocked idle, calls=%d", calls)
+	}
+	if len(rows) != 1 || rows[0].Agente == nil || rows[0].Agente.Nombre != "Codex1" {
+		t.Fatalf("rows ligeras inesperadas: %+v", rows)
 	}
 }
 
@@ -370,6 +544,186 @@ func TestStatusServiceNoEsperaIndefinidamenteRefreshEnVuelo(t *testing.T) {
 	}
 }
 
+func TestStatusServiceDevuelveSnapshotValidaSinEsperarRefreshEnVuelo(t *testing.T) {
+	prevNow := statusNowFunc
+	prevTTL := statusSnapshotTTL
+	prevAsync := statusAsyncRefresh
+	resetStatusSnapshotCache()
+	defer func() {
+		statusNowFunc = prevNow
+		statusSnapshotTTL = prevTTL
+		statusAsyncRefresh = prevAsync
+		resetStatusSnapshotCache()
+	}()
+
+	current := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return current }
+	statusSnapshotTTL = time.Minute
+	statusAsyncRefresh = true
+
+	waitCh := make(chan struct{})
+	statusCacheState.mu.Lock()
+	statusCacheState.value = apiStatusResponse{Generado: "cached"}
+	statusCacheState.expires = current.Add(time.Minute)
+	statusCacheState.ok = true
+	statusCacheState.refreshing = true
+	statusCacheState.waitCh = waitCh
+	statusCacheState.mu.Unlock()
+
+	start := time.Now()
+	status, err := dbStatusService{}.FetchStatus()
+	elapsed := time.Since(start)
+	close(waitCh)
+	if err != nil {
+		t.Fatalf("fetch status con snapshot valida: %v", err)
+	}
+	if status.Generado != "cached" {
+		t.Fatalf("deberia devolver snapshot cacheada, got=%+v", status)
+	}
+	if elapsed > 50*time.Millisecond {
+		t.Fatalf("no deberia esperar refresh en vuelo cuando ya hay snapshot valida, elapsed=%s", elapsed)
+	}
+}
+
+func TestStatusServiceAplicaBackoffTrasTimeoutFresco(t *testing.T) {
+	prevFetcher := statusFreshFetcher
+	prevFastFetcher := statusFastFetcher
+	prevFreshTimeout := statusFreshTimeout
+	prevFastTimeout := statusFastTimeout
+	prevFailureBackoff := statusFailureBackoffTTL
+	prevNow := statusNowFunc
+	resetStatusSnapshotCache()
+	defer func() {
+		statusFreshFetcher = prevFetcher
+		statusFastFetcher = prevFastFetcher
+		statusFreshTimeout = prevFreshTimeout
+		statusFastTimeout = prevFastTimeout
+		statusFailureBackoffTTL = prevFailureBackoff
+		statusNowFunc = prevNow
+		resetStatusSnapshotCache()
+	}()
+
+	current := time.Date(2026, 4, 21, 11, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return current }
+	statusFreshTimeout = 20 * time.Millisecond
+	statusFastTimeout = 100 * time.Millisecond
+	statusFailureBackoffTTL = time.Second
+
+	blockFresh := make(chan struct{})
+	var freshCalls atomic.Int32
+	statusFreshFetcher = func() (apiStatusResponse, error) {
+		freshCalls.Add(1)
+		<-blockFresh
+		return apiStatusResponse{Generado: "fresh tardio"}, nil
+	}
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{
+			Generado:         "fallback",
+			TareasEnProgreso: []tareaLite{{ID: 1, Estado: db.TareaEnProgreso, Agente: "Codex2"}},
+		}, nil
+	}
+
+	service := dbStatusService{}
+	first, err := service.FetchStatus()
+	if err != nil {
+		t.Fatalf("first fetch: %v", err)
+	}
+	if first.Generado != "fallback" {
+		t.Fatalf("fallback inesperado: %+v", first)
+	}
+	statusCacheState.mu.Lock()
+	retryAfter := statusCacheState.retryAfter
+	okCached := statusCacheState.ok
+	generadoCached := statusCacheState.value.Generado
+	statusCacheState.mu.Unlock()
+	if !okCached || generadoCached != "fallback" || !retryAfter.After(current) {
+		t.Fatalf("cache/backoff inesperado: ok=%t generado=%q retryAfter=%s now=%s", okCached, generadoCached, retryAfter, current)
+	}
+	second, err := service.FetchStatus()
+	close(blockFresh)
+	if err != nil {
+		t.Fatalf("second fetch: %v", err)
+	}
+	if second.Generado != "fallback" {
+		t.Fatalf("deberia reutilizar fallback durante backoff: %+v", second)
+	}
+	if got := freshCalls.Load(); got > 1 {
+		t.Fatalf("no deberia relanzar fetch fresco durante backoff, calls=%d", got)
+	}
+}
+
+func TestStatusServicePrefiereFallbackRapidoAntesDeFetchFrescoEnFrio(t *testing.T) {
+	prevFetcher := statusFreshFetcher
+	prevFastFetcher := statusFastFetcher
+	prevFreshTimeout := statusFreshTimeout
+	prevFastTimeout := statusFastTimeout
+	prevFailureBackoff := statusFailureBackoffTTL
+	resetStatusSnapshotCache()
+	defer func() {
+		statusFreshFetcher = prevFetcher
+		statusFastFetcher = prevFastFetcher
+		statusFreshTimeout = prevFreshTimeout
+		statusFastTimeout = prevFastTimeout
+		statusFailureBackoffTTL = prevFailureBackoff
+		resetStatusSnapshotCache()
+	}()
+
+	statusFreshTimeout = 100 * time.Millisecond
+	statusFastTimeout = 20 * time.Millisecond
+	statusFailureBackoffTTL = time.Second
+
+	blockFresh := make(chan struct{})
+	statusFreshFetcher = func() (apiStatusResponse, error) {
+		<-blockFresh
+		return apiStatusResponse{Generado: "fresh tardio"}, nil
+	}
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{Generado: "fallback"}, nil
+	}
+
+	start := time.Now()
+	status, err := (dbStatusService{}).FetchStatus()
+	elapsed := time.Since(start)
+	close(blockFresh)
+	if err != nil {
+		t.Fatalf("fetch status: %v", err)
+	}
+	if status.Generado != "fallback" {
+		t.Fatalf("deberia devolver fallback rapido, got=%+v", status)
+	}
+	if elapsed > 150*time.Millisecond {
+		t.Fatalf("no deberia esperar al fetch fresco en frio, elapsed=%s", elapsed)
+	}
+}
+
+func TestStoreStatusSnapshotNoGuardaSnapshotDegenerada(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	storeStatusSnapshot(apiStatusResponse{Generado: "empty"}, time.Now().UTC())
+	if _, ok := readStatusSnapshotAny(); ok {
+		t.Fatalf("no deberia guardar snapshot degenerada")
+	}
+}
+
+func TestReadStatusSnapshotFreshIgnoraSnapshotDegenerada(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	statusCacheState.mu.Lock()
+	statusCacheState.value = apiStatusResponse{Generado: "empty"}
+	statusCacheState.expires = time.Now().Add(time.Minute)
+	statusCacheState.ok = true
+	statusCacheState.mu.Unlock()
+
+	if _, ok := readStatusSnapshotFresh(); ok {
+		t.Fatalf("no deberia reutilizar snapshot degenerada como fresca")
+	}
+	if _, ok := readStatusSnapshotAny(); ok {
+		t.Fatalf("no deberia reutilizar snapshot degenerada")
+	}
+}
+
 func TestAgentRowsForStatusWithinTimeoutDegradaRapido(t *testing.T) {
 	prevFetcher := statusRowsFetcher
 	prevTimeout := statusRowsTimeout
@@ -397,6 +751,282 @@ func TestAgentRowsForStatusWithinTimeoutDegradaRapido(t *testing.T) {
 	}
 }
 
+func TestFetchStatusFreshNoReintentaRowsSinTimeout(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: tmp,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoID,
+		CWD:         tmp,
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	agente := "Codex2"
+	if _, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Cerrar hot path",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Estado:      db.TareaEnProgreso,
+		Agente:      &agente,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "test",
+	}); err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+
+	prevFetcher := statusRowsFetcher
+	prevTimeout := statusRowsTimeout
+	defer func() {
+		statusRowsFetcher = prevFetcher
+		statusRowsTimeout = prevTimeout
+	}()
+
+	block := make(chan struct{})
+	statusRowsFetcher = func() ([]agentesapp.Row, error) {
+		<-block
+		return nil, nil
+	}
+	statusRowsTimeout = 20 * time.Millisecond
+
+	start := time.Now()
+	status, err := fetchStatusFresh()
+	elapsed := time.Since(start)
+	close(block)
+	if err != nil {
+		t.Fatalf("fetchStatusFresh: %v", err)
+	}
+	if elapsed > 250*time.Millisecond {
+		t.Fatalf("deberia degradar rapido sin relanzar rows sin timeout, elapsed=%s", elapsed)
+	}
+	if len(status.AgentesActivos) != 1 || status.AgentesActivos[0].Nombre != "Codex2" {
+		t.Fatalf("agentes activos ligeros inesperados: %+v", status.AgentesActivos)
+	}
+}
+
+func TestFetchStatusFreshNoPromocionaResiduoSinSesionOperativaPorEstadoCrudo(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexBudget", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := db.DB.Exec(`UPDATE agentes SET activo=0, habilitado=1, estado_sesion='disponible', ultima_sesion=? WHERE nombre='CodexBudget'`, now); err != nil {
+		t.Fatalf("forzar estado crudo: %v", err)
+	}
+
+	prevFetcher := statusRowsFetcher
+	prevTimeout := statusRowsTimeout
+	defer func() {
+		statusRowsFetcher = prevFetcher
+		statusRowsTimeout = prevTimeout
+	}()
+
+	block := make(chan struct{})
+	statusRowsFetcher = func() ([]agentesapp.Row, error) {
+		<-block
+		return nil, nil
+	}
+	statusRowsTimeout = 20 * time.Millisecond
+
+	status, err := fetchStatusFresh()
+	close(block)
+	if err != nil {
+		t.Fatalf("fetchStatusFresh: %v", err)
+	}
+	if len(status.AgentesActivos) != 0 {
+		t.Fatalf("un residuo sin sesion operativa no deberia promocionarse por estado crudo: %+v", status.AgentesActivos)
+	}
+}
+
+func TestAgentesVisiblesLigeroMarcaTrabajandoPorTareaEnProgreso(t *testing.T) {
+	agente := &db.Agente{Nombre: "Codex2", Activo: true, EstadoCuota: "activo"}
+	activos, trabajando, quota := agentesVisiblesLigero(
+		[]*db.Agente{agente},
+		[]tareaLite{{ID: 7, Estado: db.TareaEnProgreso, Agente: "Codex2"}},
+	)
+	if len(activos) != 1 || activos[0].Nombre != "Codex2" {
+		t.Fatalf("activos ligeros inesperados: %+v", activos)
+	}
+	if len(trabajando) != 1 || trabajando[0].Nombre != "Codex2" {
+		t.Fatalf("trabajando ligeros inesperados: %+v", trabajando)
+	}
+	if len(quota) != 0 {
+		t.Fatalf("quota bloqueados inesperados: %+v", quota)
+	}
+}
+
+func TestFetchStatusFreshToleraSeccionesOpcionalesLentas(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: tmp,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoID,
+		CWD:         tmp,
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	prevProjects := statusListProjectsFetcher
+	prevTimeout := statusOptionalSectionTimeout
+	defer func() {
+		statusListProjectsFetcher = prevProjects
+		statusOptionalSectionTimeout = prevTimeout
+	}()
+
+	block := make(chan struct{})
+	statusListProjectsFetcher = func() ([]*db.Proyecto, error) {
+		<-block
+		return nil, nil
+	}
+	statusOptionalSectionTimeout = 20 * time.Millisecond
+
+	start := time.Now()
+	status, err := fetchStatusFresh()
+	elapsed := time.Since(start)
+	close(block)
+	if err != nil {
+		t.Fatalf("fetchStatusFresh: %v", err)
+	}
+	if elapsed > 250*time.Millisecond {
+		t.Fatalf("deberia degradar rapido con seccion opcional lenta, elapsed=%s", elapsed)
+	}
+	found := false
+	for _, agente := range status.Agentes {
+		if agente != nil && agente.Nombre == "Codex2" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("deberia conservar a Codex2 en snapshot degradado, agentes=%+v", status.Agentes)
+	}
+}
+
+func TestFetchStatusFreshReutilizaResumenDispatchParaEvitarBarridosDuplicados(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: tmp,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoID,
+		CWD:         tmp,
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	prevSummary := statusDispatchSummaryFetcher
+	prevDebt := statusDispatchDebtFetcher
+	prevHandoffs := statusHandoffsFetcher
+	prevRows := statusRowsFetcher
+	prevIncludeProposalSections := statusIncludeProposalSections
+	defer func() {
+		statusDispatchSummaryFetcher = prevSummary
+		statusDispatchDebtFetcher = prevDebt
+		statusHandoffsFetcher = prevHandoffs
+		statusRowsFetcher = prevRows
+		statusIncludeProposalSections = prevIncludeProposalSections
+	}()
+
+	statusDispatchSummaryFetcher = func() (statusDispatchSummary, error) {
+		return statusDispatchSummary{
+			Deuda: deudaDispatchResumen{
+				Pendientes:    1,
+				WorkConfirmed: 2,
+				Total:         3,
+			},
+			Handoffs: 4,
+		}, nil
+	}
+	statusDispatchDebtFetcher = func() (deudaDispatchResumen, error) {
+		t.Fatal("no deberia consultar deuda dispatch separada si ya existe resumen combinado")
+		return deudaDispatchResumen{}, nil
+	}
+	statusHandoffsFetcher = func() (int, error) {
+		t.Fatal("no deberia consultar handoffs separados si ya existe resumen combinado")
+		return 0, nil
+	}
+	statusRowsFetcher = func() ([]agentesapp.Row, error) {
+		return nil, errors.New("rows degradado")
+	}
+	statusIncludeProposalSections = false
+
+	status, err := fetchStatusFresh()
+	if err != nil {
+		t.Fatalf("fetchStatusFresh: %v", err)
+	}
+	if status.DeudaDispatch.WorkConfirmed != 2 || status.DeudaDispatch.Pendientes != 1 || status.DeudaDispatch.Total != 3 {
+		t.Fatalf("deuda dispatch inesperada: %+v", status.DeudaDispatch)
+	}
+	if status.Autonomia.Handoffs != 4 {
+		t.Fatalf("handoffs inesperados: %+v", status.Autonomia)
+	}
+}
+
+func TestFetchStatusFastFallbackCompletaHandoffsDesdeFetcher(t *testing.T) {
+	prevRowsFetcher := statusRowsFetcher
+	prevHandoffs := statusHandoffsFetcher
+	defer func() {
+		statusRowsFetcher = prevRowsFetcher
+		statusHandoffsFetcher = prevHandoffs
+	}()
+
+	statusRowsFetcher = func() ([]agentesapp.Row, error) {
+		return nil, errors.New("rows degradado")
+	}
+	statusHandoffsFetcher = func() (int, error) {
+		return 2, nil
+	}
+
+	status, err := fetchStatusFastFallback()
+	if err != nil {
+		t.Fatalf("fetchStatusFastFallback: %v", err)
+	}
+	if status.Autonomia.Handoffs != 2 {
+		t.Fatalf("deberia completar handoffs desde el fetcher ligero, got=%+v", status.Autonomia)
+	}
+}
+
 func TestStoreStatusSnapshotUsaTTLReducidoSiNoHayActivosYHayTrabajo(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()
@@ -411,6 +1041,35 @@ func TestStoreStatusSnapshotUsaTTLReducidoSiNoHayActivosYHayTrabajo(t *testing.T
 	statusCacheState.mu.Unlock()
 	if got := expires.Sub(now); got != statusFallbackTTL {
 		t.Fatalf("ttl inesperado para snapshot inconsistente: %s", got)
+	}
+}
+
+func TestInvalidateStatusSnapshotCacheConservaValorPeroMarcaStale(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	now := time.Date(2026, 4, 7, 0, 0, 0, 0, time.UTC)
+	prevNow := statusNowFunc
+	statusNowFunc = func() time.Time { return now }
+	defer func() { statusNowFunc = prevNow }()
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Generado:          now.Format(time.RFC3339),
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex1"}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex1"}},
+	}, now, time.Minute)
+
+	invalidateStatusSnapshotCache()
+
+	statusCacheState.mu.Lock()
+	defer statusCacheState.mu.Unlock()
+	if !statusCacheState.ok {
+		t.Fatal("deberia conservar snapshot previa tras invalidacion suave")
+	}
+	if statusCacheState.value.Generado != now.Format(time.RFC3339) {
+		t.Fatalf("snapshot conservada inesperada: %+v", statusCacheState.value)
+	}
+	if got := statusCacheState.expires.Sub(now); got != statusSoftInvalidateTTL {
+		t.Fatalf("la invalidacion suave deberia recortar ttl a %s, got=%s", statusSoftInvalidateTTL, got)
 	}
 }
 
@@ -477,6 +1136,31 @@ func TestAgentesVisiblesPorEstadoOperativoRowsNoCuentaArrancandoComoTrabajando(t
 	}
 }
 
+func TestAgentesVisiblesPorEstadoOperativoRowsCanonicalizaAliasCodex(t *testing.T) {
+	agenteCanonico := &db.Agente{Nombre: "Codex2", Rol: "programador"}
+	agenteAlias := &db.Agente{Nombre: "codex2", Rol: "programador"}
+	rows := []agentesapp.Row{
+		{Agente: &db.Agente{Nombre: "Codex2", Rol: "programador"}, EstadoOperativo: "atascado"},
+	}
+
+	activos, trabajando, saturados, atascados, authManual, quotaBlocked, ok := agentesVisiblesPorEstadoOperativoRows([]*db.Agente{agenteCanonico, agenteAlias}, rows)
+	if !ok {
+		t.Fatalf("debería resolver filas operativas")
+	}
+	if len(atascados) != 1 || atascados[0].Nombre != "Codex2" {
+		t.Fatalf("atascados inesperados: %+v", atascados)
+	}
+	if len(activos) > 1 || len(trabajando) > 0 || len(saturados) > 0 || len(authManual) > 0 || len(quotaBlocked) > 0 {
+		t.Fatalf("listas inesperadas: activos=%+v trabajando=%+v saturados=%+v auth=%+v quota=%+v", activos, trabajando, saturados, authManual, quotaBlocked)
+	}
+}
+
+func TestAgenteBloqueadoPorCuotaVisibleSinSenalesNoBloquea(t *testing.T) {
+	if agenteBloqueadoPorCuotaVisible(&db.Agente{Nombre: "Codex2", Rol: "programador"}) {
+		t.Fatal("un agente sin ninguna señal de cuota no debería quedar bloqueado por defecto")
+	}
+}
+
 func TestResumirAutonomiaLigeraDerivaSupervisorYTrabajoConfirmado(t *testing.T) {
 	out := resumirAutonomiaLigera(
 		[]*db.Agente{
@@ -495,7 +1179,7 @@ func TestResumirAutonomiaLigeraDerivaSupervisorYTrabajoConfirmado(t *testing.T) 
 	if out.Supervisando != 1 {
 		t.Fatalf("supervisando inesperado: %+v", out)
 	}
-	if out.Continuando != 1 {
+	if out.Continuando != 0 {
 		t.Fatalf("continuando inesperado: %+v", out)
 	}
 	if out.WorkConfirmed != 1 {
@@ -519,8 +1203,122 @@ func TestResumirAutonomiaLigeraCuentaSupervisorTrabajandoComoConfirmado(t *testi
 		},
 		time.Now().UTC(),
 	)
-	if out.Supervisando != 1 || out.Continuando != 0 || out.WorkConfirmed != 1 {
+	if out.Supervisando != 0 || out.Continuando != 0 || out.WorkConfirmed != 1 {
 		t.Fatalf("resumen ligero inesperado: %+v", out)
+	}
+}
+
+func TestResumirAutonomiaLigeraCanonicalizaAliasCodex(t *testing.T) {
+	out := resumirAutonomiaLigera(
+		[]*db.Agente{
+			{Nombre: "Codex1", Rol: "programador"},
+			{Nombre: "Codex2", Rol: "programador"},
+		},
+		[]*db.Agente{
+			{Nombre: "codex2", Rol: "programador"},
+		},
+		[]tareaLite{
+			{ID: 22, Estado: db.TareaEnProgreso, Agente: "Codex2"},
+			{ID: 23, Estado: db.TareaEnProgreso, Agente: "codex2"},
+		},
+		time.Now().UTC(),
+	)
+	if out.Supervisando != 1 || out.Continuando != 0 || out.WorkConfirmed != 1 {
+		t.Fatalf("resumen ligero inesperado con alias canonico: %+v", out)
+	}
+}
+
+func TestStatusVisibleWorkerCountersFiltraSupervisorRealContado(t *testing.T) {
+	autonomia := autonomiaResumen{Supervisando: 1}
+	autonomia.addSupervisorName("Codex2")
+	workersConectados, workersTrabajando, supervisoresActivos := statusVisibleWorkerCounters(
+		[]*db.Agente{
+			{Nombre: "Codex1", Rol: "programador"},
+			{Nombre: "Codex4", Rol: "programador"},
+		},
+		[]*db.Agente{
+			{Nombre: "Codex1", Rol: "programador"},
+			{Nombre: "Codex4", Rol: "programador"},
+		},
+		autonomia,
+	)
+	if workersConectados != 2 || workersTrabajando != 2 || supervisoresActivos != 1 {
+		t.Fatalf("contadores visibles inesperados: conectados=%d trabajando=%d supervisores=%d", workersConectados, workersTrabajando, supervisoresActivos)
+	}
+}
+
+func TestResumirAutonomiaLigeraNoCuentaComoSupervisorAConfiguradoSiEstaEjecutandoTarea(t *testing.T) {
+	prevAutonomy := statusListAutonomyFetcher
+	prevConfig := statusConfigGet
+	defer func() {
+		statusListAutonomyFetcher = prevAutonomy
+		statusConfigGet = prevConfig
+	}()
+
+	statusConfigGet = func(string) (string, error) { return "Codex1", nil }
+	statusListAutonomyFetcher = func() ([]*db.ProyectoAutonomia, error) {
+		return []*db.ProyectoAutonomia{{
+			ProyectoID:        1,
+			Enabled:           true,
+			SupervisorAgente:  "Codex2",
+			ReserveSupervisor: true,
+			EstadoAutonomia:   db.AutonomiaProyectoActiva,
+		}}, nil
+	}
+
+	out := resumirAutonomiaLigera(
+		[]*db.Agente{
+			{Nombre: "Codex1", Rol: "programador"},
+			{Nombre: "Codex2", Rol: "programador"},
+			{Nombre: "Codex4", Rol: "programador"},
+		},
+		[]*db.Agente{
+			{Nombre: "Codex1", Rol: "programador"},
+		},
+		[]tareaLite{
+			{ID: 26, Estado: db.TareaEnProgreso, Agente: "Codex1"},
+		},
+		time.Now().UTC(),
+	)
+	if out.Supervisando != 1 || out.Continuando != 0 || out.WorkConfirmed != 1 {
+		t.Fatalf("el supervisor configurado con tarea activa debe contar como worker y no inflar supervisando: %+v", out)
+	}
+}
+
+func TestBuildUltraLiteStatusReadOnlyCuentaSupervisorDesdePolicyProyecto(t *testing.T) {
+	prevAutonomy := statusListAutonomyFetcher
+	prevConfig := statusConfigGet
+	defer func() {
+		statusListAutonomyFetcher = prevAutonomy
+		statusConfigGet = prevConfig
+	}()
+
+	statusConfigGet = func(string) (string, error) { return "Codex1", nil }
+	statusListAutonomyFetcher = func() ([]*db.ProyectoAutonomia, error) {
+		return []*db.ProyectoAutonomia{{
+			ProyectoID:           1,
+			Enabled:              true,
+			SupervisorAgente:     "Codex2",
+			ReserveSupervisor:    true,
+			EstadoAutonomia:      db.AutonomiaProyectoActiva,
+			ObjetivoGeneral:      "Terminar la app",
+			DefinitionOfDoneJSON: "{}",
+		}}, nil
+	}
+
+	status := buildUltraLiteStatusReadOnly(time.Now().UTC(),
+		[]*db.Agente{
+			{Nombre: "Codex2", Activo: true, EstadoCuota: "activo"},
+			{Nombre: "Codex4", Activo: true, EstadoCuota: "activo"},
+		},
+		map[string]int{"en_progreso": 1},
+		[]tareaLite{{ID: 31, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+	)
+	if status.Autonomia.Supervisando != 1 {
+		t.Fatalf("deberia contar supervisor reservado por policy de proyecto: %+v", status.Autonomia)
+	}
+	if status.Autonomia.Continuando != 0 {
+		t.Fatalf("continuando inesperado: %+v", status.Autonomia)
 	}
 }
 
@@ -552,6 +1350,167 @@ func TestAgentesVisiblesPorEstadoOperativoRowsCuentaAtascadoSoloSiTieneRuntimeUt
 	}
 	if len(quotaBlocked) != 0 {
 		t.Fatalf("quota bloqueados inesperados: %+v", quotaBlocked)
+	}
+}
+
+func TestResumirAutonomiaRowsCuentaSupervisorConNotaSupervisionAutomatica(t *testing.T) {
+	now := time.Now().UTC()
+	resumen := resumirAutonomiaRows([]agentesapp.Row{{
+		Agente:             &db.Agente{Nombre: "Codex2"},
+		Asignacion:         &db.Asignacion{Agente: "Codex2", ProyectoID: 1, Estado: db.AsignacionActiva, Nota: "supervision_automatica"},
+		WorkerAlive:        true,
+		WorkerHeartbeat:    ptrTimeStatus(now),
+		WorkerUpdatedAt:    ptrTimeStatus(now),
+		EstadoOperativo:    "trabajando",
+		LastAutonomyAction: "continuar_trabajo",
+	}}, now)
+	if resumen.Supervisando != 1 {
+		t.Fatalf("deberia contar supervisor con nota supervision_automatica: %+v", resumen)
+	}
+	if resumen.Continuando != 0 {
+		t.Fatalf("no deberia contar como continuando a la vez: %+v", resumen)
+	}
+}
+
+func TestResumirAutonomiaRowsMantieneSupervisorConHeartbeatQuietoSiRuntimeSigueFresco(t *testing.T) {
+	now := time.Now().UTC()
+	hb := now.Add(-70 * time.Second)
+	lastSeen := now.Add(-20 * time.Second)
+	resumen := resumirAutonomiaRows([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "Codex2"},
+		Asignacion:      &db.Asignacion{Agente: "Codex2", ProyectoID: 1, Estado: db.AsignacionActiva, Nota: "supervision_automatica"},
+		WorkerAlive:     true,
+		WorkerState:     "ready",
+		WorkerHeartbeat: &hb,
+		Handle:          &db.RuntimeHandle{Estado: "activo", LastSeenAt: &lastSeen},
+		EstadoOperativo: "disponible",
+	}}, now)
+	if resumen.Supervisando != 1 {
+		t.Fatalf("deberia mantener supervisor con runtime fresco aunque heartbeat este quieto: %+v", resumen)
+	}
+}
+
+func TestResumirAutonomiaRowsCuentaSupervisorBloqueadoPorRuntimeSiSigueVivo(t *testing.T) {
+	now := time.Now().UTC()
+	hb := now.Add(-70 * time.Second)
+	lastSeen := now.Add(-20 * time.Second)
+	resumen := resumirAutonomiaRows([]agentesapp.Row{{
+		Agente:             &db.Agente{Nombre: "Codex2"},
+		Asignacion:         &db.Asignacion{Agente: "Codex2", ProyectoID: 1, Estado: db.AsignacionActiva, Nota: "supervision_automatica"},
+		WorkerAlive:        true,
+		WorkerState:        "ready",
+		WorkerHeartbeat:    &hb,
+		Handle:             &db.RuntimeHandle{Estado: "activo", LastSeenAt: &lastSeen},
+		EstadoOperativo:    "bloqueado_por_runtime",
+		DetalleOperativo:   "heartbeat worker retrasado",
+		LastAutonomyAction: "supervisar_proyecto",
+		LastAutonomySource: "work_queue",
+		LastAutonomyState:  "work_confirmed",
+		LastAutonomyMoment: &now,
+	}}, now)
+	if resumen.Supervisando != 1 {
+		t.Fatalf("deberia contar supervisor vivo aunque su estado operativo sea bloqueado_por_runtime: %+v", resumen)
+	}
+	if resumen.Continuando != 0 {
+		t.Fatalf("no deberia contar como worker continuando: %+v", resumen)
+	}
+}
+
+func TestResumirAutonomiaRowsNoCuentaContinuityPendingSiWorkerYaTieneTareaActiva(t *testing.T) {
+	now := time.Now().UTC()
+	resumen := resumirAutonomiaRows([]agentesapp.Row{{
+		Agente:                   &db.Agente{Nombre: "Codex1"},
+		Handle:                   &db.RuntimeHandle{Estado: "activo", LastSeenAt: &now},
+		WorkerAlive:              true,
+		WorkerHeartbeat:          &now,
+		LastAutonomyAction:       "continuar_trabajo",
+		LastAutonomySource:       "work_queue",
+		LastAutonomyState:        "pending",
+		MailboxContinuityPending: 1,
+		OpenTasks:                1,
+	}}, now)
+	if resumen.Continuando != 1 {
+		t.Fatalf("deberia seguir contando como continuando: %+v", resumen)
+	}
+	if resumen.ContinuidadPendiente != 0 {
+		t.Fatalf("no deberia contar continuity_pending si el worker ya absorbio el trabajo: %+v", resumen)
+	}
+}
+
+func TestResumirAutonomiaRowsNoCuentaContinuityPendingSiSupervisorSoloInspeccionaSignalDeBajoValor(t *testing.T) {
+	now := time.Now().UTC()
+	resumen := resumirAutonomiaRows([]agentesapp.Row{{
+		Agente: &db.Agente{Nombre: "Codex2"},
+		Asignacion: &db.Asignacion{
+			Agente: "Codex2",
+			Estado: db.AsignacionActiva,
+			Nota:   "supervision_automatica",
+		},
+		Handle:                   &db.RuntimeHandle{Estado: "activo", LastSeenAt: &now},
+		WorkerAlive:              true,
+		WorkerHeartbeat:          &now,
+		WorkerUpdatedAt:          &now,
+		EstadoOperativo:          "trabajando",
+		LastAutonomyAction:       "inspeccionar_transcript_signal",
+		LastAutonomySource:       "work_queue",
+		LastAutonomyState:        "pending",
+		LastAutonomyReason:       "agente=Codex1 signal=tool_exploration transcript=123",
+		MailboxContinuityPending: 1,
+	}}, now)
+	if resumen.Supervisando != 1 {
+		t.Fatalf("deberia seguir contando supervisor: %+v", resumen)
+	}
+	if resumen.ContinuidadPendiente != 0 {
+		t.Fatalf("no deberia contar continuity_pending por signal de bajo valor: %+v", resumen)
+	}
+}
+
+func TestResumirAutonomiaRowsNoCuentaContinuityPendingSiSupervisorSoloArrastraGuidanceDurableEnInbox(t *testing.T) {
+	now := time.Now().UTC()
+	resumen := resumirAutonomiaRows([]agentesapp.Row{{
+		Agente: &db.Agente{Nombre: "Codex2"},
+		Asignacion: &db.Asignacion{
+			Agente: "Codex2",
+			Estado: db.AsignacionActiva,
+			Nota:   "supervision_automatica",
+		},
+		Handle:                   &db.RuntimeHandle{Estado: "activo", LastSeenAt: &now},
+		WorkerAlive:              true,
+		WorkerHeartbeat:          &now,
+		WorkerUpdatedAt:          &now,
+		EstadoOperativo:          "trabajando",
+		LastAutonomyAction:       "inspeccionar_transcript_signal",
+		LastAutonomySource:       "work_queue",
+		LastAutonomyState:        "pending",
+		LastAutonomyReason:       "guidance durable escrita en inbox",
+		MailboxContinuityPending: 1,
+	}}, now)
+	if resumen.Supervisando != 1 {
+		t.Fatalf("deberia seguir contando supervisor: %+v", resumen)
+	}
+	if resumen.ContinuidadPendiente != 0 {
+		t.Fatalf("no deberia contar continuity_pending por guidance durable en inbox: %+v", resumen)
+	}
+}
+
+func TestAgentesVisiblesPorEstadoOperativoRowsOmiteResiduoPausadoSinTrabajo(t *testing.T) {
+	agente := &db.Agente{Nombre: "Codex4", Rol: "programador"}
+	rows := []agentesapp.Row{
+		{
+			Agente:          agente,
+			EstadoOperativo: "atascado",
+			Asignacion:      &db.Asignacion{Estado: db.AsignacionPausada, Nota: "handoff_cedido"},
+			Handle:          &db.RuntimeHandle{Estado: "activo"},
+			Runtime:         &db.RuntimeInstance{LogicalState: "activo"},
+		},
+	}
+
+	activos, trabajando, saturados, atascados, authManual, quotaBlocked, ok := agentesVisiblesPorEstadoOperativoRows([]*db.Agente{agente}, rows)
+	if !ok {
+		t.Fatalf("debería resolver filas operativas")
+	}
+	if len(activos) != 0 || len(trabajando) != 0 || len(saturados) != 0 || len(atascados) != 0 || len(authManual) != 0 || len(quotaBlocked) != 0 {
+		t.Fatalf("el residuo pausado sin trabajo no deberia contar como visible: activos=%+v trabajando=%+v saturados=%+v atascados=%+v auth=%+v quota=%+v", activos, trabajando, saturados, atascados, authManual, quotaBlocked)
 	}
 }
 

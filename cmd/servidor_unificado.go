@@ -11,6 +11,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"database/sql"
 	"fmt"
 	"log"
 	"net"
@@ -25,6 +26,8 @@ import (
 )
 
 var listenServerTCP = net.Listen
+var runtimeProcessDegradadosDeferredGate = planocontrol.NewThrottler()
+var runtimeProcessDegradadosDeferredIntervalOverride time.Duration
 
 type unifiedServerRuntimeOptions struct {
 	CoreOnly                 bool
@@ -159,8 +162,6 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 		debugLogger = newServerDebugLogger(kind)
 		debugLogger.Printf("startup addr=%s rpc=%s %s", listenAddr, rpclocal.BaseURL(normalizarAddrServidorLocal(listenAddr)), debugDurationsSummary(time.Minute, time.Minute, 30*time.Second, 15*time.Second))
 	}
-	prewarmUnifiedServerPrepareCaches(debugLogger)
-
 	controlCtx, cancel := context.WithCancel(context.Background())
 	runner := newControlPlaneRunner(debugLogger, debug.ControlPlane)
 	runner.StartupGrace = 5 * time.Second
@@ -187,6 +188,8 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 	} else if debugLogger != nil {
 		debugLogger.Printf("server_autobootstrap skipped=disabled")
 	}
+	launchStatusSnapshotWarmLoop(controlCtx, debugLogger)
+	launchAgentPanelSnapshotWarmLoop(controlCtx, debugLogger)
 	launchPrepareContextPrewarmLoop(controlCtx, debugLogger)
 	launchStorageMaintenanceLoop(controlCtx, debugLogger)
 	launchServerAutonomyMaintenanceLoop(controlCtx, debugLogger)
@@ -233,22 +236,11 @@ func prewarmUnifiedServerPrepareCaches(debugLogger *log.Logger) {
 	if !cfg.Enabled || strings.TrimSpace(cfg.ProjectSlug) == "" {
 		return
 	}
-	agents := make([]string, 0, 1+len(cfg.WorkerAgents))
-	if supervisor := strings.TrimSpace(cfg.SupervisorAgent); supervisor != "" {
-		agents = append(agents, supervisor)
-	}
-	agents = append(agents, cfg.WorkerAgents...)
-	seen := map[string]struct{}{}
-	for _, agente := range agents {
+	for _, agente := range serverPrepareContextAgents(cfg) {
 		agente = strings.TrimSpace(agente)
 		if agente == "" {
 			continue
 		}
-		key := strings.ToLower(agente)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
 		if _, _, _, err := db.ResolverPerfilEjecucionLanzamiento(&agente, cfg.ProjectSlug, "", "", ""); err != nil {
 			if debugLogger != nil {
 				debugLogger.Printf("model_policy_prewarm agente=%s proyecto=%s err=%v", agente, cfg.ProjectSlug, err)
@@ -267,16 +259,69 @@ func prewarmUnifiedServerPrepareCaches(debugLogger *log.Logger) {
 	}
 }
 
-func launchPrepareContextPrewarmLoop(ctx context.Context, debugLogger *log.Logger) {
-	cfg := loadServerAutobootstrapConfig()
-	if !cfg.Enabled || strings.TrimSpace(cfg.ProjectSlug) == "" {
+func launchStatusSnapshotWarmLoop(ctx context.Context, debugLogger *log.Logger) {
+	if ctx == nil || statusService == nil {
 		return
 	}
-	agents := make([]string, 0, 1+len(cfg.WorkerAgents))
-	if supervisor := strings.TrimSpace(cfg.SupervisorAgent); supervisor != "" {
-		agents = append(agents, supervisor)
+	go func() {
+		ticker := time.NewTicker(statusSnapshotWarmLoopInterval())
+		defer ticker.Stop()
+		seed := func() {
+			if snapshot, ok := readStatusSnapshotAny(); ok && !statusSnapshotNeedsImmediateRefresh(snapshot) {
+				return
+			}
+			start := time.Now()
+			if status, err := runStatusFetcherWithTimeout(statusFastFetcher, statusFastTimeout); err == nil {
+				storeStatusSnapshot(status, statusNowFunc().UTC())
+				if debugLogger != nil {
+					debugLogger.Printf("status_seed ok duration=%s", time.Since(start).Round(time.Millisecond))
+				}
+				return
+			}
+			if status, ok := fetchStatusUltraLiteFallback(statusFastTimeout); ok {
+				storeStatusSnapshot(status, statusNowFunc().UTC())
+				if debugLogger != nil {
+					debugLogger.Printf("status_seed ultralite duration=%s", time.Since(start).Round(time.Millisecond))
+				}
+				return
+			}
+			if debugLogger != nil {
+				debugLogger.Printf("status_seed miss duration=%s", time.Since(start).Round(time.Millisecond))
+			}
+		}
+		warm := func() {
+			if snapshot, ok := readStatusSnapshotFresh(); ok && !statusSnapshotNeedsImmediateRefresh(snapshot) {
+				return
+			}
+			if snapshot, ok := readStatusSnapshotAny(); ok && statusSnapshotCanStayLight(snapshot) {
+				return
+			}
+			start := time.Now()
+			ensureStatusRefreshAsync()
+			if debugLogger != nil {
+				debugLogger.Printf("status_warm scheduled duration=%s", time.Since(start).Round(time.Millisecond))
+			}
+		}
+		seed()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				warm()
+			}
+		}
+	}()
+}
+
+func statusSnapshotWarmLoopInterval() time.Duration {
+	if statusFallbackTTL > 0 {
+		return statusFallbackTTL
 	}
-	agents = append(agents, cfg.WorkerAgents...)
+	return 5 * time.Second
+}
+
+func launchPrepareContextPrewarmLoop(ctx context.Context, debugLogger *log.Logger) {
 	go func() {
 		ticker := time.NewTicker(serverPrepareContextPrewarmInterval())
 		defer ticker.Stop()
@@ -286,7 +331,11 @@ func launchPrepareContextPrewarmLoop(ctx context.Context, debugLogger *log.Logge
 				return
 			case <-ticker.C:
 			}
-			for _, agente := range agents {
+			cfg := loadServerAutobootstrapConfig()
+			if !cfg.Enabled || strings.TrimSpace(cfg.ProjectSlug) == "" {
+				continue
+			}
+			for _, agente := range serverPrepareContextAgents(cfg) {
 				agente = strings.TrimSpace(agente)
 				if agente == "" {
 					continue
@@ -297,6 +346,60 @@ func launchPrepareContextPrewarmLoop(ctx context.Context, debugLogger *log.Logge
 			}
 		}
 	}()
+}
+
+func serverPrepareContextAgents(cfg serverAutobootstrapConfig) []string {
+	seen := map[string]struct{}{}
+	agents := make([]string, 0, 1+len(cfg.WorkerAgents))
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return
+		}
+		key := strings.ToLower(name)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		agents = append(agents, name)
+	}
+	add(cfg.SupervisorAgent)
+	project := serverPrepareContextProject(cfg.ProjectSlug)
+	for _, worker := range cfg.WorkerAgents {
+		if !serverPrepareContextAgentIsHot(strings.TrimSpace(worker), project) {
+			continue
+		}
+		add(worker)
+	}
+	return agents
+}
+
+func serverPrepareContextProject(projectSlug string) *db.Proyecto {
+	projectSlug = strings.TrimSpace(projectSlug)
+	if projectSlug == "" {
+		return nil
+	}
+	project, err := db.GetProyecto(projectSlug)
+	if err != nil || project == nil {
+		return nil
+	}
+	return project
+}
+
+func serverPrepareContextAgentIsHot(agent string, project *db.Proyecto) bool {
+	agent = strings.TrimSpace(agent)
+	if agent == "" || project == nil || project.ID <= 0 {
+		return false
+	}
+	if assignment, err := db.GetAsignacionActivaAgente(agent); err == nil && assignment != nil && assignment.ProyectoID == project.ID {
+		return true
+	}
+	if session, err := db.GetSesionActiva(agent, &project.ID); err == nil && session != nil {
+		return true
+	} else if err != nil && err != sql.ErrNoRows {
+		return false
+	}
+	return false
 }
 
 func serverPrepareContextPrewarmInterval() time.Duration {
@@ -327,10 +430,21 @@ func envBoolServidorUnificado(key string) bool {
 
 func launchBootstrapServerAutonomy(ctx context.Context, debugLogger *log.Logger) {
 	go func() {
-		select {
-		case <-ctx.Done():
-			return
-		default:
+		delay := serverAutobootstrapStartDelay()
+		if delay > 0 {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+			}
+		} else {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 		}
 		if err := bootstrapServerAutonomy(); err != nil {
 			select {
@@ -344,6 +458,14 @@ func launchBootstrapServerAutonomy(ctx context.Context, debugLogger *log.Logger)
 			}
 		}
 	}()
+}
+
+func serverAutobootstrapStartDelay() time.Duration {
+	seconds := controlPlaneConfigIntOrDefault("server_autobootstrap_start_delay_seconds", 8)
+	if seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func launchStorageMaintenanceLoop(ctx context.Context, debugLogger *log.Logger) {
@@ -388,11 +510,21 @@ func serverAutonomyMaintenanceInterval() time.Duration {
 }
 
 func launchServerAutonomyMaintenanceLoop(ctx context.Context, debugLogger *log.Logger) {
-	cfg := loadServerAutobootstrapConfig()
-	if !cfg.Enabled {
-		return
-	}
 	runOnce := func() {
+		cfg := loadServerAutobootstrapConfig()
+		if !cfg.Enabled {
+			return
+		}
+		if skip, motivo, err := shouldSkipControlPlaneLoop("server_autonomy_maintenance"); err == nil {
+			if skip {
+				if debugLogger != nil {
+					debugLogger.Printf("runtime_process_degradados_loop skipped=%s", strings.TrimSpace(motivo))
+				}
+				return
+			}
+		} else if debugLogger != nil {
+			debugLogger.Printf("runtime_process_degradados_loop skip_guard_error=%v", err)
+		}
 		started := runtimeProcessDegradadosEnCurso.CompareAndSwap(false, true)
 		if !started {
 			return
@@ -400,6 +532,9 @@ func launchServerAutonomyMaintenanceLoop(ctx context.Context, debugLogger *log.L
 		defer runtimeProcessDegradadosEnCurso.Store(false)
 		summary, err := runtimeProcessDegradadosBatchDetailed()
 		if err != nil {
+			if runtimeProcessDegradadosHandleDeferredLoopError(err, debugLogger) {
+				return
+			}
 			db.Audit("server", "runtime_process_degradados_loop_error", "runtime", 0, err.Error())
 			if debugLogger != nil {
 				debugLogger.Printf("runtime_process_degradados_loop error=%v", err)
@@ -414,7 +549,6 @@ func launchServerAutonomyMaintenanceLoop(ctx context.Context, debugLogger *log.L
 	go func() {
 		ticker := time.NewTicker(serverAutonomyMaintenanceInterval())
 		defer ticker.Stop()
-		runOnce()
 		for {
 			select {
 			case <-ctx.Done():
@@ -424,6 +558,46 @@ func launchServerAutonomyMaintenanceLoop(ctx context.Context, debugLogger *log.L
 			runOnce()
 		}
 	}()
+}
+
+func runtimeProcessDegradadosDeferredInterval() time.Duration {
+	if runtimeProcessDegradadosDeferredIntervalOverride > 0 {
+		return runtimeProcessDegradadosDeferredIntervalOverride
+	}
+	seconds := controlPlaneConfigIntOrDefault("runtime_process_degradados_deferred_retry_interval_seconds", 300)
+	if seconds <= 0 {
+		seconds = 300
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func resetRuntimeProcessDegradadosDeferredGate() {
+	runtimeProcessDegradadosDeferredGate.Reset()
+}
+
+func runtimeProcessDegradadosDeferredKey(err error) string {
+	if !runtimeCanDeferHandlePurgeBlockedError(err) {
+		return ""
+	}
+	scope := strings.TrimSpace(db.CurrentStorageDisplayTarget())
+	if scope == "" {
+		scope = "global"
+	}
+	return scope + "|runtime_process_degradados|handle_purge_blocked"
+}
+
+func runtimeProcessDegradadosHandleDeferredLoopError(err error, debugLogger *log.Logger) bool {
+	key := runtimeProcessDegradadosDeferredKey(err)
+	if key == "" {
+		return false
+	}
+	if runtimeProcessDegradadosDeferredGate.Allow(key, runtimeProcessDegradadosDeferredInterval()) {
+		db.Audit("server", "runtime_process_degradados_deferred", "runtime", 0, err.Error())
+		if debugLogger != nil {
+			debugLogger.Printf("runtime_process_degradados deferred=%v", err)
+		}
+	}
+	return true
 }
 
 func normalizarAddrServidorLocal(listenAddr string) string {

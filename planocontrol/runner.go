@@ -48,6 +48,10 @@ type automationResetReanimationReporter interface {
 	ResetReanimacionOutcome(nombre string) (string, error)
 }
 
+type automationLoopSkipper interface {
+	ShouldSkipLoop(name string) (bool, string, error)
+}
+
 type Runner struct {
 	Automation                  AutomationService
 	NotificationFeed            <-chan db.EventoNotificacion
@@ -63,6 +67,7 @@ type Runner struct {
 	ControlPlaneWarmCada        time.Duration
 	ControlPlaneWarmRequeueCada time.Duration
 	ControlPlaneColdCada        time.Duration
+	WarmStartupDelay            time.Duration
 	RuntimeTranscriptCada       time.Duration
 	RuntimeMailboxCada          time.Duration
 	RuntimeOrdersCada           time.Duration
@@ -70,6 +75,7 @@ type Runner struct {
 	RuntimeBudgetCada           time.Duration
 	NotificationRetryCada       time.Duration
 	BatchTimeout                time.Duration
+	SlowBatchThreshold          time.Duration
 	mu                          sync.Mutex
 	runningBatches              map[string]runningBatchState
 	batchWake                   map[string]chan struct{}
@@ -78,6 +84,7 @@ type Runner struct {
 	warmLaneActive              atomic.Bool
 	warmPhase                   atomic.Uint32
 	warmRequeue                 *Throttler
+	runtimeWake                 *Throttler
 	wg                          sync.WaitGroup
 }
 
@@ -118,7 +125,7 @@ func (r *Runner) StartRuntimeCore(ctx context.Context) {
 	if r == nil || r.Automation == nil {
 		return
 	}
-	r.startLoopAfter(ctx, "control_plane_runtime_orders", r.runtimeOrdersCada(), 0, r.runControlPlaneRuntimeOrders)
+	r.startLoopAfter(ctx, "control_plane_runtime_orders", r.runtimeOrdersCada(), r.runtimeOrdersStartupDelay(), r.runControlPlaneRuntimeOrders)
 	r.startLoopAfter(ctx, "control_plane_runtime_transcript", r.runtimeTranscriptCada(), r.runtimeTranscriptStartupDelay(), r.runControlPlaneRuntimeTranscript)
 	r.startLoopAfter(ctx, "control_plane_runtime_mailbox", r.runtimeMailboxCada(), 20*time.Second, r.runControlPlaneRuntimeMailbox)
 	r.startLoopAfter(ctx, "control_plane_runtime_hygiene", r.runtimeHygieneCada(), r.runtimeHygieneStartupDelay(), r.runControlPlaneRuntimeHygiene)
@@ -145,9 +152,9 @@ func (r *Runner) StartResidentCore(ctx context.Context) {
 	if r == nil || r.Automation == nil {
 		return
 	}
-	r.startLoop(ctx, "reanimaciones", r.reanimacionCada(), r.runReanimaciones)
-	r.startLoop(ctx, "salud", r.saludCada(), r.runSalud)
-	r.startLoop(ctx, "planificacion", r.planificacionCada(), r.runPlanificacion)
+	r.startLoopAfter(ctx, "reanimaciones", r.reanimacionCada(), r.reanimacionStartupDelay(), r.runReanimaciones)
+	r.startLoopAfter(ctx, "salud", r.saludCada(), r.saludStartupDelay(), r.runSalud)
+	r.startLoopAfter(ctx, "planificacion", r.planificacionCada(), r.planificacionStartupDelay(), r.runPlanificacion)
 	r.StartRuntimeCore(ctx)
 }
 
@@ -176,13 +183,13 @@ func (r *Runner) StartNonResidentWorkerWithOptions(ctx context.Context, opts Non
 	r.debugf("runner non_resident warm=%s cold=%s notification_retry=%s",
 		r.controlPlaneWarmCada(), r.controlPlaneColdCada(), r.notificationRetryCada())
 	if opts.Warm {
-		r.startLoop(ctx, "control_plane_warm", r.controlPlaneWarmCada(), r.runControlPlaneWarm)
+		r.startLoopAfter(ctx, "control_plane_warm", r.controlPlaneWarmCada(), r.warmStartupDelay(), r.runControlPlaneWarm)
 	}
 	if opts.Cold {
-		r.startLoop(ctx, "control_plane_cold", r.controlPlaneColdCada(), r.runControlPlaneCold)
+		r.startLoopAfter(ctx, "control_plane_cold", r.controlPlaneColdCada(), r.coldStartupDelay(), r.runControlPlaneCold)
 	}
 	if opts.NotificationRetry {
-		r.startLoop(ctx, "notification_retry", r.notificationRetryCada(), r.runNotificationRetry)
+		r.startLoopAfter(ctx, "notification_retry", r.notificationRetryCada(), r.notificationRetryStartupDelay(), r.runNotificationRetry)
 	}
 }
 
@@ -319,6 +326,8 @@ func (r *Runner) hasBatch(name string) bool {
 func (r *Runner) applyLoopBackpressure(ctx context.Context, name string, each time.Duration, start time.Time) {
 	elapsed := time.Since(start)
 	if elapsed <= each/2 {
+		// Forzar un descanso mínimo para evitar saturar la CPU si recibe Wakes continuos
+		time.Sleep(100 * time.Millisecond)
 		return
 	}
 	backoff := elapsed
@@ -417,6 +426,9 @@ func (r *Runner) runSalud() {
 }
 
 func (r *Runner) runPlanificacion() {
+	if r.shouldSkipLoop("planificacion") {
+		return
+	}
 	err := r.Automation.PlanificarTareasAutomaticamente()
 	if err != nil {
 		r.debugf("planificacion error=%v", err)
@@ -450,6 +462,9 @@ func (r *Runner) runControlPlaneRuntimeTranscript() {
 }
 
 func (r *Runner) runControlPlaneRuntimeMailbox() {
+	if r.shouldSkipLoop("control_plane_runtime_mailbox") {
+		return
+	}
 	count := r.runControlPlaneBatch(
 		"runtime_mailbox",
 		"runtime_mailbox",
@@ -463,6 +478,9 @@ func (r *Runner) runControlPlaneRuntimeMailbox() {
 }
 
 func (r *Runner) runControlPlaneRuntimeOrders() {
+	if r.shouldSkipLoop("control_plane_runtime_orders") {
+		return
+	}
 	count := r.runControlPlaneBatch(
 		"runtime_orders",
 		"runtime_order",
@@ -473,12 +491,15 @@ func (r *Runner) runControlPlaneRuntimeOrders() {
 		r.Automation.ProcesarRuntimeOrdersBatch,
 	)
 	if count > 0 {
-		r.WakeRuntimeMailbox()
+		r.autoWakeRuntimeMailbox()
 	}
 	r.debugf("control_plane_runtime_orders count=%d", count)
 }
 
 func (r *Runner) runControlPlaneBudget() {
+	if r.shouldSkipLoop("control_plane_runtime_budget") {
+		return
+	}
 	if r.warmLaneActive.Load() {
 		r.debugf("control_plane_runtime_budget skipped=warm_active")
 		return
@@ -506,14 +527,17 @@ func (r *Runner) runControlPlaneRuntimeHygiene() {
 		r.Automation.ProcesarRuntimeHygieneBatch,
 	)
 	if count > 0 {
-		r.WakeRuntimeOrders()
-		r.WakeRuntimeMailbox()
+		r.autoWakeRuntimeOrders()
+		r.autoWakeRuntimeMailbox()
 	}
 	r.debugf("control_plane_runtime_hygiene count=%d", count)
 }
 
 // runControlPlaneWarm: gestión — autonomia, supervision, review, handoffs, merges, refineria.
 func (r *Runner) runControlPlaneWarm() {
+	if r.shouldSkipLoop("control_plane_warm") {
+		return
+	}
 	if !r.warmLaneActive.CompareAndSwap(false, true) {
 		r.debugf("control_plane_warm skipped=already_active")
 		return
@@ -618,14 +642,17 @@ func (r *Runner) runControlPlaneWarm() {
 	)
 	r.debugf("control_plane_warm phase=%s count=%d", selected.name, count)
 	if count > 0 {
-		r.WakeRuntimeMailbox()
-		r.WakeRuntimeOrders()
+		r.autoWakeRuntimeMailbox()
+		r.autoWakeRuntimeOrders()
 	}
 	r.scheduleWarmFollowUpIfPending()
 }
 
 // runControlPlaneCold: reconciliación pesada — stale handles y stale orders.
 func (r *Runner) runControlPlaneCold() {
+	if r.shouldSkipLoop("control_plane_cold") {
+		return
+	}
 	stale := r.runControlPlaneBatch(
 		"handles_stale",
 		"runtime_handle",
@@ -648,6 +675,29 @@ func (r *Runner) runControlPlaneCold() {
 		stale, recovered)
 }
 
+func (r *Runner) shouldSkipLoop(name string) bool {
+	if r == nil || r.Automation == nil {
+		return false
+	}
+	skipper, ok := r.Automation.(automationLoopSkipper)
+	if !ok {
+		return false
+	}
+	skip, motivo, err := skipper.ShouldSkipLoop(strings.TrimSpace(name))
+	if err != nil {
+		r.debugf("runner loop=%s skip_guard_error=%v", name, err)
+		return false
+	}
+	if !skip {
+		return false
+	}
+	if strings.TrimSpace(motivo) == "" {
+		motivo = "guard"
+	}
+	r.debugf("runner loop=%s skipped=%s", name, strings.TrimSpace(motivo))
+	return true
+}
+
 func (r *Runner) safeLoopCall(name string, fn func()) {
 	if fn == nil {
 		return
@@ -666,6 +716,7 @@ func (r *Runner) safeLoopCall(name string, fn func()) {
 
 func (r *Runner) runControlPlaneBatch(name, entity, auditOK, auditErr, auditPanic, successFmt string, fn func() (int, error)) (count int) {
 	timeout := r.controlPlaneBatchTimeout()
+	slowThreshold := r.controlPlaneSlowBatchThreshold()
 	token, running, timedOut := r.beginControlPlaneBatch(name, timeout)
 	if token == 0 {
 		if running {
@@ -716,6 +767,7 @@ func (r *Runner) runControlPlaneBatch(name, entity, auditOK, auditErr, auditPani
 		if outcome.count > 0 {
 			r.Automation.Audit("server", auditOK, entity, 0, fmt.Sprintf(successFmt, outcome.count))
 		}
+		r.auditSlowControlPlaneBatch(name, entity, duration, outcome.count, slowThreshold)
 		r.debugf("control_plane %s ok count=%d duration=%s", name, outcome.count, duration)
 		return outcome.count
 	case <-timer.C:
@@ -725,6 +777,14 @@ func (r *Runner) runControlPlaneBatch(name, entity, auditOK, auditErr, auditPani
 		r.debugf("control_plane %s timeout=%s", name, timeout)
 		return 0
 	}
+}
+
+func (r *Runner) auditSlowControlPlaneBatch(name, entity string, duration time.Duration, count int, threshold time.Duration) {
+	if r == nil || r.Automation == nil || threshold <= 0 || duration < threshold {
+		return
+	}
+	r.Automation.Audit("server", "control_plane_batch_slow", entity, 0,
+		fmt.Sprintf("batch=%s duration=%s threshold=%s count=%d", strings.TrimSpace(name), duration, threshold, count))
 }
 
 func (r *Runner) notifier() notificaciones.Notificador {
@@ -777,11 +837,48 @@ func (r *Runner) planificacionCada() time.Duration {
 	return r.PlanificacionCada
 }
 
+func (r *Runner) reanimacionStartupDelay() time.Duration {
+	if r == nil {
+		return 10 * time.Second
+	}
+	if r.ReanimacionCada > 0 {
+		return 0
+	}
+	return 10 * time.Second
+}
+
+func (r *Runner) saludStartupDelay() time.Duration {
+	if r == nil {
+		return 20 * time.Second
+	}
+	if r.SaludCada > 0 {
+		return 0
+	}
+	return 20 * time.Second
+}
+
+func (r *Runner) planificacionStartupDelay() time.Duration {
+	if r == nil {
+		return 30 * time.Second
+	}
+	if r.PlanificacionCada > 0 {
+		return 0
+	}
+	return 30 * time.Second
+}
+
 func (r *Runner) controlPlaneCada() time.Duration {
 	if r.ControlPlaneCada <= 0 {
 		return 60 * time.Second
 	}
 	return r.ControlPlaneCada
+}
+
+func (r *Runner) controlPlaneSlowBatchThreshold() time.Duration {
+	if r.SlowBatchThreshold > 0 {
+		return r.SlowBatchThreshold
+	}
+	return 750 * time.Millisecond
 }
 
 func (r *Runner) controlPlaneWarmCada() time.Duration {
@@ -842,9 +939,16 @@ func (r *Runner) runtimeOrdersCada() time.Duration {
 	return r.applySafeFloor(r.RuntimeOrdersCada, 30*time.Second)
 }
 
+func (r *Runner) runtimeOrdersStartupDelay() time.Duration {
+	if r.RuntimeOrdersCada > 0 || r.ControlPlaneCada > 0 {
+		return 0
+	}
+	return 5 * time.Second
+}
+
 func (r *Runner) runtimeHygieneCada() time.Duration {
 	if r.RuntimeHygieneCada <= 0 {
-		return 10 * time.Minute
+		return 20 * time.Minute
 	}
 	return r.applySafeFloor(r.RuntimeHygieneCada, time.Minute)
 }
@@ -861,6 +965,13 @@ func (r *Runner) runtimeBudgetCada() time.Duration {
 		return 2 * time.Minute
 	}
 	return r.RuntimeBudgetCada
+}
+
+func (r *Runner) runtimeWakeThrottle() time.Duration {
+	if r == nil {
+		return 10 * time.Second
+	}
+	return 10 * time.Second
 }
 
 func (r *Runner) notificationRetryCada() time.Duration {
@@ -889,6 +1000,38 @@ func (r *Runner) warmRequeueGate() *Throttler {
 	return r.warmRequeue
 }
 
+func (r *Runner) runtimeWakeGate() *Throttler {
+	if r == nil {
+		return NewThrottler()
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.runtimeWake == nil {
+		r.runtimeWake = NewThrottler()
+	}
+	return r.runtimeWake
+}
+
+func (r *Runner) autoWakeRuntimeOrders() bool {
+	if r == nil {
+		return false
+	}
+	if !r.runtimeWakeGate().Allow("control_plane_runtime_orders", r.runtimeWakeThrottle()) {
+		return false
+	}
+	return r.WakeRuntimeOrders()
+}
+
+func (r *Runner) autoWakeRuntimeMailbox() bool {
+	if r == nil {
+		return false
+	}
+	if !r.runtimeWakeGate().Allow("control_plane_runtime_mailbox", r.runtimeWakeThrottle()) {
+		return false
+	}
+	return r.WakeRuntimeMailbox()
+}
+
 func (r *Runner) scheduleWarmFollowUpIfPending() {
 	if r == nil || r.Automation == nil {
 		return
@@ -912,6 +1055,36 @@ func (r *Runner) startupGrace() time.Duration {
 		return 0
 	}
 	return r.StartupGrace
+}
+
+func (r *Runner) warmStartupDelay() time.Duration {
+	if r == nil {
+		return 15 * time.Second
+	}
+	if r.WarmStartupDelay > 0 {
+		return r.WarmStartupDelay
+	}
+	return 15 * time.Second
+}
+
+func (r *Runner) coldStartupDelay() time.Duration {
+	if r == nil {
+		return 60 * time.Second
+	}
+	if r.ControlPlaneColdCada > 0 {
+		return 0
+	}
+	return 60 * time.Second
+}
+
+func (r *Runner) notificationRetryStartupDelay() time.Duration {
+	if r == nil {
+		return 30 * time.Second
+	}
+	if r.NotificationRetryCada > 0 {
+		return 0
+	}
+	return 30 * time.Second
 }
 
 func (r *Runner) applySafeFloor(value, floor time.Duration) time.Duration {

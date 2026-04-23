@@ -5,6 +5,7 @@ Autor: Alberto Avidad Fernandez
 Oficina de Software Libre (OSL) - Diputacion de Granada
 */
 
+// Control-plane support for runtime resume and mailbox flow.
 package cmd
 
 import (
@@ -43,6 +44,10 @@ import (
 
 type dbAutomationService struct{}
 
+func (dbAutomationService) ShouldSkipLoop(name string) (bool, string, error) {
+	return shouldSkipControlPlaneLoop(strings.TrimSpace(name))
+}
+
 const autonomiaReplanTaskTitle = "Autonomía: replanificar backlog y abrir siguiente frente útil"
 const autonomiaCredentialsTaskTitle = "Autonomía: desbloquear credenciales o acceso externo"
 const autonomiaBlockedTaskTitle = "Autonomía: desbloquear frente bloqueado o preparar relevo"
@@ -50,6 +55,7 @@ const autonomiaPostRemediationBlockedTaskTitle = "Autonomía: resolver follow-up
 
 var runtimeBudgetObservationBackgroundGate = planocontrol.NewGate()
 var runtimeHistoricalMaintenanceGate = planocontrol.NewGate()
+var runtimeBudgetPlanningExpensiveGate = planocontrol.NewThrottler()
 
 var procesarHigieneRuntimesAutonomosBatchFn = db.ProcesarHigieneRuntimesAutonomosBatch
 var reconciliarRuntimeOrdersPendientesHandoffExpiradasFn = db.ReconciliarRuntimeOrdersPendientesHandoffExpiradas
@@ -62,6 +68,7 @@ var wakeRuntimeMailboxAfterTranscript = wakeControlPlaneRuntimeMailbox
 var wakeRuntimeOrdersAfterMailbox = wakeControlPlaneRuntimeOrders
 
 var runtimeMailboxReevaluationGate = planocontrol.NewThrottler()
+var runtimeTMUXOrphanCleanupGate = planocontrol.NewThrottler()
 var runtimeMailboxBatchBudgetOverride time.Duration
 var runtimeMailboxSyncSupervisedHandleFn = db.SincronizarRuntimeHandleSupervisado
 var runtimeMailboxPipelineShouldCompactInBatchFn = runtimeMailboxPipelineDebeCompactarseEnBatch
@@ -69,11 +76,52 @@ var runtimeMailboxLoadWorkerSnapshotFn = runtimeagente.LoadWorkerSnapshotFromMet
 var runtimeMailboxBuildInteractiveInstructionFn = construirInstruccionMailboxInteractivo
 
 func runtimeMailboxReevaluationInterval() time.Duration {
-	seconds := controlPlaneConfigIntOrDefault("runtime_mailbox_reevaluation_interval_seconds", 10)
+	seconds := controlPlaneConfigIntOrDefault("runtime_mailbox_reevaluation_interval_seconds", 15)
 	if seconds <= 0 {
-		seconds = 10
+		seconds = 15
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+func shouldSkipControlPlaneLoop(name string) (bool, string, error) {
+	switch strings.TrimSpace(name) {
+	case "planificacion",
+		"control_plane_runtime_mailbox",
+		"control_plane_runtime_orders",
+		"control_plane_runtime_budget",
+		"control_plane_warm",
+		"control_plane_cold",
+		"server_autonomy_maintenance":
+	default:
+		return false, "", nil
+	}
+	return controlPlaneQuotaBlockedIdleGuard()
+}
+
+func controlPlaneQuotaBlockedIdleGuard() (bool, string, error) {
+	info, err := buildServerOperationalInfoFastFromDB()
+	if err != nil {
+		return false, "", err
+	}
+	if info.State != "idle" || info.Reason != "workers_quota_blocked" {
+		return false, "", nil
+	}
+	if info.ConnectedWorkers > 0 || info.WorkingWorkers > 0 {
+		return false, "", nil
+	}
+	if info.StuckAgents > 0 || info.AuthAgents > 0 {
+		return false, "", nil
+	}
+	if info.ReservedTasks > 0 || info.BlockedTasks > 0 {
+		return false, "", nil
+	}
+	if info.DispatchPending > 0 || info.DispatchNotified > 0 || info.DispatchFailed > 0 {
+		return false, "", nil
+	}
+	if info.AutonomyPending > 0 || info.AutonomyHandoffs > 0 || info.AutonomyContinuing > 0 {
+		return false, "", nil
+	}
+	return true, "workers_quota_blocked", nil
 }
 
 func runtimeMailboxShouldReevaluate(lane string, msgID, handleID int64) bool {
@@ -86,6 +134,26 @@ func runtimeMailboxShouldReevaluate(lane string, msgID, handleID int64) bool {
 	}
 	key := scope + "|" + strings.TrimSpace(lane) + "|" + strconv.FormatInt(msgID, 10) + "|" + strconv.FormatInt(handleID, 10)
 	return runtimeMailboxReevaluationGate.Allow(key, runtimeMailboxReevaluationInterval())
+}
+
+func runtimeTMUXOrphanCleanupInterval() time.Duration {
+	seconds := controlPlaneConfigIntOrDefault("runtime_tmux_orphan_cleanup_retry_interval_seconds", 300)
+	if seconds <= 0 {
+		seconds = 300
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func runtimeTMUXOrphanCleanupKey(sessionName string) string {
+	sessionName = strings.TrimSpace(sessionName)
+	if sessionName == "" {
+		return ""
+	}
+	scope := strings.TrimSpace(db.CurrentStorageDisplayTarget())
+	if scope == "" {
+		scope = "global"
+	}
+	return scope + "|" + sessionName
 }
 
 func runtimeMailboxBatchBudget() time.Duration {
@@ -113,6 +181,30 @@ func resetRuntimeMailboxReevaluationGate() {
 
 func resetRuntimeHistoricalMaintenanceGate() {
 	runtimeHistoricalMaintenanceGate.Reset()
+}
+
+func resetRuntimeBudgetPlanningExpensiveGate() {
+	runtimeBudgetPlanningExpensiveGate.Reset()
+}
+
+func runtimeBudgetPlanningExpensiveInterval() time.Duration {
+	seconds := controlPlaneConfigIntOrDefault("runtime_budget_preflight_expensive_interval_seconds", 120)
+	if seconds <= 0 {
+		seconds = 120
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func runtimeBudgetPlanningShouldUseExpensive(nombre string) bool {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return false
+	}
+	scope := strings.TrimSpace(db.CurrentStorageDisplayTarget())
+	if scope == "" {
+		scope = "global"
+	}
+	return runtimeBudgetPlanningExpensiveGate.Allow(scope+"|"+nombre, runtimeBudgetPlanningExpensiveInterval())
 }
 
 func resetAutonomiaIdleAutoassignGate() {
@@ -147,8 +239,12 @@ var autonomiaSessionStepTimeoutOverride time.Duration
 var autonomiaDegradedBatchTimeoutOverride time.Duration
 var autonomiaBatchBudgetOverride time.Duration
 var refrescarPresupuestoSesionObservadoHandleFn = refrescarPresupuestoSesionObservadoHandle
+var refrescarPresupuestoSesionObservadoHandleBatchFn = refrescarPresupuestoSesionObservadoHandleBatch
 var runtimeBudgetBatchBudgetOverride time.Duration
 var autoasignarTareaAmpliaIdleFn = db.IntentarAutoasignarTareaAgente
+var observeCodexProfileStatusFn = controlruntime.ObserveCodexProfileStatus
+var observeCodexArtifactsFn = controlruntime.ObserveCodexArtifacts
+var observeClaudeRustArtifactsFn = controlruntime.ObserveClaudeRustArtifacts
 
 var autonomiaIdleAutoassignGate = planocontrol.NewThrottler()
 
@@ -169,6 +265,8 @@ var presupuestoPrimerUsoSesionGate = planocontrol.NewThrottler()
 var autonomiaContinueNudgeGate = planocontrol.NewThrottler()
 var autonomiaSessionMaintenanceGate = planocontrol.NewThrottler()
 var autonomiaRuntimeRecoveryGate = planocontrol.NewThrottler()
+
+const presupuestoObservadoDuplicateWindow = 2 * time.Minute
 
 func autonomiaIdleAutoassignInterval() time.Duration {
 	seconds := controlPlaneConfigIntOrDefault("autonomia_idle_autoassign_interval_seconds", 300)
@@ -206,9 +304,9 @@ func autonomiaSessionStepTimeout() time.Duration {
 	if autonomiaSessionStepTimeoutOverride > 0 {
 		return autonomiaSessionStepTimeoutOverride
 	}
-	seconds := controlPlaneConfigIntOrDefault("autonomia_session_step_timeout_seconds", 3)
+	seconds := controlPlaneConfigIntOrDefault("autonomia_session_step_timeout_seconds", 1)
 	if seconds <= 0 {
-		seconds = 3
+		seconds = 1
 	}
 	return time.Duration(seconds) * time.Second
 }
@@ -217,9 +315,9 @@ func autonomiaDegradedBatchTimeout() time.Duration {
 	if autonomiaDegradedBatchTimeoutOverride > 0 {
 		return autonomiaDegradedBatchTimeoutOverride
 	}
-	seconds := controlPlaneConfigIntOrDefault("autonomia_degraded_batch_timeout_seconds", 3)
+	seconds := controlPlaneConfigIntOrDefault("autonomia_degraded_batch_timeout_seconds", 1)
 	if seconds <= 0 {
-		seconds = 3
+		seconds = 1
 	}
 	return time.Duration(seconds) * time.Second
 }
@@ -228,9 +326,9 @@ func autonomiaBatchBudget() time.Duration {
 	if autonomiaBatchBudgetOverride > 0 {
 		return autonomiaBatchBudgetOverride
 	}
-	seconds := controlPlaneConfigIntOrDefault("autonomia_batch_budget_seconds", 3)
+	seconds := controlPlaneConfigIntOrDefault("autonomia_batch_budget_seconds", 1)
 	if seconds <= 0 {
-		seconds = 3
+		seconds = 1
 	}
 	return time.Duration(seconds) * time.Second
 }
@@ -569,6 +667,13 @@ func (dbAutomationService) resetReanimacionResultadoConPermisoManual(nombre stri
 	}
 	_, bloqueadoPorCapacidad, err := reactivarAgenteTrasReanimacionConResultado(nombre, "manual_rehabilitation")
 	if err != nil {
+		if strings.Contains(strings.ToLower(strings.TrimSpace(err.Error())), "ya tiene un runtime handle activo") {
+			if err := db.ResetReanimacion(nombre); err != nil {
+				return "", err
+			}
+			invalidateStatusSnapshotCache()
+			return resetReanimacionResultadoReactivado, nil
+		}
 		return "", err
 	}
 	if bloqueadoPorCapacidad {
@@ -583,7 +688,7 @@ func (dbAutomationService) resetReanimacionResultadoConPermisoManual(nombre stri
 	if err := db.ResetReanimacion(nombre); err != nil {
 		return "", err
 	}
-	resetStatusSnapshotCache()
+	invalidateStatusSnapshotCache()
 	return resetReanimacionResultadoReactivado, nil
 }
 
@@ -842,7 +947,7 @@ func revalidarPresupuestoAgenteSiCorresponde(nombre string, minAge time.Duration
 		return 0, nil
 	}
 	if force && presupuestoPrimerUsoSesion(nombre) {
-		return refrescarPresupuestoSesionObservadoAgente(nombre)
+		return refrescarPresupuestoSesionObservadoAgenteConOpciones(nombre, false)
 	}
 	if !force && !presupuestoAgenteDebeRevalidarseAhora(agente, minAge, true) {
 		return 0, nil
@@ -850,7 +955,7 @@ func revalidarPresupuestoAgenteSiCorresponde(nombre string, minAge time.Duration
 	if force && !presupuestoAgenteDebeRevalidarseAhora(agente, minAge, false) {
 		return 0, nil
 	}
-	return refrescarPresupuestoSesionObservadoAgente(nombre)
+	return refrescarPresupuestoSesionObservadoAgenteConOpciones(nombre, !force)
 }
 
 func tieneTrabajoOrquestablePendiente() (bool, string, error) {
@@ -876,7 +981,7 @@ func tieneTrabajoOrquestablePendiente() (bool, string, error) {
 func backlogRuntimePendiente() (bool, string, error) {
 	for _, estado := range []string{"pendiente", "entregado"} {
 		estado := estado
-		items, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado})
+		items, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado, Limit: 1})
 		if err != nil {
 			return false, "", err
 		}
@@ -892,18 +997,12 @@ func backlogRuntimePendiente() (bool, string, error) {
 	}
 	for _, estado := range []string{"pendiente", "tomada", "ejecutando"} {
 		estado := estado
-		orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Estado: &estado})
+		hasOrders, err := db.TieneRuntimeOrdersVivas(db.FiltroRuntimeOrders{Estado: &estado})
 		if err != nil {
 			return false, "", err
 		}
-		for _, order := range orders {
-			if order == nil {
-				continue
-			}
-			if order.ProyectoID != nil && *order.ProyectoID > 0 {
-				return true, fmt.Sprintf("runtime_orders=%s proyecto_id=%d", estado, *order.ProyectoID), nil
-			}
-			return true, fmt.Sprintf("runtime_orders_global=%s", estado), nil
+		if hasOrders {
+			return true, fmt.Sprintf("runtime_orders=%s", estado), nil
 		}
 	}
 	return false, "", nil
@@ -928,12 +1027,12 @@ func proyectoTieneTrabajoOrquestablePendiente(proyecto *db.Proyecto) (bool, stri
 		db.TareaLibre,
 		db.TareaBacklog,
 	} {
-		tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyecto.ID, Estado: &estado})
+		tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyecto.ID, Estado: &estado, Limit: 1})
 		if err != nil {
 			return false, "", err
 		}
 		if len(tareas) > 0 {
-			return true, fmt.Sprintf("proyecto=%s tareas=%s count=%d", strings.TrimSpace(proyecto.Slug), string(estado), len(tareas)), nil
+			return true, fmt.Sprintf("proyecto=%s tareas=%s count>=1", strings.TrimSpace(proyecto.Slug), string(estado)), nil
 		}
 	}
 	return false, "", nil
@@ -942,7 +1041,7 @@ func proyectoTieneTrabajoOrquestablePendiente(proyecto *db.Proyecto) (bool, stri
 func proyectoTieneRuntimePendiente(proyectoID int64, slug string) (bool, string, error) {
 	for _, estado := range []string{"pendiente", "entregado"} {
 		estado := estado
-		items, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ProyectoID: &proyectoID, Estado: &estado})
+		items, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ProyectoID: &proyectoID, Estado: &estado, Limit: 1})
 		if err != nil {
 			return false, "", err
 		}
@@ -952,12 +1051,12 @@ func proyectoTieneRuntimePendiente(proyectoID int64, slug string) (bool, string,
 	}
 	for _, estado := range []string{"pendiente", "tomada", "ejecutando"} {
 		estado := estado
-		orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{ProyectoID: &proyectoID, Estado: &estado})
+		hasOrders, err := db.TieneRuntimeOrdersVivas(db.FiltroRuntimeOrders{ProyectoID: &proyectoID, Estado: &estado})
 		if err != nil {
 			return false, "", err
 		}
-		if len(orders) > 0 {
-			return true, fmt.Sprintf("proyecto=%s runtime_orders=%s count=%d", strings.TrimSpace(slug), estado, len(orders)), nil
+		if hasOrders {
+			return true, fmt.Sprintf("proyecto=%s runtime_orders=%s count>=1", strings.TrimSpace(slug), estado), nil
 		}
 	}
 	return false, "", nil
@@ -988,8 +1087,8 @@ func revalidarPresupuestoPlanificacionBatch() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	total := 0
 	minAge := presupuestoPreflightRevalidationAge()
+	candidatos := make([]*db.Agente, 0, len(agentes))
 	for _, agente := range agentes {
 		if agente == nil || !agente.Habilitado {
 			continue
@@ -997,13 +1096,163 @@ func revalidarPresupuestoPlanificacionBatch() (int, error) {
 		if !presupuestoAgenteDebeRevalidarseAhora(agente, minAge, false) {
 			continue
 		}
-		n, err := revalidarPresupuestoAgenteSiCorresponde(agente.Nombre, minAge, true)
+		candidatos = append(candidatos, agente)
+	}
+	if len(candidatos) == 0 {
+		return 0, nil
+	}
+	candidatoCaro := seleccionarAgenteRevalidacionCaraPlanificacion(candidatos)
+	total := 0
+	for _, agente := range candidatos {
+		if agente == nil {
+			continue
+		}
+		var n int
+		if candidatoCaro != nil &&
+			strings.EqualFold(strings.TrimSpace(agente.Nombre), strings.TrimSpace(candidatoCaro.Nombre)) &&
+			runtimeBudgetPlanningShouldUseExpensive(agente.Nombre) {
+			n, err = refrescarPresupuestoSesionObservadoAgentePlanificacionCaro(agente.Nombre)
+		} else {
+			n, err = refrescarPresupuestoSesionObservadoAgenteConOpciones(agente.Nombre, true)
+		}
 		if err != nil {
 			return total, err
 		}
 		total += n
 	}
 	return total, nil
+}
+
+func refrescarPresupuestoSesionObservadoAgentePlanificacionCaro(nombre string) (int, error) {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" || db.DB == nil || db.DB.DB == nil {
+		return 0, nil
+	}
+	handles, err := listarRuntimeHandlesPresupuestoAgente(nombre)
+	if err != nil {
+		return 0, err
+	}
+	ordenarHandlesParaPresupuestoVivo(handles)
+	for _, handle := range handles {
+		ok, _, err := refrescarPresupuestoSesionObservadoHandlePlanificacionCaro(handle)
+		if err != nil {
+			return 0, err
+		}
+		if ok {
+			invalidateStatusSnapshotCache()
+			return 1, nil
+		}
+	}
+	if len(handles) > 0 {
+		return 0, nil
+	}
+	sesion, err := db.ObtenerUltimaSesion(nombre, nil)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
+	}
+	ok, err := refrescarPresupuestoSesionObservadoDesdeSesionConOpciones(sesion, time.Time{}, false)
+	if err != nil {
+		return 0, err
+	}
+	if ok {
+		invalidateStatusSnapshotCache()
+		return 1, nil
+	}
+	return 0, nil
+}
+
+func refrescarPresupuestoSesionObservadoHandlePlanificacionCaro(handle *db.RuntimeHandle) (bool, string, error) {
+	if handle == nil {
+		return false, "", nil
+	}
+	handle = runtimeHandleCanonicoParaPresupuesto(handle)
+	if handle == nil {
+		return false, "", nil
+	}
+	agente := strings.TrimSpace(handle.Agente)
+	if agente == "" {
+		return false, "", nil
+	}
+	estado := strings.TrimSpace(handle.Estado)
+	if !strings.EqualFold(estado, "activo") && !strings.EqualFold(estado, "pausado") {
+		return false, agente, nil
+	}
+	if handle.ID > 0 && db.DB != nil {
+		if syncedHandle, _, _, err := db.SincronizarRuntimeHandleSupervisado(handle, nil, "budget_refresh"); err == nil && syncedHandle != nil {
+			handle = syncedHandle
+		} else if err != nil {
+			controlPlaneBudgetDebugf("agente=%s sync_handle error=%v handle_id=%d", agente, err, handle.ID)
+		}
+	}
+	metaJSON := metadataPresupuestoDesdeHandle(handle)
+	obj := objetivoProcesoPresupuestoDesdeHandle(handle, metaJSON)
+	ok, err := refrescarPresupuestoHandleDesdeObjetivo(handle, agente, obj, time.Time{}, false)
+	if err != nil {
+		return false, agente, err
+	}
+	return ok, agente, nil
+}
+
+func seleccionarAgenteRevalidacionCaraPlanificacion(agentes []*db.Agente) *db.Agente {
+	var (
+		best      *db.Agente
+		bestScore int64 = -1 << 60
+	)
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		score := scoreAgenteRevalidacionCaraPlanificacion(agente)
+		if best == nil || score > bestScore || (score == bestScore && strings.TrimSpace(agente.Nombre) < strings.TrimSpace(best.Nombre)) {
+			best = agente
+			bestScore = score
+		}
+	}
+	return best
+}
+
+func scoreAgenteRevalidacionCaraPlanificacion(agente *db.Agente) int64 {
+	if agente == nil {
+		return -1 << 60
+	}
+	var score int64
+	if !agenteBloqueadoPorCuotaVisible(agente) {
+		score += 1_000_000_000
+	}
+	if strings.EqualFold(strings.TrimSpace(agente.PresupuestoEstado), "ok") {
+		score += 400_000_000
+	}
+	if agente.PresupuestoStale {
+		score += 200_000_000
+	}
+	if agente.Activo {
+		score += 100_000_000
+	}
+	if agente.PresupuestoCheckedAt == nil || agente.PresupuestoCheckedAt.IsZero() {
+		score += 50_000_000
+	} else {
+		edad := time.Since(agente.PresupuestoCheckedAt.UTC())
+		if edad > 0 {
+			score += minInt64(int64(edad/time.Second), 86_400)
+		}
+	}
+	if agente.CuotaRestantePct != nil {
+		score += int64(*agente.CuotaRestantePct) * 1_000
+	}
+	if agente.UltimaSesion != nil && !agente.UltimaSesion.IsZero() {
+		score += minInt64(time.Since(agente.UltimaSesion.UTC()).Milliseconds()/1000, 43_200)
+	}
+	return score
+}
+
+func minInt64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func revalidarYVerificarAgenteDisponibleParaTrabajo(nombre string) error {
@@ -1146,12 +1395,12 @@ func procesarRuntimeHygieneBatch(forceHistorical bool) (int, error) {
 		return total, err
 	}
 	total += purgedTranscriptNoise
-	n, err := purgarDatosOperacionalesFn()
-	if err != nil {
-		return total, err
-	}
-	total += n
 	if !forceHistorical && !runtimeHistoricalMaintenanceGate.Allow(runtimeHistoricalMaintenanceInterval()) {
+		n, err := purgarDatosOperacionalesFn()
+		if err != nil {
+			return total, err
+		}
+		total += n
 		return total, nil
 	}
 	resultado, err := purgarRuntimeHistoricoFn()
@@ -1170,6 +1419,11 @@ func procesarRuntimeHygieneBatch(forceHistorical bool) (int, error) {
 			total += resultado.Orders.Deleted
 		}
 	}
+	n, err := purgarDatosOperacionalesFn()
+	if err != nil {
+		return total, err
+	}
+	total += n
 	return total, nil
 }
 
@@ -1222,6 +1476,15 @@ func procesarRuntimeTranscriptBatch() (int, error) {
 	if agentAPIHotPathBusy() {
 		return 0, nil
 	}
+	releaseStuckRuntimeTranscriptBatch()
+	if !runtimeTranscriptBatchRunning.CompareAndSwap(false, true) {
+		return 0, nil
+	}
+	runtimeTranscriptBatchStartedAt.Store(time.Now().UTC().UnixNano())
+	defer func() {
+		runtimeTranscriptBatchRunning.Store(false)
+		runtimeTranscriptBatchStartedAt.Store(0)
+	}()
 	ingested, err := db.IngestarRuntimeTranscriptActivos()
 	if err != nil {
 		return ingested, err
@@ -1399,12 +1662,12 @@ func procesarSignalsPendientesRuntimeTranscript() (int, error) {
 func listarSignalsPendientesRuntimeTranscript() ([]*db.RuntimeTranscriptEntry, error) {
 	return db.ListarRuntimeTranscript(db.FiltroRuntimeTranscript{
 		SoloSenalesPend: true,
-		Limit:           50,
+		Limit:           20,
 	})
 }
 
 func procesarSignalPendienteRuntimeTranscript(item *db.RuntimeTranscriptEntry) (bool, error) {
-	if item == nil || clasificacionSignalTranscript(item) == "" {
+	if item == nil || !signalTranscriptDebeProcesarse(item) {
 		return false, nil
 	}
 	note, err := procesarSignalTranscript(item)
@@ -1425,7 +1688,7 @@ func marcarSignalTranscriptManejado(item *db.RuntimeTranscriptEntry, note string
 }
 
 func procesarEntregasDesdeRuntimeTranscript() (int, error) {
-	items, err := runtimesService.ListRuntimeTranscript(db.FiltroRuntimeTranscript{Limit: 50})
+	items, err := runtimesService.ListRuntimeTranscript(db.FiltroRuntimeTranscript{Limit: 20})
 	if err != nil {
 		return 0, err
 	}
@@ -1523,7 +1786,15 @@ func clasificacionEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry) stri
 	if item == nil {
 		return ""
 	}
-	return strings.ToLower(strings.TrimSpace(item.Classification))
+	classification := strings.ToLower(strings.TrimSpace(item.Classification))
+	if classification != "" {
+		return classification
+	}
+	normalized := normalizedEntregaRuntimeTranscript(item)
+	if normalized == "" {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(db.ClasificarTextoTranscript(normalized)))
 }
 
 func normalizedEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry) string {
@@ -1721,9 +1992,32 @@ func registrarEntregaGitRuntimeTranscript(item *db.RuntimeTranscriptEntry, agent
 		"orquesta",
 	)
 	if err != nil {
+		if runtimeTranscriptEntregaGitErrorSkippable(err) {
+			note := runtimeTranscriptEntregaGitSkipNote(err)
+			if item != nil && item.ID > 0 {
+				if markErr := db.MarcarRuntimeTranscriptManejado(item.ID, note); markErr != nil {
+					return false, markErr
+				}
+			}
+			return false, nil
+		}
 		return false, err
 	}
 	return resultado != nil, nil
+}
+
+func runtimeTranscriptEntregaGitErrorSkippable(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(strings.TrimSpace(err.Error())), "no existe worktree activa")
+}
+
+func runtimeTranscriptEntregaGitSkipNote(err error) string {
+	if runtimeTranscriptEntregaGitErrorSkippable(err) {
+		return "stale:no_active_worktree"
+	}
+	return ""
 }
 
 func slugProyectoEntregaRuntimeTranscript(proyecto *db.Proyecto) string {
@@ -1754,6 +2048,10 @@ func procesarPresupuestoSesionObservadoBatch() (int, error) {
 	}
 	started := time.Now()
 	budget := runtimeBudgetBatchBudget()
+	var deadline time.Time
+	if budget > 0 {
+		deadline = started.Add(budget)
+	}
 	handles, err := db.ListarRuntimeHandlesParaPresupuesto()
 	if err != nil {
 		return 0, err
@@ -1762,11 +2060,11 @@ func procesarPresupuestoSesionObservadoBatch() (int, error) {
 	procesados := 0
 	vistos := map[string]struct{}{}
 	for _, handle := range handles {
-		if budget > 0 && time.Since(started) >= budget {
+		if runtimeBudgetDeadlineExpired(deadline) {
 			controlPlaneBudgetDebugf("runtime_budget batch_budget_agotado=%s procesados=%d handles_vistos=%d", budget, procesados, len(vistos))
 			break
 		}
-		ok, agente, err := refrescarPresupuestoSesionObservadoHandleFn(handle)
+		ok, agente, err := refrescarPresupuestoSesionObservadoHandleBatchFn(handle, deadline)
 		if err != nil {
 			return procesados, err
 		}
@@ -1782,7 +2080,15 @@ func procesarPresupuestoSesionObservadoBatch() (int, error) {
 	return procesados, nil
 }
 
+func refrescarPresupuestoSesionObservadoHandleBatch(handle *db.RuntimeHandle, deadline time.Time) (bool, string, error) {
+	return refrescarPresupuestoSesionObservadoHandleConOpciones(handle, deadline, true)
+}
+
 func refrescarPresupuestoSesionObservadoAgente(nombre string) (int, error) {
+	return refrescarPresupuestoSesionObservadoAgenteConOpciones(nombre, false)
+}
+
+func refrescarPresupuestoSesionObservadoAgenteConOpciones(nombre string, background bool) (int, error) {
 	nombre = strings.TrimSpace(nombre)
 	if db.DB == nil || db.DB.DB == nil {
 		return 0, nil
@@ -1793,7 +2099,7 @@ func refrescarPresupuestoSesionObservadoAgente(nombre string) (int, error) {
 			return procesados, err
 		}
 		if procesados > 0 {
-			resetStatusSnapshotCache()
+			invalidateStatusSnapshotCache()
 		}
 		return procesados, nil
 	}
@@ -1804,13 +2110,13 @@ func refrescarPresupuestoSesionObservadoAgente(nombre string) (int, error) {
 	ordenarHandlesParaPresupuestoVivo(handles)
 	procesados := 0
 	for _, handle := range handles {
-		ok, _, err := refrescarPresupuestoSesionObservadoHandle(handle)
+		ok, _, err := refrescarPresupuestoSesionObservadoHandleConOpciones(handle, time.Time{}, background)
 		if err != nil {
 			return procesados, err
 		}
 		if ok {
 			procesados++
-			resetStatusSnapshotCache()
+			invalidateStatusSnapshotCache()
 			break
 		}
 	}
@@ -1824,12 +2130,12 @@ func refrescarPresupuestoSesionObservadoAgente(nombre string) (int, error) {
 		}
 		return 0, err
 	}
-	ok, err := refrescarPresupuestoSesionObservadoDesdeSesion(sesion)
+	ok, err := refrescarPresupuestoSesionObservadoDesdeSesionConOpciones(sesion, time.Time{}, background)
 	if err != nil {
 		return 0, err
 	}
 	if ok {
-		resetStatusSnapshotCache()
+		invalidateStatusSnapshotCache()
 		return 1, nil
 	}
 	return procesados, nil
@@ -2069,9 +2375,38 @@ func renderedCommandDesdeSesion(sesion *db.Sesion) string {
 }
 
 func ordenarHandlesParaPresupuestoVivo(handles []*db.RuntimeHandle) {
+	scoresByID := make(map[int64]int64, len(handles))
+	scoresByPtr := make(map[*db.RuntimeHandle]int64, len(handles))
+	for _, handle := range handles {
+		if handle == nil {
+			continue
+		}
+		score := scoreHandlePresupuestoVivo(handle)
+		if handle.ID > 0 {
+			scoresByID[handle.ID] = score
+		} else {
+			scoresByPtr[handle] = score
+		}
+	}
 	sort.SliceStable(handles, func(i, j int) bool {
-		return scoreHandlePresupuestoVivo(handles[i]) > scoreHandlePresupuestoVivo(handles[j])
+		return scoreHandlePresupuestoVivoCached(handles[i], scoresByID, scoresByPtr) >
+			scoreHandlePresupuestoVivoCached(handles[j], scoresByID, scoresByPtr)
 	})
+}
+
+func scoreHandlePresupuestoVivoCached(handle *db.RuntimeHandle, scoresByID map[int64]int64, scoresByPtr map[*db.RuntimeHandle]int64) int64 {
+	if handle == nil {
+		return -1
+	}
+	if handle.ID > 0 {
+		if score, ok := scoresByID[handle.ID]; ok {
+			return score
+		}
+	}
+	if score, ok := scoresByPtr[handle]; ok {
+		return score
+	}
+	return scoreHandlePresupuestoVivo(handle)
 }
 
 func scoreHandlePresupuestoVivo(handle *db.RuntimeHandle) int64 {
@@ -2149,6 +2484,14 @@ func boolFromMap(m map[string]any, key string) bool {
 }
 
 func refrescarPresupuestoSesionObservadoHandle(handle *db.RuntimeHandle) (bool, string, error) {
+	return refrescarPresupuestoSesionObservadoHandleConOpciones(handle, time.Time{}, false)
+}
+
+func refrescarPresupuestoSesionObservadoHandleConOpciones(handle *db.RuntimeHandle, deadline time.Time, background bool) (bool, string, error) {
+	return refrescarPresupuestoSesionObservadoHandleConFallback(handle, deadline, background, true)
+}
+
+func refrescarPresupuestoSesionObservadoHandleConFallback(handle *db.RuntimeHandle, deadline time.Time, background bool, allowSessionFallback bool) (bool, string, error) {
 	if handle == nil {
 		return false, "", nil
 	}
@@ -2166,7 +2509,7 @@ func refrescarPresupuestoSesionObservadoHandle(handle *db.RuntimeHandle) (bool, 
 	}
 	sesionCanonica := sesionPresupuestoDesdeHandle(handle)
 	baseMetaJSON := metadataPresupuestoDesdeHandle(handle)
-	if handle.ID > 0 && db.DB != nil {
+	if !background && handle.ID > 0 && db.DB != nil {
 		if syncedHandle, _, _, err := db.SincronizarRuntimeHandleSupervisado(handle, nil, "budget_refresh"); err == nil && syncedHandle != nil {
 			handle = syncedHandle
 		} else if err != nil {
@@ -2175,21 +2518,21 @@ func refrescarPresupuestoSesionObservadoHandle(handle *db.RuntimeHandle) (bool, 
 	}
 	metaJSON := mergeBudgetMetadataJSON(metadataPresupuestoDesdeHandle(handle), baseMetaJSON)
 	obj := objetivoProcesoPresupuestoDesdeHandle(handle, metaJSON)
-	if ok, err := refrescarPresupuestoHandleDesdeObjetivo(handle, agente, obj); err != nil {
+	if ok, err := refrescarPresupuestoHandleDesdeObjetivo(handle, agente, obj, deadline, background); err != nil {
 		return false, agente, err
 	} else if ok {
 		return true, agente, nil
 	}
 	if strings.TrimSpace(baseMetaJSON) != "" && strings.TrimSpace(baseMetaJSON) != strings.TrimSpace(metaJSON) {
 		fallbackObj := controlruntime.ObjetivoProceso{MetadataJSON: baseMetaJSON}
-		if ok, err := refrescarPresupuestoHandleDesdeObjetivo(handle, agente, fallbackObj); err != nil {
+		if ok, err := refrescarPresupuestoHandleDesdeObjetivo(handle, agente, fallbackObj, deadline, background); err != nil {
 			return false, agente, err
 		} else if ok {
 			return true, agente, nil
 		}
 	}
-	if sesionCanonica != nil {
-		if ok, err := refrescarPresupuestoSesionObservadoDesdeSesion(sesionCanonica); err == nil && ok {
+	if allowSessionFallback && sesionCanonica != nil {
+		if ok, err := refrescarPresupuestoSesionObservadoDesdeSesionConOpciones(sesionCanonica, deadline, background); err == nil && ok {
 			return true, agente, nil
 		} else if err != nil {
 			return false, agente, err
@@ -2218,18 +2561,27 @@ func objetivoProcesoPresupuestoDesdeHandle(handle *db.RuntimeHandle, metadataJSO
 	return obj
 }
 
-func refrescarPresupuestoHandleDesdeObjetivo(handle *db.RuntimeHandle, agente string, obj controlruntime.ObjetivoProceso) (bool, error) {
+func refrescarPresupuestoHandleDesdeObjetivo(handle *db.RuntimeHandle, agente string, obj controlruntime.ObjetivoProceso, deadline time.Time, background bool) (bool, error) {
+	if runtimeBudgetDeadlineExpired(deadline) {
+		return false, nil
+	}
 	started := time.Now()
-	observed, err := controlruntime.ObserveCodexProfileStatus(obj)
+	observed, err := observeCodexProfileStatusFn(obj)
 	if err != nil {
 		controlPlaneBudgetDebugf("agente=%s codex_profile_status error=%v handle_kind=%s handle_ref=%s", agente, err, strings.TrimSpace(handle.HandleKind), strings.TrimSpace(handle.HandleRef))
 		observed = nil
 	}
 	if observed == nil {
+		if background {
+			return false, nil
+		}
+		if runtimeBudgetDeadlineExpired(deadline) {
+			return false, nil
+		}
 		if budgetRefreshObservationBudget > 0 && time.Since(started) >= budgetRefreshObservationBudget {
 			return false, nil
 		}
-		observed, err = controlruntime.ObserveCodexArtifacts(obj)
+		observed, err = observeCodexArtifactsFn(obj)
 		if err != nil {
 			controlPlaneBudgetDebugf("agente=%s codex_artifacts error=%v", agente, err)
 			return false, nil
@@ -2242,7 +2594,10 @@ func refrescarPresupuestoHandleDesdeObjetivo(handle *db.RuntimeHandle, agente st
 		}
 		return true, nil
 	}
-	claudeObserved, err := controlruntime.ObserveClaudeRustArtifacts(obj)
+	if background || runtimeBudgetDeadlineExpired(deadline) {
+		return false, nil
+	}
+	claudeObserved, err := observeClaudeRustArtifactsFn(obj)
 	if err != nil {
 		controlPlaneBudgetDebugf("agente=%s claude_artifacts error=%v", agente, err)
 		return false, nil
@@ -2456,6 +2811,11 @@ func persistirPresupuestoSesionObservado(handle *db.RuntimeHandle, observed *con
 			rawSnapshot = string(raw)
 		}
 	}
+	if ultimo, err := db.UltimoPresupuestoSesionPorFuente(sesionID, source); err == nil && ultimo != nil {
+		if presupuestoObservadoEsDuplicadoReciente(ultimo.CheckedAt, ultimo.RawSnapshotJSON, rawSnapshot) {
+			return nil
+		}
+	}
 	windowKind, startedAt, resetAt := codexObservedWindowMeta(observed.Primary, observed.Secondary, observed.ObservedAt)
 	presupuesto := &db.PresupuestoSesion{
 		SesionID:         sesionID,
@@ -2552,6 +2912,11 @@ func persistirPresupuestoSesionClaudeObservado(handle *db.RuntimeHandle, observe
 			rawSnapshot = string(raw)
 		}
 	}
+	if ultimo, err := db.UltimoPresupuestoSesionPorFuente(sesionID, source); err == nil && ultimo != nil {
+		if presupuestoObservadoEsDuplicadoReciente(ultimo.CheckedAt, ultimo.RawSnapshotJSON, rawSnapshot) {
+			return nil
+		}
+	}
 	presupuesto := &db.PresupuestoSesion{
 		SesionID:        sesionID,
 		WindowKind:      "unknown",
@@ -2565,6 +2930,17 @@ func persistirPresupuestoSesionClaudeObservado(handle *db.RuntimeHandle, observe
 	db.Audit("orquesta", "registrar_presupuesto_claude_observado", "presupuesto_sesion", 0,
 		fmt.Sprintf("agente=%s sesion=%d source=%s session_file=%s", strings.TrimSpace(handle.Agente), sesionID, source, strings.TrimSpace(observed.SessionPath)))
 	return nil
+}
+
+func presupuestoObservadoEsDuplicadoReciente(lastCheckedAt time.Time, previousRaw, currentRaw string) bool {
+	if lastCheckedAt.IsZero() {
+		return false
+	}
+	if time.Since(lastCheckedAt.UTC()) > presupuestoObservadoDuplicateWindow {
+		return false
+	}
+	return strings.TrimSpace(previousRaw) != "" &&
+		strings.TrimSpace(previousRaw) == strings.TrimSpace(currentRaw)
 }
 
 func int64PtrFromHandleRef(kind, ref string) *int64 {
@@ -2695,18 +3071,30 @@ func float64FromAny(raw any) (float64, bool) {
 }
 
 type runtimeMailboxBatchSnapshot struct {
-	hotHandles               map[string]*db.RuntimeHandle
-	activeHandles            map[string]*db.RuntimeHandle
-	activeHandleLoaded       map[string]struct{}
-	projectsByID             map[int64]*db.Proyecto
-	projectsLoaded           map[int64]struct{}
-	quotaState               map[string]bool
-	quotaStateLoaded         map[string]struct{}
-	ordersByAgentProject     map[string][]*db.RuntimeOrder
-	ordersLoaded             map[string]struct{}
-	pipelineLocalLatestByKey map[string]int64
-	supervisedByHandleID     map[int64]runtimeMailboxSupervisedHandleSnapshot
-	externalByHandleID       map[int64]runtimeMailboxExternalSessionSnapshot
+	hotHandles                    map[string]*db.RuntimeHandle
+	activeHandles                 map[string]*db.RuntimeHandle
+	activeHandleLoaded            map[string]struct{}
+	projectsByID                  map[int64]*db.Proyecto
+	projectsLoaded                map[int64]struct{}
+	quotaState                    map[string]bool
+	quotaStateLoaded              map[string]struct{}
+	tasksByAgentProject           map[string][]*db.Tarea
+	tasksLoaded                   map[string]struct{}
+	tasksByID                     map[int64]*db.Tarea
+	tasksByIDLoaded               map[int64]struct{}
+	activeTaskByAgentProject      map[string]int64
+	activeTaskLoaded              map[string]struct{}
+	ordersByAgentProject          map[string][]*db.RuntimeOrder
+	sendInstructionByAgentProject map[string][]*db.RuntimeOrder
+	sendInstructionLoaded         map[string]struct{}
+	ordersLoaded                  map[string]struct{}
+	ordersByID                    map[int64]*db.RuntimeOrder
+	ordersByIDLoaded              map[int64]struct{}
+	ordersOutOfOrderAllowed       map[int64]bool
+	ordersOutOfOrderLoaded        map[int64]struct{}
+	pipelineLocalLatestByKey      map[string]int64
+	supervisedByHandleID          map[int64]runtimeMailboxSupervisedHandleSnapshot
+	externalByHandleID            map[int64]runtimeMailboxExternalSessionSnapshot
 }
 
 type runtimeMailboxSupervisedHandleSnapshot struct {
@@ -2725,18 +3113,30 @@ type runtimeMailboxExternalSessionSnapshot struct {
 func newRuntimeMailboxBatchSnapshot() *runtimeMailboxBatchSnapshot {
 	hotHandles, _ := db.ListarRuntimeHandlesActivosOperativosRecientes()
 	return &runtimeMailboxBatchSnapshot{
-		hotHandles:               hotHandles,
-		activeHandles:            map[string]*db.RuntimeHandle{},
-		activeHandleLoaded:       map[string]struct{}{},
-		projectsByID:             map[int64]*db.Proyecto{},
-		projectsLoaded:           map[int64]struct{}{},
-		quotaState:               map[string]bool{},
-		quotaStateLoaded:         map[string]struct{}{},
-		ordersByAgentProject:     map[string][]*db.RuntimeOrder{},
-		ordersLoaded:             map[string]struct{}{},
-		pipelineLocalLatestByKey: map[string]int64{},
-		supervisedByHandleID:     map[int64]runtimeMailboxSupervisedHandleSnapshot{},
-		externalByHandleID:       map[int64]runtimeMailboxExternalSessionSnapshot{},
+		hotHandles:                    hotHandles,
+		activeHandles:                 map[string]*db.RuntimeHandle{},
+		activeHandleLoaded:            map[string]struct{}{},
+		projectsByID:                  map[int64]*db.Proyecto{},
+		projectsLoaded:                map[int64]struct{}{},
+		quotaState:                    map[string]bool{},
+		quotaStateLoaded:              map[string]struct{}{},
+		tasksByAgentProject:           map[string][]*db.Tarea{},
+		tasksLoaded:                   map[string]struct{}{},
+		tasksByID:                     map[int64]*db.Tarea{},
+		tasksByIDLoaded:               map[int64]struct{}{},
+		activeTaskByAgentProject:      map[string]int64{},
+		activeTaskLoaded:              map[string]struct{}{},
+		ordersByAgentProject:          map[string][]*db.RuntimeOrder{},
+		sendInstructionByAgentProject: map[string][]*db.RuntimeOrder{},
+		sendInstructionLoaded:         map[string]struct{}{},
+		ordersLoaded:                  map[string]struct{}{},
+		ordersByID:                    map[int64]*db.RuntimeOrder{},
+		ordersByIDLoaded:              map[int64]struct{}{},
+		ordersOutOfOrderAllowed:       map[int64]bool{},
+		ordersOutOfOrderLoaded:        map[int64]struct{}{},
+		pipelineLocalLatestByKey:      map[string]int64{},
+		supervisedByHandleID:          map[int64]runtimeMailboxSupervisedHandleSnapshot{},
+		externalByHandleID:            map[int64]runtimeMailboxExternalSessionSnapshot{},
 	}
 }
 
@@ -2882,9 +3282,144 @@ func (s *runtimeMailboxBatchSnapshot) ordersForAgentProject(agente string, proye
 	if err != nil {
 		return nil, err
 	}
+	for _, order := range orders {
+		if order == nil || order.ID <= 0 {
+			continue
+		}
+		s.ordersByID[order.ID] = order
+		s.ordersByIDLoaded[order.ID] = struct{}{}
+	}
 	s.ordersLoaded[key] = struct{}{}
 	s.ordersByAgentProject[key] = orders
 	return orders, nil
+}
+
+func (s *runtimeMailboxBatchSnapshot) sendInstructionOrders(agente string, proyectoID *int64) ([]*db.RuntimeOrder, error) {
+	if s == nil {
+		return runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
+			Agente:     stringPtr(strings.TrimSpace(agente)),
+			ProyectoID: proyectoID,
+			Tipos:      []string{"send_instruction"},
+		})
+	}
+	if s.sendInstructionLoaded == nil {
+		s.sendInstructionLoaded = map[string]struct{}{}
+	}
+	if s.sendInstructionByAgentProject == nil {
+		s.sendInstructionByAgentProject = map[string][]*db.RuntimeOrder{}
+	}
+	key := runtimeMailboxBatchKey(agente, proyectoID)
+	if _, ok := s.sendInstructionLoaded[key]; ok {
+		return s.sendInstructionByAgentProject[key], nil
+	}
+	orders := []*db.RuntimeOrder(nil)
+	if _, ok := s.ordersLoaded[key]; ok {
+		orders = s.ordersByAgentProject[key]
+		filtered := make([]*db.RuntimeOrder, 0, len(orders))
+		for _, order := range orders {
+			if order == nil || !strings.EqualFold(strings.TrimSpace(order.Tipo), "send_instruction") {
+				continue
+			}
+			filtered = append(filtered, order)
+		}
+		s.sendInstructionLoaded[key] = struct{}{}
+		s.sendInstructionByAgentProject[key] = filtered
+		return filtered, nil
+	}
+	var err error
+	orders, err = runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
+		Agente:     stringPtr(strings.TrimSpace(agente)),
+		ProyectoID: proyectoID,
+		Tipos:      []string{"send_instruction"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, order := range orders {
+		if order == nil || order.ID <= 0 {
+			continue
+		}
+		if s.ordersByID == nil {
+			s.ordersByID = map[int64]*db.RuntimeOrder{}
+		}
+		if s.ordersByIDLoaded == nil {
+			s.ordersByIDLoaded = map[int64]struct{}{}
+		}
+		s.ordersByID[order.ID] = order
+		s.ordersByIDLoaded[order.ID] = struct{}{}
+	}
+	s.sendInstructionLoaded[key] = struct{}{}
+	s.sendInstructionByAgentProject[key] = orders
+	return orders, nil
+}
+
+func (s *runtimeMailboxBatchSnapshot) hasOpenSendInstructionForHandle(handleID int64, agente string, proyectoID *int64) (bool, error) {
+	if handleID <= 0 {
+		return false, nil
+	}
+	orders, err := s.sendInstructionOrders(agente, proyectoID)
+	if err != nil {
+		return false, err
+	}
+	now := time.Now().UTC()
+	for _, order := range orders {
+		if order == nil || order.HandleID == nil || *order.HandleID != handleID {
+			continue
+		}
+		switch strings.TrimSpace(order.Estado) {
+		case "pendiente", "tomada", "ejecutando":
+			if !runtimeOrderSigueBloqueandoMailbox(order, now) {
+				continue
+			}
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (s *runtimeMailboxBatchSnapshot) order(id int64) (*db.RuntimeOrder, error) {
+	if id <= 0 {
+		return nil, nil
+	}
+	if s == nil {
+		return db.GetRuntimeOrder(id)
+	}
+	if _, ok := s.ordersByIDLoaded[id]; ok {
+		return s.ordersByID[id], nil
+	}
+	order, err := db.GetRuntimeOrder(id)
+	if err != nil {
+		return nil, err
+	}
+	s.ordersByIDLoaded[id] = struct{}{}
+	s.ordersByID[id] = order
+	return order, nil
+}
+
+func (s *runtimeMailboxBatchSnapshot) puedeConsumirseFueraDeOrden(msg *db.RuntimeMailboxMessage) (bool, error) {
+	if msg == nil || msg.RuntimeOrderID == nil || *msg.RuntimeOrderID <= 0 {
+		return true, nil
+	}
+	if s == nil {
+		return runtimeMailboxPuedeConsumirseFueraDeOrden(msg)
+	}
+	if _, ok := s.ordersOutOfOrderLoaded[*msg.RuntimeOrderID]; ok {
+		return s.ordersOutOfOrderAllowed[*msg.RuntimeOrderID], nil
+	}
+	order, err := s.order(*msg.RuntimeOrderID)
+	if err != nil {
+		return false, err
+	}
+	allowed := true
+	if order != nil {
+		switch strings.ToLower(strings.TrimSpace(order.Estado)) {
+		case "pendiente", "tomada", "ejecutando":
+			allowed = false
+		}
+	}
+	s.ordersOutOfOrderLoaded[*msg.RuntimeOrderID] = struct{}{}
+	s.ordersOutOfOrderAllowed[*msg.RuntimeOrderID] = allowed
+	return allowed, nil
 }
 
 func (s *runtimeMailboxBatchSnapshot) project(id int64) (*db.Proyecto, error) {
@@ -2921,6 +3456,119 @@ func (s *runtimeMailboxBatchSnapshot) quotaMatches(agente, estado string) (bool,
 	s.quotaStateLoaded[key] = struct{}{}
 	s.quotaState[key] = match
 	return match, nil
+}
+
+func (s *runtimeMailboxBatchSnapshot) task(id int64) (*db.Tarea, error) {
+	if id <= 0 {
+		return nil, nil
+	}
+	if s == nil {
+		return tareasService.Get(id)
+	}
+	if _, ok := s.tasksByIDLoaded[id]; ok {
+		return s.tasksByID[id], nil
+	}
+	tarea, err := tareasService.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	s.tasksByIDLoaded[id] = struct{}{}
+	s.tasksByID[id] = tarea
+	return tarea, nil
+}
+
+func (s *runtimeMailboxBatchSnapshot) tasks(agente string, proyectoID *int64) ([]*db.Tarea, error) {
+	if s == nil {
+		return tareasService.List(db.FiltroTareas{Agente: &agente, ProyectoID: proyectoID})
+	}
+	key := runtimeMailboxBatchKey(agente, proyectoID)
+	if _, ok := s.tasksLoaded[key]; ok {
+		return s.tasksByAgentProject[key], nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{Agente: &agente, ProyectoID: proyectoID})
+	if err != nil {
+		return nil, err
+	}
+	s.tasksLoaded[key] = struct{}{}
+	s.tasksByAgentProject[key] = tareas
+	return tareas, nil
+}
+
+func (s *runtimeMailboxBatchSnapshot) activeTaskID(agente string, proyectoID *int64) (int64, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return 0, nil
+	}
+	key := runtimeMailboxBatchKey(agente, proyectoID)
+	if s == nil {
+		return db.GetTareaActivaIDPorAgenteProyecto(agente, proyectoID)
+	}
+	if _, ok := s.activeTaskLoaded[key]; ok {
+		return s.activeTaskByAgentProject[key], nil
+	}
+	if _, ok := s.tasksLoaded[key]; ok {
+		if id := runtimeMailboxBatchSnapshotActiveTaskIDFromTasks(s.tasksByAgentProject[key], agente, proyectoID); id > 0 {
+			s.activeTaskLoaded[key] = struct{}{}
+			s.activeTaskByAgentProject[key] = id
+			return id, nil
+		}
+	}
+	id, err := db.GetTareaActivaIDPorAgenteProyecto(agente, proyectoID)
+	if err != nil {
+		return 0, err
+	}
+	s.activeTaskLoaded[key] = struct{}{}
+	s.activeTaskByAgentProject[key] = id
+	return id, nil
+}
+
+func runtimeMailboxBatchSnapshotActiveTaskIDFromTasks(tareas []*db.Tarea, agente string, proyectoID *int64) int64 {
+	var best *db.Tarea
+	bestRank := 0
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.Agente == nil {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(*tarea.Agente), agente) {
+			continue
+		}
+		if proyectoID != nil {
+			if tarea.ProyectoID == nil || *tarea.ProyectoID != *proyectoID {
+				continue
+			}
+		}
+		switch tarea.Estado {
+		case db.TareaAsignada, db.TareaEnProgreso:
+		default:
+			continue
+		}
+		if best == nil {
+			best = tarea
+			if tarea.Estado == db.TareaEnProgreso {
+				bestRank = 0
+			} else {
+				bestRank = 1
+			}
+			continue
+		}
+		rank := 1
+		if tarea.Estado == db.TareaEnProgreso {
+			rank = 0
+		}
+		if rank < bestRank {
+			best = tarea
+			bestRank = rank
+			continue
+		}
+		if rank == bestRank && (tarea.UpdatedAt.After(best.UpdatedAt) || (tarea.UpdatedAt.Equal(best.UpdatedAt) && tarea.ID > best.ID)) {
+			best = tarea
+			continue
+		}
+	}
+	if best == nil {
+		return 0
+	}
+	return best.ID
 }
 
 func (s *runtimeMailboxBatchSnapshot) pipelineLocalNoConsumirEnCuota(msg *db.RuntimeMailboxMessage) bool {
@@ -3006,6 +3654,34 @@ type runtimeMailboxBatchKindsSummary struct {
 	hasPipeline    bool
 	hasInstruction bool
 	hasRefresh     bool
+}
+
+type runtimeMailboxBatchBuckets struct {
+	all         []*db.RuntimeMailboxMessage
+	pipeline    []*db.RuntimeMailboxMessage
+	instruction []*db.RuntimeMailboxMessage
+	refresh     []*db.RuntimeMailboxMessage
+	watchdog    []*db.RuntimeMailboxMessage
+}
+
+func buildRuntimeMailboxBatchBuckets(mailbox []*db.RuntimeMailboxMessage) runtimeMailboxBatchBuckets {
+	buckets := runtimeMailboxBatchBuckets{all: mailbox}
+	for _, msg := range mailbox {
+		if msg == nil {
+			continue
+		}
+		switch strings.TrimSpace(msg.Kind) {
+		case "pipeline_local":
+			buckets.pipeline = append(buckets.pipeline, msg)
+		case "instruction":
+			buckets.instruction = append(buckets.instruction, msg)
+		case db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
+			buckets.refresh = append(buckets.refresh, msg)
+		case "watchdog":
+			buckets.watchdog = append(buckets.watchdog, msg)
+		}
+	}
+	return buckets
 }
 
 func resumirKindsRuntimeMailboxBatch(mailbox []*db.RuntimeMailboxMessage) runtimeMailboxBatchKindsSummary {
@@ -3094,61 +3770,62 @@ func procesarRuntimeMailboxBatchConFiltro(filter db.FiltroRuntimeMailbox) (int, 
 	}
 	consumed := map[int64]struct{}{}
 	snapshot := newRuntimeMailboxBatchSnapshot()
+	buckets := buildRuntimeMailboxBatchBuckets(mailbox)
 	phaseNames := runtimeMailboxBatchPhaseNames(mailbox)
 	phases := make([]runtimeMailboxBatchPhase, 0, len(phaseNames))
 	for _, name := range phaseNames {
 		switch name {
 		case "quota_pipeline":
 			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
-				return reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox, consumed, snapshot)
+				return reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(buckets.pipeline, consumed, snapshot)
 			}})
 		case "agente_sin_vida":
 			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
-				return reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox, consumed, snapshot)
+				return reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(buckets.all, consumed, snapshot)
 			}})
 		case "pipeline_enfriamiento":
 			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
-				return reconciliarRuntimeMailboxPipelineEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
+				return reconciliarRuntimeMailboxPipelineEnfriamientoBatchConMailbox(buckets.pipeline, consumed, snapshot)
 			}})
 		case "refresh_enfriamiento":
 			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
-				return reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
+				return reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(buckets.refresh, consumed, snapshot)
 			}})
 		case "instruction_enfriamiento":
 			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
-				return reconciliarRuntimeMailboxInstructionEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
+				return reconciliarRuntimeMailboxInstructionEnfriamientoBatchConMailbox(buckets.instruction, consumed, snapshot)
 			}})
 		case "instruction_obsoleta_contexto":
 			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
-				return reconciliarRuntimeMailboxInstructionObsoletaContextoBatchConMailbox(mailbox, consumed, snapshot)
+				return reconciliarRuntimeMailboxInstructionObsoletaContextoBatchConMailbox(buckets.instruction, consumed, snapshot)
 			}})
 		case "watchdog_sin_handle":
 			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
-				return reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox, consumed, snapshot)
+				return reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(buckets.watchdog, consumed, snapshot)
 			}})
 		case "interactive":
 			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
-				return procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox, consumed, snapshot)
+				return procesarRuntimeMailboxInteractivoBatchConMailbox(buckets.all, consumed, snapshot)
 			}})
 		case "session_resume":
 			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
-				return procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox, consumed, snapshot)
+				return procesarRuntimeMailboxSessionResumeBatchConMailbox(buckets.all, consumed, snapshot)
 			}})
 		case "bootstrap_tmux":
 			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
-				return procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(mailbox, consumed, snapshot)
+				return procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(buckets.all, consumed, snapshot)
 			}})
 		case "pipeline_bootstrap_activa":
 			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
-				return reconciliarRuntimeMailboxPipelineBootstrapActivaBatchConMailbox(mailbox, consumed, snapshot)
+				return reconciliarRuntimeMailboxPipelineBootstrapActivaBatchConMailbox(buckets.pipeline, consumed, snapshot)
 			}})
 		case "guidance_inbox":
 			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
-				return reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox, consumed, snapshot)
+				return reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(buckets.all, consumed, snapshot)
 			}})
 		case "coordinated_restart":
 			phases = append(phases, runtimeMailboxBatchPhase{name: name, deferStage: name, fn: func() (int, error) {
-				return procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox, consumed, snapshot)
+				return procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(buckets.all, consumed, snapshot)
 			}})
 		}
 	}
@@ -3224,7 +3901,7 @@ func reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox []
 		if _, ok := snapshot.pipelineLocalLatestByKey[runtimeMailboxBatchKey(agente, msg.ProyectoID)]; !ok {
 			snapshot.pipelineLocalLatestByKey[runtimeMailboxBatchKey(agente, msg.ProyectoID)] = newestByKey[k].latest
 		}
-		if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+		if canConsume, err := snapshot.puedeConsumirseFueraDeOrden(msg); err != nil {
 			return total, err
 		} else if !canConsume {
 			continue
@@ -3271,6 +3948,20 @@ func runtimeMailboxPipelineDebeCompactarseEnBatch(agente string, proyectoID *int
 	return false, nil
 }
 
+func refrescarPresupuestoSesionObservadoDesdeSesionConOpciones(sesion *db.Sesion, deadline time.Time, background bool) (bool, error) {
+	if runtimeBudgetDeadlineExpired(deadline) {
+		return false, nil
+	}
+	if background {
+		return false, nil
+	}
+	return refrescarPresupuestoSesionObservadoDesdeSesion(sesion)
+}
+
+func runtimeBudgetDeadlineExpired(deadline time.Time) bool {
+	return !deadline.IsZero() && !time.Now().UTC().Before(deadline)
+}
+
 func reconciliarRuntimeMailboxPipelineEnfriamientoBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
 	total := 0
 	for _, msg := range mailbox {
@@ -3280,7 +3971,7 @@ func reconciliarRuntimeMailboxPipelineEnfriamientoBatchConMailbox(mailbox []*db.
 		if _, skip := consumed[msg.ID]; skip {
 			continue
 		}
-		dispatched, err := reconciliarRuntimeMailboxPipelineEnfriamientoMensaje(msg, consumed)
+		dispatched, err := reconciliarRuntimeMailboxPipelineEnfriamientoMensaje(msg, consumed, snapshot)
 		if err != nil {
 			return total, err
 		}
@@ -3293,8 +3984,8 @@ func reconciliarRuntimeMailboxPipelineEnfriamientoBatchConMailbox(mailbox []*db.
 
 // reconciliarRuntimeMailboxPipelineEnfriamientoMensaje consume un pipeline_local ya
 // cualificado como consumible por enfriamiento. Retorna true si fue consumido.
-func reconciliarRuntimeMailboxPipelineEnfriamientoMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}) (bool, error) {
-	if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+func reconciliarRuntimeMailboxPipelineEnfriamientoMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	if canConsume, err := snapshot.puedeConsumirseFueraDeOrden(msg); err != nil {
 		return false, err
 	} else if !canConsume {
 		return false, nil
@@ -3351,7 +4042,7 @@ func reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox []*db.R
 		if _, skip := consumed[msg.ID]; skip {
 			continue
 		}
-		dispatched, err := reconciliarRuntimeMailboxRefreshEnfriamientoMensaje(msg, consumed)
+		dispatched, err := reconciliarRuntimeMailboxRefreshEnfriamientoMensaje(msg, consumed, snapshot)
 		if err != nil {
 			return total, err
 		}
@@ -3364,8 +4055,8 @@ func reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox []*db.R
 
 // reconciliarRuntimeMailboxRefreshEnfriamientoMensaje consume un refresh (governance/skills)
 // ya cualificado como consumible por enfriamiento. Retorna true si fue consumido.
-func reconciliarRuntimeMailboxRefreshEnfriamientoMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}) (bool, error) {
-	if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+func reconciliarRuntimeMailboxRefreshEnfriamientoMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	if canConsume, err := snapshot.puedeConsumirseFueraDeOrden(msg); err != nil {
 		return false, err
 	} else if !canConsume {
 		return false, nil
@@ -3422,7 +4113,7 @@ func reconciliarRuntimeMailboxAgenteSinVidaMensaje(msg *db.RuntimeMailboxMessage
 	if !debeConsumirse {
 		return false, nil
 	}
-	if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+	if canConsume, err := snapshot.puedeConsumirseFueraDeOrden(msg); err != nil {
 		return false, err
 	} else if !canConsume {
 		return false, nil
@@ -3448,7 +4139,7 @@ func reconciliarRuntimeMailboxInstructionEnfriamientoBatchConMailbox(mailbox []*
 		if _, skip := consumed[msg.ID]; skip {
 			continue
 		}
-		dispatched, err := reconciliarRuntimeMailboxInstructionEnfriamientoMensaje(msg, consumed)
+		dispatched, err := reconciliarRuntimeMailboxInstructionEnfriamientoMensaje(msg, consumed, snapshot)
 		if err != nil {
 			return total, err
 		}
@@ -3461,8 +4152,8 @@ func reconciliarRuntimeMailboxInstructionEnfriamientoBatchConMailbox(mailbox []*
 
 // reconciliarRuntimeMailboxInstructionEnfriamientoMensaje consume una instrucción
 // ya cualificada como consumible por enfriamiento. Retorna true si fue consumida.
-func reconciliarRuntimeMailboxInstructionEnfriamientoMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}) (bool, error) {
-	if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+func reconciliarRuntimeMailboxInstructionEnfriamientoMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	if canConsume, err := snapshot.puedeConsumirseFueraDeOrden(msg); err != nil {
 		return false, err
 	} else if !canConsume {
 		return false, nil
@@ -3511,7 +4202,7 @@ func reconciliarRuntimeMailboxInstructionObsoletaContextoMensaje(msg *db.Runtime
 	if !obsoleta {
 		return false, nil
 	}
-	if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+	if canConsume, err := snapshot.puedeConsumirseFueraDeOrden(msg); err != nil {
 		return false, err
 	} else if !canConsume {
 		return false, nil
@@ -3566,7 +4257,13 @@ func runtimeMailboxInstructionObsoletaPorContextoActual(msg *db.RuntimeMailboxMe
 	if msg.ProyectoID == nil {
 		return "", false, nil
 	}
-	tareas, err := tareasService.List(db.FiltroTareas{Agente: &agente, ProyectoID: msg.ProyectoID})
+	var tareas []*db.Tarea
+	var err error
+	if snapshot != nil {
+		tareas, err = snapshot.tasks(agente, msg.ProyectoID)
+	} else {
+		tareas, err = tareasService.List(db.FiltroTareas{Agente: &agente, ProyectoID: msg.ProyectoID})
+	}
 	if err != nil {
 		return "", false, err
 	}
@@ -3628,7 +4325,7 @@ func reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox []*db.Run
 // Retorna true si el mensaje fue consumido.
 func reconciliarRuntimeMailboxWatchdogSinHandleMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle) (bool, error) {
 	if watchdogPuedeConsumirsePorEnfriamiento(msg, handle, snapshot) {
-		if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+		if canConsume, err := snapshot.puedeConsumirseFueraDeOrden(msg); err != nil {
 			return false, err
 		} else if !canConsume {
 			return false, nil
@@ -3648,7 +4345,7 @@ func reconciliarRuntimeMailboxWatchdogSinHandleMensaje(msg *db.RuntimeMailboxMes
 	if handle != nil {
 		return false, nil
 	}
-	if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+	if canConsume, err := snapshot.puedeConsumirseFueraDeOrden(msg); err != nil {
 		return false, err
 	} else if !canConsume {
 		return false, nil
@@ -4633,7 +5330,25 @@ func clasificacionSignalTranscript(item *db.RuntimeTranscriptEntry) string {
 	if item == nil {
 		return ""
 	}
-	return strings.TrimSpace(item.Classification)
+	classification := strings.TrimSpace(item.Classification)
+	if classification != "" {
+		return classification
+	}
+	normalized := normalizarSignalTranscriptTexto(item)
+	if normalized == "" {
+		return ""
+	}
+	return strings.TrimSpace(db.ClasificarTextoTranscript(normalized))
+}
+
+func signalTranscriptDebeProcesarse(item *db.RuntimeTranscriptEntry) bool {
+	switch strings.ToLower(strings.TrimSpace(clasificacionSignalTranscript(item))) {
+	case "", "tool_execution", "tool_exploration", "bootstrap_guidance",
+		"progress_update", "tool_result_ok", "patch_or_code_evidence", "ui_noise":
+		return false
+	default:
+		return true
+	}
 }
 
 func agenteSignalTranscript(item *db.RuntimeTranscriptEntry) string {
@@ -5571,6 +6286,232 @@ func crearTareaBlockedAutonomiaSignal(policy *supervisionapp.Policy, proyecto *d
 	return id, nil
 }
 
+func existeTareaBlockedAutonomiaWorkerAtascadoPendiente(proyectoID, tareaID int64, agente string) (bool, error) {
+	if proyectoID <= 0 || tareaID <= 0 || strings.TrimSpace(agente) == "" {
+		return false, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		return false, err
+	}
+	marcaTarea := "tarea_origen:" + strconv.FormatInt(tareaID, 10)
+	marcaAgente := "agente_origen:" + strings.TrimSpace(agente)
+	marcaStuck := "worker_stuck"
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaCompletada, db.TareaCancelada:
+			continue
+		}
+		if !esTareaBlockedAutonomia(tarea) {
+			continue
+		}
+		notas := strings.TrimSpace(tarea.Notas)
+		if !strings.Contains(notas, marcaStuck) || !strings.Contains(notas, marcaTarea) || !strings.Contains(notas, marcaAgente) {
+			continue
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+func construirDescripcionTareaBlockedAutonomiaWorkerAtascado(objetivoGeneral string, proyecto *db.Proyecto, tarea *db.Tarea, agente, detalle string) string {
+	partes := []string{
+		"Orquesta ha detectado un worker atascado tras varios reinicios coordinados.",
+		"Actúa como repair-helper barato: diagnostica si basta continuidad, reanudación, resincronización de runtime o relevo del frente.",
+		"No escales a un modelo prime ni reasignes el frente completo sin evidencia breve y concreta de que la vía barata no basta.",
+	}
+	if proyecto != nil && slugProyectoAutonomia(proyecto) != "" {
+		partes = append(partes, "Proyecto: "+slugProyectoAutonomia(proyecto)+".")
+	}
+	if tarea != nil && tarea.ID > 0 {
+		partes = append(partes, fmt.Sprintf("Tarea origen: #%d.", tarea.ID))
+	}
+	if strings.TrimSpace(agente) != "" {
+		partes = append(partes, "Agente atascado: "+strings.TrimSpace(agente)+".")
+	}
+	if strings.TrimSpace(detalle) != "" {
+		partes = append(partes, "Detalle observado: "+strings.TrimSpace(detalle)+".")
+	}
+	if strings.TrimSpace(objetivoGeneral) != "" {
+		partes = append(partes, "Objetivo general: "+strings.TrimSpace(objetivoGeneral)+".")
+	}
+	return strings.Join(partes, " ")
+}
+
+func construirNotasTareaBlockedAutonomiaWorkerAtascado(tareaID int64, agente string) string {
+	return fmt.Sprintf("autonomia:blocked;worker_stuck;tarea_origen:%d;agente_origen:%s", tareaID, strings.TrimSpace(agente))
+}
+
+func crearTareaBlockedAutonomiaWorkerAtascado(objetivoGeneral string, proyecto *db.Proyecto, tarea *db.Tarea, agente, target, detalle string) (int64, error) {
+	if proyecto == nil || tarea == nil || tarea.ID <= 0 {
+		return 0, nil
+	}
+	id, err := tareasService.Create(tareasapp.CreateTaskInput{
+		Titulo:      autonomiaBlockedTaskTitle,
+		Descripcion: construirDescripcionTareaBlockedAutonomiaWorkerAtascado(objetivoGeneral, proyecto, tarea, agente, detalle),
+		Modulo:      "autonomia",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Agente:      strings.TrimSpace(target),
+		Proyecto:    proyecto.Slug,
+		Notas:       construirNotasTareaBlockedAutonomiaWorkerAtascado(tarea.ID, agente),
+	})
+	if err != nil {
+		return 0, err
+	}
+	if err := arrancarTareaAutonomiaSiAsignada(id, strings.TrimSpace(target)); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func asegurarRepairHelperWorkerAtascado(tarea *db.Tarea, agenteOrigen, target, detalle string) (string, error) {
+	if tarea == nil || tarea.ID <= 0 || tarea.ProyectoID == nil || *tarea.ProyectoID <= 0 {
+		return "", nil
+	}
+	agenteOrigen = strings.TrimSpace(agenteOrigen)
+	target = strings.TrimSpace(target)
+	if agenteOrigen == "" || target == "" || strings.EqualFold(agenteOrigen, target) {
+		return "", nil
+	}
+	policy, err := db.GetProyectoAutonomia(*tarea.ProyectoID)
+	if err != nil {
+		return "", err
+	}
+	if policy == nil || !policy.Enabled {
+		return "", nil
+	}
+	existe, err := existeTareaBlockedAutonomiaWorkerAtascadoPendiente(*tarea.ProyectoID, tarea.ID, agenteOrigen)
+	if err != nil {
+		return "", err
+	}
+	if existe {
+		return "repair_helper_exists", nil
+	}
+	proyecto, err := db.GetProyecto(strconv.FormatInt(*tarea.ProyectoID, 10))
+	if err != nil || proyecto == nil {
+		return "", err
+	}
+	id, err := crearTareaBlockedAutonomiaWorkerAtascado(strings.TrimSpace(policy.ObjetivoGeneral), proyecto, tarea, agenteOrigen, target, detalle)
+	if err != nil {
+		return "", err
+	}
+	if id <= 0 {
+		return "", nil
+	}
+	registrarAutonomyEventBestEffort(&db.AutonomyEvent{
+		Kind:      "repair_helper_opened",
+		Actor:     "orquesta",
+		ProjectID: tarea.ProyectoID,
+		TaskID:    ptrInt64Cmd(tarea.ID),
+		Source:    "control_plane",
+		Reason:    strings.TrimSpace(detalle),
+		StateDelta: map[string]any{
+			"repair_helper_task_id": id,
+			"task_state":            string(tarea.Estado),
+			"last_autonomy_action":  "repair_helper_opened",
+			"agente_origen":         agenteOrigen,
+			"agente_destino":        target,
+		},
+	})
+	return fmt.Sprintf("repair_helper_created:%d", id), nil
+}
+
+func tareaBlockedAutonomiaWorkerAtascado(tarea *db.Tarea) bool {
+	if tarea == nil || !esTareaBlockedAutonomia(tarea) {
+		return false
+	}
+	return strings.Contains(strings.TrimSpace(tarea.Notas), "worker_stuck")
+}
+
+func workerStuckRepairHelperStillNeeded(row agentesapp.Row) bool {
+	switch strings.TrimSpace(row.EstadoOperativo) {
+	case "atascado", "bloqueado_por_runtime", "caido", "mailbox_atascada":
+		return true
+	default:
+		return false
+	}
+}
+
+func procesarCierreRepairHelpersWorkerAtascadoBatch(rows []agentesapp.Row) (int, error) {
+	tareas, err := tareasService.List(db.FiltroTareas{})
+	if err != nil {
+		return 0, err
+	}
+	rowsPorAgente := rowsPorAgenteMap(rows)
+	procesadas := 0
+	for _, tarea := range tareas {
+		if !tareaBlockedAutonomiaWorkerAtascado(tarea) {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaCompletada, db.TareaCancelada:
+			continue
+		}
+		linkedTaskID, _ := strconv.ParseInt(strings.TrimSpace(extraerNotaAutonomiaKV(tarea.Notas, "tarea_origen")), 10, 64)
+		agenteOrigen := strings.TrimSpace(extraerNotaAutonomiaKV(tarea.Notas, "agente_origen"))
+		if linkedTaskID <= 0 || agenteOrigen == "" {
+			continue
+		}
+		linked, err := tareasService.Get(linkedTaskID)
+		if err != nil && err != sql.ErrNoRows {
+			return procesadas, err
+		}
+		if err == sql.ErrNoRows {
+			linked = nil
+		}
+		cerrar := false
+		motivo := ""
+		switch {
+		case linked == nil:
+			cerrar = true
+			motivo = "cerrada automáticamente: la tarea origen del repair-helper ya no existe"
+		case linked.Estado == db.TareaCompletada || linked.Estado == db.TareaCancelada || linked.Estado == db.TareaBloqueada:
+			cerrar = true
+			motivo = "cerrada automáticamente: la tarea origen ya no requiere repair-helper"
+		case linked.Agente == nil || !strings.EqualFold(strings.TrimSpace(*linked.Agente), agenteOrigen):
+			cerrar = true
+			motivo = "cerrada automáticamente: la tarea origen ya cambió de agente"
+		default:
+			if row, ok := rowsPorAgente[strings.ToLower(agenteOrigen)]; ok && !workerStuckRepairHelperStillNeeded(row) {
+				cerrar = true
+				motivo = "cerrada automáticamente: el agente origen ya no sigue degradado"
+			}
+		}
+		if !cerrar {
+			continue
+		}
+		projectID := tarea.ProyectoID
+		if linked != nil && linked.ProyectoID != nil && *linked.ProyectoID > 0 {
+			projectID = linked.ProyectoID
+		}
+		registrarAutonomyEventBestEffort(&db.AutonomyEvent{
+			Kind:      "repair_helper_closed",
+			Actor:     "orquesta",
+			ProjectID: projectID,
+			TaskID:    ptrInt64Cmd(linkedTaskID),
+			Source:    "control_plane",
+			Reason:    strings.TrimSpace(motivo),
+			StateDelta: map[string]any{
+				"repair_helper_task_id": tarea.ID,
+				"last_autonomy_action":  "repair_helper_closed",
+				"agente_origen":         agenteOrigen,
+			},
+		})
+		if err := tareasService.Complete(tarea.ID, "orquesta", motivo); err != nil {
+			return procesadas, err
+		}
+		procesadas++
+	}
+	if procesadas > 0 {
+		invalidateStatusSnapshotCache()
+	}
+	return procesadas, nil
+}
+
 func intentarReasignacionAutomaticaBlockedSignalTranscript(item *db.RuntimeTranscriptEntry, proyecto *db.Proyecto) (string, bool, error) {
 	if item == nil || proyecto == nil || proyecto.ID <= 0 {
 		return "", false, nil
@@ -5583,8 +6524,11 @@ func intentarReasignacionAutomaticaBlockedSignalTranscript(item *db.RuntimeTrans
 	if err != nil || tarea == nil {
 		return "", false, err
 	}
-	rows, err := agentesService.BuildPanelRows()
+	rows, err := buildPanelRowsForControlPlane()
 	if err != nil {
+		if controlPlaneRowsTimedOut(err) {
+			return "", false, nil
+		}
 		return "", false, err
 	}
 	return intentarReasignacionAutomaticaBlockedSignalTranscriptConRows(item, proyecto, tarea, rows, openTasksProjectedFromRows(rows))
@@ -6396,7 +7340,7 @@ func procesarRuntimeMailboxInteractivoMensaje(msg *db.RuntimeMailboxMessage, con
 	if err != nil {
 		return false, err
 	}
-	if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(msg, handle, "interactive", now, workerState); err != nil {
+	if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(msg, handle, "interactive", now, workerState, snapshot); err != nil {
 		return false, err
 	} else if obsoleta {
 		consumed[msg.ID] = struct{}{}
@@ -6542,6 +7486,16 @@ func intentarReactivarRuntimeMailboxSinHandle(msg *db.RuntimeMailboxMessage, sna
 			return false, nil
 		}
 	}
+	if handle, err := runtimesService.GetOperationalRuntimeHandleAgentProject(agente, &proyecto.ID); err != nil {
+		return false, err
+	} else if runtimeHandleCuentaComoActivoEnMailboxBatch(handle) {
+		return false, nil
+	}
+	if handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(agente, &proyecto.ID); err != nil {
+		return false, err
+	} else if runtimeHandleCuentaComoActivoEnMailboxBatch(handle) {
+		return false, nil
+	}
 	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
 		return false, err
 	} else if pendiente {
@@ -6604,7 +7558,11 @@ func agenteUsaPoolLocalCompartidoParaReactivacion(agente string, proyecto *db.Pr
 			return true
 		}
 	}
-	return runtimeagente.EsConectorFamiliaOllama(runtimeagente.ConectorPorDefectoAgente(agente), "")
+	if proyecto == nil || strings.TrimSpace(proyecto.Slug) == "" {
+		return false
+	}
+	_, poolSlug, err := db.PoolLocalCompartidoPermiteActivacionAgenteProyecto(agente, strings.TrimSpace(proyecto.Slug))
+	return err == nil && strings.TrimSpace(poolSlug) != ""
 }
 
 func runtimeHandleUsaPoolLocalCompartido(handle *db.RuntimeHandle) bool {
@@ -6765,7 +7723,16 @@ func procesarRuntimeMailboxSessionResumeBatch() (int, error) {
 }
 
 func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
+	if consumed == nil {
+		consumed = map[int64]struct{}{}
+	}
+	if snapshot == nil {
+		snapshot = newRuntimeMailboxBatchSnapshot()
+	}
 	total := 0
+	budget := runtimeMailboxBatchBudget()
+	start := time.Now()
+	examined := 0
 	for _, msg := range mailbox {
 		if msg == nil {
 			continue
@@ -6773,6 +7740,11 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 		if _, skip := consumed[msg.ID]; skip {
 			continue
 		}
+		if examined > 0 && budget > 0 && time.Since(start) >= budget {
+			runtimeMailboxBatchDebugf("phase=session_resume budget=%s examined=%d dispatched=%d", budget, examined, total)
+			break
+		}
+		examined++
 		dispatched, err := procesarRuntimeMailboxSessionResumeMensaje(msg, consumed, snapshot)
 		if err != nil {
 			return total, err
@@ -6826,23 +7798,16 @@ func procesarRuntimeMailboxSessionResumeMensaje(msg *db.RuntimeMailboxMessage, c
 // procesarRuntimeMailboxSessionResumeFallbackInteractivo gestiona mensajes de resume
 // cuando no hay externalSessionID: usa el canal interactivo transitorio como fallback.
 func procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto, externalSessionID string) (bool, error) {
+	if cubierta, err := consumirRuntimeMailboxSessionResumeCubiertaSiProcede(msg, consumed, handle, runtimeInstance, "interactive_transitory"); err != nil {
+		return false, err
+	} else if cubierta {
+		return true, nil
+	}
 	if !runtimeHandleAdmiteFallbackInteractivoTransitorio(handle) && !runtimeMailboxSessionResumePermiteFallbackInteractivoPipelineLocal(msg, handle, externalSessionID) {
 		return false, nil
 	}
 	if !runtimeHandleListaParaDispatchInteractivo(handle) {
 		return false, nil
-	}
-	if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "interactive_transitory", time.Now().UTC()); err != nil {
-		return false, err
-	} else if obsoleta {
-		consumed[msg.ID] = struct{}{}
-		return true, nil
-	}
-	if observada, err := consumirRuntimeMailboxBootstrapObservadoSiProcede(msg, handle, runtimeInstance, "interactive_transitory"); err != nil {
-		return false, err
-	} else if observada {
-		consumed[msg.ID] = struct{}{}
-		return true, nil
 	}
 	return encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID, "runtime_mailbox_session_resume_interactive_fallback", "runtime_mailbox_session_resume_interactive_supersede")
 }
@@ -6878,7 +7843,8 @@ func runtimeMailboxSessionResumePermiteFallbackInteractivoPipelineLocal(msg *db.
 }
 
 // procesarRuntimeMailboxSessionResumeConSesion gestiona mensajes de resume cuando
-// hay una externalSessionID: verifica condiciones TMUX y encola el resume normal.
+// hay una externalSessionID: primero consume mailbox_only entregada y luego
+// verifica condiciones TMUX para encolar el resume normal si sigue pendiente.
 func procesarRuntimeMailboxSessionResumeConSesion(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto, externalSessionID string) (bool, error) {
 	if mailboxOnlyConsumed, err := consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot, msg, handle, externalSessionID, "runtime_mailbox_session_resume"); err != nil {
 		return false, err
@@ -6886,22 +7852,15 @@ func procesarRuntimeMailboxSessionResumeConSesion(msg *db.RuntimeMailboxMessage,
 		consumed[msg.ID] = struct{}{}
 		return true, nil
 	}
+	if cubierta, err := consumirRuntimeMailboxSessionResumeCubiertaSiProcede(msg, consumed, handle, runtimeInstance, "session_resume"); err != nil {
+		return false, err
+	} else if cubierta {
+		return true, nil
+	}
 	if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, externalSessionID); err != nil {
 		return false, err
 	} else if dedupe {
 		return false, nil
-	}
-	if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "session_resume", time.Now().UTC()); err != nil {
-		return false, err
-	} else if obsoleta {
-		consumed[msg.ID] = struct{}{}
-		return true, nil
-	}
-	if observada, err := consumirRuntimeMailboxBootstrapObservadoSiProcede(msg, handle, runtimeInstance, "session_resume"); err != nil {
-		return false, err
-	} else if observada {
-		consumed[msg.ID] = struct{}{}
-		return true, nil
 	}
 	if blocked, err := runtimeMailboxBloqueadaPorBootstrapPendiente(msg, handle, runtimeInstance); err != nil {
 		return false, err
@@ -6918,6 +7877,26 @@ func procesarRuntimeMailboxSessionResumeConSesion(msg *db.RuntimeMailboxMessage,
 		return false, nil
 	}
 	return encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID, "runtime_mailbox_session_resume", "runtime_mailbox_session_resume_supersede")
+}
+
+func consumirRuntimeMailboxSessionResumeCubiertaSiProcede(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, lane string) (bool, error) {
+	if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, lane, time.Now().UTC()); err != nil {
+		return false, err
+	} else if obsoleta {
+		if consumed != nil && msg != nil {
+			consumed[msg.ID] = struct{}{}
+		}
+		return true, nil
+	}
+	if observada, err := consumirRuntimeMailboxBootstrapObservadoSiProcede(msg, handle, runtimeInstance, lane); err != nil {
+		return false, err
+	} else if observada {
+		if consumed != nil && msg != nil {
+			consumed[msg.ID] = struct{}{}
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 func encolarRuntimeMailboxSessionResumeSiCorresponde(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto, externalSessionID, auditAction, supersedeAction string) (bool, error) {
@@ -6972,14 +7951,12 @@ func consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot *runtimeM
 	}
 	currentSessionID := strings.TrimSpace(externalSessionID)
 	currentSignature := runtimeMailboxDeliveryAttemptSignature(handle, externalSessionID)
-	orders, err := snapshot.ordersForAgentProject(agente, msg.ProyectoID)
+	orders, err := snapshot.sendInstructionOrders(agente, msg.ProyectoID)
 	if err != nil {
 		return false, err
 	}
-	for _, order := range orders {
-		if !runtimeOrderMatchesMailboxSendInstructionAttemptForSession(order, msg.ID, handle.ID, currentSessionID) {
-			continue
-		}
+	attempts := runtimeMailboxSendInstructionAttemptsForMailboxHandle(orders, msg.ID, handle.ID, currentSessionID)
+	for _, order := range attempts {
 		if !strings.EqualFold(strings.TrimSpace(order.Estado), "completada") {
 			continue
 		}
@@ -6990,7 +7967,7 @@ func consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot *runtimeM
 			continue
 		}
 		if !runtimeOrderMatchesCurrentMailboxDeliveryAttempt(order, currentSessionID, currentSignature) {
-			if runtimeMailboxTieneIntentoSendInstructionAbierto(orders, msg.ID, handle.ID, currentSessionID, order.ID) {
+			if runtimeMailboxTieneIntentoSendInstructionAbierto(attempts, order.ID) {
 				continue
 			}
 			if runtimeOrderMailboxOnlyExpired(order) {
@@ -7010,12 +7987,23 @@ func consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot *runtimeM
 	return false, nil
 }
 
-func runtimeMailboxTieneIntentoSendInstructionAbierto(orders []*db.RuntimeOrder, mailboxID, handleID int64, externalSessionID string, excludeOrderID int64) bool {
+func runtimeMailboxSendInstructionAttemptsForMailboxHandle(orders []*db.RuntimeOrder, mailboxID, handleID int64, externalSessionID string) []*db.RuntimeOrder {
+	if len(orders) == 0 {
+		return nil
+	}
+	out := make([]*db.RuntimeOrder, 0, len(orders))
 	for _, order := range orders {
-		if order == nil || order.ID == excludeOrderID {
+		if !runtimeOrderMatchesMailboxSendInstructionAttemptForSession(order, mailboxID, handleID, externalSessionID) {
 			continue
 		}
-		if !runtimeOrderMatchesMailboxSendInstructionAttemptForSession(order, mailboxID, handleID, externalSessionID) {
+		out = append(out, order)
+	}
+	return out
+}
+
+func runtimeMailboxTieneIntentoSendInstructionAbierto(attempts []*db.RuntimeOrder, excludeOrderID int64) bool {
+	for _, order := range attempts {
+		if order == nil || order.ID == excludeOrderID {
 			continue
 		}
 		switch strings.ToLower(strings.TrimSpace(order.Estado)) {
@@ -7051,6 +8039,11 @@ func runtimeHandleAdmiteFallbackInteractivoTransitorio(handle *db.RuntimeHandle)
 	}
 	if !strings.EqualFold(strings.TrimSpace(handle.Transporte), "cli") || !strings.EqualFold(strings.TrimSpace(handle.HandleKind), "process") {
 		return false
+	}
+	for _, key := range []string{"rendered_command", "wrapped_command", "herramienta", "conector", "profile_status_wrapper"} {
+		if controlruntime.RenderedCommandLooksLikeTMUXPreferredCLI(value(key)) {
+			return false
+		}
 	}
 	if value("external_session_id") != "" {
 		return false
@@ -7200,7 +8193,7 @@ func runtimeMailboxGuidanceDurableKey(msg *db.RuntimeMailboxMessage) string {
 // un mensaje guidance-durable para el agente destino.
 // Retorna true si el mensaje fue entregado y consumido.
 func reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
-	if detalle, obsoleta, err := runtimeMailboxObsoletaPorTareaActivaActual(msg); err != nil {
+	if detalle, obsoleta, err := runtimeMailboxObsoletaPorTareaActivaActualConSnapshot(msg, snapshot); err != nil {
 		return false, err
 	} else if obsoleta {
 		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
@@ -7304,7 +8297,14 @@ func runtimeMailboxGuidanceDurableRequiereTriggerCaliente(handle *db.RuntimeHand
 	if !strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") && !strings.EqualFold(driver, "tmux_cli_session") {
 		return false
 	}
-	return runtimeagente.NormalizeMailboxDeliveryMode(db.RuntimeHandleMailboxDeliveryMode(handle)) == runtimeagente.MailboxDeliverySessionResume
+	switch runtimeagente.NormalizeMailboxDeliveryMode(db.RuntimeHandleMailboxDeliveryMode(handle)) {
+	case runtimeagente.MailboxDeliverySessionResume:
+		return db.RuntimeHandlePermiteSendInputInteractivo(handle)
+	case runtimeagente.MailboxDeliveryBootstrapOnly:
+		return true
+	default:
+		return false
+	}
 }
 
 func runtimeMailboxGuidanceDurableTriggerText(msg *db.RuntimeMailboxMessage) string {
@@ -7339,11 +8339,15 @@ func runtimeMailboxBloqueadaPorBootstrapPendiente(msg *db.RuntimeMailboxMessage,
 	if !covered || runtimeMailboxBootstrapPendientePermiteGuidanceDurable(msg, handle) {
 		return false, nil
 	}
-	if runtimeTMUXSessionResumeWorkerReady(handle) ||
-		runtimeTMUXSessionResumeWorkerWorkingEsperandoIO(handle, runtimeInstance) {
+	if runtimeMailboxBootstrapPendientePermiteDispatchSessionResume(handle, runtimeInstance) {
 		return false, nil
 	}
 	return true, nil
+}
+
+func runtimeMailboxBootstrapPendientePermiteDispatchSessionResume(handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance) bool {
+	return runtimeTMUXSessionResumeWorkerReady(handle) ||
+		runtimeTMUXSessionResumeWorkerWorkingEsperandoIO(handle, runtimeInstance)
 }
 
 func runtimeHandleListaParaDispatchBootstrapTMUX(handle *db.RuntimeHandle) bool {
@@ -7480,7 +8484,7 @@ func reconciliarRuntimeMailboxPipelineBootstrapActivaSiProcede(msg *db.RuntimeMa
 	if err != nil || order == nil {
 		return false, err
 	}
-	receiptAt, ok, err := runtimeMailboxPipelineBootstrapReceiptAt(msg, handle, now)
+	receiptAt, ok, err := runtimeMailboxPipelineBootstrapReceiptAt(msg, snapshot, handle, now)
 	if err != nil || !ok {
 		return false, err
 	}
@@ -7498,7 +8502,7 @@ func reconciliarRuntimeMailboxPipelineBootstrapActivaSiProcede(msg *db.RuntimeMa
 	return true, nil
 }
 
-func runtimeMailboxPipelineBootstrapReceiptAt(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, now time.Time) (time.Time, bool, error) {
+func runtimeMailboxPipelineBootstrapReceiptAt(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, now time.Time) (time.Time, bool, error) {
 	if msg == nil || handle == nil {
 		return time.Time{}, false, nil
 	}
@@ -7518,7 +8522,12 @@ func runtimeMailboxPipelineBootstrapReceiptAt(msg *db.RuntimeMailboxMessage, han
 	if msg.ProyectoID == nil || targetTaskID == nil || *targetTaskID <= 0 {
 		return time.Time{}, false, nil
 	}
-	activeTaskID, err := db.GetTareaActivaIDPorAgenteProyecto(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	var activeTaskID int64
+	if snapshot != nil {
+		activeTaskID, err = snapshot.activeTaskID(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	} else {
+		activeTaskID, err = db.GetTareaActivaIDPorAgenteProyecto(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	}
 	if err != nil || activeTaskID <= 0 || activeTaskID != *targetTaskID {
 		return time.Time{}, false, err
 	}
@@ -7541,7 +8550,7 @@ func runtimeMailboxPipelineBootstrapPendingOrder(snapshot *runtimeMailboxBatchSn
 	if snapshot == nil || msg == nil || handleID <= 0 {
 		return nil, nil
 	}
-	orders, err := snapshot.ordersForAgentProject(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	orders, err := snapshot.sendInstructionOrders(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
 	if err != nil {
 		return nil, err
 	}
@@ -7620,7 +8629,7 @@ func runtimeMailboxGuidanceDurableTieneEntregaMailboxOnly(snapshot *runtimeMailb
 		return false, err
 	}
 	currentSignature := runtimeMailboxDeliveryAttemptSignature(handle, currentSessionID)
-	orders, err := snapshot.ordersForAgentProject(agente, msg.ProyectoID)
+	orders, err := snapshot.sendInstructionOrders(agente, msg.ProyectoID)
 	if err != nil {
 		return false, err
 	}
@@ -7905,8 +8914,18 @@ func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, r
 	if view == nil {
 		return true
 	}
-	if !strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") &&
-		!strings.EqualFold(strings.TrimSpace(view.Transport), "tmux") {
+	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
+	workerDriver := firstNonEmpty(
+		strings.TrimSpace(view.Driver),
+		strings.TrimSpace(stringMapValue(meta, "driver")),
+	)
+	workerTransport := firstNonEmpty(
+		strings.TrimSpace(view.Transport),
+		strings.TrimSpace(stringMapValue(meta, "transport")),
+		strings.TrimSpace(handle.Transporte),
+	)
+	if !strings.EqualFold(workerDriver, "tmux_cli_session") &&
+		!strings.EqualFold(workerTransport, "tmux") {
 		return false
 	}
 	state := runtimeHandleWorkerCanonicalState(view)
@@ -7915,11 +8934,15 @@ func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, r
 		return true
 	}
 	if state == "working" {
+		externalSessionID := firstNonEmpty(
+			strings.TrimSpace(view.ExternalSessionID),
+			strings.TrimSpace(stringMapValue(meta, "external_session_id")),
+		)
 		if runtimeTMUXSessionResumePuedeDespacharPorRuntimeCanonico(runtime) {
 			return true
 		}
 		if view.Alive && !view.HeartbeatStale &&
-			strings.TrimSpace(view.ExternalSessionID) != "" &&
+			externalSessionID != "" &&
 			(runtime == nil || strings.EqualFold(strings.TrimSpace(runtime.ProcessState), "running")) {
 			return true
 		}
@@ -8133,7 +9156,7 @@ func existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot *runtimeMa
 	if agente == "" {
 		return false, nil
 	}
-	orders, err := snapshot.ordersForAgentProject(agente, msg.ProyectoID)
+	orders, err := snapshot.sendInstructionOrders(agente, msg.ProyectoID)
 	if err != nil {
 		return false, err
 	}
@@ -8283,12 +9306,27 @@ func runtimeOrderMailboxOnlySticky(order *db.RuntimeOrder) bool {
 	if order == nil || !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
 		return false
 	}
-	switch strings.TrimSpace(runtimeOrderMailboxKindFromJSON(order.PayloadJSON)) {
+	kind := strings.TrimSpace(runtimeOrderMailboxKindFromJSON(order.PayloadJSON))
+	switch kind {
 	case "autonomia", "nudge", "watchdog", db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
 		return true
 	default:
+		return strings.HasPrefix(kind, "autonomia_") || runtimeOrderMailboxOnlyEsContinuacionManualDurable(order.PayloadJSON)
+	}
+}
+
+func runtimeOrderMailboxOnlyEsContinuacionManualDurable(raw string) bool {
+	payload := mapFromJSON(raw)
+	if payload == nil {
 		return false
 	}
+	if !strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "mailbox_kind")), "pipeline_local") {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "accion")), "continuar_trabajo") {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "control_action")), "continue")
 }
 
 func runtimeMailboxOnlyDedupeTTL() time.Duration {
@@ -8442,15 +9480,15 @@ func runtimeMailboxSiguePendiente(id int64) bool {
 }
 
 func consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, lane string, now time.Time) (bool, error) {
-	return consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(msg, handle, lane, now, nil)
+	return consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(msg, handle, lane, now, nil, nil)
 }
 
-func consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, lane string, now time.Time, state *runtimeMailboxInteractiveWorkerState) (bool, error) {
+func consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, lane string, now time.Time, state *runtimeMailboxInteractiveWorkerState, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
 	kind := strings.TrimSpace(msg.Kind)
 	if msg == nil || handle == nil || (!runtimeMailboxKindEphemeral(kind) && !strings.EqualFold(kind, "pipeline_local")) {
 		return false, nil
 	}
-	if detalle, obsoleta, err := runtimeMailboxObsoletaPorTareaActivaActual(msg); err != nil {
+	if detalle, obsoleta, err := runtimeMailboxObsoletaPorTareaActivaActualConSnapshot(msg, snapshot); err != nil {
 		return false, err
 	} else if obsoleta {
 		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
@@ -8463,10 +9501,18 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(msg *db.RuntimeMa
 			fmt.Sprintf("lane=%s agente=%s kind=%s %s", strings.TrimSpace(lane), strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), strings.TrimSpace(detalle)))
 		return true, nil
 	}
-	if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
-		return false, err
-	} else if !canConsume {
-		return false, nil
+	if snapshot != nil {
+		if canConsume, err := snapshot.puedeConsumirseFueraDeOrden(msg); err != nil {
+			return false, err
+		} else if !canConsume {
+			return false, nil
+		}
+	} else {
+		if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+			return false, err
+		} else if !canConsume {
+			return false, nil
+		}
 	}
 	var view *runtimeagente.WorkerStatusView
 	if state != nil {
@@ -8484,7 +9530,7 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(msg *db.RuntimeMa
 	if view.StartedAt == nil || view.StartedAt.IsZero() {
 		return false, nil
 	}
-	if detalle, obsoleta := runtimeMailboxObsoletaPorProgresoTareaActual(msg, view); obsoleta {
+	if detalle, obsoleta := runtimeMailboxObsoletaPorProgresoTareaActualConSnapshot(msg, view, snapshot); obsoleta {
 		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
 			return false, err
 		}
@@ -8529,6 +9575,10 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(msg *db.RuntimeMa
 }
 
 func runtimeMailboxObsoletaPorProgresoTareaActual(msg *db.RuntimeMailboxMessage, view *runtimeagente.WorkerStatusView) (string, bool) {
+	return runtimeMailboxObsoletaPorProgresoTareaActualConSnapshot(msg, view, nil)
+}
+
+func runtimeMailboxObsoletaPorProgresoTareaActualConSnapshot(msg *db.RuntimeMailboxMessage, view *runtimeagente.WorkerStatusView, snapshot *runtimeMailboxBatchSnapshot) (string, bool) {
 	if msg == nil || view == nil {
 		return "", false
 	}
@@ -8537,7 +9587,13 @@ func runtimeMailboxObsoletaPorProgresoTareaActual(msg *db.RuntimeMailboxMessage,
 	if tareaID == nil || *tareaID <= 0 || msg.ProyectoID == nil {
 		return "", false
 	}
-	actualID, err := db.GetTareaActivaIDPorAgenteProyecto(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	var actualID int64
+	var err error
+	if snapshot != nil {
+		actualID, err = snapshot.activeTaskID(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	} else {
+		actualID, err = db.GetTareaActivaIDPorAgenteProyecto(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	}
 	if err != nil || actualID <= 0 || actualID != *tareaID {
 		return "", false
 	}
@@ -8568,6 +9624,10 @@ func runtimeMailboxObsoletaPorProgresoEfimero(msg *db.RuntimeMailboxMessage, vie
 }
 
 func runtimeMailboxObsoletaPorTareaActivaActual(msg *db.RuntimeMailboxMessage) (string, bool, error) {
+	return runtimeMailboxObsoletaPorTareaActivaActualConSnapshot(msg, nil)
+}
+
+func runtimeMailboxObsoletaPorTareaActivaActualConSnapshot(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) (string, bool, error) {
 	if msg == nil || msg.ProyectoID == nil {
 		return "", false, nil
 	}
@@ -8576,7 +9636,15 @@ func runtimeMailboxObsoletaPorTareaActivaActual(msg *db.RuntimeMailboxMessage) (
 	if tareaID == nil || *tareaID <= 0 {
 		return "", false, nil
 	}
-	tareaObjetivo, err := tareasService.Get(*tareaID)
+	var (
+		tareaObjetivo *db.Tarea
+		err           error
+	)
+	if snapshot != nil {
+		tareaObjetivo, err = snapshot.task(*tareaID)
+	} else {
+		tareaObjetivo, err = tareasService.Get(*tareaID)
+	}
 	if err != nil {
 		return "", false, err
 	}
@@ -8589,7 +9657,12 @@ func runtimeMailboxObsoletaPorTareaActivaActual(msg *db.RuntimeMailboxMessage) (
 	default:
 		return fmt.Sprintf("task_id=%d target_task_estado=%s proyecto_id=%d", *tareaID, strings.TrimSpace(string(tareaObjetivo.Estado)), *msg.ProyectoID), true, nil
 	}
-	tareas, err := tareasService.List(db.FiltroTareas{Agente: &agente, ProyectoID: msg.ProyectoID})
+	var tareas []*db.Tarea
+	if snapshot != nil {
+		tareas, err = snapshot.tasks(agente, msg.ProyectoID)
+	} else {
+		tareas, err = tareasService.List(db.FiltroTareas{Agente: &agente, ProyectoID: msg.ProyectoID})
+	}
 	if err != nil {
 		return "", false, err
 	}
@@ -8716,6 +9789,36 @@ func existeRuntimeOrderAbiertaPorHandle(handleID int64, tipos ...string) (bool, 
 	if handleID <= 0 || len(tipos) == 0 {
 		return false, nil
 	}
+	if handle, err := db.GetRuntimeHandle(handleID); err == nil && handle != nil {
+		orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
+			Agente:     stringPtr(strings.TrimSpace(handle.Agente)),
+			ProyectoID: handle.ProyectoID,
+		})
+		if err != nil {
+			return false, err
+		}
+		tiposWanted := map[string]struct{}{}
+		for _, tipo := range tipos {
+			tiposWanted[strings.TrimSpace(tipo)] = struct{}{}
+		}
+		for _, order := range orders {
+			if order == nil || order.HandleID == nil || *order.HandleID != handleID {
+				continue
+			}
+			switch strings.TrimSpace(order.Estado) {
+			case "pendiente", "tomada", "ejecutando":
+				if !runtimeOrderSigueBloqueandoMailbox(order, time.Now().UTC()) {
+					continue
+				}
+			default:
+				continue
+			}
+			if _, ok := tiposWanted[strings.TrimSpace(order.Tipo)]; ok {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
 	estados := []string{"pendiente", "tomada", "ejecutando"}
 	for _, estado := range estados {
 		estado := estado
@@ -8743,6 +9846,9 @@ func existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot *runtimeMailboxBatchS
 	}
 	if msg == nil || handleID <= 0 || len(tipos) == 0 {
 		return false, nil
+	}
+	if len(tipos) == 1 && strings.EqualFold(strings.TrimSpace(tipos[0]), "send_instruction") {
+		return snapshot.hasOpenSendInstructionForHandle(handleID, strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
 	}
 	orders, err := snapshot.ordersForAgentProject(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
 	if err != nil {
@@ -8804,6 +9910,13 @@ func construirInstruccionMailboxInteractivo(msg *db.RuntimeMailboxMessage) (stri
 			if texto == "" {
 				texto = stringMapValue(payload, "texto")
 			}
+			if resumen := resumenForkFuncionMailboxInteractivo(payload); resumen != "" && !strings.Contains(texto, resumen) {
+				texto = strings.TrimSpace(texto)
+				if texto != "" {
+					texto += "\n"
+				}
+				texto += resumen
+			}
 		} else if texto == "" {
 			texto = stringMapValue(payload, "instruction")
 		}
@@ -8858,6 +9971,91 @@ func construirInstruccionMailboxInteractivo(msg *db.RuntimeMailboxMessage) (stri
 	}
 }
 
+func resumenForkFuncionMailboxInteractivo(payload map[string]any) string {
+	if payload == nil {
+		return ""
+	}
+	fork, ok := payload["fork_funcion"].(map[string]any)
+	if !ok || len(fork) == 0 {
+		return ""
+	}
+	funcionObjetivo := strings.TrimSpace(stringMapValue(fork, "funcion_objetivo"))
+	if funcionObjetivo == "" {
+		return ""
+	}
+	partes := []string{fmt.Sprintf("FORK_FUNCION: %s", funcionObjetivo)}
+	if preservar, ok := fork["preservar_arquitectura"].(bool); ok && preservar {
+		partes = append(partes, "preserva arquitectura")
+	}
+	if materia := strings.TrimSpace(stringMapValue(fork, "materia")); materia != "" {
+		partes = append(partes, "materia="+materia)
+	}
+	if forkLines := runtimeMailboxIntMapValue(fork, "fork_lines"); forkLines > 0 {
+		partes = append(partes, fmt.Sprintf("lineas=%d", forkLines))
+	}
+	modelosSeleccionados := runtimeMailboxStringSliceAny(fork["selected_models"])
+	if len(modelosSeleccionados) > 0 {
+		partes = append(partes, "seleccion="+strings.Join(modelosSeleccionados, ", "))
+	}
+	modelos := runtimeMailboxStringSliceAny(fork["modelos_candidatos"])
+	if len(modelos) > 0 {
+		partes = append(partes, "modelos="+strings.Join(modelos, ", "))
+	}
+	writeSet := runtimeMailboxStringSliceAny(fork["write_set"])
+	if len(writeSet) > 0 {
+		partes = append(partes, "write_set="+strings.Join(writeSet, ", "))
+	}
+	if reason := strings.TrimSpace(stringMapValue(fork, "decision_reason")); reason != "" {
+		partes = append(partes, "motivo="+reason)
+	}
+	return strings.Join(partes, " · ")
+}
+
+func runtimeMailboxStringSliceAny(v any) []string {
+	switch typed := v.(type) {
+	case []string:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if s := strings.TrimSpace(item); s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if s := strings.TrimSpace(fmt.Sprint(item)); s != "" && s != "<nil>" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func runtimeMailboxIntMapValue(m map[string]any, key string) int {
+	if m == nil {
+		return 0
+	}
+	switch v := m[key].(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case float32:
+		return int(v)
+	case string:
+		var out int
+		fmt.Sscanf(strings.TrimSpace(v), "%d", &out)
+		return out
+	default:
+		return 0
+	}
+}
+
 func procesarPipelineLocalBatch() (int, error) {
 	proyectos, err := db.ListarProyectosActivos()
 	if err != nil {
@@ -8878,7 +10076,7 @@ func procesarPipelineLocalBatch() (int, error) {
 		}
 	}
 	if procesados > 0 {
-		resetStatusSnapshotCache()
+		invalidateStatusSnapshotCache()
 	}
 	return procesados, nil
 }
@@ -8995,7 +10193,7 @@ func auditarPipelineLocalDispatch(proyectoID int64, slug string, despacho *capac
 		return
 	}
 	db.Audit("server", "pipeline_local_dispatch", "proyecto", proyectoID,
-		fmt.Sprintf("proyecto=%s fase=%s carril=%s agente=%s tarea_id=%d start_order_id=%d runtime_order_id=%d",
+		fmt.Sprintf("proyecto=%s fase=%s carril=%s agente=%s tarea_id=%d start_order_id=%d runtime_order_id=%d paralelismo=%t max_subagentes=%d",
 			slug,
 			strings.TrimSpace(despacho.Fase),
 			strings.TrimSpace(despacho.Carril),
@@ -9003,7 +10201,16 @@ func auditarPipelineLocalDispatch(proyectoID int64, slug string, despacho *capac
 			despacho.TareaObjetivoID,
 			valorID(dispatchRuntime.StartOrderID),
 			valorID(dispatchRuntime.RuntimeOrderID),
+			despacho.Paralelismo != nil && despacho.Paralelismo.PuedeAbrirSubagentes,
+			valorMaxSubagentesPipeline(despacho.Paralelismo),
 		))
+}
+
+func valorMaxSubagentesPipeline(p *capacidadapp.PoliticaParalelismoPipelineLocal) int {
+	if p == nil {
+		return 0
+	}
+	return p.MaxSubagentes
 }
 
 func procesarCierreProyectoAutonomiaSinSesion(proyecto *db.Proyecto) (bool, error) {
@@ -9140,7 +10347,7 @@ func procesarAutonomiaAgentesBatch() (int, error) {
 			autonomiaTickDebugf("batch_budget omite_degradados=%s sesiones_procesadas=%d acciones=%d", budget, sesionesProcesadas, procesadas)
 		}
 		if procesadas > 0 {
-			resetStatusSnapshotCache()
+			invalidateStatusSnapshotCache()
 		}
 		return procesadas, nil
 	}
@@ -9154,15 +10361,47 @@ func procesarAutonomiaAgentesBatch() (int, error) {
 		db.Audit("server", "autonomia_agentes_degradados_error", "runtime", 0, err.Error())
 		autonomiaTickDebugf("agentes_degradados duration=%s procesadas=%d", time.Since(degradadosStart).Round(time.Millisecond), 0)
 		if procesadas > 0 {
-			resetStatusSnapshotCache()
+			invalidateStatusSnapshotCache()
 		}
 		return procesadas, nil
 	}
 	procesadas += n
 	autonomiaTickDebugf("agentes_degradados duration=%s procesadas=%d", time.Since(degradadosStart).Round(time.Millisecond), n)
+	redistribucionPrimeStart := time.Now()
+	n, err = ejecutarPasoAutonomiaConTimeout(
+		"redistribucion_prime",
+		autonomiaDegradedBatchTimeout(),
+		func() (int, error) { return procesarRedistribucionPrimeAutonomiaBatch() },
+	)
+	if err != nil {
+		db.Audit("server", "autonomia_redistribucion_prime_error", "runtime", 0, err.Error())
+		autonomiaTickDebugf("redistribucion_prime duration=%s procesadas=%d", time.Since(redistribucionPrimeStart).Round(time.Millisecond), 0)
+		if procesadas > 0 {
+			invalidateStatusSnapshotCache()
+		}
+		return procesadas, nil
+	}
+	procesadas += n
+	autonomiaTickDebugf("redistribucion_prime duration=%s procesadas=%d", time.Since(redistribucionPrimeStart).Round(time.Millisecond), n)
+	expansionWorkersStart := time.Now()
+	n, err = ejecutarPasoAutonomiaConTimeout(
+		"expansion_workers",
+		autonomiaDegradedBatchTimeout(),
+		func() (int, error) { return procesarExpansionWorkersAutonomiaBatch() },
+	)
+	if err != nil {
+		db.Audit("server", "autonomia_expansion_workers_error", "runtime", 0, err.Error())
+		autonomiaTickDebugf("expansion_workers duration=%s procesadas=%d", time.Since(expansionWorkersStart).Round(time.Millisecond), 0)
+		if procesadas > 0 {
+			invalidateStatusSnapshotCache()
+		}
+		return procesadas, nil
+	}
+	procesadas += n
+	autonomiaTickDebugf("expansion_workers duration=%s procesadas=%d", time.Since(expansionWorkersStart).Round(time.Millisecond), n)
 	autonomiaTickDebugf("batch sesiones=%d procesadas=%d duration=%s acciones=%d", len(sesiones), sesionesProcesadas, time.Since(start).Round(time.Millisecond), procesadas)
 	if procesadas > 0 {
-		resetStatusSnapshotCache()
+		invalidateStatusSnapshotCache()
 	}
 	return procesadas, nil
 }
@@ -9347,9 +10586,21 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 		return runtimeProcessDegradadosSummary{}, fmt.Errorf("reanimaciones automáticas: %d error(es)", reanimaciones.Errors)
 	}
 
+	if err := db.ReconciliarEstadoAutonomia(); err != nil {
+		return runtimeProcessDegradadosSummary{}, err
+	}
+	if skip, _, err := shouldSkipControlPlaneLoop("server_autonomy_maintenance"); err != nil {
+		return runtimeProcessDegradadosSummary{}, err
+	} else if skip && !controlPlaneHasOperationalHandles() {
+		return runtimeProcessDegradadosSummary{Count: reanimaciones.Reactivated}, nil
+	}
+
 	db.ResetRuntimeHandlesHotCache()
-	rows, err := agentesService.BuildPanelRows()
+	rows, err := buildPanelRowsForControlPlane()
 	if err != nil {
+		if controlPlaneRowsTimedOut(err) {
+			return runtimeProcessDegradadosSummary{Count: reanimaciones.Reactivated}, nil
+		}
 		return runtimeProcessDegradadosSummary{}, err
 	}
 	tareasActivasPorAgente, tareasBloqueadasPorAgente, bloqueosPorTarea, err := cargarTareasYBloqueosAutonomiaPorAgente()
@@ -9377,6 +10628,11 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 		rowsPorAgente = rowsPorAgenteMap(rows)
 		openTasksProjected = openTasksProjectedFromRows(rows)
 	}
+	sesionesAjenas, err := procesarSesionesActivasProyectoAjenoBatch(rows)
+	if err != nil {
+		return resumen, err
+	}
+	resumen.Count += sesionesAjenas
 	migradas, err := procesarMigracionRuntimeLegacyTMUXBatch(rows, now)
 	if err != nil {
 		return resumen, err
@@ -9399,6 +10655,26 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 			return resumen, err
 		}
 		rowsPorAgente = rowsPorAgenteMap(rows)
+		openTasksProjected = openTasksProjectedFromRows(rows)
+	}
+	repairHelpersCerrados, err := procesarCierreRepairHelpersWorkerAtascadoBatch(rows)
+	if err != nil {
+		return resumen, err
+	}
+	resumen.Count += repairHelpersCerrados
+	if repairHelpersCerrados > 0 {
+		rows, err = buildPanelRowsForControlPlane()
+		if err != nil {
+			if controlPlaneRowsTimedOut(err) {
+				return resumen, nil
+			}
+			return resumen, err
+		}
+		rowsPorAgente = rowsPorAgenteMap(rows)
+		tareasActivasPorAgente, tareasBloqueadasPorAgente, bloqueosPorTarea, err = cargarTareasYBloqueosAutonomiaPorAgente()
+		if err != nil {
+			return resumen, err
+		}
 		openTasksProjected = openTasksProjectedFromRows(rows)
 	}
 	limpiadasFuera, err := procesarTareasActivasFueraDeOrquestacionBatch(rows, tareasActivasPorAgente, rowsPorAgente, openTasksProjected)
@@ -9434,8 +10710,11 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 	resumen.Count += reactivadosSinRuntime
 	if reactivadosSinRuntime > 0 {
 		_ = agentesSinRuntime
-		rows, err = agentesService.BuildPanelRows()
+		rows, err = buildPanelRowsForControlPlane()
 		if err != nil {
+			if controlPlaneRowsTimedOut(err) {
+				return resumen, nil
+			}
 			return resumen, err
 		}
 		rowsPorAgente = rowsPorAgenteMap(rows)
@@ -9467,9 +10746,50 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 	}
 	resumen.Count += intervencionBloqueadas
 	if resumen.Count > 0 {
-		resetStatusSnapshotCache()
+		invalidateStatusSnapshotCache()
 	}
 	return resumen, nil
+}
+
+func procesarSesionesActivasProyectoAjenoBatch(rows []agentesapp.Row) (int, error) {
+	procesadas := 0
+	for _, row := range rows {
+		if row.Agente == nil || row.Sesion == nil || row.Sesion.ProyectoID == nil || *row.Sesion.ProyectoID <= 0 {
+			continue
+		}
+		if !row.Sesion.Activa || !strings.EqualFold(strings.TrimSpace(row.Sesion.Estado), "activa") {
+			continue
+		}
+		agente := strings.TrimSpace(row.Agente.Nombre)
+		if agente == "" {
+			continue
+		}
+		proyectoObjetivo, err := orquestacionAgentesService.ResolveReactivationProject(agente)
+		if err != nil {
+			return procesadas, err
+		}
+		if proyectoObjetivo == nil || proyectoObjetivo.ID <= 0 || proyectoObjetivo.ID == *row.Sesion.ProyectoID {
+			continue
+		}
+		if abierta, err := existeRuntimeOrderAbiertaAutonomia(agente, row.Sesion.ProyectoID, "stop", "pause", "checkpoint", "resume", "start", "handoff"); err != nil {
+			return procesadas, err
+		} else if abierta {
+			continue
+		}
+		proyectoActual, err := runtimesService.GetProject(strconv.FormatInt(*row.Sesion.ProyectoID, 10))
+		if err != nil {
+			return procesadas, err
+		}
+		if proyectoActual == nil || proyectoActual.ID <= 0 {
+			continue
+		}
+		motivo := fmt.Sprintf("sesion_activa_en_otro_proyecto:%s", firstNonEmpty(strings.TrimSpace(proyectoObjetivo.Slug), strconv.FormatInt(proyectoObjetivo.ID, 10)))
+		if err := encolarControlAutonomiaProyecto(agente, proyectoActual, agenteControlAccionStop, motivo); err != nil {
+			return procesadas, err
+		}
+		procesadas++
+	}
+	return procesadas, nil
 }
 
 // procesarRecuperacionTareasBloqueadasSobrecargaBatch reactivca o reasigna tareas bloqueadas
@@ -9818,13 +11138,9 @@ func agentesWorkersAtascadosRecuperables(rows []agentesapp.Row, now time.Time) m
 
 func agentesSinRuntimeReactivables(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea, tareasBloqueadasPorAgente map[string][]*db.Tarea) map[string]struct{} {
 	out := map[string]struct{}{}
+	now := time.Now().UTC()
 	for _, row := range rows {
-		if row.Agente == nil {
-			continue
-		}
-		switch strings.TrimSpace(row.EstadoOperativo) {
-		case "bloqueado_por_runtime", "caido":
-		default:
+		if !rowDebeReactivarseSinRuntime(row, tareasActivasPorAgente, tareasBloqueadasPorAgente, now) {
 			continue
 		}
 		if rowTieneRuntimeOHandleOperativo(row) {
@@ -9906,10 +11222,14 @@ func procesarAutoasignacionPremiumSinSesionBatch(rows []agentesapp.Row, tareasAc
 			continue
 		}
 		agente := strings.TrimSpace(row.Agente.Nombre)
+		if strings.EqualFold(strings.TrimSpace(row.EstadoOperativo), "retirado") ||
+			strings.Contains(strings.ToLower(strings.TrimSpace(row.DetalleOperativo)), "agente retirado") {
+			continue
+		}
 		if agente == "" || row.OpenTasks > 0 || row.MailboxPending > 0 || len(tareasActivasPorAgente[agente]) > 0 {
 			continue
 		}
-		if rowTieneRuntimeUtilParaAutoasignacionPremium(row) {
+		if relevoAutonomiaCostTier(agente) > 0 {
 			continue
 		}
 		if disponible, _, err := autonomiaCuentaCompartidaDisponible(agente); err != nil {
@@ -9927,9 +11247,24 @@ func procesarAutoasignacionPremiumSinSesionBatch(rows []agentesapp.Row, tareasAc
 		if !proyectoUsaContinuidadMicrocicloPremium(proyecto.ID) {
 			continue
 		}
+		if rowTieneRuntimeUtilParaAutoasignacionPremium(row) {
+			reactivado, err := reactivarWorkerDisponibleConAsignacionPausada(row, proyecto)
+			if err != nil {
+				return procesadas, err
+			}
+			if reactivado {
+				procesadas++
+			}
+			continue
+		}
 		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "pause", "checkpoint", "resume", "start", "handoff"); err != nil {
 			return procesadas, err
 		} else if pendiente {
+			continue
+		}
+		if reciente, err := existeRuntimeOrderControlRecienteAutonomia(agente, &proyecto.ID, autonomiaReactivationAttemptCooldown(), "start", "resume"); err != nil {
+			return procesadas, err
+		} else if reciente {
 			continue
 		}
 		tarea, err := capacidadService.IntentarAutoasignarTareaPipelineLocal(proyecto.Slug, agente)
@@ -9960,6 +11295,69 @@ func procesarAutoasignacionPremiumSinSesionBatch(rows []agentesapp.Row, tareasAc
 		procesadas++
 	}
 	return procesadas, nil
+}
+
+func reactivarWorkerDisponibleConAsignacionPausada(row agentesapp.Row, proyecto *db.Proyecto) (bool, error) {
+	if row.Agente == nil || proyecto == nil || proyecto.ID <= 0 {
+		return false, nil
+	}
+	agente := strings.TrimSpace(row.Agente.Nombre)
+	if agente == "" {
+		return false, nil
+	}
+	if row.Asignacion != nil && row.Asignacion.Estado == db.AsignacionActiva {
+		return false, nil
+	}
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "pause", "checkpoint", "resume", "start", "handoff", "nudge", "send_instruction"); err != nil {
+		return false, err
+	} else if pendiente {
+		return false, nil
+	}
+	tarea, err := capacidadService.IntentarAutoasignarTareaPipelineLocal(proyecto.Slug, agente)
+	if err != nil {
+		return false, err
+	}
+	if tarea == nil {
+		tarea, err = asegurarFrentePremiumAgenteIdle(row.Agente, proyecto)
+		if err != nil {
+			return false, err
+		}
+	}
+	if tarea == nil {
+		return false, nil
+	}
+	if err := db.ActivarAsignacion(agente, proyecto.ID, "reactivacion_automatica_trabajo_activo"); err != nil {
+		return false, err
+	}
+	if err := cerrarSemillaPremiumSiDerivaAFrenteAcotado(agente, proyecto.ID, tarea); err != nil {
+		return false, err
+	}
+	ok, err := encolarNudgeAutonomiaConInvalidacion(
+		nil,
+		agente,
+		proyecto,
+		"continuar_trabajo",
+		fmt.Sprintf("Tarea #%d asignada automáticamente", tarea.ID),
+		"toma tarea asignada y sigue",
+		map[string]any{"tarea_id": tarea.ID, "motivo_autoasignacion": "runtime_idle_paused_assignment"},
+	)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+	db.Audit("orquesta", "autonomia_runtime_idle_reactivado", "proyecto", proyecto.ID,
+		fmt.Sprintf("agente=%s tarea_id=%d detalle=%s", agente, tarea.ID, strings.TrimSpace(row.DetalleOperativo)))
+	return true, nil
+}
+
+func autonomiaReactivationAttemptCooldown() time.Duration {
+	seconds := controlPlaneConfigIntOrDefault("autonomia_reactivation_attempt_cooldown_seconds", 120)
+	if seconds <= 0 {
+		seconds = 120
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func resolverProyectoAutoasignacionPremiumSinSesion(agente string, row agentesapp.Row) (*db.Proyecto, error) {
@@ -10328,7 +11726,7 @@ func procesarCompactacionExclusividadPremiumBatch(rows []agentesapp.Row, tareasA
 		}
 	}
 	if procesadas > 0 {
-		resetStatusSnapshotCache()
+		invalidateStatusSnapshotCache()
 	}
 	return procesadas, nil
 }
@@ -10383,10 +11781,29 @@ func procesarRuntimesFueraDeAsignacionActivaBatch(rows []agentesapp.Row, now tim
 }
 
 func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
-	estado := db.AsignacionActiva
-	asignaciones, err := db.ListarAsignaciones(db.FiltroAsignaciones{Estado: &estado})
-	if err != nil {
-		return 0, err
+	estados := []db.EstadoAsignacion{db.AsignacionActiva, db.AsignacionPausada}
+	asignaciones := make([]*db.Asignacion, 0)
+	for _, estado := range estados {
+		items, err := db.ListarAsignaciones(db.FiltroAsignaciones{Estado: &estado})
+		if err != nil {
+			return 0, err
+		}
+		asignaciones = append(asignaciones, items...)
+	}
+	filtered := make([]*db.Asignacion, 0, len(asignaciones))
+	for _, asignacion := range asignaciones {
+		if asignacion == nil || asignacion.ProyectoID <= 0 {
+			continue
+		}
+		switch asignacion.Estado {
+		case db.AsignacionActiva:
+			filtered = append(filtered, asignacion)
+		case db.AsignacionPausada:
+			switch strings.TrimSpace(asignacion.Nota) {
+			case "sin_trabajo_reactivacion_automatica", "sin_trabajo_espera_automatica":
+				filtered = append(filtered, asignacion)
+			}
+		}
 	}
 	type agenteAsignacionesActivas struct {
 		proyectos map[int64]struct{}
@@ -10399,10 +11816,8 @@ func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
 	handlesByAgent := map[string][]*db.RuntimeHandle{}
 	proyectosByID := map[int64]*db.Proyecto{}
 	asignacionesPorAgente := map[string]*agenteAsignacionesActivas{}
-	for _, asignacion := range asignaciones {
-		if asignacion == nil || asignacion.ProyectoID <= 0 {
-			continue
-		}
+	var err error
+	for _, asignacion := range filtered {
 		agente := strings.TrimSpace(asignacion.Agente)
 		if agente == "" {
 			continue
@@ -10748,12 +12163,7 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 	now := time.Now().UTC()
 	openTasksProjected := openTasksProjectedFromRows(rows)
 	for _, row := range rows {
-		if row.Agente == nil {
-			continue
-		}
-		switch strings.TrimSpace(row.EstadoOperativo) {
-		case "bloqueado_por_runtime", "caido":
-		default:
+		if !rowDebeReactivarseSinRuntime(row, tareasActivasPorAgente, tareasBloqueadasPorAgente, now) {
 			continue
 		}
 		if rowTieneRuntimeOHandleOperativo(row) {
@@ -10763,11 +12173,33 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 		if agente == "" {
 			continue
 		}
-		activasRestantes, relevadas, err := relevarTareasActivasSinRuntimeSiCorresponde(rows, openTasksProjected, agente, tareasActivasPorAgente[agente])
-		if err != nil {
-			return procesadas, err
+		if row.Sesion == nil && row.OpenTasks > 0 {
+			if reinicios, err := encolarReinicioRuntimeHandleAutonomiaRow(row, now, "esperar_recuperacion_runtime"); err != nil {
+				return procesadas, err
+			} else if reinicios > 0 {
+				procesadas += reinicios
+				continue
+			}
 		}
-		procesadas += relevadas
+		activasRestantes := tareasActivasPorAgente[agente]
+		if relevoAutonomiaCostTier(agente) > 0 {
+			relevadas := 0
+			activasRestantes, relevadas, err = relevarTareasActivasSinRuntimeSiCorresponde(rows, openTasksProjected, agente, tareasActivasPorAgente[agente])
+			if err != nil {
+				return procesadas, err
+			}
+			procesadas += relevadas
+			if len(activasRestantes) == 0 && relevadas > 0 {
+				continue
+			}
+		} else if !rowPermiteAutoRecuperacion(row, now) {
+			relevadas := 0
+			activasRestantes, relevadas, err = relevarTareasActivasSinRuntimeSiCorresponde(rows, openTasksProjected, agente, tareasActivasPorAgente[agente])
+			if err != nil {
+				return procesadas, err
+			}
+			procesadas += relevadas
+		}
 		if !rowTieneTrabajoReactivableSinRuntime(row, activasRestantes, tareasBloqueadasPorAgente[agente], bloqueosPorTarea, now) {
 			continue
 		}
@@ -10816,6 +12248,46 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 	return procesadas, nil
 }
 
+func rowDebeReactivarseSinRuntime(row agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea, tareasBloqueadasPorAgente map[string][]*db.Tarea, now time.Time) bool {
+	if row.Agente == nil {
+		return false
+	}
+	switch strings.TrimSpace(row.EstadoOperativo) {
+	case "bloqueado_por_runtime", "caido":
+		return true
+	}
+	if rowTieneRuntimeOHandleOperativo(row) {
+		return false
+	}
+	agente := strings.TrimSpace(row.Agente.Nombre)
+	if agente == "" {
+		return false
+	}
+	proyectoID := valorProyectoID(rowProyectoIDPreferido(row))
+	if proyectoID <= 0 {
+		return false
+	}
+	policy, err := db.GetProyectoAutonomia(proyectoID)
+	if err != nil || policy == nil || !policy.Enabled {
+		return false
+	}
+	reservado := (policy.ReserveSupervisor && strings.EqualFold(agente, strings.TrimSpace(policy.SupervisorAgente))) ||
+		(policy.ReserveReviewer && strings.EqualFold(agente, strings.TrimSpace(policy.ReviewerAgente)))
+	if !reservado {
+		return false
+	}
+	if row.Asignacion == nil || row.Asignacion.ProyectoID != proyectoID || row.Asignacion.Estado != db.AsignacionActiva {
+		return false
+	}
+	if row.MailboxPending > 0 || row.MailboxContinuityPending > 0 || row.DurableContinuityPending(now) {
+		return true
+	}
+	if len(tareasActivasPorAgente[agente]) > 0 || len(tareasBloqueadasPorAgente[agente]) > 0 {
+		return true
+	}
+	return false
+}
+
 func relevarTareasActivasSinRuntimeSiCorresponde(rows []agentesapp.Row, openTasksProjected map[string]int, agente string, tareas []*db.Tarea) ([]*db.Tarea, int, error) {
 	agente = strings.TrimSpace(agente)
 	if agente == "" || len(tareas) == 0 {
@@ -10837,7 +12309,7 @@ func relevarTareasActivasSinRuntimeSiCorresponde(rows []agentesapp.Row, openTask
 		if actual.Estado != db.EstadoAsignada && actual.Estado != db.EstadoEnProgreso {
 			continue
 		}
-		relevo := seleccionarRelevoAutonomia(rows, openTasksProjected, actual, agente)
+		relevo := seleccionarRelevoAutonomiaSinRuntime(rows, openTasksProjected, actual, agente)
 		if relevo == "" {
 			restantes = append(restantes, actual)
 			continue
@@ -11052,13 +12524,29 @@ func procesarWorkerAtascadoAutonomiaRow(row agentesapp.Row, rows []agentesapp.Ro
 	if row.Agente == nil || strings.TrimSpace(row.EstadoOperativo) != "atascado" {
 		return 0, nil
 	}
-	if !row.WorkerFresh(now) {
+	if row.Asignacion != nil &&
+		strings.EqualFold(strings.TrimSpace(string(row.Asignacion.Estado)), string(db.AsignacionPausada)) &&
+		row.OpenTasks <= 0 &&
+		row.BlockedTasks <= 0 {
+		return 0, nil
+	}
+	handle, sesion, proyectoID, err := resolverContextoRuntimeAutonomiaRow(row)
+	if err != nil {
+		return 0, err
+	}
+	if row.Handle == nil && handle != nil {
+		row.Handle = handle
+	}
+	if row.Sesion == nil && sesion != nil {
+		row.Sesion = sesion
+	}
+	if !row.WorkerFresh(now) && !rowHasFreshTMUXWorkerForRecovery(row, now) {
 		return 0, nil
 	}
 	if row.OpenTasks <= 0 && row.MailboxPending <= 0 {
 		return 0, nil
 	}
-	handle := row.Handle
+	handle = row.Handle
 	if handle == nil {
 		return 0, nil
 	}
@@ -11070,20 +12558,22 @@ func procesarWorkerAtascadoAutonomiaRow(row agentesapp.Row, rows []agentesapp.Ro
 		return 0, nil
 	}
 	if rowAtascadoPrefiereContinuacionLocal(row, now) {
-		proyectoID := rowProyectoIDPreferido(row)
 		if proyectoID != nil && *proyectoID > 0 {
-			if rowDurableContinuityPending(row, now) {
-				return 0, nil
-			}
-			if abierta, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "pause", "checkpoint", "resume", "start", "handoff"); err != nil {
+			if abierta, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "pause", "checkpoint", "resume", "start", "handoff", "send_instruction"); err != nil {
 				return 0, err
 			} else if !abierta {
-				tareaID := rowDurableContinuityTaskID(row, now)
+				durableTaskID := rowDurableContinuityTaskID(row, now)
+				tareaID, err := db.GetTareaActivaIDPorAgenteProyecto(agente, proyectoID)
+				if err != nil {
+					return 0, err
+				}
 				if tareaID <= 0 {
-					tareaID, err = db.GetTareaActivaIDPorAgenteProyecto(agente, proyectoID)
-					if err != nil {
-						return 0, err
-					}
+					tareaID = durableTaskID
+				}
+				if durableTaskID > 0 && tareaID > 0 && durableTaskID == tareaID &&
+					rowDurableContinuityPending(row, now) &&
+					row.EffectiveContinuityPending(now) {
+					return 0, nil
 				}
 				if tareaID > 0 {
 					proyecto := &db.Proyecto{ID: *proyectoID, Slug: rowProyectoSlugPreferido(row)}
@@ -11119,7 +12609,6 @@ func procesarWorkerAtascadoAutonomiaRow(row agentesapp.Row, rows []agentesapp.Ro
 	} else if !disponible {
 		return 0, nil
 	}
-	proyectoID := rowProyectoIDPreferido(row)
 	stopCount, err := contarRuntimeOrdersRecientes(agente, proyectoID, "stop", "stop", escalationWindow)
 	if err != nil {
 		return 0, err
@@ -11127,7 +12616,7 @@ func procesarWorkerAtascadoAutonomiaRow(row agentesapp.Row, rows []agentesapp.Ro
 	if stopCount >= escalationCount {
 		return escalarTareasWorkerAtascado(row, rows, now)
 	}
-	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "stop", "pause", "checkpoint", "start", "restart", "resume", "handoff"); err != nil {
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "stop", "pause", "checkpoint", "start", "restart", "resume", "handoff", "send_instruction"); err != nil {
 		return 0, err
 	} else if pendiente {
 		return 0, nil
@@ -11143,6 +12632,9 @@ func procesarWorkerAtascadoAutonomiaRow(row agentesapp.Row, rows []agentesapp.Ro
 	if stopReciente || startReciente {
 		return 0, nil
 	}
+	if handle == nil {
+		return 0, nil
+	}
 	stopOrderID, startOrderID, err := db.EncolarReinicioCoordinadoRuntimeHandle(handle, proyectoID, "worker_atascado", "orquesta")
 	if err != nil {
 		return 0, err
@@ -11153,14 +12645,64 @@ func procesarWorkerAtascadoAutonomiaRow(row agentesapp.Row, rows []agentesapp.Ro
 	}
 	db.Audit("orquesta", "runtime_restart_stuck_worker", "runtime_handle", handle.ID,
 		fmt.Sprintf("agente=%s proyecto_id=%s stop_order_id=%d start_order_id=%d detalle=%s", agente, detalleProyecto, stopOrderID, startOrderID, firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), "worker atascado")))
+	registrarAutonomyEventBestEffort(&db.AutonomyEvent{
+		Kind:      "runtime_restart_requested",
+		Actor:     "orquesta",
+		ProjectID: proyectoID,
+		HandleID:  ptrInt64Cmd(handle.ID),
+		Source:    "runtime_restart_stuck_worker",
+		Reason:    firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), "worker atascado"),
+		StateDelta: map[string]any{
+			"last_autonomy_action": "runtime_restart_requested",
+			"runtime_state":        runtimeStateForAutonomyEvent(row),
+			"handle_state":         handleStateForAutonomyEvent(row),
+			"stop_order_id":        stopOrderID,
+			"start_order_id":       startOrderID,
+			"agente":               agente,
+		},
+	})
 	return 1, nil
+}
+
+func registrarAutonomyEventBestEffort(ev *db.AutonomyEvent) {
+	if ev == nil {
+		return
+	}
+	if err := db.RegistrarAutonomyEvent(ev); err != nil {
+		log.Printf("orquesta/cmd: autonomy event failed kind=%s err=%v", strings.TrimSpace(ev.Kind), err)
+	}
+}
+
+func ptrInt64Cmd(v int64) *int64 {
+	if v <= 0 {
+		return nil
+	}
+	value := v
+	return &value
+}
+
+func runtimeStateForAutonomyEvent(row agentesapp.Row) string {
+	if row.Runtime != nil {
+		return firstNonEmpty(strings.TrimSpace(row.Runtime.LogicalState), strings.TrimSpace(row.Runtime.ProcessState))
+	}
+	return ""
+}
+
+func handleStateForAutonomyEvent(row agentesapp.Row) string {
+	if row.Handle != nil {
+		return strings.TrimSpace(row.Handle.Estado)
+	}
+	return ""
 }
 
 func rowAtascadoPrefiereContinuacionLocal(row agentesapp.Row, now time.Time) bool {
 	if row.Agente == nil || row.OpenTasks <= 0 {
 		return false
 	}
-	if row.Handle == nil || row.MailboxPending > 0 || row.OrdersOpen > 0 {
+	if row.Handle == nil || row.OrdersOpen > 0 {
+		return false
+	}
+	if !rowAtascadoMailboxPermiteContinuacionLocal(row, now) {
 		return false
 	}
 	if !row.WorkerAlive || !row.WorkerFresh(now) {
@@ -11177,6 +12719,89 @@ func rowAtascadoPrefiereContinuacionLocal(row agentesapp.Row, now time.Time) boo
 	default:
 		return false
 	}
+}
+
+func rowAtascadoMailboxPermiteContinuacionLocal(row agentesapp.Row, now time.Time) bool {
+	if row.MailboxPending <= 0 {
+		return true
+	}
+	if row.MailboxActionablePending > row.MailboxContinuityPending {
+		return false
+	}
+	if row.MailboxContinuityPending > 0 || row.DurableContinuityPending(now) {
+		return true
+	}
+	return false
+}
+
+func resolverContextoRuntimeAutonomiaRow(row agentesapp.Row) (*db.RuntimeHandle, *db.Sesion, *int64, error) {
+	if row.Agente == nil {
+		return row.Handle, row.Sesion, rowProyectoIDPreferido(row), nil
+	}
+	agente := strings.TrimSpace(row.Agente.Nombre)
+	if agente == "" {
+		return row.Handle, row.Sesion, rowProyectoIDPreferido(row), nil
+	}
+	proyectoID := rowProyectoIDPreferido(row)
+	sesion := row.Sesion
+	handle := row.Handle
+	if handle != nil && proyectoID != nil && *proyectoID > 0 {
+		return handle, sesion, proyectoID, nil
+	}
+	if handle == nil && proyectoID != nil && *proyectoID > 0 {
+		resolved, err := db.GetRuntimeHandleActivoAgenteProyecto(agente, proyectoID)
+		if err != nil {
+			return nil, sesion, proyectoID, err
+		}
+		if resolved != nil {
+			handle = resolved
+			if sesion == nil && handle.SesionID != nil && *handle.SesionID > 0 {
+				sesion, err = db.GetSesionActiva(agente, proyectoID)
+				if err != nil && err != sql.ErrNoRows {
+					return handle, nil, proyectoID, err
+				}
+				if err == sql.ErrNoRows {
+					sesion = nil
+				}
+			}
+			return handle, sesion, proyectoID, nil
+		}
+	}
+	if sesion == nil {
+		var err error
+		sesion, err = db.GetSesionActivaOperativa(agente, proyectoID)
+		if err != nil && err != sql.ErrNoRows {
+			return handle, nil, proyectoID, err
+		}
+		if err == sql.ErrNoRows {
+			sesion, err = db.GetSesionActiva(agente, proyectoID)
+			if err != nil && err != sql.ErrNoRows {
+				return handle, nil, proyectoID, err
+			}
+			if err == sql.ErrNoRows {
+				sesion = nil
+			}
+		}
+	}
+	if sesion != nil && (proyectoID == nil || *proyectoID <= 0) && sesion.ProyectoID != nil && *sesion.ProyectoID > 0 {
+		id := *sesion.ProyectoID
+		proyectoID = &id
+	}
+	if handle == nil && sesion != nil && sesion.ID > 0 {
+		resolved, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+		if err != nil {
+			return nil, sesion, proyectoID, err
+		}
+		handle = resolved
+	}
+	if handle == nil {
+		resolved, err := db.GetRuntimeHandleActivoAgenteProyecto(agente, proyectoID)
+		if err != nil {
+			return nil, sesion, proyectoID, err
+		}
+		handle = resolved
+	}
+	return handle, sesion, proyectoID, nil
 }
 
 func procesarSesionesTMUXHuerfanasAutonomiaBatch(now time.Time) (int, error) {
@@ -11201,8 +12826,15 @@ func procesarSesionesTMUXHuerfanasAutonomiaBatch(now time.Time) (int, error) {
 			continue
 		}
 		seenSessions[sessionName] = true
+		key := runtimeTMUXOrphanCleanupKey(sessionName)
+		if key != "" && !runtimeTMUXOrphanCleanupGate.Allow(key, runtimeTMUXOrphanCleanupInterval()) {
+			continue
+		}
 		aplicado, err := controlruntime.DetenerSesionTMUXMetadata(handle.MetadataJSON)
 		if err != nil {
+			if key != "" {
+				runtimeTMUXOrphanCleanupGate.Forget(key)
+			}
 			if errorMigracionRuntimeLegacyTMUXIgnorable(err) {
 				continue
 			}
@@ -11327,6 +12959,20 @@ func escalarTareasWorkerAtascado(row agentesapp.Row, rows []agentesapp.Row, now 
 			continue
 		}
 		relevo := seleccionarRelevoAutonomia(rows, openTasksProjected, actual, agente)
+		if relevo != "" {
+			repairHelper, err := asegurarRepairHelperWorkerAtascado(actual, agente, relevo, firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), motivo))
+			if err != nil {
+				return procesadas, err
+			}
+			switch {
+			case strings.HasPrefix(repairHelper, "repair_helper_created:"):
+				openTasksProjected[relevo]++
+				procesadas++
+				continue
+			case repairHelper == "repair_helper_exists":
+				continue
+			}
+		}
 		if relevo == "" {
 			if err := bloquearTareaAutonomiaSinRelevo(actual.ID, agente, motivo, fmt.Sprintf("Bloqueada automáticamente en %s por atasco persistente tras reinicios recientes", agente)); err != nil {
 				return procesadas, err
@@ -11374,7 +13020,7 @@ func escalarTareasWorkerAtascado(row agentesapp.Row, rows []agentesapp.Row, now 
 		procesadas++
 	}
 	if procesadas > 0 {
-		resetStatusSnapshotCache()
+		invalidateStatusSnapshotCache()
 	}
 	return procesadas, nil
 }
@@ -11757,6 +13403,9 @@ func rowPermiteAutoRecuperacion(row agentesapp.Row, now time.Time) bool {
 		return true
 	}
 	if !row.WorkerFresh(now) {
+		if rowPermiteAutoRecuperacionPorTMUXReciente(row, now) {
+			return true
+		}
 		return false
 	}
 	if row.Handle != nil {
@@ -11772,6 +13421,86 @@ func rowPermiteAutoRecuperacion(row agentesapp.Row, now time.Time) bool {
 		}
 	}
 	return false
+}
+
+func rowPermiteAutoRecuperacionPorTMUXReciente(row agentesapp.Row, now time.Time) bool {
+	if !rowTieneActividadOperativaRecienteParaRecuperacion(row, now) {
+		return false
+	}
+	if row.OpenTasks <= 0 && row.BlockedTasks <= 0 && row.MailboxPending <= 0 &&
+		row.MailboxContinuityPending <= 0 && !row.DurableContinuityPending(now) {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(row.WorkerDriver), "tmux_cli_session") {
+		return true
+	}
+	if row.Handle != nil && strings.EqualFold(strings.TrimSpace(row.Handle.Transporte), "tmux") {
+		return true
+	}
+	return false
+}
+
+func rowTieneActividadOperativaRecienteParaRecuperacion(row agentesapp.Row, now time.Time) bool {
+	cutoff := now.Add(-10 * time.Minute)
+	for _, ts := range rowTimestampsOperativosRecientes(row) {
+		if !ts.IsZero() && !ts.Before(cutoff) {
+			return true
+		}
+	}
+	if row.WorkerHeartbeat != nil && !row.WorkerHeartbeat.IsZero() && !row.WorkerHeartbeat.Before(now.Add(-45*time.Second)) {
+		return true
+	}
+	if row.WorkerUpdatedAt != nil && !row.WorkerUpdatedAt.IsZero() && !row.WorkerUpdatedAt.Before(now.Add(-45*time.Second)) {
+		return true
+	}
+	return false
+}
+
+func rowTimestampsOperativosRecientes(row agentesapp.Row) []time.Time {
+	out := make([]time.Time, 0, 8)
+	if row.Runtime != nil {
+		for _, ts := range []*time.Time{
+			row.Runtime.UltimaActividadAt,
+			row.Runtime.LastHeartbeatAt,
+			row.Runtime.LastEventAt,
+		} {
+			if ts != nil && !ts.IsZero() {
+				out = append(out, *ts)
+			}
+		}
+		if !row.Runtime.UpdatedAt.IsZero() {
+			out = append(out, row.Runtime.UpdatedAt)
+		}
+		if !row.Runtime.CreatedAt.IsZero() {
+			out = append(out, row.Runtime.CreatedAt)
+		}
+	}
+	if row.Handle != nil {
+		if row.Handle.LastSeenAt != nil && !row.Handle.LastSeenAt.IsZero() {
+			out = append(out, *row.Handle.LastSeenAt)
+		}
+		if !row.Handle.UpdatedAt.IsZero() {
+			out = append(out, row.Handle.UpdatedAt)
+		}
+		if !row.Handle.CreatedAt.IsZero() {
+			out = append(out, row.Handle.CreatedAt)
+		}
+	}
+	if row.Sesion != nil {
+		if row.Sesion.HeartbeatAt != nil && !row.Sesion.HeartbeatAt.IsZero() {
+			out = append(out, *row.Sesion.HeartbeatAt)
+		}
+		if !row.Sesion.Inicio.IsZero() {
+			out = append(out, row.Sesion.Inicio)
+		}
+	}
+	if row.LastCheckpoint != nil && !row.LastCheckpoint.CreatedAt.IsZero() {
+		out = append(out, row.LastCheckpoint.CreatedAt)
+	}
+	if row.WorkerLastProgress != nil && !row.WorkerLastProgress.IsZero() {
+		out = append(out, *row.WorkerLastProgress)
+	}
+	return out
 }
 
 func rowPermiteAutoRecuperacionPorRuntimeActivo(row agentesapp.Row, now time.Time) bool {
@@ -11842,6 +13571,367 @@ func openTasksProjectedFromRows(rows []agentesapp.Row) map[string]int {
 	return out
 }
 
+func procesarRedistribucionPrimeAutonomiaBatch() (int, error) {
+	rows, err := agentesService.BuildPanelRows()
+	if err != nil {
+		return 0, err
+	}
+	return procesarRedistribucionPrimeAutonomiaBatchConRows(rows)
+}
+
+func procesarRedistribucionPrimeAutonomiaBatchConRows(rows []agentesapp.Row) (int, error) {
+	openTasksProjected := openTasksProjectedFromRows(rows)
+	procesadas := 0
+	now := time.Now().UTC()
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		agente := strings.TrimSpace(row.Agente.Nombre)
+		if relevoAutonomiaCostTier(agente) == 0 {
+			continue
+		}
+		if row.OpenTasks <= 0 {
+			continue
+		}
+		proyectoID := proyectoIDRedistribucionPrime(row)
+		if proyectoID <= 0 {
+			continue
+		}
+		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyectoID, "stop", "pause", "checkpoint", "start", "restart", "resume", "handoff", "send_instruction"); err != nil {
+			return procesadas, err
+		} else if pendiente {
+			continue
+		}
+		tareaID, err := db.GetTareaActivaIDPorAgenteProyecto(agente, &proyectoID)
+		if err != nil || tareaID <= 0 {
+			continue
+		}
+		tarea, err := db.GetTarea(tareaID)
+		if err != nil || tarea == nil {
+			if err != nil {
+				return procesadas, err
+			}
+			continue
+		}
+		if tareaAutonomiaDebeMantenerPrime(tarea) {
+			continue
+		}
+		relevo := seleccionarRelevoAutonomiaDrenajePrime(rows, openTasksProjected, tarea, agente)
+		if relevo == "" || relevoAutonomiaCostTier(relevo) != 0 {
+			continue
+		}
+		proyecto, err := db.GetProyecto(fmt.Sprintf("%d", proyectoID))
+		if err != nil || proyecto == nil {
+			if err != nil {
+				return procesadas, err
+			}
+			continue
+		}
+		forzarReassignDirecto, err := redistribucionPrimeDebeForzarReasignacionDirecta(tarea, proyectoID, agente, now)
+		if err != nil {
+			return procesadas, err
+		}
+		verificationKey := verificationKeyContinuacionTareaReasignada(relevo, tarea.ID, "reassign", agente)
+		if !forzarReassignDirecto {
+			if handoff, err := intentarHandoffAutonomoTarea(
+				proyecto,
+				tarea.ID,
+				agente,
+				relevo,
+				verificationKey,
+				"redistribucion_coste_prime",
+				fmt.Sprintf("Continuidad automática tras drenaje de worker prime en tarea #%d", tarea.ID),
+				fmt.Sprintf("Handoff automático desde %s a %s para liberar worker prime", agente, relevo),
+				fmt.Sprintf("resuelto por handoff automático a %s", relevo),
+			); err != nil {
+				return procesadas, err
+			} else if handoff {
+				if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, tarea.ProyectoID, tarea.ID, agente, "redistribucion_coste_prime", "continúa con la tarea redistribuida desde worker prime y deja evidencia de avance", map[string]any{"redistribuida_desde": agente}); err != nil {
+					return procesadas, err
+				}
+				openTasksProjected[agente] = max(0, openTasksProjected[agente]-1)
+				openTasksProjected[relevo]++
+				procesadas++
+				continue
+			}
+		}
+		notaReassign := fmt.Sprintf("Redistribuida automáticamente desde %s a %s para liberar worker prime", agente, relevo)
+		if forzarReassignDirecto {
+			notaReassign = fmt.Sprintf("Redistribuida automáticamente desde %s a %s tras continuidad prime no consolidada", agente, relevo)
+		}
+		{
+			if err := reasignarYArrancarTareaAutonomia(tarea.ID, relevo, notaReassign); err != nil {
+				return procesadas, err
+			}
+			if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, tarea.ProyectoID, tarea.ID, agente, "redistribucion_coste_prime", "continúa con la tarea redistribuida desde worker prime y deja evidencia de avance", map[string]any{"redistribuida_desde": agente}); err != nil {
+				return procesadas, err
+			}
+		}
+		openTasksProjected[agente] = max(0, openTasksProjected[agente]-1)
+		openTasksProjected[relevo]++
+		procesadas++
+	}
+	return procesadas, nil
+}
+
+func redistribucionPrimeDebeForzarReasignacionDirecta(tarea *db.Tarea, proyectoID int64, origen string, now time.Time) (bool, error) {
+	if tarea == nil || tarea.ID <= 0 || proyectoID <= 0 {
+		return false, nil
+	}
+	origen = strings.TrimSpace(origen)
+	if origen == "" || tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), origen) {
+		return false, nil
+	}
+	threshold := time.Duration(controlPlaneConfigIntOrDefault("autonomia_prime_direct_reassign_after_seconds", 90)) * time.Second
+	if threshold <= 0 {
+		threshold = 90 * time.Second
+	}
+	orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
+		ProyectoID: &proyectoID,
+		Tipos:      []string{"nudge", "handoff"},
+		Limit:      100,
+	})
+	if err != nil {
+		return false, err
+	}
+	var latest *db.RuntimeOrder
+	for _, order := range orders {
+		if !runtimeOrderCorrespondeARedistribucionPrimePendienteDeConsolidar(order, tarea.ID, origen) {
+			continue
+		}
+		if latest == nil || order.CreatedAt.After(latest.CreatedAt) {
+			latest = order
+		}
+	}
+	if latest == nil {
+		return false, nil
+	}
+	if latest.CreatedAt.After(now.Add(-threshold)) {
+		return false, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(latest.Estado)) {
+	case "pendiente", "ejecutando":
+		return false, nil
+	default:
+		return true, nil
+	}
+}
+
+func runtimeOrderCorrespondeARedistribucionPrimePendienteDeConsolidar(order *db.RuntimeOrder, tareaID int64, origen string) bool {
+	if order == nil || tareaID <= 0 || strings.TrimSpace(origen) == "" {
+		return false
+	}
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(order.PayloadJSON)), &payload); err != nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(order.Tipo)) {
+	case "nudge":
+		if !strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "accion")), "continuar_trabajo") {
+			return false
+		}
+		if !boolFromMap(payload, "post_remediation") {
+			return false
+		}
+		if !strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "remediation_kind")), "reassign") {
+			return false
+		}
+		if !strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "origin_agent")), strings.TrimSpace(origen)) {
+			return false
+		}
+		return int64(intMapValue(payload, "tarea_id")) == tareaID
+	case "handoff":
+		if !strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "agente_origen")), strings.TrimSpace(origen)) {
+			return false
+		}
+		return int64(intMapValue(payload, "tarea_id")) == tareaID
+	default:
+		return false
+	}
+}
+
+func procesarExpansionWorkersAutonomiaBatch() (int, error) {
+	rows, err := agentesService.BuildPanelRows()
+	if err != nil {
+		return 0, err
+	}
+	return procesarExpansionWorkersAutonomiaBatchConRows(rows)
+}
+
+func procesarExpansionWorkersAutonomiaBatchConRows(rows []agentesapp.Row) (int, error) {
+	policies, err := supervisionService.ListEnabledPolicies()
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().UTC()
+	procesadas := 0
+	for _, policy := range policies {
+		if policy == nil || !policy.Enabled || policy.ProyectoID <= 0 || policy.MaxWorkers <= 0 {
+			continue
+		}
+		proyecto, err := db.GetProyecto(strconv.FormatInt(policy.ProyectoID, 10))
+		if err != nil {
+			return procesadas, err
+		}
+		if proyecto == nil {
+			continue
+		}
+		disponible, err := db.ProyectoDisponibleParaAutonomia(proyecto.ID)
+		if err != nil {
+			return procesadas, err
+		}
+		if !disponible {
+			continue
+		}
+		demanda, err := demandaWorkersAutonomiaProyecto(policy.ProyectoID)
+		if err != nil {
+			return procesadas, err
+		}
+		if demanda <= 1 {
+			continue
+		}
+		workersActivos := contarWorkersBaratosActivosProyecto(rows, policy, now)
+		workersObjetivo := min(policy.MaxWorkers, demanda)
+		if workersActivos >= workersObjetivo {
+			continue
+		}
+		excluidos := excluidosExpansionWorkersProyecto(rows, policy)
+		for _, candidato := range flotaBarataExpansionAutonomia() {
+			if repoPersistentExcluded(candidato, excluidos) {
+				continue
+			}
+			agente, activado, err := asegurarAgenteAutonomiaOperativo(policy.ProyectoID, candidato, "autonomia_expand_worker")
+			if err != nil {
+				return procesadas, err
+			}
+			if agente == nil || !activado {
+				continue
+			}
+			db.Audit("orquesta", "autonomia_expand_worker", "proyecto", policy.ProyectoID,
+				fmt.Sprintf("agente=%s demanda=%d workers_activos=%d workers_objetivo=%d", strings.TrimSpace(agente.Nombre), demanda, workersActivos, workersObjetivo))
+			procesadas++
+			break
+		}
+	}
+	return procesadas, nil
+}
+
+func demandaWorkersAutonomiaProyecto(proyectoID int64) (int, error) {
+	if proyectoID <= 0 {
+		return 0, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaAsignada, db.TareaEnProgreso:
+			total++
+		}
+	}
+	return total, nil
+}
+
+func contarWorkersBaratosActivosProyecto(rows []agentesapp.Row, policy *supervisionapp.Policy, now time.Time) int {
+	total := 0
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		agente := strings.TrimSpace(row.Agente.Nombre)
+		if agente == "" || relevoAutonomiaCostTier(agente) != 0 {
+			continue
+		}
+		if rowProyectoID := rowProyectoIDPreferido(row); rowProyectoID == nil || *rowProyectoID != policy.ProyectoID {
+			continue
+		}
+		if relevoAutonomiaDebeOmitirsePorReserva(row, &db.Tarea{ProyectoID: &policy.ProyectoID}) {
+			continue
+		}
+		switch strings.TrimSpace(row.EstadoOperativo) {
+		case "disponible", "trabajando", "arrancando", "saturado":
+			total++
+			continue
+		}
+		if rowPermiteAutoRecuperacion(row, now) {
+			total++
+		}
+	}
+	return total
+}
+
+func excluidosExpansionWorkersProyecto(rows []agentesapp.Row, policy *supervisionapp.Policy) []string {
+	out := []string{
+		strings.TrimSpace(policy.SupervisorAgente),
+		strings.TrimSpace(policy.ReviewerAgente),
+	}
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		if rowProyectoID := rowProyectoIDPreferido(row); rowProyectoID == nil || *rowProyectoID != policy.ProyectoID {
+			continue
+		}
+		out = append(out, strings.TrimSpace(row.Agente.Nombre))
+	}
+	return out
+}
+
+func flotaBarataExpansionAutonomia() []string {
+	candidatos := filtrarFlotaOficialAutobootstrap(splitServerAutobootstrapAgents(configOrDefault("server_autobootstrap_worker_agents", "Codex2,Codex3,Codex4,Codex5")))
+	if len(candidatos) > 0 {
+		return candidatos
+	}
+	out := make([]string, 0, 4)
+	for _, candidato := range repoPersistentCodexCandidates("") {
+		if relevoAutonomiaCostTier(candidato) != 0 {
+			continue
+		}
+		out = append(out, candidato)
+	}
+	return out
+}
+
+func proyectoIDRedistribucionPrime(row agentesapp.Row) int64 {
+	if row.Asignacion != nil && row.Asignacion.ProyectoID > 0 && row.Asignacion.Estado == db.AsignacionActiva {
+		return row.Asignacion.ProyectoID
+	}
+	if row.OpenTasks <= 0 {
+		return 0
+	}
+	if row.Sesion != nil && row.Sesion.Activa && row.Sesion.ProyectoID != nil && *row.Sesion.ProyectoID > 0 {
+		return *row.Sesion.ProyectoID
+	}
+	if row.Runtime != nil && row.Runtime.ProyectoID != nil && *row.Runtime.ProyectoID > 0 &&
+		!strings.EqualFold(strings.TrimSpace(row.Runtime.LogicalState), "cerrado") {
+		return *row.Runtime.ProyectoID
+	}
+	if row.Handle != nil && row.Handle.ProyectoID != nil && *row.Handle.ProyectoID > 0 &&
+		strings.EqualFold(strings.TrimSpace(row.Handle.Estado), "activo") {
+		return *row.Handle.ProyectoID
+	}
+	return 0
+}
+
+func tareaAutonomiaDebeMantenerPrime(tarea *db.Tarea) bool {
+	if tarea == nil {
+		return false
+	}
+	blob := strings.ToLower(strings.TrimSpace(strings.Join([]string{tarea.Titulo, tarea.Descripcion, tarea.Notas}, "\n")))
+	for _, token := range []string{"escalado_prime", "modelo_prime", "requiere_prime", "prime_only", "review_prime"} {
+		if strings.Contains(blob, token) {
+			return true
+		}
+	}
+	return false
+}
+
 func construirMotivoAutonomiaAgenteDegradado(row agentesapp.Row) string {
 	agente := ""
 	if row.Agente != nil {
@@ -11892,6 +13982,9 @@ func esBloqueoAutonomiaAgenteRecuperable(agente, bloqueadoPor, motivo string) bo
 	if strings.EqualFold(bloqueadoPor, agente) && esBloqueoSobrecargaOperativa(motivo) {
 		return true
 	}
+	if !agentesapp.BloqueoAutonomiaRequiereIntervencion(agente, 0, true, nil, nil, motivo) {
+		return true
+	}
 	return false
 }
 
@@ -11917,7 +14010,7 @@ func seleccionarRelevoAutonomiaBloqueada(rows []agentesapp.Row, openTasksProject
 			}
 		}
 		return ceiling
-	}, true)
+	}, true, false)
 }
 
 func seleccionarRelevoAutonomiaConLimite(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string, maxOpenTasksPerRecoveryWorker int) string {
@@ -11927,10 +14020,31 @@ func seleccionarRelevoAutonomiaConLimite(rows []agentesapp.Row, openTasksProject
 			candidateCeiling = dynamicCeiling
 		}
 		return candidateCeiling
-	}, false)
+	}, false, false)
 }
 
-func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string, ceilingFn func(agentesapp.Row, time.Time) int, allowOverflowFallback bool) string {
+func seleccionarRelevoAutonomiaDrenajePrime(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string) string {
+	return seleccionarRelevoAutonomiaConTecho(rows, openTasksProjected, tarea, agenteBloqueado, func(row agentesapp.Row, now time.Time) int {
+		candidateCeiling := autonomiaWorkerOpenTasksCeiling
+		if dynamicCeiling := autonomiaOpenTasksCeilingForRow(row, now); dynamicCeiling > candidateCeiling {
+			candidateCeiling = dynamicCeiling
+		}
+		return candidateCeiling
+	}, true, true)
+}
+
+func seleccionarRelevoAutonomiaSinRuntime(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string) string {
+	relevo := seleccionarRelevoAutonomiaConLimite(rows, openTasksProjected, tarea, agenteBloqueado, autonomiaWorkerOpenTasksCeiling)
+	if relevo == "" {
+		return ""
+	}
+	if relevoAutonomiaCostTier(relevo) == 0 || tareaAutonomiaDebeMantenerPrime(tarea) {
+		return relevo
+	}
+	return ""
+}
+
+func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string, ceilingFn func(agentesapp.Row, time.Time) int, allowOverflowFallback bool, allowReturnToRecentSource bool) string {
 	now := time.Now().UTC()
 	lastReassign, hasLastReassign := latestAutoReassignmentInfo(taskNotes(tarea))
 	tareaPremiumAcotada := tareaDBTieneContratoPremiumAcotado(tarea)
@@ -11938,6 +14052,7 @@ func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjecte
 		agente        string
 		mismoProyecto bool
 		estadoRank    int
+		costTier      int
 		openTasks     int
 	}
 	candidates := make([]candidate, 0, len(rows))
@@ -11948,6 +14063,9 @@ func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjecte
 		}
 		agente := strings.TrimSpace(row.Agente.Nombre)
 		if agente == "" || strings.EqualFold(agente, agenteBloqueado) {
+			continue
+		}
+		if relevoAutonomiaDebeOmitirsePorReserva(row, tarea) {
 			continue
 		}
 		estado := strings.TrimSpace(row.EstadoOperativo)
@@ -11967,18 +14085,35 @@ func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjecte
 				continue
 			}
 		}
-		if strings.TrimSpace(row.WorkerState) != "" && !row.WorkerFresh(now) {
+		allowStaleIdleCandidate := allowOverflowFallback &&
+			relevoAutonomiaCostTier(strings.TrimSpace(agenteBloqueado)) > 0 &&
+			relevoAutonomiaCostTier(agente) == 0 &&
+			estado == "disponible" &&
+			openTasksProjected[agente] == 0
+		if strings.TrimSpace(row.WorkerState) != "" && !row.WorkerFresh(now) && !allowStaleIdleCandidate {
 			continue
 		}
 		if hasLastReassign && now.Sub(lastReassign.At) < 30*time.Minute && strings.EqualFold(agente, lastReassign.From) {
-			continue
+			if allowReturnToRecentSource &&
+				strings.EqualFold(strings.TrimSpace(lastReassign.To), strings.TrimSpace(agenteBloqueado)) &&
+				relevoAutonomiaCostTier(strings.TrimSpace(agenteBloqueado)) > relevoAutonomiaCostTier(agente) {
+				// Permitimos volver al origen reciente si estamos drenando un worker más caro
+				// y el retorno reduce coste sin abrir un ping-pong simétrico entre iguales.
+			} else {
+				continue
+			}
 		}
 		mismoProyecto := false
-		if tarea != nil && tarea.ProyectoID != nil && row.Asignacion != nil && row.Asignacion.ProyectoID == *tarea.ProyectoID {
-			mismoProyecto = true
+		if tarea != nil && tarea.ProyectoID != nil {
+			if rowProyectoID := rowProyectoIDPreferido(row); rowProyectoID != nil && *rowProyectoID == *tarea.ProyectoID {
+				mismoProyecto = true
+			}
 		}
 		openTasks := openTasksProjected[agente]
-		if tareaPremiumAcotada && openTasks > 0 {
+		if tareaPremiumAcotada && openTasks > 0 &&
+			!(allowOverflowFallback &&
+				relevoAutonomiaCostTier(strings.TrimSpace(agenteBloqueado)) > 0 &&
+				relevoAutonomiaCostTier(agente) == 0) {
 			continue
 		}
 		if relevoPremiumExclusivoDebeOmitirse(row, tarea, openTasks) {
@@ -11990,6 +14125,7 @@ func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjecte
 					agente:        agente,
 					mismoProyecto: mismoProyecto,
 					estadoRank:    0,
+					costTier:      relevoAutonomiaCostTier(agente),
 					openTasks:     openTasks,
 				})
 			}
@@ -11999,6 +14135,7 @@ func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjecte
 			agente:        agente,
 			mismoProyecto: mismoProyecto,
 			estadoRank:    0,
+			costTier:      relevoAutonomiaCostTier(agente),
 			openTasks:     openTasks,
 		})
 	}
@@ -12008,6 +14145,9 @@ func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjecte
 		}
 		if candidates[i].estadoRank != candidates[j].estadoRank {
 			return candidates[i].estadoRank < candidates[j].estadoRank
+		}
+		if candidates[i].costTier != candidates[j].costTier {
+			return candidates[i].costTier < candidates[j].costTier
 		}
 		if candidates[i].openTasks != candidates[j].openTasks {
 			return candidates[i].openTasks < candidates[j].openTasks
@@ -12021,6 +14161,44 @@ func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjecte
 		candidates = overflowCandidates
 	}
 	return candidates[0].agente
+}
+
+func relevoAutonomiaCostTier(agente string) int {
+	agente = strings.TrimSpace(strings.ToLower(agente))
+	if strings.HasPrefix(agente, "codexpg") {
+		return 1
+	}
+	return 0
+}
+
+func relevoAutonomiaDebeOmitirsePorReserva(row agentesapp.Row, tarea *db.Tarea) bool {
+	if row.Agente == nil {
+		return false
+	}
+	proyectoID := int64(0)
+	switch {
+	case tarea != nil && tarea.ProyectoID != nil && *tarea.ProyectoID > 0:
+		proyectoID = *tarea.ProyectoID
+	case row.Asignacion != nil && row.Asignacion.ProyectoID > 0:
+		proyectoID = row.Asignacion.ProyectoID
+	default:
+		return false
+	}
+	policy, err := db.GetProyectoAutonomia(proyectoID)
+	if err != nil || policy == nil || !policy.Enabled {
+		return false
+	}
+	agente := strings.TrimSpace(row.Agente.Nombre)
+	if agente == "" {
+		return false
+	}
+	if policy.ReserveSupervisor && strings.EqualFold(agente, strings.TrimSpace(policy.SupervisorAgente)) {
+		return true
+	}
+	if policy.ReserveReviewer && strings.EqualFold(agente, strings.TrimSpace(policy.ReviewerAgente)) {
+		return true
+	}
+	return false
 }
 
 func relevoPremiumExclusivoDebeOmitirse(row agentesapp.Row, tarea *db.Tarea, openTasks int) bool {
@@ -12200,6 +14378,9 @@ func rowHasFreshTMUXWorkerForRecovery(row agentesapp.Row, now time.Time) bool {
 	if row.WorkerTMUXFresh(now) {
 		return true
 	}
+	if rowPermiteAutoRecuperacionPorTMUXReciente(row, now) {
+		return true
+	}
 	if !row.WorkerFresh(now) {
 		return false
 	}
@@ -12278,6 +14459,7 @@ func procesarPrechecksAutonomiaSesionActiva(sesion *db.Sesion, snapshot *autonom
 	checks := []autonomiaPrecheck{
 		{name: "cierre_proyecto", fn: func() (int, error) { return procesarCierreProyectoSesionConSnapshot(sesion, snapshot) }},
 		{name: "reanudacion", fn: func() (int, error) { return procesarReanudacionAutonomaSesion(sesion, snapshot) }},
+		{name: "sesion_proyecto_ajeno", fn: func() (int, error) { return procesarSesionActivaProyectoAjenoAutonomia(sesion, snapshot) }},
 		{name: "aparcado", fn: func() (int, error) { return procesarAparcadoAutonomoSesion(sesion, snapshot) }},
 		{name: "recovery_degradado", fn: func() (int, error) {
 			debeIntentar, err := autonomiaShouldAttemptDegradedRecovery(sesion, snapshot)
@@ -12306,6 +14488,41 @@ func procesarPrechecksAutonomiaSesionActiva(sesion *db.Sesion, snapshot *autonom
 		}
 	}
 	return 0, nil
+}
+
+func procesarSesionActivaProyectoAjenoAutonomia(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {
+	if sesion == nil || sesion.ProyectoID == nil || *sesion.ProyectoID <= 0 {
+		return 0, nil
+	}
+	agente := strings.TrimSpace(sesion.Agente)
+	if agente == "" || !strings.EqualFold(strings.TrimSpace(sesion.Estado), "activa") {
+		return 0, nil
+	}
+	proyectoObjetivo, err := orquestacionAgentesService.ResolveReactivationProject(agente)
+	if err != nil || proyectoObjetivo == nil || proyectoObjetivo.ID <= 0 || proyectoObjetivo.ID == *sesion.ProyectoID {
+		return 0, err
+	}
+	if abierta, err := existeRuntimeOrderAbiertaAutonomia(agente, sesion.ProyectoID, "stop", "pause", "checkpoint", "resume", "start", "handoff"); err != nil {
+		return 0, err
+	} else if abierta {
+		return 0, nil
+	}
+	var proyectoActual *db.Proyecto
+	if snapshot != nil {
+		proyectoActual, err = snapshot.project(*sesion.ProyectoID)
+	} else {
+		proyectoActual, err = runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	}
+	if err != nil || proyectoActual == nil || proyectoActual.ID <= 0 {
+		return 0, err
+	}
+	motivo := fmt.Sprintf("sesion_activa_en_otro_proyecto:%s", firstNonEmpty(strings.TrimSpace(proyectoObjetivo.Slug), strconv.FormatInt(proyectoObjetivo.ID, 10)))
+	if err := encolarControlAutonomiaProyecto(agente, proyectoActual, agenteControlAccionStop, motivo); err != nil {
+		return 0, err
+	}
+	invalidarSnapshotAutonomiaProyecto(snapshot, agente, *sesion.ProyectoID)
+	invalidarSnapshotAutonomiaProyecto(snapshot, agente, proyectoObjetivo.ID)
+	return 1, nil
 }
 
 func autonomiaShouldAttemptDegradedRecovery(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (bool, error) {
@@ -12390,7 +14607,7 @@ func procesarCompactacionExclusividadPremiumSesionActiva(sesion *db.Sesion, snap
 		procesadas++
 	}
 	if procesadas > 0 {
-		resetStatusSnapshotCache()
+		invalidateStatusSnapshotCache()
 		invalidarSnapshotAutonomiaProyecto(snapshot, agente, *sesion.ProyectoID)
 	}
 	return procesadas, nil
@@ -12526,7 +14743,7 @@ func procesarRecuperacionTareasBloqueadasSesionActiva(sesion *db.Sesion, snapsho
 		procesadas++
 	}
 	if procesadas > 0 {
-		resetStatusSnapshotCache()
+		invalidateStatusSnapshotCache()
 		invalidarSnapshotAutonomiaProyecto(snapshot, agente, *sesion.ProyectoID)
 	}
 	return procesadas, nil
@@ -12617,7 +14834,7 @@ func procesarCompactacionFrentesPremiumSesionActiva(sesion *db.Sesion, snapshot 
 		procesadas++
 	}
 	if procesadas > 0 {
-		resetStatusSnapshotCache()
+		invalidateStatusSnapshotCache()
 		invalidarSnapshotAutonomiaProyecto(snapshot, agente, *sesion.ProyectoID)
 	}
 	return procesadas, nil
@@ -12665,6 +14882,13 @@ func puntuarFrentePremiumCanonicSesionActiva(tarea *db.Tarea) int {
 		return -1
 	}
 	score := 0
+	if tareaAutonomiaFinishApp(tarea) {
+		if tareaDBTieneContratoSliceAcotadaCmd(tarea) {
+			score += 2000
+		} else {
+			score += 50
+		}
+	}
 	switch tarea.Estado {
 	case db.TareaEnProgreso:
 		score += 1000
@@ -12676,7 +14900,7 @@ func puntuarFrentePremiumCanonicSesionActiva(tarea *db.Tarea) int {
 		return -1
 	}
 	tareaPipeline := tareaPipelineLocalDesdeTareaDB(tarea)
-	if len(tareaPipeline.WriteSet) > 0 && strings.TrimSpace(tareaPipeline.TestsMinimos) != "" {
+	if tareaPipelineLocalTieneContratoSliceAcotadaCmd(tareaPipeline) {
 		score += 200
 	}
 	if strings.Contains(strings.TrimSpace(tarea.Notas), microcicloRefactorNotasTag) {
@@ -12685,25 +14909,89 @@ func puntuarFrentePremiumCanonicSesionActiva(tarea *db.Tarea) int {
 	return score
 }
 
+func tareaAutonomiaFinishApp(tarea *db.Tarea) bool {
+	if tarea == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(strings.TrimSpace(tarea.Notas)), "autonomia:finish_app")
+}
+
 func tareaPipelineLocalTieneContratoPremiumCmd(tarea *capacidadapp.TareaPipelineLocal) bool {
 	if tarea == nil {
 		return false
 	}
 	notas := strings.TrimSpace(tarea.Notas)
-	if strings.Contains(notas, microcicloRefactorNotasTag) || strings.Contains(notas, "autonomia:premium_frontier") {
+	if strings.Contains(notas, microcicloRefactorNotasTag) || strings.Contains(notas, "autonomia:premium_frontier") || strings.Contains(notas, "autonomia:finish_app") {
 		return true
 	}
 	return len(tarea.WriteSet) > 0 && strings.TrimSpace(tarea.TestsMinimos) != ""
+}
+
+func tareaPipelineLocalTieneContratoSliceAcotadaCmd(tarea *capacidadapp.TareaPipelineLocal) bool {
+	if tarea == nil {
+		return false
+	}
+	return len(tarea.WriteSet) > 0 ||
+		len(tarea.SimbolosFoco) > 0 ||
+		strings.TrimSpace(tarea.TestsMinimos) != ""
+}
+
+func tareaDBTieneContratoSliceAcotadaCmd(tarea *db.Tarea) bool {
+	return tareaPipelineLocalTieneContratoSliceAcotadaCmd(tareaPipelineLocalDesdeTareaDB(tarea))
 }
 
 func tareaDBTieneContratoPremiumAcotado(tarea *db.Tarea) bool {
 	if tarea == nil {
 		return false
 	}
-	if strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier") {
+	if strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier") || strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:finish_app") {
 		return false
 	}
 	return tareaPipelineLocalTieneContratoPremiumCmd(tareaPipelineLocalDesdeTareaDB(tarea))
+}
+
+func resolverSliceAcotadaParaFinishAppAutonomia(sesion *db.Sesion, proyecto *db.Proyecto, tareaActual *db.Tarea) (*db.Tarea, error) {
+	if sesion == nil || proyecto == nil || tareaActual == nil || !tareaAutonomiaFinishApp(tareaActual) || tareaDBTieneContratoSliceAcotadaCmd(tareaActual) {
+		return nil, nil
+	}
+	if tarea, err := derivarFrentePremiumAcotadoDesdeSemilla(proyecto.ID, strings.TrimSpace(sesion.Agente), tareaActual.ID); err != nil {
+		return nil, err
+	} else if tarea != nil && tareaDBTieneContratoPremiumAcotado(tarea) {
+		if err := replegarTareaBroadFinishAppAutonomia(tareaActual); err != nil {
+			return nil, err
+		}
+		return tarea, nil
+	}
+	if tareaPipeline, err := asegurarFrentePremiumSesionActivaIdle(sesion, proyecto); err != nil {
+		return nil, err
+	} else if tareaPipeline != nil {
+		tarea, err := tareasService.Get(tareaPipeline.ID)
+		if err != nil {
+			return nil, err
+		}
+		if tareaDBTieneContratoPremiumAcotado(tarea) {
+			if err := replegarTareaBroadFinishAppAutonomia(tareaActual); err != nil {
+				return nil, err
+			}
+			return tarea, nil
+		}
+	}
+	if err := replegarTareaBroadFinishAppAutonomia(tareaActual); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func replegarTareaBroadFinishAppAutonomia(tarea *db.Tarea) error {
+	if tarea == nil || !tareaAutonomiaFinishApp(tarea) || tareaDBTieneContratoSliceAcotadaCmd(tarea) {
+		return nil
+	}
+	switch tarea.Estado {
+	case db.TareaEnProgreso, db.TareaAsignada, db.TareaLibre:
+		return tareasService.MoveToBacklog(tarea.ID)
+	default:
+		return nil
+	}
 }
 
 func procesarDerivacionSemillaPremiumSesionActiva(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {
@@ -12974,8 +15262,11 @@ func procesarDecisionEsperarRecuperacionRuntimeSesionActivaAutonomia(sesion *db.
 	if n, err := procesarRecuperacionRuntimeDegradadoSesionFn(sesion); err != nil || n > 0 {
 		return n, err
 	}
-	rows, err := agentesService.BuildPanelRows()
+	rows, err := buildPanelRowsForControlPlane()
 	if err != nil {
+		if controlPlaneRowsTimedOut(err) {
+			return 0, nil
+		}
 		return 0, err
 	}
 	now := time.Now().UTC()
@@ -13004,12 +15295,15 @@ func encolarReinicioRuntimeHandleAutonomiaRow(row agentesapp.Row, now time.Time,
 	default:
 		return 0, nil
 	}
-	handle := row.Handle
-	if handle == nil {
-		return 0, nil
-	}
 	agente := strings.TrimSpace(row.Agente.Nombre)
 	if agente == "" {
+		return 0, nil
+	}
+	handle, _, proyectoID, err := resolverContextoRuntimeAutonomiaRow(row)
+	if err != nil {
+		return 0, err
+	}
+	if handle == nil {
 		return 0, nil
 	}
 	if disponible, _, err := autonomiaCuentaCompartidaDisponible(agente); err != nil {
@@ -13017,8 +15311,7 @@ func encolarReinicioRuntimeHandleAutonomiaRow(row agentesapp.Row, now time.Time,
 	} else if !disponible {
 		return 0, nil
 	}
-	proyectoID := rowProyectoIDPreferido(row)
-	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "stop", "pause", "checkpoint", "start", "restart", "resume", "handoff"); err != nil {
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoID, "stop", "pause", "checkpoint", "start", "restart", "resume", "handoff", "send_instruction"); err != nil {
 		return 0, err
 	} else if pendiente {
 		return 0, nil
@@ -13064,6 +15357,34 @@ func procesarDecisionContinuarTrabajoSesionActivaAutonomia(sesion *db.Sesion, pr
 	tareaID, debe, err := sesionActivaDebeRecibirNudgeContinuacionConSnapshot(sesion, proyecto, snapshot)
 	if err != nil || !debe {
 		return 0, err
+	}
+	tareaActiva, err := tareasService.Get(tareaID)
+	if err != nil && err != sql.ErrNoRows {
+		return 0, err
+	}
+	if tareaActiva != nil && tareaAutonomiaFinishApp(tareaActiva) && !tareaDBTieneContratoSliceAcotadaCmd(tareaActiva) {
+		derivada, err := resolverSliceAcotadaParaFinishAppAutonomia(sesion, proyecto, tareaActiva)
+		if err != nil {
+			return 0, err
+		}
+		if derivada == nil {
+			if ok, err := encolarNudgeAutonomiaConInvalidacion(
+				snapshot,
+				sesion.Agente,
+				proyecto,
+				"esperar_o_pedir_tarea",
+				"finish_app sin slice acotada; deriva o toma una tarea con contrato acotado antes de continuar",
+				instruccionContinuacionSesionActivaAutonomia(tareaID),
+				map[string]any{"motivo_autoasignacion": "finish_app_requires_slice"},
+			); err != nil {
+				return 0, err
+			} else if ok {
+				return 1, nil
+			}
+			return 0, nil
+		}
+		tareaID = derivada.ID
+		out.Motivo = fmt.Sprintf("Tarea #%d derivada automáticamente desde finish_app para continuar en una slice acotada", derivada.ID)
 	}
 	if cerrada, err := cerrarTareaPostRemediationBlockedSiResuelta(tareaID, strings.TrimSpace(sesion.Agente)); err != nil {
 		return 0, err
@@ -13148,6 +15469,12 @@ func instruccionContinuacionSesionActivaAutonomia(tareaID int64) string {
 	if strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier") {
 		return "Esta semilla premium no autoriza programar un frente amplio. Toma o reanuda exactamente una tarea premium acotada con WRITE_SET y tests mínimos; si no existe, créala por la app/CLI de Orquesta y continúa sobre ese frente derivado."
 	}
+	if tareaAutonomiaFinishApp(tarea) {
+		if !tareaDBTieneContratoSliceAcotadaCmd(tarea) {
+			return "Modo finish_app activo sin slice acotada: No sigas la tarea finish_app amplia como trabajo abierto. Toma o crea por la app de Orquesta una tarea acotada con WRITE_SET, símbolos foco o tests mínimos; luego continúa solo sobre esa slice derivada."
+		}
+		return "Modo finish_app activo sobre slice acotada: cierra esta slice dentro del write-set, símbolos foco y tests definidos. Al terminar, enlaza el siguiente frente útil usando la app de Orquesta sin volver a un frente amplio."
+	}
 	if esTareaPostRemediationBlockedAutonomia(tarea) {
 		return instruccionContinuacionTareaPostRemediationBlockedAutonomia(tarea)
 	}
@@ -13197,14 +15524,33 @@ func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, 
 	if sesion == nil || proyecto == nil {
 		return 0, nil
 	}
+	tareaActivaID, err := tareaActivaSesionDesdeSnapshot(sesion, snapshot)
+	if err != nil {
+		return 0, err
+	}
+	if tareaActivaID <= 0 && sesion.ProyectoID != nil {
+		tareaActivaID, err = db.GetTareaActivaIDPorAgenteProyecto(strings.TrimSpace(sesion.Agente), sesion.ProyectoID)
+		if err != nil {
+			return 0, err
+		}
+	}
+	if tareaActivaID > 0 {
+		return procesarDecisionContinuarTrabajoSesionActivaAutonomia(sesion, proyecto, agenteTickOutput{
+			Motivo: "seguir con la tarea activa ya abierta",
+		}, snapshot)
+	}
+	if relevoAutonomiaCostTier(strings.TrimSpace(sesion.Agente)) > 0 {
+		return 0, nil
+	}
 	if !autonomiaIdleAutoassignShouldAttempt(sesion.Agente, proyecto.ID, sesion.ID) {
 		return 0, nil
 	}
-	if err := revalidarYVerificarAgenteDisponibleParaTrabajo(sesion.Agente); err != nil {
+	if err := revalidarYVerificarAgenteDisponibleParaTrabajoConSnapshot(sesion.Agente, snapshot); err != nil {
 		return 0, nil
 	}
 	tarea, err := capacidadService.IntentarAutoasignarTareaPipelineLocal(proyecto.Slug, sesion.Agente)
 	motivoAutoasignacion := "sesion_activa_idle"
+	instruction := "toma tarea asignada y sigue"
 	if err != nil || tarea == nil {
 		if err != nil {
 			return 0, err
@@ -13221,6 +15567,41 @@ func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, 
 			motivoAutoasignacion = "sesion_activa_idle_general"
 		}
 	}
+	if tarea != nil && strings.Contains(strings.ToLower(strings.TrimSpace(tarea.Notas)), "autonomia:finish_app") {
+		if !tareaPipelineLocalTieneContratoSliceAcotadaCmd(tarea) {
+			tareaDB, err := tareasService.Get(tarea.ID)
+			if err != nil {
+				return 0, err
+			}
+			derivada, err := resolverSliceAcotadaParaFinishAppAutonomia(sesion, proyecto, tareaDB)
+			if err != nil {
+				return 0, err
+			}
+			if derivada == nil {
+				motivo := "finish_app sin slice acotada; deriva o toma una tarea con contrato acotado antes de continuar"
+				if ok, err := encolarNudgeAutonomiaConInvalidacion(
+					snapshot,
+					sesion.Agente,
+					proyecto,
+					"esperar_o_pedir_tarea",
+					motivo,
+					instruccionContinuacionSesionActivaAutonomia(tarea.ID),
+					map[string]any{"motivo_autoasignacion": "finish_app_requires_slice"},
+				); err != nil {
+					return 0, err
+				} else if ok {
+					return 1, nil
+				}
+				return 0, nil
+			}
+			tarea = tareaPipelineLocalDesdeTareaDB(derivada)
+			motivoAutoasignacion = "finish_app_slice_derivada"
+			instruction = instruccionContinuacionSesionActivaAutonomia(derivada.ID)
+		} else {
+			motivoAutoasignacion = "finish_app_slice_activa"
+			instruction = instruccionContinuacionSesionActivaAutonomia(tarea.ID)
+		}
+	}
 	if err := cerrarSemillaPremiumSiDerivaAFrenteAcotado(sesion.Agente, proyecto.ID, tarea); err != nil {
 		return 0, err
 	}
@@ -13231,7 +15612,7 @@ func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, 
 		proyecto,
 		"continuar_trabajo",
 		motivo,
-		"toma tarea asignada y sigue",
+		instruction,
 		map[string]any{"tarea_id": tarea.ID, "motivo_autoasignacion": motivoAutoasignacion},
 	); err != nil {
 		return 0, err
@@ -13239,6 +15620,47 @@ func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, 
 		return 1, nil
 	}
 	return 0, nil
+}
+
+func revalidarYVerificarAgenteDisponibleParaTrabajoConSnapshot(nombre string, snapshot *autonomiaBatchSnapshot) error {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return fmt.Errorf("agente obligatorio")
+	}
+	if snapshot == nil {
+		return revalidarYVerificarAgenteDisponibleParaTrabajo(nombre)
+	}
+	if agente, err := snapshot.agent(nombre); err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("agente %s no encontrado", nombre)
+		}
+		return err
+	} else if agente == nil {
+		return fmt.Errorf("agente %s no encontrado", nombre)
+	}
+	if shouldPause, reason, err := snapshot.budgetPause(nombre); err != nil {
+		return err
+	} else if shouldPause {
+		if strings.TrimSpace(reason) != "" {
+			return fmt.Errorf("agente %s bloqueado por cuota: %s", nombre, strings.TrimSpace(reason))
+		}
+		return fmt.Errorf("agente %s bloqueado por cuota", nombre)
+	}
+	if estado, detalle, err := snapshot.operationalState(nombre); err != nil {
+		return err
+	} else {
+		switch strings.TrimSpace(estado) {
+		case "", "disponible", "sin_tarea", "trabajando":
+			return nil
+		case "bloqueado_por_cuota", "bloqueado_por_runtime", "mailbox_atascada", "atascado", "saturado":
+			detalle = strings.TrimSpace(detalle)
+			if detalle != "" {
+				return fmt.Errorf("agente %s %s: %s", nombre, strings.TrimSpace(estado), detalle)
+			}
+			return fmt.Errorf("agente %s %s", nombre, strings.TrimSpace(estado))
+		}
+	}
+	return revalidarYVerificarAgenteDisponibleParaTrabajo(nombre)
 }
 
 func autoasignarTareaAmpliaSesionActivaIdle(sesion *db.Sesion, proyecto *db.Proyecto) (*capacidadapp.TareaPipelineLocal, error) {
@@ -13360,6 +15782,17 @@ func sesionActivaDebeRecibirNudgeContinuacionConSnapshot(sesion *db.Sesion, proy
 	if err != nil || tareaID <= 0 {
 		return 0, false, err
 	}
+	var tareaActiva *db.Tarea
+	if tareaID > 0 {
+		tareaActiva, err = tareasService.Get(tareaID)
+		if err != nil && err != sql.ErrNoRows {
+			return tareaID, false, err
+		}
+		if err == sql.ErrNoRows {
+			tareaActiva = nil
+		}
+	}
+	finishAppBroadSinSlice := tareaActiva != nil && tareaAutonomiaFinishApp(tareaActiva) && !tareaDBTieneContratoSliceAcotadaCmd(tareaActiva)
 	handle, err := runtimeHandleSesionActivaParaContinuacion(sesion)
 	if err != nil || handle == nil {
 		return tareaID, false, err
@@ -13371,7 +15804,7 @@ func sesionActivaDebeRecibirNudgeContinuacionConSnapshot(sesion *db.Sesion, proy
 	}
 	if vigente, err := sesionActivaTieneContinuidadDurableVigente(sesion, handle, tareaID); err != nil {
 		return tareaID, false, err
-	} else if vigente {
+	} else if vigente && !finishAppBroadSinSlice {
 		return tareaID, false, nil
 	}
 	now := time.Now().UTC()
@@ -13398,6 +15831,7 @@ func tareaActivaSesionDesdeSnapshot(sesion *db.Sesion, snapshot *autonomiaBatchS
 		return 0, err
 	}
 	var candidata *db.Tarea
+	candidatas := make([]*db.Tarea, 0, len(tareas))
 	for _, tarea := range tareas {
 		if tarea == nil || tarea.Agente == nil || tarea.ProyectoID == nil {
 			continue
@@ -13407,16 +15841,18 @@ func tareaActivaSesionDesdeSnapshot(sesion *db.Sesion, snapshot *autonomiaBatchS
 		}
 		switch tarea.Estado {
 		case db.TareaEnProgreso:
-			if candidata != nil && candidata.ID != tarea.ID {
-				return 0, nil
-			}
+			candidatas = append(candidatas, tarea)
 			candidata = tarea
 		case db.TareaAsignada:
+			candidatas = append(candidatas, tarea)
 			if candidata == nil {
 				candidata = tarea
-			} else if candidata.Estado == db.TareaAsignada && candidata.ID != tarea.ID {
-				return 0, nil
 			}
+		}
+	}
+	if len(candidatas) > 1 {
+		if mejor := seleccionarFrentePremiumCanonicSesionActiva(candidatas); mejor != nil {
+			return mejor.ID, nil
 		}
 	}
 	if candidata == nil {
@@ -13662,8 +16098,8 @@ func bloquearTareasActivasPorCuotaAutonomia(agente, motivo string) error {
 	if err != nil {
 		return err
 	}
-	rows, err := agentesService.BuildPanelRows()
-	if err != nil {
+	rows, err := buildPanelRowsForControlPlane()
+	if err != nil && !controlPlaneRowsTimedOut(err) {
 		return err
 	}
 	openTasksProjected := openTasksProjectedFromRows(rows)
@@ -14144,7 +16580,7 @@ func compactarFrentesExclusividadPremiumAgenteProyecto(agente string, proyectoID
 		procesadas++
 	}
 	if procesadas > 0 {
-		resetStatusSnapshotCache()
+		invalidateStatusSnapshotCache()
 	}
 	return procesadas, nil
 }
@@ -14652,14 +17088,13 @@ func existeRuntimeOrderAbiertaAutonomia(agente string, proyectoID *int64, tipos 
 			ProyectoID: proyectoID,
 			Estado:     &estado,
 			Tipos:      append([]string(nil), tipos...),
+			Limit:      1,
 		})
 		if err != nil {
 			return false, err
 		}
-		for _, order := range orders {
-			if order != nil {
-				return true, nil
-			}
+		if len(orders) > 0 && orders[0] != nil {
+			return true, nil
 		}
 	}
 	return false, nil
@@ -14673,6 +17108,7 @@ func existeRuntimeOrderAbiertaAgente(agente string, proyectoID *int64) (bool, er
 			Agente:     &agente,
 			ProyectoID: proyectoID,
 			Estado:     &estado,
+			Limit:      1,
 		})
 		if err != nil {
 			return false, err
@@ -14688,6 +17124,7 @@ func dbAgenteTieneTrabajoArrancable(agente string, proyectoID int64) (bool, erro
 	filtro := db.FiltroTareas{
 		Agente:     &agente,
 		ProyectoID: &proyectoID,
+		Limit:      1,
 	}
 	tareas, err := tareasService.List(filtro)
 	if err != nil {
@@ -14780,6 +17217,12 @@ func encolarContinuacionTareaReasignada(agente string, proyecto *db.Proyecto, ta
 func verificationKeyContinuacionTareaReasignada(agente string, tareaID int64, remediationKind, origen string) string {
 	if tareaID <= 0 || strings.TrimSpace(agente) == "" {
 		return ""
+	}
+	if canonico, err := db.CanonicalizeAgentName(strings.TrimSpace(agente)); err == nil && strings.TrimSpace(canonico) != "" {
+		agente = canonico
+	}
+	if canonico, err := db.CanonicalizeAgentName(strings.TrimSpace(origen)); err == nil && strings.TrimSpace(canonico) != "" {
+		origen = canonico
 	}
 	kind := strings.TrimSpace(remediationKind)
 	if kind == "" {
@@ -15029,8 +17472,11 @@ func intentarAutoResolverContinuacionPostRemediationReassign(proyecto *db.Proyec
 	if !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(agente)) {
 		return false, nil
 	}
-	rows, err := agentesService.BuildPanelRows()
+	rows, err := buildPanelRowsForControlPlane()
 	if err != nil {
+		if controlPlaneRowsTimedOut(err) {
+			return false, nil
+		}
 		return false, err
 	}
 	relevo := seleccionarRelevoAutonomiaBloqueada(rows, openTasksProjectedFromRows(rows), tarea, strings.TrimSpace(agente))
@@ -15081,18 +17527,38 @@ func intentarHandoffAutonomoTarea(proyecto *db.Proyecto, tareaID int64, origen, 
 		resumen += " (" + strings.TrimSpace(verificationKey) + ")"
 	}
 	motivo = firstNonEmpty(strings.TrimSpace(motivo), "handoff_autonomo")
-	if _, err := orquestacionAgentesService.RequestLiveAgentHandoff(origen, relevo, &tareaID, motivo, resumen, ""); err != nil {
+	orderID, handoffMode, err := int64(0), "live", error(nil)
+	if orderID, err = orquestacionAgentesService.RequestLiveAgentHandoff(origen, relevo, &tareaID, motivo, resumen, ""); err != nil {
 		if handoffCanFallback(err) {
-			if _, staleErr := orquestacionAgentesService.RequestStaleAgentHandoff(origen, relevo, &tareaID, motivo, resumen, ""); staleErr != nil {
+			handoffMode = "stale"
+			staleOrderID, staleErr := orquestacionAgentesService.RequestStaleAgentHandoff(origen, relevo, &tareaID, motivo, resumen, "")
+			if staleErr != nil {
 				if handoffCanFallback(staleErr) {
 					return false, nil
 				}
 				return false, staleErr
 			}
+			orderID = staleOrderID
 		} else {
 			return false, err
 		}
 	}
+	registrarAutonomyEventBestEffort(&db.AutonomyEvent{
+		Kind:      "handoff_requested",
+		Actor:     "orquesta",
+		ProjectID: ptrInt64Cmd(proyecto.ID),
+		TaskID:    ptrInt64Cmd(tareaID),
+		Source:    "control_plane",
+		Reason:    strings.TrimSpace(motivo),
+		StateDelta: map[string]any{
+			"last_autonomy_action": "handoff_requested",
+			"agente_origen":        origen,
+			"agente_destino":       relevo,
+			"runtime_order_id":     orderID,
+			"task_state":           string(db.TareaAsignada),
+			"handoff_mode":         handoffMode,
+		},
+	})
 	nota = strings.TrimSpace(nota)
 	if nota == "" {
 		nota = fmt.Sprintf("Handoff automático desde %s a %s", origen, relevo)
