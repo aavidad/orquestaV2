@@ -16,6 +16,9 @@ import (
 	"orquesta/runtimeagente"
 )
 
+var syncSupervisedRuntimeHandleFn = db.SincronizarRuntimeHandleSupervisado
+var canSyncSupervisedRuntimeHandleFn = func() bool { return db.DB != nil }
+
 type Store interface {
 	RegisterAgent(nombre, rol string) error
 	RegisterAgentAuto(proveedor, rol string) (string, error)
@@ -31,6 +34,7 @@ type Store interface {
 	GetPool(slug string) (*db.PoolCapacidad, error)
 	GetConnector(ref string) (*db.Conector, error)
 	ListAgents() ([]*db.Agente, error)
+	ListAgentsLight() ([]*db.Agente, error)
 	CheckReanimations() ([]*db.Agente, error)
 	ListAssignments(filtro db.FiltroAsignaciones) ([]*db.Asignacion, error)
 	ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]*db.Sesion, error)
@@ -48,8 +52,11 @@ type Store interface {
 	ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error)
 	EnqueueRuntimeOrder(order *db.RuntimeOrder) (int64, error)
 	ListRuntimeMailbox(filtro db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error)
+	SummarizeRuntimeMailboxForPanel() ([]*db.RuntimeMailboxPanelSummary, error)
+	ListLatestAutonomyMailboxForPanel() ([]*db.RuntimeMailboxMessage, error)
 	RuntimeMailboxCoveredByBootstrapPending(mailboxID int64, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (bool, int64, int64, error)
 	ListRuntimeCheckpoints(filtro db.FiltroRuntimeCheckpoints) ([]*db.RuntimeCheckpoint, error)
+	SummarizeRuntimeCheckpointsForPanel() ([]*db.RuntimeCheckpointPanelSummary, error)
 	ListTasks(filtro db.FiltroTareas) ([]*db.Tarea, error)
 	ListProjectPendingVotes(agente string, proyectoID int64) ([]*db.Propuesta, error)
 	ListProjectOpenProposals(proyectoID int64) ([]*db.Propuesta, error)
@@ -103,9 +110,9 @@ var compactDetailStaleWhileRevalidateTTL = 15 * time.Second
 var activeReanimationScheduleCacheTTL = 2 * time.Second
 var activeReanimationScheduleStaleWhileRevalidateTTL = 15 * time.Second
 
-// Prepare usa datos operativos que cambian poco frente al coste de caer a
-// SQLite bajo carga. Mantener una cache algo más larga evita ráfagas de
-// prepare degradadas cuando warm/autonomía pisan la única conexión activa.
+// Prepare usa datos operativos que cambian poco frente al coste de caer a la
+// ruta local read-only bajo carga. Mantener una cache algo más larga evita
+// ráfagas de prepare degradadas cuando warm/autonomía pisan el mismo backend.
 var prepareEntityCacheTTL = 45 * time.Second
 var prepareSessionCacheTTL = 45 * time.Second
 var prepareGovernanceCacheTTL = 45 * time.Second
@@ -129,6 +136,68 @@ func agentDetailDebugEnabled() bool {
 		}
 	}
 	return false
+}
+
+func rowShouldSyncSupervisedRuntimeHandle(row Row, now time.Time) bool {
+	if row.Handle == nil {
+		return false
+	}
+	if !estadoHandleRoto(strings.ToLower(strings.TrimSpace(row.handleState()))) &&
+		!estadoRuntimeRoto(strings.ToLower(strings.TrimSpace(row.runtimeState()))) {
+		return false
+	}
+	if !row.workerHeartbeatRecent(now) && !row.hasRecentOperationalActivity(now) {
+		return false
+	}
+	if row.WorkerAlive {
+		switch strings.ToLower(strings.TrimSpace(row.WorkerState)) {
+		case "running", "working", "ready", "starting":
+			return true
+		default:
+			return false
+		}
+	}
+	if row.OpenTasks <= 0 && !row.hasAutonomySupervisorAssignment() {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(row.WorkerDriver), "tmux_cli_session") ||
+		strings.EqualFold(strings.TrimSpace(row.handleDriver()), "tmux_cli_session") ||
+		strings.EqualFold(strings.TrimSpace(row.Handle.Transporte), "tmux") {
+		return true
+	}
+	return false
+}
+
+func maybeSyncSupervisedRuntimeHandle(row *Row, now time.Time, source string) {
+	if row == nil || row.Handle == nil || syncSupervisedRuntimeHandleFn == nil || !canSyncSupervisedRuntimeHandleFn() {
+		return
+	}
+	if !rowShouldSyncSupervisedRuntimeHandle(*row, now) {
+		return
+	}
+	refreshedHandle, refreshedRuntime, _, err := syncSupervisedRuntimeHandleFn(row.Handle, row.Runtime, source)
+	if err != nil || refreshedHandle == nil {
+		return
+	}
+	row.Handle = refreshedHandle
+	if refreshedRuntime != nil {
+		row.Runtime = refreshedRuntime
+	}
+}
+
+func (r Row) hasAutonomySupervisorAssignment() bool {
+	if r.Asignacion == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(string(r.Asignacion.Estado)), string(db.AsignacionActiva)) {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(r.Asignacion.Nota)) {
+	case "server_autobootstrap", "supervision", "supervision_automatica":
+		return true
+	default:
+		return false
+	}
 }
 
 func NewService(store Store, modelPolicyProvider ModelPolicyProvider) *Service {
@@ -581,36 +650,95 @@ func (s *Service) PauseTemporarily(nombre string, minutos int, motivo, accion, e
 }
 
 func (s *Service) BuildPanelRows() ([]Row, error) {
-	agentes, err := s.ListAgents()
+	buildStart := time.Now()
+	phaseDurations := map[string]time.Duration{}
+	markPhase := func(name string, start time.Time) {
+		phaseDurations[name] = time.Since(start)
+	}
+	logSlowPanelBuild := func() {
+		total := time.Since(buildStart)
+		if total < 500*time.Millisecond {
+			return
+		}
+		log.Printf("orquesta[agentes-panel-slow] total=%s agents=%s assignments=%s sessions=%s runtimes=%s orders=%s mailbox_summary=%s mailbox_pending=%s mailbox_autonomy=%s checkpoints=%s tasks=%s hot_handles=%s canonical_handles=%s historical_handles=%s rows=%s",
+			total,
+			phaseDurations["agents"],
+			phaseDurations["assignments"],
+			phaseDurations["sessions"],
+			phaseDurations["runtimes"],
+			phaseDurations["orders"],
+			phaseDurations["mailbox_summary"],
+			phaseDurations["mailbox_pending"],
+			phaseDurations["mailbox_autonomy"],
+			phaseDurations["checkpoints"],
+			phaseDurations["tasks"],
+			phaseDurations["hot_handles"],
+			phaseDurations["canonical_handles"],
+			phaseDurations["historical_handles"],
+			phaseDurations["rows"])
+	}
+	defer logSlowPanelBuild()
+
+	phaseStart := time.Now()
+	agentes, err := s.store.ListAgentsLight()
+	markPhase("agents", phaseStart)
 	if err != nil {
 		return nil, err
 	}
-	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{})
+	estadoAsignacionActiva := db.AsignacionActiva
+	phaseStart = time.Now()
+	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{Estado: &estadoAsignacionActiva})
+	markPhase("assignments", phaseStart)
 	if err != nil {
 		return nil, err
 	}
 	activa := true
+	phaseStart = time.Now()
 	sesiones, err := s.store.ListInspectionSessions(db.FiltroSesionesInspeccion{Activa: &activa})
+	markPhase("sessions", phaseStart)
 	if err != nil {
 		return nil, err
 	}
-	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{})
+	phaseStart = time.Now()
+	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{Activos: &activa})
+	markPhase("runtimes", phaseStart)
 	if err != nil {
 		return nil, err
 	}
-	orders, err := s.store.ListRuntimeOrders(db.FiltroRuntimeOrders{})
+	phaseStart = time.Now()
+	orders, err := s.listRelevantOrdersForPanel()
+	markPhase("orders", phaseStart)
 	if err != nil {
 		return nil, err
 	}
-	mailbox, err := s.store.ListRuntimeMailbox(db.FiltroRuntimeMailbox{})
+	phaseStart = time.Now()
+	mailboxSummary, err := s.store.SummarizeRuntimeMailboxForPanel()
+	markPhase("mailbox_summary", phaseStart)
 	if err != nil {
 		return nil, err
 	}
-	checkpoints, err := s.store.ListRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{})
+	estadoPendiente := "pendiente"
+	phaseStart = time.Now()
+	mailboxPending, err := s.store.ListRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estadoPendiente})
+	markPhase("mailbox_pending", phaseStart)
 	if err != nil {
 		return nil, err
 	}
-	tareas, err := s.store.ListTasks(db.FiltroTareas{})
+	phaseStart = time.Now()
+	mailboxAutonomy, err := s.store.ListLatestAutonomyMailboxForPanel()
+	markPhase("mailbox_autonomy", phaseStart)
+	if err != nil {
+		return nil, err
+	}
+	phaseStart = time.Now()
+	checkpointSummary, err := s.store.SummarizeRuntimeCheckpointsForPanel()
+	markPhase("checkpoints", phaseStart)
+	if err != nil {
+		return nil, err
+	}
+	phaseStart = time.Now()
+	tareas, err := s.listOpenTasksForPanel()
+	markPhase("tasks", phaseStart)
 	if err != nil {
 		return nil, err
 	}
@@ -635,30 +763,28 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		}
 	}
 
-	runtimePorAgente := map[string]*db.RuntimeInstance{}
+	runtimesPorAgente := map[string][]*db.RuntimeInstance{}
 	for _, runtime := range runtimes {
 		if runtime == nil {
 			continue
 		}
-		actual := runtimePorAgente[runtime.Agente]
-		if actual == nil || runtimeMoment(runtime).After(runtimeMoment(actual)) {
-			runtimePorAgente[runtime.Agente] = runtime
-		}
+		runtimesPorAgente[runtime.Agente] = append(runtimesPorAgente[runtime.Agente], runtime)
 	}
 
-	handlePorAgente := map[string]*db.RuntimeHandle{}
+	handlesPorAgente := map[string][]*db.RuntimeHandle{}
+	phaseStart = time.Now()
 	if hotHandles, err := s.store.ListRecentOperationalRuntimeHandles(); err == nil {
 		for _, handle := range hotHandles {
 			if handle == nil {
 				continue
 			}
-			actual := handlePorAgente[handle.Agente]
-			if actual == nil || runtimeHandleMoment(handle).After(runtimeHandleMoment(actual)) {
-				handlePorAgente[handle.Agente] = handle
-			}
+			handlesPorAgente[handle.Agente] = append(handlesPorAgente[handle.Agente], handle)
 		}
 	}
+	markPhase("hot_handles", phaseStart)
+	phaseStart = time.Now()
 	handlesCanonicos, err := s.store.ListCanonicalRuntimeHandles(nil)
+	markPhase("canonical_handles", phaseStart)
 	if err != nil {
 		return nil, err
 	}
@@ -666,28 +792,14 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		if handle == nil {
 			continue
 		}
-		if _, ok := handlePorAgente[handle.Agente]; ok {
-			continue
-		}
-		handlePorAgente[handle.Agente] = handle
+		handlesPorAgente[handle.Agente] = append(handlesPorAgente[handle.Agente], handle)
 	}
-	handlesHistoricos, err := s.store.ListRuntimeHandles(nil)
-	if err != nil {
+	handlePreferidoPorAgente := map[string]*db.RuntimeHandle{}
+	phaseStart = time.Now()
+	if err := s.fillPanelHistoricalHandles(agentes, handlePreferidoPorAgente); err != nil {
 		return nil, err
 	}
-	for _, handle := range handlesHistoricos {
-		if handle == nil {
-			continue
-		}
-		actual := handlePorAgente[handle.Agente]
-		if actual == nil {
-			handlePorAgente[handle.Agente] = handle
-			continue
-		}
-		if runtimeHandleMoment(handle).After(runtimeHandleMoment(actual)) && !runtimeHandleSostieneOperacion(actual) {
-			handlePorAgente[handle.Agente] = handle
-		}
-	}
+	markPhase("historical_handles", phaseStart)
 
 	ordersPorAgente := map[string][]*db.RuntimeOrder{}
 	for _, order := range orders {
@@ -707,26 +819,35 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		LastMoment        *time.Time
 	}
 	mailboxPorAgente := map[string]mailboxCounters{}
-	checkpointTotalPorAgente := map[string]int{}
-	lastCheckpointPorAgente := map[string]*db.RuntimeCheckpoint{}
-	for _, checkpoint := range checkpoints {
-		if checkpoint == nil {
+	for _, summary := range mailboxSummary {
+		if summary == nil || strings.TrimSpace(summary.Agente) == "" {
 			continue
 		}
-		checkpointTotalPorAgente[checkpoint.Agente]++
-		if _, ok := lastCheckpointPorAgente[checkpoint.Agente]; !ok {
-			lastCheckpointPorAgente[checkpoint.Agente] = checkpoint
+		stats := mailboxPorAgente[summary.Agente]
+		stats.Total = summary.Total
+		stats.Pending = summary.Pending
+		mailboxPorAgente[summary.Agente] = stats
+	}
+	checkpointTotalPorAgente := map[string]int{}
+	lastCheckpointPorAgente := map[string]*db.RuntimeCheckpoint{}
+	for _, summary := range checkpointSummary {
+		if summary == nil || strings.TrimSpace(summary.Agente) == "" {
+			continue
 		}
+		checkpointTotalPorAgente[summary.Agente] = summary.Total
+		lastCheckpointPorAgente[summary.Agente] = summary.Last
 	}
 
 	openTasksPorAgente := map[string]int{}
 	blockedTasksPorAgente := map[string]int{}
 	taskByID := map[int64]*db.Tarea{}
+	tareasPorAgente := map[string][]*db.Tarea{}
 	for _, tarea := range tareas {
 		if tarea == nil || tarea.Agente == nil {
 			continue
 		}
 		taskByID[tarea.ID] = tarea
+		tareasPorAgente[*tarea.Agente] = append(tareasPorAgente[*tarea.Agente], tarea)
 		switch tarea.Estado {
 		case db.EstadoCompletada, db.EstadoCancelada:
 			continue
@@ -736,43 +857,37 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		}
 		openTasksPorAgente[*tarea.Agente]++
 	}
-	for _, msg := range mailbox {
+	for _, msg := range mailboxPending {
 		if msg == nil {
 			continue
 		}
-		for _, agente := range []string{msg.ToAgente, msg.FromAgente} {
-			agente = strings.TrimSpace(agente)
-			if agente == "" {
-				continue
-			}
-			stats := mailboxPorAgente[agente]
-			stats.Total++
-			if !strings.EqualFold(strings.TrimSpace(msg.Estado), "pendiente") {
-				if action, source, moment := autonomyMailboxActionSummary(msg, agente); strings.TrimSpace(action) != "" {
-					if mailboxCountersShouldReplace(stats.LastMoment, moment) {
-						stats.LastAction = action
-						stats.LastSource = source
-						stats.LastMoment = moment
-					}
-				}
-				mailboxPorAgente[agente] = stats
-				continue
-			}
-			stats.Pending++
-			if strings.EqualFold(strings.TrimSpace(msg.ToAgente), agente) {
-				if runtimeMailboxCuentaComoTrabajoCanonico(msg, taskByID, agente) {
-					stats.ActionablePending++
-				}
-				if runtimeMailboxEsContinuidadPendiente(msg, taskByID, agente) {
-					stats.ContinuityPending++
-				}
-			}
-			if action, source, moment := autonomyMailboxActionSummary(msg, agente); strings.TrimSpace(action) != "" {
-				if mailboxCountersShouldReplace(stats.LastMoment, moment) {
-					stats.LastAction = action
-					stats.LastSource = source
-					stats.LastMoment = moment
-				}
+		agente := strings.TrimSpace(msg.ToAgente)
+		if agente == "" {
+			continue
+		}
+		stats := mailboxPorAgente[agente]
+		if runtimeMailboxCuentaComoTrabajoCanonico(msg, taskByID, agente) {
+			stats.ActionablePending++
+		}
+		if runtimeMailboxEsContinuidadPendiente(msg, taskByID, agente) {
+			stats.ContinuityPending++
+		}
+		mailboxPorAgente[agente] = stats
+	}
+	for _, msg := range mailboxAutonomy {
+		if msg == nil {
+			continue
+		}
+		agente := strings.TrimSpace(msg.ToAgente)
+		if agente == "" {
+			continue
+		}
+		stats := mailboxPorAgente[agente]
+		if action, source, moment := autonomyMailboxActionSummary(msg, agente); strings.TrimSpace(action) != "" {
+			if mailboxCountersShouldReplace(stats.LastMoment, moment) {
+				stats.LastAction = action
+				stats.LastSource = source
+				stats.LastMoment = moment
 			}
 			mailboxPorAgente[agente] = stats
 		}
@@ -781,17 +896,16 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 	now := time.Now().UTC()
 	staleThreshold := workerOutputStaleThreshold(s.store)
 	rows := make([]Row, 0, len(agentes))
+	phaseStart = time.Now()
 	for _, agente := range agentes {
 		if agente == nil {
 			continue
 		}
 		mailboxStats := mailboxPorAgente[agente.Nombre]
 		row := Row{
-			Agente:                   agente,
+			Agente:                   panelVisibleAgent(agente),
 			Asignacion:               asignacionPorAgente[agente.Nombre],
 			Sesion:                   sesionPorAgente[agente.Nombre],
-			Runtime:                  runtimePorAgente[agente.Nombre],
-			Handle:                   handlePorAgente[agente.Nombre],
 			MailboxPending:           mailboxStats.Pending,
 			MailboxActionablePending: mailboxStats.ActionablePending,
 			MailboxContinuityPending: mailboxStats.ContinuityPending,
@@ -803,6 +917,12 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 			LastCheckpoint:           lastCheckpointPorAgente[agente.Nombre],
 			OpenTasks:                openTasksPorAgente[agente.Nombre],
 			BlockedTasks:             blockedTasksPorAgente[agente.Nombre],
+		}
+		proyectoIDPreferido := targetProjectIDForSelection(row.Sesion, row.Asignacion, tareasPorAgente[agente.Nombre])
+		row.Runtime = latestRuntimeForProject(runtimesPorAgente[agente.Nombre], proyectoIDPreferido)
+		row.Handle = latestHandleForProject(handlesPorAgente[agente.Nombre], targetProjectIDForHandleSelection(row.Runtime, row.Sesion, row.Asignacion, tareasPorAgente[agente.Nombre]))
+		if row.Handle == nil {
+			row.Handle = handlePreferidoPorAgente[agente.Nombre]
 		}
 		row.OrdersOpen, row.OrdersFailed, row.ControlOrdersOpen, row.LastControlOrderType, row.LastControlOrderMoment =
 			summarizeOrdersForRow(row, ordersPorAgente[agente.Nombre])
@@ -846,12 +966,117 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		applyResumePayloadAutonomyToRow(&row)
 		promoteObservedAutonomyState(&row, now)
 		row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, staleThreshold)
+		clearResidualAutonomyHistory(&row, now)
 		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool {
 		return strings.ToLower(rows[i].Agente.Nombre) < strings.ToLower(rows[j].Agente.Nombre)
 	})
+	markPhase("rows", phaseStart)
 	return rows, nil
+}
+
+func (s *Service) listOpenTasksForPanel() ([]*db.Tarea, error) {
+	seen := map[int64]struct{}{}
+	out := make([]*db.Tarea, 0)
+	for _, estado := range []db.EstadoTarea{db.EstadoAsignada, db.EstadoEnProgreso, db.EstadoBloqueada} {
+		estado := estado
+		items, err := s.store.ListTasks(db.FiltroTareas{Estado: &estado})
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			if item == nil {
+				continue
+			}
+			if _, ok := seen[item.ID]; ok {
+				continue
+			}
+			seen[item.ID] = struct{}{}
+			out = append(out, item)
+		}
+	}
+	return out, nil
+}
+
+func (s *Service) listRelevantOrdersForPanel() ([]*db.RuntimeOrder, error) {
+	seen := map[int64]struct{}{}
+	out := make([]*db.RuntimeOrder, 0)
+	for _, estado := range []string{"pendiente", "tomada", "ejecutando", "fallida"} {
+		estado := estado
+		items, err := s.store.ListRuntimeOrders(db.FiltroRuntimeOrders{Estado: &estado})
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			if item == nil {
+				continue
+			}
+			if _, ok := seen[item.ID]; ok {
+				continue
+			}
+			seen[item.ID] = struct{}{}
+			out = append(out, item)
+		}
+	}
+	return out, nil
+}
+
+func (s *Service) fillPanelHistoricalHandles(agentes []*db.Agente, handlePorAgente map[string]*db.RuntimeHandle) error {
+	if s == nil || s.store == nil {
+		return nil
+	}
+	if len(agentes) == 0 {
+		return nil
+	}
+	pendientes := make([]string, 0, len(agentes))
+	for _, agente := range agentes {
+		if agente == nil || strings.TrimSpace(agente.Nombre) == "" {
+			continue
+		}
+		actual := handlePorAgente[agente.Nombre]
+		if actual == nil || !runtimeHandleSostieneOperacion(actual) {
+			pendientes = append(pendientes, agente.Nombre)
+		}
+	}
+	if len(pendientes) == 0 {
+		return nil
+	}
+	filtroNulo := (*string)(nil)
+	handlesHistoricos, err := s.store.ListPassiveRuntimeHandles(filtroNulo)
+	if err != nil {
+		return err
+	}
+	pendientesSet := make(map[string]struct{}, len(pendientes))
+	for _, agente := range pendientes {
+		pendientesSet[strings.ToLower(strings.TrimSpace(agente))] = struct{}{}
+	}
+	latestByAgent := map[string]*db.RuntimeHandle{}
+	for _, handle := range handlesHistoricos {
+		if handle == nil || strings.TrimSpace(handle.Agente) == "" {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(handle.Agente))
+		if _, ok := pendientesSet[key]; !ok {
+			continue
+		}
+		actual := latestByAgent[key]
+		if actual == nil || runtimeHandleMoment(handle).After(runtimeHandleMoment(actual)) {
+			latestByAgent[key] = handle
+		}
+	}
+	for _, agente := range pendientes {
+		key := strings.ToLower(strings.TrimSpace(agente))
+		handle := latestByAgent[key]
+		if handle == nil {
+			continue
+		}
+		actual := handlePorAgente[agente]
+		if actual == nil || (runtimeHandleMoment(handle).After(runtimeHandleMoment(actual)) && !runtimeHandleSostieneOperacion(actual)) {
+			handlePorAgente[agente] = handle
+		}
+	}
+	return nil
 }
 
 func (s *Service) BuildDetail(nombre string) (*Detail, error) {
@@ -911,31 +1136,23 @@ func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.buildRowForAgentWithMailbox(nombre, mailbox)
+	ctx, err := s.buildRowContextForAgentWithMailbox(nombre, mailbox)
 	if err != nil {
 		return nil, err
 	}
+	row := ctx.Row
 	if err := s.reconcileDetailRowWithPanelSnapshot(nombre, &row); err != nil {
 		return nil, err
 	}
-
-	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{Agente: &nombre})
-	if err != nil {
-		return nil, err
-	}
-	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
-	if err != nil {
-		return nil, err
-	}
-	mailboxPendingVisible, mailboxCoveredBootstrap, err := s.summarizeMailboxOverview(mailbox, row.Handle, row.Runtime)
+	mailboxPendingVisible, mailboxCoveredBootstrap, err := s.summarizeMailboxOverview(nombre, mailbox, row.Handle, row.Runtime)
 	if err != nil {
 		return nil, err
 	}
 
 	detail := &Detail{
 		Row:                     row,
-		Entity:                  buildAgentEntity(s.store, row, tareas),
-		Asignaciones:            asignaciones,
+		Entity:                  buildAgentEntity(s.store, row, ctx.Tasks),
+		Asignaciones:            ctx.Assignments,
 		MailboxTotalCount:       len(mailbox),
 		MailboxPendingVisible:   mailboxPendingVisible,
 		MailboxCoveredBootstrap: mailboxCoveredBootstrap,
@@ -945,15 +1162,7 @@ func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 	if err != nil {
 		return nil, err
 	}
-	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{Agente: &nombre})
-	if err != nil {
-		return nil, err
-	}
 	handles, err := s.store.ListRuntimeHandles(&nombre)
-	if err != nil {
-		return nil, err
-	}
-	orders, err := s.store.ListRuntimeOrders(db.FiltroRuntimeOrders{Agente: &nombre})
 	if err != nil {
 		return nil, err
 	}
@@ -967,10 +1176,10 @@ func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 	}
 
 	detail.Sesiones = sesiones
-	detail.Runtimes = runtimes
+	detail.Runtimes = ctx.Runtimes
 	detail.Handles = handles
 	detail.Transcript = transcript
-	detail.Orders = orders
+	detail.Orders = ctx.Orders
 	detail.Mailbox = mailbox
 	detail.Checkpoints = checkpoints
 	return detail, nil
@@ -992,8 +1201,10 @@ func (s *Service) reconcileDetailRowWithPanelSnapshot(nombre string, row *Row) e
 		if agente == nil || !strings.EqualFold(strings.TrimSpace(agente.Nombre), nombre) {
 			continue
 		}
-		row.Agente = agente
-		row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(*row, time.Now().UTC(), workerOutputStaleThreshold(s.store))
+		row.Agente = panelVisibleAgent(agente)
+		now := time.Now().UTC()
+		row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(*row, now, workerOutputStaleThreshold(s.store))
+		clearResidualAutonomyHistory(row, now)
 		return nil
 	}
 	return nil
@@ -1008,78 +1219,77 @@ func (s *Service) buildRowForAgent(nombre string) (Row, error) {
 }
 
 func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.RuntimeMailboxMessage) (Row, error) {
-	nombre = strings.TrimSpace(nombre)
-	if nombre == "" {
-		return Row{}, fmt.Errorf("agente obligatorio")
-	}
-	agente, err := s.visibleAgentByName(nombre)
+	ctx, err := s.buildRowContextForAgentWithMailbox(nombre, mailbox)
 	if err != nil {
 		return Row{}, err
 	}
-	row := Row{Agente: agente}
+	return ctx.Row, nil
+}
+
+type agentRowContext struct {
+	Row         Row
+	Assignments []*db.Asignacion
+	Tasks       []*db.Tarea
+	Runtimes    []*db.RuntimeInstance
+	Orders      []*db.RuntimeOrder
+}
+
+func (s *Service) buildRowContextForAgentWithMailbox(nombre string, mailbox []*db.RuntimeMailboxMessage) (*agentRowContext, error) {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return nil, fmt.Errorf("agente obligatorio")
+	}
+	agente, err := s.getAgentForPrepare(nombre)
+	if err != nil {
+		return nil, err
+	}
+	ctx := &agentRowContext{Row: Row{Agente: agente}}
 
 	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{Agente: &nombre})
 	if err != nil {
-		return Row{}, err
+		return nil, err
 	}
-	row.Asignacion = latestAssignmentForAgent(asignaciones)
+	ctx.Assignments = asignaciones
+	ctx.Row.Asignacion = latestAssignmentForAgent(asignaciones)
 
 	sesion, err := s.currentOrLastSessionForAgent(nombre)
 	if err != nil {
-		return Row{}, err
+		return nil, err
 	}
-	row.Sesion = sesion
+	ctx.Row.Sesion = sesion
 
 	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{Agente: &nombre})
 	if err != nil {
-		return Row{}, err
+		return nil, err
 	}
-	row.Runtime = latestRuntimeForAgent(runtimes)
-
-	if hotHandles, err := s.store.ListRecentOperationalRuntimeHandles(); err == nil {
-		if handle := hotHandles[nombre]; handle != nil {
-			row.Handle = handle
-		}
-	}
-	if row.Handle == nil {
-		if handles, err := s.store.ListCanonicalRuntimeHandles(&nombre); err != nil {
-			return Row{}, err
-		} else {
-			row.Handle = latestHandleForAgent(handles)
-		}
-	}
-	if row.Handle == nil {
-		if handles, err := s.store.ListRuntimeHandles(&nombre); err != nil {
-			return Row{}, err
-		} else {
-			row.Handle = latestHandleForAgent(handles)
-		}
-	}
+	ctx.Runtimes = runtimes
 
 	orders, err := s.store.ListRuntimeOrders(db.FiltroRuntimeOrders{Agente: &nombre})
 	if err != nil {
-		return Row{}, err
+		return nil, err
 	}
-	row.OrdersOpen, row.OrdersFailed, row.ControlOrdersOpen, row.LastControlOrderType, row.LastControlOrderMoment =
-		summarizeOrdersForRow(row, orders)
+	ctx.Orders = orders
+	ctx.Row.OrdersOpen, ctx.Row.OrdersFailed, ctx.Row.ControlOrdersOpen, ctx.Row.LastControlOrderType, ctx.Row.LastControlOrderMoment =
+		summarizeOrdersForRow(ctx.Row, orders)
 	if action, source, moment, state, reason, verificationKey, dispatchState, deliveryState, receiptSource := summarizeAutonomyOrdersForRow(orders); strings.TrimSpace(action) != "" {
-		if mailboxCountersShouldReplace(row.LastAutonomyMoment, moment) {
-			row.LastAutonomyAction = action
-			row.LastAutonomySource = source
-			row.LastAutonomyMoment = moment
-			row.LastAutonomyState = state
-			row.LastAutonomyReason = reason
-			row.LastAutonomyVerificationKey = verificationKey
-			row.LastAutonomyDispatchState = dispatchState
-			row.LastAutonomyDeliveryState = deliveryState
-			row.LastAutonomyReceiptSource = receiptSource
+		if mailboxCountersShouldReplace(ctx.Row.LastAutonomyMoment, moment) {
+			ctx.Row.LastAutonomyAction = action
+			ctx.Row.LastAutonomySource = source
+			ctx.Row.LastAutonomyMoment = moment
+			ctx.Row.LastAutonomyState = state
+			ctx.Row.LastAutonomyReason = reason
+			ctx.Row.LastAutonomyVerificationKey = verificationKey
+			ctx.Row.LastAutonomyDispatchState = dispatchState
+			ctx.Row.LastAutonomyDeliveryState = deliveryState
+			ctx.Row.LastAutonomyReceiptSource = receiptSource
 		}
 	}
 
 	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
 	if err != nil {
-		return Row{}, err
+		return nil, err
 	}
+	ctx.Tasks = tareas
 	taskByID := map[int64]*db.Tarea{}
 	for _, tarea := range tareas {
 		if tarea == nil || tarea.Agente == nil {
@@ -1090,52 +1300,77 @@ func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.Runti
 		case db.EstadoCompletada, db.EstadoCancelada:
 			continue
 		case db.EstadoBloqueada:
-			row.BlockedTasks++
-		default:
-			row.OpenTasks++
+			ctx.Row.BlockedTasks++
+		case db.EstadoAsignada, db.EstadoEnProgreso:
+			ctx.Row.OpenTasks++
 		}
 	}
 
-	applyMailboxStatsToRow(&row, mailbox, taskByID, nombre)
+	proyectoIDPreferido := targetProjectIDForSelection(ctx.Row.Sesion, ctx.Row.Asignacion, tareas)
+	ctx.Row.Runtime = latestRuntimeForProject(runtimes, proyectoIDPreferido)
+	proyectoID := targetProjectIDForHandleSelection(ctx.Row.Runtime, ctx.Row.Sesion, ctx.Row.Asignacion, tareas)
+	if hotHandles, err := s.store.ListRecentOperationalRuntimeHandles(); err == nil {
+		if handle := hotHandles[nombre]; handle != nil && handleMatchesProject(handle, proyectoID) {
+			ctx.Row.Handle = handle
+		}
+	}
+	if ctx.Row.Handle == nil {
+		if handles, err := s.store.ListCanonicalRuntimeHandles(&nombre); err != nil {
+			return nil, err
+		} else {
+			ctx.Row.Handle = latestHandleForProject(handles, proyectoID)
+		}
+	}
+	if ctx.Row.Handle == nil {
+		if handles, err := s.store.ListRuntimeHandles(&nombre); err != nil {
+			return nil, err
+		} else {
+			ctx.Row.Handle = latestHandleForProject(handles, proyectoID)
+		}
+	}
+
+	applyMailboxStatsToRow(&ctx.Row, mailbox, taskByID, nombre)
 
 	checkpoints, err := s.store.ListRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{Agente: &nombre, Limit: 5})
 	if err != nil {
-		return Row{}, err
+		return nil, err
 	}
-	row.Checkpoints = len(checkpoints)
+	ctx.Row.Checkpoints = len(checkpoints)
 	if len(checkpoints) > 0 {
-		row.LastCheckpoint = checkpoints[0]
+		ctx.Row.LastCheckpoint = checkpoints[0]
 	}
 
 	now := time.Now().UTC()
-	if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
+	if structured := loadStructuredWorkerSnapshot(ctx.Row.Runtime, ctx.Row.Handle); structured != nil {
 		if view := structured.View(now, time.Minute); view != nil {
-			row.WorkerState = strings.TrimSpace(view.State)
-			row.WorkerAlive = view.Alive
-			row.WorkerReadyAt = view.ReadyAt
-			row.WorkerHeartbeat = view.HeartbeatAt
-			row.WorkerUpdatedAt = view.UpdatedAt
-			row.WorkerLastOutput = view.LastOutputAt
-			row.WorkerLastProgress = view.LastProgressAt
-			row.WorkerExitError = strings.TrimSpace(view.ExitError)
-			row.WorkerSessionRef = strings.TrimSpace(view.SessionRef)
-			row.WorkerRuntimeRef = strings.TrimSpace(view.RuntimeRef)
-			row.WorkerDriver = strings.TrimSpace(view.Driver)
-			row.WorkerTransport = strings.TrimSpace(view.Transport)
-			row.WorkerTMUXSession = strings.TrimSpace(view.TmuxSession)
-			row.WorkerTMUXWindow = strings.TrimSpace(view.TmuxWindow)
-			row.WorkerTMUXPaneID = strings.TrimSpace(view.TmuxPaneID)
-			row.WorkerCanSendInput = view.CanSendInput
-			row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
-			row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
-			applyDurableWorkQueueToTickRow(&row, view)
+			ctx.Row.WorkerState = strings.TrimSpace(view.State)
+			ctx.Row.WorkerAlive = view.Alive
+			ctx.Row.WorkerReadyAt = view.ReadyAt
+			ctx.Row.WorkerHeartbeat = view.HeartbeatAt
+			ctx.Row.WorkerUpdatedAt = view.UpdatedAt
+			ctx.Row.WorkerLastOutput = view.LastOutputAt
+			ctx.Row.WorkerLastProgress = view.LastProgressAt
+			ctx.Row.WorkerExitError = strings.TrimSpace(view.ExitError)
+			ctx.Row.WorkerSessionRef = strings.TrimSpace(view.SessionRef)
+			ctx.Row.WorkerRuntimeRef = strings.TrimSpace(view.RuntimeRef)
+			ctx.Row.WorkerDriver = strings.TrimSpace(view.Driver)
+			ctx.Row.WorkerTransport = strings.TrimSpace(view.Transport)
+			ctx.Row.WorkerTMUXSession = strings.TrimSpace(view.TmuxSession)
+			ctx.Row.WorkerTMUXWindow = strings.TrimSpace(view.TmuxWindow)
+			ctx.Row.WorkerTMUXPaneID = strings.TrimSpace(view.TmuxPaneID)
+			ctx.Row.WorkerCanSendInput = view.CanSendInput
+			ctx.Row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
+			ctx.Row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
+			applyDurableWorkQueueToTickRow(&ctx.Row, view)
+			maybeSyncSupervisedRuntimeHandle(&ctx.Row, now, "agentes_detail_worker_state")
 		}
 	}
-	applyAssignmentHandoffAutonomyToRow(&row)
-	applyResumePayloadAutonomyToRow(&row)
-	promoteObservedAutonomyState(&row, now)
-	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
-	return row, nil
+	applyAssignmentHandoffAutonomyToRow(&ctx.Row)
+	applyResumePayloadAutonomyToRow(&ctx.Row)
+	promoteObservedAutonomyState(&ctx.Row, now)
+	ctx.Row.EstadoOperativo, ctx.Row.DetalleOperativo = deriveOperationalState(ctx.Row, now, workerOutputStaleThreshold(s.store))
+	clearResidualAutonomyHistory(&ctx.Row, now)
+	return ctx, nil
 }
 
 func (s *Service) buildOperationalRowForAgent(nombre string, now time.Time) (Row, error) {
@@ -1156,7 +1391,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 	agentDetailDebugf("compact start agente=%s", nombre)
 
 	stepStart := time.Now()
-	agente, err := s.visibleAgentByName(nombre)
+	agente, err := s.getAgentForPrepare(nombre)
 	if err != nil {
 		return Row{}, nil, nil, err
 	}
@@ -1166,7 +1401,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 	s.cachePrepareAgent(agente)
 	agentDetailDebugf("compact step=get_agent agente=%s duration=%s", nombre, time.Since(stepStart).Round(time.Millisecond))
 
-	row := Row{Agente: agente}
+	row := Row{Agente: panelVisibleAgent(agente)}
 
 	stepStart = time.Now()
 	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{Agente: &nombre})
@@ -1201,6 +1436,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 		return Row{}, nil, nil, err
 	}
 	row.Runtime = latestRuntimeForAgent(runtimes)
+	proyectoID := targetProjectIDForHandleSelection(row.Runtime, row.Sesion, row.Asignacion, nil)
 	agentDetailDebugf("compact step=list_runtimes agente=%s count=%d duration=%s", nombre, len(runtimes), time.Since(stepStart).Round(time.Millisecond))
 
 	stepStart = time.Now()
@@ -1208,13 +1444,13 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 	if err != nil {
 		return Row{}, nil, nil, err
 	}
-	row.Handle = latestHandleForAgent(handles)
+	row.Handle = latestHandleForProject(handles, proyectoID)
 	if row.Handle == nil {
 		handles, err = s.store.ListPassiveRuntimeHandles(&nombre)
 		if err != nil {
 			return Row{}, nil, nil, err
 		}
-		row.Handle = latestHandleForAgent(handles)
+		row.Handle = latestHandleForProject(handles, proyectoID)
 	}
 	agentDetailDebugf("compact step=list_handles agente=%s count=%d duration=%s", nombre, len(handles), time.Since(stepStart).Round(time.Millisecond))
 	if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
@@ -1238,6 +1474,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 			row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
 			row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
 			applyDurableWorkQueueToTickRow(&row, view)
+			maybeSyncSupervisedRuntimeHandle(&row, now, "agentes_compact_worker_alive")
 			if row.Asignacion != nil && row.Asignacion.ProyectoID > 0 {
 				if tarea, ok, err := s.durableWorkQueueTaskForAgent(nombre, row.Asignacion.ProyectoID, view); err != nil {
 					return Row{}, nil, nil, err
@@ -1247,7 +1484,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 					case db.EstadoBloqueada:
 						row.BlockedTasks++
 					case db.EstadoCompletada, db.EstadoCancelada, db.EstadoBacklog:
-					default:
+					case db.EstadoAsignada, db.EstadoEnProgreso:
 						row.OpenTasks++
 					}
 					stepStart = time.Now()
@@ -1265,6 +1502,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 					applyResumePayloadAutonomyToRow(&row)
 					promoteObservedAutonomyState(&row, now)
 					row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
+					clearResidualAutonomyHistory(&row, now)
 					agentDetailDebugf("compact done agente=%s duration=%s", nombre, time.Since(start).Round(time.Millisecond))
 					return row, asignaciones, tareas, nil
 				}
@@ -1286,7 +1524,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 			continue
 		case db.EstadoBloqueada:
 			row.BlockedTasks++
-		default:
+		case db.EstadoAsignada, db.EstadoEnProgreso:
 			row.OpenTasks++
 		}
 	}
@@ -1314,6 +1552,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 	applyResumePayloadAutonomyToRow(&row)
 	promoteObservedAutonomyState(&row, now)
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
+	clearResidualAutonomyHistory(&row, now)
 	agentDetailDebugf("compact done agente=%s duration=%s", nombre, time.Since(start).Round(time.Millisecond))
 	return row, asignaciones, tareas, nil
 }
@@ -1385,7 +1624,7 @@ func (s *Service) buildOperationalRowContextForAgent(nombre string, now time.Tim
 		return Row{}, nil, nil, fmt.Errorf("agente obligatorio")
 	}
 
-	agente, err := s.visibleAgentByName(nombre)
+	agente, err := s.getAgentForPrepare(nombre)
 	if err != nil {
 		return Row{}, nil, nil, err
 	}
@@ -1418,18 +1657,19 @@ func (s *Service) buildOperationalRowContextForAgent(nombre string, now time.Tim
 		return Row{}, nil, nil, err
 	}
 	row.Runtime = latestRuntimeForAgent(runtimes)
+	proyectoID := targetProjectIDForHandleSelection(row.Runtime, row.Sesion, row.Asignacion, nil)
 
 	handles, err := s.store.ListCanonicalRuntimeHandles(&nombre)
 	if err != nil {
 		return Row{}, nil, nil, err
 	}
-	row.Handle = latestHandleForAgent(handles)
+	row.Handle = latestHandleForProject(handles, proyectoID)
 	if row.Handle == nil {
 		handles, err = s.store.ListPassiveRuntimeHandles(&nombre)
 		if err != nil {
 			return Row{}, nil, nil, err
 		}
-		row.Handle = latestHandleForAgent(handles)
+		row.Handle = latestHandleForProject(handles, proyectoID)
 	}
 	if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
 		if view := structured.View(now, time.Minute); view != nil {
@@ -1451,6 +1691,7 @@ func (s *Service) buildOperationalRowContextForAgent(nombre string, now time.Tim
 			row.WorkerCanSendInput = view.CanSendInput
 			row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
 			row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
+			maybeSyncSupervisedRuntimeHandle(&row, now, "agentes_panel_worker_alive")
 		}
 	}
 
@@ -1467,12 +1708,13 @@ func (s *Service) buildOperationalRowContextForAgent(nombre string, now time.Tim
 			continue
 		case db.EstadoBloqueada:
 			row.BlockedTasks++
-		default:
+		case db.EstadoAsignada, db.EstadoEnProgreso:
 			row.OpenTasks++
 		}
 	}
 
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
+	clearResidualAutonomyHistory(&row, now)
 	return row, asignaciones, tareas, nil
 }
 
@@ -1481,7 +1723,7 @@ func (s *Service) visibleAgentByName(nombre string) (*db.Agente, error) {
 	if nombre == "" {
 		return nil, nil
 	}
-	agentes, err := s.ListAgents()
+	agentes, err := s.store.ListAgentsLight()
 	if err != nil {
 		return nil, err
 	}
@@ -2243,6 +2485,25 @@ func latestRuntimeForAgent(items []*db.RuntimeInstance) *db.RuntimeInstance {
 	return best
 }
 
+func latestRuntimeForProject(items []*db.RuntimeInstance, proyectoID *int64) *db.RuntimeInstance {
+	if proyectoID == nil || *proyectoID <= 0 {
+		return latestRuntimeForAgent(items)
+	}
+	var best *db.RuntimeInstance
+	for _, item := range items {
+		if item == nil || item.ProyectoID == nil || *item.ProyectoID != *proyectoID {
+			continue
+		}
+		if best == nil || runtimeMoment(item).After(runtimeMoment(best)) {
+			best = item
+		}
+	}
+	if best != nil {
+		return best
+	}
+	return latestRuntimeForAgent(items)
+}
+
 func latestHandleForAgent(items []*db.RuntimeHandle) *db.RuntimeHandle {
 	var best *db.RuntimeHandle
 	for _, item := range items {
@@ -2272,12 +2533,68 @@ func latestHandleForProject(items []*db.RuntimeHandle, proyectoID *int64) *db.Ru
 	return best
 }
 
-func (s *Service) summarizeMailboxOverview(items []*db.RuntimeMailboxMessage, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (pendingVisible int, coveredBootstrap int, err error) {
+func preferredProjectIDFromTasks(tareas []*db.Tarea) *int64 {
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.ProyectoID == nil || *tarea.ProyectoID <= 0 {
+			continue
+		}
+		if taskStateCountsAsOpen(tarea.Estado) {
+			return tarea.ProyectoID
+		}
+	}
+	return nil
+}
+
+func targetProjectIDForSelection(sesion *db.Sesion, asignacion *db.Asignacion, tareas []*db.Tarea) *int64 {
+	if asignacion != nil && asignacion.ProyectoID > 0 {
+		return &asignacion.ProyectoID
+	}
+	if proyectoID := preferredProjectIDFromTasks(tareas); proyectoID != nil && *proyectoID > 0 {
+		return proyectoID
+	}
+	if sesion != nil && sesion.ProyectoID != nil && *sesion.ProyectoID > 0 {
+		return sesion.ProyectoID
+	}
+	return nil
+}
+
+func targetProjectIDForHandleSelection(runtime *db.RuntimeInstance, sesion *db.Sesion, asignacion *db.Asignacion, tareas []*db.Tarea) *int64 {
+	if asignacion != nil && asignacion.ProyectoID > 0 {
+		return &asignacion.ProyectoID
+	}
+	if proyectoID := preferredProjectIDFromTasks(tareas); proyectoID != nil && *proyectoID > 0 {
+		return proyectoID
+	}
+	if runtime != nil && runtime.ProyectoID != nil && *runtime.ProyectoID > 0 {
+		return runtime.ProyectoID
+	}
+	if sesion != nil && sesion.ProyectoID != nil && *sesion.ProyectoID > 0 {
+		return sesion.ProyectoID
+	}
+	return nil
+}
+
+func handleMatchesProject(handle *db.RuntimeHandle, proyectoID *int64) bool {
+	if handle == nil {
+		return false
+	}
+	if proyectoID == nil || *proyectoID <= 0 {
+		return true
+	}
+	return handle.ProyectoID != nil && *handle.ProyectoID == *proyectoID
+}
+
+func (s *Service) summarizeMailboxOverview(agent string, items []*db.RuntimeMailboxMessage, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (pendingVisible int, coveredBootstrap int, err error) {
+	agent = strings.TrimSpace(agent)
 	for _, item := range items {
 		if item == nil {
 			continue
 		}
 		if !strings.EqualFold(strings.TrimSpace(item.Estado), "pendiente") {
+			continue
+		}
+		if agent == "" || !strings.EqualFold(strings.TrimSpace(item.ToAgente), agent) {
+			pendingVisible++
 			continue
 		}
 		covered, _, _, coverErr := s.store.RuntimeMailboxCoveredByBootstrapPending(item.ID, handle, runtime)
@@ -2723,7 +3040,7 @@ func (s *Service) buildReanimationRowForAgent(agente *db.Agente, asignacion *db.
 	}
 	nombre := strings.TrimSpace(agente.Nombre)
 	row := Row{
-		Agente:       agente,
+		Agente:       panelVisibleAgent(agente),
 		Asignacion:   asignacion,
 		OpenTasks:    openTasks,
 		BlockedTasks: blockedTasks,
@@ -2762,6 +3079,7 @@ func (s *Service) buildReanimationRowForAgent(agente *db.Agente, asignacion *db.
 	}
 
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, staleThreshold)
+	clearResidualAutonomyHistory(&row, now)
 	return row, nil
 }
 
@@ -2773,6 +3091,7 @@ func buildLightOperationalRow(agente *db.Agente, asignacion *db.Asignacion, open
 		BlockedTasks: blockedTasks,
 	}
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, staleThreshold)
+	clearResidualAutonomyHistory(&row, now)
 	return row
 }
 
@@ -3127,6 +3446,15 @@ func buildAgentEntity(store Store, row Row, tareas []*db.Tarea) *AgentEntity {
 		entity.AssignmentProject = strings.TrimSpace(row.Asignacion.ProyectoSlug)
 	}
 	return entity
+}
+
+func taskStateCountsAsOpen(state db.EstadoTarea) bool {
+	switch state {
+	case db.EstadoAsignada, db.EstadoEnProgreso:
+		return true
+	default:
+		return false
+	}
 }
 
 func compactMailboxPendingVisible(row Row, now time.Time) int {
@@ -3555,20 +3883,27 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 	recentActivity := row.hasRecentOperationalActivity(now)
 	hasActiveTask := row.OpenTasks > 0
 	hasBlockedTask := row.BlockedTasks > 0
-	continuidadAccionablePendiente := row.MailboxActionablePending > 0 || row.MailboxContinuityPending > 0
-	if !continuidadAccionablePendiente && hasActiveTask && row.DurableContinuityPending(now) {
-		continuidadAccionablePendiente = true
-		row.MailboxContinuityPending++
-	}
+	continuidadPendienteEfectiva := row.EffectiveContinuityPending(now)
+	continuidadAccionablePendiente := continuidadPendienteEfectiva
 	pausedRuntime := estadoRuntimePausado(runtimeEstado) || estadoHandlePausado(handleEstado)
 	runtimeStale := row.runtimePrincipalStale(now)
 	workerRunningFresh := false
 	workerAnchored := row.hasOperationalAnchor()
+	workerAnchoredTMUXFresh := row.WorkerAlive &&
+		workerAnchored &&
+		recentActivity &&
+		strings.EqualFold(strings.TrimSpace(row.handleDriver()), "tmux_cli_session")
 	if pausedRuntime {
 		detalle := firstNonEmpty(row.runtimeState(), row.handleState(), "runtime pausado")
 		return "bloqueado_por_runtime", detalle
 	}
+	if !hasActiveTask && row.SupervisorRoleActive(now) {
+		return "trabajando", firstNonEmpty(row.activitySummary(), "supervision autonoma viva")
+	}
 	if runtimeStale && !hasActiveTask {
+		if row.Asignacion == nil && !hasBlockedTask && row.MailboxPending == 0 && !recentActivity {
+			return "sin_tarea", ""
+		}
 		return "bloqueado_por_runtime", firstNonEmpty(strings.TrimSpace(row.WorkerExitError), "runtime principal stale")
 	}
 
@@ -3587,7 +3922,10 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 			}
 		}
 		if (hasActiveTask || row.MailboxPending > 0) && row.workerHeartbeatStale(now) {
-			return "bloqueado_por_runtime", firstNonEmpty(strings.TrimSpace(row.WorkerExitError), "heartbeat worker retrasado")
+			if !workerAnchoredTMUXFresh {
+				return "bloqueado_por_runtime", firstNonEmpty(strings.TrimSpace(row.WorkerExitError), "heartbeat worker retrasado")
+			}
+			workerRunningFresh = true
 		}
 		if row.workerHeartbeatRecent(now) && row.WorkerAlive {
 			workerRunningFresh = true
@@ -3596,7 +3934,7 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 	if hasActiveTask && row.KnownLegacyCLIWorker(now) {
 		return "bloqueado_por_runtime", "runtime CLI legacy sin tmux canónico"
 	}
-	if hasActiveTask && row.MailboxContinuityPending == 1 &&
+	if hasActiveTask && continuidadPendienteEfectiva && row.MailboxContinuityPending == 1 &&
 		(row.WorkerSupportsContinuityRecovery(now) ||
 			(row.workerHeartbeatRecent(now) && strings.EqualFold(strings.TrimSpace(row.handleDriver()), "tmux_cli_session"))) {
 		return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad pendiente útil")
@@ -3606,7 +3944,7 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 		strings.EqualFold(workerState, "ready") &&
 		runtimeagente.NormalizeMailboxDeliveryMode(row.WorkerMailboxDeliveryMode) == runtimeagente.MailboxDeliverySessionResume &&
 		row.WorkerSupportsContinuityRecovery(now) {
-		if row.MailboxContinuityPending > 0 ||
+		if continuidadPendienteEfectiva ||
 			row.workerProgressRecent(now, workerOutputStaleThreshold) ||
 			row.workerWarmupRecent(now) {
 			return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad session_resume lista")
@@ -3615,22 +3953,44 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 	if hasActiveTask && workerRunningFresh && workerState == "starting" {
 		return "arrancando", firstNonEmpty(row.activitySummary(), "worker starting")
 	}
-	if hasActiveTask && workerRunningFresh && row.workerProgressStale(now, workerOutputStaleThreshold) {
+	bootstrapOnlyRunningConSalidaReciente := workerRunningFresh &&
+		workerState == "running" &&
+		runtimeagente.NormalizeMailboxDeliveryMode(row.WorkerMailboxDeliveryMode) == runtimeagente.MailboxDeliveryBootstrapOnly &&
+		row.WorkerLastOutput != nil &&
+		!row.WorkerLastOutput.IsZero() &&
+		!row.workerOutputStale(now, workerOutputStaleThreshold) &&
+		(row.workerWarmupRecent(now) || row.workerProgressRecent(now, workerOutputStaleThreshold))
+	recentSemanticProgress := row.workerHasRecentSemanticProgress(now, workerOutputStaleThreshold)
+
+	if hasActiveTask && workerRunningFresh &&
+		row.workerProgressStale(now, workerOutputStaleThreshold) &&
+		!bootstrapOnlyRunningConSalidaReciente {
+		if recentSemanticProgress {
+			return "trabajando", firstNonEmpty(row.activitySummary(), "worker "+workerState)
+		}
 		return "atascado", firstNonEmpty(row.workerLastProgressSummary(), row.workerLastOutputSummary(), "worker sin progreso reciente")
 	}
 	if hasActiveTask && workerRunningFresh && row.workerOutputStale(now, workerOutputStaleThreshold) && !row.workerProgressRecent(now, workerOutputStaleThreshold) {
+		if recentSemanticProgress {
+			return "trabajando", firstNonEmpty(row.activitySummary(), "worker "+workerState)
+		}
 		return "atascado", firstNonEmpty(row.workerLastOutputSummary(), "worker sin salida reciente")
-	}
-	if !hasActiveTask && row.supervisorAutonomyLive(now) {
-		return "trabajando", firstNonEmpty(row.activitySummary(), "supervision autonoma viva")
 	}
 	if !hasActiveTask && row.MailboxPending > 0 && row.KnownLegacyCLIWorker(now) {
 		return "bloqueado_por_runtime", "runtime CLI legacy sin tmux canónico"
 	}
-	if !hasActiveTask && row.MailboxPending > 0 && workerRunningFresh && row.workerProgressStale(now, workerOutputStaleThreshold) {
+	if !hasActiveTask && row.MailboxPending > 0 && workerRunningFresh &&
+		row.workerProgressStale(now, workerOutputStaleThreshold) &&
+		!bootstrapOnlyRunningConSalidaReciente {
+		if recentSemanticProgress {
+			return "disponible", firstNonEmpty(row.activitySummary(), "worker "+workerState)
+		}
 		return "atascado", firstNonEmpty(row.workerLastProgressSummary(), row.workerLastOutputSummary(), "worker sin progreso reciente")
 	}
 	if !hasActiveTask && row.MailboxPending > 0 && workerRunningFresh && row.workerOutputStale(now, workerOutputStaleThreshold) && !row.workerProgressRecent(now, workerOutputStaleThreshold) {
+		if recentSemanticProgress {
+			return "disponible", firstNonEmpty(row.activitySummary(), "worker "+workerState)
+		}
 		return "atascado", firstNonEmpty(row.workerLastOutputSummary(), "worker sin salida reciente")
 	}
 	if hasActiveTask && row.MailboxPending > 0 && !workerAnchored {
@@ -3651,7 +4011,8 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 		}
 		return "disponible", firstNonEmpty(row.activitySummary(), "worker "+workerState)
 	}
-	if !hasActiveTask && (estadoRuntimeRoto(runtimeEstado) || estadoHandleRoto(handleEstado)) {
+	recentOperationalOverride := recentActivity && (hasActiveTask || row.MailboxPending > 0 || row.SupervisorRoleActive(now))
+	if !hasActiveTask && (estadoRuntimeRoto(runtimeEstado) || estadoHandleRoto(handleEstado)) && !recentOperationalOverride {
 		return "bloqueado_por_runtime", firstNonEmpty(row.runtimeState(), row.handleState(), "runtime degradado")
 	}
 
@@ -3674,13 +4035,16 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 			(row.workerHeartbeatRecent(now) && strings.EqualFold(strings.TrimSpace(row.handleDriver()), "tmux_cli_session"))) {
 		return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad accionable pendiente")
 	}
-	if hasActiveTask && (estadoRuntimeRoto(runtimeEstado) || estadoHandleRoto(handleEstado)) {
+	if hasActiveTask && (estadoRuntimeRoto(runtimeEstado) || estadoHandleRoto(handleEstado)) && !recentOperationalOverride {
 		return "bloqueado_por_runtime", firstNonEmpty(row.runtimeState(), row.handleState())
 	}
 	if hasActiveTask && hasBlockedTask && recentActivity {
 		return "saturado", fmt.Sprintf("%d activas, %d bloqueadas", row.OpenTasks, row.BlockedTasks)
 	}
 	if hasActiveTask && workerRunningFresh && row.workerHasRecentWorkSignal(now, workerOutputStaleThreshold) {
+		return "trabajando", firstNonEmpty(row.activitySummary(), "worker "+workerState)
+	}
+	if hasActiveTask && workerRunningFresh && recentSemanticProgress {
 		return "trabajando", firstNonEmpty(row.activitySummary(), "worker "+workerState)
 	}
 	if hasActiveTask && workerRunningFresh && row.workerWarmupRecent(now) {
@@ -3747,15 +4111,15 @@ func (r Row) supervisorAutonomyLive(now time.Time) bool {
 	if !strings.EqualFold(strings.TrimSpace(r.LastAutonomyAction), "supervisar_proyecto") {
 		return false
 	}
-	if !r.WorkerAlive || !r.workerHeartbeatRecent(now) {
-		return false
-	}
-	if r.LastAutonomyMoment != nil && !r.LastAutonomyMoment.IsZero() && r.LastAutonomyMoment.Before(now.Add(-10*time.Minute)) {
+	if !r.WorkerAlive || (!r.workerHeartbeatRecent(now) && !r.hasRecentOperationalActivity(now)) {
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(r.LastAutonomySource)) {
 	case "resume_payload_mailbox", "mailbox", "work_queue", "send_instruction":
-		return true
+		if r.LastAutonomyMoment == nil || r.LastAutonomyMoment.IsZero() || !r.LastAutonomyMoment.Before(now.Add(-10*time.Minute)) {
+			return true
+		}
+		return r.hasAutonomySupervisorAssignment()
 	default:
 		return false
 	}
@@ -3771,10 +4135,11 @@ func (r Row) SupervisorRoleActive(now time.Time) bool {
 	if !strings.EqualFold(strings.TrimSpace(string(r.Asignacion.Estado)), string(db.AsignacionActiva)) {
 		return false
 	}
-	if !strings.Contains(strings.ToLower(strings.TrimSpace(r.Asignacion.Nota)), "server_autobootstrap") {
+	nota := strings.ToLower(strings.TrimSpace(r.Asignacion.Nota))
+	if nota != "server_autobootstrap" && nota != "supervision" && nota != "supervision_automatica" {
 		return false
 	}
-	if !r.WorkerAlive || !r.workerHeartbeatRecent(now) {
+	if !r.WorkerAlive || (!r.workerHeartbeatRecent(now) && !r.hasRecentOperationalActivity(now)) {
 		return false
 	}
 	return true
@@ -3917,6 +4282,9 @@ func applyResumePayloadAutonomyToRow(row *Row) {
 	if row == nil || row.Sesion == nil || strings.TrimSpace(row.Sesion.ResumePayloadJSON) == "" {
 		return
 	}
+	if source := strings.ToLower(strings.TrimSpace(row.LastAutonomySource)); source != "" && source != "resume_payload_mailbox" {
+		return
+	}
 	action, source, moment, state, reason, verificationKey := summarizeResumePayloadAutonomy(row.Sesion)
 	if strings.TrimSpace(action) == "" {
 		return
@@ -3989,8 +4357,18 @@ func promoteObservedAutonomyState(row *Row, now time.Time) {
 		if row.autonomyMailboxAbsorbedByWorker(now) {
 			row.LastAutonomyState = "work_confirmed"
 		}
+	case "nudge":
+		if row.WorkerFresh(now) && (row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) {
+			row.LastAutonomyState = "work_confirmed"
+		} else if row.WorkerAlive && row.hasRecentOperationalActivity(now) &&
+			(row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) {
+			row.LastAutonomyState = "work_confirmed"
+		}
 	case "send_instruction":
 		if row.WorkerFresh(now) && (row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) {
+			row.LastAutonomyState = "work_confirmed"
+		} else if row.WorkerAlive && row.hasRecentOperationalActivity(now) &&
+			(row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) {
 			row.LastAutonomyState = "work_confirmed"
 		}
 	case "resume_payload_mailbox":
@@ -3998,10 +4376,98 @@ func promoteObservedAutonomyState(row *Row, now time.Time) {
 			row.LastAutonomyState = "work_confirmed"
 		}
 	case "work_queue":
-		if row.autonomyWorkQueueAbsorbedByWorker(now) && strings.TrimSpace(row.LastAutonomyState) != "work_confirmed" {
+		if row.WorkerFresh(now) && (row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) &&
+			strings.TrimSpace(row.LastAutonomyState) != "work_confirmed" {
+			row.LastAutonomyState = "work_confirmed"
+		} else if row.WorkerAlive && row.hasRecentOperationalActivity(now) &&
+			(row.OpenTasks > 0 || row.supervisorAutonomyLive(now)) &&
+			strings.TrimSpace(row.LastAutonomyState) != "work_confirmed" {
+			row.LastAutonomyState = "work_confirmed"
+		} else if row.autonomyWorkQueueAbsorbedByWorker(now) && strings.TrimSpace(row.LastAutonomyState) != "work_confirmed" {
 			row.LastAutonomyState = "work_confirmed"
 		}
 	}
+}
+
+func clearResidualAutonomyHistory(row *Row, now time.Time) {
+	if row == nil {
+		return
+	}
+	if strings.TrimSpace(row.LastAutonomyAction) == "" &&
+		strings.TrimSpace(row.LastAutonomySource) == "" &&
+		strings.TrimSpace(row.LastAutonomyState) == "" &&
+		strings.TrimSpace(row.LastAutonomyReason) == "" {
+		return
+	}
+	estadoOperativo := strings.ToLower(strings.TrimSpace(row.EstadoOperativo))
+	if estadoOperativo != "sin_tarea" && estadoOperativo != "retirado" {
+		return
+	}
+	if row.OpenTasks > 0 || row.BlockedTasks > 0 ||
+		row.MailboxPending > 0 || row.MailboxActionablePending > 0 || row.MailboxContinuityPending > 0 ||
+		row.OrdersOpen > 0 || row.ControlOrdersOpen > 0 {
+		return
+	}
+	if row.EffectiveContinuityPending(now) || row.DurableContinuityPending(now) || row.supervisorAutonomyLive(now) {
+		return
+	}
+	if row.Runtime != nil || row.Handle != nil || row.WorkerAlive || strings.TrimSpace(row.WorkerState) != "" {
+		return
+	}
+	if row.hasRecentOperationalActivity(now) {
+		return
+	}
+	row.LastAutonomyAction = ""
+	row.LastAutonomySource = ""
+	row.LastAutonomyMoment = nil
+	row.LastAutonomyState = ""
+	row.LastAutonomyReason = ""
+	row.LastAutonomyVerificationKey = ""
+	row.LastAutonomyDispatchState = ""
+	row.LastAutonomyDeliveryState = ""
+	row.LastAutonomyReceiptSource = ""
+}
+
+func panelVisibleAgent(agente *db.Agente) *db.Agente {
+	if agente == nil {
+		return nil
+	}
+	clone := *agente
+	sanitizePanelVisibleQuotaState(&clone)
+	return &clone
+}
+
+func sanitizePanelVisibleQuotaState(agente *db.Agente) {
+	if agente == nil {
+		return
+	}
+	motivo := strings.TrimSpace(agente.MotivoPausa)
+	if panelAgentPauseReasonVisible(motivo) {
+		return
+	}
+	now := time.Now().UTC()
+	if strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "activo") {
+		agente.ReanimarAt = nil
+		agente.MotivoPausa = ""
+		return
+	}
+	if agente.ReanimarAt != nil && !agente.ReanimarAt.IsZero() && !agente.ReanimarAt.After(now) {
+		agente.ReanimarAt = nil
+	}
+}
+
+func panelAgentPauseReasonVisible(motivo string) bool {
+	motivo = strings.ToLower(strings.TrimSpace(motivo))
+	switch motivo {
+	case "", "usage limit", "cuota diaria agotada", "presupuesto agotado observado", "presupuesto semanal agotado observado", "ventana corta agotada observada", "créditos agotados observados", "creditos agotados observados":
+		return false
+	}
+	return strings.Contains(motivo, "runtime") ||
+		strings.Contains(motivo, "panic") ||
+		strings.Contains(motivo, "manual") ||
+		strings.Contains(motivo, "pausa") ||
+		strings.Contains(motivo, "detenido") ||
+		strings.Contains(motivo, "supervisor")
 }
 
 func summarizeResumePayloadAutonomy(sesion *db.Sesion) (action, source string, moment *time.Time, state, reason, verificationKey string) {
@@ -4037,11 +4503,11 @@ func summarizeResumePayloadAutonomy(sesion *db.Sesion) (action, source string, m
 		}
 		verificationKey = strings.TrimSpace(stringFromResumePayloadAny(payload["verification_key"]))
 		switch {
-		case !sesion.Inicio.IsZero():
-			ts := sesion.Inicio.UTC()
-			moment = &ts
 		case sesion.HeartbeatAt != nil && !sesion.HeartbeatAt.IsZero():
 			ts := sesion.HeartbeatAt.UTC()
+			moment = &ts
+		case !sesion.Inicio.IsZero():
+			ts := sesion.Inicio.UTC()
 			moment = &ts
 		}
 		return action, source, moment, state, reason, verificationKey
@@ -4100,6 +4566,14 @@ func (r Row) EffectiveContinuityPending(now time.Time) bool {
 	if r.MailboxContinuityPending <= 0 && !r.DurableContinuityPending(now) {
 		return false
 	}
+	if strings.EqualFold(strings.TrimSpace(r.LastAutonomyAction), "supervisar_proyecto") && r.supervisorAutonomyLive(now) {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(r.LastAutonomyAction), "inspeccionar_transcript_signal") &&
+		r.OpenTasks <= 0 &&
+		autonomyReasonIsLowValueTranscriptSignal(r.LastAutonomyReason) {
+		return false
+	}
 	source := strings.ToLower(strings.TrimSpace(r.LastAutonomySource))
 	state := strings.ToLower(strings.TrimSpace(r.LastAutonomyState))
 	if state == "work_confirmed" {
@@ -4114,6 +4588,9 @@ func (r Row) EffectiveContinuityPending(now time.Time) bool {
 		return false
 	}
 	if source == "work_queue" && r.WorkerFresh(now) {
+		if strings.EqualFold(strings.TrimSpace(r.LastAutonomyAction), "continuar_trabajo") && r.OpenTasks > 0 {
+			return false
+		}
 		switch state {
 		case "delivered", "working", "running":
 			if r.OpenTasks > 0 || r.supervisorAutonomyLive(now) {
@@ -4121,10 +4598,34 @@ func (r Row) EffectiveContinuityPending(now time.Time) bool {
 			}
 		}
 	}
+	if source == "work_queue" &&
+		strings.EqualFold(strings.TrimSpace(r.LastAutonomyAction), "continuar_trabajo") &&
+		r.OpenTasks > 0 &&
+		strings.EqualFold(strings.TrimSpace(r.EstadoOperativo), "trabajando") {
+		return false
+	}
 	if source == "work_queue" && r.autonomyWorkQueueAbsorbedByWorker(now) && (r.OpenTasks > 0 || r.supervisorAutonomyLive(now)) {
 		return false
 	}
 	return true
+}
+
+func autonomyReasonIsLowValueTranscriptSignal(reason string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(reason))
+	if normalized == "" {
+		return false
+	}
+	for _, marker := range []string{
+		"signal=tool_execution",
+		"signal=tool_exploration",
+		"signal=bootstrap_guidance",
+		"guidance durable escrita en inbox",
+	} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r Row) autonomyResumePayloadAbsorbedByWorker(now time.Time) bool {
@@ -4142,7 +4643,7 @@ func (r Row) autonomyResumePayloadAbsorbedByWorker(now time.Time) bool {
 		if ts == nil || ts.IsZero() {
 			continue
 		}
-		if !ts.Before(*moment) && !ts.Before(now.Add(-10*time.Minute)) {
+		if autonomyWorkerSignalAbsorbsMoment(ts, moment, now) {
 			return true
 		}
 	}
@@ -4161,7 +4662,7 @@ func (r Row) autonomyWorkQueueAbsorbedByWorker(now time.Time) bool {
 		if ts == nil || ts.IsZero() {
 			continue
 		}
-		if !ts.Before(*moment) && !ts.Before(now.Add(-10*time.Minute)) {
+		if autonomyWorkerSignalAbsorbsMoment(ts, moment, now) {
 			return true
 		}
 	}
@@ -4172,16 +4673,32 @@ func (r Row) autonomyMailboxAbsorbedByWorker(now time.Time) bool {
 	if strings.ToLower(strings.TrimSpace(r.LastAutonomySource)) != "mailbox" {
 		return false
 	}
+	if strings.EqualFold(strings.TrimSpace(r.LastAutonomyAction), "continuar_trabajo") &&
+		(r.WorkerFresh(now) || (r.WorkerAlive && r.hasRecentOperationalActivity(now))) &&
+		(r.OpenTasks > 0 || r.supervisorAutonomyLive(now)) {
+		return true
+	}
 	if r.MailboxContinuityPending <= 0 && !r.DurableContinuityPending(now) {
 		return false
 	}
 	if !(r.OpenTasks > 0 || r.supervisorAutonomyLive(now)) {
 		return false
 	}
-	if !r.WorkerFresh(now) {
+	if !r.WorkerFresh(now) && !(r.WorkerAlive && r.hasRecentOperationalActivity(now)) {
 		return false
 	}
 	return r.workerHasRecentWorkSignal(now, 10*time.Minute) || r.workerWarmupRecent(now)
+}
+
+func autonomyWorkerSignalAbsorbsMoment(signal *time.Time, moment *time.Time, now time.Time) bool {
+	if signal == nil || signal.IsZero() || moment == nil || moment.IsZero() {
+		return false
+	}
+	if signal.Before(now.Add(-10 * time.Minute)) {
+		return false
+	}
+	const skew = 5 * time.Second
+	return !signal.Before(moment.Add(-skew))
 }
 
 func (r Row) RequiresStructuredTMUX() bool {
@@ -4327,6 +4844,22 @@ func (r Row) workerHasRecentWorkSignal(now time.Time, threshold time.Duration) b
 	return false
 }
 
+func (r Row) workerHasRecentSemanticProgress(now time.Time, threshold time.Duration) bool {
+	if threshold <= 0 {
+		threshold = 4 * time.Hour
+	}
+	if !strings.EqualFold(strings.TrimSpace(r.LastAutonomyState), "work_confirmed") {
+		return false
+	}
+	if !autonomyReceiptSourceConfirmsWork(r.LastAutonomyReceiptSource) {
+		return false
+	}
+	if r.LastAutonomyMoment == nil || r.LastAutonomyMoment.IsZero() {
+		return false
+	}
+	return !r.LastAutonomyMoment.UTC().Before(now.Add(-threshold))
+}
+
 func (r Row) workerProgressRecent(now time.Time, threshold time.Duration) bool {
 	if threshold <= 0 {
 		threshold = 4 * time.Hour
@@ -4437,10 +4970,10 @@ func (r Row) runtimePrincipalStale(now time.Time) bool {
 
 func loadStructuredWorkerSnapshot(runtime *db.RuntimeInstance, handle *db.RuntimeHandle) *runtimeagente.WorkerSnapshot {
 	var metas []string
-	if handle != nil && !estadoHandleRoto(handle.Estado) && !estadoHandlePausado(handle.Estado) {
+	if handle != nil && !strings.EqualFold(strings.TrimSpace(handle.Estado), "cerrado") {
 		metas = append(metas, metadataFromHandle(handle))
 	}
-	if runtime != nil && !estadoRuntimeRoto(runtime.LogicalState) && !estadoRuntimePausado(runtime.LogicalState) {
+	if runtime != nil && !strings.EqualFold(strings.TrimSpace(runtime.LogicalState), "cerrado") && !strings.EqualFold(strings.TrimSpace(runtime.LogicalState), "finalizado") {
 		metas = append(metas, metadataFromRuntime(runtime))
 	}
 	for _, metaJSON := range metas {
