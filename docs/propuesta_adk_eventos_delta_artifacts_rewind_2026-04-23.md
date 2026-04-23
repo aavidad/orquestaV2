@@ -50,6 +50,30 @@ La adaptación correcta es:
 3. Los outputs pesados no viven en el estado corto; viven como `artifacts`.
 4. El supervisor puede hacer `rewind/replay` parcial cuando una continuidad o un handoff deriva mal.
 
+## Complementariedad con la línea tipo oh-my-codex
+
+Esta propuesta no compite con una línea operativa tipo `oh-my-codex`.
+
+Las dos líneas son complementarias:
+
+- `ADK contracts` endurece el estado:
+  - `AutonomyEvent`
+  - `state_delta`
+  - `artifacts`
+  - `rewind/replay`
+- `oh-my-codex style runtime` endurece la ejecución:
+  - hooks de ciclo de vida
+  - equipos por rol
+  - `worktree + tmux + resume`
+  - perfiles de ejecución
+
+Regla doctrinal:
+
+- Orquesta puede y debe implementar ambas si se mantienen como capas complementarias
+- no deben crear dos control planes paralelos
+- la línea `ADK` refuerza la verdad durable
+- la línea `oh-my-codex` refuerza la disciplina operativa del worker
+
 ## Qué copiar
 
 ### 1. `AutonomyEvent` canónico

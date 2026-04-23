@@ -40,6 +40,13 @@ Huecos que siguen abiertos:
 - la deuda principal ya no esta en agente/proyecto sino en la agregacion global y en la capa temporal global
 - la telemetria de coste/tokens global sigue siendo parcial y heterogenea segun proveedor
 
+Regla de complementariedad aceptada:
+
+- la línea `ADK contracts` y la línea `oh-my-codex style runtime` son complementarias
+- `ADK` refuerza evento, delta, artifacts y rewind
+- `OMX` refuerza hooks, roles, `worktree + tmux + resume` y perfiles de ejecución
+- ambas pueden convivir si la observabilidad canónica y el control plane siguen siendo únicos
+
 ## Estado operativo verificable hoy
 
 Superficies ya implementadas y utilizables:

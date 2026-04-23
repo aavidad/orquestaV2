@@ -35,6 +35,7 @@ Este archivo consolida y resume, entre otros, estos documentos:
 - `docs/op_095_orquestacion_mixta.md`
 - `docs/op_096_control_total_estado_proyecto_y_estadisticas.md`
 - `docs/propuesta_adk_eventos_delta_artifacts_rewind_2026-04-23.md`
+- `docs/propuesta_omx_hooks_roles_worktree_resume_2026-04-23.md`
 - `docs/informe_autonomia_orquestador_2026-03-25.md`
 - `docs/informe_revision_hexagonal.md`
 - `docs/inventario_pendientes_orquestacion_autonoma_2026-03-24.md`
@@ -82,6 +83,7 @@ Regla de redaccion a partir de este punto:
 ## Direccion aceptada para endurecer autonomia
 
 Se acepta como evolución compatible con la filosofía actual de Orquesta la línea documentada en [docs/propuesta_adk_eventos_delta_artifacts_rewind_2026-04-23.md](/home/alberto/Trabajo/orquesta/docs/propuesta_adk_eventos_delta_artifacts_rewind_2026-04-23.md).
+También se acepta, como línea complementaria y no competidora, la documentada en [docs/propuesta_omx_hooks_roles_worktree_resume_2026-04-23.md](/home/alberto/Trabajo/orquesta/docs/propuesta_omx_hooks_roles_worktree_resume_2026-04-23.md).
 
 Regla doctrinal:
 
@@ -93,6 +95,21 @@ Regla doctrinal:
   - `rewind/replay` parcial
 
 Eso se considera una refactorización estructural del control plane actual, no una segunda arquitectura paralela.
+
+Línea complementaria aceptada:
+
+- no se adopta `oh-my-codex` como framework
+- sí se pueden copiar contratos operativos útiles:
+  - hooks de ciclo de vida
+  - equipos por rol
+  - `worktree + tmux + resume`
+  - perfiles de ejecución
+
+Regla de coexistencia:
+
+- `ADK` endurece estado y reversibilidad
+- `OMX` endurece disciplina operativa de workers
+- ambas líneas son válidas si siguen siendo complementarias y no crean dos verdades de control
 
 Regla de estado:
 
@@ -108,6 +125,7 @@ Pendiente real a `2026-04-23`:
 - normalizar coste, tokens, cuota y presupuesto entre proveedores para lectura canonica unica
 - endurecer la revalidacion de `work_confirmed` frente a salud operativa real de worker/runtime/handle
 - hacer que todos los entrypoints de autonomia persistente pasen por el helper residente comun en vez de recomponer flags a mano
+- introducir hooks, roles y contrato canónico `worktree + tmux + resume` como capa operativa complementaria
 - solo despues de eso, introducir `AutonomyEvent`, `state_delta`, `artifacts` y `rewind/replay` como siguiente endurecimiento estructural
 
 ## Que es Orquesta

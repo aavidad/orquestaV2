@@ -112,6 +112,19 @@ Complemento de corto plazo ya aceptado:
   - sí a endurecer trazabilidad, reversibilidad y rehidratación
   - no a replatformar Orquesta ni a meter ADK como framework paralelo
 
+Complemento operativo también aceptado:
+
+- la inspiración útil de `oh-my-codex` para Orquesta no es copiar otra CLI ni otro runtime completo, sino reforzar la disciplina de ejecución con:
+  - hooks de ciclo de vida
+  - equipos por rol
+  - `worktree + tmux + resume`
+  - perfiles de ejecución
+- ese trabajo se documenta en [docs/propuesta_omx_hooks_roles_worktree_resume_2026-04-23.md](/home/alberto/Trabajo/orquesta/docs/propuesta_omx_hooks_roles_worktree_resume_2026-04-23.md)
+- regla de convivencia:
+  - `ADK` para estado durable, delta y reversibilidad
+  - `OMX` para workflow de ejecución y handoff seguro
+  - una sola verdad de control plane
+
 Estado operativo verificable hoy:
 
 - `POST /api/repos/mejorar` ya puede abrir una mejora con `finish_app`, `autonomia_persistente`, supervisor residente, reviewer reservado y `max_workers`
