@@ -30,6 +30,7 @@ Regla:
 - cada hook debe ser explícito, pequeño y observable
 - no debe mutar estado durable por canales laterales
 - si cambia estado contractual, debe pasar por el control plane
+- Orquesta ya tiene una base parcial en `db/hooks.go`; la tarea correcta es extender y conectar esa base, no crear un segundo sistema de hooks
 
 ### 2. Equipos por rol
 
@@ -57,6 +58,7 @@ Contrato operativo:
 - el runtime canónico interactivo vive en `tmux`
 - la continuidad se reanuda con `resume` seguro
 - el handoff se hace sobre frente acotado y con evidencia, no sobre contexto difuso
+- Orquesta ya recorre parte de este camino; el objetivo no es duplicarlo, sino convertirlo en contrato canónico y uniforme
 
 ### 4. Perfiles de ejecución
 
@@ -101,6 +103,7 @@ Regla doctrinal:
 - Orquesta puede implementar ambas
 - siempre que sigan siendo complementarias
 - y siempre que el control plane canónico siga siendo uno solo
+- si una mejora OMX obliga a crear otra verdad de sesión, de runtime o de handoff, debe rechazarse
 
 ## Roadmap mínimo
 
