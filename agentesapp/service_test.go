@@ -354,6 +354,167 @@ func TestDeriveOperationalStateNoMarcaAtascadoSiHayWorkConfirmedSemanticoRecient
 	}
 }
 
+func TestWorkerHasRecentSemanticProgressAceptaWorkQueueRecienteSinWorkConfirmedPersistido(t *testing.T) {
+	now := time.Now().UTC()
+	recent := now.Add(-45 * time.Second)
+	row := Row{
+		Agente: &db.Agente{
+			Nombre:      "Codex1",
+			Rol:         "programador",
+			Habilitado:  true,
+			Activo:      true,
+			EstadoCuota: "activo",
+		},
+		Runtime: &db.RuntimeInstance{
+			Agente:          "Codex1",
+			LogicalState:    "activo",
+			ProcessState:    "running",
+			LastEventAt:     timePtr(recent),
+			LastHeartbeatAt: timePtr(recent),
+			UpdatedAt:       recent,
+		},
+		Handle: &db.RuntimeHandle{
+			Agente:     "Codex1",
+			Estado:     "activo",
+			Transporte: "tmux",
+			UpdatedAt:  recent,
+			LastSeenAt: timePtr(recent),
+		},
+		WorkerState:               "running",
+		WorkerAlive:               true,
+		WorkerHeartbeat:           timePtr(recent),
+		WorkerUpdatedAt:           timePtr(recent),
+		WorkerLastOutput:          timePtr(recent),
+		WorkerLastProgress:        timePtr(recent),
+		OpenTasks:                 1,
+		LastAutonomyAction:        "continuar_trabajo",
+		LastAutonomySource:        "work_queue",
+		LastAutonomyState:         "pending",
+		LastAutonomyMoment:        timePtr(recent),
+		LastAutonomyReceiptSource: "tmux_transcript_activity",
+	}
+
+	if !row.workerHasRecentSemanticProgress(now, time.Minute) {
+		t.Fatalf("deberia aceptar progreso semantico reciente con work_queue y worker sano")
+	}
+}
+
+func TestWorkerHasRecentSemanticProgressNoAceptaSenalDebilSinHealthOperativa(t *testing.T) {
+	now := time.Now().UTC()
+	recent := now.Add(-45 * time.Second)
+	row := Row{
+		Agente: &db.Agente{
+			Nombre:      "Codex1",
+			Rol:         "programador",
+			Habilitado:  true,
+			Activo:      true,
+			EstadoCuota: "activo",
+		},
+		Runtime: &db.RuntimeInstance{
+			Agente:          "Codex1",
+			LogicalState:    "degradado",
+			ProcessState:    "dead",
+			LastEventAt:     timePtr(now.Add(-20 * time.Minute)),
+			LastHeartbeatAt: timePtr(now.Add(-20 * time.Minute)),
+			UpdatedAt:       now.Add(-20 * time.Minute),
+		},
+		Handle: &db.RuntimeHandle{
+			Agente:     "Codex1",
+			Estado:     "fallido",
+			Transporte: "tmux",
+			UpdatedAt:  now.Add(-20 * time.Minute),
+			LastSeenAt: timePtr(now.Add(-20 * time.Minute)),
+		},
+		WorkerState:               "running",
+		WorkerAlive:               true,
+		WorkerHeartbeat:           timePtr(now.Add(-20 * time.Minute)),
+		WorkerUpdatedAt:           timePtr(now.Add(-20 * time.Minute)),
+		OpenTasks:                 1,
+		LastAutonomyAction:        "continuar_trabajo",
+		LastAutonomySource:        "work_queue",
+		LastAutonomyState:         "pending",
+		LastAutonomyMoment:        timePtr(recent),
+		LastAutonomyReceiptSource: "tmux_transcript_activity",
+	}
+
+	if row.workerHasRecentSemanticProgress(now, time.Minute) {
+		t.Fatalf("no deberia aceptar senal semantica si runtime y handle ya no sostienen salud operativa")
+	}
+}
+
+func TestApplyRecentSemanticTranscriptSignalsPromueveLastProgressDesdeTranscript(t *testing.T) {
+	now := time.Now().UTC()
+	recent := now.Add(-30 * time.Second)
+	store := &fakeStore{
+		transcript: []*db.RuntimeTranscriptEntry{
+			{
+				Agente:         "Codex1",
+				Classification: "progress_update",
+				CreatedAt:      recent,
+			},
+		},
+	}
+	service := NewService(store, nil)
+	row := Row{
+		Agente: &db.Agente{Nombre: "Codex1", Habilitado: true, Activo: true, EstadoCuota: "activo"},
+		Runtime: &db.RuntimeInstance{
+			Agente:       "Codex1",
+			LogicalState: "activo",
+			ProcessState: "running",
+			UpdatedAt:    recent,
+		},
+		Handle:       &db.RuntimeHandle{Agente: "Codex1", Estado: "activo", Transporte: "tmux", LastSeenAt: timePtr(recent), UpdatedAt: recent},
+		WorkerAlive:  true,
+		WorkerState:  "running",
+		OpenTasks:    1,
+		MailboxPending: 0,
+	}
+
+	if err := service.applyRecentSemanticTranscriptSignals("Codex1", &row, now); err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if row.WorkerLastProgress == nil || !row.WorkerLastProgress.Equal(recent) {
+		t.Fatalf("deberia promover WorkerLastProgress desde transcript, got=%v", row.WorkerLastProgress)
+	}
+	if store.lastTranscript.Agente == nil || *store.lastTranscript.Agente != "Codex1" {
+		t.Fatalf("deberia filtrar transcript por agente, got=%+v", store.lastTranscript)
+	}
+}
+
+func TestApplyRecentSemanticTranscriptSignalsIgnoraClasificacionDebil(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		transcript: []*db.RuntimeTranscriptEntry{
+			{
+				Agente:         "Codex1",
+				Classification: "tool_exploration",
+				CreatedAt:      now.Add(-20 * time.Second),
+			},
+		},
+	}
+	service := NewService(store, nil)
+	row := Row{
+		Agente: &db.Agente{Nombre: "Codex1", Habilitado: true, Activo: true, EstadoCuota: "activo"},
+		Runtime: &db.RuntimeInstance{
+			Agente:       "Codex1",
+			LogicalState: "activo",
+			ProcessState: "running",
+			UpdatedAt:    now,
+		},
+		Handle:      &db.RuntimeHandle{Agente: "Codex1", Estado: "activo", Transporte: "tmux", LastSeenAt: timePtr(now), UpdatedAt: now},
+		WorkerAlive: true,
+		WorkerState: "running",
+		OpenTasks:   1,
+	}
+
+	if err := service.applyRecentSemanticTranscriptSignals("Codex1", &row, now); err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if row.WorkerLastProgress != nil {
+		t.Fatalf("no deberia promover progreso con transcript debil, got=%v", row.WorkerLastProgress)
+	}
+}
+
 func TestEffectiveContinuityPendingNoCuentaSupervisorConSupervisionPendiente(t *testing.T) {
 	now := time.Now().UTC()
 	row := Row{
@@ -534,6 +695,42 @@ func TestEffectiveContinuityPendingNoCuentaSupervisorConTranscriptSignalDeBajoVa
 	}
 	if row.EffectiveContinuityPending(now) {
 		t.Fatalf("signal de bajo valor no deberia seguir contando como continuity_pending")
+	}
+}
+
+func TestEffectiveContinuityPendingNoCuentaSupervisorConTranscriptSignalDeProgresoBajoValor(t *testing.T) {
+	now := time.Now().UTC()
+	row := Row{
+		Agente: &db.Agente{
+			Nombre:      "Codex2",
+			Rol:         "programador",
+			Habilitado:  true,
+			Activo:      true,
+			EstadoCuota: "activo",
+		},
+		Asignacion: &db.Asignacion{
+			Agente: "Codex2",
+			Estado: db.AsignacionActiva,
+			Nota:   "supervision_automatica",
+		},
+		Handle: &db.RuntimeHandle{
+			Agente:     "Codex2",
+			Estado:     "activo",
+			LastSeenAt: timePtr(now),
+		},
+		WorkerAlive:              true,
+		WorkerState:              "ready",
+		WorkerHeartbeat:          timePtr(now),
+		WorkerUpdatedAt:          timePtr(now),
+		LastAutonomyAction:       "inspeccionar_transcript_signal",
+		LastAutonomySource:       "work_queue",
+		LastAutonomyState:        "pending",
+		LastAutonomyReason:       "agente=Codex1 signal=progress_update transcript=321",
+		MailboxContinuityPending: 1,
+		MailboxPending:           1,
+	}
+	if row.EffectiveContinuityPending(now) {
+		t.Fatalf("progress_update de bajo valor no deberia seguir contando como continuity_pending")
 	}
 }
 

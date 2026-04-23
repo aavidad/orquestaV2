@@ -1368,6 +1368,9 @@ func (s *Service) buildRowContextForAgentWithMailbox(nombre string, mailbox []*d
 	applyAssignmentHandoffAutonomyToRow(&ctx.Row)
 	applyResumePayloadAutonomyToRow(&ctx.Row)
 	promoteObservedAutonomyState(&ctx.Row, now)
+	if err := s.applyRecentSemanticTranscriptSignals(nombre, &ctx.Row, now); err != nil {
+		return nil, err
+	}
 	ctx.Row.EstadoOperativo, ctx.Row.DetalleOperativo = deriveOperationalState(ctx.Row, now, workerOutputStaleThreshold(s.store))
 	clearResidualAutonomyHistory(&ctx.Row, now)
 	return ctx, nil
@@ -1501,6 +1504,9 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 					applyAssignmentHandoffAutonomyToRow(&row)
 					applyResumePayloadAutonomyToRow(&row)
 					promoteObservedAutonomyState(&row, now)
+					if err := s.applyRecentSemanticTranscriptSignals(nombre, &row, now); err != nil {
+						return Row{}, nil, nil, err
+					}
 					row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
 					clearResidualAutonomyHistory(&row, now)
 					agentDetailDebugf("compact done agente=%s duration=%s", nombre, time.Since(start).Round(time.Millisecond))
@@ -1551,10 +1557,85 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 	applyAssignmentHandoffAutonomyToRow(&row)
 	applyResumePayloadAutonomyToRow(&row)
 	promoteObservedAutonomyState(&row, now)
+	if err := s.applyRecentSemanticTranscriptSignals(nombre, &row, now); err != nil {
+		return Row{}, nil, nil, err
+	}
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
 	clearResidualAutonomyHistory(&row, now)
 	agentDetailDebugf("compact done agente=%s duration=%s", nombre, time.Since(start).Round(time.Millisecond))
 	return row, asignaciones, tareas, nil
+}
+
+func (s *Service) applyRecentSemanticTranscriptSignals(nombre string, row *Row, now time.Time) error {
+	if s == nil || s.store == nil || row == nil {
+		return nil
+	}
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return nil
+	}
+	if !(row.OpenTasks > 0 || row.MailboxPending > 0 || row.supervisorAutonomyLive(now)) {
+		return nil
+	}
+	threshold := workerOutputStaleThreshold(s.store)
+	if threshold <= 0 {
+		threshold = 10 * time.Minute
+	}
+	if row.workerProgressRecent(now, threshold) || row.workerHasRecentSemanticProgress(now, threshold) {
+		return nil
+	}
+	if !(row.WorkerAlive || row.hasOperationalAnchor()) {
+		return nil
+	}
+	since := now.Add(-threshold)
+	filter := db.FiltroRuntimeTranscript{
+		Agente:     &nombre,
+		ProyectoID: row.projectID(),
+		Desde:      &since,
+		Limit:      20,
+	}
+	items, err := s.store.ListRuntimeTranscript(filter)
+	if err != nil {
+		return err
+	}
+	latest := latestSemanticProgressTranscript(items)
+	if latest == nil || latest.CreatedAt.IsZero() {
+		return nil
+	}
+	ts := latest.CreatedAt.UTC()
+	if row.WorkerLastProgress == nil || row.WorkerLastProgress.Before(ts) {
+		row.WorkerLastProgress = &ts
+	}
+	if row.WorkerLastOutput == nil || row.WorkerLastOutput.Before(ts) {
+		row.WorkerLastOutput = &ts
+	}
+	return nil
+}
+
+func latestSemanticProgressTranscript(items []*db.RuntimeTranscriptEntry) *db.RuntimeTranscriptEntry {
+	var latest *db.RuntimeTranscriptEntry
+	for _, item := range items {
+		if item == nil || !runtimeTranscriptClassificationCarriesSemanticProgress(item.Classification) {
+			continue
+		}
+		if latest == nil || item.CreatedAt.After(latest.CreatedAt) {
+			latest = item
+		}
+	}
+	return latest
+}
+
+func runtimeTranscriptClassificationCarriesSemanticProgress(classification string) bool {
+	switch strings.ToLower(strings.TrimSpace(classification)) {
+	case "progress_update",
+		"patch_or_code_evidence",
+		"task_completed",
+		"ready_for_review",
+		"tool_result_ok":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) applyAutonomyOrdersToRow(row *Row, agente string) error {
@@ -4622,6 +4703,10 @@ func autonomyReasonIsLowValueTranscriptSignal(reason string) bool {
 		"signal=tool_execution",
 		"signal=tool_exploration",
 		"signal=bootstrap_guidance",
+		"signal=progress_update",
+		"signal=tool_result_ok",
+		"signal=patch_or_code_evidence",
+		"signal=ui_noise",
 		"guidance durable escrita en inbox",
 	} {
 		if strings.Contains(normalized, marker) {
@@ -4878,16 +4963,38 @@ func (r Row) workerHasRecentSemanticProgress(now time.Time, threshold time.Durat
 	if !r.autonomyOperationalHealthSufficient(now, threshold) {
 		return false
 	}
-	if !strings.EqualFold(strings.TrimSpace(r.LastAutonomyState), "work_confirmed") {
-		return false
-	}
 	if !autonomyReceiptSourceConfirmsWork(r.LastAutonomyReceiptSource) {
 		return false
 	}
 	if r.LastAutonomyMoment == nil || r.LastAutonomyMoment.IsZero() {
 		return false
 	}
-	return !r.LastAutonomyMoment.UTC().Before(now.Add(-threshold))
+	if r.LastAutonomyMoment.UTC().Before(now.Add(-threshold)) {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(r.LastAutonomyState), "work_confirmed") {
+		return true
+	}
+	if !autonomySourceCanCarryRecentSemanticProgress(r.LastAutonomySource) {
+		return false
+	}
+	if !(r.OpenTasks > 0 || r.supervisorAutonomyLive(now)) {
+		return false
+	}
+	return r.WorkerFresh(now) || (r.WorkerAlive && r.hasRecentOperationalActivity(now))
+}
+
+func autonomySourceCanCarryRecentSemanticProgress(source string) bool {
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "work_queue",
+		"mailbox",
+		"nudge",
+		"send_instruction",
+		"resume_payload_mailbox":
+		return true
+	default:
+		return false
+	}
 }
 
 func (r Row) workerProgressRecent(now time.Time, threshold time.Duration) bool {

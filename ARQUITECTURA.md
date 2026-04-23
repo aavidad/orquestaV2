@@ -100,6 +100,27 @@ Consecuencias arquitectonicas:
   - `workersTrabajando`: capacidad ejecutora realmente ocupada
   - `supervisoresActivos`: capacidad de gobierno separada del cupo ejecutor
 
+Complemento de corto plazo ya aceptado:
+
+- la inspiracion útil de `Google ADK` para Orquesta no es adoptar otro framework, sino reforzar el núcleo actual con:
+  - `AutonomyEvent`
+  - `state_delta` por decisión
+  - `artifacts` versionados
+  - `rewind/replay` parcial de tareas autónomas
+- ese trabajo se documenta en [docs/propuesta_adk_eventos_delta_artifacts_rewind_2026-04-23.md](/home/alberto/Trabajo/orquesta/docs/propuesta_adk_eventos_delta_artifacts_rewind_2026-04-23.md)
+- criterio estricto:
+  - sí a endurecer trazabilidad, reversibilidad y rehidratación
+  - no a replatformar Orquesta ni a meter ADK como framework paralelo
+
+Estado operativo verificable hoy:
+
+- `POST /api/repos/mejorar` ya puede abrir una mejora con `finish_app`, `autonomia_persistente`, supervisor residente, reviewer reservado y `max_workers`
+- `supervisionapp.BuildResidentSupervisorEventDrivenPolicyInput(...)` ya existe y fija la normalización base del perfil residente; no todos los entrypoints pasan todavía por ese helper, pero el contrato ya no vive solo en documentos
+- `GET /api/proyectos/{slug}/cockpit` y `GET /api/proyectos/{slug}/control` ya dan control total utilizable a nivel proyecto
+- `GET /api/agentes/{agente}/actividad` y `orquesta agente actividad <agente>` ya dan control temporal y Git a nivel agente
+- `gitestadisticasapp` ya aporta `branch`, `touched_files`, `pending/committed added/deleted lines` y commits recientes por repo/cwd
+- el cierre pendiente ya no es "hacer visible agente/proyecto", sino consolidar la proyeccion global de workspace, la timeline global y la capa canonica de coste/tokens
+
 ## Principios
 
 1. La identidad del agente es estable.

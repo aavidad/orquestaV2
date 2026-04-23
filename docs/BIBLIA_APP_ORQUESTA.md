@@ -34,6 +34,7 @@ Este archivo consolida y resume, entre otros, estos documentos:
 - `docs/op_094_ui_declarativa_agentes.md`
 - `docs/op_095_orquestacion_mixta.md`
 - `docs/op_096_control_total_estado_proyecto_y_estadisticas.md`
+- `docs/propuesta_adk_eventos_delta_artifacts_rewind_2026-04-23.md`
 - `docs/informe_autonomia_orquestador_2026-03-25.md`
 - `docs/informe_revision_hexagonal.md`
 - `docs/inventario_pendientes_orquestacion_autonoma_2026-03-24.md`
@@ -54,10 +55,13 @@ Ya existe y debe documentarse como estado operativo actual:
 
 - `repo add`, `repo revisar` y `repo mejorar` por via server-first
 - `repo mejorar` ya puede sembrar una mejora con `finish_app`, `autonomia_persistente`, supervisor residente, reviewer reservado y `max_workers`
+- `supervisionapp.BuildResidentSupervisorEventDrivenPolicyInput(...)` ya existe como helper canonico base para normalizar el perfil residente/event-driven
 - `max_workers` ya no mezcla gobernanza con ejecucion: supervisor/reviewer no cuentan como workers reales
 - el control plane ya opera autonomia persistente de nivel 2 con auto-creacion de trabajo, compactacion de frentes premium, drenaje de `prime` y `repair-helper` barato antes de escalado caro
 - ya existe control total por proyecto en `/api/proyectos/{slug}/cockpit`
+- ya existe vista de control total operativo por proyecto en `/api/proyectos/{slug}/control`
 - ya existe control total por agente en CLI con `orquesta agente actividad <agente> --desde ...`
+- ya existe la misma lectura por API en `/api/agentes/{agente}/actividad`
 - ya existe correlacion operativa suficiente entre estado, runtime y Git para gobierno por agente/proyecto
 - la foto estable actual de continuidad se documenta con `autonomyPending=0`
 - la foto estable actual del loop vivo se documenta como `ready`, `autonomyContinuing=0`, `autonomyPending=0`
@@ -74,6 +78,37 @@ No debe documentarse como cerrado todavia:
 Regla de redaccion a partir de este punto:
 
 - cuando la documentacion hable de autonomia total o control total, debe dejar explicito que `agente/proyecto` ya esta operativo hoy y que lo pendiente queda en el plano `global`
+
+## Direccion aceptada para endurecer autonomia
+
+Se acepta como evolución compatible con la filosofía actual de Orquesta la línea documentada en [docs/propuesta_adk_eventos_delta_artifacts_rewind_2026-04-23.md](/home/alberto/Trabajo/orquesta/docs/propuesta_adk_eventos_delta_artifacts_rewind_2026-04-23.md).
+
+Regla doctrinal:
+
+- no se adopta `ADK` como framework de aplicación
+- sí se pueden copiar contratos útiles para reforzar el núcleo actual:
+  - `AutonomyEvent`
+  - `state_delta`
+  - `artifacts` versionados
+  - `rewind/replay` parcial
+
+Eso se considera una refactorización estructural del control plane actual, no una segunda arquitectura paralela.
+
+Regla de estado:
+
+- el helper residente ya es realidad de implementación
+- la capa `ADK contracts` sigue siendo propuesta aceptada de evolución, no contrato desplegado todavía
+
+## Inventario corto de abiertos
+
+Pendiente real a `2026-04-23`:
+
+- consolidar una proyeccion global unica de workspace sobre lo que ya existe por agente/proyecto
+- cerrar timeline global y endpoints estables de estadisticas agregadas por ventana
+- normalizar coste, tokens, cuota y presupuesto entre proveedores para lectura canonica unica
+- endurecer la revalidacion de `work_confirmed` frente a salud operativa real de worker/runtime/handle
+- hacer que todos los entrypoints de autonomia persistente pasen por el helper residente comun en vez de recomponer flags a mano
+- solo despues de eso, introducir `AutonomyEvent`, `state_delta`, `artifacts` y `rewind/replay` como siguiente endurecimiento estructural
 
 ## Que es Orquesta
 
