@@ -42,19 +42,22 @@ func callMCPWorkspaceControl(args map[string]any) (map[string]any, error) {
 	return toolResult(prettyJSON(payload), payload, false), nil
 }
 
-func callMCPServerOperational() (map[string]any, error) {
+func buildMCPServerOperationalInfo() serverOperationalInfo {
 	if snapshot, ok := readStatusSnapshotFreshUsable(); ok {
-		info := normalizeServerOperationalInfo(buildServerOperationalInfo(snapshot))
-		return toolResult(prettyJSON(info), info, false), nil
+		return normalizeServerOperationalInfo(buildServerOperationalInfo(snapshot))
 	}
 	if status, ok := fetchStatusForOperationalFallback(statusFastTimeout); ok {
-		info := normalizeServerOperationalInfo(buildServerOperationalInfo(status))
-		return toolResult(prettyJSON(info), info, false), nil
+		return normalizeServerOperationalInfo(buildServerOperationalInfo(status))
 	}
 	ensureStatusRefreshAsync()
 	info := normalizeServerOperationalInfo(degradedServerOperationalInfo())
 	if info.Generated == "" {
 		info.Generated = time.Now().UTC().Format(time.RFC3339)
 	}
+	return info
+}
+
+func callMCPServerOperational() (map[string]any, error) {
+	info := buildMCPServerOperationalInfo()
 	return toolResult(prettyJSON(info), info, false), nil
 }

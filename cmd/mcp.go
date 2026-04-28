@@ -428,6 +428,14 @@ func listMCPResources() ([]mcpResource, error) {
 			Annotations: audienceAssistant(1),
 		},
 		{
+			URI:         "orquesta://server/operational",
+			Name:        "server-operational",
+			Title:       "Estado operativo del servidor",
+			Description: "Salud operativa canónica del control plane con degradación rápida",
+			MIMEType:    "application/json",
+			Annotations: audienceAssistant(1),
+		},
+		{
 			URI:         "orquesta://workspace/control",
 			Name:        "workspace-control",
 			Title:       "Control global del workspace",
@@ -721,6 +729,9 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		return resourceText(uri, "application/json", prettyJSON(s)), nil
+	case uri == "orquesta://server/operational":
+		info := buildMCPServerOperationalInfo()
+		return resourceText(uri, "application/json", prettyJSON(info)), nil
 	case strings.HasPrefix(uri, "orquesta://workspace/control"):
 		parsed, err := url.Parse(uri)
 		if err != nil {

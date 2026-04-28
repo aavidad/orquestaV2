@@ -142,3 +142,47 @@ func TestListarLocks(t *testing.T) {
 		t.Fatalf("lock inesperado: %+v", items[0])
 	}
 }
+
+func TestListarLocksCanonizaRutaRelativaConProyecto(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "orquesta.db")
+	prev := os.Getenv("ORQUESTA_DB")
+	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
+		t.Fatalf("setenv: %v", err)
+	}
+	defer func() {
+		_ = os.Setenv("ORQUESTA_DB", prev)
+		Close()
+	}()
+
+	if err := Open(); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	projectPath := filepath.Join(dir, "orquestador")
+	var proyectoID int64
+	if err := DB.QueryRow(
+		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
+		"orquestador", "Orquestador", projectPath, "repo",
+	).Scan(&proyectoID); err != nil {
+		t.Fatalf("insert proyecto: %v", err)
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO locks (proyecto_id, agente, scope_type, scope_key, ruta_abs, branch, motivo, token_lease, estado, expires_at)
+		VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
+		proyectoID, "codex1", "task", "tarea-relativa", filepath.Join(".orquesta-worktrees", "wt-orquestador"), "main", "bloqueo", "lease-2", "activa",
+	); err != nil {
+		t.Fatalf("insert lock relativa: %v", err)
+	}
+
+	items, err := ListarLocks("activa", "codex1")
+	if err != nil {
+		t.Fatalf("ListarLocks: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("esperaba 1 lock, tengo %d", len(items))
+	}
+	want := filepath.Join(projectPath, ".orquesta-worktrees", "wt-orquestador")
+	if items[0].RutaAbs != want {
+		t.Fatalf("ruta canonica inesperada: got=%q want=%q", items[0].RutaAbs, want)
+	}
+}

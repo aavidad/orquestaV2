@@ -9,6 +9,7 @@ package db
 
 import (
 	"database/sql"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -112,6 +113,7 @@ func ListarLocks(estado, agente string) ([]*Lock, error) {
 		}
 		list = append(list, item)
 	}
+	normalizarLocksRutas(list)
 	return list, rows.Err()
 }
 
@@ -140,6 +142,24 @@ func normalizarWorktreesRutas(items []*Worktree) {
 			continue
 		}
 		item.RutaAbs = rutaWorktreeCanonicaProyecto(item.ProyectoID, item.RutaAbs)
+	}
+}
+
+func normalizarLocksRutas(items []*Lock) {
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		if item.ProyectoID != nil && *item.ProyectoID > 0 {
+			item.RutaAbs = rutaWorktreeCanonicaProyecto(*item.ProyectoID, item.RutaAbs)
+			continue
+		}
+		ruta := strings.TrimSpace(item.RutaAbs)
+		if filepath.IsAbs(ruta) {
+			item.RutaAbs = filepath.Clean(ruta)
+			continue
+		}
+		item.RutaAbs = ruta
 	}
 }
 

@@ -7534,6 +7534,77 @@ func TestMCPResourceReadWorkspaceControlIncluyeResumenGlobal(t *testing.T) {
 	}
 }
 
+func TestMCPResourcesIncluyenServerOperational(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		resources, err := listMCPResources()
+		if err != nil {
+			t.Fatalf("listMCPResources: %v", err)
+		}
+		for _, want := range []string{"orquesta://server/operational", "orquesta://workspace/control"} {
+			found := false
+			for _, item := range resources {
+				if item.URI == want {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("resource %s no listada", want)
+			}
+		}
+	})
+}
+
+func TestMCPResourceReadServerOperational(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	now := time.Date(2026, 4, 29, 8, 0, 0, 0, time.UTC)
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			{Nombre: "Codex2", Rol: "programador", EstadoCuota: "enfriamiento"},
+		},
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasEnProgreso: []tareaLite{
+			{ID: 41, Estado: db.TareaEnProgreso, Agente: "Codex1", Titulo: "vigilar runtime"},
+		},
+		TareasPorEstado: map[string]int{
+			string(db.TareaEnProgreso): 1,
+		},
+		Generado: now.Format(time.RFC3339),
+	}, now, time.Minute)
+
+	contents, err := readMCPResource("orquesta://server/operational")
+	if err != nil {
+		t.Fatalf("readMCPResource server/operational: %v", err)
+	}
+	if len(contents) == 0 {
+		t.Fatal("resource server/operational vacía")
+	}
+	text, _ := contents[0]["text"].(string)
+	for _, token := range []string{`"state": "ready"`, `"operational": true`, `"activeAgents": 1`, `"tasksInProgress": 1`} {
+		if !strings.Contains(text, token) {
+			t.Fatalf("falta %q en resource server/operational: %s", token, text)
+		}
+	}
+	var info serverOperationalInfo
+	if err := json.Unmarshal([]byte(text), &info); err != nil {
+		t.Fatalf("decode server operational: %v", err)
+	}
+	if info.State != "ready" || !info.Operational {
+		t.Fatalf("server operational inesperado: %+v", info)
+	}
+	if info.ActiveAgents != 1 || info.TasksInProgress != 1 {
+		t.Fatalf("contadores server operational inesperados: %+v", info)
+	}
+}
+
 func TestMCPResourceReadWorkspaceControlAceptaDesde(t *testing.T) {
 	prevStatus := statusService
 	prevProjects := workspaceControlListProjects
