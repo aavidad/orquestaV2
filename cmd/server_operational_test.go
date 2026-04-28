@@ -583,6 +583,115 @@ func TestBuildServerOperationalInfoFastFromDBNoHeredaAtascadosDeSnapshotStale(t 
 	}
 }
 
+func TestBuildServerOperationalInfoFastFromDBNoHeredaTrabajoNiDispatchDeSnapshotQueRequiereRefresh(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	prevAgents := serverOperationalListAgentsFetcher
+	prevTasks := serverOperationalCountTasksFetcher
+	prevDispatch := serverOperationalDispatchFetcher
+	prevTimeout := serverOperationalOptionalTimeout
+	prevNow := statusNowFunc
+	defer func() {
+		serverOperationalListAgentsFetcher = prevAgents
+		serverOperationalCountTasksFetcher = prevTasks
+		serverOperationalDispatchFetcher = prevDispatch
+		serverOperationalOptionalTimeout = prevTimeout
+		statusNowFunc = prevNow
+	}()
+
+	now := time.Date(2026, 4, 29, 10, 30, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	serverOperationalOptionalTimeout = 20 * time.Millisecond
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "CodexStale", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesActivos: []*db.Agente{
+			{Nombre: "CodexStale", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "CodexStale", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasEnProgreso: []tareaLite{
+			{ID: 99, Estado: db.TareaEnProgreso, Agente: "CodexStale"},
+		},
+		DeudaDispatch: deudaDispatchResumen{Pendientes: 3, Notificadas: 1, Total: 4},
+		Autonomia:     autonomiaResumen{ContinuidadPendiente: 1, Handoffs: 2},
+		Generado:      now.Format(time.RFC3339),
+	}, now, time.Minute)
+
+	serverOperationalListAgentsFetcher = func() ([]*db.Agente, error) {
+		return []*db.Agente{{Nombre: "CodexDB", Activo: true, EstadoCuota: "activo"}}, nil
+	}
+	serverOperationalCountTasksFetcher = func() (map[string]int, error) {
+		return map[string]int{string(db.TareaEnProgreso): 1}, nil
+	}
+	serverOperationalDispatchFetcher = func() (statusDispatchSummary, error) {
+		return statusDispatchSummary{}, nil
+	}
+
+	info, err := buildServerOperationalInfoFastFromDB()
+	if err != nil {
+		t.Fatalf("buildServerOperationalInfoFastFromDB: %v", err)
+	}
+	if info.WorkingAgents != 0 || info.WorkingWorkers != 0 {
+		t.Fatalf("no deberia heredar working agents stale: %+v", info)
+	}
+	if info.DispatchPending != 0 || info.DispatchNotified != 0 || info.DispatchConfirmed != 0 {
+		t.Fatalf("no deberia heredar deuda dispatch stale: %+v", info)
+	}
+	if info.AutonomyPending != 0 || info.AutonomyHandoffs != 0 {
+		t.Fatalf("no deberia heredar autonomia stale: %+v", info)
+	}
+	if info.Operational || info.Reason != "tasks_without_workers" {
+		t.Fatalf("deberia degradar por trabajo sin workers reales: %+v", info)
+	}
+}
+
+func TestBuildServerOperationalInfoFastFromDBCargaDispatchLigeroSinSnapshot(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	prevAgents := serverOperationalListAgentsFetcher
+	prevTasks := serverOperationalCountTasksFetcher
+	prevDispatch := serverOperationalDispatchFetcher
+	prevTimeout := serverOperationalOptionalTimeout
+	defer func() {
+		serverOperationalListAgentsFetcher = prevAgents
+		serverOperationalCountTasksFetcher = prevTasks
+		serverOperationalDispatchFetcher = prevDispatch
+		serverOperationalOptionalTimeout = prevTimeout
+	}()
+
+	serverOperationalOptionalTimeout = 20 * time.Millisecond
+	serverOperationalListAgentsFetcher = func() ([]*db.Agente, error) {
+		return []*db.Agente{{Nombre: "Codex1", Activo: true, EstadoCuota: "activo"}}, nil
+	}
+	serverOperationalCountTasksFetcher = func() (map[string]int, error) {
+		return map[string]int{string(db.TareaEnProgreso): 1}, nil
+	}
+	serverOperationalDispatchFetcher = func() (statusDispatchSummary, error) {
+		return statusDispatchSummary{
+			Deuda:    deudaDispatchResumen{Pendientes: 2, Notificadas: 1, Total: 3},
+			Handoffs: 4,
+		}, nil
+	}
+
+	info, err := buildServerOperationalInfoFastFromDB()
+	if err != nil {
+		t.Fatalf("buildServerOperationalInfoFastFromDB: %v", err)
+	}
+	if info.DispatchPending != 2 || info.DispatchNotified != 1 {
+		t.Fatalf("deberia cargar dispatch ligero canónico: %+v", info)
+	}
+	if info.AutonomyHandoffs != 4 {
+		t.Fatalf("deberia cargar handoffs desde dispatch summary: %+v", info)
+	}
+}
+
 func TestStatusSnapshotWarmLoopIntervalSigueFallbackTTL(t *testing.T) {
 	if got := statusSnapshotWarmLoopInterval(); got != statusFallbackTTL {
 		t.Fatalf("intervalo warm inesperado: got=%s want=%s", got, statusFallbackTTL)

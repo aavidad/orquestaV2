@@ -106,7 +106,7 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 		ToAgente:    "Codex1",
 		ProyectoID:  &proyectoID,
 		Kind:        "autonomia",
-		PayloadJSON: `{"texto":"continua"}`,
+		PayloadJSON: `{"texto":"continua","carril":"premium_worktree","tarea_objetivo_id":530,"worktree_id":77,"write_set":["cmd/api.go","cmd/serve.go"]}`,
 		Estado:      "pendiente",
 	}); err != nil {
 		t.Fatalf("crear mailbox pendiente: %v", err)
@@ -315,6 +315,9 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if firstMailbox["oldest_created_at"] == nil {
 		t.Fatalf("openclaw operator sin oldest_created_at en mailboxPendiente: %s", recOperator.Body.String())
 	}
+	if got, _ := firstMailbox["contexts_csv"].(string); !strings.Contains(got, "premium_worktree") || !strings.Contains(got, "tarea#530") || !strings.Contains(got, "wt#77") || !strings.Contains(got, "cmd/api.go (+1)") {
+		t.Fatalf("openclaw operator sin contexto operativo en mailboxPendiente: %#v", firstMailbox)
+	}
 	if _, ok := operatorJSON["capacity_summary"].(map[string]any); !ok {
 		t.Fatalf("openclaw operator sin capacity_summary estructurado: %s", recOperator.Body.String())
 	}
@@ -447,6 +450,32 @@ func TestBuildOpenClawPendingMailboxExponeSupervisorAction(t *testing.T) {
 	}
 	if items[0].SupervisorActionsCSV != "revisar_worktree_desfasada" {
 		t.Fatalf("supervisor action inesperada: %#v", items[0])
+	}
+}
+
+func TestBuildOpenClawPendingMailboxExponeContextoOperativo(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar codex3: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex3",
+		Kind:        "autonomia",
+		PayloadJSON: `{"carril":"premium_worktree","tarea_objetivo_id":604,"worktree_id":88,"write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"]}`,
+		Estado:      "pendiente",
+	}); err != nil {
+		t.Fatalf("crear mailbox pendiente: %v", err)
+	}
+	items, err := buildOpenClawPendingMailbox([]*db.Agente{{Nombre: "Codex3"}})
+	if err != nil {
+		t.Fatalf("buildOpenClawPendingMailbox: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("mailbox pendiente inesperada: %#v", items)
+	}
+	if got := items[0].ContextsCSV; got != "premium_worktree · tarea#604 · wt#88 · cmd/controlplane_support.go (+1)" {
+		t.Fatalf("contexto operativo inesperado: %q", got)
 	}
 }
 

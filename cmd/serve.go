@@ -2620,13 +2620,14 @@ const webTplOpenClaw = `{{define "content"}}
     <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
       <h3 style="margin:0 0 .7rem 0">Guidance durable pendiente</h3>
       {{if .MailboxPendiente}}
-      <table style="width:100%"><thead><tr><th>Agente</th><th>Mensajes</th><th>Kinds</th><th>Acción supervisor</th><th>Antigüedad</th></tr></thead><tbody>
+      <table style="width:100%"><thead><tr><th>Agente</th><th>Mensajes</th><th>Kinds</th><th>Acción supervisor</th><th>Contexto</th><th>Antigüedad</th></tr></thead><tbody>
       {{range .MailboxPendiente}}
         <tr>
           <td>{{.Agente}}</td>
           <td>{{.Count}}</td>
           <td>{{orDash .KindsCSV}}</td>
           <td>{{orDash .SupervisorActionsCSV}}</td>
+          <td>{{orDash .ContextsCSV}}</td>
           <td>{{if .OldestAgeMin}}{{.OldestAgeMin}} min{{else}}0 min{{end}}</td>
         </tr>
       {{end}}

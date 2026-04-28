@@ -276,7 +276,7 @@ func TestBuildProyectoPendingMailboxFiltraPorProyectoYAgente(t *testing.T) {
 		ToAgente:    "Codex3",
 		ProyectoID:  &proyectoID,
 		Kind:        "autonomia",
-		PayloadJSON: `{"supervisor_action":"revisar_worktree_desfasada"}`,
+		PayloadJSON: `{"supervisor_action":"revisar_worktree_desfasada","carril":"premium_worktree","tarea_objetivo_id":410,"worktree_id":19,"write_set":["cmd/api.go","cmd/serve.go"]}`,
 	}); err != nil {
 		t.Fatalf("encolar mailbox proyecto: %v", err)
 	}
@@ -299,6 +299,9 @@ func TestBuildProyectoPendingMailboxFiltraPorProyectoYAgente(t *testing.T) {
 	}
 	if items[0].SupervisorActionsCSV != "revisar_worktree_desfasada" {
 		t.Fatalf("supervisor action inesperada: %+v", items[0])
+	}
+	if items[0].ContextsCSV != "premium_worktree · tarea#410 · wt#19 · cmd/api.go (+1)" {
+		t.Fatalf("contexto mailbox inesperado: %+v", items[0])
 	}
 }
 

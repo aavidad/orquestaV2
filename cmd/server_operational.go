@@ -11,6 +11,8 @@ import (
 var (
 	serverOperationalListAgentsFetcher = db.ListarAgentesEstadoLigero
 	serverOperationalCountTasksFetcher = db.ContarTareasPorEstado
+	serverOperationalDispatchFetcher   = statusDispatchSummaryFetcher
+	serverOperationalOptionalTimeout   = statusOptionalSectionTimeout
 )
 
 type serverOperationalInfo struct {
@@ -298,19 +300,10 @@ func buildServerOperationalInfoFastFromDB() (serverOperationalInfo, error) {
 		}
 		status.Autonomia = resumirAutonomiaRows(rows, statusNowFunc().UTC())
 	}
-	if snapshot, ok := readStatusSnapshotAny(); ok {
-		status.DeudaDispatch = snapshot.DeudaDispatch
-		if status.Autonomia.Count == 0 && len(status.Autonomia.ByKind) == 0 && status.Autonomia.LastAt == nil && len(status.Autonomia.Recent) == 0 {
-			status.Autonomia = snapshot.Autonomia
-		}
-		if len(status.AgentesActivos) == 0 {
-			status.AgentesActivos = snapshot.AgentesActivos
-		}
-		if len(status.AgentesTrabajando) == 0 {
-			status.AgentesTrabajando = snapshot.AgentesTrabajando
-		}
-		if status.TareasPorEstado == nil || len(status.TareasPorEstado) == 0 {
-			status.TareasPorEstado = snapshot.TareasPorEstado
+	if summary, ok := runStatusOptional(serverOperationalOptionalTimeout, serverOperationalDispatchFetcher); ok {
+		status.DeudaDispatch = summary.Deuda
+		if summary.Handoffs > status.Autonomia.Handoffs {
+			status.Autonomia.Handoffs = summary.Handoffs
 		}
 	}
 	return buildServerOperationalInfo(status), nil

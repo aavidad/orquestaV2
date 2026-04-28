@@ -104,6 +104,16 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 	if err := db.MarcarEntregaNotificacionFallida(entregaID, "gateway down", time.Now().UTC().Add(time.Minute)); err != nil {
 		t.Fatalf("marcar entrega fallida: %v", err)
 	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "OpenClaw",
+		ToAgente:    "Codex3",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"supervisor_action":"revisar_worktree_desfasada","carril":"premium_worktree","tarea_objetivo_id":530,"worktree_id":77,"write_set":["cmd/controlplane_support.go","cmd/controlplane_support_test.go"]}`,
+		Estado:      "pendiente",
+	}); err != nil {
+		t.Fatalf("crear mailbox openclaw: %v", err)
+	}
 	taskID, err := db.CrearTarea(&db.Tarea{
 		Titulo:    "Operador OpenClaw",
 		Modulo:    "openclaw",
@@ -204,6 +214,10 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 		"pipeline_local_parallel",
 		"slice 1/2",
 		"Guidance durable pendiente",
+		"premium_worktree",
+		"tarea#530",
+		"wt#77",
+		"cmd/controlplane_support.go (+1)",
 		"autopilot",
 		"sess-openclaw-web",
 		"sess-openclaw-web-agent",

@@ -2785,6 +2785,8 @@ type apiOpenClawMailboxLite struct {
 	KindsCSV             string     `json:"kinds_csv,omitempty"`
 	SupervisorActions    []string   `json:"supervisor_actions,omitempty"`
 	SupervisorActionsCSV string     `json:"supervisor_actions_csv,omitempty"`
+	Contexts             []string   `json:"contexts,omitempty"`
+	ContextsCSV          string     `json:"contexts_csv,omitempty"`
 	OldestCreatedAt      *time.Time `json:"oldest_created_at,omitempty"`
 	OldestAgeMin         int        `json:"oldest_age_min,omitempty"`
 }
@@ -3203,81 +3205,8 @@ func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite
 	if err != nil {
 		return nil, err
 	}
-	type agg struct {
-		count             int
-		kinds             map[string]bool
-		supervisorActions map[string]bool
-		oldest            *time.Time
-	}
-	byAgent := make(map[string]*agg)
-	for _, item := range items {
-		if item == nil {
-			continue
-		}
-		agente := strings.TrimSpace(item.ToAgente)
-		if agente == "" {
-			continue
-		}
-		entry := byAgent[agente]
-		if entry == nil {
-			entry = &agg{kinds: map[string]bool{}, supervisorActions: map[string]bool{}}
-			byAgent[agente] = entry
-		}
-		entry.count++
-		if entry.oldest == nil || item.CreatedAt.Before(*entry.oldest) {
-			ts := item.CreatedAt
-			entry.oldest = &ts
-		}
-		if kind := strings.TrimSpace(item.Kind); kind != "" {
-			entry.kinds[kind] = true
-		}
-		var payload struct {
-			SupervisorAction string `json:"supervisor_action"`
-		}
-		if strings.TrimSpace(item.PayloadJSON) != "" && item.PayloadJSON != "{}" {
-			if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err == nil {
-				if action := strings.TrimSpace(payload.SupervisorAction); action != "" {
-					entry.supervisorActions[action] = true
-				}
-			}
-		}
-	}
-	out := make([]apiOpenClawMailboxLite, 0, len(byAgent))
-	for agente, entry := range byAgent {
-		kinds := make([]string, 0, len(entry.kinds))
-		for kind := range entry.kinds {
-			kinds = append(kinds, kind)
-		}
-		sort.Strings(kinds)
-		supervisorActions := make([]string, 0, len(entry.supervisorActions))
-		for action := range entry.supervisorActions {
-			supervisorActions = append(supervisorActions, action)
-		}
-		sort.Strings(supervisorActions)
-		oldestAge := 0
-		if entry.oldest != nil && !entry.oldest.IsZero() {
-			oldestAge = int(time.Since(*entry.oldest).Minutes())
-			if oldestAge < 0 {
-				oldestAge = 0
-			}
-		}
-		out = append(out, apiOpenClawMailboxLite{
-			Agente:               agente,
-			Count:                entry.count,
-			Kinds:                kinds,
-			KindsCSV:             strings.Join(kinds, ", "),
-			SupervisorActions:    supervisorActions,
-			SupervisorActionsCSV: strings.Join(supervisorActions, ", "),
-			OldestCreatedAt:      entry.oldest,
-			OldestAgeMin:         oldestAge,
-		})
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Count != out[j].Count {
-			return out[i].Count > out[j].Count
-		}
-		return out[i].Agente < out[j].Agente
-	})
+	out := buildOpenClawMailboxLiteFromItems(items, nil)
+	sortOpenClawMailboxLiteByCount(out)
 	return out, nil
 }
 
