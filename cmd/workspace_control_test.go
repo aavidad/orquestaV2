@@ -342,6 +342,53 @@ func TestBuildWorkspaceControlReportExponeCriticalProjectRiskEstructurado(t *tes
 	}
 }
 
+func TestBuildWorkspaceControlReportDerivaOperationalDesdeCockpitSiFaltaProjectControl(t *testing.T) {
+	prevStatus := statusService
+	prevProjects := workspaceControlListProjects
+	prevCockpit := workspaceControlCockpitBuilder
+	prevProjectControl := workspaceControlProjectBuilder
+	defer func() {
+		statusService = prevStatus
+		workspaceControlListProjects = prevProjects
+		workspaceControlCockpitBuilder = prevCockpit
+		workspaceControlProjectBuilder = prevProjectControl
+	}()
+
+	statusService = stubStatusService{response: apiStatusResponse{}}
+	workspaceControlListProjects = func() ([]map[string]any, error) {
+		return []map[string]any{{"slug": "infra"}}, nil
+	}
+	workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+		return &apiProyectoCockpit{
+			Proyecto:                &db.Proyecto{Slug: "infra", Nombre: "Infra"},
+			TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+			ReviewGatesAbiertas:     1,
+			RuntimeOrdersAbiertas:   1,
+			RuntimeMailboxPendiente: 1,
+		}, nil
+	}
+	workspaceControlProjectBuilder = nil
+
+	report, err := buildWorkspaceControlReport()
+	if err != nil {
+		t.Fatalf("buildWorkspaceControlReport: %v", err)
+	}
+	if report.Operational.State != "bloqueado" {
+		t.Fatalf("estado operativo fallback inesperado: %+v", report.Operational)
+	}
+	if report.Operational.AttentionScore != 14 || report.Operational.AttentionLabel != "critico" {
+		t.Fatalf("attention fallback inesperada: %+v", report.Operational)
+	}
+	if report.Operational.BlockingProjects != 1 || report.Operational.ProjectsByState["bloqueado"] != 1 {
+		t.Fatalf("blocking fallback inesperado: %+v", report.Operational)
+	}
+	for _, token := range []string{"proyecto=infra", "integración bloqueada", "bloqueadas=1", "review_gates=1", "runtime_orders=1", "mailbox_rt=1"} {
+		if !strings.Contains(report.Operational.StateReason, token) {
+			t.Fatalf("state reason fallback sin %q: %+v", token, report.Operational)
+		}
+	}
+}
+
 func TestParseWorkspaceControlSinceUsa24hPorDefecto(t *testing.T) {
 	before := time.Now().UTC()
 	since, err := parseWorkspaceControlSince("")

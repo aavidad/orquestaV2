@@ -194,6 +194,7 @@ func buildWorkspaceControlReportSince(since time.Time) (*workspaceControlReport,
 	}
 	report.AutonomyProjects = buildWorkspaceAutonomyProjects(cockpits, surface, workspaceAutonomyProjectLimit)
 	report.Operational = buildWorkspaceOperationalSummary(projectControls)
+	report.Operational = enrichWorkspaceOperationalSummaryFromAutonomyProjects(report.Operational, report.AutonomyProjects)
 	report.Git = buildWorkspaceGitAggregate(projectControls)
 	report.Agents = buildWorkspaceControlAgents(projectControls)
 	report.Timeline = buildWorkspaceTimeline(projectControls, workspaceControlTimelineLimit)
@@ -259,6 +260,52 @@ func buildWorkspaceOperationalSummary(projects []*projectControlReport) workspac
 		summary.StateReason = strings.TrimSpace(fmt.Sprintf("proyecto=%s · %s", bestProject, bestReason))
 	}
 	return summary
+}
+
+func enrichWorkspaceOperationalSummaryFromAutonomyProjects(summary workspaceOperationalSummary, items []workspaceAutonomyProjectSummary) workspaceOperationalSummary {
+	if len(items) == 0 {
+		return summary
+	}
+	if summary.AttentionScore > 0 || summary.BlockingProjects > 0 || strings.TrimSpace(summary.State) != "" || len(summary.ProjectsByState) > 0 {
+		return summary
+	}
+	topRisk, ok := workspaceTopRiskProject(items)
+	if !ok {
+		return summary
+	}
+	blocking := workspaceBlockingProjectsCount(items)
+	if blocking <= 0 {
+		return summary
+	}
+	summary.ProjectsByState = map[string]int{"bloqueado": blocking}
+	summary.BlockingProjects = blocking
+	summary.State = "bloqueado"
+	summary.AttentionScore = topRisk.Blocking
+	summary.AttentionLabel = projectControlAttentionLabel(topRisk.Blocking)
+	reason := workspaceOperationalRiskReason(topRisk.Highlights)
+	if project := strings.TrimSpace(topRisk.Project); project != "" {
+		summary.StateReason = strings.TrimSpace(fmt.Sprintf("proyecto=%s · %s", project, reason))
+	} else {
+		summary.StateReason = reason
+	}
+	return summary
+}
+
+func workspaceOperationalRiskReason(highlights []string) string {
+	causes := make([]string, 0, len(highlights))
+	for _, item := range highlights {
+		value := strings.TrimSpace(item)
+		if value == "" ||
+			strings.HasPrefix(value, "riesgo=") ||
+			strings.HasPrefix(value, "integracion_bloqueada=") {
+			continue
+		}
+		causes = append(causes, value)
+	}
+	if len(causes) == 0 {
+		return "integración bloqueada"
+	}
+	return "integración bloqueada (" + strings.Join(causes, " | ") + ")"
 }
 
 func buildWorkspaceGitAggregate(projects []*projectControlReport) workspaceControlGitAggregate {
