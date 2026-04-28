@@ -353,6 +353,61 @@ func TestWebOpenClawToleraFalloDeStatusYRenderizaModoDegradado(t *testing.T) {
 	}
 }
 
+func TestWebOpenClawConservaGeneradoDelSnapshotReutilizado(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prevStatus := statusService
+	defer func() {
+		statusService = prevStatus
+		resetStatusSnapshotCache()
+	}()
+	resetStatusSnapshotCache()
+
+	snapshotGenerated := "2026-04-20T09:45:00Z"
+	storeStatusSnapshot(apiStatusResponse{
+		Generado: snapshotGenerated,
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		Agentes: []*db.Agente{
+			{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 41, Estado: db.TareaEnProgreso, Agente: "Codex4", Titulo: "runtime mailbox/session_resume", Modulo: "cmd"},
+		},
+	}, time.Now().UTC())
+	statusService = stubStatusService{err: errStatusFetchTimeout}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openclaw", webHandlerOpenClaw)
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/openclaw", nil)
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("openclaw snapshot status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, token := range []string{
+		"OpenClaw Operator",
+		"2026-04-20 09:45:00",
+		"Codex4",
+		"41",
+		"runtime mailbox/session_resume",
+		"en_progreso",
+		"cmd",
+	} {
+		if !strings.Contains(body, token) {
+			t.Fatalf("pagina openclaw snapshot sin %q:\n%s", token, body)
+		}
+	}
+}
+
 func TestWebOpenClawAccionResuelveReviewGate(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

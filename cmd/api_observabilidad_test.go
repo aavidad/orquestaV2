@@ -745,6 +745,60 @@ func TestAPIOpenClawOperatorExponeFollowupSidecarCompacto(t *testing.T) {
 	}
 }
 
+func TestAPIOpenClawOperatorConservaGeneradoDelSnapshotReutilizado(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prev := statusService
+	defer func() {
+		statusService = prev
+		resetStatusSnapshotCache()
+	}()
+	resetStatusSnapshotCache()
+
+	snapshot := apiStatusResponse{
+		Generado: "2026-04-20T09:45:00Z",
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		Agentes: []*db.Agente{
+			{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 41, Estado: db.TareaEnProgreso, Agente: "Codex4", Titulo: "runtime mailbox/session_resume", Modulo: "cmd"},
+		},
+	}
+	storeStatusSnapshot(snapshot, time.Now().UTC())
+	statusService = stubStatusService{err: errStatusFetchTimeout}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/openclaw/operator", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("openclaw operator status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode operator: %v", err)
+	}
+	statusMap, ok := payload["status"].(map[string]any)
+	if !ok {
+		t.Fatalf("status openclaw ausente: %s", rec.Body.String())
+	}
+	if got, _ := statusMap["generado"].(string); got != snapshot.Generado {
+		t.Fatalf("generado operator inesperado: got=%q want=%q body=%s", got, snapshot.Generado, rec.Body.String())
+	}
+	if activos, ok := payload["agentesActivos"].([]any); !ok || len(activos) != 1 {
+		t.Fatalf("agentesActivos raiz inesperados: %#v", payload["agentesActivos"])
+	}
+}
+
 func TestAPIOpenClawPipelineOperaPorLaViaCanonica(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	mux := http.NewServeMux()

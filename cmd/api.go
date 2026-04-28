@@ -2656,6 +2656,13 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 }
 
 func buildOpenClawBaseStatus() *estadoResumen {
+	if cached, ok := readStatusSnapshotFresh(); ok {
+		return buildOpenClawBaseStatusFromAPIStatus(cached)
+	}
+	if cached, ok := readStatusSnapshotAny(); ok {
+		ensureStatusRefreshAsync()
+		return buildOpenClawBaseStatusFromAPIStatus(cached)
+	}
 	status, err := fetchStatusForAPIAllowDirectFallback(250*time.Millisecond, statusFastTimeout)
 	if err == nil {
 		return buildOpenClawBaseStatusFromAPIStatus(status)
