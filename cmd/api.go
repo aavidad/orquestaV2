@@ -2821,7 +2821,7 @@ type apiOpenClawStatusLite struct {
 	AgentesAuthManual   []apiOpenClawAgentLite     `json:"agentesAuthManual,omitempty"`
 	AgentesQuotaBlocked []apiOpenClawAgentLite     `json:"agentesQuotaBlocked,omitempty"`
 	EnCuota             []apiOpenClawAgentLite     `json:"enCuota,omitempty"`
-	MailboxPendiente    []apiOpenClawMailboxLite   `json:"mailboxPendiente,omitempty"`
+	MailboxPendiente    []apiOpenClawMailboxLite   `json:"mailboxPendiente"`
 	RetenidasPorCuota   []tareaLite                `json:"retenidasPorCuota,omitempty"`
 	TareasActivas       []tareaLite                `json:"tareasActivas,omitempty"`
 	TareasReservadas    []tareaLite                `json:"tareasReservadas,omitempty"`
@@ -2875,7 +2875,7 @@ func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, 
 
 func buildOpenClawOperatorStatusBase(status *estadoResumen, rows []agentesapp.Row) apiOpenClawStatusLite {
 	if status == nil {
-		return apiOpenClawStatusLite{}
+		return apiOpenClawStatusLite{MailboxPendiente: []apiOpenClawMailboxLite{}}
 	}
 	return apiOpenClawStatusLite{
 		Generado:            status.Generado,
@@ -2886,6 +2886,7 @@ func buildOpenClawOperatorStatusBase(status *estadoResumen, rows []agentesapp.Ro
 		AgentesAuthManual:   compactOpenClawAgents(status.AgentesAuthManual, status.TareasActivas, rows),
 		AgentesQuotaBlocked: compactOpenClawAgents(status.AgentesQuotaBlocked, status.TareasActivas, rows),
 		EnCuota:             compactOpenClawAgents(agentesBloqueadosPorCuotaVisibles(status), status.TareasActivas, rows),
+		MailboxPendiente:    []apiOpenClawMailboxLite{},
 		RetenidasPorCuota:   tareasRetenidasPorCuota(status.TareasActivas, status.Agentes, status.AgentesQuotaBlocked),
 		TareasActivas:       filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso),
 		TareasReservadas:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
@@ -2904,8 +2905,15 @@ func buildOpenClawOperatorStatusWithRows(status *estadoResumen, rows []agentesap
 	if err != nil {
 		return resumen, err
 	}
-	resumen.MailboxPendiente = mailboxPendiente
+	resumen.MailboxPendiente = normalizeOpenClawMailboxLiteSlice(mailboxPendiente)
 	return resumen, nil
+}
+
+func normalizeOpenClawMailboxLiteSlice(items []apiOpenClawMailboxLite) []apiOpenClawMailboxLite {
+	if items == nil {
+		return []apiOpenClawMailboxLite{}
+	}
+	return items
 }
 
 func buildOpenClawSessionCandidates(snapshot map[string]any) []apiOpenClawSessionCandidate {

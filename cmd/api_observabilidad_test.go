@@ -859,10 +859,13 @@ func TestAPIOpenClawOperatorToleraFalloMailboxYMantieneStatusBase(t *testing.T) 
 	if tareas, ok := payload["tareasActivas"].([]any); !ok || len(tareas) != 1 {
 		t.Fatalf("tareasActivas raiz inesperadas: %#v body=%s", payload["tareasActivas"], rec.Body.String())
 	}
-	if _, ok := statusMap["mailboxPendiente"]; ok {
-		if mailbox, ok := statusMap["mailboxPendiente"].([]any); ok && len(mailbox) != 0 {
-			t.Fatalf("mailboxPendiente deberia degradar a vacio: %#v", statusMap["mailboxPendiente"])
-		}
+	mailboxRoot, ok := payload["mailboxPendiente"].([]any)
+	if !ok || len(mailboxRoot) != 0 {
+		t.Fatalf("mailboxPendiente raiz deberia degradar a lista vacia: %#v body=%s", payload["mailboxPendiente"], rec.Body.String())
+	}
+	mailboxStatus, ok := statusMap["mailboxPendiente"].([]any)
+	if !ok || len(mailboxStatus) != 0 {
+		t.Fatalf("mailboxPendiente status deberia degradar a lista vacia: %#v body=%s", statusMap["mailboxPendiente"], rec.Body.String())
 	}
 }
 
