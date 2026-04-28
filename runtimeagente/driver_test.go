@@ -1826,6 +1826,48 @@ func TestNormalizeMailboxDeliveryModeCaseInsensitive(t *testing.T) {
 	}
 }
 
+func TestPermiteFallbackInteractivoSessionResumePipelineLocal(t *testing.T) {
+	got := PermiteFallbackInteractivoSessionResumePipelineLocal(
+		"pipeline_local",
+		"",
+		"cli",
+		"process",
+		`{"driver":"process_pty_cli","stdin_path":"/tmp/codex.stdin","mailbox_delivery_mode":"session_resume"}`,
+		`{"mailbox_delivery_mode":"session_resume"}`,
+	)
+	if !got {
+		t.Fatal("pipeline_local process_pty_cli con stdin_path y session_resume deberia permitir fallback interactivo")
+	}
+}
+
+func TestPermiteFallbackInteractivoSessionResumePipelineLocalLegacyStdinRawPath(t *testing.T) {
+	got := PermiteFallbackInteractivoSessionResumePipelineLocal(
+		"pipeline_local",
+		"",
+		"cli",
+		"process",
+		`{"driver":"process_pty_cli","stdin_raw_path":"/tmp/codex.stdin.raw","mailbox_delivery_mode":"session_resume"}`,
+		`{"mailbox_delivery_mode":"session_resume"}`,
+	)
+	if !got {
+		t.Fatal("stdin_raw_path legacy tambien deberia habilitar fallback interactivo")
+	}
+}
+
+func TestPermiteFallbackInteractivoSessionResumePipelineLocalBloqueaSesionExterna(t *testing.T) {
+	got := PermiteFallbackInteractivoSessionResumePipelineLocal(
+		"pipeline_local",
+		"sess-1",
+		"cli",
+		"process",
+		`{"driver":"process_pty_cli","stdin_path":"/tmp/codex.stdin","mailbox_delivery_mode":"session_resume"}`,
+		`{"mailbox_delivery_mode":"session_resume"}`,
+	)
+	if got {
+		t.Fatal("con external_session_id no deberia permitir fallback interactivo local")
+	}
+}
+
 func TestDefaultMailboxDeliveryModePorCanSendInput(t *testing.T) {
 	f := false
 	tr := true

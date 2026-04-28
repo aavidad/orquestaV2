@@ -7824,33 +7824,17 @@ func procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg *db.RuntimeMailb
 }
 
 func runtimeMailboxSessionResumePermiteFallbackInteractivoPipelineLocal(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, externalSessionID string) bool {
-	if msg == nil || handle == nil || strings.TrimSpace(externalSessionID) != "" {
+	if msg == nil || handle == nil {
 		return false
 	}
-	if !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") {
-		return false
-	}
-	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
-	caps := mapFromJSON(strings.TrimSpace(handle.CapabilitiesJSON))
-	explicitMode := runtimeagente.NormalizeMailboxDeliveryMode(firstNonEmpty(
-		strings.TrimSpace(stringMapValue(caps, "mailbox_delivery_mode")),
-		strings.TrimSpace(stringMapValue(meta, "mailbox_delivery_mode")),
-	))
-	if explicitMode != runtimeagente.MailboxDeliverySessionResume {
-		return false
-	}
-	if !strings.EqualFold(strings.TrimSpace(stringMapValue(meta, "driver")), "process_pty_cli") {
-		return false
-	}
-	if !strings.EqualFold(strings.TrimSpace(handle.Transporte), "cli") || !strings.EqualFold(strings.TrimSpace(handle.HandleKind), "process") {
-		return false
-	}
-	for _, key := range []string{"supervisor_ref", "stdin_path", "stdin_raw_path"} {
-		if strings.TrimSpace(stringMapValue(meta, key)) != "" {
-			return true
-		}
-	}
-	return false
+	return runtimeagente.PermiteFallbackInteractivoSessionResumePipelineLocal(
+		msg.Kind,
+		externalSessionID,
+		handle.Transporte,
+		handle.HandleKind,
+		handle.MetadataJSON,
+		handle.CapabilitiesJSON,
+	)
 }
 
 // procesarRuntimeMailboxSessionResumeConSesion gestiona mensajes de resume cuando

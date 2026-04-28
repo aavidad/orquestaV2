@@ -1010,6 +1010,33 @@ func NormalizeMailboxDeliveryMode(raw string) string {
 	}
 }
 
+func PermiteFallbackInteractivoSessionResumePipelineLocal(mailboxKind, externalSessionID, transport, handleKind, metadataJSON, capabilitiesJSON string) bool {
+	if !strings.EqualFold(strings.TrimSpace(mailboxKind), "pipeline_local") || strings.TrimSpace(externalSessionID) != "" {
+		return false
+	}
+	metadata, _ := parseAnyMapJSON(metadataJSON)
+	capabilities, _ := parseAnyMapJSON(capabilitiesJSON)
+	explicitMode := NormalizeMailboxDeliveryMode(strings.TrimSpace(stringMetadata(capabilities, "mailbox_delivery_mode")))
+	if explicitMode == "" {
+		explicitMode = NormalizeMailboxDeliveryMode(strings.TrimSpace(stringMetadata(metadata, "mailbox_delivery_mode")))
+	}
+	if explicitMode != MailboxDeliverySessionResume {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(stringMetadata(metadata, "driver")), "process_pty_cli") {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(transport), "cli") || !strings.EqualFold(strings.TrimSpace(handleKind), "process") {
+		return false
+	}
+	for _, key := range []string{"supervisor_ref", "stdin_path", "stdin_raw_path"} {
+		if strings.TrimSpace(stringMetadata(metadata, key)) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func defaultMailboxDeliveryMode(canSendInput *bool) string {
 	if canSendInput != nil && !*canSendInput {
 		return MailboxDeliveryBootstrapOnly
