@@ -7467,6 +7467,115 @@ func TestMCPResourceReadProyectoIncluyeWorktreesYAsignaciones(t *testing.T) {
 	})
 }
 
+func TestMCPResourcesIncluyenProjectControl(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+
+		resources, err := listMCPResources()
+		if err != nil {
+			t.Fatalf("listMCPResources: %v", err)
+		}
+		for _, want := range []string{"orquesta://proyectos/orquestador/control"} {
+			found := false
+			for _, item := range resources {
+				if item.URI == want {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("resource %s no listada", want)
+			}
+		}
+
+		templates := mcpResourceTemplates()
+		foundTemplate := false
+		for _, item := range templates {
+			if item.URITemplate == "orquesta://proyectos/{slug}/control" {
+				foundTemplate = true
+				break
+			}
+		}
+		if !foundTemplate {
+			t.Fatal("template de proyecto control no listada")
+		}
+	})
+}
+
+func TestMCPResourceReadProyectoControlAceptaDesde(t *testing.T) {
+	prevBuilder := workspaceControlProjectBuilder
+	defer func() {
+		workspaceControlProjectBuilder = prevBuilder
+	}()
+
+	workspaceControlProjectBuilder = func(slug string, since time.Time) (*projectControlReport, error) {
+		return &projectControlReport{
+			Project:   &db.Proyecto{Slug: slug, Nombre: "Orquestador"},
+			Since:     since,
+			Generated: time.Date(2026, 4, 29, 9, 0, 0, 0, time.UTC),
+			Git: projectControlGitAggregate{
+				FilesChanged: 3,
+				Insertions:   11,
+				Deletions:    4,
+				LinesNet:     7,
+			},
+		}, nil
+	}
+
+	contents, err := readMCPResource("orquesta://proyectos/orquestador/control?desde=2026-04-24T13:00:00Z")
+	if err != nil {
+		t.Fatalf("readMCPResource proyecto/control?desde: %v", err)
+	}
+	text, _ := contents[0]["text"].(string)
+	for _, token := range []string{`"since": "2026-04-24T13:00:00Z"`, `"files_changed": 3`, `"lines_net": 7`, `"Slug": "orquestador"`} {
+		if !strings.Contains(text, token) {
+			t.Fatalf("resource proyecto/control sin %q: %s", token, text)
+		}
+	}
+}
+
+func TestMCPToolProyectoControlExponeGitYVentana(t *testing.T) {
+	prevBuilder := workspaceControlProjectBuilder
+	defer func() {
+		workspaceControlProjectBuilder = prevBuilder
+	}()
+
+	workspaceControlProjectBuilder = func(slug string, since time.Time) (*projectControlReport, error) {
+		return &projectControlReport{
+			Project:   &db.Proyecto{Slug: slug, Nombre: "Orquestador"},
+			Since:     since,
+			Generated: time.Date(2026, 4, 29, 9, 30, 0, 0, time.UTC),
+			Git: projectControlGitAggregate{
+				FilesChanged: 2,
+				Insertions:   9,
+				Deletions:    1,
+				LinesNet:     8,
+			},
+		}, nil
+	}
+
+	result, err := callMCPTool("orquesta.proyectos.control", map[string]any{
+		"slug":  "orquestador",
+		"desde": "48h",
+	})
+	if err != nil {
+		t.Fatalf("callMCPTool proyectos.control: %v", err)
+	}
+	text := result["content"].([]map[string]any)[0]["text"].(string)
+	for _, token := range []string{`"files_changed": 2`, `"insertions": 9`, `"lines_net": 8`, `"Slug": "orquestador"`} {
+		if !strings.Contains(text, token) {
+			t.Fatalf("tool proyectos.control sin %q: %s", token, text)
+		}
+	}
+	structured, ok := result["structuredContent"].(apiProyectoControlResponse)
+	if !ok || structured.Control == nil {
+		t.Fatalf("structuredContent inesperado: %#v", result["structuredContent"])
+	}
+	if structured.Control.Git.FilesChanged != 2 || structured.Control.Git.LinesNet != 8 {
+		t.Fatalf("git inesperado en structuredContent: %+v", structured.Control.Git)
+	}
+}
+
 func TestMCPResourceReadWorkspaceControlIncluyeResumenGlobal(t *testing.T) {
 	prevStatus := statusService
 	prevProjects := workspaceControlListProjects

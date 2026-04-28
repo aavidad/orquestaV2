@@ -542,6 +542,14 @@ func listMCPResources() ([]mcpResource, error) {
 			MIMEType:    "application/json",
 			Annotations: audienceAssistant(0.8),
 		})
+		resources = append(resources, mcpResource{
+			URI:         "orquesta://proyectos/" + proyecto["slug"].(string) + "/control",
+			Name:        "proyecto-control-" + proyecto["slug"].(string),
+			Title:       fmt.Sprintf("Control %v", proyecto["nombre"]),
+			Description: "Control operativo y Git del proyecto " + proyecto["slug"].(string),
+			MIMEType:    "application/json",
+			Annotations: audienceAssistant(0.9),
+		})
 	}
 
 	for _, pool := range status.Pools {
@@ -706,6 +714,13 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "application/json",
 		},
 		{
+			URITemplate: "orquesta://proyectos/{slug}/control",
+			Name:        "proyecto-control-por-slug",
+			Title:       "Control de proyecto",
+			Description: "Resumen canónico de control del proyecto con métricas operativas y Git; admite ?desde=1h o RFC3339",
+			MIMEType:    "application/json",
+		},
+		{
 			URITemplate: "orquesta://pools/{slug}",
 			Name:        "pool-por-slug",
 			Title:       "Detalle de pool",
@@ -714,6 +729,13 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 		},
 	}
 	return append(templates, microprogramacionMCPResourceTemplates()...)
+}
+
+func mcpProjectControlReport(slug string, since time.Time) (*projectControlReport, error) {
+	if workspaceControlProjectBuilder != nil {
+		return workspaceControlProjectBuilder(slug, since)
+	}
+	return buildProjectControlReport(slug, since)
 }
 
 func readMCPResource(uri string) ([]map[string]any, error) {
@@ -820,6 +842,23 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		}
 		return resourceText(uri, "application/json", prettyJSON(sesiones)), nil
 	case strings.HasPrefix(uri, "orquesta://proyectos/"):
+		parsed, err := url.Parse(uri)
+		if err != nil {
+			return nil, err
+		}
+		path := strings.TrimPrefix(parsed.Path, "/")
+		if strings.HasSuffix(path, "/control") {
+			slug := strings.TrimSuffix(path, "/control")
+			since, err := parseStatsSince(parsed.Query().Get("desde"))
+			if err != nil {
+				return nil, err
+			}
+			report, err := mcpProjectControlReport(slug, since)
+			if err != nil {
+				return nil, err
+			}
+			return resourceText(uri, "application/json", prettyJSON(apiProyectoControlResponse{Control: report})), nil
+		}
 		slug := strings.TrimPrefix(uri, "orquesta://proyectos/")
 		proyecto, err := detalleProyecto(slug)
 		if err != nil {
@@ -1580,6 +1619,20 @@ func listMCPTools() []mcpTool {
 					"tipo":   map[string]any{"type": "string"},
 					"activo": map[string]any{"type": "boolean"},
 				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.proyectos.control",
+			Title:       "Control de proyecto",
+			Description: "Devuelve el resumen canónico de control del proyecto con métricas operativas y Git",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"slug":  map[string]any{"type": "string"},
+					"desde": map[string]any{"type": "string"},
+				},
+				"required":             []string{"slug"},
 				"additionalProperties": false,
 			},
 		},
@@ -3034,6 +3087,22 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 		return toolResult(prettyJSON(proyectos), proyectos, false), nil
+
+	case "orquesta.proyectos.control":
+		slug, err := requiredStringArg(args, "slug")
+		if err != nil {
+			return nil, err
+		}
+		since, err := parseStatsSince(optionalStringArg(args, "desde"))
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		report, err := mcpProjectControlReport(slug, since)
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := apiProyectoControlResponse{Control: report}
+		return toolResult(prettyJSON(result), result, false), nil
 
 	case "orquesta.pools.listar":
 		pools, err := listarPoolsResumenMCP(boolPtrArg(args, "activo"))
