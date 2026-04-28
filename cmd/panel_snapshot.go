@@ -317,6 +317,12 @@ func buildAgentPanelRowsFromStatusSnapshot(status apiStatusResponse) []agentesap
 			byName[key] = row
 		}
 		row.OpenTasks++
+		row.CurrentTask = &agentesapp.TaskFocus{
+			TaskID: tarea.ID,
+			Title:  strings.TrimSpace(tarea.Titulo),
+			State:  tarea.Estado,
+			Module: strings.TrimSpace(tarea.Modulo),
+		}
 		if row.EstadoOperativo == "desconocido" || row.EstadoOperativo == "disponible" {
 			row.EstadoOperativo = "trabajando"
 		}
@@ -332,6 +338,14 @@ func buildAgentPanelRowsFromStatusSnapshot(status apiStatusResponse) []agentesap
 			byName[key] = row
 		}
 		row.OpenTasks++
+		if row.CurrentTask == nil {
+			row.CurrentTask = &agentesapp.TaskFocus{
+				TaskID: tarea.ID,
+				Title:  strings.TrimSpace(tarea.Titulo),
+				State:  tarea.Estado,
+				Module: strings.TrimSpace(tarea.Modulo),
+			}
+		}
 	}
 	keys := make([]string, 0, len(byName))
 	for key := range byName {

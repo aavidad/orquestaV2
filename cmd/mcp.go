@@ -4147,7 +4147,7 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 		nextSafeAction = safeQueue[0]
 	}
 	capacitySummary := buildOpenClawCapacitySummary(status.AgentesActivos, status.AgentesTrabajando, status.TareasActivas, status.TareasPorEstado)
-	saturatedAgents := buildOpenClawSaturatedAgents(status.AgentesActivos, status.TareasActivas)
+	saturatedAgents := buildOpenClawSaturatedAgents(status.AgentesActivos, status.TareasActivas, nil)
 	queueSummary := buildOpenClawQueueSummaryFromActions(actionQueue, safeQueue)
 	return map[string]any{
 		"supervisor":            supervisor,

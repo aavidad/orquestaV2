@@ -441,6 +441,7 @@ func TestImprimirAgenteActividadMuestraTareasActualesCadenciaYTests(t *testing.T
 		Git:       &agentGitActivityStats{},
 		Summary: agentActivitySummary{
 			CurrentTasks:        []string{"#40 [en_progreso] runtime mailbox/session_resume modulo=cmd"},
+			DominantOrder:       "#91 send_instruction [ejecutando] tarea=#40 accion=continuar_trabajo",
 			CommitCadence:       "atrasada",
 			CommitCadenceDetail: "diff pendiente grande (9 fichero(s), +420/-35) sin commits recientes",
 			TranscriptBySignal:  map[string]int{"tests": 2},
@@ -455,6 +456,7 @@ func TestImprimirAgenteActividadMuestraTareasActualesCadenciaYTests(t *testing.T
 	if !containsAll(out,
 		"Actuales:",
 		"#40 [en_progreso] runtime mailbox/session_resume modulo=cmd",
+		"Orden:     #91 send_instruction [ejecutando] tarea=#40 accion=continuar_trabajo",
 		"Cadencia:  atrasada · diff pendiente grande (9 fichero(s), +420/-35) sin commits recientes",
 		"Tests:     señales=2 · ultimo=2026-04-28 09:10:00",
 	) {
@@ -467,6 +469,19 @@ func TestSummarizeAgentActivityExponeLeasesYUltimoTest(t *testing.T) {
 	detail := &agentesapp.Detail{
 		Row: agentesapp.Row{OpenTasks: 1},
 		Entity: &agentesapp.AgentEntity{
+			CurrentTask: &agentesapp.TaskFocus{
+				TaskID: 40,
+				Title:  "runtime mailbox/session_resume",
+				State:  db.TareaEnProgreso,
+				Module: "cmd",
+			},
+			DominantOrder: &agentesapp.OrderFocus{
+				OrderID: 91,
+				Type:    "send_instruction",
+				State:   "ejecutando",
+				TaskID:  40,
+				Action:  "continuar_trabajo",
+			},
 			Leases: []agentesapp.WorkLease{{
 				TaskID: 40,
 				Title:  "runtime mailbox/session_resume",
@@ -480,6 +495,9 @@ func TestSummarizeAgentActivityExponeLeasesYUltimoTest(t *testing.T) {
 	}, nil)
 	if len(summary.CurrentTasks) != 1 || summary.CurrentTasks[0] != "#40 [en_progreso] runtime mailbox/session_resume modulo=cmd" {
 		t.Fatalf("current tasks inesperadas: %+v", summary.CurrentTasks)
+	}
+	if summary.DominantOrder != "#91 send_instruction [ejecutando] tarea=#40 accion=continuar_trabajo" {
+		t.Fatalf("dominant order inesperada: %q", summary.DominantOrder)
 	}
 	if summary.LastTestSignalAt == nil || !summary.LastTestSignalAt.Equal(lastTest.UTC()) {
 		t.Fatalf("last test signal inesperado: %+v", summary.LastTestSignalAt)

@@ -74,6 +74,19 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 					"entity": map[string]any{
 						"name": "Codex1",
 						"role": "programador",
+						"current_task": map[string]any{
+							"task_id": 558,
+							"title":   "frente activo",
+							"state":   "en_progreso",
+							"module":  "cmd",
+						},
+						"dominant_order": map[string]any{
+							"order_id": 41,
+							"type":     "send_instruction",
+							"state":    "ejecutando",
+							"task_id":  558,
+							"action":   "continuar_trabajo",
+						},
 						"leases": []map[string]any{{
 							"task_id": 558,
 							"title":   "frente activo",
@@ -228,6 +241,10 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	if !strings.Contains(outOverview, "Tareas:    1 lease(s) · abiertas=1 bloqueadas=0") {
 		t.Fatalf("salida overview sin resumen de leases:\n%s", outOverview)
 	}
+	if !strings.Contains(outOverview, "Trabajo:   #558 [en_progreso] frente activo modulo=cmd") ||
+		!strings.Contains(outOverview, "Orden:     #41 send_instruction [ejecutando] tarea=#558 accion=continuar_trabajo") {
+		t.Fatalf("salida overview sin foco canonico:\n%s", outOverview)
+	}
 
 	outControl := capturarStdout(t, func() {
 		if err := agenteControlCmd.RunE(agenteControlCmd, []string{"arrancar", "Codex1"}); err != nil {
@@ -248,13 +265,13 @@ func TestAgenteOverviewMarcaContinuidadEmbebidaEnMailboxCompacta(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"detail": map[string]any{
 					"row": map[string]any{
-						"EstadoOperativo":     "trabajando",
-						"DetalleOperativo":    "worker ready",
-						"LastAutonomySource":  "resume_payload_mailbox",
-						"LastAutonomyAction":  "continuar_trabajo",
-						"LastAutonomyState":   "embedded",
-						"MailboxPending":      1,
-						"MailboxTotal":        1,
+						"EstadoOperativo":    "trabajando",
+						"DetalleOperativo":   "worker ready",
+						"LastAutonomySource": "resume_payload_mailbox",
+						"LastAutonomyAction": "continuar_trabajo",
+						"LastAutonomyState":  "embedded",
+						"MailboxPending":     1,
+						"MailboxTotal":       1,
 					},
 					"entity": map[string]any{
 						"Name":   "Codex3",

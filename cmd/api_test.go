@@ -70,7 +70,7 @@ func TestCompactOpenClawAgentsIncluyeCuentaCanonica(t *testing.T) {
 		CuentaEmail:   "shared@example.com",
 		CuentaUsuario: "Codex7",
 		EstadoCuota:   "activo",
-	}}, nil)
+	}}, nil, nil)
 	if len(items) != 1 {
 		t.Fatalf("items inesperados: %+v", items)
 	}

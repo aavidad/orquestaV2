@@ -36,6 +36,7 @@ type agentActivitySummary struct {
 	CurrentOperational    string         `json:"current_operational,omitempty"`
 	CurrentOperationalWhy string         `json:"current_operational_detail,omitempty"`
 	CurrentTasks          []string       `json:"current_tasks,omitempty"`
+	DominantOrder         string         `json:"dominant_order,omitempty"`
 	CommitCadence         string         `json:"commit_cadence,omitempty"`
 	CommitCadenceDetail   string         `json:"commit_cadence_detail,omitempty"`
 	AutonomyHighlights    []string       `json:"autonomy_highlights,omitempty"`
@@ -329,23 +330,46 @@ func summarizeAgentActivity(detail *agentesapp.Detail, audit []db.AuditEntry, tr
 		out.CurrentOperational = strings.TrimSpace(detail.Row.EstadoOperativo)
 		out.CurrentOperationalWhy = strings.TrimSpace(detail.Row.DetalleOperativo)
 		out.CurrentTasks = buildAgentActivityCurrentTasks(detail)
+		out.DominantOrder = formatAgentActivityDominantOrder(detail)
 	}
 	return out
 }
 
 func buildAgentActivityCurrentTasks(detail *agentesapp.Detail) []string {
-	if detail == nil || detail.Entity == nil || len(detail.Entity.Leases) == 0 {
+	if detail == nil || detail.Entity == nil {
 		return nil
 	}
-	out := make([]string, 0, len(detail.Entity.Leases))
+	out := make([]string, 0, len(detail.Entity.Leases)+1)
+	if detail.Entity.CurrentTask != nil {
+		if label := formatAgentActivityTaskFocus(detail.Entity.CurrentTask); strings.TrimSpace(label) != "" {
+			out = append(out, label)
+		}
+	}
 	for _, lease := range detail.Entity.Leases {
 		label := formatAgentActivityLease(lease)
 		if strings.TrimSpace(label) == "" {
 			continue
 		}
+		if len(out) > 0 && out[0] == label {
+			continue
+		}
 		out = append(out, label)
 	}
 	return out
+}
+
+func formatAgentActivityTaskFocus(task *agentesapp.TaskFocus) string {
+	if task == nil || task.TaskID <= 0 {
+		return ""
+	}
+	lease := agentesapp.WorkLease{
+		TaskID:    task.TaskID,
+		Title:     task.Title,
+		State:     task.State,
+		ProjectID: task.ProjectID,
+		Module:    task.Module,
+	}
+	return formatAgentActivityLease(lease)
 }
 
 func formatAgentActivityLease(lease agentesapp.WorkLease) string {
@@ -361,6 +385,33 @@ func formatAgentActivityLease(lease agentesapp.WorkLease) string {
 	}
 	if module := strings.TrimSpace(lease.Module); module != "" {
 		parts = append(parts, "modulo="+module)
+	}
+	return strings.Join(parts, " ")
+}
+
+func formatAgentActivityDominantOrder(detail *agentesapp.Detail) string {
+	if detail == nil || detail.Entity == nil || detail.Entity.DominantOrder == nil {
+		return ""
+	}
+	order := detail.Entity.DominantOrder
+	if order.OrderID <= 0 {
+		return ""
+	}
+	parts := []string{fmt.Sprintf("#%d", order.OrderID)}
+	if kind := strings.TrimSpace(order.Type); kind != "" {
+		parts = append(parts, kind)
+	}
+	if state := strings.TrimSpace(order.State); state != "" {
+		parts = append(parts, "["+state+"]")
+	}
+	if order.TaskID > 0 {
+		parts = append(parts, "tarea="+fmt.Sprintf("#%d", order.TaskID))
+	}
+	if action := strings.TrimSpace(order.Action); action != "" {
+		parts = append(parts, "accion="+action)
+	}
+	if reason := strings.TrimSpace(order.Reason); reason != "" {
+		parts = append(parts, "motivo="+reason)
 	}
 	return strings.Join(parts, " ")
 }
@@ -548,6 +599,9 @@ func imprimirAgenteActividad(report *agentActivityReport) error {
 		for _, task := range report.Summary.CurrentTasks {
 			fmt.Printf("  - %s\n", task)
 		}
+	}
+	if strings.TrimSpace(report.Summary.DominantOrder) != "" {
+		fmt.Printf("Orden:     %s\n", strings.TrimSpace(report.Summary.DominantOrder))
 	}
 	if report.Summary.IntegrationRiskScore > 0 {
 		fmt.Printf("Riesgo:    %s · integracion_bloqueada=%d", report.Summary.IntegrationRisk, report.Summary.IntegrationRiskScore)

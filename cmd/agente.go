@@ -1578,6 +1578,12 @@ func imprimirAgenteOverview(out apiAgenteOverviewResponse, jsonOut bool) error {
 		fmt.Printf(" · abiertas=%d bloqueadas=%d", abiertas, bloqueadas)
 	}
 	fmt.Println()
+	if detail.Entity.CurrentTask != nil {
+		fmt.Printf("Trabajo:   %s\n", formatAgenteOverviewTaskFocus(detail.Entity.CurrentTask))
+	}
+	if detail.Entity.DominantOrder != nil {
+		fmt.Printf("Orden:     %s\n", formatAgenteOverviewOrderFocus(detail.Entity.DominantOrder))
+	}
 	for _, lease := range detail.Entity.Leases {
 		fmt.Printf("  - #%d [%s] %s\n", lease.TaskID, strings.TrimSpace(string(lease.State)), strings.TrimSpace(lease.Title))
 	}
@@ -1606,6 +1612,46 @@ func resumirLeasesOverview(leases []agentesapp.WorkLease) (abiertas, bloqueadas 
 		}
 	}
 	return abiertas, bloqueadas
+}
+
+func formatAgenteOverviewTaskFocus(task *agentesapp.TaskFocus) string {
+	if task == nil || task.TaskID <= 0 {
+		return ""
+	}
+	parts := []string{fmt.Sprintf("#%d", task.TaskID)}
+	if state := strings.TrimSpace(string(task.State)); state != "" {
+		parts = append(parts, "["+state+"]")
+	}
+	if title := strings.TrimSpace(task.Title); title != "" {
+		parts = append(parts, title)
+	}
+	if module := strings.TrimSpace(task.Module); module != "" {
+		parts = append(parts, "modulo="+module)
+	}
+	return strings.Join(parts, " ")
+}
+
+func formatAgenteOverviewOrderFocus(order *agentesapp.OrderFocus) string {
+	if order == nil || order.OrderID <= 0 {
+		return ""
+	}
+	parts := []string{fmt.Sprintf("#%d", order.OrderID)}
+	if kind := strings.TrimSpace(order.Type); kind != "" {
+		parts = append(parts, kind)
+	}
+	if state := strings.TrimSpace(order.State); state != "" {
+		parts = append(parts, "["+state+"]")
+	}
+	if order.TaskID > 0 {
+		parts = append(parts, "tarea="+fmt.Sprintf("#%d", order.TaskID))
+	}
+	if action := strings.TrimSpace(order.Action); action != "" {
+		parts = append(parts, "accion="+action)
+	}
+	if reason := strings.TrimSpace(order.Reason); reason != "" {
+		parts = append(parts, "motivo="+reason)
+	}
+	return strings.Join(parts, " ")
 }
 
 func imprimirAgenteReanimaciones(out apiAgenteReanimationsResponse, jsonOut bool) error {

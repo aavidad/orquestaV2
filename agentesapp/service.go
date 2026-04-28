@@ -388,6 +388,8 @@ type Row struct {
 	LastCheckpoint              *db.RuntimeCheckpoint
 	OpenTasks                   int
 	BlockedTasks                int
+	CurrentTask                 *TaskFocus
+	DominantOrder               *OrderFocus
 }
 
 type Detail struct {
@@ -463,6 +465,8 @@ type AgentEntity struct {
 	LastAutonomyDeliveryState   string      `json:"last_autonomy_delivery_state,omitempty"`
 	LastAutonomyReceiptSource   string      `json:"last_autonomy_receipt_source,omitempty"`
 	Leases                      []WorkLease `json:"leases,omitempty"`
+	CurrentTask                 *TaskFocus  `json:"current_task,omitempty"`
+	DominantOrder               *OrderFocus `json:"dominant_order,omitempty"`
 }
 
 type WorkLease struct {
@@ -471,6 +475,26 @@ type WorkLease struct {
 	State     db.EstadoTarea `json:"state"`
 	ProjectID *int64         `json:"project_id,omitempty"`
 	Module    string         `json:"module,omitempty"`
+}
+
+type TaskFocus struct {
+	TaskID    int64          `json:"task_id"`
+	Title     string         `json:"title,omitempty"`
+	State     db.EstadoTarea `json:"state"`
+	ProjectID *int64         `json:"project_id,omitempty"`
+	Module    string         `json:"module,omitempty"`
+}
+
+type OrderFocus struct {
+	OrderID         int64      `json:"order_id"`
+	Type            string     `json:"type,omitempty"`
+	State           string     `json:"state,omitempty"`
+	ProjectID       *int64     `json:"project_id,omitempty"`
+	TaskID          int64      `json:"task_id,omitempty"`
+	Action          string     `json:"action,omitempty"`
+	VerificationKey string     `json:"verification_key,omitempty"`
+	Reason          string     `json:"reason,omitempty"`
+	Moment          *time.Time `json:"moment,omitempty"`
 }
 
 type InvestigationMatch struct {
@@ -926,6 +950,7 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		}
 		row.OrdersOpen, row.OrdersFailed, row.ControlOrdersOpen, row.LastControlOrderType, row.LastControlOrderMoment =
 			summarizeOrdersForRow(row, ordersPorAgente[agente.Nombre])
+		row.DominantOrder = selectDominantOrderFocus(row, ordersPorAgente[agente.Nombre])
 		if action, source, moment, state, reason, verificationKey, dispatchState, deliveryState, receiptSource := summarizeAutonomyOrdersForRow(ordersPorAgente[agente.Nombre]); strings.TrimSpace(action) != "" {
 			if mailboxCountersShouldReplace(row.LastAutonomyMoment, moment) {
 				row.LastAutonomyAction = action
@@ -960,7 +985,15 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 				row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
 				row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
 				applyDurableWorkQueueToTickRow(&row, view)
+				if projectID := resolveOperationalProjectID(row, tareasPorAgente[agente.Nombre]); projectID != nil && *projectID > 0 {
+					if tarea, ok, err := s.durableWorkQueueTaskForAgent(strings.TrimSpace(agente.Nombre), *projectID, view); err == nil && ok {
+						promoteDurableWorkQueueTaskToRow(&row, tarea)
+					}
+				}
 			}
+		}
+		if currentTask := selectCurrentTaskFocus(tareasPorAgente[agente.Nombre], row); currentTask != nil {
+			row.CurrentTask = currentTask
 		}
 		applyAssignmentHandoffAutonomyToRow(&row)
 		applyResumePayloadAutonomyToRow(&row)
@@ -1271,6 +1304,7 @@ func (s *Service) buildRowContextForAgentWithMailbox(nombre string, mailbox []*d
 	ctx.Orders = orders
 	ctx.Row.OrdersOpen, ctx.Row.OrdersFailed, ctx.Row.ControlOrdersOpen, ctx.Row.LastControlOrderType, ctx.Row.LastControlOrderMoment =
 		summarizeOrdersForRow(ctx.Row, orders)
+	ctx.Row.DominantOrder = selectDominantOrderFocus(ctx.Row, orders)
 	if action, source, moment, state, reason, verificationKey, dispatchState, deliveryState, receiptSource := summarizeAutonomyOrdersForRow(orders); strings.TrimSpace(action) != "" {
 		if mailboxCountersShouldReplace(ctx.Row.LastAutonomyMoment, moment) {
 			ctx.Row.LastAutonomyAction = action
@@ -1305,6 +1339,7 @@ func (s *Service) buildRowContextForAgentWithMailbox(nombre string, mailbox []*d
 			ctx.Row.OpenTasks++
 		}
 	}
+	ctx.Row.CurrentTask = selectCurrentTaskFocus(tareas, ctx.Row)
 
 	proyectoIDPreferido := targetProjectIDForSelection(ctx.Row.Sesion, ctx.Row.Asignacion, tareas)
 	ctx.Row.Runtime = latestRuntimeForProject(runtimes, proyectoIDPreferido)
@@ -1478,18 +1513,12 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 			row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
 			applyDurableWorkQueueToTickRow(&row, view)
 			maybeSyncSupervisedRuntimeHandle(&row, now, "agentes_compact_worker_alive")
-			if row.Asignacion != nil && row.Asignacion.ProyectoID > 0 {
-				if tarea, ok, err := s.durableWorkQueueTaskForAgent(nombre, row.Asignacion.ProyectoID, view); err != nil {
+			if projectID := resolveOperationalProjectID(row, nil); projectID != nil && *projectID > 0 {
+				if tarea, ok, err := s.durableWorkQueueTaskForAgent(nombre, *projectID, view); err != nil {
 					return Row{}, nil, nil, err
 				} else if ok {
 					tareas := []*db.Tarea{tarea}
-					switch tarea.Estado {
-					case db.EstadoBloqueada:
-						row.BlockedTasks++
-					case db.EstadoCompletada, db.EstadoCancelada, db.EstadoBacklog:
-					case db.EstadoAsignada, db.EstadoEnProgreso:
-						row.OpenTasks++
-					}
+					promoteDurableWorkQueueTaskToRow(&row, tarea)
 					stepStart = time.Now()
 					mailbox, err := s.store.ListRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &nombre})
 					if err != nil {
@@ -1534,6 +1563,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 			row.OpenTasks++
 		}
 	}
+	row.CurrentTask = selectCurrentTaskFocus(tareas, row)
 	agentDetailDebugf("compact step=list_tasks agente=%s count=%d duration=%s", nombre, len(tareas), time.Since(stepStart).Round(time.Millisecond))
 
 	stepStart = time.Now()
@@ -1689,6 +1719,7 @@ func (s *Service) applyAutonomyOrdersToRow(row *Row, agente string) error {
 	if err != nil {
 		return err
 	}
+	row.DominantOrder = selectDominantOrderFocus(*row, orders)
 	if action, source, moment, state, reason, verificationKey, dispatchState, deliveryState, receiptSource := summarizeAutonomyOrdersForRow(orders); strings.TrimSpace(action) != "" {
 		if mailboxCountersShouldReplace(row.LastAutonomyMoment, moment) {
 			row.LastAutonomyAction = action
@@ -1831,6 +1862,12 @@ func (s *Service) buildOperationalRowContextForAgent(nombre string, now time.Tim
 		case db.EstadoAsignada, db.EstadoEnProgreso:
 			row.OpenTasks++
 		}
+	}
+	row.CurrentTask = selectCurrentTaskFocus(tareas, row)
+	if orders, err := s.store.ListRuntimeOrders(db.FiltroRuntimeOrders{Agente: &nombre}); err == nil {
+		row.DominantOrder = selectDominantOrderFocus(row, orders)
+	} else {
+		return Row{}, nil, nil, err
 	}
 
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
@@ -3561,11 +3598,29 @@ func buildAgentEntity(store Store, row Row, tareas []*db.Tarea) *AgentEntity {
 		LastAutonomyDeliveryState:   strings.TrimSpace(row.LastAutonomyDeliveryState),
 		LastAutonomyReceiptSource:   strings.TrimSpace(row.LastAutonomyReceiptSource),
 		Leases:                      buildWorkLeases(tareas),
+		CurrentTask:                 cloneTaskFocus(row.CurrentTask),
+		DominantOrder:               cloneOrderFocus(row.DominantOrder),
 	}
 	if row.Asignacion != nil {
 		entity.AssignmentProject = strings.TrimSpace(row.Asignacion.ProyectoSlug)
 	}
 	return entity
+}
+
+func cloneTaskFocus(item *TaskFocus) *TaskFocus {
+	if item == nil {
+		return nil
+	}
+	clone := *item
+	return &clone
+}
+
+func cloneOrderFocus(item *OrderFocus) *OrderFocus {
+	if item == nil {
+		return nil
+	}
+	clone := *item
+	return &clone
 }
 
 func taskStateCountsAsOpen(state db.EstadoTarea) bool {
@@ -3610,6 +3665,208 @@ func buildWorkLeases(tareas []*db.Tarea) []WorkLease {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].TaskID < out[j].TaskID })
 	return out
+}
+
+func selectCurrentTaskFocus(tareas []*db.Tarea, row Row) *TaskFocus {
+	candidates := make([]*db.Tarea, 0, len(tareas))
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.EstadoEnProgreso, db.EstadoAsignada, db.EstadoBloqueada:
+			candidates = append(candidates, tarea)
+		}
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	preferredProjectID := resolveOperationalProjectID(row, tareas)
+	sort.SliceStable(candidates, func(i, j int) bool {
+		a := candidates[i]
+		b := candidates[j]
+		scoreA := taskFocusProjectPriority(a, preferredProjectID)
+		scoreB := taskFocusProjectPriority(b, preferredProjectID)
+		if scoreA != scoreB {
+			return scoreA > scoreB
+		}
+		stateA := taskFocusStatePriority(a.Estado)
+		stateB := taskFocusStatePriority(b.Estado)
+		if stateA != stateB {
+			return stateA < stateB
+		}
+		if !a.UpdatedAt.Equal(b.UpdatedAt) {
+			return a.UpdatedAt.After(b.UpdatedAt)
+		}
+		return a.ID > b.ID
+	})
+	item := candidates[0]
+	return &TaskFocus{
+		TaskID:    item.ID,
+		Title:     strings.TrimSpace(item.Titulo),
+		State:     item.Estado,
+		ProjectID: item.ProyectoID,
+		Module:    strings.TrimSpace(item.Modulo),
+	}
+}
+
+func resolveOperationalProjectID(row Row, tareas []*db.Tarea) *int64 {
+	if projectID := targetProjectIDForSelection(row.Sesion, row.Asignacion, tareas); projectID != nil && *projectID > 0 {
+		return projectID
+	}
+	if projectID := targetProjectIDForHandleSelection(row.Runtime, row.Sesion, row.Asignacion, tareas); projectID != nil && *projectID > 0 {
+		return projectID
+	}
+	if row.Handle != nil && row.Handle.ProyectoID != nil && *row.Handle.ProyectoID > 0 {
+		return row.Handle.ProyectoID
+	}
+	return nil
+}
+
+func taskFocusProjectPriority(tarea *db.Tarea, preferredProjectID *int64) int {
+	if tarea == nil || tarea.ProyectoID == nil || preferredProjectID == nil {
+		return 0
+	}
+	if *tarea.ProyectoID == *preferredProjectID {
+		return 1
+	}
+	return 0
+}
+
+func taskFocusStatePriority(state db.EstadoTarea) int {
+	switch state {
+	case db.EstadoEnProgreso:
+		return 0
+	case db.EstadoAsignada:
+		return 1
+	case db.EstadoBloqueada:
+		return 2
+	default:
+		return 9
+	}
+}
+
+func selectDominantOrderFocus(row Row, orders []*db.RuntimeOrder) *OrderFocus {
+	candidates := make([]*db.RuntimeOrder, 0, len(orders))
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch strings.TrimSpace(order.Estado) {
+		case "pendiente", "tomada", "ejecutando":
+			candidates = append(candidates, order)
+		}
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		a := candidates[i]
+		b := candidates[j]
+		matchA := runtimeOrderMatchesRowProject(row, a)
+		matchB := runtimeOrderMatchesRowProject(row, b)
+		if matchA != matchB {
+			return matchA
+		}
+		stateA := orderFocusStatePriority(strings.TrimSpace(a.Estado))
+		stateB := orderFocusStatePriority(strings.TrimSpace(b.Estado))
+		if stateA != stateB {
+			return stateA < stateB
+		}
+		typeA := orderFocusTypePriority(strings.TrimSpace(a.Tipo))
+		typeB := orderFocusTypePriority(strings.TrimSpace(b.Tipo))
+		if typeA != typeB {
+			return typeA < typeB
+		}
+		momentA := runtimeOrderMoment(a)
+		momentB := runtimeOrderMoment(b)
+		if !momentA.Equal(momentB) {
+			return momentA.After(momentB)
+		}
+		return a.ID > b.ID
+	})
+	order := candidates[0]
+	payload := runtimeMailboxPayloadMap(order.PayloadJSON)
+	reason := strings.TrimSpace(stringFromRuntimeMailboxPayload(payload, "motivo"))
+	if reason == "" {
+		result := runtimeMailboxPayloadMap(order.ResultadoJSON)
+		reason = strings.TrimSpace(stringFromRuntimeMailboxPayload(result, "deferred_reason"))
+	}
+	ts := runtimeOrderMoment(order)
+	return &OrderFocus{
+		OrderID:         order.ID,
+		Type:            strings.TrimSpace(order.Tipo),
+		State:           strings.TrimSpace(order.Estado),
+		ProjectID:       order.ProyectoID,
+		TaskID:          runtimeOrderTaskID(payload),
+		Action:          strings.TrimSpace(stringFromRuntimeMailboxPayload(payload, "accion")),
+		VerificationKey: strings.TrimSpace(stringFromRuntimeMailboxPayload(payload, "verification_key")),
+		Reason:          reason,
+		Moment:          &ts,
+	}
+}
+
+func orderFocusStatePriority(state string) int {
+	switch strings.TrimSpace(strings.ToLower(state)) {
+	case "ejecutando":
+		return 0
+	case "tomada":
+		return 1
+	case "pendiente":
+		return 2
+	default:
+		return 9
+	}
+}
+
+func orderFocusTypePriority(kind string) int {
+	switch strings.TrimSpace(strings.ToLower(kind)) {
+	case "send_instruction":
+		return 0
+	case "handoff":
+		return 1
+	case "start", "resume", "restart":
+		return 2
+	case "checkpoint", "pause", "stop":
+		return 3
+	default:
+		return 9
+	}
+}
+
+func runtimeOrderTaskID(payload map[string]any) int64 {
+	if payload == nil {
+		return 0
+	}
+	if id := int64FromRuntimeMailboxPayload(payload, "tarea_id"); id > 0 {
+		return id
+	}
+	return int64FromRuntimeMailboxPayload(payload, "tarea_objetivo_id")
+}
+
+func promoteDurableWorkQueueTaskToRow(row *Row, tarea *db.Tarea) {
+	if row == nil || tarea == nil {
+		return
+	}
+	if row.CurrentTask == nil || row.CurrentTask.TaskID != tarea.ID {
+		row.CurrentTask = &TaskFocus{
+			TaskID:    tarea.ID,
+			Title:     strings.TrimSpace(tarea.Titulo),
+			State:     tarea.Estado,
+			ProjectID: tarea.ProyectoID,
+			Module:    strings.TrimSpace(tarea.Modulo),
+		}
+	}
+	switch tarea.Estado {
+	case db.EstadoBloqueada:
+		if row.BlockedTasks <= 0 {
+			row.BlockedTasks = 1
+		}
+	case db.EstadoAsignada, db.EstadoEnProgreso:
+		if row.OpenTasks <= 0 {
+			row.OpenTasks = 1
+		}
+	}
 }
 
 func runtimeAdapterName(row Row) string {

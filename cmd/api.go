@@ -2451,9 +2451,15 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		}, errStatusFetchTimeout); err == nil && snapshot != nil {
 			revision = snapshot
 		}
+		var panelRows []agentesapp.Row
+		if rows, err := runAPITimeboxed(200*time.Millisecond, func() ([]agentesapp.Row, error) {
+			return fetchAgentPanelRowsCached(150 * time.Millisecond)
+		}, errStatusFetchTimeout); err == nil {
+			panelRows = rows
+		}
 		statusResumen := apiOpenClawStatusLite{Generado: status.Generado, TareasPorEstado: status.TareasPorEstado}
 		if summary, err := runAPITimeboxed(200*time.Millisecond, func() (apiOpenClawStatusLite, error) {
-			return buildOpenClawOperatorStatus(status)
+			return buildOpenClawOperatorStatusWithRows(status, panelRows)
 		}, errStatusFetchTimeout); err == nil {
 			statusResumen = summary
 		}
@@ -2617,17 +2623,21 @@ func buildOpenClawReviewCompact(review map[string]any) map[string]any {
 }
 
 type apiOpenClawAgentLite struct {
-	Nombre             string     `json:"nombre"`
-	Rol                string     `json:"rol,omitempty"`
-	EstadoCuota        string     `json:"estado_cuota,omitempty"`
-	ReanimarAt         *time.Time `json:"reanimar_at,omitempty"`
-	CuentaID           string     `json:"cuenta_id,omitempty"`
-	CuentaEmail        string     `json:"cuenta_email,omitempty"`
-	CuentaUsuario      string     `json:"cuenta_usuario,omitempty"`
-	PresupuestoVentana string     `json:"presupuesto_ventana,omitempty"`
-	CuotaRestantePct   *int       `json:"cuota_restante_pct,omitempty"`
-	CargaActiva        int        `json:"carga_activa,omitempty"`
-	CargaReservada     int        `json:"carga_reservada,omitempty"`
+	Nombre             string                 `json:"nombre"`
+	Rol                string                 `json:"rol,omitempty"`
+	EstadoCuota        string                 `json:"estado_cuota,omitempty"`
+	ReanimarAt         *time.Time             `json:"reanimar_at,omitempty"`
+	CuentaID           string                 `json:"cuenta_id,omitempty"`
+	CuentaEmail        string                 `json:"cuenta_email,omitempty"`
+	CuentaUsuario      string                 `json:"cuenta_usuario,omitempty"`
+	PresupuestoVentana string                 `json:"presupuesto_ventana,omitempty"`
+	CuotaRestantePct   *int                   `json:"cuota_restante_pct,omitempty"`
+	CargaActiva        int                    `json:"carga_activa,omitempty"`
+	CargaReservada     int                    `json:"carga_reservada,omitempty"`
+	OperationalState   string                 `json:"operational_state,omitempty"`
+	OperationalDetail  string                 `json:"operational_detail,omitempty"`
+	CurrentTask        *agentesapp.TaskFocus  `json:"current_task,omitempty"`
+	DominantOrder      *agentesapp.OrderFocus `json:"dominant_order,omitempty"`
 }
 
 type apiOpenClawStatusLite struct {
@@ -2686,6 +2696,10 @@ type apiOpenClawCapacitySummary struct {
 }
 
 func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, error) {
+	return buildOpenClawOperatorStatusWithRows(status, nil)
+}
+
+func buildOpenClawOperatorStatusWithRows(status *estadoResumen, rows []agentesapp.Row) (apiOpenClawStatusLite, error) {
 	if status == nil {
 		return apiOpenClawStatusLite{}, nil
 	}
@@ -2697,18 +2711,18 @@ func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, 
 		Generado:            status.Generado,
 		TareasPorEstado:     status.TareasPorEstado,
 		DeudaDispatch:       status.DeudaDispatch,
-		AgentesActivos:      compactOpenClawAgents(status.AgentesActivos, status.TareasActivas),
-		AgentesTrabajando:   compactOpenClawAgents(status.AgentesTrabajando, status.TareasActivas),
-		AgentesAuthManual:   compactOpenClawAgents(status.AgentesAuthManual, status.TareasActivas),
-		AgentesQuotaBlocked: compactOpenClawAgents(status.AgentesQuotaBlocked, status.TareasActivas),
-		EnCuota:             compactOpenClawAgents(agentesBloqueadosPorCuotaVisibles(status), status.TareasActivas),
+		AgentesActivos:      compactOpenClawAgents(status.AgentesActivos, status.TareasActivas, rows),
+		AgentesTrabajando:   compactOpenClawAgents(status.AgentesTrabajando, status.TareasActivas, rows),
+		AgentesAuthManual:   compactOpenClawAgents(status.AgentesAuthManual, status.TareasActivas, rows),
+		AgentesQuotaBlocked: compactOpenClawAgents(status.AgentesQuotaBlocked, status.TareasActivas, rows),
+		EnCuota:             compactOpenClawAgents(agentesBloqueadosPorCuotaVisibles(status), status.TareasActivas, rows),
 		MailboxPendiente:    mailboxPendiente,
 		RetenidasPorCuota:   tareasRetenidasPorCuota(status.TareasActivas, status.Agentes, status.AgentesQuotaBlocked),
 		TareasActivas:       filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso),
 		TareasReservadas:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
 		PropuestasAbiertas:  status.PropuestasAbiertas,
 		CapacitySummary:     buildOpenClawCapacitySummary(status.AgentesActivos, status.AgentesTrabajando, status.TareasActivas, status.TareasPorEstado),
-		AgentesSaturados:    buildOpenClawSaturatedAgents(status.AgentesActivos, status.TareasActivas),
+		AgentesSaturados:    buildOpenClawSaturatedAgents(status.AgentesActivos, status.TareasActivas, rows),
 	}, nil
 }
 
@@ -2998,7 +3012,7 @@ func buildOpenClawCapacitySummary(agentesActivos, agentesTrabajando []*db.Agente
 	workersActivos := visibleNonSupervisorAgents(agentesActivos)
 	workersTrabajando := visibleNonSupervisorAgents(agentesTrabajando)
 	idle := idleSupervisorWorkers(workersActivos, workersTrabajando)
-	saturated := buildOpenClawSaturatedAgents(workersActivos, tareas)
+	saturated := buildOpenClawSaturatedAgents(workersActivos, tareas, nil)
 	connected := len(workersActivos)
 	idleCount := len(idle)
 	saturatedCount := len(saturated)
@@ -3020,8 +3034,8 @@ func buildOpenClawCapacitySummary(agentesActivos, agentesTrabajando []*db.Agente
 	}
 }
 
-func buildOpenClawSaturatedAgents(items []*db.Agente, tareas []tareaLite) []apiOpenClawAgentLite {
-	agents := compactOpenClawAgents(items, tareas)
+func buildOpenClawSaturatedAgents(items []*db.Agente, tareas []tareaLite, rows []agentesapp.Row) []apiOpenClawAgentLite {
+	agents := compactOpenClawAgents(items, tareas, rows)
 	out := make([]apiOpenClawAgentLite, 0, len(agents))
 	for _, agent := range agents {
 		if agent.CargaReservada > 0 || agent.CargaActiva >= 3 {
@@ -3147,14 +3161,26 @@ func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite
 	return out, nil
 }
 
-func compactOpenClawAgents(items []*db.Agente, tareas []tareaLite) []apiOpenClawAgentLite {
+func compactOpenClawAgents(items []*db.Agente, tareas []tareaLite, rows []agentesapp.Row) []apiOpenClawAgentLite {
 	cargaActiva, cargaReservada := buildOpenClawAgentLoad(tareas)
+	rowByAgent := map[string]agentesapp.Row{}
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		name := strings.ToLower(strings.TrimSpace(row.Agente.Nombre))
+		if name == "" {
+			continue
+		}
+		rowByAgent[name] = row
+	}
 	out := make([]apiOpenClawAgentLite, 0, len(items))
 	for _, item := range items {
 		if item == nil {
 			continue
 		}
 		nombre := strings.TrimSpace(item.Nombre)
+		row := rowByAgent[strings.ToLower(nombre)]
 		out = append(out, apiOpenClawAgentLite{
 			Nombre:             item.Nombre,
 			Rol:                item.Rol,
@@ -3167,9 +3193,29 @@ func compactOpenClawAgents(items []*db.Agente, tareas []tareaLite) []apiOpenClaw
 			CuotaRestantePct:   item.CuotaRestantePct,
 			CargaActiva:        cargaActiva[nombre],
 			CargaReservada:     cargaReservada[nombre],
+			OperationalState:   strings.TrimSpace(row.EstadoOperativo),
+			OperationalDetail:  strings.TrimSpace(row.DetalleOperativo),
+			CurrentTask:        cloneOpenClawTaskFocus(row.CurrentTask),
+			DominantOrder:      cloneOpenClawOrderFocus(row.DominantOrder),
 		})
 	}
 	return out
+}
+
+func cloneOpenClawTaskFocus(item *agentesapp.TaskFocus) *agentesapp.TaskFocus {
+	if item == nil {
+		return nil
+	}
+	clone := *item
+	return &clone
+}
+
+func cloneOpenClawOrderFocus(item *agentesapp.OrderFocus) *agentesapp.OrderFocus {
+	if item == nil {
+		return nil
+	}
+	clone := *item
+	return &clone
 }
 
 func buildOpenClawAgentLoad(tareas []tareaLite) (map[string]int, map[string]int) {

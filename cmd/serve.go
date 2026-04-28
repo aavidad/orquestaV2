@@ -812,7 +812,8 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	operatorStatus, err := buildOpenClawOperatorStatus(status)
+	panelRows, _ := fetchAgentPanelRowsCached(150 * time.Millisecond)
+	operatorStatus, err := buildOpenClawOperatorStatusWithRows(status, panelRows)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
