@@ -21,6 +21,7 @@ type agentActivitySummary struct {
 	AutonomyEvents        int            `json:"autonomy_events"`
 	LastAutonomyEventAt   *time.Time     `json:"last_autonomy_event_at,omitempty"`
 	LastTestSignalAt      *time.Time     `json:"last_test_signal_at,omitempty"`
+	LastTestSignalText    string         `json:"last_test_signal_text,omitempty"`
 	LastGitSignalAt       *time.Time     `json:"last_git_signal_at,omitempty"`
 	AuditByAction         map[string]int `json:"audit_by_action,omitempty"`
 	TranscriptBySignal    map[string]int `json:"transcript_by_signal,omitempty"`
@@ -39,6 +40,8 @@ type agentActivitySummary struct {
 	DominantOrder         string         `json:"dominant_order,omitempty"`
 	CommitCadence         string         `json:"commit_cadence,omitempty"`
 	CommitCadenceDetail   string         `json:"commit_cadence_detail,omitempty"`
+	TouchedFilesCount     int            `json:"touched_files_count,omitempty"`
+	TouchedFilesPreview   []string       `json:"touched_files_preview,omitempty"`
 	AutonomyHighlights    []string       `json:"autonomy_highlights,omitempty"`
 	IntegrationRisk       string         `json:"integration_risk,omitempty"`
 	IntegrationRiskScore  int            `json:"integration_risk_score,omitempty"`
@@ -211,6 +214,7 @@ func buildAgentActivityReportLocal(agent, project string, since time.Time, audit
 	report.Autonomy, _, _, _ = compactAutonomyEventSummaries(autonomy, 8)
 	report.Summary = summarizeAgentActivity(detail, audit, transcript, autonomy)
 	report.Summary.CommitCadence, report.Summary.CommitCadenceDetail = summarizeAgentCommitCadence(report.Git)
+	report.Summary.TouchedFilesCount, report.Summary.TouchedFilesPreview = summarizeAgentTouchedFiles(report.Git, 5)
 	if projectEntity != nil {
 		projectAutonomy, err := buildProjectAutonomyEventSummaries(projectEntity.ID, since, 50)
 		if err != nil {
@@ -304,7 +308,11 @@ func summarizeAgentActivity(detail *agentesapp.Detail, audit []db.AuditEntry, tr
 			value := item.CreatedAt.UTC()
 			switch signal {
 			case "tests":
+				prev := out.LastTestSignalAt
 				out.LastTestSignalAt = maxTimePtr(out.LastTestSignalAt, &value)
+				if latestSignalTextShouldReplace(prev, &value, out.LastTestSignalText) {
+					out.LastTestSignalText = summarizeAgentTranscriptSignalText(item)
+				}
 			case "git_activity":
 				out.LastGitSignalAt = maxTimePtr(out.LastGitSignalAt, &value)
 			}
@@ -416,6 +424,19 @@ func formatAgentActivityDominantOrder(detail *agentesapp.Detail) string {
 	return strings.Join(parts, " ")
 }
 
+func latestSignalTextShouldReplace(current, candidate *time.Time, currentText string) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if candidate.After(*current) {
+		return true
+	}
+	return candidate.Equal(*current) && strings.TrimSpace(currentText) == ""
+}
+
 func summarizeAgentCommitCadence(stats *agentGitActivityStats) (string, string) {
 	if stats == nil {
 		return "", ""
@@ -437,6 +458,32 @@ func summarizeAgentCommitCadence(stats *agentGitActivityStats) (string, string) 
 		return "sin_checkpoint", fmt.Sprintf("diff pendiente (%d fichero(s), +%d/-%d) sin commits recientes",
 			pendingFiles, stats.PendingAddedLines, stats.PendingDeletedLines)
 	}
+}
+
+func summarizeAgentTouchedFiles(stats *agentGitActivityStats, limit int) (int, []string) {
+	if stats == nil {
+		return 0, nil
+	}
+	files := normalizeGitFileList(stats.TouchedFiles)
+	if len(files) == 0 {
+		return 0, nil
+	}
+	if limit <= 0 || limit > len(files) {
+		limit = len(files)
+	}
+	preview := append([]string(nil), files[:limit]...)
+	return len(files), preview
+}
+
+func summarizeAgentTranscriptSignalText(item *db.RuntimeTranscriptEntry) string {
+	if item == nil {
+		return ""
+	}
+	text := strings.TrimSpace(firstNonEmpty(item.NormalizedText, item.Text))
+	if text == "" {
+		return ""
+	}
+	return compactMCPLine(text, 140)
 }
 
 func classifyAgentActivityTranscriptSignal(item *db.RuntimeTranscriptEntry) string {
@@ -664,6 +711,9 @@ func imprimirAgenteActividad(report *agentActivityReport) error {
 		fmt.Printf("Tests:     señales=%d", tests)
 		if report.Summary.LastTestSignalAt != nil {
 			fmt.Printf(" · ultimo=%s", report.Summary.LastTestSignalAt.Format("2006-01-02 15:04:05"))
+		}
+		if report.Summary.LastTestSignalText != "" {
+			fmt.Printf(" · señal=%s", report.Summary.LastTestSignalText)
 		}
 		fmt.Println()
 	}

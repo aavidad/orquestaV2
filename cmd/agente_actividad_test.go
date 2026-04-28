@@ -362,6 +362,9 @@ func TestAgentActivityReportJSONIncluyeAutonomy(t *testing.T) {
 			IntegrationRisk:       "alto",
 			IntegrationRiskScore:  6,
 			IntegrationHighlights: []string{"review_gates=1", "runtime_orders=1"},
+			LastTestSignalText:    "go test ./cmd",
+			TouchedFilesCount:     2,
+			TouchedFilesPreview:   []string{"cmd/agente_actividad.go", "cmd/mcp.go"},
 		},
 	}
 	raw, err := json.Marshal(report)
@@ -369,7 +372,7 @@ func TestAgentActivityReportJSONIncluyeAutonomy(t *testing.T) {
 		t.Fatalf("marshal report: %v", err)
 	}
 	text := string(raw)
-	if !containsAll(text, `"autonomy"`, `"worker_recovery_requested"`, `"autonomy_events":1`, `"autonomy_highlights":["worker_recovery_requested=1"]`, `"integration_risk":"alto"`, `"integration_risk_score":6`, `"integration_highlights":["review_gates=1","runtime_orders=1"]`, `"artifacts":["runtime_checkpoint:41"]`) {
+	if !containsAll(text, `"autonomy"`, `"worker_recovery_requested"`, `"autonomy_events":1`, `"autonomy_highlights":["worker_recovery_requested=1"]`, `"integration_risk":"alto"`, `"integration_risk_score":6`, `"integration_highlights":["review_gates=1","runtime_orders=1"]`, `"artifacts":["runtime_checkpoint:41"]`, `"last_test_signal_text":"go test ./cmd"`, `"touched_files_count":2`, `"touched_files_preview":["cmd/agente_actividad.go","cmd/mcp.go"]`) {
 		t.Fatalf("json sin autonomy esperado: %s", text)
 	}
 }
@@ -444,8 +447,11 @@ func TestImprimirAgenteActividadMuestraTareasActualesCadenciaYTests(t *testing.T
 			DominantOrder:       "#91 send_instruction [ejecutando] tarea=#40 accion=continuar_trabajo",
 			CommitCadence:       "atrasada",
 			CommitCadenceDetail: "diff pendiente grande (9 fichero(s), +420/-35) sin commits recientes",
+			TouchedFilesCount:   3,
+			TouchedFilesPreview: []string{"cmd/agente_actividad.go", "cmd/mcp.go", "db/runtime_orders_controlplane.go"},
 			TranscriptBySignal:  map[string]int{"tests": 2},
 			LastTestSignalAt:    &lastTest,
+			LastTestSignalText:  "go test ./cmd -run TestFoo",
 		},
 	}
 	out := capturarStdout(t, func() {
@@ -458,7 +464,7 @@ func TestImprimirAgenteActividadMuestraTareasActualesCadenciaYTests(t *testing.T
 		"#40 [en_progreso] runtime mailbox/session_resume modulo=cmd",
 		"Orden:     #91 send_instruction [ejecutando] tarea=#40 accion=continuar_trabajo",
 		"Cadencia:  atrasada · diff pendiente grande (9 fichero(s), +420/-35) sin commits recientes",
-		"Tests:     señales=2 · ultimo=2026-04-28 09:10:00",
+		"Tests:     señales=2 · ultimo=2026-04-28 09:10:00 · señal=go test ./cmd -run TestFoo",
 	) {
 		t.Fatalf("salida cli sin visibilidad ampliada:\n%s", out)
 	}
@@ -491,7 +497,7 @@ func TestSummarizeAgentActivityExponeLeasesYUltimoTest(t *testing.T) {
 		},
 	}
 	summary := summarizeAgentActivity(detail, nil, []*db.RuntimeTranscriptEntry{
-		{NormalizedText: "go test ./cmd", CreatedAt: lastTest},
+		{NormalizedText: "go test ./cmd -run TestFast", CreatedAt: lastTest},
 	}, nil)
 	if len(summary.CurrentTasks) != 1 || summary.CurrentTasks[0] != "#40 [en_progreso] runtime mailbox/session_resume modulo=cmd" {
 		t.Fatalf("current tasks inesperadas: %+v", summary.CurrentTasks)
@@ -501,6 +507,9 @@ func TestSummarizeAgentActivityExponeLeasesYUltimoTest(t *testing.T) {
 	}
 	if summary.LastTestSignalAt == nil || !summary.LastTestSignalAt.Equal(lastTest.UTC()) {
 		t.Fatalf("last test signal inesperado: %+v", summary.LastTestSignalAt)
+	}
+	if summary.LastTestSignalText != "go test ./cmd -run TestFast" {
+		t.Fatalf("last test signal text inesperado: %q", summary.LastTestSignalText)
 	}
 }
 
@@ -516,6 +525,18 @@ func TestSummarizeAgentCommitCadenceDetectaDiffGrandeSinCommits(t *testing.T) {
 	}
 	if !strings.Contains(detail, "diff pendiente grande") {
 		t.Fatalf("detail inesperado: %s", detail)
+	}
+}
+
+func TestSummarizeAgentTouchedFilesExponeConteoYPreview(t *testing.T) {
+	count, preview := summarizeAgentTouchedFiles(&agentGitActivityStats{
+		TouchedFiles: []string{" cmd/agente_actividad.go ", "cmd/mcp.go", "", "cmd/agente_actividad.go", "db/runtime.go"},
+	}, 2)
+	if count != 3 {
+		t.Fatalf("count=%d", count)
+	}
+	if !containsAll(strings.Join(preview, "|"), "cmd/agente_actividad.go", "cmd/mcp.go") || len(preview) != 2 {
+		t.Fatalf("preview inesperado: %+v", preview)
 	}
 }
 
