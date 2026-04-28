@@ -42,6 +42,8 @@ type agentActivitySummary struct {
 	CommitCadenceDetail   string         `json:"commit_cadence_detail,omitempty"`
 	TouchedFilesCount     int            `json:"touched_files_count,omitempty"`
 	TouchedFilesPreview   []string       `json:"touched_files_preview,omitempty"`
+	DeliverySignal        string         `json:"delivery_signal,omitempty"`
+	DeliveryDetail        string         `json:"delivery_detail,omitempty"`
 	AutonomyHighlights    []string       `json:"autonomy_highlights,omitempty"`
 	IntegrationRisk       string         `json:"integration_risk,omitempty"`
 	IntegrationRiskScore  int            `json:"integration_risk_score,omitempty"`
@@ -215,6 +217,7 @@ func buildAgentActivityReportLocal(agent, project string, since time.Time, audit
 	report.Summary = summarizeAgentActivity(detail, audit, transcript, autonomy)
 	report.Summary.CommitCadence, report.Summary.CommitCadenceDetail = summarizeAgentCommitCadence(report.Git)
 	report.Summary.TouchedFilesCount, report.Summary.TouchedFilesPreview = summarizeAgentTouchedFiles(report.Git, 5)
+	report.Summary.DeliverySignal, report.Summary.DeliveryDetail = summarizeAgentDeliverySignal(report.Summary, report.Git)
 	if projectEntity != nil {
 		projectAutonomy, err := buildProjectAutonomyEventSummaries(projectEntity.ID, since, 50)
 		if err != nil {
@@ -475,6 +478,73 @@ func summarizeAgentTouchedFiles(stats *agentGitActivityStats, limit int) (int, [
 	return len(files), preview
 }
 
+func summarizeAgentDeliverySignal(summary agentActivitySummary, stats *agentGitActivityStats) (string, string) {
+	commits := 0
+	pendingFiles := 0
+	if stats != nil {
+		commits = stats.RecentCommitCount
+		pendingFiles = len(stats.PendingFiles)
+	}
+	tests := summary.TranscriptBySignal["tests"]
+	codeChanges := summary.TranscriptBySignal["code_change"]
+	gitSignals := summary.TranscriptBySignal["git_activity"]
+	opState := strings.ToLower(strings.TrimSpace(summary.CurrentOperational))
+	opDetail := strings.ToLower(strings.TrimSpace(summary.CurrentOperationalWhy))
+
+	switch {
+	case summary.OrdersFailed > 0:
+		return "atascado", fmt.Sprintf("%d orden(es) fallidas; revisar runtime/control plane", summary.OrdersFailed)
+	case containsAgentActivityAny(opState, "atascado", "bloqueado", "degradado") ||
+		containsAgentActivityAny(opDetail, "atascado", "bloqueado", "quota", "error", "failed"):
+		return "atascado", strings.TrimSpace(firstNonEmpty(summary.CurrentOperationalWhy, summary.CurrentOperational))
+	case summary.BlockedTasks > 0 && commits == 0 && tests == 0 && codeChanges == 0 && summary.CommitCadence == "atrasada":
+		return "atascado", fmt.Sprintf("%d tarea(s) bloqueada(s) y diff grande sin commits recientes", summary.BlockedTasks)
+	case commits > 0 || tests > 0 || codeChanges > 0:
+		parts := make([]string, 0, 3)
+		if commits > 0 {
+			parts = append(parts, fmt.Sprintf("%d commit(s) recientes", commits))
+		}
+		if gitSignals > 0 {
+			parts = append(parts, fmt.Sprintf("%d señal(es) Git", gitSignals))
+		}
+		if codeChanges > 0 {
+			parts = append(parts, fmt.Sprintf("%d señal(es) de cambio", codeChanges))
+		}
+		if tests > 0 {
+			parts = append(parts, fmt.Sprintf("%d señal(es) de test", tests))
+		}
+		return "entregando_valor", strings.Join(parts, " · ")
+	case pendingFiles > 0 || summary.OrdersOpen > 0 || summary.MailboxPending > 0 || len(summary.CurrentTasks) > 0:
+		parts := make([]string, 0, 3)
+		if summary.CommitCadenceDetail != "" {
+			parts = append(parts, summary.CommitCadenceDetail)
+		}
+		if summary.OrdersOpen > 0 {
+			parts = append(parts, fmt.Sprintf("%d orden(es) abiertas", summary.OrdersOpen))
+		}
+		if summary.MailboxPending > 0 {
+			parts = append(parts, fmt.Sprintf("%d mailbox pendiente(s)", summary.MailboxPending))
+		}
+		return "trabajo_en_curso", strings.Join(parts, " · ")
+	default:
+		return "sin_senal", "sin tareas activas ni señales recientes de entrega"
+	}
+}
+
+func containsAgentActivityAny(text string, needles ...string) bool {
+	text = strings.TrimSpace(strings.ToLower(text))
+	if text == "" {
+		return false
+	}
+	for _, needle := range needles {
+		needle = strings.TrimSpace(strings.ToLower(needle))
+		if needle != "" && strings.Contains(text, needle) {
+			return true
+		}
+	}
+	return false
+}
+
 func summarizeAgentTranscriptSignalText(item *db.RuntimeTranscriptEntry) string {
 	if item == nil {
 		return ""
@@ -649,6 +719,13 @@ func imprimirAgenteActividad(report *agentActivityReport) error {
 	}
 	if strings.TrimSpace(report.Summary.DominantOrder) != "" {
 		fmt.Printf("Orden:     %s\n", strings.TrimSpace(report.Summary.DominantOrder))
+	}
+	if strings.TrimSpace(report.Summary.DeliverySignal) != "" {
+		fmt.Printf("Entrega:   %s", strings.TrimSpace(report.Summary.DeliverySignal))
+		if strings.TrimSpace(report.Summary.DeliveryDetail) != "" {
+			fmt.Printf(" · %s", strings.TrimSpace(report.Summary.DeliveryDetail))
+		}
+		fmt.Println()
 	}
 	if report.Summary.IntegrationRiskScore > 0 {
 		fmt.Printf("Riesgo:    %s · integracion_bloqueada=%d", report.Summary.IntegrationRisk, report.Summary.IntegrationRiskScore)

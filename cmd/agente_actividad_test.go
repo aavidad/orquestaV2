@@ -365,6 +365,8 @@ func TestAgentActivityReportJSONIncluyeAutonomy(t *testing.T) {
 			LastTestSignalText:    "go test ./cmd",
 			TouchedFilesCount:     2,
 			TouchedFilesPreview:   []string{"cmd/agente_actividad.go", "cmd/mcp.go"},
+			DeliverySignal:        "entregando_valor",
+			DeliveryDetail:        "1 commit(s) recientes · 1 señal(es) de test",
 		},
 	}
 	raw, err := json.Marshal(report)
@@ -372,7 +374,7 @@ func TestAgentActivityReportJSONIncluyeAutonomy(t *testing.T) {
 		t.Fatalf("marshal report: %v", err)
 	}
 	text := string(raw)
-	if !containsAll(text, `"autonomy"`, `"worker_recovery_requested"`, `"autonomy_events":1`, `"autonomy_highlights":["worker_recovery_requested=1"]`, `"integration_risk":"alto"`, `"integration_risk_score":6`, `"integration_highlights":["review_gates=1","runtime_orders=1"]`, `"artifacts":["runtime_checkpoint:41"]`, `"last_test_signal_text":"go test ./cmd"`, `"touched_files_count":2`, `"touched_files_preview":["cmd/agente_actividad.go","cmd/mcp.go"]`) {
+	if !containsAll(text, `"autonomy"`, `"worker_recovery_requested"`, `"autonomy_events":1`, `"autonomy_highlights":["worker_recovery_requested=1"]`, `"integration_risk":"alto"`, `"integration_risk_score":6`, `"integration_highlights":["review_gates=1","runtime_orders=1"]`, `"artifacts":["runtime_checkpoint:41"]`, `"last_test_signal_text":"go test ./cmd"`, `"touched_files_count":2`, `"touched_files_preview":["cmd/agente_actividad.go","cmd/mcp.go"]`, `"delivery_signal":"entregando_valor"`, `"delivery_detail":"1 commit(s) recientes · 1 señal(es) de test"`) {
 		t.Fatalf("json sin autonomy esperado: %s", text)
 	}
 }
@@ -445,6 +447,8 @@ func TestImprimirAgenteActividadMuestraTareasActualesCadenciaYTests(t *testing.T
 		Summary: agentActivitySummary{
 			CurrentTasks:        []string{"#40 [en_progreso] runtime mailbox/session_resume modulo=cmd"},
 			DominantOrder:       "#91 send_instruction [ejecutando] tarea=#40 accion=continuar_trabajo",
+			DeliverySignal:      "atascado",
+			DeliveryDetail:      "1 tarea(s) bloqueada(s) y diff grande sin commits recientes",
 			CommitCadence:       "atrasada",
 			CommitCadenceDetail: "diff pendiente grande (9 fichero(s), +420/-35) sin commits recientes",
 			TouchedFilesCount:   3,
@@ -452,6 +456,7 @@ func TestImprimirAgenteActividadMuestraTareasActualesCadenciaYTests(t *testing.T
 			TranscriptBySignal:  map[string]int{"tests": 2},
 			LastTestSignalAt:    &lastTest,
 			LastTestSignalText:  "go test ./cmd -run TestFoo",
+			BlockedTasks:        1,
 		},
 	}
 	out := capturarStdout(t, func() {
@@ -463,6 +468,7 @@ func TestImprimirAgenteActividadMuestraTareasActualesCadenciaYTests(t *testing.T
 		"Actuales:",
 		"#40 [en_progreso] runtime mailbox/session_resume modulo=cmd",
 		"Orden:     #91 send_instruction [ejecutando] tarea=#40 accion=continuar_trabajo",
+		"Entrega:   atascado · 1 tarea(s) bloqueada(s) y diff grande sin commits recientes",
 		"Cadencia:  atrasada · diff pendiente grande (9 fichero(s), +420/-35) sin commits recientes",
 		"Tests:     señales=2 · ultimo=2026-04-28 09:10:00 · señal=go test ./cmd -run TestFoo",
 	) {
@@ -538,6 +544,42 @@ func TestSummarizeAgentTouchedFilesExponeConteoYPreview(t *testing.T) {
 	if !containsAll(strings.Join(preview, "|"), "cmd/agente_actividad.go", "cmd/mcp.go") || len(preview) != 2 {
 		t.Fatalf("preview inesperado: %+v", preview)
 	}
+}
+
+func TestSummarizeAgentDeliverySignalDistingueValorYAtasco(t *testing.T) {
+	t.Run("entregando valor", func(t *testing.T) {
+		signal, detail := summarizeAgentDeliverySignal(agentActivitySummary{
+			TranscriptBySignal: map[string]int{"tests": 1, "code_change": 2},
+			CurrentTasks:       []string{"#40 [en_progreso] runtime mailbox/session_resume modulo=cmd"},
+			CommitCadence:      "activa",
+		}, &agentGitActivityStats{RecentCommitCount: 2})
+		if signal != "entregando_valor" {
+			t.Fatalf("signal=%q", signal)
+		}
+		if !containsAll(detail, "2 commit(s) recientes", "2 señal(es) de cambio", "1 señal(es) de test") {
+			t.Fatalf("detail inesperado: %s", detail)
+		}
+	})
+
+	t.Run("atascado por runtime fallido", func(t *testing.T) {
+		signal, detail := summarizeAgentDeliverySignal(agentActivitySummary{
+			CurrentOperational:    "bloqueado_por_runtime",
+			CurrentOperationalWhy: "runtime timeout",
+			CommitCadence:         "atrasada",
+			BlockedTasks:          1,
+			TranscriptBySignal:    map[string]int{},
+		}, &agentGitActivityStats{
+			PendingFiles:        []string{"cmd/a.go", "cmd/b.go", "cmd/c.go", "cmd/d.go", "cmd/e.go", "cmd/f.go", "cmd/g.go", "cmd/h.go"},
+			PendingAddedLines:   500,
+			PendingDeletedLines: 10,
+		})
+		if signal != "atascado" {
+			t.Fatalf("signal=%q", signal)
+		}
+		if detail != "runtime timeout" {
+			t.Fatalf("detail inesperado: %s", detail)
+		}
+	})
 }
 
 func TestClassifyAgentActivityTranscriptSignalReduceSinClasificar(t *testing.T) {
