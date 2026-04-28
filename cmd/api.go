@@ -2477,19 +2477,8 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		supervisor := resolveOpenClawOperatorSupervisor(r.URL.Query().Get("supervisor"))
-		status, err := runAPITimeboxed(250*time.Millisecond, buildEstadoResumenLigero, errStatusFetchTimeout)
-		if err != nil || status == nil {
-			status = &estadoResumen{
-				Generado:        time.Now().UTC().Format(time.RFC3339),
-				TareasPorEstado: map[string]int{},
-			}
-		}
-		revision := map[string]any{}
-		if snapshot, err := runAPITimeboxed(350*time.Millisecond, func() (map[string]any, error) {
-			return buildSupervisorReviewSnapshot(supervisor)
-		}, errStatusFetchTimeout); err == nil && snapshot != nil {
-			revision = snapshot
-		}
+		status := buildOpenClawBaseStatus()
+		revision := buildOpenClawReviewSnapshotSafe(supervisor)
 		var panelRows []agentesapp.Row
 		if rows, err := runAPITimeboxed(200*time.Millisecond, func() ([]agentesapp.Row, error) {
 			return fetchAgentPanelRowsCached(150 * time.Millisecond)
@@ -2664,6 +2653,26 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 	default:
 		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
+}
+
+func buildOpenClawBaseStatus() *estadoResumen {
+	status, err := runAPITimeboxed(250*time.Millisecond, buildEstadoResumenLigero, errStatusFetchTimeout)
+	if err == nil && status != nil {
+		return status
+	}
+	return &estadoResumen{
+		Generado:        time.Now().UTC().Format(time.RFC3339),
+		TareasPorEstado: map[string]int{},
+	}
+}
+
+func buildOpenClawReviewSnapshotSafe(supervisor string) map[string]any {
+	if snapshot, err := runAPITimeboxed(350*time.Millisecond, func() (map[string]any, error) {
+		return buildSupervisorReviewSnapshot(supervisor)
+	}, errStatusFetchTimeout); err == nil && snapshot != nil {
+		return snapshot
+	}
+	return map[string]any{}
 }
 
 func resolveOpenClawOperatorSupervisor(supervisor string) string {

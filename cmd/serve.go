@@ -816,22 +816,14 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	supervisor := "OpenClaw"
-	status, err := buildEstadoResumenLigero()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	status := buildOpenClawBaseStatus()
 	panelRows, _ := fetchAgentPanelRowsCached(150 * time.Millisecond)
 	operatorStatus, err := buildOpenClawOperatorStatusWithRows(status, panelRows)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	review, err := buildSupervisorReviewSnapshot(supervisor)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	review := buildOpenClawReviewSnapshotSafe(supervisor)
 	reviewGates, _ := review["review_gates"].([]*db.ReviewGate)
 	signals, _ := review["signals"].([]*supervisorReviewSignal)
 	merges, _ := review["merges"].([]*db.GitMerge)

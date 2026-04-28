@@ -318,6 +318,41 @@ func TestWebOpenClawExponeTrabajoRealDelAgente(t *testing.T) {
 	}
 }
 
+func TestWebOpenClawToleraFalloDeStatusYRenderizaModoDegradado(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prevStatus := statusService
+	defer func() {
+		statusService = prevStatus
+		resetStatusSnapshotCache()
+	}()
+	resetStatusSnapshotCache()
+	statusService = stubStatusService{err: errStatusFetchTimeout}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openclaw", webHandlerOpenClaw)
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/openclaw", nil)
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("openclaw degradado status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, token := range []string{
+		"OpenClaw Operator",
+		"Control plane",
+		"no_active_workers",
+		"Sin workers disponibles ahora mismo.",
+	} {
+		if !strings.Contains(body, token) {
+			t.Fatalf("pagina openclaw degradada sin %q:\n%s", token, body)
+		}
+	}
+}
+
 func TestWebOpenClawAccionResuelveReviewGate(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
