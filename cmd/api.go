@@ -2535,6 +2535,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		reviewCompact := buildOpenClawReviewCompact(revision)
 		queueSummary := buildOpenClawQueueSummaryFromReviewSnapshot(revision)
 		sessionCandidates := alignOpenClawSessionCandidatesWithStatus(buildOpenClawSessionCandidates(threads), status.AgentesActivos)
+		operationalInfo := buildOpenClawOperationalInfo()
 		estadoNotifs := notificaciones.EstadoNotificaciones{}
 		if estado, err := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.EstadoNotificaciones, error) {
 			return notificaciones.DescribirConfiguracion(), nil
@@ -2548,37 +2549,39 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			entregas = outbox
 		}
 		apiWriteJSON(w, http.StatusOK, map[string]any{
-			"status":               statusResumen,
-			"agentesActivos":       statusResumen.AgentesActivos,
-			"agentesTrabajando":    statusResumen.AgentesTrabajando,
-			"agentesAuthManual":    statusResumen.AgentesAuthManual,
-			"agentesQuotaBlocked":  statusResumen.AgentesQuotaBlocked,
-			"enCuota":              statusResumen.EnCuota,
-			"mailboxPendiente":     statusResumen.MailboxPendiente,
-			"retenidasPorCuota":    statusResumen.RetenidasPorCuota,
-			"tareasActivas":        statusResumen.TareasActivas,
-			"tareasReservadas":     statusResumen.TareasReservadas,
-			"propuestasAbiertas":   statusResumen.PropuestasAbiertas,
-			"review":               reviewCompact,
-			"next_action":          revision["next_action"],
-			"action_queue":         revision["action_queue"],
-			"next_safe_action":     revision["next_safe_action"],
-			"safe_action_queue":    revision["safe_action_queue"],
-			"queue_summary":        queueSummary,
-			"capacity_summary":     statusResumen.CapacitySummary,
-			"saturated_agents":     statusResumen.AgentesSaturados,
-			"notificaciones":       estadoNotifs,
-			"entregas":             entregas,
-			"eventos_normalizados": eventos,
-			"thread_sessions":      threads,
-			"subagentes":           subagents["subagents"],
-			"subagent_store":       subagents["store"],
-			"subagent_profiles":    subagents["tool_profiles"],
-			"session_candidates":   sessionCandidates,
-			"worktree_drift":       worktreeDrift,
-			"pipeline_state":       pipeline,
-			"pipeline_followup":    pipelineFollowup,
-			"subagentes_followup":  subagentFollowups,
+			"status":                     statusResumen,
+			"server_operational":         operationalInfo,
+			"server_operational_summary": buildOpenClawOperationalSummary(operationalInfo),
+			"agentesActivos":             statusResumen.AgentesActivos,
+			"agentesTrabajando":          statusResumen.AgentesTrabajando,
+			"agentesAuthManual":          statusResumen.AgentesAuthManual,
+			"agentesQuotaBlocked":        statusResumen.AgentesQuotaBlocked,
+			"enCuota":                    statusResumen.EnCuota,
+			"mailboxPendiente":           statusResumen.MailboxPendiente,
+			"retenidasPorCuota":          statusResumen.RetenidasPorCuota,
+			"tareasActivas":              statusResumen.TareasActivas,
+			"tareasReservadas":           statusResumen.TareasReservadas,
+			"propuestasAbiertas":         statusResumen.PropuestasAbiertas,
+			"review":                     reviewCompact,
+			"next_action":                revision["next_action"],
+			"action_queue":               revision["action_queue"],
+			"next_safe_action":           revision["next_safe_action"],
+			"safe_action_queue":          revision["safe_action_queue"],
+			"queue_summary":              queueSummary,
+			"capacity_summary":           statusResumen.CapacitySummary,
+			"saturated_agents":           statusResumen.AgentesSaturados,
+			"notificaciones":             estadoNotifs,
+			"entregas":                   entregas,
+			"eventos_normalizados":       eventos,
+			"thread_sessions":            threads,
+			"subagentes":                 subagents["subagents"],
+			"subagent_store":             subagents["store"],
+			"subagent_profiles":          subagents["tool_profiles"],
+			"session_candidates":         sessionCandidates,
+			"worktree_drift":             worktreeDrift,
+			"pipeline_state":             pipeline,
+			"pipeline_followup":          pipelineFollowup,
+			"subagentes_followup":        subagentFollowups,
 		})
 	case http.MethodPost:
 		var req struct {

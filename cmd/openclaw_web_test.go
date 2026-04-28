@@ -38,8 +38,20 @@ func TestWebTemplateOpenClawMuestraTrabajoYOrdenOperativos(t *testing.T) {
 				},
 			}},
 		},
-		Integration: buildWebOpenClawIntegrationInfo(),
-		Generado:    "2026-04-28 12:00:00",
+		Operational: serverOperationalInfo{
+			State:            "degraded",
+			Operational:      false,
+			Reason:           "workers_stuck",
+			Generated:        "2026-04-28T11:59:30Z",
+			NextQuotaResetAt: "2026-04-28T12:30:00Z",
+			CriticalProjectRisk: &workspaceAutonomyProjectSummary{
+				Project:  "orquestador",
+				Blocking: 7,
+			},
+		},
+		OperationalSummary: "DEGRADED (1 conectados, 1 registrados, 1 atascados, quota_reset 2026-04-28T12:30:00Z)",
+		Integration:        buildWebOpenClawIntegrationInfo(),
+		Generado:           "2026-04-28 12:00:00",
 	})
 	if err != nil {
 		t.Fatalf("render openclaw: %v", err)
@@ -47,6 +59,11 @@ func TestWebTemplateOpenClawMuestraTrabajoYOrdenOperativos(t *testing.T) {
 
 	html := body.String()
 	for _, token := range []string{
+		"Control plane",
+		"degraded",
+		"motivo=workers_stuck",
+		"quota_reset=2026-04-28T12:30:00Z",
+		"riesgo crítico=orquestador (blocking=7)",
 		"Estado real",
 		"Trabajo actual",
 		"Orden dominante",

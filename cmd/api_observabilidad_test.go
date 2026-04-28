@@ -265,6 +265,12 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if _, ok := operatorJSON["queue_summary"]; !ok {
 		t.Fatalf("openclaw operator sin queue_summary: %s", recOperator.Body.String())
 	}
+	if _, ok := operatorJSON["server_operational"]; !ok {
+		t.Fatalf("openclaw operator sin server_operational: %s", recOperator.Body.String())
+	}
+	if summary, ok := operatorJSON["server_operational_summary"].(string); !ok || strings.TrimSpace(summary) == "" {
+		t.Fatalf("openclaw operator sin server_operational_summary: %s", recOperator.Body.String())
+	}
 	if queueSummary, ok := operatorJSON["queue_summary"].(map[string]any); !ok || queueSummary["safe_by_kind"] == nil {
 		t.Fatalf("openclaw operator sin safe_by_kind en queue_summary: %s", recOperator.Body.String())
 	}
@@ -296,6 +302,16 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	statusMap, ok := operatorJSON["status"].(map[string]any)
 	if !ok {
 		t.Fatalf("openclaw operator sin status estructurado: %s", recOperator.Body.String())
+	}
+	operationalMap, ok := operatorJSON["server_operational"].(map[string]any)
+	if !ok {
+		t.Fatalf("openclaw operator sin server_operational estructurado: %s", recOperator.Body.String())
+	}
+	if _, ok := operationalMap["state"].(string); !ok {
+		t.Fatalf("openclaw operator sin state en server_operational: %#v", operationalMap)
+	}
+	if _, ok := operationalMap["operational"].(bool); !ok {
+		t.Fatalf("openclaw operator sin operational bool en server_operational: %#v", operationalMap)
 	}
 	activos, ok := statusMap["agentesActivos"].([]any)
 	if !ok {
@@ -608,6 +624,19 @@ func TestAPIOpenClawOperatorExponeStatusLiteEnRaiz(t *testing.T) {
 	}
 	if propuestas, ok := payload["propuestasAbiertas"].([]any); !ok || len(propuestas) != 1 {
 		t.Fatalf("propuestasAbiertas raiz inesperadas: %#v", payload["propuestasAbiertas"])
+	}
+	operational, ok := payload["server_operational"].(map[string]any)
+	if !ok {
+		t.Fatalf("server_operational raiz ausente: %#v", payload["server_operational"])
+	}
+	if _, ok := operational["state"].(string); !ok {
+		t.Fatalf("server_operational sin state: %#v", operational)
+	}
+	if _, ok := operational["operational"].(bool); !ok {
+		t.Fatalf("server_operational sin operational bool: %#v", operational)
+	}
+	if summary, ok := payload["server_operational_summary"].(string); !ok || strings.TrimSpace(summary) == "" {
+		t.Fatalf("server_operational_summary inesperado: %#v", payload["server_operational_summary"])
 	}
 }
 

@@ -79,7 +79,11 @@ func ListarWorktrees(estado, agente string) ([]*Worktree, error) {
 		}
 		list = append(list, item)
 	}
-	return list, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	normalizarWorktreesRutas(list)
+	return list, nil
 }
 
 func ListarLocks(estado, agente string) ([]*Lock, error) {
@@ -127,8 +131,16 @@ func scanWorktree(s scanner) (*Worktree, error) {
 	if cerradaAt.Valid {
 		item.CerradaAt = &cerradaAt.Time
 	}
-	item.RutaAbs = rutaWorktreeCanonicaProyecto(item.ProyectoID, item.RutaAbs)
 	return &item, nil
+}
+
+func normalizarWorktreesRutas(items []*Worktree) {
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		item.RutaAbs = rutaWorktreeCanonicaProyecto(item.ProyectoID, item.RutaAbs)
+	}
 }
 
 func scanLock(s scanner) (*Lock, error) {

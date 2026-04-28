@@ -53,34 +53,36 @@ type webDashData struct {
 }
 
 type webOpenClawData struct {
-	Status            apiOpenClawStatusLite
-	EnCuota           []*db.Agente
-	MailboxPendiente  []apiOpenClawMailboxLite
-	WorktreeDrift     []apiOpenClawWorktreeDrift
-	Retenidas         []tareaLite
-	TareasReservadas  []tareaLite
-	ReviewGates       []*db.ReviewGate
-	Signals           []*supervisorReviewSignal
-	Merges            []*db.GitMerge
-	NormalizedEvents  []openClawNormalizedEvent
-	ThreadSessions    []*db.SupervisorThreadSessionSummary
-	ObservedSessions  []*supervisorObservedAgentSessionSummary
-	SessionCandidates []apiOpenClawSessionCandidate
-	Subagents         []*db.SupervisorSubagent
-	SubagentStore     supervisorSubagentStoreSummary
-	SubagentProfiles  []db.SupervisorSubagentToolProfile
-	PipelineStates    []*db.SupervisorPipelineState
-	Recommended       []supervisorRecommendedAction
-	SafeRecommended   []supervisorRecommendedAction
-	QueueSummary      apiOpenClawQueueSummary
-	NextAction        *supervisorRecommendedAction
-	NextSafeAction    *supervisorRecommendedAction
-	Notificaciones    notificaciones.EstadoNotificaciones
-	NotifOutbox       notificaciones.OutboxSummary
-	Integration       webOpenClawIntegrationInfo
-	Generado          string
-	Msg               string
-	Err               string
+	Status             apiOpenClawStatusLite
+	Operational        serverOperationalInfo
+	OperationalSummary string
+	EnCuota            []*db.Agente
+	MailboxPendiente   []apiOpenClawMailboxLite
+	WorktreeDrift      []apiOpenClawWorktreeDrift
+	Retenidas          []tareaLite
+	TareasReservadas   []tareaLite
+	ReviewGates        []*db.ReviewGate
+	Signals            []*supervisorReviewSignal
+	Merges             []*db.GitMerge
+	NormalizedEvents   []openClawNormalizedEvent
+	ThreadSessions     []*db.SupervisorThreadSessionSummary
+	ObservedSessions   []*supervisorObservedAgentSessionSummary
+	SessionCandidates  []apiOpenClawSessionCandidate
+	Subagents          []*db.SupervisorSubagent
+	SubagentStore      supervisorSubagentStoreSummary
+	SubagentProfiles   []db.SupervisorSubagentToolProfile
+	PipelineStates     []*db.SupervisorPipelineState
+	Recommended        []supervisorRecommendedAction
+	SafeRecommended    []supervisorRecommendedAction
+	QueueSummary       apiOpenClawQueueSummary
+	NextAction         *supervisorRecommendedAction
+	NextSafeAction     *supervisorRecommendedAction
+	Notificaciones     notificaciones.EstadoNotificaciones
+	NotifOutbox        notificaciones.OutboxSummary
+	Integration        webOpenClawIntegrationInfo
+	Generado           string
+	Msg                string
+	Err                string
 }
 
 type webOpenClawIntegrationInfo struct {
@@ -889,35 +891,38 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 	}, errStatusFetchTimeout); err == nil {
 		openClawOutbox = outbox
 	}
+	operationalInfo := buildOpenClawOperationalInfo()
 	webRender(w, r, webTplLayout+webTplOpenClaw, webOpenClawData{
-		Status:            operatorStatus,
-		EnCuota:           agentesNoActivosConCuota(status.Agentes),
-		MailboxPendiente:  mustOpenClawPendingMailbox(status.Agentes),
-		WorktreeDrift:     worktreeDrift,
-		Retenidas:         tareasRetenidasPorCuota(status.TareasActivas, status.Agentes, status.AgentesQuotaBlocked),
-		TareasReservadas:  filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
-		ReviewGates:       reviewGates,
-		Signals:           signals,
-		Merges:            merges,
-		NormalizedEvents:  normalizedEvents,
-		ThreadSessions:    threadSessions,
-		ObservedSessions:  observedSessions,
-		SessionCandidates: sessionCandidates,
-		Subagents:         subagents,
-		SubagentStore:     subagentStore,
-		SubagentProfiles:  subagentProfiles,
-		PipelineStates:    pipelineStates,
-		Recommended:       recommended,
-		SafeRecommended:   safeRecommended,
-		QueueSummary:      buildOpenClawQueueSummaryFromReviewSnapshot(review),
-		NextAction:        nextAction,
-		NextSafeAction:    nextSafeAction,
-		Notificaciones:    openClawNotifs,
-		NotifOutbox:       openClawOutbox,
-		Integration:       buildWebOpenClawIntegrationInfo(),
-		Generado:          time.Now().Format("2006-01-02 15:04:05"),
-		Msg:               r.URL.Query().Get("ok"),
-		Err:               r.URL.Query().Get("err"),
+		Status:             operatorStatus,
+		Operational:        operationalInfo,
+		OperationalSummary: buildOpenClawOperationalSummary(operationalInfo),
+		EnCuota:            agentesNoActivosConCuota(status.Agentes),
+		MailboxPendiente:   mustOpenClawPendingMailbox(status.Agentes),
+		WorktreeDrift:      worktreeDrift,
+		Retenidas:          tareasRetenidasPorCuota(status.TareasActivas, status.Agentes, status.AgentesQuotaBlocked),
+		TareasReservadas:   filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
+		ReviewGates:        reviewGates,
+		Signals:            signals,
+		Merges:             merges,
+		NormalizedEvents:   normalizedEvents,
+		ThreadSessions:     threadSessions,
+		ObservedSessions:   observedSessions,
+		SessionCandidates:  sessionCandidates,
+		Subagents:          subagents,
+		SubagentStore:      subagentStore,
+		SubagentProfiles:   subagentProfiles,
+		PipelineStates:     pipelineStates,
+		Recommended:        recommended,
+		SafeRecommended:    safeRecommended,
+		QueueSummary:       buildOpenClawQueueSummaryFromReviewSnapshot(review),
+		NextAction:         nextAction,
+		NextSafeAction:     nextSafeAction,
+		Notificaciones:     openClawNotifs,
+		NotifOutbox:        openClawOutbox,
+		Integration:        buildWebOpenClawIntegrationInfo(),
+		Generado:           time.Now().Format("2006-01-02 15:04:05"),
+		Msg:                r.URL.Query().Get("ok"),
+		Err:                r.URL.Query().Get("err"),
 	})
 }
 
@@ -2214,9 +2219,27 @@ const webTplOpenClaw = `{{define "content"}}
   <div class="stat"><div class="n">{{len .Recommended}}</div><div class="l">cola completa</div></div>
   <div class="stat"><div class="n">{{len .SafeRecommended}}</div><div class="l">cola segura</div></div>
   <div class="stat"><div class="n">{{sub (len .Recommended) (len .SafeRecommended)}}</div><div class="l">requieren arbitraje</div></div>
-  <div class="stat"><div class="n">{{len .ReviewGates}}</div><div class="l">review gates</div></div>
-  <div class="stat"><div class="n">{{len .Merges}}</div><div class="l">merges vivos</div></div>
+	<div class="stat"><div class="n">{{len .ReviewGates}}</div><div class="l">review gates</div></div>
+	<div class="stat"><div class="n">{{len .Merges}}</div><div class="l">merges vivos</div></div>
 </div>
+
+<section style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:.8rem;padding:1rem 1.1rem;margin-bottom:1.2rem">
+  <div style="display:flex;justify-content:space-between;gap:.8rem;align-items:flex-start;flex-wrap:wrap">
+    <div>
+      <div style="font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:#1d4ed8;margin-bottom:.35rem">Control plane</div>
+      <div style="font-size:1.05rem;font-weight:700;color:#0f172a">{{.Operational.State}}</div>
+      <div style="margin-top:.25rem;color:#334155">{{.OperationalSummary}}</div>
+    </div>
+    <div style="font-size:.8rem;color:#475569;text-align:right">
+      {{if .Operational.Reason}}<div>motivo={{.Operational.Reason}}</div>{{end}}
+      {{if .Operational.NextQuotaResetAt}}<div>quota_reset={{.Operational.NextQuotaResetAt}}</div>{{end}}
+      {{if .Operational.Generated}}<div>status={{.Operational.Generated}}</div>{{end}}
+    </div>
+  </div>
+  {{if .Operational.CriticalProjectRisk}}
+  <div style="margin-top:.65rem;font-size:.82rem;color:#1e293b">riesgo crítico={{.Operational.CriticalProjectRisk.Project}} (blocking={{.Operational.CriticalProjectRisk.Blocking}})</div>
+  {{end}}
+</section>
 
 {{if and .NextAction (or (not .NextSafeAction) (ne .NextAction.Action .NextSafeAction.Action) (ne .NextAction.Target .NextSafeAction.Target) (ne .NextAction.Assignee .NextSafeAction.Assignee))}}
 <section style="background:linear-gradient(135deg,#0f172a,#1e293b);color:#fff;border-radius:.8rem;padding:1rem 1.2rem;margin-bottom:1.2rem">
