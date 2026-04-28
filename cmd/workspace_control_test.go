@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -276,6 +278,67 @@ func TestBuildWorkspaceControlReportCuentaProjectControlsFallidos(t *testing.T) 
 	}
 	if len(report.ProjectControls) != 1 || report.ProjectControls[0].Project == nil || report.ProjectControls[0].Project.Slug != "orquestador" {
 		t.Fatalf("project controls cargados inesperados: %+v", report.ProjectControls)
+	}
+}
+
+func TestBuildWorkspaceControlReportExponeCriticalProjectRiskEstructurado(t *testing.T) {
+	prevStatus := statusService
+	prevProjects := workspaceControlListProjects
+	prevCockpit := workspaceControlCockpitBuilder
+	prevProjectControl := workspaceControlProjectBuilder
+	defer func() {
+		statusService = prevStatus
+		workspaceControlListProjects = prevProjects
+		workspaceControlCockpitBuilder = prevCockpit
+		workspaceControlProjectBuilder = prevProjectControl
+	}()
+
+	statusService = stubStatusService{response: apiStatusResponse{}}
+	workspaceControlListProjects = func() ([]map[string]any, error) {
+		return []map[string]any{
+			{"slug": "infra"},
+			{"slug": "orquestador"},
+		}, nil
+	}
+	workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+		switch slug {
+		case "infra":
+			return &apiProyectoCockpit{
+				Proyecto:                &db.Proyecto{Slug: "infra", Nombre: "Infra"},
+				TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+				ReviewGatesAbiertas:     1,
+				RuntimeOrdersAbiertas:   1,
+				RuntimeMailboxPendiente: 1,
+			}, nil
+		default:
+			return &apiProyectoCockpit{
+				Proyecto: &db.Proyecto{Slug: slug, Nombre: slug},
+			}, nil
+		}
+	}
+	workspaceControlProjectBuilder = nil
+
+	report, err := buildWorkspaceControlReport()
+	if err != nil {
+		t.Fatalf("buildWorkspaceControlReport: %v", err)
+	}
+	if report.CriticalProjectRisk == nil {
+		t.Fatalf("falta critical project risk estructurado: %+v", report)
+	}
+	if report.CriticalProjectRisk.Project != "infra" || report.CriticalProjectRisk.Blocking != 14 {
+		t.Fatalf("critical project risk inesperado: %+v", report.CriticalProjectRisk)
+	}
+	for _, token := range []string{"riesgo=critico", "integracion_bloqueada=14", "review_gates=1", "runtime_orders=1", "mailbox_rt=1"} {
+		if !containsStringWorkspace(report.CriticalProjectRisk.Highlights, token) {
+			t.Fatalf("falta %q en critical project risk: %+v", token, report.CriticalProjectRisk)
+		}
+	}
+	raw, err := json.Marshal(apiWorkspaceControlResponse{Control: report})
+	if err != nil {
+		t.Fatalf("marshal workspace control: %v", err)
+	}
+	if !strings.Contains(string(raw), `"critical_project_risk":{"project":"infra"`) {
+		t.Fatalf("json sin critical_project_risk estructurado: %s", raw)
 	}
 }
 

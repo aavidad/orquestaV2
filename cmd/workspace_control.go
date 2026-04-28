@@ -26,6 +26,7 @@ type workspaceControlReport struct {
 	AutonomySurface       *autonomySurface                  `json:"autonomy_surface,omitempty"`
 	AutonomyHighlights    []string                          `json:"autonomy_highlights,omitempty"`
 	AutonomyRecent        []autonomySurfaceRecentItem       `json:"autonomy_recent,omitempty"`
+	CriticalProjectRisk   *workspaceAutonomyProjectSummary  `json:"critical_project_risk,omitempty"`
 	AutonomyProjects      []workspaceAutonomyProjectSummary `json:"autonomy_projects,omitempty"`
 	Agents                []workspaceControlAgentRow        `json:"agents,omitempty"`
 	Timeline              []workspaceControlTimelineItem    `json:"timeline,omitempty"`
@@ -205,6 +206,8 @@ func buildWorkspaceControlReportSince(since time.Time) (*workspaceControlReport,
 		report.AutonomyHighlights = appendWorkspaceHighlight(report.AutonomyHighlights, fmt.Sprintf("frentes_bloqueantes=%d", blocking))
 	}
 	if hasTopRisk {
+		topRiskCopy := topRisk
+		report.CriticalProjectRisk = &topRiskCopy
 		report.AutonomyHighlights = appendWorkspaceHighlight(report.AutonomyHighlights, fmt.Sprintf("integracion_bloqueada=%d", topRisk.Blocking))
 		report.AutonomyHighlights = appendWorkspaceHighlight(report.AutonomyHighlights, fmt.Sprintf("riesgo_top=%s(%d)", topRisk.Project, topRisk.Blocking))
 	}
