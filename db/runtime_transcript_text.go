@@ -181,6 +181,9 @@ func esRuidoProgresoUITranscript(texto, normalized string) bool {
 	if texto == "" || normalized == "" {
 		return false
 	}
+	if transcriptNormalizedPareceGeminiUI(normalized) {
+		return true
+	}
 	markers := []string{
 		"esc to interrupt",
 		"use /skills to list available skills",
@@ -361,6 +364,9 @@ func clasificarTextoTranscript(normalized string) string {
 	if normalized == "" {
 		return ""
 	}
+	if transcriptNormalizedPareceCredencialesCodex(normalized) {
+		return "credentials_request"
+	}
 	if transcriptNormalizedPareceRuidoUI(normalized) {
 		return "ui_noise"
 	}
@@ -492,20 +498,8 @@ func clasificarTextoTranscript(normalized string) string {
 			return "needs_replan"
 		}
 	}
-	bootstrapGuidancePhrases := []string{
-		"retoma el trabajo actual desde orquesta",
-		"write-set preferente",
-		"salida minima",
-		"salida minima:",
-		"si la accion es destructiva",
-		"si la acción es destructiva",
-		"usa caveman",
-		"guidance durable escrita en inbox",
-	}
-	for _, phrase := range bootstrapGuidancePhrases {
-		if strings.Contains(normalized, phrase) {
-			return "bootstrap_guidance"
-		}
+	if transcriptNormalizedPareceBootstrapGuidance(normalized) {
+		return "bootstrap_guidance"
 	}
 	if pareceErrorServidorLocal(normalized) {
 		return "server_url_error"
@@ -544,6 +538,9 @@ func clasificarTextoTranscript(normalized string) string {
 		if strings.Contains(normalized, phrase) {
 			return "tool_exploration"
 		}
+	}
+	if transcriptNormalizedPareceExploracionShell(normalized) {
+		return "tool_exploration"
 	}
 	if transcriptNormalizedPareceExploracionGrep(normalized) {
 		return "tool_exploration"
@@ -647,8 +644,14 @@ func transcriptNormalizedPareceRuidoUI(normalized string) bool {
 	if transcriptNormalizedParecePromptShell(normalized) {
 		return true
 	}
+	if transcriptNormalizedPareceGeminiUI(normalized) {
+		return true
+	}
 	markers := []string{
 		"esc to interrupt",
+		"press enter to send",
+		"how can i help",
+		"welcome to codex",
 		"use /skills to list available skills",
 		"use /skill",
 		"waiting for background terminal",
@@ -666,6 +669,91 @@ func transcriptNormalizedPareceRuidoUI(normalized string) bool {
 		}
 	}
 	if !strings.Contains(normalized, " ") && strings.ContainsAny(normalized, "◦•") {
+		return true
+	}
+	return false
+}
+
+func transcriptNormalizedPareceCredencialesCodex(normalized string) bool {
+	if normalized == "" {
+		return false
+	}
+	if !strings.Contains(normalized, "mcp startup incomplete") {
+		return false
+	}
+	markers := []string{
+		"provided authentication token is expired",
+		"token_expired",
+		"status 401",
+	}
+	for _, marker := range markers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func transcriptNormalizedPareceBootstrapGuidance(normalized string) bool {
+	if normalized == "" {
+		return false
+	}
+	phrases := []string{
+		"retoma el trabajo actual desde orquesta",
+		"write-set preferente",
+		"salida minima",
+		"salida minima:",
+		"si la accion es destructiva",
+		"si la acción es destructiva",
+		"usa caveman",
+		"activa $caveman",
+		"consulta solo el fragmento minimo",
+		"consulta solo el fragmento mínimo",
+		"empieza por la tarea asignada",
+		"guidance durable escrita en inbox",
+	}
+	for _, phrase := range phrases {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	if strings.Contains(normalized, "caveman") &&
+		(strings.Contains(normalized, "activa") || strings.Contains(normalized, "usa")) {
+		return true
+	}
+	if (strings.Contains(normalized, "fragmento minimo") || strings.Contains(normalized, "fragmento mínimo")) &&
+		strings.Contains(normalized, "consulta") {
+		return true
+	}
+	if strings.Contains(normalized, "tarea asignada") && strings.Contains(normalized, "empieza") {
+		return true
+	}
+	return false
+}
+
+func transcriptNormalizedPareceGeminiUI(normalized string) bool {
+	if normalized == "" {
+		return false
+	}
+	markers := []string{
+		"workspace (/directory)",
+		"branch sandbox",
+		"type your message or @path/to/file",
+		"yolo ctrl+y",
+		"? for shortcuts",
+	}
+	for _, marker := range markers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	if strings.HasPrefix(normalized, "gemini cli") {
+		return true
+	}
+	if strings.Contains(normalized, "thinking") &&
+		(strings.Contains(normalized, "esc to cancel") ||
+			strings.Contains(normalized, "esc to interrupt") ||
+			strings.Contains(normalized, "? for shortcuts")) {
 		return true
 	}
 	return false
@@ -869,6 +957,29 @@ func transcriptNormalizedPareceExploracionGrep(normalized string) bool {
 		return true
 	}
 	if strings.Contains(normalized, "session_resume in") || strings.Contains(normalized, "runtime.*") {
+		return true
+	}
+	return false
+}
+
+func transcriptNormalizedPareceExploracionShell(normalized string) bool {
+	if normalized == "" {
+		return false
+	}
+	prefixes := []string{
+		"sed -n ",
+		"head -n ",
+		"tail -n ",
+		"git show ",
+		"git log ",
+	}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(normalized, prefix) {
+			return true
+		}
+	}
+	if strings.HasPrefix(normalized, "cat ") &&
+		(strings.Contains(normalized, "/") || strings.Contains(normalized, ".go") || strings.Contains(normalized, ".md")) {
 		return true
 	}
 	return false

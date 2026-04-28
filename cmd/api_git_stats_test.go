@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
@@ -46,6 +47,49 @@ func TestGitOperationalStatsServiceExponeMetricasCanonicas(t *testing.T) {
 	}
 	if stats.Insertions != 18 || stats.Deletions != 7 || stats.LinesNet != 11 {
 		t.Fatalf("totales canonicos inesperados: %+v", stats)
+	}
+}
+
+func TestBuildGitChangeTotalsNormalizaFicherosYTotales(t *testing.T) {
+	got := buildGitChangeTotals(
+		[]string{" cmd/api.go ", "", "cmd/api.go", "db/repo.go"},
+		3,
+		1,
+		4,
+		2,
+	)
+	if got.FilesChanged != 2 {
+		t.Fatalf("files_changed inesperado: %+v", got)
+	}
+	if got.Insertions != 7 || got.Deletions != 3 || got.LinesNet != 4 {
+		t.Fatalf("totales canonicos inesperados: %+v", got)
+	}
+}
+
+func TestNewGitOperationalStatsNormalizaListasDeFicheros(t *testing.T) {
+	got := newGitOperationalStats(&gitestadisticasapp.Stats{
+		PendingFiles:          []string{" cmd/z.go ", "", "cmd/a.go", "cmd/a.go"},
+		RecentCommitFiles:     []string{"db/repo.go", " db/repo.go "},
+		TouchedFiles:          []string{" cmd/z.go ", "db/repo.go", "", "cmd/z.go"},
+		PendingAddedLines:     2,
+		PendingDeletedLines:   1,
+		CommittedAddedLines:   3,
+		CommittedDeletedLines: 1,
+	})
+	if got == nil {
+		t.Fatalf("stats nil")
+	}
+	if !reflect.DeepEqual(got.PendingFiles, []string{"cmd/a.go", "cmd/z.go"}) {
+		t.Fatalf("pending files inesperados: %+v", got.PendingFiles)
+	}
+	if !reflect.DeepEqual(got.RecentCommitFiles, []string{"db/repo.go"}) {
+		t.Fatalf("recent_commit_files inesperados: %+v", got.RecentCommitFiles)
+	}
+	if !reflect.DeepEqual(got.TouchedFiles, []string{"cmd/z.go", "db/repo.go"}) {
+		t.Fatalf("touched_files inesperados: %+v", got.TouchedFiles)
+	}
+	if got.FilesChanged != 2 || got.Insertions != 5 || got.Deletions != 2 || got.LinesNet != 3 {
+		t.Fatalf("totales inesperados: %+v", got)
 	}
 }
 

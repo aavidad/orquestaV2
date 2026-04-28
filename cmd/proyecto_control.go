@@ -63,10 +63,14 @@ type projectControlAgentRow struct {
 
 type projectControlGitAggregate struct {
 	TouchedFiles          []string `json:"touched_files,omitempty"`
+	FilesChanged          int      `json:"files_changed"`
 	PendingAddedLines     int      `json:"pending_added_lines"`
 	PendingDeletedLines   int      `json:"pending_deleted_lines"`
 	CommittedAddedLines   int      `json:"committed_added_lines"`
 	CommittedDeletedLines int      `json:"committed_deleted_lines"`
+	Insertions            int      `json:"insertions"`
+	Deletions             int      `json:"deletions"`
+	LinesNet              int      `json:"lines_net"`
 }
 
 var proyectoControlCmd = &cobra.Command{
@@ -201,6 +205,7 @@ func buildProjectControlReport(ref string, since time.Time) (*projectControlRepo
 		}
 	}
 	report.Git.TouchedFiles = mapKeysSorted(fileSet)
+	report.Git = canonicalProjectControlGitAggregate(report.Git)
 	report.Progress = buildProjectControlProgress(report)
 	return report, nil
 }
@@ -298,6 +303,7 @@ func imprimirProyectoControl(report *projectControlReport) error {
 	if report == nil || report.Project == nil {
 		return fmt.Errorf("control de proyecto vacío")
 	}
+	git := canonicalProjectControlGitAggregate(report.Git)
 	fmt.Printf("Proyecto:   %s\n", strings.TrimSpace(report.Project.Slug))
 	fmt.Printf("Nombre:     %s\n", strings.TrimSpace(report.Project.Nombre))
 	if report.StartedAt != nil {
@@ -409,17 +415,36 @@ func imprimirProyectoControl(report *projectControlReport) error {
 			fmt.Printf(" · %s\n", item.CreatedAt.Format("2006-01-02 15:04:05"))
 		}
 	}
-	fmt.Printf("Git:        archivos=%d pending +%d/-%d commits +%d/-%d\n",
-		len(report.Git.TouchedFiles),
-		report.Git.PendingAddedLines,
-		report.Git.PendingDeletedLines,
-		report.Git.CommittedAddedLines,
-		report.Git.CommittedDeletedLines,
+	fmt.Printf("Git:        archivos=%d pending +%d/-%d commits +%d/-%d total +%d/-%d net=%+d\n",
+		git.FilesChanged,
+		git.PendingAddedLines,
+		git.PendingDeletedLines,
+		git.CommittedAddedLines,
+		git.CommittedDeletedLines,
+		git.Insertions,
+		git.Deletions,
+		git.LinesNet,
 	)
-	for _, file := range report.Git.TouchedFiles {
+	for _, file := range git.TouchedFiles {
 		fmt.Printf("  - %s\n", file)
 	}
 	return nil
+}
+
+func canonicalProjectControlGitAggregate(in projectControlGitAggregate) projectControlGitAggregate {
+	in.TouchedFiles = normalizeGitFileList(in.TouchedFiles)
+	totals := buildGitChangeTotals(
+		in.TouchedFiles,
+		in.PendingAddedLines,
+		in.PendingDeletedLines,
+		in.CommittedAddedLines,
+		in.CommittedDeletedLines,
+	)
+	in.FilesChanged = totals.FilesChanged
+	in.Insertions = totals.Insertions
+	in.Deletions = totals.Deletions
+	in.LinesNet = totals.LinesNet
+	return in
 }
 
 func projectControlIntegrationRisk(cockpit *apiProyectoCockpit, base []string) (int, string, []string) {

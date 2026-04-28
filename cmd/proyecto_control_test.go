@@ -10,6 +10,7 @@ package cmd
 import (
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -126,6 +127,25 @@ func TestProjectAutonomyActivityMomentUsaEventoMasReciente(t *testing.T) {
 	}
 }
 
+func TestCanonicalProjectControlGitAggregateExponeMetricasCanonicas(t *testing.T) {
+	got := canonicalProjectControlGitAggregate(projectControlGitAggregate{
+		TouchedFiles:          []string{"cmd/proyecto_control.go", " cmd/proyecto_control.go ", "", "cmd/api_git_stats.go"},
+		PendingAddedLines:     5,
+		PendingDeletedLines:   2,
+		CommittedAddedLines:   7,
+		CommittedDeletedLines: 3,
+	})
+	if got.FilesChanged != 2 {
+		t.Fatalf("files_changed inesperado: %+v", got)
+	}
+	if !reflect.DeepEqual(got.TouchedFiles, []string{"cmd/api_git_stats.go", "cmd/proyecto_control.go"}) {
+		t.Fatalf("touched_files inesperados: %+v", got.TouchedFiles)
+	}
+	if got.Insertions != 12 || got.Deletions != 5 || got.LinesNet != 7 {
+		t.Fatalf("totales git inesperados: %+v", got)
+	}
+}
+
 func TestProjectControlIntegrationRiskDesdeCockpit(t *testing.T) {
 	score, label, highlights := projectControlIntegrationRisk(&apiProyectoCockpit{
 		TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
@@ -209,6 +229,43 @@ func TestImprimirProyectoControlNoDuplicaEscalaresDeIntegracionEnHighlights(t *t
 	}
 	if strings.Contains(out, "Highlights: task_reassigned=1 | riesgo=alto") || strings.Contains(out, "Highlights: task_reassigned=1 | integracion_bloqueada=6") {
 		t.Fatalf("los highlights siguen duplicando escalares de integracion: %s", out)
+	}
+}
+
+func TestImprimirProyectoControlExponeTotalesGitCanonicos(t *testing.T) {
+	report := &projectControlReport{
+		Project: &db.Proyecto{
+			Slug:   "orquestador",
+			Nombre: "Orquestador",
+		},
+		Status: apiStatusResponse{},
+		Progress: projectControlProgress{
+			State:          "activo",
+			StateReason:    "hay trabajo en progreso",
+			AttentionScore: 1,
+			AttentionLabel: "bajo",
+			OpenTasks:      1,
+			ActiveTasks:    1,
+		},
+		Git: projectControlGitAggregate{
+			TouchedFiles:          []string{" cmd/proyecto_control.go ", "cmd/api_git_stats.go", "cmd/proyecto_control.go"},
+			PendingAddedLines:     3,
+			PendingDeletedLines:   1,
+			CommittedAddedLines:   4,
+			CommittedDeletedLines: 2,
+		},
+	}
+
+	out := capturarStdout(t, func() {
+		if err := imprimirProyectoControl(report); err != nil {
+			t.Fatalf("imprimirProyectoControl: %v", err)
+		}
+	})
+	if !strings.Contains(out, "Git:        archivos=2 pending +3/-1 commits +4/-2 total +7/-3 net=+4") {
+		t.Fatalf("bloque git sin totales canonicos: %s", out)
+	}
+	if strings.Count(out, "  - cmd/proyecto_control.go\n") != 1 {
+		t.Fatalf("lista git sin normalizar correctamente: %s", out)
 	}
 }
 

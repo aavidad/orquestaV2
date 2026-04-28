@@ -1203,6 +1203,9 @@ func TestClasificarTextoTranscriptReconoceReviewYReplan(t *testing.T) {
 		{raw: "• Ran go test ./cmd -run 'TestX$' -count=1", want: "tool_execution"},
 		{raw: "└ Search resolverBootstrapRuntimeLeaseConFiltro in controlplane_entities.go", want: "tool_exploration"},
 		{raw: "• Explored", want: "tool_exploration"},
+		{raw: "sed -n '1,120p' db/runtime_transcript_text.go", want: "tool_exploration"},
+		{raw: "head -n 8 docs/diario_orquestador_2026-03-30.md", want: "tool_exploration"},
+		{raw: "git show HEAD~1:db/runtime_transcript_text.go", want: "tool_exploration"},
 		{raw: "PASS\nok\tgithub.com/example/project/cmd\t0.223s", want: "tool_result_ok"},
 		{raw: "nothing to commit, working tree clean", want: "tool_result_ok"},
 		{raw: "Already up to date.", want: "tool_result_ok"},
@@ -1214,6 +1217,9 @@ func TestClasificarTextoTranscriptReconoceReviewYReplan(t *testing.T) {
 		{raw: "He dejado alineado el control plane y sigo con el siguiente corte", want: "progress_update"},
 		{raw: "• hecho: ajustado selector en db/controlplane_entities.go para que, sin", want: "progress_update"},
 		{raw: "Use /skills to list available skills", want: "ui_noise"},
+		{raw: "Welcome to Codex", want: "ui_noise"},
+		{raw: "How can I help?", want: "ui_noise"},
+		{raw: "Press Enter to send", want: "ui_noise"},
 		{raw: "codex@box:~/repo$", want: "ui_noise"},
 		{raw: "$", want: "ui_noise"},
 		{raw: "│ … +1 lines", want: "ui_noise"},
@@ -1225,8 +1231,37 @@ func TestClasificarTextoTranscriptReconoceReviewYReplan(t *testing.T) {
 		{raw: "can i continue refactoring without waiting?", want: "approval_request"},
 		{raw: "¿Qué comando tengo que ejecutar para lanzar los tests?", want: "cli_query"},
 		{raw: "curl: (28) Operation timed out after 20002 milliseconds with 0 bytes from http://localhost:16543/api/status", want: "server_url_error"},
+		{raw: "MCP startup incomplete: provided authentication token is expired (status 401)", want: "credentials_request"},
 		{raw: "missing credentials for the deploy token", want: "credentials_request"},
 		{raw: "can i continue refactoring without waiting", want: ""},
+	}
+	for _, tc := range cases {
+		if got := clasificarTextoTranscript(normalizarTextoTranscript(tc.raw)); got != tc.want {
+			t.Fatalf("clasificacion inesperada para %q: got=%q want=%q", tc.raw, got, tc.want)
+		}
+	}
+}
+
+func TestClasificarTextoTranscriptReconoceRuidoUIRealYBootstrapFragmentado(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want string
+	}{
+		{raw: "workspace (/directory)         branch                        sandbox", want: "ui_noise"},
+		{raw: "Branch                       Sandbox", want: "ui_noise"},
+		{raw: "YOLO Ctrl+Y                                                   1 GEMINI.md file", want: "ui_noise"},
+		{raw: "*   Type your message or @path/to/file", want: "ui_noise"},
+		{raw: "Gemini CLI v0.37.1", want: "ui_noise"},
+		{raw: "Gemini CLI", want: "ui_noise"},
+		{raw: "⠼ Thinking... (esc to cancel, 38s)                             ? for shortcuts", want: "ui_noise"},
+		{raw: "Thinking… (Esc to interrupt) ? for shortcuts", want: "ui_noise"},
+		{raw: "Thinking... Esc to cancel", want: "ui_noise"},
+		{raw: "Activa $caveman", want: "bootstrap_guidance"},
+		{raw: "Activa caveman", want: "bootstrap_guidance"},
+		{raw: "Consulta solo el fragmento mínimo", want: "bootstrap_guidance"},
+		{raw: "Consulta el fragmento mínimo", want: "bootstrap_guidance"},
+		{raw: "Empieza por la tarea asignada", want: "bootstrap_guidance"},
+		{raw: "Empieza por tarea asignada", want: "bootstrap_guidance"},
 	}
 	for _, tc := range cases {
 		if got := clasificarTextoTranscript(normalizarTextoTranscript(tc.raw)); got != tc.want {
@@ -1246,6 +1281,13 @@ func TestScanRuntimeTranscriptClasificaStreamsSemanticos(t *testing.T) {
 		{stream: "assistant", text: "He actualizado el handler y corregido el test roto", want: "progress_update"},
 		{stream: "stdout", text: "PASS\nok\tgithub.com/example/project/cmd\t0.223s", want: "tool_result_ok"},
 		{stream: "stderr", text: "FAIL\tgithub.com/example/project/cmd [build failed]", want: "tool_result_error"},
+		{stream: "pty_out", text: "*   Type your message or @path/to/file", want: "ui_noise"},
+		{stream: "pty_out", text: "Branch                       Sandbox", want: "ui_noise"},
+		{stream: "pty_out", text: "Welcome to Codex", want: "ui_noise"},
+		{stream: "pty_out", text: "Press Enter to send", want: "ui_noise"},
+		{stream: "pty_out", text: "Activa caveman", want: "bootstrap_guidance"},
+		{stream: "pty_out", text: "sed -n '1,120p' db/runtime_transcript_text.go", want: "tool_exploration"},
+		{stream: "pty_out", text: "MCP startup incomplete: provided authentication token is expired (status 401)", want: "credentials_request"},
 	}
 	for _, tc := range cases {
 		createdAt := time.Now().UTC()
@@ -1844,6 +1886,74 @@ func TestIngestarRuntimeTranscriptHandleDescartaRuidoUIYConservaSenal(t *testing
 	}
 	if got := items[0].NormalizedText; !strings.Contains(got, "ran go test ./db") {
 		t.Fatalf("deberia conservar la linea útil de ejecución, got=%q", got)
+	}
+}
+
+func TestIngestarRuntimeTranscriptHandleDescartaPromptsIdleYConservaAuth(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("CodexAuth", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexAuth",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, _ := GetRuntimeHandleBySesionID(sesion.ID)
+
+	logPath := filepath.Join(t.TempDir(), "codex-auth.log")
+	logData := strings.Join([]string{
+		"Welcome to Codex",
+		"How can I help?",
+		"Press Enter to send",
+		"MCP startup incomplete: provided authentication token is expired (status 401)",
+		"",
+	}, "\n")
+	if err := os.WriteFile(logPath, []byte(logData), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	n, err := IngestarRuntimeTranscriptHandle(handle.ID)
+	if err != nil {
+		t.Fatalf("ingestar transcript: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia conservar solo la senal de auth, got=%d", n)
+	}
+
+	agente := "CodexAuth"
+	items, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	if len(items) != 1 || items[0] == nil {
+		t.Fatalf("transcript inesperado: %+v", items)
+	}
+	if got := items[0].Classification; got != "credentials_request" {
+		t.Fatalf("clasificacion inesperada: got=%q item=%+v", got, items[0])
+	}
+	if !strings.Contains(items[0].NormalizedText, "mcp startup incomplete") {
+		t.Fatalf("deberia conservar la linea de auth, got=%q", items[0].NormalizedText)
 	}
 }
 

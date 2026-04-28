@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -45,6 +46,13 @@ type apiGitStatsResponse struct {
 	Since     time.Time            `json:"since"`
 	Generated time.Time            `json:"generated"`
 	Stats     *gitOperationalStats `json:"stats"`
+}
+
+type gitChangeTotals struct {
+	FilesChanged int
+	Insertions   int
+	Deletions    int
+	LinesNet     int
 }
 
 var (
@@ -125,24 +133,64 @@ func newGitOperationalStats(raw *gitestadisticasapp.Stats) *gitOperationalStats 
 	if raw == nil {
 		return nil
 	}
-	insertions := raw.PendingAddedLines + raw.CommittedAddedLines
-	deletions := raw.PendingDeletedLines + raw.CommittedDeletedLines
+	pendingFiles := normalizeGitFileList(raw.PendingFiles)
+	recentCommitFiles := normalizeGitFileList(raw.RecentCommitFiles)
+	touchedFiles := normalizeGitFileList(raw.TouchedFiles)
+	totals := buildGitChangeTotals(
+		touchedFiles,
+		raw.PendingAddedLines,
+		raw.PendingDeletedLines,
+		raw.CommittedAddedLines,
+		raw.CommittedDeletedLines,
+	)
 	return &gitOperationalStats{
 		RepoRoot:              strings.TrimSpace(raw.RepoRoot),
 		CWD:                   strings.TrimSpace(raw.CWD),
 		Branch:                strings.TrimSpace(raw.Branch),
-		PendingFiles:          append([]string(nil), raw.PendingFiles...),
-		RecentCommitFiles:     append([]string(nil), raw.RecentCommitFiles...),
-		TouchedFiles:          append([]string(nil), raw.TouchedFiles...),
-		FilesChanged:          len(raw.TouchedFiles),
+		PendingFiles:          pendingFiles,
+		RecentCommitFiles:     recentCommitFiles,
+		TouchedFiles:          touchedFiles,
+		FilesChanged:          totals.FilesChanged,
 		PendingAddedLines:     raw.PendingAddedLines,
 		PendingDeletedLines:   raw.PendingDeletedLines,
 		CommittedAddedLines:   raw.CommittedAddedLines,
 		CommittedDeletedLines: raw.CommittedDeletedLines,
-		Insertions:            insertions,
-		Deletions:             deletions,
-		LinesNet:              insertions - deletions,
+		Insertions:            totals.Insertions,
+		Deletions:             totals.Deletions,
+		LinesNet:              totals.LinesNet,
 		PendingShortStat:      strings.TrimSpace(raw.PendingShortStat),
 		RecentCommitCount:     raw.RecentCommitCount,
 	}
+}
+
+func buildGitChangeTotals(touchedFiles []string, pendingAddedLines, pendingDeletedLines, committedAddedLines, committedDeletedLines int) gitChangeTotals {
+	files := normalizeGitFileList(touchedFiles)
+	insertions := pendingAddedLines + committedAddedLines
+	deletions := pendingDeletedLines + committedDeletedLines
+	return gitChangeTotals{
+		FilesChanged: len(files),
+		Insertions:   insertions,
+		Deletions:    deletions,
+		LinesNet:     insertions - deletions,
+	}
+}
+
+func normalizeGitFileList(files []string) []string {
+	fileSet := map[string]struct{}{}
+	for _, file := range files {
+		file = strings.TrimSpace(file)
+		if file == "" {
+			continue
+		}
+		fileSet[file] = struct{}{}
+	}
+	if len(fileSet) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(fileSet))
+	for file := range fileSet {
+		out = append(out, file)
+	}
+	sort.Strings(out)
+	return out
 }
