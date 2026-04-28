@@ -12,6 +12,7 @@ type SupervisorPipelineState struct {
 	Supervisor     string     `json:"supervisor"`
 	ProyectoSlug   string     `json:"proyecto_slug,omitempty"`
 	PipelineName   string     `json:"pipeline_name,omitempty"`
+	Role           string     `json:"role,omitempty"`
 	CurrentPhase   string     `json:"current_phase,omitempty"`
 	Status         string     `json:"status"`
 	CurrentTaskID  *int64     `json:"current_task_id,omitempty"`
@@ -28,6 +29,7 @@ type UpsertSupervisorPipelineStateInput struct {
 	Supervisor     string
 	ProyectoSlug   string
 	PipelineName   string
+	Role           string
 	CurrentPhase   string
 	Status         string
 	CurrentTaskID  *int64
@@ -42,6 +44,9 @@ type UpsertSupervisorPipelineStateInput struct {
 type FiltroSupervisorPipelineStates struct {
 	Supervisor   string
 	ProyectoSlug string
+	Role         string
+	Status       string
+	CurrentPhase string
 	Limit        int
 }
 
@@ -52,6 +57,7 @@ func ensureSupervisorPipelineStatesSchema() error {
 			supervisor      TEXT    NOT NULL,
 			proyecto_slug   TEXT    NOT NULL DEFAULT '',
 			pipeline_name   TEXT    NOT NULL DEFAULT '',
+			role            TEXT    NOT NULL DEFAULT 'executor',
 			current_phase   TEXT    NOT NULL DEFAULT '',
 			status          TEXT    NOT NULL DEFAULT 'active'
 			                        CHECK (status IN ('active','paused','blocked','completed','failed')),
@@ -68,7 +74,20 @@ func ensureSupervisorPipelineStatesSchema() error {
 	if err != nil {
 		return err
 	}
+	exists, err := ColumnExists("supervisor_pipeline_states", "role")
+	if err != nil {
+		return err
+	}
+	if !exists {
+		if _, err := DB.Exec(`ALTER TABLE supervisor_pipeline_states ADD COLUMN role TEXT NOT NULL DEFAULT 'executor'`); err != nil {
+			return err
+		}
+	}
 	_, err = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_supervisor_pipeline_states_supervisor ON supervisor_pipeline_states(supervisor, updated_at DESC)`)
+	if err != nil {
+		return err
+	}
+	_, err = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_supervisor_pipeline_states_role_status ON supervisor_pipeline_states(role, status, updated_at DESC)`)
 	return err
 }
 
@@ -80,16 +99,10 @@ func UpsertSupervisorPipelineState(input UpsertSupervisorPipelineStateInput) (*S
 	if supervisor == "" {
 		return nil, fmt.Errorf("supervisor obligatorio")
 	}
-	pipelineName := strings.TrimSpace(input.PipelineName)
-	if pipelineName == "" {
-		pipelineName = "default"
-	}
-	status := strings.TrimSpace(input.Status)
-	switch status {
-	case "active", "paused", "blocked", "completed", "failed":
-	default:
-		status = "active"
-	}
+	pipelineName := canonicalSupervisorPipelineName(input.PipelineName)
+	role := canonicalSupervisorPipelineRole(input.Role, pipelineName)
+	status := canonicalSupervisorPipelineStatus(input.Status)
+	currentPhase := canonicalSupervisorPipelinePhase(input.CurrentPhase)
 	if strings.TrimSpace(input.ArtifactsJSON) == "" {
 		input.ArtifactsJSON = "{}"
 	}
@@ -101,6 +114,7 @@ func UpsertSupervisorPipelineState(input UpsertSupervisorPipelineStateInput) (*S
 		startedAt = input.StartedAt.UTC()
 	}
 	assignments := []upsertAssignment{
+		{Column: "role"},
 		{Column: "current_phase"},
 		{Column: "status"},
 		{Column: "current_task_id"},
@@ -113,7 +127,7 @@ func UpsertSupervisorPipelineState(input UpsertSupervisorPipelineStateInput) (*S
 	}
 	sqlText := upsertValuesSQL(
 		"supervisor_pipeline_states",
-		[]string{"supervisor", "proyecto_slug", "pipeline_name", "current_phase", "status", "current_task_id", "current_gate_id", "current_merge_id", "artifacts_json", "metadata_json", "started_at", "completed_at"},
+		[]string{"supervisor", "proyecto_slug", "pipeline_name", "role", "current_phase", "status", "current_task_id", "current_gate_id", "current_merge_id", "artifacts_json", "metadata_json", "started_at", "completed_at"},
 		[]string{"supervisor", "proyecto_slug", "pipeline_name"},
 		assignments,
 	)
@@ -121,7 +135,8 @@ func UpsertSupervisorPipelineState(input UpsertSupervisorPipelineStateInput) (*S
 		supervisor,
 		strings.TrimSpace(input.ProyectoSlug),
 		pipelineName,
-		strings.TrimSpace(input.CurrentPhase),
+		role,
+		currentPhase,
 		status,
 		input.CurrentTaskID,
 		input.CurrentGateID,
@@ -144,11 +159,9 @@ func GetSupervisorPipelineState(supervisor, proyectoSlug, pipelineName string) (
 	if !exists {
 		return nil, nil
 	}
-	if strings.TrimSpace(pipelineName) == "" {
-		pipelineName = "default"
-	}
+	pipelineName = canonicalSupervisorPipelineName(pipelineName)
 	row := DB.QueryRow(`
-		SELECT id, supervisor, proyecto_slug, pipeline_name, current_phase, status,
+		SELECT id, supervisor, proyecto_slug, pipeline_name, role, current_phase, status,
 		       current_task_id, current_gate_id, current_merge_id, artifacts_json,
 		       metadata_json, started_at, updated_at, completed_at
 		FROM supervisor_pipeline_states
@@ -171,7 +184,7 @@ func ListarSupervisorPipelineStates(filter FiltroSupervisorPipelineStates) ([]*S
 		return []*SupervisorPipelineState{}, nil
 	}
 	q := `
-		SELECT id, supervisor, proyecto_slug, pipeline_name, current_phase, status,
+		SELECT id, supervisor, proyecto_slug, pipeline_name, role, current_phase, status,
 		       current_task_id, current_gate_id, current_merge_id, artifacts_json,
 		       metadata_json, started_at, updated_at, completed_at
 		FROM supervisor_pipeline_states
@@ -183,6 +196,18 @@ func ListarSupervisorPipelineStates(filter FiltroSupervisorPipelineStates) ([]*S
 	}
 	if v := strings.TrimSpace(filter.ProyectoSlug); v != "" {
 		q += ` AND proyecto_slug = ?`
+		args = append(args, v)
+	}
+	if v := canonicalSupervisorPipelineRoleFilter(filter.Role); v != "" {
+		q += ` AND role = ?`
+		args = append(args, v)
+	}
+	if v := canonicalSupervisorPipelineStatusFilter(filter.Status); v != "" {
+		q += ` AND status = ?`
+		args = append(args, v)
+	}
+	if v := canonicalSupervisorPipelinePhase(filter.CurrentPhase); v != "" {
+		q += ` AND current_phase = ?`
 		args = append(args, v)
 	}
 	q += ` ORDER BY updated_at DESC, id DESC`
@@ -212,7 +237,7 @@ func scanSupervisorPipelineState(scanner interface{ Scan(dest ...any) error }) (
 	var taskID, gateID, mergeID sql.NullInt64
 	var completedAt sql.NullTime
 	if err := scanner.Scan(
-		&item.ID, &item.Supervisor, &item.ProyectoSlug, &item.PipelineName, &item.CurrentPhase, &item.Status,
+		&item.ID, &item.Supervisor, &item.ProyectoSlug, &item.PipelineName, &item.Role, &item.CurrentPhase, &item.Status,
 		&taskID, &gateID, &mergeID, &item.ArtifactsJSON, &item.MetadataJSON, &item.StartedAt, &item.UpdatedAt, &completedAt,
 	); err != nil {
 		return nil, err
@@ -231,4 +256,87 @@ func scanSupervisorPipelineState(scanner interface{ Scan(dest ...any) error }) (
 		item.CompletedAt = &ts
 	}
 	return &item, nil
+}
+
+func canonicalSupervisorPipelineName(raw string) string {
+	raw = strings.TrimSpace(strings.ToLower(raw))
+	if raw == "" {
+		return "default"
+	}
+	replacer := strings.NewReplacer(" ", "-", "_", "-", "/", "-")
+	raw = replacer.Replace(raw)
+	return compactSupervisorPipelineSlug(raw, "-")
+}
+
+func canonicalSupervisorPipelineRole(raw, pipelineName string) string {
+	if role := canonicalSupervisorPipelineRoleFilter(raw); role != "" {
+		return role
+	}
+	switch {
+	case strings.Contains(pipelineName, "supervisor"):
+		return "supervisor"
+	case strings.Contains(pipelineName, "review"):
+		return "reviewer"
+	case strings.Contains(pipelineName, "fix"), strings.Contains(pipelineName, "repair"):
+		return "fixer"
+	default:
+		return "executor"
+	}
+}
+
+func canonicalSupervisorPipelineRoleFilter(raw string) string {
+	switch compactSupervisorPipelineSlug(strings.TrimSpace(strings.ToLower(raw)), "_") {
+	case "supervisor", "lead", "manager":
+		return "supervisor"
+	case "executor", "worker", "implementer", "developer":
+		return "executor"
+	case "reviewer", "review", "qa", "validator":
+		return "reviewer"
+	case "fixer", "repair", "bugfix", "hotfix":
+		return "fixer"
+	default:
+		return ""
+	}
+}
+
+func canonicalSupervisorPipelineStatus(raw string) string {
+	if status := canonicalSupervisorPipelineStatusFilter(raw); status != "" {
+		return status
+	}
+	return "active"
+}
+
+func canonicalSupervisorPipelineStatusFilter(raw string) string {
+	raw = strings.TrimSpace(strings.ToLower(raw))
+	switch raw {
+	case "active", "paused", "blocked", "completed", "failed":
+		return raw
+	default:
+		return ""
+	}
+}
+
+func canonicalSupervisorPipelinePhase(raw string) string {
+	raw = strings.TrimSpace(strings.ToLower(raw))
+	if raw == "" {
+		return ""
+	}
+	replacer := strings.NewReplacer(" ", "_", "-", "_", "/", "_")
+	raw = replacer.Replace(raw)
+	return compactSupervisorPipelineSlug(raw, "_")
+}
+
+func compactSupervisorPipelineSlug(raw, sep string) string {
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		switch r {
+		case '-', '_', ' ', '\t', '\n', '\r', '/':
+			return true
+		default:
+			return false
+		}
+	})
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, sep)
 }

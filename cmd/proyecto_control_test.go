@@ -42,8 +42,8 @@ func TestProyectoControlJSONAlineadoConAPI(t *testing.T) {
 					"task_reassigned":           2,
 					"worker_recovery_requested": 1,
 				},
-				AutonomyLastAt: ptrTimeProyectoControlTest(time.Date(2026, 4, 23, 11, 0, 0, 0, time.UTC)),
-				AutonomyHighlights: []string{"task_reassigned=2", "worker_recovery_requested=1"},
+				AutonomyLastAt:       ptrTimeProyectoControlTest(time.Date(2026, 4, 23, 11, 0, 0, 0, time.UTC)),
+				AutonomyHighlights:   []string{"task_reassigned=2", "worker_recovery_requested=1"},
 				IntegrationRisk:      "alto",
 				IntegrationRiskScore: 6,
 				Autonomy: []autonomyEventSummary{{
@@ -174,6 +174,14 @@ func TestImprimirProyectoControlNoDuplicaEscalaresDeIntegracionEnHighlights(t *t
 		TaskCounts: map[string]int{
 			string(db.TareaBloqueada): 1,
 		},
+		Progress: projectControlProgress{
+			State:          "bloqueado",
+			StateReason:    "bloqueos abiertos sin ejecución activa",
+			OpenTasks:      1,
+			BlockedTasks:   1,
+			AttentionScore: 6,
+			AttentionLabel: "alto",
+		},
 		IntegrationRisk:      "alto",
 		IntegrationRiskScore: 6,
 		AutonomyHighlights: []string{
@@ -193,11 +201,88 @@ func TestImprimirProyectoControlNoDuplicaEscalaresDeIntegracionEnHighlights(t *t
 	if !strings.Contains(out, "Integración: riesgo=alto · integracion_bloqueada=6") {
 		t.Fatalf("sin bloque de integracion esperado: %s", out)
 	}
+	if !strings.Contains(out, "Control:    estado=bloqueado · bloqueos abiertos sin ejecución activa · atención=alto(6) · abiertas=1 activas=0 bloqueadas=1 libres=0") {
+		t.Fatalf("sin bloque control esperado: %s", out)
+	}
 	if !strings.Contains(out, "Highlights: task_reassigned=1 | review_gates=1 | mailbox_rt=1") {
 		t.Fatalf("highlights sin compactar correctamente: %s", out)
 	}
 	if strings.Contains(out, "Highlights: task_reassigned=1 | riesgo=alto") || strings.Contains(out, "Highlights: task_reassigned=1 | integracion_bloqueada=6") {
 		t.Fatalf("los highlights siguen duplicando escalares de integracion: %s", out)
+	}
+}
+
+func TestBuildProjectControlProgressDetectaAtascoPorLagYBloqueo(t *testing.T) {
+	generated := time.Date(2026, 4, 24, 18, 0, 0, 0, time.UTC)
+	lastActivity := generated.Add(-26 * time.Hour)
+	report := &projectControlReport{
+		Generated:      generated,
+		LastActivityAt: &lastActivity,
+		Tasks: []*db.Tarea{
+			{Estado: db.TareaBloqueada},
+			{Estado: db.TareaLibre},
+			{Estado: db.TareaCompletada},
+		},
+		Cockpit: &apiProyectoCockpit{
+			ReviewGatesAbiertas:     1,
+			RuntimeMailboxPendiente: 1,
+			RuntimeOrdersAbiertas:   1,
+		},
+	}
+
+	got := buildProjectControlProgress(report)
+	if got.State != "atascado" || got.StateReason != "bloqueos sin ejecución ni actividad reciente" {
+		t.Fatalf("estado inesperado: %+v", got)
+	}
+	if got.TotalTasks != 3 || got.OpenTasks != 2 || got.CompletedTasks != 1 || got.BlockedTasks != 1 || got.UnassignedTasks != 1 {
+		t.Fatalf("agregados inesperados: %+v", got)
+	}
+	if got.ActivityLagMinutes != 26*60 {
+		t.Fatalf("lag inesperado: %+v", got)
+	}
+	if got.AttentionScore != 12 || got.AttentionLabel != "critico" {
+		t.Fatalf("atencion inesperada: %+v", got)
+	}
+}
+
+func TestBuildProjectControlProgressMarcaActivoConTrabajoEnCurso(t *testing.T) {
+	generated := time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC)
+	lastActivity := generated.Add(-35 * time.Minute)
+	report := &projectControlReport{
+		Generated:      generated,
+		LastActivityAt: &lastActivity,
+		Tasks: []*db.Tarea{
+			{Estado: db.TareaEnProgreso},
+			{Estado: db.TareaAsignada},
+		},
+	}
+
+	got := buildProjectControlProgress(report)
+	if got.State != "activo" || got.StateReason != "hay trabajo en progreso" {
+		t.Fatalf("estado activo inesperado: %+v", got)
+	}
+	if got.ActiveTasks != 1 || got.ReservedTasks != 1 || got.OpenTasks != 2 {
+		t.Fatalf("conteos activos inesperados: %+v", got)
+	}
+	if got.ActivityLagMinutes != 35 {
+		t.Fatalf("lag activo inesperado: %+v", got)
+	}
+	if got.AttentionScore != 0 || got.AttentionLabel != "estable" {
+		t.Fatalf("atencion activa inesperada: %+v", got)
+	}
+}
+
+func TestFormatProjectControlLag(t *testing.T) {
+	cases := map[int]string{
+		0:   "0m",
+		25:  "25m",
+		60:  "1h",
+		135: "2h15m",
+	}
+	for minutes, want := range cases {
+		if got := formatProjectControlLag(minutes); got != want {
+			t.Fatalf("lag %d inesperado: got=%q want=%q", minutes, got, want)
+		}
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,12 +66,7 @@ func launchClaudeSubagentExternal(req supervisorSubagentLaunchRequest) (*supervi
 		}
 		if worktree != nil {
 			cmd.Dir = strings.TrimSpace(worktree.Path)
-			worktreeInfo = map[string]any{
-				"id":       worktree.ID,
-				"path":     strings.TrimSpace(worktree.Path),
-				"branch":   strings.TrimSpace(worktree.Branch),
-				"base_ref": strings.TrimSpace(worktree.BaseRef),
-			}
+			worktreeInfo = buildSupervisorSubagentLaunchWorktreeMetadata(worktree)
 		}
 	}
 	cmd.Env = append(os.Environ(),
@@ -85,11 +81,7 @@ func launchClaudeSubagentExternal(req supervisorSubagentLaunchRequest) (*supervi
 		"CLAWD_AGENT_STORE="+storePath,
 	)
 	if worktreeInfo != nil {
-		cmd.Env = append(cmd.Env,
-			"ORQUESTA_SUBAGENT_WORKTREE="+stringFromAnyLaunch(worktreeInfo["path"]),
-			"ORQUESTA_SUBAGENT_PROJECT_PATH="+stringFromAnyLaunch(worktreeInfo["path"]),
-			"ORQUESTA_SUBAGENT_BRANCH="+stringFromAnyLaunch(worktreeInfo["branch"]),
-		)
+		cmd.Env = append(cmd.Env, buildSupervisorSubagentLaunchContractEnv(worktreeInfo)...)
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -207,6 +199,67 @@ func mergeSupervisorSubagentMetadata(base string, worktreeInfo map[string]any) s
 	return string(raw)
 }
 
+func buildSupervisorSubagentLaunchWorktreeMetadata(worktree *coordinacion.Worktree) map[string]any {
+	if worktree == nil {
+		return nil
+	}
+	path := strings.TrimSpace(worktree.Path)
+	branch := strings.TrimSpace(worktree.Branch)
+	baseRef := strings.TrimSpace(worktree.BaseRef)
+	return map[string]any{
+		"id":                   worktree.ID,
+		"path":                 path,
+		"branch":               branch,
+		"base_ref":             baseRef,
+		"worktree_id":          worktree.ID,
+		"ruta_worktree":        path,
+		"branch_worktree":      branch,
+		"base_ref_worktree":    baseRef,
+		"workspace_strategy":   "git_worktree",
+		"transport_preference": "tmux",
+		"resume_capability":    "session_resume",
+		"resume_strategy":      "resumen_y_payload",
+		"execution_profile":    "worktree_tmux_resume",
+	}
+}
+
+func buildSupervisorSubagentLaunchContractEnv(worktreeInfo map[string]any) []string {
+	if len(worktreeInfo) == 0 {
+		return nil
+	}
+	worktreeID := int64SupervisorSubagente(worktreeInfo["worktree_id"])
+	if worktreeID == 0 {
+		worktreeID = int64SupervisorSubagente(worktreeInfo["id"])
+	}
+	env := []string{
+		"ORQUESTA_SUBAGENT_WORKTREE=" + firstNonEmptyLaunch(
+			stringFromAnyLaunch(worktreeInfo["ruta_worktree"]),
+			stringFromAnyLaunch(worktreeInfo["path"]),
+		),
+		"ORQUESTA_SUBAGENT_PROJECT_PATH=" + firstNonEmptyLaunch(
+			stringFromAnyLaunch(worktreeInfo["ruta_worktree"]),
+			stringFromAnyLaunch(worktreeInfo["path"]),
+		),
+		"ORQUESTA_SUBAGENT_BRANCH=" + firstNonEmptyLaunch(
+			stringFromAnyLaunch(worktreeInfo["branch_worktree"]),
+			stringFromAnyLaunch(worktreeInfo["branch"]),
+		),
+		"ORQUESTA_SUBAGENT_BASE_REF=" + firstNonEmptyLaunch(
+			stringFromAnyLaunch(worktreeInfo["base_ref_worktree"]),
+			stringFromAnyLaunch(worktreeInfo["base_ref"]),
+		),
+		"ORQUESTA_SUBAGENT_WORKSPACE_STRATEGY=" + stringFromAnyLaunch(worktreeInfo["workspace_strategy"]),
+		"ORQUESTA_SUBAGENT_TRANSPORT_PREFERENCE=" + stringFromAnyLaunch(worktreeInfo["transport_preference"]),
+		"ORQUESTA_SUBAGENT_RESUME_CAPABILITY=" + stringFromAnyLaunch(worktreeInfo["resume_capability"]),
+		"ORQUESTA_SUBAGENT_RESUME_STRATEGY=" + stringFromAnyLaunch(worktreeInfo["resume_strategy"]),
+		"ORQUESTA_SUBAGENT_EXECUTION_PROFILE=" + stringFromAnyLaunch(worktreeInfo["execution_profile"]),
+	}
+	if worktreeID > 0 {
+		env = append(env, "ORQUESTA_SUBAGENT_WORKTREE_ID="+strconv.FormatInt(worktreeID, 10))
+	}
+	return env
+}
+
 func resolverNombreSubagenteLaunch(req supervisorSubagentLaunchRequest) string {
 	if nombre := strings.TrimSpace(req.Name); nombre != "" {
 		return nombre
@@ -250,6 +303,15 @@ func prepararWorktreeSubagente(proyectoRef, agente string) (*coordinacion.Worktr
 func stringFromAnyLaunch(v any) string {
 	s, _ := v.(string)
 	return strings.TrimSpace(s)
+}
+
+func firstNonEmptyLaunch(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func mustCurrentWorkingDir() string {

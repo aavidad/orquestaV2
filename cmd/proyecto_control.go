@@ -24,6 +24,7 @@ type projectControlReport struct {
 	CompletionPct        int                              `json:"completion_pct"`
 	StartedAt            *time.Time                       `json:"started_at,omitempty"`
 	LastActivityAt       *time.Time                       `json:"last_activity_at,omitempty"`
+	Progress             projectControlProgress           `json:"progress"`
 	Agents               []projectControlAgentRow         `json:"agents,omitempty"`
 	AutonomyEvents       int                              `json:"autonomy_events"`
 	AutonomyByKind       map[string]int                   `json:"autonomy_by_kind,omitempty"`
@@ -33,6 +34,21 @@ type projectControlReport struct {
 	IntegrationRisk      string                           `json:"integration_risk,omitempty"`
 	IntegrationRiskScore int                              `json:"integration_risk_score,omitempty"`
 	Git                  projectControlGitAggregate       `json:"git"`
+}
+
+type projectControlProgress struct {
+	TotalTasks         int    `json:"total_tasks"`
+	OpenTasks          int    `json:"open_tasks"`
+	CompletedTasks     int    `json:"completed_tasks"`
+	BlockedTasks       int    `json:"blocked_tasks"`
+	ActiveTasks        int    `json:"active_tasks"`
+	ReservedTasks      int    `json:"reserved_tasks"`
+	UnassignedTasks    int    `json:"unassigned_tasks"`
+	ActivityLagMinutes int    `json:"activity_lag_minutes"`
+	State              string `json:"state,omitempty"`
+	StateReason        string `json:"state_reason,omitempty"`
+	AttentionScore     int    `json:"attention_score"`
+	AttentionLabel     string `json:"attention_label,omitempty"`
 }
 
 type projectControlAgentRow struct {
@@ -185,6 +201,7 @@ func buildProjectControlReport(ref string, since time.Time) (*projectControlRepo
 		}
 	}
 	report.Git.TouchedFiles = mapKeysSorted(fileSet)
+	report.Progress = buildProjectControlProgress(report)
 	return report, nil
 }
 
@@ -290,6 +307,22 @@ func imprimirProyectoControl(report *projectControlReport) error {
 		fmt.Printf("Actividad:  %s\n", report.LastActivityAt.Format("2006-01-02 15:04:05"))
 	}
 	fmt.Printf("Avance:     %d%%\n", report.CompletionPct)
+	fmt.Printf("Control:    estado=%s", strings.TrimSpace(report.Progress.State))
+	if report.Progress.StateReason != "" {
+		fmt.Printf(" · %s", report.Progress.StateReason)
+	}
+	fmt.Printf(" · atención=%s(%d) · abiertas=%d activas=%d bloqueadas=%d libres=%d",
+		strings.TrimSpace(report.Progress.AttentionLabel),
+		report.Progress.AttentionScore,
+		report.Progress.OpenTasks,
+		report.Progress.ActiveTasks,
+		report.Progress.BlockedTasks,
+		report.Progress.UnassignedTasks,
+	)
+	if report.Progress.ActivityLagMinutes > 0 {
+		fmt.Printf(" · lag=%s", formatProjectControlLag(report.Progress.ActivityLagMinutes))
+	}
+	fmt.Println()
 	fmt.Printf("Autonomía:  supervisor=%d continuando=%d pendiente=%d confirmada=%d\n",
 		report.Status.Autonomia.Supervisando,
 		report.Status.Autonomia.Continuando,
@@ -425,4 +458,156 @@ func projectAutonomyActivityMoment(items []autonomyEventSummary) *time.Time {
 		latest = maxTimePtr(latest, &value)
 	}
 	return latest
+}
+
+func buildProjectControlProgress(report *projectControlReport) projectControlProgress {
+	progress := projectControlProgress{
+		State:          "sin_tareas",
+		StateReason:    "sin backlog visible",
+		AttentionLabel: "estable",
+	}
+	if report == nil {
+		return progress
+	}
+	for _, task := range report.Tasks {
+		if task == nil {
+			continue
+		}
+		switch task.Estado {
+		case db.TareaCancelada:
+			continue
+		case db.TareaCompletada:
+			progress.TotalTasks++
+			progress.CompletedTasks++
+		case db.TareaBloqueada:
+			progress.TotalTasks++
+			progress.OpenTasks++
+			progress.BlockedTasks++
+		case db.TareaEnProgreso:
+			progress.TotalTasks++
+			progress.OpenTasks++
+			progress.ActiveTasks++
+		case db.TareaAsignada:
+			progress.TotalTasks++
+			progress.OpenTasks++
+			progress.ReservedTasks++
+		case db.TareaLibre:
+			progress.TotalTasks++
+			progress.OpenTasks++
+			progress.UnassignedTasks++
+		default:
+			progress.TotalTasks++
+			progress.OpenTasks++
+		}
+	}
+	if generated := report.Generated.UTC(); !generated.IsZero() && report.LastActivityAt != nil {
+		if lag := int(generated.Sub(report.LastActivityAt.UTC()).Minutes()); lag > 0 {
+			progress.ActivityLagMinutes = lag
+		}
+	}
+	progress.AttentionScore = projectControlAttentionScore(report, progress)
+	progress.AttentionLabel = projectControlAttentionLabel(progress.AttentionScore)
+	progress.State, progress.StateReason = projectControlState(progress, report)
+	return progress
+}
+
+func projectControlAttentionScore(report *projectControlReport, progress projectControlProgress) int {
+	score := 0
+	if progress.BlockedTasks > 0 {
+		score += minInt(progress.BlockedTasks*2, 4)
+	}
+	if progress.OpenTasks > 0 && progress.ActiveTasks == 0 {
+		score += 2
+	}
+	if progress.UnassignedTasks > 0 {
+		score++
+	}
+	if report != nil && report.Cockpit != nil {
+		if report.Cockpit.ReviewGatesAbiertas > 0 {
+			score++
+		}
+		if report.Cockpit.RuntimeMailboxPendiente > 0 {
+			score++
+		}
+		if report.Cockpit.RuntimeOrdersAbiertas > 0 {
+			score++
+		}
+		if report.Cockpit.PropuestasAbiertas > 0 {
+			score++
+		}
+	}
+	switch {
+	case progress.ActivityLagMinutes >= 24*60:
+		score += 4
+	case progress.ActivityLagMinutes >= 6*60:
+		score += 2
+	case progress.ActivityLagMinutes >= 2*60:
+		score++
+	}
+	return score
+}
+
+func projectControlAttentionLabel(score int) string {
+	switch {
+	case score >= 8:
+		return "critico"
+	case score >= 4:
+		return "alto"
+	case score > 0:
+		return "bajo"
+	default:
+		return "estable"
+	}
+}
+
+func projectControlState(progress projectControlProgress, report *projectControlReport) (string, string) {
+	switch {
+	case progress.TotalTasks == 0:
+		return "sin_tareas", "sin backlog visible"
+	case progress.OpenTasks == 0:
+		return "completado", "sin trabajo abierto"
+	case progress.BlockedTasks > 0 && progress.ActiveTasks == 0 && progress.ReservedTasks == 0 && progress.ActivityLagMinutes >= 6*60:
+		return "atascado", "bloqueos sin ejecución ni actividad reciente"
+	case progress.BlockedTasks > 0 && progress.ActiveTasks == 0 && progress.ReservedTasks == 0:
+		return "bloqueado", "bloqueos abiertos sin ejecución activa"
+	case progress.OpenTasks > 0 && report != nil && report.LastActivityAt == nil:
+		return "frio", "backlog abierto sin actividad registrada"
+	case progress.OpenTasks > 0 && progress.ActivityLagMinutes >= 24*60:
+		return "atascado", "sin actividad reciente en la última jornada"
+	case progress.ActiveTasks > 0:
+		return "activo", "hay trabajo en progreso"
+	case progress.ReservedTasks > 0 || projectControlHasStartupPressure(report):
+		return "arrancando", "hay trabajo reservado o runtime pendiente"
+	default:
+		return "vigilancia", "backlog abierto sin ejecución actual"
+	}
+}
+
+func projectControlHasStartupPressure(report *projectControlReport) bool {
+	if report == nil || report.Cockpit == nil {
+		return false
+	}
+	return report.Cockpit.RuntimeMailboxPendiente > 0 || report.Cockpit.RuntimeOrdersAbiertas > 0
+}
+
+func formatProjectControlLag(minutes int) string {
+	if minutes <= 0 {
+		return "0m"
+	}
+	hours := minutes / 60
+	remain := minutes % 60
+	if hours <= 0 {
+		return fmt.Sprintf("%dm", remain)
+	}
+	if remain == 0 {
+		return fmt.Sprintf("%dh", hours)
+	}
+	return fmt.Sprintf("%dh%02dm", hours, remain)
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
