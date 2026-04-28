@@ -409,6 +409,9 @@ func TestArrancarPlanTMUXEscribeArtefactosWorker(t *testing.T) {
 	if got, _ := manifest["perfil_operativo"].(string); got != "qa-heavy" {
 		t.Fatalf("perfil_operativo inesperado en runtime manifest: %+v", manifest)
 	}
+	if got, _ := manifest["execution_profile"].(string); got != "qa-heavy" {
+		t.Fatalf("execution_profile inesperado en runtime manifest: %+v", manifest)
+	}
 	if got := strings.TrimSpace(arranque.HandleKind); got != "session" {
 		t.Fatalf("handle kind inesperado para tmux: %q", got)
 	}
@@ -491,6 +494,9 @@ func TestArrancarPlanTMUXEscribeArtefactosWorker(t *testing.T) {
 	}
 	if got, _ := metaJSON["perfil_operativo"].(string); got != "qa-heavy" {
 		t.Fatalf("metadata sin perfil_operativo canonico: %+v", metaJSON)
+	}
+	if got, _ := metaJSON["execution_profile"].(string); got != "qa-heavy" {
+		t.Fatalf("metadata sin execution_profile canonico: %+v", metaJSON)
 	}
 	if got, _ := metaJSON["tmux_pane_id"].(string); got != "%1" {
 		t.Fatalf("metadata sin tmux_pane_id: %+v", metaJSON)
@@ -591,6 +597,9 @@ func TestArrancarPlanPrefiereTMUXPorDefectoParaCodexCLI(t *testing.T) {
 	}
 	if got, _ := metaJSON["perfil_operativo"].(string); got != "persistente" {
 		t.Fatalf("metadata sin perfil_operativo persistente: %+v", metaJSON)
+	}
+	if got, _ := metaJSON["execution_profile"].(string); got != "persistente" {
+		t.Fatalf("metadata sin execution_profile persistente: %+v", metaJSON)
 	}
 
 	traceDir := filepath.Dir(arranque.LogPath)

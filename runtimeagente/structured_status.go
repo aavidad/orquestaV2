@@ -150,12 +150,13 @@ type runtimeManifestOverlay struct {
 const WorkerMetadataSchemaVersion = 1
 
 type workerMetadataPaths struct {
-	SchemaVersion    int    `json:"worker_schema_version,omitempty"`
-	ManifestPath     string `json:"worker_manifest_path"`
-	StatusPath       string `json:"worker_status_path"`
-	HeartbeatPath    string `json:"worker_heartbeat_path"`
-	TraceDir         string `json:"trace_dir"`
-	ExecutionProfile string `json:"perfil_operativo,omitempty"`
+	SchemaVersion             int    `json:"worker_schema_version,omitempty"`
+	ManifestPath              string `json:"worker_manifest_path"`
+	StatusPath                string `json:"worker_status_path"`
+	HeartbeatPath             string `json:"worker_heartbeat_path"`
+	TraceDir                  string `json:"trace_dir"`
+	CanonicalExecutionProfile string `json:"execution_profile,omitempty"`
+	LegacyExecutionProfile    string `json:"perfil_operativo,omitempty"`
 }
 
 type cachedWorkerSnapshot struct {
@@ -244,7 +245,7 @@ func LoadWorkerSnapshotFromMetadataJSON(raw string) (*WorkerSnapshot, error) {
 		}
 	}
 	if snap.Manifest != nil && strings.TrimSpace(snap.Manifest.ExecutionProfile) == "" {
-		snap.Manifest.ExecutionProfile = strings.TrimSpace(meta.ExecutionProfile)
+		snap.Manifest.ExecutionProfile = meta.executionProfile()
 	}
 	cacheWorkerSnapshotByPaths(meta, snap)
 	return snap, nil
@@ -269,7 +270,8 @@ func workerMetadataPathsFromJSON(raw string) (workerMetadataPaths, error) {
 	meta.StatusPath = strings.TrimSpace(meta.StatusPath)
 	meta.HeartbeatPath = strings.TrimSpace(meta.HeartbeatPath)
 	meta.TraceDir = strings.TrimSpace(meta.TraceDir)
-	meta.ExecutionProfile = strings.TrimSpace(meta.ExecutionProfile)
+	meta.CanonicalExecutionProfile = strings.TrimSpace(meta.CanonicalExecutionProfile)
+	meta.LegacyExecutionProfile = strings.TrimSpace(meta.LegacyExecutionProfile)
 	return meta, nil
 }
 
@@ -283,7 +285,15 @@ func workerSnapshotCacheKey(meta workerMetadataPaths) string {
 		meta.StatusPath,
 		meta.HeartbeatPath,
 		meta.TraceDir,
+		meta.executionProfile(),
 	}, "|")
+}
+
+func (m workerMetadataPaths) executionProfile() string {
+	if value := strings.TrimSpace(m.CanonicalExecutionProfile); value != "" {
+		return value
+	}
+	return strings.TrimSpace(m.LegacyExecutionProfile)
 }
 
 func cachedWorkerSnapshotByPaths(meta workerMetadataPaths) *WorkerSnapshot {
