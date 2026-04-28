@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"orquesta/agentesapp"
@@ -92,6 +93,13 @@ type Service struct {
 
 var registrarAutonomyEventFn = db.RegistrarAutonomyEvent
 
+var (
+	startSessionHygieneMu       sync.Mutex
+	startSessionHygieneRunning  bool
+	startSessionHygieneLastRun  time.Time
+	startSessionHygieneCooldown = 20 * time.Second
+)
+
 func NewService(agents AgentPreparer, runtimes RuntimeController) *Service {
 	return &Service{agents: agents, runtimes: runtimes}
 }
@@ -169,6 +177,35 @@ func recordWorkerRecoveryRequested(source, reason, action, agente string, proyec
 		Reason:     strings.TrimSpace(reason),
 		StateDelta: delta,
 	})
+}
+
+func tryBeginStartSessionHygiene(now time.Time) bool {
+	startSessionHygieneMu.Lock()
+	defer startSessionHygieneMu.Unlock()
+	if startSessionHygieneRunning {
+		return false
+	}
+	if !startSessionHygieneLastRun.IsZero() && now.Sub(startSessionHygieneLastRun) < startSessionHygieneCooldown {
+		return false
+	}
+	startSessionHygieneRunning = true
+	return true
+}
+
+func finishStartSessionHygiene(success bool, completedAt time.Time) {
+	startSessionHygieneMu.Lock()
+	defer startSessionHygieneMu.Unlock()
+	startSessionHygieneRunning = false
+	if success {
+		startSessionHygieneLastRun = completedAt.UTC()
+	}
+}
+
+func resetStartSessionHygieneStateForTests() {
+	startSessionHygieneMu.Lock()
+	defer startSessionHygieneMu.Unlock()
+	startSessionHygieneRunning = false
+	startSessionHygieneLastRun = time.Time{}
 }
 
 func recordWorkerRecoveryPausedExternal(source, reason, agente string, proyectoID, runtimeID *int64, handle *db.RuntimeHandle, orderIDs map[string]int64) {
@@ -348,13 +385,26 @@ func (s *Service) runSessionHygieneForControl(req ControlRequest) error {
 	if actor == "" {
 		actor = "orquesta"
 	}
-	staleHandles, err := s.runtimes.ReconcileStaleRuntimeHandles()
-	if err != nil {
-		return err
-	}
-	staleOrders, err := s.runtimes.ReconcileStaleRuntimeOrders()
-	if err != nil {
-		return err
+
+	staleHandles := 0
+	staleOrders := 0
+	ranGlobalHygiene := false
+	if tryBeginStartSessionHygiene(time.Now().UTC()) {
+		ranGlobalHygiene = true
+		globalHygieneOK := false
+		defer func() {
+			finishStartSessionHygiene(globalHygieneOK, time.Now().UTC())
+		}()
+		var err error
+		staleHandles, err = s.runtimes.ReconcileStaleRuntimeHandles()
+		if err != nil {
+			return err
+		}
+		staleOrders, err = s.runtimes.ReconcileStaleRuntimeOrders()
+		if err != nil {
+			return err
+		}
+		globalHygieneOK = true
 	}
 	purgedOrders := 0
 	if resultado, err := s.runtimes.PurgeTerminalRuntimeOrders(runtimesapp.RuntimeOrderPurgeRequest{
@@ -378,7 +428,7 @@ func (s *Service) runSessionHygieneForControl(req ControlRequest) error {
 	} else if resultado != nil {
 		purgedHandles = resultado.Deleted
 	}
-	if s.autonomyStore != nil && (staleHandles > 0 || staleOrders > 0 || purgedHandles > 0 || purgedOrders > 0) {
+	if s.autonomyStore != nil && (ranGlobalHygiene || purgedHandles > 0 || purgedOrders > 0) && (staleHandles > 0 || staleOrders > 0 || purgedHandles > 0 || purgedOrders > 0) {
 		s.autonomyStore.Audit(actor, "session_hygiene_start", "runtime", 0,
 			fmt.Sprintf("agente=%s proyecto=%s stale_handles=%d stale_orders=%d purged_handles=%d purged_orders=%d",
 				agente, proyecto, staleHandles, staleOrders, purgedHandles, purgedOrders))

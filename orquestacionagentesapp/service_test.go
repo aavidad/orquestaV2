@@ -47,6 +47,16 @@ func captureAutonomyEventsForTest(t *testing.T) *[]*db.AutonomyEvent {
 	return &events
 }
 
+func resetStartSessionHygieneForTest(t *testing.T) {
+	t.Helper()
+	prevCooldown := startSessionHygieneCooldown
+	resetStartSessionHygieneStateForTests()
+	t.Cleanup(func() {
+		startSessionHygieneCooldown = prevCooldown
+		resetStartSessionHygieneStateForTests()
+	})
+}
+
 func (s *stubAgentPreparer) BuildPrepare(input agentesapp.PrepareInput) (*agentesapp.PrepareOutput, error) {
 	s.input = input
 	return s.out, s.err
@@ -501,7 +511,7 @@ func TestEnqueueControlNormalizesPayload(t *testing.T) {
 }
 
 func TestEnqueueControlStartRunsSessionHygieneBeforeEnqueue(t *testing.T) {
-	t.Parallel()
+	resetStartSessionHygieneForTest(t)
 
 	store := &stubAutonomyStore{}
 	runtimes := &stubRuntimeController{
@@ -552,7 +562,7 @@ func TestEnqueueControlStartRunsSessionHygieneBeforeEnqueue(t *testing.T) {
 }
 
 func TestEnqueueControlStartSkipsSessionHygieneWhenOperationalHandleIsFresh(t *testing.T) {
-	t.Parallel()
+	resetStartSessionHygieneForTest(t)
 
 	now := time.Now().UTC()
 	store := &stubAutonomyStore{}
@@ -601,7 +611,7 @@ func TestEnqueueControlStartSkipsSessionHygieneWhenOperationalHandleIsFresh(t *t
 }
 
 func TestEnqueueControlStartSkipsSessionHygieneWhenLiveRuntimeOrderExists(t *testing.T) {
-	t.Parallel()
+	resetStartSessionHygieneForTest(t)
 
 	store := &stubAutonomyStore{}
 	runtimes := &stubRuntimeController{
@@ -648,7 +658,7 @@ func TestEnqueueControlStartSkipsSessionHygieneWhenLiveRuntimeOrderExists(t *tes
 }
 
 func TestEnqueueControlNonStartSkipsSessionHygiene(t *testing.T) {
-	t.Parallel()
+	resetStartSessionHygieneForTest(t)
 
 	store := &stubAutonomyStore{}
 	runtimes := &stubRuntimeController{
@@ -671,6 +681,37 @@ func TestEnqueueControlNonStartSkipsSessionHygiene(t *testing.T) {
 	}
 	if store.auditAction == "session_hygiene_start" {
 		t.Fatalf("no deberia auditar hygiene en accion no-start: %+v", store)
+	}
+}
+
+func TestEnqueueControlStartThrottlesGlobalSessionHygieneAcrossBurst(t *testing.T) {
+	resetStartSessionHygieneForTest(t)
+	startSessionHygieneCooldown = time.Minute
+
+	runtimes := &stubRuntimeController{
+		controlID:        55,
+		controlAction:    "start",
+		reconcileHandles: 2,
+		reconcileOrders:  1,
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(&stubAutonomyStore{})
+
+	for _, agente := range []string{"Codex6", "Codex7"} {
+		if _, _, err := service.EnqueueControl(ControlRequest{
+			Agente:   agente,
+			Proyecto: "orquestador",
+			Accion:   "start",
+			Por:      "server",
+		}); err != nil {
+			t.Fatalf("EnqueueControl(%s): %v", agente, err)
+		}
+	}
+	if runtimes.reconcileHandlesHits != 1 || runtimes.reconcileOrdersHits != 1 {
+		t.Fatalf("la higiene global deberia ejecutarse una sola vez por rafaga: handles=%d orders=%d", runtimes.reconcileHandlesHits, runtimes.reconcileOrdersHits)
+	}
+	if runtimes.purgeHandlesHits != 2 || runtimes.purgeOrdersHits != 2 {
+		t.Fatalf("las purgas por agente deben mantenerse en cada start: handles=%d orders=%d", runtimes.purgeHandlesHits, runtimes.purgeOrdersHits)
 	}
 }
 
