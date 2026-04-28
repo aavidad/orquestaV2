@@ -26,6 +26,7 @@ import (
 	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/gitgobernanza"
+	"orquesta/lenguajeapp"
 	"orquesta/notificaciones"
 	"orquesta/panelapp"
 	"orquesta/propuestasapp"
@@ -606,6 +607,20 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "text/markdown",
 		},
 		{
+			URITemplate: "orquesta://agentes/{agente}/overview",
+			Name:        "overview-agente",
+			Title:       "Overview de agente",
+			Description: "Detalle operativo canónico del agente: leases, foco de tarea y orden dominante",
+			MIMEType:    "application/json",
+		},
+		{
+			URITemplate: "orquesta://agentes/{agente}/actividad",
+			Name:        "actividad-agente",
+			Title:       "Actividad de agente",
+			Description: "Resumen operativo y Git del agente; admite ?desde=1h o RFC3339",
+			MIMEType:    "application/json",
+		},
+		{
 			URITemplate: "orquesta://supervision/{supervisor}/briefing",
 			Name:        "briefing-supervisor",
 			Title:       "Briefing de supervisor",
@@ -815,6 +830,38 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		return resourceText(uri, "text/markdown", texto), nil
+	case strings.HasPrefix(uri, "orquesta://agentes/") && strings.Contains(uri, "/overview"):
+		parsed, err := url.Parse(uri)
+		if err != nil {
+			return nil, err
+		}
+		agente := strings.TrimSuffix(strings.TrimPrefix(parsed.Path, "/"), "/overview")
+		if agente == "" || strings.TrimSpace(parsed.Host) != "agentes" {
+			return nil, fmt.Errorf("agente inválido")
+		}
+		detail, err := agentesService.BuildDetailCompact(agente)
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "application/json", prettyJSON(detail)), nil
+	case strings.HasPrefix(uri, "orquesta://agentes/") && strings.Contains(uri, "/actividad"):
+		parsed, err := url.Parse(uri)
+		if err != nil {
+			return nil, err
+		}
+		agente := strings.TrimSuffix(strings.TrimPrefix(parsed.Path, "/"), "/actividad")
+		if agente == "" || strings.TrimSpace(parsed.Host) != "agentes" {
+			return nil, fmt.Errorf("agente inválido")
+		}
+		since, err := parseStatsSince(parsed.Query().Get("desde"))
+		if err != nil {
+			return nil, err
+		}
+		report, err := buildAgentActivityReportLocal(agente, strings.TrimSpace(parsed.Query().Get("proyecto")), since, 200, 400)
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "application/json", prettyJSON(report)), nil
 	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.HasSuffix(uri, "/briefing"):
 		supervisor := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://supervision/"), "/briefing")
 		texto, err := buildSupervisorBriefing(supervisor)
@@ -1375,6 +1422,92 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.lenguaje.politica.ver",
+			Title:       "Ver politica de lenguaje",
+			Description: "Devuelve la politica global de lenguaje activa",
+			InputSchema: map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.lenguaje.politica.fijar",
+			Title:       "Fijar politica de lenguaje",
+			Description: "Actualiza la politica global de lenguaje por la via canonica",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"default_language":               map[string]any{"type": "string"},
+					"documentation_multilang":        map[string]any{"type": "boolean"},
+					"apps_multilang":                 map[string]any{"type": "boolean"},
+					"documentation_default_language": map[string]any{"type": "string"},
+					"apps_default_language":          map[string]any{"type": "string"},
+					"allowed_languages":              map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"notes":                          map[string]any{"type": "string"},
+					"updated_by":                     map[string]any{"type": "string"},
+				},
+				"required":             []string{"default_language"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.lenguaje.matriz.listar",
+			Title:       "Listar matriz de lenguaje",
+			Description: "Lista las reglas activas de la matriz de resolucion de lenguaje",
+			InputSchema: map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.lenguaje.matriz.fijar",
+			Title:       "Fijar regla de lenguaje",
+			Description: "Crea o actualiza una regla de la matriz de lenguaje",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"scope":      map[string]any{"type": "string"},
+					"selector":   map[string]any{"type": "string"},
+					"contexto":   map[string]any{"type": "string"},
+					"language":   map[string]any{"type": "string"},
+					"reason":     map[string]any{"type": "string"},
+					"updated_by": map[string]any{"type": "string"},
+				},
+				"required":             []string{"scope", "selector", "contexto", "language"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.lenguaje.matriz.borrar",
+			Title:       "Borrar regla de lenguaje",
+			Description: "Elimina una regla de la matriz de lenguaje",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"scope":    map[string]any{"type": "string"},
+					"selector": map[string]any{"type": "string"},
+					"contexto": map[string]any{"type": "string"},
+				},
+				"required":             []string{"scope", "selector", "contexto"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.lenguaje.resolver",
+			Title:       "Resolver lenguaje",
+			Description: "Resuelve el idioma efectivo para un proyecto o una tarea",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"proyecto": map[string]any{"type": "string"},
+					"tarea_id": map[string]any{"type": "integer"},
+					"contexto": map[string]any{"type": "string"},
+				},
+				"required":             []string{"proyecto"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.skills.detectar-carencia",
 			Title:       "Detectar skill faltante",
 			Description: "Consulta el catalogo de skills, detecta carencias y prepara un borrador revisable con invocacion controlada a $skill-creator",
@@ -1601,6 +1734,28 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.agentes.control",
+			Title:       "Control de ciclo de vida de agente",
+			Description: "Encola una orden canónica de start, pause, resume o stop para un agente",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":       map[string]any{"type": "string"},
+					"accion":       map[string]any{"type": "string", "enum": []string{"start", "pause", "resume", "stop"}},
+					"proyecto":     map[string]any{"type": "string"},
+					"conector":     map[string]any{"type": "string"},
+					"modelo":       map[string]any{"type": "string"},
+					"razonamiento": map[string]any{"type": "string"},
+					"perfil":       map[string]any{"type": "string"},
+					"motivo":       map[string]any{"type": "string"},
+					"por":          map[string]any{"type": "string"},
+					"tarea_id":     map[string]any{"type": "integer"},
+				},
+				"required":             []string{"agente", "accion"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.agentes.handoff",
 			Title:       "Handoff entre agentes",
 			Description: "Crea un handoff canónico entre agente origen y destino",
@@ -1648,6 +1803,36 @@ func listMCPTools() []mcpTool {
 					"limit":    map[string]any{"type": "integer"},
 				},
 				"required":             []string{"query"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.agentes.overview",
+			Title:       "Overview de agente",
+			Description: "Devuelve el contexto operativo canónico completo de un agente",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente": map[string]any{"type": "string"},
+				},
+				"required":             []string{"agente"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.agentes.actividad",
+			Title:       "Actividad de agente",
+			Description: "Resume actividad operativa y Git de un agente en una ventana temporal",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":           map[string]any{"type": "string"},
+					"proyecto":         map[string]any{"type": "string"},
+					"desde":            map[string]any{"type": "string"},
+					"audit_limit":      map[string]any{"type": "integer"},
+					"transcript_limit": map[string]any{"type": "integer"},
+				},
+				"required":             []string{"agente"},
 				"additionalProperties": false,
 			},
 		},
@@ -2275,6 +2460,112 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		}
 		return toolResult(prettyJSON(politicas), politicas, false), nil
 
+	case "orquesta.lenguaje.politica.ver":
+		politica, err := lenguajeService.GetPolicy()
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(politica), politica, false), nil
+
+	case "orquesta.lenguaje.politica.fijar":
+		defaultLanguage, err := requiredStringArg(args, "default_language")
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		politica := &lenguajeapp.LanguagePolicy{
+			DefaultLanguage:          defaultLanguage,
+			DocumentationMultilang:   boolArgOrFalse(args, "documentation_multilang"),
+			AppsMultilang:            boolArgOrFalse(args, "apps_multilang"),
+			DocumentationDefaultLang: optionalStringArg(args, "documentation_default_language"),
+			AppsDefaultLang:          optionalStringArg(args, "apps_default_language"),
+			AllowedLanguages:         optionalStringSliceArg(args, "allowed_languages"),
+			Notes:                    optionalStringArg(args, "notes"),
+		}
+		if err := lenguajeService.SetPolicy(politica, optionalStringArg(args, "updated_by")); err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		actualizada, err := lenguajeService.GetPolicy()
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(actualizada), actualizada, false), nil
+
+	case "orquesta.lenguaje.matriz.listar":
+		entries, err := lenguajeService.ListMatrixEntries()
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(entries), entries, false), nil
+
+	case "orquesta.lenguaje.matriz.fijar":
+		scope, err := requiredStringArg(args, "scope")
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		selector, err := requiredStringArg(args, "selector")
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		contexto, err := requiredStringArg(args, "contexto")
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		language, err := requiredStringArg(args, "language")
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		entry, err := lenguajeService.SetMatrixEntry(lenguajeapp.SetMatrixEntryInput{
+			Scope:     scope,
+			Selector:  selector,
+			Contexto:  contexto,
+			Language:  language,
+			Reason:    optionalStringArg(args, "reason"),
+			UpdatedBy: optionalStringArg(args, "updated_by"),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(entry), entry, false), nil
+
+	case "orquesta.lenguaje.matriz.borrar":
+		scope, err := requiredStringArg(args, "scope")
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		selector, err := requiredStringArg(args, "selector")
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		contexto, err := requiredStringArg(args, "contexto")
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		if err := lenguajeService.DeleteMatrixEntry(scope, selector, contexto); err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := map[string]any{
+			"ok":       true,
+			"scope":    scope,
+			"selector": selector,
+			"contexto": contexto,
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.lenguaje.resolver":
+		proyecto, err := requiredStringArg(args, "proyecto")
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		resolucion, err := lenguajeService.Resolve(lenguajeapp.ResolveInput{
+			Proyecto: proyecto,
+			TareaID:  optionalInt64PtrArg(args, "tarea_id"),
+			Contexto: optionalStringArg(args, "contexto"),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(resolucion), resolucion, false), nil
+
 	case "orquesta.skills.detectar-carencia":
 		req, err := buildSolicitudDeteccionSkillMCP(args)
 		if err != nil {
@@ -2530,6 +2821,41 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		}
 		return toolResult(prettyJSON(detail), detail, false), nil
 
+	case "orquesta.agentes.control":
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		accion, err := requiredStringArg(args, "accion")
+		if err != nil {
+			return nil, err
+		}
+		req := apiAgenteControlRequest{
+			Agente:       agente,
+			Accion:       accion,
+			Proyecto:     optionalStringArg(args, "proyecto"),
+			Conector:     optionalStringArg(args, "conector"),
+			Modelo:       optionalStringArg(args, "modelo"),
+			Razonamiento: optionalStringArg(args, "razonamiento"),
+			Perfil:       optionalStringArg(args, "perfil"),
+			Motivo:       optionalStringArg(args, "motivo"),
+			Por:          optionalStringArg(args, "por"),
+		}
+		if tareaID := optionalInt64Arg(args, "tarea_id"); tareaID > 0 {
+			req.TareaID = &tareaID
+		}
+		orderID, accionCanonica, err := encolarControlAgenteLocalWithTimeout(req)
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := apiAgenteControlResponse{
+			OK:     true,
+			ID:     orderID,
+			Agente: strings.TrimSpace(req.Agente),
+			Accion: strings.TrimSpace(accionCanonica),
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
 	case "orquesta.agentes.handoff":
 		origen, err := requiredStringArg(args, "agente_origen")
 		if err != nil {
@@ -2594,6 +2920,38 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return toolResult(err.Error(), nil, true), nil
 		}
 		return toolResult(prettyJSON(out), out, false), nil
+
+	case "orquesta.agentes.overview":
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		detail, err := agentesService.BuildDetailCompact(agente)
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(detail), detail, false), nil
+
+	case "orquesta.agentes.actividad":
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		since, err := parseStatsSince(optionalStringArg(args, "desde"))
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		report, err := buildAgentActivityReportLocal(
+			agente,
+			optionalStringArg(args, "proyecto"),
+			since,
+			intArgOrDefault(args, "audit_limit", 200),
+			intArgOrDefault(args, "transcript_limit", 400),
+		)
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(report), report, false), nil
 
 	case "orquesta.runtime.handles.listar":
 		agente := optionalStringArg(args, "agente")

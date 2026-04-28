@@ -25,6 +25,7 @@ import (
 	"orquesta/capacidadapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/lenguajeapp"
 	"orquesta/microprogramacionapp"
 	"orquesta/propuestasapp"
 	"orquesta/reviewapp"
@@ -131,6 +132,123 @@ func TestAPIMCPCallToolStateless(t *testing.T) {
 	})
 }
 
+func TestMCPToolsIncluyeLenguaje(t *testing.T) {
+	tools := listMCPTools()
+	for _, name := range []string{
+		"orquesta.lenguaje.politica.ver",
+		"orquesta.lenguaje.politica.fijar",
+		"orquesta.lenguaje.matriz.listar",
+		"orquesta.lenguaje.matriz.fijar",
+		"orquesta.lenguaje.matriz.borrar",
+		"orquesta.lenguaje.resolver",
+	} {
+		if !mcpToolListed(tools, name) {
+			t.Fatalf("tool MCP no registrada: %s", name)
+		}
+	}
+}
+
+func TestMCPToolLenguajeParidadBasica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+
+		policyResult, err := callMCPTool("orquesta.lenguaje.politica.fijar", map[string]any{
+			"default_language":               "en",
+			"documentation_multilang":        true,
+			"apps_multilang":                 true,
+			"documentation_default_language": "en",
+			"apps_default_language":          "en",
+			"allowed_languages":              []any{"es", "en", "fr"},
+			"notes":                          "demo mcp",
+			"updated_by":                     "CodexMCP",
+		})
+		if err != nil {
+			t.Fatalf("fijar politica via MCP: %v", err)
+		}
+		policy, ok := policyResult["structuredContent"].(*lenguajeapp.LanguagePolicy)
+		if !ok || policy == nil {
+			t.Fatalf("structuredContent politica inesperado: %#v", policyResult["structuredContent"])
+		}
+		if policy.DefaultLanguage != "en" || policy.AppsDefaultLang != "en" {
+			t.Fatalf("politica MCP inesperada: %+v", policy)
+		}
+
+		matrixSetResult, err := callMCPTool("orquesta.lenguaje.matriz.fijar", map[string]any{
+			"scope":      "project",
+			"selector":   "orquestador",
+			"contexto":   "apps",
+			"language":   "fr",
+			"reason":     "demo",
+			"updated_by": "CodexMCP",
+		})
+		if err != nil {
+			t.Fatalf("fijar matriz via MCP: %v", err)
+		}
+		entry, ok := matrixSetResult["structuredContent"].(*lenguajeapp.LanguageMatrixEntry)
+		if !ok || entry == nil {
+			t.Fatalf("structuredContent entrada inesperado: %#v", matrixSetResult["structuredContent"])
+		}
+		if entry.Language != "fr" || entry.Context != "apps" {
+			t.Fatalf("entrada MCP inesperada: %+v", entry)
+		}
+
+		matrixListResult, err := callMCPTool("orquesta.lenguaje.matriz.listar", nil)
+		if err != nil {
+			t.Fatalf("listar matriz via MCP: %v", err)
+		}
+		entries, ok := matrixListResult["structuredContent"].([]*lenguajeapp.LanguageMatrixEntry)
+		if !ok {
+			t.Fatalf("structuredContent matriz inesperado: %#v", matrixListResult["structuredContent"])
+		}
+		if len(entries) != 1 || entries[0].Language != "fr" {
+			t.Fatalf("matriz MCP inesperada: %+v", entries)
+		}
+
+		resolveResult, err := callMCPTool("orquesta.lenguaje.resolver", map[string]any{
+			"proyecto": "orquestador",
+			"contexto": "apps",
+		})
+		if err != nil {
+			t.Fatalf("resolver lenguaje via MCP: %v", err)
+		}
+		resolution, ok := resolveResult["structuredContent"].(*lenguajeapp.LanguageResolution)
+		if !ok || resolution == nil {
+			t.Fatalf("structuredContent resolucion inesperado: %#v", resolveResult["structuredContent"])
+		}
+		if resolution.Idioma != "fr" || !strings.Contains(resolution.Origen, "project.orquestador.apps") {
+			t.Fatalf("resolucion MCP inesperada: %+v", resolution)
+		}
+
+		deleteResult, err := callMCPTool("orquesta.lenguaje.matriz.borrar", map[string]any{
+			"scope":    "project",
+			"selector": "orquestador",
+			"contexto": "apps",
+		})
+		if err != nil {
+			t.Fatalf("borrar matriz via MCP: %v", err)
+		}
+		deleted, ok := deleteResult["structuredContent"].(map[string]any)
+		if !ok || deleted["ok"] != true {
+			t.Fatalf("resultado borrado inesperado: %#v", deleteResult["structuredContent"])
+		}
+
+		resolveFallbackResult, err := callMCPTool("orquesta.lenguaje.resolver", map[string]any{
+			"proyecto": "orquestador",
+			"contexto": "apps",
+		})
+		if err != nil {
+			t.Fatalf("resolver fallback via MCP: %v", err)
+		}
+		fallback, ok := resolveFallbackResult["structuredContent"].(*lenguajeapp.LanguageResolution)
+		if !ok || fallback == nil {
+			t.Fatalf("structuredContent fallback inesperado: %#v", resolveFallbackResult["structuredContent"])
+		}
+		if fallback.Idioma != "en" || !strings.Contains(fallback.Origen, "policy") || fallback.Entrada != nil {
+			t.Fatalf("fallback MCP inesperado: %+v", fallback)
+		}
+	})
+}
+
 func TestMCPResourceReadDetallePropuesta(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
@@ -153,6 +271,15 @@ func TestMCPResourceReadDetallePropuesta(t *testing.T) {
 			t.Fatalf("el recurso no contiene la descripcion: %s", text)
 		}
 	})
+}
+
+func mcpToolListed(tools []mcpTool, name string) bool {
+	for _, tool := range tools {
+		if tool.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func TestMCPPromptBriefingIncluyeReglasYPropuestasPendientes(t *testing.T) {
@@ -1437,6 +1564,48 @@ func TestMCPToolsAgentesAccionOperanPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPToolsAgentesControlOperaPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := agentControlEnqueueFunc
+		defer func() { agentControlEnqueueFunc = prev }()
+
+		var seen apiAgenteControlRequest
+		agentControlEnqueueFunc = func(req apiAgenteControlRequest) (int64, string, error) {
+			seen = req
+			return 77, strings.TrimSpace(req.Accion), nil
+		}
+
+		result, err := callMCPTool("orquesta.agentes.control", map[string]any{
+			"agente":       "Codex9",
+			"accion":       "start",
+			"proyecto":     "orquestador",
+			"conector":     "codex-cli",
+			"modelo":       "gpt-5.5",
+			"razonamiento": "high",
+			"perfil":       "implementacion",
+			"motivo":       "launch from mcp",
+			"por":          "OpenClaw",
+			"tarea_id":     int64(41),
+		})
+		if err != nil {
+			t.Fatalf("agentes control MCP: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("agentes control marcado como error: %#v", result)
+		}
+		resp, _ := result["structuredContent"].(apiAgenteControlResponse)
+		if resp.ID != 77 || resp.Accion != "start" || resp.Agente != "Codex9" {
+			t.Fatalf("respuesta control inesperada: %#v", result["structuredContent"])
+		}
+		if seen.Agente != "Codex9" || seen.Proyecto != "orquestador" || seen.Conector != "codex-cli" || seen.Modelo != "gpt-5.5" {
+			t.Fatalf("request control inesperada: %+v", seen)
+		}
+		if seen.TareaID == nil || *seen.TareaID != 41 {
+			t.Fatalf("request control sin tarea esperada: %+v", seen)
+		}
+	})
+}
+
 func TestMCPToolsAgentesHandoffOperaPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
@@ -1534,6 +1703,101 @@ func TestMCPToolsAgentesPrepararEInvestigarOperanPorLaViaCanonica(t *testing.T) 
 		}
 		if report.Proyecto == nil || report.Proyecto.Slug != "orquestador" {
 			t.Fatalf("investigation report sin proyecto esperado: %#v", report.Proyecto)
+		}
+	})
+}
+
+func TestMCPToolsAgentesOverviewYActividadOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex7", "programador"); err != nil {
+			t.Fatalf("registrando Codex7: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		if _, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      "Codex7",
+			ProyectoID:  &proyectoID,
+			CWD:         "/tmp/orquestador",
+			Herramienta: "codex-cli",
+		}); err != nil {
+			t.Fatalf("iniciar sesion Codex7: %v", err)
+		}
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:     "MCP agent activity",
+			ProyectoID: &proyectoID,
+			Modulo:     "cmd",
+			Prioridad:  db.PrioridadAlta,
+			CreadoPor:  "OpenClaw",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea: %v", err)
+		}
+		if err := db.TomarTarea(tareaID, "Codex7"); err != nil {
+			t.Fatalf("tomar tarea: %v", err)
+		}
+		if err := db.IniciarTarea(tareaID, "Codex7"); err != nil {
+			t.Fatalf("iniciar tarea: %v", err)
+		}
+
+		overviewResult, err := callMCPTool("orquesta.agentes.overview", map[string]any{"agente": "Codex7"})
+		if err != nil {
+			t.Fatalf("agentes overview MCP: %v", err)
+		}
+		if overviewResult["isError"] != false {
+			t.Fatalf("agentes overview marcado como error: %#v", overviewResult)
+		}
+		detail, _ := overviewResult["structuredContent"].(*agentesapp.Detail)
+		if detail == nil || detail.Entity == nil || detail.Entity.CurrentTask == nil || detail.Entity.CurrentTask.TaskID != tareaID {
+			t.Fatalf("overview sin foco de tarea esperado: %#v", overviewResult["structuredContent"])
+		}
+
+		activityResult, err := callMCPTool("orquesta.agentes.actividad", map[string]any{
+			"agente":   "Codex7",
+			"proyecto": "orquestador",
+			"desde":    "2h",
+		})
+		if err != nil {
+			t.Fatalf("agentes actividad MCP: %v", err)
+		}
+		if activityResult["isError"] != false {
+			t.Fatalf("agentes actividad marcado como error: %#v", activityResult)
+		}
+		report, _ := activityResult["structuredContent"].(*agentActivityReport)
+		if report == nil || report.Agent != "Codex7" {
+			t.Fatalf("activity report inesperado: %#v", activityResult["structuredContent"])
+		}
+		if len(report.Summary.CurrentTasks) == 0 || !strings.Contains(report.Summary.CurrentTasks[0], "MCP agent activity") {
+			t.Fatalf("activity report sin tarea actual esperada: %#v", report.Summary.CurrentTasks)
+		}
+	})
+}
+
+func TestMCPResourceActividadAgenteAceptaDesde(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex8", "programador"); err != nil {
+			t.Fatalf("registrando Codex8: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		if _, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      "Codex8",
+			ProyectoID:  &proyectoID,
+			CWD:         "/tmp/orquestador",
+			Herramienta: "codex-cli",
+		}); err != nil {
+			t.Fatalf("iniciar sesion Codex8: %v", err)
+		}
+
+		contents, err := readMCPResource("orquesta://agentes/Codex8/actividad?desde=2h&proyecto=orquestador")
+		if err != nil {
+			t.Fatalf("readMCPResource actividad agente: %v", err)
+		}
+		if len(contents) == 0 {
+			t.Fatalf("contenido actividad agente vacío")
+		}
+		text, _ := contents[0]["text"].(string)
+		for _, token := range []string{`"agent": "Codex8"`, `"project": "orquestador"`} {
+			if !strings.Contains(text, token) {
+				t.Fatalf("recurso actividad sin %q: %s", token, text)
+			}
 		}
 	})
 }
