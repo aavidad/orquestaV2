@@ -5,7 +5,6 @@ Autor: Alberto Avidad Fernandez
 Oficina de Software Libre (OSL) - Diputacion de Granada
 */
 
-// Control-plane support for runtime resume and mailbox flow.
 package cmd
 
 import (
@@ -7730,11 +7729,11 @@ func procesarRuntimeMailboxSessionResumeBatch() (int, error) {
 }
 
 func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
-	if consumed == nil {
-		consumed = map[int64]struct{}{}
-	}
 	if snapshot == nil {
 		snapshot = newRuntimeMailboxBatchSnapshot()
+	}
+	if consumed == nil {
+		consumed = map[int64]struct{}{}
 	}
 	total := 0
 	budget := runtimeMailboxBatchBudget()
@@ -7771,6 +7770,12 @@ func runtimeMailboxSessionResumeBatchBudgetAgotado(examined int, budget time.Dur
 // session_resume y lo despacha por el canal que corresponda (con sesión o fallback interactivo).
 // Retorna true si el mensaje fue procesado (encolado, reactivado u obsoleto consumido).
 func procesarRuntimeMailboxSessionResumeMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	if consumed == nil {
+		consumed = map[int64]struct{}{}
+	}
+	if snapshot == nil {
+		snapshot = newRuntimeMailboxBatchSnapshot()
+	}
 	texto, ok := construirInstruccionMailboxInteractivo(msg)
 	if !ok {
 		return false, nil
@@ -7842,10 +7847,18 @@ func runtimeMailboxSessionResumePermiteFallbackInteractivoPipelineLocal(msg *db.
 // hay una externalSessionID: primero consume mailbox_only entregada y luego
 // verifica condiciones TMUX para encolar el resume normal si sigue pendiente.
 func procesarRuntimeMailboxSessionResumeConSesion(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto, externalSessionID string) (bool, error) {
+	if msg == nil || handle == nil {
+		return false, nil
+	}
+	if snapshot == nil {
+		snapshot = newRuntimeMailboxBatchSnapshot()
+	}
 	if mailboxOnlyConsumed, err := consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot, msg, handle, externalSessionID, "runtime_mailbox_session_resume"); err != nil {
 		return false, err
 	} else if mailboxOnlyConsumed {
-		consumed[msg.ID] = struct{}{}
+		if consumed != nil && msg != nil {
+			consumed[msg.ID] = struct{}{}
+		}
 		return true, nil
 	}
 	if cubierta, err := consumirRuntimeMailboxSessionResumeCubiertaSiProcede(msg, consumed, handle, runtimeInstance, "session_resume"); err != nil {
@@ -7876,6 +7889,9 @@ func procesarRuntimeMailboxSessionResumeConSesion(msg *db.RuntimeMailboxMessage,
 }
 
 func consumirRuntimeMailboxSessionResumeCubiertaSiProcede(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, lane string) (bool, error) {
+	if msg == nil || handle == nil {
+		return false, nil
+	}
 	if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, lane, time.Now().UTC()); err != nil {
 		return false, err
 	} else if obsoleta {
@@ -7896,6 +7912,12 @@ func consumirRuntimeMailboxSessionResumeCubiertaSiProcede(msg *db.RuntimeMailbox
 }
 
 func encolarRuntimeMailboxSessionResumeSiCorresponde(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto, externalSessionID, auditAction, supersedeAction string) (bool, error) {
+	if msg == nil || handle == nil {
+		return false, nil
+	}
+	if snapshot == nil {
+		snapshot = newRuntimeMailboxBatchSnapshot()
+	}
 	if blocked, err := runtimeMailboxBloqueadaPorBootstrapPendiente(msg, handle, runtimeInstance); err != nil {
 		return false, err
 	} else if blocked {
@@ -7904,7 +7926,9 @@ func encolarRuntimeMailboxSessionResumeSiCorresponde(msg *db.RuntimeMailboxMessa
 	if mailboxOnlyConsumed, err := consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot, msg, handle, externalSessionID, strings.TrimSpace(auditAction)); err != nil {
 		return false, err
 	} else if mailboxOnlyConsumed {
-		consumed[msg.ID] = struct{}{}
+		if consumed != nil && msg != nil {
+			consumed[msg.ID] = struct{}{}
+		}
 		return true, nil
 	}
 	if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
@@ -7933,7 +7957,9 @@ func encolarRuntimeMailboxSessionResumeSiCorresponde(msg *db.RuntimeMailboxMessa
 	}
 	db.Audit("orquesta", strings.TrimSpace(auditAction), "runtime_order", orderID,
 		fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
-	consumed[msg.ID] = struct{}{}
+	if consumed != nil && msg != nil {
+		consumed[msg.ID] = struct{}{}
+	}
 	return true, nil
 }
 
@@ -8200,7 +8226,9 @@ func reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje(msg *db.RuntimeMailb
 		}
 		db.Audit("orquesta", "runtime_mailbox_guidance_durable_obsoleta", "runtime_mailbox", msg.ID,
 			fmt.Sprintf("agente=%s kind=%s %s", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), strings.TrimSpace(detalle)))
-		consumed[msg.ID] = struct{}{}
+		if consumed != nil {
+			consumed[msg.ID] = struct{}{}
+		}
 		return true, nil
 	}
 	handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
@@ -8271,7 +8299,9 @@ func reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje(msg *db.RuntimeMailb
 	}
 	db.Audit("orquesta", "runtime_mailbox_guidance_durable_inbox", "runtime_mailbox", msg.ID,
 		fmt.Sprintf("agente=%s proyecto=%s kind=%s mailbox_only_ready=%t", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(proyecto.Slug), strings.TrimSpace(msg.Kind), mailboxOnlyReady))
-	consumed[msg.ID] = struct{}{}
+	if consumed != nil {
+		consumed[msg.ID] = struct{}{}
+	}
 	return true, nil
 }
 
@@ -9481,8 +9511,11 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg *db.RuntimeMailboxMess
 }
 
 func consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, lane string, now time.Time, state *runtimeMailboxInteractiveWorkerState, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	if msg == nil || handle == nil {
+		return false, nil
+	}
 	kind := strings.TrimSpace(msg.Kind)
-	if msg == nil || handle == nil || (!runtimeMailboxKindEphemeral(kind) && !strings.EqualFold(kind, "pipeline_local")) {
+	if !runtimeMailboxKindEphemeral(kind) && !strings.EqualFold(kind, "pipeline_local") {
 		return false, nil
 	}
 	if detalle, obsoleta, err := runtimeMailboxObsoletaPorTareaActivaActualConSnapshot(msg, snapshot); err != nil {
@@ -18191,3 +18224,5 @@ func encolarControlAutonomiaProyectoDetallado(req apiAgenteControlRequest) error
 }
 
 // TMUX canonical lane handling lives in this file.
+// Resume-path slice in progress; keep mailbox batch handling here.
+// TODO(orquesta): narrow runtime mailbox resume slice.

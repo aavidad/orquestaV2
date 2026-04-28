@@ -15498,7 +15498,7 @@ func TestReconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailboxMarcaEntr
 			resolvedHandle.ID,
 		)
 	}
-	n, err := reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox, map[int64]struct{}{}, snapshot)
+	n, err := reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox, nil, snapshot)
 	if err != nil {
 		t.Fatalf("reconciliar guidance durable inbox: %v", err)
 	}
@@ -18567,6 +18567,211 @@ func TestProcesarRuntimeMailboxSessionResumeBatchPermiteReentregaEnNuevaSesionCo
 	}
 }
 
+func TestProcesarRuntimeMailboxSessionResumeBatchConMailboxToleraEstadoNil(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	n, err := procesarRuntimeMailboxSessionResumeBatchConMailbox(nil, nil, nil)
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume con estado nil: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("deberia devolver cero con mailbox vacia, got=%d", n)
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeConSesionToleraConsumedYSnapshotNilConMailboxOnlyActual(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	metaJSON := `{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-mailbox-only-nil","tmux_pane_id":"%70","mailbox_delivery_mode":"session_resume","can_send_input":false,"external_session_id":"sess-mailbox-only-nil"}`
+	capsJSON := `{"mailbox_delivery_mode":"session_resume","can_send_input":false}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex1-mailbox-only-nil/%70', estado='activo', metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "nudge",
+		PayloadJSON: `{"instruction":"nudge durable","texto":"nudge durable"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get runtime mailbox: %+v err=%v", msg, err)
+	}
+
+	payload := fmt.Sprintf(`{"to_agente":"Codex1","from_agente":"server","texto":"nudge durable","mailbox_id":%d,"mailbox_kind":"nudge","external_session_id":"sess-mailbox-only-nil","delivery_attempt_signature":"session_resume|handle:%d|session:sess-mailbox-only-nil"}`, msgID, handle.ID)
+	resultado := fmt.Sprintf(`{"ok":true,"mailbox_id":%d,"delivery_state":"delivered","mailbox_only":true}`, msgID)
+	now := time.Now().UTC()
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:        "Codex1",
+		ProyectoID:    &proyectoID,
+		RuntimeID:     &runtime.ID,
+		HandleID:      &handle.ID,
+		Tipo:          "send_instruction",
+		PayloadJSON:   payload,
+		ResultadoJSON: resultado,
+		Estado:        "completada",
+		FinishedAt:    &now,
+		UpdatedAt:     now,
+	}); err != nil {
+		t.Fatalf("encolar send_instruction mailbox_only: %v", err)
+	}
+
+	processed, err := procesarRuntimeMailboxSessionResumeConSesion(msg, nil, nil, handle, runtime, "nudge durable", "sess-mailbox-only-nil")
+	if err != nil {
+		t.Fatalf("procesarRuntimeMailboxSessionResumeConSesion: %v", err)
+	}
+	if !processed {
+		t.Fatal("deberia consumir mailbox_only actual aunque consumed y snapshot sean nil")
+	}
+
+	msg, err = db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("mailbox final: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("mailbox deberia quedar consumida: %+v", msg)
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeHelpersToleranMsgYHandleNil(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	processed, err := procesarRuntimeMailboxSessionResumeConSesion(nil, map[int64]struct{}{}, nil, nil, nil, "", "")
+	if err != nil {
+		t.Fatalf("procesarRuntimeMailboxSessionResumeConSesion nil: %v", err)
+	}
+	if processed {
+		t.Fatal("no deberia procesar con msg/handle nil")
+	}
+
+	processed, err = encolarRuntimeMailboxSessionResumeSiCorresponde(nil, map[int64]struct{}{}, nil, nil, nil, "", "", "", "")
+	if err != nil {
+		t.Fatalf("encolarRuntimeMailboxSessionResumeSiCorresponde nil: %v", err)
+	}
+	if processed {
+		t.Fatal("no deberia encolar con msg/handle nil")
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeMensajeToleraConsumedYSnapshotNil(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-nil-guard","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"instruccion session resume helper nil"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+
+	dispatched, err := procesarRuntimeMailboxSessionResumeMensaje(msg, nil, nil)
+	if err != nil {
+		t.Fatalf("procesar mensaje session resume con nils: %v", err)
+	}
+	if !dispatched {
+		t.Fatalf("deberia despachar send_instruction con consumed/snapshot nil")
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var send *db.RuntimeOrder
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			send = order
+			break
+		}
+	}
+	if send == nil {
+		t.Fatalf("faltaba send_instruction")
+	}
+	if !strings.Contains(send.PayloadJSON, `"mailbox_id":`+strconv.FormatInt(msgID, 10)) {
+		t.Fatalf("send_instruction sin mailbox_id: %s", send.PayloadJSON)
+	}
+	if !strings.Contains(send.PayloadJSON, `"external_session_id":"sess-nil-guard"`) {
+		t.Fatalf("send_instruction sin external_session_id: %s", send.PayloadJSON)
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchRespetaLeaseHandoffDerivadaSinMailboxIDsPropios(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()
@@ -19036,6 +19241,26 @@ func TestConsumirRuntimeMailboxSessionResumeCubiertaSiProcedeMarcaConsumidaPorRe
 	}
 	if msg.Estado != "consumido" {
 		t.Fatalf("mailbox deberia quedar consumida: %+v", msg)
+	}
+}
+
+func TestConsumirRuntimeMailboxSessionResumeCubiertaSiProcedeToleraNil(t *testing.T) {
+	cubierta, err := consumirRuntimeMailboxSessionResumeCubiertaSiProcede(nil, nil, nil, nil, "session_resume")
+	if err != nil {
+		t.Fatalf("consumirRuntimeMailboxSessionResumeCubiertaSiProcede nil: %v", err)
+	}
+	if cubierta {
+		t.Fatal("nil no deberia marcar mailbox cubierta")
+	}
+}
+
+func TestConsumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstadoToleraNil(t *testing.T) {
+	obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado(nil, nil, "session_resume", time.Now().UTC(), nil, nil)
+	if err != nil {
+		t.Fatalf("consumirRuntimeMailboxObsoletaPorWorkerSiProcedeConEstado nil: %v", err)
+	}
+	if obsoleta {
+		t.Fatal("nil no deberia marcar mailbox obsoleta")
 	}
 }
 
