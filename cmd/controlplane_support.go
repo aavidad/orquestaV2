@@ -7747,7 +7747,7 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 		if _, skip := consumed[msg.ID]; skip {
 			continue
 		}
-		if examined > 0 && budget > 0 && time.Since(start) >= budget {
+		if runtimeMailboxSessionResumeBatchBudgetAgotado(examined, budget, start) {
 			runtimeMailboxBatchDebugf("phase=session_resume budget=%s examined=%d dispatched=%d", budget, examined, total)
 			break
 		}
@@ -7761,6 +7761,10 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 		}
 	}
 	return total, nil
+}
+
+func runtimeMailboxSessionResumeBatchBudgetAgotado(examined int, budget time.Duration, start time.Time) bool {
+	return examined > 0 && budget > 0 && time.Since(start) >= budget
 }
 
 // procesarRuntimeMailboxSessionResumeMensaje resuelve handle y runtime para un mensaje

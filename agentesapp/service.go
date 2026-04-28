@@ -4120,7 +4120,7 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 		return "atascado", firstNonEmpty(row.workerLastOutputSummary(), "worker sin salida reciente")
 	}
 	if hasActiveTask && row.MailboxPending > 0 && !workerAnchored {
-		return "bloqueado_por_runtime", "mailbox pendiente sin runtime activo"
+		return "arrancando", "mailbox pendiente sin runtime activo"
 	}
 	if !hasActiveTask && row.MailboxPending > 0 && !workerAnchored {
 		return "bloqueado", "mailbox pendiente sin runtime activo"

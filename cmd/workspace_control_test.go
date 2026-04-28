@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -106,6 +107,46 @@ func TestBuildWorkspaceControlReportAgregaStatusYCockpits(t *testing.T) {
 	}
 	if report.Projects[0] == nil || report.Projects[0].Proyecto == nil || report.Projects[0].Proyecto.Slug != "infra" {
 		t.Fatalf("orden de proyectos inesperado: %+v", report.Projects)
+	}
+}
+
+func TestBuildWorkspaceControlReportCuentaProyectosActivosAunqueFalleCockpit(t *testing.T) {
+	prevStatus := statusService
+	prevProjects := workspaceControlListProjects
+	prevCockpit := workspaceControlCockpitBuilder
+	defer func() {
+		statusService = prevStatus
+		workspaceControlListProjects = prevProjects
+		workspaceControlCockpitBuilder = prevCockpit
+	}()
+
+	statusService = stubStatusService{response: apiStatusResponse{}}
+	workspaceControlListProjects = func() ([]map[string]any, error) {
+		return []map[string]any{
+			{"slug": "orquestador"},
+			{"slug": "infra"},
+			{"slug": "   "},
+		}, nil
+	}
+	workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+		if slug == "infra" {
+			return nil, fmt.Errorf("cockpit no disponible")
+		}
+		return &apiProyectoCockpit{
+			Proyecto:        &db.Proyecto{Slug: slug, Nombre: slug},
+			TareasPorEstado: map[string]int{"en_progreso": 1},
+		}, nil
+	}
+
+	report, err := buildWorkspaceControlReport()
+	if err != nil {
+		t.Fatalf("buildWorkspaceControlReport: %v", err)
+	}
+	if report.ActiveProjects != 2 {
+		t.Fatalf("active projects deberia contar slugs activos aunque falte cockpit, got=%d", report.ActiveProjects)
+	}
+	if len(report.Projects) != 1 || report.Projects[0].Proyecto == nil || report.Projects[0].Proyecto.Slug != "orquestador" {
+		t.Fatalf("cockpits cargados inesperados: %+v", report.Projects)
 	}
 }
 

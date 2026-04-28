@@ -84,7 +84,18 @@ func ListarAutonomyEvents(f FiltroAutonomyEvents) ([]*AutonomyEvent, error) {
 	if limite <= 0 {
 		limite = 50
 	}
-	items, err := ListarAuditoria(FiltroAuditoria{Agente: f.Actor, Desde: f.Desde, Limite: limite * 3})
+	entidad := "autonomy_event"
+	filtroAuditoria := FiltroAuditoria{
+		Agente:  f.Actor,
+		Entidad: &entidad,
+		Desde:   f.Desde,
+		Limite:  autonomyEventAuditScanLimit(limite, f),
+	}
+	if f.Kind != nil && strings.TrimSpace(*f.Kind) != "" {
+		accion := autonomyEventActionPrefix + strings.TrimSpace(*f.Kind)
+		filtroAuditoria.Accion = &accion
+	}
+	items, err := ListarAuditoria(filtroAuditoria)
 	if err != nil {
 		return nil, err
 	}
@@ -110,6 +121,17 @@ func ListarAutonomyEvents(f FiltroAutonomyEvents) ([]*AutonomyEvent, error) {
 		}
 	}
 	return out, nil
+}
+
+func autonomyEventAuditScanLimit(limite int, f FiltroAutonomyEvents) int {
+	scanLimit := limite * 3
+	if f.ProjectID != nil || f.TaskID != nil {
+		scanLimit = limite * 20
+	}
+	if scanLimit < 50 {
+		return 50
+	}
+	return scanLimit
 }
 
 func autonomyEventEntityID(ev *AutonomyEvent) int64 {

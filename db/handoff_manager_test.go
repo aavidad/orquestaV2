@@ -1036,6 +1036,35 @@ func TestRegistrarAutonomyEventHandoffFailedSinRuntimeOrderEsIdempotente(t *test
 	}
 }
 
+func TestRegistrarAutonomyEventHandoffFailedIdempotenteConRuidoAuditoria(t *testing.T) {
+	prepararDBTemporal(t)
+
+	_, tareaID := prepararAgenteConTareaEnProgreso(t, "Codex1")
+
+	if err := RegistrarAutonomyEventHandoffFailed(0, "handoff_manager", &tareaID, nil, "Codex1", "Codex2", "stale", "request", "fallo al crear handoff", 0); err != nil {
+		t.Fatalf("RegistrarAutonomyEventHandoffFailed: %v", err)
+	}
+	for i := 0; i < 75; i++ {
+		Audit("Codex1", "accion_normal", "tarea", tareaID, fmt.Sprintf("ruido auditoria %d", i))
+	}
+	if err := RegistrarAutonomyEventHandoffFailed(0, "handoff_manager", &tareaID, nil, "Codex1", "Codex2", "stale", "request", "fallo al crear handoff", 0); err != nil {
+		t.Fatalf("RegistrarAutonomyEventHandoffFailed idempotente: %v", err)
+	}
+
+	kind := "handoff_failed"
+	events, err := ListarAutonomyEvents(FiltroAutonomyEvents{
+		Kind:   &kind,
+		TaskID: &tareaID,
+		Limite: 10,
+	})
+	if err != nil {
+		t.Fatalf("ListarAutonomyEvents: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("handoff_failed no debe duplicarse con ruido de auditoria, got=%d %+v", len(events), events)
+	}
+}
+
 func TestRegistrarAutonomyEventHandoffFailedConOrdenRealUsaRuntimeOrderYNoDuplica(t *testing.T) {
 	prepararDBTemporal(t)
 

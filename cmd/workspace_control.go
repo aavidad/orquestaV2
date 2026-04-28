@@ -57,12 +57,14 @@ func buildWorkspaceControlReport() (*workspaceControlReport, error) {
 		return nil, err
 	}
 
+	activeProjects := 0
 	cockpits := make([]*apiProyectoCockpit, 0, len(projectItems))
 	for _, item := range projectItems {
 		slug := strings.TrimSpace(fmt.Sprint(item["slug"]))
 		if slug == "" {
 			continue
 		}
+		activeProjects++
 		cockpit, err := workspaceControlCockpitBuilder(slug)
 		if err != nil || cockpit == nil {
 			continue
@@ -89,7 +91,7 @@ func buildWorkspaceControlReport() (*workspaceControlReport, error) {
 	surface := buildAutonomySurfaceFromCockpits(cockpits, workspaceAutonomyRecentLimit)
 	report := &workspaceControlReport{
 		Generated:           time.Now().UTC(),
-		ActiveProjects:      len(cockpits),
+		ActiveProjects:      activeProjects,
 		TaskCounts:          taskCounts,
 		DeudaDispatch:       status.DeudaDispatch,
 		Autonomia:           status.Autonomia,
