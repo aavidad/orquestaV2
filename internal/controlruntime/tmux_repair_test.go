@@ -21,9 +21,10 @@ func TestEnsureTMUXMonitorFromMetadataJSONReattachesDeadMonitor(t *testing.T) {
 		Agente:   "CodexTMUXRepair",
 		Proyecto: "orquestador",
 		Plan: &runtimeagente.LaunchPlan{
-			Comando:    "/bin/echo",
-			Args:       []string{"hola"},
-			WorkingDir: dir,
+			Comando:         "/bin/echo",
+			Args:            []string{"hola"},
+			WorkingDir:      dir,
+			PerfilOperativo: "persistente",
 			Env: map[string]string{
 				"ORQUESTA_TERMINAL_BACKEND": "tmux",
 				"ORQUESTA_TMUX_BIN":         fakeTmux,
@@ -73,6 +74,9 @@ func TestEnsureTMUXMonitorFromMetadataJSONReattachesDeadMonitor(t *testing.T) {
 	newMonitorPID := int(repairedMeta["tmux_monitor_pid"].(float64))
 	if newMonitorPID <= 0 || newMonitorPID == monitorPID {
 		t.Fatalf("tmux_monitor_pid no actualizado: before=%d after=%d meta=%+v", monitorPID, newMonitorPID, repairedMeta)
+	}
+	if got := strings.TrimSpace(stringValueFromMetadata(repairedMeta, "perfil_operativo")); got != "persistente" {
+		t.Fatalf("perfil_operativo reparado = %q, want persistente; meta=%+v", got, repairedMeta)
 	}
 
 	waitFileModAfter(t, heartbeatPath, beforeInfo.ModTime())

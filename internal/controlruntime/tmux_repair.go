@@ -163,6 +163,11 @@ func EnsureTMUXMonitorFromMetadataJSON(raw string) (string, bool, error) {
 		if mailboxDeliveryMode == "" {
 			mailboxDeliveryMode = strings.TrimSpace(snap.Manifest.MailboxDeliveryMode)
 		}
+		if strings.TrimSpace(stringValueFromMetadata(meta, "perfil_operativo")) == "" {
+			if executionProfile := strings.TrimSpace(snap.Manifest.ExecutionProfile); executionProfile != "" {
+				meta["perfil_operativo"] = executionProfile
+			}
+		}
 	}
 
 	monitorPID, err = launchEmbeddedTmuxMonitor(embeddedTmuxMonitorSpec{
