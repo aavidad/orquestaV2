@@ -80,6 +80,25 @@ func TestStatusSnapshotNeedsImmediateRefreshSiHayAtascadosVisibles(t *testing.T)
 	}
 }
 
+func TestStatusSnapshotNeedsImmediateRefreshSiHayActivosPeroTrabajoSinWorkers(t *testing.T) {
+	if !statusSnapshotNeedsImmediateRefresh(apiStatusResponse{
+		AgentesActivos:  []*db.Agente{{Nombre: "Codex4", Activo: true, EstadoCuota: "activo"}},
+		TareasPorEstado: map[string]int{string(db.TareaEnProgreso): 1},
+	}) {
+		t.Fatalf("un snapshot con activos pero trabajo sin workers visibles debe forzar refresh")
+	}
+}
+
+func TestStatusSnapshotNeedsImmediateRefreshToleraActivosSinWorkersSiTrabajoYaConfirmado(t *testing.T) {
+	if statusSnapshotNeedsImmediateRefresh(apiStatusResponse{
+		AgentesActivos:  []*db.Agente{{Nombre: "Codex4", Activo: true, EstadoCuota: "activo"}},
+		TareasPorEstado: map[string]int{string(db.TareaEnProgreso): 1},
+		Autonomia:       autonomiaResumen{WorkConfirmed: 1},
+	}) {
+		t.Fatalf("si el trabajo ya está confirmado no deberia forzar refresh inmediato")
+	}
+}
+
 func TestStatusSnapshotCanStayLightSiSoloHayCuotaBloqueando(t *testing.T) {
 	now := time.Now().UTC()
 	resetAt := now.Add(20 * time.Minute)

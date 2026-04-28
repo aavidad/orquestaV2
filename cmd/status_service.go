@@ -1588,19 +1588,31 @@ func statusSnapshotNeedsImmediateRefresh(status apiStatusResponse) bool {
 	if status.Autonomia.ContinuidadPendiente > 0 || status.Autonomia.Handoffs > 0 {
 		return true
 	}
+	tasksInProgress := len(status.TareasEnProgreso)
+	if tasksInProgress == 0 && status.TareasPorEstado != nil {
+		tasksInProgress = status.TareasPorEstado[string(db.TareaEnProgreso)]
+	}
+	if tasksInProgress == 0 && status.ConteoTareas != nil {
+		tasksInProgress = status.ConteoTareas[string(db.TareaEnProgreso)]
+	}
+	if tasksInProgress == 0 {
+		for _, tarea := range status.TareasActivas {
+			if tarea.Estado == db.TareaEnProgreso {
+				tasksInProgress++
+			}
+		}
+	}
 	if len(status.AgentesActivos) > 0 {
-		return false
-	}
-	if len(status.AgentesQuotaBlocked) > 0 && len(status.TareasEnProgreso) > 0 {
-		return false
-	}
-	if len(status.TareasEnProgreso) > 0 {
-		return true
-	}
-	for _, tarea := range status.TareasActivas {
-		if tarea.Estado == db.TareaEnProgreso {
+		if tasksInProgress > 0 && len(status.AgentesTrabajando) == 0 && status.Autonomia.WorkConfirmed == 0 {
 			return true
 		}
+		return false
+	}
+	if len(status.AgentesQuotaBlocked) > 0 && tasksInProgress > 0 {
+		return false
+	}
+	if tasksInProgress > 0 {
+		return true
 	}
 	return false
 }
