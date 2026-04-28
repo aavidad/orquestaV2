@@ -52,6 +52,15 @@ type mcpRuntimeTraceFixture struct {
 	handleID int64
 }
 
+type mcpRuntimeTreeFixture struct {
+	agenteRaiz string
+	agenteHijo string
+	proyecto   string
+	rootID     int64
+	childID    int64
+	closedID   int64
+}
+
 func setupMCPRuntimeTraceFixture(t *testing.T) mcpRuntimeTraceFixture {
 	t.Helper()
 
@@ -99,6 +108,73 @@ func setupMCPRuntimeTraceFixture(t *testing.T) mcpRuntimeTraceFixture {
 		t.Fatalf("update runtime handle metadata: %v", err)
 	}
 	return mcpRuntimeTraceFixture{agente: agente, proyecto: proyecto, handleID: handle.ID}
+}
+
+func setupMCPRuntimeTreeFixture(t *testing.T) mcpRuntimeTreeFixture {
+	t.Helper()
+
+	baseDir := t.TempDir()
+	proyecto := "orquestador"
+	projectDir := filepath.Join(baseDir, proyecto)
+	agenteRaiz := "CodexRuntimeRoot"
+	agenteHijo := "CodexRuntimeChild"
+	agenteCerrado := "CodexRuntimeClosed"
+	for _, agente := range []string{agenteRaiz, agenteHijo, agenteCerrado} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrando %s: %v", agente, err)
+		}
+	}
+	proyectoID := insertTestProyecto(t, proyecto, proyecto, projectDir)
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      agenteRaiz,
+		ProyectoID:  &proyectoID,
+		CWD:         projectDir,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion raiz: %v", err)
+	}
+	rootRuntime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || rootRuntime == nil {
+		t.Fatalf("runtime raíz esperado, got=%+v err=%v", rootRuntime, err)
+	}
+	childID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:            agenteHijo,
+		ProyectoID:        &proyectoID,
+		ParentRuntimeID:   &rootRuntime.ID,
+		Provider:          "openai",
+		Connector:         "cli",
+		ExternalSessionID: "mcp-child-runtime",
+		LogicalState:      "activo",
+		ProcessState:      "vivo",
+		CWD:               projectDir,
+		Branch:            "main",
+	})
+	if err != nil {
+		t.Fatalf("registrar runtime hijo: %v", err)
+	}
+	closedID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:            agenteCerrado,
+		ProyectoID:        &proyectoID,
+		Provider:          "openai",
+		Connector:         "cli",
+		ExternalSessionID: "mcp-closed-runtime",
+		LogicalState:      "cerrado",
+		ProcessState:      "finalizado",
+		CWD:               projectDir,
+		Branch:            "main",
+	})
+	if err != nil {
+		t.Fatalf("registrar runtime cerrado: %v", err)
+	}
+	return mcpRuntimeTreeFixture{
+		agenteRaiz: agenteRaiz,
+		agenteHijo: agenteHijo,
+		proyecto:   proyecto,
+		rootID:     rootRuntime.ID,
+		childID:    childID,
+		closedID:   closedID,
+	}
 }
 
 func TestMCPHandleInitializeNegociaVersion(t *testing.T) {
@@ -1555,6 +1631,189 @@ func TestMCPToolRuntimeTraceCanonicoAceptaHandleID(t *testing.T) {
 		}
 		if structured.Trace.Agente != fixture.agente || !structured.Trace.Truncated || !strings.Contains(structured.Trace.RawTail, "vance\nfin\n") {
 			t.Fatalf("payload trace inesperado: %+v", structured.Trace)
+		}
+	})
+}
+
+func TestMCPRuntimesTreeSurfaceCanonicaSeLista(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+
+		tools := listMCPTools()
+		if !mcpToolListed(tools, "orquesta.runtimes.tree") {
+			t.Fatal("tool MCP orquesta.runtimes.tree no registrada")
+		}
+
+		resources, err := listMCPResources()
+		if err != nil {
+			t.Fatalf("listMCPResources: %v", err)
+		}
+		foundResource := false
+		for _, item := range resources {
+			if item.URI == "orquesta://runtimes/tree" {
+				foundResource = true
+				break
+			}
+		}
+		if !foundResource {
+			t.Fatal("resource MCP de runtimes tree no listada")
+		}
+
+		templates := mcpResourceTemplates()
+		foundTemplate := false
+		for _, item := range templates {
+			if item.URITemplate == "orquesta://runtimes/tree{?agente,proyecto,activos}" {
+				foundTemplate = true
+				break
+			}
+		}
+		if !foundTemplate {
+			t.Fatal("template MCP de runtimes tree no listada")
+		}
+	})
+}
+
+func TestMCPResourceRuntimesTreeCanonicoAceptaProyectoYActivos(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		fixture := setupMCPRuntimeTreeFixture(t)
+
+		contents, err := readMCPResource("orquesta://runtimes/tree?proyecto=" + fixture.proyecto + "&activos=true")
+		if err != nil {
+			t.Fatalf("readMCPResource runtimes tree: %v", err)
+		}
+		if len(contents) == 0 {
+			t.Fatalf("contenido runtimes tree vacío")
+		}
+		text, _ := contents[0]["text"].(string)
+		for _, token := range []string{
+			fmt.Sprintf(`"id": %d`, fixture.rootID),
+			fmt.Sprintf(`"id": %d`, fixture.childID),
+			`"agente": "CodexRuntimeRoot"`,
+			`"agente": "CodexRuntimeChild"`,
+		} {
+			if !strings.Contains(text, token) {
+				t.Fatalf("recurso runtimes tree sin %q: %s", token, text)
+			}
+		}
+		if strings.Contains(text, fmt.Sprintf(`"id": %d`, fixture.closedID)) {
+			t.Fatalf("recurso runtimes tree no deberia incluir runtime cerrado: %s", text)
+		}
+	})
+}
+
+func TestMCPResourceRuntimesTreeCanonicoFiltraPorAgenteProyectoYActivos(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		fixture := setupMCPRuntimeTreeFixture(t)
+
+		contents, err := readMCPResource("orquesta://runtimes/tree?agente=" + fixture.agenteHijo + "&proyecto=" + fixture.proyecto + "&activos=true")
+		if err != nil {
+			t.Fatalf("readMCPResource runtimes tree filtered: %v", err)
+		}
+		if len(contents) == 0 {
+			t.Fatalf("contenido runtimes tree filtrado vacío")
+		}
+		text, _ := contents[0]["text"].(string)
+		for _, token := range []string{
+			fmt.Sprintf(`"id": %d`, fixture.childID),
+			`"agente": "CodexRuntimeChild"`,
+		} {
+			if !strings.Contains(text, token) {
+				t.Fatalf("recurso runtimes tree filtrado sin %q: %s", token, text)
+			}
+		}
+		for _, token := range []string{
+			fmt.Sprintf(`"id": %d`, fixture.rootID),
+			fmt.Sprintf(`"id": %d`, fixture.closedID),
+			`"agente": "CodexRuntimeRoot"`,
+			`"agente": "CodexRuntimeClosed"`,
+		} {
+			if strings.Contains(text, token) {
+				t.Fatalf("recurso runtimes tree filtrado no deberia incluir %q: %s", token, text)
+			}
+		}
+	})
+}
+
+func TestMCPToolRuntimesTreeCanonicoDevuelveJerarquia(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		fixture := setupMCPRuntimeTreeFixture(t)
+
+		result, err := callMCPTool("orquesta.runtimes.tree", map[string]any{
+			"proyecto": fixture.proyecto,
+			"activos":  true,
+		})
+		if err != nil {
+			t.Fatalf("callMCPTool runtimes.tree: %v", err)
+		}
+		text := result["content"].([]map[string]any)[0]["text"].(string)
+		for _, token := range []string{
+			`"agente": "CodexRuntimeRoot"`,
+			`"agente": "CodexRuntimeChild"`,
+		} {
+			if !strings.Contains(text, token) {
+				t.Fatalf("tool runtimes.tree sin %q: %s", token, text)
+			}
+		}
+		structured, ok := result["structuredContent"].(apiRuntimeTreeResponse)
+		if !ok {
+			t.Fatalf("structuredContent inesperado: %#v", result["structuredContent"])
+		}
+		if len(structured.Runtimes) != 1 || structured.Runtimes[0] == nil || structured.Runtimes[0].Runtime == nil {
+			t.Fatalf("árbol runtime inesperado: %#v", structured.Runtimes)
+		}
+		if structured.Runtimes[0].Runtime.ID != fixture.rootID {
+			t.Fatalf("runtime raíz inesperado: %+v", structured.Runtimes[0].Runtime)
+		}
+		if len(structured.Runtimes[0].Hijos) != 1 || structured.Runtimes[0].Hijos[0] == nil || structured.Runtimes[0].Hijos[0].Runtime == nil {
+			t.Fatalf("hijos runtime inesperados: %#v", structured.Runtimes[0].Hijos)
+		}
+		if structured.Runtimes[0].Hijos[0].Runtime.ID != fixture.childID {
+			t.Fatalf("runtime hijo inesperado: %+v", structured.Runtimes[0].Hijos[0].Runtime)
+		}
+	})
+}
+
+func TestMCPToolRuntimesTreeCanonicoFiltraActivosFalse(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		fixture := setupMCPRuntimeTreeFixture(t)
+
+		result, err := callMCPTool("orquesta.runtimes.tree", map[string]any{
+			"proyecto": fixture.proyecto,
+			"agente":   "CodexRuntimeClosed",
+			"activos":  false,
+		})
+		if err != nil {
+			t.Fatalf("callMCPTool runtimes.tree closed: %v", err)
+		}
+		text := result["content"].([]map[string]any)[0]["text"].(string)
+		for _, token := range []string{
+			fmt.Sprintf(`"id": %d`, fixture.closedID),
+			`"agente": "CodexRuntimeClosed"`,
+			`"logical_state": "cerrado"`,
+		} {
+			if !strings.Contains(text, token) {
+				t.Fatalf("tool runtimes.tree cerrado sin %q: %s", token, text)
+			}
+		}
+		for _, token := range []string{
+			fmt.Sprintf(`"id": %d`, fixture.rootID),
+			fmt.Sprintf(`"id": %d`, fixture.childID),
+			`"agente": "CodexRuntimeRoot"`,
+			`"agente": "CodexRuntimeChild"`,
+		} {
+			if strings.Contains(text, token) {
+				t.Fatalf("tool runtimes.tree cerrado no deberia incluir %q: %s", token, text)
+			}
+		}
+		structured, ok := result["structuredContent"].(apiRuntimeTreeResponse)
+		if !ok {
+			t.Fatalf("structuredContent inesperado: %#v", result["structuredContent"])
+		}
+		if len(structured.Runtimes) != 1 || structured.Runtimes[0] == nil || structured.Runtimes[0].Runtime == nil {
+			t.Fatalf("árbol cerrado inesperado: %#v", structured.Runtimes)
+		}
+		if structured.Runtimes[0].Runtime.ID != fixture.closedID || structured.Runtimes[0].Runtime.LogicalState != "cerrado" {
+			t.Fatalf("runtime cerrado inesperado: %+v", structured.Runtimes[0].Runtime)
 		}
 	})
 }

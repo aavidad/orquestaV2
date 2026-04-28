@@ -444,6 +444,14 @@ func listMCPResources() ([]mcpResource, error) {
 			Annotations: audienceAssistant(1),
 		},
 		{
+			URI:         "orquesta://runtimes/tree",
+			Name:        "runtimes-tree",
+			Title:       "Árbol de runtimes",
+			Description: "Vista canónica del árbol de runtimes; admite ?agente=...&proyecto=...&activos=true|false",
+			MIMEType:    "application/json",
+			Annotations: audienceAssistant(0.9),
+		},
+		{
 			URI:         "orquesta://proyectos",
 			Name:        "proyectos",
 			Title:       "Proyectos registrados",
@@ -652,6 +660,13 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "application/json",
 		},
 		{
+			URITemplate: "orquesta://runtimes/tree{?agente,proyecto,activos}",
+			Name:        "runtimes-tree",
+			Title:       "Árbol de runtimes",
+			Description: "Vista canónica del árbol de runtimes por agente/proyecto y filtro activos",
+			MIMEType:    "application/json",
+		},
+		{
 			URITemplate: "orquesta://runtime/trace{?agente,proyecto,handle_id,bytes}",
 			Name:        "trace-runtime",
 			Title:       "Trace raw de runtime",
@@ -823,6 +838,42 @@ func mcpRuntimeTraceResponse(handleID int64, agente, proyecto string, maxBytes i
 	return apiRuntimeTraceResponse{Trace: trace}, nil
 }
 
+func mcpRuntimeTreeResponse(agente, proyecto string, activos *bool) (apiRuntimeTreeResponse, error) {
+	filter := db.FiltroRuntimes{
+		Agente:  stringPtrOrNil(strings.TrimSpace(agente)),
+		Activos: activos,
+	}
+	if proyecto := strings.TrimSpace(proyecto); proyecto != "" {
+		item, err := runtimesService.GetProject(proyecto)
+		if err != nil {
+			return apiRuntimeTreeResponse{}, err
+		}
+		filter.ProyectoID = &item.ID
+	}
+	tree, err := runtimesService.BuildRuntimeTree(filter)
+	if err != nil {
+		return apiRuntimeTreeResponse{}, err
+	}
+	return apiRuntimeTreeResponse{Runtimes: runtimeTreeNodesToAPI(tree)}, nil
+}
+
+func runtimeTreeNodesToAPI(nodes []*db.RuntimeTreeNode) []*apiRuntimeTreeNode {
+	if len(nodes) == 0 {
+		return nil
+	}
+	out := make([]*apiRuntimeTreeNode, 0, len(nodes))
+	for _, node := range nodes {
+		if node == nil {
+			continue
+		}
+		out = append(out, &apiRuntimeTreeNode{
+			Runtime: node.Runtime,
+			Hijos:   runtimeTreeNodesToAPI(node.Hijos),
+		})
+	}
+	return out
+}
+
 func readMCPResource(uri string) ([]map[string]any, error) {
 	if contents, handled, err := readMicroprogramacionMCPResource(uri); handled {
 		return contents, err
@@ -853,6 +904,32 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		return resourceText(uri, "application/json", prettyJSON(apiWorkspaceControlResponse{Control: report})), nil
+	case strings.HasPrefix(uri, "orquesta://runtimes/tree"):
+		parsed, err := url.Parse(uri)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(parsed.Host) != "runtimes" || strings.TrimSpace(parsed.Path) != "/tree" {
+			return nil, fmt.Errorf("runtimes tree inválido")
+		}
+		var activos *bool
+		if raw := strings.TrimSpace(parsed.Query().Get("activos")); raw != "" {
+			switch raw {
+			case "true":
+				v := true
+				activos = &v
+			case "false":
+				v := false
+				activos = &v
+			default:
+				return nil, fmt.Errorf("activos inválido")
+			}
+		}
+		resp, err := mcpRuntimeTreeResponse(parsed.Query().Get("agente"), parsed.Query().Get("proyecto"), activos)
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "application/json", prettyJSON(resp)), nil
 	case uri == "orquesta://proyectos":
 		proyectos, err := listarProyectos()
 		if err != nil {
@@ -2250,6 +2327,20 @@ func listMCPTools() []mcpTool {
 				"type": "object",
 				"properties": map[string]any{
 					"agente": map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtimes.tree",
+			Title:       "Árbol de runtimes",
+			Description: "Devuelve la vista canónica del árbol de runtimes por agente, proyecto o filtro de activos",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":   map[string]any{"type": "string"},
+					"proyecto": map[string]any{"type": "string"},
+					"activos":  map[string]any{"type": "boolean"},
 				},
 				"additionalProperties": false,
 			},
@@ -3767,6 +3858,18 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 		return toolResult(prettyJSON(handles), handles, false), nil
+
+	case "orquesta.runtimes.tree":
+		activos := boolPtrArg(args, "activos")
+		resp, err := mcpRuntimeTreeResponse(
+			optionalStringArg(args, "agente"),
+			optionalStringArg(args, "proyecto"),
+			activos,
+		)
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(resp), resp, false), nil
 
 	case "orquesta.runtime.events.listar":
 		level := optionalStringArg(args, "level")
