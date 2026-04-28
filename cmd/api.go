@@ -142,6 +142,8 @@ var (
 	apiAgentOverviewTimeout         = 3 * time.Second
 	apiAgentBudgetRefreshTimeout    = 3 * time.Second
 	apiConfigTimeout                = 3 * time.Second
+	apiProjectListTimeout           = 3 * time.Second
+	apiTaskListTimeout              = 3 * time.Second
 	apiRuntimeProcessOrdersTimeout  = 4 * time.Second
 	apiRuntimeProcessMailboxTimeout = 4 * time.Second
 	apiAgentPrepareTimeout          = 15 * time.Second
@@ -206,6 +208,12 @@ var (
 	apiProjectLookupFn = func(ref string) (*db.Proyecto, error) {
 		return db.GetProyecto(ref)
 	}
+	apiListProjectsFn = func(filtro db.FiltroProyectos, cwdHint string) ([]*db.Proyecto, error) {
+		return db.ListarProyectosConRutaEfectiva(filtro, cwdHint)
+	}
+	apiListProjectsLiteFn = func(filtro db.FiltroProyectos) ([]*db.Proyecto, error) {
+		return db.ListarProyectos(filtro)
+	}
 	apiProjectLookupPrepareLiteFn = func(ref string) (*db.Proyecto, error) {
 		return db.GetProyectoPrepareLite(ref)
 	}
@@ -220,6 +228,7 @@ var (
 		return db.ProyectoPrepareLiteConRutaEfectiva(proyecto, ""), nil
 	}
 	apiListAuditFn                     = db.ListarAuditoria
+	apiListTasksFn                     = tareasService.List
 	apiServerOperationalBuilder        = buildServerOperationalInfoFastFromDB
 	apiServerOperationalStatusFallback = func() (apiStatusResponse, error) {
 		if status, ok := fetchStatusReadOnlyLiteDirect(statusFastTimeout); ok {
@@ -3921,8 +3930,19 @@ func apiHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 		activa := activaRaw == "1" || strings.EqualFold(activaRaw, "true")
 		activoPtr = &activa
 	}
-	proyectos, err := db.ListarProyectosConRutaEfectiva(db.FiltroProyectos{Activo: activoPtr}, "")
+	lite := parseBoolDebug(r.URL.Query().Get("lite"), false)
+	proyectos, err := runAPITimeboxed(apiProjectListTimeout, func() ([]*db.Proyecto, error) {
+		filtro := db.FiltroProyectos{Activo: activoPtr}
+		if lite {
+			return apiListProjectsLiteFn(filtro)
+		}
+		return apiListProjectsFn(filtro, "")
+	}, errStatusFetchTimeout)
 	if err != nil {
+		if errors.Is(err, errStatusFetchTimeout) {
+			apiError(w, http.StatusServiceUnavailable, fmt.Errorf("proyectos temporalmente degradado; reintenta"))
+			return
+		}
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -5460,6 +5480,7 @@ func apiHandlerTareasLimpiarFrente(w http.ResponseWriter, r *http.Request) {
 
 func apiHandlerTareasListar(w http.ResponseWriter, r *http.Request) {
 	filtro := db.FiltroTareas{}
+	resumen := parseBoolDebug(r.URL.Query().Get("resumen"), false)
 	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
 		limit, err := strconv.Atoi(rawLimit)
 		if err != nil || limit < 0 {
@@ -5500,14 +5521,22 @@ func apiHandlerTareasListar(w http.ResponseWriter, r *http.Request) {
 	}
 	var tareas []*db.Tarea
 	var err error
-	if len(estados) > 1 {
-		tareas, err = listarTareasPorEstadosOR(filtro, estados)
-	} else {
-		tareas, err = tareasService.List(filtro)
-	}
+	tareas, err = runAPITimeboxed(apiTaskListTimeout, func() ([]*db.Tarea, error) {
+		if len(estados) > 1 {
+			return listarTareasPorEstadosOR(filtro, estados)
+		}
+		return apiListTasksFn(filtro)
+	}, errStatusFetchTimeout)
 	if err != nil {
+		if errors.Is(err, errStatusFetchTimeout) {
+			apiError(w, http.StatusServiceUnavailable, fmt.Errorf("tareas temporalmente degradado; reintenta"))
+			return
+		}
 		apiError(w, http.StatusInternalServerError, err)
 		return
+	}
+	if resumen {
+		tareas = compactTaskListItems(tareas)
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"tareas": tareas})
 }
@@ -5537,7 +5566,7 @@ func listarTareasPorEstadosOR(base db.FiltroTareas, estados []db.EstadoTarea) ([
 		filtro := base
 		estadoCopy := estado
 		filtro.Estado = &estadoCopy
-		items, err := tareasService.List(filtro)
+		items, err := apiListTasksFn(filtro)
 		if err != nil {
 			return nil, err
 		}
@@ -5559,6 +5588,25 @@ func listarTareasPorEstadosOR(base db.FiltroTareas, estados []db.EstadoTarea) ([
 		return out[i].CreatedAt.After(out[j].CreatedAt)
 	})
 	return out, nil
+}
+
+func compactTaskListItems(tasks []*db.Tarea) []*db.Tarea {
+	if len(tasks) == 0 {
+		return tasks
+	}
+	out := make([]*db.Tarea, 0, len(tasks))
+	for _, tarea := range tasks {
+		if tarea == nil {
+			continue
+		}
+		copia := *tarea
+		copia.Descripcion = ""
+		copia.Notas = ""
+		copia.Dependencias = nil
+		copia.CommitCierre = ""
+		out = append(out, &copia)
+	}
+	return out
 }
 
 func apiHandlerTareasCrear(w http.ResponseWriter, r *http.Request) {

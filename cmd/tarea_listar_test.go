@@ -17,6 +17,9 @@ func TestTareaListarTSVParaScripts(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
 	mux.HandleFunc("/api/tareas", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("resumen"); got != "1" {
+			t.Fatalf("resumen inesperado: %q", got)
+		}
 		_ = json.NewEncoder(w).Encode(apiTareasResponse{
 			Tareas: []*db.Tarea{{
 				ID:          17,
@@ -31,6 +34,9 @@ func TestTareaListarTSVParaScripts(t *testing.T) {
 		})
 	})
 	mux.HandleFunc("/api/proyectos", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("lite"); got != "1" {
+			t.Fatalf("lite inesperado: %q", got)
+		}
 		_ = json.NewEncoder(w).Encode(apiProyectosResponse{
 			Proyectos: []*db.Proyecto{{ID: 7, Slug: "orquestador"}},
 		})
@@ -68,6 +74,9 @@ func TestTareaListarAceptaEstadosMultiples(t *testing.T) {
 		if len(got) != 2 || got[0] != string(db.EstadoEnProgreso) || got[1] != string(db.EstadoAsignada) {
 			t.Fatalf("estados enviados inesperados: %v", got)
 		}
+		if resumen := r.URL.Query().Get("resumen"); resumen != "1" {
+			t.Fatalf("resumen inesperado: %q", resumen)
+		}
 		_ = json.NewEncoder(w).Encode(apiTareasResponse{
 			Tareas: []*db.Tarea{{
 				ID:         17,
@@ -79,6 +88,9 @@ func TestTareaListarAceptaEstadosMultiples(t *testing.T) {
 		})
 	})
 	mux.HandleFunc("/api/proyectos", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("lite"); got != "1" {
+			t.Fatalf("lite inesperado: %q", got)
+		}
 		_ = json.NewEncoder(w).Encode(apiProyectosResponse{
 			Proyectos: []*db.Proyecto{{ID: 7, Slug: "orquestador"}},
 		})

@@ -356,8 +356,7 @@ func tmuxStartCommandTimeout() time.Duration {
 
 func tmuxPipePane(tmuxCommand, paneID, logPath string) error {
 	command := fmt.Sprintf("cat >> %s", shellQuoteSimple(strings.TrimSpace(logPath)))
-	cmd := exec.Command(tmuxCommand, "pipe-pane", "-O", "-t", strings.TrimSpace(paneID), command)
-	return cmd.Run()
+	return tmuxRunCommand(tmuxCommand, "pipe-pane", "-O", "-t", strings.TrimSpace(paneID), command)
 }
 
 func tmuxSeedLogFromPaneIfEmpty(tmuxCommand, paneID, logPath string) error {
@@ -368,8 +367,7 @@ func tmuxSeedLogFromPaneIfEmpty(tmuxCommand, paneID, logPath string) error {
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	cmd := exec.Command(strings.TrimSpace(tmuxCommand), "capture-pane", "-t", strings.TrimSpace(paneID), "-p")
-	out, err := cmd.Output()
+	out, err := tmuxOutputCommand(strings.TrimSpace(tmuxCommand), "capture-pane", "-t", strings.TrimSpace(paneID), "-p")
 	if err != nil {
 		return err
 	}
@@ -396,8 +394,7 @@ func tmuxKillSession(tmuxCommand, sessionName string) error {
 	if strings.TrimSpace(sessionName) == "" {
 		return nil
 	}
-	cmd := exec.Command(tmuxCommand, "kill-session", "-t", strings.TrimSpace(sessionName))
-	return cmd.Run()
+	return tmuxRunCommand(tmuxCommand, "kill-session", "-t", strings.TrimSpace(sessionName))
 }
 
 func writeRuntimeTraceManifestTMUX(path string, req SolicitudArranque, startedAt time.Time, pid int, logPath, rendered, wrapped string, canSendInput bool, canSendInputSource, mailboxDeliveryMode, externalSessionID, supervisorRef, tmuxCommand string, paneInfo *tmuxPaneInfo) error {

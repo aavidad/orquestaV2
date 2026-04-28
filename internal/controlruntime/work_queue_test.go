@@ -50,7 +50,7 @@ func TestHasPendingAndRecentWorkQueueEntryFromMetadataJSON(t *testing.T) {
 	metaRaw, _ := json.Marshal(map[string]any{
 		"trace_dir": dir,
 	})
-	now := time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
+	now := time.Now().UTC()
 	if err := RecordWorkQueueFromMetadataJSON(string(metaRaw), WorkQueueRecordInput{
 		MailboxID:       41,
 		RuntimeOrderID:  99,

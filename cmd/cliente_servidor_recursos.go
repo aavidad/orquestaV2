@@ -699,9 +699,13 @@ func configurarValorPorAPI(clave, valor string) (bool, error) {
 	return ok, err
 }
 
-func cargarProyectosDesdeAPI() ([]*db.Proyecto, bool, error) {
+func cargarProyectosDesdeAPI(lite bool) ([]*db.Proyecto, bool, error) {
 	var resp apiProyectosResponse
-	ok, err := apiGet("/api/proyectos", &resp)
+	query := url.Values{}
+	if lite {
+		query.Set("lite", "1")
+	}
+	ok, err := apiGetQuery("/api/proyectos", query, &resp)
 	if !ok || err != nil {
 		return nil, ok, err
 	}

@@ -285,12 +285,24 @@ func buildServerOperationalInfoFastFromDB() (serverOperationalInfo, error) {
 		status.TareasEnProgreso = make([]tareaLite, cuentas[string(db.TareaEnProgreso)])
 		status.TareasReservadas = make([]tareaLite, cuentas[string(db.TareaAsignada)])
 	}
+	if rows, ok := readAgentPanelSnapshotFresh(); ok {
+		activos, trabajando, saturados, atascados, authManual, quotaBlocked, _ := agentesVisiblesPorEstadoOperativoRows(status.Agentes, rows)
+		activos, trabajando, saturados = normalizarAgentesVisiblesStatus(activos, trabajando, saturados)
+		status.AgentesActivos = activos
+		status.AgentesTrabajando = trabajando
+		status.AgentesSaturados = saturados
+		status.AgentesAtascados = atascados
+		status.AgentesAuthManual = authManual
+		if len(quotaBlocked) > 0 {
+			status.AgentesQuotaBlocked = quotaBlocked
+		}
+		status.Autonomia = resumirAutonomiaRows(rows, statusNowFunc().UTC())
+	}
 	if snapshot, ok := readStatusSnapshotAny(); ok {
 		status.DeudaDispatch = snapshot.DeudaDispatch
-		status.Autonomia = snapshot.Autonomia
-		status.AgentesSaturados = snapshot.AgentesSaturados
-		status.AgentesAtascados = snapshot.AgentesAtascados
-		status.AgentesAuthManual = snapshot.AgentesAuthManual
+		if status.Autonomia.Count == 0 && len(status.Autonomia.ByKind) == 0 && status.Autonomia.LastAt == nil && len(status.Autonomia.Recent) == 0 {
+			status.Autonomia = snapshot.Autonomia
+		}
 		if len(status.AgentesActivos) == 0 {
 			status.AgentesActivos = snapshot.AgentesActivos
 		}

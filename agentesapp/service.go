@@ -552,7 +552,7 @@ func (s *Service) listCanonicalRuntimeHandlesWithFallback(nombre string) ([]*db.
 	if len(handles) > 0 {
 		return handles, nil
 	}
-	return s.store.ListRuntimeHandles(&nombre)
+	return s.store.ListPassiveRuntimeHandles(&nombre)
 }
 
 func (s *Service) enqueueRetirementPauseIfNeeded(nombre string) error {

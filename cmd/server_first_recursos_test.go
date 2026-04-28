@@ -260,14 +260,17 @@ func TestConectorRequiereServidor(t *testing.T) {
 func TestProyectoUsaAPI(t *testing.T) {
 	padreID := int64(2)
 	proyecto := &db.Proyecto{
-		ID:        7,
-		Slug:      "orquestador",
-		Nombre:    "Orquestador",
-		RutaAbs:   "/tmp/orquestador",
-		Tipo:      db.ProyectoRepo,
-		ParentID:  &padreID,
-		Activo:    true,
-		CreatedAt: time.Date(2026, 3, 24, 18, 0, 0, 0, time.UTC),
+		ID:         7,
+		Slug:       "orquestador",
+		Nombre:     "Orquestador",
+		RutaAbs:    "/tmp/orquestador",
+		OrigenRepo: "git",
+		RemoteURL:  "https://example.com/orquestador.git",
+		BranchBase: "main",
+		Tipo:       db.ProyectoRepo,
+		ParentID:   &padreID,
+		Activo:     true,
+		CreatedAt:  time.Date(2026, 3, 24, 18, 0, 0, 0, time.UTC),
 	}
 	padre := &db.Proyecto{
 		ID:      2,
@@ -283,6 +286,9 @@ func TestProyectoUsaAPI(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
 	mux.HandleFunc("/api/proyectos", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("lite"); got != "1" {
+			t.Fatalf("lite inesperado: %q", got)
+		}
 		_ = json.NewEncoder(w).Encode(apiProyectosResponse{Proyectos: []*db.Proyecto{proyecto}})
 	})
 	mux.HandleFunc("/api/proyectos/descubrir", func(w http.ResponseWriter, r *http.Request) {

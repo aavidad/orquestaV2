@@ -135,10 +135,17 @@ func maybeRefreshAgentPanelSnapshotAsync(timeout time.Duration) {
 
 func agentPanelRowsNeedImmediateRefresh(rows []agentesapp.Row) bool {
 	for _, row := range rows {
-		if row.OpenTasks <= 0 && !strings.EqualFold(strings.TrimSpace(row.EstadoOperativo), "trabajando") {
+		estado := strings.ToLower(strings.TrimSpace(row.EstadoOperativo))
+		needsLiveEvidence := row.OpenTasks > 0
+		switch estado {
+		case "trabajando", "saturado", "atascado", "mailbox_atascada", "bloqueado_por_runtime":
+			needsLiveEvidence = true
+		}
+		if !needsLiveEvidence {
 			continue
 		}
-		if row.Runtime != nil || row.Handle != nil || strings.TrimSpace(row.WorkerState) != "" || row.WorkerAlive {
+		if row.Runtime != nil || row.Handle != nil || strings.TrimSpace(row.WorkerState) != "" || row.WorkerAlive ||
+			row.WorkerHeartbeat != nil || row.WorkerUpdatedAt != nil || strings.TrimSpace(row.WorkerTMUXSession) != "" {
 			continue
 		}
 		if strings.TrimSpace(row.DetalleOperativo) != "" {

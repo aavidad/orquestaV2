@@ -922,16 +922,14 @@ func enviarInstruccionTMUXDesdeMetadata(raw, texto string) (bool, error) {
 		}
 		return true, fmt.Errorf("tmux pane no listo para send-keys")
 	}
-	cmd := exec.Command(tmuxCommand, "send-keys", "-t", paneID, "-l", texto)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if out, err := tmuxCombinedOutputCommand(tmuxCommand, "send-keys", "-t", paneID, "-l", texto); err != nil {
 		detalle := strings.TrimSpace(string(out))
 		if detalle != "" {
 			return true, fmt.Errorf("tmux send-keys literal: %s", detalle)
 		}
 		return true, err
 	}
-	enterCmd := exec.Command(tmuxCommand, "send-keys", "-t", paneID, "Enter")
-	if out, err := enterCmd.CombinedOutput(); err != nil {
+	if out, err := tmuxCombinedOutputCommand(tmuxCommand, "send-keys", "-t", paneID, "Enter"); err != nil {
 		detalle := strings.TrimSpace(string(out))
 		if detalle != "" {
 			return true, fmt.Errorf("tmux send-keys enter: %s", detalle)
@@ -1055,8 +1053,7 @@ func tmuxPaneHasGeminiAcceptEditsPrompt(captured string) bool {
 }
 
 func sendTMUXLiteral(tmuxCommand, paneID, texto string) error {
-	cmd := exec.Command(tmuxCommand, "send-keys", "-t", paneID, "-l", texto)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if out, err := tmuxCombinedOutputCommand(tmuxCommand, "send-keys", "-t", paneID, "-l", texto); err != nil {
 		detalle := strings.TrimSpace(string(out))
 		if detalle != "" {
 			return fmt.Errorf("tmux send-keys literal: %s", detalle)
@@ -1111,8 +1108,7 @@ func detenerSesionTMUXDesdeMetadata(raw string) (bool, error) {
 	if tmuxCommand == "" || sessionName == "" {
 		return false, nil
 	}
-	cmd := exec.Command(tmuxCommand, "kill-session", "-t", sessionName)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if out, err := tmuxCombinedOutputCommand(tmuxCommand, "kill-session", "-t", sessionName); err != nil {
 		detalle := strings.TrimSpace(string(out))
 		if tmuxKillSessionIgnorable(detalle) {
 			return true, nil

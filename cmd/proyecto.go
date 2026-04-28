@@ -23,7 +23,7 @@ var proyectoListarCmd = &cobra.Command{
 	Use:   "listar",
 	Short: "Lista los proyectos registrados",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		proyectos, ok, err := cargarProyectosDesdeAPI()
+		proyectos, ok, err := cargarProyectosDesdeAPI(true)
 		if err != nil {
 			return err
 		}

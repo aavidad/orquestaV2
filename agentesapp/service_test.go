@@ -2051,6 +2051,31 @@ func TestApplyStateActionRetirarPrefiereHandlesCanonicosCalientes(t *testing.T) 
 	}
 }
 
+func TestApplyStateActionRetirarUsaFallbackPasivoSinBarridoFuerte(t *testing.T) {
+	proyectoID := int64(42)
+	store := &fakeStore{
+		canonicalHandles: []*db.RuntimeHandle{},
+		handles: []*db.RuntimeHandle{
+			{Agente: "Codex1", ProyectoID: &proyectoID, Estado: "activo"},
+		},
+	}
+
+	svc := NewService(store, nil)
+	if err := svc.ApplyStateAction("Codex1", "retirar"); err != nil {
+		t.Fatalf("ApplyStateAction retirar: %v", err)
+	}
+
+	if store.listPassiveHandlesCalls == 0 {
+		t.Fatalf("deberia usar fallback pasivo cuando no hay handles canonicos")
+	}
+	if store.listRuntimeHandlesCalls != 0 {
+		t.Fatalf("no deberia usar barrido fuerte de runtime handles, calls=%d", store.listRuntimeHandlesCalls)
+	}
+	if len(store.enqueuedOrders) != 1 {
+		t.Fatalf("esperaba una orden de pause desde fallback pasivo, got=%d", len(store.enqueuedOrders))
+	}
+}
+
 func TestBuildPanelRowsAggregatesOperationalState(t *testing.T) {
 	now := time.Now().UTC()
 	older := now.Add(-2 * time.Hour)

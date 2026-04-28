@@ -814,7 +814,7 @@ func apiGetQuery(path string, query url.Values, dst any) (bool, error) {
 
 func apiProjectSlugMap() (map[int64]string, bool, error) {
 	var resp apiProyectosResponse
-	ok, err := apiGet("/api/proyectos", &resp)
+	ok, err := apiGetQuery("/api/proyectos", url.Values{"lite": []string{"1"}}, &resp)
 	if !ok || err != nil {
 		return nil, ok, err
 	}

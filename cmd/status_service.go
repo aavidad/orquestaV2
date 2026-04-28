@@ -1582,6 +1582,9 @@ func statusSnapshotNeedsImmediateRefresh(status apiStatusResponse) bool {
 	if len(status.AgentesAuthManual) > 0 {
 		return true
 	}
+	if len(status.AgentesAtascados) > 0 {
+		return true
+	}
 	if status.Autonomia.ContinuidadPendiente > 0 || status.Autonomia.Handoffs > 0 {
 		return true
 	}

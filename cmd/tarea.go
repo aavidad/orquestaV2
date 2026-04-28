@@ -64,6 +64,7 @@ var tareaListarCmd = &cobra.Command{
 		if propuestaCodigo != "" {
 			params.Set("propuesta", propuestaCodigo)
 		}
+		params.Set("resumen", "1")
 		var tareasResp apiTareasResponse
 		if ok, err := apiGetQuery("/api/tareas", params, &tareasResp); err != nil {
 			return err

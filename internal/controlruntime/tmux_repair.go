@@ -212,8 +212,7 @@ func tmuxSessionExists(tmuxCommand, sessionName string) bool {
 	if tmuxCommand == "" || sessionName == "" {
 		return false
 	}
-	cmd := exec.Command(tmuxCommand, "has-session", "-t", sessionName)
-	return cmd.Run() == nil
+	return tmuxRunCommand(tmuxCommand, "has-session", "-t", sessionName) == nil
 }
 
 func tmuxMonitorRunDir(meta map[string]any, snap *runtimeagente.WorkerSnapshot) string {

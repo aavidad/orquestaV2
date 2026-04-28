@@ -20,8 +20,7 @@ func ListTMUXSessions(tmuxCommand string) ([]TMUXSessionInfo, error) {
 	if tmuxCommand == "" {
 		return nil, fmt.Errorf("tmux command vacio")
 	}
-	cmd := exec.Command(tmuxCommand, "list-panes", "-a", "-F", "#{session_name}|#{pane_current_path}")
-	out, err := cmd.Output()
+	out, err := tmuxOutputCommand(tmuxCommand, "list-panes", "-a", "-F", "#{session_name}|#{pane_current_path}")
 	if err != nil {
 		return nil, err
 	}

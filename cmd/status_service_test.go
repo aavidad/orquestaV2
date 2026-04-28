@@ -71,6 +71,15 @@ func TestStatusSnapshotNeedsImmediateRefreshSiActivoVisibleVieneConFlagInactivo(
 	}
 }
 
+func TestStatusSnapshotNeedsImmediateRefreshSiHayAtascadosVisibles(t *testing.T) {
+	if !statusSnapshotNeedsImmediateRefresh(apiStatusResponse{
+		AgentesActivos:   []*db.Agente{{Nombre: "Codex4", Activo: true, EstadoCuota: "activo"}},
+		AgentesAtascados: []*db.Agente{{Nombre: "Codex4", Activo: true, EstadoCuota: "activo"}},
+	}) {
+		t.Fatalf("un snapshot con atascados visibles debe forzar refresh")
+	}
+}
+
 func TestStatusSnapshotCanStayLightSiSoloHayCuotaBloqueando(t *testing.T) {
 	now := time.Now().UTC()
 	resetAt := now.Add(20 * time.Minute)
@@ -1116,12 +1125,12 @@ func TestFetchStatusWorkspaceRiskSummaryUsaCockpitCanonicoSinRecursion(t *testin
 			t.Fatalf("slug inesperado: %q", slug)
 		}
 		return &apiProyectoCockpit{
-			Proyecto:               &db.Proyecto{Slug: "infra"},
-			AutonomyEvents:         1,
-			AutonomyByKind:         map[string]int{"handoff_failed": 1},
-			TareasPorEstado:        map[string]int{string(db.TareaBloqueada): 1},
-			ReviewGatesAbiertas:    1,
-			RuntimeOrdersAbiertas:  1,
+			Proyecto:                &db.Proyecto{Slug: "infra"},
+			AutonomyEvents:          1,
+			AutonomyByKind:          map[string]int{"handoff_failed": 1},
+			TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+			ReviewGatesAbiertas:     1,
+			RuntimeOrdersAbiertas:   1,
 			RuntimeMailboxPendiente: 1,
 		}, nil
 	}

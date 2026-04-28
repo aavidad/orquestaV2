@@ -227,3 +227,79 @@ func TestFetchAgentPanelRowsCachedRefrescaSnapshotSinteticaConTrabajoVivo(t *tes
 		t.Fatalf("deberia refrescar a filas ricas, rows=%+v", rows)
 	}
 }
+
+func TestFetchAgentPanelRowsCachedRefrescaSnapshotSinteticaConAtascadoHeredado(t *testing.T) {
+	prevBuilder := apiAgentPanelRowsBuilder
+	defer func() {
+		apiAgentPanelRowsBuilder = prevBuilder
+		resetAgentPanelSnapshotCache()
+		resetStatusSnapshotCache()
+	}()
+	resetAgentPanelSnapshotCache()
+	resetStatusSnapshotCache()
+
+	now := time.Now().UTC()
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes:          []*db.Agente{{Nombre: "CodexStuck", Activo: true, Habilitado: true, EstadoCuota: "activo"}},
+		AgentesAtascados: []*db.Agente{{Nombre: "CodexStuck", Activo: true, Habilitado: true, EstadoCuota: "activo"}},
+		Generado:         now.Format(time.RFC3339),
+	}, now, time.Minute)
+
+	apiAgentPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:           &db.Agente{Nombre: "CodexStuck", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+			EstadoOperativo:  "atascado",
+			DetalleOperativo: "mailbox sin drenar",
+			WorkerState:      "waiting_input",
+			WorkerAlive:      true,
+			Runtime:          &db.RuntimeInstance{Agente: "CodexStuck", LogicalState: "running"},
+			Handle:           &db.RuntimeHandle{Agente: "CodexStuck", Estado: "activo"},
+		}}, nil
+	}
+
+	rows, err := fetchAgentPanelRowsCached(50 * time.Millisecond)
+	if err != nil {
+		t.Fatalf("fetchAgentPanelRowsCached: %v", err)
+	}
+	if len(rows) != 1 || rows[0].DetalleOperativo != "mailbox sin drenar" || rows[0].Runtime == nil || rows[0].Handle == nil {
+		t.Fatalf("deberia refrescar atascado heredado a filas ricas, rows=%+v", rows)
+	}
+}
+
+func TestFetchAgentPanelRowsCachedRefrescaSnapshotSinteticaConRuntimeBlockedHeredado(t *testing.T) {
+	prevBuilder := apiAgentPanelRowsBuilder
+	defer func() {
+		apiAgentPanelRowsBuilder = prevBuilder
+		resetAgentPanelSnapshotCache()
+		resetStatusSnapshotCache()
+	}()
+	resetAgentPanelSnapshotCache()
+	resetStatusSnapshotCache()
+
+	now := time.Now().UTC()
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes:           []*db.Agente{{Nombre: "GeminiAuth", Activo: true, Habilitado: true, EstadoCuota: "activo"}},
+		AgentesAuthManual: []*db.Agente{{Nombre: "GeminiAuth", Activo: true, Habilitado: true, EstadoCuota: "activo"}},
+		Generado:          now.Format(time.RFC3339),
+	}, now, time.Minute)
+
+	apiAgentPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:           &db.Agente{Nombre: "GeminiAuth", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+			EstadoOperativo:  "bloqueado_por_runtime",
+			DetalleOperativo: "autenticacion manual requerida",
+			WorkerState:      "blocked_auth",
+			WorkerAlive:      true,
+			Runtime:          &db.RuntimeInstance{Agente: "GeminiAuth", LogicalState: "blocked_auth"},
+			Handle:           &db.RuntimeHandle{Agente: "GeminiAuth", Estado: "activo"},
+		}}, nil
+	}
+
+	rows, err := fetchAgentPanelRowsCached(50 * time.Millisecond)
+	if err != nil {
+		t.Fatalf("fetchAgentPanelRowsCached: %v", err)
+	}
+	if len(rows) != 1 || rows[0].WorkerState != "blocked_auth" || rows[0].DetalleOperativo != "autenticacion manual requerida" {
+		t.Fatalf("deberia refrescar runtime blocked heredado a filas ricas, rows=%+v", rows)
+	}
+}

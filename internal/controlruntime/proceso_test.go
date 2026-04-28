@@ -1,6 +1,7 @@
 package controlruntime
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -74,6 +75,38 @@ func TestProcesoVivoDetectaPIDActualEInexistente(t *testing.T) {
 	}
 }
 
+func TestTMUXSessionExistsMetadataTimeoutNoBloquea(t *testing.T) {
+	t.Setenv("ORQUESTA_TMUX_COMMAND_TIMEOUT_MS", "50")
+	fakeTmux := writeSlowTMUXScriptForTest(t, t.TempDir())
+	start := time.Now()
+	known, exists := TMUXSessionExistsMetadata(fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_command":"%s","tmux_session":"orq-timeout"}`, fakeTmux))
+	if !known {
+		t.Fatal("deberia reconocer metadata tmux")
+	}
+	if exists {
+		t.Fatal("una consulta tmux expirada no deberia devolver sesion viva")
+	}
+	if time.Since(start) > 400*time.Millisecond {
+		t.Fatalf("TMUXSessionExistsMetadata no deberia bloquearse, duracion=%s", time.Since(start))
+	}
+}
+
+func TestCaptureTMUXPaneMetadataTimeoutNoBloquea(t *testing.T) {
+	t.Setenv("ORQUESTA_TMUX_COMMAND_TIMEOUT_MS", "50")
+	fakeTmux := writeSlowTMUXScriptForTest(t, t.TempDir())
+	start := time.Now()
+	known, captured, err := CaptureTMUXPaneMetadata(fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_command":"%s","tmux_pane_id":"%%42"}`, fakeTmux))
+	if !known {
+		t.Fatal("deberia reconocer metadata tmux")
+	}
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "timeout") {
+		t.Fatalf("deberia propagar timeout de capture-pane, captured=%q err=%v", captured, err)
+	}
+	if time.Since(start) > 400*time.Millisecond {
+		t.Fatalf("CaptureTMUXPaneMetadata no deberia bloquearse, duracion=%s", time.Since(start))
+	}
+}
+
 func TestEnviarInstruccionProcesoSinLectorNoBloquea(t *testing.T) {
 	tmp := t.TempDir()
 	stdinPath := filepath.Join(tmp, "agent.stdin")
@@ -99,6 +132,39 @@ func TestEnviarInstruccionProcesoSinLectorNoBloquea(t *testing.T) {
 	if time.Since(start) > time.Second {
 		t.Fatal("la llamada no debería bloquearse")
 	}
+}
+
+func writeSlowTMUXScriptForTest(t *testing.T, dir string) string {
+	t.Helper()
+	scriptPath := filepath.Join(dir, "fake-tmux-slow")
+	script := fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+cmd="${1:-}"
+case "$cmd" in
+  has-session)
+    exec tail -f /dev/null
+    ;;
+  capture-pane)
+    exec tail -f /dev/null
+    ;;
+  display-message)
+    printf 'orq-test|worker|%%1|12345|0|codex|/tmp\n'
+    ;;
+  list-panes)
+    printf 'orq-test|/tmp\n'
+    ;;
+  send-keys|kill-session|pipe-pane)
+    exit 0
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+`)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake tmux slow: %v", err)
+	}
+	return scriptPath
 }
 
 func TestNormalizarInstruccionProcesoHaceASCIIYCorta(t *testing.T) {

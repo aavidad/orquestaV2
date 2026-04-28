@@ -523,6 +523,50 @@ func TestBuildServerOperationalInfoFastFromDBIgnoraSnapshotFrescoQueNecesitaRefr
 	}
 }
 
+func TestBuildServerOperationalInfoFastFromDBNoHeredaAtascadosDeSnapshotStale(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	prevAgents := serverOperationalListAgentsFetcher
+	prevTasks := serverOperationalCountTasksFetcher
+	prevNow := statusNowFunc
+	defer func() {
+		serverOperationalListAgentsFetcher = prevAgents
+		serverOperationalCountTasksFetcher = prevTasks
+		statusNowFunc = prevNow
+	}()
+
+	now := time.Date(2026, 4, 28, 19, 30, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes:           []*db.Agente{{Nombre: "CodexStale", Activo: true}},
+		AgentesActivos:    []*db.Agente{{Nombre: "CodexStale", Activo: true}},
+		AgentesAtascados:  []*db.Agente{{Nombre: "CodexStale", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "CodexStale", Activo: true}},
+		TareasEnProgreso:  []tareaLite{{ID: 99, Estado: db.TareaEnProgreso, Agente: "CodexStale"}},
+		TareasPorEstado:   map[string]int{string(db.TareaEnProgreso): 1},
+		Autonomia:         autonomiaResumen{WorkConfirmed: 1},
+		Generado:          now.Add(-10 * time.Second).Format(time.RFC3339),
+	}, now.Add(-2*time.Minute), time.Second)
+
+	serverOperationalListAgentsFetcher = func() ([]*db.Agente, error) {
+		return []*db.Agente{{Nombre: "CodexDB", Activo: true, EstadoCuota: "activo"}}, nil
+	}
+	serverOperationalCountTasksFetcher = func() (map[string]int, error) {
+		return map[string]int{string(db.TareaEnProgreso): 1}, nil
+	}
+
+	info, err := buildServerOperationalInfoFastFromDB()
+	if err != nil {
+		t.Fatalf("buildServerOperationalInfoFastFromDB: %v", err)
+	}
+	if info.StuckAgents != 0 || info.Reason == "workers_stuck" {
+		t.Fatalf("no deberia heredar atascados de snapshot stale: %+v", info)
+	}
+}
+
 func TestStatusSnapshotWarmLoopIntervalSigueFallbackTTL(t *testing.T) {
 	if got := statusSnapshotWarmLoopInterval(); got != statusFallbackTTL {
 		t.Fatalf("intervalo warm inesperado: got=%s want=%s", got, statusFallbackTTL)

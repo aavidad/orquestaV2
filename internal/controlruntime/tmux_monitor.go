@@ -213,8 +213,7 @@ func shouldCleanupTMUXSessionOnOwnerExit(spec embeddedTmuxMonitorSpec) bool {
 
 func consultarTmuxPane(spec embeddedTmuxMonitorSpec) (*tmuxPaneSnapshot, error) {
 	format := "#{session_name}|#{window_name}|#{pane_id}|#{pane_pid}|#{pane_dead}|#{pane_current_command}|#{pane_current_path}"
-	cmd := exec.Command(strings.TrimSpace(spec.TmuxCommand), "display-message", "-p", "-t", strings.TrimSpace(spec.PaneID), format)
-	out, err := cmd.Output()
+	out, err := tmuxOutputCommand(strings.TrimSpace(spec.TmuxCommand), "display-message", "-p", "-t", strings.TrimSpace(spec.PaneID), format)
 	if err != nil {
 		return nil, err
 	}
@@ -551,8 +550,7 @@ func tmuxClassifyPaneState(captured string) string {
 }
 
 func captureTMUXPane(tmuxCommand, paneID string) (string, error) {
-	cmd := exec.Command(strings.TrimSpace(tmuxCommand), "capture-pane", "-t", strings.TrimSpace(paneID), "-p")
-	out, err := cmd.CombinedOutput()
+	out, err := tmuxCombinedOutputCommand(strings.TrimSpace(tmuxCommand), "capture-pane", "-t", strings.TrimSpace(paneID), "-p")
 	if err != nil {
 		detalle := strings.TrimSpace(string(out))
 		if detalle != "" {
@@ -611,8 +609,7 @@ func tmuxTrustPromptDismissKeys(captured string) []string {
 }
 
 func sendTMUXKey(tmuxCommand, paneID, key string) error {
-	cmd := exec.Command(strings.TrimSpace(tmuxCommand), "send-keys", "-t", strings.TrimSpace(paneID), strings.TrimSpace(key))
-	out, err := cmd.CombinedOutput()
+	out, err := tmuxCombinedOutputCommand(strings.TrimSpace(tmuxCommand), "send-keys", "-t", strings.TrimSpace(paneID), strings.TrimSpace(key))
 	if err != nil {
 		detalle := strings.TrimSpace(string(out))
 		if detalle != "" {
