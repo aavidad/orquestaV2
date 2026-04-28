@@ -280,10 +280,7 @@ func summarizeAgentActivity(detail *agentesapp.Detail, audit []db.AuditEntry, tr
 		if item == nil {
 			continue
 		}
-		signal := strings.TrimSpace(item.Classification)
-		if signal == "" {
-			signal = "sin_clasificar"
-		}
+		signal := classifyAgentActivityTranscriptSignal(item)
 		stream := strings.TrimSpace(item.Stream)
 		if stream == "" {
 			stream = "unknown"
@@ -312,6 +309,39 @@ func summarizeAgentActivity(detail *agentesapp.Detail, audit []db.AuditEntry, tr
 		out.CurrentOperationalWhy = strings.TrimSpace(detail.Row.DetalleOperativo)
 	}
 	return out
+}
+
+func classifyAgentActivityTranscriptSignal(item *db.RuntimeTranscriptEntry) string {
+	if item == nil {
+		return "sin_clasificar"
+	}
+	if signal := strings.TrimSpace(item.Classification); signal != "" {
+		return signal
+	}
+	text := strings.ToLower(strings.TrimSpace(firstNonEmpty(item.NormalizedText, item.Text)))
+	stream := strings.ToLower(strings.TrimSpace(item.Stream))
+	switch {
+	case text == "" && stream == "":
+		return "sin_clasificar"
+	case strings.Contains(text, "go test") || strings.Contains(text, "npm test") || strings.Contains(text, "pytest") || strings.Contains(text, "tests pass") || strings.Contains(text, "ok  \t"):
+		return "tests"
+	case strings.Contains(text, "git commit") || strings.Contains(text, "git push") || strings.Contains(text, "git status") || strings.Contains(text, "files changed"):
+		return "git_activity"
+	case strings.Contains(text, "panic:") || strings.Contains(text, "error:") || strings.Contains(text, "failed") || strings.Contains(text, "traceback"):
+		return "runtime_error"
+	case strings.Contains(text, "apply_patch") || strings.Contains(text, "update file:") || strings.Contains(text, "add file:") || strings.Contains(text, "diff --git"):
+		return "code_change"
+	case strings.Contains(text, "progress") || strings.Contains(text, "avance") || strings.Contains(text, "implement") || strings.Contains(text, "validado"):
+		return "progress_update"
+	case stream == "stderr":
+		return "stderr"
+	case stream == "stdout":
+		return "stdout"
+	case stream != "":
+		return stream
+	default:
+		return "sin_clasificar"
+	}
 }
 
 func resolveAgentActivityProject(detail *agentesapp.Detail, project string) (string, *db.Proyecto, error) {

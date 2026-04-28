@@ -96,6 +96,76 @@ func TestHooksCicloVidaPersistenYAvisan(t *testing.T) {
 	}
 }
 
+func TestCanonicalLifecycleHooksContratoMinimo(t *testing.T) {
+	got := CanonicalLifecycleHooks()
+	want := []EventoHook{
+		HookBeforeTool,
+		HookAfterTool,
+		HookOnWorkerFail,
+		HookOnHandoff,
+		HookOnStop,
+		HookOnRecovery,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("hooks canonicos inesperados: got=%v want=%v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("hook canonico[%d] inesperado: got=%q want=%q", i, got[i], want[i])
+		}
+		if !IsCanonicalLifecycleHook(want[i]) {
+			t.Fatalf("hook canonico no reconocido: %q", want[i])
+		}
+	}
+	if IsCanonicalLifecycleHook(HookTaskStart) {
+		t.Fatalf("task_start es legacy y no debe formar parte del contrato canonico minimo")
+	}
+	got[0] = HookTaskStart
+	if CanonicalLifecycleHooks()[0] != HookBeforeTool {
+		t.Fatalf("CanonicalLifecycleHooks debe devolver copia defensiva")
+	}
+}
+
+func TestHooksCanonicosPersistenAvisanYNotificanSubscriptores(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	drenarNotificacionesHook()
+
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "hooks-canonicos",
+		Nombre:  "Hooks canonicos",
+		RutaAbs: filepath.Join(tmp, "hooks-canonicos"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	got := make(chan LifecycleHookEvent, 1)
+	unregister := RegisterLifecycleHookSubscriber(func(ev LifecycleHookEvent) {
+		got <- ev
+	})
+	defer unregister()
+
+	EmitirHookCicloVida("Codex2", HookBeforeTool, proyectoID, "tool_call", 99, "Codex2", "rg hooks")
+
+	ev := recibirNotificacionHook(t)
+	if ev.Tipo != "hook:before_tool" || ev.ProyectoID != proyectoID || ev.ID != 99 || ev.Agente != "Codex2" {
+		t.Fatalf("notificacion before_tool inesperada: %+v", ev)
+	}
+	if !existeAccionAuditoria(t, "hook_before_tool") {
+		t.Fatalf("no aparece hook_before_tool en auditoria")
+	}
+	select {
+	case hook := <-got:
+		if hook.Evento != HookBeforeTool || hook.Entidad != "tool_call" || hook.EntidadID != 99 || hook.Detalle != "rg hooks" {
+			t.Fatalf("subscriber hook canonico inesperado: %+v", hook)
+		}
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("subscriber no recibio hook canonico")
+	}
+}
+
 func TestListarAuditoriaFiltraDesde(t *testing.T) {
 	prepararDBTemporal(t)
 	Audit("Codex1", "accion_antigua", "tarea", 1, "antes")

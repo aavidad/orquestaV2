@@ -347,9 +347,9 @@ func TestAgentActivityReportJSONIncluyeAutonomy(t *testing.T) {
 
 func TestImprimirAgenteActividadMuestraRiesgoYAutonomiaCanonicos(t *testing.T) {
 	report := &agentActivityReport{
-		Agent:   "Codex1",
-		Project: "orquestador",
-		Since:   time.Date(2026, 4, 24, 10, 0, 0, 0, time.UTC),
+		Agent:     "Codex1",
+		Project:   "orquestador",
+		Since:     time.Date(2026, 4, 24, 10, 0, 0, 0, time.UTC),
 		Generated: time.Date(2026, 4, 25, 10, 0, 0, 0, time.UTC),
 		Summary: agentActivitySummary{
 			IntegrationRisk:       "critico",
@@ -368,6 +368,73 @@ func TestImprimirAgenteActividadMuestraRiesgoYAutonomiaCanonicos(t *testing.T) {
 		"Autonomía: task_reassigned=2 | last_at=2026-04-25T09:00:00Z",
 	) {
 		t.Fatalf("salida cli sin coherencia canónica:\n%s", out)
+	}
+}
+
+func TestClassifyAgentActivityTranscriptSignalReduceSinClasificar(t *testing.T) {
+	cases := []struct {
+		name string
+		item *db.RuntimeTranscriptEntry
+		want string
+	}{
+		{
+			name: "respeta clasificacion persistida",
+			item: &db.RuntimeTranscriptEntry{Classification: "progress_update", NormalizedText: "texto cualquiera"},
+			want: "progress_update",
+		},
+		{
+			name: "detecta tests",
+			item: &db.RuntimeTranscriptEntry{NormalizedText: "go test ./cmd ok"},
+			want: "tests",
+		},
+		{
+			name: "detecta git",
+			item: &db.RuntimeTranscriptEntry{NormalizedText: "git commit -m cambio"},
+			want: "git_activity",
+		},
+		{
+			name: "detecta cambios de codigo",
+			item: &db.RuntimeTranscriptEntry{NormalizedText: "*** Update File: cmd/agente_actividad.go"},
+			want: "code_change",
+		},
+		{
+			name: "usa stream como fallback",
+			item: &db.RuntimeTranscriptEntry{Stream: "stdout", Text: "mensaje neutro"},
+			want: "stdout",
+		},
+		{
+			name: "ultima opcion sin clasificar",
+			item: &db.RuntimeTranscriptEntry{},
+			want: "sin_clasificar",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := classifyAgentActivityTranscriptSignal(tc.item); got != tc.want {
+				t.Fatalf("signal=%q want=%q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSummarizeAgentActivityUsaSignalDerivada(t *testing.T) {
+	summary := summarizeAgentActivity(nil, nil, []*db.RuntimeTranscriptEntry{
+		{NormalizedText: "go test ./cmd"},
+		{NormalizedText: "git push origin candidato_refactor"},
+		{Stream: "stdout", Text: "mensaje neutro"},
+	}, nil)
+
+	if summary.TranscriptBySignal["tests"] != 1 {
+		t.Fatalf("tests=%d summary=%+v", summary.TranscriptBySignal["tests"], summary.TranscriptBySignal)
+	}
+	if summary.TranscriptBySignal["git_activity"] != 1 {
+		t.Fatalf("git_activity=%d summary=%+v", summary.TranscriptBySignal["git_activity"], summary.TranscriptBySignal)
+	}
+	if summary.TranscriptBySignal["stdout"] != 1 {
+		t.Fatalf("stdout=%d summary=%+v", summary.TranscriptBySignal["stdout"], summary.TranscriptBySignal)
+	}
+	if summary.TranscriptBySignal["sin_clasificar"] != 0 {
+		t.Fatalf("sin_clasificar no esperado: %+v", summary.TranscriptBySignal)
 	}
 }
 

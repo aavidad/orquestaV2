@@ -1082,6 +1082,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/propuestas/", apiRouterPropuestas)
 	mux.HandleFunc("/api/worktrees", apiHandlerWorktrees)
 	mux.HandleFunc("/api/worktrees/", apiRouterWorktrees)
+	mux.HandleFunc("/api/git/stats", apiHandlerGitStats)
 	mux.HandleFunc("/api/git/merges", apiHandlerGitMerges)
 	mux.HandleFunc("/api/runtimes", apiHandlerRuntimes)
 	mux.HandleFunc("/api/runtimes/tree", apiHandlerRuntimesTree)

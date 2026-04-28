@@ -7800,7 +7800,8 @@ func procesarRuntimeMailboxSessionResumeMensaje(msg *db.RuntimeMailboxMessage, c
 	if handle == nil {
 		return false, nil
 	}
-	if strings.TrimSpace(externalSessionID) == "" {
+	externalSessionID = strings.TrimSpace(externalSessionID)
+	if externalSessionID == "" {
 		return procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID)
 	}
 	return procesarRuntimeMailboxSessionResumeConSesion(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID)
@@ -8905,7 +8906,8 @@ func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, r
 	if err != nil || snap == nil {
 		return true
 	}
-	view := snap.View(time.Now().UTC(), time.Minute)
+	now := time.Now().UTC()
+	view := snap.View(now, time.Minute)
 	if view == nil {
 		return true
 	}
@@ -8924,7 +8926,7 @@ func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, r
 		return false
 	}
 	state := runtimeHandleWorkerCanonicalState(view)
-	ready, _ := snap.ReadyForTextDispatch(time.Now().UTC(), time.Minute)
+	ready, _ := snap.ReadyForTextDispatch(now, time.Minute)
 	if ready || state == "waiting_input" {
 		return true
 	}

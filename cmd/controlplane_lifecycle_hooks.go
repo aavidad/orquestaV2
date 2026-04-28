@@ -8,7 +8,13 @@ func init() {
 
 func handleControlPlaneLifecycleHook(ev db.LifecycleHookEvent) {
 	switch ev.Evento {
-	case db.HookProjectBlocked,
+	case db.HookBeforeTool,
+		db.HookAfterTool,
+		db.HookOnWorkerFail,
+		db.HookOnHandoff,
+		db.HookOnStop,
+		db.HookOnRecovery,
+		db.HookProjectBlocked,
 		db.HookProjectUnblocked,
 		db.HookTaskStart,
 		db.HookTaskFinish,
