@@ -1557,6 +1557,77 @@ func TestMCPToolGitStatsAceptaCwdCanonico(t *testing.T) {
 	}
 }
 
+func TestMCPResourceReadGitStatsNormalizaPathCanonico(t *testing.T) {
+	prevService := apiGitStatsService
+	prevLookup := apiGitStatsProjectLookupFn
+	defer func() {
+		apiGitStatsService = prevService
+		apiGitStatsProjectLookupFn = prevLookup
+	}()
+
+	collector := &gitStatsCollectorStub{
+		response: &gitestadisticasapp.Stats{
+			RepoRoot: "/tmp/repo",
+			CWD:      "/tmp/repo",
+		},
+	}
+	apiGitStatsService = gitOperationalStatsService{collector: collector}
+	apiGitStatsProjectLookupFn = func(ref string) (*db.Proyecto, error) {
+		t.Fatalf("project lookup no deberia usarse para path, ref=%s", ref)
+		return nil, nil
+	}
+
+	contents, err := readMCPResource("orquesta://git/stats?path=/tmp/repo/./subdir/..")
+	if err != nil {
+		t.Fatalf("readMCPResource git/stats?path=: %v", err)
+	}
+	if collector.gotCWD != "/tmp/repo" {
+		t.Fatalf("path normalizado inesperado en collector: %q", collector.gotCWD)
+	}
+	text, _ := contents[0]["text"].(string)
+	if !strings.Contains(text, `"path": "/tmp/repo"`) {
+		t.Fatalf("resource git/stats sin path canónico: %s", text)
+	}
+}
+
+func TestMCPToolGitStatsNormalizaCwdCanonico(t *testing.T) {
+	prevService := apiGitStatsService
+	prevLookup := apiGitStatsProjectLookupFn
+	defer func() {
+		apiGitStatsService = prevService
+		apiGitStatsProjectLookupFn = prevLookup
+	}()
+
+	collector := &gitStatsCollectorStub{
+		response: &gitestadisticasapp.Stats{
+			RepoRoot: "/tmp/repo",
+			CWD:      "/tmp/repo",
+		},
+	}
+	apiGitStatsService = gitOperationalStatsService{collector: collector}
+	apiGitStatsProjectLookupFn = func(ref string) (*db.Proyecto, error) {
+		t.Fatalf("project lookup no deberia usarse para cwd, ref=%s", ref)
+		return nil, nil
+	}
+
+	result, err := callMCPTool("orquesta.git.stats", map[string]any{
+		"cwd": "/tmp/repo/./subdir/..",
+	})
+	if err != nil {
+		t.Fatalf("callMCPTool git.stats: %v", err)
+	}
+	if collector.gotCWD != "/tmp/repo" {
+		t.Fatalf("cwd normalizado inesperado en collector: %q", collector.gotCWD)
+	}
+	structured, ok := result["structuredContent"].(apiGitStatsResponse)
+	if !ok {
+		t.Fatalf("structuredContent inesperado: %#v", result["structuredContent"])
+	}
+	if structured.Scope != "path" || structured.Path != "/tmp/repo" {
+		t.Fatalf("scope/path inesperados tras normalizacion: %+v", structured)
+	}
+}
+
 func TestMCPRuntimeTraceSurfaceCanonicSeLista(t *testing.T) {
 	tools := listMCPTools()
 	if !mcpToolListed(tools, "orquesta.runtime.trace") {

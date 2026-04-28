@@ -777,8 +777,8 @@ func mcpProjectControlReport(slug string, since time.Time) (*projectControlRepor
 
 func mcpResolveGitStatsScope(projectRef, path, cwd string) (string, string, string, error) {
 	projectRef = strings.TrimSpace(projectRef)
-	path = strings.TrimSpace(path)
-	cwd = strings.TrimSpace(cwd)
+	path = normalizeGitStatsPath(path)
+	cwd = normalizeGitStatsPath(cwd)
 	if path == "" {
 		path = cwd
 	}
@@ -793,7 +793,7 @@ func mcpResolveGitStatsScope(projectRef, path, cwd string) (string, string, stri
 		if project == nil || strings.TrimSpace(project.RutaAbs) == "" {
 			return "", "", "", fmt.Errorf("proyecto sin ruta git: %s", projectRef)
 		}
-		return "proyecto", strings.TrimSpace(project.Slug), strings.TrimSpace(project.RutaAbs), nil
+		return "proyecto", strings.TrimSpace(project.Slug), normalizeGitStatsPath(project.RutaAbs), nil
 	}
 	if path != "" {
 		return "path", "", path, nil
