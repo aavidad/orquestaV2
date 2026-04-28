@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/db"
 	"orquesta/i18n"
@@ -857,6 +858,17 @@ func TestWebWorkspaceControlNoConfundeRiesgoConAutonomiaVisible(t *testing.T) {
 	}
 	if strings.Contains(body, "1 proyecto(s) con autonomía visible") {
 		t.Fatalf("la web sigue confundiendo riesgo con autonomia visible: %s", body)
+	}
+}
+
+func TestWebCargarWorkspaceControlPorAPIPropagaDesde(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	report, err := webCargarWorkspaceControlPorAPI(time.Date(2026, 4, 24, 13, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("webCargarWorkspaceControlPorAPI: %v", err)
+	}
+	if report == nil || !report.Since.Equal(time.Date(2026, 4, 24, 13, 0, 0, 0, time.UTC)) {
+		t.Fatalf("workspace control inesperado: %+v", report)
 	}
 }
 

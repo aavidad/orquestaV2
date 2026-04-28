@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -677,8 +678,16 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		return resourceText(uri, "application/json", prettyJSON(s)), nil
-	case uri == "orquesta://workspace/control":
-		report, err := buildWorkspaceControlReport()
+	case strings.HasPrefix(uri, "orquesta://workspace/control"):
+		parsed, err := url.Parse(uri)
+		if err != nil {
+			return nil, err
+		}
+		since, err := parseStatsSince(strings.TrimSpace(parsed.Query().Get("desde")))
+		if err != nil {
+			return nil, err
+		}
+		report, err := buildWorkspaceControlReportSince(since)
 		if err != nil {
 			return nil, err
 		}

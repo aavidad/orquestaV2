@@ -739,9 +739,13 @@ func cargarProyectoControlDesdeAPI(ref string, since time.Time) (*projectControl
 	return resp.Control, true, nil
 }
 
-func cargarWorkspaceControlDesdeAPI() (*workspaceControlReport, bool, error) {
+func cargarWorkspaceControlDesdeAPI(since time.Time) (*workspaceControlReport, bool, error) {
 	var resp apiWorkspaceControlResponse
-	ok, err := apiGet("/api/workspace/control", &resp)
+	query := url.Values{}
+	if !since.IsZero() {
+		query.Set("desde", since.UTC().Format(time.RFC3339))
+	}
+	ok, err := apiGetQuery("/api/workspace/control", query, &resp)
 	if !ok || err != nil {
 		return nil, ok, err
 	}

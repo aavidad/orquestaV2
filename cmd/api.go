@@ -1235,7 +1235,12 @@ func apiHandlerWorkspaceControl(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	report, err := buildWorkspaceControlReport()
+	since, err := parseStatsSince(strings.TrimSpace(r.URL.Query().Get("desde")))
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	report, err := buildWorkspaceControlReportSince(since)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return

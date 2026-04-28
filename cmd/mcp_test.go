@@ -6510,6 +6510,42 @@ func TestMCPResourceReadWorkspaceControlIncluyeResumenGlobal(t *testing.T) {
 	}
 }
 
+func TestMCPResourceReadWorkspaceControlAceptaDesde(t *testing.T) {
+	prevStatus := statusService
+	prevProjects := workspaceControlListProjects
+	prevCockpit := workspaceControlCockpitBuilder
+	prevProjectControl := workspaceControlProjectBuilder
+	defer func() {
+		statusService = prevStatus
+		workspaceControlListProjects = prevProjects
+		workspaceControlCockpitBuilder = prevCockpit
+		workspaceControlProjectBuilder = prevProjectControl
+	}()
+
+	statusService = stubStatusService{response: apiStatusResponse{}}
+	workspaceControlListProjects = func() ([]map[string]any, error) {
+		return []map[string]any{{"slug": "orquestador"}}, nil
+	}
+	workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+		return &apiProyectoCockpit{Proyecto: &db.Proyecto{Slug: slug, Nombre: "Orquestador"}}, nil
+	}
+	workspaceControlProjectBuilder = func(slug string, since time.Time) (*projectControlReport, error) {
+		return &projectControlReport{
+			Project: &db.Proyecto{Slug: slug, Nombre: "Orquestador"},
+			Since:   since,
+		}, nil
+	}
+
+	contents, err := readMCPResource("orquesta://workspace/control?desde=2026-04-24T13:00:00Z")
+	if err != nil {
+		t.Fatalf("readMCPResource workspace/control?desde: %v", err)
+	}
+	text, _ := contents[0]["text"].(string)
+	if !strings.Contains(text, `"since": "2026-04-24T13:00:00Z"`) {
+		t.Fatalf("resource workspace control sin since propagado: %s", text)
+	}
+}
+
 func TestMCPToolListaProyectosFiltrados(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")

@@ -5395,10 +5395,12 @@ func TestAPIWorkspaceControlExponeVistaGlobal(t *testing.T) {
 	prevStatus := statusService
 	prevProjects := workspaceControlListProjects
 	prevCockpit := workspaceControlCockpitBuilder
+	prevProjectControl := workspaceControlProjectBuilder
 	defer func() {
 		statusService = prevStatus
 		workspaceControlListProjects = prevProjects
 		workspaceControlCockpitBuilder = prevCockpit
+		workspaceControlProjectBuilder = prevProjectControl
 	}()
 
 	statusService = stubStatusService{response: apiStatusResponse{
@@ -5431,11 +5433,38 @@ func TestAPIWorkspaceControlExponeVistaGlobal(t *testing.T) {
 			}},
 		}, nil
 	}
+	workspaceControlProjectBuilder = func(slug string, since time.Time) (*projectControlReport, error) {
+		return &projectControlReport{
+			Project: &db.Proyecto{Slug: slug, Nombre: "Orquestador"},
+			Since:   since,
+			Progress: projectControlProgress{
+				State:          "activo",
+				StateReason:    "hay trabajo en progreso",
+				AttentionScore: 2,
+				AttentionLabel: "bajo",
+			},
+			Agents: []projectControlAgentRow{{
+				Name:             "Codex4",
+				OperationalState: "trabajando",
+				OpenTasks:        2,
+			}},
+			Autonomy: []autonomyEventSummary{{
+				Kind:        "task_reassigned",
+				CreatedAt:   time.Date(2026, 4, 24, 14, 0, 0, 0, time.UTC),
+				TargetAgent: "Codex4",
+			}},
+			Git: projectControlGitAggregate{
+				TouchedFiles:        []string{"cmd/workspace_control.go"},
+				PendingAddedLines:   3,
+				PendingDeletedLines: 1,
+			},
+		}, nil
+	}
 
 	mux := http.NewServeMux()
 	registerAPIRoutes(mux)
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/workspace/control", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/workspace/control?desde=2026-04-24T13:00:00Z", nil)
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status workspace control inesperado: %d body=%s", rec.Code, rec.Body.String())
@@ -5446,6 +5475,18 @@ func TestAPIWorkspaceControlExponeVistaGlobal(t *testing.T) {
 	}
 	if resp.Control == nil || resp.Control.ActiveProjects != 1 || len(resp.Control.Projects) != 1 {
 		t.Fatalf("control global inesperado: %+v", resp.Control)
+	}
+	if !resp.Control.Since.Equal(time.Date(2026, 4, 24, 13, 0, 0, 0, time.UTC)) {
+		t.Fatalf("since global inesperado: %+v", resp.Control)
+	}
+	if resp.Control.Operational.State != "activo" || resp.Control.Git.FilesChanged != 1 || len(resp.Control.Agents) != 1 {
+		t.Fatalf("agregado global nuevo inesperado: %+v", resp.Control)
+	}
+	if len(resp.Control.Timeline) != 1 || resp.Control.Timeline[0].Project != "orquestador" || resp.Control.Timeline[0].TargetAgent != "Codex4" {
+		t.Fatalf("timeline global inesperada: %+v", resp.Control.Timeline)
+	}
+	if len(resp.Control.ProjectControls) != 1 || resp.Control.ProjectControls[0].Project == nil || resp.Control.ProjectControls[0].Project.Slug != "orquestador" {
+		t.Fatalf("project controls globales inesperados: %+v", resp.Control.ProjectControls)
 	}
 	if resp.Control.AutonomySurface == nil || resp.Control.AutonomySurface.Events != 1 {
 		t.Fatalf("autonomy surface global inesperada: %+v", resp.Control)

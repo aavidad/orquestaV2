@@ -12,10 +12,12 @@ func TestBuildWorkspaceControlReportAgregaStatusYCockpits(t *testing.T) {
 	prevStatus := statusService
 	prevProjects := workspaceControlListProjects
 	prevCockpit := workspaceControlCockpitBuilder
+	prevProjectControl := workspaceControlProjectBuilder
 	defer func() {
 		statusService = prevStatus
 		workspaceControlListProjects = prevProjects
 		workspaceControlCockpitBuilder = prevCockpit
+		workspaceControlProjectBuilder = prevProjectControl
 	}()
 
 	statusService = stubStatusService{response: apiStatusResponse{
@@ -62,8 +64,70 @@ func TestBuildWorkspaceControlReportAgregaStatusYCockpits(t *testing.T) {
 		}
 		return cockpit, nil
 	}
+	workspaceControlProjectBuilder = func(slug string, since time.Time) (*projectControlReport, error) {
+		ts := time.Date(2026, 4, 24, 13, 30, 0, 0, time.UTC)
+		if slug == "infra" {
+			return &projectControlReport{
+				Project:   &db.Proyecto{Slug: slug, Nombre: slug},
+				Since:     since,
+				Generated: ts,
+				Progress: projectControlProgress{
+					State:          "bloqueado",
+					StateReason:    "bloqueos abiertos sin ejecución activa",
+					AttentionScore: 6,
+					AttentionLabel: "alto",
+				},
+				Agents: []projectControlAgentRow{{
+					Name:             "Codex9",
+					OperationalState: "bloqueado",
+					OpenTasks:        2,
+					BlockedTasks:     2,
+					MailboxPending:   1,
+				}},
+				Autonomy: []autonomyEventSummary{{
+					Kind:        "worker_recovery_requested",
+					CreatedAt:   ts.Add(30 * time.Minute),
+					TargetAgent: "Codex9",
+				}},
+				Git: projectControlGitAggregate{
+					TouchedFiles:          []string{"cmd/api.go", "cmd/workspace_control.go"},
+					PendingAddedLines:     4,
+					PendingDeletedLines:   1,
+					CommittedAddedLines:   3,
+					CommittedDeletedLines: 2,
+				},
+			}, nil
+		}
+		return &projectControlReport{
+			Project:   &db.Proyecto{Slug: slug, Nombre: slug},
+			Since:     since,
+			Generated: ts,
+			Progress: projectControlProgress{
+				State:          "activo",
+				StateReason:    "hay trabajo en progreso",
+				AttentionScore: 2,
+				AttentionLabel: "bajo",
+			},
+			Agents: []projectControlAgentRow{{
+				Name:             "Codex1",
+				OperationalState: "trabajando",
+				OpenTasks:        1,
+			}},
+			Autonomy: []autonomyEventSummary{{
+				Kind:        "task_reassigned",
+				CreatedAt:   ts,
+				TargetAgent: "Codex1",
+			}},
+			Git: projectControlGitAggregate{
+				TouchedFiles:          []string{"cmd/workspace_control.go"},
+				PendingAddedLines:     2,
+				CommittedAddedLines:   1,
+				CommittedDeletedLines: 1,
+			},
+		}, nil
+	}
 
-	report, err := buildWorkspaceControlReport()
+	report, err := buildWorkspaceControlReportSince(time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("buildWorkspaceControlReport: %v", err)
 	}
@@ -75,6 +139,24 @@ func TestBuildWorkspaceControlReportAgregaStatusYCockpits(t *testing.T) {
 	}
 	if report.WorkersConectados != 2 || report.WorkersTrabajando != 2 || report.SupervisoresActivos != 1 {
 		t.Fatalf("workers/supervisor inesperados: %+v", report)
+	}
+	if !report.Since.Equal(time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC)) {
+		t.Fatalf("ventana inesperada: %s", report.Since)
+	}
+	if report.Operational.State != "bloqueado" || report.Operational.AttentionScore != 6 || report.Operational.BlockingProjects != 1 {
+		t.Fatalf("estado operativo global inesperado: %+v", report.Operational)
+	}
+	if report.Git.FilesChanged != 2 || report.Git.Insertions != 10 || report.Git.Deletions != 4 || report.Git.LinesNet != 6 {
+		t.Fatalf("git global inesperado: %+v", report.Git)
+	}
+	if len(report.Agents) != 2 || report.Agents[0].Project != "infra" || report.Agents[1].Project != "orquestador" {
+		t.Fatalf("agentes globales inesperados: %+v", report.Agents)
+	}
+	if len(report.Timeline) != 2 || report.Timeline[0].Project != "infra" || report.Timeline[0].Kind != "worker_recovery_requested" {
+		t.Fatalf("timeline global inesperada: %+v", report.Timeline)
+	}
+	if len(report.ProjectControls) != 2 {
+		t.Fatalf("project controls inesperados: %+v", report.ProjectControls)
 	}
 	if report.AutonomySurface == nil || report.AutonomySurface.Events != 1 || len(report.AutonomySurface.Projects) != 1 {
 		t.Fatalf("autonomy surface inesperada: %+v", report.AutonomySurface)
@@ -114,10 +196,12 @@ func TestBuildWorkspaceControlReportCuentaProyectosActivosAunqueFalleCockpit(t *
 	prevStatus := statusService
 	prevProjects := workspaceControlListProjects
 	prevCockpit := workspaceControlCockpitBuilder
+	prevProjectControl := workspaceControlProjectBuilder
 	defer func() {
 		statusService = prevStatus
 		workspaceControlListProjects = prevProjects
 		workspaceControlCockpitBuilder = prevCockpit
+		workspaceControlProjectBuilder = prevProjectControl
 	}()
 
 	statusService = stubStatusService{response: apiStatusResponse{}}
@@ -137,6 +221,7 @@ func TestBuildWorkspaceControlReportCuentaProyectosActivosAunqueFalleCockpit(t *
 			TareasPorEstado: map[string]int{"en_progreso": 1},
 		}, nil
 	}
+	workspaceControlProjectBuilder = nil
 
 	report, err := buildWorkspaceControlReport()
 	if err != nil {

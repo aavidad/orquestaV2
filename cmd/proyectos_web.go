@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"orquesta/db"
 	"orquesta/fabricaapp"
@@ -150,7 +151,14 @@ func webHandlerWorkspaceControl(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	control, err := webCargarWorkspaceControlPorAPI()
+	since, err := parseStatsSince(strings.TrimSpace(r.URL.Query().Get("desde")))
+	if err != nil {
+		webRender(w, r, webTplLayout+webTplWorkspaceControl, webWorkspaceControlData{
+			Err: err.Error(),
+		})
+		return
+	}
+	control, err := webCargarWorkspaceControlPorAPI(since)
 	if err != nil {
 		webRender(w, r, webTplLayout+webTplWorkspaceControl, webWorkspaceControlData{
 			Err: err.Error(),
@@ -670,9 +678,15 @@ func webCargarProyectoCockpitPorAPI(ref string) (*apiProyectoCockpit, error) {
 	return resp.Cockpit, nil
 }
 
-func webCargarWorkspaceControlPorAPI() (*workspaceControlReport, error) {
+func webCargarWorkspaceControlPorAPI(since time.Time) (*workspaceControlReport, error) {
 	var resp apiWorkspaceControlResponse
-	if err := webInvocarAPIJSON(http.MethodGet, "/api/workspace/control", nil, &resp); err != nil {
+	path := "/api/workspace/control"
+	if !since.IsZero() {
+		query := url.Values{}
+		query.Set("desde", since.UTC().Format(time.RFC3339))
+		path += "?" + query.Encode()
+	}
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Control, nil
