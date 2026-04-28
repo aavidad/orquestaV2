@@ -82,9 +82,9 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 			},
 		},
 		AutonomySurface: &autonomySurface{
-			Events: 2,
-			ByKind: map[string]int{"handoff_completed": 1, "task_reassigned": 1},
-			LastAt: &now,
+			Events:     2,
+			ByKind:     map[string]int{"handoff_completed": 1, "task_reassigned": 1},
+			LastAt:     &now,
 			Highlights: []string{"task_reassigned=1", "integracion_bloqueada=10", "riesgo_top=orquestador(10)"},
 			Recent: []autonomySurfaceRecentItem{
 				{Project: "orquestador", autonomyEventSummary: autonomyEventSummary{Kind: "handoff_completed", TargetAgent: "CodexX", CreatedAt: now}},
@@ -246,6 +246,70 @@ func TestAPIHandlerStatusIgnoraSnapshotFrescoQueNecesitaRefreshInmediato(t *test
 	}
 	if payload.Autonomia.ContinuidadPendiente != 0 {
 		t.Fatalf("autonomia inesperada tras refresh directo: %+v", payload.Autonomia)
+	}
+}
+
+func TestAPIHandlerStatusReconciliaPanelFrescoSobreSnapshotStale(t *testing.T) {
+	prevNow := statusNowFunc
+	prevFast := statusFastFetcher
+	prevUltraLite := apiStatusUltraLiteFetcher
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	defer func() {
+		statusNowFunc = prevNow
+		statusFastFetcher = prevFast
+		apiStatusUltraLiteFetcher = prevUltraLite
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+		resetStatusSnapshotCache()
+		resetAgentPanelSnapshotCache()
+	}()
+	resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+
+	now := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	resetAt := now.Add(30 * time.Minute)
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		Generado: now.Add(-20 * time.Second).Format(time.RFC3339),
+	}, now, time.Minute)
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "Codex1", Activo: true, EstadoCuota: "activo"},
+		EstadoOperativo: "trabajando",
+		WorkerAlive:     true,
+		WorkerState:     "running",
+		OpenTasks:       1,
+	}}, now)
+
+	statusFastFetcher = func() (apiStatusResponse, error) { return apiStatusResponse{}, errStatusFetchTimeout }
+	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) { return apiStatusResponse{}, false }
+	apiStatusReadOnlyLiteFetcher = nil
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	apiHandlerStatus(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload apiStatusResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("json decode: %v", err)
+	}
+	if len(payload.AgentesActivos) != 1 || payload.AgentesActivos[0].Nombre != "Codex1" {
+		t.Fatalf("agentesActivos inesperados tras reconciliar panel: %+v", payload.AgentesActivos)
+	}
+	if len(payload.AgentesTrabajando) != 1 || payload.AgentesTrabajando[0].Nombre != "Codex1" {
+		t.Fatalf("agentesTrabajando inesperados tras reconciliar panel: %+v", payload.AgentesTrabajando)
+	}
+	if len(payload.AgentesQuotaBlocked) != 0 {
+		t.Fatalf("no deberia conservar quota blocked stale tras reconciliar panel: %+v", payload.AgentesQuotaBlocked)
+	}
+	if payload.WorkersConectados != 1 || payload.WorkersTrabajando != 1 || payload.SupervisoresActivos != 0 {
+		t.Fatalf("counters reconciliados inesperados: %+v", payload)
 	}
 }
 

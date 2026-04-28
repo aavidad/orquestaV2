@@ -256,11 +256,11 @@ func visibleNonSupervisorAgents(items []*db.Agente) []*db.Agente {
 
 func buildServerOperationalInfoFastFromDB() (serverOperationalInfo, error) {
 	if snapshot, ok := readStatusSnapshotFreshUsable(); ok {
-		reconcileServerOperationalSnapshotWithFreshPanel(&snapshot)
+		reconcileStatusSnapshotWithFreshPanel(&snapshot)
 		return buildServerOperationalInfo(snapshot), nil
 	}
 	if snapshot, ok := readStatusSnapshotAny(); ok && !statusSnapshotNeedsImmediateRefresh(snapshot) {
-		reconcileServerOperationalSnapshotWithFreshPanel(&snapshot)
+		reconcileStatusSnapshotWithFreshPanel(&snapshot)
 		return buildServerOperationalInfo(snapshot), nil
 	}
 	agentes, err := serverOperationalListAgentsFetcher()
@@ -406,7 +406,7 @@ func mergeServerOperationalAgentsWithPanelRows(agentes []*db.Agente, rows []agen
 	return out
 }
 
-func reconcileServerOperationalSnapshotWithFreshPanel(snapshot *apiStatusResponse) {
+func reconcileStatusSnapshotWithFreshPanel(snapshot *apiStatusResponse) {
 	if snapshot == nil {
 		return
 	}
@@ -426,6 +426,11 @@ func reconcileServerOperationalSnapshotWithFreshPanel(snapshot *apiStatusRespons
 	snapshot.AgentesAuthManual = authManual
 	snapshot.AgentesQuotaBlocked = quotaBlocked
 	snapshot.Autonomia = resumirAutonomiaRows(rows, statusNowFunc().UTC())
+	snapshot.WorkersConectados, snapshot.WorkersTrabajando, snapshot.SupervisoresActivos = statusVisibleWorkerCounters(
+		snapshot.AgentesActivos,
+		snapshot.AgentesTrabajando,
+		snapshot.Autonomia,
+	)
 }
 
 func sanitizeServerOperationalQuotaFromPanelRows(agentes []*db.Agente, rows []agentesapp.Row) {

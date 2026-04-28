@@ -1231,17 +1231,20 @@ func apiHandlerServerOperational(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if snapshot, ok := readStatusSnapshotFreshUsable(); ok {
+		reconcileStatusSnapshotWithFreshPanel(&snapshot)
 		apiWriteServerOperational(w, r, buildServerOperationalInfo(snapshot))
 		return
 	}
 	if apiServerOperationalStrictProbe(r) {
 		if snapshot, ok := readStatusSnapshotAny(); ok {
+			reconcileStatusSnapshotWithFreshPanel(&snapshot)
 			ensureStatusRefreshAsync()
 			apiWriteServerOperational(w, r, buildServerOperationalInfo(snapshot))
 			return
 		}
 	}
 	if status, ok := fetchStatusForOperationalFallback(statusFastTimeout); ok {
+		reconcileStatusSnapshotWithFreshPanel(&status)
 		apiWriteServerOperational(w, r, buildServerOperationalInfo(status))
 		return
 	}
@@ -1443,22 +1446,27 @@ func fetchStatusForAPI(timeout time.Duration) (apiStatusResponse, error) {
 
 func fetchStatusForAPIAllowDirectFallback(timeout, fallbackTimeout time.Duration) (apiStatusResponse, error) {
 	if cached, ok := readStatusSnapshotFreshUsable(); ok {
+		reconcileStatusSnapshotWithFreshPanel(&cached)
 		return cached, nil
 	}
 	if cached, ok := readStatusSnapshotAny(); ok && !statusSnapshotNeedsImmediateRefresh(cached) {
+		reconcileStatusSnapshotWithFreshPanel(&cached)
 		return cached, nil
 	}
 	if status, fallbackErr := fetchStatusFallbackRace(fallbackTimeout); fallbackErr == nil {
 		storeStatusSnapshot(status, statusNowFunc().UTC())
 		ensureStatusRefreshAsync()
+		reconcileStatusSnapshotWithFreshPanel(&status)
 		return status, nil
 	}
 	if status, ok := fetchStatusReadOnlyLiteDirect(fallbackTimeout); ok {
 		storeStatusSnapshotWithTTL(status, statusNowFunc().UTC(), statusFallbackTTL)
 		ensureStatusRefreshAsync()
+		reconcileStatusSnapshotWithFreshPanel(&status)
 		return status, nil
 	}
 	if cached, ok := readStatusSnapshotAny(); ok {
+		reconcileStatusSnapshotWithFreshPanel(&cached)
 		return cached, nil
 	}
 	return apiStatusResponse{}, errStatusFetchTimeout
@@ -2657,9 +2665,11 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 
 func buildOpenClawBaseStatus() *estadoResumen {
 	if cached, ok := readStatusSnapshotFresh(); ok {
+		reconcileStatusSnapshotWithFreshPanel(&cached)
 		return buildOpenClawBaseStatusFromAPIStatus(cached)
 	}
 	if cached, ok := readStatusSnapshotAny(); ok {
+		reconcileStatusSnapshotWithFreshPanel(&cached)
 		ensureStatusRefreshAsync()
 		return buildOpenClawBaseStatusFromAPIStatus(cached)
 	}

@@ -1232,6 +1232,107 @@ func TestAPIServerOperationalUsesConfiguredDegradedBuilderWhenNoSnapshotNorReadO
 	}
 }
 
+func TestAPIServerOperationalReconciliaPanelFrescoSobreSnapshotStale(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	prevNow := statusNowFunc
+	t.Cleanup(func() {
+		statusNowFunc = prevNow
+	})
+
+	now := time.Date(2026, 4, 29, 12, 5, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	resetAt := now.Add(30 * time.Minute)
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		Generado: now.Add(-15 * time.Second).Format(time.RFC3339),
+	}, now, time.Minute)
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "Codex1", Activo: true, EstadoCuota: "activo"},
+		EstadoOperativo: "trabajando",
+		WorkerAlive:     true,
+		WorkerState:     "running",
+		OpenTasks:       1,
+	}}, now)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerServerOperational(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode fresh-panel operational: %v", err)
+	}
+	if payload.State != "ready" || !payload.Operational || payload.Reason != "control_plane_responsive" {
+		t.Fatalf("deberia converger con panel fresco: %+v", payload)
+	}
+	if payload.ActiveAgents != 1 || payload.WorkingAgents != 1 || payload.ConnectedWorkers != 1 || payload.WorkingWorkers != 1 {
+		t.Fatalf("workers inesperados tras reconciliar panel: %+v", payload)
+	}
+	if payload.QuotaAgents != 0 {
+		t.Fatalf("no deberia arrastrar quota stale tras reconciliar panel: %+v", payload)
+	}
+}
+
+func TestBuildOpenClawBaseStatusReconciliaPanelFrescoSobreSnapshotStale(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	prevNow := statusNowFunc
+	t.Cleanup(func() {
+		statusNowFunc = prevNow
+	})
+
+	now := time.Date(2026, 4, 29, 12, 10, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	resetAt := now.Add(30 * time.Minute)
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		WorkersConectados:   0,
+		WorkersTrabajando:   0,
+		SupervisoresActivos: 0,
+		Generado:            now.Add(-20 * time.Second).Format(time.RFC3339),
+	}, now, time.Minute)
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "Codex1", Activo: true, EstadoCuota: "activo"},
+		EstadoOperativo: "trabajando",
+		WorkerAlive:     true,
+		WorkerState:     "running",
+		OpenTasks:       1,
+	}}, now)
+
+	status := buildOpenClawBaseStatus()
+	if status == nil {
+		t.Fatal("status panel vacio")
+	}
+	if len(status.AgentesActivos) != 1 || len(status.AgentesTrabajando) != 1 {
+		t.Fatalf("panel deberia reflejar agentes frescos: %+v", status)
+	}
+	if len(status.AgentesQuotaBlocked) != 0 {
+		t.Fatalf("panel no deberia arrastrar quota stale: %+v", status.AgentesQuotaBlocked)
+	}
+	if status.WorkersConectados != 1 || status.WorkersTrabajando != 1 || status.SupervisoresActivos != 0 {
+		t.Fatalf("counters del panel inesperados: %+v", status)
+	}
+}
+
 func TestAPIServerOperationalUsesReadOnlyFallbackWhenFastFallbackUnavailable(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()
