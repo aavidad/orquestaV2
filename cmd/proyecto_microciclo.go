@@ -616,11 +616,7 @@ func escribirInboxMicrociclo(proyecto *db.Proyecto, agente string, tarea *db.Tar
 	if base == "" {
 		return nil
 	}
-	if err := os.MkdirAll(base, 0o755); err != nil {
-		return err
-	}
-	path := filepath.Join(base, ".orquesta-inbox.md")
-	return os.WriteFile(path, []byte(construirInboxMicrocicloMarkdown(proyecto, tarea)), 0o644)
+	return escribirInboxArchivoConHigiene(proyecto, base, tarea.ID, construirInboxMicrocicloMarkdown(proyecto, tarea))
 }
 
 func construirInboxMicrocicloMarkdown(proyecto *db.Proyecto, tarea *db.Tarea) string {

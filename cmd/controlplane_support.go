@@ -16,7 +16,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -8734,11 +8733,11 @@ func escribirInboxRuntimeMailboxDurable(proyecto *db.Proyecto, agente string, ta
 	if base == "" {
 		return nil
 	}
-	if err := os.MkdirAll(base, 0o755); err != nil {
-		return err
+	taskID := int64(0)
+	if tarea != nil {
+		taskID = tarea.ID
 	}
-	path := filepath.Join(base, ".orquesta-inbox.md")
-	return os.WriteFile(path, []byte(construirInboxRuntimeMailboxDurableMarkdown(proyecto, tarea, msg)), 0o644)
+	return escribirInboxArchivoConHigiene(proyecto, base, taskID, construirInboxRuntimeMailboxDurableMarkdown(proyecto, tarea, msg))
 }
 
 func registrarRuntimeMailboxWorkQueueLocal(msg *db.RuntimeMailboxMessage, tarea *db.Tarea, handle *db.RuntimeHandle, state, reason string) error {
