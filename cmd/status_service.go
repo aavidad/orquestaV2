@@ -87,11 +87,11 @@ var (
 )
 
 func statusRowsForSnapshot(timeout time.Duration) ([]agentesapp.Row, error) {
-	if status, ok := readStatusSnapshotAny(); ok && statusSnapshotCanStayLight(status) {
-		return buildAgentPanelRowsFromStatusSnapshot(status), nil
-	}
 	if rows, ok := readAgentPanelSnapshotFresh(); ok {
 		return rows, nil
+	}
+	if status, ok := readStatusSnapshotAny(); ok && statusSnapshotCanStayLight(status) {
+		return buildAgentPanelRowsFromStatusSnapshot(status), nil
 	}
 	rows, err := agentRowsForStatusWithinTimeout(timeout)
 	if err != nil {

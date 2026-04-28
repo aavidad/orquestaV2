@@ -256,6 +256,56 @@ func TestStatusRowsForSnapshotUsaStatusLigeroEnQuotaBlockedIdle(t *testing.T) {
 	}
 }
 
+func TestStatusRowsForSnapshotPrefierePanelFrescoSobreStatusLigeroStale(t *testing.T) {
+	prevFetcher := statusRowsFetcher
+	defer func() {
+		statusRowsFetcher = prevFetcher
+		resetAgentPanelSnapshotCache()
+		resetStatusSnapshotCache()
+	}()
+	resetAgentPanelSnapshotCache()
+	resetStatusSnapshotCache()
+
+	now := time.Now().UTC()
+	resetAt := now.Add(20 * time.Minute)
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "CodexBudget", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "CodexBudget", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		TareasEnProgreso: []tareaLite{{ID: 24, Estado: db.TareaEnProgreso}},
+		Autonomia: autonomiaResumen{
+			Supervisando:  1,
+			WorkConfirmed: 1,
+		},
+	}, now, time.Minute)
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "CodexLive", Activo: true, EstadoCuota: "activo"},
+		EstadoOperativo: "trabajando",
+		WorkerAlive:     true,
+		WorkerState:     "running",
+	}}, now)
+
+	calls := 0
+	statusRowsFetcher = func() ([]agentesapp.Row, error) {
+		calls++
+		return []agentesapp.Row{{Agente: &db.Agente{Nombre: "CodexFetcher"}, EstadoOperativo: "trabajando"}}, nil
+	}
+
+	rows, err := statusRowsForSnapshot(20 * time.Millisecond)
+	if err != nil {
+		t.Fatalf("statusRowsForSnapshot: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("no deberia pedir filas ricas si ya existe panel fresco, calls=%d", calls)
+	}
+	if len(rows) != 1 || rows[0].Agente == nil || rows[0].Agente.Nombre != "CodexLive" {
+		t.Fatalf("deberia preferir panel fresco sobre status ligero stale, rows=%+v", rows)
+	}
+}
+
 func TestStatusServiceCacheaSnapshotCorto(t *testing.T) {
 	prevFetcher := statusFreshFetcher
 	prevFastFetcher := statusFastFetcher
