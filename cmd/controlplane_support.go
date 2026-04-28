@@ -7871,9 +7871,13 @@ func procesarRuntimeMailboxSessionResumeConSesion(msg *db.RuntimeMailboxMessage,
 	} else if dedupe {
 		return false, nil
 	}
+	bootstrapPendienteCanonicoListo, err := runtimeMailboxBootstrapPendientePermiteDispatchSessionResumeCanonico(msg, handle, runtimeInstance)
+	if err != nil {
+		return false, err
+	}
 	if blocked, err := runtimeMailboxBloqueadaPorBootstrapPendiente(msg, handle, runtimeInstance); err != nil {
 		return false, err
-	} else if blocked {
+	} else if blocked && !bootstrapPendienteCanonicoListo {
 		return false, nil
 	}
 	if !runtimeMailboxShouldReevaluate("session_resume", msg.ID, handle.ID) {
@@ -7882,7 +7886,7 @@ func procesarRuntimeMailboxSessionResumeConSesion(msg *db.RuntimeMailboxMessage,
 	if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliverySessionResume {
 		return false, nil
 	}
-	if !runtimeHandleListaParaDispatchSessionResumeTMUX(handle, runtimeInstance) {
+	if !runtimeHandleListaParaDispatchSessionResumeTMUX(handle, runtimeInstance) && !bootstrapPendienteCanonicoListo {
 		return false, nil
 	}
 	return encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID, "runtime_mailbox_session_resume", "runtime_mailbox_session_resume_supersede")
@@ -7914,9 +7918,13 @@ func encolarRuntimeMailboxSessionResumeSiCorresponde(msg *db.RuntimeMailboxMessa
 	if snapshot == nil {
 		snapshot = newRuntimeMailboxBatchSnapshot()
 	}
+	bootstrapPendienteCanonicoListo, err := runtimeMailboxBootstrapPendientePermiteDispatchSessionResumeCanonico(msg, handle, runtimeInstance)
+	if err != nil {
+		return false, err
+	}
 	if blocked, err := runtimeMailboxBloqueadaPorBootstrapPendiente(msg, handle, runtimeInstance); err != nil {
 		return false, err
-	} else if blocked {
+	} else if blocked && !bootstrapPendienteCanonicoListo {
 		return false, nil
 	}
 	if mailboxOnlyConsumed, err := consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot, msg, handle, externalSessionID, strings.TrimSpace(auditAction)); err != nil {
@@ -8373,6 +8381,20 @@ func runtimeMailboxBloqueadaPorBootstrapPendiente(msg *db.RuntimeMailboxMessage,
 func runtimeMailboxBootstrapPendientePermiteDispatchSessionResume(handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance) bool {
 	return runtimeTMUXSessionResumeWorkerReady(handle) ||
 		runtimeTMUXSessionResumeWorkerWorkingEsperandoIO(handle, runtimeInstance)
+}
+
+func runtimeMailboxBootstrapPendientePermiteDispatchSessionResumeCanonico(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance) (bool, error) {
+	if msg == nil || handle == nil {
+		return false, nil
+	}
+	if !runtimeHandlePuedeResumeTmuxSinSnapshot(handle, runtimeInstance) {
+		return false, nil
+	}
+	covered, _, _, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(msg.ID, handle, runtimeInstance)
+	if err != nil || !covered {
+		return false, err
+	}
+	return true, nil
 }
 
 func runtimeHandleListaParaDispatchBootstrapTMUX(handle *db.RuntimeHandle) bool {
