@@ -286,6 +286,56 @@ func TestLoadWorkerSnapshotFromMetadataJSONCompletaExecutionProfileCanonicoDesde
 	}
 }
 
+func TestLoadWorkerSnapshotFromMetadataJSONCompletaExecutionProfileDesdeMetadata(t *testing.T) {
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+
+	write := func(path string, payload any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	write(manifestPath, WorkerManifest{
+		Version: 1,
+		Agent:   "CodexMeta",
+	})
+	write(statusPath, WorkerStatus{State: "running", Alive: true})
+	write(heartbeatPath, WorkerHeartbeat{Alive: true})
+
+	meta, err := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+		"perfil_operativo":      "paralelo",
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+
+	snap, err := LoadWorkerSnapshotFromMetadataJSON(string(meta))
+	if err != nil {
+		t.Fatalf("load worker snapshot: %v", err)
+	}
+	if snap == nil || snap.Manifest == nil {
+		t.Fatalf("snapshot incompleto: %+v", snap)
+	}
+	if got := snap.ExecutionProfile(); got != "paralelo" {
+		t.Fatalf("execution profile desde metadata inesperado: %q", got)
+	}
+	view := snap.View(time.Now().UTC(), time.Minute)
+	if view == nil || view.ExecutionProfile != "paralelo" {
+		t.Fatalf("view sin execution_profile desde metadata: %+v", view)
+	}
+}
+
 func TestLoadWorkerSnapshotFromMetadataJSONUsaCacheCaliente(t *testing.T) {
 	resetWorkerSnapshotCacheForTest()
 	prevTTL := workerSnapshotCacheTTL

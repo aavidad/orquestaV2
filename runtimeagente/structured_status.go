@@ -150,11 +150,12 @@ type runtimeManifestOverlay struct {
 const WorkerMetadataSchemaVersion = 1
 
 type workerMetadataPaths struct {
-	SchemaVersion int    `json:"worker_schema_version,omitempty"`
-	ManifestPath  string `json:"worker_manifest_path"`
-	StatusPath    string `json:"worker_status_path"`
-	HeartbeatPath string `json:"worker_heartbeat_path"`
-	TraceDir      string `json:"trace_dir"`
+	SchemaVersion    int    `json:"worker_schema_version,omitempty"`
+	ManifestPath     string `json:"worker_manifest_path"`
+	StatusPath       string `json:"worker_status_path"`
+	HeartbeatPath    string `json:"worker_heartbeat_path"`
+	TraceDir         string `json:"trace_dir"`
+	ExecutionProfile string `json:"perfil_operativo,omitempty"`
 }
 
 type cachedWorkerSnapshot struct {
@@ -242,6 +243,9 @@ func LoadWorkerSnapshotFromMetadataJSON(raw string) (*WorkerSnapshot, error) {
 			}
 		}
 	}
+	if snap.Manifest != nil && strings.TrimSpace(snap.Manifest.ExecutionProfile) == "" {
+		snap.Manifest.ExecutionProfile = strings.TrimSpace(meta.ExecutionProfile)
+	}
 	cacheWorkerSnapshotByPaths(meta, snap)
 	return snap, nil
 }
@@ -265,6 +269,7 @@ func workerMetadataPathsFromJSON(raw string) (workerMetadataPaths, error) {
 	meta.StatusPath = strings.TrimSpace(meta.StatusPath)
 	meta.HeartbeatPath = strings.TrimSpace(meta.HeartbeatPath)
 	meta.TraceDir = strings.TrimSpace(meta.TraceDir)
+	meta.ExecutionProfile = strings.TrimSpace(meta.ExecutionProfile)
 	return meta, nil
 }
 
