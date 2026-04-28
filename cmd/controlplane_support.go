@@ -9022,7 +9022,15 @@ func runtimeHandlePermiteInteractivoTmuxSinEstado(handle *db.RuntimeHandle) bool
 }
 
 func runtimeHandlePuedeResumeTmuxSinSnapshot(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) bool {
-	if handle == nil || !runtimeHandleEsTmuxLike(handle) {
+	if handle == nil {
+		return false
+	}
+	if !runtimeHandleEsTmuxLike(handle) && handle.ID > 0 {
+		if fresh, err := db.GetRuntimeHandle(handle.ID); err == nil && fresh != nil {
+			handle = fresh
+		}
+	}
+	if !runtimeHandleEsTmuxLike(handle) {
 		return false
 	}
 	if runtime == nil {

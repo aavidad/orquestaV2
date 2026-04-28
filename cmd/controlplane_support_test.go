@@ -15404,6 +15404,57 @@ func TestRuntimeHandleListaParaDispatchSessionResumeTMUXUsaMetadataSiManifestOmi
 	}
 }
 
+func TestRuntimeHandlePuedeResumeTmuxSinSnapshotRefrescaHandleCanonicoDesdeDB(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if runtimeHandleEsTmuxLike(handle) {
+		t.Fatalf("el handle inicial deberia seguir legacy/no tmux para cubrir el refresh, got=%+v", handle)
+	}
+
+	runtime := &db.RuntimeInstance{
+		ID:           1,
+		Agente:       "Codex1",
+		ProyectoID:   &proyectoID,
+		SesionID:     &sesion.ID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+	}
+	metaJSON := `{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-refresh","tmux_pane_id":"%88","external_session_id":"sess-codex1-refresh"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', metadata_json=? WHERE id=?`, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle tmux: %v", err)
+	}
+
+	if !runtimeHandlePuedeResumeTmuxSinSnapshot(handle, runtime) {
+		t.Fatal("deberia refrescar el handle desde DB y permitir session_resume TMUX sin snapshot")
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeNoDespachaSiWorkerRunningPeroRuntimeNoEsperandoIO(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()
