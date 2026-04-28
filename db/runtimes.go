@@ -170,10 +170,15 @@ func UpsertRuntimeDesdeSesion(s *Sesion) error {
 }
 
 func MarcarRuntimesCerradosPorAgente(agente string) error {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return err
+	}
 	if strings.TrimSpace(agente) == "" {
 		return nil
 	}
-	_, err := DB.Exec(`
+	_, err = DB.Exec(`
 		UPDATE runtime_instances
 		SET logical_state='cerrado',
 		    process_state='finalizado',
@@ -221,8 +226,12 @@ func ListarRuntimes(filter FiltroRuntimes) ([]*RuntimeInstance, error) {
 	q := runtimeSelectBase() + ` WHERE 1=1`
 	var args []any
 	if filter.Agente != nil {
+		agenteCanonico, err := CanonicalizeAgentName(*filter.Agente)
+		if err != nil {
+			return nil, err
+		}
 		q += ` AND r.agente = ?`
-		args = append(args, *filter.Agente)
+		args = append(args, agenteCanonico)
 	}
 	if filter.ProyectoID != nil {
 		q += ` AND r.proyecto_id = ?`
@@ -354,8 +363,12 @@ func ListarRuntimeEvents(filter FiltroRuntimeEvents) ([]*RuntimeEvent, error) {
 		args = append(args, *filter.RuntimeID)
 	}
 	if filter.Agente != nil {
+		agenteCanonico, err := CanonicalizeAgentName(*filter.Agente)
+		if err != nil {
+			return nil, err
+		}
 		rowsQuery += ` AND r.agente = ?`
-		args = append(args, strings.TrimSpace(*filter.Agente))
+		args = append(args, agenteCanonico)
 	}
 	if filter.ProyectoID != nil {
 		rowsQuery += ` AND r.proyecto_id = ?`
@@ -495,6 +508,11 @@ func insertarMuestraRuntime(runtimeID int64, logicalState, source string) error 
 }
 
 func RuntimePrincipalAgente(agente string) (*RuntimeInstance, error) {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return nil, err
+	}
 	row := DB.QueryRow(runtimeSelectBase()+`
 		WHERE r.agente = ?
 		ORDER BY `+runtimeActividadExpr("r")+` DESC, r.id DESC
@@ -637,7 +655,7 @@ func escanearRuntimeConActividad(s scanner) (*RuntimeInstance, error) {
 		runtime.LastHeartbeatAt = &lastHeartbeat.Time
 	}
 	if ultimaActividad.Valid {
-		if parsed, ok := parseSQLiteTimestamp(ultimaActividad.String); ok {
+		if parsed, ok := parseLegacyDBTimestamp(ultimaActividad.String); ok {
 			runtime.UltimaActividadAt = &parsed
 		}
 	}
@@ -660,7 +678,7 @@ func sampleJSONConFuente(source string) string {
 	return string(sampleJSON)
 }
 
-func parseSQLiteTimestamp(v string) (time.Time, bool) {
+func parseLegacyDBTimestamp(v string) (time.Time, bool) {
 	v = strings.TrimSpace(v)
 	if v == "" {
 		return time.Time{}, false

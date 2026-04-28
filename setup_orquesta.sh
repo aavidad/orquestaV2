@@ -12,6 +12,15 @@ go build -o orquesta main.go
 echo "📁 Preparando carpetas de logs..."
 mkdir -p logs
 
+if [ ! -f orquesta.env ]; then
+cat <<EOF > orquesta.env
+# Persistencia explicita obligatoria para el daemon.
+# Rellena estos valores antes de activar el servicio.
+ORQUESTA_DB_DRIVER=postgres
+ORQUESTA_DB_DSN=postgres://usuario:password@localhost/orquesta?sslmode=disable
+EOF
+fi
+
 # 2.1. Provisionar skills por defecto para Codex
 echo "🪓 Provisionando skills de Codex..."
 bash scripts/provision_codex_skills.sh
@@ -27,6 +36,8 @@ After=network.target
 Type=simple
 User=$(whoami)
 WorkingDirectory=$(pwd)
+Environment=ORQUESTA_REQUIRE_EXPLICIT_PERSISTENCE=1
+EnvironmentFile=-$(pwd)/orquesta.env
 ExecStart=$(pwd)/orquesta serve --puerto 16543
 Restart=always
 RestartSec=10

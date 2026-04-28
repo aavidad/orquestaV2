@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -98,5 +99,66 @@ func TestResetReanimacionResultadoCancelaBootstrapVivoSiCooldownSigueSostenido(t
 	}
 	if !strings.Contains(order.ResultadoJSON, `"quota_blocked":true`) || !strings.Contains(order.ResultadoJSON, `"superseded_reason":"quota_cooldown"`) {
 		t.Fatalf("resultado de cancelacion inesperado: %+v", order)
+	}
+}
+
+func TestResetReanimacionResultadoCierraReanimacionSiYaHayHandleActiva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_handles
+		SET proyecto_id=?,
+		    transporte='tmux',
+		    handle_kind='session',
+		    handle_ref='orq-codex1/%1',
+		    estado='activo',
+		    metadata_json=?,
+		    last_seen_at=CURRENT_TIMESTAMP
+		WHERE sesion_id=?`,
+		proyectoID,
+		`{"driver":"tmux_cli_session"}`,
+		sesion.ID,
+	); err != nil {
+		t.Fatalf("actualizar runtime handle activa: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET reanimar_at=CURRENT_TIMESTAMP, estado_cuota='activo', motivo_pausa='' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("marcar reanimacion: %v", err)
+	}
+
+	resultado, err := (dbAutomationService{}).ResetReanimacionResultado("Codex1")
+	if err != nil {
+		t.Fatalf("ResetReanimacionResultado: %v", err)
+	}
+	if resultado != resetReanimacionResultadoReactivado {
+		t.Fatalf("resultado inesperado: %s", resultado)
+	}
+	agente, err := db.GetAgente("Codex1")
+	if err != nil {
+		t.Fatalf("get agente: %v", err)
+	}
+	if agente == nil || agente.ReanimarAt != nil {
+		t.Fatalf("deberia limpiar la reanimacion pendiente cuando la handle ya esta activa: %+v", agente)
 	}
 }

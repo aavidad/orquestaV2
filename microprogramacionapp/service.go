@@ -336,6 +336,15 @@ func (s *Servicio) RegistrarEntregaGit(id int64, entrada EntradaRegistrarEntrega
 		notas = notas + "\n" + evidencia
 	}
 	metadataJSON := buildGitMetadataMicroprogramacion(item.ID, captura, item)
+	if subagentContext := parseMergeContextMetadata(entrada.MetadataJSON); len(subagentContext) > 0 {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(metadataJSON), &payload); err == nil && payload != nil {
+			payload["subagent_context"] = subagentContext
+			if raw, err := json.Marshal(payload); err == nil {
+				metadataJSON = string(raw)
+			}
+		}
+	}
 	mergeID, err := s.integradorGit.RegistrarSolicitudMerge(SolicitudMergeMicroprogramacion{
 		ProyectoSlug:  strings.TrimSpace(captura.ProyectoSlug),
 		SourceBranch:  strings.TrimSpace(captura.Branch),
@@ -491,6 +500,18 @@ func buildGitMetadataMicroprogramacion(especificacionID int64, captura *EntregaG
 		return "{}"
 	}
 	return string(raw)
+}
+
+func parseMergeContextMetadata(raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil || len(payload) == 0 {
+		return nil
+	}
+	return payload
 }
 
 func normalizarArchivosEntrega(item *EspecificacionFuncion, archivos []ArchivoEntrega) ([]ArchivoEntrega, []string, error) {

@@ -1,25 +1,50 @@
 package db
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"orquesta/coordinacion"
 )
 
+var (
+	projectContextSummaryTTL               = 5 * time.Second
+	projectContextOperacionFn              = GetProyectoOperacionPrepareLite
+	projectContextActiveWorktreeSummaryFn  = getActiveWorktreeSummary
+	projectContextActiveTaskSummariesFn    = getActiveTaskSummaries
+	projectContextOpenProposalSummariesFn  = getOpenProposalSummaries
+	projectContextSummaryCache             struct {
+		mu    sync.Mutex
+		items map[string]cachedProjectContextSummary
+	}
+)
+
+type cachedProjectContextSummary struct {
+	contexto map[string]any
+	resumen  string
+	expires  time.Time
+}
+
 func BuildProjectContextSummary(agente string, proyecto *Proyecto) (map[string]any, string) {
 	if proyecto == nil {
 		return nil, ""
+	}
+	cacheKey := projectContextSummaryCacheKey(agente, proyecto)
+	if contexto, resumen, ok := getCachedProjectContextSummary(cacheKey); ok {
+		return contexto, resumen
 	}
 	start := time.Now()
 	projectContextDebugf("BuildProjectContextSummary start agente=%s proyecto=%s", strings.TrimSpace(agente), strings.TrimSpace(proyecto.Slug))
 	defer func() {
 		projectContextDebugf("BuildProjectContextSummary done agente=%s proyecto=%s duration=%s", strings.TrimSpace(agente), strings.TrimSpace(proyecto.Slug), time.Since(start).Round(time.Millisecond))
 	}()
-	proyecto = ProyectoConRutaEfectiva(proyecto, "")
+	proyecto = ProyectoPrepareLiteConRutaEfectiva(proyecto, strings.TrimSpace(agente))
 	contexto := map[string]any{
 		"proyecto": map[string]any{
 			"id":   proyecto.ID,
@@ -31,7 +56,7 @@ func BuildProjectContextSummary(agente string, proyecto *Proyecto) (map[string]a
 	resumen := make([]string, 0, 4)
 
 	stepStart := time.Now()
-	if op, err := GetProyectoOperacion(proyecto.ID); err == nil && op != nil {
+	if op, err := projectContextOperacionFn(proyecto.ID); err == nil && op != nil {
 		contexto["operacion"] = map[string]any{
 			"estado":            strings.TrimSpace(string(op.EstadoOperativo)),
 			"motivo":            strings.TrimSpace(op.Motivo),
@@ -48,7 +73,7 @@ func BuildProjectContextSummary(agente string, proyecto *Proyecto) (map[string]a
 	projectContextDebugf("BuildProjectContextSummary step=operacion duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
 	stepStart = time.Now()
-	if worktree := getActiveWorktreeSummary(strings.TrimSpace(agente), proyecto); worktree != nil {
+	if worktree := projectContextActiveWorktreeSummaryFn(strings.TrimSpace(agente), proyecto); worktree != nil {
 		contexto["worktree_activa"] = worktree
 		if branch, _ := worktree["branch"].(string); strings.TrimSpace(branch) != "" {
 			resumen = append(resumen, "Worktree activa en "+strings.TrimSpace(branch))
@@ -57,20 +82,79 @@ func BuildProjectContextSummary(agente string, proyecto *Proyecto) (map[string]a
 	projectContextDebugf("BuildProjectContextSummary step=worktree duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
 	stepStart = time.Now()
-	if tareas := getActiveTaskSummaries(strings.TrimSpace(agente), proyecto.ID); len(tareas) > 0 {
+	if tareas := projectContextActiveTaskSummariesFn(strings.TrimSpace(agente), proyecto.ID); len(tareas) > 0 {
 		contexto["tareas_activas"] = tareas
 		resumen = append(resumen, fmt.Sprintf("%d tarea(s) activas del agente", len(tareas)))
 	}
 	projectContextDebugf("BuildProjectContextSummary step=tareas duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
 	stepStart = time.Now()
-	if propuestas := getOpenProposalSummaries(proyecto.ID); len(propuestas) > 0 {
+	if propuestas := projectContextOpenProposalSummariesFn(proyecto.ID); len(propuestas) > 0 {
 		contexto["propuestas_abiertas"] = propuestas
 		resumen = append(resumen, fmt.Sprintf("%d propuesta(s) abiertas", len(propuestas)))
 	}
 	projectContextDebugf("BuildProjectContextSummary step=propuestas duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
-	return contexto, strings.Join(resumen, ". ")
+	resumenStr := strings.Join(resumen, ". ")
+	storeCachedProjectContextSummary(cacheKey, contexto, resumenStr)
+	return cloneProjectContextSummaryMap(contexto), resumenStr
+}
+
+func projectContextSummaryCacheKey(agente string, proyecto *Proyecto) string {
+	if proyecto == nil {
+		return ""
+	}
+	return strings.TrimSpace(agente) + "|" + strconv.FormatInt(proyecto.ID, 10) + "|" + strings.TrimSpace(proyecto.Slug) + "|" + strings.TrimSpace(proyecto.RutaAbs)
+}
+
+func getCachedProjectContextSummary(key string) (map[string]any, string, bool) {
+	if strings.TrimSpace(key) == "" || projectContextSummaryTTL <= 0 {
+		return nil, "", false
+	}
+	projectContextSummaryCache.mu.Lock()
+	defer projectContextSummaryCache.mu.Unlock()
+	item, ok := projectContextSummaryCache.items[key]
+	if !ok || time.Now().UTC().After(item.expires) {
+		return nil, "", false
+	}
+	return cloneProjectContextSummaryMap(item.contexto), item.resumen, true
+}
+
+func storeCachedProjectContextSummary(key string, contexto map[string]any, resumen string) {
+	if strings.TrimSpace(key) == "" || projectContextSummaryTTL <= 0 {
+		return
+	}
+	projectContextSummaryCache.mu.Lock()
+	defer projectContextSummaryCache.mu.Unlock()
+	if projectContextSummaryCache.items == nil {
+		projectContextSummaryCache.items = make(map[string]cachedProjectContextSummary)
+	}
+	projectContextSummaryCache.items[key] = cachedProjectContextSummary{
+		contexto: cloneProjectContextSummaryMap(contexto),
+		resumen:  strings.TrimSpace(resumen),
+		expires:  time.Now().UTC().Add(projectContextSummaryTTL),
+	}
+}
+
+func resetProjectContextSummaryCache() {
+	projectContextSummaryCache.mu.Lock()
+	defer projectContextSummaryCache.mu.Unlock()
+	projectContextSummaryCache.items = nil
+}
+
+func cloneProjectContextSummaryMap(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return nil
+	}
+	data, err := json.Marshal(in)
+	if err != nil {
+		return in
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		return in
+	}
+	return out
 }
 
 func projectContextDebugf(format string, args ...any) {
@@ -106,7 +190,7 @@ func getActiveWorktreeSummary(agente string, proyecto *Proyecto) map[string]any 
 	}
 	agente = strings.TrimSpace(agente)
 	estado := coordinacion.WorktreeActive
-	worktrees, err := ListarWorktreesCoord(coordinacion.WorktreeFilter{
+	worktrees, err := ListarWorktreesCoordPrepareLite(coordinacion.WorktreeFilter{
 		ProjectID: &proyecto.ID,
 		Agent:     &agente,
 		State:     &estado,
@@ -126,10 +210,7 @@ func getActiveWorktreeSummary(agente string, proyecto *Proyecto) map[string]any 
 }
 
 func getActiveTaskSummaries(agente string, proyectoID int64) []map[string]any {
-	tareas, err := ListarTareas(FiltroTareas{
-		Agente:     strPtrRuntime(strings.TrimSpace(agente)),
-		ProyectoID: &proyectoID,
-	})
+	tareas, err := ListarTareasContextPrepareLite(strings.TrimSpace(agente), proyectoID, 8)
 	if err != nil {
 		return nil
 	}
@@ -157,8 +238,7 @@ func getActiveTaskSummaries(agente string, proyectoID int64) []map[string]any {
 }
 
 func getOpenProposalSummaries(proyectoID int64) []map[string]any {
-	estado := PropuestaAbierta
-	propuestas, err := ListarPropuestas(&estado, &proyectoID)
+	propuestas, err := ListarPropuestasAbiertasPrepareLite(proyectoID, 4)
 	if err != nil {
 		return nil
 	}

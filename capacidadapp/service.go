@@ -62,8 +62,19 @@ type EntradaResolverAgentePipeline struct {
 	UsaMicroprograma bool
 }
 
+type SeleccionAgentePipeline struct {
+	Agente     string `json:"agente"`
+	Estrategia string `json:"estrategia,omitempty"`
+	Motivo     string `json:"motivo,omitempty"`
+}
+
 type ResolvedorAgentePipeline interface {
 	ResolverAgentePipeline(entrada EntradaResolverAgentePipeline) (string, error)
+}
+
+type ResolvedorAgentePipelineExplicado interface {
+	ResolvedorAgentePipeline
+	ResolverSeleccionAgentePipeline(entrada EntradaResolverAgentePipeline) (*SeleccionAgentePipeline, error)
 }
 
 type SolicitudDespachoPipeline struct {
@@ -72,10 +83,11 @@ type SolicitudDespachoPipeline struct {
 }
 
 type ResultadoDespachoPipeline struct {
-	Estado         string `json:"estado"`
-	Motivo         string `json:"motivo,omitempty"`
-	StartOrderID   *int64 `json:"start_order_id,omitempty"`
-	RuntimeOrderID *int64 `json:"runtime_order_id,omitempty"`
+	Estado            string `json:"estado"`
+	Motivo            string `json:"motivo,omitempty"`
+	StartOrderID      *int64 `json:"start_order_id,omitempty"`
+	RuntimeOrderID    *int64 `json:"runtime_order_id,omitempty"`
+	SubagentsLaunched int    `json:"subagents_launched,omitempty"`
 }
 
 type DespachadorPipeline interface {
@@ -269,7 +281,7 @@ func tareaPipelineLocalTieneContratoPremium(tarea *TareaPipelineLocal) bool {
 		return false
 	}
 	notas := strings.TrimSpace(tarea.Notas)
-	if strings.Contains(notas, "autonomia:microrefactor_loop") || strings.Contains(notas, "autonomia:premium_frontier") {
+	if strings.Contains(notas, "autonomia:microrefactor_loop") || strings.Contains(notas, "autonomia:premium_frontier") || strings.Contains(notas, "autonomia:finish_app") {
 		return true
 	}
 	return len(tarea.WriteSet) > 0 && strings.TrimSpace(tarea.TestsMinimos) != ""
@@ -279,7 +291,8 @@ func tareaPipelineLocalEsFrontierPremium(tarea *TareaPipelineLocal) bool {
 	if tarea == nil {
 		return false
 	}
-	return strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier")
+	notas := strings.TrimSpace(tarea.Notas)
+	return strings.Contains(notas, "autonomia:premium_frontier") || strings.Contains(notas, "autonomia:finish_app")
 }
 
 func tareaPipelineLocalPuedeRecuperarseDesdeOrquesta(tarea *TareaPipelineLocal) bool {

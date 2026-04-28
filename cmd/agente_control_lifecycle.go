@@ -183,7 +183,7 @@ func encolarControlAgenteLocal(req apiAgenteControlRequest) (int64, string, erro
 	if err != nil {
 		return 0, "", err
 	}
-	resetStatusSnapshotCache()
+	invalidateStatusSnapshotCache()
 	return orderID, accion, nil
 }
 

@@ -8,32 +8,41 @@ import (
 	"orquesta/db"
 )
 
+var (
+	serverOperationalListAgentsFetcher = db.ListarAgentesEstadoLigero
+	serverOperationalCountTasksFetcher = db.ContarTareasPorEstado
+)
+
 type serverOperationalInfo struct {
-	State               string `json:"state"`
-	Operational         bool   `json:"operational"`
-	Reason              string `json:"reason,omitempty"`
-	NextQuotaResetAt    string `json:"nextQuotaResetAt,omitempty"`
-	Generated           string `json:"generated,omitempty"`
-	RegisteredAgents    int    `json:"registeredAgents"`
-	ActiveAgents        int    `json:"activeAgents"`
-	WorkingAgents       int    `json:"workingAgents"`
-	SaturatedAgents     int    `json:"saturatedAgents"`
-	StuckAgents         int    `json:"stuckAgents"`
-	AuthAgents          int    `json:"authAgents"`
-	QuotaAgents         int    `json:"quotaAgents"`
-	PausedAgents        int    `json:"pausedAgents"`
-	TasksInProgress     int    `json:"tasksInProgress"`
-	ReservedTasks       int    `json:"reservedTasks"`
-	BlockedTasks        int    `json:"blockedTasks"`
-	DispatchPending     int    `json:"dispatchPending"`
-	DispatchNotified    int    `json:"dispatchNotified"`
-	DispatchFailed      int    `json:"dispatchFailed"`
-	DispatchConfirmed   int    `json:"dispatchConfirmed"`
-	AutonomySupervising int    `json:"autonomySupervising"`
-	AutonomyContinuing  int    `json:"autonomyContinuing"`
-	AutonomyPending     int    `json:"autonomyPending"`
-	AutonomyConfirmed   int    `json:"autonomyConfirmed"`
-	AutonomyHandoffs    int    `json:"autonomyHandoffs"`
+	State               string                           `json:"state"`
+	Operational         bool                             `json:"operational"`
+	Reason              string                           `json:"reason,omitempty"`
+	NextQuotaResetAt    string                           `json:"nextQuotaResetAt,omitempty"`
+	Generated           string                           `json:"generated,omitempty"`
+	AutonomyHighlights  []string                         `json:"autonomyHighlights,omitempty"`
+	CriticalProjectRisk *workspaceAutonomyProjectSummary `json:"criticalProjectRisk,omitempty"`
+	RegisteredAgents    int                              `json:"registeredAgents"`
+	ActiveAgents        int                              `json:"activeAgents"`
+	WorkingAgents       int                              `json:"workingAgents"`
+	ConnectedWorkers    int                              `json:"connectedWorkers"`
+	WorkingWorkers      int                              `json:"workingWorkers"`
+	SaturatedAgents     int                              `json:"saturatedAgents"`
+	StuckAgents         int                              `json:"stuckAgents"`
+	AuthAgents          int                              `json:"authAgents"`
+	QuotaAgents         int                              `json:"quotaAgents"`
+	PausedAgents        int                              `json:"pausedAgents"`
+	TasksInProgress     int                              `json:"tasksInProgress"`
+	ReservedTasks       int                              `json:"reservedTasks"`
+	BlockedTasks        int                              `json:"blockedTasks"`
+	DispatchPending     int                              `json:"dispatchPending"`
+	DispatchNotified    int                              `json:"dispatchNotified"`
+	DispatchFailed      int                              `json:"dispatchFailed"`
+	DispatchConfirmed   int                              `json:"dispatchConfirmed"`
+	AutonomySupervising int                              `json:"autonomySupervising"`
+	AutonomyContinuing  int                              `json:"autonomyContinuing"`
+	AutonomyPending     int                              `json:"autonomyPending"`
+	AutonomyConfirmed   int                              `json:"autonomyConfirmed"`
+	AutonomyHandoffs    int                              `json:"autonomyHandoffs"`
 }
 
 func registeredAgentCountFromStatus(status apiStatusResponse) int {
@@ -60,11 +69,18 @@ func registeredAgentCountFromStatus(status apiStatusResponse) int {
 }
 
 func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo {
+	_, autonomyHighlights, criticalProjectRisk := serverOperationalAutonomyContext(status)
 	tasksInProgress := len(status.TareasEnProgreso)
+	if tasksInProgress == 0 && status.TareasPorEstado != nil {
+		tasksInProgress = status.TareasPorEstado[string(db.TareaEnProgreso)]
+	}
 	if tasksInProgress == 0 {
 		tasksInProgress = len(filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso))
 	}
 	reservedTasks := len(status.TareasReservadas)
+	if reservedTasks == 0 && status.TareasPorEstado != nil {
+		reservedTasks = status.TareasPorEstado[string(db.TareaAsignada)]
+	}
 	if reservedTasks == 0 {
 		reservedTasks = len(filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada))
 	}
@@ -81,6 +97,7 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 	pausedAgents := len(agentesNoActivosEnPausaOperativa(status.Agentes))
 	activeAgents := len(status.AgentesActivos)
 	workingAgents := len(status.AgentesTrabajando)
+	activeWorkers, workingWorkers, _ := statusVisibleWorkerCounters(status.AgentesActivos, status.AgentesTrabajando, status.Autonomia)
 	saturatedAgents := len(status.AgentesSaturados)
 	stuckAgents := len(status.AgentesAtascados)
 	authAgents := len(status.AgentesAuthManual)
@@ -100,11 +117,11 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 	case activeAgents == 0 && quotaAgents > 0:
 		state = "idle"
 		reason = "workers_quota_blocked"
-	case tasksInProgress > 0 && workingAgents == 0 && status.Autonomia.WorkConfirmed == 0:
+	case tasksInProgress > 0 && workingWorkers == 0 && status.Autonomia.WorkConfirmed == 0:
 		state = "degraded"
 		reason = "tasks_without_workers"
 		operational = false
-	case activeAgents == 0 && reservedTasks > 0:
+	case activeWorkers == 0 && reservedTasks > 0:
 		state = "degraded"
 		reason = "reserved_without_connected_workers"
 		operational = false
@@ -119,9 +136,13 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 		Reason:              reason,
 		NextQuotaResetAt:    nextQuotaResetAt,
 		Generated:           status.Generado,
+		AutonomyHighlights:  autonomyHighlights,
+		CriticalProjectRisk: criticalProjectRisk,
 		RegisteredAgents:    registeredAgentCountFromStatus(status),
 		ActiveAgents:        activeAgents,
 		WorkingAgents:       workingAgents,
+		ConnectedWorkers:    activeWorkers,
+		WorkingWorkers:      workingWorkers,
 		SaturatedAgents:     saturatedAgents,
 		StuckAgents:         stuckAgents,
 		AuthAgents:          authAgents,
@@ -142,50 +163,127 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 	}
 }
 
-func buildServerOperationalInfoFastFromDB() (serverOperationalInfo, error) {
-	sesiones, err := sesionesVisiblesParaEstado()
-	if err != nil {
-		return serverOperationalInfo{}, err
+func serverOperationalAutonomyContext(status apiStatusResponse) (*autonomySurface, []string, *workspaceAutonomyProjectSummary) {
+	surface, autonomyHighlights, criticalProjectRisk := normalizeStatusAutonomyPayload(
+		status.AutonomySurface,
+		status.AutonomyHighlights,
+		status.CriticalProjectRisk,
+	)
+	if surface != nil || len(autonomyHighlights) > 0 || criticalProjectRisk != nil {
+		return surface, autonomyHighlights, criticalProjectRisk
 	}
-	agentes, err := db.ListarAgentesEstadoLigeroConSesionesActivas(sesiones)
-	if err != nil {
-		return serverOperationalInfo{}, err
+	if statusAutonomySurfaceFetcher == nil {
+		return nil, nil, nil
 	}
-	tareasActivas, err := listarTareasActivasRapido()
-	if err != nil {
-		return serverOperationalInfo{}, err
+	surface, err := statusAutonomySurfaceFetcher()
+	if err != nil || surface == nil {
+		return nil, nil, nil
 	}
-	tareasActivas = filtrarTareasActivasVisibles(tareasActivas, agentes)
-	tareasEnProgreso := filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaEnProgreso)
-	tareasReservadas := filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaAsignada)
+	riskSummary := buildStatusWorkspaceRiskSummary(surface)
+	surface, riskSummary = canonicalizeStatusAutonomyRisk(surface, riskSummary)
+	return normalizeStatusAutonomyPayload(surface, riskSummary.Highlights, riskSummary.CriticalProjectRisk)
+}
 
-	agentesActivos := make([]*db.Agente, 0, len(agentes))
-	agentesTrabajando := make([]*db.Agente, 0, len(agentes))
-	trabajandoPorNombre := map[string]struct{}{}
-	for _, tarea := range tareasEnProgreso {
-		if nombre := strings.ToLower(strings.TrimSpace(tarea.Agente)); nombre != "" {
-			trabajandoPorNombre[nombre] = struct{}{}
-		}
+func serverOperationalRiskContext(info *serverOperationalInfo) ([]string, *workspaceAutonomyProjectSummary) {
+	if info == nil {
+		return nil, nil
 	}
+	_, autonomyHighlights, criticalProjectRisk := normalizeStatusAutonomyPayload(
+		nil,
+		info.AutonomyHighlights,
+		info.CriticalProjectRisk,
+	)
+	return autonomyHighlights, criticalProjectRisk
+}
+
+func normalizeServerOperationalInfo(info serverOperationalInfo) serverOperationalInfo {
+	autonomyHighlights, criticalProjectRisk := serverOperationalRiskContext(&info)
+	info.AutonomyHighlights = autonomyHighlights
+	info.CriticalProjectRisk = criticalProjectRisk
+	return info
+}
+
+func visibleWorkerCount(totalVisible, supervisors int) int {
+	if totalVisible <= 0 {
+		return 0
+	}
+	if supervisors <= 0 {
+		return totalVisible
+	}
+	out := totalVisible - supervisors
+	if out < 0 {
+		return 0
+	}
+	return out
+}
+
+func configuredSupervisorAgentSet() map[string]struct{} {
+	names := statusSupervisorAgentNames()
+	out := make(map[string]struct{}, len(names))
+	for _, nombre := range names {
+		nombre = nombreAgenteCanonico(nombre)
+		if nombre == "" {
+			continue
+		}
+		out[nombre] = struct{}{}
+	}
+	return out
+}
+
+func visibleNonSupervisorAgents(items []*db.Agente) []*db.Agente {
+	if len(items) == 0 {
+		return nil
+	}
+	supervisores := configuredSupervisorAgentSet()
+	if len(supervisores) == 0 {
+		return items
+	}
+	out := make([]*db.Agente, 0, len(items))
+	for _, agente := range items {
+		if agente == nil {
+			continue
+		}
+		if _, ok := supervisores[nombreAgenteCanonico(agente.Nombre)]; ok {
+			continue
+		}
+		out = append(out, agente)
+	}
+	return out
+}
+
+func buildServerOperationalInfoFastFromDB() (serverOperationalInfo, error) {
+	if snapshot, ok := readStatusSnapshotFreshUsable(); ok {
+		return buildServerOperationalInfo(snapshot), nil
+	}
+	if snapshot, ok := readStatusSnapshotAny(); ok && !statusSnapshotNeedsImmediateRefresh(snapshot) {
+		return buildServerOperationalInfo(snapshot), nil
+	}
+	agentes, err := serverOperationalListAgentsFetcher()
+	if err != nil {
+		return serverOperationalInfo{}, err
+	}
+	cuentas, err := serverOperationalCountTasksFetcher()
+	if err != nil {
+		return serverOperationalInfo{}, err
+	}
+	agentesActivos := make([]*db.Agente, 0, len(agentes))
 	for _, agente := range agentes {
 		if agente == nil || !agenteCuentaComoConectado(agente) {
 			continue
 		}
 		agentesActivos = append(agentesActivos, agente)
-		if _, ok := trabajandoPorNombre[strings.ToLower(strings.TrimSpace(agente.Nombre))]; ok {
-			agentesTrabajando = append(agentesTrabajando, agente)
-		}
 	}
 
 	status := apiStatusResponse{
 		Agentes:             agentes,
 		AgentesActivos:      agentesActivos,
-		AgentesTrabajando:   agentesTrabajando,
 		AgentesQuotaBlocked: agentesNoActivosConCuotaConResumen(agentes, nil),
-		TareasActivas:       tareasActivas,
-		TareasEnProgreso:    tareasEnProgreso,
-		TareasReservadas:    tareasReservadas,
+		TareasPorEstado:     cuentas,
 		Generado:            time.Now().UTC().Format(time.RFC3339),
+	}
+	if cuentas != nil {
+		status.TareasEnProgreso = make([]tareaLite, cuentas[string(db.TareaEnProgreso)])
+		status.TareasReservadas = make([]tareaLite, cuentas[string(db.TareaAsignada)])
 	}
 	if snapshot, ok := readStatusSnapshotAny(); ok {
 		status.DeudaDispatch = snapshot.DeudaDispatch
@@ -193,7 +291,15 @@ func buildServerOperationalInfoFastFromDB() (serverOperationalInfo, error) {
 		status.AgentesSaturados = snapshot.AgentesSaturados
 		status.AgentesAtascados = snapshot.AgentesAtascados
 		status.AgentesAuthManual = snapshot.AgentesAuthManual
-		status.TareasPorEstado = snapshot.TareasPorEstado
+		if len(status.AgentesActivos) == 0 {
+			status.AgentesActivos = snapshot.AgentesActivos
+		}
+		if len(status.AgentesTrabajando) == 0 {
+			status.AgentesTrabajando = snapshot.AgentesTrabajando
+		}
+		if status.TareasPorEstado == nil || len(status.TareasPorEstado) == 0 {
+			status.TareasPorEstado = snapshot.TareasPorEstado
+		}
 	}
 	return buildServerOperationalInfo(status), nil
 }
@@ -206,8 +312,14 @@ func formatServerOperationalSummary(info *serverOperationalInfo) string {
 		fmt.Sprintf("%d conectados", info.ActiveAgents),
 		fmt.Sprintf("%d registrados", info.RegisteredAgents),
 	}
+	if info.ConnectedWorkers > 0 {
+		parts = append(parts, fmt.Sprintf("%d workers", info.ConnectedWorkers))
+	}
 	if info.WorkingAgents > 0 {
 		parts = append(parts, fmt.Sprintf("%d trabajando", info.WorkingAgents))
+	}
+	if info.WorkingWorkers > 0 {
+		parts = append(parts, fmt.Sprintf("%d workers_activos", info.WorkingWorkers))
 	}
 	if info.StuckAgents > 0 {
 		parts = append(parts, fmt.Sprintf("%d atascados", info.StuckAgents))

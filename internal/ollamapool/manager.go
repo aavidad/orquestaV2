@@ -113,6 +113,9 @@ func (g *Gestor) Lanzar(ctx context.Context, in EntradaLanzamiento) (*Sesion, er
 	ahora := time.Now().UTC()
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if conflicto := g.modeloActivoDistintoBloqueado(modelo, ""); conflicto != "" {
+		return nil, fmt.Errorf("modelo ollama activo incompatible: %s; detenerlo antes de lanzar %s", conflicto, modelo)
+	}
 	if g.slotsActivos(poolSlug) >= slotsMaximos {
 		return nil, fmt.Errorf("pool %q sin slots libres", poolSlug)
 	}
@@ -283,6 +286,30 @@ func (g *Gestor) modeloTieneSesionesActivasBloqueado(modelo, exceptHandleRef str
 		}
 	}
 	return false
+}
+
+func (g *Gestor) modeloActivoDistintoBloqueado(modelo, exceptHandleRef string) string {
+	modelo = strings.TrimSpace(modelo)
+	exceptHandleRef = strings.TrimSpace(exceptHandleRef)
+	if modelo == "" {
+		return ""
+	}
+	for handleRef, sesion := range g.sesiones {
+		if sesion == nil || strings.TrimSpace(handleRef) == exceptHandleRef {
+			continue
+		}
+		modeloSesion := strings.TrimSpace(sesion.Modelo)
+		if modeloSesion == "" || strings.EqualFold(modeloSesion, modelo) {
+			continue
+		}
+		switch strings.TrimSpace(sesion.Estado) {
+		case "stopped", "failed":
+			continue
+		default:
+			return modeloSesion
+		}
+	}
+	return ""
 }
 
 func (g *Gestor) DescribirPool(poolSlug string) *TelemetriaPool {

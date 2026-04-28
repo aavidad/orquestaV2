@@ -403,6 +403,311 @@ func TestSupervisorBriefingYGuidanceUsanContadoresVisiblesDeWorkersYSupervisor(t
 	})
 }
 
+func TestSupervisorBriefingYGuidanceIncluyenAutonomySurfaceCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			WorkersConectados:   1,
+			WorkersTrabajando:   1,
+			SupervisoresActivos: 1,
+		}}
+
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Integrar handoff",
+			ProyectoID:  &proyectoID,
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "orquesta",
+			Descripcion: "slice",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea: %v", err)
+		}
+		if err := db.RegistrarAutonomyEvent(&db.AutonomyEvent{
+			Kind:      "handoff_completed",
+			Actor:     "orquesta",
+			ProjectID: &proyectoID,
+			TaskID:    &tareaID,
+			Source:    "control_plane",
+			Reason:    "worker_recovered",
+			StateDelta: map[string]any{
+				"agente_destino": "Codex1",
+			},
+		}); err != nil {
+			t.Fatalf("registrar autonomy event: %v", err)
+		}
+
+		briefing, err := buildSupervisorBriefing("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorBriefing: %v", err)
+		}
+		for _, token := range []string{
+			"## Autonomía reciente",
+			"handoff_completed=1",
+			"Focos canónicos:",
+			"[orquestador] handoff_completed destino=Codex1 · worker_recovered",
+		} {
+			if !strings.Contains(briefing, token) {
+				t.Fatalf("briefing sin autonomy surface %q: %s", token, briefing)
+			}
+		}
+
+		guidance, err := buildSupervisorGuidance("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorGuidance: %v", err)
+		}
+		if !strings.Contains(guidance, "- Autonomía reciente: 1 evento(s)") || !strings.Contains(guidance, "handoff_completed=1") || !strings.Contains(guidance, "- Focos canónicos de autonomía:") {
+			t.Fatalf("guidance sin autonomy surface canónica: %s", guidance)
+		}
+	})
+}
+
+func TestSupervisorBriefingYGuidanceReutilizanAutonomySurfaceCanonicaDelStatus(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		now := time.Now().UTC()
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			WorkersConectados:   1,
+			WorkersTrabajando:   1,
+			SupervisoresActivos: 1,
+			AutonomySurface: &autonomySurface{
+				Events: 1,
+				Highlights: []string{
+					"handoff_completed=1",
+				},
+				Recent: []autonomySurfaceRecentItem{{
+					Project: "infra",
+					autonomyEventSummary: autonomyEventSummary{
+						Kind:        "handoff_completed",
+						TargetAgent: "Codex1",
+						Reason:      "worker_recovered",
+						CreatedAt:   now,
+					},
+				}},
+			},
+		}}
+
+		briefing, err := buildSupervisorBriefing("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorBriefing: %v", err)
+		}
+		for _, token := range []string{
+			"## Autonomía reciente",
+			"handoff_completed=1",
+			"[infra] handoff_completed destino=Codex1 · worker_recovered",
+		} {
+			if !strings.Contains(briefing, token) {
+				t.Fatalf("briefing no reutiliza autonomy surface de status %q: %s", token, briefing)
+			}
+		}
+
+		guidance, err := buildSupervisorGuidance("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorGuidance: %v", err)
+		}
+		for _, token := range []string{
+			"- Autonomía reciente: 1 evento(s)",
+			"handoff_completed=1",
+			"- Focos canónicos de autonomía:",
+		} {
+			if !strings.Contains(guidance, token) {
+				t.Fatalf("guidance no reutiliza autonomy surface de status %q: %s", token, guidance)
+			}
+		}
+	})
+}
+
+func TestSupervisorBriefingYGuidanceIncluyenRiesgoGlobalCanonico(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		prevListProjects := workspaceControlListProjects
+		prevCockpitBuilder := workspaceControlCockpitBuilder
+		defer func() {
+			statusService = prev
+			workspaceControlListProjects = prevListProjects
+			workspaceControlCockpitBuilder = prevCockpitBuilder
+		}()
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			WorkersConectados:   1,
+			WorkersTrabajando:   1,
+			SupervisoresActivos: 1,
+		}}
+		workspaceControlListProjects = func() ([]map[string]any, error) {
+			return []map[string]any{
+				{"slug": "infra"},
+				{"slug": "orquestador"},
+			}, nil
+		}
+		workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+			switch strings.TrimSpace(slug) {
+			case "infra":
+				return &apiProyectoCockpit{
+					Proyecto:                &db.Proyecto{Slug: "infra"},
+					TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+					ReviewGatesAbiertas:     1,
+					RuntimeOrdersAbiertas:   1,
+					RuntimeMailboxPendiente: 1,
+					PropuestasAbiertas:      1,
+				}, nil
+			case "orquestador":
+				return &apiProyectoCockpit{
+					Proyecto:        &db.Proyecto{Slug: "orquestador"},
+					TareasPorEstado: map[string]int{string(db.TareaEnProgreso): 1},
+				}, nil
+			default:
+				return nil, nil
+			}
+		}
+
+		briefing, err := buildSupervisorBriefing("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorBriefing: %v", err)
+		}
+		for _, token := range []string{
+			"## Riesgo global de integración",
+			"Proyecto crítico: infra · integracion_bloqueada=15",
+			"riesgo=critico",
+			"review_gates=1",
+			"runtime_orders=1",
+			"## Cola canónica del supervisor",
+			"queue_kind=safe",
+			"next_safe_action=",
+		} {
+			if !strings.Contains(briefing, token) {
+				t.Fatalf("briefing sin riesgo global %q: %s", token, briefing)
+			}
+		}
+
+		guidance, err := buildSupervisorGuidance("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorGuidance: %v", err)
+		}
+		for _, token := range []string{
+			"Proyecto crítico por riesgo: infra · integracion_bloqueada=15.",
+			"Señales canónicas del proyecto crítico:",
+			"riesgo=critico",
+			"mailbox_rt=1",
+			"Cola canónica del supervisor: queue_kind=safe",
+			"next_safe_action=",
+			"`next_safe_action`, `safe_action_queue` y `eventos_normalizados`",
+		} {
+			if !strings.Contains(guidance, token) {
+				t.Fatalf("guidance sin riesgo global %q: %s", token, guidance)
+			}
+		}
+	})
+}
+
+func TestSupervisorBriefingYGuidanceDestacanFrenteCriticoGlobal(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		prevRows := supervisorPanelRowsBuilder
+		defer func() {
+			statusService = prev
+			supervisorPanelRowsBuilder = prevRows
+		}()
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Integrar API release",
+			ProyectoID:  &proyectoID,
+			Modulo:      "api",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "orquesta",
+			Descripcion: "frente critico global",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea critica: %v", err)
+		}
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			WorkersConectados: 1,
+			WorkersTrabajando: 1,
+			TareasActivas: []tareaLite{{
+				ID:        tareaID,
+				Estado:    db.TareaBloqueada,
+				Agente:    "Codex4",
+				Titulo:    "Integrar API release",
+				Modulo:    "api",
+				Prioridad: db.PrioridadAlta,
+			}},
+			Autonomia: autonomiaResumen{
+				Recent: []autonomyEventSummary{{
+					Kind:        "post_remediation_blocked_escalated",
+					CreatedAt:   time.Now().UTC(),
+					TaskID:      &tareaID,
+					TargetAgent: "Codex4",
+					Reason:      "review gate y deploy pendientes",
+					Artifacts:   []string{"patch:release-api", "test:go test ./cmd"},
+				}},
+			},
+		}}
+		supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+			return []agentesapp.Row{{
+				Agente:          &db.Agente{Nombre: "Codex4"},
+				EstadoOperativo: "atascado",
+			}}, nil
+		}
+
+		briefing, err := buildSupervisorBriefing("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorBriefing: %v", err)
+		}
+		expectedTarget := fmt.Sprintf("tarea:%d -> resolver_followup_bloqueado", tareaID)
+		if !strings.Contains(briefing, "## Frente crítico actual") || !strings.Contains(briefing, "proyecto=orquestador") || !strings.Contains(briefing, expectedTarget) || !strings.Contains(briefing, "Bloquea integración/progreso global") {
+			t.Fatalf("briefing sin frente critico global: %s", briefing)
+		}
+
+		guidance, err := buildSupervisorGuidance("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorGuidance: %v", err)
+		}
+		if !strings.Contains(guidance, "Frente crítico actual: proyecto=orquestador · "+expectedTarget) || !strings.Contains(guidance, "Bloquea integración/progreso global") {
+			t.Fatalf("guidance sin frente critico global: %s", guidance)
+		}
+	})
+}
+
 func TestMCPPromptRevisionSupervisorIncluyeGatesYSignals(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
@@ -500,6 +805,10 @@ func TestMCPPromptRevisionSupervisorIncluyeGatesYSignals(t *testing.T) {
 			"orq/orquestador/Codex3/api->master",
 			"Riesgos de colisión detectados",
 			"Ajustar contrato API",
+			"Cola canónica del supervisor",
+			"queue_kind=safe",
+			"next_safe_action=",
+			"critical_project_risk=",
 			"Criterio de decisión",
 		} {
 			if !strings.Contains(text, token) {
@@ -512,8 +821,16 @@ func TestMCPPromptRevisionSupervisorIncluyeGatesYSignals(t *testing.T) {
 			t.Fatalf("readMCPResource revision supervisor: %v", err)
 		}
 		resourceText, _ := contents[0]["text"].(string)
-		if !strings.Contains(resourceText, "ready_for_review") {
-			t.Fatalf("recurso de revisión sin signal esperado: %s", resourceText)
+		for _, token := range []string{
+			`"queue_kind": "safe"`,
+			`"next_safe_action"`,
+			`"safe_action_queue"`,
+			`"critical_project_risk"`,
+			`"ready_for_review"`,
+		} {
+			if !strings.Contains(resourceText, token) {
+				t.Fatalf("recurso de revisión sin contrato canónico %q: %s", token, resourceText)
+			}
 		}
 	})
 }
@@ -619,11 +936,17 @@ func TestMCPToolRevisionSupervisorDevuelveJSONEstructurado(t *testing.T) {
 		if next := structured["next_action"]; next == nil {
 			t.Fatalf("next_action vacío: %#v", structured)
 		}
+		if queueKind, _ := structured["queue_kind"].(string); queueKind != "safe" {
+			t.Fatalf("queue_kind inesperado: %#v", structured["queue_kind"])
+		}
 		if _, ok := structured["next_safe_action"]; !ok {
 			t.Fatalf("falta next_safe_action: %#v", structured)
 		}
 		if queue := reflect.ValueOf(structured["safe_action_queue"]); !queue.IsValid() {
 			t.Fatalf("falta safe_action_queue: %#v", structured)
+		}
+		if _, ok := structured["critical_project_risk"]; !ok {
+			t.Fatalf("falta critical_project_risk: %#v", structured)
 		}
 		switch queueSummary := structured["queue_summary"].(type) {
 		case map[string]any:
@@ -655,6 +978,45 @@ func TestMCPToolRevisionSupervisorDevuelveJSONEstructurado(t *testing.T) {
 			t.Fatalf("recommended action sin action: %s", string(raw))
 		}
 	})
+}
+
+func TestSupervisorReadOnlySnapshotParsedPreservesCriticalProjectRiskAndSafeQueue(t *testing.T) {
+	snapshot := map[string]any{
+		"queue_kind": "safe",
+		"next_safe_action": map[string]any{
+			"kind":           "autonomy_event",
+			"target":         "tarea:24",
+			"action":         "inspeccionar_handoff_fallido",
+			"reason":         "bloqueo real",
+			"priority":       "alta",
+			"assignee":       "Codex4",
+			"auto_aplicable": true,
+		},
+		"critical_project_risk": map[string]any{
+			"project":    "infra",
+			"events":     2,
+			"blocking":   15,
+			"highlights": []any{"riesgo=critico", "integracion_bloqueada=15", "runtime_orders=1"},
+		},
+	}
+
+	risk := supervisorCriticalProjectRiskFromSnapshot(snapshot)
+	if risk == nil || risk.Project != "infra" || risk.Blocking != 15 {
+		t.Fatalf("critical_project_risk no parseado desde snapshot read-only: %#v", risk)
+	}
+	if !reflect.DeepEqual(risk.Highlights, []string{"riesgo=critico", "integracion_bloqueada=15", "runtime_orders=1"}) {
+		t.Fatalf("highlights inesperados: %#v", risk.Highlights)
+	}
+	nextSafeAction := supervisorNextSafeActionFromSnapshot(snapshot)
+	if nextSafeAction == nil || nextSafeAction.Target != "tarea:24" || nextSafeAction.Action != "inspeccionar_handoff_fallido" {
+		t.Fatalf("next_safe_action no parseado desde snapshot read-only: %#v", nextSafeAction)
+	}
+	line := formatSupervisorQueueContextLine(snapshot)
+	for _, token := range []string{"queue_kind=safe", "next_safe_action=tarea:24 -> inspeccionar_handoff_fallido"} {
+		if !strings.Contains(line, token) {
+			t.Fatalf("contexto de cola read-only sin token %q: %s", token, line)
+		}
+	}
 }
 
 func TestMCPToolsReviewGatesYGitMergesOperanPorLaViaCanonica(t *testing.T) {
@@ -3037,6 +3399,1936 @@ func TestBuildSupervisorOperationalActionsNoPromueveCheckpointPendienteComoGuida
 	}
 }
 
+func TestBuildSupervisorOperationalActionsIncorporaAutonomyEventsRecientes(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	taskID := int64(412)
+	runtimeID := int64(77)
+	handleID := int64(15)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{
+				{
+					Kind:        "handoff_failed",
+					CreatedAt:   time.Now().UTC(),
+					TaskID:      &taskID,
+					TargetAgent: "Codex4",
+					Reason:      "runtime sin consolidar",
+					Artifacts:   []string{"runtime_order:123", "task:412"},
+				},
+				{
+					Kind:      "worker_recovery_paused_external",
+					CreatedAt: time.Now().UTC(),
+					RuntimeID: &runtimeID,
+					HandleID:  &handleID,
+					Agent:     "Codex1",
+					Reason:    "connector unavailable",
+				},
+			},
+		},
+		TareasActivas: []tareaLite{{ID: 413, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+	}
+
+	actions := buildSupervisorOperationalActions(status, nil)
+	if !containsSupervisorAction(actions, "inspeccionar_handoff_fallido", "tarea:412") {
+		t.Fatalf("falta accion por handoff_failed: %+v", actions)
+	}
+	if !containsSupervisorAction(actions, "revisar_pausa_externa", "agente:Codex1") {
+		t.Fatalf("falta accion por worker_recovery_paused_external: %+v", actions)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsIncorporaEventosAutonomiaDeSeguimiento(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	taskID := int64(413)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{
+				{
+					Kind:        "runtime_restart_requested",
+					CreatedAt:   time.Now().UTC(),
+					Agent:       "Codex1",
+					TargetAgent: "Codex1",
+					Reason:      "tmux session missing",
+				},
+				{
+					Kind:        "task_reassigned",
+					CreatedAt:   time.Now().UTC(),
+					TaskID:      &taskID,
+					TargetAgent: "Codex4",
+					Reason:      "worker degradado",
+				},
+				{
+					Kind:        "handoff_completed",
+					CreatedAt:   time.Now().UTC(),
+					TaskID:      &taskID,
+					TargetAgent: "Codex4",
+					Reason:      "handoff consolidado",
+				},
+			},
+		},
+		TareasActivas: []tareaLite{{ID: 413, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+	}
+
+	actions := buildSupervisorOperationalActions(status, nil)
+	if !containsSupervisorAction(actions, "seguir_reinicio_runtime", "agente:Codex1") {
+		t.Fatalf("falta accion por runtime_restart_requested: %+v", actions)
+	}
+	if !containsSupervisorAction(actions, "verificar_handoff_consolidado", "tarea:413") {
+		t.Fatalf("falta accion por handoff_completed: %+v", actions)
+	}
+	if containsSupervisorAction(actions, "seguir_reasignacion", "tarea:413") {
+		t.Fatalf("no deberia duplicar reasignacion si ya existe handoff_completed del mismo frente: %+v", actions)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsOmiteHandoffConsolidadoSiYaHayProgresoReciente(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	now := time.Now().UTC()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:             &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo:    "trabajando",
+			LastAutonomyState:  "work_confirmed",
+			WorkerLastProgress: &now,
+		}}, nil
+	}
+	taskID := int64(501)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "handoff_completed",
+				CreatedAt:   now,
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+			}},
+		},
+		TareasActivas: []tareaLite{{ID: 501, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	if containsSupervisorAction(actions, "verificar_handoff_consolidado", "tarea:501") {
+		t.Fatalf("no deberia mantener followup de handoff consolidado si ya hay progreso reciente: %+v", actions)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsDegradaReasignacionSiYaHayProgresoReciente(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	now := time.Now().UTC()
+	progress := now.Add(-2 * time.Minute)
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:             &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo:    "trabajando",
+			WorkerLastProgress: &progress,
+		}}, nil
+	}
+	taskID := int64(777)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "task_reassigned",
+				CreatedAt:   now,
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+			}},
+		},
+		TareasActivas: []tareaLite{{ID: 777, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	item := findSupervisorAction(actions, "seguir_reasignacion", "tarea:777")
+	if item == nil {
+		t.Fatalf("falta accion de reasignacion: %+v", actions)
+	}
+	if item.Priority != "baja" {
+		t.Fatalf("deberia degradar prioridad con progreso reciente: %+v", item)
+	}
+	if !strings.Contains(item.Reason, "Ya hay progreso reciente") {
+		t.Fatalf("deberia explicar degradacion por progreso reciente: %+v", item)
+	}
+	if !strings.Contains(item.Reason, "progreso sin bloqueo visible") {
+		t.Fatalf("deberia usar tambien el estado visible en progreso: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsOmiteReasignacionSiLaTareaYaNoEsVisible(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	defer func() { supervisorPanelRowsBuilder = prevRows }()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:          &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo: "trabajando",
+		}}, nil
+	}
+	taskID := int64(888)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "task_reassigned",
+				CreatedAt:   time.Now().UTC(),
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+			}},
+		},
+		TareasActivas:    []tareaLite{{ID: 999, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+		TareasReservadas: nil,
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	if containsSupervisorAction(actions, "seguir_reasignacion", "tarea:888") {
+		t.Fatalf("no deberia mantener reasignacion si la tarea ya no es visible: %+v", actions)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsMantieneHandoffFallidoSiElFrenteSigueBloqueado(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	defer func() { supervisorPanelRowsBuilder = prevRows }()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:          &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo: "atascado",
+		}}, nil
+	}
+	taskID := int64(901)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "handoff_failed",
+				CreatedAt:   time.Now().UTC(),
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+			}},
+		},
+		TareasActivas: []tareaLite{{ID: 901, Estado: db.TareaBloqueada, Agente: "Codex4"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	for _, item := range actions {
+		if item.Action == "inspeccionar_handoff_fallido" && item.Target == "tarea:901" {
+			if item.Priority != "alta" {
+				t.Fatalf("deberia seguir alta si el frente sigue bloqueado: %+v", item)
+			}
+			if !strings.Contains(item.Reason, "bloqueado y visible") {
+				t.Fatalf("deberia explicar bloqueo visible: %+v", item)
+			}
+			return
+		}
+	}
+	t.Fatalf("falta handoff_failed bloqueado: %+v", actions)
+}
+
+func TestBuildSupervisorOperationalActionsElevaContextoDeHandoffFallidoBloqueadoAltaPrioridad(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	defer func() { supervisorPanelRowsBuilder = prevRows }()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:          &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo: "atascado",
+		}}, nil
+	}
+	taskID := int64(905)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "handoff_failed",
+				CreatedAt:   time.Now().UTC(),
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+			}},
+		},
+		TareasActivas: []tareaLite{{
+			ID:        905,
+			Estado:    db.TareaBloqueada,
+			Agente:    "Codex4",
+			Modulo:    "checkout",
+			Prioridad: db.PrioridadAlta,
+		}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	item := findSupervisorAction(actions, "inspeccionar_handoff_fallido", "tarea:905")
+	if item == nil {
+		t.Fatalf("falta handoff_failed alta prioridad: %+v", actions)
+	}
+	if item.Priority != "alta" {
+		t.Fatalf("deberia seguir alta: %+v", item)
+	}
+	if !strings.Contains(item.Reason, "prioridad alta") || !strings.Contains(item.Reason, "Módulo: checkout") || !strings.Contains(item.Reason, "Bloquea integración real") {
+		t.Fatalf("deberia explicar impacto del frente bloqueado: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsMantieneHandoffFallidoBloqueadoAunqueHayaProgresoReciente(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	progress := time.Now().UTC()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:             &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo:    "trabajando",
+			WorkerLastProgress: &progress,
+		}}, nil
+	}
+	taskID := int64(9021)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "handoff_failed",
+				CreatedAt:   progress,
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+			}},
+		},
+		TareasActivas: []tareaLite{{ID: 9021, Estado: db.TareaBloqueada, Agente: "Codex4"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	item := findSupervisorAction(actions, "inspeccionar_handoff_fallido", "tarea:9021")
+	if item == nil {
+		t.Fatalf("falta handoff_failed bloqueado con progreso reciente: %+v", actions)
+	}
+	if item.Priority != "alta" {
+		t.Fatalf("deberia mantenerse alta si el frente sigue bloqueado: %+v", item)
+	}
+	if !strings.Contains(item.Reason, "bloqueado y visible") {
+		t.Fatalf("deberia explicar que el frente sigue bloqueado: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsMantieneHandoffFallidoAsignadoSinProgresoReciente(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	defer func() { supervisorPanelRowsBuilder = prevRows }()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:          &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo: "trabajando",
+		}}, nil
+	}
+	taskID := int64(903)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "handoff_failed",
+				CreatedAt:   time.Now().UTC(),
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+			}},
+		},
+		TareasReservadas: []tareaLite{{ID: 903, Estado: db.TareaAsignada, Agente: "Codex4"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	for _, item := range actions {
+		if item.Action == "inspeccionar_handoff_fallido" && item.Target == "tarea:903" {
+			if item.Priority != "media" {
+				t.Fatalf("deberia mantener prioridad media si el frente sigue asignado: %+v", item)
+			}
+			if !strings.Contains(item.Reason, "retenido y visible") {
+				t.Fatalf("deberia explicar que el frente sigue retenido: %+v", item)
+			}
+			return
+		}
+	}
+	t.Fatalf("falta handoff_failed asignado: %+v", actions)
+}
+
+func TestBuildSupervisorOperationalActionsMantieneReasignacionAsignadaSinProgreso(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	defer func() { supervisorPanelRowsBuilder = prevRows }()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:          &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo: "listo",
+		}}, nil
+	}
+	taskID := int64(9031)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "task_reassigned",
+				CreatedAt:   time.Now().UTC(),
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+			}},
+		},
+		TareasReservadas: []tareaLite{{ID: 9031, Estado: db.TareaAsignada, Agente: "Codex4"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	item := findSupervisorAction(actions, "seguir_reasignacion", "tarea:9031")
+	if item == nil {
+		t.Fatalf("no deberia desaparecer la reasignacion retenida: %+v", actions)
+	}
+	if item.Priority == "baja" {
+		t.Fatalf("una tarea asignada sin progreso no deberia caer a prioridad trivial: %+v", item)
+	}
+	if !strings.Contains(item.Reason, "retenido y visible") {
+		t.Fatalf("deberia explicar que el frente sigue retenido: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsDegradaReinicioRuntimeSiFrenteVisibleYaProgresa(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	now := time.Now().UTC()
+	progress := now.Add(-time.Minute)
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:             &db.Agente{Nombre: "Codex1"},
+			EstadoOperativo:    "trabajando",
+			WorkerLastProgress: &progress,
+		}}, nil
+	}
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "runtime_restart_requested",
+				CreatedAt:   now,
+				Agent:       "Codex1",
+				TargetAgent: "Codex1",
+				Reason:      "tmux session missing",
+			}},
+		},
+		TareasActivas: []tareaLite{{ID: 9041, Estado: db.TareaEnProgreso, Agente: "Codex1"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	item := findSupervisorAction(actions, "seguir_reinicio_runtime", "agente:Codex1")
+	if item == nil {
+		t.Fatalf("falta accion de reinicio runtime: %+v", actions)
+	}
+	if item.Priority != "baja" {
+		t.Fatalf("deberia degradar fuerte si el frente ya progresa: %+v", item)
+	}
+	if !strings.Contains(item.Reason, "Ya hay progreso reciente") || !strings.Contains(item.Reason, "progreso sin bloqueo visible") || !strings.Contains(item.Reason, "No parece bloquear integración/progreso global") || !strings.Contains(item.Reason, "Frente local o no bloqueante") {
+		t.Fatalf("deberia explicar progreso reciente y frente visible en curso: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsElevaFollowupBloqueadoQueBloqueaIntegracionReal(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	defer func() { supervisorPanelRowsBuilder = prevRows }()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:          &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo: "atascado",
+		}}, nil
+	}
+	taskID := int64(9045)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "post_remediation_blocked_escalated",
+				CreatedAt:   time.Now().UTC(),
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+				Reason:      "review y merge pendientes",
+				Artifacts:   []string{"patch:api-integration", "test:go test ./cmd"},
+			}},
+		},
+		TareasActivas: []tareaLite{{
+			ID:        9045,
+			Estado:    db.TareaBloqueada,
+			Agente:    "Codex4",
+			Titulo:    "Integrar API MCP",
+			Modulo:    "mcp",
+			Prioridad: db.PrioridadAlta,
+		}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	item := findSupervisorAction(actions, "resolver_followup_bloqueado", "tarea:9045")
+	if item == nil {
+		t.Fatalf("falta followup bloqueado escalado: %+v", actions)
+	}
+	if item.Priority != "alta" {
+		t.Fatalf("deberia quedar alto si bloquea integracion real: %+v", item)
+	}
+	if !strings.Contains(item.Reason, "bloqueado") || !strings.Contains(item.Reason, "Bloquea integración real") || !strings.Contains(item.Reason, "Bloquea integración/progreso global") || !strings.Contains(item.Reason, "Frente crítico del proyecto/workspace") {
+		t.Fatalf("deberia explicitar bloqueo de integracion real: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsDegradaFollowupBloqueadoSiElFrenteYaProgresaSano(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	now := time.Now().UTC()
+	progress := now.Add(-2 * time.Minute)
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:             &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo:    "trabajando",
+			WorkerLastProgress: &progress,
+		}}, nil
+	}
+	taskID := int64(9046)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "post_remediation_blocked_escalated",
+				CreatedAt:   now,
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+			}},
+		},
+		TareasActivas: []tareaLite{{
+			ID:        9046,
+			Estado:    db.TareaEnProgreso,
+			Agente:    "Codex4",
+			Titulo:    "Revisar front",
+			Modulo:    "web",
+			Prioridad: db.PrioridadMedia,
+		}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	item := findSupervisorAction(actions, "resolver_followup_bloqueado", "tarea:9046")
+	if item == nil {
+		t.Fatalf("falta followup degradado con frente sano: %+v", actions)
+	}
+	if item.Priority != "baja" {
+		t.Fatalf("deberia bajar fuerte si el frente ya progresa sano: %+v", item)
+	}
+	if !strings.Contains(item.Reason, "No parece bloquear integración/progreso global") {
+		t.Fatalf("deberia explicitar que ya no bloquea integracion real: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsMantieneHandoffFallidoConEvidenciaFuerteAunqueYaNoHayaFrenteVisible(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	progress := time.Now().UTC()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:             &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo:    "trabajando",
+			WorkerLastProgress: &progress,
+		}}, nil
+	}
+	taskID := int64(9047)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "handoff_failed",
+				CreatedAt:   progress,
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+				Reason:      "runtime recovery still under review",
+				Artifacts:   []string{"runtime_order:123", "checkpoint:resume-safe"},
+			}},
+		},
+		TareasActivas: []tareaLite{{ID: 999, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	item := findSupervisorAction(actions, "inspeccionar_handoff_fallido", "tarea:9047")
+	if item == nil {
+		t.Fatalf("deberia mantener handoff_failed con evidencia fuerte para cerrarlo bien: %+v", actions)
+	}
+	if item.Priority != "baja" {
+		t.Fatalf("si ya progresa sin bloqueo global, deberia degradarse: %+v", item)
+	}
+	if !strings.Contains(item.Reason, "Evidencia fuerte") || !strings.Contains(item.Reason, "No parece bloquear integración/progreso global") {
+		t.Fatalf("deberia explicitar evidencia fuerte mitigada y absorcion sana: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsDegradaHandoffFuerteMitigadoYSubeSiguienteRiesgoReal(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevStatus := statusService
+	prevListProjects := workspaceControlListProjects
+	prevCockpitBuilder := workspaceControlCockpitBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		statusService = prevStatus
+		workspaceControlListProjects = prevListProjects
+		workspaceControlCockpitBuilder = prevCockpitBuilder
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+
+	now := time.Now().UTC()
+	progress := now.Add(-time.Minute)
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{
+			{
+				Agente:             &db.Agente{Nombre: "Codex4"},
+				EstadoOperativo:    "trabajando",
+				WorkerLastProgress: &progress,
+			},
+			{
+				Agente:          &db.Agente{Nombre: "Codex3"},
+				EstadoOperativo: "atascado",
+			},
+		}, nil
+	}
+	statusService = stubStatusService{response: apiStatusResponse{}}
+
+	projectMitigado := insertTestProyecto(t, "infra", "infra", "/tmp/infra")
+	projectPendiente := insertTestProyecto(t, "webapp", "webapp", "/tmp/webapp")
+	taskMitigada, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Runtime recovery mitigado",
+		ProyectoID:  &projectMitigado,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Descripcion: "slice",
+		Modulo:      "worker",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea mitigada: %v", err)
+	}
+	taskPendiente, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Merge web bloqueado",
+		ProyectoID:  &projectPendiente,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Descripcion: "slice",
+		Modulo:      "web",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea pendiente: %v", err)
+	}
+
+	workspaceControlListProjects = func() ([]map[string]any, error) {
+		return []map[string]any{{"slug": "infra"}, {"slug": "webapp"}}, nil
+	}
+	workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+		switch strings.TrimSpace(slug) {
+		case "infra":
+			return &apiProyectoCockpit{
+				Proyecto:                &db.Proyecto{Slug: "infra"},
+				TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+				ReviewGatesAbiertas:     1,
+				RuntimeOrdersAbiertas:   1,
+				RuntimeMailboxPendiente: 1,
+				PropuestasAbiertas:      1,
+			}, nil
+		case "webapp":
+			return &apiProyectoCockpit{
+				Proyecto:            &db.Proyecto{Slug: "webapp"},
+				TareasPorEstado:     map[string]int{string(db.TareaBloqueada): 1},
+				ReviewGatesAbiertas: 1,
+			}, nil
+		default:
+			return nil, nil
+		}
+	}
+
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{
+				{
+					Kind:        "handoff_failed",
+					CreatedAt:   now,
+					TaskID:      &taskMitigada,
+					TargetAgent: "Codex4",
+					Reason:      "runtime recovery still under review",
+					Artifacts:   []string{"runtime_order:123", "checkpoint:resume-safe"},
+				},
+				{
+					Kind:        "handoff_failed",
+					CreatedAt:   now,
+					TaskID:      &taskPendiente,
+					TargetAgent: "Codex3",
+					Reason:      "merge bloqueado",
+					Artifacts:   []string{"patch:web-merge", "test:go test ./cmd"},
+				},
+			},
+		},
+		TareasActivas: []tareaLite{
+			{ID: taskMitigada, Estado: db.TareaEnProgreso, Agente: "Codex4", Titulo: "Runtime recovery mitigado", Modulo: "worker", Prioridad: db.PrioridadAlta},
+			{ID: taskPendiente, Estado: db.TareaBloqueada, Agente: "Codex3", Titulo: "Merge web bloqueado", Modulo: "web", Prioridad: db.PrioridadAlta},
+		},
+	}
+
+	actions := buildSupervisorOperationalActions(status, nil)
+	if len(actions) == 0 {
+		t.Fatalf("acciones vacias: %+v", actions)
+	}
+	if actions[0].Target != fmt.Sprintf("tarea:%d", taskPendiente) || actions[0].Action != "inspeccionar_handoff_fallido" {
+		t.Fatalf("deberia subir primero el siguiente riesgo real, got=%+v", actions[0])
+	}
+	mitigated := findSupervisorAction(actions, "inspeccionar_handoff_fallido", fmt.Sprintf("tarea:%d", taskMitigada))
+	if mitigated == nil {
+		t.Fatalf("falta followup mitigado: %+v", actions)
+	}
+	if mitigated.Priority != "baja" {
+		t.Fatalf("deberia quedar degradado tras mitigacion sana: %+v", mitigated)
+	}
+	if !strings.Contains(mitigated.Reason, "No parece bloquear integración/progreso global") {
+		t.Fatalf("deberia explicitar mitigacion sana: %+v", mitigated)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsMantieneFollowupBloqueadoConEvidenciaFuerteAunqueYaProgrese(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	now := time.Now().UTC()
+	progress := now.Add(-time.Minute)
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:             &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo:    "trabajando",
+			WorkerLastProgress: &progress,
+		}}, nil
+	}
+	taskID := int64(9048)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "post_remediation_blocked_escalated",
+				CreatedAt:   now,
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+				Reason:      "tests and checkpoint still under review",
+				Artifacts:   []string{"patch:api-contract", "test:go test ./cmd"},
+			}},
+		},
+		TareasActivas: []tareaLite{{
+			ID:        9048,
+			Estado:    db.TareaEnProgreso,
+			Agente:    "Codex4",
+			Titulo:    "Integrar API",
+			Modulo:    "api",
+			Prioridad: db.PrioridadAlta,
+		}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	item := findSupervisorAction(actions, "resolver_followup_bloqueado", "tarea:9048")
+	if item == nil {
+		t.Fatalf("deberia mantener followup bloqueado con evidencia fuerte: %+v", actions)
+	}
+	if item.Priority != "media" {
+		t.Fatalf("deberia sostener prioridad media con evidencia fuerte: %+v", item)
+	}
+	if !strings.Contains(item.Reason, "Evidencia fuerte") {
+		t.Fatalf("deberia explicitar la evidencia fuerte: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsMantieneFollowupGlobalConEvidenciaFuerteAunqueYaProgrese(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	now := time.Now().UTC()
+	progress := now.Add(-time.Minute)
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:             &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo:    "trabajando",
+			WorkerLastProgress: &progress,
+		}}, nil
+	}
+	taskID := int64(90481)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "post_remediation_blocked_escalated",
+				CreatedAt:   now,
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+				Reason:      "review gate and release integration still open",
+				Artifacts:   []string{"patch:release-api", "test:go test ./cmd"},
+			}},
+		},
+		TareasActivas: []tareaLite{{
+			ID:        90481,
+			Estado:    db.TareaEnProgreso,
+			Agente:    "Codex4",
+			Titulo:    "Integrar release API",
+			Modulo:    "api",
+			Prioridad: db.PrioridadAlta,
+		}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	item := findSupervisorAction(actions, "resolver_followup_bloqueado", "tarea:90481")
+	if item == nil {
+		t.Fatalf("deberia mantener followup global con evidencia fuerte: %+v", actions)
+	}
+	if item.Priority != "media" {
+		t.Fatalf("deberia sostener prioridad media cuando sigue afectando al proyecto/workspace: %+v", item)
+	}
+	if !strings.Contains(item.Reason, "Aun así, sigue afectando integración/progreso global") || !strings.Contains(item.Reason, "Frente crítico del proyecto/workspace") {
+		t.Fatalf("deberia explicitar impacto global aun con progreso: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsOmiteHandoffFallidoSinEvidenciaFuerteSiYaHayProgresoVisible(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	progress := time.Now().UTC()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:             &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo:    "trabajando",
+			WorkerLastProgress: &progress,
+		}}, nil
+	}
+	taskID := int64(9049)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "handoff_failed",
+				CreatedAt:   progress,
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+				Reason:      "noise only",
+			}},
+		},
+		TareasActivas: []tareaLite{{ID: 999, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	if item := findSupervisorAction(actions, "inspeccionar_handoff_fallido", "tarea:9049"); item != nil {
+		t.Fatalf("no deberia mantener handoff_failed sin evidencia fuerte si ya hay progreso visible: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsOmiteHandoffFallidoHistoricoSiYaNoHayFrenteYHayProgreso(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	progress := time.Now().UTC()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:             &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo:    "trabajando",
+			WorkerLastProgress: &progress,
+		}}, nil
+	}
+	taskID := int64(902)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "handoff_failed",
+				CreatedAt:   progress,
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+			}},
+		},
+		TareasActivas: []tareaLite{{ID: 999, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	if containsSupervisorAction(actions, "inspeccionar_handoff_fallido", "tarea:902") {
+		t.Fatalf("no deberia mantener handoff_failed historico si ya no hay frente visible y el destino progresa: %+v", actions)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsOmiteHandoffFallidoSiElFrenteYaProgresaVisible(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	progress := time.Now().UTC()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:             &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo:    "trabajando",
+			WorkerLastProgress: &progress,
+		}}, nil
+	}
+	taskID := int64(904)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "handoff_failed",
+				CreatedAt:   progress,
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+			}},
+		},
+		TareasActivas: []tareaLite{{ID: 904, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	if containsSupervisorAction(actions, "inspeccionar_handoff_fallido", "tarea:904") {
+		t.Fatalf("no deberia mantener handoff_failed si el frente ya progresa visible: %+v", actions)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsColapsaReasignacionYHandoffConsolidadoPorTarea(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	taskID := int64(915)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{
+				{
+					Kind:        "task_reassigned",
+					CreatedAt:   time.Now().UTC().Add(-time.Minute),
+					TaskID:      &taskID,
+					TargetAgent: "Codex4",
+				},
+				{
+					Kind:        "handoff_completed",
+					CreatedAt:   time.Now().UTC(),
+					TaskID:      &taskID,
+					TargetAgent: "Codex4",
+				},
+			},
+		},
+		TareasActivas: []tareaLite{{ID: 915, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	if containsSupervisorAction(actions, "seguir_reasignacion", "tarea:915") {
+		t.Fatalf("no deberia mantener reasignacion si ya hay handoff consolidado del mismo frente: %+v", actions)
+	}
+	if !containsSupervisorAction(actions, "verificar_handoff_consolidado", "tarea:915") {
+		t.Fatalf("deberia conservar handoff consolidado: %+v", actions)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsDaPrioridadAHandoffFallidoSobreFollowups(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	taskID := int64(916)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{
+				{
+					Kind:        "task_reassigned",
+					CreatedAt:   time.Now().UTC().Add(-2 * time.Minute),
+					TaskID:      &taskID,
+					TargetAgent: "Codex4",
+				},
+				{
+					Kind:        "handoff_completed",
+					CreatedAt:   time.Now().UTC().Add(-time.Minute),
+					TaskID:      &taskID,
+					TargetAgent: "Codex4",
+				},
+				{
+					Kind:        "handoff_failed",
+					CreatedAt:   time.Now().UTC(),
+					TaskID:      &taskID,
+					TargetAgent: "Codex4",
+				},
+			},
+		},
+		TareasActivas: []tareaLite{{ID: 916, Estado: db.TareaBloqueada, Agente: "Codex4"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	if containsSupervisorAction(actions, "seguir_reasignacion", "tarea:916") || containsSupervisorAction(actions, "verificar_handoff_consolidado", "tarea:916") {
+		t.Fatalf("no deberia mantener followups si ya hay handoff_failed del mismo frente: %+v", actions)
+	}
+	if !containsSupervisorAction(actions, "inspeccionar_handoff_fallido", "tarea:916") {
+		t.Fatalf("deberia conservar handoff_failed: %+v", actions)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsPriorizaPrimeroElFrenteConImpactoGlobal(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	defer func() { supervisorPanelRowsBuilder = prevRows }()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:          &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo: "atascado",
+		}}, nil
+	}
+	taskGlobal := int64(7001)
+	taskLocal := int64(7002)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{
+				{
+					Kind:        "post_remediation_blocked_escalated",
+					CreatedAt:   time.Now().UTC(),
+					TaskID:      &taskLocal,
+					TargetAgent: "Codex4",
+					Reason:      "seguimiento local",
+					Artifacts:   []string{"patch:local-ui"},
+				},
+				{
+					Kind:        "post_remediation_blocked_escalated",
+					CreatedAt:   time.Now().UTC(),
+					TaskID:      &taskGlobal,
+					TargetAgent: "Codex4",
+					Reason:      "review y merge bloquean release",
+					Artifacts:   []string{"patch:release-api", "test:go test ./cmd"},
+				},
+			},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 7001, Estado: db.TareaBloqueada, Agente: "Codex4", Titulo: "Integrar API release", Modulo: "api", Prioridad: db.PrioridadAlta},
+			{ID: 7002, Estado: db.TareaBloqueada, Agente: "Codex4", Titulo: "Ajuste local de UI", Modulo: "web", Prioridad: db.PrioridadMedia},
+		},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	if len(actions) == 0 {
+		t.Fatalf("acciones vacias: %+v", actions)
+	}
+	if actions[0].Target != "tarea:7001" || actions[0].Action != "resolver_followup_bloqueado" {
+		t.Fatalf("deberia priorizar primero el frente global, got=%+v", actions[0])
+	}
+	if !strings.Contains(actions[0].Reason, "Bloquea integración/progreso global") {
+		t.Fatalf("la accion prioritaria deberia explicitar impacto global: %+v", actions[0])
+	}
+}
+
+func TestBuildSupervisorOperationalActionsPriorizaProyectoConMayorRiesgoCanonico(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevStatus := statusService
+	prevListProjects := workspaceControlListProjects
+	prevCockpitBuilder := workspaceControlCockpitBuilder
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		statusService = prevStatus
+		workspaceControlListProjects = prevListProjects
+		workspaceControlCockpitBuilder = prevCockpitBuilder
+	}()
+
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:          &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo: "atascado",
+		}}, nil
+	}
+	statusService = stubStatusService{response: apiStatusResponse{}}
+
+	projectLow := insertTestProyecto(t, "webapp", "webapp", "/tmp/webapp")
+	projectHigh := insertTestProyecto(t, "infra", "infra", "/tmp/infra")
+	taskLow, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Ajuste local UI",
+		ProyectoID:  &projectLow,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Descripcion: "slice",
+		Modulo:      "web",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea low risk: %v", err)
+	}
+	taskHigh, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Integrar release API",
+		ProyectoID:  &projectHigh,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Descripcion: "slice",
+		Modulo:      "api",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea high risk: %v", err)
+	}
+
+	workspaceControlListProjects = func() ([]map[string]any, error) {
+		return []map[string]any{
+			{"slug": "webapp"},
+			{"slug": "infra"},
+		}, nil
+	}
+	workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+		switch strings.TrimSpace(slug) {
+		case "infra":
+			return &apiProyectoCockpit{
+				Proyecto:                &db.Proyecto{Slug: "infra"},
+				TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+				ReviewGatesAbiertas:     1,
+				RuntimeOrdersAbiertas:   1,
+				RuntimeMailboxPendiente: 1,
+				PropuestasAbiertas:      1,
+			}, nil
+		case "webapp":
+			return &apiProyectoCockpit{
+				Proyecto:        &db.Proyecto{Slug: "webapp"},
+				TareasPorEstado: map[string]int{string(db.TareaBloqueada): 1},
+			}, nil
+		default:
+			return nil, nil
+		}
+	}
+
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{
+				{
+					Kind:        "post_remediation_blocked_escalated",
+					CreatedAt:   time.Now().UTC(),
+					TaskID:      &taskLow,
+					TargetAgent: "Codex4",
+					Reason:      "seguimiento local",
+					Artifacts:   []string{"patch:web-ui", "test:go test ./cmd"},
+				},
+				{
+					Kind:        "post_remediation_blocked_escalated",
+					CreatedAt:   time.Now().UTC(),
+					TaskID:      &taskHigh,
+					TargetAgent: "Codex4",
+					Reason:      "release e integración bloqueadas",
+					Artifacts:   []string{"patch:release-api", "test:go test ./cmd"},
+				},
+			},
+		},
+		TareasActivas: []tareaLite{
+			{ID: taskLow, Estado: db.TareaBloqueada, Agente: "Codex4", Titulo: "Ajuste local UI", Modulo: "web", Prioridad: db.PrioridadAlta},
+			{ID: taskHigh, Estado: db.TareaBloqueada, Agente: "Codex4", Titulo: "Integrar release API", Modulo: "api", Prioridad: db.PrioridadAlta},
+		},
+	}
+
+	actions := buildSupervisorOperationalActions(status, nil)
+	if len(actions) == 0 {
+		t.Fatalf("acciones vacias: %+v", actions)
+	}
+	if actions[0].Target != fmt.Sprintf("tarea:%d", taskHigh) {
+		t.Fatalf("deberia priorizar el proyecto con mayor riesgo canonico, got=%+v", actions[0])
+	}
+}
+
+func TestBuildSupervisorOperationalActionsDegradaProyectoAbsorbidoYSubeSiguienteRiesgoReal(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevStatus := statusService
+	prevListProjects := workspaceControlListProjects
+	prevCockpitBuilder := workspaceControlCockpitBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		statusService = prevStatus
+		workspaceControlListProjects = prevListProjects
+		workspaceControlCockpitBuilder = prevCockpitBuilder
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+
+	now := time.Now().UTC()
+	progress := now.Add(-2 * time.Minute)
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{
+			{
+				Agente:             &db.Agente{Nombre: "Codex4"},
+				EstadoOperativo:    "trabajando",
+				WorkerLastProgress: &progress,
+			},
+			{
+				Agente:          &db.Agente{Nombre: "Codex3"},
+				EstadoOperativo: "atascado",
+			},
+		}, nil
+	}
+	statusService = stubStatusService{response: apiStatusResponse{}}
+
+	projectAbsorbido := insertTestProyecto(t, "infra", "infra", "/tmp/infra")
+	projectPendiente := insertTestProyecto(t, "webapp", "webapp", "/tmp/webapp")
+	taskAbsorbida, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Ajuste local ya absorbido",
+		ProyectoID:  &projectAbsorbido,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Descripcion: "slice",
+		Modulo:      "worker",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea absorbida: %v", err)
+	}
+	taskPendiente, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Merge web bloqueado",
+		ProyectoID:  &projectPendiente,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Descripcion: "slice",
+		Modulo:      "web",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea pendiente: %v", err)
+	}
+
+	workspaceControlListProjects = func() ([]map[string]any, error) {
+		return []map[string]any{
+			{"slug": "infra"},
+			{"slug": "webapp"},
+		}, nil
+	}
+	workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+		switch strings.TrimSpace(slug) {
+		case "infra":
+			return &apiProyectoCockpit{
+				Proyecto:                &db.Proyecto{Slug: "infra"},
+				TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+				ReviewGatesAbiertas:     1,
+				RuntimeOrdersAbiertas:   1,
+				RuntimeMailboxPendiente: 1,
+				PropuestasAbiertas:      1,
+			}, nil
+		case "webapp":
+			return &apiProyectoCockpit{
+				Proyecto:            &db.Proyecto{Slug: "webapp"},
+				TareasPorEstado:     map[string]int{string(db.TareaBloqueada): 1},
+				ReviewGatesAbiertas: 1,
+			}, nil
+		default:
+			return nil, nil
+		}
+	}
+
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{
+				{
+					Kind:        "post_remediation_blocked_escalated",
+					CreatedAt:   now,
+					TaskID:      &taskAbsorbida,
+					TargetAgent: "Codex4",
+					Reason:      "seguimiento local estable",
+					Artifacts:   []string{"patch:ajuste-local", "test:go test ./ui"},
+				},
+				{
+					Kind:        "handoff_failed",
+					CreatedAt:   now,
+					TaskID:      &taskPendiente,
+					TargetAgent: "Codex3",
+					Reason:      "merge bloqueado",
+					Artifacts:   []string{"patch:web-merge", "test:go test ./cmd"},
+				},
+			},
+		},
+		TareasActivas: []tareaLite{
+			{ID: taskAbsorbida, Estado: db.TareaEnProgreso, Agente: "Codex4", Titulo: "Ajuste local ya absorbido", Modulo: "worker", Prioridad: db.PrioridadAlta},
+			{ID: taskPendiente, Estado: db.TareaBloqueada, Agente: "Codex3", Titulo: "Merge web bloqueado", Modulo: "web", Prioridad: db.PrioridadAlta},
+		},
+	}
+
+	actions := buildSupervisorOperationalActions(status, nil)
+	if len(actions) == 0 {
+		t.Fatalf("acciones vacias: %+v", actions)
+	}
+	if actions[0].Target != fmt.Sprintf("tarea:%d", taskPendiente) || actions[0].Action != "inspeccionar_handoff_fallido" {
+		t.Fatalf("deberia subir primero el siguiente riesgo real, got=%+v", actions[0])
+	}
+	absorbed := findSupervisorAction(actions, "resolver_followup_bloqueado", fmt.Sprintf("tarea:%d", taskAbsorbida))
+	if absorbed == nil {
+		t.Fatalf("falta followup absorbido: %+v", actions)
+	}
+	if absorbed.Priority != "media" && absorbed.Priority != "baja" {
+		t.Fatalf("deberia quedar degradado tras absorcion sana: %+v", absorbed)
+	}
+	if !strings.Contains(absorbed.Reason, "Ya hay progreso reciente") || !strings.Contains(absorbed.Reason, "No parece bloquear integración/progreso global") {
+		t.Fatalf("deberia explicitar absorcion sana: %+v", absorbed)
+	}
+}
+
+func TestBuildSupervisorCriticalAutonomyFocusOmiteFrenteAbsorbidoSano(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevStatus := statusService
+	prevListProjects := workspaceControlListProjects
+	prevCockpitBuilder := workspaceControlCockpitBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		statusService = prevStatus
+		workspaceControlListProjects = prevListProjects
+		workspaceControlCockpitBuilder = prevCockpitBuilder
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+
+	now := time.Now().UTC()
+	progress := now.Add(-time.Minute)
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{
+			{
+				Agente:             &db.Agente{Nombre: "Codex4"},
+				EstadoOperativo:    "trabajando",
+				WorkerLastProgress: &progress,
+			},
+			{
+				Agente:          &db.Agente{Nombre: "Codex3"},
+				EstadoOperativo: "atascado",
+			},
+		}, nil
+	}
+	statusService = stubStatusService{response: apiStatusResponse{}}
+
+	projectAbsorbido := insertTestProyecto(t, "infra", "infra", "/tmp/infra")
+	projectPendiente := insertTestProyecto(t, "webapp", "webapp", "/tmp/webapp")
+	taskAbsorbida, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Ajuste local ya absorbido",
+		ProyectoID:  &projectAbsorbido,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Descripcion: "slice",
+		Modulo:      "worker",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea absorbida: %v", err)
+	}
+	taskPendiente, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Merge web bloqueado",
+		ProyectoID:  &projectPendiente,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Descripcion: "slice",
+		Modulo:      "web",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea pendiente: %v", err)
+	}
+
+	workspaceControlListProjects = func() ([]map[string]any, error) {
+		return []map[string]any{
+			{"slug": "infra"},
+			{"slug": "webapp"},
+		}, nil
+	}
+	workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+		switch strings.TrimSpace(slug) {
+		case "infra":
+			return &apiProyectoCockpit{
+				Proyecto:                &db.Proyecto{Slug: "infra"},
+				TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+				ReviewGatesAbiertas:     1,
+				RuntimeOrdersAbiertas:   1,
+				RuntimeMailboxPendiente: 1,
+				PropuestasAbiertas:      1,
+			}, nil
+		case "webapp":
+			return &apiProyectoCockpit{
+				Proyecto:            &db.Proyecto{Slug: "webapp"},
+				TareasPorEstado:     map[string]int{string(db.TareaBloqueada): 1},
+				ReviewGatesAbiertas: 1,
+			}, nil
+		default:
+			return nil, nil
+		}
+	}
+
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{
+				{
+					Kind:        "post_remediation_blocked_escalated",
+					CreatedAt:   now,
+					TaskID:      &taskAbsorbida,
+					TargetAgent: "Codex4",
+					Reason:      "seguimiento local estable",
+					Artifacts:   []string{"patch:ajuste-local", "test:go test ./ui"},
+				},
+				{
+					Kind:        "handoff_failed",
+					CreatedAt:   now,
+					TaskID:      &taskPendiente,
+					TargetAgent: "Codex3",
+					Reason:      "merge bloqueado",
+					Artifacts:   []string{"patch:web-merge", "test:go test ./cmd"},
+				},
+			},
+		},
+		TareasActivas: []tareaLite{
+			{ID: taskAbsorbida, Estado: db.TareaEnProgreso, Agente: "Codex4", Titulo: "Ajuste local ya absorbido", Modulo: "worker", Prioridad: db.PrioridadAlta},
+			{ID: taskPendiente, Estado: db.TareaBloqueada, Agente: "Codex3", Titulo: "Merge web bloqueado", Modulo: "web", Prioridad: db.PrioridadAlta},
+		},
+	}
+
+	focus := buildSupervisorCriticalAutonomyFocus(status, nil, nil)
+	if focus == nil {
+		t.Fatalf("falta frente critico")
+	}
+	if focus.Target != fmt.Sprintf("tarea:%d", taskPendiente) || focus.Action != "inspeccionar_handoff_fallido" {
+		t.Fatalf("deberia saltar el frente absorbido sano y subir el riesgo real: %+v", focus)
+	}
+}
+
+func TestBuildSupervisorReviewSnapshotDegradaProyectoCriticoAbsorbidoYExponeSiguienteRiesgoReal(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		prevRows := supervisorPanelRowsBuilder
+		prevListProjects := workspaceControlListProjects
+		prevCockpitBuilder := workspaceControlCockpitBuilder
+		prevNow := statusNowFunc
+		prevThreshold := supervisorSemanticProgressRecentThreshold
+		defer func() {
+			statusService = prev
+			supervisorPanelRowsBuilder = prevRows
+			workspaceControlListProjects = prevListProjects
+			workspaceControlCockpitBuilder = prevCockpitBuilder
+			statusNowFunc = prevNow
+			supervisorSemanticProgressRecentThreshold = prevThreshold
+		}()
+
+		now := time.Now().UTC()
+		progress := now.Add(-2 * time.Minute)
+		statusNowFunc = func() time.Time { return now }
+		supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+		supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+			return []agentesapp.Row{
+				{
+					Agente:             &db.Agente{Nombre: "Codex4"},
+					EstadoOperativo:    "trabajando",
+					WorkerLastProgress: &progress,
+				},
+				{
+					Agente:          &db.Agente{Nombre: "Codex3"},
+					EstadoOperativo: "atascado",
+				},
+			}, nil
+		}
+
+		projectAbsorbido := insertTestProyecto(t, "infra", "infra", "/tmp/infra")
+		projectPendiente := insertTestProyecto(t, "webapp", "webapp", "/tmp/webapp")
+		taskAbsorbida, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Ajuste local ya absorbido",
+			ProyectoID:  &projectAbsorbido,
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "orquesta",
+			Descripcion: "slice",
+			Modulo:      "worker",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea absorbida: %v", err)
+		}
+		taskPendiente, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Merge web bloqueado",
+			ProyectoID:  &projectPendiente,
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "orquesta",
+			Descripcion: "slice",
+			Modulo:      "web",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea pendiente: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET estado='en_progreso', agente='Codex4' WHERE id=?`, taskAbsorbida); err != nil {
+			t.Fatalf("preparar tarea absorbida: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET estado='bloqueada', agente='Codex3' WHERE id=?`, taskPendiente); err != nil {
+			t.Fatalf("preparar tarea pendiente: %v", err)
+		}
+
+		snapshotStatus := apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			WorkersConectados:   2,
+			WorkersTrabajando:   1,
+			SupervisoresActivos: 1,
+			Autonomia: autonomiaResumen{
+				Recent: []autonomyEventSummary{
+					{
+						Kind:        "post_remediation_blocked_escalated",
+						CreatedAt:   now,
+						TaskID:      &taskAbsorbida,
+						TargetAgent: "Codex4",
+						Reason:      "seguimiento local estable",
+						Artifacts:   []string{"patch:ajuste-local", "test:go test ./ui"},
+					},
+					{
+						Kind:        "handoff_failed",
+						CreatedAt:   now,
+						TaskID:      &taskPendiente,
+						TargetAgent: "Codex3",
+						Reason:      "merge bloqueado",
+						Artifacts:   []string{"patch:web-merge", "test:go test ./cmd"},
+					},
+				},
+			},
+			TareasActivas: []tareaLite{
+				{ID: taskAbsorbida, Estado: db.TareaEnProgreso, Agente: "Codex4", Titulo: "Ajuste local ya absorbido", Modulo: "worker", Prioridad: db.PrioridadAlta},
+				{ID: taskPendiente, Estado: db.TareaBloqueada, Agente: "Codex3", Titulo: "Merge web bloqueado", Modulo: "web", Prioridad: db.PrioridadAlta},
+			},
+		}
+		statusService = stubStatusService{response: snapshotStatus}
+		storeStatusSnapshotWithTTL(snapshotStatus, now, 5*time.Minute)
+
+		workspaceControlListProjects = func() ([]map[string]any, error) {
+			return []map[string]any{
+				{"slug": "infra"},
+				{"slug": "webapp"},
+			}, nil
+		}
+		workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+			switch strings.TrimSpace(slug) {
+			case "infra":
+				return &apiProyectoCockpit{
+					Proyecto:                &db.Proyecto{Slug: "infra"},
+					TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+					ReviewGatesAbiertas:     1,
+					RuntimeOrdersAbiertas:   1,
+					RuntimeMailboxPendiente: 1,
+					PropuestasAbiertas:      1,
+				}, nil
+			case "webapp":
+				return &apiProyectoCockpit{
+					Proyecto:            &db.Proyecto{Slug: "webapp"},
+					TareasPorEstado:     map[string]int{string(db.TareaBloqueada): 1},
+					ReviewGatesAbiertas: 1,
+				}, nil
+			default:
+				return nil, nil
+			}
+		}
+
+		snapshot, err := buildSupervisorReviewSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshot: %v", err)
+		}
+		risk, _ := snapshot["critical_project_risk"].(*workspaceAutonomyProjectSummary)
+		if risk == nil || risk.Project != "webapp" || risk.Blocking != 9 {
+			t.Fatalf("critical_project_risk deberia subir el siguiente riesgo real, got=%#v", snapshot["critical_project_risk"])
+		}
+		nextAction, _ := snapshot["next_action"].(supervisorRecommendedAction)
+		if nextAction.Target != fmt.Sprintf("tarea:%d", taskPendiente) || nextAction.Action != "inspeccionar_handoff_fallido" {
+			t.Fatalf("next_action deberia abrir con el siguiente riesgo real, got=%+v", nextAction)
+		}
+	})
+}
+
+func TestBuildSupervisorReviewSnapshotExponeYRrespetaProyectoCriticoPorRiesgo(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		prevRows := supervisorPanelRowsBuilder
+		prevListProjects := workspaceControlListProjects
+		prevCockpitBuilder := workspaceControlCockpitBuilder
+		prevNow := statusNowFunc
+		defer func() {
+			statusService = prev
+			supervisorPanelRowsBuilder = prevRows
+			workspaceControlListProjects = prevListProjects
+			workspaceControlCockpitBuilder = prevCockpitBuilder
+			statusNowFunc = prevNow
+		}()
+
+		supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+			return []agentesapp.Row{{
+				Agente:          &db.Agente{Nombre: "Codex4"},
+				EstadoOperativo: "atascado",
+			}}, nil
+		}
+
+		projectLow := insertTestProyecto(t, "webapp", "webapp", "/tmp/webapp")
+		projectHigh := insertTestProyecto(t, "infra", "infra", "/tmp/infra")
+		taskLow, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Ajuste local UI",
+			ProyectoID:  &projectLow,
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "orquesta",
+			Descripcion: "slice",
+			Modulo:      "web",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea low risk: %v", err)
+		}
+		taskHigh, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Integrar release API",
+			ProyectoID:  &projectHigh,
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "orquesta",
+			Descripcion: "slice",
+			Modulo:      "api",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea high risk: %v", err)
+		}
+
+		now := time.Now().UTC()
+		statusNowFunc = func() time.Time { return now }
+		snapshotStatus := apiStatusResponse{
+			Autonomia: autonomiaResumen{
+				Recent: []autonomyEventSummary{
+					{
+						Kind:        "post_remediation_blocked_escalated",
+						CreatedAt:   time.Now().UTC(),
+						TaskID:      &taskLow,
+						TargetAgent: "Codex4",
+						Reason:      "seguimiento local",
+						Artifacts:   []string{"patch:web-ui", "test:go test ./cmd"},
+					},
+					{
+						Kind:        "post_remediation_blocked_escalated",
+						CreatedAt:   time.Now().UTC(),
+						TaskID:      &taskHigh,
+						TargetAgent: "Codex4",
+						Reason:      "release e integración bloqueadas",
+						Artifacts:   []string{"patch:release-api", "test:go test ./cmd"},
+					},
+				},
+			},
+			TareasActivas: []tareaLite{
+				{ID: taskLow, Estado: db.TareaBloqueada, Agente: "Codex4", Titulo: "Ajuste local UI", Modulo: "web", Prioridad: db.PrioridadAlta},
+				{ID: taskHigh, Estado: db.TareaBloqueada, Agente: "Codex4", Titulo: "Integrar release API", Modulo: "api", Prioridad: db.PrioridadAlta},
+			},
+		}
+		statusService = stubStatusService{response: snapshotStatus}
+		storeStatusSnapshotWithTTL(snapshotStatus, now, 5*time.Minute)
+		workspaceControlListProjects = func() ([]map[string]any, error) {
+			return []map[string]any{
+				{"slug": "webapp"},
+				{"slug": "infra"},
+			}, nil
+		}
+		workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+			switch strings.TrimSpace(slug) {
+			case "infra":
+				return &apiProyectoCockpit{
+					Proyecto:                &db.Proyecto{Slug: "infra"},
+					TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+					ReviewGatesAbiertas:     1,
+					RuntimeOrdersAbiertas:   1,
+					RuntimeMailboxPendiente: 1,
+					PropuestasAbiertas:      1,
+				}, nil
+			case "webapp":
+				return &apiProyectoCockpit{
+					Proyecto:        &db.Proyecto{Slug: "webapp"},
+					TareasPorEstado: map[string]int{string(db.TareaBloqueada): 1},
+				}, nil
+			default:
+				return nil, nil
+			}
+		}
+
+		snapshot, err := buildSupervisorReviewSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshot: %v", err)
+		}
+		nextAction, _ := snapshot["next_action"].(supervisorRecommendedAction)
+		if nextAction.Target != fmt.Sprintf("tarea:%d", taskHigh) {
+			t.Fatalf("next_action deberia priorizar proyecto critico, got=%+v", nextAction)
+		}
+		queue, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+		if len(queue) == 0 || queue[0].Target != fmt.Sprintf("tarea:%d", taskHigh) {
+			t.Fatalf("action_queue deberia abrir con el proyecto critico, got=%+v", queue)
+		}
+		risk, _ := snapshot["critical_project_risk"].(*workspaceAutonomyProjectSummary)
+		if risk == nil || risk.Project != "infra" || risk.Blocking != 15 {
+			t.Fatalf("critical_project_risk inesperado: %#v", snapshot["critical_project_risk"])
+		}
+	})
+}
+
+func TestBuildSupervisorReviewSnapshotSafeActionQueueRespetaProyectoCriticoPorRiesgo(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		prevListProjects := workspaceControlListProjects
+		prevCockpitBuilder := workspaceControlCockpitBuilder
+		prevDrift := openClawWorktreeDriftBuilder
+		prevNow := statusNowFunc
+		defer func() {
+			statusService = prev
+			workspaceControlListProjects = prevListProjects
+			workspaceControlCockpitBuilder = prevCockpitBuilder
+			openClawWorktreeDriftBuilder = prevDrift
+			statusNowFunc = prevNow
+		}()
+
+		openClawWorktreeDriftBuilder = func(status apiStatusResponse) ([]apiOpenClawWorktreeDrift, error) {
+			return nil, nil
+		}
+
+		projectLow := insertTestProyecto(t, "webapp", "webapp", "/tmp/webapp")
+		projectHigh := insertTestProyecto(t, "infra", "infra", "/tmp/infra")
+		taskLow, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Frente local retenido",
+			ProyectoID:  &projectLow,
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "orquesta",
+			Descripcion: "quota",
+			Modulo:      "web",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea low risk retenida: %v", err)
+		}
+		taskHigh, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Release API retenida",
+			ProyectoID:  &projectHigh,
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "orquesta",
+			Descripcion: "quota",
+			Modulo:      "api",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea high risk retenida: %v", err)
+		}
+
+		now := time.Now().UTC()
+		statusNowFunc = func() time.Time { return now }
+		snapshotStatus := apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex2", Rol: "programador", Activo: false, EstadoCuota: "enfriamiento"},
+				{Nombre: "Codex5", Rol: "programador", Activo: false, EstadoCuota: "enfriamiento"},
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			TareasActivas: []tareaLite{
+				{ID: taskLow, Estado: db.TareaEnProgreso, Titulo: "Frente local retenido", Agente: "Codex2", Modulo: "web", Prioridad: db.PrioridadAlta},
+				{ID: taskHigh, Estado: db.TareaEnProgreso, Titulo: "Release API retenida", Agente: "Codex5", Modulo: "api", Prioridad: db.PrioridadAlta},
+				{ID: 9991, Estado: db.TareaEnProgreso, Titulo: "Trabajo activo", Agente: "Codex3", Modulo: "runtime", Prioridad: db.PrioridadMedia},
+			},
+		}
+		statusService = stubStatusService{response: snapshotStatus}
+		storeStatusSnapshotWithTTL(snapshotStatus, now, 5*time.Minute)
+
+		workspaceControlListProjects = func() ([]map[string]any, error) {
+			return []map[string]any{
+				{"slug": "webapp"},
+				{"slug": "infra"},
+			}, nil
+		}
+		workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+			switch strings.TrimSpace(slug) {
+			case "infra":
+				return &apiProyectoCockpit{
+					Proyecto:                &db.Proyecto{Slug: "infra"},
+					TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+					ReviewGatesAbiertas:     1,
+					RuntimeOrdersAbiertas:   1,
+					RuntimeMailboxPendiente: 1,
+				}, nil
+			case "webapp":
+				return &apiProyectoCockpit{
+					Proyecto:        &db.Proyecto{Slug: "webapp"},
+					TareasPorEstado: map[string]int{string(db.TareaBloqueada): 1},
+				}, nil
+			default:
+				return nil, nil
+			}
+		}
+
+		snapshot, err := buildSupervisorReviewSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshot: %v", err)
+		}
+		safeQueue, _ := snapshot["safe_action_queue"].([]supervisorRecommendedAction)
+		if len(safeQueue) == 0 {
+			t.Fatalf("safe_action_queue vacia: %+v", snapshot)
+		}
+		if safeQueue[0].Action != "replanificar_por_cuota" || safeQueue[0].Target != fmt.Sprintf("tarea:%d", taskHigh) {
+			t.Fatalf("safe_action_queue deberia abrir con el proyecto critico, got=%+v", safeQueue[0])
+		}
+		nextSafeAction, _ := snapshot["next_safe_action"].(supervisorRecommendedAction)
+		if nextSafeAction.Action != "replanificar_por_cuota" || nextSafeAction.Target != fmt.Sprintf("tarea:%d", taskHigh) {
+			t.Fatalf("next_safe_action deberia respetar el arbitraje por proyecto, got=%+v", nextSafeAction)
+		}
+	})
+}
+
+func TestBuildSupervisorOperationalActionsMantieneReinicioRuntimeAsignadoSinProgresoReciente(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	defer func() { supervisorPanelRowsBuilder = prevRows }()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:          &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo: "trabajando",
+		}}, nil
+	}
+	taskID := int64(918)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "runtime_restart_requested",
+				CreatedAt:   time.Now().UTC(),
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+			}},
+		},
+		TareasReservadas: []tareaLite{{ID: 918, Estado: db.TareaAsignada, Agente: "Codex4", Prioridad: db.PrioridadMedia}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	item := findSupervisorAction(actions, "seguir_reinicio_runtime", "tarea:918")
+	if item == nil {
+		t.Fatalf("falta followup de reinicio runtime: %+v", actions)
+	}
+	if item.Priority != "media" {
+		t.Fatalf("deberia mantener prioridad media si el frente sigue asignado: %+v", item)
+	}
+	if !strings.Contains(item.Reason, "retenido y visible") {
+		t.Fatalf("deberia explicar frente retenido: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsMantieneHandoffFallidoConEvidenciaFuerteAunqueElFrenteYaProgresa(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	progress := time.Now().UTC()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:             &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo:    "trabajando",
+			WorkerLastProgress: &progress,
+		}}, nil
+	}
+	taskID := int64(919)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "handoff_failed",
+				CreatedAt:   progress,
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+				Artifacts:   []string{"runtime_order:41", "patch:handoff-fix.diff"},
+			}},
+		},
+		TareasActivas: []tareaLite{{ID: 919, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	item := findSupervisorAction(actions, "inspeccionar_handoff_fallido", "tarea:919")
+	if item == nil {
+		t.Fatalf("deberia mantener handoff_failed con evidencia fuerte para cerrarlo bien: %+v", actions)
+	}
+	if item.Priority != "baja" {
+		t.Fatalf("si ya progresa sin bloqueo global, deberia degradarse: %+v", item)
+	}
+	if !strings.Contains(strings.ToLower(item.Reason), "evidencia fuerte") || !strings.Contains(item.Reason, "No parece bloquear integración/progreso global") {
+		t.Fatalf("deberia explicitar evidencia fuerte mitigada y absorcion sana: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsMantieneFollowupBloqueadoConEvidenciaFuerteAunqueElFrenteYaProgresa(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	progress := time.Now().UTC()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:             &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo:    "trabajando",
+			WorkerLastProgress: &progress,
+		}}, nil
+	}
+	taskID := int64(920)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "post_remediation_blocked_escalated",
+				CreatedAt:   progress,
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+				Artifacts:   []string{"runtime_order:99", "test:integration-red"},
+			}},
+		},
+		TareasActivas: []tareaLite{{ID: 920, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	item := findSupervisorAction(actions, "resolver_followup_bloqueado", "tarea:920")
+	if item == nil {
+		t.Fatalf("deberia mantener followup bloqueado con evidencia fuerte: %+v", actions)
+	}
+	if item.Priority != "media" {
+		t.Fatalf("deberia mantenerse en media con evidencia fuerte aunque ya progrese: %+v", item)
+	}
+	if !strings.Contains(item.Reason, "Evidencia:") {
+		t.Fatalf("deberia conservar evidencia en el motivo: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsMantieneReasignacionAsignadaSinProgresoReciente(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	defer func() { supervisorPanelRowsBuilder = prevRows }()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:          &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo: "trabajando",
+		}}, nil
+	}
+	taskID := int64(917)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "task_reassigned",
+				CreatedAt:   time.Now().UTC(),
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+			}},
+		},
+		TareasReservadas: []tareaLite{{ID: 917, Estado: db.TareaAsignada, Agente: "Codex4"}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	for _, item := range actions {
+		if item.Action == "seguir_reasignacion" && item.Target == "tarea:917" {
+			if item.Priority != "media" {
+				t.Fatalf("deberia mantener prioridad media si el frente sigue asignado sin progreso: %+v", item)
+			}
+			if !strings.Contains(item.Reason, "retenido y visible") {
+				t.Fatalf("deberia explicar que el frente sigue retenido: %+v", item)
+			}
+			return
+		}
+	}
+	t.Fatalf("falta followup de reasignacion asignada: %+v", actions)
+}
+
 func TestMCPToolSupervisorInspeccionaWorktreeDrift(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService
@@ -3069,6 +5361,24 @@ func TestMCPToolSupervisorInspeccionaWorktreeDrift(t *testing.T) {
 			t.Fatalf("worktree drift inesperado: %#v", result["worktree_drift"])
 		}
 	})
+}
+
+func containsSupervisorAction(items []supervisorRecommendedAction, action, target string) bool {
+	for _, item := range items {
+		if strings.TrimSpace(item.Action) == strings.TrimSpace(action) && strings.TrimSpace(item.Target) == strings.TrimSpace(target) {
+			return true
+		}
+	}
+	return false
+}
+
+func findSupervisorAction(items []supervisorRecommendedAction, action, target string) *supervisorRecommendedAction {
+	for i := range items {
+		if strings.TrimSpace(items[i].Action) == strings.TrimSpace(action) && strings.TrimSpace(items[i].Target) == strings.TrimSpace(target) {
+			return &items[i]
+		}
+	}
+	return nil
 }
 
 func TestMCPToolSupervisorSolicitaCheckpointPorWorktreeDrift(t *testing.T) {
@@ -3395,7 +5705,15 @@ func TestMCPToolSupervisorAplicaReplanificacionPorCuotaConFallbackExplicito(t *t
 func TestMCPToolSupervisorAplicaLoteSeguro(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService
-		defer func() { statusService = prev }()
+		prevListProjects := workspaceControlListProjects
+		prevCockpitBuilder := workspaceControlCockpitBuilder
+		prevNow := statusNowFunc
+		defer func() {
+			statusService = prev
+			workspaceControlListProjects = prevListProjects
+			workspaceControlCockpitBuilder = prevCockpitBuilder
+			statusNowFunc = prevNow
+		}()
 
 		tareaLibreID, err := db.CrearTarea(&db.Tarea{
 			Titulo:      "Dispatch en lote",
@@ -3427,7 +5745,9 @@ func TestMCPToolSupervisorAplicaLoteSeguro(t *testing.T) {
 			t.Fatalf("preparar retenida: %v", err)
 		}
 
-		statusService = stubStatusService{response: apiStatusResponse{
+		now := time.Now().UTC()
+		statusNowFunc = func() time.Time { return now }
+		snapshotStatus := apiStatusResponse{
 			AgentesActivos: []*db.Agente{
 				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
 			},
@@ -3442,7 +5762,22 @@ func TestMCPToolSupervisorAplicaLoteSeguro(t *testing.T) {
 			TareasActivas: []tareaLite{
 				{ID: tareaRetenidaID, Estado: db.TareaEnProgreso, Titulo: "Retenida por cuota", Agente: "Codex2"},
 			},
-		}}
+		}
+		statusService = stubStatusService{response: snapshotStatus}
+		storeStatusSnapshotWithTTL(snapshotStatus, now, 5*time.Minute)
+		workspaceControlListProjects = func() ([]map[string]any, error) {
+			return []map[string]any{{"slug": "orquestador"}}, nil
+		}
+		workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+			return &apiProyectoCockpit{
+				Proyecto:                &db.Proyecto{Slug: "orquestador"},
+				TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+				ReviewGatesAbiertas:     1,
+				RuntimeOrdersAbiertas:   1,
+				RuntimeMailboxPendiente: 1,
+				PropuestasAbiertas:      1,
+			}, nil
+		}
 
 		result, err := callMCPTool("orquesta.supervision.acciones.aplicar_lote", map[string]any{
 			"supervisor": "OpenClaw",
@@ -3470,6 +5805,13 @@ func TestMCPToolSupervisorAplicaLoteSeguro(t *testing.T) {
 		default:
 			t.Fatalf("count con tipo inesperado: %#v", structured)
 		}
+		risk, _ := structured["critical_project_risk"].(*workspaceAutonomyProjectSummary)
+		if risk == nil {
+			t.Fatalf("falta critical_project_risk en batch: %#v", structured)
+		}
+		if strings.TrimSpace(risk.Project) != "orquestador" || risk.Blocking <= 0 {
+			t.Fatalf("critical_project_risk inesperado: %#v", risk)
+		}
 
 		tareaLibre, err := db.GetTarea(tareaLibreID)
 		if err != nil {
@@ -3484,6 +5826,486 @@ func TestMCPToolSupervisorAplicaLoteSeguro(t *testing.T) {
 		}
 		if tareaRetenida.Estado != db.TareaEnProgreso || tareaRetenida.Agente == nil || *tareaRetenida.Agente != "Codex3" {
 			t.Fatalf("tarea retenida no aplicada por lote: %+v", tareaRetenida)
+		}
+	})
+}
+
+func TestApplySupervisorRecommendedActionsBatchUsaSafeQueueYExponeProyectoCritico(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		prevListProjects := workspaceControlListProjects
+		prevCockpitBuilder := workspaceControlCockpitBuilder
+		prevDrift := openClawWorktreeDriftBuilder
+		prevNow := statusNowFunc
+		defer func() {
+			statusService = prev
+			workspaceControlListProjects = prevListProjects
+			workspaceControlCockpitBuilder = prevCockpitBuilder
+			openClawWorktreeDriftBuilder = prevDrift
+			statusNowFunc = prevNow
+		}()
+
+		openClawWorktreeDriftBuilder = func(status apiStatusResponse) ([]apiOpenClawWorktreeDrift, error) {
+			return nil, nil
+		}
+
+		projectLow := insertTestProyecto(t, "webapp", "webapp", "/tmp/webapp")
+		projectHigh := insertTestProyecto(t, "infra", "infra", "/tmp/infra")
+		tareaLibreID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Dispatch low risk",
+			Descripcion: "No debe ganar si solo cabe una acción segura",
+			ProyectoID:  &projectLow,
+			Modulo:      "web",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea libre: %v", err)
+		}
+		tareaCriticaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Release API retenida",
+			Descripcion: "Debe priorizarse por riesgo de proyecto",
+			ProyectoID:  &projectHigh,
+			Modulo:      "api",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea crítica: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+			t.Fatalf("registrar Codex2: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET estado='en_progreso', agente='Codex2' WHERE id=?`, tareaCriticaID); err != nil {
+			t.Fatalf("preparar tarea crítica retenida: %v", err)
+		}
+
+		now := time.Now().UTC()
+		statusNowFunc = func() time.Time { return now }
+		snapshotStatus := apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex2", Rol: "programador", Activo: false, EstadoCuota: "enfriamiento"},
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			TareasPorEstado: map[string]int{
+				string(db.TareaLibre): 1,
+			},
+			TareasActivas: []tareaLite{
+				{ID: tareaCriticaID, Estado: db.TareaEnProgreso, Titulo: "Release API retenida", Agente: "Codex2", Modulo: "api", Prioridad: db.PrioridadAlta},
+			},
+		}
+		statusService = stubStatusService{response: snapshotStatus}
+		storeStatusSnapshotWithTTL(snapshotStatus, now, 5*time.Minute)
+
+		workspaceControlListProjects = func() ([]map[string]any, error) {
+			return []map[string]any{
+				{"slug": "webapp"},
+				{"slug": "infra"},
+			}, nil
+		}
+		workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+			switch strings.TrimSpace(slug) {
+			case "infra":
+				return &apiProyectoCockpit{
+					Proyecto:                &db.Proyecto{Slug: "infra"},
+					TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+					ReviewGatesAbiertas:     1,
+					RuntimeOrdersAbiertas:   1,
+					RuntimeMailboxPendiente: 1,
+					PropuestasAbiertas:      1,
+				}, nil
+			case "webapp":
+				return &apiProyectoCockpit{
+					Proyecto: &db.Proyecto{Slug: "webapp"},
+				}, nil
+			default:
+				return nil, nil
+			}
+		}
+
+		result, err := applySupervisorRecommendedActionsBatch("OpenClaw", 1, "")
+		if err != nil {
+			t.Fatalf("applySupervisorRecommendedActionsBatch: %v", err)
+		}
+		if queueKind, _ := result["queue_kind"].(string); queueKind != "safe" {
+			t.Fatalf("queue_kind inesperado: %#v", result["queue_kind"])
+		}
+		safeQueue, _ := result["safe_action_queue"].([]supervisorRecommendedAction)
+		if len(safeQueue) == 0 || safeQueue[0].Target != fmt.Sprintf("tarea:%d", tareaCriticaID) {
+			t.Fatalf("safe_action_queue debería abrir con la tarea crítica: %+v", safeQueue)
+		}
+		nextSafeAction, _ := result["next_safe_action"].(supervisorRecommendedAction)
+		if nextSafeAction.Target != fmt.Sprintf("tarea:%d", tareaCriticaID) {
+			t.Fatalf("next_safe_action inesperada: %+v", nextSafeAction)
+		}
+		risk, _ := result["critical_project_risk"].(*workspaceAutonomyProjectSummary)
+		if risk == nil || risk.Project != "infra" || risk.Blocking != 15 {
+			t.Fatalf("critical_project_risk inesperado: %#v", result["critical_project_risk"])
+		}
+		applied, _ := result["applied"].([]map[string]any)
+		if len(applied) != 1 {
+			t.Fatalf("applied inesperado: %#v", result["applied"])
+		}
+		if taskID, _ := applied[0]["task_id"].(int64); taskID != tareaCriticaID {
+			t.Fatalf("el batch debería aplicar primero la tarea crítica, got=%#v", applied[0])
+		}
+
+		tareaLibre, err := db.GetTarea(tareaLibreID)
+		if err != nil {
+			t.Fatalf("get tarea libre: %v", err)
+		}
+		if tareaLibre.Estado != db.TareaLibre {
+			t.Fatalf("la tarea libre no debería consumirse en este batch: %+v", tareaLibre)
+		}
+		tareaCritica, err := db.GetTarea(tareaCriticaID)
+		if err != nil {
+			t.Fatalf("get tarea crítica: %v", err)
+		}
+		if tareaCritica.Agente == nil || *tareaCritica.Agente != "Codex3" || tareaCritica.Estado != db.TareaEnProgreso {
+			t.Fatalf("la tarea crítica debería quedar reasignada a Codex3: %+v", tareaCritica)
+		}
+	})
+}
+
+func TestApplySupervisorNextActionUsaSafeQueueYExponeProyectoCritico(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		prevListProjects := workspaceControlListProjects
+		prevCockpitBuilder := workspaceControlCockpitBuilder
+		prevNow := statusNowFunc
+		defer func() {
+			statusService = prev
+			workspaceControlListProjects = prevListProjects
+			workspaceControlCockpitBuilder = prevCockpitBuilder
+			statusNowFunc = prevNow
+		}()
+
+		tareaLibreID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Dispatch low risk",
+			Descripcion: "No debe ejecutarse antes que la crítica",
+			Modulo:      "web",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea libre: %v", err)
+		}
+		projectID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		tareaCriticaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Retenida crítica",
+			Descripcion: "Debe salir primero por next action",
+			Modulo:      "controlplane",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+			ProyectoID:  &projectID,
+		})
+		if err != nil {
+			t.Fatalf("crear tarea critica: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+			t.Fatalf("registrar Codex2: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET estado='en_progreso', agente='Codex2' WHERE id=?`, tareaCriticaID); err != nil {
+			t.Fatalf("preparar tarea critica: %v", err)
+		}
+
+		now := time.Now().UTC()
+		statusNowFunc = func() time.Time { return now }
+		snapshotStatus := apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex2", Rol: "programador", Activo: false, EstadoCuota: "enfriamiento"},
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			TareasPorEstado: map[string]int{
+				string(db.TareaLibre): 1,
+			},
+			TareasActivas: []tareaLite{
+				{ID: tareaCriticaID, Estado: db.TareaEnProgreso, Titulo: "Retenida crítica", Agente: "Codex2"},
+			},
+		}
+		statusService = stubStatusService{response: snapshotStatus}
+		storeStatusSnapshotWithTTL(snapshotStatus, now, 5*time.Minute)
+		workspaceControlListProjects = func() ([]map[string]any, error) {
+			return []map[string]any{{"slug": "orquestador"}}, nil
+		}
+		workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+			return &apiProyectoCockpit{
+				Proyecto:                &db.Proyecto{Slug: "orquestador"},
+				TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+				ReviewGatesAbiertas:     1,
+				RuntimeOrdersAbiertas:   1,
+				RuntimeMailboxPendiente: 1,
+				PropuestasAbiertas:      1,
+			}, nil
+		}
+
+		result, err := applySupervisorNextAction("OpenClaw")
+		if err != nil {
+			t.Fatalf("applySupervisorNextAction: %v", err)
+		}
+		if queueKind, _ := result["queue_kind"].(string); queueKind != "safe" {
+			t.Fatalf("queue_kind inesperado: %#v", result["queue_kind"])
+		}
+		nextSafeAction, _ := result["next_safe_action"].(supervisorRecommendedAction)
+		if nextSafeAction.Action != "replanificar_por_cuota" || nextSafeAction.Target != fmt.Sprintf("tarea:%d", tareaCriticaID) {
+			t.Fatalf("next_safe_action inesperada: %+v", nextSafeAction)
+		}
+		risk, _ := result["critical_project_risk"].(*workspaceAutonomyProjectSummary)
+		if risk == nil || strings.TrimSpace(risk.Project) != "orquestador" || risk.Blocking <= 0 {
+			t.Fatalf("critical_project_risk inesperado: %#v", result["critical_project_risk"])
+		}
+		tareaLibre, err := db.GetTarea(tareaLibreID)
+		if err != nil {
+			t.Fatalf("get tarea libre: %v", err)
+		}
+		if tareaLibre.Estado != db.TareaLibre {
+			t.Fatalf("la tarea low risk no deberia ejecutarse primero: %+v", tareaLibre)
+		}
+		tareaCritica, err := db.GetTarea(tareaCriticaID)
+		if err != nil {
+			t.Fatalf("get tarea critica: %v", err)
+		}
+		if tareaCritica.Agente == nil || *tareaCritica.Agente != "Codex3" {
+			t.Fatalf("la tarea crítica no se aplicó primero: %+v", tareaCritica)
+		}
+	})
+}
+
+func TestApplySupervisorRecommendedActionExponeProyectoCriticoCanonico(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		prevListProjects := workspaceControlListProjects
+		prevCockpitBuilder := workspaceControlCockpitBuilder
+		prevDrift := openClawWorktreeDriftBuilder
+		prevNow := statusNowFunc
+		defer func() {
+			statusService = prev
+			workspaceControlListProjects = prevListProjects
+			workspaceControlCockpitBuilder = prevCockpitBuilder
+			openClawWorktreeDriftBuilder = prevDrift
+			statusNowFunc = prevNow
+		}()
+
+		openClawWorktreeDriftBuilder = func(status apiStatusResponse) ([]apiOpenClawWorktreeDrift, error) {
+			return nil, nil
+		}
+
+		projectHigh := insertTestProyecto(t, "infra", "infra", "/tmp/infra")
+		tareaCriticaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Release API retenida",
+			Descripcion: "Debe devolver riesgo canónico al aplicar una acción individual",
+			ProyectoID:  &projectHigh,
+			Modulo:      "api",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea crítica: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+			t.Fatalf("registrar Codex2: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET estado='en_progreso', agente='Codex2' WHERE id=?`, tareaCriticaID); err != nil {
+			t.Fatalf("preparar tarea crítica retenida: %v", err)
+		}
+
+		now := time.Now().UTC()
+		statusNowFunc = func() time.Time { return now }
+		snapshotStatus := apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex2", Rol: "programador", Activo: false, EstadoCuota: "enfriamiento"},
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			TareasActivas: []tareaLite{
+				{ID: tareaCriticaID, Estado: db.TareaEnProgreso, Titulo: "Release API retenida", Agente: "Codex2", Modulo: "api", Prioridad: db.PrioridadAlta},
+			},
+		}
+		statusService = stubStatusService{response: snapshotStatus}
+		storeStatusSnapshotWithTTL(snapshotStatus, now, 5*time.Minute)
+
+		workspaceControlListProjects = func() ([]map[string]any, error) {
+			return []map[string]any{{"slug": "infra"}}, nil
+		}
+		workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+			return &apiProyectoCockpit{
+				Proyecto:                &db.Proyecto{Slug: "infra"},
+				TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+				ReviewGatesAbiertas:     1,
+				RuntimeOrdersAbiertas:   1,
+				RuntimeMailboxPendiente: 1,
+				PropuestasAbiertas:      1,
+			}, nil
+		}
+
+		result, err := applySupervisorRecommendedAction("OpenClaw", "replanificar_por_cuota", fmt.Sprintf("tarea:%d", tareaCriticaID), "Codex3")
+		if err != nil {
+			t.Fatalf("applySupervisorRecommendedAction: %v", err)
+		}
+		if queueKind, _ := result["queue_kind"].(string); queueKind != "safe" {
+			t.Fatalf("queue_kind inesperado: %#v", result["queue_kind"])
+		}
+		nextSafeAction, _ := result["next_safe_action"].(supervisorRecommendedAction)
+		if nextSafeAction.Target != fmt.Sprintf("tarea:%d", tareaCriticaID) {
+			t.Fatalf("next_safe_action inesperada: %+v", nextSafeAction)
+		}
+		safeQueue, _ := result["safe_action_queue"].([]supervisorRecommendedAction)
+		if len(safeQueue) == 0 || safeQueue[0].Target != fmt.Sprintf("tarea:%d", tareaCriticaID) {
+			t.Fatalf("safe_action_queue inesperada: %+v", safeQueue)
+		}
+		risk, _ := result["critical_project_risk"].(*workspaceAutonomyProjectSummary)
+		if risk == nil || risk.Project != "infra" || risk.Blocking != 15 {
+			t.Fatalf("critical_project_risk inesperado: %#v", result["critical_project_risk"])
+		}
+		if taskID, _ := result["task_id"].(int64); taskID != tareaCriticaID {
+			t.Fatalf("task_id inesperado: %#v", result)
+		}
+	})
+}
+
+func TestApplySupervisorNextActionExponeProyectoCriticoCanonico(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		prevListProjects := workspaceControlListProjects
+		prevCockpitBuilder := workspaceControlCockpitBuilder
+		prevDrift := openClawWorktreeDriftBuilder
+		prevNow := statusNowFunc
+		defer func() {
+			statusService = prev
+			workspaceControlListProjects = prevListProjects
+			workspaceControlCockpitBuilder = prevCockpitBuilder
+			openClawWorktreeDriftBuilder = prevDrift
+			statusNowFunc = prevNow
+		}()
+
+		openClawWorktreeDriftBuilder = func(status apiStatusResponse) ([]apiOpenClawWorktreeDrift, error) {
+			return nil, nil
+		}
+
+		projectLow := insertTestProyecto(t, "webapp", "webapp", "/tmp/webapp")
+		projectHigh := insertTestProyecto(t, "infra", "infra", "/tmp/infra")
+		tareaLibreID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Dispatch low risk",
+			Descripcion: "No debe ganar si el proyecto crítico es otro",
+			ProyectoID:  &projectLow,
+			Modulo:      "web",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea libre: %v", err)
+		}
+		tareaCriticaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Release API retenida",
+			Descripcion: "Debe ejecutarse primero por riesgo canónico",
+			ProyectoID:  &projectHigh,
+			Modulo:      "api",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea crítica: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+			t.Fatalf("registrar Codex2: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET estado='en_progreso', agente='Codex2' WHERE id=?`, tareaCriticaID); err != nil {
+			t.Fatalf("preparar tarea crítica retenida: %v", err)
+		}
+
+		now := time.Now().UTC()
+		statusNowFunc = func() time.Time { return now }
+		snapshotStatus := apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex2", Rol: "programador", Activo: false, EstadoCuota: "enfriamiento"},
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			TareasPorEstado: map[string]int{
+				string(db.TareaLibre): 1,
+			},
+			TareasActivas: []tareaLite{
+				{ID: tareaCriticaID, Estado: db.TareaEnProgreso, Titulo: "Release API retenida", Agente: "Codex2", Modulo: "api", Prioridad: db.PrioridadAlta},
+			},
+		}
+		statusService = stubStatusService{response: snapshotStatus}
+		storeStatusSnapshotWithTTL(snapshotStatus, now, 5*time.Minute)
+
+		workspaceControlListProjects = func() ([]map[string]any, error) {
+			return []map[string]any{
+				{"slug": "webapp"},
+				{"slug": "infra"},
+			}, nil
+		}
+		workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+			switch strings.TrimSpace(slug) {
+			case "infra":
+				return &apiProyectoCockpit{
+					Proyecto:                &db.Proyecto{Slug: "infra"},
+					TareasPorEstado:         map[string]int{string(db.TareaBloqueada): 1},
+					ReviewGatesAbiertas:     1,
+					RuntimeOrdersAbiertas:   1,
+					RuntimeMailboxPendiente: 1,
+					PropuestasAbiertas:      1,
+				}, nil
+			case "webapp":
+				return &apiProyectoCockpit{
+					Proyecto: &db.Proyecto{Slug: "webapp"},
+				}, nil
+			default:
+				return nil, nil
+			}
+		}
+
+		result, err := applySupervisorNextAction("OpenClaw")
+		if err != nil {
+			t.Fatalf("applySupervisorNextAction: %v", err)
+		}
+		if queueKind, _ := result["queue_kind"].(string); queueKind != "safe" {
+			t.Fatalf("queue_kind inesperado: %#v", result["queue_kind"])
+		}
+		nextSafeAction, _ := result["next_safe_action"].(supervisorRecommendedAction)
+		if nextSafeAction.Target != fmt.Sprintf("tarea:%d", tareaCriticaID) {
+			t.Fatalf("next_safe_action inesperada: %+v", nextSafeAction)
+		}
+		risk, _ := result["critical_project_risk"].(*workspaceAutonomyProjectSummary)
+		if risk == nil || risk.Project != "infra" || risk.Blocking != 15 {
+			t.Fatalf("critical_project_risk inesperado: %#v", result["critical_project_risk"])
+		}
+		if taskID, _ := result["task_id"].(int64); taskID != tareaCriticaID {
+			t.Fatalf("la next_action debería aplicar primero la tarea crítica, got=%#v", result)
+		}
+
+		tareaLibre, err := db.GetTarea(tareaLibreID)
+		if err != nil {
+			t.Fatalf("get tarea libre: %v", err)
+		}
+		if tareaLibre.Estado != db.TareaLibre {
+			t.Fatalf("la tarea libre no debería ejecutarse primero: %+v", tareaLibre)
 		}
 	})
 }
@@ -3633,6 +6455,59 @@ func TestMCPResourceReadProyectoIncluyeWorktreesYAsignaciones(t *testing.T) {
 			t.Fatalf("faltan asignaciones en el recurso: %s", text)
 		}
 	})
+}
+
+func TestMCPResourceReadWorkspaceControlIncluyeResumenGlobal(t *testing.T) {
+	prevStatus := statusService
+	prevProjects := workspaceControlListProjects
+	prevCockpit := workspaceControlCockpitBuilder
+	defer func() {
+		statusService = prevStatus
+		workspaceControlListProjects = prevProjects
+		workspaceControlCockpitBuilder = prevCockpit
+	}()
+
+	statusService = stubStatusService{response: apiStatusResponse{
+		TareasPorEstado: map[string]int{"en_progreso": 2},
+		DeudaDispatch:   deudaDispatchResumen{Total: 1, Pendientes: 1},
+		Autonomia: autonomiaResumen{
+			Supervisando: 1,
+			Count:        1,
+			ByKind:       map[string]int{"task_reassigned": 1},
+		},
+		WorkersConectados:   2,
+		WorkersTrabajando:   1,
+		SupervisoresActivos: 1,
+	}}
+	workspaceControlListProjects = func() ([]map[string]any, error) {
+		return []map[string]any{{"slug": "orquestador"}}, nil
+	}
+	workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+		ts := time.Date(2026, 4, 24, 15, 0, 0, 0, time.UTC)
+		return &apiProyectoCockpit{
+			Proyecto:        &db.Proyecto{Slug: slug, Nombre: "Orquestador"},
+			TareasPorEstado: map[string]int{"en_progreso": 2},
+			AutonomyEvents:  1,
+			AutonomyByKind:  map[string]int{"task_reassigned": 1},
+			AutonomyLastAt:  &ts,
+			Autonomy: []autonomyEventSummary{{
+				Kind:        "task_reassigned",
+				CreatedAt:   ts,
+				TargetAgent: "Codex4",
+			}},
+		}, nil
+	}
+
+	contents, err := readMCPResource("orquesta://workspace/control")
+	if err != nil {
+		t.Fatalf("readMCPResource workspace/control: %v", err)
+	}
+	text, _ := contents[0]["text"].(string)
+	for _, token := range []string{`"active_projects": 1`, `"workers_conectados": 2`, `"task_reassigned"`, `"orquestador"`} {
+		if !strings.Contains(text, token) {
+			t.Fatalf("falta %q en resource workspace control: %s", token, text)
+		}
+	}
 }
 
 func TestMCPToolListaProyectosFiltrados(t *testing.T) {

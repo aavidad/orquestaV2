@@ -151,6 +151,18 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert supervisor pipeline: %v", err)
 	}
+	if _, err := db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
+		Supervisor:   "OpenClaw",
+		ProyectoSlug: "orquestador",
+		SessionID:    "sess-openclaw-web",
+		ThreadID:     "slice-openclaw-web-1",
+		SubagentName: "OpenClaw-orquestador-implementacion-slice-web",
+		SubagentType: "general-purpose",
+		Status:       "completed",
+		MetadataJSON: `{"source":"pipeline_local_parallel","task_id":530,"slice_index":1,"slice_total":2,"pipeline_parent_followup_dispatched":true,"pipeline_parent_followup_phase":"revision","pipeline_parent_followup_action":"avanzar_fase","pipeline_parent_followup_git_merge_id":91}`,
+	}); err != nil {
+		t.Fatalf("upsert supervisor subagent: %v", err)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/openclaw", webHandlerOpenClaw)
@@ -186,6 +198,10 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 		"Candidatas para reuse/spawn",
 		"Subagentes explícitos",
 		"Pipeline del supervisor",
+		"sidecar paralelo",
+		"follow-up revision",
+		"pipeline_local_parallel",
+		"slice 1/2",
 		"Guidance durable pendiente",
 		"autopilot",
 		"sess-openclaw-web",

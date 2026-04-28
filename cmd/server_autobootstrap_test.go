@@ -193,6 +193,25 @@ func TestLoadServerAutobootstrapConfigFiltraNoCodex(t *testing.T) {
 	}
 }
 
+func TestLoadServerAutobootstrapConfigFiltraPrimeDelPoolNormal(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.ConfigSet("server_autobootstrap_supervisor_agent", "CodexPg1"); err != nil {
+		t.Fatalf("config supervisor: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_worker_agents", "Codex2,CodexPg1,Codex3"); err != nil {
+		t.Fatalf("config workers: %v", err)
+	}
+
+	cfg := loadServerAutobootstrapConfig()
+	if cfg.SupervisorAgent != "CodexPg1" {
+		t.Fatalf("supervisor explicito no deberia filtrarse por ser prime: %+v", cfg)
+	}
+	if got := strings.Join(cfg.WorkerAgents, ","); got != "Codex2,Codex3" {
+		t.Fatalf("workers deberian excluir prime del pool normal, got=%q", got)
+	}
+}
+
 func TestAgenteYaBootstrappeadoServidorDetectaMailboxDurablePendiente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	t.Setenv("PWD", tmp)
@@ -276,5 +295,72 @@ func TestAgenteYaBootstrappeadoServidorCuentaHandleOperativoSinSesionActiva(t *t
 	}
 	if !ok {
 		t.Fatal("deberia detectar bootstrap por handle operativo reciente")
+	}
+}
+
+func TestBootstrapServerAutonomyReconcilaNotasFinishAppAunqueAutobootstrapEsteDesactivado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	t.Setenv("PWD", tmp)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "repo"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:        proyectoID,
+		Enabled:           true,
+		SupervisorAgente:  "Codex2",
+		ReviewerAgente:    "Codex3",
+		MaxWorkers:        4,
+		AutoCreateTasks:   true,
+		ReserveSupervisor: true,
+		ReserveReviewer:   true,
+		EstadoAutonomia:   db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Cerrar app completa",
+		Descripcion: "Finish app con notas stale",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas: `autonomia:finish_app
+autonomia_persistente_v1:
+  enabled: true
+  supervisor_agente: Codex1
+  reviewer_agente: Codex2
+  max_workers: 4
+  auto_create_tasks: true`,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_enabled", "false"); err != nil {
+		t.Fatalf("config disabled: %v", err)
+	}
+
+	if err := bootstrapServerAutonomy(); err != nil {
+		t.Fatalf("bootstrap server autonomy: %v", err)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil {
+		t.Fatal("tarea nil")
+	}
+	if !strings.Contains(tarea.Notas, "supervisor_agente: Codex2") || !strings.Contains(tarea.Notas, "reviewer_agente: Codex3") {
+		t.Fatalf("notas finish_app no reconciliadas: %s", tarea.Notas)
+	}
+	if strings.Contains(tarea.Notas, "supervisor_agente: Codex1") {
+		t.Fatalf("supervisor stale sigue presente: %s", tarea.Notas)
 	}
 }

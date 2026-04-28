@@ -149,6 +149,22 @@ func runtimeOrdersHotIndexSyncByID(id int64) error {
 	return nil
 }
 
+func runtimeOrdersHotIndexGetByID(id int64) (*RuntimeOrder, bool, error) {
+	if id <= 0 {
+		return nil, false, nil
+	}
+	if err := runtimeOrdersHotIndexEnsureLoaded(); err != nil {
+		return nil, false, err
+	}
+	runtimeOrdersHotIndex.mu.RLock()
+	defer runtimeOrdersHotIndex.mu.RUnlock()
+	order := runtimeOrdersHotIndex.byID[id]
+	if order == nil {
+		return nil, false, nil
+	}
+	return cloneRuntimeOrder(order), true, nil
+}
+
 func runtimeOrdersHotIndexSyncIDs(ids ...int64) error {
 	seen := make(map[int64]struct{}, len(ids))
 	for _, id := range ids {
@@ -259,6 +275,13 @@ func listarRuntimeOrdersVivasDesdeDB() ([]*RuntimeOrder, error) {
 }
 
 func ListarRuntimeOrdersVivas(filter FiltroRuntimeOrders) ([]*RuntimeOrder, error) {
+	if filter.Agente != nil {
+		agenteCanonico, err := CanonicalizeAgentName(*filter.Agente)
+		if err != nil {
+			return nil, err
+		}
+		filter.Agente = &agenteCanonico
+	}
 	if filter.Estado != nil && !runtimeOrderEstadoVivo(*filter.Estado) {
 		return []*RuntimeOrder{}, nil
 	}
@@ -285,6 +308,55 @@ func ListarRuntimeOrdersVivas(filter FiltroRuntimeOrders) ([]*RuntimeOrder, erro
 		out = out[:filter.Limit]
 	}
 	return out, nil
+}
+
+func TieneRuntimeOrdersVivas(filter FiltroRuntimeOrders) (bool, error) {
+	if filter.Agente != nil {
+		agenteCanonico, err := CanonicalizeAgentName(*filter.Agente)
+		if err != nil {
+			return false, err
+		}
+		filter.Agente = &agenteCanonico
+	}
+	if filter.Estado != nil && !runtimeOrderEstadoVivo(*filter.Estado) {
+		return false, nil
+	}
+	if err := runtimeOrdersHotIndexEnsureLoaded(); err != nil {
+		return false, err
+	}
+	runtimeOrdersHotIndex.mu.RLock()
+	defer runtimeOrdersHotIndex.mu.RUnlock()
+	if filter.Agente != nil && filter.ProyectoID != nil {
+		ids := runtimeOrdersHotIndex.byAgentProject[runtimeOrderHotAgentProjectKey(*filter.Agente, filter.ProyectoID)]
+		for id := range ids {
+			order := runtimeOrdersHotIndex.byID[id]
+			if order != nil && runtimeOrderMatchesLiveFilter(order, filter) {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+	if filter.Agente != nil {
+		ids := runtimeOrdersHotIndex.byAgent[strings.TrimSpace(*filter.Agente)]
+		for id := range ids {
+			order := runtimeOrdersHotIndex.byID[id]
+			if order != nil && runtimeOrderMatchesLiveFilter(order, filter) {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+	if filter.Estado != nil {
+		ids := runtimeOrdersHotIndex.byState[strings.TrimSpace(*filter.Estado)]
+		for id := range ids {
+			order := runtimeOrdersHotIndex.byID[id]
+			if order != nil && runtimeOrderMatchesLiveFilter(order, filter) {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+	return len(runtimeOrdersHotIndex.byID) > 0, nil
 }
 
 func runtimeOrdersHotIndexCandidatesLocked(filter FiltroRuntimeOrders) []*RuntimeOrder {
@@ -315,6 +387,53 @@ func runtimeOrdersFromIDSetLocked(ids map[int64]struct{}) []*RuntimeOrder {
 		}
 	}
 	return out
+}
+
+func runtimeOrdersHotIndexExists(filter FiltroRuntimeOrders, excludeID int64) (bool, error) {
+	if filter.Estado != nil && !runtimeOrderEstadoVivo(*filter.Estado) {
+		return false, nil
+	}
+	if err := runtimeOrdersHotIndexEnsureLoaded(); err != nil {
+		return false, err
+	}
+
+	runtimeOrdersHotIndex.mu.RLock()
+	defer runtimeOrdersHotIndex.mu.RUnlock()
+
+	checkOrder := func(order *RuntimeOrder) bool {
+		if order == nil || order.ID == excludeID {
+			return false
+		}
+		return runtimeOrderMatchesLiveFilter(order, filter)
+	}
+
+	switch {
+	case filter.Agente != nil && filter.ProyectoID != nil:
+		for id := range runtimeOrdersHotIndex.byAgentProject[runtimeOrderHotAgentProjectKey(*filter.Agente, filter.ProyectoID)] {
+			if checkOrder(runtimeOrdersHotIndex.byID[id]) {
+				return true, nil
+			}
+		}
+	case filter.Agente != nil:
+		for id := range runtimeOrdersHotIndex.byAgent[strings.TrimSpace(*filter.Agente)] {
+			if checkOrder(runtimeOrdersHotIndex.byID[id]) {
+				return true, nil
+			}
+		}
+	case filter.Estado != nil:
+		for id := range runtimeOrdersHotIndex.byState[strings.TrimSpace(*filter.Estado)] {
+			if checkOrder(runtimeOrdersHotIndex.byID[id]) {
+				return true, nil
+			}
+		}
+	default:
+		for _, order := range runtimeOrdersHotIndex.byID {
+			if checkOrder(order) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func runtimeOrderMatchesLiveFilter(order *RuntimeOrder, filter FiltroRuntimeOrders) bool {

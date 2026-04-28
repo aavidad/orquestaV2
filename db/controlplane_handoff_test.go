@@ -476,6 +476,158 @@ func TestCrearHandoffAgenteStaleToleraRuntimeDestinoStale(t *testing.T) {
 	}
 }
 
+func TestCrearHandoffAgenteStaleDestinoSinHandleOperativoEncolaStart(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "handoff-sin-handle",
+		Nombre:  "handoff-sin-handle",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{Agente: "Codex1", ProyectoID: &proyectoID}); err != nil {
+		t.Fatalf("IniciarSesionContexto origen: %v", err)
+	}
+	sesionDestino, err := IniciarSesionContexto(SesionInicio{
+		Agente:     "Codex2",
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto destino: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='cerrado' WHERE sesion_id=?`, sesionDestino.ID); err != nil {
+		t.Fatalf("cerrar handles destino: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='cerrado' WHERE agente=?`, "Codex1"); err != nil {
+		t.Fatalf("cerrar handles origen: %v", err)
+	}
+
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:     "Revisar handoff destino sin handle",
+		Modulo:     "orquestador",
+		Prioridad:  PrioridadAlta,
+		CreadoPor:  "alberto",
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("TomarTarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("IniciarTarea: %v", err)
+	}
+
+	if _, err := CrearHandoffAgenteStale("Codex1", "Codex2", &tareaID, "watchdog", "continuar", ""); err != nil {
+		t.Fatalf("CrearHandoffAgenteStale destino sin handle operativo: %v", err)
+	}
+
+	agente := "Codex2"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrders: %v", err)
+	}
+	if len(orders) != 2 {
+		t.Fatalf("ordenes destino inesperadas sin handle operativo: %+v", orders)
+	}
+	tipos := map[string]int{}
+	for _, order := range orders {
+		if order != nil {
+			tipos[order.Tipo]++
+		}
+	}
+	if tipos["handoff"] != 1 || tipos["start"] != 1 || tipos["stop"] != 0 {
+		t.Fatalf("tipos de orden destino inesperados sin handle operativo: %+v", tipos)
+	}
+}
+
+func TestProcesarBootstrapRuntimeOrdersActivosBatchEncolaStartParaHandoffSinHandleOperativo(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "handoff-bootstrap-legacy",
+		Nombre:  "handoff-bootstrap-legacy",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{Agente: "Codex1", ProyectoID: &proyectoID}); err != nil {
+		t.Fatalf("IniciarSesionContexto origen: %v", err)
+	}
+	sesionDestino, err := IniciarSesionContexto(SesionInicio{
+		Agente:     "Codex2",
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto destino: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='cerrado' WHERE sesion_id=?`, sesionDestino.ID); err != nil {
+		t.Fatalf("cerrar handles destino: %v", err)
+	}
+	payloadJSON, err := json.Marshal(HandoffPayload{
+		AgenteOrigen:       "Codex1",
+		AgenteDestino:      "Codex2",
+		Motivo:             "legacy_without_start",
+		ResumenContinuidad: "continuar",
+	})
+	if err != nil {
+		t.Fatalf("marshal handoff payload: %v", err)
+	}
+	if _, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoID,
+		Tipo:        "handoff",
+		PayloadJSON: string(payloadJSON),
+	}); err != nil {
+		t.Fatalf("EncolarRuntimeOrder handoff legacy: %v", err)
+	}
+
+	processed, err := procesarBootstrapRuntimeOrdersActivosBatch()
+	if err != nil {
+		t.Fatalf("procesarBootstrapRuntimeOrdersActivosBatch: %v", err)
+	}
+	if processed != 1 {
+		t.Fatalf("processed inesperado: %d", processed)
+	}
+
+	agente := "Codex2"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrders: %v", err)
+	}
+	tipos := map[string]int{}
+	for _, order := range orders {
+		if order != nil {
+			tipos[order.Tipo]++
+		}
+	}
+	if tipos["handoff"] != 1 || tipos["start"] != 1 {
+		t.Fatalf("tipos de orden tras bootstrap legacy inesperados: %+v", tipos)
+	}
+}
+
 func TestCrearHandoffAgenteVivoRechazaDestinoConGobernanzaIncompatible(t *testing.T) {
 	prepararDBTemporal(t)
 

@@ -3,7 +3,7 @@ package db
 import "strings"
 
 // schema spec mínimo para secciones que ya queremos renderizar por backend sin
-// depender de reemplazos de texto sobre un DDL SQLite-first.
+// depender de reemplazos de texto sobre un DDL base del dialecto heredado.
 type schemaColumnType string
 
 const (

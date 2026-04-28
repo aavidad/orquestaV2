@@ -12,6 +12,8 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"log"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -26,6 +28,18 @@ type Service struct {
 	Config    ConfigRepository
 	Workspace WorkspaceManager
 }
+
+type projectPrepareLiteGetter interface {
+	GetByRefPrepareLite(ref string) (*Project, error)
+}
+
+type projectPrepareLiteAgentGetter interface {
+	GetByRefPrepareLiteForAgent(ref, agent string) (*Project, error)
+}
+
+const defaultWorktreeRootName = ".orquesta-worktrees"
+
+var prepareWorktreeStoreTimeout = 750 * time.Millisecond
 
 func (s *Service) ResolveProjectID(ref string) (*int64, error) {
 	ref = strings.TrimSpace(ref)
@@ -127,14 +141,27 @@ func (s *Service) PrepareWorktree(in PrepareWorktreeInput) (*Worktree, error) {
 	if s.Workspace == nil {
 		return nil, fmt.Errorf("workspace manager no configurado")
 	}
-	project, err := s.Projects.GetByRef(in.ProjectRef)
-	if err != nil {
-		return nil, err
-	}
 	if strings.TrimSpace(in.Agent) == "" {
 		return nil, fmt.Errorf("agente obligatorio")
 	}
-	rootName := s.worktreeRootName()
+	start := time.Now()
+	worktreeDebugf("PrepareWorktree start project_ref=%s agent=%s task_id=%v", strings.TrimSpace(in.ProjectRef), strings.TrimSpace(in.Agent), in.TaskID)
+	var (
+		project *Project
+		err     error
+	)
+	if lite, ok := s.Projects.(projectPrepareLiteAgentGetter); ok {
+		project, err = lite.GetByRefPrepareLiteForAgent(in.ProjectRef, in.Agent)
+	} else if lite, ok := s.Projects.(projectPrepareLiteGetter); ok {
+		project, err = lite.GetByRefPrepareLite(in.ProjectRef)
+	} else {
+		project, err = s.Projects.GetByRef(in.ProjectRef)
+	}
+	if err != nil {
+		return nil, err
+	}
+	worktreeDebugf("PrepareWorktree step=get_project duration=%s project_id=%d root=%s", time.Since(start).Round(time.Millisecond), project.ID, strings.TrimSpace(project.RootPath))
+	rootName := defaultWorktreeRootName
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		name = buildWorktreeName(project.Slug, in.Agent, in.TaskID)
@@ -149,9 +176,15 @@ func (s *Service) PrepareWorktree(in PrepareWorktreeInput) (*Worktree, error) {
 	}
 	worktreeRoot := filepath.Join(project.RootPath, rootName)
 	worktreePath := filepath.Join(worktreeRoot, name)
+	stepStart := time.Now()
 	if err := s.Workspace.CreateWorktree(project.RootPath, worktreePath, branch, baseRef); err != nil {
-		return nil, err
+		if shouldReusePhysicalWorktree(err, worktreePath) {
+			worktreeDebugf("PrepareWorktree step=reuse_existing_physical duration=%s path=%s branch=%s", time.Since(stepStart).Round(time.Millisecond), worktreePath, branch)
+		} else {
+			return nil, err
+		}
 	}
+	worktreeDebugf("PrepareWorktree step=create_worktree duration=%s path=%s branch=%s", time.Since(stepStart).Round(time.Millisecond), worktreePath, branch)
 	worktree := &Worktree{
 		ProjectID: project.ID,
 		TaskID:    in.TaskID,
@@ -164,7 +197,51 @@ func (s *Service) PrepareWorktree(in PrepareWorktreeInput) (*Worktree, error) {
 		State:     WorktreeActive,
 		Reason:    strings.TrimSpace(in.Reason),
 	}
-	return s.Worktrees.Create(worktree)
+	stepStart = time.Now()
+	created, err := s.createWorktreeRecordWithTimeout(worktree)
+	worktreeDebugf("PrepareWorktree step=store_create duration=%s err=%v synthetic=%t total=%s", time.Since(stepStart).Round(time.Millisecond), err, created != nil && created.ID <= 0, time.Since(start).Round(time.Millisecond))
+	return created, err
+}
+
+func shouldReusePhysicalWorktree(err error, worktreePath string) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	if !strings.Contains(msg, "already used by worktree") {
+		return false
+	}
+	info, statErr := os.Stat(strings.TrimSpace(worktreePath))
+	return statErr == nil && info.IsDir()
+}
+
+func (s *Service) createWorktreeRecordWithTimeout(worktree *Worktree) (*Worktree, error) {
+	if worktree == nil {
+		return nil, fmt.Errorf("worktree nil")
+	}
+	type result struct {
+		worktree *Worktree
+		err      error
+	}
+	done := make(chan result, 1)
+	go func() {
+		created, err := s.Worktrees.Create(worktree)
+		done <- result{worktree: created, err: err}
+	}()
+	select {
+	case res := <-done:
+		return res.worktree, res.err
+	case <-time.After(prepareWorktreeStoreTimeout):
+		if !WorktreePathUsable(worktree.Path) {
+			return nil, fmt.Errorf("timeout persistiendo worktree tras %s", prepareWorktreeStoreTimeout)
+		}
+		now := time.Now().UTC()
+		copia := *worktree
+		copia.CreatedAt = now
+		copia.UpdatedAt = now
+		worktreeDebugf("PrepareWorktree step=store_create_timeout path=%s timeout=%s", strings.TrimSpace(worktree.Path), prepareWorktreeStoreTimeout)
+		return &copia, nil
+	}
 }
 
 func (s *Service) CloseWorktree(id int64, remove bool, reason string) (*Worktree, error) {
@@ -201,11 +278,11 @@ func (s *Service) defaultLeaseSeconds() int {
 
 func (s *Service) worktreeRootName() string {
 	if s.Config == nil {
-		return ".orquesta-worktrees"
+		return defaultWorktreeRootName
 	}
 	raw, err := s.Config.Get("worktree_root_name")
 	if err != nil || strings.TrimSpace(raw) == "" {
-		return ".orquesta-worktrees"
+		return defaultWorktreeRootName
 	}
 	return strings.TrimSpace(raw)
 }
@@ -247,4 +324,22 @@ func sanitizeName(s string) string {
 		return "work"
 	}
 	return s
+}
+
+func worktreeDebugf(format string, args ...any) {
+	if !worktreeDebugEnabled() {
+		return
+	}
+	log.Printf("orquesta[prepare-worktree] "+format, args...)
+}
+
+func worktreeDebugEnabled() bool {
+	for _, key := range []string{"ORQUESTA_DEBUG_PREPARE", "ORQUESTA_DEBUG"} {
+		value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+		switch value {
+		case "1", "true", "yes", "on", "si", "sí":
+			return true
+		}
+	}
+	return false
 }

@@ -6,6 +6,8 @@ After=network.target
 Type=simple
 User=alberto
 WorkingDirectory=/home/alberto/Trabajo/orquesta
+Environment=ORQUESTA_REQUIRE_EXPLICIT_PERSISTENCE=1
+EnvironmentFile=-/home/alberto/Trabajo/orquesta/orquesta.env
 ExecStart=/home/alberto/Trabajo/orquesta/orquesta serve --puerto 16543
 Restart=always
 RestartSec=10

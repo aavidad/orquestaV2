@@ -53,6 +53,9 @@ var serverRunCmd = &cobra.Command{
 		if strings.TrimSpace(security.TLSCert) != "" || strings.TrimSpace(security.TLSKey) != "" || strings.TrimSpace(security.TLSClientCA) != "" {
 			return fmt.Errorf("server run no soporta TLS; usa 'orquesta serve' para exposición HTTPS/mTLS")
 		}
+		if info, err := findExistingServerForCurrentStorage(); err == nil && info != nil {
+			return fmt.Errorf("ya existe un servidor activo para este storage en %s (pid=%d)", rpclocal.BaseURL(info.Addr), info.PID)
+		}
 		return arrancarServidorUnificado(listenAddr, "server", false, resolveServerDebugOptions(cmd), security)
 	},
 }
@@ -83,6 +86,12 @@ var serverStartCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		addr, _ := cmd.Flags().GetString("addr")
 		baseURL := rpclocal.BaseURL(addr)
+		if info, err := findExistingServerForCurrentStorage(); err == nil && info != nil {
+			if stableErr := waitLocalServerStable(rpclocal.BaseURL(info.Addr), 3*time.Second); stableErr == nil {
+				fmt.Printf("Servidor ya activo en %s (pid=%d)\n", rpclocal.BaseURL(info.Addr), info.PID)
+				return nil
+			}
+		}
 		if info, _, err := loadServerInfoWithHealthFallback(baseURL); err == nil {
 			if stableErr := waitLocalServerStable(rpclocal.BaseURL(info.Addr), 3*time.Second); stableErr == nil {
 				fmt.Printf("Servidor ya activo en %s (pid=%d)\n", rpclocal.BaseURL(info.Addr), info.PID)
@@ -354,6 +363,9 @@ func loadServerInfoWithHealthFallback(addr string) (*rpclocal.ServerInfo, bool, 
 			}
 			return info, false, nil
 		}
+		if !pidSigueVivo(info.PID) {
+			_ = rpclocal.RemoveState("")
+		}
 	}
 
 	if strings.TrimSpace(addr) == "" {
@@ -402,9 +414,14 @@ func currentServerStorageTarget() string {
 
 func serverPrepararSesionAllowedAgents(baseURL string) (map[string]struct{}, error) {
 	allowed := map[string]struct{}{}
-	add := func(name string) {
+	add := func(name string, allowPrime bool) {
 		name = strings.ToLower(strings.TrimSpace(name))
-		if name != "" && perteneceAFlotaOficialAutobootstrap(name) {
+		switch {
+		case name == "":
+			return
+		case allowPrime && perteneceAFamiliaCodexAutobootstrap(name):
+			allowed[name] = struct{}{}
+		case perteneceAFlotaOficialAutobootstrap(name):
 			allowed[name] = struct{}{}
 		}
 	}
@@ -415,10 +432,10 @@ func serverPrepararSesionAllowedAgents(baseURL string) (map[string]struct{}, err
 		return nil, err
 	}
 	supervisor := strings.TrimSpace(configResp.Config["server_autobootstrap_supervisor_agent"])
-	if !perteneceAFlotaOficialAutobootstrap(supervisor) {
+	if !perteneceAFamiliaCodexAutobootstrap(supervisor) {
 		supervisor = "Codex1"
 	}
-	add(supervisor)
+	add(supervisor, true)
 	workers := strings.TrimSpace(configResp.Config["server_autobootstrap_worker_agents"])
 	workersFiltrados := filtrarFlotaOficialAutobootstrap(splitServerAutobootstrapAgents(workers))
 	if len(workersFiltrados) == 0 {
@@ -426,7 +443,7 @@ func serverPrepararSesionAllowedAgents(baseURL string) (map[string]struct{}, err
 		workersFiltrados = splitServerAutobootstrapAgents(workers)
 	}
 	for _, item := range workersFiltrados {
-		add(item)
+		add(item, false)
 	}
 	return allowed, nil
 }
@@ -595,6 +612,11 @@ func executeViaLocalServer(args []string, stdout, stderr io.Writer) (bool, int, 
 }
 
 func ensureLocalServer(addr string) error {
+	if info, err := findExistingServerForCurrentStorage(); err == nil && info != nil {
+		if stableErr := waitLocalServerStable(rpclocal.BaseURL(info.Addr), 3*time.Second); stableErr == nil {
+			return nil
+		}
+	}
 	executable, err := os.Executable()
 	if err != nil {
 		executable = os.Args[0]
@@ -642,10 +664,67 @@ func ensureLocalServer(addr string) error {
 	return fmt.Errorf("timeout esperando al servidor local y su statefile. Log: %s", resumirServerLog(logPath))
 }
 
-func ensureServerInfoFromHealth(addr string) (*rpclocal.ServerInfo, error) {
-	if state, err := rpclocal.LoadServerInfo(); err == nil {
-		return state, nil
+func findExistingServerForCurrentStorage() (*rpclocal.ServerInfo, error) {
+	paths, err := filepath.Glob(filepath.Join(os.TempDir(), "orquesta-localrpc*.json"))
+	if err != nil {
+		return nil, err
 	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		info, err := loadServerInfoRaw(path)
+		if err != nil || info == nil || strings.TrimSpace(info.Addr) == "" {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), rpclocal.DefaultTimeout())
+		health, pingErr := rpclocal.NewClient(rpclocal.BaseURL(info.Addr), nil).Ping(ctx)
+		cancel()
+		if pingErr != nil || health == nil || !health.OK {
+			if !pidSigueVivo(info.PID) {
+				_ = os.Remove(path)
+			}
+			continue
+		}
+		if strings.TrimSpace(health.ScopeID) != "" && health.ScopeID != rpclocal.CurrentScopeID() {
+			continue
+		}
+		if err := validateHealthStorage(health); err != nil {
+			continue
+		}
+		return &rpclocal.ServerInfo{
+			Addr:          strings.TrimSpace(health.Addr),
+			PID:           health.PID,
+			Kind:          strings.TrimSpace(health.Kind),
+			ScopeID:       strings.TrimSpace(health.ScopeID),
+			DBPath:        legacyStorageTarget(health.StorageTarget, health.DBPath),
+			StorageDriver: strings.TrimSpace(health.StorageDriver),
+			StorageTarget: legacyStorageTarget(health.StorageTarget, health.DBPath),
+			StartedAt:     health.StartedAt,
+			Version:       strings.TrimSpace(health.Version),
+		}, nil
+	}
+	return nil, nil
+}
+
+func loadServerInfoRaw(path string) (*rpclocal.ServerInfo, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil, fmt.Errorf("path obligatorio")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var info rpclocal.ServerInfo
+	if err := json.Unmarshal(data, &info); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(info.Addr) == "" {
+		return nil, fmt.Errorf("state sin addr")
+	}
+	return &info, nil
+}
+
+func ensureServerInfoFromHealth(addr string) (*rpclocal.ServerInfo, error) {
 	info, recovered, err := loadServerInfoWithHealthFallback(addr)
 	if err != nil {
 		return nil, err

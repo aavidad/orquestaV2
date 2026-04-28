@@ -27,7 +27,7 @@ func TestResolveConfigSQLitePorDefectoUsaPathDelCallback(t *testing.T) {
 	if cfg.Path != "/tmp/orquesta.db" {
 		t.Fatalf("path inesperado: %s", cfg.Path)
 	}
-	if cfg.DSN != "/tmp/orquesta.db?_journal_mode=WAL&_synchronous=NORMAL&_wal_autocheckpoint=100&_foreign_keys=on&_busy_timeout=5000" {
+	if cfg.DSN != "/tmp/orquesta.db?_journal_mode=WAL&_synchronous=NORMAL&_wal_autocheckpoint=100&_foreign_keys=on&_busy_timeout=30000" {
 		t.Fatalf("dsn inesperado: %s", cfg.DSN)
 	}
 	if cfg.MaxOpenConns != 1 {
@@ -48,6 +48,36 @@ func TestResolveConfigFallaSinConectorNiTargetExplicito(t *testing.T) {
 
 	if _, err := ResolveConfig(func() string { return "" }); err == nil {
 		t.Fatalf("se esperaba error sin conector ni target explicito")
+	}
+}
+
+func TestResolveConfigRequireExplicitPersistenceNoUsaFallbackLocal(t *testing.T) {
+	t.Setenv("ORQUESTA_REQUIRE_EXPLICIT_PERSISTENCE", "1")
+	t.Setenv("ORQUESTA_PERSISTENCE_CONNECTOR", "")
+	t.Setenv("ORQUESTA_DB_CONNECTOR", "")
+	t.Setenv("ORQUESTA_DB_DRIVER", "")
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB_DSN", "")
+	t.Setenv("ORQUESTA_DB", "")
+
+	if _, err := ResolveConfig(func() string { return "/tmp/orquesta.db" }); err == nil {
+		t.Fatalf("se esperaba error al exigir persistencia explicita")
+	}
+}
+
+func TestResolveConfigRequireExplicitPersistenceAceptaPostgresPorDSN(t *testing.T) {
+	t.Setenv("ORQUESTA_REQUIRE_EXPLICIT_PERSISTENCE", "1")
+	t.Setenv("ORQUESTA_DB_DRIVER", "")
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB_DSN", "postgres://user:pass@localhost/orquesta?sslmode=disable")
+	t.Setenv("ORQUESTA_DB", "")
+
+	cfg, err := ResolveConfig(func() string { return "/tmp/orquesta.db" })
+	if err != nil {
+		t.Fatalf("ResolveConfig: %v", err)
+	}
+	if cfg.Driver != "postgres" {
+		t.Fatalf("driver inesperado: %s", cfg.Driver)
 	}
 }
 
@@ -170,7 +200,7 @@ func TestResolveConfigFallaSinDSNParaDriversExternos(t *testing.T) {
 
 func TestSQLiteDSNAniadeParametrosSinRomperQueryExistente(t *testing.T) {
 	got := SQLiteDSN("/tmp/orquesta.db?cache=shared")
-	want := "/tmp/orquesta.db?cache=shared&_journal_mode=WAL&_synchronous=NORMAL&_wal_autocheckpoint=100&_foreign_keys=on&_busy_timeout=5000"
+	want := "/tmp/orquesta.db?cache=shared&_journal_mode=WAL&_synchronous=NORMAL&_wal_autocheckpoint=100&_foreign_keys=on&_busy_timeout=30000"
 	if got != want {
 		t.Fatalf("dsn inesperado: %s", got)
 	}
@@ -214,7 +244,7 @@ func TestDisplayTargetMantienePathEnSQLite(t *testing.T) {
 	cfg := Config{
 		Driver: "sqlite",
 		Path:   "/tmp/orquesta.db",
-		DSN:    "/tmp/orquesta.db?_busy_timeout=5000",
+		DSN:    "/tmp/orquesta.db?_busy_timeout=30000",
 	}
 
 	got := DisplayTarget(cfg)

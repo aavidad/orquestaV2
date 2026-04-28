@@ -22,6 +22,15 @@ chmod +x "$BIN_NAME"
 echo "📁 Creando estructura de logs..."
 mkdir -p "$APP_DIR/logs"
 
+if [ ! -f "$APP_DIR/orquesta.env" ]; then
+cat > "$APP_DIR/orquesta.env" <<'EOF'
+# Persistencia explicita obligatoria para el daemon.
+# Rellena estos valores antes de arrancar en producción.
+ORQUESTA_DB_DRIVER=postgres
+ORQUESTA_DB_DSN=postgres://usuario:password@localhost/orquesta?sslmode=disable
+EOF
+fi
+
 # 2.1. Provisionar skills por defecto para Codex
 echo "🪓 Provisionando skills de Codex..."
 bash "$APP_DIR/scripts/provision_codex_skills.sh"
@@ -37,6 +46,8 @@ After=network.target
 Type=simple
 User=$USER_NAME
 WorkingDirectory=$APP_DIR
+Environment=ORQUESTA_REQUIRE_EXPLICIT_PERSISTENCE=1
+EnvironmentFile=-$APP_DIR/orquesta.env
 ExecStart=$APP_DIR/$BIN_NAME serve --puerto 16543
 Restart=always
 RestartSec=5

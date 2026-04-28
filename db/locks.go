@@ -18,7 +18,7 @@ import (
 
 type CoordinationLockSQLRepository struct{}
 
-type SQLiteLockRepository struct {
+type CoordinationLockDBRepository struct {
 	CoordinationLockSQLRepository
 }
 

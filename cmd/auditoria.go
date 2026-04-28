@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
@@ -22,6 +23,7 @@ var auditListarCmd = &cobra.Command{
 		accion, _ := cmd.Flags().GetString("accion")
 		entidad, _ := cmd.Flags().GetString("entidad")
 		limite, _ := cmd.Flags().GetInt("limite")
+		desdeRaw, _ := cmd.Flags().GetString("desde")
 
 		f := db.FiltroAuditoria{Limite: limite}
 		if agente != "" {
@@ -44,6 +46,13 @@ var auditListarCmd = &cobra.Command{
 		}
 		if strings.TrimSpace(entidad) != "" {
 			query.Set("entidad", strings.TrimSpace(entidad))
+		}
+		if strings.TrimSpace(desdeRaw) != "" {
+			desde, err := parseStatsSince(strings.TrimSpace(desdeRaw))
+			if err != nil {
+				return err
+			}
+			query.Set("desde", desde.Format(time.RFC3339))
 		}
 
 		var resp apiAuditResponse
@@ -87,6 +96,7 @@ func init() {
 	auditListarCmd.Flags().String("agente", "", "Filtrar por agente")
 	auditListarCmd.Flags().String("accion", "", "Filtrar por acción")
 	auditListarCmd.Flags().String("entidad", "", "Filtrar por entidad (tarea, propuesta, etc.)")
+	auditListarCmd.Flags().String("desde", "", "Filtrar desde hace cuánto o desde timestamp RFC3339")
 	auditListarCmd.Flags().Int("limite", 50, "Número máximo de registros a mostrar")
 
 	auditCmd.AddCommand(auditListarCmd)

@@ -266,6 +266,111 @@ func TestRuntimeOrdersHotIndexRespetaFiltroPorTipo(t *testing.T) {
 	}
 }
 
+func TestRuntimeOrdersHotIndexGetByIDDevuelveCloneVivo(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "checkpoint",
+		PayloadJSON: `{}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar runtime order: %v", err)
+	}
+
+	got, ok, err := runtimeOrdersHotIndexGetByID(orderID)
+	if err != nil {
+		t.Fatalf("runtimeOrdersHotIndexGetByID: %v", err)
+	}
+	if !ok || got == nil || got.ID != orderID || got.Estado != "pendiente" {
+		t.Fatalf("runtime order viva inesperada: ok=%v got=%+v", ok, got)
+	}
+
+	got.Estado = "fallida"
+	got2, ok, err := runtimeOrdersHotIndexGetByID(orderID)
+	if err != nil {
+		t.Fatalf("runtimeOrdersHotIndexGetByID second: %v", err)
+	}
+	if !ok || got2 == nil || got2.Estado != "pendiente" {
+		t.Fatalf("deberia devolver clone independiente del indice: ok=%v got=%+v", ok, got2)
+	}
+}
+
+func TestRuntimeOrdersHotIndexExistsRespetaExcludeIDYTipos(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	stopID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "stop",
+		PayloadJSON: `{}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar stop: %v", err)
+	}
+	if _, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "checkpoint",
+		PayloadJSON: `{}`,
+	}); err != nil {
+		t.Fatalf("encolar checkpoint: %v", err)
+	}
+
+	exists, err := runtimeOrdersHotIndexExists(FiltroRuntimeOrders{
+		Agente:     stringsPtrTrimmed("Codex1"),
+		ProyectoID: &proyectoID,
+		Tipos:      []string{"stop", "start", "restart"},
+	}, 0)
+	if err != nil {
+		t.Fatalf("runtimeOrdersHotIndexExists: %v", err)
+	}
+	if !exists {
+		t.Fatalf("deberia detectar runtime order abierta por tipo")
+	}
+
+	exists, err = runtimeOrdersHotIndexExists(FiltroRuntimeOrders{
+		Agente:     stringsPtrTrimmed("Codex1"),
+		ProyectoID: &proyectoID,
+		Tipos:      []string{"stop", "start", "restart"},
+	}, stopID)
+	if err != nil {
+		t.Fatalf("runtimeOrdersHotIndexExists exclude: %v", err)
+	}
+	if exists {
+		t.Fatalf("no deberia contar la orden excluida")
+	}
+}
+
 func assertRuntimeOrdersHotIndexState(t *testing.T, wantDirty bool, id int64, estado string) {
 	t.Helper()
 	runtimeOrdersHotIndex.mu.RLock()

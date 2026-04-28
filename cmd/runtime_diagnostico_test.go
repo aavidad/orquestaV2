@@ -121,6 +121,41 @@ func TestRuntimeDiagnosticoUsaAPI(t *testing.T) {
 	}
 }
 
+func TestRuntimeDiagnosticoFiltraHandlesPorProyectoEnAPI(t *testing.T) {
+	var handlesProyecto string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/runtimes/tree", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeTreeResponse{})
+	})
+	mux.HandleFunc("/api/runtime-handles", func(w http.ResponseWriter, r *http.Request) {
+		handlesProyecto = strings.TrimSpace(r.URL.Query().Get("proyecto"))
+		_ = json.NewEncoder(w).Encode(apiRuntimeHandlesResponse{})
+	})
+	mux.HandleFunc("/api/runtime-orders", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeOrdersResponse{})
+	})
+	mux.HandleFunc("/api/runtime-mailbox", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeMailboxResponse{})
+	})
+	mux.HandleFunc("/api/runtime-checkpoints", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeCheckpointsResponse{})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	if _, ok, err := cargarRuntimeDiagnosticoDesdeAPI("Gemma1", "orquestador", 2); err != nil || !ok {
+		t.Fatalf("cargarRuntimeDiagnosticoDesdeAPI err=%v ok=%v", err, ok)
+	}
+	if handlesProyecto != "orquestador" {
+		t.Fatalf("runtime-handles deberia filtrarse por proyecto, got=%q", handlesProyecto)
+	}
+}
+
 func TestRuntimeDiagnosticoRequiereServidor(t *testing.T) {
 	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
 	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
@@ -770,6 +805,21 @@ func TestRuntimeDiagnosticoIssuesDetectaResumeOrderPendingYRestartLoop(t *testin
 	}
 	if issues[1].Code != "restart_loop" {
 		t.Fatalf("segundo issue inesperado: %+v", issues)
+	}
+}
+
+func TestRuntimeDiagnosticoTieneActividadVivaEnProyectoAceptaRuntimeDisponible(t *testing.T) {
+	data := &runtimeDiagnosticoData{
+		Runtimes: []runtimeRow{
+			{ID: 288, Agente: "Gemma1", Proyecto: "orquestador", Estado: "disponible"},
+			{ID: 289, Agente: "Gemma1", Proyecto: "api", Estado: "cerrado"},
+		},
+	}
+	if !runtimeDiagnosticoTieneActividadVivaEnProyecto(data, "orquestador") {
+		t.Fatalf("deberia considerar runtime disponible como actividad viva en el proyecto")
+	}
+	if runtimeDiagnosticoTieneActividadVivaEnProyecto(data, "demo") {
+		t.Fatalf("no deberia marcar proyecto ajeno sin runtime vivo")
 	}
 }
 

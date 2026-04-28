@@ -365,6 +365,7 @@ var runtimeTranscriptCmd = &cobra.Command{
 		signalsPending, _ := cmd.Flags().GetBool("signals-pending")
 		limit, _ := cmd.Flags().GetInt("limit")
 		rawView, _ := cmd.Flags().GetBool("raw")
+		desdeRaw, _ := cmd.Flags().GetString("desde")
 
 		query := url.Values{}
 		if strings.TrimSpace(agente) != "" {
@@ -399,6 +400,13 @@ var runtimeTranscriptCmd = &cobra.Command{
 		}
 		if limit > 0 {
 			query.Set("limit", strconv.Itoa(limit))
+		}
+		if strings.TrimSpace(desdeRaw) != "" {
+			desde, err := parseStatsSince(strings.TrimSpace(desdeRaw))
+			if err != nil {
+				return err
+			}
+			query.Set("desde", desde.Format(time.RFC3339))
 		}
 
 		if items, ok, err := cargarRuntimeTranscriptDesdeAPI(query); ok {
@@ -1211,6 +1219,26 @@ func runtimeDiagnosticoTieneActividadViva(data *runtimeDiagnosticoData) bool {
 	return false
 }
 
+func runtimeDiagnosticoTieneActividadVivaEnProyecto(data *runtimeDiagnosticoData, proyecto string) bool {
+	proyecto = strings.TrimSpace(proyecto)
+	if proyecto == "" {
+		return runtimeDiagnosticoTieneActividadViva(data)
+	}
+	if data == nil {
+		return false
+	}
+	for _, runtime := range data.Runtimes {
+		if !strings.EqualFold(strings.TrimSpace(runtime.Proyecto), proyecto) {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(runtime.Estado)) {
+		case "activo", "pausado", "esperando_io", "working", "ready", "running", "disponible", "available", "starting":
+			return true
+		}
+	}
+	return false
+}
+
 func imprimirRuntimeCheckpoint(cp *db.RuntimeCheckpoint) error {
 	if cp == nil {
 		fmt.Println("No hay checkpoints para ese agente.")
@@ -1934,6 +1962,7 @@ func init() {
 	runtimeTranscriptCmd.Flags().Int64("handle-id", 0, "Filtrar transcript por handle_id")
 	runtimeTranscriptCmd.Flags().Bool("signals-pending", false, "Mostrar solo señales pendientes de gestionar")
 	runtimeTranscriptCmd.Flags().Int("limit", 50, "Número máximo de líneas de transcript")
+	runtimeTranscriptCmd.Flags().String("desde", "", "Filtrar desde hace cuánto o desde timestamp RFC3339")
 	runtimeTranscriptCmd.Flags().Bool("raw", false, "Mostrar también ruido operativo/banner del runtime")
 	runtimeOrdenesCmd.Flags().String("agente", "", "Filtrar órdenes por agente")
 	runtimeOrdenesCmd.Flags().String("estado", "", "Filtrar órdenes por estado")

@@ -157,6 +157,11 @@ func runtimeHandleCanonicoRecienteConFallback(agente string, proyectoID *int64) 
 }
 
 func runtimeHandleOperativoRecienteConFallback(agente string, proyectoID *int64) (*RuntimeHandle, error) {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return nil, err
+	}
 	snapshot, err := runtimeHandleHotSnapshotOperativo()
 	if err != nil {
 		return nil, err

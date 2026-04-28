@@ -90,6 +90,13 @@ var proyectoVerCmd = &cobra.Command{
 		fmt.Printf("  Slug:      %s\n", p.Slug)
 		fmt.Printf("  Tipo:      %s\n", p.Tipo)
 		fmt.Printf("  Ruta ABS:  %s\n", p.RutaAbs)
+		fmt.Printf("  Origen:    %s\n", emptyDash(p.OrigenRepo))
+		if strings.TrimSpace(p.RemoteURL) != "" {
+			fmt.Printf("  Remote:    %s\n", p.RemoteURL)
+		}
+		if strings.TrimSpace(p.BranchBase) != "" {
+			fmt.Printf("  Base ref:  %s\n", p.BranchBase)
+		}
 		padre := "—"
 		if p.ParentID != nil {
 			if ok {
@@ -222,6 +229,10 @@ var proyectoMicrocicloCmd = &cobra.Command{
 			fmt.Printf("  Fase:      %s\n", resultado.Fase.Nombre)
 			fmt.Printf("  Tarea:     #%d %s\n", resultado.Tarea.ID, resultado.Tarea.Titulo)
 			fmt.Printf("  Reutiliza: %v\n", resultado.TareaReutilizada)
+			if resultado.Dispatch != nil && resultado.Dispatch.Despacho != nil {
+				imprimirModoDespachoCLI(resultado.Dispatch.Despacho)
+				imprimirSeleccionAgenteCLI(resultado.Dispatch.Despacho.SeleccionAgente)
+			}
 			if resultado.Dispatch != nil && resultado.Dispatch.DispatchRuntime != nil {
 				fmt.Printf("  Dispatch:  %s\n", resultado.Dispatch.DispatchRuntime.Estado)
 			}
@@ -249,6 +260,10 @@ var proyectoMicrocicloCmd = &cobra.Command{
 		fmt.Printf("  Fase:      %s\n", resultado.Fase.Nombre)
 		fmt.Printf("  Tarea:     #%d %s\n", resultado.Tarea.ID, resultado.Tarea.Titulo)
 		fmt.Printf("  Reutiliza: %v\n", resultado.TareaReutilizada)
+		if resultado.Dispatch != nil && resultado.Dispatch.Despacho != nil {
+			imprimirModoDespachoCLI(resultado.Dispatch.Despacho)
+			imprimirSeleccionAgenteCLI(resultado.Dispatch.Despacho.SeleccionAgente)
+		}
 		if resultado.Dispatch != nil && resultado.Dispatch.DispatchRuntime != nil {
 			fmt.Printf("  Dispatch:  %s\n", resultado.Dispatch.DispatchRuntime.Estado)
 		}

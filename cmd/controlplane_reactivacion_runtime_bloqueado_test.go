@@ -85,3 +85,72 @@ func TestProcesarReactivacionAgentesSinRuntimeBatchResuelveProyectoDesdeTareaAct
 		t.Fatalf("faltaba el motivo esperado en payload: %s", orders[0].PayloadJSON)
 	}
 }
+
+func TestProcesarReactivacionAgentesSinRuntimeBatchReanimaSupervisorReservadoConContinuidadPendienteAunqueFigureTrabajando(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+		SupervisorAgente:     "Codex2",
+		ReserveSupervisor:    true,
+		ReviewerAgente:       "",
+		ReserveReviewer:      false,
+		ObjetivoGeneral:      "cerrar app",
+		DefinitionOfDoneJSON: "{}",
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex2", proyectoID, "supervision_automatica"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+
+	rows := []agentesapp.Row{{
+		Agente:                   &db.Agente{Nombre: "Codex2", Habilitado: true},
+		Asignacion:               &db.Asignacion{Agente: "Codex2", ProyectoID: proyectoID, Estado: db.AsignacionActiva, Nota: "supervision_automatica"},
+		EstadoOperativo:          "trabajando",
+		DetalleOperativo:         "worker ready con runtime stale",
+		WorkerAlive:              true,
+		MailboxPending:           1,
+		MailboxContinuityPending: 1,
+	}}
+
+	n, err := procesarReactivacionAgentesSinRuntimeBatch(rows, nil, nil)
+	if err != nil {
+		t.Fatalf("procesar reactivacion sin runtime reservado: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia reactivar supervisor reservado sin runtime operativo, got=%d", n)
+	}
+
+	agente := "Codex2"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{
+		Agente:     &agente,
+		ProyectoID: &proyectoID,
+		Estado:     &estado,
+	})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "start" {
+		t.Fatalf("deberia encolar start para supervisor reservado, got=%+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"motivo":"agente_sin_runtime_activo"`) {
+		t.Fatalf("faltaba motivo esperado en payload: %s", orders[0].PayloadJSON)
+	}
+}

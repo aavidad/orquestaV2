@@ -137,6 +137,7 @@ type EntradaRegistrarEntregaGit struct {
 	ProyectoSlug            string
 	SolicitadoPor           string
 	Evidencia               string
+	MetadataJSON            string
 	PreferenciaWorktreeID   *int64
 	PreferenciaRutaWorktree string
 	PreferenciaBranch       string

@@ -8,6 +8,7 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net"
@@ -303,6 +304,12 @@ var webFuncMap = template.FuncMap{
 		}
 		return s
 	},
+	"subagentFollowupSummary": func(item *db.SupervisorSubagent) string {
+		return webSupervisorSubagentFollowupSummary(item)
+	},
+	"pipelineFollowupSummary": func(item *db.SupervisorPipelineState) string {
+		return webSupervisorPipelineFollowupSummary(item)
+	},
 	"join": func(items []string, sep string) string {
 		if len(items) == 0 {
 			return ""
@@ -334,6 +341,7 @@ var webFuncMap = template.FuncMap{
 var (
 	webI18nBundle     = i18n.NewBundle(resolveWebI18nDir(), i18n.DefaultLang)
 	webI18nBundleOnce sync.Once
+	webTemplateCache  sync.Map
 )
 
 const webLangCookieName = "orquesta_lang"
@@ -373,7 +381,7 @@ func webTranslateRequestf(r *http.Request, key string, args ...any) string {
 }
 
 func buildWebFuncMap(lang string) template.FuncMap {
-	funcs := make(template.FuncMap, len(webFuncMap)+2)
+	funcs := make(template.FuncMap, len(webFuncMap)+3)
 	for key, value := range webFuncMap {
 		funcs[key] = value
 	}
@@ -383,7 +391,30 @@ func buildWebFuncMap(lang string) template.FuncMap {
 	funcs["lang"] = func() string {
 		return lang
 	}
+	funcs["wizardHelp"] = func(key string) []webWizardHelpItem {
+		return webWizardHelp(lang, key)
+	}
 	return funcs
+}
+
+type webTemplateCacheKey struct {
+	Lang string
+	Tpl  string
+}
+
+func compiledWebTemplate(lang, tplStr string) (*template.Template, error) {
+	key := webTemplateCacheKey{Lang: lang, Tpl: tplStr}
+	if cached, ok := webTemplateCache.Load(key); ok {
+		if tmpl, ok := cached.(*template.Template); ok && tmpl != nil {
+			return tmpl, nil
+		}
+	}
+	tmpl, err := template.New("layout").Funcs(buildWebFuncMap(lang)).Parse(tplStr)
+	if err != nil {
+		return nil, err
+	}
+	webTemplateCache.Store(key, tmpl)
+	return tmpl, nil
 }
 
 func resolveWebRequestLang(r *http.Request) string {
@@ -708,7 +739,18 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 		resAbiertas []webPropResumen
 		ep          []webTareaRow
 	)
-	status, _ := statusService.FetchStatus()
+	status := degradedAPIStatusResponse()
+	if snapshot, ok := readStatusSnapshotFresh(); ok {
+		status = snapshot
+	} else if snapshot, ok := fetchStatusReadOnlyLiteDirect(statusFastTimeout); ok {
+		storeStatusSnapshot(snapshot, statusNowFunc().UTC())
+		status = snapshot
+	} else if snapshot, ok := readStatusSnapshotAny(); ok {
+		ensureStatusRefreshAsync()
+		status = snapshot
+	} else {
+		ensureStatusRefreshAsync()
+	}
 	if status.Agentes != nil || status.TareasPorEstado != nil {
 		agentes = status.Agentes
 		counts = status.TareasPorEstado
@@ -737,8 +779,18 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 			ep = append(ep, toWebTareaLite(t))
 		}
 	}
-	notifs := notificaciones.DescribirConfiguracion()
-	notifOutbox := notificaciones.DescribirOutbox(5)
+	notifs := notificaciones.EstadoNotificaciones{}
+	if estado, err := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.EstadoNotificaciones, error) {
+		return notificaciones.DescribirConfiguracion(), nil
+	}, errStatusFetchTimeout); err == nil {
+		notifs = estado
+	}
+	notifOutbox := notificaciones.OutboxSummary{}
+	if outbox, err := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.OutboxSummary, error) {
+		return notificaciones.DescribirOutbox(5), nil
+	}, errStatusFetchTimeout); err == nil {
+		notifOutbox = outbox
+	}
 	webRender(w, r, webTplLayout+webTplDash, webDashData{
 		Agentes: agentes, Counts: counts, Total: total,
 		Completadas: completadas, Pct: pct,
@@ -817,6 +869,18 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
+	openClawNotifs := notificaciones.EstadoNotificaciones{}
+	if estado, err := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.EstadoNotificaciones, error) {
+		return notificaciones.DescribirConfiguracion(), nil
+	}, errStatusFetchTimeout); err == nil {
+		openClawNotifs = estado
+	}
+	openClawOutbox := notificaciones.OutboxSummary{}
+	if outbox, err := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.OutboxSummary, error) {
+		return notificaciones.DescribirOutbox(10), nil
+	}, errStatusFetchTimeout); err == nil {
+		openClawOutbox = outbox
+	}
 	webRender(w, r, webTplLayout+webTplOpenClaw, webOpenClawData{
 		Status:            operatorStatus,
 		EnCuota:           agentesNoActivosConCuota(status.Agentes),
@@ -840,8 +904,8 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		QueueSummary:      buildOpenClawQueueSummaryFromReviewSnapshot(review),
 		NextAction:        nextAction,
 		NextSafeAction:    nextSafeAction,
-		Notificaciones:    notificaciones.DescribirConfiguracion(),
-		NotifOutbox:       notificaciones.DescribirOutbox(10),
+		Notificaciones:    openClawNotifs,
+		NotifOutbox:       openClawOutbox,
 		Integration:       buildWebOpenClawIntegrationInfo(),
 		Generado:          time.Now().Format("2006-01-02 15:04:05"),
 		Msg:               r.URL.Query().Get("ok"),
@@ -1487,9 +1551,14 @@ func runtimeA2UIToWeb(runtime *db.RuntimeInstance, limit int) []webRuntimeA2UIRo
 	if limit <= 0 {
 		limit = 8
 	}
+	mailboxLimit := limit * 3
+	if mailboxLimit < 24 {
+		mailboxLimit = 24
+	}
 	messages, _ := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
 		ToAgente:   &agente,
 		ProyectoID: runtime.ProyectoID,
+		Limit:      mailboxLimit,
 	})
 	out := make([]webRuntimeA2UIRow, 0, min(limit, len(messages)))
 	for _, msg := range messages {
@@ -1575,8 +1644,12 @@ func runtimeTimelineToWeb(runtime *db.RuntimeInstance, limit int) []webRuntimeTi
 	if limit <= 0 {
 		limit = 20
 	}
+	historyLimit := limit * 3
+	if historyLimit < 24 {
+		historyLimit = 24
+	}
 
-	orderFilter := db.FiltroRuntimeOrders{Agente: &agente}
+	orderFilter := db.FiltroRuntimeOrders{Agente: &agente, Limit: historyLimit}
 	if runtime.ProyectoID != nil {
 		orderFilter.ProyectoID = runtime.ProyectoID
 	}
@@ -1586,11 +1659,13 @@ func runtimeTimelineToWeb(runtime *db.RuntimeInstance, limit int) []webRuntimeTi
 	mailboxTo, _ := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
 		ToAgente:   &toAgente,
 		ProyectoID: runtime.ProyectoID,
+		Limit:      historyLimit,
 	})
 	fromAgente := agente
 	mailboxFrom, _ := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
 		FromAgente: &fromAgente,
 		ProyectoID: runtime.ProyectoID,
+		Limit:      historyLimit,
 	})
 	checkpoints, _ := runtimesService.ListRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{
 		Agente:     &agente,
@@ -1739,7 +1814,7 @@ func webRender(w http.ResponseWriter, args ...any) {
 	}
 	lang := resolveWebRequestLang(r)
 	persistWebLangCookie(w, r, lang)
-	tmpl, err := template.New("layout").Funcs(buildWebFuncMap(lang)).Parse(tplStr)
+	tmpl, err := compiledWebTemplate(lang, tplStr)
 	if err != nil {
 		http.Error(w, "Error de plantilla: "+err.Error(), 500)
 		return
@@ -1764,6 +1839,55 @@ var serveCmd = &cobra.Command{
 		addr := net.JoinHostPort(host, fmt.Sprintf("%d", puerto))
 		return arrancarServidorUnificado(addr, "serve", true, resolveServerDebugOptions(cmd), security)
 	},
+}
+
+func webSupervisorSubagentFollowupSummary(item *db.SupervisorSubagent) string {
+	metadata := metadataSupervisorSubagente(item)
+	if len(metadata) == 0 || !strings.EqualFold(strings.TrimSpace(stringSupervisorSubagente(metadata["source"])), "pipeline_local_parallel") {
+		return ""
+	}
+	parts := []string{"pipeline_local_parallel"}
+	if idx := int64SupervisorSubagente(metadata["slice_index"]); idx > 0 {
+		if total := int64SupervisorSubagente(metadata["slice_total"]); total > 0 {
+			parts = append(parts, fmt.Sprintf("slice %d/%d", idx, total))
+		}
+	}
+	if sidecarPipelineFollowupYaDespachado(metadata) {
+		phase := strings.TrimSpace(stringSupervisorSubagente(metadata["pipeline_parent_followup_phase"]))
+		action := strings.TrimSpace(stringSupervisorSubagente(metadata["pipeline_parent_followup_action"]))
+		switch {
+		case phase != "" && action != "":
+			parts = append(parts, fmt.Sprintf("follow-up %s (%s)", phase, action))
+		case phase != "":
+			parts = append(parts, "follow-up "+phase)
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
+func webSupervisorPipelineFollowupSummary(item *db.SupervisorPipelineState) string {
+	if item == nil || strings.TrimSpace(item.MetadataJSON) == "" {
+		return ""
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(item.MetadataJSON)), &metadata); err != nil || len(metadata) == 0 {
+		return ""
+	}
+	followup, _ := metadata["latest_parallel_sidecar_followup"].(map[string]any)
+	if len(followup) == 0 {
+		return ""
+	}
+	parts := []string{"sidecar paralelo"}
+	if phase := strings.TrimSpace(stringSupervisorSubagente(followup["phase"])); phase != "" {
+		parts = append(parts, "fase "+phase)
+	}
+	if taskID := int64SupervisorSubagente(followup["task_id"]); taskID > 0 {
+		parts = append(parts, fmt.Sprintf("task #%d", taskID))
+	}
+	if mergeID := int64SupervisorSubagente(followup["git_merge_id"]); mergeID > 0 {
+		parts = append(parts, fmt.Sprintf("merge #%d", mergeID))
+	}
+	return strings.Join(parts, " · ")
 }
 
 func init() {
@@ -2501,13 +2625,14 @@ const webTplOpenClaw = `{{define "content"}}
     <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
       <h3 style="margin:0 0 .7rem 0">Pipeline del supervisor</h3>
       {{if .PipelineStates}}
-      <table style="width:100%;margin-bottom:.8rem"><thead><tr><th>Pipeline</th><th>Proyecto</th><th>Fase</th><th>Estado</th></tr></thead><tbody>
+      <table style="width:100%;margin-bottom:.8rem"><thead><tr><th>Pipeline</th><th>Proyecto</th><th>Fase</th><th>Estado</th><th>Follow-up</th></tr></thead><tbody>
       {{range .PipelineStates}}
         <tr>
           <td>{{orDash .PipelineName}}</td>
           <td>{{orDash .ProyectoSlug}}</td>
           <td><code>{{orDash .CurrentPhase}}</code></td>
           <td><span class="tag t-media">{{.Status}}</span></td>
+          <td>{{orDash (pipelineFollowupSummary .)}}</td>
         </tr>
       {{end}}
       </tbody></table>
@@ -2593,7 +2718,7 @@ const webTplOpenClaw = `{{define "content"}}
         </form>
       </div>
       {{if .Subagents}}
-      <table style="width:100%"><thead><tr><th>Thread</th><th>Nombre</th><th>Tipo</th><th>Estado</th><th>Padre</th><th>Artefactos</th><th>Acción</th></tr></thead><tbody>
+      <table style="width:100%"><thead><tr><th>Thread</th><th>Nombre</th><th>Tipo</th><th>Estado</th><th>Padre</th><th>Follow-up</th><th>Artefactos</th><th>Acción</th></tr></thead><tbody>
       {{range .Subagents}}
         <tr>
           <td>{{.ThreadID}}</td>
@@ -2601,6 +2726,7 @@ const webTplOpenClaw = `{{define "content"}}
           <td><code>{{orDash .SubagentType}}</code></td>
           <td><span class="tag t-media">{{.Status}}</span></td>
           <td>{{orDash .ParentThreadID}}</td>
+          <td>{{orDash (subagentFollowupSummary .)}}</td>
           <td>
             <small>
               manifest: {{orDash .ManifestPath}}<br>

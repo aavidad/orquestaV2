@@ -7,6 +7,7 @@ type SupervisorCandidateSnapshot struct {
 	Preferred bool
 	Active    bool
 	RoleScore int
+	CostTier  int
 }
 
 func SupervisorRoleScore(role string) int {
@@ -31,14 +32,25 @@ func PreferSupervisorCandidate(candidate *SupervisorCandidateSnapshot, current *
 	if current == nil || strings.TrimSpace(current.AgentName) == "" {
 		return true
 	}
+	if candidate.Active != current.Active {
+		return candidate.Active
+	}
 	if candidate.Preferred != current.Preferred {
 		return candidate.Preferred
 	}
-	if candidate.Active != current.Active {
-		return candidate.Active
+	if candidate.CostTier != current.CostTier {
+		return candidate.CostTier < current.CostTier
 	}
 	if candidate.RoleScore != current.RoleScore {
 		return candidate.RoleScore < current.RoleScore
 	}
 	return strings.TrimSpace(candidate.AgentName) < strings.TrimSpace(current.AgentName)
+}
+
+func AgentCostTier(name string) int {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if strings.HasPrefix(name, "codexpg") {
+		return 1
+	}
+	return 0
 }

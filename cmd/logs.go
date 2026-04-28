@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
@@ -26,6 +27,7 @@ Permite filtrar por agente, acción o entidad para rastrear cambios y eventos.`,
 		agenteF, _ := cmd.Flags().GetString("agente")
 		accionF, _ := cmd.Flags().GetString("accion")
 		entidadF, _ := cmd.Flags().GetString("entidad")
+		desdeRaw, _ := cmd.Flags().GetString("desde")
 
 		query := url.Values{"limit": []string{fmt.Sprintf("%d", limit)}}
 		if strings.TrimSpace(agenteF) != "" {
@@ -36,6 +38,13 @@ Permite filtrar por agente, acción o entidad para rastrear cambios y eventos.`,
 		}
 		if strings.TrimSpace(entidadF) != "" {
 			query.Set("entidad", strings.TrimSpace(entidadF))
+		}
+		if strings.TrimSpace(desdeRaw) != "" {
+			desde, err := parseStatsSince(strings.TrimSpace(desdeRaw))
+			if err != nil {
+				return err
+			}
+			query.Set("desde", desde.Format(time.RFC3339))
 		}
 
 		var entries []db.AuditEntry
@@ -93,4 +102,5 @@ func init() {
 	logsCmd.Flags().String("agente", "", "Filtrar por agente")
 	logsCmd.Flags().String("accion", "", "Filtrar por acción")
 	logsCmd.Flags().String("entidad", "", "Filtrar por entidad (tarea, propuesta, sesion...)")
+	logsCmd.Flags().String("desde", "", "Filtrar desde hace cuánto o desde timestamp RFC3339 (ej: 1h, 24h, 2026-04-23T10:00:00Z)")
 }

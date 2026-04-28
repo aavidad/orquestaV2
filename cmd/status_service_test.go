@@ -1027,6 +1027,119 @@ func TestFetchStatusFastFallbackCompletaHandoffsDesdeFetcher(t *testing.T) {
 	}
 }
 
+func TestFetchStatusFastFallbackIncluyeAutonomySurfaceCanonica(t *testing.T) {
+	prevRowsFetcher := statusRowsFetcher
+	prevSurfaceFetcher := statusAutonomySurfaceFetcher
+	defer func() {
+		statusRowsFetcher = prevRowsFetcher
+		statusAutonomySurfaceFetcher = prevSurfaceFetcher
+	}()
+
+	statusRowsFetcher = func() ([]agentesapp.Row, error) {
+		return nil, errors.New("rows degradado")
+	}
+	statusAutonomySurfaceFetcher = func() (*autonomySurface, error) {
+		now := time.Date(2026, 4, 24, 10, 0, 0, 0, time.UTC)
+		return &autonomySurface{
+			Events: 1,
+			ByKind: map[string]int{"task_reassigned": 1},
+			LastAt: &now,
+			Recent: []autonomySurfaceRecentItem{
+				{Project: "orquestador", autonomyEventSummary: autonomyEventSummary{Kind: "task_reassigned", Agent: "Codex1", CreatedAt: now}},
+			},
+		}, nil
+	}
+
+	status, err := fetchStatusFastFallback()
+	if err != nil {
+		t.Fatalf("fetchStatusFastFallback: %v", err)
+	}
+	if status.AutonomySurface == nil || status.AutonomySurface.Events != 1 || status.AutonomySurface.ByKind["task_reassigned"] != 1 {
+		t.Fatalf("autonomySurface inesperada: %+v", status.AutonomySurface)
+	}
+}
+
+func TestFetchStatusFastFallbackIncluyeRiesgoGlobalCanonico(t *testing.T) {
+	prevRowsFetcher := statusRowsFetcher
+	prevSurfaceFetcher := statusAutonomySurfaceFetcher
+	defer func() {
+		statusRowsFetcher = prevRowsFetcher
+		statusAutonomySurfaceFetcher = prevSurfaceFetcher
+	}()
+
+	statusRowsFetcher = func() ([]agentesapp.Row, error) {
+		return nil, errors.New("rows degradado")
+	}
+	statusAutonomySurfaceFetcher = func() (*autonomySurface, error) {
+		now := time.Date(2026, 4, 25, 9, 0, 0, 0, time.UTC)
+		return &autonomySurface{
+			Highlights: []string{"frentes_bloqueantes=1", "integracion_bloqueada=10", "riesgo_top=orquestador(10)"},
+			Projects: []autonomyProjectSurface{{
+				Project:    "orquestador",
+				Events:     2,
+				LastAt:     &now,
+				Highlights: []string{"riesgo=critico", "integracion_bloqueada=10", "review_gates=1", "runtime_orders=1"},
+			}},
+		}, nil
+	}
+
+	status, err := fetchStatusFastFallback()
+	if err != nil {
+		t.Fatalf("fetchStatusFastFallback: %v", err)
+	}
+	if status.CriticalProjectRisk == nil || status.CriticalProjectRisk.Project != "orquestador" || status.CriticalProjectRisk.Blocking != 10 {
+		t.Fatalf("criticalProjectRisk inesperado: %+v", status.CriticalProjectRisk)
+	}
+	if status.AutonomySurface == nil || !containsStringWorkspace(status.AutonomySurface.Highlights, "riesgo_top=orquestador(10)") {
+		t.Fatalf("autonomySurface sin riesgo canónico: %+v", status.AutonomySurface)
+	}
+	if len(status.AutonomyHighlights) == 0 || !containsStringWorkspace(status.AutonomyHighlights, "integracion_bloqueada=10") {
+		t.Fatalf("autonomyHighlights sin riesgo canónico: %+v", status.AutonomyHighlights)
+	}
+}
+
+func TestFetchStatusWorkspaceRiskSummaryUsaCockpitCanonicoSinRecursion(t *testing.T) {
+	prevListProjects := workspaceControlListProjects
+	prevCockpitBuilder := workspaceControlCockpitBuilder
+	defer func() {
+		workspaceControlListProjects = prevListProjects
+		workspaceControlCockpitBuilder = prevCockpitBuilder
+	}()
+
+	workspaceControlListProjects = func() ([]map[string]any, error) {
+		return []map[string]any{
+			{"slug": "infra"},
+		}, nil
+	}
+	workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+		if slug != "infra" {
+			t.Fatalf("slug inesperado: %q", slug)
+		}
+		return &apiProyectoCockpit{
+			Proyecto:               &db.Proyecto{Slug: "infra"},
+			AutonomyEvents:         1,
+			AutonomyByKind:         map[string]int{"handoff_failed": 1},
+			TareasPorEstado:        map[string]int{string(db.TareaBloqueada): 1},
+			ReviewGatesAbiertas:    1,
+			RuntimeOrdersAbiertas:  1,
+			RuntimeMailboxPendiente: 1,
+		}, nil
+	}
+
+	out, err := fetchStatusWorkspaceRiskSummary()
+	if err != nil {
+		t.Fatalf("fetchStatusWorkspaceRiskSummary: %v", err)
+	}
+	if out.CriticalProjectRisk == nil || out.CriticalProjectRisk.Project != "infra" || out.CriticalProjectRisk.Blocking != 14 {
+		t.Fatalf("critical project risk inesperado: %+v", out.CriticalProjectRisk)
+	}
+	for _, token := range []string{"frentes_bloqueantes=1", "integracion_bloqueada=14", "riesgo_top=infra(14)"} {
+		if !containsStringWorkspace(out.Highlights, token) {
+			t.Fatalf("faltan highlights canónicos %q: %+v", token, out.Highlights)
+		}
+	}
+}
+
 func TestStoreStatusSnapshotUsaTTLReducidoSiNoHayActivosYHayTrabajo(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()
@@ -1244,6 +1357,69 @@ func TestStatusVisibleWorkerCountersFiltraSupervisorRealContado(t *testing.T) {
 	)
 	if workersConectados != 2 || workersTrabajando != 2 || supervisoresActivos != 1 {
 		t.Fatalf("contadores visibles inesperados: conectados=%d trabajando=%d supervisores=%d", workersConectados, workersTrabajando, supervisoresActivos)
+	}
+}
+
+func TestResumirAutonomiaEventosRecientesCompactaResumenGlobal(t *testing.T) {
+	prevFetcher := statusAutonomyEventsFetcher
+	prevWindow := statusAutonomyEventsWindow
+	prevLimit := statusAutonomyEventsFetchLimit
+	prevRecent := statusAutonomyEventsRecentLimit
+	defer func() {
+		statusAutonomyEventsFetcher = prevFetcher
+		statusAutonomyEventsWindow = prevWindow
+		statusAutonomyEventsFetchLimit = prevLimit
+		statusAutonomyEventsRecentLimit = prevRecent
+	}()
+
+	now := time.Date(2026, 4, 24, 11, 0, 0, 0, time.UTC)
+	statusAutonomyEventsWindow = 24 * time.Hour
+	statusAutonomyEventsFetchLimit = 20
+	statusAutonomyEventsRecentLimit = 2
+	statusAutonomyEventsFetcher = func(since time.Time, limit int) ([]autonomyEventSummary, error) {
+		if !since.Equal(now.Add(-24 * time.Hour)) {
+			t.Fatalf("since inesperado: %s", since)
+		}
+		if limit != 20 {
+			t.Fatalf("limit inesperado: %d", limit)
+		}
+		return []autonomyEventSummary{
+			{Kind: "task_reassigned", CreatedAt: now.Add(-20 * time.Minute), TargetAgent: "Codex4"},
+			{Kind: "handoff_completed", CreatedAt: now.Add(-5 * time.Minute), TargetAgent: "Codex1"},
+			{Kind: "task_reassigned", CreatedAt: now.Add(-10 * time.Minute), TargetAgent: "Codex2"},
+		}, nil
+	}
+
+	out, err := resumirAutonomiaEventosRecientes(autonomiaResumen{Supervisando: 1}, now)
+	if err != nil {
+		t.Fatalf("resumirAutonomiaEventosRecientes: %v", err)
+	}
+	if out.Supervisando != 1 {
+		t.Fatalf("deberia conservar resumen base: %+v", out)
+	}
+	if out.Count != 3 {
+		t.Fatalf("count inesperado: %+v", out)
+	}
+	if out.ByKind["task_reassigned"] != 2 || out.ByKind["handoff_completed"] != 1 {
+		t.Fatalf("by_kind inesperado: %+v", out.ByKind)
+	}
+	if out.LastAt == nil || !out.LastAt.Equal(now.Add(-5*time.Minute)) {
+		t.Fatalf("last_at inesperado: %+v", out.LastAt)
+	}
+	if len(out.Recent) != 2 || out.Recent[0].Kind != "handoff_completed" || out.Recent[1].Kind != "task_reassigned" {
+		t.Fatalf("recent inesperado: %+v", out.Recent)
+	}
+}
+
+func TestStatusSnapshotIsDegenerateNoDescartaAutonomiaReciente(t *testing.T) {
+	if statusSnapshotIsDegenerate(apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Count:  1,
+			ByKind: map[string]int{"task_reassigned": 1},
+			Recent: []autonomyEventSummary{{Kind: "task_reassigned", CreatedAt: time.Now().UTC()}},
+		},
+	}) {
+		t.Fatal("autonomia reciente no deberia considerarse snapshot degenerado")
 	}
 }
 

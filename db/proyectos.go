@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"orquesta/coordinacion"
+	"orquesta/storage"
 )
 
 type TipoProyecto string
@@ -23,15 +24,18 @@ const (
 )
 
 type Proyecto struct {
-	ID        int64
-	Slug      string
-	Nombre    string
-	RutaAbs   string
-	Tipo      TipoProyecto
-	ParentID  *int64
-	Activo    bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID         int64
+	Slug       string
+	Nombre     string
+	RutaAbs    string
+	OrigenRepo string
+	RemoteURL  string
+	BranchBase string
+	Tipo       TipoProyecto
+	ParentID   *int64
+	Activo     bool
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 type EstadisticasProyecto struct {
@@ -74,6 +78,9 @@ func UpsertProyecto(p *Proyecto) (int64, error) {
 	if strings.TrimSpace(string(p.Tipo)) == "" {
 		p.Tipo = ProyectoRepo
 	}
+	if strings.TrimSpace(p.OrigenRepo) == "" {
+		p.OrigenRepo = "local"
+	}
 
 	var existenteID int64
 	err = DB.QueryRow(`SELECT id FROM proyectos WHERE slug = ? OR ruta_abs = ?`, p.Slug, p.RutaAbs).Scan(&existenteID)
@@ -81,9 +88,9 @@ func UpsertProyecto(p *Proyecto) (int64, error) {
 	case nil:
 		_, err = DB.Exec(`
 			UPDATE proyectos
-			SET slug=?, nombre=?, ruta_abs=?, tipo=?, parent_id=?, activo=?
+			SET slug=?, nombre=?, ruta_abs=?, origen_repo=?, remote_url=?, branch_base=?, tipo=?, parent_id=?, activo=?
 			WHERE id=?`,
-			p.Slug, p.Nombre, p.RutaAbs, p.Tipo, p.ParentID, boolToInt(p.Activo), existenteID,
+			p.Slug, p.Nombre, p.RutaAbs, p.OrigenRepo, p.RemoteURL, p.BranchBase, p.Tipo, p.ParentID, boolToInt(p.Activo), existenteID,
 		)
 		if err != nil {
 			return 0, err
@@ -91,9 +98,9 @@ func UpsertProyecto(p *Proyecto) (int64, error) {
 		return existenteID, nil
 	case sql.ErrNoRows:
 		id, err := insertReturningID(`
-			INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, parent_id, activo)
-			VALUES (?,?,?,?,?,?)`,
-			p.Slug, p.Nombre, p.RutaAbs, p.Tipo, p.ParentID, boolToInt(p.Activo),
+			INSERT INTO proyectos (slug, nombre, ruta_abs, origen_repo, remote_url, branch_base, tipo, parent_id, activo)
+			VALUES (?,?,?,?,?,?,?,?,?)`,
+			p.Slug, p.Nombre, p.RutaAbs, p.OrigenRepo, p.RemoteURL, p.BranchBase, p.Tipo, p.ParentID, boolToInt(p.Activo),
 		)
 		if err != nil {
 			return 0, err
@@ -128,11 +135,14 @@ func UpdateProyecto(p *Proyecto) error {
 	if strings.TrimSpace(string(p.Tipo)) == "" {
 		p.Tipo = ProyectoRepo
 	}
+	if strings.TrimSpace(p.OrigenRepo) == "" {
+		p.OrigenRepo = "local"
+	}
 	if _, err := DB.Exec(`
 		UPDATE proyectos
-		SET slug=?, nombre=?, ruta_abs=?, tipo=?, parent_id=?, activo=?
+		SET slug=?, nombre=?, ruta_abs=?, origen_repo=?, remote_url=?, branch_base=?, tipo=?, parent_id=?, activo=?
 		WHERE id=?`,
-		p.Slug, p.Nombre, p.RutaAbs, p.Tipo, p.ParentID, boolToInt(p.Activo), p.ID,
+		p.Slug, p.Nombre, p.RutaAbs, p.OrigenRepo, p.RemoteURL, p.BranchBase, p.Tipo, p.ParentID, boolToInt(p.Activo), p.ID,
 	); err != nil {
 		return err
 	}
@@ -146,7 +156,7 @@ func GetProyecto(ref string) (*Proyecto, error) {
 	}
 
 	q := `
-		SELECT id, slug, nombre, ruta_abs, tipo, parent_id, activo, created_at, updated_at
+		SELECT id, slug, nombre, ruta_abs, origen_repo, remote_url, branch_base, tipo, parent_id, activo, created_at, updated_at
 		FROM proyectos
 		WHERE slug = ? OR ruta_abs = ?`
 	args := []any{ref, filepath.Clean(ref)}
@@ -165,6 +175,57 @@ func GetProyecto(ref string) (*Proyecto, error) {
 	})
 }
 
+func GetProyectoPrepareLite(ref string) (*Proyecto, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, fmt.Errorf("referencia de proyecto vacía")
+	}
+	if proyecto, ok, err := getProyectoPrepareLiteReadOnly(ref); ok {
+		return proyecto, err
+	}
+	return GetProyecto(ref)
+}
+
+func getProyectoPrepareLiteReadOnly(ref string) (*Proyecto, bool, error) {
+	backend, cfg, err := resolveOpenConfig()
+	if err != nil {
+		return nil, false, err
+	}
+	driver := normalizedDriverName(cfg.Driver)
+	if !supportsPrepareLiteReadOnlyBackend(driver) {
+		return nil, false, nil
+	}
+	disabled := false
+	skipPost := true
+	cfg = applyOpenOptions(cfg, OpenOptions{
+		BootstrapSchema:    &disabled,
+		SkipPostMigrations: &skipPost,
+		ReadOnly:           true,
+	})
+	cfg.MaxOpenConns = 1
+	raw, err := backend.Open(cfg)
+	if err != nil {
+		return nil, true, err
+	}
+	defer raw.Close()
+
+	q := `
+		SELECT id, slug, nombre, ruta_abs, origen_repo, remote_url, branch_base, tipo, parent_id, activo, created_at, updated_at
+		FROM proyectos
+		WHERE slug = ? OR ruta_abs = ?`
+	args := []any{ref, filepath.Clean(ref)}
+	if id, err := strconv.ParseInt(ref, 10, 64); err == nil {
+		q += ` OR id = ?`
+		args = append(args, id)
+	}
+	row := raw.QueryRow(storage.RebindQuery(driver, q), args...)
+	p, err := escanearProyecto(row)
+	if err == sql.ErrNoRows {
+		return nil, true, nil
+	}
+	return p, true, err
+}
+
 func GetProyectoConRutaEfectiva(ref, cwdHint string) (*Proyecto, error) {
 	proyecto, err := GetProyecto(ref)
 	if err != nil {
@@ -179,6 +240,18 @@ func ProyectoConRutaEfectiva(proyecto *Proyecto, cwdHint string) *Proyecto {
 	}
 	copia := *proyecto
 	copia.RutaAbs = RutaProyectoEfectiva(copia.ID, copia.RutaAbs, cwdHint)
+	return &copia
+}
+
+func ProyectoPrepareLiteConRutaEfectiva(proyecto *Proyecto, agente string) *Proyecto {
+	if proyecto == nil {
+		return nil
+	}
+	if canonical, err := CanonicalizeAgentName(agente); err == nil {
+		agente = canonical
+	}
+	copia := *proyecto
+	copia.RutaAbs = rutaProyectoPrepareLite(copia.ID, strings.TrimSpace(agente), copia.RutaAbs)
 	return &copia
 }
 
@@ -366,6 +439,23 @@ func RutaTrabajoPreferidaAgenteProyecto(agente string, proyecto *Proyecto, cwd s
 	)
 }
 
+func RutaTrabajoPreferidaAgenteProyectoPrepareLite(agente string, proyecto *Proyecto, cwd string) string {
+	if proyecto == nil {
+		return normalizarRutaProyecto(cwd)
+	}
+	if canonical, err := CanonicalizeAgentName(agente); err == nil {
+		agente = canonical
+	}
+	agente = strings.TrimSpace(agente)
+	rutaProyecto := rutaProyectoPrepareLite(proyecto.ID, agente, proyecto.RutaAbs)
+	return coordinacion.PreferredWorkPath(
+		cwd,
+		rutaWorktreeActivaPrepareLite(proyecto.ID, agente, rutaProyecto),
+		rutaProyecto,
+		rutaSesionWorktreeProyectoConRuta(cwd, rutaProyecto),
+	)
+}
+
 func rutaSesionWorktreeProyecto(proyecto *Proyecto, cwd string) bool {
 	return rutaSesionWorktreeProyectoConRuta(cwd, rutaProyectoEfectivaDesdeProyecto(proyecto, ""))
 }
@@ -395,6 +485,190 @@ func rutaProyectoEfectivaDesdeProyecto(proyecto *Proyecto, cwdHint string) strin
 	return normalizarRutaProyecto(RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, cwdHint))
 }
 
+func rutaProyectoPrepareLite(proyectoID int64, agente, fallback string) string {
+	fallback = normalizarRutaProyecto(fallback)
+	if proyectoID <= 0 {
+		return fallback
+	}
+	agente = strings.TrimSpace(agente)
+	if agente != "" {
+		if rutaSesion := rutaSesionProyectoPrepareLite(proyectoID, agente); rutaSesion != "" {
+			return rutaSesion
+		}
+	}
+	if rutaWorktree := rutaWorktreeActivaPrepareLite(proyectoID, agente, fallback); rutaWorktree != "" {
+		if ruta := coordinacion.CandidateEffectiveProjectPath(rutaWorktree, true, tieneMarcadoresRepo); ruta != "" {
+			return ruta
+		}
+	}
+	if ruta := coordinacion.CandidateEffectiveProjectPath(fallback, false, tieneMarcadoresRepo); ruta != "" {
+		return ruta
+	}
+	if rutaSesion := rutaSesionProyectoPrepareLite(proyectoID, ""); rutaSesion != "" {
+		return rutaSesion
+	}
+	return fallback
+}
+
+func rutaSesionProyectoPrepareLite(proyectoID int64, agente string) string {
+	backend, cfg, err := resolveOpenConfig()
+	if err != nil {
+		return rutaSesionProyectoPrepareLiteMainDB(proyectoID, agente)
+	}
+	driver := normalizedDriverName(cfg.Driver)
+	if !supportsPrepareLiteReadOnlyBackend(driver) {
+		return rutaSesionProyectoPrepareLiteMainDB(proyectoID, agente)
+	}
+	disabled := false
+	skipPost := true
+	cfg = applyOpenOptions(cfg, OpenOptions{
+		BootstrapSchema:    &disabled,
+		SkipPostMigrations: &skipPost,
+		ReadOnly:           true,
+	})
+	cfg.MaxOpenConns = 1
+	raw, err := backend.Open(cfg)
+	if err != nil {
+		return rutaSesionProyectoPrepareLiteMainDB(proyectoID, agente)
+	}
+	defer raw.Close()
+	return rutaSesionProyectoPrepareLiteWithQuery(
+		func(q string, args ...any) (*sql.Rows, error) {
+			return raw.Query(storage.RebindQuery(driver, q), args...)
+		},
+		proyectoID,
+		agente,
+	)
+}
+
+func rutaSesionProyectoPrepareLiteMainDB(proyectoID int64, agente string) string {
+	if proyectoID <= 0 || DB == nil {
+		return ""
+	}
+	return rutaSesionProyectoPrepareLiteWithQuery(
+		func(q string, args ...any) (*sql.Rows, error) {
+			return DB.Query(q, args...)
+		},
+		proyectoID,
+		agente,
+	)
+}
+
+func rutaSesionProyectoPrepareLiteWithQuery(queryFn func(string, ...any) (*sql.Rows, error), proyectoID int64, agente string) string {
+	if proyectoID <= 0 || queryFn == nil {
+		return ""
+	}
+	agenteCanonico, err := CanonicalizeAgentName(agente)
+	if err != nil {
+		agenteCanonico = strings.TrimSpace(agente)
+	}
+	rutaSesion := func(agentFilter string) string {
+		q := `
+			SELECT cwd
+			FROM sesiones
+			WHERE proyecto_id = ?
+			  AND trim(cwd) <> ''`
+		args := []any{proyectoID}
+		if strings.TrimSpace(agentFilter) != "" {
+			q += ` AND agente = ?`
+			args = append(args, strings.TrimSpace(agentFilter))
+		}
+		q += `
+			ORDER BY activa DESC, id DESC
+			LIMIT 20`
+		rows, err := queryFn(q, args...)
+		if err != nil {
+			return ""
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var cwd string
+			if err := rows.Scan(&cwd); err != nil {
+				return ""
+			}
+			cwd = normalizarRutaProyecto(cwd)
+			if cwd == "" {
+				continue
+			}
+			insideWorktree := strings.Contains(cwd, string(filepath.Separator)+".orquesta-worktrees"+string(filepath.Separator))
+			if ruta := coordinacion.CandidateEffectiveProjectPath(cwd, insideWorktree, tieneMarcadoresRepo); ruta != "" {
+				return ruta
+			}
+		}
+		return ""
+	}
+	return rutaSesion(agenteCanonico)
+}
+
+func rutaWorktreeActivaPrepareLite(proyectoID int64, agente, rutaProyecto string) string {
+	backend, cfg, err := resolveOpenConfig()
+	if err != nil {
+		return rutaWorktreeActivaPrepareLiteMainDB(proyectoID, agente, rutaProyecto)
+	}
+	driver := normalizedDriverName(cfg.Driver)
+	if !supportsPrepareLiteReadOnlyBackend(driver) {
+		return rutaWorktreeActivaPrepareLiteMainDB(proyectoID, agente, rutaProyecto)
+	}
+	disabled := false
+	skipPost := true
+	cfg = applyOpenOptions(cfg, OpenOptions{
+		BootstrapSchema:    &disabled,
+		SkipPostMigrations: &skipPost,
+		ReadOnly:           true,
+	})
+	cfg.MaxOpenConns = 1
+	raw, err := backend.Open(cfg)
+	if err != nil {
+		return rutaWorktreeActivaPrepareLiteMainDB(proyectoID, agente, rutaProyecto)
+	}
+	defer raw.Close()
+	return rutaWorktreeActivaPrepareLiteWithQueryRow(
+		func(q string, args ...any) scanner {
+			return raw.QueryRow(storage.RebindQuery(driver, q), args...)
+		},
+		proyectoID,
+		agente,
+		rutaProyecto,
+	)
+}
+
+func rutaWorktreeActivaPrepareLiteMainDB(proyectoID int64, agente, rutaProyecto string) string {
+	if proyectoID <= 0 || DB == nil {
+		return ""
+	}
+	return rutaWorktreeActivaPrepareLiteWithQueryRow(
+		func(q string, args ...any) scanner {
+			return DB.QueryRow(q, args...)
+		},
+		proyectoID,
+		agente,
+		rutaProyecto,
+	)
+}
+
+func rutaWorktreeActivaPrepareLiteWithQueryRow(queryRowFn func(string, ...any) scanner, proyectoID int64, agente, rutaProyecto string) string {
+	if proyectoID <= 0 || queryRowFn == nil {
+		return ""
+	}
+	q := `SELECT ruta_abs FROM worktrees WHERE proyecto_id = ? AND estado = 'activa'`
+	args := []any{proyectoID}
+	agenteCanonico, err := CanonicalizeAgentName(agente)
+	if err != nil {
+		agenteCanonico = strings.TrimSpace(agente)
+	}
+	agente = strings.TrimSpace(agenteCanonico)
+	if agente != "" {
+		q += ` AND agente = ?`
+		args = append(args, agente)
+	}
+	q += ` ORDER BY id DESC LIMIT 1`
+	var rutaRaw string
+	if err := queryRowFn(q, args...).Scan(&rutaRaw); err != nil {
+		return ""
+	}
+	return rutaProyectoEscopadaCanonica(rutaProyecto, rutaRaw)
+}
+
 func rutaWorktreeActivaAgenteProyecto(proyectoID int64, agente string) string {
 	if proyectoID <= 0 || DB == nil {
 		return ""
@@ -407,6 +681,9 @@ func rutaWorktreeActivaAgenteProyecto(proyectoID int64, agente string) string {
 	filter := coordinacion.WorktreeFilter{
 		ProjectID: &proyectoID,
 		State:     &estado,
+	}
+	if canonical, err := CanonicalizeAgentName(agente); err == nil {
+		agente = canonical
 	}
 	agente = strings.TrimSpace(agente)
 	if agente != "" {
@@ -447,9 +724,13 @@ func rutaSesionPerteneceAWorktreeActivaConRutaProyecto(proyectoID int64, agente,
 		WHERE proyecto_id = ?
 		  AND estado = 'activa'`
 	args := []any{proyectoID}
-	if strings.TrimSpace(agente) != "" {
+	agenteCanonico, err := CanonicalizeAgentName(agente)
+	if err != nil {
+		agenteCanonico = strings.TrimSpace(agente)
+	}
+	if strings.TrimSpace(agenteCanonico) != "" {
 		q += ` AND agente = ?`
-		args = append(args, strings.TrimSpace(agente))
+		args = append(args, strings.TrimSpace(agenteCanonico))
 	}
 	rows, err := DB.Query(q, args...)
 	if err != nil {
@@ -463,11 +744,11 @@ func rutaSesionPerteneceAWorktreeActivaConRutaProyecto(proyectoID int64, agente,
 			return false
 		}
 		worktrees = append(worktrees, coordinacion.WorktreePathRef{
-			Agent: strings.TrimSpace(agente),
+			Agent: strings.TrimSpace(agenteCanonico),
 			Path:  rutaProyectoEscopadaCanonica(rutaProyectoRaw, worktreePath),
 		})
 	}
-	return coordinacion.SessionPathInsideActiveWorktree(agente, cwd, worktrees)
+	return coordinacion.SessionPathInsideActiveWorktree(strings.TrimSpace(agenteCanonico), cwd, worktrees)
 }
 
 func rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID int64, agente, cwd string, worktrees []coordinacion.WorktreePathRef, rutaProyectoRaw string) bool {
@@ -493,7 +774,7 @@ func ResolveProyectoIDBySlug(slug string) (*int64, error) {
 
 func ListarProyectos(f FiltroProyectos) ([]*Proyecto, error) {
 	q := `
-		SELECT id, slug, nombre, ruta_abs, tipo, parent_id, activo, created_at, updated_at
+		SELECT id, slug, nombre, ruta_abs, origen_repo, remote_url, branch_base, tipo, parent_id, activo, created_at, updated_at
 		FROM proyectos WHERE 1=1`
 	var args []any
 	if f.Tipo != nil {
@@ -850,19 +1131,22 @@ func slugProyecto(raw string) string {
 func escanearProyecto(s scanner) (*Proyecto, error) {
 	var p Proyecto
 	var parentID sql.NullInt64
-	err := s.Scan(&p.ID, &p.Slug, &p.Nombre, &p.RutaAbs, &p.Tipo, &parentID, &p.Activo, &p.CreatedAt, &p.UpdatedAt)
+	err := s.Scan(&p.ID, &p.Slug, &p.Nombre, &p.RutaAbs, &p.OrigenRepo, &p.RemoteURL, &p.BranchBase, &p.Tipo, &parentID, &p.Activo, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 	if parentID.Valid {
 		p.ParentID = &parentID.Int64
 	}
+	if strings.TrimSpace(p.OrigenRepo) == "" {
+		p.OrigenRepo = "local"
+	}
 	return &p, nil
 }
 
 // ListarProyectosActivos devuelve todos los proyectos marcados como activos.
 func ListarProyectosActivos() ([]*Proyecto, error) {
-	rows, err := DB.Query(`SELECT id, slug, nombre, ruta_abs, tipo, parent_id, activo, created_at, updated_at FROM proyectos WHERE activo = 1 ORDER BY nombre`)
+	rows, err := DB.Query(`SELECT id, slug, nombre, ruta_abs, origen_repo, remote_url, branch_base, tipo, parent_id, activo, created_at, updated_at FROM proyectos WHERE activo = 1 ORDER BY nombre`)
 	if err != nil {
 		return nil, err
 	}

@@ -47,6 +47,10 @@ func TestSchemaIncluyeCoordinacionMultiProyectoYMCP(t *testing.T) {
 		"CREATE TABLE IF NOT EXISTS runtime_orders",
 		"CREATE INDEX IF NOT EXISTS idx_runtime_mailbox_estado_id",
 		"CREATE INDEX IF NOT EXISTS idx_tareas_agente_estado_id",
+		"CREATE INDEX IF NOT EXISTS idx_tareas_estado_id",
+		"CREATE INDEX IF NOT EXISTS idx_audit_log_accion_id",
+		"CREATE INDEX IF NOT EXISTS idx_audit_log_agente_id",
+		"CREATE INDEX IF NOT EXISTS idx_audit_log_entidad_entidadid_id",
 		"CREATE INDEX IF NOT EXISTS idx_runtime_instances_agente_updated_id",
 		"CREATE TABLE IF NOT EXISTS pools_capacidad",
 		"CREATE TABLE IF NOT EXISTS pool_modelos",
@@ -135,6 +139,10 @@ func TestSchemaSeparadoEnDDLYSemillas(t *testing.T) {
 		"CREATE INDEX IF NOT EXISTS idx_propuestas_estado_proyecto_id",
 		"CREATE INDEX IF NOT EXISTS idx_votos_agente_posicion_propuesta",
 		"CREATE INDEX IF NOT EXISTS idx_tareas_agente_estado_id",
+		"CREATE INDEX IF NOT EXISTS idx_tareas_estado_id",
+		"CREATE INDEX IF NOT EXISTS idx_audit_log_accion_id",
+		"CREATE INDEX IF NOT EXISTS idx_audit_log_agente_id",
+		"CREATE INDEX IF NOT EXISTS idx_audit_log_entidad_entidadid_id",
 		"CREATE INDEX IF NOT EXISTS idx_runtime_instances_agente_updated_id",
 	} {
 		if !strings.Contains(ddl, required) {

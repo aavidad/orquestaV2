@@ -209,3 +209,110 @@ func TestUltimoRuntimeCheckpointVuelveARaizSiLaWorktreeLegacyYaNoExiste(t *testi
 		t.Fatalf("sin worktree usable deberia volver a la raiz del proyecto: got=%s want=%s", checkpoint.CWD, rutaBase)
 	}
 }
+
+func TestRutaWorktreeYSesionPrepareLiteCanonicalizanAliasCodex(t *testing.T) {
+	prepararDBTemporal(t)
+
+	rutaBase := filepath.Join(t.TempDir(), "orquesta")
+	rutaWorktree := filepath.Join(rutaBase, ".orquesta-worktrees", "orquestador-codex94")
+	if err := os.MkdirAll(rutaWorktree, 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaBase, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	for _, nombre := range []string{"Codex94", "codex94"} {
+		if err := RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", nombre, err)
+		}
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO worktrees (proyecto_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		proyectoID, "Codex94", "orquestador-codex94", ".orquesta-worktrees/orquestador-codex94", "orq-orquestador-codex94", "HEAD", "activa", "legacy",
+	); err != nil {
+		t.Fatalf("insert worktree: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex94",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(rutaWorktree, "cmd"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
+
+	gotSesion := rutaSesionProyectoPrepareLiteMainDB(proyectoID, "codex94")
+	if gotSesion != "" {
+		t.Fatalf("rutaSesionProyectoPrepareLiteMainDB deberia ignorar sesiones dentro de worktree activa: got=%s", gotSesion)
+	}
+	gotWorktree := rutaWorktreeActivaPrepareLiteMainDB(proyectoID, "codex94", rutaBase)
+	if gotWorktree != rutaWorktree {
+		t.Fatalf("rutaWorktreeActivaPrepareLiteMainDB inesperada: got=%s want=%s", gotWorktree, rutaWorktree)
+	}
+	gotProyecto := rutaProyectoPrepareLite(proyectoID, "codex94", rutaBase)
+	if gotProyecto != rutaBase {
+		t.Fatalf("rutaProyectoPrepareLite inesperada: got=%s want=%s", gotProyecto, rutaBase)
+	}
+	if !rutaSesionPerteneceAWorktreeActivaConRutaProyecto(proyectoID, "codex94", filepath.Join(rutaWorktree, "cmd"), rutaBase) {
+		t.Fatal("rutaSesionPerteneceAWorktreeActivaConRutaProyecto deberia aceptar alias canonico")
+	}
+}
+
+func TestProyectoPrepareLiteConRutaEfectivaYRuntimeCanonicoCanonicalizanAliasCodex(t *testing.T) {
+	prepararDBTemporal(t)
+
+	rutaBase := filepath.Join(t.TempDir(), "orquesta")
+	rutaWorktree := filepath.Join(rutaBase, ".orquesta-worktrees", "orquestador-codex97")
+	if err := os.MkdirAll(filepath.Join(rutaWorktree, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaBase, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	for _, nombre := range []string{"Codex97", "codex97"} {
+		if err := RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", nombre, err)
+		}
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO worktrees (proyecto_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		proyectoID, "Codex97", "orquestador-codex97", ".orquesta-worktrees/orquestador-codex97", "orq-orquestador-codex97", "HEAD", "activa", "legacy",
+	); err != nil {
+		t.Fatalf("insert worktree: %v", err)
+	}
+
+	proyecto, err := GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("GetProyecto: %v", err)
+	}
+	prepared := ProyectoPrepareLiteConRutaEfectiva(proyecto, "codex97")
+	if prepared == nil || prepared.RutaAbs != rutaBase {
+		t.Fatalf("ProyectoPrepareLiteConRutaEfectiva inesperado: %+v", prepared)
+	}
+	canonica := rutaRuntimeCanonicaProyecto("codex97", &proyectoID, filepath.Join(rutaWorktree, "cmd"))
+	if canonica != filepath.Join(rutaWorktree, "cmd") {
+		t.Fatalf("rutaRuntimeCanonicaProyecto inesperada: got=%s want=%s", canonica, filepath.Join(rutaWorktree, "cmd"))
+	}
+}

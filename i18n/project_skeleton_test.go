@@ -115,3 +115,43 @@ func TestNormalizeProjectSkeletonSpec(t *testing.T) {
 		t.Fatalf("domains inesperados: %+v", spec.Domains)
 	}
 }
+
+func TestExpandProjectSkeletonLanguages(t *testing.T) {
+	root := t.TempDir()
+	if _, err := MaterializeProjectSkeleton(ProjectSkeletonSpec{
+		RootDir:         root,
+		DefaultLanguage: "es",
+		Languages:       []string{"es", "en"},
+		Domains:         []string{"common", "errors"},
+	}); err != nil {
+		t.Fatalf("MaterializeProjectSkeleton: %v", err)
+	}
+
+	customPath := filepath.Join(root, "i18n", "en", "common.json")
+	customRaw := []byte("{\n  \"action.save\": \"Keep mine\",\n  \"custom\": \"present\"\n}\n")
+	if err := os.WriteFile(customPath, customRaw, 0o644); err != nil {
+		t.Fatalf("rewrite common.json: %v", err)
+	}
+
+	cfg, err := ExpandProjectSkeletonLanguages(root, []string{"fr", "en"})
+	if err != nil {
+		t.Fatalf("ExpandProjectSkeletonLanguages: %v", err)
+	}
+	if len(cfg.Languages) != 3 || cfg.Languages[0] != "en" || cfg.Languages[1] != "es" || cfg.Languages[2] != "fr" {
+		t.Fatalf("languages inesperados tras expandir: %+v", cfg.Languages)
+	}
+
+	raw, err := os.ReadFile(customPath)
+	if err != nil {
+		t.Fatalf("leer common.json personalizado: %v", err)
+	}
+	if string(raw) != string(customRaw) {
+		t.Fatalf("common.json existente fue sobrescrito:\n%s", string(raw))
+	}
+
+	for _, rel := range []string{"fr/common.json", "fr/errors.json"} {
+		if _, err := os.Stat(filepath.Join(root, "i18n", rel)); err != nil {
+			t.Fatalf("falta fichero nuevo %s: %v", rel, err)
+		}
+	}
+}

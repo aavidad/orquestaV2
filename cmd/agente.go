@@ -25,6 +25,7 @@ import (
 	"github.com/spf13/cobra"
 	"orquesta/agentesapp"
 	"orquesta/db"
+	"orquesta/internal/controlruntime"
 	"orquesta/internal/lanzamientoruntime"
 	"orquesta/runtimeagente"
 	"orquesta/supervisionapp"
@@ -76,6 +77,136 @@ func agenteModoRecuperacionLocalExplicito() bool {
 
 func agenteErrorServerFirst() error {
 	return serverFirstCommandError("agente")
+}
+
+func agenteLauncherBootstrapInput(plan *runtimeagente.LaunchPlan) string {
+	if plan == nil {
+		return ""
+	}
+	if !strings.EqualFold(strings.TrimSpace(plan.LaunchPromptMode), "post_start") {
+		return ""
+	}
+	prompt := strings.TrimSpace(runtimeagente.LaunchPromptText(plan))
+	if prompt == "" {
+		return ""
+	}
+	return prompt + "\n\n"
+}
+
+func bombearEntradaAgenteEjecutor(dst *os.File, plan *runtimeagente.LaunchPlan) {
+	defer dst.Close()
+	if plan != nil && plan.LaunchPromptDelayMS > 0 {
+		time.Sleep(time.Duration(plan.LaunchPromptDelayMS) * time.Millisecond)
+	}
+	if bootstrap := agenteLauncherBootstrapInput(plan); bootstrap != "" {
+		_, _ = io.WriteString(dst, bootstrap)
+	}
+	_, _ = io.Copy(dst, os.Stdin)
+}
+
+func agentePlanDebeUsarArranqueCanonico(plan *runtimeagente.LaunchPlan) bool {
+	if plan == nil {
+		return false
+	}
+	rendered := runtimeagente.RenderCommand(plan)
+	if strings.TrimSpace(rendered) == "" {
+		return false
+	}
+	return controlruntime.RenderedCommandLooksLikeTMUXPreferredCLI(rendered)
+}
+
+func lanzarAgenteCanonicoPorAPI(prep agentePrepararOutput, agente, proyecto string) (int64, bool, error) {
+	req := apiAgenteControlRequest{
+		Agente:       strings.TrimSpace(agente),
+		Proyecto:     strings.TrimSpace(proyecto),
+		Accion:       agenteControlAccionStart,
+		Conector:     strings.TrimSpace(prep.Conector.Slug),
+		Modelo:       strings.TrimSpace(prep.Politica.Modelo),
+		Razonamiento: strings.TrimSpace(prep.Politica.Razonamiento),
+		Perfil:       strings.TrimSpace(prep.Politica.PerfilTarea),
+		Motivo:       "agente ejecutar canonico",
+		Por:          "orquesta",
+	}
+	orderID, _, ok, err := encolarControlAgentePorAPI(req)
+	return orderID, ok, err
+}
+
+func agenteArranqueCanonicoPuedeReutilizarRuntime(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.Contains(text, "ya tiene un runtime handle activo")
+}
+
+func esperarArranqueCanonicoAgente(agente, proyecto string, timeout time.Duration) (*runtimeDiagnosticoData, error) {
+	if timeout <= 0 {
+		timeout = 20 * time.Second
+	}
+	deadline := time.Now().Add(timeout)
+	var last *runtimeDiagnosticoData
+	for {
+		if _, ok, err := despertarRuntimePorAPI(true, false, true); err != nil {
+			return last, err
+		} else if !ok {
+			return last, serverFirstCommandError("agente ejecutar")
+		}
+		if _, ok, err := procesarRuntimeOrdersPorAPI(); err != nil {
+			return last, err
+		} else if !ok {
+			return last, serverFirstCommandError("agente ejecutar")
+		}
+		if data, ok, err := cargarRuntimeDiagnosticoDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), 5); err != nil {
+			return last, err
+		} else if ok {
+			last = data
+			if runtimeDiagnosticoTieneActividadVivaEnProyecto(data, strings.TrimSpace(proyecto)) {
+				return data, nil
+			}
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(750 * time.Millisecond)
+	}
+	if last != nil {
+		return last, fmt.Errorf("timeout esperando runtime activo para %s", strings.TrimSpace(agente))
+	}
+	return nil, fmt.Errorf("timeout esperando runtime activo para %s", strings.TrimSpace(agente))
+}
+
+func imprimirArranqueCanonicoAgente(data *runtimeDiagnosticoData, agente string) {
+	if data == nil {
+		fmt.Printf("✓ [Orquesta] Start canónico encolado para %s.\n", strings.TrimSpace(agente))
+		return
+	}
+	var runtimeID int64
+	for _, row := range data.Runtimes {
+		switch strings.ToLower(strings.TrimSpace(row.Estado)) {
+		case "activo", "vivo", "esperando_io", "running", "ready":
+			runtimeID = row.ID
+			break
+		}
+	}
+	var sessionHint string
+	for _, worker := range data.Workers {
+		if !worker.Alive {
+			continue
+		}
+		if strings.TrimSpace(worker.TmuxSession) != "" {
+			sessionHint = strings.TrimSpace(worker.TmuxSession)
+			break
+		}
+	}
+	fmt.Printf("✓ [Orquesta] Runtime canónico activo para %s", strings.TrimSpace(agente))
+	if runtimeID > 0 {
+		fmt.Printf(" (runtime #%d)", runtimeID)
+	}
+	fmt.Println()
+	if sessionHint != "" {
+		fmt.Printf("↪ [Orquesta] Sesión tmux: %s\n", sessionHint)
+		fmt.Printf("↪ [Orquesta] Adjunta con: tmux attach -t %s\n", sessionHint)
+	}
 }
 
 type proyectoBundle struct {
@@ -147,6 +278,7 @@ type agenteTickOutput struct {
 	SesionActiva         *sesionBundle  `json:"sesion_activa,omitempty"`
 	AsignadoAProyecto    bool           `json:"asignado_a_proyecto"`
 	ProyectoAsignado     string         `json:"proyecto_asignado,omitempty"`
+	FinishApp            bool           `json:"finish_app,omitempty"`
 	AccionRecomendada    string         `json:"accion_recomendada"`
 	DebePausar           bool           `json:"debe_pausar"`
 	Motivo               string         `json:"motivo,omitempty"`
@@ -164,6 +296,7 @@ type agenteTickOutput struct {
 type decisionTickAutonomiaInput struct {
 	AsignadoAProyecto     bool
 	ProyectoAsignado      string
+	FinishApp             bool
 	EsSupervisorOperativo bool
 	SupervisorOperativo   *db.Agente
 	PropuestasPendientes  int
@@ -225,6 +358,9 @@ func resolverAccionTickAutonomia(in decisionTickAutonomiaInput) (accion string, 
 	case in.TieneBloqueos:
 		return "pedir_intervencion", false, "Hay tareas bloqueadas que requieren resolución"
 	case in.TieneTrabajo:
+		if in.FinishApp {
+			return "continuar_trabajo", false, "Modo finish_app activo: no cierres solo esta tarea; sigue hasta completar la app o detectar un bloqueo real"
+		}
 		return "continuar_trabajo", false, "Sigue trabajando hasta completar la tarea o detectar una duda real"
 	default:
 		return "esperar_o_pedir_tarea", false, "No hay tarea activa asignada en este proyecto"
@@ -302,6 +438,7 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 	var tareasActivas []itemLigero
 	var tieneBloqueos bool
 	var tieneTrabajo bool
+	var finishApp bool
 	for _, tarea := range tareas {
 		if tarea.Estado == db.TareaCompletada || tarea.Estado == db.TareaCancelada || tarea.Estado == db.TareaBacklog {
 			continue
@@ -322,6 +459,9 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 		}
 		if tarea.Estado == db.TareaAsignada || tarea.Estado == db.TareaEnProgreso {
 			tieneTrabajo = true
+			if strings.Contains(strings.ToLower(strings.TrimSpace(tarea.Notas)), "autonomia:finish_app") {
+				finishApp = true
+			}
 		}
 	}
 
@@ -363,6 +503,7 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 		Politica:             politica,
 		AsignadoAProyecto:    asignadoAProyecto,
 		ProyectoAsignado:     proyectoAsignado,
+		FinishApp:            finishApp,
 		TareasActivas:        tareasActivas,
 		PropuestasPendientes: propuestasPendientes,
 		PropuestasAbiertas:   propuestasAbiertas,
@@ -398,6 +539,7 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 	out.AccionRecomendada, out.DebePausar, out.Motivo = resolverAccionTickAutonomia(decisionTickAutonomiaInput{
 		AsignadoAProyecto:     asignadoAProyecto,
 		ProyectoAsignado:      proyectoAsignado,
+		FinishApp:             finishApp,
 		EsSupervisorOperativo: esSupervisorOperativo,
 		SupervisorOperativo:   supervisorOperativo,
 		PropuestasPendientes:  len(propuestasPendientes),
@@ -750,6 +892,33 @@ var agenteEjecutarCmd = &cobra.Command{
 				continue
 			}
 
+			if agentePlanDebeUsarArranqueCanonico(prep.Plan) {
+				fmt.Printf("🎬 [Orquesta] Arranque canónico vía control plane para %s\n", agente)
+				orderID, ok, err := lanzarAgenteCanonicoPorAPI(prep, agente, proyecto)
+				if err != nil {
+					if agenteArranqueCanonicoPuedeReutilizarRuntime(err) {
+						fmt.Printf("↪ [Orquesta] Reutilizando runtime canónico ya activo para %s\n", agente)
+						data, waitErr := esperarArranqueCanonicoAgente(agente, proyecto, 20*time.Second)
+						if waitErr != nil {
+							return waitErr
+						}
+						imprimirArranqueCanonicoAgente(data, agente)
+						return nil
+					}
+					return fmt.Errorf("error encolando arranque canónico: %w", err)
+				}
+				if !ok {
+					return serverFirstCommandError("agente ejecutar")
+				}
+				fmt.Printf("🧭 [Orquesta] Orden start #%d encolada. Esperando runtime vivo...\n", orderID)
+				data, err := esperarArranqueCanonicoAgente(agente, proyecto, 20*time.Second)
+				if err != nil {
+					return err
+				}
+				imprimirArranqueCanonicoAgente(data, agente)
+				return nil
+			}
+
 			// 2. Ejecutar (Modo PTY con 'script' - Funcionalidad Total confirmada por USER)
 			fullCmdStr := runtimeagente.RenderCommand(prep.Plan)
 			fmt.Printf("🎬 [Orquesta] Ejecutando: %s\n", fullCmdStr)
@@ -763,19 +932,27 @@ var agenteEjecutarCmd = &cobra.Command{
 			for k, v := range prep.Plan.Env {
 				proc.Env = append(proc.Env, k+"="+v)
 			}
+			stdinReader, stdinWriter, err := os.Pipe()
+			if err != nil {
+				return fmt.Errorf("error preparando stdin del agente: %w", err)
+			}
 
 			// Tubería de espionaje para la cuota (OP-084)
 			pr, pw := io.Pipe()
 
 			// Conexión TTY Real (OP-TTY)
-			proc.Stdin = os.Stdin
+			proc.Stdin = stdinReader
 			// Usamos MultiWriter solo para la salida, para poder "espiar" sin romper el visual
 			proc.Stdout = io.MultiWriter(os.Stdout, pw)
 			proc.Stderr = io.MultiWriter(os.Stderr, pw)
 
 			if err := proc.Start(); err != nil {
+				_ = stdinReader.Close()
+				_ = stdinWriter.Close()
 				return fmt.Errorf("error arrancando proceso: %w", err)
 			}
+			_ = stdinReader.Close()
+			go bombearEntradaAgenteEjecutor(stdinWriter, prep.Plan)
 
 			if err := iniciarSesionActivaAgenteEjecutor(prep, agente, proyecto, proc.Process.Pid); err != nil {
 				_ = proc.Process.Kill()
@@ -1089,7 +1266,7 @@ var agenteRehabilitarCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		nombre := args[0]
-		ok, err := resetReanimacionAgentePorAPI(nombre)
+		ok, err := rehabilitarAgentePorAPI(nombre)
 		if !ok {
 			return serverFirstCommandError("agente rehabilitar")
 		}
@@ -1313,6 +1490,9 @@ func imprimirAgenteTick(out agenteTickOutput, jsonOut bool) error {
 	fmt.Printf("Acción:    %s\n", out.AccionRecomendada)
 	if out.Motivo != "" {
 		fmt.Printf("Motivo:    %s\n", out.Motivo)
+	}
+	if out.FinishApp {
+		fmt.Printf("Modo:      finish_app\n")
 	}
 	fmt.Printf("Asignado:  %t", out.AsignadoAProyecto)
 	if out.ProyectoAsignado != "" && !out.AsignadoAProyecto {

@@ -92,3 +92,40 @@ func TestProgresoEstimadoPorSenales(t *testing.T) {
 		t.Fatalf("4 ckpt + 6 mailbox: esperaba 80, got %d", pct)
 	}
 }
+
+func TestProgresoEstimadoPorSenalesCanonicalizaAliasCodex(t *testing.T) {
+	prepararDBTemporal(t)
+
+	for _, nombre := range []string{"Codex91", "codex91"} {
+		if err := RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", nombre, err)
+		}
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:    "Test tarea progreso canon",
+		CreadoPor: "test",
+		Prioridad: "media",
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "codex91"); err != nil {
+		t.Fatalf("TomarTarea: %v", err)
+	}
+	if _, err := DB.Exec(`INSERT INTO runtime_checkpoints (agente, checkpoint_kind, resumen) VALUES (?,?,?)`,
+		"Codex91", "manual", "test"); err != nil {
+		t.Fatalf("insertar checkpoint: %v", err)
+	}
+	if _, err := DB.Exec(`INSERT INTO runtime_mailbox (from_agente, to_agente, kind, estado) VALUES (?,?,?,?)`,
+		"server", "Codex91", "nudge", "consumido"); err != nil {
+		t.Fatalf("insertar mailbox: %v", err)
+	}
+
+	pct, err := ProgresoEstimadoPorSenales(tareaID)
+	if err != nil {
+		t.Fatalf("ProgresoEstimadoPorSenales: %v", err)
+	}
+	if pct != 20 {
+		t.Fatalf("progreso inesperado: got=%d want=20", pct)
+	}
+}

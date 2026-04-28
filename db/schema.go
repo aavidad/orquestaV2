@@ -44,6 +44,10 @@ CREATE TABLE IF NOT EXISTS proyectos (
     slug       TEXT    NOT NULL UNIQUE,
     nombre     TEXT    NOT NULL,
     ruta_abs   TEXT    NOT NULL UNIQUE,
+    origen_repo TEXT   NOT NULL DEFAULT 'local'
+                        CHECK (origen_repo IN ('local','git')),
+    remote_url TEXT    NOT NULL DEFAULT '',
+    branch_base TEXT   NOT NULL DEFAULT '',
     tipo       TEXT    NOT NULL DEFAULT 'repo'
                          CHECK (tipo IN ('raiz','grupo','repo')),
     parent_id  INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
@@ -574,6 +578,9 @@ ON runtime_mailbox(estado, id DESC);
 CREATE INDEX IF NOT EXISTS idx_tareas_agente_estado_id
 ON tareas(agente, estado, id DESC);
 
+CREATE INDEX IF NOT EXISTS idx_tareas_estado_id
+ON tareas(estado, id DESC);
+
 CREATE TABLE IF NOT EXISTS runtime_checkpoints (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     agente              TEXT    NOT NULL REFERENCES agentes(nombre),
@@ -642,6 +649,32 @@ CREATE TABLE IF NOT EXISTS politicas_modelo (
     created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS agente_scores_locales (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    agente            TEXT    NOT NULL REFERENCES agentes(nombre) ON DELETE CASCADE,
+    conector_slug     TEXT    NOT NULL DEFAULT '',
+    materia           TEXT    NOT NULL DEFAULT 'codigo',
+    score_base        REAL    NOT NULL DEFAULT 5.0,
+    score_observado   REAL    NOT NULL DEFAULT 5.0,
+    score_total       REAL    NOT NULL DEFAULT 5.0,
+    confianza         REAL    NOT NULL DEFAULT 0.0,
+    muestras          INTEGER NOT NULL DEFAULT 0,
+    exitos            INTEGER NOT NULL DEFAULT 0,
+    benchmarks        INTEGER NOT NULL DEFAULT 0,
+    metadata_json     TEXT    NOT NULL DEFAULT '{}',
+    last_benchmark_at DATETIME,
+    last_observed_at  DATETIME,
+    created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(agente, conector_slug, materia)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agente_scores_locales_agente_materia
+ON agente_scores_locales(agente, materia, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_agente_scores_locales_conector_materia
+ON agente_scores_locales(conector_slug, materia, score_total DESC, updated_at DESC);
 
 -- ─── Memoria de proyecto y gobernanza Git ─────────────────────────────────
 CREATE TABLE IF NOT EXISTS decisiones_proyecto (
@@ -749,6 +782,21 @@ CREATE TABLE IF NOT EXISTS memoria_derivas (
     resuelta_at      DATETIME
 );
 
+CREATE TABLE IF NOT EXISTS shared_context_items (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    proyecto_id      INTEGER REFERENCES proyectos(id) ON DELETE CASCADE,
+    agente           TEXT    NOT NULL DEFAULT '',
+    tipo             TEXT    NOT NULL DEFAULT 'nota',
+    titulo           TEXT    NOT NULL,
+    detalle          TEXT    NOT NULL DEFAULT '',
+    payload_json     TEXT    NOT NULL DEFAULT '{}',
+    peso             REAL    NOT NULL DEFAULT 5,
+    origen           TEXT    NOT NULL DEFAULT '',
+    expires_at       DATETIME,
+    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS fases_proyecto (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     proyecto         TEXT    NOT NULL,
@@ -843,6 +891,15 @@ CREATE TABLE IF NOT EXISTS audit_log (
     detalle    TEXT    NOT NULL DEFAULT '',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_accion_id
+ON audit_log(accion, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_agente_id
+ON audit_log(agente, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_entidad_entidadid_id
+ON audit_log(entidad, entidad_id, id DESC);
 
 -- ─── Triggers updated_at ───────────────────────────────────────────────────
 CREATE TRIGGER IF NOT EXISTS trig_tareas_updated

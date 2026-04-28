@@ -230,6 +230,10 @@ func (d commandDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 			plan.ContinuityPrompt = construirPromptContinuidad(req)
 			plan.Notas = append(plan.Notas, "El conector no declara estrategia nativa de reanudación; se devuelve prompt de continuidad.")
 		}
+	} else if isOllamaCLIRequest(req) && strings.TrimSpace(plan.BootstrapPrompt) == "" {
+		plan.BootstrapPrompt = construirPromptContinuidad(req)
+		_ = ApplyLaunchPromptMetadata(plan, req.Conector.MetadataJSON)
+		plan.Notas = append(plan.Notas, "El conector local interactivo recibe bootstrap mínimo al arrancar.")
 	}
 
 	return plan, nil
@@ -256,15 +260,19 @@ func (d remoteDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 		return nil, fmt.Errorf("env_json inválido para '%s': %w", req.Conector.Slug, err)
 	}
 
+	workingDir := strings.TrimSpace(resume.CWD)
+	if workingDir == "" {
+		workingDir = strings.TrimSpace(req.ProyectoRuta)
+	}
 	plan := &LaunchPlan{
 		Driver:       d.transport,
 		Transporte:   d.transport,
 		Modo:         "launch",
 		Comando:      req.Conector.Comando,
 		Env:          env,
-		WorkingDir:   strings.TrimSpace(req.ProyectoRuta),
+		WorkingDir:   workingDir,
 		Branch:       strings.TrimSpace(resume.Branch),
-		WorktreePath: inferWorktreePath(strings.TrimSpace(req.ProyectoRuta)),
+		WorktreePath: inferWorktreePath(workingDir),
 		Modelo:       strings.TrimSpace(req.Modelo),
 		Razonamiento: strings.TrimSpace(req.Razonamiento),
 		PerfilTarea:  strings.TrimSpace(req.PerfilTarea),
@@ -429,7 +437,7 @@ func asegurarEntornoBaseOrquesta(env map[string]string, vars map[string]string) 
 	if env == nil {
 		return
 	}
-	resolvedServerURL := strings.TrimSpace(rpclocal.ResolveServerAddr())
+	resolvedServerURL := resolveOrquestaServerURLForLaunchEnv()
 	currentServerURL := strings.TrimSpace(env["ORQUESTA_SERVER_URL"])
 	if currentServerURL == "" {
 		if resolvedServerURL != "" {
@@ -443,6 +451,15 @@ func asegurarEntornoBaseOrquesta(env map[string]string, vars map[string]string) 
 			env["ORQUESTA_BIN"] = value
 		}
 	}
+}
+
+func resolveOrquestaServerURLForLaunchEnv() string {
+	if info, err := rpclocal.LoadServerInfo(); err == nil {
+		if addr := strings.TrimSpace(info.Addr); addr != "" {
+			return strings.TrimSpace(rpclocal.BaseURL(addr))
+		}
+	}
+	return strings.TrimSpace(rpclocal.ResolveServerAddr())
 }
 
 func shouldReplaceResidualLocalServerURL(current, resolved string) bool {
@@ -724,6 +741,12 @@ func ModeloCompatibleConConector(conector ConnectorConfig, modelo string) bool {
 		return true
 	}
 	if isOllamaCLIConnector(conector) {
+		if modeloCompatibleFamiliaOpenAI(modelo) {
+			return false
+		}
+		if strings.HasPrefix(modelo, "claude") || strings.HasPrefix(modelo, "gemini") {
+			return false
+		}
 		return true
 	}
 	familia := ""
@@ -768,12 +791,8 @@ func SanitizarResumeParaConector(conector ConnectorConfig, resume ResumeContext)
 		return resume
 	}
 	preservarResumenContinuidad := boolMetadata(metadata, "pool_compartido")
-	payloadTeniaContexto := resumePayloadTieneContextoReanudable(resume.ResumePayloadJSON)
 	resume.ExternalSessionID = ""
 	resume.ResumePayloadJSON = conservarSoloPerfilEjecucionResumePayload(resume.ResumePayloadJSON)
-	if payloadTeniaContexto {
-		resume.ResumePayloadJSON = ""
-	}
 	if !preservarResumenContinuidad {
 		resume.ResumenContinuidad = ""
 	}
@@ -1610,13 +1629,7 @@ func applyResumeHints(plan *LaunchPlan, metadata map[string]any, resume ResumeCo
 
 func construirPromptContinuidad(req LaunchRequest) string {
 	if isOllamaCLIRequest(req) {
-		partes := []string{
-			"PROTOCOLO_ORQUESTA_MICRO",
-			"NO_INTERPRETAR_COMO_PREGUNTA",
-			"SI_NO_HAY_MICROTAREA=ACK-ESPERA",
-			"ESPERA_MICROTAREA_CERRADA",
-		}
-		return strings.Join(partes, " ")
+		return construirPromptContinuidadOllama(req)
 	}
 	if isCodexCLIRequest(req) {
 		partes := []string{"Retoma el trabajo actual desde Orquesta."}
@@ -1669,6 +1682,45 @@ func construirPromptContinuidad(req LaunchRequest) string {
 		return base + "."
 	}
 	return base + ". " + strings.Join(detalle, ". ")
+}
+
+func construirPromptContinuidadOllama(req LaunchRequest) string {
+	if ollamaModelLooksCoder(req.Modelo) {
+		partes := []string{
+			"PROTOCOLO_ORQUESTA_MICRO",
+			"NO_INTERPRETAR_COMO_PREGUNTA",
+			"SI_NO_HAY_MICROTAREA=ACK-ESPERA",
+			"ESPERA_MICROTAREA_CERRADA",
+		}
+		return strings.Join(partes, " ")
+	}
+	partes := []string{
+		"Eres un worker local de Orquesta.",
+		"No interpretes este mensaje como una pregunta ni pidas aclaraciones ahora.",
+		"Si no hay una microtarea cerrada lista para ejecutar, responde exactamente ACK-ESPERA.",
+		"Despues espera la siguiente instruccion de Orquesta.",
+		"Si aparece una microtarea cerrada, ejecuta solo ese alcance.",
+		"Si no puedes continuar, responde BLOQUEO: <motivo concreto>.",
+	}
+	return strings.Join(partes, " ")
+}
+
+func ollamaModelLooksCoder(model string) bool {
+	lower := strings.ToLower(strings.TrimSpace(model))
+	if lower == "" {
+		return false
+	}
+	switch {
+	case strings.Contains(lower, "coder"),
+		strings.Contains(lower, "code"),
+		strings.Contains(lower, "codellama"),
+		strings.Contains(lower, "deepseek-coder"),
+		strings.Contains(lower, "starcoder"),
+		strings.Contains(lower, "codestral"):
+		return true
+	default:
+		return false
+	}
 }
 
 func resumirContinuidadCodex(raw string) string {
@@ -1820,25 +1872,17 @@ func resumePayloadCodexEsPipelineLocalPriorizado(raw string) bool {
 }
 
 func mailboxPayloadEsPipelineLocalCodex(items []any) bool {
-	if len(items) == 0 {
-		return false
-	}
-	first, ok := items[0].(map[string]any)
-	if !ok {
-		return false
-	}
-	kind := strings.TrimSpace(stringFromAny(first["kind"]))
-	payload, _ := first["payload"].(map[string]any)
-	if payload == nil {
-		return false
-	}
-	source := strings.TrimSpace(stringFromAny(payload["source"]))
-	return strings.EqualFold(kind, "pipeline_local") || strings.EqualFold(source, "pipeline_local")
+	_, ok := mailboxPayloadPipelineLocalCodex(items)
+	return ok
 }
 
 func resumirMailboxPayloadCodex(items []any) string {
 	if len(items) == 0 {
 		return ""
+	}
+	if pipelineLocal, ok := mailboxPayloadPipelineLocalCodex(items); ok {
+		payload, _ := pipelineLocal["payload"].(map[string]any)
+		return resumirMailboxPipelineLocalCodex(strings.TrimSpace(stringFromAny(pipelineLocal["kind"])), payload)
 	}
 	first, ok := items[0].(map[string]any)
 	if !ok {
@@ -1854,6 +1898,28 @@ func resumirMailboxPayloadCodex(items []any) string {
 		return resumirMailboxPayload(items)
 	}
 	return resumirMailboxPipelineLocalCodex(kind, payload)
+}
+
+func mailboxPayloadPipelineLocalCodex(items []any) (map[string]any, bool) {
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		payload, _ := entry["payload"].(map[string]any)
+		if payload == nil {
+			continue
+		}
+		kind := strings.TrimSpace(stringFromAny(entry["kind"]))
+		source := strings.TrimSpace(stringFromAny(payload["source"]))
+		if strings.EqualFold(kind, "pipeline_local") || strings.EqualFold(source, "pipeline_local") {
+			return map[string]any{
+				"kind":    kind,
+				"payload": payload,
+			}, true
+		}
+	}
+	return nil, false
 }
 
 func resumirMailboxPipelineLocalCodex(kind string, payload map[string]any) string {
@@ -2091,6 +2157,9 @@ func resumirResumePayload(raw string) string {
 		}
 		partes = append(partes, label)
 		delete(obj, "mailbox")
+	}
+	for _, key := range []string{"bootstrap_prompt", "bootstrap_prompt_compact"} {
+		delete(obj, key)
 	}
 	for _, key := range []string{"project_context", "governance_catalog", "adopted_context"} {
 		if _, ok := obj[key]; ok {

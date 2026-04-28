@@ -8,9 +8,11 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -36,6 +38,7 @@ var (
 
 // Execute es el punto de entrada principal.
 func Execute() {
+	autoloadWorkspaceEnv()
 	args := os.Args[1:]
 	if localRPCEnabled(args) && !forceLocalMode(args) && !skipRemoteDelegation(args) {
 		ensureRequireServerEnv()
@@ -54,6 +57,54 @@ func Execute() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func autoloadWorkspaceEnv() {
+	path := strings.TrimSpace(os.Getenv("ORQUESTA_ENV_FILE"))
+	if path == "" {
+		if cwd, err := os.Getwd(); err == nil && strings.TrimSpace(cwd) != "" {
+			path = filepath.Join(cwd, "orquesta.env")
+		}
+	}
+	if strings.TrimSpace(path) == "" {
+		return
+	}
+	_ = loadEnvFileIfPresent(path)
+}
+
+func loadEnvFileIfPresent(path string) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "export ")
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		if key == "" || strings.TrimSpace(os.Getenv(key)) != "" {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		value = strings.Trim(value, `"'`)
+		_ = os.Setenv(key, value)
+	}
+	return scanner.Err()
 }
 
 func init() {
@@ -80,6 +131,7 @@ func init() {
 		exportarCmd,
 		statusCmd,
 		logsCmd,
+		workspaceCmd,
 	)
 }
 

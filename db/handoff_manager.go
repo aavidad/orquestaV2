@@ -148,6 +148,11 @@ func DetectarAgentesAgotados() ([]*HandoffCandidato, error) {
 }
 
 func seleccionarTareaHandoffAgente(agente string, proyectoID *int64) (*Tarea, error) {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return nil, err
+	}
 	q := `
 		SELECT id, titulo, descripcion, proyecto_id, modulo, estado, agente, propuesta_id, prioridad,
 		       dependencias, creado_por, commit_cierre, notas,
@@ -399,9 +404,13 @@ func GuardarCheckpointHandoff(c *HandoffCandidato, resumen string) (int64, error
 	if c.SesionID == nil {
 		return 0, fmt.Errorf("candidato sin sesión para checkpoint")
 	}
+	agenteCanonico, err := CanonicalizeAgentName(c.Agente)
+	if err != nil {
+		return 0, err
+	}
 	if strings.TrimSpace(resumen) == "" {
 		resumen = fmt.Sprintf("Checkpoint automático por handoff: agente %s (%s)",
-			c.Agente, descripcionMotivoHandoff(c))
+			agenteCanonico, descripcionMotivoHandoff(c))
 	}
 
 	payload := map[string]any{
@@ -421,13 +430,13 @@ func GuardarCheckpointHandoff(c *HandoffCandidato, resumen string) (int64, error
 		INSERT INTO runtime_checkpoints
 			(agente, proyecto_id, sesion_id, checkpoint_kind, resumen, payload_json, resume_strategy, source)
 		VALUES (?, ?, ?, 'automatic', ?, ?, 'context_injection', 'handoff_manager')`,
-		c.Agente, c.ProyectoID, *c.SesionID, resumen, string(payloadJSON),
+		agenteCanonico, c.ProyectoID, *c.SesionID, resumen, string(payloadJSON),
 	)
 	if err != nil {
 		return 0, err
 	}
 	Audit("server", "checkpoint_handoff", "runtime_checkpoint", id,
-		fmt.Sprintf("agente=%s motivo=%s", c.Agente, c.Motivo))
+		fmt.Sprintf("agente=%s motivo=%s", agenteCanonico, c.Motivo))
 	return id, nil
 }
 
@@ -472,6 +481,293 @@ func descripcionMotivoHandoff(c *HandoffCandidato) string {
 	}
 }
 
+func RegistrarAutonomyEventHandoffCompleted(orderID int64, source string, taskID, proyectoID *int64, handoffMode string, checkpointID int64) error {
+	if orderID <= 0 {
+		return fmt.Errorf("runtime_order_id obligatorio")
+	}
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		return err
+	}
+	if order == nil || !strings.EqualFold(strings.TrimSpace(order.Tipo), "handoff") {
+		return fmt.Errorf("runtime order #%d no es handoff", orderID)
+	}
+	var payload HandoffPayload
+	if strings.TrimSpace(order.PayloadJSON) != "" {
+		if err := json.Unmarshal([]byte(order.PayloadJSON), &payload); err != nil {
+			return fmt.Errorf("payload_json handoff inválido: %w", err)
+		}
+	}
+	if strings.TrimSpace(payload.AgenteDestino) == "" {
+		payload.AgenteDestino = strings.TrimSpace(order.Agente)
+	}
+	resolvedTaskID := taskID
+	if (resolvedTaskID == nil || *resolvedTaskID <= 0) && payload.TareaID != nil && *payload.TareaID > 0 {
+		resolvedTaskID = payload.TareaID
+	}
+	resolvedProjectID := proyectoID
+	if (resolvedProjectID == nil || *resolvedProjectID <= 0) && order.ProyectoID != nil && *order.ProyectoID > 0 {
+		resolvedProjectID = order.ProyectoID
+	}
+	taskState := ""
+	if resolvedTaskID != nil && *resolvedTaskID > 0 {
+		tarea, err := GetTarea(*resolvedTaskID)
+		if err != nil {
+			return err
+		}
+		if tarea == nil {
+			return fmt.Errorf("tarea #%d no encontrada para handoff_completed", *resolvedTaskID)
+		}
+		if strings.TrimSpace(payload.AgenteDestino) != "" {
+			if tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(payload.AgenteDestino)) {
+				return fmt.Errorf("handoff aún no consolidado: la tarea #%d no quedó reasignada a %s", *resolvedTaskID, strings.TrimSpace(payload.AgenteDestino))
+			}
+		}
+		switch tarea.Estado {
+		case EstadoAsignada, EstadoEnProgreso:
+			taskState = string(tarea.Estado)
+		default:
+			return fmt.Errorf("handoff aún no consolidado: la tarea #%d quedó en estado %s", *resolvedTaskID, tarea.Estado)
+		}
+		if (resolvedProjectID == nil || *resolvedProjectID <= 0) && tarea.ProyectoID != nil && *tarea.ProyectoID > 0 {
+			resolvedProjectID = tarea.ProyectoID
+		}
+	}
+	exists, err := autonomyEventHandoffCompletedExists(orderID, resolvedTaskID, resolvedProjectID)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	ev := &AutonomyEvent{
+		Kind:      "handoff_completed",
+		Actor:     "orquesta",
+		ProjectID: resolvedProjectID,
+		TaskID:    resolvedTaskID,
+		RuntimeID: order.RuntimeID,
+		HandleID:  order.HandleID,
+		Source:    strings.TrimSpace(source),
+		Reason:    strings.TrimSpace(payload.Motivo),
+		StateDelta: map[string]any{
+			"last_autonomy_action": "handoff_completed",
+			"agente_origen":        strings.TrimSpace(payload.AgenteOrigen),
+			"agente_destino":       strings.TrimSpace(payload.AgenteDestino),
+			"runtime_order_id":     orderID,
+		},
+	}
+	if ev.Source == "" {
+		ev.Source = "handoff_manager"
+	}
+	if taskState != "" {
+		ev.StateDelta["task_state"] = taskState
+	}
+	if strings.TrimSpace(handoffMode) != "" {
+		ev.StateDelta["handoff_mode"] = strings.TrimSpace(handoffMode)
+	}
+	if checkpointID > 0 {
+		ev.ArtifactsRef = []string{fmt.Sprintf("runtime_checkpoint:%d", checkpointID)}
+	}
+	return RegistrarAutonomyEvent(ev)
+}
+
+func RegistrarAutonomyEventHandoffFailed(orderID int64, source string, taskID, proyectoID *int64, agenteOrigen, agenteDestino, handoffMode, handoffStage, reason string, checkpointID int64) error {
+	if orderID > 0 {
+		order, err := GetRuntimeOrder(orderID)
+		if err != nil {
+			return err
+		}
+		if order == nil || !strings.EqualFold(strings.TrimSpace(order.Tipo), "handoff") {
+			return fmt.Errorf("runtime order #%d no es handoff", orderID)
+		}
+		var payload HandoffPayload
+		if strings.TrimSpace(order.PayloadJSON) != "" {
+			if err := json.Unmarshal([]byte(order.PayloadJSON), &payload); err != nil {
+				return fmt.Errorf("payload_json handoff inválido: %w", err)
+			}
+		}
+		if taskID == nil || *taskID <= 0 {
+			if payload.TareaID != nil && *payload.TareaID > 0 {
+				taskID = payload.TareaID
+			}
+		}
+		if proyectoID == nil || *proyectoID <= 0 {
+			if order.ProyectoID != nil && *order.ProyectoID > 0 {
+				proyectoID = order.ProyectoID
+			}
+		}
+		if strings.TrimSpace(agenteOrigen) == "" {
+			agenteOrigen = strings.TrimSpace(payload.AgenteOrigen)
+		}
+		if strings.TrimSpace(agenteDestino) == "" {
+			agenteDestino = strings.TrimSpace(payload.AgenteDestino)
+			if agenteDestino == "" {
+				agenteDestino = strings.TrimSpace(order.Agente)
+			}
+		}
+		if strings.TrimSpace(reason) == "" {
+			reason = strings.TrimSpace(payload.Motivo)
+		}
+		var taskState string
+		if taskID != nil && *taskID > 0 {
+			tarea, err := GetTarea(*taskID)
+			if err != nil {
+				return err
+			}
+			if tarea != nil {
+				taskState = string(tarea.Estado)
+				if (proyectoID == nil || *proyectoID <= 0) && tarea.ProyectoID != nil && *tarea.ProyectoID > 0 {
+					proyectoID = tarea.ProyectoID
+				}
+			}
+		}
+		exists, err := autonomyEventHandoffFailedExists(orderID, taskID, proyectoID, agenteOrigen, agenteDestino, handoffMode, handoffStage)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return nil
+		}
+		ev := &AutonomyEvent{
+			Kind:      "handoff_failed",
+			Actor:     "orquesta",
+			ProjectID: proyectoID,
+			TaskID:    taskID,
+			RuntimeID: order.RuntimeID,
+			HandleID:  order.HandleID,
+			Source:    strings.TrimSpace(source),
+			Reason:    strings.TrimSpace(reason),
+			StateDelta: map[string]any{
+				"last_autonomy_action": "handoff_failed",
+				"agente_origen":        strings.TrimSpace(agenteOrigen),
+				"agente_destino":       strings.TrimSpace(agenteDestino),
+				"runtime_order_id":     orderID,
+			},
+		}
+		if ev.Source == "" {
+			ev.Source = "handoff_manager"
+		}
+		if strings.TrimSpace(handoffMode) != "" {
+			ev.StateDelta["handoff_mode"] = strings.TrimSpace(handoffMode)
+		}
+		if strings.TrimSpace(handoffStage) != "" {
+			ev.StateDelta["handoff_stage"] = strings.TrimSpace(handoffStage)
+		}
+		if taskState != "" {
+			ev.StateDelta["task_state"] = taskState
+		}
+		if checkpointID > 0 {
+			ev.ArtifactsRef = []string{fmt.Sprintf("runtime_checkpoint:%d", checkpointID)}
+		}
+		return RegistrarAutonomyEvent(ev)
+	}
+
+	exists, err := autonomyEventHandoffFailedExists(0, taskID, proyectoID, agenteOrigen, agenteDestino, handoffMode, handoffStage)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	ev := &AutonomyEvent{
+		Kind:      "handoff_failed",
+		Actor:     "orquesta",
+		ProjectID: proyectoID,
+		TaskID:    taskID,
+		Source:    strings.TrimSpace(source),
+		Reason:    strings.TrimSpace(reason),
+		StateDelta: map[string]any{
+			"last_autonomy_action": "handoff_failed",
+			"agente_origen":        strings.TrimSpace(agenteOrigen),
+			"agente_destino":       strings.TrimSpace(agenteDestino),
+		},
+	}
+	if ev.Source == "" {
+		ev.Source = "handoff_manager"
+	}
+	if strings.TrimSpace(handoffMode) != "" {
+		ev.StateDelta["handoff_mode"] = strings.TrimSpace(handoffMode)
+	}
+	if strings.TrimSpace(handoffStage) != "" {
+		ev.StateDelta["handoff_stage"] = strings.TrimSpace(handoffStage)
+	}
+	if checkpointID > 0 {
+		ev.ArtifactsRef = []string{fmt.Sprintf("runtime_checkpoint:%d", checkpointID)}
+	}
+	return RegistrarAutonomyEvent(ev)
+}
+
+func autonomyEventHandoffCompletedExists(orderID int64, taskID, proyectoID *int64) (bool, error) {
+	kind := "handoff_completed"
+	filter := FiltroAutonomyEvents{
+		Kind:   &kind,
+		Limite: 25,
+	}
+	if taskID != nil && *taskID > 0 {
+		filter.TaskID = taskID
+	} else if proyectoID != nil && *proyectoID > 0 {
+		filter.ProjectID = proyectoID
+	}
+	events, err := ListarAutonomyEvents(filter)
+	if err != nil {
+		return false, err
+	}
+	for _, ev := range events {
+		if ev == nil || ev.StateDelta == nil {
+			continue
+		}
+		if fmt.Sprint(ev.StateDelta["runtime_order_id"]) == fmt.Sprint(orderID) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func autonomyEventHandoffFailedExists(orderID int64, taskID, proyectoID *int64, agenteOrigen, agenteDestino, handoffMode, handoffStage string) (bool, error) {
+	kind := "handoff_failed"
+	filter := FiltroAutonomyEvents{
+		Kind:   &kind,
+		Limite: 25,
+	}
+	if taskID != nil && *taskID > 0 {
+		filter.TaskID = taskID
+	} else if proyectoID != nil && *proyectoID > 0 {
+		filter.ProjectID = proyectoID
+	}
+	events, err := ListarAutonomyEvents(filter)
+	if err != nil {
+		return false, err
+	}
+	for _, ev := range events {
+		if ev == nil || ev.StateDelta == nil {
+			continue
+		}
+		if orderID > 0 {
+			if fmt.Sprint(ev.StateDelta["runtime_order_id"]) == fmt.Sprint(orderID) {
+				return true, nil
+			}
+			continue
+		}
+		if runtimeOrderID, ok := ev.StateDelta["runtime_order_id"]; ok && strings.TrimSpace(fmt.Sprint(runtimeOrderID)) != "" {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(fmt.Sprint(ev.StateDelta["agente_origen"])), strings.TrimSpace(agenteOrigen)) {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(fmt.Sprint(ev.StateDelta["agente_destino"])), strings.TrimSpace(agenteDestino)) {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(fmt.Sprint(ev.StateDelta["handoff_mode"])), strings.TrimSpace(handoffMode)) {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(fmt.Sprint(ev.StateDelta["handoff_stage"])), strings.TrimSpace(handoffStage)) {
+			continue
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
 // ProcesarHandoffsBatch detecta agentes agotados, selecciona reemplazos y
 // ejecuta el handoff automático para cada candidato.
 // Devuelve el número de handoffs iniciados.
@@ -506,19 +802,43 @@ func ProcesarHandoffsBatch() (int, error) {
 		if err != nil {
 			Audit("server", "handoff_checkpoint_error", "agente", 0,
 				fmt.Sprintf("agente=%s disparador=%s error=%s", c.Agente, c.Disparador, err.Error()))
+			_ = RegistrarAutonomyEventHandoffFailed(0, "handoff_manager", c.TareaID, c.ProyectoID, c.Agente, destino, "", "checkpoint", err.Error(), 0)
 			continue
 		}
 
 		resumen := construirResumenContinuidad(c, checkpointID)
+		handoffMode := "live"
+		orderID := int64(0)
 		if c.HandleID == nil {
-			_, err = CrearHandoffAgenteStale(c.Agente, destino, c.TareaID, c.Motivo, resumen, "")
+			handoffMode = "stale"
+			orderID, err = CrearHandoffAgenteStale(c.Agente, destino, c.TareaID, c.Motivo, resumen, "")
 		} else {
-			_, err = CrearHandoffAgenteVivo(c.Agente, destino, c.TareaID, c.Motivo, resumen, "")
+			orderID, err = CrearHandoffAgenteVivo(c.Agente, destino, c.TareaID, c.Motivo, resumen, "")
 		}
 		if err != nil {
 			Audit("server", "handoff_error", "agente", 0,
 				fmt.Sprintf("%s→%s disparador=%s error=%s", c.Agente, destino, c.Disparador, err.Error()))
+			_ = RegistrarAutonomyEventHandoffFailed(0, "handoff_manager", c.TareaID, c.ProyectoID, c.Agente, destino, handoffMode, "request", err.Error(), checkpointID)
 			continue
+		}
+		_ = RegistrarAutonomyEvent(&AutonomyEvent{
+			Kind:      "handoff_requested",
+			Actor:     "orquesta",
+			ProjectID: c.ProyectoID,
+			TaskID:    c.TareaID,
+			Source:    "handoff_manager",
+			Reason:    strings.TrimSpace(c.Motivo),
+			StateDelta: map[string]any{
+				"last_autonomy_action": "handoff_requested",
+				"agente_origen":        strings.TrimSpace(c.Agente),
+				"agente_destino":       strings.TrimSpace(destino),
+				"runtime_order_id":     orderID,
+				"handoff_mode":         handoffMode,
+			},
+			ArtifactsRef: []string{fmt.Sprintf("runtime_checkpoint:%d", checkpointID)},
+		})
+		if err := RegistrarAutonomyEventHandoffCompleted(orderID, "handoff_manager", c.TareaID, c.ProyectoID, handoffMode, checkpointID); err != nil {
+			_ = RegistrarAutonomyEventHandoffFailed(orderID, "handoff_manager", c.TareaID, c.ProyectoID, c.Agente, destino, handoffMode, "consolidation", err.Error(), checkpointID)
 		}
 
 		excluidos = append(excluidos, destino)
@@ -549,6 +869,11 @@ func asegurarSondeoPrevioHandoff(c *HandoffCandidato) (bool, error) {
 }
 
 func existeSondeoWatchdogReciente(agente string, proyectoID *int64) (bool, error) {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return false, err
+	}
 	desde := time.Now().UTC().Add(-time.Minute)
 	q := runtimeOrderSelectBase() + `
 		WHERE agente = ?

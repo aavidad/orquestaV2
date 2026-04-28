@@ -33,3 +33,17 @@ func TestConfigInt64FallbackUsaDefaultsDeclarados(t *testing.T) {
 		t.Fatalf("fallback duro inesperado: %d", got)
 	}
 }
+
+func TestConfigInt64FallbackUsaDefaultsAutonomiaCortos(t *testing.T) {
+	t.Parallel()
+
+	if got := configInt64Fallback("autonomia_session_step_timeout_seconds", -1); got != 1 {
+		t.Fatalf("autonomia_session_step_timeout_seconds default inesperado: %d", got)
+	}
+	if got := configInt64Fallback("autonomia_degraded_batch_timeout_seconds", -1); got != 1 {
+		t.Fatalf("autonomia_degraded_batch_timeout_seconds default inesperado: %d", got)
+	}
+	if got := configInt64Fallback("autonomia_batch_budget_seconds", -1); got != 1 {
+		t.Fatalf("autonomia_batch_budget_seconds default inesperado: %d", got)
+	}
+}

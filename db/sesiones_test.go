@@ -388,6 +388,119 @@ func TestRetirarAgentePausaAsignacionesYLiberaTrabajo(t *testing.T) {
 	}
 }
 
+func TestRehabilitarYPausarAgenteCanonicalizanAliasCodex(t *testing.T) {
+	prepararDBTemporal(t)
+	for _, nombre := range []string{"Codex7", "codex7"} {
+		if err := RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", nombre, err)
+		}
+	}
+	if err := RetirarAgente("codex7"); err != nil {
+		t.Fatalf("RetirarAgente alias: %v", err)
+	}
+	agente, err := GetAgente("Codex7")
+	if err != nil {
+		t.Fatalf("GetAgente tras retirar: %v", err)
+	}
+	if agente == nil || agente.Habilitado {
+		t.Fatalf("agente no retirado correctamente: %+v", agente)
+	}
+	if err := RehabilitarAgente("codex7"); err != nil {
+		t.Fatalf("RehabilitarAgente alias: %v", err)
+	}
+	if err := PausarAgente("codex7", 5, "test pausa"); err != nil {
+		t.Fatalf("PausarAgente alias: %v", err)
+	}
+	agente, err = GetAgente("Codex7")
+	if err != nil {
+		t.Fatalf("GetAgente tras pausa: %v", err)
+	}
+	if agente == nil || agente.EstadoCuota != "enfriamiento" {
+		t.Fatalf("agente no pausado correctamente: %+v", agente)
+	}
+}
+
+func TestGetSesionActivaCanonicalizaAliasCodex(t *testing.T) {
+	prepararDBTemporal(t)
+	if err := RegistrarAgente("Codex8", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	if err := RegistrarAgente("codex8", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente alias: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "demo-sesion",
+		Nombre:  "Demo Sesion",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{Agente: "Codex8", ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
+	if sesion == nil {
+		t.Fatal("sesion nil")
+	}
+	got, err := GetSesionActiva("codex8", &proyectoID)
+	if err != nil {
+		t.Fatalf("GetSesionActiva alias: %v", err)
+	}
+	if got == nil || got.Agente != "Codex8" {
+		t.Fatalf("sesion inesperada: %+v", got)
+	}
+}
+
+func TestFinSesionCanonicalizaAliasCodex(t *testing.T) {
+	prepararDBTemporal(t)
+	if err := RegistrarAgente("Codex9", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	if err := RegistrarAgente("codex9", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente alias: %v", err)
+	}
+	if _, err := IniciarSesion("Codex9"); err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	if err := FinSesion("codex9"); err != nil {
+		t.Fatalf("FinSesion alias: %v", err)
+	}
+	agente, err := GetAgente("Codex9")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente == nil || agente.Activo {
+		t.Fatalf("agente no cerrado correctamente: %+v", agente)
+	}
+}
+
+func TestObtenerUltimaSesionCanonicalizaAliasCodex(t *testing.T) {
+	prepararDBTemporal(t)
+	if err := RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	if err := RegistrarAgente("codex10", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente alias: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{Agente: "Codex10", CWD: "/tmp/demo"})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
+	if sesion == nil {
+		t.Fatal("sesion nil")
+	}
+	got, err := ObtenerUltimaSesion("codex10", nil)
+	if err != nil {
+		t.Fatalf("ObtenerUltimaSesion alias: %v", err)
+	}
+	if got == nil || got.Agente != "Codex10" {
+		t.Fatalf("ultima sesion inesperada: %+v", got)
+	}
+}
+
 func TestRegistrarAgenteNoRehabilitaAgenteRetirado(t *testing.T) {
 	prepararDBTemporal(t)
 	if err := RegistrarAgente("CodexRetenido", "programador"); err != nil {
@@ -903,6 +1016,32 @@ func TestGetAgenteConservaPausaOperativaVisibleSinSesionActiva(t *testing.T) {
 	}
 	if !strings.Contains(agente.MotivoPausa, "runtime_panic") {
 		t.Fatalf("motivo_pausa operativo inesperado: %+v", agente)
+	}
+}
+
+func TestGetAgenteLimpiaPausaVisibleStaleSiEstadoCuotaYaEsActivo(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("CodexQuotaStale", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	pasado := time.Now().UTC().Add(-2 * time.Hour)
+	if _, err := DB.Exec(`UPDATE agentes SET estado_cuota='activo', reanimar_at=?, motivo_pausa='worker bloqueado por cuota' WHERE nombre='CodexQuotaStale'`, pasado); err != nil {
+		t.Fatalf("actualizar agente: %v", err)
+	}
+
+	agente, err := GetAgente("CodexQuotaStale")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.EstadoCuota != "activo" {
+		t.Fatalf("estado_cuota inesperado: %+v", agente)
+	}
+	if agente.ReanimarAt != nil {
+		t.Fatalf("reanimar_at stale deberia limpiarse: %+v", agente)
+	}
+	if strings.TrimSpace(agente.MotivoPausa) != "" {
+		t.Fatalf("motivo_pausa stale deberia limpiarse: %+v", agente)
 	}
 }
 

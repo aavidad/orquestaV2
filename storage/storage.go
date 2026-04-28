@@ -21,13 +21,25 @@ type Config struct {
 }
 
 func ResolveConfig(pathResolver func() string) (Config, error) {
+	requireExplicit := false
+	if v := strings.TrimSpace(envFirst("ORQUESTA_REQUIRE_EXPLICIT_PERSISTENCE")); v != "" {
+		enabled, err := parseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("ORQUESTA_REQUIRE_EXPLICIT_PERSISTENCE invalido: %q", v)
+		}
+		requireExplicit = enabled
+	}
+
 	driver := strings.TrimSpace(envFirst("ORQUESTA_PERSISTENCE_CONNECTOR", "ORQUESTA_DB_CONNECTOR", "ORQUESTA_DB_DRIVER", "ORQUESTA_DB_BACKEND"))
 	if driver == "" {
-		driver = inferDriverFromConfiguredTarget(pathResolver)
+		driver = inferDriverFromConfiguredTarget(pathResolver, requireExplicit)
 	} else {
 		driver = normalizeDriver(driver)
 	}
 	if driver == "" {
+		if requireExplicit {
+			return Config{}, fmt.Errorf("persistencia explicita requerida; declara ORQUESTA_DB_DRIVER/ORQUESTA_DB_DSN o ORQUESTA_DB")
+		}
 		return Config{}, fmt.Errorf("conector de persistencia no configurado; declara ORQUESTA_DB_DRIVER/ORQUESTA_DB_DSN o un target local ORQUESTA_DB")
 	}
 
@@ -63,9 +75,14 @@ func ResolveConfig(pathResolver func() string) (Config, error) {
 	case "sqlite":
 		cfg.Path = strings.TrimSpace(envFirst("ORQUESTA_DB"))
 		if cfg.Path == "" && pathResolver != nil {
-			cfg.Path = strings.TrimSpace(pathResolver())
+			if !requireExplicit {
+				cfg.Path = strings.TrimSpace(pathResolver())
+			}
 		}
 		if cfg.Path == "" {
+			if requireExplicit && dsn == "" {
+				return Config{}, fmt.Errorf("persistencia sqlite explicita requerida; declara ORQUESTA_DB o ORQUESTA_DB_DSN")
+			}
 			cfg.Path = "orquesta.db"
 		}
 		if dsn == "" {
@@ -111,7 +128,7 @@ func SQLiteDSN(path string) string {
 	if strings.Contains(path, "?") {
 		sep = "&"
 	}
-	return path + sep + "_journal_mode=WAL&_synchronous=NORMAL&_wal_autocheckpoint=100&_foreign_keys=on&_busy_timeout=5000"
+	return path + sep + "_journal_mode=WAL&_synchronous=NORMAL&_wal_autocheckpoint=100&_foreign_keys=on&_busy_timeout=30000"
 }
 
 func SQLiteDSNWithMode(path, mode string) string {
@@ -181,7 +198,7 @@ func normalizeDriver(v string) string {
 	}
 }
 
-func inferDriverFromConfiguredTarget(pathResolver func() string) string {
+func inferDriverFromConfiguredTarget(pathResolver func() string, requireExplicit bool) string {
 	if dsn := strings.TrimSpace(envFirst("ORQUESTA_DB_DSN")); dsn != "" {
 		lower := strings.ToLower(dsn)
 		switch {
@@ -194,6 +211,9 @@ func inferDriverFromConfiguredTarget(pathResolver func() string) string {
 	if path := strings.TrimSpace(envFirst("ORQUESTA_DB")); path != "" {
 		return "sqlite"
 	}
+	if requireExplicit {
+		return ""
+	}
 	if pathResolver != nil && strings.TrimSpace(pathResolver()) != "" {
 		return "sqlite"
 	}
@@ -203,9 +223,11 @@ func inferDriverFromConfiguredTarget(pathResolver func() string) string {
 func defaultMaxOpenConns(driver string) int {
 	switch normalizeDriver(driver) {
 	case "sqlite":
-		// En la práctica el daemon trabaja mejor con una sola conexión SQLite:
-		// evita SQLITE_BUSY persistentes con bases reales grandes mientras el
-		// control plane escribe y la API sirve lecturas concurrentes.
+		// El daemon ya saca muchas lecturas calientes a conexiones read-only
+		// separadas. El pool principal queda para escrituras y mutaciones del
+		// control plane; con varias conexiones SQLite aparece SQLITE_BUSY con
+		// demasiada facilidad bajo lanes residentes concurrentes.
+		// Dejamos una sola conexión principal para serializar escrituras.
 		return 1
 	case "postgres":
 		// El control plane en Postgres dispara varias lanes residentes y API

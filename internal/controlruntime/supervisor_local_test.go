@@ -115,6 +115,35 @@ func TestConsultarEstadoLocalRehidrataSupervisorDesdeManifestSinPIDInicial(t *te
 	}
 }
 
+func TestManifestPathsCandidatosSupervisorLocalUsaSoloElMasRecienteDelHistorico(t *testing.T) {
+	tmp := t.TempDir()
+	workingDir := filepath.Join(tmp, "repo")
+	oldRunDir := filepath.Join(workingDir, ".orquesta-runtime", "codex7", "20260402-150000-000000001")
+	newRunDir := filepath.Join(workingDir, ".orquesta-runtime", "codex7", "20260403-150000-000000001")
+	if err := os.MkdirAll(oldRunDir, 0o755); err != nil {
+		t.Fatalf("mkdir old run dir: %v", err)
+	}
+	if err := os.MkdirAll(newRunDir, 0o755); err != nil {
+		t.Fatalf("mkdir new run dir: %v", err)
+	}
+	oldManifest := filepath.Join(oldRunDir, "runtime.json")
+	newManifest := filepath.Join(newRunDir, "runtime.json")
+	if err := os.WriteFile(oldManifest, []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("write old manifest: %v", err)
+	}
+	if err := os.WriteFile(newManifest, []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("write new manifest: %v", err)
+	}
+
+	paths := manifestPathsCandidatosSupervisorLocal(descriptorSupervisorLocal{WorkingDir: workingDir}, nil)
+	if len(paths) != 1 {
+		t.Fatalf("deberia devolver solo un manifest candidato, got=%d paths=%v", len(paths), paths)
+	}
+	if paths[0] != newManifest {
+		t.Fatalf("deberia elegir el manifest mas reciente, got=%q want=%q", paths[0], newManifest)
+	}
+}
+
 func TestConsultarEstadoLocalIgnoraPoolRemotoAunqueExistaManifestLocal(t *testing.T) {
 	resetSupervisoresLocalesForTest(t)
 	tmp := t.TempDir()

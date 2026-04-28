@@ -153,6 +153,59 @@ Lectura de politica:
 - `workersTrabajando > 0` con `autonomyPending = 0` y `autonomyContinuing = 0` describe ejecucion ya absorbida y confirmada
 - `autonomyConfirmed > 0` no basta por si solo para declarar el frente sano si la salud operativa actual del worker ya no sostiene ese trabajo
 
+## Funnel actual de `AutonomyEvent` y hooks
+
+Contrato vigente:
+
+- `AutonomyEvent` registra decisiones canónicas del control plane sobre la misma verdad de estado actual
+- los hooks lifecycle sirven para wake/invalidez de snapshot, no para abrir otra semántica paralela
+- no se abren tablas nuevas ni un bus nuevo para este funnel
+
+Eventos ya emitidos hoy:
+
+- `handoff_completed`
+- `handoff_failed`
+- `handoff_requested`
+- `repair_helper_opened`
+- `repair_helper_closed`
+- `runtime_restart_requested`
+- `task_reassigned`
+- `task_reactivated`
+- `worker_recovery_requested`
+- `worker_recovery_paused_external`
+- `post_remediation_followup_requested`
+- `post_remediation_blocked_escalated`
+
+Hooks lifecycle ya conectados al loop:
+
+- `project_blocked`
+- `project_unblocked`
+- `task_start`
+- `task_finish`
+- `session_park`
+- `session_resume`
+
+Funcion operativa:
+
+- los hooks invalidan snapshot y despiertan el control plane cuando cambia el estado relevante
+- `AutonomyEvent` deja trazabilidad de la decision ya tomada
+- los hooks tecnicos de runtime/mailbox/transcript siguen siendo el wake caliente del daemon
+- `workspace control`, `proyecto control`, `agente actividad` y cockpit/web ya consumen la misma proyeccion canónica de `AutonomyEvent`
+- `autonomy highlights` ya es superficie canónica reutilizable para resumen global, cockpit, control de proyecto, CLI y web
+
+Siguiente corte inmediato:
+
+- seguir sustituyendo heuristica del supervisor por `AutonomyEvent + artifacts + progreso semantico`
+- proyectar `AutonomyEvent` en control total y telemetria sin rederivar heuristicas adicionales
+- seguir reduciendo casos donde el supervisor necesite inferir estado desde transcript en vez de leer decision durable
+
+Limites aceptados:
+
+- sin tablas nuevas para eventos
+- sin segunda verdad de estado
+- sin duplicar el runtime manager
+- sin mover la semantica de control plane fuera de Orquesta
+
 ## Inspección diaria
 
 Qué mirar primero:

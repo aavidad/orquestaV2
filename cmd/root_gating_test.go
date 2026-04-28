@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -136,5 +137,64 @@ func TestLocalRPCEnabled(t *testing.T) {
 	}
 	if !localRPCEnabled([]string{"status"}) {
 		t.Fatalf("deberia activarse por env")
+	}
+}
+
+func TestLoadEnvFileIfPresentCargaVariablesSinPisarlas(t *testing.T) {
+	tmp := t.TempDir()
+	envPath := filepath.Join(tmp, "orquesta.env")
+	if err := os.WriteFile(envPath, []byte("ORQUESTA_DB_DRIVER=postgres\nORQUESTA_DB_DSN=postgres://demo\n"), 0o600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+	prevDriver := os.Getenv("ORQUESTA_DB_DRIVER")
+	prevDSN := os.Getenv("ORQUESTA_DB_DSN")
+	t.Cleanup(func() {
+		if prevDriver == "" {
+			_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+		} else {
+			_ = os.Setenv("ORQUESTA_DB_DRIVER", prevDriver)
+		}
+		if prevDSN == "" {
+			_ = os.Unsetenv("ORQUESTA_DB_DSN")
+		} else {
+			_ = os.Setenv("ORQUESTA_DB_DSN", prevDSN)
+		}
+	})
+	_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+	_ = os.Unsetenv("ORQUESTA_DB_DSN")
+
+	if err := loadEnvFileIfPresent(envPath); err != nil {
+		t.Fatalf("loadEnvFileIfPresent: %v", err)
+	}
+	if got := os.Getenv("ORQUESTA_DB_DRIVER"); got != "postgres" {
+		t.Fatalf("ORQUESTA_DB_DRIVER=%q", got)
+	}
+	if got := os.Getenv("ORQUESTA_DB_DSN"); got != "postgres://demo" {
+		t.Fatalf("ORQUESTA_DB_DSN=%q", got)
+	}
+}
+
+func TestLoadEnvFileIfPresentNoPisaVariablesExistentes(t *testing.T) {
+	tmp := t.TempDir()
+	envPath := filepath.Join(tmp, "orquesta.env")
+	if err := os.WriteFile(envPath, []byte("ORQUESTA_DB_DRIVER=postgres\n"), 0o600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+	prevDriver := os.Getenv("ORQUESTA_DB_DRIVER")
+	t.Cleanup(func() {
+		if prevDriver == "" {
+			_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+			return
+		}
+		_ = os.Setenv("ORQUESTA_DB_DRIVER", prevDriver)
+	})
+	if err := os.Setenv("ORQUESTA_DB_DRIVER", "sqlite"); err != nil {
+		t.Fatalf("Setenv: %v", err)
+	}
+	if err := loadEnvFileIfPresent(envPath); err != nil {
+		t.Fatalf("loadEnvFileIfPresent: %v", err)
+	}
+	if got := os.Getenv("ORQUESTA_DB_DRIVER"); got != "sqlite" {
+		t.Fatalf("ORQUESTA_DB_DRIVER=%q, want sqlite", got)
 	}
 }

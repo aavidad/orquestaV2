@@ -24,6 +24,8 @@ type Preparacion struct {
 	Plan      *runtimeagente.LaunchPlan
 }
 
+const resolverPerfilPrepareTimeout = 250 * time.Millisecond
+
 func PrepararDesdeRefs(agenteRef, proyectoRef, conectorRef, modelo, razonamiento, perfilTarea string) (*Preparacion, error) {
 	agente, err := db.GetAgente(strings.TrimSpace(agenteRef))
 	if err != nil {
@@ -61,9 +63,9 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 		prepareRuntimeDebugf("PrepararDesdeDatos done agente=%s proyecto=%s duration=%s", strings.TrimSpace(agente.Nombre), strings.TrimSpace(proyecto.Slug), time.Since(start).Round(time.Millisecond))
 	}()
 	var err error
-	proyecto = db.ProyectoConRutaEfectiva(proyecto, "")
+	proyecto = db.ProyectoPrepareLiteConRutaEfectiva(proyecto, strings.TrimSpace(agente.Nombre))
 	stepStart := time.Now()
-	perfilTarea, modelo, razonamiento, err = db.ResolverPerfilEjecucionLanzamiento(
+	perfilTarea, modelo, razonamiento, err = resolverPerfilEjecucionLanzamientoBestEffort(
 		&agente.Nombre,
 		strings.TrimSpace(proyecto.Slug),
 		perfilTarea,
@@ -135,8 +137,19 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 		return nil, err
 	}
 	prepareRuntimeDebugf("PrepararDesdeDatos step=bootstrap duration=%s", time.Since(stepStart).Round(time.Millisecond))
+	stepStart = time.Now()
 	resume = db.SanitizeResumeContextForProject(resume, proyecto)
-	resume.CWD = db.RutaTrabajoPreferidaAgenteProyecto(strings.TrimSpace(agente.Nombre), proyecto, strings.TrimSpace(resume.CWD))
+	prepareRuntimeDebugf("PrepararDesdeDatos step=sanitize_resume duration=%s", time.Since(stepStart).Round(time.Millisecond))
+	stepStart = time.Now()
+	resume.CWD = db.RutaTrabajoPreferidaAgenteProyectoPrepareLite(strings.TrimSpace(agente.Nombre), proyecto, strings.TrimSpace(resume.CWD))
+	prepareRuntimeDebugf("PrepararDesdeDatos step=ruta_trabajo_preferida duration=%s", time.Since(stepStart).Round(time.Millisecond))
+	if worktree != nil && coordinacion.WorktreePathUsable(strings.TrimSpace(worktree.Path)) {
+		cwdNormalizado := strings.TrimSpace(resume.CWD)
+		rutaProyecto := strings.TrimSpace(proyecto.RutaAbs)
+		if cwdNormalizado == "" || cwdNormalizado == rutaProyecto {
+			resume.CWD = strings.TrimSpace(worktree.Path)
+		}
+	}
 	if strings.TrimSpace(resume.CWD) == "" {
 		resume.CWD = strings.TrimSpace(proyecto.RutaAbs)
 	}
@@ -145,6 +158,7 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 			resume.Branch = strings.TrimSpace(worktree.Branch)
 		}
 	}
+	stepStart = time.Now()
 	resume = runtimeagente.SanitizarResumeParaConector(runtimeagente.ConnectorConfig{
 		Slug:         strings.TrimSpace(conector.Slug),
 		Nombre:       strings.TrimSpace(conector.Nombre),
@@ -155,6 +169,7 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 		MetadataJSON: strings.TrimSpace(conector.MetadataJSON),
 		Activo:       conector.Activo,
 	}, resume)
+	prepareRuntimeDebugf("PrepararDesdeDatos step=sanitizar_resume_conector duration=%s", time.Since(stepStart).Round(time.Millisecond))
 	req := runtimeagente.LaunchRequest{
 		Agente:       strings.TrimSpace(agente.Nombre),
 		Rol:          strings.TrimSpace(agente.Rol),
@@ -163,8 +178,8 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 		Modelo:       strings.TrimSpace(modelo),
 		Razonamiento: strings.TrimSpace(razonamiento),
 		PerfilTarea:  strings.TrimSpace(perfilTarea),
-		Conector: conectorRuntime,
-		Resume: resume,
+		Conector:     conectorRuntime,
+		Resume:       resume,
 	}
 	stepStart = time.Now()
 	plan, err := runtimeagente.DefaultRegistry().Prepare(req)
@@ -208,6 +223,7 @@ func asegurarWorktreeOperativa(agente string, proyecto *db.Proyecto, workspace c
 	if proyecto.Tipo != db.ProyectoRepo {
 		return nil, nil
 	}
+	inicio := time.Now()
 	state := coordinacion.WorktreeActive
 	filter := coordinacion.WorktreeFilter{
 		ProjectID: &proyecto.ID,
@@ -215,17 +231,21 @@ func asegurarWorktreeOperativa(agente string, proyecto *db.Proyecto, workspace c
 		State:     &state,
 	}
 	repo := db.CoordinationWorktreeRepository()
-	activa, err := repo.List(filter)
+	activa, err := db.ListarWorktreesCoordPrepareLite(filter)
 	if err != nil {
 		return nil, err
 	}
+	prepareRuntimeDebugf("PrepararDesdeDatos step=asegurar_worktree_lookup duration=%s agente=%s proyecto=%s activas=%d", time.Since(inicio).Round(time.Millisecond), strings.TrimSpace(agente), strings.TrimSpace(proyecto.Slug), len(activa))
 	if len(activa) > 0 {
 		return activa[0], nil
 	}
+	inicioTarea := time.Now()
 	tarea, err := resolverTareaActivaAgenteProyecto(strings.TrimSpace(agente), proyecto.ID)
 	if err != nil || tarea == nil {
 		return nil, err
 	}
+	prepareRuntimeDebugf("PrepararDesdeDatos step=resolver_tarea_activa duration=%s agente=%s proyecto=%s tarea=%d", time.Since(inicioTarea).Round(time.Millisecond), strings.TrimSpace(agente), strings.TrimSpace(proyecto.Slug), tarea.ID)
+	inicioPrepare := time.Now()
 	svc := &coordinacion.Service{
 		Locks:     db.CoordinationLockRepository(),
 		Worktrees: repo,
@@ -234,37 +254,28 @@ func asegurarWorktreeOperativa(agente string, proyecto *db.Proyecto, workspace c
 		Config:    db.CoordinationConfigRepository(),
 		Workspace: workspace,
 	}
-	return svc.PrepareWorktree(coordinacion.PrepareWorktreeInput{
+	worktree, err := svc.PrepareWorktree(coordinacion.PrepareWorktreeInput{
 		ProjectRef: strings.TrimSpace(proyecto.Slug),
 		Agent:      strings.TrimSpace(agente),
 		TaskID:     &tarea.ID,
 		Reason:     "autonomia_runtime",
 	})
+	prepareRuntimeDebugf("PrepararDesdeDatos step=prepare_worktree duration=%s agente=%s proyecto=%s err=%v", time.Since(inicioPrepare).Round(time.Millisecond), strings.TrimSpace(agente), strings.TrimSpace(proyecto.Slug), err)
+	return worktree, err
 }
 
 func resolverTareaActivaAgenteProyecto(agente string, proyectoID int64) (*db.Tarea, error) {
-	tareas, err := db.ListarTareas(db.FiltroTareas{
-		Agente:     strPtr(strings.TrimSpace(agente)),
-		ProyectoID: &proyectoID,
-	})
+	inicio := time.Now()
+	tarea, err := db.GetTareaActivaPrepareLite(strings.TrimSpace(agente), proyectoID)
 	if err != nil {
 		return nil, err
 	}
-	var asignada *db.Tarea
-	for _, tarea := range tareas {
-		if tarea == nil {
-			continue
-		}
-		switch tarea.Estado {
-		case db.TareaEnProgreso:
-			return tarea, nil
-		case db.TareaAsignada:
-			if asignada == nil {
-				asignada = tarea
-			}
-		}
+	tareaID := int64(0)
+	if tarea != nil {
+		tareaID = tarea.ID
 	}
-	return asignada, nil
+	prepareRuntimeDebugf("PrepararDesdeDatos step=resolver_tarea_agente_prepare_lite duration=%s agente=%s proyecto_id=%d tarea=%d", time.Since(inicio).Round(time.Millisecond), strings.TrimSpace(agente), proyectoID, tareaID)
+	return tarea, nil
 }
 
 func strPtr(v string) *string {
@@ -273,6 +284,41 @@ func strPtr(v string) *string {
 		return nil
 	}
 	return &v
+}
+
+func resolverPerfilEjecucionLanzamientoBestEffort(agenteNombre *string, proyectoSlug, perfilTarea, modelo, razonamiento string) (string, string, string, error) {
+	if strings.TrimSpace(perfilTarea) != "" && strings.TrimSpace(modelo) != "" && strings.TrimSpace(razonamiento) != "" {
+		return perfilTarea, modelo, razonamiento, nil
+	}
+	type result struct {
+		perfil       string
+		modelo       string
+		razonamiento string
+		err          error
+	}
+	done := make(chan result, 1)
+	go func() {
+		perfilRes, modeloRes, razonamientoRes, err := db.ResolverPerfilEjecucionLanzamiento(
+			agenteNombre,
+			proyectoSlug,
+			perfilTarea,
+			modelo,
+			razonamiento,
+		)
+		done <- result{
+			perfil:       perfilRes,
+			modelo:       modeloRes,
+			razonamiento: razonamientoRes,
+			err:          err,
+		}
+	}()
+	select {
+	case res := <-done:
+		return res.perfil, res.modelo, res.razonamiento, res.err
+	case <-time.After(resolverPerfilPrepareTimeout):
+		prepareRuntimeDebugf("PrepararDesdeDatos step=resolver_perfil_timeout proyecto=%s timeout=%s", strings.TrimSpace(proyectoSlug), resolverPerfilPrepareTimeout)
+		return strings.TrimSpace(perfilTarea), strings.TrimSpace(modelo), strings.TrimSpace(razonamiento), nil
+	}
 }
 
 func ResolverConector(agente, conectorRef string, ultima *db.Sesion) (*db.Conector, error) {

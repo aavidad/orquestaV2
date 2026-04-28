@@ -401,7 +401,7 @@ func capasPolitica(input ResolverPoliticaInput, perfil string) []capaPolitica {
 	}
 	if input.AgenteNombre != nil && strings.TrimSpace(*input.AgenteNombre) != "" {
 		nombre := strings.TrimSpace(*input.AgenteNombre)
-		if agente, err := GetAgente(nombre); err == nil && agente != nil && strings.TrimSpace(agente.Rol) != "" {
+		if agente, err := GetAgentePrepareLite(nombre); err == nil && agente != nil && strings.TrimSpace(agente.Rol) != "" {
 			layers = append(layers, capaPolitica{scopeTipo: "rol", scopeRef: strings.TrimSpace(agente.Rol)})
 		}
 		layers = append(layers, capaPolitica{scopeTipo: "agente", scopeRef: nombre})

@@ -270,6 +270,252 @@ func TestRutaProyectoEfectivaNoSobrescribeRaizSiLaSesionYaEstaEnWorktreeActiva(t
 	}
 }
 
+func TestRutaTrabajoPreferidaAgenteProyectoPrepareLitePriorizaSesionDelAgente(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	rutaBase := filepath.Join(tmp, "orquesta")
+	rutaAjena := filepath.Join(tmp, "otro-repo")
+	if err := os.MkdirAll(filepath.Join(rutaBase, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir ruta base: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(rutaAjena, "pkg"), 0o755); err != nil {
+		t.Fatalf("mkdir ruta ajena: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaBase, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod base: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaAjena, "go.mod"), []byte("module otrorepo\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod ajena: %v", err)
+	}
+
+	if err := RegistrarAgente("QwenCoder1", "programador"); err != nil {
+		t.Fatalf("registrar qwen: %v", err)
+	}
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar codex: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "QwenCoder1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(rutaBase, "cmd"),
+		Herramienta: "ollama-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion qwen: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(rutaAjena, "pkg"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion codex: %v", err)
+	}
+
+	proyecto, err := GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	got := RutaTrabajoPreferidaAgenteProyectoPrepareLite("QwenCoder1", proyecto, "")
+	if got != rutaBase {
+		t.Fatalf("ruta prepare-lite inesperada: got=%s want=%s", got, rutaBase)
+	}
+}
+
+func TestRutaTrabajoPreferidaAgenteProyectoPrepareLiteCanonicalizaAliasCodex(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	rutaBase := filepath.Join(tmp, "orquesta")
+	rutaWorktree := filepath.Join(rutaBase, ".orquesta-worktrees", "orquestador-codex95")
+	if err := os.MkdirAll(filepath.Join(rutaWorktree, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaBase, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod base: %v", err)
+	}
+	for _, nombre := range []string{"Codex95", "codex95"} {
+		if err := RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("registrar %s: %v", nombre, err)
+		}
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO worktrees (proyecto_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		proyectoID, "Codex95", "orquestador-codex95", ".orquesta-worktrees/orquestador-codex95", "orq-orquestador-codex95", "HEAD", "activa", "legacy",
+	); err != nil {
+		t.Fatalf("insert worktree: %v", err)
+	}
+	proyecto, err := GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	got := RutaTrabajoPreferidaAgenteProyectoPrepareLite("codex95", proyecto, filepath.Join(rutaWorktree, "cmd"))
+	if got != filepath.Join(rutaWorktree, "cmd") {
+		t.Fatalf("ruta prepare-lite canonica inesperada: got=%s want=%s", got, filepath.Join(rutaWorktree, "cmd"))
+	}
+}
+
+func TestProyectoPrepareLiteConRutaEfectivaSinAgenteNoContaminaRaizPorSesionAjena(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	rutaBase := filepath.Join(tmp, "orquesta")
+	rutaAjena := filepath.Join(tmp, "otro-repo")
+	if err := os.MkdirAll(filepath.Join(rutaBase, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir ruta base: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(rutaAjena, "pkg"), 0o755); err != nil {
+		t.Fatalf("mkdir ruta ajena: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaBase, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod base: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaAjena, "go.mod"), []byte("module otrorepo\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod ajena: %v", err)
+	}
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar codex: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(rutaAjena, "pkg"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion codex: %v", err)
+	}
+
+	proyecto, err := GetProyectoPrepareLite("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto prepare-lite: %v", err)
+	}
+	efectivo := ProyectoPrepareLiteConRutaEfectiva(proyecto, "")
+	if efectivo.RutaAbs != rutaBase {
+		t.Fatalf("ruta prepare-lite sin agente inesperada: got=%s want=%s", efectivo.RutaAbs, rutaBase)
+	}
+}
+
+func TestProyectoPrepareLiteConRutaEfectivaRecuperaSesionSiLaRutaGuardadaEstaRota(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	rutaHistorica := filepath.Join(tmp, "historica-rota", "orquestador")
+	rutaActual := filepath.Join(tmp, "actual", "orquesta")
+	if err := os.MkdirAll(filepath.Join(rutaActual, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir ruta actual: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaActual, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod actual: %v", err)
+	}
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar codex: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaHistorica,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(rutaActual, "cmd"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion codex: %v", err)
+	}
+
+	proyecto, err := GetProyectoPrepareLite("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto prepare-lite: %v", err)
+	}
+	efectivo := ProyectoPrepareLiteConRutaEfectiva(proyecto, "")
+	if efectivo.RutaAbs != rutaActual {
+		t.Fatalf("ruta prepare-lite con fallback roto inesperada: got=%s want=%s", efectivo.RutaAbs, rutaActual)
+	}
+}
+
+func TestProyectoPrepareLiteConRutaEfectivaConBackendSinReadOnlyUsaSesionPrincipal(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	rutaStale := filepath.Join(tmp, "historica-valida", "orquestador")
+	rutaActual := filepath.Join(tmp, "actual", "orquesta")
+	if err := os.MkdirAll(rutaStale, 0o755); err != nil {
+		t.Fatalf("mkdir ruta stale: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaStale, "go.mod"), []byte("module stale\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod stale: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(rutaActual, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir ruta actual: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaActual, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod actual: %v", err)
+	}
+
+	if err := RegistrarAgente("QwenCoder1", "programador"); err != nil {
+		t.Fatalf("registrar qwen: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaStale,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "QwenCoder1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(rutaActual, "cmd"),
+		Herramienta: "ollama-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion qwen: %v", err)
+	}
+
+	t.Setenv("ORQUESTA_DB_DRIVER", "postgres")
+	t.Setenv("ORQUESTA_DB_DSN", "")
+
+	proyecto, err := GetProyectoPrepareLite("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto prepare-lite: %v", err)
+	}
+	efectivo := ProyectoPrepareLiteConRutaEfectiva(proyecto, "QwenCoder1")
+	if efectivo.RutaAbs != rutaActual {
+		t.Fatalf("ruta prepare-lite sin read-only backend inesperada: got=%s want=%s", efectivo.RutaAbs, rutaActual)
+	}
+}
+
 func TestRutaTrabajoPreferidaAgenteProyectoPrefiereWorktreeActivaSobreRaizRepo(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	rutaBase := filepath.Join(tmp, "orquesta")

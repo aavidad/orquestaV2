@@ -90,6 +90,8 @@ type Service struct {
 	recoveryFlow  RecoveryFlowSupport
 }
 
+var registrarAutonomyEventFn = db.RegistrarAutonomyEvent
+
 func NewService(agents AgentPreparer, runtimes RuntimeController) *Service {
 	return &Service{agents: agents, runtimes: runtimes}
 }
@@ -120,6 +122,86 @@ func (s *Service) SetRecoveryFlowSupport(support RecoveryFlowSupport) {
 		return
 	}
 	s.recoveryFlow = support
+}
+
+func registrarAutonomyEventBestEffort(ev *db.AutonomyEvent) {
+	if ev == nil {
+		return
+	}
+	_ = registrarAutonomyEventFn(ev)
+}
+
+func ptrInt64Orq(v int64) *int64 {
+	if v <= 0 {
+		return nil
+	}
+	value := v
+	return &value
+}
+
+func recordWorkerRecoveryRequested(source, reason, action, agente string, proyectoID, runtimeID *int64, handle *db.RuntimeHandle, orderIDs map[string]int64) {
+	delta := map[string]any{
+		"last_autonomy_action": "worker_recovery_requested",
+		"agente":               strings.TrimSpace(agente),
+		"control_action":       strings.TrimSpace(action),
+	}
+	if handle != nil {
+		delta["handle_state_before"] = strings.TrimSpace(handle.Estado)
+	}
+	for key, value := range orderIDs {
+		if strings.TrimSpace(key) == "" || value <= 0 {
+			continue
+		}
+		delta[key] = value
+	}
+	registrarAutonomyEventBestEffort(&db.AutonomyEvent{
+		Kind:      "worker_recovery_requested",
+		Actor:     "orquesta",
+		ProjectID: proyectoID,
+		RuntimeID: runtimeID,
+		HandleID: func() *int64 {
+			if handle == nil {
+				return nil
+			}
+			return ptrInt64Orq(handle.ID)
+		}(),
+		Source:     strings.TrimSpace(source),
+		Reason:     strings.TrimSpace(reason),
+		StateDelta: delta,
+	})
+}
+
+func recordWorkerRecoveryPausedExternal(source, reason, agente string, proyectoID, runtimeID *int64, handle *db.RuntimeHandle, orderIDs map[string]int64) {
+	delta := map[string]any{
+		"last_autonomy_action": "worker_recovery_paused_external",
+		"agente":               strings.TrimSpace(agente),
+		"control_action":       "pause",
+		"external_block_kind":  "connector_unavailable",
+	}
+	if handle != nil {
+		delta["handle_state_before"] = strings.TrimSpace(handle.Estado)
+	}
+	for key, value := range orderIDs {
+		if strings.TrimSpace(key) == "" || value <= 0 {
+			continue
+		}
+		delta[key] = value
+	}
+	registrarAutonomyEventBestEffort(&db.AutonomyEvent{
+		Kind:      "worker_recovery_paused_external",
+		Actor:     "orquesta",
+		ProjectID: proyectoID,
+		RuntimeID: runtimeID,
+		HandleID: func() *int64 {
+			if handle == nil {
+				return nil
+			}
+			return ptrInt64Orq(handle.ID)
+		}(),
+		Source:     strings.TrimSpace(source),
+		Reason:     strings.TrimSpace(reason),
+		StateDelta: delta,
+	})
 }
 
 type ControlRequest struct {
@@ -319,9 +401,42 @@ func (s *Service) shouldSkipSessionHygieneForStart(agente, proyectoRef string) (
 	}
 	handle, err := s.runtimes.GetOperationalRuntimeHandleForProject(agente, &proyecto.ID)
 	if err != nil || handle == nil {
+		if err != nil {
+			return false, err
+		}
+		return s.hasLiveRuntimeWorkForStartHygiene(agente, &proyecto.ID)
+	}
+	if db.RuntimeHandleSnapshotIsFresh(handle, time.Minute) {
+		return true, nil
+	}
+	return s.hasLiveRuntimeWorkForStartHygiene(agente, &proyecto.ID)
+}
+
+func (s *Service) hasLiveRuntimeWorkForStartHygiene(agente string, proyectoID *int64) (bool, error) {
+	if s == nil || s.runtimes == nil {
+		return false, fmt.Errorf("servicio de orquestacion de agentes no inicializado")
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyectoID == nil || *proyectoID <= 0 {
+		return false, nil
+	}
+	orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
+		Agente:     &agente,
+		ProyectoID: proyectoID,
+	})
+	if err != nil {
 		return false, err
 	}
-	return db.RuntimeHandleSnapshotIsFresh(handle, time.Minute), nil
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(order.Estado)) {
+		case "pendiente", "notificada", "tomada", "ejecutando":
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *Service) Launch(req LaunchRequest) (*LaunchResult, error) {
@@ -585,7 +700,16 @@ func (s *Service) RecoverLocalFailedRuntimeSession(sesion *db.Sesion, proyecto *
 		modelo = ""
 		razonamiento = ""
 	}
-	if _, _, err := s.EnqueueControl(ControlRequest{
+	runtimeID := func() *int64 {
+		if runtime != nil && runtime.ID > 0 {
+			return &runtime.ID
+		}
+		if handle != nil && handle.RuntimeID != nil && *handle.RuntimeID > 0 {
+			return handle.RuntimeID
+		}
+		return nil
+	}()
+	orderID, _, err := s.EnqueueControl(ControlRequest{
 		Agente:       strings.TrimSpace(sesion.Agente),
 		Proyecto:     strings.TrimSpace(proyecto.Slug),
 		Accion:       "start",
@@ -594,9 +718,20 @@ func (s *Service) RecoverLocalFailedRuntimeSession(sesion *db.Sesion, proyecto *
 		Perfil:       perfil,
 		Motivo:       "local_runtime_failed",
 		Por:          "orquesta",
-	}); err != nil {
+	})
+	if err != nil {
 		return 0, err
 	}
+	recordWorkerRecoveryRequested(
+		"worker_recovery_local_failed",
+		"local_runtime_failed",
+		"start",
+		strings.TrimSpace(sesion.Agente),
+		sesion.ProyectoID,
+		runtimeID,
+		handle,
+		map[string]int64{"runtime_order_id": orderID},
+	)
 	return 1, nil
 }
 
@@ -642,32 +777,60 @@ func (s *Service) ReactivateProjectIfNeeded(agente string, proyecto *db.Proyecto
 			if db.RuntimeHandlePauseRequiresFreshStart(handle) {
 				accion = "start"
 			}
-			if _, _, err := s.EnqueueControl(ControlRequest{
+			orderID, _, err := s.EnqueueControl(ControlRequest{
 				Agente:   agente,
 				Proyecto: strings.TrimSpace(proyecto.Slug),
 				Accion:   accion,
 				Motivo:   strings.TrimSpace(motivo),
 				Por:      "orquesta",
-			}); err != nil {
+			})
+			if err != nil {
 				return false, err
 			}
+			recordWorkerRecoveryRequested(
+				"worker_recovery_reactivate",
+				strings.TrimSpace(motivo),
+				accion,
+				agente,
+				&proyecto.ID,
+				handle.RuntimeID,
+				handle,
+				map[string]int64{"runtime_order_id": orderID},
+			)
 			return true, nil
 		case "fallido":
-			if _, _, err := s.EnqueueControl(ControlRequest{
+			orderID, _, err := s.EnqueueControl(ControlRequest{
 				Agente:   agente,
 				Proyecto: strings.TrimSpace(proyecto.Slug),
 				Accion:   "start",
 				Motivo:   strings.TrimSpace(motivo),
 				Por:      "orquesta",
-			}); err != nil {
+			})
+			if err != nil {
 				return false, err
 			}
+			recordWorkerRecoveryRequested(
+				"worker_recovery_reactivate",
+				strings.TrimSpace(motivo),
+				"start",
+				agente,
+				&proyecto.ID,
+				handle.RuntimeID,
+				handle,
+				map[string]int64{"runtime_order_id": orderID},
+			)
 			return true, nil
 		}
 	}
 	tieneTrabajo, err := s.workChecker.HasStartableAgentWork(agente, proyecto.ID)
 	if err != nil {
 		return false, err
+	}
+	if !tieneTrabajo {
+		tieneTrabajo, err = s.hasRecoverableAssignedProjectWork(agente, proyecto.ID)
+		if err != nil {
+			return false, err
+		}
 	}
 	if !tieneTrabajo {
 		tieneBacklog, err := s.recoveryFlow.ProjectHasReactivableBacklog(proyecto.ID)
@@ -678,16 +841,48 @@ func (s *Service) ReactivateProjectIfNeeded(agente string, proyecto *db.Proyecto
 			return false, nil
 		}
 	}
-	if _, _, err := s.EnqueueControl(ControlRequest{
+	orderID, _, err := s.EnqueueControl(ControlRequest{
 		Agente:   agente,
 		Proyecto: strings.TrimSpace(proyecto.Slug),
 		Accion:   "start",
 		Motivo:   strings.TrimSpace(motivo),
 		Por:      "orquesta",
-	}); err != nil {
+	})
+	if err != nil {
 		return false, err
 	}
+	recordWorkerRecoveryRequested(
+		"worker_recovery_reactivate",
+		strings.TrimSpace(motivo),
+		"start",
+		agente,
+		&proyecto.ID,
+		nil,
+		handle,
+		map[string]int64{"runtime_order_id": orderID},
+	)
 	return true, nil
+}
+
+func (s *Service) hasRecoverableAssignedProjectWork(agente string, proyectoID int64) (bool, error) {
+	if s == nil || s.recoveryFlow == nil || proyectoID <= 0 {
+		return false, nil
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return false, nil
+	}
+	if activeProjectID, err := s.recoveryFlow.ActiveProjectID(agente); err != nil {
+		return false, err
+	} else if activeProjectID == proyectoID {
+		return true, nil
+	}
+	if taskProjectID, err := s.recoveryFlow.ProjectIDFromAssignedWork(agente); err != nil {
+		return false, err
+	} else if taskProjectID == proyectoID {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (s *Service) ResolveReactivationProject(agente string) (*db.Proyecto, error) {
@@ -707,6 +902,11 @@ func (s *Service) ResolveReactivationProject(agente string) (*db.Proyecto, error
 		return nil, err
 	} else if proyectoID > 0 {
 		return s.resolveReactivationProjectByID(agente, proyectoID, "tarea")
+	}
+	if proyectoID, err := s.projectIDFromPendingStartOrder(agente); err != nil {
+		return nil, err
+	} else if proyectoID > 0 {
+		return s.resolveReactivationProjectByID(agente, proyectoID, "runtime_order_start")
 	}
 	if proyectoID, err := s.projectIDFromPendingMailbox(agente); err != nil {
 		return nil, err
@@ -803,15 +1003,30 @@ func (s *Service) RecoverRemoteDegradedRuntimeSession(sesion *db.Sesion, proyect
 			} else if satisfecha {
 				return 1, nil
 			}
-			if _, _, err := s.EnqueueControl(ControlRequest{
+			pauseOrderID, _, err := s.EnqueueControl(ControlRequest{
 				Agente:   strings.TrimSpace(sesion.Agente),
 				Proyecto: strings.TrimSpace(proyecto.Slug),
 				Accion:   "pause",
 				Motivo:   motivo,
 				Por:      "orquesta",
-			}); err != nil {
+			})
+			if err != nil {
 				return 0, err
 			}
+			recordWorkerRecoveryPausedExternal(
+				"worker_recovery_remote_degraded",
+				motivo,
+				strings.TrimSpace(sesion.Agente),
+				sesion.ProyectoID,
+				func() *int64 {
+					if runtime == nil || runtime.ID <= 0 {
+						return nil
+					}
+					return ptrInt64Orq(runtime.ID)
+				}(),
+				handle,
+				map[string]int64{"pause_order_id": pauseOrderID},
+			)
 			return 1, nil
 		}
 	}
@@ -834,14 +1049,15 @@ func (s *Service) RecoverRemoteDegradedRuntimeSession(sesion *db.Sesion, proyect
 		}
 		return handle.RuntimeID
 	}()
-	if _, err := s.runtimes.EnqueueRuntimeOrder(&db.RuntimeOrder{
+	checkpointOrderID, err := s.runtimes.EnqueueRuntimeOrder(&db.RuntimeOrder{
 		Agente:      strings.TrimSpace(sesion.Agente),
 		ProyectoID:  sesion.ProyectoID,
 		RuntimeID:   runtimeID,
 		HandleID:    &handle.ID,
 		Tipo:        "checkpoint",
 		PayloadJSON: string(checkpointPayload),
-	}); err != nil {
+	})
+	if err != nil {
 		return 0, err
 	}
 	if remoteRuntimeResumable(sesion, handle) {
@@ -854,27 +1070,55 @@ func (s *Service) RecoverRemoteDegradedRuntimeSession(sesion *db.Sesion, proyect
 		if err != nil {
 			return 0, err
 		}
-		if _, err := s.runtimes.EnqueueRuntimeOrder(&db.RuntimeOrder{
+		resumeOrderID, err := s.runtimes.EnqueueRuntimeOrder(&db.RuntimeOrder{
 			Agente:      strings.TrimSpace(sesion.Agente),
 			ProyectoID:  sesion.ProyectoID,
 			RuntimeID:   runtimeID,
 			HandleID:    &handle.ID,
 			Tipo:        "resume",
 			PayloadJSON: string(payload),
-		}); err != nil {
+		})
+		if err != nil {
 			return 0, err
 		}
+		recordWorkerRecoveryRequested(
+			"worker_recovery_remote_degraded",
+			"remote_runtime_degraded",
+			"resume",
+			strings.TrimSpace(sesion.Agente),
+			sesion.ProyectoID,
+			runtimeID,
+			handle,
+			map[string]int64{
+				"checkpoint_order_id": checkpointOrderID,
+				"resume_order_id":     resumeOrderID,
+			},
+		)
 		return 2, nil
 	}
-	if _, _, err := s.EnqueueControl(ControlRequest{
+	startOrderID, _, err := s.EnqueueControl(ControlRequest{
 		Agente:   strings.TrimSpace(sesion.Agente),
 		Proyecto: strings.TrimSpace(proyecto.Slug),
 		Accion:   "start",
 		Motivo:   "remote_runtime_degraded",
 		Por:      "orquesta",
-	}); err != nil {
+	})
+	if err != nil {
 		return 0, err
 	}
+	recordWorkerRecoveryRequested(
+		"worker_recovery_remote_degraded",
+		"remote_runtime_degraded",
+		"start",
+		strings.TrimSpace(sesion.Agente),
+		sesion.ProyectoID,
+		runtimeID,
+		handle,
+		map[string]int64{
+			"checkpoint_order_id": checkpointOrderID,
+			"start_order_id":      startOrderID,
+		},
+	)
 	return 2, nil
 }
 
@@ -978,7 +1222,11 @@ func (s *Service) EnqueueAutonomyNudge(req NudgeRequest) (bool, error) {
 	if proyecto == nil {
 		return false, nil
 	}
-	agente := strings.TrimSpace(req.Agente)
+	agente, err := db.CanonicalizeAgentName(req.Agente)
+	if err != nil {
+		return false, err
+	}
+	agente = strings.TrimSpace(agente)
 	accion := strings.TrimSpace(req.Accion)
 	if agente == "" || accion == "" || proyecto.ID <= 0 {
 		return false, nil
@@ -1346,6 +1594,40 @@ func (s *Service) projectIDFromPendingMailbox(agente string) (int64, error) {
 		if bestProjectID == 0 || msg.ID > bestID {
 			bestProjectID = *msg.ProyectoID
 			bestID = msg.ID
+		}
+	}
+	return bestProjectID, nil
+}
+
+func (s *Service) projectIDFromPendingStartOrder(agente string) (int64, error) {
+	if s == nil || s.runtimes == nil {
+		return 0, nil
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return 0, nil
+	}
+	bestProjectID := int64(0)
+	bestID := int64(0)
+	estados := []string{"pendiente", "tomada", "ejecutando"}
+	for _, estado := range estados {
+		estado := estado
+		orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
+			Agente: &agente,
+			Estado: &estado,
+			Tipos:  []string{"start"},
+		})
+		if err != nil {
+			return 0, err
+		}
+		for _, order := range orders {
+			if order == nil || order.ProyectoID == nil || *order.ProyectoID <= 0 {
+				continue
+			}
+			if bestProjectID == 0 || order.ID > bestID {
+				bestProjectID = *order.ProyectoID
+				bestID = order.ID
+			}
 		}
 	}
 	return bestProjectID, nil

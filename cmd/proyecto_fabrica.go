@@ -10,6 +10,7 @@ import (
 
 type projectAppFactory interface {
 	Generate(spec fabricaapp.AppSpec) (fabricaapp.GenerationResult, error)
+	GenerateLanguageExpansion(nombre string, idiomas []string) (fabricaapp.GenerationResult, error)
 }
 
 var newProjectAppFactory = func() projectAppFactory {

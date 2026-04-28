@@ -68,7 +68,8 @@ func renderSeedStatementForDriver(driver, stmt string) string {
 				stmt += " ON CONFLICT(" + conflict + ") DO NOTHING;"
 			}
 		default:
-			// SQLite: ON CONFLICT DO NOTHING (sin columna) captura TODOS los
+			// El dialecto local heredado usa ON CONFLICT DO NOTHING (sin
+			// columna), que captura TODOS los
 			// unique constraints, incluidos índices CI como idx_agentes_nombre_ci.
 			stmt = strings.Replace(stmt, "INSERT OR IGNORE INTO", "INSERT INTO", 1)
 			stmt = strings.TrimSuffix(stmt, ";")

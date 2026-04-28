@@ -23,6 +23,30 @@ type stubAgentPreparer struct {
 
 func int64Ptr(v int64) *int64 { return &v }
 
+func captureAutonomyEventsForTest(t *testing.T) *[]*db.AutonomyEvent {
+	t.Helper()
+	prev := registrarAutonomyEventFn
+	events := make([]*db.AutonomyEvent, 0, 4)
+	registrarAutonomyEventFn = func(ev *db.AutonomyEvent) error {
+		if ev == nil {
+			return nil
+		}
+		clone := *ev
+		if len(ev.StateDelta) > 0 {
+			clone.StateDelta = make(map[string]any, len(ev.StateDelta))
+			for k, v := range ev.StateDelta {
+				clone.StateDelta[k] = v
+			}
+		}
+		events = append(events, &clone)
+		return nil
+	}
+	t.Cleanup(func() {
+		registrarAutonomyEventFn = prev
+	})
+	return &events
+}
+
 func (s *stubAgentPreparer) BuildPrepare(input agentesapp.PrepareInput) (*agentesapp.PrepareOutput, error) {
 	s.input = input
 	return s.out, s.err
@@ -573,6 +597,53 @@ func TestEnqueueControlStartSkipsSessionHygieneWhenOperationalHandleIsFresh(t *t
 	}
 	if store.auditAction == "session_hygiene_start" {
 		t.Fatalf("no deberia auditar hygiene al saltarse el precheck: %+v", store)
+	}
+}
+
+func TestEnqueueControlStartSkipsSessionHygieneWhenLiveRuntimeOrderExists(t *testing.T) {
+	t.Parallel()
+
+	store := &stubAutonomyStore{}
+	runtimes := &stubRuntimeController{
+		controlID:     22,
+		controlAction: "start",
+		project: &db.Proyecto{
+			ID:   7,
+			Slug: "orquestador",
+		},
+		operationalHandle: &db.RuntimeHandle{
+			ID:         99,
+			Agente:     "Codex3",
+			Estado:     "fallido",
+			ProyectoID: int64Ptr(7),
+		},
+		orders: []*db.RuntimeOrder{
+			{ID: 11705, Agente: "Codex3", Estado: "pendiente", Tipo: "send_instruction"},
+		},
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(store)
+
+	orderID, accion, err := service.EnqueueControl(ControlRequest{
+		Agente:   "Codex3",
+		Proyecto: "orquestador",
+		Accion:   "start",
+		Por:      "server",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueControl: %v", err)
+	}
+	if orderID != 22 || accion != "start" {
+		t.Fatalf("respuesta inesperada: %d %s", orderID, accion)
+	}
+	if runtimes.reconcileHandlesHits != 0 || runtimes.reconcileOrdersHits != 0 {
+		t.Fatalf("no deberia reconciliar stale si ya hay runtime work viva: handles=%d orders=%d", runtimes.reconcileHandlesHits, runtimes.reconcileOrdersHits)
+	}
+	if runtimes.purgeHandlesHits != 0 || runtimes.purgeOrdersHits != 0 {
+		t.Fatalf("no deberia purgar si ya hay runtime work viva: handles=%d orders=%d", runtimes.purgeHandlesHits, runtimes.purgeOrdersHits)
+	}
+	if store.auditAction == "session_hygiene_start" {
+		t.Fatalf("no deberia auditar hygiene si el arranque ya tiene work runtime viva: %+v", store)
 	}
 }
 
@@ -1345,8 +1416,7 @@ func TestShouldSupersedeSessionRecoveryWithRecentTMUXIgnoresSameSession(t *testi
 }
 
 func TestRecoverLocalFailedRuntimeSessionEnqueuesStartWithPersistedProfile(t *testing.T) {
-	t.Parallel()
-
+	events := captureAutonomyEventsForTest(t)
 	proyectoID := int64(13)
 	runtimeID := int64(21)
 	runtimes := &stubRuntimeController{
@@ -1385,6 +1455,21 @@ func TestRecoverLocalFailedRuntimeSessionEnqueuesStartWithPersistedProfile(t *te
 	}
 	if runtimes.controlReq.Perfil != "implementacion" || runtimes.controlReq.Modelo != "gemma4:26b" || runtimes.controlReq.Razonamiento != "medium" {
 		t.Fatalf("perfil persistido inesperado: %+v", runtimes.controlReq)
+	}
+	if len(*events) != 1 {
+		t.Fatalf("autonomy events inesperados: %+v", *events)
+	}
+	ev := (*events)[0]
+	if ev.Kind != "worker_recovery_requested" || ev.Source != "worker_recovery_local_failed" || ev.Reason != "local_runtime_failed" {
+		t.Fatalf("worker_recovery event inesperado: %+v", ev)
+	}
+	if ev.ProjectID == nil || *ev.ProjectID != proyectoID || ev.RuntimeID == nil || *ev.RuntimeID != runtimeID || ev.HandleID == nil || *ev.HandleID != 3 {
+		t.Fatalf("ids del event inesperados: %+v", ev)
+	}
+	if fmt.Sprint(ev.StateDelta["control_action"]) != "start" ||
+		fmt.Sprint(ev.StateDelta["runtime_order_id"]) != "4" ||
+		fmt.Sprint(ev.StateDelta["handle_state_before"]) != "fallido" {
+		t.Fatalf("state_delta inesperado: %+v", ev.StateDelta)
 	}
 }
 
@@ -1465,8 +1550,7 @@ func TestRecoverLocalFailedRuntimeSessionSkipsHealthyRuntimeWithoutSync(t *testi
 }
 
 func TestRecoverRemoteDegradedRuntimeSessionEnqueuesCheckpointAndResume(t *testing.T) {
-	t.Parallel()
-
+	events := captureAutonomyEventsForTest(t)
 	proyectoID := int64(31)
 	runtimeID := int64(44)
 	runtimes := &stubRuntimeController{
@@ -1496,11 +1580,22 @@ func TestRecoverRemoteDegradedRuntimeSessionEnqueuesCheckpointAndResume(t *testi
 	if runtimes.controlReq.Accion != "" {
 		t.Fatalf("no deberia encolar control start: %+v", runtimes.controlReq)
 	}
+	if len(*events) != 1 {
+		t.Fatalf("autonomy events inesperados: %+v", *events)
+	}
+	ev := (*events)[0]
+	if ev.Kind != "worker_recovery_requested" || ev.Source != "worker_recovery_remote_degraded" || ev.Reason != "remote_runtime_degraded" {
+		t.Fatalf("worker_recovery event inesperado: %+v", ev)
+	}
+	if fmt.Sprint(ev.StateDelta["control_action"]) != "resume" ||
+		fmt.Sprint(ev.StateDelta["checkpoint_order_id"]) != "8" ||
+		fmt.Sprint(ev.StateDelta["resume_order_id"]) != "8" {
+		t.Fatalf("state_delta inesperado: %+v", ev.StateDelta)
+	}
 }
 
 func TestRecoverRemoteDegradedRuntimeSessionPausesWhenConnectorUnavailable(t *testing.T) {
-	t.Parallel()
-
+	events := captureAutonomyEventsForTest(t)
 	proyectoID := int64(31)
 	store := &stubAutonomyStore{}
 	support := &stubRemoteRecoverySupport{
@@ -1529,6 +1624,52 @@ func TestRecoverRemoteDegradedRuntimeSessionPausesWhenConnectorUnavailable(t *te
 	}
 	if runtimes.controlReq.Accion != "pause" || runtimes.controlReq.Motivo != "conector:codex-remote:circuito_abierto" {
 		t.Fatalf("pause inesperada: %+v", runtimes.controlReq)
+	}
+	if len(*events) != 1 {
+		t.Fatalf("autonomy events inesperados: %+v", *events)
+	}
+	ev := (*events)[0]
+	if ev.Kind != "worker_recovery_paused_external" || ev.Source != "worker_recovery_remote_degraded" || ev.Reason != "conector:codex-remote:circuito_abierto" {
+		t.Fatalf("worker_recovery paused event inesperado: %+v", ev)
+	}
+	if fmt.Sprint(ev.StateDelta["control_action"]) != "pause" ||
+		fmt.Sprint(ev.StateDelta["external_block_kind"]) != "connector_unavailable" ||
+		fmt.Sprint(ev.StateDelta["pause_order_id"]) != "8" ||
+		fmt.Sprint(ev.StateDelta["agente"]) != "Codex1" {
+		t.Fatalf("state_delta inesperado: %+v", ev.StateDelta)
+	}
+}
+
+func TestRecoverRemoteDegradedRuntimeSessionNoEmitePausedExternalWhenPauseAlreadySatisfied(t *testing.T) {
+	events := captureAutonomyEventsForTest(t)
+	proyectoID := int64(31)
+	store := &stubAutonomyStore{quotaState: "agotado"}
+	support := &stubRemoteRecoverySupport{
+		conector:  &db.Conector{ID: 5, Slug: "codex-remote"},
+		available: false,
+	}
+	runtimes := &stubRuntimeController{}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(store)
+	service.SetRemoteRecoverySupport(support)
+
+	count, err := service.RecoverRemoteDegradedRuntimeSession(
+		&db.Sesion{ID: 9, Agente: "Codex1", ProyectoID: &proyectoID, Estado: "activa"},
+		&db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		&db.RuntimeHandle{ID: 3, Estado: "fallido", Transporte: "api", HandleKind: "session", HandleRef: "remote-1"},
+		&db.RuntimeInstance{ID: 44, Agente: "Codex1", ProyectoID: &proyectoID, LogicalState: "degradado", ProcessState: "remote_status_error"},
+	)
+	if err != nil {
+		t.Fatalf("RecoverRemoteDegradedRuntimeSession: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("count inesperado: %d", count)
+	}
+	if runtimes.controlReq.Accion != "" {
+		t.Fatalf("no deberia encolar pause al estar ya satisfecha: %+v", runtimes.controlReq)
+	}
+	if len(*events) != 0 {
+		t.Fatalf("no deberia emitir worker_recovery_paused_external si la pausa ya estaba satisfecha: %+v", *events)
 	}
 }
 
@@ -1615,6 +1756,81 @@ func TestReactivateProjectIfNeededSkipsWhenHandleAlreadyActive(t *testing.T) {
 	}
 }
 
+func TestReactivateProjectIfNeededUsesActiveAssignmentWhenNoStartableWork(t *testing.T) {
+	events := captureAutonomyEventsForTest(t)
+	proyectoID := int64(31)
+	runtimes := &stubRuntimeController{controlID: 18, controlAction: "start"}
+	service := NewService(nil, runtimes)
+	service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: false})
+	service.SetRecoveryFlowSupport(&stubRecoveryFlowSupport{
+		available:       true,
+		activeProjectID: proyectoID,
+	})
+
+	ok, err := service.ReactivateProjectIfNeeded(
+		"QwenCoder1",
+		&db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		"agente_sin_runtime_activo",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ReactivateProjectIfNeeded: %v", err)
+	}
+	if !ok {
+		t.Fatal("deberia reactivar cuando la asignacion activa ya apunta al proyecto")
+	}
+	if runtimes.controlReq.Accion != "start" {
+		t.Fatalf("accion inesperada: %+v", runtimes.controlReq)
+	}
+	if len(*events) != 1 {
+		t.Fatalf("autonomy events inesperados: %+v", *events)
+	}
+	ev := (*events)[0]
+	if ev.Kind != "worker_recovery_requested" || ev.Source != "worker_recovery_reactivate" || ev.Reason != "agente_sin_runtime_activo" {
+		t.Fatalf("worker_recovery event inesperado: %+v", ev)
+	}
+	if ev.ProjectID == nil || *ev.ProjectID != proyectoID {
+		t.Fatalf("project_id inesperado: %+v", ev)
+	}
+	if fmt.Sprint(ev.StateDelta["control_action"]) != "start" ||
+		fmt.Sprint(ev.StateDelta["runtime_order_id"]) != "18" ||
+		fmt.Sprint(ev.StateDelta["agente"]) != "QwenCoder1" {
+		t.Fatalf("state_delta inesperado: %+v", ev.StateDelta)
+	}
+}
+
+func TestReactivateProjectIfNeededRespetaPoolGateCuandoElPoolCompartidoEstaLleno(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(31)
+	runtimes := &stubRuntimeController{}
+	service := NewService(nil, runtimes)
+	service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: false})
+	service.SetRecoveryFlowSupport(&stubRecoveryFlowSupport{
+		available:       true,
+		usePool:         true,
+		poolAllowed:     false,
+		poolSlug:        "ollama_pool_local",
+		activeProjectID: proyectoID,
+	})
+
+	ok, err := service.ReactivateProjectIfNeeded(
+		"QwenCoder1",
+		&db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		"agente_sin_runtime_activo",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ReactivateProjectIfNeeded: %v", err)
+	}
+	if ok {
+		t.Fatal("no deberia reactivar cuando el pool local compartido niega capacidad")
+	}
+	if runtimes.controlReq.Accion != "" {
+		t.Fatalf("no deberia encolar control: %+v", runtimes.controlReq)
+	}
+}
+
 func TestResolveReactivationProjectPrefersActiveAssignment(t *testing.T) {
 	t.Parallel()
 
@@ -1658,6 +1874,56 @@ func TestResolveReactivationProjectFallsBackToMailbox(t *testing.T) {
 	}
 	if proyecto == nil || proyecto.ID != 55 {
 		t.Fatalf("proyecto inesperado: %+v", proyecto)
+	}
+}
+
+func TestResolveReactivationProjectPrefersPendingStartOrderOverLatestSession(t *testing.T) {
+	t.Parallel()
+
+	projectStartID := int64(91)
+	projectLatestID := int64(77)
+	runtimes := &stubRuntimeController{
+		project: &db.Proyecto{ID: projectStartID, Slug: "orquestador"},
+		orders: []*db.RuntimeOrder{
+			{ID: 12249, Agente: "Gemma1", Tipo: "start", Estado: "pendiente", ProyectoID: &projectStartID},
+		},
+	}
+	service := NewService(nil, runtimes)
+	service.SetRecoveryFlowSupport(&stubRecoveryFlowSupport{
+		latestProjectID: projectLatestID,
+	})
+
+	proyecto, err := service.ResolveReactivationProject("Gemma1")
+	if err != nil {
+		t.Fatalf("ResolveReactivationProject: %v", err)
+	}
+	if proyecto == nil || proyecto.ID != projectStartID {
+		t.Fatalf("deberia preferir proyecto de start pendiente: %+v", proyecto)
+	}
+}
+
+func TestResolveReactivationProjectPrefersActiveAssignmentOverPendingStartOrder(t *testing.T) {
+	t.Parallel()
+
+	projectActiveID := int64(31)
+	projectStartID := int64(91)
+	runtimes := &stubRuntimeController{
+		project: &db.Proyecto{ID: projectActiveID, Slug: "orquestador"},
+		orders: []*db.RuntimeOrder{
+			{ID: 12249, Agente: "Gemma1", Tipo: "start", Estado: "pendiente", ProyectoID: &projectStartID},
+		},
+	}
+	service := NewService(nil, runtimes)
+	service.SetRecoveryFlowSupport(&stubRecoveryFlowSupport{
+		activeProjectID: projectActiveID,
+	})
+
+	proyecto, err := service.ResolveReactivationProject("Gemma1")
+	if err != nil {
+		t.Fatalf("ResolveReactivationProject: %v", err)
+	}
+	if proyecto == nil || proyecto.ID != projectActiveID {
+		t.Fatalf("deberia preferir asignacion activa sobre start pendiente: %+v", proyecto)
 	}
 }
 

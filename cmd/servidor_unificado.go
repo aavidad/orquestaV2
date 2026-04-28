@@ -55,6 +55,7 @@ func registrarRutasServe(mux *http.ServeMux) {
 	mux.HandleFunc("/sesiones/", webRouterSesiones)
 	mux.HandleFunc("/proyectos", webHandlerProyectos)
 	mux.HandleFunc("/proyectos/", webRouterProyectos)
+	mux.HandleFunc("/workspace/control", webHandlerWorkspaceControl)
 	mux.HandleFunc("/nueva-app", webHandlerNuevaApp)
 	mux.HandleFunc("/progreso", webHandlerProgreso)
 	mux.HandleFunc("/progreso/", webRouterProgreso)

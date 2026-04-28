@@ -21,6 +21,12 @@ func TestPreferSupervisorCandidate(t *testing.T) {
 	); !got {
 		t.Fatalf("prefered candidate should win")
 	}
+	if got := PreferSupervisorCandidate(
+		&SupervisorCandidateSnapshot{AgentName: "a", Preferred: true, Active: false},
+		&SupervisorCandidateSnapshot{AgentName: "b", Active: true},
+	); got {
+		t.Fatalf("active candidate should outrank inactive preferred")
+	}
 
 	if got := PreferSupervisorCandidate(
 		&SupervisorCandidateSnapshot{AgentName: "a", Active: true},
@@ -42,5 +48,23 @@ func TestPreferSupervisorCandidateFallsBackToRoleAndName(t *testing.T) {
 		&SupervisorCandidateSnapshot{AgentName: "CodexB", RoleScore: 1},
 	); !got {
 		t.Fatalf("lexicographic tie-break should win")
+	}
+}
+
+func TestPreferSupervisorCandidatePrefiereNoPrimeATieBreak(t *testing.T) {
+	if got := PreferSupervisorCandidate(
+		&SupervisorCandidateSnapshot{AgentName: "Codex1", RoleScore: 2, CostTier: AgentCostTier("Codex1")},
+		&SupervisorCandidateSnapshot{AgentName: "CodexPg1", RoleScore: 2, CostTier: AgentCostTier("CodexPg1")},
+	); !got {
+		t.Fatalf("worker no-prime deberia ganar frente a prime con el mismo rol")
+	}
+}
+
+func TestAgentCostTier(t *testing.T) {
+	if got := AgentCostTier("Codex1"); got != 0 {
+		t.Fatalf("cost tier inesperado para codex normal: %d", got)
+	}
+	if got := AgentCostTier("CodexPg1"); got != 1 {
+		t.Fatalf("cost tier inesperado para prime: %d", got)
 	}
 }

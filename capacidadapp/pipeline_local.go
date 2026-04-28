@@ -46,12 +46,33 @@ type PipelineLocalDeterminista struct {
 
 func (s *Service) ConstruirPipelineLocalDeterminista(proyectoSlug string) (*PipelineLocalDeterminista, error) {
 	proyectoSlug = strings.TrimSpace(proyectoSlug)
+	resolutionCache := map[string]*db.ResolucionModelo{}
+	resolvePolicy := func(fase, perfil string) *db.ResolucionModelo {
+		if s == nil {
+			return nil
+		}
+		key := strings.TrimSpace(proyectoSlug) + "|" + strings.TrimSpace(fase) + "|" + strings.TrimSpace(perfil)
+		if cached, ok := resolutionCache[key]; ok {
+			return cached
+		}
+		resolucion, err := s.ResolveModelPolicy(db.ResolverPoliticaInput{
+			ProyectoSlug: strings.TrimSpace(proyectoSlug),
+			Fase:         strings.TrimSpace(fase),
+			PerfilTarea:  strings.TrimSpace(perfil),
+		})
+		if err == nil {
+			resolutionCache[key] = resolucion
+			return resolucion
+		}
+		resolutionCache[key] = nil
+		return nil
+	}
 	fases := []EtapaPipelineLocal{
-		s.construirEtapaPipelineLocal(proyectoSlug, "especificacion", "analisis", "worker_modelo", "premium_worktree", "git_worktree", true, false, true, "qwen3.5:27b-q4_K_M", "gemma4:26b"),
-		s.construirEtapaPipelineLocal(proyectoSlug, "implementacion", "implementacion", "worker_modelo", "premium_worktree", "git_worktree", true, false, true, "qwen2.5-coder:32b", "gemma4:26b"),
-		s.construirEtapaPipelineLocal(proyectoSlug, "revision", "revision", "worker_modelo", "revision_diff", "hallazgos_estructurados", true, false, true, "deepseek-coder-v2", "gemma4:26b"),
-		s.construirEtapaPipelineLocal(proyectoSlug, "correccion", "implementacion", "worker_modelo", "premium_worktree", "git_worktree", true, false, true, "qwen2.5-coder:32b", "gemma4:26b"),
-		s.construirEtapaPipelineLocal(proyectoSlug, "integracion", "analisis", "determinista_app", "determinista_app", "merge_controlado", false, false, false, "", ""),
+		s.construirEtapaPipelineLocal(proyectoSlug, "especificacion", "analisis", "worker_modelo", "premium_worktree", "git_worktree", true, false, true, "qwen3.5:27b-q4_K_M", "gemma4:26b", resolvePolicy("especificacion", "analisis")),
+		s.construirEtapaPipelineLocal(proyectoSlug, "implementacion", "implementacion", "worker_modelo", "premium_worktree", "git_worktree", true, false, true, "qwen2.5-coder:32b", "gemma4:26b", resolvePolicy("implementacion", "implementacion")),
+		s.construirEtapaPipelineLocal(proyectoSlug, "revision", "revision", "worker_modelo", "revision_diff", "hallazgos_estructurados", true, false, true, "deepseek-coder-v2", "gemma4:26b", resolvePolicy("revision", "revision")),
+		s.construirEtapaPipelineLocal(proyectoSlug, "correccion", "implementacion", "worker_modelo", "premium_worktree", "git_worktree", true, false, true, "qwen2.5-coder:32b", "gemma4:26b", resolvePolicy("correccion", "implementacion")),
+		s.construirEtapaPipelineLocal(proyectoSlug, "integracion", "analisis", "determinista_app", "determinista_app", "merge_controlado", false, false, false, "", "", nil),
 	}
 	return &PipelineLocalDeterminista{
 		ProyectoSlug: proyectoSlug,
@@ -66,15 +87,15 @@ func (s *Service) ConstruirPipelineLocalDeterminista(proyectoSlug string) (*Pipe
 				"riesgo_alto",
 			},
 			Revisores: []RevisorEscalonado{
-				s.construirRevisorEscalonado(proyectoSlug, "revisor_base_local", "local", false, "revision", "revision_diff", "hallazgos_estructurados", true, "deepseek-coder-v2", "gemma4:26b"),
-				s.construirRevisorEscalonado(proyectoSlug, "segunda_opinion_local", "local", false, "revision", "revision_diff", "hallazgos_estructurados", true, "qwen3.5:27b-q4_K_M", "gemma4:26b"),
-				s.construirRevisorEscalonado(proyectoSlug, "segunda_opinion_premium", "premium", true, "revision", "revision_diff", "hallazgos_estructurados", true, "gpt-5.4", "claude"),
+				s.construirRevisorEscalonado(proyectoSlug, "revisor_base_local", "local", false, "revision", "revision_diff", "hallazgos_estructurados", true, "deepseek-coder-v2", "gemma4:26b", resolvePolicy("revision", "revision")),
+				s.construirRevisorEscalonado(proyectoSlug, "segunda_opinion_local", "local", false, "revision", "revision_diff", "hallazgos_estructurados", true, "qwen3.5:27b-q4_K_M", "gemma4:26b", resolvePolicy("revision", "revision")),
+				s.construirRevisorEscalonado(proyectoSlug, "segunda_opinion_premium", "premium", true, "revision", "revision_diff", "hallazgos_estructurados", true, "gpt-5.4", "claude", resolvePolicy("revision", "revision")),
 			},
 		},
 	}, nil
 }
 
-func (s *Service) construirEtapaPipelineLocal(proyectoSlug, fase, perfil, modo, carril, entregaCanonica string, requiereWorktree, usaMicroprograma, requiereModelo bool, objetivoModelo, modeloFallback string) EtapaPipelineLocal {
+func (s *Service) construirEtapaPipelineLocal(proyectoSlug, fase, perfil, modo, carril, entregaCanonica string, requiereWorktree, usaMicroprograma, requiereModelo bool, objetivoModelo, modeloFallback string, resolucion *db.ResolucionModelo) EtapaPipelineLocal {
 	etapa := EtapaPipelineLocal{
 		Fase:             strings.TrimSpace(fase),
 		PerfilTarea:      strings.TrimSpace(perfil),
@@ -90,12 +111,7 @@ func (s *Service) construirEtapaPipelineLocal(proyectoSlug, fase, perfil, modo, 
 	if !requiereModelo {
 		return etapa
 	}
-	resolucion, err := s.ResolveModelPolicy(db.ResolverPoliticaInput{
-		ProyectoSlug: strings.TrimSpace(proyectoSlug),
-		Fase:         strings.TrimSpace(fase),
-		PerfilTarea:  strings.TrimSpace(perfil),
-	})
-	if err == nil {
+	if resolucion != nil {
 		etapa.ResolucionActual = resolucion
 	}
 	return etapa
@@ -205,7 +221,7 @@ func seleccionarRevisorEscalonadoPipeline(revision *RevisionEscalonada, señales
 	return &revision.Revisores[0]
 }
 
-func (s *Service) construirRevisorEscalonado(proyectoSlug, nombreRol, clase string, premium bool, perfil, carril, entregaCanonica string, requiereWorktree bool, objetivoModelo, modeloFallback string) RevisorEscalonado {
+func (s *Service) construirRevisorEscalonado(proyectoSlug, nombreRol, clase string, premium bool, perfil, carril, entregaCanonica string, requiereWorktree bool, objetivoModelo, modeloFallback string, resolucion *db.ResolucionModelo) RevisorEscalonado {
 	revisor := RevisorEscalonado{
 		NombreRol:        strings.TrimSpace(nombreRol),
 		Clase:            strings.TrimSpace(clase),
@@ -217,12 +233,7 @@ func (s *Service) construirRevisorEscalonado(proyectoSlug, nombreRol, clase stri
 		ObjetivoModelo:   strings.TrimSpace(objetivoModelo),
 		ModeloFallback:   strings.TrimSpace(modeloFallback),
 	}
-	resolucion, err := s.ResolveModelPolicy(db.ResolverPoliticaInput{
-		ProyectoSlug: strings.TrimSpace(proyectoSlug),
-		Fase:         "revision",
-		PerfilTarea:  strings.TrimSpace(perfil),
-	})
-	if err == nil {
+	if resolucion != nil {
 		revisor.ResolucionActual = resolucion
 	}
 	return revisor

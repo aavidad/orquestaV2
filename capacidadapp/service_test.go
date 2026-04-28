@@ -13,7 +13,9 @@ import (
 func ptrInt64(v int64) *int64    { return &v }
 func ptrString(v string) *string { return &v }
 
-type fakeStore struct{}
+type fakeStore struct {
+	resolveCalls *int
+}
 
 type fakePoolLocalProvider struct {
 	telemetria *TelemetriaPoolLocal
@@ -27,7 +29,8 @@ type fakeRuntimeModelManager struct {
 }
 
 type fakeTaskProvider struct {
-	tareas []*db.Tarea
+	tareas    []*db.Tarea
+	listCalls *int
 }
 
 type fakeTaskActionProvider struct {
@@ -40,7 +43,8 @@ type fakePhaseControlProvider struct {
 }
 
 type fakeReviewGateProvider struct {
-	items []*reviewapp.Gate
+	items     []*reviewapp.Gate
+	listCalls *int
 }
 
 type fakeReviewGateManager struct {
@@ -48,7 +52,9 @@ type fakeReviewGateManager struct {
 }
 
 type fakeAgentResolver struct {
-	agente string
+	agente     string
+	estrategia string
+	motivo     string
 }
 
 type fakePipelineDispatcher struct {
@@ -80,6 +86,9 @@ func (f *fakeRuntimeModelManager) DescargarModelo(modelo string) error {
 }
 
 func (f fakeTaskProvider) ListProjectTasks(proyecto string) ([]*db.Tarea, error) {
+	if f.listCalls != nil {
+		*f.listCalls = *f.listCalls + 1
+	}
 	return f.tareas, nil
 }
 
@@ -149,6 +158,9 @@ func (f *fakePhaseControlProvider) UpdateProjectPhase(fase *db.FaseProyecto) err
 }
 
 func (f fakeReviewGateProvider) List(input reviewapp.ListInput) ([]*reviewapp.Gate, error) {
+	if f.listCalls != nil {
+		*f.listCalls = *f.listCalls + 1
+	}
 	return f.items, nil
 }
 
@@ -166,6 +178,17 @@ func (f *fakeReviewGateManager) Create(input reviewapp.CreateGateInput) (*review
 
 func (f fakeAgentResolver) ResolverAgentePipeline(entrada EntradaResolverAgentePipeline) (string, error) {
 	return f.agente, nil
+}
+
+func (f fakeAgentResolver) ResolverSeleccionAgentePipeline(entrada EntradaResolverAgentePipeline) (*SeleccionAgentePipeline, error) {
+	if strings.TrimSpace(f.agente) == "" {
+		return nil, nil
+	}
+	return &SeleccionAgentePipeline{
+		Agente:     f.agente,
+		Estrategia: strings.TrimSpace(f.estrategia),
+		Motivo:     strings.TrimSpace(f.motivo),
+	}, nil
 }
 
 func (f *fakePipelineDispatcher) DespacharPipeline(entrada SolicitudDespachoPipeline) (*ResultadoDespachoPipeline, error) {
@@ -219,7 +242,10 @@ func (fakeStore) ListModelPolicies(scopeTipo, scopeRef string, activa *bool) ([]
 }
 func (fakeStore) SaveModelPolicy(policy *db.PoliticaModelo) (int64, error) { return 3, nil }
 func (fakeStore) SeedInitialModelPolicies() error                          { return nil }
-func (fakeStore) ResolveModelPolicy(input db.ResolverPoliticaInput) (*db.ResolucionModelo, error) {
+func (f fakeStore) ResolveModelPolicy(input db.ResolverPoliticaInput) (*db.ResolucionModelo, error) {
+	if f.resolveCalls != nil {
+		*f.resolveCalls = *f.resolveCalls + 1
+	}
 	return &db.ResolucionModelo{PerfilTarea: "implementacion", PoolSlug: "codex", ModelSlug: "gpt-5.4"}, nil
 }
 
@@ -454,6 +480,22 @@ func TestConstruirPipelineLocalDeterministaDefineFasesYRevisionEscalonada(t *tes
 	}
 }
 
+func TestConstruirPipelineLocalDeterministaMemoizaResolveModelPolicyPorClave(t *testing.T) {
+	resolveCalls := 0
+	service := NewService(fakeStore{resolveCalls: &resolveCalls})
+
+	pipeline, err := service.ConstruirPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("ConstruirPipelineLocalDeterminista: %v", err)
+	}
+	if pipeline == nil {
+		t.Fatal("pipeline nil")
+	}
+	if resolveCalls != 4 {
+		t.Fatalf("ResolveModelPolicy deberia llamarse una vez por clave unica, got=%d want=4", resolveCalls)
+	}
+}
+
 func TestCalcularSiguientePasoPipelineLocalDeterministaArrancaPrimeraFaseSiNoHayActiva(t *testing.T) {
 	service := NewService(fakeStore{})
 	service.SetPhaseProvider(fakePhaseProvider{fase: ""})
@@ -479,7 +521,7 @@ func TestCalcularSiguientePasoPipelineLocalDeterministaArrancaPrimeraFaseSiNoHay
 func TestCalcularSiguientePasoPipelineLocalDeterministaAbreCorreccionPorGateBloqueante(t *testing.T) {
 	service := NewService(fakeStore{})
 	service.SetPhaseProvider(fakePhaseProvider{fase: "revision"})
-	service.SetReviewGateProvider(fakeReviewGateProvider{items: []*reviewapp.Gate{
+	service.SetReviewGateProvider(&fakeReviewGateProvider{items: []*reviewapp.Gate{
 		{ID: 7, Estado: reviewapp.GateStateChangesAsked, ProyectoSlug: "orquestador"},
 	}})
 
@@ -492,6 +534,36 @@ func TestCalcularSiguientePasoPipelineLocalDeterministaAbreCorreccionPorGateBloq
 	}
 	if paso.GateBloqueante == nil || paso.GateBloqueante.ID != 7 {
 		t.Fatalf("gate bloqueante inesperada: %+v", paso.GateBloqueante)
+	}
+}
+
+func TestCalcularSiguientePasoPipelineLocalDeterministaMemoizaTasksYGatesPorDecision(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "revision"})
+	taskCalls := 0
+	gateCalls := 0
+	taskProvider := fakeTaskProvider{tareas: []*db.Tarea{
+		{ID: 10, Titulo: "Implementacion abierta", Estado: db.TareaEnProgreso, Prioridad: db.PrioridadAlta},
+		{ID: 11, Titulo: "Revision completada", Estado: db.TareaCompletada, Prioridad: db.PrioridadAlta},
+	}, listCalls: &taskCalls}
+	gateProvider := fakeReviewGateProvider{items: []*reviewapp.Gate{
+		{ID: 9, Estado: reviewapp.GateStateApproved, ProyectoSlug: "orquestador", TareaID: ptrInt64(11)},
+	}, listCalls: &gateCalls}
+	service.SetTaskProvider(taskProvider)
+	service.SetReviewGateProvider(gateProvider)
+
+	paso, err := service.CalcularSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("CalcularSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if paso == nil || paso.FaseObjetivo != "implementacion" {
+		t.Fatalf("paso inesperado: %+v", paso)
+	}
+	if taskCalls != 1 {
+		t.Fatalf("ListProjectTasks deberia llamarse una vez por decision, got=%d", taskCalls)
+	}
+	if gateCalls != 1 {
+		t.Fatalf("List review gates deberia llamarse una vez por decision, got=%d", gateCalls)
 	}
 }
 
@@ -913,6 +985,42 @@ func TestEjecutarSiguientePasoPipelineLocalDeterministaReasignaFrenteMicrocicloA
 	}
 }
 
+func TestEjecutarSiguientePasoPipelineLocalDeterministaPropagaSeleccionAgente(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: ""})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{ID: 71, Titulo: "Preparar backlog", Estado: db.TareaLibre, Prioridad: db.PrioridadAlta},
+	}})
+	service.SetTaskActionProvider(&fakeTaskActionProvider{
+		tareas: map[int64]*db.Tarea{
+			71: {ID: 71, Titulo: "Preparar backlog", Estado: db.TareaLibre, Prioridad: db.PrioridadAlta},
+		},
+	})
+	service.SetPhaseControlProvider(&fakePhaseControlProvider{})
+	service.SetAgentResolver(fakeAgentResolver{
+		agente:     "Gemma1",
+		estrategia: "local_first",
+		motivo:     "local-first: agente local con fitness suficiente para el carril premium_worktree (Gemma1, fitness=7.6)",
+	})
+
+	resultado, err := service.EjecutarSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("EjecutarSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if resultado == nil || resultado.Despacho == nil || resultado.Despacho.SeleccionAgente == nil {
+		t.Fatalf("seleccion_agente nil: %+v", resultado)
+	}
+	if resultado.Despacho.AgenteSugerido != "Gemma1" || resultado.Despacho.SeleccionAgente.Agente != "Gemma1" {
+		t.Fatalf("agente sugerido inesperado: %+v", resultado.Despacho)
+	}
+	if resultado.Despacho.SeleccionAgente.Estrategia != "local_first" {
+		t.Fatalf("estrategia inesperada: %+v", resultado.Despacho.SeleccionAgente)
+	}
+	if !strings.Contains(resultado.Despacho.SeleccionAgente.Motivo, "fitness suficiente") {
+		t.Fatalf("motivo inesperado: %+v", resultado.Despacho.SeleccionAgente)
+	}
+}
+
 func TestEjecutarSiguientePasoPipelineLocalDeterministaConservaAgenteAsignadoSiNoHaySugerencia(t *testing.T) {
 	service := NewService(fakeStore{})
 	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
@@ -1162,6 +1270,10 @@ func TestConstruirDespachoPipelineLocalPropagaContratoDelFrente(t *testing.T) {
 		ProyectoSlug: "orquestador",
 		AccionTarea:  "implementar",
 		Motivo:       "frente activo",
+		Paralelismo: &PoliticaParalelismoPipelineLocal{
+			PuedeAbrirSubagentes: false,
+			Motivo:               "write_set exclusivo",
+		},
 		EtapaObjetivo: &EtapaPipelineLocal{
 			Fase:             "implementacion",
 			PerfilTarea:      "implementacion",
@@ -1196,6 +1308,9 @@ func TestConstruirDespachoPipelineLocalPropagaContratoDelFrente(t *testing.T) {
 	}
 	if despacho.TestsMinimos != "go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'" {
 		t.Fatalf("tests minimos inesperados: %+v", despacho)
+	}
+	if despacho.Paralelismo == nil || despacho.Paralelismo.PuedeAbrirSubagentes {
+		t.Fatalf("politica de paralelismo inesperada: %+v", despacho.Paralelismo)
 	}
 }
 
@@ -1472,6 +1587,46 @@ func TestCalcularSiguientePasoPipelineLocalDeterministaEscalaRevisorPorZonaCriti
 	if !paso.RevisorObjetivo.Premium {
 		t.Fatalf("zona_critica_control_plane deberia escalar a revisor premium; got=%+v", paso.RevisorObjetivo)
 	}
+	if paso.Paralelismo == nil || paso.Paralelismo.PuedeAbrirSubagentes {
+		t.Fatalf("una zona critica no deberia abrir subagentes: %+v", paso.Paralelismo)
+	}
+}
+
+func TestResolverPoliticaParalelismoPipelineLocalBloqueaWriteSetExclusivo(t *testing.T) {
+	tarea := &TareaPipelineLocal{
+		ID:           120,
+		Titulo:       "Cerrar runtime mailbox",
+		Descripcion:  "Write-set exclusivo: internal/runtime_mailbox.go, internal/runtime_mailbox_test.go. Trabaja solo dentro de ese write_set.",
+		WriteSet:     []string{"internal/runtime_mailbox.go", "internal/runtime_mailbox_test.go"},
+		TestsMinimos: "go test ./cmd -run 'TestProcesarRuntimeMailbox.*'",
+	}
+	etapa := &EtapaPipelineLocal{Fase: "implementacion", ModoEjecucion: "worker_modelo"}
+	politica := resolverPoliticaParalelismoPipelineLocal(tarea, etapa)
+	if politica == nil || politica.PuedeAbrirSubagentes {
+		t.Fatalf("write_set exclusivo no deberia permitir subagentes: %+v", politica)
+	}
+	if !strings.Contains(strings.ToLower(politica.Motivo), "exclusivo") {
+		t.Fatalf("motivo inesperado: %+v", politica)
+	}
+}
+
+func TestResolverPoliticaParalelismoPipelineLocalPermiteFrenteAmplio(t *testing.T) {
+	tarea := &TareaPipelineLocal{
+		ID:     121,
+		Titulo: "Refactor amplio de implementacion",
+		WriteSet: []string{
+			"internal/a.go",
+			"internal/b.go",
+			"internal/c.go",
+			"internal/d.go",
+		},
+		TestsMinimos: "go test ./internal/...",
+	}
+	etapa := &EtapaPipelineLocal{Fase: "implementacion", ModoEjecucion: "worker_modelo"}
+	politica := resolverPoliticaParalelismoPipelineLocal(tarea, etapa)
+	if politica == nil || !politica.PuedeAbrirSubagentes || politica.MaxSubagentes != 2 {
+		t.Fatalf("frente amplio deberia permitir paralelismo acotado: %+v", politica)
+	}
 }
 
 func TestExtraerSeñalesTareaPipelineLocalZonaCriticaPorModulo(t *testing.T) {
@@ -1494,9 +1649,9 @@ func TestExtraerSeñalesTareaPipelineLocalZonaCriticaPorModulo(t *testing.T) {
 
 func TestExtraerSeñalesTareaPipelineLocalCorreccionesRepetidas(t *testing.T) {
 	tarea := &TareaPipelineLocal{
-		ID:    111,
+		ID:     111,
 		Titulo: "Cerrar mailbox",
-		Notas: "correcciones_repetidas; el agente ya fue corregido dos veces en este frente",
+		Notas:  "correcciones_repetidas; el agente ya fue corregido dos veces en este frente",
 	}
 	señales := extraerSeñalesTareaPipelineLocal(tarea)
 	found := false
@@ -1535,9 +1690,9 @@ func TestExtraerSeñalesTareaPipelineLocalCicloCorreccionEscalaSegundaOpinion(t 
 		t.Fatalf("ConstruirPipelineLocalDeterminista: %v", err)
 	}
 	tarea := &TareaPipelineLocal{
-		ID:    113,
+		ID:     113,
 		Titulo: "Cerrar carril premium",
-		Notas: "ciclo_correccion:2 — agente ya aplicó dos rondas sin convergencia",
+		Notas:  "ciclo_correccion:2 — agente ya aplicó dos rondas sin convergencia",
 	}
 	señales := extraerSeñalesTareaPipelineLocal(tarea)
 	revisor := seleccionarRevisorEscalonadoPipeline(pipeline.Revision, señales)
@@ -1831,9 +1986,18 @@ func TestElegirNuevaCandidataTareaPipelineLocalEmpateIDMayorGana(t *testing.T) {
 	}
 }
 
+func TestElegirNuevaCandidataTareaPipelineLocalFinishAppGanaAPremiumNormal(t *testing.T) {
+	candidata := &db.Tarea{ID: 10, Estado: db.TareaEnProgreso, Notas: "autonomia:premium_frontier"}
+	nueva := &db.Tarea{ID: 9, Estado: db.TareaAsignada, Notas: "autonomia:finish_app"}
+	got, _ := elegirNuevaCandidataTareaPipelineLocal(candidata, nueva, "implementacion", 50)
+	if got != nueva {
+		t.Fatalf("finish_app deberia ganar sobre premium normal, got=%+v", got)
+	}
+}
+
 func TestElegirNuevaCandidataTareaPipelineLocalScoreMayorGana(t *testing.T) {
-	candidata := &db.Tarea{ID: 10, Estado: db.TareaLibre}    // score 40
-	nueva := &db.Tarea{ID: 5, Estado: db.TareaEnProgreso}    // score 50
+	candidata := &db.Tarea{ID: 10, Estado: db.TareaLibre} // score 40
+	nueva := &db.Tarea{ID: 5, Estado: db.TareaEnProgreso} // score 50
 	got, score := elegirNuevaCandidataTareaPipelineLocal(candidata, nueva, "implementacion", 40)
 	if got != nueva {
 		t.Fatalf("score mayor debe ganar, got ID=%d", got.ID)

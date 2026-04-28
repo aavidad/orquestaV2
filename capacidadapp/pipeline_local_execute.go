@@ -17,29 +17,32 @@ type ResultadoEjecucionPasoPipelineLocal struct {
 }
 
 type DespachoPipelineLocal struct {
-	ProyectoSlug     string               `json:"proyecto_slug,omitempty"`
-	Fase             string               `json:"fase"`
-	AccionTarea      string               `json:"accion_tarea,omitempty"`
-	PerfilTarea      string               `json:"perfil_tarea,omitempty"`
-	ModoEjecucion    string               `json:"modo_ejecucion,omitempty"`
-	Carril           string               `json:"carril,omitempty"`
-	EntregaCanonica  string               `json:"entrega_canonica,omitempty"`
-	RequiereWorktree bool                 `json:"requiere_worktree"`
-	UsaMicroprograma bool                 `json:"usa_microprogramacion"`
-	RequiereModelo   bool                 `json:"requiere_modelo"`
-	ObjetivoModelo   string               `json:"objetivo_modelo,omitempty"`
-	ModeloFallback   string               `json:"modelo_fallback,omitempty"`
-	ResolucionActual *db.ResolucionModelo `json:"resolucion_actual,omitempty"`
-	TareaObjetivoID  int64                `json:"tarea_objetivo_id,omitempty"`
-	TareaObjetivo    string               `json:"tarea_objetivo,omitempty"`
-	AgenteTarea      string               `json:"agente_tarea,omitempty"`
-	WriteSet         []string             `json:"write_set,omitempty"`
-	SimbolosFoco     string               `json:"simbolos_foco,omitempty"`
-	TestsMinimos     string               `json:"tests_minimos,omitempty"`
-	AgenteSugerido   string               `json:"agente_sugerido,omitempty"`
-	RevisorObjetivo  *RevisorEscalonado   `json:"revisor_objetivo,omitempty"`
-	Especificacion   *EspecificacionFuncion `json:"especificacion,omitempty"`
-	Motivo           string               `json:"motivo,omitempty"`
+	ProyectoSlug     string                            `json:"proyecto_slug,omitempty"`
+	Fase             string                            `json:"fase"`
+	AccionTarea      string                            `json:"accion_tarea,omitempty"`
+	PerfilTarea      string                            `json:"perfil_tarea,omitempty"`
+	ModoEjecucion    string                            `json:"modo_ejecucion,omitempty"`
+	Carril           string                            `json:"carril,omitempty"`
+	EntregaCanonica  string                            `json:"entrega_canonica,omitempty"`
+	RequiereWorktree bool                              `json:"requiere_worktree"`
+	UsaMicroprograma bool                              `json:"usa_microprogramacion"`
+	RequiereModelo   bool                              `json:"requiere_modelo"`
+	ObjetivoModelo   string                            `json:"objetivo_modelo,omitempty"`
+	ModeloFallback   string                            `json:"modelo_fallback,omitempty"`
+	ResolucionActual *db.ResolucionModelo              `json:"resolucion_actual,omitempty"`
+	TareaObjetivoID  int64                             `json:"tarea_objetivo_id,omitempty"`
+	TareaObjetivo    string                            `json:"tarea_objetivo,omitempty"`
+	AgenteTarea      string                            `json:"agente_tarea,omitempty"`
+	WriteSet         []string                          `json:"write_set,omitempty"`
+	SimbolosFoco     string                            `json:"simbolos_foco,omitempty"`
+	TestsMinimos     string                            `json:"tests_minimos,omitempty"`
+	FinishApp        bool                              `json:"finish_app,omitempty"`
+	AgenteSugerido   string                            `json:"agente_sugerido,omitempty"`
+	SeleccionAgente  *SeleccionAgentePipeline          `json:"seleccion_agente,omitempty"`
+	RevisorObjetivo  *RevisorEscalonado                `json:"revisor_objetivo,omitempty"`
+	Especificacion   *EspecificacionFuncion            `json:"especificacion,omitempty"`
+	Paralelismo      *PoliticaParalelismoPipelineLocal `json:"paralelismo,omitempty"`
+	Motivo           string                            `json:"motivo,omitempty"`
 }
 
 func (s *Service) EjecutarSiguientePasoPipelineLocalDeterminista(proyectoSlug string) (*ResultadoEjecucionPasoPipelineLocal, error) {
@@ -58,7 +61,11 @@ func (s *Service) EjecutarSiguientePasoPipelineLocalDeterminista(proyectoSlug st
 			out.FaseActivada = &activada
 		}
 	}
-	agenteSugerido := s.resolverAgenteSugeridoPipeline(paso, paso.EtapaObjetivo)
+	seleccionAgente := s.resolverSeleccionAgentePipeline(paso, paso.EtapaObjetivo)
+	agenteSugerido := ""
+	if seleccionAgente != nil {
+		agenteSugerido = strings.TrimSpace(seleccionAgente.Agente)
+	}
 	if tarea := paso.TareaObjetivo; tarea != nil && paso.AccionTarea != "" {
 		actualizada, err := s.ejecutarAccionTareaPipelineLocal(tarea.ID, paso.AccionTarea, agenteSugerido)
 		if err != nil {
@@ -66,7 +73,7 @@ func (s *Service) EjecutarSiguientePasoPipelineLocalDeterminista(proyectoSlug st
 		}
 		out.TareaActualizada = actualizada
 	}
-	out.Despacho = s.construirDespachoPipelineLocalConAgente(paso, out.TareaActualizada, agenteSugerido)
+	out.Despacho = s.construirDespachoPipelineLocalConSeleccion(paso, out.TareaActualizada, seleccionAgente)
 	if err := s.asegurarReviewGatePipelineLocal(strings.TrimSpace(proyectoSlug), out.Despacho); err != nil {
 		return nil, err
 	}
@@ -90,16 +97,24 @@ func (s *Service) EjecutarYDespacharSiguientePasoPipelineLocalDeterminista(proye
 }
 
 func (s *Service) construirDespachoPipelineLocal(paso *PasoPipelineLocalDeterminista, tarea *TareaPipelineLocal) *DespachoPipelineLocal {
-	return s.construirDespachoPipelineLocalConAgente(paso, tarea, "")
+	return s.construirDespachoPipelineLocalConSeleccion(paso, tarea, nil)
 }
 
 func (s *Service) construirDespachoPipelineLocalConAgente(paso *PasoPipelineLocalDeterminista, tarea *TareaPipelineLocal, agenteSugerido string) *DespachoPipelineLocal {
+	return s.construirDespachoPipelineLocalConSeleccion(paso, tarea, &SeleccionAgentePipeline{Agente: strings.TrimSpace(agenteSugerido)})
+}
+
+func (s *Service) construirDespachoPipelineLocalConSeleccion(paso *PasoPipelineLocalDeterminista, tarea *TareaPipelineLocal, seleccion *SeleccionAgentePipeline) *DespachoPipelineLocal {
 	if paso == nil || paso.EtapaObjetivo == nil {
 		return nil
 	}
 	etapa := paso.EtapaObjetivo
-	if strings.TrimSpace(agenteSugerido) == "" {
-		agenteSugerido = s.resolverAgenteSugeridoPipeline(paso, etapa)
+	if seleccion == nil || strings.TrimSpace(seleccion.Agente) == "" {
+		seleccion = s.resolverSeleccionAgentePipeline(paso, etapa)
+	}
+	agenteSugerido := ""
+	if seleccion != nil {
+		agenteSugerido = strings.TrimSpace(seleccion.Agente)
 	}
 	out := &DespachoPipelineLocal{
 		ProyectoSlug:     strings.TrimSpace(paso.ProyectoSlug),
@@ -117,6 +132,8 @@ func (s *Service) construirDespachoPipelineLocalConAgente(paso *PasoPipelineLoca
 		ResolucionActual: etapa.ResolucionActual,
 		Motivo:           strings.TrimSpace(paso.Motivo),
 		AgenteSugerido:   strings.TrimSpace(agenteSugerido),
+		SeleccionAgente:  seleccion,
+		Paralelismo:      paso.Paralelismo,
 	}
 	if tarea == nil {
 		tarea = paso.TareaObjetivo
@@ -125,6 +142,7 @@ func (s *Service) construirDespachoPipelineLocalConAgente(paso *PasoPipelineLoca
 		out.TareaObjetivoID = tarea.ID
 		out.TareaObjetivo = strings.TrimSpace(tarea.Titulo)
 		out.AgenteTarea = strings.TrimSpace(tarea.Agente)
+		out.FinishApp = tarea.FinishApp
 		out.WriteSet = append([]string(nil), tarea.WriteSet...)
 		out.SimbolosFoco = strings.TrimSpace(tarea.SimbolosFoco)
 		out.TestsMinimos = strings.TrimSpace(tarea.TestsMinimos)
@@ -137,8 +155,16 @@ func (s *Service) construirDespachoPipelineLocalConAgente(paso *PasoPipelineLoca
 }
 
 func (s *Service) resolverAgenteSugeridoPipeline(paso *PasoPipelineLocalDeterminista, etapa *EtapaPipelineLocal) string {
+	seleccion := s.resolverSeleccionAgentePipeline(paso, etapa)
+	if seleccion == nil {
+		return agenteSugeridoParaCarril(strings.TrimSpace(etapa.Carril))
+	}
+	return strings.TrimSpace(seleccion.Agente)
+}
+
+func (s *Service) resolverSeleccionAgentePipeline(paso *PasoPipelineLocalDeterminista, etapa *EtapaPipelineLocal) *SeleccionAgentePipeline {
 	if s != nil && s.agentResolver != nil && paso != nil && etapa != nil {
-		agente, err := s.agentResolver.ResolverAgentePipeline(EntradaResolverAgentePipeline{
+		entrada := EntradaResolverAgentePipeline{
 			ProyectoSlug:     strings.TrimSpace(paso.ProyectoSlug),
 			Fase:             strings.TrimSpace(etapa.Fase),
 			AccionTarea:      strings.TrimSpace(paso.AccionTarea),
@@ -148,12 +174,19 @@ func (s *Service) resolverAgenteSugeridoPipeline(paso *PasoPipelineLocalDetermin
 			ModeloFallback:   strings.TrimSpace(etapa.ModeloFallback),
 			RequiereWorktree: etapa.RequiereWorktree,
 			UsaMicroprograma: etapa.UsaMicroprograma,
-		})
-		if err == nil {
-			return strings.TrimSpace(agente)
+		}
+		if explicado, ok := s.agentResolver.(ResolvedorAgentePipelineExplicado); ok {
+			seleccion, err := explicado.ResolverSeleccionAgentePipeline(entrada)
+			if err == nil && seleccion != nil && strings.TrimSpace(seleccion.Agente) != "" {
+				return seleccion
+			}
+		}
+		agente, err := s.agentResolver.ResolverAgentePipeline(entrada)
+		if err == nil && strings.TrimSpace(agente) != "" {
+			return &SeleccionAgentePipeline{Agente: strings.TrimSpace(agente)}
 		}
 	}
-	return agenteSugeridoParaCarril(strings.TrimSpace(etapa.Carril))
+	return nil
 }
 
 func agenteSugeridoParaCarril(carril string) string {

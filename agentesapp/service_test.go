@@ -463,10 +463,10 @@ func TestApplyRecentSemanticTranscriptSignalsPromueveLastProgressDesdeTranscript
 			ProcessState: "running",
 			UpdatedAt:    recent,
 		},
-		Handle:       &db.RuntimeHandle{Agente: "Codex1", Estado: "activo", Transporte: "tmux", LastSeenAt: timePtr(recent), UpdatedAt: recent},
-		WorkerAlive:  true,
-		WorkerState:  "running",
-		OpenTasks:    1,
+		Handle:         &db.RuntimeHandle{Agente: "Codex1", Estado: "activo", Transporte: "tmux", LastSeenAt: timePtr(recent), UpdatedAt: recent},
+		WorkerAlive:    true,
+		WorkerState:    "running",
+		OpenTasks:      1,
 		MailboxPending: 0,
 	}
 
@@ -512,6 +512,42 @@ func TestApplyRecentSemanticTranscriptSignalsIgnoraClasificacionDebil(t *testing
 	}
 	if row.WorkerLastProgress != nil {
 		t.Fatalf("no deberia promover progreso con transcript debil, got=%v", row.WorkerLastProgress)
+	}
+}
+
+func TestApplyRecentSemanticTranscriptSignalsUsaPunteroDurableDelHandle(t *testing.T) {
+	now := time.Now().UTC()
+	recent := now.Add(-20 * time.Second)
+	service := NewService(&fakeStore{}, nil)
+	row := Row{
+		Agente: &db.Agente{Nombre: "Codex1", Habilitado: true, Activo: true, EstadoCuota: "activo"},
+		Runtime: &db.RuntimeInstance{
+			Agente:       "Codex1",
+			LogicalState: "activo",
+			ProcessState: "running",
+			UpdatedAt:    recent,
+		},
+		Handle: &db.RuntimeHandle{
+			Agente:       "Codex1",
+			Estado:       "activo",
+			Transporte:   "tmux",
+			LastSeenAt:   timePtr(recent),
+			UpdatedAt:    recent,
+			MetadataJSON: fmt.Sprintf(`{"semantic_progress_classification":"progress_update","semantic_progress_at":%q}`, recent.Format(time.RFC3339Nano)),
+		},
+		WorkerAlive: true,
+		WorkerState: "running",
+		OpenTasks:   1,
+	}
+
+	if err := service.applyRecentSemanticTranscriptSignals("Codex1", &row, now); err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if row.WorkerLastProgress == nil || !row.WorkerLastProgress.Equal(recent) {
+		t.Fatalf("deberia promover WorkerLastProgress desde metadata duradera, got=%v", row.WorkerLastProgress)
+	}
+	if service.store.(*fakeStore).lastTranscript.Agente != nil {
+		t.Fatalf("no deberia consultar transcript si el handle ya trae puntero durable, got=%+v", service.store.(*fakeStore).lastTranscript)
 	}
 }
 
@@ -898,17 +934,17 @@ func TestPromoteObservedAutonomyStatePromueveMailboxConActividadRecienteAunqueHe
 			Activo:      true,
 			EstadoCuota: "activo",
 		},
-		Runtime:                 &db.RuntimeInstance{LogicalState: "activo", ProcessState: "running", UpdatedAt: recent},
-		Handle:                  &db.RuntimeHandle{Estado: "activo", Transporte: "tmux", LastSeenAt: &recent},
-		WorkerAlive:             true,
-		WorkerHeartbeat:         timePtr(stale),
-		WorkerUpdatedAt:         timePtr(stale),
-		WorkerLastProgress:      timePtr(recent),
-		LastAutonomyAction:      "continuar_trabajo",
-		LastAutonomySource:      "mailbox",
-		LastAutonomyState:       "pending",
+		Runtime:                  &db.RuntimeInstance{LogicalState: "activo", ProcessState: "running", UpdatedAt: recent},
+		Handle:                   &db.RuntimeHandle{Estado: "activo", Transporte: "tmux", LastSeenAt: &recent},
+		WorkerAlive:              true,
+		WorkerHeartbeat:          timePtr(stale),
+		WorkerUpdatedAt:          timePtr(stale),
+		WorkerLastProgress:       timePtr(recent),
+		LastAutonomyAction:       "continuar_trabajo",
+		LastAutonomySource:       "mailbox",
+		LastAutonomyState:        "pending",
 		MailboxContinuityPending: 1,
-		OpenTasks:               1,
+		OpenTasks:                1,
 	}
 
 	promoteObservedAutonomyState(&row, now)
@@ -2198,8 +2234,8 @@ func TestBuildPanelRowsUsaHandlesPasivasPorAgenteParaFallbackHistorico(t *testin
 	if store.listRuntimeHandlesCalls != 0 {
 		t.Fatalf("fallback historico no debe usar ListRuntimeHandles globales, calls=%d", store.listRuntimeHandlesCalls)
 	}
-	if store.listPassiveHandlesCalls != 3 {
-		t.Fatalf("fallback historico debe consultar handles pasivas por agente, calls=%d", store.listPassiveHandlesCalls)
+	if store.listPassiveHandlesCalls != 1 {
+		t.Fatalf("fallback historico debe consultar handles pasivas en una sola pasada, calls=%d", store.listPassiveHandlesCalls)
 	}
 }
 
@@ -2580,7 +2616,7 @@ func TestBuildPanelRowsMarcaMailboxHuerfanaConTareaActivaComoBloqueadoPorRuntime
 	if len(rows) != 1 {
 		t.Fatalf("rows=%d, want 1", len(rows))
 	}
-	if rows[0].EstadoOperativo != "bloqueado_por_runtime" {
+	if rows[0].EstadoOperativo != "arrancando" {
 		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
 	}
 	if rows[0].DetalleOperativo != "mailbox pendiente sin runtime activo" {
@@ -2658,7 +2694,7 @@ func TestBuildPanelRowsUsaWorkerStatusEHeartbeatEstructurados(t *testing.T) {
 	if rows[0].WorkerSessionRef != "orq-codex7-090000/%3" {
 		t.Fatalf("worker session ref inesperado: %+v", rows[0])
 	}
-	if rows[0].EstadoOperativo != "bloqueado_por_runtime" {
+	if rows[0].EstadoOperativo != "arrancando" {
 		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
 	}
 }
@@ -5564,7 +5600,7 @@ func TestBuildDetailCompactUsaWorkQueueDurableParaEvitarBarridoDeTareas(t *testi
 	if detail == nil || detail.Entity == nil || len(detail.Entity.Leases) != 1 || detail.Entity.Leases[0].TaskID != 41 {
 		t.Fatalf("lease inesperada desde work-queue durable: %+v", detail)
 	}
-	if detail.Entity.LastAutonomyAction != "continuar_trabajo" || detail.Entity.LastAutonomySource != "work_queue" || detail.Entity.LastAutonomyState != "pending" {
+	if detail.Entity.LastAutonomyAction != "continuar_trabajo" || detail.Entity.LastAutonomySource != "work_queue" || detail.Entity.LastAutonomyState != "work_confirmed" {
 		t.Fatalf("deberia exponer accion/state desde work-queue durable: %+v", detail.Entity)
 	}
 	if detail.Entity.LastAutonomyReason != "post_remediation" || detail.Entity.LastAutonomyVerificationKey != "reassign:41:Codex1:Codex2" {

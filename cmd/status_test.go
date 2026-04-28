@@ -552,6 +552,178 @@ func TestFetchServerStatusRecuperaContadoresVisiblesDeWorkersYSupervisor(t *test
 	}
 }
 
+func TestFetchServerStatusRecuperaAutonomySurfaceDesdeCockpitCanonico(t *testing.T) {
+	prevClient := serverHTTPClient
+	serverHTTPClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch req.URL.Path {
+			case "/api/status":
+				return newJSONResponse(http.StatusOK, `{"generado":"2026-04-24T10:00:00Z","agentesActivos":[{"Nombre":"Codex1","Activo":true,"EstadoCuota":"activo"}],"tareasPorEstado":{"en_progreso":1}}`), nil
+			case "/api/proyectos":
+				if req.URL.RawQuery == "activa=1" {
+					return newJSONResponse(http.StatusOK, `{"proyectos":[{"slug":"orquestador","activo":true}]}`), nil
+				}
+			case "/api/proyectos/orquestador/cockpit":
+				return newJSONResponse(http.StatusOK, `{"cockpit":{"proyecto":{"slug":"orquestador"},"autonomy_events":2,"autonomy_by_kind":{"handoff_completed":1,"task_reassigned":1},"autonomy_last_at":"2026-04-24T09:59:00Z","autonomy":[{"kind":"handoff_completed","created_at":"2026-04-24T09:59:00Z","target_agent":"Codex1","reason":"worker_recovered"},{"kind":"task_reassigned","created_at":"2026-04-24T09:40:00Z","agent":"Codex4","reason":"worker_degradado"}]}}`), nil
+			case "/api/workspace/control":
+				return newJSONResponse(http.StatusOK, `{"control":{"autonomy_highlights":["task_reassigned=1","frentes_bloqueantes=1","integracion_bloqueada=10","riesgo_top=orquestador(10)"],"autonomy_projects":[{"project":"orquestador","events":2,"blocking":10,"highlights":["riesgo=critico","integracion_bloqueada=10","review_gates=1","runtime_orders=1","mailbox_rt=1","propuestas_abiertas=1"]}]}}`), nil
+			}
+			return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+		}),
+	}
+	defer func() {
+		serverHTTPClient = prevClient
+	}()
+
+	status, err := fetchServerStatus("http://orquesta.local")
+	if err != nil {
+		t.Fatalf("fetchServerStatus: %v", err)
+	}
+	if status.AutonomySurface == nil {
+		t.Fatalf("autonomy surface vacía: %+v", status)
+	}
+	if status.AutonomySurface.Events != 2 || status.AutonomySurface.ByKind["handoff_completed"] != 1 || status.AutonomySurface.ByKind["task_reassigned"] != 1 {
+		t.Fatalf("autonomy surface inesperada: %+v", status.AutonomySurface)
+	}
+	if len(status.AutonomySurface.Recent) != 2 || status.AutonomySurface.Recent[0].Project != "orquestador" || status.AutonomySurface.Recent[0].Kind != "handoff_completed" {
+		t.Fatalf("recent autonomy inesperada: %+v", status.AutonomySurface.Recent)
+	}
+	if !strings.Contains(strings.Join(status.AutonomySurface.Highlights, " | "), "riesgo_top=orquestador(10)") {
+		t.Fatalf("autonomy surface sin riesgo_top canónico: %+v", status.AutonomySurface)
+	}
+	if len(status.AutonomySurface.Projects) != 1 || !strings.Contains(strings.Join(status.AutonomySurface.Projects[0].Highlights, " | "), "integracion_bloqueada=10") {
+		t.Fatalf("autonomy surface sin highlights de riesgo por proyecto: %+v", status.AutonomySurface.Projects)
+	}
+}
+
+func TestFetchServerStatusRecuperaRiesgoCanonicoDesdePayloadStatus(t *testing.T) {
+	prevClient := serverHTTPClient
+	serverHTTPClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch req.URL.Path {
+			case "/api/status":
+				return newJSONResponse(http.StatusOK, `{"generado":"2026-04-25T10:00:00Z","agentesActivos":[{"Nombre":"Codex1","Activo":true,"EstadoCuota":"activo"}],"tareasPorEstado":{"en_progreso":1},"autonomyHighlights":["integracion_bloqueada=9","riesgo_top=infra(9)"],"criticalProjectRisk":{"project":"infra","blocking":9,"highlights":["riesgo=alto","integracion_bloqueada=9","runtime_orders=1"]}}`), nil
+			case "/api/workspace/control":
+				return newJSONResponse(http.StatusNotFound, `{"error":"skip"}`), nil
+			}
+			return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+		}),
+	}
+	defer func() {
+		serverHTTPClient = prevClient
+	}()
+
+	status, err := fetchServerStatus("http://orquesta.local")
+	if err != nil {
+		t.Fatalf("fetchServerStatus: %v", err)
+	}
+	if status.AutonomySurface == nil {
+		t.Fatalf("autonomy surface vacía: %+v", status)
+	}
+	if !strings.Contains(strings.Join(status.AutonomySurface.Highlights, " | "), "riesgo_top=infra(9)") {
+		t.Fatalf("autonomy surface sin riesgo_top en payload status: %+v", status.AutonomySurface)
+	}
+	if project, score, highlights, ok := autonomySurfaceCriticalProjectRisk(status.AutonomySurface); !ok || project != "infra" || score != 9 || !strings.Contains(strings.Join(highlights, " | "), "runtime_orders=1") {
+		t.Fatalf("riesgo crítico inesperado: project=%s score=%d highlights=%v ok=%v", project, score, highlights, ok)
+	}
+}
+
+func TestFetchServerStatusPrefiereCriticalProjectRiskEstructurado(t *testing.T) {
+	prevClient := serverHTTPClient
+	serverHTTPClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch req.URL.Path {
+			case "/api/status":
+				return newJSONResponse(http.StatusOK, `{"generado":"2026-04-24T10:00:00Z","agentesActivos":[{"Nombre":"Codex1","Activo":true,"EstadoCuota":"activo"}],"tareasPorEstado":{"en_progreso":1}}`), nil
+			case "/api/proyectos":
+				if req.URL.RawQuery == "activa=1" {
+					return newJSONResponse(http.StatusOK, `{"proyectos":[{"slug":"orquestador","activo":true}]}`), nil
+				}
+			case "/api/proyectos/orquestador/cockpit":
+				return newJSONResponse(http.StatusOK, `{"cockpit":{"proyecto":{"slug":"orquestador"},"autonomy_events":2,"autonomy_by_kind":{"handoff_completed":1,"task_reassigned":1},"autonomy_last_at":"2026-04-24T09:59:00Z","autonomy":[{"kind":"handoff_completed","created_at":"2026-04-24T09:59:00Z","target_agent":"Codex1","reason":"worker_recovered"},{"kind":"task_reassigned","created_at":"2026-04-24T09:40:00Z","agent":"Codex4","reason":"worker_degradado"}]}}`), nil
+			case "/api/workspace/control":
+				return newJSONResponse(http.StatusOK, `{"control":{"autonomy_highlights":["task_reassigned=1","frentes_bloqueantes=1","integracion_bloqueada=10","riesgo_top=orquestador(10)"],"critical_project_risk":{"project":"infra","events":0,"blocking":15,"highlights":["riesgo=critico","integracion_bloqueada=15","review_gates=1","runtime_orders=1","mailbox_rt=1"]},"autonomy_projects":[{"project":"orquestador","events":2,"blocking":10,"highlights":["riesgo=alto","integracion_bloqueada=10","review_gates=1"]}]}}`), nil
+			}
+			return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+		}),
+	}
+	defer func() {
+		serverHTTPClient = prevClient
+	}()
+
+	status, err := fetchServerStatus("http://orquesta.local")
+	if err != nil {
+		t.Fatalf("fetchServerStatus: %v", err)
+	}
+	project, score, highlights, ok := autonomySurfaceCriticalProjectRisk(status.AutonomySurface)
+	if !ok {
+		t.Fatalf("sin critical project risk estructurado: %+v", status.AutonomySurface)
+	}
+	if project != "infra" || score != 15 {
+		t.Fatalf("critical project risk inesperado: project=%q score=%d surface=%+v", project, score, status.AutonomySurface)
+	}
+	for _, token := range []string{"review_gates=1", "runtime_orders=1", "mailbox_rt=1"} {
+		if !containsStringStatus(highlights, token) {
+			t.Fatalf("faltan causas canónicas %q: %+v", token, highlights)
+		}
+	}
+
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{resumen: status})
+	})
+	if !strings.Contains(out, "Proyecto crítico infra · integracion_bloqueada=15") || !strings.Contains(out, "causas review_gates=1 | runtime_orders=1 | mailbox_rt=1") {
+		t.Fatalf("status cli no prioriza critical_project_risk estructurado: %s", out)
+	}
+}
+
+func TestFetchServerStatusPrefiereCriticalProjectRiskEstructuradoSobreAutonomySurfaceYHighlightsReconstruidos(t *testing.T) {
+	prevClient := serverHTTPClient
+	serverHTTPClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch req.URL.Path {
+			case "/api/status":
+				return newJSONResponse(http.StatusOK, `{"generado":"2026-04-25T10:00:00Z","agentesActivos":[{"Nombre":"Codex1","Activo":true,"EstadoCuota":"activo"}],"autonomySurface":{"events":1,"highlights":["integracion_bloqueada=10","riesgo_top=orquestador(10)"],"projects":[{"project":"orquestador","events":1,"highlights":["riesgo=alto","integracion_bloqueada=10","review_gates=1"]}]},"autonomyHighlights":["integracion_bloqueada=10","riesgo_top=orquestador(10)"],"criticalProjectRisk":{"project":"infra","blocking":9,"highlights":["riesgo=alto","integracion_bloqueada=9","runtime_orders=1"]}}`), nil
+			case "/api/workspace/control":
+				return newJSONResponse(http.StatusOK, `{"control":{"autonomy_highlights":["frentes_bloqueantes=1","integracion_bloqueada=10","riesgo_top=orquestador(10)"],"autonomy_projects":[{"project":"orquestador","events":1,"blocking":10,"highlights":["riesgo=alto","integracion_bloqueada=10","review_gates=1"]}]}}`), nil
+			}
+			return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+		}),
+	}
+	defer func() {
+		serverHTTPClient = prevClient
+	}()
+
+	status, err := fetchServerStatus("http://orquesta.local")
+	if err != nil {
+		t.Fatalf("fetchServerStatus: %v", err)
+	}
+	project, score, highlights, ok := autonomySurfaceCriticalProjectRisk(status.AutonomySurface)
+	if !ok {
+		t.Fatalf("sin critical project risk estructurado: %+v", status.AutonomySurface)
+	}
+	if project != "infra" || score != 9 {
+		t.Fatalf("critical project risk estructurado no priorizado: project=%q score=%d surface=%+v", project, score, status.AutonomySurface)
+	}
+	if !containsStringStatus(highlights, "runtime_orders=1") {
+		t.Fatalf("faltan highlights del structured risk: %+v", highlights)
+	}
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{resumen: status})
+	})
+	if !strings.Contains(out, "Proyecto crítico infra · integracion_bloqueada=9") {
+		t.Fatalf("status cli no prioriza structured risk frente a highlights reconstruidos: %s", out)
+	}
+}
+
+func containsStringStatus(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestFetchStatusFreshIncluyeTareasEnProgresoYReservadas(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
@@ -656,6 +828,18 @@ func TestFiltrarTareasActivasVisiblesDescartaTareaLiteVacia(t *testing.T) {
 	out := filtrarTareasActivasVisibles(items, agentes)
 	if len(out) != 1 || out[0].ID != 24 {
 		t.Fatalf("tareas visibles inesperadas: %+v", out)
+	}
+}
+
+func TestNormalizarTareasLiteVisiblesDescartaPlaceholdersVacios(t *testing.T) {
+	items := []tareaLite{
+		{},
+		{ID: 24, Estado: db.TareaEnProgreso, Agente: "Codex1", Titulo: "Real"},
+		{ID: 0, Estado: db.TareaEnProgreso, Agente: "Codex2", Titulo: "Placeholder"},
+	}
+	out := normalizarTareasLiteVisibles(items)
+	if len(out) != 1 || out[0].ID != 24 {
+		t.Fatalf("normalizacion inesperada: %+v", out)
 	}
 }
 
@@ -765,7 +949,7 @@ func TestRenderStatusSummaryMuestraContadoresVisiblesDeWorkersYSupervisor(t *tes
 				AgentesTrabajando: []*db.Agente{
 					{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
 				},
-				Autonomia: autonomiaResumen{Supervisando: 1, WorkConfirmed: 1},
+				Autonomia:           autonomiaResumen{Supervisando: 1, WorkConfirmed: 1},
 				WorkersConectados:   1,
 				WorkersTrabajando:   1,
 				SupervisoresActivos: 1,
@@ -775,6 +959,68 @@ func TestRenderStatusSummaryMuestraContadoresVisiblesDeWorkersYSupervisor(t *tes
 	})
 	if !strings.Contains(out, "Workers conectados 1 · workers trabajando 1 · supervisores activos 1") {
 		t.Fatalf("salida sin contadores visibles: %s", out)
+	}
+}
+
+func TestRenderStatusSummaryMuestraAutonomySurfaceCanonica(t *testing.T) {
+	now := time.Date(2026, 4, 24, 10, 0, 0, 0, time.UTC)
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				TareasPorEstado: map[string]int{},
+				AutonomySurface: &autonomySurface{
+					Events: 2,
+					ByKind: map[string]int{"handoff_completed": 1, "task_reassigned": 1},
+					LastAt: &now,
+					Highlights: []string{
+						"task_reassigned=1",
+						"integracion_bloqueada=10",
+						"riesgo_top=orquestador(10)",
+					},
+					Projects: []autonomyProjectSurface{
+						{
+							Project:    "orquestador",
+							Events:     2,
+							Highlights: []string{"riesgo=critico", "integracion_bloqueada=10", "review_gates=1", "runtime_orders=1"},
+						},
+					},
+					Recent: []autonomySurfaceRecentItem{
+						{Project: "orquestador", autonomyEventSummary: autonomyEventSummary{Kind: "handoff_completed", TargetAgent: "Codex1", Reason: "worker_recovered", CreatedAt: now}},
+					},
+				},
+			},
+		})
+	})
+	if !strings.Contains(out, "Autonomía reciente 2 evento(s)") || !strings.Contains(out, "handoff_completed=1") || !strings.Contains(out, "[orquestador] handoff_completed destino=Codex1 · worker_recovered") {
+		t.Fatalf("salida sin autonomy surface canónica: %s", out)
+	}
+	if !strings.Contains(out, "Proyecto crítico orquestador · integracion_bloqueada=10") || !strings.Contains(out, "causas review_gates=1 | runtime_orders=1") {
+		t.Fatalf("salida sin proyecto crítico canónico: %s", out)
+	}
+}
+
+func TestRenderStatusSummaryMuestraRiesgoGlobalCanonicoSinEventosRecientes(t *testing.T) {
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				TareasPorEstado: map[string]int{},
+				AutonomySurface: &autonomySurface{
+					Highlights: []string{
+						"integracion_bloqueada=9",
+						"riesgo_top=infra(9)",
+					},
+					Projects: []autonomyProjectSurface{
+						{
+							Project:    "infra",
+							Highlights: []string{"riesgo=alto", "integracion_bloqueada=9", "runtime_orders=1"},
+						},
+					},
+				},
+			},
+		})
+	})
+	if !strings.Contains(out, "Proyecto crítico infra · integracion_bloqueada=9") || !strings.Contains(out, "causas runtime_orders=1") {
+		t.Fatalf("salida sin riesgo global canónico: %s", out)
 	}
 }
 

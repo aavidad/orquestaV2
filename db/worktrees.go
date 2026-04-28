@@ -10,6 +10,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,7 +19,7 @@ import (
 
 type CoordinationWorktreeSQLRepository struct{}
 
-type SQLiteWorktreeRepository struct {
+type CoordinationWorktreeDBRepository struct {
 	CoordinationWorktreeSQLRepository
 }
 
@@ -30,11 +31,88 @@ func ListarWorktreesCoordRaw(filter coordinacion.WorktreeFilter) ([]*coordinacio
 	return (CoordinationWorktreeSQLRepository{}).ListRaw(filter)
 }
 
+func ListarWorktreesCoordPrepareLite(filter coordinacion.WorktreeFilter) ([]*coordinacion.Worktree, error) {
+	if items, ok, err := listarWorktreesCoordPrepareLiteReadOnly(filter); ok {
+		return items, err
+	}
+	return ListarWorktreesCoordRaw(filter)
+}
+
+func listarWorktreesCoordPrepareLiteReadOnly(filter coordinacion.WorktreeFilter) ([]*coordinacion.Worktree, bool, error) {
+	backend, cfg, err := resolveOpenConfig()
+	if err != nil {
+		return nil, false, err
+	}
+	if !supportsPrepareLiteReadOnlyBackend(cfg.Driver) {
+		return nil, false, nil
+	}
+	disabled := false
+	skipPost := true
+	cfg = applyOpenOptions(cfg, OpenOptions{
+		BootstrapSchema:    &disabled,
+		SkipPostMigrations: &skipPost,
+		ReadOnly:           true,
+	})
+	cfg.MaxOpenConns = 1
+	raw, err := backend.Open(cfg)
+	if err != nil {
+		return nil, true, err
+	}
+	defer raw.Close()
+
+	q := `
+		SELECT id, proyecto_id, tarea_id, lock_id, agente, nombre, ruta_abs, branch, base_ref, estado,
+		       motivo, created_at, updated_at, cerrada_at
+		FROM worktrees
+		WHERE 1=1`
+	var args []any
+	if filter.ProjectID != nil {
+		q += ` AND proyecto_id = ?`
+		args = append(args, *filter.ProjectID)
+	}
+	if filter.Agent != nil {
+		agenteCanonico, err := CanonicalizeAgentName(*filter.Agent)
+		if err != nil {
+			return nil, true, err
+		}
+		q += ` AND agente = ?`
+		args = append(args, agenteCanonico)
+	}
+	if filter.State != nil {
+		q += ` AND estado = ?`
+		args = append(args, string(*filter.State))
+	}
+	q += ` ORDER BY id DESC`
+	rows, err := raw.Query(q, args...)
+	if err != nil {
+		return nil, true, err
+	}
+	defer rows.Close()
+
+	var out []*coordinacion.Worktree
+	for rows.Next() {
+		worktree, err := scanCoordinationWorktree(rows)
+		if err != nil {
+			return nil, true, err
+		}
+		out = append(out, canonizarCoordinationWorktreePrepareLiteRaw(raw, worktree))
+	}
+	return out, true, rows.Err()
+}
+
 func (CoordinationWorktreeSQLRepository) Create(worktree *coordinacion.Worktree) (*coordinacion.Worktree, error) {
 	if worktree == nil {
 		return nil, fmt.Errorf("worktree nil")
 	}
+	agenteCanonico, err := CanonicalizeAgentName(worktree.Agent)
+	if err != nil {
+		return nil, err
+	}
+	worktree.Agent = agenteCanonico
 	worktree.Path = rutaWorktreeCanonicaProyecto(worktree.ProjectID, worktree.Path)
+	if created, ok, err := createCoordinationWorktreePrepareFast(worktree); ok {
+		return created, err
+	}
 	id, err := insertReturningID(`
 		INSERT INTO worktrees (proyecto_id, tarea_id, lock_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
 		VALUES (?,?,?,?,?,?,?,?,?,?)`,
@@ -45,6 +123,44 @@ func (CoordinationWorktreeSQLRepository) Create(worktree *coordinacion.Worktree)
 		return nil, err
 	}
 	return (CoordinationWorktreeSQLRepository{}).GetByID(id)
+}
+
+func createCoordinationWorktreePrepareFast(worktree *coordinacion.Worktree) (*coordinacion.Worktree, bool, error) {
+	backend, cfg, err := resolveOpenConfig()
+	if err != nil {
+		return nil, false, err
+	}
+	if !supportsPrepareLiteReadOnlyBackend(cfg.Driver) {
+		return nil, false, nil
+	}
+	disabled := false
+	skipPost := true
+	cfg = applyOpenOptions(cfg, OpenOptions{
+		BootstrapSchema:    &disabled,
+		SkipPostMigrations: &skipPost,
+	})
+	cfg.MaxOpenConns = 1
+	raw, err := backend.Open(cfg)
+	if err != nil {
+		return nil, true, err
+	}
+	defer raw.Close()
+
+	id, err := insertReturningIDWith(raw, `
+		INSERT INTO worktrees (proyecto_id, tarea_id, lock_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
+		VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		worktree.ProjectID, worktree.TaskID, worktree.LockID, worktree.Agent, worktree.Name, worktree.Path,
+		worktree.Branch, worktree.BaseRef, string(worktree.State), worktree.Reason,
+	)
+	if err != nil {
+		return nil, true, err
+	}
+	now := time.Now().UTC()
+	copia := *worktree
+	copia.ID = id
+	copia.CreatedAt = now
+	copia.UpdatedAt = now
+	return &copia, true, nil
 }
 
 func (CoordinationWorktreeSQLRepository) GetByID(id int64) (*coordinacion.Worktree, error) {
@@ -159,8 +275,12 @@ func (CoordinationWorktreeSQLRepository) ListRaw(filter coordinacion.WorktreeFil
 		args = append(args, *filter.ProjectID)
 	}
 	if filter.Agent != nil {
+		agenteCanonico, err := CanonicalizeAgentName(*filter.Agent)
+		if err != nil {
+			return nil, err
+		}
 		q += ` AND agente = ?`
-		args = append(args, *filter.Agent)
+		args = append(args, agenteCanonico)
 	}
 	if filter.State != nil {
 		q += ` AND estado = ?`
@@ -210,7 +330,7 @@ func (CoordinationWorktreeSQLRepository) Close(id int64, closedAt time.Time, rea
 
 type CoordinationProjectSQLRepository struct{}
 
-type SQLiteProjectRepository struct {
+type CoordinationProjectDBRepository struct {
 	CoordinationProjectSQLRepository
 }
 
@@ -231,9 +351,43 @@ func (CoordinationProjectSQLRepository) GetByRef(ref string) (*coordinacion.Proj
 	}, nil
 }
 
+func (CoordinationProjectSQLRepository) GetByRefPrepareLite(ref string) (*coordinacion.Project, error) {
+	project, err := GetProyectoPrepareLite(ref)
+	if err != nil {
+		return nil, err
+	}
+	if project == nil {
+		return nil, sql.ErrNoRows
+	}
+	project = ProyectoPrepareLiteConRutaEfectiva(project, "")
+	return &coordinacion.Project{
+		ID:       project.ID,
+		Slug:     project.Slug,
+		Name:     project.Nombre,
+		RootPath: project.RutaAbs,
+	}, nil
+}
+
+func (CoordinationProjectSQLRepository) GetByRefPrepareLiteForAgent(ref, agent string) (*coordinacion.Project, error) {
+	project, err := GetProyectoPrepareLite(ref)
+	if err != nil {
+		return nil, err
+	}
+	if project == nil {
+		return nil, sql.ErrNoRows
+	}
+	project = ProyectoPrepareLiteConRutaEfectiva(project, agent)
+	return &coordinacion.Project{
+		ID:       project.ID,
+		Slug:     project.Slug,
+		Name:     project.Nombre,
+		RootPath: project.RutaAbs,
+	}, nil
+}
+
 type CoordinationSessionSQLRepository struct{}
 
-type SQLiteSessionRepository struct {
+type CoordinationSessionDBRepository struct {
 	CoordinationSessionSQLRepository
 }
 
@@ -253,7 +407,7 @@ func (CoordinationSessionSQLRepository) GetActive(agent string, projectID *int64
 
 type CoordinationConfigSQLRepository struct{}
 
-type SQLiteConfigRepository struct {
+type CoordinationConfigDBRepository struct {
 	CoordinationConfigSQLRepository
 }
 
@@ -295,4 +449,29 @@ func canonizarCoordinationWorktree(worktree *coordinacion.Worktree) *coordinacio
 	copia := *worktree
 	copia.Path = rutaWorktreeCanonicaProyecto(copia.ProjectID, copia.Path)
 	return &copia
+}
+
+func canonizarCoordinationWorktreePrepareLiteRaw(raw *sql.DB, worktree *coordinacion.Worktree) *coordinacion.Worktree {
+	if worktree == nil {
+		return nil
+	}
+	copia := *worktree
+	ruta := strings.TrimSpace(copia.Path)
+	if filepath.IsAbs(ruta) {
+		copia.Path = filepath.Clean(ruta)
+		return &copia
+	}
+	copia.Path = rutaProyectoEscopadaCanonica(rutaProyectoPrepareLiteReadOnly(raw, copia.ProjectID), ruta)
+	return &copia
+}
+
+func rutaProyectoPrepareLiteReadOnly(raw *sql.DB, proyectoID int64) string {
+	if raw == nil || proyectoID <= 0 {
+		return ""
+	}
+	var ruta string
+	if err := raw.QueryRow(`SELECT ruta_abs FROM proyectos WHERE id = ?`, proyectoID).Scan(&ruta); err != nil {
+		return ""
+	}
+	return normalizarRutaProyecto(ruta)
 }

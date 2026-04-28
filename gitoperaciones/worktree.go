@@ -9,20 +9,28 @@ package gitoperaciones
 
 import (
 	"bufio"
+	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type WorktreeManager struct{}
 
+const worktreeCommandTimeout = 8 * time.Second
+
 func (WorktreeManager) CreateWorktree(repoPath, worktreePath, branch, baseRef string) error {
+	start := time.Now()
+	worktreeGitDebugf("CreateWorktree step=start repo=%s path=%s branch=%s base=%s", strings.TrimSpace(repoPath), strings.TrimSpace(worktreePath), strings.TrimSpace(branch), strings.TrimSpace(baseRef))
 	repoRoot, err := canonicalGitRepoPath(repoPath)
 	if err != nil {
 		return err
 	}
+	worktreeGitDebugf("CreateWorktree step=canonical_repo duration=%s repo=%s", time.Since(start).Round(time.Millisecond), repoRoot)
 	if err := os.MkdirAll(filepath.Dir(worktreePath), 0o755); err != nil {
 		return err
 	}
@@ -30,11 +38,17 @@ func (WorktreeManager) CreateWorktree(repoPath, worktreePath, branch, baseRef st
 	if baseRef != "" {
 		args = append(args, baseRef)
 	}
-	cmd := exec.Command("git", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), worktreeCommandTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("git worktree add timeout tras %s: %s", worktreeCommandTimeout, string(out))
+		}
 		return fmt.Errorf("git worktree add: %w: %s", err, string(out))
 	}
+	worktreeGitDebugf("CreateWorktree step=git_add duration=%s repo=%s path=%s branch=%s", time.Since(start).Round(time.Millisecond), repoRoot, worktreePath, branch)
 	return nil
 }
 
@@ -109,7 +123,9 @@ func canonicalGitRepoPath(repoPath string) (string, error) {
 	if repoPath == "" {
 		return "", fmt.Errorf("repoPath obligatorio")
 	}
-	root, err := gitOutput(repoPath, "rev-parse", "--show-toplevel")
+	ctx, cancel := context.WithTimeout(context.Background(), worktreeCommandTimeout)
+	defer cancel()
+	root, err := gitOutputContext(ctx, repoPath, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", fmt.Errorf("ruta repo inválida %s: %w", filepath.Clean(repoPath), err)
 	}
@@ -118,4 +134,27 @@ func canonicalGitRepoPath(repoPath string) (string, error) {
 		return "", fmt.Errorf("ruta repo inválida %s: toplevel git inesperado /", filepath.Clean(repoPath))
 	}
 	return root, nil
+}
+
+func gitOutputContext(ctx context.Context, repoPath string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repoPath}, args...)...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("%s timeout tras %s: %s", strings.Join(args, " "), worktreeCommandTimeout, strings.TrimSpace(string(out)))
+		}
+		return "", fmt.Errorf("%s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func worktreeGitDebugf(format string, args ...any) {
+	for _, key := range []string{"ORQUESTA_DEBUG_PREPARE", "ORQUESTA_DEBUG"} {
+		value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+		switch value {
+		case "1", "true", "yes", "on", "si", "sí":
+			log.Printf("orquesta[prepare-git] "+format, args...)
+			return
+		}
+	}
 }

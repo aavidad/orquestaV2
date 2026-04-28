@@ -426,6 +426,14 @@ func listMCPResources() ([]mcpResource, error) {
 			Annotations: audienceAssistant(1),
 		},
 		{
+			URI:         "orquesta://workspace/control",
+			Name:        "workspace-control",
+			Title:       "Control global del workspace",
+			Description: "Vista global compacta del workspace con proyectos activos, flota y autonomia reciente",
+			MIMEType:    "application/json",
+			Annotations: audienceAssistant(1),
+		},
+		{
 			URI:         "orquesta://proyectos",
 			Name:        "proyectos",
 			Title:       "Proyectos registrados",
@@ -669,6 +677,12 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		return resourceText(uri, "application/json", prettyJSON(s)), nil
+	case uri == "orquesta://workspace/control":
+		report, err := buildWorkspaceControlReport()
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "application/json", prettyJSON(apiWorkspaceControlResponse{Control: report})), nil
 	case uri == "orquesta://proyectos":
 		proyectos, err := listarProyectos()
 		if err != nil {
@@ -808,11 +822,11 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		return resourceText(uri, "text/markdown", texto), nil
 	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.HasSuffix(uri, "/revision"):
 		supervisor := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://supervision/"), "/revision")
-		texto, err := buildSupervisorReviewBriefing(supervisor)
+		snapshot, err := buildSupervisorReviewSnapshot(supervisor)
 		if err != nil {
 			return nil, err
 		}
-		return resourceText(uri, "text/markdown", texto), nil
+		return resourceText(uri, "application/json", prettyJSON(snapshot)), nil
 	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.HasSuffix(uri, "/threads"):
 		supervisor := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://supervision/"), "/threads")
 		snapshot, err := buildSupervisorThreadsSnapshot(supervisor, "", 100)
@@ -3066,6 +3080,7 @@ type estadoResumen struct {
 	PoolsLocales        []*capacidadapp.PoolLocalCompartido `json:"poolsLocales,omitempty"`
 	DeudaDispatch       deudaDispatchResumen                `json:"deudaDispatch,omitempty"`
 	Autonomia           autonomiaResumen                    `json:"autonomia,omitempty"`
+	AutonomySurface     *autonomySurface                    `json:"autonomySurface,omitempty"`
 	WorkersConectados   int                                 `json:"workersConectados,omitempty"`
 	WorkersTrabajando   int                                 `json:"workersTrabajando,omitempty"`
 	SupervisoresActivos int                                 `json:"supervisoresActivos,omitempty"`
@@ -3130,6 +3145,10 @@ func buildEstadoResumen() (*estadoResumen, error) {
 	if err != nil {
 		return nil, err
 	}
+	autonomySurface, err := resolveMCPStatusAutonomySurface(status)
+	if err != nil {
+		return nil, err
+	}
 
 	return &estadoResumen{
 		Generado:            time.Now().UTC().Format(time.RFC3339),
@@ -3153,10 +3172,19 @@ func buildEstadoResumen() (*estadoResumen, error) {
 		LocksActivos:        locks,
 		SesionesActivas:     sesiones,
 		Conectores:          conectores,
+		AutonomySurface:     autonomySurface,
 		WorkersConectados:   status.WorkersConectados,
 		WorkersTrabajando:   status.WorkersTrabajando,
 		SupervisoresActivos: status.SupervisoresActivos,
 	}, nil
+}
+
+func resolveMCPStatusAutonomySurface(status apiStatusResponse) (*autonomySurface, error) {
+	surface, _, _ := normalizeStatusAutonomyPayload(status.AutonomySurface, status.AutonomyHighlights, status.CriticalProjectRisk)
+	if surface != nil {
+		return surface, nil
+	}
+	return buildVisibleProjectAutonomySurfaceLocal()
 }
 
 func buildEstadoResumenLigero() (*estadoResumen, error) {
@@ -3377,6 +3405,15 @@ func buildSupervisorBriefing(supervisor string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	autonomySurface, err := resolveMCPStatusAutonomySurface(status)
+	if err != nil {
+		return "", err
+	}
+	snapshot, err := buildSupervisorReviewSnapshot(supervisor)
+	if err != nil {
+		return "", err
+	}
+	globalRiskFocus := supervisorCriticalProjectRiskFromSnapshot(snapshot)
 
 	conectados := status.AgentesActivos
 	enCuota := agentesNoActivosConCuota(status.Agentes)
@@ -3444,6 +3481,47 @@ func buildSupervisorBriefing(supervisor string) (string, error) {
 		}
 		b.WriteString("\n")
 	}
+	if focus := buildSupervisorCriticalAutonomyFocus(status, autonomySurface, nil); focus != nil {
+		b.WriteString("## Frente crítico actual\n")
+		if strings.TrimSpace(focus.Project) != "" {
+			fmt.Fprintf(&b, "- proyecto=%s · %s -> %s · %s\n\n", strings.TrimSpace(focus.Project), strings.TrimSpace(focus.Target), strings.TrimSpace(focus.Action), strings.TrimSpace(focus.Reason))
+		} else {
+			fmt.Fprintf(&b, "- %s -> %s · %s\n\n", strings.TrimSpace(focus.Target), strings.TrimSpace(focus.Action), strings.TrimSpace(focus.Reason))
+		}
+	}
+	if globalRiskFocus != nil {
+		b.WriteString("## Riesgo global de integración\n")
+		fmt.Fprintf(&b, "- Proyecto crítico: %s · integracion_bloqueada=%d\n", strings.TrimSpace(globalRiskFocus.Project), globalRiskFocus.Blocking)
+		if len(globalRiskFocus.Highlights) > 0 {
+			fmt.Fprintf(&b, "- Señales: %s\n", strings.Join(globalRiskFocus.Highlights, " | "))
+		}
+		b.WriteString("\n")
+	}
+	if queueContext := formatSupervisorQueueContextLine(snapshot); queueContext != "" {
+		b.WriteString("## Cola canónica del supervisor\n")
+		fmt.Fprintf(&b, "- %s\n\n", queueContext)
+	}
+	if autonomySurface != nil && autonomySurface.Events > 0 {
+		b.WriteString("## Autonomía reciente\n")
+		fmt.Fprintf(&b, "- %s\n", formatAutonomySurfaceSummary(autonomySurface))
+		if len(autonomySurface.Highlights) > 0 {
+			fmt.Fprintf(&b, "- Focos canónicos: %s\n", strings.Join(autonomySurface.Highlights, " | "))
+		}
+		for _, item := range autonomySurface.Recent {
+			fmt.Fprintf(&b, "- [%s] %s", strings.TrimSpace(item.Project), strings.TrimSpace(item.Kind))
+			if strings.TrimSpace(item.Agent) != "" {
+				fmt.Fprintf(&b, " agente=%s", strings.TrimSpace(item.Agent))
+			}
+			if strings.TrimSpace(item.TargetAgent) != "" {
+				fmt.Fprintf(&b, " destino=%s", strings.TrimSpace(item.TargetAgent))
+			}
+			if strings.TrimSpace(item.Reason) != "" {
+				fmt.Fprintf(&b, " · %s", strings.TrimSpace(item.Reason))
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
 	revision, err := buildSupervisorReviewOverview()
 	if err != nil {
 		return "", err
@@ -3474,6 +3552,15 @@ func buildSupervisorGuidance(supervisor string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	autonomySurface, err := resolveMCPStatusAutonomySurface(status)
+	if err != nil {
+		return "", err
+	}
+	snapshot, err := buildSupervisorReviewSnapshot(supervisor)
+	if err != nil {
+		return "", err
+	}
+	globalRiskFocus := supervisorCriticalProjectRiskFromSnapshot(snapshot)
 	workersConectados, workersTrabajando, supervisoresActivos := apiStatusVisibleCounters(status)
 
 	var b strings.Builder
@@ -3493,8 +3580,30 @@ func buildSupervisorGuidance(supervisor string) (string, error) {
 	fmt.Fprintf(&b, "- Flota conectada ahora: %d.\n", workersConectados)
 	fmt.Fprintf(&b, "- Flota trabajando ahora: %d.\n", workersTrabajando)
 	fmt.Fprintf(&b, "- Supervisores activos ahora: %d.\n", supervisoresActivos)
+	if focus := buildSupervisorCriticalAutonomyFocus(status, autonomySurface, nil); focus != nil {
+		if strings.TrimSpace(focus.Project) != "" {
+			fmt.Fprintf(&b, "- Frente crítico actual: proyecto=%s · %s -> %s. %s.\n", strings.TrimSpace(focus.Project), strings.TrimSpace(focus.Target), strings.TrimSpace(focus.Action), strings.TrimSpace(focus.Reason))
+		} else {
+			fmt.Fprintf(&b, "- Frente crítico actual: %s -> %s. %s.\n", strings.TrimSpace(focus.Target), strings.TrimSpace(focus.Action), strings.TrimSpace(focus.Reason))
+		}
+	}
+	if globalRiskFocus != nil {
+		fmt.Fprintf(&b, "- Proyecto crítico por riesgo: %s · integracion_bloqueada=%d.\n", strings.TrimSpace(globalRiskFocus.Project), globalRiskFocus.Blocking)
+		if len(globalRiskFocus.Highlights) > 0 {
+			fmt.Fprintf(&b, "- Señales canónicas del proyecto crítico: %s.\n", strings.Join(globalRiskFocus.Highlights, " | "))
+		}
+	}
+	if queueContext := formatSupervisorQueueContextLine(snapshot); queueContext != "" {
+		fmt.Fprintf(&b, "- Cola canónica del supervisor: %s.\n", queueContext)
+	}
+	if autonomySurface != nil && autonomySurface.Events > 0 {
+		fmt.Fprintf(&b, "- Autonomía reciente: %s.\n", formatAutonomySurfaceSummary(autonomySurface))
+		if len(autonomySurface.Highlights) > 0 {
+			fmt.Fprintf(&b, "- Focos canónicos de autonomía: %s.\n", strings.Join(autonomySurface.Highlights, " | "))
+		}
+	}
 	b.WriteString("- Lee briefing, guidance y cola de revisión antes de tomar decisiones.\n")
-	b.WriteString("- Usa `next_action`, `action_queue` y `eventos_normalizados` como resumen operativo, no como sustituto de la verdad viva.\n")
+	b.WriteString("- Usa `next_safe_action`, `safe_action_queue` y `eventos_normalizados` como resumen operativo canónico; `action_queue` queda como vista amplia, no como vía de ejecución.\n")
 	b.WriteString("- Si un gate, señal o merge necesita acción, prioriza arbitraje e integración antes que abrir nuevos frentes.\n\n")
 
 	b.WriteString("## Constraints & Safety\n")
@@ -3514,6 +3623,71 @@ func buildSupervisorGuidance(supervisor string) (string, error) {
 	b.WriteString("- Si la integración queda bloqueada, usa review queue y eventos normalizados para arbitrar la siguiente acción.\n")
 
 	return strings.TrimSpace(b.String()) + "\n", nil
+}
+
+func buildSupervisorWorkspaceRiskFocus() (*workspaceAutonomyProjectSummary, error) {
+	report, err := buildWorkspaceControlReport()
+	if err != nil {
+		return nil, err
+	}
+	if report == nil {
+		return nil, nil
+	}
+	top, ok := workspaceTopRiskProject(report.AutonomyProjects)
+	if !ok || strings.TrimSpace(top.Project) == "" || top.Blocking <= 0 {
+		return nil, nil
+	}
+	item := top
+	item.Project = strings.TrimSpace(item.Project)
+	item.Highlights = append([]string(nil), item.Highlights...)
+	return &item, nil
+}
+
+func buildSupervisorWorkspaceRiskFocusFromActions(actions []supervisorRecommendedAction) (*workspaceAutonomyProjectSummary, error) {
+	report, err := buildWorkspaceControlReport()
+	if err != nil {
+		return nil, err
+	}
+	if report == nil || len(report.AutonomyProjects) == 0 {
+		return nil, nil
+	}
+	projectsBySlug := make(map[string]workspaceAutonomyProjectSummary, len(report.AutonomyProjects))
+	for _, item := range report.AutonomyProjects {
+		slug := strings.ToLower(strings.TrimSpace(item.Project))
+		if slug == "" || item.Blocking <= 0 {
+			continue
+		}
+		copy := item
+		copy.Project = strings.TrimSpace(copy.Project)
+		copy.Highlights = append([]string(nil), copy.Highlights...)
+		projectsBySlug[slug] = copy
+	}
+	if len(projectsBySlug) == 0 {
+		return nil, nil
+	}
+	for _, action := range actions {
+		if strings.TrimSpace(action.Kind) != "autonomy_event" {
+			continue
+		}
+		if supervisorActionIsHealthyAbsorbed(action) {
+			continue
+		}
+		project := strings.ToLower(strings.TrimSpace(supervisorCriticalAutonomyProjectFromTarget(action)))
+		if project == "" {
+			continue
+		}
+		if item, ok := projectsBySlug[project]; ok {
+			return &item, nil
+		}
+	}
+	top, ok := workspaceTopRiskProject(report.AutonomyProjects)
+	if !ok || strings.TrimSpace(top.Project) == "" || top.Blocking <= 0 {
+		return nil, nil
+	}
+	item := top
+	item.Project = strings.TrimSpace(item.Project)
+	item.Highlights = append([]string(nil), item.Highlights...)
+	return &item, nil
 }
 
 func apiStatusVisibleCounters(status apiStatusResponse) (int, int, int) {
@@ -3653,11 +3827,11 @@ func buildSupervisorReviewBriefing(supervisor string) (string, error) {
 			supervisor = "OpenClaw"
 		}
 	}
-	revision, err := buildSupervisorReviewOverview()
+	snapshot, err := buildSupervisorReviewSnapshot(supervisor)
 	if err != nil {
 		return "", err
 	}
-	conflicts, err := buildSupervisorConflictOverview()
+	revision, err := buildSupervisorReviewOverview()
 	if err != nil {
 		return "", err
 	}
@@ -3672,9 +3846,23 @@ func buildSupervisorReviewBriefing(supervisor string) (string, error) {
 	} else {
 		b.WriteString("## Revisión e integración\n- Sin gates abiertos ni señales recientes.\n\n")
 	}
-	if strings.TrimSpace(conflicts) != "" {
-		b.WriteString(conflicts)
+	conflicts := supervisorModuleConflictsFromSnapshot(snapshot)
+	if len(conflicts) == 0 {
+		if fallback, err := listarSupervisorModuleConflictsSnapshotSafe(nil); err == nil {
+			conflicts = fallback
+		}
+	}
+	if conflictsOverview := buildSupervisorConflictOverview(conflicts); strings.TrimSpace(conflictsOverview) != "" {
+		b.WriteString(conflictsOverview)
 		b.WriteString("\n\n")
+	}
+	if queueContext := formatSupervisorQueueContextLine(snapshot); queueContext != "" {
+		b.WriteString("## Cola canónica del supervisor\n")
+		fmt.Fprintf(&b, "- %s\n", queueContext)
+		if risk := supervisorCriticalProjectRiskFromSnapshot(snapshot); risk != nil {
+			fmt.Fprintf(&b, "- critical_project_risk=%s(%d)\n", strings.TrimSpace(risk.Project), risk.Blocking)
+		}
+		b.WriteString("- safe_action_queue refleja solo la cola autoaplicable actual.\n\n")
 	}
 	b.WriteString("## Criterio de decisión\n")
 	b.WriteString("- `approval_request`: arbitra y desbloquea sin abrir espera humana innecesaria.\n")
@@ -3683,11 +3871,7 @@ func buildSupervisorReviewBriefing(supervisor string) (string, error) {
 	return strings.TrimSpace(b.String()) + "\n", nil
 }
 
-func buildSupervisorConflictOverview() (string, error) {
-	conflicts, err := listarSupervisorModuleConflicts()
-	if err != nil {
-		return "", err
-	}
+func buildSupervisorConflictOverview(conflicts []supervisorModuleConflict) string {
 	lines := make([]string, 0, 8)
 	for _, conflict := range conflicts {
 		partes := make([]string, 0, len(conflict.Tareas))
@@ -3699,14 +3883,24 @@ func buildSupervisorConflictOverview() (string, error) {
 	}
 	sort.Strings(lines)
 	if len(lines) == 0 {
-		return "", nil
+		return ""
 	}
 	var b strings.Builder
 	b.WriteString("## Riesgos de colisión detectados\n")
 	for _, line := range lines {
 		b.WriteString(line + "\n")
 	}
-	return strings.TrimSpace(b.String()), nil
+	return strings.TrimSpace(b.String())
+}
+
+func supervisorModuleConflictsFromSnapshot(snapshot map[string]any) []supervisorModuleConflict {
+	if len(snapshot) == 0 {
+		return nil
+	}
+	if conflicts, ok := snapshot["module_conflicts"].([]supervisorModuleConflict); ok {
+		return conflicts
+	}
+	return nil
 }
 
 type supervisorReviewSignal struct {
@@ -3890,7 +4084,10 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	default:
 		ensureStatusRefreshAsync()
 	}
-	conflicts := listarSupervisorModuleConflictsFromTasks(status.TareasActivas)
+	conflicts, err := listarSupervisorModuleConflictsSnapshotSafe(status.TareasActivas)
+	if err != nil {
+		return nil, err
+	}
 	mailboxPendiente, err := buildOpenClawPendingMailbox(status.Agentes)
 	if err != nil {
 		return nil, err
@@ -3926,15 +4123,15 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	recommended = append(recommended, buildSupervisorProposalActions(status.PropuestasResumen)...)
 	sortSupervisorRecommendedActions(recommended)
 	markSupervisorRecommendedActions(recommended)
-	safeQueue := make([]supervisorRecommendedAction, 0, len(recommended))
-	for _, item := range recommended {
-		if supervisorActionIsAutomaticallyApplicable(item.Action) {
-			safeQueue = append(safeQueue, item)
-		}
+	actionQueue := cloneSupervisorRecommendedActions(recommended)
+	safeQueue := buildSupervisorSafeActionQueue(actionQueue)
+	criticalProjectRisk, err := buildSupervisorWorkspaceRiskFocusFromActions(actionQueue)
+	if err != nil {
+		return nil, err
 	}
 	var nextAction any
-	if len(recommended) > 0 {
-		nextAction = recommended[0]
+	if len(actionQueue) > 0 {
+		nextAction = actionQueue[0]
 	}
 	var nextSafeAction any
 	if len(safeQueue) > 0 {
@@ -3942,28 +4139,67 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	}
 	capacitySummary := buildOpenClawCapacitySummary(status.AgentesActivos, status.AgentesTrabajando, status.TareasActivas, status.TareasPorEstado)
 	saturatedAgents := buildOpenClawSaturatedAgents(status.AgentesActivos, status.TareasActivas)
-	queueSummary := buildOpenClawQueueSummaryFromActions(recommended, safeQueue)
+	queueSummary := buildOpenClawQueueSummaryFromActions(actionQueue, safeQueue)
 	return map[string]any{
-		"supervisor":          supervisor,
-		"review_gates":        openGates,
-		"signals":             signals,
-		"merges":              merges,
-		"module_conflicts":    conflicts,
-		"mailbox_pending":     mailboxPendiente,
-		"normalized_events":   normalizedEvents,
-		"thread_sessions":     threadSessions,
-		"subagents":           subagents,
-		"worktree_drift":      worktreeDrift,
-		"pipeline_state":      pipelineState,
-		"recommended_actions": recommended,
-		"action_queue":        recommended,
-		"next_action":         nextAction,
-		"safe_action_queue":   safeQueue,
-		"next_safe_action":    nextSafeAction,
-		"capacity_summary":    capacitySummary,
-		"saturated_agents":    saturatedAgents,
-		"queue_summary":       queueSummary,
+		"supervisor":            supervisor,
+		"review_gates":          openGates,
+		"signals":               signals,
+		"merges":                merges,
+		"module_conflicts":      conflicts,
+		"mailbox_pending":       mailboxPendiente,
+		"normalized_events":     normalizedEvents,
+		"thread_sessions":       threadSessions,
+		"subagents":             subagents,
+		"worktree_drift":        worktreeDrift,
+		"pipeline_state":        pipelineState,
+		"recommended_actions":   recommended,
+		"action_queue":          actionQueue,
+		"next_action":           nextAction,
+		"queue_kind":            "safe",
+		"safe_action_queue":     safeQueue,
+		"next_safe_action":      nextSafeAction,
+		"critical_project_risk": criticalProjectRisk,
+		"capacity_summary":      capacitySummary,
+		"saturated_agents":      saturatedAgents,
+		"queue_summary":         queueSummary,
 	}, nil
+}
+
+func supervisorQueueKindFromSnapshot(snapshot map[string]any) string {
+	if snapshot == nil {
+		return ""
+	}
+	queueKind, _ := snapshot["queue_kind"].(string)
+	return strings.TrimSpace(queueKind)
+}
+
+func supervisorNextSafeActionFromSnapshot(snapshot map[string]any) *supervisorRecommendedAction {
+	if snapshot == nil {
+		return nil
+	}
+	nextSafeAction, ok := parseSupervisorRecommendedActionSnapshotValue(snapshot["next_safe_action"])
+	if !ok {
+		return nil
+	}
+	return nextSafeAction
+}
+
+func formatSupervisorQueueContextLine(snapshot map[string]any) string {
+	queueKind := supervisorQueueKindFromSnapshot(snapshot)
+	nextSafeAction := supervisorNextSafeActionFromSnapshot(snapshot)
+	if queueKind == "" && nextSafeAction == nil {
+		return ""
+	}
+	parts := make([]string, 0, 2)
+	if queueKind != "" {
+		parts = append(parts, "queue_kind="+queueKind)
+	}
+	if nextSafeAction != nil {
+		parts = append(parts, fmt.Sprintf("next_safe_action=%s -> %s", strings.TrimSpace(nextSafeAction.Target), strings.TrimSpace(nextSafeAction.Action)))
+	} else if queueKind != "" {
+		parts = append(parts, "next_safe_action=none")
+	}
+	return strings.Join(parts, " · ")
 }
 
 func intArgOrDefault(args map[string]any, name string, fallback int) int {
@@ -3994,6 +4230,46 @@ func listarSupervisorModuleConflicts() ([]supervisorModuleConflict, error) {
 		return nil, err
 	}
 	return listarSupervisorModuleConflictsFromTasks(status.TareasActivas), nil
+}
+
+func listarSupervisorModuleConflictsSnapshotSafe(tareas []tareaLite) ([]supervisorModuleConflict, error) {
+	conflicts := listarSupervisorModuleConflictsFromTasks(tareas)
+	if len(conflicts) > 0 || len(tareas) > 0 {
+		return conflicts, nil
+	}
+	activa := db.TareaEnProgreso
+	asignada := db.TareaAsignada
+	tareasActivas, err := db.ListarTareas(db.FiltroTareas{Estado: &activa})
+	if err != nil {
+		return nil, err
+	}
+	tareasAsignadas, err := db.ListarTareas(db.FiltroTareas{Estado: &asignada})
+	if err != nil {
+		return nil, err
+	}
+	flat := make([]tareaLite, 0, len(tareasActivas)+len(tareasAsignadas))
+	appendLite := func(src []*db.Tarea) {
+		for _, tarea := range src {
+			if tarea == nil {
+				continue
+			}
+			agente := ""
+			if tarea.Agente != nil {
+				agente = strings.TrimSpace(*tarea.Agente)
+			}
+			flat = append(flat, tareaLite{
+				ID:        tarea.ID,
+				Estado:    tarea.Estado,
+				Prioridad: tarea.Prioridad,
+				Agente:    agente,
+				Titulo:    strings.TrimSpace(tarea.Titulo),
+				Modulo:    strings.TrimSpace(tarea.Modulo),
+			})
+		}
+	}
+	appendLite(tareasActivas)
+	appendLite(tareasAsignadas)
+	return listarSupervisorModuleConflictsFromTasks(flat), nil
 }
 
 func listarSupervisorModuleConflictsFromTasks(tareas []tareaLite) []supervisorModuleConflict {
@@ -4146,6 +4422,41 @@ func markSupervisorRecommendedActions(actions []supervisorRecommendedAction) {
 	}
 }
 
+func cloneSupervisorRecommendedActions(actions []supervisorRecommendedAction) []supervisorRecommendedAction {
+	if len(actions) == 0 {
+		return nil
+	}
+	out := make([]supervisorRecommendedAction, len(actions))
+	copy(out, actions)
+	return out
+}
+
+func buildSupervisorSafeActionQueue(actions []supervisorRecommendedAction) []supervisorRecommendedAction {
+	if len(actions) == 0 {
+		return nil
+	}
+	safeQueue := make([]supervisorRecommendedAction, 0, len(actions))
+	for _, item := range actions {
+		if supervisorActionIsAutomaticallyApplicable(item.Action) {
+			safeQueue = append(safeQueue, item)
+		}
+	}
+	projectRisk := supervisorWorkspaceProjectRiskSnapshot()
+	sort.SliceStable(safeQueue, func(i, j int) bool {
+		ri := supervisorActionProjectRisk(safeQueue[i], projectRisk)
+		rj := supervisorActionProjectRisk(safeQueue[j], projectRisk)
+		if ri != rj {
+			return ri > rj
+		}
+		return false
+	})
+	return safeQueue
+}
+
+var supervisorPanelRowsBuilder = buildPanelRowsForControlPlane
+
+var supervisorSemanticProgressRecentThreshold = 5 * time.Minute
+
 func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendiente []apiOpenClawMailboxLite) []supervisorRecommendedAction {
 	actions := make([]supervisorRecommendedAction, 0, 4+len(mailboxPendiente))
 	idle := idleSupervisorWorkers(status.AgentesActivos, status.AgentesTrabajando)
@@ -4237,7 +4548,590 @@ func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendient
 			Assignee: strings.TrimSpace(item.Agente),
 		})
 	}
+	actions = append(actions, buildSupervisorAutonomyActions(status.Autonomia.Recent)...)
+	actions = supervisorApplyLiveProgressToAutonomyActions(actions, status)
+	sortSupervisorRecommendedActions(actions)
 	return actions
+}
+
+func supervisorApplyLiveProgressToAutonomyActions(actions []supervisorRecommendedAction, status apiStatusResponse) []supervisorRecommendedAction {
+	if len(actions) == 0 || supervisorPanelRowsBuilder == nil {
+		return actions
+	}
+	rows, err := supervisorPanelRowsBuilder()
+	if err != nil || len(rows) == 0 {
+		return actions
+	}
+	now := time.Now().UTC()
+	rowByAgent := make(map[string]agentesapp.Row, len(rows))
+	for _, row := range rows {
+		if row.Agente == nil || strings.TrimSpace(row.Agente.Nombre) == "" {
+			continue
+		}
+		rowByAgent[nombreAgenteCanonico(row.Agente.Nombre)] = row
+	}
+	visibleTaskIDs := supervisorVisibleTasks(status)
+	visibleTasksByAgent := supervisorVisibleTasksByAgent(status)
+	out := make([]supervisorRecommendedAction, 0, len(actions))
+	for _, action := range actions {
+		if adjusted, keep := supervisorAdjustAutonomyActionByRows(action, rowByAgent, visibleTaskIDs, visibleTasksByAgent, now); keep {
+			out = append(out, adjusted)
+		}
+	}
+	return out
+}
+
+func supervisorAdjustAutonomyActionByRows(action supervisorRecommendedAction, rowByAgent map[string]agentesapp.Row, visibleTasks map[int64]tareaLite, visibleTasksByAgent map[string]tareaLite, now time.Time) (supervisorRecommendedAction, bool) {
+	if strings.TrimSpace(action.Kind) != "autonomy_event" {
+		return action, true
+	}
+	if taskID := parseSupervisorActionTargetID("tarea:", action.Target); taskID != nil {
+		switch strings.TrimSpace(action.Action) {
+		case "verificar_handoff_consolidado", "seguir_reasignacion":
+			if _, ok := visibleTasks[*taskID]; !ok {
+				return action, false
+			}
+		}
+	}
+	if adjusted, keep, handled := supervisorAdjustAutonomyFollowupByVisibleTask(action, visibleTasks, visibleTasksByAgent); handled {
+		return adjusted, keep
+	}
+	agent := nombreAgenteCanonico(strings.TrimSpace(action.Assignee))
+	if agent == "" {
+		if strings.HasPrefix(strings.TrimSpace(action.Target), "agente:") {
+			agent = nombreAgenteCanonico(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(action.Target), "agente:")))
+		}
+	}
+	row, ok := rowByAgent[agent]
+	if !ok {
+		return action, true
+	}
+	task, hasVisibleTask := supervisorVisibleTaskForAutonomyAction(action, visibleTasks, visibleTasksByAgent)
+	if !supervisorRowShowsRecentSemanticProgress(row, now) {
+		if strings.TrimSpace(action.Action) == "inspeccionar_handoff_fallido" && hasVisibleTask {
+			switch task.Estado {
+			case db.TareaBloqueada:
+				action.Priority = "alta"
+				action.Reason = strings.TrimSpace(action.Reason + supervisorBlockedFrontReasonSuffix(task))
+				if supervisorTaskBlocksRealIntegration(action, task) {
+					action.Reason = strings.TrimSpace(action.Reason + " Bloquea integración real.")
+				}
+			case db.TareaAsignada:
+				if strings.TrimSpace(action.Priority) == "" || strings.EqualFold(strings.TrimSpace(action.Priority), "baja") {
+					action.Priority = "media"
+				}
+				action.Reason = strings.TrimSpace(action.Reason + " El frente sigue asignado y sin progreso confirmado.")
+				if supervisorTaskBlocksRealIntegration(action, task) {
+					action.Priority = "alta"
+					action.Reason = strings.TrimSpace(action.Reason + " Bloquea integración real.")
+				}
+			case db.TareaEnProgreso:
+				if strings.TrimSpace(action.Priority) == "" || strings.EqualFold(strings.TrimSpace(action.Priority), "alta") {
+					action.Priority = "media"
+				}
+				action.Reason = strings.TrimSpace(action.Reason + " El frente reapareció en progreso, pero aún sin confirmación semántica reciente.")
+			}
+		}
+		return action, true
+	}
+	switch strings.TrimSpace(action.Action) {
+	case "verificar_handoff_consolidado":
+		return action, false
+	case "seguir_reasignacion", "seguir_reinicio_runtime", "resolver_followup_bloqueado":
+		action.Priority = "baja"
+		if supervisorActionCarriesStrongEvidence(action) && strings.TrimSpace(action.Action) == "resolver_followup_bloqueado" {
+			action.Priority = "media"
+		}
+		if hasVisibleTask && task.Estado == db.TareaEnProgreso {
+			action.Reason = strings.TrimSpace(action.Reason + " Ya hay progreso reciente del worker destino. El frente ya está en progreso visible y con progreso sin bloqueo visible.")
+			if supervisorActionBlocksGlobalProgress(action, task) {
+				action.Priority = "media"
+				action.Reason = strings.TrimSpace(action.Reason + " Aun así, sigue afectando integración/progreso global. Frente crítico del proyecto/workspace.")
+			} else {
+				action.Reason = strings.TrimSpace(action.Reason + " No parece bloquear integración/progreso global. Frente local o no bloqueante.")
+			}
+			return action, true
+		}
+		action.Reason = strings.TrimSpace(action.Reason + " Ya hay progreso reciente del worker destino.")
+		return action, true
+	case "inspeccionar_handoff_fallido":
+		if !hasVisibleTask {
+			if supervisorActionCarriesStrongEvidence(action) {
+				action.Priority = "media"
+				action.Reason = strings.TrimSpace(action.Reason + " La evidencia fuerte aconseja mantener seguimiento aunque el frente ya no sea visible.")
+				return action, true
+			}
+			if taskID := parseSupervisorActionTargetID("tarea:", action.Target); taskID != nil {
+				if _, ok := visibleTasks[*taskID]; !ok {
+					return action, false
+				}
+			}
+			action.Priority = "media"
+			action.Reason = strings.TrimSpace(action.Reason + " El destino ya muestra progreso reciente.")
+			return action, true
+		}
+		switch task.Estado {
+		case db.TareaBloqueada:
+			action.Priority = "alta"
+			action.Reason = strings.TrimSpace(action.Reason + supervisorBlockedFrontReasonSuffix(task))
+			if supervisorTaskBlocksRealIntegration(action, task) {
+				action.Reason = strings.TrimSpace(action.Reason + " Bloquea integración real.")
+			}
+			if supervisorActionBlocksGlobalProgress(action, task) {
+				action.Reason = strings.TrimSpace(action.Reason + " Bloquea integración/progreso global. Frente crítico del proyecto/workspace.")
+			}
+			return action, true
+		case db.TareaAsignada:
+			action.Priority = "media"
+			action.Reason = strings.TrimSpace(action.Reason + " El frente sigue asignado y requiere validar el relevo.")
+			if supervisorTaskBlocksRealIntegration(action, task) {
+				action.Priority = "alta"
+				action.Reason = strings.TrimSpace(action.Reason + " Bloquea integración real.")
+			}
+			if supervisorActionBlocksGlobalProgress(action, task) {
+				action.Priority = "alta"
+				action.Reason = strings.TrimSpace(action.Reason + " Bloquea integración/progreso global. Frente crítico del proyecto/workspace.")
+			}
+			return action, true
+		case db.TareaEnProgreso:
+			if supervisorActionCarriesStrongEvidence(action) {
+				action.Reason = strings.TrimSpace(action.Reason + " El frente ya progresa, pero la evidencia fuerte aconseja cerrar el seguimiento antes de descartarlo.")
+				if supervisorActionBlocksGlobalProgress(action, task) {
+					action.Priority = "media"
+					action.Reason = strings.TrimSpace(action.Reason + " Sigue afectando integración/progreso global. Frente crítico del proyecto/workspace.")
+				} else {
+					action.Priority = "baja"
+					action.Reason = strings.TrimSpace(action.Reason + " Ya hay progreso reciente del worker destino. No parece bloquear integración/progreso global. Frente local o ya mitigado.")
+				}
+				return action, true
+			}
+			return action, false
+		}
+		return action, false
+	default:
+		return action, true
+	}
+}
+
+func supervisorRowShowsRecentSemanticProgress(row agentesapp.Row, now time.Time) bool {
+	if strings.EqualFold(strings.TrimSpace(row.LastAutonomyState), "work_confirmed") &&
+		strings.EqualFold(strings.TrimSpace(row.EstadoOperativo), "trabajando") {
+		return true
+	}
+	cutoff := now.Add(-supervisorSemanticProgressRecentThreshold)
+	if row.WorkerLastProgress != nil && !row.WorkerLastProgress.IsZero() && !row.WorkerLastProgress.Before(cutoff) &&
+		strings.EqualFold(strings.TrimSpace(row.EstadoOperativo), "trabajando") {
+		return true
+	}
+	return false
+}
+
+func supervisorVisibleTasks(status apiStatusResponse) map[int64]tareaLite {
+	out := make(map[int64]tareaLite, len(status.TareasActivas)+len(status.TareasReservadas))
+	for _, item := range status.TareasActivas {
+		if item.ID > 0 {
+			out[item.ID] = item
+		}
+	}
+	for _, item := range status.TareasReservadas {
+		if item.ID > 0 {
+			out[item.ID] = item
+		}
+	}
+	return out
+}
+
+func supervisorVisibleTasksByAgent(status apiStatusResponse) map[string]tareaLite {
+	out := make(map[string]tareaLite, len(status.TareasActivas)+len(status.TareasReservadas))
+	for _, item := range status.TareasActivas {
+		supervisorStorePreferredVisibleTaskByAgent(out, item)
+	}
+	for _, item := range status.TareasReservadas {
+		supervisorStorePreferredVisibleTaskByAgent(out, item)
+	}
+	return out
+}
+
+func supervisorStorePreferredVisibleTaskByAgent(out map[string]tareaLite, item tareaLite) {
+	agent := nombreAgenteCanonico(strings.TrimSpace(item.Agente))
+	if agent == "" || item.ID <= 0 {
+		return
+	}
+	current, ok := out[agent]
+	if !ok || supervisorVisibleTaskPriority(item) < supervisorVisibleTaskPriority(current) {
+		out[agent] = item
+	}
+}
+
+func supervisorVisibleTaskPriority(task tareaLite) int {
+	switch task.Estado {
+	case db.TareaBloqueada:
+		return 0
+	case db.TareaAsignada:
+		return 1
+	case db.TareaEnProgreso:
+		return 2
+	default:
+		return 3
+	}
+}
+
+func supervisorAdjustAutonomyFollowupByVisibleTask(action supervisorRecommendedAction, visibleTasks map[int64]tareaLite, visibleTasksByAgent map[string]tareaLite) (supervisorRecommendedAction, bool, bool) {
+	if !supervisorAutonomyActionUsesVisibleFrontState(action.Action) {
+		return action, true, false
+	}
+	task, ok := supervisorVisibleTaskForAutonomyAction(action, visibleTasks, visibleTasksByAgent)
+	if !ok {
+		return action, true, false
+	}
+	switch task.Estado {
+	case db.TareaBloqueada:
+		action.Priority = "alta"
+		action.Reason = strings.TrimSpace(action.Reason + supervisorBlockedFrontReasonSuffix(task))
+		if supervisorTaskBlocksRealIntegration(action, task) {
+			action.Reason = strings.TrimSpace(action.Reason + " Bloquea integración real.")
+		}
+		if supervisorActionBlocksGlobalProgress(action, task) {
+			action.Reason = strings.TrimSpace(action.Reason + " Bloquea integración/progreso global. Frente crítico del proyecto/workspace.")
+		}
+		return action, true, true
+	case db.TareaAsignada:
+		if strings.TrimSpace(action.Action) == "inspeccionar_handoff_fallido" {
+			action.Priority = "media"
+			action.Reason = strings.TrimSpace(action.Reason + " El frente sigue asignado, retenido y visible.")
+			if supervisorTaskBlocksRealIntegration(action, task) {
+				action.Priority = "alta"
+				action.Reason = strings.TrimSpace(action.Reason + " Bloquea integración real.")
+			}
+			if supervisorActionBlocksGlobalProgress(action, task) {
+				action.Priority = "alta"
+				action.Reason = strings.TrimSpace(action.Reason + " Bloquea integración/progreso global. Frente crítico del proyecto/workspace.")
+			}
+			return action, true, true
+		} else if strings.TrimSpace(action.Priority) == "" || strings.EqualFold(strings.TrimSpace(action.Priority), "baja") {
+			action.Priority = "media"
+		}
+		action.Reason = strings.TrimSpace(action.Reason + " El frente sigue retenido y visible.")
+		if supervisorTaskBlocksRealIntegration(action, task) {
+			action.Priority = "alta"
+			action.Reason = strings.TrimSpace(action.Reason + " Bloquea integración real.")
+		}
+		if supervisorActionBlocksGlobalProgress(action, task) {
+			action.Priority = "alta"
+			action.Reason = strings.TrimSpace(action.Reason + " Bloquea integración/progreso global. Frente crítico del proyecto/workspace.")
+		}
+		return action, true, true
+	default:
+		return action, true, false
+	}
+}
+
+func supervisorBlockedFrontReasonSuffix(task tareaLite) string {
+	suffix := " El frente sigue bloqueado y visible."
+	switch task.Prioridad {
+	case db.PrioridadAlta:
+		suffix = " El frente sigue bloqueado, visible y es de prioridad alta."
+	}
+	if modulo := strings.TrimSpace(task.Modulo); modulo != "" {
+		suffix += " Módulo: " + modulo + "."
+	}
+	return suffix
+}
+
+func supervisorActionCarriesStrongEvidence(action supervisorRecommendedAction) bool {
+	reason := strings.ToLower(strings.TrimSpace(action.Reason))
+	if strings.Contains(reason, "evidencia fuerte") {
+		return true
+	}
+	for _, marker := range []string{
+		"evidencia: checkpoint:",
+		"evidencia: runtime_order:",
+		"evidencia: runtime:",
+		"evidencia: handle:",
+		"evidencia: patch:",
+		"evidencia: test:",
+		"evidencia: transcript:",
+		" checkpoint ",
+		" patch ",
+		" test ",
+	} {
+		if strings.Contains(reason, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func supervisorAutonomyActionUsesVisibleFrontState(action string) bool {
+	switch strings.TrimSpace(action) {
+	case "verificar_handoff_consolidado", "seguir_reasignacion", "seguir_reinicio_runtime", "inspeccionar_handoff_fallido", "resolver_followup_bloqueado":
+		return true
+	default:
+		return false
+	}
+}
+
+func supervisorTaskBlocksRealIntegration(action supervisorRecommendedAction, task tareaLite) bool {
+	if task.Estado != db.TareaBloqueada && task.Estado != db.TareaAsignada {
+		return false
+	}
+	switch strings.TrimSpace(action.Action) {
+	case "resolver_followup_bloqueado":
+		return true
+	case "inspeccionar_handoff_fallido":
+		if task.Prioridad == db.PrioridadAlta {
+			return true
+		}
+		text := strings.ToLower(strings.TrimSpace(task.Titulo + " " + task.Modulo))
+		for _, marker := range []string{"integr", "merge", "release", "deploy", "review", "handoff", "api", "mcp"} {
+			if strings.Contains(text, marker) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func supervisorActionBlocksGlobalProgress(action supervisorRecommendedAction, task tareaLite) bool {
+	if !supervisorActionCarriesStrongEvidence(action) {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(strings.Join([]string{
+		action.Reason,
+		task.Titulo,
+		task.Modulo,
+	}, " ")))
+	if strings.Contains(text, "review gate") {
+		return true
+	}
+	for _, marker := range []string{"merge", "api", "mcp", "deploy", "release", "integr"} {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func supervisorVisibleTaskForAutonomyAction(action supervisorRecommendedAction, visibleTasks map[int64]tareaLite, visibleTasksByAgent map[string]tareaLite) (tareaLite, bool) {
+	if taskID := parseSupervisorActionTargetID("tarea:", action.Target); taskID != nil {
+		task, ok := visibleTasks[*taskID]
+		return task, ok
+	}
+	agent := nombreAgenteCanonico(strings.TrimSpace(action.Assignee))
+	if agent == "" && strings.HasPrefix(strings.TrimSpace(action.Target), "agente:") {
+		agent = nombreAgenteCanonico(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(action.Target), "agente:")))
+	}
+	task, ok := visibleTasksByAgent[agent]
+	return task, ok
+}
+
+func buildSupervisorAutonomyActions(items []autonomyEventSummary) []supervisorRecommendedAction {
+	if len(items) == 0 {
+		return nil
+	}
+	actions := make([]supervisorRecommendedAction, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
+	taskActionIndex := make(map[string]int, len(items))
+	for _, item := range items {
+		action, ok := supervisorActionFromAutonomyEvent(item)
+		if !ok {
+			continue
+		}
+		key := supervisorAutonomyActionSeenKey(action)
+		if target := strings.TrimSpace(action.Target); strings.HasPrefix(target, "tarea:") {
+			if rank, collapsible := supervisorAutonomyTaskCollapseRank(action.Action); collapsible {
+				if existingIdx, ok := taskActionIndex[target]; ok && existingIdx >= 0 && existingIdx < len(actions) {
+					existing := actions[existingIdx]
+					if existingRank, existingCollapsible := supervisorAutonomyTaskCollapseRank(existing.Action); existingCollapsible {
+						if existingRank <= rank {
+							continue
+						}
+						delete(seen, supervisorAutonomyActionSeenKey(existing))
+						seen[key] = struct{}{}
+						actions[existingIdx] = action
+						continue
+					}
+				}
+				taskActionIndex[target] = len(actions)
+			}
+		}
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		actions = append(actions, action)
+	}
+	return actions
+}
+
+func supervisorAutonomyTaskCollapseRank(action string) (int, bool) {
+	switch strings.TrimSpace(action) {
+	case "inspeccionar_handoff_fallido":
+		return 0, true
+	case "resolver_followup_bloqueado":
+		return 1, true
+	case "verificar_handoff_consolidado":
+		return 2, true
+	case "seguir_reasignacion":
+		return 3, true
+	default:
+		return 0, false
+	}
+}
+
+func supervisorAutonomyActionSeenKey(action supervisorRecommendedAction) string {
+	return strings.Join([]string{
+		strings.TrimSpace(action.Kind),
+		strings.TrimSpace(action.Target),
+		strings.TrimSpace(action.Action),
+	}, "|")
+}
+
+func supervisorActionFromAutonomyEvent(item autonomyEventSummary) (supervisorRecommendedAction, bool) {
+	target := supervisorAutonomyActionTarget(item)
+	kind := "autonomy_event"
+	reasonSuffix := strings.TrimSpace(item.Reason)
+	artifactSuffix := ""
+	strongEvidence := supervisorAutonomyEventHasStrongEvidence(item)
+	if len(item.Artifacts) > 0 {
+		artifactSuffix = " Evidencia: " + strings.Join(item.Artifacts, ", ")
+		if item.ArtifactsMore > 0 {
+			artifactSuffix += fmt.Sprintf(" (+%d)", item.ArtifactsMore)
+		}
+	}
+	if strongEvidence {
+		artifactSuffix += " Evidencia fuerte."
+	}
+	switch strings.TrimSpace(item.Kind) {
+	case "runtime_restart_requested":
+		reason := "Hay un reinicio de runtime pedido por el control plane; verificar convergencia antes de abrir más trabajo."
+		if reasonSuffix != "" {
+			reason += " Motivo: " + reasonSuffix + "."
+		}
+		return supervisorRecommendedAction{
+			Kind:     kind,
+			Target:   target,
+			Action:   "seguir_reinicio_runtime",
+			Reason:   strings.TrimSpace(reason + artifactSuffix),
+			Priority: "media",
+			Assignee: firstNonEmpty(strings.TrimSpace(item.TargetAgent), strings.TrimSpace(item.Agent), strings.TrimSpace(item.Supervisor)),
+		}, true
+	case "task_reassigned":
+		reason := "Hubo una reasignación reciente; confirmar que el nuevo worker absorbió el frente sin deriva."
+		if reasonSuffix != "" {
+			reason += " Motivo: " + reasonSuffix + "."
+		}
+		return supervisorRecommendedAction{
+			Kind:     kind,
+			Target:   target,
+			Action:   "seguir_reasignacion",
+			Reason:   strings.TrimSpace(reason + artifactSuffix),
+			Priority: "media",
+			Assignee: firstNonEmpty(strings.TrimSpace(item.TargetAgent), strings.TrimSpace(item.Supervisor), strings.TrimSpace(item.Agent)),
+		}, true
+	case "handoff_completed":
+		reason := "El handoff ya se consolidó; conviene verificar progreso real del destino y cerrar seguimiento residual."
+		if reasonSuffix != "" {
+			reason += " Motivo: " + reasonSuffix + "."
+		}
+		return supervisorRecommendedAction{
+			Kind:     kind,
+			Target:   target,
+			Action:   "verificar_handoff_consolidado",
+			Reason:   strings.TrimSpace(reason + artifactSuffix),
+			Priority: "baja",
+			Assignee: firstNonEmpty(strings.TrimSpace(item.TargetAgent), strings.TrimSpace(item.Supervisor), strings.TrimSpace(item.Agent)),
+		}, true
+	case "handoff_failed":
+		reason := "Handoff autónomo fallido reciente; revisar reasignación, destino y consolidación."
+		if reasonSuffix != "" {
+			reason += " Motivo: " + reasonSuffix + "."
+		}
+		return supervisorRecommendedAction{
+			Kind:     kind,
+			Target:   target,
+			Action:   "inspeccionar_handoff_fallido",
+			Reason:   strings.TrimSpace(reason + artifactSuffix),
+			Priority: "alta",
+			Assignee: firstNonEmpty(strings.TrimSpace(item.Supervisor), strings.TrimSpace(item.TargetAgent), strings.TrimSpace(item.Agent)),
+		}, true
+	case "post_remediation_blocked_escalated":
+		reason := "Follow-up bloqueado tras remediación; decidir escalado, cambio de slice o desbloqueo real."
+		if reasonSuffix != "" {
+			reason += " Motivo: " + reasonSuffix + "."
+		}
+		return supervisorRecommendedAction{
+			Kind:     kind,
+			Target:   target,
+			Action:   "resolver_followup_bloqueado",
+			Reason:   strings.TrimSpace(reason + artifactSuffix),
+			Priority: "alta",
+			Assignee: firstNonEmpty(strings.TrimSpace(item.Supervisor), strings.TrimSpace(item.Agent), strings.TrimSpace(item.TargetAgent)),
+		}, true
+	case "worker_recovery_paused_external":
+		reason := "Recuperación pausada por dependencia externa; revisar conector o ventana operativa antes de reintentar."
+		if reasonSuffix != "" {
+			reason += " Motivo: " + reasonSuffix + "."
+		}
+		return supervisorRecommendedAction{
+			Kind:     kind,
+			Target:   target,
+			Action:   "revisar_pausa_externa",
+			Reason:   strings.TrimSpace(reason + artifactSuffix),
+			Priority: "media",
+			Assignee: firstNonEmpty(strings.TrimSpace(item.Supervisor), strings.TrimSpace(item.Agent)),
+		}, true
+	case "repair_helper_opened":
+		reason := "Hay un repair-helper activo; seguir si converge o si necesita relevo limpio."
+		if reasonSuffix != "" {
+			reason += " Motivo: " + reasonSuffix + "."
+		}
+		return supervisorRecommendedAction{
+			Kind:     kind,
+			Target:   target,
+			Action:   "seguir_repair_helper",
+			Reason:   strings.TrimSpace(reason + artifactSuffix),
+			Priority: "media",
+			Assignee: firstNonEmpty(strings.TrimSpace(item.Supervisor), strings.TrimSpace(item.TargetAgent), strings.TrimSpace(item.Agent)),
+		}, true
+	default:
+		return supervisorRecommendedAction{}, false
+	}
+}
+
+func supervisorAutonomyEventHasStrongEvidence(item autonomyEventSummary) bool {
+	for _, artifact := range item.Artifacts {
+		value := strings.ToLower(strings.TrimSpace(artifact))
+		for _, prefix := range []string{"checkpoint:", "runtime_order:", "runtime:", "handle:", "patch:", "test:", "transcript:"} {
+			if strings.HasPrefix(value, prefix) {
+				return true
+			}
+		}
+	}
+	reason := strings.ToLower(strings.TrimSpace(item.Reason))
+	for _, marker := range []string{"checkpoint", "runtime", "patch", "test", "transcript"} {
+		if strings.Contains(reason, marker) {
+			return true
+		}
+	}
+	return item.ArtifactsMore > 0 && len(item.Artifacts) > 0
+}
+
+func supervisorAutonomyActionTarget(item autonomyEventSummary) string {
+	switch {
+	case item.TaskID != nil && *item.TaskID > 0:
+		return fmt.Sprintf("tarea:%d", *item.TaskID)
+	case strings.TrimSpace(item.TargetAgent) != "":
+		return "agente:" + strings.TrimSpace(item.TargetAgent)
+	case strings.TrimSpace(item.Agent) != "":
+		return "agente:" + strings.TrimSpace(item.Agent)
+	case item.RuntimeID != nil && *item.RuntimeID > 0:
+		return fmt.Sprintf("runtime:%d", *item.RuntimeID)
+	case item.HandleID != nil && *item.HandleID > 0:
+		return fmt.Sprintf("handle:%d", *item.HandleID)
+	default:
+		return "autonomia:reciente"
+	}
 }
 
 var openClawWorktreeDriftBuilder = buildOpenClawWorktreeDriftFromAPIStatus
@@ -4665,6 +5559,7 @@ func preferredSupervisorWorker(status apiStatusResponse) string {
 }
 
 func sortSupervisorRecommendedActions(actions []supervisorRecommendedAction) {
+	projectRisk := supervisorWorkspaceProjectRiskSnapshot()
 	sort.SliceStable(actions, func(i, j int) bool {
 		weight := func(v string) int {
 			switch v {
@@ -4680,8 +5575,311 @@ func sortSupervisorRecommendedActions(actions []supervisorRecommendedAction) {
 		if wi != wj {
 			return wi < wj
 		}
+		gi, gj := supervisorActionGlobalImpactSortWeight(actions[i]), supervisorActionGlobalImpactSortWeight(actions[j])
+		if gi != gj {
+			return gi < gj
+		}
+		ri, rj := supervisorActionProjectRisk(actions[i], projectRisk), supervisorActionProjectRisk(actions[j], projectRisk)
+		if ri != rj {
+			return ri > rj
+		}
 		return actions[i].Target < actions[j].Target
 	})
+}
+
+func supervisorWorkspaceProjectRiskSnapshot() map[string]int {
+	report, err := buildWorkspaceControlReport()
+	if err != nil || report == nil || len(report.AutonomyProjects) == 0 {
+		return nil
+	}
+	out := make(map[string]int, len(report.AutonomyProjects))
+	for _, item := range report.AutonomyProjects {
+		project := strings.ToLower(strings.TrimSpace(item.Project))
+		if project == "" || item.Blocking <= 0 {
+			continue
+		}
+		out[project] = item.Blocking
+	}
+	return out
+}
+
+func supervisorActionProjectRisk(action supervisorRecommendedAction, projectRisk map[string]int) int {
+	if len(projectRisk) == 0 {
+		return 0
+	}
+	if supervisorActionIsHealthyAbsorbed(action) {
+		return 0
+	}
+	project := strings.ToLower(strings.TrimSpace(supervisorCriticalAutonomyProjectFromTarget(action)))
+	if project == "" {
+		return 0
+	}
+	return projectRisk[project]
+}
+
+func supervisorActionGlobalImpactSortWeight(action supervisorRecommendedAction) int {
+	if supervisorActionIsHealthyAbsorbed(action) {
+		return 3
+	}
+	if strings.TrimSpace(action.Kind) != "autonomy_event" {
+		return 2
+	}
+	if supervisorActionHasCriticalGlobalImpact(action) {
+		return 0
+	}
+	if supervisorActionHasGlobalImpact(action) {
+		return 1
+	}
+	return 2
+}
+
+func supervisorActionHasCriticalGlobalImpact(action supervisorRecommendedAction) bool {
+	if supervisorActionIsHealthyAbsorbed(action) {
+		return false
+	}
+	reason := strings.ToLower(strings.TrimSpace(action.Reason))
+	if strings.Contains(reason, "bloquea integración/progreso global") {
+		return true
+	}
+	return false
+}
+
+func supervisorActionHasGlobalImpact(action supervisorRecommendedAction) bool {
+	if supervisorActionIsHealthyAbsorbed(action) {
+		return false
+	}
+	reason := strings.ToLower(strings.TrimSpace(action.Reason))
+	return strings.Contains(reason, "integración/progreso global")
+}
+
+func supervisorActionIsHealthyAbsorbed(action supervisorRecommendedAction) bool {
+	reason := strings.ToLower(strings.TrimSpace(action.Reason))
+	if !strings.Contains(reason, "ya hay progreso reciente") {
+		return false
+	}
+	if !strings.Contains(reason, "no parece bloquear integración/progreso global") {
+		return false
+	}
+	return true
+}
+
+type supervisorCriticalAutonomyFocus struct {
+	supervisorRecommendedAction
+	Project string
+}
+
+func buildSupervisorCriticalAutonomyFocus(status apiStatusResponse, surface *autonomySurface, mailboxPendiente []apiOpenClawMailboxLite) *supervisorCriticalAutonomyFocus {
+	actions := buildSupervisorOperationalActions(status, mailboxPendiente)
+	for i := range actions {
+		if strings.TrimSpace(actions[i].Kind) != "autonomy_event" {
+			continue
+		}
+		if supervisorActionHasGlobalImpact(actions[i]) {
+			item := supervisorCriticalAutonomyFocus{supervisorRecommendedAction: actions[i]}
+			item.Project = supervisorCriticalAutonomyProject(actions[i], surface)
+			return &item
+		}
+	}
+	return nil
+}
+
+func supervisorCriticalAutonomyProject(action supervisorRecommendedAction, surface *autonomySurface) string {
+	if surface == nil {
+		return supervisorCriticalAutonomyProjectFromTarget(action)
+	}
+	for _, item := range surface.Recent {
+		candidate, ok := supervisorActionFromAutonomyEvent(item.autonomyEventSummary)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(candidate.Action) == strings.TrimSpace(action.Action) &&
+			strings.TrimSpace(candidate.Target) == strings.TrimSpace(action.Target) {
+			return strings.TrimSpace(item.Project)
+		}
+	}
+	return supervisorCriticalAutonomyProjectFromTarget(action)
+}
+
+func supervisorCriticalAutonomyProjectFromTarget(action supervisorRecommendedAction) string {
+	taskID := parseSupervisorActionTargetID("tarea:", action.Target)
+	if taskID == nil || *taskID <= 0 {
+		return ""
+	}
+	task, err := db.GetTarea(*taskID)
+	if err != nil || task == nil || task.ProyectoID == nil || *task.ProyectoID <= 0 {
+		return ""
+	}
+	project, err := db.GetProyecto(strconv.FormatInt(*task.ProyectoID, 10))
+	if err != nil || project == nil {
+		return ""
+	}
+	return strings.TrimSpace(project.Slug)
+}
+
+func supervisorCriticalProjectRiskFromSnapshot(snapshot map[string]any) *workspaceAutonomyProjectSummary {
+	if snapshot == nil {
+		return nil
+	}
+	risk, _ := parseWorkspaceAutonomyProjectSummarySnapshotValue(snapshot["critical_project_risk"])
+	return risk
+}
+
+func parseSupervisorRecommendedActionSnapshotValue(raw any) (*supervisorRecommendedAction, bool) {
+	switch value := raw.(type) {
+	case supervisorRecommendedAction:
+		item := value
+		return &item, true
+	case *supervisorRecommendedAction:
+		if value == nil {
+			return nil, false
+		}
+		item := *value
+		return &item, true
+	case map[string]any:
+		item := supervisorRecommendedAction{
+			Kind:     strings.TrimSpace(fmt.Sprint(value["kind"])),
+			Target:   strings.TrimSpace(fmt.Sprint(value["target"])),
+			Action:   strings.TrimSpace(fmt.Sprint(value["action"])),
+			Reason:   strings.TrimSpace(fmt.Sprint(value["reason"])),
+			Priority: strings.TrimSpace(fmt.Sprint(value["priority"])),
+			Assignee: strings.TrimSpace(fmt.Sprint(value["assignee"])),
+		}
+		if rawAuto, ok := value["auto_aplicable"]; ok {
+			switch v := rawAuto.(type) {
+			case bool:
+				item.AutoAplicable = v
+			case string:
+				item.AutoAplicable = strings.EqualFold(strings.TrimSpace(v), "true")
+			}
+		}
+		if item.Action == "" && item.Target == "" && item.Kind == "" {
+			return nil, false
+		}
+		return &item, true
+	default:
+		return nil, false
+	}
+}
+
+func parseWorkspaceAutonomyProjectSummarySnapshotValue(raw any) (*workspaceAutonomyProjectSummary, bool) {
+	switch value := raw.(type) {
+	case *workspaceAutonomyProjectSummary:
+		if value == nil {
+			return nil, false
+		}
+		item := *value
+		item.Project = strings.TrimSpace(item.Project)
+		item.Highlights = append([]string(nil), item.Highlights...)
+		return &item, true
+	case workspaceAutonomyProjectSummary:
+		item := value
+		item.Project = strings.TrimSpace(item.Project)
+		item.Highlights = append([]string(nil), item.Highlights...)
+		return &item, true
+	case map[string]any:
+		item := &workspaceAutonomyProjectSummary{
+			Project: strings.TrimSpace(fmt.Sprint(value["project"])),
+		}
+		if rawEvents, ok := value["events"]; ok {
+			switch v := rawEvents.(type) {
+			case int:
+				item.Events = v
+			case int64:
+				item.Events = int(v)
+			case float64:
+				item.Events = int(v)
+			}
+		}
+		if rawBlocking, ok := value["blocking"]; ok {
+			switch v := rawBlocking.(type) {
+			case int:
+				item.Blocking = v
+			case int64:
+				item.Blocking = int(v)
+			case float64:
+				item.Blocking = int(v)
+			}
+		}
+		if rawLastAt, ok := value["last_at"]; ok {
+			switch v := rawLastAt.(type) {
+			case string:
+				if parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(v)); err == nil {
+					item.LastAt = &parsed
+				}
+			case time.Time:
+				parsed := v
+				item.LastAt = &parsed
+			}
+		}
+		if rawHighlights, ok := value["highlights"]; ok {
+			switch v := rawHighlights.(type) {
+			case []string:
+				item.Highlights = append(item.Highlights, v...)
+			case []any:
+				for _, candidate := range v {
+					value := strings.TrimSpace(fmt.Sprint(candidate))
+					if value == "" {
+						continue
+					}
+					item.Highlights = append(item.Highlights, value)
+				}
+			}
+		}
+		if item.Project == "" && item.Blocking <= 0 && len(item.Highlights) == 0 {
+			return nil, false
+		}
+		return item, true
+	default:
+		return nil, false
+	}
+}
+
+func attachSupervisorCriticalProjectRisk(result map[string]any, snapshot map[string]any) map[string]any {
+	if result == nil {
+		return nil
+	}
+	if risk := supervisorCriticalProjectRiskFromSnapshot(snapshot); risk != nil {
+		result["critical_project_risk"] = risk
+	}
+	return result
+}
+
+func supervisorRecommendedActionEquals(a, b supervisorRecommendedAction) bool {
+	return strings.TrimSpace(a.Kind) == strings.TrimSpace(b.Kind) &&
+		strings.TrimSpace(a.Action) == strings.TrimSpace(b.Action) &&
+		strings.TrimSpace(a.Target) == strings.TrimSpace(b.Target) &&
+		strings.TrimSpace(a.Assignee) == strings.TrimSpace(b.Assignee)
+}
+
+func attachSupervisorQueueContext(result map[string]any, snapshot map[string]any, selected *supervisorRecommendedAction) map[string]any {
+	if result == nil || snapshot == nil || selected == nil {
+		return result
+	}
+	safeQueue, _ := snapshot["safe_action_queue"].([]supervisorRecommendedAction)
+	for _, item := range safeQueue {
+		if !supervisorRecommendedActionEquals(item, *selected) {
+			continue
+		}
+		result["queue_kind"] = "safe"
+		result["safe_action_queue"] = safeQueue
+		if nextSafeAction, ok := snapshot["next_safe_action"].(supervisorRecommendedAction); ok {
+			result["next_safe_action"] = nextSafeAction
+		}
+		return result
+	}
+	actionQueue, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+	for _, item := range actionQueue {
+		if !supervisorRecommendedActionEquals(item, *selected) {
+			continue
+		}
+		result["queue_kind"] = "recommended"
+		result["action_queue"] = actionQueue
+		if nextAction, ok := snapshot["next_action"].(supervisorRecommendedAction); ok {
+			result["next_action"] = nextAction
+		}
+		return result
+	}
+	return result
 }
 
 func applySupervisorRecommendedAction(supervisor, actionName, target, assignee string) (map[string]any, error) {
@@ -4690,7 +5888,7 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 	if err != nil {
 		return nil, err
 	}
-	actions, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+	actions, _ := snapshot["safe_action_queue"].([]supervisorRecommendedAction)
 	selected := pickSupervisorRecommendedAction(actions, strings.TrimSpace(actionName), strings.TrimSpace(target), strings.TrimSpace(assignee))
 	if selected == nil {
 		selected = fallbackSupervisorRecommendedAction(strings.TrimSpace(actionName), strings.TrimSpace(target), strings.TrimSpace(assignee))
@@ -4745,7 +5943,8 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			"task_id":    taskID,
 			"assignee":   worker,
 		}
-		return result, nil
+		attachSupervisorQueueContext(result, snapshot, selected)
+		return attachSupervisorCriticalProjectRisk(result, snapshot), nil
 	case "reservar_tarea_libre":
 		taskID, err := resolveSupervisorActionTaskID(*selected)
 		if err != nil {
@@ -4773,7 +5972,8 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			"task_id":    taskID,
 			"assignee":   worker,
 		}
-		return result, nil
+		attachSupervisorQueueContext(result, snapshot, selected)
+		return attachSupervisorCriticalProjectRisk(result, snapshot), nil
 	case "replanificar_por_cuota":
 		taskID, err := resolveSupervisorActionTaskID(*selected)
 		if err != nil {
@@ -4802,7 +6002,8 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			"task_id":    taskID,
 			"assignee":   worker,
 		}
-		return result, nil
+		attachSupervisorQueueContext(result, snapshot, selected)
+		return attachSupervisorCriticalProjectRisk(result, snapshot), nil
 	case "rebalancear_reserva":
 		taskID, err := resolveSupervisorActionTaskID(*selected)
 		if err != nil {
@@ -4828,7 +6029,8 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			"task_id":    taskID,
 			"assignee":   worker,
 		}
-		return result, nil
+		attachSupervisorQueueContext(result, snapshot, selected)
+		return attachSupervisorCriticalProjectRisk(result, snapshot), nil
 	case "cerrar_propuesta_rechazada":
 		codigo, err := resolveSupervisorActionProposalCode(*selected)
 		if err != nil {
@@ -4844,7 +6046,8 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			"codigo":     codigo,
 			"assignee":   worker,
 		}
-		return result, nil
+		attachSupervisorQueueContext(result, snapshot, selected)
+		return attachSupervisorCriticalProjectRisk(result, snapshot), nil
 	case "seguir_guidance_durable":
 		mailboxID, err := resolveSupervisorActionMailboxID(*selected, worker)
 		if err != nil {
@@ -4860,7 +6063,8 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			"mailbox_id": mailboxID,
 			"assignee":   worker,
 		}
-		return result, nil
+		attachSupervisorQueueContext(result, snapshot, selected)
+		return attachSupervisorCriticalProjectRisk(result, snapshot), nil
 	case "inspeccionar_sesion_observada":
 		target := strings.TrimSpace(selected.Target)
 		if !strings.HasPrefix(target, "agente:") {
@@ -4877,14 +6081,14 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 		candidates := buildOpenClawSessionCandidates(snapshot)
 		for _, item := range candidates {
 			if strings.EqualFold(strings.TrimSpace(item.Agente), agente) {
-				return map[string]any{
+				return attachSupervisorCriticalProjectRisk(map[string]any{
 					"ok":                true,
 					"supervisor":        supervisor,
 					"action":            selected,
 					"agente":            agente,
 					"assignee":          worker,
 					"session_candidate": item,
-				}, nil
+				}, snapshot), nil
 			}
 		}
 		return nil, fmt.Errorf("no hay sesión observada para %s", agente)
@@ -4924,7 +6128,8 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 				} else {
 					result["request_error"] = err.Error()
 				}
-				return result, nil
+				attachSupervisorQueueContext(result, snapshot, selected)
+				return attachSupervisorCriticalProjectRisk(result, snapshot), nil
 			}
 		}
 		return nil, fmt.Errorf("no hay worktree desfasada para %s", agente)
@@ -4956,7 +6161,7 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{
+			return attachSupervisorCriticalProjectRisk(map[string]any{
 				"ok":               true,
 				"supervisor":       supervisor,
 				"action":           selected,
@@ -4964,7 +6169,7 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 				"assignee":         worker,
 				"worktree_drift":   item,
 				"worktree_refresh": refreshed,
-			}, nil
+			}, snapshot), nil
 		}
 		return nil, fmt.Errorf("no hay worktree limpia desfasada para %s", agente)
 	case "recoger_resultado_subagente", "revisar_subagente_fallido", "limpiar_subagente_cancelado":
@@ -5000,19 +6205,22 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 		if pipelineFollowup != nil {
 			out["pipeline_followup"] = pipelineFollowup
 		}
-		return out, nil
+		attachSupervisorQueueContext(out, snapshot, selected)
+		return attachSupervisorCriticalProjectRisk(out, snapshot), nil
 	case "refrescar_store_subagentes":
-		result, err := refreshSupervisorSubagentsFromStore(supervisor, "")
+		storeSync, err := refreshSupervisorSubagentsFromStore(supervisor, "")
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{
+		result := map[string]any{
 			"ok":         true,
 			"supervisor": supervisor,
 			"action":     selected,
 			"assignee":   worker,
-			"store_sync": result,
-		}, nil
+			"store_sync": storeSync,
+		}
+		attachSupervisorQueueContext(result, snapshot, selected)
+		return attachSupervisorCriticalProjectRisk(result, snapshot), nil
 	default:
 		return nil, fmt.Errorf("acción no aplicable automáticamente: %s", strings.TrimSpace(selected.Action))
 	}
@@ -5189,7 +6397,8 @@ func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int, bat
 	if err != nil {
 		return nil, err
 	}
-	actions, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+	actions, _ := snapshot["safe_action_queue"].([]supervisorRecommendedAction)
+	criticalProjectRisk, _ := snapshot["critical_project_risk"].(*workspaceAutonomyProjectSummary)
 	batchKind = normalizeSupervisorBatchKind(batchKind)
 	if batchKind != "" {
 		filtered := make([]supervisorRecommendedAction, 0, len(actions))
@@ -5204,13 +6413,14 @@ func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int, bat
 	if maxItems <= 0 || maxItems > len(actions) {
 		maxItems = len(actions)
 	}
+	var nextSafeAction any
+	if len(actions) > 0 {
+		nextSafeAction = actions[0]
+	}
 	applied := make([]map[string]any, 0, maxItems)
 	for _, item := range actions {
 		if len(applied) >= maxItems {
 			break
-		}
-		if !supervisorActionIsAutomaticallyApplicable(item.Action) {
-			continue
 		}
 		result, err := applySupervisorRecommendedAction(supervisor, item.Action, item.Target, item.Assignee)
 		if err != nil {
@@ -5219,11 +6429,15 @@ func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int, bat
 		applied = append(applied, result)
 	}
 	return map[string]any{
-		"ok":         true,
-		"supervisor": supervisor,
-		"count":      len(applied),
-		"applied":    applied,
-		"kind":       batchKind,
+		"ok":                    true,
+		"supervisor":            supervisor,
+		"count":                 len(applied),
+		"applied":               applied,
+		"kind":                  batchKind,
+		"queue_kind":            "safe",
+		"safe_action_queue":     actions,
+		"next_safe_action":      nextSafeAction,
+		"critical_project_risk": criticalProjectRisk,
 	}, nil
 }
 
@@ -5233,11 +6447,16 @@ func applySupervisorNextAction(supervisor string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	actions, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+	actions, _ := snapshot["safe_action_queue"].([]supervisorRecommendedAction)
 	for _, item := range actions {
-		if supervisorActionIsAutomaticallyApplicable(item.Action) {
-			return applySupervisorRecommendedAction(supervisor, item.Action, item.Target, item.Assignee)
+		result, err := applySupervisorRecommendedAction(supervisor, item.Action, item.Target, item.Assignee)
+		if err != nil {
+			return nil, err
 		}
+		result["queue_kind"] = "safe"
+		result["next_safe_action"] = item
+		attachSupervisorCriticalProjectRisk(result, snapshot)
+		return result, nil
 	}
 	return nil, fmt.Errorf("no hay acción segura aplicable en la cola del supervisor")
 }

@@ -64,6 +64,11 @@ type FiltroAsignaciones struct {
 }
 
 func ActivarAsignacion(agente string, proyectoID int64, nota string) error {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return err
+	}
 	tx, err := DB.Begin()
 	if err != nil {
 		return err
@@ -84,6 +89,11 @@ func ActivarAsignacion(agente string, proyectoID int64, nota string) error {
 }
 
 func PausarAsignacion(agente string, proyectoID int64, nota string) error {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return err
+	}
 	tx, err := DB.Begin()
 	if err != nil {
 		return err
@@ -163,8 +173,12 @@ func ListarAsignaciones(f FiltroAsignaciones) ([]*Asignacion, error) {
 		WHERE 1=1`
 	var args []any
 	if f.Agente != nil {
+		agenteCanonico, err := CanonicalizeAgentName(*f.Agente)
+		if err != nil {
+			return nil, err
+		}
 		q += ` AND a.agente = ?`
-		args = append(args, *f.Agente)
+		args = append(args, agenteCanonico)
 	}
 	if f.ProyectoID != nil {
 		q += ` AND a.proyecto_id = ?`
@@ -209,15 +223,20 @@ func ListarAsignaciones(f FiltroAsignaciones) ([]*Asignacion, error) {
 }
 
 func GetAsignacionActivaAgente(agente string) (*Asignacion, error) {
-	estado := AsignacionActiva
-	list, err := ListarAsignaciones(FiltroAsignaciones{Agente: &agente, Estado: &estado})
+	agenteCanonico, err := CanonicalizeAgentName(agente)
 	if err != nil {
 		return nil, err
 	}
-	if len(list) == 0 {
-		return nil, sql.ErrNoRows
-	}
-	return list[0], nil
+	return consultarConReintentos(func() (*Asignacion, error) {
+		row := DB.QueryRow(`
+			SELECT a.id, a.agente, a.proyecto_id, p.slug, p.nombre, a.estado, a.nota, a.created_at, a.updated_at, a.cerrada_at
+			FROM asignaciones a
+			JOIN proyectos p ON p.id = a.proyecto_id
+			WHERE a.agente = ? AND a.estado = ?
+			ORDER BY a.id DESC
+			LIMIT 1`, agenteCanonico, string(AsignacionActiva))
+		return escanearAsignacion(row)
+	})
 }
 
 func ContarAsignacionesActivasPorProyecto() (map[int64]int, error) {

@@ -634,8 +634,8 @@ func TestBuildTickOutputSupervisorAutobootstrapSupervisaProyectoSinTareaActiva(t
 	store := &fakeStore{
 		project: proyecto,
 		config: map[string]string{
-			"server_autobootstrap_enabled":        "true",
-			"server_autobootstrap_project_slug":   "orquestador",
+			"server_autobootstrap_enabled":          "true",
+			"server_autobootstrap_project_slug":     "orquestador",
 			"server_autobootstrap_supervisor_agent": "Codex1",
 		},
 		agents: []*db.Agente{
@@ -840,6 +840,43 @@ func TestBuildTickOutputConTrabajoActivoNoConsultaPropuestas(t *testing.T) {
 	}
 	if store.pendingVotesCalls != 0 || store.openProposalsCalls != 0 {
 		t.Fatalf("el hot path con trabajo activo no deberia consultar propuestas: pending=%d open=%d", store.pendingVotesCalls, store.openProposalsCalls)
+	}
+}
+
+func TestBuildTickOutputMarcaFinishAppDesdeNotas(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex1", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex1"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente activo Codex", Notas: "autonomia:finish_app"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 52, Agente: "Codex1", ProyectoID: int64Ptr(7), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 62, Agente: "Codex1", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(52), Estado: "activo", UpdatedAt: now},
+		},
+	}
+	svc := NewService(store, nil)
+	proyecto := &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()}
+
+	out, err := svc.buildTickOutput("Codex1", proyecto, nil, 100)
+	if err != nil {
+		t.Fatalf("buildTickOutput: %v", err)
+	}
+	if out == nil || !out.FinishApp {
+		t.Fatalf("tick sin finish_app: %+v", out)
+	}
+	if out.AccionRecomendada != "continuar_trabajo" || out.DebePausar {
+		t.Fatalf("salida inesperada: %+v", out)
+	}
+	if !strings.Contains(strings.ToLower(out.Motivo), "finish_app") {
+		t.Fatalf("motivo inesperado: %q", out.Motivo)
 	}
 }
 
@@ -1311,6 +1348,179 @@ func TestBuildPreparePremiumIgnoraModeloLocalIncompatible(t *testing.T) {
 	}
 	if out.Plan.Modelo != "gpt-5.4" {
 		t.Fatalf("deberia caer al modelo premium compatible por defecto: %+v", out.Plan)
+	}
+}
+
+func TestBuildPrepareOllamaIgnoraModeloPremiumIncompatible(t *testing.T) {
+	prepararDBTemporalRuntimeService(t)
+	tmp := t.TempDir()
+	rutaProyecto := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(rutaProyecto, 0o755); err != nil {
+		t.Fatalf("mkdir proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("QwenCoder1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaProyecto,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertConector(&db.Conector{
+		Slug:         "ollama-cli",
+		Nombre:       "Ollama CLI",
+		Transporte:   "cli",
+		Comando:      "ollama",
+		MetadataJSON: `{"familia":"ollama","default_model":"qwen2.5-coder:7b","default_reasoning_effort":"medium","default_task_profile":"implementacion","model_positional":true}`,
+		Activo:       true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	if _, err := db.GuardarPoliticaModelo(&db.PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		ModelSlug:       "gpt-5.4",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("guardar politica: %v", err)
+	}
+
+	out, err := NewService(Repository{}, capacidadapp.Repository{}).BuildPrepare(PrepareInput{
+		Agente:   "QwenCoder1",
+		Proyecto: "orquestador",
+		Perfil:   "implementacion",
+	})
+	if err != nil {
+		t.Fatalf("BuildPrepare: %v", err)
+	}
+	if out == nil || out.Plan == nil {
+		t.Fatalf("prepare inesperado: %+v", out)
+	}
+	if out.Plan.Modelo == "gpt-5.4" {
+		t.Fatalf("ollama no deberia conservar modelo premium incompatible: %+v", out.Plan)
+	}
+	if out.Plan.Modelo != "qwen2.5-coder:7b" {
+		t.Fatalf("deberia caer al modelo local por defecto: %+v", out.Plan)
+	}
+	if rendered := runtimeagente.RenderCommand(out.Plan); !strings.Contains(rendered, "qwen2.5-coder:7b") {
+		t.Fatalf("rendered command deberia usar modelo local por defecto: %s", rendered)
+	}
+}
+
+func TestBuildPrepareGemmaRecuperaAfinidadLocalAunquePoliticaCaigaEnPremium(t *testing.T) {
+	prepararDBTemporalRuntimeService(t)
+	tmp := t.TempDir()
+	rutaProyecto := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(rutaProyecto, 0o755); err != nil {
+		t.Fatalf("mkdir proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Gemma1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaProyecto,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertConector(&db.Conector{
+		Slug:         "ollama-cli",
+		Nombre:       "Ollama CLI",
+		Transporte:   "cli",
+		Comando:      "ollama",
+		MetadataJSON: `{"familia":"ollama","default_model":"qwen2.5-coder:7b","default_reasoning_effort":"medium","default_task_profile":"implementacion","model_positional":true}`,
+		Activo:       true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	if _, err := db.GuardarPoliticaModelo(&db.PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		ModelSlug:       "gpt-5.4",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("guardar politica: %v", err)
+	}
+
+	out, err := NewService(Repository{}, capacidadapp.Repository{}).BuildPrepare(PrepareInput{
+		Agente:   "Gemma1",
+		Proyecto: "orquestador",
+		Perfil:   "implementacion",
+	})
+	if err != nil {
+		t.Fatalf("BuildPrepare: %v", err)
+	}
+	if out == nil || out.Plan == nil {
+		t.Fatalf("prepare inesperado: %+v", out)
+	}
+	if out.Plan.Modelo != "gemma4:26b" {
+		t.Fatalf("Gemma deberia recuperar su afinidad local, got=%+v", out.Plan)
+	}
+	if rendered := runtimeagente.RenderCommand(out.Plan); !strings.Contains(rendered, "gemma4:26b") {
+		t.Fatalf("rendered command deberia usar gemma4:26b: %s", rendered)
+	}
+}
+
+func TestBuildPrepareOllamaConservaBootstrapMinimoDelRegistry(t *testing.T) {
+	prepararDBTemporalRuntimeService(t)
+	tmp := t.TempDir()
+	rutaProyecto := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(rutaProyecto, 0o755); err != nil {
+		t.Fatalf("mkdir proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("QwenCoder1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaProyecto,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertConector(&db.Conector{
+		Slug:         "ollama-cli",
+		Nombre:       "Ollama CLI",
+		Transporte:   "cli",
+		Comando:      "ollama",
+		ArgsJSON:     `["run"]`,
+		MetadataJSON: `{"familia":"ollama","default_model":"qwen2.5-coder:7b","default_reasoning_effort":"medium","model_positional":true,"can_send_input":true,"mailbox_delivery_mode":"interactive","launch_prompt_transport":"post_start","launch_prompt_delay_ms":1200}`,
+		Activo:       true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+
+	out, err := NewService(Repository{}, capacidadapp.Repository{}).BuildPrepare(PrepareInput{
+		Agente:   "QwenCoder1",
+		Proyecto: "orquestador",
+		Perfil:   "implementacion",
+	})
+	if err != nil {
+		t.Fatalf("BuildPrepare: %v", err)
+	}
+	if out == nil || out.Plan == nil {
+		t.Fatalf("prepare inesperado: %+v", out)
+	}
+	if strings.TrimSpace(out.Plan.BootstrapPrompt) == "" {
+		t.Fatalf("deberia conservar bootstrap minimo para ollama: %+v", out.Plan)
+	}
+	if out.Plan.LaunchPromptMode != "post_start" {
+		t.Fatalf("ollama deberia salir con launch_prompt_mode post_start: %+v", out.Plan)
 	}
 }
 
@@ -1870,14 +2080,14 @@ func TestProcessTickPromueveTareaAsignadaSiContinuidadYaFueAbsorbida(t *testing.
 		Version:   1,
 		UpdatedAt: now.Add(-15 * time.Second).Format(time.RFC3339),
 		Current: &runtimeagente.WorkerWorkQueueEntry{
-			MailboxID:        1172,
-			Kind:             "autonomia",
-			Action:           "continuar_trabajo",
-			TaskID:           tareaID,
-			State:            "running",
-			VerificationKey:  "vk-codex3",
-			RecordedAt:       now.Add(-15 * time.Second).Format(time.RFC3339),
-			Title:            "Promover tarea asignada por continuidad absorbida",
+			MailboxID:       1172,
+			Kind:            "autonomia",
+			Action:          "continuar_trabajo",
+			TaskID:          tareaID,
+			State:           "running",
+			VerificationKey: "vk-codex3",
+			RecordedAt:      now.Add(-15 * time.Second).Format(time.RFC3339),
+			Title:           "Promover tarea asignada por continuidad absorbida",
 		},
 	})
 
@@ -2060,11 +2270,11 @@ func TestProcessTickPriorizaContinuidadAccionableSobreBloqueoResidual(t *testing
 	})
 
 	metaJSON, _ := json.Marshal(map[string]any{
-		"driver":                 "tmux_cli_session",
-		"worker_manifest_path":   manifestPath,
-		"worker_status_path":     statusPath,
-		"worker_heartbeat_path":  heartbeatPath,
-		"mailbox_delivery_mode":  "session_resume",
+		"driver":                "tmux_cli_session",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+		"mailbox_delivery_mode": "session_resume",
 	})
 	if err := db.ActualizarMetadataRuntimeHandle(handle.ID, string(metaJSON)); err != nil {
 		t.Fatalf("actualizar metadata handle: %v", err)

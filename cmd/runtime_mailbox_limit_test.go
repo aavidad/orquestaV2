@@ -32,6 +32,27 @@ func TestAPIHandlerRuntimeMailboxRespetaLimit(t *testing.T) {
 	}
 }
 
+func TestAPIHandlerRuntimeMailboxUsaLimitPorDefecto(t *testing.T) {
+	prevFn := apiListRuntimeMailboxFn
+	t.Cleanup(func() { apiListRuntimeMailboxFn = prevFn })
+
+	var gotFilter db.FiltroRuntimeMailbox
+	apiListRuntimeMailboxFn = func(filter db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error) {
+		gotFilter = filter
+		return []*db.RuntimeMailboxMessage{}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/runtime-mailbox?to_agente=Codex1", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerRuntimeMailbox(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	if gotFilter.Limit != apiRuntimeMailboxDefaultLimit {
+		t.Fatalf("limit por defecto inesperado: got=%d want=%d", gotFilter.Limit, apiRuntimeMailboxDefaultLimit)
+	}
+}
+
 func TestCargarRuntimeMailboxRecuperacionLocalRespetaLimit(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{

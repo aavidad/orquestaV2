@@ -25,6 +25,7 @@ import (
 	"orquesta/agentesapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/i18n"
 	"orquesta/internal/a2ui"
 	"orquesta/reviewapp"
 	"orquesta/runtimeagente"
@@ -668,6 +669,551 @@ func TestAPIServerOperationalExponeResumenOperativo(t *testing.T) {
 	}
 	if payload.AutonomySupervising < 0 || payload.AutonomyContinuing < 0 || payload.AutonomyPending < 0 || payload.AutonomyConfirmed < 0 || payload.AutonomyHandoffs < 0 {
 		t.Fatalf("contadores autonomia invalidos: %+v", payload)
+	}
+}
+
+func TestAPIServerOperationalExponeRiesgoCanonicoLigero(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	prevNow := statusNowFunc
+	t.Cleanup(func() {
+		statusNowFunc = prevNow
+	})
+	now := time.Date(2026, 4, 26, 12, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes:           []*db.Agente{{Nombre: "Codex1"}},
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		TareasEnProgreso:  []tareaLite{{ID: 1, Estado: db.TareaEnProgreso, Agente: "Codex1"}},
+		AutonomyHighlights: []string{
+			"integracion_bloqueada=9",
+			"riesgo_top=infra(9)",
+		},
+		CriticalProjectRisk: &workspaceAutonomyProjectSummary{
+			Project:    "infra",
+			Blocking:   9,
+			Highlights: []string{"riesgo=alto", "integracion_bloqueada=9", "runtime_orders=1"},
+		},
+		Generado: now.Format(time.RFC3339),
+	}, now, time.Minute)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerServerOperational(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /api/server/operational: %v", err)
+	}
+	if len(payload.AutonomyHighlights) != 2 || payload.AutonomyHighlights[0] != "integracion_bloqueada=9" {
+		t.Fatalf("autonomyHighlights inesperados: %+v", payload.AutonomyHighlights)
+	}
+	if payload.CriticalProjectRisk == nil || payload.CriticalProjectRisk.Project != "infra" || payload.CriticalProjectRisk.Blocking != 9 {
+		t.Fatalf("criticalProjectRisk inesperado: %+v", payload.CriticalProjectRisk)
+	}
+}
+
+func TestAPIServerOperationalNormalizaRiesgoCanonicoDelDegradedBuilder(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	prevBuilder := apiServerOperationalBuilder
+	prevTimeout := apiServerOperationalTimeout
+	prevFallback := apiServerOperationalStatusFallback
+	prevDegraded := apiServerOperationalDegradedBuilder
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	prevFast := statusFastFetcher
+	prevUltraLite := apiStatusUltraLiteFetcher
+	t.Cleanup(func() {
+		apiServerOperationalBuilder = prevBuilder
+		apiServerOperationalTimeout = prevTimeout
+		apiServerOperationalStatusFallback = prevFallback
+		apiServerOperationalDegradedBuilder = prevDegraded
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+		statusFastFetcher = prevFast
+		apiStatusUltraLiteFetcher = prevUltraLite
+	})
+
+	apiStatusReadOnlyLiteFetcher = nil
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{}, errStatusFetchTimeout
+	}
+	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) {
+		return apiStatusResponse{}, false
+	}
+	apiServerOperationalTimeout = 20 * time.Millisecond
+	apiServerOperationalStatusFallback = func() (apiStatusResponse, error) {
+		return apiStatusResponse{}, errStatusFetchTimeout
+	}
+	apiServerOperationalDegradedBuilder = func() serverOperationalInfo {
+		return serverOperationalInfo{
+			State:       "degraded",
+			Operational: false,
+			Reason:      "status_temporarily_degraded",
+			CriticalProjectRisk: &workspaceAutonomyProjectSummary{
+				Project:    "infra",
+				Blocking:   12,
+				Highlights: []string{"riesgo=alto", "integracion_bloqueada=12", "runtime_orders=3"},
+			},
+		}
+	}
+	apiServerOperationalBuilder = func() (serverOperationalInfo, error) {
+		time.Sleep(200 * time.Millisecond)
+		return serverOperationalInfo{}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerServerOperational(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode degraded operational: %v", err)
+	}
+	if payload.CriticalProjectRisk == nil || payload.CriticalProjectRisk.Project != "infra" || payload.CriticalProjectRisk.Blocking != 12 {
+		t.Fatalf("criticalProjectRisk inesperado: %+v", payload.CriticalProjectRisk)
+	}
+	if !containsStringWorkspace(payload.AutonomyHighlights, "integracion_bloqueada=12") || !containsStringWorkspace(payload.AutonomyHighlights, "riesgo_top=infra(12)") {
+		t.Fatalf("autonomyHighlights canónicos inesperados: %+v", payload.AutonomyHighlights)
+	}
+}
+
+func TestAPIServerOperationalReturnsDegradedPayloadWhenBuilderHangs(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	prevBuilder := apiServerOperationalBuilder
+	prevTimeout := apiServerOperationalTimeout
+	prevFallback := apiServerOperationalStatusFallback
+	prevDegraded := apiServerOperationalDegradedBuilder
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	prevFast := statusFastFetcher
+	prevUltraLite := apiStatusUltraLiteFetcher
+	t.Cleanup(func() {
+		apiServerOperationalBuilder = prevBuilder
+		apiServerOperationalTimeout = prevTimeout
+		apiServerOperationalStatusFallback = prevFallback
+		apiServerOperationalDegradedBuilder = prevDegraded
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+		statusFastFetcher = prevFast
+		apiStatusUltraLiteFetcher = prevUltraLite
+	})
+
+	apiStatusReadOnlyLiteFetcher = nil
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{}, errStatusFetchTimeout
+	}
+	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) {
+		return apiStatusResponse{}, false
+	}
+	apiServerOperationalTimeout = 20 * time.Millisecond
+	apiServerOperationalStatusFallback = func() (apiStatusResponse, error) {
+		return apiStatusResponse{}, errStatusFetchTimeout
+	}
+	apiServerOperationalDegradedBuilder = func() serverOperationalInfo {
+		return serverOperationalInfo{
+			State:       "degraded",
+			Operational: false,
+			Reason:      "status_temporarily_degraded",
+		}
+	}
+	apiServerOperationalBuilder = func() (serverOperationalInfo, error) {
+		time.Sleep(200 * time.Millisecond)
+		return serverOperationalInfo{}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerServerOperational(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode degraded operational: %v", err)
+	}
+	if payload.State != "degraded" || strings.TrimSpace(payload.Reason) == "" {
+		t.Fatalf("payload degradado inesperado: %+v", payload)
+	}
+}
+
+func TestAPIServerOperationalUsesFreshSnapshotWhenBuilderHangs(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	prevBuilder := apiServerOperationalBuilder
+	prevTimeout := apiServerOperationalTimeout
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	prevNow := statusNowFunc
+	t.Cleanup(func() {
+		apiServerOperationalBuilder = prevBuilder
+		apiServerOperationalTimeout = prevTimeout
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+		statusNowFunc = prevNow
+	})
+
+	apiStatusReadOnlyLiteFetcher = nil
+	now := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes:           []*db.Agente{{Nombre: "Codex1"}},
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		TareasEnProgreso:  []tareaLite{{ID: 1, Estado: db.TareaEnProgreso, Agente: "Codex1"}},
+		Generado:          now.Format(time.RFC3339),
+	}, now, time.Minute)
+
+	apiServerOperationalTimeout = 20 * time.Millisecond
+	apiServerOperationalBuilder = func() (serverOperationalInfo, error) {
+		time.Sleep(200 * time.Millisecond)
+		return serverOperationalInfo{}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerServerOperational(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode fresh snapshot operational: %v", err)
+	}
+	if payload.State == "degraded" || payload.Reason == "status_temporarily_degraded" {
+		t.Fatalf("deberia reutilizar snapshot fresca sin degradar: %+v", payload)
+	}
+	if payload.ActiveAgents != 1 || payload.WorkingAgents != 1 {
+		t.Fatalf("payload operacional inesperado: %+v", payload)
+	}
+}
+
+func TestAPIServerOperationalUsesStaleSnapshotWhenNoFreshAvailable(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	prevBuilder := apiServerOperationalBuilder
+	prevTimeout := apiServerOperationalTimeout
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	prevNow := statusNowFunc
+	t.Cleanup(func() {
+		apiServerOperationalBuilder = prevBuilder
+		apiServerOperationalTimeout = prevTimeout
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+		statusNowFunc = prevNow
+	})
+
+	apiStatusReadOnlyLiteFetcher = nil
+	now := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes:           []*db.Agente{{Nombre: "Codex1"}},
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		TareasEnProgreso:  []tareaLite{{ID: 1, Estado: db.TareaEnProgreso, Agente: "Codex1"}},
+		Generado:          now.Add(-10 * time.Second).Format(time.RFC3339),
+	}, now.Add(-2*time.Minute), time.Second)
+
+	apiServerOperationalTimeout = 20 * time.Millisecond
+	apiServerOperationalBuilder = func() (serverOperationalInfo, error) {
+		time.Sleep(200 * time.Millisecond)
+		return serverOperationalInfo{}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerServerOperational(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode fast fallback operational: %v", err)
+	}
+	if payload.State == "degraded" || payload.Reason == "status_temporarily_degraded" {
+		t.Fatalf("deberia reutilizar fallback ligero sin degradar: %+v", payload)
+	}
+	if payload.ActiveAgents != 1 || payload.WorkingAgents != 1 {
+		t.Fatalf("payload operacional inesperado: %+v", payload)
+	}
+}
+
+func TestAPIServerOperationalUsesConfiguredDegradedBuilderWhenNoSnapshotNorReadOnly(t *testing.T) {
+	prevBuilder := apiServerOperationalBuilder
+	prevTimeout := apiServerOperationalTimeout
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	t.Cleanup(func() {
+		apiServerOperationalBuilder = prevBuilder
+		apiServerOperationalTimeout = prevTimeout
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+	})
+
+	apiStatusReadOnlyLiteFetcher = nil
+	apiServerOperationalTimeout = 20 * time.Millisecond
+	apiServerOperationalBuilder = func() (serverOperationalInfo, error) {
+		time.Sleep(200 * time.Millisecond)
+		return serverOperationalInfo{}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerServerOperational(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode degraded operational: %v", err)
+	}
+	if payload.State != "idle" || payload.Reason != "no_active_workers" {
+		t.Fatalf("deberia usar el degraded builder configurado sin snapshot/read-only: %+v", payload)
+	}
+}
+
+func TestAPIServerOperationalUsesReadOnlyFallbackWhenFastFallbackUnavailable(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	prevBuilder := apiServerOperationalBuilder
+	prevTimeout := apiServerOperationalTimeout
+	prevFallback := apiServerOperationalStatusFallback
+	prevFast := statusFastFetcher
+	prevUltraLite := apiStatusUltraLiteFetcher
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	t.Cleanup(func() {
+		apiServerOperationalBuilder = prevBuilder
+		apiServerOperationalTimeout = prevTimeout
+		apiServerOperationalStatusFallback = prevFallback
+		statusFastFetcher = prevFast
+		apiStatusUltraLiteFetcher = prevUltraLite
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+	})
+
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{}, errStatusFetchTimeout
+	}
+	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) {
+		return apiStatusResponse{}, false
+	}
+	apiStatusReadOnlyLiteFetcher = func() ([]*db.Agente, map[string]int, []*db.Tarea, error) {
+		return []*db.Agente{{Nombre: "CodexRO", Activo: true, EstadoCuota: "activo"}}, map[string]int{"en_progreso": 1}, []*db.Tarea{
+			{ID: 9, Estado: db.TareaEnProgreso, Agente: stringPtr("CodexRO")},
+		}, nil
+	}
+	apiServerOperationalStatusFallback = func() (apiStatusResponse, error) {
+		if status, ok := fetchStatusReadOnlyLiteDirect(statusFastTimeout); ok {
+			return status, nil
+		}
+		if status, ok := fetchStatusForOperationalFallback(statusFastTimeout); ok {
+			return status, nil
+		}
+		return apiStatusResponse{}, errStatusFetchTimeout
+	}
+	apiServerOperationalTimeout = 20 * time.Millisecond
+	apiServerOperationalBuilder = func() (serverOperationalInfo, error) {
+		time.Sleep(200 * time.Millisecond)
+		return serverOperationalInfo{}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerServerOperational(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode read-only fallback operational: %v", err)
+	}
+	if payload.RegisteredAgents != 1 || payload.TasksInProgress != 1 || payload.WorkingAgents != 1 {
+		t.Fatalf("payload operacional read-only inesperado: %+v", payload)
+	}
+}
+
+func TestFetchStatusReadOnlyLiteDirectReconcilesVisibleSessions(t *testing.T) {
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	prevSessions := statusVisibleSessionsFetcher
+	prevAgentsWithSessions := statusListAgentsWithSessionsFetcher
+	resetAgentPanelSnapshotCache()
+	t.Cleanup(func() {
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+		statusVisibleSessionsFetcher = prevSessions
+		statusListAgentsWithSessionsFetcher = prevAgentsWithSessions
+		resetAgentPanelSnapshotCache()
+	})
+
+	apiStatusReadOnlyLiteFetcher = func() ([]*db.Agente, map[string]int, []*db.Tarea, error) {
+		return []*db.Agente{{Nombre: "Codex2", Activo: false, Habilitado: true, EstadoCuota: "activo"}}, map[string]int{}, nil, nil
+	}
+	statusVisibleSessionsFetcher = func() ([]*db.Sesion, error) {
+		return []*db.Sesion{{ID: 7, Agente: "Codex2", Activa: true, Estado: "activa"}}, nil
+	}
+	statusListAgentsWithSessionsFetcher = func(_ []*db.Sesion) ([]*db.Agente, error) {
+		return []*db.Agente{{Nombre: "Codex2", Activo: true, Habilitado: true, EstadoSesion: "disponible", EstadoCuota: "activo"}}, nil
+	}
+
+	status, ok := fetchStatusReadOnlyLiteDirect(20 * time.Millisecond)
+	if !ok {
+		t.Fatalf("deberia construir snapshot read-only")
+	}
+	if len(status.AgentesActivos) != 1 || status.AgentesActivos[0].Nombre != "Codex2" || !status.AgentesActivos[0].Activo {
+		t.Fatalf("agentes activos reconciliados inesperados: %+v", status.AgentesActivos)
+	}
+}
+
+func TestFetchStatusReadOnlyLiteDirectPrefierePanelSnapshotFrescoParaVisibilidad(t *testing.T) {
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	prevSessions := statusVisibleSessionsFetcher
+	prevAgentsWithSessions := statusListAgentsWithSessionsFetcher
+	resetAgentPanelSnapshotCache()
+	t.Cleanup(func() {
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+		statusVisibleSessionsFetcher = prevSessions
+		statusListAgentsWithSessionsFetcher = prevAgentsWithSessions
+		resetAgentPanelSnapshotCache()
+	})
+
+	apiStatusReadOnlyLiteFetcher = func() ([]*db.Agente, map[string]int, []*db.Tarea, error) {
+		return []*db.Agente{
+			{Nombre: "Codex1", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+			{Nombre: "Codex2", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		}, map[string]int{}, nil, nil
+	}
+	statusVisibleSessionsFetcher = func() ([]*db.Sesion, error) { return nil, nil }
+	statusListAgentsWithSessionsFetcher = func(_ []*db.Sesion) ([]*db.Agente, error) { return nil, nil }
+	storeAgentPanelSnapshot([]agentesapp.Row{
+		{Agente: &db.Agente{Nombre: "Codex2", Activo: true, Habilitado: true, EstadoCuota: "activo"}, EstadoOperativo: "trabajando"},
+	}, time.Now().UTC())
+
+	status, ok := fetchStatusReadOnlyLiteDirect(20 * time.Millisecond)
+	if !ok {
+		t.Fatalf("deberia construir snapshot read-only")
+	}
+	if len(status.AgentesActivos) != 1 || status.AgentesActivos[0].Nombre != "Codex2" {
+		t.Fatalf("agentes activos deberian alinearse con panel fresco: %+v", status.AgentesActivos)
+	}
+	if len(status.AgentesTrabajando) != 1 || status.AgentesTrabajando[0].Nombre != "Codex2" {
+		t.Fatalf("agentes trabajando deberian alinearse con panel fresco: %+v", status.AgentesTrabajando)
+	}
+}
+
+func TestAPIAuditFiltraEnSQLPorAccionYEntidadID(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	db.Audit("Codex1", "pipeline_local_batch", "runtime", 7, "entrada valida")
+	db.Audit("Codex1", "otro_batch", "runtime", 7, "accion distinta")
+	db.Audit("Codex2", "pipeline_local_batch", "runtime", 8, "entidad_id distinta")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/audit?accion=pipeline_local_batch&entidad=runtime&entidad_id=7&limit=10", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerAudit(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload apiAuditResponse
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode audit payload: %v", err)
+	}
+	if len(payload.Audit) != 1 {
+		t.Fatalf("audit filtrada inesperada: %+v", payload.Audit)
+	}
+	if payload.Audit[0].Accion != "pipeline_local_batch" || payload.Audit[0].EntidadID != 7 {
+		t.Fatalf("entrada audit inesperada: %+v", payload.Audit[0])
+	}
+}
+
+func TestAPIAuditReturnsEmptyWhenQueryTimesOut(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prevTimeout := apiAuditTimeout
+	prevListAudit := apiListAuditFn
+	t.Cleanup(func() {
+		apiAuditTimeout = prevTimeout
+		apiListAuditFn = prevListAudit
+	})
+
+	apiAuditTimeout = 20 * time.Millisecond
+	apiListAuditFn = func(db.FiltroAuditoria) ([]*db.LogAuditoria, error) {
+		time.Sleep(200 * time.Millisecond)
+		return nil, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/audit?accion=control_plane_batch_slow&limit=10", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerAudit(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload apiAuditResponse
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode audit payload: %v", err)
+	}
+	if len(payload.Audit) != 0 {
+		t.Fatalf("audit degradada inesperada: %+v", payload.Audit)
+	}
+}
+
+func TestAPIAuditFiltraDesde(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevListAudit := apiListAuditFn
+	t.Cleanup(func() {
+		apiListAuditFn = prevListAudit
+	})
+
+	var got db.FiltroAuditoria
+	apiListAuditFn = func(f db.FiltroAuditoria) ([]*db.LogAuditoria, error) {
+		got = f
+		return []*db.LogAuditoria{}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/audit?agente=Codex1&desde=2026-04-23T10:00:00Z&limit=10", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerAudit(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got.Desde == nil || got.Desde.UTC().Format(time.RFC3339) != "2026-04-23T10:00:00Z" {
+		t.Fatalf("filtro desde inesperado: %+v", got)
+	}
+}
+
+func TestAPIRuntimeTranscriptFiltraDesde(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevFn := apiListRuntimeTranscriptFn
+	t.Cleanup(func() {
+		apiListRuntimeTranscriptFn = prevFn
+	})
+
+	var got db.FiltroRuntimeTranscript
+	apiListRuntimeTranscriptFn = func(filter db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error) {
+		got = filter
+		return []*db.RuntimeTranscriptEntry{}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/runtime-transcript?agente=Codex1&desde=2026-04-23T10:00:00Z&limit=10", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerRuntimeTranscript(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got.Desde == nil || got.Desde.UTC().Format(time.RFC3339) != "2026-04-23T10:00:00Z" {
+		t.Fatalf("filtro desde inesperado: %+v", got)
 	}
 }
 
@@ -2163,6 +2709,44 @@ func TestAPIProyectoDescubrirYGestionAgentes(t *testing.T) {
 	}
 }
 
+func TestAPIProyectoGetUsaFallbackPrepareLiteTrasTimeout(t *testing.T) {
+	prevTimeout := apiRuntimeProjectLookupTimeout
+	prevPrimary := apiProjectLookupWithRouteFn
+	prevFallback := apiProjectLookupWithRoutePrepareLiteFn
+	t.Cleanup(func() {
+		apiRuntimeProjectLookupTimeout = prevTimeout
+		apiProjectLookupWithRouteFn = prevPrimary
+		apiProjectLookupWithRoutePrepareLiteFn = prevFallback
+	})
+
+	apiRuntimeProjectLookupTimeout = 5 * time.Millisecond
+	apiProjectLookupWithRouteFn = func(ref, cwdHint string) (*db.Proyecto, error) {
+		time.Sleep(25 * time.Millisecond)
+		return &db.Proyecto{ID: 1, Slug: ref, RutaAbs: "/slow", Tipo: db.ProyectoRepo}, nil
+	}
+	apiProjectLookupWithRoutePrepareLiteFn = func(ref, cwdHint string) (*db.Proyecto, error) {
+		return &db.Proyecto{ID: 7, Slug: ref, RutaAbs: "/fast", Tipo: db.ProyectoRepo}, nil
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/proyectos/demo", nil)
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status proyecto inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]*db.Proyecto
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode proyecto: %v", err)
+	}
+	if payload["proyecto"] == nil || payload["proyecto"].RutaAbs != "/fast" {
+		t.Fatalf("fallback prepare-lite no aplicado: %+v", payload["proyecto"])
+	}
+}
+
 func TestAPIProyectoFusionar(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
@@ -2630,6 +3214,141 @@ func TestAPIProyectoFabricarApp(t *testing.T) {
 	}
 }
 
+func TestAPIProyectoIdiomas(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	rutaProyecto := filepath.Join(tmp, "demo-app")
+	if err := os.MkdirAll(rutaProyecto, 0o755); err != nil {
+		t.Fatalf("mkdir proyecto: %v", err)
+	}
+	if _, err := i18n.MaterializeProjectSkeleton(i18n.ProjectSkeletonSpec{
+		RootDir:         rutaProyecto,
+		DefaultLanguage: "es",
+		Languages:       []string{"es"},
+		Domains:         []string{"common", "errors"},
+	}); err != nil {
+		t.Fatalf("materialize i18n: %v", err)
+	}
+	enCommon := filepath.Join(rutaProyecto, "i18n", "es", "common.json")
+	customRaw := []byte("{\n  \"custom\": \"persist\"\n}\n")
+	if err := os.WriteFile(enCommon, customRaw, 0o644); err != nil {
+		t.Fatalf("rewrite common.json: %v", err)
+	}
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "demo-app",
+		Nombre:  "Demo App",
+		RutaAbs: rutaProyecto,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	body, _ := json.Marshal(apiProyectoIdiomasRequest{
+		Idiomas: []string{"en", "fr"},
+		Por:     "Codex3",
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/proyectos/demo-app/idiomas", bytes.NewReader(body))
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status idiomas inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp apiProyectoIdiomasResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode idiomas: %v", err)
+	}
+	if !resp.OK || resp.Slug != "demo-app" || resp.Created < 3 || len(resp.Idiomas) != 2 {
+		t.Fatalf("respuesta idiomas inesperada: %+v", resp)
+	}
+
+	for _, key := range []string{"i18n_expand_en", "documentacion_expand_en", "qa_i18n_expand_en", "i18n_expand_fr"} {
+		if id := db.GetTareaIDBlueprintKey(proyectoID, key); id <= 0 {
+			t.Fatalf("faltaba blueprint %s", key)
+		}
+	}
+	for _, rel := range []string{"i18n/en/common.json", "i18n/en/errors.json", "i18n/fr/common.json"} {
+		if _, err := os.Stat(filepath.Join(rutaProyecto, rel)); err != nil {
+			t.Fatalf("falta fichero expandido %s: %v", rel, err)
+		}
+	}
+	raw, err := os.ReadFile(enCommon)
+	if err != nil {
+		t.Fatalf("leer common.json es: %v", err)
+	}
+	if string(raw) != string(customRaw) {
+		t.Fatalf("common.json existente sobrescrito:\n%s", string(raw))
+	}
+}
+
+func TestAPIProyectoSharedContext(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "demo-app",
+		Nombre:  "Demo App",
+		RutaAbs: filepath.Join(tmp, "demo-app"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if proyectoID <= 0 {
+		t.Fatalf("id proyecto invalido")
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	createBody, _ := json.Marshal(apiProyectoSharedContextCreateRequest{
+		Tipo:    "restriccion",
+		Titulo:  "Preservar hexagonalidad",
+		Detalle: "No mover dominio a adaptadores",
+		Peso:    3,
+		Origen:  "humano",
+	})
+	createRec := httptest.NewRecorder()
+	createReq := httptest.NewRequest(http.MethodPost, "/api/proyectos/demo-app/contexto-compartido", bytes.NewReader(createBody))
+	mux.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("status create shared context inesperado: %d body=%s", createRec.Code, createRec.Body.String())
+	}
+
+	var createResp apiProyectoSharedContextMutationResponse
+	if err := json.Unmarshal(createRec.Body.Bytes(), &createResp); err != nil {
+		t.Fatalf("decode create shared context: %v", err)
+	}
+	if !createResp.OK || createResp.ID <= 0 {
+		t.Fatalf("respuesta create shared context inesperada: %+v", createResp)
+	}
+
+	listRec := httptest.NewRecorder()
+	listReq := httptest.NewRequest(http.MethodGet, "/api/proyectos/demo-app/contexto-compartido", nil)
+	mux.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("status list shared context inesperado: %d body=%s", listRec.Code, listRec.Body.String())
+	}
+
+	var listResp apiProyectoSharedContextResponse
+	if err := json.Unmarshal(listRec.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("decode list shared context: %v", err)
+	}
+	if len(listResp.Items) != 1 {
+		t.Fatalf("items shared context inesperados: %d", len(listResp.Items))
+	}
+	if listResp.Items[0].Titulo != "Preservar hexagonalidad" {
+		t.Fatalf("titulo shared context inesperado: %+v", listResp.Items[0])
+	}
+	if !strings.Contains(listResp.Summary, "Preservar hexagonalidad") {
+		t.Fatalf("summary shared context inesperado: %q", listResp.Summary)
+	}
+}
+
 func TestAPIProyectoOperacionGetYPost(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -2641,6 +3360,11 @@ func TestAPIProyectoOperacionGetYPost(t *testing.T) {
 		Activo:  true,
 	}); err != nil {
 		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, nombre := range []string{"CodexSupervisor", "CodexReview"} {
+		if err := db.RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", nombre, err)
+		}
 	}
 
 	mux := http.NewServeMux()
@@ -2741,8 +3465,11 @@ func TestAPIProyectoAutonomiaGetPostYCiclos(t *testing.T) {
 	if postResp.Policy == nil || !postResp.Policy.Enabled || postResp.Policy.MaxWorkers != 3 {
 		t.Fatalf("autonomia guardada inesperada: %+v", postResp.Policy)
 	}
-	if postResp.Policy.SupervisorAgente != "CodexSupervisor" || postResp.Policy.ReviewerAgente != "CodexReview" {
-		t.Fatalf("agentes preferidos de autonomia inesperados: %+v", postResp.Policy)
+	if postResp.Policy.SupervisorAgente != "CodexSupervisor" {
+		t.Fatalf("supervisor de autonomia inesperado: %+v", postResp.Policy)
+	}
+	if strings.TrimSpace(postResp.Policy.ReviewerAgente) == "" {
+		t.Fatalf("reviewer de autonomia vacío: %+v", postResp.Policy)
 	}
 
 	if _, err := supervisionService.RegisterCycle("demo-app", supervisionapp.CycleInput{
@@ -2769,6 +3496,65 @@ func TestAPIProyectoAutonomiaGetPostYCiclos(t *testing.T) {
 	}
 	if len(cyclesResp.Cycles) != 1 || cyclesResp.Cycles[0].Kind != "supervision" {
 		t.Fatalf("ciclos inesperados: %+v", cyclesResp.Cycles)
+	}
+}
+
+func TestAPIProyectoAutonomiaPostAutocompletaReviewerPersistente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "demo-app",
+		Nombre:  "Demo App",
+		RutaAbs: filepath.Join(tmp, "demo-app"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, nombre := range []string{"Codex1", "Codex2", "Codex3"} {
+		if err := db.RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", nombre, err)
+		}
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	body, _ := json.Marshal(apiProyectoAutonomiaSaveRequest{
+		Enabled:              true,
+		ObjetivoGeneral:      "terminar el proyecto sin intervención humana",
+		DefinitionOfDoneJSON: `{"tests":"green"}`,
+		MaxWorkers:           2,
+		SupervisorAgente:     "codex1",
+		ReviewerAgente:       "",
+		ReserveReviewer:      true,
+		ReserveSupervisor:    true,
+		ReviewRequired:       true,
+		AutoCreateTasks:      true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      string(db.AutonomiaProyectoActiva),
+	})
+	recPost := httptest.NewRecorder()
+	reqPost := httptest.NewRequest(http.MethodPost, "/api/proyectos/demo-app/autonomia", bytes.NewReader(body))
+	mux.ServeHTTP(recPost, reqPost)
+	if recPost.Code != http.StatusOK {
+		t.Fatalf("status post autonomia inesperado: %d body=%s", recPost.Code, recPost.Body.String())
+	}
+	var postResp apiProyectoAutonomiaResponse
+	if err := json.Unmarshal(recPost.Body.Bytes(), &postResp); err != nil {
+		t.Fatalf("decode post autonomia: %v", err)
+	}
+	if postResp.Policy == nil {
+		t.Fatalf("policy ausente: %s", recPost.Body.String())
+	}
+	if postResp.Policy.SupervisorAgente != "Codex1" {
+		t.Fatalf("supervisor inesperado: %+v", postResp.Policy)
+	}
+	if postResp.Policy.ReviewerAgente == "" || postResp.Policy.ReviewerAgente == "codex1" {
+		t.Fatalf("reviewer no autocompletado correctamente: %+v", postResp.Policy)
+	}
+	if postResp.Policy.ReviewerAgente != "Codex2" {
+		t.Fatalf("reviewer inesperado: %+v", postResp.Policy)
 	}
 }
 
@@ -4435,6 +5221,20 @@ func TestAPIProyectoCockpitExponeResumenOperativo(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("encolar runtime order: %v", err)
 	}
+	if err := db.RegistrarAutonomyEvent(&db.AutonomyEvent{
+		Kind:      "task_reassigned",
+		Actor:     "orquesta",
+		ProjectID: &proyectoID,
+		Source:    "control_plane",
+		Reason:    "worker_degradado",
+		StateDelta: map[string]any{
+			"agente":         "Codex3",
+			"agente_destino": "Codex4",
+		},
+		ArtifactsRef: []string{"runtime_checkpoint:41"},
+	}); err != nil {
+		t.Fatalf("registrar autonomy event: %v", err)
+	}
 
 	mux := http.NewServeMux()
 	registerAPIRoutes(mux)
@@ -4463,8 +5263,204 @@ func TestAPIProyectoCockpitExponeResumenOperativo(t *testing.T) {
 	if resp.Cockpit.PropuestasAbiertas != 1 || resp.Cockpit.ReviewGatesAbiertas != 1 || resp.Cockpit.RuntimeMailboxPendiente != 1 || resp.Cockpit.RuntimeOrdersAbiertas != 1 {
 		t.Fatalf("resumen operativo inesperado: %+v", resp.Cockpit)
 	}
+	if resp.Cockpit.IntegrationRisk != "critico" || resp.Cockpit.IntegrationRiskScore != 10 {
+		t.Fatalf("riesgo de integracion inesperado: %+v", resp.Cockpit)
+	}
+	if got := strings.Join(resp.Cockpit.IntegrationHighlights, " | "); got != "review_gates=1 | runtime_orders=1 | mailbox_rt=1 | propuestas_abiertas=1" {
+		t.Fatalf("integration highlights inesperados: %q", got)
+	}
+	if resp.Cockpit.AutonomyEvents != 1 || len(resp.Cockpit.Autonomy) != 1 || resp.Cockpit.Autonomy[0].Kind != "task_reassigned" {
+		t.Fatalf("autonomy en cockpit inesperada: %+v", resp.Cockpit)
+	}
+	if len(resp.Cockpit.AutonomyHighlights) == 0 || resp.Cockpit.AutonomyHighlights[0] != "task_reassigned=1" {
+		t.Fatalf("autonomy highlights en cockpit inesperados: %+v", resp.Cockpit.AutonomyHighlights)
+	}
+	if len(resp.Cockpit.Autonomy[0].Artifacts) != 1 || resp.Cockpit.Autonomy[0].Artifacts[0] != "runtime_checkpoint:41" {
+		t.Fatalf("artifacts autonomy en cockpit inesperados: %+v", resp.Cockpit.Autonomy)
+	}
 	if len(resp.Cockpit.MailboxPendiente) != 1 || resp.Cockpit.MailboxPendiente[0].Agente != "Codex3" {
 		t.Fatalf("mailbox pendiente de cockpit inesperada: %+v", resp.Cockpit.MailboxPendiente)
+	}
+}
+
+func TestAPIProyectoControlConsolidaCockpit(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex3",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Refactor runtime mailbox",
+		ProyectoID:  &proyectoID,
+		Modulo:      "runtime",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Descripcion: "en progreso",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex3"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex3"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	tareaBloqueadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Integración bloqueada",
+		ProyectoID:  &proyectoID,
+		Modulo:      "api",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Descripcion: "bloqueada",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea bloqueada: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE tareas SET estado='bloqueada', agente='Codex3' WHERE id=?`, tareaBloqueadaID); err != nil {
+		t.Fatalf("activar tarea bloqueada: %v", err)
+	}
+	if err := db.RegistrarAutonomyEvent(&db.AutonomyEvent{
+		Kind:      "task_reassigned",
+		Actor:     "orquesta",
+		ProjectID: &proyectoID,
+		TaskID:    &tareaID,
+		Source:    "control_plane",
+		Reason:    "worker_degradado",
+		StateDelta: map[string]any{
+			"agente_destino": "Codex3",
+		},
+		ArtifactsRef: []string{"runtime_checkpoint:77"},
+	}); err != nil {
+		t.Fatalf("registrar autonomy event: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/proyectos/orquestador/control?desde=24h", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status control inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp apiProyectoControlResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode control: %v", err)
+	}
+	if resp.Control == nil || resp.Control.Project == nil || resp.Control.Project.ID != proyectoID {
+		t.Fatalf("control sin proyecto esperado: %+v", resp.Control)
+	}
+	if resp.Control.Cockpit == nil || resp.Control.Cockpit.Proyecto == nil || resp.Control.Cockpit.Proyecto.ID != proyectoID {
+		t.Fatalf("control sin cockpit consolidado: %+v", resp.Control)
+	}
+	if got := resp.Control.TaskCounts["en_progreso"]; got != 1 {
+		t.Fatalf("task_counts inesperado: %+v", resp.Control.TaskCounts)
+	}
+	if got := resp.Control.Cockpit.TareasPorEstado["en_progreso"]; got != 1 {
+		t.Fatalf("cockpit consolidado inesperado: %+v", resp.Control.Cockpit.TareasPorEstado)
+	}
+	if resp.Control.Cockpit.IntegrationRisk != "alto" || resp.Control.Cockpit.IntegrationRiskScore != 5 {
+		t.Fatalf("cockpit consolidado sin riesgo canónico: %+v", resp.Control.Cockpit)
+	}
+	if got := strings.Join(resp.Control.Cockpit.IntegrationHighlights, " | "); got != "bloqueadas=1" {
+		t.Fatalf("integration highlights de cockpit consolidado inesperados: %q", got)
+	}
+	if len(resp.Control.Autonomy) != 1 || resp.Control.Autonomy[0].Kind != "task_reassigned" {
+		t.Fatalf("control sin autonomy consolidada: %+v", resp.Control.Autonomy)
+	}
+	if len(resp.Control.Autonomy[0].Artifacts) != 1 || resp.Control.Autonomy[0].Artifacts[0] != "runtime_checkpoint:77" {
+		t.Fatalf("control sin artifacts autonomy: %+v", resp.Control.Autonomy)
+	}
+}
+
+func TestAPIWorkspaceControlExponeVistaGlobal(t *testing.T) {
+	prevStatus := statusService
+	prevProjects := workspaceControlListProjects
+	prevCockpit := workspaceControlCockpitBuilder
+	defer func() {
+		statusService = prevStatus
+		workspaceControlListProjects = prevProjects
+		workspaceControlCockpitBuilder = prevCockpit
+	}()
+
+	statusService = stubStatusService{response: apiStatusResponse{
+		TareasPorEstado: map[string]int{"en_progreso": 2},
+		DeudaDispatch:   deudaDispatchResumen{Total: 1, Pendientes: 1},
+		Autonomia: autonomiaResumen{
+			Supervisando: 1,
+			Count:        1,
+			ByKind:       map[string]int{"task_reassigned": 1},
+		},
+		WorkersConectados:   2,
+		WorkersTrabajando:   1,
+		SupervisoresActivos: 1,
+	}}
+	workspaceControlListProjects = func() ([]map[string]any, error) {
+		return []map[string]any{{"slug": "orquestador"}}, nil
+	}
+	workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+		ts := time.Date(2026, 4, 24, 14, 0, 0, 0, time.UTC)
+		return &apiProyectoCockpit{
+			Proyecto:        &db.Proyecto{Slug: slug, Nombre: "Orquestador"},
+			TareasPorEstado: map[string]int{"en_progreso": 2},
+			AutonomyEvents:  1,
+			AutonomyByKind:  map[string]int{"task_reassigned": 1},
+			AutonomyLastAt:  &ts,
+			Autonomy: []autonomyEventSummary{{
+				Kind:        "task_reassigned",
+				CreatedAt:   ts,
+				TargetAgent: "Codex4",
+			}},
+		}, nil
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/workspace/control", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status workspace control inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp apiWorkspaceControlResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode workspace control: %v", err)
+	}
+	if resp.Control == nil || resp.Control.ActiveProjects != 1 || len(resp.Control.Projects) != 1 {
+		t.Fatalf("control global inesperado: %+v", resp.Control)
+	}
+	if resp.Control.AutonomySurface == nil || resp.Control.AutonomySurface.Events != 1 {
+		t.Fatalf("autonomy surface global inesperada: %+v", resp.Control)
+	}
+	if len(resp.Control.AutonomyHighlights) == 0 || resp.Control.AutonomyHighlights[0] != "task_reassigned=1" {
+		t.Fatalf("autonomy highlights global inesperados: %+v", resp.Control)
+	}
+	if len(resp.Control.AutonomyRecent) != 1 || resp.Control.AutonomyRecent[0].Project != "orquestador" || resp.Control.AutonomyRecent[0].Kind != "task_reassigned" {
+		t.Fatalf("autonomy recent global inesperada: %+v", resp.Control.AutonomyRecent)
+	}
+	if len(resp.Control.AutonomyProjects) != 1 || resp.Control.AutonomyProjects[0].Project != "orquestador" || resp.Control.AutonomyProjects[0].Events != 1 {
+		t.Fatalf("autonomy projects global inesperados: %+v", resp.Control.AutonomyProjects)
+	}
+	if resp.Control.WorkersConectados != 2 || resp.Control.SupervisoresActivos != 1 {
+		t.Fatalf("workers/supervisor global inesperados: %+v", resp.Control)
 	}
 }
 
@@ -4520,6 +5516,98 @@ func TestAPIProyectoCockpitAlineaAgentesActivosConStatusVisible(t *testing.T) {
 	}
 	if len(resp.Cockpit.AgentesActivos) != 1 || resp.Cockpit.AgentesActivos[0].Nombre != "Codex3" {
 		t.Fatalf("cockpit deberia alinear agentes visibles con status: %+v", resp.Cockpit.AgentesActivos)
+	}
+}
+
+func TestAPIAgenteActividadExponeVistaUnica(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: t.TempDir(),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         t.TempDir(),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Runtime control",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Descripcion: "en progreso",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	db.Audit("Codex1", "guardar_sesion", "sesion", 1, "tick")
+	if err := db.RegistrarAutonomyEvent(&db.AutonomyEvent{
+		Kind:      "worker_recovery_requested",
+		Actor:     "orquesta",
+		ProjectID: &proyectoID,
+		TaskID:    &tareaID,
+		Source:    "worker_recovery_reactivate",
+		Reason:    "agente_sin_runtime_activo",
+		StateDelta: map[string]any{
+			"agente":         "Codex1",
+			"control_action": "start",
+		},
+		ArtifactsRef: []string{"runtime_checkpoint:99"},
+	}); err != nil {
+		t.Fatalf("registrar autonomy event: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/agentes/Codex1/actividad?desde=24h&proyecto=orquestador", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status actividad inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp apiAgenteActividadResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode actividad: %v", err)
+	}
+	if resp.Activity == nil {
+		t.Fatalf("actividad vacia")
+	}
+	if got := strings.TrimSpace(resp.Activity.Agent); got != "Codex1" {
+		t.Fatalf("agente inesperado: %q", got)
+	}
+	if resp.Activity.Summary.OpenTasks != 1 {
+		t.Fatalf("open tasks inesperadas: %+v", resp.Activity.Summary)
+	}
+	if resp.Activity.Summary.AuditEntries <= 0 {
+		t.Fatalf("deberia incluir auditoria: %+v", resp.Activity.Summary)
+	}
+	if resp.Activity.Summary.AutonomyEvents != 1 || len(resp.Activity.Autonomy) != 1 || resp.Activity.Autonomy[0].Kind != "worker_recovery_requested" {
+		t.Fatalf("actividad sin autonomy consolidada: %+v", resp.Activity)
+	}
+	if len(resp.Activity.Autonomy[0].Artifacts) != 1 || resp.Activity.Autonomy[0].Artifacts[0] != "runtime_checkpoint:99" {
+		t.Fatalf("actividad sin artifacts autonomy: %+v", resp.Activity.Autonomy)
 	}
 }
 

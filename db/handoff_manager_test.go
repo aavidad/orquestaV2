@@ -2,8 +2,10 @@ package db
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -223,6 +225,108 @@ func TestDetectarAgentesAgotadosExcluyeConHandoffPendiente(t *testing.T) {
 		if c.Agente == "Codex1" {
 			t.Fatalf("Codex1 no debería aparecer: ya tiene handoff pendiente")
 		}
+	}
+}
+
+func TestSeleccionarTareaHandoffAgenteCanonicalizaAliasCodex(t *testing.T) {
+	prepararDBTemporal(t)
+
+	for _, nombre := range []string{"Codex41", "codex41"} {
+		if err := RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", nombre, err)
+		}
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Tarea canonical handoff",
+		Descripcion: "debe resolverse por alias",
+		Modulo:      "orquestador",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "test",
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "Codex41"); err != nil {
+		t.Fatalf("TomarTarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "Codex41"); err != nil {
+		t.Fatalf("IniciarTarea: %v", err)
+	}
+
+	tarea, err := seleccionarTareaHandoffAgente("codex41", nil)
+	if err != nil {
+		t.Fatalf("seleccionarTareaHandoffAgente: %v", err)
+	}
+	if tarea == nil || tarea.ID != tareaID || tarea.Agente == nil || *tarea.Agente != "Codex41" {
+		t.Fatalf("tarea inesperada: %+v", tarea)
+	}
+}
+
+func TestExisteSondeoWatchdogRecienteCanonicalizaAliasCodex(t *testing.T) {
+	prepararDBTemporal(t)
+
+	for _, nombre := range []string{"Codex42", "codex42"} {
+		if err := RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", nombre, err)
+		}
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "demo-watchdog-canonical",
+		Nombre:  "Demo Watchdog Canonical",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	if _, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex42",
+		ProyectoID:  &proyectoID,
+		Tipo:        "sync_status",
+		Estado:      "pendiente",
+		PayloadJSON: `{"kind":"watchdog"}`,
+	}); err != nil {
+		t.Fatalf("EncolarRuntimeOrder: %v", err)
+	}
+
+	ok, err := existeSondeoWatchdogReciente("codex42", &proyectoID)
+	if err != nil {
+		t.Fatalf("existeSondeoWatchdogReciente: %v", err)
+	}
+	if !ok {
+		t.Fatalf("deberia detectar sondeo watchdog reciente por alias")
+	}
+}
+
+func TestGuardarCheckpointHandoffCanonicalizaAliasCodex(t *testing.T) {
+	prepararDBTemporal(t)
+
+	for _, nombre := range []string{"Codex44", "codex44"} {
+		if err := RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", nombre, err)
+		}
+	}
+	sesionID, err := IniciarSesion("Codex44")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+
+	id, err := GuardarCheckpointHandoff(&HandoffCandidato{
+		Agente:     "codex44",
+		SesionID:   &sesionID,
+		Motivo:     "test canonical handoff checkpoint",
+		Disparador: "watchdog",
+	}, "")
+	if err != nil {
+		t.Fatalf("GuardarCheckpointHandoff: %v", err)
+	}
+	cp, err := GetRuntimeCheckpoint(id)
+	if err != nil {
+		t.Fatalf("GetRuntimeCheckpoint: %v", err)
+	}
+	if cp == nil || cp.Agente != "Codex44" {
+		t.Fatalf("checkpoint inesperado: %+v", cp)
 	}
 }
 
@@ -762,6 +866,82 @@ func TestProcesarHandoffsBatchSinHandleHaceHandoffDirecto(t *testing.T) {
 	if len(ordersDestino) != 1 || ordersDestino[0].Tipo != "handoff" {
 		t.Fatalf("handoff directo inesperado: %+v", ordersDestino)
 	}
+	kind := "handoff_requested"
+	events, err := ListarAutonomyEvents(FiltroAutonomyEvents{
+		Kind:   &kind,
+		TaskID: &tareaID,
+		Limite: 10,
+	})
+	if err != nil {
+		t.Fatalf("ListarAutonomyEvents: %v", err)
+	}
+	if len(events) != 1 || events[0] == nil {
+		t.Fatalf("autonomy events inesperados: %+v", events)
+	}
+	ev := events[0]
+	if ev.Source != "handoff_manager" {
+		t.Fatalf("source inesperado: %+v", ev)
+	}
+	if fmt.Sprint(ev.StateDelta["agente_origen"]) != "Codex1" ||
+		fmt.Sprint(ev.StateDelta["agente_destino"]) != "Codex2" ||
+		fmt.Sprint(ev.StateDelta["handoff_mode"]) != "stale" ||
+		fmt.Sprint(ev.StateDelta["last_autonomy_action"]) != "handoff_requested" {
+		t.Fatalf("state_delta handoff_requested inesperado: %+v", ev.StateDelta)
+	}
+	if len(ev.ArtifactsRef) != 1 || !strings.HasPrefix(ev.ArtifactsRef[0], "runtime_checkpoint:") {
+		t.Fatalf("artifacts_ref inesperado: %+v", ev)
+	}
+	cp, err := UltimoRuntimeCheckpoint("Codex1", nil)
+	if err != nil {
+		t.Fatalf("UltimoRuntimeCheckpoint: %v", err)
+	}
+	if cp == nil {
+		t.Fatalf("checkpoint handoff no encontrado")
+	}
+	if ev.ArtifactsRef[0] != fmt.Sprintf("runtime_checkpoint:%d", cp.ID) {
+		t.Fatalf("artifacts_ref inesperado: %+v checkpoint=%+v", ev.ArtifactsRef, cp)
+	}
+	kind = "handoff_completed"
+	events, err = ListarAutonomyEvents(FiltroAutonomyEvents{
+		Kind:   &kind,
+		TaskID: &tareaID,
+		Limite: 10,
+	})
+	if err != nil {
+		t.Fatalf("ListarAutonomyEvents handoff_completed: %v", err)
+	}
+	if len(events) != 1 || events[0] == nil {
+		t.Fatalf("autonomy events handoff_completed inesperados: %+v", events)
+	}
+	ev = events[0]
+	if ev.Source != "handoff_manager" {
+		t.Fatalf("source handoff_completed inesperado: %+v", ev)
+	}
+	if fmt.Sprint(ev.StateDelta["agente_origen"]) != "Codex1" ||
+		fmt.Sprint(ev.StateDelta["agente_destino"]) != "Codex2" ||
+		fmt.Sprint(ev.StateDelta["handoff_mode"]) != "stale" ||
+		fmt.Sprint(ev.StateDelta["task_state"]) != string(EstadoAsignada) ||
+		fmt.Sprint(ev.StateDelta["last_autonomy_action"]) != "handoff_completed" ||
+		fmt.Sprint(ev.StateDelta["runtime_order_id"]) != fmt.Sprint(ordersDestino[0].ID) {
+		t.Fatalf("state_delta handoff_completed inesperado: %+v", ev.StateDelta)
+	}
+	if len(ev.ArtifactsRef) != 1 || ev.ArtifactsRef[0] != fmt.Sprintf("runtime_checkpoint:%d", cp.ID) {
+		t.Fatalf("artifacts_ref handoff_completed inesperado: %+v", ev)
+	}
+	if err := RegistrarAutonomyEventHandoffCompleted(ordersDestino[0].ID, "handoff_manager", &tareaID, nil, "stale", cp.ID); err != nil {
+		t.Fatalf("RegistrarAutonomyEventHandoffCompleted idempotente: %v", err)
+	}
+	events, err = ListarAutonomyEvents(FiltroAutonomyEvents{
+		Kind:   &kind,
+		TaskID: &tareaID,
+		Limite: 10,
+	})
+	if err != nil {
+		t.Fatalf("ListarAutonomyEvents handoff_completed segunda vez: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("handoff_completed no debe duplicarse, got=%d %+v", len(events), events)
+	}
 
 	tarea, err := GetTarea(tareaID)
 	if err != nil {
@@ -776,6 +956,166 @@ func TestProcesarHandoffsBatchSinHandleHaceHandoffDirecto(t *testing.T) {
 	}
 	if sesion.Activa || sesion.Estado != "pausada" {
 		t.Fatalf("sesion origen deberia quedar aparcada: %+v", sesion)
+	}
+}
+
+func TestRegistrarAutonomyEventHandoffCompletedExigeConsolidacionReal(t *testing.T) {
+	prepararDBTemporal(t)
+
+	_, tareaID := prepararAgenteConTareaEnProgreso(t, "Codex1")
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Codex2: %v", err)
+	}
+
+	payloadJSON := fmt.Sprintf(`{"agente_origen":"Codex1","agente_destino":"Codex2","tarea_id":%d,"motivo":"test"}`, tareaID)
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex2",
+		Tipo:        "handoff",
+		PayloadJSON: payloadJSON,
+	})
+	if err != nil {
+		t.Fatalf("EncolarRuntimeOrder handoff: %v", err)
+	}
+
+	err = RegistrarAutonomyEventHandoffCompleted(orderID, "handoff_manager", &tareaID, nil, "stale", 0)
+	if err == nil {
+		t.Fatal("esperaba error si la tarea aún no quedó consolidada en el destino")
+	}
+
+	kind := "handoff_completed"
+	events, err := ListarAutonomyEvents(FiltroAutonomyEvents{
+		Kind:   &kind,
+		TaskID: &tareaID,
+		Limite: 10,
+	})
+	if err != nil {
+		t.Fatalf("ListarAutonomyEvents: %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("no esperaba handoff_completed sin consolidación real: %+v", events)
+	}
+}
+
+func TestRegistrarAutonomyEventHandoffFailedSinRuntimeOrderEsIdempotente(t *testing.T) {
+	prepararDBTemporal(t)
+
+	_, tareaID := prepararAgenteConTareaEnProgreso(t, "Codex1")
+
+	if err := RegistrarAutonomyEventHandoffFailed(0, "handoff_manager", &tareaID, nil, "Codex1", "Codex2", "stale", "request", "fallo al crear handoff", 0); err != nil {
+		t.Fatalf("RegistrarAutonomyEventHandoffFailed: %v", err)
+	}
+	if err := RegistrarAutonomyEventHandoffFailed(0, "handoff_manager", &tareaID, nil, "Codex1", "Codex2", "stale", "request", "fallo al crear handoff", 0); err != nil {
+		t.Fatalf("RegistrarAutonomyEventHandoffFailed idempotente: %v", err)
+	}
+
+	kind := "handoff_failed"
+	events, err := ListarAutonomyEvents(FiltroAutonomyEvents{
+		Kind:   &kind,
+		TaskID: &tareaID,
+		Limite: 10,
+	})
+	if err != nil {
+		t.Fatalf("ListarAutonomyEvents: %v", err)
+	}
+	if len(events) != 1 || events[0] == nil {
+		t.Fatalf("handoff_failed inesperado: %+v", events)
+	}
+	ev := events[0]
+	if ev.Source != "handoff_manager" || ev.Reason != "fallo al crear handoff" {
+		t.Fatalf("handoff_failed metadata inesperada: %+v", ev)
+	}
+	if fmt.Sprint(ev.StateDelta["agente_origen"]) != "Codex1" ||
+		fmt.Sprint(ev.StateDelta["agente_destino"]) != "Codex2" ||
+		fmt.Sprint(ev.StateDelta["handoff_mode"]) != "stale" ||
+		fmt.Sprint(ev.StateDelta["handoff_stage"]) != "request" ||
+		fmt.Sprint(ev.StateDelta["last_autonomy_action"]) != "handoff_failed" {
+		t.Fatalf("state_delta handoff_failed inesperado: %+v", ev.StateDelta)
+	}
+	if _, ok := ev.StateDelta["runtime_order_id"]; ok {
+		t.Fatalf("runtime_order_id no debería existir sin orden real: %+v", ev.StateDelta)
+	}
+}
+
+func TestRegistrarAutonomyEventHandoffFailedConOrdenRealUsaRuntimeOrderYNoDuplica(t *testing.T) {
+	prepararDBTemporal(t)
+
+	_, tareaID := prepararAgenteConTareaEnProgreso(t, "Codex1")
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Codex2: %v", err)
+	}
+
+	payloadJSON := fmt.Sprintf(`{"agente_origen":"Codex1","agente_destino":"Codex2","tarea_id":%d,"motivo":"watchdog"}`, tareaID)
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex2",
+		Tipo:        "handoff",
+		PayloadJSON: payloadJSON,
+	})
+	if err != nil {
+		t.Fatalf("EncolarRuntimeOrder handoff: %v", err)
+	}
+
+	if err := RegistrarAutonomyEventHandoffFailed(orderID, "handoff_manager", &tareaID, nil, "", "", "stale", "consolidation", "la tarea no quedó consolidada", 7); err != nil {
+		t.Fatalf("RegistrarAutonomyEventHandoffFailed: %v", err)
+	}
+	if err := RegistrarAutonomyEventHandoffFailed(orderID, "handoff_manager", &tareaID, nil, "", "", "stale", "consolidation", "la tarea no quedó consolidada", 7); err != nil {
+		t.Fatalf("RegistrarAutonomyEventHandoffFailed idempotente: %v", err)
+	}
+
+	kind := "handoff_failed"
+	events, err := ListarAutonomyEvents(FiltroAutonomyEvents{
+		Kind:   &kind,
+		TaskID: &tareaID,
+		Limite: 10,
+	})
+	if err != nil {
+		t.Fatalf("ListarAutonomyEvents: %v", err)
+	}
+	if len(events) != 1 || events[0] == nil {
+		t.Fatalf("handoff_failed inesperado: %+v", events)
+	}
+	ev := events[0]
+	if fmt.Sprint(ev.StateDelta["runtime_order_id"]) != fmt.Sprint(orderID) ||
+		fmt.Sprint(ev.StateDelta["agente_origen"]) != "Codex1" ||
+		fmt.Sprint(ev.StateDelta["agente_destino"]) != "Codex2" ||
+		fmt.Sprint(ev.StateDelta["handoff_mode"]) != "stale" ||
+		fmt.Sprint(ev.StateDelta["handoff_stage"]) != "consolidation" ||
+		fmt.Sprint(ev.StateDelta["task_state"]) != string(EstadoEnProgreso) ||
+		fmt.Sprint(ev.StateDelta["last_autonomy_action"]) != "handoff_failed" {
+		t.Fatalf("state_delta handoff_failed con orden inesperado: %+v", ev.StateDelta)
+	}
+	if len(ev.ArtifactsRef) != 1 || ev.ArtifactsRef[0] != "runtime_checkpoint:7" {
+		t.Fatalf("artifacts_ref handoff_failed inesperado: %+v", ev.ArtifactsRef)
+	}
+}
+
+func TestRegistrarAutonomyEventHandoffFailedRechazaOrdenNoHandoff(t *testing.T) {
+	prepararDBTemporal(t)
+
+	_, tareaID := prepararAgenteConTareaEnProgreso(t, "Codex1")
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente: "Codex1",
+		Tipo:   "nudge",
+	})
+	if err != nil {
+		t.Fatalf("EncolarRuntimeOrder nudge: %v", err)
+	}
+
+	err = RegistrarAutonomyEventHandoffFailed(orderID, "handoff_manager", &tareaID, nil, "Codex1", "Codex2", "live", "request", "orden inválida", 0)
+	if err == nil {
+		t.Fatal("esperaba error para runtime_order que no es handoff")
+	}
+
+	kind := "handoff_failed"
+	events, err := ListarAutonomyEvents(FiltroAutonomyEvents{
+		Kind:   &kind,
+		TaskID: &tareaID,
+		Limite: 10,
+	})
+	if err != nil {
+		t.Fatalf("ListarAutonomyEvents: %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("no esperaba handoff_failed con orden no handoff: %+v", events)
 	}
 }
 

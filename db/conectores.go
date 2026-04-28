@@ -3,7 +3,10 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
+
+	"orquesta/storage"
 )
 
 type Conector struct {
@@ -71,6 +74,39 @@ func GetConector(ref string) (*Conector, error) {
 		SELECT id, slug, nombre, transporte, comando, args_json, env_json, metadata_json, activo, created_at, updated_at
 		FROM conectores
 		WHERE slug = ? OR CAST(id AS TEXT) = ?`, ref, ref)
+	return escanearConector(row)
+}
+
+func GetConectorPrepareLite(ref string) (*Conector, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, fmt.Errorf("referencia de conector vacía")
+	}
+	backend, cfg, err := resolveOpenConfig()
+	if err != nil {
+		return nil, err
+	}
+	driver := normalizedDriverName(cfg.Driver)
+	if !supportsPrepareLiteReadOnlyBackend(driver) {
+		return GetConector(ref)
+	}
+	disabled := false
+	skipPost := true
+	cfg = applyOpenOptions(cfg, OpenOptions{
+		BootstrapSchema:    &disabled,
+		SkipPostMigrations: &skipPost,
+		ReadOnly:           true,
+	})
+	cfg.MaxOpenConns = 1
+	raw, err := backend.Open(cfg)
+	if err != nil {
+		return nil, err
+	}
+	defer raw.Close()
+	row := raw.QueryRow(storage.RebindQuery(driver, `
+		SELECT id, slug, nombre, transporte, comando, args_json, env_json, metadata_json, activo, created_at, updated_at
+		FROM conectores
+		WHERE slug = ? OR CAST(id AS TEXT) = ?`), ref, ref)
 	return escanearConector(row)
 }
 

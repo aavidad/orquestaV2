@@ -451,6 +451,14 @@ func (f *fakeStore) MarkRuntimeOrderState(id int64, estado, resultadoJSON, error
 	f.markOrderStateResultado = resultadoJSON
 	f.markOrderStateError = errorText
 	f.markedOrderStates = append(f.markedOrderStates, id)
+	for _, order := range f.ordersResponse {
+		if order == nil || order.ID != id {
+			continue
+		}
+		order.Estado = estado
+		order.ResultadoJSON = resultadoJSON
+		order.ErrorText = errorText
+	}
 	return nil
 }
 
@@ -1873,6 +1881,56 @@ func TestRegistrarEntregaGitMicroprogramacionActivaUsaRegistradorYCompletaOrden(
 	}
 }
 
+func TestRegistrarEntregaGitMicroprogramacionActivaObservaScoreLocal(t *testing.T) {
+	db.Close()
+	path := filepath.Join(t.TempDir(), "orquesta.db")
+	prev := os.Getenv("ORQUESTA_DB")
+	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
+		t.Fatalf("setenv ORQUESTA_DB: %v", err)
+	}
+	defer func() {
+		if prev == "" {
+			_ = os.Unsetenv("ORQUESTA_DB")
+		} else {
+			_ = os.Setenv("ORQUESTA_DB", prev)
+		}
+		db.Close()
+	}()
+	if err := db.Open(); err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+
+	projectID := int64(11)
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{
+			{
+				ID:            301,
+				Agente:        "Gemma1",
+				ProyectoID:    &projectID,
+				Tipo:          "send_instruction",
+				PayloadJSON:   `{"source":"microprogramacion","mailbox_id":77,"microprogramacion":{"especificacion_id":44,"archivo_objetivo":"microprogramacionapp/service.go","simbolo_objetivo":"RegistrarEntregaGit","write_set":["microprogramacionapp/service.go"],"formato_salida":"git_worktree+evidencia"}}`,
+				ResultadoJSON: `{"delivery_state":"queued"}`,
+			},
+		},
+	}
+	service := NewService(store)
+	service.SetRegistradorEntregaGit(&fakeRegistradorEntregaGit{})
+
+	if _, err := service.RegistrarEntregaGitMicroprogramacionActiva("Gemma1", &projectID, "orquestador", "diff listo", "OpenClaw"); err != nil {
+		t.Fatalf("RegistrarEntregaGitMicroprogramacionActiva: %v", err)
+	}
+	if !strings.Contains(store.markOrderStateResultado, `"local_agent_score_recorded":true`) {
+		t.Fatalf("resultado sin anotacion de score local: %s", store.markOrderStateResultado)
+	}
+	score, err := db.GetAgenteScoreLocal("Gemma1", "", "codigo")
+	if err != nil {
+		t.Fatalf("GetAgenteScoreLocal: %v", err)
+	}
+	if score == nil || score.Muestras < 1 || score.ScoreTotal <= 5.0 {
+		t.Fatalf("score local no se actualizo tras entrega: %+v", score)
+	}
+}
+
 func TestSupersederMicroprogramacionAbiertaEquivalenteCancelaOrdenVieja(t *testing.T) {
 	projectID := int64(11)
 	store := &fakeStore{
@@ -1983,6 +2041,7 @@ func TestRegistrarEntregaGitMicroprogramacionActivaPreferentePropagaWorktree(t *
 		"thread_id=sub-1",
 		"OpenClaw",
 		microprogramacionapp.EntradaRegistrarEntregaGit{
+			MetadataJSON:            `{"source":"pipeline_local_parallel","slice_index":1,"slice_total":2}`,
 			PreferenciaWorktreeID:   &worktreeID,
 			PreferenciaRutaWorktree: "/tmp/orquesta-worktree-sub1",
 			PreferenciaBranch:       "orq/orquestador/claude-sub1",
@@ -2000,6 +2059,9 @@ func TestRegistrarEntregaGitMicroprogramacionActivaPreferentePropagaWorktree(t *
 	}
 	if registrador.entrada.PreferenciaRutaWorktree != "/tmp/orquesta-worktree-sub1" {
 		t.Fatalf("ruta worktree no propagada: %+v", registrador.entrada)
+	}
+	if registrador.entrada.MetadataJSON != `{"source":"pipeline_local_parallel","slice_index":1,"slice_total":2}` {
+		t.Fatalf("metadata no propagada: %+v", registrador.entrada)
 	}
 }
 
@@ -2038,7 +2100,7 @@ func TestRegistrarEntregaGitMicroprogramacionActivaFallbackPremiumUsaRegistrador
 			ProyectoID:    &projectID,
 			Tipo:          "send_instruction",
 			Estado:        "ejecutando",
-			PayloadJSON:   `{"source":"pipeline_local","mailbox_id":91,"carril":"premium_worktree","tarea_objetivo_id":530,"write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"],"worktree_id":81,"ruta_worktree":"/tmp/orq-premium","branch_worktree":"orq/orquestador/codex1","base_ref_worktree":"main"}`,
+			PayloadJSON:   `{"source":"pipeline_local","mailbox_id":91,"carril":"premium_worktree","tarea_objetivo_id":530,"write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"],"fork_funcion":{"schema_version":"fork_funcion_v1","funcion_objetivo":"procesarRuntimeMailboxSessionResumeBatchConMailbox","write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"],"modelos_candidatos":["claude-sonnet","gemini-2.5-pro"],"preservar_arquitectura":true},"variantes_candidatas":[{"indice":1,"modelo":"claude-sonnet","funcion_objetivo":"procesarRuntimeMailboxSessionResumeBatchConMailbox","write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"],"preservar_arquitectura":true,"estado":"pendiente"},{"indice":2,"modelo":"gemini-2.5-pro","funcion_objetivo":"procesarRuntimeMailboxSessionResumeBatchConMailbox","write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"],"preservar_arquitectura":true,"estado":"pendiente"}],"worktree_id":81,"ruta_worktree":"/tmp/orq-premium","branch_worktree":"orq/orquestador/codex1","base_ref_worktree":"main"}`,
 			ResultadoJSON: `{"delivery_state":"queued"}`,
 		}},
 	}
@@ -2067,6 +2129,12 @@ func TestRegistrarEntregaGitMicroprogramacionActivaFallbackPremiumUsaRegistrador
 	if len(registrador.entrada.WriteSet) != 2 || registrador.entrada.WriteSet[0] != "cmd/controlplane_support.go" {
 		t.Fatalf("write_set premium no propagado: %+v", registrador.entrada)
 	}
+	if registrador.entrada.ForkFuncion == nil || strings.TrimSpace(fmt.Sprint(registrador.entrada.ForkFuncion["funcion_objetivo"])) != "procesarRuntimeMailboxSessionResumeBatchConMailbox" {
+		t.Fatalf("fork_funcion premium no propagado: %+v", registrador.entrada)
+	}
+	if len(registrador.entrada.VariantesCandidatas) != 2 {
+		t.Fatalf("variantes_candidatas premium no propagadas: %+v", registrador.entrada)
+	}
 	if completer.id != 530 || completer.agente != "Codex1" || completer.commit != "abc123" {
 		t.Fatalf("tarea premium no completada via app: %+v", completer)
 	}
@@ -2075,6 +2143,36 @@ func TestRegistrarEntregaGitMicroprogramacionActivaFallbackPremiumUsaRegistrador
 	}
 	if !strings.Contains(store.markOrderStateResultado, `"receipt_source":"git_worktree"`) {
 		t.Fatalf("resultado premium sin receipt git: %s", store.markOrderStateResultado)
+	}
+}
+
+func TestResolverContextoEntregaGitPremiumPropagaForkFuncionYVariantes(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{{
+			ID:            406,
+			Agente:        "Codex1",
+			ProyectoID:    &projectID,
+			Tipo:          "send_instruction",
+			Estado:        "completada",
+			PayloadJSON:   `{"kind":"pipeline_local","mailbox_kind":"pipeline_local","carril":"premium_worktree","tarea_objetivo_id":530,"write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"],"fork_funcion":{"schema_version":"fork_funcion_v1","funcion_objetivo":"procesarRuntimeMailboxSessionResumeBatchConMailbox","write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"],"modelos_candidatos":["claude-sonnet","gemini-2.5-pro"],"preservar_arquitectura":true},"variantes_candidatas":[{"indice":1,"modelo":"claude-sonnet","funcion_objetivo":"procesarRuntimeMailboxSessionResumeBatchConMailbox","write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"],"preservar_arquitectura":true,"estado":"pendiente"},{"indice":2,"modelo":"gemini-2.5-pro","funcion_objetivo":"procesarRuntimeMailboxSessionResumeBatchConMailbox","write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"],"preservar_arquitectura":true,"estado":"pendiente"}],"worktree_id":81,"ruta_worktree":"/tmp/orq-premium","branch_worktree":"orq/orquestador/codex1","base_ref_worktree":"main"}`,
+			ResultadoJSON: `{"delivery_state":"notified"}`,
+		}},
+	}
+	service := NewService(store)
+
+	ctx, err := service.ResolverContextoEntregaGitPremium("Codex1", &projectID)
+	if err != nil {
+		t.Fatalf("ResolverContextoEntregaGitPremium: %v", err)
+	}
+	if ctx == nil {
+		t.Fatal("deberia resolver contexto premium")
+	}
+	if ctx.ForkFuncion == nil || strings.TrimSpace(fmt.Sprint(ctx.ForkFuncion["schema_version"])) != "fork_funcion_v1" {
+		t.Fatalf("fork_funcion no propagado al contexto: %+v", ctx)
+	}
+	if len(ctx.Variantes) != 2 {
+		t.Fatalf("variantes no propagadas al contexto: %+v", ctx)
 	}
 }
 
@@ -2915,11 +3013,11 @@ func TestEnqueueAgentControlContinuarReuseOrdenViva(t *testing.T) {
 		agentResponse:   &db.Agente{Nombre: "Codex2", Rol: "programador"},
 		ordersResponse: []*db.RuntimeOrder{
 			{
-				ID:         91,
-				Agente:     "Codex2",
-				ProyectoID: &projectID,
-				Tipo:       "nudge",
-				Estado:     "ejecutando",
+				ID:          91,
+				Agente:      "Codex2",
+				ProyectoID:  &projectID,
+				Tipo:        "nudge",
+				Estado:      "ejecutando",
 				PayloadJSON: `{"accion":"continuar_trabajo","control_action":"continue","tarea_id":17}`,
 			},
 		},

@@ -56,6 +56,10 @@ func (Repository) GetProject(ref string) (*db.Proyecto, error) {
 	return db.GetProyectoConRutaEfectiva(ref, "")
 }
 
+func (Repository) GetProjectPrepareLite(ref string) (*db.Proyecto, error) {
+	return db.GetProyectoPrepareLite(ref)
+}
+
 func (Repository) GetPool(slug string) (*db.PoolCapacidad, error) {
 	return db.GetPool(slug)
 }
@@ -64,8 +68,16 @@ func (Repository) GetConnector(ref string) (*db.Conector, error) {
 	return db.GetConector(ref)
 }
 
+func (Repository) GetConnectorPrepareLite(ref string) (*db.Conector, error) {
+	return db.GetConectorPrepareLite(ref)
+}
+
 func (Repository) ListAgents() ([]*db.Agente, error) {
 	return db.ListarAgentes()
+}
+
+func (Repository) ListAgentsLight() ([]*db.Agente, error) {
+	return db.ListarAgentesEstadoLigero()
 }
 
 func (Repository) CheckReanimations() ([]*db.Agente, error) {
@@ -82,6 +94,10 @@ func (Repository) ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]
 
 func (Repository) GetLastSession(agente string, proyectoID *int64) (*db.Sesion, error) {
 	return db.ObtenerUltimaSesion(agente, proyectoID)
+}
+
+func (Repository) GetLastSessionPrepareLite(agente string, proyectoID *int64) (*db.Sesion, error) {
+	return db.ObtenerUltimaSesionPrepareLite(agente, proyectoID)
 }
 
 func (Repository) GetActiveSession(agente string, proyectoID *int64) (*db.Sesion, error) {
@@ -140,12 +156,24 @@ func (Repository) ListRuntimeMailbox(filtro db.FiltroRuntimeMailbox) ([]*db.Runt
 	return db.ListarRuntimeMailbox(filtro)
 }
 
+func (Repository) SummarizeRuntimeMailboxForPanel() ([]*db.RuntimeMailboxPanelSummary, error) {
+	return db.ResumirRuntimeMailboxPorAgente()
+}
+
+func (Repository) ListLatestAutonomyMailboxForPanel() ([]*db.RuntimeMailboxMessage, error) {
+	return db.ListarUltimaAutonomiaMailboxPorAgente()
+}
+
 func (Repository) RuntimeMailboxCoveredByBootstrapPending(mailboxID int64, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (bool, int64, int64, error) {
 	return db.RuntimeMailboxCubiertoPorBootstrapPendiente(mailboxID, handle, runtime)
 }
 
 func (Repository) ListRuntimeCheckpoints(filtro db.FiltroRuntimeCheckpoints) ([]*db.RuntimeCheckpoint, error) {
 	return db.ListarRuntimeCheckpoints(filtro)
+}
+
+func (Repository) SummarizeRuntimeCheckpointsForPanel() ([]*db.RuntimeCheckpointPanelSummary, error) {
+	return db.ResumirRuntimeCheckpointsPorAgente()
 }
 
 func (Repository) ListTasks(filtro db.FiltroTareas) ([]*db.Tarea, error) {

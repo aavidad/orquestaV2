@@ -70,9 +70,27 @@ func TestPremiumRuntimeGitServiceRegistraMergeDesdeWorktreeActiva(t *testing.T) 
 		ProyectoSlug:    "orquestador",
 		SolicitadoPor:   "orquesta",
 		Evidencia:       "diff listo",
+		MetadataJSON:    `{"source":"pipeline_local_parallel","slice_index":2,"slice_total":2,"write_set_slice":["cmd/controlplane_support.go"]}`,
 		Carril:          "premium_worktree",
 		TareaObjetivoID: 530,
 		WriteSet:        []string{"cmd/controlplane_support.go"},
+		ForkFuncion: map[string]any{
+			"schema_version":         "fork_funcion_v1",
+			"funcion_objetivo":       "procesarRuntimeMailboxSessionResumeBatchConMailbox",
+			"write_set":              []string{"cmd/controlplane_support.go"},
+			"modelos_candidatos":     []string{"claude-sonnet", "gemini-2.5-pro"},
+			"preservar_arquitectura": true,
+		},
+		VariantesCandidatas: []map[string]any{
+			{
+				"indice":                 1,
+				"modelo":                 "claude-sonnet",
+				"funcion_objetivo":       "procesarRuntimeMailboxSessionResumeBatchConMailbox",
+				"write_set":              []string{"cmd/controlplane_support.go"},
+				"preservar_arquitectura": true,
+				"estado":                 "pendiente",
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("RegistrarEntregaGitPremium: %v", err)
@@ -88,6 +106,16 @@ func TestPremiumRuntimeGitServiceRegistraMergeDesdeWorktreeActiva(t *testing.T) 
 	}
 	if !strings.Contains(store.saved.MetadataJSON, `"source":"premium_runtime"`) || !strings.Contains(store.saved.MetadataJSON, `"tarea_objetivo_id":530`) {
 		t.Fatalf("metadata inesperada: %s", store.saved.MetadataJSON)
+	}
+	if !strings.Contains(store.saved.MetadataJSON, `"fork_funcion":{"funcion_objetivo":"procesarRuntimeMailboxSessionResumeBatchConMailbox"`) {
+		t.Fatalf("metadata premium sin fork_funcion: %s", store.saved.MetadataJSON)
+	}
+	if !strings.Contains(store.saved.MetadataJSON, `"variantes_candidatas":[{"estado":"pendiente"`) {
+		t.Fatalf("metadata premium sin variantes_candidatas: %s", store.saved.MetadataJSON)
+	}
+	if !strings.Contains(store.saved.MetadataJSON, `"subagent_context":{"slice_index":2,"slice_total":2,"source":"pipeline_local_parallel","write_set_slice":["cmd/controlplane_support.go"]}`) &&
+		!strings.Contains(store.saved.MetadataJSON, `"subagent_context":{"source":"pipeline_local_parallel","slice_index":2,"slice_total":2,"write_set_slice":["cmd/controlplane_support.go"]}`) {
+		t.Fatalf("metadata premium sin contexto de subagente: %s", store.saved.MetadataJSON)
 	}
 }
 

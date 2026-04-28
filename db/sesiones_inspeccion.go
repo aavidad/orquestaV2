@@ -22,8 +22,12 @@ func ListarSesionesInspeccion(f FiltroSesionesInspeccion) ([]*Sesion, error) {
 	var args []any
 
 	if f.Agente != nil && strings.TrimSpace(*f.Agente) != "" {
+		agenteCanonico, err := CanonicalizeAgentName(*f.Agente)
+		if err != nil {
+			return nil, err
+		}
 		q += ` AND s.agente = ?`
-		args = append(args, strings.TrimSpace(*f.Agente))
+		args = append(args, agenteCanonico)
 	}
 	if f.ProyectoID != nil {
 		q += ` AND s.proyecto_id = ?`

@@ -132,6 +132,72 @@ func TestPrepararStartRuntimeOrderSaneaContinuidadDeProyectoAjeno(t *testing.T) 
 	}
 }
 
+func TestPrepararStartRuntimeOrderNoRecuperaModeloPersistidoDeProyectoAjeno(t *testing.T) {
+	prepararDBTemporal(t)
+	rutaActual := filepath.Join(t.TempDir(), "orquesta-modelo")
+	rutaAjena := filepath.Join(t.TempDir(), "api-ajena")
+	if err := os.MkdirAll(rutaActual, 0o755); err != nil {
+		t.Fatalf("mkdir ruta actual: %v", err)
+	}
+	if err := os.MkdirAll(rutaAjena, 0o755); err != nil {
+		t.Fatalf("mkdir ruta ajena: %v", err)
+	}
+
+	if err := RegistrarAgente("Gemma1", "programador"); err != nil {
+		t.Fatalf("registrar Gemma1: %v", err)
+	}
+	if _, err := GuardarPoliticaModelo(&PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		ModelSlug:       "gpt-5.4",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("guardar politica: %v", err)
+	}
+
+	const slugActual = "orquesta-modelo"
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    slugActual,
+		Nombre:  "Orquesta Modelo",
+		RutaAbs: rutaActual,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "Gemma1",
+		ProyectoID:        &proyectoID,
+		CWD:               rutaAjena,
+		Herramienta:       "ollama-cli",
+		ResumePayloadJSON: fmt.Sprintf(`{"perfil_tarea":"analisis","modelo":"qwen3.5:27b-q4_K_M","razonamiento":"medium","project_context":{"proyecto":{"slug":"api","ruta":"%s"}}}`, rutaAjena),
+		Branch:            "feature/api",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	_, proyecto, _, _, resume, _, plan, err := prepararStartRuntimeOrder("Gemma1", slugActual, 0, "", "", "", "implementacion", nil, false)
+	if err != nil {
+		t.Fatalf("prepararStartRuntimeOrder: %v", err)
+	}
+	if proyecto == nil || plan == nil {
+		t.Fatalf("faltaba proyecto/plan: proyecto=%+v plan=%+v", proyecto, plan)
+	}
+	if strings.Contains(strings.TrimSpace(resume.ResumePayloadJSON), "qwen3.5:27b-q4_K_M") {
+		t.Fatalf("no deberia conservar modelo ajeno en resume saneado: %s", resume.ResumePayloadJSON)
+	}
+	if plan.Modelo == "qwen3.5:27b-q4_K_M" {
+		t.Fatalf("no deberia recuperar modelo persistido de proyecto ajeno: %+v", plan)
+	}
+	if !strings.Contains(runtimeagente.RenderCommand(plan), "gemma4:26b") {
+		t.Fatalf("Gemma deberia volver a su afinidad local tras sanear payload ajeno: %s", runtimeagente.RenderCommand(plan))
+	}
+}
+
 func TestPrepararStartRuntimeOrderAplicaXHighPorDefectoEnImplementacion(t *testing.T) {
 	prepararDBTemporal(t)
 	rutaActual := filepath.Join(t.TempDir(), "orquesta-runtime")

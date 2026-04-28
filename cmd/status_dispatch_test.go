@@ -319,7 +319,7 @@ func TestResumirAutonomiaRowsCuentaSupervisorPorRolAunqueUltimaAccionSeaContinua
 	}
 
 	got := resumirAutonomiaRows(rows, now)
-	if got.Supervisando != 1 || got.Continuando != 1 {
+	if got.Supervisando != 1 || got.Continuando != 0 {
 		t.Fatalf("deberia distinguir supervisor operativo del resto: %+v", got)
 	}
 	if got.WorkConfirmed != 2 {
@@ -456,7 +456,7 @@ func TestResumirAutonomiaRowsOmiteAgentesBloqueadosPorCuota(t *testing.T) {
 	}
 
 	got := resumirAutonomiaRows(rows, now)
-	if got.Continuando != 1 || got.WorkConfirmed != 1 || got.ContinuidadPendiente != 0 {
+	if got.Continuando != 0 || got.WorkConfirmed != 1 || got.ContinuidadPendiente != 0 {
 		t.Fatalf("los agentes bloqueados por cuota no deberian contaminar autonomia activa: %+v", got)
 	}
 }
@@ -499,7 +499,7 @@ func TestResumirAutonomiaRowsOmiteAgentesBloqueadosPorRuntimeYAtascados(t *testi
 	}
 
 	got := resumirAutonomiaRows(rows, now)
-	if got.Continuando != 1 || got.WorkConfirmed != 1 || got.ContinuidadPendiente != 0 || got.Handoffs != 0 {
+	if got.Continuando != 0 || got.WorkConfirmed != 1 || got.ContinuidadPendiente != 0 || got.Handoffs != 0 {
 		t.Fatalf("los agentes bloqueados por runtime o atascados no deberian contaminar autonomia activa: %+v", got)
 	}
 }
@@ -525,6 +525,55 @@ func TestResumirAutonomiaRowsCuentaHandoffVivoDesdeAssignment(t *testing.T) {
 	}
 	if got.Continuando != 1 {
 		t.Fatalf("deberia seguir contando continuidad viva: %+v", got)
+	}
+}
+
+func TestResumirAutonomiaRowsNoCuentaHandoffConfirmadoDesdeAssignment(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	rows := []agentesapp.Row{
+		{
+			LastAutonomyAction: "continuar_trabajo",
+			LastAutonomySource: "assignment_handoff",
+			LastAutonomyState:  "work_confirmed",
+			OpenTasks:          1,
+			WorkerAlive:        true,
+			WorkerHeartbeat:    ptrTimeStatusDispatch(now),
+		},
+	}
+
+	got := resumirAutonomiaRows(rows, now)
+	if got.Handoffs != 0 {
+		t.Fatalf("no deberia contar handoff ya confirmado: %+v", got)
+	}
+	if got.Continuando != 0 || got.WorkConfirmed != 1 {
+		t.Fatalf("deberia seguir contando continuidad confirmada: %+v", got)
+	}
+}
+
+func TestResumirAutonomiaRowsNoCuentaContinuandoSinTareaAbierta(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	rows := []agentesapp.Row{
+		{
+			LastAutonomyAction:       "continuar_trabajo",
+			LastAutonomySource:       "assignment_handoff",
+			LastAutonomyState:        "work_confirmed",
+			MailboxContinuityPending: 1,
+			OpenTasks:                0,
+			WorkerAlive:              true,
+			WorkerHeartbeat:          ptrTimeStatusDispatch(now),
+		},
+	}
+
+	got := resumirAutonomiaRows(rows, now)
+	if got.Continuando != 0 {
+		t.Fatalf("no deberia contar continuidad sin tarea abierta: %+v", got)
+	}
+	if got.ContinuidadPendiente != 0 {
+		t.Fatalf("la continuidad confirmada no deberia quedar pendiente: %+v", got)
 	}
 }
 
@@ -573,6 +622,12 @@ func TestStatusSnapshotNeedsImmediateRefreshConAutonomiaEnTransicion(t *testing.
 		AgentesActivos: []*db.Agente{{Nombre: "Codex1"}},
 	}) {
 		t.Fatal("no deberia forzar refresh inmediato solo por autonomia confirmada")
+	}
+	if statusSnapshotNeedsImmediateRefresh(apiStatusResponse{
+		AgentesQuotaBlocked: []*db.Agente{{Nombre: "Codex1"}},
+		TareasEnProgreso:    []tareaLite{{ID: 1, Estado: db.TareaEnProgreso}},
+	}) {
+		t.Fatal("no deberia forzar refresh inmediato si lo unico vivo es cuota bloqueada")
 	}
 }
 

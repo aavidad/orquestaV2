@@ -97,6 +97,33 @@ func TestPreparePoolLocalOllamaGeneraPlanRemotoAPI(t *testing.T) {
 	}
 }
 
+func TestPreparePoolLocalOllamaRespetaWorkingDirDeResume(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Gemma1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:         "ollama_pool_local",
+			Transporte:   "api",
+			Comando:      "ollama",
+			MetadataJSON: `{"endpoint":"http://127.0.0.1:18081","launch_path":"/api/runtime/ollama-pool/launch","input_path":"/api/runtime/ollama-pool/input","status_path":"/api/runtime/ollama-pool/status","stop_path":"/api/runtime/ollama-pool/stop"}`,
+		},
+		Resume: ResumeContext{
+			CWD:    "/tmp/orquestador/.orquesta-worktrees/orquestador-gemma1",
+			Branch: "orq-orquestador-gemma1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare pool local ollama con resume: %v", err)
+	}
+	if plan.WorkingDir != "/tmp/orquestador/.orquesta-worktrees/orquestador-gemma1" {
+		t.Fatalf("working dir inesperado: %+v", plan)
+	}
+	if plan.WorktreePath != "/tmp/orquestador/.orquesta-worktrees/orquestador-gemma1" {
+		t.Fatalf("worktree path inesperado: %+v", plan)
+	}
+}
+
 func TestPreparePoolLocalOllamaUsaRutasCanonicasPorDefecto(t *testing.T) {
 	t.Setenv("ORQUESTA_SERVER_URL", "http://127.0.0.1:17669")
 	plan, err := DefaultRegistry().Prepare(LaunchRequest{
@@ -381,6 +408,62 @@ func TestPrepareCLICodexPriorizaSliceEjecutableEnPipelineLocalContinuityPrompt(t
 	}
 }
 
+func TestPrepareCLICodexPriorizaPipelineLocalAunqueNoSeaLaPrimeraMailbox(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex9",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    "codex",
+		},
+		Resume: ResumeContext{
+			ResumenContinuidad: "seguir frente activo",
+			Branch:             "orq-orquestador-codex9",
+			ResumePayloadJSON: `{
+				"mailbox":[
+					{"id":7,"kind":"instruction","payload":{"texto":"ruido previo"}},
+					{
+						"id":8,
+						"kind":"pipeline_local",
+						"payload":{
+							"source":"pipeline_local",
+							"accion":"continuar_trabajo",
+							"tarea_objetivo_id":585,
+							"carril":"premium_worktree",
+							"write_set":["cmd/controlplane_support.go","db/controlplane_entities.go","runtimeagente/driver.go"],
+							"instruction":"FASE: implementacion\nACCION: continuar_trabajo\nTAREA: #585 Micro-refactorización cíclica del control plane\nSimbolos foco: procesarRuntimeMailboxSessionResumeBatchConMailbox, resolverBootstrapRuntimeLeasePendiente y helpers inmediatos del mismo slice."
+						}
+					}
+				]
+			}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	for _, token := range []string{
+		"mailbox=2",
+		"tarea#585",
+		"carril=premium_worktree",
+		"Simbolos foco: procesarRuntimeMailboxSessionResumeBatchConMailbox, resolverBootstrapRuntimeLeasePendiente",
+	} {
+		if !strings.Contains(plan.ContinuityPrompt, token) {
+			t.Fatalf("falta %q en continuity prompt priorizado: %s", token, plan.ContinuityPrompt)
+		}
+	}
+	for _, token := range []string{
+		"Proyecto: orquestador.",
+		"Rama: orq-orquestador-codex9.",
+		"Ignora cualquier conversación vieja que no coincida con la tarea activa o el mailbox actual.",
+	} {
+		if strings.Contains(plan.ContinuityPrompt, token) {
+			t.Fatalf("no deberia degradar a prompt generico por mailbox inicial no priorizada, token=%q prompt=%s", token, plan.ContinuityPrompt)
+		}
+	}
+}
+
 func TestPrepareCLIGenericoResumePayloadResumeMailboxCompacto(t *testing.T) {
 	plan, err := DefaultRegistry().Prepare(LaunchRequest{
 		Agente:       "Claude7",
@@ -407,11 +490,43 @@ func TestPrepareCLIGenericoResumePayloadResumeMailboxCompacto(t *testing.T) {
 	}
 }
 
+func TestPrepareCLIGenericoResumePayloadOcultaBootstrapPromptRuido(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Claude8",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:       "claude-code",
+			Transporte: "cli",
+			Comando:    "claude-code",
+		},
+		Resume: ResumeContext{
+			ResumenContinuidad: "seguir trabajo actual",
+			Branch:             "orq-orquestador-claude8",
+			ResumePayloadJSON:  `{"bootstrap_prompt":"Bootstrap de Orquesta para Claude8.","checkpoint":{"id":14,"kind":"stop"},"mailbox":[{"id":2,"kind":"instruction","payload":{"texto":"cambia solo runtimeagente/driver.go"}}]}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	for _, token := range []string{"Resume payload:", "checkpoint#14(stop)", "mailbox=1", "instruction", "cambia solo runtimeagente/driver.go"} {
+		if !strings.Contains(plan.ContinuityPrompt, token) {
+			t.Fatalf("falta %q en continuity prompt generico: %s", token, plan.ContinuityPrompt)
+		}
+	}
+	for _, token := range []string{"bootstrap_prompt", "Bootstrap de Orquesta para Claude8."} {
+		if strings.Contains(plan.ContinuityPrompt, token) {
+			t.Fatalf("continuity prompt generico no deberia filtrar ruido de bootstrap %q: %s", token, plan.ContinuityPrompt)
+		}
+	}
+}
+
 func TestPrepareCLIOllamaNoReanudaContextoNoReanudable(t *testing.T) {
 	plan, err := DefaultRegistry().Prepare(LaunchRequest{
 		Agente:       "OllamaLocal",
 		ProyectoSlug: "orquestador",
 		ProyectoRuta: "/tmp/orquestador",
+		Modelo:       "qwen2.5-coder:7b",
 		Conector: ConnectorConfig{
 			Slug:         "ollama-cli",
 			Transporte:   "cli",
@@ -436,6 +551,12 @@ func TestPrepareCLIOllamaNoReanudaContextoNoReanudable(t *testing.T) {
 	}
 	if strings.TrimSpace(plan.ContinuityPrompt) != "" {
 		t.Fatalf("ollama no deberia heredar continuity prompt: %q", plan.ContinuityPrompt)
+	}
+	if strings.TrimSpace(plan.BootstrapPrompt) == "" {
+		t.Fatalf("ollama deberia recibir bootstrap minimo al arrancar: %+v", plan)
+	}
+	if !strings.Contains(plan.BootstrapPrompt, "PROTOCOLO_ORQUESTA_MICRO") {
+		t.Fatalf("bootstrap minimo inesperado: %q", plan.BootstrapPrompt)
 	}
 	if plan.WorkingDir != "/tmp/orquestador/.orquesta-worktrees/orq-ollama" {
 		t.Fatalf("deberia conservar cwd de trabajo aunque no reanude: %s", plan.WorkingDir)
@@ -480,6 +601,28 @@ func TestSanitizarResumeParaConectorPoolCompartidoConservaResumenBreve(t *testin
 	}
 	if !strings.Contains(resume.ResumePayloadJSON, "gemma4:26b") {
 		t.Fatalf("el payload persistido no deberia perderse: %s", resume.ResumePayloadJSON)
+	}
+}
+
+func TestSanitizarResumeParaConectorConservaSoloPerfilCuandoPayloadMezclaContextoReanudable(t *testing.T) {
+	resume := SanitizarResumeParaConector(ConnectorConfig{
+		Slug:         "ollama-cli",
+		Transporte:   "cli",
+		Comando:      "ollama",
+		MetadataJSON: `{"reanudable":false}`,
+	}, ResumeContext{
+		ExternalSessionID:  "sess-1",
+		ResumenContinuidad: "seguir luego",
+		ResumePayloadJSON:  `{"external_session_id":"sess-1","checkpoint_kind":"handoff_prepare","perfil_ejecucion":{"modelo":"gemma4:26b","perfil_tarea":"implementacion"}}`,
+	})
+	if resume.ExternalSessionID != "" || resume.ResumenContinuidad != "" {
+		t.Fatalf("el conector no reanudable debe limpiar continuidad de proveedor: %+v", resume)
+	}
+	if !strings.Contains(resume.ResumePayloadJSON, `"perfil_ejecucion"`) || !strings.Contains(resume.ResumePayloadJSON, "gemma4:26b") {
+		t.Fatalf("deberia conservar solo perfil_ejecucion util: %s", resume.ResumePayloadJSON)
+	}
+	if strings.Contains(resume.ResumePayloadJSON, "checkpoint_kind") || strings.Contains(resume.ResumePayloadJSON, "external_session_id") {
+		t.Fatalf("deberia purgar contexto reanudable legado del payload: %s", resume.ResumePayloadJSON)
 	}
 }
 
@@ -563,6 +706,16 @@ func TestModeloCompatibleConConectorPremiumNoAceptaModeloLocal(t *testing.T) {
 			},
 			modelo: "qwen2.5-coder:14b",
 			want:   true,
+		},
+		{
+			name: "ollama rechaza gpt remoto",
+			conector: ConnectorConfig{
+				Slug:       "ollama-cli",
+				Transporte: "cli",
+				Comando:    "ollama",
+			},
+			modelo: "gpt-5.4",
+			want:   false,
 		},
 	}
 	for _, tc := range cases {
@@ -830,9 +983,42 @@ func TestPrepareCLIOllamaUsaModeloPosicional(t *testing.T) {
 	if plan.Modelo != "qwen2.5-coder:7b" {
 		t.Fatalf("modelo inesperado: %+v", plan)
 	}
+	if strings.TrimSpace(plan.BootstrapPrompt) == "" {
+		t.Fatalf("ollama deberia exponer bootstrap minimo: %+v", plan)
+	}
+	if plan.LaunchPromptMode != "post_start" {
+		t.Fatalf("ollama deberia usar post_start para bootstrap: %+v", plan)
+	}
 	rendered := RenderCommand(plan)
 	if !strings.Contains(rendered, "'run'") || !strings.Contains(rendered, "'qwen2.5-coder:7b'") {
 		t.Fatalf("comando ollama inesperado: %s", rendered)
+	}
+}
+
+func TestPrepareCLIOllamaModeloGeneralUsaBootstrapNatural(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Gemma1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Modelo:       "gemma4:27b",
+		Conector: ConnectorConfig{
+			Slug:         "ollama-cli",
+			Transporte:   "cli",
+			Comando:      "ollama",
+			ArgsJSON:     `["run"]`,
+			MetadataJSON: `{"launch_prompt_transport":"post_start"}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if strings.Contains(plan.BootstrapPrompt, "PROTOCOLO_ORQUESTA_MICRO") {
+		t.Fatalf("gemma no deberia recibir bootstrap de wire protocol: %q", plan.BootstrapPrompt)
+	}
+	for _, token := range []string{"worker local de Orquesta", "ACK-ESPERA", "BLOQUEO:"} {
+		if !strings.Contains(plan.BootstrapPrompt, token) {
+			t.Fatalf("faltaba %q en bootstrap natural: %q", token, plan.BootstrapPrompt)
+		}
 	}
 }
 

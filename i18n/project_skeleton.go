@@ -137,6 +137,91 @@ func MaterializeProjectSkeleton(spec ProjectSkeletonSpec) (*ProjectSkeletonConfi
 	return cfg, nil
 }
 
+func ExpandProjectSkeletonLanguages(rootDir string, languages []string) (*ProjectSkeletonConfig, error) {
+	rootDir = strings.TrimSpace(rootDir)
+	if rootDir == "" {
+		return nil, fmt.Errorf("root dir obligatorio")
+	}
+	languages = normalizeUniqueLanguages(languages)
+	if len(languages) == 0 {
+		return nil, fmt.Errorf("idiomas obligatorios")
+	}
+
+	i18nDir := filepath.Join(rootDir, projectSkeletonDirName)
+	cfg, err := loadBundleConfig(i18nDir)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		return MaterializeProjectSkeleton(ProjectSkeletonSpec{
+			RootDir:          rootDir,
+			DefaultLanguage:  DefaultLang,
+			FallbackLanguage: DefaultLang,
+			Languages:        languages,
+		})
+	}
+
+	spec, err := NormalizeProjectSkeletonSpec(ProjectSkeletonSpec{
+		RootDir:          rootDir,
+		DefaultLanguage:  cfg.DefaultLanguage,
+		FallbackLanguage: cfg.FallbackLanguage,
+		Languages:        append(append([]string{}, cfg.Languages...), languages...),
+		Domains:          cfg.Domains,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(i18nDir, 0o755); err != nil {
+		return nil, fmt.Errorf("crear directorio i18n: %w", err)
+	}
+
+	nextCfg, err := BuildProjectSkeletonConfig(spec)
+	if err != nil {
+		return nil, err
+	}
+	if err := writeJSONFile(filepath.Join(i18nDir, projectSkeletonConfigName), nextCfg); err != nil {
+		return nil, err
+	}
+	readmePath := filepath.Join(i18nDir, projectSkeletonReadmeName)
+	if _, err := os.Stat(readmePath); err != nil {
+		if os.IsNotExist(err) {
+			if err := os.WriteFile(readmePath, []byte(projectSkeletonReadme(spec)), 0o644); err != nil {
+				return nil, fmt.Errorf("escribir README i18n: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("leer README i18n: %w", err)
+		}
+	}
+
+	existing := map[string]struct{}{}
+	for _, lang := range cfg.Languages {
+		existing[NormalizeLang(lang)] = struct{}{}
+	}
+	for _, lang := range spec.Languages {
+		langDir := filepath.Join(i18nDir, lang)
+		if err := os.MkdirAll(langDir, 0o755); err != nil {
+			return nil, fmt.Errorf("crear directorio idioma %s: %w", lang, err)
+		}
+		_, already := existing[lang]
+		for _, domain := range spec.Domains {
+			path := filepath.Join(langDir, domain+".json")
+			if _, err := os.Stat(path); err == nil {
+				continue
+			} else if !os.IsNotExist(err) {
+				return nil, fmt.Errorf("leer %s: %w", path, err)
+			}
+			if !already || os.IsNotExist(err) {
+				seed := seedDomainDictionary(lang, spec.DefaultLanguage, domain)
+				if err := writeJSONFile(path, seed); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+
+	return nextCfg, nil
+}
+
 func writeJSONFile(path string, value any) error {
 	raw, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {

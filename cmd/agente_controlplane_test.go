@@ -107,7 +107,7 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 				nombre = "Ollama1"
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "nombre": nombre, "rol": req.Rol})
-		case r.URL.Path == "/api/agentes/Codex1/reset-reanimacion" && r.Method == http.MethodPost:
+		case r.URL.Path == "/api/agentes/Codex1/rehabilitar" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agente": "Codex1"})
 		case r.URL.Path == "/api/agentes/Codex1/retirar" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agente": "Codex1"})

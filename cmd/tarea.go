@@ -151,6 +151,33 @@ var tareaVerCmd = &cobra.Command{
 		if t.Notas != "" {
 			fmt.Printf("  Notas:       %s\n", t.Notas)
 		}
+		if tareaResp.FinishApp {
+			fmt.Printf("  Modo:        finish_app\n")
+		}
+		if tareaResp.Fork != nil {
+			fmt.Printf("  Fork:        %s\n", strings.TrimSpace(tareaResp.Fork.FuncionObjetivo))
+			if len(tareaResp.Fork.ModelosCandidatos) > 0 {
+				fmt.Printf("  Modelos:     %s\n", strings.Join(tareaResp.Fork.ModelosCandidatos, ", "))
+			}
+			if tareaResp.Fork.Materia != "" {
+				fmt.Printf("  Materia:     %s\n", tareaResp.Fork.Materia)
+			}
+			if tareaResp.Fork.ForkLines > 0 {
+				fmt.Printf("  Líneas:      %d\n", tareaResp.Fork.ForkLines)
+			}
+			if len(tareaResp.Fork.SelectedModels) > 0 {
+				fmt.Printf("  Selección:   %s\n", strings.Join(tareaResp.Fork.SelectedModels, ", "))
+			}
+			if len(tareaResp.Fork.WriteSet) > 0 {
+				fmt.Printf("  Write set:   %s\n", strings.Join(tareaResp.Fork.WriteSet, ", "))
+			}
+			if tareaResp.Fork.PreservarArquitectura {
+				fmt.Printf("  Regla:       preservar arquitectura\n")
+			}
+			if strings.TrimSpace(tareaResp.Fork.DecisionReason) != "" {
+				fmt.Printf("  Motivo:      %s\n", tareaResp.Fork.DecisionReason)
+			}
+		}
 		fmt.Printf("  Creada:      %s\n", t.CreatedAt.Format("2006-01-02 15:04"))
 		return nil
 	},
@@ -575,6 +602,19 @@ var tareaNotasCmd = &cobra.Command{
 					fmt.Printf("  %d. %s\n", i+1, l)
 				}
 			}
+		}
+		if resp.Fork != nil {
+			fmt.Println()
+			fmt.Println("Fork de función")
+			fmt.Println("─────────────────────────────────────────")
+			fmt.Printf("  Función: %s\n", strings.TrimSpace(resp.Fork.FuncionObjetivo))
+			if len(resp.Fork.ModelosCandidatos) > 0 {
+				fmt.Printf("  Modelos: %s\n", strings.Join(resp.Fork.ModelosCandidatos, ", "))
+			}
+			if len(resp.Fork.WriteSet) > 0 {
+				fmt.Printf("  Write set: %s\n", strings.Join(resp.Fork.WriteSet, ", "))
+			}
+			fmt.Printf("  Preservar arquitectura: %t\n", resp.Fork.PreservarArquitectura)
 		}
 		return nil
 	},

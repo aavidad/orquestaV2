@@ -131,6 +131,7 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "propuesta actualizar", args: []string{"propuesta", "actualizar", "OP-116", "--titulo", "Nuevo"}, want: true},
 		{nombre: "runtime purgar-handles", args: []string{"runtime", "purgar-handles", "--agente", "Codex1"}, want: true},
 		{nombre: "runtime purgar-ordenes", args: []string{"runtime", "purgar-ordenes", "--agente", "Codex1"}, want: true},
+		{nombre: "agente ejecutar", args: []string{"agente", "ejecutar", "QwenCoder1", "--proyecto", "orquestador"}, want: true},
 		{nombre: "runtime no soportado", args: []string{"runtime", "foo"}, want: false},
 		{nombre: "serve", args: []string{"serve"}, want: false},
 	}
@@ -219,6 +220,17 @@ func TestShouldPreferAPIClientParaServerFirstSinDescubrimientoPrevio(t *testing.
 	}
 	if shouldPreferAPIClient([]string{"persistencia", "info"}) {
 		t.Fatalf("persistencia info no deberia preferir API")
+	}
+}
+
+func TestShouldPreferAPIClientParaAgenteEjecutarSinDescubrimientoPrevio(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_STATE", "")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_INFO", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	if !shouldPreferAPIClient([]string{"agente", "ejecutar", "QwenCoder1", "--proyecto", "orquestador"}) {
+		t.Fatalf("agente ejecutar deberia mantenerse en server-first aunque no haya descubrimiento previo")
 	}
 }
 
@@ -381,6 +393,38 @@ func TestServerBaseURLUsaPuertoPorDefectoDeServe(t *testing.T) {
 
 	if got := serverBaseURL(); got != defaultServerURL {
 		t.Fatalf("serverBaseURL() = %q, want %q", got, defaultServerURL)
+	}
+}
+
+func TestServerBaseURLEncuentraServidorVivoSinEnvExplicito(t *testing.T) {
+	tmp := t.TempDir()
+	defer cambiarEnv(t, "TMPDIR", tmp)()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_ADDR", "")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_STATE", "")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_INFO", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	var advertisedAddr string
+	mux := http.NewServeMux()
+	mux.HandleFunc(rpclocal.HealthPath, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(rpclocal.HealthResponse{
+			OK:   true,
+			Addr: advertisedAddr,
+			PID:  4242,
+		})
+	})
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+	advertisedAddr = strings.TrimPrefix(srv.URL, "http://")
+
+	statePath := filepath.Join(tmp, "orquesta-localrpc-postgres.json")
+	if err := os.WriteFile(statePath, []byte(`{"addr":"`+advertisedAddr+`","pid":4242,"scope_id":"scope-ajeno"}`), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+
+	if got := serverBaseURL(); got != srv.URL {
+		t.Fatalf("serverBaseURL=%q, want %q", got, srv.URL)
 	}
 }
 

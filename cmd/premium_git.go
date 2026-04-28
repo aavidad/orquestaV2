@@ -155,8 +155,29 @@ func metadataEntregaGitPremium(entrada runtimesapp.EntradaRegistrarEntregaGitPre
 		"archivos_entregados": append([]string(nil), estado.ArchivosModificados...),
 		"write_set":           append([]string(nil), entrada.WriteSet...),
 	}
+	if len(entrada.ForkFuncion) > 0 {
+		payload["fork_funcion"] = entrada.ForkFuncion
+	}
+	if len(entrada.VariantesCandidatas) > 0 {
+		payload["variantes_candidatas"] = entrada.VariantesCandidatas
+	}
+	if subagentContext := parsePremiumMergeContextMetadata(strings.TrimSpace(entrada.MetadataJSON)); len(subagentContext) > 0 {
+		payload["subagent_context"] = subagentContext
+	}
 	raw, _ := json.Marshal(payload)
 	return string(raw)
+}
+
+func parsePremiumMergeContextMetadata(raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil || len(payload) == 0 {
+		return nil
+	}
+	return payload
 }
 
 func validarWriteSetPremium(writeSet, archivos []string) error {

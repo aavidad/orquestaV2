@@ -88,6 +88,8 @@ type Service struct {
 	taskCompleter                TaskCompleter
 }
 
+const agenteScoreEntregaGitExitosa = 7.0
+
 type RuntimeDescription struct {
 	Runtime *db.RuntimeInstance             `json:"runtime"`
 	Handle  *db.RuntimeHandle               `json:"handle,omitempty"`
@@ -312,9 +314,12 @@ type EntradaRegistrarEntregaGitPremium struct {
 	ProyectoSlug            string
 	SolicitadoPor           string
 	Evidencia               string
+	MetadataJSON            string
 	Carril                  string
 	TareaObjetivoID         int64
 	WriteSet                []string
+	ForkFuncion             map[string]any
+	VariantesCandidatas     []map[string]any
 	PreferenciaWorktreeID   *int64
 	PreferenciaRutaWorktree string
 	PreferenciaBranch       string
@@ -336,6 +341,8 @@ type ContextoEntregaGitPremium struct {
 	Carril          string
 	TareaObjetivoID int64
 	WriteSet        []string
+	ForkFuncion     map[string]any
+	Variantes       []map[string]any
 	WorktreeID      *int64
 	RutaWorktree    string
 	BranchWorktree  string
@@ -970,7 +977,11 @@ func (s *Service) CreateRuntimeMailbox(msg *db.RuntimeMailboxMessage) (int64, er
 }
 
 func (s *Service) EnqueueAgentNudge(req AgentNudgeRequest) (*AgentNudgeResult, error) {
-	agente := strings.TrimSpace(req.Agente)
+	agente, err := db.CanonicalizeAgentName(req.Agente)
+	if err != nil {
+		return nil, err
+	}
+	agente = strings.TrimSpace(agente)
 	if agente == "" {
 		return nil, fmt.Errorf("agente obligatorio")
 	}
@@ -1619,6 +1630,13 @@ func (s *Service) registrarEntregaGitMicroprogramacionActiva(agente string, proy
 		if err := s.CompletarEntregaMicroprogramacion(ctx.RuntimeOrderID, "git_worktree"); err != nil {
 			return nil, err
 		}
+		s.registrarObservacionScoreEntregaGitSiCorresponde(
+			ctx.RuntimeOrderID,
+			"completada",
+			strings.TrimSpace(agente),
+			"codigo",
+			"entrega git validada por microprogramacion activa",
+		)
 		return &ResultadoEntregaGitMicroprogramacionActiva{
 			Contexto: ctx,
 			Entrega:  resultado,
@@ -1636,6 +1654,7 @@ func (s *Service) registrarEntregaGitMicroprogramacionActiva(agente string, proy
 			ProyectoSlug:            strings.TrimSpace(proyectoSlug),
 			SolicitadoPor:           strings.TrimSpace(solicitadoPor),
 			Evidencia:               strings.TrimSpace(evidencia),
+			MetadataJSON:            strings.TrimSpace(entrada.MetadataJSON),
 			PreferenciaWorktreeID:   entrada.PreferenciaWorktreeID,
 			PreferenciaRutaWorktree: strings.TrimSpace(entrada.PreferenciaRutaWorktree),
 			PreferenciaBranch:       strings.TrimSpace(entrada.PreferenciaBranch),
@@ -1676,6 +1695,12 @@ func (s *Service) registrarEntregaGitPremiumActiva(agente string, proyectoID *in
 	if len(entrada.WriteSet) == 0 && len(ctx.WriteSet) > 0 {
 		entrada.WriteSet = append([]string(nil), ctx.WriteSet...)
 	}
+	if entrada.ForkFuncion == nil && len(ctx.ForkFuncion) > 0 {
+		entrada.ForkFuncion = cloneMapAny(ctx.ForkFuncion)
+	}
+	if len(entrada.VariantesCandidatas) == 0 && len(ctx.Variantes) > 0 {
+		entrada.VariantesCandidatas = cloneMapSliceAny(ctx.Variantes)
+	}
 	if entrada.PreferenciaWorktreeID == nil && ctx.WorktreeID != nil && *ctx.WorktreeID > 0 {
 		entrada.PreferenciaWorktreeID = ctx.WorktreeID
 	}
@@ -1701,10 +1726,42 @@ func (s *Service) registrarEntregaGitPremiumActiva(agente string, proyectoID *in
 	if err := s.CompletarEntregaMicroprogramacion(ctx.RuntimeOrderID, "git_worktree"); err != nil {
 		return nil, err
 	}
+	s.registrarObservacionScoreEntregaGitSiCorresponde(
+		ctx.RuntimeOrderID,
+		"completada",
+		strings.TrimSpace(agente),
+		db.MateriaScoreDesdePipeline("", "", strings.TrimSpace(ctx.Carril)),
+		fmt.Sprintf("entrega git premium validada en carril %s", strings.TrimSpace(ctx.Carril)),
+	)
 	return &ResultadoEntregaGitMicroprogramacionActiva{
 		ContextoPremium: ctx,
 		EntregaPremium:  resultado,
 	}, nil
+}
+
+func cloneMapAny(src map[string]any) map[string]any {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
+}
+
+func cloneMapSliceAny(src []map[string]any) []map[string]any {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(src))
+	for _, item := range src {
+		if len(item) == 0 {
+			continue
+		}
+		out = append(out, cloneMapAny(item))
+	}
+	return out
 }
 
 func (s *Service) completarTareaEntregaGitPremiumSiCorresponde(ctx *ContextoEntregaGitPremium, agente string, resultado *ResultadoRegistrarEntregaGitPremium) error {
@@ -1742,6 +1799,57 @@ func entregaGitSinCambios(err error) bool {
 		return true
 	}
 	return false
+}
+
+func (s *Service) registrarObservacionScoreEntregaGitSiCorresponde(runtimeOrderID int64, estadoFinal, agente, materia, detalle string) {
+	if s == nil || s.store == nil || runtimeOrderID <= 0 {
+		return
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" || !db.AgenteEsLocalPuntuable(agente, "") {
+		return
+	}
+	order, err := s.store.GetRuntimeOrder(runtimeOrderID)
+	if err != nil || order == nil {
+		if err != nil {
+			s.store.Audit(agente, "agente_score_observacion_error", "runtime_order", runtimeOrderID, err.Error())
+		}
+		return
+	}
+	if runtimeOrderResultadoYaIncluyeScoreLocal(order.ResultadoJSON) {
+		return
+	}
+	materia = db.NormalizarMateriaScoreAgente(materia)
+	if materia == "" {
+		materia = "codigo"
+	}
+	if _, err := db.RegistrarObservacionScoreAgenteLocal(agente, "", materia, agenteScoreEntregaGitExitosa, true, strings.TrimSpace(detalle)); err != nil {
+		s.store.Audit(agente, "agente_score_observacion_error", "runtime_order", runtimeOrderID, err.Error())
+		return
+	}
+	resultadoJSON := mergeRuntimeOrderResultJSONApp(order.ResultadoJSON, map[string]any{
+		"local_agent_score_recorded": true,
+		"local_agent_score_materia":  materia,
+		"local_agent_score_score":    agenteScoreEntregaGitExitosa,
+		"local_agent_score_source":   "git_delivery",
+		"local_agent_score_at":       time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	if err := s.store.MarkRuntimeOrderState(order.ID, strings.TrimSpace(estadoFinal), resultadoJSON, strings.TrimSpace(order.ErrorText)); err != nil {
+		s.store.Audit(agente, "agente_score_observacion_error", "runtime_order", runtimeOrderID, err.Error())
+	}
+}
+
+func runtimeOrderResultadoYaIncluyeScoreLocal(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false
+	}
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return false
+	}
+	recorded, _ := payload["local_agent_score_recorded"].(bool)
+	return recorded
 }
 
 func (s *Service) SendRuntimeMailbox(msg *db.RuntimeMailboxMessage) (int64, error) {
@@ -1896,6 +2004,12 @@ func contextoEntregaGitPremiumDesdePayload(runtimeOrderID int64, payload map[str
 		BranchWorktree:  strings.TrimSpace(stringAny(payload["branch_worktree"])),
 		BaseRefWorktree: strings.TrimSpace(stringAny(payload["base_ref_worktree"])),
 	}
+	if fork, ok := mapAny(payload["fork_funcion"]); ok && len(fork) > 0 {
+		ctx.ForkFuncion = fork
+	}
+	if variantes := mapSliceAny(payload["variantes_candidatas"]); len(variantes) > 0 {
+		ctx.Variantes = variantes
+	}
 	if worktreeID := int64Any(payload["worktree_id"]); worktreeID > 0 {
 		ctx.WorktreeID = &worktreeID
 	}
@@ -1989,6 +2103,32 @@ func stringSliceAny(v any) []string {
 		}
 	}
 	return resultado
+}
+
+func mapAny(v any) (map[string]any, bool) {
+	m, ok := v.(map[string]any)
+	if !ok || len(m) == 0 {
+		return nil, false
+	}
+	out := make(map[string]any, len(m))
+	for k, value := range m {
+		out[k] = value
+	}
+	return out, true
+}
+
+func mapSliceAny(v any) []map[string]any {
+	items, _ := v.([]any)
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if m, ok := mapAny(item); ok {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 func contextoEntregaMicroprogramacionCoincideArchivos(ctx *ContextoEntregaMicroprogramacion, archivos []microprogramacionapp.ArchivoEntrega) bool {

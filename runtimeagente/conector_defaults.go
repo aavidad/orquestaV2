@@ -89,6 +89,53 @@ func AplicarDefaultsConector(conector ConnectorConfig, perfilSolicitado, modeloS
 	return perfilActual, modeloActual, razonamientoActual, nil
 }
 
+func ModeloPorDefectoAgente(agente string) string {
+	agente = strings.ToLower(strings.TrimSpace(agente))
+	switch {
+	case strings.HasPrefix(agente, "gemma"):
+		return "gemma4:26b"
+	case strings.HasPrefix(agente, "qwen"):
+		return "qwen2.5-coder:7b"
+	default:
+		return ""
+	}
+}
+
+func ModeloAfinAgente(agente, modelo string) bool {
+	agente = strings.ToLower(strings.TrimSpace(agente))
+	modelo = strings.ToLower(strings.TrimSpace(modelo))
+	if agente == "" || modelo == "" {
+		return true
+	}
+	switch {
+	case strings.HasPrefix(agente, "gemma"):
+		return strings.HasPrefix(modelo, "gemma")
+	case strings.HasPrefix(agente, "qwen"):
+		return strings.HasPrefix(modelo, "qwen")
+	case strings.HasPrefix(agente, "llama"):
+		return strings.HasPrefix(modelo, "llama")
+	case strings.HasPrefix(agente, "claude"):
+		return strings.HasPrefix(modelo, "claude")
+	case strings.HasPrefix(agente, "gemini"):
+		return strings.HasPrefix(modelo, "gemini")
+	case strings.HasPrefix(agente, "codex"):
+		return modeloCompatibleFamiliaOpenAI(modelo)
+	default:
+		return true
+	}
+}
+
+func ModeloPreferenteAgenteCompatible(agente string, conector ConnectorConfig) string {
+	modelo := strings.TrimSpace(ModeloPorDefectoAgente(agente))
+	if modelo == "" {
+		return ""
+	}
+	if !ModeloCompatibleConConector(conector, modelo) {
+		return ""
+	}
+	return modelo
+}
+
 func familiaAgente(agente string) string {
 	agente = strings.ToLower(strings.TrimSpace(agente))
 	switch {

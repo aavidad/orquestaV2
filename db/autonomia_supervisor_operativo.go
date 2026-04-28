@@ -27,27 +27,12 @@ func SeleccionarSupervisorAutonomiaOperativo(proyectoID int64, exclude string) (
 
 	exclude = strings.TrimSpace(exclude)
 	preferred := strings.TrimSpace(policy.SupervisorAgente)
-	if preferred != "" && !strings.EqualFold(preferred, exclude) {
+	if preferred != "" {
 		nombreCanonico, _, _, err := resolverAgentePorNombreCI(preferred)
 		if err == nil {
 			preferred = nombreCanonico
 		} else if err != sql.ErrNoRows {
 			return nil, err
-		}
-		agente, err := GetAgente(preferred)
-		if err == sql.ErrNoRows {
-			agente = nil
-			err = nil
-		}
-		if err != nil {
-			return nil, err
-		}
-		disponible, err := agenteAutonomiaDisponible(agente, proyectoID)
-		if err != nil {
-			return nil, err
-		}
-		if disponible {
-			return agente, nil
 		}
 	}
 	seen := map[string]struct{}{}
@@ -77,6 +62,7 @@ func SeleccionarSupervisorAutonomiaOperativo(proyectoID int64, exclude string) (
 				Preferred: preferred != "" && strings.EqualFold(strings.TrimSpace(agente.Nombre), preferred),
 				Active:    activo,
 				RoleScore: autonomiapolicy.SupervisorRoleScore(agente.Rol),
+				CostTier:  autonomiapolicy.AgentCostTier(agente.Nombre),
 			},
 		})
 		return nil
@@ -112,6 +98,23 @@ func SeleccionarSupervisorAutonomiaOperativo(proyectoID int64, exclude string) (
 			continue
 		}
 		if err := add(asignacion.Agente); err != nil {
+			return nil, err
+		}
+	}
+	tareas, err := ListarTareas(FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		return nil, err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.Agente == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case TareaAsignada, TareaEnProgreso, TareaBloqueada:
+		default:
+			continue
+		}
+		if err := add(strings.TrimSpace(*tarea.Agente)); err != nil {
 			return nil, err
 		}
 	}
@@ -177,6 +180,13 @@ func agenteAutonomiaDisponible(agente *Agente, proyectoID int64) (bool, error) {
 	if proyectoActivoID != 0 && proyectoActivoID != proyectoID {
 		return false, nil
 	}
+	if activa, err := agenteAutonomiaActivoEnProyecto(strings.TrimSpace(agente.Nombre), proyectoID); err != nil {
+		return false, err
+	} else if activa {
+		// Si el agente ya está vivo en el proyecto, reutilizarlo como supervisor
+		// efectivo no requiere otra activación sobre la cuenta compartida.
+		return true, nil
+	}
 	disponible, _, err := cuentaCompartidaPermiteActivacion(agente)
 	return disponible, err
 }
@@ -194,6 +204,14 @@ func agenteAutonomiaActivoEnProyecto(agente string, proyectoID int64) (bool, err
 		return false, err
 	} else if handle != nil {
 		return true, nil
+	}
+	if runtime, err := runtimePrincipalAgenteProyecto(agente, &proyectoID); err != nil {
+		return false, err
+	} else if runtime != nil {
+		switch strings.ToLower(strings.TrimSpace(runtime.LogicalState)) {
+		case "activo", "active", "running", "iniciando", "starting", "esperando_io", "waiting_io", "pausado", "paused":
+			return true, nil
+		}
 	}
 	return false, nil
 }

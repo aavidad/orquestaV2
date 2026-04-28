@@ -77,7 +77,7 @@ Si varios agentes trabajan sobre el mismo proyecto:
 
 ## Script manual de compatibilidad
 
-Mientras el control total del runtime vivo sigue cerrándose en el servicio, el punto de entrada manual de compatibilidad es:
+Aunque el control plane ya cubre el runtime vivo por agente/proyecto, el punto de entrada manual de compatibilidad sigue siendo:
 
 ```bash
 scripts/inicio_agente.sh <agente>

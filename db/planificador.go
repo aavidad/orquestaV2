@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"orquesta/planificadorpolicy"
-	"sort"
 	"strings"
 	"time"
 )
@@ -48,6 +47,13 @@ func PrepararPlanificacionAutomatica() error {
 	// 1.a Liberar tareas no iniciadas retenidas por agentes pausados por cuota
 	// para que el planificador pueda redistribuirlas sin tocar trabajo en progreso.
 	if err := reconciliarTareasAsignadasPorCuota(); err != nil {
+		return err
+	}
+
+	// 1.a Saneamos primero el estado autónomo vivo para que el planificador
+	// no construya decisiones sobre residuos de supervisor worker, aliases
+	// no canónicos u órdenes pendientes heredadas fuera de canon.
+	if err := ReconciliarEstadoAutonomia(); err != nil {
 		return err
 	}
 
@@ -177,6 +183,191 @@ func reconciliarTareasAsignadasPorCuota() error {
 	return nil
 }
 
+func reconciliarTareasWorkerEnSupervisorReservado() error {
+	rows, err := DB.Query(`
+		SELECT id, proyecto_id, agente
+		FROM tareas
+		WHERE proyecto_id IS NOT NULL
+		  AND agente IS NOT NULL
+		  AND trim(agente) <> ''
+		  AND estado IN ('asignada','en_progreso')`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	type tareaSupervisor struct {
+		id         int64
+		proyectoID int64
+		agente     string
+	}
+	var candidatas []tareaSupervisor
+	for rows.Next() {
+		var item tareaSupervisor
+		if err := rows.Scan(&item.id, &item.proyectoID, &item.agente); err != nil {
+			return err
+		}
+		candidatas = append(candidatas, item)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, item := range candidatas {
+		reservado, rol, err := agenteReservadoAutonomiaProyecto(strings.TrimSpace(item.agente), item.proyectoID)
+		if err != nil || !reservado {
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		if rol != "supervisor" && rol != "reviewer" {
+			continue
+		}
+		tarea, err := GetTarea(item.id)
+		if err != nil {
+			return err
+		}
+		if tareaAgenteReservadoAutonomiaDebePreservarse(tarea, rol) {
+			continue
+		}
+		anotacion := formatearAnotacionTarea("server",
+			fmt.Sprintf("tarea worker liberada automáticamente del %s reservado %s", rol, strings.TrimSpace(item.agente)),
+			time.Now().UTC())
+		if _, err := DB.Exec(`
+			UPDATE tareas
+			SET estado='libre',
+			    agente=NULL,
+			    notas=COALESCE(notas,'') || ?
+			WHERE id=?`,
+			anotacion, item.id,
+		); err != nil {
+			return err
+		}
+		Audit("sistema", "liberar_tarea_agente_reservado_autonomia", "tarea", item.id,
+			fmt.Sprintf("rol=%s agente=%s proyecto_id=%d", rol, strings.TrimSpace(item.agente), item.proyectoID))
+	}
+	return nil
+}
+
+func tareaAgenteReservadoAutonomiaDebePreservarse(tarea *Tarea, rol string) bool {
+	if tarea == nil {
+		return false
+	}
+	notas := strings.ToLower(strings.TrimSpace(tarea.Notas))
+	switch strings.TrimSpace(strings.ToLower(rol)) {
+	case "supervisor":
+		switch {
+		case strings.Contains(notas, "autonomia:post_remediation_blocked"):
+			return true
+		case strings.Contains(notas, "autonomia:needs_replan"):
+			return true
+		case strings.Contains(notas, "autonomia:blocked"):
+			return true
+		}
+	case "reviewer":
+		switch {
+		case strings.Contains(notas, "review_gate"):
+			return true
+		case strings.Contains(notas, "review_feedback"):
+			return true
+		case strings.Contains(notas, "ready_for_review"):
+			return true
+		}
+	}
+	return false
+}
+
+func reconciliarAsignacionesSupervisorStale() error {
+	enabled := true
+	policies, err := ListarProyectosAutonomia(&enabled)
+	if err != nil {
+		return err
+	}
+	for _, policy := range policies {
+		if policy == nil || !policy.Enabled || !policy.ReserveSupervisor || policy.ProyectoID <= 0 {
+			continue
+		}
+		supervisor := strings.TrimSpace(policy.SupervisorAgente)
+		if supervisor == "" {
+			continue
+		}
+		estado := AsignacionActiva
+		asignaciones, err := ListarAsignaciones(FiltroAsignaciones{
+			ProyectoID: &policy.ProyectoID,
+			Estado:     &estado,
+		})
+		if err != nil {
+			return err
+		}
+		for _, asignacion := range asignaciones {
+			if asignacion == nil {
+				continue
+			}
+			nota := strings.ToLower(strings.TrimSpace(asignacion.Nota))
+			if nota != "supervision" && nota != "supervision_automatica" && nota != "server_autobootstrap" {
+				continue
+			}
+			if strings.EqualFold(strings.TrimSpace(asignacion.Agente), supervisor) {
+				continue
+			}
+			if err := PausarAsignacion(strings.TrimSpace(asignacion.Agente), policy.ProyectoID, "supervision_stale_policy_mismatch"); err != nil {
+				return err
+			}
+			Audit("sistema", "pausar_supervision_stale", "asignacion", asignacion.ID,
+				fmt.Sprintf("agente=%s proyecto_id=%d supervisor_policy=%s", strings.TrimSpace(asignacion.Agente), policy.ProyectoID, supervisor))
+		}
+	}
+	return nil
+}
+
+func reconciliarAsignacionesAliasNoCanonico() error {
+	rows, err := DB.Query(`
+		SELECT id, agente, proyecto_id, estado
+		FROM asignaciones
+		WHERE trim(COALESCE(agente,'')) <> ''
+		  AND estado='activa'`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	type aliasActivo struct {
+		id         int64
+		agente     string
+		proyectoID int64
+		estado     string
+	}
+	var items []aliasActivo
+	for rows.Next() {
+		var item aliasActivo
+		if err := rows.Scan(&item.id, &item.agente, &item.proyectoID, &item.estado); err != nil {
+			return err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, item := range items {
+		canonico, err := CanonicalizeAgentName(strings.TrimSpace(item.agente))
+		if err != nil {
+			continue
+		}
+		if canonico == "" || canonico == strings.TrimSpace(item.agente) {
+			continue
+		}
+		if _, err := DB.Exec(`UPDATE asignaciones SET estado='pausada', nota=?, cerrada_at=NULL WHERE id=?`,
+			"alias_no_canonico:"+canonico, item.id); err != nil {
+			return err
+		}
+		Audit("sistema", "pausar_asignacion_alias_no_canonico", "asignacion", item.id,
+			fmt.Sprintf("agente=%s canonico=%s proyecto_id=%d", strings.TrimSpace(item.agente), canonico, item.proyectoID))
+	}
+	return nil
+}
+
 func reconciliarTareasHuerfanas() error {
 	rows, err := DB.Query(`
 		SELECT id, proyecto_id, agente, estado, updated_at
@@ -261,11 +452,21 @@ func tareaHuerfanaDebeConservarFrenteAcotado(tarea *Tarea) bool {
 }
 
 func tareaHuerfanaRecuperable(agente string, proyectoID int64) (bool, error) {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return false, err
+	}
 	agente = strings.TrimSpace(agente)
 	if agente == "" || proyectoID <= 0 {
 		return false, nil
 	}
 	if agentePareceOperadorManualFueraDeFlota(agente) {
+		return false, nil
+	}
+	if reservado, _, err := agenteReservadoAutonomiaProyecto(agente, proyectoID); err != nil {
+		return false, err
+	} else if reservado {
 		return false, nil
 	}
 	if asignacion, err := GetAsignacionActivaAgente(agente); err != nil && err != sql.ErrNoRows {
@@ -392,6 +593,7 @@ func agenteTieneTrabajoArrancable(agente string, proyectoID int64) (bool, error)
 	filtro := FiltroTareas{
 		Agente:     &agente,
 		ProyectoID: &proyectoID,
+		Limit:      1,
 	}
 	tareas, err := ListarTareas(filtro)
 	if err != nil {
@@ -426,6 +628,36 @@ func ResolverProyectoPlanificableAgente(agente string) (int64, error) {
 	proyectoActivoID, err := ObtenerProyectoActivoAgente(agente)
 	if err != nil {
 		return 0, err
+	}
+	tareaActivaID, err := GetTareaActivaIDPorAgente(agente)
+	if err != nil {
+		return 0, err
+	}
+	if tareaActivaID > 0 {
+		tareaActiva, err := GetTarea(tareaActivaID)
+		if err != nil {
+			return 0, err
+		}
+		if tareaActiva != nil && tareaActiva.ProyectoID != nil && *tareaActiva.ProyectoID > 0 {
+			proyectoTareaID := *tareaActiva.ProyectoID
+			disponible, err := ProyectoDisponibleParaAutonomia(proyectoTareaID)
+			if err != nil {
+				return 0, err
+			}
+			if disponible {
+				if proyectoActivoID != 0 && proyectoActivoID != proyectoTareaID {
+					if err := PausarAsignacion(agente, proyectoActivoID, "sesion_activa_en_otro_proyecto_con_tarea_viva"); err != nil {
+						return 0, err
+					}
+				}
+				if proyectoActivoID != proyectoTareaID {
+					if err := ActivarAsignacion(agente, proyectoTareaID, "tarea_activa_prioritaria"); err != nil {
+						return 0, err
+					}
+				}
+				return proyectoTareaID, nil
+			}
+		}
 	}
 	if proyectoActivoID != 0 {
 		disponible, err := ProyectoDisponibleParaAutonomia(proyectoActivoID)
@@ -552,7 +784,7 @@ func EncolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo
 			fmt.Sprintf("agente=%s proyecto=%s pool=%s motivo=%s", agente, proyecto.Slug, poolSlug, motivo))
 		return nil
 	}
-	sesionActiva, err := GetSesionActiva(agente, nil)
+	sesionActiva, err := GetSesionActivaOperativa(agente, nil)
 	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
@@ -566,7 +798,7 @@ func EncolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo
 	if pendiente {
 		return nil
 	}
-	handleProyecto, err := runtimeHandleCanonicoRecienteConFallback(agente, &proyecto.ID)
+	handleProyecto, err := runtimeHandleOperativoRecienteConFallback(agente, &proyecto.ID)
 	if err != nil {
 		return err
 	}
@@ -597,7 +829,7 @@ func EncolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo
 		}
 		return nil
 	}
-	handle, err := runtimeHandleCanonicoRecienteConFallback(agente, nil)
+	handle, err := runtimeHandleOperativoRecienteConFallback(agente, nil)
 	if err != nil {
 		return err
 	}
@@ -628,161 +860,6 @@ func EncolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo
 	return nil
 }
 
-func PoolLocalCompartidoPermiteActivacionAgenteProyecto(agente, proyectoSlug string) (bool, string, error) {
-	agente = strings.TrimSpace(agente)
-	proyectoSlug = strings.TrimSpace(proyectoSlug)
-	if agente == "" {
-		return true, "", nil
-	}
-	resolucion, err := ResolverPoliticaModelo(ResolverPoliticaInput{
-		AgenteNombre: &agente,
-		ProyectoSlug: proyectoSlug,
-	})
-	if err != nil {
-		return false, "", err
-	}
-	if resolucion == nil || strings.TrimSpace(resolucion.PoolSlug) == "" {
-		return true, "", nil
-	}
-	pool, err := GetPool(strings.TrimSpace(resolucion.PoolSlug))
-	if err != nil {
-		return false, "", err
-	}
-	if !poolUsaConectorPoolLocalCompartido(pool) {
-		return true, "", nil
-	}
-	resumen, err := ListarPoolsResumen(boolPtr(true))
-	if err != nil {
-		return false, "", err
-	}
-	for _, item := range resumen {
-		if item == nil || item.Pool == nil || item.Pool.ID != pool.ID {
-			continue
-		}
-		reservasPendientes, err := reservasPendientesPoolLocalCompartido(pool.ID, strings.TrimSpace(pool.Slug))
-		if err != nil {
-			return false, "", err
-		}
-		return item.CapacidadDisponible-reservasPendientes > 0, strings.TrimSpace(pool.Slug), nil
-	}
-	return true, strings.TrimSpace(pool.Slug), nil
-}
-
-func reservasPendientesPoolLocalCompartido(poolID int64, poolSlug string) (int, error) {
-	if poolID <= 0 || strings.TrimSpace(poolSlug) == "" {
-		return 0, nil
-	}
-	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{})
-	if err != nil {
-		return 0, err
-	}
-	now := time.Now().UTC()
-	reservas := 0
-	for _, order := range orders {
-		if !runtimeOrderOcupaPoolLocalCompartido(order, poolID, strings.TrimSpace(poolSlug), now) {
-			continue
-		}
-		reservas++
-	}
-	return reservas, nil
-}
-
-func runtimeOrderOcupaPoolLocalCompartido(order *RuntimeOrder, poolID int64, poolSlug string, now time.Time) bool {
-	if order == nil || poolID <= 0 || strings.TrimSpace(poolSlug) == "" {
-		return false
-	}
-	if !runtimeOrderOcupaCapacidadCuenta(order, now) {
-		return false
-	}
-	if agenteOcupa, err := agenteTieneSesionActivaEnPoolLocalCompartido(order.Agente, poolID); err == nil && agenteOcupa {
-		return false
-	}
-	proyectoSlug := strings.TrimSpace(runtimeOrderProyectoSlug(order))
-	if proyectoSlug == "" {
-		return false
-	}
-	agente := strings.TrimSpace(order.Agente)
-	resolucion, err := ResolverPoliticaModelo(ResolverPoliticaInput{
-		AgenteNombre: &agente,
-		ProyectoSlug: proyectoSlug,
-	})
-	if err != nil || resolucion == nil {
-		return false
-	}
-	return strings.EqualFold(strings.TrimSpace(resolucion.PoolSlug), strings.TrimSpace(poolSlug))
-}
-
-func agenteTieneSesionActivaEnPoolLocalCompartido(agente string, poolID int64) (bool, error) {
-	agente = strings.TrimSpace(agente)
-	if agente == "" || poolID <= 0 {
-		return false, nil
-	}
-	var n int
-	if err := DB.QueryRow(`
-		SELECT COUNT(*)
-		FROM sesiones
-		WHERE agente = ?
-		  AND activa = 1
-		  AND pool_id = ?`,
-		agente, poolID,
-	).Scan(&n); err != nil {
-		return false, err
-	}
-	return n > 0, nil
-}
-
-func runtimeOrderProyectoSlug(order *RuntimeOrder) string {
-	if order == nil {
-		return ""
-	}
-	if order.ProyectoID != nil && *order.ProyectoID > 0 {
-		if proyecto, err := GetProyecto(jsonNumber(*order.ProyectoID)); err == nil && proyecto != nil {
-			return strings.TrimSpace(proyecto.Slug)
-		}
-	}
-	return strings.TrimSpace(stringFromMap(mapFromJSON(order.PayloadJSON), "proyecto", ""))
-}
-
-func poolUsaConectorPoolLocalCompartido(pool *PoolCapacidad) bool {
-	if pool == nil {
-		return false
-	}
-	return planificadorpolicy.PoolUsesSharedLocalConnector(pool.Runtime, pool.MetadataJSON)
-}
-
-func existeRuntimeOrderAbierta(agente string, proyectoID *int64, tipos ...string) (bool, error) {
-	if len(tipos) == 0 {
-		return false, nil
-	}
-	estado := "pendiente"
-	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{
-		Agente: stringsPtrTrimmed(agente),
-		Estado: &estado,
-	})
-	if err != nil {
-		return false, err
-	}
-	tiposWanted := make(map[string]struct{}, len(tipos))
-	for _, tipo := range tipos {
-		tipo = strings.TrimSpace(tipo)
-		if tipo != "" {
-			tiposWanted[tipo] = struct{}{}
-		}
-	}
-	for _, order := range orders {
-		if order == nil {
-			continue
-		}
-		if proyectoID != nil && order.ProyectoID != nil && *order.ProyectoID != *proyectoID {
-			continue
-		}
-		if _, ok := tiposWanted[strings.TrimSpace(order.Tipo)]; ok {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 func liberarBacklog() error {
 	rows, err := DB.Query("SELECT id FROM tareas WHERE estado = 'backlog'")
 	if err != nil {
@@ -803,6 +880,9 @@ func liberarBacklog() error {
 		if err != nil {
 			continue
 		}
+		if tareaBacklogDebeSeguirCompactada(t) {
+			continue
+		}
 		// Si las dependencias están OK, la pasamos a libre
 		if err := ValidarDependencias(t); err == nil {
 			_, err = DB.Exec("UPDATE tareas SET estado = 'libre' WHERE id = ?", id)
@@ -812,6 +892,29 @@ func liberarBacklog() error {
 		}
 	}
 	return nil
+}
+
+func tareaBacklogDebeSeguirCompactada(t *Tarea) bool {
+	if t == nil || t.ID <= 0 || t.ProyectoID == nil || *t.ProyectoID <= 0 {
+		return false
+	}
+	if !strings.Contains(strings.ToLower(strings.TrimSpace(t.Notas)), "autonomia:finish_app") {
+		return false
+	}
+	var existe int
+	if err := DB.QueryRow(`
+		SELECT 1
+		FROM tareas
+		WHERE proyecto_id = ?
+		  AND id <> ?
+		  AND estado IN ('asignada','en_progreso','bloqueada')
+		  AND LOWER(COALESCE(notas,'')) LIKE '%autonomia:finish_app%'
+		LIMIT 1`,
+		*t.ProyectoID, t.ID,
+	).Scan(&existe); err != nil {
+		return false
+	}
+	return existe == 1
 }
 
 func ListarAgentesPlanificables() ([]*Agente, error) {
@@ -1089,8 +1192,13 @@ func ListarAgentesDisponibles() ([]*Agente, error) {
 }
 
 func ObtenerProyectoActivoAgente(agente string) (int64, error) {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return 0, err
+	}
 	var id int64
-	err := DB.QueryRow(`
+	err = DB.QueryRow(`
 		SELECT proyecto_id 
 		FROM asignaciones 
 		WHERE agente = ? AND estado = 'activa' 
@@ -1099,186 +1207,4 @@ func ObtenerProyectoActivoAgente(agente string) (int64, error) {
 		return 0, nil
 	}
 	return id, err
-}
-
-func buscarSiguienteTareaLibre(proyectoID int64) (*Tarea, error) {
-	q := FiltroTareas{
-		ProyectoID: &proyectoID,
-		Libre:      true,
-	}
-	list, err := ListarTareas(q)
-	if err != nil || len(list) == 0 {
-		return nil, err
-	}
-	// ListarTareas ya ordena por prioridad
-	return list[0], nil
-}
-
-func buscarSiguienteTareaLibreParaAgente(agente string, proyectoID int64) (*Tarea, error) {
-	q := FiltroTareas{
-		ProyectoID: &proyectoID,
-		Libre:      true,
-	}
-	list, err := ListarTareas(q)
-	if err != nil || len(list) == 0 {
-		return nil, err
-	}
-	if strings.TrimSpace(agente) == "" || len(list) == 1 {
-		return list[0], nil
-	}
-	preferirMicroprogramacion, err := agentePrefiereTrabajoMicroprogramacion(strings.TrimSpace(agente), proyectoID)
-	if err != nil {
-		return nil, err
-	}
-	moduloPreferido, err := moduloPreferidoAgenteProyecto(strings.TrimSpace(agente), proyectoID)
-	if err != nil {
-		return nil, err
-	}
-	modulosOcupados, err := modulosOcupadosProyecto(proyectoID, strings.TrimSpace(agente))
-	if err != nil {
-		return nil, err
-	}
-	candidatas := make([]*Tarea, 0, len(list))
-	candidatas = append(candidatas, list...)
-	sort.SliceStable(candidatas, func(i, j int) bool {
-		return mejorTareaLibreParaAgente(candidatas[i], candidatas[j], moduloPreferido, modulosOcupados, preferirMicroprogramacion)
-	})
-	return candidatas[0], nil
-}
-
-func mejorTareaLibreParaAgente(a, b *Tarea, moduloPreferido string, modulosOcupados map[string]bool, preferirMicroprogramacion bool) bool {
-	return planificadorpolicy.PreferFreeTaskCandidate(
-		freeTaskCandidateSnapshot(a),
-		freeTaskCandidateSnapshot(b),
-		moduloPreferido,
-		modulosOcupados,
-		preferirMicroprogramacion,
-	)
-}
-
-func scoreTareaLibreParaAgente(t *Tarea, moduloPreferido string, modulosOcupados map[string]bool, preferirMicroprogramacion bool) int {
-	return planificadorpolicy.ScoreFreeTaskCandidate(
-		freeTaskCandidateSnapshot(t),
-		moduloPreferido,
-		modulosOcupados,
-		preferirMicroprogramacion,
-	)
-}
-
-func freeTaskCandidateSnapshot(task *Tarea) *planificadorpolicy.FreeTaskCandidateSnapshot {
-	if task == nil {
-		return nil
-	}
-	snapshot := &planificadorpolicy.FreeTaskCandidateSnapshot{
-		ID:              task.ID,
-		Module:          task.Modulo,
-		Priority:        string(task.Prioridad),
-		ContractDefined: task.ContratoDefinido,
-	}
-	if hasSpec, err := tareaTieneEspecificacionActiva(task.ID); err == nil {
-		snapshot.HasActiveSpec = hasSpec
-	}
-	return snapshot
-}
-
-func agentePrefiereTrabajoMicroprogramacion(agente string, proyectoID int64) (bool, error) {
-	agente = strings.TrimSpace(agente)
-	if agente == "" || proyectoID <= 0 {
-		return false, nil
-	}
-	proyecto, err := GetProyecto(jsonNumber(proyectoID))
-	if err != nil {
-		return false, err
-	}
-	poolSlug, err := resolverPoolLocalCompartidoAgenteProyecto(agente, strings.TrimSpace(proyecto.Slug))
-	if err != nil {
-		return false, err
-	}
-	return strings.TrimSpace(poolSlug) != "", nil
-}
-
-func tareaTieneEspecificacionActiva(tareaID int64) (bool, error) {
-	if tareaID <= 0 {
-		return false, nil
-	}
-	var total int
-	if err := DB.QueryRow(`
-		SELECT COUNT(*)
-		FROM especificaciones_funcion
-		WHERE tarea_id = ?
-		  AND estado = 'activa'`, tareaID).Scan(&total); err != nil {
-		return false, err
-	}
-	return total > 0, nil
-}
-
-func moduloPreferidoAgenteProyecto(agente string, proyectoID int64) (string, error) {
-	agente = strings.TrimSpace(agente)
-	if agente == "" || proyectoID <= 0 {
-		return "", nil
-	}
-	rows, err := DB.Query(`
-		SELECT modulo
-		FROM tareas
-		WHERE proyecto_id = ?
-		  AND agente = ?
-		  AND trim(modulo) <> ''
-		  AND estado IN ('asignada','en_progreso','bloqueada','completada')
-		ORDER BY
-		  CASE estado
-		    WHEN 'en_progreso' THEN 0
-		    WHEN 'bloqueada' THEN 1
-		    WHEN 'asignada' THEN 2
-		    ELSE 3
-		  END,
-		  updated_at DESC,
-		  id DESC
-		LIMIT 5`, proyectoID, agente)
-	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var modulo string
-		if err := rows.Scan(&modulo); err != nil {
-			return "", err
-		}
-		modulo = strings.TrimSpace(modulo)
-		if modulo != "" {
-			return modulo, nil
-		}
-	}
-	return "", rows.Err()
-}
-
-func modulosOcupadosProyecto(proyectoID int64, agente string) (map[string]bool, error) {
-	out := make(map[string]bool)
-	if proyectoID <= 0 {
-		return out, nil
-	}
-	rows, err := DB.Query(`
-		SELECT DISTINCT COALESCE(modulo,''), COALESCE(agente,'')
-		FROM tareas
-		WHERE proyecto_id = ?
-		  AND trim(COALESCE(modulo,'')) <> ''
-		  AND trim(COALESCE(agente,'')) <> ''
-		  AND estado IN ('asignada','en_progreso','bloqueada')`, proyectoID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var modulo string
-		var asignado string
-		if err := rows.Scan(&modulo, &asignado); err != nil {
-			return nil, err
-		}
-		modulo = strings.ToLower(strings.TrimSpace(modulo))
-		asignado = strings.TrimSpace(asignado)
-		if modulo == "" || strings.EqualFold(asignado, agente) {
-			continue
-		}
-		out[modulo] = true
-	}
-	return out, rows.Err()
 }

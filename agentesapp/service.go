@@ -1587,6 +1587,9 @@ func (s *Service) applyRecentSemanticTranscriptSignals(nombre string, row *Row, 
 	if !(row.WorkerAlive || row.hasOperationalAnchor()) {
 		return nil
 	}
+	if applyDurableSemanticProgressFromHandle(row, now, threshold) {
+		return nil
+	}
 	since := now.Add(-threshold)
 	filter := db.FiltroRuntimeTranscript{
 		Agente:     &nombre,
@@ -1610,6 +1613,42 @@ func (s *Service) applyRecentSemanticTranscriptSignals(nombre string, row *Row, 
 		row.WorkerLastOutput = &ts
 	}
 	return nil
+}
+
+func applyDurableSemanticProgressFromHandle(row *Row, now time.Time, threshold time.Duration) bool {
+	if row == nil || row.Handle == nil || strings.TrimSpace(row.Handle.MetadataJSON) == "" {
+		return false
+	}
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(row.Handle.MetadataJSON), &meta); err != nil {
+		return false
+	}
+	classification := stringMapValueAgent(meta, "semantic_progress_classification")
+	if !runtimeTranscriptClassificationCarriesSemanticProgress(classification) {
+		return false
+	}
+	rawAt := stringMapValueAgent(meta, "semantic_progress_at")
+	if rawAt == "" {
+		return false
+	}
+	ts, err := time.Parse(time.RFC3339Nano, rawAt)
+	if err != nil {
+		ts, err = time.Parse(time.RFC3339, rawAt)
+		if err != nil {
+			return false
+		}
+	}
+	ts = ts.UTC()
+	if threshold > 0 && ts.Before(now.Add(-threshold)) {
+		return false
+	}
+	if row.WorkerLastProgress == nil || row.WorkerLastProgress.Before(ts) {
+		row.WorkerLastProgress = &ts
+	}
+	if row.WorkerLastOutput == nil || row.WorkerLastOutput.Before(ts) {
+		row.WorkerLastOutput = &ts
+	}
+	return true
 }
 
 func latestSemanticProgressTranscript(items []*db.RuntimeTranscriptEntry) *db.RuntimeTranscriptEntry {
@@ -4017,6 +4056,7 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 	}
 	if hasActiveTask && continuidadPendienteEfectiva && row.MailboxContinuityPending == 1 &&
 		(row.WorkerSupportsContinuityRecovery(now) ||
+			workerRunningFresh ||
 			(row.workerHeartbeatRecent(now) && strings.EqualFold(strings.TrimSpace(row.handleDriver()), "tmux_cli_session"))) {
 		return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad pendiente útil")
 	}
@@ -4030,6 +4070,11 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 			row.workerWarmupRecent(now) {
 			return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad session_resume lista")
 		}
+	}
+	if hasActiveTask && workerRunningFresh &&
+		strings.EqualFold(strings.TrimSpace(row.LastAutonomyState), "work_confirmed") &&
+		autonomySourceCanCarryRecentSemanticProgress(row.LastAutonomySource) {
+		return "trabajando", firstNonEmpty(row.activitySummary(), "worker "+workerState)
 	}
 	if hasActiveTask && workerRunningFresh && workerState == "starting" {
 		return "arrancando", firstNonEmpty(row.activitySummary(), "worker starting")
@@ -4121,14 +4166,14 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 	if hasActiveTask && (estadoRuntimeRoto(runtimeEstado) || estadoHandleRoto(handleEstado)) && !recentOperationalOverride {
 		return "bloqueado_por_runtime", firstNonEmpty(row.runtimeState(), row.handleState())
 	}
-	if hasActiveTask && hasBlockedTask && recentActivity {
-		return "saturado", fmt.Sprintf("%d activas, %d bloqueadas", row.OpenTasks, row.BlockedTasks)
-	}
 	if hasActiveTask && workerRunningFresh && row.workerHasRecentWorkSignal(now, workerOutputStaleThreshold) {
 		return "trabajando", firstNonEmpty(row.activitySummary(), "worker "+workerState)
 	}
 	if hasActiveTask && workerRunningFresh && recentSemanticProgress {
 		return "trabajando", firstNonEmpty(row.activitySummary(), "worker "+workerState)
+	}
+	if hasActiveTask && hasBlockedTask && recentActivity {
+		return "saturado", fmt.Sprintf("%d activas, %d bloqueadas", row.OpenTasks, row.BlockedTasks)
 	}
 	if hasActiveTask && workerRunningFresh && row.workerWarmupRecent(now) {
 		return "arrancando", firstNonEmpty(row.activitySummary(), "worker "+workerState)

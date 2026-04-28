@@ -489,6 +489,21 @@ func TestGetRuntimeHandleActivoAgenteProyectoPrefiereWorkerEstructuradoFrescoYCi
 	}
 }
 
+func TestRuntimeHandleCacheKeyCanonicalizaAliasCodex(t *testing.T) {
+	prepararDBTemporal(t)
+	for _, nombre := range []string{"Codex77", "codex77"} {
+		if err := RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", nombre, err)
+		}
+	}
+	proyectoID := int64(77)
+	gotLower := runtimeHandleCacheKey("codex77", &proyectoID)
+	gotCanon := runtimeHandleCacheKey("Codex77", &proyectoID)
+	if gotLower != gotCanon || gotCanon != "codex77#77" {
+		t.Fatalf("cache key inesperada: lower=%q canon=%q", gotLower, gotCanon)
+	}
+}
+
 func TestGetRuntimeHandleActivoAgenteProyectoOmiteLegacyTMUXPreferredSinOptIn(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
@@ -1221,6 +1236,91 @@ func TestSincronizarRuntimeHandleSupervisadoNormalizaTMUXDesdeSnapshotEstructura
 	}
 	if got := strings.TrimSpace(refreshed.HandleRef); got != "orq-codextmuxsnap-1/%8" {
 		t.Fatalf("handle_ref canonico esperado, got=%q", got)
+	}
+}
+
+func TestSincronizarRuntimeHandleSupervisadoReanimaTMUXDesdeSnapshotRunningSinPIDObservable(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexTMUXLive", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	runDir := filepath.Join(tmp, "tmux-snapshot-live")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir runDir: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"CodexTMUXLive","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codextmuxlive-1","tmux_pane_id":"%9","status_path":"`+statusPath+`","heartbeat_path":"`+heartbeatPath+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","updated_at":"`+now+`","alive":true,"last_output_at":"`+now+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now+`","last_output_at":"`+now+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+
+	runtimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "CodexTMUXLive",
+		ProyectoID:   &proyectoID,
+		LogicalState: "degradado",
+		ProcessState: "missing",
+	})
+	if err != nil {
+		t.Fatalf("crear runtime: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	handleID := mustInsertID(t, `INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'fallido', ?, ?)`,
+		"CodexTMUXLive", proyectoID, runtimeID, "cli", "process", "99998", string(metaJSON), time.Now().UTC())
+	handle, err := GetRuntimeHandle(handleID)
+	if err != nil {
+		t.Fatalf("get handle inicial: %v", err)
+	}
+
+	refreshed, refreshedRuntime, _, err := SincronizarRuntimeHandleSupervisado(handle, nil, "test_sync_tmux_snapshot_live")
+	if err != nil {
+		t.Fatalf("sincronizar handle snapshot live: %v", err)
+	}
+	if refreshed == nil || strings.TrimSpace(refreshed.Estado) != "activo" {
+		t.Fatalf("handle deberia reanimarse activo: %+v", refreshed)
+	}
+	if got := strings.TrimSpace(refreshed.Transporte); got != "tmux" {
+		t.Fatalf("transporte tmux esperado, got=%q", got)
+	}
+	if got := strings.TrimSpace(refreshed.HandleKind); got != "session" {
+		t.Fatalf("handle_kind session esperado, got=%q", got)
+	}
+	if got := strings.TrimSpace(refreshed.HandleRef); got != "orq-codextmuxlive-1/%9" {
+		t.Fatalf("handle_ref canonico esperado, got=%q", got)
+	}
+	if refreshedRuntime == nil {
+		refreshedRuntime, err = GetRuntime(runtimeID)
+		if err != nil {
+			t.Fatalf("get runtime: %v", err)
+		}
+	}
+	if refreshedRuntime == nil || strings.TrimSpace(refreshedRuntime.LogicalState) != "activo" || strings.TrimSpace(refreshedRuntime.ProcessState) != "running" {
+		t.Fatalf("runtime deberia reanimarse por snapshot estructurado: %+v", refreshedRuntime)
 	}
 }
 

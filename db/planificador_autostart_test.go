@@ -1,6 +1,7 @@
 package db
 
 import (
+	"database/sql"
 	"encoding/json"
 	"path/filepath"
 	"strings"
@@ -1890,6 +1891,323 @@ func TestPlanificarTareasAutomaticamenteNoCuentaSupervisorReservadoComoWorker(t 
 	}
 }
 
+func TestPrepararPlanificacionAutomaticaLiberaTareaWorkerDeSupervisorReservado(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexSupervisor", "programador"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:        proyectoID,
+		Enabled:           true,
+		SupervisorAgente:  "CodexSupervisor",
+		ReserveSupervisor: true,
+		EstadoAutonomia:   AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := ActivarAsignacion("CodexSupervisor", proyectoID, "supervision_automatica"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Cerrar app",
+		Descripcion: "Trabajo worker heredado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:finish_app",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "CodexSupervisor"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "CodexSupervisor"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	if err := PrepararPlanificacionAutomatica(); err != nil {
+		t.Fatalf("preparar planificacion: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Estado != TareaLibre || tarea.Agente != nil {
+		t.Fatalf("la tarea worker deberia liberarse del supervisor reservado: %+v", tarea)
+	}
+}
+
+func TestPrepararPlanificacionAutomaticaConservaTareaDeSupervisionEnSupervisorReservado(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexSupervisor", "programador"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:        proyectoID,
+		Enabled:           true,
+		SupervisorAgente:  "CodexSupervisor",
+		ReserveSupervisor: true,
+		EstadoAutonomia:   AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := ActivarAsignacion("CodexSupervisor", proyectoID, "supervision_automatica"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Resolver follow-up bloqueado",
+		Descripcion: "Trabajo de supervisión real",
+		ProyectoID:  &proyectoID,
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:post_remediation_blocked;tarea:41;agente_objetivo:Codex2",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "CodexSupervisor"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "CodexSupervisor"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	if err := PrepararPlanificacionAutomatica(); err != nil {
+		t.Fatalf("preparar planificacion: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Agente == nil || *tarea.Agente != "CodexSupervisor" || tarea.Estado != TareaEnProgreso {
+		t.Fatalf("la tarea de supervisión debería conservarse: %+v", tarea)
+	}
+}
+
+func TestPrepararPlanificacionAutomaticaLiberaTareaWorkerDeReviewerReservado(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexReviewer", "programador"); err != nil {
+		t.Fatalf("registrar reviewer: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:      proyectoID,
+		Enabled:         true,
+		ReviewerAgente:  "CodexReviewer",
+		ReserveReviewer: true,
+		EstadoAutonomia: AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := ActivarAsignacion("CodexReviewer", proyectoID, "review_automatica"); err != nil {
+		t.Fatalf("activar asignacion reviewer: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Cerrar app",
+		Descripcion: "Trabajo worker heredado en reviewer reservado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:finish_app",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	if err := PrepararPlanificacionAutomatica(); err != nil {
+		t.Fatalf("preparar planificacion: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Estado != TareaLibre || tarea.Agente != nil {
+		t.Fatalf("la tarea worker deberia liberarse del reviewer reservado: %+v", tarea)
+	}
+}
+
+func TestPrepararPlanificacionAutomaticaConservaTareaEspecialDeReviewerReservado(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexReviewer", "programador"); err != nil {
+		t.Fatalf("registrar reviewer: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:      proyectoID,
+		Enabled:         true,
+		ReviewerAgente:  "CodexReviewer",
+		ReserveReviewer: true,
+		EstadoAutonomia: AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := ActivarAsignacion("CodexReviewer", proyectoID, "review_automatica"); err != nil {
+		t.Fatalf("activar asignacion reviewer: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Revisión final",
+		Descripcion: "Trabajo real de reviewer reservado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "review_gate:91",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	if err := PrepararPlanificacionAutomatica(); err != nil {
+		t.Fatalf("preparar planificacion: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Agente == nil || *tarea.Agente != "CodexReviewer" || tarea.Estado != TareaEnProgreso {
+		t.Fatalf("la tarea especial del reviewer debería conservarse: %+v", tarea)
+	}
+}
+
+func TestPrepararPlanificacionAutomaticaPausaSupervisorStaleFueraDePolicy(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexSupervisorViejo", "programador"); err != nil {
+		t.Fatalf("registrar supervisor viejo: %v", err)
+	}
+	if err := RegistrarAgente("CodexSupervisorNuevo", "programador"); err != nil {
+		t.Fatalf("registrar supervisor nuevo: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:        proyectoID,
+		Enabled:           true,
+		SupervisorAgente:  "CodexSupervisorNuevo",
+		ReserveSupervisor: true,
+		EstadoAutonomia:   AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := ActivarAsignacion("CodexSupervisorViejo", proyectoID, "supervision_automatica"); err != nil {
+		t.Fatalf("activar asignacion vieja: %v", err)
+	}
+
+	if err := PrepararPlanificacionAutomatica(); err != nil {
+		t.Fatalf("preparar planificacion: %v", err)
+	}
+
+	asignacion, err := GetAsignacionActivaAgente("CodexSupervisorViejo")
+	if err != nil && err != sql.ErrNoRows {
+		t.Fatalf("get asignacion activa: %v", err)
+	}
+	if asignacion != nil {
+		t.Fatalf("la asignacion de supervision vieja deberia pausarse: %+v", asignacion)
+	}
+}
+
+func TestPrepararPlanificacionAutomaticaPausaAsignacionActivaConAliasNoCanonico(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente canonico: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := DB.Exec(`INSERT INTO asignaciones (agente, proyecto_id, estado, nota) VALUES ('codex2', ?, 'activa', 'handoff_recibido_desde_Codex4')`, proyectoID); err != nil {
+		t.Fatalf("insert asignacion alias: %v", err)
+	}
+
+	if err := PrepararPlanificacionAutomatica(); err != nil {
+		t.Fatalf("preparar planificacion: %v", err)
+	}
+
+	var estado, nota string
+	if err := DB.QueryRow(`SELECT estado, COALESCE(nota,'') FROM asignaciones WHERE agente='codex2' AND proyecto_id=? ORDER BY id DESC LIMIT 1`, proyectoID).Scan(&estado, &nota); err != nil {
+		t.Fatalf("query asignacion alias: %v", err)
+	}
+	if estado != "pausada" {
+		t.Fatalf("la asignacion alias deberia quedar pausada, got=%s nota=%q", estado, nota)
+	}
+	if !strings.Contains(nota, "alias_no_canonico:Codex2") {
+		t.Fatalf("nota inesperada tras pausar alias no canonico: %q", nota)
+	}
+}
+
 func TestPlanificarTareasAutomaticamenteRespetaMaxWorkersAutonomia(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "CodexBusy", "CodexWorker")
@@ -2851,6 +3169,81 @@ func TestResolverProyectoPlanificableAgenteLiberaAgenteSiSuFrenteActivoNoTieneTr
 	}
 	if len(asignaciones) != 1 || asignaciones[0].ProyectoID != proyectoA || asignaciones[0].Nota != "sin_trabajo_espera_automatica" {
 		t.Fatalf("la asignacion deberia quedar pausada para preservar afinidad: %+v", asignaciones)
+	}
+}
+
+func TestResolverProyectoPlanificableAgentePrefiereProyectoDeTareaVivaSobreAsignacionAjena(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexPg1")
+
+	if err := RegistrarAgente("CodexPg1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre='CodexPg1'`); err != nil {
+		t.Fatalf("marcar agente disponible: %v", err)
+	}
+
+	proyectoA, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador-a",
+		Nombre:  "Orquestador A",
+		RutaAbs: filepath.Join(tmp, "orquestador-a"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto A: %v", err)
+	}
+	proyectoB, err := UpsertProyecto(&Proyecto{
+		Slug:    "demo-b",
+		Nombre:  "Demo B",
+		RutaAbs: filepath.Join(tmp, "demo-b"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto B: %v", err)
+	}
+	if err := ActivarAsignacion("CodexPg1", proyectoA, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion A: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Trabajo principal",
+		Descripcion: "frente vivo del proyecto A",
+		ProyectoID:  &proyectoA,
+		Modulo:      "controlplane",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea A: %v", err)
+	}
+	if err := TomarTarea(tareaID, "CodexPg1"); err != nil {
+		t.Fatalf("tomar tarea A: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "CodexPg1"); err != nil {
+		t.Fatalf("iniciar tarea A: %v", err)
+	}
+	if err := PausarAsignacion("CodexPg1", proyectoA, "handoff_cedido"); err != nil {
+		t.Fatalf("pausar asignacion A: %v", err)
+	}
+	if err := ActivarAsignacion("CodexPg1", proyectoB, "frente ajeno temporal"); err != nil {
+		t.Fatalf("activar asignacion B: %v", err)
+	}
+
+	proyectoPlanificable, err := ResolverProyectoPlanificableAgente("CodexPg1")
+	if err != nil {
+		t.Fatalf("resolver proyecto planificable: %v", err)
+	}
+	if proyectoPlanificable != proyectoA {
+		t.Fatalf("deberia volver al proyecto de la tarea viva, got=%d want=%d", proyectoPlanificable, proyectoA)
+	}
+
+	asignacionActiva, err := GetAsignacionActivaAgente("CodexPg1")
+	if err != nil {
+		t.Fatalf("get asignacion activa: %v", err)
+	}
+	if asignacionActiva == nil || asignacionActiva.ProyectoID != proyectoA {
+		t.Fatalf("la asignacion activa deberia volver al proyecto de la tarea viva: %+v", asignacionActiva)
 	}
 }
 

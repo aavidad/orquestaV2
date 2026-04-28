@@ -88,6 +88,10 @@ Elegirlo por:
 4. Si el presupuesto restante del pool baja de umbral, degradar primero el razonamiento antes de cambiar de pool.
 5. Si el presupuesto restante no permite terminar bien, forzar `handoff`.
 6. Las revisiones importantes deben evitar el mismo perfil exacto que el autor cuando sea posible.
+7. Antes de subir a `xhigh` o `prime`, exigir evidencia: atasco real, review fallida repetida, criticidad alta o riesgo técnico demostrado.
+8. En implementación normal, preferir salida corta y protocolos compactos (`caveman`, `compact` o equivalente) antes que aumentar modelo o razonamiento.
+9. Ante atasco operativo, preferir `repair-helper local rápido` antes que subir directamente a `prime`.
+10. En entorno local/Ollama, mantener un solo modelo cargado a la vez salvo excepción explícita; si hacen falta varios agentes, reusar primero el mismo modelo.
 
 ## Regla de evaluacion para modelos locales
 

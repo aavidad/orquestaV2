@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 )
@@ -29,7 +30,16 @@ var (
 	guardarSesionActivaSyncRuntimeDesdeSesion = UpsertRuntimeDesdeSesion
 	guardarSesionActivaSyncHandleDesdeSesion  = UpsertRuntimeHandleDesdeSesion
 	guardarSesionActivaAuditFn                = Audit
+	proyectoRutaEfectivaCache                 struct {
+		mu    sync.Mutex
+		items map[string]cachedProyectoRutaEfectiva
+	}
 )
+
+type cachedProyectoRutaEfectiva struct {
+	project *Proyecto
+	expires time.Time
+}
 
 // IniciarSesion marca al agente como activo y crea una sesión.
 func IniciarSesion(agente string) (int64, error) {
@@ -104,6 +114,11 @@ func IniciarSesionContexto(in SesionInicio) (*Sesion, error) {
 
 // FinSesion marca al agente como inactivo y cierra su sesión.
 func FinSesion(agente string) error {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return err
+	}
 	tx, err := DB.Begin()
 	if err != nil {
 		return err
@@ -164,7 +179,19 @@ func ObtenerUltimaSesion(agente string, proyectoID *int64) (*Sesion, error) {
 	return ObtenerUltimaSesionConFiltro(agente, proyectoID, "")
 }
 
+func ObtenerUltimaSesionPrepareLite(agente string, proyectoID *int64) (*Sesion, error) {
+	if sesion, ok, err := obtenerUltimaSesionPrepareLiteReadOnly(agente, proyectoID); ok {
+		return sesion, err
+	}
+	return ObtenerUltimaSesion(agente, proyectoID)
+}
+
 func ObtenerUltimaSesionConFiltro(agente string, proyectoID *int64, cwd string) (*Sesion, error) {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return nil, err
+	}
 	q := `
 		SELECT s.id, s.agente, s.conector_id, COALESCE(c.slug,''), COALESCE(c.nombre,''),
 		       s.proyecto_id, COALESCE(p.slug,''), COALESCE(p.nombre,''),
@@ -188,7 +215,63 @@ func ObtenerUltimaSesionConFiltro(agente string, proyectoID *int64, cwd string) 
 	return escanearSesion(DB.QueryRow(q, args...))
 }
 
+func obtenerUltimaSesionPrepareLiteReadOnly(agente string, proyectoID *int64) (*Sesion, bool, error) {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return nil, true, err
+	}
+	backend, cfg, err := resolveOpenConfig()
+	if err != nil {
+		return nil, false, err
+	}
+	driver := normalizedDriverName(cfg.Driver)
+	if !supportsPrepareLiteReadOnlyBackend(driver) {
+		return nil, false, nil
+	}
+	disabled := false
+	skipPost := true
+	cfg = applyOpenOptions(cfg, OpenOptions{
+		BootstrapSchema:    &disabled,
+		SkipPostMigrations: &skipPost,
+		ReadOnly:           true,
+	})
+	cfg.MaxOpenConns = 1
+	raw, err := backend.Open(cfg)
+	if err != nil {
+		return nil, true, err
+	}
+	defer raw.Close()
+	q := `
+		SELECT s.id, s.agente, s.conector_id, COALESCE(c.slug,''), COALESCE(c.nombre,''),
+		       s.proyecto_id, COALESCE(p.slug,''), COALESCE(p.nombre,''),
+		       s.inicio, s.fin, s.activa, s.estado, s.cwd, s.herramienta,
+		       s.external_session_id, s.resume_payload_json, s.resumen_continuidad,
+		       s.branch, s.heartbeat_at, s.host, s.pid
+		FROM sesiones s
+		LEFT JOIN conectores c ON c.id = s.conector_id
+		LEFT JOIN proyectos p ON p.id = s.proyecto_id
+		WHERE s.agente = ?`
+	args := []any{agente}
+	if proyectoID != nil {
+		q += ` AND s.proyecto_id = ?`
+		args = append(args, *proyectoID)
+	}
+	q += ` ORDER BY s.id DESC LIMIT 1`
+	row := raw.QueryRow(q, args...)
+	sesion, err := escanearSesion(row)
+	if err == sql.ErrNoRows {
+		return nil, true, nil
+	}
+	return sesion, true, err
+}
+
 func GuardarSesionActiva(agente string, proyectoID *int64, upd SesionUpdate) error {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return err
+	}
 	q := `SELECT id FROM sesiones WHERE agente = ? AND activa = 1`
 	args := []any{agente}
 	if proyectoID != nil {
@@ -261,7 +344,7 @@ func GuardarSesionActiva(agente string, proyectoID *int64, upd SesionUpdate) err
 	}
 
 	updateArgs = append(updateArgs, id)
-	_, err := DB.Exec(`UPDATE sesiones SET `+strings.Join(partes, ", ")+` WHERE id = ?`, updateArgs...)
+	_, err = DB.Exec(`UPDATE sesiones SET `+strings.Join(partes, ", ")+` WHERE id = ?`, updateArgs...)
 	if err == nil {
 		if sesionUpdatePuedeUsarCaminoLigero(upd) {
 			return nil
@@ -362,6 +445,7 @@ func SesionEsOperativa(sesion *Sesion) bool {
 }
 
 func runtimeHandleCacheKey(agente string, proyectoID *int64) string {
+	agente = canonicalPreferredAgentName(agente)
 	key := strings.ToLower(strings.TrimSpace(agente))
 	if proyectoID != nil && *proyectoID > 0 {
 		key = fmt.Sprintf("%s#%d", key, *proyectoID)
@@ -534,7 +618,7 @@ func runtimeHandleTMUXCurrentPathMismatch(handle *RuntimeHandle) bool {
 		}
 		return false
 	}
-	proyecto, err := GetProyectoConRutaEfectiva(strconv.FormatInt(*handle.ProyectoID, 10), current)
+	proyecto, err := getProyectoConRutaEfectivaCached(*handle.ProyectoID, current)
 	if err != nil || proyecto == nil {
 		return false
 	}
@@ -543,6 +627,35 @@ func runtimeHandleTMUXCurrentPathMismatch(handle *RuntimeHandle) bool {
 		return false
 	}
 	return !runtimePathsEqual(current, preferred)
+}
+
+func getProyectoConRutaEfectivaCached(projectID int64, current string) (*Proyecto, error) {
+	if projectID <= 0 {
+		return nil, nil
+	}
+	current = strings.TrimSpace(current)
+	cacheKey := fmt.Sprintf("%d|%s", projectID, current)
+	now := time.Now().UTC()
+	proyectoRutaEfectivaCache.mu.Lock()
+	if item, ok := proyectoRutaEfectivaCache.items[cacheKey]; ok && now.Before(item.expires) {
+		proyectoRutaEfectivaCache.mu.Unlock()
+		return item.project, nil
+	}
+	proyectoRutaEfectivaCache.mu.Unlock()
+	proyecto, err := GetProyectoConRutaEfectiva(strconv.FormatInt(projectID, 10), current)
+	if err != nil || proyecto == nil {
+		return proyecto, err
+	}
+	proyectoRutaEfectivaCache.mu.Lock()
+	if proyectoRutaEfectivaCache.items == nil {
+		proyectoRutaEfectivaCache.items = map[string]cachedProyectoRutaEfectiva{}
+	}
+	proyectoRutaEfectivaCache.items[cacheKey] = cachedProyectoRutaEfectiva{
+		project: proyecto,
+		expires: now.Add(15 * time.Second),
+	}
+	proyectoRutaEfectivaCache.mu.Unlock()
+	return proyecto, nil
 }
 
 func runtimePathsEqual(a, b string) bool {
@@ -663,6 +776,7 @@ func aplicarEstadoVisibleAgente(agente *Agente, sesion *Sesion) {
 	}
 	proyectarBloqueoVisibleDesdePresupuestoObservado(agente)
 	sincronizarReanimacionVisibleDesdePresupuesto(agente)
+	limpiarPausaVisibleNoOperativa(agente)
 	if !agenteBloqueadoPorCuotaOperativo(agente) && !strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "activo") {
 		mantenerPausaVisible := agenteMotivoPausaOperativaVisible(agente.MotivoPausa)
 		if !mantenerPausaVisible && agente.ReanimarAt != nil && agente.ReanimarAt.After(time.Now().UTC()) {
@@ -709,6 +823,24 @@ func aplicarEstadoVisibleAgente(agente *Agente, sesion *Sesion) {
 		return
 	}
 	agente.EstadoSesion = "disponible"
+}
+
+func limpiarPausaVisibleNoOperativa(agente *Agente) {
+	if agente == nil {
+		return
+	}
+	if agenteMotivoPausaOperativaVisible(agente.MotivoPausa) {
+		return
+	}
+	now := time.Now().UTC()
+	if strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "activo") {
+		agente.ReanimarAt = nil
+		agente.MotivoPausa = ""
+		return
+	}
+	if agente.ReanimarAt != nil && !agente.ReanimarAt.IsZero() && !agente.ReanimarAt.After(now) {
+		agente.ReanimarAt = nil
+	}
 }
 
 func agenteMotivoPausaOperativaVisible(motivo string) bool {
@@ -990,21 +1122,66 @@ func ListarAgentesCuentasLigero() ([]*Agente, error) {
 }
 
 func GetAgentePrepareLite(nombre string) (*Agente, error) {
+	if canonical, _, _, err := resolverAgentePorNombreCI(strings.TrimSpace(nombre)); err == nil {
+		nombre = canonical
+	} else if err == sql.ErrNoRows {
+		if canonical, err := CanonicalizeAgentName(nombre); err == nil {
+			nombre = canonical
+		}
+	}
 	nombre = strings.TrimSpace(nombre)
 	if nombre == "" {
 		return nil, nil
+	}
+	if agente, ok, err := getAgentePrepareLiteReadOnly(nombre); ok {
+		return agente, err
 	}
 	dbHandle := DB
 	if dbHandle == nil || dbHandle.DB == nil {
 		return nil, nil
 	}
-	row := dbHandle.QueryRow(`
+	return scanAgentePrepareLiteRow(dbHandle.QueryRow(`
 		SELECT nombre, rol, activo, habilitado, COALESCE(estado_sesion,''), ultima_sesion,
 		       estado_cuota, reanimar_at, motivo_pausa
 		FROM agentes
-		WHERE nombre = ? OR lower(nombre) = lower(?)
-		ORDER BY CASE WHEN nombre = ? THEN 0 ELSE 1 END
-		LIMIT 1`, nombre, nombre, nombre)
+		WHERE nombre = ?
+		LIMIT 1`, nombre))
+}
+
+func getAgentePrepareLiteReadOnly(nombre string) (*Agente, bool, error) {
+	if canonical, err := CanonicalizeAgentName(nombre); err == nil {
+		nombre = canonical
+	}
+	backend, cfg, err := resolveOpenConfig()
+	if err != nil {
+		return nil, false, err
+	}
+	if !supportsPrepareLiteReadOnlyBackend(cfg.Driver) {
+		return nil, false, nil
+	}
+	disabled := false
+	skipPost := true
+	cfg = applyOpenOptions(cfg, OpenOptions{
+		BootstrapSchema:    &disabled,
+		SkipPostMigrations: &skipPost,
+		ReadOnly:           true,
+	})
+	cfg.MaxOpenConns = 1
+	raw, err := backend.Open(cfg)
+	if err != nil {
+		return nil, true, err
+	}
+	defer raw.Close()
+	agente, err := scanAgentePrepareLiteRow(raw.QueryRow(`
+		SELECT nombre, rol, activo, habilitado, COALESCE(estado_sesion,''), ultima_sesion,
+		       estado_cuota, reanimar_at, motivo_pausa
+		FROM agentes
+		WHERE nombre = ?
+		LIMIT 1`, nombre))
+	return agente, true, err
+}
+
+func scanAgentePrepareLiteRow(row *sql.Row) (*Agente, error) {
 	a := &Agente{}
 	var ultima sql.NullTime
 	var reanimar sql.NullTime
@@ -1222,6 +1399,13 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 }
 
 func listarRuntimeHandlesIdentidadCuenta(agente *string) ([]*RuntimeHandle, error) {
+	if agente != nil && strings.TrimSpace(*agente) != "" {
+		agenteCanonico, err := CanonicalizeAgentName(*agente)
+		if err != nil {
+			return nil, err
+		}
+		*agente = agenteCanonico
+	}
 	handles, err := ListarRuntimeHandlesCanonicosRecientes(agente)
 	if err != nil {
 		return nil, err
@@ -1871,6 +2055,11 @@ func identidadCuentaDesdePresupuesto(p *PresupuestoSesion) identidadCuentaAgente
 }
 
 func ultimaIdentidadCuentaDesdePresupuestos(agente string) identidadCuentaAgente {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return identidadCuentaAgente{}
+	}
 	agente = strings.TrimSpace(agente)
 	if agente == "" {
 		return identidadCuentaAgente{}
@@ -2347,18 +2536,26 @@ func CheckReanimaciones() ([]*Agente, error) {
 
 // ResetReanimacion limpia los campos de reanimación de un agente.
 func ResetReanimacion(nombre string) error {
-	nombre = strings.TrimSpace(nombre)
+	var err error
+	nombre, err = CanonicalizeAgentName(nombre)
+	if err != nil {
+		return err
+	}
 	if nombre == "" || DB == nil || DB.DB == nil {
 		return nil
 	}
-	_, err := DB.Exec(`UPDATE agentes SET reanimar_at = NULL, motivo_pausa = NULL, estado_cuota = 'activo' WHERE nombre = ?`, nombre)
+	_, err = DB.Exec(`UPDATE agentes SET reanimar_at = NULL, motivo_pausa = NULL, estado_cuota = 'activo' WHERE nombre = ?`, nombre)
 	return err
 }
 
 // LimpiarContinuidadAgente borra la continuidad persistida que puede contaminar
 // un arranque manual posterior.
 func LimpiarContinuidadAgente(nombre string) error {
-	nombre = strings.TrimSpace(nombre)
+	var err error
+	nombre, err = CanonicalizeAgentName(nombre)
+	if err != nil {
+		return err
+	}
 	if nombre == "" {
 		return nil
 	}
@@ -2385,7 +2582,11 @@ func LimpiarContinuidadAgente(nombre string) error {
 
 // EliminarAgente borra físicamente un agente de la base de datos.
 func EliminarAgente(nombre string) error {
-	nombre = strings.TrimSpace(nombre)
+	var err error
+	nombre, err = CanonicalizeAgentName(nombre)
+	if err != nil {
+		return err
+	}
 	if nombre == "" {
 		return fmt.Errorf("agente obligatorio")
 	}
@@ -2447,8 +2648,13 @@ func resumirTareasActivasAgente(tareas []*Tarea) string {
 
 // PausarAgente establece una pausa forzada (por rate-limit externo) para un agente.
 func PausarAgente(nombre string, minutos int, motivo string) error {
+	var err error
+	nombre, err = CanonicalizeAgentName(nombre)
+	if err != nil {
+		return err
+	}
 	reanimar := time.Now().Add(time.Duration(minutos) * time.Minute)
-	_, err := DB.Exec(`
+	_, err = DB.Exec(`
 		UPDATE agentes 
 		SET estado_cuota = 'enfriamiento', reanimar_at = ?, motivo_pausa = ? 
 		WHERE nombre = ?`, reanimar, motivo, nombre)
@@ -2456,10 +2662,15 @@ func PausarAgente(nombre string, minutos int, motivo string) error {
 }
 
 func PausarAgenteHasta(nombre string, reanimar time.Time, motivo string) error {
+	var err error
+	nombre, err = CanonicalizeAgentName(nombre)
+	if err != nil {
+		return err
+	}
 	if reanimar.IsZero() {
 		reanimar = time.Now().UTC()
 	}
-	_, err := DB.Exec(`
+	_, err = DB.Exec(`
 		UPDATE agentes
 		SET estado_cuota = 'enfriamiento', reanimar_at = ?, motivo_pausa = ?
 		WHERE nombre = ?`, reanimar.UTC(), motivo, nombre)
@@ -2468,6 +2679,11 @@ func PausarAgenteHasta(nombre string, reanimar time.Time, motivo string) error {
 
 // SetEstadoSesion actualiza el estado de actividad de un agente en sesión.
 func SetEstadoSesion(agente, estado string) {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return
+	}
 	if DB == nil || agente == "" {
 		return
 	}
@@ -2500,6 +2716,11 @@ func sessionOperationalCutoff() time.Time {
 }
 
 func GetSesionAbierta(agente string, proyectoID *int64) (*Sesion, error) {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return nil, err
+	}
 	q := `
 		SELECT s.id, s.agente, s.conector_id, COALESCE(c.slug,''), COALESCE(c.nombre,''),
 		       s.proyecto_id, COALESCE(p.slug,''), COALESCE(p.nombre,''),
@@ -2522,6 +2743,11 @@ func GetSesionAbierta(agente string, proyectoID *int64) (*Sesion, error) {
 }
 
 func GetSesionActiva(agente string, proyectoID *int64) (*Sesion, error) {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return nil, err
+	}
 	q := `
 		SELECT s.id, s.agente, s.conector_id, COALESCE(c.slug,''), COALESCE(c.nombre,''),
 		       s.proyecto_id, COALESCE(p.slug,''), COALESCE(p.nombre,''),
@@ -2573,13 +2799,24 @@ func SesionActivaDeAgente(agente string) (*Sesion, error) {
 
 // RegistrarAgente añade un nuevo agente al sistema.
 func RegistrarAgente(nombre, rol string) error {
-	_, err := DB.Exec(
+	var err error
+	nombre, err = CanonicalizeAgentName(nombre)
+	if err != nil {
+		return err
+	}
+	_, err = DB.Exec(
 		`INSERT INTO agentes (nombre, rol, habilitado, retirado) VALUES (?,?,1,0)
 		 ON CONFLICT(nombre) DO UPDATE SET rol=excluded.rol,
 		   habilitado=CASE WHEN agentes.retirado=1 THEN 0 ELSE 1 END`,
 		nombre, rol,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if AgenteEsLocalPuntuable(nombre, "") {
+		return GarantizarScoresLocalesAgente(nombre, "")
+	}
+	return nil
 }
 
 func escanearSesion(s scanner) (*Sesion, error) {
@@ -2623,6 +2860,11 @@ func escanearSesion(s scanner) (*Sesion, error) {
 // el consenso. La continuidad fina del runtime se gestiona en el control plane;
 // aquí solo se deja el estado de BD en una situación replanificable.
 func RetirarAgente(nombre string) error {
+	var err error
+	nombre, err = CanonicalizeAgentName(nombre)
+	if err != nil {
+		return err
+	}
 	tx, err := DB.Begin()
 	if err != nil {
 		return err
@@ -2711,6 +2953,11 @@ func RetirarAgente(nombre string) error {
 
 // RehabilitarAgente reactiva a un agente retirado.
 func RehabilitarAgente(nombre string) error {
+	var err error
+	nombre, err = CanonicalizeAgentName(nombre)
+	if err != nil {
+		return err
+	}
 	res, err := DB.Exec(`UPDATE agentes SET habilitado=1, retirado=0 WHERE nombre=?`, nombre)
 	if err != nil {
 		return err

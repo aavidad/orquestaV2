@@ -114,13 +114,21 @@ func apiHandlerOllamaPoolLaunch(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
+	modeloObjetivo := valorConFallback(strings.TrimSpace(req.Plan.Modelo), strings.TrimSpace(pool.ModeloPreferente))
+	if modeloActivo, err := detectarModeloOllamaActivoIncompatible(modeloObjetivo); err != nil {
+		apiError(w, http.StatusBadGateway, err)
+		return
+	} else if modeloActivo != "" {
+		apiError(w, http.StatusConflict, fmt.Errorf("modelo ollama activo incompatible: %s; detenerlo antes de lanzar %s", modeloActivo, modeloObjetivo))
+		return
+	}
 	resumenContinuidad := resolverResumenContinuidadPoolLocalCompartido(strings.TrimSpace(req.Agente), strings.TrimSpace(req.Proyecto))
 	sesion, err := ollamaPoolManager.Lanzar(context.Background(), ollamapool.EntradaLanzamiento{
 		Agente:             strings.TrimSpace(req.Agente),
 		Proyecto:           strings.TrimSpace(req.Proyecto),
 		PoolSlug:           strings.TrimSpace(pool.PoolSlug),
 		SlotsMaximos:       pool.SlotsMaximos,
-		Modelo:             valorConFallback(strings.TrimSpace(req.Plan.Modelo), strings.TrimSpace(pool.ModeloPreferente)),
+		Modelo:             modeloObjetivo,
 		PerfilTarea:        strings.TrimSpace(req.Plan.PerfilTarea),
 		Razonamiento:       strings.TrimSpace(req.Plan.Razonamiento),
 		Sistema:            "MICROTAREA CERRADA. Sigue solo la especificacion activa y no abras frentes fuera del write_set.",
@@ -174,6 +182,29 @@ func apiHandlerOllamaPoolLaunch(w http.ResponseWriter, r *http.Request) {
 			"can_stop_without_reauth": true,
 		},
 	})
+}
+
+func detectarModeloOllamaActivoIncompatible(modeloObjetivo string) (string, error) {
+	modeloObjetivo = strings.TrimSpace(modeloObjetivo)
+	if modeloObjetivo == "" {
+		return "", nil
+	}
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	items, err := nuevoGestorRuntimeModelosOllama(endpointOllamaLocal(), client).ListarModelosActivos()
+	if err != nil {
+		return "", nil
+	}
+	for _, item := range items {
+		modeloActivo := strings.TrimSpace(item.Modelo)
+		if modeloActivo == "" {
+			modeloActivo = strings.TrimSpace(item.ID)
+		}
+		if modeloActivo == "" || strings.EqualFold(modeloActivo, modeloObjetivo) {
+			continue
+		}
+		return modeloActivo, nil
+	}
+	return "", nil
 }
 
 func apiHandlerOllamaPoolInput(w http.ResponseWriter, r *http.Request) {

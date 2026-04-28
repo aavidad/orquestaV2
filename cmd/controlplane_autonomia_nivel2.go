@@ -38,7 +38,13 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 	total := 0
 	for _, policy := range policies {
 		if !supervisionDue(policy, now, interval) {
-			continue
+			forzar, err := supervisionDebeForzarSupervisorReservado(policy, now)
+			if err != nil {
+				return total, err
+			}
+			if !forzar {
+				continue
+			}
 		}
 		proyecto, err := db.GetProyecto(strconv.FormatInt(policy.ProyectoID, 10))
 		if err != nil {
@@ -69,7 +75,7 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 			if err != nil {
 				return total, err
 			}
-			if tieneTrabajoActivo {
+			if tieneTrabajoActivo && !policy.ReserveSupervisor {
 				continue
 			}
 		}
@@ -88,7 +94,7 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 			if err != nil {
 				return total, err
 			}
-			if operativo {
+			if operativo && !policy.ReserveSupervisor {
 				continue
 			}
 		}
@@ -157,6 +163,10 @@ func asegurarTrabajoAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyec
 	if policy == nil || !policy.Enabled || proyecto == nil || agente == nil {
 		return zero, nil
 	}
+	targetAgente, err := resolverObjetivoTrabajoAutonomia(policy, proyecto.ID, strings.TrimSpace(agente.Nombre))
+	if err != nil {
+		return zero, err
+	}
 	terminado, _, err := proyectoTerminadoAutonomamente(proyecto)
 	if err != nil || terminado {
 		return zero, err
@@ -211,7 +221,7 @@ func asegurarTrabajoAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyec
 		if err != nil {
 			return zero, err
 		}
-		primaryTaskID, err := arrancarPrimeraTareaPlanAutonomia(materialized.TaskIDs, strings.TrimSpace(agente.Nombre))
+		primaryTaskID, err := arrancarPrimeraTareaPlanAutonomia(materialized.TaskIDs, targetAgente)
 		if err != nil {
 			return zero, err
 		}
@@ -228,15 +238,17 @@ func asegurarTrabajoAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyec
 		Modulo:      "autonomia",
 		Prioridad:   db.PrioridadAlta,
 		CreadoPor:   "orquesta",
-		Agente:      strings.TrimSpace(agente.Nombre),
+		Agente:      targetAgente,
 		Proyecto:    proyecto.Slug,
 		Notas:       "autonomia:auto_create_tasks",
 	})
 	if err != nil {
 		return zero, err
 	}
-	if err := tareasService.Start(id, strings.TrimSpace(agente.Nombre)); err != nil {
-		return zero, err
+	if targetAgente != "" {
+		if err := tareasService.Start(id, targetAgente); err != nil {
+			return zero, err
+		}
 	}
 	return autonomiaAutoCreateResult{
 		Created:    true,
@@ -249,13 +261,17 @@ func asegurarTrabajoContinuoPremium(policy *supervisionapp.Policy, proyecto *db.
 	if policy == nil || proyecto == nil || agente == nil {
 		return zero, nil
 	}
+	targetAgente, err := resolverObjetivoTrabajoAutonomia(policy, proyecto.ID, strings.TrimSpace(agente.Nombre))
+	if err != nil {
+		return zero, err
+	}
 	if !proyectoUsaContinuidadMicrocicloPremium(proyecto.ID) {
 		return zero, nil
 	}
 	if agotado, err := microcicloPremiumAgotado(proyecto.ID); err != nil {
 		return zero, err
 	} else if agotado {
-		id, err := crearTareaFrentePremiumMayorAutonomia(policy, proyecto, strings.TrimSpace(agente.Nombre))
+		id, err := crearTareaFrentePremiumMayorAutonomia(policy, proyecto, targetAgente)
 		if err != nil {
 			return zero, err
 		}
@@ -267,7 +283,7 @@ func asegurarTrabajoContinuoPremium(policy *supervisionapp.Policy, proyecto *db.
 			SeedTaskID: id,
 		}, nil
 	}
-	tarea, reutilizada, err := asegurarTareaMicrociclo(proyecto, strings.TrimSpace(agente.Nombre), proyectoMicrocicloRequest{}, true)
+	tarea, reutilizada, err := asegurarTareaMicrociclo(proyecto, targetAgente, proyectoMicrocicloRequest{}, true)
 	if err != nil {
 		return zero, err
 	}
@@ -312,7 +328,7 @@ func esTareaMicrocicloPremium(tarea *db.Tarea) bool {
 
 func crearTareaFrentePremiumMayorAutonomia(policy *supervisionapp.Policy, proyecto *db.Proyecto, agente string) (int64, error) {
 	agente = strings.TrimSpace(agente)
-	if proyecto == nil || agente == "" {
+	if proyecto == nil {
 		return 0, nil
 	}
 	id, err := tareasService.Create(tareasapp.CreateTaskInput{
@@ -328,8 +344,10 @@ func crearTareaFrentePremiumMayorAutonomia(policy *supervisionapp.Policy, proyec
 	if err != nil {
 		return 0, err
 	}
-	if err := tareasService.Start(id, agente); err != nil {
-		return 0, err
+	if agente != "" {
+		if err := tareasService.Start(id, agente); err != nil {
+			return 0, err
+		}
 	}
 	return id, nil
 }
@@ -413,6 +431,110 @@ func arrancarPrimeraTareaPlanAutonomia(taskIDs map[string]int64, agente string) 
 		return id, nil
 	}
 	return 0, nil
+}
+
+func resolverObjetivoTrabajoAutonomia(policy *supervisionapp.Policy, proyectoID int64, supervisor string) (string, error) {
+	supervisor = strings.TrimSpace(supervisor)
+	if policy == nil || proyectoID <= 0 {
+		return supervisor, nil
+	}
+	if !policy.ReserveSupervisor || supervisor == "" {
+		return supervisor, nil
+	}
+	excludes := []string{supervisor}
+	if policy.ReserveReviewer && strings.TrimSpace(policy.ReviewerAgente) != "" {
+		excludes = append(excludes, strings.TrimSpace(policy.ReviewerAgente))
+	}
+	worker, err := seleccionarAgenteActivoProyectoExcluyendo(proyectoID, []string{"programador", "admin", "orquestador", "supervisor", "reviewer", "revisor"}, excludes...)
+	if err != nil {
+		return "", err
+	}
+	if worker == nil {
+		return "", nil
+	}
+	return strings.TrimSpace(worker.Nombre), nil
+}
+
+func seleccionarAgenteActivoProyectoExcluyendo(proyectoID int64, preferredRoles []string, excludes ...string) (*db.Agente, error) {
+	sesiones, err := db.ListarSesionesActivasOperativas()
+	if err != nil {
+		return nil, err
+	}
+	type candidato struct {
+		agente *db.Agente
+		score  int
+	}
+	excluded := map[string]struct{}{}
+	for _, nombre := range excludes {
+		nombre = strings.TrimSpace(nombre)
+		if nombre != "" {
+			excluded[strings.ToLower(nombre)] = struct{}{}
+		}
+	}
+	var candidatos []candidato
+	seen := map[string]struct{}{}
+	addCandidate := func(nombre string) error {
+		nombre = strings.TrimSpace(nombre)
+		if nombre == "" {
+			return nil
+		}
+		key := strings.ToLower(nombre)
+		if _, ok := excluded[key]; ok {
+			return nil
+		}
+		if _, ok := seen[key]; ok {
+			return nil
+		}
+		seen[key] = struct{}{}
+		agente, err := db.GetAgente(nombre)
+		if err != nil {
+			return err
+		}
+		if agente == nil || !agente.Habilitado {
+			return nil
+		}
+		candidatos = append(candidatos, candidato{agente: agente, score: roleScore(agente.Rol, preferredRoles)})
+		return nil
+	}
+	for _, sesion := range sesiones {
+		if sesion == nil || sesion.ProyectoID == nil || *sesion.ProyectoID != proyectoID {
+			continue
+		}
+		if err := addCandidate(sesion.Agente); err != nil {
+			return nil, err
+		}
+	}
+	if len(candidatos) == 0 {
+		planificables, err := db.ListarAgentesPlanificables()
+		if err != nil {
+			return nil, err
+		}
+		for _, agente := range planificables {
+			if agente == nil {
+				continue
+			}
+			proyectoPlanificable, err := db.ResolverProyectoPlanificableAgente(strings.TrimSpace(agente.Nombre))
+			if err != nil {
+				return nil, err
+			}
+			if proyectoPlanificable != proyectoID {
+				continue
+			}
+			if err := addCandidate(agente.Nombre); err != nil {
+				return nil, err
+			}
+		}
+	}
+	sort.Slice(candidatos, func(i, j int) bool {
+		if candidatos[i].score != candidatos[j].score {
+			return candidatos[i].score < candidatos[j].score
+		}
+		return strings.TrimSpace(candidatos[i].agente.Nombre) < strings.TrimSpace(candidatos[j].agente.Nombre)
+	})
+	if len(candidatos) == 0 {
+		return nil, nil
+	}
+	return candidatos[0].agente, nil
 }
 
 func proyectoNombreAutonomia(proyecto *db.Proyecto) string {
@@ -924,6 +1046,31 @@ func supervisionDue(policy *supervisionapp.Policy, now time.Time, interval time.
 	return now.Sub(policy.LastSupervisionAt.UTC()) >= interval
 }
 
+func supervisionDebeForzarSupervisorReservado(policy *supervisionapp.Policy, now time.Time) (bool, error) {
+	if policy == nil || !policy.Enabled || !policy.ReserveSupervisor || policy.ProyectoID <= 0 {
+		return false, nil
+	}
+	supervisor, err := db.SeleccionarSupervisorAutonomiaOperativo(policy.ProyectoID, "")
+	if err != nil {
+		return false, err
+	}
+	if supervisor == nil || strings.TrimSpace(supervisor.Nombre) == "" {
+		return true, nil
+	}
+	detail, err := agentesService.BuildDetailCompact(strings.TrimSpace(supervisor.Nombre))
+	if err != nil {
+		return false, err
+	}
+	if detail == nil || detail.Row.Agente == nil {
+		return true, nil
+	}
+	proyectoID := rowProyectoIDPreferido(detail.Row)
+	if proyectoID == nil || *proyectoID != policy.ProyectoID {
+		return true, nil
+	}
+	return !detail.Row.SupervisorRoleActive(now), nil
+}
+
 func supervisorAutonomiaYaOperativo(agente string, proyectoID int64) (bool, error) {
 	if strings.TrimSpace(agente) == "" || proyectoID <= 0 {
 		return false, nil
@@ -986,7 +1133,7 @@ func prepararAgentePreferidoAutonomia(proyectoID int64, preferredAgent, activati
 }
 
 func asegurarAgenteAutonomiaOperativo(proyectoID int64, preferredAgent, activationReason string) (*db.Agente, bool, error) {
-	preferredAgent = strings.TrimSpace(preferredAgent)
+	preferredAgent = canonicalAutonomyCodexName(strings.TrimSpace(preferredAgent))
 	if preferredAgent == "" || proyectoID <= 0 {
 		return nil, false, nil
 	}
@@ -1009,12 +1156,7 @@ func asegurarAgenteAutonomiaOperativo(proyectoID int64, preferredAgent, activati
 	if proyectoActivoID != 0 && proyectoActivoID != proyectoID {
 		return nil, false, nil
 	}
-	if disponible, _, err := autonomiaCuentaCompartidaDisponible(preferredAgent); err != nil {
-		return nil, false, err
-	} else if !disponible {
-		return nil, false, nil
-	}
-	if sesion, err := db.GetSesionActiva(preferredAgent, &proyectoID); err != nil && err != sql.ErrNoRows {
+	if sesion, err := db.GetSesionActivaOperativa(preferredAgent, &proyectoID); err != nil && err != sql.ErrNoRows {
 		return nil, false, err
 	} else if sesion != nil {
 		return agente, false, nil
@@ -1023,6 +1165,19 @@ func asegurarAgenteAutonomiaOperativo(proyectoID int64, preferredAgent, activati
 		return nil, false, err
 	} else if handle != nil {
 		return agente, false, nil
+	}
+	if runtime, err := db.GetRuntimePrincipalAgenteProyecto(preferredAgent, &proyectoID); err != nil {
+		return nil, false, err
+	} else if runtime != nil {
+		switch strings.ToLower(strings.TrimSpace(runtime.LogicalState)) {
+		case "activo", "active", "running", "iniciando", "starting", "esperando_io", "waiting_io", "pausado", "paused":
+			return agente, false, nil
+		}
+	}
+	if disponible, _, err := autonomiaCuentaCompartidaDisponible(preferredAgent); err != nil {
+		return nil, false, err
+	} else if !disponible {
+		return nil, false, nil
 	}
 	if err := db.ActivarAsignacion(preferredAgent, proyectoID, activationReason); err != nil {
 		return nil, false, err
@@ -1041,7 +1196,7 @@ func asegurarAgenteAutonomiaOperativo(proyectoID int64, preferredAgent, activati
 }
 
 func resolverAgenteAutonomiaOperativo(nombre string) (*db.Agente, error) {
-	nombre = strings.TrimSpace(nombre)
+	nombre = canonicalAutonomyCodexName(strings.TrimSpace(nombre))
 	if nombre == "" {
 		return nil, nil
 	}

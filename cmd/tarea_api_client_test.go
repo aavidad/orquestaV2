@@ -64,6 +64,16 @@ func TestTareaNotasUsaAPI(t *testing.T) {
 				Titulo: "Cliente fino",
 				Notas:  "nota uno\nnota dos",
 			},
+			Fork: &apiRepoFunctionForkSpec{
+				FuncionObjetivo:       "pkg.Calcular",
+				WriteSet:              []string{"pkg/calculo.go", "pkg/calculo_test.go"},
+				ModelosCandidatos:     []string{"qwen", "gemma"},
+				Materia:               "arquitectura",
+				ForkLines:             3,
+				SelectedModels:        []string{"qwen", "gemma", "llama"},
+				PreservarArquitectura: true,
+				DecisionReason:        "orquesta decide fork automático · materia=arquitectura · lineas=3",
+			},
 		})
 	})
 
@@ -79,9 +89,59 @@ func TestTareaNotasUsaAPI(t *testing.T) {
 			t.Fatalf("tarea notas via API: %v", err)
 		}
 	})
-	for _, token := range []string{"Cliente fino", "nota uno", "nota dos"} {
+	for _, token := range []string{"Cliente fino", "nota uno", "nota dos", "Fork de función", "pkg.Calcular", "qwen, gemma", "pkg/calculo.go, pkg/calculo_test.go", "Preservar arquitectura: true"} {
 		if !strings.Contains(out, token) {
 			t.Fatalf("salida notas sin %q:\n%s", token, out)
+		}
+	}
+}
+
+func TestTareaVerUsaAPIYExponeForkFuncion(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/proyectos", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"proyectos": []map[string]any{{"id": 7, "slug": "orquestador"}}})
+	})
+	mux.HandleFunc("/api/tareas/12", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiTareaResponse{
+			Tarea: &db.Tarea{
+				ID:          12,
+				Titulo:      "Cliente fino",
+				ProyectoID:  ptrInt64(7),
+				Descripcion: "Refactor del carril premium",
+				Notas:       "nota uno\nnota dos",
+			},
+			FinishApp: true,
+			Fork: &apiRepoFunctionForkSpec{
+				FuncionObjetivo:       "pkg.Calcular",
+				WriteSet:              []string{"pkg/calculo.go", "pkg/calculo_test.go"},
+				ModelosCandidatos:     []string{"qwen", "gemma"},
+				Materia:               "arquitectura",
+				ForkLines:             3,
+				SelectedModels:        []string{"qwen", "gemma", "llama"},
+				PreservarArquitectura: true,
+				DecisionReason:        "orquesta decide fork automático · materia=arquitectura · lineas=3",
+			},
+		})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	out := capturarStdout(t, func() {
+		if err := tareaVerCmd.RunE(tareaVerCmd, []string{"12"}); err != nil {
+			t.Fatalf("tarea ver via API: %v", err)
+		}
+	})
+	for _, token := range []string{"Tarea #12", "Cliente fino", "Proyecto:    orquestador", "Modo:        finish_app", "Fork:        pkg.Calcular", "Modelos:     qwen, gemma", "Materia:     arquitectura", "Líneas:      3", "Selección:   qwen, gemma, llama", "Write set:   pkg/calculo.go, pkg/calculo_test.go", "Regla:       preservar arquitectura", "Motivo:      orquesta decide fork automático"} {
+		if !strings.Contains(out, token) {
+			t.Fatalf("salida tarea ver sin %q:\n%s", token, out)
 		}
 	}
 }

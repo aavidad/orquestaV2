@@ -128,9 +128,66 @@ Frente abierto en Orquesta para esta decision:
 - `#545` Proyectar deuda de dispatch (`pending/notified/failed`) en `status`, cockpit y web
 - `#546` Alinear Ollama, Codex, Claude y OpenClaw con el mismo contrato de dispatch
 - `#547` Mantener benchmark vivo de referencias externas y retirar soluciones propias superadas
+- `#548` Activar `finish_app` persistente con `Codex supervisor` y `Codex reviewer` desde `repo mejorar`
+- `#549` Forzar bucle autonomo `until done or hard blocker` con guardas de progreso, CPU y cruce de proyecto
+- `#550` Exponer supervisor/reviewer/workers persistentes en CLI, API y notas de tarea sin rutas paralelas
 - `#548` Introducir puerto hexagonal de gestion de modelos runtime (`listar`, `activar`, `detener`, `descargar`)
 - `#549` Implementar adaptador Ollama para gestion de modelos runtime
 - `#550` Preparar adaptador futuro `vllm` sin tocar el nucleo
+- `#551` Introducir alta canónica de repositorios (`repo add`) con origen local (`--path`) u origen remoto (`--git`)
+- `#552` Materializar repos remotos en copia local canónica antes de abrir pipeline, sesiones o worktrees
+- `#553` Unificar `repo revisar` y `repo mejorar` para que operen sobre el mismo proyecto materializado sin distinguir el origen del repo
+- `#554` Persistir scorecards mutables de agentes locales por materias canónicas
+- `#555` Inicializar bootstrap neutro de score para cada agente local al darse de alta
+- `#556` Ponderar la elección del worker local por materia según fase, carril y perfil de tarea
+- `#557` Registrar observaciones automáticas tras entregas reales para subir o bajar el fitness local
+- `#558` Exponer matriz de scores locales por CLI, API y web operativa
+- `#559` Añadir benchmark manual y benchmark continuo para recalibrar agentes locales sin reiniciar su historial
+- `#560` Separar score, confianza y número de muestras para evitar promocionar agentes con histórico débil
+- `#561` Introducir `shared_context_items` durables y tipados por proyecto/agente para recall selectivo antes del prompt
+- `#562` Inyectar contexto compartido selectivo en `prepare/bootstrap` sin compartir transcripts completos entre agentes
+- `#563` Exponer contexto compartido por CLI, API y web operativa con filtros por proyecto, agente, tipo y peso
+- `#564` Añadir `memory flush` previo a compactacion para promover decisiones, restricciones y hallazgos a memoria durable
+- `#565` Consolidar en background señales repetidas de contexto corto a memoria durable de proyecto
+- `#566` Definir `fork de funcion` como unidad canonica de refactor competitivo dentro de `repo mejorar`
+- `#567` Lanzar variantes aisladas de una misma funcion con varios modelos y `write_set` comun preservando arquitectura de proyecto
+- `#568` Comparar forks de funcion por tests, seguridad, invariantes arquitectonicas y benchmark antes de integracion
+- `#569` Rechazar automaticamente forks ganadores que degraden hexagonalidad, observabilidad o contratos de capa
+- `#570` Exponer en web/API el laboratorio de forks de funcion con candidatos, metricas y revisiones no autor
+- `#571` Crear cockpit canónico de proyecto con control total del estado operativo, Git y autonomia
+- `#572` Exponer timeline por ventana (`ultima hora`, `24h`, `ciclo actual`) por agente, proyecto y global
+- `#573` Añadir API de estadisticas por agente con tareas, runtimes, handoffs, repairs y presupuesto
+- `#574` Añadir API de estadisticas por proyecto con fases, porcentaje, flota, hotspots y bloqueos
+- `#575` Añadir API global de capacidad, throughput, presupuesto y bloqueos recurrentes
+- `#576` Introducir puerto hexagonal de observabilidad/control Git para repos, ramas, worktrees, diffs y merges
+- `#577` Exponer ficheros tocados y `insertions/deletions/net` por agente, proyecto, tarea y ventana temporal
+- `#578` Calcular hotspots por fichero, carpeta y modulo desde evidencia Git canonica
+- `#579` Unificar cockpit, status, OpenClaw y MCP sobre la misma proyección temporal y estadistica
+- `#580` Registrar eventos normalizados de codigo, runtime, review, merge y presupuesto para consultas temporales
+- `#581` Exponer acciones Git canonicas por API/web/MCP: refresh, checkpoint, review, merge y reconciliacion
+- `#582` Hacer visible el coste/tokens/presupuesto por agente, proyecto y global con fuentes y ventanas
+- `#583` Forzar que supervisor/reviewer/workers usen politica `token-frugal` con `caveman/compact` cuando el runtime lo permita
+- `#584` Añadir vista de trabajo por agente capaz de responder `que ha hecho X en la ultima hora`
+- `#585` Añadir vista de estado total de proyecto con `inicio real`, `% fin`, `riesgos`, `bloqueos` y `ultima actividad util`
+
+### Estado real de ejecucion a 2026-04-23
+
+Este bloque ya no esta en fase puramente teórica.
+En el repo actual ya hay avance visible en:
+
+- `repo mejorar` con `finish_app` persistente y policy durable
+- reserva de supervisor/reviewer y cuota explicita de workers reales
+- auto-creacion de trabajo para supervision autonoma
+- compactacion de frentes premium y drenaje de `prime`
+- `repair-helper` barato como paso previo de recuperacion
+- score local y contexto compartido como base de seleccion/mejora de workers
+- control total por agente/proyecto ya operativo
+- `autonomyPending=0` como foto estable de continuidad drenada
+
+Sigue pendiente dentro del mismo bloque:
+
+- cerrar la proyeccion total global de observabilidad/estadisticas para que la autonomia no dependa de shell ni de lectura parcial de audit/transcript a escala workspace
+- rematar la separacion hexagonal de Git/estadisticas/control temporal para que no queden como utilidades de borde
 
 Decision adicional de este bloque:
 
@@ -210,6 +267,45 @@ Dar visibilidad y control real sobre ramas, commits, push y merge.
 - snapshots Git
 - estado `dirty`, `ahead`, `behind`
 - merges orquestados y gates previos
+- API Git canónica hexagonal
+- ficheros tocados y LOC por agente/proyecto/ventana
+- hotspots por fichero/modulo
+- timeline Git integrada con timeline operativa
+
+## Bloque 6.b — Control total y estadisticas
+
+### Objetivo
+
+Dar control total del estado de proyecto y permitir autonomia supervisada con evidencia completa.
+
+### Entregables
+
+- cockpit canónico de proyecto
+- timeline temporal por agente/proyecto/global
+- estadisticas completas por agente
+- estadisticas completas por proyecto
+- estadisticas globales del workspace
+- porcentaje real de avance por proyecto
+- coste/tokens/presupuesto por ventana y fuente
+- correlacion entre tarea, agente, runtime, worktree, diff y merge
+- API y MCP capaces de responder preguntas temporales sin shell manual
+
+### Estado real de ejecucion a 2026-04-23
+
+En curso claro:
+
+- cockpit server-first de proyecto ya operativo, aunque todavia ligero
+- CLI `agente actividad` ya operativa para ventana temporal por agente
+- proyeccion base de audit + transcript + Git stats por repo
+- web de proyectos ya consumiendo cockpit por API
+
+Pendiente real antes de declarar este bloque cerrado:
+
+- timeline canonica por ventana en API para proyecto/agente/global
+- agregacion Git canonica por proyecto y global, no solo por `cwd`
+- porcentaje real de avance con señal fiable
+- coste/tokens/presupuesto con fuentes canonicas y agregacion por ventana
+- endpoints dedicados de estadisticas equivalentes a la ambicion de `OP 096`
 
 ## Bloque 7 — MCP y conectores avanzados
 
@@ -272,6 +368,9 @@ Permitir experimentos controlados con varias variantes y seleccion rigurosa.
 - backups previos
 - scorecards
 - revision por al menos dos no autores
+- forks de funcion sobre especificaciones cerradas
+- comparacion multi-modelo sobre la misma funcion y el mismo contrato
+- preservacion automatica de arquitectura de proyecto durante la mejora
 
 ## Bloque 11 — Web y app de escritorio
 

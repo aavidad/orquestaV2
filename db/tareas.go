@@ -188,7 +188,11 @@ func GetTareaActivaIDPorAgente(agente string) (int64, error) {
 // GetTareaActivaIDPorAgenteProyecto devuelve la tarea activa más reciente del
 // agente, opcionalmente acotada al proyecto.
 func GetTareaActivaIDPorAgenteProyecto(agente string, proyectoID *int64) (int64, error) {
-	agente = strings.TrimSpace(agente)
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return 0, err
+	}
 	if agente == "" {
 		return 0, nil
 	}
@@ -203,15 +207,88 @@ func GetTareaActivaIDPorAgenteProyecto(agente string, proyectoID *int64) (int64,
 	q += `
 		ORDER BY CASE WHEN estado = 'en_progreso' THEN 1 ELSE 2 END, updated_at DESC LIMIT 1`
 	var id int64
-	err := DB.QueryRow(q, args...).Scan(&id)
+	err = DB.QueryRow(q, args...).Scan(&id)
 	if err == sql.ErrNoRows {
 		return 0, nil
 	}
 	return id, err
 }
 
+func GetTareaActivaPrepareLite(agente string, proyectoID int64) (*Tarea, error) {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return nil, err
+	}
+	if agente == "" || proyectoID == 0 {
+		return nil, nil
+	}
+	if tarea, ok, err := getTareaActivaPrepareLiteReadOnly(agente, proyectoID); ok {
+		return tarea, err
+	}
+	var tarea Tarea
+	err = DB.QueryRow(`
+		SELECT id, estado, prioridad
+		FROM tareas
+		WHERE agente = ? AND proyecto_id = ? AND estado IN ('en_progreso','asignada')
+		ORDER BY CASE WHEN estado = 'en_progreso' THEN 1 ELSE 2 END,
+		         CASE prioridad WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END,
+		         id
+		LIMIT 1`, agente, proyectoID).Scan(&tarea.ID, &tarea.Estado, &tarea.Prioridad)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &tarea, nil
+}
+
+func getTareaActivaPrepareLiteReadOnly(agente string, proyectoID int64) (*Tarea, bool, error) {
+	backend, cfg, err := resolveOpenConfig()
+	if err != nil {
+		return nil, false, err
+	}
+	if !supportsPrepareLiteReadOnlyBackend(cfg.Driver) {
+		return nil, false, nil
+	}
+	disabled := false
+	skipPost := true
+	cfg = applyOpenOptions(cfg, OpenOptions{
+		BootstrapSchema:    &disabled,
+		SkipPostMigrations: &skipPost,
+		ReadOnly:           true,
+	})
+	cfg.MaxOpenConns = 1
+	raw, err := backend.Open(cfg)
+	if err != nil {
+		return nil, true, err
+	}
+	defer raw.Close()
+	var tarea Tarea
+	err = raw.QueryRow(`
+		SELECT id, estado, prioridad
+		FROM tareas
+		WHERE agente = ? AND proyecto_id = ? AND estado IN ('en_progreso','asignada')
+		ORDER BY CASE WHEN estado = 'en_progreso' THEN 1 ELSE 2 END,
+		         CASE prioridad WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END,
+		         id
+		LIMIT 1`, agente, proyectoID).Scan(&tarea.ID, &tarea.Estado, &tarea.Prioridad)
+	if err == sql.ErrNoRows {
+		return nil, true, nil
+	}
+	if err != nil {
+		return nil, true, err
+	}
+	return &tarea, true, nil
+}
+
 func ListarTareasNoTerminalesAgente(agente string) ([]*Tarea, error) {
-	agente = strings.TrimSpace(agente)
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return nil, err
+	}
 	if agente == "" {
 		return nil, nil
 	}
@@ -349,6 +426,11 @@ func ValidarDependencias(t *Tarea) error {
 // TomarTarea asigna una tarea libre (o backlog) a un agente.
 // Valida dependencias (OP-069) antes de permitir la asignación.
 func TomarTarea(id int64, agente string) error {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return err
+	}
 	t, err := GetTarea(id)
 	if err != nil {
 		return fmt.Errorf("tarea #%d no encontrada", id)
@@ -385,6 +467,11 @@ func DefinirContrato(id int64, agente string) error {
 // IniciarTarea marca una tarea como en_progreso.
 // También valida dependencias (OP-069) como segunda barrera de seguridad.
 func IniciarTarea(id int64, agente string) error {
+	var err error
+	agente, err = CanonicalizeAgentName(agente)
+	if err != nil {
+		return err
+	}
 	t, err := GetTarea(id)
 	if err != nil {
 		return fmt.Errorf("tarea #%d no encontrada", id)
@@ -524,7 +611,11 @@ func MoverTareaABacklog(id int64) error {
 }
 
 func ReasignarTarea(id int64, nuevoAgente string) error {
-	_, err := DB.Exec(`UPDATE tareas SET estado='asignada', agente=? WHERE id=?`, nuevoAgente, id)
+	agenteCanonico, err := CanonicalizeAgentName(nuevoAgente)
+	if err != nil {
+		return err
+	}
+	_, err = DB.Exec(`UPDATE tareas SET estado='asignada', agente=? WHERE id=?`, agenteCanonico, id)
 	return err
 }
 

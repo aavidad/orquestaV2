@@ -1055,8 +1055,26 @@ func TestAPIOllamaPoolLaunchFallaSinSlots(t *testing.T) {
 	}
 	prev := ollamaPoolManager
 	t.Cleanup(func() { ollamaPoolManager = prev })
-
-	ollamaPoolManager = newTestOllamaPoolManager("http://127.0.0.1:11434")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/ps":
+			_ = json.NewEncoder(w).Encode(map[string]any{"models": []any{}})
+		case "/api/chat":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"message": map[string]any{
+					"role":    "assistant",
+					"content": "PATCH: listo",
+				},
+			})
+		case "/api/generate":
+			_ = json.NewEncoder(w).Encode(map[string]any{"done": true})
+		default:
+			t.Fatalf("ruta inesperada: %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	t.Setenv("ORQUESTA_OLLAMA_ENDPOINT", srv.URL)
+	ollamaPoolManager = newTestOllamaPoolManager(srv.URL)
 	if _, err := capacidadService.AsegurarPoolLocalCompartido(capacidadapp.EntradaAsegurarPoolLocalCompartido{
 		PoolSlug:         "ollama-gemma4",
 		ModeloPreferente: "gemma4:26b",
@@ -1082,6 +1100,55 @@ func TestAPIOllamaPoolLaunchFallaSinSlots(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("segundo launch deberia fallar por slots, status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAPIOllamaPoolLaunchBloqueaModeloActivoDistinto(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	asegurarProyectoOrquestadorCmdTest(t)
+	asegurarConectorPoolLocalCmdTest(t)
+	if err := agentesService.RegisterAgent("Gemma1", "programador"); err != nil {
+		t.Fatalf("registrar agente gemma1: %v", err)
+	}
+	prev := ollamaPoolManager
+	t.Cleanup(func() { ollamaPoolManager = prev })
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/ps":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"models": []map[string]any{
+					{"name": "qwen2.5-coder:7b", "model": "qwen2.5-coder:7b"},
+				},
+			})
+		default:
+			t.Fatalf("ruta inesperada: %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	t.Setenv("ORQUESTA_OLLAMA_ENDPOINT", srv.URL)
+	ollamaPoolManager = newTestOllamaPoolManager(srv.URL)
+
+	if _, err := capacidadService.AsegurarPoolLocalCompartido(capacidadapp.EntradaAsegurarPoolLocalCompartido{
+		PoolSlug:         "ollama-gemma4",
+		ModeloPreferente: "gemma4:26b",
+		SlotsMaximos:     1,
+	}); err != nil {
+		t.Fatalf("asegurar pool local: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/runtime/ollama-pool/launch", bytes.NewReader([]byte(`{"agente":"Gemma1","proyecto":"orquestador","plan":{"modelo":"gemma4:26b","perfil_tarea":"implementacion","razonamiento":"high"}}`)))
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("launch deberia fallar por modelo activo distinto, status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "modelo ollama activo incompatible") {
+		t.Fatalf("body sin trazabilidad de conflicto de modelo: %s", rec.Body.String())
 	}
 }
 

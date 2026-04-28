@@ -14,8 +14,10 @@ import (
 var activeControlPlaneRunner atomic.Pointer[planocontrol.Runner]
 var runtimeOrdersWakeFallbackRunning atomic.Bool
 var runtimeMailboxWakeFallbackRunning atomic.Bool
+var runtimeTranscriptBatchRunning atomic.Bool
 var runtimeOrdersWakeFallbackStartedAt atomic.Int64
 var runtimeMailboxWakeFallbackStartedAt atomic.Int64
+var runtimeTranscriptBatchStartedAt atomic.Int64
 var runtimeTranscriptDirectWakeGate = planocontrol.NewThrottler()
 
 var processRuntimeOrdersWakeFallback func()
@@ -149,6 +151,10 @@ func releaseStuckRuntimeOrdersWakeFallback() {
 
 func releaseStuckRuntimeMailboxWakeFallback() {
 	releaseStuckRuntimeWakeFallback(&runtimeMailboxWakeFallbackRunning, &runtimeMailboxWakeFallbackStartedAt)
+}
+
+func releaseStuckRuntimeTranscriptBatch() {
+	releaseStuckRuntimeWakeFallback(&runtimeTranscriptBatchRunning, &runtimeTranscriptBatchStartedAt)
 }
 
 func releaseStuckRuntimeWakeFallback(flag *atomic.Bool, startedAt *atomic.Int64) {

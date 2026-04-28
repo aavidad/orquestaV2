@@ -129,6 +129,43 @@ func TestListarSesionesInspeccionFiltraPorAgenteProyectoActivaYEstado(t *testing
 	})
 }
 
+func TestListarSesionesInspeccionCanonicalizaAliasCodex(t *testing.T) {
+	tmp := prepararDBTemporalInspeccionSesiones(t)
+
+	for _, nombre := range []string{"Codex81", "codex81"} {
+		if err := RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", nombre, err)
+		}
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "sesiones-canon",
+		Nombre:  "Sesiones Canon",
+		RutaAbs: filepath.Join(tmp, "sesiones-canon"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex81",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "sesiones-canon"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
+
+	agente := "codex81"
+	lista, err := ListarSesionesInspeccion(FiltroSesionesInspeccion{Agente: &agente})
+	if err != nil {
+		t.Fatalf("ListarSesionesInspeccion: %v", err)
+	}
+	if len(lista) != 1 || lista[0] == nil || lista[0].Agente != "Codex81" {
+		t.Fatalf("sesiones inesperadas: %+v", lista)
+	}
+}
+
 func stringPtr(v string) *string {
 	return &v
 }

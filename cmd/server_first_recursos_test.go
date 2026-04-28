@@ -329,7 +329,7 @@ func TestProyectoUsaAPI(t *testing.T) {
 			t.Fatalf("proyecto ver via api: %v", err)
 		}
 	})
-	for _, token := range []string{"Proyecto #7", "orquestador", "2 (grupo-pm)"} {
+	for _, token := range []string{"Proyecto #7", "orquestador", "2 (grupo-pm)", "Origen:    git", "Remote:    https://example.com/orquestador.git", "Base ref:  main"} {
 		if !strings.Contains(outVer, token) {
 			t.Fatalf("salida proyecto ver sin %q:\n%s", token, outVer)
 		}
@@ -374,14 +374,17 @@ func TestAsignacionRequiereServidor(t *testing.T) {
 func TestProyectoVerViaAPINoDependeDeDBParaElPadre(t *testing.T) {
 	padreID := int64(2)
 	proyecto := &db.Proyecto{
-		ID:        7,
-		Slug:      "orquestador",
-		Nombre:    "Orquestador",
-		RutaAbs:   "/tmp/orquestador",
-		Tipo:      db.ProyectoRepo,
-		ParentID:  &padreID,
-		Activo:    true,
-		CreatedAt: time.Date(2026, 3, 24, 18, 0, 0, 0, time.UTC),
+		ID:         7,
+		Slug:       "orquestador",
+		Nombre:     "Orquestador",
+		RutaAbs:    "/tmp/orquestador",
+		OrigenRepo: "git",
+		RemoteURL:  "https://example.com/orquestador.git",
+		BranchBase: "main",
+		Tipo:       db.ProyectoRepo,
+		ParentID:   &padreID,
+		Activo:     true,
+		CreatedAt:  time.Date(2026, 3, 24, 18, 0, 0, 0, time.UTC),
 	}
 
 	mux := http.NewServeMux()

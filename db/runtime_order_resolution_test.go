@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"orquesta/runtimeagente"
 )
 
 func TestResolverHandleYRuntimeParaOrdenPrefierenTMUXCanonicoSobreLegacy(t *testing.T) {
@@ -219,6 +221,56 @@ func TestRuntimePrincipalAgenteProyectoAceptaRuntimeConSesionActivaSinHandle(t *
 	}
 }
 
+func TestRuntimePrincipalAgenteProyectoCanonicalizaAliasCodex(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	for _, nombre := range []string{"Codex41", "codex41"} {
+		if err := RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", nombre, err)
+		}
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "runtime-canon",
+		Nombre:  "Runtime Canon",
+		RutaAbs: filepath.Join(tmp, "runtime-canon"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+
+	sesionID := mustInsertID(t, `INSERT INTO sesiones (
+		agente, proyecto_id, activa, estado, herramienta, host, heartbeat_at
+	) VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
+		"Codex41", proyectoID, 1, "activa", "codex-cli", "test-host")
+
+	runtimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "Codex41",
+		ProyectoID:   &proyectoID,
+		SesionID:     &sesionID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+	})
+	if err != nil {
+		t.Fatalf("RegistrarRuntimeInstance: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := DB.Exec(`UPDATE runtime_instances
+		SET last_event_at=?, last_heartbeat_at=?, updated_at=?
+		WHERE id=?`, now, now, now, runtimeID); err != nil {
+		t.Fatalf("actualizar runtime activo: %v", err)
+	}
+
+	runtime, err := runtimePrincipalAgenteProyecto("codex41", &proyectoID)
+	if err != nil {
+		t.Fatalf("runtimePrincipalAgenteProyecto: %v", err)
+	}
+	if runtime == nil || runtime.ID != runtimeID || runtime.Agente != "Codex41" {
+		t.Fatalf("runtime inesperada: %+v", runtime)
+	}
+}
+
 func TestRuntimeOrderRuntimeOperativoConSesionActivaOmiteHeartbeatStale(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
@@ -259,6 +311,54 @@ func TestRuntimeOrderRuntimeOperativoConSesionActivaOmiteHeartbeatStale(t *testi
 	}
 	if runtimeOrderRuntimeOperativoConSesionActiva(order, runtime) {
 		t.Fatal("una sesion activa sin heartbeat operativo no deberia satisfacer start")
+	}
+}
+
+func TestRuntimeOrderStartSesionAbiertaAjenaCanonicalizaAliasCodex(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	for _, nombre := range []string{"Codex45", "codex45"} {
+		if err := RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", nombre, err)
+		}
+	}
+	proyectoAID, err := UpsertProyecto(&Proyecto{
+		Slug:    "runtime-start-a",
+		Nombre:  "Runtime Start A",
+		RutaAbs: filepath.Join(tmp, "runtime-start-a"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto A: %v", err)
+	}
+	proyectoBID, err := UpsertProyecto(&Proyecto{
+		Slug:    "runtime-start-b",
+		Nombre:  "Runtime Start B",
+		RutaAbs: filepath.Join(tmp, "runtime-start-b"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto B: %v", err)
+	}
+
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex45",
+		ProyectoID:  &proyectoAID,
+		CWD:         filepath.Join(tmp, "runtime-start-a"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
+
+	ajena, err := runtimeOrderStartSesionAbiertaAjena("codex45", &proyectoBID)
+	if err != nil {
+		t.Fatalf("runtimeOrderStartSesionAbiertaAjena: %v", err)
+	}
+	if ajena == nil || ajena.ID != sesion.ID || ajena.Agente != "Codex45" {
+		t.Fatalf("sesion ajena inesperada: %+v", ajena)
 	}
 }
 
@@ -366,6 +466,65 @@ func TestResolverRuntimeParaOrdenConSoloRuntimeIDPrefiereTMUXCanonico(t *testing
 	}
 	if runtime == nil || runtime.ID != runtimeTMUXID {
 		t.Fatalf("deberia resolver al runtime tmux canónico aunque la orden solo tenga runtime_id viejo: %+v", runtime)
+	}
+}
+
+func TestPrepararResumeBootstrapRuntimeCanonicalizaAliasCodex(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	rutaBase := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(rutaBase, 0o755); err != nil {
+		t.Fatalf("mkdir proyecto: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaBase, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	for _, nombre := range []string{"Codex98", "codex98"} {
+		if err := RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", nombre, err)
+		}
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "runtime-bootstrap-canon",
+		Nombre:  "Runtime Bootstrap Canon",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	proyecto, err := GetProyecto("runtime-bootstrap-canon")
+	if err != nil || proyecto == nil {
+		t.Fatalf("GetProyecto: %+v err=%v", proyecto, err)
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex98",
+		ProyectoID:  &proyectoID,
+		Tipo:        "resume",
+		PayloadJSON: `{"motivo":"bootstrap_canon"}`,
+	})
+	if err != nil {
+		t.Fatalf("EncolarRuntimeOrder: %v", err)
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO runtime_mailbox (from_agente, to_agente, kind, payload_json, estado, proyecto_id)
+		VALUES (?,?,?,?,?,?)`,
+		"orquesta", "Codex98", "watchdog", `{"motivo":"canon"}`, "pendiente", proyectoID,
+	); err != nil {
+		t.Fatalf("insert mailbox: %v", err)
+	}
+	resume, bootstrap, err := prepararResumeBootstrapRuntime("codex98", proyecto, runtimeagente.ResumeContext{}, 0)
+	if err != nil {
+		t.Fatalf("prepararResumeBootstrapRuntime: %v", err)
+	}
+	if bootstrap == nil || bootstrap.Order == nil || bootstrap.Order.ID != orderID {
+		t.Fatalf("bootstrap order inesperada: %+v", bootstrap)
+	}
+	if len(bootstrap.Mailbox) != 1 || bootstrap.Mailbox[0] == nil || bootstrap.Mailbox[0].ToAgente != "Codex98" {
+		t.Fatalf("mailbox bootstrap inesperada: %+v", bootstrap.Mailbox)
+	}
+	if strings.TrimSpace(resume.CWD) != rutaBase {
+		t.Fatalf("resume cwd inesperado: got=%s want=%s", resume.CWD, rutaBase)
 	}
 }
 

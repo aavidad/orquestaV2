@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -49,17 +51,31 @@ var (
 		estadoAbierta := db.PropuestaAbierta
 		return db.ListarPropuestas(&estadoAbierta, nil)
 	}
-	statusVotesSummaryFetcher     = db.ResumenVotosPorPropuestas
-	statusPoolsFetcher            = listarPoolsLocalesCompartidosEstado
-	statusDispatchDebtFetcher     = listarDeudaDispatchEstado
-	statusHandoffsFetcher         = listarHandoffsAutonomiaEstado
-	statusDispatchSummaryFetcher  = listarResumenDispatchYHandoffsEstado
-	statusIncludeProposalSections = true
-	statusDispatchFailureWindow   = 2 * time.Hour
-	statusConfigGet               = db.ConfigGet
-	statusNowFunc                 = time.Now
-	statusAsyncRefresh            = true
-	statusCacheState              struct {
+	statusVotesSummaryFetcher       = db.ResumenVotosPorPropuestas
+	statusPoolsFetcher              = listarPoolsLocalesCompartidosEstado
+	statusDispatchDebtFetcher       = listarDeudaDispatchEstado
+	statusHandoffsFetcher           = listarHandoffsAutonomiaEstado
+	statusDispatchSummaryFetcher    = listarResumenDispatchYHandoffsEstado
+	statusIncludeProposalSections   = true
+	statusDispatchFailureWindow     = 2 * time.Hour
+	statusAutonomyEventsWindow      = 24 * time.Hour
+	statusAutonomyEventsFetchLimit  = 50
+	statusAutonomyEventsRecentLimit = 8
+	statusAutonomySurfaceFetcher    = buildStatusAutonomySurfaceLocal
+	statusAutonomyEventsFetcher     = func(since time.Time, limit int) ([]autonomyEventSummary, error) {
+		items, err := db.ListarAutonomyEvents(db.FiltroAutonomyEvents{
+			Desde:  &since,
+			Limite: limit,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return projectAutonomyEventSummariesFromEvents(items), nil
+	}
+	statusConfigGet    = db.ConfigGet
+	statusNowFunc      = time.Now
+	statusAsyncRefresh = true
+	statusCacheState   struct {
 		mu         sync.Mutex
 		value      apiStatusResponse
 		expires    time.Time
@@ -129,12 +145,21 @@ type deudaDispatchResumen struct {
 }
 
 type autonomiaResumen struct {
-	Supervisando         int `json:"supervising"`
-	Continuando          int `json:"continuing"`
-	ContinuidadPendiente int `json:"continuity_pending"`
-	WorkConfirmed        int `json:"work_confirmed"`
-	Handoffs             int `json:"handoffing"`
+	Supervisando         int                    `json:"supervising"`
+	Continuando          int                    `json:"continuing"`
+	ContinuidadPendiente int                    `json:"continuity_pending"`
+	WorkConfirmed        int                    `json:"work_confirmed"`
+	Handoffs             int                    `json:"handoffing"`
+	Count                int                    `json:"count"`
+	ByKind               map[string]int         `json:"by_kind"`
+	LastAt               *time.Time             `json:"last_at,omitempty"`
+	Recent               []autonomyEventSummary `json:"recent,omitempty"`
 	supervisorNames      map[string]struct{}
+}
+
+type statusWorkspaceRiskSummary struct {
+	CriticalProjectRisk *workspaceAutonomyProjectSummary
+	Highlights          []string
 }
 
 func (a *autonomiaResumen) addSupervisorName(nombre string) {
@@ -585,6 +610,345 @@ func listarHandoffsAutonomiaEstado() (int, error) {
 		return 0, err
 	}
 	return out.Handoffs, nil
+}
+
+func buildStatusWorkspaceRiskSummary(surface *autonomySurface) statusWorkspaceRiskSummary {
+	if surface == nil {
+		return statusWorkspaceRiskSummary{}
+	}
+	out := statusWorkspaceRiskSummary{
+		Highlights: append([]string(nil), surface.Highlights...),
+	}
+	if top := statusCriticalProjectRiskFromSurface(surface); top != nil {
+		out.CriticalProjectRisk = top
+	}
+	return out
+}
+
+func fetchStatusWorkspaceRiskSummary() (statusWorkspaceRiskSummary, error) {
+	if workspaceControlListProjects == nil || workspaceControlCockpitBuilder == nil {
+		return statusWorkspaceRiskSummary{}, nil
+	}
+	projectItems, err := workspaceControlListProjects()
+	if err != nil {
+		return statusWorkspaceRiskSummary{}, err
+	}
+	cockpits := make([]*apiProyectoCockpit, 0, len(projectItems))
+	for _, item := range projectItems {
+		project := strings.TrimSpace(fmt.Sprint(item["slug"]))
+		if project == "" {
+			continue
+		}
+		cockpit, err := workspaceControlCockpitBuilder(project)
+		if err != nil || cockpit == nil {
+			continue
+		}
+		cockpits = append(cockpits, cockpit)
+	}
+	surface := buildAutonomySurfaceFromCockpits(cockpits, workspaceAutonomyRecentLimit)
+	report := buildStatusWorkspaceRiskSummary(surface)
+	projects := buildWorkspaceAutonomyProjects(cockpits, surface, workspaceAutonomyProjectLimit)
+	if blocking := workspaceBlockingProjectsCount(projects); blocking > 0 {
+		report.Highlights = appendWorkspaceHighlight(report.Highlights, fmt.Sprintf("frentes_bloqueantes=%d", blocking))
+	}
+	if topRisk, ok := workspaceTopRiskProject(projects); ok {
+		topRiskCopy := topRisk
+		report.CriticalProjectRisk = &topRiskCopy
+		report.Highlights = appendWorkspaceHighlight(report.Highlights, fmt.Sprintf("integracion_bloqueada=%d", topRisk.Blocking))
+		report.Highlights = appendWorkspaceHighlight(report.Highlights, fmt.Sprintf("riesgo_top=%s(%d)", topRisk.Project, topRisk.Blocking))
+	}
+	return report, nil
+}
+
+func statusCriticalProjectRiskFromSurface(surface *autonomySurface) *workspaceAutonomyProjectSummary {
+	if surface == nil || len(surface.Projects) == 0 {
+		return nil
+	}
+	bestIndex := -1
+	for i := range surface.Projects {
+		project := strings.TrimSpace(surface.Projects[i].Project)
+		if project == "" {
+			continue
+		}
+		if bestIndex < 0 {
+			bestIndex = i
+			continue
+		}
+		current := surface.Projects[i]
+		best := surface.Projects[bestIndex]
+		switch {
+		case current.LastAt != nil && best.LastAt == nil:
+			bestIndex = i
+		case current.LastAt != nil && best.LastAt != nil && current.LastAt.After(*best.LastAt):
+			bestIndex = i
+		case current.LastAt != nil && best.LastAt != nil && current.LastAt.Equal(*best.LastAt) && current.Events > best.Events:
+			bestIndex = i
+		case current.LastAt == nil && best.LastAt == nil && current.Events > best.Events:
+			bestIndex = i
+		case current.LastAt == nil && best.LastAt == nil && current.Events == best.Events &&
+			strings.TrimSpace(current.Project) < strings.TrimSpace(best.Project):
+			bestIndex = i
+		}
+	}
+	if bestIndex < 0 {
+		return nil
+	}
+	best := surface.Projects[bestIndex]
+	project := strings.TrimSpace(best.Project)
+	if project == "" {
+		return nil
+	}
+	item := &workspaceAutonomyProjectSummary{
+		Project:    project,
+		Events:     best.Events,
+		LastAt:     best.LastAt,
+		Blocking:   statusBlockingFromHighlights(best.Highlights),
+		Highlights: append([]string(nil), best.Highlights...),
+	}
+	return item
+}
+
+func statusBlockingFromHighlights(highlights []string) int {
+	for _, item := range highlights {
+		item = strings.TrimSpace(item)
+		if !strings.HasPrefix(item, "integracion_bloqueada=") {
+			continue
+		}
+		value := strings.TrimPrefix(item, "integracion_bloqueada=")
+		if n, err := strconv.Atoi(strings.TrimSpace(value)); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 0
+}
+
+func enrichStatusAutonomySurfaceWithRisk(surface *autonomySurface, risk statusWorkspaceRiskSummary) *autonomySurface {
+	if surface == nil && len(risk.Highlights) == 0 && risk.CriticalProjectRisk == nil {
+		return nil
+	}
+	if surface == nil {
+		surface = &autonomySurface{}
+	}
+	surface.Highlights = mergeStatusRiskHighlights(surface.Highlights, risk.Highlights)
+	if risk.CriticalProjectRisk == nil {
+		return surface
+	}
+	surface.Highlights = mergeStatusRiskHighlights(surface.Highlights, []string{
+		fmt.Sprintf("integracion_bloqueada=%d", risk.CriticalProjectRisk.Blocking),
+		fmt.Sprintf("riesgo_top=%s(%d)", strings.TrimSpace(risk.CriticalProjectRisk.Project), risk.CriticalProjectRisk.Blocking),
+	})
+	project := strings.TrimSpace(risk.CriticalProjectRisk.Project)
+	if project == "" {
+		return surface
+	}
+	for i := range surface.Projects {
+		if !strings.EqualFold(strings.TrimSpace(surface.Projects[i].Project), project) {
+			continue
+		}
+		surface.Projects[i].Highlights = mergeStatusRiskHighlights(surface.Projects[i].Highlights, risk.CriticalProjectRisk.Highlights)
+		return surface
+	}
+	surface.Projects = append(surface.Projects, autonomyProjectSurface{
+		Project:    project,
+		Events:     risk.CriticalProjectRisk.Events,
+		LastAt:     risk.CriticalProjectRisk.LastAt,
+		Highlights: append([]string(nil), risk.CriticalProjectRisk.Highlights...),
+	})
+	sort.SliceStable(surface.Projects, func(i, j int) bool {
+		if strings.EqualFold(strings.TrimSpace(surface.Projects[i].Project), project) {
+			return true
+		}
+		if strings.EqualFold(strings.TrimSpace(surface.Projects[j].Project), project) {
+			return false
+		}
+		return strings.TrimSpace(surface.Projects[i].Project) < strings.TrimSpace(surface.Projects[j].Project)
+	})
+	return surface
+}
+
+func statusAutonomyHighlights(surface *autonomySurface, fallback []string) []string {
+	if surface == nil {
+		if len(fallback) == 0 {
+			return nil
+		}
+		return append([]string(nil), fallback...)
+	}
+	return mergeStatusRiskHighlights(surface.Highlights, fallback)
+}
+
+func cloneStatusCriticalProjectRisk(item *workspaceAutonomyProjectSummary) *workspaceAutonomyProjectSummary {
+	if item == nil {
+		return nil
+	}
+	out := *item
+	out.Highlights = append([]string(nil), item.Highlights...)
+	return &out
+}
+
+func mergeStatusWorkspaceRiskSummary(base, extra statusWorkspaceRiskSummary) statusWorkspaceRiskSummary {
+	out := statusWorkspaceRiskSummary{
+		CriticalProjectRisk: cloneStatusCriticalProjectRisk(base.CriticalProjectRisk),
+		Highlights:          append([]string(nil), base.Highlights...),
+	}
+	if extra.CriticalProjectRisk != nil {
+		out.CriticalProjectRisk = cloneStatusCriticalProjectRisk(extra.CriticalProjectRisk)
+	}
+	out.Highlights = mergeStatusRiskHighlights(out.Highlights, extra.Highlights)
+	return out
+}
+
+func canonicalizeStatusAutonomyRisk(surface *autonomySurface, risk statusWorkspaceRiskSummary) (*autonomySurface, statusWorkspaceRiskSummary) {
+	risk = mergeStatusWorkspaceRiskSummary(buildStatusWorkspaceRiskSummary(surface), risk)
+	surface = enrichStatusAutonomySurfaceWithRisk(surface, risk)
+	if risk.CriticalProjectRisk == nil {
+		risk.CriticalProjectRisk = statusCriticalProjectRiskFromSurface(surface)
+	}
+	risk.Highlights = statusAutonomyHighlights(surface, risk.Highlights)
+	return surface, risk
+}
+
+func loadStatusAutonomySurfaceAndRisk() (*autonomySurface, statusWorkspaceRiskSummary) {
+	var surface *autonomySurface
+	if out, ok := runStatusOptional(statusOptionalSectionTimeout, func() (*autonomySurface, error) {
+		return statusAutonomySurfaceFetcher()
+	}); ok {
+		surface = out
+	}
+	riskSummary := buildStatusWorkspaceRiskSummary(surface)
+	if out, ok := runStatusOptional(statusOptionalSectionTimeout, fetchStatusWorkspaceRiskSummary); ok {
+		riskSummary = mergeStatusWorkspaceRiskSummary(riskSummary, out)
+	}
+	return canonicalizeStatusAutonomyRisk(surface, riskSummary)
+}
+
+func normalizeStatusAutonomyPayload(surface *autonomySurface, highlights []string, criticalProjectRisk *workspaceAutonomyProjectSummary) (*autonomySurface, []string, *workspaceAutonomyProjectSummary) {
+	riskSummary := statusWorkspaceRiskSummary{
+		CriticalProjectRisk: cloneStatusCriticalProjectRisk(criticalProjectRisk),
+		Highlights:          append([]string(nil), highlights...),
+	}
+	surface, riskSummary = canonicalizeStatusAutonomyRisk(surface, riskSummary)
+	return surface, riskSummary.Highlights, riskSummary.CriticalProjectRisk
+}
+
+func resumirAutonomiaEventosRecientes(base autonomiaResumen, now time.Time) (autonomiaResumen, error) {
+	base.ByKind = map[string]int{}
+	if statusAutonomyEventsFetcher == nil {
+		return base, nil
+	}
+	if statusAutonomyEventsWindow <= 0 {
+		return base, nil
+	}
+	limit := statusAutonomyEventsFetchLimit
+	if limit <= 0 {
+		limit = 50
+	}
+	items, err := statusAutonomyEventsFetcher(now.UTC().Add(-statusAutonomyEventsWindow), limit)
+	if err != nil {
+		return base, err
+	}
+	base.Recent, base.ByKind, base.LastAt, base.Count = compactAutonomyEventSummaries(items, statusAutonomyEventsRecentLimit)
+	if base.ByKind == nil {
+		base.ByKind = map[string]int{}
+	}
+	return base, nil
+}
+
+func buildStatusAutonomySurfaceLocal() (*autonomySurface, error) {
+	if statusListProjectsFetcher == nil || statusAutonomyEventsWindow <= 0 {
+		return nil, nil
+	}
+	proyectos, err := statusListProjectsFetcher()
+	if err != nil {
+		return nil, err
+	}
+	since := statusNowFunc().UTC().Add(-statusAutonomyEventsWindow)
+	out := &autonomySurface{
+		ByKind:   map[string]int{},
+		Projects: make([]autonomyProjectSurface, 0, len(proyectos)),
+	}
+	recent := make([]autonomySurfaceRecentItem, 0)
+	for _, proyecto := range proyectos {
+		if proyecto == nil || !proyecto.Activo {
+			continue
+		}
+		project := strings.TrimSpace(proyecto.Slug)
+		if project == "" {
+			continue
+		}
+		items, err := buildProjectAutonomyEventSummaries(proyecto.ID, since, statusAutonomyEventsFetchLimit)
+		if err != nil || len(items) == 0 {
+			continue
+		}
+		projectRecent, projectByKind, projectLastAt, total := compactAutonomyEventSummaries(items, statusAutonomyEventsRecentLimit)
+		if total <= 0 {
+			continue
+		}
+		for kind, count := range projectByKind {
+			out.ByKind[kind] += count
+		}
+		out.Events += total
+		out.LastAt = maxTimePtr(out.LastAt, projectLastAt)
+		out.Projects = append(out.Projects, autonomyProjectSurface{
+			Project:    project,
+			Events:     total,
+			ByKind:     projectByKind,
+			LastAt:     projectLastAt,
+			Recent:     projectRecent,
+			Highlights: buildAutonomyHighlights(projectByKind, projectRecent, projectLastAt, 3),
+		})
+		for _, item := range projectRecent {
+			recent = append(recent, autonomySurfaceRecentItem{
+				Project:              project,
+				autonomyEventSummary: item,
+			})
+		}
+	}
+	if out.Events == 0 {
+		return nil, nil
+	}
+	sort.SliceStable(out.Projects, func(i, j int) bool {
+		left := out.Projects[i]
+		right := out.Projects[j]
+		switch {
+		case left.LastAt == nil && right.LastAt == nil:
+		case left.LastAt == nil:
+			return false
+		case right.LastAt == nil:
+			return true
+		case !left.LastAt.Equal(*right.LastAt):
+			return left.LastAt.After(*right.LastAt)
+		}
+		if left.Events != right.Events {
+			return left.Events > right.Events
+		}
+		return left.Project < right.Project
+	})
+	sort.SliceStable(recent, func(i, j int) bool {
+		if recent[i].CreatedAt.Equal(recent[j].CreatedAt) {
+			if recent[i].Project == recent[j].Project {
+				return recent[i].Kind < recent[j].Kind
+			}
+			return recent[i].Project < recent[j].Project
+		}
+		return recent[i].CreatedAt.After(recent[j].CreatedAt)
+	})
+	if statusAutonomyEventsRecentLimit > 0 && len(recent) > statusAutonomyEventsRecentLimit {
+		recent = recent[:statusAutonomyEventsRecentLimit]
+	}
+	out.Recent = recent
+	out.Highlights = buildAutonomyHighlights(out.ByKind, projectRecentFromSurfaceRecent(recent), out.LastAt, 4)
+	return out, nil
+}
+
+func projectRecentFromSurfaceRecent(items []autonomySurfaceRecentItem) []autonomyEventSummary {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]autonomyEventSummary, 0, len(items))
+	for _, item := range items {
+		out = append(out, item.autonomyEventSummary)
+	}
+	return out
 }
 
 func statusSupervisorAgentName() string {
@@ -1197,6 +1561,9 @@ func statusSnapshotIsDegenerate(status apiStatusResponse) bool {
 	if status.Autonomia.Supervisando > 0 || status.Autonomia.Continuando > 0 || status.Autonomia.ContinuidadPendiente > 0 || status.Autonomia.WorkConfirmed > 0 || status.Autonomia.Handoffs > 0 {
 		return false
 	}
+	if status.Autonomia.Count > 0 || len(status.Autonomia.ByKind) > 0 || status.Autonomia.LastAt != nil || len(status.Autonomia.Recent) > 0 {
+		return false
+	}
 	return true
 }
 
@@ -1339,6 +1706,14 @@ func fetchStatusFastFallback() (apiStatusResponse, error) {
 			autonomia.Handoffs = handoffs
 		}
 	}
+	if out, ok := runStatusOptional(statusOptionalSectionTimeout, func() (autonomiaResumen, error) {
+		return resumirAutonomiaEventosRecientes(autonomia, statusNowFunc().UTC())
+	}); ok {
+		autonomia = out
+	} else if autonomia.ByKind == nil {
+		autonomia.ByKind = map[string]int{}
+	}
+	surface, riskSummary := loadStatusAutonomySurfaceAndRisk()
 	workersConectados, workersTrabajando, supervisoresActivos := statusVisibleWorkerCounters(agentesActivos, agentesTrabajando, autonomia)
 	return apiStatusResponse{
 		Agentes:             agentes,
@@ -1356,6 +1731,9 @@ func fetchStatusFastFallback() (apiStatusResponse, error) {
 		TareasEnProgreso:    tareasEnProgreso,
 		TareasReservadas:    tareasReservadas,
 		Autonomia:           autonomia,
+		AutonomySurface:     surface,
+		AutonomyHighlights:  riskSummary.Highlights,
+		CriticalProjectRisk: riskSummary.CriticalProjectRisk,
 		WorkersConectados:   workersConectados,
 		WorkersTrabajando:   workersTrabajando,
 		SupervisoresActivos: supervisoresActivos,
@@ -1559,6 +1937,14 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 			autonomia.Handoffs = handoffs
 		}
 	}
+	if out, ok := runStatusOptional(statusOptionalSectionTimeout, func() (autonomiaResumen, error) {
+		return resumirAutonomiaEventosRecientes(autonomia, statusNowFunc().UTC())
+	}); ok {
+		autonomia = out
+	} else if autonomia.ByKind == nil {
+		autonomia.ByKind = map[string]int{}
+	}
+	surface, riskSummary := loadStatusAutonomySurfaceAndRisk()
 	workersConectados, workersTrabajando, supervisoresActivos := statusVisibleWorkerCounters(agentesActivos, agentesTrabajando, autonomia)
 	return apiStatusResponse{
 		Agentes:             agentes,
@@ -1583,6 +1969,9 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 		PoolsLocales:        poolsLocales,
 		DeudaDispatch:       deudaDispatch,
 		Autonomia:           autonomia,
+		AutonomySurface:     surface,
+		AutonomyHighlights:  riskSummary.Highlights,
+		CriticalProjectRisk: riskSummary.CriticalProjectRisk,
 		WorkersConectados:   workersConectados,
 		WorkersTrabajando:   workersTrabajando,
 		SupervisoresActivos: supervisoresActivos,

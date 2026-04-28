@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -241,6 +242,29 @@ func renderStatusSummary(ctx *statusContext) {
 	workersConectados, workersTrabajando, supervisoresActivos := resumenVisibleWorkerCounters(resumen)
 	if workersConectados > 0 || workersTrabajando > 0 || supervisoresActivos > 0 {
 		fmt.Printf("   Workers conectados %d · workers trabajando %d · supervisores activos %d\n", workersConectados, workersTrabajando, supervisoresActivos)
+	}
+	if resumen.AutonomySurface != nil && resumen.AutonomySurface.Events > 0 {
+		fmt.Printf("   Autonomía reciente %s\n", formatAutonomySurfaceSummary(resumen.AutonomySurface))
+		for _, item := range resumen.AutonomySurface.Recent {
+			fmt.Printf("   · [%s] %s", strings.TrimSpace(item.Project), strings.TrimSpace(item.Kind))
+			if strings.TrimSpace(item.Agent) != "" {
+				fmt.Printf(" agente=%s", strings.TrimSpace(item.Agent))
+			}
+			if strings.TrimSpace(item.TargetAgent) != "" {
+				fmt.Printf(" destino=%s", strings.TrimSpace(item.TargetAgent))
+			}
+			if strings.TrimSpace(item.Reason) != "" {
+				fmt.Printf(" · %s", strings.TrimSpace(item.Reason))
+			}
+			fmt.Println()
+		}
+	}
+	if project, score, highlights, ok := autonomySurfaceCriticalProjectRisk(resumen.AutonomySurface); ok {
+		fmt.Printf("   Proyecto crítico %s · integracion_bloqueada=%d", project, score)
+		if len(highlights) > 0 {
+			fmt.Printf(" · causas %s", strings.Join(highlights, " | "))
+		}
+		fmt.Println()
 	}
 	saturados := make(map[string]bool, len(resumen.AgentesSaturados))
 	for _, a := range resumen.AgentesSaturados {
@@ -1110,6 +1134,9 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		PoolsLocales             []*capacidadapp.PoolLocalCompartido `json:"poolsLocales"`
 		DeudaDispatch            deudaDispatchResumen                `json:"deudaDispatch"`
 		Autonomia                autonomiaResumen                    `json:"autonomia"`
+		AutonomySurface          *autonomySurface                    `json:"autonomySurface"`
+		AutonomyHighlights       []string                            `json:"autonomyHighlights"`
+		CriticalProjectRisk      *workspaceAutonomyProjectSummary    `json:"criticalProjectRisk"`
 		WorkersConectados        int                                 `json:"workersConectados"`
 		WorkersTrabajando        int                                 `json:"workersTrabajando"`
 		SupervisoresActivos      int                                 `json:"supervisoresActivos"`
@@ -1141,6 +1168,7 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		PoolsLocales:        payload.PoolsLocales,
 		DeudaDispatch:       payload.DeudaDispatch,
 		Autonomia:           payload.Autonomia,
+		AutonomySurface:     payload.AutonomySurface,
 		WorkersConectados:   payload.WorkersConectados,
 		WorkersTrabajando:   payload.WorkersTrabajando,
 		SupervisoresActivos: payload.SupervisoresActivos,
@@ -1166,6 +1194,29 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 	}
 	if resumen.WorkersConectados == 0 && resumen.WorkersTrabajando == 0 && resumen.SupervisoresActivos == 0 {
 		resumen.WorkersConectados, resumen.WorkersTrabajando, resumen.SupervisoresActivos = statusVisibleWorkerCounters(resumen.AgentesActivos, resumen.AgentesTrabajando, resumen.Autonomia)
+	}
+	if resumen.AutonomySurface == nil {
+		if surface, err := fetchServerProjectAutonomySurface(baseURL); err == nil && surface != nil {
+			resumen.AutonomySurface = surface
+		}
+	}
+	resumen.AutonomySurface = enrichStatusAutonomySurfaceWithRisk(resumen.AutonomySurface, statusWorkspaceRiskSummary{
+		CriticalProjectRisk: payload.CriticalProjectRisk,
+		Highlights:          payload.AutonomyHighlights,
+	})
+	if payload.CriticalProjectRisk != nil {
+		resumen.AutonomySurface = applyStructuredCriticalProjectRisk(resumen.AutonomySurface, payload.CriticalProjectRisk)
+	}
+	if resumen.AutonomySurface != nil {
+		if control, criticalProjectRisk, err := fetchServerWorkspaceControl(baseURL); err == nil && control != nil {
+			resumen.AutonomySurface = enrichAutonomySurfaceWithWorkspaceRisk(resumen.AutonomySurface, control, criticalProjectRisk)
+			switch {
+			case criticalProjectRisk != nil:
+				resumen.AutonomySurface = applyStructuredCriticalProjectRisk(resumen.AutonomySurface, criticalProjectRisk)
+			case payload.CriticalProjectRisk != nil:
+				resumen.AutonomySurface = applyStructuredCriticalProjectRisk(resumen.AutonomySurface, payload.CriticalProjectRisk)
+			}
+		}
 	}
 	if len(resumen.PropuestasAbiertas) == 0 && len(payload.PropuestasCompatAbiertas) > 0 {
 		resumen.PropuestasAbiertas = make([]propuestaLite, 0, len(payload.PropuestasCompatAbiertas))
@@ -1199,6 +1250,168 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		}
 	}
 	return resumen, nil
+}
+
+type workspaceControlCompatPayload struct {
+	workspaceControlReport
+	CriticalProjectRisk *workspaceAutonomyProjectSummary `json:"critical_project_risk,omitempty"`
+}
+
+type apiWorkspaceControlCompatResponse struct {
+	Control *workspaceControlCompatPayload `json:"control"`
+}
+
+func fetchServerWorkspaceControl(baseURL string) (*workspaceControlReport, *workspaceAutonomyProjectSummary, error) {
+	var payload apiWorkspaceControlCompatResponse
+	if err := fetchServerJSON(baseURL+"/api/workspace/control", &payload); err != nil {
+		return nil, nil, err
+	}
+	if payload.Control == nil {
+		return nil, nil, nil
+	}
+	return &payload.Control.workspaceControlReport, payload.Control.CriticalProjectRisk, nil
+}
+
+func enrichAutonomySurfaceWithWorkspaceRisk(surface *autonomySurface, report *workspaceControlReport, criticalProjectRisk *workspaceAutonomyProjectSummary) *autonomySurface {
+	if surface == nil || report == nil {
+		return surface
+	}
+	surface.Highlights = mergeStatusRiskHighlights(surface.Highlights, report.AutonomyHighlights)
+	if len(surface.Projects) > 0 && len(report.AutonomyProjects) > 0 {
+		byProject := make(map[string]workspaceAutonomyProjectSummary, len(report.AutonomyProjects))
+		for _, item := range report.AutonomyProjects {
+			project := strings.TrimSpace(item.Project)
+			if project == "" {
+				continue
+			}
+			byProject[strings.ToLower(project)] = item
+		}
+		for i := range surface.Projects {
+			project := strings.ToLower(strings.TrimSpace(surface.Projects[i].Project))
+			if project == "" {
+				continue
+			}
+			if risk, ok := byProject[project]; ok {
+				surface.Projects[i].Highlights = mergeStatusRiskHighlights(surface.Projects[i].Highlights, risk.Highlights)
+			}
+		}
+	}
+	surface = applyStructuredCriticalProjectRisk(surface, criticalProjectRisk)
+	return surface
+}
+
+func applyStructuredCriticalProjectRisk(surface *autonomySurface, critical *workspaceAutonomyProjectSummary) *autonomySurface {
+	if surface == nil || critical == nil {
+		return surface
+	}
+	project := strings.TrimSpace(critical.Project)
+	if project == "" || critical.Blocking <= 0 {
+		return surface
+	}
+	baseHighlights := filterStatusRiskScalarHighlights(surface.Highlights)
+	baseHighlights = mergeStatusRiskHighlights(baseHighlights, []string{
+		fmt.Sprintf("integracion_bloqueada=%d", critical.Blocking),
+		fmt.Sprintf("riesgo_top=%s(%d)", project, critical.Blocking),
+	})
+	surface.Highlights = baseHighlights
+
+	for i := range surface.Projects {
+		if !strings.EqualFold(strings.TrimSpace(surface.Projects[i].Project), project) {
+			continue
+		}
+		surface.Projects[i].Highlights = mergeStatusRiskHighlights(surface.Projects[i].Highlights, critical.Highlights)
+		if surface.Projects[i].Events == 0 && critical.Events > 0 {
+			surface.Projects[i].Events = critical.Events
+		}
+		return surface
+	}
+
+	surface.Projects = append(surface.Projects, autonomyProjectSurface{
+		Project:    project,
+		Events:     critical.Events,
+		Highlights: append([]string(nil), critical.Highlights...),
+	})
+	return surface
+}
+
+func filterStatusRiskScalarHighlights(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		value := strings.TrimSpace(item)
+		if value == "" {
+			continue
+		}
+		if strings.HasPrefix(value, "integracion_bloqueada=") || strings.HasPrefix(value, "riesgo_top=") {
+			continue
+		}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func mergeStatusRiskHighlights(base []string, extra []string) []string {
+	if len(base) == 0 && len(extra) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(base)+len(extra))
+	seen := map[string]struct{}{}
+	for _, item := range append(append([]string(nil), base...), extra...) {
+		value := strings.TrimSpace(item)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func autonomySurfaceCriticalProjectRisk(surface *autonomySurface) (string, int, []string, bool) {
+	if surface == nil {
+		return "", 0, nil, false
+	}
+	project, score, ok := autonomySurfaceCriticalProjectToken(surface.Highlights)
+	if !ok {
+		return "", 0, nil, false
+	}
+	for _, item := range surface.Projects {
+		if !strings.EqualFold(strings.TrimSpace(item.Project), project) {
+			continue
+		}
+		return project, score, compactProjectControlIntegrationHighlights(item.Highlights), true
+	}
+	return project, score, nil, true
+}
+
+func autonomySurfaceCriticalProjectToken(highlights []string) (string, int, bool) {
+	for _, item := range highlights {
+		value := strings.TrimSpace(item)
+		if !strings.HasPrefix(value, "riesgo_top=") {
+			continue
+		}
+		raw := strings.TrimPrefix(value, "riesgo_top=")
+		open := strings.LastIndex(raw, "(")
+		close := strings.LastIndex(raw, ")")
+		if open <= 0 || close <= open+1 || close != len(raw)-1 {
+			return "", 0, false
+		}
+		project := strings.TrimSpace(raw[:open])
+		score, err := strconv.Atoi(strings.TrimSpace(raw[open+1 : close]))
+		if err != nil || project == "" || score <= 0 {
+			return "", 0, false
+		}
+		return project, score, true
+	}
+	return "", 0, false
 }
 
 func derivarAgentesTrabajando(agentesActivos []*db.Agente, tareasActivas []tareaLite) []*db.Agente {

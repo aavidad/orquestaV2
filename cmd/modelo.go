@@ -297,6 +297,8 @@ var modeloPipelineEjecutarCmd = &cobra.Command{
 				}
 			}
 			fmt.Printf("Agente sugerido: %s\n", emptyDash(resultado.Despacho.AgenteSugerido))
+			imprimirModoDespachoCLI(resultado.Despacho)
+			imprimirSeleccionAgenteCLI(resultado.Despacho.SeleccionAgente)
 		}
 		return nil
 	},
@@ -323,6 +325,8 @@ var modeloPipelineDespacharCmd = &cobra.Command{
 		if resultado.Despacho != nil {
 			fmt.Printf("Carril: %s\n", emptyDash(resultado.Despacho.Carril))
 			fmt.Printf("Agente sugerido: %s\n", emptyDash(resultado.Despacho.AgenteSugerido))
+			imprimirModoDespachoCLI(resultado.Despacho)
+			imprimirSeleccionAgenteCLI(resultado.Despacho.SeleccionAgente)
 		}
 		if resultado.DispatchRuntime != nil {
 			fmt.Printf("Estado dispatch: %s\n", emptyDash(resultado.DispatchRuntime.Estado))

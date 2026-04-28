@@ -3,7 +3,10 @@ package bootstrapruntime
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
 	"strings"
+	"time"
 
 	"orquesta/db"
 	"orquesta/runtimeagente"
@@ -15,8 +18,18 @@ type State struct {
 	Checkpoint *db.RuntimeCheckpoint       `json:"checkpoint,omitempty"`
 }
 
+const (
+	bootstrapCheckpointPrepareTimeout = 500 * time.Millisecond
+	bootstrapProjectContextTimeout    = 500 * time.Millisecond
+)
+
 func Preparar(agente string, proyecto *db.Proyecto, ultima *db.Sesion) (runtimeagente.ResumeContext, *State, error) {
 	var resume runtimeagente.ResumeContext
+	start := time.Now()
+	bootstrapRuntimeDebugf("Preparar start agente=%s proyecto_id=%v", strings.TrimSpace(agente), proyectoIDDebug(proyecto))
+	defer func() {
+		bootstrapRuntimeDebugf("Preparar done agente=%s proyecto_id=%v duration=%s", strings.TrimSpace(agente), proyectoIDDebug(proyecto), time.Since(start).Round(time.Millisecond))
+	}()
 	if ultima != nil {
 		resume = runtimeagente.ResumeContext{
 			ExternalSessionID:  ultima.ExternalSessionID,
@@ -31,14 +44,17 @@ func Preparar(agente string, proyecto *db.Proyecto, ultima *db.Sesion) (runtimea
 	}
 
 	state := &State{}
-	order, err := db.PeekNextBootstrapRuntimeOrder(strings.TrimSpace(agente), &proyecto.ID)
+	stepStart := time.Now()
+	order, err := db.PeekNextBootstrapRuntimeOrderPrepareLite(strings.TrimSpace(agente), &proyecto.ID)
 	if err != nil {
 		return resume, nil, err
 	}
+	bootstrapRuntimeDebugf("Preparar step=peek_order duration=%s agente=%s proyecto_id=%d order=%d", time.Since(stepStart).Round(time.Millisecond), strings.TrimSpace(agente), proyecto.ID, runtimeOrderIDOrZero(order))
 	state.Order = order
 
 	estadoPendiente := "pendiente"
-	mailbox, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+	stepStart = time.Now()
+	mailbox, err := db.ListarRuntimeMailboxPrepareLite(db.FiltroRuntimeMailbox{
 		ToAgente:   strPtr(strings.TrimSpace(agente)),
 		ProyectoID: &proyecto.ID,
 		Estado:     &estadoPendiente,
@@ -46,28 +62,44 @@ func Preparar(agente string, proyecto *db.Proyecto, ultima *db.Sesion) (runtimea
 	if err != nil {
 		return resume, nil, err
 	}
+	bootstrapRuntimeDebugf("Preparar step=list_mailbox duration=%s agente=%s proyecto_id=%d total=%d", time.Since(stepStart).Round(time.Millisecond), strings.TrimSpace(agente), proyecto.ID, len(mailbox))
+	stepStart = time.Now()
 	mailbox = append(mailbox, sintetizarBootstrapMailboxDesdeRuntimeOrders(strings.TrimSpace(agente), &proyecto.ID)...)
+	bootstrapRuntimeDebugf("Preparar step=sintetizar_mailbox duration=%s agente=%s proyecto_id=%d total=%d", time.Since(stepStart).Round(time.Millisecond), strings.TrimSpace(agente), proyecto.ID, len(mailbox))
 	state.Mailbox = mailbox
 
-	checkpoint, err := db.UltimoRuntimeCheckpoint(strings.TrimSpace(agente), &proyecto.ID)
+	stepStart = time.Now()
+	checkpoint, err := ultimoRuntimeCheckpointPrepareLiteBestEffort(strings.TrimSpace(agente), &proyecto.ID)
 	if err != nil {
 		return resume, nil, err
 	}
+	bootstrapRuntimeDebugf("Preparar step=ultimo_checkpoint duration=%s agente=%s proyecto_id=%d checkpoint=%d", time.Since(stepStart).Round(time.Millisecond), strings.TrimSpace(agente), proyecto.ID, checkpointIDOrZero(checkpoint))
 	state.Checkpoint = checkpoint
 
 	if state.Order == nil && len(state.Mailbox) == 0 && state.Checkpoint == nil {
+		enriquecerResumeConContextoCompartidoBestEffort(&resume, strings.TrimSpace(agente), proyecto)
 		return resume, nil, nil
 	}
 
+	stepStart = time.Now()
 	ajustarResumeDesdeBootstrap(&resume, proyecto, state)
+	bootstrapRuntimeDebugf("Preparar step=ajustar_resume duration=%s agente=%s proyecto_id=%d", time.Since(stepStart).Round(time.Millisecond), strings.TrimSpace(agente), proyecto.ID)
+	stepStart = time.Now()
 	if payload := construirResumePayloadBootstrap(resume.ResumePayloadJSON, state); payload != "" {
 		resume.ResumePayloadJSON = payload
 	}
+	bootstrapRuntimeDebugf("Preparar step=resume_payload duration=%s agente=%s proyecto_id=%d", time.Since(stepStart).Round(time.Millisecond), strings.TrimSpace(agente), proyecto.ID)
+	stepStart = time.Now()
 	if resumen := construirResumenBootstrap(resume.ResumenContinuidad, state); resumen != "" {
 		resume.ResumenContinuidad = resumen
 	}
-	enriquecerResumeConContextoProyecto(&resume, strings.TrimSpace(agente), proyecto)
-	enriquecerResumeConGobernanza(&resume, strings.TrimSpace(agente), &proyecto.ID)
+	bootstrapRuntimeDebugf("Preparar step=resumen duration=%s agente=%s proyecto_id=%d", time.Since(stepStart).Round(time.Millisecond), strings.TrimSpace(agente), proyecto.ID)
+	stepStart = time.Now()
+	enriquecerResumeConContextoProyectoBestEffort(&resume, strings.TrimSpace(agente), proyecto)
+	bootstrapRuntimeDebugf("Preparar step=contexto_proyecto duration=%s agente=%s proyecto_id=%d", time.Since(stepStart).Round(time.Millisecond), strings.TrimSpace(agente), proyecto.ID)
+	stepStart = time.Now()
+	enriquecerResumeConContextoCompartidoBestEffort(&resume, strings.TrimSpace(agente), proyecto)
+	bootstrapRuntimeDebugf("Preparar step=contexto_compartido duration=%s agente=%s proyecto_id=%d", time.Since(stepStart).Round(time.Millisecond), strings.TrimSpace(agente), proyecto.ID)
 	return resume, state, nil
 }
 
@@ -198,11 +230,76 @@ func enriquecerResumeConContextoProyecto(resume *runtimeagente.ResumeContext, ag
 	}
 }
 
+func enriquecerResumeConContextoProyectoBestEffort(resume *runtimeagente.ResumeContext, agente string, proyecto *db.Proyecto) {
+	done := make(chan struct{}, 1)
+	go func() {
+		enriquecerResumeConContextoProyecto(resume, agente, proyecto)
+		done <- struct{}{}
+	}()
+	select {
+	case <-done:
+	case <-time.After(bootstrapProjectContextTimeout):
+		bootstrapRuntimeDebugf("Preparar step=contexto_proyecto_timeout agente=%s proyecto_id=%v timeout=%s", strings.TrimSpace(agente), proyectoIDDebug(proyecto), bootstrapProjectContextTimeout)
+	}
+}
+
+func enriquecerResumeConContextoCompartido(resume *runtimeagente.ResumeContext, agente string, proyecto *db.Proyecto) {
+	if resume == nil || proyecto == nil {
+		return
+	}
+	items, resumen := db.BuildSharedContextSummary(strings.TrimSpace(agente), proyecto)
+	if len(items) == 0 {
+		return
+	}
+	if payload := db.AppendSharedContextPayload(resume.ResumePayloadJSON, items); payload != "" {
+		resume.ResumePayloadJSON = payload
+	}
+	if resumen != "" && !strings.Contains(resume.ResumenContinuidad, resumen) {
+		if strings.TrimSpace(resume.ResumenContinuidad) == "" {
+			resume.ResumenContinuidad = resumen
+		} else {
+			resume.ResumenContinuidad += ". " + resumen
+		}
+	}
+}
+
+func enriquecerResumeConContextoCompartidoBestEffort(resume *runtimeagente.ResumeContext, agente string, proyecto *db.Proyecto) {
+	done := make(chan struct{}, 1)
+	go func() {
+		enriquecerResumeConContextoCompartido(resume, agente, proyecto)
+		done <- struct{}{}
+	}()
+	select {
+	case <-done:
+	case <-time.After(bootstrapProjectContextTimeout):
+		bootstrapRuntimeDebugf("Preparar step=contexto_compartido_timeout agente=%s proyecto_id=%v timeout=%s", strings.TrimSpace(agente), proyectoIDDebug(proyecto), bootstrapProjectContextTimeout)
+	}
+}
+
+func ultimoRuntimeCheckpointPrepareLiteBestEffort(agente string, proyectoID *int64) (*db.RuntimeCheckpoint, error) {
+	type result struct {
+		checkpoint *db.RuntimeCheckpoint
+		err        error
+	}
+	done := make(chan result, 1)
+	go func() {
+		checkpoint, err := db.UltimoRuntimeCheckpointPrepareLite(strings.TrimSpace(agente), proyectoID)
+		done <- result{checkpoint: checkpoint, err: err}
+	}()
+	select {
+	case res := <-done:
+		return res.checkpoint, res.err
+	case <-time.After(bootstrapCheckpointPrepareTimeout):
+		bootstrapRuntimeDebugf("Preparar step=ultimo_checkpoint_timeout agente=%s proyecto_id=%v timeout=%s", strings.TrimSpace(agente), proyectoID, bootstrapCheckpointPrepareTimeout)
+		return nil, nil
+	}
+}
+
 func enriquecerResumeConGobernanza(resume *runtimeagente.ResumeContext, agente string, proyectoID *int64) {
 	if resume == nil || !resumeTieneContexto(*resume) {
 		return
 	}
-	info, err := db.GetAgente(strings.TrimSpace(agente))
+	info, err := db.GetAgentePrepareLite(strings.TrimSpace(agente))
 	if err != nil || info == nil {
 		return
 	}
@@ -239,12 +336,7 @@ func sintetizarBootstrapMailboxDesdeRuntimeOrders(agente string, proyectoID *int
 	if strings.TrimSpace(agente) == "" {
 		return nil
 	}
-	estado := "pendiente"
-	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{
-		Agente:     strPtr(strings.TrimSpace(agente)),
-		ProyectoID: proyectoID,
-		Estado:     &estado,
-	})
+	orders, err := db.ListarBootstrapRuntimeOrdersMailboxPrepareLite(strings.TrimSpace(agente), proyectoID)
 	if err != nil {
 		return nil
 	}
@@ -257,7 +349,7 @@ func sintetizarBootstrapMailboxDesdeRuntimeOrders(agente string, proyectoID *int
 		if kind == "" {
 			continue
 		}
-		existente, err := db.GetRuntimeMailboxByRuntimeOrderID(order.ID)
+		existente, err := db.GetRuntimeMailboxByRuntimeOrderIDPrepareLite(order.ID)
 		if err != nil {
 			return nil
 		}
@@ -324,4 +416,36 @@ func strPtr(v string) *string {
 		return nil
 	}
 	return &v
+}
+
+func bootstrapRuntimeDebugf(format string, args ...any) {
+	if !bootstrapRuntimeDebugEnabled() {
+		return
+	}
+	log.Printf("orquesta[prepare-bootstrap] "+format, args...)
+}
+
+func bootstrapRuntimeDebugEnabled() bool {
+	for _, key := range []string{"ORQUESTA_DEBUG_PREPARE", "ORQUESTA_DEBUG"} {
+		value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+		switch value {
+		case "1", "true", "yes", "on", "si", "sí":
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeOrderIDOrZero(order *db.RuntimeOrder) int64 {
+	if order == nil {
+		return 0
+	}
+	return order.ID
+}
+
+func proyectoIDDebug(proyecto *db.Proyecto) any {
+	if proyecto == nil {
+		return nil
+	}
+	return proyecto.ID
 }

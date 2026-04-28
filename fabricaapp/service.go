@@ -17,8 +17,11 @@ import (
 // Campos configurables por el usuario:
 //   - Plataformas, SO, compliance, infraestructura, etc.
 type AppSpec struct {
-	Nombre      string
-	Descripcion string
+	Nombre           string
+	Descripcion      string
+	ObjetivoNegocio  string
+	UsuariosObjetivo string
+	Restricciones    string
 
 	// Tipo de interfaz principal
 	// Valores: web, api, web_api, cli, desktop, mobile, embedded
@@ -61,6 +64,41 @@ type AppSpec struct {
 	Terraform  bool // Infraestructura como código
 	Monitoring bool // Observabilidad (métricas, trazas, logs)
 
+	// Decisiones guiadas de arquitectura y producto
+	Arquitectura          string // hexagonal, clean, layered, event_driven
+	APIStyle              string // rest, graphql, grpc, async, mixed
+	FrontendStack         string // react, vue, sveltekit, nextjs, astro, htmx, server_rendered, angular, other
+	DatabaseEngine        string // postgres, mysql, sqlite, mongodb, redis, other
+	AuthMode              string // session, jwt, oauth, sso, api_key
+	IdentityProvider      string // active_directory, ldap, entra_id, keycloak, auth0, google, other
+	TestingLevel          string // base, strict, tdd
+	ObservabilityLevel    string // basic, standard, strict
+	DeploymentTarget      string // docker, kubernetes, serverless, vm, edge
+	ArtifactType          string // executable, docker_image, library, desktop_installer, mobile_bundle, firmware, static_site
+	BackgroundJobs        bool
+	Notifications         bool
+	MultiTenant           bool
+	RBAC                  bool
+	ThemeSupport          bool
+	BrandingProfiles      bool
+	OfflineMode           bool
+	ImportExport          bool
+	Webhooks              bool
+	FileUploads           bool
+	Reporting             bool
+	ServicioResidente     bool
+	Cache                 bool
+	Queue                 bool
+	Scheduler             bool
+	ObjectStorage         bool
+	Search                bool
+	RateLimiting          bool
+	FeatureFlags          bool
+	AuditTrail            bool
+	Backups               bool
+	DisasterRecovery      bool
+	IntegracionesExternas []string
+
 	// Calidad y arquitectura (siempre activos internamente)
 	// No se exponen como campos porque son obligatorios en toda app generada.
 	// Se generan tareas para ellos siempre.
@@ -96,6 +134,108 @@ type Service struct{}
 
 func NewService() *Service {
 	return &Service{}
+}
+
+// RecommendDatabaseEngine devuelve el motor recomendado para el primer corte del proyecto.
+// No impone la decisión final; solo sugiere un default sensato para el wizard.
+func RecommendDatabaseEngine(spec AppSpec) string {
+	spec = normalizeSpecForDatabaseRecommendation(spec)
+
+	durable := needsDurablePersistence(spec)
+	serverGrade := needsServerGradeDatabase(spec)
+	embeddedPreferred := prefersEmbeddedDatabase(spec)
+
+	switch {
+	case !durable && !serverGrade && !embeddedPreferred:
+		return "none"
+	case embeddedPreferred:
+		return "sqlite"
+	case serverGrade:
+		return "postgres"
+	case spec.Database || durable:
+		if spec.OfflineMode || spec.PlatDesktop || spec.PlatMobile || spec.PlatCLI || spec.PlatEmbedded {
+			return "sqlite"
+		}
+		return "postgres"
+	default:
+		return "none"
+	}
+}
+
+// RecommendFrontendStack devuelve el stack web recomendado cuando la app tiene UI web.
+func RecommendFrontendStack(spec AppSpec) string {
+	spec = normalizeSpecForDatabaseRecommendation(spec)
+
+	if !spec.Frontend && spec.Tipo != "web" && spec.Tipo != "web_api" {
+		return "server_rendered"
+	}
+	if spec.OfflineMode || spec.Reporting || spec.FeatureFlags || spec.MultiTenant || spec.FileUploads {
+		return "react"
+	}
+	if spec.Tipo == "web" && !spec.API && !spec.ServicioResidente && !spec.BackgroundJobs {
+		return "server_rendered"
+	}
+	return "react"
+}
+
+// RecommendAuthMode devuelve el modo de autenticación recomendado.
+func RecommendAuthMode(spec AppSpec) string {
+	spec = normalizeSpecForDatabaseRecommendation(spec)
+
+	switch {
+	case !spec.Auth:
+		return "none"
+	case spec.IdentityProvider != "none":
+		return "sso"
+	case spec.Tipo == "mobile":
+		return "oauth"
+	case spec.Tipo == "cli":
+		return "api_key"
+	case spec.Tipo == "api" && !spec.Frontend:
+		return "jwt"
+	default:
+		return "session"
+	}
+}
+
+// RecommendDeploymentTarget devuelve el target de despliegue recomendado.
+func RecommendDeploymentTarget(spec AppSpec) string {
+	spec = normalizeSpecForDatabaseRecommendation(spec)
+
+	switch {
+	case spec.Kubernetes:
+		return "kubernetes"
+	case spec.Tipo == "embedded" || spec.PlatEmbedded:
+		return "edge"
+	case spec.Tipo == "desktop" || spec.Tipo == "mobile" || spec.Tipo == "cli" || spec.PlatDesktop || spec.PlatMobile || spec.PlatCLI:
+		return "vm"
+	case spec.Tipo == "web" && !spec.API && !spec.ServicioResidente && !spec.BackgroundJobs && !spec.Queue && !spec.Scheduler:
+		return "serverless"
+	default:
+		return "docker"
+	}
+}
+
+// RecommendArtifactType devuelve el artefacto principal recomendado.
+func RecommendArtifactType(spec AppSpec) string {
+	spec = normalizeSpecForDatabaseRecommendation(spec)
+
+	switch {
+	case spec.Tipo == "embedded" || spec.PlatEmbedded:
+		return "firmware"
+	case spec.Tipo == "mobile" || spec.PlatMobile:
+		return "mobile_bundle"
+	case spec.Tipo == "desktop" || spec.PlatDesktop:
+		return "desktop_installer"
+	case spec.Tipo == "web" && !spec.API && !spec.ServicioResidente && !spec.BackgroundJobs && !spec.Queue && !spec.Scheduler:
+		return "static_site"
+	case spec.ArtifactType == "library":
+		return "library"
+	case spec.DeploymentTarget == "kubernetes" || spec.Kubernetes || spec.DeploymentTarget == "docker":
+		return "docker_image"
+	default:
+		return "executable"
+	}
 }
 
 func (s *Service) Generate(spec AppSpec) (GenerationResult, error) {
@@ -193,6 +333,20 @@ func (s *Service) Generate(spec AppSpec) (GenerationResult, error) {
 		"Cobertura mínima acordada y documentada",
 		"Tests de integración con BD/servicios externos planificados"))
 
+	builder.add(withSOP(BlueprintTask{
+		Key:              "baseline_profesional",
+		Titulo:           fmt.Sprintf("Cerrar baseline de codificación profesional de %s", normalized.Nombre),
+		Descripcion:      composeProfessionalBaselineDescription(normalized),
+		Modulo:           "ingenieria",
+		Prioridad:        PrioridadAlta,
+		Dependencias:     []string{"arquitectura", "tooling_calidad", "testing_base"},
+		ContratoDefinido: true,
+	}, "tech_lead", "arquitectura", "Baseline profesional acordada y operativa",
+		"Configuración, secretos y entornos definidos sin hardcodes",
+		"Política de errores, validación y logging estructurado documentada",
+		"Desarrollo local y CI reproducibles",
+		"Seguridad baseline y dependencias críticas revisadas"))
+
 	// ── Fase 2: Compliance (si aplica) ───────────────────────────────────────
 
 	if hasCompliance(normalized) {
@@ -236,6 +390,22 @@ func (s *Service) Generate(spec AppSpec) (GenerationResult, error) {
 		builder.add(mobileTask(normalized, archDeps))
 	case "embedded":
 		builder.add(embeddedTask(normalized, archDeps))
+	}
+
+	if hasThemeableUI(normalized) {
+		builder.add(withSOP(BlueprintTask{
+			Key:              "ui_temas_branding",
+			Titulo:           fmt.Sprintf("Cerrar sistema de temas y branding de %s", normalized.Nombre),
+			Descripcion:      composeUIThemesDescription(normalized),
+			Modulo:           "frontend",
+			Prioridad:        PrioridadAlta,
+			Dependencias:     uniqueKeys(append(archDeps, featureDepsForAuth(normalized)...)...),
+			ContratoDefinido: true,
+		}, "frontend", "implementacion", "Sistema de temas desacoplado y reutilizable",
+			"Tokens semánticos de color, tipografía y espaciado definidos",
+			"Componentes sin estilos hardcodeados por negocio",
+			"Cambio de tema o branding sin tocar lógica de aplicación",
+			"Documentación de theming y branding disponible"))
 	}
 
 	if normalized.Database {
@@ -483,12 +653,15 @@ func (s *Service) Generate(spec AppSpec) (GenerationResult, error) {
 	builder.add(withSOP(BlueprintTask{
 		Key:          "documentacion",
 		Titulo:       fmt.Sprintf("Cerrar documentación operativa de %s", normalized.Nombre),
-		Descripcion:  "Documentar arquitectura hexagonal, módulos, uso, despliegue, i18n y operación. Incluir atribución visible a Orquesta de Alberto Avidad Fernández en README, manuales y piezas documentales generadas.",
+		Descripcion:  composeDocumentationDescription(normalized),
 		Modulo:       "docs",
 		Prioridad:    PrioridadMedia,
 		Dependencias: []string{"qa_smoke"},
-	}, "documentador", "documentacion", "Documentación operativa y técnica",
+	}, "documentador", "documentacion", "Documentación para usuarios, técnicos y sistemas",
 		"README y manuales actualizados",
+		"Guía de usuario básica disponible",
+		"Guía técnica para desarrollo disponible",
+		"Guía de sistemas y operación disponible",
 		"Arquitectura hexagonal documentada con diagrama",
 		"Operación y despliegue explicados",
 		"Atribución visible a Orquesta"))
@@ -513,6 +686,64 @@ func (s *Service) Generate(spec AppSpec) (GenerationResult, error) {
 		"Artefactos finales validados",
 		"Criterio de completitud explicitado"))
 
+	return GenerationResult{Tasks: builder.tasks}, nil
+}
+
+func (s *Service) GenerateLanguageExpansion(nombre string, idiomas []string) (GenerationResult, error) {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return GenerationResult{}, fmt.Errorf("nombre obligatorio")
+	}
+	idiomas = normalizeIdiomas(idiomas)
+	if len(idiomas) == 0 {
+		return GenerationResult{}, fmt.Errorf("idiomas obligatorios")
+	}
+
+	builder := blueprintBuilder{}
+	for _, idioma := range idiomas {
+		langKey := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(idioma)), "-", "_")
+		baseKey := "i18n_expand_" + langKey
+		docsKey := "documentacion_expand_" + langKey
+		qaKey := "qa_i18n_expand_" + langKey
+		builder.add(withSOP(BlueprintTask{
+			Key:              baseKey,
+			Titulo:           fmt.Sprintf("Ampliar %s a %s", nombre, strings.ToUpper(idioma)),
+			Descripcion:      composeI18nExpansionDescription(nombre, idioma),
+			Modulo:           "i18n",
+			Prioridad:        PrioridadAlta,
+			ContratoDefinido: true,
+		}, "i18n", "implementacion", "Bundles y cadenas nuevas operativas",
+			"Bundles base del idioma creados y conectados",
+			"UI, API y mensajes operativos sin literales fijas en la superficie nueva",
+			"Formato de fechas, números y textos críticos validado para el idioma nuevo",
+		))
+		builder.add(withSOP(BlueprintTask{
+			Key:              docsKey,
+			Titulo:           fmt.Sprintf("Traducir manuales de %s a %s", nombre, strings.ToUpper(idioma)),
+			Descripcion:      composeLanguageDocumentationExpansionDescription(nombre, idioma),
+			Modulo:           "documentacion",
+			Prioridad:        PrioridadMedia,
+			Dependencias:     []string{baseKey},
+			ContratoDefinido: true,
+		}, "documentador", "documentacion", "Manuales del nuevo idioma publicados",
+			"Manual de usuario actualizado en el idioma nuevo",
+			"Manual tecnico/desarrollo actualizado en el idioma nuevo",
+			"Manual de sistemas/operacion actualizado en el idioma nuevo",
+		))
+		builder.add(withSOP(BlueprintTask{
+			Key:              qaKey,
+			Titulo:           fmt.Sprintf("Validar QA multilenguaje para %s en %s", nombre, strings.ToUpper(idioma)),
+			Descripcion:      composeLanguageQAExpansionDescription(nombre, idioma),
+			Modulo:           "qa",
+			Prioridad:        PrioridadMedia,
+			Dependencias:     []string{docsKey},
+			ContratoDefinido: true,
+		}, "qa", "validacion", "Evidencia funcional del nuevo idioma",
+			"Navegacion principal validada en el nuevo idioma",
+			"Mensajes de error, confirmacion y ayuda revisados",
+			"Documentacion y producto coherentes para el idioma nuevo",
+		))
+	}
 	return GenerationResult{Tasks: builder.tasks}, nil
 }
 
@@ -557,8 +788,22 @@ func (b *blueprintBuilder) featureDependencyKeys() []string {
 func normalizeSpec(spec AppSpec) (AppSpec, error) {
 	spec.Nombre = strings.TrimSpace(spec.Nombre)
 	spec.Descripcion = strings.TrimSpace(spec.Descripcion)
+	spec.ObjetivoNegocio = strings.TrimSpace(spec.ObjetivoNegocio)
+	spec.UsuariosObjetivo = strings.TrimSpace(spec.UsuariosObjetivo)
+	spec.Restricciones = strings.TrimSpace(spec.Restricciones)
 	spec.Tipo = strings.ToLower(strings.TrimSpace(spec.Tipo))
 	spec.Idiomas = normalizeIdiomas(spec.Idiomas)
+	spec.Arquitectura = normalizeArchitecture(spec.Arquitectura)
+	spec.APIStyle = normalizeAPIStyle(spec.APIStyle)
+	spec.FrontendStack = normalizeFrontendStack(spec.FrontendStack)
+	spec.DatabaseEngine = normalizeDatabaseEngine(spec.DatabaseEngine)
+	spec.AuthMode = normalizeAuthMode(spec.AuthMode)
+	spec.IdentityProvider = normalizeIdentityProvider(spec.IdentityProvider)
+	spec.TestingLevel = normalizeTestingLevel(spec.TestingLevel)
+	spec.ObservabilityLevel = normalizeObservabilityLevel(spec.ObservabilityLevel)
+	spec.DeploymentTarget = normalizeDeploymentTarget(spec.DeploymentTarget)
+	spec.ArtifactType = normalizeArtifactType(spec.ArtifactType)
+	spec.IntegracionesExternas = normalizeCSVList(spec.IntegracionesExternas)
 
 	if spec.Nombre == "" {
 		return AppSpec{}, fmt.Errorf("nombre obligatorio")
@@ -590,19 +835,240 @@ func normalizeSpec(spec AppSpec) (AppSpec, error) {
 		return AppSpec{}, fmt.Errorf("tipo de app no soportado: %s", spec.Tipo)
 	}
 
+	if !spec.Database {
+		spec.DatabaseEngine = "none"
+	} else if spec.DatabaseEngine == "none" {
+		spec.DatabaseEngine = RecommendDatabaseEngine(spec)
+	}
+	if hasThemeableUI(spec) && spec.FrontendStack == "server_rendered" && (spec.Tipo == "web_api" || spec.Frontend) {
+		spec.FrontendStack = RecommendFrontendStack(spec)
+	}
+	if !spec.Auth {
+		spec.AuthMode = "none"
+	} else if spec.AuthMode == "none" {
+		spec.AuthMode = RecommendAuthMode(spec)
+	}
+	if hasThemeableUI(spec) {
+		spec.ThemeSupport = true
+	}
+
 	return spec, nil
 }
 
+func normalizeSpecForDatabaseRecommendation(spec AppSpec) AppSpec {
+	spec.Tipo = strings.ToLower(strings.TrimSpace(spec.Tipo))
+	spec.AuthMode = normalizeAuthMode(spec.AuthMode)
+	spec.IdentityProvider = normalizeIdentityProvider(spec.IdentityProvider)
+	spec.DeploymentTarget = normalizeDeploymentTarget(spec.DeploymentTarget)
+	spec.ArtifactType = normalizeArtifactType(spec.ArtifactType)
+
+	switch spec.Tipo {
+	case "web":
+		spec.Frontend = true
+		spec.PlatWeb = true
+	case "api":
+		spec.API = true
+		spec.PlatWeb = true
+	case "web_api":
+		spec.Frontend = true
+		spec.API = true
+		spec.PlatWeb = true
+	case "cli":
+		spec.PlatCLI = true
+	case "desktop":
+		spec.PlatDesktop = true
+	case "mobile":
+		spec.PlatMobile = true
+	case "embedded":
+		spec.PlatEmbedded = true
+	}
+
+	return spec
+}
+
 func normalizeIdiomas(idiomas []string) []string {
-	out := make([]string, 0, len(idiomas))
-	for _, idioma := range idiomas {
-		idioma = strings.ToLower(strings.TrimSpace(idioma))
-		if idioma == "" || slices.Contains(out, idioma) {
+	return normalizeCSVList(idiomas)
+}
+
+func normalizeCSVList(items []string) []string {
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		item = strings.ToLower(strings.TrimSpace(item))
+		if item == "" || slices.Contains(out, item) {
 			continue
 		}
-		out = append(out, idioma)
+		out = append(out, item)
 	}
 	return out
+}
+
+func normalizeArchitecture(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "hexagonal":
+		return "hexagonal"
+	case "clean", "layered", "event_driven":
+		return strings.ToLower(strings.TrimSpace(v))
+	default:
+		return "hexagonal"
+	}
+}
+
+func normalizeAPIStyle(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "rest":
+		return "rest"
+	case "graphql", "grpc", "async", "mixed":
+		return strings.ToLower(strings.TrimSpace(v))
+	default:
+		return "rest"
+	}
+}
+
+func normalizeFrontendStack(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "server_rendered":
+		return "server_rendered"
+	case "react", "vue", "sveltekit", "nextjs", "astro", "htmx", "angular", "other":
+		return strings.ToLower(strings.TrimSpace(v))
+	default:
+		return "other"
+	}
+}
+
+func normalizeDatabaseEngine(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "none":
+		return "none"
+	case "postgres", "mysql", "sqlite", "mongodb", "redis", "other":
+		return strings.ToLower(strings.TrimSpace(v))
+	default:
+		return "other"
+	}
+}
+
+func normalizeAuthMode(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "none":
+		return "none"
+	case "session", "jwt", "oauth", "sso", "api_key":
+		return strings.ToLower(strings.TrimSpace(v))
+	default:
+		return "none"
+	}
+}
+
+func normalizeTestingLevel(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "base":
+		return "base"
+	case "strict", "tdd":
+		return strings.ToLower(strings.TrimSpace(v))
+	default:
+		return "base"
+	}
+}
+
+func normalizeIdentityProvider(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "none":
+		return "none"
+	case "active_directory", "ldap", "entra_id", "keycloak", "auth0", "google", "other":
+		return strings.ToLower(strings.TrimSpace(v))
+	default:
+		return "none"
+	}
+}
+
+func normalizeObservabilityLevel(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "standard":
+		return "standard"
+	case "basic", "strict":
+		return strings.ToLower(strings.TrimSpace(v))
+	default:
+		return "standard"
+	}
+}
+
+func normalizeDeploymentTarget(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "docker":
+		return "docker"
+	case "kubernetes", "serverless", "vm", "edge":
+		return strings.ToLower(strings.TrimSpace(v))
+	default:
+		return "docker"
+	}
+}
+
+func normalizeArtifactType(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "executable":
+		return "executable"
+	case "docker_image", "library", "desktop_installer", "mobile_bundle", "firmware", "static_site":
+		return strings.ToLower(strings.TrimSpace(v))
+	default:
+		return "executable"
+	}
+}
+
+func needsDurablePersistence(spec AppSpec) bool {
+	return spec.Database ||
+		spec.Auth ||
+		spec.AuthMode != "none" ||
+		spec.IdentityProvider != "none" ||
+		spec.FileUploads ||
+		spec.ImportExport ||
+		spec.Reporting ||
+		spec.Search ||
+		spec.AuditTrail ||
+		spec.MultiTenant ||
+		spec.BackgroundJobs ||
+		spec.Queue ||
+		spec.Scheduler ||
+		spec.ServicioResidente ||
+		spec.Notifications ||
+		spec.Webhooks ||
+		spec.ObjectStorage ||
+		spec.Backups ||
+		spec.DisasterRecovery
+}
+
+func needsServerGradeDatabase(spec AppSpec) bool {
+	return spec.API ||
+		spec.MultiTenant ||
+		spec.RBAC ||
+		spec.Reporting ||
+		spec.BackgroundJobs ||
+		spec.Queue ||
+		spec.Scheduler ||
+		spec.ServicioResidente ||
+		spec.Notifications ||
+		spec.Webhooks ||
+		spec.AuditTrail ||
+		spec.Backups ||
+		spec.DisasterRecovery ||
+		spec.AuthMode == "oauth" ||
+		spec.AuthMode == "sso" ||
+		spec.AuthMode == "api_key" ||
+		spec.IdentityProvider != "none" ||
+		spec.DeploymentTarget == "kubernetes" ||
+		spec.Kubernetes ||
+		spec.ArtifactType == "docker_image"
+}
+
+func prefersEmbeddedDatabase(spec AppSpec) bool {
+	return needsDurablePersistence(spec) &&
+		(spec.OfflineMode ||
+			spec.Tipo == "desktop" ||
+			spec.Tipo == "mobile" ||
+			spec.Tipo == "cli" ||
+			spec.Tipo == "embedded" ||
+			spec.PlatDesktop ||
+			spec.PlatMobile ||
+			spec.PlatCLI ||
+			spec.PlatEmbedded) &&
+		!needsServerGradeDatabase(spec)
 }
 
 func uniqueKeys(keys ...string) []string {
@@ -623,7 +1089,11 @@ func hasCompliance(spec AppSpec) bool {
 }
 
 func requiresResidentService(spec AppSpec) bool {
-	return spec.API
+	return spec.API || spec.ServicioResidente || spec.BackgroundJobs || spec.Queue || spec.Scheduler
+}
+
+func hasThemeableUI(spec AppSpec) bool {
+	return spec.Frontend || spec.Tipo == "web" || spec.Tipo == "web_api" || spec.Tipo == "desktop" || spec.Tipo == "mobile"
 }
 
 // ── Helpers de tareas específicas ─────────────────────────────────────────────
@@ -657,10 +1127,17 @@ func featureDepsForAuth(spec AppSpec) []string {
 }
 
 func frontendTask(spec AppSpec, deps []string) BlueprintTask {
+	description := "Crear shell visual, navegación principal, estados base y estructura inicial de interfaz. El frontend se implementa como adaptador de UI en la arquitectura hexagonal, sin lógica de negocio."
+	if stack := describeFrontendStack(spec.FrontendStack); stack != "" {
+		description += " Stack preferido: " + stack + "."
+	}
+	if root := describeUISurfaceRoot(spec); root != "" {
+		description += " La estructura debe dejar una superficie UI explícita en " + root + "."
+	}
 	return withSOP(BlueprintTask{
 		Key:              "frontend_base",
 		Titulo:           fmt.Sprintf("Implementar frontend base de %s", spec.Nombre),
-		Descripcion:      "Crear shell visual, navegación principal, estados base y estructura inicial de interfaz. El frontend se implementa como adaptador de UI en la arquitectura hexagonal, sin lógica de negocio.",
+		Descripcion:      description,
 		Modulo:           "frontend",
 		Prioridad:        PrioridadAlta,
 		Dependencias:     uniqueKeys(deps...),
@@ -799,13 +1276,89 @@ func composeBriefingDescription(spec AppSpec) string {
 	parts := []string{
 		fmt.Sprintf("Alinear alcance, personas usuarias, flujos principales y criterios de entrega de la app %s.", spec.Nombre),
 		fmt.Sprintf("Tipo objetivo: %s.", spec.Tipo),
+		fmt.Sprintf("Arquitectura objetivo: %s.", describeArchitecture(spec.Arquitectura)),
 	}
 	if spec.Descripcion != "" {
 		parts = append(parts, "Contexto: "+spec.Descripcion)
 	}
+	if hasThemeableUI(spec) {
+		parts = append(parts, "La app debe soportar theming y branding desacoplado como capacidad de producto, no como CSS puntual.")
+	}
+	if spec.ObjetivoNegocio != "" {
+		parts = append(parts, "Objetivo de negocio: "+spec.ObjetivoNegocio)
+	}
+	if spec.UsuariosObjetivo != "" {
+		parts = append(parts, "Usuarios objetivo: "+spec.UsuariosObjetivo)
+	}
+	if spec.Restricciones != "" {
+		parts = append(parts, "Restricciones iniciales: "+spec.Restricciones)
+	}
+	if spec.API {
+		parts = append(parts, fmt.Sprintf("Estilo de interfaz API esperado: %s.", describeAPIStyle(spec.APIStyle)))
+	}
+	if spec.Database {
+		parts = append(parts, fmt.Sprintf("Persistencia prevista: %s.", describeDatabaseEngine(spec.DatabaseEngine)))
+	}
+	if spec.Auth {
+		parts = append(parts, fmt.Sprintf("Modelo de acceso preferido: %s.", describeAuthMode(spec.AuthMode)))
+		if spec.RBAC {
+			parts = append(parts, "La autorización debe resolverse con RBAC.")
+		}
+		if idp := describeIdentityProvider(spec.IdentityProvider); idp != "" {
+			parts = append(parts, fmt.Sprintf("Proveedor de identidad previsto: %s.", idp))
+		}
+	}
 	soList := composeSoList(spec)
 	if len(soList) > 0 {
 		parts = append(parts, fmt.Sprintf("SO objetivo: %s.", strings.Join(soList, ", ")))
+	}
+	if spec.BackgroundJobs {
+		parts = append(parts, "La app debe contemplar procesos asíncronos o jobs en segundo plano.")
+	}
+	if spec.OfflineMode {
+		parts = append(parts, "La app debe contemplar modo offline y estrategia de sincronización.")
+	}
+	if spec.ServicioResidente {
+		parts = append(parts, "La app requiere un núcleo o servicio residente explícito.")
+	}
+	if spec.Queue {
+		parts = append(parts, "La app debe incorporar colas o mensajería asíncrona.")
+	}
+	if spec.Scheduler {
+		parts = append(parts, "La app necesita tareas programadas o cron de negocio.")
+	}
+	if spec.Cache {
+		parts = append(parts, "La app debe contemplar una capa de caché.")
+	}
+	if spec.ObjectStorage {
+		parts = append(parts, "La app debe gestionar ficheros o blobs en object storage.")
+	}
+	if spec.Search {
+		parts = append(parts, "La app necesita búsqueda o indexación dedicada.")
+	}
+	if spec.ImportExport {
+		parts = append(parts, "La app debe importar y exportar datos de forma controlada.")
+	}
+	if spec.Webhooks {
+		parts = append(parts, "La app debe exponer o consumir webhooks/eventos con terceros.")
+	}
+	if spec.FileUploads {
+		parts = append(parts, "La app debe gestionar subida y ciclo de vida de ficheros.")
+	}
+	if spec.Reporting {
+		parts = append(parts, "La app debe ofrecer reporting, cuadros o analítica funcional.")
+	}
+	if spec.Notifications {
+		parts = append(parts, "La app debe contemplar notificaciones salientes o entrantes.")
+	}
+	if spec.MultiTenant {
+		parts = append(parts, "La app debe diseñarse con separación multi-tenant.")
+	}
+	if len(spec.IntegracionesExternas) > 0 {
+		parts = append(parts, fmt.Sprintf("Integraciones externas declaradas: %s.", strings.Join(spec.IntegracionesExternas, ", ")))
+	}
+	if spec.ArtifactType != "" {
+		parts = append(parts, fmt.Sprintf("Artefacto principal de entrega: %s.", describeArtifactType(spec.ArtifactType)))
 	}
 	if hasCompliance(spec) {
 		parts = append(parts, "Incluir requisitos legales y normativos en el brief.")
@@ -821,28 +1374,52 @@ func composeResearchDescription(spec AppSpec) string {
 	if spec.I18n {
 		parts = append(parts, "Confirmar implicaciones de i18n desde el inicio.")
 	}
+	if spec.Database {
+		parts = append(parts, fmt.Sprintf("Comparar alternativas de persistencia y validar por qué %s encaja mejor.", describeDatabaseEngine(spec.DatabaseEngine)))
+	}
+	if spec.API {
+		parts = append(parts, fmt.Sprintf("Validar el encaje de %s frente a otras opciones de integración.", describeAPIStyle(spec.APIStyle)))
+	}
+	if spec.Auth {
+		parts = append(parts, fmt.Sprintf("Evaluar riesgos y tradeoffs de %s para autenticación y autorización.", describeAuthMode(spec.AuthMode)))
+		if idp := describeIdentityProvider(spec.IdentityProvider); idp != "" {
+			parts = append(parts, fmt.Sprintf("Revisar integración con %s y sus requisitos de provisioning, grupos y claims.", idp))
+		}
+	}
 	if hasCompliance(spec) {
 		parts = append(parts, "Revisar normativas aplicables y su impacto técnico.")
 	}
 	if spec.PlatDesktop || spec.PlatMobile {
 		parts = append(parts, "Evaluar frameworks multiplataforma y sus restricciones.")
 	}
+	if len(spec.IntegracionesExternas) > 0 {
+		parts = append(parts, fmt.Sprintf("Revisar SDKs, cuotas y contratos de las integraciones declaradas: %s.", strings.Join(spec.IntegracionesExternas, ", ")))
+	}
+	if spec.Cache || spec.Queue || spec.ObjectStorage || spec.Search || spec.Webhooks || spec.FileUploads {
+		parts = append(parts, "Revisar también servicios de infraestructura gestionada, costes y estrategia local/dev frente a producción.")
+	}
 	return strings.Join(parts, " ")
 }
 
 func composeArchitectureDescription(spec AppSpec) string {
 	parts := []string{
-		"Diseñar arquitectura hexagonal (puertos y adaptadores): núcleo de dominio aislado de infraestructura, adaptadores de entrada (API, CLI, UI) y salida (BD, servicios externos).",
+		fmt.Sprintf("Diseñar arquitectura %s: núcleo de dominio aislado de infraestructura, adaptadores de entrada (API, CLI, UI) y salida (BD, servicios externos).", describeArchitecture(spec.Arquitectura)),
 		"Definir módulos con contratos explícitos entre sí. Ningún módulo depende de la implementación concreta de otro.",
 	}
 	if requiresResidentService(spec) {
 		parts = append(parts, "Si la app necesita servicio residente, el núcleo siempre vivo debe ser mínimo: continuidad operativa, hot state imprescindible y coordinación ligera. La supervisión rica, snapshots pesados, reconciliaciones profundas y lecturas no críticas deben salir a workers separados, caminos on-demand o procesamiento orientado a eventos.")
 	}
 	if spec.Database {
-		parts = append(parts, "Incluir puerto de persistencia con adaptador(es) de BD.")
+		parts = append(parts, fmt.Sprintf("Incluir puerto de persistencia con adaptador(es) para %s.", describeDatabaseEngine(spec.DatabaseEngine)))
 	}
 	if spec.Auth {
-		parts = append(parts, "Incluir puerto de autenticación/autorización.")
+		parts = append(parts, fmt.Sprintf("Incluir puerto de autenticación/autorización alineado con %s.", describeAuthMode(spec.AuthMode)))
+		if spec.RBAC {
+			parts = append(parts, "Modelar RBAC explícito con roles, permisos y puntos de decisión de acceso.")
+		}
+		if idp := describeIdentityProvider(spec.IdentityProvider); idp != "" {
+			parts = append(parts, "Separar la integración con "+idp+" detrás de un adaptador de identidad.")
+		}
 	}
 	if spec.I18n {
 		parts = append(parts, "Diseñar con i18n desde el inicio.")
@@ -852,7 +1429,49 @@ func composeArchitectureDescription(spec AppSpec) string {
 		parts = append(parts, fmt.Sprintf("Estrategia multiplataforma para: %s.", strings.Join(soList, ", ")))
 	}
 	if spec.Monitoring {
-		parts = append(parts, "Incluir puertos de observabilidad (logs, métricas, trazas).")
+		parts = append(parts, fmt.Sprintf("Incluir puertos de observabilidad con nivel %s (logs, métricas, trazas).", describeObservabilityLevel(spec.ObservabilityLevel)))
+	}
+	if spec.BackgroundJobs {
+		parts = append(parts, "Separar explícitamente jobs, colas o tareas programadas del request path principal.")
+	}
+	if spec.OfflineMode {
+		parts = append(parts, "Diseñar estrategia de sincronización, versionado y resolución de conflictos para trabajo offline.")
+	}
+	if spec.Cache {
+		parts = append(parts, "Diseñar puerto/adaptador de caché y reglas de invalidación.")
+	}
+	if spec.Queue {
+		parts = append(parts, "Diseñar puerto/adaptador para colas, reintentos y dead-letter si aplica.")
+	}
+	if spec.ObjectStorage {
+		parts = append(parts, "Diseñar puerto/adaptador para almacenamiento de objetos y lifecycle de ficheros.")
+	}
+	if spec.Search {
+		parts = append(parts, "Diseñar puerto/adaptador para indexación y consulta de búsqueda.")
+	}
+	if spec.RateLimiting {
+		parts = append(parts, "Definir estrategia de rate limiting y cuotas por actor, tenant o API key.")
+	}
+	if spec.FeatureFlags {
+		parts = append(parts, "Prever feature flags para despliegue progresivo y rollback funcional.")
+	}
+	if spec.AuditTrail {
+		parts = append(parts, "Definir eventos auditables y trazabilidad funcional de acciones sensibles.")
+	}
+	if spec.Webhooks {
+		parts = append(parts, "Diseñar contratos de webhook firmados, idempotencia y reintentos.")
+	}
+	if spec.FileUploads {
+		parts = append(parts, "Diseñar flujo de subida, validación, antivirus y lifecycle de ficheros.")
+	}
+	if spec.Reporting {
+		parts = append(parts, "Separar cargas OLTP y reporting cuando el volumen lo exija.")
+	}
+	if spec.MultiTenant {
+		parts = append(parts, "Definir estrategia de aislamiento multi-tenant en dominio, persistencia y observabilidad.")
+	}
+	if spec.Notifications {
+		parts = append(parts, "Modelar adaptadores para email, push, webhooks o mensajería si forman parte del producto.")
 	}
 	return strings.Join(parts, " ")
 }
@@ -868,13 +1487,54 @@ func composeResidentServiceDescription(spec AppSpec) string {
 	return strings.Join(parts, " ")
 }
 
+func composeProfessionalBaselineDescription(spec AppSpec) string {
+	parts := []string{
+		"Fijar el baseline profesional obligatorio del repositorio desde el primer commit.",
+		"Externalizar configuración y secretos por entorno, con bootstrap reproducible para desarrollo, CI y despliegue.",
+		"Definir política de errores, validación de entrada, contratos de salida y logging estructurado con contexto suficiente para operar.",
+		"Documentar convenciones de ramas, commits, revisión, ownership y runbook mínimo de desarrollo.",
+		"Dejar automatizados formatter, linter, tests mínimos y verificación de dependencias críticas.",
+	}
+	if spec.Database {
+		parts = append(parts, "Asegurar migraciones, seed mínimo y estrategia de rollback de cambios persistentes.")
+	}
+	if spec.Monitoring || spec.ObservabilityLevel != "basic" {
+		parts = append(parts, "Incluir correlación entre logs, métricas y trazas desde la base.")
+	}
+	if spec.Auth || spec.ComplianceENS || spec.ComplianceRGPD {
+		parts = append(parts, "Aplicar baseline de seguridad: mínimos privilegios, manejo correcto de secretos y revisión de dependencias y superficies expuestas.")
+	}
+	return strings.Join(parts, " ")
+}
+
+func composeDocumentationDescription(spec AppSpec) string {
+	parts := []string{
+		"Documentar arquitectura hexagonal, módulos, uso, despliegue, i18n y operación.",
+		"La documentación mínima obligatoria se produce para tres públicos: usuarios finales, técnicos/desarrollo y sistemas/operación.",
+		"Incluir atribución visible a Orquesta de Alberto Avidad Fernández en README, manuales y piezas documentales generadas.",
+	}
+	if spec.I18n && len(spec.Idiomas) > 0 {
+		parts = append(parts, "Los manuales deben generarse en los idiomas elegidos: "+strings.Join(spec.Idiomas, ", ")+".")
+	}
+	return strings.Join(parts, " ")
+}
+
 func composePersistenceDescription(spec AppSpec) string {
 	parts := []string{
 		"Definir esquema, migraciones, acceso a datos y contratos de almacenamiento.",
 		"La BD se accede exclusivamente a través del adaptador de persistencia (puerto hexagonal). Ninguna capa de aplicación o dominio importa el driver directamente.",
 	}
+	if engine := describeDatabaseEngine(spec.DatabaseEngine); engine != "" && spec.DatabaseEngine != "none" {
+		parts = append(parts, "Motor objetivo: "+engine+".")
+	}
 	if spec.ComplianceRGPD {
 		parts = append(parts, "Cifrar datos personales en reposo. Implementar retención y derecho al olvido.")
+	}
+	if spec.MultiTenant {
+		parts = append(parts, "Asegurar partición o scoping tenant-aware en esquema, queries e índices.")
+	}
+	if spec.Backups {
+		parts = append(parts, "Definir política de backups y restauración verificable.")
 	}
 	return strings.Join(parts, " ")
 }
@@ -884,13 +1544,58 @@ func composeAuthDescription(spec AppSpec) string {
 		"Implementar autenticación y autorización como adaptador de seguridad en la arquitectura hexagonal.",
 		"Definir roles, permisos, validación de acceso y puntos de integración de seguridad.",
 	}
+	if spec.AuthMode != "none" {
+		parts = append(parts, "Modo objetivo: "+describeAuthMode(spec.AuthMode)+".")
+	}
+	if spec.RBAC {
+		parts = append(parts, "La matriz de roles y permisos debe quedar explícita y versionada.")
+	}
+	if idp := describeIdentityProvider(spec.IdentityProvider); idp != "" {
+		parts = append(parts, "Proveedor de identidad a integrar: "+idp+".")
+	}
 	if spec.ComplianceRGPD {
 		parts = append(parts, "Mínimo privilegio en acceso a datos personales. Log de accesos.")
 	}
 	if spec.ComplianceENS {
 		parts = append(parts, "Gestión de identidades conforme a ENS.")
 	}
+	if spec.RateLimiting {
+		parts = append(parts, "Aplicar límites de uso y controles anti abuso en accesos sensibles.")
+	}
 	return strings.Join(parts, " ")
+}
+
+func composeUIThemesDescription(spec AppSpec) string {
+	parts := []string{
+		"Definir theming y branding desacoplados de la lógica de negocio.",
+		"Usar tokens semánticos de color, tipografía, espaciado e iconografía en vez de valores duros repartidos por la UI.",
+		"El cambio de tema debe poder hacerse creando o cargando un tema, sin tocar casos de uso, servicios ni componentes de negocio.",
+	}
+	if stack := describeFrontendStack(spec.FrontendStack); stack != "" {
+		parts = append(parts, "Stack de UI previsto: "+stack+".")
+	}
+	if root := describeUISurfaceRoot(spec); root != "" {
+		parts = append(parts, "La superficie de UI debe vivir de forma explícita en "+root+" y no dispersa por el repositorio.")
+	}
+	if spec.MultiTenant || spec.BrandingProfiles {
+		parts = append(parts, "Preparar branding por tenant o perfiles white-label cuando aplique.")
+	} else {
+		parts = append(parts, "Preparar al menos tema base, oscuro y un branding alternativo demostrable.")
+	}
+	return strings.Join(parts, " ")
+}
+
+func describeUISurfaceRoot(spec AppSpec) string {
+	if !hasThemeableUI(spec) {
+		return ""
+	}
+	if spec.FrontendStack == "server_rendered" {
+		return "`adaptadores/web/` para handlers, templates y assets, con temas aislados en una subcarpeta propia"
+	}
+	if spec.Tipo == "desktop" || spec.Tipo == "mobile" {
+		return "`ui/` como superficie visual principal, con temas aislados bajo esa raíz"
+	}
+	return "`web/` como raíz del frontend, con temas/branding desacoplados dentro de esa superficie"
 }
 
 func composeI18nDescription(spec AppSpec) string {
@@ -898,6 +1603,28 @@ func composeI18nDescription(spec AppSpec) string {
 		return "Aplicar i18n desde el inicio, evitando literales fijas y dejando bundles preparados para varios idiomas."
 	}
 	return fmt.Sprintf("Aplicar i18n desde el inicio y dejar bundles operativos para: %s.", strings.Join(spec.Idiomas, ", "))
+}
+
+func composeI18nExpansionDescription(nombre, idioma string) string {
+	return fmt.Sprintf(
+		"Ampliar el soporte multilenguaje de %s para el idioma %s sin reabrir la arquitectura completa. "+
+			"Crear o completar bundles, catálogos, textos de UI, mensajes de API, notificaciones y superficies operativas necesarias. "+
+			"El idioma nuevo debe quedar integrado en la estrategia de i18n existente, sin literales duras ni bifurcaciones de lógica.",
+		nombre, strings.ToUpper(strings.TrimSpace(idioma)))
+}
+
+func composeLanguageDocumentationExpansionDescription(nombre, idioma string) string {
+	return fmt.Sprintf(
+		"Actualizar la documentación de %s en el idioma %s para los tres públicos obligatorios: usuarios finales, técnicos/desarrollo y sistemas/operación. "+
+			"No basta con traducir pantallas; los manuales y runbooks del proyecto deben quedar disponibles también en el idioma nuevo.",
+		nombre, strings.ToUpper(strings.TrimSpace(idioma)))
+}
+
+func composeLanguageQAExpansionDescription(nombre, idioma string) string {
+	return fmt.Sprintf(
+		"Ejecutar una validación específica del idioma %s en %s cubriendo UI, mensajes, flujos críticos y documentación publicada. "+
+			"La salida debe dejar evidencia de que el idioma nuevo funciona de forma consistente y no rompe accesibilidad, navegación ni soporte operativo.",
+		strings.ToUpper(strings.TrimSpace(idioma)), nombre)
 }
 
 func composeComplianceDescription(spec AppSpec) string {
@@ -930,11 +1657,24 @@ func composeCICDDescription(spec AppSpec) string {
 	parts := []string{
 		"Configurar pipeline CI/CD: build, tests, linting, análisis estático y despliegue automático a entorno de pruebas.",
 	}
+	parts = append(parts, "Nivel de testing esperado: "+describeTestingLevel(spec.TestingLevel)+".")
 	if spec.Docker {
 		parts = append(parts, "Incluir build y push de imagen Docker.")
 	}
 	if spec.Kubernetes {
 		parts = append(parts, "Incluir deploy automático a Kubernetes.")
+	}
+	if spec.DeploymentTarget != "" {
+		parts = append(parts, "Objetivo principal de despliegue: "+describeDeploymentTarget(spec.DeploymentTarget)+".")
+	}
+	if spec.ArtifactType != "" {
+		parts = append(parts, "Artefacto principal a producir: "+describeArtifactType(spec.ArtifactType)+".")
+	}
+	if spec.Backups {
+		parts = append(parts, "Automatizar política de backups, verificación y restore drill.")
+	}
+	if spec.DisasterRecovery {
+		parts = append(parts, "Definir runbooks y pruebas mínimas de disaster recovery.")
 	}
 	if spec.ComplianceENS {
 		parts = append(parts, "Incluir análisis de vulnerabilidades (SAST/DAST) en el pipeline.")
@@ -944,7 +1684,7 @@ func composeCICDDescription(spec AppSpec) string {
 
 func composeMonitoringDescription(spec AppSpec) string {
 	parts := []string{
-		"Implementar los tres pilares de observabilidad: logs estructurados (JSON), métricas (Prometheus/OpenMetrics) y trazas distribuidas (OpenTelemetry).",
+		fmt.Sprintf("Implementar observabilidad con nivel %s: logs estructurados (JSON), métricas (Prometheus/OpenMetrics) y trazas distribuidas (OpenTelemetry).", describeObservabilityLevel(spec.ObservabilityLevel)),
 		"Configurar dashboard básico de salud y alertas críticas.",
 	}
 	if spec.ComplianceENS {
@@ -953,7 +1693,174 @@ func composeMonitoringDescription(spec AppSpec) string {
 	if spec.ComplianceRGPD {
 		parts = append(parts, "No registrar datos personales en logs sin anonimización.")
 	}
+	if spec.AuditTrail {
+		parts = append(parts, "Mantener audit trail funcional separado de logs técnicos cuando aplique.")
+	}
 	return strings.Join(parts, " ")
+}
+
+func describeArchitecture(v string) string {
+	switch v {
+	case "clean":
+		return "clean architecture con límites explícitos"
+	case "layered":
+		return "arquitectura por capas con adaptadores aislados"
+	case "event_driven":
+		return "arquitectura orientada a eventos con puertos y adaptadores"
+	default:
+		return "arquitectura hexagonal (puertos y adaptadores)"
+	}
+}
+
+func describeAPIStyle(v string) string {
+	switch v {
+	case "graphql":
+		return "GraphQL"
+	case "grpc":
+		return "gRPC"
+	case "async":
+		return "mensajería/eventos asíncronos"
+	case "mixed":
+		return "combinación de REST y otros contratos"
+	default:
+		return "REST/HTTP"
+	}
+}
+
+func describeFrontendStack(v string) string {
+	switch v {
+	case "react":
+		return "React"
+	case "vue":
+		return "Vue"
+	case "sveltekit":
+		return "SvelteKit"
+	case "nextjs":
+		return "Next.js"
+	case "astro":
+		return "Astro"
+	case "htmx":
+		return "HTMX"
+	case "server_rendered":
+		return "server-rendered"
+	case "angular":
+		return "Angular"
+	case "other":
+		return "otro stack web"
+	default:
+		return ""
+	}
+}
+
+func describeDatabaseEngine(v string) string {
+	switch v {
+	case "postgres":
+		return "PostgreSQL"
+	case "mysql":
+		return "MySQL/MariaDB"
+	case "sqlite":
+		return "SQLite"
+	case "mongodb":
+		return "MongoDB"
+	case "redis":
+		return "Redis o almacenamiento clave/valor"
+	case "other":
+		return "motor no relacional o específico del dominio"
+	default:
+		return ""
+	}
+}
+
+func describeAuthMode(v string) string {
+	switch v {
+	case "session":
+		return "sesiones servidoras"
+	case "jwt":
+		return "tokens JWT"
+	case "oauth":
+		return "OAuth/OIDC"
+	case "sso":
+		return "SSO corporativo"
+	case "api_key":
+		return "API keys"
+	default:
+		return "sin autenticación específica"
+	}
+}
+
+func describeTestingLevel(v string) string {
+	switch v {
+	case "strict":
+		return "cobertura fuerte con unit, integración y smoke"
+	case "tdd":
+		return "TDD o disciplina de tests-first"
+	default:
+		return "base con unit y smoke mínimos"
+	}
+}
+
+func describeIdentityProvider(v string) string {
+	switch v {
+	case "active_directory":
+		return "Active Directory"
+	case "ldap":
+		return "LDAP corporativo"
+	case "entra_id":
+		return "Microsoft Entra ID"
+	case "keycloak":
+		return "Keycloak"
+	case "auth0":
+		return "Auth0"
+	case "google":
+		return "Google Identity"
+	default:
+		return ""
+	}
+}
+
+func describeObservabilityLevel(v string) string {
+	switch v {
+	case "basic":
+		return "básico"
+	case "strict":
+		return "estricto"
+	default:
+		return "estándar"
+	}
+}
+
+func describeDeploymentTarget(v string) string {
+	switch v {
+	case "kubernetes":
+		return "Kubernetes"
+	case "serverless":
+		return "plataforma serverless"
+	case "vm":
+		return "máquina virtual o bare metal"
+	case "edge":
+		return "entorno edge"
+	default:
+		return "contenedores Docker"
+	}
+}
+
+func describeArtifactType(v string) string {
+	switch v {
+	case "docker_image":
+		return "imagen Docker"
+	case "library":
+		return "librería o SDK"
+	case "desktop_installer":
+		return "instalador de escritorio"
+	case "mobile_bundle":
+		return "bundle o paquete móvil"
+	case "firmware":
+		return "firmware"
+	case "static_site":
+		return "sitio estático"
+	default:
+		return "ejecutable o servicio desplegable"
+	}
 }
 
 func composeSoList(spec AppSpec) []string {

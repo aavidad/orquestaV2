@@ -17,6 +17,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -202,7 +203,9 @@ type apiTareasResponse struct {
 }
 
 type apiTareaResponse struct {
-	Tarea *db.Tarea `json:"tarea"`
+	Tarea     *db.Tarea                `json:"tarea"`
+	Fork      *apiRepoFunctionForkSpec `json:"fork_funcion,omitempty"`
+	FinishApp bool                     `json:"finish_app,omitempty"`
 }
 
 type apiProgresoResumenResponse struct {
@@ -612,7 +615,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 	case "agente":
-		return len(tokens) > 1 && (tokens[1] == "preparar" || tokens[1] == "tick" || tokens[1] == "overview" || tokens[1] == "reanimaciones" || tokens[1] == "investigar" || tokens[1] == "pausar" || tokens[1] == "retirar" || tokens[1] == "control" || tokens[1] == "eliminar" || tokens[1] == "rehabilitar" || tokens[1] == "fusionar" || tokens[1] == "handoff" || tokens[1] == "reasignar-vivo" || tokens[1] == "lanzar-plan" || tokens[1] == "cuentas" || tokens[1] == "presupuesto" || tokens[1] == "ranking-cuentas" || tokens[1] == "observar-cuenta")
+		return len(tokens) > 1 && (tokens[1] == "preparar" || tokens[1] == "ejecutar" || tokens[1] == "tick" || tokens[1] == "overview" || tokens[1] == "actividad" || tokens[1] == "reanimaciones" || tokens[1] == "investigar" || tokens[1] == "pausar" || tokens[1] == "retirar" || tokens[1] == "control" || tokens[1] == "eliminar" || tokens[1] == "rehabilitar" || tokens[1] == "fusionar" || tokens[1] == "handoff" || tokens[1] == "reasignar-vivo" || tokens[1] == "lanzar-plan" || tokens[1] == "cuentas" || tokens[1] == "presupuesto" || tokens[1] == "ranking-cuentas" || tokens[1] == "observar-cuenta")
 	case "sesion":
 		if len(tokens) <= 1 {
 			return false
@@ -657,6 +660,9 @@ func serverBaseURL() string {
 	if info, _, err := loadServerInfoWithHealthFallback(""); err == nil && info != nil && strings.TrimSpace(info.Addr) != "" {
 		return rpclocal.BaseURL(info.Addr)
 	}
+	if base := findSingleHealthyServerBaseURL(); base != "" {
+		return base
+	}
 	return rpclocal.ResolveServerAddr()
 }
 
@@ -691,6 +697,38 @@ func serverReachable() bool {
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
+}
+
+func findSingleHealthyServerBaseURL() string {
+	if serverURLConfiguredExplicitly() {
+		return ""
+	}
+	paths, err := filepath.Glob(filepath.Join(os.TempDir(), "orquesta-localrpc*.json"))
+	if err != nil {
+		return ""
+	}
+	found := ""
+	for _, path := range paths {
+		info, err := loadServerInfoRaw(path)
+		if err != nil || info == nil || strings.TrimSpace(info.Addr) == "" {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), rpclocal.DefaultTimeout())
+		health, pingErr := rpclocal.NewClient(rpclocal.BaseURL(info.Addr), nil).Ping(ctx)
+		cancel()
+		if pingErr != nil || health == nil || !health.OK || strings.TrimSpace(health.Addr) == "" {
+			continue
+		}
+		base := rpclocal.BaseURL(health.Addr)
+		if found == "" {
+			found = base
+			continue
+		}
+		if found != base {
+			return ""
+		}
+	}
+	return found
 }
 
 func ensureLocalDB() error {
@@ -887,7 +925,7 @@ func apiInvokeLocal(method, path string, query url.Values, payload any, dst any)
 	registerAPIRoutes(mux)
 	mux.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
+	if rec.Code < http.StatusOK || rec.Code >= http.StatusMultipleChoices {
 		var apiErr apiErrorResponse
 		if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&apiErr); err == nil && strings.TrimSpace(apiErr.Error) != "" {
 			return true, fmt.Errorf("%s", apiErr.Error)

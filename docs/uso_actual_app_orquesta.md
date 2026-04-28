@@ -9,7 +9,7 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 ## Objetivo
 
-Explicar cómo se usa hoy Orquesta mientras la app completa todavía no controla por sí sola todo el ciclo de vida de los agentes.
+Explicar cómo se usa hoy Orquesta con el estado operativo real ya alcanzado por el control plane.
 
 ## Capas actuales
 
@@ -63,10 +63,12 @@ Rutas JSON principales:
 
 - `/api/status`
 - `/api/agentes`
+- `/api/agentes/{agente}/overview`
 - `/api/reglas`
 - `/api/skills`
 - `/api/workflows`
 - `/api/proyectos`
+- `/api/proyectos/{slug}/cockpit`
 - `/api/conectores`
 - `/api/asignaciones`
 - `/api/asignaciones/activar`
@@ -74,6 +76,11 @@ Rutas JSON principales:
 - `/api/tareas`
 - `/api/propuestas`
 - `/api/worktrees`
+- `/api/repos/materializar`
+- `/api/repos/revisar`
+- `/api/repos/mejorar`
+- `/api/audit`
+- `/api/runtime-transcript`
 - `/api/sesiones/inicio`
 - `/api/sesiones/guardar`
 - `/api/sesiones/fin`
@@ -88,6 +95,14 @@ Por eso, mientras la interfaz gráfica no llegue a todo, la combinación correct
 - web y CLI como clientes del servicio
 - API para integración con escritorio, automatizaciones y control plane
 - OpenClaw Gateway como adaptador saliente opcional de notificaciones, configurado por `openclaw_gateway_url`, `openclaw_gateway_token` y `openclaw_gateway_operator`
+
+Capacidades nuevas ya utilizables en el estado actual:
+
+- `repo add`, `repo revisar` y `repo mejorar` por carril server-first
+- `repo mejorar --finish-app --autonomia-persistente` para sembrar un frente de cierre de app con policy durable
+- `orquesta agente actividad <agente> --desde <ventana>` para actividad temporal por agente
+- cockpit de control total por proyecto para ver tareas, agentes activos, mailbox pendiente, drift y gobernanza sin consultar tablas manualmente
+- autonomia persistente con supervisor residente, reviewer reservado, workers reales acotados y `autonomyPending=0` como foto operativa estable
 
 Consultas de briefing de agentes ya cubiertas por API:
 
@@ -136,10 +151,11 @@ Los agentes documentadores como `antigravity` deben usar:
 ## Limitaciones actuales
 
 - la web todavía no cubre todo el modelo de proyectos, conectores y control activo de agentes
-- el arranque autónomo completo de agentes sigue en cierre progresivo aunque el control plane y el autobootstrap ya operan
+- el arranque autónomo persistente ya opera con supervisor residente; los scripts manuales siguen existiendo como compatibilidad y rescate
 - una instalación nueva ya no debe levantar flota legacy por seed implícito: para pruebas locales de Ollama o flotas específicas, los agentes se registran explícitamente desde la app/API
 - la app de escritorio aún no existe como producto terminado
 - parte del gobierno operativo sigue pasando por CLI y scripts
+- el control total ya cubre agente/proyecto; lo pendiente queda en la agregación global del workspace y en la homogeneización global de coste/tokens
 
 ## Estado actual de Ollama local
 

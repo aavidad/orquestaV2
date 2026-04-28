@@ -45,7 +45,10 @@ func init() {
 	capacidadService.SetTaskProvider(capacidadapp.Repository{})
 	capacidadService.SetTaskActionProvider(capacidadapp.Repository{})
 	capacidadService.SetPhaseControlProvider(capacidadapp.Repository{})
-	capacidadService.SetAgentResolver(resolvedorAgentePipelineOperativo{rowsProvider: agentesService})
+	capacidadService.SetAgentResolver(resolvedorAgentePipelineOperativo{
+		rowsProvider:  agentesService,
+		scoreProvider: proveedorScoreAgentePipelineDB{},
+	})
 	capacidadService.SetPipelineDispatcher(despachadorPipelineOperativo{})
 	microprogramacionService.SetEscritorArchivos(microprogramacionapp.EscritorArchivosDisco{})
 	microprogramacionService.SetRecolectorEntregaGit(microprogramacionRecolectorGit{})

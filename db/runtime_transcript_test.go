@@ -1,6 +1,7 @@
 package db
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,6 +13,75 @@ import (
 
 	"orquesta/runtimeagente"
 )
+
+type runtimeTranscriptScanStub struct {
+	values []any
+}
+
+func (s runtimeTranscriptScanStub) Scan(dest ...any) error {
+	if len(dest) != len(s.values) {
+		return fmt.Errorf("scan stub: dest=%d values=%d", len(dest), len(s.values))
+	}
+	for i, target := range dest {
+		value := s.values[i]
+		switch d := target.(type) {
+		case *int64:
+			switch v := value.(type) {
+			case int64:
+				*d = v
+			case nil:
+				*d = 0
+			default:
+				return fmt.Errorf("scan stub int64[%d]: %T", i, value)
+			}
+		case *string:
+			switch v := value.(type) {
+			case string:
+				*d = v
+			case nil:
+				*d = ""
+			default:
+				return fmt.Errorf("scan stub string[%d]: %T", i, value)
+			}
+		case *time.Time:
+			v, ok := value.(time.Time)
+			if !ok {
+				return fmt.Errorf("scan stub time[%d]: %T", i, value)
+			}
+			*d = v
+		case *sql.NullInt64:
+			switch v := value.(type) {
+			case int64:
+				*d = sql.NullInt64{Int64: v, Valid: true}
+			case nil:
+				*d = sql.NullInt64{}
+			default:
+				return fmt.Errorf("scan stub nullint64[%d]: %T", i, value)
+			}
+		case *sql.NullString:
+			switch v := value.(type) {
+			case string:
+				*d = sql.NullString{String: v, Valid: true}
+			case nil:
+				*d = sql.NullString{}
+			default:
+				return fmt.Errorf("scan stub nullstring[%d]: %T", i, value)
+			}
+		case *sql.NullTime:
+			switch v := value.(type) {
+			case time.Time:
+				*d = sql.NullTime{Time: v, Valid: true}
+			case nil:
+				*d = sql.NullTime{}
+			default:
+				return fmt.Errorf("scan stub nulltime[%d]: %T", i, value)
+			}
+		default:
+			return fmt.Errorf("scan stub dest[%d] unsupported: %T", i, target)
+		}
+	}
+	return nil
+}
 
 func TestIngestarRuntimeTranscriptHandleClasificaYGeneraEventos(t *testing.T) {
 	abrirDBTemporalRuntimeObservabilidad(t)
@@ -148,6 +218,243 @@ func TestRegistrarRuntimeTranscriptInputPersisteLinea(t *testing.T) {
 	}
 	if len(items) != 1 || items[0].Stream != "stdin" || items[0].Text != "continúa automáticamente" {
 		t.Fatalf("entrada transcript inesperada: %+v", items)
+	}
+}
+
+func TestRegistrarRuntimeTranscriptPersistePunteroDurableDeProgresoSemanticoEnHandle(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+
+	entryID, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
+		RuntimeID:      runtime.ID,
+		HandleID:       &handle.ID,
+		Agente:         "Codex1",
+		ProyectoID:     &proyectoID,
+		Stream:         "pty_out",
+		Text:           "he terminado el parche y voy a ejecutar tests",
+		Classification: "progress_update",
+	})
+	if err != nil {
+		t.Fatalf("registrar transcript: %v", err)
+	}
+	fresh, err := GetRuntimeHandle(handle.ID)
+	if err != nil || fresh == nil {
+		t.Fatalf("fresh handle: %+v err=%v", fresh, err)
+	}
+	meta := mapFromJSON(fresh.MetadataJSON)
+	if got := int64FromMap(meta, "semantic_progress_transcript_id"); got != entryID {
+		t.Fatalf("semantic_progress_transcript_id=%d, want %d meta=%+v", got, entryID, meta)
+	}
+	if got := stringFromMap(meta, "semantic_progress_classification", ""); got != "progress_update" {
+		t.Fatalf("semantic_progress_classification=%q meta=%+v", got, meta)
+	}
+	if got := stringFromMap(meta, "semantic_progress_at", ""); strings.TrimSpace(got) == "" {
+		t.Fatalf("semantic_progress_at vacio: %+v", meta)
+	}
+}
+
+func TestListarRuntimeTranscriptFiltraDesde(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	oldID, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
+		RuntimeID:  runtime.ID,
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		Stream:     "pty_out",
+		Text:       "viejo",
+	})
+	if err != nil {
+		t.Fatalf("insert old transcript: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_transcript SET created_at = ? WHERE id = ?`, time.Now().UTC().Add(-2*time.Hour), oldID); err != nil {
+		t.Fatalf("retrofechar transcript: %v", err)
+	}
+	if _, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
+		RuntimeID:  runtime.ID,
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		Stream:     "pty_out",
+		Text:       "reciente",
+	}); err != nil {
+		t.Fatalf("insert recent transcript: %v", err)
+	}
+
+	agente := "Codex1"
+	desde := time.Now().UTC().Add(-30 * time.Minute)
+	items, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, Desde: &desde, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	if len(items) != 1 || items[0] == nil || !strings.Contains(items[0].Text, "reciente") {
+		t.Fatalf("transcript filtrado inesperado: %+v", items)
+	}
+}
+
+func TestListarRuntimeTranscriptReclasificaHistoricoVacioAlLeer(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+
+	id, err := insertReturningID(`
+		INSERT INTO runtime_transcript (
+			runtime_id, handle_id, agente, proyecto_id, stream, byte_offset,
+			text, normalized_text, classification, handling_note, handled_at
+		) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		runtime.ID, handle.ID, "Codex1", proyectoID, "pty_out", int64(0),
+		"• Ran git diff -- cmd/controlplane_support.go", normalizarTextoTranscript("• Ran git diff -- cmd/controlplane_support.go"), "", "", nil,
+	)
+	if err != nil {
+		t.Fatalf("insert transcript historico: %v", err)
+	}
+	if id <= 0 {
+		t.Fatalf("id inesperado: %d", id)
+	}
+
+	agente := "Codex1"
+	items, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	if len(items) != 1 || items[0] == nil {
+		t.Fatalf("transcript inesperado: %+v", items)
+	}
+	if items[0].Classification != "tool_execution" {
+		t.Fatalf("deberia reclasificar al leer, got=%q", items[0].Classification)
+	}
+}
+
+func TestListarRuntimeTranscriptCanonicalizaAliasCodex(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	for _, nombre := range []string{"Codex83", "codex83"} {
+		if err := RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", nombre, err)
+		}
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "transcript-canon",
+		Nombre:  "Transcript Canon",
+		RutaAbs: filepath.Join(t.TempDir(), "transcript-canon"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex83",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "transcript-canon"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("GetRuntimeBySesionID: runtime=%+v err=%v", runtime, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("GetRuntimeHandleBySesionID: handle=%+v err=%v", handle, err)
+	}
+	if err := RegistrarRuntimeTranscriptInput(handle, runtime, "hola mundo"); err != nil {
+		t.Fatalf("RegistrarRuntimeTranscriptInput: %v", err)
+	}
+
+	agente := "codex83"
+	items, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, ProyectoID: &proyectoID, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListarRuntimeTranscript: %v", err)
+	}
+	if len(items) != 1 || items[0] == nil || items[0].Agente != "Codex83" {
+		t.Fatalf("transcript inesperado: %+v", items)
 	}
 }
 
@@ -891,6 +1198,28 @@ func TestClasificarTextoTranscriptReconoceReviewYReplan(t *testing.T) {
 		{raw: "Review blocked pending credentials", want: "review_blocked"},
 		{raw: "¿Qué hago ahora? no tengo claro el siguiente paso", want: "needs_replan"},
 		{raw: "what should i do next after this task?", want: "needs_replan"},
+		{raw: "Retoma el trabajo actual desde Orquesta. Write-set preferente: cmd/controlplane_support.go", want: "bootstrap_guidance"},
+		{raw: "diff --git a/cmd/api.go b/cmd/api.go", want: "patch_or_code_evidence"},
+		{raw: "• Ran go test ./cmd -run 'TestX$' -count=1", want: "tool_execution"},
+		{raw: "└ Search resolverBootstrapRuntimeLeaseConFiltro in controlplane_entities.go", want: "tool_exploration"},
+		{raw: "• Explored", want: "tool_exploration"},
+		{raw: "PASS\nok\tgithub.com/example/project/cmd\t0.223s", want: "tool_result_ok"},
+		{raw: "nothing to commit, working tree clean", want: "tool_result_ok"},
+		{raw: "Already up to date.", want: "tool_result_ok"},
+		{raw: "FAIL\tgithub.com/example/project/cmd [build failed]", want: "tool_result_error"},
+		{raw: "undefined: runtimeBootstrapLeaseBaseline", want: "tool_result_error"},
+		{raw: "flag provided but not defined: -z", want: "tool_result_error"},
+		{raw: "context deadline exceeded", want: "tool_result_error"},
+		{raw: "He actualizado el handler y corregido el test roto", want: "progress_update"},
+		{raw: "He dejado alineado el control plane y sigo con el siguiente corte", want: "progress_update"},
+		{raw: "• hecho: ajustado selector en db/controlplane_entities.go para que, sin", want: "progress_update"},
+		{raw: "Use /skills to list available skills", want: "ui_noise"},
+		{raw: "codex@box:~/repo$", want: "ui_noise"},
+		{raw: "$", want: "ui_noise"},
+		{raw: "│ … +1 lines", want: "ui_noise"},
+		{raw: "• Summarize recent commits  gpt-5.4 medium · ~/Trabajo/orquesta", want: "ui_noise"},
+		{raw: "controlplane_support_test.go", want: "tool_exploration"},
+		{raw: "external_session_handle|session_resume in", want: "tool_exploration"},
 		{raw: "thread 'main' panicked at src/ui.rs:1:1", want: "runtime_panic"},
 		{raw: "connection reset by peer", want: "runtime_crash"},
 		{raw: "can i continue refactoring without waiting?", want: "approval_request"},
@@ -903,6 +1232,185 @@ func TestClasificarTextoTranscriptReconoceReviewYReplan(t *testing.T) {
 		if got := clasificarTextoTranscript(normalizarTextoTranscript(tc.raw)); got != tc.want {
 			t.Fatalf("clasificacion inesperada para %q: got=%q want=%q", tc.raw, got, tc.want)
 		}
+	}
+}
+
+func TestScanRuntimeTranscriptClasificaStreamsSemanticos(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	cases := []struct {
+		stream string
+		text   string
+		want   string
+	}{
+		{stream: "assistant", text: "He actualizado el handler y corregido el test roto", want: "progress_update"},
+		{stream: "stdout", text: "PASS\nok\tgithub.com/example/project/cmd\t0.223s", want: "tool_result_ok"},
+		{stream: "stderr", text: "FAIL\tgithub.com/example/project/cmd [build failed]", want: "tool_result_error"},
+	}
+	for _, tc := range cases {
+		createdAt := time.Now().UTC()
+		row := runtimeTranscriptScanStub{values: []any{
+			int64(1),
+			int64(2),
+			int64(3),
+			"CodexStreams",
+			int64(4),
+			"streams-demo",
+			tc.stream,
+			nil,
+			tc.text,
+			"",
+			"",
+			"",
+			createdAt,
+			nil,
+		}}
+		entry, err := scanRuntimeTranscript(row)
+		if err != nil {
+			t.Fatalf("scan transcript %s: %v", tc.stream, err)
+		}
+		if entry.Classification != tc.want {
+			t.Fatalf("clasificacion inesperada para %s: got=%q want=%q", tc.stream, entry.Classification, tc.want)
+		}
+	}
+}
+
+func TestListarRuntimeTranscriptSoloSenalesPendIgnoraProgresoUtil(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("CodexSignals", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "signal-demo",
+		Nombre:  "Signal Demo",
+		RutaAbs: filepath.Join(t.TempDir(), "signal-demo"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexSignals",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "signal-demo"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	now := time.Now().UTC()
+	for _, item := range []*RuntimeTranscriptEntry{
+		{
+			RuntimeID:      runtime.ID,
+			HandleID:       &handle.ID,
+			ProyectoID:     &proyectoID,
+			Agente:         "CodexSignals",
+			Stream:         "pty_out",
+			Text:           "• Ran go test ./cmd -run 'TestX$' -count=1",
+			NormalizedText: "ran go test ./cmd -run 'testx$' -count=1",
+			Classification: "tool_execution",
+			CreatedAt:      now.Add(-3 * time.Minute),
+		},
+		{
+			RuntimeID:      runtime.ID,
+			HandleID:       &handle.ID,
+			ProyectoID:     &proyectoID,
+			Agente:         "CodexSignals",
+			Stream:         "pty_out",
+			Text:           "└ Search resolverBootstrapRuntimeLeaseConFiltro in controlplane_entities.go",
+			NormalizedText: "search resolverbootstrapruntimeleaseconfiltro in controlplane_entities.go",
+			Classification: "tool_exploration",
+			CreatedAt:      now.Add(-2 * time.Minute),
+		},
+		{
+			RuntimeID:      runtime.ID,
+			HandleID:       &handle.ID,
+			ProyectoID:     &proyectoID,
+			Agente:         "CodexSignals",
+			Stream:         "pty_out",
+			Text:           "Retoma el trabajo actual desde Orquesta. Write-set preferente: cmd/controlplane_support.go",
+			NormalizedText: "retoma el trabajo actual desde orquesta write-set preferente cmd/controlplane_support.go",
+			Classification: "bootstrap_guidance",
+			CreatedAt:      now.Add(-1 * time.Minute),
+		},
+		{
+			RuntimeID:      runtime.ID,
+			HandleID:       &handle.ID,
+			ProyectoID:     &proyectoID,
+			Agente:         "CodexSignals",
+			Stream:         "pty_out",
+			Text:           "He actualizado el handler y corregido el test roto",
+			NormalizedText: "he actualizado el handler y corregido el test roto",
+			Classification: "progress_update",
+			CreatedAt:      now.Add(-30 * time.Second),
+		},
+		{
+			RuntimeID:      runtime.ID,
+			HandleID:       &handle.ID,
+			ProyectoID:     &proyectoID,
+			Agente:         "CodexSignals",
+			Stream:         "pty_out",
+			Text:           "No puedo continuar con el frente actual",
+			NormalizedText: "no puedo continuar con el frente actual",
+			Classification: "blocked",
+			CreatedAt:      now,
+		},
+	} {
+		if _, err := RegistrarRuntimeTranscript(item); err != nil {
+			t.Fatalf("registrar transcript: %v", err)
+		}
+	}
+
+	items, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{
+		SoloSenalesPend: true,
+		Limit:           10,
+	})
+	if err != nil {
+		t.Fatalf("listar signals pendientes: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("signals pendientes inesperadas: %+v", items)
+	}
+	if got := strings.TrimSpace(items[0].Classification); got != "blocked" {
+		t.Fatalf("deberia conservar solo blocked, got=%q", got)
+	}
+}
+
+func TestRuntimeTranscriptLooksLikeTMUXInteractiveActivityReconoceClasificacionUtil(t *testing.T) {
+	if !runtimeTranscriptLooksLikeTMUXInteractiveActivity(&RuntimeTranscriptEntry{
+		Stream:         "pty_out",
+		Text:           "• Ran go test ./cmd -run 'TestX$' -count=1",
+		NormalizedText: "ran go test ./cmd -run 'testx$' -count=1",
+		Classification: "tool_execution",
+	}) {
+		t.Fatal("tool_execution deberia contar como actividad interactiva útil")
+	}
+	if !runtimeTranscriptLooksLikeTMUXInteractiveActivity(&RuntimeTranscriptEntry{
+		Stream:         "pty_out",
+		Text:           "└ Search resolverBootstrapRuntimeLeaseConFiltro in controlplane_entities.go",
+		NormalizedText: "search resolverbootstrapruntimeleaseconfiltro in controlplane_entities.go",
+		Classification: "tool_exploration",
+	}) {
+		t.Fatal("tool_exploration deberia contar como actividad interactiva útil")
+	}
+	if runtimeTranscriptLooksLikeTMUXInteractiveActivity(&RuntimeTranscriptEntry{
+		Stream:         "pty_out",
+		Text:           "Retoma el trabajo actual desde Orquesta",
+		NormalizedText: "retoma el trabajo actual desde orquesta",
+		Classification: "bootstrap_guidance",
+	}) {
+		t.Fatal("bootstrap_guidance no deberia contar como actividad interactiva útil")
 	}
 }
 

@@ -4,9 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -65,8 +62,8 @@ func EmitirNotificacion(ev EventoNotificacion) bool {
 }
 
 // Open inicializa el sistema de persistencia de Orquesta.
-// Resuelve el backend (SQLite/otros), aplica migraciones idempotentes y
-// prepara los canales de notificación en tiempo real.
+// Resuelve el backend activo, aplica migraciones idempotentes y prepara los
+// canales de notificación en tiempo real.
 func Open() error {
 	return OpenWithOptions(OpenOptions{})
 }
@@ -75,6 +72,7 @@ func OpenWithOptions(opts OpenOptions) error {
 	runtimeHandleHotReset()
 	resetRuntimeOrdersHotIndex()
 	resetConfigCache()
+	resetProjectContextSummaryCache()
 	backend, cfg, err := resolveOpenConfig()
 	if err != nil {
 		return err
@@ -127,7 +125,7 @@ func resolveOpenConfig() (Backend, storage.Config, error) {
 }
 
 func adjustConfigForOpen(cfg storage.Config) storage.Config {
-	if shouldUseSQLiteRecoveryOpen(cfg) {
+	if shouldUseLocalRecoveryOpen(cfg) {
 		cfg.BootstrapSchema = false
 		cfg.SkipPostMigrations = true
 	}
@@ -141,33 +139,10 @@ func applyOpenOptions(cfg storage.Config, opts OpenOptions) storage.Config {
 	if opts.SkipPostMigrations != nil {
 		cfg.SkipPostMigrations = *opts.SkipPostMigrations
 	}
-	if opts.ReadOnly && normalizedDriverName(cfg.Driver) == "sqlite" {
+	if opts.ReadOnly && usesLegacyLocalDriver(cfg.Driver) {
 		cfg.DSN = storage.SQLiteDSNWithMode(cfg.Path, "ro")
 	}
 	return cfg
-}
-
-func shouldUseSQLiteRecoveryOpen(cfg storage.Config) bool {
-	if normalizedDriverName(cfg.Driver) != "sqlite" {
-		return false
-	}
-	if !envBoolEnabled("ORQUESTA_FORCE_LOCAL_DB") && !envBoolEnabled("ORQUESTA_FORCE_LOCAL") {
-		return false
-	}
-	target := strings.TrimSpace(cfg.Path)
-	if target == "" {
-		return false
-	}
-	info, err := os.Stat(target)
-	if err != nil || info.IsDir() {
-		return false
-	}
-	return info.Size() > 0
-}
-
-func envBoolEnabled(key string) bool {
-	value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
-	return value == "1" || value == "true" || value == "yes" || value == "si" || value == "on"
 }
 
 func Close() {
@@ -184,28 +159,7 @@ func Close() {
 	runtimeHandleHotReset()
 	resetRuntimeOrdersHotIndex()
 	resetConfigCache()
-}
-
-// Orden de resolución del target por fichero local cuando el backend activo usa
-// persistencia basada en ruta. Solo devuelve rutas existentes; no inventa una
-// sqlite implícita por omisión:
-//  1. Variable de entorno ORQUESTA_DB
-//  2. Repositorio `orquesta`/`orquestador` del workspace actual con fichero existente
-//  3. Si el git-root ya es ese repo, <git-root>/orquesta.db existente
-func resolverRuta() string {
-	if v := os.Getenv("ORQUESTA_DB"); strings.TrimSpace(v) != "" {
-		return v
-	}
-	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
-	if err == nil {
-		return resolverRutaDesdeGitRoot(strings.TrimSpace(string(out)))
-	}
-	if wd, err := os.Getwd(); err == nil {
-		if ruta := buscarRutaRepoOrquesta(wd); ruta != "" {
-			return ruta
-		}
-	}
-	return ""
+	resetProjectContextSummaryCache()
 }
 
 // postMigraciones ejecuta ALTER TABLE idempotentes para columnas añadidas tras el schema inicial.
@@ -226,60 +180,12 @@ func postMigracionesPorDriver(conn *sql.DB, driver string) error {
 	return nil
 }
 
-func resolverRutaDesdeGitRoot(root string) string {
-	root = strings.TrimSpace(root)
-	if root == "" {
-		return ""
-	}
-	if filepath.Base(root) == "orquesta" {
-		ruta := filepath.Join(root, "orquesta.db")
-		if existeFichero(ruta) {
-			return ruta
-		}
-		return ""
-	}
-	if ruta := rutaRepoOrquestaEnDirectorio(filepath.Dir(root)); ruta != "" {
-		return ruta
-	}
-	return ""
-}
-
-func buscarRutaRepoOrquesta(inicio string) string {
-	actual := filepath.Clean(inicio)
-	for {
-		if ruta := rutaRepoOrquestaEnDirectorio(actual); ruta != "" {
-			return ruta
-		}
-		siguiente := filepath.Dir(actual)
-		if siguiente == actual {
-			return ""
-		}
-		actual = siguiente
-	}
-}
-
-func rutaRepoOrquestaEnDirectorio(base string) string {
-	for _, nombre := range []string{"orquesta", "orquestador"} {
-		candidato := filepath.Join(base, nombre)
-		rutaDB := filepath.Join(candidato, "orquesta.db")
-		if existeFichero(filepath.Join(candidato, "go.mod")) && existeFichero(rutaDB) {
-			return rutaDB
-		}
-	}
-	return ""
-}
-
-func existeFichero(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
-}
-
 func aplicarSchema(db *sql.DB) error {
 	return aplicarSchemaPorDriver(db, DriverName())
 }
 
 func aplicarSchemaPorDriver(db *sql.DB, driver string) error {
-	if normalizedDriverName(driver) == "sqlite" {
+	if usesLegacyLocalDriver(driver) {
 		if err := prepararSchemaLegacy(db); err != nil {
 			return err
 		}
@@ -395,7 +301,7 @@ func reconstruirPoliticasModeloLegacy(db *sql.DB) error {
 	if strings.Contains(strings.ToLower(sqlText), "'agente'") {
 		return nil
 	}
-	return rebuildSQLiteTable(
+	return rebuildLegacyTable(
 		db,
 		tableName,
 		nil,
@@ -475,8 +381,8 @@ func tablaTieneColumna(db *sql.DB, tabla, columna string) (bool, error) {
 }
 
 func tablaSQL(db *sql.DB, nombre string) (string, error) {
-	if normalizedDriverName(CurrentStorageDriver()) != "sqlite" {
-		return "", fmt.Errorf("tablaSQL solo aplica al adapter sqlite heredado")
+	if !usesLegacyLocalDriver(CurrentStorageDriver()) {
+		return "", fmt.Errorf("tablaSQL solo aplica al adapter local heredado")
 	}
 	var sqlText sql.NullString
 	err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE type='table' AND name = ?`, nombre).Scan(&sqlText)
@@ -519,7 +425,7 @@ func reconstruirRuntimeHandlesLegacy(db *sql.DB) error {
 	if !needsRebuild {
 		return nil
 	}
-	return rebuildSQLiteTable(
+	return rebuildLegacyTable(
 		db,
 		tableName,
 		[]string{"idx_runtime_handles_sesion", "idx_runtime_handles_agente_estado"},
@@ -609,7 +515,7 @@ func reconstruirRuntimeOrdersLegacy(db *sql.DB) error {
 	if !needsRebuild {
 		return nil
 	}
-	return rebuildSQLiteTable(
+	return rebuildLegacyTable(
 		db,
 		tableName,
 		[]string{"idx_runtime_orders_estado_created"},
@@ -685,7 +591,7 @@ func reconstruirAutonomiaCiclosLegacy(db *sql.DB) error {
 	if strings.TrimSpace(sqlNorm) != "" && strings.Contains(sqlNorm, "review_feedback") {
 		return nil
 	}
-	return rebuildSQLiteTable(
+	return rebuildLegacyTable(
 		db,
 		tableName,
 		[]string{"idx_autonomia_ciclos_proyecto_kind"},
@@ -742,7 +648,7 @@ func reconstruirRuntimeMailboxLegacy(db *sql.DB) error {
 		!strings.Contains(sqlNorm, "from_agente text not null references agentes(nombre)") {
 		return nil
 	}
-	return rebuildSQLiteTable(
+	return rebuildLegacyTable(
 		db,
 		tableName,
 		[]string{"idx_runtime_mailbox_destino_estado"},
@@ -787,7 +693,7 @@ func reconstruirRuntimeMailboxLegacy(db *sql.DB) error {
 	)
 }
 
-func rebuildSQLiteTable(
+func rebuildLegacyTable(
 	db *sql.DB,
 	tableName string,
 	indexes []string,
@@ -853,6 +759,7 @@ func rebuildSQLiteTable(
 	}
 	return tx.Commit()
 }
+
 
 func columnasTabla(db *sql.DB, tabla string) (map[string]bool, error) {
 	rows, err := db.Query(`PRAGMA table_info(` + tabla + `)`)
@@ -927,10 +834,12 @@ type LogAuditoria struct {
 }
 
 type FiltroAuditoria struct {
-	Agente  *string
-	Accion  *string
-	Entidad *string
-	Limite  int
+	Agente    *string
+	Accion    *string
+	Entidad   *string
+	EntidadID *int64
+	Desde     *time.Time
+	Limite    int
 }
 
 // Audit registra una acción en el log de auditoría.
@@ -973,6 +882,14 @@ func ListarAuditoria(f FiltroAuditoria) ([]*LogAuditoria, error) {
 		if f.Entidad != nil {
 			q += " AND entidad = ?"
 			args = append(args, *f.Entidad)
+		}
+		if f.EntidadID != nil {
+			q += " AND entidad_id = ?"
+			args = append(args, *f.EntidadID)
+		}
+		if f.Desde != nil {
+			q += " AND created_at >= ?"
+			args = append(args, f.Desde.UTC())
 		}
 		q += " ORDER BY id DESC"
 		if f.Limite > 0 {

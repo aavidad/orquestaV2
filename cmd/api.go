@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -30,6 +31,7 @@ import (
 	"orquesta/fabricaapp"
 	"orquesta/gitgobernanza"
 	"orquesta/gobernanzaapp"
+	"orquesta/i18n"
 	"orquesta/internal/a2ui"
 	"orquesta/lenguajeapp"
 	"orquesta/memoriaproyecto"
@@ -70,6 +72,12 @@ type apiStatusResponse struct {
 	PoolsLocales        []*capacidadapp.PoolLocalCompartido `json:"poolsLocales,omitempty"`
 	DeudaDispatch       deudaDispatchResumen                `json:"deudaDispatch,omitempty"`
 	Autonomia           autonomiaResumen                    `json:"autonomia,omitempty"`
+	AutonomySurface     *autonomySurface                    `json:"autonomySurface,omitempty"`
+	AutonomyHighlights  []string                            `json:"autonomyHighlights,omitempty"`
+	CriticalProjectRisk *workspaceAutonomyProjectSummary    `json:"criticalProjectRisk,omitempty"`
+	WorkersConectados   int                                 `json:"workersConectados,omitempty"`
+	WorkersTrabajando   int                                 `json:"workersTrabajando,omitempty"`
+	SupervisoresActivos int                                 `json:"supervisoresActivos,omitempty"`
 }
 
 type apiProyectoOverviewResponse struct {
@@ -128,6 +136,9 @@ type apiProyectoAutonomiaResponse struct {
 
 var (
 	apiStatusFetchTimeout           = 3 * time.Second
+	apiServerOperationalTimeout     = 3 * time.Second
+	apiAuditTimeout                 = 2 * time.Second
+	apiAgentsPanelTimeout           = 3 * time.Second
 	apiAgentOverviewTimeout         = 3 * time.Second
 	apiAgentBudgetRefreshTimeout    = 3 * time.Second
 	apiConfigTimeout                = 3 * time.Second
@@ -161,6 +172,9 @@ var (
 	apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) {
 		return procesarRuntimeMailboxBatchConFiltro(filter)
 	}
+	apiAgentPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return agentesService.BuildPanelRows()
+	}
 	apiAgentDetailBuilder = func(nombre string, compact bool) (*agentesapp.Detail, error) {
 		if compact {
 			return agentesService.BuildDetailCompact(nombre)
@@ -177,6 +191,9 @@ var (
 	apiListRuntimeOrdersFn = func(filter db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error) {
 		return runtimesService.ListRuntimeOrders(filter)
 	}
+	apiListRuntimeTranscriptFn = func(filter db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error) {
+		return runtimesService.ListRuntimeTranscript(filter)
+	}
 	apiListRuntimeMailboxFn = func(filter db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error) {
 		return runtimesService.ListRuntimeMailbox(filter)
 	}
@@ -186,8 +203,42 @@ var (
 	apiGetRuntimeProjectFn = func(ref string) (*db.Proyecto, error) {
 		return runtimesService.GetProject(ref)
 	}
+	apiProjectLookupFn = func(ref string) (*db.Proyecto, error) {
+		return db.GetProyecto(ref)
+	}
+	apiProjectLookupPrepareLiteFn = func(ref string) (*db.Proyecto, error) {
+		return db.GetProyectoPrepareLite(ref)
+	}
+	apiProjectLookupWithRouteFn = func(ref, cwdHint string) (*db.Proyecto, error) {
+		return db.GetProyectoConRutaEfectiva(ref, cwdHint)
+	}
+	apiProjectLookupWithRoutePrepareLiteFn = func(ref, cwdHint string) (*db.Proyecto, error) {
+		proyecto, err := db.GetProyectoPrepareLite(ref)
+		if err != nil || proyecto == nil {
+			return proyecto, err
+		}
+		return db.ProyectoPrepareLiteConRutaEfectiva(proyecto, ""), nil
+	}
+	apiListAuditFn                     = db.ListarAuditoria
+	apiServerOperationalBuilder        = buildServerOperationalInfoFastFromDB
+	apiServerOperationalStatusFallback = func() (apiStatusResponse, error) {
+		if status, ok := fetchStatusReadOnlyLiteDirect(statusFastTimeout); ok {
+			return status, nil
+		}
+		if status, ok := fetchStatusForOperationalFallback(statusFastTimeout); ok {
+			return status, nil
+		}
+		return apiStatusResponse{}, errStatusFetchTimeout
+	}
+	apiServerOperationalDegradedBuilder = func() serverOperationalInfo {
+		return buildServerOperationalInfo(degradedAPIStatusResponse())
+	}
+	apiStatusUltraLiteFetcher      = fetchStatusUltraLiteFallback
+	apiStatusReadOnlyLiteFetcher   = db.ListarEstadoLigeroReadOnly
+	apiStatusFallbackRichGrace     = 200 * time.Millisecond
 	apiListRuntimeOrdersTimeout    = 2 * time.Second
 	apiListRuntimeMailboxTimeout   = 2 * time.Second
+	apiRuntimeMailboxDefaultLimit  = 100
 	apiRuntimeProjectLookupTimeout = 1500 * time.Millisecond
 	apiAgentCanonicalCacheTTL      = 30 * time.Second
 	apiAgentCanonicalCacheMu       sync.Mutex
@@ -985,6 +1036,10 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/lenguaje/resolver", apiHandlerLenguajeResolver)
 	mux.HandleFunc("/api/config", apiHandlerConfig)
 	mux.HandleFunc("/api/notificaciones", apiHandlerNotificaciones)
+	mux.HandleFunc("/api/workspace/control", apiHandlerWorkspaceControl)
+	mux.HandleFunc("/api/repos/materializar", apiHandlerRepoMaterializar)
+	mux.HandleFunc("/api/repos/revisar", apiHandlerRepoRevisar)
+	mux.HandleFunc("/api/repos/mejorar", apiHandlerRepoMejorar)
 	mux.HandleFunc("/api/openclaw/operator", apiHandlerOpenClawOperator)
 	mux.HandleFunc("/api/openclaw/threads", apiHandlerOpenClawThreads)
 	mux.HandleFunc("/api/openclaw/pipeline", apiHandlerOpenClawPipeline)
@@ -1159,27 +1214,75 @@ func apiHandlerServerOperational(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	info, err := buildServerOperationalInfoFastFromDB()
+	if snapshot, ok := readStatusSnapshotFreshUsable(); ok {
+		apiWriteJSON(w, http.StatusOK, normalizeServerOperationalInfo(buildServerOperationalInfo(snapshot)))
+		return
+	}
+	if status, ok := fetchStatusForOperationalFallback(statusFastTimeout); ok {
+		apiWriteJSON(w, http.StatusOK, normalizeServerOperationalInfo(buildServerOperationalInfo(status)))
+		return
+	}
+	ensureStatusRefreshAsync()
+	if apiServerOperationalDegradedBuilder != nil {
+		apiWriteJSON(w, http.StatusOK, normalizeServerOperationalInfo(apiServerOperationalDegradedBuilder()))
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, normalizeServerOperationalInfo(degradedServerOperationalInfo()))
+}
+
+func apiHandlerWorkspaceControl(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	report, err := buildWorkspaceControlReport()
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
-	apiWriteJSON(w, http.StatusOK, info)
+	apiWriteJSON(w, http.StatusOK, apiWorkspaceControlResponse{Control: report})
 }
 
 func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	status, err := fetchStatusForAPI(apiStatusFetchTimeout)
-	if err != nil {
-		if errors.Is(err, errStatusFetchTimeout) {
-			apiError(w, http.StatusServiceUnavailable, fmt.Errorf("status temporalmente degradado"))
-			return
-		}
-		apiError(w, http.StatusInternalServerError, err)
+	if status, err := fetchStatusForAPIAllowDirectFallback(apiStatusFetchTimeout, statusFastTimeout); err == nil {
+		writeAPIStatusPayload(w, status)
 		return
 	}
+	ensureStatusRefreshAsync()
+	writeAPIStatusPayload(w, degradedAPIStatusResponse())
+}
+
+func writeAPIStatusPayload(w http.ResponseWriter, status apiStatusResponse) {
+	tareasActivas := normalizarTareasLiteVisibles(status.TareasActivas)
+	agentesActivos := status.AgentesActivos
+	agentesTrabajando := status.AgentesTrabajando
+	autonomia := status.Autonomia
+	if autonomia.ByKind == nil {
+		autonomia.ByKind = map[string]int{}
+	}
+	tareasEnProgreso := filtrarOpenClawTareasPorEstado(status.TareasEnProgreso, db.TareaEnProgreso)
+	if len(tareasEnProgreso) == 0 {
+		tareasEnProgreso = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaEnProgreso)
+	}
+	tareasReservadas := filtrarOpenClawTareasPorEstado(status.TareasReservadas, db.TareaAsignada)
+	if len(tareasReservadas) == 0 {
+		tareasReservadas = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaAsignada)
+	}
+	if len(status.Agentes) > 0 && (len(agentesActivos) == 0 || len(agentesTrabajando) == 0) {
+		if activos, trabajando, _ := agentesVisiblesLigero(status.Agentes, tareasEnProgreso); len(activos) > 0 || len(trabajando) > 0 {
+			activos, trabajando, _ = normalizarAgentesVisiblesStatus(activos, trabajando, nil)
+			if len(agentesActivos) == 0 {
+				agentesActivos = activos
+			}
+			if len(agentesTrabajando) == 0 {
+				agentesTrabajando = trabajando
+			}
+		}
+	}
+	autonomySurface, autonomyHighlights, criticalProjectRisk := normalizeStatusAutonomyPayload(status.AutonomySurface, status.AutonomyHighlights, status.CriticalProjectRisk)
+	workersConectados, workersTrabajando, supervisoresActivos := statusVisibleWorkerCounters(agentesActivos, agentesTrabajando, autonomia)
 	payload := map[string]any{
 		"agentes":              status.Agentes,
 		"conteo_tareas":        status.ConteoTareas,
@@ -1190,27 +1293,89 @@ func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 		"propuestas_abiertas":  status.PropuestasAbiertas,
 		"generado":             status.Generado,
 		"tareasPorEstado":      status.TareasPorEstado,
-		"agentesActivos":       status.AgentesActivos,
-		"agentesTrabajando":    status.AgentesTrabajando,
+		"agentesActivos":       agentesActivos,
+		"agentesTrabajando":    agentesTrabajando,
 		"agentesSaturados":     status.AgentesSaturados,
 		"agentesAtascados":     status.AgentesAtascados,
 		"agentesAuthManual":    status.AgentesAuthManual,
 		"agentesQuotaBlocked":  status.AgentesQuotaBlocked,
 		"propuestasAbiertas":   status.PropuestasResumen,
-		"tareasActivas":        status.TareasActivas,
-		"tareasEnProgreso":     status.TareasEnProgreso,
-		"tareasReservadas":     status.TareasReservadas,
+		"tareasActivas":        tareasActivas,
+		"tareasEnProgreso":     tareasEnProgreso,
+		"tareasReservadas":     tareasReservadas,
 		"poolsLocales":         status.PoolsLocales,
 		"deudaDispatch":        status.DeudaDispatch,
-		"autonomia":           status.Autonomia,
-	}
-	if items, _ := payload["tareasEnProgreso"].([]tareaLite); len(items) == 0 {
-		payload["tareasEnProgreso"] = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso)
-	}
-	if items, _ := payload["tareasReservadas"].([]tareaLite); len(items) == 0 {
-		payload["tareasReservadas"] = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada)
+		"autonomia":            autonomia,
+		"autonomySurface":      autonomySurface,
+		"autonomyHighlights":   autonomyHighlights,
+		"criticalProjectRisk":  criticalProjectRisk,
+		"workersConectados":    workersConectados,
+		"workersTrabajando":    workersTrabajando,
+		"supervisoresActivos":  supervisoresActivos,
 	}
 	apiWriteJSON(w, http.StatusOK, payload)
+}
+
+func degradedAPIStatusResponse() apiStatusResponse {
+	now := time.Now().UTC().Format(time.RFC3339)
+	return apiStatusResponse{
+		Agentes:             []*db.Agente{},
+		ConteoTareas:        map[string]int{},
+		ResumenTareas:       map[string]int{},
+		Proyectos:           []*db.Proyecto{},
+		AsignacionesActivas: map[int64]int{},
+		SesionesActivas:     map[int64]int{},
+		PropuestasAbiertas:  []*db.Propuesta{},
+		Generado:            now,
+		TareasPorEstado:     map[string]int{},
+		AgentesActivos:      []*db.Agente{},
+		AgentesTrabajando:   []*db.Agente{},
+		AgentesSaturados:    []*db.Agente{},
+		AgentesAtascados:    []*db.Agente{},
+		AgentesAuthManual:   []*db.Agente{},
+		AgentesQuotaBlocked: []*db.Agente{},
+		PropuestasResumen:   []propuestaLite{},
+		TareasActivas:       []tareaLite{},
+		TareasEnProgreso:    []tareaLite{},
+		TareasReservadas:    []tareaLite{},
+		PoolsLocales:        []*capacidadapp.PoolLocalCompartido{},
+		DeudaDispatch:       deudaDispatchResumen{},
+		Autonomia:           autonomiaResumen{ByKind: map[string]int{}},
+		AutonomyHighlights:  []string{},
+	}
+}
+
+func degradedServerOperationalInfo() serverOperationalInfo {
+	if apiServerOperationalStatusFallback != nil {
+		if snapshot, err := apiServerOperationalStatusFallback(); err == nil {
+			return normalizeServerOperationalInfo(buildServerOperationalInfo(snapshot))
+		}
+	}
+	if apiServerOperationalDegradedBuilder != nil {
+		return normalizeServerOperationalInfo(apiServerOperationalDegradedBuilder())
+	}
+	return normalizeServerOperationalInfo(serverOperationalInfo{
+		State:       "degraded",
+		Operational: false,
+		Reason:      "status_temporarily_degraded",
+	})
+}
+
+func fetchStatusForOperationalFallback(timeout time.Duration) (apiStatusResponse, bool) {
+	if snapshot, ok := readStatusSnapshotAny(); ok {
+		return snapshot, true
+	}
+	if status, err := fetchStatusFallbackRace(timeout); err == nil {
+		storeStatusSnapshot(status, statusNowFunc().UTC())
+		ensureStatusRefreshAsync()
+		return status, true
+	}
+	if status, ok := fetchStatusReadOnlyLiteDirect(timeout); ok {
+		storeStatusSnapshotWithTTL(status, statusNowFunc().UTC(), statusFallbackTTL)
+		ensureStatusRefreshAsync()
+		return status, true
+	}
+	return apiStatusResponse{}, false
 }
 
 func fetchStatusForAPI(timeout time.Duration) (apiStatusResponse, error) {
@@ -1218,6 +1383,327 @@ func fetchStatusForAPI(timeout time.Duration) (apiStatusResponse, error) {
 		return apiStatusResponse{}, fmt.Errorf("status service nil")
 	}
 	return runAPITimeboxed(timeout, statusService.FetchStatus, errStatusFetchTimeout)
+}
+
+func fetchStatusForAPIAllowDirectFallback(timeout, fallbackTimeout time.Duration) (apiStatusResponse, error) {
+	if cached, ok := readStatusSnapshotFreshUsable(); ok {
+		return cached, nil
+	}
+	if cached, ok := readStatusSnapshotAny(); ok && !statusSnapshotNeedsImmediateRefresh(cached) {
+		return cached, nil
+	}
+	if status, fallbackErr := fetchStatusFallbackRace(fallbackTimeout); fallbackErr == nil {
+		storeStatusSnapshot(status, statusNowFunc().UTC())
+		ensureStatusRefreshAsync()
+		return status, nil
+	}
+	if status, ok := fetchStatusReadOnlyLiteDirect(fallbackTimeout); ok {
+		storeStatusSnapshotWithTTL(status, statusNowFunc().UTC(), statusFallbackTTL)
+		ensureStatusRefreshAsync()
+		return status, nil
+	}
+	if cached, ok := readStatusSnapshotAny(); ok {
+		return cached, nil
+	}
+	return apiStatusResponse{}, errStatusFetchTimeout
+}
+
+func fetchStatusFallbackRace(timeout time.Duration) (apiStatusResponse, error) {
+	type result struct {
+		status apiStatusResponse
+		ok     bool
+		rich   bool
+	}
+	if timeout <= 0 {
+		timeout = time.Second
+	}
+	ch := make(chan result, 2)
+	launched := 0
+	if fetcher := statusFastFetcher; fetcher != nil {
+		launched++
+		go func() {
+			status, err := runStatusFetcherWithTimeout(fetcher, timeout)
+			ch <- result{status: status, ok: err == nil, rich: true}
+		}()
+	}
+	if fetcher := apiStatusUltraLiteFetcher; fetcher != nil {
+		launched++
+		go func() {
+			status, ok := fetcher(timeout)
+			ch <- result{status: status, ok: ok, rich: false}
+		}()
+	}
+	if launched == 0 {
+		return apiStatusResponse{}, errStatusFetchTimeout
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	var graceTimer *time.Timer
+	var graceC <-chan time.Time
+	defer func() {
+		if graceTimer != nil {
+			graceTimer.Stop()
+		}
+	}()
+	failures := 0
+	var fallback *apiStatusResponse
+	for failures < launched {
+		select {
+		case res := <-ch:
+			if res.ok && res.rich {
+				return res.status, nil
+			}
+			if res.ok {
+				if fallback == nil {
+					status := res.status
+					fallback = &status
+					if failures+1 >= launched {
+						return *fallback, nil
+					}
+					if apiStatusFallbackRichGrace <= 0 {
+						return *fallback, nil
+					}
+					graceTimer = time.NewTimer(apiStatusFallbackRichGrace)
+					graceC = graceTimer.C
+				}
+				continue
+			}
+			failures++
+			if failures >= launched && fallback != nil {
+				return *fallback, nil
+			}
+		case <-graceC:
+			if fallback != nil {
+				return *fallback, nil
+			}
+		case <-timer.C:
+			if fallback != nil {
+				return *fallback, nil
+			}
+			return apiStatusResponse{}, errStatusFetchTimeout
+		}
+	}
+	if fallback != nil {
+		return *fallback, nil
+	}
+	return apiStatusResponse{}, errStatusFetchTimeout
+}
+
+func fetchStatusUltraLiteFallback(timeout time.Duration) (apiStatusResponse, bool) {
+	now := time.Now().UTC()
+	type result struct {
+		status apiStatusResponse
+		ok     bool
+	}
+	ch := make(chan result, 2)
+	launched := 0
+	if fetcher := apiStatusReadOnlyLiteFetcher; fetcher != nil {
+		launched++
+		go func() {
+			agentes, cuentas, tareas, err := fetcher()
+			if err != nil {
+				ch <- result{}
+				return
+			}
+			ch <- result{status: buildUltraLiteStatus(now, agentes, cuentas, tareaLiteFromDB(tareas)), ok: true}
+		}()
+	}
+	launched++
+	go func() {
+		status, ok := fetchStatusUltraLiteFallbackPrimary(now, timeout)
+		ch <- result{status: status, ok: ok}
+	}()
+	if launched == 0 {
+		return apiStatusResponse{}, false
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	failures := 0
+	for failures < launched {
+		select {
+		case res := <-ch:
+			if res.ok {
+				return res.status, true
+			}
+			failures++
+		case <-timer.C:
+			return apiStatusResponse{}, false
+		}
+	}
+	return apiStatusResponse{}, false
+}
+
+func fetchStatusReadOnlyLiteDirect(timeout time.Duration) (apiStatusResponse, bool) {
+	fetcher := apiStatusReadOnlyLiteFetcher
+	if fetcher == nil {
+		return apiStatusResponse{}, false
+	}
+	type liteResult struct {
+		agentes []*db.Agente
+		cuentas map[string]int
+		tareas  []*db.Tarea
+	}
+	result, err := runAPITimeboxed(timeout, func() (liteResult, error) {
+		agentes, cuentas, tareas, err := fetcher()
+		if err != nil {
+			return liteResult{}, err
+		}
+		return liteResult{agentes: agentes, cuentas: cuentas, tareas: tareas}, nil
+	}, errStatusFetchTimeout)
+	if err != nil {
+		return apiStatusResponse{}, false
+	}
+	if statusVisibleSessionsFetcher != nil && statusListAgentsWithSessionsFetcher != nil {
+		if sesiones, err := statusVisibleSessionsFetcher(); err == nil {
+			if agentesConSesiones, err := statusListAgentsWithSessionsFetcher(sesiones); err == nil && len(agentesConSesiones) > 0 {
+				result.agentes = agentesConSesiones
+			}
+		}
+	}
+	now := time.Now().UTC()
+	status := buildUltraLiteStatusReadOnly(now, result.agentes, result.cuentas, tareaLiteFromDB(result.tareas))
+	if rows, ok := readAgentPanelSnapshotFresh(); ok {
+		activos, trabajando, saturados, atascados, authManual, quotaBlocked, _ := agentesVisiblesPorEstadoOperativoRows(status.Agentes, rows)
+		activos, trabajando, saturados = normalizarAgentesVisiblesStatus(activos, trabajando, saturados)
+		status.AgentesActivos = activos
+		status.AgentesTrabajando = trabajando
+		status.AgentesSaturados = saturados
+		status.AgentesAtascados = atascados
+		status.AgentesAuthManual = authManual
+		status.AgentesQuotaBlocked = quotaBlocked
+		status.Autonomia = resumirAutonomiaRows(rows, now)
+	}
+	return status, true
+}
+
+func fetchStatusUltraLiteFallbackPrimary(now time.Time, timeout time.Duration) (apiStatusResponse, bool) {
+	type agentesResult struct {
+		value []*db.Agente
+		ok    bool
+	}
+	type cuentasResult struct {
+		value map[string]int
+		ok    bool
+	}
+	agentesCh := make(chan agentesResult, 1)
+	cuentasCh := make(chan cuentasResult, 1)
+	go func() {
+		value, ok := runStatusOptional(timeout, statusListAgentsFetcher)
+		agentesCh <- agentesResult{value: value, ok: ok}
+	}()
+	go func() {
+		value, ok := runStatusOptional(timeout, statusCountTasksFetcher)
+		cuentasCh <- cuentasResult{value: value, ok: ok}
+	}()
+	agentesRes := <-agentesCh
+	cuentasRes := <-cuentasCh
+	agentes, agentesOK := agentesRes.value, agentesRes.ok
+	cuentas, cuentasOK := cuentasRes.value, cuentasRes.ok
+	if !agentesOK && !cuentasOK {
+		return apiStatusResponse{}, false
+	}
+	return buildUltraLiteStatus(now, agentes, cuentas, nil), true
+}
+
+func tareaLiteFromDB(items []*db.Tarea) []tareaLite {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]tareaLite, 0, len(items))
+	for _, tarea := range items {
+		if tarea == nil {
+			continue
+		}
+		lite := tareaLite{
+			ID:        tarea.ID,
+			Titulo:    tarea.Titulo,
+			Estado:    tarea.Estado,
+			Modulo:    tarea.Modulo,
+			Prioridad: tarea.Prioridad,
+		}
+		if tarea.Agente != nil {
+			lite.Agente = *tarea.Agente
+		}
+		out = append(out, lite)
+	}
+	return normalizarTareasLiteVisibles(out)
+}
+
+func buildUltraLiteStatus(now time.Time, agentes []*db.Agente, cuentas map[string]int, tareasActivas []tareaLite) apiStatusResponse {
+	return buildUltraLiteStatusWithAutonomy(now, agentes, cuentas, tareasActivas, true)
+}
+
+func buildUltraLiteStatusReadOnly(now time.Time, agentes []*db.Agente, cuentas map[string]int, tareasActivas []tareaLite) apiStatusResponse {
+	return buildUltraLiteStatusWithAutonomy(now, agentes, cuentas, tareasActivas, true)
+}
+
+func buildUltraLiteStatusWithAutonomy(now time.Time, agentes []*db.Agente, cuentas map[string]int, tareasActivas []tareaLite, includeSupervisorConfig bool) apiStatusResponse {
+	status := apiStatusResponse{
+		Agentes:             []*db.Agente{},
+		ConteoTareas:        map[string]int{},
+		ResumenTareas:       map[string]int{},
+		Proyectos:           []*db.Proyecto{},
+		AsignacionesActivas: map[int64]int{},
+		SesionesActivas:     map[int64]int{},
+		PropuestasAbiertas:  []*db.Propuesta{},
+		Generado:            now.Format(time.RFC3339),
+		TareasPorEstado:     map[string]int{},
+		AgentesActivos:      []*db.Agente{},
+		AgentesTrabajando:   []*db.Agente{},
+		AgentesSaturados:    []*db.Agente{},
+		AgentesAtascados:    []*db.Agente{},
+		AgentesAuthManual:   []*db.Agente{},
+		AgentesQuotaBlocked: []*db.Agente{},
+		PropuestasResumen:   []propuestaLite{},
+		TareasActivas:       []tareaLite{},
+		TareasEnProgreso:    []tareaLite{},
+		TareasReservadas:    []tareaLite{},
+		PoolsLocales:        []*capacidadapp.PoolLocalCompartido{},
+		DeudaDispatch:       deudaDispatchResumen{},
+		Autonomia:           autonomiaResumen{ByKind: map[string]int{}},
+	}
+	if agentes != nil {
+		status.Agentes = agentes
+		status.AgentesQuotaBlocked = agentesNoActivosConCuotaConResumen(agentes, nil)
+	}
+	if cuentas != nil {
+		status.ConteoTareas = cuentas
+		status.ResumenTareas = cuentas
+		status.TareasPorEstado = cuentas
+	}
+	if len(tareasActivas) > 0 {
+		tareasActivas = normalizarTareasLiteVisibles(tareasActivas)
+		status.TareasActivas = tareasActivas
+		status.TareasEnProgreso = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaEnProgreso)
+		status.TareasReservadas = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaAsignada)
+		status.TareasPorEstado = reconciliarConteoTareasActivasVisible(status.TareasPorEstado, tareasActivas)
+		status.ConteoTareas = status.TareasPorEstado
+		status.ResumenTareas = status.TareasPorEstado
+	}
+	if agentes != nil {
+		activos, trabajando, quota := agentesVisiblesLigero(status.Agentes, status.TareasEnProgreso)
+		activos, trabajando, _ = normalizarAgentesVisiblesStatus(activos, trabajando, nil)
+		status.AgentesActivos = activos
+		status.AgentesTrabajando = trabajando
+		if len(quota) > 0 {
+			status.AgentesQuotaBlocked = quota
+		}
+		status.Autonomia = resumirAutonomiaLigeraConSupervisor(activos, trabajando, status.TareasEnProgreso, now, includeSupervisorConfig)
+		if enriched, err := resumirAutonomiaEventosRecientes(status.Autonomia, now); err == nil {
+			status.Autonomia = enriched
+		} else if status.Autonomia.ByKind == nil {
+			status.Autonomia.ByKind = map[string]int{}
+		}
+		status.WorkersConectados, status.WorkersTrabajando, status.SupervisoresActivos = statusVisibleWorkerCounters(activos, trabajando, status.Autonomia)
+	}
+	riskSummary := buildStatusWorkspaceRiskSummary(status.AutonomySurface)
+	if out, err := runAPITimeboxed(statusOptionalSectionTimeout, fetchStatusWorkspaceRiskSummary, errStatusFetchTimeout); err == nil {
+		riskSummary = mergeStatusWorkspaceRiskSummary(riskSummary, out)
+	}
+	status.AutonomySurface, riskSummary = canonicalizeStatusAutonomyRisk(status.AutonomySurface, riskSummary)
+	status.CriticalProjectRisk = riskSummary.CriticalProjectRisk
+	status.AutonomyHighlights = riskSummary.Highlights
+	return status
 }
 
 func runAPITimeboxed[T any](timeout time.Duration, fn func() (T, error), timeoutErr error) (T, error) {
@@ -1256,6 +1742,9 @@ func apiResolveProjectIDTimeboxed(proyectoRef string) (*int64, error) {
 	proyecto, err := runAPITimeboxed(apiRuntimeProjectLookupTimeout, func() (*db.Proyecto, error) {
 		return apiGetRuntimeProjectFn(proyectoRef)
 	}, errStatusFetchTimeout)
+	if errors.Is(err, errStatusFetchTimeout) {
+		proyecto, err = apiProjectLookupPrepareLiteFn(proyectoRef)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1263,6 +1752,34 @@ func apiResolveProjectIDTimeboxed(proyectoRef string) (*int64, error) {
 		return nil, fmt.Errorf("proyecto no encontrado")
 	}
 	return &proyecto.ID, nil
+}
+
+func apiGetProyectoTimeboxed(ref string) (*db.Proyecto, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, fmt.Errorf("referencia de proyecto vacía")
+	}
+	proyecto, err := runAPITimeboxed(apiRuntimeProjectLookupTimeout, func() (*db.Proyecto, error) {
+		return apiProjectLookupFn(ref)
+	}, errStatusFetchTimeout)
+	if errors.Is(err, errStatusFetchTimeout) {
+		return apiProjectLookupPrepareLiteFn(ref)
+	}
+	return proyecto, err
+}
+
+func apiGetProyectoConRutaEfectivaTimeboxed(ref, cwdHint string) (*db.Proyecto, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, fmt.Errorf("referencia de proyecto vacía")
+	}
+	proyecto, err := runAPITimeboxed(apiRuntimeProjectLookupTimeout, func() (*db.Proyecto, error) {
+		return apiProjectLookupWithRouteFn(ref, cwdHint)
+	}, errStatusFetchTimeout)
+	if errors.Is(err, errStatusFetchTimeout) {
+		return apiProjectLookupWithRoutePrepareLiteFn(ref, cwdHint)
+	}
+	return proyecto, err
 }
 
 func apiHandlerDiagnostico(w http.ResponseWriter, r *http.Request) {
@@ -1290,12 +1807,16 @@ func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("vista")), "panel") {
-			rows, err := agentesService.BuildPanelRows()
+			rows, err := fetchAgentPanelRowsCached(apiAgentsPanelTimeout)
 			if err != nil {
+				if errors.Is(err, errStatusFetchTimeout) {
+					apiError(w, http.StatusServiceUnavailable, fmt.Errorf("panel temporalmente degradado"))
+					return
+				}
 				apiError(w, http.StatusInternalServerError, err)
 				return
 			}
-			apiWriteJSON(w, http.StatusOK, apiAgentesPanelResponse{Rows: rows})
+			apiWriteJSON(w, http.StatusOK, apiAgentesPanelResponse{Rows: normalizeAgentPanelRowsForAPI(rows, time.Now().UTC())})
 			return
 		}
 		if snapshot, err := statusService.FetchStatus(); err == nil {
@@ -1339,6 +1860,35 @@ func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func normalizeAgentPanelRowsForAPI(rows []agentesapp.Row, now time.Time) []agentesapp.Row {
+	if len(rows) == 0 {
+		return rows
+	}
+	out := make([]agentesapp.Row, len(rows))
+	copy(out, rows)
+	for i := range out {
+		out[i].MailboxPending = compactMailboxPendingVisibleForAPI(out[i], now)
+		if !out[i].EffectiveContinuityPending(now) {
+			out[i].MailboxContinuityPending = 0
+		}
+	}
+	return out
+}
+
+func compactMailboxPendingVisibleForAPI(row agentesapp.Row, now time.Time) int {
+	pending := row.MailboxPending
+	if pending <= 0 {
+		return 0
+	}
+	if row.MailboxContinuityPending > 0 && !row.EffectiveContinuityPending(now) {
+		pending -= row.MailboxContinuityPending
+		if pending < 0 {
+			pending = 0
+		}
+	}
+	return pending
+}
+
 func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/agentes/"), "/"), "/")
 	if len(parts) == 0 || parts[0] == "" {
@@ -1376,6 +1926,10 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			apiWriteJSON(w, http.StatusOK, apiAgenteOverviewResponse{Detail: detail})
+			return
+		}
+		if len(parts) == 2 && parts[1] == "actividad" {
+			apiHandlerAgenteActividad(w, r, parts[0])
 			return
 		}
 		http.NotFound(w, r)
@@ -1834,14 +2388,27 @@ func apiHandlerNotificaciones(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	eventos, err := buildOpenClawNormalizedEvents(10)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
+	eventos := []openClawNormalizedEvent{}
+	if items, err := runAPITimeboxed(250*time.Millisecond, func() ([]openClawNormalizedEvent, error) {
+		return buildOpenClawNormalizedEvents(10)
+	}, errStatusFetchTimeout); err == nil {
+		eventos = items
+	}
+	estadoNotifs := notificaciones.EstadoNotificaciones{}
+	if estado, err := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.EstadoNotificaciones, error) {
+		return notificaciones.DescribirConfiguracion(), nil
+	}, errStatusFetchTimeout); err == nil {
+		estadoNotifs = estado
+	}
+	entregas := notificaciones.OutboxSummary{}
+	if outbox, err := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.OutboxSummary, error) {
+		return notificaciones.DescribirOutbox(10), nil
+	}, errStatusFetchTimeout); err == nil {
+		entregas = outbox
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{
-		"notificaciones":       notificaciones.DescribirConfiguracion(),
-		"entregas":             notificaciones.DescribirOutbox(10),
+		"notificaciones":       estadoNotifs,
+		"entregas":             entregas,
 		"eventos_normalizados": eventos,
 	})
 }
@@ -1849,32 +2416,70 @@ func apiHandlerNotificaciones(w http.ResponseWriter, r *http.Request) {
 func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		status, err := buildEstadoResumenLigero()
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
+		status, err := runAPITimeboxed(250*time.Millisecond, buildEstadoResumenLigero, errStatusFetchTimeout)
+		if err != nil || status == nil {
+			status = &estadoResumen{
+				Generado:        time.Now().UTC().Format(time.RFC3339),
+				TareasPorEstado: map[string]int{},
+			}
 		}
-		revision, err := buildSupervisorReviewSnapshot("")
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
+		revision := map[string]any{}
+		if snapshot, err := runAPITimeboxed(350*time.Millisecond, func() (map[string]any, error) {
+			return buildSupervisorReviewSnapshot("")
+		}, errStatusFetchTimeout); err == nil && snapshot != nil {
+			revision = snapshot
 		}
-		statusResumen, err := buildOpenClawOperatorStatus(status)
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
+		statusResumen := apiOpenClawStatusLite{Generado: status.Generado, TareasPorEstado: status.TareasPorEstado}
+		if summary, err := runAPITimeboxed(200*time.Millisecond, func() (apiOpenClawStatusLite, error) {
+			return buildOpenClawOperatorStatus(status)
+		}, errStatusFetchTimeout); err == nil {
+			statusResumen = summary
 		}
 		eventos := openClawEventsFromReviewSnapshot(revision)
 		threads := supervisorThreadsFromReviewSnapshot(revision)
 		pipeline := supervisorPipelineFromReviewSnapshot(revision)
 		worktreeDrift := openClawWorktreeDriftFromReviewSnapshot(revision)
 		subagents := supervisorSubagentsFromReviewSnapshot(revision)
+		if len(subagents) == 0 {
+			if snapshot, err := runAPITimeboxed(150*time.Millisecond, func() (map[string]any, error) {
+				return buildSupervisorSubagentsSnapshot("", "", "", 100)
+			}, errStatusFetchTimeout); err == nil && snapshot != nil {
+				subagents = snapshot
+			}
+		}
+		if len(pipeline) == 0 {
+			if snapshot, err := runAPITimeboxed(150*time.Millisecond, func() (map[string]any, error) {
+				return buildSupervisorPipelineSnapshot("", "", 20)
+			}, errStatusFetchTimeout); err == nil && snapshot != nil {
+				pipeline = snapshot
+			}
+		}
+		subagentFollowups := buildOpenClawSubagentFollowupsCompact(subagents)
+		if len(subagentFollowups) == 0 {
+			subagentFollowups = buildOpenClawSubagentFollowupsDirect("")
+		}
+		pipelineFollowup := buildOpenClawPipelineFollowupCompact(pipeline)
+		if len(pipelineFollowup) == 0 && len(subagentFollowups) > 0 {
+			pipelineFollowup = buildOpenClawPipelineFollowupFromSubagents(subagentFollowups)
+		}
 		if observed, ok := threads["observed_agent_sessions"].([]*supervisorObservedAgentSessionSummary); ok {
 			threads["observed_agent_sessions"] = alignSupervisorObservedSessionsWithStatus(observed, status.AgentesActivos)
 		}
 		reviewCompact := buildOpenClawReviewCompact(revision)
 		queueSummary := buildOpenClawQueueSummaryFromReviewSnapshot(revision)
 		sessionCandidates := alignOpenClawSessionCandidatesWithStatus(buildOpenClawSessionCandidates(threads), status.AgentesActivos)
+		estadoNotifs := notificaciones.EstadoNotificaciones{}
+		if estado, err := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.EstadoNotificaciones, error) {
+			return notificaciones.DescribirConfiguracion(), nil
+		}, errStatusFetchTimeout); err == nil {
+			estadoNotifs = estado
+		}
+		entregas := notificaciones.OutboxSummary{}
+		if outbox, err := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.OutboxSummary, error) {
+			return notificaciones.DescribirOutbox(10), nil
+		}, errStatusFetchTimeout); err == nil {
+			entregas = outbox
+		}
 		apiWriteJSON(w, http.StatusOK, map[string]any{
 			"status":               statusResumen,
 			"agentesActivos":       statusResumen.AgentesActivos,
@@ -1895,8 +2500,8 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			"queue_summary":        queueSummary,
 			"capacity_summary":     statusResumen.CapacitySummary,
 			"saturated_agents":     statusResumen.AgentesSaturados,
-			"notificaciones":       notificaciones.DescribirConfiguracion(),
-			"entregas":             notificaciones.DescribirOutbox(10),
+			"notificaciones":       estadoNotifs,
+			"entregas":             entregas,
 			"eventos_normalizados": eventos,
 			"thread_sessions":      threads,
 			"subagentes":           subagents["subagents"],
@@ -1905,6 +2510,8 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			"session_candidates":   sessionCandidates,
 			"worktree_drift":       worktreeDrift,
 			"pipeline_state":       pipeline,
+			"pipeline_followup":    pipelineFollowup,
+			"subagentes_followup":  subagentFollowups,
 		})
 	case http.MethodPost:
 		var req struct {
@@ -2218,6 +2825,120 @@ func supervisorPipelineFromReviewSnapshot(review map[string]any) map[string]any 
 	return map[string]any{}
 }
 
+func buildOpenClawSubagentFollowupsCompact(snapshot map[string]any) []map[string]any {
+	items, _ := snapshot["subagents"].([]*db.SupervisorSubagent)
+	return buildOpenClawSubagentFollowupsFromItems(items)
+}
+
+func buildOpenClawSubagentFollowupsDirect(supervisor string) []map[string]any {
+	items, err := db.ListarSupervisorSubagents(db.FiltroSupervisorSubagents{
+		Supervisor: resolveSupervisorName(supervisor),
+		Status:     "completed",
+		Limit:      100,
+	})
+	if err != nil {
+		return nil
+	}
+	return buildOpenClawSubagentFollowupsFromItems(items)
+}
+
+func buildOpenClawSubagentFollowupsFromItems(items []*db.SupervisorSubagent) []map[string]any {
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		metadata := metadataSupervisorSubagente(item)
+		if len(metadata) == 0 || !strings.EqualFold(strings.TrimSpace(stringSupervisorSubagente(metadata["source"])), "pipeline_local_parallel") {
+			continue
+		}
+		compact := map[string]any{
+			"id":            item.ID,
+			"thread_id":     strings.TrimSpace(item.ThreadID),
+			"subagent_name": strings.TrimSpace(item.SubagentName),
+			"status":        strings.TrimSpace(item.Status),
+			"source":        "pipeline_local_parallel",
+		}
+		if idx := int64SupervisorSubagente(metadata["slice_index"]); idx > 0 {
+			compact["slice_index"] = idx
+		}
+		if total := int64SupervisorSubagente(metadata["slice_total"]); total > 0 {
+			compact["slice_total"] = total
+		}
+		if taskID := int64SupervisorSubagente(metadata["task_id"]); taskID > 0 {
+			compact["task_id"] = taskID
+		}
+		if taskTitle := strings.TrimSpace(stringSupervisorSubagente(metadata["task_title"])); taskTitle != "" {
+			compact["task_title"] = taskTitle
+		}
+		if phase := strings.TrimSpace(stringSupervisorSubagente(metadata["pipeline_parent_followup_phase"])); phase != "" {
+			compact["followup_phase"] = phase
+		}
+		if action := strings.TrimSpace(stringSupervisorSubagente(metadata["pipeline_parent_followup_action"])); action != "" {
+			compact["followup_action"] = action
+		}
+		if mergeID := int64SupervisorSubagente(metadata["pipeline_parent_followup_git_merge_id"]); mergeID > 0 {
+			compact["git_merge_id"] = mergeID
+		}
+		if dispatched := sidecarPipelineFollowupYaDespachado(metadata); dispatched {
+			compact["followup_dispatched"] = true
+		}
+		out = append(out, compact)
+	}
+	return out
+}
+
+func buildOpenClawPipelineFollowupCompact(snapshot map[string]any) map[string]any {
+	items, _ := snapshot["pipelines"].([]*db.SupervisorPipelineState)
+	return buildOpenClawPipelineFollowupFromPipelineItems(items)
+}
+
+func buildOpenClawPipelineFollowupFromPipelineItems(items []*db.SupervisorPipelineState) map[string]any {
+	for _, item := range items {
+		if item == nil || strings.TrimSpace(item.MetadataJSON) == "" {
+			continue
+		}
+		var metadata map[string]any
+		if err := json.Unmarshal([]byte(strings.TrimSpace(item.MetadataJSON)), &metadata); err != nil || len(metadata) == 0 {
+			continue
+		}
+		followup, _ := metadata["latest_parallel_sidecar_followup"].(map[string]any)
+		if len(followup) == 0 {
+			continue
+		}
+		compact := map[string]any{
+			"pipeline_name": strings.TrimSpace(item.PipelineName),
+			"proyecto":      strings.TrimSpace(item.ProyectoSlug),
+		}
+		for _, key := range []string{"phase", "action", "task_id", "task_title", "git_merge_id", "slice_index", "slice_total", "subagent_id", "thread_id", "updated_at"} {
+			if value, ok := followup[key]; ok {
+				compact[key] = value
+			}
+		}
+		return compact
+	}
+	return map[string]any{}
+}
+
+func buildOpenClawPipelineFollowupFromSubagents(items []map[string]any) map[string]any {
+	for _, item := range items {
+		if len(item) == 0 {
+			continue
+		}
+		compact := map[string]any{}
+		for _, key := range []string{"task_id", "task_title", "git_merge_id", "slice_index", "slice_total", "thread_id"} {
+			if value, ok := item[key]; ok {
+				compact[key] = value
+			}
+		}
+		if phase, ok := item["followup_phase"]; ok {
+			compact["phase"] = phase
+		}
+		if action, ok := item["followup_action"]; ok {
+			compact["action"] = action
+		}
+		return compact
+	}
+	return map[string]any{}
+}
+
 func openClawWorktreeDriftFromReviewSnapshot(review map[string]any) []apiOpenClawWorktreeDrift {
 	if review == nil {
 		return nil
@@ -2252,9 +2973,11 @@ func buildOpenClawQueueSummaryFromActions(allActions, safeActions []supervisorRe
 }
 
 func buildOpenClawCapacitySummary(agentesActivos, agentesTrabajando []*db.Agente, tareas []tareaLite, tareasPorEstado map[string]int) apiOpenClawCapacitySummary {
-	idle := idleSupervisorWorkers(agentesActivos, agentesTrabajando)
-	saturated := buildOpenClawSaturatedAgents(agentesActivos, tareas)
-	connected := len(agentesActivos)
+	workersActivos := visibleNonSupervisorAgents(agentesActivos)
+	workersTrabajando := visibleNonSupervisorAgents(agentesTrabajando)
+	idle := idleSupervisorWorkers(workersActivos, workersTrabajando)
+	saturated := buildOpenClawSaturatedAgents(workersActivos, tareas)
+	connected := len(workersActivos)
 	idleCount := len(idle)
 	saturatedCount := len(saturated)
 	available := connected - saturatedCount
@@ -2305,6 +3028,9 @@ func filtrarOpenClawTareasPorEstado(items []tareaLite, estados ...db.EstadoTarea
 	}
 	out := make([]tareaLite, 0, len(items))
 	for _, item := range items {
+		if !tareaLiteValida(item) {
+			continue
+		}
 		if _, ok := permitidos[item.Estado]; ok {
 			out = append(out, item)
 		}
@@ -3083,19 +3809,15 @@ func apiHandlerAudit(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = v
 	}
-	fetchLimit := limit
-	if fetchLimit < 200 {
-		fetchLimit = 200
-	}
-	entries, err := db.AuditLog(fetchLimit)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
 	agenteFiltro := strings.TrimSpace(r.URL.Query().Get("agente"))
 	accionFiltro := strings.TrimSpace(r.URL.Query().Get("accion"))
 	entidadFiltro := strings.TrimSpace(r.URL.Query().Get("entidad"))
 	entidadIDFiltro := strings.TrimSpace(r.URL.Query().Get("entidad_id"))
+	desdeFiltro, err := apiParseRFC3339QueryTime(r.URL.Query().Get("desde"))
+	if err != nil {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("desde inválido"))
+		return
+	}
 
 	var entidadID int64
 	var filtrarEntidadID bool
@@ -3108,27 +3830,48 @@ func apiHandlerAudit(w http.ResponseWriter, r *http.Request) {
 		entidadID = v
 		filtrarEntidadID = true
 	}
-
-	filtered := make([]db.AuditEntry, 0, len(entries))
-	for _, entry := range entries {
-		if agenteFiltro != "" && entry.Agente != agenteFiltro {
-			continue
-		}
-		if accionFiltro != "" && entry.Accion != accionFiltro {
-			continue
-		}
-		if entidadFiltro != "" && entry.Entidad != entidadFiltro {
-			continue
-		}
-		if filtrarEntidadID && entry.EntidadID != entidadID {
-			continue
-		}
-		filtered = append(filtered, entry)
-		if len(filtered) >= limit {
-			break
-		}
+	filtro := db.FiltroAuditoria{Limite: limit}
+	if agenteFiltro != "" {
+		filtro.Agente = &agenteFiltro
 	}
-	apiWriteJSON(w, http.StatusOK, map[string]any{"audit": filtered})
+	if accionFiltro != "" {
+		filtro.Accion = &accionFiltro
+	}
+	if entidadFiltro != "" {
+		filtro.Entidad = &entidadFiltro
+	}
+	if filtrarEntidadID {
+		filtro.EntidadID = &entidadID
+	}
+	if desdeFiltro != nil {
+		filtro.Desde = desdeFiltro
+	}
+	logs, err := runAPITimeboxed(apiAuditTimeout, func() ([]*db.LogAuditoria, error) {
+		return apiListAuditFn(filtro)
+	}, errStatusFetchTimeout)
+	if err != nil {
+		if errors.Is(err, errStatusFetchTimeout) {
+			apiWriteJSON(w, http.StatusOK, apiAuditResponse{Audit: []db.AuditEntry{}})
+			return
+		}
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	entries := make([]db.AuditEntry, 0, len(logs))
+	for _, entry := range logs {
+		if entry == nil {
+			continue
+		}
+		entries = append(entries, db.AuditEntry{
+			Agente:    entry.Agente,
+			Accion:    entry.Accion,
+			Entidad:   entry.Entidad,
+			EntidadID: entry.EntidadID,
+			Detalle:   entry.Detalle,
+			CreatedAt: entry.CreatedAt,
+		})
+	}
+	apiWriteJSON(w, http.StatusOK, apiAuditResponse{Audit: entries})
 }
 
 func apiHandlerRespaldoBD(w http.ResponseWriter, r *http.Request) {
@@ -3210,7 +3953,7 @@ func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 	ref := strings.TrimSpace(parts[0])
 	switch {
 	case len(parts) == 1 && r.Method == http.MethodGet:
-		proyecto, err := db.GetProyectoConRutaEfectiva(ref, "")
+		proyecto, err := apiGetProyectoConRutaEfectivaTimeboxed(ref, "")
 		if err != nil {
 			apiError(w, http.StatusNotFound, err)
 			return
@@ -3224,6 +3967,8 @@ func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 		apiHandlerProyectoActualizar(w, r, ref)
 	case len(parts) == 2 && parts[1] == "overview" && r.Method == http.MethodGet:
 		apiHandlerProyectoOverview(w, r, ref)
+	case len(parts) == 2 && parts[1] == "control" && r.Method == http.MethodGet:
+		apiHandlerProyectoControl(w, r, ref)
 	case len(parts) == 2 && parts[1] == "cockpit" && r.Method == http.MethodGet:
 		apiHandlerProyectoCockpit(w, r, ref)
 	case len(parts) == 2 && parts[1] == "fusionar" && r.Method == http.MethodPost:
@@ -3248,6 +3993,12 @@ func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 		apiHandlerProyectoFabricarApp(w, r, ref)
 	case len(parts) == 3 && parts[1] == "fabricar-app" && parts[2] == "preview" && r.Method == http.MethodPost:
 		apiHandlerProyectoFabricarAppPreview(w, r, ref)
+	case len(parts) == 2 && parts[1] == "idiomas" && r.Method == http.MethodPost:
+		apiHandlerProyectoIdiomas(w, r, ref)
+	case len(parts) == 2 && parts[1] == "contexto-compartido" && r.Method == http.MethodGet:
+		apiHandlerProyectoSharedContextList(w, r, ref)
+	case len(parts) == 2 && parts[1] == "contexto-compartido" && r.Method == http.MethodPost:
+		apiHandlerProyectoSharedContextCreate(w, r, ref)
 	default:
 		http.NotFound(w, r)
 	}
@@ -3273,6 +4024,15 @@ func apiHandlerProyectoActualizar(w http.ResponseWriter, r *http.Request, ref st
 	}
 	if v := strings.TrimSpace(req.RutaAbs); v != "" {
 		actualizado.RutaAbs = v
+	}
+	if v := strings.TrimSpace(req.OrigenRepo); v != "" {
+		actualizado.OrigenRepo = v
+	}
+	if req.RemoteURL != "" {
+		actualizado.RemoteURL = strings.TrimSpace(req.RemoteURL)
+	}
+	if req.BranchBase != "" {
+		actualizado.BranchBase = strings.TrimSpace(req.BranchBase)
 	}
 	if v := strings.TrimSpace(req.Tipo); v != "" {
 		actualizado.Tipo = db.TipoProyecto(v)
@@ -3319,6 +4079,45 @@ func apiHandlerProyectoOverview(w http.ResponseWriter, r *http.Request, ref stri
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, apiProyectoOverviewResponse{Overview: overview})
+}
+
+func apiHandlerProyectoControl(w http.ResponseWriter, r *http.Request, ref string) {
+	sinceRaw := strings.TrimSpace(r.URL.Query().Get("desde"))
+	since, err := parseStatsSince(sinceRaw)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	report, err := buildProjectControlReport(strings.TrimSpace(ref), since)
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	if report == nil {
+		apiError(w, http.StatusNotFound, fmt.Errorf("proyecto no encontrado: %s", strings.TrimSpace(ref)))
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiProyectoControlResponse{Control: report})
+}
+
+func apiHandlerAgenteActividad(w http.ResponseWriter, r *http.Request, agent string) {
+	sinceRaw := strings.TrimSpace(r.URL.Query().Get("desde"))
+	since, err := parseStatsSince(sinceRaw)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	project := strings.TrimSpace(r.URL.Query().Get("proyecto"))
+	report, err := buildAgentActivityReportLocal(strings.TrimSpace(agent), project, since, 200, 400)
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	compact := *report
+	compact.Detail = nil
+	compact.Audit = nil
+	compact.Transcript = nil
+	apiWriteJSON(w, http.StatusOK, apiAgenteActividadResponse{Activity: &compact})
 }
 
 func apiHandlerProyectoCockpit(w http.ResponseWriter, r *http.Request, ref string) {
@@ -3411,16 +4210,19 @@ func apiHandlerProyectoFabricarApp(w http.ResponseWriter, r *http.Request, ref s
 		actor = "alberto"
 	}
 	plan, err := newProjectAppFactory().Generate(fabricaapp.AppSpec{
-		Nombre:      nombre,
-		Descripcion: descripcion,
-		Tipo:        strings.TrimSpace(req.Tipo),
-		Frontend:    req.Frontend,
-		API:         req.API,
-		Auth:        req.Auth,
-		Database:    req.Database,
-		Docker:      req.Docker,
-		I18n:        req.I18n,
-		Idiomas:     req.Idiomas,
+		Nombre:           nombre,
+		Descripcion:      descripcion,
+		ObjetivoNegocio:  strings.TrimSpace(req.ObjetivoNegocio),
+		UsuariosObjetivo: strings.TrimSpace(req.UsuariosObjetivo),
+		Restricciones:    strings.TrimSpace(req.Restricciones),
+		Tipo:             strings.TrimSpace(req.Tipo),
+		Frontend:         req.Frontend,
+		API:              req.API,
+		Auth:             req.Auth,
+		Database:         req.Database,
+		Docker:           req.Docker,
+		I18n:             req.I18n,
+		Idiomas:          req.Idiomas,
 
 		PlatWeb:      req.PlatWeb,
 		PlatDesktop:  req.PlatDesktop,
@@ -3445,6 +4247,40 @@ func apiHandlerProyectoFabricarApp(w http.ResponseWriter, r *http.Request, ref s
 		Kubernetes: req.Kubernetes,
 		Terraform:  req.Terraform,
 		Monitoring: req.Monitoring,
+
+		Arquitectura:          req.Arquitectura,
+		APIStyle:              req.APIStyle,
+		FrontendStack:         req.FrontendStack,
+		DatabaseEngine:        req.DatabaseEngine,
+		AuthMode:              req.AuthMode,
+		IdentityProvider:      req.IdentityProvider,
+		TestingLevel:          req.TestingLevel,
+		ObservabilityLevel:    req.ObservabilityLevel,
+		DeploymentTarget:      req.DeploymentTarget,
+		ArtifactType:          req.ArtifactType,
+		BackgroundJobs:        req.BackgroundJobs,
+		Notifications:         req.Notifications,
+		MultiTenant:           req.MultiTenant,
+		RBAC:                  req.RBAC,
+		ThemeSupport:          req.ThemeSupport,
+		BrandingProfiles:      req.BrandingProfiles,
+		OfflineMode:           req.OfflineMode,
+		ImportExport:          req.ImportExport,
+		Webhooks:              req.Webhooks,
+		FileUploads:           req.FileUploads,
+		Reporting:             req.Reporting,
+		ServicioResidente:     req.ServicioResidente,
+		Cache:                 req.Cache,
+		Queue:                 req.Queue,
+		Scheduler:             req.Scheduler,
+		ObjectStorage:         req.ObjectStorage,
+		Search:                req.Search,
+		RateLimiting:          req.RateLimiting,
+		FeatureFlags:          req.FeatureFlags,
+		AuditTrail:            req.AuditTrail,
+		Backups:               req.Backups,
+		DisasterRecovery:      req.DisasterRecovery,
+		IntegracionesExternas: req.Integraciones,
 	})
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)
@@ -3488,16 +4324,19 @@ func apiHandlerProyectoFabricarAppPreview(w http.ResponseWriter, r *http.Request
 		descripcion = "Preview de backlog de " + nombre + "."
 	}
 	plan, err := newProjectAppFactory().Generate(fabricaapp.AppSpec{
-		Nombre:      nombre,
-		Descripcion: descripcion,
-		Tipo:        strings.TrimSpace(req.Tipo),
-		Frontend:    req.Frontend,
-		API:         req.API,
-		Auth:        req.Auth,
-		Database:    req.Database,
-		Docker:      req.Docker,
-		I18n:        req.I18n,
-		Idiomas:     req.Idiomas,
+		Nombre:           nombre,
+		Descripcion:      descripcion,
+		ObjetivoNegocio:  strings.TrimSpace(req.ObjetivoNegocio),
+		UsuariosObjetivo: strings.TrimSpace(req.UsuariosObjetivo),
+		Restricciones:    strings.TrimSpace(req.Restricciones),
+		Tipo:             strings.TrimSpace(req.Tipo),
+		Frontend:         req.Frontend,
+		API:              req.API,
+		Auth:             req.Auth,
+		Database:         req.Database,
+		Docker:           req.Docker,
+		I18n:             req.I18n,
+		Idiomas:          req.Idiomas,
 
 		PlatWeb:      req.PlatWeb,
 		PlatDesktop:  req.PlatDesktop,
@@ -3522,6 +4361,40 @@ func apiHandlerProyectoFabricarAppPreview(w http.ResponseWriter, r *http.Request
 		Kubernetes: req.Kubernetes,
 		Terraform:  req.Terraform,
 		Monitoring: req.Monitoring,
+
+		Arquitectura:          req.Arquitectura,
+		APIStyle:              req.APIStyle,
+		FrontendStack:         req.FrontendStack,
+		DatabaseEngine:        req.DatabaseEngine,
+		AuthMode:              req.AuthMode,
+		IdentityProvider:      req.IdentityProvider,
+		TestingLevel:          req.TestingLevel,
+		ObservabilityLevel:    req.ObservabilityLevel,
+		DeploymentTarget:      req.DeploymentTarget,
+		ArtifactType:          req.ArtifactType,
+		BackgroundJobs:        req.BackgroundJobs,
+		Notifications:         req.Notifications,
+		MultiTenant:           req.MultiTenant,
+		RBAC:                  req.RBAC,
+		ThemeSupport:          req.ThemeSupport,
+		BrandingProfiles:      req.BrandingProfiles,
+		OfflineMode:           req.OfflineMode,
+		ImportExport:          req.ImportExport,
+		Webhooks:              req.Webhooks,
+		FileUploads:           req.FileUploads,
+		Reporting:             req.Reporting,
+		ServicioResidente:     req.ServicioResidente,
+		Cache:                 req.Cache,
+		Queue:                 req.Queue,
+		Scheduler:             req.Scheduler,
+		ObjectStorage:         req.ObjectStorage,
+		Search:                req.Search,
+		RateLimiting:          req.RateLimiting,
+		FeatureFlags:          req.FeatureFlags,
+		AuditTrail:            req.AuditTrail,
+		Backups:               req.Backups,
+		DisasterRecovery:      req.DisasterRecovery,
+		IntegracionesExternas: req.Integraciones,
 	})
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)
@@ -3530,6 +4403,150 @@ func apiHandlerProyectoFabricarAppPreview(w http.ResponseWriter, r *http.Request
 	apiWriteJSON(w, http.StatusOK, apiProyectoFabricarAppPreviewResponse{
 		OK:    true,
 		Tasks: plan.Tasks,
+	})
+}
+
+func apiHandlerProyectoIdiomas(w http.ResponseWriter, r *http.Request, ref string) {
+	proyecto, err := db.GetProyecto(strings.TrimSpace(ref))
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	var req apiProyectoIdiomasRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	req.Idiomas = splitCSV(strings.Join(req.Idiomas, ","))
+	if len(req.Idiomas) == 0 {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("idiomas obligatorios"))
+		return
+	}
+	actor := strings.TrimSpace(req.Por)
+	if actor == "" {
+		actor = "alberto"
+	}
+	plan, err := newProjectAppFactory().GenerateLanguageExpansion(strings.TrimSpace(proyecto.Nombre), req.Idiomas)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	result, err := fabricaapp.Materialize(fabricaapp.DBStore{}, proyecto.ID, actor, plan)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if ruta := strings.TrimSpace(proyecto.RutaAbs); ruta != "" {
+		if info, statErr := os.Stat(ruta); statErr == nil && info.IsDir() {
+			if _, err := i18n.ExpandProjectSkeletonLanguages(ruta, req.Idiomas); err != nil {
+				apiError(w, http.StatusInternalServerError, err)
+				return
+			}
+		}
+	}
+	apiWriteJSON(w, http.StatusCreated, apiProyectoIdiomasResponse{
+		OK:      true,
+		Slug:    proyecto.Slug,
+		Idiomas: req.Idiomas,
+		Created: result.Created,
+		Backlog: result.Backlog,
+	})
+}
+
+func apiHandlerProyectoSharedContextList(w http.ResponseWriter, r *http.Request, ref string) {
+	proyecto, err := db.GetProyecto(strings.TrimSpace(ref))
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	if proyecto == nil {
+		apiError(w, http.StatusNotFound, fmt.Errorf("proyecto no encontrado"))
+		return
+	}
+	limit := 20
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	filtro := db.FiltroSharedContextItems{
+		ProyectoID: &proyecto.ID,
+		Activos:    true,
+		Limit:      limit,
+	}
+	if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
+		filtro.Agente = &agente
+	}
+	if tipo := strings.TrimSpace(r.URL.Query().Get("tipo")); tipo != "" {
+		filtro.Tipo = &tipo
+	}
+	items, err := db.ListSharedContextItems(filtro)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	_, summary := db.BuildSharedContextSummary(strings.TrimSpace(r.URL.Query().Get("agente")), proyecto)
+	apiWriteJSON(w, http.StatusOK, apiProyectoSharedContextResponse{
+		Items:   items,
+		Summary: summary,
+	})
+}
+
+func apiHandlerProyectoSharedContextCreate(w http.ResponseWriter, r *http.Request, ref string) {
+	proyecto, err := db.GetProyecto(strings.TrimSpace(ref))
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	if proyecto == nil {
+		apiError(w, http.StatusNotFound, fmt.Errorf("proyecto no encontrado"))
+		return
+	}
+	var req apiProyectoSharedContextCreateRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	titulo := strings.TrimSpace(req.Titulo)
+	if titulo == "" {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("titulo obligatorio"))
+		return
+	}
+	item := &db.SharedContextItem{
+		ProyectoID:  &proyecto.ID,
+		Agente:      strings.TrimSpace(req.Agente),
+		Tipo:        strings.TrimSpace(req.Tipo),
+		Titulo:      titulo,
+		Detalle:     strings.TrimSpace(req.Detalle),
+		PayloadJSON: strings.TrimSpace(req.PayloadJSON),
+		Peso:        req.Peso,
+		Origen:      strings.TrimSpace(req.Origen),
+	}
+	if item.Tipo == "" {
+		item.Tipo = "decision"
+	}
+	if item.Peso <= 0 {
+		item.Peso = 1
+	}
+	if item.Origen == "" {
+		item.Origen = "humano"
+	}
+	if raw := strings.TrimSpace(req.ExpiresAt); raw != "" {
+		ts, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("expires_at inválido: %w", err))
+			return
+		}
+		item.ExpiresAt = &ts
+	}
+	id, err := db.CreateSharedContextItem(item)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusCreated, apiProyectoSharedContextMutationResponse{
+		OK: true,
+		ID: id,
 	})
 }
 
@@ -3619,6 +4636,15 @@ func apiHandlerProyectoAutonomiaGuardar(w http.ResponseWriter, r *http.Request, 
 	})
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := bootstrapPersistentAutonomyProject(strings.TrimSpace(ref), policy, "api_autonomia_guardar"); err != nil {
+		apiError(w, repoAPIStatusForError(err), err)
+		return
+	}
+	policy, err = supervisionService.GetProjectPolicy(strings.TrimSpace(ref))
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, apiProyectoAutonomiaResponse{Policy: policy})
@@ -4580,7 +5606,11 @@ func apiRouterTareas(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusNotFound, err)
 			return
 		}
-		apiWriteJSON(w, http.StatusOK, map[string]any{"tarea": tarea})
+		apiWriteJSON(w, http.StatusOK, apiTareaResponse{
+			Tarea:     tarea,
+			Fork:      parseRepoFunctionForkSpecFromNotes(strings.TrimSpace(tarea.Notas)),
+			FinishApp: strings.Contains(strings.ToLower(strings.TrimSpace(tarea.Notas)), "autonomia:finish_app"),
+		})
 		return
 	}
 	if len(parts) == 2 && parts[1] == "accion" && r.Method == http.MethodPost {
@@ -5234,6 +6264,14 @@ func apiHandlerRuntimeTranscript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	filter := db.FiltroRuntimeTranscript{}
+	desdeFiltro, err := apiParseRFC3339QueryTime(r.URL.Query().Get("desde"))
+	if err != nil {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("desde inválido"))
+		return
+	}
+	if desdeFiltro != nil {
+		filter.Desde = desdeFiltro
+	}
 	if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
 		agente = apiNombreAgenteCanonico(agente)
 		filter.Agente = &agente
@@ -5285,12 +6323,26 @@ func apiHandlerRuntimeTranscript(w http.ResponseWriter, r *http.Request) {
 		}
 		filter.Limit = limit
 	}
-	items, err := runtimesService.ListRuntimeTranscript(filter)
+	items, err := apiListRuntimeTranscriptFn(filter)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"transcript": items})
+}
+
+func apiParseRFC3339QueryTime(raw string) (*time.Time, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return nil, nil
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			utc := parsed.UTC()
+			return &utc, nil
+		}
+	}
+	return nil, fmt.Errorf("invalid timestamp")
 }
 
 func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {
@@ -5456,7 +6508,7 @@ func apiHandlerRuntimeOrdersCancelar(w http.ResponseWriter, r *http.Request) {
 func apiHandlerRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		filter := db.FiltroRuntimeMailbox{}
+		filter := db.FiltroRuntimeMailbox{Limit: apiRuntimeMailboxDefaultLimit}
 		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
 			limit, err := strconv.Atoi(raw)
 			if err != nil || limit <= 0 {

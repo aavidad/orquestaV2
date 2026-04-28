@@ -28,6 +28,7 @@ func buildSupervisorSubagentsSnapshot(supervisor, proyectoSlug, sessionID string
 		"session_id":    strings.TrimSpace(sessionID),
 		"generated_at":  time.Now().UTC().Format(time.RFC3339),
 		"subagents":     items,
+		"followups":     buildOpenClawSubagentFollowupsFromItems(items),
 		"tool_profiles": db.ListSupervisorSubagentToolProfiles(),
 		"store":         mustSupervisorSubagentStoreSummary(),
 	}, nil

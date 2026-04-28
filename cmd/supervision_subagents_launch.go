@@ -14,13 +14,14 @@ import (
 )
 
 type supervisorSubagentLaunchRequest struct {
-	Supervisor   string `json:"supervisor,omitempty"`
-	Proyecto     string `json:"proyecto,omitempty"`
-	Name         string `json:"name,omitempty"`
-	Description  string `json:"description"`
-	Prompt       string `json:"prompt"`
-	SubagentType string `json:"subagent_type,omitempty"`
-	Model        string `json:"model,omitempty"`
+	Supervisor   string         `json:"supervisor,omitempty"`
+	Proyecto     string         `json:"proyecto,omitempty"`
+	Name         string         `json:"name,omitempty"`
+	Description  string         `json:"description"`
+	Prompt       string         `json:"prompt"`
+	SubagentType string         `json:"subagent_type,omitempty"`
+	Model        string         `json:"model,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
 type supervisorSubagentLaunchResult struct {
@@ -98,8 +99,15 @@ func launchClaudeSubagentExternal(req supervisorSubagentLaunchRequest) (*supervi
 	if err != nil {
 		return nil, err
 	}
-	if worktreeInfo != nil {
-		refresh.Subagents = persistirWorktreeEnSubagenteLanzado(refresh.Subagents, supervisor, strings.TrimSpace(req.Proyecto), strings.TrimSpace(req.Name), worktreeInfo)
+	metadataInfo := map[string]any{}
+	for key, value := range req.Metadata {
+		metadataInfo[key] = value
+	}
+	for key, value := range worktreeInfo {
+		metadataInfo[key] = value
+	}
+	if len(metadataInfo) > 0 {
+		refresh.Subagents = persistirMetadataEnSubagenteLanzado(refresh.Subagents, supervisor, strings.TrimSpace(req.Proyecto), strings.TrimSpace(req.Name), metadataInfo)
 	}
 	return &supervisorSubagentLaunchResult{
 		Supervisor: supervisor,
@@ -112,15 +120,15 @@ func launchClaudeSubagentExternal(req supervisorSubagentLaunchRequest) (*supervi
 	}, nil
 }
 
-func persistirWorktreeEnSubagenteLanzado(items []*db.SupervisorSubagent, supervisor, proyectoSlug, nombre string, worktreeInfo map[string]any) []*db.SupervisorSubagent {
-	if len(items) == 0 || strings.TrimSpace(nombre) == "" || worktreeInfo == nil {
+func persistirMetadataEnSubagenteLanzado(items []*db.SupervisorSubagent, supervisor, proyectoSlug, nombre string, metadata map[string]any) []*db.SupervisorSubagent {
+	if len(items) == 0 || strings.TrimSpace(nombre) == "" || len(metadata) == 0 {
 		return items
 	}
 	objetivo := seleccionarSubagentePersistenciaWorktree(items, strings.TrimSpace(nombre))
 	if objetivo == nil {
 		return items
 	}
-	metadataJSON := mergeSupervisorSubagentMetadata(objetivo.MetadataJSON, worktreeInfo)
+	metadataJSON := mergeSupervisorSubagentMetadata(objetivo.MetadataJSON, metadata)
 	actualizado, err := db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
 		Supervisor:      strings.TrimSpace(supervisor),
 		ProyectoSlug:    strings.TrimSpace(proyectoSlug),
@@ -173,17 +181,24 @@ func mergeSupervisorSubagentMetadata(base string, worktreeInfo map[string]any) s
 	if payload == nil {
 		payload = map[string]any{}
 	}
-	if id, ok := worktreeInfo["id"]; ok {
-		payload["worktree_id"] = id
-	}
-	if path := stringFromAnyLaunch(worktreeInfo["path"]); path != "" {
-		payload["ruta_worktree"] = path
-	}
-	if branch := stringFromAnyLaunch(worktreeInfo["branch"]); branch != "" {
-		payload["branch_worktree"] = branch
-	}
-	if baseRef := stringFromAnyLaunch(worktreeInfo["base_ref"]); baseRef != "" {
-		payload["base_ref_worktree"] = baseRef
+	for key, value := range worktreeInfo {
+		switch v := value.(type) {
+		case string:
+			if strings.TrimSpace(v) == "" {
+				continue
+			}
+			payload[key] = strings.TrimSpace(v)
+		case []string:
+			if len(v) == 0 {
+				continue
+			}
+			payload[key] = append([]string(nil), v...)
+		default:
+			if value == nil {
+				continue
+			}
+			payload[key] = value
+		}
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {

@@ -139,7 +139,7 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 		t.Fatalf("get propuesta: %v", err)
 	}
 
-	lock, err := (db.SQLiteLockRepository{}).Create(&coordinacion.Lock{
+	lock, err := (db.CoordinationLockDBRepository{}).Create(&coordinacion.Lock{
 		ProjectID:   &proyectoID,
 		TaskID:      &tareaID,
 		SessionID:   &sesion.ID,
@@ -158,7 +158,7 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 		t.Fatalf("crear lock: %v", err)
 	}
 
-	worktree, err := (db.SQLiteWorktreeRepository{}).Create(&coordinacion.Worktree{
+	worktree, err := (db.CoordinationWorktreeDBRepository{}).Create(&coordinacion.Worktree{
 		ProjectID: proyectoID,
 		TaskID:    &tareaID,
 		LockID:    &lock.ID,
@@ -520,9 +520,13 @@ func TestAPIOpenClawOperatorExponeStatusLiteEnRaiz(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
 	prev := statusService
-	defer func() { statusService = prev }()
+	defer func() {
+		statusService = prev
+		resetStatusSnapshotCache()
+	}()
+	resetStatusSnapshotCache()
 
-	statusService = stubStatusService{response: apiStatusResponse{
+	snapshot := apiStatusResponse{
 		AgentesActivos: []*db.Agente{
 			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
 		},
@@ -543,7 +547,9 @@ func TestAPIOpenClawOperatorExponeStatusLiteEnRaiz(t *testing.T) {
 		PropuestasResumen: []propuestaLite{
 			{ID: 9, Codigo: "OP-999", Titulo: "demo", Estado: db.PropuestaAbierta},
 		},
-	}}
+	}
+	statusService = stubStatusService{response: snapshot}
+	storeStatusSnapshot(snapshot, time.Now().UTC())
 
 	mux := http.NewServeMux()
 	registerAPIRoutes(mux)
@@ -576,6 +582,77 @@ func TestAPIOpenClawOperatorExponeStatusLiteEnRaiz(t *testing.T) {
 	}
 }
 
+func TestAPIOpenClawOperatorExponeFollowupSidecarCompacto(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prev := statusService
+	defer func() {
+		statusService = prev
+		resetStatusSnapshotCache()
+	}()
+	resetStatusSnapshotCache()
+
+	snapshot := apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		Agentes: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 410, Estado: db.TareaEnProgreso, Agente: "Codex3", Titulo: "activa"},
+		},
+	}
+	statusService = stubStatusService{response: snapshot}
+	storeStatusSnapshot(snapshot, time.Now().UTC())
+
+	if _, err := db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
+		Supervisor:   resolveSupervisorName(""),
+		ProyectoSlug: "orquestador",
+		SessionID:    "sess-api-followup",
+		ThreadID:     "slice-api-followup-1",
+		SubagentName: "OpenClaw-orquestador-implementacion-slice-api",
+		SubagentType: "general-purpose",
+		Status:       "completed",
+		MetadataJSON: `{"source":"pipeline_local_parallel","task_id":530,"task_title":"Frente amplio del control plane","slice_index":1,"slice_total":2,"pipeline_parent_followup_dispatched":true,"pipeline_parent_followup_phase":"revision","pipeline_parent_followup_action":"avanzar_fase","pipeline_parent_followup_git_merge_id":91}`,
+	}); err != nil {
+		t.Fatalf("upsert supervisor subagent: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/openclaw/operator", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("openclaw operator status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode operator: %v", err)
+	}
+	followup, ok := payload["pipeline_followup"].(map[string]any)
+	if !ok || followup["phase"] != "revision" {
+		t.Fatalf("pipeline_followup inesperado: %#v", payload["pipeline_followup"])
+	}
+	if got := int(followup["task_id"].(float64)); got != 530 {
+		t.Fatalf("pipeline_followup task_id inesperado: %#v", followup)
+	}
+	subagentsFollowup, ok := payload["subagentes_followup"].([]any)
+	if !ok || len(subagentsFollowup) != 1 {
+		t.Fatalf("subagentes_followup inesperado: %#v", payload["subagentes_followup"])
+	}
+	first, _ := subagentsFollowup[0].(map[string]any)
+	if first["source"] != "pipeline_local_parallel" || first["followup_phase"] != "revision" {
+		t.Fatalf("subagentes_followup sin fase/source esperadas: %#v", first)
+	}
+}
+
 func TestAPIOpenClawPipelineOperaPorLaViaCanonica(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	mux := http.NewServeMux()
@@ -604,6 +681,69 @@ func TestAPIOpenClawPipelineOperaPorLaViaCanonica(t *testing.T) {
 	}
 	if !strings.Contains(recGet.Body.String(), "autopilot") || !strings.Contains(recGet.Body.String(), "review") {
 		t.Fatalf("openclaw pipeline sin contenido esperado: %s", recGet.Body.String())
+	}
+}
+
+func TestAPIOpenClawPipelineExponeFollowupSidecarCompacto(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prev := statusService
+	defer func() {
+		statusService = prev
+		resetStatusSnapshotCache()
+	}()
+	resetStatusSnapshotCache()
+
+	snapshot := apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		Agentes: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 410, Estado: db.TareaEnProgreso, Agente: "Codex3", Titulo: "activa"},
+		},
+	}
+	statusService = stubStatusService{response: snapshot}
+	storeStatusSnapshot(snapshot, time.Now().UTC())
+
+	if _, err := db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
+		Supervisor:   "OpenClaw",
+		ProyectoSlug: "orquestador",
+		SessionID:    "sess-pipeline-api-followup",
+		ThreadID:     "slice-pipeline-api-followup-1",
+		SubagentName: "OpenClaw-orquestador-implementacion-slice-pipeline-api",
+		SubagentType: "general-purpose",
+		Status:       "completed",
+		MetadataJSON: `{"source":"pipeline_local_parallel","task_id":530,"task_title":"Frente amplio del control plane","slice_index":1,"slice_total":2,"pipeline_parent_followup_dispatched":true,"pipeline_parent_followup_phase":"revision","pipeline_parent_followup_action":"avanzar_fase","pipeline_parent_followup_git_merge_id":91}`,
+	}); err != nil {
+		t.Fatalf("upsert supervisor subagent: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/openclaw/pipeline?supervisor=OpenClaw&proyecto=orquestador", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("openclaw pipeline status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode pipeline: %v", err)
+	}
+	followup, ok := payload["followup"].(map[string]any)
+	if !ok || followup["phase"] != "revision" {
+		t.Fatalf("followup inesperado: %#v", payload["followup"])
+	}
+	if got := int(followup["task_id"].(float64)); got != 530 {
+		t.Fatalf("followup task_id inesperado: %#v", followup)
 	}
 }
 

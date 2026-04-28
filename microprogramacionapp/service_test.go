@@ -33,11 +33,11 @@ type fakeDespachador struct {
 }
 
 type fakeRecolectorEntregaGit struct {
-	entradaAgente      string
-	entradaProyectoID  *int64
+	entradaAgente       string
+	entradaProyectoID   *int64
 	entradaProyectoSlug string
-	resultado          *EntregaGitCapturada
-	err                error
+	resultado           *EntregaGitCapturada
+	err                 error
 }
 
 func (f *fakeRecolectorEntregaGit) CapturarEntregaGit(agente string, proyectoID *int64, proyectoSlug string) (*EntregaGitCapturada, error) {
@@ -543,14 +543,14 @@ func TestServicioRegistrarEntregaGitValidaWriteSetYRegistraMerge(t *testing.T) {
 	}
 	recolector := &fakeRecolectorEntregaGit{
 		resultado: &EntregaGitCapturada{
-			ProyectoSlug:       "orquestador",
-			WorktreeID:         14,
-			RutaWorktree:       "/tmp/wt-gemma1",
-			Branch:             "orq/orquestador/gemma1/t91",
-			BaseRef:            "origin/main",
-			HeadCommit:         "abc123",
+			ProyectoSlug:        "orquestador",
+			WorktreeID:          14,
+			RutaWorktree:        "/tmp/wt-gemma1",
+			Branch:              "orq/orquestador/gemma1/t91",
+			BaseRef:             "origin/main",
+			HeadCommit:          "abc123",
 			ArchivosModificados: []string{"microprogramacionapp/service.go"},
-			Diff:               "diff --git a/microprogramacionapp/service.go b/microprogramacionapp/service.go",
+			Diff:                "diff --git a/microprogramacionapp/service.go b/microprogramacionapp/service.go",
 		},
 	}
 	integrador := &fakeIntegradorGit{}
@@ -559,11 +559,12 @@ func TestServicioRegistrarEntregaGitValidaWriteSetYRegistraMerge(t *testing.T) {
 	service.SetIntegradorGit(integrador)
 
 	resultado, err := service.RegistrarEntregaGit(91, EntradaRegistrarEntregaGit{
-		Agente:       "Gemma1",
-		ProyectoID:   &proyectoID,
-		ProyectoSlug: "orquestador",
+		Agente:        "Gemma1",
+		ProyectoID:    &proyectoID,
+		ProyectoSlug:  "orquestador",
 		SolicitadoPor: "orquesta",
-		Evidencia:    "go test ./microprogramacionapp ... => ok",
+		Evidencia:     "go test ./microprogramacionapp ... => ok",
+		MetadataJSON:  `{"source":"pipeline_local_parallel","slice_index":1,"slice_total":2,"write_set_slice":["microprogramacionapp/service.go"]}`,
 	})
 	if err != nil {
 		t.Fatalf("RegistrarEntregaGit: %v", err)
@@ -580,6 +581,10 @@ func TestServicioRegistrarEntregaGitValidaWriteSetYRegistraMerge(t *testing.T) {
 	if !strings.Contains(integrador.entrada.MetadataJSON, `"especificacion_id":91`) {
 		t.Fatalf("metadata sin especificacion: %s", integrador.entrada.MetadataJSON)
 	}
+	if !strings.Contains(integrador.entrada.MetadataJSON, `"subagent_context":{"slice_index":1,"slice_total":2,"source":"pipeline_local_parallel","write_set_slice":["microprogramacionapp/service.go"]}`) &&
+		!strings.Contains(integrador.entrada.MetadataJSON, `"subagent_context":{"source":"pipeline_local_parallel","slice_index":1,"slice_total":2,"write_set_slice":["microprogramacionapp/service.go"]}`) {
+		t.Fatalf("metadata sin contexto de subagente: %s", integrador.entrada.MetadataJSON)
+	}
 }
 
 func TestServicioRegistrarEntregaGitRechazaFueraDeWriteSet(t *testing.T) {
@@ -595,12 +600,12 @@ func TestServicioRegistrarEntregaGitRechazaFueraDeWriteSet(t *testing.T) {
 	}
 	recolector := &fakeRecolectorEntregaGit{
 		resultado: &EntregaGitCapturada{
-			ProyectoSlug:       "orquestador",
-			WorktreeID:         14,
-			RutaWorktree:       "/tmp/wt-gemma1",
-			Branch:             "orq/orquestador/gemma1/t92",
-			BaseRef:            "main",
-			HeadCommit:         "abc123",
+			ProyectoSlug:        "orquestador",
+			WorktreeID:          14,
+			RutaWorktree:        "/tmp/wt-gemma1",
+			Branch:              "orq/orquestador/gemma1/t92",
+			BaseRef:             "main",
+			HeadCommit:          "abc123",
 			ArchivosModificados: []string{"cmd/api.go"},
 		},
 	}

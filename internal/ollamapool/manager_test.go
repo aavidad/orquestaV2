@@ -231,6 +231,34 @@ func TestGestorRespetaSlotsPorPool(t *testing.T) {
 	}
 }
 
+func TestGestorBloqueaModeloActivoDistinto(t *testing.T) {
+	gestor := NuevoGestor("http://127.0.0.1:11434", &http.Client{})
+	if _, err := gestor.Lanzar(context.Background(), EntradaLanzamiento{
+		Agente:       "Gemma1",
+		PoolSlug:     "ollama-local",
+		SlotsMaximos: 2,
+		Modelo:       "gemma4:26b",
+	}); err != nil {
+		t.Fatalf("primer launch: %v", err)
+	}
+	if _, err := gestor.Lanzar(context.Background(), EntradaLanzamiento{
+		Agente:       "Qwen1",
+		PoolSlug:     "ollama-local",
+		SlotsMaximos: 2,
+		Modelo:       "qwen2.5-coder:7b",
+	}); err == nil || !strings.Contains(err.Error(), "modelo ollama activo incompatible") {
+		t.Fatalf("deberia bloquear segundo modelo distinto, err=%v", err)
+	}
+	if _, err := gestor.Lanzar(context.Background(), EntradaLanzamiento{
+		Agente:       "Gemma2",
+		PoolSlug:     "ollama-local",
+		SlotsMaximos: 2,
+		Modelo:       "gemma4:26b",
+	}); err != nil {
+		t.Fatalf("deberia permitir segunda sesion del mismo modelo: %v", err)
+	}
+}
+
 func TestGestorCompactaContextoYConservaResumenBreve(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{

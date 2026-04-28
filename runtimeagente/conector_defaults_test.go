@@ -60,3 +60,37 @@ func TestConectorCompatibleConAgenteIgnoraHerenciaIncompatible(t *testing.T) {
 		}
 	}
 }
+
+func TestModeloPorDefectoAgenteLocal(t *testing.T) {
+	tests := []struct {
+		agente string
+		want   string
+	}{
+		{agente: "Gemma1", want: "gemma4:26b"},
+		{agente: "QwenCoder1", want: "qwen2.5-coder:7b"},
+		{agente: "Codex1", want: ""},
+	}
+	for _, tc := range tests {
+		if got := ModeloPorDefectoAgente(tc.agente); got != tc.want {
+			t.Fatalf("ModeloPorDefectoAgente(%q)=%q; want %q", tc.agente, got, tc.want)
+		}
+	}
+}
+
+func TestModeloAfinAgente(t *testing.T) {
+	tests := []struct {
+		agente string
+		modelo string
+		want   bool
+	}{
+		{agente: "Gemma1", modelo: "gemma4:26b", want: true},
+		{agente: "Gemma1", modelo: "qwen2.5-coder:7b", want: false},
+		{agente: "QwenCoder1", modelo: "qwen2.5-coder:7b", want: true},
+		{agente: "QwenCoder1", modelo: "gpt-5.4", want: false},
+	}
+	for _, tc := range tests {
+		if got := ModeloAfinAgente(tc.agente, tc.modelo); got != tc.want {
+			t.Fatalf("ModeloAfinAgente(%q,%q)=%v; want %v", tc.agente, tc.modelo, got, tc.want)
+		}
+	}
+}

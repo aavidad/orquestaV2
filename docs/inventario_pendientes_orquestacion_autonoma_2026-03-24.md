@@ -16,6 +16,11 @@ No reemplaza la arquitectura ni las tareas existentes. Sirve como mapa operativo
 - Adaptador de proceso con control real de `start`, `pause`, `resume`, `stop` y `send_instruction`.
 - Observabilidad pasiva y diagnóstico de runtimes.
 - Single-writer reforzado cuando hay servidor activo.
+- `finish_app` persistente ya operativo, con policy durable de proyecto, supervisor residente, reviewer reservado y workers acotados.
+- Auto-creación de trabajo útil en supervision autonoma cuando el proyecto se queda sin frente activo.
+- `repair-helper` barato, compactacion de frentes premium y drenaje de `prime` antes de escalado caro.
+- Control total por proyecto y actividad/control total por agente ya visibles por superficies server-first.
+- `autonomyPending=0` como foto estable de continuidad drenada.
 
 ## Pendiente Crítico
 
@@ -32,6 +37,15 @@ Pendiente real:
 
 Riesgo:
 - mientras convivan varios caminos, el control plane puede comportarse distinto según cómo se arranque la app
+
+### 1.b. Extender el control total observable al plano global
+
+Pendiente real:
+- consolidar una proyeccion canonica unica global a partir del control total ya operativo por agente/proyecto
+- poder responder tambien a nivel workspace `que ha hecho X`, `que queda`, `cuanto se ha tocado` y `por que se ha escalado` sin recomposicion manual
+
+Riesgo:
+- sin esa capa global, la autonomia ya gobernable por agente/proyecto sigue siendo mas dificil de auditar a escala de workspace
 
 ### 2. Sustituir scripts/manualidades como vía operativa principal
 
@@ -104,3 +118,4 @@ Se podrá considerar Orquesta autónoma sin matices cuando:
 - no haga falta acceso directo a BD como flujo normal
 - los scripts de consola no sean la fuente de verdad operativa
 - exista validación E2E con runtime vivo real
+- exista observabilidad temporal y Git/coste suficiente por agente/proyecto y agregacion global para gobernar el sistema sin shell manual

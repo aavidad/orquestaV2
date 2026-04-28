@@ -61,6 +61,9 @@ func rutaRuntimeCanonicaProyecto(agente string, proyectoID *int64, cwd string) s
 	if cwd == "" {
 		return ""
 	}
+	if canonical, err := CanonicalizeAgentName(agente); err == nil {
+		agente = canonical
+	}
 	if proyectoID == nil || *proyectoID <= 0 {
 		return normalizarRutaProyecto(cwd)
 	}

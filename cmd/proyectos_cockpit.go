@@ -19,6 +19,14 @@ type apiProyectoCockpit struct {
 	TareasActivas           []tareaLite                `json:"tareas_activas,omitempty"`
 	TareasReservadas        []tareaLite                `json:"tareas_reservadas,omitempty"`
 	AgentesActivos          []apiProyectoCockpitAgente `json:"agentes_activos,omitempty"`
+	AutonomyEvents          int                        `json:"autonomy_events"`
+	AutonomyByKind          map[string]int             `json:"autonomy_by_kind,omitempty"`
+	AutonomyLastAt          *time.Time                 `json:"autonomy_last_at,omitempty"`
+	Autonomy                []autonomyEventSummary     `json:"autonomy,omitempty"`
+	AutonomyHighlights      []string                   `json:"autonomy_highlights,omitempty"`
+	IntegrationRisk         string                     `json:"integration_risk,omitempty"`
+	IntegrationRiskScore    int                        `json:"integration_risk_score,omitempty"`
+	IntegrationHighlights   []string                   `json:"integration_highlights,omitempty"`
 	MailboxPendiente        []apiOpenClawMailboxLite   `json:"mailbox_pendiente,omitempty"`
 	WorktreeDrift           []apiOpenClawWorktreeDrift `json:"worktree_drift,omitempty"`
 	AsignacionesActivas     int                        `json:"asignaciones_activas"`
@@ -45,6 +53,7 @@ func buildProyectoCockpit(ref string) (*apiProyectoCockpit, error) {
 	cockpit := &apiProyectoCockpit{
 		Proyecto:        proyecto,
 		TareasPorEstado: map[string]int{},
+		AutonomyByKind:  map[string]int{},
 	}
 
 	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyecto.ID})
@@ -122,6 +131,17 @@ func buildProyectoCockpit(ref string) (*apiProyectoCockpit, error) {
 	cockpit.RuntimeOrdersAbiertas, err = db.CountProjectOpenRuntimeOrders(proyecto.ID, "pendiente", "tomada", "ejecutando")
 	if err != nil {
 		return nil, err
+	}
+	autonomy, err := buildProjectAutonomyEventSummaries(proyecto.ID, time.Now().UTC().Add(-24*time.Hour), 50)
+	if err != nil {
+		return nil, err
+	}
+	cockpit.Autonomy, cockpit.AutonomyByKind, cockpit.AutonomyLastAt, cockpit.AutonomyEvents = compactAutonomyEventSummaries(autonomy, 8)
+	cockpit.AutonomyHighlights = buildAutonomyHighlights(cockpit.AutonomyByKind, cockpit.Autonomy, cockpit.AutonomyLastAt, 3)
+	if highlights, risk := buildWorkspaceBlockingHighlights(cockpit); risk > 0 {
+		cockpit.IntegrationRiskScore = risk
+		cockpit.IntegrationRisk = workspaceIntegrationRiskLabel(risk)
+		cockpit.IntegrationHighlights = compactProjectControlIntegrationHighlights(highlights)
 	}
 
 	return cockpit, nil
@@ -300,6 +320,20 @@ func listarAgentesActivosProyecto(proyectoID int64) ([]apiProyectoCockpitAgente,
 			Nombre: nombre,
 			Rol:    strings.TrimSpace(agente.Rol),
 		})
+	}
+	if len(items) == 0 {
+		names := make([]string, 0, len(nombresProyecto))
+		for nombre := range nombresProyecto {
+			names = append(names, strings.TrimSpace(nombre))
+		}
+		sort.Strings(names)
+		items = make([]apiProyectoCockpitAgente, 0, len(names))
+		for _, nombre := range names {
+			if nombre == "" {
+				continue
+			}
+			items = append(items, apiProyectoCockpitAgente{Nombre: nombre})
+		}
 	}
 	return items, nil
 }

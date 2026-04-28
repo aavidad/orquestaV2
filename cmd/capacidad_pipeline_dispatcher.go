@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"orquesta/capacidadapp"
@@ -15,6 +16,10 @@ import (
 )
 
 type despachadorPipelineOperativo struct{}
+
+var pipelineSubagentLaunchFn = func(req supervisorSubagentLaunchRequest) (*supervisorSubagentLaunchResult, error) {
+	return launchClaudeSubagentExternal(req)
+}
 
 func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.SolicitudDespachoPipeline) (*capacidadapp.ResultadoDespachoPipeline, error) {
 	despacho := entrada.Despacho
@@ -91,6 +96,7 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 		if err := asegurarOwnershipTareaDespachoPremium(despacho.TareaObjetivoID, agente); err != nil {
 			return nil, err
 		}
+		var forkPayload map[string]any
 		payload := map[string]any{
 			"from_agente":       "server",
 			"to_agente":         agente,
@@ -109,6 +115,20 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 			"simbolos_foco":     strings.TrimSpace(despacho.SimbolosFoco),
 			"tests_minimos":     strings.TrimSpace(despacho.TestsMinimos),
 		}
+		if fork := cargarForkFuncionPipeline(despacho.TareaObjetivoID); fork != nil {
+			forkPayload = fork
+			payload["fork_funcion"] = fork
+			if variantes := construirVariantesCandidatasFork(fork); len(variantes) > 0 {
+				payload["variantes_candidatas"] = variantes
+			}
+		}
+		if despacho.Paralelismo != nil {
+			payload["paralelismo"] = map[string]any{
+				"puede_abrir_subagentes": despacho.Paralelismo.PuedeAbrirSubagentes,
+				"max_subagentes":         despacho.Paralelismo.MaxSubagentes,
+				"motivo":                 strings.TrimSpace(despacho.Paralelismo.Motivo),
+			}
+		}
 		payloadJSON, err := jsonMarshalPipelinePayload(payload)
 		if err != nil {
 			return nil, err
@@ -122,12 +142,32 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 		}); err != nil {
 			return nil, err
 		}
+		if forkPayload != nil {
+			modelosAudit := stringSliceFromAny(forkPayload["selected_models"])
+			if len(modelosAudit) == 0 {
+				modelosAudit = stringSliceFromAny(forkPayload["modelos_candidatos"])
+			}
+			detalle := fmt.Sprintf("slug=%s tarea=%d funcion=%s modelos=%s fork_lines=%d decision_mode=%s",
+				strings.TrimSpace(entrada.ProyectoSlug),
+				despacho.TareaObjetivoID,
+				strings.TrimSpace(stringFromAny(forkPayload["funcion_objetivo"])),
+				strings.Join(modelosAudit, ","),
+				intFromAny(forkPayload["fork_lines"]),
+				strings.TrimSpace(stringFromAny(forkPayload["decision_mode"])),
+			)
+			db.Audit("server", "pipeline_dispatch_fork_funcion", "tarea", despacho.TareaObjetivoID, detalle)
+		}
+		subagentsLaunched := lanzarSubagentesForkFuncionSidecar(strings.TrimSpace(entrada.ProyectoSlug), despacho, forkPayload)
+		if subagentsLaunched == 0 {
+			subagentsLaunched = lanzarSubagentesPipelineSidecar(strings.TrimSpace(entrada.ProyectoSlug), despacho)
+		}
 		if activo, err := existeRuntimeHandleActivoPipeline(agente, &proyecto.ID); err != nil {
 			return nil, err
 		} else if activo {
 			return &capacidadapp.ResultadoDespachoPipeline{
-				Estado: "mailbox_encolado_runtime_existente",
-				Motivo: "pipeline_local encolado; ya existe un runtime activo para el agente y proyecto",
+				Estado:            "mailbox_encolado_runtime_existente",
+				Motivo:            "pipeline_local encolado; ya existe un runtime activo para el agente y proyecto",
+				SubagentsLaunched: subagentsLaunched,
 			}, nil
 		}
 		conectorStart, modeloStart := resolverConectorYModeloStartPipeline(agente, strings.TrimSpace(despacho.ObjetivoModelo))
@@ -150,9 +190,10 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 			db.Audit("server", "pipeline_dispatch_notify_error", "orden", startID, err.Error())
 		}
 		return &capacidadapp.ResultadoDespachoPipeline{
-			Estado:       "encolado",
-			Motivo:       "mailbox y start encolados por la vía canónica",
-			StartOrderID: &startID,
+			Estado:            "encolado",
+			Motivo:            "mailbox y start encolados por la vía canónica",
+			StartOrderID:      &startID,
+			SubagentsLaunched: subagentsLaunched,
 		}, nil
 	case "microprogramacion_local":
 		if despacho.TareaObjetivoID <= 0 {
@@ -323,6 +364,405 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 	}
 }
 
+func cargarForkFuncionPipeline(tareaID int64) map[string]any {
+	if tareaID <= 0 {
+		return nil
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil || tarea == nil {
+		return nil
+	}
+	spec := parseRepoFunctionForkSpecFromNotes(strings.TrimSpace(tarea.Notas))
+	if spec == nil {
+		return nil
+	}
+	return map[string]any{
+		"schema_version":         "fork_funcion_v1",
+		"funcion_objetivo":       strings.TrimSpace(spec.FuncionObjetivo),
+		"write_set":              append([]string(nil), spec.WriteSet...),
+		"modelos_candidatos":     append([]string(nil), spec.ModelosCandidatos...),
+		"materia":                strings.TrimSpace(spec.Materia),
+		"fork_lines":             spec.ForkLines,
+		"selected_models":        append([]string(nil), spec.SelectedModels...),
+		"decision_mode":          strings.TrimSpace(spec.DecisionMode),
+		"decision_reason":        strings.TrimSpace(spec.DecisionReason),
+		"preservar_arquitectura": spec.PreservarArquitectura,
+	}
+}
+
+func construirVariantesCandidatasFork(fork map[string]any) []map[string]any {
+	if len(fork) == 0 {
+		return nil
+	}
+	modelos := stringSliceFromAny(fork["selected_models"])
+	if len(modelos) == 0 {
+		modelos = stringSliceFromAny(fork["modelos_candidatos"])
+	}
+	if len(modelos) == 0 {
+		return nil
+	}
+	forkLines := intFromAny(fork["fork_lines"])
+	if forkLines > 0 && len(modelos) > forkLines {
+		modelos = modelos[:forkLines]
+	}
+	writeSet := stringSliceFromAny(fork["write_set"])
+	funcionObjetivo := strings.TrimSpace(stringFromAny(fork["funcion_objetivo"]))
+	preservar := boolFromAny(fork["preservar_arquitectura"])
+	materia := strings.TrimSpace(stringFromAny(fork["materia"]))
+	decisionMode := strings.TrimSpace(stringFromAny(fork["decision_mode"]))
+	decisionReason := strings.TrimSpace(stringFromAny(fork["decision_reason"]))
+	out := make([]map[string]any, 0, len(modelos))
+	for idx, modelo := range modelos {
+		modelo = strings.TrimSpace(modelo)
+		if modelo == "" {
+			continue
+		}
+		out = append(out, map[string]any{
+			"indice":                 idx + 1,
+			"modelo":                 modelo,
+			"funcion_objetivo":       funcionObjetivo,
+			"write_set":              append([]string(nil), writeSet...),
+			"preservar_arquitectura": preservar,
+			"materia":                materia,
+			"fork_lines":             forkLines,
+			"decision_mode":          decisionMode,
+			"decision_reason":        decisionReason,
+			"estado":                 "pendiente",
+		})
+	}
+	return out
+}
+
+func stringSliceFromAny(raw any) []string {
+	switch v := raw.(type) {
+	case []string:
+		return append([]string(nil), v...)
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s := strings.TrimSpace(stringFromAny(item)); s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func stringFromAny(raw any) string {
+	switch v := raw.(type) {
+	case string:
+		return v
+	default:
+		return fmt.Sprintf("%v", raw)
+	}
+}
+
+func intFromAny(raw any) int {
+	switch v := raw.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case float32:
+		return int(v)
+	case string:
+		var out int
+		fmt.Sscanf(strings.TrimSpace(v), "%d", &out)
+		return out
+	default:
+		return 0
+	}
+}
+
+func boolFromAny(raw any) bool {
+	switch v := raw.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(strings.TrimSpace(v), "true")
+	default:
+		return false
+	}
+}
+
+func lanzarSubagentesPipelineSidecar(proyectoSlug string, despacho *capacidadapp.DespachoPipelineLocal) int {
+	if !pipelinePermiteSubagentes(despacho) {
+		return 0
+	}
+	if pipelineSubagentLaunchFn == nil || strings.TrimSpace(resolveClaudeSubagentLauncher()) == "" {
+		return 0
+	}
+	slices := pipelineWriteSetSlices(despacho.WriteSet, despacho.Paralelismo.MaxSubagentes)
+	if len(slices) == 0 {
+		return 0
+	}
+	launched := 0
+	for idx, slice := range slices {
+		req := supervisorSubagentLaunchRequest{
+			Supervisor:   "OpenClaw",
+			Proyecto:     strings.TrimSpace(proyectoSlug),
+			Name:         pipelineSubagentName(proyectoSlug, despacho, idx+1),
+			Description:  pipelineSubagentDescription(despacho, idx+1, len(slices)),
+			Prompt:       pipelineSubagentPrompt(proyectoSlug, despacho, slice, idx+1, len(slices)),
+			SubagentType: "general-purpose",
+			Metadata: map[string]any{
+				"source":             "pipeline_local_parallel",
+				"pipeline_phase":     strings.TrimSpace(despacho.Fase),
+				"pipeline_lane":      strings.TrimSpace(despacho.Carril),
+				"task_id":            despacho.TareaObjetivoID,
+				"task_title":         strings.TrimSpace(despacho.TareaObjetivo),
+				"slice_index":        idx + 1,
+				"slice_total":        len(slices),
+				"write_set_slice":    append([]string(nil), slice...),
+				"tests_minimos":      strings.TrimSpace(despacho.TestsMinimos),
+				"agente_supervisado": strings.TrimSpace(despacho.AgenteSugerido),
+			},
+		}
+		if _, err := pipelineSubagentLaunchFn(req); err != nil {
+			db.Audit("server", "pipeline_subagent_launch_error", "proyecto", 0, fmt.Sprintf("%s: %v", strings.TrimSpace(proyectoSlug), err))
+			continue
+		}
+		launched++
+	}
+	return launched
+}
+
+func lanzarSubagentesForkFuncionSidecar(proyectoSlug string, despacho *capacidadapp.DespachoPipelineLocal, fork map[string]any) int {
+	if !pipelinePermiteSubagentesForkFuncion(despacho, fork) {
+		return 0
+	}
+	if pipelineSubagentLaunchFn == nil || strings.TrimSpace(resolveClaudeSubagentLauncher()) == "" {
+		return 0
+	}
+	variantes := construirVariantesCandidatasFork(fork)
+	if len(variantes) < 2 {
+		return 0
+	}
+	writeSet := stringSliceFromAny(fork["write_set"])
+	if len(writeSet) == 0 {
+		writeSet = append([]string(nil), despacho.WriteSet...)
+	}
+	total := len(variantes)
+	launched := 0
+	for idx, variante := range variantes {
+		modelo := strings.TrimSpace(stringFromAny(variante["modelo"]))
+		if modelo == "" {
+			continue
+		}
+		req := supervisorSubagentLaunchRequest{
+			Supervisor:   "OpenClaw",
+			Proyecto:     strings.TrimSpace(proyectoSlug),
+			Name:         pipelineForkSubagentName(proyectoSlug, despacho, idx+1, modelo),
+			Description:  pipelineForkSubagentDescription(despacho, idx+1, total, modelo),
+			Prompt:       pipelineForkSubagentPrompt(proyectoSlug, despacho, fork, variante, writeSet, idx+1, total),
+			SubagentType: "general-purpose",
+			Model:        modelo,
+			Metadata: map[string]any{
+				"source":             "pipeline_local_parallel",
+				"parallel_mode":      "fork_funcion",
+				"pipeline_phase":     strings.TrimSpace(despacho.Fase),
+				"pipeline_lane":      strings.TrimSpace(despacho.Carril),
+				"task_id":            despacho.TareaObjetivoID,
+				"task_title":         strings.TrimSpace(despacho.TareaObjetivo),
+				"slice_index":        idx + 1,
+				"slice_total":        total,
+				"write_set_slice":    append([]string(nil), writeSet...),
+				"tests_minimos":      strings.TrimSpace(despacho.TestsMinimos),
+				"agente_supervisado": strings.TrimSpace(despacho.AgenteSugerido),
+				"fork_function":      strings.TrimSpace(stringFromAny(fork["funcion_objetivo"])),
+				"fork_model":         modelo,
+				"fork_decision_mode": strings.TrimSpace(stringFromAny(fork["decision_mode"])),
+				"fork_lines":         intFromAny(fork["fork_lines"]),
+				"fork_materia":       strings.TrimSpace(stringFromAny(fork["materia"])),
+			},
+		}
+		if _, err := pipelineSubagentLaunchFn(req); err != nil {
+			db.Audit("server", "pipeline_fork_subagent_launch_error", "tarea", despacho.TareaObjetivoID, fmt.Sprintf("%s modelo=%s: %v", strings.TrimSpace(proyectoSlug), modelo, err))
+			continue
+		}
+		launched++
+	}
+	if launched > 0 {
+		db.Audit("server", "pipeline_fork_subagents_launched", "tarea", despacho.TareaObjetivoID, fmt.Sprintf("slug=%s funcion=%s modelos=%d", strings.TrimSpace(proyectoSlug), strings.TrimSpace(stringFromAny(fork["funcion_objetivo"])), launched))
+	}
+	return launched
+}
+
+func pipelinePermiteSubagentes(despacho *capacidadapp.DespachoPipelineLocal) bool {
+	if despacho == nil || despacho.Paralelismo == nil {
+		return false
+	}
+	if !despacho.Paralelismo.PuedeAbrirSubagentes || despacho.Paralelismo.MaxSubagentes <= 0 {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(despacho.Fase), "implementacion") {
+		return false
+	}
+	if len(despacho.WriteSet) < 2 || strings.TrimSpace(despacho.TestsMinimos) == "" {
+		return false
+	}
+	return true
+}
+
+func pipelinePermiteSubagentesForkFuncion(despacho *capacidadapp.DespachoPipelineLocal, fork map[string]any) bool {
+	if despacho == nil || len(fork) == 0 {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(despacho.Fase), "implementacion") {
+		return false
+	}
+	if strings.TrimSpace(despacho.TestsMinimos) == "" {
+		return false
+	}
+	selected := stringSliceFromAny(fork["selected_models"])
+	if len(selected) < 2 {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(stringFromAny(fork["decision_mode"]))) {
+	case "auto":
+		return true
+	default:
+		return false
+	}
+}
+
+func pipelineWriteSetSlices(writeSet []string, maxSubagentes int) [][]string {
+	normalized := make([]string, 0, len(writeSet))
+	seen := map[string]struct{}{}
+	for _, item := range writeSet {
+		ruta := strings.TrimSpace(item)
+		if ruta == "" {
+			continue
+		}
+		if _, ok := seen[ruta]; ok {
+			continue
+		}
+		seen[ruta] = struct{}{}
+		normalized = append(normalized, ruta)
+	}
+	sort.Strings(normalized)
+	if len(normalized) < 2 || maxSubagentes <= 0 {
+		return nil
+	}
+	numSlices := maxSubagentes
+	if len(normalized) < numSlices {
+		numSlices = len(normalized)
+	}
+	if numSlices <= 0 {
+		return nil
+	}
+	slices := make([][]string, numSlices)
+	for idx, ruta := range normalized {
+		slot := idx % numSlices
+		slices[slot] = append(slices[slot], ruta)
+	}
+	out := make([][]string, 0, len(slices))
+	for _, slice := range slices {
+		if len(slice) > 0 {
+			out = append(out, slice)
+		}
+	}
+	return out
+}
+
+func pipelineSubagentName(proyectoSlug string, despacho *capacidadapp.DespachoPipelineLocal, index int) string {
+	slug := strings.TrimSpace(proyectoSlug)
+	if slug == "" {
+		slug = "pipeline"
+	}
+	fase := strings.TrimSpace(despacho.Fase)
+	if fase == "" {
+		fase = "implementacion"
+	}
+	return fmt.Sprintf("OpenClaw-%s-%s-slice-%d", slug, fase, index)
+}
+
+func pipelineForkSubagentName(proyectoSlug string, despacho *capacidadapp.DespachoPipelineLocal, index int, modelo string) string {
+	slug := strings.TrimSpace(proyectoSlug)
+	if slug == "" {
+		slug = "pipeline"
+	}
+	fase := strings.TrimSpace(despacho.Fase)
+	if fase == "" {
+		fase = "implementacion"
+	}
+	modelo = strings.NewReplacer(":", "-", "/", "-", " ", "-").Replace(strings.TrimSpace(modelo))
+	return fmt.Sprintf("OpenClaw-%s-%s-fork-%d-%s", slug, fase, index, modelo)
+}
+
+func pipelineSubagentDescription(despacho *capacidadapp.DespachoPipelineLocal, index, total int) string {
+	base := firstNonEmpty(strings.TrimSpace(despacho.TareaObjetivo), strings.TrimSpace(despacho.Motivo), "pipeline_local")
+	return fmt.Sprintf("Slice %d/%d de %s", index, total, base)
+}
+
+func pipelineForkSubagentDescription(despacho *capacidadapp.DespachoPipelineLocal, index, total int, modelo string) string {
+	base := firstNonEmpty(strings.TrimSpace(despacho.TareaObjetivo), strings.TrimSpace(despacho.Motivo), "fork_funcion")
+	return fmt.Sprintf("Fork %d/%d de %s con modelo %s", index, total, base, strings.TrimSpace(modelo))
+}
+
+func pipelineSubagentPrompt(proyectoSlug string, despacho *capacidadapp.DespachoPipelineLocal, writeSet []string, index, total int) string {
+	lineas := []string{
+		"TRABAJO DE PIPELINE LOCAL EN PARALELO.",
+		fmt.Sprintf("Proyecto: %s", strings.TrimSpace(proyectoSlug)),
+		fmt.Sprintf("Slice: %d/%d", index, total),
+		fmt.Sprintf("Fase: %s", strings.TrimSpace(despacho.Fase)),
+		fmt.Sprintf("Objetivo: %s", firstNonEmpty(strings.TrimSpace(despacho.TareaObjetivo), strings.TrimSpace(despacho.Motivo))),
+		"Trabaja solo dentro de este write_set disjunto:",
+		strings.Join(writeSet, ", "),
+	}
+	if foco := strings.TrimSpace(despacho.SimbolosFoco); foco != "" {
+		lineas = append(lineas, "Simbolos foco compartidos: "+foco)
+	}
+	if tests := strings.TrimSpace(despacho.TestsMinimos); tests != "" {
+		lineas = append(lineas, "Tests minimos del slice: "+tests)
+	}
+	lineas = append(lineas,
+		"No toques archivos fuera del write_set asignado.",
+		"Si el cambio exige salir del write_set, para y reporta BLOQUEO.",
+		"Prioriza dejar el slice listo para integración posterior.",
+	)
+	return strings.Join(lineas, "\n")
+}
+
+func pipelineForkSubagentPrompt(proyectoSlug string, despacho *capacidadapp.DespachoPipelineLocal, fork map[string]any, variante map[string]any, writeSet []string, index, total int) string {
+	modelo := strings.TrimSpace(stringFromAny(variante["modelo"]))
+	funcionObjetivo := strings.TrimSpace(stringFromAny(fork["funcion_objetivo"]))
+	lineas := []string{
+		"TRABAJO DE FORK DE FUNCION EN PARALELO.",
+		fmt.Sprintf("Proyecto: %s", strings.TrimSpace(proyectoSlug)),
+		fmt.Sprintf("Fork: %d/%d", index, total),
+		fmt.Sprintf("Modelo objetivo: %s", modelo),
+		fmt.Sprintf("Fase: %s", strings.TrimSpace(despacho.Fase)),
+		fmt.Sprintf("Funcion objetivo: %s", funcionObjetivo),
+		fmt.Sprintf("Objetivo: %s", firstNonEmpty(strings.TrimSpace(despacho.TareaObjetivo), strings.TrimSpace(despacho.Motivo))),
+		"Trabaja sobre la misma función y el mismo write_set, proponiendo una variante mejor sin romper la arquitectura existente.",
+		"Write_set autorizado:",
+		strings.Join(writeSet, ", "),
+	}
+	if materia := strings.TrimSpace(stringFromAny(fork["materia"])); materia != "" {
+		lineas = append(lineas, "Materia dominante: "+materia)
+	}
+	if forkLines := intFromAny(fork["fork_lines"]); forkLines > 0 {
+		lineas = append(lineas, fmt.Sprintf("Numero de lineas de fork decidido por Orquesta: %d", forkLines))
+	}
+	if boolFromAny(fork["preservar_arquitectura"]) {
+		lineas = append(lineas, "Debes preservar arquitectura y estilo de la app. No pierdas hexagonalidad ni contratos existentes.")
+	}
+	if tests := strings.TrimSpace(despacho.TestsMinimos); tests != "" {
+		lineas = append(lineas, "Tests minimos de la variante: "+tests)
+	}
+	lineas = append(lineas,
+		"No toques archivos fuera del write_set.",
+		"Si la mejora exige salir del write_set, para y reporta BLOQUEO.",
+		"Entrega una variante clara y comparable frente a las otras, priorizando eficiencia sin perder seguridad ni arquitectura.",
+	)
+	return strings.Join(lineas, "\n")
+}
+
 func asegurarOwnershipTareaDespachoPremium(tareaID int64, agente string) error {
 	agente = strings.TrimSpace(agente)
 	if tareaID <= 0 || agente == "" {
@@ -407,6 +847,20 @@ func construirInstructionPipeline(despacho capacidadapp.DespachoPipelineLocal) s
 	}
 	if strings.TrimSpace(despacho.TestsMinimos) != "" {
 		lineas = append(lineas, "Tests minimos: "+strings.TrimSpace(despacho.TestsMinimos))
+	}
+	if despacho.FinishApp {
+		lineas = append(lineas, "MODO: finish_app")
+		lineas = append(lineas, "REGLA: no pares al cerrar solo esta tarea; sigue enlazando el siguiente frente util hasta completar la app salvo bloqueo real")
+	}
+	if despacho.Paralelismo != nil {
+		if despacho.Paralelismo.PuedeAbrirSubagentes {
+			lineas = append(lineas, fmt.Sprintf("PARALELISMO: puedes abrir hasta %d subagentes solo si el trabajo se puede partir en slices disjuntos", despacho.Paralelismo.MaxSubagentes))
+		} else {
+			lineas = append(lineas, "PARALELISMO: no abras subagentes para este frente")
+		}
+		if motivo := strings.TrimSpace(despacho.Paralelismo.Motivo); motivo != "" {
+			lineas = append(lineas, "Motivo paralelismo: "+motivo)
+		}
 	}
 	lineas = append(lineas,
 		"REGLA: no cambies nada fuera del alcance de la tarea",

@@ -493,6 +493,7 @@ func activarFaseImplementacionMicrociclo(proyectoSlug string) (*progresoapp.Fase
 }
 
 func asegurarTareaMicrociclo(proyecto *db.Proyecto, agente string, req proyectoMicrocicloRequest, reutilizarExistente bool) (*db.Tarea, bool, error) {
+	agente = strings.TrimSpace(agente)
 	if reutilizarExistente {
 		tarea, err := buscarTareaMicrocicloAbierta(proyecto.ID)
 		if err != nil {
@@ -538,8 +539,10 @@ func asegurarTareaMicrociclo(proyecto *db.Proyecto, agente string, req proyectoM
 	if err != nil {
 		return nil, false, err
 	}
-	if err := tareasService.Start(id, agente); err != nil {
-		return nil, false, err
+	if agente != "" {
+		if err := tareasService.Start(id, agente); err != nil {
+			return nil, false, err
+		}
 	}
 	tarea, err := tareasService.Get(id)
 	return tarea, false, err

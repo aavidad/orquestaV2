@@ -114,7 +114,8 @@ Regla de coexistencia:
 Regla de estado:
 
 - el helper residente ya es realidad de implementación
-- la capa `ADK contracts` sigue siendo propuesta aceptada de evolución, no contrato desplegado todavía
+- `AutonomyEvent` ya está desplegado sobre la verdad de estado actual, sin tablas nuevas ni segunda arquitectura
+- `state_delta`, `artifacts` y `rewind/replay` siguen siendo la parte pendiente del endurecimiento tipo `ADK`
 
 ## Inventario corto de abiertos
 
@@ -126,7 +127,7 @@ Pendiente real a `2026-04-23`:
 - endurecer la revalidacion de `work_confirmed` frente a salud operativa real de worker/runtime/handle
 - hacer que todos los entrypoints de autonomia persistente pasen por el helper residente comun en vez de recomponer flags a mano
 - introducir hooks, roles y contrato canónico `worktree + tmux + resume` como capa operativa complementaria
-- solo despues de eso, introducir `AutonomyEvent`, `state_delta`, `artifacts` y `rewind/replay` como siguiente endurecimiento estructural
+- seguir endureciendo `AutonomyEvent` con `state_delta`, `artifacts` y `rewind/replay` como siguiente paso estructural
 
 ## Que es Orquesta
 

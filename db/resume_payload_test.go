@@ -1,6 +1,7 @@
 package db
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -86,6 +87,65 @@ func TestPrepararStartRuntimeOrderReutilizaPerfilPersistidoEnResume(t *testing.T
 	}
 }
 
+func TestPrepararStartRuntimeOrderUsaRutaEfectivaAgenteAunqueProyectoEsteStale(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	rutaStale := filepath.Join(tmp, "historica-valida", "orquestador")
+	rutaActual := filepath.Join(tmp, "actual", "orquesta")
+	if err := os.MkdirAll(rutaStale, 0o755); err != nil {
+		t.Fatalf("mkdir ruta stale: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaStale, "go.mod"), []byte("module stale\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod stale: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(rutaActual, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir ruta actual: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaActual, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod actual: %v", err)
+	}
+
+	if err := RegistrarAgente("Gemma1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaStale,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	conector, err := GetConector("ollama-cli")
+	if err != nil || conector == nil {
+		t.Fatalf("get conector ollama-cli: %+v err=%v", conector, err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Gemma1",
+		ConectorID:  &conector.ID,
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(rutaActual, "cmd"),
+		Herramienta: "ollama-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	_, proyecto, _, _, _, _, plan, err := prepararStartRuntimeOrder("Gemma1", "orquestador", 0, "", "", "", "", nil, false)
+	if err != nil {
+		t.Fatalf("prepararStartRuntimeOrder: %v", err)
+	}
+	if proyecto == nil || plan == nil {
+		t.Fatalf("resultado incompleto: proyecto=%+v plan=%+v", proyecto, plan)
+	}
+	if proyecto.RutaAbs != rutaActual {
+		t.Fatalf("ruta efectiva inesperada: got=%s want=%s", proyecto.RutaAbs, rutaActual)
+	}
+	if strings.HasPrefix(plan.WorkingDir, rutaStale) {
+		t.Fatalf("working dir no deberia usar la ruta stale: %s", plan.WorkingDir)
+	}
+}
+
 func TestPrepararStartRuntimeOrderPrefiereConectorPoolLocalCompartidoOllama(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	if err := RegistrarAgente("Gemma1", "programador"); err != nil {
@@ -150,6 +210,50 @@ func TestPrepararStartRuntimeOrderPrefiereConectorPoolLocalCompartidoOllama(t *t
 	}
 	if plan == nil || plan.Transporte != "api" {
 		t.Fatalf("plan inesperado: %+v", plan)
+	}
+}
+
+func TestPrepararStartRuntimeOrderRecuperaModeloAfinDelAgenteLocal(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	if err := RegistrarAgente("Gemma1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := GuardarPoliticaModelo(&PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		ModelSlug:       "gpt-5.4",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("guardar politica: %v", err)
+	}
+	if _, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	_, _, conector, _, _, _, plan, err := prepararStartRuntimeOrder("Gemma1", "orquestador", 0, "", "", "", "implementacion", nil, false)
+	if err != nil {
+		t.Fatalf("prepararStartRuntimeOrder: %v", err)
+	}
+	if conector == nil || conector.Slug != "ollama-cli" {
+		t.Fatalf("conector inesperado: %+v", conector)
+	}
+	if plan == nil {
+		t.Fatal("faltaba plan de arranque")
+	}
+	if plan.Modelo != "gemma4:26b" {
+		t.Fatalf("Gemma deberia recuperar su afinidad local, got=%+v", plan)
+	}
+	if rendered := runtimeagente.RenderCommand(plan); !strings.Contains(rendered, "gemma4:26b") {
+		t.Fatalf("rendered command deberia usar gemma4:26b: %s", rendered)
 	}
 }
 

@@ -342,8 +342,8 @@ func manifestPathsCandidatosSupervisorLocal(desc descriptorSupervisorLocal, meta
 	if workdir := strings.TrimSpace(desc.WorkingDir); workdir != "" {
 		if matches, err := filepath.Glob(filepath.Join(workdir, ".orquesta-runtime", "*", "*", "runtime.json")); err == nil {
 			sort.Sort(sort.Reverse(sort.StringSlice(matches)))
-			for _, match := range matches {
-				add(match)
+			if len(matches) > 0 {
+				add(matches[0])
 			}
 		}
 	}

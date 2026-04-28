@@ -221,10 +221,10 @@ func TestProcesarAutoasignacionPremiumSinSesionBatchNoBloqueaPorHandleActivaStal
 		Asignacion:      asignacion,
 		EstadoOperativo: "sin_tarea",
 		Handle: &db.RuntimeHandle{
-			ID:        91,
-			Agente:    "Gemini1",
+			ID:         91,
+			Agente:     "Gemini1",
 			ProyectoID: &proyectoID,
-			Estado:    "activo",
+			Estado:     "activo",
 			UpdatedAt:  time.Now().UTC().Add(-20 * time.Minute),
 		},
 	}}, map[string][]*db.Tarea{})
@@ -398,6 +398,163 @@ func TestProcesarAutoasignacionPremiumSinSesionBatchAbreMicrotareaParaAsignacion
 	}
 }
 
+func TestProcesarAutoasignacionPremiumSinSesionBatchOmiteAgenteRetirado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("GeminiRetirado", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.RetirarAgente("GeminiRetirado"); err != nil {
+		t.Fatalf("retirar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-retirado",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ObjetivoPct:      100,
+		MinAgentes:       1,
+		MaxAgentes:       3,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion: %v", err)
+	}
+	if err := db.ActivarAsignacion("GeminiRetirado", proyectoID, "frente premium"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      microcicloRefactorTituloDefault,
+		Descripcion: descripcionMicrocicloDefault(&db.Proyecto{Slug: "orquestador-retirado", RutaAbs: filepath.Join(tmp, "orquestador")}),
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+
+	n, err := procesarAutoasignacionPremiumSinSesionBatch([]agentesapp.Row{{
+		Agente:           &db.Agente{Nombre: "GeminiRetirado", Habilitado: false},
+		EstadoOperativo:  "retirado",
+		DetalleOperativo: "agente retirado",
+	}}, map[string][]*db.Tarea{})
+	if err != nil {
+		t.Fatalf("procesarAutoasignacionPremiumSinSesionBatch: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia procesar agente retirado, got=%d", n)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Agente != nil || tarea.Estado != db.TareaLibre {
+		t.Fatalf("la tarea no deberia tocarse para agente retirado: %+v", tarea)
+	}
+
+	agente := "GeminiRetirado"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar start para agente retirado: %+v", orders)
+	}
+}
+
+func TestProcesarAutoasignacionPremiumSinSesionBatchRespetaCooldownReactivacionReciente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("GeminiCooldown", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-cooldown",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ObjetivoPct:      100,
+		MinAgentes:       1,
+		MaxAgentes:       3,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion: %v", err)
+	}
+	if err := db.ActivarAsignacion("GeminiCooldown", proyectoID, "frente premium"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      microcicloRefactorTituloDefault,
+		Descripcion: descripcionMicrocicloDefault(&db.Proyecto{Slug: "orquestador-cooldown", RutaAbs: filepath.Join(tmp, "orquestador")}),
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	payload := `{"accion":"start","motivo":"premium_idle_autoassigned"}`
+	if _, err := db.DB.Exec(`
+		INSERT INTO runtime_orders (agente, proyecto_id, tipo, estado, payload_json, created_at, updated_at)
+		VALUES (?, ?, 'start', 'fallida', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, "GeminiCooldown", proyectoID, payload); err != nil {
+		t.Fatalf("insert runtime order reciente: %v", err)
+	}
+
+	n, err := procesarAutoasignacionPremiumSinSesionBatch([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "GeminiCooldown", Habilitado: true},
+		EstadoOperativo: "sin_tarea",
+	}}, map[string][]*db.Tarea{})
+	if err != nil {
+		t.Fatalf("procesarAutoasignacionPremiumSinSesionBatch: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("deberia respetar cooldown de reactivacion reciente, got=%d", n)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Agente != nil || tarea.Estado != db.TareaLibre {
+		t.Fatalf("la tarea no deberia tocarse durante cooldown: %+v", tarea)
+	}
+
+	agente := "GeminiCooldown"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar start nuevo durante cooldown: %+v", orders)
+	}
+}
+
 func TestResolverProyectoAutoasignacionPremiumSinSesionPrefiereProyectoPremiumSobrePausaMasReciente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -457,6 +614,103 @@ func TestResolverProyectoAutoasignacionPremiumSinSesionPrefiereProyectoPremiumSo
 	}
 	if proyecto == nil || proyecto.ID != proyectoPremiumID {
 		t.Fatalf("deberia preferir el proyecto premium con continuidad frente a la pausa mas reciente: %+v", proyecto)
+	}
+}
+
+func TestProcesarAutoasignacionPremiumSinSesionBatchReanudaWorkerVivoConAsignacionPausada(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ObjetivoPct:      100,
+		MinAgentes:       1,
+		MaxAgentes:       3,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex4", proyectoID, "reactivacion_automatica_trabajo_activo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if err := db.PausarAsignacion("Codex4", proyectoID, "sin_trabajo_reactivacion_automatica"); err != nil {
+		t.Fatalf("pausar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      microcicloRefactorTituloDefault,
+		Descripcion: descripcionMicrocicloDefault(&db.Proyecto{Slug: "orquestador", RutaAbs: filepath.Join(tmp, "orquestador")}),
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	now := time.Now().UTC()
+	row := agentesapp.Row{
+		Agente:          &db.Agente{Nombre: "Codex4", Habilitado: true},
+		EstadoOperativo: "disponible",
+		DetalleOperativo:"worker running",
+		WorkerAlive:     true,
+		WorkerState:     "running",
+		WorkerDriver:    "tmux_cli_session",
+		WorkerHeartbeat: &now,
+		WorkerUpdatedAt: &now,
+		Runtime:         &db.RuntimeInstance{LogicalState: "activo", UpdatedAt: now},
+		Handle:          &db.RuntimeHandle{Estado: "activo", Transporte: "tmux", LastSeenAt: &now},
+	}
+
+	n, err := procesarAutoasignacionPremiumSinSesionBatch([]agentesapp.Row{row}, map[string][]*db.Tarea{})
+	if err != nil {
+		t.Fatalf("procesarAutoasignacionPremiumSinSesionBatch: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("deberia reactivar worker vivo con asignacion pausada, got=%d", n)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Agente == nil || strings.TrimSpace(*tarea.Agente) != "Codex4" {
+		t.Fatalf("la tarea deberia quedar reasignada al worker vivo: %+v", tarea)
+	}
+
+	asignacion, err := db.GetAsignacionActivaAgente("Codex4")
+	if err != nil {
+		t.Fatalf("get asignacion activa: %v", err)
+	}
+	if asignacion == nil || asignacion.ProyectoID != proyectoID {
+		t.Fatalf("la asignacion deberia reactivarse para Codex4: %+v", asignacion)
+	}
+
+	agente := "Codex4"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "nudge" {
+		t.Fatalf("deberia encolar nudge sobre worker ya vivo: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"motivo_autoasignacion":"runtime_idle_paused_assignment"`) {
+		t.Fatalf("nudge sin motivo esperado: %s", orders[0].PayloadJSON)
 	}
 }
 

@@ -24,3 +24,11 @@ server.log
 server_new.log
 orquesta_bin
 orquesta_server
+cmd.test
+orquesta.env
+.orquesta-inbox.md
+.orquesta-logs/
+sigue.py
+sigue.txt
+sigue_300_veces.txt
+transcribe-app/

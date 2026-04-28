@@ -24,6 +24,9 @@ type serverAutobootstrapConfig struct {
 }
 
 func bootstrapServerAutonomy() error {
+	if err := db.ReconciliarEstadoAutonomia(); err != nil {
+		return err
+	}
 	cfg := loadServerAutobootstrapConfig()
 	if !cfg.Enabled {
 		return nil
@@ -152,12 +155,12 @@ func runtimeMailboxEsBootstrapServidor(msg *db.RuntimeMailboxMessage) bool {
 
 func loadServerAutobootstrapConfig() serverAutobootstrapConfig {
 	cfg := serverAutobootstrapConfig{
-		Enabled:              controlPlaneConfigBoolOrDefault("server_autobootstrap_enabled", true),
+		Enabled:              controlPlaneConfigBoolOrDefault("server_autobootstrap_enabled", false),
 		ProjectSlug:          strings.TrimSpace(configOrDefault("server_autobootstrap_project_slug", "orquestador")),
 		ProjectName:          strings.TrimSpace(configOrDefault("server_autobootstrap_project_name", "Orquestador")),
 		ProjectPath:          strings.TrimSpace(configOrDefault("server_autobootstrap_project_path", "")),
-		SupervisorAgent:      strings.TrimSpace(configOrDefault("server_autobootstrap_supervisor_agent", "Codex1")),
-		WorkerAgents:         filtrarFlotaOficialAutobootstrap(splitServerAutobootstrapAgents(configOrDefault("server_autobootstrap_worker_agents", "Codex2,Codex3,Codex4,Codex5"))),
+		SupervisorAgent:      canonicalAutonomyCodexName(strings.TrimSpace(configOrDefault("server_autobootstrap_supervisor_agent", "Codex1"))),
+		WorkerAgents:         canonicalAutonomyCodexNames(filtrarFlotaOficialAutobootstrap(splitServerAutobootstrapAgents(configOrDefault("server_autobootstrap_worker_agents", "Codex2,Codex3,Codex4,Codex5")))),
 		ObjetivoGeneral:      strings.TrimSpace(configOrDefault("server_autobootstrap_objective_general", "Terminar la app al completo, revisando el codigo real, reparando fallos de raiz y validando con pruebas reales.")),
 		DefinitionOfDoneJSON: strings.TrimSpace(configOrDefault("server_autobootstrap_definition_of_done_json", `{"estado":"app_completa","criterios":["codigo_real_y_funcional","sin_humo","pruebas_reales_en_verde","frentes_cerrados"]}`)),
 	}
@@ -172,7 +175,7 @@ func loadServerAutobootstrapConfig() serverAutobootstrapConfig {
 			cfg.ProjectPath = cwd
 		}
 	}
-	if !perteneceAFlotaOficialAutobootstrap(cfg.SupervisorAgent) {
+	if !perteneceAFamiliaCodexAutobootstrap(cfg.SupervisorAgent) {
 		cfg.SupervisorAgent = "Codex1"
 	}
 	if len(cfg.WorkerAgents) == 0 {
@@ -183,7 +186,17 @@ func loadServerAutobootstrapConfig() serverAutobootstrapConfig {
 
 func perteneceAFlotaOficialAutobootstrap(nombre string) bool {
 	nombre = strings.ToLower(strings.TrimSpace(nombre))
+	return perteneceAFamiliaCodexAutobootstrap(nombre) && !esAgentePrimeAutobootstrap(nombre)
+}
+
+func perteneceAFamiliaCodexAutobootstrap(nombre string) bool {
+	nombre = strings.ToLower(strings.TrimSpace(nombre))
 	return strings.HasPrefix(nombre, "codex")
+}
+
+func esAgentePrimeAutobootstrap(nombre string) bool {
+	nombre = strings.ToLower(strings.TrimSpace(nombre))
+	return strings.HasPrefix(nombre, "codexpg")
 }
 
 func filtrarFlotaOficialAutobootstrap(nombres []string) []string {
@@ -216,7 +229,7 @@ func splitServerAutobootstrapAgents(raw string) []string {
 			continue
 		}
 		seen[key] = struct{}{}
-		out = append(out, part)
+		out = append(out, canonicalAutonomyCodexName(part))
 	}
 	return out
 }
@@ -248,8 +261,7 @@ func ensureAutobootstrapProject(cfg serverAutobootstrapConfig) (*db.Proyecto, er
 }
 
 func ensureAutobootstrapAgents(proyectoID int64, cfg serverAutobootstrapConfig) error {
-	nombres := append([]string{cfg.SupervisorAgent}, cfg.WorkerAgents...)
-	for _, nombre := range nombres {
+	for _, nombre := range append([]string{cfg.SupervisorAgent}, cfg.WorkerAgents...) {
 		nombre = strings.TrimSpace(nombre)
 		if nombre == "" {
 			continue

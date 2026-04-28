@@ -49,7 +49,7 @@ func (Repository) ReassignTask(id int64, nuevoAgente string) error {
 }
 
 func (Repository) GetProject(ref string) (*db.Proyecto, error) {
-	return db.GetProyecto(ref)
+	return db.GetProyectoPrepareLite(ref)
 }
 
 func (Repository) GetProposal(codigo string) (*db.Propuesta, error) {

@@ -30,7 +30,10 @@ func ProgresoEstimadoPorSenales(tareaID int64) (int, error) {
 	if !agente.Valid || agente.String == "" {
 		return 0, nil
 	}
-	nombre := agente.String
+	nombre, err := CanonicalizeAgentName(agente.String)
+	if err != nil {
+		return 0, err
+	}
 
 	var checkpoints int
 	if err := DB.QueryRow(

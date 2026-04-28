@@ -8,7 +8,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"orquesta/db"
@@ -19,8 +18,23 @@ import (
 
 const liveOperationalStateTimeout = 750 * time.Millisecond
 
+const prepareDefaultProfile = "implementacion"
+const prepareModelPolicyTimeout = 250 * time.Millisecond
+
 type liteAgentGetter interface {
 	GetAgentPrepareLite(nombre string) (*db.Agente, error)
+}
+
+type liteProjectGetter interface {
+	GetProjectPrepareLite(ref string) (*db.Proyecto, error)
+}
+
+type liteSessionGetter interface {
+	GetLastSessionPrepareLite(agente string, proyectoID *int64) (*db.Sesion, error)
+}
+
+type liteConnectorGetter interface {
+	GetConnectorPrepareLite(ref string) (*db.Conector, error)
 }
 
 type tickRuntimeGetter interface {
@@ -126,6 +140,7 @@ type TickOutput struct {
 	SesionActiva         *SessionBundle `json:"sesion_activa,omitempty"`
 	AsignadoAProyecto    bool           `json:"asignado_a_proyecto"`
 	ProyectoAsignado     string         `json:"proyecto_asignado,omitempty"`
+	FinishApp            bool           `json:"finish_app,omitempty"`
 	AccionRecomendada    string         `json:"accion_recomendada"`
 	DebePausar           bool           `json:"debe_pausar"`
 	Motivo               string         `json:"motivo,omitempty"`
@@ -364,20 +379,21 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 		return nil, err
 	}
 	prepareDebugf("BuildPrepare step=resolve_connector conector=%s duration=%s", strings.TrimSpace(conector.Slug), time.Since(stepStart).Round(time.Millisecond))
-	stepStart = time.Now()
-	catalogo, err := s.getGovernanceCatalogForPrepare(agente.Rol, proyecto.ID, agente.Nombre)
-	if err != nil {
-		return nil, err
-	}
-	prepareDebugf("BuildPrepare step=resolve_governance duration=%s", time.Since(stepStart).Round(time.Millisecond))
-	stepStart = time.Now()
 	// Resolución hexagonal de política de modelo (OP-HEX)
 	modeloSolicitado := strings.TrimSpace(input.Modelo)
 	razonamientoSolicitado := strings.TrimSpace(input.Razonamiento)
 	perfilSolicitado := strings.TrimSpace(input.Perfil)
 	var resolucionModelo *db.ResolucionModelo
 
-	if s.modelPolicyProvider != nil && (modeloSolicitado == "" || razonamientoSolicitado == "") {
+	if modeloSolicitado != "" {
+		if perfilSolicitado == "" {
+			perfilSolicitado = prepareDefaultProfile
+		}
+		if razonamientoSolicitado == "" {
+			razonamientoSolicitado = defaultPrepareReasoning(perfilSolicitado)
+		}
+	}
+	if s.modelPolicyProvider != nil && modeloSolicitado == "" {
 		resolucion, err := s.getModelPolicyResolutionForPrepare(agenteNombre, proyecto.Slug, perfilSolicitado)
 		if err == nil && resolucion != nil {
 			resolucionModelo = resolucion
@@ -402,6 +418,15 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 		MetadataJSON: strings.TrimSpace(conector.MetadataJSON),
 		Activo:       conector.Activo,
 	}
+	if strings.TrimSpace(input.Modelo) == "" {
+		if preferido := runtimeagente.ModeloPreferenteAgenteCompatible(agenteNombre, conectorRuntime); preferido != "" {
+			if modeloSolicitado == "" ||
+				!runtimeagente.ModeloAfinAgente(agenteNombre, modeloSolicitado) ||
+				(resolucionModelo != nil && strings.HasPrefix(strings.TrimSpace(resolucionModelo.FuenteModelo), "fallback-perfil:")) {
+				modeloSolicitado = preferido
+			}
+		}
+	}
 	if !runtimeagente.ModeloCompatibleConConector(conectorRuntime, modeloSolicitado) {
 		modeloSolicitado = ""
 	}
@@ -418,53 +443,22 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	}
 	prepareDebugf("BuildPrepare step=prepare_runtime duration=%s", time.Since(stepStart).Round(time.Millisecond))
 	var (
-		memoria              []*db.EntidadMemoria
-		tareas               []*db.Tarea
-		propuestasPendientes []*db.Propuesta
-		bootstrapPrompt      string
+		catalogo        *db.GovernanceCatalog
+		memoria         []*db.EntidadMemoria
+		bootstrapPrompt string
 	)
 	if prepareDebeCargarBootstrapContext(prep) {
-		var (
-			loadWG          sync.WaitGroup
-			memErr          error
-			tasksErr        error
-			votesErr        error
-			listMemoryStart = time.Now()
-			listTasksStart  = time.Now()
-			listVotesStart  = time.Now()
-		)
-		loadWG.Add(3)
-		go func() {
-			defer loadWG.Done()
-			memoria, memErr = s.store.ListMemoryEntities(db.FiltroEntidadesMemoria{ProyectoID: &proyecto.ID})
-		}()
-		go func() {
-			defer loadWG.Done()
-			tareas, tasksErr = s.store.ListTasks(db.FiltroTareas{Agente: &agenteNombre, ProyectoID: &proyecto.ID})
-		}()
-		go func() {
-			defer loadWG.Done()
-			propuestasPendientes, votesErr = s.store.ListProjectPendingVotes(agenteNombre, proyecto.ID)
-		}()
-		loadWG.Wait()
-		if memErr != nil {
-			return nil, memErr
+		if cached := s.cachedPrepareGovernance(agente.Rol, proyecto.ID, agente.Nombre); cached != nil {
+			catalogo = cached
+			prepareDebugf("BuildPrepare step=resolve_governance_cache_hit agente=%s proyecto_id=%d", strings.TrimSpace(agente.Nombre), proyecto.ID)
+		} else {
+			prepareDebugf("BuildPrepare step=bootstrap_context_skip agente=%s proyecto_id=%d motivo=no_cached_governance", strings.TrimSpace(agente.Nombre), proyecto.ID)
 		}
-		if tasksErr != nil {
-			return nil, tasksErr
-		}
-		if votesErr != nil {
-			return nil, votesErr
-		}
-		prepareDebugf("BuildPrepare step=list_memory count=%d duration=%s", len(memoria), time.Since(listMemoryStart).Round(time.Millisecond))
-		prepareDebugf("BuildPrepare step=list_tasks count=%d duration=%s", len(tareas), time.Since(listTasksStart).Round(time.Millisecond))
-		prepareDebugf("BuildPrepare step=list_pending_votes count=%d duration=%s", len(propuestasPendientes), time.Since(listVotesStart).Round(time.Millisecond))
-		stepStart = time.Now()
-		bootstrapPrompt = buildBootstrapPrompt(&agenteRuntime, proyecto, prep.Plan, catalogo, memoria, tareas, propuestasPendientes)
-		prepareDebugf("BuildPrepare step=build_prompt duration=%s", time.Since(stepStart).Round(time.Millisecond))
 	}
 	if prep.Plan != nil {
-		prep.Plan.BootstrapPrompt = strings.TrimSpace(bootstrapPrompt)
+		if prompt := strings.TrimSpace(bootstrapPrompt); prompt != "" {
+			prep.Plan.BootstrapPrompt = prompt
+		}
 		if err := runtimeagente.ApplyLaunchPromptMetadata(prep.Plan, conector.MetadataJSON); err != nil {
 			return nil, fmt.Errorf("metadata_json inválido para '%s': %w", strings.TrimSpace(conector.Slug), err)
 		}
@@ -486,17 +480,19 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 			Transporte: conector.Transporte,
 			Comando:    conector.Comando,
 		},
-		Politica:        s.loadPolicy(),
+		Politica:        defaultPreparePolicy(),
 		Plan:            prep.Plan,
 		BootstrapPrompt: bootstrapPrompt,
-		Reglas:          catalogo.Reglas,
-		Skills:          catalogo.Skills,
-		Workflows:       catalogo.Workflows,
 		Memoria:         memoria,
 		Bootstrap:       prep.Bootstrap,
 		ReanimarAt:      agente.ReanimarAt,
 		MotivoPausa:     agente.MotivoPausa,
 		EstadoCuota:     agente.EstadoCuota,
+	}
+	if catalogo != nil {
+		out.Reglas = catalogo.Reglas
+		out.Skills = catalogo.Skills
+		out.Workflows = catalogo.Workflows
 	}
 	out.Politica.Modelo = prep.Plan.Modelo
 	out.Politica.Razonamiento = prep.Plan.Razonamiento
@@ -504,6 +500,7 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	if ultima != nil {
 		out.UltimaSesion = summarizeSession(ultima)
 	}
+	prepareDebugf("BuildPrepare step=return_output agente=%s proyecto_id=%d duration_total=%s", strings.TrimSpace(agente.Nombre), proyecto.ID, time.Since(start).Round(time.Millisecond))
 	return out, nil
 }
 
@@ -521,6 +518,28 @@ func prepareDebeCargarBootstrapContext(prep *lanzamientoruntime.Preparacion) boo
 		return false
 	}
 	return true
+}
+
+func defaultPrepareReasoning(perfil string) string {
+	switch strings.ToLower(strings.TrimSpace(perfil)) {
+	case "script", "documentacion":
+		return "medium"
+	case "orquestacion":
+		return "xhigh"
+	case "analisis", "revision", "implementacion", "":
+		return "high"
+	default:
+		return "high"
+	}
+}
+
+func defaultPreparePolicy() Policy {
+	return Policy{
+		ModoBucle:         "sticky",
+		IntervaloTickSeg:  30,
+		ContinuarHasta:    "tarea_terminal_o_duda_real",
+		ConsultarProyecto: true,
+	}
 }
 
 func prepareDebugf(format string, args ...any) {
@@ -613,6 +632,19 @@ func (s *Service) getProjectForPrepare(ref string) (*db.Proyecto, error) {
 	prepareDebugf("BuildPrepare step=get_project_load_start proyecto=%s", strings.TrimSpace(ref))
 	defer s.finishPrepareProjectFlight(ref, flight)
 	if s != nil && s.store != nil {
+		if lite, ok := s.store.(liteProjectGetter); ok {
+			proyecto, err := lite.GetProjectPrepareLite(ref)
+			if err != nil {
+				flight.err = err
+				return nil, err
+			}
+			if proyecto != nil {
+				s.cachePrepareProject(proyecto, ref)
+				flight.project = clonePrepareProject(proyecto)
+				prepareDebugf("BuildPrepare step=get_project_load_done proyecto=%s fuente=lite", strings.TrimSpace(ref))
+				return proyecto, nil
+			}
+		}
 		proyecto, err := s.store.GetProject(ref)
 		if err != nil {
 			flight.err = err
@@ -884,6 +916,30 @@ func (s *Service) getLastSessionForPrepare(agente string, proyectoID int64) (*db
 	}
 	prepareDebugf("BuildPrepare step=get_last_session_load_start agente=%s proyecto_id=%d", strings.TrimSpace(agente), proyectoID)
 	defer s.finishPrepareSessionFlight(agente, proyectoID, flight)
+	if lite, ok := s.store.(liteSessionGetter); ok {
+		session, err := lite.GetLastSessionPrepareLite(agente, &proyectoID)
+		if err != nil && err != sql.ErrNoRows {
+			flight.err = err
+			return nil, err
+		}
+		if err == sql.ErrNoRows {
+			s.cachePrepareSession(agente, proyectoID, nil, false)
+			flight.found = false
+			prepareDebugf("BuildPrepare step=get_last_session_load_done agente=%s proyecto_id=%d valor=nil fuente=lite", strings.TrimSpace(agente), proyectoID)
+			return nil, nil
+		}
+		if session == nil {
+			s.cachePrepareSession(agente, proyectoID, nil, false)
+			flight.found = false
+			prepareDebugf("BuildPrepare step=get_last_session_load_done agente=%s proyecto_id=%d valor=nil fuente=lite", strings.TrimSpace(agente), proyectoID)
+			return nil, nil
+		}
+		s.cachePrepareSession(agente, proyectoID, session, true)
+		flight.session = clonePrepareSession(session)
+		flight.found = true
+		prepareDebugf("BuildPrepare step=get_last_session_load_done agente=%s proyecto_id=%d fuente=lite", strings.TrimSpace(agente), proyectoID)
+		return session, nil
+	}
 	session, err := s.store.GetLastSession(agente, &proyectoID)
 	if err != nil && err != sql.ErrNoRows {
 		flight.err = err
@@ -914,6 +970,19 @@ func (s *Service) getConnectorForPrepare(ref string) (*db.Conector, error) {
 	}
 	prepareDebugf("BuildPrepare step=resolve_connector_load_start ref=%s", strings.TrimSpace(ref))
 	defer s.finishPrepareConnectorFlight(ref, flight)
+	if lite, ok := s.store.(liteConnectorGetter); ok {
+		connector, err := lite.GetConnectorPrepareLite(ref)
+		if err != nil {
+			flight.err = err
+			return nil, err
+		}
+		if connector != nil {
+			s.cachePrepareConnector(connector, ref)
+			flight.connector = clonePrepareConnector(connector)
+		}
+		prepareDebugf("BuildPrepare step=resolve_connector_load_done ref=%s fuente=lite", strings.TrimSpace(ref))
+		return connector, nil
+	}
 	connector, err := s.store.GetConnector(ref)
 	if err != nil {
 		flight.err = err
@@ -948,21 +1017,35 @@ func (s *Service) getModelPolicyResolutionForPrepare(agente, proyectoSlug, perfi
 	prepareDebugf("BuildPrepare step=resolve_model_policy_load_start agente=%s proyecto=%s", strings.TrimSpace(agente), strings.TrimSpace(proyectoSlug))
 	defer s.finishPrepareModelPolicyFlight(key, flight)
 	agentePolicy := strings.TrimSpace(agente)
-	resolution, err := s.modelPolicyProvider.ResolveModelPolicy(db.ResolverPoliticaInput{
-		AgenteNombre: &agentePolicy,
-		ProyectoSlug: strings.TrimSpace(proyectoSlug),
-		PerfilTarea:  strings.TrimSpace(perfilTarea),
-	})
-	if err != nil {
-		flight.err = err
-		return nil, err
+	type result struct {
+		resolution *db.ResolucionModelo
+		err        error
 	}
-	if resolution != nil {
-		s.cachePrepareModelPolicy(key, resolution)
-		flight.resolution = clonePrepareModelResolution(resolution)
+	done := make(chan result, 1)
+	go func() {
+		resolution, err := s.modelPolicyProvider.ResolveModelPolicy(db.ResolverPoliticaInput{
+			AgenteNombre: &agentePolicy,
+			ProyectoSlug: strings.TrimSpace(proyectoSlug),
+			PerfilTarea:  strings.TrimSpace(perfilTarea),
+		})
+		done <- result{resolution: resolution, err: err}
+	}()
+	select {
+	case res := <-done:
+		if res.err != nil {
+			flight.err = res.err
+			return nil, res.err
+		}
+		if res.resolution != nil {
+			s.cachePrepareModelPolicy(key, res.resolution)
+			flight.resolution = clonePrepareModelResolution(res.resolution)
+		}
+		prepareDebugf("BuildPrepare step=resolve_model_policy_load_done agente=%s proyecto=%s", strings.TrimSpace(agente), strings.TrimSpace(proyectoSlug))
+		return res.resolution, nil
+	case <-time.After(prepareModelPolicyTimeout):
+		prepareDebugf("BuildPrepare step=resolve_model_policy_timeout agente=%s proyecto=%s timeout=%s", strings.TrimSpace(agente), strings.TrimSpace(proyectoSlug), prepareModelPolicyTimeout)
+		return nil, nil
 	}
-	prepareDebugf("BuildPrepare step=resolve_model_policy_load_done agente=%s proyecto=%s", strings.TrimSpace(agente), strings.TrimSpace(proyectoSlug))
-	return resolution, nil
 }
 
 func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
@@ -1235,17 +1318,19 @@ func (s *Service) buildOperationalRowContextForTick(agenteNombre string, proyect
 	if err != nil {
 		return Row{}, nil, nil, err
 	}
-	row.Handle = latestHandleForProject(handles, projectID)
+	projectHandle := latestHandleForProject(handles, projectID)
+	row.Handle = projectHandle
 	if row.Handle == nil {
 		row.Handle = latestHandleForAgent(handles)
 	}
-	if row.Handle == nil {
+	if projectHandle == nil {
 		handles, err = s.store.ListPassiveRuntimeHandles(&agenteNombre)
 		if err != nil {
 			return Row{}, nil, nil, err
 		}
-		row.Handle = latestHandleForProject(handles, projectID)
-		if row.Handle == nil {
+		if passiveProjectHandle := latestHandleForProject(handles, projectID); passiveProjectHandle != nil {
+			row.Handle = passiveProjectHandle
+		} else if row.Handle == nil {
 			row.Handle = latestHandleForAgent(handles)
 		}
 	}
@@ -1279,7 +1364,7 @@ func (s *Service) buildOperationalRowContextForTick(agenteNombre string, proyect
 				case db.EstadoBloqueada:
 					row.BlockedTasks++
 				case db.EstadoCompletada, db.EstadoCancelada, db.EstadoBacklog:
-				default:
+				case db.EstadoAsignada, db.EstadoEnProgreso:
 					row.OpenTasks++
 				}
 				row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
@@ -1308,7 +1393,7 @@ func (s *Service) buildOperationalRowContextForTick(agenteNombre string, proyect
 			continue
 		case db.EstadoBloqueada:
 			row.BlockedTasks++
-		default:
+		case db.EstadoAsignada, db.EstadoEnProgreso:
 			row.OpenTasks++
 		}
 	}
@@ -1463,6 +1548,7 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		tareasActivas []LightItem
 		tieneBloqueos bool
 		tieneTrabajo  bool
+		finishApp     bool
 	)
 	for _, tarea := range tareas {
 		if tarea == nil || tarea.Estado == db.TareaCompletada || tarea.Estado == db.TareaCancelada || tarea.Estado == db.TareaBacklog {
@@ -1481,6 +1567,9 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		tareasActivas = append(tareasActivas, LightItem{ID: tarea.ID, Titulo: tarea.Titulo, Estado: string(tarea.Estado)})
 		if tarea.Estado == db.TareaAsignada || tarea.Estado == db.TareaEnProgreso {
 			tieneTrabajo = true
+			if strings.Contains(strings.ToLower(strings.TrimSpace(tarea.Notas)), "autonomia:finish_app") {
+				finishApp = true
+			}
 		}
 	}
 	if !tieneTrabajo && len(tareasActivas) == 0 {
@@ -1569,6 +1658,7 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		Politica:          politica,
 		AsignadoAProyecto: asignadoAProyecto,
 		ProyectoAsignado:  proyectoAsignado,
+		FinishApp:         finishApp,
 		TareasActivas:     tareasActivas,
 		ConsumoDia:        agente.ConsumoDiaSegundos,
 		LimiteDia:         agente.LimiteDiaSegundos,
@@ -1616,7 +1706,11 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		out.Motivo = "Hay tareas bloqueadas que requieren resolución"
 	case tieneTrabajo:
 		out.AccionRecomendada = "continuar_trabajo"
-		out.Motivo = "Sigue trabajando hasta completar la tarea o detectar una duda real"
+		if finishApp {
+			out.Motivo = "Modo finish_app activo: no cierres solo esta tarea; sigue hasta completar la app o detectar un bloqueo real"
+		} else {
+			out.Motivo = "Sigue trabajando hasta completar la tarea o detectar una duda real"
+		}
 	default:
 		pendientes, err := s.store.ListProjectPendingVotes(agenteNombre, proyecto.ID)
 		if err != nil {

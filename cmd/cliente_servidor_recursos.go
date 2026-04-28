@@ -28,6 +28,10 @@ type apiProyectoResponse struct {
 	Proyecto *db.Proyecto `json:"proyecto"`
 }
 
+type apiProyectoControlResponse struct {
+	Control *projectControlReport `json:"control"`
+}
+
 type apiConectorResponse struct {
 	Conector *db.Conector `json:"conector"`
 }
@@ -64,6 +68,10 @@ type apiAgentesPanelResponse struct {
 
 type apiAgenteOverviewResponse struct {
 	Detail *agentesapp.Detail `json:"detail"`
+}
+
+type apiAgenteActividadResponse struct {
+	Activity *agentActivityReport `json:"activity"`
 }
 
 type apiAgenteReanimationsResponse struct {
@@ -127,26 +135,32 @@ type apiProyectoDescubrirRequest struct {
 }
 
 type apiProyectoActualizarRequest struct {
-	Slug     string `json:"slug"`
-	Nombre   string `json:"nombre"`
-	RutaAbs  string `json:"ruta_abs"`
-	Tipo     string `json:"tipo"`
-	ParentID *int64 `json:"parent_id"`
-	Activo   *bool  `json:"activo"`
+	Slug       string `json:"slug"`
+	Nombre     string `json:"nombre"`
+	RutaAbs    string `json:"ruta_abs"`
+	OrigenRepo string `json:"origen_repo"`
+	RemoteURL  string `json:"remote_url"`
+	BranchBase string `json:"branch_base"`
+	Tipo       string `json:"tipo"`
+	ParentID   *int64 `json:"parent_id"`
+	Activo     *bool  `json:"activo"`
 }
 
 type apiProyectoFabricarAppRequest struct {
-	Nombre      string   `json:"nombre"`
-	Descripcion string   `json:"descripcion"`
-	Tipo        string   `json:"tipo"`
-	Frontend    bool     `json:"frontend"`
-	API         bool     `json:"api"`
-	Auth        bool     `json:"auth"`
-	Database    bool     `json:"db"`
-	Docker      bool     `json:"docker"`
-	I18n        bool     `json:"i18n"`
-	Idiomas     []string `json:"idiomas"`
-	Por         string   `json:"por"`
+	Nombre           string   `json:"nombre"`
+	Descripcion      string   `json:"descripcion"`
+	ObjetivoNegocio  string   `json:"objetivo_negocio"`
+	UsuariosObjetivo string   `json:"usuarios_objetivo"`
+	Restricciones    string   `json:"restricciones"`
+	Tipo             string   `json:"tipo"`
+	Frontend         bool     `json:"frontend"`
+	API              bool     `json:"api"`
+	Auth             bool     `json:"auth"`
+	Database         bool     `json:"db"`
+	Docker           bool     `json:"docker"`
+	I18n             bool     `json:"i18n"`
+	Idiomas          []string `json:"idiomas"`
+	Por              string   `json:"por"`
 
 	// Plataformas
 	PlatWeb      bool `json:"plat_web"`
@@ -175,6 +189,41 @@ type apiProyectoFabricarAppRequest struct {
 	Kubernetes bool `json:"kubernetes"`
 	Terraform  bool `json:"terraform"`
 	Monitoring bool `json:"monitoring"`
+
+	// Decisiones guiadas
+	Arquitectura       string   `json:"arquitectura"`
+	APIStyle           string   `json:"api_style"`
+	FrontendStack      string   `json:"frontend_stack"`
+	DatabaseEngine     string   `json:"db_engine"`
+	AuthMode           string   `json:"auth_mode"`
+	IdentityProvider   string   `json:"identity_provider"`
+	TestingLevel       string   `json:"testing_level"`
+	ObservabilityLevel string   `json:"observability_level"`
+	DeploymentTarget   string   `json:"deployment_target"`
+	ArtifactType       string   `json:"artifact_type"`
+	BackgroundJobs     bool     `json:"background_jobs"`
+	Notifications      bool     `json:"notifications"`
+	MultiTenant        bool     `json:"multi_tenant"`
+	RBAC               bool     `json:"rbac"`
+	ThemeSupport       bool     `json:"theme_support"`
+	BrandingProfiles   bool     `json:"branding_profiles"`
+	OfflineMode        bool     `json:"offline_mode"`
+	ImportExport       bool     `json:"import_export"`
+	Webhooks           bool     `json:"webhooks"`
+	FileUploads        bool     `json:"file_uploads"`
+	Reporting          bool     `json:"reporting"`
+	ServicioResidente  bool     `json:"servicio_residente"`
+	Cache              bool     `json:"cache"`
+	Queue              bool     `json:"queue"`
+	Scheduler          bool     `json:"scheduler"`
+	ObjectStorage      bool     `json:"object_storage"`
+	Search             bool     `json:"search"`
+	RateLimiting       bool     `json:"rate_limiting"`
+	FeatureFlags       bool     `json:"feature_flags"`
+	AuditTrail         bool     `json:"audit_trail"`
+	Backups            bool     `json:"backups"`
+	DisasterRecovery   bool     `json:"disaster_recovery"`
+	Integraciones      []string `json:"integraciones"`
 }
 
 type apiProyectoFabricarAppResponse struct {
@@ -188,6 +237,40 @@ type apiProyectoFabricarAppResponse struct {
 type apiProyectoFabricarAppPreviewResponse struct {
 	OK    bool                       `json:"ok"`
 	Tasks []fabricaapp.BlueprintTask `json:"tasks"`
+}
+
+type apiProyectoIdiomasRequest struct {
+	Idiomas []string `json:"idiomas"`
+	Por     string   `json:"por"`
+}
+
+type apiProyectoIdiomasResponse struct {
+	OK      bool     `json:"ok"`
+	Slug    string   `json:"slug"`
+	Idiomas []string `json:"idiomas"`
+	Created int      `json:"created"`
+	Backlog int      `json:"backlog"`
+}
+
+type apiProyectoSharedContextCreateRequest struct {
+	Agente      string  `json:"agente"`
+	Tipo        string  `json:"tipo"`
+	Titulo      string  `json:"titulo"`
+	Detalle     string  `json:"detalle"`
+	PayloadJSON string  `json:"payload_json"`
+	Peso        float64 `json:"peso"`
+	Origen      string  `json:"origen"`
+	ExpiresAt   string  `json:"expires_at"`
+}
+
+type apiProyectoSharedContextResponse struct {
+	Items   []*db.SharedContextItem `json:"items"`
+	Summary string                  `json:"summary"`
+}
+
+type apiProyectoSharedContextMutationResponse struct {
+	OK bool  `json:"ok"`
+	ID int64 `json:"id"`
 }
 
 type apiProyectoOperacionResponse struct {
@@ -643,6 +726,44 @@ func cargarProyectoDesdeAPI(ref string) (*db.Proyecto, bool, error) {
 	return resp.Proyecto, true, nil
 }
 
+func cargarProyectoControlDesdeAPI(ref string, since time.Time) (*projectControlReport, bool, error) {
+	var resp apiProyectoControlResponse
+	query := url.Values{}
+	if !since.IsZero() {
+		query.Set("desde", since.UTC().Format(time.RFC3339))
+	}
+	ok, err := apiGetQuery(fmt.Sprintf("/api/proyectos/%s/control", url.PathEscape(strings.TrimSpace(ref))), query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Control, true, nil
+}
+
+func cargarWorkspaceControlDesdeAPI() (*workspaceControlReport, bool, error) {
+	var resp apiWorkspaceControlResponse
+	ok, err := apiGet("/api/workspace/control", &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Control, true, nil
+}
+
+func cargarAgenteActividadDesdeAPI(agent, project string, since time.Time) (*agentActivityReport, bool, error) {
+	var resp apiAgenteActividadResponse
+	query := url.Values{}
+	if !since.IsZero() {
+		query.Set("desde", since.UTC().Format(time.RFC3339))
+	}
+	if strings.TrimSpace(project) != "" {
+		query.Set("proyecto", strings.TrimSpace(project))
+	}
+	ok, err := apiGetQuery(fmt.Sprintf("/api/agentes/%s/actividad", url.PathEscape(strings.TrimSpace(agent))), query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Activity, true, nil
+}
+
 func fusionarProyectoPorAPI(origen, destino string, archivarOrigen bool) (*db.FusionProyectosResultado, bool, error) {
 	var resp apiProyectoFusionResponse
 	ok, err := apiPost(
@@ -680,6 +801,34 @@ func activarMicrocicloProyectoPorAPI(ref string, req apiProyectoMicrocicloReques
 func fabricarAppProyectoPorAPI(ref string, req apiProyectoFabricarAppRequest) (*apiProyectoFabricarAppResponse, bool, error) {
 	var resp apiProyectoFabricarAppResponse
 	ok, err := apiPost(fmt.Sprintf("/api/proyectos/%s/fabricar-app", url.PathEscape(strings.TrimSpace(ref))), req, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
+func listarContextoCompartidoProyectoPorAPI(ref, agente, tipo string, limit int) (*apiProyectoSharedContextResponse, bool, error) {
+	var resp apiProyectoSharedContextResponse
+	params := url.Values{}
+	if strings.TrimSpace(agente) != "" {
+		params.Set("agente", strings.TrimSpace(agente))
+	}
+	if strings.TrimSpace(tipo) != "" {
+		params.Set("tipo", strings.TrimSpace(tipo))
+	}
+	if limit > 0 {
+		params.Set("limit", fmt.Sprintf("%d", limit))
+	}
+	ok, err := apiGetQuery(fmt.Sprintf("/api/proyectos/%s/contexto-compartido", url.PathEscape(strings.TrimSpace(ref))), params, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
+func anotarContextoCompartidoProyectoPorAPI(ref string, req apiProyectoSharedContextCreateRequest) (*apiProyectoSharedContextMutationResponse, bool, error) {
+	var resp apiProyectoSharedContextMutationResponse
+	ok, err := apiPost(fmt.Sprintf("/api/proyectos/%s/contexto-compartido", url.PathEscape(strings.TrimSpace(ref))), req, &resp)
 	if !ok || err != nil {
 		return nil, ok, err
 	}

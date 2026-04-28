@@ -2,12 +2,16 @@ package cmd
 
 import (
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
+	"orquesta/db"
+	"orquesta/runtimeagente"
 )
 
 func TestResolveAgenteLaunchMode(t *testing.T) {
@@ -23,6 +27,176 @@ func TestResolveAgenteLaunchMode(t *testing.T) {
 		t.Fatalf("mode default = %q, want windows", mode)
 	}
 }
+
+func TestAgenteLauncherBootstrapInputSoloParaPostStart(t *testing.T) {
+	plan := &runtimeagente.LaunchPlan{
+		BootstrapPrompt:  "Bootstrap de Orquesta",
+		LaunchPromptMode: "post_start",
+	}
+	if got := agenteLauncherBootstrapInput(plan); got != "Bootstrap de Orquesta\n\n" {
+		t.Fatalf("bootstrap input inesperado: %q", got)
+	}
+	plan.LaunchPromptMode = "embedded"
+	if got := agenteLauncherBootstrapInput(plan); got != "" {
+		t.Fatalf("no deberia inyectar bootstrap fuera de post_start: %q", got)
+	}
+}
+
+func TestAgentePlanDebeUsarArranqueCanonicoParaOllamaCLI(t *testing.T) {
+	plan := &runtimeagente.LaunchPlan{
+		Comando: "ollama",
+		Args:    []string{"run", "qwen2.5-coder:7b"},
+	}
+	if !agentePlanDebeUsarArranqueCanonico(plan) {
+		t.Fatal("deberia usar arranque canónico para ollama cli")
+	}
+}
+
+func TestAgenteArranqueCanonicoPuedeReutilizarRuntime(t *testing.T) {
+	if !agenteArranqueCanonicoPuedeReutilizarRuntime(assertErr("el agente Gemma1 ya tiene un runtime handle activo")) {
+		t.Fatalf("deberia reutilizar runtime cuando el handle ya esta activo")
+	}
+	if agenteArranqueCanonicoPuedeReutilizarRuntime(assertErr("agente no encontrado")) {
+		t.Fatalf("no deberia reutilizar runtime para errores ajenos")
+	}
+}
+
+func TestEsperarArranqueCanonicoAgenteDespiertaYDetectaHandleActivo(t *testing.T) {
+	now := time.Date(2026, 4, 22, 10, 0, 0, 0, time.UTC)
+	runtime := &db.RuntimeInstance{
+		ID:              168,
+		Agente:          "QwenCoder1",
+		ProyectoSlug:    "orquestador",
+		Provider:        "ollama",
+		Connector:       "ollama-cli",
+		LogicalState:    "activo",
+		LastHeartbeatAt: &now,
+	}
+	handle := &db.RuntimeHandle{
+		ID:           268,
+		Agente:       "QwenCoder1",
+		Transporte:   "tmux",
+		HandleKind:   "session",
+		HandleRef:    "orq-qwen/%4",
+		Estado:       "activo",
+		LastSeenAt:   &now,
+		MetadataJSON: `{"driver":"tmux_cli_session","tmux_session":"orq-qwencoder1-123","can_send_input":true}`,
+	}
+	var wakeCalls, processCalls int
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/runtime/wake", func(w http.ResponseWriter, r *http.Request) {
+		wakeCalls++
+		_ = json.NewEncoder(w).Encode(apiRuntimeWakeResponse{Orders: true})
+	})
+	mux.HandleFunc("/api/runtime/process-orders", func(w http.ResponseWriter, r *http.Request) {
+		processCalls++
+		_ = json.NewEncoder(w).Encode(apiRuntimeProcessOrdersResponse{OK: true, Count: 1})
+	})
+	mux.HandleFunc("/api/runtimes/tree", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeTreeResponse{
+			Runtimes: []*apiRuntimeTreeNode{{Runtime: runtime}},
+		})
+	})
+	mux.HandleFunc("/api/runtime-handles", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeHandlesResponse{Handles: []*db.RuntimeHandle{handle}})
+	})
+	mux.HandleFunc("/api/runtime-orders", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeOrdersResponse{Orders: []*db.RuntimeOrder{}})
+	})
+	mux.HandleFunc("/api/runtime-mailbox", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeMailboxResponse{Mailbox: []*db.RuntimeMailboxMessage{}})
+	})
+	mux.HandleFunc("/api/runtime-checkpoints", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeCheckpointsResponse{Checkpoints: []*db.RuntimeCheckpoint{}})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	data, err := esperarArranqueCanonicoAgente("QwenCoder1", "orquestador", 1500*time.Millisecond)
+	if err != nil {
+		t.Fatalf("esperarArranqueCanonicoAgente: %v", err)
+	}
+	if data == nil || len(data.Handles) != 1 || data.Handles[0].ID != 268 {
+		t.Fatalf("diagnóstico inesperado: %+v", data)
+	}
+	if wakeCalls == 0 || processCalls == 0 {
+		t.Fatalf("deberia llamar wake y process-orders, wake=%d process=%d", wakeCalls, processCalls)
+	}
+}
+
+func TestEsperarArranqueCanonicoAgenteIgnoraRuntimeDeProyectoAjeno(t *testing.T) {
+	now := time.Date(2026, 4, 22, 10, 0, 0, 0, time.UTC)
+	runtime := &db.RuntimeInstance{
+		ID:              281,
+		Agente:          "Gemma1",
+		ProyectoSlug:    "api",
+		Provider:        "ollama-cli",
+		Connector:       "ollama-cli",
+		LogicalState:    "esperando_io",
+		LastHeartbeatAt: &now,
+	}
+	handle := &db.RuntimeHandle{
+		ID:           381,
+		Agente:       "Gemma1",
+		ProyectoID:   int64Ptr(6),
+		Transporte:   "tmux",
+		HandleKind:   "session",
+		HandleRef:    "orq-gemma1/%84",
+		Estado:       "activo",
+		LastSeenAt:   &now,
+		MetadataJSON: `{"driver":"tmux_cli_session","tmux_session":"orq-gemma1-140919","can_send_input":true}`,
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/runtime/wake", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeWakeResponse{Orders: true})
+	})
+	mux.HandleFunc("/api/runtime/process-orders", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeProcessOrdersResponse{OK: true, Count: 1})
+	})
+	mux.HandleFunc("/api/runtimes/tree", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeTreeResponse{
+			Runtimes: []*apiRuntimeTreeNode{{Runtime: runtime}},
+		})
+	})
+	mux.HandleFunc("/api/runtime-handles", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeHandlesResponse{Handles: []*db.RuntimeHandle{handle}})
+	})
+	mux.HandleFunc("/api/runtime-orders", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeOrdersResponse{Orders: []*db.RuntimeOrder{}})
+	})
+	mux.HandleFunc("/api/runtime-mailbox", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeMailboxResponse{Mailbox: []*db.RuntimeMailboxMessage{}})
+	})
+	mux.HandleFunc("/api/runtime-checkpoints", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRuntimeCheckpointsResponse{Checkpoints: []*db.RuntimeCheckpoint{}})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	data, err := esperarArranqueCanonicoAgente("Gemma1", "orquestador", 1500*time.Millisecond)
+	if err == nil {
+		t.Fatalf("deberia ignorar runtime vivo de proyecto ajeno: %+v", data)
+	}
+	if data == nil || len(data.Runtimes) != 1 || data.Runtimes[0].Proyecto != "api" {
+		t.Fatalf("diagnóstico inesperado: %+v", data)
+	}
+}
+
+func assertErr(text string) error {
+	return &testErr{text: text}
+}
+
+type testErr struct{ text string }
+
+func (e *testErr) Error() string { return e.text }
 
 func TestResolveAgenteLaunchModeConflicto(t *testing.T) {
 	cmd := &cobra.Command{}

@@ -99,7 +99,11 @@ func shouldSkipControlPlaneLoop(name string) (bool, string, error) {
 }
 
 func controlPlaneQuotaBlockedIdleGuard() (bool, string, error) {
-	info, err := buildServerOperationalInfoFastFromDB()
+	fetcher := controlPlaneOperationalInfoFetcher
+	if fetcher == nil {
+		fetcher = buildServerOperationalInfoFastFromDB
+	}
+	info, err := fetcher()
 	if err != nil {
 		return false, "", err
 	}
@@ -235,6 +239,8 @@ var autonomiaActiveSessionsGate = planocontrol.NewGate()
 var procesarAutonomiaSesionActivaBatchFn = procesarAutonomiaSesionActivaConSnapshot
 var procesarAgentesDegradadosAutonomiaBatchFn = procesarAgentesDegradadosAutonomiaBatch
 var procesarRecuperacionRuntimeDegradadoSesionFn = procesarRecuperacionRuntimeDegradadoSesion
+var controlPlaneCriticalProjectSignalFn = loadControlPlaneCriticalProjectSignal
+var controlPlaneOperationalInfoFetcher = buildServerOperationalInfoFastFromDB
 var autonomiaSessionStepTimeoutOverride time.Duration
 var autonomiaDegradedBatchTimeoutOverride time.Duration
 var autonomiaBatchBudgetOverride time.Duration
@@ -6575,7 +6581,8 @@ func intentarReasignacionAutomaticaBlockedSignalTranscriptConRows(item *db.Runti
 	} else if reciente {
 		return "", false, nil
 	}
-	relevo := seleccionarRelevoAutonomiaBloqueada(rows, openTasksProjected, tarea, agente)
+	criticalProject := controlPlaneCriticalProjectSignalFn()
+	relevo := seleccionarRelevoAutonomiaBloqueadaConSignal(rows, openTasksProjected, tarea, agente, criticalProject)
 	if strings.TrimSpace(relevo) == "" {
 		return "", false, nil
 	}
@@ -10796,6 +10803,7 @@ func procesarSesionesActivasProyectoAjenoBatch(rows []agentesapp.Row) (int, erro
 // de agentes que ya están operativos pero tenían bloqueos por sobrecarga.
 func procesarRecuperacionTareasBloqueadasSobrecargaBatch(rows []agentesapp.Row, tareasBloqueadasPorAgente map[string][]*db.Tarea, bloqueosPorTarea map[int64]db.ResumenBloqueo, openTasksProjected map[string]int, now time.Time) (int, error) {
 	count := 0
+	criticalProject := controlPlaneCriticalProjectSignalFn()
 	for _, row := range rows {
 		if row.Agente == nil || !rowPermiteAutoRecuperacion(row, now) {
 			continue
@@ -10805,7 +10813,9 @@ func procesarRecuperacionTareasBloqueadasSobrecargaBatch(rows []agentesapp.Row, 
 			continue
 		}
 		workerCeiling := autonomiaOpenTasksCeilingForRow(row, now)
-		for _, tarea := range tareasBloqueadasPorAgente[agente] {
+		tareas := append([]*db.Tarea(nil), tareasBloqueadasPorAgente[agente]...)
+		sortTasksByCriticalProjectFirst(tareas, criticalProject)
+		for _, tarea := range tareas {
 			if tarea == nil {
 				continue
 			}
@@ -10823,8 +10833,12 @@ func procesarRecuperacionTareasBloqueadasSobrecargaBatch(rows []agentesapp.Row, 
 			if !ok || !esBloqueoAutonomiaAgenteRecuperable(agente, strings.TrimSpace(bloqueo.Agente), strings.TrimSpace(bloqueo.Motivo)) {
 				continue
 			}
-			if esBloqueoSobrecargaOperativa(strings.TrimSpace(bloqueo.Motivo)) && openTasksProjected[agente] >= workerCeiling {
-				relevo := seleccionarRelevoAutonomiaBloqueada(rows, openTasksProjected, actual, agente)
+			recoveryCeiling := workerCeiling
+			if criticalProjectNeedsImmediateIntervention(actual, row, criticalProject) && recoveryCeiling > 0 {
+				recoveryCeiling++
+			}
+			if esBloqueoSobrecargaOperativa(strings.TrimSpace(bloqueo.Motivo)) && openTasksProjected[agente] >= recoveryCeiling {
+				relevo := seleccionarRelevoAutonomiaBloqueadaConSignal(rows, openTasksProjected, actual, agente, criticalProject)
 				if relevo == "" {
 					continue
 				}
@@ -10878,6 +10892,7 @@ func procesarRecuperacionTareasBloqueadasSobrecargaBatch(rows []agentesapp.Row, 
 // cuyo agente está en un estado operativo que requiere intervención automática.
 func procesarIntervencionTareasActivasDegradadasBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea, openTasksProjected map[string]int, now time.Time) (int, error) {
 	count := 0
+	criticalProject := controlPlaneCriticalProjectSignalFn()
 	for _, row := range rows {
 		if row.Agente == nil || !estadoOperativoAutoIntervencion(row.EstadoOperativo) {
 			continue
@@ -10885,14 +10900,13 @@ func procesarIntervencionTareasActivasDegradadasBatch(rows []agentesapp.Row, tar
 		if rowControlOrderPending(row, now) {
 			continue
 		}
-		if strings.TrimSpace(row.EstadoOperativo) == "atascado" && !rowAtascadoShouldEscalate(row, now) {
-			continue
-		}
 		agente := strings.TrimSpace(row.Agente.Nombre)
 		if agente == "" {
 			continue
 		}
-		for _, tarea := range tareasActivasPorAgente[agente] {
+		tareas := append([]*db.Tarea(nil), tareasActivasPorAgente[agente]...)
+		sortTasksByCriticalProjectFirst(tareas, criticalProject)
+		for _, tarea := range tareas {
 			if tarea == nil {
 				continue
 			}
@@ -10912,12 +10926,16 @@ func procesarIntervencionTareasActivasDegradadasBatch(rows []agentesapp.Row, tar
 			if degradedTaskRecentlyAutoReassigned(actual, now) {
 				continue
 			}
-			if !degradedTaskShouldIntervene(actual, now) && !degradedTaskRequiresImmediateIntervention(row, now) {
+			criticalImmediate := criticalProjectNeedsImmediateIntervention(actual, row, criticalProject)
+			if strings.TrimSpace(row.EstadoOperativo) == "atascado" && !criticalImmediate && !rowAtascadoShouldEscalate(row, now) {
+				continue
+			}
+			if !criticalImmediate && !degradedTaskShouldIntervene(actual, now) && !degradedTaskRequiresImmediateIntervention(row, now) {
 				continue
 			}
 
 			motivo := construirMotivoAutonomiaAgenteDegradado(row)
-			relevo := seleccionarRelevoAutonomia(rows, openTasksProjected, actual, agente)
+			relevo := seleccionarRelevoAutonomiaConSignal(rows, openTasksProjected, actual, agente, criticalProject)
 			if relevo == "" {
 				if err := bloquearTareaAutonomiaSinRelevo(actual.ID, agente, motivo, construirNotaBloqueoAutonomiaSinRelevo(row, agente)); err != nil {
 					return count, err
@@ -10974,21 +10992,21 @@ func procesarIntervencionTareasActivasDegradadasBatch(rows []agentesapp.Row, tar
 // cuyo agente está degradado y hay un relevo disponible.
 func procesarIntervencionTareasBloqueadasDegradadasBatch(rows []agentesapp.Row, tareasBloqueadasPorAgente map[string][]*db.Tarea, bloqueosPorTarea map[int64]db.ResumenBloqueo, openTasksProjected map[string]int, now time.Time) (int, error) {
 	count := 0
-	for _, row := range priorizarRowsAutonomiaBloqueadas(rows, tareasBloqueadasPorAgente) {
+	criticalProject := controlPlaneCriticalProjectSignalFn()
+	for _, row := range priorizarRowsAutonomiaBloqueadas(rows, tareasBloqueadasPorAgente, criticalProject) {
 		if row.Agente == nil || !estadoOperativoAutoIntervencion(row.EstadoOperativo) {
 			continue
 		}
 		if rowControlOrderPending(row, now) {
 			continue
 		}
-		if strings.TrimSpace(row.EstadoOperativo) == "atascado" && !rowAtascadoShouldEscalate(row, now) {
-			continue
-		}
 		agente := strings.TrimSpace(row.Agente.Nombre)
 		if agente == "" {
 			continue
 		}
-		for _, tarea := range tareasBloqueadasPorAgente[agente] {
+		tareas := append([]*db.Tarea(nil), tareasBloqueadasPorAgente[agente]...)
+		sortTasksByCriticalProjectFirst(tareas, criticalProject)
+		for _, tarea := range tareas {
 			if tarea == nil {
 				continue
 			}
@@ -11012,11 +11030,15 @@ func procesarIntervencionTareasBloqueadasDegradadasBatch(rows []agentesapp.Row, 
 			if degradedTaskRecentlyAutoReassigned(actual, now) {
 				continue
 			}
-			if !degradedTaskShouldIntervene(actual, now) && !degradedTaskRequiresImmediateIntervention(row, now) {
+			criticalImmediate := criticalProjectNeedsImmediateIntervention(actual, row, criticalProject)
+			if strings.TrimSpace(row.EstadoOperativo) == "atascado" && !criticalImmediate && !rowAtascadoShouldEscalate(row, now) {
+				continue
+			}
+			if !criticalImmediate && !degradedTaskShouldIntervene(actual, now) && !degradedTaskRequiresImmediateIntervention(row, now) {
 				continue
 			}
 
-			relevo := seleccionarRelevoAutonomiaBloqueada(rows, openTasksProjected, actual, agente)
+			relevo := seleccionarRelevoAutonomiaBloqueadaConSignal(rows, openTasksProjected, actual, agente, criticalProject)
 			if relevo == "" {
 				continue
 			}
@@ -11213,6 +11235,128 @@ func cargarTareasYBloqueosAutonomiaPorAgente() (map[string][]*db.Tarea, map[stri
 		}
 	}
 	return tareasActivasPorAgente, tareasBloqueadasPorAgente, bloqueosPorTarea, nil
+}
+
+type controlPlaneCriticalProjectSignal struct {
+	Project    string
+	ProjectID  int64
+	Blocking   int
+	Highlights []string
+}
+
+func loadControlPlaneCriticalProjectSignal() *controlPlaneCriticalProjectSignal {
+	if controlPlaneOperationalInfoFetcher != nil {
+		if info, err := controlPlaneOperationalInfoFetcher(); err == nil {
+			if _, risk := serverOperationalRiskContext(&info); risk != nil {
+				if signal := controlPlaneCriticalProjectSignalFromSummary(risk); signal != nil {
+					return signal
+				}
+			}
+		}
+	}
+	_, riskSummary := loadStatusAutonomySurfaceAndRisk()
+	return controlPlaneCriticalProjectSignalFromSummary(riskSummary.CriticalProjectRisk)
+}
+
+func controlPlaneCriticalProjectSignalFromSummary(critical *workspaceAutonomyProjectSummary) *controlPlaneCriticalProjectSignal {
+	if critical == nil {
+		return nil
+	}
+	project := strings.TrimSpace(critical.Project)
+	if project == "" {
+		return nil
+	}
+	signal := &controlPlaneCriticalProjectSignal{
+		Project:    project,
+		Blocking:   critical.Blocking,
+		Highlights: append([]string(nil), critical.Highlights...),
+	}
+	proyecto, err := db.GetProyecto(project)
+	if err == nil && proyecto != nil && proyecto.ID > 0 {
+		signal.ProjectID = proyecto.ID
+	}
+	return signal
+}
+
+func taskTargetsCriticalProject(tarea *db.Tarea, signal *controlPlaneCriticalProjectSignal) bool {
+	if tarea == nil || signal == nil || signal.ProjectID <= 0 || tarea.ProyectoID == nil {
+		return false
+	}
+	return *tarea.ProyectoID == signal.ProjectID
+}
+
+func controlPlaneCriticalProjectFastTrackBlockingThreshold() int {
+	threshold := controlPlaneConfigIntOrDefault("autonomia_critical_project_fast_track_blocking_threshold", 10)
+	if threshold <= 0 {
+		return 10
+	}
+	return threshold
+}
+
+func criticalProjectNeedsImmediateIntervention(tarea *db.Tarea, row agentesapp.Row, signal *controlPlaneCriticalProjectSignal) bool {
+	if signal == nil || signal.ProjectID <= 0 {
+		return false
+	}
+	if signal.Blocking < controlPlaneCriticalProjectFastTrackBlockingThreshold() {
+		return false
+	}
+	return taskTargetsCriticalProject(tarea, signal) || rowTargetsCriticalProject(row, signal)
+}
+
+func rowTargetsCriticalProject(row agentesapp.Row, signal *controlPlaneCriticalProjectSignal) bool {
+	if signal == nil || signal.ProjectID <= 0 {
+		return false
+	}
+	proyectoID := rowProyectoIDPreferido(row)
+	return proyectoID != nil && *proyectoID == signal.ProjectID
+}
+
+func sortTasksByCriticalProjectFirst(tasks []*db.Tarea, signal *controlPlaneCriticalProjectSignal) {
+	if len(tasks) < 2 || signal == nil || signal.ProjectID <= 0 {
+		return
+	}
+	sort.SliceStable(tasks, func(i, j int) bool {
+		criticalI := taskTargetsCriticalProject(tasks[i], signal)
+		criticalJ := taskTargetsCriticalProject(tasks[j], signal)
+		if criticalI != criticalJ {
+			return criticalI
+		}
+		if tasks[i] == nil || tasks[j] == nil {
+			return tasks[i] != nil
+		}
+		if tasks[i].Prioridad != tasks[j].Prioridad {
+			return controlPlaneTaskPriorityWeight(tasks[i].Prioridad) > controlPlaneTaskPriorityWeight(tasks[j].Prioridad)
+		}
+		if !tasks[i].UpdatedAt.Equal(tasks[j].UpdatedAt) {
+			return tasks[i].UpdatedAt.Before(tasks[j].UpdatedAt)
+		}
+		return tasks[i].ID < tasks[j].ID
+	})
+}
+
+func controlPlaneTaskPriorityWeight(prioridad db.PrioridadTarea) int {
+	switch prioridad {
+	case db.PrioridadAlta:
+		return 3
+	case db.PrioridadMedia:
+		return 2
+	case db.PrioridadBaja:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func agentHasBlockedTaskInCriticalProject(tareas []*db.Tarea, signal *controlPlaneCriticalProjectSignal) bool {
+	if signal == nil || signal.ProjectID <= 0 {
+		return false
+	}
+	for _, tarea := range tareas {
+		if taskTargetsCriticalProject(tarea, signal) {
+			return true
+		}
+	}
+	return false
 }
 
 func procesarAutoasignacionPremiumSinSesionBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea) (int, error) {
@@ -11593,6 +11737,7 @@ func derivarFrentePremiumAccionableSiSemilla(agente string, proyectoID int64, ta
 
 func procesarTareasActivasFueraDeOrquestacionBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea, rowsPorAgente map[string]agentesapp.Row, openTasksProjected map[string]int) (int, error) {
 	procesadas := 0
+	criticalProject := controlPlaneCriticalProjectSignalFn()
 	for agente, tareas := range tareasActivasPorAgente {
 		row, ok := rowsPorAgente[strings.ToLower(strings.TrimSpace(agente))]
 		if ok && row.Agente != nil && strings.TrimSpace(row.EstadoOperativo) != "retirado" {
@@ -11619,7 +11764,7 @@ func procesarTareasActivasFueraDeOrquestacionBatch(rows []agentesapp.Row, tareas
 			if actual.Estado != db.EstadoAsignada && actual.Estado != db.EstadoEnProgreso {
 				continue
 			}
-			relevo := seleccionarRelevoAutonomia(rows, openTasksProjected, actual, strings.TrimSpace(agente))
+			relevo := seleccionarRelevoAutonomiaConSignal(rows, openTasksProjected, actual, strings.TrimSpace(agente), criticalProject)
 			if relevo != "" {
 				if handoff, err := intentarHandoffAutonomoTarea(
 					proyectoLigeroDesdeTarea(actual),
@@ -12372,6 +12517,7 @@ func filtrarTareasBloqueadasReactivacionSinRuntimeBatch(rows []agentesapp.Row, t
 	if len(tareasBloqueadasPorAgente) == 0 {
 		return tareasBloqueadasPorAgente
 	}
+	criticalProject := controlPlaneCriticalProjectSignalFn()
 	out := make(map[string][]*db.Tarea, len(tareasBloqueadasPorAgente))
 	for agente, tareas := range tareasBloqueadasPorAgente {
 		for _, tarea := range tareas {
@@ -12385,7 +12531,7 @@ func filtrarTareasBloqueadasReactivacionSinRuntimeBatch(rows []agentesapp.Row, t
 			if !strings.EqualFold(strings.TrimSpace(*actual.Agente), agente) || actual.Estado != db.EstadoBloqueada {
 				continue
 			}
-			if relevo := seleccionarRelevoAutonomiaBloqueada(rows, openTasksProjected, actual, agente); relevo != "" {
+			if relevo := seleccionarRelevoAutonomiaBloqueadaConSignal(rows, openTasksProjected, actual, agente, criticalProject); relevo != "" {
 				continue
 			}
 			out[agente] = append(out[agente], tarea)
@@ -12936,8 +13082,10 @@ func escalarTareasWorkerAtascado(row agentesapp.Row, rows []agentesapp.Row, now 
 		return 0, err
 	}
 	openTasksProjected := openTasksProjectedFromRows(rows)
+	criticalProject := controlPlaneCriticalProjectSignalFn()
 	motivo := fmt.Sprintf("Agente %s atascado: %s", agente, firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), "sin progreso reciente tras reinicios"))
 	procesadas := 0
+	sortTasksByCriticalProjectFirst(tareas, criticalProject)
 	for _, tarea := range tareas {
 		if tarea == nil {
 			continue
@@ -12958,7 +13106,7 @@ func escalarTareasWorkerAtascado(row agentesapp.Row, rows []agentesapp.Row, now 
 		if taskManualTakeover(actual) {
 			continue
 		}
-		relevo := seleccionarRelevoAutonomia(rows, openTasksProjected, actual, agente)
+		relevo := seleccionarRelevoAutonomiaConSignal(rows, openTasksProjected, actual, agente, criticalProject)
 		if relevo != "" {
 			repairHelper, err := asegurarRepairHelperWorkerAtascado(actual, agente, relevo, firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), motivo))
 			if err != nil {
@@ -13080,6 +13228,7 @@ func rowControlOrderPending(row agentesapp.Row, now time.Time) bool {
 
 func procesarSobrecargaAgentesAutonomiaBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea, openTasksProjected map[string]int, now time.Time) (int, error) {
 	procesadas := 0
+	criticalProject := controlPlaneCriticalProjectSignalFn()
 	for _, row := range rows {
 		if row.Agente == nil {
 			continue
@@ -13099,7 +13248,13 @@ func procesarSobrecargaAgentesAutonomiaBatch(rows []agentesapp.Row, tareasActiva
 		if len(tareas) == 0 {
 			continue
 		}
+		sortTasksByCriticalProjectFirst(tareas, criticalProject)
 		sort.SliceStable(tareas, func(i, j int) bool {
+			criticalI := taskTargetsCriticalProject(tareas[i], criticalProject)
+			criticalJ := taskTargetsCriticalProject(tareas[j], criticalProject)
+			if criticalI != criticalJ {
+				return criticalI
+			}
 			pi := prioridadRedistribucionSobrecarga(tareas[i])
 			pj := prioridadRedistribucionSobrecarga(tareas[j])
 			if pi != pj {
@@ -13130,7 +13285,7 @@ func procesarSobrecargaAgentesAutonomiaBatch(rows []agentesapp.Row, tareasActiva
 			if actual.Estado != db.EstadoAsignada && actual.Estado != db.EstadoEnProgreso {
 				continue
 			}
-			relevo := seleccionarRelevoAutonomiaConLimite(rows, openTasksProjected, actual, agente, autonomiaWorkerOpenTasksCeiling)
+			relevo := seleccionarRelevoAutonomiaConLimiteConSignal(rows, openTasksProjected, actual, agente, autonomiaWorkerOpenTasksCeiling, criticalProject)
 			if relevo == "" {
 				if err := bloquearTareaAutonomiaSinRelevo(actual.ID, agente, "Sobrecarga operativa: sin relevo sano disponible", fmt.Sprintf("Bloqueada automáticamente en %s por sobrecarga operativa sin relevo sano", agente)); err != nil {
 					return procesadas, err
@@ -13356,7 +13511,7 @@ func estadoOperativoAutoIntervencion(estado string) bool {
 	}
 }
 
-func priorizarRowsAutonomiaBloqueadas(rows []agentesapp.Row, tareasBloqueadasPorAgente map[string][]*db.Tarea) []agentesapp.Row {
+func priorizarRowsAutonomiaBloqueadas(rows []agentesapp.Row, tareasBloqueadasPorAgente map[string][]*db.Tarea, criticalProject *controlPlaneCriticalProjectSignal) []agentesapp.Row {
 	prioritized := append([]agentesapp.Row(nil), rows...)
 	sort.SliceStable(prioritized, func(i, j int) bool {
 		nombreI := ""
@@ -13369,6 +13524,11 @@ func priorizarRowsAutonomiaBloqueadas(rows []agentesapp.Row, tareasBloqueadasPor
 		}
 		bloqueadasI := len(tareasBloqueadasPorAgente[nombreI])
 		bloqueadasJ := len(tareasBloqueadasPorAgente[nombreJ])
+		criticalI := agentHasBlockedTaskInCriticalProject(tareasBloqueadasPorAgente[nombreI], criticalProject)
+		criticalJ := agentHasBlockedTaskInCriticalProject(tareasBloqueadasPorAgente[nombreJ], criticalProject)
+		if criticalI != criticalJ {
+			return criticalI
+		}
 		if bloqueadasI != bloqueadasJ {
 			return bloqueadasI > bloqueadasJ
 		}
@@ -13994,11 +14154,19 @@ func esBloqueoSobrecargaOperativa(motivo string) bool {
 }
 
 func seleccionarRelevoAutonomia(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string) string {
-	return seleccionarRelevoAutonomiaConLimite(rows, openTasksProjected, tarea, agenteBloqueado, autonomiaWorkerOpenTasksCeiling)
+	return seleccionarRelevoAutonomiaConSignal(rows, openTasksProjected, tarea, agenteBloqueado, nil)
+}
+
+func seleccionarRelevoAutonomiaConSignal(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string, criticalProject *controlPlaneCriticalProjectSignal) string {
+	return seleccionarRelevoAutonomiaConLimiteConSignal(rows, openTasksProjected, tarea, agenteBloqueado, autonomiaWorkerOpenTasksCeiling, criticalProject)
 }
 
 func seleccionarRelevoAutonomiaBloqueada(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string) string {
-	return seleccionarRelevoAutonomiaConTecho(rows, openTasksProjected, tarea, agenteBloqueado, func(row agentesapp.Row, now time.Time) int {
+	return seleccionarRelevoAutonomiaBloqueadaConSignal(rows, openTasksProjected, tarea, agenteBloqueado, nil)
+}
+
+func seleccionarRelevoAutonomiaBloqueadaConSignal(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string, criticalProject *controlPlaneCriticalProjectSignal) string {
+	return seleccionarRelevoAutonomiaConTechoConSignal(rows, openTasksProjected, tarea, agenteBloqueado, func(row agentesapp.Row, now time.Time) int {
 		ceiling := autonomiaBlockedTaskRecoveryBurstCeiling
 		if dynamic := autonomiaOpenTasksCeilingForRow(row, now); dynamic > ceiling {
 			ceiling = dynamic
@@ -14010,27 +14178,31 @@ func seleccionarRelevoAutonomiaBloqueada(rows []agentesapp.Row, openTasksProject
 			}
 		}
 		return ceiling
-	}, true, false)
+	}, true, false, criticalProject)
 }
 
 func seleccionarRelevoAutonomiaConLimite(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string, maxOpenTasksPerRecoveryWorker int) string {
-	return seleccionarRelevoAutonomiaConTecho(rows, openTasksProjected, tarea, agenteBloqueado, func(row agentesapp.Row, now time.Time) int {
+	return seleccionarRelevoAutonomiaConLimiteConSignal(rows, openTasksProjected, tarea, agenteBloqueado, maxOpenTasksPerRecoveryWorker, nil)
+}
+
+func seleccionarRelevoAutonomiaConLimiteConSignal(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string, maxOpenTasksPerRecoveryWorker int, criticalProject *controlPlaneCriticalProjectSignal) string {
+	return seleccionarRelevoAutonomiaConTechoConSignal(rows, openTasksProjected, tarea, agenteBloqueado, func(row agentesapp.Row, now time.Time) int {
 		candidateCeiling := maxOpenTasksPerRecoveryWorker
 		if dynamicCeiling := autonomiaOpenTasksCeilingForRow(row, now); dynamicCeiling > candidateCeiling {
 			candidateCeiling = dynamicCeiling
 		}
 		return candidateCeiling
-	}, false, false)
+	}, false, false, criticalProject)
 }
 
 func seleccionarRelevoAutonomiaDrenajePrime(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string) string {
-	return seleccionarRelevoAutonomiaConTecho(rows, openTasksProjected, tarea, agenteBloqueado, func(row agentesapp.Row, now time.Time) int {
+	return seleccionarRelevoAutonomiaConTechoConSignal(rows, openTasksProjected, tarea, agenteBloqueado, func(row agentesapp.Row, now time.Time) int {
 		candidateCeiling := autonomiaWorkerOpenTasksCeiling
 		if dynamicCeiling := autonomiaOpenTasksCeilingForRow(row, now); dynamicCeiling > candidateCeiling {
 			candidateCeiling = dynamicCeiling
 		}
 		return candidateCeiling
-	}, true, true)
+	}, true, true, nil)
 }
 
 func seleccionarRelevoAutonomiaSinRuntime(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string) string {
@@ -14045,15 +14217,24 @@ func seleccionarRelevoAutonomiaSinRuntime(rows []agentesapp.Row, openTasksProjec
 }
 
 func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string, ceilingFn func(agentesapp.Row, time.Time) int, allowOverflowFallback bool, allowReturnToRecentSource bool) string {
+	return seleccionarRelevoAutonomiaConTechoConSignal(rows, openTasksProjected, tarea, agenteBloqueado, ceilingFn, allowOverflowFallback, allowReturnToRecentSource, nil)
+}
+
+func seleccionarRelevoAutonomiaConTechoConSignal(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string, ceilingFn func(agentesapp.Row, time.Time) int, allowOverflowFallback bool, allowReturnToRecentSource bool, criticalProject *controlPlaneCriticalProjectSignal) string {
 	now := time.Now().UTC()
 	lastReassign, hasLastReassign := latestAutoReassignmentInfo(taskNotes(tarea))
 	tareaPremiumAcotada := tareaDBTieneContratoPremiumAcotado(tarea)
+	if criticalProject == nil {
+		criticalProject = controlPlaneCriticalProjectSignalFn()
+	}
+	taskCritical := taskTargetsCriticalProject(tarea, criticalProject)
 	type candidate struct {
-		agente        string
-		mismoProyecto bool
-		estadoRank    int
-		costTier      int
-		openTasks     int
+		agente          string
+		mismoProyecto   bool
+		criticalProject bool
+		estadoRank      int
+		costTier        int
+		openTasks       int
 	}
 	candidates := make([]candidate, 0, len(rows))
 	overflowCandidates := make([]candidate, 0, len(rows))
@@ -14122,26 +14303,34 @@ func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjecte
 		if candidateCeiling > 0 && openTasks >= candidateCeiling {
 			if allowOverflowFallback {
 				overflowCandidates = append(overflowCandidates, candidate{
-					agente:        agente,
-					mismoProyecto: mismoProyecto,
-					estadoRank:    0,
-					costTier:      relevoAutonomiaCostTier(agente),
-					openTasks:     openTasks,
+					agente:          agente,
+					mismoProyecto:   mismoProyecto,
+					criticalProject: rowTargetsCriticalProject(row, criticalProject),
+					estadoRank:      0,
+					costTier:        relevoAutonomiaCostTier(agente),
+					openTasks:       openTasks,
 				})
 			}
 			continue
 		}
 		candidates = append(candidates, candidate{
-			agente:        agente,
-			mismoProyecto: mismoProyecto,
-			estadoRank:    0,
-			costTier:      relevoAutonomiaCostTier(agente),
-			openTasks:     openTasks,
+			agente:          agente,
+			mismoProyecto:   mismoProyecto,
+			criticalProject: rowTargetsCriticalProject(row, criticalProject),
+			estadoRank:      0,
+			costTier:        relevoAutonomiaCostTier(agente),
+			openTasks:       openTasks,
 		})
 	}
 	sort.Slice(candidates, func(i, j int) bool {
 		if candidates[i].mismoProyecto != candidates[j].mismoProyecto {
 			return candidates[i].mismoProyecto
+		}
+		if candidates[i].criticalProject != candidates[j].criticalProject {
+			if taskCritical {
+				return candidates[i].criticalProject
+			}
+			return !candidates[i].criticalProject
 		}
 		if candidates[i].estadoRank != candidates[j].estadoRank {
 			return candidates[i].estadoRank < candidates[j].estadoRank
@@ -16103,6 +16292,7 @@ func bloquearTareasActivasPorCuotaAutonomia(agente, motivo string) error {
 		return err
 	}
 	openTasksProjected := openTasksProjectedFromRows(rows)
+	criticalProject := controlPlaneCriticalProjectSignalFn()
 	motivoBloqueo := construirMotivoBloqueoCuotaAutonomia(agente, motivo)
 	nota := fmt.Sprintf("Bloqueada automáticamente en %s por cuota sin relevo sano", agente)
 	for _, tarea := range tareas {
@@ -16119,7 +16309,7 @@ func bloquearTareasActivasPorCuotaAutonomia(agente, motivo string) error {
 		if actual.Estado != db.TareaAsignada && actual.Estado != db.TareaEnProgreso {
 			continue
 		}
-		relevo := seleccionarRelevoAutonomiaBloqueada(rows, openTasksProjected, actual, agente)
+		relevo := seleccionarRelevoAutonomiaBloqueadaConSignal(rows, openTasksProjected, actual, agente, criticalProject)
 		if relevo != "" {
 			if handoff, err := intentarHandoffAutonomoTarea(
 				proyectoLigeroDesdeTarea(actual),
@@ -17200,18 +17390,42 @@ func encolarContinuacionTareaReasignada(agente string, proyecto *db.Proyecto, ta
 	for k, v := range extras {
 		payloadExtras[k] = v
 	}
-	return orquestacionAgentesService.EnqueuePostRemediationFollowup(orquestacionagentesapp.PostRemediationFollowupRequest{
+	verificationKey := verificationKeyContinuacionTareaReasignada(strings.TrimSpace(agente), tareaID, kind, origen)
+	encolada, err := orquestacionAgentesService.EnqueuePostRemediationFollowup(orquestacionagentesapp.PostRemediationFollowupRequest{
 		Agente:          strings.TrimSpace(agente),
 		Proyecto:        proyecto,
 		TareaID:         tareaID,
 		RemediationKind: kind,
 		OriginAgent:     origen,
-		VerificationKey: verificationKeyContinuacionTareaReasignada(strings.TrimSpace(agente), tareaID, kind, origen),
+		VerificationKey: verificationKey,
 		Motivo:          fmt.Sprintf("Tarea #%d reasignada automáticamente", tareaID),
 		Instruction:     instruction,
 		Extras:          payloadExtras,
 		Cooldown:        time.Duration(controlPlaneConfigIntOrDefault("autonomia_nudge_cooldown_seconds", 60)) * time.Second,
 	})
+	if err != nil || !encolada {
+		return encolada, err
+	}
+	var projectID *int64
+	if proyecto != nil && proyecto.ID > 0 {
+		projectID = ptrInt64Cmd(proyecto.ID)
+	}
+	registrarAutonomyEventBestEffort(&db.AutonomyEvent{
+		Kind:      "post_remediation_followup_requested",
+		Actor:     "orquesta",
+		ProjectID: projectID,
+		TaskID:    ptrInt64Cmd(tareaID),
+		Source:    "control_plane",
+		Reason:    firstNonEmpty(motivo, "post_remediation_followup"),
+		StateDelta: map[string]any{
+			"last_autonomy_action": "post_remediation_followup_requested",
+			"agente":               strings.TrimSpace(agente),
+			"agente_origen":        origen,
+			"remediation_kind":     kind,
+			"verification_key":     verificationKey,
+		},
+	})
+	return true, nil
 }
 
 func verificationKeyContinuacionTareaReasignada(agente string, tareaID int64, remediationKind, origen string) string {
@@ -17430,6 +17644,21 @@ func escalarContinuacionPostRemediationBloqueada(proyecto *db.Proyecto, tareaID 
 		if _, err := crearTareaPostRemediationBlockedAutonomia(policy, proyecto, supervisor, tareaID, strings.TrimSpace(agente), verificationKey, detalle, strings.TrimSpace(status.RemediationKind)); err != nil {
 			return err
 		}
+		registrarAutonomyEventBestEffort(&db.AutonomyEvent{
+			Kind:      "post_remediation_blocked_escalated",
+			Actor:     "orquesta",
+			ProjectID: ptrInt64Cmd(proyecto.ID),
+			TaskID:    ptrInt64Cmd(tareaID),
+			Source:    "control_plane",
+			Reason:    detalle,
+			StateDelta: map[string]any{
+				"last_autonomy_action": "post_remediation_blocked_escalated",
+				"agente":               strings.TrimSpace(agente),
+				"supervisor":           nombreAgenteAutonomia(supervisor),
+				"verification_key":     strings.TrimSpace(verificationKey),
+				"remediation_kind":     strings.TrimSpace(status.RemediationKind),
+			},
+		})
 	}
 	if existeTarea {
 		return nil
@@ -17479,7 +17708,8 @@ func intentarAutoResolverContinuacionPostRemediationReassign(proyecto *db.Proyec
 		}
 		return false, err
 	}
-	relevo := seleccionarRelevoAutonomiaBloqueada(rows, openTasksProjectedFromRows(rows), tarea, strings.TrimSpace(agente))
+	criticalProject := controlPlaneCriticalProjectSignalFn()
+	relevo := seleccionarRelevoAutonomiaBloqueadaConSignal(rows, openTasksProjectedFromRows(rows), tarea, strings.TrimSpace(agente), criticalProject)
 	if strings.TrimSpace(relevo) == "" {
 		return false, nil
 	}
@@ -17559,6 +17789,9 @@ func intentarHandoffAutonomoTarea(proyecto *db.Proyecto, tareaID int64, origen, 
 			"handoff_mode":         handoffMode,
 		},
 	})
+	if err := db.RegistrarAutonomyEventHandoffCompleted(orderID, "control_plane", ptrInt64Cmd(tareaID), ptrInt64Cmd(proyecto.ID), handoffMode, 0); err != nil {
+		log.Printf("[autonomia] no se pudo registrar handoff_completed task=%d order=%d: %v", tareaID, orderID, err)
+	}
 	nota = strings.TrimSpace(nota)
 	if nota == "" {
 		nota = fmt.Sprintf("Handoff automático desde %s a %s", origen, relevo)
@@ -17761,12 +17994,41 @@ func reasignarYArrancarTareaAutonomia(tareaID int64, relevo, nota string) error 
 	if tareaID <= 0 || strings.TrimSpace(relevo) == "" {
 		return nil
 	}
+	tareaAntes, err := tareasService.Get(tareaID)
+	if err != nil {
+		return err
+	}
+	var proyectoID *int64
+	agenteOrigen := ""
+	estadoAnterior := ""
+	if tareaAntes != nil {
+		proyectoID = tareaAntes.ProyectoID
+		estadoAnterior = strings.TrimSpace(string(tareaAntes.Estado))
+		if tareaAntes.Agente != nil {
+			agenteOrigen = strings.TrimSpace(*tareaAntes.Agente)
+		}
+	}
 	if err := tareasService.Reassign(tareaID, strings.TrimSpace(relevo)); err != nil {
 		return err
 	}
 	if err := arrancarTareaAutonomiaSiAsignada(tareaID, strings.TrimSpace(relevo)); err != nil {
 		return err
 	}
+	registrarAutonomyEventBestEffort(&db.AutonomyEvent{
+		Kind:      "task_reassigned",
+		Actor:     "orquesta",
+		ProjectID: proyectoID,
+		TaskID:    ptrInt64Cmd(tareaID),
+		Source:    "control_plane",
+		Reason:    firstNonEmpty(strings.TrimSpace(nota), "reasignacion automatica"),
+		StateDelta: map[string]any{
+			"last_autonomy_action": "task_reassigned",
+			"task_state_before":    estadoAnterior,
+			"task_state":           string(db.TareaEnProgreso),
+			"agente_origen":        agenteOrigen,
+			"agente_destino":       strings.TrimSpace(relevo),
+		},
+	})
 	if strings.TrimSpace(nota) != "" {
 		_ = tareasService.Note(tareaID, "orquesta", strings.TrimSpace(nota))
 	}
@@ -17803,6 +18065,16 @@ func desbloquearYReactivarTareaAutonomia(tareaID int64, resolucion, agente, nota
 	if tareaID <= 0 || strings.TrimSpace(agente) == "" {
 		return nil
 	}
+	tareaAntes, err := tareasService.Get(tareaID)
+	if err != nil {
+		return err
+	}
+	var proyectoID *int64
+	estadoAnterior := ""
+	if tareaAntes != nil {
+		proyectoID = tareaAntes.ProyectoID
+		estadoAnterior = strings.TrimSpace(string(tareaAntes.Estado))
+	}
 	if err := tareasService.Unblock(tareaID, "orquesta", strings.TrimSpace(resolucion)); err != nil {
 		return err
 	}
@@ -17812,6 +18084,20 @@ func desbloquearYReactivarTareaAutonomia(tareaID int64, resolucion, agente, nota
 	if err := arrancarTareaAutonomiaSiAsignada(tareaID, strings.TrimSpace(agente)); err != nil {
 		return err
 	}
+	registrarAutonomyEventBestEffort(&db.AutonomyEvent{
+		Kind:      "task_reactivated",
+		Actor:     "orquesta",
+		ProjectID: proyectoID,
+		TaskID:    ptrInt64Cmd(tareaID),
+		Source:    "control_plane",
+		Reason:    firstNonEmpty(strings.TrimSpace(resolucion), "reactivacion automatica"),
+		StateDelta: map[string]any{
+			"last_autonomy_action": "task_reactivated",
+			"task_state_before":    estadoAnterior,
+			"task_state":           string(db.TareaEnProgreso),
+			"agente":               strings.TrimSpace(agente),
+		},
+	})
 	if strings.TrimSpace(nota) != "" {
 		_ = tareasService.Note(tareaID, "orquesta", strings.TrimSpace(nota))
 	}

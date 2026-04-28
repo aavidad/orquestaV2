@@ -9,6 +9,8 @@ import (
 	"orquesta/db"
 )
 
+func ptrTimeServerOperational(v time.Time) *time.Time { return &v }
+
 func TestBuildServerOperationalInfoToleraTrabajoConfirmadoSinWorkingAgents(t *testing.T) {
 	info := buildServerOperationalInfo(apiStatusResponse{
 		TareasEnProgreso: []tareaLite{{ID: 1, Estado: db.TareaEnProgreso}},
@@ -90,6 +92,78 @@ func TestBuildServerOperationalInfoExponeQuotaBlockedSinWorkersActivos(t *testin
 	}
 	if info.NextQuotaResetAt == "" {
 		t.Fatalf("deberia exponer el siguiente quota reset visible: %+v", info)
+	}
+}
+
+func TestBuildServerOperationalInfoPreservaRiesgoCanonicoEstructuradoDelStatus(t *testing.T) {
+	info := buildServerOperationalInfo(apiStatusResponse{
+		AutonomyHighlights: []string{"integracion_bloqueada=9", "riesgo_top=infra(9)"},
+		CriticalProjectRisk: &workspaceAutonomyProjectSummary{
+			Project:    "infra",
+			Blocking:   9,
+			Highlights: []string{"riesgo=alto", "integracion_bloqueada=9", "runtime_orders=1"},
+		},
+	})
+	if info.CriticalProjectRisk == nil || info.CriticalProjectRisk.Project != "infra" || info.CriticalProjectRisk.Blocking != 9 {
+		t.Fatalf("deberia preservar el riesgo crítico estructurado: %+v", info.CriticalProjectRisk)
+	}
+	if len(info.AutonomyHighlights) != 2 || info.AutonomyHighlights[0] != "integracion_bloqueada=9" {
+		t.Fatalf("deberia preservar highlights canónicos: %+v", info.AutonomyHighlights)
+	}
+}
+
+func TestServerOperationalRiskContextNormalizaHighlightsDesdeRiesgoEstructurado(t *testing.T) {
+	highlights, risk := serverOperationalRiskContext(&serverOperationalInfo{
+		CriticalProjectRisk: &workspaceAutonomyProjectSummary{
+			Project:    "infra",
+			Blocking:   11,
+			Highlights: []string{"riesgo=alto", "integracion_bloqueada=11", "runtime_orders=2"},
+		},
+	})
+	if risk == nil || risk.Project != "infra" || risk.Blocking != 11 {
+		t.Fatalf("riesgo crítico inesperado: %+v", risk)
+	}
+	if len(highlights) == 0 {
+		t.Fatalf("deberia derivar highlights canónicos desde riesgo estructurado")
+	}
+	if !containsStringWorkspace(highlights, "integracion_bloqueada=11") || !containsStringWorkspace(highlights, "riesgo_top=infra(11)") {
+		t.Fatalf("highlights canónicos inesperados: %+v", highlights)
+	}
+}
+
+func TestServerOperationalRiskContextPreservaHighlightsCanonicosExistentes(t *testing.T) {
+	highlights, risk := serverOperationalRiskContext(&serverOperationalInfo{
+		AutonomyHighlights: []string{"integracion_bloqueada=8", "riesgo_top=orquestador(8)"},
+		CriticalProjectRisk: &workspaceAutonomyProjectSummary{
+			Project:    "orquestador",
+			Blocking:   8,
+			Highlights: []string{"riesgo=alto", "integracion_bloqueada=8"},
+		},
+	})
+	if risk == nil || risk.Project != "orquestador" || risk.Blocking != 8 {
+		t.Fatalf("riesgo crítico inesperado: %+v", risk)
+	}
+	if len(highlights) != 2 || highlights[0] != "integracion_bloqueada=8" || highlights[1] != "riesgo_top=orquestador(8)" {
+		t.Fatalf("deberia preservar highlights ya normalizados: %+v", highlights)
+	}
+}
+
+func TestNormalizeServerOperationalInfoDerivaHighlightsDesdeRiesgoEstructurado(t *testing.T) {
+	info := normalizeServerOperationalInfo(serverOperationalInfo{
+		State:       "degraded",
+		Operational: false,
+		Reason:      "status_temporarily_degraded",
+		CriticalProjectRisk: &workspaceAutonomyProjectSummary{
+			Project:    "infra",
+			Blocking:   12,
+			Highlights: []string{"riesgo=alto", "integracion_bloqueada=12", "runtime_orders=3"},
+		},
+	})
+	if info.CriticalProjectRisk == nil || info.CriticalProjectRisk.Project != "infra" || info.CriticalProjectRisk.Blocking != 12 {
+		t.Fatalf("riesgo crítico inesperado: %+v", info.CriticalProjectRisk)
+	}
+	if !containsStringWorkspace(info.AutonomyHighlights, "integracion_bloqueada=12") || !containsStringWorkspace(info.AutonomyHighlights, "riesgo_top=infra(12)") {
+		t.Fatalf("highlights canónicos inesperados: %+v", info.AutonomyHighlights)
 	}
 }
 
@@ -194,6 +268,32 @@ func TestControlPlaneQuotaBlockedIdleGuardNoSaltaSiHayDispatchPendiente(t *testi
 	}
 }
 
+func TestControlPlaneQuotaBlockedIdleGuardUsaFetcherLigeroInyectable(t *testing.T) {
+	prev := controlPlaneOperationalInfoFetcher
+	defer func() { controlPlaneOperationalInfoFetcher = prev }()
+
+	controlPlaneOperationalInfoFetcher = func() (serverOperationalInfo, error) {
+		return serverOperationalInfo{
+			State:            "idle",
+			Reason:           "workers_quota_blocked",
+			ConnectedWorkers: 0,
+			WorkingWorkers:   0,
+			StuckAgents:      0,
+			AuthAgents:       0,
+			ReservedTasks:    0,
+			BlockedTasks:     0,
+		}, nil
+	}
+
+	skip, motivo, err := controlPlaneQuotaBlockedIdleGuard()
+	if err != nil {
+		t.Fatalf("controlPlaneQuotaBlockedIdleGuard: %v", err)
+	}
+	if !skip || motivo != "workers_quota_blocked" {
+		t.Fatalf("guard inesperado con fetcher inyectable skip=%v motivo=%q", skip, motivo)
+	}
+}
+
 func TestBuildServerOperationalInfoUsaCuotaVisibleAunqueSnapshotNoTraigaQuotaBlockedExplicito(t *testing.T) {
 	reset := time.Now().UTC().Add(20 * time.Minute)
 	info := buildServerOperationalInfo(apiStatusResponse{
@@ -242,19 +342,22 @@ func TestBuildServerOperationalInfoFastFromDBPrefiereSnapshotFresco(t *testing.T
 
 	prevAgents := serverOperationalListAgentsFetcher
 	prevTasks := serverOperationalCountTasksFetcher
+	prevSurface := statusAutonomySurfaceFetcher
 	prevNow := statusNowFunc
 	defer func() {
 		serverOperationalListAgentsFetcher = prevAgents
 		serverOperationalCountTasksFetcher = prevTasks
+		statusAutonomySurfaceFetcher = prevSurface
 		statusNowFunc = prevNow
 	}()
 
 	now := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
 	statusNowFunc = func() time.Time { return now }
+	statusAutonomySurfaceFetcher = func() (*autonomySurface, error) { return nil, nil }
 	storeStatusSnapshotWithTTL(apiStatusResponse{
-		Agentes:           []*db.Agente{{Nombre: "Codex1"}},
-		AgentesActivos:    []*db.Agente{{Nombre: "Codex1"}},
-		AgentesTrabajando: []*db.Agente{{Nombre: "Codex1"}},
+		Agentes:           []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex1", Activo: true}},
 		TareasEnProgreso:  []tareaLite{{ID: 1, Estado: db.TareaEnProgreso}},
 		Generado:          now.Format(time.RFC3339),
 	}, now, time.Minute)
@@ -319,6 +422,61 @@ func TestBuildServerOperationalInfoFastFromDBUsaDBSiSnapshotExpira(t *testing.T)
 	}
 }
 
+func TestBuildServerOperationalInfoFastFromDBDerivaRiesgoCanonicoSinStatus(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	prevAgents := serverOperationalListAgentsFetcher
+	prevTasks := serverOperationalCountTasksFetcher
+	prevSurface := statusAutonomySurfaceFetcher
+	prevNow := statusNowFunc
+	defer func() {
+		serverOperationalListAgentsFetcher = prevAgents
+		serverOperationalCountTasksFetcher = prevTasks
+		statusAutonomySurfaceFetcher = prevSurface
+		statusNowFunc = prevNow
+	}()
+
+	now := time.Date(2026, 4, 26, 12, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+
+	serverOperationalListAgentsFetcher = func() ([]*db.Agente, error) {
+		return []*db.Agente{{Nombre: "Codex1", Activo: true}}, nil
+	}
+	serverOperationalCountTasksFetcher = func() (map[string]int, error) {
+		return map[string]int{string(db.TareaEnProgreso): 1}, nil
+	}
+	statusAutonomySurfaceFetcher = func() (*autonomySurface, error) {
+		return &autonomySurface{
+			Events:     2,
+			LastAt:     ptrTimeServerOperational(now.Add(-2 * time.Minute)),
+			Highlights: []string{"integracion_bloqueada=9", "riesgo_top=infra(9)"},
+			Projects: []autonomyProjectSurface{
+				{
+					Project:    "infra",
+					Events:     2,
+					LastAt:     ptrTimeServerOperational(now.Add(-2 * time.Minute)),
+					Highlights: []string{"riesgo=alto", "integracion_bloqueada=9", "runtime_orders=1"},
+				},
+			},
+		}, nil
+	}
+
+	info, err := buildServerOperationalInfoFastFromDB()
+	if err != nil {
+		t.Fatalf("buildServerOperationalInfoFastFromDB: %v", err)
+	}
+	if info.CriticalProjectRisk == nil || info.CriticalProjectRisk.Project != "infra" {
+		t.Fatalf("deberia derivar riesgo crítico canónico en ruta operativa ligera: %+v", info.CriticalProjectRisk)
+	}
+	if info.CriticalProjectRisk.Blocking <= 0 {
+		t.Fatalf("deberia derivar blocking > 0: %+v", info.CriticalProjectRisk)
+	}
+	if len(info.AutonomyHighlights) == 0 {
+		t.Fatalf("deberia derivar autonomy highlights canónicos: %+v", info.AutonomyHighlights)
+	}
+}
+
 func TestBuildServerOperationalInfoFastFromDBIgnoraSnapshotFrescoQueNecesitaRefresh(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()
@@ -377,15 +535,18 @@ func TestBuildServerOperationalInfoFastFromDBReutilizaSnapshotStaleSinIrADB(t *t
 
 	prevAgents := serverOperationalListAgentsFetcher
 	prevTasks := serverOperationalCountTasksFetcher
+	prevSurface := statusAutonomySurfaceFetcher
 	prevNow := statusNowFunc
 	defer func() {
 		serverOperationalListAgentsFetcher = prevAgents
 		serverOperationalCountTasksFetcher = prevTasks
+		statusAutonomySurfaceFetcher = prevSurface
 		statusNowFunc = prevNow
 	}()
 
 	now := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
 	statusNowFunc = func() time.Time { return now }
+	statusAutonomySurfaceFetcher = func() (*autonomySurface, error) { return nil, nil }
 	storeStatusSnapshotWithTTL(apiStatusResponse{
 		Agentes: []*db.Agente{
 			{Nombre: "Codex1", Activo: true, EstadoCuota: "activo"},
@@ -412,5 +573,55 @@ func TestBuildServerOperationalInfoFastFromDBReutilizaSnapshotStaleSinIrADB(t *t
 	}
 	if info.ActiveAgents != 1 || info.WorkingAgents != 1 || info.TasksInProgress != 1 {
 		t.Fatalf("deberia reutilizar snapshot stale sin ir a DB: %+v", info)
+	}
+}
+
+func TestBuildServerOperationalInfoFastFromDBReutilizaSnapshotConRiesgoCanonico(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	prevAgents := serverOperationalListAgentsFetcher
+	prevTasks := serverOperationalCountTasksFetcher
+	prevNow := statusNowFunc
+	defer func() {
+		serverOperationalListAgentsFetcher = prevAgents
+		serverOperationalCountTasksFetcher = prevTasks
+		statusNowFunc = prevNow
+	}()
+
+	now := time.Date(2026, 4, 26, 13, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		TareasEnProgreso:  []tareaLite{{ID: 1, Estado: db.TareaEnProgreso, Agente: "Codex1"}},
+		AutonomyHighlights: []string{
+			"integracion_bloqueada=8",
+			"riesgo_top=infra(8)",
+		},
+		CriticalProjectRisk: &workspaceAutonomyProjectSummary{
+			Project:    "infra",
+			Blocking:   8,
+			Highlights: []string{"riesgo=alto", "integracion_bloqueada=8"},
+		},
+		Generado: now.Format(time.RFC3339),
+	}, now, time.Minute)
+
+	serverOperationalListAgentsFetcher = func() ([]*db.Agente, error) {
+		return nil, errors.New("no deberia consultar agentes con snapshot fresco")
+	}
+	serverOperationalCountTasksFetcher = func() (map[string]int, error) {
+		return nil, errors.New("no deberia consultar tareas con snapshot fresco")
+	}
+
+	info, err := buildServerOperationalInfoFastFromDB()
+	if err != nil {
+		t.Fatalf("buildServerOperationalInfoFastFromDB: %v", err)
+	}
+	if info.CriticalProjectRisk == nil || info.CriticalProjectRisk.Project != "infra" || info.CriticalProjectRisk.Blocking != 8 {
+		t.Fatalf("deberia reutilizar riesgo canónico desde snapshot: %+v", info.CriticalProjectRisk)
+	}
+	if len(info.AutonomyHighlights) != 2 {
+		t.Fatalf("deberia reutilizar highlights canónicos desde snapshot: %+v", info.AutonomyHighlights)
 	}
 }

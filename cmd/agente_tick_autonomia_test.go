@@ -323,6 +323,16 @@ func TestResolverAccionTickAutonomiaPrioridades(t *testing.T) {
 			t.Fatalf("decision inesperada: accion=%s pausar=%v motivo=%q", accion, pausar, motivo)
 		}
 	})
+
+	t.Run("finish app refuerza continuidad", func(t *testing.T) {
+		accion, pausar, motivo := resolverAccionTickAutonomia(decisionTickAutonomiaInput{
+			TieneTrabajo: true,
+			FinishApp:    true,
+		})
+		if accion != "continuar_trabajo" || pausar || !strings.Contains(strings.ToLower(motivo), "finish_app") {
+			t.Fatalf("decision inesperada: accion=%s pausar=%v motivo=%q", accion, pausar, motivo)
+		}
+	})
 }
 
 func TestConstruirAgenteTickOutputNoPideIntervencionPorBloqueoAutorecuperableConSesionActiva(t *testing.T) {
@@ -502,6 +512,79 @@ func TestConstruirAgenteTickOutputNoContinuaSiRuntimeBloqueado(t *testing.T) {
 		t.Fatalf("deberia esperar recuperación del runtime: %+v", out)
 	}
 	if !strings.Contains(strings.ToLower(out.Motivo), "tmux") {
+		t.Fatalf("motivo inesperado: %q", out.Motivo)
+	}
+}
+
+func TestConstruirAgenteTickOutputMarcaFinishAppDesdeNotas(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Cerrar app completa",
+		Descripcion: "test finish app",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+		Notas:       "autonomia:finish_app",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	proyecto, err := db.GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	agenteRef := "Codex1"
+	snapshot := &autonomiaBatchSnapshot{
+		agentesByName:              map[string]*db.Agente{"codex1": {Nombre: "Codex1", Rol: "programador", EstadoCuota: "activo", Habilitado: true, Activo: true}},
+		asignacionesByAgent:        map[string][]*db.Asignacion{"codex1": {{Agente: "Codex1", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva}}},
+		tareasByAgentProject:       map[string][]*db.Tarea{agentProjectCacheKey("Codex1", proyectoID): {{ID: tareaID, Titulo: "Cerrar app completa", Estado: db.TareaEnProgreso, ProyectoID: &proyectoID, Agente: &agenteRef, Notas: "autonomia:finish_app"}}},
+		pendingVotesByAgentProject: map[string][]*db.Propuesta{},
+		openProposalsByProject:     map[int64][]*db.Propuesta{},
+		politicasByProject:         map[int64]*supervisionapp.Policy{},
+		activeProjectByAgent:       map[string]int64{},
+		activeHandleByAgentProject: map[string]bool{"codex1:1": true},
+		supervisorByProject:        map[int64]*db.Agente{},
+		supervisorLoaded:           map[int64]struct{}{},
+		pauseByAgent:               map[string]autonomiaBudgetPauseDecision{},
+		operationalStateByAgent:    map[string]string{"codex1": "trabajando"},
+		operationalDetailByAgent:   map[string]string{"codex1": "runtime operativa"},
+		operationalStateResolved:   map[string]struct{}{"codex1": {}},
+	}
+	out, err := construirAgenteTickOutputConSnapshot("Codex1", proyecto, nil, 100, snapshot)
+	if err != nil {
+		t.Fatalf("construir tick: %v", err)
+	}
+	if !out.FinishApp {
+		t.Fatalf("deberia marcar finish_app: %+v", out)
+	}
+	if out.AccionRecomendada != "continuar_trabajo" || out.DebePausar {
+		t.Fatalf("accion inesperada con finish_app: %+v", out)
+	}
+	if !strings.Contains(strings.ToLower(out.Motivo), "finish_app") {
 		t.Fatalf("motivo inesperado: %q", out.Motivo)
 	}
 }

@@ -119,7 +119,11 @@ func cargarRuntimeDiagnosticoDesdeAPI(agente, proyecto string, limit int) (*runt
 		return nil, ok, err
 	}
 
-	handles, ok, err := cargarRuntimeHandlesDesdeAPI(url.Values{"agente": []string{agente}})
+	handleQuery := url.Values{"agente": []string{agente}}
+	if proyecto != "" {
+		handleQuery.Set("proyecto", proyecto)
+	}
+	handles, ok, err := cargarRuntimeHandlesDesdeAPI(handleQuery)
 	if !ok || err != nil {
 		return nil, ok, err
 	}
@@ -175,7 +179,11 @@ func cargarRuntimeDiagnosticoRecuperacionLocal(agente, proyecto string, limit in
 	if err != nil {
 		return nil, err
 	}
-	handles, err := cargarRuntimeHandlesRecuperacionLocal(url.Values{"agente": []string{agente}})
+	handleQuery := url.Values{"agente": []string{agente}}
+	if proyecto != "" {
+		handleQuery.Set("proyecto", proyecto)
+	}
+	handles, err := cargarRuntimeHandlesRecuperacionLocal(handleQuery)
 	if err != nil {
 		return nil, err
 	}

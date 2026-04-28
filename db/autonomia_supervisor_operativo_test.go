@@ -319,3 +319,89 @@ func TestAgenteAutonomiaActivoEnProyectoCuentaHandleOperativoSinSesionActiva(t *
 		t.Fatal("deberia contar el handle operativo reciente aunque la sesion ya no este activa")
 	}
 }
+
+func TestSeleccionarSupervisorAutonomiaOperativoConsideraTrabajoActivoConAsignacionPausada(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexSupervisor", "programador"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	if err := RegistrarAgente("CodexBudget", "programador"); err != nil {
+		t.Fatalf("registrar worker: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := UpsertAgenteIdentidadObservada("CodexSupervisor", "shared@example.com", "shared", "test", &now); err != nil {
+		t.Fatalf("identidad supervisor: %v", err)
+	}
+	if err := UpsertAgenteIdentidadObservada("CodexBudget", "shared@example.com", "shared", "test", &now); err != nil {
+		t.Fatalf("identidad worker: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "supervision-runtime-vivo",
+		Nombre:  "supervision-runtime-vivo",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:        proyectoID,
+		Enabled:           true,
+		SupervisorAgente:  "CodexSupervisor",
+		ReserveSupervisor: true,
+		EstadoAutonomia:   AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "CodexBudget",
+		ProyectoID:        &proyectoID,
+		CWD:               t.TempDir(),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-codex-budget",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion activa: %v", err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime: %+v err=%v", runtime, err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_instances SET logical_state='esperando_io', process_state='running' WHERE id=?`, runtime.ID); err != nil {
+		t.Fatalf("actualizar runtime: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE sesiones SET activa=0, estado='pausada' WHERE id=?`, sesion.ID); err != nil {
+		t.Fatalf("pausar sesion: %v", err)
+	}
+	if handle, err := GetRuntimeHandleBySesionID(sesion.ID); err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	} else if _, err := DB.Exec(`UPDATE runtime_handles SET estado='cerrado' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("cerrar handle: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Frente vivo del worker",
+		ProyectoID:  &proyectoID,
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "tester",
+		Descripcion: "runtime vivo con asignacion pausada",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "CodexBudget"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "CodexBudget"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	supervisor, err := SeleccionarSupervisorAutonomiaOperativo(proyectoID, "")
+	if err != nil {
+		t.Fatalf("seleccionar supervisor operativo: %v", err)
+	}
+	if supervisor == nil || supervisor.Nombre != "CodexBudget" {
+		t.Fatalf("deberia usar el worker realmente vivo como supervisor efectivo: %+v", supervisor)
+	}
+}

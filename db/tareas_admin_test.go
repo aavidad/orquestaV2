@@ -30,7 +30,7 @@ func TestReasignarTarea(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTarea: %v", err)
 	}
-	if tarea.Agente == nil || *tarea.Agente != "codex1" {
+	if tarea.Agente == nil || *tarea.Agente != "Codex1" {
 		t.Fatalf("agente inesperado: %+v", tarea)
 	}
 	if tarea.Estado != TareaAsignada {
