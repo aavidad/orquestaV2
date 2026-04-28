@@ -442,7 +442,7 @@ func sanitizeServerOperationalQuotaFromPanelRows(agentes []*db.Agente, rows []ag
 			continue
 		}
 		switch strings.TrimSpace(row.EstadoOperativo) {
-		case "arrancando", "trabajando", "saturado", "disponible":
+		case "arrancando", "trabajando", "saturado", "disponible", "atascado", "mailbox_atascada", "bloqueado_por_runtime":
 			agente.EstadoCuota = "activo"
 			agente.ReanimarAt = nil
 			agente.MotivoPausa = ""
