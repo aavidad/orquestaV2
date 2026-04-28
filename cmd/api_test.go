@@ -784,6 +784,142 @@ func TestAPIServerOperationalExponeResumenOperativo(t *testing.T) {
 	}
 }
 
+func TestAPIServerOperationalExponeHeadersOperativosPorDefecto(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	prevNow := statusNowFunc
+	t.Cleanup(func() {
+		statusNowFunc = prevNow
+	})
+	now := time.Date(2026, 4, 29, 9, 55, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		TareasEnProgreso:  []tareaLite{{ID: 1, Estado: db.TareaEnProgreso, Agente: "Codex1"}},
+		Autonomia:         autonomiaResumen{WorkConfirmed: 1, ByKind: map[string]int{}},
+		Generado:          now.Format(time.RFC3339),
+	}, now, time.Minute)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerServerOperational(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("cache-control inesperado: %q", got)
+	}
+	if got := rec.Header().Get("X-Orquesta-Operational"); got != "true" {
+		t.Fatalf("header operational inesperado: %q", got)
+	}
+	if got := rec.Header().Get("X-Orquesta-Operational-State"); got != "ready" {
+		t.Fatalf("header state inesperado: %q", got)
+	}
+	if got := rec.Header().Get("X-Orquesta-Operational-Reason"); got != "control_plane_responsive" {
+		t.Fatalf("header reason inesperado: %q", got)
+	}
+}
+
+func TestAPIServerOperationalStrictProbeDevuelve503CuandoNoEsOperativo(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational?strict=1", nil)
+	rec := httptest.NewRecorder()
+	apiWriteServerOperational(rec, req, serverOperationalInfo{
+		State:       "degraded",
+		Operational: false,
+		Reason:      "workers_require_manual_auth",
+	})
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("cache-control inesperado: %q", got)
+	}
+	if got := rec.Header().Get("X-Orquesta-Operational"); got != "false" {
+		t.Fatalf("header operational inesperado: %q", got)
+	}
+	if got := rec.Header().Get("X-Orquesta-Operational-State"); got != "degraded" {
+		t.Fatalf("header state inesperado: %q", got)
+	}
+	if got := rec.Header().Get("X-Orquesta-Operational-Reason"); got != "workers_require_manual_auth" {
+		t.Fatalf("header reason inesperado: %q", got)
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode strict operational: %v", err)
+	}
+	if payload.Operational || payload.State != "degraded" || payload.Reason != "workers_require_manual_auth" {
+		t.Fatalf("payload estricto inesperado: %+v", payload)
+	}
+}
+
+func TestAPIServerOperationalStrictProbeMantiene200SiSigueOperativo(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational?probe=true", nil)
+	rec := httptest.NewRecorder()
+	apiWriteServerOperational(rec, req, serverOperationalInfo{
+		State:       "idle",
+		Operational: true,
+		Reason:      "workers_quota_blocked",
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("X-Orquesta-Operational"); got != "true" {
+		t.Fatalf("header operational inesperado: %q", got)
+	}
+	if got := rec.Header().Get("X-Orquesta-Operational-State"); got != "idle" {
+		t.Fatalf("header state inesperado: %q", got)
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode strict operational idle: %v", err)
+	}
+	if !payload.Operational || payload.State != "idle" || strings.TrimSpace(payload.Reason) == "" {
+		t.Fatalf("payload idle inesperado: %+v", payload)
+	}
+}
+
+func TestAPIServerOperationalStrictProbeReutilizaSnapshotStale(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	prevNow := statusNowFunc
+	t.Cleanup(func() {
+		statusNowFunc = prevNow
+	})
+	now := time.Date(2026, 4, 29, 10, 10, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		TareasEnProgreso:  []tareaLite{{ID: 11, Estado: db.TareaEnProgreso, Agente: "Codex1"}},
+		Autonomia:         autonomiaResumen{ContinuidadPendiente: 1, WorkConfirmed: 1, ByKind: map[string]int{}},
+		Generado:          now.Add(-15 * time.Second).Format(time.RFC3339),
+	}, now.Add(-2*time.Minute), time.Second)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational?strict=1", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerServerOperational(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("X-Orquesta-Operational"); got != "true" {
+		t.Fatalf("header operational inesperado: %q", got)
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode strict stale operational: %v", err)
+	}
+	if !payload.Operational || payload.State != "ready" || payload.ActiveAgents != 1 || payload.TasksInProgress != 1 {
+		t.Fatalf("payload stale inesperado: %+v", payload)
+	}
+}
+
 func TestAPIServerOperationalExponeRiesgoCanonicoLigero(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()

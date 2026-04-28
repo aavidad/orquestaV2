@@ -1225,19 +1225,51 @@ func apiHandlerServerOperational(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if snapshot, ok := readStatusSnapshotFreshUsable(); ok {
-		apiWriteJSON(w, http.StatusOK, normalizeServerOperationalInfo(buildServerOperationalInfo(snapshot)))
+		apiWriteServerOperational(w, r, buildServerOperationalInfo(snapshot))
 		return
 	}
+	if apiServerOperationalStrictProbe(r) {
+		if snapshot, ok := readStatusSnapshotAny(); ok {
+			ensureStatusRefreshAsync()
+			apiWriteServerOperational(w, r, buildServerOperationalInfo(snapshot))
+			return
+		}
+	}
 	if status, ok := fetchStatusForOperationalFallback(statusFastTimeout); ok {
-		apiWriteJSON(w, http.StatusOK, normalizeServerOperationalInfo(buildServerOperationalInfo(status)))
+		apiWriteServerOperational(w, r, buildServerOperationalInfo(status))
 		return
 	}
 	ensureStatusRefreshAsync()
 	if apiServerOperationalDegradedBuilder != nil {
-		apiWriteJSON(w, http.StatusOK, normalizeServerOperationalInfo(apiServerOperationalDegradedBuilder()))
+		apiWriteServerOperational(w, r, apiServerOperationalDegradedBuilder())
 		return
 	}
-	apiWriteJSON(w, http.StatusOK, normalizeServerOperationalInfo(degradedServerOperationalInfo()))
+	apiWriteServerOperational(w, r, degradedServerOperationalInfo())
+}
+
+func apiWriteServerOperational(w http.ResponseWriter, r *http.Request, info serverOperationalInfo) {
+	info = normalizeServerOperationalInfo(info)
+	status := http.StatusOK
+	if apiServerOperationalStrictProbe(r) && !info.Operational {
+		status = http.StatusServiceUnavailable
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Orquesta-Operational", strconv.FormatBool(info.Operational))
+	if state := strings.TrimSpace(info.State); state != "" {
+		w.Header().Set("X-Orquesta-Operational-State", state)
+	}
+	if reason := strings.TrimSpace(info.Reason); reason != "" {
+		w.Header().Set("X-Orquesta-Operational-Reason", reason)
+	}
+	apiWriteJSON(w, status, info)
+}
+
+func apiServerOperationalStrictProbe(r *http.Request) bool {
+	if r == nil || r.URL == nil {
+		return false
+	}
+	query := r.URL.Query()
+	return parseBoolDebug(query.Get("strict"), false) || parseBoolDebug(query.Get("probe"), false)
 }
 
 func apiHandlerWorkspaceControl(w http.ResponseWriter, r *http.Request) {

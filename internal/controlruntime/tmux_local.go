@@ -85,6 +85,7 @@ func arrancarPlanLocalTMUX(req SolicitudArranque) (*ProcesoArrancado, error) {
 		Driver:               "tmux_cli_session",
 		Transport:            "tmux",
 		Profile:              strings.TrimSpace(profileName),
+		ExecutionProfile:     strings.TrimSpace(req.Plan.PerfilOperativo),
 		ProfileStatusWrapper: strings.TrimSpace(profileWrapper),
 		TmuxSession:          strings.TrimSpace(paneInfo.SessionName),
 		TmuxWindow:           strings.TrimSpace(paneInfo.WindowName),
@@ -201,6 +202,7 @@ func arrancarPlanLocalTMUX(req SolicitudArranque) (*ProcesoArrancado, error) {
 		"can_send_input_source": canSendInputSource,
 		"mailbox_delivery_mode": mailboxDeliveryMode,
 		"external_session_id":   externalSessionID,
+		"perfil_operativo":      strings.TrimSpace(req.Plan.PerfilOperativo),
 		"profile_name":          strings.TrimSpace(profileName),
 		"profile_status_wrapper": func() string {
 			if !hasProfileStatus {
@@ -413,6 +415,7 @@ func writeRuntimeTraceManifestTMUX(path string, req SolicitudArranque, startedAt
 		"can_send_input_source": strings.TrimSpace(canSendInputSource),
 		"mailbox_delivery_mode": strings.TrimSpace(mailboxDeliveryMode),
 		"external_session_id":   strings.TrimSpace(externalSessionID),
+		"perfil_operativo":      strings.TrimSpace(req.Plan.PerfilOperativo),
 		"supervisor_ref":        strings.TrimSpace(supervisorRef),
 		"supervisor_driver":     "tmux_runtime_monitor",
 		"supervision_mode":      supervisionModoAdjunto,

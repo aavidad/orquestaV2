@@ -374,9 +374,10 @@ func TestArrancarPlanTMUXEscribeArtefactosWorker(t *testing.T) {
 		Agente:   "CodexTMUX",
 		Proyecto: "orquestador",
 		Plan: &runtimeagente.LaunchPlan{
-			Comando:    "/bin/echo",
-			Args:       []string{"hola"},
-			WorkingDir: dir,
+			Comando:         "/bin/echo",
+			Args:            []string{"hola"},
+			WorkingDir:      dir,
+			PerfilOperativo: "qa-heavy",
 			Env: map[string]string{
 				"ORQUESTA_TERMINAL_BACKEND": "tmux",
 				"ORQUESTA_TMUX_BIN":         fakeTmux,
@@ -404,6 +405,9 @@ func TestArrancarPlanTMUXEscribeArtefactosWorker(t *testing.T) {
 	}
 	if got, _ := manifest["transport"].(string); got != "tmux" {
 		t.Fatalf("transport inesperado en runtime manifest: %+v", manifest)
+	}
+	if got, _ := manifest["perfil_operativo"].(string); got != "qa-heavy" {
+		t.Fatalf("perfil_operativo inesperado en runtime manifest: %+v", manifest)
 	}
 	if got := strings.TrimSpace(arranque.HandleKind); got != "session" {
 		t.Fatalf("handle kind inesperado para tmux: %q", got)
@@ -438,6 +442,9 @@ func TestArrancarPlanTMUXEscribeArtefactosWorker(t *testing.T) {
 	}
 	if got, _ := workerManifest["transport"].(string); got != "tmux" {
 		t.Fatalf("transport inesperado en worker manifest tmux: %+v", workerManifest)
+	}
+	if got, _ := workerManifest["execution_profile"].(string); got != "qa-heavy" {
+		t.Fatalf("execution_profile inesperado en worker manifest tmux: %+v", workerManifest)
 	}
 
 	workerStatusData, err := os.ReadFile(workerStatusPath)
@@ -481,6 +488,9 @@ func TestArrancarPlanTMUXEscribeArtefactosWorker(t *testing.T) {
 	}
 	if got, _ := metaJSON["driver"].(string); got != "tmux_cli_session" {
 		t.Fatalf("metadata sin driver tmux_cli_session: %+v", metaJSON)
+	}
+	if got, _ := metaJSON["perfil_operativo"].(string); got != "qa-heavy" {
+		t.Fatalf("metadata sin perfil_operativo canonico: %+v", metaJSON)
 	}
 	if got, _ := metaJSON["tmux_pane_id"].(string); got != "%1" {
 		t.Fatalf("metadata sin tmux_pane_id: %+v", metaJSON)
@@ -551,9 +561,10 @@ func TestArrancarPlanPrefiereTMUXPorDefectoParaCodexCLI(t *testing.T) {
 		Agente:   "CodexTMUXAuto",
 		Proyecto: "orquestador",
 		Plan: &runtimeagente.LaunchPlan{
-			Comando:    "codex-perfil",
-			Args:       []string{"CodexTMUXAuto", "--version"},
-			WorkingDir: dir,
+			Comando:         "codex-perfil",
+			Args:            []string{"CodexTMUXAuto", "--version"},
+			WorkingDir:      dir,
+			PerfilOperativo: "persistente",
 			Env: map[string]string{
 				"ORQUESTA_TMUX_BIN": fakeTmux,
 			},
@@ -578,6 +589,9 @@ func TestArrancarPlanPrefiereTMUXPorDefectoParaCodexCLI(t *testing.T) {
 	if got, _ := metaJSON["profile_status_wrapper"].(string); filepath.Base(got) != "codex-perfil" {
 		t.Fatalf("metadata sin profile_status_wrapper canonico: %+v", metaJSON)
 	}
+	if got, _ := metaJSON["perfil_operativo"].(string); got != "persistente" {
+		t.Fatalf("metadata sin perfil_operativo persistente: %+v", metaJSON)
+	}
 
 	traceDir := filepath.Dir(arranque.LogPath)
 	workerManifestPath := filepath.Join(traceDir, "manifest.json")
@@ -591,6 +605,9 @@ func TestArrancarPlanPrefiereTMUXPorDefectoParaCodexCLI(t *testing.T) {
 	}
 	if got, _ := workerManifest["profile"].(string); got != "CodexTMUXAuto" {
 		t.Fatalf("worker manifest sin profile codex: %+v", workerManifest)
+	}
+	if got, _ := workerManifest["execution_profile"].(string); got != "persistente" {
+		t.Fatalf("worker manifest sin execution_profile persistente: %+v", workerManifest)
 	}
 	if got, _ := workerManifest["profile_status_wrapper"].(string); filepath.Base(got) != "codex-perfil" {
 		t.Fatalf("worker manifest sin profile_status_wrapper canonico: %+v", workerManifest)

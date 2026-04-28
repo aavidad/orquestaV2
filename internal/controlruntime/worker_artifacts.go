@@ -32,6 +32,7 @@ type workerManifest struct {
 	Driver               string `json:"driver"`
 	Transport            string `json:"transport"`
 	Profile              string `json:"profile,omitempty"`
+	ExecutionProfile     string `json:"execution_profile,omitempty"`
 	ProfileStatusWrapper string `json:"profile_status_wrapper,omitempty"`
 	TmuxSession          string `json:"tmux_session,omitempty"`
 	TmuxWindow           string `json:"tmux_window,omitempty"`
