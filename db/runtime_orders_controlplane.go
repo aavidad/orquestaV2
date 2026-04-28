@@ -2368,10 +2368,13 @@ func ListarRuntimeCheckpoints(filter FiltroRuntimeCheckpoints) ([]*RuntimeCheckp
 		if err != nil {
 			return nil, err
 		}
-		cp.CWD = rutaRuntimeCanonicaProyecto(cp.Agente, cp.ProyectoID, cp.CWD)
 		out = append(out, cp)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	normalizarRuntimeCheckpointCWDs(out)
+	return out, nil
 }
 
 func ResumirRuntimeCheckpointsPorAgente() ([]*RuntimeCheckpointPanelSummary, error) {
@@ -2397,14 +2400,29 @@ func ResumirRuntimeCheckpointsPorAgente() ([]*RuntimeCheckpointPanelSummary, err
 		if err != nil {
 			return nil, err
 		}
-		if cp != nil {
-			cp.CWD = rutaRuntimeCanonicaProyecto(cp.Agente, cp.ProyectoID, cp.CWD)
-		}
 		out = append(out, &RuntimeCheckpointPanelSummary{
 			Agente: cp.Agente,
 			Total:  total,
 			Last:   cp,
 		})
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, item := range out {
+		if item == nil || item.Last == nil {
+			continue
+		}
+		item.Last.CWD = rutaRuntimeCanonicaProyecto(item.Last.Agente, item.Last.ProyectoID, item.Last.CWD)
+	}
+	return out, nil
+}
+
+func normalizarRuntimeCheckpointCWDs(items []*RuntimeCheckpoint) {
+	for _, cp := range items {
+		if cp == nil {
+			continue
+		}
+		cp.CWD = rutaRuntimeCanonicaProyecto(cp.Agente, cp.ProyectoID, cp.CWD)
+	}
 }

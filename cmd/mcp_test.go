@@ -1491,6 +1491,299 @@ func TestMCPToolsRuntimeMailboxGestionanCicloCanonico(t *testing.T) {
 	})
 }
 
+func TestMCPToolsRuntimeRecoveryProcesanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prevOrders := apiRuntimeProcessOrdersExecutor
+		prevMailbox := apiRuntimeProcessMailboxExecutor
+		prevAutonomia := runtimeProcessAutonomiaBatch
+		prevDegradados := runtimeProcessDegradadosBatchDetailed
+		prevHygiene := runtimeProcessHygieneBatch
+		prevReanimations := runtimeProcessReanimationsBatchFn
+		t.Cleanup(func() {
+			apiRuntimeProcessOrdersExecutor = prevOrders
+			apiRuntimeProcessMailboxExecutor = prevMailbox
+			runtimeProcessAutonomiaBatch = prevAutonomia
+			runtimeProcessDegradadosBatchDetailed = prevDegradados
+			runtimeProcessHygieneBatch = prevHygiene
+			runtimeProcessReanimationsBatchFn = prevReanimations
+			runtimeProcessAutonomiaEnCurso.Store(false)
+			runtimeProcessDegradadosEnCurso.Store(false)
+			runtimeProcessReanimacionesEnCurso.Store(false)
+		})
+
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+
+		apiRuntimeProcessOrdersExecutor = func() (int, error) { return 7, nil }
+		apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) {
+			if filter.ToAgente == nil || *filter.ToAgente != "CodexProcess" {
+				t.Fatalf("filtro mailbox inesperado: %+v", filter)
+			}
+			return 5, nil
+		}
+		runtimeProcessAutonomiaBatch = func() (int, error) { return 3, nil }
+		runtimeProcessDegradadosBatchDetailed = func() (runtimeProcessDegradadosSummary, error) {
+			return runtimeProcessDegradadosSummary{
+				Count:                     4,
+				GhostAssignmentsCompacted: 1,
+				ReactivatedWithoutRuntime: 2,
+				IdleAutoassigned:          1,
+			}, nil
+		}
+		runtimeProcessHygieneBatch = func() (int, error) { return 6, nil }
+		runtimeProcessReanimationsBatchFn = func() apiRuntimeProcessReanimationsResponse {
+			return apiRuntimeProcessReanimationsResponse{
+				OK:                true,
+				Count:             2,
+				Candidates:        3,
+				Reactivated:       2,
+				CooldownSustained: 1,
+			}
+		}
+
+		ordersResult, err := callMCPTool("orquesta.runtime.process.orders", map[string]any{})
+		if err != nil {
+			t.Fatalf("runtime process orders MCP: %v", err)
+		}
+		if ordersResult["isError"] != false {
+			t.Fatalf("runtime process orders marcado como error: %#v", ordersResult)
+		}
+		ordersResp, _ := ordersResult["structuredContent"].(apiRuntimeProcessOrdersResponse)
+		if !ordersResp.OK || ordersResp.Count != 7 {
+			t.Fatalf("runtime process orders inesperado: %#v", ordersResult["structuredContent"])
+		}
+
+		mailboxResult, err := callMCPTool("orquesta.runtime.process.mailbox", map[string]any{
+			"to_agente": "CodexProcess",
+			"proyecto":  "orquestador",
+		})
+		if err != nil {
+			t.Fatalf("runtime process mailbox MCP: %v", err)
+		}
+		if mailboxResult["isError"] != false {
+			t.Fatalf("runtime process mailbox marcado como error: %#v", mailboxResult)
+		}
+		mailboxResp, _ := mailboxResult["structuredContent"].(apiRuntimeProcessMailboxResponse)
+		if !mailboxResp.OK || mailboxResp.Count != 5 {
+			t.Fatalf("runtime process mailbox inesperado: %#v", mailboxResult["structuredContent"])
+		}
+
+		autonomiaResult, err := callMCPTool("orquesta.runtime.process.autonomia", map[string]any{"wait": true})
+		if err != nil {
+			t.Fatalf("runtime process autonomia MCP: %v", err)
+		}
+		autonomiaResp, _ := autonomiaResult["structuredContent"].(apiRuntimeProcessAutonomiaResponse)
+		if !autonomiaResp.OK || autonomiaResp.Count != 3 {
+			t.Fatalf("runtime process autonomia inesperado: %#v", autonomiaResult["structuredContent"])
+		}
+
+		degradadosResult, err := callMCPTool("orquesta.runtime.process.degradados", map[string]any{"wait": true})
+		if err != nil {
+			t.Fatalf("runtime process degradados MCP: %v", err)
+		}
+		degradadosResp, _ := degradadosResult["structuredContent"].(apiRuntimeProcessAutonomiaResponse)
+		if !degradadosResp.OK || degradadosResp.Count != 4 || degradadosResp.GhostAssignmentsCompacted != 1 || degradadosResp.ReactivatedWithoutRuntime != 2 || degradadosResp.IdleAutoassigned != 1 {
+			t.Fatalf("runtime process degradados inesperado: %#v", degradadosResult["structuredContent"])
+		}
+
+		hygieneResult, err := callMCPTool("orquesta.runtime.process.hygiene", map[string]any{"wait": true})
+		if err != nil {
+			t.Fatalf("runtime process hygiene MCP: %v", err)
+		}
+		hygieneResp, _ := hygieneResult["structuredContent"].(apiRuntimeProcessAutonomiaResponse)
+		if !hygieneResp.OK || hygieneResp.Count != 6 {
+			t.Fatalf("runtime process hygiene inesperado: %#v", hygieneResult["structuredContent"])
+		}
+
+		reanimationsResult, err := callMCPTool("orquesta.runtime.process.reanimaciones", map[string]any{"wait": true})
+		if err != nil {
+			t.Fatalf("runtime process reanimaciones MCP: %v", err)
+		}
+		reanimationsResp, _ := reanimationsResult["structuredContent"].(apiRuntimeProcessReanimationsResponse)
+		if !reanimationsResp.OK || reanimationsResp.Count != 2 || reanimationsResp.Reactivated != 2 || reanimationsResp.CooldownSustained != 1 {
+			t.Fatalf("runtime process reanimaciones inesperado: %#v", reanimationsResult["structuredContent"])
+		}
+
+		wakeResult, err := callMCPTool("orquesta.runtime.wake", map[string]any{
+			"orders":  true,
+			"mailbox": true,
+			"warm":    true,
+		})
+		if err != nil {
+			t.Fatalf("runtime wake MCP: %v", err)
+		}
+		if wakeResult["isError"] != false {
+			t.Fatalf("runtime wake marcado como error: %#v", wakeResult)
+		}
+		wakeResp, _ := wakeResult["structuredContent"].(apiRuntimeWakeResponse)
+		if !wakeResp.Orders || !wakeResp.Mailbox {
+			t.Fatalf("runtime wake inesperado: %#v", wakeResult["structuredContent"])
+		}
+	})
+}
+
+func TestMCPToolsRuntimeAdministrativeControlsOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("CodexRuntime", "programador"); err != nil {
+			t.Fatalf("registrando CodexRuntime: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      "CodexRuntime",
+			ProyectoID:  &proyectoID,
+			CWD:         "/tmp/orquestador",
+			Herramienta: "codex-cli",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion: %v", err)
+		}
+		runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
+		if err != nil || runtimeInst == nil {
+			t.Fatalf("runtime esperado, got=%+v err=%v", runtimeInst, err)
+		}
+
+		orderID, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
+			Agente:      "CodexRuntime",
+			ProyectoID:  &proyectoID,
+			Tipo:        "send_instruction",
+			PayloadJSON: `{"task_id":41}`,
+		})
+		if err != nil {
+			t.Fatalf("crear runtime order: %v", err)
+		}
+		if _, err := callMCPTool("orquesta.runtime.ordenes.cancelar", map[string]any{
+			"id":     orderID,
+			"actor":  "OpenClaw",
+			"motivo": "limpieza operativa",
+		}); err != nil {
+			t.Fatalf("runtime orden cancelar MCP: %v", err)
+		}
+
+		order, err := runtimesService.GetRuntimeOrder(orderID)
+		if err != nil {
+			t.Fatalf("leer runtime order: %v", err)
+		}
+		if order == nil || strings.TrimSpace(order.Estado) != "cancelada" {
+			t.Fatalf("runtime order no quedó cancelada: %+v", order)
+		}
+
+		purgeResult, err := callMCPTool("orquesta.runtime.ordenes.purgar", map[string]any{
+			"agente":   "CodexRuntime",
+			"proyecto": "orquestador",
+			"actor":    "OpenClaw",
+			"estados":  []any{"cancelada"},
+		})
+		if err != nil {
+			t.Fatalf("runtime ordenes purgar MCP: %v", err)
+		}
+		purgeResp, _ := purgeResult["structuredContent"].(apiRuntimeOrdersPurgeResponse)
+		if !purgeResp.OK || purgeResp.Deleted < 1 {
+			t.Fatalf("runtime ordenes purgar inesperado: %#v", purgeResult["structuredContent"])
+		}
+
+		sendResult, err := callMCPTool("orquesta.runtime.mailbox.enviar", map[string]any{
+			"from_agente":  "OpenClaw",
+			"to_agente":    "CodexRuntime",
+			"kind":         "governance_refresh",
+			"proyecto":     "orquestador",
+			"payload_json": `{"motivo":"cleanup"}`,
+		})
+		if err != nil {
+			t.Fatalf("runtime mailbox enviar MCP: %v", err)
+		}
+		sent, _ := sendResult["structuredContent"].(map[string]any)
+		mailboxID, _ := sent["id"].(int64)
+		if mailboxID <= 0 {
+			t.Fatalf("mailbox id invalido: %#v", sendResult["structuredContent"])
+		}
+
+		clearResult, err := callMCPTool("orquesta.runtime.mailbox.limpiar", map[string]any{
+			"to_agente": "CodexRuntime",
+			"proyecto":  "orquestador",
+			"estados":   []any{"pendiente"},
+			"kinds":     []any{"governance_refresh"},
+		})
+		if err != nil {
+			t.Fatalf("runtime mailbox limpiar MCP: %v", err)
+		}
+		clearResp, _ := clearResult["structuredContent"].(apiRuntimeMailboxClearResponse)
+		if !clearResp.OK || clearResp.Cleared < 1 {
+			t.Fatalf("runtime mailbox limpiar inesperado: %#v", clearResult["structuredContent"])
+		}
+
+		checkpointCreateResult, err := callMCPTool("orquesta.runtime.checkpoints.crear", map[string]any{
+			"agente":          "CodexRuntime",
+			"proyecto":        "orquestador",
+			"sesion_id":       sesion.ID,
+			"runtime_id":      runtimeInst.ID,
+			"checkpoint_kind": "manual_override",
+			"resumen":         "checkpoint desde MCP",
+			"branch":          "candidato_refactor",
+			"cwd":             "/tmp/orquestador",
+			"payload":         `{"step":"manual_override"}`,
+			"resume_strategy": "session_resume",
+			"source":          "OpenClaw",
+		})
+		if err != nil {
+			t.Fatalf("runtime checkpoint crear MCP: %v", err)
+		}
+		createPayload, _ := checkpointCreateResult["structuredContent"].(map[string]any)
+		checkpointID, _ := createPayload["id"].(int64)
+		if checkpointID <= 0 {
+			t.Fatalf("checkpoint id invalido: %#v", checkpointCreateResult["structuredContent"])
+		}
+
+		listResult, err := callMCPTool("orquesta.runtime.checkpoints.listar", map[string]any{
+			"agente":   "CodexRuntime",
+			"proyecto": "orquestador",
+			"kind":     "manual_override",
+			"source":   "OpenClaw",
+			"limit":    5,
+		})
+		if err != nil {
+			t.Fatalf("runtime checkpoints listar MCP: %v", err)
+		}
+		checkpoints, _ := listResult["structuredContent"].([]*db.RuntimeCheckpoint)
+		if len(checkpoints) == 0 || checkpoints[0] == nil || checkpoints[0].ID != checkpointID {
+			t.Fatalf("runtime checkpoints inesperados: %#v", listResult["structuredContent"])
+		}
+
+		latestResult, err := callMCPTool("orquesta.runtime.checkpoints.latest", map[string]any{
+			"agente":   "CodexRuntime",
+			"proyecto": "orquestador",
+		})
+		if err != nil {
+			t.Fatalf("runtime checkpoint latest MCP: %v", err)
+		}
+		latest, _ := latestResult["structuredContent"].(*db.RuntimeCheckpoint)
+		if latest == nil || latest.ID != checkpointID || strings.TrimSpace(latest.Source) != "OpenClaw" {
+			t.Fatalf("runtime checkpoint latest inesperado: %#v", latestResult["structuredContent"])
+		}
+
+		if _, err := callMCPTool("orquesta.runtime.handles.cerrar", map[string]any{
+			"agente":   "CodexRuntime",
+			"proyecto": "orquestador",
+			"actor":    "OpenClaw",
+		}); err != nil {
+			t.Fatalf("runtime handles cerrar MCP: %v", err)
+		}
+		if _, err := callMCPTool("orquesta.runtime.handles.purgar", map[string]any{
+			"agente":   "CodexRuntime",
+			"proyecto": "orquestador",
+			"actor":    "OpenClaw",
+			"estados":  []any{"cerrado"},
+		}); err != nil {
+			t.Fatalf("runtime handles purgar MCP: %v", err)
+		}
+		if _, err := callMCPTool("orquesta.runtimes.cerrar", map[string]any{
+			"agente":   "CodexRuntime",
+			"proyecto": "orquestador",
+			"actor":    "OpenClaw",
+		}); err != nil {
+			t.Fatalf("runtimes cerrar MCP: %v", err)
+		}
+	})
+}
+
 func TestMCPToolsAgentesListarYPausarOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex5", "programador"); err != nil {

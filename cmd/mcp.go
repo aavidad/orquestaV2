@@ -2027,6 +2027,251 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.runtime.handles.cerrar",
+			Title:       "Cerrar runtime handles residuales",
+			Description: "Cierra runtime handles residuales por agente o proyecto",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":   map[string]any{"type": "string"},
+					"proyecto": map[string]any{"type": "string"},
+					"actor":    map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.handles.purgar",
+			Title:       "Purgar runtime handles inactivos",
+			Description: "Purga runtime handles inactivos filtrando por agente, proyecto o estados",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":   map[string]any{"type": "string"},
+					"proyecto": map[string]any{"type": "string"},
+					"actor":    map[string]any{"type": "string"},
+					"estados": map[string]any{
+						"type":  "array",
+						"items": map[string]any{"type": "string"},
+					},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtimes.cerrar",
+			Title:       "Cerrar runtimes residuales",
+			Description: "Cierra runtimes residuales activos por agente o proyecto",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":   map[string]any{"type": "string"},
+					"proyecto": map[string]any{"type": "string"},
+					"actor":    map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.ordenes.cancelar",
+			Title:       "Cancelar runtime order",
+			Description: "Cancela una runtime order existente",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":     map[string]any{"type": "integer"},
+					"actor":  map[string]any{"type": "string"},
+					"motivo": map[string]any{"type": "string"},
+				},
+				"required":             []string{"id"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.ordenes.purgar",
+			Title:       "Purgar runtime orders terminales",
+			Description: "Purga runtime orders terminales por agente, proyecto, estados o tipos",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":             map[string]any{"type": "string"},
+					"proyecto":           map[string]any{"type": "string"},
+					"actor":              map[string]any{"type": "string"},
+					"older_than_minutes": map[string]any{"type": "integer"},
+					"estados": map[string]any{
+						"type":  "array",
+						"items": map[string]any{"type": "string"},
+					},
+					"tipos": map[string]any{
+						"type":  "array",
+						"items": map[string]any{"type": "string"},
+					},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.mailbox.limpiar",
+			Title:       "Limpiar runtime mailbox",
+			Description: "Marca como consumidos mensajes del runtime mailbox filtrados por destino, origen, proyecto, estado o kind",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"to_agente":   map[string]any{"type": "string"},
+					"from_agente": map[string]any{"type": "string"},
+					"proyecto":    map[string]any{"type": "string"},
+					"estados": map[string]any{
+						"type":  "array",
+						"items": map[string]any{"type": "string"},
+					},
+					"kinds": map[string]any{
+						"type":  "array",
+						"items": map[string]any{"type": "string"},
+					},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.wake",
+			Title:       "Wake runtime control plane",
+			Description: "Despierta explícitamente los carriles orders, mailbox o warm del control plane",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"orders":  map[string]any{"type": "boolean"},
+					"mailbox": map[string]any{"type": "boolean"},
+					"warm":    map[string]any{"type": "boolean"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.process.orders",
+			Title:       "Procesar runtime orders",
+			Description: "Fuerza el batch canónico de runtime orders",
+			InputSchema: map[string]any{
+				"type":                 "object",
+				"properties":           map[string]any{},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.process.mailbox",
+			Title:       "Procesar runtime mailbox",
+			Description: "Fuerza el batch canónico de runtime mailbox con filtros opcionales",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"to_agente": map[string]any{"type": "string"},
+					"proyecto":  map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.process.autonomia",
+			Title:       "Procesar runtime autonomia",
+			Description: "Fuerza el batch canónico de autonomía del runtime",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"wait": map[string]any{"type": "boolean"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.process.degradados",
+			Title:       "Procesar runtime degradados",
+			Description: "Fuerza el batch canónico de recuperación de agentes degradados",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"wait": map[string]any{"type": "boolean"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.process.hygiene",
+			Title:       "Procesar runtime hygiene",
+			Description: "Fuerza el batch canónico de higiene runtime",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"wait": map[string]any{"type": "boolean"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.process.reanimaciones",
+			Title:       "Procesar runtime reanimaciones",
+			Description: "Fuerza el batch canónico de reanimaciones de agentes",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"wait": map[string]any{"type": "boolean"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.checkpoints.crear",
+			Title:       "Crear runtime checkpoint",
+			Description: "Crea un checkpoint explícito de runtime por la vía canónica",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":          map[string]any{"type": "string"},
+					"proyecto":        map[string]any{"type": "string"},
+					"sesion_id":       map[string]any{"type": "integer"},
+					"runtime_id":      map[string]any{"type": "integer"},
+					"checkpoint_kind": map[string]any{"type": "string"},
+					"resumen":         map[string]any{"type": "string"},
+					"branch":          map[string]any{"type": "string"},
+					"cwd":             map[string]any{"type": "string"},
+					"payload":         map[string]any{"type": "string"},
+					"resume_strategy": map[string]any{"type": "string"},
+					"source":          map[string]any{"type": "string"},
+				},
+				"required":             []string{"agente"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.checkpoints.listar",
+			Title:       "Listar runtime checkpoints",
+			Description: "Lista checkpoints de runtime por agente, proyecto, kind o source",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":   map[string]any{"type": "string"},
+					"proyecto": map[string]any{"type": "string"},
+					"kind":     map[string]any{"type": "string"},
+					"source":   map[string]any{"type": "string"},
+					"limit":    map[string]any{"type": "integer"},
+				},
+				"required":             []string{"agente"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.checkpoints.latest",
+			Title:       "Último runtime checkpoint",
+			Description: "Devuelve el último checkpoint de runtime para un agente y proyecto opcional",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":   map[string]any{"type": "string"},
+					"proyecto": map[string]any{"type": "string"},
+				},
+				"required":             []string{"agente"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.agentes.tick",
 			Title:       "Tick de agente",
 			Description: "Procesa un tick canónico de agente y devuelve la siguiente acción recomendada",
@@ -3243,6 +3488,374 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		}
 		result := map[string]any{"id": id, "estado": "consumido"}
 		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.handles.cerrar":
+		resultado, err := runtimesService.CloseResidualRuntimeHandles(runtimesapp.RuntimeHandleResidualCloseRequest{
+			Agente:   apiNombreAgenteCanonico(optionalStringArg(args, "agente")),
+			Proyecto: strings.TrimSpace(optionalStringArg(args, "proyecto")),
+			Actor:    strings.TrimSpace(optionalStringArg(args, "actor")),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := apiRuntimeHandleResidualCloseResponse{
+			OK:     true,
+			Closed: resultado.Closed,
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.handles.purgar":
+		resultado, err := runtimesService.PurgeInactiveRuntimeHandles(runtimesapp.RuntimeHandlePurgeRequest{
+			Agente:   apiNombreAgenteCanonico(optionalStringArg(args, "agente")),
+			Proyecto: strings.TrimSpace(optionalStringArg(args, "proyecto")),
+			Estados:  optionalStringSliceArg(args, "estados"),
+			Actor:    strings.TrimSpace(optionalStringArg(args, "actor")),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := apiRuntimeHandlesPurgeResponse{
+			OK:         true,
+			Deleted:    resultado.Deleted,
+			DeletedIDs: resultado.DeletedIDs,
+			Estados:    resultado.Estados,
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtimes.cerrar":
+		resultado, err := runtimesService.CloseResidualRuntimes(runtimesapp.RuntimeResidualCloseRequest{
+			Agente:   apiNombreAgenteCanonico(optionalStringArg(args, "agente")),
+			Proyecto: strings.TrimSpace(optionalStringArg(args, "proyecto")),
+			Actor:    strings.TrimSpace(optionalStringArg(args, "actor")),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := apiRuntimeResidualCloseResponse{
+			OK:        true,
+			Closed:    resultado.Closed,
+			ClosedIDs: resultado.ClosedIDs,
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.ordenes.cancelar":
+		id, err := requiredInt64Arg(args, "id")
+		if err != nil {
+			return nil, err
+		}
+		if err := runtimesService.CancelRuntimeOrder(id, strings.TrimSpace(optionalStringArg(args, "actor")), strings.TrimSpace(optionalStringArg(args, "motivo"))); err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := map[string]any{"ok": true, "id": id}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.ordenes.purgar":
+		resultado, err := runtimesService.PurgeTerminalRuntimeOrders(runtimesapp.RuntimeOrderPurgeRequest{
+			Agente:           apiNombreAgenteCanonico(optionalStringArg(args, "agente")),
+			Proyecto:         strings.TrimSpace(optionalStringArg(args, "proyecto")),
+			Estados:          optionalStringSliceArg(args, "estados"),
+			Tipos:            optionalStringSliceArg(args, "tipos"),
+			OlderThanMinutes: optionalIntArg(args, "older_than_minutes"),
+			Actor:            strings.TrimSpace(optionalStringArg(args, "actor")),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := apiRuntimeOrdersPurgeResponse{
+			OK:         true,
+			Deleted:    resultado.Deleted,
+			DeletedIDs: resultado.DeletedIDs,
+			Estados:    resultado.Estados,
+			Tipos:      resultado.Tipos,
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.mailbox.limpiar":
+		filter := db.FiltroRuntimeMailbox{}
+		if toAgente := strings.TrimSpace(optionalStringArg(args, "to_agente")); toAgente != "" {
+			toAgente = apiNombreAgenteCanonico(toAgente)
+			filter.ToAgente = &toAgente
+		}
+		if fromAgente := strings.TrimSpace(optionalStringArg(args, "from_agente")); fromAgente != "" {
+			fromAgente = apiNombreAgenteCanonico(fromAgente)
+			filter.FromAgente = &fromAgente
+		}
+		if proyecto := strings.TrimSpace(optionalStringArg(args, "proyecto")); proyecto != "" {
+			p, err := runtimesService.GetProject(proyecto)
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			filter.ProyectoID = &p.ID
+		}
+		estados := normalizarSliceFlags(optionalStringSliceArg(args, "estados"))
+		if len(estados) == 0 {
+			estados = []string{"pendiente"}
+		}
+		kinds := normalizarSliceFlags(optionalStringSliceArg(args, "kinds"))
+		ids := make([]int64, 0)
+		for _, estado := range estados {
+			estadoLocal := estado
+			filter.Estado = &estadoLocal
+			items, err := runtimesService.ListRuntimeMailbox(filter)
+			if err != nil {
+				return nil, err
+			}
+			for _, item := range items {
+				if item == nil || item.ID <= 0 {
+					continue
+				}
+				if len(kinds) > 0 {
+					match := false
+					for _, kind := range kinds {
+						if strings.EqualFold(strings.TrimSpace(item.Kind), kind) {
+							match = true
+							break
+						}
+					}
+					if !match {
+						continue
+					}
+				}
+				if err := runtimesService.MarkRuntimeMailboxConsumed(item.ID); err != nil {
+					return toolResult(err.Error(), nil, true), nil
+				}
+				ids = append(ids, item.ID)
+			}
+		}
+		result := apiRuntimeMailboxClearResponse{
+			OK:         true,
+			Cleared:    len(ids),
+			ClearedIDs: ids,
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.wake":
+		result := apiRuntimeWakeResponse{}
+		if boolArgOrFalse(args, "orders") {
+			result.Orders = wakeControlPlaneRuntimeOrders()
+		}
+		if boolArgOrFalse(args, "mailbox") {
+			result.Mailbox = wakeControlPlaneRuntimeMailbox()
+		}
+		if boolArgOrFalse(args, "warm") {
+			result.Warm = wakeControlPlaneWarm()
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.process.orders":
+		count, err := apiRuntimeProcessOrdersExecutor()
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := apiRuntimeProcessOrdersResponse{OK: true, Count: count}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.process.mailbox":
+		estado := "pendiente"
+		filter := db.FiltroRuntimeMailbox{Estado: &estado}
+		if toAgente := strings.TrimSpace(optionalStringArg(args, "to_agente")); toAgente != "" {
+			toAgente = apiNombreAgenteCanonico(toAgente)
+			filter.ToAgente = &toAgente
+		}
+		if proyecto := strings.TrimSpace(optionalStringArg(args, "proyecto")); proyecto != "" {
+			p, err := apiRuntimeProcessMailboxProjectFn(proyecto)
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			filter.ProyectoID = &p.ID
+		}
+		count, err := apiRuntimeProcessMailboxExecutor(filter)
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := apiRuntimeProcessMailboxResponse{OK: true, Count: count}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.process.autonomia":
+		if boolArgOrFalse(args, "wait") {
+			count, err := runtimeProcessAutonomiaBatch()
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			result := apiRuntimeProcessAutonomiaResponse{OK: true, Count: count}
+			return toolResult(prettyJSON(result), result, false), nil
+		}
+		started := runtimeProcessAutonomiaEnCurso.CompareAndSwap(false, true)
+		if started {
+			go func() {
+				defer runtimeProcessAutonomiaEnCurso.Store(false)
+				if _, err := runtimeProcessAutonomiaBatch(); err != nil {
+					db.Audit("server", "runtime_process_autonomia_error", "runtime", 0, err.Error())
+				}
+			}()
+		}
+		result := apiRuntimeProcessAutonomiaResponse{
+			OK:       true,
+			Count:    0,
+			Accepted: started,
+			Running:  runtimeProcessAutonomiaEnCurso.Load(),
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.process.degradados":
+		if boolArgOrFalse(args, "wait") {
+			started := runtimeProcessDegradadosEnCurso.CompareAndSwap(false, true)
+			if !started {
+				result := apiRuntimeProcessAutonomiaResponse{OK: true, Count: 0, Accepted: false, Running: true}
+				return toolResult(prettyJSON(result), result, false), nil
+			}
+			defer runtimeProcessDegradadosEnCurso.Store(false)
+			summary, err := runtimeProcessDegradadosBatchDetailed()
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			result := apiRuntimeProcessAutonomiaResponse{
+				OK:                        true,
+				Count:                     summary.Count,
+				GhostAssignmentsCompacted: summary.GhostAssignmentsCompacted,
+				ReactivatedWithoutRuntime: summary.ReactivatedWithoutRuntime,
+				IdleAutoassigned:          summary.IdleAutoassigned,
+			}
+			return toolResult(prettyJSON(result), result, false), nil
+		}
+		started := runtimeProcessDegradadosEnCurso.CompareAndSwap(false, true)
+		if started {
+			go func() {
+				defer runtimeProcessDegradadosEnCurso.Store(false)
+				if _, err := runtimeProcessDegradadosBatch(); err != nil {
+					db.Audit("server", "runtime_process_degradados_error", "runtime", 0, err.Error())
+				}
+			}()
+		}
+		result := apiRuntimeProcessAutonomiaResponse{
+			OK:       true,
+			Count:    0,
+			Accepted: started,
+			Running:  runtimeProcessDegradadosEnCurso.Load(),
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.process.hygiene":
+		if boolArgOrFalse(args, "wait") {
+			count, err := runtimeProcessHygieneBatch()
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			result := apiRuntimeProcessAutonomiaResponse{OK: true, Count: count}
+			return toolResult(prettyJSON(result), result, false), nil
+		}
+		go func() {
+			if _, err := runtimeProcessHygieneBatch(); err != nil {
+				db.Audit("server", "runtime_process_hygiene_error", "runtime", 0, err.Error())
+			}
+		}()
+		result := apiRuntimeProcessAutonomiaResponse{OK: true, Count: 0, Accepted: true, Running: true}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.process.reanimaciones":
+		if boolArgOrFalse(args, "wait") {
+			result := runtimeProcessReanimationsBatchFn()
+			return toolResult(prettyJSON(result), result, false), nil
+		}
+		started := runtimeProcessReanimacionesEnCurso.CompareAndSwap(false, true)
+		if started {
+			go func() {
+				defer runtimeProcessReanimacionesEnCurso.Store(false)
+				resp := runtimeProcessReanimationsBatchFn()
+				if resp.Errors > 0 {
+					db.Audit("server", "runtime_process_reanimaciones_background_errors", "runtime", 0,
+						fmt.Sprintf("candidates=%d reactivated=%d cooldown_sustained=%d capacity_blocked=%d errors=%d", resp.Candidates, resp.Reactivated, resp.CooldownSustained, resp.CapacityBlocked, resp.Errors))
+				}
+			}()
+		}
+		result := apiRuntimeProcessReanimationsResponse{
+			OK:       true,
+			Count:    0,
+			Accepted: started,
+			Running:  runtimeProcessReanimacionesEnCurso.Load(),
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.checkpoints.crear":
+		req := &db.RuntimeCheckpoint{
+			Agente:         strings.TrimSpace(optionalStringArg(args, "agente")),
+			CheckpointKind: strings.TrimSpace(optionalStringArg(args, "checkpoint_kind")),
+			Resumen:        strings.TrimSpace(optionalStringArg(args, "resumen")),
+			Branch:         strings.TrimSpace(optionalStringArg(args, "branch")),
+			CWD:            strings.TrimSpace(optionalStringArg(args, "cwd")),
+			PayloadJSON:    strings.TrimSpace(optionalStringArg(args, "payload")),
+			ResumeStrategy: strings.TrimSpace(optionalStringArg(args, "resume_strategy")),
+			Source:         strings.TrimSpace(optionalStringArg(args, "source")),
+		}
+		if req.PayloadJSON == "" {
+			req.PayloadJSON = "{}"
+		}
+		if proyecto := strings.TrimSpace(optionalStringArg(args, "proyecto")); proyecto != "" {
+			p, err := runtimesService.GetProject(proyecto)
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			req.ProyectoID = &p.ID
+		}
+		if sesionID := optionalInt64Arg(args, "sesion_id"); sesionID > 0 {
+			req.SesionID = &sesionID
+		}
+		if runtimeID := optionalInt64Arg(args, "runtime_id"); runtimeID > 0 {
+			req.RuntimeID = &runtimeID
+		}
+		id, err := runtimesService.CreateRuntimeCheckpoint(req)
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := map[string]any{"ok": true, "id": id}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.checkpoints.listar":
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		filter := db.FiltroRuntimeCheckpoints{Agente: &agente}
+		if proyecto := strings.TrimSpace(optionalStringArg(args, "proyecto")); proyecto != "" {
+			p, err := runtimesService.GetProject(proyecto)
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			filter.ProyectoID = &p.ID
+		}
+		if checkpointKind := strings.TrimSpace(optionalStringArg(args, "kind")); checkpointKind != "" {
+			filter.CheckpointKind = &checkpointKind
+		}
+		if source := strings.TrimSpace(optionalStringArg(args, "source")); source != "" {
+			filter.Source = &source
+		}
+		if limit := optionalIntArg(args, "limit"); limit > 0 {
+			filter.Limit = limit
+		}
+		checkpoints, err := runtimesService.ListRuntimeCheckpoints(filter)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(checkpoints), checkpoints, false), nil
+
+	case "orquesta.runtime.checkpoints.latest":
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		var proyectoID *int64
+		if proyecto := strings.TrimSpace(optionalStringArg(args, "proyecto")); proyecto != "" {
+			p, err := runtimesService.GetProject(proyecto)
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			proyectoID = &p.ID
+		}
+		checkpoint, err := runtimesService.LatestRuntimeCheckpoint(agente, proyectoID)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(checkpoint), checkpoint, false), nil
 
 	case "orquesta.agentes.tick":
 		agente, err := requiredStringArg(args, "agente")
