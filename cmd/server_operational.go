@@ -114,9 +114,6 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 		state = "degraded"
 		reason = "workers_stuck"
 		operational = false
-	case activeAgents == 0 && quotaAgents > 0:
-		state = "idle"
-		reason = "workers_quota_blocked"
 	case tasksInProgress > 0 && workingWorkers == 0 && status.Autonomia.WorkConfirmed == 0:
 		state = "degraded"
 		reason = "tasks_without_workers"
@@ -125,6 +122,9 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 		state = "degraded"
 		reason = "reserved_without_connected_workers"
 		operational = false
+	case activeAgents == 0 && quotaAgents > 0:
+		state = "idle"
+		reason = "workers_quota_blocked"
 	case activeAgents == 0 && tasksInProgress == 0 && reservedTasks == 0:
 		state = "idle"
 		reason = "no_active_workers"

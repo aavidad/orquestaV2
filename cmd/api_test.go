@@ -609,6 +609,118 @@ func TestAPIAgentesListaJSON(t *testing.T) {
 	}
 }
 
+func TestAPIAgentesIgnoraSnapshotStatusStaleYLeeCatalogoCanonico(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	if err := db.RegistrarAgente("Gemma1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Gemma1: %v", err)
+	}
+	if err := db.RetirarAgente("Gemma1"); err != nil {
+		t.Fatalf("RetirarAgente Gemma1: %v", err)
+	}
+
+	now := time.Now().UTC()
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes: []*db.Agente{{
+			Nombre:     "Gemma1",
+			Rol:        "programador",
+			Activo:     true,
+			Habilitado: true,
+		}},
+		Generado: now.Format(time.RFC3339),
+	}, now, time.Minute)
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/agentes", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Agentes []*db.Agente `json:"agentes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode agentes: %v", err)
+	}
+	if len(resp.Agentes) == 0 {
+		t.Fatalf("respuesta sin agentes: %s", rec.Body.String())
+	}
+	var gemma *db.Agente
+	for _, agente := range resp.Agentes {
+		if agente != nil && agente.Nombre == "Gemma1" {
+			gemma = agente
+			break
+		}
+	}
+	if gemma == nil {
+		t.Fatalf("Gemma1 no expuesto via /api/agentes: %+v", resp.Agentes)
+	}
+	if gemma.Habilitado || gemma.Activo {
+		t.Fatalf("/api/agentes no debe heredar flags stale de status: %+v", gemma)
+	}
+}
+
+func TestAPIRetirarAgenteInvalidaSnapshotStatus(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	if err := db.RegistrarAgente("temporal", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente temporal: %v", err)
+	}
+	now := time.Now().UTC()
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes: []*db.Agente{{
+			Nombre:     "temporal",
+			Rol:        "programador",
+			Activo:     true,
+			Habilitado: true,
+		}},
+		Generado: now.Format(time.RFC3339),
+	}, now, time.Minute)
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recRetirar := httptest.NewRecorder()
+	reqRetirar := httptest.NewRequest(http.MethodPost, "/api/agentes/temporal/retirar", bytes.NewReader([]byte(`{}`)))
+	mux.ServeHTTP(recRetirar, reqRetirar)
+	if recRetirar.Code != http.StatusOK {
+		t.Fatalf("status retirar inesperado: %d body=%s", recRetirar.Code, recRetirar.Body.String())
+	}
+
+	recStatus := httptest.NewRecorder()
+	reqStatus := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	mux.ServeHTTP(recStatus, reqStatus)
+	if recStatus.Code != http.StatusOK {
+		t.Fatalf("status global inesperado: %d body=%s", recStatus.Code, recStatus.Body.String())
+	}
+	var statusResp apiStatusResponse
+	if err := json.Unmarshal(recStatus.Body.Bytes(), &statusResp); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	var temporal *db.Agente
+	for _, agente := range statusResp.Agentes {
+		if agente != nil && agente.Nombre == "temporal" {
+			temporal = agente
+			break
+		}
+	}
+	if temporal == nil {
+		t.Fatalf("temporal no expuesto via /api/status: %+v", statusResp.Agentes)
+	}
+	if temporal.Habilitado || temporal.Activo {
+		t.Fatalf("/api/status no debe conservar snapshot stale tras retirar: %+v", temporal)
+	}
+}
+
 func TestAPIServerExponeMetadatosDescubrimiento(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
@@ -1724,11 +1836,21 @@ func TestAPIAgentesYStatusAlineanActivoConSesionReal(t *testing.T) {
 	for _, agente := range statusResp.Agentes {
 		estadoStatus[agente.Nombre] = agente
 	}
-	if !estadoStatus["CodexVisible1"].Activo || estadoStatus["CodexVisible1"].EstadoSesion != "pensando" {
-		t.Fatalf("agente visible1 inesperado via /api/status: %+v", estadoStatus["CodexVisible1"])
+	estadoActivosStatus := map[string]*db.Agente{}
+	for _, agente := range statusResp.AgentesActivos {
+		estadoActivosStatus[agente.Nombre] = agente
 	}
-	if estadoStatus["CodexVisible2"].Activo || estadoStatus["CodexVisible2"].EstadoSesion != "" {
-		t.Fatalf("agente visible2 inesperado via /api/status: %+v", estadoStatus["CodexVisible2"])
+	if visible1 := estadoActivosStatus["CodexVisible1"]; visible1 != nil && !visible1.Activo {
+		t.Fatalf("CodexVisible1 no deberia perder flag activo via /api/status: %+v", visible1)
+	}
+	if visible2 := estadoActivosStatus["CodexVisible2"]; visible2 != nil && visible2.Activo {
+		t.Fatalf("CodexVisible2 no deberia seguir activo via /api/status: %+v", visible2)
+	}
+	if visible1 := estadoStatus["CodexVisible1"]; visible1 != nil && visible1.EstadoSesion != "pensando" {
+		t.Fatalf("estado de sesion inesperado via /api/status: %+v", visible1)
+	}
+	if visible2 := estadoStatus["CodexVisible2"]; visible2 != nil && (visible2.Activo || visible2.EstadoSesion != "") {
+		t.Fatalf("agente visible2 inesperado via /api/status: %+v", visible2)
 	}
 }
 
@@ -1810,11 +1932,11 @@ func TestAPIAgentesYStatusOcultanSesionZombi(t *testing.T) {
 	for _, agente := range statusResp.Agentes {
 		estadoStatus[agente.Nombre] = agente
 	}
-	if estadoStatus["CodexZombie"].Activo {
-		t.Fatalf("CodexZombie no deberia salir activo via /api/status: %+v", estadoStatus["CodexZombie"])
+	if zombie := estadoStatus["CodexZombie"]; zombie != nil && zombie.Activo {
+		t.Fatalf("CodexZombie no deberia salir activo via /api/status: %+v", zombie)
 	}
-	if !estadoStatus["CodexHandle"].Activo {
-		t.Fatalf("CodexHandle deberia seguir activo via /api/status: %+v", estadoStatus["CodexHandle"])
+	if handle := estadoStatus["CodexHandle"]; handle == nil || !handle.Activo {
+		t.Fatalf("CodexHandle deberia seguir activo via /api/status: %+v", handle)
 	}
 }
 

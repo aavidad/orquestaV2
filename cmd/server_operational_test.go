@@ -95,6 +95,22 @@ func TestBuildServerOperationalInfoExponeQuotaBlockedSinWorkersActivos(t *testin
 	}
 }
 
+func TestBuildServerOperationalInfoNoMarcaIdleSiQuedaTrabajoSinWorkersAunqueHayaCuota(t *testing.T) {
+	reset := time.Now().UTC().Add(30 * time.Minute)
+	info := buildServerOperationalInfo(apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &reset},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &reset},
+		},
+		TareasEnProgreso: []tareaLite{{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+	})
+	if info.Operational || info.State != "degraded" || info.Reason != "tasks_without_workers" {
+		t.Fatalf("no deberia marcar idle si queda trabajo en progreso sin workers: %+v", info)
+	}
+}
+
 func TestBuildServerOperationalInfoPreservaRiesgoCanonicoEstructuradoDelStatus(t *testing.T) {
 	info := buildServerOperationalInfo(apiStatusResponse{
 		AutonomyHighlights: []string{"integracion_bloqueada=9", "riesgo_top=infra(9)"},

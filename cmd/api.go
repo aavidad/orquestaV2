@@ -1837,13 +1837,6 @@ func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 			apiWriteJSON(w, http.StatusOK, apiAgentesPanelResponse{Rows: normalizeAgentPanelRowsForAPI(rows, time.Now().UTC())})
 			return
 		}
-		if snapshot, err := statusService.FetchStatus(); err == nil {
-			apiWriteJSON(w, http.StatusOK, map[string]any{"agentes": snapshot.Agentes})
-			return
-		} else if !errors.Is(err, errStatusFetchTimeout) {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
 		agentes, err := agentesService.ListAgents()
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
@@ -1872,10 +1865,16 @@ func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
+		invalidateAgentStatusCaches()
 		apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "nombre": nombre, "rol": rol})
 	default:
 		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
+}
+
+func invalidateAgentStatusCaches() {
+	resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
 }
 
 func normalizeAgentPanelRowsForAPI(rows []agentesapp.Row, now time.Time) []agentesapp.Row {
@@ -1976,16 +1975,19 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
+		invalidateAgentStatusCaches()
 	case "retirar":
 		if err := agentesService.ApplyStateAction(nombre, "retirar"); err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
+		invalidateAgentStatusCaches()
 	case "rehabilitar":
 		if err := agentesService.ApplyStateAction(nombre, "rehabilitar"); err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
+		invalidateAgentStatusCaches()
 		apiWriteJSON(w, http.StatusOK, launchAgentResetReanimation(nombre))
 		return
 	case "eliminar":
@@ -2002,6 +2004,7 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
+		invalidateAgentStatusCaches()
 	case "fusionar":
 		var req apiAgenteFusionRequest
 		if err := apiDecodeJSON(r, &req); err != nil {
@@ -2027,6 +2030,7 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
+		invalidateAgentStatusCaches()
 		apiWriteJSON(w, http.StatusOK, apiAgenteFusionResponse{
 			OK:           true,
 			Origen:       nombre,
