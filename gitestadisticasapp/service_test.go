@@ -39,6 +39,18 @@ func TestCollectResumeRepoYVentanaTemporal(t *testing.T) {
 	if stats.PendingShortStat == "" {
 		t.Fatalf("pending shortstat vacío")
 	}
+	if stats.HeadCommit == nil {
+		t.Fatalf("head commit vacío")
+	}
+	if stats.HeadCommit.HashShort == "" {
+		t.Fatalf("hash corto vacío: %+v", stats.HeadCommit)
+	}
+	if stats.HeadCommit.Subject != "stats test" {
+		t.Fatalf("subject inesperado: %+v", stats.HeadCommit)
+	}
+	if stats.HeadCommit.CommittedAt == nil || stats.HeadCommit.CommittedAt.IsZero() {
+		t.Fatalf("fecha de head commit vacía: %+v", stats.HeadCommit)
+	}
 	if stats.RecentCommitCount != 1 {
 		t.Fatalf("commit count inesperado: %d", stats.RecentCommitCount)
 	}
@@ -139,6 +151,20 @@ func TestParseGitNumstatTotalsSumaLineasYFicheros(t *testing.T) {
 	}
 	if len(files) != 2 || files[0] != "cmd/app.go" || files[1] != "db/repo.go" {
 		t.Fatalf("files inesperados: %+v", files)
+	}
+}
+
+func TestParseGitHeadCommitResumeHashSubjectYFecha(t *testing.T) {
+	commit := parseGitHeadCommit("abc1234\x1ffeat: exponer head\x1f2026-04-28T10:00:00+02:00\n")
+	if commit == nil {
+		t.Fatal("commit no debería ser nil")
+	}
+	if commit.HashShort != "abc1234" || commit.Subject != "feat: exponer head" {
+		t.Fatalf("resumen inesperado: %+v", commit)
+	}
+	want := time.Date(2026, 4, 28, 8, 0, 0, 0, time.UTC)
+	if commit.CommittedAt == nil || !commit.CommittedAt.Equal(want) {
+		t.Fatalf("fecha inesperada: %+v want=%s", commit, want)
 	}
 }
 

@@ -55,6 +55,12 @@ type agentActivityReport struct {
 }
 
 var agentGitStatsService = gitestadisticasapp.NewService()
+var resolveAgentActivityWorktree = func(project, agent string) string {
+	if worktree, err := gitService.ResolveActiveWorktree(strings.TrimSpace(project), strings.TrimSpace(agent)); err == nil && worktree != nil {
+		return strings.TrimSpace(worktree.RutaAbs)
+	}
+	return ""
+}
 
 var agenteActividadCmd = &cobra.Command{
 	Use:   "actividad <agente>",
@@ -397,6 +403,12 @@ func resolveAgentActivityCWD(detail *agentesapp.Detail, project string) string {
 	if detail == nil {
 		return ""
 	}
+	project = strings.TrimSpace(project)
+	if detail.Row.Agente != nil {
+		if path := strings.TrimSpace(resolveAgentActivityWorktree(project, strings.TrimSpace(detail.Row.Agente.Nombre))); path != "" {
+			return path
+		}
+	}
 	sessions := make([]*db.Sesion, 0, len(detail.Sesiones)+1)
 	if detail.Row.Sesion != nil {
 		sessions = append(sessions, detail.Row.Sesion)
@@ -410,7 +422,6 @@ func resolveAgentActivityCWD(detail *agentesapp.Detail, project string) string {
 	sort.SliceStable(sessions, func(i, j int) bool {
 		return sessionActivityMoment(sessions[i]).After(sessionActivityMoment(sessions[j]))
 	})
-	project = strings.TrimSpace(project)
 	for _, session := range sessions {
 		if session == nil || strings.TrimSpace(session.CWD) == "" {
 			continue
@@ -491,6 +502,9 @@ func imprimirAgenteActividad(report *agentActivityReport) error {
 		if report.Git.RepoRoot != "" {
 			fmt.Printf("Repo:      %s\n", report.Git.RepoRoot)
 		}
+		if head := formatAgentGitHeadCommit(report.Git.HeadCommit); head != "" {
+			fmt.Printf("HEAD:      %s\n", head)
+		}
 		if report.Git.PendingShortStat != "" {
 			fmt.Printf("Diff:      %s\n", report.Git.PendingShortStat)
 		}
@@ -534,6 +548,24 @@ func imprimirAgenteActividad(report *agentActivityReport) error {
 		}
 	}
 	return nil
+}
+
+func formatAgentGitHeadCommit(commit *gitestadisticasapp.CommitSummary) string {
+	if commit == nil {
+		return ""
+	}
+	parts := make([]string, 0, 3)
+	headline := strings.TrimSpace(strings.Join([]string{
+		strings.TrimSpace(commit.HashShort),
+		strings.TrimSpace(commit.Subject),
+	}, " "))
+	if headline != "" {
+		parts = append(parts, headline)
+	}
+	if commit.CommittedAt != nil && !commit.CommittedAt.IsZero() {
+		parts = append(parts, commit.CommittedAt.UTC().Format("2006-01-02 15:04:05Z07:00"))
+	}
+	return strings.Join(parts, " · ")
 }
 
 func compactAutonomyEventSummaries(items []autonomyEventSummary, recentLimit int) ([]autonomyEventSummary, map[string]int, *time.Time, int) {

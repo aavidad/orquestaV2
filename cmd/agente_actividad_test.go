@@ -9,6 +9,7 @@ import (
 
 	"orquesta/agentesapp"
 	"orquesta/db"
+	"orquesta/gitestadisticasapp"
 )
 
 func TestParseStatsSinceAceptaDuracionYRFC3339(t *testing.T) {
@@ -60,6 +61,34 @@ func TestResolveAgentActivityCWDPrefiereSesionActivaYProyecto(t *testing.T) {
 	}
 	got := resolveAgentActivityCWD(detail, "orquestador")
 	if got != "/tmp/orquestador-activa" {
+		t.Fatalf("cwd inesperado: %q", got)
+	}
+}
+
+func TestResolveAgentActivityCWDPrefiereWorktreeActivaCanonica(t *testing.T) {
+	prev := resolveAgentActivityWorktree
+	resolveAgentActivityWorktree = func(project, agent string) string {
+		if project == "orquestador" && agent == "Codex1" {
+			return "/tmp/orquestador-worktree-canonica"
+		}
+		return ""
+	}
+	t.Cleanup(func() {
+		resolveAgentActivityWorktree = prev
+	})
+
+	detail := &agentesapp.Detail{
+		Row: agentesapp.Row{
+			Agente: &db.Agente{Nombre: "Codex1"},
+			Sesion: &db.Sesion{
+				ID:           10,
+				ProyectoSlug: "orquestador",
+				CWD:          "/tmp/orquestador-activa",
+			},
+		},
+	}
+	got := resolveAgentActivityCWD(detail, "orquestador")
+	if got != "/tmp/orquestador-worktree-canonica" {
 		t.Fatalf("cwd inesperado: %q", got)
 	}
 }
@@ -368,6 +397,38 @@ func TestImprimirAgenteActividadMuestraRiesgoYAutonomiaCanonicos(t *testing.T) {
 		"Autonomía: task_reassigned=2 | last_at=2026-04-25T09:00:00Z",
 	) {
 		t.Fatalf("salida cli sin coherencia canónica:\n%s", out)
+	}
+}
+
+func TestImprimirAgenteActividadMuestraResumenGitConHead(t *testing.T) {
+	committedAt := time.Date(2026, 4, 28, 8, 30, 0, 0, time.UTC)
+	report := &agentActivityReport{
+		Agent:     "Codex1",
+		Since:     time.Date(2026, 4, 28, 7, 0, 0, 0, time.UTC),
+		Generated: time.Date(2026, 4, 28, 9, 0, 0, 0, time.UTC),
+		Git: &agentGitActivityStats{
+			Branch:           "main",
+			RepoRoot:         "/repo/orquesta",
+			PendingShortStat: "2 files changed, 10 insertions(+), 3 deletions(-)",
+			HeadCommit: &gitestadisticasapp.CommitSummary{
+				HashShort:   "abc1234",
+				Subject:     "feat: exponer head commit",
+				CommittedAt: &committedAt,
+			},
+		},
+	}
+	out := capturarStdout(t, func() {
+		if err := imprimirAgenteActividad(report); err != nil {
+			t.Fatalf("imprimirAgenteActividad: %v", err)
+		}
+	})
+	if !containsAll(out,
+		"Git:       rama=main",
+		"Repo:      /repo/orquesta",
+		"HEAD:      abc1234 feat: exponer head commit · 2026-04-28 08:30:00Z",
+		"Diff:      2 files changed, 10 insertions(+), 3 deletions(-)",
+	) {
+		t.Fatalf("salida cli git inesperada:\n%s", out)
 	}
 }
 

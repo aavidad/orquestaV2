@@ -157,6 +157,7 @@ func RuntimeHandlePermiteSendInputInteractivo(handle *RuntimeHandle) bool {
 		return true
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
+	caps := mapFromJSON(handle.CapabilitiesJSON)
 	if runtimeHandlePuedeInteractuarAntesDeSessionResume(handle, meta) {
 		return true
 	}
@@ -172,6 +173,12 @@ func RuntimeHandlePermiteSendInputInteractivo(handle *RuntimeHandle) bool {
 		if runtimeHandleUsaCodexTTYInestable(meta) {
 			return false
 		}
+	}
+	if value, ok := meta["can_send_input"]; ok && !boolFromAny(value) {
+		return false
+	}
+	if value, ok := caps["can_send_input"]; ok && !boolFromAny(value) {
+		return false
 	}
 	if runtimeHandleUsaCodexTTYInestable(meta) {
 		return false

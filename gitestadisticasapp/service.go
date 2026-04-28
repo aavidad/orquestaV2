@@ -12,18 +12,25 @@ import (
 )
 
 type Stats struct {
-	RepoRoot              string   `json:"repo_root,omitempty"`
-	CWD                   string   `json:"cwd,omitempty"`
-	Branch                string   `json:"branch,omitempty"`
-	PendingFiles          []string `json:"pending_files,omitempty"`
-	RecentCommitFiles     []string `json:"recent_commit_files,omitempty"`
-	TouchedFiles          []string `json:"touched_files,omitempty"`
-	PendingAddedLines     int      `json:"pending_added_lines"`
-	PendingDeletedLines   int      `json:"pending_deleted_lines"`
-	CommittedAddedLines   int      `json:"committed_added_lines"`
-	CommittedDeletedLines int      `json:"committed_deleted_lines"`
-	PendingShortStat      string   `json:"pending_shortstat,omitempty"`
-	RecentCommitCount     int      `json:"recent_commit_count"`
+	RepoRoot              string         `json:"repo_root,omitempty"`
+	CWD                   string         `json:"cwd,omitempty"`
+	Branch                string         `json:"branch,omitempty"`
+	PendingFiles          []string       `json:"pending_files,omitempty"`
+	RecentCommitFiles     []string       `json:"recent_commit_files,omitempty"`
+	TouchedFiles          []string       `json:"touched_files,omitempty"`
+	HeadCommit            *CommitSummary `json:"head_commit,omitempty"`
+	PendingAddedLines     int            `json:"pending_added_lines"`
+	PendingDeletedLines   int            `json:"pending_deleted_lines"`
+	CommittedAddedLines   int            `json:"committed_added_lines"`
+	CommittedDeletedLines int            `json:"committed_deleted_lines"`
+	PendingShortStat      string         `json:"pending_shortstat,omitempty"`
+	RecentCommitCount     int            `json:"recent_commit_count"`
+}
+
+type CommitSummary struct {
+	HashShort   string     `json:"hash_short,omitempty"`
+	Subject     string     `json:"subject,omitempty"`
+	CommittedAt *time.Time `json:"committed_at,omitempty"`
 }
 
 type Aggregate struct {
@@ -84,6 +91,7 @@ func (s *Service) Collect(cwd string, since time.Time) (*Stats, error) {
 	pendingShortStat, _ := s.runner.Run(root, "diff", "--shortstat")
 	pendingNumstat, _ := s.runner.Run(root, "diff", "--numstat")
 	pendingStatus, _ := s.runner.Run(root, "status", "--porcelain", "--untracked-files=all")
+	headCommitRaw, _ := s.runner.Run(root, "log", "-1", "--format=%h%x1f%s%x1f%cI", "HEAD")
 	commitNumstat, _ := s.runner.Run(root, "log", "--since", since.Format(time.RFC3339), "--numstat", "--format=tformat:")
 	commitFilesRaw, _ := s.runner.Run(root, "log", "--since", since.Format(time.RFC3339), "--name-only", "--format=tformat:")
 	commitCountRaw, _ := s.runner.Run(root, "rev-list", "--count", "--since="+since.Format(time.RFC3339), "HEAD")
@@ -101,6 +109,7 @@ func (s *Service) Collect(cwd string, since time.Time) (*Stats, error) {
 		PendingFiles:          pendingFiles,
 		RecentCommitFiles:     recentCommitFiles,
 		TouchedFiles:          touchedFiles,
+		HeadCommit:            parseGitHeadCommit(headCommitRaw),
 		PendingAddedLines:     pendingAdded,
 		PendingDeletedLines:   pendingDeleted,
 		CommittedAddedLines:   committedAdded,
@@ -208,6 +217,33 @@ func parseGitNumstatAndFiles(numstatRaw, filesRaw string) (int, int, []string) {
 		fileSet[filepath.Clean(line)] = struct{}{}
 	}
 	return added, deleted, mapKeysSorted(fileSet)
+}
+
+func parseGitHeadCommit(raw string) *CommitSummary {
+	line := strings.TrimSpace(raw)
+	if line == "" {
+		return nil
+	}
+	parts := strings.SplitN(line, "\x1f", 3)
+	if len(parts) == 0 {
+		return nil
+	}
+	commit := &CommitSummary{
+		HashShort: strings.TrimSpace(parts[0]),
+	}
+	if len(parts) > 1 {
+		commit.Subject = strings.TrimSpace(parts[1])
+	}
+	if len(parts) > 2 {
+		if committedAt, err := time.Parse(time.RFC3339, strings.TrimSpace(parts[2])); err == nil {
+			value := committedAt.UTC()
+			commit.CommittedAt = &value
+		}
+	}
+	if commit.HashShort == "" && commit.Subject == "" && commit.CommittedAt == nil {
+		return nil
+	}
+	return commit
 }
 
 func mergeStringSets(groups ...[]string) []string {
