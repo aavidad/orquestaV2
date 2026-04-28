@@ -137,6 +137,9 @@ func buildOpenClawMailboxContext(payload map[string]any) string {
 	}
 	taskID := int64DesdeAny(payload["tarea_objetivo_id"])
 	if taskID <= 0 {
+		taskID = int64DesdeAny(payload["tarea_id"])
+	}
+	if taskID <= 0 {
 		taskID = int64DesdeAny(payload["task_id"])
 	}
 	if taskID > 0 {

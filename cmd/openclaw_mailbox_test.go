@@ -49,3 +49,14 @@ func TestBuildOpenClawMailboxLiteFromItemsAggregatesContexts(t *testing.T) {
 		t.Fatalf("oldest_created_at inesperado: %+v", out[0])
 	}
 }
+
+func TestOpenClawMailboxSummarizePayloadReconoceTareaIDCanonica(t *testing.T) {
+	action, context := summarizeOpenClawMailboxPayload(`{"supervisor_action":"continuar_trabajo","carril":"premium_worktree","tarea_id":41,"worktree_id":7}`)
+	if action != "continuar_trabajo" {
+		t.Fatalf("accion inesperada: %q", action)
+	}
+	want := "premium_worktree · tarea#41 · wt#7"
+	if context != want {
+		t.Fatalf("contexto inesperado para tarea_id: got=%q want=%q", context, want)
+	}
+}
