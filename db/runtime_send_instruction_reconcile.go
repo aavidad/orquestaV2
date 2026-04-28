@@ -9,7 +9,21 @@ import (
 )
 
 func reconciliarRuntimeOrderSendInstructionConMailboxActual(order *RuntimeOrder, payload map[string]any, now time.Time) (bool, error) {
-	if order == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) {
+	if order == nil {
+		return false, nil
+	}
+	if newer, err := runtimeOrderSendInstructionDuplicadaMasRecientePorTarea(order, payload); err != nil {
+		return false, err
+	} else if newer != nil {
+		reason := fmt.Sprintf("covered_by_newer_task_order:%d", newer.ID)
+		if err := completarRuntimeOrderSendInstructionSupersedida(order, payload, reason); err != nil {
+			if !errors.Is(err, sql.ErrNoRows) {
+				return false, err
+			}
+		}
+		return true, nil
+	}
+	if !runtimeOrderSendInstructionProvieneMailbox(payload) {
 		return false, nil
 	}
 	if reason, err := runtimeOrderSendInstructionObsoletaPorTarea(order, payload); err != nil {

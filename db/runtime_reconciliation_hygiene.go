@@ -7,6 +7,7 @@ import (
 	"orquesta/coordinacion"
 	"orquesta/internal/controlruntime"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -338,6 +339,11 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 		return mailboxObsoleta + worktreesObsoletas + processed, err
 	}
 	processed += orphanTMUX
+	worktreesCerradas, err := purgarRutasWorktreeCerradasOFallidas()
+	if err != nil {
+		return mailboxObsoleta + worktreesObsoletas + processed, err
+	}
+	processed += worktreesCerradas
 	historico, err := PurgarRuntimeHistorico()
 	if err != nil {
 		return mailboxObsoleta + worktreesObsoletas + processed, err
@@ -530,6 +536,53 @@ func cerrarWorktreeActivaPorHigiene(item *coordinacion.Worktree, reason string) 
 		_ = os.RemoveAll(strings.TrimSpace(item.Path))
 	}
 	return closed != nil, nil
+}
+
+func purgarRutasWorktreeCerradasOFallidas() (int, error) {
+	processed := 0
+	for _, state := range []coordinacion.WorktreeState{coordinacion.WorktreeClosed, coordinacion.WorktreeFailed} {
+		state := state
+		items, err := (CoordinationWorktreeSQLRepository{}).ListRaw(coordinacion.WorktreeFilter{State: &state})
+		if err != nil {
+			return processed, err
+		}
+		for _, item := range items {
+			if item == nil || strings.TrimSpace(item.Path) == "" {
+				continue
+			}
+			shouldRemove, err := runtimeHygieneShouldRemoveClosedWorktreePath(item)
+			if err != nil {
+				return processed, err
+			}
+			if !shouldRemove {
+				continue
+			}
+			if err := os.RemoveAll(strings.TrimSpace(item.Path)); err != nil {
+				return processed, err
+			}
+			processed++
+		}
+	}
+	return processed, nil
+}
+
+func runtimeHygieneShouldRemoveClosedWorktreePath(item *coordinacion.Worktree) (bool, error) {
+	if item == nil || strings.TrimSpace(item.Path) == "" {
+		return false, nil
+	}
+	path := strings.TrimSpace(item.Path)
+	if !coordinacion.WorktreePathUsable(path) {
+		return false, nil
+	}
+	proyecto, err := GetProyectoConRutaEfectiva(jsonNumber(item.ProjectID), "")
+	if err != nil || proyecto == nil {
+		return false, err
+	}
+	root := filepath.Join(strings.TrimSpace(proyecto.RutaAbs), ".orquesta-worktrees")
+	if !coordinacion.PathWithin(root, path) {
+		return false, nil
+	}
+	return true, nil
 }
 
 func contarPurgaRuntimeHistorico(resultado *PurgaRuntimeHistoricoResultado) int {

@@ -648,6 +648,11 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 	if err != nil {
 		return err
 	}
+	if supersedida, err := reconciliarRuntimeOrderSendInstructionConMailboxActual(order, payload, time.Now().UTC()); err != nil {
+		return err
+	} else if supersedida {
+		return nil
+	}
 	payloadDesdeMailbox := runtimeOrderSendInstructionProvieneMailbox(payload)
 
 	toAgente := stringFromMap(payload, "to_agente", order.Agente)

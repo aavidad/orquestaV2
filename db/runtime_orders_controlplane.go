@@ -218,6 +218,51 @@ func runtimeOrderSendInstructionDuplicadaMasReciente(order *RuntimeOrder, payloa
 	return other, nil
 }
 
+func runtimeOrderSendInstructionDuplicadaMasRecientePorTarea(order *RuntimeOrder, payload map[string]any) (*RuntimeOrder, error) {
+	if order == nil {
+		return nil, nil
+	}
+	taskID := runtimeOrderSendInstructionTaskID(payload)
+	if taskID <= 0 {
+		return nil, nil
+	}
+	args := []any{
+		strings.TrimSpace(order.Agente),
+		order.ID,
+		`%"tarea_id":` + strconv.FormatInt(taskID, 10) + `%`,
+		`%"tarea_objetivo_id":` + strconv.FormatInt(taskID, 10) + `%`,
+	}
+	query := `
+		SELECT id, agente, proyecto_id, runtime_id, handle_id, tipo, payload_json, resultado_json,
+		       error_text, estado, claimed_by, lease_token, attempt_count, lease_expires_at,
+		       available_at, created_at, started_at, finished_at, updated_at
+		FROM runtime_orders
+		WHERE tipo = 'send_instruction'
+		  AND TRIM(agente) = ?
+		  AND id <> ?
+		  AND estado IN ('pendiente','tomada','ejecutando')
+		  AND (payload_json LIKE ? OR payload_json LIKE ?)`
+	if order.ProyectoID != nil && *order.ProyectoID > 0 {
+		query += ` AND proyecto_id = ?`
+		args = append(args, *order.ProyectoID)
+	}
+	query += `
+		ORDER BY created_at DESC, id DESC
+		LIMIT 1`
+	row := DB.QueryRow(query, args...)
+	other, err := scanRuntimeOrder(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if other == nil || other.ID <= order.ID {
+		return nil, nil
+	}
+	return other, nil
+}
+
 func runtimeOrderSendInstructionTaskID(payload map[string]any) int64 {
 	if payload == nil {
 		return 0
