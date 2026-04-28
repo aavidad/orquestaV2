@@ -185,8 +185,9 @@ func runtimeOrderSendInstructionDuplicadaMasReciente(order *RuntimeOrder, payloa
 	args := []any{
 		strings.TrimSpace(order.Agente),
 		order.ID,
-		`%"mailbox_id":` + strconv.FormatInt(mailboxID, 10) + `%`,
 	}
+	whereTask, taskArgs := runtimeJSONIntFieldLikeWhere("payload_json", mailboxID, "mailbox_id")
+	args = append(args, taskArgs...)
 	query := `
 		SELECT id, agente, proyecto_id, runtime_id, handle_id, tipo, payload_json, resultado_json,
 		       error_text, estado, claimed_by, lease_token, attempt_count, lease_expires_at,
@@ -196,7 +197,7 @@ func runtimeOrderSendInstructionDuplicadaMasReciente(order *RuntimeOrder, payloa
 		  AND TRIM(agente) = ?
 		  AND id <> ?
 		  AND estado IN ('pendiente','tomada','ejecutando')
-		  AND payload_json LIKE ?`
+		  AND ` + whereTask
 	if order.ProyectoID != nil && *order.ProyectoID > 0 {
 		query += ` AND proyecto_id = ?`
 		args = append(args, *order.ProyectoID)
@@ -229,9 +230,9 @@ func runtimeOrderSendInstructionDuplicadaMasRecientePorTarea(order *RuntimeOrder
 	args := []any{
 		strings.TrimSpace(order.Agente),
 		order.ID,
-		`%"tarea_id":` + strconv.FormatInt(taskID, 10) + `%`,
-		`%"tarea_objetivo_id":` + strconv.FormatInt(taskID, 10) + `%`,
 	}
+	whereTask, taskArgs := runtimeJSONIntFieldLikeWhere("payload_json", taskID, "tarea_id", "tarea_objetivo_id")
+	args = append(args, taskArgs...)
 	query := `
 		SELECT id, agente, proyecto_id, runtime_id, handle_id, tipo, payload_json, resultado_json,
 		       error_text, estado, claimed_by, lease_token, attempt_count, lease_expires_at,
@@ -241,7 +242,7 @@ func runtimeOrderSendInstructionDuplicadaMasRecientePorTarea(order *RuntimeOrder
 		  AND TRIM(agente) = ?
 		  AND id <> ?
 		  AND estado IN ('pendiente','tomada','ejecutando')
-		  AND (payload_json LIKE ? OR payload_json LIKE ?)`
+		  AND ` + whereTask
 	if order.ProyectoID != nil && *order.ProyectoID > 0 {
 		query += ` AND proyecto_id = ?`
 		args = append(args, *order.ProyectoID)
@@ -260,7 +261,60 @@ func runtimeOrderSendInstructionDuplicadaMasRecientePorTarea(order *RuntimeOrder
 	if other == nil || other.ID <= order.ID {
 		return nil, nil
 	}
+	otherPayload, err := runtimeOrderPayloadMap(other.PayloadJSON)
+	if err != nil {
+		return nil, err
+	}
+	if !runtimeOrderSendInstructionTaskScopeEquivalent(payload, otherPayload) {
+		return nil, nil
+	}
 	return other, nil
+}
+
+func runtimeJSONIntFieldLikeWhere(column string, value int64, fields ...string) (string, []any) {
+	clauses := make([]string, 0, len(fields)*2)
+	args := make([]any, 0, len(fields)*2)
+	token := strconv.FormatInt(value, 10)
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			continue
+		}
+		for _, suffix := range []string{",", "}"} {
+			clauses = append(clauses, column+` LIKE ?`)
+			args = append(args, `%"`+field+`":`+token+suffix+`%`)
+		}
+	}
+	if len(clauses) == 0 {
+		return "1=0", nil
+	}
+	return "(" + strings.Join(clauses, " OR ") + ")", args
+}
+
+func runtimeOrderSendInstructionTaskScopeEquivalent(current, other map[string]any) bool {
+	if runtimeOrderSendInstructionProvieneMailbox(current) != runtimeOrderSendInstructionProvieneMailbox(other) {
+		return false
+	}
+	if runtimeOrderSendInstructionSemanticKind(current) != runtimeOrderSendInstructionSemanticKind(other) {
+		return false
+	}
+	if strings.TrimSpace(strings.ToLower(anyToString(current["accion"]))) != strings.TrimSpace(strings.ToLower(anyToString(other["accion"]))) {
+		return false
+	}
+	currentVerification := strings.TrimSpace(anyToString(current["verification_key"]))
+	otherVerification := strings.TrimSpace(anyToString(other["verification_key"]))
+	if currentVerification != "" || otherVerification != "" {
+		return currentVerification == otherVerification
+	}
+	return true
+}
+
+func runtimeOrderSendInstructionSemanticKind(payload map[string]any) string {
+	kind := strings.TrimSpace(strings.ToLower(anyToString(payload["mailbox_kind"])))
+	if kind == "" {
+		return "instruction"
+	}
+	return kind
 }
 
 func runtimeOrderSendInstructionTaskID(payload map[string]any) int64 {

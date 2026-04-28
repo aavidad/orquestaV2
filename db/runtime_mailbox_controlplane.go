@@ -300,10 +300,9 @@ func ConsumirRuntimeMailboxPendienteSupersedidoPorTaskID(toAgente string, proyec
 		q += ` AND proyecto_id = ?`
 		args = append(args, *proyectoID)
 	}
-	q += ` AND payload_json LIKE ?`
-	args = append(args,
-		`%"tarea_id":`+jsonNumber(taskID)+`%`,
-	)
+	whereTask, taskArgs := runtimeJSONIntFieldLikeWhere("payload_json", taskID, "tarea_id", "tarea_objetivo_id")
+	q += ` AND ` + whereTask
+	args = append(args, taskArgs...)
 	res, err := DB.Exec(q, args...)
 	if err != nil {
 		return 0, err
