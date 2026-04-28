@@ -408,6 +408,64 @@ func TestWebOpenClawConservaGeneradoDelSnapshotReutilizado(t *testing.T) {
 	}
 }
 
+func TestWebOpenClawToleraFalloMailboxYMantieneStatusBase(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prevStatus := statusService
+	prevMailbox := openClawPendingMailboxFetcher
+	defer func() {
+		statusService = prevStatus
+		openClawPendingMailboxFetcher = prevMailbox
+		resetStatusSnapshotCache()
+	}()
+	resetStatusSnapshotCache()
+
+	snapshot := apiStatusResponse{
+		Generado: "2026-04-29T10:15:00Z",
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex7", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex7", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		Agentes: []*db.Agente{
+			{Nombre: "Codex7", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 77, Estado: db.TareaEnProgreso, Agente: "Codex7", Titulo: "slice activa", Modulo: "cmd"},
+		},
+	}
+	statusService = stubStatusService{response: snapshot}
+	storeStatusSnapshot(snapshot, time.Now().UTC())
+	openClawPendingMailboxFetcher = func(agentes []*db.Agente) ([]apiOpenClawMailboxLite, error) {
+		return nil, os.ErrDeadlineExceeded
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openclaw", webHandlerOpenClaw)
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/openclaw", nil)
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("openclaw mailbox degradado status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, token := range []string{
+		"OpenClaw Operator",
+		"2026-04-29 10:15:00",
+		"Codex7",
+		"slice activa",
+		"Sin guidance durable pendiente.",
+	} {
+		if !strings.Contains(body, token) {
+			t.Fatalf("pagina openclaw mailbox degradada sin %q:\n%s", token, body)
+		}
+	}
+}
+
 func TestWebOpenClawAccionResuelveReviewGate(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

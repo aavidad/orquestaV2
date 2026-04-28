@@ -2485,7 +2485,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		}, errStatusFetchTimeout); err == nil {
 			panelRows = rows
 		}
-		statusResumen := apiOpenClawStatusLite{Generado: status.Generado, TareasPorEstado: status.TareasPorEstado}
+		statusResumen := buildOpenClawOperatorStatusBase(status, panelRows)
 		if summary, err := runAPITimeboxed(200*time.Millisecond, func() (apiOpenClawStatusLite, error) {
 			return buildOpenClawOperatorStatusWithRows(status, panelRows)
 		}, errStatusFetchTimeout); err == nil {
@@ -2792,6 +2792,8 @@ func buildOpenClawReviewCompact(review map[string]any) map[string]any {
 	return compact
 }
 
+var openClawPendingMailboxFetcher = buildOpenClawPendingMailbox
+
 type apiOpenClawAgentLite struct {
 	Nombre             string                 `json:"nombre"`
 	Rol                string                 `json:"rol,omitempty"`
@@ -2871,13 +2873,9 @@ func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, 
 	return buildOpenClawOperatorStatusWithRows(status, nil)
 }
 
-func buildOpenClawOperatorStatusWithRows(status *estadoResumen, rows []agentesapp.Row) (apiOpenClawStatusLite, error) {
+func buildOpenClawOperatorStatusBase(status *estadoResumen, rows []agentesapp.Row) apiOpenClawStatusLite {
 	if status == nil {
-		return apiOpenClawStatusLite{}, nil
-	}
-	mailboxPendiente, err := buildOpenClawPendingMailbox(status.Agentes)
-	if err != nil {
-		return apiOpenClawStatusLite{}, err
+		return apiOpenClawStatusLite{}
 	}
 	return apiOpenClawStatusLite{
 		Generado:            status.Generado,
@@ -2888,14 +2886,26 @@ func buildOpenClawOperatorStatusWithRows(status *estadoResumen, rows []agentesap
 		AgentesAuthManual:   compactOpenClawAgents(status.AgentesAuthManual, status.TareasActivas, rows),
 		AgentesQuotaBlocked: compactOpenClawAgents(status.AgentesQuotaBlocked, status.TareasActivas, rows),
 		EnCuota:             compactOpenClawAgents(agentesBloqueadosPorCuotaVisibles(status), status.TareasActivas, rows),
-		MailboxPendiente:    mailboxPendiente,
 		RetenidasPorCuota:   tareasRetenidasPorCuota(status.TareasActivas, status.Agentes, status.AgentesQuotaBlocked),
 		TareasActivas:       filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso),
 		TareasReservadas:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
 		PropuestasAbiertas:  status.PropuestasAbiertas,
 		CapacitySummary:     buildOpenClawCapacitySummary(status.AgentesActivos, status.AgentesTrabajando, status.TareasActivas, status.TareasPorEstado),
 		AgentesSaturados:    buildOpenClawSaturatedAgents(status.AgentesActivos, status.TareasActivas, rows),
-	}, nil
+	}
+}
+
+func buildOpenClawOperatorStatusWithRows(status *estadoResumen, rows []agentesapp.Row) (apiOpenClawStatusLite, error) {
+	resumen := buildOpenClawOperatorStatusBase(status, rows)
+	if status == nil {
+		return resumen, nil
+	}
+	mailboxPendiente, err := openClawPendingMailboxFetcher(status.Agentes)
+	if err != nil {
+		return resumen, err
+	}
+	resumen.MailboxPendiente = mailboxPendiente
+	return resumen, nil
 }
 
 func buildOpenClawSessionCandidates(snapshot map[string]any) []apiOpenClawSessionCandidate {

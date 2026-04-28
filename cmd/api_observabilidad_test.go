@@ -799,6 +799,73 @@ func TestAPIOpenClawOperatorConservaGeneradoDelSnapshotReutilizado(t *testing.T)
 	}
 }
 
+func TestAPIOpenClawOperatorToleraFalloMailboxYMantieneStatusBase(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prevStatus := statusService
+	prevMailbox := openClawPendingMailboxFetcher
+	defer func() {
+		statusService = prevStatus
+		openClawPendingMailboxFetcher = prevMailbox
+		resetStatusSnapshotCache()
+	}()
+	resetStatusSnapshotCache()
+
+	snapshot := apiStatusResponse{
+		Generado: "2026-04-29T10:15:00Z",
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex7", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex7", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		Agentes: []*db.Agente{
+			{Nombre: "Codex7", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 77, Estado: db.TareaEnProgreso, Agente: "Codex7", Titulo: "slice activa", Modulo: "cmd"},
+		},
+	}
+	statusService = stubStatusService{response: snapshot}
+	storeStatusSnapshot(snapshot, time.Now().UTC())
+	openClawPendingMailboxFetcher = func(agentes []*db.Agente) ([]apiOpenClawMailboxLite, error) {
+		return nil, fmt.Errorf("mailbox temporalmente no disponible")
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/openclaw/operator", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("openclaw operator status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode operator: %v", err)
+	}
+	statusMap, ok := payload["status"].(map[string]any)
+	if !ok {
+		t.Fatalf("status openclaw ausente: %s", rec.Body.String())
+	}
+	if got, _ := statusMap["generado"].(string); got != snapshot.Generado {
+		t.Fatalf("generado operator inesperado: got=%q want=%q body=%s", got, snapshot.Generado, rec.Body.String())
+	}
+	if activos, ok := payload["agentesActivos"].([]any); !ok || len(activos) != 1 {
+		t.Fatalf("agentesActivos raiz inesperados: %#v body=%s", payload["agentesActivos"], rec.Body.String())
+	}
+	if tareas, ok := payload["tareasActivas"].([]any); !ok || len(tareas) != 1 {
+		t.Fatalf("tareasActivas raiz inesperadas: %#v body=%s", payload["tareasActivas"], rec.Body.String())
+	}
+	if _, ok := statusMap["mailboxPendiente"]; ok {
+		if mailbox, ok := statusMap["mailboxPendiente"].([]any); ok && len(mailbox) != 0 {
+			t.Fatalf("mailboxPendiente deberia degradar a vacio: %#v", statusMap["mailboxPendiente"])
+		}
+	}
+}
+
 func TestAPIOpenClawPipelineOperaPorLaViaCanonica(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	mux := http.NewServeMux()

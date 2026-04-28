@@ -818,10 +818,9 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 	supervisor := "OpenClaw"
 	status := buildOpenClawBaseStatus()
 	panelRows, _ := fetchAgentPanelRowsCached(150 * time.Millisecond)
-	operatorStatus, err := buildOpenClawOperatorStatusWithRows(status, panelRows)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	operatorStatus := buildOpenClawOperatorStatusBase(status, panelRows)
+	if resolved, err := buildOpenClawOperatorStatusWithRows(status, panelRows); err == nil {
+		operatorStatus = resolved
 	}
 	review := buildOpenClawReviewSnapshotSafe(supervisor)
 	reviewGates, _ := review["review_gates"].([]*db.ReviewGate)
@@ -933,7 +932,7 @@ func formatWebGeneratedAt(raw string) string {
 }
 
 func mustOpenClawPendingMailbox(agentes []*db.Agente) []apiOpenClawMailboxLite {
-	items, err := buildOpenClawPendingMailbox(agentes)
+	items, err := openClawPendingMailboxFetcher(agentes)
 	if err != nil {
 		return nil
 	}
