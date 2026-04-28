@@ -495,9 +495,13 @@ func summarizeAgentNoiseSignals(bySignal map[string]int, total int) (int, int) {
 func summarizeAgentDeliverySignal(summary agentActivitySummary, stats *agentGitActivityStats) (string, string) {
 	commits := 0
 	pendingFiles := 0
+	pendingAdded := 0
+	pendingDeleted := 0
 	if stats != nil {
 		commits = stats.RecentCommitCount
 		pendingFiles = len(stats.PendingFiles)
+		pendingAdded = stats.PendingAddedLines
+		pendingDeleted = stats.PendingDeletedLines
 	}
 	tests := summary.TranscriptBySignal["tests"]
 	codeChanges := summary.TranscriptBySignal["code_change"]
@@ -529,6 +533,9 @@ func summarizeAgentDeliverySignal(summary agentActivitySummary, stats *agentGitA
 			parts = append(parts, fmt.Sprintf("%d señal(es) de test", tests))
 		}
 		return "entregando_valor", strings.Join(parts, " · ")
+	case pendingFiles > 0 && commits == 0 && tests == 0 && codeChanges == 0:
+		return "acumulando_diff", fmt.Sprintf("%d fichero(s) pendientes +%d/-%d sin commits, tests ni señales de cambio",
+			pendingFiles, pendingAdded, pendingDeleted)
 	case noiseSignals > 0 && summary.NoiseRatioPct >= 60 && pendingFiles == 0 && summary.OrdersFailed == 0:
 		return "solo_ruido", fmt.Sprintf("%d/%d señales de transcript son ruido (%d%%) sin evidencia de entrega",
 			noiseSignals, summary.TranscriptEntries, summary.NoiseRatioPct)

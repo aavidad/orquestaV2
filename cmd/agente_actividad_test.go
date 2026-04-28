@@ -508,6 +508,32 @@ func TestImprimirAgenteActividadMuestraRuidoCuandoPredomina(t *testing.T) {
 	}
 }
 
+func TestImprimirAgenteActividadMuestraAcumulacionDeDiffSinEntrega(t *testing.T) {
+	report := &agentActivityReport{
+		Agent:     "CodexDiff",
+		Since:     time.Date(2026, 4, 28, 8, 0, 0, 0, time.UTC),
+		Generated: time.Date(2026, 4, 28, 9, 30, 0, 0, time.UTC),
+		Summary: agentActivitySummary{
+			CurrentTasks:        []string{"#52 [en_progreso] endurecer runtime modulo=db"},
+			DeliverySignal:      "acumulando_diff",
+			DeliveryDetail:      "7 fichero(s) pendientes +320/-40 sin commits, tests ni señales de cambio",
+			CommitCadence:       "sin_checkpoint",
+			CommitCadenceDetail: "diff pendiente (7 fichero(s), +320/-40) sin commits recientes",
+		},
+	}
+	out := capturarStdout(t, func() {
+		if err := imprimirAgenteActividad(report); err != nil {
+			t.Fatalf("imprimirAgenteActividad: %v", err)
+		}
+	})
+	if !containsAll(out,
+		"#52 [en_progreso] endurecer runtime modulo=db",
+		"Entrega:   acumulando_diff · 7 fichero(s) pendientes +320/-40 sin commits, tests ni señales de cambio",
+	) {
+		t.Fatalf("salida cli sin señal de acumulación de diff:\n%s", out)
+	}
+}
+
 func TestSummarizeAgentActivityExponeLeasesYUltimoTest(t *testing.T) {
 	lastTest := time.Date(2026, 4, 28, 9, 15, 0, 0, time.UTC)
 	detail := &agentesapp.Detail{
@@ -644,6 +670,26 @@ func TestSummarizeAgentDeliverySignalDistingueValorYAtasco(t *testing.T) {
 			t.Fatalf("signal=%q", signal)
 		}
 		if detail != "4/5 señales de transcript son ruido (80%) sin evidencia de entrega" {
+			t.Fatalf("detail inesperado: %s", detail)
+		}
+	})
+
+	t.Run("acumulando diff sin entrega", func(t *testing.T) {
+		signal, detail := summarizeAgentDeliverySignal(agentActivitySummary{
+			CurrentTasks:       []string{"#52 [en_progreso] endurecer runtime modulo=db"},
+			CommitCadence:      "sin_checkpoint",
+			CommitCadenceDetail:"diff pendiente (7 fichero(s), +320/-40) sin commits recientes",
+			TranscriptBySignal: map[string]int{"progress_update": 1},
+		}, &agentGitActivityStats{
+			PendingFiles:        []string{"a.go", "b.go", "c.go", "d.go", "e.go", "f.go", "g.go"},
+			PendingAddedLines:   320,
+			PendingDeletedLines: 40,
+			RecentCommitCount:   0,
+		})
+		if signal != "acumulando_diff" {
+			t.Fatalf("signal=%q", signal)
+		}
+		if detail != "7 fichero(s) pendientes +320/-40 sin commits, tests ni señales de cambio" {
 			t.Fatalf("detail inesperado: %s", detail)
 		}
 	})
