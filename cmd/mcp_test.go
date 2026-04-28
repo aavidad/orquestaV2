@@ -6560,6 +6560,16 @@ func TestMCPResourceReadWorkspaceControlAceptaDesde(t *testing.T) {
 	}
 }
 
+func TestMCPResourceReadWorkspaceControlRechazaDesdeInvalido(t *testing.T) {
+	contents, err := readMCPResource("orquesta://workspace/control?desde=xxx")
+	if err == nil {
+		t.Fatalf("readMCPResource workspace/control?desde=xxx deberia fallar, contents=%#v", contents)
+	}
+	if !strings.Contains(err.Error(), "valor --desde inválido") {
+		t.Fatalf("error inesperado para workspace/control?desde=xxx: %v", err)
+	}
+}
+
 func TestMCPToolListaProyectosFiltrados(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")

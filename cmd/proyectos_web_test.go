@@ -813,6 +813,23 @@ func TestWebWorkspaceControlMuestraResumenGlobal(t *testing.T) {
 	}
 }
 
+func TestWebWorkspaceControlRenderizaErrorConDesdeInvalido(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/workspace/control?desde=xxx", nil)
+	rec := httptest.NewRecorder()
+	webHandlerWorkspaceControl(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("workspace control status=%d cuerpo=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, token := range []string{"Control global del workspace", "valor --desde inválido", "workspace"} {
+		if !strings.Contains(body, token) {
+			t.Fatalf("falta %q en workspace control con desde invalido: %s", token, body)
+		}
+	}
+}
+
 func TestWebWorkspaceControlNoConfundeRiesgoConAutonomiaVisible(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

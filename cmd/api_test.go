@@ -1044,6 +1044,73 @@ func TestAPIServerOperationalUsesReadOnlyFallbackWhenFastFallbackUnavailable(t *
 	}
 }
 
+func TestAPIServerOperationalIgnoraSnapshotEnTransicionYUsaReadOnlyFresco(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	prevFast := statusFastFetcher
+	prevUltraLite := apiStatusUltraLiteFetcher
+	prevNow := statusNowFunc
+	t.Cleanup(func() {
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+		statusFastFetcher = prevFast
+		apiStatusUltraLiteFetcher = prevUltraLite
+		statusNowFunc = prevNow
+	})
+
+	now := time.Date(2026, 4, 28, 19, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Stale1", Activo: true, EstadoCuota: "activo"},
+			{Nombre: "Stale2", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Stale1", Activo: true, EstadoCuota: "activo"},
+			{Nombre: "Stale2", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasEnProgreso: []tareaLite{
+			{ID: 98, Estado: db.TareaEnProgreso, Agente: "Stale1"},
+			{ID: 99, Estado: db.TareaEnProgreso, Agente: "Stale2"},
+		},
+		Autonomia: autonomiaResumen{ContinuidadPendiente: 1},
+		Generado:  now.Format(time.RFC3339),
+	}, now, time.Minute)
+
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{}, errStatusFetchTimeout
+	}
+	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) {
+		return apiStatusResponse{}, false
+	}
+	apiStatusReadOnlyLiteFetcher = func() ([]*db.Agente, map[string]int, []*db.Tarea, error) {
+		return []*db.Agente{{Nombre: "CodexRO", Activo: true, EstadoCuota: "activo"}}, map[string]int{"en_progreso": 1}, []*db.Tarea{
+			{ID: 9, Estado: db.TareaEnProgreso, Agente: stringPtr("CodexRO")},
+		}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerServerOperational(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode operational: %v", err)
+	}
+	if payload.RegisteredAgents != 1 || payload.WorkingAgents != 1 || payload.TasksInProgress != 1 {
+		t.Fatalf("payload operacional inesperado: %+v", payload)
+	}
+	if payload.State == "degraded" || payload.Reason == "status_temporarily_degraded" {
+		t.Fatalf("no deberia degradar si hay read-only fresco disponible: %+v", payload)
+	}
+}
+
 func TestFetchStatusForOperationalFallbackIgnoraSnapshotQueRequiereRefresh(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()
@@ -5598,6 +5665,20 @@ func TestAPIWorkspaceControlUsa24hPorDefectoCuandoNoSePasaDesde(t *testing.T) {
 	maxWant := after.Add(-workspaceControlDefaultWindow).Add(2 * time.Second)
 	if resp.Control.Since.Before(minWant) || resp.Control.Since.After(maxWant) {
 		t.Fatalf("since global por defecto inesperado: got=%s want_between=[%s,%s]", resp.Control.Since, minWant, maxWant)
+	}
+}
+
+func TestAPIWorkspaceControlRechazaDesdeInvalido(t *testing.T) {
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/workspace/control?desde=xxx", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "valor --desde inválido") {
+		t.Fatalf("body inesperado para desde invalido: %s", rec.Body.String())
 	}
 }
 
