@@ -439,6 +439,69 @@ func TestBuildServerOperationalInfoFastFromDBUsaDBSiSnapshotExpira(t *testing.T)
 	}
 }
 
+func TestBuildServerOperationalInfoFastFromDBPrefierePanelFrescoSobreSnapshotFrescoUsable(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	prevAgents := serverOperationalListAgentsFetcher
+	prevTasks := serverOperationalCountTasksFetcher
+	prevNow := statusNowFunc
+	defer func() {
+		serverOperationalListAgentsFetcher = prevAgents
+		serverOperationalCountTasksFetcher = prevTasks
+		statusNowFunc = prevNow
+	}()
+
+	now := time.Date(2026, 4, 29, 11, 15, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	resetAt := now.Add(30 * time.Minute)
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		TareasPorEstado: map[string]int{
+			string(db.TareaEnProgreso): 1,
+		},
+		TareasEnProgreso: []tareaLite{{ID: 24, Estado: db.TareaEnProgreso, Agente: "Codex1"}},
+		Autonomia: autonomiaResumen{
+			Supervisando:  1,
+			WorkConfirmed: 1,
+		},
+		Generado: now.Format(time.RFC3339),
+	}, now, time.Minute)
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:           &db.Agente{Nombre: "Codex1", Activo: true, EstadoCuota: "activo"},
+		EstadoOperativo:  "bloqueado_por_runtime",
+		DetalleOperativo: "autenticacion manual requerida",
+		WorkerAlive:      true,
+		WorkerState:      "blocked_auth",
+		OpenTasks:        1,
+	}}, now)
+
+	serverOperationalListAgentsFetcher = func() ([]*db.Agente, error) {
+		return nil, errors.New("no deberia consultar agentes con snapshot fresco usable")
+	}
+	serverOperationalCountTasksFetcher = func() (map[string]int, error) {
+		return nil, errors.New("no deberia consultar tareas con snapshot fresco usable")
+	}
+
+	info, err := buildServerOperationalInfoFastFromDB()
+	if err != nil {
+		t.Fatalf("buildServerOperationalInfoFastFromDB: %v", err)
+	}
+	if info.State != "degraded" || info.Reason != "workers_require_manual_auth" || info.Operational {
+		t.Fatalf("deberia preferir panel fresco sobre snapshot fresco usable: %+v", info)
+	}
+	if info.AuthAgents != 1 || info.QuotaAgents != 0 {
+		t.Fatalf("clasificacion auth/quota inesperada: %+v", info)
+	}
+}
+
 func TestBuildServerOperationalInfoFastFromDBDerivaRiesgoCanonicoSinStatus(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()

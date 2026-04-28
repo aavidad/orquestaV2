@@ -256,23 +256,11 @@ func visibleNonSupervisorAgents(items []*db.Agente) []*db.Agente {
 
 func buildServerOperationalInfoFastFromDB() (serverOperationalInfo, error) {
 	if snapshot, ok := readStatusSnapshotFreshUsable(); ok {
+		reconcileServerOperationalSnapshotWithFreshPanel(&snapshot)
 		return buildServerOperationalInfo(snapshot), nil
 	}
 	if snapshot, ok := readStatusSnapshotAny(); ok && !statusSnapshotNeedsImmediateRefresh(snapshot) {
-		if rows, ok := readAgentPanelSnapshotFresh(); ok {
-			snapshot.Agentes = mergeServerOperationalAgentsWithPanelRows(snapshot.Agentes, rows)
-			sanitizeServerOperationalQuotaFromPanelRows(snapshot.Agentes, rows)
-			aplicarVisibilidadOperativaAgentes(snapshot.Agentes, rows)
-			activos, trabajando, saturados, atascados, authManual, quotaBlocked, _ := agentesVisiblesPorEstadoOperativoRows(snapshot.Agentes, rows)
-			activos, trabajando, saturados = normalizarAgentesVisiblesStatus(activos, trabajando, saturados)
-			snapshot.AgentesActivos = activos
-			snapshot.AgentesTrabajando = trabajando
-			snapshot.AgentesSaturados = saturados
-			snapshot.AgentesAtascados = atascados
-			snapshot.AgentesAuthManual = authManual
-			snapshot.AgentesQuotaBlocked = quotaBlocked
-			snapshot.Autonomia = resumirAutonomiaRows(rows, statusNowFunc().UTC())
-		}
+		reconcileServerOperationalSnapshotWithFreshPanel(&snapshot)
 		return buildServerOperationalInfo(snapshot), nil
 	}
 	agentes, err := serverOperationalListAgentsFetcher()
@@ -416,6 +404,28 @@ func mergeServerOperationalAgentsWithPanelRows(agentes []*db.Agente, rows []agen
 		}
 	}
 	return out
+}
+
+func reconcileServerOperationalSnapshotWithFreshPanel(snapshot *apiStatusResponse) {
+	if snapshot == nil {
+		return
+	}
+	rows, ok := readAgentPanelSnapshotFresh()
+	if !ok {
+		return
+	}
+	snapshot.Agentes = mergeServerOperationalAgentsWithPanelRows(snapshot.Agentes, rows)
+	sanitizeServerOperationalQuotaFromPanelRows(snapshot.Agentes, rows)
+	aplicarVisibilidadOperativaAgentes(snapshot.Agentes, rows)
+	activos, trabajando, saturados, atascados, authManual, quotaBlocked, _ := agentesVisiblesPorEstadoOperativoRows(snapshot.Agentes, rows)
+	activos, trabajando, saturados = normalizarAgentesVisiblesStatus(activos, trabajando, saturados)
+	snapshot.AgentesActivos = activos
+	snapshot.AgentesTrabajando = trabajando
+	snapshot.AgentesSaturados = saturados
+	snapshot.AgentesAtascados = atascados
+	snapshot.AgentesAuthManual = authManual
+	snapshot.AgentesQuotaBlocked = quotaBlocked
+	snapshot.Autonomia = resumirAutonomiaRows(rows, statusNowFunc().UTC())
 }
 
 func sanitizeServerOperationalQuotaFromPanelRows(agentes []*db.Agente, rows []agentesapp.Row) {
