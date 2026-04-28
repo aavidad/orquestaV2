@@ -7855,9 +7855,7 @@ func procesarRuntimeMailboxSessionResumeConSesion(msg *db.RuntimeMailboxMessage,
 	if mailboxOnlyConsumed, err := consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot, msg, handle, externalSessionID, "runtime_mailbox_session_resume"); err != nil {
 		return false, err
 	} else if mailboxOnlyConsumed {
-		if consumed != nil && msg != nil {
-			consumed[msg.ID] = struct{}{}
-		}
+		marcarRuntimeMailboxConsumidaEnBatch(consumed, msg)
 		return true, nil
 	}
 	if cubierta, err := consumirRuntimeMailboxSessionResumeCubiertaSiProcede(msg, consumed, handle, runtimeInstance, "session_resume"); err != nil {
@@ -7894,17 +7892,13 @@ func consumirRuntimeMailboxSessionResumeCubiertaSiProcede(msg *db.RuntimeMailbox
 	if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, lane, time.Now().UTC()); err != nil {
 		return false, err
 	} else if obsoleta {
-		if consumed != nil && msg != nil {
-			consumed[msg.ID] = struct{}{}
-		}
+		marcarRuntimeMailboxConsumidaEnBatch(consumed, msg)
 		return true, nil
 	}
 	if observada, err := consumirRuntimeMailboxBootstrapObservadoSiProcede(msg, handle, runtimeInstance, lane); err != nil {
 		return false, err
 	} else if observada {
-		if consumed != nil && msg != nil {
-			consumed[msg.ID] = struct{}{}
-		}
+		marcarRuntimeMailboxConsumidaEnBatch(consumed, msg)
 		return true, nil
 	}
 	return false, nil
@@ -7925,9 +7919,7 @@ func encolarRuntimeMailboxSessionResumeSiCorresponde(msg *db.RuntimeMailboxMessa
 	if mailboxOnlyConsumed, err := consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot, msg, handle, externalSessionID, strings.TrimSpace(auditAction)); err != nil {
 		return false, err
 	} else if mailboxOnlyConsumed {
-		if consumed != nil && msg != nil {
-			consumed[msg.ID] = struct{}{}
-		}
+		marcarRuntimeMailboxConsumidaEnBatch(consumed, msg)
 		return true, nil
 	}
 	if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
@@ -7956,10 +7948,15 @@ func encolarRuntimeMailboxSessionResumeSiCorresponde(msg *db.RuntimeMailboxMessa
 	}
 	db.Audit("orquesta", strings.TrimSpace(auditAction), "runtime_order", orderID,
 		fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
-	if consumed != nil && msg != nil {
-		consumed[msg.ID] = struct{}{}
-	}
+	marcarRuntimeMailboxConsumidaEnBatch(consumed, msg)
 	return true, nil
+}
+
+func marcarRuntimeMailboxConsumidaEnBatch(consumed map[int64]struct{}, msg *db.RuntimeMailboxMessage) {
+	if consumed == nil || msg == nil || msg.ID <= 0 {
+		return
+	}
+	consumed[msg.ID] = struct{}{}
 }
 
 func consumirRuntimeMailboxEfimeraConEntregaMailboxOnlyActual(snapshot *runtimeMailboxBatchSnapshot, msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, externalSessionID, lane string) (bool, error) {
