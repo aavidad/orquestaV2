@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -95,9 +96,9 @@ func apiHandlerGitStats(w http.ResponseWriter, r *http.Request) {
 func resolveGitStatsScope(r *http.Request) (string, string, string, error) {
 	query := r.URL.Query()
 	projectRef := strings.TrimSpace(query.Get("proyecto"))
-	path := strings.TrimSpace(query.Get("path"))
+	path := normalizeGitStatsPath(query.Get("path"))
 	if path == "" {
-		path = strings.TrimSpace(query.Get("cwd"))
+		path = normalizeGitStatsPath(query.Get("cwd"))
 	}
 	if projectRef != "" && path != "" {
 		return "", "", "", fmt.Errorf("usa proyecto o path/cwd, pero no ambos")
@@ -110,12 +111,20 @@ func resolveGitStatsScope(r *http.Request) (string, string, string, error) {
 		if project == nil || strings.TrimSpace(project.RutaAbs) == "" {
 			return "", "", "", fmt.Errorf("proyecto sin ruta git: %s", projectRef)
 		}
-		return "proyecto", strings.TrimSpace(project.Slug), strings.TrimSpace(project.RutaAbs), nil
+		return "proyecto", strings.TrimSpace(project.Slug), normalizeGitStatsPath(project.RutaAbs), nil
 	}
 	if path != "" {
 		return "path", "", path, nil
 	}
 	return "", "", "", fmt.Errorf("path/cwd o proyecto es obligatorio")
+}
+
+func normalizeGitStatsPath(raw string) string {
+	path := strings.TrimSpace(raw)
+	if path == "" {
+		return ""
+	}
+	return filepath.Clean(path)
 }
 
 func (s gitOperationalStatsService) Collect(path string, since time.Time) (*gitOperationalStats, error) {

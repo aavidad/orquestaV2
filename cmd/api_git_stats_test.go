@@ -173,6 +173,36 @@ func TestAPIGitStatsProyectoResuelveRuta(t *testing.T) {
 	}
 }
 
+func TestAPIGitStatsNormalizaPathYCWDEntrada(t *testing.T) {
+	fake := &fakeGitStatsCollector{stats: &gitestadisticasapp.Stats{RepoRoot: "/tmp/repo", CWD: "/tmp/repo"}}
+	prevService := apiGitStatsService
+	t.Cleanup(func() {
+		apiGitStatsService = prevService
+	})
+	apiGitStatsService = gitOperationalStatsService{collector: fake}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/git/stats?cwd=%20/tmp/repo/./subdir/..%20", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp apiGitStatsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if fake.gotPath != "/tmp/repo" {
+		t.Fatalf("path normalizado inesperado para collector: %q", fake.gotPath)
+	}
+	if resp.Path != "/tmp/repo" || resp.Scope != "path" {
+		t.Fatalf("respuesta con path no canónico: %+v", resp)
+	}
+}
+
 func TestAPIGitStatsRechazaScopeAmbiguo(t *testing.T) {
 	mux := http.NewServeMux()
 	registerAPIRoutes(mux)

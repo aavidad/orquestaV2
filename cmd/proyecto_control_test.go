@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"orquesta/db"
+	"orquesta/gitestadisticasapp"
 )
 
 func TestProyectoControlJSONAlineadoConAPI(t *testing.T) {
@@ -124,6 +125,23 @@ func TestProjectAutonomyActivityMomentUsaEventoMasReciente(t *testing.T) {
 	})
 	if got == nil || !got.Equal(newer) {
 		t.Fatalf("momento autonomia inesperado: %v", got)
+	}
+}
+
+func TestProjectActivityMomentUsaHeadCommitRecienteSiNoHayAuditNiTranscript(t *testing.T) {
+	headAt := time.Date(2026, 4, 24, 16, 0, 0, 0, time.UTC)
+	got := projectActivityMoment(&agentActivityReport{
+		Git: &agentGitActivityStats{
+			RecentCommitCount: 1,
+			HeadCommit: &gitestadisticasapp.CommitSummary{
+				HashShort:   "abc1234",
+				Subject:     "feat: improve project control",
+				CommittedAt: &headAt,
+			},
+		},
+	})
+	if got == nil || !got.Equal(headAt) {
+		t.Fatalf("momento de actividad por git inesperado: %v", got)
 	}
 }
 

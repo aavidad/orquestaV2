@@ -285,6 +285,10 @@ func projectActivityMoment(report *agentActivityReport) *time.Time {
 		value := item.CreatedAt.UTC()
 		latest = maxTimePtr(latest, &value)
 	}
+	if report.Git != nil && report.Git.RecentCommitCount > 0 && report.Git.HeadCommit != nil && report.Git.HeadCommit.CommittedAt != nil {
+		value := report.Git.HeadCommit.CommittedAt.UTC()
+		latest = maxTimePtr(latest, &value)
+	}
 	return latest
 }
 
