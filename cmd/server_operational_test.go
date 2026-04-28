@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/db"
 )
 
@@ -742,6 +743,71 @@ func TestBuildServerOperationalInfoFastFromDBReutilizaSnapshotStaleSinIrADB(t *t
 	}
 	if info.ActiveAgents != 1 || info.WorkingAgents != 1 || info.TasksInProgress != 1 {
 		t.Fatalf("deberia reutilizar snapshot stale sin ir a DB: %+v", info)
+	}
+}
+
+func TestBuildServerOperationalInfoFastFromDBRefrescaSnapshotStaleConPanelFresco(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	prevAgents := serverOperationalListAgentsFetcher
+	prevTasks := serverOperationalCountTasksFetcher
+	prevNow := statusNowFunc
+	defer func() {
+		serverOperationalListAgentsFetcher = prevAgents
+		serverOperationalCountTasksFetcher = prevTasks
+		statusNowFunc = prevNow
+	}()
+
+	now := time.Date(2026, 4, 29, 11, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	resetAt := now.Add(30 * time.Minute)
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		TareasPorEstado: map[string]int{
+			string(db.TareaEnProgreso): 1,
+		},
+		TareasEnProgreso: []tareaLite{{ID: 24, Estado: db.TareaEnProgreso, Agente: "Codex1"}},
+		Autonomia: autonomiaResumen{
+			Supervisando:  1,
+			WorkConfirmed: 1,
+		},
+		Generado: now.Add(-15 * time.Second).Format(time.RFC3339),
+	}, now.Add(-2*time.Minute), time.Second)
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "Codex1", Activo: true, EstadoCuota: "activo"},
+		EstadoOperativo: "trabajando",
+		WorkerAlive:     true,
+		WorkerState:     "running",
+		OpenTasks:       1,
+	}}, now)
+
+	serverOperationalListAgentsFetcher = func() ([]*db.Agente, error) {
+		return nil, errors.New("no deberia consultar agentes con snapshot stale reutilizable")
+	}
+	serverOperationalCountTasksFetcher = func() (map[string]int, error) {
+		return nil, errors.New("no deberia consultar tareas con snapshot stale reutilizable")
+	}
+
+	info, err := buildServerOperationalInfoFastFromDB()
+	if err != nil {
+		t.Fatalf("buildServerOperationalInfoFastFromDB: %v", err)
+	}
+	if info.State != "ready" || !info.Operational {
+		t.Fatalf("deberia converger con panel fresco y dejar de anunciar quota_blocked idle: %+v", info)
+	}
+	if info.ActiveAgents != 1 || info.WorkingAgents != 1 || info.ConnectedWorkers != 1 || info.WorkingWorkers != 1 {
+		t.Fatalf("deberia reflejar workers del panel fresco: %+v", info)
+	}
+	if info.QuotaAgents != 0 || info.Reason != "control_plane_responsive" {
+		t.Fatalf("no deberia arrastrar cuota stale desde status: %+v", info)
 	}
 }
 

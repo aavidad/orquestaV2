@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/db"
 )
 
@@ -258,6 +259,20 @@ func buildServerOperationalInfoFastFromDB() (serverOperationalInfo, error) {
 		return buildServerOperationalInfo(snapshot), nil
 	}
 	if snapshot, ok := readStatusSnapshotAny(); ok && !statusSnapshotNeedsImmediateRefresh(snapshot) {
+		if rows, ok := readAgentPanelSnapshotFresh(); ok {
+			snapshot.Agentes = mergeServerOperationalAgentsWithPanelRows(snapshot.Agentes, rows)
+			sanitizeServerOperationalQuotaFromPanelRows(snapshot.Agentes, rows)
+			aplicarVisibilidadOperativaAgentes(snapshot.Agentes, rows)
+			activos, trabajando, saturados, atascados, authManual, quotaBlocked, _ := agentesVisiblesPorEstadoOperativoRows(snapshot.Agentes, rows)
+			activos, trabajando, saturados = normalizarAgentesVisiblesStatus(activos, trabajando, saturados)
+			snapshot.AgentesActivos = activos
+			snapshot.AgentesTrabajando = trabajando
+			snapshot.AgentesSaturados = saturados
+			snapshot.AgentesAtascados = atascados
+			snapshot.AgentesAuthManual = authManual
+			snapshot.AgentesQuotaBlocked = quotaBlocked
+			snapshot.Autonomia = resumirAutonomiaRows(rows, statusNowFunc().UTC())
+		}
 		return buildServerOperationalInfo(snapshot), nil
 	}
 	agentes, err := serverOperationalListAgentsFetcher()
@@ -288,6 +303,9 @@ func buildServerOperationalInfoFastFromDB() (serverOperationalInfo, error) {
 		status.TareasReservadas = make([]tareaLite, cuentas[string(db.TareaAsignada)])
 	}
 	if rows, ok := readAgentPanelSnapshotFresh(); ok {
+		status.Agentes = mergeServerOperationalAgentsWithPanelRows(status.Agentes, rows)
+		sanitizeServerOperationalQuotaFromPanelRows(status.Agentes, rows)
+		aplicarVisibilidadOperativaAgentes(status.Agentes, rows)
 		activos, trabajando, saturados, atascados, authManual, quotaBlocked, _ := agentesVisiblesPorEstadoOperativoRows(status.Agentes, rows)
 		activos, trabajando, saturados = normalizarAgentesVisiblesStatus(activos, trabajando, saturados)
 		status.AgentesActivos = activos
@@ -354,6 +372,82 @@ func formatServerOperationalSummary(info *serverOperationalInfo) string {
 		parts = append(parts, "quota_reset "+info.NextQuotaResetAt)
 	}
 	return fmt.Sprintf("%s (%s)", strings.ToUpper(strings.TrimSpace(info.State)), strings.Join(parts, ", "))
+}
+
+func mergeServerOperationalAgentsWithPanelRows(agentes []*db.Agente, rows []agentesapp.Row) []*db.Agente {
+	if len(rows) == 0 {
+		return agentes
+	}
+	byName := make(map[string]*db.Agente, len(agentes)+len(rows))
+	order := make([]string, 0, len(agentes)+len(rows))
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		nombre := nombreAgenteCanonico(agente.Nombre)
+		if nombre == "" {
+			continue
+		}
+		if _, ok := byName[nombre]; !ok {
+			order = append(order, nombre)
+		}
+		byName[nombre] = preferAgenteStatusCanonico(byName[nombre], agente)
+	}
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		nombre := nombreAgenteCanonico(row.Agente.Nombre)
+		if nombre == "" {
+			continue
+		}
+		if _, ok := byName[nombre]; !ok {
+			order = append(order, nombre)
+		}
+		byName[nombre] = preferAgenteStatusCanonico(byName[nombre], row.Agente)
+	}
+	if len(byName) == 0 {
+		return nil
+	}
+	out := make([]*db.Agente, 0, len(order))
+	for _, nombre := range order {
+		if agente := byName[nombre]; agente != nil {
+			out = append(out, agente)
+		}
+	}
+	return out
+}
+
+func sanitizeServerOperationalQuotaFromPanelRows(agentes []*db.Agente, rows []agentesapp.Row) {
+	if len(agentes) == 0 || len(rows) == 0 {
+		return
+	}
+	rowPorNombre := make(map[string]agentesapp.Row, len(rows))
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		nombre := nombreAgenteCanonico(row.Agente.Nombre)
+		if nombre == "" {
+			continue
+		}
+		rowPorNombre[nombre] = row
+	}
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		row, ok := rowPorNombre[nombreAgenteCanonico(agente.Nombre)]
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(row.EstadoOperativo) {
+		case "arrancando", "trabajando", "saturado", "disponible":
+			agente.EstadoCuota = "activo"
+			agente.ReanimarAt = nil
+			agente.MotivoPausa = ""
+		}
+	}
 }
 
 func nextQuotaResetVisible(agentes []*db.Agente) string {
