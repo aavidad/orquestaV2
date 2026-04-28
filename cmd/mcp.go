@@ -1953,6 +1953,27 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.runtime.transcript.listar",
+			Title:       "Listar runtime transcript",
+			Description: "Lista runtime transcript por agente, proyecto, handle, runtime, stream o clasificación",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":          map[string]any{"type": "string"},
+					"proyecto":        map[string]any{"type": "string"},
+					"runtime_id":      map[string]any{"type": "integer"},
+					"handle_id":       map[string]any{"type": "integer"},
+					"stream":          map[string]any{"type": "string"},
+					"classification":  map[string]any{"type": "string"},
+					"q":               map[string]any{"type": "string"},
+					"desde":           map[string]any{"type": "string", "description": "RFC3339 timestamp"},
+					"signals_pending": map[string]any{"type": "boolean"},
+					"limit":           map[string]any{"type": "integer"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.runtime.ordenes.listar",
 			Title:       "Listar runtime orders",
 			Description: "Lista runtime orders por agente, proyecto o estado",
@@ -2157,6 +2178,21 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.runtime.process.transcript",
+			Title:       "Procesar runtime transcript",
+			Description: "Fuerza el reprocesado canónico del transcript completo, por handle o por agente/proyecto",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"wait":      map[string]any{"type": "boolean"},
+					"handle_id": map[string]any{"type": "integer"},
+					"agente":    map[string]any{"type": "string"},
+					"proyecto":  map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.runtime.process.mailbox",
 			Title:       "Procesar runtime mailbox",
 			Description: "Fuerza el batch canónico de runtime mailbox con filtros opcionales",
@@ -2213,6 +2249,18 @@ func listMCPTools() []mcpTool {
 				"type": "object",
 				"properties": map[string]any{
 					"wait": map[string]any{"type": "boolean"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.transcript.purgar_ruido",
+			Title:       "Purgar ruido de transcript",
+			Description: "Purge histórico de ruido UI/spinner del runtime transcript",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"all": map[string]any{"type": "boolean"},
 				},
 				"additionalProperties": false,
 			},
@@ -3386,6 +3434,41 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		events = compactarRuntimeEventsAPI(events)
 		return toolResult(prettyJSON(events), events, false), nil
 
+	case "orquesta.runtime.transcript.listar":
+		filter := db.FiltroRuntimeTranscript{
+			Agente:          stringPtrOrNil(optionalStringArg(args, "agente")),
+			Stream:          stringPtrOrNil(optionalStringArg(args, "stream")),
+			Classification:  stringPtrOrNil(optionalStringArg(args, "classification")),
+			Query:           stringPtrOrNil(optionalStringArg(args, "q")),
+			SoloSenalesPend: boolArgOrFalse(args, "signals_pending"),
+			Limit:           intArgOrDefault(args, "limit", 50),
+		}
+		if sinceRaw := strings.TrimSpace(optionalStringArg(args, "desde")); sinceRaw != "" {
+			since, err := apiParseRFC3339QueryTime(sinceRaw)
+			if err != nil {
+				return toolResult("desde inválido", nil, true), nil
+			}
+			filter.Desde = since
+		}
+		if proyecto := strings.TrimSpace(optionalStringArg(args, "proyecto")); proyecto != "" {
+			p, err := runtimesService.GetProject(proyecto)
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			filter.ProyectoID = &p.ID
+		}
+		if runtimeID := optionalInt64Arg(args, "runtime_id"); runtimeID > 0 {
+			filter.RuntimeID = &runtimeID
+		}
+		if handleID := optionalInt64Arg(args, "handle_id"); handleID > 0 {
+			filter.HandleID = &handleID
+		}
+		items, err := apiListRuntimeTranscriptFn(filter)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(items), items, false), nil
+
 	case "orquesta.runtime.ordenes.listar":
 		filter := db.FiltroRuntimeOrders{
 			Agente: stringPtrOrNil(optionalStringArg(args, "agente")),
@@ -3650,6 +3733,71 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		result := apiRuntimeProcessOrdersResponse{OK: true, Count: count}
 		return toolResult(prettyJSON(result), result, false), nil
 
+	case "orquesta.runtime.process.transcript":
+		if handleID := optionalInt64Arg(args, "handle_id"); handleID > 0 {
+			count, err := db.IngestarRuntimeTranscriptHandle(handleID)
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			result := apiRuntimeProcessAutonomiaResponse{OK: true, Count: count}
+			return toolResult(prettyJSON(result), result, false), nil
+		}
+		if agente := strings.TrimSpace(optionalStringArg(args, "agente")); agente != "" {
+			agente = apiNombreAgenteCanonico(agente)
+			var (
+				handle     *db.RuntimeHandle
+				err        error
+				proyectoID *int64
+			)
+			if proyecto := strings.TrimSpace(optionalStringArg(args, "proyecto")); proyecto != "" {
+				p, err := apiRuntimeProcessMailboxProjectFn(proyecto)
+				if err != nil {
+					return toolResult(err.Error(), nil, true), nil
+				}
+				proyectoID = &p.ID
+				handle, err = db.GetRuntimeHandleCanonicoRecienteAgenteProyecto(agente, proyectoID)
+			} else {
+				handle, err = db.GetRuntimeHandleCanonicoRecienteAgente(agente)
+			}
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			if handle == nil || handle.ID <= 0 {
+				result := apiRuntimeProcessAutonomiaResponse{OK: true, Count: 0}
+				return toolResult(prettyJSON(result), result, false), nil
+			}
+			count, err := db.IngestarRuntimeTranscriptHandle(handle.ID)
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			result := apiRuntimeProcessAutonomiaResponse{OK: true, Count: count}
+			return toolResult(prettyJSON(result), result, false), nil
+		}
+		if boolArgOrFalse(args, "wait") {
+			count, err := runtimeProcessTranscriptBatch()
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			result := apiRuntimeProcessAutonomiaResponse{OK: true, Count: count}
+			return toolResult(prettyJSON(result), result, false), nil
+		}
+		started := runtimeProcessTranscriptEnCurso.CompareAndSwap(false, true)
+		if started {
+			go func() {
+				defer runtimeProcessTranscriptEnCurso.Store(false)
+				if _, err := runtimeProcessTranscriptBatch(); err != nil {
+					db.Audit("server", "runtime_process_transcript_error", "runtime", 0, err.Error())
+				}
+			}()
+		}
+		result := apiRuntimeProcessAutonomiaResponse{
+			OK:       true,
+			Count:    0,
+			Accepted: started,
+			Running:  runtimeProcessTranscriptEnCurso.Load(),
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
 	case "orquesta.runtime.process.mailbox":
 		estado := "pendiente"
 		filter := db.FiltroRuntimeMailbox{Estado: &estado}
@@ -3774,6 +3922,27 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			Accepted: started,
 			Running:  runtimeProcessReanimacionesEnCurso.Load(),
 		}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.transcript.purgar_ruido":
+		total := 0
+		maxBatches := 20
+		purgeFn := apiRuntimePurgeTranscriptNoiseExecutor
+		if boolArgOrFalse(args, "all") {
+			purgeFn = apiRuntimePurgeTranscriptNoiseAllExecutor
+			maxBatches = 1
+		}
+		for i := 0; i < maxBatches; i++ {
+			count, err := purgeFn()
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			total += count
+			if !boolArgOrFalse(args, "all") || count == 0 {
+				break
+			}
+		}
+		result := apiRuntimeProcessAutonomiaResponse{OK: true, Count: total}
 		return toolResult(prettyJSON(result), result, false), nil
 
 	case "orquesta.runtime.checkpoints.crear":

@@ -174,6 +174,12 @@ var (
 	apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) {
 		return procesarRuntimeMailboxBatchConFiltro(filter)
 	}
+	apiRuntimePurgeTranscriptNoiseExecutor = func() (int, error) {
+		return db.PurgarRuntimeTranscriptRuidoHistorico()
+	}
+	apiRuntimePurgeTranscriptNoiseAllExecutor = func() (int, error) {
+		return db.PurgarRuntimeTranscriptRuidoHistoricoCompleto()
+	}
 	apiAgentPanelRowsBuilder = func() ([]agentesapp.Row, error) {
 		return agentesService.BuildPanelRows()
 	}
@@ -7043,9 +7049,9 @@ func apiHandlerRuntimePurgeTranscriptNoise(w http.ResponseWriter, r *http.Reques
 	}
 	total := 0
 	maxBatches := 20
-	purgeFn := db.PurgarRuntimeTranscriptRuidoHistorico
+	purgeFn := apiRuntimePurgeTranscriptNoiseExecutor
 	if req.All {
-		purgeFn = db.PurgarRuntimeTranscriptRuidoHistoricoCompleto
+		purgeFn = apiRuntimePurgeTranscriptNoiseAllExecutor
 		maxBatches = 1
 	}
 	for i := 0; i < maxBatches; i++ {

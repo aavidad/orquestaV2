@@ -1621,6 +1621,141 @@ func TestMCPToolsRuntimeRecoveryProcesanPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPToolsRuntimeTranscriptOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prevList := apiListRuntimeTranscriptFn
+		prevTranscriptBatch := runtimeProcessTranscriptBatch
+		prevPurge := apiRuntimePurgeTranscriptNoiseExecutor
+		prevPurgeAll := apiRuntimePurgeTranscriptNoiseAllExecutor
+		t.Cleanup(func() {
+			apiListRuntimeTranscriptFn = prevList
+			runtimeProcessTranscriptBatch = prevTranscriptBatch
+			apiRuntimePurgeTranscriptNoiseExecutor = prevPurge
+			apiRuntimePurgeTranscriptNoiseAllExecutor = prevPurgeAll
+			runtimeProcessTranscriptEnCurso.Store(false)
+		})
+
+		if err := db.RegistrarAgente("CodexTranscript", "programador"); err != nil {
+			t.Fatalf("registrando CodexTranscript: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      "CodexTranscript",
+			ProyectoID:  &proyectoID,
+			CWD:         "/tmp/orquestador",
+			Herramienta: "codex-cli",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion: %v", err)
+		}
+		handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+		if err != nil || handle == nil {
+			t.Fatalf("runtime handle esperado, got=%+v err=%v", handle, err)
+		}
+
+		var got db.FiltroRuntimeTranscript
+		apiListRuntimeTranscriptFn = func(filter db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error) {
+			got = filter
+			return []*db.RuntimeTranscriptEntry{{
+				ID:             77,
+				RuntimeID:      55,
+				HandleID:       &handle.ID,
+				Agente:         "CodexTranscript",
+				ProyectoID:     &proyectoID,
+				ProyectoSlug:   "orquestador",
+				Stream:         "pty_out",
+				Text:           "Need approval",
+				NormalizedText: "need approval",
+				Classification: "approval_request",
+				CreatedAt:      time.Date(2026, 4, 29, 10, 0, 0, 0, time.UTC),
+			}}, nil
+		}
+		transcriptResult, err := callMCPTool("orquesta.runtime.transcript.listar", map[string]any{
+			"agente":          "CodexTranscript",
+			"proyecto":        "orquestador",
+			"stream":          "pty_out",
+			"classification":  "approval_request",
+			"q":               "approval",
+			"desde":           "2026-04-29T10:00:00Z",
+			"signals_pending": true,
+			"limit":           10,
+		})
+		if err != nil {
+			t.Fatalf("runtime transcript listar MCP: %v", err)
+		}
+		if transcriptResult["isError"] != false {
+			t.Fatalf("runtime transcript listar marcado como error: %#v", transcriptResult)
+		}
+		if got.Agente == nil || *got.Agente != "CodexTranscript" || got.ProyectoID == nil || *got.ProyectoID != proyectoID {
+			t.Fatalf("filtro transcript inesperado: %+v", got)
+		}
+		if got.Stream == nil || *got.Stream != "pty_out" || got.Classification == nil || *got.Classification != "approval_request" {
+			t.Fatalf("filtro transcript stream/classification inesperado: %+v", got)
+		}
+		if got.Query == nil || *got.Query != "approval" || got.Desde == nil || got.Desde.UTC().Format(time.RFC3339) != "2026-04-29T10:00:00Z" || !got.SoloSenalesPend || got.Limit != 10 {
+			t.Fatalf("filtro transcript restante inesperado: %+v", got)
+		}
+
+		transcriptByHandle, err := callMCPTool("orquesta.runtime.process.transcript", map[string]any{"handle_id": handle.ID})
+		if err != nil {
+			t.Fatalf("runtime process transcript by handle MCP: %v", err)
+		}
+		handleResp, _ := transcriptByHandle["structuredContent"].(apiRuntimeProcessAutonomiaResponse)
+		if !handleResp.OK || handleResp.Count != 0 {
+			t.Fatalf("runtime process transcript by handle inesperado: %#v", transcriptByHandle["structuredContent"])
+		}
+
+		transcriptByAgent, err := callMCPTool("orquesta.runtime.process.transcript", map[string]any{
+			"agente":   "CodexTranscript",
+			"proyecto": "orquestador",
+		})
+		if err != nil {
+			t.Fatalf("runtime process transcript by agent MCP: %v", err)
+		}
+		agentResp, _ := transcriptByAgent["structuredContent"].(apiRuntimeProcessAutonomiaResponse)
+		if !agentResp.OK || agentResp.Count != 0 {
+			t.Fatalf("runtime process transcript by agent inesperado: %#v", transcriptByAgent["structuredContent"])
+		}
+
+		runtimeProcessTranscriptBatch = func() (int, error) { return 4, nil }
+		transcriptWait, err := callMCPTool("orquesta.runtime.process.transcript", map[string]any{"wait": true})
+		if err != nil {
+			t.Fatalf("runtime process transcript wait MCP: %v", err)
+		}
+		waitResp, _ := transcriptWait["structuredContent"].(apiRuntimeProcessAutonomiaResponse)
+		if !waitResp.OK || waitResp.Count != 4 {
+			t.Fatalf("runtime process transcript wait inesperado: %#v", transcriptWait["structuredContent"])
+		}
+
+		purgeCalls := 0
+		apiRuntimePurgeTranscriptNoiseExecutor = func() (int, error) {
+			purgeCalls++
+			if purgeCalls == 1 {
+				return 2, nil
+			}
+			return 0, nil
+		}
+		purgeResult, err := callMCPTool("orquesta.runtime.transcript.purgar_ruido", map[string]any{})
+		if err != nil {
+			t.Fatalf("runtime transcript purgar ruido MCP: %v", err)
+		}
+		purgeResp, _ := purgeResult["structuredContent"].(apiRuntimeProcessAutonomiaResponse)
+		if !purgeResp.OK || purgeResp.Count != 2 || purgeCalls != 1 {
+			t.Fatalf("runtime transcript purgar ruido inesperado: resp=%#v calls=%d", purgeResult["structuredContent"], purgeCalls)
+		}
+
+		apiRuntimePurgeTranscriptNoiseAllExecutor = func() (int, error) { return 5, nil }
+		purgeAllResult, err := callMCPTool("orquesta.runtime.transcript.purgar_ruido", map[string]any{"all": true})
+		if err != nil {
+			t.Fatalf("runtime transcript purgar ruido all MCP: %v", err)
+		}
+		purgeAllResp, _ := purgeAllResult["structuredContent"].(apiRuntimeProcessAutonomiaResponse)
+		if !purgeAllResp.OK || purgeAllResp.Count != 5 {
+			t.Fatalf("runtime transcript purgar ruido all inesperado: %#v", purgeAllResult["structuredContent"])
+		}
+	})
+}
+
 func TestMCPToolsRuntimeAdministrativeControlsOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("CodexRuntime", "programador"); err != nil {
