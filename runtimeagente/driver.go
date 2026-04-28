@@ -813,14 +813,33 @@ func conservarSoloPerfilEjecucionResumePayload(raw string) string {
 		return ""
 	}
 	perfil := map[string]any{}
-	if value := strings.TrimSpace(stringFromAny(perfilRaw["perfil_tarea"])); value != "" {
-		perfil["perfil_tarea"] = value
+	for _, key := range []string{
+		"perfil_tarea",
+		"modelo",
+		"razonamiento",
+		"perfil_operativo",
+		"driver",
+		"transport",
+		"endpoint",
+		"launch_path",
+		"resume_path",
+		"input_path",
+		"status_path",
+		"pause_path",
+		"continue_path",
+		"stop_path",
+		"mailbox_delivery_mode",
+		"pool_slug",
+		"worktree_path",
+		"tmux_session",
+		"tmux_pane_id",
+	} {
+		if value := strings.TrimSpace(stringFromAny(perfilRaw[key])); value != "" {
+			perfil[key] = value
+		}
 	}
-	if value := strings.TrimSpace(stringFromAny(perfilRaw["modelo"])); value != "" {
-		perfil["modelo"] = value
-	}
-	if value := strings.TrimSpace(stringFromAny(perfilRaw["razonamiento"])); value != "" {
-		perfil["razonamiento"] = value
+	if value, ok := perfilRaw["can_send_input"].(bool); ok {
+		perfil["can_send_input"] = value
 	}
 	if len(perfil) == 0 {
 		return ""

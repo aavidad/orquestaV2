@@ -23,6 +23,27 @@ func TestMergeResumePayloadPerfilEjecucionPreservaYSobrescribe(t *testing.T) {
 	}
 }
 
+func TestMergeResumePayloadPerfilEjecucionConservaHintsOperativosPrevios(t *testing.T) {
+	prev := `{"perfil_ejecucion":{"perfil_tarea":"implementacion","modelo":"gemma4:26b","razonamiento":"medium","perfil_operativo":"persistente","driver":"tmux_cli_session","transport":"tmux","worktree_path":"/tmp/orquesta/.orquesta-worktrees/orq-codex1","tmux_session":"orq-codex1","tmux_pane_id":"%7","mailbox_delivery_mode":"session_resume","can_send_input":false}}`
+	got := MergeResumePayloadPerfilEjecucion(prev, "", "gpt-5.4", "")
+	for _, token := range []string{
+		`"perfil_operativo":"persistente"`,
+		`"driver":"tmux_cli_session"`,
+		`"transport":"tmux"`,
+		`"worktree_path":"/tmp/orquesta/.orquesta-worktrees/orq-codex1"`,
+		`"tmux_session":"orq-codex1"`,
+		`"tmux_pane_id":"%7"`,
+		`"mailbox_delivery_mode":"session_resume"`,
+		`"can_send_input":false`,
+		`"modelo":"gpt-5.4"`,
+		`"razonamiento":"medium"`,
+	} {
+		if !strings.Contains(got, token) {
+			t.Fatalf("faltaba hint operativo %s en merge: %s", token, got)
+		}
+	}
+}
+
 func TestPayloadJSONDesdePlanYResumePersistePerfilEjecucion(t *testing.T) {
 	got := payloadJSONDesdePlanYResume(&runtimeagente.LaunchPlan{
 		PerfilTarea:  "implementacion",
@@ -37,6 +58,30 @@ func TestPayloadJSONDesdePlanYResumePersistePerfilEjecucion(t *testing.T) {
 	}
 	if ParseResumePayloadEnvelope(got)["persist"] != "ok" {
 		t.Fatalf("payload no debería perder claves previas: %s", got)
+	}
+}
+
+func TestPayloadJSONDesdePlanYResumeConservaHintsOperativosDePerfil(t *testing.T) {
+	got := payloadJSONDesdePlanYResume(&runtimeagente.LaunchPlan{
+		PerfilTarea:  "implementacion",
+		Modelo:       "gpt-5.4",
+		Razonamiento: "high",
+	}, runtimeagente.ResumeContext{
+		ResumePayloadJSON: `{"persist":"ok","perfil_ejecucion":{"perfil_tarea":"implementacion","modelo":"gemma4:26b","razonamiento":"medium","perfil_operativo":"qa-heavy","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1","tmux_pane_id":"%7"}}`,
+	})
+	for _, token := range []string{
+		`"persist":"ok"`,
+		`"perfil_operativo":"qa-heavy"`,
+		`"driver":"tmux_cli_session"`,
+		`"transport":"tmux"`,
+		`"tmux_session":"orq-codex1"`,
+		`"tmux_pane_id":"%7"`,
+		`"modelo":"gpt-5.4"`,
+		`"razonamiento":"high"`,
+	} {
+		if !strings.Contains(got, token) {
+			t.Fatalf("faltaba token %s en payload persistido: %s", token, got)
+		}
 	}
 }
 

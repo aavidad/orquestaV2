@@ -90,11 +90,19 @@ func MergeResumePayloadPerfilEjecucion(prev, perfilTarea, modelo, razonamiento s
 	if perfilTarea == "" && modelo == "" && razonamiento == "" {
 		return strings.TrimSpace(prev)
 	}
+	perfilPayload := map[string]any{}
+	if raw, ok := ParseResumePayloadEnvelope(prev)[claveResumePayloadPerfilEjecucion].(map[string]any); ok {
+		for key, value := range raw {
+			if strings.TrimSpace(key) == "" {
+				continue
+			}
+			perfilPayload[key] = value
+		}
+	}
+	perfilPayload["perfil_tarea"] = perfilTarea
+	perfilPayload["modelo"] = modelo
+	perfilPayload["razonamiento"] = razonamiento
 	return MergeResumePayloadEnvelope(prev, map[string]any{
-		claveResumePayloadPerfilEjecucion: map[string]any{
-			"perfil_tarea": perfilTarea,
-			"modelo":       modelo,
-			"razonamiento": razonamiento,
-		},
+		claveResumePayloadPerfilEjecucion: perfilPayload,
 	})
 }

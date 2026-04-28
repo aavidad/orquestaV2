@@ -116,7 +116,11 @@ func extraerMetadataResumeSesion(s *Sesion) map[string]any {
 		"auth_mode",
 		"mailbox_delivery_mode",
 		"pool_compartido",
+		"perfil_operativo",
 		"can_send_input",
+		"worktree_path",
+		"tmux_session",
+		"tmux_pane_id",
 	} {
 		if value, ok := envelope[key]; ok {
 			out[key] = value
@@ -139,7 +143,11 @@ func extraerMetadataResumeSesion(s *Sesion) map[string]any {
 			"modelo",
 			"perfil_tarea",
 			"razonamiento",
+			"perfil_operativo",
 			"can_send_input",
+			"worktree_path",
+			"tmux_session",
+			"tmux_pane_id",
 		} {
 			if value, ok := perfil[key]; ok {
 				out[key] = value
