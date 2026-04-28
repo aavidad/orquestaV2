@@ -25,12 +25,26 @@ import (
 	"orquesta/capacidadapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/gitestadisticasapp"
 	"orquesta/lenguajeapp"
 	"orquesta/microprogramacionapp"
 	"orquesta/propuestasapp"
 	"orquesta/reviewapp"
 	"orquesta/runtimesapp"
 )
+
+type gitStatsCollectorStub struct {
+	gotCWD   string
+	gotSince time.Time
+	response *gitestadisticasapp.Stats
+	err      error
+}
+
+func (s *gitStatsCollectorStub) Collect(cwd string, since time.Time) (*gitestadisticasapp.Stats, error) {
+	s.gotCWD = cwd
+	s.gotSince = since
+	return s.response, s.err
+}
 
 func TestMCPHandleInitializeNegociaVersion(t *testing.T) {
 	t.Helper()
@@ -1269,6 +1283,146 @@ func TestBuildEstadoResumenLigeroPropagaAuthManual(t *testing.T) {
 	}
 	if len(resumen.AgentesAuthManual) != 1 || resumen.AgentesAuthManual[0].Nombre != "Codex1" {
 		t.Fatalf("agentes auth manual inesperados: %+v", resumen.AgentesAuthManual)
+	}
+}
+
+func TestMCPGitStatsSurfaceSeLista(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+
+		tools := listMCPTools()
+		if !mcpToolListed(tools, "orquesta.git.stats") {
+			t.Fatal("tool MCP orquesta.git.stats no registrada")
+		}
+
+		resources, err := listMCPResources()
+		if err != nil {
+			t.Fatalf("listMCPResources: %v", err)
+		}
+		foundResource := false
+		for _, item := range resources {
+			if item.URI == "orquesta://git/stats?proyecto=orquestador" {
+				foundResource = true
+				break
+			}
+		}
+		if !foundResource {
+			t.Fatal("resource MCP de git stats por proyecto no listada")
+		}
+
+		templates := mcpResourceTemplates()
+		foundTemplate := false
+		for _, item := range templates {
+			if item.URITemplate == "orquesta://git/stats{?proyecto,path,cwd,desde}" {
+				foundTemplate = true
+				break
+			}
+		}
+		if !foundTemplate {
+			t.Fatal("template MCP de git stats no listada")
+		}
+	})
+}
+
+func TestMCPResourceReadGitStatsPorProyecto(t *testing.T) {
+	prevService := apiGitStatsService
+	prevLookup := apiGitStatsProjectLookupFn
+	defer func() {
+		apiGitStatsService = prevService
+		apiGitStatsProjectLookupFn = prevLookup
+	}()
+
+	collector := &gitStatsCollectorStub{
+		response: &gitestadisticasapp.Stats{
+			RepoRoot:            "/tmp/orquestador",
+			CWD:                 "/tmp/orquestador",
+			Branch:              "main",
+			PendingFiles:        []string{"cmd/mcp.go"},
+			RecentCommitFiles:   []string{"cmd/api_git_stats.go"},
+			TouchedFiles:        []string{"cmd/api_git_stats.go", "cmd/mcp.go"},
+			PendingAddedLines:   7,
+			PendingDeletedLines: 2,
+			PendingShortStat:    "1 file changed, 7 insertions(+), 2 deletions(-)",
+			RecentCommitCount:   3,
+		},
+	}
+	apiGitStatsService = gitOperationalStatsService{collector: collector}
+	apiGitStatsProjectLookupFn = func(ref string) (*db.Proyecto, error) {
+		return &db.Proyecto{Slug: "orquestador", RutaAbs: "/tmp/orquestador"}, nil
+	}
+
+	contents, err := readMCPResource("orquesta://git/stats?proyecto=orquestador&desde=2026-04-24T13:00:00Z")
+	if err != nil {
+		t.Fatalf("readMCPResource git/stats: %v", err)
+	}
+	if collector.gotCWD != "/tmp/orquestador" {
+		t.Fatalf("cwd inesperado en collector: %q", collector.gotCWD)
+	}
+	if got := collector.gotSince.UTC().Format(time.RFC3339); got != "2026-04-24T13:00:00Z" {
+		t.Fatalf("since inesperado en collector: %s", got)
+	}
+	text, _ := contents[0]["text"].(string)
+	for _, token := range []string{`"scope": "proyecto"`, `"project": "orquestador"`, `"pending_shortstat": "1 file changed, 7 insertions(+), 2 deletions(-)"`, `"files_changed": 2`} {
+		if !strings.Contains(text, token) {
+			t.Fatalf("resource git/stats sin %q: %s", token, text)
+		}
+	}
+}
+
+func TestMCPToolGitStatsAceptaCwdCanonico(t *testing.T) {
+	prevService := apiGitStatsService
+	prevLookup := apiGitStatsProjectLookupFn
+	defer func() {
+		apiGitStatsService = prevService
+		apiGitStatsProjectLookupFn = prevLookup
+	}()
+
+	collector := &gitStatsCollectorStub{
+		response: &gitestadisticasapp.Stats{
+			RepoRoot:              "/tmp/repo",
+			CWD:                   "/tmp/repo/subdir",
+			Branch:                "feature/mcp",
+			PendingFiles:          []string{"cmd/mcp.go"},
+			RecentCommitFiles:     []string{"cmd/mcp_test.go"},
+			TouchedFiles:          []string{"cmd/mcp.go", "cmd/mcp_test.go"},
+			PendingAddedLines:     5,
+			PendingDeletedLines:   1,
+			CommittedAddedLines:   4,
+			CommittedDeletedLines: 2,
+			RecentCommitCount:     2,
+		},
+	}
+	apiGitStatsService = gitOperationalStatsService{collector: collector}
+	apiGitStatsProjectLookupFn = func(ref string) (*db.Proyecto, error) {
+		t.Fatalf("project lookup no deberia usarse para cwd, ref=%s", ref)
+		return nil, nil
+	}
+
+	result, err := callMCPTool("orquesta.git.stats", map[string]any{
+		"cwd":   "/tmp/repo/subdir",
+		"desde": "2026-04-24T13:00:00Z",
+	})
+	if err != nil {
+		t.Fatalf("callMCPTool git.stats: %v", err)
+	}
+	if collector.gotCWD != "/tmp/repo/subdir" {
+		t.Fatalf("cwd inesperado en collector: %q", collector.gotCWD)
+	}
+	text := result["content"].([]map[string]any)[0]["text"].(string)
+	for _, token := range []string{`"scope": "path"`, `"path": "/tmp/repo/subdir"`, `"files_changed": 2`, `"lines_net": 6`} {
+		if !strings.Contains(text, token) {
+			t.Fatalf("tool git.stats sin %q: %s", token, text)
+		}
+	}
+	structured, ok := result["structuredContent"].(apiGitStatsResponse)
+	if !ok {
+		t.Fatalf("structuredContent inesperado: %#v", result["structuredContent"])
+	}
+	if structured.Scope != "path" || structured.Path != "/tmp/repo/subdir" {
+		t.Fatalf("scope/path inesperados: %+v", structured)
+	}
+	if structured.Stats == nil || structured.Stats.FilesChanged != 2 || structured.Stats.LinesNet != 6 {
+		t.Fatalf("stats inesperados: %+v", structured.Stats)
 	}
 }
 

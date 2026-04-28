@@ -550,6 +550,14 @@ func listMCPResources() ([]mcpResource, error) {
 			MIMEType:    "application/json",
 			Annotations: audienceAssistant(0.9),
 		})
+		resources = append(resources, mcpResource{
+			URI:         "orquesta://git/stats?proyecto=" + url.QueryEscape(proyecto["slug"].(string)),
+			Name:        "git-stats-" + proyecto["slug"].(string),
+			Title:       fmt.Sprintf("Git stats %v", proyecto["nombre"]),
+			Description: "Métricas Git canónicas del proyecto " + proyecto["slug"].(string),
+			MIMEType:    "application/json",
+			Annotations: audienceAssistant(0.9),
+		})
 	}
 
 	for _, pool := range status.Pools {
@@ -721,6 +729,13 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "application/json",
 		},
 		{
+			URITemplate: "orquesta://git/stats{?proyecto,path,cwd,desde}",
+			Name:        "git-stats",
+			Title:       "Git stats canónicos",
+			Description: "Métricas Git canónicas por proyecto o path/cwd; admite ?desde=1h o RFC3339",
+			MIMEType:    "application/json",
+		},
+		{
 			URITemplate: "orquesta://pools/{slug}",
 			Name:        "pool-por-slug",
 			Title:       "Detalle de pool",
@@ -736,6 +751,52 @@ func mcpProjectControlReport(slug string, since time.Time) (*projectControlRepor
 		return workspaceControlProjectBuilder(slug, since)
 	}
 	return buildProjectControlReport(slug, since)
+}
+
+func mcpResolveGitStatsScope(projectRef, path, cwd string) (string, string, string, error) {
+	projectRef = strings.TrimSpace(projectRef)
+	path = strings.TrimSpace(path)
+	cwd = strings.TrimSpace(cwd)
+	if path == "" {
+		path = cwd
+	}
+	if projectRef != "" && path != "" {
+		return "", "", "", fmt.Errorf("usa proyecto o path/cwd, pero no ambos")
+	}
+	if projectRef != "" {
+		project, err := apiGitStatsProjectLookupFn(projectRef)
+		if err != nil {
+			return "", "", "", err
+		}
+		if project == nil || strings.TrimSpace(project.RutaAbs) == "" {
+			return "", "", "", fmt.Errorf("proyecto sin ruta git: %s", projectRef)
+		}
+		return "proyecto", strings.TrimSpace(project.Slug), strings.TrimSpace(project.RutaAbs), nil
+	}
+	if path != "" {
+		return "path", "", path, nil
+	}
+	return "", "", "", fmt.Errorf("path/cwd o proyecto es obligatorio")
+}
+
+func mcpGitStatsResponse(projectRef, path, cwd string, since time.Time) (apiGitStatsResponse, error) {
+	scope, project, resolvedPath, err := mcpResolveGitStatsScope(projectRef, path, cwd)
+	if err != nil {
+		return apiGitStatsResponse{}, err
+	}
+	stats, err := apiGitStatsService.Collect(resolvedPath, since)
+	if err != nil {
+		return apiGitStatsResponse{}, err
+	}
+	return apiGitStatsResponse{
+		OK:        true,
+		Scope:     scope,
+		Project:   project,
+		Path:      resolvedPath,
+		Since:     since.UTC(),
+		Generated: time.Now().UTC(),
+		Stats:     stats,
+	}, nil
 }
 
 func readMCPResource(uri string) ([]map[string]any, error) {
@@ -774,6 +835,20 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		return resourceText(uri, "application/json", prettyJSON(proyectos)), nil
+	case strings.HasPrefix(uri, "orquesta://git/stats"):
+		parsed, err := url.Parse(uri)
+		if err != nil {
+			return nil, err
+		}
+		since, err := parseStatsSince(parsed.Query().Get("desde"))
+		if err != nil {
+			return nil, err
+		}
+		resp, err := mcpGitStatsResponse(parsed.Query().Get("proyecto"), parsed.Query().Get("path"), parsed.Query().Get("cwd"), since)
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "application/json", prettyJSON(resp)), nil
 	case uri == "orquesta://asignaciones/activas":
 		asignaciones, err := listarAsignaciones("activa")
 		if err != nil {
@@ -2612,6 +2687,21 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.git.stats",
+			Title:       "Git stats canónicos",
+			Description: "Devuelve métricas Git canónicas por proyecto o path/cwd",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"proyecto": map[string]any{"type": "string"},
+					"path":     map[string]any{"type": "string"},
+					"cwd":      map[string]any{"type": "string"},
+					"desde":    map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.git.merges.guardar",
 			Title:       "Guardar merge",
 			Description: "Crea o actualiza una solicitud de merge por la vía canónica de Orquesta",
@@ -4378,6 +4468,22 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 		return toolResult(prettyJSON(merges), merges, false), nil
+
+	case "orquesta.git.stats":
+		since, err := parseStatsSince(optionalStringArg(args, "desde"))
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		resp, err := mcpGitStatsResponse(
+			optionalStringArg(args, "proyecto"),
+			optionalStringArg(args, "path"),
+			optionalStringArg(args, "cwd"),
+			since,
+		)
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(resp), resp, false), nil
 
 	case "orquesta.git.merges.guardar":
 		proyecto, err := requiredStringArg(args, "proyecto")
