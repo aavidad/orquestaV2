@@ -75,3 +75,11 @@ func TestNormalizeOpenClawDeliveryUsaFallbacksCuandoFaltaContexto(t *testing.T) 
 		t.Fatalf("suggested action inesperada: %+v", ev)
 	}
 }
+
+func TestOpenClawDeliveryProjectToleraPayloadNil(t *testing.T) {
+	t.Parallel()
+
+	if got := openClawDeliveryProject(db.EventoNotificacion{ProyectoID: 12}); got != "#12" {
+		t.Fatalf("project fallback inesperado con payload nil: %q", got)
+	}
+}

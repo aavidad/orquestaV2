@@ -236,7 +236,7 @@ func normalizeOpenClawDelivery(entrega *db.EntregaNotificacion) openClawNormaliz
 
 func openClawDeliveryProject(evento db.EventoNotificacion) string {
 	for _, key := range []string{"project_slug", "proyecto_slug", "project_name", "proyecto_nombre"} {
-		if value := strings.TrimSpace(fmt.Sprintf("%v", evento.Payload[key])); value != "" && value != "<nil>" {
+		if value := openClawDeliveryPayloadString(evento.Payload, key); value != "" {
 			return value
 		}
 	}
@@ -271,4 +271,20 @@ func openClawDeliveryMessage(entrega *db.EntregaNotificacion) string {
 		}
 	}
 	return strings.Join(parts, " | ")
+}
+
+func openClawDeliveryPayloadString(payload map[string]any, key string) string {
+	if payload == nil {
+		return ""
+	}
+	value, ok := payload[key]
+	if !ok || value == nil {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	default:
+		return strings.TrimSpace(fmt.Sprintf("%v", typed))
+	}
 }

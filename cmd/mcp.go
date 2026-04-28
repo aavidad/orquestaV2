@@ -642,6 +642,13 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "text/markdown",
 		},
 		{
+			URITemplate: "orquesta://supervision/{supervisor}/eventos",
+			Name:        "eventos-supervisor",
+			Title:       "Eventos normalizados del supervisor",
+			Description: "Cola compacta de eventos normalizados para el supervisor/OpenClaw",
+			MIMEType:    "application/json",
+		},
+		{
 			URITemplate: "orquesta://supervision/{supervisor}/threads",
 			Name:        "threads-supervisor",
 			Title:       "Threads del supervisor",
@@ -883,6 +890,33 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		return resourceText(uri, "application/json", prettyJSON(snapshot)), nil
+	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.Contains(uri, "/eventos"):
+		parsed, err := url.Parse(uri)
+		if err != nil {
+			return nil, err
+		}
+		supervisor := strings.TrimSuffix(strings.TrimPrefix(parsed.Path, "/"), "/eventos")
+		if supervisor == "" || strings.TrimSpace(parsed.Host) != "supervision" {
+			return nil, fmt.Errorf("supervisor inválido")
+		}
+		limit := mcpSupervisorEventsDefaultLimit
+		if raw := strings.TrimSpace(parsed.Query().Get("limit")); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n <= 0 {
+				return nil, fmt.Errorf("limit inválido")
+			}
+			limit = n
+		}
+		items, err := buildOpenClawNormalizedEvents(limit)
+		if err != nil {
+			return nil, err
+		}
+		payload := map[string]any{
+			"supervisor":        resolveSupervisorName(supervisor),
+			"limit":             limit,
+			"normalized_events": items,
+		}
+		return resourceText(uri, "application/json", prettyJSON(payload)), nil
 	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.HasSuffix(uri, "/threads"):
 		supervisor := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://supervision/"), "/threads")
 		snapshot, err := buildSupervisorThreadsSnapshot(supervisor, "", 100)
@@ -949,6 +983,15 @@ func listMCPPrompts() []mcpPrompt {
 			Description: "Devuelve la vista estrecha de integración: review gates y señales recientes para OpenClaw",
 			Arguments: []mcpPromptArgument{
 				{Name: "supervisor", Description: "Nombre del supervisor operativo, por ejemplo OpenClaw", Required: false},
+			},
+		},
+		{
+			Name:        "orquesta.supervision.eventos",
+			Title:       "Eventos del supervisor",
+			Description: "Resume la cola compacta de eventos normalizados del supervisor/OpenClaw",
+			Arguments: []mcpPromptArgument{
+				{Name: "supervisor", Description: "Nombre del supervisor operativo, por ejemplo OpenClaw", Required: false},
+				{Name: "limit", Description: "Número máximo de eventos a incluir", Required: false},
 			},
 		},
 		{
@@ -1102,6 +1145,25 @@ func getMCPPrompt(name string, args map[string]any) (map[string]any, error) {
 					Content: map[string]any{
 						"type": "text",
 						"text": briefing,
+					},
+				},
+			},
+		}, nil
+
+	case "orquesta.supervision.eventos":
+		supervisor := optionalStringArg(args, "supervisor")
+		texto, err := buildSupervisorEventsOverview(supervisor, intArgOrDefault(args, "limit", mcpSupervisorEventsDefaultLimit))
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"description": "Resumen de eventos normalizados del supervisor",
+			"messages": []mcpPromptMessage{
+				{
+					Role: "user",
+					Content: map[string]any{
+						"type": "text",
+						"text": texto,
 					},
 				},
 			},
@@ -2096,6 +2158,19 @@ func listMCPTools() []mcpTool {
 				"type": "object",
 				"properties": map[string]any{
 					"supervisor": map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.supervision.eventos",
+			Title:       "Eventos normalizados del supervisor",
+			Description: "Devuelve en JSON la cola compacta de eventos normalizados para OpenClaw",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"supervisor": map[string]any{"type": "string"},
+					"limit":      map[string]any{"type": "integer"},
 				},
 				"additionalProperties": false,
 			},
@@ -3369,6 +3444,9 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 		return toolResult(prettyJSON(resumen), resumen, false), nil
+
+	case "orquesta.supervision.eventos":
+		return callMCPSupervisionEvents(args)
 
 	case "orquesta.supervision.threads.registrar":
 		item, err := registrarSupervisorThreadLigero(

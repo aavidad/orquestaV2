@@ -1994,6 +1994,84 @@ func TestMCPToolsSesionesYObservabilidadRuntimeOperanPorLaViaCanonica(t *testing
 	})
 }
 
+func TestMCPEventosSupervisorOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrando Codex3: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      "Codex3",
+			ProyectoID:  &proyectoID,
+			CWD:         "/tmp/orquestador",
+			Herramienta: "codex-cli",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion: %v", err)
+		}
+		runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+		if err != nil || runtime == nil {
+			t.Fatalf("runtime esperado, got=%+v err=%v", runtime, err)
+		}
+		if _, err := db.RegistrarRuntimeEvent(&db.RuntimeEvent{
+			RuntimeID:   runtime.ID,
+			Kind:        "ready_for_review",
+			Level:       "info",
+			Message:     "Listo para revisión desde MCP supervisor",
+			PayloadJSON: `{"classification":"ready_for_review"}`,
+		}); err != nil {
+			t.Fatalf("registrar runtime event: %v", err)
+		}
+
+		result, err := callMCPTool("orquesta.supervision.eventos", map[string]any{
+			"supervisor": "OpenClaw",
+			"limit":      5,
+		})
+		if err != nil {
+			t.Fatalf("callMCPTool supervision eventos: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("supervision eventos marcado como error: %#v", result)
+		}
+		structured, _ := result["structuredContent"].(map[string]any)
+		if structured == nil {
+			t.Fatalf("structuredContent vacío: %#v", result)
+		}
+		if got, _ := structured["supervisor"].(string); got != "OpenClaw" {
+			t.Fatalf("supervisor inesperado: %#v", structured["supervisor"])
+		}
+		events := reflect.ValueOf(structured["normalized_events"])
+		if !events.IsValid() || events.Len() == 0 {
+			t.Fatalf("normalized_events vacío: %#v", structured)
+		}
+
+		contents, err := readMCPResource("orquesta://supervision/OpenClaw/eventos?limit=5")
+		if err != nil {
+			t.Fatalf("readMCPResource supervision eventos: %v", err)
+		}
+		resourceText, _ := contents[0]["text"].(string)
+		for _, token := range []string{`"supervisor": "OpenClaw"`, `"normalized_events"`, `"review.ready"`} {
+			if !strings.Contains(resourceText, token) {
+				t.Fatalf("recurso supervision eventos sin %q: %s", token, resourceText)
+			}
+		}
+
+		prompt, err := getMCPPrompt("orquesta.supervision.eventos", map[string]any{
+			"supervisor": "OpenClaw",
+			"limit":      5,
+		})
+		if err != nil {
+			t.Fatalf("getMCPPrompt supervision eventos: %v", err)
+		}
+		text := prompt["messages"].([]mcpPromptMessage)[0].Content.(map[string]any)["text"].(string)
+		for _, token := range []string{"Eventos del supervisor: OpenClaw", "review.ready", "Listo para revisión desde MCP supervisor"} {
+			if !strings.Contains(text, token) {
+				t.Fatalf("prompt supervision eventos sin %q: %s", token, text)
+			}
+		}
+	})
+}
+
 func TestMCPThreadsSupervisorOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
