@@ -253,12 +253,15 @@ func projectControlCompletionPct(tasks []*db.Tarea) int {
 
 func projectControlStartedAt(project *db.Proyecto, tasks []*db.Tarea) *time.Time {
 	var started *time.Time
-	if project != nil {
+	if project != nil && !project.CreatedAt.IsZero() {
 		value := project.CreatedAt.UTC()
 		started = &value
 	}
 	for _, task := range tasks {
 		if task == nil {
+			continue
+		}
+		if task.CreatedAt.IsZero() {
 			continue
 		}
 		if started == nil || task.CreatedAt.UTC().Before(*started) {

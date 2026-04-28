@@ -93,6 +93,19 @@ func TestNewGitOperationalStatsNormalizaListasDeFicheros(t *testing.T) {
 	}
 }
 
+func TestNormalizeGitFileListCanonicalizaRutasEquivalentes(t *testing.T) {
+	got := normalizeGitFileList([]string{
+		" ./cmd/api.go ",
+		"cmd/./api.go",
+		"cmd/subdir/../api.go",
+		".",
+		"",
+	})
+	if !reflect.DeepEqual(got, []string{"cmd/api.go"}) {
+		t.Fatalf("normalizacion de rutas git inesperada: %+v", got)
+	}
+}
+
 func TestAPIGitStatsPathDevuelveContratoCanonico(t *testing.T) {
 	fake := &fakeGitStatsCollector{stats: &gitestadisticasapp.Stats{
 		RepoRoot:              "/tmp/repo",

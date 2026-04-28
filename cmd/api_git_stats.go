@@ -191,6 +191,10 @@ func normalizeGitFileList(files []string) []string {
 		if file == "" {
 			continue
 		}
+		file = filepath.Clean(file)
+		if file == "." || file == "" {
+			continue
+		}
 		fileSet[file] = struct{}{}
 	}
 	if len(fileSet) == 0 {

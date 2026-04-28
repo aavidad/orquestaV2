@@ -145,6 +145,22 @@ func TestProjectActivityMomentUsaHeadCommitRecienteSiNoHayAuditNiTranscript(t *t
 	}
 }
 
+func TestProjectControlStartedAtIgnoraTimestampsCero(t *testing.T) {
+	created := time.Date(2026, 4, 24, 9, 0, 0, 0, time.UTC)
+	got := projectControlStartedAt(&db.Proyecto{}, []*db.Tarea{
+		{CreatedAt: time.Time{}},
+		{CreatedAt: created},
+	})
+	if got == nil || !got.Equal(created) {
+		t.Fatalf("started_at inesperado con timestamps cero: %v", got)
+	}
+
+	got = projectControlStartedAt(&db.Proyecto{}, []*db.Tarea{{CreatedAt: time.Time{}}})
+	if got != nil {
+		t.Fatalf("deberia devolver nil si no hay timestamps válidos: %v", got)
+	}
+}
+
 func TestCanonicalProjectControlGitAggregateExponeMetricasCanonicas(t *testing.T) {
 	got := canonicalProjectControlGitAggregate(projectControlGitAggregate{
 		TouchedFiles:          []string{"cmd/proyecto_control.go", " cmd/proyecto_control.go ", "", "cmd/api_git_stats.go"},
