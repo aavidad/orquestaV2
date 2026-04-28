@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -187,6 +188,63 @@ func TestWaitLocalServerStableFallaSinStatefile(t *testing.T) {
 
 	if err := waitLocalServerStable(srv.URL, 250*time.Millisecond); err == nil {
 		t.Fatalf("deberia fallar si el statefile no llega a publicarse")
+	}
+}
+
+func TestEnsureLocalServerNoReintentaSpawnSiYaHayDaemonSanoAunqueReadinessFalle(t *testing.T) {
+	statePath := filepath.Join(os.TempDir(), "orquesta-localrpc-no-respawn-test.json")
+	t.Cleanup(func() { _ = os.Remove(statePath) })
+	defer cambiarEnv(t, "ORQUESTA_SERVER_INFO", statePath)()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_STATE", "")()
+	dbPath := filepath.Join(t.TempDir(), "orquesta.db")
+	defer cambiarEnv(t, "ORQUESTA_DB", dbPath)()
+	defer cambiarEnv(t, "ORQUESTA_DB_DRIVER", "")()
+	defer cambiarEnv(t, "ORQUESTA_DB_DSN", "")()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(rpclocal.HealthPath, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(rpclocal.HealthResponse{
+			OK:            true,
+			Addr:          strings.TrimPrefix(strings.TrimPrefix(srvURLForRequest(r), "http://"), "https://"),
+			PID:           4242,
+			Kind:          "server",
+			ScopeID:       rpclocal.CurrentScopeID(),
+			StorageDriver: db.CurrentStorageDriver(),
+			StorageTarget: dbPath,
+			DBPath:        dbPath,
+		})
+	})
+	mux.HandleFunc("/api/server", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "warming-up", http.StatusServiceUnavailable)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	info := rpclocal.ServerInfo{
+		Addr:          strings.TrimPrefix(strings.TrimPrefix(srv.URL, "http://"), "https://"),
+		PID:           4242,
+		Kind:          "server",
+		ScopeID:       rpclocal.CurrentScopeID(),
+		StorageDriver: db.CurrentStorageDriver(),
+		StorageTarget: dbPath,
+		DBPath:        dbPath,
+	}
+	if err := os.WriteFile(statePath, []byte(fmt.Sprintf(`{
+  "addr": %q,
+  "pid": 4242,
+  "kind": "server",
+  "scope_id": %q,
+  "db_path": %q,
+  "storage_driver": %q,
+  "storage_target": %q,
+  "started_at": "2026-04-28T20:22:43Z",
+  "version": "test"
+}`, info.Addr, info.ScopeID, info.DBPath, info.StorageDriver, info.StorageTarget)), 0o600); err != nil {
+		t.Fatalf("save server info: %v", err)
+	}
+
+	if err := ensureLocalServer(srv.URL); err != nil {
+		t.Fatalf("ensureLocalServer no deberia intentar spawn sobre daemon sano: %v", err)
 	}
 }
 

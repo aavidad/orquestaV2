@@ -432,6 +432,20 @@ func requireServerForCurrentCommand() bool {
 	return commandSupportsServerMode(args)
 }
 
+func commandRequestsServerMode() bool {
+	if strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1" {
+		return false
+	}
+	args := getCurrentExecArgs()
+	if len(args) == 0 && len(os.Args) > 1 {
+		args = os.Args[1:]
+	}
+	if forceLocalMode(args) {
+		return false
+	}
+	return shouldPreferAPIClient(args)
+}
+
 func commandSupportsServerMode(args []string) bool {
 	tokens := commandPathTokens(args)
 	if len(tokens) == 0 {
@@ -758,7 +772,7 @@ func apiGetQuery(path string, query url.Values, dst any) (bool, error) {
 		base = serverBaseURL()
 	}
 	if base == "" {
-		if requireServerForCurrentCommand() {
+		if requireServerForCurrentCommand() || commandRequestsServerMode() {
 			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
 		}
 		return false, nil
@@ -793,7 +807,7 @@ func apiGetQuery(path string, query url.Values, dst any) (bool, error) {
 				}
 			}
 		}
-		if requireServerForCurrentCommand() || serverURLConfiguredExplicitly() {
+		if requireServerForCurrentCommand() || commandRequestsServerMode() || serverURLConfiguredExplicitly() {
 			return true, fmt.Errorf("no se pudo contactar con el servidor de Orquesta: %w", err)
 		}
 		return false, nil
@@ -835,7 +849,7 @@ func apiPost(path string, payload any, dst any) (bool, error) {
 		base = serverBaseURL()
 	}
 	if base == "" {
-		if requireServerForCurrentCommand() {
+		if requireServerForCurrentCommand() || commandRequestsServerMode() {
 			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
 		}
 		return false, nil
@@ -872,7 +886,7 @@ func apiPost(path string, payload any, dst any) (bool, error) {
 				}
 			}
 		}
-		if requireServerForCurrentCommand() || serverURLConfiguredExplicitly() {
+		if requireServerForCurrentCommand() || commandRequestsServerMode() || serverURLConfiguredExplicitly() {
 			return true, fmt.Errorf("no se pudo contactar con el servidor de Orquesta: %w", err)
 		}
 		return false, nil

@@ -367,6 +367,23 @@ func TestAPIGetNoHaceFallbackCuandoServidorEsObligatorio(t *testing.T) {
 	}
 }
 
+func TestAPIGetNoHaceFallbackCuandoComandoEsServerFirstSinEnvExplicito(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarArgs(t, []string{"orquesta", "tarea", "ver", "35"})()
+
+	var resp apiTareaResponse
+	ok, err := apiGet("/api/tareas/35", &resp)
+	if !ok {
+		t.Fatalf("se esperaba bloqueo explicito sin fallback local")
+	}
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "requiere el servidor") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
 func TestAPIGetUsaAPILocalEnRecuperacionLocalDB(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

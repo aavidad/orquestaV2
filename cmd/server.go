@@ -616,6 +616,9 @@ func ensureLocalServer(addr string) error {
 		if stableErr := waitLocalServerStable(rpclocal.BaseURL(info.Addr), 3*time.Second); stableErr == nil {
 			return nil
 		}
+		// Si healthz ya confirma un daemon sano para este scope/storage, no intentes
+		// arrancar otro sobre el mismo puerto solo porque /api/server tarde en estabilizar.
+		return nil
 	}
 	executable, err := os.Executable()
 	if err != nil {
