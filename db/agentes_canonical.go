@@ -14,9 +14,6 @@ func CanonicalizeAgentName(nombre string) (string, error) {
 		return "", nil
 	}
 	preferred := canonicalPreferredAgentName(nombre)
-	if preferred != nombre && strings.HasPrefix(strings.ToLower(nombre), "codex") {
-		return preferred, nil
-	}
 	nombreCanonico, _, _, err := resolverAgentePorNombreCI(nombre)
 	if err == nil {
 		return nombreCanonico, nil

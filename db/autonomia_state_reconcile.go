@@ -540,21 +540,29 @@ func reconciliarAsignacionesDuplicadasAgenteProyecto() error {
 		proyectoID int64
 		estado     string
 	}
+	var items []item
 	grupos := map[string][]item{}
 	for rows.Next() {
 		var it item
 		if err := rows.Scan(&it.id, &it.agente, &it.proyectoID, &it.estado); err != nil {
 			return err
 		}
+		items = append(items, it)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	for _, it := range items {
 		canonico, err := CanonicalizeAgentName(strings.TrimSpace(it.agente))
 		if err != nil {
 			return err
 		}
 		clave := fmt.Sprintf("%d:%s", it.proyectoID, strings.TrimSpace(canonico))
 		grupos[clave] = append(grupos[clave], it)
-	}
-	if err := rows.Err(); err != nil {
-		return err
 	}
 
 	for _, items := range grupos {

@@ -38,8 +38,8 @@ func TestReconciliarEstadoAutonomiaCanonicalizaRuntimeOrderHandoffPendiente(t *t
 		t.Fatalf("insert runtime_order: %v", err)
 	}
 
-	if err := reconciliarAsignacionesDuplicadasAgenteProyecto(); err != nil {
-		t.Fatalf("reconciliarAsignacionesDuplicadasAgenteProyecto: %v", err)
+	if err := reconciliarRuntimeOrdersAliasNoCanonico(); err != nil {
+		t.Fatalf("reconciliarRuntimeOrdersAliasNoCanonico: %v", err)
 	}
 
 	order, err := GetRuntimeOrder(id)
@@ -82,19 +82,19 @@ func TestReconciliarEstadoAutonomiaCompactaAsignacionesDuplicadas(t *testing.T) 
 	if _, err := DB.Exec(`INSERT INTO asignaciones (agente, proyecto_id, estado, nota) VALUES (?,?,?,?)`, "Codex2", proyectoID, "activa", "nueva"); err != nil {
 		t.Fatalf("insert asignacion activa: %v", err)
 	}
-	if _, err := DB.Exec(`INSERT INTO asignaciones (agente, proyecto_id, estado, nota) VALUES (?,?,?,?)`, "Codex2", proyectoID, "pausada", "vieja"); err != nil {
+	if _, err := DB.Exec(`INSERT INTO asignaciones (agente, proyecto_id, estado, nota) VALUES (?,?,?,?)`, "codex2", proyectoID, "pausada", "vieja"); err != nil {
 		t.Fatalf("insert asignacion pausada: %v", err)
 	}
 
-	if err := reconciliarRuntimeOrdersAliasNoCanonico(); err != nil {
-		t.Fatalf("reconciliarRuntimeOrdersAliasNoCanonico: %v", err)
+	if err := reconciliarAsignacionesDuplicadasAgenteProyecto(); err != nil {
+		t.Fatalf("reconciliarAsignacionesDuplicadasAgenteProyecto: %v", err)
 	}
 
 	var abiertas int
 	if err := DB.QueryRow(`
 		SELECT COUNT(*)
 		FROM asignaciones
-		WHERE agente = 'Codex2'
+		WHERE lower(agente) = lower('Codex2')
 		  AND proyecto_id = ?
 		  AND estado IN ('planificada','activa','pausada')`, proyectoID,
 	).Scan(&abiertas); err != nil {
@@ -108,7 +108,7 @@ func TestReconciliarEstadoAutonomiaCompactaAsignacionesDuplicadas(t *testing.T) 
 	if err := DB.QueryRow(`
 		SELECT COUNT(*)
 		FROM asignaciones
-		WHERE agente = 'Codex2'
+		WHERE lower(agente) = lower('Codex2')
 		  AND proyecto_id = ?
 		  AND estado = 'cerrada'
 		  AND nota LIKE 'duplicada_compactada:%'`, proyectoID,
