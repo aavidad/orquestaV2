@@ -80,6 +80,26 @@ Regla de redaccion a partir de este punto:
 
 - cuando la documentacion hable de autonomia total o control total, debe dejar explicito que `agente/proyecto` ya esta operativo hoy y que lo pendiente queda en el plano `global`
 
+## Delta de estado a 2026-04-28
+
+Para evitar deriva entre doctrina y estado real del repo, esta actualización deja cuatro aclaraciones:
+
+- retiro/fuera de orquestación:
+  - el control plane ya incorpora mitigaciones para no reactivar retirados, consumir mailbox residual y bloquear tarea huérfana
+  - no debe seguir documentándose como hueco estructural base
+
+- degradación `workers_stuck`:
+  - ya existe como flujo operativo real con restart coordinado, continuidad local, `repair-helper` y cierre del helper
+  - el frente restante es de tuning, observabilidad y lectura global
+
+- clasificación de transcript:
+  - sigue siendo una deuda abierta y de alto impacto
+  - el problema material es `classification=''` en `runtime_transcript`, no una clase persistida `sin_clasificar`
+
+- control total y estadísticas:
+  - ya están operativos por agente y por proyecto
+  - el hueco real sigue en la agregación global del workspace y en la homogeneización global de coste/tokens
+
 ## Direccion aceptada para endurecer autonomia
 
 Se acepta como evolución compatible con la filosofía actual de Orquesta la línea documentada en [docs/propuesta_adk_eventos_delta_artifacts_rewind_2026-04-23.md](/home/alberto/Trabajo/orquesta/docs/propuesta_adk_eventos_delta_artifacts_rewind_2026-04-23.md).

@@ -39,6 +39,8 @@ Huecos que siguen abiertos:
 - no hay endpoints dedicados de estadisticas globales con contrato estable
 - la deuda principal ya no esta en agente/proyecto sino en la agregacion global y en la capa temporal global
 - la telemetria de coste/tokens global sigue siendo parcial y heterogenea segun proveedor
+- la clasificacion de transcript sigue siendo parcial y todavía ensucia la observabilidad pasiva
+- la lectura global de retirados/fuera de orquestacion y `workers_stuck` sigue menos consolidada que la lectura agente/proyecto
 
 Regla de complementariedad aceptada:
 
@@ -46,6 +48,34 @@ Regla de complementariedad aceptada:
 - `ADK` refuerza evento, delta, artifacts y rewind
 - `OMX` refuerza hooks, roles, `worktree + tmux + resume` y perfiles de ejecución
 - ambas pueden convivir si la observabilidad canónica y el control plane siguen siendo únicos
+
+## Delta de estado a 2026-04-28
+
+Frentes que ya no deben documentarse con ambigüedad:
+
+- retiro/fuera de orquestación:
+  - el mecanismo base ya existe
+  - el control plane ya cubre no reactivar retirados, consumir mailbox residual y bloquear tarea huérfana preservando trazabilidad
+  - la deuda residual está en la proyección global y en la lectura uniforme de estas incidencias
+
+- degradación `workers_stuck`:
+  - ya existe flujo canónico con restart coordinado, continuidad local por `session_resume`, `repair-helper` y cierre del helper
+  - el frente abierto aquí es de tuning y observabilidad, no de ausencia de mecanismo
+
+- clasificación de transcript:
+  - sigue siendo una deuda abierta
+  - el problema material es `classification=''` en `runtime_transcript`, no una clase de dominio persistida `sin_clasificar`
+  - la capa de actividad por agente acaba proyectando parte de esa bolsa como `sin_clasificar`
+
+- control total/estadísticas:
+  - por agente y por proyecto ya es estado operativo real
+  - el plano aún abierto sigue siendo la agregación global temporal y de coste del workspace
+
+Fotografía histórica útil para priorización del transcript:
+
+- `backups/legacy-sqlite-20260422/orquesta.db` contiene `203500` filas en `runtime_transcript`
+- `203474` conservan `classification` vacío
+- el grueso cae en `pty_out` y parece dominado por ruido TUI/bootstrap no filtrado
 
 ## Estado operativo verificable hoy
 
@@ -67,6 +97,8 @@ Lectura correcta del estado actual:
 - `control total por proyecto` ya esta operativo
 - `control temporal por agente` ya esta operativo
 - la capa que sigue pendiente no es local ni por proyecto; es la agregacion global canonica del workspace
+- transcript sigue siendo la principal deuda de calidad de señal dentro del control total
+- retiro/fuera de orquestación y `workers_stuck` ya pertenecen al estado operativo vigente, no a la lista de ideas futuras
 
 ## Principios
 
@@ -167,6 +199,11 @@ El cockpit debe ofrecer timeline consultable por ventana:
 
 La pregunta “que ha hecho `Codex1` en la ultima hora en `orquestador`” debe resolverse leyendo esta timeline, no recomponiendo shell manualmente.
 
+Matiz de estado real:
+
+- hoy ya puede resolverse razonablemente por agente/proyecto usando `agente actividad`, `audit`, `runtime-transcript` y estadística Git
+- lo que sigue sin cerrarse es la agregación global y la calidad del transcript pasivo
+
 ## Estadisticas Git canónicas
 
 Orquesta debe tener una API de control de versiones Git propia.
@@ -249,6 +286,7 @@ Estado de implementacion actual frente a esta API:
 - implementado ya para control por agente/proyecto: `GET /api/agentes/{agente}/actividad`, `orquesta agente actividad <agente>`, `GET /api/audit`, `GET /api/runtime-transcript`, `GET /api/agentes/{agente}/overview`
 - implementado ya para ingestion/trabajo de repos: `POST /api/repos/materializar`, `POST /api/repos/revisar`, `POST /api/repos/mejorar`
 - pendiente: la capa global de `timeline`, `estadisticas` y agregacion canonica unica para workspace
+- pendiente: reducir la dependencia de transcript poco clasificado para explicar trabajo real por agente
 
 ## Modelo de datos observable
 

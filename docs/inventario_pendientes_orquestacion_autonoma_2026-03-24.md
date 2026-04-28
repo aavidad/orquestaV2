@@ -2,6 +2,7 @@
 
 Fecha: `2026-03-24`
 Responsable de esta pasada: `Codex1`
+Actualización de estado real: `2026-04-28`
 
 ## Alcance
 
@@ -21,6 +22,37 @@ No reemplaza la arquitectura ni las tareas existentes. Sirve como mapa operativo
 - `repair-helper` barato, compactacion de frentes premium y drenaje de `prime` antes de escalado caro.
 - Control total por proyecto y actividad/control total por agente ya visibles por superficies server-first.
 - `autonomyPending=0` como foto estable de continuidad drenada.
+- Mitigaciones server-first para retiro/fuera de orquestación:
+  - no reactivar agentes retirados
+  - consumir mailbox/autonomía residual dirigida a retirados
+  - bloquear tareas huérfanas sin perder trazabilidad del último agente
+- Degradación `workers_stuck` ya tratada por el control plane con restart coordinado, continuidad local por `session_resume`, `repair-helper` y cierre del helper cuando deja de ser útil
+
+## Estado Real A 2026-04-28
+
+### Cerrado o muy avanzado
+
+- Bug de retiro bloqueante:
+  - ya no debe tratarse como hueco estructural base
+  - el repo ya contiene cobertura para retirada sin reactivación y para tarea huérfana por agente fuera de orquestación
+  - la deuda restante es de proyección visible, no de ausencia de mecanismo
+
+- Degradación `workers_stuck`:
+  - ya existe como flujo real del control plane
+  - el frente pendiente aquí es tuning, observabilidad y consistencia de lectura global
+
+### Parcial
+
+- Control total y estadísticas:
+  - ya está operativo por agente y por proyecto
+  - sigue parcial a escala global de workspace
+
+### Abierto y de alto impacto
+
+- Clasificación de transcript:
+  - sigue siendo la deuda más visible del plano de observabilidad pasiva
+  - el problema real no es una clase persistida `sin_clasificar`, sino muchas filas con `classification=''`
+  - la mayor parte del volumen histórico parece ruido TUI/bootstrap no filtrado
 
 ## Pendiente Crítico
 
@@ -46,6 +78,25 @@ Pendiente real:
 
 Riesgo:
 - sin esa capa global, la autonomia ya gobernable por agente/proyecto sigue siendo mas dificil de auditar a escala de workspace
+
+### 1.c. Reducir `sin_clasificar` real en transcript y endurecer progreso semántico
+
+Tareas relacionadas:
+- `#33`
+- `#35`
+
+Pendiente real:
+- bajar el volumen de `classification=''` en `runtime_transcript`
+- distinguir mejor ruido TUI/bootstrap frente a progreso útil o evidencia de herramienta
+- hacer más durable la señal de progreso semántico útil
+
+Estado real actual:
+- el clasificador ya reconoce señales fuertes de bloqueo, revisión, aprobación, replan, pánico y parte de `tool_*`
+- la deuda dominante sigue en transcript pasivo ruidoso
+- la fotografía histórica disponible en `backups/legacy-sqlite-20260422/orquesta.db` muestra `203500` filas de transcript y `203474` con `classification` vacío
+
+Riesgo:
+- sin este cierre, el control total por agente sigue contaminado y el supervisor depende demasiado de texto débil
 
 ### 2. Sustituir scripts/manualidades como vía operativa principal
 
@@ -73,6 +124,15 @@ Riesgo:
 - hoy la mayor parte del núcleo está probada por paquete, pero falta más humo real de operación continua
 
 ## Pendiente Importante
+
+### 3.b. Cerrar del todo la lectura operativa del retiro en superficies globales
+
+Pendiente real:
+- reflejar de forma canónica en resúmenes globales cuando una tarea queda huérfana por agente retirado o fuera de orquestación
+- evitar que reaparezca como “worker parado pero tarea en progreso” por una proyección incompleta
+
+Riesgo:
+- bajo a nivel de mecanismo base; medio a nivel de visibilidad y auditoría
 
 ### 4. Cierre de web cliente-fino
 
@@ -103,11 +163,12 @@ Riesgo:
 
 ## Orden Recomendado
 
-1. `#361`: unificar daemon oficial y runner operativo.
-2. `#362`: sacar scripts del camino principal y pasarlos a cliente fino.
-3. `#363`: humo E2E de runtime vivo.
-4. `#357` y `#244`: cierre web/i18n sin pisar daemon.
-5. `#364` y cortes restantes de `#227`: remates residuales.
+1. `#33`: reducir `sin_clasificar` real del transcript y endurecer progreso semántico.
+2. `#34`: cerrar la agregación global de control total y estadísticas.
+3. `#361`: unificar daemon oficial y runner operativo.
+4. `#363`: humo E2E de runtime vivo y revalidación de degradaciones.
+5. `#357` y `#244`: cierre web/i18n sin pisar daemon.
+6. `#364` y cortes restantes de `#227`: remates residuales.
 
 ## Criterio De Cierre
 
@@ -119,3 +180,4 @@ Se podrá considerar Orquesta autónoma sin matices cuando:
 - los scripts de consola no sean la fuente de verdad operativa
 - exista validación E2E con runtime vivo real
 - exista observabilidad temporal y Git/coste suficiente por agente/proyecto y agregacion global para gobernar el sistema sin shell manual
+- retiro/fuera de orquestación, `workers_stuck` y transcript ruidoso queden reflejados de forma canónica en las superficies de control

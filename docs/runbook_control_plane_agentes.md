@@ -272,6 +272,7 @@ Estado real hoy:
 - supervisor y reviewer ya se tratan como reservas; los workers reales son el cupo ejecutor visible
 - la foto operativa estable que debe esperarse hoy es `autonomyPending=0`
 - lo pendiente queda en la capa final unificada de timeline/estadisticas globales de `OP 096`
+- transcript sigue siendo una señal desigual: parte del ruido TUI/bootstrap aún cae a `classification=''` y luego aparece como `sin_clasificar` en algunas vistas
 
 Contrato deseado de observabilidad:
 
@@ -283,6 +284,11 @@ Regla:
 
 - si para responder `que ha hecho Codex1 en la ultima hora` hace falta shell manual, la app aun no esta cerrada
 - la respuesta correcta debe salir del cockpit, timeline y estadisticas canónicas de Orquesta
+
+Matiz operativo actual:
+
+- por agente y por proyecto ya existe una base útil para responder esa pregunta
+- el hueco real está en la agregación global y en la mejora del transcript pasivo
 
 Comandos ya utiles en el estado actual:
 
@@ -420,6 +426,56 @@ Acción:
 - regenerar continuidad desde la información disponible
 - dejar resumen explícito antes del nuevo relevo
 - evitar cadenas de handoff sin checkpoint intermedio
+
+### 4. Agente retirado o fuera de orquestación
+
+Señales:
+
+- tarea viva cuyo agente ya no figura como worker gobernable
+- detalle operativo `retirado` o motivo de fuera de orquestación
+- mailbox/autonomía dirigida a un agente retirado
+
+Comportamiento esperado hoy:
+
+- no reactivar el agente retirado
+- consumir mailbox que ya no pueda ejecutarse para no dejar cola engañosa
+- bloquear la tarea huérfana conservando trazabilidad del último agente
+
+Acción:
+
+1. confirmar en control total que el agente está retirado o fuera de flota
+2. revisar si la tarea viva ya quedó bloqueada por el batch de degradación
+3. si la capa visible no lo refleja, tratarlo como incidente de proyección, no como excusa para reabrir runtime del retirado
+
+Regla:
+
+- el bug de retiro bloqueante debe considerarse mitigado en el control plane base
+- si reaparece, el fallo probable está en una superficie de resumen o en un entrypoint no alineado
+
+### 5. Worker `stuck` / `workers_stuck`
+
+Señales:
+
+- `EstadoOperativo=atascado`
+- detalle tipo `sin progreso desde listo` o `sin progreso tras varios reinicios`
+- heartbeat/runtime vivos pero sin progreso útil actual
+
+Comportamiento esperado hoy:
+
+- si el runtime sano permite continuidad local, preferir `nudge` o `session_resume`
+- si el worker está realmente degradado, encolar restart coordinado
+- si persiste el atasco, abrir `repair-helper` antes de un handoff caro
+
+Acción:
+
+1. revisar `EstadoOperativo`, `DetalleOperativo` y si hay tarea viva real
+2. confirmar si hubo `runtime_restart_requested`, `repair_helper_opened` o `repair_helper_closed`
+3. verificar si el frente sigue en atasco real o si ya convergió a relevo/recuperación
+
+Regla:
+
+- `workers_stuck` ya no es un frente “sin mecanismo”; es un frente de tuning, observabilidad y lectura uniforme
+- no documentarlo ni operarlo como si todo atasco exigiera siempre handoff o escalado a `prime`
 
 ## Qué no hacer
 
