@@ -77,3 +77,59 @@ func TestWebTemplateOpenClawMuestraTrabajoYOrdenOperativos(t *testing.T) {
 		}
 	}
 }
+
+func TestWebTemplateOpenClawMarcaSesionesObservadasStale(t *testing.T) {
+	tmpl, err := compiledWebTemplate("es", webTplLayout+webTplOpenClaw)
+	if err != nil {
+		t.Fatalf("compiledWebTemplate: %v", err)
+	}
+
+	var body bytes.Buffer
+	err = tmpl.ExecuteTemplate(&body, "layout", webOpenClawData{
+		Status: apiOpenClawStatusLite{},
+		ObservedSessions: []*supervisorObservedAgentSessionSummary{
+			{
+				Agente:              "Codex4",
+				Activo:              false,
+				Herramienta:         "codex",
+				ExternalSessionID:   "sess-stale-1",
+				ObservedSessionPath: ".codex/sessions/stale.jsonl",
+				UsageSummary:        "sin heartbeat reciente",
+			},
+		},
+		SessionCandidates: []apiOpenClawSessionCandidate{
+			{
+				Agente:              "Codex4",
+				Activo:              false,
+				ExternalSessionID:   "sess-stale-1",
+				ObservedSessionPath: ".codex/sessions/stale.jsonl",
+				UsageSummary:        "sin heartbeat reciente",
+			},
+		},
+		Operational: serverOperationalInfo{
+			State:       "degraded",
+			Operational: false,
+			Reason:      "no_active_workers",
+		},
+		OperationalSummary: "DEGRADED (0 conectados, 1 observada stale)",
+		Integration:        buildWebOpenClawIntegrationInfo(),
+		Generado:           "2026-04-29 10:00:00",
+	})
+	if err != nil {
+		t.Fatalf("render openclaw stale sessions: %v", err)
+	}
+
+	html := body.String()
+	for _, token := range []string{
+		"Sesiones observadas de agentes",
+		"Candidatas para reuse/spawn",
+		"<th>Estado</th>",
+		"stale",
+		"sess-stale-1",
+		".codex/sessions/stale.jsonl",
+	} {
+		if !strings.Contains(html, token) {
+			t.Fatalf("template openclaw sin %q:\n%s", token, html)
+		}
+	}
+}

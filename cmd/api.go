@@ -2890,7 +2890,7 @@ func buildOpenClawSessionCandidates(snapshot map[string]any) []apiOpenClawSessio
 }
 
 func alignSupervisorObservedSessionsWithStatus(items []*supervisorObservedAgentSessionSummary, activos []*db.Agente) []*supervisorObservedAgentSessionSummary {
-	if len(items) == 0 || len(activos) == 0 {
+	if len(items) == 0 {
 		return items
 	}
 	activosSet := make(map[string]struct{}, len(activos))
@@ -2918,7 +2918,7 @@ func alignSupervisorObservedSessionsWithStatus(items []*supervisorObservedAgentS
 }
 
 func alignOpenClawSessionCandidatesWithStatus(candidates []apiOpenClawSessionCandidate, activos []*db.Agente) []apiOpenClawSessionCandidate {
-	if len(candidates) == 0 || len(activos) == 0 {
+	if len(candidates) == 0 {
 		return candidates
 	}
 	activosSet := make(map[string]struct{}, len(activos))

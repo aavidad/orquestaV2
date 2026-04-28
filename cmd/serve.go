@@ -834,7 +834,8 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 	if snapshot, ok := review["thread_sessions"].(map[string]any); ok {
 		threadSessions, _ = snapshot["sessions"].([]*db.SupervisorThreadSessionSummary)
 		observedSessions, _ = snapshot["observed_agent_sessions"].([]*supervisorObservedAgentSessionSummary)
-		sessionCandidates = buildOpenClawSessionCandidates(snapshot)
+		observedSessions = alignSupervisorObservedSessionsWithStatus(observedSessions, status.AgentesActivos)
+		sessionCandidates = alignOpenClawSessionCandidatesWithStatus(buildOpenClawSessionCandidates(snapshot), status.AgentesActivos)
 	}
 	var pipelineStates []*db.SupervisorPipelineState
 	if snapshot, ok := review["pipeline_state"].(map[string]any); ok {
@@ -2689,10 +2690,11 @@ const webTplOpenClaw = `{{define "content"}}
       {{end}}
       <h4 style="margin:1rem 0 .6rem 0">Sesiones observadas de agentes</h4>
       {{if .ObservedSessions}}
-      <table style="width:100%"><thead><tr><th>Agente</th><th>Runtime</th><th>Sesión externa</th><th>Sesión observada</th><th>Uso</th></tr></thead><tbody>
+      <table style="width:100%"><thead><tr><th>Agente</th><th>Estado</th><th>Runtime</th><th>Sesión externa</th><th>Sesión observada</th><th>Uso</th></tr></thead><tbody>
       {{range .ObservedSessions}}
         <tr>
           <td>{{.Agente}}</td>
+          <td>{{if .Activo}}activa{{else}}stale{{end}}</td>
           <td>{{orDash .Herramienta}}{{if .Host}} · {{.Host}}{{end}}</td>
           <td>{{orDash .ExternalSessionID}}</td>
           <td>{{orDash .ObservedSessionPath}}</td>
@@ -2705,10 +2707,11 @@ const webTplOpenClaw = `{{define "content"}}
       {{end}}
       <h4 style="margin:1rem 0 .6rem 0">Candidatas para reuse/spawn</h4>
       {{if .SessionCandidates}}
-      <table style="width:100%"><thead><tr><th>Agente</th><th>Sesión</th><th>Observada</th><th>Uso</th></tr></thead><tbody>
+      <table style="width:100%"><thead><tr><th>Agente</th><th>Estado</th><th>Sesión</th><th>Observada</th><th>Uso</th></tr></thead><tbody>
       {{range .SessionCandidates}}
         <tr>
           <td>{{.Agente}}</td>
+          <td>{{if .Activo}}activa{{else}}stale{{end}}</td>
           <td>{{orDash .ExternalSessionID}}</td>
           <td>{{orDash .ObservedSessionPath}}</td>
           <td>{{orDash .UsageSummary}}</td>
