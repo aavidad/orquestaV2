@@ -1251,6 +1251,8 @@ func listMCPTools() []mcpTool {
 				"additionalProperties": false,
 			},
 		},
+		mcpServerOperationalTool(),
+		mcpWorkspaceControlTool(),
 		{
 			Name:        "orquesta.tareas.listar",
 			Title:       "Listar tareas",
@@ -1754,6 +1756,30 @@ func listMCPTools() []mcpTool {
 				"required":             []string{"agente", "accion"},
 				"additionalProperties": false,
 			},
+		},
+		{
+			Name:        "orquesta.agentes.start",
+			Title:       "Arrancar agente",
+			Description: "Encola una orden canónica de start para un agente",
+			InputSchema: mcpAgentLifecycleToolInputSchema("start"),
+		},
+		{
+			Name:        "orquesta.agentes.pause",
+			Title:       "Pausar runtime de agente",
+			Description: "Encola una orden canónica de pause para un agente",
+			InputSchema: mcpAgentLifecycleToolInputSchema("pause"),
+		},
+		{
+			Name:        "orquesta.agentes.resume",
+			Title:       "Reanudar agente",
+			Description: "Encola una orden canónica de resume para un agente",
+			InputSchema: mcpAgentLifecycleToolInputSchema("resume"),
+		},
+		{
+			Name:        "orquesta.agentes.stop",
+			Title:       "Detener agente",
+			Description: "Encola una orden canónica de stop para un agente",
+			InputSchema: mcpAgentLifecycleToolInputSchema("stop"),
 		},
 		{
 			Name:        "orquesta.agentes.handoff",
@@ -2261,6 +2287,69 @@ func listMCPTools() []mcpTool {
 	return append(tools, microprogramacionMCPTools()...)
 }
 
+func mcpAgentLifecycleToolInputSchema(action string) map[string]any {
+	properties := map[string]any{
+		"agente":       map[string]any{"type": "string"},
+		"proyecto":     map[string]any{"type": "string"},
+		"conector":     map[string]any{"type": "string"},
+		"modelo":       map[string]any{"type": "string"},
+		"razonamiento": map[string]any{"type": "string"},
+		"perfil":       map[string]any{"type": "string"},
+		"motivo":       map[string]any{"type": "string"},
+		"por":          map[string]any{"type": "string"},
+		"tarea_id":     map[string]any{"type": "integer"},
+	}
+	required := []string{"agente"}
+	if strings.EqualFold(strings.TrimSpace(action), "start") {
+		required = append(required, "proyecto")
+	}
+	return map[string]any{
+		"type":                 "object",
+		"properties":           properties,
+		"required":             required,
+		"additionalProperties": false,
+	}
+}
+
+func callMCPAgentLifecycleTool(args map[string]any, forcedAction string) (map[string]any, error) {
+	agente, err := requiredStringArg(args, "agente")
+	if err != nil {
+		return nil, err
+	}
+	accion := strings.TrimSpace(forcedAction)
+	if accion == "" {
+		accion, err = requiredStringArg(args, "accion")
+		if err != nil {
+			return nil, err
+		}
+	}
+	req := apiAgenteControlRequest{
+		Agente:       agente,
+		Accion:       accion,
+		Proyecto:     optionalStringArg(args, "proyecto"),
+		Conector:     optionalStringArg(args, "conector"),
+		Modelo:       optionalStringArg(args, "modelo"),
+		Razonamiento: optionalStringArg(args, "razonamiento"),
+		Perfil:       optionalStringArg(args, "perfil"),
+		Motivo:       optionalStringArg(args, "motivo"),
+		Por:          optionalStringArg(args, "por"),
+	}
+	if tareaID := optionalInt64Arg(args, "tarea_id"); tareaID > 0 {
+		req.TareaID = &tareaID
+	}
+	orderID, accionCanonica, err := encolarControlAgenteLocalWithTimeout(req)
+	if err != nil {
+		return toolResult(err.Error(), nil, true), nil
+	}
+	result := apiAgenteControlResponse{
+		OK:     true,
+		ID:     orderID,
+		Agente: strings.TrimSpace(req.Agente),
+		Accion: strings.TrimSpace(accionCanonica),
+	}
+	return toolResult(prettyJSON(result), result, false), nil
+}
+
 func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 	if result, handled, err := callMicroprogramacionMCPTool(name, args); handled {
 		return result, err
@@ -2272,6 +2361,12 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 		return toolResult(prettyJSON(resumen), resumen, false), nil
+
+	case "orquesta.server.operational":
+		return callMCPServerOperational()
+
+	case "orquesta.workspace.control":
+		return callMCPWorkspaceControl(args)
 
 	case "orquesta.tareas.listar":
 		filtro, err := buildFiltroTareas(args)
@@ -2822,39 +2917,19 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		return toolResult(prettyJSON(detail), detail, false), nil
 
 	case "orquesta.agentes.control":
-		agente, err := requiredStringArg(args, "agente")
-		if err != nil {
-			return nil, err
-		}
-		accion, err := requiredStringArg(args, "accion")
-		if err != nil {
-			return nil, err
-		}
-		req := apiAgenteControlRequest{
-			Agente:       agente,
-			Accion:       accion,
-			Proyecto:     optionalStringArg(args, "proyecto"),
-			Conector:     optionalStringArg(args, "conector"),
-			Modelo:       optionalStringArg(args, "modelo"),
-			Razonamiento: optionalStringArg(args, "razonamiento"),
-			Perfil:       optionalStringArg(args, "perfil"),
-			Motivo:       optionalStringArg(args, "motivo"),
-			Por:          optionalStringArg(args, "por"),
-		}
-		if tareaID := optionalInt64Arg(args, "tarea_id"); tareaID > 0 {
-			req.TareaID = &tareaID
-		}
-		orderID, accionCanonica, err := encolarControlAgenteLocalWithTimeout(req)
-		if err != nil {
-			return toolResult(err.Error(), nil, true), nil
-		}
-		result := apiAgenteControlResponse{
-			OK:     true,
-			ID:     orderID,
-			Agente: strings.TrimSpace(req.Agente),
-			Accion: strings.TrimSpace(accionCanonica),
-		}
-		return toolResult(prettyJSON(result), result, false), nil
+		return callMCPAgentLifecycleTool(args, "")
+
+	case "orquesta.agentes.start":
+		return callMCPAgentLifecycleTool(args, "start")
+
+	case "orquesta.agentes.pause":
+		return callMCPAgentLifecycleTool(args, "pause")
+
+	case "orquesta.agentes.resume":
+		return callMCPAgentLifecycleTool(args, "resume")
+
+	case "orquesta.agentes.stop":
+		return callMCPAgentLifecycleTool(args, "stop")
 
 	case "orquesta.agentes.handoff":
 		origen, err := requiredStringArg(args, "agente_origen")

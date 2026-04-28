@@ -44,6 +44,12 @@ type OpenClawGatewayNotificador struct {
 	Client   httpDoer
 }
 
+type openClawProjectContext struct {
+	ID   int64
+	Slug string
+	Name string
+}
+
 type OutboxSummary struct {
 	Activas   []*db.EntregaNotificacion `json:"activas,omitempty"`
 	Recientes []*db.EntregaNotificacion `json:"recientes,omitempty"`
@@ -165,6 +171,7 @@ func (n *OpenClawGatewayNotificador) enviarEventoHTTP(ev db.EventoNotificacion, 
 	if strings.TrimSpace(eventType) == "" {
 		eventType = mapNotificationEventType(ev)
 	}
+	project := resolveOpenClawProjectContext(ev)
 	payload := map[string]any{
 		"source":     "orquesta",
 		"event_type": eventType,
@@ -181,8 +188,14 @@ func (n *OpenClawGatewayNotificador) enviarEventoHTTP(ev db.EventoNotificacion, 
 	if codigo := strings.TrimSpace(ev.Codigo); codigo != "" {
 		payload["proposal_code"] = codigo
 	}
-	if ev.ProyectoID > 0 {
-		payload["project_id"] = ev.ProyectoID
+	if project.ID > 0 {
+		payload["project_id"] = project.ID
+	}
+	if project.Slug != "" {
+		payload["project_slug"] = project.Slug
+	}
+	if project.Name != "" {
+		payload["project_name"] = project.Name
 	}
 	if len(ev.Payload) > 0 {
 		payload["payload"] = ev.Payload
@@ -198,6 +211,12 @@ func (n *OpenClawGatewayNotificador) enviarEventoHTTP(ev db.EventoNotificacion, 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Orquesta-Source", "orquesta")
 	req.Header.Set("X-Orquesta-Event-Type", eventType)
+	if project.ID > 0 {
+		req.Header.Set("X-Orquesta-Project-ID", fmt.Sprintf("%d", project.ID))
+	}
+	if project.Slug != "" {
+		req.Header.Set("X-Orquesta-Project-Slug", project.Slug)
+	}
 	if token := strings.TrimSpace(n.Token); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -332,6 +351,34 @@ func payloadString(payload map[string]any, key string) string {
 	default:
 		return strings.TrimSpace(fmt.Sprintf("%v", typed))
 	}
+}
+
+func resolveOpenClawProjectContext(ev db.EventoNotificacion) openClawProjectContext {
+	ctx := openClawProjectContext{
+		ID:   ev.ProyectoID,
+		Slug: payloadString(ev.Payload, "project_slug"),
+		Name: payloadString(ev.Payload, "project_name"),
+	}
+	if ctx.Slug == "" {
+		ctx.Slug = payloadString(ev.Payload, "proyecto_slug")
+	}
+	if ctx.Name == "" {
+		ctx.Name = payloadString(ev.Payload, "proyecto_nombre")
+	}
+	if ev.ProyectoID <= 0 || (ctx.Slug != "" && ctx.Name != "") || db.DB == nil {
+		return ctx
+	}
+	proyecto, err := db.GetProyecto(fmt.Sprintf("%d", ev.ProyectoID))
+	if err != nil || proyecto == nil {
+		return ctx
+	}
+	if ctx.Slug == "" {
+		ctx.Slug = strings.TrimSpace(proyecto.Slug)
+	}
+	if ctx.Name == "" {
+		ctx.Name = strings.TrimSpace(proyecto.Nombre)
+	}
+	return ctx
 }
 
 func DescribirConfiguracion() EstadoNotificaciones {

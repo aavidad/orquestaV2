@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -25,10 +26,12 @@ func TestOpenClawGatewayNotificadorEnviarEvento(t *testing.T) {
 
 	var (
 		gotAuth  string
+		gotSlug  string
 		gotEvent map[string]any
 	)
 	client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		gotAuth = req.Header.Get("Authorization")
+		gotSlug = req.Header.Get("X-Orquesta-Project-Slug")
 		if req.Method != http.MethodPost {
 			t.Fatalf("method inesperado: %s", req.Method)
 		}
@@ -63,6 +66,8 @@ func TestOpenClawGatewayNotificadorEnviarEvento(t *testing.T) {
 		Payload: map[string]any{
 			"classification": "runtime_panic",
 			"runtime_id":     9,
+			"project_slug":   "orquestador",
+			"project_name":   "Orquestador",
 		},
 	})
 	if err != nil {
@@ -82,6 +87,15 @@ func TestOpenClawGatewayNotificadorEnviarEvento(t *testing.T) {
 	}
 	if got, _ := gotEvent["operator"].(string); got != "alberto" {
 		t.Fatalf("operator inesperado: %+v", gotEvent)
+	}
+	if got, _ := gotEvent["project_slug"].(string); got != "orquestador" {
+		t.Fatalf("project_slug inesperado: %+v", gotEvent)
+	}
+	if got, _ := gotEvent["project_name"].(string); got != "Orquestador" {
+		t.Fatalf("project_name inesperado: %+v", gotEvent)
+	}
+	if gotSlug != "orquestador" {
+		t.Fatalf("header project slug inesperado: %q", gotSlug)
 	}
 	payload, _ := gotEvent["payload"].(map[string]any)
 	if payload == nil {
@@ -116,6 +130,98 @@ func TestOpenClawGatewayNotificadorIgnoraEventoBajoValor(t *testing.T) {
 	}
 	if calls != 0 {
 		t.Fatalf("runtime_auto_guidance no deberia salir hacia OpenClaw, calls=%d", calls)
+	}
+}
+
+func TestOpenClawGatewayNotificadorResuelveProyectoDesdeDB(t *testing.T) {
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "orquesta-openclaw-project.db")
+
+	prevDB := os.Getenv("ORQUESTA_DB")
+	prevForceLocal := os.Getenv("ORQUESTA_FORCE_LOCAL_DB")
+	prevDisableServer := os.Getenv("ORQUESTA_DISABLE_SERVER_CLIENT")
+	t.Cleanup(func() {
+		db.Close()
+		db.DB = nil
+		if prevDB == "" {
+			_ = os.Unsetenv("ORQUESTA_DB")
+		} else {
+			_ = os.Setenv("ORQUESTA_DB", prevDB)
+		}
+		if prevForceLocal == "" {
+			_ = os.Unsetenv("ORQUESTA_FORCE_LOCAL_DB")
+		} else {
+			_ = os.Setenv("ORQUESTA_FORCE_LOCAL_DB", prevForceLocal)
+		}
+		if prevDisableServer == "" {
+			_ = os.Unsetenv("ORQUESTA_DISABLE_SERVER_CLIENT")
+		} else {
+			_ = os.Setenv("ORQUESTA_DISABLE_SERVER_CLIENT", prevDisableServer)
+		}
+	})
+
+	_ = os.Setenv("ORQUESTA_DB", dbPath)
+	_ = os.Setenv("ORQUESTA_FORCE_LOCAL_DB", "1")
+	_ = os.Setenv("ORQUESTA_DISABLE_SERVER_CLIENT", "1")
+	if err := db.Open(); err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	var (
+		gotProjectID string
+		gotSlug      string
+		gotEvent     map[string]any
+	)
+	n := &OpenClawGatewayNotificador{
+		URL: "https://openclaw.local/gateway",
+		Client: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			gotProjectID = req.Header.Get("X-Orquesta-Project-ID")
+			gotSlug = req.Header.Get("X-Orquesta-Project-Slug")
+			if err := json.NewDecoder(req.Body).Decode(&gotEvent); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			return &http.Response{
+				StatusCode: http.StatusAccepted,
+				Body:       io.NopCloser(strings.NewReader("{}")),
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+	err = n.EnviarEvento(db.EventoNotificacion{
+		Tipo:       "runtime_review",
+		ID:         77,
+		Agente:     "Codex1",
+		Texto:      "Frente listo para review",
+		ProyectoID: proyectoID,
+		Payload:    map[string]any{"stage": "ready_for_review"},
+	})
+	if err != nil {
+		t.Fatalf("EnviarEvento: %v", err)
+	}
+	if gotProjectID != strconv.FormatInt(proyectoID, 10) {
+		t.Fatalf("header project id inesperado: %q", gotProjectID)
+	}
+	if gotSlug != "orquestador" {
+		t.Fatalf("header project slug inesperado: %q", gotSlug)
+	}
+	if got, _ := gotEvent["project_id"].(float64); int64(got) != proyectoID {
+		t.Fatalf("project_id inesperado: %+v", gotEvent)
+	}
+	if got, _ := gotEvent["project_slug"].(string); got != "orquestador" {
+		t.Fatalf("project_slug inesperado: %+v", gotEvent)
+	}
+	if got, _ := gotEvent["project_name"].(string); got != "Orquestador" {
+		t.Fatalf("project_name inesperado: %+v", gotEvent)
 	}
 }
 

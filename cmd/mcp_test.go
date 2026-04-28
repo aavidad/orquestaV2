@@ -148,6 +148,20 @@ func TestMCPToolsIncluyeLenguaje(t *testing.T) {
 	}
 }
 
+func TestMCPToolsIncluyeLifecycleAgentes(t *testing.T) {
+	tools := listMCPTools()
+	for _, name := range []string{
+		"orquesta.agentes.start",
+		"orquesta.agentes.pause",
+		"orquesta.agentes.resume",
+		"orquesta.agentes.stop",
+	} {
+		if !mcpToolListed(tools, name) {
+			t.Fatalf("tool MCP no registrada: %s", name)
+		}
+	}
+}
+
 func TestMCPToolLenguajeParidadBasica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
@@ -1602,6 +1616,109 @@ func TestMCPToolsAgentesControlOperaPorLaViaCanonica(t *testing.T) {
 		}
 		if seen.TareaID == nil || *seen.TareaID != 41 {
 			t.Fatalf("request control sin tarea esperada: %+v", seen)
+		}
+	})
+}
+
+func TestMCPToolsAgentesLifecycleOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := agentControlEnqueueFunc
+		defer func() { agentControlEnqueueFunc = prev }()
+
+		cases := []struct {
+			name       string
+			tool       string
+			args       map[string]any
+			wantAction string
+		}{
+			{
+				name: "start",
+				tool: "orquesta.agentes.start",
+				args: map[string]any{
+					"agente":       "Codex10",
+					"proyecto":     "orquestador",
+					"conector":     "codex-cli",
+					"modelo":       "gpt-5.5",
+					"razonamiento": "high",
+					"perfil":       "implementacion",
+					"motivo":       "launch from lifecycle tool",
+					"por":          "OpenClaw",
+					"tarea_id":     int64(101),
+				},
+				wantAction: "start",
+			},
+			{
+				name: "pause",
+				tool: "orquesta.agentes.pause",
+				args: map[string]any{
+					"agente":   "Codex11",
+					"proyecto": "orquestador",
+					"motivo":   "pause from lifecycle tool",
+					"por":      "OpenClaw",
+				},
+				wantAction: "pause",
+			},
+			{
+				name: "resume",
+				tool: "orquesta.agentes.resume",
+				args: map[string]any{
+					"agente":   "Codex12",
+					"proyecto": "orquestador",
+					"motivo":   "resume from lifecycle tool",
+					"por":      "OpenClaw",
+				},
+				wantAction: "resume",
+			},
+			{
+				name: "stop",
+				tool: "orquesta.agentes.stop",
+				args: map[string]any{
+					"agente":   "Codex13",
+					"proyecto": "orquestador",
+					"motivo":   "stop from lifecycle tool",
+					"por":      "OpenClaw",
+				},
+				wantAction: "stop",
+			},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				var seen apiAgenteControlRequest
+				agentControlEnqueueFunc = func(req apiAgenteControlRequest) (int64, string, error) {
+					seen = req
+					return 88, strings.TrimSpace(req.Accion), nil
+				}
+
+				result, err := callMCPTool(tc.tool, tc.args)
+				if err != nil {
+					t.Fatalf("%s MCP: %v", tc.tool, err)
+				}
+				if result["isError"] != false {
+					t.Fatalf("%s marcado como error: %#v", tc.tool, result)
+				}
+				resp, _ := result["structuredContent"].(apiAgenteControlResponse)
+				if resp.ID != 88 || resp.Accion != tc.wantAction || resp.Agente != strings.TrimSpace(seen.Agente) {
+					t.Fatalf("respuesta lifecycle inesperada: %#v", result["structuredContent"])
+				}
+				if seen.Accion != tc.wantAction {
+					t.Fatalf("accion lifecycle inesperada: %+v", seen)
+				}
+				if seen.Agente != tc.args["agente"] {
+					t.Fatalf("agente lifecycle inesperado: %+v", seen)
+				}
+				if proyecto, _ := tc.args["proyecto"].(string); proyecto != "" && seen.Proyecto != proyecto {
+					t.Fatalf("proyecto lifecycle inesperado: %+v", seen)
+				}
+				if tc.wantAction == "start" {
+					if seen.Conector != "codex-cli" || seen.Modelo != "gpt-5.5" || seen.Razonamiento != "high" || seen.Perfil != "implementacion" {
+						t.Fatalf("payload start lifecycle inesperado: %+v", seen)
+					}
+					if seen.TareaID == nil || *seen.TareaID != 101 {
+						t.Fatalf("start lifecycle sin tarea esperada: %+v", seen)
+					}
+				}
+			})
 		}
 	})
 }
