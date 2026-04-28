@@ -3,8 +3,11 @@ package db
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"orquesta/coordinacion"
 	"orquesta/internal/controlruntime"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -229,10 +232,18 @@ func ProcesarRuntimeOrdersBatch() (int, error) {
 }
 
 func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
+	mailboxObsoleta, err := reconciliarRuntimeMailboxPendientePorTarea()
+	if err != nil {
+		return 0, err
+	}
+	worktreesObsoletas, err := reconciliarWorktreesActivasPorTarea()
+	if err != nil {
+		return mailboxObsoleta, err
+	}
 	rows, err := DB.Query(runtimeHandleSelectBase() + `
 		WHERE estado='activo' AND metadata_json LIKE '%"modo":"autonomo"%'`)
 	if err != nil {
-		return 0, err
+		return mailboxObsoleta + worktreesObsoletas, err
 	}
 	defer rows.Close()
 
@@ -279,7 +290,7 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 					Estado:      "pending",
 				}
 				if _, err := EncolarRuntimeOrder(order); err != nil {
-					return processed, err
+					return mailboxObsoleta + worktreesObsoletas + processed, err
 				}
 				Audit("server", "runtime_higiene_autonomo_stop_encolado", "handle", handle.ID, "agente: "+handle.Agente)
 				processed++
@@ -288,7 +299,7 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 	}
 	handlesSinTrabajo, err := listarRuntimeHandlesActivosSupervisados()
 	if err != nil {
-		return processed, err
+		return mailboxObsoleta + worktreesObsoletas + processed, err
 	}
 	for _, handle := range handlesSinTrabajo {
 		if handle == nil {
@@ -296,7 +307,7 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 		}
 		apagar, err := runtimeHandleDebeApagarsePorHigieneSinTrabajo(handle)
 		if err != nil {
-			return processed, err
+			return mailboxObsoleta + worktreesObsoletas + processed, err
 		}
 		if !apagar {
 			continue
@@ -316,7 +327,7 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 			Estado:      "pending",
 		}
 		if _, err := EncolarRuntimeOrder(order); err != nil {
-			return processed, err
+			return mailboxObsoleta + worktreesObsoletas + processed, err
 		}
 		Audit("server", "runtime_higiene_stop_sin_trabajo_encolado", "handle", handle.ID,
 			"agente: "+handle.Agente)
@@ -324,20 +335,201 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 	}
 	orphanTMUX, err := purgarSesionesTMUXHuerfanasConCurrentPathBorrado()
 	if err != nil {
-		return processed, err
+		return mailboxObsoleta + worktreesObsoletas + processed, err
 	}
 	processed += orphanTMUX
 	historico, err := PurgarRuntimeHistorico()
 	if err != nil {
-		return processed, err
+		return mailboxObsoleta + worktreesObsoletas + processed, err
 	}
 	processed += contarPurgaRuntimeHistorico(historico)
 	agentesInactivos, err := reconciliarAgentesActivosSinVida()
 	if err != nil {
-		return processed, err
+		return mailboxObsoleta + worktreesObsoletas + processed, err
 	}
 	processed += agentesInactivos
+	return mailboxObsoleta + worktreesObsoletas + processed, nil
+}
+
+func reconciliarRuntimeMailboxPendientePorTarea() (int, error) {
+	estado := "pendiente"
+	items, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{Estado: &estado})
+	if err != nil {
+		return 0, err
+	}
+	processed := 0
+	for _, msg := range items {
+		if msg == nil {
+			continue
+		}
+		taskID := runtimeMailboxPayloadTaskIDJSON(msg.PayloadJSON)
+		if taskID <= 0 {
+			continue
+		}
+		obsoleta, err := runtimeMailboxPendienteObsoletaPorTarea(msg, taskID)
+		if err != nil {
+			return processed, err
+		}
+		if !obsoleta {
+			continue
+		}
+		if err := MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return processed, err
+		}
+		if err := MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return processed, err
+		}
+		processed++
+	}
 	return processed, nil
+}
+
+func runtimeMailboxPendienteObsoletaPorTarea(msg *RuntimeMailboxMessage, taskID int64) (bool, error) {
+	if msg == nil || taskID <= 0 {
+		return false, nil
+	}
+	tarea, err := GetTarea(taskID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return true, nil
+		}
+		return false, err
+	}
+	if tarea == nil {
+		return true, nil
+	}
+	if runtimeTaskNoLongerActionable(tarea) {
+		return true, nil
+	}
+	target := strings.TrimSpace(msg.ToAgente)
+	if tarea.Agente == nil || strings.TrimSpace(*tarea.Agente) == "" {
+		return true, nil
+	}
+	if target != "" && !strings.EqualFold(strings.TrimSpace(*tarea.Agente), target) {
+		return true, nil
+	}
+	if msg.ProyectoID != nil && tarea.ProyectoID != nil && *msg.ProyectoID != *tarea.ProyectoID {
+		return true, nil
+	}
+	return false, nil
+}
+
+func runtimeTaskNoLongerActionable(tarea *Tarea) bool {
+	if tarea == nil {
+		return true
+	}
+	switch tarea.Estado {
+	case TareaCompletada, TareaCancelada, TareaLibre, TareaBacklog:
+		return true
+	default:
+		return false
+	}
+}
+
+func reconciliarWorktreesActivasPorTarea() (int, error) {
+	estado := coordinacion.WorktreeActive
+	items, err := (CoordinationWorktreeSQLRepository{}).ListRaw(coordinacion.WorktreeFilter{State: &estado})
+	if err != nil {
+		return 0, err
+	}
+	processed := 0
+	grouped := map[string][]*coordinacion.Worktree{}
+	for _, item := range items {
+		if item == nil || item.TaskID == nil || *item.TaskID <= 0 {
+			continue
+		}
+		tarea, err := GetTarea(*item.TaskID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return processed, err
+		}
+		if err != nil || tarea == nil || runtimeTaskNoLongerActionable(tarea) ||
+			tarea.ProyectoID == nil || *tarea.ProyectoID != item.ProjectID ||
+			tarea.Agente == nil || strings.TrimSpace(*tarea.Agente) == "" ||
+			!strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(item.Agent)) {
+			closed, err := cerrarWorktreeActivaPorHigiene(item, "higiene_task_orphaned")
+			if err != nil {
+				return processed, err
+			}
+			if closed {
+				processed++
+			}
+			continue
+		}
+		key := runtimeHygieneTaskGroupKey(item.ProjectID, *item.TaskID)
+		grouped[key] = append(grouped[key], item)
+	}
+	for _, group := range grouped {
+		if len(group) <= 1 {
+			continue
+		}
+		keep := seleccionarWorktreeActivaPreferidaPorTarea(group)
+		for _, item := range group {
+			if item == nil || keep == nil || item.ID == keep.ID {
+				continue
+			}
+			closed, err := cerrarWorktreeActivaPorHigiene(item, "higiene_task_duplicate")
+			if err != nil {
+				return processed, err
+			}
+			if closed {
+				processed++
+			}
+		}
+	}
+	return processed, nil
+}
+
+func runtimeHygieneTaskGroupKey(projectID, taskID int64) string {
+	return jsonNumber(projectID) + ":" + jsonNumber(taskID)
+}
+
+func seleccionarWorktreeActivaPreferidaPorTarea(items []*coordinacion.Worktree) *coordinacion.Worktree {
+	candidates := append([]*coordinacion.Worktree(nil), items...)
+	sort.SliceStable(candidates, func(i, j int) bool {
+		a := candidates[i]
+		b := candidates[j]
+		scoreA := runtimeHygieneWorktreeScore(a)
+		scoreB := runtimeHygieneWorktreeScore(b)
+		if scoreA != scoreB {
+			return scoreA > scoreB
+		}
+		if !a.UpdatedAt.Equal(b.UpdatedAt) {
+			return a.UpdatedAt.After(b.UpdatedAt)
+		}
+		return a.ID > b.ID
+	})
+	if len(candidates) == 0 {
+		return nil
+	}
+	return candidates[0]
+}
+
+func runtimeHygieneWorktreeScore(item *coordinacion.Worktree) int {
+	if item == nil {
+		return -1
+	}
+	score := 0
+	if coordinacion.WorktreePathUsable(item.Path) {
+		score += 2
+	}
+	if strings.TrimSpace(item.Agent) != "" {
+		score++
+	}
+	return score
+}
+
+func cerrarWorktreeActivaPorHigiene(item *coordinacion.Worktree, reason string) (bool, error) {
+	if item == nil || item.ID <= 0 {
+		return false, nil
+	}
+	closed, err := (CoordinationWorktreeSQLRepository{}).Close(item.ID, time.Now().UTC(), reason)
+	if err != nil {
+		return false, nil
+	}
+	if item.Path != "" {
+		_ = os.RemoveAll(strings.TrimSpace(item.Path))
+	}
+	return closed != nil, nil
 }
 
 func contarPurgaRuntimeHistorico(resultado *PurgaRuntimeHistoricoResultado) int {

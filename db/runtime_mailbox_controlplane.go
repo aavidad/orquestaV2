@@ -40,6 +40,11 @@ func EnviarRuntimeMailbox(msg *RuntimeMailboxMessage) (int64, error) {
 		if _, err := ConsumirRuntimeMailboxPendienteSupersedido(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), id); err != nil {
 			return 0, err
 		}
+		if taskID := runtimeMailboxPayloadTaskIDJSON(msg.PayloadJSON); taskID > 0 {
+			if _, err := ConsumirRuntimeMailboxPendienteSupersedidoPorTaskID(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), taskID, id); err != nil {
+				return 0, err
+			}
+		}
 	}
 	return id, nil
 }
@@ -266,6 +271,60 @@ func ConsumirRuntimeMailboxPendienteSupersedido(toAgente string, proyectoID *int
 	}
 	rows, _ := res.RowsAffected()
 	return rows, nil
+}
+
+func ConsumirRuntimeMailboxPendienteSupersedidoPorTaskID(toAgente string, proyectoID *int64, kind string, taskID, keepID int64) (int64, error) {
+	toAgente = strings.TrimSpace(toAgente)
+	kind = strings.TrimSpace(kind)
+	if toAgente == "" || kind == "" || taskID <= 0 || keepID <= 0 {
+		return 0, nil
+	}
+	args := []any{toAgente}
+	q := `
+		UPDATE runtime_mailbox
+		SET estado='consumido',
+		    delivered_at=COALESCE(delivered_at, CURRENT_TIMESTAMP),
+		    consumed_at=CURRENT_TIMESTAMP
+		WHERE estado='pendiente'
+		  AND to_agente = ?`
+	if family := runtimeMailboxSupersedeFamily(kind); family != "" {
+		q += ` AND kind IN (` + runtimeMailboxFamilyPlaceholders(family) + `)`
+		args = append(args, runtimeMailboxFamilyKinds(family)...)
+	} else {
+		q += ` AND kind = ?`
+		args = append(args, kind)
+	}
+	q += ` AND id < ?`
+	args = append(args, keepID)
+	if proyectoID != nil {
+		q += ` AND proyecto_id = ?`
+		args = append(args, *proyectoID)
+	}
+	q += ` AND payload_json LIKE ?`
+	args = append(args,
+		`%"tarea_id":`+jsonNumber(taskID)+`%`,
+	)
+	res, err := DB.Exec(q, args...)
+	if err != nil {
+		return 0, err
+	}
+	rows, _ := res.RowsAffected()
+	return rows, nil
+}
+
+func runtimeMailboxPayloadTaskIDJSON(raw string) int64 {
+	payload := mapFromJSON(raw)
+	return runtimeMailboxPayloadTaskID(payload)
+}
+
+func runtimeMailboxPayloadTaskID(payload map[string]any) int64 {
+	if payload == nil {
+		return 0
+	}
+	if id := int64FromAny(payload["tarea_id"]); id > 0 {
+		return id
+	}
+	return int64FromAny(payload["tarea_objetivo_id"])
 }
 
 func runtimeMailboxSupersedeFamily(kind string) string {
