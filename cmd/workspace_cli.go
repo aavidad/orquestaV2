@@ -21,7 +21,7 @@ var workspaceControlCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sinceRaw, _ := cmd.Flags().GetString("desde")
 		jsonOut, _ := cmd.Flags().GetBool("json")
-		since, err := parseStatsSince(strings.TrimSpace(sinceRaw))
+		since, err := parseWorkspaceControlSince(sinceRaw)
 		if err != nil {
 			return err
 		}

@@ -14,25 +14,26 @@ type apiWorkspaceControlResponse struct {
 }
 
 type workspaceControlReport struct {
-	Since               time.Time                         `json:"since"`
-	Generated           time.Time                         `json:"generated"`
-	ActiveProjects      int                               `json:"active_projects"`
-	TaskCounts          map[string]int                    `json:"task_counts,omitempty"`
-	DeudaDispatch       deudaDispatchResumen              `json:"deuda_dispatch"`
-	Autonomia           autonomiaResumen                  `json:"autonomia"`
-	Operational         workspaceOperationalSummary       `json:"operational"`
-	Git                 workspaceControlGitAggregate      `json:"git"`
-	AutonomySurface     *autonomySurface                  `json:"autonomy_surface,omitempty"`
-	AutonomyHighlights  []string                          `json:"autonomy_highlights,omitempty"`
-	AutonomyRecent      []autonomySurfaceRecentItem       `json:"autonomy_recent,omitempty"`
-	AutonomyProjects    []workspaceAutonomyProjectSummary `json:"autonomy_projects,omitempty"`
-	Agents              []workspaceControlAgentRow        `json:"agents,omitempty"`
-	Timeline            []workspaceControlTimelineItem    `json:"timeline,omitempty"`
-	ProjectControls     []*projectControlReport           `json:"project_controls,omitempty"`
-	WorkersConectados   int                               `json:"workers_conectados"`
-	WorkersTrabajando   int                               `json:"workers_trabajando"`
-	SupervisoresActivos int                               `json:"supervisores_activos"`
-	Projects            []*apiProyectoCockpit             `json:"projects,omitempty"`
+	Since                 time.Time                         `json:"since"`
+	Generated             time.Time                         `json:"generated"`
+	ActiveProjects        int                               `json:"active_projects"`
+	ProjectControlsFailed int                               `json:"project_controls_failed"`
+	TaskCounts            map[string]int                    `json:"task_counts,omitempty"`
+	DeudaDispatch         deudaDispatchResumen              `json:"deuda_dispatch"`
+	Autonomia             autonomiaResumen                  `json:"autonomia"`
+	Operational           workspaceOperationalSummary       `json:"operational"`
+	Git                   workspaceControlGitAggregate      `json:"git"`
+	AutonomySurface       *autonomySurface                  `json:"autonomy_surface,omitempty"`
+	AutonomyHighlights    []string                          `json:"autonomy_highlights,omitempty"`
+	AutonomyRecent        []autonomySurfaceRecentItem       `json:"autonomy_recent,omitempty"`
+	AutonomyProjects      []workspaceAutonomyProjectSummary `json:"autonomy_projects,omitempty"`
+	Agents                []workspaceControlAgentRow        `json:"agents,omitempty"`
+	Timeline              []workspaceControlTimelineItem    `json:"timeline,omitempty"`
+	ProjectControls       []*projectControlReport           `json:"project_controls,omitempty"`
+	WorkersConectados     int                               `json:"workers_conectados"`
+	WorkersTrabajando     int                               `json:"workers_trabajando"`
+	SupervisoresActivos   int                               `json:"supervisores_activos"`
+	Projects              []*apiProyectoCockpit             `json:"projects,omitempty"`
 }
 
 type workspaceAutonomyProjectSummary struct {
@@ -106,6 +107,14 @@ func buildWorkspaceControlReport() (*workspaceControlReport, error) {
 	return buildWorkspaceControlReportSince(since)
 }
 
+func parseWorkspaceControlSince(raw string) (time.Time, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return time.Now().UTC().Add(-workspaceControlDefaultWindow), nil
+	}
+	return parseStatsSince(value)
+}
+
 func buildWorkspaceControlReportSince(since time.Time) (*workspaceControlReport, error) {
 	if since.IsZero() {
 		since = time.Now().UTC().Add(-workspaceControlDefaultWindow)
@@ -123,6 +132,7 @@ func buildWorkspaceControlReportSince(since time.Time) (*workspaceControlReport,
 	activeProjects := 0
 	cockpits := make([]*apiProyectoCockpit, 0, len(projectItems))
 	projectControls := make([]*projectControlReport, 0, len(projectItems))
+	projectControlsFailed := 0
 	for _, item := range projectItems {
 		slug := strings.TrimSpace(fmt.Sprint(item["slug"]))
 		if slug == "" {
@@ -138,7 +148,9 @@ func buildWorkspaceControlReportSince(since time.Time) (*workspaceControlReport,
 		}
 		if workspaceControlProjectBuilder != nil {
 			projectControl, err := workspaceControlProjectBuilder(slug, since)
-			if err == nil && projectControl != nil {
+			if err != nil {
+				projectControlsFailed++
+			} else if projectControl != nil {
 				if projectControl.Cockpit == nil {
 					projectControl.Cockpit = cockpit
 				}
@@ -165,18 +177,19 @@ func buildWorkspaceControlReportSince(since time.Time) (*workspaceControlReport,
 
 	surface := buildAutonomySurfaceFromCockpits(cockpits, workspaceAutonomyRecentLimit)
 	report := &workspaceControlReport{
-		Since:               since,
-		Generated:           time.Now().UTC(),
-		ActiveProjects:      activeProjects,
-		TaskCounts:          taskCounts,
-		DeudaDispatch:       status.DeudaDispatch,
-		Autonomia:           status.Autonomia,
-		AutonomySurface:     surface,
-		WorkersConectados:   status.WorkersConectados,
-		WorkersTrabajando:   status.WorkersTrabajando,
-		SupervisoresActivos: status.SupervisoresActivos,
-		Projects:            cockpits,
-		ProjectControls:     projectControls,
+		Since:                 since,
+		Generated:             time.Now().UTC(),
+		ActiveProjects:        activeProjects,
+		ProjectControlsFailed: projectControlsFailed,
+		TaskCounts:            taskCounts,
+		DeudaDispatch:         status.DeudaDispatch,
+		Autonomia:             status.Autonomia,
+		AutonomySurface:       surface,
+		WorkersConectados:     status.WorkersConectados,
+		WorkersTrabajando:     status.WorkersTrabajando,
+		SupervisoresActivos:   status.SupervisoresActivos,
+		Projects:              cockpits,
+		ProjectControls:       projectControls,
 	}
 	report.AutonomyProjects = buildWorkspaceAutonomyProjects(cockpits, surface, workspaceAutonomyProjectLimit)
 	report.Operational = buildWorkspaceOperationalSummary(projectControls)

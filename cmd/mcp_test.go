@@ -6498,7 +6498,9 @@ func TestMCPResourceReadWorkspaceControlIncluyeResumenGlobal(t *testing.T) {
 		}, nil
 	}
 
+	before := time.Now().UTC()
 	contents, err := readMCPResource("orquesta://workspace/control")
+	after := time.Now().UTC()
 	if err != nil {
 		t.Fatalf("readMCPResource workspace/control: %v", err)
 	}
@@ -6507,6 +6509,18 @@ func TestMCPResourceReadWorkspaceControlIncluyeResumenGlobal(t *testing.T) {
 		if !strings.Contains(text, token) {
 			t.Fatalf("falta %q en resource workspace control: %s", token, text)
 		}
+	}
+	var resp apiWorkspaceControlResponse
+	if err := json.Unmarshal([]byte(text), &resp); err != nil {
+		t.Fatalf("decode workspace control: %v", err)
+	}
+	if resp.Control == nil {
+		t.Fatal("control global vacio")
+	}
+	minWant := before.Add(-workspaceControlDefaultWindow).Add(-2 * time.Second)
+	maxWant := after.Add(-workspaceControlDefaultWindow).Add(2 * time.Second)
+	if resp.Control.Since.Before(minWant) || resp.Control.Since.After(maxWant) {
+		t.Fatalf("since MCP por defecto inesperado: got=%s want_between=[%s,%s]", resp.Control.Since, minWant, maxWant)
 	}
 }
 

@@ -151,7 +151,7 @@ func webHandlerWorkspaceControl(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	since, err := parseStatsSince(strings.TrimSpace(r.URL.Query().Get("desde")))
+	since, err := parseWorkspaceControlSince(r.URL.Query().Get("desde"))
 	if err != nil {
 		webRender(w, r, webTplLayout+webTplWorkspaceControl, webWorkspaceControlData{
 			Err: err.Error(),

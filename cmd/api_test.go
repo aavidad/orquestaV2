@@ -1044,6 +1044,52 @@ func TestAPIServerOperationalUsesReadOnlyFallbackWhenFastFallbackUnavailable(t *
 	}
 }
 
+func TestFetchStatusForOperationalFallbackIgnoraSnapshotQueRequiereRefresh(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	prevFast := statusFastFetcher
+	prevUltraLite := apiStatusUltraLiteFetcher
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	prevNow := statusNowFunc
+	t.Cleanup(func() {
+		statusFastFetcher = prevFast
+		apiStatusUltraLiteFetcher = prevUltraLite
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+		statusNowFunc = prevNow
+	})
+
+	now := time.Date(2026, 4, 28, 18, 45, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes:          []*db.Agente{{Nombre: "Stale", Activo: true, EstadoCuota: "activo"}},
+		AgentesActivos:   []*db.Agente{{Nombre: "Stale", Activo: true, EstadoCuota: "activo"}},
+		TareasEnProgreso: []tareaLite{{ID: 99, Estado: db.TareaEnProgreso, Agente: "Stale"}},
+		Autonomia:        autonomiaResumen{ContinuidadPendiente: 1},
+		Generado:         now.Format(time.RFC3339),
+	}, now, time.Minute)
+
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{}, errStatusFetchTimeout
+	}
+	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) {
+		return apiStatusResponse{}, false
+	}
+	apiStatusReadOnlyLiteFetcher = func() ([]*db.Agente, map[string]int, []*db.Tarea, error) {
+		return []*db.Agente{{Nombre: "CodexRO", Activo: true, EstadoCuota: "activo"}}, map[string]int{"en_progreso": 1}, []*db.Tarea{
+			{ID: 9, Estado: db.TareaEnProgreso, Agente: stringPtr("CodexRO")},
+		}, nil
+	}
+
+	status, ok := fetchStatusForOperationalFallback(50 * time.Millisecond)
+	if !ok {
+		t.Fatal("deberia encontrar fallback operativo")
+	}
+	if len(status.Agentes) == 0 || status.Agentes[0] == nil || status.Agentes[0].Nombre != "CodexRO" {
+		t.Fatalf("no deberia reutilizar snapshot stale que requiere refresh: %+v", status.Agentes)
+	}
+}
+
 func TestFetchStatusReadOnlyLiteDirectReconcilesVisibleSessions(t *testing.T) {
 	prevReadOnly := apiStatusReadOnlyLiteFetcher
 	prevSessions := statusVisibleSessionsFetcher
@@ -5502,6 +5548,56 @@ func TestAPIWorkspaceControlExponeVistaGlobal(t *testing.T) {
 	}
 	if resp.Control.WorkersConectados != 2 || resp.Control.SupervisoresActivos != 1 {
 		t.Fatalf("workers/supervisor global inesperados: %+v", resp.Control)
+	}
+}
+
+func TestAPIWorkspaceControlUsa24hPorDefectoCuandoNoSePasaDesde(t *testing.T) {
+	prevStatus := statusService
+	prevProjects := workspaceControlListProjects
+	prevCockpit := workspaceControlCockpitBuilder
+	prevProjectControl := workspaceControlProjectBuilder
+	defer func() {
+		statusService = prevStatus
+		workspaceControlListProjects = prevProjects
+		workspaceControlCockpitBuilder = prevCockpit
+		workspaceControlProjectBuilder = prevProjectControl
+	}()
+
+	statusService = stubStatusService{response: apiStatusResponse{}}
+	workspaceControlListProjects = func() ([]map[string]any, error) {
+		return []map[string]any{{"slug": "orquestador"}}, nil
+	}
+	workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+		return &apiProyectoCockpit{Proyecto: &db.Proyecto{Slug: slug, Nombre: "Orquestador"}}, nil
+	}
+	workspaceControlProjectBuilder = func(slug string, since time.Time) (*projectControlReport, error) {
+		return &projectControlReport{
+			Project: &db.Proyecto{Slug: slug, Nombre: "Orquestador"},
+			Since:   since,
+		}, nil
+	}
+
+	before := time.Now().UTC()
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/workspace/control", nil)
+	mux.ServeHTTP(rec, req)
+	after := time.Now().UTC()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status workspace control inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp apiWorkspaceControlResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode workspace control: %v", err)
+	}
+	if resp.Control == nil {
+		t.Fatal("control global vacio")
+	}
+	minWant := before.Add(-workspaceControlDefaultWindow).Add(-2 * time.Second)
+	maxWant := after.Add(-workspaceControlDefaultWindow).Add(2 * time.Second)
+	if resp.Control.Since.Before(minWant) || resp.Control.Since.After(maxWant) {
+		t.Fatalf("since global por defecto inesperado: got=%s want_between=[%s,%s]", resp.Control.Since, minWant, maxWant)
 	}
 }
 

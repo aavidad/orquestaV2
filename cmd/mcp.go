@@ -683,7 +683,7 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		since, err := parseStatsSince(strings.TrimSpace(parsed.Query().Get("desde")))
+		since, err := parseWorkspaceControlSince(parsed.Query().Get("desde"))
 		if err != nil {
 			return nil, err
 		}

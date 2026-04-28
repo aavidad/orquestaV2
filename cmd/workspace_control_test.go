@@ -235,6 +235,64 @@ func TestBuildWorkspaceControlReportCuentaProyectosActivosAunqueFalleCockpit(t *
 	}
 }
 
+func TestBuildWorkspaceControlReportCuentaProjectControlsFallidos(t *testing.T) {
+	prevStatus := statusService
+	prevProjects := workspaceControlListProjects
+	prevCockpit := workspaceControlCockpitBuilder
+	prevProjectControl := workspaceControlProjectBuilder
+	defer func() {
+		statusService = prevStatus
+		workspaceControlListProjects = prevProjects
+		workspaceControlCockpitBuilder = prevCockpit
+		workspaceControlProjectBuilder = prevProjectControl
+	}()
+
+	statusService = stubStatusService{response: apiStatusResponse{}}
+	workspaceControlListProjects = func() ([]map[string]any, error) {
+		return []map[string]any{
+			{"slug": "orquestador"},
+			{"slug": "infra"},
+		}, nil
+	}
+	workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+		return &apiProyectoCockpit{Proyecto: &db.Proyecto{Slug: slug, Nombre: slug}}, nil
+	}
+	workspaceControlProjectBuilder = func(slug string, since time.Time) (*projectControlReport, error) {
+		if slug == "infra" {
+			return nil, fmt.Errorf("control no disponible")
+		}
+		return &projectControlReport{
+			Project: &db.Proyecto{Slug: slug, Nombre: slug},
+			Since:   since,
+		}, nil
+	}
+
+	report, err := buildWorkspaceControlReport()
+	if err != nil {
+		t.Fatalf("buildWorkspaceControlReport: %v", err)
+	}
+	if report.ProjectControlsFailed != 1 {
+		t.Fatalf("project controls fallidos inesperados: %+v", report)
+	}
+	if len(report.ProjectControls) != 1 || report.ProjectControls[0].Project == nil || report.ProjectControls[0].Project.Slug != "orquestador" {
+		t.Fatalf("project controls cargados inesperados: %+v", report.ProjectControls)
+	}
+}
+
+func TestParseWorkspaceControlSinceUsa24hPorDefecto(t *testing.T) {
+	before := time.Now().UTC()
+	since, err := parseWorkspaceControlSince("")
+	after := time.Now().UTC()
+	if err != nil {
+		t.Fatalf("parseWorkspaceControlSince: %v", err)
+	}
+	minWant := before.Add(-workspaceControlDefaultWindow).Add(-2 * time.Second)
+	maxWant := after.Add(-workspaceControlDefaultWindow).Add(2 * time.Second)
+	if since.Before(minWant) || since.After(maxWant) {
+		t.Fatalf("ventana por defecto inesperada: got=%s want_between=[%s,%s]", since, minWant, maxWant)
+	}
+}
+
 func containsStringWorkspace(items []string, want string) bool {
 	for _, item := range items {
 		if item == want {

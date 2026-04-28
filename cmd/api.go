@@ -1235,7 +1235,7 @@ func apiHandlerWorkspaceControl(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	since, err := parseStatsSince(strings.TrimSpace(r.URL.Query().Get("desde")))
+	since, err := parseWorkspaceControlSince(r.URL.Query().Get("desde"))
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
@@ -1368,7 +1368,10 @@ func degradedServerOperationalInfo() serverOperationalInfo {
 }
 
 func fetchStatusForOperationalFallback(timeout time.Duration) (apiStatusResponse, bool) {
-	if snapshot, ok := readStatusSnapshotAny(); ok {
+	if snapshot, ok := readStatusSnapshotFreshUsable(); ok {
+		return snapshot, true
+	}
+	if snapshot, ok := readStatusSnapshotAny(); ok && !statusSnapshotNeedsImmediateRefresh(snapshot) {
 		return snapshot, true
 	}
 	if status, err := fetchStatusFallbackRace(timeout); err == nil {
