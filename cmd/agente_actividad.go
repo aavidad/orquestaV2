@@ -26,6 +26,8 @@ type agentActivitySummary struct {
 	AuditByAction         map[string]int `json:"audit_by_action,omitempty"`
 	TranscriptBySignal    map[string]int `json:"transcript_by_signal,omitempty"`
 	TranscriptByStream    map[string]int `json:"transcript_by_stream,omitempty"`
+	NoiseSignals         int            `json:"noise_signals,omitempty"`
+	NoiseRatioPct        int            `json:"noise_ratio_pct,omitempty"`
 	AutonomyByKind        map[string]int `json:"autonomy_by_kind,omitempty"`
 	OpenTasks             int            `json:"open_tasks"`
 	BlockedTasks          int            `json:"blocked_tasks"`
@@ -321,6 +323,7 @@ func summarizeAgentActivity(detail *agentesapp.Detail, audit []db.AuditEntry, tr
 			}
 		}
 	}
+	out.NoiseSignals, out.NoiseRatioPct = summarizeAgentNoiseSignals(out.TranscriptBySignal, out.TranscriptEntries)
 	for _, item := range autonomy {
 		key := strings.TrimSpace(item.Kind)
 		if key == "" {
@@ -478,6 +481,17 @@ func summarizeAgentTouchedFiles(stats *agentGitActivityStats, limit int) (int, [
 	return len(files), preview
 }
 
+func summarizeAgentNoiseSignals(bySignal map[string]int, total int) (int, int) {
+	if total <= 0 || len(bySignal) == 0 {
+		return 0, 0
+	}
+	noise := bySignal["stdout"] + bySignal["stderr"] + bySignal["sin_clasificar"]
+	if noise <= 0 {
+		return 0, 0
+	}
+	return noise, int((100 * noise) / total)
+}
+
 func summarizeAgentDeliverySignal(summary agentActivitySummary, stats *agentGitActivityStats) (string, string) {
 	commits := 0
 	pendingFiles := 0
@@ -488,6 +502,7 @@ func summarizeAgentDeliverySignal(summary agentActivitySummary, stats *agentGitA
 	tests := summary.TranscriptBySignal["tests"]
 	codeChanges := summary.TranscriptBySignal["code_change"]
 	gitSignals := summary.TranscriptBySignal["git_activity"]
+	noiseSignals := summary.NoiseSignals
 	opState := strings.ToLower(strings.TrimSpace(summary.CurrentOperational))
 	opDetail := strings.ToLower(strings.TrimSpace(summary.CurrentOperationalWhy))
 
@@ -514,6 +529,9 @@ func summarizeAgentDeliverySignal(summary agentActivitySummary, stats *agentGitA
 			parts = append(parts, fmt.Sprintf("%d señal(es) de test", tests))
 		}
 		return "entregando_valor", strings.Join(parts, " · ")
+	case noiseSignals > 0 && summary.NoiseRatioPct >= 60 && pendingFiles == 0 && summary.OrdersFailed == 0:
+		return "solo_ruido", fmt.Sprintf("%d/%d señales de transcript son ruido (%d%%) sin evidencia de entrega",
+			noiseSignals, summary.TranscriptEntries, summary.NoiseRatioPct)
 	case pendingFiles > 0 || summary.OrdersOpen > 0 || summary.MailboxPending > 0 || len(summary.CurrentTasks) > 0:
 		parts := make([]string, 0, 3)
 		if summary.CommitCadenceDetail != "" {
@@ -744,6 +762,9 @@ func imprimirAgenteActividad(report *agentActivityReport) error {
 	fmt.Printf("Transcript:%d linea(s)\n", report.Summary.TranscriptEntries)
 	for _, item := range topCountPairs(report.Summary.TranscriptBySignal, 5) {
 		fmt.Printf("  - %s: %d\n", item.Key, item.Count)
+	}
+	if report.Summary.NoiseSignals > 0 {
+		fmt.Printf("Ruido:     señales=%d · ratio=%d%%\n", report.Summary.NoiseSignals, report.Summary.NoiseRatioPct)
 	}
 	fmt.Printf("Autonomy:  %d evento(s)\n", report.Summary.AutonomyEvents)
 	if report.Summary.LastAutonomyEventAt != nil {

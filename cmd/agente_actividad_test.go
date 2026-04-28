@@ -476,6 +476,38 @@ func TestImprimirAgenteActividadMuestraTareasActualesCadenciaYTests(t *testing.T
 	}
 }
 
+func TestImprimirAgenteActividadMuestraRuidoCuandoPredomina(t *testing.T) {
+	report := &agentActivityReport{
+		Agent:     "CodexNoise",
+		Since:     time.Date(2026, 4, 28, 8, 0, 0, 0, time.UTC),
+		Generated: time.Date(2026, 4, 28, 9, 30, 0, 0, time.UTC),
+		Summary: agentActivitySummary{
+			TranscriptEntries: 5,
+			TranscriptBySignal: map[string]int{
+				"stdout":         2,
+				"stderr":         1,
+				"sin_clasificar": 1,
+				"progress_update": 1,
+			},
+			NoiseSignals:  4,
+			NoiseRatioPct: 80,
+			DeliverySignal: "solo_ruido",
+			DeliveryDetail: "4/5 señales de transcript son ruido (80%) sin evidencia de entrega",
+		},
+	}
+	out := capturarStdout(t, func() {
+		if err := imprimirAgenteActividad(report); err != nil {
+			t.Fatalf("imprimirAgenteActividad: %v", err)
+		}
+	})
+	if !containsAll(out,
+		"Entrega:   solo_ruido · 4/5 señales de transcript son ruido (80%) sin evidencia de entrega",
+		"Ruido:     señales=4 · ratio=80%",
+	) {
+		t.Fatalf("salida cli sin señal de ruido:\n%s", out)
+	}
+}
+
 func TestSummarizeAgentActivityExponeLeasesYUltimoTest(t *testing.T) {
 	lastTest := time.Date(2026, 4, 28, 9, 15, 0, 0, time.UTC)
 	detail := &agentesapp.Detail{
@@ -546,6 +578,21 @@ func TestSummarizeAgentTouchedFilesExponeConteoYPreview(t *testing.T) {
 	}
 }
 
+func TestSummarizeAgentNoiseSignalsCuentaRatio(t *testing.T) {
+	noise, ratio := summarizeAgentNoiseSignals(map[string]int{
+		"stdout":         2,
+		"stderr":         1,
+		"sin_clasificar": 1,
+		"tests":          1,
+	}, 5)
+	if noise != 4 {
+		t.Fatalf("noise=%d", noise)
+	}
+	if ratio != 80 {
+		t.Fatalf("ratio=%d", ratio)
+	}
+}
+
 func TestSummarizeAgentDeliverySignalDistingueValorYAtasco(t *testing.T) {
 	t.Run("entregando valor", func(t *testing.T) {
 		signal, detail := summarizeAgentDeliverySignal(agentActivitySummary{
@@ -577,6 +624,26 @@ func TestSummarizeAgentDeliverySignalDistingueValorYAtasco(t *testing.T) {
 			t.Fatalf("signal=%q", signal)
 		}
 		if detail != "runtime timeout" {
+			t.Fatalf("detail inesperado: %s", detail)
+		}
+	})
+
+	t.Run("solo ruido sin entrega", func(t *testing.T) {
+		signal, detail := summarizeAgentDeliverySignal(agentActivitySummary{
+			TranscriptEntries: 5,
+			TranscriptBySignal: map[string]int{
+				"stdout":         2,
+				"stderr":         1,
+				"sin_clasificar": 1,
+				"progress_update": 1,
+			},
+			NoiseSignals:  4,
+			NoiseRatioPct: 80,
+		}, &agentGitActivityStats{})
+		if signal != "solo_ruido" {
+			t.Fatalf("signal=%q", signal)
+		}
+		if detail != "4/5 señales de transcript son ruido (80%) sin evidencia de entrega" {
 			t.Fatalf("detail inesperado: %s", detail)
 		}
 	})
