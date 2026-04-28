@@ -432,6 +432,75 @@ func TestImprimirAgenteActividadMuestraResumenGitConHead(t *testing.T) {
 	}
 }
 
+func TestImprimirAgenteActividadMuestraTareasActualesCadenciaYTests(t *testing.T) {
+	lastTest := time.Date(2026, 4, 28, 9, 10, 0, 0, time.UTC)
+	report := &agentActivityReport{
+		Agent:     "Codex4",
+		Since:     time.Date(2026, 4, 28, 8, 0, 0, 0, time.UTC),
+		Generated: time.Date(2026, 4, 28, 9, 30, 0, 0, time.UTC),
+		Git:       &agentGitActivityStats{},
+		Summary: agentActivitySummary{
+			CurrentTasks:        []string{"#40 [en_progreso] runtime mailbox/session_resume modulo=cmd"},
+			CommitCadence:       "atrasada",
+			CommitCadenceDetail: "diff pendiente grande (9 fichero(s), +420/-35) sin commits recientes",
+			TranscriptBySignal:  map[string]int{"tests": 2},
+			LastTestSignalAt:    &lastTest,
+		},
+	}
+	out := capturarStdout(t, func() {
+		if err := imprimirAgenteActividad(report); err != nil {
+			t.Fatalf("imprimirAgenteActividad: %v", err)
+		}
+	})
+	if !containsAll(out,
+		"Actuales:",
+		"#40 [en_progreso] runtime mailbox/session_resume modulo=cmd",
+		"Cadencia:  atrasada · diff pendiente grande (9 fichero(s), +420/-35) sin commits recientes",
+		"Tests:     señales=2 · ultimo=2026-04-28 09:10:00",
+	) {
+		t.Fatalf("salida cli sin visibilidad ampliada:\n%s", out)
+	}
+}
+
+func TestSummarizeAgentActivityExponeLeasesYUltimoTest(t *testing.T) {
+	lastTest := time.Date(2026, 4, 28, 9, 15, 0, 0, time.UTC)
+	detail := &agentesapp.Detail{
+		Row: agentesapp.Row{OpenTasks: 1},
+		Entity: &agentesapp.AgentEntity{
+			Leases: []agentesapp.WorkLease{{
+				TaskID: 40,
+				Title:  "runtime mailbox/session_resume",
+				State:  db.TareaEnProgreso,
+				Module: "cmd",
+			}},
+		},
+	}
+	summary := summarizeAgentActivity(detail, nil, []*db.RuntimeTranscriptEntry{
+		{NormalizedText: "go test ./cmd", CreatedAt: lastTest},
+	}, nil)
+	if len(summary.CurrentTasks) != 1 || summary.CurrentTasks[0] != "#40 [en_progreso] runtime mailbox/session_resume modulo=cmd" {
+		t.Fatalf("current tasks inesperadas: %+v", summary.CurrentTasks)
+	}
+	if summary.LastTestSignalAt == nil || !summary.LastTestSignalAt.Equal(lastTest.UTC()) {
+		t.Fatalf("last test signal inesperado: %+v", summary.LastTestSignalAt)
+	}
+}
+
+func TestSummarizeAgentCommitCadenceDetectaDiffGrandeSinCommits(t *testing.T) {
+	state, detail := summarizeAgentCommitCadence(&agentGitActivityStats{
+		PendingFiles:        []string{"a.go", "b.go", "c.go", "d.go", "e.go", "f.go", "g.go", "h.go"},
+		PendingAddedLines:   401,
+		PendingDeletedLines: 12,
+		RecentCommitCount:   0,
+	})
+	if state != "atrasada" {
+		t.Fatalf("state=%q", state)
+	}
+	if !strings.Contains(detail, "diff pendiente grande") {
+		t.Fatalf("detail inesperado: %s", detail)
+	}
+}
+
 func TestClassifyAgentActivityTranscriptSignalReduceSinClasificar(t *testing.T) {
 	cases := []struct {
 		name string

@@ -15672,30 +15672,30 @@ func cerrarTareaPostRemediationBlockedSiResuelta(tareaID int64, agente string) (
 
 func instruccionContinuacionSesionActivaAutonomia(tareaID int64) string {
 	if tareaID <= 0 {
-		return "Sigue con la tarea activa y cierra el siguiente slice útil del frente actual dentro del write-set y tests definidos."
+		return instruccionContinuacionConMicroCommit("Sigue con la tarea activa y cierra el siguiente slice útil del frente actual dentro del write-set y tests definidos.")
 	}
 	tarea, err := tareasService.Get(tareaID)
 	if err != nil || tarea == nil {
-		return "Sigue con la tarea activa y cierra el siguiente slice útil del frente actual dentro del write-set y tests definidos."
+		return instruccionContinuacionConMicroCommit("Sigue con la tarea activa y cierra el siguiente slice útil del frente actual dentro del write-set y tests definidos.")
 	}
 	if strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier") {
-		return "Esta semilla premium no autoriza programar un frente amplio. Toma o reanuda exactamente una tarea premium acotada con WRITE_SET y tests mínimos; si no existe, créala por la app/CLI de Orquesta y continúa sobre ese frente derivado."
+		return instruccionContinuacionConMicroCommit("Esta semilla premium no autoriza programar un frente amplio. Toma o reanuda exactamente una tarea premium acotada con WRITE_SET y tests mínimos; si no existe, créala por la app/CLI de Orquesta y continúa sobre ese frente derivado.")
 	}
 	if tareaAutonomiaFinishApp(tarea) {
 		if !tareaDBTieneContratoSliceAcotadaCmd(tarea) {
-			return "Modo finish_app activo sin slice acotada: No sigas la tarea finish_app amplia como trabajo abierto. Toma o crea por la app de Orquesta una tarea acotada con WRITE_SET, símbolos foco o tests mínimos; luego continúa solo sobre esa slice derivada."
+			return instruccionContinuacionConMicroCommit("Modo finish_app activo sin slice acotada: No sigas la tarea finish_app amplia como trabajo abierto. Toma o crea por la app de Orquesta una tarea acotada con WRITE_SET, símbolos foco o tests mínimos; luego continúa solo sobre esa slice derivada.")
 		}
-		return "Modo finish_app activo sobre slice acotada: cierra esta slice dentro del write-set, símbolos foco y tests definidos. Al terminar, enlaza el siguiente frente útil usando la app de Orquesta sin volver a un frente amplio."
+		return instruccionContinuacionConMicroCommit("Modo finish_app activo sobre slice acotada: cierra esta slice dentro del write-set, símbolos foco y tests definidos. Al terminar, enlaza el siguiente frente útil usando la app de Orquesta sin volver a un frente amplio.")
 	}
 	if esTareaPostRemediationBlockedAutonomia(tarea) {
 		return instruccionContinuacionTareaPostRemediationBlockedAutonomia(tarea)
 	}
-	return "Sigue con la tarea activa y cierra el siguiente slice útil del frente actual dentro del write-set y tests definidos."
+	return instruccionContinuacionConMicroCommit("Sigue con la tarea activa y cierra el siguiente slice útil del frente actual dentro del write-set y tests definidos.")
 }
 
 func instruccionContinuacionTareaPostRemediationBlockedAutonomia(tarea *db.Tarea) string {
 	if tarea == nil {
-		return "Resuelve el follow-up post-remediation bloqueado: diagnostica retry, nuevo relevo o handoff y deja el frente desbloqueado con trazabilidad."
+		return instruccionContinuacionConMicroCommit("Resuelve el follow-up post-remediation bloqueado: diagnostica retry, nuevo relevo o handoff y deja el frente desbloqueado con trazabilidad.")
 	}
 	targetAgente := extraerNotaAutonomiaKV(tarea.Notas, "agente_objetivo")
 	verificationKey := extraerNotaAutonomiaKV(tarea.Notas, "verification_key")
@@ -15714,7 +15714,19 @@ func instruccionContinuacionTareaPostRemediationBlockedAutonomia(tarea *db.Tarea
 		partes = append(partes, "Tipo de remediación previa: "+strings.TrimSpace(remediationKind)+".")
 	}
 	partes = append(partes, "Usa la app de Orquesta para decidir y ejecutar el siguiente paso; evita dejarlo en bucle o esperar a humano por defecto.")
-	return strings.Join(partes, " ")
+	return instruccionContinuacionConMicroCommit(strings.Join(partes, " "))
+}
+
+func instruccionContinuacionConMicroCommit(base string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return "No acumules trabajo sin checkpoint: cierra slices pequeños, crea checkpoint y haz commit local descriptivo antes de seguir."
+	}
+	policy := " No acumules trabajo sin checkpoint: cierra slices pequeños y verificables; si el diff local deja de ser pequeño, crea checkpoint y haz commit local descriptivo antes de seguir."
+	if strings.Contains(base, "commit local descriptivo") {
+		return base
+	}
+	return strings.TrimSpace(base) + policy
 }
 
 func extraerNotaAutonomiaKV(notas, key string) string {

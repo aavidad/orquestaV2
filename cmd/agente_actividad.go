@@ -20,6 +20,8 @@ type agentActivitySummary struct {
 	TranscriptEntries     int            `json:"transcript_entries"`
 	AutonomyEvents        int            `json:"autonomy_events"`
 	LastAutonomyEventAt   *time.Time     `json:"last_autonomy_event_at,omitempty"`
+	LastTestSignalAt      *time.Time     `json:"last_test_signal_at,omitempty"`
+	LastGitSignalAt       *time.Time     `json:"last_git_signal_at,omitempty"`
 	AuditByAction         map[string]int `json:"audit_by_action,omitempty"`
 	TranscriptBySignal    map[string]int `json:"transcript_by_signal,omitempty"`
 	TranscriptByStream    map[string]int `json:"transcript_by_stream,omitempty"`
@@ -33,6 +35,9 @@ type agentActivitySummary struct {
 	LastAutonomySource    string         `json:"last_autonomy_source,omitempty"`
 	CurrentOperational    string         `json:"current_operational,omitempty"`
 	CurrentOperationalWhy string         `json:"current_operational_detail,omitempty"`
+	CurrentTasks          []string       `json:"current_tasks,omitempty"`
+	CommitCadence         string         `json:"commit_cadence,omitempty"`
+	CommitCadenceDetail   string         `json:"commit_cadence_detail,omitempty"`
 	AutonomyHighlights    []string       `json:"autonomy_highlights,omitempty"`
 	IntegrationRisk       string         `json:"integration_risk,omitempty"`
 	IntegrationRiskScore  int            `json:"integration_risk_score,omitempty"`
@@ -204,6 +209,7 @@ func buildAgentActivityReportLocal(agent, project string, since time.Time, audit
 	}
 	report.Autonomy, _, _, _ = compactAutonomyEventSummaries(autonomy, 8)
 	report.Summary = summarizeAgentActivity(detail, audit, transcript, autonomy)
+	report.Summary.CommitCadence, report.Summary.CommitCadenceDetail = summarizeAgentCommitCadence(report.Git)
 	if projectEntity != nil {
 		projectAutonomy, err := buildProjectAutonomyEventSummaries(projectEntity.ID, since, 50)
 		if err != nil {
@@ -293,6 +299,15 @@ func summarizeAgentActivity(detail *agentesapp.Detail, audit []db.AuditEntry, tr
 		}
 		out.TranscriptBySignal[signal]++
 		out.TranscriptByStream[stream]++
+		if !item.CreatedAt.IsZero() {
+			value := item.CreatedAt.UTC()
+			switch signal {
+			case "tests":
+				out.LastTestSignalAt = maxTimePtr(out.LastTestSignalAt, &value)
+			case "git_activity":
+				out.LastGitSignalAt = maxTimePtr(out.LastGitSignalAt, &value)
+			}
+		}
 	}
 	for _, item := range autonomy {
 		key := strings.TrimSpace(item.Kind)
@@ -313,8 +328,64 @@ func summarizeAgentActivity(detail *agentesapp.Detail, audit []db.AuditEntry, tr
 		out.LastAutonomySource = strings.TrimSpace(detail.Row.LastAutonomySource)
 		out.CurrentOperational = strings.TrimSpace(detail.Row.EstadoOperativo)
 		out.CurrentOperationalWhy = strings.TrimSpace(detail.Row.DetalleOperativo)
+		out.CurrentTasks = buildAgentActivityCurrentTasks(detail)
 	}
 	return out
+}
+
+func buildAgentActivityCurrentTasks(detail *agentesapp.Detail) []string {
+	if detail == nil || detail.Entity == nil || len(detail.Entity.Leases) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(detail.Entity.Leases))
+	for _, lease := range detail.Entity.Leases {
+		label := formatAgentActivityLease(lease)
+		if strings.TrimSpace(label) == "" {
+			continue
+		}
+		out = append(out, label)
+	}
+	return out
+}
+
+func formatAgentActivityLease(lease agentesapp.WorkLease) string {
+	if lease.TaskID <= 0 {
+		return ""
+	}
+	parts := []string{fmt.Sprintf("#%d", lease.TaskID)}
+	if state := strings.TrimSpace(string(lease.State)); state != "" {
+		parts = append(parts, "["+state+"]")
+	}
+	if title := strings.TrimSpace(lease.Title); title != "" {
+		parts = append(parts, title)
+	}
+	if module := strings.TrimSpace(lease.Module); module != "" {
+		parts = append(parts, "modulo="+module)
+	}
+	return strings.Join(parts, " ")
+}
+
+func summarizeAgentCommitCadence(stats *agentGitActivityStats) (string, string) {
+	if stats == nil {
+		return "", ""
+	}
+	pendingFiles := len(stats.PendingFiles)
+	pendingLines := stats.PendingAddedLines + stats.PendingDeletedLines
+	switch {
+	case stats.RecentCommitCount > 0 && pendingFiles == 0:
+		return "fluida", fmt.Sprintf("%d commit(s) recientes y sin diff pendiente", stats.RecentCommitCount)
+	case stats.RecentCommitCount > 0:
+		return "activa", fmt.Sprintf("%d commit(s) recientes; diff pendiente=%d fichero(s) +%d/-%d",
+			stats.RecentCommitCount, pendingFiles, stats.PendingAddedLines, stats.PendingDeletedLines)
+	case pendingFiles == 0:
+		return "sin_diff", "sin diff pendiente ni commits recientes en la ventana"
+	case pendingFiles >= 8 || pendingLines >= 400:
+		return "atrasada", fmt.Sprintf("diff pendiente grande (%d fichero(s), +%d/-%d) sin commits recientes",
+			pendingFiles, stats.PendingAddedLines, stats.PendingDeletedLines)
+	default:
+		return "sin_checkpoint", fmt.Sprintf("diff pendiente (%d fichero(s), +%d/-%d) sin commits recientes",
+			pendingFiles, stats.PendingAddedLines, stats.PendingDeletedLines)
+	}
 }
 
 func classifyAgentActivityTranscriptSignal(item *db.RuntimeTranscriptEntry) string {
@@ -472,6 +543,12 @@ func imprimirAgenteActividad(report *agentActivityReport) error {
 		report.Summary.OrdersOpen,
 		report.Summary.OrdersFailed,
 	)
+	if len(report.Summary.CurrentTasks) > 0 {
+		fmt.Printf("Actuales:\n")
+		for _, task := range report.Summary.CurrentTasks {
+			fmt.Printf("  - %s\n", task)
+		}
+	}
 	if report.Summary.IntegrationRiskScore > 0 {
 		fmt.Printf("Riesgo:    %s · integracion_bloqueada=%d", report.Summary.IntegrationRisk, report.Summary.IntegrationRiskScore)
 		if len(report.Summary.IntegrationHighlights) > 0 {
@@ -515,12 +592,26 @@ func imprimirAgenteActividad(report *agentActivityReport) error {
 			report.Git.CommittedDeletedLines,
 			report.Git.RecentCommitCount,
 		)
+		if report.Summary.CommitCadence != "" {
+			fmt.Printf("Cadencia:  %s", report.Summary.CommitCadence)
+			if report.Summary.CommitCadenceDetail != "" {
+				fmt.Printf(" · %s", report.Summary.CommitCadenceDetail)
+			}
+			fmt.Println()
+		}
 		if len(report.Git.TouchedFiles) > 0 {
 			fmt.Printf("Ficheros tocados (%d):\n", len(report.Git.TouchedFiles))
 			for _, file := range report.Git.TouchedFiles {
 				fmt.Printf("  - %s\n", file)
 			}
 		}
+	}
+	if tests := report.Summary.TranscriptBySignal["tests"]; tests > 0 {
+		fmt.Printf("Tests:     señales=%d", tests)
+		if report.Summary.LastTestSignalAt != nil {
+			fmt.Printf(" · ultimo=%s", report.Summary.LastTestSignalAt.Format("2006-01-02 15:04:05"))
+		}
+		fmt.Println()
 	}
 	if len(report.Autonomy) > 0 {
 		fmt.Printf("Eventos autonomía recientes:\n")

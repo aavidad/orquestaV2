@@ -22489,6 +22489,7 @@ func TestInstruccionContinuacionSesionActivaAutonomiaEspecializaPostRemediationB
 		"Verification key: reassign:41:Codex1:Codex2.",
 		"Tipo de remediación previa: reassign.",
 		"Usa la app de Orquesta",
+		"commit local descriptivo",
 	} {
 		if !strings.Contains(instruction, fragment) {
 			t.Fatalf("instruccion sin %q: %s", fragment, instruction)
@@ -22527,9 +22528,46 @@ func TestInstruccionContinuacionSesionActivaAutonomiaEspecializaFinishApp(t *tes
 		"No sigas la tarea finish_app amplia como trabajo abierto",
 		"WRITE_SET, símbolos foco o tests mínimos",
 		"app de Orquesta",
+		"commit local descriptivo",
 	} {
 		if !strings.Contains(instruction, fragment) {
 			t.Fatalf("instruccion finish_app sin %q: %s", fragment, instruction)
+		}
+	}
+}
+
+func TestInstruccionContinuacionSesionActivaAutonomiaIncluyePoliticaMicroCommit(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Ajustar server-first",
+		Descripcion: "Cerrar el siguiente frente util sin abrir carriles paralelos",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+
+	instruction := instruccionContinuacionSesionActivaAutonomia(tareaID)
+	for _, fragment := range []string{
+		"Sigue con la tarea activa y cierra el siguiente slice útil",
+		"cierra slices pequeños y verificables",
+		"commit local descriptivo",
+	} {
+		if !strings.Contains(instruction, fragment) {
+			t.Fatalf("instruccion sin %q: %s", fragment, instruction)
 		}
 	}
 }
