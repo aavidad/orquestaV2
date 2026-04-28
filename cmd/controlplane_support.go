@@ -7822,6 +7822,9 @@ func procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg *db.RuntimeMailb
 	if !runtimeHandleAdmiteFallbackInteractivoTransitorio(handle) && !runtimeMailboxSessionResumePermiteFallbackInteractivoPipelineLocal(msg, handle, externalSessionID) {
 		return false, nil
 	}
+	if !runtimeMailboxShouldReevaluate("session_resume_interactive_fallback", msg.ID, handle.ID) {
+		return false, nil
+	}
 	if !runtimeHandleListaParaDispatchInteractivo(handle) {
 		return false, nil
 	}
@@ -8951,9 +8954,15 @@ func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, r
 		!strings.EqualFold(workerTransport, "tmux") {
 		return false
 	}
+	if !view.Alive || view.HeartbeatStale {
+		return false
+	}
 	state := runtimeHandleWorkerCanonicalState(view)
 	ready, _ := snap.ReadyForTextDispatch(now, time.Minute)
-	if ready || state == "waiting_input" {
+	if ready {
+		return true
+	}
+	if state == "waiting_input" {
 		return true
 	}
 	if state == "working" {
@@ -9015,8 +9024,21 @@ func runtimeTMUXSessionResumeWorkerReady(handle *db.RuntimeHandle) bool {
 	if view == nil {
 		return false
 	}
-	if !strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") &&
-		!strings.EqualFold(strings.TrimSpace(view.Transport), "tmux") {
+	if !view.Alive || view.HeartbeatStale {
+		return false
+	}
+	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
+	workerDriver := firstNonEmpty(
+		strings.TrimSpace(view.Driver),
+		strings.TrimSpace(stringMapValue(meta, "driver")),
+	)
+	workerTransport := firstNonEmpty(
+		strings.TrimSpace(view.Transport),
+		strings.TrimSpace(stringMapValue(meta, "transport")),
+		strings.TrimSpace(handle.Transporte),
+	)
+	if !strings.EqualFold(workerDriver, "tmux_cli_session") &&
+		!strings.EqualFold(workerTransport, "tmux") {
 		return false
 	}
 	switch runtimeHandleWorkerCanonicalState(view) {
@@ -9040,8 +9062,21 @@ func runtimeTMUXSessionResumeWorkerWorkingEsperandoIO(handle *db.RuntimeHandle, 
 	if view == nil {
 		return false
 	}
-	if !strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") &&
-		!strings.EqualFold(strings.TrimSpace(view.Transport), "tmux") {
+	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
+	workerDriver := firstNonEmpty(
+		strings.TrimSpace(view.Driver),
+		strings.TrimSpace(stringMapValue(meta, "driver")),
+	)
+	workerTransport := firstNonEmpty(
+		strings.TrimSpace(view.Transport),
+		strings.TrimSpace(stringMapValue(meta, "transport")),
+		strings.TrimSpace(handle.Transporte),
+	)
+	if !strings.EqualFold(workerDriver, "tmux_cli_session") &&
+		!strings.EqualFold(workerTransport, "tmux") {
+		return false
+	}
+	if !view.Alive || view.HeartbeatStale {
 		return false
 	}
 	if runtimeHandleWorkerCanonicalState(view) != "working" {
@@ -18234,3 +18269,4 @@ func encolarControlAutonomiaProyectoDetallado(req apiAgenteControlRequest) error
 // TMUX canonical lane handling lives in this file.
 // Resume-path slice in progress; keep mailbox batch handling here.
 // TODO(orquesta): narrow runtime mailbox resume slice.
+// Orquesta runtime slice: canonical resume/worktree/tmux handling.

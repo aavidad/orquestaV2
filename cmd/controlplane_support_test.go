@@ -11851,6 +11851,109 @@ func TestProcesarRuntimeMailboxSessionResumeBatchUsaFallbackInteractivoConStdinR
 	}
 }
 
+func TestProcesarRuntimeMailboxSessionResumeBatchFallbackInteractivoRespetaGateDeReevaluacion(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+	t.Cleanup(resetRuntimeMailboxReevaluationGate)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","stdin_raw_path":"` + filepath.Join(tmp, "codex.raw") + `","mailbox_delivery_mode":"session_resume","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='cli', handle_kind='process', capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"instruction":"haz una micro refactorizacion concreta","texto":"continua trabajo actual"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("primer procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("primer fallback interactivo deberia materializar send_instruction, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var send *db.RuntimeOrder
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			send = order
+			break
+		}
+	}
+	if send == nil {
+		t.Fatal("faltaba send_instruction inicial")
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET estado='completada', resultado_json='{"ok":true}', finished_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, send.ID); err != nil {
+		t.Fatalf("cerrar send_instruction inicial: %v", err)
+	}
+
+	n, err = procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("segundo procesar mailbox session resume: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia rematerializar send_instruction en reevaluacion inmediata del fallback interactivo, got=%d", n)
+	}
+
+	orders, err = db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders final: %v", err)
+	}
+	var sendCount int
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			sendCount++
+		}
+	}
+	if sendCount != 1 {
+		t.Fatalf("no deberia crear segunda send_instruction en fallback interactivo, got=%d", sendCount)
+	}
+	if msg, err := db.GetRuntimeMailbox(msgID); err != nil || msg == nil {
+		t.Fatalf("mailbox final: %+v err=%v", msg, err)
+	} else if msg.Estado != "pendiente" {
+		t.Fatalf("mailbox deberia seguir pendiente hasta entrega real: %+v", msg)
+	}
+}
+
 func TestRuntimeHandleAdmiteFallbackInteractivoTransitorioParaCodexTMUXPreferredConStdin(t *testing.T) {
 	handle := &db.RuntimeHandle{
 		Transporte:       "cli",
@@ -14625,7 +14728,7 @@ func TestProcesarRuntimeMailboxSessionResumeBatchConsumeMailboxBootstrapObservad
 	}
 }
 
-func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeDespachaConWorkerRunningYRuntimeEsperandoIO(t *testing.T) {
+func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeNoDespachaConWorkerRunningStaleAunqueRuntimeEsperandoIO(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()
 
@@ -14699,10 +14802,10 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeDespachaConWor
 		"child_pid":    os.Getpid(),
 	})
 
-	// Registrar runtime canonico con estado esperando_io para que
-	// runtimeTMUXSessionResumePuedeDespacharPorRuntimeCanonico devuelva true.
+	// Registrar runtime canonico con estado esperando_io para verificar que
+	// un worker stale no desbloquea session_resume por la via canonica.
 	pid := int64(os.Getpid())
-	_, err = db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+	runtimeID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
 		Agente:       "Codex1",
 		ProyectoID:   &proyectoID,
 		SesionID:     &sesion.ID,
@@ -14712,6 +14815,10 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeDespachaConWor
 	})
 	if err != nil {
 		t.Fatalf("registrar runtime instance: %v", err)
+	}
+	runtime, err := db.GetRuntime(runtimeID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
 	}
 
 	metaJSON, _ := json.Marshal(map[string]any{
@@ -14739,13 +14846,19 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeDespachaConWor
 	if err != nil {
 		t.Fatalf("mailbox: %v", err)
 	}
+	if runtimeHandleListaParaDispatchSessionResumeTMUX(handle, runtime) {
+		t.Fatal("worker running stale no deberia considerarse listo para session_resume aunque runtime canonico espere IO")
+	}
+	if runtimeMailboxBootstrapPendientePermiteDispatchSessionResume(handle, runtime) {
+		t.Fatal("bootstrap pendiente no deberia desbloquearse con worker running stale aunque runtime canonico espere IO")
+	}
 
 	n, err := procesarRuntimeMailboxSessionResumeBatch()
 	if err != nil {
 		t.Fatalf("procesar mailbox session resume: %v", err)
 	}
-	if n != 1 {
-		t.Fatalf("deberia despachar cuando heartbeat stale pero worker running y runtime esperando_io, got=%d", n)
+	if n != 0 {
+		t.Fatalf("no deberia despachar cuando worker running tiene heartbeat stale aunque runtime este esperando_io, got=%d", n)
 	}
 
 	agente := "Codex1"
@@ -14753,21 +14866,10 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeDespachaConWor
 	if err != nil {
 		t.Fatalf("listar orders: %v", err)
 	}
-	var send *db.RuntimeOrder
 	for _, order := range orders {
 		if order != nil && order.Tipo == "send_instruction" {
-			send = order
-			break
+			t.Fatalf("no deberia existir send_instruction para worker running stale aunque runtime espere IO: %+v", order)
 		}
-	}
-	if send == nil {
-		t.Fatalf("faltaba send_instruction para runtime esperando_io con heartbeat stale")
-	}
-	if !strings.Contains(send.PayloadJSON, `"mailbox_id":`+strconv.FormatInt(msgID, 10)) {
-		t.Fatalf("send_instruction sin mailbox_id: %s", send.PayloadJSON)
-	}
-	if !strings.Contains(send.PayloadJSON, `"external_session_id":"sess-codex1-esperando-io"`) {
-		t.Fatalf("send_instruction sin external_session_id: %s", send.PayloadJSON)
 	}
 
 	msg, err := db.GetRuntimeMailbox(msgID)
@@ -14775,7 +14877,7 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeDespachaConWor
 		t.Fatalf("mailbox final: %+v err=%v", msg, err)
 	}
 	if msg.Estado != "pendiente" {
-		t.Fatalf("la mailbox debe seguir pendiente hasta entregar de verdad: %+v", msg)
+		t.Fatalf("la mailbox debe seguir pendiente mientras el worker stale no pueda recibir session_resume: %+v", msg)
 	}
 }
 
@@ -15010,6 +15112,78 @@ func TestRuntimeHandleListaParaDispatchSessionResumeTMUXAceptaWorkerWaitingInput
 	}
 }
 
+func TestRuntimeHandleListaParaDispatchSessionResumeTMUXNoAceptaWorkerWaitingInputStale(t *testing.T) {
+	tmp := t.TempDir()
+	runDir := filepath.Join(tmp, "runtime", "waiting-input-stale")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir run dir: %v", err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	stale := time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339Nano)
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	writeJSON := func(path string, payload map[string]any) {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	writeJSON(manifestPath, map[string]any{
+		"version":        1,
+		"agent":          "Codex1",
+		"driver":         "tmux_cli_session",
+		"transport":      "tmux",
+		"tmux_session":   "orq-codex1-waiting-input-stale",
+		"tmux_pane_id":   "%178",
+		"status_path":    statusPath,
+		"heartbeat_path": heartbeatPath,
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":          "waiting_input",
+		"updated_at":     now,
+		"alive":          true,
+		"ready_at":       now,
+		"last_output_at": now,
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":          true,
+		"heartbeat_at":   stale,
+		"started_at":     stale,
+		"ready_at":       stale,
+		"last_output_at": stale,
+	})
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex1-waiting-input-stale",
+		"tmux_pane_id":          "%178",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	sesionID := int64(178)
+	handle := &db.RuntimeHandle{
+		Agente:       "Codex1",
+		SesionID:     &sesionID,
+		Transporte:   "tmux",
+		HandleKind:   "session",
+		HandleRef:    "orq-codex1-waiting-input-stale/%178",
+		Estado:       "activo",
+		MetadataJSON: string(metaJSON),
+	}
+
+	if runtimeHandleListaParaDispatchSessionResumeTMUX(handle, nil) {
+		t.Fatal("no deberia despachar session_resume con worker waiting_input stale")
+	}
+	if runtimeMailboxBootstrapPendientePermiteDispatchSessionResume(handle, nil) {
+		t.Fatal("bootstrap pendiente no deberia desbloquearse con worker waiting_input stale")
+	}
+}
+
 func TestRuntimeHandleListaParaDispatchSessionResumeTMUXAceptaWorkerRunningFrescoConExternalSession(t *testing.T) {
 	tmp := t.TempDir()
 	runDir := filepath.Join(tmp, "runtime", "Codex1", "session-resume-running-fresh")
@@ -15224,6 +15398,9 @@ func TestRuntimeHandleListaParaDispatchSessionResumeTMUXUsaMetadataSiManifestOmi
 
 	if !runtimeHandleListaParaDispatchSessionResumeTMUX(handle, nil) {
 		t.Fatal("deberia aceptar snapshot TMUX cuando manifest omite driver/transport pero handle canonico los conserva")
+	}
+	if !runtimeMailboxBootstrapPendientePermiteDispatchSessionResume(handle, nil) {
+		t.Fatal("bootstrap pendiente deberia aceptar snapshot TMUX cuando metadata conserva driver/transport")
 	}
 }
 
