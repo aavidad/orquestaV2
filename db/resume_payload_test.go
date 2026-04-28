@@ -44,6 +44,23 @@ func TestMergeResumePayloadPerfilEjecucionConservaHintsOperativosPrevios(t *test
 	}
 }
 
+func TestMergeResumePayloadPerfilOperativoSobrescribeSinPerderHints(t *testing.T) {
+	prev := `{"perfil_ejecucion":{"perfil_tarea":"implementacion","modelo":"gpt-5.4","razonamiento":"high","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1"}}`
+	got := MergeResumePayloadPerfilOperativo(prev, "qa-heavy")
+	if perfil := ResumePayloadPerfilOperativo(got); perfil != "qa-heavy" {
+		t.Fatalf("perfil_operativo inesperado: %s", got)
+	}
+	for _, token := range []string{
+		`"driver":"tmux_cli_session"`,
+		`"transport":"tmux"`,
+		`"tmux_session":"orq-codex1"`,
+	} {
+		if !strings.Contains(got, token) {
+			t.Fatalf("faltaba hint %s en merge operativo: %s", token, got)
+		}
+	}
+}
+
 func TestPayloadJSONDesdePlanYResumePersistePerfilEjecucion(t *testing.T) {
 	got := payloadJSONDesdePlanYResume(&runtimeagente.LaunchPlan{
 		PerfilTarea:  "implementacion",
@@ -63,15 +80,16 @@ func TestPayloadJSONDesdePlanYResumePersistePerfilEjecucion(t *testing.T) {
 
 func TestPayloadJSONDesdePlanYResumeConservaHintsOperativosDePerfil(t *testing.T) {
 	got := payloadJSONDesdePlanYResume(&runtimeagente.LaunchPlan{
-		PerfilTarea:  "implementacion",
-		Modelo:       "gpt-5.4",
-		Razonamiento: "high",
+		PerfilTarea:     "implementacion",
+		Modelo:          "gpt-5.4",
+		Razonamiento:    "high",
+		PerfilOperativo: "persistente",
 	}, runtimeagente.ResumeContext{
 		ResumePayloadJSON: `{"persist":"ok","perfil_ejecucion":{"perfil_tarea":"implementacion","modelo":"gemma4:26b","razonamiento":"medium","perfil_operativo":"qa-heavy","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1","tmux_pane_id":"%7"}}`,
 	})
 	for _, token := range []string{
 		`"persist":"ok"`,
-		`"perfil_operativo":"qa-heavy"`,
+		`"perfil_operativo":"persistente"`,
 		`"driver":"tmux_cli_session"`,
 		`"transport":"tmux"`,
 		`"tmux_session":"orq-codex1"`,
@@ -82,6 +100,16 @@ func TestPayloadJSONDesdePlanYResumeConservaHintsOperativosDePerfil(t *testing.T
 		if !strings.Contains(got, token) {
 			t.Fatalf("faltaba token %s en payload persistido: %s", token, got)
 		}
+	}
+}
+
+func TestPayloadJSONDesdePlanIncluyePerfilOperativo(t *testing.T) {
+	got := payloadJSONDesdePlan(&runtimeagente.LaunchPlan{
+		Modo:            "launch",
+		PerfilOperativo: "persistente",
+	})
+	if !strings.Contains(got, `"perfil_operativo":"persistente"`) {
+		t.Fatalf("payload sin perfil_operativo: %s", got)
 	}
 }
 

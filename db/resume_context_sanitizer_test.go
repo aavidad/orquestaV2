@@ -471,6 +471,51 @@ func TestConstruirResumePayloadBootstrapDBCompactaResumenDeCheckpointRuidoso(t *
 	}
 }
 
+func TestConstruirResumePayloadBootstrapDBElevaArtifactsVersionadosYQuitaDuplicadoPesado(t *testing.T) {
+	order := &RuntimeOrder{
+		ID:          9,
+		Tipo:        "handoff",
+		PayloadJSON: `{"artifacts":[{"artifact_id":"patch-1","scope":"task","kind":"patch","version":3,"content_type":"text/x-diff","path":"artifacts/patches/patch-1.diff"}],"artifacts_ref":["handoff:patch-1"],"motivo":"handoff"}`,
+	}
+	mailbox := []*RuntimeMailboxMessage{{
+		ID:          4,
+		FromAgente:  "orquesta",
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"corre tests","artifacts":[{"artifact_id":"tests-1","scope":"task","kind":"test_output","version":2,"content_type":"text/plain","blob_ref":"blob://tests-1"}]}`,
+	}}
+	checkpoint := &RuntimeCheckpoint{
+		ID:             11,
+		CheckpointKind: "stop",
+		PayloadJSON:    `{"artifacts":[{"artifact_id":"tx-1","scope":"session","kind":"transcript","version":1,"content_type":"text/plain","path":"artifacts/transcripts/tx-1.txt"}],"archivos":["a.go"]}`,
+	}
+
+	got := construirResumePayloadBootstrapDB(`{"persist":"ok"}`, order, mailbox, checkpoint)
+	envelope := ParseResumePayloadEnvelope(got)
+	artifacts, ok := envelope["artifacts"].([]any)
+	if !ok || len(artifacts) != 3 {
+		t.Fatalf("artifacts versionados inesperados: %+v payload=%s", envelope["artifacts"], got)
+	}
+	if refs := stringSliceFromAnyDB(envelope["artifacts_ref"]); len(refs) != 1 || refs[0] != "handoff:patch-1" {
+		t.Fatalf("artifacts_ref inesperado: %+v payload=%s", envelope["artifacts_ref"], got)
+	}
+	runtimeOrder, _ := envelope["runtime_order"].(map[string]any)
+	runtimePayload, _ := runtimeOrder["payload"].(map[string]any)
+	if _, exists := runtimePayload["artifacts"]; exists {
+		t.Fatalf("runtime_order payload no deberia duplicar artifacts: %+v", runtimePayload)
+	}
+	mailboxItems, _ := envelope["mailbox"].([]any)
+	firstMailbox, _ := mailboxItems[0].(map[string]any)
+	mailboxPayload, _ := firstMailbox["payload"].(map[string]any)
+	if _, exists := mailboxPayload["artifacts"]; exists {
+		t.Fatalf("mailbox payload no deberia duplicar artifacts: %+v", mailboxPayload)
+	}
+	checkpointPayload, _ := envelope["checkpoint"].(map[string]any)
+	cpRaw, _ := checkpointPayload["payload"].(map[string]any)
+	if _, exists := cpRaw["artifacts"]; exists {
+		t.Fatalf("checkpoint payload no deberia duplicar artifacts: %+v", cpRaw)
+	}
+}
+
 func TestSanitizeResumePayloadForProjectEliminaMetadatosEphemerosDeArranque(t *testing.T) {
 	proyecto := &Proyecto{
 		Slug:    "orquestador",

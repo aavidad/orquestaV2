@@ -51,6 +51,25 @@ func TestPrepareCLISinResumeNativoDevuelvePromptContinuidad(t *testing.T) {
 	}
 }
 
+func TestPrepareCLICodexAsignaPerfilOperativoPersistentePorDefecto(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    "codex",
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if plan.PerfilOperativo != "persistente" {
+		t.Fatalf("perfil_operativo inesperado: %+v", plan)
+	}
+}
+
 func TestEsConectorFamiliaOllamaReconocePoolLocal(t *testing.T) {
 	if !EsConectorFamiliaOllama("ollama_pool_local", "") {
 		t.Fatal("ollama_pool_local deberia pertenecer a la familia ollama")
@@ -195,6 +214,37 @@ func TestPrepareCLISinResumeNativoCompactaResumePayloadEnPrompt(t *testing.T) {
 	}
 	if !strings.Contains(plan.ContinuityPrompt, "[instruction") {
 		t.Fatalf("falta resumen compacto de mailbox en continuity prompt: %s", plan.ContinuityPrompt)
+	}
+}
+
+func TestPrepareCLISinResumeNativoCompactaArtifactsVersionadosEnPrompt(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex2",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    "codex",
+		},
+		Resume: ResumeContext{
+			ResumenContinuidad: "seguir con control plane",
+			ResumePayloadJSON: `{
+				"artifacts":[
+					{"artifact_id":"patch-1","scope":"task","kind":"patch","version":3,"path":"artifacts/patches/patch-1.diff"},
+					{"artifact_id":"tests-1","scope":"task","kind":"test_output","version":2,"blob_ref":"blob://tests-1"},
+					{"artifact_id":"tx-1","scope":"session","kind":"transcript","version":1,"path":"artifacts/transcripts/tx-1.txt"}
+				]
+			}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	for _, token := range []string{"artifacts=3", "patch@v3", "test_output@v2", "transcript@v1"} {
+		if !strings.Contains(plan.ContinuityPrompt, token) {
+			t.Fatalf("falta resumen de artifacts %s en: %s", token, plan.ContinuityPrompt)
+		}
 	}
 }
 
@@ -656,6 +706,36 @@ func TestSanitizarResumeParaConectorConservaHintsOperativosDePerfil(t *testing.T
 	}
 	if strings.Contains(resume.ResumePayloadJSON, "checkpoint_kind") || strings.Contains(resume.ResumePayloadJSON, "external_session_id") {
 		t.Fatalf("deberia purgar contexto reanudable legado del payload: %s", resume.ResumePayloadJSON)
+	}
+}
+
+func TestSanitizarResumeParaConectorConservaArtifactsVersionados(t *testing.T) {
+	resume := SanitizarResumeParaConector(ConnectorConfig{
+		Slug:         "ollama-cli",
+		Transporte:   "cli",
+		Comando:      "ollama",
+		MetadataJSON: `{"reanudable":false}`,
+	}, ResumeContext{
+		ExternalSessionID:  "sess-1",
+		ResumenContinuidad: "seguir luego",
+		ResumePayloadJSON:  `{"external_session_id":"sess-1","checkpoint_kind":"handoff_prepare","artifacts":[{"artifact_id":"patch-1","scope":"task","kind":"patch","version":3,"path":"artifacts/patches/patch-1.diff"}],"artifacts_ref":["handoff:patch-1"],"perfil_ejecucion":{"modelo":"gemma4:26b","perfil_tarea":"implementacion"}}`,
+	})
+	if resume.ExternalSessionID != "" || resume.ResumenContinuidad != "" {
+		t.Fatalf("el conector no reanudable debe limpiar continuidad de proveedor: %+v", resume)
+	}
+	for _, token := range []string{`"artifacts"`, `"artifact_id":"patch-1"`, `"artifacts_ref":["handoff:patch-1"]`, `"perfil_ejecucion"`} {
+		if !strings.Contains(resume.ResumePayloadJSON, token) {
+			t.Fatalf("faltaba %s en payload saneado: %s", token, resume.ResumePayloadJSON)
+		}
+	}
+	if strings.Contains(resume.ResumePayloadJSON, "checkpoint_kind") || strings.Contains(resume.ResumePayloadJSON, "external_session_id") {
+		t.Fatalf("deberia purgar contexto reanudable legado del payload: %s", resume.ResumePayloadJSON)
+	}
+}
+
+func TestResumePayloadTieneContextoReanudableIgnoraArtifactsVersionados(t *testing.T) {
+	if resumePayloadTieneContextoReanudable(`{"artifacts":[{"artifact_id":"patch-1","kind":"patch","version":3,"path":"artifacts/patches/patch-1.diff"}],"artifacts_ref":["handoff:patch-1"],"perfil_ejecucion":{"modelo":"gpt-5.5"}}`) {
+		t.Fatal("artifacts versionados no deberian activar contexto reanudable por si solos")
 	}
 }
 

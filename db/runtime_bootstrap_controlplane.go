@@ -68,11 +68,17 @@ func claimBootstrapRuntimeOrderParaStart(agente string, proyectoID *int64, exclu
 func construirResumePayloadBootstrapDB(prev string, order *RuntimeOrder, mailbox []*RuntimeMailboxMessage, checkpoint *RuntimeCheckpoint) string {
 	prev = strings.TrimSpace(prev)
 	envelope := map[string]any{}
+	prevEnvelope := ParseResumePayloadEnvelope(prev)
+	artifacts := normalizeResumePayloadArtifactsDB(prevEnvelope["artifacts"])
+	artifactRefs := resumePayloadArtifactRefsDB(prevEnvelope["artifacts_ref"])
 	if order != nil {
+		payload, extractedArtifacts, extractedRefs := rawJSONSansArtifactsOrStringDB(order.PayloadJSON)
+		artifacts = mergeResumePayloadArtifactsDB(artifacts, extractedArtifacts)
+		artifactRefs = mergeResumePayloadArtifactRefsDB(artifactRefs, extractedRefs)
 		envelope["runtime_order"] = map[string]any{
 			"id":      order.ID,
 			"tipo":    order.Tipo,
-			"payload": rawJSONOrStringDB(order.PayloadJSON),
+			"payload": payload,
 		}
 	}
 	if len(mailbox) > 0 {
@@ -81,11 +87,14 @@ func construirResumePayloadBootstrapDB(prev string, order *RuntimeOrder, mailbox
 			if msg == nil {
 				continue
 			}
+			payload, extractedArtifacts, extractedRefs := rawJSONSansArtifactsOrStringDB(msg.PayloadJSON)
+			artifacts = mergeResumePayloadArtifactsDB(artifacts, extractedArtifacts)
+			artifactRefs = mergeResumePayloadArtifactRefsDB(artifactRefs, extractedRefs)
 			items = append(items, map[string]any{
 				"id":          msg.ID,
 				"from_agente": msg.FromAgente,
 				"kind":        msg.Kind,
-				"payload":     rawJSONOrStringDB(msg.PayloadJSON),
+				"payload":     payload,
 			})
 		}
 		if len(items) > 0 {
@@ -93,16 +102,25 @@ func construirResumePayloadBootstrapDB(prev string, order *RuntimeOrder, mailbox
 		}
 	}
 	if checkpoint != nil {
+		payload, extractedArtifacts, extractedRefs := rawJSONSansArtifactsOrStringDB(checkpoint.PayloadJSON)
+		artifacts = mergeResumePayloadArtifactsDB(artifacts, extractedArtifacts)
+		artifactRefs = mergeResumePayloadArtifactRefsDB(artifactRefs, extractedRefs)
 		envelope["checkpoint"] = map[string]any{
 			"id":              checkpoint.ID,
 			"kind":            checkpoint.CheckpointKind,
 			"resumen":         resumenCheckpointPayload(checkpoint),
 			"branch":          checkpoint.Branch,
 			"cwd":             checkpoint.CWD,
-			"payload":         rawJSONOrStringDB(checkpoint.PayloadJSON),
+			"payload":         payload,
 			"resume_strategy": checkpoint.ResumeStrategy,
 			"source":          checkpoint.Source,
 		}
+	}
+	if len(artifacts) > 0 {
+		envelope["artifacts"] = artifacts
+	}
+	if len(artifactRefs) > 0 {
+		envelope["artifacts_ref"] = artifactRefs
 	}
 	if len(envelope) == 0 {
 		return prev
@@ -151,6 +169,202 @@ func rawJSONOrStringDB(raw string) any {
 		return parsed
 	}
 	return raw
+}
+
+func rawJSONSansArtifactsOrStringDB(raw string) (any, []map[string]any, []string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return map[string]any{}, nil, nil
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(raw), &parsed); err == nil {
+		obj, ok := parsed.(map[string]any)
+		if !ok {
+			return parsed, nil, nil
+		}
+		artifacts := normalizeResumePayloadArtifactsDB(obj["artifacts"])
+		artifactRefs := resumePayloadArtifactRefsDB(obj["artifacts_ref"])
+		delete(obj, "artifacts")
+		delete(obj, "artifacts_ref")
+		if len(obj) == 0 {
+			return map[string]any{}, artifacts, artifactRefs
+		}
+		return obj, artifacts, artifactRefs
+	}
+	return raw, nil, nil
+}
+
+func normalizeResumePayloadArtifactsDB(raw any) []map[string]any {
+	items, ok := raw.([]any)
+	if !ok || len(items) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(items))
+	seen := map[string]struct{}{}
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		normalized := map[string]any{}
+		for _, key := range []string{"artifact_id", "scope", "kind", "content_type", "path", "blob_ref", "created_at"} {
+			if value := strings.TrimSpace(stringFromAny(entry[key])); value != "" {
+				normalized[key] = value
+			}
+		}
+		if version := int64FromAny(entry["version"]); version > 0 {
+			normalized["version"] = version
+		}
+		if len(normalized) == 0 {
+			continue
+		}
+		if _, ok := normalized["artifact_id"]; !ok {
+			if _, ok := normalized["kind"]; !ok && normalized["path"] == nil && normalized["blob_ref"] == nil {
+				continue
+			}
+		}
+		key := resumePayloadArtifactKeyDB(normalized)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, normalized)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func mergeResumePayloadArtifactsDB(base []map[string]any, additions []map[string]any) []map[string]any {
+	if len(additions) == 0 {
+		if len(base) == 0 {
+			return nil
+		}
+		return base
+	}
+	out := make([]map[string]any, 0, len(base)+len(additions))
+	seen := map[string]struct{}{}
+	for _, item := range base {
+		if len(item) == 0 {
+			continue
+		}
+		key := resumePayloadArtifactKeyDB(item)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, item)
+	}
+	for _, item := range additions {
+		if len(item) == 0 {
+			continue
+		}
+		key := resumePayloadArtifactKeyDB(item)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, item)
+	}
+	return out
+}
+
+func resumePayloadArtifactKeyDB(item map[string]any) string {
+	return strings.Join([]string{
+		strings.TrimSpace(stringFromAny(item["artifact_id"])),
+		strings.TrimSpace(stringFromAny(item["scope"])),
+		strings.TrimSpace(stringFromAny(item["kind"])),
+		strings.TrimSpace(stringFromAny(item["path"])),
+		strings.TrimSpace(stringFromAny(item["blob_ref"])),
+		strings.TrimSpace(stringFromAny(item["created_at"])),
+		jsonNumber(int64FromAny(item["version"])),
+	}, "|")
+}
+
+func resumePayloadArtifactRefsDB(raw any) []string {
+	items := stringSliceFromAnyDB(raw)
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	seen := map[string]struct{}{}
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if _, exists := seen[item]; exists {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func stringSliceFromAnyDB(raw any) []string {
+	switch items := raw.(type) {
+	case []string:
+		out := make([]string, 0, len(items))
+		for _, item := range items {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			out = append(out, item)
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(items))
+		for _, item := range items {
+			texto := strings.TrimSpace(stringFromAny(item))
+			if texto == "" {
+				continue
+			}
+			out = append(out, texto)
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func mergeResumePayloadArtifactRefsDB(base []string, additions []string) []string {
+	if len(additions) == 0 {
+		if len(base) == 0 {
+			return nil
+		}
+		return base
+	}
+	out := make([]string, 0, len(base)+len(additions))
+	seen := map[string]struct{}{}
+	for _, item := range base {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if _, exists := seen[item]; exists {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	for _, item := range additions {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if _, exists := seen[item]; exists {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	return out
 }
 
 func checkpointIDOrZeroDB(cp *RuntimeCheckpoint) int64 {

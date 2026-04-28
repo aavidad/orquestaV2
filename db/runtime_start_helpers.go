@@ -46,6 +46,7 @@ func payloadJSONDesdePlan(plan *runtimeagente.LaunchPlan) string {
 		"launch_prompt_embedded": plan.LaunchPromptEmbedded,
 		"launch_prompt_mode":     strings.TrimSpace(plan.LaunchPromptMode),
 		"launch_prompt_delay_ms": plan.LaunchPromptDelayMS,
+		"perfil_operativo":       strings.TrimSpace(plan.PerfilOperativo),
 	})
 	if err != nil {
 		return "{}"
@@ -57,12 +58,13 @@ func payloadJSONDesdePlanYResume(plan *runtimeagente.LaunchPlan, resume runtimea
 	if plan == nil {
 		return strings.TrimSpace(resume.ResumePayloadJSON)
 	}
-	return MergeResumePayloadPerfilEjecucion(
+	payload := MergeResumePayloadPerfilEjecucion(
 		resume.ResumePayloadJSON,
 		strings.TrimSpace(plan.PerfilTarea),
 		strings.TrimSpace(plan.Modelo),
 		strings.TrimSpace(plan.Razonamiento),
 	)
+	return MergeResumePayloadPerfilOperativo(payload, strings.TrimSpace(plan.PerfilOperativo))
 }
 
 func construirTranscriptArranque(plan *runtimeagente.LaunchPlan, resume runtimeagente.ResumeContext, bootstrap *bootstrapRuntimeData) string {

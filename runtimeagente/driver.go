@@ -86,6 +86,7 @@ type LaunchPlan struct {
 	Modelo               string              `json:"modelo,omitempty"`
 	Razonamiento         string              `json:"razonamiento,omitempty"`
 	PerfilTarea          string              `json:"perfil_tarea,omitempty"`
+	PerfilOperativo      string              `json:"perfil_operativo,omitempty"`
 	NativeResume         bool                `json:"native_resume"`
 	ContinuityPrompt     string              `json:"continuity_prompt,omitempty"`
 	BootstrapPrompt      string              `json:"bootstrap_prompt,omitempty"`
@@ -624,6 +625,9 @@ func normalizeConnectorMetadata(conector ConnectorConfig, metadata map[string]an
 	if !hasMetadataKey(metadata, "can_send_input") {
 		needsCopy = true
 	}
+	if !hasMetadataKey(metadata, "default_execution_profile") {
+		needsCopy = true
+	}
 	for _, key := range []string{"sandbox_flag", "sandbox_mode", "approval_flag", "approval_policy"} {
 		if !hasMetadataKey(metadata, key) {
 			needsCopy = true
@@ -681,6 +685,9 @@ func normalizeConnectorMetadata(conector ConnectorConfig, metadata map[string]an
 	}
 	if stringMetadata(out, "approval_policy") == "" {
 		out["approval_policy"] = "never"
+	}
+	if stringMetadata(out, "default_execution_profile") == "" {
+		out["default_execution_profile"] = "persistente"
 	}
 	return out
 }
@@ -810,43 +817,53 @@ func conservarSoloPerfilEjecucionResumePayload(raw string) string {
 	}
 	perfilRaw, ok := payload["perfil_ejecucion"].(map[string]any)
 	if !ok {
-		return ""
+		perfilRaw = nil
 	}
+	envelope := map[string]any{}
 	perfil := map[string]any{}
-	for _, key := range []string{
-		"perfil_tarea",
-		"modelo",
-		"razonamiento",
-		"perfil_operativo",
-		"driver",
-		"transport",
-		"endpoint",
-		"launch_path",
-		"resume_path",
-		"input_path",
-		"status_path",
-		"pause_path",
-		"continue_path",
-		"stop_path",
-		"mailbox_delivery_mode",
-		"pool_slug",
-		"worktree_path",
-		"tmux_session",
-		"tmux_pane_id",
-	} {
-		if value := strings.TrimSpace(stringFromAny(perfilRaw[key])); value != "" {
-			perfil[key] = value
+	if perfilRaw != nil {
+		for _, key := range []string{
+			"perfil_tarea",
+			"modelo",
+			"razonamiento",
+			"perfil_operativo",
+			"driver",
+			"transport",
+			"endpoint",
+			"launch_path",
+			"resume_path",
+			"input_path",
+			"status_path",
+			"pause_path",
+			"continue_path",
+			"stop_path",
+			"mailbox_delivery_mode",
+			"pool_slug",
+			"worktree_path",
+			"tmux_session",
+			"tmux_pane_id",
+		} {
+			if value := strings.TrimSpace(stringFromAny(perfilRaw[key])); value != "" {
+				perfil[key] = value
+			}
+		}
+		if value, ok := perfilRaw["can_send_input"].(bool); ok {
+			perfil["can_send_input"] = value
 		}
 	}
-	if value, ok := perfilRaw["can_send_input"].(bool); ok {
-		perfil["can_send_input"] = value
+	if len(perfil) > 0 {
+		envelope["perfil_ejecucion"] = perfil
 	}
-	if len(perfil) == 0 {
+	if artifacts := normalizeResumePayloadArtifacts(payload["artifacts"]); len(artifacts) > 0 {
+		envelope["artifacts"] = artifacts
+	}
+	if refs := uniqueResumePayloadArtifactRefs(payload["artifacts_ref"]); len(refs) > 0 {
+		envelope["artifacts_ref"] = refs
+	}
+	if len(envelope) == 0 {
 		return ""
 	}
-	data, err := json.Marshal(map[string]any{
-		"perfil_ejecucion": perfil,
-	})
+	data, err := json.Marshal(envelope)
 	if err != nil {
 		return ""
 	}
@@ -1480,7 +1497,8 @@ func resumePayloadTieneContextoReanudable(raw string) bool {
 		return false
 	}
 	for key, value := range payload {
-		if strings.EqualFold(strings.TrimSpace(key), "perfil_ejecucion") {
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "perfil_ejecucion", "artifacts", "artifacts_ref":
 			continue
 		}
 		if resumePayloadValorNoVacio(value) {
@@ -1640,6 +1658,9 @@ func applyExecutionProfile(plan *LaunchPlan, metadata map[string]any) {
 	}
 	if plan.PerfilTarea == "" {
 		plan.PerfilTarea = stringMetadata(metadata, "default_task_profile")
+	}
+	if plan.PerfilOperativo == "" {
+		plan.PerfilOperativo = stringMetadata(metadata, "default_execution_profile")
 	}
 }
 
@@ -1855,6 +1876,11 @@ func resumirResumePayloadCodex(raw string) string {
 		}
 		partes = append(partes, label)
 		delete(obj, "mailbox")
+	}
+	if resumen := resumirArtifactsResumePayload(obj["artifacts"], obj["artifacts_ref"]); resumen != "" {
+		partes = append(partes, resumen)
+		delete(obj, "artifacts")
+		delete(obj, "artifacts_ref")
 	}
 	if projectContext, ok := obj["project_context"]; ok {
 		if !pipelineLocalPriorizado {
@@ -2204,6 +2230,11 @@ func resumirResumePayload(raw string) string {
 		partes = append(partes, label)
 		delete(obj, "mailbox")
 	}
+	if resumen := resumirArtifactsResumePayload(obj["artifacts"], obj["artifacts_ref"]); resumen != "" {
+		partes = append(partes, resumen)
+		delete(obj, "artifacts")
+		delete(obj, "artifacts_ref")
+	}
 	for _, key := range []string{"bootstrap_prompt", "bootstrap_prompt_compact"} {
 		delete(obj, key)
 	}
@@ -2227,6 +2258,135 @@ func resumirResumePayload(raw string) string {
 		return "Resume payload disponible"
 	}
 	return "Resume payload: " + strings.Join(partes, ", ")
+}
+
+func resumirArtifactsResumePayload(raw any, refsRaw any) string {
+	count, descriptors := describeResumePayloadArtifacts(raw)
+	if count == 0 {
+		if refs := uniqueResumePayloadArtifactRefs(refsRaw); len(refs) > 0 {
+			return fmt.Sprintf("artifacts_ref=%d", len(refs))
+		}
+		return ""
+	}
+	label := fmt.Sprintf("artifacts=%d", count)
+	if len(descriptors) > 0 {
+		label += " [" + strings.Join(descriptors, ", ") + "]"
+	}
+	return label
+}
+
+func describeResumePayloadArtifacts(raw any) (int, []string) {
+	items, ok := raw.([]any)
+	if !ok || len(items) == 0 {
+		return 0, nil
+	}
+	count := 0
+	descriptors := make([]string, 0, 3)
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok || !resumePayloadArtifactSeemsUseful(entry) {
+			continue
+		}
+		count++
+		if len(descriptors) >= 3 {
+			continue
+		}
+		label := strings.TrimSpace(stringFromAny(entry["kind"]))
+		if label == "" {
+			label = strings.TrimSpace(stringFromAny(entry["artifact_id"]))
+		}
+		if label == "" {
+			label = "artifact"
+		}
+		if version := int64FromAny(entry["version"]); version > 0 {
+			label += fmt.Sprintf("@v%d", version)
+		}
+		descriptors = append(descriptors, label)
+	}
+	if count == 0 {
+		return 0, nil
+	}
+	return count, descriptors
+}
+
+func normalizeResumePayloadArtifacts(raw any) []map[string]any {
+	items, ok := raw.([]any)
+	if !ok || len(items) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(items))
+	seen := map[string]struct{}{}
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok || !resumePayloadArtifactSeemsUseful(entry) {
+			continue
+		}
+		normalized := map[string]any{}
+		for _, key := range []string{"artifact_id", "scope", "kind", "content_type", "path", "blob_ref", "created_at"} {
+			if value := strings.TrimSpace(stringFromAny(entry[key])); value != "" {
+				normalized[key] = value
+			}
+		}
+		if version := int64FromAny(entry["version"]); version > 0 {
+			normalized["version"] = version
+		}
+		key := strings.Join([]string{
+			strings.TrimSpace(stringFromAny(normalized["artifact_id"])),
+			strings.TrimSpace(stringFromAny(normalized["scope"])),
+			strings.TrimSpace(stringFromAny(normalized["kind"])),
+			strings.TrimSpace(stringFromAny(normalized["path"])),
+			strings.TrimSpace(stringFromAny(normalized["blob_ref"])),
+			strings.TrimSpace(stringFromAny(normalized["created_at"])),
+			strconv.FormatInt(int64FromAny(normalized["version"]), 10),
+		}, "|")
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, normalized)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func uniqueResumePayloadArtifactRefs(raw any) []string {
+	items := stringSliceFromAny(raw)
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	seen := map[string]struct{}{}
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if _, exists := seen[item]; exists {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func resumePayloadArtifactSeemsUseful(entry map[string]any) bool {
+	if len(entry) == 0 {
+		return false
+	}
+	if strings.TrimSpace(stringFromAny(entry["artifact_id"])) != "" {
+		return true
+	}
+	if strings.TrimSpace(stringFromAny(entry["kind"])) != "" {
+		return true
+	}
+	return strings.TrimSpace(stringFromAny(entry["path"])) != "" ||
+		strings.TrimSpace(stringFromAny(entry["blob_ref"])) != ""
 }
 
 func resumirMailboxPayload(items []any) string {

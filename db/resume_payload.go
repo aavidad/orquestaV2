@@ -70,6 +70,16 @@ func ResumePayloadPerfilEjecucion(prev string) (string, string, string) {
 		strings.TrimSpace(stringFromAny(perfil["razonamiento"]))
 }
 
+func ResumePayloadPerfilOperativo(prev string) string {
+	envelope := ParseResumePayloadEnvelope(prev)
+	raw := envelope[claveResumePayloadPerfilEjecucion]
+	perfil, ok := raw.(map[string]any)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(stringFromAny(perfil["perfil_operativo"]))
+}
+
 // MergeResumePayloadPerfilEjecucion persiste el perfil de ejecución actual en
 // el resume payload para que reanudaciones y rearmes automáticos no vuelvan a
 // caer a defaults del conector si ya existía una decisión previa.
@@ -104,5 +114,25 @@ func MergeResumePayloadPerfilEjecucion(prev, perfilTarea, modelo, razonamiento s
 	perfilPayload["razonamiento"] = razonamiento
 	return MergeResumePayloadEnvelope(prev, map[string]any{
 		claveResumePayloadPerfilEjecucion: perfilPayload,
+	})
+}
+
+func MergeResumePayloadPerfilOperativo(prev, perfilOperativo string) string {
+	perfilOperativo = strings.TrimSpace(perfilOperativo)
+	if perfilOperativo == "" {
+		return strings.TrimSpace(prev)
+	}
+	envelope := ParseResumePayloadEnvelope(prev)
+	perfilPayload, _ := envelope[claveResumePayloadPerfilEjecucion].(map[string]any)
+	out := map[string]any{}
+	for key, value := range perfilPayload {
+		if strings.TrimSpace(key) == "" {
+			continue
+		}
+		out[key] = value
+	}
+	out["perfil_operativo"] = perfilOperativo
+	return MergeResumePayloadEnvelope(prev, map[string]any{
+		claveResumePayloadPerfilEjecucion: out,
 	})
 }
