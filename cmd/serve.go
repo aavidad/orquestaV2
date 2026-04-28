@@ -913,10 +913,23 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		Notificaciones:     openClawNotifs,
 		NotifOutbox:        openClawOutbox,
 		Integration:        buildWebOpenClawIntegrationInfo(),
-		Generado:           time.Now().Format("2006-01-02 15:04:05"),
+		Generado:           formatWebGeneratedAt(status.Generado),
 		Msg:                r.URL.Query().Get("ok"),
 		Err:                r.URL.Query().Get("err"),
 	})
+}
+
+func formatWebGeneratedAt(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Now().Format("2006-01-02 15:04:05")
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		if parsed, err := time.Parse(layout, raw); err == nil {
+			return parsed.UTC().Format("2006-01-02 15:04:05")
+		}
+	}
+	return raw
 }
 
 func mustOpenClawPendingMailbox(agentes []*db.Agente) []apiOpenClawMailboxLite {

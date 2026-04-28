@@ -2656,13 +2656,38 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 }
 
 func buildOpenClawBaseStatus() *estadoResumen {
-	status, err := runAPITimeboxed(250*time.Millisecond, buildEstadoResumenLigero, errStatusFetchTimeout)
-	if err == nil && status != nil {
-		return status
+	status, err := fetchStatusForAPIAllowDirectFallback(250*time.Millisecond, statusFastTimeout)
+	if err == nil {
+		return buildOpenClawBaseStatusFromAPIStatus(status)
+	}
+	return buildOpenClawBaseStatusFromAPIStatus(degradedAPIStatusResponse())
+}
+
+func buildOpenClawBaseStatusFromAPIStatus(status apiStatusResponse) *estadoResumen {
+	generado := strings.TrimSpace(status.Generado)
+	if generado == "" {
+		generado = time.Now().UTC().Format(time.RFC3339)
 	}
 	return &estadoResumen{
-		Generado:        time.Now().UTC().Format(time.RFC3339),
-		TareasPorEstado: map[string]int{},
+		Generado:            generado,
+		Agentes:             status.Agentes,
+		TareasPorEstado:     status.TareasPorEstado,
+		AgentesActivos:      status.AgentesActivos,
+		AgentesTrabajando:   status.AgentesTrabajando,
+		AgentesSaturados:    status.AgentesSaturados,
+		AgentesAtascados:    status.AgentesAtascados,
+		AgentesAuthManual:   status.AgentesAuthManual,
+		AgentesQuotaBlocked: status.AgentesQuotaBlocked,
+		PropuestasAbiertas:  status.PropuestasResumen,
+		TareasActivas:       status.TareasActivas,
+		TareasEnProgreso:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada),
+		TareasReservadas:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
+		PoolsLocales:        status.PoolsLocales,
+		DeudaDispatch:       status.DeudaDispatch,
+		Autonomia:           status.Autonomia,
+		WorkersConectados:   status.WorkersConectados,
+		WorkersTrabajando:   status.WorkersTrabajando,
+		SupervisoresActivos: status.SupervisoresActivos,
 	}
 }
 
