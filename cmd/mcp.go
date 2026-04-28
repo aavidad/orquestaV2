@@ -621,6 +621,27 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "application/json",
 		},
 		{
+			URITemplate: "orquesta://runtime/transcript/{agente}",
+			Name:        "transcript-runtime-agente",
+			Title:       "Transcript de runtime por agente",
+			Description: "Transcript canónico del runtime; admite ?proyecto=slug&classification=...&stream=...&desde=RFC3339&limit=50",
+			MIMEType:    "application/json",
+		},
+		{
+			URITemplate: "orquesta://runtime/checkpoints/{agente}",
+			Name:        "checkpoints-runtime-agente",
+			Title:       "Checkpoints de runtime por agente",
+			Description: "Lista checkpoints de runtime; admite ?proyecto=slug&kind=...&source=...&limit=20",
+			MIMEType:    "application/json",
+		},
+		{
+			URITemplate: "orquesta://runtime/checkpoints/{agente}/latest",
+			Name:        "checkpoint-runtime-agente-latest",
+			Title:       "Último checkpoint de runtime por agente",
+			Description: "Devuelve el último checkpoint de runtime; admite ?proyecto=slug",
+			MIMEType:    "application/json",
+		},
+		{
 			URITemplate: "orquesta://supervision/{supervisor}/briefing",
 			Name:        "briefing-supervisor",
 			Title:       "Briefing de supervisor",
@@ -869,6 +890,111 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		return resourceText(uri, "application/json", prettyJSON(report)), nil
+	case strings.HasPrefix(uri, "orquesta://runtime/transcript/"):
+		parsed, err := url.Parse(uri)
+		if err != nil {
+			return nil, err
+		}
+		agente := strings.TrimPrefix(strings.TrimPrefix(parsed.Path, "/"), "transcript/")
+		if agente == "" || strings.TrimSpace(parsed.Host) != "runtime" {
+			return nil, fmt.Errorf("agente inválido")
+		}
+		filter := db.FiltroRuntimeTranscript{
+			Agente:         stringPtrOrNil(agente),
+			Stream:         stringPtrOrNil(strings.TrimSpace(parsed.Query().Get("stream"))),
+			Classification: stringPtrOrNil(strings.TrimSpace(parsed.Query().Get("classification"))),
+			Query:          stringPtrOrNil(strings.TrimSpace(parsed.Query().Get("q"))),
+			Limit:          50,
+		}
+		if raw := strings.TrimSpace(parsed.Query().Get("desde")); raw != "" {
+			since, err := apiParseRFC3339QueryTime(raw)
+			if err != nil {
+				return nil, err
+			}
+			filter.Desde = since
+		}
+		if raw := strings.TrimSpace(parsed.Query().Get("signals_pending")); raw != "" {
+			switch strings.ToLower(raw) {
+			case "1", "true", "yes", "si", "sí", "on":
+				filter.SoloSenalesPend = true
+			}
+		}
+		if raw := strings.TrimSpace(parsed.Query().Get("limit")); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n <= 0 {
+				return nil, fmt.Errorf("limit inválido")
+			}
+			filter.Limit = n
+		}
+		if proyecto := strings.TrimSpace(parsed.Query().Get("proyecto")); proyecto != "" {
+			p, err := runtimesService.GetProject(proyecto)
+			if err != nil {
+				return nil, err
+			}
+			filter.ProyectoID = &p.ID
+		}
+		items, err := apiListRuntimeTranscriptFn(filter)
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "application/json", prettyJSON(items)), nil
+	case strings.HasPrefix(uri, "orquesta://runtime/checkpoints/"):
+		parsed, err := url.Parse(uri)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(parsed.Host) != "runtime" {
+			return nil, fmt.Errorf("agente inválido")
+		}
+		if strings.HasSuffix(parsed.Path, "/latest") {
+			agente := strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(parsed.Path, "/"), "checkpoints/"), "/latest")
+			if agente == "" {
+				return nil, fmt.Errorf("agente inválido")
+			}
+			var proyectoID *int64
+			if proyecto := strings.TrimSpace(parsed.Query().Get("proyecto")); proyecto != "" {
+				p, err := runtimesService.GetProject(proyecto)
+				if err != nil {
+					return nil, err
+				}
+				proyectoID = &p.ID
+			}
+			checkpoint, err := runtimesService.LatestRuntimeCheckpoint(agente, proyectoID)
+			if err != nil {
+				return nil, err
+			}
+			return resourceText(uri, "application/json", prettyJSON(checkpoint)), nil
+		}
+		agente := strings.TrimPrefix(strings.TrimPrefix(parsed.Path, "/"), "checkpoints/")
+		if agente == "" {
+			return nil, fmt.Errorf("agente inválido")
+		}
+		filter := db.FiltroRuntimeCheckpoints{Agente: &agente}
+		if raw := strings.TrimSpace(parsed.Query().Get("limit")); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n <= 0 {
+				return nil, fmt.Errorf("limit inválido")
+			}
+			filter.Limit = n
+		}
+		if kind := strings.TrimSpace(parsed.Query().Get("kind")); kind != "" {
+			filter.CheckpointKind = &kind
+		}
+		if source := strings.TrimSpace(parsed.Query().Get("source")); source != "" {
+			filter.Source = &source
+		}
+		if proyecto := strings.TrimSpace(parsed.Query().Get("proyecto")); proyecto != "" {
+			p, err := runtimesService.GetProject(proyecto)
+			if err != nil {
+				return nil, err
+			}
+			filter.ProyectoID = &p.ID
+		}
+		checkpoints, err := runtimesService.ListRuntimeCheckpoints(filter)
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "application/json", prettyJSON(checkpoints)), nil
 	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.HasSuffix(uri, "/briefing"):
 		supervisor := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://supervision/"), "/briefing")
 		texto, err := buildSupervisorBriefing(supervisor)

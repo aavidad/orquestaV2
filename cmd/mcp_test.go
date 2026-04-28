@@ -2347,6 +2347,129 @@ func TestMCPResourceActividadAgenteAceptaDesde(t *testing.T) {
 	})
 }
 
+func TestMCPResourceRuntimeTranscriptAceptaFiltros(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("CodexTranscriptResource", "programador"); err != nil {
+			t.Fatalf("registrando CodexTranscriptResource: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      "CodexTranscriptResource",
+			ProyectoID:  &proyectoID,
+			CWD:         "/tmp/orquestador",
+			Herramienta: "codex-cli",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion: %v", err)
+		}
+		runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
+		if err != nil || runtimeInst == nil {
+			t.Fatalf("runtime esperado, got=%+v err=%v", runtimeInst, err)
+		}
+		handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+		if err != nil || handle == nil {
+			t.Fatalf("handle esperado, got=%+v err=%v", handle, err)
+		}
+		byteOffset := int64(64)
+		if _, err := db.RegistrarRuntimeTranscript(&db.RuntimeTranscriptEntry{
+			RuntimeID:      runtimeInst.ID,
+			HandleID:       &handle.ID,
+			Agente:         "CodexTranscriptResource",
+			ProyectoID:     &proyectoID,
+			Stream:         "pty_out",
+			ByteOffset:     &byteOffset,
+			Text:           "Need approval for deploy",
+			NormalizedText: "need approval for deploy",
+			Classification: "approval_request",
+		}); err != nil {
+			t.Fatalf("registrar transcript: %v", err)
+		}
+
+		contents, err := readMCPResource("orquesta://runtime/transcript/CodexTranscriptResource?proyecto=orquestador&classification=approval_request&stream=pty_out&desde=2026-04-01T00:00:00Z&limit=5")
+		if err != nil {
+			t.Fatalf("readMCPResource runtime transcript: %v", err)
+		}
+		if len(contents) == 0 {
+			t.Fatalf("contenido runtime transcript vacío")
+		}
+		text, _ := contents[0]["text"].(string)
+		for _, token := range []string{`"agente": "CodexTranscriptResource"`, `"classification": "approval_request"`, `"stream": "pty_out"`} {
+			if !strings.Contains(text, token) {
+				t.Fatalf("recurso transcript sin %q: %s", token, text)
+			}
+		}
+	})
+}
+
+func TestMCPResourceRuntimeCheckpointsAceptaProyectoYLatest(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("CodexCheckpointResource", "programador"); err != nil {
+			t.Fatalf("registrando CodexCheckpointResource: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      "CodexCheckpointResource",
+			ProyectoID:  &proyectoID,
+			CWD:         "/tmp/orquestador",
+			Herramienta: "codex-cli",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion: %v", err)
+		}
+		runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
+		if err != nil || runtimeInst == nil {
+			t.Fatalf("runtime esperado, got=%+v err=%v", runtimeInst, err)
+		}
+		id, err := runtimesService.CreateRuntimeCheckpoint(&db.RuntimeCheckpoint{
+			Agente:         "CodexCheckpointResource",
+			ProyectoID:     &proyectoID,
+			SesionID:       &sesion.ID,
+			RuntimeID:      &runtimeInst.ID,
+			CheckpointKind: "manual_override",
+			Resumen:        "checkpoint resource",
+			Branch:         "candidato_refactor",
+			CWD:            "/tmp/orquestador",
+			PayloadJSON:    `{"step":"resource"}`,
+			ResumeStrategy: "session_resume",
+			Source:         "OpenClaw",
+		})
+		if err != nil {
+			t.Fatalf("create runtime checkpoint: %v", err)
+		}
+		if id <= 0 {
+			t.Fatalf("checkpoint id inválido: %d", id)
+		}
+
+		contents, err := readMCPResource("orquesta://runtime/checkpoints/CodexCheckpointResource?proyecto=orquestador&kind=manual_override&source=OpenClaw&limit=5")
+		if err != nil {
+			t.Fatalf("readMCPResource runtime checkpoints: %v", err)
+		}
+		if len(contents) == 0 {
+			t.Fatalf("contenido runtime checkpoints vacío")
+		}
+		text, _ := contents[0]["text"].(string)
+		for _, token := range []string{`"agente": "CodexCheckpointResource"`, `"checkpoint_kind": "manual_override"`, `"source": "OpenClaw"`} {
+			if !strings.Contains(text, token) {
+				t.Fatalf("recurso checkpoints sin %q: %s", token, text)
+			}
+		}
+
+		latestContents, err := readMCPResource("orquesta://runtime/checkpoints/CodexCheckpointResource/latest?proyecto=orquestador")
+		if err != nil {
+			t.Fatalf("readMCPResource runtime checkpoint latest: %v", err)
+		}
+		if len(latestContents) == 0 {
+			t.Fatalf("contenido runtime checkpoint latest vacío")
+		}
+		latestText, _ := latestContents[0]["text"].(string)
+		for _, token := range []string{`"agente": "CodexCheckpointResource"`, `"source": "OpenClaw"`} {
+			if !strings.Contains(latestText, token) {
+				t.Fatalf("recurso checkpoint latest sin %q: %s", token, latestText)
+			}
+		}
+	})
+}
+
 func TestMCPToolsSesionesYObservabilidadRuntimeOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
