@@ -209,7 +209,9 @@ func normalizeOpenClawDelivery(entrega *db.EntregaNotificacion) openClawNormaliz
 		RawType:   strings.TrimSpace(entrega.TipoEvento),
 		Resource:  fmt.Sprintf("delivery:%d", entrega.ID),
 		Status:    strings.TrimSpace(string(entrega.Estado)),
-		Message:   compactMCPLine(strings.TrimSpace(entrega.Evento.Texto), 180),
+		Agent:     strings.TrimSpace(entrega.Evento.Agente),
+		Project:   openClawDeliveryProject(entrega.Evento),
+		Message:   openClawDeliveryMessage(entrega),
 		CreatedAt: entrega.UpdatedAt,
 	}
 	if ev.CreatedAt.IsZero() {
@@ -230,4 +232,43 @@ func normalizeOpenClawDelivery(entrega *db.EntregaNotificacion) openClawNormaliz
 		ev.SuggestedAction = "inspeccionar_entrega"
 	}
 	return ev
+}
+
+func openClawDeliveryProject(evento db.EventoNotificacion) string {
+	for _, key := range []string{"project_slug", "proyecto_slug", "project_name", "proyecto_nombre"} {
+		if value := strings.TrimSpace(fmt.Sprintf("%v", evento.Payload[key])); value != "" && value != "<nil>" {
+			return value
+		}
+	}
+	if evento.ProyectoID > 0 {
+		return fmt.Sprintf("#%d", evento.ProyectoID)
+	}
+	return ""
+}
+
+func openClawDeliveryMessage(entrega *db.EntregaNotificacion) string {
+	if entrega == nil {
+		return ""
+	}
+	parts := make([]string, 0, 4)
+	if text := compactMCPLine(strings.TrimSpace(entrega.Evento.Texto), 180); text != "" {
+		parts = append(parts, text)
+	}
+	if entrega.Estado == db.EntregaNotificacionFallida {
+		if lastErr := compactMCPLine(strings.TrimSpace(entrega.UltimoError), 120); lastErr != "" {
+			parts = append(parts, "error="+lastErr)
+		}
+	}
+	if entrega.Intentos > 1 {
+		parts = append(parts, fmt.Sprintf("intentos=%d", entrega.Intentos))
+	}
+	if entrega.NextRetryAt != nil && entrega.Estado != db.EntregaNotificacionEntregada {
+		parts = append(parts, "retry="+entrega.NextRetryAt.UTC().Format(time.RFC3339))
+	}
+	if len(parts) == 0 {
+		if eventType := strings.TrimSpace(entrega.TipoEvento); eventType != "" {
+			parts = append(parts, "evento="+eventType)
+		}
+	}
+	return strings.Join(parts, " | ")
 }
