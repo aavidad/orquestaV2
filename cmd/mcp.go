@@ -652,6 +652,13 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "application/json",
 		},
 		{
+			URITemplate: "orquesta://runtime/trace{?agente,proyecto,handle_id,bytes}",
+			Name:        "trace-runtime",
+			Title:       "Trace raw de runtime",
+			Description: "Traza raw PTY canónica por agente/proyecto o handle; admite ?bytes=8192",
+			MIMEType:    "application/json",
+		},
+		{
 			URITemplate: "orquesta://runtime/checkpoints/{agente}",
 			Name:        "checkpoints-runtime-agente",
 			Title:       "Checkpoints de runtime por agente",
@@ -799,6 +806,23 @@ func mcpGitStatsResponse(projectRef, path, cwd string, since time.Time) (apiGitS
 	}, nil
 }
 
+func mcpRuntimeTraceResponse(handleID int64, agente, proyecto string, maxBytes int) (apiRuntimeTraceResponse, error) {
+	req := runtimesapp.RuntimeTraceRequest{
+		HandleID: handleID,
+		Agente:   strings.TrimSpace(agente),
+		Proyecto: strings.TrimSpace(proyecto),
+		MaxBytes: maxBytes,
+	}
+	if req.HandleID <= 0 && req.Agente == "" {
+		return apiRuntimeTraceResponse{}, fmt.Errorf("handle_id o agente es obligatorio")
+	}
+	trace, err := runtimesService.ReadRuntimeTrace(req)
+	if err != nil {
+		return apiRuntimeTraceResponse{}, err
+	}
+	return apiRuntimeTraceResponse{Trace: trace}, nil
+}
+
 func readMCPResource(uri string) ([]map[string]any, error) {
 	if contents, handled, err := readMicroprogramacionMCPResource(uri); handled {
 		return contents, err
@@ -845,6 +869,35 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		resp, err := mcpGitStatsResponse(parsed.Query().Get("proyecto"), parsed.Query().Get("path"), parsed.Query().Get("cwd"), since)
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "application/json", prettyJSON(resp)), nil
+	case strings.HasPrefix(uri, "orquesta://runtime/trace"):
+		parsed, err := url.Parse(uri)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(parsed.Host) != "runtime" || strings.TrimSpace(parsed.Path) != "/trace" {
+			return nil, fmt.Errorf("runtime trace inválido")
+		}
+		var handleID int64
+		if raw := strings.TrimSpace(parsed.Query().Get("handle_id")); raw != "" {
+			value, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil || value <= 0 {
+				return nil, fmt.Errorf("handle_id inválido")
+			}
+			handleID = value
+		}
+		maxBytes := 0
+		if raw := strings.TrimSpace(parsed.Query().Get("bytes")); raw != "" {
+			value, err := strconv.Atoi(raw)
+			if err != nil || value <= 0 {
+				return nil, fmt.Errorf("bytes inválido")
+			}
+			maxBytes = value
+		}
+		resp, err := mcpRuntimeTraceResponse(handleID, parsed.Query().Get("agente"), parsed.Query().Get("proyecto"), maxBytes)
 		if err != nil {
 			return nil, err
 		}
@@ -2213,6 +2266,21 @@ func listMCPTools() []mcpTool {
 					"kind":     map[string]any{"type": "string"},
 					"level":    map[string]any{"type": "string"},
 					"limit":    map[string]any{"type": "integer"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.trace",
+			Title:       "Leer runtime trace raw",
+			Description: "Lee la traza raw PTY canónica por handle o agente/proyecto",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":    map[string]any{"type": "string"},
+					"proyecto":  map[string]any{"type": "string"},
+					"handle_id": map[string]any{"type": "integer"},
+					"bytes":     map[string]any{"type": "integer"},
 				},
 				"additionalProperties": false,
 			},
@@ -3729,6 +3797,26 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		}
 		events = compactarRuntimeEventsAPI(events)
 		return toolResult(prettyJSON(events), events, false), nil
+
+	case "orquesta.runtime.trace":
+		maxBytes := 0
+		if raw, ok := args["bytes"]; ok && raw != nil {
+			value := optionalIntArg(args, "bytes")
+			if value <= 0 {
+				return toolResult("bytes inválido", nil, true), nil
+			}
+			maxBytes = value
+		}
+		resp, err := mcpRuntimeTraceResponse(
+			optionalInt64Arg(args, "handle_id"),
+			optionalStringArg(args, "agente"),
+			optionalStringArg(args, "proyecto"),
+			maxBytes,
+		)
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(resp), resp, false), nil
 
 	case "orquesta.runtime.transcript.listar":
 		filter := db.FiltroRuntimeTranscript{

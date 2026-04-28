@@ -46,6 +46,61 @@ func (s *gitStatsCollectorStub) Collect(cwd string, since time.Time) (*gitestadi
 	return s.response, s.err
 }
 
+type mcpRuntimeTraceFixture struct {
+	agente   string
+	proyecto string
+	handleID int64
+}
+
+func setupMCPRuntimeTraceFixture(t *testing.T) mcpRuntimeTraceFixture {
+	t.Helper()
+
+	agente := "CodexTraceMCP"
+	proyecto := "orquestador"
+	baseDir := t.TempDir()
+	projectDir := filepath.Join(baseDir, proyecto)
+	if err := db.RegistrarAgente(agente, "programador"); err != nil {
+		t.Fatalf("registrando %s: %v", agente, err)
+	}
+	proyectoID := insertTestProyecto(t, proyecto, proyecto, projectDir)
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      agente,
+		ProyectoID:  &proyectoID,
+		CWD:         projectDir,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle esperado, got=%+v err=%v", handle, err)
+	}
+	traceDir := filepath.Join(baseDir, ".orquesta-runtime", strings.ToLower(agente), "20260329-120000-000000001")
+	if err := os.MkdirAll(traceDir, 0o700); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	logPath := filepath.Join(traceDir, "pty.log")
+	manifestPath := filepath.Join(traceDir, "runtime.json")
+	if err := os.WriteFile(logPath, []byte("inicio\navance\nfin\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"trace_dir":      traceDir,
+		"trace_manifest": manifestPath,
+		"log_path":       logPath,
+		"working_dir":    projectDir,
+		"driver":         "process_pty_cli",
+	})
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json = ? WHERE id = ?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update runtime handle metadata: %v", err)
+	}
+	return mcpRuntimeTraceFixture{agente: agente, proyecto: proyecto, handleID: handle.ID}
+}
+
 func TestMCPHandleInitializeNegociaVersion(t *testing.T) {
 	t.Helper()
 
@@ -1424,6 +1479,84 @@ func TestMCPToolGitStatsAceptaCwdCanonico(t *testing.T) {
 	if structured.Stats == nil || structured.Stats.FilesChanged != 2 || structured.Stats.LinesNet != 6 {
 		t.Fatalf("stats inesperados: %+v", structured.Stats)
 	}
+}
+
+func TestMCPRuntimeTraceSurfaceCanonicSeLista(t *testing.T) {
+	tools := listMCPTools()
+	if !mcpToolListed(tools, "orquesta.runtime.trace") {
+		t.Fatal("tool MCP orquesta.runtime.trace no registrada")
+	}
+
+	templates := mcpResourceTemplates()
+	foundTemplate := false
+	for _, item := range templates {
+		if item.URITemplate == "orquesta://runtime/trace{?agente,proyecto,handle_id,bytes}" {
+			foundTemplate = true
+			break
+		}
+	}
+	if !foundTemplate {
+		t.Fatal("template MCP de runtime trace no listada")
+	}
+}
+
+func TestMCPResourceRuntimeTraceCanonicoAceptaAgenteProyectoYBytes(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		fixture := setupMCPRuntimeTraceFixture(t)
+
+		contents, err := readMCPResource("orquesta://runtime/trace?agente=" + fixture.agente + "&proyecto=" + fixture.proyecto + "&bytes=10")
+		if err != nil {
+			t.Fatalf("readMCPResource runtime trace: %v", err)
+		}
+		if len(contents) == 0 {
+			t.Fatalf("contenido runtime trace vacío")
+		}
+		text, _ := contents[0]["text"].(string)
+		for _, token := range []string{
+			`"agente": "CodexTraceMCP"`,
+			`"proyecto": "orquestador"`,
+			`"truncated": true`,
+			`"raw_tail": "vance\nfin\n"`,
+		} {
+			if !strings.Contains(text, token) {
+				t.Fatalf("recurso runtime trace sin %q: %s", token, text)
+			}
+		}
+	})
+}
+
+func TestMCPToolRuntimeTraceCanonicoAceptaHandleID(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		fixture := setupMCPRuntimeTraceFixture(t)
+
+		result, err := callMCPTool("orquesta.runtime.trace", map[string]any{
+			"handle_id": fixture.handleID,
+			"bytes":     10,
+		})
+		if err != nil {
+			t.Fatalf("callMCPTool runtime.trace: %v", err)
+		}
+		text := result["content"].([]map[string]any)[0]["text"].(string)
+		for _, token := range []string{
+			fmt.Sprintf(`"handle_id": %d`, fixture.handleID),
+			`"agente": "CodexTraceMCP"`,
+			`"truncated": true`,
+		} {
+			if !strings.Contains(text, token) {
+				t.Fatalf("tool runtime.trace sin %q: %s", token, text)
+			}
+		}
+		structured, ok := result["structuredContent"].(apiRuntimeTraceResponse)
+		if !ok {
+			t.Fatalf("structuredContent inesperado: %#v", result["structuredContent"])
+		}
+		if structured.Trace == nil || structured.Trace.HandleID != fixture.handleID {
+			t.Fatalf("trace estructurada inesperada: %+v", structured.Trace)
+		}
+		if structured.Trace.Agente != fixture.agente || !structured.Trace.Truncated || !strings.Contains(structured.Trace.RawTail, "vance\nfin\n") {
+			t.Fatalf("payload trace inesperado: %+v", structured.Trace)
+		}
+	})
 }
 
 func TestMCPToolsTareasYNudgeOperanPorLaViaCanonica(t *testing.T) {
