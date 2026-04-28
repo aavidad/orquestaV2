@@ -16,6 +16,7 @@ type WorkerManifest struct {
 	Driver               string `json:"driver"`
 	Transport            string `json:"transport"`
 	Profile              string `json:"profile,omitempty"`
+	ExecutionProfile     string `json:"execution_profile,omitempty"`
 	ProfileStatusWrapper string `json:"profile_status_wrapper,omitempty"`
 	TmuxSession          string `json:"tmux_session,omitempty"`
 	TmuxWindow           string `json:"tmux_window,omitempty"`
@@ -99,48 +100,51 @@ type WorkerWorkQueueEntry struct {
 }
 
 type WorkerStatusView struct {
-	Driver              string     `json:"driver,omitempty"`
-	Transport           string     `json:"transport,omitempty"`
-	State               string     `json:"state,omitempty"`
-	Alive               bool       `json:"alive"`
-	HeartbeatStale      bool       `json:"heartbeat_stale"`
-	ChildPID            int        `json:"child_pid,omitempty"`
-	RuntimeRef          string     `json:"runtime_ref,omitempty"`
-	SessionRef          string     `json:"session_ref,omitempty"`
-	ExternalSessionID   string     `json:"external_session_id,omitempty"`
-	MailboxDeliveryMode string     `json:"mailbox_delivery_mode,omitempty"`
-	ExitError           string     `json:"exit_error,omitempty"`
-	ManifestPath        string     `json:"manifest_path,omitempty"`
-	StatusPath          string     `json:"status_path,omitempty"`
-	HeartbeatPath       string     `json:"heartbeat_path,omitempty"`
-	TmuxSession         string     `json:"tmux_session,omitempty"`
-	TmuxWindow          string     `json:"tmux_window,omitempty"`
-	TmuxPaneID          string     `json:"tmux_pane_id,omitempty"`
-	CurrentPath         string     `json:"current_path,omitempty"`
-	WorkQueueMailboxID  int64      `json:"work_queue_mailbox_id,omitempty"`
-	WorkQueueKind       string     `json:"work_queue_kind,omitempty"`
-	WorkQueueAction     string     `json:"work_queue_action,omitempty"`
-	WorkQueueTaskID     int64      `json:"work_queue_task_id,omitempty"`
-	WorkQueueVerificationKey string `json:"work_queue_verification_key,omitempty"`
-	WorkQueueState      string     `json:"work_queue_state,omitempty"`
-	WorkQueueTitle      string     `json:"work_queue_title,omitempty"`
-	WorkQueueReason     string     `json:"work_queue_reason,omitempty"`
-	WorkQueueUpdatedAt  *time.Time `json:"work_queue_updated_at,omitempty"`
-	CanSendInput        bool       `json:"can_send_input"`
-	StartedAt           *time.Time `json:"started_at,omitempty"`
-	UpdatedAt           *time.Time `json:"updated_at,omitempty"`
-	HeartbeatAt         *time.Time `json:"heartbeat_at,omitempty"`
-	ReadyAt             *time.Time `json:"ready_at,omitempty"`
-	LastOutputAt        *time.Time `json:"last_output_at,omitempty"`
-	LastProgressAt      *time.Time `json:"last_progress_at,omitempty"`
+	Driver                   string     `json:"driver,omitempty"`
+	Transport                string     `json:"transport,omitempty"`
+	ExecutionProfile         string     `json:"execution_profile,omitempty"`
+	State                    string     `json:"state,omitempty"`
+	Alive                    bool       `json:"alive"`
+	HeartbeatStale           bool       `json:"heartbeat_stale"`
+	ChildPID                 int        `json:"child_pid,omitempty"`
+	RuntimeRef               string     `json:"runtime_ref,omitempty"`
+	SessionRef               string     `json:"session_ref,omitempty"`
+	ExternalSessionID        string     `json:"external_session_id,omitempty"`
+	MailboxDeliveryMode      string     `json:"mailbox_delivery_mode,omitempty"`
+	ExitError                string     `json:"exit_error,omitempty"`
+	ManifestPath             string     `json:"manifest_path,omitempty"`
+	StatusPath               string     `json:"status_path,omitempty"`
+	HeartbeatPath            string     `json:"heartbeat_path,omitempty"`
+	TmuxSession              string     `json:"tmux_session,omitempty"`
+	TmuxWindow               string     `json:"tmux_window,omitempty"`
+	TmuxPaneID               string     `json:"tmux_pane_id,omitempty"`
+	CurrentPath              string     `json:"current_path,omitempty"`
+	WorkQueueMailboxID       int64      `json:"work_queue_mailbox_id,omitempty"`
+	WorkQueueKind            string     `json:"work_queue_kind,omitempty"`
+	WorkQueueAction          string     `json:"work_queue_action,omitempty"`
+	WorkQueueTaskID          int64      `json:"work_queue_task_id,omitempty"`
+	WorkQueueVerificationKey string     `json:"work_queue_verification_key,omitempty"`
+	WorkQueueState           string     `json:"work_queue_state,omitempty"`
+	WorkQueueTitle           string     `json:"work_queue_title,omitempty"`
+	WorkQueueReason          string     `json:"work_queue_reason,omitempty"`
+	WorkQueueUpdatedAt       *time.Time `json:"work_queue_updated_at,omitempty"`
+	CanSendInput             bool       `json:"can_send_input"`
+	StartedAt                *time.Time `json:"started_at,omitempty"`
+	UpdatedAt                *time.Time `json:"updated_at,omitempty"`
+	HeartbeatAt              *time.Time `json:"heartbeat_at,omitempty"`
+	ReadyAt                  *time.Time `json:"ready_at,omitempty"`
+	LastOutputAt             *time.Time `json:"last_output_at,omitempty"`
+	LastProgressAt           *time.Time `json:"last_progress_at,omitempty"`
 }
 
 type runtimeManifestOverlay struct {
-	Driver      string `json:"driver"`
-	Transport   string `json:"transport"`
-	TmuxSession string `json:"tmux_session"`
-	TmuxWindow  string `json:"tmux_window"`
-	TmuxPaneID  string `json:"tmux_pane_id"`
+	Driver                 string `json:"driver"`
+	Transport              string `json:"transport"`
+	ExecutionProfile       string `json:"execution_profile"`
+	LegacyExecutionProfile string `json:"perfil_operativo"`
+	TmuxSession            string `json:"tmux_session"`
+	TmuxWindow             string `json:"tmux_window"`
+	TmuxPaneID             string `json:"tmux_pane_id"`
 }
 
 const WorkerMetadataSchemaVersion = 1
@@ -223,6 +227,9 @@ func LoadWorkerSnapshotFromMetadataJSON(raw string) (*WorkerSnapshot, error) {
 				if strings.TrimSpace(snap.Manifest.Transport) == "" {
 					snap.Manifest.Transport = strings.TrimSpace(overlay.Transport)
 				}
+				if strings.TrimSpace(snap.Manifest.ExecutionProfile) == "" {
+					snap.Manifest.ExecutionProfile = overlay.executionProfile()
+				}
 				if strings.TrimSpace(snap.Manifest.TmuxSession) == "" {
 					snap.Manifest.TmuxSession = strings.TrimSpace(overlay.TmuxSession)
 				}
@@ -237,6 +244,13 @@ func LoadWorkerSnapshotFromMetadataJSON(raw string) (*WorkerSnapshot, error) {
 	}
 	cacheWorkerSnapshotByPaths(meta, snap)
 	return snap, nil
+}
+
+func (o runtimeManifestOverlay) executionProfile() string {
+	if value := strings.TrimSpace(o.ExecutionProfile); value != "" {
+		return value
+	}
+	return strings.TrimSpace(o.LegacyExecutionProfile)
 }
 
 func workerMetadataPathsFromJSON(raw string) (workerMetadataPaths, error) {
@@ -517,6 +531,13 @@ func (s *WorkerSnapshot) Transport() string {
 	return strings.TrimSpace(s.Manifest.Transport)
 }
 
+func (s *WorkerSnapshot) ExecutionProfile() string {
+	if s == nil || s.Manifest == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.Manifest.ExecutionProfile)
+}
+
 func (s *WorkerSnapshot) ChildPID() int {
 	if s == nil {
 		return 0
@@ -602,6 +623,7 @@ func (s *WorkerSnapshot) View(now time.Time, heartbeatThreshold time.Duration) *
 	view := &WorkerStatusView{
 		Driver:              s.Driver(),
 		Transport:           s.Transport(),
+		ExecutionProfile:    s.ExecutionProfile(),
 		State:               s.EffectiveState(),
 		Alive:               s.Alive(),
 		HeartbeatStale:      s.IsHeartbeatStale(now, heartbeatThreshold),

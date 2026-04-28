@@ -40,6 +40,7 @@ func TestLoadWorkerSnapshotFromMetadataJSON(t *testing.T) {
 		Project:             "orquestador",
 		Driver:              "tmux_cli_session",
 		Transport:           "tmux",
+		ExecutionProfile:    "qa-heavy",
 		TmuxSession:         "orq-codex8-093000",
 		TmuxPaneID:          "%3",
 		ChildPID:            4242,
@@ -114,6 +115,9 @@ func TestLoadWorkerSnapshotFromMetadataJSON(t *testing.T) {
 	if got := snap.Transport(); got != "tmux" {
 		t.Fatalf("transport inesperado: %q", got)
 	}
+	if got := snap.ExecutionProfile(); got != "qa-heavy" {
+		t.Fatalf("execution profile inesperado: %q", got)
+	}
 	if got := snap.RuntimeRef(); got != "orq-codex8-093000/%3" {
 		t.Fatalf("runtime ref inesperado: %q", got)
 	}
@@ -132,6 +136,9 @@ func TestLoadWorkerSnapshotFromMetadataJSON(t *testing.T) {
 	view := snap.View(now, time.Minute)
 	if view == nil || view.WorkQueueMailboxID != 77 || view.WorkQueueAction != "continuar_trabajo" || view.WorkQueueState != "pending" {
 		t.Fatalf("view work queue inesperada: %+v", view)
+	}
+	if view.ExecutionProfile != "qa-heavy" {
+		t.Fatalf("view sin execution_profile: %+v", view)
 	}
 	if view.WorkQueueVerificationKey != "reassign:42:Codex1:Codex8" || view.WorkQueueReason != "post_remediation" {
 		t.Fatalf("view work queue sin verification/reason: %+v", view)
@@ -181,10 +188,11 @@ func TestLoadWorkerSnapshotFromMetadataJSONCompletaTMUXDesdeRuntimeManifest(t *t
 	write(statusPath, WorkerStatus{State: "running", Alive: true})
 	write(heartbeatPath, WorkerHeartbeat{Alive: true})
 	write(runtimeManifestPath, map[string]any{
-		"driver":       "tmux_cli_session",
-		"transport":    "tmux",
-		"tmux_session": "orq-codex7-111552",
-		"tmux_pane_id": "%0",
+		"driver":           "tmux_cli_session",
+		"transport":        "tmux",
+		"perfil_operativo": "persistente",
+		"tmux_session":     "orq-codex7-111552",
+		"tmux_pane_id":     "%0",
 	})
 
 	meta, err := json.Marshal(map[string]any{
@@ -209,11 +217,72 @@ func TestLoadWorkerSnapshotFromMetadataJSONCompletaTMUXDesdeRuntimeManifest(t *t
 	if got := snap.Transport(); got != "tmux" {
 		t.Fatalf("transport inesperado: %q", got)
 	}
+	if got := snap.ExecutionProfile(); got != "persistente" {
+		t.Fatalf("execution profile inesperado: %q", got)
+	}
 	if got := snap.RuntimeRef(); got != "orq-codex7-111552/%0" {
 		t.Fatalf("runtime ref inesperado: %q", got)
 	}
 	if got := snap.SessionRef(); got != "orq-codex7-111552/%0" {
 		t.Fatalf("session ref inesperado: %q", got)
+	}
+}
+
+func TestLoadWorkerSnapshotFromMetadataJSONCompletaExecutionProfileCanonicoDesdeRuntimeManifest(t *testing.T) {
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	runtimeManifestPath := filepath.Join(tmp, "runtime.json")
+
+	write := func(path string, payload any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	write(manifestPath, WorkerManifest{
+		Version:             1,
+		Agent:               "Codex9",
+		RuntimeManifestPath: runtimeManifestPath,
+	})
+	write(statusPath, WorkerStatus{State: "running", Alive: true})
+	write(heartbeatPath, WorkerHeartbeat{Alive: true})
+	write(runtimeManifestPath, map[string]any{
+		"driver":            "tmux_cli_session",
+		"transport":         "tmux",
+		"execution_profile": "mcp-remote",
+		"tmux_session":      "orq-codex9-111553",
+		"tmux_pane_id":      "%1",
+	})
+
+	meta, err := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+
+	snap, err := LoadWorkerSnapshotFromMetadataJSON(string(meta))
+	if err != nil {
+		t.Fatalf("load worker snapshot: %v", err)
+	}
+	if snap == nil || snap.Manifest == nil {
+		t.Fatalf("snapshot incompleto: %+v", snap)
+	}
+	if got := snap.ExecutionProfile(); got != "mcp-remote" {
+		t.Fatalf("execution profile canónico inesperado: %q", got)
+	}
+	view := snap.View(time.Now().UTC(), time.Minute)
+	if view == nil || view.ExecutionProfile != "mcp-remote" {
+		t.Fatalf("view sin execution_profile canónico: %+v", view)
 	}
 }
 
