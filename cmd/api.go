@@ -2438,6 +2438,7 @@ func apiHandlerNotificaciones(w http.ResponseWriter, r *http.Request) {
 func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		supervisor := resolveOpenClawOperatorSupervisor(r.URL.Query().Get("supervisor"))
 		status, err := runAPITimeboxed(250*time.Millisecond, buildEstadoResumenLigero, errStatusFetchTimeout)
 		if err != nil || status == nil {
 			status = &estadoResumen{
@@ -2447,7 +2448,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		}
 		revision := map[string]any{}
 		if snapshot, err := runAPITimeboxed(350*time.Millisecond, func() (map[string]any, error) {
-			return buildSupervisorReviewSnapshot("")
+			return buildSupervisorReviewSnapshot(supervisor)
 		}, errStatusFetchTimeout); err == nil && snapshot != nil {
 			revision = snapshot
 		}
@@ -2470,21 +2471,21 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		subagents := supervisorSubagentsFromReviewSnapshot(revision)
 		if len(subagents) == 0 {
 			if snapshot, err := runAPITimeboxed(150*time.Millisecond, func() (map[string]any, error) {
-				return buildSupervisorSubagentsSnapshot("", "", "", 100)
+				return buildSupervisorSubagentsSnapshot(supervisor, "", "", 100)
 			}, errStatusFetchTimeout); err == nil && snapshot != nil {
 				subagents = snapshot
 			}
 		}
 		if len(pipeline) == 0 {
 			if snapshot, err := runAPITimeboxed(150*time.Millisecond, func() (map[string]any, error) {
-				return buildSupervisorPipelineSnapshot("", "", 20)
+				return buildSupervisorPipelineSnapshot(supervisor, "", 20)
 			}, errStatusFetchTimeout); err == nil && snapshot != nil {
 				pipeline = snapshot
 			}
 		}
 		subagentFollowups := buildOpenClawSubagentFollowupsCompact(subagents)
 		if len(subagentFollowups) == 0 {
-			subagentFollowups = buildOpenClawSubagentFollowupsDirect("")
+			subagentFollowups = buildOpenClawSubagentFollowupsDirect(supervisor)
 		}
 		pipelineFollowup := buildOpenClawPipelineFollowupCompact(pipeline)
 		if len(pipelineFollowup) == 0 && len(subagentFollowups) > 0 {
@@ -2548,6 +2549,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			Action       string `json:"action"`
 			Target       string `json:"target"`
 			Assignee     string `json:"assignee"`
+			Agente       string `json:"agente"`
 			MaxItems     int    `json:"max_items"`
 			BatchKind    string `json:"batch_kind"`
 			Proyecto     string `json:"proyecto"`
@@ -2556,12 +2558,20 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			Prompt       string `json:"prompt"`
 			SubagentType string `json:"subagent_type"`
 			Model        string `json:"model"`
+			GateID       int64  `json:"gate_id"`
+			Estado       string `json:"estado"`
+			Reviewer     string `json:"reviewer_agente"`
+			FindingsJSON string `json:"findings_json"`
 		}
 		if err := apiDecodeJSON(r, &req); err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
 		mode := strings.TrimSpace(strings.ToLower(req.Mode))
+		supervisor := resolveOpenClawOperatorSupervisor(req.Supervisor)
+		if shouldPrimeOpenClawOperatorStatus(mode) {
+			primeOpenClawOperatorStatusSnapshot()
+		}
 		var (
 			result any
 			err    error
@@ -2572,20 +2582,28 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 				apiError(w, http.StatusBadRequest, fmt.Errorf("action y target obligatorios"))
 				return
 			}
-			result, err = applySupervisorRecommendedAction(req.Supervisor, req.Action, req.Target, req.Assignee)
+			result, err = applySupervisorRecommendedAction(supervisor, req.Action, req.Target, req.Assignee)
 		case "batch":
-			result, err = applySupervisorRecommendedActionsBatch(req.Supervisor, req.MaxItems, req.BatchKind)
+			result, err = applySupervisorRecommendedActionsBatch(supervisor, req.MaxItems, req.BatchKind)
 		case "next":
-			result, err = applySupervisorNextAction(req.Supervisor)
+			result, err = applySupervisorNextAction(supervisor)
+		case "agent_action":
+			result, err = applyOpenClawAgentAction(req.Agente, req.Action)
+		case "review_gate_resolve":
+			result, err = resolveOpenClawReviewGate(req.GateID, apiReviewGateResolveRequest{
+				Estado:         req.Estado,
+				ReviewerAgente: req.Reviewer,
+				FindingsJSON:   req.FindingsJSON,
+			})
 		case "subagent_store_refresh":
-			result, err = refreshSupervisorSubagentsFromStore(req.Supervisor, req.Proyecto)
+			result, err = refreshSupervisorSubagentsFromStore(supervisor, req.Proyecto)
 		case "subagent_launch":
 			if strings.TrimSpace(req.Description) == "" || strings.TrimSpace(req.Prompt) == "" {
 				apiError(w, http.StatusBadRequest, fmt.Errorf("description y prompt obligatorios"))
 				return
 			}
 			result, err = launchClaudeSubagentExternal(supervisorSubagentLaunchRequest{
-				Supervisor:   req.Supervisor,
+				Supervisor:   supervisor,
 				Proyecto:     req.Proyecto,
 				Name:         req.Name,
 				Description:  req.Description,
@@ -2594,7 +2612,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 				Model:        req.Model,
 			})
 		default:
-			apiError(w, http.StatusBadRequest, fmt.Errorf("mode inválido: usa action, batch, next, subagent_store_refresh o subagent_launch"))
+			apiError(w, http.StatusBadRequest, fmt.Errorf("mode inválido: usa action, batch, next, agent_action, review_gate_resolve, subagent_store_refresh o subagent_launch"))
 			return
 		}
 		if err != nil {
@@ -2605,6 +2623,76 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 	default:
 		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
+}
+
+func resolveOpenClawOperatorSupervisor(supervisor string) string {
+	if strings.TrimSpace(supervisor) == "" {
+		return "OpenClaw"
+	}
+	return resolveSupervisorName(supervisor)
+}
+
+func shouldPrimeOpenClawOperatorStatus(mode string) bool {
+	switch strings.TrimSpace(strings.ToLower(mode)) {
+	case "action", "batch", "next", "review_gate_resolve":
+		return true
+	default:
+		return false
+	}
+}
+
+func primeOpenClawOperatorStatusSnapshot() {
+	status, err := runAPITimeboxed(200*time.Millisecond, statusService.FetchStatus, errStatusFetchTimeout)
+	if err != nil {
+		return
+	}
+	storeStatusSnapshot(status, statusNowFunc().UTC())
+}
+
+func applyOpenClawAgentAction(agent, action string) (map[string]any, error) {
+	agent = strings.TrimSpace(agent)
+	action = strings.TrimSpace(action)
+	if agent == "" || !webAccionEstadoAgenteValida(action) {
+		return nil, fmt.Errorf("accion de agente invalida")
+	}
+	if strings.EqualFold(action, "reset-reanimacion") {
+		resultado, err := (dbAutomationService{}).resetReanimacionResultadoConPermisoManual(agent, true)
+		if err != nil {
+			return nil, err
+		}
+		invalidateAgentStatusCaches()
+		return map[string]any{
+			"ok":     true,
+			"agente": agent,
+			"accion": action,
+			"reset":  resultado,
+		}, nil
+	}
+	if err := agentesService.ApplyStateAction(agent, action); err != nil {
+		return nil, err
+	}
+	invalidateAgentStatusCaches()
+	return map[string]any{
+		"ok":     true,
+		"agente": agent,
+		"accion": action,
+	}, nil
+}
+
+func resolveOpenClawReviewGate(id int64, req apiReviewGateResolveRequest) (map[string]any, error) {
+	if id <= 0 || strings.TrimSpace(req.Estado) == "" {
+		return nil, fmt.Errorf("review gate invalido")
+	}
+	gate, err := reviewService.Resolve(reviewapp.ResolveGateInput{
+		ID:             id,
+		Estado:         strings.TrimSpace(req.Estado),
+		ReviewerAgente: strings.TrimSpace(req.ReviewerAgente),
+		FindingsJSON:   strings.TrimSpace(req.FindingsJSON),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"gate": gate}, nil
 }
 
 func buildOpenClawReviewCompact(review map[string]any) map[string]any {

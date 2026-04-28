@@ -582,6 +582,40 @@ func TestAPIOpenClawOperatorExponeStatusLiteEnRaiz(t *testing.T) {
 	}
 }
 
+func TestAPIOpenClawOperatorUsaSupervisorCanonicoAunqueGatewaySeaHumano(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prev := statusService
+	defer func() { statusService = prev }()
+
+	if err := db.ConfigSet("openclaw_gateway_operator", "alberto"); err != nil {
+		t.Fatalf("config openclaw gateway operator: %v", err)
+	}
+	statusService = stubStatusService{response: apiStatusResponse{}}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/openclaw/operator", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("openclaw operator status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode operator: %v", err)
+	}
+	review, ok := payload["review"].(map[string]any)
+	if !ok {
+		t.Fatalf("review ausente: %s", rec.Body.String())
+	}
+	if got, _ := review["supervisor"].(string); got != "OpenClaw" {
+		t.Fatalf("supervisor openclaw inesperado: got=%q body=%s", got, rec.Body.String())
+	}
+}
+
 func TestAPIOpenClawOperatorExponeFollowupSidecarCompacto(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
@@ -881,6 +915,75 @@ func TestAPIOpenClawOperatorAccionaPorLaViaCanonica(t *testing.T) {
 	mux.ServeHTTP(recNext, reqNext)
 	if recNext.Code != http.StatusOK {
 		t.Fatalf("openclaw operator next status=%d body=%s", recNext.Code, recNext.Body.String())
+	}
+}
+
+func TestAPIOpenClawOperatorAccionaAgenteYReviewGate(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar Codex3: %v", err)
+	}
+	taskID, err := db.CrearTarea(&db.Tarea{
+		Titulo:    "Gate por API OpenClaw",
+		Modulo:    "openclaw",
+		Prioridad: db.PrioridadAlta,
+		CreadoPor: "OpenClaw",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	gateID, err := db.CrearReviewGate(&db.ReviewGate{
+		TareaID:        &taskID,
+		Estado:         db.ReviewGatePendiente,
+		ReviewerAgente: "OpenClaw",
+		RequestedBy:    "Codex3",
+	})
+	if err != nil {
+		t.Fatalf("crear review gate: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recAgent := httptest.NewRecorder()
+	reqAgent := httptest.NewRequest(http.MethodPost, "/api/openclaw/operator", strings.NewReader(`{
+		"mode":"agent_action",
+		"agente":"Codex3",
+		"action":"retirar"
+	}`))
+	reqAgent.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(recAgent, reqAgent)
+	if recAgent.Code != http.StatusOK {
+		t.Fatalf("openclaw operator agent action status=%d body=%s", recAgent.Code, recAgent.Body.String())
+	}
+	agente, err := db.GetAgente("Codex3")
+	if err != nil {
+		t.Fatalf("get agente: %v", err)
+	}
+	if agente == nil || agente.Habilitado {
+		t.Fatalf("el agente no quedó retirado: %+v", agente)
+	}
+
+	recGate := httptest.NewRecorder()
+	reqGate := httptest.NewRequest(http.MethodPost, "/api/openclaw/operator", strings.NewReader(fmt.Sprintf(`{
+		"mode":"review_gate_resolve",
+		"gate_id":%d,
+		"estado":"aprobado",
+		"reviewer_agente":"OpenClaw",
+		"findings_json":"[{\"severity\":\"baja\",\"title\":\"ok\"}]"
+	}`, gateID)))
+	reqGate.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(recGate, reqGate)
+	if recGate.Code != http.StatusOK {
+		t.Fatalf("openclaw operator review gate status=%d body=%s", recGate.Code, recGate.Body.String())
+	}
+	gate, err := db.GetReviewGate(gateID)
+	if err != nil {
+		t.Fatalf("get review gate: %v", err)
+	}
+	if gate == nil || gate.Estado != db.ReviewGateAprobado || gate.ResolvedAt == nil {
+		t.Fatalf("review gate no quedó resuelta: %+v", gate)
 	}
 }
 

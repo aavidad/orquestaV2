@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"orquesta/agentesapp"
 	"orquesta/db"
 	"orquesta/i18n"
 	"orquesta/internal/a2ui"
@@ -303,6 +304,12 @@ var webFuncMap = template.FuncMap{
 			return "—"
 		}
 		return s
+	},
+	"openclawTaskFocus": func(item *agentesapp.TaskFocus) string {
+		return formatAgenteOverviewTaskFocus(item)
+	},
+	"openclawOrderFocus": func(item *agentesapp.OrderFocus) string {
+		return formatAgenteOverviewOrderFocus(item)
 	},
 	"subagentFollowupSummary": func(item *db.SupervisorSubagent) string {
 		return webSupervisorSubagentFollowupSummary(item)
@@ -2248,11 +2255,14 @@ const webTplOpenClaw = `{{define "content"}}
         <div class="stat" style="padding:.7rem"><div class="n" style="font-size:1.35rem">{{.Status.CapacitySummary.WorkersSaturados}}</div><div class="l">saturados</div></div>
       </div>
       {{if .Status.AgentesActivos}}
-      <table style="width:100%"><thead><tr><th>Agente</th><th>Rol</th><th>Activa</th><th>Reservada</th><th>Cuota visible</th><th>Cuenta</th></tr></thead><tbody>
+      <table style="width:100%"><thead><tr><th>Agente</th><th>Rol</th><th>Estado real</th><th>Trabajo actual</th><th>Orden dominante</th><th>Activa</th><th>Reservada</th><th>Cuota visible</th><th>Cuenta</th></tr></thead><tbody>
       {{range .Status.AgentesActivos}}
         <tr>
           <td><strong>{{.Nombre}}</strong></td>
           <td>{{orDash .Rol}}</td>
+          <td>{{orDash .OperationalState}}{{if .OperationalDetail}}<div style="font-size:.74rem;color:#64748b">{{.OperationalDetail}}</div>{{end}}</td>
+          <td>{{orDash (openclawTaskFocus .CurrentTask)}}</td>
+          <td>{{orDash (openclawOrderFocus .DominantOrder)}}</td>
           <td>{{.CargaActiva}}</td>
           <td>{{.CargaReservada}}</td>
           <td>{{if .CuotaRestantePct}}{{.CuotaRestantePct}}%{{if .PresupuestoVentana}} · {{.PresupuestoVentana}}{{end}}{{else}}—{{end}}</td>
@@ -2266,10 +2276,13 @@ const webTplOpenClaw = `{{define "content"}}
       {{if .Status.AgentesSaturados}}
       <div style="margin-top:.8rem">
         <h4 style="margin:0 0 .45rem 0;font-size:.9rem">Agentes saturados</h4>
-        <table style="width:100%"><thead><tr><th>Agente</th><th>Activa</th><th>Reservada</th><th>Cuenta</th></tr></thead><tbody>
+        <table style="width:100%"><thead><tr><th>Agente</th><th>Estado real</th><th>Trabajo actual</th><th>Orden dominante</th><th>Activa</th><th>Reservada</th><th>Cuenta</th></tr></thead><tbody>
         {{range .Status.AgentesSaturados}}
           <tr>
             <td><strong>{{.Nombre}}</strong></td>
+            <td>{{orDash .OperationalState}}{{if .OperationalDetail}}<div style="font-size:.74rem;color:#64748b">{{.OperationalDetail}}</div>{{end}}</td>
+            <td>{{orDash (openclawTaskFocus .CurrentTask)}}</td>
+            <td>{{orDash (openclawOrderFocus .DominantOrder)}}</td>
             <td>{{.CargaActiva}}</td>
             <td>{{.CargaReservada}}</td>
             <td>{{if .CuentaEmail}}{{.CuentaEmail}}{{else}}—{{end}}</td>

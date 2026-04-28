@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/db"
 	"orquesta/propuestasapp"
 )
@@ -222,6 +223,84 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 	}
 	if !strings.Contains(body, "</html>") {
 		t.Fatalf("la página openclaw quedó truncada:\n%s", body)
+	}
+}
+
+func TestWebOpenClawExponeTrabajoRealDelAgente(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prevRowsBuilder := apiAgentPanelRowsBuilder
+	defer func() {
+		apiAgentPanelRowsBuilder = prevRowsBuilder
+		resetStatusSnapshotCache()
+		resetAgentPanelSnapshotCache()
+	}()
+	resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+
+	snapshot := apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo", CuentaEmail: "codex4@example.com"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo", CuentaEmail: "codex4@example.com"},
+		},
+		Agentes: []*db.Agente{
+			{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo", CuentaEmail: "codex4@example.com"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 41, Estado: db.TareaEnProgreso, Agente: "Codex4", Titulo: "runtime mailbox/session_resume", Modulo: "cmd"},
+			{ID: 42, Estado: db.TareaAsignada, Agente: "Codex4", Titulo: "cola siguiente", Modulo: "api"},
+			{ID: 43, Estado: db.TareaEnProgreso, Agente: "Codex4", Titulo: "frente adicional", Modulo: "db"},
+		},
+	}
+	storeStatusSnapshot(snapshot, time.Now().UTC())
+	apiAgentPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:           &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo:  "trabajando",
+			DetalleOperativo: "worker ready",
+			CurrentTask: &agentesapp.TaskFocus{
+				TaskID: 41,
+				Title:  "runtime mailbox/session_resume",
+				State:  db.TareaEnProgreso,
+				Module: "cmd",
+			},
+			DominantOrder: &agentesapp.OrderFocus{
+				OrderID: 91,
+				Type:    "send_instruction",
+				State:   "ejecutando",
+				TaskID:  41,
+				Action:  "continuar_trabajo",
+				Reason:  "mailbox viva",
+			},
+		}}, nil
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openclaw", webHandlerOpenClaw)
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/openclaw", nil)
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("openclaw status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, token := range []string{
+		"Estado real",
+		"Trabajo actual",
+		"Orden dominante",
+		"trabajando",
+		"worker ready",
+		"#41 [en_progreso] runtime mailbox/session_resume modulo=cmd",
+		"#91 send_instruction [ejecutando] tarea=#41 accion=continuar_trabajo motivo=mailbox viva",
+	} {
+		if !strings.Contains(body, token) {
+			t.Fatalf("pagina openclaw sin %q:\n%s", token, body)
+		}
 	}
 }
 
