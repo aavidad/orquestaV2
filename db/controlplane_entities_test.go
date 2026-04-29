@@ -16913,6 +16913,50 @@ func TestRuntimeOrderControlEstadoDeseadoSatisfechoCuentaWorkerRunningSinReadyAt
 	}
 }
 
+func TestResolverTareaIDStartRuntimeInfiereTareaActivaParaPremiumIdle(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador-premium-idle-start",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Frente premium activo",
+		Descripcion: "Slice activo",
+		ProyectoID:  &proyectoID,
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	proyecto := &Proyecto{ID: proyectoID}
+
+	got, err := resolverTareaIDStartRuntime("Gemini1", proyecto, nil, "premium_idle_autoassigned")
+	if err != nil {
+		t.Fatalf("resolverTareaIDStartRuntime: %v", err)
+	}
+	if got == nil || *got != tareaID {
+		t.Fatalf("deberia inferir la tarea activa premium, got=%v want=%d", got, tareaID)
+	}
+}
+
 func TestRuntimeOrderControlEstadoDeseadoSatisfechoCuentaWorkerStartingComoArranqueEnCurso(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	statusPath := filepath.Join(tmp, "helper-worker-status-starting.json")

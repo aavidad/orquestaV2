@@ -1015,6 +1015,14 @@ func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int
 	if err != nil {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
 	}
+	motivo, err := runtimeOrderMotivoStartRuntime(excludeOrderID)
+	if err != nil {
+		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
+	}
+	tareaID, err = resolverTareaIDStartRuntime(agenteRef, proyecto, tareaID, motivo)
+	if err != nil {
+		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
+	}
 	perfilTarea, modelo, razonamiento, err = resolverPerfilModeloStartRuntime(
 		agenteRef,
 		proyecto,
@@ -1057,4 +1065,48 @@ func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
 	}
 	return agente, proyecto, conector, ultima, resume, bootstrap, plan, nil
+}
+
+func resolverTareaIDStartRuntime(agenteRef string, proyecto *Proyecto, tareaID *int64, motivo string) (*int64, error) {
+	if tareaID != nil && *tareaID > 0 {
+		return tareaID, nil
+	}
+	if proyecto == nil || proyecto.ID <= 0 {
+		return nil, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(motivo)) {
+	case "premium_idle_autoassigned":
+	default:
+		return nil, nil
+	}
+	activaID, err := GetTareaActivaIDPorAgenteProyecto(strings.TrimSpace(agenteRef), &proyecto.ID)
+	if err != nil {
+		return nil, err
+	}
+	if activaID <= 0 {
+		return nil, nil
+	}
+	id := activaID
+	return &id, nil
+}
+
+func runtimeOrderMotivoStartRuntime(orderID int64) (string, error) {
+	if orderID <= 0 {
+		return "", nil
+	}
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", err
+	}
+	if order == nil {
+		return "", nil
+	}
+	payload, err := runtimeOrderPayloadMap(order.PayloadJSON)
+	if err != nil {
+		return "", err
+	}
+	return stringFromMap(payload, "motivo", ""), nil
 }
