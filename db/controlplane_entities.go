@@ -608,6 +608,68 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) (err error) {
 	if err := ackBootstrapRuntimeSinLeaseEnStart(order, bootstrap, sesion); err != nil {
 		return err
 	}
+	result := runtimeOrderStartResult(order, agente, sesion, handle, runtime, bootstrap, plan, arranque)
+	if externalSessionID != "" {
+		result["external_session_id"] = externalSessionID
+	}
+	data, _ := json.Marshal(result)
+	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func runtimeOrderStartTaskID(payload map[string]any) *int64 {
+	for _, key := range []string{"tarea_id", "tarea_objetivo_id", "task_id", "tareaObjetivoId", "taskId"} {
+		if tareaID := runtimeOrderPayloadInt64Ptr(payload, key); tareaID != nil && *tareaID > 0 {
+			return tareaID
+		}
+	}
+	return nil
+}
+
+func runtimeOrderPayloadInt64Ptr(payload map[string]any, key string) *int64 {
+	if tareaID := int64PtrFromMap(payload, key); tareaID != nil {
+		return tareaID
+	}
+	normalizedKey := runtimeOrderPayloadKeyNormalized(key)
+	if normalizedKey == "" {
+		return nil
+	}
+	for rawKey, value := range payload {
+		if runtimeOrderPayloadKeyNormalized(rawKey) != normalizedKey {
+			continue
+		}
+		if tareaID := int64PtrFromMap(map[string]any{key: value}, key); tareaID != nil {
+			return tareaID
+		}
+	}
+	return nil
+}
+
+func runtimeOrderPayloadKeyNormalized(key string) string {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(key))
+	for _, r := range key {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r + ('a' - 'A'))
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func runtimeOrderStartTaskIDValue(plan *runtimeagente.LaunchPlan) int64 {
+	if plan == nil || plan.TareaID == nil || *plan.TareaID <= 0 {
+		return 0
+	}
+	return *plan.TareaID
+}
+
+func runtimeOrderStartResult(order *RuntimeOrder, agente *Agente, sesion *Sesion, handle *RuntimeHandle, runtime *RuntimeInstance, bootstrap *bootstrapRuntimeData, plan *runtimeagente.LaunchPlan, arranque *controlruntime.ProcesoArrancado) map[string]any {
 	result := map[string]any{
 		"ok":            true,
 		"agente":        agente.Nombre,
@@ -619,6 +681,9 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) (err error) {
 		"control_real":  true,
 		"bootstrap":     bootstrapResumenJSON(bootstrap),
 	}
+	if tareaID := runtimeOrderStartTaskIDValue(plan); tareaID > 0 {
+		result["tarea_id"] = tareaID
+	}
 	if len(bootstrap.Mailbox) > 0 {
 		result["lease_state"] = "waiting_for_evidence"
 		result["mailbox_count"] = len(bootstrap.Mailbox)
@@ -627,33 +692,25 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) (err error) {
 		result["continuidad"] = true
 		result["order_tipo"] = "start"
 	}
-	if arranque.PID > 0 {
+	if arranque != nil && arranque.PID > 0 {
 		result["pid"] = arranque.PID
 	}
-	if externalSessionID != "" {
-		result["external_session_id"] = externalSessionID
+	if arranque != nil && strings.TrimSpace(arranque.ExternalSessionID) != "" {
+		result["external_session_id"] = strings.TrimSpace(arranque.ExternalSessionID)
 	}
-	if strings.TrimSpace(arranque.HandleKind) != "" {
+	if strings.TrimSpace(sesion.ExternalSessionID) != "" && result["external_session_id"] == nil {
+		result["external_session_id"] = strings.TrimSpace(sesion.ExternalSessionID)
+	}
+	if arranque != nil && strings.TrimSpace(arranque.HandleKind) != "" {
 		result["handle_kind"] = strings.TrimSpace(arranque.HandleKind)
 	}
-	if strings.TrimSpace(arranque.HandleRef) != "" {
+	if arranque != nil && strings.TrimSpace(arranque.HandleRef) != "" {
 		result["handle_ref"] = strings.TrimSpace(arranque.HandleRef)
 	}
-	data, _ := json.Marshal(result)
-	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
-}
-
-func runtimeOrderStartTaskID(payload map[string]any) *int64 {
-	if tareaID := int64PtrFromMap(payload, "tarea_id"); tareaID != nil && *tareaID > 0 {
-		return tareaID
+	if order != nil && strings.TrimSpace(order.Tipo) != "" {
+		result["order_tipo"] = strings.TrimSpace(order.Tipo)
 	}
-	if tareaID := int64PtrFromMap(payload, "tarea_objetivo_id"); tareaID != nil && *tareaID > 0 {
-		return tareaID
-	}
-	if tareaID := int64PtrFromMap(payload, "task_id"); tareaID != nil && *tareaID > 0 {
-		return tareaID
-	}
-	return nil
+	return result
 }
 
 func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {

@@ -11757,6 +11757,11 @@ func reactivarWorkerDisponibleConAsignacionPausada(row agentesapp.Row, proyecto 
 	if bloqueadaPorOtroAgente {
 		return false, nil
 	}
+	if bloqueadaPorFrentePremiumCanonicoAjeno, err := proyectoTieneFrentePremiumCanonicoActivoAjeno(proyecto.ID, agente); err != nil {
+		return false, err
+	} else if bloqueadaPorFrentePremiumCanonicoAjeno {
+		return false, nil
+	}
 	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "pause", "checkpoint", "resume", "start", "handoff", "nudge", "send_instruction"); err != nil {
 		return false, err
 	} else if pendiente {

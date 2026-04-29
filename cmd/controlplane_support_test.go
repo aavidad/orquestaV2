@@ -7397,6 +7397,84 @@ func TestReactivarWorkerDisponibleConAsignacionPausadaNoReasignaObjetivoCanonico
 	}
 }
 
+func TestReactivarWorkerDisponibleConAsignacionPausadaNoRobaFrentePremiumCanonicoAjeno(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex10: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex6: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-reactivacion-pausada-premium-ajeno",
+		Nombre:  "Orquestador Reactivacion Pausada Premium Ajeno",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO asignaciones (agente, proyecto_id, estado, nota) VALUES (?,?,?,?)`,
+		"Codex6", proyectoID, db.AsignacionPausada, "sin_trabajo_reactivacion_automatica",
+	); err != nil {
+		t.Fatalf("insert asignacion pausada: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente premium acotado generico",
+		Descripcion: "Write-set preferente: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestReactivarWorkerDisponibleConAsignacionPausadaNoRobaFrentePremiumCanonicoAjeno$'",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("tomar tarea Codex10: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("iniciar tarea Codex10: %v", err)
+	}
+
+	proyecto, err := db.GetProyecto("orquestador-reactivacion-pausada-premium-ajeno")
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+	row := agentesapp.Row{
+		Agente:     &db.Agente{Nombre: "Codex6"},
+		Asignacion: &db.Asignacion{Agente: "Codex6", ProyectoID: proyectoID, Estado: db.AsignacionPausada, Nota: "sin_trabajo_reactivacion_automatica"},
+	}
+
+	reactivado, err := reactivarWorkerDisponibleConAsignacionPausada(row, proyecto)
+	if err != nil {
+		t.Fatalf("reactivarWorkerDisponibleConAsignacionPausada: %v", err)
+	}
+	if reactivado {
+		t.Fatal("no deberia reactivar ni nudgear una asignacion pausada si ya existe un frente premium canónico activo ajeno")
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || strings.TrimSpace(*tarea.Agente) != "Codex10" || tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea premium canónica no deberia cambiar de agente: %+v", tarea)
+	}
+
+	agente := "Codex6"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar runtime orders para Codex6: %+v", orders)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchAutoasignaFinishAppASesionActivaIdle(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	autonomiaIdleAutoassignGate.Reset()

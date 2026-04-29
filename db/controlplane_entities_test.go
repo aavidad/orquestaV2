@@ -17182,6 +17182,18 @@ func TestRuntimeOrderStartTaskIDAceptaAliasesCanonicos(t *testing.T) {
 			name:    "task_id",
 			payload: map[string]any{"task_id": tareaID},
 		},
+		{
+			name:    "task_id mayusculas y espacios",
+			payload: map[string]any{" TASK_ID ": tareaID},
+		},
+		{
+			name:    "taskId camelCase string",
+			payload: map[string]any{"taskId": strconv.FormatInt(tareaID, 10)},
+		},
+		{
+			name:    "tareaObjetivoId camelCase",
+			payload: map[string]any{"tareaObjetivoId": tareaID},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := runtimeOrderStartTaskID(tc.payload)
@@ -17189,6 +17201,72 @@ func TestRuntimeOrderStartTaskIDAceptaAliasesCanonicos(t *testing.T) {
 				t.Fatalf("deberia aceptar alias canonico, got=%v want=%d", got, tareaID)
 			}
 		})
+	}
+}
+
+func TestEjecutarRuntimeOrderStartExponeTareaIDCanonicaDesdeTaskIDAlias(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "cat-cli",
+		Nombre:     "Cat CLI",
+		Transporte: "cli",
+		Comando:    "cat",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:     "Reanudar tarea via alias canonico",
+		Modulo:     "orquestador",
+		Prioridad:  PrioridadAlta,
+		CreadoPor:  "alberto",
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: fmt.Sprintf(`{"proyecto":"orquestador","conector":"cat-cli","taskId":"%d"}`, tareaID),
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start: %v", err)
+	}
+
+	startOrder, err = GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("reload start: %v", err)
+	}
+	resultado := mapFromJSON(startOrder.ResultadoJSON)
+	if got := int64FromAny(resultado["tarea_id"]); got != tareaID {
+		t.Fatalf("resultado start sin tarea_id canonica: got=%d want=%d resultado=%s", got, tareaID, startOrder.ResultadoJSON)
 	}
 }
 
