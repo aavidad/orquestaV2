@@ -218,6 +218,12 @@ Mientras dure esta migración:
 - solo se permiten fixes mínimos de comportamiento roto donde la lógica ya existe ahí
 - toda policy nueva debe vivir fuera de `db/`, idealmente en:
   - `runtimesapp`
+
+## Regla adicional de portabilidad
+
+- Ningun helper nuevo `ensure...Schema()` debe ejecutar DDL SQLite crudo en rutas vivas.
+- Las autocreaciones, migraciones auxiliares y `upsert/insert-id` deben pasar por carriles `driver-aware`.
+- `SQLite` no es la referencia semantica del backend; el objetivo operativo prioritario es `Postgres` y, despues, ampliar portabilidad real a otros motores como `MySQL/MariaDB`.
   - `capacidadapp`
   - `tareasapp`
   - helpers puros fuera de `db`

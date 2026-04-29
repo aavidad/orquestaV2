@@ -37,6 +37,12 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 - `uso_actual_app_orquesta.md`
   Resumen del uso actual con política servidor-primero: servicio/daemon como fuente de verdad y CLI/web como clientes.
 
+- `estado_persistencia_portabilidad.md`
+  Estado real de portabilidad de persistencia y regla vigente: SQLite no es backend operativo canónico.
+
+- `politica_acceso_persistencia_es.md`
+  Política operativa de acceso a persistencia, incluyendo la prohibición de asumir SQLite como dialecto universal.
+
 - `handoff_2026-03-22_codex1.md`
   Estado de relevo con decisiones, deuda abierta y siguiente bloque recomendado.
 

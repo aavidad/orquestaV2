@@ -13,6 +13,13 @@ Orquesta is the only entry and exit portal for system data. The internal integri
 ## Backend Independence
 This policy is formulated against the application layer and not against the specific database engine. This allows the system to migrate from SQLite to other engines (such as MySQL/MariaDB) in the future without breaking agent operations or compromising data governance.
 
+## Current Operational Backend Rule
+
+- SQLite must not be treated as Orquesta's canonical live operational backend.
+- Live state must flow through the configured driver and through real backend compatibility/connectors.
+- Any new SQL, auxiliary schema, or migration must be driver-aware (`postgres`, `mysql`, etc.), not `sqlite-first`.
+- If an operational surface only works because a local SQLite path exists, that surface is incomplete and must be fixed.
+
 ## Transition Status
 
 As of `2026-03-24`, the project direction is already stable:
@@ -29,3 +36,10 @@ The blockers that still prevent turning on full technical blocking are:
 - completing end-to-end smoke tests with a real live runtime
 
 The operational inventory of those gaps and their recommended closure order lives in [Inventory of pending work for autonomous orchestration](inventario_pendientes_orquestacion_autonoma_2026-03-24.md).
+
+While the transition lasts, the rule for agents and developers is simple:
+
+- do not use `orquesta.db` as a manual operational backend
+- do not introduce new local business paths
+- move each capability to API/MCP and retire the local fallback as soon as coverage exists
+- do not introduce persistence helpers that assume SQLite as a universal dialect

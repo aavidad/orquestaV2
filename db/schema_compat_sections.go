@@ -271,9 +271,10 @@ func extractSchemaObjects(prefixes ...string) []string {
 	var out []string
 	for _, stmt := range statements {
 		trimmed := strings.TrimSpace(stmt)
+		canonical := strings.TrimSpace(stripLeadingSQLComments(trimmed))
 		for _, prefix := range prefixes {
-			if strings.HasPrefix(trimmed, prefix) {
-				out = append(out, trimmed)
+			if strings.HasPrefix(canonical, prefix) {
+				out = append(out, canonical)
 				break
 			}
 		}

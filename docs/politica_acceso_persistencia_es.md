@@ -14,6 +14,13 @@ Orquesta es el único portal de entrada y salida para los datos del sistema. La 
 ## Independencia del Backend
 Esta política se formula contra la capa de aplicación y no contra el motor de base de datos concreto. Esto permite que el sistema pueda migrar de SQLite a otros motores (como MySQL/MariaDB) en el futuro sin romper la operativa de los agentes ni comprometer el gobierno de los datos.
 
+## Backend Operativo Vigente
+
+- SQLite no debe tratarse como backend operativo canónico de Orquesta.
+- El estado vivo del sistema debe entrar por el driver configurado y por conectores/compatibilidad real de backend.
+- Cualquier SQL, schema auxiliar o migración nueva debe ser consciente del driver (`postgres`, `mysql`, etc.), no `sqlite-first`.
+- Si una superficie operativa solo funciona porque existe una ruta SQLite local, esa superficie se considera incompleta y debe corregirse.
+
 ## Estado de Transición
 
 A fecha de `2026-03-24`, la dirección del proyecto ya es estable:
@@ -36,3 +43,4 @@ Mientras dure la transición, la regla para agentes y programadores es simple:
 - no usar `orquesta.db` como backend operativo manual
 - no introducir nuevas rutas locales de negocio
 - mover cada capacidad a API y retirar su fallback local en cuanto exista cobertura
+- no introducir helpers de persistencia que asuman SQLite como dialecto universal

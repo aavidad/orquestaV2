@@ -93,37 +93,11 @@ var supervisorSubagentProfiles = map[string]SupervisorSubagentToolProfile{
 }
 
 func ensureSupervisorSubagentsSchema() error {
-	_, err := DB.Exec(`
-		CREATE TABLE IF NOT EXISTS supervisor_subagents (
-			id                INTEGER PRIMARY KEY AUTOINCREMENT,
-			supervisor        TEXT    NOT NULL,
-			proyecto_slug     TEXT    NOT NULL DEFAULT '',
-			session_id        TEXT    NOT NULL DEFAULT '',
-			parent_thread_id  TEXT    NOT NULL DEFAULT '',
-			thread_id         TEXT    NOT NULL,
-			subagent_name     TEXT    NOT NULL DEFAULT '',
-			subagent_type     TEXT    NOT NULL DEFAULT 'general-purpose',
-			tool_profile_json TEXT    NOT NULL DEFAULT '{}',
-			status            TEXT    NOT NULL DEFAULT 'running'
-			                          CHECK (status IN ('running','completed','failed','cancelled')),
-			manifest_path     TEXT    NOT NULL DEFAULT '',
-			output_path       TEXT    NOT NULL DEFAULT '',
-			error_message     TEXT    NOT NULL DEFAULT '',
-			metadata_json     TEXT    NOT NULL DEFAULT '{}',
-			created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			started_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			completed_at      DATETIME,
-			UNIQUE(supervisor, session_id, thread_id)
-		)`)
-	if err != nil {
-		return err
-	}
-	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_supervisor_subagents_supervisor_session ON supervisor_subagents(supervisor, session_id, updated_at DESC)`); err != nil {
-		return err
-	}
-	_, err = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_supervisor_subagents_project_status ON supervisor_subagents(proyecto_slug, supervisor, status, updated_at DESC)`)
-	return err
+	return ensureSupervisorSchemaObjects(
+		"CREATE TABLE IF NOT EXISTS supervisor_subagents (",
+		"CREATE INDEX IF NOT EXISTS idx_supervisor_subagents_supervisor_session",
+		"CREATE INDEX IF NOT EXISTS idx_supervisor_subagents_project_status",
+	)
 }
 
 func NormalizeSupervisorSubagentType(raw string) string {

@@ -62,34 +62,11 @@ type SupervisorThreadSessionSummary struct {
 }
 
 func ensureSupervisorThreadsSchema() error {
-	_, err := DB.Exec(`
-		CREATE TABLE IF NOT EXISTS supervisor_threads (
-			id            INTEGER PRIMARY KEY AUTOINCREMENT,
-			supervisor    TEXT    NOT NULL,
-			proyecto_slug TEXT    NOT NULL DEFAULT '',
-			session_id    TEXT    NOT NULL DEFAULT '',
-			thread_id     TEXT    NOT NULL,
-			kind          TEXT    NOT NULL DEFAULT 'subagent'
-			                      CHECK (kind IN ('leader','subagent')),
-			mode          TEXT    NOT NULL DEFAULT '',
-			status        TEXT    NOT NULL DEFAULT 'active'
-			                      CHECK (status IN ('active','idle','closed')),
-			source        TEXT    NOT NULL DEFAULT '',
-			last_turn_id  TEXT    NOT NULL DEFAULT '',
-			turn_count    INTEGER NOT NULL DEFAULT 1,
-			metadata_json TEXT    NOT NULL DEFAULT '{}',
-			first_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			last_seen_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			UNIQUE(supervisor, session_id, thread_id)
-		)`)
-	if err != nil {
-		return err
-	}
-	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_supervisor_threads_supervisor_session ON supervisor_threads(supervisor, session_id, last_seen_at DESC)`); err != nil {
-		return err
-	}
-	_, err = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_supervisor_threads_project ON supervisor_threads(proyecto_slug, supervisor, last_seen_at DESC)`)
-	return err
+	return ensureSupervisorSchemaObjects(
+		"CREATE TABLE IF NOT EXISTS supervisor_threads (",
+		"CREATE INDEX IF NOT EXISTS idx_supervisor_threads_supervisor_session",
+		"CREATE INDEX IF NOT EXISTS idx_supervisor_threads_project",
+	)
 }
 
 func RecordSupervisorThreadTurn(input RecordSupervisorThreadInput) (*SupervisorThread, error) {
