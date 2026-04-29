@@ -53,6 +53,7 @@ const autonomiaPostRemediationBlockedTaskTitle = "Autonomía: resolver follow-up
 
 var runtimeBudgetObservationBackgroundGate = planocontrol.NewGate()
 var runtimeHistoricalMaintenanceGate = planocontrol.NewGate()
+var runtimeTMUXOrphanCleanupScanGate = planocontrol.NewGate()
 var runtimeBudgetPlanningExpensiveGate = planocontrol.NewThrottler()
 
 var procesarHigieneRuntimesAutonomosBatchFn = db.ProcesarHigieneRuntimesAutonomosBatch
@@ -146,6 +147,18 @@ func runtimeTMUXOrphanCleanupInterval() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
+func runtimeTMUXOrphanCleanupScanInterval() time.Duration {
+	seconds := controlPlaneConfigIntOrDefault("runtime_tmux_orphan_cleanup_scan_interval_seconds", 300)
+	if seconds <= 0 {
+		seconds = 300
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func allowRuntimeTMUXOrphanCleanupScan(now time.Time) bool {
+	return runtimeTMUXOrphanCleanupScanGate.AllowAt(runtimeTMUXOrphanCleanupScanInterval(), now)
+}
+
 func runtimeTMUXOrphanCleanupKey(sessionName string) string {
 	sessionName = strings.TrimSpace(sessionName)
 	if sessionName == "" {
@@ -183,6 +196,10 @@ func resetRuntimeMailboxReevaluationGate() {
 
 func resetRuntimeHistoricalMaintenanceGate() {
 	runtimeHistoricalMaintenanceGate.Reset()
+}
+
+func resetRuntimeTMUXOrphanCleanupScanGate() {
+	runtimeTMUXOrphanCleanupScanGate.Reset()
 }
 
 func resetRuntimeBudgetPlanningExpensiveGate() {
@@ -1138,7 +1155,10 @@ func refrescarPresupuestoSesionObservadoAgentePlanificacionCaro(nombre string) (
 	}
 	ordenarHandlesParaPresupuestoVivo(handles)
 	for _, handle := range handles {
-		ok, _, err := refrescarPresupuestoSesionObservadoHandlePlanificacionCaro(handle)
+		// El loop de planificación no debe escanear artifacts grandes de Codex.
+		// Revalida por la vía barata/background y deja la observación profunda
+		// para carriles explícitos de presupuesto, no para el planner residente.
+		ok, _, err := refrescarPresupuestoSesionObservadoHandleConOpciones(handle, time.Time{}, true)
 		if err != nil {
 			return 0, err
 		}
@@ -1157,7 +1177,7 @@ func refrescarPresupuestoSesionObservadoAgentePlanificacionCaro(nombre string) (
 		}
 		return 0, err
 	}
-	ok, err := refrescarPresupuestoSesionObservadoDesdeSesionConOpciones(sesion, time.Time{}, false)
+	ok, err := refrescarPresupuestoSesionObservadoDesdeSesionConOpciones(sesion, time.Time{}, true)
 	if err != nil {
 		return 0, err
 	}
@@ -13626,6 +13646,9 @@ func resolverContextoRuntimeAutonomiaRow(row agentesapp.Row) (*db.RuntimeHandle,
 }
 
 func procesarSesionesTMUXHuerfanasAutonomiaBatch(now time.Time) (int, error) {
+	if !allowRuntimeTMUXOrphanCleanupScan(now) {
+		return 0, nil
+	}
 	handles, err := db.ListarRuntimeHandles(nil)
 	if err != nil {
 		return 0, err

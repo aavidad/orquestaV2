@@ -373,10 +373,11 @@ func launchStatusSnapshotWarmLoop(ctx context.Context, debugLogger *log.Logger) 
 }
 
 func statusSnapshotWarmLoopInterval() time.Duration {
-	if statusFallbackTTL > 0 {
-		return statusFallbackTTL
+	seconds := controlPlaneConfigIntOrDefault("server_status_snapshot_warm_interval_seconds", 30)
+	if seconds < 30 {
+		seconds = 30
 	}
-	return 5 * time.Second
+	return time.Duration(seconds) * time.Second
 }
 
 func launchPrepareContextPrewarmLoop(ctx context.Context, debugLogger *log.Logger) {

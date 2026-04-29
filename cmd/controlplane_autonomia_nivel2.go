@@ -1564,6 +1564,8 @@ func controlPlaneConfigSafeFloor(clave string) int {
 		return 60
 	case "autonomia_active_sessions_interval_seconds":
 		return 30
+	case "server_status_snapshot_warm_interval_seconds":
+		return 30
 	case "autonomia_idle_autoassign_interval_seconds":
 		return 120
 	case "pipeline_local_dispatch_interval_seconds":

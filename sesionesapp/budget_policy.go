@@ -134,6 +134,13 @@ func BudgetSnapshotContributesQuota(snapshot BudgetQuotaSnapshot) bool {
 	if strings.EqualFold(strings.TrimSpace(snapshot.Source), "provider_backoff") {
 		return true
 	}
+	rawSnapshot := strings.ToLower(strings.TrimSpace(snapshot.RawSnapshotJSON))
+	if rawSnapshot == "" {
+		return false
+	}
+	if strings.Contains(rawSnapshot, "\"rate_limits\"") && strings.Contains(rawSnapshot, "\"used_percent\"") {
+		return true
+	}
 	var raw map[string]any
 	if err := json.Unmarshal([]byte(snapshot.RawSnapshotJSON), &raw); err != nil || raw == nil {
 		return false

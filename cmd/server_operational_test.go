@@ -970,9 +970,9 @@ func TestBuildServerOperationalInfoFastFromDBCargaDispatchLigeroSinSnapshot(t *t
 	}
 }
 
-func TestStatusSnapshotWarmLoopIntervalSigueFallbackTTL(t *testing.T) {
-	if got := statusSnapshotWarmLoopInterval(); got != statusFallbackTTL {
-		t.Fatalf("intervalo warm inesperado: got=%s want=%s", got, statusFallbackTTL)
+func TestStatusSnapshotWarmLoopIntervalUsaSueloSeguro(t *testing.T) {
+	if got := statusSnapshotWarmLoopInterval(); got != 30*time.Second {
+		t.Fatalf("intervalo warm inesperado: got=%s want=%s", got, 30*time.Second)
 	}
 }
 

@@ -30,6 +30,15 @@ func timePtr(v time.Time) *time.Time { return &v }
 
 func ptrTimeStatus(v time.Time) *time.Time { return &v }
 
+func mustJSONRuntimeMailboxPayload(t *testing.T, payload map[string]any) string {
+	t.Helper()
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal runtime mailbox payload: %v", err)
+	}
+	return string(data)
+}
+
 func TestProcesarSupervisionAutonomaBatchEncolaSupervisionYRegistraCiclo(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -38021,7 +38030,7 @@ func TestSeleccionarAgenteRevalidacionCaraPlanificacionPriorizaCandidatoUtil(t *
 	}
 }
 
-func TestRevalidarPresupuestoPlanificacionBatchUsaRutaCaraSoloParaUnCandidato(t *testing.T) {
+func TestRevalidarPresupuestoPlanificacionBatchNoUsaArtifactsCaros(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	presupuestoPrimerUsoSesionGate.Reset()
 	resetRuntimeBudgetPlanningExpensiveGate()
@@ -38110,11 +38119,8 @@ func TestRevalidarPresupuestoPlanificacionBatchUsaRutaCaraSoloParaUnCandidato(t 
 	if len(profileCalls) != 3 {
 		t.Fatalf("deberia hacer ruta barata para todos los candidatos, got=%+v", profileCalls)
 	}
-	if total := artifactCalls["CodexPlanA"] + artifactCalls["CodexPlanB"] + artifactCalls["CodexPlanC"]; total != 1 {
-		t.Fatalf("deberia usar ruta cara solo para un candidato, got=%+v", artifactCalls)
-	}
-	if artifactCalls["CodexPlanA"] != 1 {
-		t.Fatalf("con empate deberia elegir el primero canónico por nombre, got=%+v", artifactCalls)
+	if total := artifactCalls["CodexPlanA"] + artifactCalls["CodexPlanB"] + artifactCalls["CodexPlanC"]; total != 0 {
+		t.Fatalf("planificacion no deberia usar ObserveCodexArtifacts, got=%+v", artifactCalls)
 	}
 
 	profileCalls = map[string]int{}
@@ -38127,7 +38133,23 @@ func TestRevalidarPresupuestoPlanificacionBatchUsaRutaCaraSoloParaUnCandidato(t 
 		t.Fatalf("sin observacion valida no deberia procesar en segundo batch, got=%d", procesados)
 	}
 	if total := artifactCalls["CodexPlanA"] + artifactCalls["CodexPlanB"] + artifactCalls["CodexPlanC"]; total != 0 {
-		t.Fatalf("el segundo batch inmediato no deberia repetir ruta cara, got=%+v", artifactCalls)
+		t.Fatalf("el segundo batch tampoco deberia usar ObserveCodexArtifacts, got=%+v", artifactCalls)
+	}
+}
+
+func TestAllowRuntimeTMUXOrphanCleanupScanRespetaIntervalo(t *testing.T) {
+	resetRuntimeTMUXOrphanCleanupScanGate()
+	t.Cleanup(resetRuntimeTMUXOrphanCleanupScanGate)
+
+	now := time.Now().UTC()
+	if !allowRuntimeTMUXOrphanCleanupScan(now) {
+		t.Fatalf("primer barrido tmux huerfano deberia permitirse")
+	}
+	if allowRuntimeTMUXOrphanCleanupScan(now.Add(30 * time.Second)) {
+		t.Fatalf("segundo barrido tmux huerfano no deberia permitirse dentro del intervalo")
+	}
+	if !allowRuntimeTMUXOrphanCleanupScan(now.Add(runtimeTMUXOrphanCleanupScanInterval() + time.Second)) {
+		t.Fatalf("barrido tmux huerfano deberia permitirse tras el intervalo")
 	}
 }
 
