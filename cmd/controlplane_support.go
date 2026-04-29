@@ -9837,6 +9837,9 @@ func runtimeMailboxTargetTaskID(payload map[string]any) *int64 {
 	if tareaID := int64PtrFromMap(payload, "tarea_objetivo_id"); tareaID != nil && *tareaID > 0 {
 		return tareaID
 	}
+	if tareaID := int64PtrFromMap(payload, "task_id"); tareaID != nil && *tareaID > 0 {
+		return tareaID
+	}
 	return nil
 }
 
@@ -9848,7 +9851,9 @@ func runtimeMailboxPremiumPipelineLocalSinTarea(msg *db.RuntimeMailboxMessage, p
 		!strings.EqualFold(strings.TrimSpace(msg.Kind), "microprogramacion") {
 		return false
 	}
-	isPipelineLocal := strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "source")), "pipeline_local") ||
+	isPipelineLocal := strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") ||
+		strings.EqualFold(strings.TrimSpace(msg.Kind), "microprogramacion") ||
+		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "source")), "pipeline_local") ||
 		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "kind")), "pipeline_local") ||
 		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "mailbox_kind")), "pipeline_local") ||
 		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "source")), "microprogramacion") ||

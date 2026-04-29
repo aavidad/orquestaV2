@@ -27,4 +27,19 @@ func TestExtraerMetadataResumeSesionConservaHintsOperativosDePerfilEjecucion(t *
 	if got, ok := meta["can_send_input"].(bool); !ok || got {
 		t.Fatalf("can_send_input inesperado: %+v", meta)
 	}
+	if got := stringFromMap(meta, "execution_profile", ""); got != "persistente" {
+		t.Fatalf("execution_profile inesperado: %+v", meta)
+	}
+}
+
+func TestExtraerMetadataResumeSesionAceptaExecutionProfileCanonico(t *testing.T) {
+	meta := extraerMetadataResumeSesion(&Sesion{
+		ResumePayloadJSON: `{"perfil_ejecucion":{"driver":"tmux_cli_session","transport":"tmux","execution_profile":"qa-heavy","worktree_path":"/tmp/orquesta/.orquesta-worktrees/orq-codex2","tmux_session":"orq-codex2","tmux_pane_id":"%9"}}`,
+	})
+	if got := stringFromMap(meta, "execution_profile", ""); got != "qa-heavy" {
+		t.Fatalf("execution_profile canonico inesperado: %+v", meta)
+	}
+	if got := stringFromMap(meta, "perfil_operativo", ""); got != "qa-heavy" {
+		t.Fatalf("perfil_operativo espejado inesperado: %+v", meta)
+	}
 }

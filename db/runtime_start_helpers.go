@@ -46,6 +46,7 @@ func payloadJSONDesdePlan(plan *runtimeagente.LaunchPlan) string {
 		"launch_prompt_embedded": plan.LaunchPromptEmbedded,
 		"launch_prompt_mode":     strings.TrimSpace(plan.LaunchPromptMode),
 		"launch_prompt_delay_ms": plan.LaunchPromptDelayMS,
+		"execution_profile":      strings.TrimSpace(plan.PerfilOperativo),
 		"perfil_operativo":       strings.TrimSpace(plan.PerfilOperativo),
 	})
 	if err != nil {

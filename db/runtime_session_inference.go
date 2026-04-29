@@ -116,6 +116,7 @@ func extraerMetadataResumeSesion(s *Sesion) map[string]any {
 		"auth_mode",
 		"mailbox_delivery_mode",
 		"pool_compartido",
+		"execution_profile",
 		"perfil_operativo",
 		"can_send_input",
 		"worktree_path",
@@ -143,6 +144,7 @@ func extraerMetadataResumeSesion(s *Sesion) map[string]any {
 			"modelo",
 			"perfil_tarea",
 			"razonamiento",
+			"execution_profile",
 			"perfil_operativo",
 			"can_send_input",
 			"worktree_path",
@@ -153,6 +155,13 @@ func extraerMetadataResumeSesion(s *Sesion) map[string]any {
 				out[key] = value
 			}
 		}
+	}
+	if perfil := strings.TrimSpace(stringFromAny(out["execution_profile"])); perfil != "" {
+		if strings.TrimSpace(stringFromAny(out["perfil_operativo"])) == "" {
+			out["perfil_operativo"] = perfil
+		}
+	} else if perfil := strings.TrimSpace(stringFromAny(out["perfil_operativo"])); perfil != "" {
+		out["execution_profile"] = perfil
 	}
 	return out
 }

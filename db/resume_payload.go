@@ -77,6 +77,9 @@ func ResumePayloadPerfilOperativo(prev string) string {
 	if !ok {
 		return ""
 	}
+	if value := strings.TrimSpace(stringFromAny(perfil["execution_profile"])); value != "" {
+		return value
+	}
 	return strings.TrimSpace(stringFromAny(perfil["perfil_operativo"]))
 }
 
@@ -131,6 +134,7 @@ func MergeResumePayloadPerfilOperativo(prev, perfilOperativo string) string {
 		}
 		out[key] = value
 	}
+	out["execution_profile"] = perfilOperativo
 	out["perfil_operativo"] = perfilOperativo
 	return MergeResumePayloadEnvelope(prev, map[string]any{
 		claveResumePayloadPerfilEjecucion: out,

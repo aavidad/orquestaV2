@@ -19421,6 +19421,81 @@ func TestProcesarRuntimeMailboxSessionResumeBatchConsumePipelineLocalPremiumSinT
 	}
 }
 
+func TestProcesarRuntimeMailboxSessionResumeBatchConsumePipelineLocalPremiumConSoloMailboxKindSinTareaObjetivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-premium-mailbox-kind","tmux_pane_id":"%172","mailbox_delivery_mode":"session_resume","can_send_input":false,"external_session_id":"sess-premium-mailbox-kind"}`
+	capsJSON := `{"mailbox_delivery_mode":"session_resume","can_send_input":false}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex1-premium-mailbox-kind/%172', estado='activo', metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"mailbox_kind":"pipeline_local","carril":"premium_worktree","texto":"seguir frente premium mailbox_kind"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia consumir pipeline_local premium con solo mailbox_kind sin tarea, got=%d", n)
+	}
+
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("pipeline_local premium con solo mailbox_kind deberia quedar consumido, got=%s", msg.Estado)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			t.Fatalf("no deberia crear send_instruction para pipeline_local premium con solo mailbox_kind: %+v", order)
+		}
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchConsumePipelineLocalMicroprogramacionSinTareaObjetivo(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -19493,6 +19568,351 @@ func TestProcesarRuntimeMailboxSessionResumeBatchConsumePipelineLocalMicroprogra
 		if order != nil && order.Tipo == "send_instruction" {
 			t.Fatalf("no deberia crear send_instruction para pipeline_local microprogramacion sin tarea: %+v", order)
 		}
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeBatchConsumePipelineLocalAliasMicroprogramacionSinTareaObjetivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-micro-alias-sin-tarea","tmux_pane_id":"%173","mailbox_delivery_mode":"session_resume","can_send_input":false,"external_session_id":"sess-micro-alias-sin-tarea"}`
+	capsJSON := `{"mailbox_delivery_mode":"session_resume","can_send_input":false}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex1-micro-alias-sin-tarea/%173', estado='activo', metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"source":"microprogramacion","kind":"microprogramacion","carril":"microprogramacion_local","texto":"seguir frente micro alias"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia consumir alias microprogramacion sin tarea objetivo, got=%d", n)
+	}
+
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("alias microprogramacion sin tarea deberia quedar consumido, got=%s", msg.Estado)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			t.Fatalf("no deberia crear send_instruction para alias microprogramacion sin tarea: %+v", order)
+		}
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeBatchConsumeKindMicroprogramacionSinTareaObjetivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-micro-kind-sin-tarea","tmux_pane_id":"%174","mailbox_delivery_mode":"session_resume","can_send_input":false,"external_session_id":"sess-micro-kind-sin-tarea"}`
+	capsJSON := `{"mailbox_delivery_mode":"session_resume","can_send_input":false}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex1-micro-kind-sin-tarea/%174', estado='activo', metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "microprogramacion",
+		PayloadJSON: `{"source":"microprogramacion","kind":"microprogramacion","carril":"microprogramacion_local","texto":"seguir frente micro kind"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatchConMailbox([]*db.RuntimeMailboxMessage{{
+		ID:          msgID,
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "microprogramacion",
+		PayloadJSON: `{"source":"microprogramacion","kind":"microprogramacion","carril":"microprogramacion_local","texto":"seguir frente micro kind"}`,
+	}}, map[int64]struct{}{}, newRuntimeMailboxBatchSnapshot())
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume con mailbox explicita: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia consumir kind microprogramacion sin tarea objetivo, got=%d", n)
+	}
+
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("kind microprogramacion sin tarea deberia quedar consumido, got=%s", msg.Estado)
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeBatchConsumePipelineLocalSinSourceNiKindSiCarrilEsMicroprogramacion(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-micro-carril-sin-kind","tmux_pane_id":"%175","mailbox_delivery_mode":"session_resume","can_send_input":false,"external_session_id":"sess-micro-carril-sin-kind"}`
+	capsJSON := `{"mailbox_delivery_mode":"session_resume","can_send_input":false}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex1-micro-carril-sin-kind/%175', estado='activo', metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"carril":"microprogramacion_local","texto":"seguir frente micro solo carril"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia consumir pipeline_local microprogramacion solo por carril+kind, got=%d", n)
+	}
+
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("pipeline_local con solo carril microprogramacion deberia quedar consumido, got=%s", msg.Estado)
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeBatchConsumeKindMicroprogramacionSoloConCarrilSinTareaObjetivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-micro-kind-carril","tmux_pane_id":"%176","mailbox_delivery_mode":"session_resume","can_send_input":false,"external_session_id":"sess-micro-kind-carril"}`
+	capsJSON := `{"mailbox_delivery_mode":"session_resume","can_send_input":false}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex1-micro-kind-carril/%176', estado='activo', metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "microprogramacion",
+		PayloadJSON: `{"carril":"microprogramacion_local","texto":"seguir frente micro kind carril"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatchConMailbox([]*db.RuntimeMailboxMessage{{
+		ID:          msgID,
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "microprogramacion",
+		PayloadJSON: `{"carril":"microprogramacion_local","texto":"seguir frente micro kind carril"}`,
+	}}, map[int64]struct{}{}, newRuntimeMailboxBatchSnapshot())
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume con mailbox explicita: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia consumir kind microprogramacion con solo carril, got=%d", n)
+	}
+
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("kind microprogramacion con solo carril deberia quedar consumido, got=%s", msg.Estado)
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeBatchConsumePipelineLocalConSoloMailboxKindMicroprogramacion(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-micro-mailbox-kind","tmux_pane_id":"%177","mailbox_delivery_mode":"session_resume","can_send_input":false,"external_session_id":"sess-micro-mailbox-kind"}`
+	capsJSON := `{"mailbox_delivery_mode":"session_resume","can_send_input":false}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex1-micro-mailbox-kind/%177', estado='activo', metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"mailbox_kind":"microprogramacion","carril":"microprogramacion_local","texto":"seguir frente micro mailbox_kind"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia consumir pipeline_local con solo mailbox_kind microprogramacion, got=%d", n)
+	}
+
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("pipeline_local con solo mailbox_kind microprogramacion deberia quedar consumido, got=%s", msg.Estado)
 	}
 }
 
@@ -20066,6 +20486,148 @@ func TestProcesarRuntimeMailboxSessionResumeBatchConsumeMailboxSiHandoffDerivada
 	}
 }
 
+func TestProcesarRuntimeMailboxSessionResumeBatchConsumeMailboxSiHandoffDerivadaHeredaReceiptUtilDeStartFuenteAunqueExistaStartMasReciente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	oldMsgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"instruction":"slice observado viejo","texto":"continua slice observado viejo"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox vieja: %v", err)
+	}
+	oldStartID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		HandleID:   &handle.ID,
+		RuntimeID:  &runtime.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","delivery_state":"delivered","delivery_receipt_at":"2026-04-14T12:37:01Z","receipt_source":"git_worktree","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			oldMsgID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start fuente observada vieja: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET estado='completada', started_at=CURRENT_TIMESTAMP, finished_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, oldStartID); err != nil {
+		t.Fatalf("marcar start fuente vieja completada: %v", err)
+	}
+
+	newMsgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"instruction":"slice observado reciente","texto":"continua slice observado reciente"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox reciente: %v", err)
+	}
+	newStartID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		HandleID:   &handle.ID,
+		RuntimeID:  &runtime.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","delivery_state":"delivered","delivery_receipt_at":"2026-04-14T12:38:01Z","receipt_source":"git_worktree","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			newMsgID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start fuente observada reciente: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET estado='completada', started_at=CURRENT_TIMESTAMP, finished_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, newStartID); err != nil {
+		t.Fatalf("marcar start fuente reciente completada: %v", err)
+	}
+
+	handoffID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		HandleID:    &handle.ID,
+		RuntimeID:   &runtime.ID,
+		Tipo:        "handoff",
+		PayloadJSON: `{"agente_origen":"Codex0","agente_destino":"Codex1","resumen_continuidad":"handoff observado heredado con start reciente"}`,
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","start_order_id":%d,"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			oldStartID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff derivada: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, handoffID); err != nil {
+		t.Fatalf("marcar handoff derivada ejecutando: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatchConMailbox([]*db.RuntimeMailboxMessage{{
+		ID:          oldMsgID,
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"instruction":"slice observado viejo","texto":"continua slice observado viejo"}`,
+	}}, map[int64]struct{}{}, newRuntimeMailboxBatchSnapshot())
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia consumir mailbox observada heredada vieja aunque exista start mas reciente, got=%d", n)
+	}
+
+	oldMsg, err := db.GetRuntimeMailbox(oldMsgID)
+	if err != nil || oldMsg == nil {
+		t.Fatalf("mailbox vieja final: %+v err=%v", oldMsg, err)
+	}
+	if oldMsg.Estado != "consumido" {
+		t.Fatalf("mailbox vieja deberia quedar consumida por receipt util heredado: %+v", oldMsg)
+	}
+
+	newMsg, err := db.GetRuntimeMailbox(newMsgID)
+	if err != nil || newMsg == nil {
+		t.Fatalf("mailbox reciente final: %+v err=%v", newMsg, err)
+	}
+	if newMsg.Estado != "pendiente" {
+		t.Fatalf("mailbox reciente no deberia tocarse: %+v", newMsg)
+	}
+}
+
 func TestConsumirRuntimeMailboxSessionResumeCubiertaSiProcedeMarcaConsumidaPorReceiptHeredado(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()
@@ -20337,6 +20899,79 @@ func TestRuntimeMailboxObsoletaPorTareaActivaActualUsaTareaObjetivoID(t *testing
 	}
 	if !obsoleta {
 		t.Fatalf("deberia detectar mailbox obsoleta por tarea_objetivo_id; detalle=%q nueva=%d", detalle, tareaNuevaID)
+	}
+	if !strings.Contains(detalle, fmt.Sprintf("task_id=%d", tareaViejaID)) {
+		t.Fatalf("detalle sin task_id vieja: %q", detalle)
+	}
+	if !strings.Contains(detalle, "target_task_estado=bloqueada") && !strings.Contains(detalle, fmt.Sprintf("active_task_id=%d", tareaNuevaID)) {
+		t.Fatalf("detalle sin razon canonica de obsolescencia: %q", detalle)
+	}
+}
+
+func TestRuntimeMailboxObsoletaPorTareaActivaActualUsaTaskIDAlias(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	agente := "Codex4"
+	tareaViejaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Backlog viejo alias",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "test",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea vieja: %v", err)
+	}
+	if err := db.TomarTarea(tareaViejaID, agente); err != nil {
+		t.Fatalf("tomar tarea vieja: %v", err)
+	}
+	if err := db.IniciarTarea(tareaViejaID, agente); err != nil {
+		t.Fatalf("iniciar tarea vieja: %v", err)
+	}
+	tareaNuevaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Backlog nuevo alias",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "test",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea nueva: %v", err)
+	}
+	if err := db.TomarTarea(tareaNuevaID, agente); err != nil {
+		t.Fatalf("tomar tarea nueva: %v", err)
+	}
+	if err := db.BloquearTarea(tareaViejaID, agente, "frente obsoleto"); err != nil {
+		t.Fatalf("bloquear tarea vieja: %v", err)
+	}
+
+	msg := &db.RuntimeMailboxMessage{
+		ToAgente:   agente,
+		ProyectoID: &proyectoID,
+		Kind:       "pipeline_local",
+		PayloadJSON: fmt.Sprintf(
+			`{"task_id":%d,"accion":"especificar"}`,
+			tareaViejaID,
+		),
+	}
+
+	detalle, obsoleta, err := runtimeMailboxObsoletaPorTareaActivaActual(msg)
+	if err != nil {
+		t.Fatalf("runtimeMailboxObsoletaPorTareaActivaActual: %v", err)
+	}
+	if !obsoleta {
+		t.Fatalf("deberia detectar mailbox obsoleta por task_id; detalle=%q nueva=%d", detalle, tareaNuevaID)
 	}
 	if !strings.Contains(detalle, fmt.Sprintf("task_id=%d", tareaViejaID)) {
 		t.Fatalf("detalle sin task_id vieja: %q", detalle)
@@ -28119,11 +28754,29 @@ func TestProcesarAgentesDegradadosAutonomiaBatchAutoasignaPremiumLibreSinSesion(
 	if err != nil {
 		t.Fatalf("listar orders: %v", err)
 	}
-	if len(orders) != 1 || orders[0].Tipo != "start" {
-		t.Fatalf("deberia encolar start para premium idle sin sesion: %+v", orders)
+	if len(orders) != 2 {
+		t.Fatalf("deberia encolar start y nudge para premium idle sin sesion: %+v", orders)
 	}
-	if !strings.Contains(orders[0].PayloadJSON, `"motivo":"premium_idle_autoassigned"`) {
-		t.Fatalf("start sin motivo esperado: %s", orders[0].PayloadJSON)
+	var startOrder, nudgeOrder *db.RuntimeOrder
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch order.Tipo {
+		case "start":
+			startOrder = order
+		case "nudge":
+			nudgeOrder = order
+		}
+	}
+	if startOrder == nil || nudgeOrder == nil {
+		t.Fatalf("faltan start o nudge en premium idle sin sesion: %+v", orders)
+	}
+	if !strings.Contains(startOrder.PayloadJSON, `"motivo":"premium_idle_autoassigned"`) {
+		t.Fatalf("start sin motivo esperado: %s", startOrder.PayloadJSON)
+	}
+	if !strings.Contains(nudgeOrder.PayloadJSON, `"accion":"continuar_trabajo"`) || !strings.Contains(nudgeOrder.PayloadJSON, `"tarea_id":`+strconv.FormatInt(tareaID, 10)) {
+		t.Fatalf("nudge sin tarea canonica esperada: %s", nudgeOrder.PayloadJSON)
 	}
 }
 
@@ -28469,6 +29122,12 @@ func TestRuntimeOrderEntregaGitPremiumDesdeSendInstruction(t *testing.T) {
 		Estado: "encolada", PayloadJSON: `{"kind":"pipeline_local","carril":"revision_diff"}`,
 	}) {
 		t.Error("carril revision_diff deberia devolver true")
+	}
+	// alias microprogramacion_local via mailbox_kind -> true
+	if !runtimeOrderEntregaGitPremiumDesdeSendInstruction(&db.RuntimeOrder{
+		Estado: "encolada", PayloadJSON: `{"mailbox_kind":"microprogramacion","carril":"microprogramacion_local"}`,
+	}) {
+		t.Error("mailbox_kind microprogramacion_local deberia devolver true")
 	}
 }
 

@@ -691,6 +691,7 @@ func TestSanitizarResumeParaConectorConservaHintsOperativosDePerfil(t *testing.T
 		t.Fatalf("el conector no reanudable debe limpiar continuidad de proveedor: %+v", resume)
 	}
 	for _, token := range []string{
+		`"execution_profile":"qa-heavy"`,
 		`"perfil_operativo":"qa-heavy"`,
 		`"driver":"tmux_cli_session"`,
 		`"transport":"tmux"`,
@@ -698,6 +699,37 @@ func TestSanitizarResumeParaConectorConservaHintsOperativosDePerfil(t *testing.T
 		`"worktree_path":"/tmp/orquesta/.orquesta-worktrees/orq-codex1"`,
 		`"tmux_session":"orq-codex1"`,
 		`"tmux_pane_id":"%7"`,
+		`"can_send_input":false`,
+	} {
+		if !strings.Contains(resume.ResumePayloadJSON, token) {
+			t.Fatalf("faltaba hint operativo %s en payload saneado: %s", token, resume.ResumePayloadJSON)
+		}
+	}
+	if strings.Contains(resume.ResumePayloadJSON, "checkpoint_kind") || strings.Contains(resume.ResumePayloadJSON, "external_session_id") {
+		t.Fatalf("deberia purgar contexto reanudable legado del payload: %s", resume.ResumePayloadJSON)
+	}
+}
+
+func TestSanitizarResumeParaConectorAceptaExecutionProfileCanonico(t *testing.T) {
+	resume := SanitizarResumeParaConector(ConnectorConfig{
+		Slug:         "ollama-cli",
+		Transporte:   "cli",
+		Comando:      "ollama",
+		MetadataJSON: `{"reanudable":false}`,
+	}, ResumeContext{
+		ExternalSessionID:  "sess-1",
+		ResumenContinuidad: "seguir luego",
+		ResumePayloadJSON:  `{"external_session_id":"sess-1","checkpoint_kind":"handoff_prepare","perfil_ejecucion":{"modelo":"gemma4:26b","perfil_tarea":"implementacion","execution_profile":"persistente","driver":"tmux_cli_session","transport":"tmux","mailbox_delivery_mode":"session_resume","worktree_path":"/tmp/orquesta/.orquesta-worktrees/orq-codex2","tmux_session":"orq-codex2","tmux_pane_id":"%8","can_send_input":false}}`,
+	})
+	for _, token := range []string{
+		`"execution_profile":"persistente"`,
+		`"perfil_operativo":"persistente"`,
+		`"driver":"tmux_cli_session"`,
+		`"transport":"tmux"`,
+		`"mailbox_delivery_mode":"session_resume"`,
+		`"worktree_path":"/tmp/orquesta/.orquesta-worktrees/orq-codex2"`,
+		`"tmux_session":"orq-codex2"`,
+		`"tmux_pane_id":"%8"`,
 		`"can_send_input":false`,
 	} {
 		if !strings.Contains(resume.ResumePayloadJSON, token) {

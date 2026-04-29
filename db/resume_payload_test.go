@@ -51,6 +51,8 @@ func TestMergeResumePayloadPerfilOperativoSobrescribeSinPerderHints(t *testing.T
 		t.Fatalf("perfil_operativo inesperado: %s", got)
 	}
 	for _, token := range []string{
+		`"execution_profile":"qa-heavy"`,
+		`"perfil_operativo":"qa-heavy"`,
 		`"driver":"tmux_cli_session"`,
 		`"transport":"tmux"`,
 		`"tmux_session":"orq-codex1"`,
@@ -108,6 +110,9 @@ func TestPayloadJSONDesdePlanIncluyePerfilOperativo(t *testing.T) {
 		Modo:            "launch",
 		PerfilOperativo: "persistente",
 	})
+	if !strings.Contains(got, `"execution_profile":"persistente"`) {
+		t.Fatalf("payload sin execution_profile: %s", got)
+	}
 	if !strings.Contains(got, `"perfil_operativo":"persistente"`) {
 		t.Fatalf("payload sin perfil_operativo: %s", got)
 	}

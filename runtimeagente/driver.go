@@ -826,6 +826,7 @@ func conservarSoloPerfilEjecucionResumePayload(raw string) string {
 			"perfil_tarea",
 			"modelo",
 			"razonamiento",
+			"execution_profile",
 			"perfil_operativo",
 			"driver",
 			"transport",
@@ -849,6 +850,13 @@ func conservarSoloPerfilEjecucionResumePayload(raw string) string {
 		}
 		if value, ok := perfilRaw["can_send_input"].(bool); ok {
 			perfil["can_send_input"] = value
+		}
+		if value := strings.TrimSpace(stringFromAny(perfil["execution_profile"])); value != "" {
+			if strings.TrimSpace(stringFromAny(perfil["perfil_operativo"])) == "" {
+				perfil["perfil_operativo"] = value
+			}
+		} else if value := strings.TrimSpace(stringFromAny(perfil["perfil_operativo"])); value != "" {
+			perfil["execution_profile"] = value
 		}
 	}
 	if len(perfil) > 0 {
