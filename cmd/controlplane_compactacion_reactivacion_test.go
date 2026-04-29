@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -314,5 +315,95 @@ func TestReactivarSesionAutonomiaPorTrabajoCompactaFrentesHeredados(t *testing.T
 	}
 	if premium == nil || premium.Estado != db.TareaEnProgreso {
 		t.Fatalf("el frente premium acotado deberia seguir en progreso: %+v", premium)
+	}
+}
+
+func TestProcesarCompactacionFrentesPremiumSesionActivaCompactaLegacyNoPremiumConSliceActiva(t *testing.T) {
+	resetAutonomiaSessionMaintenanceGate()
+	t.Cleanup(resetAutonomiaSessionMaintenanceGate)
+
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	legacyID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Contrato canonico de worktree tmux resume y perfiles de ejecucion",
+		Descripcion: "Frente amplio heredado sin write-set ni tests mínimos explícitos.",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear legacy: %v", err)
+	}
+	if err := db.TomarTarea(legacyID, "Codex10"); err != nil {
+		t.Fatalf("tomar legacy: %v", err)
+	}
+	if err := db.IniciarTarea(legacyID, "Codex10"); err != nil {
+		t.Fatalf("iniciar legacy: %v", err)
+	}
+
+	keepID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Micro-refactorización cíclica del control plane: runtime mailbox/session_resume",
+		Descripcion: "WRITE_SET: cmd/controlplane_support.go, cmd/controlplane_compactacion_reactivacion_test.go\nTests minimos: go test ./cmd -run 'TestProcesarCompactacionFrentesPremiumSesionActivaCompactaLegacyNoPremiumConSliceActiva$' -count=1",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Modulo:      "controlplane",
+	})
+	if err != nil {
+		t.Fatalf("crear keep: %v", err)
+	}
+	if err := db.TomarTarea(keepID, "Codex10"); err != nil {
+		t.Fatalf("tomar keep: %v", err)
+	}
+	if err := db.IniciarTarea(keepID, "Codex10"); err != nil {
+		t.Fatalf("iniciar keep: %v", err)
+	}
+
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex10",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	n, err := procesarCompactacionFrentesPremiumSesionActiva(sesion, nil)
+	if err != nil {
+		t.Fatalf("compactar frentes mixtos: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia compactar exactamente un frente amplio legacy, got=%d", n)
+	}
+
+	legacy, err := db.GetTarea(legacyID)
+	if err != nil {
+		t.Fatalf("get legacy: %v", err)
+	}
+	if legacy == nil || legacy.Estado != db.TareaBacklog || legacy.Agente != nil {
+		t.Fatalf("el frente amplio legacy deberia volver a backlog sin agente: %+v", legacy)
+	}
+
+	keep, err := db.GetTarea(keepID)
+	if err != nil {
+		t.Fatalf("get keep: %v", err)
+	}
+	if keep == nil || keep.Estado != db.TareaEnProgreso || keep.Agente == nil || !strings.EqualFold(strings.TrimSpace(*keep.Agente), "Codex10") {
+		t.Fatalf("la slice premium debe mantenerse en progreso sobre Codex10: %+v", keep)
 	}
 }

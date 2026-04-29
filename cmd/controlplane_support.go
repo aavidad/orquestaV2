@@ -10984,6 +10984,41 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 		return resumen, err
 	}
 	resumen.Count += compactadasExclusivas
+	if compactadasExclusivas > 0 {
+		rows, err = buildPanelRowsForControlPlane()
+		if err != nil {
+			if controlPlaneRowsTimedOut(err) {
+				return resumen, nil
+			}
+			return resumen, err
+		}
+		rowsPorAgente = rowsPorAgenteMap(rows)
+		tareasActivasPorAgente, tareasBloqueadasPorAgente, bloqueosPorTarea, err = cargarTareasYBloqueosAutonomiaPorAgente()
+		if err != nil {
+			return resumen, err
+		}
+		openTasksProjected = openTasksProjectedFromRows(rows)
+	}
+	compactadasMixtas, err := procesarCompactacionFrentesPremiumBatch(rows, tareasActivasPorAgente)
+	if err != nil {
+		return resumen, err
+	}
+	resumen.Count += compactadasMixtas
+	if compactadasMixtas > 0 {
+		rows, err = buildPanelRowsForControlPlane()
+		if err != nil {
+			if controlPlaneRowsTimedOut(err) {
+				return resumen, nil
+			}
+			return resumen, err
+		}
+		rowsPorAgente = rowsPorAgenteMap(rows)
+		tareasActivasPorAgente, tareasBloqueadasPorAgente, bloqueosPorTarea, err = cargarTareasYBloqueosAutonomiaPorAgente()
+		if err != nil {
+			return resumen, err
+		}
+		openTasksProjected = openTasksProjectedFromRows(rows)
+	}
 	runtimesFueraAsignacion, err := procesarRuntimesFueraDeAsignacionActivaBatch(rows, now)
 	if err != nil {
 		return resumen, err
@@ -12255,6 +12290,72 @@ func procesarCompactacionExclusividadPremiumBatch(rows []agentesapp.Row, tareasA
 				continue
 			}
 			if err := tareasService.MoveToBacklog(actual.ID); err != nil {
+				return procesadas, err
+			}
+			procesadas++
+		}
+	}
+	if procesadas > 0 {
+		invalidateStatusSnapshotCache()
+	}
+	return procesadas, nil
+}
+
+func procesarCompactacionFrentesPremiumBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea) (int, error) {
+	procesadas := 0
+	for _, row := range rows {
+		if row.Agente == nil || row.OpenTasks <= 1 || row.CurrentTask == nil || row.CurrentTask.TaskID <= 0 {
+			continue
+		}
+		agente := strings.TrimSpace(row.Agente.Nombre)
+		if agente == "" {
+			continue
+		}
+		proyectoID := int64(0)
+		if row.CurrentTask.ProjectID != nil {
+			proyectoID = *row.CurrentTask.ProjectID
+		}
+		if proyectoID <= 0 {
+			if preferido := rowProyectoIDPreferido(row); preferido != nil {
+				proyectoID = *preferido
+			}
+		}
+		if proyectoID <= 0 {
+			continue
+		}
+		keep, err := tareasService.Get(row.CurrentTask.TaskID)
+		if err != nil {
+			return procesadas, err
+		}
+		if keep == nil || !tareaDBTieneContratoPremiumAcotado(keep) {
+			continue
+		}
+		frentesActivos := 0
+		tareasCanon := make([]*db.Tarea, 0, len(tareasActivasPorAgente[agente]))
+		for _, tarea := range tareasActivasPorAgente[agente] {
+			if tarea == nil || tarea.ID <= 0 {
+				continue
+			}
+			actual, err := tareasService.Get(tarea.ID)
+			if err != nil {
+				return procesadas, err
+			}
+			if actual == nil {
+				continue
+			}
+			tareasCanon = append(tareasCanon, actual)
+			if tareaCuentaComoFrenteActivoCompactable(actual, proyectoID, agente) {
+				frentesActivos++
+			}
+		}
+		if frentesActivos <= 1 {
+			continue
+		}
+		for _, tarea := range tareasCanon {
+			if !tareaDebeCompactarseComoRestoLegacyBajoSlicePremium(tarea, keep, proyectoID, agente, frentesActivos) {
+				continue
+			}
+			if err := tareasService.MoveToBacklog(tarea.ID); err != nil {
 				return procesadas, err
 			}
 			procesadas++
@@ -15432,8 +15533,12 @@ func procesarCompactacionFrentesPremiumSesionActiva(sesion *db.Sesion, snapshot 
 		return 0, err
 	}
 	candidatas := make([]*db.Tarea, 0, len(tareas))
+	frentesActivos := 0
 	enProgreso := 0
 	for _, tarea := range tareas {
+		if tareaCuentaComoFrenteActivoCompactable(tarea, *sesion.ProyectoID, agente) {
+			frentesActivos++
+		}
 		if !tareaEsFrentePremiumCompactable(tarea, agente) {
 			continue
 		}
@@ -15442,7 +15547,7 @@ func procesarCompactacionFrentesPremiumSesionActiva(sesion *db.Sesion, snapshot 
 			enProgreso++
 		}
 	}
-	if len(candidatas) <= 1 {
+	if len(candidatas) == 0 {
 		return 0, nil
 	}
 	keep := seleccionarFrentePremiumCanonicSesionActiva(candidatas)
@@ -15451,17 +15556,21 @@ func procesarCompactacionFrentesPremiumSesionActiva(sesion *db.Sesion, snapshot 
 	}
 	multiplesEnProgreso := enProgreso > 1
 	procesadas := 0
-	for _, tarea := range candidatas {
+	for _, tarea := range tareas {
 		if tarea == nil || tarea.ID == keep.ID {
 			continue
 		}
-		switch tarea.Estado {
-		case db.TareaAsignada, db.TareaBloqueada:
-		case db.TareaEnProgreso:
-			if !multiplesEnProgreso {
+		if tareaEsFrentePremiumCompactable(tarea, agente) {
+			switch tarea.Estado {
+			case db.TareaAsignada, db.TareaBloqueada:
+			case db.TareaEnProgreso:
+				if !multiplesEnProgreso {
+					continue
+				}
+			default:
 				continue
 			}
-		default:
+		} else if !tareaDebeCompactarseComoRestoLegacyBajoSlicePremium(tarea, keep, *sesion.ProyectoID, agente, frentesActivos) {
 			continue
 		}
 		if err := tareasService.MoveToBacklog(tarea.ID); err != nil {
@@ -15474,6 +15583,33 @@ func procesarCompactacionFrentesPremiumSesionActiva(sesion *db.Sesion, snapshot 
 		invalidarSnapshotAutonomiaProyecto(snapshot, agente, *sesion.ProyectoID)
 	}
 	return procesadas, nil
+}
+
+func tareaDebeCompactarseComoRestoLegacyBajoSlicePremium(tarea *db.Tarea, keep *db.Tarea, proyectoID int64, agente string, frentesActivos int) bool {
+	if tarea == nil || keep == nil || frentesActivos <= 1 {
+		return false
+	}
+	if !tareaDBTieneContratoPremiumAcotado(keep) {
+		return false
+	}
+	if tarea.ID == keep.ID || tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(agente)) {
+		return false
+	}
+	if taskManualTakeover(tarea) {
+		return false
+	}
+	if tarea.ProyectoID == nil || *tarea.ProyectoID != proyectoID {
+		return false
+	}
+	switch tarea.Estado {
+	case db.TareaAsignada, db.TareaEnProgreso:
+	default:
+		return false
+	}
+	if tareaDBTieneContratoPremiumAcotado(tarea) {
+		return false
+	}
+	return true
 }
 
 func tareaEsFrentePremiumActivoCompactable(tarea *db.Tarea, agente string) bool {
@@ -16045,6 +16181,11 @@ func procesarDecisionContinuarTrabajoSesionActivaAutonomia(sesion *db.Sesion, pr
 		return 0, err
 	}
 	if bloqueadaPorOtroAgente {
+		return 0, nil
+	}
+	if ajena, err := tareaPipelineLocalAsignadaAOtroAgente(&capacidadapp.TareaPipelineLocal{ID: tareaID}, strings.TrimSpace(sesion.Agente)); err != nil {
+		return 0, err
+	} else if ajena {
 		return 0, nil
 	}
 	throttleKey := autonomiaContinueNudgeThrottleKey(sesion.Agente, proyecto.ID, tareaID)
@@ -17950,29 +18091,75 @@ func invalidarSnapshotAutonomiaProyecto(snapshot *autonomiaBatchSnapshot, agente
 	}
 }
 
+func tareaIDContinuarTrabajoDesdeExtras(extras map[string]any) int64 {
+	for _, key := range []string{"tarea_id", "tarea_objetivo_id", "task_id"} {
+		if tareaID := int64PtrFromMap(extras, key); tareaID != nil && *tareaID > 0 {
+			return *tareaID
+		}
+	}
+	return 0
+}
+
 func encolarNudgeAutonomiaConInvalidacion(snapshot *autonomiaBatchSnapshot, agente string, proyecto *db.Proyecto, accion, motivo, instruction string, extras map[string]any) (bool, error) {
 	if proyecto == nil {
 		return false, nil
+	}
+	agente = strings.TrimSpace(agente)
+	accion = strings.TrimSpace(accion)
+	if strings.EqualFold(accion, "continuar_trabajo") {
+		if tareaID := tareaIDContinuarTrabajoDesdeExtras(extras); tareaID > 0 {
+			if ajena, err := tareaPipelineLocalAsignadaAOtroAgente(&capacidadapp.TareaPipelineLocal{ID: tareaID}, agente); err != nil {
+				return false, err
+			} else if ajena {
+				return false, nil
+			}
+		} else {
+			if bloqueadaPorFrentePremiumCanonicoAjeno, err := proyectoTieneFrentePremiumCanonicoActivoAjeno(proyecto.ID, agente); err != nil {
+				return false, err
+			} else if bloqueadaPorFrentePremiumCanonicoAjeno {
+				return false, nil
+			}
+		}
 	}
 	if pendiente, err := existeRuntimeOrderAutonomiaPendiente(strings.TrimSpace(agente), &proyecto.ID, "nudge", strings.TrimSpace(accion)); err != nil {
 		return false, err
 	} else if pendiente {
 		return false, nil
 	}
-	encolada, err := encolarNudgeAutonomiaDetallado(strings.TrimSpace(agente), proyecto, strings.TrimSpace(accion), motivo, instruction, extras)
+	encolada, err := encolarNudgeAutonomiaDetallado(agente, proyecto, accion, motivo, instruction, extras)
 	if err != nil || !encolada {
 		return encolada, err
 	}
-	invalidarSnapshotAutonomiaProyecto(snapshot, strings.TrimSpace(agente), proyecto.ID)
+	invalidarSnapshotAutonomiaProyecto(snapshot, agente, proyecto.ID)
 	return true, nil
 }
 
 func encolarNudgeAutonomiaDetallado(agente string, proyecto *db.Proyecto, accion, motivo, instruction string, extras map[string]any) (bool, error) {
+	agente = strings.TrimSpace(agente)
+	accion = strings.TrimSpace(accion)
+	if proyecto == nil {
+		return false, nil
+	}
+	if strings.EqualFold(accion, "continuar_trabajo") {
+		if tareaID := tareaIDContinuarTrabajoDesdeExtras(extras); tareaID > 0 {
+			if ajena, err := tareaPipelineLocalAsignadaAOtroAgente(&capacidadapp.TareaPipelineLocal{ID: tareaID}, agente); err != nil {
+				return false, err
+			} else if ajena {
+				return false, nil
+			}
+		} else {
+			if bloqueadaPorFrentePremiumCanonicoAjeno, err := proyectoTieneFrentePremiumCanonicoActivoAjeno(proyecto.ID, agente); err != nil {
+				return false, err
+			} else if bloqueadaPorFrentePremiumCanonicoAjeno {
+				return false, nil
+			}
+		}
+	}
 	cooldown := time.Duration(controlPlaneConfigIntOrDefault("autonomia_nudge_cooldown_seconds", 60)) * time.Second
 	return orquestacionAgentesService.EnqueueAutonomyNudge(orquestacionagentesapp.NudgeRequest{
-		Agente:      strings.TrimSpace(agente),
+		Agente:      agente,
 		Proyecto:    proyecto,
-		Accion:      strings.TrimSpace(accion),
+		Accion:      accion,
 		Motivo:      motivo,
 		Instruction: instruction,
 		Extras:      extras,

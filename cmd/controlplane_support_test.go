@@ -9442,6 +9442,97 @@ func TestProcesarCompactacionExclusividadPremiumBatchMueveRestosSinSesionViva(t 
 	}
 }
 
+func TestProcesarCompactacionFrentesPremiumBatchCompactaLegacySinSesionViva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	legacyID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Contrato canonico de worktree tmux resume y perfiles de ejecucion",
+		Descripcion: "Frente amplio heredado sin contrato bounded.",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear legacy: %v", err)
+	}
+	if err := db.TomarTarea(legacyID, "Codex10"); err != nil {
+		t.Fatalf("tomar legacy: %v", err)
+	}
+	if err := db.IniciarTarea(legacyID, "Codex10"); err != nil {
+		t.Fatalf("iniciar legacy: %v", err)
+	}
+
+	keepID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Micro-refactorización cíclica del control plane: runtime mailbox/session_resume",
+		Descripcion: "WRITE_SET: cmd/controlplane_support.go, cmd/controlplane_support_test.go\nTests minimos: go test ./cmd -run 'TestProcesarCompactacionFrentesPremiumBatchCompactaLegacySinSesionViva$' -count=1",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Modulo:      "controlplane",
+	})
+	if err != nil {
+		t.Fatalf("crear keep: %v", err)
+	}
+	if err := db.TomarTarea(keepID, "Codex10"); err != nil {
+		t.Fatalf("tomar keep: %v", err)
+	}
+	if err := db.IniciarTarea(keepID, "Codex10"); err != nil {
+		t.Fatalf("iniciar keep: %v", err)
+	}
+
+	rows := []agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "Codex10", Activo: true, Habilitado: true},
+		EstadoOperativo: "trabajando",
+		WorkerAlive:     true,
+		WorkerState:     "ready",
+		OpenTasks:       2,
+		CurrentTask: &agentesapp.TaskFocus{
+			TaskID:    keepID,
+			Title:     "Micro-refactorización cíclica del control plane: runtime mailbox/session_resume",
+			State:     db.TareaEnProgreso,
+			ProjectID: &proyectoID,
+			Module:    "controlplane",
+		},
+	}}
+	tareasActivasPorAgente := map[string][]*db.Tarea{
+		"Codex10": {
+			{ID: legacyID, ProyectoID: &proyectoID, Agente: ptrString("Codex10"), Estado: db.TareaEnProgreso},
+			{ID: keepID, ProyectoID: &proyectoID, Agente: ptrString("Codex10"), Estado: db.TareaEnProgreso},
+		},
+	}
+
+	n, err := procesarCompactacionFrentesPremiumBatch(rows, tareasActivasPorAgente)
+	if err != nil {
+		t.Fatalf("compactar frentes premium batch: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia compactar exactamente un frente legacy sin sesion viva, got=%d", n)
+	}
+
+	legacy, _ := db.GetTarea(legacyID)
+	if legacy.Estado != db.TareaBacklog || legacy.Agente != nil {
+		t.Fatalf("la legacy deberia volver a backlog: %+v", legacy)
+	}
+	keep, _ := db.GetTarea(keepID)
+	if keep.Estado != db.TareaEnProgreso || keep.Agente == nil || !strings.EqualFold(strings.TrimSpace(*keep.Agente), "Codex10") {
+		t.Fatalf("la slice premium debe mantenerse en progreso: %+v", keep)
+	}
+}
+
 func TestProcesarDecisionPausaSesionActivaAutonomiaUsaStopCuandoLaAsignacionCambioDeProyecto(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -21906,6 +21997,113 @@ func TestProcesarRuntimeMailboxSessionResumeBatchConsumeMailboxSiHandoffDerivada
 	}
 }
 
+func TestProcesarRuntimeMailboxSessionResumeBatchConsumeMailboxSiHandoffDerivadaHeredaReceiptUtilDeStartFuenteCaseInsensitive(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"instruction":"slice observado mixed-case","texto":"continua slice observado mixed-case"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox vigente: %v", err)
+	}
+	startID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		HandleID:   &handle.ID,
+		RuntimeID:  &runtime.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":" Waiting_For_Evidence ","delivery_state":" DELIVERED ","delivery_receipt_at":"2026-04-14T12:37:01Z","receipt_source":" GIT_WORKTREE ","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			msgID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start fuente observada: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET estado='completada', started_at=CURRENT_TIMESTAMP, finished_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, startID); err != nil {
+		t.Fatalf("marcar start fuente completada: %v", err)
+	}
+
+	handoffPayload := `{"agente_origen":"Codex0","agente_destino":"Codex1","resumen_continuidad":"handoff observado heredado mixed-case"}`
+	handoffID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		HandleID:    &handle.ID,
+		RuntimeID:   &runtime.ID,
+		Tipo:        "handoff",
+		PayloadJSON: handoffPayload,
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":" waiting_for_evidence ","start_order_id":%d,"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			startID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff derivada: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, handoffID); err != nil {
+		t.Fatalf("marcar handoff derivada ejecutando: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatchConMailbox([]*db.RuntimeMailboxMessage{{
+		ID:          msgID,
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"instruction":"slice observado mixed-case","texto":"continua slice observado mixed-case"}`,
+	}}, map[int64]struct{}{}, newRuntimeMailboxBatchSnapshot())
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia consumir mailbox observada heredada mixed-case desde start fuente, got=%d", n)
+	}
+
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("mailbox final: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("mailbox deberia quedar consumida por receipt util heredado mixed-case: %+v", msg)
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchConsumeMailboxSiHandoffDerivadaHeredaReceiptUtilDeStartFuenteAunqueExistaStartMasReciente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()
@@ -24473,6 +24671,65 @@ func TestEncolarNudgeAutonomiaDetalladoNoDuplicaMailboxPendienteEnHandleNoIntera
 	}
 	if len(mailbox) != 1 {
 		t.Fatalf("mailbox inesperado tras dedupe: %+v", mailbox)
+	}
+}
+
+func TestEncolarNudgeAutonomiaDetalladoOmiteContinuarTrabajoSinTaskIDConFrentePremiumCanonicoAjeno(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex6: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex10: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-detallado-sin-taskid-ajeno",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente premium acotado",
+		Descripcion: "Write-set preferente: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	proyecto, err := db.GetProyecto("orquestador-detallado-sin-taskid-ajeno")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	encolada, err := encolarNudgeAutonomiaDetallado("Codex6", proyecto, "continuar_trabajo", "seguir frente", "retoma el frente", nil)
+	if err != nil {
+		t.Fatalf("encolar nudge autonomia detallado: %v", err)
+	}
+	if encolada {
+		t.Fatal("no deberia encolar continuar_trabajo generico cuando el frente premium canonico ya esta activo en otro agente")
+	}
+
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: ptrString("Codex6"), ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia crear runtime orders con frente premium canonico ajeno: %+v", orders)
 	}
 }
 
@@ -37634,6 +37891,138 @@ func TestRuntimeMailboxTieneTrabajoAccionableParaReactivacionNoHaceFallbackSiTas
 	}
 	if accionable {
 		t.Fatal("no deberia hacer fallback a otra tarea propia cuando la task_id explicita pertenece a otro agente")
+	}
+}
+
+func TestEncolarNudgeAutonomiaConInvalidacionOmiteTaskIDAjena(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex6: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex10: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-nudge-taskid-ajena",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente ajeno",
+		Descripcion: "Ya pertenece a otro agente",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	proyecto, err := db.GetProyecto("orquestador-nudge-taskid-ajena")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	encolada, err := encolarNudgeAutonomiaConInvalidacion(
+		nil,
+		"Codex6",
+		proyecto,
+		"continuar_trabajo",
+		"seguir frente",
+		"retoma el frente",
+		map[string]any{"task_id": tareaID},
+	)
+	if err != nil {
+		t.Fatalf("encolar nudge autonomia con invalidacion: %v", err)
+	}
+	if encolada {
+		t.Fatal("no deberia encolar continuar_trabajo cuando la task_id explicita pertenece a otro agente")
+	}
+
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: ptrString("Codex6"), ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia crear runtime orders para una task_id ajena: %+v", orders)
+	}
+}
+
+func TestEncolarNudgeAutonomiaConInvalidacionOmiteContinuarTrabajoSinTaskIDConFrentePremiumCanonicoAjeno(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex6: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex10: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-nudge-sin-taskid-ajeno",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente premium acotado",
+		Descripcion: "Write-set preferente: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	proyecto, err := db.GetProyecto("orquestador-nudge-sin-taskid-ajeno")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	encolada, err := encolarNudgeAutonomiaConInvalidacion(
+		nil,
+		"Codex6",
+		proyecto,
+		"continuar_trabajo",
+		"seguir frente",
+		"retoma el frente",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("encolar nudge autonomia con invalidacion: %v", err)
+	}
+	if encolada {
+		t.Fatal("no deberia encolar continuar_trabajo generico cuando el frente premium canonico ya esta activo en otro agente")
+	}
+
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: ptrString("Codex6"), ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia crear runtime orders con frente premium canonico ajeno: %+v", orders)
 	}
 }
 
