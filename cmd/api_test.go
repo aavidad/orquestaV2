@@ -231,6 +231,64 @@ func TestOpenClawOperatorReuseReviewSnapshotHelpers(t *testing.T) {
 	}
 }
 
+func TestOpenClawOperatorQueueHelpersNormalizanSlicesVacios(t *testing.T) {
+	review := map[string]any{}
+
+	all := supervisorActionQueueFromReviewSnapshot(review)
+	if all == nil || len(all) != 0 {
+		t.Fatalf("action_queue deberia normalizarse a slice vacia: %#v", all)
+	}
+	safe := supervisorSafeActionQueueFromReviewSnapshot(review)
+	if safe == nil || len(safe) != 0 {
+		t.Fatalf("safe_action_queue deberia normalizarse a slice vacia: %#v", safe)
+	}
+	if got := supervisorNextActionFromReviewSnapshot(review); got != nil {
+		t.Fatalf("next_action deberia quedar nil: %#v", got)
+	}
+	if got := supervisorNextSafeActionFromReviewSnapshot(review); got != nil {
+		t.Fatalf("next_safe_action deberia quedar nil: %#v", got)
+	}
+}
+
+func TestOpenClawOperatorQueueHelpersRecuperanFallbackDesdePipeline(t *testing.T) {
+	action := supervisorRecommendedAction{
+		Kind:     "dispatch",
+		Target:   "tarea:40",
+		Action:   "asignar_tarea_libre",
+		Reason:   "fallback pipeline",
+		Priority: "media",
+		Assignee: "Codex1",
+	}
+	artifacts, err := json.Marshal(map[string]any{
+		"action_queue": []any{action},
+	})
+	if err != nil {
+		t.Fatalf("marshal artifacts: %v", err)
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"next_action": action,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	pipeline := map[string]any{
+		"pipelines": []*db.SupervisorPipelineState{{
+			ArtifactsJSON: string(artifacts),
+			MetadataJSON:  string(metadata),
+		}},
+	}
+
+	queue := supervisorActionQueueFromReviewOrPipelineSnapshot(map[string]any{}, pipeline)
+	if len(queue) != 1 || queue[0].Target != "tarea:40" || queue[0].Action != "asignar_tarea_libre" {
+		t.Fatalf("queue fallback inesperada: %#v", queue)
+	}
+	next := supervisorNextActionFromReviewOrPipelineSnapshot(map[string]any{}, pipeline)
+	parsed, ok := next.(*supervisorRecommendedAction)
+	if !ok || parsed == nil || parsed.Target != "tarea:40" || parsed.Action != "asignar_tarea_libre" {
+		t.Fatalf("next_action fallback inesperada: %#v", next)
+	}
+}
+
 func TestListarSupervisorModuleConflictsFromTasksReutilizaEstadoYaCargado(t *testing.T) {
 	conflicts := listarSupervisorModuleConflictsFromTasks([]tareaLite{
 		{ID: 410, Modulo: "runtime", Agente: "Codex3"},

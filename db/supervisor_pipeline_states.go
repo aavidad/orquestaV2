@@ -51,23 +51,27 @@ type FiltroSupervisorPipelineStates struct {
 }
 
 func ensureSupervisorPipelineStatesSchema() error {
-	if err := ensureSupervisorSchemaObjects(
-		"CREATE TABLE IF NOT EXISTS supervisor_pipeline_states (",
-		"CREATE INDEX IF NOT EXISTS idx_supervisor_pipeline_states_supervisor",
-	); err != nil {
-		return err
-	}
-	exists, err := ColumnExists("supervisor_pipeline_states", "role")
-	if err != nil {
-		return err
-	}
-	if !exists {
-		if _, err := DB.Exec(`ALTER TABLE supervisor_pipeline_states ADD COLUMN role TEXT NOT NULL DEFAULT 'executor'`); err != nil {
+	return withSupervisorSchemaEnsureLock(func() error {
+		for _, stmt := range renderSupervisorSchemaObjectsForDriver(CurrentStorageDriver(),
+			"CREATE TABLE IF NOT EXISTS supervisor_pipeline_states (",
+			"CREATE INDEX IF NOT EXISTS idx_supervisor_pipeline_states_supervisor",
+		) {
+			if _, err := DB.Exec(stmt); err != nil {
+				return err
+			}
+		}
+		exists, err := ColumnExists("supervisor_pipeline_states", "role")
+		if err != nil {
 			return err
 		}
-	}
-	_, err = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_supervisor_pipeline_states_role_status ON supervisor_pipeline_states(role, status, updated_at DESC)`)
-	return err
+		if !exists {
+			if _, err := DB.Exec(`ALTER TABLE supervisor_pipeline_states ADD COLUMN role TEXT NOT NULL DEFAULT 'executor'`); err != nil {
+				return err
+			}
+		}
+		_, err = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_supervisor_pipeline_states_role_status ON supervisor_pipeline_states(role, status, updated_at DESC)`)
+		return err
+	})
 }
 
 func UpsertSupervisorPipelineState(input UpsertSupervisorPipelineStateInput) (*SupervisorPipelineState, error) {

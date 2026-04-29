@@ -2826,7 +2826,12 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			threads["observed_agent_sessions"] = alignSupervisorObservedSessionsWithStatus(observed, status.AgentesActivos)
 		}
 		reviewCompact := buildOpenClawReviewCompact(revision)
-		queueSummary := buildOpenClawQueueSummaryFromReviewSnapshot(revision)
+		actionQueue := supervisorActionQueueFromReviewOrPipelineSnapshot(revision, pipeline)
+		safeActionQueue := supervisorSafeActionQueueFromReviewSnapshot(revision)
+		nextAction := supervisorNextActionFromReviewOrPipelineSnapshot(revision, pipeline)
+		nextSafeAction := supervisorNextSafeActionFromReviewSnapshot(revision)
+		actionQueue, safeActionQueue, nextAction, nextSafeAction = fillOpenClawOperationalQueuesFromStatusFallback(apiStatus, statusResumen.MailboxPendiente, actionQueue, safeActionQueue, nextAction, nextSafeAction)
+		queueSummary := buildOpenClawQueueSummaryFromActions(actionQueue, safeActionQueue)
 		sessionCandidates := alignOpenClawSessionCandidatesWithStatus(buildOpenClawSessionCandidates(threads), status.AgentesActivos)
 		operationalInfo := buildOpenClawOperationalInfoWithStatus(apiStatus)
 		estadoNotifs := notificaciones.EstadoNotificaciones{}
@@ -2856,10 +2861,10 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			"tareasReservadas":           statusResumen.TareasReservadas,
 			"propuestasAbiertas":         statusResumen.PropuestasAbiertas,
 			"review":                     reviewCompact,
-			"next_action":                revision["next_action"],
-			"action_queue":               revision["action_queue"],
-			"next_safe_action":           revision["next_safe_action"],
-			"safe_action_queue":          revision["safe_action_queue"],
+			"next_action":                nextAction,
+			"action_queue":               actionQueue,
+			"next_safe_action":           nextSafeAction,
+			"safe_action_queue":          safeActionQueue,
 			"queue_summary":              queueSummary,
 			"capacity_summary":           statusResumen.CapacitySummary,
 			"saturated_agents":           statusResumen.AgentesSaturados,
@@ -3349,15 +3354,10 @@ func alignOpenClawSessionCandidatesWithStatus(candidates []apiOpenClawSessionCan
 }
 
 func buildOpenClawQueueSummary(review map[string]any) apiOpenClawQueueSummary {
-	var allActions []supervisorRecommendedAction
-	if items, ok := review["action_queue"].([]supervisorRecommendedAction); ok {
-		allActions = items
-	}
-	var safeActions []supervisorRecommendedAction
-	if items, ok := review["safe_action_queue"].([]supervisorRecommendedAction); ok {
-		safeActions = items
-	}
-	return buildOpenClawQueueSummaryFromActions(allActions, safeActions)
+	return buildOpenClawQueueSummaryFromActions(
+		supervisorActionQueueFromReviewSnapshot(review),
+		supervisorSafeActionQueueFromReviewSnapshot(review),
+	)
 }
 
 func buildOpenClawQueueSummaryFromReviewSnapshot(review map[string]any) apiOpenClawQueueSummary {
@@ -3368,6 +3368,135 @@ func buildOpenClawQueueSummaryFromReviewSnapshot(review map[string]any) apiOpenC
 		return summary
 	}
 	return buildOpenClawQueueSummary(review)
+}
+
+func supervisorActionQueueFromReviewSnapshot(review map[string]any) []supervisorRecommendedAction {
+	if review == nil {
+		return []supervisorRecommendedAction{}
+	}
+	if items, ok := review["action_queue"].([]supervisorRecommendedAction); ok && items != nil {
+		return items
+	}
+	return []supervisorRecommendedAction{}
+}
+
+func supervisorActionQueueFromReviewOrPipelineSnapshot(review, pipeline map[string]any) []supervisorRecommendedAction {
+	if items := supervisorActionQueueFromReviewSnapshot(review); len(items) > 0 {
+		return items
+	}
+	return supervisorActionQueueFromPipelineSnapshot(pipeline)
+}
+
+func supervisorSafeActionQueueFromReviewSnapshot(review map[string]any) []supervisorRecommendedAction {
+	if review == nil {
+		return []supervisorRecommendedAction{}
+	}
+	if items, ok := review["safe_action_queue"].([]supervisorRecommendedAction); ok && items != nil {
+		return items
+	}
+	return []supervisorRecommendedAction{}
+}
+
+func supervisorNextActionFromReviewSnapshot(review map[string]any) any {
+	if review == nil {
+		return nil
+	}
+	if item, ok := parseSupervisorRecommendedActionSnapshotValue(review["next_action"]); ok {
+		return item
+	}
+	return nil
+}
+
+func supervisorNextActionFromReviewOrPipelineSnapshot(review, pipeline map[string]any) any {
+	if item := supervisorNextActionFromReviewSnapshot(review); item != nil {
+		return item
+	}
+	return supervisorNextActionFromPipelineSnapshot(pipeline)
+}
+
+func supervisorNextSafeActionFromReviewSnapshot(review map[string]any) any {
+	if review == nil {
+		return nil
+	}
+	if item, ok := parseSupervisorRecommendedActionSnapshotValue(review["next_safe_action"]); ok {
+		return item
+	}
+	return nil
+}
+
+func supervisorActionQueueFromPipelineSnapshot(pipeline map[string]any) []supervisorRecommendedAction {
+	for _, item := range supervisorPipelineItemsFromSnapshot(pipeline) {
+		if item == nil || strings.TrimSpace(item.ArtifactsJSON) == "" {
+			continue
+		}
+		payload := map[string]any{}
+		if err := json.Unmarshal([]byte(item.ArtifactsJSON), &payload); err != nil {
+			continue
+		}
+		rawItems, _ := payload["action_queue"].([]any)
+		if len(rawItems) == 0 {
+			continue
+		}
+		out := make([]supervisorRecommendedAction, 0, len(rawItems))
+		for _, raw := range rawItems {
+			if parsed, ok := parseSupervisorRecommendedActionSnapshotValue(raw); ok {
+				out = append(out, *parsed)
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return []supervisorRecommendedAction{}
+}
+
+func supervisorNextActionFromPipelineSnapshot(pipeline map[string]any) any {
+	for _, item := range supervisorPipelineItemsFromSnapshot(pipeline) {
+		if item == nil || strings.TrimSpace(item.MetadataJSON) == "" {
+			continue
+		}
+		payload := map[string]any{}
+		if err := json.Unmarshal([]byte(item.MetadataJSON), &payload); err != nil {
+			continue
+		}
+		if parsed, ok := parseSupervisorRecommendedActionSnapshotValue(payload["next_action"]); ok {
+			return parsed
+		}
+	}
+	if queue := supervisorActionQueueFromPipelineSnapshot(pipeline); len(queue) > 0 {
+		item := queue[0]
+		return &item
+	}
+	return nil
+}
+
+func supervisorPipelineItemsFromSnapshot(pipeline map[string]any) []*db.SupervisorPipelineState {
+	if pipeline == nil {
+		return nil
+	}
+	items, _ := pipeline["pipelines"].([]*db.SupervisorPipelineState)
+	return items
+}
+
+func fillOpenClawOperationalQueuesFromStatusFallback(status apiStatusResponse, mailbox []apiOpenClawMailboxLite, actionQueue, safeActionQueue []supervisorRecommendedAction, nextAction, nextSafeAction any) ([]supervisorRecommendedAction, []supervisorRecommendedAction, any, any) {
+	if len(actionQueue) > 0 || nextAction != nil || len(safeActionQueue) > 0 || nextSafeAction != nil {
+		return actionQueue, safeActionQueue, nextAction, nextSafeAction
+	}
+	fallback := buildSupervisorOperationalActions(status, mailbox)
+	if len(fallback) == 0 {
+		return actionQueue, safeActionQueue, nextAction, nextSafeAction
+	}
+	actionQueue = fallback
+	safeActionQueue = buildSupervisorSafeActionQueue(fallback)
+	if len(actionQueue) > 0 {
+		item := actionQueue[0]
+		nextAction = &item
+	}
+	if len(safeActionQueue) > 0 {
+		item := safeActionQueue[0]
+		nextSafeAction = &item
+	}
+	return actionQueue, safeActionQueue, nextAction, nextSafeAction
 }
 
 func openClawEventsFromReviewSnapshot(review map[string]any) []openClawNormalizedEvent {

@@ -78,7 +78,12 @@ func buildMCPOpenClawOperatorSnapshot(supervisor string) (map[string]any, error)
 	}
 
 	reviewCompact := buildOpenClawReviewCompact(revision)
-	queueSummary := buildOpenClawQueueSummaryFromReviewSnapshot(revision)
+	actionQueue := supervisorActionQueueFromReviewOrPipelineSnapshot(revision, pipeline)
+	safeActionQueue := supervisorSafeActionQueueFromReviewSnapshot(revision)
+	nextAction := supervisorNextActionFromReviewOrPipelineSnapshot(revision, pipeline)
+	nextSafeAction := supervisorNextSafeActionFromReviewSnapshot(revision)
+	actionQueue, safeActionQueue, nextAction, nextSafeAction = fillOpenClawOperationalQueuesFromStatusFallback(apiStatus, statusResumen.MailboxPendiente, actionQueue, safeActionQueue, nextAction, nextSafeAction)
+	queueSummary := buildOpenClawQueueSummaryFromActions(actionQueue, safeActionQueue)
 	sessionCandidates := alignOpenClawSessionCandidatesWithStatus(buildOpenClawSessionCandidates(threads), status.AgentesActivos)
 	operationalInfo := buildOpenClawOperationalInfoWithStatus(apiStatus)
 
@@ -110,10 +115,10 @@ func buildMCPOpenClawOperatorSnapshot(supervisor string) (map[string]any, error)
 		"tareasReservadas":           statusResumen.TareasReservadas,
 		"propuestasAbiertas":         statusResumen.PropuestasAbiertas,
 		"review":                     reviewCompact,
-		"next_action":                revision["next_action"],
-		"action_queue":               revision["action_queue"],
-		"next_safe_action":           revision["next_safe_action"],
-		"safe_action_queue":          revision["safe_action_queue"],
+		"next_action":                nextAction,
+		"action_queue":               actionQueue,
+		"next_safe_action":           nextSafeAction,
+		"safe_action_queue":          safeActionQueue,
 		"queue_summary":              queueSummary,
 		"capacity_summary":           statusResumen.CapacitySummary,
 		"saturated_agents":           statusResumen.AgentesSaturados,
