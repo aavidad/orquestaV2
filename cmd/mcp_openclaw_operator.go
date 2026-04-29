@@ -28,6 +28,7 @@ func buildMCPOpenClawOperatorSnapshot(supervisor string) (map[string]any, error)
 	supervisor = resolveOpenClawOperatorSupervisor(supervisor)
 	status := buildOpenClawBaseStatus()
 	revision := buildOpenClawReviewSnapshotSafe(supervisor)
+	mailboxPendiente, mailboxKnown := openClawPendingMailboxFromReviewSnapshot(revision)
 
 	var panelRows []agentesapp.Row
 	if rows, err := runAPITimeboxed(200*time.Millisecond, func() ([]agentesapp.Row, error) {
@@ -38,7 +39,7 @@ func buildMCPOpenClawOperatorSnapshot(supervisor string) (map[string]any, error)
 
 	statusResumen := buildOpenClawOperatorStatusBase(status, panelRows)
 	if summary, err := runAPITimeboxed(200*time.Millisecond, func() (apiOpenClawStatusLite, error) {
-		return buildOpenClawOperatorStatusWithRows(status, panelRows)
+		return buildOpenClawOperatorStatusWithRowsAndMailbox(status, panelRows, mailboxPendiente, mailboxKnown)
 	}, errStatusFetchTimeout); err == nil {
 		statusResumen = summary
 	}

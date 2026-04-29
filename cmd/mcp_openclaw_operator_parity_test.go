@@ -178,3 +178,37 @@ func TestMCPOpenClawOperatorExponeSnapshotCanonico(t *testing.T) {
 		}
 	})
 }
+
+func TestBuildOpenClawOperatorStatusWithRowsReutilizaMailboxPrecalculada(t *testing.T) {
+	prevFetcher := openClawPendingMailboxFetcher
+	t.Cleanup(func() {
+		openClawPendingMailboxFetcher = prevFetcher
+	})
+
+	openClawPendingMailboxFetcher = func(agentes []*db.Agente) ([]apiOpenClawMailboxLite, error) {
+		t.Fatal("no deberia recalcular mailbox si el snapshot ya la trae")
+		return nil, nil
+	}
+
+	status := &estadoResumen{
+		Generado:       "2026-04-29T12:00:00Z",
+		Agentes:        []*db.Agente{{Nombre: "Codex4"}},
+		AgentesActivos: []*db.Agente{{Nombre: "Codex4"}},
+		TareasActivas:  []tareaLite{{ID: 1, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+	}
+	mailbox := []apiOpenClawMailboxLite{{
+		Agente:       "Codex4",
+		Count:        1,
+		KindsCSV:     "pipeline_local",
+		ContextsCSV:  "tarea#1",
+		OldestAgeMin: 5,
+	}}
+
+	resumen, err := buildOpenClawOperatorStatusWithRowsAndMailbox(status, nil, mailbox, true)
+	if err != nil {
+		t.Fatalf("buildOpenClawOperatorStatusWithRowsAndMailbox: %v", err)
+	}
+	if len(resumen.MailboxPendiente) != 1 || resumen.MailboxPendiente[0].Agente != "Codex4" {
+		t.Fatalf("deberia reutilizar mailbox precalculada: %+v", resumen.MailboxPendiente)
+	}
+}

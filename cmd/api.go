@@ -1243,10 +1243,18 @@ func apiHandlerServerOperational(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if status, ok := fetchStatusForOperationalFallback(statusFastTimeout); ok {
-		reconcileStatusSnapshotWithFreshPanel(&status)
-		apiWriteServerOperational(w, r, buildServerOperationalInfo(status))
-		return
+	if apiServerOperationalBuilder != nil {
+		if info, err := runAPITimeboxed(apiServerOperationalTimeout, apiServerOperationalBuilder, errStatusFetchTimeout); err == nil {
+			apiWriteServerOperational(w, r, info)
+			return
+		}
+	}
+	if apiServerOperationalStatusFallback != nil {
+		if status, err := apiServerOperationalStatusFallback(); err == nil {
+			reconcileStatusSnapshotWithFreshPanel(&status)
+			apiWriteServerOperational(w, r, buildServerOperationalInfo(status))
+			return
+		}
 	}
 	ensureStatusRefreshAsync()
 	if apiServerOperationalDegradedBuilder != nil {
@@ -1888,6 +1896,7 @@ func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
+		agentes = reconcileAPIAgentesWithFreshPanel(agentes)
 		apiWriteJSON(w, http.StatusOK, map[string]any{"agentes": agentes})
 	case http.MethodPost:
 		var req apiAgenteRequest
@@ -1916,6 +1925,55 @@ func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 	default:
 		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
+}
+
+func reconcileAPIAgentesWithFreshPanel(agentes []*db.Agente) []*db.Agente {
+	if len(agentes) == 0 {
+		return agentes
+	}
+	rows, ok := readAgentPanelSnapshotFresh()
+	if !ok || len(rows) == 0 {
+		return agentes
+	}
+	rowByName := make(map[string]agentesapp.Row, len(rows))
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		nombre := nombreAgenteCanonico(row.Agente.Nombre)
+		if nombre == "" {
+			continue
+		}
+		rowByName[nombre] = row
+	}
+	out := make([]*db.Agente, 0, len(agentes))
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		merged := *agente
+		if row, ok := rowByName[nombreAgenteCanonico(agente.Nombre)]; ok && row.Agente != nil {
+			if strings.TrimSpace(row.Agente.EstadoCuota) != "" {
+				merged.EstadoCuota = row.Agente.EstadoCuota
+			}
+			if row.Agente.ReanimarAt != nil {
+				merged.ReanimarAt = row.Agente.ReanimarAt
+			}
+			if strings.TrimSpace(row.Agente.MotivoPausa) != "" {
+				merged.MotivoPausa = row.Agente.MotivoPausa
+			}
+			if strings.TrimSpace(row.Agente.EstadoSesion) != "" {
+				merged.EstadoSesion = row.Agente.EstadoSesion
+			}
+			if row.Agente.UltimaSesion != nil && (merged.UltimaSesion == nil || row.Agente.UltimaSesion.After(*merged.UltimaSesion)) {
+				merged.UltimaSesion = row.Agente.UltimaSesion
+			}
+		}
+		out = append(out, &merged)
+	}
+	sanitizeServerOperationalQuotaFromPanelRows(out, rows)
+	aplicarVisibilidadOperativaAgentes(out, rows)
+	return out
 }
 
 func invalidateAgentStatusCaches() {
@@ -2487,6 +2545,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		supervisor := resolveOpenClawOperatorSupervisor(r.URL.Query().Get("supervisor"))
 		status := buildOpenClawBaseStatus()
 		revision := buildOpenClawReviewSnapshotSafe(supervisor)
+		mailboxPendiente, mailboxKnown := openClawPendingMailboxFromReviewSnapshot(revision)
 		var panelRows []agentesapp.Row
 		if rows, err := runAPITimeboxed(200*time.Millisecond, func() ([]agentesapp.Row, error) {
 			return fetchAgentPanelRowsCached(150 * time.Millisecond)
@@ -2495,7 +2554,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		}
 		statusResumen := buildOpenClawOperatorStatusBase(status, panelRows)
 		if summary, err := runAPITimeboxed(200*time.Millisecond, func() (apiOpenClawStatusLite, error) {
-			return buildOpenClawOperatorStatusWithRows(status, panelRows)
+			return buildOpenClawOperatorStatusWithRowsAndMailbox(status, panelRows, mailboxPendiente, mailboxKnown)
 		}, errStatusFetchTimeout); err == nil {
 			statusResumen = summary
 		}
@@ -2907,8 +2966,16 @@ func buildOpenClawOperatorStatusBase(status *estadoResumen, rows []agentesapp.Ro
 }
 
 func buildOpenClawOperatorStatusWithRows(status *estadoResumen, rows []agentesapp.Row) (apiOpenClawStatusLite, error) {
+	return buildOpenClawOperatorStatusWithRowsAndMailbox(status, rows, nil, false)
+}
+
+func buildOpenClawOperatorStatusWithRowsAndMailbox(status *estadoResumen, rows []agentesapp.Row, mailbox []apiOpenClawMailboxLite, mailboxKnown bool) (apiOpenClawStatusLite, error) {
 	resumen := buildOpenClawOperatorStatusBase(status, rows)
 	if status == nil {
+		return resumen, nil
+	}
+	if mailboxKnown {
+		resumen.MailboxPendiente = normalizeOpenClawMailboxLiteSlice(mailbox)
 		return resumen, nil
 	}
 	mailboxPendiente, err := openClawPendingMailboxFetcher(status.Agentes)
@@ -2917,6 +2984,17 @@ func buildOpenClawOperatorStatusWithRows(status *estadoResumen, rows []agentesap
 	}
 	resumen.MailboxPendiente = normalizeOpenClawMailboxLiteSlice(mailboxPendiente)
 	return resumen, nil
+}
+
+func openClawPendingMailboxFromReviewSnapshot(review map[string]any) ([]apiOpenClawMailboxLite, bool) {
+	if len(review) == 0 {
+		return nil, false
+	}
+	items, ok := review["mailbox_pending"].([]apiOpenClawMailboxLite)
+	if !ok {
+		return nil, false
+	}
+	return normalizeOpenClawMailboxLiteSlice(items), true
 }
 
 func normalizeOpenClawMailboxLiteSlice(items []apiOpenClawMailboxLite) []apiOpenClawMailboxLite {
