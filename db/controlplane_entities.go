@@ -1188,8 +1188,12 @@ func validarTareaIDStartRuntimeAutonomico(agente string, proyectoID, tareaID int
 }
 
 func runtimeOrderMotivoRequiereTareaActiva(motivo string) bool {
-	switch strings.ToLower(strings.TrimSpace(motivo)) {
-	case "premium_idle_autoassigned", "autonomia_expand_worker", "supervision_transcript_signal", "runtime_mailbox_sin_handle", "runtime_mailbox_pool_local_sin_handle", "agente_sin_runtime_activo", "desbloqueo_humano_auto", "remote_runtime_degraded", "local_runtime_failed", "local_runtime_missing", "prueba_mcp_control":
+	motivo = strings.ToLower(strings.TrimSpace(motivo))
+	if strings.HasPrefix(motivo, "runtime_bootstrap_coordinated_restart:") {
+		return true
+	}
+	switch motivo {
+	case "premium_idle_autoassigned", "autonomia_expand_worker", "supervision_transcript_signal", "runtime_mailbox_sin_handle", "runtime_mailbox_pool_local_sin_handle", "agente_sin_runtime_activo", "desbloqueo_humano_auto", "remote_runtime_degraded", "local_runtime_failed", "local_runtime_missing", "prueba_mcp_control", "esperar_recuperacion_runtime":
 		return true
 	default:
 		return false

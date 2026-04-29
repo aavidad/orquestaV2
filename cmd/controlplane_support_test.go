@@ -45002,6 +45002,66 @@ func TestClasificacionSignalTranscriptRecalculaSiVieneVacia(t *testing.T) {
 	}
 }
 
+func TestClasificacionSignalTranscriptRanCurlCanonicoNoEsServerURLError(t *testing.T) {
+	item := &db.RuntimeTranscriptEntry{
+		Stream:         "pty_out",
+		Text:           "• Ran curl -sf http://127.0.0.1:16543/api/status",
+		NormalizedText: "• ran curl -sf http://127.0.0.1:16543/api/status",
+		Classification: "",
+	}
+	if got := clasificacionSignalTranscript(item); got != "tool_execution" {
+		t.Fatalf("clasificacion signal inesperada para ran curl: %q", got)
+	}
+	if got := clasificacionEntregaRuntimeTranscript(item); got != "tool_execution" {
+		t.Fatalf("clasificacion entrega inesperada para ran curl: %q", got)
+	}
+}
+
+func TestClasificacionSignalTranscriptRanCurlCanonicoSobrescribeServerURLErrorPrecargado(t *testing.T) {
+	item := &db.RuntimeTranscriptEntry{
+		Stream:         "pty_out",
+		Text:           "• Ran curl -sf http://127.0.0.1:16543/api/status",
+		NormalizedText: "• ran curl -sf http://127.0.0.1:16543/api/status",
+		Classification: "server_url_error",
+	}
+	if got := clasificacionSignalTranscript(item); got != "tool_execution" {
+		t.Fatalf("clasificacion signal inesperada para ran curl preclasificado: %q", got)
+	}
+	if got := clasificacionEntregaRuntimeTranscript(item); got != "tool_execution" {
+		t.Fatalf("clasificacion entrega inesperada para ran curl preclasificado: %q", got)
+	}
+}
+
+func TestClasificacionSignalTranscriptCurlCanonicoSobrescribeServerURLErrorPrecargado(t *testing.T) {
+	item := &db.RuntimeTranscriptEntry{
+		Stream:         "pty_out",
+		Text:           "curl -sf http://127.0.0.1:16543/api/status",
+		NormalizedText: "curl -sf http://127.0.0.1:16543/api/status",
+		Classification: "server_url_error",
+	}
+	if got := clasificacionSignalTranscript(item); got != "tool_execution" {
+		t.Fatalf("clasificacion signal inesperada para curl preclasificado: %q", got)
+	}
+	if got := clasificacionEntregaRuntimeTranscript(item); got != "tool_execution" {
+		t.Fatalf("clasificacion entrega inesperada para curl preclasificado: %q", got)
+	}
+}
+
+func TestClasificacionSignalTranscriptEndpointCanonicoSobrescribeServerURLErrorPrecargado(t *testing.T) {
+	item := &db.RuntimeTranscriptEntry{
+		Stream:         "pty_out",
+		Text:           "http://127.0.0.1:16543/api/status",
+		NormalizedText: "http://127.0.0.1:16543/api/status",
+		Classification: "server_url_error",
+	}
+	if got := clasificacionSignalTranscript(item); got != "tool_execution" {
+		t.Fatalf("clasificacion signal inesperada para endpoint canonico preclasificado: %q", got)
+	}
+	if got := clasificacionEntregaRuntimeTranscript(item); got != "tool_execution" {
+		t.Fatalf("clasificacion entrega inesperada para endpoint canonico preclasificado: %q", got)
+	}
+}
+
 func TestSignalTranscriptDebeProcesarseIgnoraProgresoUtil(t *testing.T) {
 	for _, tc := range []struct {
 		name string

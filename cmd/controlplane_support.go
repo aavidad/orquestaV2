@@ -1794,12 +1794,18 @@ func clasificacionEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry) stri
 		return ""
 	}
 	classification := strings.ToLower(strings.TrimSpace(item.Classification))
+	normalized := normalizedEntregaRuntimeTranscript(item)
+	if classification == "server_url_error" && (runtimeTranscriptTextoEsRanCurl(normalized) || runtimeTranscriptTextoRefiereEndpointCanonicoLocal(normalized)) {
+		return "tool_execution"
+	}
 	if classification != "" {
 		return classification
 	}
-	normalized := normalizedEntregaRuntimeTranscript(item)
 	if normalized == "" {
 		return ""
+	}
+	if runtimeTranscriptTextoEsRanCurl(normalized) {
+		return "tool_execution"
 	}
 	return strings.ToLower(strings.TrimSpace(db.ClasificarTextoTranscript(normalized)))
 }
@@ -5338,14 +5344,34 @@ func clasificacionSignalTranscript(item *db.RuntimeTranscriptEntry) string {
 		return ""
 	}
 	classification := strings.TrimSpace(item.Classification)
+	normalized := normalizarSignalTranscriptTexto(item)
+	if strings.EqualFold(classification, "server_url_error") && (runtimeTranscriptTextoEsRanCurl(normalized) || runtimeTranscriptTextoRefiereEndpointCanonicoLocal(normalized)) {
+		return "tool_execution"
+	}
 	if classification != "" {
 		return classification
 	}
-	normalized := normalizarSignalTranscriptTexto(item)
 	if normalized == "" {
 		return ""
 	}
+	if runtimeTranscriptTextoEsRanCurl(normalized) {
+		return "tool_execution"
+	}
 	return strings.TrimSpace(db.ClasificarTextoTranscript(normalized))
+}
+
+func runtimeTranscriptTextoEsRanCurl(normalized string) bool {
+	normalized = strings.ToLower(strings.TrimSpace(normalized))
+	return strings.HasPrefix(normalized, "• ran curl ") ||
+		strings.HasPrefix(normalized, "ran curl ") ||
+		strings.HasPrefix(normalized, "• curl ") ||
+		strings.HasPrefix(normalized, "curl ")
+}
+
+func runtimeTranscriptTextoRefiereEndpointCanonicoLocal(normalized string) bool {
+	normalized = strings.ToLower(strings.TrimSpace(normalized))
+	return strings.Contains(normalized, "http://127.0.0.1:16543/") ||
+		strings.Contains(normalized, "http://localhost:16543/")
 }
 
 func signalTranscriptDebeProcesarse(item *db.RuntimeTranscriptEntry) bool {

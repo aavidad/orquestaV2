@@ -17329,6 +17329,8 @@ func TestResolverTareaIDStartRuntimeRequiereTareaActivaParaMotivosAutonomicos(t 
 		"local_runtime_failed",
 		"local_runtime_missing",
 		"prueba_mcp_control",
+		"esperar_recuperacion_runtime",
+		"runtime_bootstrap_coordinated_restart:handoff:12357",
 	} {
 		t.Run(motivo, func(t *testing.T) {
 			got, err := resolverTareaIDStartRuntime("CodexNoTask", proyecto, nil, motivo)
