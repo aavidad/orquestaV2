@@ -354,6 +354,7 @@ func TestMCPToolsIncluyeLenguaje(t *testing.T) {
 func TestMCPToolsIncluyeLifecycleAgentes(t *testing.T) {
 	tools := listMCPTools()
 	for _, name := range []string{
+		"orquesta.agentes.lanzar",
 		"orquesta.agentes.start",
 		"orquesta.agentes.pause",
 		"orquesta.agentes.resume",
@@ -2756,6 +2757,62 @@ func TestMCPToolsAgentesControlOperaPorLaViaCanonica(t *testing.T) {
 		}
 		if seen.TareaID == nil || *seen.TareaID != 41 {
 			t.Fatalf("request control sin tarea esperada: %+v", seen)
+		}
+	})
+}
+
+func TestMCPToolsAgentesLanzarOperaPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		tmp := t.TempDir()
+		if err := db.RegistrarAgente("CodexLaunchMCP", "programador"); err != nil {
+			t.Fatalf("registrando CodexLaunchMCP: %v", err)
+		}
+		if _, err := db.UpsertProyecto(&db.Proyecto{
+			Slug:    "orquestador",
+			Nombre:  "Orquestador",
+			RutaAbs: filepath.Join(tmp, "orquestador"),
+			Tipo:    db.ProyectoRepo,
+			Activo:  true,
+		}); err != nil {
+			t.Fatalf("upsert proyecto: %v", err)
+		}
+
+		result, err := callMCPTool("orquesta.agentes.lanzar", map[string]any{
+			"agente":   "CodexLaunchMCP",
+			"proyecto": "orquestador",
+			"motivo":   "launch from mcp canonical tool",
+			"por":      "OpenClaw",
+		})
+		if err != nil {
+			t.Fatalf("agentes lanzar MCP: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("agentes lanzar marcado como error: %#v", result)
+		}
+		resp, _ := result["structuredContent"].(apiAgenteLanzarResponse)
+		if !resp.OK || resp.OrderID <= 0 {
+			t.Fatalf("respuesta lanzar inesperada: %#v", result["structuredContent"])
+		}
+		if resp.Agente != "CodexLaunchMCP" || resp.Proyecto.Slug != "orquestador" || resp.Conector.Slug != "codex-cli" {
+			t.Fatalf("payload lanzar inesperado: %+v", resp)
+		}
+
+		order, err := db.GetRuntimeOrder(resp.OrderID)
+		if err != nil {
+			t.Fatalf("get runtime order: %v", err)
+		}
+		if order == nil || order.Agente != "CodexLaunchMCP" || order.Tipo != "start" {
+			t.Fatalf("runtime order inesperada: %+v", order)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(order.PayloadJSON), &payload); err != nil {
+			t.Fatalf("decode runtime order payload: %v", err)
+		}
+		if strings.TrimSpace(fmt.Sprint(payload["conector"])) != "codex-cli" {
+			t.Fatalf("payload sin conector canonico: %+v", payload)
+		}
+		if strings.TrimSpace(fmt.Sprint(payload["por"])) != "OpenClaw" {
+			t.Fatalf("payload sin actor esperado: %+v", payload)
 		}
 	})
 }

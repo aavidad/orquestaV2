@@ -28,6 +28,7 @@ import (
 	"orquesta/gitgobernanza"
 	"orquesta/lenguajeapp"
 	"orquesta/notificaciones"
+	"orquesta/orquestacionagentesapp"
 	"orquesta/panelapp"
 	"orquesta/propuestasapp"
 	"orquesta/reviewapp"
@@ -2317,6 +2318,26 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.agentes.lanzar",
+			Title:       "Lanzar agente",
+			Description: "Prepara y arranca un agente por la vía canónica unificada del servidor",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":       map[string]any{"type": "string"},
+					"proyecto":     map[string]any{"type": "string"},
+					"conector":     map[string]any{"type": "string"},
+					"modelo":       map[string]any{"type": "string"},
+					"razonamiento": map[string]any{"type": "string"},
+					"perfil":       map[string]any{"type": "string"},
+					"motivo":       map[string]any{"type": "string"},
+					"por":          map[string]any{"type": "string"},
+				},
+				"required":             []string{"agente", "proyecto"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.agentes.control",
 			Title:       "Control de ciclo de vida de agente",
 			Description: "Encola una orden canónica de start, pause, resume o stop para un agente",
@@ -3889,6 +3910,37 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 
 	case "orquesta.agentes.control":
 		return callMCPAgentLifecycleTool(args, "")
+
+	case "orquesta.agentes.lanzar":
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		proyecto, err := requiredStringArg(args, "proyecto")
+		if err != nil {
+			return nil, err
+		}
+		out, err := orquestacionAgentesService.Launch(orquestacionagentesapp.LaunchRequest{
+			Agente:       agente,
+			Proyecto:     proyecto,
+			Conector:     optionalStringArg(args, "conector"),
+			Modelo:       optionalStringArg(args, "modelo"),
+			Razonamiento: optionalStringArg(args, "razonamiento"),
+			Perfil:       optionalStringArg(args, "perfil"),
+			Motivo:       optionalStringArg(args, "motivo"),
+			Por:          optionalStringArg(args, "por"),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := apiAgenteLanzarResponse{
+			OK:       true,
+			OrderID:  out.OrderID,
+			Agente:   out.Agente,
+			Proyecto: out.Proyecto,
+			Conector: out.Conector,
+		}
+		return toolResult(prettyJSON(result), result, false), nil
 
 	case "orquesta.agentes.start":
 		return callMCPAgentLifecycleTool(args, "start")
