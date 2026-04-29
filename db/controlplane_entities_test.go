@@ -10179,6 +10179,137 @@ func TestRuntimeMailboxEntregadoPorBootstrapObservadoReconoceHandoffDerivadaSinR
 	_ = handoffID
 }
 
+func TestRuntimeMailboxEntregadoPorBootstrapObservadoReconoceHandoffDerivadaConReceiptHeredadoAunqueExistaStartMasReciente(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	oldMailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"bootstrap observado viejo"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox vieja: %v", err)
+	}
+	oldStartID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		Estado:     "completada",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","delivery_state":"delivered","delivery_receipt_at":"2026-04-14T12:37:01Z","receipt_source":"git_worktree","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			oldMailboxID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start fuente observada vieja: %v", err)
+	}
+
+	newMailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"bootstrap observado reciente"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox reciente: %v", err)
+	}
+	newStartID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		Estado:     "completada",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","delivery_state":"delivered","delivery_receipt_at":"2026-04-14T12:38:01Z","receipt_source":"git_worktree","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			newMailboxID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start fuente observada reciente: %v", err)
+	}
+
+	handoffPayload, err := json.Marshal(HandoffPayload{
+		AgenteOrigen:       "Codex0",
+		AgenteDestino:      "Codex1",
+		ResumenContinuidad: "handoff derivada con start fuente observado y start reciente",
+	})
+	if err != nil {
+		t.Fatalf("marshal handoff: %v", err)
+	}
+	handoffID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "handoff",
+		PayloadJSON: string(handoffPayload),
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","start_order_id":%d,"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			oldStartID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff derivada: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, handoffID); err != nil {
+		t.Fatalf("marcar handoff derivada ejecutando: %v", err)
+	}
+
+	observado, bootstrapOrderID, startOrderID, err := RuntimeMailboxEntregadoPorBootstrapObservado(oldMailboxID, handle, runtime)
+	if err != nil {
+		t.Fatalf("RuntimeMailboxEntregadoPorBootstrapObservado: %v", err)
+	}
+	if !observado {
+		t.Fatal("la handoff derivada deberia heredar el receipt util de la start fuente vieja aunque exista start mas reciente")
+	}
+	if bootstrapOrderID != oldStartID || startOrderID != 0 {
+		t.Fatalf("lease observada inesperada: bootstrap=%d start=%d want_bootstrap=%d", bootstrapOrderID, startOrderID, oldStartID)
+	}
+	_ = newStartID
+	_ = handoffID
+}
+
 func TestResolverBootstrapRuntimeLeasePendienteRecuperaMailboxVigenteDesdeStartFuenteSiHandoffTraeMailboxConsumida(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

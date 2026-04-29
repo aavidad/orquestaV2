@@ -1999,6 +1999,20 @@ func TestPermiteFallbackInteractivoSessionResumePipelineLocalLegacyStdinRawPath(
 	}
 }
 
+func TestPermiteFallbackInteractivoSessionResumePipelineLocalSoloSupervisorRef(t *testing.T) {
+	got := PermiteFallbackInteractivoSessionResumePipelineLocal(
+		"pipeline_local",
+		"",
+		"cli",
+		"process",
+		`{"driver":"process_pty_cli","supervisor_ref":"codex1-supervisor","mailbox_delivery_mode":"session_resume"}`,
+		`{"mailbox_delivery_mode":"session_resume"}`,
+	)
+	if !got {
+		t.Fatal("supervisor_ref sin stdin_path tambien deberia habilitar fallback interactivo")
+	}
+}
+
 func TestPermiteFallbackInteractivoSessionResumePipelineLocalBloqueaSesionExterna(t *testing.T) {
 	got := PermiteFallbackInteractivoSessionResumePipelineLocal(
 		"pipeline_local",
