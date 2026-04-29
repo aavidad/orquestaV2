@@ -45047,18 +45047,18 @@ func TestClasificacionSignalTranscriptCurlCanonicoSobrescribeServerURLErrorPreca
 	}
 }
 
-func TestClasificacionSignalTranscriptEndpointCanonicoSobrescribeServerURLErrorPrecargado(t *testing.T) {
+func TestClasificacionSignalTranscriptCurlErrorCanonicoMantieneServerURLError(t *testing.T) {
 	item := &db.RuntimeTranscriptEntry{
 		Stream:         "pty_out",
-		Text:           "http://127.0.0.1:16543/api/status",
-		NormalizedText: "http://127.0.0.1:16543/api/status",
+		Text:           "curl: (28) Operation timed out after 20002 milliseconds with 0 bytes from http://localhost:16543/api/status",
+		NormalizedText: "curl: (28) operation timed out after 20002 milliseconds with 0 bytes from http://localhost:16543/api/status",
 		Classification: "server_url_error",
 	}
-	if got := clasificacionSignalTranscript(item); got != "tool_execution" {
-		t.Fatalf("clasificacion signal inesperada para endpoint canonico preclasificado: %q", got)
+	if got := clasificacionSignalTranscript(item); got != "server_url_error" {
+		t.Fatalf("clasificacion signal inesperada para curl error canonico: %q", got)
 	}
-	if got := clasificacionEntregaRuntimeTranscript(item); got != "tool_execution" {
-		t.Fatalf("clasificacion entrega inesperada para endpoint canonico preclasificado: %q", got)
+	if got := clasificacionEntregaRuntimeTranscript(item); got != "server_url_error" {
+		t.Fatalf("clasificacion entrega inesperada para curl error canonico: %q", got)
 	}
 }
 
