@@ -231,7 +231,7 @@ func TestResolvedorAgentePipelineOperativoUsaLocalConScoreAltoParaMicroprogramac
 	}
 }
 
-func TestResolvedorAgentePipelineOperativoUsaLocalConScoreAltoParaPremium(t *testing.T) {
+func TestResolvedorAgentePipelineOperativoNoUsaLocalFirstEnPremium(t *testing.T) {
 	scoreProvider := &fakeScoreProvider{
 		fitnessByName: map[string]float64{
 			"Gemma1": 7.6,
@@ -253,12 +253,12 @@ func TestResolvedorAgentePipelineOperativoUsaLocalConScoreAltoParaPremium(t *tes
 	if err != nil {
 		t.Fatalf("ResolverAgentePipeline: %v", err)
 	}
-	if agente != "Gemma1" {
-		t.Fatalf("deberia elegir local-first con fitness alto en premium, got=%q", agente)
+	if agente != "Codex1" {
+		t.Fatalf("premium debe quedar en codex remoto, got=%q", agente)
 	}
 }
 
-func TestResolvedorAgentePipelineOperativoUsaLocalConScoreAltoParaRevision(t *testing.T) {
+func TestResolvedorAgentePipelineOperativoNoUsaLocalFirstEnRevision(t *testing.T) {
 	scoreProvider := &fakeScoreProvider{
 		fitnessByName: map[string]float64{
 			"QwenCoder1": 7.2,
@@ -280,8 +280,28 @@ func TestResolvedorAgentePipelineOperativoUsaLocalConScoreAltoParaRevision(t *te
 	if err != nil {
 		t.Fatalf("ResolverAgentePipeline: %v", err)
 	}
-	if agente != "QwenCoder1" {
-		t.Fatalf("deberia elegir local-first con fitness alto en revision, got=%q", agente)
+	if agente != "Codex1" {
+		t.Fatalf("revision debe quedar en codex remoto, got=%q", agente)
+	}
+}
+
+func TestResolvedorAgentePipelineOperativoPremiumNoAceptaSoloLocal(t *testing.T) {
+	resolvedor := resolvedorAgentePipelineOperativo{
+		rowsProvider: fakeRowsProvider{rows: []agentesapp.Row{
+			{Agente: &db.Agente{Nombre: "Gemma1", Habilitado: true}, EstadoOperativo: "disponible"},
+		}},
+	}
+
+	agente, err := resolvedor.ResolverAgentePipeline(capacidadapp.EntradaResolverAgentePipeline{
+		Carril:      "premium_worktree",
+		Fase:        "implementacion",
+		PerfilTarea: "implementacion",
+	})
+	if err != nil {
+		t.Fatalf("ResolverAgentePipeline: %v", err)
+	}
+	if agente != "" {
+		t.Fatalf("premium no deberia caer a local/ollama, got=%q", agente)
 	}
 }
 

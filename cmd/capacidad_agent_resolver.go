@@ -173,7 +173,7 @@ func (r resolvedorAgentePipelineOperativo) resolverAgenteLocalConScore(candidato
 
 func carrilPipelinePrefiereLocalConScore(carril string) bool {
 	switch strings.ToLower(strings.TrimSpace(carril)) {
-	case "premium_worktree", "revision_diff", "microprogramacion_local":
+	case "microprogramacion_local":
 		return true
 	default:
 		return false
@@ -278,7 +278,9 @@ func preferenciasAgentePorCarrilYFase(entrada capacidadapp.EntradaResolverAgente
 func agenteCompatibleConCarril(nombre, carril string) bool {
 	nombre = strings.ToLower(strings.TrimSpace(nombre))
 	switch strings.ToLower(strings.TrimSpace(carril)) {
-	case "premium_worktree", "revision_diff", "microprogramacion_local":
+	case "premium_worktree", "revision_diff":
+		return strings.HasPrefix(nombre, "codex")
+	case "microprogramacion_local":
 		if strings.HasPrefix(nombre, "codex") {
 			return true
 		}
