@@ -17322,6 +17322,13 @@ func TestResolverTareaIDStartRuntimeRequiereTareaActivaParaMotivosAutonomicos(t 
 		"autonomia_expand_worker",
 		"supervision_transcript_signal",
 		"runtime_mailbox_sin_handle",
+		"runtime_mailbox_pool_local_sin_handle",
+		"agente_sin_runtime_activo",
+		"desbloqueo_humano_auto",
+		"remote_runtime_degraded",
+		"local_runtime_failed",
+		"local_runtime_missing",
+		"prueba_mcp_control",
 	} {
 		t.Run(motivo, func(t *testing.T) {
 			got, err := resolverTareaIDStartRuntime("CodexNoTask", proyecto, nil, motivo)
