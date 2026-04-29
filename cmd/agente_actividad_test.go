@@ -619,6 +619,21 @@ func TestSummarizeAgentNoiseSignalsCuentaRatio(t *testing.T) {
 	}
 }
 
+func TestShouldFlagAccumulatingDiffSoloCuandoYaEsMaterial(t *testing.T) {
+	if shouldFlagAccumulatingDiff(1, 20, 5, "sin_checkpoint") {
+		t.Fatal("no deberia marcar diff pequeño como acumulado")
+	}
+	if !shouldFlagAccumulatingDiff(5, 120, 15, "sin_checkpoint") {
+		t.Fatal("deberia marcar diff por volumen de ficheros")
+	}
+	if !shouldFlagAccumulatingDiff(2, 260, 10, "sin_checkpoint") {
+		t.Fatal("deberia marcar diff por volumen de lineas")
+	}
+	if !shouldFlagAccumulatingDiff(1, 20, 5, "atrasada") {
+		t.Fatal("cadencia atrasada deberia marcar acumulacion")
+	}
+}
+
 func TestSummarizeAgentDeliverySignalDistingueValorYAtasco(t *testing.T) {
 	t.Run("entregando valor", func(t *testing.T) {
 		signal, detail := summarizeAgentDeliverySignal(agentActivitySummary{
@@ -690,6 +705,27 @@ func TestSummarizeAgentDeliverySignalDistingueValorYAtasco(t *testing.T) {
 			t.Fatalf("signal=%q", signal)
 		}
 		if detail != "7 fichero(s) pendientes +320/-40 sin commits, tests ni señales de cambio" {
+			t.Fatalf("detail inesperado: %s", detail)
+		}
+	})
+
+	t.Run("diff pequeño sigue como trabajo en curso", func(t *testing.T) {
+		signal, detail := summarizeAgentDeliverySignal(agentActivitySummary{
+			CurrentTasks:        []string{"#12 [en_progreso] ajustar API modulo=cmd"},
+			CommitCadence:       "sin_checkpoint",
+			CommitCadenceDetail: "diff pendiente (1 fichero(s), +20/-5) sin commits recientes",
+			OrdersOpen:          1,
+			TranscriptBySignal:  map[string]int{"progress_update": 1},
+		}, &agentGitActivityStats{
+			PendingFiles:        []string{"cmd/api.go"},
+			PendingAddedLines:   20,
+			PendingDeletedLines: 5,
+			RecentCommitCount:   0,
+		})
+		if signal != "trabajo_en_curso" {
+			t.Fatalf("signal=%q", signal)
+		}
+		if !containsAll(detail, "diff pendiente (1 fichero(s), +20/-5) sin commits recientes", "1 orden(es) abiertas") {
 			t.Fatalf("detail inesperado: %s", detail)
 		}
 	})

@@ -492,6 +492,15 @@ func summarizeAgentNoiseSignals(bySignal map[string]int, total int) (int, int) {
 	return noise, int((100 * noise) / total)
 }
 
+func shouldFlagAccumulatingDiff(pendingFiles, pendingAdded, pendingDeleted int, cadence string) bool {
+	cadence = strings.TrimSpace(strings.ToLower(cadence))
+	if cadence == "atrasada" {
+		return true
+	}
+	pendingLines := pendingAdded + pendingDeleted
+	return pendingFiles >= 5 || pendingLines >= 250
+}
+
 func summarizeAgentDeliverySignal(summary agentActivitySummary, stats *agentGitActivityStats) (string, string) {
 	commits := 0
 	pendingFiles := 0
@@ -533,7 +542,8 @@ func summarizeAgentDeliverySignal(summary agentActivitySummary, stats *agentGitA
 			parts = append(parts, fmt.Sprintf("%d señal(es) de test", tests))
 		}
 		return "entregando_valor", strings.Join(parts, " · ")
-	case pendingFiles > 0 && commits == 0 && tests == 0 && codeChanges == 0:
+	case pendingFiles > 0 && commits == 0 && tests == 0 && codeChanges == 0 &&
+		shouldFlagAccumulatingDiff(pendingFiles, pendingAdded, pendingDeleted, summary.CommitCadence):
 		return "acumulando_diff", fmt.Sprintf("%d fichero(s) pendientes +%d/-%d sin commits, tests ni señales de cambio",
 			pendingFiles, pendingAdded, pendingDeleted)
 	case noiseSignals > 0 && summary.NoiseRatioPct >= 60 && pendingFiles == 0 && summary.OrdersFailed == 0:
