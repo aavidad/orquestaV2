@@ -9164,6 +9164,9 @@ func runtimeHandlePuedeResumeTmuxSinSnapshot(handle *db.RuntimeHandle, runtime *
 	if !runtimeHandleEsTmuxLike(handle) {
 		return false
 	}
+	if runtimeTMUXSessionResumeWorkerReady(handle) {
+		return true
+	}
 	if runtime == nil {
 		return false
 	}
@@ -11678,6 +11681,11 @@ func procesarAutoasignacionPremiumSinSesionBatch(rows []agentesapp.Row, tareasAc
 		if !proyectoUsaContinuidadMicrocicloPremium(proyecto.ID) {
 			continue
 		}
+		if bloqueadaPorTrabajoPremiumActivoAjeno, err := proyectoTieneTrabajoPremiumActivoAjeno(proyecto.ID, agente); err != nil {
+			return procesadas, err
+		} else if bloqueadaPorTrabajoPremiumActivoAjeno {
+			continue
+		}
 		if rowTieneRuntimeUtilParaAutoasignacionPremium(row) {
 			reactivado, err := reactivarWorkerDisponibleConAsignacionPausada(row, proyecto)
 			if err != nil {
@@ -11709,6 +11717,11 @@ func procesarAutoasignacionPremiumSinSesionBatch(rows []agentesapp.Row, tareasAc
 			}
 		}
 		if tarea == nil {
+			continue
+		}
+		if ajena, err := tareaPipelineLocalAsignadaAOtroAgente(tarea, agente); err != nil {
+			return procesadas, err
+		} else if ajena {
 			continue
 		}
 		if err := cerrarSemillaPremiumSiDerivaAFrenteAcotado(agente, proyecto.ID, tarea); err != nil {
@@ -11760,6 +11773,11 @@ func reactivarWorkerDisponibleConAsignacionPausada(row agentesapp.Row, proyecto 
 	if bloqueadaPorFrentePremiumCanonicoAjeno, err := proyectoTieneFrentePremiumCanonicoActivoAjeno(proyecto.ID, agente); err != nil {
 		return false, err
 	} else if bloqueadaPorFrentePremiumCanonicoAjeno {
+		return false, nil
+	}
+	if bloqueadaPorTrabajoPremiumActivoAjeno, err := proyectoTieneTrabajoPremiumActivoAjeno(proyecto.ID, agente); err != nil {
+		return false, err
+	} else if bloqueadaPorTrabajoPremiumActivoAjeno {
 		return false, nil
 	}
 	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "pause", "checkpoint", "resume", "start", "handoff", "nudge", "send_instruction"); err != nil {
@@ -11839,6 +11857,33 @@ func tareaPipelineLocalAsignadaAOtroAgente(tarea *capacidadapp.TareaPipelineLoca
 		return false, nil
 	}
 	return true, nil
+}
+
+func proyectoTieneTrabajoPremiumActivoAjeno(proyectoID int64, agente string) (bool, error) {
+	agente = strings.TrimSpace(agente)
+	if proyectoID <= 0 || agente == "" {
+		return false, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		return false, err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.Agente == nil || !tareaDBTieneContratoPremiumAcotado(tarea) {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaAsignada, db.TareaEnProgreso:
+		default:
+			continue
+		}
+		actual := strings.TrimSpace(*tarea.Agente)
+		if actual == "" || strings.EqualFold(actual, agente) || strings.EqualFold(actual, "orquesta") {
+			continue
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 func autonomiaReactivationAttemptCooldown() time.Duration {
@@ -16250,6 +16295,11 @@ func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, 
 			motivoAutoasignacion = "finish_app_slice_activa"
 			instruction = instruccionContinuacionSesionActivaAutonomia(tarea.ID)
 		}
+	}
+	if ajena, err := tareaPipelineLocalAsignadaAOtroAgente(tarea, strings.TrimSpace(sesion.Agente)); err != nil {
+		return 0, err
+	} else if ajena {
+		return 0, nil
 	}
 	if err := cerrarSemillaPremiumSiDerivaAFrenteAcotado(sesion.Agente, proyecto.ID, tarea); err != nil {
 		return 0, err

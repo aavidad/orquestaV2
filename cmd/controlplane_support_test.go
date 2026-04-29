@@ -16577,6 +16577,152 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXCanonicoDespachaNudgeAunque
 	}
 }
 
+func TestProcesarRuntimeMailboxSessionResumeBatchTMUXCanonicoDespachaAunqueRuntimeAunNoEsteEnlazadoSiWorkerYaEstaReady(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+
+	runDir := filepath.Join(tmp, "runtime", "Codex1", "session-resume-ready-no-runtime")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir run dir: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	writeJSON := func(path string, payload map[string]any) {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	writeJSON(manifestPath, map[string]any{
+		"version":             1,
+		"agent":               "Codex1",
+		"driver":              "tmux_cli_session",
+		"transport":           "tmux",
+		"tmux_session":        "orq-codex1-ready-no-runtime",
+		"tmux_pane_id":        "%170",
+		"external_session_id": "sess-codex1-ready-no-runtime",
+		"status_path":         statusPath,
+		"heartbeat_path":      heartbeatPath,
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":               "idle",
+		"updated_at":          now,
+		"alive":               true,
+		"external_session_id": "sess-codex1-ready-no-runtime",
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":               true,
+		"heartbeat_at":        now,
+		"started_at":          now,
+		"external_session_id": "sess-codex1-ready-no-runtime",
+	})
+
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex1-ready-no-runtime",
+		"tmux_pane_id":          "%170",
+		"external_session_id":   "sess-codex1-ready-no-runtime",
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryInteractive + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', runtime_id=NULL, capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle tmux: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"instruction":"haz una micro refactorizacion concreta","texto":"continua trabajo actual"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	startID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","mailbox_ids":[%d],"sesion_id":%d,"handle_id":%d}`,
+			msgID, sesion.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start bootstrap ready-no-runtime: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, startID); err != nil {
+		t.Fatalf("marcar start ejecutando: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia despachar session_resume si tmux ya esta ready aunque runtime aun no enlace, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var send *db.RuntimeOrder
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			send = order
+			break
+		}
+	}
+	if send == nil {
+		t.Fatal("faltaba send_instruction")
+	}
+	if !strings.Contains(send.PayloadJSON, `"mailbox_id":`+strconv.FormatInt(msgID, 10)) {
+		t.Fatalf("send_instruction sin mailbox_id: %s", send.PayloadJSON)
+	}
+	if !strings.Contains(send.PayloadJSON, `"external_session_id":"sess-codex1-ready-no-runtime"`) {
+		t.Fatalf("send_instruction sin external_session_id: %s", send.PayloadJSON)
+	}
+}
+
 func TestRuntimeHandleListaParaDispatchSessionResumeTMUXAceptaWorkerWaitingInputCanonico(t *testing.T) {
 	tmp := t.TempDir()
 	runDir := filepath.Join(tmp, "runtime", "waiting-input")
@@ -30158,6 +30304,92 @@ func TestProcesarAgentesDegradadosAutonomiaBatchAutoasignaPremiumLibreSinSesion(
 	}
 	if !strings.Contains(nudgeOrder.PayloadJSON, `"accion":"continuar_trabajo"`) || !strings.Contains(nudgeOrder.PayloadJSON, `"tarea_id":`+strconv.FormatInt(tareaID, 10)) {
 		t.Fatalf("nudge sin tarea canonica esperada: %s", nudgeOrder.PayloadJSON)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchNoRobaFrentePipelineLocalAjeno(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente Gemini1: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexOwner", "programador"); err != nil {
+		t.Fatalf("registrar agente CodexOwner: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-premium-frente-ajeno",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ObjetivoPct:      100,
+		MinAgentes:       1,
+		MaxAgentes:       3,
+		Prioridad:        100,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "frente premium"); err != nil {
+		t.Fatalf("activar asignacion Gemini1: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		INSERT INTO runtime_handles (agente, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at)
+		VALUES ('Gemini1', ?, 'tmux', 'session', 'orq-gemini1-fallida-ajena', 'fallido', '{"driver":"tmux_cli_session"}', CURRENT_TIMESTAMP)
+	`, proyectoID); err != nil {
+		t.Fatalf("insert handle fallido: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      microcicloRefactorTituloDefault,
+		Descripcion: descripcionMicrocicloDefault(&db.Proyecto{Slug: "orquestador-premium-frente-ajeno", RutaAbs: filepath.Join(tmp, "orquestador")}),
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexOwner"); err != nil {
+		t.Fatalf("tomar tarea CodexOwner: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexOwner"); err != nil {
+		t.Fatalf("iniciar tarea CodexOwner: %v", err)
+	}
+
+	resumen, err := procesarAgentesDegradadosAutonomiaBatchDetallado()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if resumen.IdleAutoassigned != 0 {
+		t.Fatalf("no deberia autoasignar premium sobre frente ajeno, resumen=%+v", resumen)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Agente == nil || strings.TrimSpace(*tarea.Agente) != "CodexOwner" || tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea ajena no deberia moverse de CodexOwner: %+v", tarea)
+	}
+
+	agente := "Gemini1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders Gemini1: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar start/nudge para Gemini1 sobre frente ajeno: %+v", orders)
 	}
 }
 
