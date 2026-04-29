@@ -444,6 +444,14 @@ func listMCPResources() ([]mcpResource, error) {
 			Annotations: audienceAssistant(1),
 		},
 		{
+			URI:         "orquesta://openclaw/operator",
+			Name:        "openclaw-operator",
+			Title:       "Snapshot operador OpenClaw",
+			Description: "Snapshot canónico del operador OpenClaw para decisión remota por MCP",
+			MIMEType:    "application/json",
+			Annotations: audienceAssistant(1),
+		},
+		{
 			URI:         "orquesta://runtimes/tree",
 			Name:        "runtimes-tree",
 			Title:       "Árbol de runtimes",
@@ -688,6 +696,13 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "application/json",
 		},
 		{
+			URITemplate: "orquesta://openclaw/operator{?supervisor}",
+			Name:        "openclaw-operator",
+			Title:       "Snapshot operador OpenClaw",
+			Description: "Snapshot canónico del operador OpenClaw; admite ?supervisor=OpenClaw",
+			MIMEType:    "application/json",
+		},
+		{
 			URITemplate: "orquesta://supervision/{supervisor}/briefing",
 			Name:        "briefing-supervisor",
 			Title:       "Briefing de supervisor",
@@ -773,6 +788,13 @@ func mcpProjectControlReport(slug string, since time.Time) (*projectControlRepor
 		return workspaceControlProjectBuilder(slug, since)
 	}
 	return buildProjectControlReport(slug, since)
+}
+
+func parseMCPProjectControlSince(raw string) (time.Time, error) {
+	if strings.TrimSpace(raw) == "" {
+		return parseStatsSince("24h")
+	}
+	return parseStatsSince(raw)
 }
 
 func mcpResolveGitStatsScope(projectRef, path, cwd string) (string, string, string, error) {
@@ -890,6 +912,16 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 	case uri == "orquesta://server/operational":
 		info := buildMCPServerOperationalInfo()
 		return resourceText(uri, "application/json", prettyJSON(info)), nil
+	case strings.HasPrefix(uri, "orquesta://openclaw/operator"):
+		parsed, err := url.Parse(uri)
+		if err != nil {
+			return nil, err
+		}
+		payload, err := buildMCPOpenClawOperatorSnapshot(parsed.Query().Get("supervisor"))
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "application/json", prettyJSON(payload)), nil
 	case strings.HasPrefix(uri, "orquesta://workspace/control"):
 		parsed, err := url.Parse(uri)
 		if err != nil {
@@ -1054,7 +1086,7 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		path := strings.TrimPrefix(parsed.Path, "/")
 		if strings.HasSuffix(path, "/control") {
 			slug := strings.TrimSuffix(path, "/control")
-			since, err := parseStatsSince(parsed.Query().Get("desde"))
+			since, err := parseMCPProjectControlSince(parsed.Query().Get("desde"))
 			if err != nil {
 				return nil, err
 			}
@@ -1359,6 +1391,14 @@ func listMCPPrompts() []mcpPrompt {
 			},
 		},
 		{
+			Name:        "orquesta.openclaw.operator",
+			Title:       "Snapshot operador OpenClaw",
+			Description: "Resume el snapshot canónico del operador OpenClaw listo para decidir por MCP",
+			Arguments: []mcpPromptArgument{
+				{Name: "supervisor", Description: "Nombre del supervisor operativo, por ejemplo OpenClaw", Required: false},
+			},
+		},
+		{
 			Name:        "orquesta.supervision.revision",
 			Title:       "Cola de revisión del supervisor",
 			Description: "Devuelve la vista estrecha de integración: review gates y señales recientes para OpenClaw",
@@ -1507,6 +1547,25 @@ func getMCPPrompt(name string, args map[string]any) (map[string]any, error) {
 					Content: map[string]any{
 						"type": "text",
 						"text": guidance,
+					},
+				},
+			},
+		}, nil
+
+	case "orquesta.openclaw.operator":
+		supervisor := optionalStringArg(args, "supervisor")
+		texto, err := buildMCPOpenClawOperatorOverview(supervisor)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"description": "Resumen operativo del snapshot canónico de OpenClaw",
+			"messages": []mcpPromptMessage{
+				{
+					Role: "user",
+					Content: map[string]any{
+						"type": "text",
+						"text": texto,
 					},
 				},
 			},
@@ -1696,6 +1755,7 @@ func listMCPTools() []mcpTool {
 		},
 		mcpServerOperationalTool(),
 		mcpWorkspaceControlTool(),
+		mcpOpenClawOperatorTool(),
 		{
 			Name:        "orquesta.tareas.listar",
 			Title:       "Listar tareas",
@@ -3175,6 +3235,9 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 	case "orquesta.workspace.control":
 		return callMCPWorkspaceControl(args)
 
+	case "orquesta.openclaw.operator":
+		return callMCPOpenClawOperator(args)
+
 	case "orquesta.tareas.listar":
 		filtro, err := buildFiltroTareas(args)
 		if err != nil {
@@ -3342,7 +3405,7 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		since, err := parseStatsSince(optionalStringArg(args, "desde"))
+		since, err := parseMCPProjectControlSince(optionalStringArg(args, "desde"))
 		if err != nil {
 			return toolResult(err.Error(), nil, true), nil
 		}
