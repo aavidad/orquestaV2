@@ -4361,6 +4361,160 @@ func TestProcesarDecisionContinuacionSesionActivaAutonomiaUsaInstructionEspecifi
 	}
 }
 
+func TestProcesarDecisionContinuacionSesionActivaAutonomiaNoReasignaObjetivoCanonicoDeOtroAgente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex6: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex10: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex6", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion Codex6: %v", err)
+	}
+	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+	semillaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Autonomía premium: abrir siguiente frente mayor útil",
+		Descripcion: "Semilla premium activa",
+		ProyectoID:  &proyectoID,
+		Modulo:      "autonomia",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:premium_frontier",
+	})
+	if err != nil {
+		t.Fatalf("crear semilla: %v", err)
+	}
+	if err := db.TomarTarea(semillaID, "Codex6"); err != nil {
+		t.Fatalf("tomar semilla Codex6: %v", err)
+	}
+	if err := db.IniciarTarea(semillaID, "Codex6"); err != nil {
+		t.Fatalf("iniciar semilla Codex6: %v", err)
+	}
+	tareaCanonicaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Micro-refactorización cíclica del control plane: runtime mailbox/session_resume",
+		Descripcion: "Frente premium acotado.\nWrite-set preferente: cmd/controlplane_support.go, cmd/controlplane_support_test.go\nTests minimos: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea canonica: %v", err)
+	}
+	if err := db.TomarTarea(tareaCanonicaID, "Codex10"); err != nil {
+		t.Fatalf("tomar tarea canonica Codex10: %v", err)
+	}
+	if err := db.IniciarTarea(tareaCanonicaID, "Codex10"); err != nil {
+		t.Fatalf("iniciar tarea canonica Codex10: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex6",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtimeInst == nil {
+		t.Fatalf("runtime: %+v err=%v", runtimeInst, err)
+	}
+	traceDir := filepath.Join(tmp, "runtime", "codex6stale")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	now := time.Now().UTC()
+	staleAt := now.Add(-10 * time.Minute)
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex6","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex6-stale","tmux_pane_id":"%31","created_at":"`+now.Format(time.RFC3339Nano)+`","started_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"ready","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`","last_output_at":"`+staleAt.Format(time.RFC3339Nano)+`","last_progress_at":"`+staleAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write worker status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now.Format(time.RFC3339Nano)+`","last_output_at":"`+staleAt.Format(time.RFC3339Nano)+`","last_progress_at":"`+staleAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex6-stale",
+		"tmux_pane_id":          "%31",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex6-stale/%31', metadata_json=?, estado='activo' WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("activar handle tmux: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='activo', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeInst.ID); err != nil {
+		t.Fatalf("activar runtime: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	n, err := procesarDecisionContinuacionSesionActivaAutonomia(sesion, proyecto, agenteTickOutput{
+		AccionRecomendada: "continuar_trabajo",
+		Motivo:            "Sigue trabajando hasta completar la tarea o detectar una duda real",
+	}, nil)
+	if err != nil {
+		t.Fatalf("procesarDecisionContinuacionSesionActivaAutonomia: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia nudgear continuidad si el objetivo canonico ya esta tomado por otro agente, got=%d", n)
+	}
+
+	semilla, err := db.GetTarea(semillaID)
+	if err != nil {
+		t.Fatalf("get semilla: %v", err)
+	}
+	if semilla.Estado != db.TareaEnProgreso || semilla.Agente == nil || strings.TrimSpace(*semilla.Agente) != "Codex6" {
+		t.Fatalf("la semilla no deberia alterarse: %+v", semilla)
+	}
+	tareaCanonica, err := db.GetTarea(tareaCanonicaID)
+	if err != nil {
+		t.Fatalf("get tarea canonica: %v", err)
+	}
+	if tareaCanonica.Estado != db.TareaEnProgreso || tareaCanonica.Agente == nil || strings.TrimSpace(*tareaCanonica.Agente) != "Codex10" {
+		t.Fatalf("la tarea canonica no deberia cambiar de agente: %+v", tareaCanonica)
+	}
+
+	agente := "Codex6"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar runtime orders para Codex6: %+v", orders)
+	}
+}
+
 func TestProcesarDecisionContinuacionSesionActivaAutonomiaEncolaNudgeTMUXStaleConHandleCanonicoNoEnlazado(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -6963,6 +7117,163 @@ func TestProcesarAutonomiaAgentesBatchAutoasignaTrabajoAmplioASesionActivaIdle(t
 	}
 }
 
+func TestProcesarAutonomiaSesionActivaIdleNoReasignaObjetivoCanonicoDeOtroAgente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	autonomiaIdleAutoassignGate.Reset()
+
+	if err := db.RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex10: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex6: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex6", proyectoID, "frente auxiliar"); err != nil {
+		t.Fatalf("activar asignacion Codex6: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex6",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "cat-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion Codex6: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Micro-refactorización cíclica del control plane: runtime mailbox/session_resume",
+		Descripcion: "Frente premium acotado.\nWrite-set preferente: cmd/controlplane_support.go, cmd/controlplane_support_test.go\nTests minimos: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("tomar tarea Codex10: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("iniciar tarea Codex10: %v", err)
+	}
+
+	n, err := procesarAutonomiaSesionActiva(sesion)
+	if err != nil {
+		t.Fatalf("procesar autonomia: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia autoasignar ni nudgear un objetivo canonico ya tomado por otro agente, got=%d", n)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || strings.TrimSpace(*tarea.Agente) != "Codex10" || tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea canonica no deberia cambiar de agente: %+v", tarea)
+	}
+
+	agente := "Codex6"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar runtime orders para Codex6: %+v", orders)
+	}
+}
+
+func TestReactivarWorkerDisponibleConAsignacionPausadaNoReasignaObjetivoCanonicoDeOtroAgente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex10: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex6: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO asignaciones (agente, proyecto_id, estado, nota) VALUES (?,?,?,?)`,
+		"Codex6", proyectoID, db.AsignacionPausada, "sin_trabajo_reactivacion_automatica",
+	); err != nil {
+		t.Fatalf("insert asignacion pausada: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Micro-refactorización cíclica del control plane: runtime mailbox/session_resume",
+		Descripcion: "Frente premium acotado.\nWrite-set preferente: cmd/controlplane_support.go, cmd/controlplane_support_test.go\nTests minimos: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("tomar tarea Codex10: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("iniciar tarea Codex10: %v", err)
+	}
+
+	proyecto, err := db.GetProyecto("orquestador")
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+	row := agentesapp.Row{
+		Agente:     &db.Agente{Nombre: "Codex6"},
+		Asignacion: &db.Asignacion{Agente: "Codex6", ProyectoID: proyectoID, Estado: db.AsignacionPausada, Nota: "sin_trabajo_reactivacion_automatica"},
+	}
+
+	reactivado, err := reactivarWorkerDisponibleConAsignacionPausada(row, proyecto)
+	if err != nil {
+		t.Fatalf("reactivarWorkerDisponibleConAsignacionPausada: %v", err)
+	}
+	if reactivado {
+		t.Fatal("no deberia reactivar ni nudgear una asignacion pausada si el objetivo canonico ya pertenece a otro agente")
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || strings.TrimSpace(*tarea.Agente) != "Codex10" || tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea canonica no deberia cambiar de agente: %+v", tarea)
+	}
+
+	agente := "Codex6"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar runtime orders para Codex6: %+v", orders)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchAutoasignaFinishAppASesionActivaIdle(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	autonomiaIdleAutoassignGate.Reset()
@@ -8247,6 +8558,111 @@ func TestProcesarAutonomiaSesionActivaCompactaFrentesPremiumAsignadosDuplicados(
 	}
 	if tareaAcotada.Estado != db.TareaAsignada || tareaAcotada.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tareaAcotada.Agente), "claude1") {
 		t.Fatalf("la tarea acotada deberia quedar como frente canónico: %+v", tareaAcotada)
+	}
+}
+
+func TestProcesarDerivacionSemillaPremiumSesionActivaNoReasignaObjetivoCanonicoDeOtroAgente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex6: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex10: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex6", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion Codex6: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex6",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "cat-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion Codex6: %v", err)
+	}
+
+	semillaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Autonomía premium: abrir siguiente frente mayor útil",
+		Descripcion: "Semilla premium activa",
+		ProyectoID:  &proyectoID,
+		Modulo:      "autonomia",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:premium_frontier",
+	})
+	if err != nil {
+		t.Fatalf("crear semilla premium: %v", err)
+	}
+	if err := db.TomarTarea(semillaID, "Codex6"); err != nil {
+		t.Fatalf("tomar semilla premium Codex6: %v", err)
+	}
+	if err := db.IniciarTarea(semillaID, "Codex6"); err != nil {
+		t.Fatalf("iniciar semilla premium Codex6: %v", err)
+	}
+
+	tareaAcotadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Micro-refactorización cíclica del control plane: runtime mailbox/session_resume",
+		Descripcion: "Frente premium acotado.\nWrite-set preferente: cmd/controlplane_support.go, cmd/controlplane_support_test.go\nTests minimos: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea acotada: %v", err)
+	}
+	if err := db.TomarTarea(tareaAcotadaID, "Codex10"); err != nil {
+		t.Fatalf("tomar tarea acotada Codex10: %v", err)
+	}
+	if err := db.IniciarTarea(tareaAcotadaID, "Codex10"); err != nil {
+		t.Fatalf("iniciar tarea acotada Codex10: %v", err)
+	}
+
+	n, err := procesarDerivacionSemillaPremiumSesionActiva(sesion, nil)
+	if err != nil {
+		t.Fatalf("procesarDerivacionSemillaPremiumSesionActiva: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia derivar ni nudgear si la slice canonica ya pertenece a otro agente, got=%d", n)
+	}
+
+	semilla, err := db.GetTarea(semillaID)
+	if err != nil {
+		t.Fatalf("get semilla: %v", err)
+	}
+	if semilla.Estado != db.TareaEnProgreso || semilla.Agente == nil || strings.TrimSpace(*semilla.Agente) != "Codex6" {
+		t.Fatalf("la semilla no deberia alterarse: %+v", semilla)
+	}
+
+	tareaAcotada, err := db.GetTarea(tareaAcotadaID)
+	if err != nil {
+		t.Fatalf("get tarea acotada: %v", err)
+	}
+	if tareaAcotada.Estado != db.TareaEnProgreso || tareaAcotada.Agente == nil || strings.TrimSpace(*tareaAcotada.Agente) != "Codex10" {
+		t.Fatalf("la tarea canonica no deberia cambiar de agente: %+v", tareaAcotada)
+	}
+
+	agente := "Codex6"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar runtime orders para Codex6: %+v", orders)
 	}
 }
 
@@ -19564,6 +19980,17 @@ func TestProcesarRuntimeMailboxSessionResumeBatchConsumePipelineLocalPremiumSinT
 	}
 }
 
+func TestRuntimeMailboxPremiumPipelineLocalSinTareaReconoceSourceAunqueKindVengaVacio(t *testing.T) {
+	msg := &db.RuntimeMailboxMessage{Kind: ""}
+	payload := map[string]any{
+		"source": "pipeline_local",
+		"carril": "premium_worktree",
+	}
+	if !runtimeMailboxPremiumPipelineLocalSinTarea(msg, payload) {
+		t.Fatalf("deberia reconocer source pipeline_local premium aunque mailbox.Kind venga vacio")
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchConsumePipelineLocalPremiumConSoloMailboxKindSinTareaObjetivo(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -20590,6 +21017,111 @@ func TestProcesarRuntimeMailboxSessionResumeBatchRespetaLeaseHandoffDerivadaConM
 		if order != nil && order.Tipo == "send_instruction" {
 			t.Fatalf("no deberia existir send_instruction duplicada para mailbox cubierta por handoff con mailbox propia consumida: %+v", order)
 		}
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeBatchConsumeMailboxSiLeaseDerivadaHeredaReceiptUtilDeStartFuente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"instruction":"slice observado derivado","texto":"continua slice observado derivado"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox vigente: %v", err)
+	}
+	startID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		HandleID:   &handle.ID,
+		RuntimeID:  &runtime.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","delivery_state":"delivered","delivery_receipt_at":"2026-04-14T12:37:01Z","receipt_source":"git_worktree","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			msgID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start fuente observada: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET estado='completada', started_at=CURRENT_TIMESTAMP, finished_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, startID); err != nil {
+		t.Fatalf("marcar start fuente completada: %v", err)
+	}
+
+	resumeID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		HandleID:   &handle.ID,
+		RuntimeID:  &runtime.ID,
+		Tipo:       "resume",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","start_order_id":%d,"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			startID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar resume derivada: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, resumeID); err != nil {
+		t.Fatalf("marcar resume derivada ejecutando: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatchConMailbox([]*db.RuntimeMailboxMessage{{
+		ID:          msgID,
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"instruction":"slice observado derivado","texto":"continua slice observado derivado"}`,
+	}}, map[int64]struct{}{}, newRuntimeMailboxBatchSnapshot())
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia consumir mailbox observada heredada desde start fuente, got=%d", n)
+	}
+
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("mailbox final: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("mailbox deberia quedar consumida por receipt util heredado: %+v", msg)
 	}
 }
 
@@ -42757,6 +43289,129 @@ func TestProcesarWorkerAtascadoAutonomiaRowPrefiereContinuacionLocalBootstrapOnl
 	}
 	if nudgeCount != 1 {
 		t.Fatalf("deberia encolar exactamente un nudge de continuidad, got=%d orders=%+v", nudgeCount, orders)
+	}
+}
+
+func TestProcesarWorkerAtascadoAutonomiaRowNoReasignaObjetivoCanonicoDeOtroAgente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	if err := db.ConfigSet("runtime_shared_account_active_ceiling", "4"); err != nil {
+		t.Fatalf("config ceiling: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex10: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex6: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex6", proyectoID, "frente auxiliar"); err != nil {
+		t.Fatalf("activar asignacion Codex6: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex6",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion Codex6: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert handle Codex6: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle=%+v err=%v", handle, err)
+	}
+	semillaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Autonomía premium: abrir siguiente frente mayor útil",
+		Descripcion: "Semilla premium activa",
+		ProyectoID:  &proyectoID,
+		Modulo:      "autonomia",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:premium_frontier",
+	})
+	if err != nil {
+		t.Fatalf("crear semilla premium: %v", err)
+	}
+	if err := db.TomarTarea(semillaID, "Codex6"); err != nil {
+		t.Fatalf("tomar semilla premium Codex6: %v", err)
+	}
+	if err := db.IniciarTarea(semillaID, "Codex6"); err != nil {
+		t.Fatalf("iniciar semilla premium Codex6: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Micro-refactorización cíclica del control plane: runtime mailbox/session_resume",
+		Descripcion: "Frente premium acotado.\nWrite-set preferente: cmd/controlplane_support.go, cmd/controlplane_support_test.go\nTests minimos: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea canonica: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("tomar tarea canonica Codex10: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("iniciar tarea canonica Codex10: %v", err)
+	}
+
+	now := time.Now().UTC()
+	row := agentesapp.Row{
+		Agente:                    &db.Agente{Nombre: "Codex6"},
+		Asignacion:                &db.Asignacion{Agente: "Codex6", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+		Sesion:                    sesion,
+		Handle:                    handle,
+		WorkerDriver:              "tmux_cli_session",
+		WorkerState:               "ready",
+		WorkerAlive:               true,
+		WorkerCanSendInput:        true,
+		WorkerMailboxDeliveryMode: runtimeagente.MailboxDeliverySessionResume,
+		WorkerHeartbeat:           ptrTime(now),
+		WorkerUpdatedAt:           ptrTime(now),
+		WorkerReadyAt:             ptrTime(now.Add(-25 * time.Minute)),
+		OpenTasks:                 1,
+		EstadoOperativo:           "atascado",
+		DetalleOperativo:          "sin progreso desde listo",
+	}
+
+	procesadas, err := procesarWorkerAtascadoAutonomiaRow(row, []agentesapp.Row{row}, now)
+	if err != nil {
+		t.Fatalf("procesar worker atascado row: %v", err)
+	}
+	if procesadas != 0 {
+		t.Fatalf("no deberia reinyectar continuidad si el objetivo canonico ya esta tomado por otro agente, got=%d", procesadas)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea canonica: %v", err)
+	}
+	if tarea.Agente == nil || strings.TrimSpace(*tarea.Agente) != "Codex10" || tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea canonica no deberia cambiar de agente: %+v", tarea)
+	}
+
+	agente := "Codex6"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar runtime orders para Codex6: %+v", orders)
 	}
 }
 

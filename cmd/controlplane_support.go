@@ -9922,10 +9922,6 @@ func runtimeMailboxPremiumPipelineLocalSinTarea(msg *db.RuntimeMailboxMessage, p
 	if msg == nil || payload == nil {
 		return false
 	}
-	if !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") &&
-		!strings.EqualFold(strings.TrimSpace(msg.Kind), "microprogramacion") {
-		return false
-	}
 	isPipelineLocal := strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") ||
 		strings.EqualFold(strings.TrimSpace(msg.Kind), "microprogramacion") ||
 		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "source")), "pipeline_local") ||
@@ -11709,6 +11705,13 @@ func reactivarWorkerDisponibleConAsignacionPausada(row agentesapp.Row, proyecto 
 	if row.Asignacion != nil && row.Asignacion.Estado == db.AsignacionActiva {
 		return false, nil
 	}
+	bloqueadaPorOtroAgente, err := pipelineLocalObjetivoAsignadoAOtroAgenteSesionActiva(strings.TrimSpace(proyecto.Slug), agente)
+	if err != nil {
+		return false, err
+	}
+	if bloqueadaPorOtroAgente {
+		return false, nil
+	}
 	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "pause", "checkpoint", "resume", "start", "handoff", "nudge", "send_instruction"); err != nil {
 		return false, err
 	} else if pendiente {
@@ -12987,6 +12990,13 @@ func procesarWorkerAtascadoAutonomiaRow(row agentesapp.Row, rows []agentesapp.Ro
 						}
 					}
 					if proyecto != nil {
+						bloqueadaPorOtroAgente, err := pipelineLocalObjetivoAsignadoAOtroAgenteSesionActiva(strings.TrimSpace(proyecto.Slug), agente)
+						if err != nil {
+							return 0, err
+						}
+						if bloqueadaPorOtroAgente {
+							return 0, nil
+						}
 						ok, err := encolarNudgeAutonomiaConInvalidacion(
 							nil,
 							agente,
@@ -15528,6 +15538,13 @@ func procesarDerivacionSemillaPremiumSesionActiva(sesion *db.Sesion, snapshot *a
 	if err != nil || proyecto == nil {
 		return 0, err
 	}
+	bloqueadaPorOtroAgente, err := pipelineLocalObjetivoAsignadoAOtroAgenteSesionActiva(strings.TrimSpace(proyecto.Slug), strings.TrimSpace(sesion.Agente))
+	if err != nil {
+		return 0, err
+	}
+	if bloqueadaPorOtroAgente {
+		return 0, nil
+	}
 	var tareaNueva *capacidadapp.TareaPipelineLocal
 	if tareaDerivada, err := derivarFrentePremiumAcotadoDesdeSemilla(proyecto.ID, sesion.Agente, tareaActual.ID); err != nil {
 		return 0, err
@@ -15878,6 +15895,13 @@ func procesarDecisionContinuarTrabajoSesionActivaAutonomia(sesion *db.Sesion, pr
 		invalidarSnapshotAutonomiaProyecto(snapshot, sesion.Agente, proyecto.ID)
 		return 1, nil
 	}
+	bloqueadaPorOtroAgente, err := pipelineLocalObjetivoAsignadoAOtroAgenteSesionActiva(strings.TrimSpace(proyecto.Slug), strings.TrimSpace(sesion.Agente))
+	if err != nil {
+		return 0, err
+	}
+	if bloqueadaPorOtroAgente {
+		return 0, nil
+	}
 	throttleKey := autonomiaContinueNudgeThrottleKey(sesion.Agente, proyecto.ID, tareaID)
 	if !autonomiaContinueNudgeShouldAttempt(sesion.Agente, proyecto.ID, tareaID) {
 		return 0, nil
@@ -16046,6 +16070,13 @@ func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, 
 	if err := revalidarYVerificarAgenteDisponibleParaTrabajoConSnapshot(sesion.Agente, snapshot); err != nil {
 		return 0, nil
 	}
+	bloqueadaPorOtroAgente, err := pipelineLocalObjetivoAsignadoAOtroAgenteSesionActiva(strings.TrimSpace(proyecto.Slug), strings.TrimSpace(sesion.Agente))
+	if err != nil {
+		return 0, err
+	}
+	if bloqueadaPorOtroAgente {
+		return 0, nil
+	}
 	tarea, err := capacidadService.IntentarAutoasignarTareaPipelineLocal(proyecto.Slug, sesion.Agente)
 	motivoAutoasignacion := "sesion_activa_idle"
 	instruction := "toma tarea asignada y sigue"
@@ -16118,6 +16149,32 @@ func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, 
 		return 1, nil
 	}
 	return 0, nil
+}
+
+func pipelineLocalObjetivoAsignadoAOtroAgenteSesionActiva(proyectoSlug, agente string) (bool, error) {
+	proyectoSlug = strings.TrimSpace(proyectoSlug)
+	agente = strings.TrimSpace(agente)
+	if proyectoSlug == "" || agente == "" {
+		return false, nil
+	}
+	paso, err := capacidadService.CalcularSiguientePasoPipelineLocalDeterminista(proyectoSlug)
+	if err != nil || paso == nil || paso.TareaObjetivo == nil {
+		return false, err
+	}
+	tarea := paso.TareaObjetivo
+	switch strings.TrimSpace(tarea.Estado) {
+	case string(db.TareaAsignada), string(db.TareaEnProgreso):
+	default:
+		return false, nil
+	}
+	actual := strings.TrimSpace(tarea.Agente)
+	if actual == "" {
+		return false, nil
+	}
+	if strings.EqualFold(actual, agente) || strings.EqualFold(actual, "orquesta") {
+		return false, nil
+	}
+	return true, nil
 }
 
 func revalidarYVerificarAgenteDisponibleParaTrabajoConSnapshot(nombre string, snapshot *autonomiaBatchSnapshot) error {
