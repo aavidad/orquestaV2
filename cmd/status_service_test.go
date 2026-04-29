@@ -570,6 +570,7 @@ func TestStatusServiceNoEsperaIndefinidamenteRefreshEnVuelo(t *testing.T) {
 	prevFastFetcher := statusFastFetcher
 	prevFreshTimeout := statusFreshTimeout
 	prevFastTimeout := statusFastTimeout
+	prevRefreshWaitTimeout := statusRefreshWaitTimeout
 	prevNow := statusNowFunc
 	prevTTL := statusSnapshotTTL
 	prevAsync := statusAsyncRefresh
@@ -579,6 +580,7 @@ func TestStatusServiceNoEsperaIndefinidamenteRefreshEnVuelo(t *testing.T) {
 		statusFastFetcher = prevFastFetcher
 		statusFreshTimeout = prevFreshTimeout
 		statusFastTimeout = prevFastTimeout
+		statusRefreshWaitTimeout = prevRefreshWaitTimeout
 		statusNowFunc = prevNow
 		statusSnapshotTTL = prevTTL
 		statusAsyncRefresh = prevAsync
@@ -619,6 +621,64 @@ func TestStatusServiceNoEsperaIndefinidamenteRefreshEnVuelo(t *testing.T) {
 	}
 	if elapsed > 250*time.Millisecond {
 		t.Fatalf("no deberia esperar indefinidamente a waitCh, elapsed=%s", elapsed)
+	}
+}
+
+func TestStatusServiceTimeoutAcotadoSiFastYRefreshSiguenBloqueados(t *testing.T) {
+	prevFetcher := statusFreshFetcher
+	prevFastFetcher := statusFastFetcher
+	prevFreshTimeout := statusFreshTimeout
+	prevFastTimeout := statusFastTimeout
+	prevRefreshWaitTimeout := statusRefreshWaitTimeout
+	prevNow := statusNowFunc
+	prevTTL := statusSnapshotTTL
+	prevAsync := statusAsyncRefresh
+	resetStatusSnapshotCache()
+	defer func() {
+		statusFreshFetcher = prevFetcher
+		statusFastFetcher = prevFastFetcher
+		statusFreshTimeout = prevFreshTimeout
+		statusFastTimeout = prevFastTimeout
+		statusRefreshWaitTimeout = prevRefreshWaitTimeout
+		statusNowFunc = prevNow
+		statusSnapshotTTL = prevTTL
+		statusAsyncRefresh = prevAsync
+		resetStatusSnapshotCache()
+	}()
+
+	current := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return current }
+	statusSnapshotTTL = time.Minute
+	statusAsyncRefresh = true
+	statusFreshTimeout = 20 * time.Millisecond
+	statusFastTimeout = 20 * time.Millisecond
+	statusRefreshWaitTimeout = 30 * time.Millisecond
+
+	blockFresh := make(chan struct{})
+	statusFreshFetcher = func() (apiStatusResponse, error) {
+		<-blockFresh
+		return apiStatusResponse{Generado: "fresh"}, nil
+	}
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		<-blockFresh
+		return apiStatusResponse{Generado: "fallback_wait"}, nil
+	}
+
+	statusCacheState.mu.Lock()
+	statusCacheState.refreshing = true
+	statusCacheState.waitCh = blockFresh
+	statusCacheState.ok = false
+	statusCacheState.mu.Unlock()
+
+	start := time.Now()
+	status, err := dbStatusService{}.FetchStatus()
+	elapsed := time.Since(start)
+	close(blockFresh)
+	if !errors.Is(err, errStatusFetchTimeout) {
+		t.Fatalf("deberia devolver timeout acotado, status=%+v err=%v", status, err)
+	}
+	if elapsed > 150*time.Millisecond {
+		t.Fatalf("no deberia esperar indefinidamente con fast y refresh bloqueados, elapsed=%s", elapsed)
 	}
 }
 

@@ -32,6 +32,7 @@ var (
 	statusFailureBackoffTTL             = 2 * time.Second
 	statusFreshTimeout                  = 1500 * time.Millisecond
 	statusFastTimeout                   = 750 * time.Millisecond
+	statusRefreshWaitTimeout            = 150 * time.Millisecond
 	statusRowsTimeout                   = 400 * time.Millisecond
 	statusOptionalSectionTimeout        = 300 * time.Millisecond
 	statusFreshFetcher                  = fetchStatusFresh
@@ -1363,7 +1364,7 @@ func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
 				markStatusRefreshBackoff(now)
 				return status, nil
 			}
-			if waitStatusRefresh(waitCh, 0) {
+			if waitStatusRefresh(waitCh, statusRefreshWaitTimeout) {
 				if cached, ok := readStatusSnapshotAny(); ok {
 					return cached, nil
 				}
@@ -1378,7 +1379,7 @@ func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
 			markStatusRefreshBackoff(now)
 			return status, nil
 		}
-		if waitStatusRefresh(waitCh, 0) {
+		if waitStatusRefresh(waitCh, statusRefreshWaitTimeout) {
 			if cached, ok := readStatusSnapshotAny(); ok {
 				return cached, nil
 			}
