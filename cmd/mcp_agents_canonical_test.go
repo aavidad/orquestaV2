@@ -67,5 +67,8 @@ func TestMCPToolsAgentesOverviewCanonicalExponeTaskDebt(t *testing.T) {
 		if resp.Agent.Entity.MultitaskDebt != 1 || resp.Agent.Entity.WorkerGapCount != 2 {
 			t.Fatalf("task debt canónica inesperada: %+v", resp.Agent.Entity)
 		}
+		if resp.Agent.Entity.TaskWorkerHint == "" || resp.Agent.Entity.TaskWorkerHint != "2 tarea(s) abiertas sin worker vivo u operativo; este agente puede no aparecer en /api/status.agentesActivos" {
+			t.Fatalf("task worker hint canónico inesperado: %+v", resp.Agent.Entity)
+		}
 	})
 }

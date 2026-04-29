@@ -2178,8 +2178,26 @@ func buildCanonicalAgentOverview(detail *agentesapp.Detail) *agentesapp.PanelEnt
 	if mailboxTotal == 0 {
 		mailboxTotal = row.MailboxTotal
 	}
+	var entity *agentesapp.AgentEntity
+	if canonical := agentesService.BuildPanelEntities([]agentesapp.Row{row}, time.Now().UTC()); len(canonical) == 1 {
+		entity = canonical[0].Entity
+	}
+	if entity == nil {
+		entity = detail.Entity
+	}
+	if entity != nil && detail.Entity != nil {
+		if len(entity.Leases) == 0 && len(detail.Entity.Leases) > 0 {
+			entity.Leases = detail.Entity.Leases
+		}
+		if entity.CurrentTask == nil && detail.Entity.CurrentTask != nil {
+			entity.CurrentTask = detail.Entity.CurrentTask
+		}
+		if entity.DominantOrder == nil && detail.Entity.DominantOrder != nil {
+			entity.DominantOrder = detail.Entity.DominantOrder
+		}
+	}
 	return &agentesapp.PanelEntity{
-		Entity:                   detail.Entity,
+		Entity:                   entity,
 		MailboxPending:           row.MailboxPending,
 		MailboxPendingVisible:    detail.MailboxPendingVisible,
 		MailboxActionablePending: row.MailboxActionablePending,

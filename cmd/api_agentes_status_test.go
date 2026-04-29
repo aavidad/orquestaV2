@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -154,6 +155,9 @@ func TestAPIAgentesPanelCanonicalExponeDTOCanonico(t *testing.T) {
 	if resp.Agents[0].Entity.MultitaskDebt != 2 || resp.Agents[0].Entity.WorkerGapCount != 0 {
 		t.Fatalf("panel canonical sin deuda multitarea esperada: %+v", resp.Agents[0].Entity)
 	}
+	if !strings.Contains(resp.Agents[0].Entity.TaskWorkerHint, "deuda multitarea=2") {
+		t.Fatalf("panel canonical sin explicacion multitarea esperada: %+v", resp.Agents[0].Entity)
+	}
 }
 
 func TestAPIAgenteOverviewExponeAgentCanonicoSinRomperDetail(t *testing.T) {
@@ -205,6 +209,49 @@ func TestAPIAgenteOverviewExponeAgentCanonicoSinRomperDetail(t *testing.T) {
 	}
 }
 
+func TestAPIAgenteOverviewCanonicoExplicaGapConStatus(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prevBuilder := apiAgentDetailBuilder
+	defer func() { apiAgentDetailBuilder = prevBuilder }()
+
+	apiAgentDetailBuilder = func(nombre string, compact bool) (*agentesapp.Detail, error) {
+		return &agentesapp.Detail{
+			Row: agentesapp.Row{
+				Agente:    &db.Agente{Nombre: nombre, Rol: "programador", Activo: false, Habilitado: true},
+				OpenTasks: 2,
+			},
+			Entity:                &agentesapp.AgentEntity{Name: nombre, Role: "programador", ActiveNow: false, OperationalState: "sin_tarea"},
+			MailboxPendingVisible: 0,
+			MailboxTotalCount:     0,
+		}, nil
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/agentes/CodexGap/overview?compact=true", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp apiAgenteOverviewResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode overview gap: %v", err)
+	}
+	if resp.Agent == nil || resp.Agent.Entity == nil {
+		t.Fatalf("agent canónico inesperado: %+v", resp.Agent)
+	}
+	if resp.Agent.Entity.WorkerGapCount != 2 {
+		t.Fatalf("worker gap inesperado: %+v", resp.Agent.Entity)
+	}
+	if !strings.Contains(resp.Agent.Entity.TaskWorkerHint, "/api/status.agentesActivos") {
+		t.Fatalf("falta explicacion de discrepancia con status: %+v", resp.Agent.Entity)
+	}
+}
+
 func TestAPIAgentesPanelCanonicalDerivaActiveNowDesdeEstadoOperativoVivo(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	resetAgentPanelSnapshotCache()
@@ -247,6 +294,9 @@ func TestAPIAgentesPanelCanonicalNoPromueveSesionSolaComoActiveNow(t *testing.T)
 	prepararDBTemporalCmd(t)
 	resetAgentPanelSnapshotCache()
 	defer resetAgentPanelSnapshotCache()
+	prevBuilder := apiAgentPanelRowsBuilder
+	apiAgentPanelRowsBuilder = nil
+	defer func() { apiAgentPanelRowsBuilder = prevBuilder }()
 
 	now := time.Now().UTC()
 	storeAgentPanelSnapshot([]agentesapp.Row{{
@@ -278,5 +328,8 @@ func TestAPIAgentesPanelCanonicalNoPromueveSesionSolaComoActiveNow(t *testing.T)
 	}
 	if resp.Agents[0].Entity.WorkerGapCount != 2 {
 		t.Fatalf("deberia exponer gap tareas-vs-worker por agente: %+v", resp.Agents[0].Entity)
+	}
+	if !strings.Contains(resp.Agents[0].Entity.TaskWorkerHint, "/api/status.agentesActivos") {
+		t.Fatalf("deberia explicar la discrepancia con status: %+v", resp.Agents[0].Entity)
 	}
 }

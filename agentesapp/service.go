@@ -451,6 +451,7 @@ type AgentEntity struct {
 	ActiveNow                   bool        `json:"active_now"`
 	MultitaskDebt               int         `json:"multitask_debt,omitempty"`
 	WorkerGapCount              int         `json:"worker_gap_count,omitempty"`
+	TaskWorkerHint              string      `json:"task_worker_hint,omitempty"`
 	AccountID                   string      `json:"account_id,omitempty"`
 	AccountEmail                string      `json:"account_email,omitempty"`
 	AccountUser                 string      `json:"account_user,omitempty"`
@@ -3650,6 +3651,12 @@ func buildAgentEntity(store Store, row Row, tareas []*db.Tarea) *AgentEntity {
 	}
 	if row.OpenTasks > 0 && !activeNow {
 		entity.WorkerGapCount = row.OpenTasks
+	}
+	switch {
+	case entity.WorkerGapCount > 0:
+		entity.TaskWorkerHint = fmt.Sprintf("%d tarea(s) abiertas sin worker vivo u operativo; este agente puede no aparecer en /api/status.agentesActivos", entity.WorkerGapCount)
+	case entity.MultitaskDebt > 0:
+		entity.TaskWorkerHint = fmt.Sprintf("%d tarea(s) abiertas comparten un solo agente activo; deuda multitarea=%d", row.OpenTasks, entity.MultitaskDebt)
 	}
 	if row.Asignacion != nil {
 		entity.AssignmentProject = strings.TrimSpace(row.Asignacion.ProyectoSlug)
