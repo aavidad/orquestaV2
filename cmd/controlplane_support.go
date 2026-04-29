@@ -13127,6 +13127,11 @@ func procesarWorkerAtascadoAutonomiaRow(row agentesapp.Row, rows []agentesapp.Ro
 						if bloqueadaPorOtroAgente {
 							return 0, nil
 						}
+						if ajena, err := tareaPipelineLocalAsignadaAOtroAgente(&capacidadapp.TareaPipelineLocal{ID: tareaID}, agente); err != nil {
+							return 0, err
+						} else if ajena {
+							return 0, nil
+						}
 						ok, err := encolarNudgeAutonomiaConInvalidacion(
 							nil,
 							agente,

@@ -44341,6 +44341,112 @@ func TestProcesarWorkerAtascadoAutonomiaRowNoReasignaObjetivoCanonicoDeOtroAgent
 	}
 }
 
+func TestProcesarWorkerAtascadoAutonomiaRowNoReinyectaDurableTaskIDAjena(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexDurableStale", "programador"); err != nil {
+		t.Fatalf("registrar agente durable: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex10: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-worker-durable-stale",
+		Nombre:  "Orquestador Worker Durable Stale",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexDurableStale", proyectoID, "frente auxiliar"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente ajeno confirmado",
+		Descripcion: "Slice activo en otro agente",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	traceDir := filepath.Join(tmp, "runtime-codexdurable-stale")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	workQueueRaw, _ := json.Marshal(map[string]any{
+		"version":    1,
+		"updated_at": time.Now().UTC().Format(time.RFC3339Nano),
+		"current": map[string]any{
+			"mailbox_id":  101,
+			"kind":        "autonomia",
+			"action":      "continuar_trabajo",
+			"task_id":     tareaID,
+			"state":       "pending",
+			"recorded_at": time.Now().UTC().Format(time.RFC3339Nano),
+		},
+	})
+	if err := os.WriteFile(filepath.Join(traceDir, "work-queue.json"), workQueueRaw, 0o600); err != nil {
+		t.Fatalf("write work-queue: %v", err)
+	}
+	metaRaw, _ := json.Marshal(map[string]any{
+		"trace_dir":             traceDir,
+		"worker_schema_version": runtimeagente.WorkerMetadataSchemaVersion,
+		"worker_manifest_path":  filepath.Join(traceDir, "manifest.json"),
+		"worker_status_path":    filepath.Join(traceDir, "status.json"),
+		"worker_heartbeat_path": filepath.Join(traceDir, "heartbeat.json"),
+	})
+
+	now := time.Now().UTC()
+	moment := now.Add(-20 * time.Minute)
+	row := agentesapp.Row{
+		Agente:                    &db.Agente{Nombre: "CodexDurableStale"},
+		Asignacion:                &db.Asignacion{Agente: "CodexDurableStale", ProyectoID: proyectoID, ProyectoSlug: "orquestador-worker-durable-stale", Estado: db.AsignacionActiva},
+		Handle:                    &db.RuntimeHandle{ID: 101, MetadataJSON: string(metaRaw)},
+		WorkerDriver:              "tmux_cli_session",
+		WorkerState:               "ready",
+		WorkerAlive:               true,
+		WorkerCanSendInput:        true,
+		WorkerMailboxDeliveryMode: runtimeagente.MailboxDeliverySessionResume,
+		WorkerHeartbeat:           ptrTime(now),
+		WorkerUpdatedAt:           ptrTime(now),
+		WorkerReadyAt:             ptrTime(now.Add(-25 * time.Minute)),
+		OpenTasks:                 1,
+		EstadoOperativo:           "atascado",
+		DetalleOperativo:          "sin progreso desde listo",
+		LastAutonomyAction:        "continuar_trabajo",
+		LastAutonomySource:        "work_queue",
+		LastAutonomyState:         "work_confirmed",
+		LastAutonomyMoment:        &moment,
+	}
+
+	procesadas, err := procesarWorkerAtascadoAutonomiaRow(row, []agentesapp.Row{row}, now)
+	if err != nil {
+		t.Fatalf("procesar worker atascado row: %v", err)
+	}
+	if procesadas != 0 {
+		t.Fatalf("no deberia reinyectar continuidad si durableTaskID ya pertenece a otro agente, got=%d", procesadas)
+	}
+
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: ptrString("CodexDurableStale")})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar runtime orders para durableTaskID ajena: %+v", orders)
+	}
+}
+
 func TestEncolarReinicioRuntimeHandleAutonomiaRowReiniciaBloqueadoPorRuntimeSinWorkerFresh(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	if err := db.ConfigSet("runtime_shared_account_active_ceiling", "4"); err != nil {
