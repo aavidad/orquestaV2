@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -82,4 +83,47 @@ func TestOpenClawDeliveryProjectToleraPayloadNil(t *testing.T) {
 	if got := openClawDeliveryProject(db.EventoNotificacion{ProyectoID: 12}); got != "#12" {
 		t.Fatalf("project fallback inesperado con payload nil: %q", got)
 	}
+}
+
+func TestBuildOpenClawNormalizedEventsFromDataResuelveProyectoSinFanOutPorGate(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		projectID, err := db.UpsertProyecto(&db.Proyecto{
+			Slug:    "orquestador",
+			Nombre:  "Orquestador",
+			RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+			Tipo:    db.ProyectoRepo,
+			Activo:  true,
+		})
+		if err != nil {
+			t.Fatalf("UpsertProyecto: %v", err)
+		}
+		gates := []*db.ReviewGate{
+			{
+				ID:             7,
+				ProyectoID:     &projectID,
+				ReviewerAgente: "Codex4",
+				Estado:         db.ReviewGatePendiente,
+				SeverityMax:    "alta",
+				UpdatedAt:      time.Now().UTC(),
+			},
+			{
+				ID:             8,
+				ProyectoID:     &projectID,
+				ReviewerAgente: "Codex5",
+				Estado:         db.ReviewGateBloqueado,
+				SeverityMax:    "media",
+				UpdatedAt:      time.Now().UTC().Add(-time.Minute),
+			},
+		}
+
+		events := buildOpenClawNormalizedEventsFromData(gates, nil, nil, nil, 20)
+		if len(events) != 2 {
+			t.Fatalf("eventos inesperados: %+v", events)
+		}
+		for _, event := range events {
+			if event.Project != "orquestador" {
+				t.Fatalf("project inesperado en evento %+v", event)
+			}
+		}
+	})
 }

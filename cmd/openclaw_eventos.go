@@ -49,11 +49,12 @@ func buildOpenClawNormalizedEventsFromData(gates []*db.ReviewGate, signals []*su
 		limit = 20
 	}
 	items := make([]openClawNormalizedEvent, 0, len(gates)+len(signals)+len(merges)+len(deliveries))
+	projectSlugsByID := loadOpenClawGateProjectSlugs(gates)
 	for _, gate := range gates {
 		if gate == nil || gate.Estado == db.ReviewGateAprobado {
 			continue
 		}
-		items = append(items, normalizeOpenClawReviewGate(gate))
+		items = append(items, normalizeOpenClawReviewGate(gate, projectSlugsByID))
 	}
 	for _, signal := range signals {
 		if signal == nil || signal.Event == nil {
@@ -83,7 +84,22 @@ func buildOpenClawNormalizedEventsFromData(gates []*db.ReviewGate, signals []*su
 	return items
 }
 
-func normalizeOpenClawReviewGate(gate *db.ReviewGate) openClawNormalizedEvent {
+func loadOpenClawGateProjectSlugs(gates []*db.ReviewGate) map[int64]string {
+	projectIDs := make([]int64, 0, len(gates))
+	for _, gate := range gates {
+		if gate == nil || gate.ProyectoID == nil || *gate.ProyectoID <= 0 {
+			continue
+		}
+		projectIDs = append(projectIDs, *gate.ProyectoID)
+	}
+	items, err := db.ProyectoSlugsByID(projectIDs)
+	if err != nil {
+		return map[int64]string{}
+	}
+	return items
+}
+
+func normalizeOpenClawReviewGate(gate *db.ReviewGate, projectSlugsByID map[int64]string) openClawNormalizedEvent {
 	ev := openClawNormalizedEvent{
 		Source:    "review_gate",
 		RawType:   strings.TrimSpace(string(gate.Estado)),
@@ -96,9 +112,7 @@ func normalizeOpenClawReviewGate(gate *db.ReviewGate) openClawNormalizedEvent {
 		ev.CreatedAt = gate.CreatedAt
 	}
 	if gate.ProyectoID != nil && *gate.ProyectoID > 0 {
-		if proyecto, err := db.GetProyecto(fmt.Sprintf("%d", *gate.ProyectoID)); err == nil && proyecto != nil {
-			ev.Project = strings.TrimSpace(proyecto.Slug)
-		}
+		ev.Project = strings.TrimSpace(projectSlugsByID[*gate.ProyectoID])
 	}
 	switch gate.Estado {
 	case db.ReviewGatePendiente:

@@ -175,6 +175,44 @@ func GetProyecto(ref string) (*Proyecto, error) {
 	})
 }
 
+func ProyectoSlugsByID(ids []int64) (map[int64]string, error) {
+	if len(ids) == 0 {
+		return map[int64]string{}, nil
+	}
+	unique := make([]int64, 0, len(ids))
+	seen := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		unique = append(unique, id)
+	}
+	if len(unique) == 0 {
+		return map[int64]string{}, nil
+	}
+	rows, err := DB.Query(`SELECT id, slug FROM proyectos WHERE id IN (`+runtimeSQLPlaceholders(len(unique))+`)`, int64SliceToAny(unique)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[int64]string, len(unique))
+	for rows.Next() {
+		var (
+			id   int64
+			slug string
+		)
+		if err := rows.Scan(&id, &slug); err != nil {
+			return nil, err
+		}
+		out[id] = strings.TrimSpace(slug)
+	}
+	return out, rows.Err()
+}
+
 func GetProyectoPrepareLite(ref string) (*Proyecto, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
