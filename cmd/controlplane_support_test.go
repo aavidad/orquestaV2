@@ -10032,6 +10032,75 @@ func TestReactivarAgenteTrasReanimacionRecuperaProyectoDesdeAsignacionPausada(t 
 	}
 }
 
+func TestReactivarSesionAutonomiaPorTrabajoRespetaCooldownDeStartReciente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-reactivacion-sesion-cooldown",
+		Nombre:  "Orquestador Reactivacion Sesion Cooldown",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	estadoPausada := "pausada"
+	if err := db.GuardarSesionActiva("Codex1", &proyectoID, db.SesionUpdate{
+		Estado:    &estadoPausada,
+		Heartbeat: true,
+	}); err != nil {
+		t.Fatalf("guardar sesion pausada: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		Estado:      "completada",
+		PayloadJSON: `{"accion":"start","motivo":"desbloqueo_humano_auto"}`,
+	}); err != nil {
+		t.Fatalf("encolar start reciente: %v", err)
+	}
+
+	procesadas, err := reactivarSesionAutonomiaPorTrabajo(sesion)
+	if err != nil {
+		t.Fatalf("reactivarSesionAutonomiaPorTrabajo: %v", err)
+	}
+	if procesadas != 0 {
+		t.Fatalf("no deberia reactivar dentro del cooldown, got=%d", procesadas)
+	}
+
+	actual, err := db.GetSesionActiva("Codex1", &proyectoID)
+	if err != nil {
+		t.Fatalf("get sesion activa: %v", err)
+	}
+	if actual == nil || !strings.EqualFold(strings.TrimSpace(actual.Estado), "pausada") {
+		t.Fatalf("la sesion deberia seguir pausada: %+v", actual)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders pendientes: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar runtime orders nuevas dentro del cooldown, got=%+v", orders)
+	}
+}
+
 func TestResetReanimacionEncolaStartSiHandleFallidoConMailboxPendiente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

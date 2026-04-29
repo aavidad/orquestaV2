@@ -16950,6 +16950,11 @@ func reactivarSesionAutonomiaPorTrabajoConSnapshot(sesion *db.Sesion, snapshot *
 	if err != nil {
 		return 0, err
 	}
+	if reciente, err := existeRuntimeOrderControlRecienteAutonomia(strings.TrimSpace(sesion.Agente), sesion.ProyectoID, autonomiaReactivationAttemptCooldown(), "start", "resume"); err != nil {
+		return 0, err
+	} else if reciente {
+		return 0, nil
+	}
 	if err := db.ActivarAsignacion(strings.TrimSpace(sesion.Agente), *sesion.ProyectoID, "reactivacion_automatica_trabajo_activo"); err != nil {
 		return 0, err
 	}
