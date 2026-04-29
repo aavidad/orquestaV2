@@ -437,12 +437,12 @@ func TestBuildOpenClawOperatorSnapshotCoreNoReabreFollowupsSiReviewLlegaDegradad
 
 		openClawOperatorReviewSnapshotBuilder = func(supervisor string, status apiStatusResponse) map[string]any {
 			return map[string]any{
-				"thread_sessions":      map[string]any{},
-				"pipeline_state":       map[string]any{},
-				"subagents":            map[string]any{},
-				"normalized_events":    []openClawNormalizedEvent{},
-				"worktree_drift":       []apiOpenClawWorktreeDrift{},
-				"mailbox_pending":      []apiOpenClawMailboxLite{},
+				"thread_sessions":       map[string]any{},
+				"pipeline_state":        map[string]any{},
+				"subagents":             map[string]any{},
+				"normalized_events":     []openClawNormalizedEvent{},
+				"worktree_drift":        []apiOpenClawWorktreeDrift{},
+				"mailbox_pending":       []apiOpenClawMailboxLite{},
 				"critical_project_risk": nil,
 			}
 		}
@@ -500,6 +500,47 @@ func TestBuildOpenClawNextRecoveryActionDerivaPlanCanonico(t *testing.T) {
 func TestBuildOpenClawNextRecoveryActionNilSinRecovery(t *testing.T) {
 	if action := buildOpenClawNextRecoveryAction(serverOperationalInfo{}); action != nil {
 		t.Fatalf("no deberia derivar recovery action sin hint: %+v", action)
+	}
+}
+
+func TestBuildOpenClawNextRecoveryPlanDerivaSelfHealParaRearm(t *testing.T) {
+	plan := buildOpenClawNextRecoveryPlan(serverOperationalInfo{
+		Reason: "tasks_without_workers",
+		Recovery: &serverOperationalRecoveryHint{
+			Kind:            "worker_gap",
+			SuggestedAction: "server_rearm",
+			Detail:          "1 tarea en progreso sin worker confirmado",
+		},
+	})
+	if plan == nil {
+		t.Fatalf("deberia derivar recovery plan")
+	}
+	if plan.Kind != "worker_gap" || !plan.Automatic || !plan.Blocking {
+		t.Fatalf("plan recovery inesperado: %+v", plan)
+	}
+	if len(plan.Steps) != 2 || plan.Steps[0].Tool != "orquesta.server.self_heal" || plan.Steps[1].Tool != "orquesta.server.operational" {
+		t.Fatalf("steps recovery inesperados: %+v", plan.Steps)
+	}
+}
+
+func TestBuildOpenClawNextRecoveryPlanDerivaEsperaCuota(t *testing.T) {
+	plan := buildOpenClawNextRecoveryPlan(serverOperationalInfo{
+		Reason:           "workers_quota_blocked",
+		NextQuotaResetAt: "2026-04-29T10:00:00Z",
+		Recovery: &serverOperationalRecoveryHint{
+			Kind:            "quota_cooldown",
+			SuggestedAction: "wait_quota_reset",
+			Detail:          "2 worker(s) bloqueados por cuota",
+		},
+	})
+	if plan == nil {
+		t.Fatalf("deberia derivar recovery plan de cuota")
+	}
+	if plan.Automatic || !plan.Blocking {
+		t.Fatalf("plan de cuota inesperado: %+v", plan)
+	}
+	if len(plan.Steps) != 2 || plan.Steps[0].Action != "wait_quota_reset" || plan.Steps[0].WaitFor != "2026-04-29T10:00:00Z" {
+		t.Fatalf("steps de cuota inesperados: %+v", plan.Steps)
 	}
 }
 

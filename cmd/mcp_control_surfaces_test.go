@@ -481,6 +481,63 @@ func TestMCPToolServerSelfHealDrenaOrdersYMailboxHastaCerrarTasksWithoutWorkers(
 	if !payload.Operational.Operational || payload.Operational.State != "ready" {
 		t.Fatalf("self_heal deberia converger tras drenar orders/mailbox: %+v", payload.Operational)
 	}
+	if payload.NextRecoveryAction != nil || payload.NextRecoveryPlan != nil {
+		t.Fatalf("no deberia quedar recovery pendiente tras converger: action=%+v plan=%+v", payload.NextRecoveryAction, payload.NextRecoveryPlan)
+	}
+}
+
+func TestMCPToolServerSelfHealExponeNextRecoveryPlanSiSigueDegradado(t *testing.T) {
+	prevOperational := mcpBuildServerOperationalInfoFn
+	prevOrdersExec := apiRuntimeProcessOrdersExecutor
+	prevMailboxExec := apiRuntimeProcessMailboxExecutor
+	prevDrainLimit := mcpServerSelfHealDrainPassLimit
+	prevSettleAttempts := mcpServerSelfHealSettleAttempts
+	prevSettleDelay := mcpServerSelfHealSettleDelay
+	defer func() {
+		mcpBuildServerOperationalInfoFn = prevOperational
+		apiRuntimeProcessOrdersExecutor = prevOrdersExec
+		apiRuntimeProcessMailboxExecutor = prevMailboxExec
+		mcpServerSelfHealDrainPassLimit = prevDrainLimit
+		mcpServerSelfHealSettleAttempts = prevSettleAttempts
+		mcpServerSelfHealSettleDelay = prevSettleDelay
+	}()
+
+	mcpServerSelfHealDrainPassLimit = 1
+	mcpServerSelfHealSettleAttempts = 0
+	mcpServerSelfHealSettleDelay = 0
+	apiRuntimeProcessOrdersExecutor = func() (int, error) { return 0, nil }
+	apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) { return 0, nil }
+	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
+		return serverOperationalInfo{
+			State:            "degraded",
+			Operational:      false,
+			Reason:           "workers_quota_blocked",
+			NextQuotaResetAt: "2026-04-29T10:00:00Z",
+			Recovery: &serverOperationalRecoveryHint{
+				Kind:            "quota_cooldown",
+				SuggestedAction: "wait_quota_reset",
+				Detail:          "2 worker(s) bloqueados por cuota",
+			},
+		}
+	}
+
+	result, err := callMCPTool("orquesta.server.self_heal", map[string]any{
+		"hygiene":       false,
+		"degradados":    false,
+		"autonomia":     false,
+		"reanimaciones": false,
+		"rearm":         false,
+	})
+	if err != nil {
+		t.Fatalf("server self_heal MCP: %v", err)
+	}
+	payload, _ := result["structuredContent"].(apiRuntimeSelfHealResponse)
+	if payload.NextRecoveryAction == nil || payload.NextRecoveryAction.Action != "wait_quota_reset" {
+		t.Fatalf("next_recovery_action inesperada: %+v", payload.NextRecoveryAction)
+	}
+	if payload.NextRecoveryPlan == nil || len(payload.NextRecoveryPlan.Steps) != 2 || payload.NextRecoveryPlan.Steps[0].Action != "wait_quota_reset" {
+		t.Fatalf("next_recovery_plan inesperado: %+v", payload.NextRecoveryPlan)
+	}
 }
 
 func TestMCPToolServerSelfHealMarcaErrorSiDrainOrdersFalla(t *testing.T) {

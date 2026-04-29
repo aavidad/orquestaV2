@@ -156,11 +156,14 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 		}
 	}
 	result.Operational = mcpBuildServerOperationalInfoFn()
+	syncMCPServerSelfHealRecovery(&result)
 	if drain, err := drainMCPServerSelfHealRuntimeWork(&result.Operational, enabled); err != nil {
 		result.Drain = drain
+		syncMCPServerSelfHealRecovery(&result)
 		appendErr("drain", err)
 	} else {
 		result.Drain = drain
+		syncMCPServerSelfHealRecovery(&result)
 	}
 	if enabled("rearm") {
 		for attempts := 0; attempts < mcpServerSelfHealRearmLimit; attempts++ {
@@ -177,12 +180,15 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 				result.RearmApplied = append(result.RearmApplied, applied)
 			}
 			result.Operational = mcpBuildServerOperationalInfoFn()
+			syncMCPServerSelfHealRecovery(&result)
 			if drain, err := drainMCPServerSelfHealRuntimeWork(&result.Operational, enabled); err != nil {
 				result.Drain = mergeMCPServerSelfHealDrain(result.Drain, drain)
+				syncMCPServerSelfHealRecovery(&result)
 				appendErr("drain", err)
 				break
 			} else {
 				result.Drain = mergeMCPServerSelfHealDrain(result.Drain, drain)
+				syncMCPServerSelfHealRecovery(&result)
 			}
 		}
 		if !result.Operational.Operational && result.Operational.Rearm != nil &&
@@ -192,7 +198,16 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 		}
 	}
 	result.Operational = settleMCPServerSelfHealOperational(result.Operational)
+	syncMCPServerSelfHealRecovery(&result)
 	return toolResult(prettyJSON(result), result, len(result.Errors) > 0), nil
+}
+
+func syncMCPServerSelfHealRecovery(result *apiRuntimeSelfHealResponse) {
+	if result == nil {
+		return
+	}
+	result.NextRecoveryAction = buildOpenClawNextRecoveryAction(result.Operational)
+	result.NextRecoveryPlan = buildOpenClawNextRecoveryPlan(result.Operational)
 }
 
 func settleMCPServerSelfHealOperational(info serverOperationalInfo) serverOperationalInfo {

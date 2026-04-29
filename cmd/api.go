@@ -830,16 +830,18 @@ type apiRuntimeSelfHealDrainResponse struct {
 }
 
 type apiRuntimeSelfHealResponse struct {
-	OK            bool                                  `json:"ok"`
-	Wake          apiRuntimeWakeResponse                `json:"wake"`
-	Hygiene       apiRuntimeProcessAutonomiaResponse    `json:"hygiene"`
-	Degradados    apiRuntimeProcessAutonomiaResponse    `json:"degradados"`
-	Autonomia     apiRuntimeProcessAutonomiaResponse    `json:"autonomia"`
-	Reanimaciones apiRuntimeProcessReanimationsResponse `json:"reanimaciones"`
-	RearmApplied  []map[string]any                      `json:"rearmApplied,omitempty"`
-	Drain         *apiRuntimeSelfHealDrainResponse      `json:"drain,omitempty"`
-	Operational   serverOperationalInfo                 `json:"operational"`
-	Errors        []string                              `json:"errors,omitempty"`
+	OK                 bool                                  `json:"ok"`
+	Wake               apiRuntimeWakeResponse                `json:"wake"`
+	Hygiene            apiRuntimeProcessAutonomiaResponse    `json:"hygiene"`
+	Degradados         apiRuntimeProcessAutonomiaResponse    `json:"degradados"`
+	Autonomia          apiRuntimeProcessAutonomiaResponse    `json:"autonomia"`
+	Reanimaciones      apiRuntimeProcessReanimationsResponse `json:"reanimaciones"`
+	RearmApplied       []map[string]any                      `json:"rearmApplied,omitempty"`
+	Drain              *apiRuntimeSelfHealDrainResponse      `json:"drain,omitempty"`
+	Operational        serverOperationalInfo                 `json:"operational"`
+	NextRecoveryAction *supervisorRecommendedAction          `json:"next_recovery_action,omitempty"`
+	NextRecoveryPlan   *openClawRecoveryPlan                 `json:"next_recovery_plan,omitempty"`
+	Errors             []string                              `json:"errors,omitempty"`
 }
 
 type apiRuntimeProcessMailboxResponse struct {
