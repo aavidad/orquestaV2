@@ -75,6 +75,22 @@ func TestBuildServerOperationalInfoPreservaWorkersSiSupervisorRealNoEstaEnSliceV
 	}
 }
 
+func TestBuildServerOperationalInfoRecomponeWorkersSiSnapshotTraeSupervisorPeroWorkersStale(t *testing.T) {
+	autonomia := autonomiaResumen{Supervisando: 1}
+	autonomia.addSupervisorName("OpenClaw")
+	info := buildServerOperationalInfo(apiStatusResponse{
+		AgentesActivos:      []*db.Agente{{Nombre: "Codex10", Activo: true}},
+		AgentesTrabajando:   []*db.Agente{{Nombre: "Codex10", Activo: true}},
+		WorkersConectados:   0,
+		WorkersTrabajando:   0,
+		SupervisoresActivos: 1,
+		Autonomia:           autonomia,
+	})
+	if info.ConnectedWorkers != 1 || info.WorkingWorkers != 1 {
+		t.Fatalf("deberia recomponer workers visibles desde agentes activos: %+v", info)
+	}
+}
+
 func TestBuildServerOperationalInfoExponeQuotaBlockedSinWorkersActivos(t *testing.T) {
 	reset := time.Now().UTC().Add(30 * time.Minute)
 	info := buildServerOperationalInfo(apiStatusResponse{

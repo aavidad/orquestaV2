@@ -137,6 +137,20 @@ func statusVisibleWorkerCounters(agentesActivos, agentesTrabajando []*db.Agente,
 	return workersActivos, workersTrabajando, supervisoresActivos
 }
 
+func reconciledVisibleWorkerCounters(workersConectados, workersTrabajando, supervisoresActivos int, agentesActivos, agentesTrabajando []*db.Agente, autonomia autonomiaResumen) (int, int, int) {
+	recomputedConectados, recomputedTrabajando, recomputedSupervisores := statusVisibleWorkerCounters(agentesActivos, agentesTrabajando, autonomia)
+	if workersConectados > 0 || workersTrabajando > 0 {
+		if supervisoresActivos == 0 && recomputedSupervisores > 0 {
+			supervisoresActivos = recomputedSupervisores
+		}
+		return workersConectados, workersTrabajando, supervisoresActivos
+	}
+	if recomputedConectados > 0 || recomputedTrabajando > 0 || supervisoresActivos == 0 {
+		return recomputedConectados, recomputedTrabajando, recomputedSupervisores
+	}
+	return workersConectados, workersTrabajando, supervisoresActivos
+}
+
 func filterVisibleWorkersByAutonomy(items []*db.Agente, autonomia autonomiaResumen) []*db.Agente {
 	if len(items) == 0 || len(autonomia.supervisorNames) == 0 {
 		return items

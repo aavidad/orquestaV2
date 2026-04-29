@@ -1550,6 +1550,40 @@ func TestStatusVisibleWorkerCountersUsaSupervisorConfiguradoAntesDeDescontarPorC
 	}
 }
 
+func TestReconciledVisibleWorkerCountersRecomponeWorkersConSupervisorStale(t *testing.T) {
+	autonomia := autonomiaResumen{Supervisando: 1}
+	autonomia.addSupervisorName("CodexSupervisor")
+
+	workersConectados, workersTrabajando, supervisoresActivos := reconciledVisibleWorkerCounters(
+		0,
+		0,
+		1,
+		[]*db.Agente{{Nombre: "Codex10", Rol: "programador"}},
+		[]*db.Agente{{Nombre: "Codex10", Rol: "programador"}},
+		autonomia,
+	)
+	if workersConectados != 1 || workersTrabajando != 1 || supervisoresActivos != 1 {
+		t.Fatalf("contadores reconciliados inesperados: conectados=%d trabajando=%d supervisores=%d", workersConectados, workersTrabajando, supervisoresActivos)
+	}
+}
+
+func TestReconciledVisibleWorkerCountersConservaSupervisorSinWorkers(t *testing.T) {
+	autonomia := autonomiaResumen{Supervisando: 1}
+	autonomia.addSupervisorName("CodexSupervisor")
+
+	workersConectados, workersTrabajando, supervisoresActivos := reconciledVisibleWorkerCounters(
+		0,
+		0,
+		1,
+		[]*db.Agente{{Nombre: "CodexSupervisor", Rol: "supervisor"}},
+		[]*db.Agente{{Nombre: "CodexSupervisor", Rol: "supervisor"}},
+		autonomia,
+	)
+	if workersConectados != 0 || workersTrabajando != 0 || supervisoresActivos != 1 {
+		t.Fatalf("contadores reconciliados inesperados sin workers: conectados=%d trabajando=%d supervisores=%d", workersConectados, workersTrabajando, supervisoresActivos)
+	}
+}
+
 func TestResumirAutonomiaEventosRecientesCompactaResumenGlobal(t *testing.T) {
 	prevFetcher := statusAutonomyEventsFetcher
 	prevWindow := statusAutonomyEventsWindow

@@ -162,7 +162,14 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 	pausedAgents := len(agentesNoActivosEnPausaOperativa(status.Agentes))
 	activeAgents := len(status.AgentesActivos)
 	workingAgents := len(status.AgentesTrabajando)
-	activeWorkers, workingWorkers, _ := statusVisibleWorkerCounters(status.AgentesActivos, status.AgentesTrabajando, status.Autonomia)
+	activeWorkers, workingWorkers, _ := reconciledVisibleWorkerCounters(
+		status.WorkersConectados,
+		status.WorkersTrabajando,
+		status.SupervisoresActivos,
+		status.AgentesActivos,
+		status.AgentesTrabajando,
+		status.Autonomia,
+	)
 	saturatedAgents := len(status.AgentesSaturados)
 	stuckAgents := len(status.AgentesAtascados)
 	authAgents := len(status.AgentesAuthManual)

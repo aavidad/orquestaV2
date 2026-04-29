@@ -1192,9 +1192,14 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 	if len(resumen.TareasReservadas) == 0 {
 		resumen.TareasReservadas = filtrarOpenClawTareasPorEstado(resumen.TareasActivas, db.TareaAsignada)
 	}
-	if resumen.WorkersConectados == 0 && resumen.WorkersTrabajando == 0 && resumen.SupervisoresActivos == 0 {
-		resumen.WorkersConectados, resumen.WorkersTrabajando, resumen.SupervisoresActivos = statusVisibleWorkerCounters(resumen.AgentesActivos, resumen.AgentesTrabajando, resumen.Autonomia)
-	}
+	resumen.WorkersConectados, resumen.WorkersTrabajando, resumen.SupervisoresActivos = reconciledVisibleWorkerCounters(
+		resumen.WorkersConectados,
+		resumen.WorkersTrabajando,
+		resumen.SupervisoresActivos,
+		resumen.AgentesActivos,
+		resumen.AgentesTrabajando,
+		resumen.Autonomia,
+	)
 	if resumen.AutonomySurface == nil {
 		if surface, err := fetchServerProjectAutonomySurface(baseURL); err == nil && surface != nil {
 			resumen.AutonomySurface = surface

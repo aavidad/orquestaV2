@@ -5738,10 +5738,14 @@ func buildSupervisorWorkspaceRiskFocusFromActions(actions []supervisorRecommende
 }
 
 func apiStatusVisibleCounters(status apiStatusResponse) (int, int, int) {
-	if status.WorkersConectados > 0 || status.WorkersTrabajando > 0 || status.SupervisoresActivos > 0 {
-		return status.WorkersConectados, status.WorkersTrabajando, status.SupervisoresActivos
-	}
-	return statusVisibleWorkerCounters(status.AgentesActivos, status.AgentesTrabajando, status.Autonomia)
+	return reconciledVisibleWorkerCounters(
+		status.WorkersConectados,
+		status.WorkersTrabajando,
+		status.SupervisoresActivos,
+		status.AgentesActivos,
+		status.AgentesTrabajando,
+		status.Autonomia,
+	)
 }
 
 func resumenSupervisorAgente(a *db.Agente) string {
