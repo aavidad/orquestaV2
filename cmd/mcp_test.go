@@ -1132,6 +1132,11 @@ func TestMCPPromptRevisionSupervisorIncluyeGatesYSignals(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("guardar merge: %v", err)
 		}
+		snapshot, err := buildSupervisorRevisionSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorRevisionSnapshot: %v", err)
+		}
+		storeSupervisorRevisionSnapshotWithTTL("OpenClaw", snapshot, time.Now().UTC(), time.Minute, time.Minute)
 
 		result, err := getMCPPrompt("orquesta.supervision.revision", map[string]any{"supervisor": "OpenClaw"})
 		if err != nil {
@@ -1265,6 +1270,11 @@ func TestMCPToolRevisionSupervisorDevuelveJSONEstructurado(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("registrar event: %v", err)
 		}
+		snapshot, err := buildSupervisorRevisionSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorRevisionSnapshot: %v", err)
+		}
+		storeSupervisorRevisionSnapshotWithTTL("OpenClaw", snapshot, time.Now().UTC(), time.Minute, time.Minute)
 
 		result, err := callMCPTool("orquesta.supervision.revision", map[string]any{"supervisor": "OpenClaw"})
 		if err != nil {

@@ -1164,6 +1164,14 @@ func (s *Service) InvalidateCompactDetailCache(names ...string) {
 }
 
 func (s *Service) BuildPanelEntities(rows []Row, now time.Time) []*PanelEntity {
+	return s.buildPanelEntities(rows, now, false)
+}
+
+func (s *Service) BuildPanelEntitiesFast(rows []Row, now time.Time) []*PanelEntity {
+	return s.buildPanelEntities(rows, now, true)
+}
+
+func (s *Service) buildPanelEntities(rows []Row, now time.Time, skipAccountAvailability bool) []*PanelEntity {
 	if len(rows) == 0 {
 		return nil
 	}
@@ -1173,7 +1181,7 @@ func (s *Service) BuildPanelEntities(rows []Row, now time.Time) []*PanelEntity {
 			continue
 		}
 		out = append(out, &PanelEntity{
-			Entity:                   buildAgentEntity(s.store, row, nil),
+			Entity:                   buildAgentEntityWithOptions(s.store, row, nil, skipAccountAvailability),
 			MailboxPending:           row.MailboxPending,
 			MailboxPendingVisible:    compactMailboxPendingVisible(row, now.UTC()),
 			MailboxActionablePending: row.MailboxActionablePending,
@@ -3599,13 +3607,17 @@ func int64FromRuntimeMailboxPayload(payload map[string]any, key string) int64 {
 }
 
 func buildAgentEntity(store Store, row Row, tareas []*db.Tarea) *AgentEntity {
+	return buildAgentEntityWithOptions(store, row, tareas, false)
+}
+
+func buildAgentEntityWithOptions(store Store, row Row, tareas []*db.Tarea, skipAccountAvailability bool) *AgentEntity {
 	if row.Agente == nil {
 		return nil
 	}
 	now := time.Now().UTC()
 	accountAvailable := true
 	accountOccupiedBy := ""
-	if store != nil {
+	if store != nil && !skipAccountAvailability {
 		if ok, ocupadoPor, err := store.SharedAccountAllowsActivation(strings.TrimSpace(row.Agente.Nombre)); err == nil {
 			accountAvailable = ok
 			accountOccupiedBy = strings.TrimSpace(ocupadoPor)

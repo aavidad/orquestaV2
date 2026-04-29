@@ -2045,7 +2045,7 @@ func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("vista")), "panel") {
-			rows, err := fetchAgentPanelRowsCached(apiAgentsPanelTimeout)
+			rows, err := fetchAgentPanelRowsReadOnlyCached(apiAgentsPanelTimeout)
 			if err != nil {
 				if errors.Is(err, errStatusFetchTimeout) {
 					apiError(w, http.StatusServiceUnavailable, fmt.Errorf("panel temporalmente degradado"))
@@ -2057,7 +2057,7 @@ func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 			now := time.Now().UTC()
 			rows = normalizeAgentPanelRowsForAPI(rows, now)
 			if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("schema")), "canonical") {
-				apiWriteJSON(w, http.StatusOK, apiAgentesPanelCanonicalResponse{Agents: agentesService.BuildPanelEntities(rows, now)})
+				apiWriteJSON(w, http.StatusOK, apiAgentesPanelCanonicalResponse{Agents: agentesService.BuildPanelEntitiesFast(rows, now)})
 				return
 			}
 			apiWriteJSON(w, http.StatusOK, apiAgentesPanelResponse{Rows: rows})
@@ -2215,12 +2215,12 @@ func buildCanonicalAgentOverview(detail *agentesapp.Detail) *agentesapp.PanelEnt
 }
 
 func buildCanonicalActiveAgentsResponse() (apiAgentesPanelCanonicalResponse, error) {
-	rows, err := fetchAgentPanelRowsCached(apiAgentsPanelTimeout)
+	rows, err := fetchAgentPanelRowsReadOnlyCached(apiAgentsPanelTimeout)
 	if err != nil {
 		return apiAgentesPanelCanonicalResponse{}, err
 	}
 	now := time.Now().UTC()
-	entities := agentesService.BuildPanelEntities(normalizeAgentPanelRowsForAPI(rows, now), now)
+	entities := agentesService.BuildPanelEntitiesFast(normalizeAgentPanelRowsForAPI(rows, now), now)
 	out := apiAgentesPanelCanonicalResponse{Agents: make([]*agentesapp.PanelEntity, 0, len(entities))}
 	for _, entity := range entities {
 		if entity == nil || entity.Entity == nil || !entity.Entity.ActiveNow {
@@ -3803,7 +3803,7 @@ func apiHandlerOpenClawPipeline(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		supervisor := strings.TrimSpace(r.URL.Query().Get("supervisor"))
 		proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto"))
-		pipeline, err := buildSupervisorPipelineSnapshot(supervisor, proyecto, 20)
+		pipeline, err := buildSupervisorPipelineReadSnapshot(supervisor, proyecto, 20)
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return

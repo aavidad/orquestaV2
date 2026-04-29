@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -216,6 +217,44 @@ func TestBuildSupervisorPipelineSnapshotRefinaConFollowupSidecarParalelo(t *test
 		followup, _ := snapshot["followup"].(map[string]any)
 		if followup == nil || followup["phase"] != "revision" {
 			t.Fatalf("followup compacta inesperada: %#v", snapshot["followup"])
+		}
+	})
+}
+
+func TestBuildSupervisorPipelineReadSnapshotReutilizaEstadoPersistido(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		_, err := db.UpsertSupervisorPipelineState(db.UpsertSupervisorPipelineStateInput{
+			Supervisor:   "OpenClaw",
+			ProyectoSlug: "orquestador",
+			PipelineName: "autopilot",
+			CurrentPhase: "review",
+			Status:       "active",
+			MetadataJSON: `{"mode":"review"}`,
+		})
+		if err != nil {
+			t.Fatalf("persistir pipeline: %v", err)
+		}
+
+		statusService = stubStatusService{err: fmt.Errorf("no deberia reconciliar en lectura caliente")}
+
+		start := time.Now()
+		snapshot, err := buildSupervisorPipelineReadSnapshot("OpenClaw", "orquestador", 20)
+		if err != nil {
+			t.Fatalf("buildSupervisorPipelineReadSnapshot: %v", err)
+		}
+		if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+			t.Fatalf("lectura caliente demasiado lenta: %s", elapsed)
+		}
+		pipelines, _ := snapshot["pipelines"].([]*db.SupervisorPipelineState)
+		loop := findSupervisorPipelineByName(pipelines, "autopilot")
+		if loop == nil {
+			t.Fatalf("falta pipeline persistida: %#v", pipelines)
+		}
+		if loop.CurrentPhase != "review" || loop.Status != "active" {
+			t.Fatalf("pipeline persistida inesperada: %+v", loop)
 		}
 	})
 }

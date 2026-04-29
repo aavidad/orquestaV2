@@ -217,6 +217,44 @@ func fetchAgentPanelRowsCached(timeout time.Duration) ([]agentesapp.Row, error) 
 	return rows, nil
 }
 
+func fetchAgentPanelRowsReadOnlyCached(timeout time.Duration) ([]agentesapp.Row, error) {
+	if rows, ok := readAgentPanelSnapshotFresh(); ok {
+		if agentPanelRowsNeedImmediateRefresh(rows) {
+			maybeRefreshAgentPanelSnapshotAsync(timeout)
+		}
+		return rows, nil
+	}
+	if rows, ok := readAgentPanelSnapshotAny(); ok {
+		maybeRefreshAgentPanelSnapshotAsync(timeout)
+		return rows, nil
+	}
+	if status, ok := readStatusSnapshotAny(); ok {
+		rows := buildAgentPanelRowsFromStatusSnapshot(status)
+		storeAgentPanelSnapshotWithTTL(rows, time.Now().UTC(), 0, agentPanelSnapshotStaleTTL)
+		if agentPanelRowsNeedImmediateRefresh(rows) {
+			maybeRefreshAgentPanelSnapshotAsync(timeout)
+		}
+		return rows, nil
+	}
+	if apiStatusUltraLiteFetcher != nil {
+		if status, ok := apiStatusUltraLiteFetcher(statusFastTimeout); ok {
+			now := time.Now().UTC()
+			storeStatusSnapshotWithTTL(status, now, statusFallbackTTL)
+			rows := buildAgentPanelRowsFromStatusSnapshot(status)
+			storeAgentPanelSnapshotWithTTL(rows, now, 0, agentPanelSnapshotStaleTTL)
+			if agentPanelRowsNeedImmediateRefresh(rows) {
+				maybeRefreshAgentPanelSnapshotAsync(timeout)
+			}
+			return rows, nil
+		}
+	}
+	now := time.Now().UTC()
+	rows := buildAgentPanelRowsFromStatusSnapshot(degradedAPIStatusResponse())
+	storeAgentPanelSnapshotWithTTL(rows, now, 0, agentPanelSnapshotStaleTTL)
+	markAgentPanelSnapshotRefreshFailure(now)
+	return rows, nil
+}
+
 func launchAgentPanelSnapshotWarmLoop(ctx context.Context, debugLogger *log.Logger) {
 	if ctx == nil || apiAgentPanelRowsBuilder == nil {
 		return

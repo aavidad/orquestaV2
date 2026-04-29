@@ -312,6 +312,9 @@ func prewarmUnifiedServerReadModels(debugLogger *log.Logger) {
 	if debugLogger != nil {
 		debugLogger.Printf("startup_panel_prime ok rows=%d duration=%s", len(rows), time.Since(start).Round(time.Millisecond))
 	}
+	if _, ok := readSupervisorRevisionSnapshotFresh(resolveSupervisorName("OpenClaw")); !ok {
+		ensureSupervisorRevisionSnapshotAsync("OpenClaw")
+	}
 }
 
 func launchStatusSnapshotWarmLoop(ctx context.Context, debugLogger *log.Logger) {

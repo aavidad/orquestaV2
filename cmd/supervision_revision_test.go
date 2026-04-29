@@ -284,3 +284,81 @@ func TestBuildSupervisorRevisionSnapshotWithStatusOmiteSeccionesRicas(t *testing
 		}
 	})
 }
+
+func TestBuildSupervisorRevisionReadSnapshotReutilizaSnapshotPersistido(t *testing.T) {
+	prevBuilder := supervisorRevisionSnapshotBuilder
+	defer func() {
+		supervisorRevisionSnapshotBuilder = prevBuilder
+		resetSupervisorRevisionSnapshotCache()
+	}()
+	resetSupervisorRevisionSnapshotCache()
+
+	now := time.Now().UTC()
+	storeSupervisorRevisionSnapshotWithTTL("OpenClaw", map[string]any{
+		"supervisor":   "OpenClaw",
+		"review_gates": []*db.ReviewGate{{ID: 7, Estado: db.ReviewGatePendiente}},
+	}, now, time.Minute, time.Minute)
+
+	supervisorRevisionSnapshotBuilder = func(supervisor string) (map[string]any, error) {
+		time.Sleep(2 * time.Second)
+		return map[string]any{"supervisor": supervisor}, nil
+	}
+
+	start := time.Now()
+	snapshot, err := buildSupervisorRevisionReadSnapshot("OpenClaw")
+	if err != nil {
+		t.Fatalf("buildSupervisorRevisionReadSnapshot: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
+		t.Fatalf("lectura de snapshot de revision demasiado lenta: %s", elapsed)
+	}
+	gates, _ := snapshot["review_gates"].([]*db.ReviewGate)
+	if len(gates) != 1 || gates[0].ID != 7 {
+		t.Fatalf("snapshot reutilizado inesperado: %#v", snapshot)
+	}
+}
+
+func TestBuildSupervisorRevisionReadSnapshotColdStartUsaStatusYNoBloquea(t *testing.T) {
+	prevBuilder := supervisorRevisionSnapshotBuilder
+	defer func() {
+		supervisorRevisionSnapshotBuilder = prevBuilder
+		resetSupervisorRevisionSnapshotCache()
+		resetStatusSnapshotCache()
+	}()
+	resetSupervisorRevisionSnapshotCache()
+	resetStatusSnapshotCache()
+
+	now := time.Now().UTC()
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Generado:          now.Format(time.RFC3339),
+		Agentes:           []*db.Agente{{Nombre: "Codex10", Activo: true, Habilitado: true}},
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex10", Activo: true, Habilitado: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex10", Activo: true, Habilitado: true}},
+		TareasEnProgreso:  []tareaLite{{ID: 40, Agente: "Codex10", Estado: db.TareaEnProgreso}},
+		TareasPorEstado:   map[string]int{"en_progreso": 1},
+	}, now, time.Minute)
+
+	release := make(chan struct{})
+	supervisorRevisionSnapshotBuilder = func(supervisor string) (map[string]any, error) {
+		<-release
+		return map[string]any{"supervisor": supervisor, "review_gates": []*db.ReviewGate{{ID: 99}}}, nil
+	}
+
+	start := time.Now()
+	snapshot, err := buildSupervisorRevisionReadSnapshot("OpenClaw")
+	elapsed := time.Since(start)
+	close(release)
+	if err != nil {
+		t.Fatalf("buildSupervisorRevisionReadSnapshot: %v", err)
+	}
+	if elapsed > 100*time.Millisecond {
+		t.Fatalf("cold start no deberia bloquearse por revision rica, elapsed=%s", elapsed)
+	}
+	if snapshot["supervisor"] != "OpenClaw" {
+		t.Fatalf("snapshot inesperado: %#v", snapshot)
+	}
+	gates, _ := snapshot["review_gates"].([]*db.ReviewGate)
+	if len(gates) != 0 {
+		t.Fatalf("cold start deberia devolver snapshot minima, gates=%#v", gates)
+	}
+}

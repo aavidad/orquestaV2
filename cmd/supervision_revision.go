@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"orquesta/db"
@@ -10,10 +12,12 @@ import (
 )
 
 const (
-	supervisorReviewOpenGatesLimit = 20
-	supervisorReviewSignalsLimit   = 12
-	supervisorReviewMergesLimit    = 12
-	supervisorReviewOutboxLimit    = 20
+	supervisorReviewOpenGatesLimit     = 20
+	supervisorReviewSignalsLimit       = 12
+	supervisorReviewMergesLimit        = 12
+	supervisorReviewOutboxLimit        = 20
+	supervisorRevisionSnapshotTTL      = 5 * time.Second
+	supervisorRevisionSnapshotStaleTTL = 30 * time.Second
 )
 
 var (
@@ -24,6 +28,19 @@ var (
 	supervisorReviewOutboxBuilder = func(limit int) (notificaciones.OutboxSummary, error) {
 		return notificaciones.DescribirOutbox(limit), nil
 	}
+	supervisorRevisionSnapshotBuilder = buildSupervisorRevisionSnapshot
+)
+
+type supervisorRevisionSnapshotEntry struct {
+	Snapshot   map[string]any
+	FreshUntil time.Time
+	StaleUntil time.Time
+}
+
+var (
+	supervisorRevisionSnapshotMu      sync.RWMutex
+	supervisorRevisionSnapshotCache   = map[string]supervisorRevisionSnapshotEntry{}
+	supervisorRevisionSnapshotRefresh sync.Map
 )
 
 type supervisorReviewAsyncResult[T any] struct {
@@ -147,14 +164,6 @@ func buildSupervisorRevisionSnapshot(supervisor string) (map[string]any, error) 
 		return ok
 	}():
 	case func() bool {
-		snapshot, ok := fetchStatusReadOnlyLiteDirect(statusFastTimeout)
-		if ok {
-			status = snapshot
-			storeStatusSnapshot(snapshot, statusNowFunc().UTC())
-		}
-		return ok
-	}():
-	case func() bool {
 		snapshot, ok := readStatusSnapshotAny()
 		if ok {
 			status = snapshot
@@ -162,10 +171,180 @@ func buildSupervisorRevisionSnapshot(supervisor string) (map[string]any, error) 
 		}
 		return ok
 	}():
+	case func() bool {
+		snapshot, ok := fetchStatusReadOnlyLiteDirect(statusFastTimeout)
+		if ok {
+			status = snapshot
+			storeStatusSnapshot(snapshot, statusNowFunc().UTC())
+		}
+		return ok
+	}():
 	default:
 		ensureStatusRefreshAsync()
 	}
 	return buildSupervisorRevisionSnapshotWithStatus(supervisor, status)
+}
+
+func buildSupervisorRevisionReadSnapshot(supervisor string) (map[string]any, error) {
+	supervisor = resolveSupervisorName(supervisor)
+	start := time.Now()
+	logSlow := func(source string) {
+		if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+			log.Printf("orquesta[supervision-revision-slow] source=%s supervisor=%s elapsed=%s", source, supervisor, elapsed)
+		}
+	}
+	if snapshot, ok := readSupervisorRevisionSnapshotFresh(supervisor); ok {
+		logSlow("cache_fresh")
+		return snapshot, nil
+	}
+	if snapshot, ok := readSupervisorRevisionSnapshotAny(supervisor); ok {
+		ensureSupervisorRevisionSnapshotAsync(supervisor)
+		logSlow("cache_any")
+		return snapshot, nil
+	}
+	if status, ok := readStatusSnapshotFresh(); ok {
+		snapshot := buildSupervisorRevisionFastSnapshotFromStatus(supervisor, status)
+		storeSupervisorRevisionSnapshot(supervisor, snapshot, time.Now().UTC())
+		ensureSupervisorRevisionSnapshotAsync(supervisor)
+		logSlow("status_fresh")
+		return snapshot, nil
+	}
+	if status, ok := readStatusSnapshotAny(); ok {
+		snapshot := buildSupervisorRevisionFastSnapshotFromStatus(supervisor, status)
+		storeSupervisorRevisionSnapshot(supervisor, snapshot, time.Now().UTC())
+		ensureSupervisorRevisionSnapshotAsync(supervisor)
+		logSlow("status_any")
+		return snapshot, nil
+	}
+	if status, ok := fetchStatusReadOnlyLiteDirect(statusFastTimeout); ok {
+		storeStatusSnapshot(status, statusNowFunc().UTC())
+		snapshot := buildSupervisorRevisionFastSnapshotFromStatus(supervisor, status)
+		storeSupervisorRevisionSnapshot(supervisor, snapshot, time.Now().UTC())
+		ensureSupervisorRevisionSnapshotAsync(supervisor)
+		logSlow("status_direct")
+		return snapshot, nil
+	}
+	snapshot := buildSupervisorRevisionFastSnapshotFromStatus(supervisor, degradedAPIStatusResponse())
+	storeSupervisorRevisionSnapshot(supervisor, snapshot, time.Now().UTC())
+	ensureSupervisorRevisionSnapshotAsync(supervisor)
+	logSlow("degraded")
+	return snapshot, nil
+}
+
+func storeSupervisorRevisionSnapshot(supervisor string, snapshot map[string]any, now time.Time) {
+	storeSupervisorRevisionSnapshotWithTTL(supervisor, snapshot, now, supervisorRevisionSnapshotTTL, supervisorRevisionSnapshotStaleTTL)
+}
+
+func storeSupervisorRevisionSnapshotWithTTL(supervisor string, snapshot map[string]any, now time.Time, freshTTL, staleTTL time.Duration) {
+	supervisor = resolveSupervisorName(supervisor)
+	if snapshot == nil {
+		return
+	}
+	entry := supervisorRevisionSnapshotEntry{
+		Snapshot: snapshot,
+	}
+	if freshTTL > 0 {
+		entry.FreshUntil = now.Add(freshTTL)
+	}
+	if staleTTL > 0 {
+		entry.StaleUntil = now.Add(staleTTL)
+	}
+	supervisorRevisionSnapshotMu.Lock()
+	supervisorRevisionSnapshotCache[supervisor] = entry
+	supervisorRevisionSnapshotMu.Unlock()
+}
+
+func readSupervisorRevisionSnapshotFresh(supervisor string) (map[string]any, bool) {
+	supervisor = resolveSupervisorName(supervisor)
+	supervisorRevisionSnapshotMu.RLock()
+	entry, ok := supervisorRevisionSnapshotCache[supervisor]
+	supervisorRevisionSnapshotMu.RUnlock()
+	if !ok || entry.Snapshot == nil {
+		return nil, false
+	}
+	if entry.FreshUntil.IsZero() || time.Now().UTC().After(entry.FreshUntil) {
+		return nil, false
+	}
+	return entry.Snapshot, true
+}
+
+func readSupervisorRevisionSnapshotAny(supervisor string) (map[string]any, bool) {
+	supervisor = resolveSupervisorName(supervisor)
+	supervisorRevisionSnapshotMu.RLock()
+	entry, ok := supervisorRevisionSnapshotCache[supervisor]
+	supervisorRevisionSnapshotMu.RUnlock()
+	if !ok || entry.Snapshot == nil {
+		return nil, false
+	}
+	if !entry.StaleUntil.IsZero() && time.Now().UTC().After(entry.StaleUntil) {
+		return nil, false
+	}
+	return entry.Snapshot, true
+}
+
+func ensureSupervisorRevisionSnapshotAsync(supervisor string) {
+	supervisor = resolveSupervisorName(supervisor)
+	if _, loaded := supervisorRevisionSnapshotRefresh.LoadOrStore(supervisor, struct{}{}); loaded {
+		return
+	}
+	go func() {
+		defer supervisorRevisionSnapshotRefresh.Delete(supervisor)
+		snapshot, err := supervisorRevisionSnapshotBuilder(supervisor)
+		if err != nil || snapshot == nil {
+			return
+		}
+		storeSupervisorRevisionSnapshot(supervisor, snapshot, time.Now().UTC())
+	}()
+}
+
+func resetSupervisorRevisionSnapshotCache() {
+	supervisorRevisionSnapshotMu.Lock()
+	supervisorRevisionSnapshotCache = map[string]supervisorRevisionSnapshotEntry{}
+	supervisorRevisionSnapshotMu.Unlock()
+	supervisorRevisionSnapshotRefresh = sync.Map{}
+}
+
+func buildSupervisorRevisionFastSnapshotFromStatus(supervisor string, status apiStatusResponse) map[string]any {
+	supervisor = resolveSupervisorName(supervisor)
+	mailboxPendiente := []apiOpenClawMailboxLite{}
+	recommended := buildSupervisorOperationalActionsFast(status, mailboxPendiente)
+	recommended = append(recommended, buildSupervisorProposalActions(status.PropuestasResumen)...)
+	sortSupervisorRecommendedActionsFast(recommended)
+	markSupervisorRecommendedActions(recommended)
+	actionQueue := cloneSupervisorRecommendedActions(recommended)
+	safeQueue := buildSupervisorSafeActionQueueFast(actionQueue)
+	_, _, criticalProjectRisk := normalizeStatusAutonomyPayload(status.AutonomySurface, status.AutonomyHighlights, status.CriticalProjectRisk)
+	var nextAction any
+	if len(actionQueue) > 0 {
+		nextAction = actionQueue[0]
+	}
+	var nextSafeAction any
+	if len(safeQueue) > 0 {
+		nextSafeAction = safeQueue[0]
+	}
+	capacitySummary := buildOpenClawCapacitySummary(status.AgentesActivos, status.AgentesTrabajando, status.TareasActivas, status.TareasPorEstado)
+	saturatedAgents := buildOpenClawSaturatedAgents(status.AgentesActivos, status.TareasActivas, nil)
+	queueSummary := buildOpenClawQueueSummaryFromActions(actionQueue, safeQueue)
+
+	return map[string]any{
+		"supervisor":            supervisor,
+		"review_gates":          []*db.ReviewGate{},
+		"signals":               []*supervisorReviewSignal{},
+		"merges":                []*db.GitMerge{},
+		"module_conflicts":      []supervisorModuleConflict{},
+		"mailbox_pending":       mailboxPendiente,
+		"normalized_events":     []openClawNormalizedEvent{},
+		"recommended_actions":   recommended,
+		"action_queue":          actionQueue,
+		"next_action":           nextAction,
+		"queue_kind":            "safe",
+		"safe_action_queue":     safeQueue,
+		"next_safe_action":      nextSafeAction,
+		"critical_project_risk": criticalProjectRisk,
+		"capacity_summary":      capacitySummary,
+		"saturated_agents":      saturatedAgents,
+		"queue_summary":         queueSummary,
+	}
 }
 
 func buildSupervisorRevisionSnapshotWithStatus(supervisor string, status apiStatusResponse) (map[string]any, error) {
@@ -228,12 +407,7 @@ func buildSupervisorRevisionSnapshotWithStatus(supervisor string, status apiStat
 
 	actionQueue := cloneSupervisorRecommendedActions(recommended)
 	safeQueue := buildSupervisorSafeActionQueueFast(actionQueue)
-	var criticalProjectRisk *workspaceAutonomyProjectSummary
-	if snapshot, timeoutErr := runAPITimeboxed(200*time.Millisecond, func() (*workspaceAutonomyProjectSummary, error) {
-		return supervisorReviewCriticalRiskBuilder(actionQueue)
-	}, errStatusFetchTimeout); timeoutErr == nil {
-		criticalProjectRisk = snapshot
-	}
+	_, _, criticalProjectRisk := normalizeStatusAutonomyPayload(status.AutonomySurface, status.AutonomyHighlights, status.CriticalProjectRisk)
 	var nextAction any
 	if len(actionQueue) > 0 {
 		nextAction = actionQueue[0]

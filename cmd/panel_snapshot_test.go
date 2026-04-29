@@ -228,6 +228,47 @@ func TestFetchAgentPanelRowsCachedRefrescaSnapshotSinteticaConTrabajoVivo(t *tes
 	}
 }
 
+func TestFetchAgentPanelRowsReadOnlyCachedNoBloqueaPorRefrescoInmediato(t *testing.T) {
+	prevBuilder := apiAgentPanelRowsBuilder
+	defer func() {
+		apiAgentPanelRowsBuilder = prevBuilder
+		resetAgentPanelSnapshotCache()
+		resetStatusSnapshotCache()
+	}()
+	resetAgentPanelSnapshotCache()
+	resetStatusSnapshotCache()
+
+	now := time.Now().UTC()
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes:           []*db.Agente{{Nombre: "Codex1", Activo: true, Habilitado: true, EstadoCuota: "activo"}},
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex1", Activo: true, Habilitado: true, EstadoCuota: "activo"}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex1", Activo: true, Habilitado: true, EstadoCuota: "activo"}},
+		TareasEnProgreso:  []tareaLite{{ID: 26, Agente: "Codex1", Estado: db.TareaEnProgreso}},
+		Generado:          now.Format(time.RFC3339),
+	}, now, time.Minute)
+
+	release := make(chan struct{})
+	apiAgentPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		<-release
+		return []agentesapp.Row{{EstadoOperativo: "trabajando"}}, nil
+	}
+
+	start := time.Now()
+	rows, err := fetchAgentPanelRowsReadOnlyCached(20 * time.Millisecond)
+	elapsed := time.Since(start)
+	close(release)
+
+	if err != nil {
+		t.Fatalf("fetchAgentPanelRowsReadOnlyCached: %v", err)
+	}
+	if elapsed > 100*time.Millisecond {
+		t.Fatalf("read-only panel no deberia bloquearse por refresh inmediato, elapsed=%s", elapsed)
+	}
+	if len(rows) != 1 || rows[0].Agente == nil || rows[0].Agente.Nombre != "Codex1" {
+		t.Fatalf("rows inesperadas: %+v", rows)
+	}
+}
+
 func TestFetchAgentPanelRowsCachedRefrescaSnapshotSinteticaConAtascadoHeredado(t *testing.T) {
 	prevBuilder := apiAgentPanelRowsBuilder
 	defer func() {

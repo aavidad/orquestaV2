@@ -1054,13 +1054,13 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		}
 		return resourceText(uri, "application/json", prettyJSON(activos)), nil
 	case uri == "orquesta://agentes/panel":
-		rows, err := fetchAgentPanelRowsCached(apiAgentsPanelTimeout)
+		rows, err := fetchAgentPanelRowsReadOnlyCached(apiAgentsPanelTimeout)
 		if err != nil {
 			return nil, err
 		}
 		now := time.Now().UTC()
 		return resourceText(uri, "application/json", prettyJSON(apiAgentesPanelCanonicalResponse{
-			Agents: agentesService.BuildPanelEntities(normalizeAgentPanelRowsForAPI(rows, now), now),
+			Agents: agentesService.BuildPanelEntitiesFast(normalizeAgentPanelRowsForAPI(rows, now), now),
 		})), nil
 	case uri == "orquesta://propuestas/abiertas":
 		propuestas, err := propuestasService.List(ptrPropuestaEstado(db.PropuestaAbierta))
@@ -1337,7 +1337,7 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		return resourceText(uri, "text/markdown", texto), nil
 	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.HasSuffix(uri, "/revision"):
 		supervisor := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://supervision/"), "/revision")
-		snapshot, err := buildSupervisorRevisionSnapshot(supervisor)
+		snapshot, err := buildSupervisorRevisionReadSnapshot(supervisor)
 		if err != nil {
 			return nil, err
 		}
@@ -1378,7 +1378,7 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		return resourceText(uri, "application/json", prettyJSON(snapshot)), nil
 	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.HasSuffix(uri, "/pipeline"):
 		supervisor := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://supervision/"), "/pipeline")
-		snapshot, err := buildSupervisorPipelineSnapshot(supervisor, "", 20)
+		snapshot, err := buildSupervisorPipelineReadSnapshot(supervisor, "", 20)
 		if err != nil {
 			return nil, err
 		}
@@ -4062,13 +4062,13 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		return toolResult(prettyJSON(detail), detail, false), nil
 
 	case "orquesta.agentes.panel":
-		rows, err := fetchAgentPanelRowsCached(apiAgentsPanelTimeout)
+		rows, err := fetchAgentPanelRowsReadOnlyCached(apiAgentsPanelTimeout)
 		if err != nil {
 			return toolResult(err.Error(), nil, true), nil
 		}
 		now := time.Now().UTC()
 		out := apiAgentesPanelCanonicalResponse{
-			Agents: agentesService.BuildPanelEntities(normalizeAgentPanelRowsForAPI(rows, now), now),
+			Agents: agentesService.BuildPanelEntitiesFast(normalizeAgentPanelRowsForAPI(rows, now), now),
 		}
 		return toolResult(prettyJSON(out), out, false), nil
 
@@ -4966,7 +4966,7 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 
 	case "orquesta.supervision.revision":
 		supervisor := optionalStringArg(args, "supervisor")
-		resumen, err := buildSupervisorRevisionSnapshot(supervisor)
+		resumen, err := buildSupervisorRevisionReadSnapshot(supervisor)
 		if err != nil {
 			return nil, err
 		}
@@ -5021,7 +5021,7 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		return toolResult(prettyJSON(item), item, false), nil
 
 	case "orquesta.supervision.pipeline.listar":
-		resumen, err := buildSupervisorPipelineSnapshot(optionalStringArg(args, "supervisor"), optionalStringArg(args, "proyecto"), 20)
+		resumen, err := buildSupervisorPipelineReadSnapshot(optionalStringArg(args, "supervisor"), optionalStringArg(args, "proyecto"), 20)
 		if err != nil {
 			return nil, err
 		}
@@ -5603,7 +5603,7 @@ func buildSupervisorGuidance(supervisor string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	snapshot, err := buildSupervisorRevisionSnapshot(supervisor)
+	snapshot, err := buildSupervisorRevisionReadSnapshot(supervisor)
 	if err != nil {
 		return "", err
 	}

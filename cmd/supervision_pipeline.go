@@ -18,6 +18,22 @@ func buildSupervisorPipelineSnapshot(supervisor, proyectoSlug string, limit int)
 	return listSupervisorPipelineSnapshot(supervisor, proyectoSlug, limit)
 }
 
+func buildSupervisorPipelineReadSnapshot(supervisor, proyectoSlug string, limit int) (map[string]any, error) {
+	supervisor = resolveSupervisorName(supervisor)
+	proyectoSlug = strings.TrimSpace(proyectoSlug)
+	snapshot, err := listSupervisorPipelineSnapshot(supervisor, proyectoSlug, limit)
+	if err != nil {
+		return nil, err
+	}
+	if items, _ := snapshot["pipelines"].([]*db.SupervisorPipelineState); len(items) > 0 {
+		go func(supervisor, proyectoSlug string) {
+			_, _ = reconcileSupervisorPipelineState(supervisor, proyectoSlug)
+		}(supervisor, proyectoSlug)
+		return snapshot, nil
+	}
+	return buildSupervisorPipelineSnapshot(supervisor, proyectoSlug, limit)
+}
+
 func buildSupervisorPipelineSnapshotFromInputs(supervisor, proyectoSlug string, limit int, status apiStatusResponse, gates []*db.ReviewGate, signals []*supervisorReviewSignal, merges []*db.GitMerge, conflicts []supervisorModuleConflict, mailboxPendiente []apiOpenClawMailboxLite) (map[string]any, error) {
 	supervisor = resolveSupervisorName(supervisor)
 	if _, err := reconcileSupervisorPipelineStateFromInputs(supervisor, strings.TrimSpace(proyectoSlug), status, gates, signals, merges, conflicts, mailboxPendiente); err != nil {
@@ -49,7 +65,7 @@ func listSupervisorPipelineSnapshot(supervisor, proyectoSlug string, limit int) 
 
 func buildSupervisorPipelineOverview(supervisor string) (string, error) {
 	supervisor = resolveSupervisorName(supervisor)
-	snapshot, err := buildSupervisorPipelineSnapshot(supervisor, "", 20)
+	snapshot, err := buildSupervisorPipelineReadSnapshot(supervisor, "", 20)
 	if err != nil {
 		return "", err
 	}
