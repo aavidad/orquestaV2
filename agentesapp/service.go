@@ -409,18 +409,18 @@ type Detail struct {
 }
 
 type PanelEntity struct {
-	Entity                    *AgentEntity `json:"entity,omitempty"`
-	MailboxPending            int          `json:"mailbox_pending"`
-	MailboxPendingVisible     int          `json:"mailbox_pending_visible"`
-	MailboxActionablePending  int          `json:"mailbox_actionable_pending"`
-	MailboxContinuityPending  int          `json:"mailbox_continuity_pending"`
-	MailboxTotal              int          `json:"mailbox_total"`
-	OpenTasks                 int          `json:"open_tasks"`
-	BlockedTasks              int          `json:"blocked_tasks"`
-	OrdersOpen                int          `json:"orders_open"`
-	OrdersFailed              int          `json:"orders_failed"`
-	ControlOrdersOpen         int          `json:"control_orders_open"`
-	Checkpoints               int          `json:"checkpoints"`
+	Entity                   *AgentEntity `json:"entity,omitempty"`
+	MailboxPending           int          `json:"mailbox_pending"`
+	MailboxPendingVisible    int          `json:"mailbox_pending_visible"`
+	MailboxActionablePending int          `json:"mailbox_actionable_pending"`
+	MailboxContinuityPending int          `json:"mailbox_continuity_pending"`
+	MailboxTotal             int          `json:"mailbox_total"`
+	OpenTasks                int          `json:"open_tasks"`
+	BlockedTasks             int          `json:"blocked_tasks"`
+	OrdersOpen               int          `json:"orders_open"`
+	OrdersFailed             int          `json:"orders_failed"`
+	ControlOrdersOpen        int          `json:"control_orders_open"`
+	Checkpoints              int          `json:"checkpoints"`
 }
 
 type ReanimationCandidate struct {
@@ -3597,6 +3597,7 @@ func buildAgentEntity(store Store, row Row, tareas []*db.Tarea) *AgentEntity {
 	if row.Agente == nil {
 		return nil
 	}
+	now := time.Now().UTC()
 	accountAvailable := true
 	accountOccupiedBy := ""
 	if store != nil {
@@ -3609,7 +3610,7 @@ func buildAgentEntity(store Store, row Row, tareas []*db.Tarea) *AgentEntity {
 		Name:                        strings.TrimSpace(row.Agente.Nombre),
 		Role:                        strings.TrimSpace(row.Agente.Rol),
 		Enabled:                     row.Agente.Habilitado,
-		ActiveNow:                   row.Agente.Activo,
+		ActiveNow:                   rowEntityActiveNow(row, now),
 		AccountID:                   strings.TrimSpace(row.Agente.CuentaID),
 		AccountEmail:                strings.TrimSpace(row.Agente.CuentaEmail),
 		AccountUser:                 strings.TrimSpace(row.Agente.CuentaUsuario),
@@ -3647,6 +3648,38 @@ func buildAgentEntity(store Store, row Row, tareas []*db.Tarea) *AgentEntity {
 		entity.AssignmentProject = strings.TrimSpace(row.Asignacion.ProyectoSlug)
 	}
 	return entity
+}
+
+func rowEntityActiveNow(row Row, now time.Time) bool {
+	if row.Agente == nil {
+		return false
+	}
+	if row.Agente.Activo {
+		return true
+	}
+	if row.WorkerFresh(now) || row.workerWarmupRecent(now) {
+		return true
+	}
+	if row.WorkerAlive && row.hasRecentOperationalActivity(now) {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(row.EstadoOperativo)) {
+	case "trabajando", "disponible", "saturado", "atascado":
+		if row.WorkerAlive || row.hasOperationalAnchor() {
+			return true
+		}
+	}
+	switch strings.ToLower(strings.TrimSpace(row.runtimeState())) {
+	case "activo", "running", "ready", "waiting_input", "esperando_input":
+		return true
+	}
+	if row.Sesion != nil {
+		switch strings.ToLower(strings.TrimSpace(row.Sesion.Estado)) {
+		case "activa", "running", "ready", "pensando", "disponible":
+			return true
+		}
+	}
+	return false
 }
 
 func cloneTaskFocus(item *TaskFocus) *TaskFocus {

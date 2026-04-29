@@ -201,3 +201,41 @@ func TestAPIAgenteOverviewExponeAgentCanonicoSinRomperDetail(t *testing.T) {
 		t.Fatalf("agent canónico sin contadores esperados: %+v", resp.Agent)
 	}
 }
+
+func TestAPIAgentesPanelCanonicalDerivaActiveNowDesdeEstadoOperativoVivo(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "CodexLive", Rol: "programador", Activo: false, Habilitado: true, EstadoCuota: "activo"},
+		EstadoOperativo: "trabajando",
+		WorkerAlive:     true,
+		WorkerState:     "ready",
+		WorkerHeartbeat: &now,
+		OpenTasks:       1,
+		CurrentTask:     &agentesapp.TaskFocus{TaskID: 36, Title: "slice activo", State: db.TareaEnProgreso},
+	}}, now)
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/agentes?vista=panel&schema=canonical", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp apiAgentesPanelCanonicalResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode canonical panel: %v", err)
+	}
+	if len(resp.Agents) != 1 || resp.Agents[0] == nil || resp.Agents[0].Entity == nil {
+		t.Fatalf("agents inesperados: %+v", resp.Agents)
+	}
+	if !resp.Agents[0].Entity.ActiveNow {
+		t.Fatalf("active_now deberia derivarse del estado operativo vivo: %+v", resp.Agents[0].Entity)
+	}
+}
