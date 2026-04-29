@@ -8333,6 +8333,85 @@ func TestResolverBootstrapRuntimeLeasePendienteIgnoraLeaseConMailboxConsumida(t 
 	}
 }
 
+func TestResolverBootstrapRuntimeLeasePendienteIgnoraStartConReceiptUtilCaseInsensitive(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Claude1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "claude-code",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Claude1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"microciclo premium"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Claude1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":" Waiting_For_Evidence ","delivery_state":" DELIVERED ","delivery_receipt_at":"2026-04-14T12:37:01Z","receipt_source":" GIT_WORKTREE ","mailbox_ids":[%d],"sesion_id":%d}`,
+			mailboxID, sesion.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start observada: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='completada', started_at=CURRENT_TIMESTAMP, finished_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, startID); err != nil {
+		t.Fatalf("marcar start completada: %v", err)
+	}
+
+	order, startOrderID, mailboxIDs, sesionID, err := resolverBootstrapRuntimeLeasePendiente(handle, runtime)
+	if err != nil {
+		t.Fatalf("resolverBootstrapRuntimeLeasePendiente: %v", err)
+	}
+	if order != nil || startOrderID != 0 || len(mailboxIDs) != 0 {
+		t.Fatalf("no deberia devolver lease pendiente si receipt util ya cubre mailbox: order=%+v start=%d mailbox=%v sesion=%d", order, startOrderID, mailboxIDs, sesionID)
+	}
+	if sesionID != sesion.ID {
+		t.Fatalf("sesion_id operativo inesperado: got=%d want=%d", sesionID, sesion.ID)
+	}
+}
+
 func TestResolverBootstrapRuntimeLeasePendienteParaMailboxRecuperaMailboxFuenteSiResumeTraeMailboxPropiaPendiente(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
@@ -17085,6 +17164,31 @@ func TestResolverTareaIDStartRuntimeInfiereTareaActivaParaPremiumIdle(t *testing
 	}
 	if got == nil || *got != tareaID {
 		t.Fatalf("deberia inferir la tarea activa premium, got=%v want=%d", got, tareaID)
+	}
+}
+
+func TestRuntimeOrderStartTaskIDAceptaAliasesCanonicos(t *testing.T) {
+	tareaID := int64(530)
+
+	for _, tc := range []struct {
+		name    string
+		payload map[string]any
+	}{
+		{
+			name:    "tarea_objetivo_id",
+			payload: map[string]any{"tarea_objetivo_id": tareaID},
+		},
+		{
+			name:    "task_id",
+			payload: map[string]any{"task_id": tareaID},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := runtimeOrderStartTaskID(tc.payload)
+			if got == nil || *got != tareaID {
+				t.Fatalf("deberia aceptar alias canonico, got=%v want=%d", got, tareaID)
+			}
+		})
 	}
 }
 

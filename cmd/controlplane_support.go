@@ -7559,6 +7559,7 @@ func runtimeMailboxTieneTrabajoAccionableParaReactivacion(msg *db.RuntimeMailbox
 		if accionable {
 			return true, nil
 		}
+		return false, nil
 	}
 	if runtimeMailboxPremiumPipelineLocalSinTarea(msg, payload) {
 		return false, nil
@@ -7884,6 +7885,10 @@ func procesarRuntimeMailboxSessionResumeMensaje(msg *db.RuntimeMailboxMessage, c
 	if handle == nil {
 		return intentarReactivarRuntimeMailboxSinHandle(msg, snapshot)
 	}
+	handle, err = runtimeMailboxPreferCanonicalTMUXHandleParaSessionResume(snapshot, handle, strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	if err != nil {
+		return false, err
+	}
 	var runtimeInstance *db.RuntimeInstance
 	runtimeInstance, err = runtimeCanonicoDesdeHandleAgenteProyecto(handle, strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
 	if err != nil {
@@ -7901,6 +7906,40 @@ func procesarRuntimeMailboxSessionResumeMensaje(msg *db.RuntimeMailboxMessage, c
 		return procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID)
 	}
 	return procesarRuntimeMailboxSessionResumeConSesion(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID)
+}
+
+func runtimeMailboxPreferCanonicalTMUXHandleParaSessionResume(snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
+	if handle == nil {
+		return nil, nil
+	}
+	var (
+		candidate *db.RuntimeHandle
+		err       error
+	)
+	if proyectoID != nil && *proyectoID > 0 {
+		candidate, err = db.GetRuntimeHandleCanonicoRecienteAgenteProyecto(agente, proyectoID)
+	} else {
+		candidate, err = db.GetRuntimeHandleCanonicoRecienteAgente(agente)
+	}
+	if err != nil || candidate == nil {
+		return handle, err
+	}
+	candidate, err = db.GetRuntimeHandle(candidate.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !runtimeHandleCuentaComoActivoEnMailboxBatch(candidate) {
+		return handle, nil
+	}
+	if !runtimeHandleEsTmuxLike(candidate) || !strings.EqualFold(strings.TrimSpace(candidate.HandleKind), "session") {
+		return handle, nil
+	}
+	if snapshot != nil {
+		key := runtimeMailboxBatchKey(agente, proyectoID)
+		snapshot.activeHandleLoaded[key] = struct{}{}
+		snapshot.activeHandles[key] = candidate
+	}
+	return candidate, nil
 }
 
 // procesarRuntimeMailboxSessionResumeFallbackInteractivo gestiona mensajes de resume
@@ -9856,9 +9895,6 @@ func runtimeMailboxObsoletaPorTareaActivaActualConSnapshot(msg *db.RuntimeMailbo
 		}
 		return "", false, nil
 	}
-	if msg.ProyectoID == nil {
-		return "", false, nil
-	}
 	var (
 		tareaObjetivo *db.Tarea
 		err           error
@@ -9873,12 +9909,21 @@ func runtimeMailboxObsoletaPorTareaActivaActualConSnapshot(msg *db.RuntimeMailbo
 	}
 	agente := strings.TrimSpace(msg.ToAgente)
 	if tareaObjetivo == nil || tareaObjetivo.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tareaObjetivo.Agente), agente) {
-		return fmt.Sprintf("task_id=%d target_task_invalida=true proyecto_id=%d", *tareaID, *msg.ProyectoID), true, nil
+		if msg.ProyectoID != nil {
+			return fmt.Sprintf("task_id=%d target_task_invalida=true proyecto_id=%d", *tareaID, *msg.ProyectoID), true, nil
+		}
+		return fmt.Sprintf("task_id=%d target_task_invalida=true", *tareaID), true, nil
 	}
 	switch tareaObjetivo.Estado {
 	case db.TareaAsignada, db.TareaEnProgreso:
 	default:
-		return fmt.Sprintf("task_id=%d target_task_estado=%s proyecto_id=%d", *tareaID, strings.TrimSpace(string(tareaObjetivo.Estado)), *msg.ProyectoID), true, nil
+		if msg.ProyectoID != nil {
+			return fmt.Sprintf("task_id=%d target_task_estado=%s proyecto_id=%d", *tareaID, strings.TrimSpace(string(tareaObjetivo.Estado)), *msg.ProyectoID), true, nil
+		}
+		return fmt.Sprintf("task_id=%d target_task_estado=%s", *tareaID, strings.TrimSpace(string(tareaObjetivo.Estado))), true, nil
+	}
+	if msg.ProyectoID == nil {
+		return "", false, nil
 	}
 	var tareas []*db.Tarea
 	if snapshot != nil {
@@ -16077,6 +16122,11 @@ func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, 
 	if bloqueadaPorOtroAgente {
 		return 0, nil
 	}
+	if bloqueadaPorFrentePremiumCanonicoAjeno, err := proyectoTieneFrentePremiumCanonicoActivoAjeno(proyecto.ID, strings.TrimSpace(sesion.Agente)); err != nil {
+		return 0, err
+	} else if bloqueadaPorFrentePremiumCanonicoAjeno {
+		return 0, nil
+	}
 	tarea, err := capacidadService.IntentarAutoasignarTareaPipelineLocal(proyecto.Slug, sesion.Agente)
 	motivoAutoasignacion := "sesion_activa_idle"
 	instruction := "toma tarea asignada y sigue"
@@ -16172,6 +16222,36 @@ func pipelineLocalObjetivoAsignadoAOtroAgenteSesionActiva(proyectoSlug, agente s
 		return false, nil
 	}
 	if strings.EqualFold(actual, agente) || strings.EqualFold(actual, "orquesta") {
+		return false, nil
+	}
+	return true, nil
+}
+
+func proyectoTieneFrentePremiumCanonicoActivoAjeno(proyectoID int64, agente string) (bool, error) {
+	agente = strings.TrimSpace(agente)
+	if proyectoID <= 0 || agente == "" {
+		return false, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		return false, err
+	}
+	candidatas := make([]*db.Tarea, 0, len(tareas))
+	for _, tarea := range tareas {
+		if tarea == nil || !tareaDBTieneContratoPremiumAcotado(tarea) {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaAsignada, db.TareaEnProgreso:
+			candidatas = append(candidatas, tarea)
+		}
+	}
+	canonica := seleccionarFrentePremiumCanonicSesionActiva(candidatas)
+	if canonica == nil || canonica.Agente == nil {
+		return false, nil
+	}
+	actual := strings.TrimSpace(*canonica.Agente)
+	if actual == "" || strings.EqualFold(actual, agente) || strings.EqualFold(actual, "orquesta") {
 		return false, nil
 	}
 	return true, nil
@@ -17406,6 +17486,13 @@ func encolarReactivacionAgenteProyectoConHandleSiProcede(agente string, proyecto
 			return false, err
 		}
 		if !trabajoArrancable {
+			return false, nil
+		}
+		bloqueadaPorFrentePremiumCanonicoAjeno, err := proyectoTieneFrentePremiumCanonicoActivoAjeno(proyecto.ID, strings.TrimSpace(agente))
+		if err != nil {
+			return false, err
+		}
+		if bloqueadaPorFrentePremiumCanonicoAjeno {
 			return false, nil
 		}
 	}

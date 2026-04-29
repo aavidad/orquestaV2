@@ -459,7 +459,7 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) (err error) {
 		stringFromMap(payload, "modelo", ""),
 		stringFromMap(payload, "razonamiento", ""),
 		stringFromMap(payload, "perfil", ""),
-		int64PtrFromMap(payload, "tarea_id"),
+		runtimeOrderStartTaskID(payload),
 		skipBootstrap,
 	)
 	if err != nil {
@@ -641,6 +641,19 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) (err error) {
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func runtimeOrderStartTaskID(payload map[string]any) *int64 {
+	if tareaID := int64PtrFromMap(payload, "tarea_id"); tareaID != nil && *tareaID > 0 {
+		return tareaID
+	}
+	if tareaID := int64PtrFromMap(payload, "tarea_objetivo_id"); tareaID != nil && *tareaID > 0 {
+		return tareaID
+	}
+	if tareaID := int64PtrFromMap(payload, "task_id"); tareaID != nil && *tareaID > 0 {
+		return tareaID
+	}
+	return nil
 }
 
 func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
