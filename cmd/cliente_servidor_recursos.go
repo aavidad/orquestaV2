@@ -66,6 +66,10 @@ type apiAgentesPanelResponse struct {
 	Rows []agentesapp.Row `json:"rows"`
 }
 
+type apiAgentesPanelCanonicalResponse struct {
+	Agents []*agentesapp.PanelEntity `json:"agents"`
+}
+
 type apiAgenteOverviewResponse struct {
 	Detail *agentesapp.Detail `json:"detail"`
 }

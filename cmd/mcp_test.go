@@ -2933,6 +2933,40 @@ func TestMCPToolsAgentesOverviewYActividadOperanPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPToolsAgentesPanelOperaPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		resetAgentPanelSnapshotCache()
+		defer resetAgentPanelSnapshotCache()
+
+		now := time.Now().UTC()
+		storeAgentPanelSnapshot([]agentesapp.Row{{
+			Agente:          &db.Agente{Nombre: "CodexPanel", Rol: "programador", Activo: true, Habilitado: true},
+			EstadoOperativo: "trabajando",
+			DetalleOperativo:"worker ready",
+			WorkerAlive:     true,
+			WorkerState:     "running",
+			MailboxPending:  1,
+			OpenTasks:       2,
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 40, Title: "panel canonico", State: db.TareaEnProgreso},
+		}}, now)
+
+		result, err := callMCPTool("orquesta.agentes.panel", map[string]any{})
+		if err != nil {
+			t.Fatalf("agentes panel MCP: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("agentes panel marcado como error: %#v", result)
+		}
+		resp, _ := result["structuredContent"].(apiAgentesPanelCanonicalResponse)
+		if len(resp.Agents) != 1 || resp.Agents[0] == nil || resp.Agents[0].Entity == nil {
+			t.Fatalf("panel canónico inesperado: %#v", result["structuredContent"])
+		}
+		if resp.Agents[0].Entity.Name != "CodexPanel" || resp.Agents[0].OpenTasks != 2 {
+			t.Fatalf("panel canónico inesperado: %+v", resp.Agents[0])
+		}
+	})
+}
+
 func TestMCPResourceActividadAgenteAceptaDesde(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex8", "programador"); err != nil {
@@ -8432,6 +8466,30 @@ func TestMCPResourceReadServerOperational(t *testing.T) {
 	}
 	if info.ActiveAgents != 1 || info.TasksInProgress != 1 {
 		t.Fatalf("contadores server operational inesperados: %+v", info)
+	}
+}
+
+func TestMCPResourceReadAgentesPanelCanonico(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "CodexPanel", Rol: "programador", Activo: true, Habilitado: true},
+		EstadoOperativo: "trabajando",
+		WorkerAlive:     true,
+		WorkerState:     "running",
+		MailboxPending:  2,
+		OpenTasks:       1,
+	}}, now)
+
+	contents, err := readMCPResource("orquesta://agentes/panel")
+	if err != nil {
+		t.Fatalf("readMCPResource agentes/panel: %v", err)
+	}
+	text, _ := contents[0]["text"].(string)
+	if !strings.Contains(text, "\"agents\"") || !strings.Contains(text, "\"name\": \"CodexPanel\"") {
+		t.Fatalf("resource agentes/panel inesperado: %s", text)
 	}
 }
 

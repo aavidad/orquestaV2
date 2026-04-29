@@ -1902,7 +1902,13 @@ func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 				apiError(w, http.StatusInternalServerError, err)
 				return
 			}
-			apiWriteJSON(w, http.StatusOK, apiAgentesPanelResponse{Rows: normalizeAgentPanelRowsForAPI(rows, time.Now().UTC())})
+			now := time.Now().UTC()
+			rows = normalizeAgentPanelRowsForAPI(rows, now)
+			if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("schema")), "canonical") {
+				apiWriteJSON(w, http.StatusOK, apiAgentesPanelCanonicalResponse{Agents: agentesService.BuildPanelEntities(rows, now)})
+				return
+			}
+			apiWriteJSON(w, http.StatusOK, apiAgentesPanelResponse{Rows: rows})
 			return
 		}
 		agentes, err := agentesService.ListAgents()

@@ -484,6 +484,14 @@ func listMCPResources() ([]mcpResource, error) {
 			Annotations: audienceAssistant(0.8),
 		},
 		{
+			URI:         "orquesta://agentes/panel",
+			Name:        "agentes-panel",
+			Title:       "Panel canónico de agentes",
+			Description: "Vista canónica de flota por agente para operadores y OpenClaw",
+			MIMEType:    "application/json",
+			Annotations: audienceAssistant(0.9),
+		},
+		{
 			URI:         "orquesta://propuestas/abiertas",
 			Name:        "propuestas-abiertas",
 			Title:       "Propuestas abiertas",
@@ -1029,6 +1037,15 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			}
 		}
 		return resourceText(uri, "application/json", prettyJSON(activos)), nil
+	case uri == "orquesta://agentes/panel":
+		rows, err := fetchAgentPanelRowsCached(apiAgentsPanelTimeout)
+		if err != nil {
+			return nil, err
+		}
+		now := time.Now().UTC()
+		return resourceText(uri, "application/json", prettyJSON(apiAgentesPanelCanonicalResponse{
+			Agents: agentesService.BuildPanelEntities(normalizeAgentPanelRowsForAPI(rows, now), now),
+		})), nil
 	case uri == "orquesta://propuestas/abiertas":
 		propuestas, err := propuestasService.List(ptrPropuestaEstado(db.PropuestaAbierta))
 		if err != nil {
@@ -2359,6 +2376,16 @@ func listMCPTools() []mcpTool {
 					"agente": map[string]any{"type": "string"},
 				},
 				"required":             []string{"agente"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.agentes.panel",
+			Title:       "Panel canónico de agentes",
+			Description: "Devuelve la vista canónica de flota por agente",
+			InputSchema: map[string]any{
+				"type":                 "object",
+				"properties":           map[string]any{},
 				"additionalProperties": false,
 			},
 		},
@@ -3892,6 +3919,17 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return toolResult(err.Error(), nil, true), nil
 		}
 		return toolResult(prettyJSON(detail), detail, false), nil
+
+	case "orquesta.agentes.panel":
+		rows, err := fetchAgentPanelRowsCached(apiAgentsPanelTimeout)
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		now := time.Now().UTC()
+		out := apiAgentesPanelCanonicalResponse{
+			Agents: agentesService.BuildPanelEntities(normalizeAgentPanelRowsForAPI(rows, now), now),
+		}
+		return toolResult(prettyJSON(out), out, false), nil
 
 	case "orquesta.agentes.actividad":
 		agente, err := requiredStringArg(args, "agente")

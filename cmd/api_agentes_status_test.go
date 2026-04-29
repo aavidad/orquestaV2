@@ -108,3 +108,47 @@ func TestAPIAgentesConvergeConStatusYOperationalTrasRefreshDePanel(t *testing.T)
 		t.Fatalf("/api/server/operational no convergio con panel fresco: %+v", operationalResp)
 	}
 }
+
+func TestAPIAgentesPanelCanonicalExponeDTOCanonico(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "Codex7", Rol: "programador", Activo: true, Habilitado: true},
+		EstadoOperativo: "trabajando",
+		DetalleOperativo:"worker ready",
+		WorkerAlive:     true,
+		WorkerState:     "running",
+		MailboxPending:  2,
+		OpenTasks:       1,
+		BlockedTasks:    0,
+		CurrentTask:     &agentesapp.TaskFocus{TaskID: 40, Title: "runtime mailbox", State: db.TareaEnProgreso},
+		DominantOrder:   &agentesapp.OrderFocus{OrderID: 91, Type: "send_instruction", State: "pendiente"},
+	}}, now)
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/agentes?vista=panel&schema=canonical", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp apiAgentesPanelCanonicalResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode canonical panel: %v", err)
+	}
+	if len(resp.Agents) != 1 || resp.Agents[0] == nil || resp.Agents[0].Entity == nil {
+		t.Fatalf("agents inesperados: %+v", resp.Agents)
+	}
+	if resp.Agents[0].Entity.Name != "Codex7" || resp.Agents[0].Entity.OperationalState != "trabajando" {
+		t.Fatalf("entity inesperada: %+v", resp.Agents[0].Entity)
+	}
+	if resp.Agents[0].OpenTasks != 1 || resp.Agents[0].MailboxPendingVisible != 2 {
+		t.Fatalf("panel canonical inesperado: %+v", resp.Agents[0])
+	}
+}

@@ -408,6 +408,21 @@ type Detail struct {
 	Checkpoints             []*db.RuntimeCheckpoint      `json:"checkpoints,omitempty"`
 }
 
+type PanelEntity struct {
+	Entity                    *AgentEntity `json:"entity,omitempty"`
+	MailboxPending            int          `json:"mailbox_pending"`
+	MailboxPendingVisible     int          `json:"mailbox_pending_visible"`
+	MailboxActionablePending  int          `json:"mailbox_actionable_pending"`
+	MailboxContinuityPending  int          `json:"mailbox_continuity_pending"`
+	MailboxTotal              int          `json:"mailbox_total"`
+	OpenTasks                 int          `json:"open_tasks"`
+	BlockedTasks              int          `json:"blocked_tasks"`
+	OrdersOpen                int          `json:"orders_open"`
+	OrdersFailed              int          `json:"orders_failed"`
+	ControlOrdersOpen         int          `json:"control_orders_open"`
+	Checkpoints               int          `json:"checkpoints"`
+}
+
 type ReanimationCandidate struct {
 	Name              string      `json:"name"`
 	Role              string      `json:"role,omitempty"`
@@ -1143,6 +1158,33 @@ func (s *Service) InvalidateCompactDetailCache(names ...string) {
 		}
 		delete(s.compactDetailCache, name)
 	}
+}
+
+func (s *Service) BuildPanelEntities(rows []Row, now time.Time) []*PanelEntity {
+	if len(rows) == 0 {
+		return nil
+	}
+	out := make([]*PanelEntity, 0, len(rows))
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		out = append(out, &PanelEntity{
+			Entity:                   buildAgentEntity(s.store, row, nil),
+			MailboxPending:           row.MailboxPending,
+			MailboxPendingVisible:    compactMailboxPendingVisible(row, now.UTC()),
+			MailboxActionablePending: row.MailboxActionablePending,
+			MailboxContinuityPending: row.MailboxContinuityPending,
+			MailboxTotal:             row.MailboxTotal,
+			OpenTasks:                row.OpenTasks,
+			BlockedTasks:             row.BlockedTasks,
+			OrdersOpen:               row.OrdersOpen,
+			OrdersFailed:             row.OrdersFailed,
+			ControlOrdersOpen:        row.ControlOrdersOpen,
+			Checkpoints:              row.Checkpoints,
+		})
+	}
+	return out
 }
 
 func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
