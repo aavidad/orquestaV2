@@ -8511,8 +8511,12 @@ func reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje(msg *db.RuntimeMailb
 	if err != nil {
 		return false, err
 	}
+	agente := strings.TrimSpace(msg.ToAgente)
 	if rutaInboxActiva != "" {
 		if err := escribirInboxRuntimeMailboxDurableEnRuta(proyecto, rutaInboxActiva, tarea, msg); err != nil {
+			return false, err
+		}
+		if _, err := encolarReactivacionAgenteProyectoSiProcede(agente, proyecto, "runtime_mailbox_guidance_durable_sin_handle"); err != nil {
 			return false, err
 		}
 	} else if err := escribirInboxRuntimeMailboxDurable(proyecto, strings.TrimSpace(msg.ToAgente), tarea, msg, handle); err != nil {

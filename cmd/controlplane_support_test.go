@@ -18140,6 +18140,21 @@ func TestReconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailboxPersisteS
 	if msg.Estado != "entregado" {
 		t.Fatalf("la mailbox durable deberia quedar entregada tras persistir inbox, got=%s", msg.Estado)
 	}
+	agente := "CodexSinHandle"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	var startCount int
+	for _, order := range orders {
+		if order != nil && order.Tipo == agenteControlAccionStart {
+			startCount++
+		}
+	}
+	if startCount != 1 {
+		t.Fatalf("deberia encolar una reactivacion canonica al persistir guidance durable sin handle, got orders=%+v", orders)
+	}
 	rawInbox, err := os.ReadFile(filepath.Join(worktreeDir, ".orquesta-inbox.md"))
 	if err != nil {
 		t.Fatalf("leer inbox durable: %v", err)
