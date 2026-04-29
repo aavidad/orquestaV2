@@ -18056,6 +18056,103 @@ func TestReconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailboxIgnoraMen
 	}
 }
 
+func TestReconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailboxPersisteSinHandleSiHayWorktreeActiva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSinHandle", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	repoDir := filepath.Join(tmp, "repo-inbox-durable-no-handle")
+	worktreeDir := filepath.Join(tmp, "wt-codex-sin-handle")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	if err := os.MkdirAll(worktreeDir, 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: repoDir,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Persistir guidance durable sin runtime",
+		Descripcion: "La continuidad durable debe quedar en inbox aunque no haya handle vivo.",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexSinHandle"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexSinHandle"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if _, err := (db.CoordinationWorktreeSQLRepository{}).Create(&coordinacion.Worktree{
+		ProjectID: proyectoID,
+		TaskID:    &tareaID,
+		Agent:     "CodexSinHandle",
+		Name:      "orquestador-codex-sin-handle",
+		Path:      worktreeDir,
+		Branch:    "orq/orquestador/codex-sin-handle",
+		BaseRef:   "main",
+		State:     coordinacion.WorktreeActive,
+		Reason:    "test_guidance_durable_sin_handle",
+	}); err != nil {
+		t.Fatalf("crear worktree activa: %v", err)
+	}
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "CodexSinHandle",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","instruction":"Relee la inbox y cierra el siguiente slice util.","texto":"continuidad durable sin handle"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox durable: %v", err)
+	}
+
+	pendiente := "pendiente"
+	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{ProyectoID: &proyectoID, Estado: &pendiente})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	n, err := reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox, map[int64]struct{}{}, newRuntimeMailboxBatchSnapshot())
+	if err != nil {
+		t.Fatalf("reconciliar guidance durable inbox: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia reconciliar exactamente una guidance durable sin handle, got=%d", n)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "entregado" {
+		t.Fatalf("la mailbox durable deberia quedar entregada tras persistir inbox, got=%s", msg.Estado)
+	}
+	rawInbox, err := os.ReadFile(filepath.Join(worktreeDir, ".orquesta-inbox.md"))
+	if err != nil {
+		t.Fatalf("leer inbox durable: %v", err)
+	}
+	inbox := string(rawInbox)
+	if !strings.Contains(inbox, "Persistir guidance durable sin runtime") {
+		t.Fatalf("la inbox deberia conservar la tarea activa, got=%q", inbox)
+	}
+	if !strings.Contains(inbox, "Relee la inbox y cierra el siguiente slice util.") {
+		t.Fatalf("la inbox durable deberia incluir la guidance vigente, got=%q", inbox)
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchConsumeAutonomiaConMailboxOnlyCompletada(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()

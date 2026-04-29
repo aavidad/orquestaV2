@@ -8468,35 +8468,54 @@ func reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje(msg *db.RuntimeMailb
 		}
 		return true, nil
 	}
+	var (
+		proyecto *db.Proyecto
+		err      error
+	)
+	if msg.ProyectoID != nil && *msg.ProyectoID > 0 {
+		proyecto, err = snapshot.project(*msg.ProyectoID)
+		if err != nil {
+			return false, err
+		}
+		if proyecto == nil {
+			return false, nil
+		}
+	}
 	handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
 	if err != nil {
 		return false, err
 	}
-	if handle == nil {
+	if handle != nil && !runtimeMailboxGuidanceDurableUsaInbox(handle) {
 		return false, nil
-	}
-	if !runtimeMailboxGuidanceDurableUsaInbox(handle) {
-		return false, nil
-	}
-	mailboxOnlyReady, err := runtimeMailboxGuidanceDurableTieneEntregaMailboxOnly(snapshot, msg, handle)
-	if err != nil {
-		return false, err
-	}
-	if msg.ProyectoID == nil || *msg.ProyectoID <= 0 {
-		return false, nil
-	}
-	proyecto, err := snapshot.project(*msg.ProyectoID)
-	if err != nil {
-		return false, err
 	}
 	if proyecto == nil {
 		return false, nil
+	}
+	rutaInboxActiva := ""
+	mailboxOnlyReady := false
+	if handle == nil {
+		rutaInboxActiva, err = resolverRutaInboxRuntimeMailboxDurableActiva(proyecto, strings.TrimSpace(msg.ToAgente), nil)
+		if err != nil {
+			return false, err
+		}
+		if strings.TrimSpace(rutaInboxActiva) == "" {
+			return false, nil
+		}
+	} else {
+		mailboxOnlyReady, err = runtimeMailboxGuidanceDurableTieneEntregaMailboxOnly(snapshot, msg, handle)
+		if err != nil {
+			return false, err
+		}
 	}
 	tarea, err := tareaActivaAutonomiaProyectoAgente(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
 	if err != nil {
 		return false, err
 	}
-	if err := escribirInboxRuntimeMailboxDurable(proyecto, strings.TrimSpace(msg.ToAgente), tarea, msg, handle); err != nil {
+	if rutaInboxActiva != "" {
+		if err := escribirInboxRuntimeMailboxDurableEnRuta(proyecto, rutaInboxActiva, tarea, msg); err != nil {
+			return false, err
+		}
+	} else if err := escribirInboxRuntimeMailboxDurable(proyecto, strings.TrimSpace(msg.ToAgente), tarea, msg, handle); err != nil {
 		return false, err
 	}
 	if err := registrarRuntimeMailboxWorkQueueLocal(msg, tarea, handle, "pending", "guidance durable escrita en inbox"); err != nil {
@@ -8982,6 +9001,14 @@ func escribirInboxRuntimeMailboxDurable(proyecto *db.Proyecto, agente string, ta
 	} else if strings.TrimSpace(ruta) != "" {
 		base = strings.TrimSpace(ruta)
 	}
+	return escribirInboxRuntimeMailboxDurableEnRuta(proyecto, base, tarea, msg)
+}
+
+func escribirInboxRuntimeMailboxDurableEnRuta(proyecto *db.Proyecto, base string, tarea *db.Tarea, msg *db.RuntimeMailboxMessage) error {
+	if proyecto == nil || msg == nil {
+		return nil
+	}
+	base = strings.TrimSpace(base)
 	if base == "" {
 		return nil
 	}
@@ -9022,6 +9049,24 @@ func registrarRuntimeMailboxWorkQueueLocal(msg *db.RuntimeMailboxMessage, tarea 
 }
 
 func resolverRutaInboxRuntimeMailboxDurable(proyecto *db.Proyecto, agente string, handle *db.RuntimeHandle) (string, error) {
+	if ruta, err := resolverRutaInboxRuntimeMailboxDurableActiva(proyecto, agente, handle); err != nil {
+		return "", err
+	} else if strings.TrimSpace(ruta) != "" {
+		return strings.TrimSpace(ruta), nil
+	}
+	if proyecto == nil {
+		return "", nil
+	}
+	proyectoCanonico := db.ProyectoConRutaEfectiva(proyecto, "")
+	if proyecto != nil && proyecto.ID > 0 {
+		if refreshed, err := db.GetProyectoConRutaEfectiva(strconv.FormatInt(proyecto.ID, 10), ""); err == nil && refreshed != nil {
+			proyectoCanonico = refreshed
+		}
+	}
+	return strings.TrimSpace(proyectoCanonico.RutaAbs), nil
+}
+
+func resolverRutaInboxRuntimeMailboxDurableActiva(proyecto *db.Proyecto, agente string, handle *db.RuntimeHandle) (string, error) {
 	if proyecto == nil {
 		return "", nil
 	}
@@ -9063,7 +9108,7 @@ func resolverRutaInboxRuntimeMailboxDurable(proyecto *db.Proyecto, agente string
 		}
 		return ruta, nil
 	}
-	return strings.TrimSpace(proyectoCanonico.RutaAbs), nil
+	return "", nil
 }
 
 func runtimeMailboxGuidanceDurableWorkingDir(proyecto *db.Proyecto, agente string, handle *db.RuntimeHandle) (string, error) {
