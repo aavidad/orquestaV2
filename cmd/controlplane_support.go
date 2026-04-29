@@ -11780,6 +11780,11 @@ func reactivarWorkerDisponibleConAsignacionPausada(row agentesapp.Row, proyecto 
 	if tarea == nil {
 		return false, nil
 	}
+	if ajena, err := tareaPipelineLocalAsignadaAOtroAgente(tarea, agente); err != nil {
+		return false, err
+	} else if ajena {
+		return false, nil
+	}
 	if err := db.ActivarAsignacion(agente, proyecto.ID, "reactivacion_automatica_trabajo_activo"); err != nil {
 		return false, err
 	}
@@ -11803,6 +11808,36 @@ func reactivarWorkerDisponibleConAsignacionPausada(row agentesapp.Row, proyecto 
 	}
 	db.Audit("orquesta", "autonomia_runtime_idle_reactivado", "proyecto", proyecto.ID,
 		fmt.Sprintf("agente=%s tarea_id=%d detalle=%s", agente, tarea.ID, strings.TrimSpace(row.DetalleOperativo)))
+	return true, nil
+}
+
+func tareaPipelineLocalAsignadaAOtroAgente(tarea *capacidadapp.TareaPipelineLocal, agente string) (bool, error) {
+	if tarea == nil || tarea.ID <= 0 {
+		return false, nil
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return false, nil
+	}
+	actual, err := tareasService.Get(tarea.ID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	if actual == nil || actual.Agente == nil {
+		return false, nil
+	}
+	switch actual.Estado {
+	case db.TareaAsignada, db.TareaEnProgreso:
+	default:
+		return false, nil
+	}
+	asignado := strings.TrimSpace(*actual.Agente)
+	if asignado == "" || strings.EqualFold(asignado, agente) || strings.EqualFold(asignado, "orquesta") {
+		return false, nil
+	}
 	return true, nil
 }
 
@@ -14589,6 +14624,11 @@ func seleccionarRelevoAutonomiaConTechoConSignal(rows []agentesapp.Row, openTask
 		if agente == "" || strings.EqualFold(agente, agenteBloqueado) {
 			continue
 		}
+		agenteCanonico, ok, err := resolverAgenteRelevoAutonomia(agente)
+		if err != nil || !ok {
+			continue
+		}
+		agente = agenteCanonico
 		if forzarCarrilCodex && !strings.HasPrefix(strings.ToLower(agente), "codex") {
 			continue
 		}
@@ -16090,6 +16130,31 @@ func extraerNotaAutonomiaKV(notas, key string) string {
 		}
 	}
 	return ""
+}
+
+func resolverAgenteRelevoAutonomia(agente string) (string, bool, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return "", false, nil
+	}
+	canonico, err := db.CanonicalizeAgentName(agente)
+	if err != nil {
+		return "", false, err
+	}
+	if strings.TrimSpace(canonico) == "" {
+		return "", false, nil
+	}
+	if db.DB == nil || db.DB.DB == nil {
+		return canonico, true, nil
+	}
+	info, err := db.GetAgente(canonico)
+	if err != nil {
+		return "", false, err
+	}
+	if info == nil || !info.Habilitado {
+		return canonico, false, nil
+	}
+	return strings.TrimSpace(info.Nombre), true, nil
 }
 
 func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, proyecto *db.Proyecto, snapshot *autonomiaBatchSnapshot) (int, error) {
@@ -18228,6 +18293,14 @@ func intentarHandoffAutonomoTarea(proyecto *db.Proyecto, tareaID int64, origen, 
 	if origen == "" || relevo == "" || strings.EqualFold(origen, relevo) {
 		return false, nil
 	}
+	relevoCanonico, ok, err := resolverAgenteRelevoAutonomia(relevo)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+	relevo = relevoCanonico
 	resumen = strings.TrimSpace(resumen)
 	if resumen == "" {
 		resumen = fmt.Sprintf("Continuidad automática en tarea #%d", tareaID)
@@ -18473,6 +18546,14 @@ func reasignarYArrancarTareaAutonomia(tareaID int64, relevo, nota string) error 
 	if tareaID <= 0 || strings.TrimSpace(relevo) == "" {
 		return nil
 	}
+	relevoCanonico, ok, err := resolverAgenteRelevoAutonomia(relevo)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("agente relevo no disponible para autonomía: %s", strings.TrimSpace(relevo))
+	}
+	relevo = relevoCanonico
 	tareaAntes, err := tareasService.Get(tareaID)
 	if err != nil {
 		return err

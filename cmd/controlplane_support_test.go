@@ -7241,6 +7241,52 @@ func TestProyectoTieneFrentePremiumCanonicoActivoAjeno(t *testing.T) {
 	}
 }
 
+func TestReasignarYArrancarTareaAutonomiaRechazaRelevoNoRegistrado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexOrigen", "programador"); err != nil {
+		t.Fatalf("registrar agente origen: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Tarea degradada",
+		Descripcion: "Debe fallar antes de violar FK",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexOrigen"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexOrigen"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	err = reasignarYArrancarTareaAutonomia(tareaID, "CodexFantasma", "No deberia violar FK")
+	if err == nil || !strings.Contains(err.Error(), "agente relevo no disponible") {
+		t.Fatalf("deberia rechazar relevo no registrado antes de tocar DB, err=%v", err)
+	}
+	tarea, getErr := db.GetTarea(tareaID)
+	if getErr != nil {
+		t.Fatalf("get tarea: %v", getErr)
+	}
+	if tarea == nil || tarea.Agente == nil || *tarea.Agente != "CodexOrigen" || tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea no deberia haberse reasignado: %+v", tarea)
+	}
+}
+
 func TestProcesarAutonomiaSesionActivaIdleNoReasignaFrentePremiumCanonicoAjeno(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	autonomiaIdleAutoassignGate.Reset()
@@ -7472,6 +7518,52 @@ func TestReactivarWorkerDisponibleConAsignacionPausadaNoRobaFrentePremiumCanonic
 	}
 	if len(orders) != 0 {
 		t.Fatalf("no deberia encolar runtime orders para Codex6: %+v", orders)
+	}
+}
+
+func TestTareaPipelineLocalAsignadaAOtroAgenteDetectaFrenteAjeno(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex10: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex14", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex14: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-reactivacion-pausada-frente-ajeno-stale",
+		Nombre:  "Orquestador Reactivacion Pausada Frente Ajeno Stale",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente activo ajeno",
+		Descripcion: "Slice en curso",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("tomar tarea Codex10: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("iniciar tarea Codex10: %v", err)
+	}
+
+	ajena, err := tareaPipelineLocalAsignadaAOtroAgente(&capacidadapp.TareaPipelineLocal{ID: tareaID}, "Codex14")
+	if err != nil {
+		t.Fatalf("tareaPipelineLocalAsignadaAOtroAgente: %v", err)
+	}
+	if !ajena {
+		t.Fatal("deberia detectar que la tarea devuelta ya pertenece a otro agente")
 	}
 }
 
@@ -39353,6 +39445,41 @@ func TestSeleccionarRelevoAutonomiaDescartaCandidatoEnMailboxAtascada(t *testing
 	relevo := seleccionarRelevoAutonomia(rows, map[string]int{"CodexMailbox": 0, "CodexSano": 0}, tarea, "CodexBloqueado")
 	if relevo != "CodexSano" {
 		t.Fatalf("deberia descartar candidato atascado por mailbox, got=%q", relevo)
+	}
+}
+
+func TestSeleccionarRelevoAutonomiaDescartaAgenteNoRegistrado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSano", "programador"); err != nil {
+		t.Fatalf("registrar CodexSano: %v", err)
+	}
+	tarea := &db.Tarea{ID: 7, ProyectoID: &proyectoID}
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexFantasma"},
+			Asignacion:      &db.Asignacion{Agente: "CodexFantasma", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+			EstadoOperativo: "disponible",
+		},
+		{
+			Agente:          &db.Agente{Nombre: "CodexSano"},
+			Asignacion:      &db.Asignacion{Agente: "CodexSano", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+			EstadoOperativo: "disponible",
+		},
+	}
+
+	relevo := seleccionarRelevoAutonomia(rows, map[string]int{"CodexFantasma": 0, "CodexSano": 0}, tarea, "CodexBloqueado")
+	if relevo != "CodexSano" {
+		t.Fatalf("deberia descartar agente no registrado como relevo, got=%q", relevo)
 	}
 }
 
