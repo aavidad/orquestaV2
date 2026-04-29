@@ -3676,7 +3676,10 @@ func rowEntityActiveNow(row Row, now time.Time) bool {
 	if row.Sesion != nil {
 		switch strings.ToLower(strings.TrimSpace(row.Sesion.Estado)) {
 		case "activa", "running", "ready", "pensando", "disponible":
-			return true
+			switch strings.ToLower(strings.TrimSpace(row.handleState())) {
+			case "activo", "active", "ready", "waiting_input", "esperando_input":
+				return true
+			}
 		}
 	}
 	return false
