@@ -218,6 +218,12 @@ func TestNormalizeServerOperationalInfoDerivaRecoveryHintParaTasksWithoutWorkers
 	if info.Recovery.SuggestedAction != "server_rearm" || !info.Recovery.RearmAvailable {
 		t.Fatalf("recovery hint sin accion canónica: %+v", info.Recovery)
 	}
+	if info.NextRecoveryPlan == nil || info.NextRecoveryPlan.Action != "server_rearm" || !info.NextRecoveryPlan.RequiresRearm || !info.NextRecoveryPlan.AutoExecutable {
+		t.Fatalf("recovery plan canónico inesperado: %+v", info.NextRecoveryPlan)
+	}
+	if len(info.NextRecoveryPlan.Steps) != 2 || info.NextRecoveryPlan.Steps[0].Action != "server_rearm" || info.NextRecoveryPlan.Steps[1].Action != "server_operational_refresh" {
+		t.Fatalf("steps de recovery plan inesperados: %+v", info.NextRecoveryPlan.Steps)
+	}
 }
 
 func TestNormalizeServerOperationalInfoDerivaRecoveryHintDeCuotaSinRearm(t *testing.T) {
@@ -236,6 +242,12 @@ func TestNormalizeServerOperationalInfoDerivaRecoveryHintDeCuotaSinRearm(t *test
 	}
 	if info.Recovery.SuggestedAction != "wait_quota_reset" {
 		t.Fatalf("accion recovery inesperada: %+v", info.Recovery)
+	}
+	if info.NextRecoveryPlan == nil || info.NextRecoveryPlan.Action != "wait_quota_reset" || info.NextRecoveryPlan.Priority != "baja" {
+		t.Fatalf("recovery plan de cuota inesperado: %+v", info.NextRecoveryPlan)
+	}
+	if info.NextRecoveryPlan.NextQuotaResetAt != "2026-04-29T11:00:00Z" {
+		t.Fatalf("recovery plan sin reset visible: %+v", info.NextRecoveryPlan)
 	}
 }
 

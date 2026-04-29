@@ -553,6 +553,34 @@ func TestBuildServerOperationalRecoveryPlanDerivaEsperaCuota(t *testing.T) {
 	}
 }
 
+func TestBuildOpenClawOperatorSnapshotFallbackExponeNextRecoveryPlanCanonico(t *testing.T) {
+	prevOperational := controlPlaneOperationalInfoFetcher
+	t.Cleanup(func() {
+		controlPlaneOperationalInfoFetcher = prevOperational
+	})
+	controlPlaneOperationalInfoFetcher = nil
+
+	reset := time.Date(2026, 4, 29, 10, 0, 0, 0, time.UTC)
+	status := apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &reset},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "Codex1", EstadoCuota: "enfriamiento", ReanimarAt: &reset},
+		},
+	}
+
+	payload := buildOpenClawOperatorSnapshotFallback("OpenClaw", status)
+	plan, _ := payload["next_recovery_plan"].(*openClawRecoveryPlan)
+	if plan == nil || plan.Action != "wait_quota_reset" || plan.Kind != "quota_cooldown" {
+		t.Fatalf("next_recovery_plan fallback inesperado: %#v", payload["next_recovery_plan"])
+	}
+	operational, _ := payload["server_operational"].(serverOperationalInfo)
+	if operational.NextRecoveryPlan == nil || operational.NextRecoveryPlan.Action != "wait_quota_reset" {
+		t.Fatalf("server_operational sin recovery plan canónico: %+v", operational)
+	}
+}
+
 func TestListarSupervisorModuleConflictsFromTasksReutilizaEstadoYaCargado(t *testing.T) {
 	conflicts := listarSupervisorModuleConflictsFromTasks([]tareaLite{
 		{ID: 410, Modulo: "runtime", Agente: "Codex3"},

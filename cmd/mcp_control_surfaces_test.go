@@ -535,8 +535,14 @@ func TestMCPToolServerSelfHealExponeNextRecoveryPlanSiSigueDegradado(t *testing.
 	if payload.NextRecoveryAction == nil || payload.NextRecoveryAction.Action != "wait_quota_reset" {
 		t.Fatalf("next_recovery_action inesperada: %+v", payload.NextRecoveryAction)
 	}
-	if payload.NextRecoveryPlan == nil || len(payload.NextRecoveryPlan.Steps) != 2 || payload.NextRecoveryPlan.Steps[0].Action != "wait_quota_reset" {
+	if payload.NextRecoveryPlan == nil || payload.NextRecoveryPlan.Action != "wait_quota_reset" || payload.NextRecoveryPlan.NextQuotaResetAt != "2026-04-29T10:00:00Z" {
 		t.Fatalf("next_recovery_plan inesperado: %+v", payload.NextRecoveryPlan)
+	}
+	if len(payload.NextRecoveryPlan.Steps) != 2 || payload.NextRecoveryPlan.Steps[0].Action != "wait_quota_reset" || payload.NextRecoveryPlan.Steps[1].Action != "server_operational_refresh" {
+		t.Fatalf("next_recovery_plan inesperado: %+v", payload.NextRecoveryPlan)
+	}
+	if payload.Operational.NextRecoveryPlan == nil || payload.Operational.NextRecoveryPlan.Action != "wait_quota_reset" {
+		t.Fatalf("operational sin recovery plan canónico: %+v", payload.Operational)
 	}
 }
 
