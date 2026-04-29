@@ -184,7 +184,12 @@ func ensureNotificacionesOutboxSchema() error {
 	if DB == nil {
 		return nil
 	}
-	_, err := DB.Exec(`
+	return ensureRenderedSchemaStatements(renderNotificacionesOutboxSchemaForDriver(CurrentStorageDriver()))
+}
+
+func renderNotificacionesOutboxSchemaForDriver(driver string) []string {
+	return []string{
+		renderDriverColumnSyntax(driver, `
 		CREATE TABLE IF NOT EXISTS notificaciones_entregas (
 			id            INTEGER PRIMARY KEY AUTOINCREMENT,
 			canal         TEXT    NOT NULL,
@@ -199,12 +204,9 @@ func ensureNotificacionesOutboxSchema() error {
 			delivered_at  DATETIME,
 			created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		)`)
-	if err != nil {
-		return err
+		)`),
+		`CREATE INDEX IF NOT EXISTS idx_notificaciones_entregas_canal_estado_id ON notificaciones_entregas(canal, estado, id DESC)`,
 	}
-	_, err = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_notificaciones_entregas_canal_estado_id ON notificaciones_entregas(canal, estado, id DESC)`)
-	return err
 }
 
 func scanEntregaNotificacion(scanner interface{ Scan(dest ...any) error }) (*EntregaNotificacion, error) {

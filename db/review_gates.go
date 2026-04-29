@@ -184,27 +184,10 @@ func ResolverReviewGate(id int64, estado EstadoReviewGate, findingsJSON string, 
 }
 
 func ensureReviewGateSchema() error {
-	_, err := DB.Exec(`
-		CREATE TABLE IF NOT EXISTS review_gates (
-			id              INTEGER PRIMARY KEY AUTOINCREMENT,
-			proyecto_id     INTEGER REFERENCES proyectos(id) ON DELETE CASCADE,
-			tarea_id        INTEGER REFERENCES tareas(id) ON DELETE CASCADE,
-			worktree_id     INTEGER REFERENCES worktrees(id) ON DELETE SET NULL,
-			requested_by    TEXT    NOT NULL DEFAULT '',
-			reviewer_agente TEXT    NOT NULL DEFAULT '',
-			estado          TEXT    NOT NULL DEFAULT 'pendiente'
-			                              CHECK (estado IN ('pendiente','en_revision','cambios_pedidos','aprobado','bloqueado')),
-			severity_max    TEXT    NOT NULL DEFAULT '',
-			findings_json   TEXT    NOT NULL DEFAULT '[]',
-			resolved_at     DATETIME,
-			created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		)`)
-	if err != nil {
-		return err
-	}
-	_, err = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_review_gates_proyecto_estado ON review_gates(proyecto_id, estado, id DESC)`)
-	return err
+	return ensureSchemaObjects(
+		"CREATE TABLE IF NOT EXISTS review_gates (",
+		"CREATE INDEX IF NOT EXISTS idx_review_gates_proyecto_estado",
+	)
 }
 
 func normalizarReviewGate(item *ReviewGate) {
