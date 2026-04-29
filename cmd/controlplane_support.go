@@ -1601,7 +1601,10 @@ func runtimeOrderEntregaGitPremiumDesdeSendInstruction(order *db.RuntimeOrder) b
 	}
 	isPipelineLocal := strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "source")), "pipeline_local") ||
 		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "kind")), "pipeline_local") ||
-		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "mailbox_kind")), "pipeline_local")
+		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "mailbox_kind")), "pipeline_local") ||
+		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "source")), "microprogramacion") ||
+		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "kind")), "microprogramacion") ||
+		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "mailbox_kind")), "microprogramacion")
 	if !isPipelineLocal {
 		return false
 	}
@@ -9841,12 +9844,16 @@ func runtimeMailboxPremiumPipelineLocalSinTarea(msg *db.RuntimeMailboxMessage, p
 	if msg == nil || payload == nil {
 		return false
 	}
-	if !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") {
+	if !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") &&
+		!strings.EqualFold(strings.TrimSpace(msg.Kind), "microprogramacion") {
 		return false
 	}
 	isPipelineLocal := strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "source")), "pipeline_local") ||
 		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "kind")), "pipeline_local") ||
-		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "mailbox_kind")), "pipeline_local")
+		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "mailbox_kind")), "pipeline_local") ||
+		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "source")), "microprogramacion") ||
+		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "kind")), "microprogramacion") ||
+		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "mailbox_kind")), "microprogramacion")
 	if !isPipelineLocal {
 		return false
 	}
@@ -11592,6 +11599,17 @@ func procesarAutoasignacionPremiumSinSesionBatch(rows []agentesapp.Row, tareasAc
 		}
 		if !reactivado {
 			continue
+		}
+		if _, err := encolarNudgeAutonomiaConInvalidacion(
+			nil,
+			agente,
+			proyecto,
+			"continuar_trabajo",
+			fmt.Sprintf("Tarea #%d asignada automáticamente", tarea.ID),
+			"toma tarea asignada y sigue",
+			map[string]any{"tarea_id": tarea.ID, "motivo_autoasignacion": "premium_idle_autoassigned"},
+		); err != nil {
+			return procesadas, err
 		}
 		db.Audit("orquesta", "autonomia_premium_idle_autoassigned", "proyecto", proyecto.ID,
 			fmt.Sprintf("agente=%s tarea_id=%d detalle=%s", agente, tarea.ID, strings.TrimSpace(row.DetalleOperativo)))
