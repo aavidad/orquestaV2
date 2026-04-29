@@ -7419,6 +7419,9 @@ func runtimeMailboxInteractiveWorkerStateForHandle(handle *db.RuntimeHandle, now
 
 func intentarReactivarRuntimeMailboxPoolLocalSinHandle(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
 	proyecto, err := resolverProyectoRuntimeMailboxReactivacion(msg, snapshot)
+	if err != nil {
+		return false, err
+	}
 	if msg == nil || proyecto == nil {
 		return false, nil
 	}
@@ -7445,6 +7448,16 @@ func intentarReactivarRuntimeMailboxPoolLocalSinHandle(msg *db.RuntimeMailboxMes
 	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
 		return false, err
 	} else if pendiente {
+		return false, nil
+	}
+	if accionable, err := runtimeMailboxTieneTrabajoAccionableParaReactivacion(msg, proyecto.ID); err != nil {
+		return false, err
+	} else if !accionable {
+		return false, nil
+	}
+	if reciente, err := existeRuntimeOrderControlRecienteAutonomia(agente, &proyecto.ID, autonomiaReactivationAttemptCooldown(), "start", "resume"); err != nil {
+		return false, err
+	} else if reciente {
 		return false, nil
 	}
 	if err := encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStart, "runtime_mailbox_pool_local_sin_handle"); err != nil {
@@ -7487,12 +7500,10 @@ func intentarReactivarRuntimeMailboxSinHandle(msg *db.RuntimeMailboxMessage, sna
 	case db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh, "watchdog":
 		return false, nil
 	}
-	if kind != "pipeline_local" && kind != "microprogramacion" && kind != "autonomia" && kind != "nudge" {
-		if tieneTrabajo, err := dbAgenteTieneTrabajoArrancable(agente, proyecto.ID); err != nil {
-			return false, err
-		} else if tieneTrabajo {
-			return false, nil
-		}
+	if accionable, err := runtimeMailboxTieneTrabajoAccionableParaReactivacion(msg, proyecto.ID); err != nil {
+		return false, err
+	} else if !accionable {
+		return false, nil
 	}
 	if handle, err := runtimesService.GetOperationalRuntimeHandleAgentProject(agente, &proyecto.ID); err != nil {
 		return false, err
@@ -7509,6 +7520,11 @@ func intentarReactivarRuntimeMailboxSinHandle(msg *db.RuntimeMailboxMessage, sna
 	} else if pendiente {
 		return false, nil
 	}
+	if reciente, err := existeRuntimeOrderControlRecienteAutonomia(agente, &proyecto.ID, autonomiaReactivationAttemptCooldown(), "start", "resume"); err != nil {
+		return false, err
+	} else if reciente {
+		return false, nil
+	}
 	reactivado, err := encolarReactivacionAgenteProyectoSiProcede(agente, proyecto, "runtime_mailbox_sin_handle")
 	if err != nil {
 		return false, err
@@ -7519,6 +7535,22 @@ func intentarReactivarRuntimeMailboxSinHandle(msg *db.RuntimeMailboxMessage, sna
 	db.Audit("orquesta", "runtime_mailbox_reactivacion_sin_handle", "runtime_mailbox", msg.ID,
 		fmt.Sprintf("agente=%s proyecto_id=%d kind=%s", agente, proyecto.ID, strings.TrimSpace(msg.Kind)))
 	return true, nil
+}
+
+func runtimeMailboxTieneTrabajoAccionableParaReactivacion(msg *db.RuntimeMailboxMessage, proyectoID int64) (bool, error) {
+	if msg == nil || proyectoID <= 0 {
+		return false, nil
+	}
+	payload := map[string]any{}
+	if strings.TrimSpace(msg.PayloadJSON) != "" {
+		if err := json.Unmarshal([]byte(strings.TrimSpace(msg.PayloadJSON)), &payload); err != nil {
+			return false, err
+		}
+	}
+	if tareaID := runtimeMailboxTargetTaskID(payload); tareaID != nil && *tareaID > 0 {
+		return true, nil
+	}
+	return dbAgenteTieneTrabajoArrancable(strings.TrimSpace(msg.ToAgente), proyectoID)
 }
 
 func resolverProyectoRuntimeMailboxReactivacion(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) (*db.Proyecto, error) {

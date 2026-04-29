@@ -35858,6 +35858,249 @@ func TestIntentarReactivarRuntimeMailboxSinHandleOmiteReactivacionSiYaHayHandleO
 	}
 }
 
+func TestRuntimeMailboxTieneTrabajoAccionableParaReactivacionAceptaTaskIDAlias(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex5", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-runtime-mailbox-taskid",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	msg := &db.RuntimeMailboxMessage{
+		ToAgente:    "Codex5",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"task_id":123,"texto":"continua"}`,
+	}
+	accionable, err := runtimeMailboxTieneTrabajoAccionableParaReactivacion(msg, proyectoID)
+	if err != nil {
+		t.Fatalf("runtimeMailboxTieneTrabajoAccionableParaReactivacion: %v", err)
+	}
+	if !accionable {
+		t.Fatal("deberia tratar task_id explicita como trabajo accionable")
+	}
+}
+
+func TestIntentarReactivarRuntimeMailboxSinHandleOmiteReactivacionSinTrabajoArrancable(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex5", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-runtime-mailbox-sin-trabajo",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		ToAgente:    "Codex5",
+		FromAgente:  "server",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"texto":"continua"}`,
+		Estado:      "pendiente",
+	})
+	if err != nil {
+		t.Fatalf("enviar mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+
+	reactivado, err := intentarReactivarRuntimeMailboxSinHandle(msg, nil)
+	if err != nil {
+		t.Fatalf("intentarReactivarRuntimeMailboxSinHandle: %v", err)
+	}
+	if reactivado {
+		t.Fatal("no deberia reactivar sin tarea explicita ni trabajo arrancable")
+	}
+
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: stringPtr("Codex5"), ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar runtime orders, got=%+v", orders)
+	}
+}
+
+func TestIntentarReactivarRuntimeMailboxSinHandleRespetaCooldownDeStartReciente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-runtime-mailbox-cooldown",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Retomar frente premium",
+		Descripcion: "Frente activo para reactivacion",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex6"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex6"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex6",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		Estado:      "completada",
+		PayloadJSON: `{"kind":"autonomia","motivo":"runtime_mailbox_sin_handle"}`,
+	}); err != nil {
+		t.Fatalf("encolar start reciente: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		ToAgente:    "Codex6",
+		FromAgente:  "server",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"texto":"continua"}`,
+		Estado:      "pendiente",
+	})
+	if err != nil {
+		t.Fatalf("enviar mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+
+	reactivado, err := intentarReactivarRuntimeMailboxSinHandle(msg, nil)
+	if err != nil {
+		t.Fatalf("intentarReactivarRuntimeMailboxSinHandle: %v", err)
+	}
+	if reactivado {
+		t.Fatal("no deberia reactivar si ya existe un start reciente dentro del cooldown")
+	}
+
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: stringPtr("Codex6"), ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders pendientes: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia crear una nueva runtime order pendiente dentro del cooldown, got=%+v", orders)
+	}
+}
+
+func TestIntentarReactivarRuntimeMailboxPoolLocalSinHandleOmiteReactivacionSinTrabajoArrancable(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("QwenCoder1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-runtime-mailbox-pool",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.GuardarPool(&db.PoolCapacidad{
+		Slug:                "ollama-qwen",
+		Proveedor:           "Ollama",
+		Runtime:             "ollama",
+		Plan:                "local",
+		CapacidadTotal:      1,
+		PermiteModelosMulti: true,
+		PoliticaHandoff:     "preventivo",
+		FuenteTelemetria:    "manual",
+		MetadataJSON:        `{"conector_canonico":"ollama_pool_local","modelo_preferente":"qwen2.5-coder:7b","slots_maximos":1}`,
+		Activo:              true,
+	}); err != nil {
+		t.Fatalf("guardar pool: %v", err)
+	}
+	if _, err := db.GuardarPoolModelo("ollama-qwen", &db.PoolModelo{
+		ModelSlug: "qwen2.5-coder:7b",
+		Activo:    true,
+		Prioridad: 10,
+	}); err != nil {
+		t.Fatalf("guardar pool modelo: %v", err)
+	}
+	if _, err := db.GuardarPoliticaModelo(&db.PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		PoolSlug:        "ollama-qwen",
+		ModelSlug:       "qwen2.5-coder:7b",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("guardar politica modelo: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		ToAgente:    "QwenCoder1",
+		FromAgente:  "server",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"texto":"continua"}`,
+		Estado:      "pendiente",
+	})
+	if err != nil {
+		t.Fatalf("enviar mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+
+	reactivado, err := intentarReactivarRuntimeMailboxPoolLocalSinHandle(msg, nil)
+	if err != nil {
+		t.Fatalf("intentarReactivarRuntimeMailboxPoolLocalSinHandle: %v", err)
+	}
+	if reactivado {
+		t.Fatal("no deberia reactivar pool local si no hay tarea explicita ni trabajo arrancable")
+	}
+
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: stringPtr("QwenCoder1"), ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar runtime orders de pool local, got=%+v", orders)
+	}
+}
+
 func TestRuntimeMailboxCanDeferSupervisedHandleError(t *testing.T) {
 	if runtimeMailboxCanDeferSupervisedHandleError(nil) {
 		t.Fatal("nil no deberia diferirse")
