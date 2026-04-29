@@ -1601,6 +1601,7 @@ func TestRecoverRemoteDegradedRuntimeSessionEnqueuesCheckpointAndResume(t *testi
 	}
 	service := NewService(nil, runtimes)
 	service.SetAutonomyStore(&stubAutonomyStore{})
+	service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: true})
 	service.SetRemoteRecoverySupport(&stubRemoteRecoverySupport{
 		conector:  &db.Conector{ID: 5, Slug: "codex-remote"},
 		available: true,
@@ -1646,6 +1647,7 @@ func TestRecoverRemoteDegradedRuntimeSessionPausesWhenConnectorUnavailable(t *te
 	runtimes := &stubRuntimeController{controlID: 8, controlAction: "pause"}
 	service := NewService(nil, runtimes)
 	service.SetAutonomyStore(store)
+	service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: true})
 	service.SetRemoteRecoverySupport(support)
 
 	count, err := service.RecoverRemoteDegradedRuntimeSession(
@@ -1692,6 +1694,7 @@ func TestRecoverRemoteDegradedRuntimeSessionNoEmitePausedExternalWhenPauseAlread
 	runtimes := &stubRuntimeController{}
 	service := NewService(nil, runtimes)
 	service.SetAutonomyStore(store)
+	service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: true})
 	service.SetRemoteRecoverySupport(support)
 
 	count, err := service.RecoverRemoteDegradedRuntimeSession(
@@ -1869,6 +1872,155 @@ func TestReactivateProjectIfNeededRespetaPoolGateCuandoElPoolCompartidoEstaLleno
 	}
 	if runtimes.controlReq.Accion != "" {
 		t.Fatalf("no deberia encolar control: %+v", runtimes.controlReq)
+	}
+}
+
+func TestReactivateProjectIfNeededNoUsaBacklogGenericoComoTrabajoAccionable(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(31)
+	runtimes := &stubRuntimeController{}
+	service := NewService(nil, runtimes)
+	service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: false})
+	service.SetRecoveryFlowSupport(&stubRecoveryFlowSupport{
+		available: true,
+		backlog:   true,
+	})
+
+	ok, err := service.ReactivateProjectIfNeeded(
+		"Codex1",
+		&db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		"runtime_mailbox_sin_handle",
+		&db.RuntimeHandle{ID: 5, Estado: "pausado"},
+	)
+	if err != nil {
+		t.Fatalf("ReactivateProjectIfNeeded: %v", err)
+	}
+	if ok {
+		t.Fatal("no deberia reactivar solo por backlog generico del proyecto")
+	}
+	if runtimes.controlReq.Accion != "" {
+		t.Fatalf("no deberia encolar control: %+v", runtimes.controlReq)
+	}
+}
+
+func TestReactivateProjectIfNeededRespetaCooldownDeStartReciente(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(31)
+	now := time.Now().UTC()
+	runtimes := &stubRuntimeController{
+		orders: []*db.RuntimeOrder{{
+			ID:         91,
+			Agente:     "Codex1",
+			ProyectoID: &proyectoID,
+			Tipo:       "start",
+			Estado:     "completada",
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}},
+	}
+	service := NewService(nil, runtimes)
+	service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: true})
+	service.SetRecoveryFlowSupport(&stubRecoveryFlowSupport{available: true})
+
+	ok, err := service.ReactivateProjectIfNeeded(
+		"Codex1",
+		&db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		"runtime_mailbox_sin_handle",
+		&db.RuntimeHandle{ID: 5, Estado: "pausado"},
+	)
+	if err != nil {
+		t.Fatalf("ReactivateProjectIfNeeded: %v", err)
+	}
+	if ok {
+		t.Fatal("no deberia reactivar dentro del cooldown de start reciente")
+	}
+	if runtimes.controlReq.Accion != "" {
+		t.Fatalf("no deberia encolar control: %+v", runtimes.controlReq)
+	}
+}
+
+func TestRecoverRemoteDegradedRuntimeSessionOmiteRecuperacionSinTrabajoAccionable(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(31)
+	runtimeID := int64(44)
+	runtimes := &stubRuntimeController{
+		runtime: &db.RuntimeInstance{ID: runtimeID, Agente: "Codex1", ProyectoID: &proyectoID},
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(&stubAutonomyStore{})
+	service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: false})
+	service.SetRecoveryFlowSupport(&stubRecoveryFlowSupport{available: true})
+	service.SetRemoteRecoverySupport(&stubRemoteRecoverySupport{
+		conector:  &db.Conector{ID: 5, Slug: "codex-remote"},
+		available: true,
+	})
+
+	count, err := service.RecoverRemoteDegradedRuntimeSession(
+		&db.Sesion{ID: 9, Agente: "Codex1", ProyectoID: &proyectoID, ExternalSessionID: "sess-1"},
+		&db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		&db.RuntimeHandle{ID: 3, Estado: "fallido", Transporte: "api", HandleKind: "session", HandleRef: "remote-1", RuntimeID: &runtimeID},
+		&db.RuntimeInstance{ID: runtimeID, Agente: "Codex1", ProyectoID: &proyectoID, LogicalState: "degradado", ProcessState: "remote_status_error"},
+	)
+	if err != nil {
+		t.Fatalf("RecoverRemoteDegradedRuntimeSession: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("count inesperado: %d", count)
+	}
+	if runtimes.controlReq.Accion != "" {
+		t.Fatalf("no deberia encolar control: %+v", runtimes.controlReq)
+	}
+	if runtimes.enqueuedRuntimeOrder != nil {
+		t.Fatalf("no deberia encolar runtime order: %+v", runtimes.enqueuedRuntimeOrder)
+	}
+}
+
+func TestRecoverRemoteDegradedRuntimeSessionRespetaCooldownDeResumeReciente(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(31)
+	runtimeID := int64(44)
+	now := time.Now().UTC()
+	runtimes := &stubRuntimeController{
+		runtime: &db.RuntimeInstance{ID: runtimeID, Agente: "Codex1", ProyectoID: &proyectoID},
+		orders: []*db.RuntimeOrder{{
+			ID:         92,
+			Agente:     "Codex1",
+			ProyectoID: &proyectoID,
+			Tipo:       "resume",
+			Estado:     "completada",
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}},
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(&stubAutonomyStore{})
+	service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: true})
+	service.SetRemoteRecoverySupport(&stubRemoteRecoverySupport{
+		conector:  &db.Conector{ID: 5, Slug: "codex-remote"},
+		available: true,
+	})
+
+	count, err := service.RecoverRemoteDegradedRuntimeSession(
+		&db.Sesion{ID: 9, Agente: "Codex1", ProyectoID: &proyectoID, ExternalSessionID: "sess-1"},
+		&db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		&db.RuntimeHandle{ID: 3, Estado: "fallido", Transporte: "api", HandleKind: "session", HandleRef: "remote-1", RuntimeID: &runtimeID},
+		&db.RuntimeInstance{ID: runtimeID, Agente: "Codex1", ProyectoID: &proyectoID, LogicalState: "degradado", ProcessState: "remote_status_error"},
+	)
+	if err != nil {
+		t.Fatalf("RecoverRemoteDegradedRuntimeSession: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("count inesperado: %d", count)
+	}
+	if runtimes.controlReq.Accion != "" {
+		t.Fatalf("no deberia encolar control: %+v", runtimes.controlReq)
+	}
+	if runtimes.enqueuedRuntimeOrder != nil {
+		t.Fatalf("no deberia encolar runtime order: %+v", runtimes.enqueuedRuntimeOrder)
 	}
 }
 

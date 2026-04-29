@@ -811,6 +811,23 @@ func (s *Service) ReactivateProjectIfNeeded(agente string, proyecto *db.Proyecto
 	} else if pending {
 		return false, nil
 	}
+	if reciente, err := s.existsRecentAutonomyOrder(agente, &proyecto.ID, "start", "", reactivationAttemptCooldown()); err != nil {
+		return false, err
+	} else if reciente {
+		return false, nil
+	}
+	if reciente, err := s.existsRecentAutonomyOrder(agente, &proyecto.ID, "resume", "", reactivationAttemptCooldown()); err != nil {
+		return false, err
+	} else if reciente {
+		return false, nil
+	}
+	tieneTrabajo, err := s.hasActionableReactivationWork(agente, proyecto.ID)
+	if err != nil {
+		return false, err
+	}
+	if !tieneTrabajo {
+		return false, nil
+	}
 	if handle == nil {
 		var err error
 		handle, err = s.ResolveRecoveryHandle(agente, &proyecto.ID)
@@ -872,25 +889,6 @@ func (s *Service) ReactivateProjectIfNeeded(agente string, proyecto *db.Proyecto
 			return true, nil
 		}
 	}
-	tieneTrabajo, err := s.workChecker.HasStartableAgentWork(agente, proyecto.ID)
-	if err != nil {
-		return false, err
-	}
-	if !tieneTrabajo {
-		tieneTrabajo, err = s.hasRecoverableAssignedProjectWork(agente, proyecto.ID)
-		if err != nil {
-			return false, err
-		}
-	}
-	if !tieneTrabajo {
-		tieneBacklog, err := s.recoveryFlow.ProjectHasReactivableBacklog(proyecto.ID)
-		if err != nil {
-			return false, err
-		}
-		if !tieneBacklog {
-			return false, nil
-		}
-	}
 	orderID, _, err := s.EnqueueControl(ControlRequest{
 		Agente:   agente,
 		Proyecto: strings.TrimSpace(proyecto.Slug),
@@ -912,6 +910,20 @@ func (s *Service) ReactivateProjectIfNeeded(agente string, proyecto *db.Proyecto
 		map[string]int64{"runtime_order_id": orderID},
 	)
 	return true, nil
+}
+
+func (s *Service) hasActionableReactivationWork(agente string, proyectoID int64) (bool, error) {
+	if s == nil || s.workChecker == nil || proyectoID <= 0 {
+		return false, nil
+	}
+	tieneTrabajo, err := s.workChecker.HasStartableAgentWork(agente, proyectoID)
+	if err != nil {
+		return false, err
+	}
+	if tieneTrabajo {
+		return true, nil
+	}
+	return s.hasRecoverableAssignedProjectWork(agente, proyectoID)
 }
 
 func (s *Service) hasRecoverableAssignedProjectWork(agente string, proyectoID int64) (bool, error) {
@@ -1085,6 +1097,23 @@ func (s *Service) RecoverRemoteDegradedRuntimeSession(sesion *db.Sesion, proyect
 	} else if pendiente {
 		return 0, nil
 	}
+	if reciente, err := s.existsRecentAutonomyOrder(strings.TrimSpace(sesion.Agente), sesion.ProyectoID, "start", "", reactivationAttemptCooldown()); err != nil {
+		return 0, err
+	} else if reciente {
+		return 0, nil
+	}
+	if reciente, err := s.existsRecentAutonomyOrder(strings.TrimSpace(sesion.Agente), sesion.ProyectoID, "resume", "", reactivationAttemptCooldown()); err != nil {
+		return 0, err
+	} else if reciente {
+		return 0, nil
+	}
+	tieneTrabajo, err := s.hasActionableReactivationWork(strings.TrimSpace(sesion.Agente), *sesion.ProyectoID)
+	if err != nil {
+		return 0, err
+	}
+	if !tieneTrabajo {
+		return 0, nil
+	}
 	checkpointPayload, err := json.Marshal(map[string]any{
 		"checkpoint_kind": "remote_recovery",
 		"resumen":         "Checkpoint automático antes de recuperación de runtime remoto degradado",
@@ -1170,6 +1199,10 @@ func (s *Service) RecoverRemoteDegradedRuntimeSession(sesion *db.Sesion, proyect
 		},
 	)
 	return 2, nil
+}
+
+func reactivationAttemptCooldown() time.Duration {
+	return 2 * time.Minute
 }
 
 func (s *Service) PauseAutonomyAlreadySatisfied(agente string, proyectoID *int64, sesion *db.Sesion) (bool, error) {
