@@ -16933,6 +16933,11 @@ func reactivarSesionAutonomiaPorTrabajoConSnapshot(sesion *db.Sesion, snapshot *
 	if sesion == nil || sesion.ProyectoID == nil {
 		return 0, nil
 	}
+\tif tieneTrabajoActivo, err := sesionTieneTrabajoArrancableAutonomia(sesion, snapshot); err != nil {
+\t\treturn 0, err
+\t} else if !tieneTrabajoActivo {
+\t\treturn 0, nil
+\t}
 	if disponible, _, err := autonomiaCuentaCompartidaDisponible(strings.TrimSpace(sesion.Agente)); err != nil {
 		return 0, err
 	} else if !disponible {

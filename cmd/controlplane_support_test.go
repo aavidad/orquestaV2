@@ -10101,6 +10101,80 @@ func TestReactivarSesionAutonomiaPorTrabajoRespetaCooldownDeStartReciente(t *tes
 	}
 }
 
+func TestReactivarSesionAutonomiaPorTrabajoNoRelanzaSinTrabajoArrancable(t *testing.T) {
+\ttmp := prepararDBTemporalCmd(t)
+
+\tif err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+\t\tt.Fatalf("registrar agente: %v", err)
+\t}
+\tproyectoID, err := db.UpsertProyecto(&db.Proyecto{
+\t\tSlug:    "orquestador-reactivacion-sesion-sin-trabajo",
+\t\tNombre:  "Orquestador Reactivacion Sesion Sin Trabajo",
+\t\tRutaAbs: filepath.Join(tmp, "orquestador"),
+\t\tTipo:    db.ProyectoRepo,
+\t\tActivo:  true,
+\t})
+\tif err != nil {
+\t\tt.Fatalf("upsert proyecto: %v", err)
+\t}
+\tif err := db.ActivarAsignacion("Codex1", proyectoID, "frente pausado sin trabajo"); err != nil {
+\t\tt.Fatalf("activar asignacion: %v", err)
+\t}
+\tif err := db.PausarAsignacion("Codex1", proyectoID, "sin_trabajo_reactivacion_automatica"); err != nil {
+\t\tt.Fatalf("pausar asignacion: %v", err)
+\t}
+\tsesion, err := db.IniciarSesionContexto(db.SesionInicio{
+\t\tAgente:      "Codex1",
+\t\tProyectoID:  &proyectoID,
+\t\tCWD:         filepath.Join(tmp, "orquestador"),
+\t\tHerramienta: "codex-cli",
+\t})
+\tif err != nil {
+\t\tt.Fatalf("iniciar sesion: %v", err)
+\t}
+\testadoPausada := "pausada"
+\tif err := db.GuardarSesionActiva("Codex1", &proyectoID, db.SesionUpdate{
+\t\tEstado:    &estadoPausada,
+\t\tHeartbeat: true,
+\t}); err != nil {
+\t\tt.Fatalf("guardar sesion pausada: %v", err)
+\t}
+
+\tprocesadas, err := reactivarSesionAutonomiaPorTrabajo(sesion)
+\tif err != nil {
+\t\tt.Fatalf("reactivarSesionAutonomiaPorTrabajo: %v", err)
+\t}
+\tif procesadas != 0 {
+\t\tt.Fatalf("no deberia reactivar sin trabajo arrancable, got=%d", procesadas)
+\t}
+
+\tactual, err := db.GetSesionActiva("Codex1", &proyectoID)
+\tif err != nil {
+\t\tt.Fatalf("get sesion activa: %v", err)
+\t}
+\tif actual == nil || !strings.EqualFold(strings.TrimSpace(actual.Estado), "pausada") {
+\t\tt.Fatalf("la sesion deberia seguir pausada: %+v", actual)
+\t}
+
+\tasignacionActiva, err := db.GetAsignacionActivaAgente("Codex1")
+\tif err != nil && err != sql.ErrNoRows {
+\t\tt.Fatalf("get asignacion activa: %v", err)
+\t}
+\tif asignacionActiva != nil {
+\t\tt.Fatalf("no deberia reactivar la asignacion sin trabajo real: %+v", asignacionActiva)
+\t}
+
+\tagente := "Codex1"
+\testado := "pendiente"
+\torders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+\tif err != nil {
+\t\tt.Fatalf("listar runtime orders pendientes: %v", err)
+\t}
+\tif len(orders) != 0 {
+\t\tt.Fatalf("no deberia encolar runtime orders sin trabajo real, got=%+v", orders)
+\t}
+}
+
 func TestResetReanimacionEncolaStartSiHandleFallidoConMailboxPendiente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
