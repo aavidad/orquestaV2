@@ -1800,7 +1800,7 @@ func TestReactivateProjectIfNeededSkipsWhenHandleAlreadyActive(t *testing.T) {
 	}
 }
 
-func TestReactivateProjectIfNeededUsesActiveAssignmentWhenNoStartableWork(t *testing.T) {
+func TestReactivateProjectIfNeededOmiteAsignacionActivaSinTrabajoArrancable(t *testing.T) {
 	events := captureAutonomyEventsForTest(t)
 	proyectoID := int64(31)
 	runtimes := &stubRuntimeController{controlID: 18, controlAction: "start"}
@@ -1820,26 +1820,14 @@ func TestReactivateProjectIfNeededUsesActiveAssignmentWhenNoStartableWork(t *tes
 	if err != nil {
 		t.Fatalf("ReactivateProjectIfNeeded: %v", err)
 	}
-	if !ok {
-		t.Fatal("deberia reactivar cuando la asignacion activa ya apunta al proyecto")
+	if ok {
+		t.Fatal("no deberia reactivar solo por una asignacion activa sin trabajo arrancable")
 	}
-	if runtimes.controlReq.Accion != "start" {
-		t.Fatalf("accion inesperada: %+v", runtimes.controlReq)
+	if runtimes.controlReq.Accion != "" {
+		t.Fatalf("no deberia encolar control: %+v", runtimes.controlReq)
 	}
-	if len(*events) != 1 {
-		t.Fatalf("autonomy events inesperados: %+v", *events)
-	}
-	ev := (*events)[0]
-	if ev.Kind != "worker_recovery_requested" || ev.Source != "worker_recovery_reactivate" || ev.Reason != "agente_sin_runtime_activo" {
-		t.Fatalf("worker_recovery event inesperado: %+v", ev)
-	}
-	if ev.ProjectID == nil || *ev.ProjectID != proyectoID {
-		t.Fatalf("project_id inesperado: %+v", ev)
-	}
-	if fmt.Sprint(ev.StateDelta["control_action"]) != "start" ||
-		fmt.Sprint(ev.StateDelta["runtime_order_id"]) != "18" ||
-		fmt.Sprint(ev.StateDelta["agente"]) != "QwenCoder1" {
-		t.Fatalf("state_delta inesperado: %+v", ev.StateDelta)
+	if len(*events) != 0 {
+		t.Fatalf("no deberia emitir eventos de recovery: %+v", *events)
 	}
 }
 
@@ -1953,6 +1941,46 @@ func TestRecoverRemoteDegradedRuntimeSessionOmiteRecuperacionSinTrabajoAccionabl
 	service.SetAutonomyStore(&stubAutonomyStore{})
 	service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: false})
 	service.SetRecoveryFlowSupport(&stubRecoveryFlowSupport{available: true})
+	service.SetRemoteRecoverySupport(&stubRemoteRecoverySupport{
+		conector:  &db.Conector{ID: 5, Slug: "codex-remote"},
+		available: true,
+	})
+
+	count, err := service.RecoverRemoteDegradedRuntimeSession(
+		&db.Sesion{ID: 9, Agente: "Codex1", ProyectoID: &proyectoID, ExternalSessionID: "sess-1"},
+		&db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+		&db.RuntimeHandle{ID: 3, Estado: "fallido", Transporte: "api", HandleKind: "session", HandleRef: "remote-1", RuntimeID: &runtimeID},
+		&db.RuntimeInstance{ID: runtimeID, Agente: "Codex1", ProyectoID: &proyectoID, LogicalState: "degradado", ProcessState: "remote_status_error"},
+	)
+	if err != nil {
+		t.Fatalf("RecoverRemoteDegradedRuntimeSession: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("count inesperado: %d", count)
+	}
+	if runtimes.controlReq.Accion != "" {
+		t.Fatalf("no deberia encolar control: %+v", runtimes.controlReq)
+	}
+	if runtimes.enqueuedRuntimeOrder != nil {
+		t.Fatalf("no deberia encolar runtime order: %+v", runtimes.enqueuedRuntimeOrder)
+	}
+}
+
+func TestRecoverRemoteDegradedRuntimeSessionOmiteAsignacionActivaSinTareaReal(t *testing.T) {
+	t.Parallel()
+
+	proyectoID := int64(31)
+	runtimeID := int64(44)
+	runtimes := &stubRuntimeController{
+		runtime: &db.RuntimeInstance{ID: runtimeID, Agente: "Codex1", ProyectoID: &proyectoID},
+	}
+	service := NewService(nil, runtimes)
+	service.SetAutonomyStore(&stubAutonomyStore{})
+	service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: false})
+	service.SetRecoveryFlowSupport(&stubRecoveryFlowSupport{
+		available:       true,
+		activeProjectID: proyectoID,
+	})
 	service.SetRemoteRecoverySupport(&stubRemoteRecoverySupport{
 		conector:  &db.Conector{ID: 5, Slug: "codex-remote"},
 		available: true,

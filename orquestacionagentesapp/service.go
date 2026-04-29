@@ -934,11 +934,6 @@ func (s *Service) hasRecoverableAssignedProjectWork(agente string, proyectoID in
 	if agente == "" {
 		return false, nil
 	}
-	if activeProjectID, err := s.recoveryFlow.ActiveProjectID(agente); err != nil {
-		return false, err
-	} else if activeProjectID == proyectoID {
-		return true, nil
-	}
 	if taskProjectID, err := s.recoveryFlow.ProjectIDFromAssignedWork(agente); err != nil {
 		return false, err
 	} else if taskProjectID == proyectoID {
