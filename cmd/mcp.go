@@ -6123,7 +6123,8 @@ func buildSupervisorReviewSnapshotWithStatus(supervisor string, status apiStatus
 	recommended = append(recommended, buildSupervisorObservedSessionActions(status, threadSessions)...)
 	recommended = append(recommended, buildSupervisorSubagentActions(subagents)...)
 	recommended = append(recommended, buildSupervisorProposalActions(status.PropuestasResumen)...)
-	sortSupervisorRecommendedActions(recommended)
+	_, _, statusCriticalProjectRisk := normalizeStatusAutonomyPayload(status.AutonomySurface, status.AutonomyHighlights, status.CriticalProjectRisk)
+	sortSupervisorRecommendedActionsWithProjectRisk(recommended, supervisorProjectRiskMapFromCriticalProjectRisk(statusCriticalProjectRisk))
 	markSupervisorRecommendedActions(recommended)
 	actionQueue := cloneSupervisorRecommendedActions(recommended)
 	safeQueue := buildSupervisorSafeActionQueueFast(actionQueue)
@@ -6132,6 +6133,9 @@ func buildSupervisorReviewSnapshotWithStatus(supervisor string, status apiStatus
 		return supervisorReviewCriticalRiskBuilder(actionQueue)
 	}, errStatusFetchTimeout); timeoutErr == nil {
 		criticalProjectRisk = snapshot
+	}
+	if criticalProjectRisk == nil {
+		criticalProjectRisk = statusCriticalProjectRisk
 	}
 	var nextAction any
 	if len(actionQueue) > 0 {
@@ -7598,6 +7602,10 @@ var supervisorWorkspaceProjectRiskSnapshotBuilder = supervisorWorkspaceProjectRi
 
 func sortSupervisorRecommendedActions(actions []supervisorRecommendedAction) {
 	projectRisk := supervisorWorkspaceProjectRiskSnapshotBuilder()
+	sortSupervisorRecommendedActionsWithProjectRisk(actions, projectRisk)
+}
+
+func sortSupervisorRecommendedActionsWithProjectRisk(actions []supervisorRecommendedAction, projectRisk map[string]int) {
 	sort.SliceStable(actions, func(i, j int) bool {
 		wi, wj := supervisorActionPriorityWeight(actions[i].Priority), supervisorActionPriorityWeight(actions[j].Priority)
 		if wi != wj {
@@ -7615,8 +7623,37 @@ func sortSupervisorRecommendedActions(actions []supervisorRecommendedAction) {
 	})
 }
 
+func supervisorProjectRiskMapFromCriticalProjectRisk(item *workspaceAutonomyProjectSummary) map[string]int {
+	if item == nil {
+		return nil
+	}
+	project := strings.ToLower(strings.TrimSpace(item.Project))
+	if project == "" || item.Blocking <= 0 {
+		return nil
+	}
+	return map[string]int{project: item.Blocking}
+}
+
 func sortSupervisorRecommendedActionsFast(actions []supervisorRecommendedAction) {
 	sort.SliceStable(actions, func(i, j int) bool {
+		wi, wj := supervisorActionPriorityWeight(actions[i].Priority), supervisorActionPriorityWeight(actions[j].Priority)
+		if wi != wj {
+			return wi < wj
+		}
+		gi, gj := supervisorActionGlobalImpactSortWeight(actions[i]), supervisorActionGlobalImpactSortWeight(actions[j])
+		if gi != gj {
+			return gi < gj
+		}
+		return actions[i].Target < actions[j].Target
+	})
+}
+
+func sortSupervisorExecutionActionsWithProjectRisk(actions []supervisorRecommendedAction, projectRisk map[string]int) {
+	sort.SliceStable(actions, func(i, j int) bool {
+		ri, rj := supervisorActionProjectRisk(actions[i], projectRisk), supervisorActionProjectRisk(actions[j], projectRisk)
+		if ri != rj {
+			return ri > rj
+		}
 		wi, wj := supervisorActionPriorityWeight(actions[i].Priority), supervisorActionPriorityWeight(actions[j].Priority)
 		if wi != wj {
 			return wi < wj
@@ -7935,6 +7972,32 @@ func attachSupervisorQueueContext(result map[string]any, snapshot map[string]any
 	return result
 }
 
+func attachSupervisorSafeQueueContext(result map[string]any, safeQueue []supervisorRecommendedAction, selected *supervisorRecommendedAction) map[string]any {
+	if result == nil {
+		return nil
+	}
+	queue := cloneSupervisorRecommendedActions(safeQueue)
+	if selected != nil {
+		reordered := make([]supervisorRecommendedAction, 0, len(queue))
+		reordered = append(reordered, *selected)
+		for _, item := range queue {
+			if supervisorRecommendedActionEquals(item, *selected) {
+				continue
+			}
+			reordered = append(reordered, item)
+		}
+		queue = reordered
+	}
+	result["queue_kind"] = "safe"
+	result["safe_action_queue"] = queue
+	if selected != nil {
+		result["next_safe_action"] = *selected
+	} else if len(queue) > 0 {
+		result["next_safe_action"] = queue[0]
+	}
+	return result
+}
+
 func buildSupervisorPostActionVerification(supervisor string) map[string]any {
 	verification := map[string]any{
 		"verified_at": time.Now().UTC().Format(time.RFC3339),
@@ -7974,17 +8037,83 @@ func attachSupervisorPostActionVerification(result map[string]any, supervisor st
 	return result
 }
 
+func invalidateSupervisorPostMutationCaches() {
+	invalidateStatusSnapshotCacheHard()
+	resetSupervisorRevisionSnapshotCache()
+	invalidateAgentStatusCaches()
+}
+
+func cloneSupervisorSnapshotMap(snapshot map[string]any) map[string]any {
+	if snapshot == nil {
+		return nil
+	}
+	out := make(map[string]any, len(snapshot))
+	for key, value := range snapshot {
+		out[key] = value
+	}
+	return out
+}
+
+func buildSupervisorActionSnapshot(supervisor string) (map[string]any, error) {
+	supervisor = resolveSupervisorName(supervisor)
+	snapshot, err := buildSupervisorRevisionReadSnapshot(supervisor)
+	if err != nil {
+		return nil, err
+	}
+	if snapshot == nil {
+		return nil, nil
+	}
+	snapshot = cloneSupervisorSnapshotMap(snapshot)
+	actionQueue, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+	actionQueue = cloneSupervisorRecommendedActions(actionQueue)
+	safeQueue, _ := snapshot["safe_action_queue"].([]supervisorRecommendedAction)
+	safeQueue = cloneSupervisorRecommendedActions(safeQueue)
+	snapshot["action_queue"] = actionQueue
+	snapshot["safe_action_queue"] = safeQueue
+
+	risk := supervisorCriticalProjectRiskFromSnapshot(snapshot)
+	if risk == nil && len(actionQueue) > 0 {
+		enrichedRisk, timeoutErr := runAPITimeboxed(150*time.Millisecond, func() (*workspaceAutonomyProjectSummary, error) {
+			return buildSupervisorWorkspaceRiskFocusFromActions(actionQueue)
+		}, errStatusFetchTimeout)
+		if timeoutErr == nil && enrichedRisk != nil {
+			risk = enrichedRisk
+			snapshot["critical_project_risk"] = enrichedRisk
+		}
+	}
+	if risk != nil && len(actionQueue) > 0 {
+		projectRisk := supervisorProjectRiskMapFromCriticalProjectRisk(risk)
+		sortSupervisorExecutionActionsWithProjectRisk(actionQueue, projectRisk)
+		safeQueue = buildSupervisorSafeActionQueueFast(actionQueue)
+		snapshot["action_queue"] = actionQueue
+		snapshot["safe_action_queue"] = safeQueue
+	}
+	snapshot["queue_summary"] = buildOpenClawQueueSummaryFromActions(actionQueue, safeQueue)
+	if len(actionQueue) > 0 {
+		snapshot["next_action"] = actionQueue[0]
+	} else {
+		snapshot["next_action"] = nil
+	}
+	if len(safeQueue) > 0 {
+		snapshot["next_safe_action"] = safeQueue[0]
+	} else {
+		snapshot["next_safe_action"] = nil
+	}
+	return snapshot, nil
+}
+
 func applySupervisorRecommendedAction(supervisor, actionName, target, assignee string) (map[string]any, error) {
 	result, err := applySupervisorRecommendedActionInternal(supervisor, actionName, target, assignee)
 	if err != nil {
 		return nil, err
 	}
+	invalidateSupervisorPostMutationCaches()
 	return attachSupervisorPostActionVerification(result, resolveSupervisorName(supervisor)), nil
 }
 
 func applySupervisorRecommendedActionInternal(supervisor, actionName, target, assignee string) (map[string]any, error) {
 	supervisor = resolveSupervisorName(supervisor)
-	snapshot, err := buildSupervisorReviewSnapshot(supervisor)
+	snapshot, err := buildSupervisorActionSnapshot(supervisor)
 	if err != nil {
 		return nil, err
 	}
@@ -8004,9 +8133,7 @@ func applySupervisorRecommendedActionInternal(supervisor, actionName, target, as
 		return nil, fmt.Errorf("la acción no tiene assignee sugerido ni explícito")
 	}
 	if strings.TrimSpace(selected.Action) == "asignar_tarea_libre" ||
-		strings.TrimSpace(selected.Action) == "reservar_tarea_libre" ||
-		strings.TrimSpace(selected.Action) == "replanificar_por_cuota" ||
-		strings.TrimSpace(selected.Action) == "rebalancear_reserva" {
+		strings.TrimSpace(selected.Action) == "replanificar_por_cuota" {
 		if err := revalidarYVerificarAgenteDisponibleParaTrabajo(worker); err != nil {
 			return nil, err
 		}
@@ -8043,8 +8170,9 @@ func applySupervisorRecommendedActionInternal(supervisor, actionName, target, as
 			"task_id":    taskID,
 			"assignee":   worker,
 		}
-		attachSupervisorQueueContext(result, snapshot, selected)
-		return attachSupervisorCriticalProjectRisk(result, snapshot), nil
+		result = attachSupervisorSafeQueueContext(result, actions, selected)
+		result = attachSupervisorCriticalProjectRisk(result, snapshot)
+		return result, nil
 	case "reservar_tarea_libre":
 		taskID, err := resolveSupervisorActionTaskID(*selected)
 		if err != nil {
@@ -8072,8 +8200,9 @@ func applySupervisorRecommendedActionInternal(supervisor, actionName, target, as
 			"task_id":    taskID,
 			"assignee":   worker,
 		}
-		attachSupervisorQueueContext(result, snapshot, selected)
-		return attachSupervisorCriticalProjectRisk(result, snapshot), nil
+		result = attachSupervisorSafeQueueContext(result, actions, selected)
+		result = attachSupervisorCriticalProjectRisk(result, snapshot)
+		return result, nil
 	case "replanificar_por_cuota":
 		taskID, err := resolveSupervisorActionTaskID(*selected)
 		if err != nil {
@@ -8102,8 +8231,9 @@ func applySupervisorRecommendedActionInternal(supervisor, actionName, target, as
 			"task_id":    taskID,
 			"assignee":   worker,
 		}
-		attachSupervisorQueueContext(result, snapshot, selected)
-		return attachSupervisorCriticalProjectRisk(result, snapshot), nil
+		result = attachSupervisorSafeQueueContext(result, actions, selected)
+		result = attachSupervisorCriticalProjectRisk(result, snapshot)
+		return result, nil
 	case "rebalancear_reserva":
 		taskID, err := resolveSupervisorActionTaskID(*selected)
 		if err != nil {
@@ -8129,8 +8259,9 @@ func applySupervisorRecommendedActionInternal(supervisor, actionName, target, as
 			"task_id":    taskID,
 			"assignee":   worker,
 		}
-		attachSupervisorQueueContext(result, snapshot, selected)
-		return attachSupervisorCriticalProjectRisk(result, snapshot), nil
+		result = attachSupervisorSafeQueueContext(result, actions, selected)
+		result = attachSupervisorCriticalProjectRisk(result, snapshot)
+		return result, nil
 	case "cerrar_propuesta_rechazada":
 		codigo, err := resolveSupervisorActionProposalCode(*selected)
 		if err != nil {
@@ -8146,8 +8277,9 @@ func applySupervisorRecommendedActionInternal(supervisor, actionName, target, as
 			"codigo":     codigo,
 			"assignee":   worker,
 		}
-		attachSupervisorQueueContext(result, snapshot, selected)
-		return attachSupervisorCriticalProjectRisk(result, snapshot), nil
+		result = attachSupervisorSafeQueueContext(result, actions, selected)
+		result = attachSupervisorCriticalProjectRisk(result, snapshot)
+		return result, nil
 	case "seguir_guidance_durable":
 		agenteObjetivo := strings.TrimSpace(worker)
 		if strings.HasPrefix(strings.TrimSpace(selected.Target), "agente:") {
@@ -8518,7 +8650,7 @@ func supervisorActionMatchesBatchKind(action supervisorRecommendedAction, batchK
 
 func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int, batchKind string) (map[string]any, error) {
 	supervisor = resolveSupervisorName(supervisor)
-	snapshot, err := buildSupervisorReviewSnapshot(supervisor)
+	snapshot, err := buildSupervisorActionSnapshot(supervisor)
 	if err != nil {
 		return nil, err
 	}
@@ -8553,6 +8685,9 @@ func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int, bat
 		}
 		applied = append(applied, result)
 	}
+	if len(applied) > 0 {
+		invalidateSupervisorPostMutationCaches()
+	}
 	result := map[string]any{
 		"ok":                    true,
 		"supervisor":            supervisor,
@@ -8569,7 +8704,7 @@ func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int, bat
 
 func applySupervisorNextAction(supervisor string) (map[string]any, error) {
 	supervisor = resolveSupervisorName(supervisor)
-	snapshot, err := buildSupervisorReviewSnapshot(supervisor)
+	snapshot, err := buildSupervisorActionSnapshot(supervisor)
 	if err != nil {
 		return nil, err
 	}
@@ -8579,6 +8714,7 @@ func applySupervisorNextAction(supervisor string) (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
+		invalidateSupervisorPostMutationCaches()
 		result["queue_kind"] = "safe"
 		result["next_safe_action"] = item
 		attachSupervisorCriticalProjectRisk(result, snapshot)
