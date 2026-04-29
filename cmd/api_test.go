@@ -1777,11 +1777,13 @@ func TestFetchStatusReadOnlyLiteDirectNoSeQuedaBloqueadoPorSesionesVisibles(t *t
 	prevReadOnly := apiStatusReadOnlyLiteFetcher
 	prevSessions := statusVisibleSessionsFetcher
 	prevAgentsWithSessions := statusListAgentsWithSessionsFetcher
+	prevTasksLite := apiStatusListActiveTasksLiteFn
 	resetAgentPanelSnapshotCache()
 	t.Cleanup(func() {
 		apiStatusReadOnlyLiteFetcher = prevReadOnly
 		statusVisibleSessionsFetcher = prevSessions
 		statusListAgentsWithSessionsFetcher = prevAgentsWithSessions
+		apiStatusListActiveTasksLiteFn = prevTasksLite
 		resetAgentPanelSnapshotCache()
 	})
 
@@ -1807,6 +1809,67 @@ func TestFetchStatusReadOnlyLiteDirectNoSeQuedaBloqueadoPorSesionesVisibles(t *t
 	}
 	if len(status.Agentes) == 0 || status.Agentes[0].Nombre != "Codex2" {
 		t.Fatalf("snapshot read-only inesperado: %+v", status.Agentes)
+	}
+}
+
+func TestFetchStatusReadOnlyLiteDirectRecuperaTareasActivasCuandoReadonlyNoLasTrae(t *testing.T) {
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	prevSessions := statusVisibleSessionsFetcher
+	prevAgentsWithSessions := statusListAgentsWithSessionsFetcher
+	prevTasksLite := apiStatusListActiveTasksLiteFn
+	resetAgentPanelSnapshotCache()
+	t.Cleanup(func() {
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+		statusVisibleSessionsFetcher = prevSessions
+		statusListAgentsWithSessionsFetcher = prevAgentsWithSessions
+		apiStatusListActiveTasksLiteFn = prevTasksLite
+		resetAgentPanelSnapshotCache()
+	})
+
+	apiStatusReadOnlyLiteFetcher = func() ([]*db.Agente, map[string]int, []*db.Tarea, error) {
+		return []*db.Agente{{Nombre: "Codex2", Activo: true, Habilitado: true, EstadoCuota: "activo"}}, map[string]int{"en_progreso": 1}, nil, nil
+	}
+	apiStatusListActiveTasksLiteFn = func() ([]tareaLite, error) {
+		return []tareaLite{{ID: 11, Titulo: "slice vivo", Estado: db.TareaEnProgreso, Agente: "Codex2"}}, nil
+	}
+	statusVisibleSessionsFetcher = func() ([]*db.Sesion, error) { return nil, nil }
+	statusListAgentsWithSessionsFetcher = func(_ []*db.Sesion) ([]*db.Agente, error) { return nil, nil }
+
+	status, ok := fetchStatusReadOnlyLiteDirect(20 * time.Millisecond)
+	if !ok {
+		t.Fatalf("deberia construir snapshot read-only")
+	}
+	if len(status.TareasEnProgreso) != 1 || status.TareasEnProgreso[0].ID != 11 {
+		t.Fatalf("deberia recuperar tareas activas fallback: %+v", status.TareasEnProgreso)
+	}
+}
+
+func TestFetchStatusUltraLiteFallbackPrimaryIncluyeTareasActivas(t *testing.T) {
+	prevAgents := statusListAgentsFetcher
+	prevCounts := statusCountTasksFetcher
+	prevTasksLite := apiStatusListActiveTasksLiteFn
+	t.Cleanup(func() {
+		statusListAgentsFetcher = prevAgents
+		statusCountTasksFetcher = prevCounts
+		apiStatusListActiveTasksLiteFn = prevTasksLite
+	})
+
+	statusListAgentsFetcher = func() ([]*db.Agente, error) {
+		return []*db.Agente{{Nombre: "CodexLite", Activo: true, Habilitado: true, EstadoCuota: "activo"}}, nil
+	}
+	statusCountTasksFetcher = func() (map[string]int, error) {
+		return map[string]int{"en_progreso": 1}, nil
+	}
+	apiStatusListActiveTasksLiteFn = func() ([]tareaLite, error) {
+		return []tareaLite{{ID: 21, Titulo: "ultralite activo", Estado: db.TareaEnProgreso, Agente: "CodexLite"}}, nil
+	}
+
+	status, ok := fetchStatusUltraLiteFallbackPrimary(time.Now().UTC(), 20*time.Millisecond)
+	if !ok {
+		t.Fatalf("deberia construir fallback ultraligero")
+	}
+	if len(status.TareasEnProgreso) != 1 || status.TareasEnProgreso[0].ID != 21 {
+		t.Fatalf("fallback ultraligero sin tareas activas esperadas: %+v", status.TareasEnProgreso)
 	}
 }
 

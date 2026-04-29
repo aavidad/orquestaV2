@@ -250,6 +250,7 @@ var (
 	}
 	apiStatusUltraLiteFetcher      = fetchStatusUltraLiteFallback
 	apiStatusReadOnlyLiteFetcher   = db.ListarEstadoLigeroReadOnly
+	apiStatusListActiveTasksLiteFn = listarTareasActivasRapido
 	apiStatusFallbackRichGrace     = 200 * time.Millisecond
 	apiListRuntimeOrdersTimeout    = 2 * time.Second
 	apiListRuntimeMailboxTimeout   = 2 * time.Second
@@ -1646,6 +1647,22 @@ func fetchStatusReadOnlyLiteDirect(timeout time.Duration) (apiStatusResponse, bo
 			}
 		}
 	}
+	if len(result.tareas) == 0 && cuentasSugierenTrabajoActivo(result.cuentas) {
+		if remaining := timeout - time.Since(startedAt); remaining > 0 && apiStatusListActiveTasksLiteFn != nil {
+			type tasksResult struct {
+				value []tareaLite
+			}
+			if recovered, err := runAPITimeboxed(remaining, func() (tasksResult, error) {
+				tareas, err := apiStatusListActiveTasksLiteFn()
+				if err != nil {
+					return tasksResult{}, err
+				}
+				return tasksResult{value: tareas}, nil
+			}, errStatusFetchTimeout); err == nil && len(recovered.value) > 0 {
+				result.tareas = tareasDBFromLite(recovered.value)
+			}
+		}
+	}
 	now := time.Now().UTC()
 	status := buildUltraLiteStatusReadOnly(now, result.agentes, result.cuentas, tareaLiteFromDB(result.tareas))
 	if rows, ok := readAgentPanelSnapshotFresh(); ok {
@@ -1671,8 +1688,13 @@ func fetchStatusUltraLiteFallbackPrimary(now time.Time, timeout time.Duration) (
 		value map[string]int
 		ok    bool
 	}
+	type tareasResult struct {
+		value []tareaLite
+		ok    bool
+	}
 	agentesCh := make(chan agentesResult, 1)
 	cuentasCh := make(chan cuentasResult, 1)
+	tareasCh := make(chan tareasResult, 1)
 	go func() {
 		value, ok := runStatusOptional(timeout, statusListAgentsFetcher)
 		agentesCh <- agentesResult{value: value, ok: ok}
@@ -1681,14 +1703,27 @@ func fetchStatusUltraLiteFallbackPrimary(now time.Time, timeout time.Duration) (
 		value, ok := runStatusOptional(timeout, statusCountTasksFetcher)
 		cuentasCh <- cuentasResult{value: value, ok: ok}
 	}()
+	go func() {
+		if apiStatusListActiveTasksLiteFn == nil {
+			tareasCh <- tareasResult{}
+			return
+		}
+		value, ok := runStatusOptional(timeout, apiStatusListActiveTasksLiteFn)
+		tareasCh <- tareasResult{value: value, ok: ok}
+	}()
 	agentesRes := <-agentesCh
 	cuentasRes := <-cuentasCh
+	tareasRes := <-tareasCh
 	agentes, agentesOK := agentesRes.value, agentesRes.ok
 	cuentas, cuentasOK := cuentasRes.value, cuentasRes.ok
 	if !agentesOK && !cuentasOK {
 		return apiStatusResponse{}, false
 	}
-	return buildUltraLiteStatus(now, agentes, cuentas, nil), true
+	tareas := tareasRes.value
+	if len(tareas) == 0 && !tareasRes.ok && !cuentasSugierenTrabajoActivo(cuentas) {
+		tareas = nil
+	}
+	return buildUltraLiteStatus(now, agentes, cuentas, tareas), true
 }
 
 func tareaLiteFromDB(items []*db.Tarea) []tareaLite {
@@ -1713,6 +1748,37 @@ func tareaLiteFromDB(items []*db.Tarea) []tareaLite {
 		out = append(out, lite)
 	}
 	return normalizarTareasLiteVisibles(out)
+}
+
+func tareasDBFromLite(items []tareaLite) []*db.Tarea {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]*db.Tarea, 0, len(items))
+	for _, tarea := range items {
+		t := &db.Tarea{
+			ID:        tarea.ID,
+			Titulo:    tarea.Titulo,
+			Estado:    tarea.Estado,
+			Modulo:    tarea.Modulo,
+			Prioridad: tarea.Prioridad,
+		}
+		if strings.TrimSpace(tarea.Agente) != "" {
+			agente := strings.TrimSpace(tarea.Agente)
+			t.Agente = &agente
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+func cuentasSugierenTrabajoActivo(cuentas map[string]int) bool {
+	if len(cuentas) == 0 {
+		return false
+	}
+	return cuentas[string(db.TareaEnProgreso)] > 0 ||
+		cuentas[string(db.TareaAsignada)] > 0 ||
+		cuentas[string(db.TareaBloqueada)] > 0
 }
 
 func buildUltraLiteStatus(now time.Time, agentes []*db.Agente, cuentas map[string]int, tareasActivas []tareaLite) apiStatusResponse {
