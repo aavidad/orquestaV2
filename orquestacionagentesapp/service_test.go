@@ -117,6 +117,8 @@ type stubRuntimeController struct {
 	controlHandleErr     error
 	deliveryHandle       *db.RuntimeHandle
 	deliveryHandleErr    error
+	activeWorktree       *db.Worktree
+	activeWorktreeErr    error
 	transcriptHandle     *db.RuntimeHandle
 	transcriptHandleErr  error
 }
@@ -291,6 +293,10 @@ func (s *stubRuntimeController) ResolveControlHandle(agente string, proyectoID *
 
 func (s *stubRuntimeController) ResolveDeliveryHandle(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
 	return s.deliveryHandle, s.deliveryHandleErr
+}
+
+func (s *stubRuntimeController) ResolveActiveWorktree(agente string, proyectoID *int64) (*db.Worktree, error) {
+	return s.activeWorktree, s.activeWorktreeErr
 }
 
 func (s *stubRuntimeController) ResolveTranscriptDeliveryHandle(item *db.RuntimeTranscriptEntry) (*db.RuntimeHandle, error) {
@@ -2380,6 +2386,80 @@ func TestExistsRecentAutonomyOrderUsesDurableWorkQueueBeforeDB(t *testing.T) {
 	}
 	if !ok {
 		t.Fatal("deberia detectar recent desde work-queue durable")
+	}
+}
+
+func TestExistsPendingAutonomyMailboxUsesActiveWorktreeDurableWorkQueueWithoutHandle(t *testing.T) {
+	t.Parallel()
+
+	projectID := int64(43)
+	dir := t.TempDir()
+	workQueueRaw, _ := json.Marshal(map[string]any{
+		"version":    1,
+		"updated_at": time.Now().UTC().Format(time.RFC3339Nano),
+		"current": map[string]any{
+			"mailbox_id":       9,
+			"kind":             "autonomia",
+			"action":           "continuar_trabajo",
+			"task_id":          21,
+			"verification_key": "vk-21",
+			"state":            "pending",
+			"recorded_at":      time.Now().UTC().Format(time.RFC3339Nano),
+		},
+	})
+	if err := os.WriteFile(controlruntime.WorkQueuePathFromDir(dir), workQueueRaw, 0o600); err != nil {
+		t.Fatalf("write work-queue: %v", err)
+	}
+	runtimes := &stubRuntimeController{
+		activeWorktree: &db.Worktree{ID: 5, ProyectoID: projectID, Agente: "Codex1", RutaAbs: dir, Estado: "activa"},
+		mailboxErr:     fmt.Errorf("no deberia consultar mailbox"),
+	}
+	service := NewService(nil, runtimes)
+
+	ok, err := service.existsPendingAutonomyMailbox("Codex1", &projectID, "continuar_trabajo", map[string]any{
+		"tarea_id":         int64(21),
+		"verification_key": "vk-21",
+	})
+	if err != nil {
+		t.Fatalf("existsPendingAutonomyMailbox: %v", err)
+	}
+	if !ok {
+		t.Fatal("deberia detectar continuidad pendiente desde work-queue durable sin handle")
+	}
+}
+
+func TestExistsRecentAutonomyOrderUsesActiveWorktreeDurableWorkQueueWithoutHandle(t *testing.T) {
+	t.Parallel()
+
+	projectID := int64(44)
+	dir := t.TempDir()
+	workQueueRaw, _ := json.Marshal(map[string]any{
+		"version":    1,
+		"updated_at": time.Now().UTC().Format(time.RFC3339Nano),
+		"current": map[string]any{
+			"mailbox_id":  10,
+			"kind":        "autonomia",
+			"action":      "continuar_trabajo",
+			"task_id":     22,
+			"state":       "consumed",
+			"recorded_at": time.Now().UTC().Format(time.RFC3339Nano),
+		},
+	})
+	if err := os.WriteFile(controlruntime.WorkQueuePathFromDir(dir), workQueueRaw, 0o600); err != nil {
+		t.Fatalf("write work-queue: %v", err)
+	}
+	runtimes := &stubRuntimeController{
+		activeWorktree: &db.Worktree{ID: 6, ProyectoID: projectID, Agente: "Codex1", RutaAbs: dir, Estado: "activa"},
+		ordersErr:      fmt.Errorf("no deberia consultar orders"),
+	}
+	service := NewService(nil, runtimes)
+
+	ok, err := service.existsRecentAutonomyOrder("Codex1", &projectID, "nudge", "continuar_trabajo", time.Minute)
+	if err != nil {
+		t.Fatalf("existsRecentAutonomyOrder: %v", err)
+	}
+	if !ok {
+		t.Fatal("deberia detectar recent desde work-queue durable sin handle")
 	}
 }
 

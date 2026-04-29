@@ -20,6 +20,7 @@ import (
 	"orquesta/agentesapp"
 	"orquesta/db"
 	"orquesta/internal/controlruntime"
+	"orquesta/runtimeagente"
 	"orquesta/runtimesapp"
 )
 
@@ -50,6 +51,7 @@ type RuntimeController interface {
 	ListRuntimeMailbox(filtro db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error)
 	ResolveControlHandle(agente string, proyectoID *int64) (*db.RuntimeHandle, error)
 	ResolveDeliveryHandle(agente string, proyectoID *int64) (*db.RuntimeHandle, error)
+	ResolveActiveWorktree(agente string, proyectoID *int64) (*db.Worktree, error)
 	ResolveTranscriptDeliveryHandle(item *db.RuntimeTranscriptEntry) (*db.RuntimeHandle, error)
 }
 
@@ -470,10 +472,7 @@ func (s *Service) hasLiveRuntimeWorkForStartHygiene(agente string, proyectoID *i
 	if agente == "" || proyectoID == nil || *proyectoID <= 0 {
 		return false, nil
 	}
-	orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
-		Agente:     &agente,
-		ProyectoID: proyectoID,
-	})
+	orders, err := s.listAutonomyRelevantRuntimeOrders(agente, proyectoID, nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -1593,12 +1592,7 @@ func (s *Service) existsPendingAutonomyOrder(agente string, proyectoID *int64, t
 		}
 	}
 	estado := "pendiente"
-	orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
-		Agente:     &agente,
-		ProyectoID: proyectoID,
-		Estado:     &estado,
-		Tipos:      []string{strings.TrimSpace(tipo)},
-	})
+	orders, err := s.listAutonomyRelevantRuntimeOrders(agente, proyectoID, &estado, []string{strings.TrimSpace(tipo)})
 	if err != nil {
 		return false, err
 	}
@@ -1627,11 +1621,7 @@ func (s *Service) existsRecentAutonomyOrder(agente string, proyectoID *int64, ti
 			return true, nil
 		}
 	}
-	orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
-		Agente:     &agente,
-		ProyectoID: proyectoID,
-		Tipos:      []string{strings.TrimSpace(tipo)},
-	})
+	orders, err := s.listAutonomyRelevantRuntimeOrders(agente, proyectoID, nil, []string{strings.TrimSpace(tipo)})
 	if err != nil {
 		return false, err
 	}
@@ -1737,6 +1727,61 @@ func (s *Service) projectIDFromPendingStartOrder(agente string) (int64, error) {
 	return bestProjectID, nil
 }
 
+func (s *Service) listAutonomyRelevantRuntimeOrders(agente string, proyectoID *int64, estado *string, tipos []string) ([]*db.RuntimeOrder, error) {
+	if s == nil || s.runtimes == nil {
+		return nil, nil
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" && (proyectoID == nil || *proyectoID <= 0) {
+		return nil, nil
+	}
+	fetch := func(agentFilter *string) ([]*db.RuntimeOrder, error) {
+		return s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
+			Agente: agentFilter,
+			Estado: estado,
+			Tipos:  append([]string(nil), tipos...),
+		})
+	}
+	var agentFilter *string
+	if agente != "" {
+		agentFilter = &agente
+	}
+	orders, err := fetch(agentFilter)
+	if err != nil {
+		return nil, err
+	}
+	if agente != "" {
+		if fallback, err := fetch(nil); err != nil {
+			return nil, err
+		} else if len(fallback) > 0 {
+			orders = append(orders, fallback...)
+		}
+	}
+	filtered := make([]*db.RuntimeOrder, 0, len(orders))
+	seen := map[int64]struct{}{}
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		if order.ID > 0 {
+			if _, ok := seen[order.ID]; ok {
+				continue
+			}
+			seen[order.ID] = struct{}{}
+		}
+		if agente != "" {
+			orderAgent := strings.TrimSpace(order.Agente)
+			if orderAgent != "" && !strings.EqualFold(orderAgent, agente) {
+				continue
+			}
+		}
+		if order.ProyectoID == nil || *order.ProyectoID <= 0 || *order.ProyectoID == *proyectoID {
+			filtered = append(filtered, order)
+		}
+	}
+	return filtered, nil
+}
+
 func (s *Service) existsOpenAutonomyOrder(agente string, proyectoID *int64, tipos ...string) (bool, error) {
 	if len(tipos) == 0 {
 		return false, nil
@@ -1744,12 +1789,7 @@ func (s *Service) existsOpenAutonomyOrder(agente string, proyectoID *int64, tipo
 	estados := []string{"pendiente", "tomada", "ejecutando"}
 	for _, estado := range estados {
 		estado := estado
-		orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
-			Agente:     &agente,
-			ProyectoID: proyectoID,
-			Estado:     &estado,
-			Tipos:      append([]string(nil), tipos...),
-		})
+		orders, err := s.listAutonomyRelevantRuntimeOrders(agente, proyectoID, &estado, tipos)
 		if err != nil {
 			return false, err
 		}
@@ -1773,12 +1813,7 @@ func (s *Service) existsOpenAutonomyOrderMatchingAutonomyAction(agente string, p
 	estados := []string{"pendiente", "tomada", "ejecutando"}
 	for _, estado := range estados {
 		estado := estado
-		orders, err := s.runtimes.ListRuntimeOrders(db.FiltroRuntimeOrders{
-			Agente:     &agente,
-			ProyectoID: proyectoID,
-			Estado:     &estado,
-			Tipos:      []string{strings.TrimSpace(tipo)},
-		})
+		orders, err := s.listAutonomyRelevantRuntimeOrders(agente, proyectoID, &estado, []string{strings.TrimSpace(tipo)})
 		if err != nil {
 			return false, err
 		}
@@ -1982,10 +2017,32 @@ func (s *Service) deliveryHandleMetadata(agente string, proyectoID *int64) (stri
 		return "", fmt.Errorf("servicio de orquestacion de agentes no inicializado")
 	}
 	handle, err := s.ResolveDeliveryHandle(strings.TrimSpace(agente), proyectoID)
-	if err != nil || handle == nil {
+	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(handle.MetadataJSON), nil
+	if handle != nil && strings.TrimSpace(handle.MetadataJSON) != "" {
+		return strings.TrimSpace(handle.MetadataJSON), nil
+	}
+	worktree, err := s.runtimes.ResolveActiveWorktree(strings.TrimSpace(agente), proyectoID)
+	if err != nil || worktree == nil {
+		return "", err
+	}
+	return metadataJSONFromWorkingDir(strings.TrimSpace(worktree.RutaAbs)), nil
+}
+
+func metadataJSONFromWorkingDir(workingDir string) string {
+	workingDir = strings.TrimSpace(workingDir)
+	if workingDir == "" {
+		return ""
+	}
+	raw, err := json.Marshal(map[string]any{
+		"worker_schema_version": runtimeagente.WorkerMetadataSchemaVersion,
+		"working_dir":           workingDir,
+	})
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }
 
 func (s *Service) resolveCanonicalRuntimeIDForHandle(handle *db.RuntimeHandle, agente string, proyectoID *int64) (*int64, error) {

@@ -2991,6 +2991,30 @@ func (s *Service) resolveAgentControlResumeHandle(agente string, proyectoID *int
 	return nil, nil
 }
 
+func (s *Service) ResolveActiveWorktree(agente string, proyectoID *int64) (*db.Worktree, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil, nil
+	}
+	worktrees, err := db.ListarWorktrees("activa", agente)
+	if err != nil {
+		return nil, err
+	}
+	var fallback *db.Worktree
+	for _, item := range worktrees {
+		if item == nil {
+			continue
+		}
+		if fallback == nil {
+			fallback = item
+		}
+		if proyectoID != nil && *proyectoID > 0 && item.ProyectoID == *proyectoID {
+			return item, nil
+		}
+	}
+	return fallback, nil
+}
+
 func (s *Service) canSupersedeStartHandle(agente string, proyectoID *int64, handle *db.RuntimeHandle) (bool, error) {
 	if handle == nil {
 		return false, nil
