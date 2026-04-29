@@ -18,17 +18,7 @@ type AgenteIdentidadObservada struct {
 }
 
 func ensureAgentesIdentidadObservadaSchema() error {
-	_, err := DB.Exec(`
-		CREATE TABLE IF NOT EXISTS agentes_identidad_observada (
-			agente      TEXT PRIMARY KEY REFERENCES agentes(nombre) ON DELETE CASCADE,
-			account_id  TEXT    NOT NULL DEFAULT '',
-			email       TEXT    NOT NULL DEFAULT '',
-			usuario     TEXT    NOT NULL DEFAULT '',
-			fuente      TEXT    NOT NULL DEFAULT '',
-			observed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		)`)
-	if err != nil {
+	if err := ensureRenderedSchemaStatements(renderAgentesIdentidadObservadaSchemaForDriver(CurrentStorageDriver())); err != nil {
 		return err
 	}
 	exists, err := ColumnExists("agentes_identidad_observada", "account_id")
@@ -45,6 +35,23 @@ func ensureAgentesIdentidadObservadaSchema() error {
 	}
 	_, err = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_agentes_identidad_observada_email ON agentes_identidad_observada(email, updated_at DESC)`)
 	return err
+}
+
+func renderAgentesIdentidadObservadaSchemaForDriver(driver string) []string {
+	return []string{
+		renderDriverColumnSyntax(driver, `
+		CREATE TABLE IF NOT EXISTS agentes_identidad_observada (
+			agente      TEXT PRIMARY KEY REFERENCES agentes(nombre) ON DELETE CASCADE,
+			account_id  TEXT    NOT NULL DEFAULT '',
+			email       TEXT    NOT NULL DEFAULT '',
+			usuario     TEXT    NOT NULL DEFAULT '',
+			fuente      TEXT    NOT NULL DEFAULT '',
+			observed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`),
+		`CREATE INDEX IF NOT EXISTS idx_agentes_identidad_observada_account_id ON agentes_identidad_observada(account_id, updated_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_agentes_identidad_observada_email ON agentes_identidad_observada(email, updated_at DESC)`,
+	}
 }
 
 func UpsertAgenteIdentidadObservada(agente, email, usuario, fuente string, observedAt *time.Time) error {
