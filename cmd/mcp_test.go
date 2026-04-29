@@ -8621,6 +8621,66 @@ func TestMCPResourceReadServerOperational(t *testing.T) {
 	}
 }
 
+func TestMCPResourceReadServerOperationalIncluyeRecoveryHint(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	prevReview := serverOperationalReviewSnapshotFn
+	prevFast := statusFastFetcher
+	prevUltraLite := apiStatusUltraLiteFetcher
+	defer func() {
+		serverOperationalReviewSnapshotFn = prevReview
+		statusFastFetcher = prevFast
+		apiStatusUltraLiteFetcher = prevUltraLite
+	}()
+	serverOperationalReviewSnapshotFn = func(supervisor string) (map[string]any, error) {
+		return map[string]any{
+			"supervisor": supervisor,
+			"next_safe_action": supervisorRecommendedAction{
+				Target: "tarea:51",
+				Action: "reanudar_worker",
+				Reason: "worker parado con backlog pendiente",
+			},
+		}, nil
+	}
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{
+			Agentes: []*db.Agente{
+				{Nombre: "CodexGap", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			TareasEnProgreso: []tareaLite{
+				{ID: 51, Estado: db.TareaEnProgreso, Agente: "CodexGap", Titulo: "reanudar runtime"},
+				{ID: 52, Estado: db.TareaEnProgreso, Agente: "CodexGap", Titulo: "cerrar bloqueo"},
+			},
+			TareasPorEstado: map[string]int{
+				string(db.TareaEnProgreso): 2,
+			},
+			Generado: time.Now().UTC().Format(time.RFC3339),
+		}, nil
+	}
+	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) {
+		return apiStatusResponse{}, false
+	}
+
+	contents, err := readMCPResource("orquesta://server/operational")
+	if err != nil {
+		t.Fatalf("readMCPResource server/operational recovery: %v", err)
+	}
+	text, _ := contents[0]["text"].(string)
+	for _, token := range []string{`"recovery"`, `"kind": "worker_gap"`, `"suggestedAction": "server_rearm"`} {
+		if !strings.Contains(text, token) {
+			t.Fatalf("falta %q en resource server/operational: %s", token, text)
+		}
+	}
+	var info serverOperationalInfo
+	if err := json.Unmarshal([]byte(text), &info); err != nil {
+		t.Fatalf("decode server operational recovery: %v", err)
+	}
+	if info.Recovery == nil || info.Recovery.Kind != "worker_gap" || info.Recovery.MissingWorkers != 2 {
+		t.Fatalf("recovery MCP inesperada: %+v", info.Recovery)
+	}
+}
+
 func TestMCPResourceReadAgentesPanelCanonico(t *testing.T) {
 	resetAgentPanelSnapshotCache()
 	defer resetAgentPanelSnapshotCache()

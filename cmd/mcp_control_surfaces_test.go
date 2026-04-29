@@ -103,6 +103,8 @@ func TestMCPToolServerSelfHealEjecutaCarrilesCanonicosYDevuelveOperational(t *te
 	prevWakeOrders := apiRuntimeWakeOrdersFn
 	prevWakeMailbox := apiRuntimeWakeMailboxFn
 	prevWakeWarm := apiRuntimeWakeWarmFn
+	prevOrdersExec := apiRuntimeProcessOrdersExecutor
+	prevMailboxExec := apiRuntimeProcessMailboxExecutor
 	prevHygiene := runtimeProcessHygieneBatch
 	prevDegradados := runtimeProcessDegradadosBatchDetailed
 	prevAutonomia := runtimeProcessAutonomiaBatch
@@ -113,6 +115,8 @@ func TestMCPToolServerSelfHealEjecutaCarrilesCanonicosYDevuelveOperational(t *te
 		apiRuntimeWakeOrdersFn = prevWakeOrders
 		apiRuntimeWakeMailboxFn = prevWakeMailbox
 		apiRuntimeWakeWarmFn = prevWakeWarm
+		apiRuntimeProcessOrdersExecutor = prevOrdersExec
+		apiRuntimeProcessMailboxExecutor = prevMailboxExec
 		runtimeProcessHygieneBatch = prevHygiene
 		runtimeProcessDegradadosBatchDetailed = prevDegradados
 		runtimeProcessAutonomiaBatch = prevAutonomia
@@ -124,6 +128,8 @@ func TestMCPToolServerSelfHealEjecutaCarrilesCanonicosYDevuelveOperational(t *te
 	apiRuntimeWakeOrdersFn = func() bool { return true }
 	apiRuntimeWakeMailboxFn = func() bool { return true }
 	apiRuntimeWakeWarmFn = func() bool { return false }
+	apiRuntimeProcessOrdersExecutor = func() (int, error) { return 0, nil }
+	apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) { return 0, nil }
 	runtimeProcessHygieneBatch = func() (int, error) { return 6, nil }
 	runtimeProcessDegradadosBatchDetailed = func() (runtimeProcessDegradadosSummary, error) {
 		return runtimeProcessDegradadosSummary{
@@ -180,13 +186,22 @@ func TestMCPToolServerSelfHealAutoRearmaHastaConverger(t *testing.T) {
 	prevOperational := mcpBuildServerOperationalInfoFn
 	prevRearmApply := serverOperationalApplyNextActionFn
 	prevLimit := mcpServerSelfHealRearmLimit
+	prevDrainLimit := mcpServerSelfHealDrainPassLimit
+	prevOrdersExec := apiRuntimeProcessOrdersExecutor
+	prevMailboxExec := apiRuntimeProcessMailboxExecutor
 	defer func() {
 		mcpBuildServerOperationalInfoFn = prevOperational
 		serverOperationalApplyNextActionFn = prevRearmApply
 		mcpServerSelfHealRearmLimit = prevLimit
+		mcpServerSelfHealDrainPassLimit = prevDrainLimit
+		apiRuntimeProcessOrdersExecutor = prevOrdersExec
+		apiRuntimeProcessMailboxExecutor = prevMailboxExec
 	}()
 
 	mcpServerSelfHealRearmLimit = 3
+	mcpServerSelfHealDrainPassLimit = 1
+	apiRuntimeProcessOrdersExecutor = func() (int, error) { return 0, nil }
+	apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) { return 0, nil }
 	operationalCalls := 0
 	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
 		operationalCalls++
@@ -265,18 +280,27 @@ func TestMCPToolServerSelfHealMarcaErrorSiRearmNoConvergeDentroDelLimite(t *test
 	prevOperational := mcpBuildServerOperationalInfoFn
 	prevRearmApply := serverOperationalApplyNextActionFn
 	prevLimit := mcpServerSelfHealRearmLimit
+	prevDrainLimit := mcpServerSelfHealDrainPassLimit
+	prevOrdersExec := apiRuntimeProcessOrdersExecutor
+	prevMailboxExec := apiRuntimeProcessMailboxExecutor
 	prevSettleAttempts := mcpServerSelfHealSettleAttempts
 	prevSettleDelay := mcpServerSelfHealSettleDelay
 	defer func() {
 		mcpBuildServerOperationalInfoFn = prevOperational
 		serverOperationalApplyNextActionFn = prevRearmApply
 		mcpServerSelfHealRearmLimit = prevLimit
+		mcpServerSelfHealDrainPassLimit = prevDrainLimit
+		apiRuntimeProcessOrdersExecutor = prevOrdersExec
+		apiRuntimeProcessMailboxExecutor = prevMailboxExec
 		mcpServerSelfHealSettleAttempts = prevSettleAttempts
 		mcpServerSelfHealSettleDelay = prevSettleDelay
 	}()
 
 	mcpServerSelfHealRearmLimit = 2
+	mcpServerSelfHealDrainPassLimit = 1
 	mcpServerSelfHealSettleAttempts = 0
+	apiRuntimeProcessOrdersExecutor = func() (int, error) { return 0, nil }
+	apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) { return 0, nil }
 	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
 		return serverOperationalInfo{
 			State:       "degraded",
@@ -325,14 +349,23 @@ func TestMCPToolServerSelfHealMarcaErrorSiRearmNoConvergeDentroDelLimite(t *test
 
 func TestMCPToolServerSelfHealReevaluaOperationalAntesDeResponder(t *testing.T) {
 	prevOperational := mcpBuildServerOperationalInfoFn
+	prevOrdersExec := apiRuntimeProcessOrdersExecutor
+	prevMailboxExec := apiRuntimeProcessMailboxExecutor
+	prevDrainLimit := mcpServerSelfHealDrainPassLimit
 	prevSettleAttempts := mcpServerSelfHealSettleAttempts
 	prevSettleDelay := mcpServerSelfHealSettleDelay
 	defer func() {
 		mcpBuildServerOperationalInfoFn = prevOperational
+		apiRuntimeProcessOrdersExecutor = prevOrdersExec
+		apiRuntimeProcessMailboxExecutor = prevMailboxExec
+		mcpServerSelfHealDrainPassLimit = prevDrainLimit
 		mcpServerSelfHealSettleAttempts = prevSettleAttempts
 		mcpServerSelfHealSettleDelay = prevSettleDelay
 	}()
 
+	apiRuntimeProcessOrdersExecutor = func() (int, error) { return 0, nil }
+	apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) { return 0, nil }
+	mcpServerSelfHealDrainPassLimit = 1
 	mcpServerSelfHealSettleAttempts = 2
 	mcpServerSelfHealSettleDelay = 0
 	calls := 0
@@ -375,15 +408,150 @@ func TestMCPToolServerSelfHealReevaluaOperationalAntesDeResponder(t *testing.T) 
 	}
 }
 
+func TestMCPToolServerSelfHealDrenaOrdersYMailboxHastaCerrarTasksWithoutWorkers(t *testing.T) {
+	prevOperational := mcpBuildServerOperationalInfoFn
+	prevOrdersExec := apiRuntimeProcessOrdersExecutor
+	prevMailboxExec := apiRuntimeProcessMailboxExecutor
+	prevDrainLimit := mcpServerSelfHealDrainPassLimit
+	prevSettleAttempts := mcpServerSelfHealSettleAttempts
+	prevSettleDelay := mcpServerSelfHealSettleDelay
+	defer func() {
+		mcpBuildServerOperationalInfoFn = prevOperational
+		apiRuntimeProcessOrdersExecutor = prevOrdersExec
+		apiRuntimeProcessMailboxExecutor = prevMailboxExec
+		mcpServerSelfHealDrainPassLimit = prevDrainLimit
+		mcpServerSelfHealSettleAttempts = prevSettleAttempts
+		mcpServerSelfHealSettleDelay = prevSettleDelay
+	}()
+
+	mcpServerSelfHealDrainPassLimit = 3
+	mcpServerSelfHealSettleAttempts = 0
+	mcpServerSelfHealSettleDelay = 0
+	operationalCalls := 0
+	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
+		operationalCalls++
+		if operationalCalls == 1 {
+			return serverOperationalInfo{
+				State:       "degraded",
+				Operational: false,
+				Reason:      "tasks_without_workers",
+			}
+		}
+		return serverOperationalInfo{
+			State:        "ready",
+			Operational:  true,
+			Reason:       "control_plane_responsive",
+			ActiveAgents: 1,
+		}
+	}
+	orderCalls := 0
+	apiRuntimeProcessOrdersExecutor = func() (int, error) {
+		orderCalls++
+		if orderCalls == 1 {
+			return 1, nil
+		}
+		return 0, nil
+	}
+	mailboxCalls := 0
+	apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) {
+		mailboxCalls++
+		if mailboxCalls == 1 {
+			return 1, nil
+		}
+		return 0, nil
+	}
+
+	result, err := callMCPTool("orquesta.server.self_heal", map[string]any{
+		"hygiene":       false,
+		"degradados":    false,
+		"autonomia":     false,
+		"reanimaciones": false,
+		"rearm":         false,
+	})
+	if err != nil {
+		t.Fatalf("server self_heal MCP: %v", err)
+	}
+	if result["isError"] != false {
+		t.Fatalf("server self_heal no deberia marcar error tras drenar recovery: %#v", result)
+	}
+	payload, _ := result["structuredContent"].(apiRuntimeSelfHealResponse)
+	if payload.Drain == nil || payload.Drain.Orders != 1 || payload.Drain.Mailbox != 1 || payload.Drain.Passes != 1 {
+		t.Fatalf("drain inesperado: %+v", payload.Drain)
+	}
+	if !payload.Operational.Operational || payload.Operational.State != "ready" {
+		t.Fatalf("self_heal deberia converger tras drenar orders/mailbox: %+v", payload.Operational)
+	}
+}
+
+func TestMCPToolServerSelfHealMarcaErrorSiDrainOrdersFalla(t *testing.T) {
+	prevOperational := mcpBuildServerOperationalInfoFn
+	prevOrdersExec := apiRuntimeProcessOrdersExecutor
+	prevMailboxExec := apiRuntimeProcessMailboxExecutor
+	prevDrainLimit := mcpServerSelfHealDrainPassLimit
+	prevSettleAttempts := mcpServerSelfHealSettleAttempts
+	prevSettleDelay := mcpServerSelfHealSettleDelay
+	defer func() {
+		mcpBuildServerOperationalInfoFn = prevOperational
+		apiRuntimeProcessOrdersExecutor = prevOrdersExec
+		apiRuntimeProcessMailboxExecutor = prevMailboxExec
+		mcpServerSelfHealDrainPassLimit = prevDrainLimit
+		mcpServerSelfHealSettleAttempts = prevSettleAttempts
+		mcpServerSelfHealSettleDelay = prevSettleDelay
+	}()
+
+	mcpServerSelfHealDrainPassLimit = 1
+	mcpServerSelfHealSettleAttempts = 0
+	mcpServerSelfHealSettleDelay = 0
+	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
+		return serverOperationalInfo{
+			State:       "degraded",
+			Operational: false,
+			Reason:      "tasks_without_workers",
+		}
+	}
+	apiRuntimeProcessOrdersExecutor = func() (int, error) { return 0, fmt.Errorf("queue jammed") }
+	apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) {
+		t.Fatalf("mailbox no deberia ejecutarse si process-orders ya falló")
+		return 0, nil
+	}
+
+	result, err := callMCPTool("orquesta.server.self_heal", map[string]any{
+		"hygiene":       false,
+		"degradados":    false,
+		"autonomia":     false,
+		"reanimaciones": false,
+		"rearm":         false,
+	})
+	if err != nil {
+		t.Fatalf("server self_heal MCP: %v", err)
+	}
+	if result["isError"] != true {
+		t.Fatalf("server self_heal deberia marcar error si falla el drain: %#v", result)
+	}
+	payload, _ := result["structuredContent"].(apiRuntimeSelfHealResponse)
+	if payload.OK || len(payload.Errors) == 0 || !strings.Contains(payload.Errors[0], "drain: orders: queue jammed") {
+		t.Fatalf("error de drain inesperado: %+v", payload)
+	}
+}
+
 func TestMCPToolServerSelfHealMarcaErroresParciales(t *testing.T) {
 	prevHygiene := runtimeProcessHygieneBatch
 	prevOperational := mcpBuildServerOperationalInfoFn
+	prevOrdersExec := apiRuntimeProcessOrdersExecutor
+	prevMailboxExec := apiRuntimeProcessMailboxExecutor
+	prevDrainLimit := mcpServerSelfHealDrainPassLimit
 	defer func() {
 		runtimeProcessHygieneBatch = prevHygiene
 		mcpBuildServerOperationalInfoFn = prevOperational
+		apiRuntimeProcessOrdersExecutor = prevOrdersExec
+		apiRuntimeProcessMailboxExecutor = prevMailboxExec
+		mcpServerSelfHealDrainPassLimit = prevDrainLimit
 	}()
 
 	runtimeProcessHygieneBatch = func() (int, error) { return 0, fmt.Errorf("boom") }
+	apiRuntimeProcessOrdersExecutor = func() (int, error) { return 0, nil }
+	apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) { return 0, nil }
+	mcpServerSelfHealDrainPassLimit = 1
 	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
 		return serverOperationalInfo{State: "degraded", Operational: false, Reason: "status_temporarily_degraded"}
 	}

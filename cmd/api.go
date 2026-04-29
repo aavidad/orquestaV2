@@ -823,6 +823,12 @@ type apiRuntimeWakeResponse struct {
 	Warm    bool `json:"warm"`
 }
 
+type apiRuntimeSelfHealDrainResponse struct {
+	Passes  int `json:"passes"`
+	Orders  int `json:"orders"`
+	Mailbox int `json:"mailbox"`
+}
+
 type apiRuntimeSelfHealResponse struct {
 	OK            bool                                  `json:"ok"`
 	Wake          apiRuntimeWakeResponse                `json:"wake"`
@@ -831,6 +837,7 @@ type apiRuntimeSelfHealResponse struct {
 	Autonomia     apiRuntimeProcessAutonomiaResponse    `json:"autonomia"`
 	Reanimaciones apiRuntimeProcessReanimationsResponse `json:"reanimaciones"`
 	RearmApplied  []map[string]any                      `json:"rearmApplied,omitempty"`
+	Drain         *apiRuntimeSelfHealDrainResponse      `json:"drain,omitempty"`
 	Operational   serverOperationalInfo                 `json:"operational"`
 	Errors        []string                              `json:"errors,omitempty"`
 }

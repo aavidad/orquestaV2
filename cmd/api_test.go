@@ -919,6 +919,9 @@ func TestAPIServerOperationalExponeHintRearm(t *testing.T) {
 	if payload.Rearm.NextSafeAction == nil || payload.Rearm.NextSafeAction.Action != "inspeccionar_handoff_fallido" {
 		t.Fatalf("next safe action inesperada: %+v", payload.Rearm)
 	}
+	if payload.Recovery == nil || payload.Recovery.Kind != "worker_gap" || payload.Recovery.SuggestedAction != "server_rearm" {
+		t.Fatalf("recovery hint inesperada: %+v", payload.Recovery)
+	}
 }
 
 func TestAPIServerOperationalStrictProbeMantiene200SiSigueOperativo(t *testing.T) {

@@ -26,6 +26,7 @@ type serverOperationalInfo struct {
 	Generated           string                           `json:"generated,omitempty"`
 	AutonomyHighlights  []string                         `json:"autonomyHighlights,omitempty"`
 	CriticalProjectRisk *workspaceAutonomyProjectSummary `json:"criticalProjectRisk,omitempty"`
+	Recovery            *serverOperationalRecoveryHint   `json:"recovery,omitempty"`
 	RegisteredAgents    int                              `json:"registeredAgents"`
 	ActiveAgents        int                              `json:"activeAgents"`
 	WorkingAgents       int                              `json:"workingAgents"`
@@ -60,6 +61,18 @@ type serverOperationalRearmHint struct {
 	Endpoint       string                       `json:"endpoint,omitempty"`
 	Method         string                       `json:"method,omitempty"`
 	NextSafeAction *supervisorRecommendedAction `json:"nextSafeAction,omitempty"`
+}
+
+type serverOperationalRecoveryHint struct {
+	Kind               string `json:"kind"`
+	AffectedTasks      int    `json:"affectedTasks,omitempty"`
+	MissingWorkers     int    `json:"missingWorkers,omitempty"`
+	QuotaBlockedAgents int    `json:"quotaBlockedAgents,omitempty"`
+	AuthBlockedAgents  int    `json:"authBlockedAgents,omitempty"`
+	StuckAgents        int    `json:"stuckAgents,omitempty"`
+	RearmAvailable     bool   `json:"rearmAvailable,omitempty"`
+	SuggestedAction    string `json:"suggestedAction,omitempty"`
+	Detail             string `json:"detail,omitempty"`
 }
 
 func registeredAgentCountFromStatus(status apiStatusResponse) int {
@@ -218,7 +231,119 @@ func normalizeServerOperationalInfo(info serverOperationalInfo) serverOperationa
 	info.AutonomyHighlights = autonomyHighlights
 	info.CriticalProjectRisk = criticalProjectRisk
 	info.Rearm = buildServerOperationalRearmHint(info)
+	info.Recovery = buildServerOperationalRecoveryHint(info)
 	return info
+}
+
+func buildServerOperationalRecoveryHint(info serverOperationalInfo) *serverOperationalRecoveryHint {
+	reason := strings.TrimSpace(info.Reason)
+	if reason == "" {
+		return nil
+	}
+	withFallback := func(value, fallback string) string {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return fallback
+		}
+		return value
+	}
+	hint := &serverOperationalRecoveryHint{
+		QuotaBlockedAgents: info.QuotaAgents,
+		AuthBlockedAgents:  info.AuthAgents,
+		StuckAgents:        info.StuckAgents,
+	}
+	if info.Rearm != nil && info.Rearm.Needed {
+		hint.RearmAvailable = info.Rearm.Available
+	}
+	switch reason {
+	case "tasks_without_workers":
+		hint.Kind = "worker_gap"
+		hint.AffectedTasks = max(info.TasksInProgress, 0)
+		hint.MissingWorkers = max(info.TasksInProgress-max(info.WorkingWorkers, info.AutonomyConfirmed), 0)
+		if hint.MissingWorkers == 0 && hint.AffectedTasks > 0 {
+			hint.MissingWorkers = hint.AffectedTasks
+		}
+		if hint.RearmAvailable {
+			hint.SuggestedAction = "server_rearm"
+			hint.Detail = fmt.Sprintf("%d tarea(s) en progreso sin worker útil visible; hay rearm seguro disponible", max(hint.AffectedTasks, 1))
+			return hint
+		}
+		if info.AuthAgents > 0 {
+			hint.SuggestedAction = "complete_manual_auth"
+			hint.Detail = fmt.Sprintf("%d worker(s) requieren autenticación manual antes de retomar el trabajo", info.AuthAgents)
+			return hint
+		}
+		if info.QuotaAgents > 0 {
+			hint.SuggestedAction = "wait_quota_reset"
+			hint.Detail = fmt.Sprintf("%d worker(s) bloqueados por cuota; próximo reset visible %s", info.QuotaAgents, withFallback(info.NextQuotaResetAt, "pendiente"))
+			return hint
+		}
+		if info.StuckAgents > 0 {
+			hint.SuggestedAction = "inspect_stuck_workers"
+			hint.Detail = fmt.Sprintf("%d worker(s) atascados siguen bloqueando %d tarea(s) en progreso", info.StuckAgents, max(hint.AffectedTasks, 1))
+			return hint
+		}
+		if info.ConnectedWorkers > 0 {
+			hint.SuggestedAction = "inspect_connected_idle_workers"
+			hint.Detail = fmt.Sprintf("%d worker(s) conectados pero solo %d trabajando; revisar runtime, resume o start", info.ConnectedWorkers, info.WorkingWorkers)
+			return hint
+		}
+		hint.SuggestedAction = "start_or_assign_workers"
+		hint.Detail = fmt.Sprintf("%d tarea(s) en progreso sin worker visible", max(hint.AffectedTasks, 1))
+		return hint
+	case "reserved_without_connected_workers":
+		hint.Kind = "reserved_gap"
+		hint.AffectedTasks = max(info.ReservedTasks, 0)
+		hint.MissingWorkers = max(info.ReservedTasks-info.ConnectedWorkers, 0)
+		if hint.MissingWorkers == 0 && hint.AffectedTasks > 0 {
+			hint.MissingWorkers = hint.AffectedTasks
+		}
+		if hint.RearmAvailable {
+			hint.SuggestedAction = "server_rearm"
+			hint.Detail = fmt.Sprintf("%d tarea(s) reservadas sin worker conectado; hay rearm seguro disponible", max(hint.AffectedTasks, 1))
+			return hint
+		}
+		if info.QuotaAgents > 0 {
+			hint.SuggestedAction = "wait_quota_reset"
+			hint.Detail = fmt.Sprintf("%d worker(s) bloqueados por cuota; próximo reset visible %s", info.QuotaAgents, withFallback(info.NextQuotaResetAt, "pendiente"))
+			return hint
+		}
+		hint.SuggestedAction = "start_or_assign_workers"
+		hint.Detail = fmt.Sprintf("%d tarea(s) reservadas esperan worker conectado", max(hint.AffectedTasks, 1))
+		return hint
+	case "workers_require_manual_auth":
+		hint.Kind = "manual_auth"
+		hint.SuggestedAction = "complete_manual_auth"
+		hint.Detail = fmt.Sprintf("%d worker(s) requieren autenticación manual", max(info.AuthAgents, 1))
+		return hint
+	case "workers_stuck":
+		hint.Kind = "stuck_workers"
+		if hint.RearmAvailable {
+			hint.SuggestedAction = "server_rearm"
+			hint.Detail = fmt.Sprintf("%d worker(s) atascados; hay rearm seguro disponible", max(info.StuckAgents, 1))
+			return hint
+		}
+		hint.SuggestedAction = "inspect_stuck_workers"
+		hint.Detail = fmt.Sprintf("%d worker(s) atascados requieren inspección", max(info.StuckAgents, 1))
+		return hint
+	case "workers_quota_blocked":
+		hint.Kind = "quota_cooldown"
+		hint.SuggestedAction = "wait_quota_reset"
+		hint.Detail = fmt.Sprintf("%d worker(s) bloqueados por cuota; próximo reset visible %s", max(info.QuotaAgents, 1), withFallback(info.NextQuotaResetAt, "pendiente"))
+		return hint
+	default:
+		if !hint.RearmAvailable {
+			return nil
+		}
+		hint.Kind = "rearm"
+		hint.SuggestedAction = "server_rearm"
+		if info.Rearm != nil && strings.TrimSpace(info.Rearm.Reason) != "" {
+			hint.Detail = strings.TrimSpace(info.Rearm.Reason)
+		} else {
+			hint.Detail = fmt.Sprintf("estado %s degradado con rearm seguro disponible", withFallback(reason, "operational"))
+		}
+		return hint
+	}
 }
 
 func buildServerOperationalRearmHint(info serverOperationalInfo) *serverOperationalRearmHint {
@@ -407,6 +532,21 @@ func formatServerOperationalSummary(info *serverOperationalInfo) string {
 	}
 	if info.NextQuotaResetAt != "" {
 		parts = append(parts, "quota_reset "+info.NextQuotaResetAt)
+	}
+	if info.Recovery != nil {
+		recovery := strings.TrimSpace(info.Recovery.Kind)
+		action := strings.TrimSpace(info.Recovery.SuggestedAction)
+		switch {
+		case recovery != "" && action != "":
+			parts = append(parts, fmt.Sprintf("recovery %s->%s", recovery, action))
+		case recovery != "":
+			parts = append(parts, "recovery "+recovery)
+		case action != "":
+			parts = append(parts, "recovery "+action)
+		}
+		if info.Recovery.MissingWorkers > 0 {
+			parts = append(parts, fmt.Sprintf("faltan_workers:%d", info.Recovery.MissingWorkers))
+		}
 	}
 	return fmt.Sprintf("%s (%s)", strings.ToUpper(strings.TrimSpace(info.State)), strings.Join(parts, ", "))
 }

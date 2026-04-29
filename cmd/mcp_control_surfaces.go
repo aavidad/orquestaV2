@@ -3,6 +3,8 @@ package cmd
 import (
 	"strings"
 	"time"
+
+	"orquesta/db"
 )
 
 func mcpWorkspaceControlTool() mcpTool {
@@ -36,7 +38,7 @@ func mcpServerSelfHealTool() mcpTool {
 	return mcpTool{
 		Name:        "orquesta.server.self_heal",
 		Title:       "Auto-reparar control plane",
-		Description: "Ejecuta el barrido canónico de wake, hygiene, degradados, autonomia y reanimaciones; si aún queda rearm seguro pendiente, lo aplica hasta converger o agotar el límite",
+		Description: "Ejecuta el barrido canónico de wake, hygiene, degradados, autonomia y reanimaciones; drena runtime_orders/mailbox y, si aún queda rearm seguro pendiente, lo aplica hasta converger o agotar el límite",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -69,6 +71,7 @@ func callMCPWorkspaceControl(args map[string]any) (map[string]any, error) {
 
 var mcpBuildServerOperationalInfoFn = buildMCPServerOperationalInfo
 var mcpServerSelfHealRearmLimit = 3
+var mcpServerSelfHealDrainPassLimit = 3
 var mcpServerSelfHealSettleAttempts = 3
 var mcpServerSelfHealSettleDelay = 150 * time.Millisecond
 
@@ -153,6 +156,12 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 		}
 	}
 	result.Operational = mcpBuildServerOperationalInfoFn()
+	if drain, err := drainMCPServerSelfHealRuntimeWork(&result.Operational, enabled); err != nil {
+		result.Drain = drain
+		appendErr("drain", err)
+	} else {
+		result.Drain = drain
+	}
 	if enabled("rearm") {
 		for attempts := 0; attempts < mcpServerSelfHealRearmLimit; attempts++ {
 			rearm := result.Operational.Rearm
@@ -168,6 +177,13 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 				result.RearmApplied = append(result.RearmApplied, applied)
 			}
 			result.Operational = mcpBuildServerOperationalInfoFn()
+			if drain, err := drainMCPServerSelfHealRuntimeWork(&result.Operational, enabled); err != nil {
+				result.Drain = mergeMCPServerSelfHealDrain(result.Drain, drain)
+				appendErr("drain", err)
+				break
+			} else {
+				result.Drain = mergeMCPServerSelfHealDrain(result.Drain, drain)
+			}
 		}
 		if !result.Operational.Operational && result.Operational.Rearm != nil &&
 			result.Operational.Rearm.Needed && result.Operational.Rearm.Available &&
@@ -193,6 +209,63 @@ func settleMCPServerSelfHealOperational(info serverOperationalInfo) serverOperat
 		}
 	}
 	return info
+}
+
+func drainMCPServerSelfHealRuntimeWork(info *serverOperationalInfo, enabled func(string) bool) (*apiRuntimeSelfHealDrainResponse, error) {
+	if enabled == nil || (!enabled("orders") && !enabled("mailbox")) || mcpServerSelfHealDrainPassLimit <= 0 {
+		return nil, nil
+	}
+	drain := &apiRuntimeSelfHealDrainResponse{}
+	for pass := 0; pass < mcpServerSelfHealDrainPassLimit; pass++ {
+		progress := false
+		if enabled("orders") {
+			count, err := apiRuntimeProcessOrdersExecutor()
+			if err != nil {
+				return drain, mcpServerSelfHealError("orders: " + strings.TrimSpace(err.Error()))
+			}
+			drain.Orders += count
+			if count > 0 {
+				progress = true
+			}
+		}
+		if enabled("mailbox") {
+			count, err := apiRuntimeProcessMailboxExecutor(db.FiltroRuntimeMailbox{})
+			if err != nil {
+				return drain, mcpServerSelfHealError("mailbox: " + strings.TrimSpace(err.Error()))
+			}
+			drain.Mailbox += count
+			if count > 0 {
+				progress = true
+			}
+		}
+		if !progress {
+			break
+		}
+		drain.Passes++
+		if info != nil {
+			*info = mcpBuildServerOperationalInfoFn()
+			if info.Operational {
+				break
+			}
+		}
+	}
+	if drain.Passes == 0 && drain.Orders == 0 && drain.Mailbox == 0 {
+		return nil, nil
+	}
+	return drain, nil
+}
+
+func mergeMCPServerSelfHealDrain(base, add *apiRuntimeSelfHealDrainResponse) *apiRuntimeSelfHealDrainResponse {
+	if base == nil {
+		return add
+	}
+	if add == nil {
+		return base
+	}
+	base.Passes += add.Passes
+	base.Orders += add.Orders
+	base.Mailbox += add.Mailbox
+	return base
 }
 
 var errSelfHealRearmLimitReached = mcpServerSelfHealError("safe rearm limit reached before convergence")

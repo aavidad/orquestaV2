@@ -184,6 +184,61 @@ func TestNormalizeServerOperationalInfoDerivaHighlightsDesdeRiesgoEstructurado(t
 	}
 }
 
+func TestNormalizeServerOperationalInfoDerivaRecoveryHintParaTasksWithoutWorkers(t *testing.T) {
+	prevReview := serverOperationalReviewSnapshotFn
+	t.Cleanup(func() {
+		serverOperationalReviewSnapshotFn = prevReview
+	})
+	serverOperationalReviewSnapshotFn = func(supervisor string) (map[string]any, error) {
+		return map[string]any{
+			"supervisor": supervisor,
+			"next_safe_action": supervisorRecommendedAction{
+				Target: "tarea:24",
+				Action: "reanudar_worker",
+				Reason: "worker parado con backlog pendiente",
+			},
+		}, nil
+	}
+
+	info := normalizeServerOperationalInfo(serverOperationalInfo{
+		State:            "degraded",
+		Operational:      false,
+		Reason:           "tasks_without_workers",
+		TasksInProgress:  3,
+		WorkingWorkers:   1,
+		QuotaAgents:      1,
+		NextQuotaResetAt: "2026-04-29T10:30:00Z",
+	})
+	if info.Recovery == nil {
+		t.Fatalf("recovery hint ausente: %+v", info)
+	}
+	if info.Recovery.Kind != "worker_gap" || info.Recovery.MissingWorkers != 2 || info.Recovery.AffectedTasks != 3 {
+		t.Fatalf("recovery hint inesperado: %+v", info.Recovery)
+	}
+	if info.Recovery.SuggestedAction != "server_rearm" || !info.Recovery.RearmAvailable {
+		t.Fatalf("recovery hint sin accion canónica: %+v", info.Recovery)
+	}
+}
+
+func TestNormalizeServerOperationalInfoDerivaRecoveryHintDeCuotaSinRearm(t *testing.T) {
+	info := normalizeServerOperationalInfo(serverOperationalInfo{
+		State:            "idle",
+		Operational:      true,
+		Reason:           "workers_quota_blocked",
+		QuotaAgents:      2,
+		NextQuotaResetAt: "2026-04-29T11:00:00Z",
+	})
+	if info.Recovery == nil {
+		t.Fatalf("recovery hint ausente: %+v", info)
+	}
+	if info.Recovery.Kind != "quota_cooldown" || info.Recovery.QuotaBlockedAgents != 2 {
+		t.Fatalf("recovery quota inesperado: %+v", info.Recovery)
+	}
+	if info.Recovery.SuggestedAction != "wait_quota_reset" {
+		t.Fatalf("accion recovery inesperada: %+v", info.Recovery)
+	}
+}
+
 func TestControlPlaneQuotaBlockedIdleGuardSaltaSinWorkersUtiles(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()
@@ -341,6 +396,11 @@ func TestFormatServerOperationalSummaryIncluyeDispatch(t *testing.T) {
 		AutonomyHandoffs:    5,
 		QuotaAgents:         6,
 		NextQuotaResetAt:    "2026-04-20T21:05:00Z",
+		Recovery: &serverOperationalRecoveryHint{
+			Kind:            "worker_gap",
+			SuggestedAction: "server_rearm",
+			MissingWorkers:  2,
+		},
 	})
 	if !strings.Contains(summary, "dispatch p:1 n:2 f:3 c:4") {
 		t.Fatalf("summary sin dispatch confirmado: %s", summary)
@@ -350,6 +410,9 @@ func TestFormatServerOperationalSummaryIncluyeDispatch(t *testing.T) {
 	}
 	if !strings.Contains(summary, "6 bloqueados_cuota") || !strings.Contains(summary, "quota_reset 2026-04-20T21:05:00Z") {
 		t.Fatalf("summary sin informacion de cuota visible: %s", summary)
+	}
+	if !strings.Contains(summary, "recovery worker_gap->server_rearm") || !strings.Contains(summary, "faltan_workers:2") {
+		t.Fatalf("summary sin pista recovery: %s", summary)
 	}
 }
 
