@@ -202,10 +202,10 @@ func TestMCPHandleInitializeNegociaVersion(t *testing.T) {
 	if payload["protocolVersion"] != "2025-06-18" {
 		t.Fatalf("version inesperada: %#v", payload["protocolVersion"])
 	}
-		if !srv.initialized {
-			t.Fatalf("el servidor no quedo inicializado")
-		}
+	if !srv.initialized {
+		t.Fatalf("el servidor no quedo inicializado")
 	}
+}
 
 func TestAPIMCPDescribeEndpoint(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/mcp", nil)
@@ -328,12 +328,12 @@ func TestAPIMCPCallServerRearmStateless(t *testing.T) {
 	}
 	item, _ := content[0].(map[string]any)
 	text, _ := item["text"].(string)
-		for _, token := range []string{`"ok": true`, `"supervisor": "OpenClaw"`, `"queue_kind": "safe"`} {
-			if !strings.Contains(text, token) {
-				t.Fatalf("resultado MCP sin token %q: %s", token, text)
-			}
+	for _, token := range []string{`"ok": true`, `"supervisor": "OpenClaw"`, `"queue_kind": "safe"`} {
+		if !strings.Contains(text, token) {
+			t.Fatalf("resultado MCP sin token %q: %s", token, text)
 		}
 	}
+}
 
 func TestMCPToolsIncluyeLenguaje(t *testing.T) {
 	tools := listMCPTools()
@@ -1165,6 +1165,9 @@ func TestMCPPromptRevisionSupervisorIncluyeGatesYSignals(t *testing.T) {
 		if err != nil {
 			t.Fatalf("readMCPResource revision supervisor: %v", err)
 		}
+		if mimeType, _ := contents[0]["mimeType"].(string); mimeType != "application/json" {
+			t.Fatalf("mimeType de revision supervisor = %q, want application/json", mimeType)
+		}
 		resourceText, _ := contents[0]["text"].(string)
 		for _, token := range []string{
 			`"queue_kind": "safe"`,
@@ -1176,6 +1179,20 @@ func TestMCPPromptRevisionSupervisorIncluyeGatesYSignals(t *testing.T) {
 			if !strings.Contains(resourceText, token) {
 				t.Fatalf("recurso de revisión sin contrato canónico %q: %s", token, resourceText)
 			}
+		}
+		foundTemplate := false
+		for _, item := range mcpResourceTemplates() {
+			if item.URITemplate != "orquesta://supervision/{supervisor}/revision" {
+				continue
+			}
+			foundTemplate = true
+			if item.MIMEType != "application/json" {
+				t.Fatalf("template revision supervisor mimeType = %q, want application/json", item.MIMEType)
+			}
+			break
+		}
+		if !foundTemplate {
+			t.Fatal("template MCP de revision supervisor no listado")
 		}
 	})
 }
@@ -7294,6 +7311,88 @@ func TestBuildSupervisorReviewSnapshotToleraWorktreeDriftLento(t *testing.T) {
 		drift, _ := snapshot["worktree_drift"].([]apiOpenClawWorktreeDrift)
 		if len(drift) != 0 {
 			t.Fatalf("drift deberia omitirse si excede timeout, got=%+v", drift)
+		}
+	})
+}
+
+func TestBuildSupervisorReviewSnapshotWithStatusUsaCarrilesRapidosParaSafeQueueYOperacional(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prevRisk := supervisorWorkspaceProjectRiskSnapshotBuilder
+		prevRows := supervisorPanelRowsBuilder
+		prevDrift := openClawWorktreeDriftBuilder
+		prevThreads := supervisorReviewThreadsSnapshotBuilder
+		prevSubagents := supervisorReviewSubagentsSnapshotBuilder
+		prevPipeline := supervisorReviewPipelineSnapshotBuilder
+		prevSignals := supervisorReviewSignalsBuilder
+		prevMerges := supervisorReviewMergesBuilder
+		prevCriticalRisk := supervisorReviewCriticalRiskBuilder
+		defer func() {
+			supervisorWorkspaceProjectRiskSnapshotBuilder = prevRisk
+			supervisorPanelRowsBuilder = prevRows
+			openClawWorktreeDriftBuilder = prevDrift
+			supervisorReviewThreadsSnapshotBuilder = prevThreads
+			supervisorReviewSubagentsSnapshotBuilder = prevSubagents
+			supervisorReviewPipelineSnapshotBuilder = prevPipeline
+			supervisorReviewSignalsBuilder = prevSignals
+			supervisorReviewMergesBuilder = prevMerges
+			supervisorReviewCriticalRiskBuilder = prevCriticalRisk
+		}()
+
+		supervisorWorkspaceProjectRiskSnapshotBuilder = func() map[string]int {
+			time.Sleep(250 * time.Millisecond)
+			return map[string]int{"orquestador": 9}
+		}
+		supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+			time.Sleep(250 * time.Millisecond)
+			return []agentesapp.Row{{
+				Agente: &db.Agente{Nombre: "Codex10", Rol: "programador"},
+			}}, nil
+		}
+		supervisorReviewThreadsSnapshotBuilder = func(supervisor, sessionID string, limit int) (map[string]any, error) {
+			return map[string]any{}, nil
+		}
+		supervisorReviewSubagentsSnapshotBuilder = func(supervisor, proyectoSlug, sessionID string, limit int) (map[string]any, error) {
+			return map[string]any{}, nil
+		}
+		supervisorReviewPipelineSnapshotBuilder = func(supervisor, proyectoSlug string, limit int, status apiStatusResponse, gates []*db.ReviewGate, signals []*supervisorReviewSignal, merges []*db.GitMerge, conflicts []supervisorModuleConflict, mailboxPendiente []apiOpenClawMailboxLite) (map[string]any, error) {
+			return map[string]any{}, nil
+		}
+		supervisorReviewSignalsBuilder = func(limit int) ([]*supervisorReviewSignal, error) {
+			return nil, nil
+		}
+		supervisorReviewMergesBuilder = func(limit int) ([]*db.GitMerge, error) {
+			return nil, nil
+		}
+		supervisorReviewCriticalRiskBuilder = func(actions []supervisorRecommendedAction) (*workspaceAutonomyProjectSummary, error) {
+			return nil, nil
+		}
+		openClawWorktreeDriftBuilder = func(status apiStatusResponse) ([]apiOpenClawWorktreeDrift, error) {
+			return nil, nil
+		}
+
+		start := time.Now()
+		snapshot, err := buildSupervisorReviewSnapshotWithStatus("OpenClaw", apiStatusResponse{
+			Agentes:           []*db.Agente{{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"}},
+			AgentesActivos:    []*db.Agente{{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"}},
+			AgentesTrabajando: []*db.Agente{{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"}},
+			TareasActivas: []tareaLite{{
+				ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex10", Modulo: "controlplane", Titulo: "Micro-refactorización",
+			}},
+			TareasPorEstado: map[string]int{
+				string(db.TareaEnProgreso): 1,
+				string(db.TareaLibre):      1,
+			},
+		})
+		elapsed := time.Since(start)
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshotWithStatus: %v", err)
+		}
+		if elapsed >= 600*time.Millisecond {
+			t.Fatalf("snapshot no deberia bloquearse por risk/panel lentos, elapsed=%s", elapsed)
+		}
+		safeQueue, _ := snapshot["safe_action_queue"].([]supervisorRecommendedAction)
+		if len(safeQueue) == 0 {
+			t.Fatalf("safe_action_queue vacia: %+v", snapshot)
 		}
 	})
 }

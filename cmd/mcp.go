@@ -730,7 +730,7 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			Name:        "revision-supervisor",
 			Title:       "Cola de revisión del supervisor",
 			Description: "Resumen estrecho de gates y señales recientes para decidir integración, cambios o relevo",
-			MIMEType:    "text/markdown",
+			MIMEType:    "application/json",
 		},
 		{
 			URITemplate: "orquesta://supervision/{supervisor}/eventos",
@@ -1337,7 +1337,7 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		return resourceText(uri, "text/markdown", texto), nil
 	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.HasSuffix(uri, "/revision"):
 		supervisor := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://supervision/"), "/revision")
-		snapshot, err := buildSupervisorReviewSnapshot(supervisor)
+		snapshot, err := buildSupervisorRevisionSnapshot(supervisor)
 		if err != nil {
 			return nil, err
 		}
@@ -4966,7 +4966,7 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 
 	case "orquesta.supervision.revision":
 		supervisor := optionalStringArg(args, "supervisor")
-		resumen, err := buildSupervisorReviewSnapshot(supervisor)
+		resumen, err := buildSupervisorRevisionSnapshot(supervisor)
 		if err != nil {
 			return nil, err
 		}
@@ -5569,7 +5569,7 @@ func buildSupervisorBriefing(supervisor string) (string, error) {
 		}
 		b.WriteString("\n")
 	}
-	revision, err := buildSupervisorReviewOverview()
+	revision, err := buildSupervisorReviewOverviewFromSnapshot(snapshot)
 	if err != nil {
 		return "", err
 	}
@@ -5603,7 +5603,7 @@ func buildSupervisorGuidance(supervisor string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	snapshot, err := buildSupervisorReviewSnapshot(supervisor)
+	snapshot, err := buildSupervisorRevisionSnapshot(supervisor)
 	if err != nil {
 		return "", err
 	}
@@ -5775,98 +5775,11 @@ func resumenSupervisorAgente(a *db.Agente) string {
 }
 
 func buildSupervisorReviewOverview() (string, error) {
-	gates, err := db.ListarReviewGates(db.FiltroReviewGates{Limit: 20})
+	openGates, signals, merges, err := listSupervisorReviewOverviewData()
 	if err != nil {
 		return "", err
 	}
-	openGates := make([]*db.ReviewGate, 0, len(gates))
-	for _, gate := range gates {
-		if gate == nil || gate.Estado == db.ReviewGateAprobado {
-			continue
-		}
-		openGates = append(openGates, gate)
-	}
-	signals, err := listarSignalsRevisionSupervisor(12)
-	if err != nil {
-		return "", err
-	}
-	merges, err := listarMergesRevisionSupervisor(12)
-	if err != nil {
-		return "", err
-	}
-	if len(openGates) == 0 && len(signals) == 0 && len(merges) == 0 {
-		return "", nil
-	}
-
-	var b strings.Builder
-	if len(openGates) > 0 {
-		b.WriteString("## Review gates abiertos\n")
-		for _, gate := range openGates {
-			linea := fmt.Sprintf("- #%d estado=%s", gate.ID, strings.TrimSpace(string(gate.Estado)))
-			if gate.TareaID != nil && *gate.TareaID > 0 {
-				linea += fmt.Sprintf(" tarea=%d", *gate.TareaID)
-				if tarea, err := tareasService.Get(*gate.TareaID); err == nil && tarea != nil && strings.TrimSpace(tarea.Titulo) != "" {
-					linea += " \"" + compactMCPLine(strings.TrimSpace(tarea.Titulo), 80) + "\""
-				}
-			}
-			if gate.ProyectoID != nil && *gate.ProyectoID > 0 {
-				if proyecto, err := db.GetProyecto(strconv.FormatInt(*gate.ProyectoID, 10)); err == nil && proyecto != nil && strings.TrimSpace(proyecto.Slug) != "" {
-					linea += " proyecto=" + strings.TrimSpace(proyecto.Slug)
-				}
-			}
-			if strings.TrimSpace(gate.ReviewerAgente) != "" {
-				linea += " reviewer=" + strings.TrimSpace(gate.ReviewerAgente)
-			}
-			if strings.TrimSpace(gate.SeverityMax) != "" {
-				linea += " severity=" + strings.TrimSpace(gate.SeverityMax)
-			}
-			b.WriteString(linea + "\n")
-		}
-		b.WriteString("\n")
-	}
-	if len(signals) > 0 {
-		b.WriteString("## Señales recientes de revisión e integración\n")
-		for _, item := range signals {
-			if item == nil || item.Event == nil {
-				continue
-			}
-			linea := fmt.Sprintf("- %s", strings.TrimSpace(item.Event.Kind))
-			if strings.TrimSpace(item.Agent) != "" {
-				linea += " agente=" + strings.TrimSpace(item.Agent)
-			}
-			if strings.TrimSpace(item.Project) != "" {
-				linea += " proyecto=" + strings.TrimSpace(item.Project)
-			}
-			if strings.TrimSpace(item.Event.Message) != "" {
-				linea += " · " + compactMCPLine(item.Event.Message, 180)
-			}
-			b.WriteString(linea + "\n")
-		}
-		b.WriteString("\n")
-	}
-	if len(merges) > 0 {
-		b.WriteString("## Solicitudes de merge vivas\n")
-		for _, merge := range merges {
-			if merge == nil {
-				continue
-			}
-			linea := fmt.Sprintf("- #%d estado=%s", merge.ID, strings.TrimSpace(merge.Estado))
-			if strings.TrimSpace(merge.ProyectoSlug) != "" {
-				linea += " proyecto=" + strings.TrimSpace(merge.ProyectoSlug)
-			}
-			if strings.TrimSpace(merge.SourceBranch) != "" || strings.TrimSpace(merge.TargetBranch) != "" {
-				linea += fmt.Sprintf(" %s->%s", strings.TrimSpace(merge.SourceBranch), strings.TrimSpace(merge.TargetBranch))
-			}
-			if strings.TrimSpace(merge.RequestedBy) != "" {
-				linea += " por=" + strings.TrimSpace(merge.RequestedBy)
-			}
-			if strings.TrimSpace(merge.Notas) != "" {
-				linea += " · " + compactMCPLine(merge.Notas, 180)
-			}
-			b.WriteString(linea + "\n")
-		}
-	}
-	return strings.TrimSpace(b.String()), nil
+	return buildSupervisorReviewOverviewFromData(openGates, signals, merges)
 }
 
 func buildSupervisorReviewBriefing(supervisor string) (string, error) {
@@ -5882,7 +5795,7 @@ func buildSupervisorReviewBriefing(supervisor string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	revision, err := buildSupervisorReviewOverview()
+	revision, err := buildSupervisorReviewOverviewFromSnapshot(snapshot)
 	if err != nil {
 		return "", err
 	}
@@ -6129,7 +6042,7 @@ func buildSupervisorReviewSnapshotWithStatus(supervisor string, status apiStatus
 			supervisor = "OpenClaw"
 		}
 	}
-	gates, err := db.ListarReviewGates(db.FiltroReviewGates{Limit: 20})
+	gates, err := db.ListarReviewGates(db.FiltroReviewGates{Limit: supervisorReviewOpenGatesLimit})
 	if err != nil {
 		return nil, err
 	}
@@ -6140,47 +6053,58 @@ func buildSupervisorReviewSnapshotWithStatus(supervisor string, status apiStatus
 		}
 		openGates = append(openGates, gate)
 	}
+	signalsCh := supervisorReviewOptionalAsync(150*time.Millisecond, func() ([]*supervisorReviewSignal, error) {
+		return supervisorReviewSignalsBuilder(supervisorReviewSignalsLimit)
+	})
+	mergesCh := supervisorReviewOptionalAsync(150*time.Millisecond, func() ([]*db.GitMerge, error) {
+		return supervisorReviewMergesBuilder(supervisorReviewMergesLimit)
+	})
+	conflictsCh := supervisorReviewOptionalAsync(100*time.Millisecond, func() ([]supervisorModuleConflict, error) {
+		return supervisorReviewConflictsBuilder(status.TareasActivas)
+	})
+	mailboxCh := supervisorReviewOptionalAsync(100*time.Millisecond, func() ([]apiOpenClawMailboxLite, error) {
+		return supervisorReviewMailboxBuilder(status.Agentes)
+	})
+	outboxCh := supervisorReviewOptionalAsync(100*time.Millisecond, func() (notificaciones.OutboxSummary, error) {
+		return supervisorReviewOutboxBuilder(supervisorReviewOutboxLimit)
+	})
+	threadsCh := supervisorReviewOptionalAsync(150*time.Millisecond, func() (map[string]any, error) {
+		return supervisorReviewThreadsSnapshotBuilder(supervisor, "", 100)
+	})
+	subagentsCh := supervisorReviewOptionalAsync(150*time.Millisecond, func() (map[string]any, error) {
+		return supervisorReviewSubagentsSnapshotBuilder(supervisor, "", "", 100)
+	})
+	worktreeDriftCh := supervisorReviewOptionalAsync(openClawWorktreeDriftTimeout, func() ([]apiOpenClawWorktreeDrift, error) {
+		return openClawWorktreeDriftBuilder(status)
+	})
+
 	signals := []*supervisorReviewSignal{}
-	if snapshot, timeoutErr := runAPITimeboxed(150*time.Millisecond, func() ([]*supervisorReviewSignal, error) {
-		return supervisorReviewSignalsBuilder(12)
-	}, errStatusFetchTimeout); timeoutErr == nil && snapshot != nil {
+	if snapshot, ok := supervisorReviewAwait(signalsCh); ok && snapshot != nil {
 		signals = snapshot
 	}
 	merges := []*db.GitMerge{}
-	if snapshot, timeoutErr := runAPITimeboxed(150*time.Millisecond, func() ([]*db.GitMerge, error) {
-		return supervisorReviewMergesBuilder(12)
-	}, errStatusFetchTimeout); timeoutErr == nil && snapshot != nil {
+	if snapshot, ok := supervisorReviewAwait(mergesCh); ok && snapshot != nil {
 		merges = snapshot
 	}
 	conflicts := []supervisorModuleConflict{}
-	if snapshot, timeoutErr := runAPITimeboxed(100*time.Millisecond, func() ([]supervisorModuleConflict, error) {
-		return listarSupervisorModuleConflictsSnapshotSafe(status.TareasActivas)
-	}, errStatusFetchTimeout); timeoutErr == nil && snapshot != nil {
+	if snapshot, ok := supervisorReviewAwait(conflictsCh); ok && snapshot != nil {
 		conflicts = snapshot
 	}
 	mailboxPendiente := []apiOpenClawMailboxLite{}
-	if snapshot, timeoutErr := runAPITimeboxed(100*time.Millisecond, func() ([]apiOpenClawMailboxLite, error) {
-		return buildOpenClawPendingMailbox(status.Agentes)
-	}, errStatusFetchTimeout); timeoutErr == nil && snapshot != nil {
+	if snapshot, ok := supervisorReviewAwait(mailboxCh); ok && snapshot != nil {
 		mailboxPendiente = snapshot
 	}
 	outbox := notificaciones.OutboxSummary{}
-	if snapshot, timeoutErr := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.OutboxSummary, error) {
-		return notificaciones.DescribirOutbox(20), nil
-	}, errStatusFetchTimeout); timeoutErr == nil {
+	if snapshot, ok := supervisorReviewAwait(outboxCh); ok {
 		outbox = snapshot
 	}
-	normalizedEvents := buildOpenClawNormalizedEventsFromData(openGates, signals, merges, outbox.Recientes, 20)
+	normalizedEvents := buildOpenClawNormalizedEventsFromData(openGates, signals, merges, outbox.Recientes, supervisorReviewOutboxLimit)
 	threadSessions := map[string]any{}
-	if snapshot, timeoutErr := runAPITimeboxed(150*time.Millisecond, func() (map[string]any, error) {
-		return supervisorReviewThreadsSnapshotBuilder(supervisor, "", 100)
-	}, errStatusFetchTimeout); timeoutErr == nil && snapshot != nil {
+	if snapshot, ok := supervisorReviewAwait(threadsCh); ok && snapshot != nil {
 		threadSessions = snapshot
 	}
 	subagents := map[string]any{}
-	if snapshot, timeoutErr := runAPITimeboxed(150*time.Millisecond, func() (map[string]any, error) {
-		return supervisorReviewSubagentsSnapshotBuilder(supervisor, "", "", 100)
-	}, errStatusFetchTimeout); timeoutErr == nil && snapshot != nil {
+	if snapshot, ok := supervisorReviewAwait(subagentsCh); ok && snapshot != nil {
 		subagents = snapshot
 	}
 	pipelineState := map[string]any{}
@@ -6190,21 +6114,19 @@ func buildSupervisorReviewSnapshotWithStatus(supervisor string, status apiStatus
 		pipelineState = snapshot
 	}
 	worktreeDrift := []apiOpenClawWorktreeDrift(nil)
-	if snapshot, timeoutErr := runAPITimeboxed(openClawWorktreeDriftTimeout, func() ([]apiOpenClawWorktreeDrift, error) {
-		return openClawWorktreeDriftBuilder(status)
-	}, errStatusFetchTimeout); timeoutErr == nil {
+	if snapshot, ok := supervisorReviewAwait(worktreeDriftCh); ok {
 		worktreeDrift = snapshot
 	}
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
 	recommended = append(recommended, buildSupervisorWorktreeDriftActions(worktreeDrift)...)
-	recommended = append(recommended, buildSupervisorOperationalActions(status, mailboxPendiente)...)
+	recommended = append(recommended, buildSupervisorOperationalActionsFast(status, mailboxPendiente)...)
 	recommended = append(recommended, buildSupervisorObservedSessionActions(status, threadSessions)...)
 	recommended = append(recommended, buildSupervisorSubagentActions(subagents)...)
 	recommended = append(recommended, buildSupervisorProposalActions(status.PropuestasResumen)...)
 	sortSupervisorRecommendedActions(recommended)
 	markSupervisorRecommendedActions(recommended)
 	actionQueue := cloneSupervisorRecommendedActions(recommended)
-	safeQueue := buildSupervisorSafeActionQueue(actionQueue)
+	safeQueue := buildSupervisorSafeActionQueueFast(actionQueue)
 	var criticalProjectRisk *workspaceAutonomyProjectSummary
 	if snapshot, timeoutErr := runAPITimeboxed(200*time.Millisecond, func() (*workspaceAutonomyProjectSummary, error) {
 		return supervisorReviewCriticalRiskBuilder(actionQueue)
