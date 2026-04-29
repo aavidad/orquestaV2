@@ -19,37 +19,39 @@ var (
 )
 
 type serverOperationalInfo struct {
-	State               string                           `json:"state"`
-	Operational         bool                             `json:"operational"`
-	Reason              string                           `json:"reason,omitempty"`
-	NextQuotaResetAt    string                           `json:"nextQuotaResetAt,omitempty"`
-	Generated           string                           `json:"generated,omitempty"`
-	AutonomyHighlights  []string                         `json:"autonomyHighlights,omitempty"`
-	CriticalProjectRisk *workspaceAutonomyProjectSummary `json:"criticalProjectRisk,omitempty"`
-	Recovery            *serverOperationalRecoveryHint   `json:"recovery,omitempty"`
-	RegisteredAgents    int                              `json:"registeredAgents"`
-	ActiveAgents        int                              `json:"activeAgents"`
-	WorkingAgents       int                              `json:"workingAgents"`
-	ConnectedWorkers    int                              `json:"connectedWorkers"`
-	WorkingWorkers      int                              `json:"workingWorkers"`
-	SaturatedAgents     int                              `json:"saturatedAgents"`
-	StuckAgents         int                              `json:"stuckAgents"`
-	AuthAgents          int                              `json:"authAgents"`
-	QuotaAgents         int                              `json:"quotaAgents"`
-	PausedAgents        int                              `json:"pausedAgents"`
-	TasksInProgress     int                              `json:"tasksInProgress"`
-	ReservedTasks       int                              `json:"reservedTasks"`
-	BlockedTasks        int                              `json:"blockedTasks"`
-	DispatchPending     int                              `json:"dispatchPending"`
-	DispatchNotified    int                              `json:"dispatchNotified"`
-	DispatchFailed      int                              `json:"dispatchFailed"`
-	DispatchConfirmed   int                              `json:"dispatchConfirmed"`
-	AutonomySupervising int                              `json:"autonomySupervising"`
-	AutonomyContinuing  int                              `json:"autonomyContinuing"`
-	AutonomyPending     int                              `json:"autonomyPending"`
-	AutonomyConfirmed   int                              `json:"autonomyConfirmed"`
-	AutonomyHandoffs    int                              `json:"autonomyHandoffs"`
-	Rearm               *serverOperationalRearmHint      `json:"rearm,omitempty"`
+	State                string                           `json:"state"`
+	Operational          bool                             `json:"operational"`
+	Reason               string                           `json:"reason,omitempty"`
+	NextQuotaResetAt     string                           `json:"nextQuotaResetAt,omitempty"`
+	Generated            string                           `json:"generated,omitempty"`
+	AutonomyHighlights   []string                         `json:"autonomyHighlights,omitempty"`
+	CriticalProjectRisk  *workspaceAutonomyProjectSummary `json:"criticalProjectRisk,omitempty"`
+	Recovery             *serverOperationalRecoveryHint   `json:"recovery,omitempty"`
+	RegisteredAgents     int                              `json:"registeredAgents"`
+	ActiveAgents         int                              `json:"activeAgents"`
+	WorkingAgents        int                              `json:"workingAgents"`
+	ConnectedWorkers     int                              `json:"connectedWorkers"`
+	WorkingWorkers       int                              `json:"workingWorkers"`
+	SaturatedAgents      int                              `json:"saturatedAgents"`
+	StuckAgents          int                              `json:"stuckAgents"`
+	AuthAgents           int                              `json:"authAgents"`
+	QuotaAgents          int                              `json:"quotaAgents"`
+	PausedAgents         int                              `json:"pausedAgents"`
+	TasksInProgress      int                              `json:"tasksInProgress"`
+	ReservedTasks        int                              `json:"reservedTasks"`
+	BlockedTasks         int                              `json:"blockedTasks"`
+	CompactionDebtAgents int                              `json:"compactionDebtAgents"`
+	CompactionDebtTasks  int                              `json:"compactionDebtTasks"`
+	DispatchPending      int                              `json:"dispatchPending"`
+	DispatchNotified     int                              `json:"dispatchNotified"`
+	DispatchFailed       int                              `json:"dispatchFailed"`
+	DispatchConfirmed    int                              `json:"dispatchConfirmed"`
+	AutonomySupervising  int                              `json:"autonomySupervising"`
+	AutonomyContinuing   int                              `json:"autonomyContinuing"`
+	AutonomyPending      int                              `json:"autonomyPending"`
+	AutonomyConfirmed    int                              `json:"autonomyConfirmed"`
+	AutonomyHandoffs     int                              `json:"autonomyHandoffs"`
+	Rearm                *serverOperationalRearmHint      `json:"rearm,omitempty"`
 }
 
 type serverOperationalRearmHint struct {
@@ -131,6 +133,7 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 	saturatedAgents := len(status.AgentesSaturados)
 	stuckAgents := len(status.AgentesAtascados)
 	authAgents := len(status.AgentesAuthManual)
+	compactionDebtAgents, compactionDebtTasks := serverOperationalCompactionDebt(statusNowFunc().UTC())
 
 	state := "ready"
 	reason := "control_plane_responsive"
@@ -161,35 +164,37 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 	}
 
 	return serverOperationalInfo{
-		State:               state,
-		Operational:         operational,
-		Reason:              reason,
-		NextQuotaResetAt:    nextQuotaResetAt,
-		Generated:           status.Generado,
-		AutonomyHighlights:  autonomyHighlights,
-		CriticalProjectRisk: criticalProjectRisk,
-		RegisteredAgents:    registeredAgentCountFromStatus(status),
-		ActiveAgents:        activeAgents,
-		WorkingAgents:       workingAgents,
-		ConnectedWorkers:    activeWorkers,
-		WorkingWorkers:      workingWorkers,
-		SaturatedAgents:     saturatedAgents,
-		StuckAgents:         stuckAgents,
-		AuthAgents:          authAgents,
-		QuotaAgents:         quotaAgents,
-		PausedAgents:        pausedAgents,
-		TasksInProgress:     tasksInProgress,
-		ReservedTasks:       reservedTasks,
-		BlockedTasks:        blockedTasks,
-		DispatchPending:     status.DeudaDispatch.Pendientes,
-		DispatchNotified:    status.DeudaDispatch.Notificadas,
-		DispatchFailed:      status.DeudaDispatch.Fallidas,
-		DispatchConfirmed:   status.DeudaDispatch.WorkConfirmed,
-		AutonomySupervising: status.Autonomia.Supervisando,
-		AutonomyContinuing:  status.Autonomia.Continuando,
-		AutonomyPending:     status.Autonomia.ContinuidadPendiente,
-		AutonomyConfirmed:   status.Autonomia.WorkConfirmed,
-		AutonomyHandoffs:    status.Autonomia.Handoffs,
+		State:                state,
+		Operational:          operational,
+		Reason:               reason,
+		NextQuotaResetAt:     nextQuotaResetAt,
+		Generated:            status.Generado,
+		AutonomyHighlights:   autonomyHighlights,
+		CriticalProjectRisk:  criticalProjectRisk,
+		RegisteredAgents:     registeredAgentCountFromStatus(status),
+		ActiveAgents:         activeAgents,
+		WorkingAgents:        workingAgents,
+		ConnectedWorkers:     activeWorkers,
+		WorkingWorkers:       workingWorkers,
+		SaturatedAgents:      saturatedAgents,
+		StuckAgents:          stuckAgents,
+		AuthAgents:           authAgents,
+		QuotaAgents:          quotaAgents,
+		PausedAgents:         pausedAgents,
+		TasksInProgress:      tasksInProgress,
+		ReservedTasks:        reservedTasks,
+		BlockedTasks:         blockedTasks,
+		CompactionDebtAgents: compactionDebtAgents,
+		CompactionDebtTasks:  compactionDebtTasks,
+		DispatchPending:      status.DeudaDispatch.Pendientes,
+		DispatchNotified:     status.DeudaDispatch.Notificadas,
+		DispatchFailed:       status.DeudaDispatch.Fallidas,
+		DispatchConfirmed:    status.DeudaDispatch.WorkConfirmed,
+		AutonomySupervising:  status.Autonomia.Supervisando,
+		AutonomyContinuing:   status.Autonomia.Continuando,
+		AutonomyPending:      status.Autonomia.ContinuidadPendiente,
+		AutonomyConfirmed:    status.Autonomia.WorkConfirmed,
+		AutonomyHandoffs:     status.Autonomia.Handoffs,
 	}
 }
 
@@ -236,6 +241,16 @@ func normalizeServerOperationalInfo(info serverOperationalInfo) serverOperationa
 }
 
 func buildServerOperationalRecoveryHint(info serverOperationalInfo) *serverOperationalRecoveryHint {
+	if info.Operational &&
+		strings.TrimSpace(info.Reason) == "control_plane_responsive" &&
+		info.CompactionDebtTasks > 0 {
+		return &serverOperationalRecoveryHint{
+			Kind:            "compaction_debt",
+			AffectedTasks:   info.CompactionDebtTasks,
+			SuggestedAction: "compact_or_reassign_active_tasks",
+			Detail:          fmt.Sprintf("%d tarea(s) abiertas exceden la señal real de trabajo en %d agente(s)", max(info.CompactionDebtTasks, 1), max(info.CompactionDebtAgents, 1)),
+		}
+	}
 	reason := strings.TrimSpace(info.Reason)
 	if reason == "" {
 		return nil
@@ -530,6 +545,9 @@ func formatServerOperationalSummary(info *serverOperationalInfo) string {
 	if info.TasksInProgress > 0 {
 		parts = append(parts, fmt.Sprintf("%d en_progreso", info.TasksInProgress))
 	}
+	if info.CompactionDebtTasks > 0 {
+		parts = append(parts, fmt.Sprintf("compactacion_pendiente:%d", info.CompactionDebtTasks))
+	}
 	if info.NextQuotaResetAt != "" {
 		parts = append(parts, "quota_reset "+info.NextQuotaResetAt)
 	}
@@ -549,6 +567,48 @@ func formatServerOperationalSummary(info *serverOperationalInfo) string {
 		}
 	}
 	return fmt.Sprintf("%s (%s)", strings.ToUpper(strings.TrimSpace(info.State)), strings.Join(parts, ", "))
+}
+
+func serverOperationalCompactionDebt(now time.Time) (int, int) {
+	rows, ok := readAgentPanelSnapshotFresh()
+	if !ok {
+		return 0, 0
+	}
+	return serverOperationalCompactionDebtFromRows(rows, now)
+}
+
+func serverOperationalCompactionDebtFromRows(rows []agentesapp.Row, now time.Time) (int, int) {
+	agents := 0
+	tasks := 0
+	for _, row := range rows {
+		if !rowHasCompactionDebt(row, now) {
+			continue
+		}
+		agents++
+		tasks += row.OpenTasks - 1
+	}
+	return agents, tasks
+}
+
+func rowHasCompactionDebt(row agentesapp.Row, now time.Time) bool {
+	if row.Agente == nil || row.CurrentTask == nil || row.OpenTasks <= 1 {
+		return false
+	}
+	agente := nombreAgenteCanonico(row.Agente.Nombre)
+	if agente == "" || !agenteVisibleEnStatusFleet(agente) {
+		return false
+	}
+	if rowEsResiduoPausadoSinTrabajo(row, now) || row.SupervisorRoleActive(now) || row.EffectiveContinuityPending(now) {
+		return false
+	}
+	switch strings.TrimSpace(row.EstadoOperativo) {
+	case "retirado", "bloqueado", "bloqueado_por_runtime", "bloqueado_por_cuota", "caido":
+		return false
+	}
+	if row.WorkerFresh(now) {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(row.LastAutonomyState), "work_confirmed")
 }
 
 func mergeServerOperationalAgentsWithPanelRows(agentes []*db.Agente, rows []agentesapp.Row) []*db.Agente {

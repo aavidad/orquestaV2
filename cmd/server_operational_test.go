@@ -239,6 +239,79 @@ func TestNormalizeServerOperationalInfoDerivaRecoveryHintDeCuotaSinRearm(t *test
 	}
 }
 
+func TestNormalizeServerOperationalInfoMarcaCompactionDebtConFilaFresca(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	prevNow := statusNowFunc
+	defer func() { statusNowFunc = prevNow }()
+
+	now := time.Date(2026, 4, 29, 13, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:            &db.Agente{Nombre: "Codex7", Activo: true, EstadoCuota: "activo"},
+		EstadoOperativo:   "trabajando",
+		WorkerAlive:       true,
+		WorkerState:       "running",
+		WorkerHeartbeat:   ptrTimeServerOperational(now),
+		OpenTasks:         3,
+		CurrentTask:       &agentesapp.TaskFocus{TaskID: 24, State: db.EstadoEnProgreso},
+		LastAutonomyState: "work_confirmed",
+	}}, now)
+
+	info := normalizeServerOperationalInfo(buildServerOperationalInfo(apiStatusResponse{
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex7", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex7", Activo: true}},
+		TareasEnProgreso: []tareaLite{
+			{ID: 24, Estado: db.TareaEnProgreso, Agente: "Codex7"},
+			{ID: 25, Estado: db.TareaEnProgreso, Agente: "Codex7"},
+			{ID: 26, Estado: db.TareaEnProgreso, Agente: "Codex7"},
+		},
+	}))
+	if !info.Operational || info.Reason != "control_plane_responsive" {
+		t.Fatalf("el servidor sigue operativo; solo deberia marcar deuda de compactacion: %+v", info)
+	}
+	if info.CompactionDebtAgents != 1 || info.CompactionDebtTasks != 2 {
+		t.Fatalf("deuda de compactacion inesperada: %+v", info)
+	}
+	if info.Recovery == nil || info.Recovery.Kind != "compaction_debt" {
+		t.Fatalf("faltaba recovery hint de compactacion: %+v", info.Recovery)
+	}
+	if info.Recovery.AffectedTasks != 2 || info.Recovery.SuggestedAction != "compact_or_reassign_active_tasks" {
+		t.Fatalf("recovery de compactacion inesperado: %+v", info.Recovery)
+	}
+}
+
+func TestNormalizeServerOperationalInfoNoMarcaCompactionDebtSinSenalReal(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	prevNow := statusNowFunc
+	defer func() { statusNowFunc = prevNow }()
+
+	now := time.Date(2026, 4, 29, 13, 5, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "Codex8", Activo: true, EstadoCuota: "activo"},
+		EstadoOperativo: "atascado",
+		OpenTasks:       2,
+		CurrentTask:     &agentesapp.TaskFocus{TaskID: 40, State: db.EstadoEnProgreso},
+	}}, now)
+
+	info := normalizeServerOperationalInfo(buildServerOperationalInfo(apiStatusResponse{
+		TareasEnProgreso: []tareaLite{
+			{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex8"},
+			{ID: 41, Estado: db.TareaEnProgreso, Agente: "Codex8"},
+		},
+	}))
+	if info.CompactionDebtAgents != 0 || info.CompactionDebtTasks != 0 {
+		t.Fatalf("no deberia marcar deuda sin worker fresco ni trabajo confirmado: %+v", info)
+	}
+	if info.Recovery == nil || info.Recovery.Kind != "worker_gap" {
+		t.Fatalf("deberia seguir priorizando el gap real de workers: %+v", info.Recovery)
+	}
+}
+
 func TestControlPlaneQuotaBlockedIdleGuardSaltaSinWorkersUtiles(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()
