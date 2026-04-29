@@ -45047,6 +45047,51 @@ func TestClasificacionSignalTranscriptCurlCanonicoSobrescribeServerURLErrorPreca
 	}
 }
 
+func TestClasificacionSignalTranscriptEndpointCanonicoMantieneServerURLErrorPrecargado(t *testing.T) {
+	item := &db.RuntimeTranscriptEntry{
+		Stream:         "pty_out",
+		Text:           "endpoint canonico verificado en ORQUESTA_SERVER_URL=http://127.0.0.1:16543; /api/status responde",
+		NormalizedText: "endpoint canonico verificado en orquesta_server_url=http://127.0.0.1:16543; /api/status responde",
+		Classification: "server_url_error",
+	}
+	if got := clasificacionSignalTranscript(item); got != "server_url_error" {
+		t.Fatalf("clasificacion signal inesperada para endpoint canonico preclasificado: %q", got)
+	}
+	if got := clasificacionEntregaRuntimeTranscript(item); got != "server_url_error" {
+		t.Fatalf("clasificacion entrega inesperada para endpoint canonico preclasificado: %q", got)
+	}
+}
+
+func TestClasificacionSignalTranscriptEndpointCanonicoSinClasificacionNoEsToolExecution(t *testing.T) {
+	item := &db.RuntimeTranscriptEntry{
+		Stream:         "pty_out",
+		Text:           "endpoint canonico verificado en ORQUESTA_SERVER_URL=http://127.0.0.1:16543; /api/status responde",
+		NormalizedText: "endpoint canonico verificado en orquesta_server_url=http://127.0.0.1:16543; /api/status responde",
+		Classification: "",
+	}
+	if got := clasificacionSignalTranscript(item); got == "tool_execution" {
+		t.Fatalf("clasificacion signal no deberia tratar endpoint canonico como tool_execution: %q", got)
+	}
+	if got := clasificacionEntregaRuntimeTranscript(item); got == "tool_execution" {
+		t.Fatalf("clasificacion entrega no deberia tratar endpoint canonico como tool_execution: %q", got)
+	}
+}
+
+func TestClasificacionSignalTranscriptEndpointCanonicoLocalhostSinClasificacionNoEsToolExecution(t *testing.T) {
+	item := &db.RuntimeTranscriptEntry{
+		Stream:         "pty_out",
+		Text:           "endpoint canonico verificado en ORQUESTA_SERVER_URL=http://localhost:16543; /api/status responde",
+		NormalizedText: "endpoint canonico verificado en orquesta_server_url=http://localhost:16543; /api/status responde",
+		Classification: "",
+	}
+	if got := clasificacionSignalTranscript(item); got == "tool_execution" {
+		t.Fatalf("clasificacion signal no deberia tratar endpoint canonico localhost como tool_execution: %q", got)
+	}
+	if got := clasificacionEntregaRuntimeTranscript(item); got == "tool_execution" {
+		t.Fatalf("clasificacion entrega no deberia tratar endpoint canonico localhost como tool_execution: %q", got)
+	}
+}
+
 func TestClasificacionSignalTranscriptCurlErrorCanonicoMantieneServerURLError(t *testing.T) {
 	item := &db.RuntimeTranscriptEntry{
 		Stream:         "pty_out",
