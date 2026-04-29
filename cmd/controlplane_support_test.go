@@ -15403,7 +15403,7 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeDespachaConWor
 	}
 }
 
-func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeNoDespachaSiHeartbeatStale(t *testing.T) {
+func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeEscalaAReinicioCoordinadoSiHeartbeatStale(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()
 
@@ -15505,8 +15505,8 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeNoDespachaSiHe
 	if err != nil {
 		t.Fatalf("procesar mailbox session resume: %v", err)
 	}
-	if n != 0 {
-		t.Fatalf("no deberia despachar con heartbeat stale, got=%d", n)
+	if n != 1 {
+		t.Fatalf("deberia escalar a reinicio coordinado con heartbeat stale, got=%d", n)
 	}
 
 	agente := "Codex1"
@@ -15514,10 +15514,22 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeNoDespachaSiHe
 	if err != nil {
 		t.Fatalf("listar orders: %v", err)
 	}
+	var stopOrders, startOrders int
 	for _, order := range orders {
-		if order != nil && order.Tipo == "send_instruction" {
-			t.Fatalf("no deberia existir send_instruction con heartbeat stale: %+v", order)
+		if order == nil {
+			continue
 		}
+		switch order.Tipo {
+		case "send_instruction":
+			t.Fatalf("no deberia existir send_instruction con heartbeat stale: %+v", order)
+		case "stop":
+			stopOrders++
+		case "start":
+			startOrders++
+		}
+	}
+	if stopOrders != 1 || startOrders != 1 {
+		t.Fatalf("deberia encolar stop/start coordinados, got stop=%d start=%d", stopOrders, startOrders)
 	}
 
 	msg, err := db.GetRuntimeMailbox(msgID)
@@ -15525,7 +15537,7 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeNoDespachaSiHe
 		t.Fatalf("mailbox final: %+v err=%v", msg, err)
 	}
 	if msg.Estado != "pendiente" {
-		t.Fatalf("la mailbox deberia seguir pendiente con heartbeat stale: %+v", msg)
+		t.Fatalf("la mailbox debe seguir pendiente hasta que el reinicio coordinado remonte el runtime: %+v", msg)
 	}
 }
 
@@ -15943,7 +15955,7 @@ func TestProcesarRuntimeMailboxSessionResumeBatchConsumeMailboxBootstrapObservad
 	}
 }
 
-func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeNoDespachaConWorkerRunningStaleAunqueRuntimeEsperandoIO(t *testing.T) {
+func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeEscalaAReinicioCoordinadoConWorkerRunningStaleAunqueRuntimeEsperandoIO(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()
 
@@ -16072,8 +16084,8 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeNoDespachaConW
 	if err != nil {
 		t.Fatalf("procesar mailbox session resume: %v", err)
 	}
-	if n != 0 {
-		t.Fatalf("no deberia despachar cuando worker running tiene heartbeat stale aunque runtime este esperando_io, got=%d", n)
+	if n != 1 {
+		t.Fatalf("deberia escalar a reinicio coordinado con worker running stale aunque runtime este esperando_io, got=%d", n)
 	}
 
 	agente := "Codex1"
@@ -16081,10 +16093,22 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeNoDespachaConW
 	if err != nil {
 		t.Fatalf("listar orders: %v", err)
 	}
+	var stopOrders, startOrders int
 	for _, order := range orders {
-		if order != nil && order.Tipo == "send_instruction" {
-			t.Fatalf("no deberia existir send_instruction para worker running stale aunque runtime espere IO: %+v", order)
+		if order == nil {
+			continue
 		}
+		switch order.Tipo {
+		case "send_instruction":
+			t.Fatalf("no deberia existir send_instruction para worker running stale aunque runtime espere IO: %+v", order)
+		case "stop":
+			stopOrders++
+		case "start":
+			startOrders++
+		}
+	}
+	if stopOrders != 1 || startOrders != 1 {
+		t.Fatalf("deberia encolar stop/start coordinados, got stop=%d start=%d", stopOrders, startOrders)
 	}
 
 	msg, err := db.GetRuntimeMailbox(msgID)
@@ -16092,7 +16116,7 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeNoDespachaConW
 		t.Fatalf("mailbox final: %+v err=%v", msg, err)
 	}
 	if msg.Estado != "pendiente" {
-		t.Fatalf("la mailbox debe seguir pendiente mientras el worker stale no pueda recibir session_resume: %+v", msg)
+		t.Fatalf("la mailbox debe seguir pendiente hasta que el reinicio coordinado remonte el runtime: %+v", msg)
 	}
 }
 
@@ -17225,7 +17249,7 @@ func TestRuntimeHandlePuedeResumeTmuxSinSnapshotRefrescaHandleCanonicoDesdeDB(t 
 	}
 }
 
-func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeNoDespachaSiWorkerRunningPeroRuntimeNoEsperandoIO(t *testing.T) {
+func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeEscalaAReinicioCoordinadoSiWorkerRunningPeroRuntimeNoEsperandoIO(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()
 
@@ -17342,8 +17366,8 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeNoDespachaSiWo
 	if err != nil {
 		t.Fatalf("procesar mailbox session resume: %v", err)
 	}
-	if n != 0 {
-		t.Fatalf("no deberia despachar cuando worker running con heartbeat stale y runtime no esta esperando_io, got=%d", n)
+	if n != 1 {
+		t.Fatalf("deberia escalar a reinicio coordinado cuando worker running tiene heartbeat stale y runtime no esta esperando_io, got=%d", n)
 	}
 
 	agente := "Codex1"
@@ -17351,10 +17375,22 @@ func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeNoDespachaSiWo
 	if err != nil {
 		t.Fatalf("listar orders: %v", err)
 	}
+	var stopOrders, startOrders int
 	for _, order := range orders {
-		if order != nil && order.Tipo == "send_instruction" {
-			t.Fatalf("no deberia existir send_instruction con worker running stale y runtime no esperando_io: %+v", order)
+		if order == nil {
+			continue
 		}
+		switch order.Tipo {
+		case "send_instruction":
+			t.Fatalf("no deberia existir send_instruction con worker running stale y runtime no esperando_io: %+v", order)
+		case "stop":
+			stopOrders++
+		case "start":
+			startOrders++
+		}
+	}
+	if stopOrders != 1 || startOrders != 1 {
+		t.Fatalf("deberia encolar stop/start coordinados, got stop=%d start=%d", stopOrders, startOrders)
 	}
 
 	msg, err := db.GetRuntimeMailbox(msgID)

@@ -8018,9 +8018,57 @@ func procesarRuntimeMailboxSessionResumeConSesion(msg *db.RuntimeMailboxMessage,
 		return false, nil
 	}
 	if !runtimeHandleListaParaDispatchSessionResumeTMUX(handle, runtimeInstance) && !bootstrapPendienteCanonicoListo {
+		if restartQueued, err := encolarReinicioCoordinadoSessionResumeTMUXStale(msg, snapshot, handle, runtimeInstance, externalSessionID); err != nil {
+			return false, err
+		} else if restartQueued {
+			return true, nil
+		}
 		return false, nil
 	}
 	return encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID, "runtime_mailbox_session_resume", "runtime_mailbox_session_resume_supersede")
+}
+
+func encolarReinicioCoordinadoSessionResumeTMUXStale(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, externalSessionID string) (bool, error) {
+	if msg == nil || handle == nil || msg.ProyectoID == nil || *msg.ProyectoID <= 0 {
+		return false, nil
+	}
+	if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliverySessionResume {
+		return false, nil
+	}
+	if !runtimeHandleEsTmuxLike(handle) {
+		return false, nil
+	}
+	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
+	externalSessionID = firstNonEmpty(
+		strings.TrimSpace(externalSessionID),
+		strings.TrimSpace(stringMapValue(meta, "external_session_id")),
+	)
+	if externalSessionID == "" && !runtimeTMUXSessionResumePuedeDespacharPorRuntimeCanonico(runtimeInstance) {
+		return false, nil
+	}
+	agente := firstNonEmpty(strings.TrimSpace(msg.ToAgente), strings.TrimSpace(handle.Agente))
+	if agente == "" {
+		return false, nil
+	}
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, msg.ProyectoID, "stop", "pause", "checkpoint", "start", "restart", "resume", "handoff", "send_instruction"); err != nil {
+		return false, err
+	} else if pendiente {
+		return false, nil
+	}
+	motivo := fmt.Sprintf("runtime_mailbox_session_resume_stale_tmux:%s:%d", strings.TrimSpace(msg.Kind), msg.ID)
+	stopOrderID, startOrderID, err := db.EncolarReinicioCoordinadoRuntimeHandle(handle, msg.ProyectoID, motivo, "orquesta")
+	if err != nil {
+		return false, err
+	}
+	db.Audit("orquesta", "runtime_mailbox_session_resume_stale_tmux_restart", "runtime_mailbox", msg.ID,
+		fmt.Sprintf("agente=%s proyecto_id=%d kind=%s handle_id=%d stop_order_id=%d start_order_id=%d",
+			agente,
+			*msg.ProyectoID,
+			strings.TrimSpace(msg.Kind),
+			handle.ID,
+			stopOrderID,
+			startOrderID))
+	return true, nil
 }
 
 func consumirRuntimeMailboxSessionResumeCubiertaSiProcede(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, lane string) (bool, error) {
