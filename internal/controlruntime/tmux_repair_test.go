@@ -16,13 +16,14 @@ import (
 func TestEnsureTMUXMonitorFromMetadataJSONReattachesDeadMonitor(t *testing.T) {
 	dir := t.TempDir()
 	fakeTmux := writeLiveFakeTmuxScript(t, dir)
+	fakeCodexProfile := writeFakeCodexProfileCommand(t, dir)
 
 	arranque, err := ArrancarPlan(SolicitudArranque{
 		Agente:   "CodexTMUXRepair",
 		Proyecto: "orquestador",
 		Plan: &runtimeagente.LaunchPlan{
-			Comando:         "/bin/echo",
-			Args:            []string{"hola"},
+			Comando:         fakeCodexProfile,
+			Args:            []string{"CodexTMUXRepair"},
 			WorkingDir:      dir,
 			PerfilOperativo: "persistente",
 			Env: map[string]string{
@@ -43,9 +44,34 @@ func TestEnsureTMUXMonitorFromMetadataJSONReattachesDeadMonitor(t *testing.T) {
 	if strings.TrimSpace(heartbeatPath) == "" {
 		t.Fatalf("metadata sin worker_heartbeat_path: %+v", meta)
 	}
+	manifestPath, _ := meta["worker_manifest_path"].(string)
+	if strings.TrimSpace(manifestPath) == "" {
+		t.Fatalf("metadata sin worker_manifest_path: %+v", meta)
+	}
 	monitorPID := int(meta["tmux_monitor_pid"].(float64))
 	if monitorPID <= 0 {
 		t.Fatalf("metadata sin tmux_monitor_pid valido: %+v", meta)
+	}
+	if got := strings.TrimSpace(stringValueFromMetadata(meta, "profile_name")); got != "CodexTMUXRepair" {
+		t.Fatalf("metadata sin profile_name inicial: %+v", meta)
+	}
+	if got := filepath.Base(strings.TrimSpace(stringValueFromMetadata(meta, "profile_status_wrapper"))); got != "codex-perfil" {
+		t.Fatalf("metadata sin profile_status_wrapper inicial: %+v", meta)
+	}
+
+	manifestData, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read worker manifest: %v", err)
+	}
+	var manifest runtimeagente.WorkerManifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		t.Fatalf("unmarshal worker manifest: %v", err)
+	}
+	if manifest.Profile != "CodexTMUXRepair" {
+		t.Fatalf("worker manifest sin profile reparable: %+v", manifest)
+	}
+	if filepath.Base(strings.TrimSpace(manifest.ProfileStatusWrapper)) != "codex-perfil" {
+		t.Fatalf("worker manifest sin wrapper reparable: %+v", manifest)
 	}
 
 	beforeInfo := waitFileStat(t, heartbeatPath)
@@ -54,6 +80,11 @@ func TestEnsureTMUXMonitorFromMetadataJSONReattachesDeadMonitor(t *testing.T) {
 	}
 	meta["tmux_monitor_pid"] = 99999999
 	meta["supervisor_owner_pid"] = 1
+	delete(meta, "perfil_operativo")
+	delete(meta, "execution_profile")
+	delete(meta, "profile_name")
+	delete(meta, "profile_status_wrapper")
+	delete(meta, "can_send_input")
 	metaData, err := json.Marshal(meta)
 	if err != nil {
 		t.Fatalf("remarshal metadata tmux: %v", err)
@@ -78,6 +109,18 @@ func TestEnsureTMUXMonitorFromMetadataJSONReattachesDeadMonitor(t *testing.T) {
 	if got := strings.TrimSpace(stringValueFromMetadata(repairedMeta, "perfil_operativo")); got != "persistente" {
 		t.Fatalf("perfil_operativo reparado = %q, want persistente; meta=%+v", got, repairedMeta)
 	}
+	if got := strings.TrimSpace(stringValueFromMetadata(repairedMeta, "execution_profile")); got != "persistente" {
+		t.Fatalf("execution_profile reparado = %q, want persistente; meta=%+v", got, repairedMeta)
+	}
+	if got := strings.TrimSpace(stringValueFromMetadata(repairedMeta, "profile_name")); got != "CodexTMUXRepair" {
+		t.Fatalf("profile_name reparado = %q; meta=%+v", got, repairedMeta)
+	}
+	if got := filepath.Base(strings.TrimSpace(stringValueFromMetadata(repairedMeta, "profile_status_wrapper"))); got != "codex-perfil" {
+		t.Fatalf("profile_status_wrapper reparado = %q; meta=%+v", got, repairedMeta)
+	}
+	if _, ok := repairedMeta["can_send_input"]; !ok {
+		t.Fatalf("can_send_input reparado ausente: %+v", repairedMeta)
+	}
 
 	waitFileModAfter(t, heartbeatPath, beforeInfo.ModTime())
 	alive, err := procesoVivoPID(newMonitorPID)
@@ -87,6 +130,18 @@ func TestEnsureTMUXMonitorFromMetadataJSONReattachesDeadMonitor(t *testing.T) {
 	if !alive {
 		t.Fatalf("monitor tmux reenganchado no sigue vivo: pid=%d", newMonitorPID)
 	}
+}
+
+func writeFakeCodexProfileCommand(t *testing.T, dir string) string {
+	t.Helper()
+	scriptPath := filepath.Join(dir, "bin", "codex-perfil")
+	if err := os.MkdirAll(filepath.Dir(scriptPath), 0o755); err != nil {
+		t.Fatalf("mkdir fake codex-perfil: %v", err)
+	}
+	if err := os.WriteFile(scriptPath, []byte("#!/usr/bin/env bash\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write fake codex-perfil: %v", err)
+	}
+	return scriptPath
 }
 
 func TestCleanupTMUXSessionOnOwnerExitKillsSesionOllama(t *testing.T) {

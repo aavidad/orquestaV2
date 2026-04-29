@@ -163,10 +163,33 @@ func EnsureTMUXMonitorFromMetadataJSON(raw string) (string, bool, error) {
 		if mailboxDeliveryMode == "" {
 			mailboxDeliveryMode = strings.TrimSpace(snap.Manifest.MailboxDeliveryMode)
 		}
-		if strings.TrimSpace(stringValueFromMetadata(meta, "perfil_operativo")) == "" {
-			if executionProfile := strings.TrimSpace(snap.Manifest.ExecutionProfile); executionProfile != "" {
+		executionProfile := strings.TrimSpace(stringValueFromMetadata(meta, "execution_profile"))
+		if executionProfile == "" {
+			executionProfile = strings.TrimSpace(snap.Manifest.ExecutionProfile)
+		}
+		if executionProfile == "" {
+			executionProfile = strings.TrimSpace(stringValueFromMetadata(meta, "perfil_operativo"))
+		}
+		if executionProfile != "" {
+			if strings.TrimSpace(stringValueFromMetadata(meta, "perfil_operativo")) == "" {
 				meta["perfil_operativo"] = executionProfile
 			}
+			if strings.TrimSpace(stringValueFromMetadata(meta, "execution_profile")) == "" {
+				meta["execution_profile"] = executionProfile
+			}
+		}
+		if strings.TrimSpace(stringValueFromMetadata(meta, "profile_name")) == "" {
+			if profileName := strings.TrimSpace(snap.Manifest.Profile); profileName != "" {
+				meta["profile_name"] = profileName
+			}
+		}
+		if strings.TrimSpace(stringValueFromMetadata(meta, "profile_status_wrapper")) == "" {
+			if wrapper := strings.TrimSpace(snap.Manifest.ProfileStatusWrapper); wrapper != "" {
+				meta["profile_status_wrapper"] = wrapper
+			}
+		}
+		if _, ok := meta["can_send_input"]; !ok {
+			meta["can_send_input"] = snap.Manifest.CanSendInput
 		}
 	}
 
