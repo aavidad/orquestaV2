@@ -12888,6 +12888,84 @@ func TestProcesarRuntimeMailboxSessionResumeBatchUsaFallbackInteractivoConStdinR
 	}
 }
 
+func TestProcesarRuntimeMailboxSessionResumeBatchUsaFallbackInteractivoConSoloSupervisorRef(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"process_pty_cli","working_dir":"` + filepath.Join(tmp, "orquestador") + `","supervisor_ref":"codex1-supervisor","mailbox_delivery_mode":"session_resume","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='cli', handle_kind='process', capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"instruction":"haz una micro refactorizacion concreta","texto":"continua trabajo actual"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia materializar una send_instruction por fallback con supervisor_ref, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var send *db.RuntimeOrder
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			send = order
+			break
+		}
+	}
+	if send == nil {
+		t.Fatal("faltaba send_instruction")
+	}
+	if strings.Contains(send.PayloadJSON, `"external_session_id":`) {
+		t.Fatalf("no deberia incluir external_session_id en fallback con supervisor_ref: %s", send.PayloadJSON)
+	}
+	if !strings.Contains(send.PayloadJSON, `"mailbox_id":`+strconv.FormatInt(msgID, 10)) {
+		t.Fatalf("send_instruction sin mailbox_id: %s", send.PayloadJSON)
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchFallbackInteractivoRespetaGateDeReevaluacion(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()
@@ -12988,6 +13066,78 @@ func TestProcesarRuntimeMailboxSessionResumeBatchFallbackInteractivoRespetaGateD
 		t.Fatalf("mailbox final: %+v err=%v", msg, err)
 	} else if msg.Estado != "pendiente" {
 		t.Fatalf("mailbox deberia seguir pendiente hasta entrega real: %+v", msg)
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeBatchNoUsaFallbackInteractivoParaInstructionLegacy(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","stdin_raw_path":"` + filepath.Join(tmp, "codex.raw") + `","mailbox_delivery_mode":"session_resume","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='cli', handle_kind='process', capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"instruction":"haz una micro refactorizacion concreta","texto":"continua trabajo actual"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("instruction legacy no deberia usar fallback interactivo de session_resume, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			t.Fatalf("no deberia crear send_instruction para instruction legacy: %+v", order)
+		}
+	}
+	if msg, err := db.GetRuntimeMailbox(msgID); err != nil || msg == nil {
+		t.Fatalf("mailbox final: %+v err=%v", msg, err)
+	} else if msg.Estado != "pendiente" {
+		t.Fatalf("mailbox deberia seguir pendiente sin fallback interactivo: %+v", msg)
 	}
 }
 
@@ -25335,6 +25485,64 @@ func TestEncolarContinuacionTareaReasignadaPreservaExtras(t *testing.T) {
 	}
 	if !strings.Contains(orders[0].PayloadJSON, `"redistribuida_desde":"Claude1"`) {
 		t.Fatalf("payload extras inesperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestEncolarContinuacionTareaReasignadaInvalidaStatusSnapshot(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	now := time.Now().UTC()
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Generado:            now.Format(time.RFC3339Nano),
+		AgentesQuotaBlocked: []*db.Agente{{Nombre: "Codex3"}},
+	}, now, 5*time.Minute)
+	if _, ok := readStatusSnapshotFreshUsable(); !ok {
+		t.Fatal("snapshot de status deberia estar util antes del follow-up durable")
+	}
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	proyecto, err := db.GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+
+	encolada, err := encolarContinuacionTareaReasignada(
+		"Codex1",
+		proyecto,
+		177,
+		"Codex3",
+		"bloqueado_por_cuota",
+		"continua con la tarea reasignada",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("encolar continuacion: %v", err)
+	}
+	if !encolada {
+		t.Fatal("deberia encolar follow-up durable")
+	}
+	if _, ok := readStatusSnapshotFreshUsable(); ok {
+		t.Fatal("snapshot de status no deberia seguir util tras encolar follow-up durable")
+	}
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("runtime orders inesperadas: %+v", orders)
 	}
 }
 
@@ -44403,6 +44611,158 @@ func TestProcesarWorkerAtascadoAutonomiaRowNoDuplicaNudgeSiWorkQueueYaLoMarcaPen
 	}
 	if len(orders) != 0 {
 		t.Fatalf("no deberia duplicar nudge si la work-queue durable ya marca continuidad pendiente: %+v", orders)
+	}
+}
+
+func TestProcesarWorkerAtascadoAutonomiaRowNoDuplicaNudgeSiWorkQueueYaLoMarcaPendienteSinHandleUsandoSessionCWD(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	if err := db.ConfigSet("runtime_shared_account_active_ceiling", "4"); err != nil {
+		t.Fatalf("config ceiling: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-worker-durable-session-cwd",
+		Nombre:  "Orquestador Worker Durable Session CWD",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexDurableSession", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexDurableSession", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+
+	workDir := filepath.Join(tmp, ".orquesta-worktrees", "codex-durable-session")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	workQueueRaw, _ := json.Marshal(map[string]any{
+		"version":    1,
+		"updated_at": time.Now().UTC().Format(time.RFC3339Nano),
+		"current": map[string]any{
+			"mailbox_id":  177,
+			"kind":        "autonomia",
+			"action":      "continuar_trabajo",
+			"task_id":     99911,
+			"state":       "pending",
+			"recorded_at": time.Now().UTC().Format(time.RFC3339Nano),
+		},
+	})
+	if err := os.WriteFile(controlruntime.WorkQueuePathFromDir(workDir), workQueueRaw, 0o600); err != nil {
+		t.Fatalf("write work-queue: %v", err)
+	}
+
+	now := time.Now().UTC()
+	row := agentesapp.Row{
+		Agente:                    &db.Agente{Nombre: "CodexDurableSession"},
+		Asignacion:                &db.Asignacion{Agente: "CodexDurableSession", ProyectoID: proyectoID, ProyectoSlug: "orquestador-worker-durable-session-cwd", Estado: db.AsignacionActiva},
+		Sesion:                    &db.Sesion{Agente: "CodexDurableSession", ProyectoID: &proyectoID, Activa: true, Estado: "activa", CWD: workDir},
+		WorkerDriver:              "tmux_cli_session",
+		WorkerState:               "ready",
+		WorkerAlive:               true,
+		WorkerCanSendInput:        true,
+		WorkerMailboxDeliveryMode: runtimeagente.MailboxDeliverySessionResume,
+		WorkerHeartbeat:           ptrTime(now),
+		WorkerUpdatedAt:           ptrTime(now),
+		WorkerReadyAt:             ptrTime(now.Add(-25 * time.Minute)),
+		OpenTasks:                 1,
+		EstadoOperativo:           "atascado",
+		DetalleOperativo:          "sin progreso desde listo",
+	}
+
+	procesadas, err := procesarWorkerAtascadoAutonomiaRow(row, []agentesapp.Row{row}, now)
+	if err != nil {
+		t.Fatalf("procesar worker atascado row: %v", err)
+	}
+	if procesadas != 0 {
+		t.Fatalf("procesadas=%d, want 0", procesadas)
+	}
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: ptrString("CodexDurableSession")})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia duplicar nudge si la work-queue durable ya marca continuidad pendiente sin handle: %+v", orders)
+	}
+}
+
+func TestProcesarWorkerAtascadoAutonomiaRowNoDuplicaNudgeSiWorkQueueYaLoMarcaPendienteSinHandleUsandoRuntimeCWD(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	if err := db.ConfigSet("runtime_shared_account_active_ceiling", "4"); err != nil {
+		t.Fatalf("config ceiling: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-worker-durable-runtime-cwd",
+		Nombre:  "Orquestador Worker Durable Runtime CWD",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexDurableRuntime", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexDurableRuntime", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+
+	workDir := filepath.Join(tmp, ".orquesta-worktrees", "codex-durable-runtime")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	workQueueRaw, _ := json.Marshal(map[string]any{
+		"version":    1,
+		"updated_at": time.Now().UTC().Format(time.RFC3339Nano),
+		"current": map[string]any{
+			"mailbox_id":  188,
+			"kind":        "autonomia",
+			"action":      "continuar_trabajo",
+			"task_id":     99912,
+			"state":       "pending",
+			"recorded_at": time.Now().UTC().Format(time.RFC3339Nano),
+		},
+	})
+	if err := os.WriteFile(controlruntime.WorkQueuePathFromDir(workDir), workQueueRaw, 0o600); err != nil {
+		t.Fatalf("write work-queue: %v", err)
+	}
+
+	now := time.Now().UTC()
+	row := agentesapp.Row{
+		Agente:                    &db.Agente{Nombre: "CodexDurableRuntime"},
+		Asignacion:                &db.Asignacion{Agente: "CodexDurableRuntime", ProyectoID: proyectoID, ProyectoSlug: "orquestador-worker-durable-runtime-cwd", Estado: db.AsignacionActiva},
+		Runtime:                   &db.RuntimeInstance{Agente: "CodexDurableRuntime", ProyectoID: &proyectoID, LogicalState: "activo", ProcessState: "running", CWD: workDir},
+		WorkerDriver:              "tmux_cli_session",
+		WorkerState:               "ready",
+		WorkerAlive:               true,
+		WorkerCanSendInput:        true,
+		WorkerMailboxDeliveryMode: runtimeagente.MailboxDeliverySessionResume,
+		WorkerHeartbeat:           ptrTime(now),
+		WorkerUpdatedAt:           ptrTime(now),
+		WorkerReadyAt:             ptrTime(now.Add(-25 * time.Minute)),
+		OpenTasks:                 1,
+		EstadoOperativo:           "atascado",
+		DetalleOperativo:          "sin progreso desde listo",
+	}
+
+	procesadas, err := procesarWorkerAtascadoAutonomiaRow(row, []agentesapp.Row{row}, now)
+	if err != nil {
+		t.Fatalf("procesar worker atascado row: %v", err)
+	}
+	if procesadas != 0 {
+		t.Fatalf("procesadas=%d, want 0", procesadas)
+	}
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: ptrString("CodexDurableRuntime")})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia duplicar nudge si la work-queue durable ya marca continuidad pendiente sin handle: %+v", orders)
 	}
 }
 

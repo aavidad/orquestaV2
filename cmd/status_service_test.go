@@ -1264,6 +1264,37 @@ func TestInvalidateStatusSnapshotCacheConservaValorPeroMarcaStale(t *testing.T) 
 	}
 }
 
+func TestInvalidateStatusSnapshotCacheHardInutilizaSnapshotHastaRefresh(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	now := time.Date(2026, 4, 7, 0, 0, 0, 0, time.UTC)
+	prevNow := statusNowFunc
+	statusNowFunc = func() time.Time { return now }
+	defer func() { statusNowFunc = prevNow }()
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Generado:          now.Format(time.RFC3339),
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex1"}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex1"}},
+	}, now, time.Minute)
+
+	if _, ok := readStatusSnapshotFresh(); !ok {
+		t.Fatal("snapshot deberia existir fresco antes de invalidacion dura")
+	}
+	if _, ok := readStatusSnapshotAny(); !ok {
+		t.Fatal("snapshot deberia existir por fallback antes de invalidacion dura")
+	}
+
+	invalidateStatusSnapshotCacheHard()
+
+	if _, ok := readStatusSnapshotFresh(); ok {
+		t.Fatal("snapshot no deberia seguir fresco tras invalidacion dura")
+	}
+	if _, ok := readStatusSnapshotAny(); ok {
+		t.Fatal("snapshot no deberia seguir disponible por fallback tras invalidacion dura")
+	}
+}
+
 func TestAgentesVisiblesPorEstadoOperativoRowsUsaEstadoOperativoCanónico(t *testing.T) {
 	agentes := []*db.Agente{
 		{Nombre: "Codex6", Rol: "programador"},

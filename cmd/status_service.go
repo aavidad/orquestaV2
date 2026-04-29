@@ -83,6 +83,7 @@ var (
 		value      apiStatusResponse
 		expires    time.Time
 		ok         bool
+		hardStale  bool
 		retryAfter time.Time
 		refreshing bool
 		waitCh     chan struct{}
@@ -1488,6 +1489,7 @@ func storeStatusSnapshotWithTTL(status apiStatusResponse, now time.Time, ttl tim
 	statusCacheState.value = status
 	statusCacheState.expires = now.Add(ttl)
 	statusCacheState.ok = true
+	statusCacheState.hardStale = false
 	statusCacheState.retryAfter = time.Time{}
 	statusCacheState.refreshing = false
 	statusCacheState.waitCh = nil
@@ -1502,7 +1504,7 @@ func markStatusRefreshBackoff(now time.Time) {
 func readStatusSnapshotAny() (apiStatusResponse, bool) {
 	statusCacheState.mu.Lock()
 	defer statusCacheState.mu.Unlock()
-	if !statusCacheState.ok {
+	if !statusCacheState.ok || statusCacheState.hardStale {
 		return apiStatusResponse{}, false
 	}
 	if statusSnapshotIsDegenerate(statusCacheState.value) {
@@ -1514,7 +1516,7 @@ func readStatusSnapshotAny() (apiStatusResponse, bool) {
 func readStatusSnapshotFresh() (apiStatusResponse, bool) {
 	statusCacheState.mu.Lock()
 	defer statusCacheState.mu.Unlock()
-	if !statusCacheState.ok {
+	if !statusCacheState.ok || statusCacheState.hardStale {
 		return apiStatusResponse{}, false
 	}
 	if statusSnapshotIsDegenerate(statusCacheState.value) {
@@ -2022,6 +2024,7 @@ func resetStatusSnapshotCache() {
 	statusCacheState.value = apiStatusResponse{}
 	statusCacheState.expires = time.Time{}
 	statusCacheState.ok = false
+	statusCacheState.hardStale = false
 	statusCacheState.retryAfter = time.Time{}
 	statusCacheState.refreshing = false
 	statusCacheState.waitCh = nil
@@ -2038,6 +2041,18 @@ func invalidateStatusSnapshotCache() {
 		if statusCacheState.expires.IsZero() || statusCacheState.expires.After(deadline) {
 			statusCacheState.expires = deadline
 		}
+	}
+	statusCacheState.retryAfter = time.Time{}
+	if agentesService != nil {
+		agentesService.InvalidateCompactDetailCache()
+	}
+}
+
+func invalidateStatusSnapshotCacheHard() {
+	statusCacheState.mu.Lock()
+	defer statusCacheState.mu.Unlock()
+	if statusCacheState.ok {
+		statusCacheState.hardStale = true
 	}
 	statusCacheState.retryAfter = time.Time{}
 	if agentesService != nil {

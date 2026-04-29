@@ -7963,13 +7963,13 @@ func procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg *db.RuntimeMailb
 	} else if cubierta {
 		return true, nil
 	}
-	if !runtimeHandleAdmiteFallbackInteractivoTransitorio(handle) && !runtimeMailboxSessionResumePermiteFallbackInteractivoPipelineLocal(msg, handle, externalSessionID) {
+	fallbackTransitorio := runtimeHandleAdmiteFallbackInteractivoTransitorio(handle)
+	fallbackPipelineLocal := runtimeMailboxSessionResumePermiteFallbackInteractivoPipelineLocal(msg, handle, externalSessionID)
+	fallbackControlado := fallbackTransitorio || fallbackPipelineLocal
+	if !fallbackControlado {
 		return false, nil
 	}
 	if !runtimeMailboxShouldReevaluate("session_resume_interactive_fallback", msg.ID, handle.ID) {
-		return false, nil
-	}
-	if !runtimeHandleListaParaDispatchInteractivo(handle) {
 		return false, nil
 	}
 	return encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID, "runtime_mailbox_session_resume_interactive_fallback", "runtime_mailbox_session_resume_interactive_supersede")
@@ -8299,17 +8299,17 @@ func runtimeHandleAdmiteFallbackInteractivoTransitorio(handle *db.RuntimeHandle)
 	if !strings.EqualFold(strings.TrimSpace(handle.Transporte), "cli") || !strings.EqualFold(strings.TrimSpace(handle.HandleKind), "process") {
 		return false
 	}
-	for _, key := range []string{"rendered_command", "wrapped_command", "herramienta", "conector", "profile_status_wrapper"} {
-		if controlruntime.RenderedCommandLooksLikeTMUXPreferredCLI(value(key)) {
-			return false
-		}
-	}
 	if value("external_session_id") != "" {
 		return false
 	}
 	for _, key := range []string{"supervisor_ref", "stdin_path", "stdin_raw_path"} {
 		if value(key) != "" {
 			return true
+		}
+	}
+	for _, key := range []string{"rendered_command", "wrapped_command", "herramienta", "conector", "profile_status_wrapper"} {
+		if controlruntime.RenderedCommandLooksLikeTMUXPreferredCLI(value(key)) {
+			return false
 		}
 	}
 	return false
@@ -14099,11 +14099,11 @@ func rowDurableContinuityPending(row agentesapp.Row, now time.Time) bool {
 }
 
 func rowDurableContinuityState(row agentesapp.Row, now time.Time) (bool, int64) {
-	handle := row.Handle
-	if handle == nil {
+	metaRaw := rowDurableContinuityMetadata(row)
+	if strings.TrimSpace(metaRaw) == "" {
 		return false, 0
 	}
-	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(metaRaw)
 	if err != nil || snap == nil {
 		return false, 0
 	}
@@ -14123,6 +14123,34 @@ func rowDurableContinuityState(row agentesapp.Row, now time.Time) (bool, int64) 
 	default:
 		return false, 0
 	}
+}
+
+func rowDurableContinuityMetadata(row agentesapp.Row) string {
+	if row.Handle != nil && strings.TrimSpace(row.Handle.MetadataJSON) != "" {
+		return strings.TrimSpace(row.Handle.MetadataJSON)
+	}
+	if row.Sesion != nil && strings.TrimSpace(row.Sesion.CWD) != "" {
+		return metadataJSONFromWorkingDirCmd(strings.TrimSpace(row.Sesion.CWD))
+	}
+	if row.Runtime != nil && strings.TrimSpace(row.Runtime.CWD) != "" {
+		return metadataJSONFromWorkingDirCmd(strings.TrimSpace(row.Runtime.CWD))
+	}
+	return ""
+}
+
+func metadataJSONFromWorkingDirCmd(workingDir string) string {
+	workingDir = strings.TrimSpace(workingDir)
+	if workingDir == "" {
+		return ""
+	}
+	raw, err := json.Marshal(map[string]any{
+		"worker_schema_version": runtimeagente.WorkerMetadataSchemaVersion,
+		"working_dir":           workingDir,
+	})
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }
 
 func rowHandleProyectoID(handle *db.RuntimeHandle) *int64 {
@@ -18349,6 +18377,7 @@ func encolarContinuacionTareaReasignada(agente string, proyecto *db.Proyecto, ta
 	if err != nil || !encolada {
 		return encolada, err
 	}
+	invalidateStatusSnapshotCacheHard()
 	var projectID *int64
 	if proyecto != nil && proyecto.ID > 0 {
 		projectID = ptrInt64Cmd(proyecto.ID)
