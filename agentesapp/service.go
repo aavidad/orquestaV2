@@ -4329,6 +4329,13 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 		}
 		return "bloqueado_por_cuota", detalle
 	}
+	if !sinCuotaProveedor && !workerOperativoFresco && panelAgentPauseReasonVisible(strings.TrimSpace(agente.MotivoPausa)) {
+		detalle := strings.TrimSpace(agente.MotivoPausa)
+		if detalle == "" && agente.ReanimarAt != nil && !agente.ReanimarAt.IsZero() {
+			detalle = "reanimacion " + agente.ReanimarAt.Local().Format("15:04")
+		}
+		return "bloqueado_por_cuota", detalle
+	}
 	if blocked, detalle := row.pendingControlOrderBlocksRuntime(now); blocked {
 		return "bloqueado_por_runtime", detalle
 	}

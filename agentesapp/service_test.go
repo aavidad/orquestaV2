@@ -5420,6 +5420,29 @@ func TestBuildDetailCompactReconcilesQuotaFromPanelSnapshot(t *testing.T) {
 	}
 }
 
+func TestDeriveOperationalStateMantienePausaVisibleAunqueEstadoCuotaFigureActivo(t *testing.T) {
+	now := time.Now().UTC()
+	row := Row{
+		Agente: &db.Agente{
+			Nombre:      "CodexBudget",
+			Rol:         "programador",
+			Activo:      false,
+			Habilitado:  true,
+			EstadoCuota: "activo",
+			MotivoPausa: "Presupuesto crítico. Pausa y relevo recomendados: cuota restante visible 9% en 5h",
+			ReanimarAt:  timePtr(now.Add(10 * time.Minute)),
+		},
+	}
+
+	estado, detalle := deriveOperationalState(row, now, 10*time.Minute)
+	if estado != "bloqueado_por_cuota" {
+		t.Fatalf("estado operativo=%q, want bloqueado_por_cuota", estado)
+	}
+	if !strings.Contains(strings.ToLower(detalle), "pausa") && !strings.Contains(strings.ToLower(detalle), "presupuesto") {
+		t.Fatalf("detalle operativo inesperado: %q", detalle)
+	}
+}
+
 func TestBuildReanimationScheduleFiltraVencidasYExponeLeases(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(7)
