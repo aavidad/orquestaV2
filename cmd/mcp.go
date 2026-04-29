@@ -6106,6 +6106,15 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	return buildSupervisorReviewSnapshotWithStatus(supervisor, status)
 }
 
+var (
+	supervisorReviewThreadsSnapshotBuilder   = buildSupervisorThreadsSnapshot
+	supervisorReviewSubagentsSnapshotBuilder = buildSupervisorSubagentsSnapshot
+	supervisorReviewPipelineSnapshotBuilder  = buildSupervisorPipelineSnapshotFromInputs
+	supervisorReviewSignalsBuilder           = listarSignalsRevisionSupervisor
+	supervisorReviewMergesBuilder            = listarMergesRevisionSupervisor
+	supervisorReviewCriticalRiskBuilder      = buildSupervisorWorkspaceRiskFocusFromActions
+)
+
 func buildSupervisorReviewSnapshotWithStatus(supervisor string, status apiStatusResponse) (map[string]any, error) {
 	supervisor = strings.TrimSpace(supervisor)
 	if supervisor == "" {
@@ -6126,21 +6135,29 @@ func buildSupervisorReviewSnapshotWithStatus(supervisor string, status apiStatus
 		}
 		openGates = append(openGates, gate)
 	}
-	signals, err := listarSignalsRevisionSupervisor(12)
-	if err != nil {
-		return nil, err
+	signals := []*supervisorReviewSignal{}
+	if snapshot, timeoutErr := runAPITimeboxed(150*time.Millisecond, func() ([]*supervisorReviewSignal, error) {
+		return supervisorReviewSignalsBuilder(12)
+	}, errStatusFetchTimeout); timeoutErr == nil && snapshot != nil {
+		signals = snapshot
 	}
-	merges, err := listarMergesRevisionSupervisor(12)
-	if err != nil {
-		return nil, err
+	merges := []*db.GitMerge{}
+	if snapshot, timeoutErr := runAPITimeboxed(150*time.Millisecond, func() ([]*db.GitMerge, error) {
+		return supervisorReviewMergesBuilder(12)
+	}, errStatusFetchTimeout); timeoutErr == nil && snapshot != nil {
+		merges = snapshot
 	}
-	conflicts, err := listarSupervisorModuleConflictsSnapshotSafe(status.TareasActivas)
-	if err != nil {
-		return nil, err
+	conflicts := []supervisorModuleConflict{}
+	if snapshot, timeoutErr := runAPITimeboxed(100*time.Millisecond, func() ([]supervisorModuleConflict, error) {
+		return listarSupervisorModuleConflictsSnapshotSafe(status.TareasActivas)
+	}, errStatusFetchTimeout); timeoutErr == nil && snapshot != nil {
+		conflicts = snapshot
 	}
-	mailboxPendiente, err := buildOpenClawPendingMailbox(status.Agentes)
-	if err != nil {
-		return nil, err
+	mailboxPendiente := []apiOpenClawMailboxLite{}
+	if snapshot, timeoutErr := runAPITimeboxed(100*time.Millisecond, func() ([]apiOpenClawMailboxLite, error) {
+		return buildOpenClawPendingMailbox(status.Agentes)
+	}, errStatusFetchTimeout); timeoutErr == nil && snapshot != nil {
+		mailboxPendiente = snapshot
 	}
 	outbox := notificaciones.OutboxSummary{}
 	if snapshot, timeoutErr := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.OutboxSummary, error) {
@@ -6149,17 +6166,23 @@ func buildSupervisorReviewSnapshotWithStatus(supervisor string, status apiStatus
 		outbox = snapshot
 	}
 	normalizedEvents := buildOpenClawNormalizedEventsFromData(openGates, signals, merges, outbox.Recientes, 20)
-	threadSessions, err := buildSupervisorThreadsSnapshot(supervisor, "", 100)
-	if err != nil {
-		return nil, err
+	threadSessions := map[string]any{}
+	if snapshot, timeoutErr := runAPITimeboxed(150*time.Millisecond, func() (map[string]any, error) {
+		return supervisorReviewThreadsSnapshotBuilder(supervisor, "", 100)
+	}, errStatusFetchTimeout); timeoutErr == nil && snapshot != nil {
+		threadSessions = snapshot
 	}
-	subagents, err := buildSupervisorSubagentsSnapshot(supervisor, "", "", 100)
-	if err != nil {
-		return nil, err
+	subagents := map[string]any{}
+	if snapshot, timeoutErr := runAPITimeboxed(150*time.Millisecond, func() (map[string]any, error) {
+		return supervisorReviewSubagentsSnapshotBuilder(supervisor, "", "", 100)
+	}, errStatusFetchTimeout); timeoutErr == nil && snapshot != nil {
+		subagents = snapshot
 	}
-	pipelineState, err := buildSupervisorPipelineSnapshotFromInputs(supervisor, "", 20, status, openGates, signals, merges, conflicts, mailboxPendiente)
-	if err != nil {
-		return nil, err
+	pipelineState := map[string]any{}
+	if snapshot, timeoutErr := runAPITimeboxed(200*time.Millisecond, func() (map[string]any, error) {
+		return supervisorReviewPipelineSnapshotBuilder(supervisor, "", 20, status, openGates, signals, merges, conflicts, mailboxPendiente)
+	}, errStatusFetchTimeout); timeoutErr == nil && snapshot != nil {
+		pipelineState = snapshot
 	}
 	worktreeDrift := []apiOpenClawWorktreeDrift(nil)
 	if snapshot, timeoutErr := runAPITimeboxed(openClawWorktreeDriftTimeout, func() ([]apiOpenClawWorktreeDrift, error) {
@@ -6177,9 +6200,11 @@ func buildSupervisorReviewSnapshotWithStatus(supervisor string, status apiStatus
 	markSupervisorRecommendedActions(recommended)
 	actionQueue := cloneSupervisorRecommendedActions(recommended)
 	safeQueue := buildSupervisorSafeActionQueue(actionQueue)
-	criticalProjectRisk, err := buildSupervisorWorkspaceRiskFocusFromActions(actionQueue)
-	if err != nil {
-		return nil, err
+	var criticalProjectRisk *workspaceAutonomyProjectSummary
+	if snapshot, timeoutErr := runAPITimeboxed(200*time.Millisecond, func() (*workspaceAutonomyProjectSummary, error) {
+		return supervisorReviewCriticalRiskBuilder(actionQueue)
+	}, errStatusFetchTimeout); timeoutErr == nil {
+		criticalProjectRisk = snapshot
 	}
 	var nextAction any
 	if len(actionQueue) > 0 {

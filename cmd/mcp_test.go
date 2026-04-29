@@ -202,10 +202,10 @@ func TestMCPHandleInitializeNegociaVersion(t *testing.T) {
 	if payload["protocolVersion"] != "2025-06-18" {
 		t.Fatalf("version inesperada: %#v", payload["protocolVersion"])
 	}
-	if !srv.initialized {
-		t.Fatalf("el servidor no quedo inicializado")
+		if !srv.initialized {
+			t.Fatalf("el servidor no quedo inicializado")
+		}
 	}
-}
 
 func TestAPIMCPDescribeEndpoint(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/mcp", nil)
@@ -328,12 +328,12 @@ func TestAPIMCPCallServerRearmStateless(t *testing.T) {
 	}
 	item, _ := content[0].(map[string]any)
 	text, _ := item["text"].(string)
-	for _, token := range []string{`"ok": true`, `"supervisor": "OpenClaw"`, `"queue_kind": "safe"`} {
-		if !strings.Contains(text, token) {
-			t.Fatalf("resultado MCP sin token %q: %s", token, text)
+		for _, token := range []string{`"ok": true`, `"supervisor": "OpenClaw"`, `"queue_kind": "safe"`} {
+			if !strings.Contains(text, token) {
+				t.Fatalf("resultado MCP sin token %q: %s", token, text)
+			}
 		}
 	}
-}
 
 func TestMCPToolsIncluyeLenguaje(t *testing.T) {
 	tools := listMCPTools()
@@ -6980,6 +6980,90 @@ func TestBuildSupervisorReviewSnapshotSafeActionQueueRespetaProyectoCriticoPorRi
 		nextSafeAction, _ := snapshot["next_safe_action"].(supervisorRecommendedAction)
 		if nextSafeAction.Action != "replanificar_por_cuota" || nextSafeAction.Target != fmt.Sprintf("tarea:%d", taskHigh) {
 			t.Fatalf("next_safe_action deberia respetar el arbitraje por proyecto, got=%+v", nextSafeAction)
+		}
+	})
+}
+
+func TestBuildSupervisorReviewSnapshotWithStatusToleraSeccionesLentasOMuertas(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prevThreads := supervisorReviewThreadsSnapshotBuilder
+		prevSubagents := supervisorReviewSubagentsSnapshotBuilder
+		prevPipeline := supervisorReviewPipelineSnapshotBuilder
+		prevSignals := supervisorReviewSignalsBuilder
+		prevMerges := supervisorReviewMergesBuilder
+		prevCriticalRisk := supervisorReviewCriticalRiskBuilder
+		prevDrift := openClawWorktreeDriftBuilder
+		defer func() {
+			supervisorReviewThreadsSnapshotBuilder = prevThreads
+			supervisorReviewSubagentsSnapshotBuilder = prevSubagents
+			supervisorReviewPipelineSnapshotBuilder = prevPipeline
+			supervisorReviewSignalsBuilder = prevSignals
+			supervisorReviewMergesBuilder = prevMerges
+			supervisorReviewCriticalRiskBuilder = prevCriticalRisk
+			openClawWorktreeDriftBuilder = prevDrift
+		}()
+
+		supervisorReviewThreadsSnapshotBuilder = func(supervisor, sessionID string, limit int) (map[string]any, error) {
+			return nil, fmt.Errorf("threads degradadas")
+		}
+		supervisorReviewSubagentsSnapshotBuilder = func(supervisor, proyectoSlug, sessionID string, limit int) (map[string]any, error) {
+			return nil, fmt.Errorf("subagents degradados")
+		}
+		supervisorReviewPipelineSnapshotBuilder = func(supervisor, proyectoSlug string, limit int, status apiStatusResponse, gates []*db.ReviewGate, signals []*supervisorReviewSignal, merges []*db.GitMerge, conflicts []supervisorModuleConflict, mailboxPendiente []apiOpenClawMailboxLite) (map[string]any, error) {
+			return nil, fmt.Errorf("pipeline degradado")
+		}
+		supervisorReviewSignalsBuilder = func(limit int) ([]*supervisorReviewSignal, error) {
+			return nil, fmt.Errorf("signals degradadas")
+		}
+		supervisorReviewMergesBuilder = func(limit int) ([]*db.GitMerge, error) {
+			return nil, fmt.Errorf("merges degradados")
+		}
+		supervisorReviewCriticalRiskBuilder = func(actions []supervisorRecommendedAction) (*workspaceAutonomyProjectSummary, error) {
+			return nil, fmt.Errorf("critical risk degradado")
+		}
+		openClawWorktreeDriftBuilder = func(status apiStatusResponse) ([]apiOpenClawWorktreeDrift, error) {
+			return nil, nil
+		}
+
+		status := apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			TareasPorEstado: map[string]int{
+				string(db.TareaLibre): 1,
+			},
+		}
+
+		snapshot, err := buildSupervisorReviewSnapshotWithStatus("OpenClaw", status)
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshotWithStatus no deberia fallar por secciones degradadas: %v", err)
+		}
+		queue, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+		if len(queue) == 0 {
+			t.Fatalf("action_queue no deberia quedar vacia: %+v", snapshot)
+		}
+		if queue[0].Kind != "dispatch" {
+			t.Fatalf("action_queue deberia conservar accion operativa minima, got=%+v", queue[0])
+		}
+		safeQueue, _ := snapshot["safe_action_queue"].([]supervisorRecommendedAction)
+		if len(safeQueue) == 0 {
+			t.Fatalf("safe_action_queue no deberia quedar vacia: %+v", snapshot)
+		}
+		nextAction, _ := snapshot["next_action"].(supervisorRecommendedAction)
+		if nextAction.Kind != "dispatch" {
+			t.Fatalf("next_action inesperada: %+v", nextAction)
+		}
+		if signals, _ := snapshot["signals"].([]*supervisorReviewSignal); len(signals) != 0 {
+			t.Fatalf("signals deberia degradarse a vacio: %+v", signals)
+		}
+		if merges, _ := snapshot["merges"].([]*db.GitMerge); len(merges) != 0 {
+			t.Fatalf("merges deberia degradarse a vacio: %+v", merges)
+		}
+		if risk, _ := snapshot["critical_project_risk"].(*workspaceAutonomyProjectSummary); risk != nil {
+			t.Fatalf("critical_project_risk deberia degradarse a nil: %#v", risk)
 		}
 	})
 }
