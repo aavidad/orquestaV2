@@ -752,6 +752,16 @@ func TestAPIServerExponeMetadatosDescubrimiento(t *testing.T) {
 	if len(payload.Capabilities) == 0 {
 		t.Fatalf("capabilities vacias: %+v", payload)
 	}
+	foundRearm := false
+	for _, capability := range payload.Capabilities {
+		if capability == "supervisor-rearm" {
+			foundRearm = true
+			break
+		}
+	}
+	if !foundRearm {
+		t.Fatalf("falta capability supervisor-rearm: %+v", payload.Capabilities)
+	}
 }
 
 func TestAPIServerOperationalExponeResumenOperativo(t *testing.T) {
@@ -861,6 +871,56 @@ func TestAPIServerOperationalStrictProbeDevuelve503CuandoNoEsOperativo(t *testin
 	}
 }
 
+func TestAPIServerOperationalExponeHintRearm(t *testing.T) {
+	prevReview := serverOperationalReviewSnapshotFn
+	defer func() {
+		serverOperationalReviewSnapshotFn = prevReview
+	}()
+
+	serverOperationalReviewSnapshotFn = func(supervisor string) (map[string]any, error) {
+		return map[string]any{
+			"supervisor": supervisor,
+			"next_safe_action": supervisorRecommendedAction{
+				Target:   "tarea:24",
+				Action:   "inspeccionar_handoff_fallido",
+				Reason:   "handoff atascado sin confirmacion",
+				Priority: "alta",
+			},
+		}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational?strict=1", nil)
+	rec := httptest.NewRecorder()
+	apiWriteServerOperational(rec, req, serverOperationalInfo{
+		State:       "degraded",
+		Operational: false,
+		Reason:      "tasks_without_workers",
+	})
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("X-Orquesta-Rearm-Needed"); got != "true" {
+		t.Fatalf("header rearm needed inesperado: %q", got)
+	}
+	if got := rec.Header().Get("X-Orquesta-Rearm-Available"); got != "true" {
+		t.Fatalf("header rearm available inesperado: %q", got)
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode operational con rearm: %v", err)
+	}
+	if payload.Rearm == nil || !payload.Rearm.Needed || !payload.Rearm.Available {
+		t.Fatalf("hint rearm ausente: %+v", payload)
+	}
+	if payload.Rearm.Tool != "orquesta.server.rearm" || payload.Rearm.Endpoint != "/api/server/rearm" {
+		t.Fatalf("surface rearm inesperada: %+v", payload.Rearm)
+	}
+	if payload.Rearm.NextSafeAction == nil || payload.Rearm.NextSafeAction.Action != "inspeccionar_handoff_fallido" {
+		t.Fatalf("next safe action inesperada: %+v", payload.Rearm)
+	}
+}
+
 func TestAPIServerOperationalStrictProbeMantiene200SiSigueOperativo(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/server/operational?probe=true", nil)
 	rec := httptest.NewRecorder()
@@ -885,6 +945,36 @@ func TestAPIServerOperationalStrictProbeMantiene200SiSigueOperativo(t *testing.T
 	}
 	if !payload.Operational || payload.State != "idle" || strings.TrimSpace(payload.Reason) == "" {
 		t.Fatalf("payload idle inesperado: %+v", payload)
+	}
+}
+
+func TestAPIServerRearmAplicaSiguienteAccionSegura(t *testing.T) {
+	prevApply := serverOperationalApplyNextActionFn
+	defer func() {
+		serverOperationalApplyNextActionFn = prevApply
+	}()
+
+	serverOperationalApplyNextActionFn = func(supervisor string) (map[string]any, error) {
+		return map[string]any{
+			"ok":         true,
+			"supervisor": supervisor,
+			"queue_kind": "safe",
+		}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/server/rearm?supervisor=OpenClaw", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerServerRearm(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /api/server/rearm: %v", err)
+	}
+	if payload["ok"] != true || payload["queue_kind"] != "safe" || payload["supervisor"] != "OpenClaw" {
+		t.Fatalf("payload server rearm inesperado: %#v", payload)
 	}
 }
 

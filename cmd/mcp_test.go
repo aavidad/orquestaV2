@@ -277,6 +277,64 @@ func TestAPIMCPCallToolStateless(t *testing.T) {
 	})
 }
 
+func TestAPIMCPCallServerRearmStateless(t *testing.T) {
+	prevApply := serverOperationalApplyNextActionFn
+	defer func() {
+		serverOperationalApplyNextActionFn = prevApply
+	}()
+
+	serverOperationalApplyNextActionFn = func(supervisor string) (map[string]any, error) {
+		return map[string]any{
+			"ok":         true,
+			"supervisor": supervisor,
+			"queue_kind": "safe",
+		}, nil
+	}
+
+	body := mustJSON(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "orquesta.server.rearm",
+			"arguments": map[string]any{"supervisor": "OpenClaw"},
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/mcp", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp mcpResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Error != nil {
+		t.Fatalf("mcp error inesperado: %+v", resp.Error)
+	}
+	result, ok := resp.Result.(map[string]any)
+	if !ok {
+		t.Fatalf("resultado inesperado: %#v", resp.Result)
+	}
+	content, ok := result["content"].([]any)
+	if !ok || len(content) == 0 {
+		t.Fatalf("content MCP inesperado: %#v", result)
+	}
+	item, _ := content[0].(map[string]any)
+	text, _ := item["text"].(string)
+	for _, token := range []string{`"ok": true`, `"supervisor": "OpenClaw"`, `"queue_kind": "safe"`} {
+		if !strings.Contains(text, token) {
+			t.Fatalf("resultado MCP sin token %q: %s", token, text)
+		}
+	}
+}
+
 func TestMCPToolsIncluyeLenguaje(t *testing.T) {
 	tools := listMCPTools()
 	for _, name := range []string{

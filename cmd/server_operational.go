@@ -14,6 +14,8 @@ var (
 	serverOperationalCountTasksFetcher = db.ContarTareasPorEstado
 	serverOperationalDispatchFetcher   = statusDispatchSummaryFetcher
 	serverOperationalOptionalTimeout   = statusOptionalSectionTimeout
+	serverOperationalReviewSnapshotFn  = buildSupervisorReviewSnapshot
+	serverOperationalApplyNextActionFn = applySupervisorNextAction
 )
 
 type serverOperationalInfo struct {
@@ -46,6 +48,18 @@ type serverOperationalInfo struct {
 	AutonomyPending     int                              `json:"autonomyPending"`
 	AutonomyConfirmed   int                              `json:"autonomyConfirmed"`
 	AutonomyHandoffs    int                              `json:"autonomyHandoffs"`
+	Rearm               *serverOperationalRearmHint      `json:"rearm,omitempty"`
+}
+
+type serverOperationalRearmHint struct {
+	Needed         bool                         `json:"needed"`
+	Available      bool                         `json:"available"`
+	Supervisor     string                       `json:"supervisor,omitempty"`
+	Reason         string                       `json:"reason,omitempty"`
+	Tool           string                       `json:"tool,omitempty"`
+	Endpoint       string                       `json:"endpoint,omitempty"`
+	Method         string                       `json:"method,omitempty"`
+	NextSafeAction *supervisorRecommendedAction `json:"nextSafeAction,omitempty"`
 }
 
 func registeredAgentCountFromStatus(status apiStatusResponse) int {
@@ -203,7 +217,42 @@ func normalizeServerOperationalInfo(info serverOperationalInfo) serverOperationa
 	autonomyHighlights, criticalProjectRisk := serverOperationalRiskContext(&info)
 	info.AutonomyHighlights = autonomyHighlights
 	info.CriticalProjectRisk = criticalProjectRisk
+	info.Rearm = buildServerOperationalRearmHint(info)
 	return info
+}
+
+func buildServerOperationalRearmHint(info serverOperationalInfo) *serverOperationalRearmHint {
+	if info.Operational {
+		return nil
+	}
+	supervisor := resolveSupervisorName("")
+	hint := &serverOperationalRearmHint{
+		Needed:     true,
+		Supervisor: supervisor,
+		Reason:     strings.TrimSpace(info.Reason),
+		Tool:       "orquesta.server.rearm",
+		Endpoint:   "/api/server/rearm",
+		Method:     "POST",
+	}
+	snapshot, ok := runStatusOptional(serverOperationalOptionalTimeout, func() (map[string]any, error) {
+		return serverOperationalReviewSnapshotFn(supervisor)
+	})
+	if !ok || snapshot == nil {
+		return hint
+	}
+	if nextSafeAction := supervisorNextSafeActionFromSnapshot(snapshot); nextSafeAction != nil {
+		hint.Available = true
+		hint.NextSafeAction = nextSafeAction
+		if reason := strings.TrimSpace(nextSafeAction.Reason); reason != "" {
+			hint.Reason = reason
+		}
+	}
+	return hint
+}
+
+func serverOperationalApplyNextAction(supervisor string) (map[string]any, error) {
+	supervisor = resolveSupervisorName(supervisor)
+	return serverOperationalApplyNextActionFn(supervisor)
 }
 
 func visibleWorkerCount(totalVisible, supervisors int) int {

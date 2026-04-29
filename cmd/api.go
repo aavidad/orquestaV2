@@ -823,6 +823,17 @@ type apiRuntimeWakeResponse struct {
 	Warm    bool `json:"warm"`
 }
 
+type apiRuntimeSelfHealResponse struct {
+	OK            bool                                  `json:"ok"`
+	Wake          apiRuntimeWakeResponse                `json:"wake"`
+	Hygiene       apiRuntimeProcessAutonomiaResponse    `json:"hygiene"`
+	Degradados    apiRuntimeProcessAutonomiaResponse    `json:"degradados"`
+	Autonomia     apiRuntimeProcessAutonomiaResponse    `json:"autonomia"`
+	Reanimaciones apiRuntimeProcessReanimationsResponse `json:"reanimaciones"`
+	Operational   serverOperationalInfo                 `json:"operational"`
+	Errors        []string                              `json:"errors,omitempty"`
+}
+
 type apiRuntimeProcessMailboxResponse struct {
 	OK    bool `json:"ok"`
 	Count int  `json:"count"`
@@ -904,6 +915,9 @@ var runtimeProcessDegradadosEnCurso atomic.Bool
 var runtimeProcessTranscriptEnCurso atomic.Bool
 var runtimeProcessReanimacionesEnCurso atomic.Bool
 var runtimeProcessReanimationsBatchFn = ejecutarRuntimeProcessReanimationsBatch
+var apiRuntimeWakeOrdersFn = wakeControlPlaneRuntimeOrders
+var apiRuntimeWakeMailboxFn = wakeControlPlaneRuntimeMailbox
+var apiRuntimeWakeWarmFn = wakeControlPlaneWarm
 var apiAgentResetReanimacionEnCurso sync.Map
 
 type apiRuntimeProcessMailboxRequest struct {
@@ -1026,6 +1040,7 @@ type apiRuntimeA2UIChartRow struct {
 func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/server", apiHandlerServer)
 	mux.HandleFunc("/api/server/operational", apiHandlerServerOperational)
+	mux.HandleFunc("/api/server/rearm", apiHandlerServerRearm)
 	mux.HandleFunc("/api/mcp", apiHandlerMCP)
 	mux.HandleFunc("/api/status", apiHandlerStatus)
 	mux.HandleFunc("/api/diagnostico", apiHandlerDiagnostico)
@@ -1222,6 +1237,7 @@ func apiHandlerServer(w http.ResponseWriter, r *http.Request) {
 			"runtimes",
 			"control-plane",
 			"operational-status",
+			"supervisor-rearm",
 		},
 	}
 	apiWriteJSON(w, http.StatusOK, info)
@@ -1279,7 +1295,30 @@ func apiWriteServerOperational(w http.ResponseWriter, r *http.Request, info serv
 	if reason := strings.TrimSpace(info.Reason); reason != "" {
 		w.Header().Set("X-Orquesta-Operational-Reason", reason)
 	}
+	if info.Rearm != nil {
+		w.Header().Set("X-Orquesta-Rearm-Needed", strconv.FormatBool(info.Rearm.Needed))
+		w.Header().Set("X-Orquesta-Rearm-Available", strconv.FormatBool(info.Rearm.Available))
+	}
 	apiWriteJSON(w, status, info)
+}
+
+func apiHandlerServerRearm(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	result, err := serverOperationalApplyNextAction(r.URL.Query().Get("supervisor"))
+	if err != nil {
+		status := http.StatusInternalServerError
+		if strings.Contains(strings.ToLower(err.Error()), "no hay acción segura aplicable") {
+			status = http.StatusConflict
+		}
+		apiWriteJSON(w, status, map[string]any{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, result)
 }
 
 func apiServerOperationalStrictProbe(r *http.Request) bool {

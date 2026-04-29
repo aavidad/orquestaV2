@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,8 @@ func TestMCPToolsIncluyeControlSurfaces(t *testing.T) {
 	tools := listMCPTools()
 	for _, name := range []string{
 		"orquesta.server.operational",
+		"orquesta.server.self_heal",
+		"orquesta.server.rearm",
 		"orquesta.workspace.control",
 	} {
 		if !mcpToolListed(tools, name) {
@@ -61,6 +64,142 @@ func TestMCPToolServerOperationalUsaFallbackCanonico(t *testing.T) {
 	info, _ := result["structuredContent"].(serverOperationalInfo)
 	if info.State != "ready" || !info.Operational || info.TasksInProgress != 1 || info.ActiveAgents != 1 {
 		t.Fatalf("server operational inesperado: %+v", info)
+	}
+}
+
+func TestMCPToolServerRearmAplicaSiguienteAccionSegura(t *testing.T) {
+	prevApply := serverOperationalApplyNextActionFn
+	defer func() {
+		serverOperationalApplyNextActionFn = prevApply
+	}()
+
+	serverOperationalApplyNextActionFn = func(supervisor string) (map[string]any, error) {
+		return map[string]any{
+			"ok":         true,
+			"supervisor": supervisor,
+			"queue_kind": "safe",
+			"next_safe_action": supervisorRecommendedAction{
+				Target:   "tarea:24",
+				Action:   "inspeccionar_handoff_fallido",
+				Priority: "alta",
+			},
+		}, nil
+	}
+
+	result, err := callMCPTool("orquesta.server.rearm", map[string]any{"supervisor": "OpenClaw"})
+	if err != nil {
+		t.Fatalf("server rearm MCP: %v", err)
+	}
+	if result["isError"] != false {
+		t.Fatalf("server rearm marcado como error: %#v", result)
+	}
+	payload, _ := result["structuredContent"].(map[string]any)
+	if payload["queue_kind"] != "safe" || payload["supervisor"] != "OpenClaw" {
+		t.Fatalf("payload server rearm inesperado: %#v", payload)
+	}
+}
+
+func TestMCPToolServerSelfHealEjecutaCarrilesCanonicosYDevuelveOperational(t *testing.T) {
+	prevWakeOrders := apiRuntimeWakeOrdersFn
+	prevWakeMailbox := apiRuntimeWakeMailboxFn
+	prevWakeWarm := apiRuntimeWakeWarmFn
+	prevHygiene := runtimeProcessHygieneBatch
+	prevDegradados := runtimeProcessDegradadosBatchDetailed
+	prevAutonomia := runtimeProcessAutonomiaBatch
+	prevReanimations := runtimeProcessReanimationsBatchFn
+	prevOperational := mcpBuildServerOperationalInfoFn
+	defer func() {
+		apiRuntimeWakeOrdersFn = prevWakeOrders
+		apiRuntimeWakeMailboxFn = prevWakeMailbox
+		apiRuntimeWakeWarmFn = prevWakeWarm
+		runtimeProcessHygieneBatch = prevHygiene
+		runtimeProcessDegradadosBatchDetailed = prevDegradados
+		runtimeProcessAutonomiaBatch = prevAutonomia
+		runtimeProcessReanimationsBatchFn = prevReanimations
+		mcpBuildServerOperationalInfoFn = prevOperational
+	}()
+
+	apiRuntimeWakeOrdersFn = func() bool { return true }
+	apiRuntimeWakeMailboxFn = func() bool { return true }
+	apiRuntimeWakeWarmFn = func() bool { return false }
+	runtimeProcessHygieneBatch = func() (int, error) { return 6, nil }
+	runtimeProcessDegradadosBatchDetailed = func() (runtimeProcessDegradadosSummary, error) {
+		return runtimeProcessDegradadosSummary{
+			Count:                     4,
+			GhostAssignmentsCompacted: 1,
+			ReactivatedWithoutRuntime: 2,
+			IdleAutoassigned:          1,
+		}, nil
+	}
+	runtimeProcessAutonomiaBatch = func() (int, error) { return 3, nil }
+	runtimeProcessReanimationsBatchFn = func() apiRuntimeProcessReanimationsResponse {
+		return apiRuntimeProcessReanimationsResponse{
+			OK:                true,
+			Count:             2,
+			Reactivated:       2,
+			CooldownSustained: 1,
+		}
+	}
+	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
+		return serverOperationalInfo{
+			State:           "ready",
+			Operational:     true,
+			Reason:          "control_plane_responsive",
+			ActiveAgents:    4,
+			WorkingAgents:   2,
+			TasksInProgress: 3,
+		}
+	}
+
+	result, err := callMCPTool("orquesta.server.self_heal", nil)
+	if err != nil {
+		t.Fatalf("server self_heal MCP: %v", err)
+	}
+	if result["isError"] != false {
+		t.Fatalf("server self_heal marcado como error: %#v", result)
+	}
+	payload, _ := result["structuredContent"].(apiRuntimeSelfHealResponse)
+	if !payload.OK || payload.Hygiene.Count != 6 || payload.Degradados.Count != 4 || payload.Autonomia.Count != 3 {
+		t.Fatalf("payload self_heal inesperado: %+v", payload)
+	}
+	if !payload.Wake.Orders || !payload.Wake.Mailbox {
+		t.Fatalf("wake self_heal inesperado: %+v", payload.Wake)
+	}
+	if payload.Operational.State != "ready" || !payload.Operational.Operational || payload.Operational.TasksInProgress != 3 {
+		t.Fatalf("operational final inesperado: %+v", payload.Operational)
+	}
+}
+
+func TestMCPToolServerSelfHealMarcaErroresParciales(t *testing.T) {
+	prevHygiene := runtimeProcessHygieneBatch
+	prevOperational := mcpBuildServerOperationalInfoFn
+	defer func() {
+		runtimeProcessHygieneBatch = prevHygiene
+		mcpBuildServerOperationalInfoFn = prevOperational
+	}()
+
+	runtimeProcessHygieneBatch = func() (int, error) { return 0, fmt.Errorf("boom") }
+	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
+		return serverOperationalInfo{State: "degraded", Operational: false, Reason: "status_temporarily_degraded"}
+	}
+
+	result, err := callMCPTool("orquesta.server.self_heal", map[string]any{
+		"orders":        false,
+		"mailbox":       false,
+		"warm":          false,
+		"degradados":    false,
+		"autonomia":     false,
+		"reanimaciones": false,
+	})
+	if err != nil {
+		t.Fatalf("server self_heal MCP: %v", err)
+	}
+	if result["isError"] != true {
+		t.Fatalf("server self_heal deberia marcar error parcial: %#v", result)
+	}
+	payload, _ := result["structuredContent"].(apiRuntimeSelfHealResponse)
+	if payload.OK || len(payload.Errors) == 0 || !strings.Contains(payload.Errors[0], "hygiene:") {
+		t.Fatalf("errores self_heal inesperados: %+v", payload)
 	}
 }
 

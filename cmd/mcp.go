@@ -1791,6 +1791,19 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		mcpServerOperationalTool(),
+		mcpServerSelfHealTool(),
+		{
+			Name:        "orquesta.server.rearm",
+			Title:       "Rearmar supervisor",
+			Description: "Aplica la siguiente acción segura del supervisor para recuperación operativa sin CLI",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"supervisor": map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
 		mcpWorkspaceControlTool(),
 		mcpOpenClawOperatorTool(),
 		{
@@ -3293,6 +3306,16 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 
 	case "orquesta.server.operational":
 		return callMCPServerOperational()
+
+	case "orquesta.server.self_heal":
+		return callMCPServerSelfHeal(args)
+
+	case "orquesta.server.rearm":
+		result, err := serverOperationalApplyNextAction(optionalStringArg(args, "supervisor"))
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(result), result, false), nil
 
 	case "orquesta.workspace.control":
 		return callMCPWorkspaceControl(args)
