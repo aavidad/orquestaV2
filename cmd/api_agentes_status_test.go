@@ -122,7 +122,7 @@ func TestAPIAgentesPanelCanonicalExponeDTOCanonico(t *testing.T) {
 		WorkerAlive:      true,
 		WorkerState:      "running",
 		MailboxPending:   2,
-		OpenTasks:        1,
+		OpenTasks:        3,
 		BlockedTasks:     0,
 		CurrentTask:      &agentesapp.TaskFocus{TaskID: 40, Title: "runtime mailbox", State: db.TareaEnProgreso},
 		DominantOrder:    &agentesapp.OrderFocus{OrderID: 91, Type: "send_instruction", State: "pendiente"},
@@ -148,8 +148,11 @@ func TestAPIAgentesPanelCanonicalExponeDTOCanonico(t *testing.T) {
 	if resp.Agents[0].Entity.Name != "Codex7" || resp.Agents[0].Entity.OperationalState != "trabajando" {
 		t.Fatalf("entity inesperada: %+v", resp.Agents[0].Entity)
 	}
-	if resp.Agents[0].OpenTasks != 1 || resp.Agents[0].MailboxPendingVisible != 2 {
+	if resp.Agents[0].OpenTasks != 3 || resp.Agents[0].MailboxPendingVisible != 2 {
 		t.Fatalf("panel canonical inesperado: %+v", resp.Agents[0])
+	}
+	if resp.Agents[0].Entity.MultitaskDebt != 2 || resp.Agents[0].Entity.WorkerGapCount != 0 {
+		t.Fatalf("panel canonical sin deuda multitarea esperada: %+v", resp.Agents[0].Entity)
 	}
 }
 
@@ -250,6 +253,7 @@ func TestAPIAgentesPanelCanonicalNoPromueveSesionSolaComoActiveNow(t *testing.T)
 		Agente:          &db.Agente{Nombre: "CodexStale", Rol: "programador", Activo: false, Habilitado: true, EstadoCuota: "activo"},
 		EstadoOperativo: "sin_tarea",
 		Sesion:          &db.Sesion{ID: 77, Agente: "CodexStale", Estado: "activa", Activa: true},
+		OpenTasks:       2,
 	}}, now)
 
 	mux := http.NewServeMux()
@@ -271,5 +275,8 @@ func TestAPIAgentesPanelCanonicalNoPromueveSesionSolaComoActiveNow(t *testing.T)
 	}
 	if resp.Agents[0].Entity.ActiveNow {
 		t.Fatalf("una sesion sola sin worker/runtime/handle vivo no deberia marcar active_now: %+v", resp.Agents[0].Entity)
+	}
+	if resp.Agents[0].Entity.WorkerGapCount != 2 {
+		t.Fatalf("deberia exponer gap tareas-vs-worker por agente: %+v", resp.Agents[0].Entity)
 	}
 }

@@ -449,6 +449,8 @@ type AgentEntity struct {
 	Role                        string      `json:"role,omitempty"`
 	Enabled                     bool        `json:"enabled"`
 	ActiveNow                   bool        `json:"active_now"`
+	MultitaskDebt               int         `json:"multitask_debt,omitempty"`
+	WorkerGapCount              int         `json:"worker_gap_count,omitempty"`
 	AccountID                   string      `json:"account_id,omitempty"`
 	AccountEmail                string      `json:"account_email,omitempty"`
 	AccountUser                 string      `json:"account_user,omitempty"`
@@ -3606,11 +3608,13 @@ func buildAgentEntity(store Store, row Row, tareas []*db.Tarea) *AgentEntity {
 			accountOccupiedBy = strings.TrimSpace(ocupadoPor)
 		}
 	}
+	activeNow := rowEntityActiveNow(row, now)
 	entity := &AgentEntity{
 		Name:                        strings.TrimSpace(row.Agente.Nombre),
 		Role:                        strings.TrimSpace(row.Agente.Rol),
 		Enabled:                     row.Agente.Habilitado,
-		ActiveNow:                   rowEntityActiveNow(row, now),
+		ActiveNow:                   activeNow,
+		MultitaskDebt:               max(row.OpenTasks-1, 0),
 		AccountID:                   strings.TrimSpace(row.Agente.CuentaID),
 		AccountEmail:                strings.TrimSpace(row.Agente.CuentaEmail),
 		AccountUser:                 strings.TrimSpace(row.Agente.CuentaUsuario),
@@ -3643,6 +3647,9 @@ func buildAgentEntity(store Store, row Row, tareas []*db.Tarea) *AgentEntity {
 		Leases:                      buildWorkLeases(tareas),
 		CurrentTask:                 cloneTaskFocus(row.CurrentTask),
 		DominantOrder:               cloneOrderFocus(row.DominantOrder),
+	}
+	if row.OpenTasks > 0 && !activeNow {
+		entity.WorkerGapCount = row.OpenTasks
 	}
 	if row.Asignacion != nil {
 		entity.AssignmentProject = strings.TrimSpace(row.Asignacion.ProyectoSlug)
