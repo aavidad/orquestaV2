@@ -1529,6 +1529,27 @@ func TestStatusVisibleWorkerCountersFiltraSupervisorRealContado(t *testing.T) {
 	}
 }
 
+func TestStatusVisibleWorkerCountersUsaSupervisorConfiguradoAntesDeDescontarPorConteo(t *testing.T) {
+	prevConfig := statusConfigGet
+	prevAutonomy := statusListAutonomyFetcher
+	t.Cleanup(func() {
+		statusConfigGet = prevConfig
+		statusListAutonomyFetcher = prevAutonomy
+	})
+
+	statusConfigGet = func(string) (string, error) { return "OpenClaw", nil }
+	statusListAutonomyFetcher = func() ([]*db.ProyectoAutonomia, error) { return nil, nil }
+
+	workersConectados, workersTrabajando, supervisoresActivos := statusVisibleWorkerCounters(
+		[]*db.Agente{{Nombre: "Codex10", Rol: "programador"}},
+		[]*db.Agente{{Nombre: "Codex10", Rol: "programador"}},
+		autonomiaResumen{Supervisando: 1},
+	)
+	if workersConectados != 1 || workersTrabajando != 1 || supervisoresActivos != 1 {
+		t.Fatalf("contadores visibles inesperados con supervisor configurado externo: conectados=%d trabajando=%d supervisores=%d", workersConectados, workersTrabajando, supervisoresActivos)
+	}
+}
+
 func TestResumirAutonomiaEventosRecientesCompactaResumenGlobal(t *testing.T) {
 	prevFetcher := statusAutonomyEventsFetcher
 	prevWindow := statusAutonomyEventsWindow

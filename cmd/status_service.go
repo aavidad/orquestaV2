@@ -111,7 +111,22 @@ type dbStatusService struct{}
 func statusVisibleWorkerCounters(agentesActivos, agentesTrabajando []*db.Agente, autonomia autonomiaResumen) (int, int, int) {
 	workersActivos := visibleWorkerCount(len(agentesActivos), autonomia.Supervisando)
 	workersTrabajando := visibleWorkerCount(len(agentesTrabajando), autonomia.Supervisando)
-	if len(autonomia.supervisorNames) > 0 {
+	supervisorNames := autonomia.supervisorNames
+	if len(supervisorNames) == 0 {
+		names := statusSupervisorAgentNames()
+		if len(names) > 0 {
+			supervisorNames = make(map[string]struct{}, len(names))
+			for _, nombre := range names {
+				canon := nombreAgenteCanonico(nombre)
+				if canon == "" {
+					continue
+				}
+				supervisorNames[canon] = struct{}{}
+			}
+		}
+	}
+	if len(supervisorNames) > 0 {
+		autonomia.supervisorNames = supervisorNames
 		workersActivos = len(filterVisibleWorkersByAutonomy(agentesActivos, autonomia))
 		workersTrabajando = len(filterVisibleWorkersByAutonomy(agentesTrabajando, autonomia))
 	}
