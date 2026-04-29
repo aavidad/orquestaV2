@@ -7909,7 +7909,11 @@ func TestApplySupervisorRecommendedActionsBatchUsaSafeQueueYExponeProyectoCritic
 			workspaceControlCockpitBuilder = prevCockpitBuilder
 			openClawWorktreeDriftBuilder = prevDrift
 			statusNowFunc = prevNow
+			resetSupervisorRevisionSnapshotCache()
+			resetStatusSnapshotCache()
 		}()
+		resetSupervisorRevisionSnapshotCache()
+		resetStatusSnapshotCache()
 
 		openClawWorktreeDriftBuilder = func(status apiStatusResponse) ([]apiOpenClawWorktreeDrift, error) {
 			return nil, nil
@@ -8022,6 +8026,8 @@ func TestApplySupervisorRecommendedActionsBatchUsaSafeQueueYExponeProyectoCritic
 		if taskID, _ := applied[0]["task_id"].(int64); taskID != tareaCriticaID {
 			t.Fatalf("el batch debería aplicar primero la tarea crítica, got=%#v", applied[0])
 		}
+		verification, _ := result["verification"].(map[string]any)
+		_ = verification
 
 		tareaLibre, err := db.GetTarea(tareaLibreID)
 		if err != nil {
@@ -8134,6 +8140,8 @@ func TestApplySupervisorNextActionUsaSafeQueueYExponeProyectoCritico(t *testing.
 		if risk == nil || strings.TrimSpace(risk.Project) != "orquestador" || risk.Blocking <= 0 {
 			t.Fatalf("critical_project_risk inesperado: %#v", result["critical_project_risk"])
 		}
+		verification, _ := result["verification"].(map[string]any)
+		_ = verification
 		tareaLibre, err := db.GetTarea(tareaLibreID)
 		if err != nil {
 			t.Fatalf("get tarea libre: %v", err)
@@ -8244,6 +8252,145 @@ func TestApplySupervisorRecommendedActionExponeProyectoCriticoCanonico(t *testin
 		}
 		if taskID, _ := result["task_id"].(int64); taskID != tareaCriticaID {
 			t.Fatalf("task_id inesperado: %#v", result)
+		}
+		verification, _ := result["verification"].(map[string]any)
+		_ = verification
+	})
+}
+
+func TestApplySupervisorRecommendedActionsBatchAdjuntaVerificationOperativa(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		prevListProjects := workspaceControlListProjects
+		prevCockpitBuilder := workspaceControlCockpitBuilder
+		prevNow := statusNowFunc
+		defer func() {
+			statusService = prev
+			workspaceControlListProjects = prevListProjects
+			workspaceControlCockpitBuilder = prevCockpitBuilder
+			statusNowFunc = prevNow
+			resetSupervisorRevisionSnapshotCache()
+			resetStatusSnapshotCache()
+		}()
+		resetSupervisorRevisionSnapshotCache()
+		resetStatusSnapshotCache()
+
+		taskID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Dispatch batch verification",
+			Descripcion: "Debe adjuntar verification operativa al batch",
+			Modulo:      "api",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+
+		now := time.Now().UTC()
+		statusNowFunc = func() time.Time { return now }
+		snapshotStatus := apiStatusResponse{
+			AgentesActivos: []*db.Agente{{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"}},
+			Agentes:        []*db.Agente{{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"}},
+			TareasPorEstado: map[string]int{
+				string(db.TareaLibre): 1,
+			},
+		}
+		statusService = stubStatusService{response: snapshotStatus}
+		storeStatusSnapshotWithTTL(snapshotStatus, now, 5*time.Minute)
+		workspaceControlListProjects = func() ([]map[string]any, error) { return nil, nil }
+		workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) { return nil, nil }
+
+		result, err := applySupervisorRecommendedActionsBatch("OpenClaw", 1, "")
+		if err != nil {
+			t.Fatalf("applySupervisorRecommendedActionsBatch: %v", err)
+		}
+		if got, _ := result["task_id"].(int64); got != 0 {
+			t.Fatalf("task_id no debería estar en top-level de batch: %#v", result)
+		}
+		applied, _ := result["applied"].([]map[string]any)
+		if len(applied) != 1 {
+			t.Fatalf("applied inesperado: %#v", result["applied"])
+		}
+		if got, _ := applied[0]["task_id"].(int64); got != taskID {
+			t.Fatalf("batch no aplicó la tarea esperada: %#v", applied[0])
+		}
+		verification, _ := result["verification"].(map[string]any)
+		if verification == nil {
+			t.Fatalf("verification ausente: %#v", result)
+		}
+		if _, ok := verification["status"].(apiOpenClawStatusLite); !ok {
+			t.Fatalf("status ausente en verification: %#v", verification)
+		}
+		if _, ok := verification["server_operational"].(serverOperationalInfo); !ok {
+			t.Fatalf("server_operational ausente en verification: %#v", verification)
+		}
+	})
+}
+
+func TestApplySupervisorNextActionAdjuntaVerificationOperativa(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		prevListProjects := workspaceControlListProjects
+		prevCockpitBuilder := workspaceControlCockpitBuilder
+		prevNow := statusNowFunc
+		defer func() {
+			statusService = prev
+			workspaceControlListProjects = prevListProjects
+			workspaceControlCockpitBuilder = prevCockpitBuilder
+			statusNowFunc = prevNow
+			resetSupervisorRevisionSnapshotCache()
+			resetStatusSnapshotCache()
+		}()
+		resetSupervisorRevisionSnapshotCache()
+		resetStatusSnapshotCache()
+
+		taskID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Dispatch next verification",
+			Descripcion: "Debe adjuntar verification operativa al next action",
+			Modulo:      "api",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+
+		now := time.Now().UTC()
+		statusNowFunc = func() time.Time { return now }
+		snapshotStatus := apiStatusResponse{
+			AgentesActivos: []*db.Agente{{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"}},
+			Agentes:        []*db.Agente{{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"}},
+			TareasPorEstado: map[string]int{
+				string(db.TareaLibre): 1,
+			},
+		}
+		statusService = stubStatusService{response: snapshotStatus}
+		storeStatusSnapshotWithTTL(snapshotStatus, now, 5*time.Minute)
+		workspaceControlListProjects = func() ([]map[string]any, error) { return nil, nil }
+		workspaceControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) { return nil, nil }
+
+		result, err := applySupervisorNextAction("OpenClaw")
+		if err != nil {
+			t.Fatalf("applySupervisorNextAction: %v", err)
+		}
+		if got, _ := result["task_id"].(int64); got != taskID {
+			t.Fatalf("next action no aplicó la tarea esperada: %#v", result)
+		}
+		verification, _ := result["verification"].(map[string]any)
+		if verification == nil {
+			t.Fatalf("verification ausente: %#v", result)
+		}
+		if _, ok := verification["queue_summary"].(apiOpenClawQueueSummary); !ok {
+			t.Fatalf("queue_summary ausente en verification: %#v", verification)
+		}
+		if _, ok := verification["server_operational"].(serverOperationalInfo); !ok {
+			t.Fatalf("server_operational ausente en verification: %#v", verification)
 		}
 	})
 }

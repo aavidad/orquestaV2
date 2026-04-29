@@ -7935,7 +7935,54 @@ func attachSupervisorQueueContext(result map[string]any, snapshot map[string]any
 	return result
 }
 
+func buildSupervisorPostActionVerification(supervisor string) map[string]any {
+	verification := map[string]any{
+		"verified_at": time.Now().UTC().Format(time.RFC3339),
+	}
+	if info, err := buildServerOperationalInfoFastFromDB(); err == nil {
+		info = normalizeServerOperationalInfo(info)
+		verification["server_operational"] = info
+		verification["server_operational_summary"] = buildOpenClawOperationalSummary(info)
+	}
+	if snapshot, err := buildMCPOpenClawOperatorSnapshot(supervisor, false); err == nil && snapshot != nil {
+		for _, key := range []string{
+			"status",
+			"queue_summary",
+			"next_action",
+			"next_safe_action",
+			"next_recovery_action",
+			"next_recovery_plan",
+		} {
+			if value, ok := snapshot[key]; ok && value != nil {
+				verification[key] = value
+			}
+		}
+	}
+	if len(verification) == 1 {
+		return nil
+	}
+	return verification
+}
+
+func attachSupervisorPostActionVerification(result map[string]any, supervisor string) map[string]any {
+	if result == nil {
+		return nil
+	}
+	if verification := buildSupervisorPostActionVerification(supervisor); len(verification) > 0 {
+		result["verification"] = verification
+	}
+	return result
+}
+
 func applySupervisorRecommendedAction(supervisor, actionName, target, assignee string) (map[string]any, error) {
+	result, err := applySupervisorRecommendedActionInternal(supervisor, actionName, target, assignee)
+	if err != nil {
+		return nil, err
+	}
+	return attachSupervisorPostActionVerification(result, resolveSupervisorName(supervisor)), nil
+}
+
+func applySupervisorRecommendedActionInternal(supervisor, actionName, target, assignee string) (map[string]any, error) {
 	supervisor = resolveSupervisorName(supervisor)
 	snapshot, err := buildSupervisorReviewSnapshot(supervisor)
 	if err != nil {
@@ -8500,13 +8547,13 @@ func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int, bat
 		if len(applied) >= maxItems {
 			break
 		}
-		result, err := applySupervisorRecommendedAction(supervisor, item.Action, item.Target, item.Assignee)
+		result, err := applySupervisorRecommendedActionInternal(supervisor, item.Action, item.Target, item.Assignee)
 		if err != nil {
 			return nil, err
 		}
 		applied = append(applied, result)
 	}
-	return map[string]any{
+	result := map[string]any{
 		"ok":                    true,
 		"supervisor":            supervisor,
 		"count":                 len(applied),
@@ -8516,7 +8563,8 @@ func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int, bat
 		"safe_action_queue":     actions,
 		"next_safe_action":      nextSafeAction,
 		"critical_project_risk": criticalProjectRisk,
-	}, nil
+	}
+	return attachSupervisorPostActionVerification(result, supervisor), nil
 }
 
 func applySupervisorNextAction(supervisor string) (map[string]any, error) {
@@ -8527,14 +8575,14 @@ func applySupervisorNextAction(supervisor string) (map[string]any, error) {
 	}
 	actions, _ := snapshot["safe_action_queue"].([]supervisorRecommendedAction)
 	for _, item := range actions {
-		result, err := applySupervisorRecommendedAction(supervisor, item.Action, item.Target, item.Assignee)
+		result, err := applySupervisorRecommendedActionInternal(supervisor, item.Action, item.Target, item.Assignee)
 		if err != nil {
 			return nil, err
 		}
 		result["queue_kind"] = "safe"
 		result["next_safe_action"] = item
 		attachSupervisorCriticalProjectRisk(result, snapshot)
-		return result, nil
+		return attachSupervisorPostActionVerification(result, supervisor), nil
 	}
 	return nil, fmt.Errorf("no hay acción segura aplicable en la cola del supervisor")
 }
