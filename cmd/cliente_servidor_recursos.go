@@ -71,7 +71,8 @@ type apiAgentesPanelCanonicalResponse struct {
 }
 
 type apiAgenteOverviewResponse struct {
-	Detail *agentesapp.Detail `json:"detail"`
+	Agent  *agentesapp.PanelEntity `json:"agent,omitempty"`
+	Detail *agentesapp.Detail      `json:"detail"`
 }
 
 type apiAgenteActividadResponse struct {

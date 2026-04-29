@@ -479,7 +479,7 @@ func listMCPResources() ([]mcpResource, error) {
 			URI:         "orquesta://agentes/activos",
 			Name:        "agentes-activos",
 			Title:       "Agentes activos",
-			Description: "Listado de agentes con sesion activa",
+			Description: "Listado de agentes con sesión activa; acepta schema=canonical para la vista canónica",
 			MIMEType:    "application/json",
 			Annotations: audienceAssistant(0.8),
 		},
@@ -1025,7 +1025,21 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		return resourceText(uri, "application/json", prettyJSON(asignaciones)), nil
-	case uri == "orquesta://agentes/activos":
+	case strings.HasPrefix(uri, "orquesta://agentes/activos"):
+		parsed, err := url.Parse(uri)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(parsed.Host) != "agentes" || parsed.Path != "/activos" {
+			return nil, fmt.Errorf("recurso de agentes activos inválido")
+		}
+		if strings.EqualFold(strings.TrimSpace(parsed.Query().Get("schema")), "canonical") {
+			out, err := buildCanonicalActiveAgentsResponse()
+			if err != nil {
+				return nil, err
+			}
+			return resourceText(uri, "application/json", prettyJSON(out)), nil
+		}
 		agentes, err := propuestasService.ListAgents()
 		if err != nil {
 			return nil, err
@@ -1174,6 +1188,12 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		detail, err := agentesService.BuildDetailCompact(agente)
 		if err != nil {
 			return nil, err
+		}
+		if strings.EqualFold(strings.TrimSpace(parsed.Query().Get("schema")), "canonical") {
+			return resourceText(uri, "application/json", prettyJSON(apiAgenteOverviewResponse{
+				Agent:  buildCanonicalAgentOverview(detail),
+				Detail: detail,
+			})), nil
 		}
 		return resourceText(uri, "application/json", prettyJSON(detail)), nil
 	case strings.HasPrefix(uri, "orquesta://agentes/") && strings.Contains(uri, "/actividad"):
@@ -2374,6 +2394,7 @@ func listMCPTools() []mcpTool {
 				"type": "object",
 				"properties": map[string]any{
 					"agente": map[string]any{"type": "string"},
+					"schema": map[string]any{"type": "string"},
 				},
 				"required":             []string{"agente"},
 				"additionalProperties": false,
@@ -3917,6 +3938,13 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		detail, err := agentesService.BuildDetailCompact(agente)
 		if err != nil {
 			return toolResult(err.Error(), nil, true), nil
+		}
+		if strings.EqualFold(optionalStringArg(args, "schema"), "canonical") {
+			out := apiAgenteOverviewResponse{
+				Agent:  buildCanonicalAgentOverview(detail),
+				Detail: detail,
+			}
+			return toolResult(prettyJSON(out), out, false), nil
 		}
 		return toolResult(prettyJSON(detail), detail, false), nil
 

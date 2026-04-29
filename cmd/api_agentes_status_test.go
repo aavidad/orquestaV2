@@ -116,16 +116,16 @@ func TestAPIAgentesPanelCanonicalExponeDTOCanonico(t *testing.T) {
 
 	now := time.Now().UTC()
 	storeAgentPanelSnapshot([]agentesapp.Row{{
-		Agente:          &db.Agente{Nombre: "Codex7", Rol: "programador", Activo: true, Habilitado: true},
-		EstadoOperativo: "trabajando",
-		DetalleOperativo:"worker ready",
-		WorkerAlive:     true,
-		WorkerState:     "running",
-		MailboxPending:  2,
-		OpenTasks:       1,
-		BlockedTasks:    0,
-		CurrentTask:     &agentesapp.TaskFocus{TaskID: 40, Title: "runtime mailbox", State: db.TareaEnProgreso},
-		DominantOrder:   &agentesapp.OrderFocus{OrderID: 91, Type: "send_instruction", State: "pendiente"},
+		Agente:           &db.Agente{Nombre: "Codex7", Rol: "programador", Activo: true, Habilitado: true},
+		EstadoOperativo:  "trabajando",
+		DetalleOperativo: "worker ready",
+		WorkerAlive:      true,
+		WorkerState:      "running",
+		MailboxPending:   2,
+		OpenTasks:        1,
+		BlockedTasks:     0,
+		CurrentTask:      &agentesapp.TaskFocus{TaskID: 40, Title: "runtime mailbox", State: db.TareaEnProgreso},
+		DominantOrder:    &agentesapp.OrderFocus{OrderID: 91, Type: "send_instruction", State: "pendiente"},
 	}}, now)
 
 	mux := http.NewServeMux()
@@ -150,5 +150,54 @@ func TestAPIAgentesPanelCanonicalExponeDTOCanonico(t *testing.T) {
 	}
 	if resp.Agents[0].OpenTasks != 1 || resp.Agents[0].MailboxPendingVisible != 2 {
 		t.Fatalf("panel canonical inesperado: %+v", resp.Agents[0])
+	}
+}
+
+func TestAPIAgenteOverviewExponeAgentCanonicoSinRomperDetail(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prevBuilder := apiAgentDetailBuilder
+	defer func() { apiAgentDetailBuilder = prevBuilder }()
+
+	apiAgentDetailBuilder = func(nombre string, compact bool) (*agentesapp.Detail, error) {
+		return &agentesapp.Detail{
+			Row: agentesapp.Row{
+				Agente:                   &db.Agente{Nombre: nombre, Rol: "programador", Activo: true, Habilitado: true},
+				MailboxPending:           3,
+				MailboxActionablePending: 1,
+				MailboxContinuityPending: 1,
+				MailboxTotal:             7,
+				OpenTasks:                2,
+				OrdersOpen:               1,
+				Checkpoints:              4,
+			},
+			Entity:                &agentesapp.AgentEntity{Name: nombre, Role: "programador", ActiveNow: true, OperationalState: "trabajando"},
+			MailboxPendingVisible: 2,
+			MailboxTotalCount:     7,
+		}, nil
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/agentes/Codex7/overview?compact=true", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp apiAgenteOverviewResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode overview: %v", err)
+	}
+	if resp.Detail == nil || resp.Detail.Entity == nil || resp.Detail.Entity.Name != "Codex7" {
+		t.Fatalf("detail legacy inesperado: %+v", resp.Detail)
+	}
+	if resp.Agent == nil || resp.Agent.Entity == nil || resp.Agent.Entity.Name != "Codex7" {
+		t.Fatalf("agent canónico inesperado: %+v", resp.Agent)
+	}
+	if resp.Agent.OpenTasks != 2 || resp.Agent.MailboxPendingVisible != 2 || resp.Agent.MailboxTotal != 7 {
+		t.Fatalf("agent canónico sin contadores esperados: %+v", resp.Agent)
 	}
 }

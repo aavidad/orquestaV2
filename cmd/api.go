@@ -2016,6 +2016,51 @@ func normalizeAgentPanelRowsForAPI(rows []agentesapp.Row, now time.Time) []agent
 	return out
 }
 
+func buildCanonicalAgentOverview(detail *agentesapp.Detail) *agentesapp.PanelEntity {
+	if detail == nil {
+		return nil
+	}
+	row := detail.Row
+	if normalized := normalizeAgentPanelRowsForAPI([]agentesapp.Row{row}, time.Now().UTC()); len(normalized) == 1 {
+		row = normalized[0]
+	}
+	mailboxTotal := detail.MailboxTotalCount
+	if mailboxTotal == 0 {
+		mailboxTotal = row.MailboxTotal
+	}
+	return &agentesapp.PanelEntity{
+		Entity:                   detail.Entity,
+		MailboxPending:           row.MailboxPending,
+		MailboxPendingVisible:    detail.MailboxPendingVisible,
+		MailboxActionablePending: row.MailboxActionablePending,
+		MailboxContinuityPending: row.MailboxContinuityPending,
+		MailboxTotal:             mailboxTotal,
+		OpenTasks:                row.OpenTasks,
+		BlockedTasks:             row.BlockedTasks,
+		OrdersOpen:               row.OrdersOpen,
+		OrdersFailed:             row.OrdersFailed,
+		ControlOrdersOpen:        row.ControlOrdersOpen,
+		Checkpoints:              row.Checkpoints,
+	}
+}
+
+func buildCanonicalActiveAgentsResponse() (apiAgentesPanelCanonicalResponse, error) {
+	rows, err := fetchAgentPanelRowsCached(apiAgentsPanelTimeout)
+	if err != nil {
+		return apiAgentesPanelCanonicalResponse{}, err
+	}
+	now := time.Now().UTC()
+	entities := agentesService.BuildPanelEntities(normalizeAgentPanelRowsForAPI(rows, now), now)
+	out := apiAgentesPanelCanonicalResponse{Agents: make([]*agentesapp.PanelEntity, 0, len(entities))}
+	for _, entity := range entities {
+		if entity == nil || entity.Entity == nil || !entity.Entity.ActiveNow {
+			continue
+		}
+		out.Agents = append(out.Agents, entity)
+	}
+	return out, nil
+}
+
 func compactMailboxPendingVisibleForAPI(row agentesapp.Row, now time.Time) int {
 	pending := row.MailboxPending
 	if pending <= 0 {
@@ -2066,7 +2111,10 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 				apiError(w, http.StatusNotFound, err)
 				return
 			}
-			apiWriteJSON(w, http.StatusOK, apiAgenteOverviewResponse{Detail: detail})
+			apiWriteJSON(w, http.StatusOK, apiAgenteOverviewResponse{
+				Agent:  buildCanonicalAgentOverview(detail),
+				Detail: detail,
+			})
 			return
 		}
 		if len(parts) == 2 && parts[1] == "actividad" {

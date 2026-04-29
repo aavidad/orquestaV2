@@ -2940,14 +2940,14 @@ func TestMCPToolsAgentesPanelOperaPorLaViaCanonica(t *testing.T) {
 
 		now := time.Now().UTC()
 		storeAgentPanelSnapshot([]agentesapp.Row{{
-			Agente:          &db.Agente{Nombre: "CodexPanel", Rol: "programador", Activo: true, Habilitado: true},
-			EstadoOperativo: "trabajando",
-			DetalleOperativo:"worker ready",
-			WorkerAlive:     true,
-			WorkerState:     "running",
-			MailboxPending:  1,
-			OpenTasks:       2,
-			CurrentTask:     &agentesapp.TaskFocus{TaskID: 40, Title: "panel canonico", State: db.TareaEnProgreso},
+			Agente:           &db.Agente{Nombre: "CodexPanel", Rol: "programador", Activo: true, Habilitado: true},
+			EstadoOperativo:  "trabajando",
+			DetalleOperativo: "worker ready",
+			WorkerAlive:      true,
+			WorkerState:      "running",
+			MailboxPending:   1,
+			OpenTasks:        2,
+			CurrentTask:      &agentesapp.TaskFocus{TaskID: 40, Title: "panel canonico", State: db.TareaEnProgreso},
 		}}, now)
 
 		result, err := callMCPTool("orquesta.agentes.panel", map[string]any{})
@@ -8491,6 +8491,103 @@ func TestMCPResourceReadAgentesPanelCanonico(t *testing.T) {
 	if !strings.Contains(text, "\"agents\"") || !strings.Contains(text, "\"name\": \"CodexPanel\"") {
 		t.Fatalf("resource agentes/panel inesperado: %s", text)
 	}
+}
+
+func TestMCPResourceReadAgentesActivosCanonical(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexActive", Rol: "programador", Activo: true, Habilitado: true},
+			EstadoOperativo: "trabajando",
+			WorkerAlive:     true,
+			WorkerState:     "running",
+			OpenTasks:       1,
+		},
+		{
+			Agente:          &db.Agente{Nombre: "CodexIdle", Rol: "programador", Activo: false, Habilitado: true},
+			EstadoOperativo: "disponible",
+		},
+	}, now)
+
+	contents, err := readMCPResource("orquesta://agentes/activos?schema=canonical")
+	if err != nil {
+		t.Fatalf("readMCPResource agentes/activos canonical: %v", err)
+	}
+	text, _ := contents[0]["text"].(string)
+	if !strings.Contains(text, "\"agents\"") || !strings.Contains(text, "\"name\": \"CodexActive\"") {
+		t.Fatalf("resource agentes/activos canonical inesperado: %s", text)
+	}
+	if strings.Contains(text, "\"CodexIdle\"") {
+		t.Fatalf("resource agentes/activos canonical no deberia incluir agentes inactivos: %s", text)
+	}
+}
+
+func TestMCPResourceReadAgentesActivosLegacySigueSiendoArray(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		contents, err := readMCPResource("orquesta://agentes/activos")
+		if err != nil {
+			t.Fatalf("readMCPResource agentes/activos legacy: %v", err)
+		}
+		text, _ := contents[0]["text"].(string)
+		trimmed := strings.TrimSpace(text)
+		if trimmed != "null" && !strings.HasPrefix(trimmed, "[") {
+			t.Fatalf("legacy agentes/activos no deberia cambiar a objeto canónico: %s", text)
+		}
+	})
+}
+
+func TestMCPToolAgentesOverviewCanonical(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("CodexOverviewCanonical", "programador"); err != nil {
+			t.Fatalf("registrando CodexOverviewCanonical: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		if _, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      "CodexOverviewCanonical",
+			ProyectoID:  &proyectoID,
+			CWD:         "/tmp/orquestador",
+			Herramienta: "codex-cli",
+		}); err != nil {
+			t.Fatalf("iniciar sesion: %v", err)
+		}
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:     "canonical overview",
+			ProyectoID: &proyectoID,
+			Modulo:     "cmd",
+			Prioridad:  db.PrioridadAlta,
+			CreadoPor:  "OpenClaw",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea: %v", err)
+		}
+		if err := db.TomarTarea(tareaID, "CodexOverviewCanonical"); err != nil {
+			t.Fatalf("tomar tarea: %v", err)
+		}
+		if err := db.IniciarTarea(tareaID, "CodexOverviewCanonical"); err != nil {
+			t.Fatalf("iniciar tarea: %v", err)
+		}
+
+		result, err := callMCPTool("orquesta.agentes.overview", map[string]any{
+			"agente": "CodexOverviewCanonical",
+			"schema": "canonical",
+		})
+		if err != nil {
+			t.Fatalf("agentes overview canonical MCP: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("agentes overview canonical marcado como error: %#v", result)
+		}
+		resp, _ := result["structuredContent"].(apiAgenteOverviewResponse)
+		if resp.Detail == nil || resp.Detail.Entity == nil || resp.Detail.Entity.Name != "CodexOverviewCanonical" {
+			t.Fatalf("detail legacy inesperado: %#v", result["structuredContent"])
+		}
+		if resp.Agent == nil || resp.Agent.Entity == nil || resp.Agent.Entity.CurrentTask == nil || resp.Agent.Entity.CurrentTask.TaskID != tareaID {
+			t.Fatalf("agent canónico sin foco de tarea esperado: %#v", resp.Agent)
+		}
+	})
 }
 
 func TestMCPResourceReadWorkspaceControlAceptaDesde(t *testing.T) {
