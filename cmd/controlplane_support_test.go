@@ -36265,6 +36265,140 @@ func TestIntentarReactivarRuntimeMailboxSinHandleOmiteReactivacionSinTrabajoArra
 	}
 }
 
+func TestIntentarReactivarRuntimeMailboxSinHandleOmiteInstructionSinTareaExplicitaAunqueHayaTrabajo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex9", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-runtime-mailbox-instruction-sin-tarea",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Trabajo stale no canonico",
+		Descripcion: "No debe habilitar instruction sin tarea explicita",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex9"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex9"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		ToAgente:    "Codex9",
+		FromAgente:  "orquesta",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"accion":"continuar_trabajo","texto":"ACK-ESPERA"}`,
+		Estado:      "pendiente",
+	})
+	if err != nil {
+		t.Fatalf("enviar mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+
+	reactivado, err := intentarReactivarRuntimeMailboxSinHandle(msg, nil)
+	if err != nil {
+		t.Fatalf("intentarReactivarRuntimeMailboxSinHandle: %v", err)
+	}
+	if reactivado {
+		t.Fatal("instruction sin tarea explicita no deberia reactivar runtime sin handle")
+	}
+
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: stringPtr("Codex9"), ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar runtime orders por instruction sin tarea: %+v", orders)
+	}
+}
+
+func TestIntentarReactivarRuntimeMailboxSinHandleOmitePipelineLocalPremiumSinTareaAunqueHayaTrabajo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex9", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-runtime-mailbox-pipeline-premium-sin-tarea",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Trabajo premium stale no canonico",
+		Descripcion: "No debe bootstrapear pipeline_local premium sin tarea objetivo",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex9"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex9"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		ToAgente:    "Codex9",
+		FromAgente:  "server",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"source":"pipeline_local","carril":"premium_worktree","texto":"seguir frente premium"}`,
+		Estado:      "pendiente",
+	})
+	if err != nil {
+		t.Fatalf("enviar mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+
+	reactivado, err := intentarReactivarRuntimeMailboxSinHandle(msg, nil)
+	if err != nil {
+		t.Fatalf("intentarReactivarRuntimeMailboxSinHandle: %v", err)
+	}
+	if reactivado {
+		t.Fatal("pipeline_local premium sin tarea explicita no deberia reactivar runtime sin handle")
+	}
+
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: stringPtr("Codex9"), ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar runtime orders por pipeline_local premium sin tarea: %+v", orders)
+	}
+}
+
 func TestIntentarReactivarRuntimeMailboxSinHandleRespetaCooldownDeStartReciente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

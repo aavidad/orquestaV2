@@ -7560,6 +7560,12 @@ func runtimeMailboxTieneTrabajoAccionableParaReactivacion(msg *db.RuntimeMailbox
 			return true, nil
 		}
 	}
+	if runtimeMailboxPremiumPipelineLocalSinTarea(msg, payload) {
+		return false, nil
+	}
+	if strings.EqualFold(strings.TrimSpace(msg.Kind), "instruction") {
+		return false, nil
+	}
 	return dbAgenteTieneTrabajoArrancable(agente, proyectoID)
 }
 
