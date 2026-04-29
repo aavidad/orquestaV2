@@ -1138,15 +1138,20 @@ func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int
 }
 
 func resolverTareaIDStartRuntime(agenteRef string, proyecto *Proyecto, tareaID *int64, motivo string) (*int64, error) {
-	if tareaID != nil && *tareaID > 0 {
-		return tareaID, nil
-	}
 	if proyecto == nil || proyecto.ID <= 0 {
 		return nil, nil
 	}
-	switch strings.ToLower(strings.TrimSpace(motivo)) {
-	case "premium_idle_autoassigned":
-	default:
+	requiereTareaActiva := runtimeOrderMotivoRequiereTareaActiva(motivo)
+	if tareaID != nil && *tareaID > 0 {
+		if !requiereTareaActiva {
+			return tareaID, nil
+		}
+		if err := validarTareaIDStartRuntimeAutonomico(strings.TrimSpace(agenteRef), proyecto.ID, *tareaID, motivo); err != nil {
+			return nil, err
+		}
+		return tareaID, nil
+	}
+	if !requiereTareaActiva {
 		return nil, nil
 	}
 	activaID, err := GetTareaActivaIDPorAgenteProyecto(strings.TrimSpace(agenteRef), &proyecto.ID)
@@ -1154,10 +1159,41 @@ func resolverTareaIDStartRuntime(agenteRef string, proyecto *Proyecto, tareaID *
 		return nil, err
 	}
 	if activaID <= 0 {
-		return nil, nil
+		return nil, fmt.Errorf("start autonomico sin tarea activa: %s", strings.TrimSpace(motivo))
 	}
 	id := activaID
 	return &id, nil
+}
+
+func validarTareaIDStartRuntimeAutonomico(agente string, proyectoID, tareaID int64, motivo string) error {
+	if proyectoID <= 0 || tareaID <= 0 {
+		return fmt.Errorf("start autonomico con tarea invalida: %s", strings.TrimSpace(motivo))
+	}
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		return err
+	}
+	if tarea == nil || tarea.ProyectoID == nil || *tarea.ProyectoID != proyectoID || tarea.Agente == nil {
+		return fmt.Errorf("start autonomico con tarea ajena o inexistente: %s", strings.TrimSpace(motivo))
+	}
+	if !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(agente)) {
+		return fmt.Errorf("start autonomico con tarea ajena o inexistente: %s", strings.TrimSpace(motivo))
+	}
+	switch tarea.Estado {
+	case TareaAsignada, TareaEnProgreso:
+		return nil
+	default:
+		return fmt.Errorf("start autonomico con tarea no arrancable: %s", strings.TrimSpace(motivo))
+	}
+}
+
+func runtimeOrderMotivoRequiereTareaActiva(motivo string) bool {
+	switch strings.ToLower(strings.TrimSpace(motivo)) {
+	case "premium_idle_autoassigned", "autonomia_expand_worker", "supervision_transcript_signal", "runtime_mailbox_sin_handle":
+		return true
+	default:
+		return false
+	}
 }
 
 func runtimeOrderMotivoStartRuntime(orderID int64) (string, error) {
