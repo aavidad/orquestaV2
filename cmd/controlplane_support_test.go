@@ -11760,6 +11760,100 @@ func TestProcesarRuntimeMailboxBatchNoCoordinaRestartSiHayPausePendiente(t *test
 	}
 }
 
+func TestProcesarRuntimeMailboxBatchDespiertaRuntimeOrdersSiRestartTMUXBootstrapOnlyBloqueadoPorStopPendiente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexTMUX", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexTMUX",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(
+		`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', capabilities_json=?, metadata_json=? WHERE id=?`,
+		`{"can_send_input":false,"mailbox_delivery_mode":"bootstrap_only"}`,
+		`{"driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codextmux-blocked","tmux_pane_id":"%2","can_send_input":false,"mailbox_delivery_mode":"bootstrap_only"}`,
+		handle.ID,
+	); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "CodexTMUX",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","motivo":"seguir"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	if _, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "CodexTMUX",
+		ProyectoID:  &proyectoID,
+		HandleID:    &handle.ID,
+		Tipo:        agenteControlAccionStop,
+		PayloadJSON: `{"accion":"stop","proyecto":"orquestador","motivo":"ya pendiente"}`,
+	}); err != nil {
+		t.Fatalf("encolar stop: %v", err)
+	}
+	previousWake := wakeRuntimeOrdersAfterMailbox
+	wakeCalls := 0
+	wakeRuntimeOrdersAfterMailbox = func() bool {
+		wakeCalls++
+		return true
+	}
+	defer func() {
+		wakeRuntimeOrdersAfterMailbox = previousWake
+	}()
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox batch: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia duplicar reinicio coordinado, got=%d", n)
+	}
+	if wakeCalls != 1 {
+		t.Fatalf("deberia despertar runtime_orders cuando restart TMUX bootstrap_only queda bloqueado por stop pendiente, got=%d", wakeCalls)
+	}
+	agente := "CodexTMUX"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != agenteControlAccionStop {
+		t.Fatalf("solo deberia quedar la stop pendiente: %+v", orders)
+	}
+	mailboxPendiente, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	if len(mailboxPendiente) != 1 || mailboxPendiente[0] == nil || mailboxPendiente[0].ID != msgID {
+		t.Fatalf("la mailbox deberia seguir pendiente: %+v", mailboxPendiente)
+	}
+}
+
 func TestProcesarRuntimeMailboxBatchCoordinaRestartParaTMUXBootstrapOnly(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

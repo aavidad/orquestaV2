@@ -7714,6 +7714,7 @@ func procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox []*db.Runti
 		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, "stop", "pause", "checkpoint", "start", "restart", "resume", "handoff"); err != nil {
 			return 0, err
 		} else if pendiente {
+			despertarRuntimeOrdersBloqueadasPorMailbox(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, "runtime_mailbox_coordinated_restart_blocked")
 			continue
 		}
 		key := recycleKey{
@@ -7745,6 +7746,18 @@ func procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox []*db.Runti
 		}
 	}
 	return total, nil
+}
+
+func despertarRuntimeOrdersBloqueadasPorMailbox(agente string, proyectoID *int64, reason string) {
+	if !wakeRuntimeOrdersAfterMailbox() {
+		return
+	}
+	detalleProyecto := "-"
+	if proyectoID != nil && *proyectoID > 0 {
+		detalleProyecto = strconv.FormatInt(*proyectoID, 10)
+	}
+	db.Audit("orquesta", "runtime_mailbox_wake_runtime_orders", "runtime_mailbox", 0,
+		fmt.Sprintf("agente=%s proyecto_id=%s reason=%s", strings.TrimSpace(agente), detalleProyecto, strings.TrimSpace(reason)))
 }
 
 // procesarRuntimeMailboxCoordinatedRestartMensaje despacha un mensaje coordinated_restart
@@ -8038,6 +8051,9 @@ func encolarReinicioCoordinadoSessionResumeTMUXStale(msg *db.RuntimeMailboxMessa
 	if !runtimeHandleEsTmuxLike(handle) {
 		return false, nil
 	}
+	if runtimeTMUXSessionResumeDebeEsperarWorker(handle) {
+		return false, nil
+	}
 	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
 	externalSessionID = firstNonEmpty(
 		strings.TrimSpace(externalSessionID),
@@ -8053,6 +8069,7 @@ func encolarReinicioCoordinadoSessionResumeTMUXStale(msg *db.RuntimeMailboxMessa
 	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, msg.ProyectoID, "stop", "pause", "checkpoint", "start", "restart", "resume", "handoff", "send_instruction"); err != nil {
 		return false, err
 	} else if pendiente {
+		despertarRuntimeOrdersBloqueadasPorMailbox(agente, msg.ProyectoID, "runtime_mailbox_session_resume_stale_tmux_blocked")
 		return false, nil
 	}
 	motivo := fmt.Sprintf("runtime_mailbox_session_resume_stale_tmux:%s:%d", strings.TrimSpace(msg.Kind), msg.ID)
@@ -8069,6 +8086,40 @@ func encolarReinicioCoordinadoSessionResumeTMUXStale(msg *db.RuntimeMailboxMessa
 			stopOrderID,
 			startOrderID))
 	return true, nil
+}
+
+func runtimeTMUXSessionResumeDebeEsperarWorker(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
+	if err != nil || snap == nil {
+		return false
+	}
+	view := snap.View(time.Now().UTC(), time.Minute)
+	if view == nil || !view.Alive || view.HeartbeatStale {
+		return false
+	}
+	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
+	workerDriver := firstNonEmpty(
+		strings.TrimSpace(view.Driver),
+		strings.TrimSpace(stringMapValue(meta, "driver")),
+	)
+	workerTransport := firstNonEmpty(
+		strings.TrimSpace(view.Transport),
+		strings.TrimSpace(stringMapValue(meta, "transport")),
+		strings.TrimSpace(handle.Transporte),
+	)
+	if !strings.EqualFold(workerDriver, "tmux_cli_session") &&
+		!strings.EqualFold(workerTransport, "tmux") {
+		return false
+	}
+	switch runtimeHandleWorkerCanonicalState(view) {
+	case "working", "starting":
+		return true
+	default:
+		return false
+	}
 }
 
 func consumirRuntimeMailboxSessionResumeCubiertaSiProcede(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, lane string) (bool, error) {
@@ -9118,6 +9169,7 @@ func runtimeHandleListaParaDispatchInteractivoConEstado(handle *db.RuntimeHandle
 }
 
 func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) bool {
+	_ = runtime
 	if handle == nil {
 		return false
 	}
@@ -9165,20 +9217,6 @@ func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, r
 	}
 	if state == "waiting_input" {
 		return true
-	}
-	if state == "working" {
-		externalSessionID := firstNonEmpty(
-			strings.TrimSpace(view.ExternalSessionID),
-			strings.TrimSpace(stringMapValue(meta, "external_session_id")),
-		)
-		if runtimeTMUXSessionResumePuedeDespacharPorRuntimeCanonico(runtime) {
-			return true
-		}
-		if view.Alive && !view.HeartbeatStale &&
-			externalSessionID != "" &&
-			(runtime == nil || strings.EqualFold(strings.TrimSpace(runtime.ProcessState), "running")) {
-			return true
-		}
 	}
 	return false
 }
