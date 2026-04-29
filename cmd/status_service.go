@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"orquesta/agentesapp"
@@ -21,6 +22,8 @@ type StatusService interface {
 }
 
 var statusService StatusService = dbStatusService{}
+
+var statusWorkspaceRiskSummaryBypassDepth atomic.Int32
 
 var (
 	statusSnapshotTTL                   = time.Minute
@@ -626,6 +629,9 @@ func buildStatusWorkspaceRiskSummary(surface *autonomySurface) statusWorkspaceRi
 }
 
 func fetchStatusWorkspaceRiskSummary() (statusWorkspaceRiskSummary, error) {
+	if statusWorkspaceRiskSummaryBypassDepth.Load() > 0 {
+		return statusWorkspaceRiskSummary{}, nil
+	}
 	if workspaceControlListProjects == nil || workspaceControlCockpitBuilder == nil {
 		return statusWorkspaceRiskSummary{}, nil
 	}
@@ -658,6 +664,16 @@ func fetchStatusWorkspaceRiskSummary() (statusWorkspaceRiskSummary, error) {
 		report.Highlights = appendWorkspaceHighlight(report.Highlights, fmt.Sprintf("riesgo_top=%s(%d)", topRisk.Project, topRisk.Blocking))
 	}
 	return report, nil
+}
+
+func runWithoutStatusWorkspaceRiskSummary[T any](fn func() (T, error)) (T, error) {
+	var zero T
+	if fn == nil {
+		return zero, errors.New("status workspace risk fn nil")
+	}
+	statusWorkspaceRiskSummaryBypassDepth.Add(1)
+	defer statusWorkspaceRiskSummaryBypassDepth.Add(-1)
+	return fn()
 }
 
 func statusCriticalProjectRiskFromSurface(surface *autonomySurface) *workspaceAutonomyProjectSummary {

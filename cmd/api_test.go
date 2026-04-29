@@ -439,6 +439,7 @@ func prepararDBTemporalCmd(t *testing.T) string {
 	processRuntimeOrdersWakeFallback = func() {}
 	processRuntimeMailboxWakeFallback = func() {}
 	resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
 	resetControlPlaneConfigCache()
 	resetRuntimeBudgetObservationBackgroundGate()
 	resetAutonomiaActiveSessionsObservationGate()
@@ -468,6 +469,7 @@ func prepararDBTemporalCmd(t *testing.T) string {
 		processRuntimeOrdersWakeFallback = runRuntimeOrdersWakeFallback
 		processRuntimeMailboxWakeFallback = runRuntimeMailboxWakeFallback
 		resetStatusSnapshotCache()
+		resetAgentPanelSnapshotCache()
 		resetControlPlaneConfigCache()
 		resetRuntimeBudgetObservationBackgroundGate()
 		resetAutonomiaActiveSessionsObservationGate()
@@ -1094,6 +1096,66 @@ func TestAPIServerOperationalReturnsDegradedPayloadWhenBuilderHangs(t *testing.T
 	}
 	if payload.State != "degraded" || strings.TrimSpace(payload.Reason) == "" {
 		t.Fatalf("payload degradado inesperado: %+v", payload)
+	}
+}
+
+func TestAPIServerOperationalUsesBuilderWhenNoSnapshotNorFallback(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	prevBuilder := apiServerOperationalBuilder
+	prevTimeout := apiServerOperationalTimeout
+	prevFallback := apiServerOperationalStatusFallback
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	prevFast := statusFastFetcher
+	prevUltraLite := apiStatusUltraLiteFetcher
+	t.Cleanup(func() {
+		apiServerOperationalBuilder = prevBuilder
+		apiServerOperationalTimeout = prevTimeout
+		apiServerOperationalStatusFallback = prevFallback
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+		statusFastFetcher = prevFast
+		apiStatusUltraLiteFetcher = prevUltraLite
+	})
+
+	apiStatusReadOnlyLiteFetcher = nil
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{}, errStatusFetchTimeout
+	}
+	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) {
+		return apiStatusResponse{}, false
+	}
+	apiServerOperationalStatusFallback = func() (apiStatusResponse, error) {
+		return apiStatusResponse{}, errStatusFetchTimeout
+	}
+	apiServerOperationalTimeout = 100 * time.Millisecond
+	apiServerOperationalBuilder = func() (serverOperationalInfo, error) {
+		return serverOperationalInfo{
+			State:            "ready",
+			Operational:      true,
+			Reason:           "control_plane_responsive",
+			RegisteredAgents: 2,
+			ActiveAgents:     1,
+			WorkingAgents:    1,
+			ConnectedWorkers: 1,
+			WorkingWorkers:   1,
+			TasksInProgress:  1,
+		}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerServerOperational(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode builder operational: %v", err)
+	}
+	if !payload.Operational || payload.State != "ready" || payload.ActiveAgents != 1 || payload.WorkingWorkers != 1 {
+		t.Fatalf("deberia usar builder vivo antes de degradar: %+v", payload)
 	}
 }
 
@@ -6096,6 +6158,47 @@ func TestAPIProyectoCockpitAlineaAgentesActivosConStatusVisible(t *testing.T) {
 	}
 	if len(resp.Cockpit.AgentesActivos) != 1 || resp.Cockpit.AgentesActivos[0].Nombre != "Codex3" {
 		t.Fatalf("cockpit deberia alinear agentes visibles con status: %+v", resp.Cockpit.AgentesActivos)
+	}
+}
+
+func TestListarAgentesActivosProyectoCaeASesionesSoloSinStatusVisible(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: t.TempDir(),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"Codex3", "Codex1"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if _, err := db.IniciarSesionContexto(db.SesionInicio{Agente: agente, ProyectoID: &proyectoID}); err != nil {
+			t.Fatalf("iniciar sesion %s: %v", agente, err)
+		}
+	}
+
+	visible, err := listarAgentesActivosProyecto(proyectoID, apiStatusResponse{
+		AgentesActivos: []*db.Agente{{Nombre: "Codex3", Rol: "programador"}},
+	}, true)
+	if err != nil {
+		t.Fatalf("listar agentes visibles: %v", err)
+	}
+	if len(visible) != 1 || visible[0].Nombre != "Codex3" {
+		t.Fatalf("deberia respetar solo la foto visible de status: %+v", visible)
+	}
+
+	fallback, err := listarAgentesActivosProyecto(proyectoID, apiStatusResponse{}, false)
+	if err != nil {
+		t.Fatalf("listar agentes fallback: %v", err)
+	}
+	if len(fallback) != 2 || fallback[0].Nombre != "Codex1" || fallback[1].Nombre != "Codex3" {
+		t.Fatalf("deberia caer a sesiones solo sin status visible: %+v", fallback)
 	}
 }
 

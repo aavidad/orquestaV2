@@ -94,26 +94,26 @@ func buildProyectoCockpit(ref string) (*apiProyectoCockpit, error) {
 	}
 	cockpit.AsignacionesActivas = len(asignaciones)
 
-	agentesActivos, err := listarAgentesActivosProyecto(proyecto.ID)
+	status, statusVisible := fetchProyectoCockpitStatusLite()
+
+	agentesActivos, err := listarAgentesActivosProyecto(proyecto.ID, status, statusVisible)
 	if err != nil {
 		return nil, err
 	}
 	cockpit.AgentesActivos = agentesActivos
 
-	status, err := statusService.FetchStatus()
-	if err != nil {
-		return nil, err
-	}
 	relevantAgents := projectRelevantAgentNames(proyecto.ID, tareas, status.AgentesActivos)
 	cockpit.MailboxPendiente, err = buildProyectoPendingMailbox(proyecto.ID, relevantAgents)
 	if err != nil {
 		return nil, err
 	}
-	drift, err := buildOpenClawWorktreeDriftFromAPIStatus(status)
-	if err != nil {
-		return nil, err
+	if status.Generado != "" || len(status.Agentes) > 0 || len(status.AgentesActivos) > 0 {
+		drift, err := buildOpenClawWorktreeDriftFromAPIStatus(status)
+		if err != nil {
+			return nil, err
+		}
+		cockpit.WorktreeDrift = filterOpenClawWorktreeDriftByAgents(drift, relevantAgents)
 	}
-	cockpit.WorktreeDrift = filterOpenClawWorktreeDriftByAgents(drift, relevantAgents)
 
 	cockpit.PropuestasAbiertas, err = db.CountProjectOpenProposals(proyecto.ID)
 	if err != nil {
@@ -212,7 +212,93 @@ func filterOpenClawWorktreeDriftByAgents(items []apiOpenClawWorktreeDrift, relev
 	return out
 }
 
-func listarAgentesActivosProyecto(proyectoID int64) ([]apiProyectoCockpitAgente, error) {
+func fetchProyectoCockpitStatusLite() (apiStatusResponse, bool) {
+	if status, ok := readStatusSnapshotFreshUsable(); ok {
+		reconcileStatusSnapshotWithFreshPanel(&status)
+		return status, true
+	}
+	if status, ok := readStatusSnapshotAny(); ok && !statusSnapshotNeedsImmediateRefresh(status) {
+		reconcileStatusSnapshotWithFreshPanel(&status)
+		return status, true
+	}
+	if status, ok := fetchStatusReadOnlyLiteDirect(statusFastTimeout); ok {
+		reconcileStatusSnapshotWithFreshPanel(&status)
+		return status, true
+	}
+	if statusService != nil {
+		if status, err := runWithoutStatusWorkspaceRiskSummary(func() (apiStatusResponse, error) {
+			return runStatusFetcherWithTimeout(statusService.FetchStatus, statusFreshTimeout)
+		}); err == nil {
+			reconcileStatusSnapshotWithFreshPanel(&status)
+			return status, true
+		}
+	}
+	if status, err := runWithoutStatusWorkspaceRiskSummary(func() (apiStatusResponse, error) {
+		return runStatusFetcherWithTimeout(statusFastFetcher, statusFastTimeout)
+	}); err == nil {
+		reconcileStatusSnapshotWithFreshPanel(&status)
+		return status, true
+	}
+	if status, ok := fetchProyectoCockpitStatusDirect(); ok {
+		return status, true
+	}
+	return apiStatusResponse{}, false
+}
+
+func fetchProyectoCockpitStatusDirect() (apiStatusResponse, bool) {
+	sesiones, err := db.ListarSesionesActivasOperativas()
+	if err != nil {
+		return apiStatusResponse{}, false
+	}
+	agentes, err := db.ListarAgentesConSesionesActivas(sesiones)
+	if err != nil {
+		return apiStatusResponse{}, false
+	}
+	tareasActivas, err := listarTareasActivasRapido()
+	if err != nil {
+		return apiStatusResponse{}, false
+	}
+	tareasActivas = filtrarTareasActivasVisibles(tareasActivas, agentes)
+	tareasEnProgreso := filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaEnProgreso)
+	tareasReservadas := filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaAsignada)
+	now := statusNowFunc().UTC()
+
+	var agentesActivos []*db.Agente
+	var agentesTrabajando []*db.Agente
+	var agentesSaturados []*db.Agente
+	var agentesAtascados []*db.Agente
+	var agentesAuthManual []*db.Agente
+	var agentesQuotaBlocked []*db.Agente
+	autonomia := autonomiaResumen{ByKind: map[string]int{}}
+
+	if rows, ok := readAgentPanelSnapshotFresh(); ok {
+		aplicarVisibilidadOperativaAgentes(agentes, rows)
+		agentesActivos, agentesTrabajando, agentesSaturados, agentesAtascados, agentesAuthManual, agentesQuotaBlocked, _ = agentesVisiblesPorEstadoOperativoRows(agentes, rows)
+		agentesActivos, agentesTrabajando, agentesSaturados = normalizarAgentesVisiblesStatus(agentesActivos, agentesTrabajando, agentesSaturados)
+		autonomia = resumirAutonomiaRows(rows, now)
+	} else {
+		agentesActivos, agentesTrabajando, agentesQuotaBlocked = agentesVisiblesLigero(agentes, tareasEnProgreso)
+		agentesActivos, agentesTrabajando, _ = normalizarAgentesVisiblesStatus(agentesActivos, agentesTrabajando, nil)
+		autonomia = resumirAutonomiaLigera(agentesActivos, agentesTrabajando, tareasEnProgreso, now)
+	}
+
+	return apiStatusResponse{
+		Agentes:             agentes,
+		AgentesActivos:      agentesActivos,
+		AgentesTrabajando:   agentesTrabajando,
+		AgentesSaturados:    agentesSaturados,
+		AgentesAtascados:    agentesAtascados,
+		AgentesAuthManual:   agentesAuthManual,
+		AgentesQuotaBlocked: agentesQuotaBlocked,
+		TareasActivas:       tareasActivas,
+		TareasEnProgreso:    tareasEnProgreso,
+		TareasReservadas:    tareasReservadas,
+		Autonomia:           autonomia,
+		Generado:            now.Format(time.RFC3339),
+	}, true
+}
+
+func listarAgentesActivosProyecto(proyectoID int64, status apiStatusResponse, statusVisible bool) ([]apiProyectoCockpitAgente, error) {
 	sesiones, err := db.ListarSesionesActivasOperativas()
 	if err != nil {
 		return nil, err
@@ -230,17 +316,13 @@ func listarAgentesActivosProyecto(proyectoID int64) ([]apiProyectoCockpitAgente,
 	if len(nombresProyecto) == 0 {
 		return nil, nil
 	}
-	status, err := statusService.FetchStatus()
-	if err != nil {
-		return nil, err
-	}
 	items := make([]apiProyectoCockpitAgente, 0, len(status.AgentesActivos))
 	for _, agente := range status.AgentesActivos {
 		if agente == nil {
 			continue
 		}
 		nombre := strings.TrimSpace(agente.Nombre)
-		if nombre == "" || !containsProyectoAgente(nombresProyecto, nombre) {
+		if nombre == "" || !containsProyectoAgente(nombresProyecto, nombre) || agenteBloqueadoPorPresupuestoVisible(agente) {
 			continue
 		}
 		items = append(items, apiProyectoCockpitAgente{
@@ -248,7 +330,34 @@ func listarAgentesActivosProyecto(proyectoID int64) ([]apiProyectoCockpitAgente,
 			Rol:    strings.TrimSpace(agente.Rol),
 		})
 	}
-	if len(items) == 0 {
+	if len(items) == 0 && !statusVisible {
+		if agentesSesion, err := db.ListarAgentesConSesionesActivas(sesiones); err == nil {
+			snapshotConHabilitado := snapshotExponeHabilitado(agentesSesion)
+			for _, agente := range agentesSesion {
+				if agente == nil {
+					continue
+				}
+				nombre := strings.TrimSpace(agente.Nombre)
+				if nombre == "" || !containsProyectoAgente(nombresProyecto, nombre) {
+					continue
+				}
+				if !agenteCuentaComoHabilitadoEnSnapshot(agente, snapshotConHabilitado) ||
+					!agenteCuentaComoConectado(agente) ||
+					agenteBloqueadoPorCuotaVisible(agente) ||
+					agenteBloqueadoPorPresupuestoVisible(agente) {
+					continue
+				}
+				items = append(items, apiProyectoCockpitAgente{
+					Nombre: nombre,
+					Rol:    strings.TrimSpace(agente.Rol),
+				})
+			}
+			sort.SliceStable(items, func(i, j int) bool {
+				return strings.TrimSpace(items[i].Nombre) < strings.TrimSpace(items[j].Nombre)
+			})
+		}
+	}
+	if len(items) == 0 && !statusVisible {
 		names := make([]string, 0, len(nombresProyecto))
 		for nombre := range nombresProyecto {
 			names = append(names, strings.TrimSpace(nombre))
@@ -275,4 +384,19 @@ func safeStringPtr(v *string) string {
 		return ""
 	}
 	return strings.TrimSpace(*v)
+}
+
+func agenteBloqueadoPorPresupuestoVisible(agente *db.Agente) bool {
+	if agente == nil {
+		return false
+	}
+	presupuesto, _, err := db.UltimoPresupuestoAgente(strings.TrimSpace(agente.Nombre))
+	if err != nil || presupuesto == nil || !db.PresupuestoSesionFresco(presupuesto) {
+		return false
+	}
+	evaluacion, err := db.EvaluarPresupuestoSesion(presupuesto)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(evaluacion.Estado), "agotado")
 }
