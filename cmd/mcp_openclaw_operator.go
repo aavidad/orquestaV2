@@ -12,6 +12,8 @@ import (
 
 var openClawOperatorSnapshotTimeout = 1200 * time.Millisecond
 var openClawOperatorSnapshotCoreBuilder = buildOpenClawOperatorSnapshotCore
+var openClawOperatorReviewSnapshotBuilder = buildOpenClawReviewSnapshotSafeWithStatus
+var openClawOperatorRichDefault = false
 
 func mcpOpenClawOperatorTool() mcpTool {
 	return mcpTool{
@@ -22,6 +24,7 @@ func mcpOpenClawOperatorTool() mcpTool {
 			"type": "object",
 			"properties": map[string]any{
 				"supervisor": map[string]any{"type": "string"},
+				"rich":       map[string]any{"type": "boolean"},
 			},
 			"additionalProperties": false,
 		},
@@ -80,15 +83,25 @@ func buildOpenClawOperatorSnapshotBestEffort(supervisor string, apiStatus apiSta
 	return buildOpenClawOperatorSnapshotFallback(supervisor, apiStatus)
 }
 
-func buildMCPOpenClawOperatorSnapshot(supervisor string) (map[string]any, error) {
+func buildOpenClawOperatorSnapshot(supervisor string, apiStatus apiStatusResponse, rich bool) map[string]any {
+	if !rich {
+		return buildOpenClawOperatorSnapshotFallback(supervisor, apiStatus)
+	}
+	return buildOpenClawOperatorSnapshotBestEffort(supervisor, apiStatus)
+}
+
+func buildMCPOpenClawOperatorSnapshot(supervisor string, rich bool) (map[string]any, error) {
 	supervisor = resolveOpenClawOperatorSupervisor(supervisor)
 	apiStatus := resolveOpenClawAPIStatus()
-	return buildOpenClawOperatorSnapshotBestEffort(supervisor, apiStatus), nil
+	if !rich && openClawOperatorRichDefault {
+		rich = true
+	}
+	return buildOpenClawOperatorSnapshot(supervisor, apiStatus, rich), nil
 }
 
 func buildOpenClawOperatorSnapshotCore(supervisor string, apiStatus apiStatusResponse) map[string]any {
 	status := buildOpenClawBaseStatusFromAPIStatus(apiStatus)
-	revision := buildOpenClawReviewSnapshotSafeWithStatus(supervisor, apiStatus)
+	revision := openClawOperatorReviewSnapshotBuilder(supervisor, apiStatus)
 	mailboxPendiente, mailboxKnown := openClawPendingMailboxFromReviewSnapshot(revision)
 
 	var panelRows []agentesapp.Row
@@ -110,22 +123,8 @@ func buildOpenClawOperatorSnapshotCore(supervisor string, apiStatus apiStatusRes
 	pipeline := supervisorPipelineFromReviewSnapshot(revision)
 	worktreeDrift := openClawWorktreeDriftFromReviewSnapshot(revision)
 	subagents := supervisorSubagentsFromReviewSnapshot(revision)
-	if len(subagents) == 0 {
-		if snapshot, err := runAPITimeboxed(150*time.Millisecond, func() (map[string]any, error) {
-			return buildSupervisorSubagentsSnapshot(supervisor, "", "", 100)
-		}, errStatusFetchTimeout); err == nil && snapshot != nil {
-			subagents = snapshot
-		}
-	}
-	if len(pipeline) == 0 {
-		if snapshot, err := runAPITimeboxed(150*time.Millisecond, func() (map[string]any, error) {
-			return buildSupervisorPipelineSnapshot(supervisor, "", 20)
-		}, errStatusFetchTimeout); err == nil && snapshot != nil {
-			pipeline = snapshot
-		}
-	}
 
-	subagentFollowups := buildOpenClawSubagentFollowupsBestEffort(supervisor, subagents)
+	subagentFollowups := buildOpenClawSubagentFollowupsCompact(subagents)
 	pipelineFollowup := buildOpenClawPipelineFollowupCompact(pipeline)
 	if len(pipelineFollowup) == 0 && len(subagentFollowups) > 0 {
 		pipelineFollowup = buildOpenClawPipelineFollowupFromSubagents(subagentFollowups)
@@ -195,7 +194,8 @@ func buildOpenClawOperatorSnapshotCore(supervisor string, apiStatus apiStatusRes
 }
 
 func callMCPOpenClawOperator(args map[string]any) (map[string]any, error) {
-	payload, err := buildMCPOpenClawOperatorSnapshot(optionalStringArg(args, "supervisor"))
+	rich, _ := boolArg(args, "rich")
+	payload, err := buildMCPOpenClawOperatorSnapshot(optionalStringArg(args, "supervisor"), rich)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func callMCPOpenClawOperator(args map[string]any) (map[string]any, error) {
 }
 
 func buildMCPOpenClawOperatorOverview(supervisor string) (string, error) {
-	payload, err := buildMCPOpenClawOperatorSnapshot(supervisor)
+	payload, err := buildMCPOpenClawOperatorSnapshot(supervisor, false)
 	if err != nil {
 		return "", err
 	}

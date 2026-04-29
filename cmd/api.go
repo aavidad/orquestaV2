@@ -2780,7 +2780,11 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		supervisor := resolveOpenClawOperatorSupervisor(r.URL.Query().Get("supervisor"))
 		apiStatus := resolveOpenClawAPIStatus()
-		apiWriteJSON(w, http.StatusOK, buildOpenClawOperatorSnapshotBestEffort(supervisor, apiStatus))
+		rich := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("rich")), "true") || strings.TrimSpace(r.URL.Query().Get("rich")) == "1"
+		if !rich && openClawOperatorRichDefault {
+			rich = true
+		}
+		apiWriteJSON(w, http.StatusOK, buildOpenClawOperatorSnapshot(supervisor, apiStatus, rich))
 	case http.MethodPost:
 		var req struct {
 			Supervisor   string `json:"supervisor"`
@@ -3382,12 +3386,12 @@ func fillOpenClawOperationalQueuesFromStatusFallback(status apiStatusResponse, m
 	if len(actionQueue) > 0 || nextAction != nil || len(safeActionQueue) > 0 || nextSafeAction != nil {
 		return actionQueue, safeActionQueue, nextAction, nextSafeAction
 	}
-	fallback := buildSupervisorOperationalActions(status, mailbox)
+	fallback := buildSupervisorOperationalActionsFast(status, mailbox)
 	if len(fallback) == 0 {
 		return actionQueue, safeActionQueue, nextAction, nextSafeAction
 	}
 	actionQueue = fallback
-	safeActionQueue = buildSupervisorSafeActionQueue(fallback)
+	safeActionQueue = buildSupervisorSafeActionQueueFast(fallback)
 	if len(actionQueue) > 0 {
 		item := actionQueue[0]
 		nextAction = &item

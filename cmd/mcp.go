@@ -926,7 +926,8 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		payload, err := buildMCPOpenClawOperatorSnapshot(parsed.Query().Get("supervisor"))
+		rich := strings.EqualFold(strings.TrimSpace(parsed.Query().Get("rich")), "true") || strings.TrimSpace(parsed.Query().Get("rich")) == "1"
+		payload, err := buildMCPOpenClawOperatorSnapshot(parsed.Query().Get("supervisor"), rich)
 		if err != nil {
 			return nil, err
 		}
@@ -6518,7 +6519,7 @@ func buildSupervisorSafeActionQueue(actions []supervisorRecommendedAction) []sup
 			safeQueue = append(safeQueue, item)
 		}
 	}
-	projectRisk := supervisorWorkspaceProjectRiskSnapshot()
+	projectRisk := supervisorWorkspaceProjectRiskSnapshotBuilder()
 	sort.SliceStable(safeQueue, func(i, j int) bool {
 		ri := supervisorActionProjectRisk(safeQueue[i], projectRisk)
 		rj := supervisorActionProjectRisk(safeQueue[j], projectRisk)
@@ -6530,11 +6531,32 @@ func buildSupervisorSafeActionQueue(actions []supervisorRecommendedAction) []sup
 	return safeQueue
 }
 
+func buildSupervisorSafeActionQueueFast(actions []supervisorRecommendedAction) []supervisorRecommendedAction {
+	if len(actions) == 0 {
+		return nil
+	}
+	safeQueue := make([]supervisorRecommendedAction, 0, len(actions))
+	for _, item := range actions {
+		if supervisorActionIsAutomaticallyApplicable(item.Action) {
+			safeQueue = append(safeQueue, item)
+		}
+	}
+	return safeQueue
+}
+
 var supervisorPanelRowsBuilder = buildPanelRowsForControlPlane
 
 var supervisorSemanticProgressRecentThreshold = 5 * time.Minute
 
 func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendiente []apiOpenClawMailboxLite) []supervisorRecommendedAction {
+	return buildSupervisorOperationalActionsWithOptions(status, mailboxPendiente, false)
+}
+
+func buildSupervisorOperationalActionsFast(status apiStatusResponse, mailboxPendiente []apiOpenClawMailboxLite) []supervisorRecommendedAction {
+	return buildSupervisorOperationalActionsWithOptions(status, mailboxPendiente, true)
+}
+
+func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mailboxPendiente []apiOpenClawMailboxLite, fast bool) []supervisorRecommendedAction {
 	actions := make([]supervisorRecommendedAction, 0, 4+len(mailboxPendiente))
 	idle := idleSupervisorWorkers(status.AgentesActivos, status.AgentesTrabajando)
 	if len(idle) > 0 {
@@ -6545,9 +6567,11 @@ func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendient
 		if len(status.AgentesTrabajando) == 0 {
 			priority = "alta"
 		}
-		libres, err := db.ListarTareas(db.FiltroTareas{Libre: true})
-		if err == nil && len(libres) > 0 && libres[0] != nil {
-			target = fmt.Sprintf("tarea:%d", libres[0].ID)
+		if !fast {
+			libres, err := db.ListarTareas(db.FiltroTareas{Libre: true})
+			if err == nil && len(libres) > 0 && libres[0] != nil {
+				target = fmt.Sprintf("tarea:%d", libres[0].ID)
+			}
 		}
 		if libresCount := countLibreTasks(status); libresCount > 0 || strings.HasPrefix(target, "tarea:") {
 			actions = append(actions, supervisorRecommendedAction{
@@ -6564,9 +6588,11 @@ func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendient
 		assignee := preferredSupervisorWorker(status)
 		target := "backlog:libre"
 		reason := "Hay backlog libre y workers conectados, pero ninguno ocioso; conviene reservar el siguiente frente sin arrancarlo aún."
-		libres, err := db.ListarTareas(db.FiltroTareas{Libre: true})
-		if err == nil && len(libres) > 0 && libres[0] != nil {
-			target = fmt.Sprintf("tarea:%d", libres[0].ID)
+		if !fast {
+			libres, err := db.ListarTareas(db.FiltroTareas{Libre: true})
+			if err == nil && len(libres) > 0 && libres[0] != nil {
+				target = fmt.Sprintf("tarea:%d", libres[0].ID)
+			}
 		}
 		if libresCount := countLibreTasks(status); libresCount > 0 || strings.HasPrefix(target, "tarea:") {
 			actions = append(actions, supervisorRecommendedAction{
@@ -6626,8 +6652,12 @@ func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendient
 		})
 	}
 	actions = append(actions, buildSupervisorAutonomyActions(status.Autonomia.Recent)...)
-	actions = supervisorApplyLiveProgressToAutonomyActions(actions, status)
-	sortSupervisorRecommendedActions(actions)
+	if !fast {
+		actions = supervisorApplyLiveProgressToAutonomyActions(actions, status)
+		sortSupervisorRecommendedActions(actions)
+		return actions
+	}
+	sortSupervisorRecommendedActionsFast(actions)
 	return actions
 }
 
@@ -7638,20 +7668,12 @@ func preferredSupervisorWorker(status apiStatusResponse) string {
 	return best
 }
 
+var supervisorWorkspaceProjectRiskSnapshotBuilder = supervisorWorkspaceProjectRiskSnapshot
+
 func sortSupervisorRecommendedActions(actions []supervisorRecommendedAction) {
-	projectRisk := supervisorWorkspaceProjectRiskSnapshot()
+	projectRisk := supervisorWorkspaceProjectRiskSnapshotBuilder()
 	sort.SliceStable(actions, func(i, j int) bool {
-		weight := func(v string) int {
-			switch v {
-			case "alta":
-				return 0
-			case "media":
-				return 1
-			default:
-				return 2
-			}
-		}
-		wi, wj := weight(actions[i].Priority), weight(actions[j].Priority)
+		wi, wj := supervisorActionPriorityWeight(actions[i].Priority), supervisorActionPriorityWeight(actions[j].Priority)
 		if wi != wj {
 			return wi < wj
 		}
@@ -7665,6 +7687,31 @@ func sortSupervisorRecommendedActions(actions []supervisorRecommendedAction) {
 		}
 		return actions[i].Target < actions[j].Target
 	})
+}
+
+func sortSupervisorRecommendedActionsFast(actions []supervisorRecommendedAction) {
+	sort.SliceStable(actions, func(i, j int) bool {
+		wi, wj := supervisorActionPriorityWeight(actions[i].Priority), supervisorActionPriorityWeight(actions[j].Priority)
+		if wi != wj {
+			return wi < wj
+		}
+		gi, gj := supervisorActionGlobalImpactSortWeight(actions[i]), supervisorActionGlobalImpactSortWeight(actions[j])
+		if gi != gj {
+			return gi < gj
+		}
+		return actions[i].Target < actions[j].Target
+	})
+}
+
+func supervisorActionPriorityWeight(v string) int {
+	switch v {
+	case "alta":
+		return 0
+	case "media":
+		return 1
+	default:
+		return 2
+	}
 }
 
 func supervisorWorkspaceProjectRiskSnapshot() map[string]int {

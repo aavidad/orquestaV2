@@ -289,6 +289,47 @@ func TestOpenClawOperatorQueueHelpersRecuperanFallbackDesdePipeline(t *testing.T
 	}
 }
 
+func TestFillOpenClawOperationalQueuesFromStatusFallbackUsaCarrilRapidoSinPanelVivo(t *testing.T) {
+	prevRows := supervisorPanelRowsBuilder
+	prevRisk := supervisorWorkspaceProjectRiskSnapshotBuilder
+	t.Cleanup(func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorWorkspaceProjectRiskSnapshotBuilder = prevRisk
+	})
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		t.Fatalf("el fallback rapido de openclaw/operator no deberia pedir panel vivo")
+		return nil, nil
+	}
+	supervisorWorkspaceProjectRiskSnapshotBuilder = func() map[string]int {
+		t.Fatalf("el fallback rapido de openclaw/operator no deberia pedir workspace control")
+		return nil
+	}
+
+	status := apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex4", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{},
+		TareasPorEstado:   map[string]int{string(db.TareaLibre): 1},
+	}
+
+	queue, safe, next, nextSafe := fillOpenClawOperationalQueuesFromStatusFallback(status, nil, nil, nil, nil, nil)
+	if len(queue) == 0 || queue[0].Action != "asignar_tarea_libre" || queue[0].Target != "backlog:libre" {
+		t.Fatalf("queue fallback rapido inesperada: %#v", queue)
+	}
+	if len(safe) == 0 {
+		t.Fatalf("safe_action_queue deberia poblarse en fallback rapido")
+	}
+	parsed, ok := next.(*supervisorRecommendedAction)
+	if !ok || parsed == nil || parsed.Target != "backlog:libre" {
+		t.Fatalf("next_action fallback rapido inesperada: %#v", next)
+	}
+	parsedSafe, ok := nextSafe.(*supervisorRecommendedAction)
+	if !ok || parsedSafe == nil || parsedSafe.Target == "" {
+		t.Fatalf("next_safe_action fallback rapido inesperada: %#v", nextSafe)
+	}
+}
+
 func TestBuildOpenClawSubagentFollowupsBestEffortToleraFallbackLento(t *testing.T) {
 	prevBuilder := openClawSubagentFollowupsDirectBuilder
 	prevTimeout := openClawSubagentFollowupsDirectTimeout
@@ -354,6 +395,86 @@ func TestBuildOpenClawOperatorSnapshotBestEffortDegradaACanonicoSiCoreLento(t *t
 	if _, ok := payload["server_operational"].(serverOperationalInfo); !ok {
 		t.Fatalf("server_operational fallback inesperado: %#v", payload["server_operational"])
 	}
+}
+
+func TestBuildOpenClawOperatorSnapshotFastPorDefectoNoInvocaCore(t *testing.T) {
+	prevBuilder := openClawOperatorSnapshotCoreBuilder
+	prevDefault := openClawOperatorRichDefault
+	t.Cleanup(func() {
+		openClawOperatorSnapshotCoreBuilder = prevBuilder
+		openClawOperatorRichDefault = prevDefault
+	})
+
+	openClawOperatorRichDefault = false
+	openClawOperatorSnapshotCoreBuilder = func(supervisor string, apiStatus apiStatusResponse) map[string]any {
+		t.Fatalf("no deberia invocar snapshot rico en modo por defecto")
+		return nil
+	}
+
+	status := apiStatusResponse{
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"}},
+		TareasActivas:     []tareaLite{{ID: 40, Titulo: "frente", Estado: db.TareaEnProgreso, Agente: "Codex10"}},
+		TareasEnProgreso:  []tareaLite{{ID: 40, Titulo: "frente", Estado: db.TareaEnProgreso, Agente: "Codex10"}},
+		TareasPorEstado:   map[string]int{string(db.TareaLibre): 1},
+		Generado:          time.Now().UTC().Format(time.RFC3339),
+	}
+
+	payload := buildOpenClawOperatorSnapshot("OpenClaw", status, false)
+	if _, ok := payload["status"].(apiOpenClawStatusLite); !ok {
+		t.Fatalf("status fallback inesperado: %#v", payload["status"])
+	}
+}
+
+func TestBuildOpenClawOperatorSnapshotCoreNoReabreFollowupsSiReviewLlegaDegradada(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prevReview := openClawOperatorReviewSnapshotBuilder
+		prevDirect := openClawSubagentFollowupsDirectBuilder
+		t.Cleanup(func() {
+			openClawOperatorReviewSnapshotBuilder = prevReview
+			openClawSubagentFollowupsDirectBuilder = prevDirect
+		})
+
+		openClawOperatorReviewSnapshotBuilder = func(supervisor string, status apiStatusResponse) map[string]any {
+			return map[string]any{
+				"thread_sessions":      map[string]any{},
+				"pipeline_state":       map[string]any{},
+				"subagents":            map[string]any{},
+				"normalized_events":    []openClawNormalizedEvent{},
+				"worktree_drift":       []apiOpenClawWorktreeDrift{},
+				"mailbox_pending":      []apiOpenClawMailboxLite{},
+				"critical_project_risk": nil,
+			}
+		}
+		openClawSubagentFollowupsDirectBuilder = func(supervisor string) []map[string]any {
+			t.Fatalf("no deberia recalcular followups directos si la review ya degrado")
+			return nil
+		}
+
+		status := apiStatusResponse{
+			AgentesActivos:    []*db.Agente{{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"}},
+			AgentesTrabajando: []*db.Agente{{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"}},
+			Agentes:           []*db.Agente{{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"}},
+			TareasActivas:     []tareaLite{{ID: 40, Titulo: "frente", Estado: db.TareaEnProgreso, Agente: "Codex10"}},
+			TareasEnProgreso:  []tareaLite{{ID: 40, Titulo: "frente", Estado: db.TareaEnProgreso, Agente: "Codex10"}},
+			TareasPorEstado:   map[string]int{string(db.TareaEnProgreso): 1},
+			Generado:          time.Now().UTC().Format(time.RFC3339),
+		}
+
+		payload := buildOpenClawOperatorSnapshotCore("OpenClaw", status)
+
+		if followups, ok := payload["subagentes_followup"].([]map[string]any); !ok || len(followups) != 0 {
+			t.Fatalf("subagentes_followup degradado inesperado: %#v", payload["subagentes_followup"])
+		}
+		if pipeline, ok := payload["pipeline_state"].(map[string]any); !ok || len(pipeline) != 0 {
+			t.Fatalf("pipeline_state degradado inesperado: %#v", payload["pipeline_state"])
+		}
+		if subagents := payload["subagentes"]; subagents != nil {
+			if typed, ok := subagents.([]*db.SupervisorSubagent); !ok || len(typed) != 0 {
+				t.Fatalf("subagentes degradados inesperados: %#v", payload["subagentes"])
+			}
+		}
+	})
 }
 
 func TestListarSupervisorModuleConflictsFromTasksReutilizaEstadoYaCargado(t *testing.T) {
