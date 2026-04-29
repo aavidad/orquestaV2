@@ -15692,6 +15692,11 @@ func procesarDerivacionSemillaPremiumSesionActiva(sesion *db.Sesion, snapshot *a
 	if err != nil || tareaNueva == nil {
 		return 0, err
 	}
+	if ajena, err := tareaPipelineLocalAsignadaAOtroAgente(tareaNueva, strings.TrimSpace(sesion.Agente)); err != nil {
+		return 0, err
+	} else if ajena {
+		return 0, nil
+	}
 	if err := cerrarSemillaPremiumSiDerivaAFrenteAcotado(sesion.Agente, proyecto.ID, tareaNueva); err != nil {
 		return 0, err
 	}

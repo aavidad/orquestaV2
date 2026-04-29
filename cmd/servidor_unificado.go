@@ -602,6 +602,7 @@ func launchServerAutonomyMaintenanceLoop(ctx context.Context, debugLogger *log.L
 		}
 	}
 	go func() {
+		runOnce()
 		ticker := time.NewTicker(serverAutonomyMaintenanceInterval())
 		defer ticker.Stop()
 		for {
