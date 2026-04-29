@@ -14489,7 +14489,7 @@ func seleccionarRelevoAutonomiaConTechoConSignal(rows []agentesapp.Row, openTask
 			continue
 		}
 		if candidateCeiling > 0 && openTasks >= candidateCeiling {
-			if allowOverflowFallback {
+			if allowOverflowFallback && relevoAutonomiaPuedeUsarOverflow(row, now) {
 				overflowCandidates = append(overflowCandidates, candidate{
 					agente:          agente,
 					mismoProyecto:   mismoProyecto,
@@ -14769,6 +14769,10 @@ func rowHasFreshTMUXWorkerForRecovery(row agentesapp.Row, now time.Time) bool {
 		return false
 	}
 	return strings.EqualFold(rowWorkerDriverForRecovery(row), "tmux_cli_session")
+}
+
+func relevoAutonomiaPuedeUsarOverflow(row agentesapp.Row, now time.Time) bool {
+	return rowHasFreshTMUXWorkerForRecovery(row, now)
 }
 
 func autonomiaTickDebugf(format string, args ...any) {
