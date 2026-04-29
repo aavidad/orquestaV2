@@ -8104,19 +8104,44 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 		attachSupervisorQueueContext(result, snapshot, selected)
 		return attachSupervisorCriticalProjectRisk(result, snapshot), nil
 	case "seguir_guidance_durable":
-		mailboxID, err := resolveSupervisorActionMailboxID(*selected, worker)
+		agenteObjetivo := strings.TrimSpace(worker)
+		if strings.HasPrefix(strings.TrimSpace(selected.Target), "agente:") {
+			agenteObjetivo = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(selected.Target), "agente:"))
+		}
+		if agenteObjetivo == "" {
+			return nil, fmt.Errorf("target de agente inválido para guidance durable: %s", strings.TrimSpace(selected.Target))
+		}
+		estadoPendiente := "pendiente"
+		filter := db.FiltroRuntimeMailbox{
+			ToAgente: strPtr(strings.TrimSpace(apiNombreAgenteCanonico(agenteObjetivo))),
+			Estado:   &estadoPendiente,
+		}
+		processedCount, err := apiRuntimeProcessMailboxExecutor(filter)
 		if err != nil {
 			return nil, err
 		}
-		if err := runtimesService.MarkRuntimeMailboxConsumed(mailboxID); err != nil {
+		remaining, err := db.ListarRuntimeMailbox(filter)
+		if err != nil {
 			return nil, err
 		}
+		pendingIDs := make([]int64, 0, len(remaining))
+		for _, item := range remaining {
+			if item == nil {
+				continue
+			}
+			pendingIDs = append(pendingIDs, item.ID)
+		}
 		result := map[string]any{
-			"ok":         true,
-			"supervisor": supervisor,
-			"action":     selected,
-			"mailbox_id": mailboxID,
-			"assignee":   worker,
+			"ok":                    true,
+			"supervisor":            supervisor,
+			"action":                selected,
+			"agente":                agenteObjetivo,
+			"assignee":              worker,
+			"processed_count":       processedCount,
+			"mailbox_pending_after": len(pendingIDs),
+			"pending_mailbox_ids":   pendingIDs,
+			"guidance_resolved":     len(pendingIDs) == 0,
+			"needs_followup":        len(pendingIDs) > 0,
 		}
 		attachSupervisorQueueContext(result, snapshot, selected)
 		return attachSupervisorCriticalProjectRisk(result, snapshot), nil

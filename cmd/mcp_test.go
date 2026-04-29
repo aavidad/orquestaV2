@@ -7430,10 +7430,12 @@ func TestMCPToolSupervisorRefrescaWorktreeLimpia(t *testing.T) {
 	})
 }
 
-func TestMCPToolSupervisorConsumeGuidanceDurable(t *testing.T) {
+func TestMCPToolSupervisorDrainGuidanceDurableWithoutBlindConsume(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService
+		prevMailboxExecutor := apiRuntimeProcessMailboxExecutor
 		defer func() { statusService = prev }()
+		defer func() { apiRuntimeProcessMailboxExecutor = prevMailboxExecutor }()
 
 		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
 			t.Fatalf("registrar Codex3: %v", err)
@@ -7460,6 +7462,11 @@ func TestMCPToolSupervisorConsumeGuidanceDurable(t *testing.T) {
 				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
 			},
 		}}
+		var seenFilter db.FiltroRuntimeMailbox
+		apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) {
+			seenFilter = filter
+			return 3, nil
+		}
 
 		result, err := callMCPTool("orquesta.supervision.acciones.aplicar", map[string]any{
 			"supervisor": "OpenClaw",
@@ -7473,6 +7480,21 @@ func TestMCPToolSupervisorConsumeGuidanceDurable(t *testing.T) {
 		if result["isError"] != false {
 			t.Fatalf("guidance durable marcada como error: %#v", result)
 		}
+		if seenFilter.ToAgente == nil || *seenFilter.ToAgente != "Codex3" {
+			t.Fatalf("filtro mailbox inesperado: %+v", seenFilter)
+		}
+		payload, _ := result["structuredContent"].(map[string]any)
+		processedCount, _ := payload["processed_count"].(int)
+		if got := processedCount; got != 3 {
+			t.Fatalf("processed_count inesperado: %#v", payload)
+		}
+		pendingAfter, _ := payload["mailbox_pending_after"].(int)
+		if got := pendingAfter; got != 1 {
+			t.Fatalf("mailbox_pending_after inesperado: %#v", payload)
+		}
+		if resolved, _ := payload["guidance_resolved"].(bool); resolved {
+			t.Fatalf("guidance no deberia figurar resuelta sin entrega real: %#v", payload)
+		}
 		rows, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: strPtr("Codex3")})
 		if err != nil {
 			t.Fatalf("listar mailbox: %v", err)
@@ -7484,8 +7506,8 @@ func TestMCPToolSupervisorConsumeGuidanceDurable(t *testing.T) {
 				break
 			}
 		}
-		if found == nil || found.Estado != "consumido" {
-			t.Fatalf("mailbox no consumida: %+v", found)
+		if found == nil || found.Estado != "pendiente" {
+			t.Fatalf("mailbox no deberia consumirse a ciegas: %+v", found)
 		}
 	})
 }
