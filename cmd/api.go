@@ -830,6 +830,7 @@ type apiRuntimeSelfHealResponse struct {
 	Degradados    apiRuntimeProcessAutonomiaResponse    `json:"degradados"`
 	Autonomia     apiRuntimeProcessAutonomiaResponse    `json:"autonomia"`
 	Reanimaciones apiRuntimeProcessReanimationsResponse `json:"reanimaciones"`
+	RearmApplied  []map[string]any                      `json:"rearmApplied,omitempty"`
 	Operational   serverOperationalInfo                 `json:"operational"`
 	Errors        []string                              `json:"errors,omitempty"`
 }

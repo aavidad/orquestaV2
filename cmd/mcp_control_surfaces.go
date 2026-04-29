@@ -36,7 +36,7 @@ func mcpServerSelfHealTool() mcpTool {
 	return mcpTool{
 		Name:        "orquesta.server.self_heal",
 		Title:       "Auto-reparar control plane",
-		Description: "Ejecuta el barrido canónico de wake, hygiene, degradados, autonomia y reanimaciones, y devuelve el estado operativo final",
+		Description: "Ejecuta el barrido canónico de wake, hygiene, degradados, autonomia y reanimaciones; si aún queda rearm seguro pendiente, lo aplica hasta converger o agotar el límite",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -47,6 +47,7 @@ func mcpServerSelfHealTool() mcpTool {
 				"degradados":    map[string]any{"type": "boolean"},
 				"autonomia":     map[string]any{"type": "boolean"},
 				"reanimaciones": map[string]any{"type": "boolean"},
+				"rearm":         map[string]any{"type": "boolean"},
 			},
 			"additionalProperties": false,
 		},
@@ -67,6 +68,7 @@ func callMCPWorkspaceControl(args map[string]any) (map[string]any, error) {
 }
 
 var mcpBuildServerOperationalInfoFn = buildMCPServerOperationalInfo
+var mcpServerSelfHealRearmLimit = 3
 
 func buildMCPServerOperationalInfo() serverOperationalInfo {
 	if snapshot, ok := readStatusSnapshotFreshUsable(); ok {
@@ -149,5 +151,33 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 		}
 	}
 	result.Operational = mcpBuildServerOperationalInfoFn()
+	if enabled("rearm") {
+		for attempts := 0; attempts < mcpServerSelfHealRearmLimit; attempts++ {
+			rearm := result.Operational.Rearm
+			if result.Operational.Operational || rearm == nil || !rearm.Needed || !rearm.Available {
+				break
+			}
+			applied, err := serverOperationalApplyNextAction(rearm.Supervisor)
+			if err != nil {
+				appendErr("rearm", err)
+				break
+			}
+			if applied != nil {
+				result.RearmApplied = append(result.RearmApplied, applied)
+			}
+			result.Operational = mcpBuildServerOperationalInfoFn()
+		}
+		if !result.Operational.Operational && result.Operational.Rearm != nil &&
+			result.Operational.Rearm.Needed && result.Operational.Rearm.Available &&
+			len(result.RearmApplied) >= mcpServerSelfHealRearmLimit {
+			appendErr("rearm", errSelfHealRearmLimitReached)
+		}
+	}
 	return toolResult(prettyJSON(result), result, len(result.Errors) > 0), nil
 }
+
+var errSelfHealRearmLimitReached = mcpServerSelfHealError("safe rearm limit reached before convergence")
+
+type mcpServerSelfHealError string
+
+func (e mcpServerSelfHealError) Error() string { return string(e) }

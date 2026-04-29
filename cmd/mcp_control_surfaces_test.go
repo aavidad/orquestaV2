@@ -108,6 +108,7 @@ func TestMCPToolServerSelfHealEjecutaCarrilesCanonicosYDevuelveOperational(t *te
 	prevAutonomia := runtimeProcessAutonomiaBatch
 	prevReanimations := runtimeProcessReanimationsBatchFn
 	prevOperational := mcpBuildServerOperationalInfoFn
+	prevRearmApply := serverOperationalApplyNextActionFn
 	defer func() {
 		apiRuntimeWakeOrdersFn = prevWakeOrders
 		apiRuntimeWakeMailboxFn = prevWakeMailbox
@@ -117,6 +118,7 @@ func TestMCPToolServerSelfHealEjecutaCarrilesCanonicosYDevuelveOperational(t *te
 		runtimeProcessAutonomiaBatch = prevAutonomia
 		runtimeProcessReanimationsBatchFn = prevReanimations
 		mcpBuildServerOperationalInfoFn = prevOperational
+		serverOperationalApplyNextActionFn = prevRearmApply
 	}()
 
 	apiRuntimeWakeOrdersFn = func() bool { return true }
@@ -139,6 +141,10 @@ func TestMCPToolServerSelfHealEjecutaCarrilesCanonicosYDevuelveOperational(t *te
 			Reactivated:       2,
 			CooldownSustained: 1,
 		}
+	}
+	serverOperationalApplyNextActionFn = func(supervisor string) (map[string]any, error) {
+		t.Fatalf("self_heal no deberia invocar rearm si el estado ya converge")
+		return nil, nil
 	}
 	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
 		return serverOperationalInfo{
@@ -167,6 +173,148 @@ func TestMCPToolServerSelfHealEjecutaCarrilesCanonicosYDevuelveOperational(t *te
 	}
 	if payload.Operational.State != "ready" || !payload.Operational.Operational || payload.Operational.TasksInProgress != 3 {
 		t.Fatalf("operational final inesperado: %+v", payload.Operational)
+	}
+}
+
+func TestMCPToolServerSelfHealAutoRearmaHastaConverger(t *testing.T) {
+	prevOperational := mcpBuildServerOperationalInfoFn
+	prevRearmApply := serverOperationalApplyNextActionFn
+	prevLimit := mcpServerSelfHealRearmLimit
+	defer func() {
+		mcpBuildServerOperationalInfoFn = prevOperational
+		serverOperationalApplyNextActionFn = prevRearmApply
+		mcpServerSelfHealRearmLimit = prevLimit
+	}()
+
+	mcpServerSelfHealRearmLimit = 3
+	operationalCalls := 0
+	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
+		operationalCalls++
+		switch operationalCalls {
+		case 1:
+			return serverOperationalInfo{
+				State:       "degraded",
+				Operational: false,
+				Reason:      "tasks_without_workers",
+				Rearm: &serverOperationalRearmHint{
+					Needed:     true,
+					Available:  true,
+					Supervisor: "OpenClaw",
+				},
+			}
+		case 2:
+			return serverOperationalInfo{
+				State:       "degraded",
+				Operational: false,
+				Reason:      "workers_stuck",
+				Rearm: &serverOperationalRearmHint{
+					Needed:     true,
+					Available:  true,
+					Supervisor: "OpenClaw",
+				},
+			}
+		default:
+			return serverOperationalInfo{
+				State:        "ready",
+				Operational:  true,
+				Reason:       "control_plane_responsive",
+				ActiveAgents: 4,
+			}
+		}
+	}
+
+	var rearms []string
+	serverOperationalApplyNextActionFn = func(supervisor string) (map[string]any, error) {
+		rearms = append(rearms, supervisor)
+		return map[string]any{
+			"ok":         true,
+			"supervisor": supervisor,
+			"queue_kind": "safe",
+			"task_id":    int64(len(rearms)),
+		}, nil
+	}
+
+	result, err := callMCPTool("orquesta.server.self_heal", map[string]any{
+		"orders":        false,
+		"mailbox":       false,
+		"warm":          false,
+		"hygiene":       false,
+		"degradados":    false,
+		"autonomia":     false,
+		"reanimaciones": false,
+	})
+	if err != nil {
+		t.Fatalf("server self_heal MCP: %v", err)
+	}
+	if result["isError"] != false {
+		t.Fatalf("server self_heal no deberia marcar error tras converger: %#v", result)
+	}
+	payload, _ := result["structuredContent"].(apiRuntimeSelfHealResponse)
+	if !payload.OK || !payload.Operational.Operational || payload.Operational.State != "ready" {
+		t.Fatalf("self_heal deberia converger tras rearm seguro: %+v", payload)
+	}
+	if len(rearms) != 2 {
+		t.Fatalf("deberia aplicar dos rearms seguros antes de converger, got=%d", len(rearms))
+	}
+	if len(payload.RearmApplied) != 2 {
+		t.Fatalf("rearmApplied inesperado: %+v", payload.RearmApplied)
+	}
+}
+
+func TestMCPToolServerSelfHealMarcaErrorSiRearmNoConvergeDentroDelLimite(t *testing.T) {
+	prevOperational := mcpBuildServerOperationalInfoFn
+	prevRearmApply := serverOperationalApplyNextActionFn
+	prevLimit := mcpServerSelfHealRearmLimit
+	defer func() {
+		mcpBuildServerOperationalInfoFn = prevOperational
+		serverOperationalApplyNextActionFn = prevRearmApply
+		mcpServerSelfHealRearmLimit = prevLimit
+	}()
+
+	mcpServerSelfHealRearmLimit = 2
+	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
+		return serverOperationalInfo{
+			State:       "degraded",
+			Operational: false,
+			Reason:      "tasks_without_workers",
+			Rearm: &serverOperationalRearmHint{
+				Needed:     true,
+				Available:  true,
+				Supervisor: "OpenClaw",
+			},
+		}
+	}
+	attempts := 0
+	serverOperationalApplyNextActionFn = func(supervisor string) (map[string]any, error) {
+		attempts++
+		return map[string]any{
+			"ok":         true,
+			"supervisor": supervisor,
+			"queue_kind": "safe",
+		}, nil
+	}
+
+	result, err := callMCPTool("orquesta.server.self_heal", map[string]any{
+		"orders":        false,
+		"mailbox":       false,
+		"warm":          false,
+		"hygiene":       false,
+		"degradados":    false,
+		"autonomia":     false,
+		"reanimaciones": false,
+	})
+	if err != nil {
+		t.Fatalf("server self_heal MCP: %v", err)
+	}
+	if result["isError"] != true {
+		t.Fatalf("server self_heal deberia marcar error si no converge el rearm: %#v", result)
+	}
+	payload, _ := result["structuredContent"].(apiRuntimeSelfHealResponse)
+	if payload.OK || attempts != 2 {
+		t.Fatalf("self_heal deberia cortar en el limite de rearm: attempts=%d payload=%+v", attempts, payload)
+	}
+	if len(payload.Errors) == 0 || !strings.Contains(payload.Errors[len(payload.Errors)-1], "rearm: safe rearm limit reached before convergence") {
+		t.Fatalf("error de rearm inesperado: %+v", payload.Errors)
 	}
 }
 
