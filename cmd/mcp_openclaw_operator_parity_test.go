@@ -79,13 +79,13 @@ func TestMCPOpenClawOperatorExponeSnapshotCanonico(t *testing.T) {
 		snapshot := apiStatusResponse{
 			Generado: time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC).Format(time.RFC3339),
 			Agentes: []*db.Agente{
-				{Nombre: "Codex4"},
+				{Nombre: "Codex4", Activo: true},
 			},
 			AgentesActivos: []*db.Agente{
-				{Nombre: "Codex4"},
+				{Nombre: "Codex4", Activo: true},
 			},
 			AgentesTrabajando: []*db.Agente{
-				{Nombre: "Codex4"},
+				{Nombre: "Codex4", Activo: true},
 			},
 			TareasPorEstado: map[string]int{
 				string(db.TareaEnProgreso): 1,

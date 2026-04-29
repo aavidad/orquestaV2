@@ -1458,6 +1458,141 @@ func TestAPIServerOperationalUsesReadOnlyFallbackWhenFastFallbackUnavailable(t *
 	}
 }
 
+func TestResolveOpenClawAPIStatusIgnoraSnapshotQueRequiereRefresh(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	prevFast := statusFastFetcher
+	prevUltraLite := apiStatusUltraLiteFetcher
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	prevNow := statusNowFunc
+	t.Cleanup(func() {
+		statusFastFetcher = prevFast
+		apiStatusUltraLiteFetcher = prevUltraLite
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+		statusNowFunc = prevNow
+	})
+
+	now := time.Date(2026, 4, 29, 10, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Stale1", Activo: true, EstadoCuota: "activo"},
+			{Nombre: "Stale2", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Stale1", Activo: true, EstadoCuota: "activo"},
+			{Nombre: "Stale2", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasEnProgreso: []tareaLite{
+			{ID: 98, Estado: db.TareaEnProgreso, Agente: "Stale1"},
+			{ID: 99, Estado: db.TareaEnProgreso, Agente: "Stale2"},
+		},
+		Autonomia: autonomiaResumen{ContinuidadPendiente: 1},
+		Generado:  now.Format(time.RFC3339),
+	}, now, time.Minute)
+
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{}, errStatusFetchTimeout
+	}
+	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) {
+		return apiStatusResponse{}, false
+	}
+	apiStatusReadOnlyLiteFetcher = func() ([]*db.Agente, map[string]int, []*db.Tarea, error) {
+		return []*db.Agente{{Nombre: "CodexRO", Activo: true, EstadoCuota: "activo"}}, map[string]int{"en_progreso": 1}, []*db.Tarea{
+			{ID: 9, Estado: db.TareaEnProgreso, Agente: stringPtr("CodexRO")},
+		}, nil
+	}
+
+	status := resolveOpenClawAPIStatus()
+	if len(status.AgentesActivos) != 1 || status.AgentesActivos[0].Nombre != "CodexRO" {
+		t.Fatalf("openclaw deberia ignorar snapshot en transicion: %+v", status.AgentesActivos)
+	}
+}
+
+func TestBuildOpenClawBaseStatusFromAPIStatusReparaVisiblesSiFaltan(t *testing.T) {
+	status := apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", Activo: true, Habilitado: true, EstadoSesion: "disponible", EstadoCuota: "activo"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 41, Estado: db.TareaEnProgreso, Agente: "Codex1"},
+		},
+		TareasPorEstado: map[string]int{string(db.TareaEnProgreso): 1},
+		Generado:        time.Date(2026, 4, 29, 10, 5, 0, 0, time.UTC).Format(time.RFC3339),
+	}
+
+	resumen := buildOpenClawBaseStatusFromAPIStatus(status)
+	if resumen == nil {
+		t.Fatal("resumen openclaw vacio")
+	}
+	if len(resumen.AgentesActivos) != 1 || resumen.AgentesActivos[0].Nombre != "Codex1" {
+		t.Fatalf("agentes activos reparados inesperados: %+v", resumen.AgentesActivos)
+	}
+	if len(resumen.AgentesTrabajando) != 1 || resumen.AgentesTrabajando[0].Nombre != "Codex1" {
+		t.Fatalf("agentes trabajando reparados inesperados: %+v", resumen.AgentesTrabajando)
+	}
+}
+
+func TestAPIServerOperationalPrefiereFallbackAntesQueBuilderLento(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	prevBuilder := apiServerOperationalBuilder
+	prevTimeout := apiServerOperationalTimeout
+	prevFallback := apiServerOperationalStatusFallback
+	t.Cleanup(func() {
+		apiServerOperationalBuilder = prevBuilder
+		apiServerOperationalTimeout = prevTimeout
+		apiServerOperationalStatusFallback = prevFallback
+	})
+
+	apiServerOperationalTimeout = 3 * time.Second
+	apiServerOperationalBuilder = func() (serverOperationalInfo, error) {
+		time.Sleep(250 * time.Millisecond)
+		return serverOperationalInfo{
+			State:            "ready",
+			Operational:      true,
+			Reason:           "builder",
+			RegisteredAgents: 99,
+		}, nil
+	}
+	apiServerOperationalStatusFallback = func() (apiStatusResponse, error) {
+		return apiStatusResponse{
+			Agentes:           []*db.Agente{{Nombre: "CodexRO", Activo: true, EstadoCuota: "activo"}},
+			AgentesActivos:    []*db.Agente{{Nombre: "CodexRO", Activo: true, EstadoCuota: "activo"}},
+			AgentesTrabajando: []*db.Agente{{Nombre: "CodexRO", Activo: true, EstadoCuota: "activo"}},
+			TareasEnProgreso:  []tareaLite{{ID: 9, Estado: db.TareaEnProgreso, Agente: "CodexRO"}},
+			TareasPorEstado:   map[string]int{string(db.TareaEnProgreso): 1},
+			Generado:          time.Date(2026, 4, 29, 9, 0, 0, 0, time.UTC).Format(time.RFC3339),
+		}, nil
+	}
+
+	start := time.Now()
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational", nil)
+	rec := httptest.NewRecorder()
+	apiHandlerServerOperational(rec, req)
+	elapsed := time.Since(start)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if elapsed >= 200*time.Millisecond {
+		t.Fatalf("deberia responder por fallback antes del builder lento, elapsed=%s", elapsed)
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode operational fallback-first: %v", err)
+	}
+	if payload.RegisteredAgents != 1 || payload.Reason == "builder" || payload.TasksInProgress != 1 {
+		t.Fatalf("payload operacional inesperado: %+v", payload)
+	}
+}
+
 func TestAPIServerOperationalIgnoraSnapshotEnTransicionYUsaReadOnlyFresco(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()
@@ -1635,6 +1770,43 @@ func TestFetchStatusReadOnlyLiteDirectPrefierePanelSnapshotFrescoParaVisibilidad
 	}
 	if len(status.AgentesTrabajando) != 1 || status.AgentesTrabajando[0].Nombre != "Codex2" {
 		t.Fatalf("agentes trabajando deberian alinearse con panel fresco: %+v", status.AgentesTrabajando)
+	}
+}
+
+func TestFetchStatusReadOnlyLiteDirectNoSeQuedaBloqueadoPorSesionesVisibles(t *testing.T) {
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	prevSessions := statusVisibleSessionsFetcher
+	prevAgentsWithSessions := statusListAgentsWithSessionsFetcher
+	resetAgentPanelSnapshotCache()
+	t.Cleanup(func() {
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+		statusVisibleSessionsFetcher = prevSessions
+		statusListAgentsWithSessionsFetcher = prevAgentsWithSessions
+		resetAgentPanelSnapshotCache()
+	})
+
+	apiStatusReadOnlyLiteFetcher = func() ([]*db.Agente, map[string]int, []*db.Tarea, error) {
+		return []*db.Agente{{Nombre: "Codex2", Activo: true, Habilitado: true, EstadoCuota: "activo"}}, map[string]int{}, nil, nil
+	}
+	statusVisibleSessionsFetcher = func() ([]*db.Sesion, error) {
+		time.Sleep(200 * time.Millisecond)
+		return []*db.Sesion{{ID: 7, Agente: "Codex2", Activa: true, Estado: "activa"}}, nil
+	}
+	statusListAgentsWithSessionsFetcher = func(_ []*db.Sesion) ([]*db.Agente, error) {
+		return []*db.Agente{{Nombre: "Codex2", Activo: true, Habilitado: true, EstadoSesion: "disponible", EstadoCuota: "activo"}}, nil
+	}
+
+	start := time.Now()
+	status, ok := fetchStatusReadOnlyLiteDirect(20 * time.Millisecond)
+	elapsed := time.Since(start)
+	if !ok {
+		t.Fatalf("deberia construir snapshot read-only")
+	}
+	if elapsed >= 120*time.Millisecond {
+		t.Fatalf("el enrichment de sesiones no deberia bloquear el fallback, elapsed=%s", elapsed)
+	}
+	if len(status.Agentes) == 0 || status.Agentes[0].Nombre != "Codex2" {
+		t.Fatalf("snapshot read-only inesperado: %+v", status.Agentes)
 	}
 }
 

@@ -1243,16 +1243,16 @@ func apiHandlerServerOperational(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if apiServerOperationalBuilder != nil {
-		if info, err := runAPITimeboxed(apiServerOperationalTimeout, apiServerOperationalBuilder, errStatusFetchTimeout); err == nil {
-			apiWriteServerOperational(w, r, info)
-			return
-		}
-	}
 	if apiServerOperationalStatusFallback != nil {
 		if status, err := apiServerOperationalStatusFallback(); err == nil {
 			reconcileStatusSnapshotWithFreshPanel(&status)
 			apiWriteServerOperational(w, r, buildServerOperationalInfo(status))
+			return
+		}
+	}
+	if apiServerOperationalBuilder != nil {
+		if info, err := runAPITimeboxed(apiServerOperationalTimeout, apiServerOperationalBuilder, errStatusFetchTimeout); err == nil {
+			apiWriteServerOperational(w, r, info)
 			return
 		}
 	}
@@ -1610,6 +1610,7 @@ func fetchStatusReadOnlyLiteDirect(timeout time.Duration) (apiStatusResponse, bo
 	if fetcher == nil {
 		return apiStatusResponse{}, false
 	}
+	startedAt := time.Now()
 	type liteResult struct {
 		agentes []*db.Agente
 		cuentas map[string]int
@@ -1626,9 +1627,22 @@ func fetchStatusReadOnlyLiteDirect(timeout time.Duration) (apiStatusResponse, bo
 		return apiStatusResponse{}, false
 	}
 	if statusVisibleSessionsFetcher != nil && statusListAgentsWithSessionsFetcher != nil {
-		if sesiones, err := statusVisibleSessionsFetcher(); err == nil {
-			if agentesConSesiones, err := statusListAgentsWithSessionsFetcher(sesiones); err == nil && len(agentesConSesiones) > 0 {
-				result.agentes = agentesConSesiones
+		if remaining := timeout - time.Since(startedAt); remaining > 0 {
+			type sessionAgentsResult struct {
+				value []*db.Agente
+			}
+			if enriched, err := runAPITimeboxed(remaining, func() (sessionAgentsResult, error) {
+				sesiones, err := statusVisibleSessionsFetcher()
+				if err != nil || len(sesiones) == 0 {
+					return sessionAgentsResult{}, err
+				}
+				agentesConSesiones, err := statusListAgentsWithSessionsFetcher(sesiones)
+				if err != nil {
+					return sessionAgentsResult{}, err
+				}
+				return sessionAgentsResult{value: agentesConSesiones}, nil
+			}, errStatusFetchTimeout); err == nil && len(enriched.value) > 0 {
+				result.agentes = enriched.value
 			}
 		}
 	}
@@ -2543,8 +2557,9 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		supervisor := resolveOpenClawOperatorSupervisor(r.URL.Query().Get("supervisor"))
-		status := buildOpenClawBaseStatus()
-		revision := buildOpenClawReviewSnapshotSafe(supervisor)
+		apiStatus := resolveOpenClawAPIStatus()
+		status := buildOpenClawBaseStatusFromAPIStatus(apiStatus)
+		revision := buildOpenClawReviewSnapshotSafeWithStatus(supervisor, apiStatus)
 		mailboxPendiente, mailboxKnown := openClawPendingMailboxFromReviewSnapshot(revision)
 		var panelRows []agentesapp.Row
 		if rows, err := runAPITimeboxed(200*time.Millisecond, func() ([]agentesapp.Row, error) {
@@ -2591,7 +2606,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		reviewCompact := buildOpenClawReviewCompact(revision)
 		queueSummary := buildOpenClawQueueSummaryFromReviewSnapshot(revision)
 		sessionCandidates := alignOpenClawSessionCandidatesWithStatus(buildOpenClawSessionCandidates(threads), status.AgentesActivos)
-		operationalInfo := buildOpenClawOperationalInfo()
+		operationalInfo := buildOpenClawOperationalInfoWithStatus(apiStatus)
 		estadoNotifs := notificaciones.EstadoNotificaciones{}
 		if estado, err := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.EstadoNotificaciones, error) {
 			return notificaciones.DescribirConfiguracion(), nil
@@ -2723,20 +2738,20 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 }
 
 func buildOpenClawBaseStatus() *estadoResumen {
-	if cached, ok := readStatusSnapshotFresh(); ok {
-		reconcileStatusSnapshotWithFreshPanel(&cached)
-		return buildOpenClawBaseStatusFromAPIStatus(cached)
+	return buildOpenClawBaseStatusFromAPIStatus(resolveOpenClawAPIStatus())
+}
+
+func resolveOpenClawAPIStatus() apiStatusResponse {
+	status, err := fetchStatusForAPIAllowDirectFallback(250*time.Millisecond, statusFastTimeout)
+	if err == nil {
+		return status
 	}
 	if cached, ok := readStatusSnapshotAny(); ok {
 		reconcileStatusSnapshotWithFreshPanel(&cached)
 		ensureStatusRefreshAsync()
-		return buildOpenClawBaseStatusFromAPIStatus(cached)
+		return cached
 	}
-	status, err := fetchStatusForAPIAllowDirectFallback(250*time.Millisecond, statusFastTimeout)
-	if err == nil {
-		return buildOpenClawBaseStatusFromAPIStatus(status)
-	}
-	return buildOpenClawBaseStatusFromAPIStatus(degradedAPIStatusResponse())
+	return degradedAPIStatusResponse()
 }
 
 func buildOpenClawBaseStatusFromAPIStatus(status apiStatusResponse) *estadoResumen {
@@ -2744,20 +2759,42 @@ func buildOpenClawBaseStatusFromAPIStatus(status apiStatusResponse) *estadoResum
 	if generado == "" {
 		generado = time.Now().UTC().Format(time.RFC3339)
 	}
+	tareasActivas := normalizarTareasLiteVisibles(status.TareasActivas)
+	agentesActivos := status.AgentesActivos
+	agentesTrabajando := status.AgentesTrabajando
+	tareasEnProgreso := filtrarOpenClawTareasPorEstado(status.TareasEnProgreso, db.TareaEnProgreso)
+	if len(tareasEnProgreso) == 0 {
+		tareasEnProgreso = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaEnProgreso)
+	}
+	tareasReservadas := filtrarOpenClawTareasPorEstado(status.TareasReservadas, db.TareaAsignada)
+	if len(tareasReservadas) == 0 {
+		tareasReservadas = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaAsignada)
+	}
+	if len(status.Agentes) > 0 && (len(agentesActivos) == 0 || len(agentesTrabajando) == 0) {
+		if activos, trabajando, _ := agentesVisiblesLigero(status.Agentes, tareasEnProgreso); len(activos) > 0 || len(trabajando) > 0 {
+			activos, trabajando, _ = normalizarAgentesVisiblesStatus(activos, trabajando, nil)
+			if len(agentesActivos) == 0 {
+				agentesActivos = activos
+			}
+			if len(agentesTrabajando) == 0 {
+				agentesTrabajando = trabajando
+			}
+		}
+	}
 	return &estadoResumen{
 		Generado:            generado,
 		Agentes:             status.Agentes,
 		TareasPorEstado:     status.TareasPorEstado,
-		AgentesActivos:      status.AgentesActivos,
-		AgentesTrabajando:   status.AgentesTrabajando,
+		AgentesActivos:      agentesActivos,
+		AgentesTrabajando:   agentesTrabajando,
 		AgentesSaturados:    status.AgentesSaturados,
 		AgentesAtascados:    status.AgentesAtascados,
 		AgentesAuthManual:   status.AgentesAuthManual,
 		AgentesQuotaBlocked: status.AgentesQuotaBlocked,
 		PropuestasAbiertas:  status.PropuestasResumen,
-		TareasActivas:       status.TareasActivas,
-		TareasEnProgreso:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada),
-		TareasReservadas:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
+		TareasActivas:       tareasActivas,
+		TareasEnProgreso:    tareasEnProgreso,
+		TareasReservadas:    tareasReservadas,
 		PoolsLocales:        status.PoolsLocales,
 		DeudaDispatch:       status.DeudaDispatch,
 		Autonomia:           status.Autonomia,
@@ -2770,6 +2807,15 @@ func buildOpenClawBaseStatusFromAPIStatus(status apiStatusResponse) *estadoResum
 func buildOpenClawReviewSnapshotSafe(supervisor string) map[string]any {
 	if snapshot, err := runAPITimeboxed(350*time.Millisecond, func() (map[string]any, error) {
 		return buildSupervisorReviewSnapshot(supervisor)
+	}, errStatusFetchTimeout); err == nil && snapshot != nil {
+		return snapshot
+	}
+	return map[string]any{}
+}
+
+func buildOpenClawReviewSnapshotSafeWithStatus(supervisor string, status apiStatusResponse) map[string]any {
+	if snapshot, err := runAPITimeboxed(350*time.Millisecond, func() (map[string]any, error) {
+		return buildSupervisorReviewSnapshotWithStatus(supervisor, status)
 	}, errStatusFetchTimeout); err == nil && snapshot != nil {
 		return snapshot
 	}

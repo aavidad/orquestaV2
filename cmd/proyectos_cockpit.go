@@ -48,7 +48,25 @@ func buildProyectoCockpit(ref string) (*apiProyectoCockpit, error) {
 	if proyecto == nil {
 		return nil, nil
 	}
+	status, statusVisible := fetchProyectoCockpitStatusLite()
+	return buildProyectoCockpitFromData(proyecto, status, statusVisible)
+}
 
+func buildProyectoCockpitWithStatus(ref string, status apiStatusResponse, statusVisible bool) (*apiProyectoCockpit, error) {
+	proyecto, err := db.GetProyectoConRutaEfectiva(strings.TrimSpace(ref), "")
+	if err != nil {
+		return nil, err
+	}
+	if proyecto == nil {
+		return nil, nil
+	}
+	return buildProyectoCockpitFromData(proyecto, status, statusVisible)
+}
+
+func buildProyectoCockpitFromData(proyecto *db.Proyecto, status apiStatusResponse, statusVisible bool) (*apiProyectoCockpit, error) {
+	if proyecto == nil {
+		return nil, nil
+	}
 	cockpit := &apiProyectoCockpit{
 		Proyecto:        proyecto,
 		TareasPorEstado: map[string]int{},
@@ -93,8 +111,6 @@ func buildProyectoCockpit(ref string) (*apiProyectoCockpit, error) {
 		return nil, err
 	}
 	cockpit.AsignacionesActivas = len(asignaciones)
-
-	status, statusVisible := fetchProyectoCockpitStatusLite()
 
 	agentesActivos, err := listarAgentesActivosProyecto(proyecto.ID, status, statusVisible)
 	if err != nil {

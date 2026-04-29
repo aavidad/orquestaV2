@@ -26,8 +26,9 @@ func mcpOpenClawOperatorTool() mcpTool {
 
 func buildMCPOpenClawOperatorSnapshot(supervisor string) (map[string]any, error) {
 	supervisor = resolveOpenClawOperatorSupervisor(supervisor)
-	status := buildOpenClawBaseStatus()
-	revision := buildOpenClawReviewSnapshotSafe(supervisor)
+	apiStatus := resolveOpenClawAPIStatus()
+	status := buildOpenClawBaseStatusFromAPIStatus(apiStatus)
+	revision := buildOpenClawReviewSnapshotSafeWithStatus(supervisor, apiStatus)
 	mailboxPendiente, mailboxKnown := openClawPendingMailboxFromReviewSnapshot(revision)
 
 	var panelRows []agentesapp.Row
@@ -79,7 +80,7 @@ func buildMCPOpenClawOperatorSnapshot(supervisor string) (map[string]any, error)
 	reviewCompact := buildOpenClawReviewCompact(revision)
 	queueSummary := buildOpenClawQueueSummaryFromReviewSnapshot(revision)
 	sessionCandidates := alignOpenClawSessionCandidatesWithStatus(buildOpenClawSessionCandidates(threads), status.AgentesActivos)
-	operationalInfo := buildOpenClawOperationalInfo()
+	operationalInfo := buildOpenClawOperationalInfoWithStatus(apiStatus)
 
 	estadoNotifs := notificaciones.EstadoNotificaciones{}
 	if estado, err := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.EstadoNotificaciones, error) {

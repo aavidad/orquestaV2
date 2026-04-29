@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/db"
 )
 
@@ -95,8 +96,8 @@ var (
 		active := true
 		return listarProyectosFiltrados("", &active)
 	}
-	workspaceControlCockpitBuilder = buildProyectoCockpit
-	workspaceControlProjectBuilder = buildProjectControlReport
+	workspaceControlCockpitBuilder func(string) (*apiProyectoCockpit, error)
+	workspaceControlProjectBuilder func(string, time.Time) (*projectControlReport, error)
 	workspaceAutonomyRecentLimit   = 8
 	workspaceAutonomyProjectLimit  = 8
 	workspaceControlTimelineLimit  = 24
@@ -125,6 +126,10 @@ func buildWorkspaceControlReportSince(since time.Time) (*workspaceControlReport,
 	if err != nil {
 		return nil, err
 	}
+	panelRows, err := projectControlPanelRowsFetcher()
+	if err != nil {
+		panelRows = nil
+	}
 	projectItems, err := workspaceControlListProjects()
 	if err != nil {
 		return nil, err
@@ -140,23 +145,21 @@ func buildWorkspaceControlReportSince(since time.Time) (*workspaceControlReport,
 			continue
 		}
 		activeProjects++
-		cockpit, err := workspaceControlCockpitBuilder(slug)
+		cockpit, err := buildWorkspaceControlCockpit(slug, status)
 		if err != nil || cockpit == nil {
 			cockpit = nil
 		}
 		if cockpit != nil {
 			cockpits = append(cockpits, cockpit)
 		}
-		if workspaceControlProjectBuilder != nil {
-			projectControl, err := workspaceControlProjectBuilder(slug, since)
-			if err != nil {
-				projectControlsFailed++
-			} else if projectControl != nil {
-				if projectControl.Cockpit == nil {
-					projectControl.Cockpit = cockpit
-				}
-				projectControls = append(projectControls, projectControl)
+		projectControl, err := buildWorkspaceControlProjectControl(slug, since, status, panelRows, cockpit)
+		if err != nil {
+			projectControlsFailed++
+		} else if projectControl != nil {
+			if projectControl.Cockpit == nil {
+				projectControl.Cockpit = cockpit
 			}
+			projectControls = append(projectControls, projectControl)
 		}
 	}
 	sort.SliceStable(cockpits, func(i, j int) bool {
@@ -213,6 +216,31 @@ func buildWorkspaceControlReportSince(since time.Time) (*workspaceControlReport,
 		report.AutonomyHighlights = appendWorkspaceHighlight(report.AutonomyHighlights, fmt.Sprintf("riesgo_top=%s(%d)", topRisk.Project, topRisk.Blocking))
 	}
 	return report, nil
+}
+
+func buildWorkspaceControlCockpit(slug string, status apiStatusResponse) (*apiProyectoCockpit, error) {
+	if workspaceControlCockpitBuilder != nil {
+		return workspaceControlCockpitBuilder(slug)
+	}
+	return buildProyectoCockpitWithStatus(slug, status, true)
+}
+
+func buildWorkspaceControlProjectControl(slug string, since time.Time, status apiStatusResponse, panelRows []agentesapp.Row, cockpit *apiProyectoCockpit) (*projectControlReport, error) {
+	if workspaceControlProjectBuilder != nil {
+		return workspaceControlProjectBuilder(slug, since)
+	}
+	if workspaceControlCockpitBuilder != nil {
+		return nil, nil
+	}
+	inputs := projectControlBuildInputs{
+		Cockpit:   cockpit,
+		Status:    &status,
+		PanelRows: panelRows,
+	}
+	if cockpit != nil {
+		inputs.Project = cockpit.Proyecto
+	}
+	return buildProjectControlReportWithInputs(slug, since, inputs)
 }
 
 func buildWorkspaceOperationalSummary(projects []*projectControlReport) workspaceOperationalSummary {

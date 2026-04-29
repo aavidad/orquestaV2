@@ -6990,6 +6990,44 @@ func TestMCPToolSupervisorInspeccionaWorktreeDrift(t *testing.T) {
 	})
 }
 
+func TestBuildSupervisorReviewSnapshotToleraWorktreeDriftLento(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prevDrift := openClawWorktreeDriftBuilder
+		prevTimeout := openClawWorktreeDriftTimeout
+		defer func() {
+			openClawWorktreeDriftBuilder = prevDrift
+			openClawWorktreeDriftTimeout = prevTimeout
+		}()
+
+		openClawWorktreeDriftTimeout = 20 * time.Millisecond
+		openClawWorktreeDriftBuilder = func(status apiStatusResponse) ([]apiOpenClawWorktreeDrift, error) {
+			time.Sleep(200 * time.Millisecond)
+			return []apiOpenClawWorktreeDrift{{
+				Agente:       "Codex3",
+				CurrentHead:  "slowhead1",
+				ExpectedHead: "slowhead2",
+			}}, nil
+		}
+
+		start := time.Now()
+		snapshot, err := buildSupervisorReviewSnapshotWithStatus("OpenClaw", apiStatusResponse{
+			Agentes:        []*db.Agente{{Nombre: "Codex3", Activo: true, EstadoCuota: "activo"}},
+			AgentesActivos: []*db.Agente{{Nombre: "Codex3", Activo: true, EstadoCuota: "activo"}},
+		})
+		elapsed := time.Since(start)
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshotWithStatus: %v", err)
+		}
+		if elapsed >= 150*time.Millisecond {
+			t.Fatalf("snapshot deberia tolerar drift lento sin bloquear, elapsed=%s", elapsed)
+		}
+		drift, _ := snapshot["worktree_drift"].([]apiOpenClawWorktreeDrift)
+		if len(drift) != 0 {
+			t.Fatalf("drift deberia omitirse si excede timeout, got=%+v", drift)
+		}
+	})
+}
+
 func containsSupervisorAction(items []supervisorRecommendedAction, action, target string) bool {
 	for _, item := range items {
 		if strings.TrimSpace(item.Action) == strings.TrimSpace(action) && strings.TrimSpace(item.Target) == strings.TrimSpace(target) {
@@ -8151,6 +8189,40 @@ func TestMCPResourceReadProyectoControlAceptaDesde(t *testing.T) {
 	}
 }
 
+func TestMCPResourceReadProyectoControlUsa24hPorDefecto(t *testing.T) {
+	prevBuilder := workspaceControlProjectBuilder
+	defer func() {
+		workspaceControlProjectBuilder = prevBuilder
+	}()
+
+	before := time.Now().UTC()
+	workspaceControlProjectBuilder = func(slug string, since time.Time) (*projectControlReport, error) {
+		return &projectControlReport{
+			Project: &db.Proyecto{Slug: slug, Nombre: "Orquestador"},
+			Since:   since,
+		}, nil
+	}
+
+	contents, err := readMCPResource("orquesta://proyectos/orquestador/control")
+	if err != nil {
+		t.Fatalf("readMCPResource proyecto/control: %v", err)
+	}
+	after := time.Now().UTC()
+	text, _ := contents[0]["text"].(string)
+	var resp apiProyectoControlResponse
+	if err := json.Unmarshal([]byte(text), &resp); err != nil {
+		t.Fatalf("decode proyecto/control: %v", err)
+	}
+	if resp.Control == nil {
+		t.Fatalf("control vacío: %s", text)
+	}
+	minWant := before.Add(-24 * time.Hour).Add(-2 * time.Second)
+	maxWant := after.Add(-24 * time.Hour).Add(2 * time.Second)
+	if resp.Control.Since.Before(minWant) || resp.Control.Since.After(maxWant) {
+		t.Fatalf("since MCP proyecto/control por defecto inesperado: got=%s want_between=[%s,%s]", resp.Control.Since, minWant, maxWant)
+	}
+}
+
 func TestMCPToolProyectoControlExponeGitYVentana(t *testing.T) {
 	prevBuilder := workspaceControlProjectBuilder
 	defer func() {
@@ -8190,6 +8262,38 @@ func TestMCPToolProyectoControlExponeGitYVentana(t *testing.T) {
 	}
 	if structured.Control.Git.FilesChanged != 2 || structured.Control.Git.LinesNet != 8 {
 		t.Fatalf("git inesperado en structuredContent: %+v", structured.Control.Git)
+	}
+}
+
+func TestMCPToolProyectoControlUsa24hPorDefecto(t *testing.T) {
+	prevBuilder := workspaceControlProjectBuilder
+	defer func() {
+		workspaceControlProjectBuilder = prevBuilder
+	}()
+
+	before := time.Now().UTC()
+	workspaceControlProjectBuilder = func(slug string, since time.Time) (*projectControlReport, error) {
+		return &projectControlReport{
+			Project: &db.Proyecto{Slug: slug, Nombre: "Orquestador"},
+			Since:   since,
+		}, nil
+	}
+
+	result, err := callMCPTool("orquesta.proyectos.control", map[string]any{
+		"slug": "orquestador",
+	})
+	if err != nil {
+		t.Fatalf("callMCPTool proyectos.control: %v", err)
+	}
+	after := time.Now().UTC()
+	structured, ok := result["structuredContent"].(apiProyectoControlResponse)
+	if !ok || structured.Control == nil {
+		t.Fatalf("structuredContent inesperado: %#v", result["structuredContent"])
+	}
+	minWant := before.Add(-24 * time.Hour).Add(-2 * time.Second)
+	maxWant := after.Add(-24 * time.Hour).Add(2 * time.Second)
+	if structured.Control.Since.Before(minWant) || structured.Control.Since.After(maxWant) {
+		t.Fatalf("since MCP proyectos.control por defecto inesperado: got=%s want_between=[%s,%s]", structured.Control.Since, minWant, maxWant)
 	}
 }
 

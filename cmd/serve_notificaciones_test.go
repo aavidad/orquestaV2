@@ -8,6 +8,7 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -187,6 +188,7 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 		t.Fatalf("openclaw status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
+	bodyDecoded := html.UnescapeString(body)
 	for _, token := range []string{
 		"OpenClaw Operator",
 		"Acción siguiente",
@@ -225,7 +227,7 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 		"gateway down",
 		"OpenClaw",
 	} {
-		if !strings.Contains(body, token) {
+		if !strings.Contains(bodyDecoded, token) {
 			t.Fatalf("pagina openclaw sin %q:\n%s", token, body)
 		}
 	}

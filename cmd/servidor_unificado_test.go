@@ -8,6 +8,7 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -15,6 +16,9 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"orquesta/agentesapp"
+	"orquesta/db"
 )
 
 func TestNormalizarAddrServidorLocal(t *testing.T) {
@@ -198,5 +202,89 @@ func TestEnvBoolServidorUnificadoIgnoraValoresFalsos(t *testing.T) {
 				t.Fatalf("valor %q no deberia considerarse verdadero", value)
 			}
 		})
+	}
+}
+
+func TestPrewarmUnifiedServerReadModelsSiembraStatusYPanel(t *testing.T) {
+	prevStatusTimeout := unifiedServerStartupStatusPrimeTimeout
+	prevPanelTimeout := unifiedServerStartupPanelPrimeTimeout
+	prevStatusFetcher := unifiedServerStartupStatusPrimeFetcher
+	prevPanelFetcher := unifiedServerStartupPanelPrimeFetcher
+	t.Cleanup(func() {
+		unifiedServerStartupStatusPrimeTimeout = prevStatusTimeout
+		unifiedServerStartupPanelPrimeTimeout = prevPanelTimeout
+		unifiedServerStartupStatusPrimeFetcher = prevStatusFetcher
+		unifiedServerStartupPanelPrimeFetcher = prevPanelFetcher
+		resetStatusSnapshotCache()
+		resetAgentPanelSnapshotCache()
+	})
+	resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+
+	statusCalls := 0
+	panelCalls := 0
+	unifiedServerStartupStatusPrimeFetcher = func(timeout time.Duration) (apiStatusResponse, bool) {
+		statusCalls++
+		return apiStatusResponse{
+			AgentesActivos:    []*db.Agente{{Nombre: "Codex1", Activo: true}},
+			AgentesTrabajando: []*db.Agente{{Nombre: "Codex1", Activo: true}},
+			TareasEnProgreso:  []tareaLite{{ID: 40, Agente: "Codex1", Estado: db.TareaEnProgreso}},
+			Generado:          time.Now().UTC().Format(time.RFC3339),
+		}, true
+	}
+	unifiedServerStartupPanelPrimeFetcher = func(timeout time.Duration) ([]agentesapp.Row, error) {
+		panelCalls++
+		return []agentesapp.Row{{
+			Agente:          &db.Agente{Nombre: "Codex1", Activo: true},
+			EstadoOperativo: "trabajando",
+		}}, nil
+	}
+
+	prewarmUnifiedServerReadModels(nil)
+
+	if statusCalls != 1 {
+		t.Fatalf("deberia sembrar status una vez, calls=%d", statusCalls)
+	}
+	if panelCalls != 1 {
+		t.Fatalf("deberia sembrar panel una vez, calls=%d", panelCalls)
+	}
+	if snapshot, ok := readStatusSnapshotFreshUsable(); !ok || len(snapshot.AgentesActivos) != 1 {
+		t.Fatalf("deberia dejar status fresco usable: %+v ok=%v", snapshot, ok)
+	}
+	if rows, ok := readAgentPanelSnapshotFresh(); !ok || len(rows) != 1 {
+		t.Fatalf("deberia dejar panel fresco: rows=%d ok=%v", len(rows), ok)
+	}
+}
+
+func TestPrewarmUnifiedServerReadModelsOmitePanelSiStatusPuedeSeguirLigero(t *testing.T) {
+	prevStatusFetcher := unifiedServerStartupStatusPrimeFetcher
+	prevPanelFetcher := unifiedServerStartupPanelPrimeFetcher
+	t.Cleanup(func() {
+		unifiedServerStartupStatusPrimeFetcher = prevStatusFetcher
+		unifiedServerStartupPanelPrimeFetcher = prevPanelFetcher
+		resetStatusSnapshotCache()
+		resetAgentPanelSnapshotCache()
+	})
+	resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+
+	panelCalls := 0
+	unifiedServerStartupStatusPrimeFetcher = func(timeout time.Duration) (apiStatusResponse, bool) {
+		quota := &db.Agente{Nombre: "CodexQuota", Activo: false}
+		return apiStatusResponse{
+			Agentes:             []*db.Agente{quota},
+			AgentesQuotaBlocked: []*db.Agente{quota},
+			Generado:            time.Now().UTC().Format(time.RFC3339),
+		}, true
+	}
+	unifiedServerStartupPanelPrimeFetcher = func(timeout time.Duration) ([]agentesapp.Row, error) {
+		panelCalls++
+		return nil, errors.New("no deberia pedir panel en status ligero")
+	}
+
+	prewarmUnifiedServerReadModels(nil)
+
+	if panelCalls != 0 {
+		t.Fatalf("no deberia pedir panel cuando status puede quedarse ligero, calls=%d", panelCalls)
 	}
 }

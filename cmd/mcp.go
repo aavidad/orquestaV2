@@ -5897,33 +5897,6 @@ func adaptarGitMergeGobernanzaDB(item *gitgobernanza.GitMerge) *db.GitMerge {
 }
 
 func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
-	supervisor = strings.TrimSpace(supervisor)
-	if supervisor == "" {
-		if cfg, err := db.ConfigGet("openclaw_gateway_operator"); err == nil && strings.TrimSpace(cfg) != "" {
-			supervisor = strings.TrimSpace(cfg)
-		} else {
-			supervisor = "OpenClaw"
-		}
-	}
-	gates, err := db.ListarReviewGates(db.FiltroReviewGates{Limit: 20})
-	if err != nil {
-		return nil, err
-	}
-	openGates := make([]*db.ReviewGate, 0, len(gates))
-	for _, gate := range gates {
-		if gate == nil || gate.Estado == db.ReviewGateAprobado {
-			continue
-		}
-		openGates = append(openGates, gate)
-	}
-	signals, err := listarSignalsRevisionSupervisor(12)
-	if err != nil {
-		return nil, err
-	}
-	merges, err := listarMergesRevisionSupervisor(12)
-	if err != nil {
-		return nil, err
-	}
 	status := degradedAPIStatusResponse()
 	switch {
 	case func() bool {
@@ -5952,6 +5925,37 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	default:
 		ensureStatusRefreshAsync()
 	}
+	return buildSupervisorReviewSnapshotWithStatus(supervisor, status)
+}
+
+func buildSupervisorReviewSnapshotWithStatus(supervisor string, status apiStatusResponse) (map[string]any, error) {
+	supervisor = strings.TrimSpace(supervisor)
+	if supervisor == "" {
+		if cfg, err := db.ConfigGet("openclaw_gateway_operator"); err == nil && strings.TrimSpace(cfg) != "" {
+			supervisor = strings.TrimSpace(cfg)
+		} else {
+			supervisor = "OpenClaw"
+		}
+	}
+	gates, err := db.ListarReviewGates(db.FiltroReviewGates{Limit: 20})
+	if err != nil {
+		return nil, err
+	}
+	openGates := make([]*db.ReviewGate, 0, len(gates))
+	for _, gate := range gates {
+		if gate == nil || gate.Estado == db.ReviewGateAprobado {
+			continue
+		}
+		openGates = append(openGates, gate)
+	}
+	signals, err := listarSignalsRevisionSupervisor(12)
+	if err != nil {
+		return nil, err
+	}
+	merges, err := listarMergesRevisionSupervisor(12)
+	if err != nil {
+		return nil, err
+	}
 	conflicts, err := listarSupervisorModuleConflictsSnapshotSafe(status.TareasActivas)
 	if err != nil {
 		return nil, err
@@ -5979,9 +5983,11 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	worktreeDrift, err := openClawWorktreeDriftBuilder(status)
-	if err != nil {
-		return nil, err
+	worktreeDrift := []apiOpenClawWorktreeDrift(nil)
+	if snapshot, timeoutErr := runAPITimeboxed(openClawWorktreeDriftTimeout, func() ([]apiOpenClawWorktreeDrift, error) {
+		return openClawWorktreeDriftBuilder(status)
+	}, errStatusFetchTimeout); timeoutErr == nil {
+		worktreeDrift = snapshot
 	}
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
 	recommended = append(recommended, buildSupervisorWorktreeDriftActions(worktreeDrift)...)
@@ -7002,7 +7008,10 @@ func supervisorAutonomyActionTarget(item autonomyEventSummary) string {
 	}
 }
 
-var openClawWorktreeDriftBuilder = buildOpenClawWorktreeDriftFromAPIStatus
+var (
+	openClawWorktreeDriftBuilder = buildOpenClawWorktreeDriftFromAPIStatusCached
+	openClawWorktreeDriftTimeout = 150 * time.Millisecond
+)
 var supervisorRefreshCleanWorktreeDrift = refreshSupervisorCleanWorktreeDrift
 
 func buildSupervisorWorktreeDriftActions(items []apiOpenClawWorktreeDrift) []supervisorRecommendedAction {

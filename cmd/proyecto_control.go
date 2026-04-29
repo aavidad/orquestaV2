@@ -12,6 +12,13 @@ import (
 	"orquesta/memoriaproyecto"
 )
 
+type projectControlBuildInputs struct {
+	Project   *db.Proyecto
+	Cockpit   *apiProyectoCockpit
+	Status    *apiStatusResponse
+	PanelRows []agentesapp.Row
+}
+
 type projectControlReport struct {
 	Project              *db.Proyecto                     `json:"project,omitempty"`
 	Overview             *memoriaproyecto.ProjectOverview `json:"overview,omitempty"`
@@ -101,6 +108,31 @@ func init() {
 	proyectoCmd.AddCommand(proyectoControlCmd)
 }
 
+var (
+	projectControlProjectLoader = func(ref string) (*db.Proyecto, error) {
+		return apiGetProyectoConRutaEfectivaTimeboxed(strings.TrimSpace(ref), "")
+	}
+	projectControlOverviewLoader = func(slug string) (*memoriaproyecto.ProjectOverview, error) {
+		return memoriaproyecto.NewService(db.ProjectMemoryRepository{}).Overview(strings.TrimSpace(slug))
+	}
+	projectControlCockpitBuilder = buildProyectoCockpit
+	projectControlStatusFetcher  = func() (apiStatusResponse, error) {
+		return statusService.FetchStatus()
+	}
+	projectControlPanelRowsFetcher = func() ([]agentesapp.Row, error) {
+		rows, err := fetchAgentPanelRowsCached(statusRowsTimeout)
+		if err == nil {
+			return rows, nil
+		}
+		return agentesService.BuildPanelRows()
+	}
+	projectControlTasksFetcher = func(projectID int64) ([]*db.Tarea, error) {
+		return db.ListarTareas(db.FiltroTareas{ProyectoID: &projectID})
+	}
+	projectControlAutonomyFetcher = buildProjectAutonomyEventSummaries
+	projectControlAgentActivity   = buildAgentActivityReportLocal
+)
+
 func loadProjectControlReport(projectRef string, since time.Time) (*projectControlReport, error) {
 	report, ok, err := cargarProyectoControlDesdeAPI(projectRef, since)
 	if err != nil {
@@ -113,33 +145,52 @@ func loadProjectControlReport(projectRef string, since time.Time) (*projectContr
 }
 
 func buildProjectControlReport(ref string, since time.Time) (*projectControlReport, error) {
-	project, err := apiGetProyectoConRutaEfectivaTimeboxed(strings.TrimSpace(ref), "")
+	return buildProjectControlReportWithInputs(ref, since, projectControlBuildInputs{})
+}
+
+func buildProjectControlReportWithInputs(ref string, since time.Time, inputs projectControlBuildInputs) (*projectControlReport, error) {
+	project := inputs.Project
+	var err error
+	if project == nil {
+		project, err = projectControlProjectLoader(strings.TrimSpace(ref))
+		if err != nil {
+			return nil, err
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
 	if project == nil {
 		return nil, nil
 	}
-	overview, err := memoriaproyecto.NewService(db.ProjectMemoryRepository{}).Overview(strings.TrimSpace(project.Slug))
+	overview, err := projectControlOverviewLoader(strings.TrimSpace(project.Slug))
 	if err != nil {
 		return nil, err
 	}
-	cockpit, err := buildProyectoCockpit(strings.TrimSpace(project.Slug))
-	if err != nil {
-		return nil, err
-	}
-	status, err := statusService.FetchStatus()
-	if err != nil {
-		return nil, err
-	}
-	panelRows, err := fetchAgentPanelRowsCached(statusRowsTimeout)
-	if err != nil {
-		panelRows, err = agentesService.BuildPanelRows()
+	cockpit := inputs.Cockpit
+	if cockpit == nil {
+		cockpit, err = projectControlCockpitBuilder(strings.TrimSpace(project.Slug))
 		if err != nil {
 			return nil, err
 		}
 	}
-	tasks, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &project.ID})
+	status := apiStatusResponse{}
+	if inputs.Status != nil {
+		status = *inputs.Status
+	} else {
+		status, err = projectControlStatusFetcher()
+		if err != nil {
+			return nil, err
+		}
+	}
+	panelRows := inputs.PanelRows
+	if panelRows == nil {
+		panelRows, err = projectControlPanelRowsFetcher()
+		if err != nil {
+			return nil, err
+		}
+	}
+	tasks, err := projectControlTasksFetcher(project.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +207,7 @@ func buildProjectControlReport(ref string, since time.Time) (*projectControlRepo
 		CompletionPct: projectControlCompletionPct(tasks),
 	}
 	report.StartedAt = projectControlStartedAt(project, tasks)
-	autonomy, err := buildProjectAutonomyEventSummaries(project.ID, since, 50)
+	autonomy, err := projectControlAutonomyFetcher(project.ID, since, 50)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +229,7 @@ func buildProjectControlReport(ref string, since time.Time) (*projectControlRepo
 		report.TaskCounts[strings.TrimSpace(string(task.Estado))]++
 	}
 	for _, row := range agents {
-		activity, err := buildAgentActivityReportLocal(strings.TrimSpace(row.Agente.Nombre), project.Slug, since, 200, 400)
+		activity, err := projectControlAgentActivity(strings.TrimSpace(row.Agente.Nombre), project.Slug, since, 200, 400)
 		if err != nil {
 			return nil, err
 		}

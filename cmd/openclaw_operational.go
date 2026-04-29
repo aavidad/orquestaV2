@@ -2,15 +2,26 @@ package cmd
 
 import "time"
 
-const openClawOperationalInfoTimeout = 150 * time.Millisecond
+var openClawOperationalInfoTimeout = 150 * time.Millisecond
 
 func buildOpenClawOperationalInfo() serverOperationalInfo {
+	return buildOpenClawOperationalInfoWithStatus(apiStatusResponse{})
+}
+
+func buildOpenClawOperationalInfoWithStatus(status apiStatusResponse) serverOperationalInfo {
+	fallback := normalizeServerOperationalInfo(buildServerOperationalInfo(status))
 	if controlPlaneOperationalInfoFetcher == nil {
-		return degradedServerOperationalInfo()
+		if fallback.Generated == "" {
+			return degradedServerOperationalInfo()
+		}
+		return fallback
 	}
 	info, err := runAPITimeboxed(openClawOperationalInfoTimeout, controlPlaneOperationalInfoFetcher, errStatusFetchTimeout)
 	if err != nil {
-		return degradedServerOperationalInfo()
+		if fallback.Generated == "" {
+			return degradedServerOperationalInfo()
+		}
+		return fallback
 	}
 	return normalizeServerOperationalInfo(info)
 }

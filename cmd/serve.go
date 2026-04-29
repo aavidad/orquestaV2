@@ -816,13 +816,15 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	supervisor := "OpenClaw"
-	status := buildOpenClawBaseStatus()
+	apiStatus := resolveOpenClawAPIStatus()
+	status := buildOpenClawBaseStatusFromAPIStatus(apiStatus)
 	panelRows, _ := fetchAgentPanelRowsCached(150 * time.Millisecond)
+	review := buildOpenClawReviewSnapshotSafeWithStatus(supervisor, apiStatus)
+	mailboxPendiente, mailboxKnown := openClawPendingMailboxFromReviewSnapshot(review)
 	operatorStatus := buildOpenClawOperatorStatusBase(status, panelRows)
-	if resolved, err := buildOpenClawOperatorStatusWithRows(status, panelRows); err == nil {
+	if resolved, err := buildOpenClawOperatorStatusWithRowsAndMailbox(status, panelRows, mailboxPendiente, mailboxKnown); err == nil {
 		operatorStatus = resolved
 	}
-	review := buildOpenClawReviewSnapshotSafe(supervisor)
 	reviewGates, _ := review["review_gates"].([]*db.ReviewGate)
 	signals, _ := review["signals"].([]*supervisorReviewSignal)
 	merges, _ := review["merges"].([]*db.GitMerge)
@@ -883,13 +885,13 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 	}, errStatusFetchTimeout); err == nil {
 		openClawOutbox = outbox
 	}
-	operationalInfo := buildOpenClawOperationalInfo()
+	operationalInfo := buildOpenClawOperationalInfoWithStatus(apiStatus)
 	webRender(w, r, webTplLayout+webTplOpenClaw, webOpenClawData{
 		Status:             operatorStatus,
 		Operational:        operationalInfo,
 		OperationalSummary: buildOpenClawOperationalSummary(operationalInfo),
 		EnCuota:            agentesNoActivosConCuota(status.Agentes),
-		MailboxPendiente:   mustOpenClawPendingMailbox(status.Agentes),
+		MailboxPendiente:   operatorStatus.MailboxPendiente,
 		WorktreeDrift:      worktreeDrift,
 		Retenidas:          tareasRetenidasPorCuota(status.TareasActivas, status.Agentes, status.AgentesQuotaBlocked),
 		TareasReservadas:   filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),

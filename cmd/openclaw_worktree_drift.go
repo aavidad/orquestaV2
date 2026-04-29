@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"orquesta/coordinacion"
 	"orquesta/db"
@@ -34,6 +36,17 @@ type gitWorktreeHeadRef struct {
 	Path string
 	Head string
 }
+
+type openClawWorktreeDriftCacheEntry struct {
+	Generated time.Time
+	Items     []apiOpenClawWorktreeDrift
+}
+
+var (
+	openClawWorktreeDriftCacheTTL = 5 * time.Second
+	openClawWorktreeDriftCacheMu  sync.Mutex
+	openClawWorktreeDriftCache    = map[string]openClawWorktreeDriftCacheEntry{}
+)
 
 func parseGitWorktreeListPorcelain(raw string) []gitWorktreeHeadRef {
 	lines := strings.Split(raw, "\n")
@@ -171,6 +184,23 @@ func buildOpenClawWorktreeDriftFromAPIStatus(status apiStatusResponse) ([]apiOpe
 	return enrichOpenClawWorktreeDriftWithDirty(buildOpenClawWorktreeDriftFromRefs(worktrees, repoHead, heads, relevantAgents)), nil
 }
 
+func buildOpenClawWorktreeDriftFromAPIStatusCached(status apiStatusResponse) ([]apiOpenClawWorktreeDrift, error) {
+	key := openClawWorktreeDriftCacheKey(status)
+	now := time.Now().UTC()
+	if items, ok := readOpenClawWorktreeDriftCacheFresh(key, now); ok {
+		return items, nil
+	}
+	items, err := buildOpenClawWorktreeDriftFromAPIStatus(status)
+	if err != nil {
+		if stale, ok := readOpenClawWorktreeDriftCacheAny(key); ok {
+			return stale, nil
+		}
+		return nil, err
+	}
+	storeOpenClawWorktreeDriftCache(key, now, items)
+	return cloneOpenClawWorktreeDrift(items), nil
+}
+
 func relevantOpenClawWorktreeAgentsFromEstadoResumen(status *estadoResumen) map[string]struct{} {
 	relevantAgents := make(map[string]struct{}, len(status.AgentesActivos)+len(status.TareasActivas))
 	for _, agente := range status.AgentesActivos {
@@ -205,6 +235,73 @@ func relevantOpenClawWorktreeAgentsFromAPIStatus(status apiStatusResponse) map[s
 		relevantAgents[agente] = struct{}{}
 	}
 	return relevantAgents
+}
+
+func openClawWorktreeDriftCacheKey(status apiStatusResponse) string {
+	relevantAgents := relevantOpenClawWorktreeAgentsFromAPIStatus(status)
+	if len(relevantAgents) == 0 {
+		return ""
+	}
+	items := make([]string, 0, len(relevantAgents))
+	for agent := range relevantAgents {
+		agent = strings.ToLower(strings.TrimSpace(agent))
+		if agent == "" {
+			continue
+		}
+		items = append(items, agent)
+	}
+	sort.Strings(items)
+	return strings.Join(items, "|")
+}
+
+func readOpenClawWorktreeDriftCacheFresh(key string, now time.Time) ([]apiOpenClawWorktreeDrift, bool) {
+	if openClawWorktreeDriftCacheTTL <= 0 {
+		return nil, false
+	}
+	openClawWorktreeDriftCacheMu.Lock()
+	defer openClawWorktreeDriftCacheMu.Unlock()
+	entry, ok := openClawWorktreeDriftCache[key]
+	if !ok {
+		return nil, false
+	}
+	if now.Sub(entry.Generated) > openClawWorktreeDriftCacheTTL {
+		return nil, false
+	}
+	return cloneOpenClawWorktreeDrift(entry.Items), true
+}
+
+func readOpenClawWorktreeDriftCacheAny(key string) ([]apiOpenClawWorktreeDrift, bool) {
+	openClawWorktreeDriftCacheMu.Lock()
+	defer openClawWorktreeDriftCacheMu.Unlock()
+	entry, ok := openClawWorktreeDriftCache[key]
+	if !ok {
+		return nil, false
+	}
+	return cloneOpenClawWorktreeDrift(entry.Items), true
+}
+
+func storeOpenClawWorktreeDriftCache(key string, generated time.Time, items []apiOpenClawWorktreeDrift) {
+	openClawWorktreeDriftCacheMu.Lock()
+	defer openClawWorktreeDriftCacheMu.Unlock()
+	openClawWorktreeDriftCache[key] = openClawWorktreeDriftCacheEntry{
+		Generated: generated.UTC(),
+		Items:     cloneOpenClawWorktreeDrift(items),
+	}
+}
+
+func cloneOpenClawWorktreeDrift(items []apiOpenClawWorktreeDrift) []apiOpenClawWorktreeDrift {
+	if items == nil {
+		return nil
+	}
+	out := make([]apiOpenClawWorktreeDrift, 0, len(items))
+	for _, item := range items {
+		copyItem := item
+		if item.DirtyFiles != nil {
+			copyItem.DirtyFiles = append([]string(nil), item.DirtyFiles...)
+		}
+		out = append(out, copyItem)
+	}
+	return out
 }
 
 func shortGitHash(hash string) string {

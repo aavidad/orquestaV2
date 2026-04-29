@@ -15,8 +15,10 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/db"
 	"orquesta/gitestadisticasapp"
+	"orquesta/memoriaproyecto"
 )
 
 func TestProyectoControlJSONAlineadoConAPI(t *testing.T) {
@@ -374,6 +376,89 @@ func TestFormatProjectControlLag(t *testing.T) {
 		if got := formatProjectControlLag(minutes); got != want {
 			t.Fatalf("lag %d inesperado: got=%q want=%q", minutes, got, want)
 		}
+	}
+}
+
+func TestBuildProjectControlReportWithInputsReutilizaDatosPrecargados(t *testing.T) {
+	prevProjectLoader := projectControlProjectLoader
+	prevOverviewLoader := projectControlOverviewLoader
+	prevCockpitBuilder := projectControlCockpitBuilder
+	prevStatusFetcher := projectControlStatusFetcher
+	prevPanelRowsFetcher := projectControlPanelRowsFetcher
+	prevTasksFetcher := projectControlTasksFetcher
+	prevAutonomyFetcher := projectControlAutonomyFetcher
+	prevAgentActivity := projectControlAgentActivity
+	defer func() {
+		projectControlProjectLoader = prevProjectLoader
+		projectControlOverviewLoader = prevOverviewLoader
+		projectControlCockpitBuilder = prevCockpitBuilder
+		projectControlStatusFetcher = prevStatusFetcher
+		projectControlPanelRowsFetcher = prevPanelRowsFetcher
+		projectControlTasksFetcher = prevTasksFetcher
+		projectControlAutonomyFetcher = prevAutonomyFetcher
+		projectControlAgentActivity = prevAgentActivity
+	}()
+
+	project := &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador"}
+	cockpit := &apiProyectoCockpit{Proyecto: project}
+	status := apiStatusResponse{Autonomia: autonomiaResumen{Supervisando: 3}}
+	panelRows := []agentesapp.Row{{
+		Agente:           &db.Agente{Nombre: "Codex1"},
+		Asignacion:       &db.Asignacion{ProyectoSlug: "orquestador"},
+		EstadoOperativo:  "trabajando",
+		DetalleOperativo: "ok",
+		OpenTasks:        1,
+	}}
+
+	projectControlProjectLoader = func(ref string) (*db.Proyecto, error) {
+		t.Fatalf("no deberia recargar proyecto para %q", ref)
+		return nil, nil
+	}
+	projectControlOverviewLoader = func(slug string) (*memoriaproyecto.ProjectOverview, error) {
+		return nil, nil
+	}
+	projectControlCockpitBuilder = func(slug string) (*apiProyectoCockpit, error) {
+		t.Fatalf("no deberia recomponer cockpit para %q", slug)
+		return nil, nil
+	}
+	projectControlStatusFetcher = func() (apiStatusResponse, error) {
+		t.Fatalf("no deberia volver a pedir status")
+		return apiStatusResponse{}, nil
+	}
+	projectControlPanelRowsFetcher = func() ([]agentesapp.Row, error) {
+		t.Fatalf("no deberia volver a pedir panel rows")
+		return nil, nil
+	}
+	projectControlTasksFetcher = func(projectID int64) ([]*db.Tarea, error) {
+		return []*db.Tarea{{Estado: db.TareaEnProgreso}}, nil
+	}
+	projectControlAutonomyFetcher = func(projectID int64, since time.Time, limit int) ([]autonomyEventSummary, error) {
+		return nil, nil
+	}
+	projectControlAgentActivity = func(agent, project string, since time.Time, auditLimit, transcriptLimit int) (*agentActivityReport, error) {
+		return nil, nil
+	}
+
+	report, err := buildProjectControlReportWithInputs("orquestador", time.Date(2026, 4, 29, 9, 0, 0, 0, time.UTC), projectControlBuildInputs{
+		Project:   project,
+		Cockpit:   cockpit,
+		Status:    &status,
+		PanelRows: panelRows,
+	})
+	if err != nil {
+		t.Fatalf("buildProjectControlReportWithInputs: %v", err)
+	}
+	if report == nil || report.Project == nil || report.Project.Slug != "orquestador" {
+		t.Fatalf("report inesperado: %+v", report)
+	}
+	if report.Cockpit != cockpit {
+		t.Fatalf("cockpit no reutilizado")
+	}
+	if report.Status.Autonomia.Supervisando != 3 {
+		t.Fatalf("status no reutilizado: %+v", report.Status.Autonomia)
+	}
+	if len(report.Agents) != 1 || report.Agents[0].Name != "Codex1" {
+		t.Fatalf("agentes inesperados: %+v", report.Agents)
 	}
 }
 

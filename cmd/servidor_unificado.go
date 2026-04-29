@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/db"
 	"orquesta/internal/rpclocal"
 	"orquesta/planocontrol"
@@ -28,6 +29,14 @@ import (
 var listenServerTCP = net.Listen
 var runtimeProcessDegradadosDeferredGate = planocontrol.NewThrottler()
 var runtimeProcessDegradadosDeferredIntervalOverride time.Duration
+var unifiedServerStartupStatusPrimeTimeout = 250 * time.Millisecond
+var unifiedServerStartupPanelPrimeTimeout = 250 * time.Millisecond
+var unifiedServerStartupStatusPrimeFetcher = func(timeout time.Duration) (apiStatusResponse, bool) {
+	return fetchStatusReadOnlyLiteDirect(timeout)
+}
+var unifiedServerStartupPanelPrimeFetcher = func(timeout time.Duration) ([]agentesapp.Row, error) {
+	return runAPITimeboxed(timeout, apiAgentPanelRowsBuilder, errStatusFetchTimeout)
+}
 
 type unifiedServerRuntimeOptions struct {
 	CoreOnly                 bool
@@ -189,6 +198,7 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 	} else if debugLogger != nil {
 		debugLogger.Printf("server_autobootstrap skipped=disabled")
 	}
+	prewarmUnifiedServerReadModels(debugLogger)
 	launchStatusSnapshotWarmLoop(controlCtx, debugLogger)
 	launchAgentPanelSnapshotWarmLoop(controlCtx, debugLogger)
 	launchPrepareContextPrewarmLoop(controlCtx, debugLogger)
@@ -257,6 +267,50 @@ func prewarmUnifiedServerPrepareCaches(debugLogger *log.Logger) {
 		if debugLogger != nil {
 			debugLogger.Printf("prepare_context_prewarm agente=%s proyecto=%s ok", agente, cfg.ProjectSlug)
 		}
+	}
+}
+
+func prewarmUnifiedServerReadModels(debugLogger *log.Logger) {
+	status, statusKnown := readStatusSnapshotFreshUsable()
+	if !statusKnown {
+		start := time.Now()
+		if seeded, ok := unifiedServerStartupStatusPrimeFetcher(unifiedServerStartupStatusPrimeTimeout); ok {
+			storeStatusSnapshot(seeded, statusNowFunc().UTC())
+			status = seeded
+			statusKnown = true
+			if debugLogger != nil {
+				debugLogger.Printf("startup_status_prime ok duration=%s", time.Since(start).Round(time.Millisecond))
+			}
+		} else {
+			if debugLogger != nil {
+				debugLogger.Printf("startup_status_prime miss duration=%s", time.Since(start).Round(time.Millisecond))
+			}
+			if seeded, ok := readStatusSnapshotAny(); ok {
+				status = seeded
+				statusKnown = true
+				ensureStatusRefreshAsync()
+			} else {
+				ensureStatusRefreshAsync()
+			}
+		}
+	}
+	if !statusKnown || statusSnapshotCanStayLight(status) {
+		return
+	}
+	if _, ok := readAgentPanelSnapshotFresh(); ok || apiAgentPanelRowsBuilder == nil {
+		return
+	}
+	start := time.Now()
+	rows, err := unifiedServerStartupPanelPrimeFetcher(unifiedServerStartupPanelPrimeTimeout)
+	if err != nil {
+		if debugLogger != nil {
+			debugLogger.Printf("startup_panel_prime err=%v duration=%s", err, time.Since(start).Round(time.Millisecond))
+		}
+		return
+	}
+	storeAgentPanelSnapshot(rows, time.Now().UTC())
+	if debugLogger != nil {
+		debugLogger.Printf("startup_panel_prime ok rows=%d duration=%s", len(rows), time.Since(start).Round(time.Millisecond))
 	}
 }
 
