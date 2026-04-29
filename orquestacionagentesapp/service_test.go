@@ -453,7 +453,16 @@ func TestLaunchBuildsPrepareAndEnqueuesStart(t *testing.T) {
 			Conector: agentesapp.ConnectorBundle{Slug: "codex-cli"},
 		},
 	}
-	runtimes := &stubRuntimeController{controlID: 33, controlAction: "start"}
+	runtimes := &stubRuntimeController{
+		controlID:     33,
+		controlAction: "start",
+		project: &db.Proyecto{
+			ID:      7,
+			Slug:    "orquestador",
+			Nombre:  "Orquestador",
+			RutaAbs: "/home/alberto/Trabajo/orquesta",
+		},
+	}
 	service := NewService(agents, runtimes)
 
 	result, err := service.Launch(LaunchRequest{
@@ -470,6 +479,9 @@ func TestLaunchBuildsPrepareAndEnqueuesStart(t *testing.T) {
 	}
 	if result.OrderID != 33 || result.Agente != "Codex1" {
 		t.Fatalf("resultado inesperado: %+v", result)
+	}
+	if result.Proyecto.RutaAbs != "/home/alberto/Trabajo/orquesta" {
+		t.Fatalf("launch deberia devolver proyecto canonico en la salida publica: %+v", result.Proyecto)
 	}
 	if agents.input.Agente != "Codex1" || agents.input.Proyecto != "orquestador" {
 		t.Fatalf("prepare no normalizado: %+v", agents.input)

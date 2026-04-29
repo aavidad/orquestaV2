@@ -527,10 +527,21 @@ func (s *Service) Launch(req LaunchRequest) (*LaunchResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	proyectoBundle := prep.Proyecto
+	if proyectoCanonico, err := s.runtimes.GetProject(req.Proyecto); err != nil {
+		return nil, err
+	} else if proyectoCanonico != nil {
+		proyectoBundle = agentesapp.ProjectBundle{
+			ID:      proyectoCanonico.ID,
+			Slug:    proyectoCanonico.Slug,
+			Nombre:  proyectoCanonico.Nombre,
+			RutaAbs: proyectoCanonico.RutaAbs,
+		}
+	}
 	return &LaunchResult{
 		OrderID:  orderID,
 		Agente:   prep.Agente,
-		Proyecto: prep.Proyecto,
+		Proyecto: proyectoBundle,
 		Conector: prep.Conector,
 	}, nil
 }
