@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"log"
 	"strings"
 	"time"
 
@@ -96,6 +97,31 @@ func callMCPServerOperational() (map[string]any, error) {
 }
 
 func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
+	started := time.Now()
+	phaseDurations := map[string]time.Duration{}
+	markPhase := func(name string, start time.Time) {
+		phaseDurations[name] = time.Since(start)
+	}
+	logSlow := func() {
+		total := time.Since(started)
+		if total < 500*time.Millisecond {
+			return
+		}
+		log.Printf("orquesta[self-heal-slow] total=%s wake=%s hygiene=%s degradados=%s autonomia=%s reanimaciones=%s operational=%s drain=%s rearm=%s settle=%s",
+			total,
+			phaseDurations["wake"],
+			phaseDurations["hygiene"],
+			phaseDurations["degradados"],
+			phaseDurations["autonomia"],
+			phaseDurations["reanimaciones"],
+			phaseDurations["operational"],
+			phaseDurations["drain"],
+			phaseDurations["rearm"],
+			phaseDurations["settle"],
+		)
+	}
+	defer logSlow()
+
 	enabled := func(key string) bool {
 		if args == nil {
 			return true
@@ -114,6 +140,7 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 		result.Errors = append(result.Errors, strings.TrimSpace(phase)+": "+strings.TrimSpace(err.Error()))
 	}
 
+	phaseStart := time.Now()
 	if enabled("orders") {
 		result.Wake.Orders = apiRuntimeWakeOrdersFn()
 	}
@@ -123,11 +150,27 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 	if enabled("warm") {
 		result.Wake.Warm = apiRuntimeWakeWarmFn()
 	}
+	markPhase("wake", phaseStart)
+	phaseStart = time.Now()
 	if enabled("hygiene") {
 		count, err := runtimeProcessHygieneBatch()
 		result.Hygiene = apiRuntimeProcessAutonomiaResponse{OK: err == nil, Count: count}
 		appendErr("hygiene", err)
 	}
+	markPhase("hygiene", phaseStart)
+	phaseStart = time.Now()
+	result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
+	syncMCPServerSelfHealRecovery(&result)
+	markPhase("operational", phaseStart)
+	if mcpServerSelfHealCanShortCircuit(result.Operational) {
+		mcpServerSelfHealMarkSkippedHeavyPhases(&result, enabled)
+		phaseStart = time.Now()
+		result.Operational = settleMCPServerSelfHealOperational(result.Operational)
+		syncMCPServerSelfHealRecovery(&result)
+		markPhase("settle", phaseStart)
+		return toolResult(prettyJSON(result), result, len(result.Errors) > 0), nil
+	}
+	phaseStart = time.Now()
 	if enabled("degradados") {
 		summary, err := runtimeProcessDegradadosBatchDetailed()
 		result.Degradados = apiRuntimeProcessAutonomiaResponse{
@@ -139,11 +182,15 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 		}
 		appendErr("degradados", err)
 	}
+	markPhase("degradados", phaseStart)
+	phaseStart = time.Now()
 	if enabled("autonomia") {
 		count, err := runtimeProcessAutonomiaBatch()
 		result.Autonomia = apiRuntimeProcessAutonomiaResponse{OK: err == nil, Count: count}
 		appendErr("autonomia", err)
 	}
+	markPhase("autonomia", phaseStart)
+	phaseStart = time.Now()
 	if enabled("reanimaciones") {
 		result.Reanimaciones = runtimeProcessReanimationsBatchFn()
 		if !result.Reanimaciones.OK || result.Reanimaciones.Errors > 0 {
@@ -155,8 +202,12 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 			}
 		}
 	}
+	markPhase("reanimaciones", phaseStart)
+	phaseStart = time.Now()
 	result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
 	syncMCPServerSelfHealRecovery(&result)
+	markPhase("operational", phaseStart)
+	phaseStart = time.Now()
 	if drain, err := drainMCPServerSelfHealRuntimeWork(&result.Operational, enabled); err != nil {
 		result.Drain = drain
 		syncMCPServerSelfHealRecovery(&result)
@@ -165,6 +216,8 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 		result.Drain = drain
 		syncMCPServerSelfHealRecovery(&result)
 	}
+	markPhase("drain", phaseStart)
+	phaseStart = time.Now()
 	if enabled("rearm") {
 		for attempts := 0; attempts < mcpServerSelfHealRearmLimit; attempts++ {
 			rearm := result.Operational.Rearm
@@ -179,7 +232,7 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 			if applied != nil {
 				result.RearmApplied = append(result.RearmApplied, applied)
 			}
-				result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
+			result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
 			syncMCPServerSelfHealRecovery(&result)
 			if drain, err := drainMCPServerSelfHealRuntimeWork(&result.Operational, enabled); err != nil {
 				result.Drain = mergeMCPServerSelfHealDrain(result.Drain, drain)
@@ -197,9 +250,45 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 			appendErr("rearm", errSelfHealRearmLimitReached)
 		}
 	}
+	markPhase("rearm", phaseStart)
+	phaseStart = time.Now()
 	result.Operational = settleMCPServerSelfHealOperational(result.Operational)
 	syncMCPServerSelfHealRecovery(&result)
+	markPhase("settle", phaseStart)
 	return toolResult(prettyJSON(result), result, len(result.Errors) > 0), nil
+}
+
+func mcpServerSelfHealCanShortCircuit(info serverOperationalInfo) bool {
+	info = normalizeServerOperationalInfo(info)
+	if !info.Operational {
+		return false
+	}
+	if info.NextRecoveryPlan != nil {
+		return false
+	}
+	if info.Recovery != nil {
+		return false
+	}
+	if info.Rearm != nil && info.Rearm.Needed {
+		return false
+	}
+	return true
+}
+
+func mcpServerSelfHealMarkSkippedHeavyPhases(result *apiRuntimeSelfHealResponse, enabled func(string) bool) {
+	if result == nil || enabled == nil {
+		return
+	}
+	if enabled("degradados") && !result.Degradados.OK && result.Degradados.Count == 0 {
+		result.Degradados.OK = true
+	}
+	if enabled("autonomia") && !result.Autonomia.OK && result.Autonomia.Count == 0 {
+		result.Autonomia.OK = true
+	}
+	if enabled("reanimaciones") && !result.Reanimaciones.OK &&
+		result.Reanimaciones.Count == 0 && result.Reanimaciones.Errors == 0 {
+		result.Reanimaciones.OK = true
+	}
 }
 
 func syncMCPServerSelfHealRecovery(result *apiRuntimeSelfHealResponse) {
