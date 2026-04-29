@@ -17335,6 +17335,52 @@ func TestResolverTareaIDStartRuntimeRequiereTareaActivaParaMotivosAutonomicos(t 
 	}
 }
 
+func TestResolverTareaIDStartRuntimeRechazaTaskIDExplicitaAjenaParaMotivoAutonomico(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex6", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex6: %v", err)
+	}
+	if err := RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex10: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador-start-taskid-ajena",
+		Nombre:  "Orquestador Start TaskID Ajena",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Frente ajeno",
+		Descripcion: "Slice ya tomada por otro agente",
+		ProyectoID:  &proyectoID,
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	proyecto := &Proyecto{ID: proyectoID}
+	got, err := resolverTareaIDStartRuntime("Codex6", proyecto, &tareaID, "supervision_transcript_signal")
+	if err == nil || !strings.Contains(err.Error(), "start autonomico con tarea ajena o inexistente") {
+		t.Fatalf("deberia rechazar task_id ajena en start autonomico, got tarea=%v err=%v", got, err)
+	}
+	if got != nil {
+		t.Fatalf("no deberia conservar task_id ajena para start autonomico, got=%v", got)
+	}
+}
+
 func TestEjecutarRuntimeOrderStartExponeTareaIDCanonicaDesdeTaskIDAlias(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
