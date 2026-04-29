@@ -6026,7 +6026,7 @@ func listarMergesRevisionSupervisor(limit int) ([]*db.GitMerge, error) {
 	items := make([]*db.GitMerge, 0, limit*len(estados))
 	seen := make(map[int64]struct{}, limit*len(estados))
 	for _, estado := range estados {
-		rows, err := svc.ListRequests("", estado)
+		rows, err := svc.ListRequestsLimit("", estado, limit)
 		if err != nil {
 			return nil, err
 		}

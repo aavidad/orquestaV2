@@ -111,3 +111,38 @@ func TestGuardarGitMergeValidaCampos(t *testing.T) {
 		t.Fatalf("esperaba sql.ErrNoRows, tengo %v", err)
 	}
 }
+
+func TestListarGitMergesLimitadoRespetaLimitYOrden(t *testing.T) {
+	prepararDBTemporal(t)
+	var proyectoID int64
+	if err := DB.QueryRow(
+		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
+		"orquestador", "Orquestador", "/tmp/orquestador", "repo",
+	).Scan(&proyectoID); err != nil {
+		t.Fatalf("insert proyecto: %v", err)
+	}
+
+	branches := []string{"feature/a", "feature/b", "feature/c"}
+	for _, branch := range branches {
+		if _, err := GuardarGitMerge(&GitMerge{
+			ProyectoID:   proyectoID,
+			SourceBranch: branch,
+			TargetBranch: "main",
+			RequestedBy:  "codex2",
+			Estado:       "pendiente",
+		}); err != nil {
+			t.Fatalf("GuardarGitMerge(%s): %v", branch, err)
+		}
+	}
+
+	items, err := ListarGitMergesLimitado(&proyectoID, "pendiente", 2)
+	if err != nil {
+		t.Fatalf("ListarGitMergesLimitado: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("esperaba 2 merges, tengo %d", len(items))
+	}
+	if items[0].SourceBranch != "feature/c" || items[1].SourceBranch != "feature/b" {
+		t.Fatalf("orden inesperado: %+v", items)
+	}
+}

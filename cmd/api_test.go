@@ -289,6 +289,73 @@ func TestOpenClawOperatorQueueHelpersRecuperanFallbackDesdePipeline(t *testing.T
 	}
 }
 
+func TestBuildOpenClawSubagentFollowupsBestEffortToleraFallbackLento(t *testing.T) {
+	prevBuilder := openClawSubagentFollowupsDirectBuilder
+	prevTimeout := openClawSubagentFollowupsDirectTimeout
+	t.Cleanup(func() {
+		openClawSubagentFollowupsDirectBuilder = prevBuilder
+		openClawSubagentFollowupsDirectTimeout = prevTimeout
+	})
+
+	openClawSubagentFollowupsDirectTimeout = 10 * time.Millisecond
+	openClawSubagentFollowupsDirectBuilder = func(supervisor string) []map[string]any {
+		time.Sleep(50 * time.Millisecond)
+		return []map[string]any{{"thread_id": "slow-sidecar"}}
+	}
+
+	start := time.Now()
+	items := buildOpenClawSubagentFollowupsBestEffort("OpenClaw", map[string]any{})
+	elapsed := time.Since(start)
+
+	if len(items) != 0 {
+		t.Fatalf("fallback lento deberia degradarse a vacio: %#v", items)
+	}
+	if elapsed >= 40*time.Millisecond {
+		t.Fatalf("fallback lento no deberia bloquear, elapsed=%s", elapsed)
+	}
+}
+
+func TestBuildOpenClawOperatorSnapshotBestEffortDegradaACanonicoSiCoreLento(t *testing.T) {
+	prevBuilder := openClawOperatorSnapshotCoreBuilder
+	prevTimeout := openClawOperatorSnapshotTimeout
+	t.Cleanup(func() {
+		openClawOperatorSnapshotCoreBuilder = prevBuilder
+		openClawOperatorSnapshotTimeout = prevTimeout
+	})
+
+	openClawOperatorSnapshotTimeout = 10 * time.Millisecond
+	openClawOperatorSnapshotCoreBuilder = func(supervisor string, apiStatus apiStatusResponse) map[string]any {
+		time.Sleep(50 * time.Millisecond)
+		return map[string]any{"unexpected": true}
+	}
+
+	status := apiStatusResponse{
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"}},
+		TareasActivas:     []tareaLite{{ID: 40, Titulo: "frente", Estado: db.TareaEnProgreso, Agente: "Codex10"}},
+		TareasEnProgreso:  []tareaLite{{ID: 40, Titulo: "frente", Estado: db.TareaEnProgreso, Agente: "Codex10"}},
+		TareasPorEstado:   map[string]int{string(db.TareaLibre): 1},
+		Generado:          time.Now().UTC().Format(time.RFC3339),
+	}
+
+	start := time.Now()
+	payload := buildOpenClawOperatorSnapshotBestEffort("OpenClaw", status)
+	elapsed := time.Since(start)
+
+	if elapsed >= 40*time.Millisecond {
+		t.Fatalf("fallback global no deberia bloquear, elapsed=%s", elapsed)
+	}
+	if _, ok := payload["status"].(apiOpenClawStatusLite); !ok {
+		t.Fatalf("status fallback inesperado: %#v", payload["status"])
+	}
+	if queue, ok := payload["action_queue"].([]supervisorRecommendedAction); !ok || len(queue) == 0 {
+		t.Fatalf("action_queue fallback inesperada: %#v", payload["action_queue"])
+	}
+	if _, ok := payload["server_operational"].(serverOperationalInfo); !ok {
+		t.Fatalf("server_operational fallback inesperado: %#v", payload["server_operational"])
+	}
+}
+
 func TestListarSupervisorModuleConflictsFromTasksReutilizaEstadoYaCargado(t *testing.T) {
 	conflicts := listarSupervisorModuleConflictsFromTasks([]tareaLite{
 		{ID: 410, Modulo: "runtime", Agente: "Codex3"},

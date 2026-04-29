@@ -2780,107 +2780,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		supervisor := resolveOpenClawOperatorSupervisor(r.URL.Query().Get("supervisor"))
 		apiStatus := resolveOpenClawAPIStatus()
-		status := buildOpenClawBaseStatusFromAPIStatus(apiStatus)
-		revision := buildOpenClawReviewSnapshotSafeWithStatus(supervisor, apiStatus)
-		mailboxPendiente, mailboxKnown := openClawPendingMailboxFromReviewSnapshot(revision)
-		var panelRows []agentesapp.Row
-		if rows, err := runAPITimeboxed(200*time.Millisecond, func() ([]agentesapp.Row, error) {
-			return fetchAgentPanelRowsCached(150 * time.Millisecond)
-		}, errStatusFetchTimeout); err == nil {
-			panelRows = rows
-		}
-		statusResumen := buildOpenClawOperatorStatusBase(status, panelRows)
-		if summary, err := runAPITimeboxed(200*time.Millisecond, func() (apiOpenClawStatusLite, error) {
-			return buildOpenClawOperatorStatusWithRowsAndMailbox(status, panelRows, mailboxPendiente, mailboxKnown)
-		}, errStatusFetchTimeout); err == nil {
-			statusResumen = summary
-		}
-		eventos := openClawEventsFromReviewSnapshot(revision)
-		threads := supervisorThreadsFromReviewSnapshot(revision)
-		pipeline := supervisorPipelineFromReviewSnapshot(revision)
-		worktreeDrift := openClawWorktreeDriftFromReviewSnapshot(revision)
-		subagents := supervisorSubagentsFromReviewSnapshot(revision)
-		if len(subagents) == 0 {
-			if snapshot, err := runAPITimeboxed(150*time.Millisecond, func() (map[string]any, error) {
-				return buildSupervisorSubagentsSnapshot(supervisor, "", "", 100)
-			}, errStatusFetchTimeout); err == nil && snapshot != nil {
-				subagents = snapshot
-			}
-		}
-		if len(pipeline) == 0 {
-			if snapshot, err := runAPITimeboxed(150*time.Millisecond, func() (map[string]any, error) {
-				return buildSupervisorPipelineSnapshot(supervisor, "", 20)
-			}, errStatusFetchTimeout); err == nil && snapshot != nil {
-				pipeline = snapshot
-			}
-		}
-		subagentFollowups := buildOpenClawSubagentFollowupsCompact(subagents)
-		if len(subagentFollowups) == 0 {
-			subagentFollowups = buildOpenClawSubagentFollowupsDirect(supervisor)
-		}
-		pipelineFollowup := buildOpenClawPipelineFollowupCompact(pipeline)
-		if len(pipelineFollowup) == 0 && len(subagentFollowups) > 0 {
-			pipelineFollowup = buildOpenClawPipelineFollowupFromSubagents(subagentFollowups)
-		}
-		if observed, ok := threads["observed_agent_sessions"].([]*supervisorObservedAgentSessionSummary); ok {
-			threads["observed_agent_sessions"] = alignSupervisorObservedSessionsWithStatus(observed, status.AgentesActivos)
-		}
-		reviewCompact := buildOpenClawReviewCompact(revision)
-		actionQueue := supervisorActionQueueFromReviewOrPipelineSnapshot(revision, pipeline)
-		safeActionQueue := supervisorSafeActionQueueFromReviewSnapshot(revision)
-		nextAction := supervisorNextActionFromReviewOrPipelineSnapshot(revision, pipeline)
-		nextSafeAction := supervisorNextSafeActionFromReviewSnapshot(revision)
-		actionQueue, safeActionQueue, nextAction, nextSafeAction = fillOpenClawOperationalQueuesFromStatusFallback(apiStatus, statusResumen.MailboxPendiente, actionQueue, safeActionQueue, nextAction, nextSafeAction)
-		queueSummary := buildOpenClawQueueSummaryFromActions(actionQueue, safeActionQueue)
-		sessionCandidates := alignOpenClawSessionCandidatesWithStatus(buildOpenClawSessionCandidates(threads), status.AgentesActivos)
-		operationalInfo := buildOpenClawOperationalInfoWithStatus(apiStatus)
-		estadoNotifs := notificaciones.EstadoNotificaciones{}
-		if estado, err := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.EstadoNotificaciones, error) {
-			return notificaciones.DescribirConfiguracion(), nil
-		}, errStatusFetchTimeout); err == nil {
-			estadoNotifs = estado
-		}
-		entregas := notificaciones.OutboxSummary{}
-		if outbox, err := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.OutboxSummary, error) {
-			return notificaciones.DescribirOutbox(10), nil
-		}, errStatusFetchTimeout); err == nil {
-			entregas = outbox
-		}
-		apiWriteJSON(w, http.StatusOK, map[string]any{
-			"status":                     statusResumen,
-			"server_operational":         operationalInfo,
-			"server_operational_summary": buildOpenClawOperationalSummary(operationalInfo),
-			"agentesActivos":             statusResumen.AgentesActivos,
-			"agentesTrabajando":          statusResumen.AgentesTrabajando,
-			"agentesAuthManual":          statusResumen.AgentesAuthManual,
-			"agentesQuotaBlocked":        statusResumen.AgentesQuotaBlocked,
-			"enCuota":                    statusResumen.EnCuota,
-			"mailboxPendiente":           statusResumen.MailboxPendiente,
-			"retenidasPorCuota":          statusResumen.RetenidasPorCuota,
-			"tareasActivas":              statusResumen.TareasActivas,
-			"tareasReservadas":           statusResumen.TareasReservadas,
-			"propuestasAbiertas":         statusResumen.PropuestasAbiertas,
-			"review":                     reviewCompact,
-			"next_action":                nextAction,
-			"action_queue":               actionQueue,
-			"next_safe_action":           nextSafeAction,
-			"safe_action_queue":          safeActionQueue,
-			"queue_summary":              queueSummary,
-			"capacity_summary":           statusResumen.CapacitySummary,
-			"saturated_agents":           statusResumen.AgentesSaturados,
-			"notificaciones":             estadoNotifs,
-			"entregas":                   entregas,
-			"eventos_normalizados":       eventos,
-			"thread_sessions":            threads,
-			"subagentes":                 subagents["subagents"],
-			"subagent_store":             subagents["store"],
-			"subagent_profiles":          subagents["tool_profiles"],
-			"session_candidates":         sessionCandidates,
-			"worktree_drift":             worktreeDrift,
-			"pipeline_state":             pipeline,
-			"pipeline_followup":          pipelineFollowup,
-			"subagentes_followup":        subagentFollowups,
-		})
+		apiWriteJSON(w, http.StatusOK, buildOpenClawOperatorSnapshotBestEffort(supervisor, apiStatus))
 	case http.MethodPost:
 		var req struct {
 			Supervisor   string `json:"supervisor"`
@@ -3539,6 +3439,22 @@ func supervisorPipelineFromReviewSnapshot(review map[string]any) map[string]any 
 func buildOpenClawSubagentFollowupsCompact(snapshot map[string]any) []map[string]any {
 	items, _ := snapshot["subagents"].([]*db.SupervisorSubagent)
 	return buildOpenClawSubagentFollowupsFromItems(items)
+}
+
+var openClawSubagentFollowupsDirectBuilder = buildOpenClawSubagentFollowupsDirect
+var openClawSubagentFollowupsDirectTimeout = 100 * time.Millisecond
+
+func buildOpenClawSubagentFollowupsBestEffort(supervisor string, snapshot map[string]any) []map[string]any {
+	followups := buildOpenClawSubagentFollowupsCompact(snapshot)
+	if len(followups) > 0 {
+		return followups
+	}
+	if direct, err := runAPITimeboxed(openClawSubagentFollowupsDirectTimeout, func() ([]map[string]any, error) {
+		return openClawSubagentFollowupsDirectBuilder(supervisor), nil
+	}, errStatusFetchTimeout); err == nil {
+		return direct
+	}
+	return nil
 }
 
 func buildOpenClawSubagentFollowupsDirect(supervisor string) []map[string]any {

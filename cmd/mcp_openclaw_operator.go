@@ -6,8 +6,12 @@ import (
 	"time"
 
 	"orquesta/agentesapp"
+	"orquesta/db"
 	"orquesta/notificaciones"
 )
+
+var openClawOperatorSnapshotTimeout = 1200 * time.Millisecond
+var openClawOperatorSnapshotCoreBuilder = buildOpenClawOperatorSnapshotCore
 
 func mcpOpenClawOperatorTool() mcpTool {
 	return mcpTool{
@@ -24,9 +28,65 @@ func mcpOpenClawOperatorTool() mcpTool {
 	}
 }
 
+func buildOpenClawOperatorSnapshotFallback(supervisor string, apiStatus apiStatusResponse) map[string]any {
+	status := buildOpenClawBaseStatusFromAPIStatus(apiStatus)
+	statusResumen := buildOpenClawOperatorStatusBase(status, nil)
+	operationalInfo := buildOpenClawOperationalInfoWithStatus(apiStatus)
+	actionQueue, safeActionQueue, nextAction, nextSafeAction := fillOpenClawOperationalQueuesFromStatusFallback(apiStatus, statusResumen.MailboxPendiente, nil, nil, nil, nil)
+	queueSummary := buildOpenClawQueueSummaryFromActions(actionQueue, safeActionQueue)
+	return map[string]any{
+		"status":                     statusResumen,
+		"server_operational":         operationalInfo,
+		"server_operational_summary": buildOpenClawOperationalSummary(operationalInfo),
+		"agentesActivos":             statusResumen.AgentesActivos,
+		"agentesTrabajando":          statusResumen.AgentesTrabajando,
+		"agentesAuthManual":          statusResumen.AgentesAuthManual,
+		"agentesQuotaBlocked":        statusResumen.AgentesQuotaBlocked,
+		"enCuota":                    statusResumen.EnCuota,
+		"mailboxPendiente":           statusResumen.MailboxPendiente,
+		"retenidasPorCuota":          statusResumen.RetenidasPorCuota,
+		"tareasActivas":              statusResumen.TareasActivas,
+		"tareasReservadas":           statusResumen.TareasReservadas,
+		"propuestasAbiertas":         statusResumen.PropuestasAbiertas,
+		"review":                     map[string]any{},
+		"next_action":                nextAction,
+		"action_queue":               actionQueue,
+		"next_safe_action":           nextSafeAction,
+		"safe_action_queue":          safeActionQueue,
+		"queue_summary":              queueSummary,
+		"capacity_summary":           statusResumen.CapacitySummary,
+		"saturated_agents":           statusResumen.AgentesSaturados,
+		"notificaciones":             notificaciones.EstadoNotificaciones{},
+		"entregas":                   notificaciones.OutboxSummary{},
+		"eventos_normalizados":       []openClawNormalizedEvent{},
+		"thread_sessions":            map[string]any{},
+		"subagentes":                 []map[string]any{},
+		"subagent_store":             supervisorSubagentStoreSummary{},
+		"subagent_profiles":          []db.SupervisorSubagentToolProfile{},
+		"session_candidates":         []apiOpenClawSessionCandidate{},
+		"worktree_drift":             []apiOpenClawWorktreeDrift{},
+		"pipeline_state":             map[string]any{},
+		"pipeline_followup":          map[string]any{},
+		"subagentes_followup":        []map[string]any{},
+	}
+}
+
+func buildOpenClawOperatorSnapshotBestEffort(supervisor string, apiStatus apiStatusResponse) map[string]any {
+	if snapshot, err := runAPITimeboxed(openClawOperatorSnapshotTimeout, func() (map[string]any, error) {
+		return openClawOperatorSnapshotCoreBuilder(supervisor, apiStatus), nil
+	}, errStatusFetchTimeout); err == nil && snapshot != nil {
+		return snapshot
+	}
+	return buildOpenClawOperatorSnapshotFallback(supervisor, apiStatus)
+}
+
 func buildMCPOpenClawOperatorSnapshot(supervisor string) (map[string]any, error) {
 	supervisor = resolveOpenClawOperatorSupervisor(supervisor)
 	apiStatus := resolveOpenClawAPIStatus()
+	return buildOpenClawOperatorSnapshotBestEffort(supervisor, apiStatus), nil
+}
+
+func buildOpenClawOperatorSnapshotCore(supervisor string, apiStatus apiStatusResponse) map[string]any {
 	status := buildOpenClawBaseStatusFromAPIStatus(apiStatus)
 	revision := buildOpenClawReviewSnapshotSafeWithStatus(supervisor, apiStatus)
 	mailboxPendiente, mailboxKnown := openClawPendingMailboxFromReviewSnapshot(revision)
@@ -65,10 +125,7 @@ func buildMCPOpenClawOperatorSnapshot(supervisor string) (map[string]any, error)
 		}
 	}
 
-	subagentFollowups := buildOpenClawSubagentFollowupsCompact(subagents)
-	if len(subagentFollowups) == 0 {
-		subagentFollowups = buildOpenClawSubagentFollowupsDirect(supervisor)
-	}
+	subagentFollowups := buildOpenClawSubagentFollowupsBestEffort(supervisor, subagents)
 	pipelineFollowup := buildOpenClawPipelineFollowupCompact(pipeline)
 	if len(pipelineFollowup) == 0 && len(subagentFollowups) > 0 {
 		pipelineFollowup = buildOpenClawPipelineFollowupFromSubagents(subagentFollowups)
@@ -134,7 +191,7 @@ func buildMCPOpenClawOperatorSnapshot(supervisor string) (map[string]any, error)
 		"pipeline_state":             pipeline,
 		"pipeline_followup":          pipelineFollowup,
 		"subagentes_followup":        subagentFollowups,
-	}, nil
+	}
 }
 
 func callMCPOpenClawOperator(args map[string]any) (map[string]any, error) {

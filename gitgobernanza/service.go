@@ -106,12 +106,23 @@ func (s *Service) SaveRequest(input SaveMergeRequestInput) (int64, error) {
 }
 
 func (s *Service) ListRequests(proyectoSlug, estado string) ([]*GitMerge, error) {
+	return s.ListRequestsLimit(proyectoSlug, estado, 0)
+}
+
+func (s *Service) ListRequestsLimit(proyectoSlug, estado string, limit int) ([]*GitMerge, error) {
 	var proyectoID *int64
 	var err error
 	if strings.TrimSpace(proyectoSlug) != "" {
 		proyectoID, err = s.store.ResolveProyectoIDBySlug(strings.TrimSpace(proyectoSlug))
 		if err != nil {
 			return nil, err
+		}
+	}
+	if limit > 0 {
+		if limited, ok := s.store.(interface {
+			ListGitMergesLimitado(proyectoID *int64, estado string, limit int) ([]*GitMerge, error)
+		}); ok {
+			return limited.ListGitMergesLimitado(proyectoID, strings.TrimSpace(estado), limit)
 		}
 	}
 	return s.store.ListGitMerges(proyectoID, strings.TrimSpace(estado))

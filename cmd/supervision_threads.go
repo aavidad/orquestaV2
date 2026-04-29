@@ -97,10 +97,7 @@ func buildSupervisorThreadsSnapshot(supervisor, sessionID string, limit int) (ma
 		if key == "_default" {
 			actualSessionID = ""
 		}
-		summary, err := db.SummarizeSupervisorThreadSession(supervisor, actualSessionID, db.DefaultSupervisorThreadActiveWindow)
-		if err != nil {
-			return nil, err
-		}
+		summary := summarizeSupervisorThreadSessionItems(supervisor, actualSessionID, sessionIndex[key], db.DefaultSupervisorThreadActiveWindow)
 		if summary == nil {
 			continue
 		}
@@ -114,13 +111,81 @@ func buildSupervisorThreadsSnapshot(supervisor, sessionID string, limit int) (ma
 		return nil, err
 	}
 	return map[string]any{
-		"supervisor":               supervisor,
-		"session_id":               strings.TrimSpace(sessionID),
-		"active_window_s":          int(db.DefaultSupervisorThreadActiveWindow / time.Second),
-		"sessions":                 summaries,
-		"threads":                  items,
-		"observed_agent_sessions":  observedSessions,
+		"supervisor":              supervisor,
+		"session_id":              strings.TrimSpace(sessionID),
+		"active_window_s":         int(db.DefaultSupervisorThreadActiveWindow / time.Second),
+		"sessions":                summaries,
+		"observed_agent_sessions": observedSessions,
 	}, nil
+}
+
+func summarizeSupervisorThreadSessionItems(supervisor, sessionID string, items []*db.SupervisorThread, activeWindow time.Duration) *db.SupervisorThreadSessionSummary {
+	if activeWindow <= 0 {
+		activeWindow = db.DefaultSupervisorThreadActiveWindow
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	now := time.Now().UTC()
+	var leaderThreadID string
+	threadIDs := make([]string, 0, len(items))
+	subagentIDs := []string{}
+	activeSubagentIDs := []string{}
+	seenIDs := map[string]struct{}{}
+	projectSlug := ""
+	var updatedAt *time.Time
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		if projectSlug == "" && strings.TrimSpace(item.ProyectoSlug) != "" {
+			projectSlug = strings.TrimSpace(item.ProyectoSlug)
+		}
+		if updatedAt == nil || item.LastSeenAt.After(*updatedAt) {
+			ts := item.LastSeenAt
+			updatedAt = &ts
+		}
+		threadID := strings.TrimSpace(item.ThreadID)
+		if threadID == "" {
+			continue
+		}
+		if _, ok := seenIDs[threadID]; !ok {
+			seenIDs[threadID] = struct{}{}
+			threadIDs = append(threadIDs, threadID)
+		}
+		if strings.TrimSpace(item.Kind) == "leader" && leaderThreadID == "" {
+			leaderThreadID = threadID
+		}
+		if strings.TrimSpace(item.Kind) != "subagent" {
+			continue
+		}
+		subagentIDs = appendStringIfMissing(subagentIDs, threadID)
+		if now.Sub(item.LastSeenAt) <= activeWindow && strings.TrimSpace(item.Status) != "closed" {
+			activeSubagentIDs = appendStringIfMissing(activeSubagentIDs, threadID)
+		}
+	}
+	sort.Strings(threadIDs)
+	sort.Strings(subagentIDs)
+	sort.Strings(activeSubagentIDs)
+	return &db.SupervisorThreadSessionSummary{
+		Supervisor:              strings.TrimSpace(supervisor),
+		ProyectoSlug:            projectSlug,
+		SessionID:               strings.TrimSpace(sessionID),
+		LeaderThreadID:          leaderThreadID,
+		AllThreadIDs:            threadIDs,
+		AllSubagentThreadIDs:    subagentIDs,
+		ActiveSubagentThreadIDs: activeSubagentIDs,
+		UpdatedAt:               updatedAt,
+	}
+}
+
+func appendStringIfMissing(items []string, value string) []string {
+	for _, existing := range items {
+		if existing == value {
+			return items
+		}
+	}
+	return append(items, value)
 }
 
 func buildSupervisorObservedAgentSessions() ([]*supervisorObservedAgentSessionSummary, error) {

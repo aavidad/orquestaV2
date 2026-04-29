@@ -53,3 +53,18 @@ func (Repository) ListGitMerges(proyectoID *int64, estado string) ([]*GitMerge, 
 	}
 	return out, nil
 }
+
+func (Repository) ListGitMergesLimitado(proyectoID *int64, estado string, limit int) ([]*GitMerge, error) {
+	items, err := db.ListarGitMergesLimitado(proyectoID, estado, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*GitMerge, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		out = append(out, mapGitMerge(item))
+	}
+	return out, nil
+}

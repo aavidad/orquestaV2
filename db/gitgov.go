@@ -99,6 +99,14 @@ func GuardarGitMerge(m *GitMerge) (int64, error) {
 }
 
 func ListarGitMerges(proyectoID *int64, estado string) ([]*GitMerge, error) {
+	return listarGitMerges(proyectoID, estado, 0)
+}
+
+func ListarGitMergesLimitado(proyectoID *int64, estado string, limit int) ([]*GitMerge, error) {
+	return listarGitMerges(proyectoID, estado, limit)
+}
+
+func listarGitMerges(proyectoID *int64, estado string, limit int) ([]*GitMerge, error) {
 	q := `
 		SELECT gm.id, gm.proyecto_id, p.slug, gm.source_branch, gm.target_branch, gm.requested_by, gm.estado,
 		       gm.commit_origen, gm.commit_merge, gm.notas, gm.metadata_json, gm.created_at, gm.updated_at
@@ -115,6 +123,10 @@ func ListarGitMerges(proyectoID *int64, estado string) ([]*GitMerge, error) {
 		args = append(args, estado)
 	}
 	q += ` ORDER BY gm.created_at DESC, gm.id DESC`
+	if limit > 0 {
+		q += ` LIMIT ?`
+		args = append(args, limit)
+	}
 	rows, err := DB.Query(q, args...)
 	if err != nil {
 		return nil, err

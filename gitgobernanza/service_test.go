@@ -11,6 +11,8 @@ type fakeStore struct {
 	projectID int64
 	saved     *GitMerge
 	listed    []*GitMerge
+	limited   []*GitMerge
+	lastLimit int
 	worktrees []*db.Worktree
 	locks     []*db.Lock
 }
@@ -56,6 +58,14 @@ func (f *fakeStore) SaveGitMerge(m *GitMerge) (int64, error) {
 }
 
 func (f *fakeStore) ListGitMerges(proyectoID *int64, estado string) ([]*GitMerge, error) {
+	return f.listed, nil
+}
+
+func (f *fakeStore) ListGitMergesLimitado(proyectoID *int64, estado string, limit int) ([]*GitMerge, error) {
+	f.lastLimit = limit
+	if f.limited != nil {
+		return f.limited, nil
+	}
 	return f.listed, nil
 }
 
@@ -122,6 +132,27 @@ func TestListRequestsSinProyectoPermiteListadoGlobal(t *testing.T) {
 		t.Fatalf("ListRequests: %v", err)
 	}
 	if len(items) != 1 || items[0].ID != 1 {
+		t.Fatalf("resultado inesperado: %+v", items)
+	}
+}
+
+func TestListRequestsLimitUsaCarrilLimitadoSiExiste(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{
+		limited: []*GitMerge{
+			{ID: 9, ProyectoID: 3, SourceBranch: "feat/limit", TargetBranch: "main"},
+		},
+	}
+	svc := NewService(store)
+	items, err := svc.ListRequestsLimit("", "pendiente", 2)
+	if err != nil {
+		t.Fatalf("ListRequestsLimit: %v", err)
+	}
+	if store.lastLimit != 2 {
+		t.Fatalf("limit inesperado: %d", store.lastLimit)
+	}
+	if len(items) != 1 || items[0].ID != 9 {
 		t.Fatalf("resultado inesperado: %+v", items)
 	}
 }
