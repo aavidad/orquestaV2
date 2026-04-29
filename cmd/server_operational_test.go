@@ -557,6 +557,56 @@ func TestBuildServerOperationalInfoFastFromDBDerivaRiesgoCanonicoSinStatus(t *te
 	}
 }
 
+func TestBuildServerOperationalInfoFastFromDBToleraAutonomySurfaceLenta(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	prevAgents := serverOperationalListAgentsFetcher
+	prevTasks := serverOperationalCountTasksFetcher
+	prevSurface := statusAutonomySurfaceFetcher
+	prevTimeout := serverOperationalOptionalTimeout
+	prevNow := statusNowFunc
+	defer func() {
+		serverOperationalListAgentsFetcher = prevAgents
+		serverOperationalCountTasksFetcher = prevTasks
+		statusAutonomySurfaceFetcher = prevSurface
+		serverOperationalOptionalTimeout = prevTimeout
+		statusNowFunc = prevNow
+	}()
+
+	now := time.Date(2026, 4, 29, 9, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	serverOperationalOptionalTimeout = 20 * time.Millisecond
+
+	serverOperationalListAgentsFetcher = func() ([]*db.Agente, error) {
+		return []*db.Agente{{Nombre: "Codex1", Activo: true}}, nil
+	}
+	serverOperationalCountTasksFetcher = func() (map[string]int, error) {
+		return map[string]int{string(db.TareaEnProgreso): 1}, nil
+	}
+	statusAutonomySurfaceFetcher = func() (*autonomySurface, error) {
+		time.Sleep(150 * time.Millisecond)
+		return &autonomySurface{
+			Projects: []autonomyProjectSurface{{Project: "infra"}},
+		}, nil
+	}
+
+	start := time.Now()
+	info, err := buildServerOperationalInfoFastFromDB()
+	if err != nil {
+		t.Fatalf("buildServerOperationalInfoFastFromDB: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 120*time.Millisecond {
+		t.Fatalf("la ruta operativa ligera no deberia bloquearse por autonomy surface lenta: %s", elapsed)
+	}
+	if info.TasksInProgress != 1 || info.ActiveAgents != 1 {
+		t.Fatalf("snapshot operativo inesperado: %+v", info)
+	}
+	if info.CriticalProjectRisk != nil {
+		t.Fatalf("no deberia esperar riesgo crítico cuando autonomy surface expira: %+v", info.CriticalProjectRisk)
+	}
+}
+
 func TestBuildServerOperationalInfoFastFromDBIgnoraSnapshotFrescoQueNecesitaRefresh(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()

@@ -178,8 +178,8 @@ func serverOperationalAutonomyContext(status apiStatusResponse) (*autonomySurfac
 	if statusAutonomySurfaceFetcher == nil {
 		return nil, nil, nil
 	}
-	surface, err := statusAutonomySurfaceFetcher()
-	if err != nil || surface == nil {
+	surface, ok := runStatusOptional(serverOperationalOptionalTimeout, statusAutonomySurfaceFetcher)
+	if !ok || surface == nil {
 		return nil, nil, nil
 	}
 	riskSummary := buildStatusWorkspaceRiskSummary(surface)
