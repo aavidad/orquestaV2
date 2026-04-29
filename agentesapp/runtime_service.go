@@ -835,7 +835,7 @@ func (s *Service) prewarmDurableWorkerSnapshot(agente string, proyectoID int64) 
 	if handle == nil {
 		return nil
 	}
-	_ = loadStructuredWorkerSnapshot(nil, handle)
+	_ = loadStructuredWorkerSnapshot(nil, nil, handle)
 	return nil
 }
 
@@ -1334,7 +1334,7 @@ func (s *Service) buildOperationalRowContextForTick(agenteNombre string, proyect
 			row.Handle = latestHandleForAgent(handles)
 		}
 	}
-	if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
+	if structured := loadStructuredWorkerSnapshot(row.Sesion, row.Runtime, row.Handle); structured != nil {
 		if view := structured.View(now, time.Minute); view != nil {
 			row.WorkerState = strings.TrimSpace(view.State)
 			row.WorkerAlive = view.Alive

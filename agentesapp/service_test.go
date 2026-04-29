@@ -5916,6 +5916,55 @@ func TestBuildPanelRowsPromueveTareaDurableDesdeWorkQueue(t *testing.T) {
 	}
 }
 
+func TestBuildPanelRowsPromueveTareaDurableDesdeWorkQueueSinHandleUsandoSessionCWD(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(779)
+	tmp := t.TempDir()
+	if err := controlruntime.RecordWorkQueueAtPath(controlruntime.WorkQueuePathFromDir(tmp), controlruntime.WorkQueueRecordInput{
+		Kind:       "autonomia",
+		Action:     "continuar_trabajo",
+		TaskID:     93,
+		State:      "running",
+		Reason:     "trabajo durable activo sin handle",
+		RecordedAt: now,
+	}); err != nil {
+		t.Fatalf("RecordWorkQueueAtPath: %v", err)
+	}
+
+	store := &fakeStoreDurableOnly{fakeStore: &fakeStore{
+		agents: []*db.Agente{{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true}},
+		sessions: []*db.Sesion{{
+			ID:         12,
+			Agente:     "Codex2",
+			ProyectoID: &proyectoID,
+			Activa:     true,
+			Estado:     "activa",
+			Inicio:     now,
+			CWD:        tmp,
+		}},
+		runtimes: []*db.RuntimeInstance{{ID: 10, Agente: "Codex2", ProyectoID: &proyectoID, LogicalState: "activo", ProcessState: "running", UpdatedAt: now}},
+		tasks:    []*db.Tarea{{ID: 93, Titulo: "Slice panel durable sin handle", Estado: db.EstadoEnProgreso, ProyectoID: &proyectoID, Agente: ptr("Codex2"), Modulo: "cmd"}},
+	}}
+	svc := NewService(store, nil)
+
+	rows, err := svc.BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].CurrentTask == nil || rows[0].CurrentTask.TaskID != 93 {
+		t.Fatalf("current task inesperada: %+v", rows[0].CurrentTask)
+	}
+	if rows[0].LastAutonomySource != "work_queue" {
+		t.Fatalf("last autonomy source=%q, want work_queue", rows[0].LastAutonomySource)
+	}
+	if rows[0].OpenTasks != 1 {
+		t.Fatalf("open tasks=%d, want 1", rows[0].OpenTasks)
+	}
+}
+
 func TestBuildDetailCompactPromueveWorkQueueAbsorbidaConSkewCorto(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(460)
@@ -5996,6 +6045,62 @@ func TestBuildDetailCompactPromueveWorkQueueAbsorbidaConSkewCorto(t *testing.T) 
 	}
 	if detail.Row.LastAutonomyState != "work_confirmed" || detail.Entity.LastAutonomyState != "work_confirmed" {
 		t.Fatalf("deberia promover work_queue absorbida con skew corto: row=%+v entity=%+v", detail.Row, detail.Entity)
+	}
+}
+
+func TestBuildDetailCompactPromueveTareaDurableSinHandleUsandoRuntimeCWD(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(780)
+	tmp := t.TempDir()
+	if err := controlruntime.RecordWorkQueueAtPath(controlruntime.WorkQueuePathFromDir(tmp), controlruntime.WorkQueueRecordInput{
+		Kind:       "autonomia",
+		Action:     "continuar_trabajo",
+		TaskID:     94,
+		State:      "running",
+		Reason:     "trabajo durable activo sin handle",
+		RecordedAt: now,
+	}); err != nil {
+		t.Fatalf("RecordWorkQueueAtPath: %v", err)
+	}
+
+	store := &fakeStoreDurableOnly{fakeStore: &fakeStore{
+		agents: []*db.Agente{{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true}},
+		sessions: []*db.Sesion{{
+			ID:         12,
+			Agente:     "Codex2",
+			ProyectoID: &proyectoID,
+			Activa:     true,
+			Estado:     "activa",
+			Inicio:     now,
+		}},
+		runtimes: []*db.RuntimeInstance{{
+			ID:           10,
+			Agente:       "Codex2",
+			ProyectoID:   &proyectoID,
+			LogicalState: "activo",
+			ProcessState: "running",
+			UpdatedAt:    now,
+			CWD:          tmp,
+		}},
+		tasks: []*db.Tarea{{ID: 94, Titulo: "Slice detail durable sin handle", Estado: db.EstadoEnProgreso, ProyectoID: &proyectoID, Agente: ptr("Codex2"), Modulo: "cmd"}},
+	}}
+	svc := NewService(store, nil)
+
+	detail, err := svc.BuildDetailCompact("Codex2")
+	if err != nil {
+		t.Fatalf("BuildDetailCompact: %v", err)
+	}
+	if detail == nil || detail.Entity == nil {
+		t.Fatalf("detail/entity inesperado: %+v", detail)
+	}
+	if detail.Row.CurrentTask == nil || detail.Row.CurrentTask.TaskID != 94 {
+		t.Fatalf("current task inesperada: %+v", detail.Row.CurrentTask)
+	}
+	if detail.Entity.LastAutonomySource != "work_queue" {
+		t.Fatalf("entity last autonomy source=%q, want work_queue", detail.Entity.LastAutonomySource)
+	}
+	if detail.Row.OpenTasks != 1 {
+		t.Fatalf("open tasks=%d, want 1", detail.Row.OpenTasks)
 	}
 }
 

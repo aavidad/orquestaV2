@@ -982,7 +982,7 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 				row.LastAutonomyReceiptSource = receiptSource
 			}
 		}
-		if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
+		if structured := loadStructuredWorkerSnapshot(row.Sesion, row.Runtime, row.Handle); structured != nil {
 			if view := structured.View(now, time.Minute); view != nil {
 				row.WorkerState = strings.TrimSpace(view.State)
 				row.WorkerAlive = view.Alive
@@ -1421,7 +1421,7 @@ func (s *Service) buildRowContextForAgentWithMailbox(nombre string, mailbox []*d
 	}
 
 	now := time.Now().UTC()
-	if structured := loadStructuredWorkerSnapshot(ctx.Row.Runtime, ctx.Row.Handle); structured != nil {
+	if structured := loadStructuredWorkerSnapshot(ctx.Row.Sesion, ctx.Row.Runtime, ctx.Row.Handle); structured != nil {
 		if view := structured.View(now, time.Minute); view != nil {
 			ctx.Row.WorkerState = strings.TrimSpace(view.State)
 			ctx.Row.WorkerAlive = view.Alive
@@ -1536,7 +1536,7 @@ func (s *Service) buildOperationalRowContextForAgentCompactWithSession(nombre st
 		row.Handle = latestHandleForProject(handles, proyectoID)
 	}
 	agentDetailDebugf("compact step=list_handles agente=%s count=%d duration=%s", nombre, len(handles), time.Since(stepStart).Round(time.Millisecond))
-	if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
+	if structured := loadStructuredWorkerSnapshot(row.Sesion, row.Runtime, row.Handle); structured != nil {
 		if view := structured.View(now, time.Minute); view != nil {
 			row.WorkerState = strings.TrimSpace(view.State)
 			row.WorkerAlive = view.Alive
@@ -1867,7 +1867,7 @@ func (s *Service) buildOperationalRowContextForAgent(nombre string, now time.Tim
 		}
 		row.Handle = latestHandleForProject(handles, proyectoID)
 	}
-	if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
+	if structured := loadStructuredWorkerSnapshot(row.Sesion, row.Runtime, row.Handle); structured != nil {
 		if view := structured.View(now, time.Minute); view != nil {
 			row.WorkerState = strings.TrimSpace(view.State)
 			row.WorkerAlive = view.Alive
@@ -5014,10 +5014,11 @@ func stringFromResumePayloadAny(v any) string {
 }
 
 func (r Row) durableWorkQueueView(now time.Time) *runtimeagente.WorkerStatusView {
-	if r.Handle == nil || strings.TrimSpace(r.Handle.MetadataJSON) == "" {
+	metaJSON := r.workerSnapshotMetadataJSON()
+	if strings.TrimSpace(metaJSON) == "" {
 		return nil
 	}
-	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(r.Handle.MetadataJSON))
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(metaJSON)
 	if err != nil || snap == nil {
 		return nil
 	}
@@ -5506,10 +5507,13 @@ func (r Row) runtimePrincipalStale(now time.Time) bool {
 	return true
 }
 
-func loadStructuredWorkerSnapshot(runtime *db.RuntimeInstance, handle *db.RuntimeHandle) *runtimeagente.WorkerSnapshot {
+func loadStructuredWorkerSnapshot(sesion *db.Sesion, runtime *db.RuntimeInstance, handle *db.RuntimeHandle) *runtimeagente.WorkerSnapshot {
 	var metas []string
 	if handle != nil && !strings.EqualFold(strings.TrimSpace(handle.Estado), "cerrado") {
 		metas = append(metas, metadataFromHandle(handle))
+	}
+	if sesion != nil && sesion.Activa && (sesion.Fin == nil || sesion.Fin.IsZero()) {
+		metas = append(metas, metadataFromSession(sesion))
 	}
 	if runtime != nil && !strings.EqualFold(strings.TrimSpace(runtime.LogicalState), "cerrado") && !strings.EqualFold(strings.TrimSpace(runtime.LogicalState), "finalizado") {
 		metas = append(metas, metadataFromRuntime(runtime))
@@ -5524,8 +5528,10 @@ func loadStructuredWorkerSnapshot(runtime *db.RuntimeInstance, handle *db.Runtim
 }
 
 func metadataFromRuntime(runtime *db.RuntimeInstance) string {
-	_ = runtime
-	return ""
+	if runtime == nil {
+		return ""
+	}
+	return metadataFromWorkingDir(runtime.CWD)
 }
 
 func metadataFromHandle(handle *db.RuntimeHandle) string {
@@ -5533,6 +5539,41 @@ func metadataFromHandle(handle *db.RuntimeHandle) string {
 		return ""
 	}
 	return handle.MetadataJSON
+}
+
+func metadataFromSession(sesion *db.Sesion) string {
+	if sesion == nil {
+		return ""
+	}
+	return metadataFromWorkingDir(sesion.CWD)
+}
+
+func metadataFromWorkingDir(workingDir string) string {
+	workingDir = strings.TrimSpace(workingDir)
+	if workingDir == "" {
+		return ""
+	}
+	raw, err := json.Marshal(map[string]any{
+		"worker_schema_version": runtimeagente.WorkerMetadataSchemaVersion,
+		"working_dir":           workingDir,
+	})
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+func (r Row) workerSnapshotMetadataJSON() string {
+	for _, metaJSON := range []string{
+		metadataFromHandle(r.Handle),
+		metadataFromSession(r.Sesion),
+		metadataFromRuntime(r.Runtime),
+	} {
+		if strings.TrimSpace(metaJSON) != "" {
+			return metaJSON
+		}
+	}
+	return ""
 }
 
 func sesionMoment(sesion *db.Sesion) time.Time {
