@@ -36,6 +36,7 @@ func buildOpenClawOperatorSnapshotFallback(supervisor string, apiStatus apiStatu
 	statusResumen := buildOpenClawOperatorStatusBase(status, nil)
 	operationalInfo := buildOpenClawOperationalInfoWithStatus(apiStatus)
 	actionQueue, safeActionQueue, nextAction, nextSafeAction := fillOpenClawOperationalQueuesFromStatusFallback(apiStatus, statusResumen.MailboxPendiente, nil, nil, nil, nil)
+	nextRecoveryAction := buildOpenClawNextRecoveryAction(operationalInfo)
 	queueSummary := buildOpenClawQueueSummaryFromActions(actionQueue, safeActionQueue)
 	return map[string]any{
 		"status":                     statusResumen,
@@ -53,6 +54,7 @@ func buildOpenClawOperatorSnapshotFallback(supervisor string, apiStatus apiStatu
 		"propuestasAbiertas":         statusResumen.PropuestasAbiertas,
 		"review":                     map[string]any{},
 		"next_action":                nextAction,
+		"next_recovery_action":       nextRecoveryAction,
 		"action_queue":               actionQueue,
 		"next_safe_action":           nextSafeAction,
 		"safe_action_queue":          safeActionQueue,
@@ -138,10 +140,11 @@ func buildOpenClawOperatorSnapshotCore(supervisor string, apiStatus apiStatusRes
 	safeActionQueue := supervisorSafeActionQueueFromReviewSnapshot(revision)
 	nextAction := supervisorNextActionFromReviewOrPipelineSnapshot(revision, pipeline)
 	nextSafeAction := supervisorNextSafeActionFromReviewSnapshot(revision)
+	operationalInfo := buildOpenClawOperationalInfoWithStatus(apiStatus)
 	actionQueue, safeActionQueue, nextAction, nextSafeAction = fillOpenClawOperationalQueuesFromStatusFallback(apiStatus, statusResumen.MailboxPendiente, actionQueue, safeActionQueue, nextAction, nextSafeAction)
+	nextRecoveryAction := buildOpenClawNextRecoveryAction(operationalInfo)
 	queueSummary := buildOpenClawQueueSummaryFromActions(actionQueue, safeActionQueue)
 	sessionCandidates := alignOpenClawSessionCandidatesWithStatus(buildOpenClawSessionCandidates(threads), status.AgentesActivos)
-	operationalInfo := buildOpenClawOperationalInfoWithStatus(apiStatus)
 
 	estadoNotifs := notificaciones.EstadoNotificaciones{}
 	if estado, err := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.EstadoNotificaciones, error) {
@@ -172,6 +175,7 @@ func buildOpenClawOperatorSnapshotCore(supervisor string, apiStatus apiStatusRes
 		"propuestasAbiertas":         statusResumen.PropuestasAbiertas,
 		"review":                     reviewCompact,
 		"next_action":                nextAction,
+		"next_recovery_action":       nextRecoveryAction,
 		"action_queue":               actionQueue,
 		"next_safe_action":           nextSafeAction,
 		"safe_action_queue":          safeActionQueue,
@@ -191,6 +195,31 @@ func buildOpenClawOperatorSnapshotCore(supervisor string, apiStatus apiStatusRes
 		"pipeline_followup":          pipelineFollowup,
 		"subagentes_followup":        subagentFollowups,
 	}
+}
+
+func buildOpenClawNextRecoveryAction(info serverOperationalInfo) *supervisorRecommendedAction {
+	recovery := info.Recovery
+	if recovery == nil || strings.TrimSpace(recovery.SuggestedAction) == "" {
+		return nil
+	}
+	action := &supervisorRecommendedAction{
+		Kind:     "recovery",
+		Target:   "server:operational",
+		Action:   strings.TrimSpace(recovery.SuggestedAction),
+		Reason:   strings.TrimSpace(recovery.Detail),
+		Priority: "media",
+		Assignee: resolveSupervisorName(""),
+	}
+	switch strings.TrimSpace(recovery.Kind) {
+	case "worker_gap", "stuck_workers":
+		action.Priority = "alta"
+	case "quota_cooldown":
+		action.Priority = "baja"
+	}
+	if strings.TrimSpace(action.Reason) == "" {
+		action.Reason = strings.TrimSpace(info.Reason)
+	}
+	return action
 }
 
 func callMCPOpenClawOperator(args map[string]any) (map[string]any, error) {

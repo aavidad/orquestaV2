@@ -477,6 +477,32 @@ func TestBuildOpenClawOperatorSnapshotCoreNoReabreFollowupsSiReviewLlegaDegradad
 	})
 }
 
+func TestBuildOpenClawNextRecoveryActionDerivaPlanCanonico(t *testing.T) {
+	action := buildOpenClawNextRecoveryAction(serverOperationalInfo{
+		Reason: "tasks_without_workers",
+		Recovery: &serverOperationalRecoveryHint{
+			Kind:            "worker_gap",
+			SuggestedAction: "server_rearm",
+			Detail:          "1 tarea en progreso sin worker confirmado",
+		},
+	})
+	if action == nil {
+		t.Fatalf("deberia derivar action de recovery")
+	}
+	if action.Kind != "recovery" || action.Action != "server_rearm" || action.Target != "server:operational" {
+		t.Fatalf("action recovery inesperada: %+v", action)
+	}
+	if action.Priority != "alta" {
+		t.Fatalf("priority recovery inesperada: %+v", action)
+	}
+}
+
+func TestBuildOpenClawNextRecoveryActionNilSinRecovery(t *testing.T) {
+	if action := buildOpenClawNextRecoveryAction(serverOperationalInfo{}); action != nil {
+		t.Fatalf("no deberia derivar recovery action sin hint: %+v", action)
+	}
+}
+
 func TestListarSupervisorModuleConflictsFromTasksReutilizaEstadoYaCargado(t *testing.T) {
 	conflicts := listarSupervisorModuleConflictsFromTasks([]tareaLite{
 		{ID: 410, Modulo: "runtime", Agente: "Codex3"},
