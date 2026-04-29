@@ -1606,7 +1606,7 @@ func runtimeOrderEntregaGitPremiumDesdeSendInstruction(order *db.RuntimeOrder) b
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(stringMapValue(payload, "carril"))) {
-	case "premium_worktree", "revision_diff":
+	case "premium_worktree", "revision_diff", "microprogramacion_local":
 		return true
 	default:
 		return false
@@ -7775,14 +7775,28 @@ func procesarRuntimeMailboxSessionResumeMensaje(msg *db.RuntimeMailboxMessage, c
 	if snapshot == nil {
 		snapshot = newRuntimeMailboxBatchSnapshot()
 	}
-	texto, ok := construirInstruccionMailboxInteractivo(msg)
-	if !ok {
-		return false, nil
-	}
 	if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
 		return false, err
 	}
 	if !runtimeMailboxSiguePendiente(msg.ID) {
+		return false, nil
+	}
+	if detalle, obsoleta, err := runtimeMailboxObsoletaPorTareaActivaActualConSnapshot(msg, snapshot); err != nil {
+		return false, err
+	} else if obsoleta {
+		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return false, err
+		}
+		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return false, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_obsoleta_tarea", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("lane=%s agente=%s kind=%s %s", "session_resume_preflight", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), strings.TrimSpace(detalle)))
+		marcarRuntimeMailboxConsumidaEnBatch(consumed, msg)
+		return true, nil
+	}
+	texto, ok := construirInstruccionMailboxInteractivo(msg)
+	if !ok {
 		return false, nil
 	}
 	handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
@@ -7883,7 +7897,7 @@ func procesarRuntimeMailboxSessionResumeConSesion(msg *db.RuntimeMailboxMessage,
 	if !runtimeMailboxShouldReevaluate("session_resume", msg.ID, handle.ID) {
 		return false, nil
 	}
-	if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliverySessionResume {
+	if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliverySessionResume && !bootstrapPendienteCanonicoListo {
 		return false, nil
 	}
 	if !runtimeHandleListaParaDispatchSessionResumeTMUX(handle, runtimeInstance) && !bootstrapPendienteCanonicoListo {
@@ -9222,6 +9236,9 @@ func existeIntentoSendInstructionMailboxParaHandle(msg *db.RuntimeMailboxMessage
 		}
 		switch strings.TrimSpace(order.Estado) {
 		case "pendiente", "tomada", "ejecutando":
+			if !runtimeOrderOpenMailboxAttemptMatchesCurrentSession(order, handle.ID, currentSessionID) {
+				continue
+			}
 			return true, nil
 		case "completada":
 			if !runtimeOrderCompletedMailboxAttemptStillBlocks(order, currentSessionID, currentSignature) {
@@ -9260,6 +9277,9 @@ func existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot *runtimeMa
 		}
 		switch strings.TrimSpace(order.Estado) {
 		case "pendiente", "tomada", "ejecutando":
+			if !runtimeOrderOpenMailboxAttemptMatchesCurrentSession(order, handle.ID, currentSessionID) {
+				continue
+			}
 			if ledgerDelivered {
 				continue
 			}
@@ -9316,15 +9336,40 @@ func runtimeOrderMatchesMailboxSendInstructionAttemptForSession(order *db.Runtim
 	if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
 		return false
 	}
-	if order.HandleID == nil || handleID <= 0 || *order.HandleID == handleID {
+	externalSessionID = strings.TrimSpace(externalSessionID)
+	if order.HandleID == nil {
+		if externalSessionID == "" {
+			return handleID <= 0
+		}
+		orderSessionID := strings.TrimSpace(runtimeOrderExternalSessionIDFromJSON(order.PayloadJSON))
+		return orderSessionID != "" && orderSessionID == externalSessionID
+	}
+	if handleID <= 0 || *order.HandleID == handleID {
 		return true
 	}
-	externalSessionID = strings.TrimSpace(externalSessionID)
 	if externalSessionID == "" {
 		return false
 	}
 	orderSessionID := strings.TrimSpace(runtimeOrderExternalSessionIDFromJSON(order.PayloadJSON))
 	return orderSessionID != "" && orderSessionID == externalSessionID
+}
+
+func runtimeOrderOpenMailboxAttemptMatchesCurrentSession(order *db.RuntimeOrder, handleID int64, currentSessionID string) bool {
+	if order == nil {
+		return false
+	}
+	currentSessionID = strings.TrimSpace(currentSessionID)
+	if currentSessionID == "" {
+		return true
+	}
+	orderSessionID := strings.TrimSpace(runtimeOrderExternalSessionIDFromJSON(order.PayloadJSON))
+	if order.HandleID != nil && *order.HandleID == handleID {
+		return orderSessionID != "" && orderSessionID == currentSessionID
+	}
+	if order.HandleID == nil {
+		return orderSessionID != "" && orderSessionID == currentSessionID
+	}
+	return true
 }
 
 func runtimeOrderCompletedMailboxAttemptStillBlocks(order *db.RuntimeOrder, currentSessionID, currentSignature string) bool {
@@ -9719,12 +9764,21 @@ func runtimeMailboxObsoletaPorTareaActivaActual(msg *db.RuntimeMailboxMessage) (
 }
 
 func runtimeMailboxObsoletaPorTareaActivaActualConSnapshot(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) (string, bool, error) {
-	if msg == nil || msg.ProyectoID == nil {
+	if msg == nil {
 		return "", false, nil
 	}
 	payload := mapFromJSON(strings.TrimSpace(msg.PayloadJSON))
 	tareaID := runtimeMailboxTargetTaskID(payload)
 	if tareaID == nil || *tareaID <= 0 {
+		if runtimeMailboxPremiumPipelineLocalSinTarea(msg, payload) {
+			if msg.ProyectoID != nil {
+				return fmt.Sprintf("premium_pipeline_local_sin_tarea=true proyecto_id=%d", *msg.ProyectoID), true, nil
+			}
+			return "premium_pipeline_local_sin_tarea=true", true, nil
+		}
+		return "", false, nil
+	}
+	if msg.ProyectoID == nil {
 		return "", false, nil
 	}
 	var (
@@ -9781,6 +9835,27 @@ func runtimeMailboxTargetTaskID(payload map[string]any) *int64 {
 		return tareaID
 	}
 	return nil
+}
+
+func runtimeMailboxPremiumPipelineLocalSinTarea(msg *db.RuntimeMailboxMessage, payload map[string]any) bool {
+	if msg == nil || payload == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") {
+		return false
+	}
+	isPipelineLocal := strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "source")), "pipeline_local") ||
+		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "kind")), "pipeline_local") ||
+		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "mailbox_kind")), "pipeline_local")
+	if !isPipelineLocal {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(stringMapValue(payload, "carril"))) {
+	case "premium_worktree", "revision_diff", "microprogramacion_local":
+		return true
+	default:
+		return false
+	}
 }
 
 func consumirRuntimeMailboxBootstrapObservadoSiProcede(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, runtime *db.RuntimeInstance, lane string) (bool, error) {
@@ -14173,7 +14248,31 @@ func tareaAutonomiaDebeMantenerPrime(tarea *db.Tarea) bool {
 			return true
 		}
 	}
-	return false
+	if tarea.ProyectoID == nil || *tarea.ProyectoID <= 0 {
+		return false
+	}
+	if !tareaPipelineLocalTieneContratoPremiumCmd(tareaPipelineLocalDesdeTareaDB(tarea)) {
+		return false
+	}
+	proyecto, err := db.GetProyecto(strconv.FormatInt(*tarea.ProyectoID, 10))
+	if err != nil || proyecto == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(proyecto.Slug), "orquestador")
+}
+
+func tareaAutonomiaDebeMantenerCarrilCodex(tarea *db.Tarea) bool {
+	if tarea == nil {
+		return false
+	}
+	notas := strings.ToLower(strings.TrimSpace(tarea.Notas))
+	if strings.Contains(notas, "autonomia:finish_app") || strings.Contains(notas, "autonomia:premium_frontier") {
+		return true
+	}
+	if tareaDBTieneContratoPremiumAcotado(tarea) {
+		return true
+	}
+	return tareaAutonomiaDebeMantenerPrime(tarea)
 }
 
 func construirMotivoAutonomiaAgenteDegradado(row agentesapp.Row) string {
@@ -14308,6 +14407,8 @@ func seleccionarRelevoAutonomiaConTechoConSignal(rows []agentesapp.Row, openTask
 	now := time.Now().UTC()
 	lastReassign, hasLastReassign := latestAutoReassignmentInfo(taskNotes(tarea))
 	tareaPremiumAcotada := tareaDBTieneContratoPremiumAcotado(tarea)
+	forzarCarrilCodex := tareaAutonomiaDebeMantenerCarrilCodex(tarea)
+	forzarCarrilPremium := tareaAutonomiaDebeMantenerPrime(tarea)
 	if criticalProject == nil {
 		criticalProject = controlPlaneCriticalProjectSignalFn()
 	}
@@ -14328,6 +14429,9 @@ func seleccionarRelevoAutonomiaConTechoConSignal(rows []agentesapp.Row, openTask
 		}
 		agente := strings.TrimSpace(row.Agente.Nombre)
 		if agente == "" || strings.EqualFold(agente, agenteBloqueado) {
+			continue
+		}
+		if forzarCarrilCodex && !strings.HasPrefix(strings.ToLower(agente), "codex") {
 			continue
 		}
 		if relevoAutonomiaDebeOmitirsePorReserva(row, tarea) {
@@ -14415,6 +14519,13 @@ func seleccionarRelevoAutonomiaConTechoConSignal(rows []agentesapp.Row, openTask
 				return candidates[i].criticalProject
 			}
 			return !candidates[i].criticalProject
+		}
+		if forzarCarrilPremium {
+			iPremium := candidates[i].costTier > 0
+			jPremium := candidates[j].costTier > 0
+			if iPremium != jPremium {
+				return iPremium
+			}
 		}
 		if candidates[i].estadoRank != candidates[j].estadoRank {
 			return candidates[i].estadoRank < candidates[j].estadoRank
