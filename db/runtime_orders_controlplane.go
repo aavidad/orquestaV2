@@ -2409,13 +2409,58 @@ func ResumirRuntimeCheckpointsPorAgente() ([]*RuntimeCheckpointPanelSummary, err
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	for _, item := range out {
+	normalizarRuntimeCheckpointPanelSummaryCWDs(out)
+	return out, nil
+}
+
+type runtimeCheckpointProjectAgentKey struct {
+	projectID int64
+	agent     string
+}
+
+func normalizarRuntimeCheckpointPanelSummaryCWDs(items []*RuntimeCheckpointPanelSummary) {
+	if len(items) == 0 {
+		return
+	}
+	projectRoute := map[int64]string{}
+	worktreeRoute := map[runtimeCheckpointProjectAgentKey]string{}
+	for _, item := range items {
 		if item == nil || item.Last == nil {
 			continue
 		}
-		item.Last.CWD = rutaRuntimeCanonicaProyecto(item.Last.Agente, item.Last.ProyectoID, item.Last.CWD)
+		cp := item.Last
+		cp.CWD = canonicalRuntimeCheckpointPanelSummaryCWD(cp, projectRoute, worktreeRoute)
 	}
-	return out, nil
+}
+
+func canonicalRuntimeCheckpointPanelSummaryCWD(cp *RuntimeCheckpoint, projectRoute map[int64]string, worktreeRoute map[runtimeCheckpointProjectAgentKey]string) string {
+	if cp == nil {
+		return ""
+	}
+	cwd := strings.TrimSpace(cp.CWD)
+	if cwd == "" {
+		return ""
+	}
+	if cp.ProyectoID == nil || *cp.ProyectoID <= 0 {
+		return normalizarRutaProyecto(cwd)
+	}
+	projectID := *cp.ProyectoID
+	rutaProyecto, ok := projectRoute[projectID]
+	if !ok {
+		rutaProyecto = rutaProyectoWorktreeEfectiva(projectID)
+		projectRoute[projectID] = rutaProyecto
+	}
+	agent := strings.TrimSpace(cp.Agente)
+	if canonical, err := CanonicalizeAgentName(agent); err == nil {
+		agent = canonical
+	}
+	key := runtimeCheckpointProjectAgentKey{projectID: projectID, agent: agent}
+	rutaWorktree, ok := worktreeRoute[key]
+	if !ok {
+		rutaWorktree = rutaWorktreeActivaAgenteProyecto(projectID, agent)
+		worktreeRoute[key] = rutaWorktree
+	}
+	return rutaRuntimeCanonicaConProyecto(rutaProyecto, rutaWorktree, cwd)
 }
 
 func normalizarRuntimeCheckpointCWDs(items []*RuntimeCheckpoint) {

@@ -210,6 +210,86 @@ func TestUltimoRuntimeCheckpointVuelveARaizSiLaWorktreeLegacyYaNoExiste(t *testi
 	}
 }
 
+func TestResumirRuntimeCheckpointsPorAgenteCanonizaCWDLegacyALaWorktreeActiva(t *testing.T) {
+	prepararDBTemporal(t)
+	rutaBase := filepath.Join(t.TempDir(), "orquesta")
+	rutaWorktree11 := filepath.Join(rutaBase, ".orquesta-worktrees", "orquestador-codex11")
+	rutaWorktree12 := filepath.Join(rutaBase, ".orquesta-worktrees", "orquestador-codex12")
+	if err := os.MkdirAll(filepath.Join(rutaWorktree11, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir worktree11: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(rutaWorktree12, "api"), 0o755); err != nil {
+		t.Fatalf("mkdir worktree12: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaBase, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	for _, nombre := range []string{"Codex11", "Codex12"} {
+		if err := RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("registrar %s: %v", nombre, err)
+		}
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, item := range []struct {
+		agente string
+		ruta   string
+		nombre string
+	}{
+		{"Codex11", ".orquesta-worktrees/orquestador-codex11", "orquestador-codex11"},
+		{"Codex12", ".orquesta-worktrees/orquestador-codex12", "orquestador-codex12"},
+	} {
+		if _, err := DB.Exec(`
+			INSERT INTO worktrees (proyecto_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
+			VALUES (?,?,?,?,?,?,?,?)`,
+			proyectoID, item.agente, item.nombre, item.ruta, "HEAD", "HEAD", "activa", "legacy",
+		); err != nil {
+			t.Fatalf("insert worktree %s: %v", item.agente, err)
+		}
+	}
+	for _, item := range []struct {
+		agente string
+		cwd    string
+	}{
+		{"Codex11", filepath.Join(t.TempDir(), "legacy", "orquesta", ".orquesta-worktrees", "orquestador-codex11", "cmd")},
+		{"Codex12", filepath.Join(t.TempDir(), "legacy", "orquesta", ".orquesta-worktrees", "orquestador-codex12", "api")},
+	} {
+		if _, err := DB.Exec(`
+			INSERT INTO runtime_checkpoints (agente, proyecto_id, checkpoint_kind, resumen, branch, cwd, payload_json, resume_strategy, source)
+			VALUES (?,?,?,?,?,?,?,?,?)`,
+			item.agente, proyectoID, "pause", "legacy checkpoint", "HEAD", item.cwd, `{}`, "resumen_y_payload", "test:panel-summary",
+		); err != nil {
+			t.Fatalf("insert checkpoint %s: %v", item.agente, err)
+		}
+	}
+
+	items, err := ResumirRuntimeCheckpointsPorAgente()
+	if err != nil {
+		t.Fatalf("ResumirRuntimeCheckpointsPorAgente: %v", err)
+	}
+	got := map[string]string{}
+	for _, item := range items {
+		if item == nil || item.Last == nil {
+			continue
+		}
+		got[item.Agente] = item.Last.CWD
+	}
+	if got["Codex11"] != filepath.Join(rutaWorktree11, "cmd") {
+		t.Fatalf("cwd canonico Codex11 inesperado: got=%s want=%s", got["Codex11"], filepath.Join(rutaWorktree11, "cmd"))
+	}
+	if got["Codex12"] != filepath.Join(rutaWorktree12, "api") {
+		t.Fatalf("cwd canonico Codex12 inesperado: got=%s want=%s", got["Codex12"], filepath.Join(rutaWorktree12, "api"))
+	}
+}
+
 func TestRutaWorktreeYSesionPrepareLiteCanonicalizanAliasCodex(t *testing.T) {
 	prepararDBTemporal(t)
 
