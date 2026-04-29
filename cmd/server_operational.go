@@ -27,6 +27,7 @@ type serverOperationalInfo struct {
 	AutonomyHighlights   []string                         `json:"autonomyHighlights,omitempty"`
 	CriticalProjectRisk  *workspaceAutonomyProjectSummary `json:"criticalProjectRisk,omitempty"`
 	Recovery             *serverOperationalRecoveryHint   `json:"recovery,omitempty"`
+	NextRecoveryPlan     *serverOperationalRecoveryPlan   `json:"nextRecoveryPlan,omitempty"`
 	RegisteredAgents     int                              `json:"registeredAgents"`
 	ActiveAgents         int                              `json:"activeAgents"`
 	WorkingAgents        int                              `json:"workingAgents"`
@@ -75,6 +76,38 @@ type serverOperationalRecoveryHint struct {
 	RearmAvailable     bool   `json:"rearmAvailable,omitempty"`
 	SuggestedAction    string `json:"suggestedAction,omitempty"`
 	Detail             string `json:"detail,omitempty"`
+}
+
+type serverOperationalRecoveryPlan struct {
+	Kind               string                          `json:"kind"`
+	Action             string                          `json:"action,omitempty"`
+	Target             string                          `json:"target,omitempty"`
+	Priority           string                          `json:"priority,omitempty"`
+	Assignee           string                          `json:"assignee,omitempty"`
+	Summary            string                          `json:"summary,omitempty"`
+	Detail             string                          `json:"detail,omitempty"`
+	BlockingReason     string                          `json:"blockingReason,omitempty"`
+	RequiresRearm      bool                            `json:"requiresRearm,omitempty"`
+	RearmAvailable     bool                            `json:"rearmAvailable,omitempty"`
+	AutoExecutable     bool                            `json:"autoExecutable,omitempty"`
+	Tool               string                          `json:"tool,omitempty"`
+	Endpoint           string                          `json:"endpoint,omitempty"`
+	Method             string                          `json:"method,omitempty"`
+	NextQuotaResetAt   string                          `json:"nextQuotaResetAt,omitempty"`
+	AffectedTasks      int                             `json:"affectedTasks,omitempty"`
+	MissingWorkers     int                             `json:"missingWorkers,omitempty"`
+	QuotaBlockedAgents int                             `json:"quotaBlockedAgents,omitempty"`
+	AuthBlockedAgents  int                             `json:"authBlockedAgents,omitempty"`
+	StuckAgents        int                             `json:"stuckAgents,omitempty"`
+	Steps              []serverOperationalRecoveryStep `json:"steps,omitempty"`
+}
+
+type serverOperationalRecoveryStep struct {
+	Name           string `json:"name"`
+	Action         string `json:"action"`
+	Target         string `json:"target,omitempty"`
+	Detail         string `json:"detail,omitempty"`
+	AutoExecutable bool   `json:"autoExecutable,omitempty"`
 }
 
 func registeredAgentCountFromStatus(status apiStatusResponse) int {
@@ -237,6 +270,7 @@ func normalizeServerOperationalInfo(info serverOperationalInfo) serverOperationa
 	info.CriticalProjectRisk = criticalProjectRisk
 	info.Rearm = buildServerOperationalRearmHint(info)
 	info.Recovery = buildServerOperationalRecoveryHint(info)
+	info.NextRecoveryPlan = buildServerOperationalRecoveryPlan(info, buildOpenClawNextRecoveryAction(info))
 	return info
 }
 
@@ -358,6 +392,174 @@ func buildServerOperationalRecoveryHint(info serverOperationalInfo) *serverOpera
 			hint.Detail = fmt.Sprintf("estado %s degradado con rearm seguro disponible", withFallback(reason, "operational"))
 		}
 		return hint
+	}
+}
+
+func buildServerOperationalRecoveryPlan(info serverOperationalInfo, action *supervisorRecommendedAction) *serverOperationalRecoveryPlan {
+	recovery := info.Recovery
+	if recovery == nil {
+		return nil
+	}
+	kind := strings.TrimSpace(recovery.Kind)
+	plan := &serverOperationalRecoveryPlan{
+		Kind:               kind,
+		Action:             strings.TrimSpace(recovery.SuggestedAction),
+		Target:             "server:operational",
+		BlockingReason:     strings.TrimSpace(info.Reason),
+		Detail:             strings.TrimSpace(recovery.Detail),
+		RearmAvailable:     recovery.RearmAvailable,
+		NextQuotaResetAt:   strings.TrimSpace(info.NextQuotaResetAt),
+		AffectedTasks:      recovery.AffectedTasks,
+		MissingWorkers:     recovery.MissingWorkers,
+		QuotaBlockedAgents: recovery.QuotaBlockedAgents,
+		AuthBlockedAgents:  recovery.AuthBlockedAgents,
+		StuckAgents:        recovery.StuckAgents,
+	}
+	if action != nil {
+		if value := strings.TrimSpace(action.Action); value != "" {
+			plan.Action = value
+		}
+		if value := strings.TrimSpace(action.Target); value != "" {
+			plan.Target = value
+		}
+		if value := strings.TrimSpace(action.Priority); value != "" {
+			plan.Priority = value
+		}
+		if value := strings.TrimSpace(action.Assignee); value != "" {
+			plan.Assignee = value
+		}
+		if plan.Detail == "" {
+			plan.Detail = strings.TrimSpace(action.Reason)
+		}
+	}
+	if plan.Action == "" {
+		return nil
+	}
+	if plan.Priority == "" {
+		plan.Priority = defaultServerOperationalRecoveryPriority(kind)
+	}
+	if plan.Assignee == "" {
+		plan.Assignee = resolveSupervisorName("")
+	}
+	plan.RequiresRearm = plan.Action == "server_rearm"
+	plan.AutoExecutable = plan.RequiresRearm && plan.RearmAvailable
+	if plan.RequiresRearm && info.Rearm != nil {
+		plan.Tool = strings.TrimSpace(info.Rearm.Tool)
+		plan.Endpoint = strings.TrimSpace(info.Rearm.Endpoint)
+		plan.Method = strings.TrimSpace(info.Rearm.Method)
+	}
+	plan.Summary = buildServerOperationalRecoveryPlanSummary(plan)
+	plan.Steps = buildServerOperationalRecoveryPlanSteps(plan)
+	return plan
+}
+
+func defaultServerOperationalRecoveryPriority(kind string) string {
+	switch strings.TrimSpace(kind) {
+	case "worker_gap", "reserved_gap", "manual_auth", "stuck_workers":
+		return "alta"
+	case "quota_cooldown":
+		return "baja"
+	default:
+		return "media"
+	}
+}
+
+func buildServerOperationalRecoveryPlanSummary(plan *serverOperationalRecoveryPlan) string {
+	if plan == nil {
+		return ""
+	}
+	switch strings.TrimSpace(plan.Kind) {
+	case "worker_gap":
+		return fmt.Sprintf("Recuperar workers útiles para %d tarea(s) en progreso", max(plan.AffectedTasks, 1))
+	case "reserved_gap":
+		return fmt.Sprintf("Recuperar workers conectados para %d tarea(s) reservadas", max(plan.AffectedTasks, 1))
+	case "manual_auth":
+		return fmt.Sprintf("Completar autenticación manual de %d worker(s)", max(plan.AuthBlockedAgents, 1))
+	case "quota_cooldown":
+		return fmt.Sprintf("Esperar reset de cuota para %d worker(s) bloqueados", max(plan.QuotaBlockedAgents, 1))
+	case "stuck_workers":
+		return fmt.Sprintf("Desbloquear %d worker(s) atascados", max(plan.StuckAgents, 1))
+	case "compaction_debt":
+		return fmt.Sprintf("Compactar o reasignar %d tarea(s) con deuda operativa", max(plan.AffectedTasks, 1))
+	case "rearm":
+		return "Aplicar el rearm seguro del control plane"
+	default:
+		if detail := strings.TrimSpace(plan.Detail); detail != "" {
+			return detail
+		}
+		return strings.TrimSpace(plan.Action)
+	}
+}
+
+func buildServerOperationalRecoveryPlanSteps(plan *serverOperationalRecoveryPlan) []serverOperationalRecoveryStep {
+	if plan == nil || strings.TrimSpace(plan.Action) == "" {
+		return nil
+	}
+	steps := []serverOperationalRecoveryStep{{
+		Name:           serverOperationalRecoveryPrimaryStepName(plan.Action),
+		Action:         strings.TrimSpace(plan.Action),
+		Target:         strings.TrimSpace(plan.Target),
+		Detail:         buildServerOperationalRecoveryPrimaryStepDetail(plan),
+		AutoExecutable: plan.AutoExecutable,
+	}}
+	recheckDetail := "Volver a consultar `orquesta.server.operational` y confirmar si desaparece la degradación."
+	if strings.TrimSpace(plan.Action) == "wait_quota_reset" && strings.TrimSpace(plan.NextQuotaResetAt) != "" {
+		recheckDetail = "Reevaluar `orquesta.server.operational` después del próximo reset visible de cuota."
+	}
+	steps = append(steps, serverOperationalRecoveryStep{
+		Name:   "recheck_operational_state",
+		Action: "server_operational_refresh",
+		Target: "server:operational",
+		Detail: recheckDetail,
+	})
+	return steps
+}
+
+func serverOperationalRecoveryPrimaryStepName(action string) string {
+	switch strings.TrimSpace(action) {
+	case "server_rearm":
+		return "server_rearm"
+	case "complete_manual_auth":
+		return "complete_manual_auth"
+	case "wait_quota_reset":
+		return "wait_quota_reset"
+	case "inspect_stuck_workers":
+		return "inspect_stuck_workers"
+	case "inspect_connected_idle_workers":
+		return "inspect_connected_idle_workers"
+	case "start_or_assign_workers":
+		return "start_or_assign_workers"
+	case "compact_or_reassign_active_tasks":
+		return "compact_or_reassign_active_tasks"
+	default:
+		return "apply_recovery_action"
+	}
+}
+
+func buildServerOperationalRecoveryPrimaryStepDetail(plan *serverOperationalRecoveryPlan) string {
+	if plan == nil {
+		return ""
+	}
+	if detail := strings.TrimSpace(plan.Detail); detail != "" {
+		return detail
+	}
+	switch strings.TrimSpace(plan.Action) {
+	case "server_rearm":
+		return "Aplicar el siguiente rearm seguro disponible del supervisor."
+	case "complete_manual_auth":
+		return "Completar la autenticación manual pendiente antes de retomar trabajo."
+	case "wait_quota_reset":
+		return "Esperar al próximo reset visible de cuota para reactivar workers."
+	case "inspect_stuck_workers":
+		return "Inspeccionar workers atascados y desbloquear la ejecución."
+	case "inspect_connected_idle_workers":
+		return "Revisar workers conectados sin trabajo útil y relanzar runtime si hace falta."
+	case "start_or_assign_workers":
+		return "Asignar o arrancar workers útiles para retomar las tareas afectadas."
+	case "compact_or_reassign_active_tasks":
+		return "Compactar deuda operativa o reasignar tareas activas inconsistentes."
+	default:
+		return ""
 	}
 }
 

@@ -15,25 +15,9 @@ var openClawOperatorSnapshotCoreBuilder = buildOpenClawOperatorSnapshotCore
 var openClawOperatorReviewSnapshotBuilder = buildOpenClawReviewSnapshotSafeWithStatus
 var openClawOperatorRichDefault = false
 
-type openClawRecoveryPlanStep struct {
-	Kind           string `json:"kind,omitempty"`
-	Action         string `json:"action"`
-	Tool           string `json:"tool,omitempty"`
-	Endpoint       string `json:"endpoint,omitempty"`
-	Method         string `json:"method,omitempty"`
-	Reason         string `json:"reason,omitempty"`
-	RequiresManual bool   `json:"requires_manual,omitempty"`
-	WaitFor        string `json:"wait_for,omitempty"`
-}
+type openClawRecoveryPlanStep = serverOperationalRecoveryStep
 
-type openClawRecoveryPlan struct {
-	Kind            string                     `json:"kind"`
-	SuggestedAction string                     `json:"suggested_action,omitempty"`
-	Summary         string                     `json:"summary,omitempty"`
-	Automatic       bool                       `json:"automatic,omitempty"`
-	Blocking        bool                       `json:"blocking,omitempty"`
-	Steps           []openClawRecoveryPlanStep `json:"steps,omitempty"`
-}
+type openClawRecoveryPlan = serverOperationalRecoveryPlan
 
 func mcpOpenClawOperatorTool() mcpTool {
 	return mcpTool{
@@ -57,7 +41,7 @@ func buildOpenClawOperatorSnapshotFallback(supervisor string, apiStatus apiStatu
 	operationalInfo := buildOpenClawOperationalInfoWithStatus(apiStatus)
 	actionQueue, safeActionQueue, nextAction, nextSafeAction := fillOpenClawOperationalQueuesFromStatusFallback(apiStatus, statusResumen.MailboxPendiente, nil, nil, nil, nil)
 	nextRecoveryAction := buildOpenClawNextRecoveryAction(operationalInfo)
-	nextRecoveryPlan := buildOpenClawNextRecoveryPlan(operationalInfo)
+	nextRecoveryPlan := operationalInfo.NextRecoveryPlan
 	queueSummary := buildOpenClawQueueSummaryFromActions(actionQueue, safeActionQueue)
 	return map[string]any{
 		"status":                     statusResumen,
@@ -165,7 +149,7 @@ func buildOpenClawOperatorSnapshotCore(supervisor string, apiStatus apiStatusRes
 	operationalInfo := buildOpenClawOperationalInfoWithStatus(apiStatus)
 	actionQueue, safeActionQueue, nextAction, nextSafeAction = fillOpenClawOperationalQueuesFromStatusFallback(apiStatus, statusResumen.MailboxPendiente, actionQueue, safeActionQueue, nextAction, nextSafeAction)
 	nextRecoveryAction := buildOpenClawNextRecoveryAction(operationalInfo)
-	nextRecoveryPlan := buildOpenClawNextRecoveryPlan(operationalInfo)
+	nextRecoveryPlan := operationalInfo.NextRecoveryPlan
 	queueSummary := buildOpenClawQueueSummaryFromActions(actionQueue, safeActionQueue)
 	sessionCandidates := alignOpenClawSessionCandidatesWithStatus(buildOpenClawSessionCandidates(threads), status.AgentesActivos)
 
@@ -247,112 +231,7 @@ func buildOpenClawNextRecoveryAction(info serverOperationalInfo) *supervisorReco
 }
 
 func buildOpenClawNextRecoveryPlan(info serverOperationalInfo) *openClawRecoveryPlan {
-	recovery := info.Recovery
-	if recovery == nil || strings.TrimSpace(recovery.SuggestedAction) == "" {
-		return nil
-	}
-
-	plan := &openClawRecoveryPlan{
-		Kind:            strings.TrimSpace(recovery.Kind),
-		SuggestedAction: strings.TrimSpace(recovery.SuggestedAction),
-		Summary:         strings.TrimSpace(recovery.Detail),
-	}
-	if plan.Kind == "" {
-		plan.Kind = "recovery"
-	}
-	if plan.Summary == "" {
-		plan.Summary = strings.TrimSpace(info.Reason)
-	}
-
-	switch plan.SuggestedAction {
-	case "server_rearm":
-		plan.Automatic = true
-		plan.Blocking = true
-		plan.Steps = []openClawRecoveryPlanStep{
-			{
-				Kind:     "automatic",
-				Action:   "run_self_heal",
-				Tool:     "orquesta.server.self_heal",
-				Endpoint: "/api/mcp",
-				Method:   "POST",
-				Reason:   "Drenar runtime_orders/mailbox, higiene y aplicar rearm seguro si sigue disponible",
-			},
-			{
-				Kind:     "verify",
-				Action:   "recheck_operational",
-				Tool:     "orquesta.server.operational",
-				Endpoint: "/api/mcp",
-				Method:   "POST",
-				Reason:   "Verificar que el control plane vuelve a ready sin escalar a premium",
-			},
-		}
-	case "wait_quota_reset":
-		plan.Blocking = true
-		plan.Steps = []openClawRecoveryPlanStep{
-			{
-				Kind:    "wait",
-				Action:  "wait_quota_reset",
-				Reason:  strings.TrimSpace(recovery.Detail),
-				WaitFor: strings.TrimSpace(info.NextQuotaResetAt),
-			},
-			{
-				Kind:     "verify",
-				Action:   "recheck_operational",
-				Tool:     "orquesta.server.operational",
-				Endpoint: "/api/mcp",
-				Method:   "POST",
-				Reason:   "Reevaluar workers y tareas tras el reset visible de cuota",
-			},
-		}
-	case "complete_manual_auth":
-		plan.Blocking = true
-		plan.Steps = []openClawRecoveryPlanStep{
-			{
-				Kind:           "manual",
-				Action:         "complete_manual_auth",
-				Reason:         strings.TrimSpace(recovery.Detail),
-				RequiresManual: true,
-			},
-			{
-				Kind:     "verify",
-				Action:   "recheck_operational",
-				Tool:     "orquesta.server.operational",
-				Endpoint: "/api/mcp",
-				Method:   "POST",
-				Reason:   "Reevaluar el estado operativo cuando termine la autenticación",
-			},
-		}
-	case "inspect_stuck_workers", "inspect_connected_idle_workers", "start_or_assign_workers", "compact_or_reassign_active_tasks":
-		plan.Automatic = true
-		plan.Blocking = true
-		plan.Steps = []openClawRecoveryPlanStep{
-			{
-				Kind:     "automatic",
-				Action:   "run_self_heal",
-				Tool:     "orquesta.server.self_heal",
-				Endpoint: "/api/mcp",
-				Method:   "POST",
-				Reason:   strings.TrimSpace(recovery.Detail),
-			},
-			{
-				Kind:     "verify",
-				Action:   "recheck_operational",
-				Tool:     "orquesta.server.operational",
-				Endpoint: "/api/mcp",
-				Method:   "POST",
-				Reason:   "Comprobar si el recovery automático resolvió el hueco sin intervención premium",
-			},
-		}
-	default:
-		plan.Blocking = !info.Operational
-		plan.Steps = []openClawRecoveryPlanStep{{
-			Kind:   "observe",
-			Action: plan.SuggestedAction,
-			Reason: plan.Summary,
-		}}
-	}
-
-	return plan
+	return buildServerOperationalRecoveryPlan(info, buildOpenClawNextRecoveryAction(info))
 }
 
 func callMCPOpenClawOperator(args map[string]any) (map[string]any, error) {
@@ -377,6 +256,7 @@ func buildMCPOpenClawOperatorOverview(supervisor string) (string, error) {
 	sessionCandidates, _ := payload["session_candidates"].([]apiOpenClawSessionCandidate)
 	mailboxPendiente, _ := payload["mailboxPendiente"].([]apiOpenClawMailboxLite)
 	nextSafeAction, _ := parseSupervisorRecommendedActionSnapshotValue(payload["next_safe_action"])
+	nextRecoveryPlan, _ := payload["next_recovery_plan"].(*openClawRecoveryPlan)
 
 	var b strings.Builder
 	b.WriteString("Snapshot operador OpenClaw: ")
@@ -413,6 +293,20 @@ func buildMCPOpenClawOperatorOverview(supervisor string) (string, error) {
 		if note := compactMCPLine(strings.TrimSpace(nextSafeAction.Reason), 180); note != "" {
 			b.WriteString(" · ")
 			b.WriteString(note)
+		}
+		b.WriteString("\n")
+	}
+
+	if nextRecoveryPlan != nil {
+		b.WriteString("\nRecovery plan:\n")
+		b.WriteString("- ")
+		b.WriteString(strings.TrimSpace(nextRecoveryPlan.Action))
+		if summary := compactMCPLine(strings.TrimSpace(nextRecoveryPlan.Summary), 180); summary != "" {
+			b.WriteString(" · ")
+			b.WriteString(summary)
+		}
+		if nextRecoveryPlan.AutoExecutable {
+			b.WriteString(" · auto")
 		}
 		b.WriteString("\n")
 	}

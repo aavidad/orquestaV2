@@ -840,7 +840,7 @@ type apiRuntimeSelfHealResponse struct {
 	Drain              *apiRuntimeSelfHealDrainResponse      `json:"drain,omitempty"`
 	Operational        serverOperationalInfo                 `json:"operational"`
 	NextRecoveryAction *supervisorRecommendedAction          `json:"next_recovery_action,omitempty"`
-	NextRecoveryPlan   *openClawRecoveryPlan                 `json:"next_recovery_plan,omitempty"`
+	NextRecoveryPlan   *serverOperationalRecoveryPlan        `json:"next_recovery_plan,omitempty"`
 	Errors             []string                              `json:"errors,omitempty"`
 }
 

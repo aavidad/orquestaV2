@@ -503,28 +503,36 @@ func TestBuildOpenClawNextRecoveryActionNilSinRecovery(t *testing.T) {
 	}
 }
 
-func TestBuildOpenClawNextRecoveryPlanDerivaSelfHealParaRearm(t *testing.T) {
-	plan := buildOpenClawNextRecoveryPlan(serverOperationalInfo{
+func TestBuildServerOperationalRecoveryPlanDerivaSelfHealParaRearm(t *testing.T) {
+	info := serverOperationalInfo{
 		Reason: "tasks_without_workers",
 		Recovery: &serverOperationalRecoveryHint{
 			Kind:            "worker_gap",
 			SuggestedAction: "server_rearm",
 			Detail:          "1 tarea en progreso sin worker confirmado",
+			RearmAvailable:  true,
 		},
-	})
+		Rearm: &serverOperationalRearmHint{
+			Available: true,
+			Tool:      "orquesta.server.rearm",
+			Endpoint:  "/api/server/rearm",
+			Method:    "POST",
+		},
+	}
+	plan := buildServerOperationalRecoveryPlan(info, buildOpenClawNextRecoveryAction(info))
 	if plan == nil {
 		t.Fatalf("deberia derivar recovery plan")
 	}
-	if plan.Kind != "worker_gap" || !plan.Automatic || !plan.Blocking {
+	if plan.Kind != "worker_gap" || !plan.AutoExecutable || !plan.RequiresRearm {
 		t.Fatalf("plan recovery inesperado: %+v", plan)
 	}
-	if len(plan.Steps) != 2 || plan.Steps[0].Tool != "orquesta.server.self_heal" || plan.Steps[1].Tool != "orquesta.server.operational" {
+	if len(plan.Steps) != 2 || plan.Tool != "orquesta.server.rearm" || plan.Steps[0].Action != "server_rearm" || plan.Steps[1].Action != "server_operational_refresh" {
 		t.Fatalf("steps recovery inesperados: %+v", plan.Steps)
 	}
 }
 
-func TestBuildOpenClawNextRecoveryPlanDerivaEsperaCuota(t *testing.T) {
-	plan := buildOpenClawNextRecoveryPlan(serverOperationalInfo{
+func TestBuildServerOperationalRecoveryPlanDerivaEsperaCuota(t *testing.T) {
+	info := serverOperationalInfo{
 		Reason:           "workers_quota_blocked",
 		NextQuotaResetAt: "2026-04-29T10:00:00Z",
 		Recovery: &serverOperationalRecoveryHint{
@@ -532,14 +540,15 @@ func TestBuildOpenClawNextRecoveryPlanDerivaEsperaCuota(t *testing.T) {
 			SuggestedAction: "wait_quota_reset",
 			Detail:          "2 worker(s) bloqueados por cuota",
 		},
-	})
+	}
+	plan := buildServerOperationalRecoveryPlan(info, buildOpenClawNextRecoveryAction(info))
 	if plan == nil {
 		t.Fatalf("deberia derivar recovery plan de cuota")
 	}
-	if plan.Automatic || !plan.Blocking {
+	if plan.AutoExecutable || plan.Action != "wait_quota_reset" {
 		t.Fatalf("plan de cuota inesperado: %+v", plan)
 	}
-	if len(plan.Steps) != 2 || plan.Steps[0].Action != "wait_quota_reset" || plan.Steps[0].WaitFor != "2026-04-29T10:00:00Z" {
+	if len(plan.Steps) != 2 || plan.Steps[0].Action != "wait_quota_reset" || plan.Steps[1].Action != "server_operational_refresh" || plan.NextQuotaResetAt != "2026-04-29T10:00:00Z" {
 		t.Fatalf("steps de cuota inesperados: %+v", plan.Steps)
 	}
 }

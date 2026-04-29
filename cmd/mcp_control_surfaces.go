@@ -91,7 +91,7 @@ func buildMCPServerOperationalInfo() serverOperationalInfo {
 }
 
 func callMCPServerOperational() (map[string]any, error) {
-	info := mcpBuildServerOperationalInfoFn()
+	info := normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
 	return toolResult(prettyJSON(info), info, false), nil
 }
 
@@ -155,7 +155,7 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 			}
 		}
 	}
-	result.Operational = mcpBuildServerOperationalInfoFn()
+	result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
 	syncMCPServerSelfHealRecovery(&result)
 	if drain, err := drainMCPServerSelfHealRuntimeWork(&result.Operational, enabled); err != nil {
 		result.Drain = drain
@@ -179,7 +179,7 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 			if applied != nil {
 				result.RearmApplied = append(result.RearmApplied, applied)
 			}
-			result.Operational = mcpBuildServerOperationalInfoFn()
+				result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
 			syncMCPServerSelfHealRecovery(&result)
 			if drain, err := drainMCPServerSelfHealRuntimeWork(&result.Operational, enabled); err != nil {
 				result.Drain = mergeMCPServerSelfHealDrain(result.Drain, drain)
@@ -206,8 +206,12 @@ func syncMCPServerSelfHealRecovery(result *apiRuntimeSelfHealResponse) {
 	if result == nil {
 		return
 	}
+	result.Operational = normalizeServerOperationalInfo(result.Operational)
 	result.NextRecoveryAction = buildOpenClawNextRecoveryAction(result.Operational)
-	result.NextRecoveryPlan = buildOpenClawNextRecoveryPlan(result.Operational)
+	result.NextRecoveryPlan = result.Operational.NextRecoveryPlan
+	if result.NextRecoveryPlan == nil {
+		result.NextRecoveryPlan = buildServerOperationalRecoveryPlan(result.Operational, result.NextRecoveryAction)
+	}
 }
 
 func settleMCPServerSelfHealOperational(info serverOperationalInfo) serverOperationalInfo {
@@ -218,7 +222,7 @@ func settleMCPServerSelfHealOperational(info serverOperationalInfo) serverOperat
 		if mcpServerSelfHealSettleDelay > 0 {
 			time.Sleep(mcpServerSelfHealSettleDelay)
 		}
-		info = mcpBuildServerOperationalInfoFn()
+		info = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
 		if info.Operational {
 			return info
 		}
@@ -258,7 +262,7 @@ func drainMCPServerSelfHealRuntimeWork(info *serverOperationalInfo, enabled func
 		}
 		drain.Passes++
 		if info != nil {
-			*info = mcpBuildServerOperationalInfoFn()
+			*info = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
 			if info.Operational {
 				break
 			}
