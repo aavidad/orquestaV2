@@ -1,6 +1,15 @@
 package db
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+	"sync"
+)
+
+var schemaObjectExistsCache struct {
+	mu    sync.RWMutex
+	items map[string]bool
+}
 
 func TableExists(table string) (bool, error) {
 	if DB == nil {
@@ -28,15 +37,60 @@ func SchemaObjectExists(kind, name string) (bool, error) {
 	if DB == nil {
 		return false, fmt.Errorf("db no inicializada")
 	}
+	driver := DriverName()
+	_, _, target := currentPersistenceState()
+	cacheKey := schemaObjectExistsCacheKey(driver, target, kind, name)
+	if cacheKey != "" && cachedSchemaObjectExists(cacheKey) {
+		return true, nil
+	}
 	var count int
-	query, args, err := schemaObjectExistsQuery(DriverName(), kind, name)
+	query, args, err := schemaObjectExistsQuery(driver, kind, name)
 	if err != nil {
 		return false, err
 	}
 	if err := DB.QueryRow(query, args...).Scan(&count); err != nil {
 		return false, err
 	}
-	return count > 0, nil
+	exists := count > 0
+	if exists && cacheKey != "" {
+		storeSchemaObjectExists(cacheKey)
+	}
+	return exists, nil
+}
+
+func schemaObjectExistsCacheKey(driver, target, kind, name string) string {
+	driver = normalizedDriverName(driver)
+	target = strings.TrimSpace(target)
+	kind = strings.TrimSpace(kind)
+	name = strings.TrimSpace(name)
+	if driver == "" || target == "" || kind == "" || name == "" {
+		return ""
+	}
+	return strings.Join([]string{driver, target, kind, name}, "|")
+}
+
+func cachedSchemaObjectExists(key string) bool {
+	schemaObjectExistsCache.mu.RLock()
+	defer schemaObjectExistsCache.mu.RUnlock()
+	if schemaObjectExistsCache.items == nil {
+		return false
+	}
+	return schemaObjectExistsCache.items[key]
+}
+
+func storeSchemaObjectExists(key string) {
+	schemaObjectExistsCache.mu.Lock()
+	defer schemaObjectExistsCache.mu.Unlock()
+	if schemaObjectExistsCache.items == nil {
+		schemaObjectExistsCache.items = map[string]bool{}
+	}
+	schemaObjectExistsCache.items[key] = true
+}
+
+func resetSchemaObjectExistsCache() {
+	schemaObjectExistsCache.mu.Lock()
+	defer schemaObjectExistsCache.mu.Unlock()
+	schemaObjectExistsCache.items = nil
 }
 
 func tableExistsQuery(driver string) string {

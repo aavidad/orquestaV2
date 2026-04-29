@@ -87,3 +87,27 @@ func TestSchemaObjectExistsQueryPorDriver(t *testing.T) {
 		t.Fatalf("esperaba error para tipo de objeto no soportado")
 	}
 }
+
+func TestSchemaObjectExistsCacheSeInvalidaConDDL(t *testing.T) {
+	prepararDBTemporal(t)
+
+	exists, err := SchemaObjectExists("table", "review_gates")
+	if err != nil {
+		t.Fatalf("SchemaObjectExists inicial: %v", err)
+	}
+	if !exists {
+		t.Fatalf("review_gates deberia existir tras bootstrap")
+	}
+
+	if _, err := DB.Exec(`DROP TABLE review_gates`); err != nil {
+		t.Fatalf("drop review_gates: %v", err)
+	}
+
+	exists, err = SchemaObjectExists("table", "review_gates")
+	if err != nil {
+		t.Fatalf("SchemaObjectExists tras drop: %v", err)
+	}
+	if exists {
+		t.Fatalf("review_gates no deberia seguir cacheada tras DDL")
+	}
+}

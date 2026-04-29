@@ -73,6 +73,7 @@ func OpenWithOptions(opts OpenOptions) error {
 	resetRuntimeOrdersHotIndex()
 	resetConfigCache()
 	resetProjectContextSummaryCache()
+	resetSchemaObjectExistsCache()
 	backend, cfg, err := resolveOpenConfig()
 	if err != nil {
 		return err
@@ -160,6 +161,7 @@ func Close() {
 	resetRuntimeOrdersHotIndex()
 	resetConfigCache()
 	resetProjectContextSummaryCache()
+	resetSchemaObjectExistsCache()
 }
 
 // postMigraciones ejecuta ALTER TABLE idempotentes para columnas añadidas tras el schema inicial.
@@ -759,7 +761,6 @@ func rebuildLegacyTable(
 	}
 	return tx.Commit()
 }
-
 
 func columnasTabla(db *sql.DB, tabla string) (map[string]bool, error) {
 	rows, err := db.Query(`PRAGMA table_info(` + tabla + `)`)

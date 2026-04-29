@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -76,6 +77,9 @@ func (h *Handle) Exec(query string, args ...any) (sql.Result, error) {
 		res, err = h.DB.Exec(storage.RebindQuery(h.driver, query), args...)
 		return err
 	})
+	if err == nil && schemaObjectExistsCacheMutatingQuery(query) {
+		resetSchemaObjectExistsCache()
+	}
 	if err == nil && runtimeOrdersHotIndexMutatingQuery(query) {
 		markRuntimeOrdersHotIndexDirty()
 	}
@@ -156,11 +160,27 @@ func (tx *Tx) Exec(query string, args ...any) (sql.Result, error) {
 		res, err = tx.Tx.Exec(storage.RebindQuery(tx.driver, query), args...)
 		return err
 	})
+	if err == nil && schemaObjectExistsCacheMutatingQuery(query) {
+		resetSchemaObjectExistsCache()
+	}
 	if err == nil && runtimeOrdersHotIndexMutatingQuery(query) {
 		tx.dirty = true
 		markRuntimeOrdersHotIndexDirty()
 	}
 	return res, err
+}
+
+func schemaObjectExistsCacheMutatingQuery(query string) bool {
+	query = strings.ToUpper(strings.TrimSpace(query))
+	if query == "" {
+		return false
+	}
+	for _, prefix := range []string{"CREATE ", "ALTER ", "DROP ", "REINDEX "} {
+		if strings.HasPrefix(query, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (tx *Tx) Query(query string, args ...any) (*sql.Rows, error) {
