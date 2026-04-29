@@ -313,6 +313,78 @@ func TestAPIHandlerStatusReconciliaPanelFrescoSobreSnapshotStale(t *testing.T) {
 	}
 }
 
+func TestAPIHandlerStatusReconciliaPanelFrescoAunqueSnapshotTraigaArraysStale(t *testing.T) {
+	prevNow := statusNowFunc
+	prevFast := statusFastFetcher
+	prevUltraLite := apiStatusUltraLiteFetcher
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	defer func() {
+		statusNowFunc = prevNow
+		statusFastFetcher = prevFast
+		apiStatusUltraLiteFetcher = prevUltraLite
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+		resetStatusSnapshotCache()
+		resetAgentPanelSnapshotCache()
+	}()
+	resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+
+	now := time.Date(2026, 4, 29, 12, 5, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	resetAt := now.Add(30 * time.Minute)
+	storeStatusSnapshotWithTTL(apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", Activo: false, EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex1", Activo: false, EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex1", Activo: false, EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "Codex1", Activo: false, EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		WorkersConectados: 1,
+		WorkersTrabajando: 1,
+		Generado:          now.Add(-20 * time.Second).Format(time.RFC3339),
+	}, now, time.Minute)
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "Codex1", Activo: true, EstadoCuota: "activo"},
+		EstadoOperativo: "trabajando",
+		WorkerAlive:     true,
+		WorkerState:     "running",
+		OpenTasks:       1,
+	}}, now)
+
+	statusFastFetcher = func() (apiStatusResponse, error) { return apiStatusResponse{}, errStatusFetchTimeout }
+	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) { return apiStatusResponse{}, false }
+	apiStatusReadOnlyLiteFetcher = nil
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	apiHandlerStatus(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload apiStatusResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("json decode: %v", err)
+	}
+	if len(payload.AgentesActivos) != 1 || payload.AgentesActivos[0].Nombre != "Codex1" || !payload.AgentesActivos[0].Activo {
+		t.Fatalf("agentesActivos no alineados con panel fresco: %+v", payload.AgentesActivos)
+	}
+	if len(payload.AgentesTrabajando) != 1 || payload.AgentesTrabajando[0].Nombre != "Codex1" || !payload.AgentesTrabajando[0].Activo {
+		t.Fatalf("agentesTrabajando no alineados con panel fresco: %+v", payload.AgentesTrabajando)
+	}
+	if len(payload.AgentesQuotaBlocked) != 0 {
+		t.Fatalf("no deberia conservar quota blocked stale con arrays no vacios: %+v", payload.AgentesQuotaBlocked)
+	}
+	if payload.WorkersConectados != 1 || payload.WorkersTrabajando != 1 {
+		t.Fatalf("workers no alineados con panel fresco: %+v", payload)
+	}
+}
+
 func TestAPIHandlerStatusReturnsDegradedPayloadWhenNoSnapshotNorFallback(t *testing.T) {
 	prevFast := statusFastFetcher
 	prevUltraLite := apiStatusUltraLiteFetcher

@@ -1323,6 +1323,10 @@ func writeAPIStatusPayload(w http.ResponseWriter, status apiStatusResponse) {
 	tareasActivas := normalizarTareasLiteVisibles(status.TareasActivas)
 	agentesActivos := status.AgentesActivos
 	agentesTrabajando := status.AgentesTrabajando
+	agentesSaturados := status.AgentesSaturados
+	agentesAtascados := status.AgentesAtascados
+	agentesAuthManual := status.AgentesAuthManual
+	agentesQuotaBlocked := status.AgentesQuotaBlocked
 	autonomia := status.Autonomia
 	if autonomia.ByKind == nil {
 		autonomia.ByKind = map[string]int{}
@@ -1335,14 +1339,30 @@ func writeAPIStatusPayload(w http.ResponseWriter, status apiStatusResponse) {
 	if len(tareasReservadas) == 0 {
 		tareasReservadas = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaAsignada)
 	}
-	if len(status.Agentes) > 0 && (len(agentesActivos) == 0 || len(agentesTrabajando) == 0) {
-		if activos, trabajando, _ := agentesVisiblesLigero(status.Agentes, tareasEnProgreso); len(activos) > 0 || len(trabajando) > 0 {
-			activos, trabajando, _ = normalizarAgentesVisiblesStatus(activos, trabajando, nil)
-			if len(agentesActivos) == 0 {
+	if len(status.Agentes) > 0 {
+		if rows, ok := readAgentPanelSnapshotFresh(); ok {
+			if activos, trabajando, saturados, atascados, authManual, quotaBlocked, _ := agentesVisiblesPorEstadoOperativoRows(status.Agentes, rows); len(activos) > 0 || len(trabajando) > 0 || len(saturados) > 0 || len(atascados) > 0 || len(authManual) > 0 || len(quotaBlocked) > 0 {
+				activos, trabajando, saturados = normalizarAgentesVisiblesStatus(activos, trabajando, saturados)
 				agentesActivos = activos
-			}
-			if len(agentesTrabajando) == 0 {
 				agentesTrabajando = trabajando
+				agentesSaturados = saturados
+				agentesAtascados = atascados
+				agentesAuthManual = authManual
+				agentesQuotaBlocked = quotaBlocked
+				autonomia = resumirAutonomiaRows(rows, time.Now().UTC())
+				if autonomia.ByKind == nil {
+					autonomia.ByKind = map[string]int{}
+				}
+			}
+		} else if len(agentesActivos) == 0 || len(agentesTrabajando) == 0 {
+			if activos, trabajando, _ := agentesVisiblesLigero(status.Agentes, tareasEnProgreso); len(activos) > 0 || len(trabajando) > 0 {
+				activos, trabajando, _ = normalizarAgentesVisiblesStatus(activos, trabajando, nil)
+				if len(agentesActivos) == 0 {
+					agentesActivos = activos
+				}
+				if len(agentesTrabajando) == 0 {
+					agentesTrabajando = trabajando
+				}
 			}
 		}
 	}
@@ -1360,10 +1380,10 @@ func writeAPIStatusPayload(w http.ResponseWriter, status apiStatusResponse) {
 		"tareasPorEstado":      status.TareasPorEstado,
 		"agentesActivos":       agentesActivos,
 		"agentesTrabajando":    agentesTrabajando,
-		"agentesSaturados":     status.AgentesSaturados,
-		"agentesAtascados":     status.AgentesAtascados,
-		"agentesAuthManual":    status.AgentesAuthManual,
-		"agentesQuotaBlocked":  status.AgentesQuotaBlocked,
+		"agentesSaturados":     agentesSaturados,
+		"agentesAtascados":     agentesAtascados,
+		"agentesAuthManual":    agentesAuthManual,
+		"agentesQuotaBlocked":  agentesQuotaBlocked,
 		"propuestasAbiertas":   status.PropuestasResumen,
 		"tareasActivas":        tareasActivas,
 		"tareasEnProgreso":     tareasEnProgreso,
