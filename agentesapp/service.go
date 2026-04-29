@@ -1764,6 +1764,8 @@ func (s *Service) applyAutonomyOrdersToRow(row *Row, agente string) error {
 	if err != nil {
 		return err
 	}
+	row.OrdersOpen, row.OrdersFailed, row.ControlOrdersOpen, row.LastControlOrderType, row.LastControlOrderMoment =
+		summarizeOrdersForRow(*row, orders)
 	row.DominantOrder = selectDominantOrderFocus(*row, orders)
 	if action, source, moment, state, reason, verificationKey, dispatchState, deliveryState, receiptSource := summarizeAutonomyOrdersForRow(orders); strings.TrimSpace(action) != "" {
 		if mailboxCountersShouldReplace(row.LastAutonomyMoment, moment) {

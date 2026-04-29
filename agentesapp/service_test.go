@@ -6677,6 +6677,39 @@ func TestBuildDetailCompactPromueveReactivacionAutomaticaDesdeAsignacionActiva(t
 	}
 }
 
+func TestBuildDetailCompactCuentaOrdersAbiertasCuandoApplyAutonomyOrdersPromueveDominantOrder(t *testing.T) {
+	now := time.Now().UTC()
+	projectID := int64(1)
+	store := &fakeStore{
+		agents: []*db.Agente{{Nombre: "Codex18", Rol: "programador", Habilitado: true}},
+		orders: []*db.RuntimeOrder{{
+			ID:         13938,
+			Agente:     "Codex18",
+			Tipo:       "start",
+			Estado:     "pendiente",
+			ProyectoID: &projectID,
+			PayloadJSON: `{"accion":"start","motivo":"mcp probe"}`,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}},
+	}
+	svc := NewService(store, nil)
+
+	detail, err := svc.BuildDetailCompact("Codex18")
+	if err != nil {
+		t.Fatalf("BuildDetailCompact: %v", err)
+	}
+	if detail == nil || detail.Entity == nil {
+		t.Fatalf("detail/entity inesperado: %+v", detail)
+	}
+	if detail.Entity.DominantOrder == nil || detail.Entity.DominantOrder.OrderID != 13938 {
+		t.Fatalf("dominant order inesperada: %+v", detail.Entity.DominantOrder)
+	}
+	if detail.Row.OrdersOpen != 1 {
+		t.Fatalf("orders_open deberia converger con dominant_order: row=%d detail=%+v", detail.Row.OrdersOpen, detail.Row)
+	}
+}
+
 func TestBuildPanelRowsNoMarcaSupervisorConResumePayloadVivoComoAtascado(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(46)
