@@ -2623,6 +2623,43 @@ func TestMCPToolsAgentesAccionOperanPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPToolsAgentesRegistrarOperaPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		result, err := callMCPTool("orquesta.agentes.registrar", map[string]any{
+			"nombre": "Codex16",
+		})
+		if err != nil {
+			t.Fatalf("agentes registrar MCP: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("agentes registrar marcado como error: %#v", result)
+		}
+		resp, _ := result["structuredContent"].(map[string]any)
+		if resp["ok"] != true || resp["nombre"] != "Codex16" || resp["rol"] != "programador" {
+			t.Fatalf("respuesta registrar inesperada: %#v", result["structuredContent"])
+		}
+		agente, err := agentesService.GetAgent("Codex16")
+		if err != nil {
+			t.Fatalf("get agent Codex16: %v", err)
+		}
+		if agente == nil || agente.Nombre != "Codex16" || strings.TrimSpace(agente.Rol) != "programador" {
+			t.Fatalf("agente registrado inesperado: %+v", agente)
+		}
+	})
+}
+
+func TestMCPToolsAgentesRegistrarExigeNombreOProveedor(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		result, err := callMCPTool("orquesta.agentes.registrar", map[string]any{})
+		if err != nil {
+			t.Fatalf("agentes registrar sin args MCP: %v", err)
+		}
+		if result["isError"] != true {
+			t.Fatalf("agentes registrar sin args deberia marcar error: %#v", result)
+		}
+	})
+}
+
 func TestMCPToolsAgentesControlOperaPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := agentControlEnqueueFunc

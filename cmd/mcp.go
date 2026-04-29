@@ -2276,6 +2276,20 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.agentes.registrar",
+			Title:       "Registrar agente",
+			Description: "Registra un agente nuevo por la vía canónica; acepta nombre explícito o alta automática por proveedor",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"nombre":    map[string]any{"type": "string"},
+					"rol":       map[string]any{"type": "string"},
+					"proveedor": map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.agentes.accion",
 			Title:       "Acción de agente",
 			Description: "Aplica una acción canónica de estado sobre un agente",
@@ -3928,6 +3942,29 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		if err != nil {
 			return toolResult(err.Error(), nil, true), nil
 		}
+		return toolResult(prettyJSON(out), out, false), nil
+
+	case "orquesta.agentes.registrar":
+		nombre := strings.TrimSpace(optionalStringArg(args, "nombre"))
+		rol := strings.TrimSpace(optionalStringArg(args, "rol"))
+		if rol == "" {
+			rol = "programador"
+		}
+		proveedor := strings.TrimSpace(optionalStringArg(args, "proveedor"))
+		if nombre == "" {
+			if proveedor == "" {
+				return toolResult("nombre o proveedor requerido", nil, true), nil
+			}
+			nombreAuto, err := agentesService.RegisterAgentAuto(proveedor, rol)
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			nombre = nombreAuto
+		} else if err := agentesService.RegisterAgent(nombre, rol); err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		invalidateAgentStatusCaches()
+		out := map[string]any{"ok": true, "nombre": nombre, "rol": rol}
 		return toolResult(prettyJSON(out), out, false), nil
 
 	case "orquesta.agentes.overview":
