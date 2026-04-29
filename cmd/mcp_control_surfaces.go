@@ -69,6 +69,8 @@ func callMCPWorkspaceControl(args map[string]any) (map[string]any, error) {
 
 var mcpBuildServerOperationalInfoFn = buildMCPServerOperationalInfo
 var mcpServerSelfHealRearmLimit = 3
+var mcpServerSelfHealSettleAttempts = 3
+var mcpServerSelfHealSettleDelay = 150 * time.Millisecond
 
 func buildMCPServerOperationalInfo() serverOperationalInfo {
 	if snapshot, ok := readStatusSnapshotFreshUsable(); ok {
@@ -173,7 +175,24 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 			appendErr("rearm", errSelfHealRearmLimitReached)
 		}
 	}
+	result.Operational = settleMCPServerSelfHealOperational(result.Operational)
 	return toolResult(prettyJSON(result), result, len(result.Errors) > 0), nil
+}
+
+func settleMCPServerSelfHealOperational(info serverOperationalInfo) serverOperationalInfo {
+	if info.Operational || mcpServerSelfHealSettleAttempts <= 0 {
+		return info
+	}
+	for attempt := 0; attempt < mcpServerSelfHealSettleAttempts; attempt++ {
+		if mcpServerSelfHealSettleDelay > 0 {
+			time.Sleep(mcpServerSelfHealSettleDelay)
+		}
+		info = mcpBuildServerOperationalInfoFn()
+		if info.Operational {
+			return info
+		}
+	}
+	return info
 }
 
 var errSelfHealRearmLimitReached = mcpServerSelfHealError("safe rearm limit reached before convergence")
