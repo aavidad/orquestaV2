@@ -1368,6 +1368,9 @@ func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 
 func writeAPIStatusPayload(w http.ResponseWriter, status apiStatusResponse) {
 	tareasActivas := normalizarTareasLiteVisibles(status.TareasActivas)
+	agentes := status.Agentes
+	conteoTareas := status.ConteoTareas
+	resumenTareas := status.TareasPorEstado
 	agentesActivos := status.AgentesActivos
 	agentesTrabajando := status.AgentesTrabajando
 	agentesSaturados := status.AgentesSaturados
@@ -1386,9 +1389,17 @@ func writeAPIStatusPayload(w http.ResponseWriter, status apiStatusResponse) {
 	if len(tareasReservadas) == 0 {
 		tareasReservadas = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaAsignada)
 	}
-	if len(status.Agentes) > 0 {
+	if len(agentes) > 0 {
 		if rows, ok := readAgentPanelSnapshotFresh(); ok {
-			if activos, trabajando, saturados, atascados, authManual, quotaBlocked, _ := agentesVisiblesPorEstadoOperativoRows(status.Agentes, rows); len(activos) > 0 || len(trabajando) > 0 || len(saturados) > 0 || len(atascados) > 0 || len(authManual) > 0 || len(quotaBlocked) > 0 {
+			tareasActivas = reconciliarTareasActivasConPanelRows(tareasActivas, rows)
+			tareasEnProgreso = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaEnProgreso)
+			tareasReservadas = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaAsignada)
+			resumenTareas = reconciliarConteoTareasActivasVisible(resumenTareas, tareasActivas)
+			conteoTareas = resumenTareas
+			agentes = mergeServerOperationalAgentsWithPanelRows(agentes, rows)
+			sanitizeServerOperationalQuotaFromPanelRows(agentes, rows)
+			aplicarVisibilidadOperativaAgentes(agentes, rows)
+			if activos, trabajando, saturados, atascados, authManual, quotaBlocked, _ := agentesVisiblesPorEstadoOperativoRows(agentes, rows); len(activos) > 0 || len(trabajando) > 0 || len(saturados) > 0 || len(atascados) > 0 || len(authManual) > 0 || len(quotaBlocked) > 0 {
 				activos, trabajando, saturados = normalizarAgentesVisiblesStatus(activos, trabajando, saturados)
 				agentesActivos = activos
 				agentesTrabajando = trabajando
@@ -1402,7 +1413,7 @@ func writeAPIStatusPayload(w http.ResponseWriter, status apiStatusResponse) {
 				}
 			}
 		} else if len(agentesActivos) == 0 || len(agentesTrabajando) == 0 {
-			if activos, trabajando, _ := agentesVisiblesLigero(status.Agentes, tareasEnProgreso); len(activos) > 0 || len(trabajando) > 0 {
+			if activos, trabajando, _ := agentesVisiblesLigero(agentes, tareasEnProgreso); len(activos) > 0 || len(trabajando) > 0 {
 				activos, trabajando, _ = normalizarAgentesVisiblesStatus(activos, trabajando, nil)
 				if len(agentesActivos) == 0 {
 					agentesActivos = activos
@@ -1416,15 +1427,15 @@ func writeAPIStatusPayload(w http.ResponseWriter, status apiStatusResponse) {
 	autonomySurface, autonomyHighlights, criticalProjectRisk := normalizeStatusAutonomyPayload(status.AutonomySurface, status.AutonomyHighlights, status.CriticalProjectRisk)
 	workersConectados, workersTrabajando, supervisoresActivos := statusVisibleWorkerCounters(agentesActivos, agentesTrabajando, autonomia)
 	payload := map[string]any{
-		"agentes":              status.Agentes,
-		"conteo_tareas":        status.ConteoTareas,
-		"resumenTareas":        status.TareasPorEstado,
+		"agentes":              agentes,
+		"conteo_tareas":        conteoTareas,
+		"resumenTareas":        resumenTareas,
 		"proyectos":            status.Proyectos,
 		"asignaciones_activas": status.AsignacionesActivas,
 		"sesiones_activas":     status.SesionesActivas,
 		"propuestas_abiertas":  status.PropuestasAbiertas,
 		"generado":             status.Generado,
-		"tareasPorEstado":      status.TareasPorEstado,
+		"tareasPorEstado":      resumenTareas,
 		"agentesActivos":       agentesActivos,
 		"agentesTrabajando":    agentesTrabajando,
 		"agentesSaturados":     agentesSaturados,
@@ -1733,6 +1744,12 @@ func fetchStatusReadOnlyLiteDirect(timeout time.Duration) (apiStatusResponse, bo
 	now := time.Now().UTC()
 	status := buildUltraLiteStatusReadOnly(now, result.agentes, result.cuentas, tareaLiteFromDB(result.tareas))
 	if rows, ok := readAgentPanelSnapshotFresh(); ok {
+		status.TareasActivas = reconciliarTareasActivasConPanelRows(status.TareasActivas, rows)
+		status.TareasEnProgreso = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso)
+		status.TareasReservadas = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada)
+		status.TareasPorEstado = reconciliarConteoTareasActivasVisible(status.TareasPorEstado, status.TareasActivas)
+		status.ConteoTareas = status.TareasPorEstado
+		status.ResumenTareas = status.TareasPorEstado
 		activos, trabajando, saturados, atascados, authManual, quotaBlocked, _ := agentesVisiblesPorEstadoOperativoRows(status.Agentes, rows)
 		activos, trabajando, saturados = normalizarAgentesVisiblesStatus(activos, trabajando, saturados)
 		status.AgentesActivos = activos

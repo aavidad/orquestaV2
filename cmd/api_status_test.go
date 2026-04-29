@@ -283,7 +283,7 @@ func TestAPIHandlerStatusReconciliaPanelFrescoSobreSnapshotStale(t *testing.T) {
 		WorkerAlive:     true,
 		WorkerState:     "running",
 		OpenTasks:       1,
-	}}, now)
+	}}, time.Now().UTC())
 
 	statusFastFetcher = func() (apiStatusResponse, error) { return apiStatusResponse{}, errStatusFetchTimeout }
 	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) { return apiStatusResponse{}, false }
@@ -355,7 +355,7 @@ func TestAPIHandlerStatusReconciliaPanelFrescoAunqueSnapshotTraigaArraysStale(t 
 		WorkerAlive:     true,
 		WorkerState:     "running",
 		OpenTasks:       1,
-	}}, now)
+	}}, time.Now().UTC())
 
 	statusFastFetcher = func() (apiStatusResponse, error) { return apiStatusResponse{}, errStatusFetchTimeout }
 	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) { return apiStatusResponse{}, false }
@@ -382,6 +382,78 @@ func TestAPIHandlerStatusReconciliaPanelFrescoAunqueSnapshotTraigaArraysStale(t 
 	}
 	if payload.WorkersConectados != 1 || payload.WorkersTrabajando != 1 {
 		t.Fatalf("workers no alineados con panel fresco: %+v", payload)
+	}
+}
+
+func TestAPIHandlerStatusCompactaTareasAbiertasSegunPanelFresco(t *testing.T) {
+	prevNow := statusNowFunc
+	prevFast := statusFastFetcher
+	prevUltraLite := apiStatusUltraLiteFetcher
+	prevReadOnly := apiStatusReadOnlyLiteFetcher
+	defer func() {
+		statusNowFunc = prevNow
+		statusFastFetcher = prevFast
+		apiStatusUltraLiteFetcher = prevUltraLite
+		apiStatusReadOnlyLiteFetcher = prevReadOnly
+		resetStatusSnapshotCache()
+		resetAgentPanelSnapshotCache()
+	}()
+	resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+
+	now := time.Date(2026, 4, 29, 13, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:      &db.Agente{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"},
+		OpenTasks:   1,
+		CurrentTask: &agentesapp.TaskFocus{TaskID: 40, State: db.TareaEnProgreso},
+	}}, time.Now().UTC())
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{
+			Agentes: []*db.Agente{
+				{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"},
+			},
+			ConteoTareas: map[string]int{
+				string(db.TareaEnProgreso): 2,
+			},
+			ResumenTareas: map[string]int{
+				string(db.TareaEnProgreso): 2,
+			},
+			TareasPorEstado: map[string]int{
+				string(db.TareaEnProgreso): 2,
+			},
+			TareasActivas: []tareaLite{
+				{ID: 38, Titulo: "Contrato canonico", Estado: db.TareaEnProgreso, Agente: "Codex10"},
+				{ID: 40, Titulo: "runtime mailbox/session_resume", Estado: db.TareaEnProgreso, Agente: "Codex10"},
+			},
+			TareasEnProgreso: []tareaLite{
+				{ID: 38, Titulo: "Contrato canonico", Estado: db.TareaEnProgreso, Agente: "Codex10"},
+				{ID: 40, Titulo: "runtime mailbox/session_resume", Estado: db.TareaEnProgreso, Agente: "Codex10"},
+			},
+			Generado: now.Format(time.RFC3339),
+		}, nil
+	}
+	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) { return apiStatusResponse{}, false }
+	apiStatusReadOnlyLiteFetcher = nil
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	apiHandlerStatus(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload apiStatusResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("json decode: %v", err)
+	}
+	if len(payload.TareasEnProgreso) != 1 || payload.TareasEnProgreso[0].ID != 40 {
+		t.Fatalf("tareasEnProgreso no compactadas segun panel fresco: %+v", payload.TareasEnProgreso)
+	}
+	if len(payload.TareasActivas) != 1 || payload.TareasActivas[0].ID != 40 {
+		t.Fatalf("tareasActivas no compactadas segun panel fresco: %+v", payload.TareasActivas)
+	}
+	if payload.TareasPorEstado[string(db.TareaEnProgreso)] != 1 {
+		t.Fatalf("conteo de tareas no reconciliado: %+v", payload.TareasPorEstado)
 	}
 }
 

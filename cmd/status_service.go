@@ -1723,6 +1723,10 @@ func fetchStatusFastFallback() (apiStatusResponse, error) {
 	rowsResolved := false
 	if rows, err := statusRowsForSnapshot(statusRowsTimeout); err == nil {
 		rowsResolved = true
+		tareasActivas = reconciliarTareasActivasConPanelRows(tareasActivas, rows)
+		cuentas = reconciliarConteoTareasActivasVisible(cuentas, tareasActivas)
+		tareasEnProgreso = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaEnProgreso)
+		tareasReservadas = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaAsignada)
 		aplicarVisibilidadOperativaAgentes(agentes, rows)
 		agentesActivos, agentesTrabajando, agentesSaturados, agentesAtascados, agentesAuthManual, agentesQuotaBlocked, _ = agentesVisiblesPorEstadoOperativoRows(agentes, rows)
 		agentesActivos, agentesTrabajando, agentesSaturados = normalizarAgentesVisiblesStatus(agentesActivos, agentesTrabajando, agentesSaturados)
@@ -1943,6 +1947,9 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 		}
 	}
 	if rows, rowsErr := statusRowsForSnapshot(statusRowsTimeout); rowsErr == nil {
+		tareasActivas = reconciliarTareasActivasConPanelRows(tareasActivas, rows)
+		tareasEnProgreso = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaEnProgreso)
+		cuentas = reconciliarConteoTareasActivasVisible(cuentas, tareasActivas)
 		aplicarVisibilidadOperativaAgentes(agentes, rows)
 		if activosOperativos, trabajandoOperativos, saturadosOperativos, atascadosOperativos, authManualOperativos, quotaBlockedOperativos, ok := agentesVisiblesPorEstadoOperativoRows(agentes, rows); ok {
 			agentesActivos = activosOperativos
@@ -2057,6 +2064,51 @@ func reconciliarConteoTareasActivasVisible(cuentas map[string]int, tareasActivas
 		}
 	}
 	return out
+}
+
+func reconciliarTareasActivasConPanelRows(tareas []tareaLite, rows []agentesapp.Row) []tareaLite {
+	tareas = normalizarTareasLiteVisibles(tareas)
+	if len(tareas) == 0 || len(rows) == 0 {
+		return tareas
+	}
+	type agentConstraint struct {
+		currentTaskID int64
+		openTasks     int
+	}
+	constraints := make(map[string]agentConstraint, len(rows))
+	for _, row := range rows {
+		if row.CurrentTask == nil || row.OpenTasks != 1 || row.Agente == nil {
+			continue
+		}
+		nombre := nombreAgenteCanonico(row.Agente.Nombre)
+		if nombre == "" {
+			continue
+		}
+		constraints[nombre] = agentConstraint{
+			currentTaskID: row.CurrentTask.TaskID,
+			openTasks:     row.OpenTasks,
+		}
+	}
+	if len(constraints) == 0 {
+		return tareas
+	}
+	out := make([]tareaLite, 0, len(tareas))
+	for _, tarea := range tareas {
+		if !tareaLiteValida(tarea) {
+			continue
+		}
+		nombre := nombreAgenteCanonico(tarea.Agente)
+		if constraint, ok := constraints[nombre]; ok {
+			switch tarea.Estado {
+			case db.TareaAsignada, db.TareaEnProgreso:
+				if constraint.openTasks == 1 && tarea.ID != constraint.currentTaskID {
+					continue
+				}
+			}
+		}
+		out = append(out, tarea)
+	}
+	return normalizarTareasLiteVisibles(out)
 }
 
 func normalizarTareasLiteVisibles(items []tareaLite) []tareaLite {
