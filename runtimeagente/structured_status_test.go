@@ -145,6 +145,53 @@ func TestLoadWorkerSnapshotFromMetadataJSON(t *testing.T) {
 	}
 }
 
+func TestLoadWorkerSnapshotFromMetadataJSONUsesWorkingDirWorkQueueFallback(t *testing.T) {
+	resetWorkerSnapshotCacheForTest()
+	tmp := t.TempDir()
+	now := time.Date(2026, 4, 29, 10, 30, 0, 0, time.UTC)
+	workQueuePath := filepath.Join(tmp, "work-queue.json")
+	write := func(path string, payload any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	write(workQueuePath, WorkerWorkQueue{
+		Version:   1,
+		UpdatedAt: now.Format(time.RFC3339Nano),
+		Current: &WorkerWorkQueueEntry{
+			MailboxID:  91,
+			Kind:       "autonomia",
+			Action:     "continuar_trabajo",
+			TaskID:     77,
+			State:      "pending",
+			Title:      "seguir frente",
+			Reason:     "fallback working_dir",
+			RecordedAt: now.Format(time.RFC3339Nano),
+		},
+	})
+	meta, err := json.Marshal(map[string]any{
+		"working_dir": tmp,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	snap, err := LoadWorkerSnapshotFromMetadataJSON(string(meta))
+	if err != nil {
+		t.Fatalf("load worker snapshot: %v", err)
+	}
+	if snap == nil || snap.WorkQueue == nil || snap.WorkQueue.Current == nil {
+		t.Fatalf("snapshot sin work queue: %+v", snap)
+	}
+	if snap.WorkQueue.Current.MailboxID != 91 || snap.WorkQueue.Current.TaskID != 77 {
+		t.Fatalf("work queue inesperada: %+v", snap.WorkQueue.Current)
+	}
+}
+
 func TestWorkerMetadataPathsFromJSONDefaultVersion(t *testing.T) {
 	meta, err := workerMetadataPathsFromJSON(`{"trace_dir":"/tmp/orquesta"}`)
 	if err != nil {

@@ -18166,6 +18166,24 @@ func TestReconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailboxPersisteS
 	if !strings.Contains(inbox, "Relee la inbox y cierra el siguiente slice util.") {
 		t.Fatalf("la inbox durable deberia incluir la guidance vigente, got=%q", inbox)
 	}
+	workQueueRaw, err := os.ReadFile(filepath.Join(worktreeDir, "work-queue.json"))
+	if err != nil {
+		t.Fatalf("leer work-queue durable: %v", err)
+	}
+	var queue map[string]any
+	if err := json.Unmarshal(workQueueRaw, &queue); err != nil {
+		t.Fatalf("parse work-queue durable: %v", err)
+	}
+	current, _ := queue["current"].(map[string]any)
+	if current == nil {
+		t.Fatalf("work-queue sin current: %s", string(workQueueRaw))
+	}
+	if got, _ := current["state"].(string); got != "pending" {
+		t.Fatalf("work-queue state inesperado: %q payload=%s", got, string(workQueueRaw))
+	}
+	if got, _ := current["kind"].(string); got != "autonomia" {
+		t.Fatalf("work-queue kind inesperado: %q payload=%s", got, string(workQueueRaw))
+	}
 }
 
 func TestProcesarRuntimeMailboxSessionResumeBatchConsumeAutonomiaConMailboxOnlyCompletada(t *testing.T) {

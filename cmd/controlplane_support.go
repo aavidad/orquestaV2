@@ -8516,6 +8516,9 @@ func reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje(msg *db.RuntimeMailb
 		if err := escribirInboxRuntimeMailboxDurableEnRuta(proyecto, rutaInboxActiva, tarea, msg); err != nil {
 			return false, err
 		}
+		if err := registrarRuntimeMailboxWorkQueueEnRuta(rutaInboxActiva, msg, tarea, nil, "pending", "guidance durable escrita en inbox"); err != nil {
+			return false, err
+		}
 		if _, err := encolarReactivacionAgenteProyectoSiProcede(agente, proyecto, "runtime_mailbox_guidance_durable_sin_handle"); err != nil {
 			return false, err
 		}
@@ -9027,6 +9030,13 @@ func registrarRuntimeMailboxWorkQueueLocal(msg *db.RuntimeMailboxMessage, tarea 
 	if msg == nil || handle == nil || msg.ID <= 0 {
 		return nil
 	}
+	return registrarRuntimeMailboxWorkQueueEnRuta("", msg, tarea, handle, state, reason)
+}
+
+func registrarRuntimeMailboxWorkQueueEnRuta(base string, msg *db.RuntimeMailboxMessage, tarea *db.Tarea, handle *db.RuntimeHandle, state, reason string) error {
+	if msg == nil || msg.ID <= 0 {
+		return nil
+	}
 	payload := map[string]any{}
 	if strings.TrimSpace(msg.PayloadJSON) != "" {
 		_ = json.Unmarshal([]byte(msg.PayloadJSON), &payload)
@@ -9039,7 +9049,7 @@ func registrarRuntimeMailboxWorkQueueLocal(msg *db.RuntimeMailboxMessage, tarea 
 	if title == "" && tarea != nil {
 		title = strings.TrimSpace(tarea.Titulo)
 	}
-	return controlruntime.RecordWorkQueueFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON), controlruntime.WorkQueueRecordInput{
+	input := controlruntime.WorkQueueRecordInput{
 		MailboxID:       msg.ID,
 		Kind:            strings.TrimSpace(msg.Kind),
 		Action:          strings.TrimSpace(stringMapValue(payload, "accion")),
@@ -9049,7 +9059,14 @@ func registrarRuntimeMailboxWorkQueueLocal(msg *db.RuntimeMailboxMessage, tarea 
 		Title:           title,
 		Reason:          strings.TrimSpace(reason),
 		RecordedAt:      time.Now().UTC(),
-	})
+	}
+	if strings.TrimSpace(base) != "" {
+		return controlruntime.RecordWorkQueueAtPath(controlruntime.WorkQueuePathFromDir(base), input)
+	}
+	if handle == nil {
+		return nil
+	}
+	return controlruntime.RecordWorkQueueFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON), input)
 }
 
 func resolverRutaInboxRuntimeMailboxDurable(proyecto *db.Proyecto, agente string, handle *db.RuntimeHandle) (string, error) {

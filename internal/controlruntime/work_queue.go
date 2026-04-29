@@ -56,6 +56,7 @@ func WorkQueuePathFromMetadataJSON(raw string) string {
 	}
 	candidates := []string{
 		stringValueFromMetadata(meta, "trace_dir"),
+		stringValueFromMetadata(meta, "working_dir"),
 		dirIfFile(stringValueFromMetadata(meta, "worker_manifest_path")),
 		dirIfFile(stringValueFromMetadata(meta, "worker_status_path")),
 		dirIfFile(stringValueFromMetadata(meta, "worker_heartbeat_path")),
@@ -67,13 +68,21 @@ func WorkQueuePathFromMetadataJSON(raw string) string {
 		if candidate == "" {
 			continue
 		}
-		return filepath.Join(candidate, "work-queue.json")
+		return WorkQueuePathFromDir(candidate)
 	}
 	return ""
 }
 
-func RecordWorkQueueFromMetadataJSON(raw string, input WorkQueueRecordInput) error {
-	path := WorkQueuePathFromMetadataJSON(raw)
+func WorkQueuePathFromDir(dir string) string {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, "work-queue.json")
+}
+
+func RecordWorkQueueAtPath(path string, input WorkQueueRecordInput) error {
+	path = strings.TrimSpace(path)
 	if strings.TrimSpace(path) == "" {
 		return nil
 	}
@@ -102,6 +111,10 @@ func RecordWorkQueueFromMetadataJSON(raw string, input WorkQueueRecordInput) err
 	file.Current = &entry
 	file.Recent = append(trimWorkQueueEntries(file.Recent), entry)
 	return writeJSONAtomic(path, file)
+}
+
+func RecordWorkQueueFromMetadataJSON(raw string, input WorkQueueRecordInput) error {
+	return RecordWorkQueueAtPath(WorkQueuePathFromMetadataJSON(raw), input)
 }
 
 func MarkWorkQueueStateFromMetadataJSON(raw string, mailboxID int64, state, reason string, recordedAt time.Time) error {

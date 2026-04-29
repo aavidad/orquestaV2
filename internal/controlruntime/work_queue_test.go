@@ -90,3 +90,33 @@ func TestHasPendingAndRecentWorkQueueEntryFromMetadataJSON(t *testing.T) {
 		t.Fatalf("HasRecentWorkQueueEntryFromMetadataJSON consumed=%v err=%v", ok, err)
 	}
 }
+
+func TestRecordWorkQueueAtPathAndWorkingDirMetadataFallback(t *testing.T) {
+	dir := t.TempDir()
+	path := WorkQueuePathFromDir(dir)
+	recordedAt := time.Date(2026, 4, 29, 10, 0, 0, 0, time.UTC)
+	if err := RecordWorkQueueAtPath(path, WorkQueueRecordInput{
+		MailboxID:  51,
+		Kind:       "autonomia",
+		Action:     "continuar_trabajo",
+		TaskID:     321,
+		State:      "pending",
+		Title:      "seguir frente",
+		Reason:     "guidance durable sin handle",
+		RecordedAt: recordedAt,
+	}); err != nil {
+		t.Fatalf("RecordWorkQueueAtPath: %v", err)
+	}
+	metaRaw, _ := json.Marshal(map[string]any{
+		"working_dir": dir,
+	})
+	match := WorkQueueMatch{
+		Kind:   "autonomia",
+		Action: "continuar_trabajo",
+		TaskID: 321,
+		Within: time.Minute,
+	}
+	if ok, err := HasPendingWorkQueueEntryFromMetadataJSON(string(metaRaw), match); err != nil || !ok {
+		t.Fatalf("HasPendingWorkQueueEntryFromMetadataJSON working_dir=%v err=%v", ok, err)
+	}
+}

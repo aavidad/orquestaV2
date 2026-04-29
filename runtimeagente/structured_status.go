@@ -155,6 +155,7 @@ type workerMetadataPaths struct {
 	StatusPath                string `json:"worker_status_path"`
 	HeartbeatPath             string `json:"worker_heartbeat_path"`
 	TraceDir                  string `json:"trace_dir"`
+	WorkingDir                string `json:"working_dir,omitempty"`
 	CanonicalExecutionProfile string `json:"execution_profile,omitempty"`
 	LegacyExecutionProfile    string `json:"perfil_operativo,omitempty"`
 }
@@ -270,13 +271,14 @@ func workerMetadataPathsFromJSON(raw string) (workerMetadataPaths, error) {
 	meta.StatusPath = strings.TrimSpace(meta.StatusPath)
 	meta.HeartbeatPath = strings.TrimSpace(meta.HeartbeatPath)
 	meta.TraceDir = strings.TrimSpace(meta.TraceDir)
+	meta.WorkingDir = strings.TrimSpace(meta.WorkingDir)
 	meta.CanonicalExecutionProfile = strings.TrimSpace(meta.CanonicalExecutionProfile)
 	meta.LegacyExecutionProfile = strings.TrimSpace(meta.LegacyExecutionProfile)
 	return meta, nil
 }
 
 func workerMetadataPathsEmpty(meta workerMetadataPaths) bool {
-	return meta.ManifestPath == "" && meta.StatusPath == "" && meta.HeartbeatPath == ""
+	return meta.ManifestPath == "" && meta.StatusPath == "" && meta.HeartbeatPath == "" && meta.TraceDir == "" && meta.WorkingDir == ""
 }
 
 func workerSnapshotCacheKey(meta workerMetadataPaths) string {
@@ -285,6 +287,7 @@ func workerSnapshotCacheKey(meta workerMetadataPaths) string {
 		meta.StatusPath,
 		meta.HeartbeatPath,
 		meta.TraceDir,
+		meta.WorkingDir,
 		meta.executionProfile(),
 	}, "|")
 }
@@ -369,6 +372,9 @@ func cloneWorkerSnapshot(src *WorkerSnapshot) *WorkerSnapshot {
 func workerWorkQueuePath(meta workerMetadataPaths) string {
 	if strings.TrimSpace(meta.TraceDir) != "" {
 		return filepath.Join(strings.TrimSpace(meta.TraceDir), "work-queue.json")
+	}
+	if strings.TrimSpace(meta.WorkingDir) != "" {
+		return filepath.Join(strings.TrimSpace(meta.WorkingDir), "work-queue.json")
 	}
 	for _, path := range []string{meta.ManifestPath, meta.StatusPath, meta.HeartbeatPath} {
 		if strings.TrimSpace(path) != "" {
