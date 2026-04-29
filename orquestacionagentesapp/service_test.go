@@ -242,7 +242,43 @@ func (s *stubRuntimeController) EnqueueRuntimeOrder(order *db.RuntimeOrder) (int
 }
 
 func (s *stubRuntimeController) ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error) {
-	return s.orders, s.ordersErr
+	if s.ordersErr != nil {
+		return nil, s.ordersErr
+	}
+	if len(s.orders) == 0 {
+		return nil, nil
+	}
+	out := make([]*db.RuntimeOrder, 0, len(s.orders))
+	for _, order := range s.orders {
+		if order == nil {
+			continue
+		}
+		if filtro.Agente != nil && !strings.EqualFold(strings.TrimSpace(order.Agente), strings.TrimSpace(*filtro.Agente)) {
+			continue
+		}
+		if filtro.ProyectoID != nil {
+			if order.ProyectoID == nil || *order.ProyectoID != *filtro.ProyectoID {
+				continue
+			}
+		}
+		if filtro.Estado != nil && !strings.EqualFold(strings.TrimSpace(order.Estado), strings.TrimSpace(*filtro.Estado)) {
+			continue
+		}
+		if len(filtro.Tipos) > 0 {
+			match := false
+			for _, tipo := range filtro.Tipos {
+				if strings.EqualFold(strings.TrimSpace(order.Tipo), strings.TrimSpace(tipo)) {
+					match = true
+					break
+				}
+			}
+			if !match {
+				continue
+			}
+		}
+		out = append(out, order)
+	}
+	return out, nil
 }
 
 func (s *stubRuntimeController) ListRuntimeMailbox(filtro db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error) {
@@ -1941,6 +1977,47 @@ func TestReactivateProjectIfNeededRespetaCooldownDeStartReciente(t *testing.T) {
 	}
 }
 
+func TestReactivateProjectIfNeededNoBloqueaCooldownPorStartFallidaOCancelada(t *testing.T) {
+	t.Parallel()
+
+	for _, estado := range []string{"fallida", "cancelada"} {
+		t.Run(estado, func(t *testing.T) {
+			proyectoID := int64(31)
+			now := time.Now().UTC()
+			runtimes := &stubRuntimeController{
+				orders: []*db.RuntimeOrder{{
+					ID:         91,
+					Agente:     "Codex1",
+					ProyectoID: &proyectoID,
+					Tipo:       "start",
+					Estado:     estado,
+					CreatedAt:  now,
+					UpdatedAt:  now,
+				}},
+			}
+			service := NewService(nil, runtimes)
+			service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: true})
+			service.SetRecoveryFlowSupport(&stubRecoveryFlowSupport{available: true})
+
+			ok, err := service.ReactivateProjectIfNeeded(
+				"Codex1",
+				&db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+				"runtime_mailbox_sin_handle",
+				&db.RuntimeHandle{ID: 5, Estado: "pausado"},
+			)
+			if err != nil {
+				t.Fatalf("ReactivateProjectIfNeeded: %v", err)
+			}
+			if !ok {
+				t.Fatal("deberia permitir reactivacion cuando la start reciente no fue util")
+			}
+			if runtimes.controlReq.Accion != "resume" {
+				t.Fatalf("deberia encolar resume tras start %s no util: %+v", estado, runtimes.controlReq)
+			}
+		})
+	}
+}
+
 func TestRecoverRemoteDegradedRuntimeSessionOmiteRecuperacionSinTrabajoAccionable(t *testing.T) {
 	t.Parallel()
 
@@ -2061,6 +2138,56 @@ func TestRecoverRemoteDegradedRuntimeSessionRespetaCooldownDeResumeReciente(t *t
 	}
 	if runtimes.enqueuedRuntimeOrder != nil {
 		t.Fatalf("no deberia encolar runtime order: %+v", runtimes.enqueuedRuntimeOrder)
+	}
+}
+
+func TestRecoverRemoteDegradedRuntimeSessionNoBloqueaCooldownPorResumeFallidaOExpirada(t *testing.T) {
+	t.Parallel()
+
+	for _, estado := range []string{"fallida", "expirada"} {
+		t.Run(estado, func(t *testing.T) {
+			proyectoID := int64(31)
+			runtimeID := int64(44)
+			now := time.Now().UTC()
+			runtimes := &stubRuntimeController{
+				runtime: &db.RuntimeInstance{ID: runtimeID, Agente: "Codex1", ProyectoID: &proyectoID},
+				orders: []*db.RuntimeOrder{{
+					ID:         92,
+					Agente:     "Codex1",
+					ProyectoID: &proyectoID,
+					Tipo:       "resume",
+					Estado:     estado,
+					CreatedAt:  now,
+					UpdatedAt:  now,
+				}},
+			}
+			service := NewService(nil, runtimes)
+			service.SetAutonomyStore(&stubAutonomyStore{})
+			service.SetStartableWorkChecker(&stubStartableWorkChecker{ok: true})
+			service.SetRemoteRecoverySupport(&stubRemoteRecoverySupport{
+				conector:  &db.Conector{ID: 5, Slug: "codex-remote"},
+				available: true,
+			})
+
+			count, err := service.RecoverRemoteDegradedRuntimeSession(
+				&db.Sesion{ID: 9, Agente: "Codex1", ProyectoID: &proyectoID, ExternalSessionID: "sess-1"},
+				&db.Proyecto{ID: proyectoID, Slug: "orquestador"},
+				&db.RuntimeHandle{ID: 3, Estado: "fallido", Transporte: "api", HandleKind: "session", HandleRef: "remote-1", RuntimeID: &runtimeID},
+				&db.RuntimeInstance{ID: runtimeID, Agente: "Codex1", ProyectoID: &proyectoID, LogicalState: "degradado", ProcessState: "remote_status_error"},
+			)
+			if err != nil {
+				t.Fatalf("RecoverRemoteDegradedRuntimeSession: %v", err)
+			}
+			if count != 2 {
+				t.Fatalf("deberia reintentar recovery cuando la resume reciente no fue util, got=%d", count)
+			}
+			if runtimes.enqueuedRuntimeOrder == nil || runtimes.enqueuedRuntimeOrder.Tipo != "resume" {
+				t.Fatalf("deberia dejar encolada la nueva resume del recovery remoto: %+v", runtimes.enqueuedRuntimeOrder)
+			}
+			if runtimes.controlReq.Accion != "" {
+				t.Fatalf("no deberia encolar control directo en este carril: %+v", runtimes.controlReq)
+			}
+		})
 	}
 }
 

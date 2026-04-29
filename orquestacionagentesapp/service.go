@@ -1640,6 +1640,9 @@ func (s *Service) existsRecentAutonomyOrder(agente string, proyectoID *int64, ti
 		if order == nil {
 			continue
 		}
+		if !runtimeOrderCountsForRecentAutonomyCooldown(order) {
+			continue
+		}
 		if strings.TrimSpace(accion) != "" && !runtimeOrderHasAction(order, accion) {
 			continue
 		}
@@ -1649,6 +1652,18 @@ func (s *Service) existsRecentAutonomyOrder(agente string, proyectoID *int64, ti
 		return true, nil
 	}
 	return false, nil
+}
+
+func runtimeOrderCountsForRecentAutonomyCooldown(order *db.RuntimeOrder) bool {
+	if order == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(order.Estado)) {
+	case "fallida", "cancelada", "expirada":
+		return false
+	default:
+		return true
+	}
 }
 
 func (s *Service) resolveReactivationProjectByID(agente string, proyectoID int64, origen string) (*db.Proyecto, error) {
