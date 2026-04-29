@@ -3,6 +3,7 @@ package cmd
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"orquesta/db"
 )
@@ -95,6 +96,128 @@ func TestProcesarCompactacionExclusividadPremiumSesionActivaReactivacionAutomati
 	}
 	if premium == nil || premium.Estado != db.TareaEnProgreso {
 		t.Fatalf("el frente premium acotado deberia seguir en progreso: %+v", premium)
+	}
+}
+
+func TestReactivarSesionAutonomiaPorTrabajoOmiteSesionSinTrabajoArrancable(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("GeminiIdle", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-idle",
+		Nombre:  "Orquestador Idle",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "GeminiIdle",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "gemini-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	sesionRecargada, err := db.GetSesionByID(sesion.ID)
+	if err != nil || sesionRecargada == nil {
+		t.Fatalf("recargar sesion: %+v err=%v", sesionRecargada, err)
+	}
+
+	n, err := reactivarSesionAutonomiaPorTrabajo(sesionRecargada)
+	if err != nil {
+		t.Fatalf("reactivar sesion por trabajo: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("sin trabajo arrancable no deberia relanzar premium, got=%d", n)
+	}
+
+	agente := "GeminiIdle"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("sin trabajo arrancable no deberia encolar runtime orders: %+v", orders)
+	}
+}
+
+func TestReactivarSesionAutonomiaPorTrabajoRespetaCooldownRecienteDeStartResume(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("GeminiCooldown", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-cooldown-reactivacion",
+		Nombre:  "Orquestador Cooldown",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Retomar premium con cooldown",
+		Descripcion: "Hay trabajo real, pero el relanzamiento debe esperar el cooldown.",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "GeminiCooldown"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "GeminiCooldown"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		INSERT INTO runtime_orders (agente, proyecto_id, tipo, estado, payload_json, created_at, updated_at)
+		VALUES (?, ?, 'resume', 'completada', ?, ?, ?)
+	`, "GeminiCooldown", proyectoID, `{"accion":"resume","motivo":"desbloqueo_humano_auto"}`, time.Now().UTC(), time.Now().UTC()); err != nil {
+		t.Fatalf("insert runtime order reciente: %v", err)
+	}
+
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "GeminiCooldown",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "gemini-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	sesionRecargada, err := db.GetSesionByID(sesion.ID)
+	if err != nil || sesionRecargada == nil {
+		t.Fatalf("recargar sesion: %+v err=%v", sesionRecargada, err)
+	}
+
+	n, err := reactivarSesionAutonomiaPorTrabajo(sesionRecargada)
+	if err != nil {
+		t.Fatalf("reactivar sesion por trabajo: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("deberia respetar cooldown reciente de start/resume, got=%d", n)
+	}
+
+	agente := "GeminiCooldown"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar runtime orders durante cooldown: %+v", orders)
 	}
 }
 

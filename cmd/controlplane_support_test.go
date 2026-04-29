@@ -10102,77 +10102,77 @@ func TestReactivarSesionAutonomiaPorTrabajoRespetaCooldownDeStartReciente(t *tes
 }
 
 func TestReactivarSesionAutonomiaPorTrabajoNoRelanzaSinTrabajoArrancable(t *testing.T) {
-\ttmp := prepararDBTemporalCmd(t)
+	tmp := prepararDBTemporalCmd(t)
 
-\tif err := db.RegistrarAgente("Codex1", "programador"); err != nil {
-\t\tt.Fatalf("registrar agente: %v", err)
-\t}
-\tproyectoID, err := db.UpsertProyecto(&db.Proyecto{
-\t\tSlug:    "orquestador-reactivacion-sesion-sin-trabajo",
-\t\tNombre:  "Orquestador Reactivacion Sesion Sin Trabajo",
-\t\tRutaAbs: filepath.Join(tmp, "orquestador"),
-\t\tTipo:    db.ProyectoRepo,
-\t\tActivo:  true,
-\t})
-\tif err != nil {
-\t\tt.Fatalf("upsert proyecto: %v", err)
-\t}
-\tif err := db.ActivarAsignacion("Codex1", proyectoID, "frente pausado sin trabajo"); err != nil {
-\t\tt.Fatalf("activar asignacion: %v", err)
-\t}
-\tif err := db.PausarAsignacion("Codex1", proyectoID, "sin_trabajo_reactivacion_automatica"); err != nil {
-\t\tt.Fatalf("pausar asignacion: %v", err)
-\t}
-\tsesion, err := db.IniciarSesionContexto(db.SesionInicio{
-\t\tAgente:      "Codex1",
-\t\tProyectoID:  &proyectoID,
-\t\tCWD:         filepath.Join(tmp, "orquestador"),
-\t\tHerramienta: "codex-cli",
-\t})
-\tif err != nil {
-\t\tt.Fatalf("iniciar sesion: %v", err)
-\t}
-\testadoPausada := "pausada"
-\tif err := db.GuardarSesionActiva("Codex1", &proyectoID, db.SesionUpdate{
-\t\tEstado:    &estadoPausada,
-\t\tHeartbeat: true,
-\t}); err != nil {
-\t\tt.Fatalf("guardar sesion pausada: %v", err)
-\t}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-reactivacion-sesion-sin-trabajo",
+		Nombre:  "Orquestador Reactivacion Sesion Sin Trabajo",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente pausado sin trabajo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if err := db.PausarAsignacion("Codex1", proyectoID, "sin_trabajo_reactivacion_automatica"); err != nil {
+		t.Fatalf("pausar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	estadoPausada := "pausada"
+	if err := db.GuardarSesionActiva("Codex1", &proyectoID, db.SesionUpdate{
+		Estado:    &estadoPausada,
+		Heartbeat: true,
+	}); err != nil {
+		t.Fatalf("guardar sesion pausada: %v", err)
+	}
 
-\tprocesadas, err := reactivarSesionAutonomiaPorTrabajo(sesion)
-\tif err != nil {
-\t\tt.Fatalf("reactivarSesionAutonomiaPorTrabajo: %v", err)
-\t}
-\tif procesadas != 0 {
-\t\tt.Fatalf("no deberia reactivar sin trabajo arrancable, got=%d", procesadas)
-\t}
+	procesadas, err := reactivarSesionAutonomiaPorTrabajo(sesion)
+	if err != nil {
+		t.Fatalf("reactivarSesionAutonomiaPorTrabajo: %v", err)
+	}
+	if procesadas != 0 {
+		t.Fatalf("no deberia reactivar sin trabajo arrancable, got=%d", procesadas)
+	}
 
-\tactual, err := db.GetSesionActiva("Codex1", &proyectoID)
-\tif err != nil {
-\t\tt.Fatalf("get sesion activa: %v", err)
-\t}
-\tif actual == nil || !strings.EqualFold(strings.TrimSpace(actual.Estado), "pausada") {
-\t\tt.Fatalf("la sesion deberia seguir pausada: %+v", actual)
-\t}
+	actual, err := db.GetSesionActiva("Codex1", &proyectoID)
+	if err != nil {
+		t.Fatalf("get sesion activa: %v", err)
+	}
+	if actual == nil || !strings.EqualFold(strings.TrimSpace(actual.Estado), "pausada") {
+		t.Fatalf("la sesion deberia seguir pausada: %+v", actual)
+	}
 
-\tasignacionActiva, err := db.GetAsignacionActivaAgente("Codex1")
-\tif err != nil && err != sql.ErrNoRows {
-\t\tt.Fatalf("get asignacion activa: %v", err)
-\t}
-\tif asignacionActiva != nil {
-\t\tt.Fatalf("no deberia reactivar la asignacion sin trabajo real: %+v", asignacionActiva)
-\t}
+	asignacionActiva, err := db.GetAsignacionActivaAgente("Codex1")
+	if err != nil && err != sql.ErrNoRows {
+		t.Fatalf("get asignacion activa: %v", err)
+	}
+	if asignacionActiva != nil {
+		t.Fatalf("no deberia reactivar la asignacion sin trabajo real: %+v", asignacionActiva)
+	}
 
-\tagente := "Codex1"
-\testado := "pendiente"
-\torders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
-\tif err != nil {
-\t\tt.Fatalf("listar runtime orders pendientes: %v", err)
-\t}
-\tif len(orders) != 0 {
-\t\tt.Fatalf("no deberia encolar runtime orders sin trabajo real, got=%+v", orders)
-\t}
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders pendientes: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar runtime orders sin trabajo real, got=%+v", orders)
+	}
 }
 
 func TestResetReanimacionEncolaStartSiHandleFallidoConMailboxPendiente(t *testing.T) {
@@ -20264,6 +20264,77 @@ func TestProcesarRuntimeMailboxSessionResumeMensajeToleraConsumedYSnapshotNil(t 
 	}
 }
 
+func TestProcesarRuntimeMailboxSessionResumeMensajeRespetaConsumedPrevia(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-consumed-guard","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"instruccion session resume consumed guard"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+
+	dispatched, err := procesarRuntimeMailboxSessionResumeMensaje(msg, map[int64]struct{}{msgID: {}}, nil)
+	if err != nil {
+		t.Fatalf("procesar mensaje session resume con consumed previa: %v", err)
+	}
+	if dispatched {
+		t.Fatal("mailbox ya consumida en batch no deberia redespacharse")
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			t.Fatalf("no deberia crear send_instruction para mailbox ya consumida: %+v", order)
+		}
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchRespetaLeaseHandoffDerivadaSinMailboxIDsPropios(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()
@@ -26824,6 +26895,49 @@ func TestEncolarReactivacionAgenteProyectoConHandleActivoNoDuplicaStart(t *testi
 	}
 	if len(orders) != 0 {
 		t.Fatalf("no deberia crear start/resume redundante con handle activo: %+v", orders)
+	}
+}
+
+func TestEncolarReactivacionAgenteProyectoConHandleSiProcedeOmiteSinTrabajoArrancable(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSinTrabajo", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-reactivacion-sin-trabajo",
+		Nombre:  "Orquestador Reactivacion Sin Trabajo",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSinTrabajo", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	proyecto, err := db.GetProyecto("orquestador-reactivacion-sin-trabajo")
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+
+	encolada, err := encolarReactivacionAgenteProyectoConHandleSiProcede("CodexSinTrabajo", proyecto, "reanimacion_automatica", nil)
+	if err != nil {
+		t.Fatalf("encolarReactivacionAgenteProyectoConHandleSiProcede: %v", err)
+	}
+	if encolada {
+		t.Fatal("no deberia reactivar si el agente ya no tiene tarea arrancable")
+	}
+
+	agente := "CodexSinTrabajo"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia crear start/resume sin tarea arrancable: %+v", orders)
 	}
 }
 
@@ -36017,12 +36131,28 @@ func TestRuntimeMailboxTieneTrabajoAccionableParaReactivacionAceptaTaskIDAlias(t
 	if err != nil {
 		t.Fatalf("upsert proyecto: %v", err)
 	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Retomar frente",
+		Descripcion: "Slice activo",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex5"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex5"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
 
 	msg := &db.RuntimeMailboxMessage{
 		ToAgente:    "Codex5",
 		ProyectoID:  &proyectoID,
 		Kind:        "autonomia",
-		PayloadJSON: `{"task_id":123,"texto":"continua"}`,
+		PayloadJSON: fmt.Sprintf(`{"task_id":%d,"texto":"continua"}`, tareaID),
 	}
 	accionable, err := runtimeMailboxTieneTrabajoAccionableParaReactivacion(msg, proyectoID)
 	if err != nil {
@@ -36030,6 +36160,57 @@ func TestRuntimeMailboxTieneTrabajoAccionableParaReactivacionAceptaTaskIDAlias(t
 	}
 	if !accionable {
 		t.Fatal("deberia tratar task_id explicita como trabajo accionable")
+	}
+}
+
+func TestRuntimeMailboxTieneTrabajoAccionableParaReactivacionOmiteTaskIDStaleDeOtroAgente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex5", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex5: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex10: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-runtime-mailbox-taskid-stale",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente reasignado",
+		Descripcion: "Ya no pertenece al mailbox target",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex10"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	msg := &db.RuntimeMailboxMessage{
+		ToAgente:    "Codex5",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: fmt.Sprintf(`{"task_id":%d,"texto":"continua"}`, tareaID),
+	}
+	accionable, err := runtimeMailboxTieneTrabajoAccionableParaReactivacion(msg, proyectoID)
+	if err != nil {
+		t.Fatalf("runtimeMailboxTieneTrabajoAccionableParaReactivacion: %v", err)
+	}
+	if accionable {
+		t.Fatal("no deberia tratar task_id stale de otro agente como trabajo accionable")
 	}
 }
 

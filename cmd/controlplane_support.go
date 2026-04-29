@@ -7541,6 +7541,10 @@ func runtimeMailboxTieneTrabajoAccionableParaReactivacion(msg *db.RuntimeMailbox
 	if msg == nil || proyectoID <= 0 {
 		return false, nil
 	}
+	agente := strings.TrimSpace(msg.ToAgente)
+	if agente == "" {
+		return false, nil
+	}
 	payload := map[string]any{}
 	if strings.TrimSpace(msg.PayloadJSON) != "" {
 		if err := json.Unmarshal([]byte(strings.TrimSpace(msg.PayloadJSON)), &payload); err != nil {
@@ -7548,9 +7552,37 @@ func runtimeMailboxTieneTrabajoAccionableParaReactivacion(msg *db.RuntimeMailbox
 		}
 	}
 	if tareaID := runtimeMailboxTargetTaskID(payload); tareaID != nil && *tareaID > 0 {
-		return true, nil
+		accionable, err := runtimeMailboxTaskIDAccionableParaReactivacion(*tareaID, agente, proyectoID)
+		if err != nil {
+			return false, err
+		}
+		if accionable {
+			return true, nil
+		}
 	}
-	return dbAgenteTieneTrabajoArrancable(strings.TrimSpace(msg.ToAgente), proyectoID)
+	return dbAgenteTieneTrabajoArrancable(agente, proyectoID)
+}
+
+func runtimeMailboxTaskIDAccionableParaReactivacion(tareaID int64, agente string, proyectoID int64) (bool, error) {
+	if tareaID <= 0 || proyectoID <= 0 {
+		return false, nil
+	}
+	tarea, err := tareasService.Get(tareaID)
+	if err != nil {
+		return false, err
+	}
+	if tarea == nil || tarea.ProyectoID == nil || *tarea.ProyectoID != proyectoID {
+		return false, nil
+	}
+	if tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(agente)) {
+		return false, nil
+	}
+	switch tarea.Estado {
+	case db.TareaAsignada, db.TareaEnProgreso:
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 func resolverProyectoRuntimeMailboxReactivacion(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) (*db.Proyecto, error) {
@@ -7804,6 +7836,11 @@ func runtimeMailboxSessionResumeBatchBudgetAgotado(examined int, budget time.Dur
 // session_resume y lo despacha por el canal que corresponda (con sesión o fallback interactivo).
 // Retorna true si el mensaje fue procesado (encolado, reactivado u obsoleto consumido).
 func procesarRuntimeMailboxSessionResumeMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	if msg != nil && consumed != nil {
+		if _, skip := consumed[msg.ID]; skip {
+			return false, nil
+		}
+	}
 	if consumed == nil {
 		consumed = map[int64]struct{}{}
 	}
@@ -16933,11 +16970,11 @@ func reactivarSesionAutonomiaPorTrabajoConSnapshot(sesion *db.Sesion, snapshot *
 	if sesion == nil || sesion.ProyectoID == nil {
 		return 0, nil
 	}
-\tif tieneTrabajoActivo, err := sesionTieneTrabajoArrancableAutonomia(sesion, snapshot); err != nil {
-\t\treturn 0, err
-\t} else if !tieneTrabajoActivo {
-\t\treturn 0, nil
-\t}
+	if tieneTrabajoActivo, err := sesionTieneTrabajoArrancableAutonomia(sesion, snapshot); err != nil {
+		return 0, err
+	} else if !tieneTrabajoActivo {
+		return 0, nil
+	}
 	if disponible, _, err := autonomiaCuentaCompartidaDisponible(strings.TrimSpace(sesion.Agente)); err != nil {
 		return 0, err
 	} else if !disponible {
@@ -17300,6 +17337,15 @@ func encolarReactivacionAgenteProyectoSiProcede(agente string, proyecto *db.Proy
 }
 
 func encolarReactivacionAgenteProyectoConHandleSiProcede(agente string, proyecto *db.Proyecto, motivo string, handle *db.RuntimeHandle) (bool, error) {
+	if proyecto != nil && proyecto.ID > 0 {
+		trabajoArrancable, err := dbAgenteTieneTrabajoArrancable(strings.TrimSpace(agente), proyecto.ID)
+		if err != nil {
+			return false, err
+		}
+		if !trabajoArrancable {
+			return false, nil
+		}
+	}
 	return orquestacionAgentesService.ReactivateProjectIfNeeded(agente, proyecto, motivo, handle)
 }
 
@@ -17590,7 +17636,6 @@ func dbAgenteTieneTrabajoArrancable(agente string, proyectoID int64) (bool, erro
 	filtro := db.FiltroTareas{
 		Agente:     &agente,
 		ProyectoID: &proyectoID,
-		Limit:      1,
 	}
 	tareas, err := tareasService.List(filtro)
 	if err != nil {
@@ -17600,8 +17645,11 @@ func dbAgenteTieneTrabajoArrancable(agente string, proyectoID int64) (bool, erro
 		if tarea == nil {
 			continue
 		}
-		switch tarea.Estado {
-		case db.TareaAsignada, db.TareaEnProgreso:
+		arrancable, err := tareaAutonomiaArrancableParaSesion(agente, tarea)
+		if err != nil {
+			return false, err
+		}
+		if arrancable {
 			return true, nil
 		}
 	}
