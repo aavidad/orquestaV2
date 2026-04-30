@@ -15,7 +15,9 @@ func TestBuildPanelRowsForControlPlaneTimeout(t *testing.T) {
 	defer func() {
 		statusRowsFetcher = prevFetcher
 		controlPlanePanelRowsTimeout = prevTimeout
+		resetStatusRowsFlightState()
 	}()
+	resetStatusRowsFlightState()
 
 	block := make(chan struct{})
 	statusRowsFetcher = func() ([]agentesapp.Row, error) {
@@ -46,7 +48,9 @@ func TestProcesarAgentesDegradadosAutonomiaBatchDetalladoDegradaSiRowsTimeout(t 
 		statusRowsFetcher = prevRowsFetcher
 		controlPlanePanelRowsTimeout = prevRowsTimeout
 		runtimeProcessReanimationsBatchFn = prevReanimations
+		resetStatusRowsFlightState()
 	}()
+	resetStatusRowsFlightState()
 
 	block := make(chan struct{})
 	statusRowsFetcher = func() ([]agentesapp.Row, error) {

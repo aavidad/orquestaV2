@@ -868,7 +868,9 @@ func TestAgentRowsForStatusWithinTimeoutDegradaRapido(t *testing.T) {
 	defer func() {
 		statusRowsFetcher = prevFetcher
 		statusRowsTimeout = prevTimeout
+		resetStatusRowsFlightState()
 	}()
+	resetStatusRowsFlightState()
 
 	block := make(chan struct{})
 	statusRowsFetcher = func() ([]agentesapp.Row, error) {
@@ -886,6 +888,57 @@ func TestAgentRowsForStatusWithinTimeoutDegradaRapido(t *testing.T) {
 	}
 	if elapsed > 150*time.Millisecond {
 		t.Fatalf("deberia degradar rapido, elapsed=%s", elapsed)
+	}
+}
+
+func TestAgentRowsForStatusWithinTimeoutCoalesceFetchEnVuelo(t *testing.T) {
+	prevFetcher := statusRowsFetcher
+	prevTimeout := statusRowsTimeout
+	defer func() {
+		statusRowsFetcher = prevFetcher
+		statusRowsTimeout = prevTimeout
+		resetStatusRowsFlightState()
+	}()
+	resetStatusRowsFlightState()
+
+	block := make(chan struct{})
+	var calls atomic.Int32
+	statusRowsFetcher = func() ([]agentesapp.Row, error) {
+		calls.Add(1)
+		<-block
+		return []agentesapp.Row{{Agente: &db.Agente{Nombre: "Codex10"}}}, nil
+	}
+	statusRowsTimeout = 20 * time.Millisecond
+
+	if _, err := agentRowsForStatusWithinTimeout(statusRowsTimeout); !errors.Is(err, errStatusFetchTimeout) {
+		t.Fatalf("primera llamada debería degradar por timeout, err=%v", err)
+	}
+	if _, err := agentRowsForStatusWithinTimeout(statusRowsTimeout); !errors.Is(err, errStatusFetchTimeout) {
+		t.Fatalf("segunda llamada debería esperar el mismo vuelo y degradar por timeout, err=%v", err)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("no debería lanzar fetch duplicado mientras el primero sigue en vuelo, calls=%d", got)
+	}
+	close(block)
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		statusRowsFlightState.mu.Lock()
+		running := statusRowsFlightState.running
+		statusRowsFlightState.mu.Unlock()
+		if !running {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	rows, err := agentRowsForStatusWithinTimeout(statusRowsTimeout)
+	if err != nil {
+		t.Fatalf("tercera llamada debería volver a poder resolver rows, err=%v", err)
+	}
+	if len(rows) != 1 || rows[0].Agente == nil || rows[0].Agente.Nombre != "Codex10" {
+		t.Fatalf("rows inesperadas tras completar el vuelo: %+v", rows)
+	}
+	if got := calls.Load(); got > 2 {
+		t.Fatalf("no debería disparar más de un fetch adicional tras completar el vuelo, calls=%d", got)
 	}
 }
 

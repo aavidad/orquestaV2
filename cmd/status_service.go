@@ -89,6 +89,13 @@ var (
 		refreshing bool
 		waitCh     chan struct{}
 	}
+	statusRowsFlightState struct {
+		mu      sync.Mutex
+		running bool
+		waitCh  chan struct{}
+		rows    []agentesapp.Row
+		err     error
+	}
 )
 
 func statusRowsForSnapshot(timeout time.Duration) ([]agentesapp.Row, error) {
@@ -1131,21 +1138,42 @@ func agentRowsForStatusWithinTimeout(timeout time.Duration) ([]agentesapp.Row, e
 	if timeout <= 0 {
 		return statusRowsFetcher()
 	}
-	type result struct {
-		rows []agentesapp.Row
-		err  error
+	statusRowsFlightState.mu.Lock()
+	ch := statusRowsFlightState.waitCh
+	if !statusRowsFlightState.running {
+		ch = make(chan struct{})
+		statusRowsFlightState.running = true
+		statusRowsFlightState.waitCh = ch
+		go func(waitCh chan struct{}) {
+			rows, err := statusRowsFetcher()
+			statusRowsFlightState.mu.Lock()
+			statusRowsFlightState.rows = cloneAgentPanelRows(rows)
+			statusRowsFlightState.err = err
+			statusRowsFlightState.running = false
+			close(waitCh)
+			statusRowsFlightState.mu.Unlock()
+		}(ch)
 	}
-	ch := make(chan result, 1)
-	go func() {
-		rows, err := statusRowsFetcher()
-		ch <- result{rows: rows, err: err}
-	}()
+	statusRowsFlightState.mu.Unlock()
 	select {
-	case res := <-ch:
-		return res.rows, res.err
+	case <-ch:
+		statusRowsFlightState.mu.Lock()
+		rows := cloneAgentPanelRows(statusRowsFlightState.rows)
+		err := statusRowsFlightState.err
+		statusRowsFlightState.mu.Unlock()
+		return rows, err
 	case <-time.After(timeout):
 		return nil, errStatusFetchTimeout
 	}
+}
+
+func resetStatusRowsFlightState() {
+	statusRowsFlightState.mu.Lock()
+	defer statusRowsFlightState.mu.Unlock()
+	statusRowsFlightState.running = false
+	statusRowsFlightState.waitCh = nil
+	statusRowsFlightState.rows = nil
+	statusRowsFlightState.err = nil
 }
 
 func agentesVisiblesPorEstadoOperativoRows(agentes []*db.Agente, rows []agentesapp.Row) ([]*db.Agente, []*db.Agente, []*db.Agente, []*db.Agente, []*db.Agente, []*db.Agente, bool) {
