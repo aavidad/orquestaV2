@@ -2224,12 +2224,6 @@ func invalidateStatusSnapshotCache() {
 		}
 	}
 	statusCacheState.retryAfter = time.Time{}
-	statusAutonomySurfaceState.mu.Lock()
-	statusAutonomySurfaceState.value = nil
-	statusAutonomySurfaceState.expires = time.Time{}
-	statusAutonomySurfaceState.refreshing = false
-	statusAutonomySurfaceState.waitCh = nil
-	statusAutonomySurfaceState.mu.Unlock()
 	if agentesService != nil {
 		agentesService.InvalidateCompactDetailCache()
 	}
@@ -2242,12 +2236,6 @@ func invalidateStatusSnapshotCacheHard() {
 		statusCacheState.hardStale = true
 	}
 	statusCacheState.retryAfter = time.Time{}
-	statusAutonomySurfaceState.mu.Lock()
-	statusAutonomySurfaceState.value = nil
-	statusAutonomySurfaceState.expires = time.Time{}
-	statusAutonomySurfaceState.refreshing = false
-	statusAutonomySurfaceState.waitCh = nil
-	statusAutonomySurfaceState.mu.Unlock()
 	if agentesService != nil {
 		agentesService.InvalidateCompactDetailCache()
 	}

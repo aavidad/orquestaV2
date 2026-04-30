@@ -1394,6 +1394,34 @@ func TestInvalidateStatusSnapshotCacheConservaValorPeroMarcaStale(t *testing.T) 
 	}
 }
 
+func TestInvalidateStatusSnapshotCacheNoDescartaAutonomySurfaceCache(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	now := time.Date(2026, 4, 30, 13, 0, 0, 0, time.UTC)
+	prevNow := statusNowFunc
+	statusNowFunc = func() time.Time { return now }
+	defer func() { statusNowFunc = prevNow }()
+
+	statusAutonomySurfaceState.mu.Lock()
+	statusAutonomySurfaceState.value = &autonomySurface{Events: 3}
+	statusAutonomySurfaceState.expires = now.Add(time.Minute)
+	statusAutonomySurfaceState.refreshing = false
+	statusAutonomySurfaceState.waitCh = nil
+	statusAutonomySurfaceState.mu.Unlock()
+
+	invalidateStatusSnapshotCache()
+
+	statusAutonomySurfaceState.mu.Lock()
+	defer statusAutonomySurfaceState.mu.Unlock()
+	if statusAutonomySurfaceState.value == nil || statusAutonomySurfaceState.value.Events != 3 {
+		t.Fatalf("la invalidacion suave no deberia borrar autonomySurface cacheada: %+v", statusAutonomySurfaceState.value)
+	}
+	if statusAutonomySurfaceState.expires.IsZero() || !statusAutonomySurfaceState.expires.After(now) {
+		t.Fatalf("la invalidacion suave no deberia resetear la expiracion de autonomySurface: %s", statusAutonomySurfaceState.expires)
+	}
+}
+
 func TestInvalidateStatusSnapshotCacheHardInutilizaSnapshotHastaRefresh(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()
@@ -1422,6 +1450,34 @@ func TestInvalidateStatusSnapshotCacheHardInutilizaSnapshotHastaRefresh(t *testi
 	}
 	if _, ok := readStatusSnapshotAny(); ok {
 		t.Fatal("snapshot no deberia seguir disponible por fallback tras invalidacion dura")
+	}
+}
+
+func TestInvalidateStatusSnapshotCacheHardNoDescartaAutonomySurfaceCache(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	now := time.Date(2026, 4, 30, 13, 0, 0, 0, time.UTC)
+	prevNow := statusNowFunc
+	statusNowFunc = func() time.Time { return now }
+	defer func() { statusNowFunc = prevNow }()
+
+	statusAutonomySurfaceState.mu.Lock()
+	statusAutonomySurfaceState.value = &autonomySurface{Events: 5}
+	statusAutonomySurfaceState.expires = now.Add(time.Minute)
+	statusAutonomySurfaceState.refreshing = false
+	statusAutonomySurfaceState.waitCh = nil
+	statusAutonomySurfaceState.mu.Unlock()
+
+	invalidateStatusSnapshotCacheHard()
+
+	statusAutonomySurfaceState.mu.Lock()
+	defer statusAutonomySurfaceState.mu.Unlock()
+	if statusAutonomySurfaceState.value == nil || statusAutonomySurfaceState.value.Events != 5 {
+		t.Fatalf("la invalidacion dura no deberia borrar autonomySurface cacheada: %+v", statusAutonomySurfaceState.value)
+	}
+	if statusAutonomySurfaceState.expires.IsZero() || !statusAutonomySurfaceState.expires.After(now) {
+		t.Fatalf("la invalidacion dura no deberia resetear la expiracion de autonomySurface: %s", statusAutonomySurfaceState.expires)
 	}
 }
 
