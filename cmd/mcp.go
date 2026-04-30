@@ -6443,6 +6443,10 @@ var supervisorAgentDetailBuilder = func(agent string) (*agentesapp.Detail, error
 var supervisorActionSnapshotBuilder = func(supervisor string) (map[string]any, error) {
 	return buildMCPOpenClawOperatorSnapshot(supervisor, false)
 }
+var supervisorOperatorSnapshotBuilder = func(supervisor string) (map[string]any, error) {
+	return buildMCPOpenClawOperatorSnapshot(supervisor, false)
+}
+var supervisorVerificationOperationalBuilder = buildServerOperationalInfoFastFromDB
 
 var supervisorSemanticProgressRecentThreshold = 5 * time.Minute
 
@@ -8034,12 +8038,20 @@ func buildSupervisorPostActionVerification(supervisor string) map[string]any {
 	verification := map[string]any{
 		"verified_at": time.Now().UTC().Format(time.RFC3339),
 	}
-	if info, err := buildServerOperationalInfoFastFromDB(); err == nil {
+	if info, err := supervisorVerificationOperationalBuilder(); err == nil {
 		info = normalizeServerOperationalInfo(info)
 		verification["server_operational"] = info
 		verification["server_operational_summary"] = buildOpenClawOperationalSummary(info)
 	}
-	if snapshot, err := buildMCPOpenClawOperatorSnapshot(supervisor, false); err == nil && snapshot != nil {
+	if snapshot, err := supervisorOperatorSnapshotBuilder(supervisor); err == nil && snapshot != nil {
+		if info, ok := snapshot["server_operational"].(serverOperationalInfo); ok {
+			info = normalizeServerOperationalInfo(info)
+			current, _ := verification["server_operational"].(serverOperationalInfo)
+			if supervisorOperationalSnapshotShouldReplaceVerification(current, info) {
+				verification["server_operational"] = info
+				verification["server_operational_summary"] = buildOpenClawOperationalSummary(info)
+			}
+		}
 		for _, key := range []string{
 			"status",
 			"queue_summary",
@@ -8057,6 +8069,19 @@ func buildSupervisorPostActionVerification(supervisor string) map[string]any {
 		return nil
 	}
 	return verification
+}
+
+func supervisorOperationalSnapshotShouldReplaceVerification(current, candidate serverOperationalInfo) bool {
+	if strings.TrimSpace(current.Generated) == "" {
+		return true
+	}
+	if strings.TrimSpace(candidate.Generated) == "" {
+		return false
+	}
+	if strings.TrimSpace(current.Generated) == strings.TrimSpace(candidate.Generated) {
+		return true
+	}
+	return openClawOperationalFallbackIsNewer(apiStatusResponse{Generado: candidate.Generated}, current.Generated)
 }
 
 func attachSupervisorPostActionVerification(result map[string]any, supervisor string) map[string]any {
