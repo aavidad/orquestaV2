@@ -205,6 +205,17 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 		markPhase("settle", phaseStart)
 		return toolResult(prettyJSON(result), result, len(result.Errors) > 0), nil
 	}
+	if handled, phase, err := mcpServerSelfHealAutoExecuteEarlyRecovery(&result, enabled); handled {
+		if err != nil {
+			appendErr(phase, err)
+		}
+		mcpServerSelfHealMarkSkippedHeavyPhases(&result, enabled)
+		phaseStart = time.Now()
+		result.Operational = settleMCPServerSelfHealOperational(result.Operational)
+		syncMCPServerSelfHealRecovery(&result)
+		markPhase("settle", phaseStart)
+		return toolResult(prettyJSON(result), result, len(result.Errors) > 0), nil
+	}
 	phaseStart = time.Now()
 	if enabled("degradados") {
 		summary, err := runtimeProcessDegradadosBatchDetailed()
@@ -317,6 +328,26 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 	syncMCPServerSelfHealRecovery(&result)
 	markPhase("settle", phaseStart)
 	return toolResult(prettyJSON(result), result, len(result.Errors) > 0), nil
+}
+
+func mcpServerSelfHealAutoExecuteEarlyRecovery(result *apiRuntimeSelfHealResponse, enabled func(string) bool) (bool, string, error) {
+	if result == nil || enabled == nil {
+		return false, "", nil
+	}
+	plan := result.Operational.NextRecoveryPlan
+	if plan == nil || !plan.AutoExecutable {
+		return false, "", nil
+	}
+	switch strings.TrimSpace(plan.Action) {
+	case "compact_or_reassign_active_tasks":
+		return true, "compaction", mcpServerSelfHealAutoExecuteCompaction(result, enabled)
+	case "recover_blocked_fronts":
+		return true, "blocked_fronts", mcpServerSelfHealAutoExecuteBlockedFronts(result, enabled)
+	case "inspect_stuck_workers":
+		return true, "stuck_workers", mcpServerSelfHealAutoExecuteStuckWorkers(result, enabled)
+	default:
+		return false, "", nil
+	}
 }
 
 func mcpServerSelfHealCanShortCircuit(info serverOperationalInfo) bool {

@@ -16,6 +16,9 @@ var (
 	serverOperationalOptionalTimeout   = statusOptionalSectionTimeout
 	serverOperationalReviewSnapshotFn  = buildSupervisorReviewSnapshot
 	serverOperationalApplyNextActionFn = applySupervisorNextAction
+	serverOperationalCompactionAutoExecutableFn = serverOperationalCompactionAutoExecutable
+	serverOperationalBlockedFrontAutoExecutableFn = serverOperationalBlockedFrontAutoExecutable
+	serverOperationalStuckWorkersAutoExecutableFn = serverOperationalStuckWorkersAutoExecutable
 )
 
 type serverOperationalInfo struct {
@@ -301,7 +304,7 @@ func buildServerOperationalRecoveryHint(info serverOperationalInfo) *serverOpera
 	if info.Operational &&
 		strings.TrimSpace(info.Reason) == "control_plane_responsive" &&
 		info.BlockedTasks > 0 &&
-		serverOperationalBlockedFrontAutoExecutable(statusNowFunc().UTC()) {
+		serverOperationalBlockedFrontAutoExecutableFn(statusNowFunc().UTC()) {
 		return &serverOperationalRecoveryHint{
 			Kind:            "blocked_fronts",
 			AffectedTasks:   info.BlockedTasks,
@@ -358,7 +361,7 @@ func buildServerOperationalRecoveryHint(info serverOperationalInfo) *serverOpera
 			hint.Detail = fmt.Sprintf("%d tarea(s) abiertas exceden la señal real de trabajo en %d agente(s); conviene compactar antes de esperar cuota", max(info.CompactionDebtTasks, 1), max(info.CompactionDebtAgents, 1))
 			return hint
 		}
-		if info.BlockedTasks > 0 && serverOperationalBlockedFrontAutoExecutable(statusNowFunc().UTC()) {
+		if info.BlockedTasks > 0 && serverOperationalBlockedFrontAutoExecutableFn(statusNowFunc().UTC()) {
 			hint.Kind = "blocked_fronts"
 			hint.AffectedTasks = info.BlockedTasks
 			hint.SuggestedAction = "recover_blocked_fronts"
@@ -491,9 +494,9 @@ func buildServerOperationalRecoveryPlan(info serverOperationalInfo, action *supe
 	}
 	plan.RequiresRearm = plan.Action == "server_rearm"
 	plan.AutoExecutable = (plan.RequiresRearm && plan.RearmAvailable) ||
-		(strings.TrimSpace(plan.Action) == "compact_or_reassign_active_tasks" && serverOperationalCompactionAutoExecutable()) ||
-		(strings.TrimSpace(plan.Action) == "recover_blocked_fronts" && serverOperationalBlockedFrontAutoExecutable(statusNowFunc().UTC())) ||
-		(strings.TrimSpace(plan.Action) == "inspect_stuck_workers" && serverOperationalStuckWorkersAutoExecutable(statusNowFunc().UTC()))
+		(strings.TrimSpace(plan.Action) == "compact_or_reassign_active_tasks" && serverOperationalCompactionAutoExecutableFn()) ||
+		(strings.TrimSpace(plan.Action) == "recover_blocked_fronts" && serverOperationalBlockedFrontAutoExecutableFn(statusNowFunc().UTC())) ||
+		(strings.TrimSpace(plan.Action) == "inspect_stuck_workers" && serverOperationalStuckWorkersAutoExecutableFn(statusNowFunc().UTC()))
 	if plan.RequiresRearm && info.Rearm != nil {
 		plan.Tool = strings.TrimSpace(info.Rearm.Tool)
 		plan.Endpoint = strings.TrimSpace(info.Rearm.Endpoint)

@@ -840,6 +840,7 @@ func TestMCPToolServerSelfHealAutoEjecutaCompactionDebt(t *testing.T) {
 	prevAutonomia := runtimeProcessAutonomiaBatch
 	prevReanimations := runtimeProcessReanimationsBatchFn
 	prevOperational := mcpBuildServerOperationalInfoFn
+	prevCompactionAutoexec := serverOperationalCompactionAutoExecutableFn
 	defer func() {
 		apiRuntimeWakeOrdersFn = prevWakeOrders
 		apiRuntimeWakeMailboxFn = prevWakeMailbox
@@ -851,7 +852,9 @@ func TestMCPToolServerSelfHealAutoEjecutaCompactionDebt(t *testing.T) {
 		runtimeProcessAutonomiaBatch = prevAutonomia
 		runtimeProcessReanimationsBatchFn = prevReanimations
 		mcpBuildServerOperationalInfoFn = prevOperational
+		serverOperationalCompactionAutoExecutableFn = prevCompactionAutoexec
 	}()
+	serverOperationalCompactionAutoExecutableFn = func() bool { return true }
 
 	apiRuntimeWakeOrdersFn = func() bool { return true }
 	apiRuntimeWakeMailboxFn = func() bool { return true }
@@ -877,7 +880,7 @@ func TestMCPToolServerSelfHealAutoEjecutaCompactionDebt(t *testing.T) {
 	operationalCalls := 0
 	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
 		operationalCalls++
-		if operationalCalls <= 2 {
+		if operationalCalls <= 1 {
 			return serverOperationalInfo{
 				State:                "degraded",
 				Operational:          false,
@@ -908,8 +911,8 @@ func TestMCPToolServerSelfHealAutoEjecutaCompactionDebt(t *testing.T) {
 		t.Fatalf("server self_heal no deberia marcar error tras autoejecutar compactacion: %#v", result)
 	}
 	payload, _ := result["structuredContent"].(apiRuntimeSelfHealResponse)
-	if degradadosCalls < 2 || autonomiaCalls < 2 {
-		t.Fatalf("self_heal deberia reintentar degradados/autonomia para compaction debt: degradados=%d autonomia=%d", degradadosCalls, autonomiaCalls)
+	if degradadosCalls != 1 || autonomiaCalls != 1 {
+		t.Fatalf("self_heal deberia ejecutar una sola pasada dirigida para compaction debt: degradados=%d autonomia=%d", degradadosCalls, autonomiaCalls)
 	}
 	if !payload.Operational.Operational || payload.Operational.State != "ready" {
 		t.Fatalf("self_heal deberia converger tras compactacion autoejecutable: %+v", payload.Operational)
@@ -934,6 +937,7 @@ func TestMCPToolServerSelfHealAutoEjecutaBlockedFronts(t *testing.T) {
 	prevAutonomia := runtimeProcessAutonomiaBatch
 	prevReanimations := runtimeProcessReanimationsBatchFn
 	prevOperational := mcpBuildServerOperationalInfoFn
+	prevBlockedAutoexec := serverOperationalBlockedFrontAutoExecutableFn
 	defer func() {
 		apiRuntimeWakeOrdersFn = prevWakeOrders
 		apiRuntimeWakeMailboxFn = prevWakeMailbox
@@ -945,7 +949,9 @@ func TestMCPToolServerSelfHealAutoEjecutaBlockedFronts(t *testing.T) {
 		runtimeProcessAutonomiaBatch = prevAutonomia
 		runtimeProcessReanimationsBatchFn = prevReanimations
 		mcpBuildServerOperationalInfoFn = prevOperational
+		serverOperationalBlockedFrontAutoExecutableFn = prevBlockedAutoexec
 	}()
+	serverOperationalBlockedFrontAutoExecutableFn = func(time.Time) bool { return true }
 
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
 		Slug:    "orquestador-selfheal-blocked-front",
@@ -1028,7 +1034,7 @@ func TestMCPToolServerSelfHealAutoEjecutaBlockedFronts(t *testing.T) {
 	operationalCalls := 0
 	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
 		operationalCalls++
-		if operationalCalls <= 2 {
+		if operationalCalls <= 1 {
 			return buildServerOperationalInfo(apiStatusResponse{
 				AgentesActivos: []*db.Agente{
 					{Nombre: "CodexIdle", Activo: true},
@@ -1059,8 +1065,8 @@ func TestMCPToolServerSelfHealAutoEjecutaBlockedFronts(t *testing.T) {
 		t.Fatalf("server self_heal no deberia marcar error tras autoejecutar blocked fronts: %#v", result)
 	}
 	payload, _ := result["structuredContent"].(apiRuntimeSelfHealResponse)
-	if degradadosCalls < 2 || autonomiaCalls < 2 {
-		t.Fatalf("self_heal deberia reintentar degradados/autonomia para blocked fronts: degradados=%d autonomia=%d", degradadosCalls, autonomiaCalls)
+	if degradadosCalls != 1 || autonomiaCalls != 1 {
+		t.Fatalf("self_heal deberia ejecutar una sola pasada dirigida para blocked fronts: degradados=%d autonomia=%d", degradadosCalls, autonomiaCalls)
 	}
 	if !payload.Operational.Operational || payload.Operational.State != "ready" {
 		t.Fatalf("self_heal deberia converger tras blocked fronts autoejecutable: %+v", payload.Operational)
@@ -1084,6 +1090,7 @@ func TestMCPToolServerSelfHealAutoEjecutaStuckWorkers(t *testing.T) {
 	prevAutonomia := runtimeProcessAutonomiaBatch
 	prevReanimations := runtimeProcessReanimationsBatchFn
 	prevOperational := mcpBuildServerOperationalInfoFn
+	prevStuckAutoexec := serverOperationalStuckWorkersAutoExecutableFn
 	defer func() {
 		apiRuntimeWakeOrdersFn = prevWakeOrders
 		apiRuntimeWakeMailboxFn = prevWakeMailbox
@@ -1095,7 +1102,9 @@ func TestMCPToolServerSelfHealAutoEjecutaStuckWorkers(t *testing.T) {
 		runtimeProcessAutonomiaBatch = prevAutonomia
 		runtimeProcessReanimationsBatchFn = prevReanimations
 		mcpBuildServerOperationalInfoFn = prevOperational
+		serverOperationalStuckWorkersAutoExecutableFn = prevStuckAutoexec
 	}()
+	serverOperationalStuckWorkersAutoExecutableFn = func(time.Time) bool { return true }
 
 	now := time.Now().UTC()
 	storeAgentPanelSnapshot([]agentesapp.Row{{
@@ -1135,7 +1144,7 @@ func TestMCPToolServerSelfHealAutoEjecutaStuckWorkers(t *testing.T) {
 	operationalCalls := 0
 	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
 		operationalCalls++
-		if operationalCalls <= 2 {
+		if operationalCalls <= 1 {
 			return buildServerOperationalInfo(apiStatusResponse{
 				AgentesActivos:    []*db.Agente{{Nombre: "CodexTMUX", Activo: true}},
 				AgentesTrabajando: []*db.Agente{{Nombre: "CodexTMUX", Activo: true}},
@@ -1162,8 +1171,8 @@ func TestMCPToolServerSelfHealAutoEjecutaStuckWorkers(t *testing.T) {
 		t.Fatalf("server self_heal no deberia marcar error tras autoejecutar stuck workers: %#v", result)
 	}
 	payload, _ := result["structuredContent"].(apiRuntimeSelfHealResponse)
-	if degradadosCalls < 2 || autonomiaCalls < 2 {
-		t.Fatalf("self_heal deberia reintentar degradados/autonomia para stuck workers: degradados=%d autonomia=%d", degradadosCalls, autonomiaCalls)
+	if degradadosCalls != 1 || autonomiaCalls != 1 {
+		t.Fatalf("self_heal deberia ejecutar una sola pasada dirigida para stuck workers: degradados=%d autonomia=%d", degradadosCalls, autonomiaCalls)
 	}
 	if !payload.Operational.Operational || payload.Operational.State != "ready" {
 		t.Fatalf("self_heal deberia converger tras stuck workers autoejecutable: %+v", payload.Operational)
