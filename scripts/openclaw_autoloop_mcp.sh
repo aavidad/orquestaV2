@@ -7,6 +7,7 @@ OUTER_SLEEP="${OUTER_SLEEP:-20}"
 IDLE_SLEEP="${IDLE_SLEEP:-60}"
 QUIET_SLEEP="${QUIET_SLEEP:-90}"
 PASSIVE_RECOVERY_SLEEP="${PASSIVE_RECOVERY_SLEEP:-300}"
+MANUAL_QUEUE_SLEEP="${MANUAL_QUEUE_SLEEP:-180}"
 EXIT_ON_COMPLETE="${EXIT_ON_COMPLETE:-true}"
 LOG_FILE="${LOG_FILE:-/tmp/orquesta-openclaw-autoloop.log}"
 MAX_SAFE_ACTIONS_PER_TICK="${MAX_SAFE_ACTIONS_PER_TICK:-1}"
@@ -116,6 +117,7 @@ print("next_safe_action=" + str(next_safe.get("action", "")))
 print("next_safe_target=" + str(next_safe.get("target", "")))
 print("next_safe_assignee=" + str(next_safe.get("assignee", "")))
 print("safe_queue_total=" + str(queue.get("safe", 0)))
+print("manual_queue_total=" + str(queue.get("manual", 0)))
 print("queue_total=" + str(queue.get("total", 0)))
 PY
 )
@@ -322,7 +324,10 @@ PY
       fi
     fi
   fi
-  if [[ "${kv[operational]}" == "true" && "${kv[next_recovery_action]}" == "" && "${kv[safe_queue_total]}" == "0" ]]; then
+  if [[ "${kv[operational]}" == "true" && "${kv[next_recovery_action]}" == "" && "${kv[safe_queue_total]}" == "0" && "${kv[manual_queue_total]}" != "0" ]]; then
+    sleep_for="${MANUAL_QUEUE_SLEEP}"
+  fi
+  if [[ "${kv[operational]}" == "true" && "${kv[next_recovery_action]}" == "" && "${kv[safe_queue_total]}" == "0" && "${kv[manual_queue_total]}" == "0" ]]; then
     sleep_for="${IDLE_SLEEP}"
     if [[ "${kv[next_action]}" == "" ]]; then
       sleep_for="${QUIET_SLEEP}"
