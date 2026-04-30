@@ -15423,6 +15423,13 @@ func taskNotesMarkedManualTakeover(notas string) bool {
 }
 
 func autonomiaOpenTasksCeilingForRow(row agentesapp.Row, now time.Time) int {
+	if row.WorkerFresh(now) &&
+		row.CurrentTask != nil &&
+		row.OpenTasks > 1 &&
+		strings.EqualFold(strings.TrimSpace(row.EstadoOperativo), "trabajando") &&
+		strings.EqualFold(strings.TrimSpace(row.LastAutonomyState), "work_confirmed") {
+		return 1
+	}
 	ceiling := autonomiaWorkerOpenTasksCeiling
 	tmuxCeiling := controlPlaneConfigIntOrDefault("autonomia_tmux_open_tasks_ceiling", autonomiaTMUXWorkerOpenTasksCeilingDefault)
 	if tmuxCeiling < ceiling {

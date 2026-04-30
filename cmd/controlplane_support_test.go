@@ -42458,6 +42458,26 @@ func TestAutonomiaOpenTasksCeilingForRowElevaTMUXFreshDesdeRowCanonico(t *testin
 	}
 }
 
+func TestAutonomiaOpenTasksCeilingForRowReduceAMonotareaConTrabajoConfirmado(t *testing.T) {
+	now := time.Now().UTC()
+	row := agentesapp.Row{
+		WorkerDriver:       "tmux_cli_session",
+		WorkerTransport:    "tmux",
+		WorkerState:        "running",
+		WorkerAlive:        true,
+		WorkerHeartbeat:    timePtr(now),
+		WorkerUpdatedAt:    timePtr(now),
+		EstadoOperativo:    "trabajando",
+		LastAutonomyState:  "work_confirmed",
+		OpenTasks:          2,
+		CurrentTask:        &agentesapp.TaskFocus{TaskID: 29, State: db.TareaEnProgreso},
+	}
+
+	if got := autonomiaOpenTasksCeilingForRow(row, now); got != 1 {
+		t.Fatalf("ceiling monotarea inesperado: %d", got)
+	}
+}
+
 func TestProcesarAgentesDegradadosAutonomiaBatchRecuperaBloqueoPorSobrecargaHastaTechoTMUX(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetStatusSnapshotCache()
