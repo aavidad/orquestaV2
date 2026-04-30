@@ -742,6 +742,91 @@ func TestMCPToolServerSelfHealCortaMantenimientoPesadoEnWaitQuotaReset(t *testin
 	}
 }
 
+func TestMCPToolServerSelfHealCortaMantenimientoPesadoEnRecoveryManual(t *testing.T) {
+	prevWakeOrders := apiRuntimeWakeOrdersFn
+	prevWakeMailbox := apiRuntimeWakeMailboxFn
+	prevWakeWarm := apiRuntimeWakeWarmFn
+	prevOrdersExec := apiRuntimeProcessOrdersExecutor
+	prevMailboxExec := apiRuntimeProcessMailboxExecutor
+	prevDegradados := runtimeProcessDegradadosBatchDetailed
+	prevAutonomia := runtimeProcessAutonomiaBatch
+	prevReanimaciones := runtimeProcessReanimationsBatchFn
+	prevOperational := mcpBuildServerOperationalInfoFn
+	prevHygiene := runtimeProcessHygieneBatch
+	defer func() {
+		apiRuntimeWakeOrdersFn = prevWakeOrders
+		apiRuntimeWakeMailboxFn = prevWakeMailbox
+		apiRuntimeWakeWarmFn = prevWakeWarm
+		apiRuntimeProcessOrdersExecutor = prevOrdersExec
+		apiRuntimeProcessMailboxExecutor = prevMailboxExec
+		runtimeProcessDegradadosBatchDetailed = prevDegradados
+		runtimeProcessAutonomiaBatch = prevAutonomia
+		runtimeProcessReanimationsBatchFn = prevReanimaciones
+		mcpBuildServerOperationalInfoFn = prevOperational
+		runtimeProcessHygieneBatch = prevHygiene
+	}()
+
+	runtimeProcessHygieneBatch = func() (int, error) { return 1, nil }
+
+	ordersCalls := 0
+	mailboxCalls := 0
+	degradadosCalls := 0
+	autonomiaCalls := 0
+	reanimacionesCalls := 0
+	apiRuntimeProcessOrdersExecutor = func() (int, error) {
+		ordersCalls++
+		return 0, nil
+	}
+	apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) {
+		mailboxCalls++
+		return 0, nil
+	}
+	runtimeProcessDegradadosBatchDetailed = func() (runtimeProcessDegradadosSummary, error) {
+		degradadosCalls++
+		return runtimeProcessDegradadosSummary{Count: 99}, nil
+	}
+	runtimeProcessAutonomiaBatch = func() (int, error) {
+		autonomiaCalls++
+		return 77, nil
+	}
+	runtimeProcessReanimationsBatchFn = func() apiRuntimeProcessReanimationsResponse {
+		reanimacionesCalls++
+		return apiRuntimeProcessReanimationsResponse{OK: true, Count: 55}
+	}
+	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
+		return serverOperationalInfo{
+			State:            "degraded",
+			Operational:      false,
+			Reason:           "workers_stuck",
+			TasksInProgress:  1,
+			ConnectedWorkers: 2,
+			WorkingWorkers:   1,
+			NextRecoveryPlan: &serverOperationalRecoveryPlan{Kind: "stuck_workers", Action: "inspect_stuck_workers", AutoExecutable: false},
+		}
+	}
+
+	result, err := callMCPTool("orquesta.server.self_heal", nil)
+	if err != nil {
+		t.Fatalf("server self_heal MCP: %v", err)
+	}
+	if result["isError"] != false {
+		t.Fatalf("server self_heal no deberia marcar error en recovery manual: %#v", result)
+	}
+	payload, _ := result["structuredContent"].(apiRuntimeSelfHealResponse)
+	if payload.NextRecoveryPlan == nil || payload.NextRecoveryPlan.Action != "inspect_stuck_workers" {
+		t.Fatalf("next_recovery_plan inesperado: %+v", payload.NextRecoveryPlan)
+	}
+	if degradadosCalls != 0 || autonomiaCalls != 0 || reanimacionesCalls != 0 {
+		t.Fatalf("self_heal no deberia ejecutar mantenimiento pesado en recovery manual: degradados=%d autonomia=%d reanimaciones=%d", degradadosCalls, autonomiaCalls, reanimacionesCalls)
+	}
+	if ordersCalls != 0 || mailboxCalls != 0 {
+		t.Fatalf("self_heal no deberia drenar runtime en recovery manual: orders=%d mailbox=%d", ordersCalls, mailboxCalls)
+	}
+	if !payload.Degradados.OK || !payload.Autonomia.OK || !payload.Reanimaciones.OK {
+		t.Fatalf("self_heal deberia marcar como OK los carriles omitidos en recovery manual: %+v", payload)
+	}
+}
+
 func TestMCPToolServerSelfHealAutoEjecutaCompactionDebt(t *testing.T) {
 	prevWakeOrders := apiRuntimeWakeOrdersFn
 	prevWakeMailbox := apiRuntimeWakeMailboxFn

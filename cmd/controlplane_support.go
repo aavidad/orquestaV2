@@ -11286,9 +11286,6 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 		return resumen, err
 	}
 	resumen.Count += intervencionBloqueadas
-	if resumen.Count > 0 {
-		invalidateStatusSnapshotCache()
-	}
 	return resumen, nil
 }
 
@@ -13496,6 +13493,15 @@ func procesarWorkerAtascadoAutonomiaRow(row agentesapp.Row, rows []agentesapp.Ro
 						} else if ajena {
 							return 0, nil
 						}
+						if vigente, err := sesionActivaTieneContinuidadDurableVigente(sesion, handle, tareaID); err != nil {
+							return 0, err
+						} else if vigente {
+							return 0, nil
+						}
+						throttleKey := autonomiaContinueNudgeThrottleKey(agente, *proyectoID, tareaID)
+						if !autonomiaContinueNudgeShouldAttempt(agente, *proyectoID, tareaID) {
+							return 0, nil
+						}
 						ok, err := encolarNudgeAutonomiaConInvalidacion(
 							nil,
 							agente,
@@ -13506,10 +13512,16 @@ func procesarWorkerAtascadoAutonomiaRow(row agentesapp.Row, rows []agentesapp.Ro
 							map[string]any{"tarea_id": tareaID, "motivo_autoasignacion": "worker_ready_stale"},
 						)
 						if err != nil {
+							if throttleKey != "" {
+								autonomiaContinueNudgeGate.Forget(throttleKey)
+							}
 							return 0, err
 						}
 						if ok {
 							return 1, nil
+						}
+						if throttleKey != "" {
+							autonomiaContinueNudgeGate.Forget(throttleKey)
 						}
 					}
 				}

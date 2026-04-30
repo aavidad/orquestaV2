@@ -180,6 +180,9 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 			ReactivatedWithoutRuntime: summary.ReactivatedWithoutRuntime,
 			IdleAutoassigned:          summary.IdleAutoassigned,
 		}
+		if summary.Count > 0 {
+			invalidateStatusSnapshotCache()
+		}
 		appendErr("degradados", err)
 	}
 	markPhase("degradados", phaseStart)
@@ -268,6 +271,9 @@ func mcpServerSelfHealCanShortCircuit(info serverOperationalInfo) bool {
 	if mcpServerSelfHealPassiveQuotaWait(info) {
 		return true
 	}
+	if mcpServerSelfHealManualRecoveryOnly(info) {
+		return true
+	}
 	if !info.Operational {
 		return false
 	}
@@ -297,6 +303,17 @@ func mcpServerSelfHealPassiveQuotaWait(info serverOperationalInfo) bool {
 	return false
 }
 
+func mcpServerSelfHealManualRecoveryOnly(info serverOperationalInfo) bool {
+	info = normalizeServerOperationalInfo(info)
+	if info.NextRecoveryPlan == nil {
+		return false
+	}
+	if info.NextRecoveryPlan.AutoExecutable {
+		return false
+	}
+	return strings.TrimSpace(info.NextRecoveryPlan.Action) != ""
+}
+
 func mcpServerSelfHealAutoExecuteCompaction(result *apiRuntimeSelfHealResponse, enabled func(string) bool) error {
 	if result == nil || enabled == nil {
 		return nil
@@ -312,6 +329,9 @@ func mcpServerSelfHealAutoExecuteCompaction(result *apiRuntimeSelfHealResponse, 
 		result.Degradados.GhostAssignmentsCompacted += summary.GhostAssignmentsCompacted
 		result.Degradados.ReactivatedWithoutRuntime += summary.ReactivatedWithoutRuntime
 		result.Degradados.IdleAutoassigned += summary.IdleAutoassigned
+		if summary.Count > 0 {
+			invalidateStatusSnapshotCache()
+		}
 		if err != nil {
 			result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
 			syncMCPServerSelfHealRecovery(result)
