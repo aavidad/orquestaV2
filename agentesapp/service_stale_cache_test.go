@@ -3,6 +3,8 @@ package agentesapp
 import (
 	"testing"
 	"time"
+
+	"orquesta/db"
 )
 
 func TestGetOrBuildCompactDetailDevuelveStaleMientrasRevalida(t *testing.T) {
@@ -135,4 +137,64 @@ func TestGetOrBuildActiveReanimationScheduleDevuelveStaleMientrasRevalida(t *tes
 		time.Sleep(2 * time.Millisecond)
 	}
 	t.Fatal("el refresh de reanimaciones no actualizo la cache")
+}
+
+func TestGetOrBuildCheckpointPanelSummaryDevuelveStaleMientrasRevalida(t *testing.T) {
+	prevTTL := checkpointPanelSummaryCacheTTL
+	prevStale := checkpointPanelSummaryStaleWhileRevalidateTTL
+	checkpointPanelSummaryCacheTTL = 50 * time.Millisecond
+	checkpointPanelSummaryStaleWhileRevalidateTTL = time.Second
+	t.Cleanup(func() {
+		checkpointPanelSummaryCacheTTL = prevTTL
+		checkpointPanelSummaryStaleWhileRevalidateTTL = prevStale
+	})
+
+	svc := NewService(nil, nil)
+	svc.checkpointPanelCache = cachedCheckpointPanelSummary{
+		rows: []*db.RuntimeCheckpointPanelSummary{{
+			Agente: "Codex1",
+			Total:  1,
+			Last:   &db.RuntimeCheckpoint{ID: 1, Agente: "Codex1"},
+		}},
+		expires: time.Now().UTC().Add(-50 * time.Millisecond),
+	}
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	fresh := []*db.RuntimeCheckpointPanelSummary{{
+		Agente: "Codex1",
+		Total:  2,
+		Last:   &db.RuntimeCheckpoint{ID: 2, Agente: "Codex1"},
+	}}
+
+	rows, err := svc.getOrBuildCheckpointPanelSummary(func() ([]*db.RuntimeCheckpointPanelSummary, error) {
+		close(started)
+		<-release
+		return fresh, nil
+	})
+	if err != nil {
+		t.Fatalf("getOrBuildCheckpointPanelSummary: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Total != 1 || rows[0].Last == nil || rows[0].Last.ID != 1 {
+		t.Fatalf("deberia devolver rows stale mientras refresca, got=%+v", rows)
+	}
+	select {
+	case <-started:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("deberia lanzar refresh de checkpoints en background")
+	}
+
+	close(release)
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		svc.cacheMu.Lock()
+		cached := svc.checkpointPanelCache
+		inflight := svc.checkpointPanelFlight != nil
+		svc.cacheMu.Unlock()
+		if !inflight && len(cached.rows) == 1 && cached.rows[0] != nil && cached.rows[0].Total == 2 && cached.rows[0].Last != nil && cached.rows[0].Last.ID == 2 {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatal("el refresh de checkpoint summary no actualizo la cache")
 }

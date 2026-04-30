@@ -83,6 +83,7 @@ type fakeStore struct {
 	budgetCalls                 int
 	governanceCalls             int
 	mailboxCoveredCalls         int
+	summarizeCheckpointCalls    int
 	sharedAccountCalls          int
 	pausedAgent                 string
 	pausedMinutes               int
@@ -1569,6 +1570,7 @@ func (f *fakeStore) ListRuntimeCheckpoints(filter db.FiltroRuntimeCheckpoints) (
 }
 
 func (f *fakeStore) SummarizeRuntimeCheckpointsForPanel() ([]*db.RuntimeCheckpointPanelSummary, error) {
+	f.summarizeCheckpointCalls++
 	byAgent := map[string]*db.RuntimeCheckpointPanelSummary{}
 	for _, item := range f.checkpoints {
 		if item == nil || strings.TrimSpace(item.Agente) == "" {
@@ -2302,6 +2304,9 @@ func TestBuildPanelRowsUsaResumenDeCheckpointsEnLugarDeListadoCompleto(t *testin
 	}
 	if store.listRuntimeCheckpointsCalls != 0 {
 		t.Fatalf("BuildPanelRows no debe listar checkpoints completos, calls=%d", store.listRuntimeCheckpointsCalls)
+	}
+	if store.summarizeCheckpointCalls != 1 {
+		t.Fatalf("BuildPanelRows deberia resumir checkpoints una sola vez, calls=%d", store.summarizeCheckpointCalls)
 	}
 }
 

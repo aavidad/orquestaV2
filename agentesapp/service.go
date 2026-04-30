@@ -99,6 +99,8 @@ type Service struct {
 	tickOutputFlight         map[string]*tickOutputFlight
 	tickBudgetPauseCache     map[string]cachedTickBudgetPause
 	accountAvailabilityCache map[string]cachedAccountAvailability
+	checkpointPanelCache     cachedCheckpointPanelSummary
+	checkpointPanelFlight    *checkpointPanelSummaryFlight
 	compactDetailCache       map[string]cachedCompactDetail
 	compactDetailFlight      map[string]*compactDetailFlight
 	reanimCache              map[string]cachedReanimationSchedule
@@ -110,6 +112,8 @@ const defaultWorkerOutputStaleSeconds = 20 * 60
 var compactDetailCacheTTL = 2 * time.Second
 var compactDetailStaleWhileRevalidateTTL = 15 * time.Second
 var compactAccountAvailabilityCacheTTL = 15 * time.Second
+var checkpointPanelSummaryCacheTTL = 10 * time.Second
+var checkpointPanelSummaryStaleWhileRevalidateTTL = 30 * time.Second
 var activeReanimationScheduleCacheTTL = 2 * time.Second
 var activeReanimationScheduleStaleWhileRevalidateTTL = 15 * time.Second
 
@@ -245,6 +249,11 @@ type cachedAccountAvailability struct {
 	expires    time.Time
 }
 
+type cachedCheckpointPanelSummary struct {
+	rows    []*db.RuntimeCheckpointPanelSummary
+	expires time.Time
+}
+
 type cachedPrepareAgent struct {
 	agent   *db.Agente
 	expires time.Time
@@ -345,6 +354,12 @@ type compactDetailFlight struct {
 	done   chan struct{}
 	detail *Detail
 	err    error
+}
+
+type checkpointPanelSummaryFlight struct {
+	done chan struct{}
+	rows []*db.RuntimeCheckpointPanelSummary
+	err  error
 }
 
 type cachedReanimationSchedule struct {
@@ -791,7 +806,9 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		return nil, err
 	}
 	phaseStart = time.Now()
-	checkpointSummary, err := s.store.SummarizeRuntimeCheckpointsForPanel()
+	checkpointSummary, err := s.getOrBuildCheckpointPanelSummary(func() ([]*db.RuntimeCheckpointPanelSummary, error) {
+		return s.store.SummarizeRuntimeCheckpointsForPanel()
+	})
 	markPhase("checkpoints", phaseStart)
 	if err != nil {
 		return nil, err
@@ -3389,6 +3406,26 @@ func cloneReanimationCandidates(rows []ReanimationCandidate) []ReanimationCandid
 	return out
 }
 
+func cloneCheckpointPanelSummaryRows(rows []*db.RuntimeCheckpointPanelSummary) []*db.RuntimeCheckpointPanelSummary {
+	if len(rows) == 0 {
+		return nil
+	}
+	out := make([]*db.RuntimeCheckpointPanelSummary, 0, len(rows))
+	for _, item := range rows {
+		if item == nil {
+			out = append(out, nil)
+			continue
+		}
+		clone := *item
+		if item.Last != nil {
+			cp := *item.Last
+			clone.Last = &cp
+		}
+		out = append(out, &clone)
+	}
+	return out
+}
+
 func (s *Service) getOrBuildCompactDetail(nombre string, fn func() (*Detail, error)) (*Detail, error) {
 	now := time.Now().UTC()
 	s.cacheMu.Lock()
@@ -3457,6 +3494,40 @@ func (s *Service) getOrBuildActiveReanimationSchedule(key string, fn func() ([]R
 	return s.runActiveReanimationScheduleRefresh(key, flight, fn)
 }
 
+func (s *Service) getOrBuildCheckpointPanelSummary(fn func() ([]*db.RuntimeCheckpointPanelSummary, error)) ([]*db.RuntimeCheckpointPanelSummary, error) {
+	now := time.Now().UTC()
+	s.cacheMu.Lock()
+	cached := s.checkpointPanelCache
+	if len(cached.rows) > 0 && now.Before(cached.expires) {
+		rows := cloneCheckpointPanelSummaryRows(cached.rows)
+		s.cacheMu.Unlock()
+		return rows, nil
+	}
+	if flight := s.checkpointPanelFlight; flight != nil {
+		if len(cached.rows) > 0 && staleCacheStillUsable(now, cached.expires, checkpointPanelSummaryStaleWhileRevalidateTTL) {
+			rows := cloneCheckpointPanelSummaryRows(cached.rows)
+			s.cacheMu.Unlock()
+			return rows, nil
+		}
+		done := flight.done
+		s.cacheMu.Unlock()
+		<-done
+		return cloneCheckpointPanelSummaryRows(flight.rows), flight.err
+	}
+	if len(cached.rows) > 0 && staleCacheStillUsable(now, cached.expires, checkpointPanelSummaryStaleWhileRevalidateTTL) {
+		flight := &checkpointPanelSummaryFlight{done: make(chan struct{})}
+		s.checkpointPanelFlight = flight
+		rows := cloneCheckpointPanelSummaryRows(cached.rows)
+		s.cacheMu.Unlock()
+		go s.refreshCheckpointPanelSummary(flight, fn)
+		return rows, nil
+	}
+	flight := &checkpointPanelSummaryFlight{done: make(chan struct{})}
+	s.checkpointPanelFlight = flight
+	s.cacheMu.Unlock()
+	return s.runCheckpointPanelSummaryRefresh(flight, fn)
+}
+
 func staleCacheStillUsable(now, expires time.Time, grace time.Duration) bool {
 	if grace <= 0 || expires.IsZero() {
 		return false
@@ -3490,6 +3561,10 @@ func (s *Service) refreshActiveReanimationSchedule(key string, flight *reanimati
 	_, _ = s.runActiveReanimationScheduleRefresh(key, flight, fn)
 }
 
+func (s *Service) refreshCheckpointPanelSummary(flight *checkpointPanelSummaryFlight, fn func() ([]*db.RuntimeCheckpointPanelSummary, error)) {
+	_, _ = s.runCheckpointPanelSummaryRefresh(flight, fn)
+}
+
 func (s *Service) runActiveReanimationScheduleRefresh(key string, flight *reanimationScheduleFlight, fn func() ([]ReanimationCandidate, error)) ([]ReanimationCandidate, error) {
 	rows, err := fn()
 
@@ -3506,6 +3581,24 @@ func (s *Service) runActiveReanimationScheduleRefresh(key string, flight *reanim
 	close(flight.done)
 	s.cacheMu.Unlock()
 	return cloneReanimationCandidates(rows), err
+}
+
+func (s *Service) runCheckpointPanelSummaryRefresh(flight *checkpointPanelSummaryFlight, fn func() ([]*db.RuntimeCheckpointPanelSummary, error)) ([]*db.RuntimeCheckpointPanelSummary, error) {
+	rows, err := fn()
+
+	s.cacheMu.Lock()
+	if err == nil {
+		s.checkpointPanelCache = cachedCheckpointPanelSummary{
+			rows:    cloneCheckpointPanelSummaryRows(rows),
+			expires: time.Now().UTC().Add(checkpointPanelSummaryCacheTTL),
+		}
+	}
+	flight.rows = cloneCheckpointPanelSummaryRows(rows)
+	flight.err = err
+	s.checkpointPanelFlight = nil
+	close(flight.done)
+	s.cacheMu.Unlock()
+	return cloneCheckpointPanelSummaryRows(rows), err
 }
 
 func (s *Service) currentOrLastSessionForAgent(nombre string) (*db.Sesion, error) {

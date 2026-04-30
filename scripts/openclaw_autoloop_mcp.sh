@@ -4,6 +4,8 @@ set -euo pipefail
 MCP_URL="${ORQUESTA_MCP_URL:-http://127.0.0.1:16543/api/mcp}"
 SUPERVISOR="${SUPERVISOR:-OpenClaw}"
 OUTER_SLEEP="${OUTER_SLEEP:-20}"
+IDLE_SLEEP="${IDLE_SLEEP:-60}"
+QUIET_SLEEP="${QUIET_SLEEP:-90}"
 EXIT_ON_COMPLETE="${EXIT_ON_COMPLETE:-true}"
 LOG_FILE="${LOG_FILE:-/tmp/orquesta-openclaw-autoloop.log}"
 MAX_SAFE_ACTIONS_PER_TICK="${MAX_SAFE_ACTIONS_PER_TICK:-1}"
@@ -87,8 +89,6 @@ while true; do
     sleep "${OUTER_SLEEP}"
     continue
   fi
-  printf '%s operator %s\n' "$timestamp" "$operator_response" >> "$LOG_FILE"
-
   mapfile -t summary < <(python3 - "$operator_response" <<'PY'
 import json, sys
 resp = json.loads(sys.argv[1])
@@ -97,6 +97,7 @@ payload = result.get("structuredContent", {}) or {}
 server = payload.get("server_operational") or {}
 plan = payload.get("next_recovery_plan") or {}
 next_safe = payload.get("next_safe_action") or {}
+next_action = payload.get("next_action") or {}
 queue = payload.get("queue_summary") or {}
 print("state=" + str(server.get("state", "")))
 print("reason=" + str(server.get("reason", "")))
@@ -107,10 +108,13 @@ print("compaction_debt=" + str(server.get("compactionDebtTasks", 0)))
 print("next_recovery_action=" + str(plan.get("action", "")))
 print("next_recovery_auto=" + str(plan.get("autoExecutable", False)).lower())
 print("next_recovery_requires_rearm=" + str(plan.get("requiresRearm", False)).lower())
+print("next_action=" + str(next_action.get("action", "")))
+print("next_action_target=" + str(next_action.get("target", "")))
 print("next_safe_action=" + str(next_safe.get("action", "")))
 print("next_safe_target=" + str(next_safe.get("target", "")))
 print("next_safe_assignee=" + str(next_safe.get("assignee", "")))
 print("safe_queue_total=" + str(queue.get("safe", 0)))
+print("queue_total=" + str(queue.get("total", 0)))
 PY
 )
 
@@ -121,14 +125,16 @@ PY
     kv["$key"]="$value"
   done
 
-  printf '%s operational=%s tasks=%s reserved=%s compaction_debt=%s next_safe=%s safe_queue=%s next_recovery=%s auto=%s rearm=%s state=%s reason=%s\n' \
+  printf '%s operational=%s tasks=%s reserved=%s compaction_debt=%s next_action=%s next_safe=%s safe_queue=%s queue_total=%s next_recovery=%s auto=%s rearm=%s state=%s reason=%s\n' \
     "$timestamp" \
     "${kv[operational]}" \
     "${kv[tasks_active]}" \
     "${kv[tasks_reserved]}" \
     "${kv[compaction_debt]}" \
+    "${kv[next_action]}" \
     "${kv[next_safe_action]}" \
     "${kv[safe_queue_total]}" \
+    "${kv[queue_total]}" \
     "${kv[next_recovery_action]}" \
     "${kv[next_recovery_auto]}" \
     "${kv[next_recovery_requires_rearm]}" \
@@ -294,5 +300,12 @@ PY
   if [[ "${EXIT_ON_COMPLETE}" == "true" && "${kv[operational]}" == "true" && "${kv[tasks_active]}" == "0" && "${kv[tasks_reserved]}" == "0" ]]; then
     break
   fi
-  sleep "${OUTER_SLEEP}"
+  sleep_for="${OUTER_SLEEP}"
+  if [[ "${kv[operational]}" == "true" && "${kv[next_recovery_action]}" == "" && "${kv[safe_queue_total]}" == "0" ]]; then
+    sleep_for="${IDLE_SLEEP}"
+    if [[ "${kv[next_action]}" == "" ]]; then
+      sleep_for="${QUIET_SLEEP}"
+    fi
+  fi
+  sleep "${sleep_for}"
 done
