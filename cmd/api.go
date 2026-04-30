@@ -2877,17 +2877,91 @@ func buildOpenClawBaseStatus() *estadoResumen {
 func resolveOpenClawAPIStatus() apiStatusResponse {
 	status, err := fetchStatusForAPIAllowDirectFallback(250*time.Millisecond, statusFastTimeout)
 	if err == nil {
-		return status
+		return reconcileOpenClawAPIStatus(status)
 	}
 	if cached, ok := readStatusSnapshotAny(); ok {
 		reconcileStatusSnapshotWithFreshPanel(&cached)
 		ensureStatusRefreshAsync()
-		return cached
+		return reconcileOpenClawAPIStatus(cached)
 	}
 	return degradedAPIStatusResponse()
 }
 
+func reconcileOpenClawAPIStatus(status apiStatusResponse) apiStatusResponse {
+	tareasActivas := normalizarTareasLiteVisibles(status.TareasActivas)
+	tareasEnProgreso := filtrarOpenClawTareasPorEstado(status.TareasEnProgreso, db.TareaEnProgreso)
+	if len(tareasEnProgreso) == 0 {
+		tareasEnProgreso = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaEnProgreso)
+	}
+	tareasReservadas := filtrarOpenClawTareasPorEstado(status.TareasReservadas, db.TareaAsignada)
+	if len(tareasReservadas) == 0 {
+		tareasReservadas = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaAsignada)
+	}
+
+	agentesActivos := status.AgentesActivos
+	agentesTrabajando := status.AgentesTrabajando
+	agentesSaturados := status.AgentesSaturados
+	agentesAtascados := status.AgentesAtascados
+	agentesAuthManual := status.AgentesAuthManual
+	agentesQuotaBlocked := status.AgentesQuotaBlocked
+	autonomia := status.Autonomia
+	if autonomia.ByKind == nil {
+		autonomia.ByKind = map[string]int{}
+	}
+
+	if len(status.Agentes) > 0 {
+		if rows, ok := readAgentPanelSnapshotFresh(); ok {
+			tareasActivas = reconciliarTareasActivasConPanelRows(tareasActivas, rows)
+			tareasEnProgreso = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaEnProgreso)
+			tareasReservadas = filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaAsignada)
+			status.TareasPorEstado = reconciliarConteoTareasActivasVisible(status.TareasPorEstado, tareasActivas)
+			status.ConteoTareas = status.TareasPorEstado
+			status.ResumenTareas = status.TareasPorEstado
+			if activos, trabajando, saturados, atascados, authManual, quotaBlocked, ok := agentesVisiblesPorEstadoOperativoRows(status.Agentes, rows); ok {
+				activos, trabajando, saturados = normalizarAgentesVisiblesStatus(activos, trabajando, saturados)
+				agentesActivos = activos
+				agentesTrabajando = trabajando
+				agentesSaturados = saturados
+				agentesAtascados = atascados
+				agentesAuthManual = authManual
+				agentesQuotaBlocked = quotaBlocked
+				autonomia = resumirAutonomiaRows(rows, time.Now().UTC())
+				if autonomia.ByKind == nil {
+					autonomia.ByKind = map[string]int{}
+				}
+			}
+		} else if len(agentesActivos) == 0 || len(agentesTrabajando) == 0 {
+			if activos, trabajando, _ := agentesVisiblesLigero(status.Agentes, tareasEnProgreso); len(activos) > 0 || len(trabajando) > 0 {
+				activos, trabajando, _ = normalizarAgentesVisiblesStatus(activos, trabajando, nil)
+				if len(agentesActivos) == 0 {
+					agentesActivos = activos
+				}
+				if len(agentesTrabajando) == 0 {
+					agentesTrabajando = trabajando
+				}
+			}
+		}
+	}
+
+	workersConectados, workersTrabajando, supervisoresActivos := statusVisibleWorkerCounters(agentesActivos, agentesTrabajando, autonomia)
+	status.TareasActivas = tareasActivas
+	status.TareasEnProgreso = tareasEnProgreso
+	status.TareasReservadas = tareasReservadas
+	status.AgentesActivos = agentesActivos
+	status.AgentesTrabajando = agentesTrabajando
+	status.AgentesSaturados = agentesSaturados
+	status.AgentesAtascados = agentesAtascados
+	status.AgentesAuthManual = agentesAuthManual
+	status.AgentesQuotaBlocked = agentesQuotaBlocked
+	status.Autonomia = autonomia
+	status.WorkersConectados = workersConectados
+	status.WorkersTrabajando = workersTrabajando
+	status.SupervisoresActivos = supervisoresActivos
+	return status
+}
+
 func buildOpenClawBaseStatusFromAPIStatus(status apiStatusResponse) *estadoResumen {
+	status = reconcileOpenClawAPIStatus(status)
 	generado := strings.TrimSpace(status.Generado)
 	if generado == "" {
 		generado = time.Now().UTC().Format(time.RFC3339)
@@ -3125,12 +3199,23 @@ func buildOpenClawOperatorStatusBase(status *estadoResumen, rows []agentesapp.Ro
 	if status == nil {
 		return apiOpenClawStatusLite{MailboxPendiente: []apiOpenClawMailboxLite{}}
 	}
+	agentesActivos := status.AgentesActivos
+	agentesTrabajando := status.AgentesTrabajando
+	agentesSaturados := status.AgentesSaturados
+	if len(status.Agentes) > 0 && len(rows) > 0 {
+		if activos, trabajando, saturados, _, _, _, ok := agentesVisiblesPorEstadoOperativoRows(status.Agentes, rows); ok {
+			activos, trabajando, saturados = normalizarAgentesVisiblesStatus(activos, trabajando, saturados)
+			agentesActivos = activos
+			agentesTrabajando = trabajando
+			agentesSaturados = saturados
+		}
+	}
 	return apiOpenClawStatusLite{
 		Generado:            status.Generado,
 		TareasPorEstado:     status.TareasPorEstado,
 		DeudaDispatch:       status.DeudaDispatch,
-		AgentesActivos:      compactOpenClawAgents(status.AgentesActivos, status.TareasActivas, rows),
-		AgentesTrabajando:   compactOpenClawAgents(status.AgentesTrabajando, status.TareasActivas, rows),
+		AgentesActivos:      compactOpenClawAgents(agentesActivos, status.TareasActivas, rows),
+		AgentesTrabajando:   compactOpenClawAgents(agentesTrabajando, status.TareasActivas, rows),
 		AgentesAuthManual:   compactOpenClawAgents(status.AgentesAuthManual, status.TareasActivas, rows),
 		AgentesQuotaBlocked: compactOpenClawAgents(status.AgentesQuotaBlocked, status.TareasActivas, rows),
 		EnCuota:             compactOpenClawAgents(agentesBloqueadosPorCuotaVisibles(status), status.TareasActivas, rows),
@@ -3139,8 +3224,8 @@ func buildOpenClawOperatorStatusBase(status *estadoResumen, rows []agentesapp.Ro
 		TareasActivas:       filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso),
 		TareasReservadas:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
 		PropuestasAbiertas:  status.PropuestasAbiertas,
-		CapacitySummary:     buildOpenClawCapacitySummary(status.AgentesActivos, status.AgentesTrabajando, status.TareasActivas, status.TareasPorEstado),
-		AgentesSaturados:    buildOpenClawSaturatedAgents(status.AgentesActivos, status.TareasActivas, rows),
+		CapacitySummary:     buildOpenClawCapacitySummary(agentesActivos, agentesTrabajando, status.TareasActivas, status.TareasPorEstado),
+		AgentesSaturados:    compactOpenClawAgents(agentesSaturados, status.TareasActivas, rows),
 	}
 }
 

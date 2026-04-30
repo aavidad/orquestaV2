@@ -113,6 +113,9 @@ func buildOpenClawOperatorSnapshotCore(supervisor string, apiStatus apiStatusRes
 	mailboxPendiente, mailboxKnown := openClawPendingMailboxFromReviewSnapshot(revision)
 
 	var panelRows []agentesapp.Row
+	if rows, ok := readAgentPanelSnapshotFresh(); ok {
+		panelRows = rows
+	}
 	if rows, err := runAPITimeboxed(200*time.Millisecond, func() ([]agentesapp.Row, error) {
 		return fetchAgentPanelRowsCached(150 * time.Millisecond)
 	}, errStatusFetchTimeout); err == nil {

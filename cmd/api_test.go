@@ -1979,6 +1979,157 @@ func TestBuildOpenClawBaseStatusFromAPIStatusReparaVisiblesSiFaltan(t *testing.T
 	}
 }
 
+func TestBuildOpenClawBaseStatusFromAPIStatusReconcilaReservaSinContarTrabajando(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "Codex2"},
+			EstadoOperativo: "trabajando",
+			DetalleOperativo:"worker ready",
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 4, Title: "Reserva", State: db.TareaAsignada},
+			OpenTasks:       0,
+			BlockedTasks:    0,
+		},
+		{
+			Agente:          &db.Agente{Nombre: "Codex1"},
+			EstadoOperativo: "trabajando",
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 40, Title: "Frente activo", State: db.TareaEnProgreso},
+			OpenTasks:       1,
+		},
+	}, now)
+
+	status := apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex2", Activo: true, Habilitado: true, EstadoSesion: "disponible", EstadoCuota: "activo"},
+			{Nombre: "Codex1", Activo: true, Habilitado: true, EstadoSesion: "disponible", EstadoCuota: "activo"},
+		},
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex2", Activo: true},
+			{Nombre: "Codex1", Activo: true},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex2", Activo: true},
+			{Nombre: "Codex1", Activo: true},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex1"},
+			{ID: 4, Estado: db.TareaAsignada, Agente: "Codex2"},
+		},
+		TareasPorEstado: map[string]int{string(db.TareaEnProgreso): 1, string(db.TareaAsignada): 1},
+		Generado:        now.Format(time.RFC3339),
+	}
+
+	resumen := buildOpenClawBaseStatusFromAPIStatus(status)
+	if resumen == nil {
+		t.Fatal("resumen openclaw vacio")
+	}
+	if len(resumen.AgentesTrabajando) != 1 || resumen.AgentesTrabajando[0].Nombre != "Codex1" {
+		t.Fatalf("agentes trabajando reconciliados inesperados: %+v", resumen.AgentesTrabajando)
+	}
+	if len(resumen.TareasReservadas) != 1 || resumen.TareasReservadas[0].ID != 4 {
+		t.Fatalf("tareas reservadas inesperadas: %+v", resumen.TareasReservadas)
+	}
+}
+
+func TestBuildOpenClawOperatorStatusBasePrefiereRowsParaTrabajandoCanonico(t *testing.T) {
+	status := &estadoResumen{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex2", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+			{Nombre: "Codex1", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex2", Activo: true},
+			{Nombre: "Codex1", Activo: true},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex2", Activo: true},
+			{Nombre: "Codex1", Activo: true},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex1"},
+			{ID: 4, Estado: db.TareaAsignada, Agente: "Codex2"},
+		},
+		TareasPorEstado: map[string]int{string(db.TareaEnProgreso): 1, string(db.TareaAsignada): 1},
+	}
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "Codex2"},
+			EstadoOperativo: "trabajando",
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 4, State: db.TareaAsignada},
+		},
+		{
+			Agente:          &db.Agente{Nombre: "Codex1"},
+			EstadoOperativo: "trabajando",
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 40, State: db.TareaEnProgreso},
+			OpenTasks:       1,
+		},
+	}
+
+	resumen := buildOpenClawOperatorStatusBase(status, rows)
+	if len(resumen.AgentesTrabajando) != 1 || resumen.AgentesTrabajando[0].Nombre != "Codex1" {
+		t.Fatalf("openclaw operator status base deberia preferir rows canonicas: %+v", resumen.AgentesTrabajando)
+	}
+}
+
+func TestResolveOpenClawAPIStatusReconcilaVisiblesConPanelFresco(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	resetStatusSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "Codex2"},
+			EstadoOperativo: "trabajando",
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 4, State: db.TareaAsignada},
+		},
+		{
+			Agente:          &db.Agente{Nombre: "Codex1"},
+			EstadoOperativo: "trabajando",
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 40, State: db.TareaEnProgreso},
+			OpenTasks:       1,
+		},
+	}, now)
+
+	prevFast := statusFastFetcher
+	prevUltra := apiStatusUltraLiteFetcher
+	t.Cleanup(func() {
+		statusFastFetcher = prevFast
+		apiStatusUltraLiteFetcher = prevUltra
+	})
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{
+			Agentes: []*db.Agente{
+				{Nombre: "Codex2", Activo: true, Habilitado: true, EstadoSesion: "disponible", EstadoCuota: "activo"},
+				{Nombre: "Codex1", Activo: true, Habilitado: true, EstadoSesion: "disponible", EstadoCuota: "activo"},
+			},
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex2", Activo: true},
+				{Nombre: "Codex1", Activo: true},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex2", Activo: true},
+				{Nombre: "Codex1", Activo: true},
+			},
+			TareasActivas: []tareaLite{
+				{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex1"},
+				{ID: 4, Estado: db.TareaAsignada, Agente: "Codex2"},
+			},
+			TareasPorEstado: map[string]int{string(db.TareaEnProgreso): 1, string(db.TareaAsignada): 1},
+			Generado:        now.Format(time.RFC3339),
+		}, nil
+	}
+	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) { return apiStatusResponse{}, false }
+
+	status := resolveOpenClawAPIStatus()
+	if len(status.AgentesTrabajando) != 1 || status.AgentesTrabajando[0].Nombre != "Codex1" {
+		t.Fatalf("resolveOpenClawAPIStatus deberia reconciliar panel fresco: %+v", status.AgentesTrabajando)
+	}
+}
+
 func TestAPIServerOperationalPrefiereFallbackAntesQueBuilderLento(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()
