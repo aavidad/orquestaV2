@@ -6554,8 +6554,8 @@ func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mail
 		})
 	}
 	actions = append(actions, buildSupervisorAutonomyActions(status.Autonomia.Recent)...)
+	actions = supervisorApplyLiveProgressToAutonomyActions(actions, status)
 	if !fast {
-		actions = supervisorApplyLiveProgressToAutonomyActions(actions, status)
 		sortSupervisorRecommendedActions(actions)
 		return actions
 	}
@@ -6568,7 +6568,7 @@ func supervisorApplyLiveProgressToAutonomyActions(actions []supervisorRecommende
 		return actions
 	}
 	rows, err := supervisorPanelRowsBuilder()
-	if err != nil || len(rows) == 0 {
+	if err != nil {
 		return actions
 	}
 	now := time.Now().UTC()
