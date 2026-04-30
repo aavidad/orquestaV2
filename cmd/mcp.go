@@ -6486,7 +6486,7 @@ func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mail
 			})
 		}
 	}
-	if len(idle) == 0 && len(status.AgentesActivos) > 0 {
+	if len(idle) == 0 && len(status.AgentesActivos) > 0 && countReservedTasks(status) == 0 {
 		assignee := preferredSupervisorWorker(status)
 		target := "backlog:libre"
 		reason := "Hay backlog libre y workers conectados, pero ninguno ocioso; conviene reservar el siguiente frente sin arrancarlo aún."
@@ -7546,6 +7546,23 @@ func countLibreTasks(status apiStatusResponse) int {
 	}
 	if status.TareasPorEstado != nil {
 		if n, ok := status.TareasPorEstado[string(db.TareaLibre)]; ok {
+			return n
+		}
+	}
+	return 0
+}
+
+func countReservedTasks(status apiStatusResponse) int {
+	if len(status.TareasReservadas) > 0 {
+		return len(status.TareasReservadas)
+	}
+	if status.ResumenTareas != nil {
+		if n, ok := status.ResumenTareas[string(db.TareaAsignada)]; ok {
+			return n
+		}
+	}
+	if status.TareasPorEstado != nil {
+		if n, ok := status.TareasPorEstado[string(db.TareaAsignada)]; ok {
 			return n
 		}
 	}
