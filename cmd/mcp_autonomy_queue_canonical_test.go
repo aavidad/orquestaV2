@@ -101,7 +101,7 @@ func TestBuildSupervisorOperationalActionsConsultaOverviewCanonicoSiElPanelNoTra
 		}
 		return &agentesapp.Detail{Row: agentesapp.Row{
 			Agente:          &db.Agente{Nombre: "Codex10"},
-			EstadoOperativo: "sin_tarea",
+			EstadoOperativo: "desconocido",
 		}}, nil
 	}
 	now := time.Now().UTC()

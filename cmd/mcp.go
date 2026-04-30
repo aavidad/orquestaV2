@@ -6440,6 +6440,9 @@ var supervisorPanelRowsBuilder = buildPanelRowsForControlPlane
 var supervisorAgentDetailBuilder = func(agent string) (*agentesapp.Detail, error) {
 	return agentesService.BuildDetailCompact(agent)
 }
+var supervisorActionSnapshotBuilder = func(supervisor string) (map[string]any, error) {
+	return buildMCPOpenClawOperatorSnapshot(supervisor, false)
+}
 
 var supervisorSemanticProgressRecentThreshold = 5 * time.Minute
 
@@ -6742,7 +6745,7 @@ func supervisorAutonomyActionResolvedByCanonicalRow(action supervisorRecommended
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(row.EstadoOperativo)) {
-	case "sin_tarea", "retirado":
+	case "sin_tarea", "retirado", "desconocido":
 	default:
 		return false
 	}
@@ -8085,7 +8088,14 @@ func cloneSupervisorSnapshotMap(snapshot map[string]any) map[string]any {
 
 func buildSupervisorActionSnapshot(supervisor string) (map[string]any, error) {
 	supervisor = resolveSupervisorName(supervisor)
-	snapshot, err := buildSupervisorRevisionReadSnapshot(supervisor)
+	var snapshot map[string]any
+	var err error
+	if supervisorActionSnapshotBuilder != nil {
+		snapshot, err = supervisorActionSnapshotBuilder(supervisor)
+	}
+	if err != nil || snapshot == nil {
+		snapshot, err = buildSupervisorRevisionReadSnapshot(supervisor)
+	}
 	if err != nil {
 		return nil, err
 	}
