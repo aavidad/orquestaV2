@@ -112,3 +112,92 @@ func TestProcesarIntervencionTareasBloqueadasDegradadasBatchReasignaBloqueadoHue
 		t.Fatalf("deberia encolar handoff o continuidad para el relevo")
 	}
 }
+
+func TestProcesarIntervencionTareasBloqueadasDegradadasBatchUsaIdleSinTareaComoRelevo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-bloqueado-idle",
+		Nombre:  "Orquestador Bloqueado Idle",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"CodexBloq", "CodexIdle"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente bloqueado"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente bloqueado para idle",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexBloq"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexBloq"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "orquesta", "Agente CodexBloq en estado bloqueado: runtime stale sin worker"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	actual, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea bloqueada: %v", err)
+	}
+	now := time.Now().UTC()
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexBloq", Rol: "programador"},
+			Asignacion:      &db.Asignacion{Agente: "CodexBloq", ProyectoID: proyectoID, ProyectoSlug: "orquestador-bloqueado-idle", Estado: db.AsignacionActiva},
+			EstadoOperativo: "bloqueado",
+			BlockedTasks:    1,
+			OpenTasks:       0,
+			WorkerAlive:     false,
+		},
+		{
+			Agente:          &db.Agente{Nombre: "CodexIdle", Rol: "programador"},
+			Asignacion:      &db.Asignacion{Agente: "CodexIdle", ProyectoID: proyectoID, ProyectoSlug: "orquestador-bloqueado-idle", Estado: db.AsignacionActiva},
+			EstadoOperativo: "sin_tarea",
+			OpenTasks:       0,
+			BlockedTasks:    0,
+			WorkerAlive:     false,
+		},
+	}
+	tareasBloqueadas := map[string][]*db.Tarea{
+		"CodexBloq": {actual},
+	}
+	bloqueos := map[int64]db.ResumenBloqueo{
+		tareaID: {ID: tareaID, Agente: "CodexBloq", Motivo: "Agente CodexBloq en estado bloqueado: runtime stale sin worker"},
+	}
+
+	procesadas, err := procesarIntervencionTareasBloqueadasDegradadasBatch(rows, tareasBloqueadas, bloqueos, openTasksProjectedFromRows(rows), now)
+	if err != nil {
+		t.Fatalf("procesarIntervencionTareasBloqueadasDegradadasBatch: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia usar un idle sin_tarea como relevo, got=%d", procesadas)
+	}
+
+	reasignada, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea reasignada: %v", err)
+	}
+	if reasignada == nil || reasignada.Agente == nil || *reasignada.Agente != "CodexIdle" {
+		t.Fatalf("la tarea deberia quedar reasignada a CodexIdle: %+v", reasignada)
+	}
+}

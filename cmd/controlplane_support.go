@@ -15085,7 +15085,16 @@ func seleccionarRelevoAutonomiaConTechoConSignal(rows []agentesapp.Row, openTask
 		if ceilingFn != nil {
 			candidateCeiling = ceilingFn(row, now)
 		}
-		if estado != "disponible" && !(candidateCeiling > 0 && estado == "trabajando") {
+		allowIdleLaunchCandidate := tarea != nil &&
+			tarea.Estado == db.TareaBloqueada &&
+			estado == "sin_tarea" &&
+			openTasksProjected[agente] == 0 &&
+			row.OpenTasks == 0 &&
+			row.BlockedTasks == 0 &&
+			row.OrdersOpen == 0 &&
+			!row.WorkerAlive &&
+			!row.WorkerFresh(now)
+		if estado != "disponible" && !(candidateCeiling > 0 && estado == "trabajando") && !allowIdleLaunchCandidate {
 			continue
 		}
 		if row.OrdersOpen > 0 {
@@ -15144,11 +15153,15 @@ func seleccionarRelevoAutonomiaConTechoConSignal(rows []agentesapp.Row, openTask
 			}
 			continue
 		}
+		estadoRank := 0
+		if allowIdleLaunchCandidate {
+			estadoRank = 1
+		}
 		candidates = append(candidates, candidate{
 			agente:          agente,
 			mismoProyecto:   mismoProyecto,
 			criticalProject: rowTargetsCriticalProject(row, criticalProject),
-			estadoRank:      0,
+			estadoRank:      estadoRank,
 			costTier:        relevoAutonomiaCostTier(agente),
 			openTasks:       openTasks,
 		})
