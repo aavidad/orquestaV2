@@ -268,6 +268,12 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if _, ok := operatorJSON["server_operational"]; !ok {
 		t.Fatalf("openclaw operator sin server_operational: %s", recOperator.Body.String())
 	}
+	if _, ok := operatorJSON["runtime_health"]; !ok {
+		t.Fatalf("openclaw operator sin runtime_health: %s", recOperator.Body.String())
+	}
+	if _, ok := operatorJSON["hot_paths"]; !ok {
+		t.Fatalf("openclaw operator sin hot_paths: %s", recOperator.Body.String())
+	}
 	if summary, ok := operatorJSON["server_operational_summary"].(string); !ok || strings.TrimSpace(summary) == "" {
 		t.Fatalf("openclaw operator sin server_operational_summary: %s", recOperator.Body.String())
 	}

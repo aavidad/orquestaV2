@@ -38,15 +38,22 @@ func mcpOpenClawOperatorTool() mcpTool {
 func buildOpenClawOperatorSnapshotFallback(supervisor string, apiStatus apiStatusResponse) map[string]any {
 	status := buildOpenClawBaseStatusFromAPIStatus(apiStatus)
 	statusResumen := buildOpenClawOperatorStatusBase(status, nil)
+	if summary, err := buildOpenClawOperatorStatusWithRows(status, nil); err == nil {
+		statusResumen = summary
+	}
 	operationalInfo := buildOpenClawOperationalInfoWithStatus(apiStatus)
+	runtimeHealth := buildServerRuntimeHealth()
 	actionQueue, safeActionQueue, nextAction, nextSafeAction := fillOpenClawOperationalQueuesFromStatusFallback(apiStatus, operationalInfo, statusResumen.MailboxPendiente, nil, nil, nil, nil)
 	nextRecoveryAction := buildOpenClawNextRecoveryAction(operationalInfo)
 	nextRecoveryPlan := operationalInfo.NextRecoveryPlan
 	queueSummary := buildOpenClawQueueSummaryFromActions(actionQueue, safeActionQueue)
+	sessionCandidates := buildOpenClawSessionCandidatesFromLite(statusResumen.AgentesActivos)
 	return map[string]any{
 		"status":                     statusResumen,
 		"server_operational":         operationalInfo,
 		"server_operational_summary": buildOpenClawOperationalSummary(operationalInfo),
+		"runtime_health":             runtimeHealth,
+		"hot_paths":                  runtimeHealth.HotPaths,
 		"agentesActivos":             statusResumen.AgentesActivos,
 		"agentesTrabajando":          statusResumen.AgentesTrabajando,
 		"agentesAuthManual":          statusResumen.AgentesAuthManual,
@@ -74,7 +81,7 @@ func buildOpenClawOperatorSnapshotFallback(supervisor string, apiStatus apiStatu
 		"subagentes":                 []map[string]any{},
 		"subagent_store":             supervisorSubagentStoreSummary{},
 		"subagent_profiles":          []db.SupervisorSubagentToolProfile{},
-		"session_candidates":         []apiOpenClawSessionCandidate{},
+		"session_candidates":         sessionCandidates,
 		"worktree_drift":             []apiOpenClawWorktreeDrift{},
 		"pipeline_state":             map[string]any{},
 		"pipeline_followup":          map[string]any{},
@@ -111,6 +118,7 @@ func buildOpenClawOperatorSnapshotCore(supervisor string, apiStatus apiStatusRes
 	status := buildOpenClawBaseStatusFromAPIStatus(apiStatus)
 	revision := openClawOperatorReviewSnapshotBuilder(supervisor, apiStatus)
 	mailboxPendiente, mailboxKnown := openClawPendingMailboxFromReviewSnapshot(revision)
+	runtimeHealth := buildServerRuntimeHealth()
 
 	var panelRows []agentesapp.Row
 	if rows, ok := readAgentPanelSnapshotFresh(); ok {
@@ -155,6 +163,9 @@ func buildOpenClawOperatorSnapshotCore(supervisor string, apiStatus apiStatusRes
 	nextRecoveryPlan := operationalInfo.NextRecoveryPlan
 	queueSummary := buildOpenClawQueueSummaryFromActions(actionQueue, safeActionQueue)
 	sessionCandidates := alignOpenClawSessionCandidatesWithStatus(buildOpenClawSessionCandidates(threads), status.AgentesActivos)
+	if len(sessionCandidates) == 0 {
+		sessionCandidates = buildOpenClawSessionCandidatesFromLite(statusResumen.AgentesActivos)
+	}
 
 	estadoNotifs := notificaciones.EstadoNotificaciones{}
 	if estado, err := runAPITimeboxed(100*time.Millisecond, func() (notificaciones.EstadoNotificaciones, error) {
@@ -173,6 +184,8 @@ func buildOpenClawOperatorSnapshotCore(supervisor string, apiStatus apiStatusRes
 		"status":                     statusResumen,
 		"server_operational":         operationalInfo,
 		"server_operational_summary": buildOpenClawOperationalSummary(operationalInfo),
+		"runtime_health":             runtimeHealth,
+		"hot_paths":                  runtimeHealth.HotPaths,
 		"agentesActivos":             statusResumen.AgentesActivos,
 		"agentesTrabajando":          statusResumen.AgentesTrabajando,
 		"agentesAuthManual":          statusResumen.AgentesAuthManual,

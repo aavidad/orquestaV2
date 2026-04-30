@@ -3279,6 +3279,45 @@ func alignOpenClawSessionCandidatesWithStatus(candidates []apiOpenClawSessionCan
 	return out
 }
 
+func buildOpenClawSessionCandidatesFromActivos(activos []*db.Agente) []apiOpenClawSessionCandidate {
+	if len(activos) == 0 {
+		return nil
+	}
+	out := make([]apiOpenClawSessionCandidate, 0, len(activos))
+	for _, agente := range activos {
+		if agente == nil {
+			continue
+		}
+		nombre := strings.TrimSpace(agente.Nombre)
+		if nombre == "" {
+			continue
+		}
+		out = append(out, apiOpenClawSessionCandidate{
+			Agente: nombre,
+			Activo: true,
+		})
+	}
+	return out
+}
+
+func buildOpenClawSessionCandidatesFromLite(activos []apiOpenClawAgentLite) []apiOpenClawSessionCandidate {
+	if len(activos) == 0 {
+		return nil
+	}
+	out := make([]apiOpenClawSessionCandidate, 0, len(activos))
+	for _, agente := range activos {
+		nombre := strings.TrimSpace(agente.Nombre)
+		if nombre == "" {
+			continue
+		}
+		out = append(out, apiOpenClawSessionCandidate{
+			Agente: nombre,
+			Activo: true,
+		})
+	}
+	return out
+}
+
 func buildOpenClawQueueSummary(review map[string]any) apiOpenClawQueueSummary {
 	return buildOpenClawQueueSummaryFromActions(
 		supervisorActionQueueFromReviewSnapshot(review),
