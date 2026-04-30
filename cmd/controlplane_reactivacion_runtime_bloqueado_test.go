@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/agentesapp"
 	"orquesta/db"
@@ -24,6 +25,9 @@ func TestProcesarReactivacionAgentesSinRuntimeBatchResuelveProyectoDesdeTareaAct
 	})
 	if err != nil {
 		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "reactivacion_automatica"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
 	}
 	tareaID, err := db.CrearTarea(&db.Tarea{
 		Titulo:      "Retomar frente premium sin runtime vivo",
@@ -118,6 +122,15 @@ func TestProcesarReactivacionAgentesSinRuntimeBatchReanimaSupervisorReservadoCon
 	if err := db.ActivarAsignacion("Codex2", proyectoID, "supervision_automatica"); err != nil {
 		t.Fatalf("activar asignacion: %v", err)
 	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "orquesta",
+		ToAgente:    "Codex2",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","texto":"reanudar supervision reservada"}`,
+	}); err != nil {
+		t.Fatalf("mailbox autonomia: %v", err)
+	}
 
 	rows := []agentesapp.Row{{
 		Agente:                   &db.Agente{Nombre: "Codex2", Habilitado: true},
@@ -152,5 +165,39 @@ func TestProcesarReactivacionAgentesSinRuntimeBatchReanimaSupervisorReservadoCon
 	}
 	if !strings.Contains(orders[0].PayloadJSON, `"motivo":"agente_sin_runtime_activo"`) {
 		t.Fatalf("faltaba motivo esperado en payload: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestRowTieneRuntimeOHandleOperativoParaReactivacionToleraSnapshotResidualActivoConContinuidadAccionable(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(1)
+	row := agentesapp.Row{
+		Agente:                   &db.Agente{Nombre: "Codex2", Habilitado: true},
+		Asignacion:               &db.Asignacion{Agente: "Codex2", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva, Nota: "reactivacion_automatica"},
+		EstadoOperativo:          "bloqueado_por_runtime",
+		DetalleOperativo:         "runtime principal stale",
+		WorkerAlive:              true,
+		WorkerState:              "ready",
+		Handle:                   &db.RuntimeHandle{Estado: "activo", Transporte: "tmux", ProyectoID: &proyectoID},
+		Runtime:                  &db.RuntimeInstance{LogicalState: "running", ProyectoID: &proyectoID},
+		MailboxActionablePending: 1,
+		MailboxContinuityPending: 1,
+	}
+
+	if rowTieneRuntimeOHandleOperativoParaReactivacion(row, now) {
+		t.Fatal("no deberia tratar snapshot residual activo como runtime operativo para reactivacion cuando ya esta bloqueado_por_runtime y hay continuidad accionable")
+	}
+}
+
+func TestRowTieneTrabajoReactivableSinRuntimeCuentaContinuidadAccionable(t *testing.T) {
+	now := time.Now().UTC()
+	row := agentesapp.Row{
+		Agente:                   &db.Agente{Nombre: "Codex2", Habilitado: true},
+		MailboxActionablePending: 1,
+		MailboxContinuityPending: 1,
+	}
+
+	if !rowTieneTrabajoReactivableSinRuntime(row, nil, nil, nil, now) {
+		t.Fatal("deberia contar continuidad accionable como trabajo reactivable sin runtime")
 	}
 }

@@ -11674,14 +11674,20 @@ func agentesSinRuntimeReactivables(rows []agentesapp.Row, tareasActivasPorAgente
 		if !rowDebeReactivarseSinRuntime(row, tareasActivasPorAgente, tareasBloqueadasPorAgente, now) {
 			continue
 		}
-		if rowTieneRuntimeOHandleOperativo(row) {
+		if rowTieneRuntimeOHandleOperativoParaReactivacion(row, now) {
 			continue
 		}
 		agente := strings.TrimSpace(row.Agente.Nombre)
 		if agente == "" {
 			continue
 		}
-		if row.MailboxPending <= 0 && len(tareasActivasPorAgente[agente]) == 0 && len(tareasBloqueadasPorAgente[agente]) == 0 {
+		if row.MailboxPending <= 0 &&
+			row.MailboxActionablePending <= 0 &&
+			row.MailboxContinuityPending <= 0 &&
+			!row.DurableContinuityPending(now) &&
+			!row.EffectiveContinuityPending(now) &&
+			len(tareasActivasPorAgente[agente]) == 0 &&
+			len(tareasBloqueadasPorAgente[agente]) == 0 {
 			continue
 		}
 		out[strings.ToLower(agente)] = struct{}{}
@@ -13216,7 +13222,11 @@ func filtrarTareasBloqueadasReactivacionSinRuntimeBatch(rows []agentesapp.Row, t
 }
 
 func rowTieneTrabajoReactivableSinRuntime(row agentesapp.Row, tareasActivas []*db.Tarea, tareasBloqueadas []*db.Tarea, bloqueosPorTarea map[int64]db.ResumenBloqueo, now time.Time) bool {
-	if row.MailboxPending > 0 {
+	if row.MailboxPending > 0 ||
+		row.MailboxActionablePending > 0 ||
+		row.MailboxContinuityPending > 0 ||
+		row.DurableContinuityPending(now) ||
+		row.EffectiveContinuityPending(now) {
 		return true
 	}
 	agente := ""
@@ -13315,6 +13325,27 @@ func rowTieneRuntimeOHandleOperativo(row agentesapp.Row) bool {
 		}
 	}
 	return false
+}
+
+func rowTieneRuntimeOHandleOperativoParaReactivacion(row agentesapp.Row, now time.Time) bool {
+	if !rowTieneRuntimeOHandleOperativo(row) {
+		return false
+	}
+	if strings.TrimSpace(row.EstadoOperativo) != "bloqueado_por_runtime" {
+		return true
+	}
+	if row.ControlOrdersOpen > 0 || row.OrdersOpen > 0 {
+		return true
+	}
+	if row.MailboxActionablePending > 0 ||
+		row.MailboxContinuityPending > 0 ||
+		row.DurableContinuityPending(now) ||
+		row.EffectiveContinuityPending(now) {
+		if row.WorkerAlive || rowTieneActividadOperativaRecienteParaRecuperacion(row, now) {
+			return false
+		}
+	}
+	return true
 }
 
 func procesarWorkersAtascadosAutonomiaBatch(rows []agentesapp.Row, now time.Time) (int, error) {
@@ -17980,7 +18011,7 @@ func encolarReactivacionAgenteProyectoConHandleSiProcede(agente string, proyecto
 		if err != nil {
 			return false, err
 		}
-		if !trabajoArrancable {
+		if !trabajoArrancable && !permiteReactivacionSupervisorReservadoSinTrabajoVisible(strings.TrimSpace(agente), proyecto.ID, strings.TrimSpace(motivo)) {
 			return false, nil
 		}
 		bloqueadaPorFrentePremiumCanonicoAjeno, err := proyectoTieneFrentePremiumCanonicoActivoAjeno(proyecto.ID, strings.TrimSpace(agente))
@@ -17992,6 +18023,23 @@ func encolarReactivacionAgenteProyectoConHandleSiProcede(agente string, proyecto
 		}
 	}
 	return orquestacionAgentesService.ReactivateProjectIfNeeded(agente, proyecto, motivo, handle)
+}
+
+func permiteReactivacionSupervisorReservadoSinTrabajoVisible(agente string, proyectoID int64, motivo string) bool {
+	if agente == "" || proyectoID <= 0 || motivo != "agente_sin_runtime_activo" {
+		return false
+	}
+	policy, err := db.GetProyectoAutonomia(proyectoID)
+	if err != nil || policy == nil || !policy.Enabled {
+		return false
+	}
+	if policy.ReserveSupervisor && strings.EqualFold(agente, strings.TrimSpace(policy.SupervisorAgente)) {
+		return true
+	}
+	if policy.ReserveReviewer && strings.EqualFold(agente, strings.TrimSpace(policy.ReviewerAgente)) {
+		return true
+	}
+	return false
 }
 
 func tareaBloqueadaRecuperableParaReanimacion(tareaID int64) (bool, error) {
