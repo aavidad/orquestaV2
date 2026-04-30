@@ -168,6 +168,90 @@ func TestProcesarReactivacionAgentesSinRuntimeBatchReanimaSupervisorReservadoCon
 	}
 }
 
+func TestProcesarReactivacionAgentesSinRuntimeBatchReanimaMailboxAtascadaSinWorker(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexMailbox", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-mailbox-atascada",
+		Nombre:  "Orquestador Mailbox Atascada",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexMailbox", proyectoID, "reactivacion_automatica"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Retomar frente con mailbox atascada",
+		Descripcion: "Debe reactivarse aunque el estado operativo sea mailbox_atascada si ya no hay worker vivo.",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexMailbox"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexMailbox"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil || tarea == nil {
+		t.Fatalf("get tarea: %+v err=%v", tarea, err)
+	}
+
+	rows := []agentesapp.Row{{
+		Agente:                   &db.Agente{Nombre: "CodexMailbox", Habilitado: true},
+		EstadoOperativo:          "mailbox_atascada",
+		DetalleOperativo:         "guidance durable pendiente sin worker vivo",
+		WorkerAlive:              false,
+		MailboxPending:           1,
+		MailboxActionablePending: 1,
+		OpenTasks:                1,
+		CurrentTask: &agentesapp.TaskFocus{
+			TaskID:    tareaID,
+			Title:     "Retomar frente con mailbox atascada",
+			State:     db.EstadoEnProgreso,
+			ProjectID: &proyectoID,
+		},
+	}}
+
+	n, err := procesarReactivacionAgentesSinRuntimeBatch(rows, map[string][]*db.Tarea{
+		"CodexMailbox": {tarea},
+	}, nil)
+	if err != nil {
+		t.Fatalf("procesar reactivacion sin runtime mailbox atascada: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia reactivar mailbox atascada sin worker vivo, got=%d", n)
+	}
+
+	agente := "CodexMailbox"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{
+		Agente:     &agente,
+		ProyectoID: &proyectoID,
+		Estado:     &estado,
+	})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "start" {
+		t.Fatalf("deberia encolar start para mailbox atascada sin worker, got=%+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"motivo":"agente_sin_runtime_activo"`) {
+		t.Fatalf("faltaba motivo esperado en payload: %s", orders[0].PayloadJSON)
+	}
+}
+
 func TestRowTieneRuntimeOHandleOperativoParaReactivacionToleraSnapshotResidualActivoConContinuidadAccionable(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(1)

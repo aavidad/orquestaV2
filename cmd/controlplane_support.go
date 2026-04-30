@@ -13126,6 +13126,10 @@ func rowDebeReactivarseSinRuntime(row agentesapp.Row, tareasActivasPorAgente map
 	switch strings.TrimSpace(row.EstadoOperativo) {
 	case "bloqueado_por_runtime", "caido":
 		return true
+	case "mailbox_atascada":
+		if !row.WorkerAlive && !rowTieneRuntimeOHandleOperativo(row) {
+			return true
+		}
 	}
 	if rowTieneRuntimeOHandleOperativo(row) {
 		return false
@@ -14188,6 +14192,7 @@ func runtimeHandleEsLegacyControlPlane(handle *db.RuntimeHandle) bool {
 
 func rowProyectoIDPreferido(row agentesapp.Row) *int64 {
 	for _, id := range []*int64{
+		rowCurrentTaskProjectID(row.CurrentTask),
 		rowAsignacionProyectoID(row.Asignacion),
 		rowHandleProyectoID(row.Handle),
 		rowRuntimeProyectoID(row.Runtime),
@@ -14198,6 +14203,14 @@ func rowProyectoIDPreferido(row agentesapp.Row) *int64 {
 		}
 	}
 	return nil
+}
+
+func rowCurrentTaskProjectID(task *agentesapp.TaskFocus) *int64 {
+	if task == nil || task.ProjectID == nil || *task.ProjectID <= 0 {
+		return nil
+	}
+	id := *task.ProjectID
+	return &id
 }
 
 func rowProyectoSlugPreferido(row agentesapp.Row) string {
