@@ -1953,29 +1953,26 @@ func fetchStatusFastFallback() (apiStatusResponse, error) {
 }
 
 func listarTareasActivasRapido() ([]tareaLite, error) {
-	estados := []db.EstadoTarea{db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada}
-	out := make([]tareaLite, 0, 16)
-	for _, estado := range estados {
-		items, err := db.ListarTareas(db.FiltroTareas{Estado: &estado})
-		if err != nil {
-			return nil, err
+	items, err := db.ListarTareasActivasLigero()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]tareaLite, 0, len(items))
+	for _, tarea := range items {
+		if tarea == nil {
+			continue
 		}
-		for _, tarea := range items {
-			if tarea == nil {
-				continue
-			}
-			lite := tareaLite{
-				ID:        tarea.ID,
-				Titulo:    tarea.Titulo,
-				Estado:    tarea.Estado,
-				Modulo:    tarea.Modulo,
-				Prioridad: tarea.Prioridad,
-			}
-			if tarea.Agente != nil {
-				lite.Agente = *tarea.Agente
-			}
-			out = append(out, lite)
+		lite := tareaLite{
+			ID:        tarea.ID,
+			Titulo:    tarea.Titulo,
+			Estado:    tarea.Estado,
+			Modulo:    tarea.Modulo,
+			Prioridad: tarea.Prioridad,
 		}
+		if tarea.Agente != nil {
+			lite.Agente = *tarea.Agente
+		}
+		out = append(out, lite)
 	}
 	return normalizarTareasLiteVisibles(out), nil
 }

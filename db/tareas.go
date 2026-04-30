@@ -396,6 +396,41 @@ func ListarTareas(f FiltroTareas) ([]*Tarea, error) {
 	})
 }
 
+// ListarTareasActivasLigero devuelve solo los campos necesarios para estado
+// operativo de tareas activas, evitando el payload completo de ListarTareas.
+func ListarTareasActivasLigero() ([]*Tarea, error) {
+	return consultarConReintentos(func() ([]*Tarea, error) {
+		rows, err := DB.Query(`
+			SELECT id, titulo, proyecto_id, modulo, estado, agente, prioridad
+			FROM tareas
+			WHERE estado IN (?, ?, ?)
+			ORDER BY CASE prioridad WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, id`,
+			TareaAsignada, TareaEnProgreso, TareaBloqueada,
+		)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		out := make([]*Tarea, 0, 32)
+		for rows.Next() {
+			t := &Tarea{}
+			var proyectoID sql.NullInt64
+			var agente sql.NullString
+			if err := rows.Scan(&t.ID, &t.Titulo, &proyectoID, &t.Modulo, &t.Estado, &agente, &t.Prioridad); err != nil {
+				return nil, err
+			}
+			if proyectoID.Valid {
+				t.ProyectoID = &proyectoID.Int64
+			}
+			if agente.Valid {
+				t.Agente = &agente.String
+			}
+			out = append(out, t)
+		}
+		return out, rows.Err()
+	})
+}
+
 // ValidarDependencias comprueba que todas las dependencias previas de una tarea
 // estén completadas y tengan contrato/interfaz definido. Implementa OP-069.
 func ValidarDependencias(t *Tarea) error {

@@ -414,7 +414,7 @@ func TestReconcileStatusSnapshotWithFreshPanelActualizaEstadosDeTareaYConteos(t 
 	resetAgentPanelSnapshotCache()
 	defer resetAgentPanelSnapshotCache()
 
-	now := time.Date(2026, 4, 30, 15, 20, 0, 0, time.UTC)
+	now := time.Now().UTC()
 	storeAgentPanelSnapshot([]agentesapp.Row{
 		{
 			Agente:          &db.Agente{Nombre: "Codex12", Activo: true, EstadoCuota: "activo"},
@@ -474,7 +474,7 @@ func TestReconcileStatusSnapshotWithFreshPanelEliminaTareaStaleSinFrenteVisible(
 	resetAgentPanelSnapshotCache()
 	defer resetAgentPanelSnapshotCache()
 
-	now := time.Date(2026, 4, 30, 15, 24, 0, 0, time.UTC)
+	now := time.Now().UTC()
 	storeAgentPanelSnapshot([]agentesapp.Row{
 		{
 			Agente:          &db.Agente{Nombre: "Codex13", Activo: true, EstadoCuota: "activo"},
