@@ -1261,7 +1261,9 @@ func rowCountsAsWorkingVisible(row agentesapp.Row) bool {
 	if row.OpenTasks > 0 || row.BlockedTasks > 0 {
 		return true
 	}
-	if row.CurrentTask != nil && row.CurrentTask.TaskID != 0 {
+	if row.CurrentTask != nil &&
+		row.CurrentTask.TaskID != 0 &&
+		(row.CurrentTask.State == db.TareaEnProgreso || row.CurrentTask.State == db.TareaBloqueada) {
 		return true
 	}
 	return false

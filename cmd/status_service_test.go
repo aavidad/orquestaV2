@@ -1859,6 +1859,35 @@ func TestAgentesVisiblesPorEstadoOperativoRowsNoCuentaSupervisorSinFrenteComoTra
 	}
 }
 
+func TestAgentesVisiblesPorEstadoOperativoRowsNoCuentaReservaComoTrabajoActivo(t *testing.T) {
+	agentes := []*db.Agente{
+		{Nombre: "Codex2", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+	}
+	rows := []agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "Codex2"},
+		EstadoOperativo: "trabajando",
+		DetalleOperativo:"worker ready",
+		CurrentTask: &agentesapp.TaskFocus{
+			TaskID: 4,
+			Title:  "Reserva viva",
+			State:  db.TareaAsignada,
+		},
+		OpenTasks:    0,
+		BlockedTasks: 0,
+	}}
+
+	activos, trabajando, _, _, _, _, ok := agentesVisiblesPorEstadoOperativoRows(agentes, rows)
+	if !ok {
+		t.Fatalf("deberia resolver filas operativas")
+	}
+	if len(activos) != 1 || activos[0].Nombre != "Codex2" {
+		t.Fatalf("activos inesperados: %+v", activos)
+	}
+	if len(trabajando) != 0 {
+		t.Fatalf("una reserva no deberia contar como trabajo activo: %+v", trabajando)
+	}
+}
+
 func TestResumirAutonomiaRowsMantieneSupervisorConHeartbeatQuietoSiRuntimeSigueFresco(t *testing.T) {
 	now := time.Now().UTC()
 	hb := now.Add(-70 * time.Second)
