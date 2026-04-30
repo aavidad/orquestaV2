@@ -11528,7 +11528,8 @@ func procesarIntervencionTareasBloqueadasDegradadasBatch(rows []agentesapp.Row, 
 	count := 0
 	criticalProject := controlPlaneCriticalProjectSignalFn()
 	for _, row := range priorizarRowsAutonomiaBloqueadas(rows, tareasBloqueadasPorAgente, criticalProject) {
-		if row.Agente == nil || !estadoOperativoAutoIntervencion(row.EstadoOperativo) {
+		blockedOrphan := rowBloqueadoSinRuntimeUtilParaAutonomia(row, now)
+		if row.Agente == nil || (!estadoOperativoAutoIntervencion(row.EstadoOperativo) && !blockedOrphan) {
 			continue
 		}
 		if rowControlOrderPending(row, now) {
@@ -11568,7 +11569,7 @@ func procesarIntervencionTareasBloqueadasDegradadasBatch(rows []agentesapp.Row, 
 			if strings.TrimSpace(row.EstadoOperativo) == "atascado" && !criticalImmediate && !rowAtascadoShouldEscalate(row, now) {
 				continue
 			}
-			if !criticalImmediate && !degradedTaskShouldIntervene(actual, now) && !degradedTaskRequiresImmediateIntervention(row, now) {
+			if !criticalImmediate && !blockedOrphan && !degradedTaskShouldIntervene(actual, now) && !degradedTaskRequiresImmediateIntervention(row, now) {
 				continue
 			}
 
@@ -11608,6 +11609,28 @@ func procesarIntervencionTareasBloqueadasDegradadasBatch(rows []agentesapp.Row, 
 		}
 	}
 	return count, nil
+}
+
+func rowBloqueadoSinRuntimeUtilParaAutonomia(row agentesapp.Row, now time.Time) bool {
+	if row.Agente == nil || strings.TrimSpace(row.EstadoOperativo) != "bloqueado" {
+		return false
+	}
+	if rowControlOrderPending(row, now) || row.OrdersOpen > 0 || row.ControlOrdersOpen > 0 {
+		return false
+	}
+	if row.Sesion != nil && row.Sesion.Activa && strings.EqualFold(strings.TrimSpace(row.Sesion.Estado), "activa") {
+		return false
+	}
+	if row.WorkerAlive || row.WorkerFresh(now) {
+		return false
+	}
+	if row.MailboxActionablePending > 0 ||
+		row.MailboxContinuityPending > 0 ||
+		row.DurableContinuityPending(now) ||
+		row.EffectiveContinuityPending(now) {
+		return false
+	}
+	return !rowTieneRuntimeOHandleOperativoParaReactivacion(row, now)
 }
 
 func rowsPorAgenteMap(rows []agentesapp.Row) map[string]agentesapp.Row {
