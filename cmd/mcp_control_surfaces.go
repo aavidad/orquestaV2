@@ -35,6 +35,30 @@ func mcpServerOperationalTool() mcpTool {
 	}
 }
 
+func mcpServerRuntimeHealthTool() mcpTool {
+	return mcpTool{
+		Name:        "orquesta.server.runtime_health",
+		Title:       "Salud interna del servidor",
+		Description: "Expone salud interna del daemon y últimos hot paths medidos desde la propia app",
+		InputSchema: map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+		},
+	}
+}
+
+func mcpServerHotPathsTool() mcpTool {
+	return mcpTool{
+		Name:        "orquesta.server.hot_paths",
+		Title:       "Hot paths del servidor",
+		Description: "Devuelve los últimos timings pesados observados en self_heal y panel canónico",
+		InputSchema: map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+		},
+	}
+}
+
 func mcpServerSelfHealTool() mcpTool {
 	return mcpTool{
 		Name:        "orquesta.server.self_heal",
@@ -96,6 +120,16 @@ func callMCPServerOperational() (map[string]any, error) {
 	return toolResult(prettyJSON(info), info, false), nil
 }
 
+func callMCPServerRuntimeHealth() (map[string]any, error) {
+	info := buildServerRuntimeHealth()
+	return toolResult(prettyJSON(info), info, false), nil
+}
+
+func callMCPServerHotPaths() (map[string]any, error) {
+	info := readServerHotPathDiagnostics()
+	return toolResult(prettyJSON(info), info, false), nil
+}
+
 func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 	started := time.Now()
 	phaseDurations := map[string]time.Duration{}
@@ -104,6 +138,7 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 	}
 	logSlow := func() {
 		total := time.Since(started)
+		recordServerSelfHealDiagnostics(total, phaseDurations)
 		if total < 500*time.Millisecond {
 			return
 		}

@@ -732,6 +732,7 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 	}
 	logSlowPanelBuild := func() {
 		total := time.Since(buildStart)
+		recordPanelBuildDiagnostics(total, phaseDurations)
 		if total < 500*time.Millisecond {
 			return
 		}

@@ -437,6 +437,22 @@ func listMCPResources() ([]mcpResource, error) {
 			Annotations: audienceAssistant(1),
 		},
 		{
+			URI:         "orquesta://server/runtime_health",
+			Name:        "server-runtime-health",
+			Title:       "Salud interna del servidor",
+			Description: "Salud del daemon y últimos hot paths medidos desde la propia app",
+			MIMEType:    "application/json",
+			Annotations: audienceAssistant(1),
+		},
+		{
+			URI:         "orquesta://server/hot_paths",
+			Name:        "server-hot-paths",
+			Title:       "Hot paths del servidor",
+			Description: "Últimos timings pesados observados en self_heal y panel canónico",
+			MIMEType:    "application/json",
+			Annotations: audienceAssistant(1),
+		},
+		{
 			URI:         "orquesta://workspace/control",
 			Name:        "workspace-control",
 			Title:       "Control global del workspace",
@@ -878,6 +894,12 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		return resourceText(uri, "application/json", prettyJSON(s)), nil
 	case uri == "orquesta://server/operational":
 		info := buildMCPServerOperationalInfo()
+		return resourceText(uri, "application/json", prettyJSON(info)), nil
+	case uri == "orquesta://server/runtime_health":
+		info := buildServerRuntimeHealth()
+		return resourceText(uri, "application/json", prettyJSON(info)), nil
+	case uri == "orquesta://server/hot_paths":
+		info := readServerHotPathDiagnostics()
 		return resourceText(uri, "application/json", prettyJSON(info)), nil
 	case strings.HasPrefix(uri, "orquesta://openclaw/operator"):
 		parsed, err := url.Parse(uri)
@@ -1751,6 +1773,8 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		mcpServerOperationalTool(),
+		mcpServerRuntimeHealthTool(),
+		mcpServerHotPathsTool(),
 		mcpServerSelfHealTool(),
 		{
 			Name:        "orquesta.server.rearm",
@@ -3288,6 +3312,10 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 
 	case "orquesta.server.operational":
 		return callMCPServerOperational()
+	case "orquesta.server.runtime_health":
+		return callMCPServerRuntimeHealth()
+	case "orquesta.server.hot_paths":
+		return callMCPServerHotPaths()
 
 	case "orquesta.server.self_heal":
 		return callMCPServerSelfHeal(args)
