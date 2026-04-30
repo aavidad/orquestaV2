@@ -208,28 +208,32 @@ func ProcesarRuntimeOrdersBatch() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	reconciled, err := reconciliarRuntimeOrdersPendientesMailboxConsumido()
+	expiredHandoffs, err := ReconciliarRuntimeOrdersPendientesHandoffExpiradas()
 	if err != nil {
 		return stale, err
 	}
+	reconciled, err := reconciliarRuntimeOrdersPendientesMailboxConsumido()
+	if err != nil {
+		return stale + expiredHandoffs, err
+	}
 	controlEjecutando, err := reconciliarRuntimeOrdersEjecutandoControlSatisfechas()
 	if err != nil {
-		return stale + reconciled, err
+		return stale + expiredHandoffs + reconciled, err
 	}
 	controlObsoletas, err := reconciliarRuntimeOrdersPendientesControlObsoletas()
 	if err != nil {
-		return stale + reconciled + controlEjecutando, err
+		return stale + expiredHandoffs + reconciled + controlEjecutando, err
 	}
 	processed, err := procesarRuntimeOrdersBatchTipos(runtimeOrderTiposDespachables())
 	if err != nil {
-		return stale + reconciled + controlEjecutando + controlObsoletas + processed, err
+		return stale + expiredHandoffs + reconciled + controlEjecutando + controlObsoletas + processed, err
 	}
 	promoted, err := procesarBootstrapRuntimeOrdersActivosBatch()
 	if err != nil {
-		return stale + reconciled + controlEjecutando + controlObsoletas + processed + promoted, err
+		return stale + expiredHandoffs + reconciled + controlEjecutando + controlObsoletas + processed + promoted, err
 	}
 	deferred, err := procesarRuntimeOrdersBatchTipos(runtimeOrderTiposDiferibles())
-	return stale + reconciled + controlEjecutando + controlObsoletas + processed + promoted + deferred, err
+	return stale + expiredHandoffs + reconciled + controlEjecutando + controlObsoletas + processed + promoted + deferred, err
 }
 
 func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
@@ -241,10 +245,14 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 	if err != nil {
 		return mailboxObsoleta, err
 	}
+	tareasHuerfanas, err := reconciliarTareasEnProgresoHuerfanasPorRuntime()
+	if err != nil {
+		return mailboxObsoleta + worktreesObsoletas, err
+	}
 	rows, err := DB.Query(runtimeHandleSelectBase() + `
 		WHERE estado='activo' AND metadata_json LIKE '%"modo":"autonomo"%'`)
 	if err != nil {
-		return mailboxObsoleta + worktreesObsoletas, err
+		return mailboxObsoleta + worktreesObsoletas + tareasHuerfanas, err
 	}
 	defer rows.Close()
 
@@ -291,7 +299,7 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 					Estado:      "pending",
 				}
 				if _, err := EncolarRuntimeOrder(order); err != nil {
-					return mailboxObsoleta + worktreesObsoletas + processed, err
+					return mailboxObsoleta + worktreesObsoletas + tareasHuerfanas + processed, err
 				}
 				Audit("server", "runtime_higiene_autonomo_stop_encolado", "handle", handle.ID, "agente: "+handle.Agente)
 				processed++
@@ -300,7 +308,7 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 	}
 	handlesSinTrabajo, err := listarRuntimeHandlesActivosSupervisados()
 	if err != nil {
-		return mailboxObsoleta + worktreesObsoletas + processed, err
+		return mailboxObsoleta + worktreesObsoletas + tareasHuerfanas + processed, err
 	}
 	for _, handle := range handlesSinTrabajo {
 		if handle == nil {
@@ -308,7 +316,7 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 		}
 		apagar, err := runtimeHandleDebeApagarsePorHigieneSinTrabajo(handle)
 		if err != nil {
-			return mailboxObsoleta + worktreesObsoletas + processed, err
+			return mailboxObsoleta + worktreesObsoletas + tareasHuerfanas + processed, err
 		}
 		if !apagar {
 			continue
@@ -328,7 +336,7 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 			Estado:      "pending",
 		}
 		if _, err := EncolarRuntimeOrder(order); err != nil {
-			return mailboxObsoleta + worktreesObsoletas + processed, err
+			return mailboxObsoleta + worktreesObsoletas + tareasHuerfanas + processed, err
 		}
 		Audit("server", "runtime_higiene_stop_sin_trabajo_encolado", "handle", handle.ID,
 			"agente: "+handle.Agente)
@@ -336,25 +344,114 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 	}
 	orphanTMUX, err := purgarSesionesTMUXHuerfanasConCurrentPathBorrado()
 	if err != nil {
-		return mailboxObsoleta + worktreesObsoletas + processed, err
+		return mailboxObsoleta + worktreesObsoletas + tareasHuerfanas + processed, err
 	}
 	processed += orphanTMUX
 	worktreesCerradas, err := purgarRutasWorktreeCerradasOFallidas()
 	if err != nil {
-		return mailboxObsoleta + worktreesObsoletas + processed, err
+		return mailboxObsoleta + worktreesObsoletas + tareasHuerfanas + processed, err
 	}
 	processed += worktreesCerradas
 	historico, err := PurgarRuntimeHistorico()
 	if err != nil {
-		return mailboxObsoleta + worktreesObsoletas + processed, err
+		return mailboxObsoleta + worktreesObsoletas + tareasHuerfanas + processed, err
 	}
 	processed += contarPurgaRuntimeHistorico(historico)
 	agentesInactivos, err := reconciliarAgentesActivosSinVida()
 	if err != nil {
-		return mailboxObsoleta + worktreesObsoletas + processed, err
+		return mailboxObsoleta + worktreesObsoletas + tareasHuerfanas + processed, err
 	}
 	processed += agentesInactivos
-	return mailboxObsoleta + worktreesObsoletas + processed, nil
+	return mailboxObsoleta + worktreesObsoletas + tareasHuerfanas + processed, nil
+}
+
+func reconciliarTareasEnProgresoHuerfanasPorRuntime() (int, error) {
+	estado := TareaEnProgreso
+	tareas, err := ListarTareas(FiltroTareas{Estado: &estado})
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().UTC()
+	processed := 0
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.ID <= 0 || tarea.Agente == nil || strings.TrimSpace(*tarea.Agente) == "" {
+			continue
+		}
+		agente := strings.TrimSpace(*tarea.Agente)
+		proyectoID := tarea.ProyectoID
+		if sesion, err := GetSesionActivaOperativa(agente, proyectoID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return processed, err
+		} else if sesion != nil {
+			continue
+		}
+		if handle, err := GetRuntimeHandleOperativoRecienteAgenteProyecto(agente, proyectoID); err != nil {
+			return processed, err
+		} else if handle != nil {
+			continue
+		}
+		if runtime, err := GetRuntimePrincipalAgenteProyecto(agente, proyectoID); err != nil {
+			return processed, err
+		} else if runtimeTaskStillBackedByRuntime(runtime, now) {
+			continue
+		}
+		if live, err := runtimeTaskHasLiveRecoveryOrders(agente, proyectoID); err != nil {
+			return processed, err
+		} else if live {
+			continue
+		}
+		note := formatearAnotacionTarea("server", "degradada automáticamente a asignada por higiene runtime: frente huérfano sin sesión operativa, runtime/handle fresco ni órdenes vivas", now)
+		res, err := DB.Exec(`
+			UPDATE tareas
+			SET estado='asignada',
+			    notas=COALESCE(notas,'') || ?,
+			    updated_at=CURRENT_TIMESTAMP
+			WHERE id=?
+			  AND estado='en_progreso'`, note, tarea.ID)
+		if err != nil {
+			return processed, err
+		}
+		if rows, _ := res.RowsAffected(); rows > 0 {
+			processed++
+		}
+	}
+	return processed, nil
+}
+
+func runtimeTaskStillBackedByRuntime(runtime *RuntimeInstance, now time.Time) bool {
+	if runtime == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(runtime.LogicalState)) {
+	case "", "cerrado", "fallido":
+		return false
+	}
+	last := runtimeMomentForRecovery(runtime)
+	if last.IsZero() {
+		return false
+	}
+	graceMinutes := configIntOrDefault("runtime_orphan_task_grace_minutes", 30)
+	if graceMinutes <= 0 {
+		graceMinutes = 30
+	}
+	return !last.Before(now.Add(-time.Duration(graceMinutes) * time.Minute))
+}
+
+func runtimeTaskHasLiveRecoveryOrders(agente string, proyectoID *int64) (bool, error) {
+	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{
+		Agente:     stringsPtrTrimmed(agente),
+		ProyectoID: proyectoID,
+		Tipos:      []string{"handoff", "start", "resume", "restart", "stop", "send_instruction", "checkpoint", "pause"},
+		Limit:      1,
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, order := range orders {
+		if order != nil {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func reconciliarRuntimeMailboxPendientePorTarea() (int, error) {
