@@ -152,3 +152,114 @@ func TestBuildSupervisorOperationalActionsFastNoReservaSobreAgenteConFrenteYaVis
 		t.Fatalf("no deberia reservar otra tarea sobre un agente que ya tiene un frente visible: %+v", actions)
 	}
 }
+
+func TestBuildSupervisorOperationalActionsFastAbreFrenteConAgenteIdleDelPanelCanonico(t *testing.T) {
+	prevRows := supervisorPanelRowsBuilder
+	defer func() { supervisorPanelRowsBuilder = prevRows }()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{
+			{
+				Agente:           &db.Agente{Nombre: "Codex10", Rol: "programador", Activo: true, Habilitado: true},
+				EstadoOperativo:  "trabajando",
+				WorkerAlive:      true,
+				WorkerState:      "ready",
+				OpenTasks:        1,
+				CurrentTask:      &agentesapp.TaskFocus{TaskID: 40, Title: "runtime mailbox", State: db.TareaEnProgreso},
+			},
+			{
+				Agente:           &db.Agente{Nombre: "Codex11", Rol: "programador", Activo: false, Habilitado: true},
+				EstadoOperativo:  "sin_tarea",
+			},
+		}, nil
+	}
+
+	status := apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex10", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex10", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex10", Prioridad: db.PrioridadAlta},
+		},
+		TareasPorEstado: map[string]int{
+			string(db.TareaLibre): 4,
+		},
+	}
+
+	actions := buildSupervisorOperationalActionsFast(status, nil)
+	item := findSupervisorAction(actions, "asignar_tarea_libre", "backlog:libre")
+	if item == nil {
+		t.Fatalf("deberia abrir frente con agente idle del panel canonico: %+v", actions)
+	}
+	if item.Assignee != "codex11" {
+		t.Fatalf("assignee inesperado: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsFastPrefiereAbrirFrenteSobreReservaSiHayIdleLanzable(t *testing.T) {
+	prevRows := supervisorPanelRowsBuilder
+	defer func() { supervisorPanelRowsBuilder = prevRows }()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{
+			{
+				Agente:          &db.Agente{Nombre: "Codex10", Rol: "programador", Activo: true, Habilitado: true},
+				EstadoOperativo: "trabajando",
+				WorkerAlive:     true,
+				WorkerState:     "ready",
+				OpenTasks:       1,
+				CurrentTask:     &agentesapp.TaskFocus{TaskID: 40, Title: "runtime mailbox", State: db.TareaEnProgreso},
+			},
+			{
+				Agente:          &db.Agente{Nombre: "Codex11", Rol: "programador", Activo: false, Habilitado: true},
+				EstadoOperativo: "sin_tarea",
+			},
+		}, nil
+	}
+
+	status := apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex10", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex10", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex10", Prioridad: db.PrioridadAlta},
+		},
+		TareasPorEstado: map[string]int{
+			string(db.TareaLibre): 2,
+		},
+	}
+
+	actions := buildSupervisorOperationalActionsFast(status, nil)
+	if reserve := findSupervisorAction(actions, "reservar_tarea_libre", "backlog:libre"); reserve != nil {
+		t.Fatalf("no deberia reservar si ya va a abrir frente con agente idle lanzable: %+v", actions)
+	}
+	if assign := findSupervisorAction(actions, "asignar_tarea_libre", "backlog:libre"); assign == nil {
+		t.Fatalf("deberia abrir frente nuevo con agente idle lanzable: %+v", actions)
+	}
+}
+
+func TestSupervisorIdleLaunchCandidatesExcluyeSupervisoresConfigurados(t *testing.T) {
+	prevRows := supervisorPanelRowsBuilder
+	defer func() { supervisorPanelRowsBuilder = prevRows }()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{
+			{
+				Agente:          &db.Agente{Nombre: "Codex1", Rol: "supervisor", Habilitado: true},
+				EstadoOperativo: "sin_tarea",
+			},
+			{
+				Agente:          &db.Agente{Nombre: "Codex11", Rol: "programador", Habilitado: true},
+				EstadoOperativo: "sin_tarea",
+			},
+		}, nil
+	}
+
+	got := supervisorIdleLaunchCandidates()
+	if len(got) != 1 || got[0] != "codex11" {
+		t.Fatalf("candidatos launch idle inesperados: %+v", got)
+	}
+}

@@ -6462,6 +6462,7 @@ func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mail
 	actions := make([]supervisorRecommendedAction, 0, 4+len(mailboxPendiente))
 	idle := idleSupervisorWorkers(status.AgentesActivos, status.AgentesTrabajando)
 	visibleWorkers := visibleNonSupervisorAgents(status.AgentesActivos)
+	launchableIdle := supervisorIdleLaunchCandidates()
 	if len(idle) > 0 {
 		assignee := idle[0]
 		target := "backlog:libre"
@@ -6487,7 +6488,7 @@ func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mail
 			})
 		}
 	}
-	if len(idle) == 0 && len(visibleWorkers) > 0 && countReservedTasks(status) == 0 {
+	if len(idle) == 0 && len(visibleWorkers) > 0 && countReservedTasks(status) == 0 && len(launchableIdle) == 0 {
 		assignee := preferredSupervisorWorker(status)
 		target := "backlog:libre"
 		reason := "Hay backlog libre y workers conectados, pero ninguno ocioso; conviene reservar el siguiente frente sin arrancarlo aún."
@@ -6508,6 +6509,28 @@ func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mail
 					Assignee: assignee,
 				})
 			}
+		}
+	}
+	if len(idle) == 0 && countReservedTasks(status) == 0 && len(launchableIdle) > 0 {
+		assignee := launchableIdle[0]
+		target := "backlog:libre"
+		reason := fmt.Sprintf("Hay backlog libre y agentes habilitados sin tarea (%s); conviene abrir otro frente útil sin esperar a que aparezca un worker ya conectado.", strings.Join(launchableIdle, ", "))
+		priority := "media"
+		if !fast {
+			libres, err := db.ListarTareas(db.FiltroTareas{Libre: true})
+			if err == nil && len(libres) > 0 && libres[0] != nil {
+				target = fmt.Sprintf("tarea:%d", libres[0].ID)
+			}
+		}
+		if libresCount := countLibreTasks(status); libresCount > 0 || strings.HasPrefix(target, "tarea:") {
+			actions = append(actions, supervisorRecommendedAction{
+				Kind:     "dispatch",
+				Target:   target,
+				Action:   "asignar_tarea_libre",
+				Reason:   reason,
+				Priority: priority,
+				Assignee: assignee,
+			})
 		}
 	}
 	actions = append(actions, buildSupervisorReserveRebalanceActions(status)...)
@@ -6567,6 +6590,52 @@ func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mail
 	}
 	sortSupervisorRecommendedActionsFast(actions)
 	return actions
+}
+
+func supervisorIdleLaunchCandidates() []string {
+	if supervisorPanelRowsBuilder == nil {
+		return nil
+	}
+	supervisores := configuredSupervisorAgentSet()
+	rows, err := supervisorPanelRowsBuilder()
+	if err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(rows))
+	seen := map[string]struct{}{}
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		name := nombreAgenteCanonico(strings.TrimSpace(row.Agente.Nombre))
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		if _, supervisor := supervisores[name]; supervisor {
+			continue
+		}
+		if !row.Agente.Habilitado {
+			continue
+		}
+		if row.WorkerAlive || row.OpenTasks > 0 || row.BlockedTasks > 0 || row.CurrentTask != nil {
+			continue
+		}
+		if row.MailboxActionablePending > 0 || row.ControlOrdersOpen > 0 || row.OrdersOpen > 0 {
+			continue
+		}
+		switch strings.TrimSpace(row.EstadoOperativo) {
+		case "sin_tarea", "disponible":
+		default:
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func supervisorAgentAlreadyCarriesVisibleFront(status apiStatusResponse, assignee string) bool {

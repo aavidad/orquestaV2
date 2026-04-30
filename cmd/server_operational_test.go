@@ -24,14 +24,36 @@ func TestBuildServerOperationalInfoToleraTrabajoConfirmadoSinWorkingAgents(t *te
 	}
 }
 
+func TestBuildServerOperationalInfoToleraCoberturaCompletaPorTrabajoConfirmado(t *testing.T) {
+	info := buildServerOperationalInfo(apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex1", Activo: true},
+			{Nombre: "Codex10", Activo: true},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex1", Activo: true},
+		},
+		TareasEnProgreso: []tareaLite{
+			{ID: 4, Estado: db.TareaEnProgreso, Agente: "Codex1"},
+			{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex10"},
+		},
+		Autonomia: autonomiaResumen{
+			WorkConfirmed: 2,
+		},
+	})
+	if !info.Operational || info.State != "ready" {
+		t.Fatalf("no deberia degradar si WorkConfirmed ya cubre todas las tareas: %+v", info)
+	}
+}
+
 func TestBuildServerOperationalInfoDegradaSiSoloQuedaSupervisorConTareasEnProgreso(t *testing.T) {
+	autonomia := autonomiaResumen{Supervisando: 1}
+	autonomia.addSupervisorName("Codex2")
 	info := buildServerOperationalInfo(apiStatusResponse{
 		AgentesActivos:    []*db.Agente{{Nombre: "Codex2", Activo: true}},
 		AgentesTrabajando: []*db.Agente{{Nombre: "Codex2", Activo: true}},
 		TareasEnProgreso:  []tareaLite{{ID: 1, Estado: db.TareaEnProgreso}},
-		Autonomia: autonomiaResumen{
-			Supervisando: 1,
-		},
+		Autonomia:         autonomia,
 	})
 	if info.Operational || info.State != "degraded" || info.Reason != "tasks_without_workers" {
 		t.Fatalf("deberia degradar si solo queda supervisor sin workers reales: %+v", info)
@@ -39,13 +61,13 @@ func TestBuildServerOperationalInfoDegradaSiSoloQuedaSupervisorConTareasEnProgre
 }
 
 func TestBuildServerOperationalInfoDegradaReservadasSiSoloQuedaSupervisor(t *testing.T) {
+	autonomia := autonomiaResumen{Supervisando: 1}
+	autonomia.addSupervisorName("Codex2")
 	info := buildServerOperationalInfo(apiStatusResponse{
 		AgentesActivos:    []*db.Agente{{Nombre: "Codex2", Activo: true}},
 		AgentesTrabajando: []*db.Agente{{Nombre: "Codex2", Activo: true}},
 		TareasReservadas:  []tareaLite{{ID: 2, Estado: db.TareaAsignada}},
-		Autonomia: autonomiaResumen{
-			Supervisando: 1,
-		},
+		Autonomia:         autonomia,
 	})
 	if info.Operational || info.State != "degraded" || info.Reason != "reserved_without_connected_workers" {
 		t.Fatalf("deberia degradar reservadas si solo queda supervisor: %+v", info)
@@ -125,6 +147,32 @@ func TestBuildServerOperationalInfoNoMarcaIdleSiQuedaTrabajoSinWorkersAunqueHaya
 	})
 	if info.Operational || info.State != "degraded" || info.Reason != "tasks_without_workers" {
 		t.Fatalf("no deberia marcar idle si queda trabajo en progreso sin workers: %+v", info)
+	}
+}
+
+func TestBuildServerOperationalInfoDegradaSiHayGapEntreTareasYWorkers(t *testing.T) {
+	info := buildServerOperationalInfo(apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex1", Activo: true},
+			{Nombre: "Codex10", Activo: true},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex1", Activo: true},
+			{Nombre: "Codex10", Activo: true},
+		},
+		TareasEnProgreso: []tareaLite{
+			{ID: 4, Estado: db.TareaEnProgreso, Agente: "Codex1"},
+			{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex10"},
+		},
+		Autonomia: autonomiaResumen{
+			WorkConfirmed: 1,
+		},
+	})
+	if info.Operational || info.State != "degraded" || info.Reason != "tasks_without_workers" {
+		t.Fatalf("deberia degradar si hay mas tareas en progreso que workers reales: %+v", info)
+	}
+	if info.TasksInProgress != 2 || info.WorkingWorkers != 1 {
+		t.Fatalf("contadores inesperados para worker gap: %+v", info)
 	}
 }
 
