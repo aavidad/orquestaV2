@@ -43,6 +43,7 @@ type serverOperationalInfo struct {
 	BlockedTasks         int                              `json:"blockedTasks"`
 	CompactionDebtAgents int                              `json:"compactionDebtAgents"`
 	CompactionDebtTasks  int                              `json:"compactionDebtTasks"`
+	LaunchableMissingWorkerFronts int                     `json:"launchableMissingWorkerFronts,omitempty"`
 	DispatchPending      int                              `json:"dispatchPending"`
 	DispatchNotified     int                              `json:"dispatchNotified"`
 	DispatchFailed       int                              `json:"dispatchFailed"`
@@ -174,6 +175,10 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 	stuckAgents := len(status.AgentesAtascados)
 	authAgents := len(status.AgentesAuthManual)
 	compactionDebtAgents, compactionDebtTasks := serverOperationalCompactionDebt(statusNowFunc().UTC())
+	if fallbackAgents, fallbackTasks := serverOperationalCompactionDebtFromStatus(status); fallbackTasks > compactionDebtTasks {
+		compactionDebtAgents, compactionDebtTasks = fallbackAgents, fallbackTasks
+	}
+	launchableMissingWorkerFronts := serverOperationalLaunchableMissingWorkerFronts(statusNowFunc().UTC())
 
 	state := "ready"
 	reason := "control_plane_responsive"
@@ -226,6 +231,7 @@ func buildServerOperationalInfo(status apiStatusResponse) serverOperationalInfo 
 		BlockedTasks:         blockedTasks,
 		CompactionDebtAgents: compactionDebtAgents,
 		CompactionDebtTasks:  compactionDebtTasks,
+		LaunchableMissingWorkerFronts: launchableMissingWorkerFronts,
 		DispatchPending:      status.DeudaDispatch.Pendientes,
 		DispatchNotified:     status.DeudaDispatch.Notificadas,
 		DispatchFailed:       status.DeudaDispatch.Fallidas,
@@ -339,6 +345,11 @@ func buildServerOperationalRecoveryHint(info serverOperationalInfo) *serverOpera
 			hint.AffectedTasks = info.CompactionDebtTasks
 			hint.SuggestedAction = "compact_or_reassign_active_tasks"
 			hint.Detail = fmt.Sprintf("%d tarea(s) abiertas exceden la señal real de trabajo en %d agente(s); conviene compactar antes de esperar cuota", max(info.CompactionDebtTasks, 1), max(info.CompactionDebtAgents, 1))
+			return hint
+		}
+		if info.LaunchableMissingWorkerFronts > 0 {
+			hint.SuggestedAction = "start_or_assign_workers"
+			hint.Detail = fmt.Sprintf("%d frente(s) siguen arrancables sin worker útil; conviene reactivar o reasignar antes de esperar cuota", info.LaunchableMissingWorkerFronts)
 			return hint
 		}
 		if info.QuotaAgents > 0 {
@@ -683,7 +694,11 @@ func buildServerOperationalInfoFastFromDB() (serverOperationalInfo, error) {
 		return buildServerOperationalInfo(snapshot), nil
 	}
 	if snapshot, ok := readStatusSnapshotAny(); ok && !statusSnapshotNeedsImmediateRefresh(snapshot) {
-		reconcileStatusSnapshotWithFreshPanel(&snapshot)
+		if rows, okRows := serverOperationalPanelRows(statusNowFunc().UTC()); okRows {
+			reconcileStatusSnapshotWithPanelRows(&snapshot, rows)
+		} else {
+			reconcileStatusSnapshotWithFreshPanel(&snapshot)
+		}
 		return buildServerOperationalInfo(snapshot), nil
 	}
 	agentes, err := serverOperationalListAgentsFetcher()
@@ -713,7 +728,9 @@ func buildServerOperationalInfoFastFromDB() (serverOperationalInfo, error) {
 		status.TareasEnProgreso = make([]tareaLite, cuentas[string(db.TareaEnProgreso)])
 		status.TareasReservadas = make([]tareaLite, cuentas[string(db.TareaAsignada)])
 	}
-	if rows, ok := readAgentPanelSnapshotFresh(); ok {
+	var panelRows []agentesapp.Row
+	if rows, ok := serverOperationalPanelRows(statusNowFunc().UTC()); ok {
+		panelRows = rows
 		status.Agentes = mergeServerOperationalAgentsWithPanelRows(status.Agentes, rows)
 		sanitizeServerOperationalQuotaFromPanelRows(status.Agentes, rows)
 		aplicarVisibilidadOperativaAgentes(status.Agentes, rows)
@@ -728,6 +745,12 @@ func buildServerOperationalInfoFastFromDB() (serverOperationalInfo, error) {
 			status.AgentesQuotaBlocked = quotaBlocked
 		}
 		status.Autonomia = resumirAutonomiaRows(rows, statusNowFunc().UTC())
+		status.TareasActivas = reconciliarTareasActivasConPanelRows(status.TareasActivas, rows)
+		status.TareasEnProgreso = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso)
+		status.TareasReservadas = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada)
+		status.TareasPorEstado = reconciliarConteoTareasActivasVisible(status.TareasPorEstado, status.TareasActivas)
+		status.ConteoTareas = status.TareasPorEstado
+		status.ResumenTareas = status.TareasPorEstado
 	}
 	if summary, ok := runStatusOptional(serverOperationalOptionalTimeout, serverOperationalDispatchFetcher); ok {
 		status.DeudaDispatch = summary.Deuda
@@ -735,7 +758,17 @@ func buildServerOperationalInfoFastFromDB() (serverOperationalInfo, error) {
 			status.Autonomia.Handoffs = summary.Handoffs
 		}
 	}
-	return buildServerOperationalInfo(status), nil
+	info := buildServerOperationalInfo(status)
+	if len(panelRows) > 0 {
+		if agents, tasks := serverOperationalCompactionDebtFromRows(panelRows, statusNowFunc().UTC()); tasks > info.CompactionDebtTasks {
+			info.CompactionDebtAgents = agents
+			info.CompactionDebtTasks = tasks
+		}
+		if fronts := serverOperationalLaunchableMissingWorkerFrontsFromRows(panelRows, statusNowFunc().UTC()); fronts > info.LaunchableMissingWorkerFronts {
+			info.LaunchableMissingWorkerFronts = fronts
+		}
+	}
+	return normalizeServerOperationalInfo(info), nil
 }
 
 func formatServerOperationalSummary(info *serverOperationalInfo) string {
@@ -804,11 +837,41 @@ func formatServerOperationalSummary(info *serverOperationalInfo) string {
 }
 
 func serverOperationalCompactionDebt(now time.Time) (int, int) {
-	rows, ok := readAgentPanelSnapshotFresh()
+	rows, ok := serverOperationalPanelRows(now)
 	if !ok {
 		return 0, 0
 	}
 	return serverOperationalCompactionDebtFromRows(rows, now)
+}
+
+func serverOperationalLaunchableMissingWorkerFronts(now time.Time) int {
+	rows, ok := serverOperationalPanelRows(now)
+	if !ok {
+		return 0
+	}
+	return serverOperationalLaunchableMissingWorkerFrontsFromRows(rows, now)
+}
+
+func serverOperationalPanelRows(now time.Time) ([]agentesapp.Row, bool) {
+	rows, ok := readAgentPanelSnapshotFresh()
+	if !ok {
+		rows, ok = readAgentPanelSnapshotAny()
+	}
+	if !ok {
+		return nil, false
+	}
+	return normalizeAgentPanelRowsForAPI(rows, now), true
+}
+
+func serverOperationalLaunchableMissingWorkerFrontsFromRows(rows []agentesapp.Row, now time.Time) int {
+	fronts := 0
+	for _, row := range rows {
+		if !rowHasLaunchableMissingWorkerFront(row, now) {
+			continue
+		}
+		fronts++
+	}
+	return fronts
 }
 
 func serverOperationalCompactionDebtFromRows(rows []agentesapp.Row, now time.Time) (int, int) {
@@ -824,6 +887,90 @@ func serverOperationalCompactionDebtFromRows(rows []agentesapp.Row, now time.Tim
 	return agents, tasks
 }
 
+func serverOperationalCompactionDebtFromStatus(status apiStatusResponse) (int, int) {
+	if len(status.TareasActivas) == 0 {
+		return 0, 0
+	}
+	visibleAgents := make(map[string]struct{}, len(status.AgentesActivos)+len(status.AgentesTrabajando))
+	for _, group := range [][]*db.Agente{status.AgentesActivos, status.AgentesTrabajando} {
+		for _, agente := range group {
+			if agente == nil {
+				continue
+			}
+			nombre := nombreAgenteCanonico(agente.Nombre)
+			if nombre == "" || !agenteVisibleEnStatusFleet(nombre) {
+				continue
+			}
+			visibleAgents[nombre] = struct{}{}
+		}
+	}
+	if len(visibleAgents) == 0 {
+		return 0, 0
+	}
+	counts := map[string]int{}
+	for _, tarea := range status.TareasActivas {
+		agente := nombreAgenteCanonico(tarea.Agente)
+		if agente == "" {
+			continue
+		}
+		if _, ok := visibleAgents[agente]; !ok {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaAsignada, db.TareaEnProgreso:
+			counts[agente]++
+		}
+	}
+	agents := 0
+	tasks := 0
+	for _, count := range counts {
+		if count <= 1 {
+			continue
+		}
+		agents++
+		tasks += count - 1
+	}
+	return agents, tasks
+}
+
+func rowHasLaunchableMissingWorkerFront(row agentesapp.Row, now time.Time) bool {
+	if row.Agente == nil || row.CurrentTask == nil || row.OpenTasks <= 0 {
+		return false
+	}
+	agente := nombreAgenteCanonico(row.Agente.Nombre)
+	if agente == "" || !agenteVisibleEnStatusFleet(agente) {
+		return false
+	}
+	if row.SupervisorRoleActive(now) || rowEsResiduoPausadoSinTrabajo(row, now) {
+		return false
+	}
+	if serverOperationalQuotaBlocked(strings.TrimSpace(row.Agente.EstadoCuota)) {
+		return false
+	}
+	if row.WorkerFresh(now) {
+		return false
+	}
+	switch strings.TrimSpace(row.EstadoOperativo) {
+	case "retirado", "bloqueado", "bloqueado_por_cuota", "caido":
+		return false
+	}
+	switch row.CurrentTask.State {
+	case db.TareaAsignada, db.TareaEnProgreso:
+		return true
+	default:
+		return false
+	}
+}
+
+func serverOperationalQuotaBlocked(state string) bool {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "agotado", "enfriamiento":
+		return true
+	default:
+		return false
+	}
+}
+
 func rowHasCompactionDebt(row agentesapp.Row, now time.Time) bool {
 	if row.Agente == nil || row.CurrentTask == nil || row.OpenTasks <= 1 {
 		return false
@@ -832,7 +979,7 @@ func rowHasCompactionDebt(row agentesapp.Row, now time.Time) bool {
 	if agente == "" || !agenteVisibleEnStatusFleet(agente) {
 		return false
 	}
-	if rowEsResiduoPausadoSinTrabajo(row, now) || row.SupervisorRoleActive(now) || row.EffectiveContinuityPending(now) {
+	if rowEsResiduoPausadoSinTrabajo(row, now) || row.SupervisorRoleActive(now) {
 		return false
 	}
 	switch strings.TrimSpace(row.EstadoOperativo) {
@@ -840,6 +987,9 @@ func rowHasCompactionDebt(row agentesapp.Row, now time.Time) bool {
 		return false
 	}
 	if row.WorkerFresh(now) {
+		return true
+	}
+	if row.WorkerAlive && strings.EqualFold(strings.TrimSpace(row.EstadoOperativo), "trabajando") {
 		return true
 	}
 	return strings.EqualFold(strings.TrimSpace(row.LastAutonomyState), "work_confirmed")
@@ -895,6 +1045,13 @@ func reconcileStatusSnapshotWithFreshPanel(snapshot *apiStatusResponse) {
 	}
 	rows, ok := readAgentPanelSnapshotFresh()
 	if !ok {
+		return
+	}
+	reconcileStatusSnapshotWithPanelRows(snapshot, rows)
+}
+
+func reconcileStatusSnapshotWithPanelRows(snapshot *apiStatusResponse, rows []agentesapp.Row) {
+	if snapshot == nil || len(rows) == 0 {
 		return
 	}
 	snapshot.Agentes = mergeServerOperationalAgentsWithPanelRows(snapshot.Agentes, rows)

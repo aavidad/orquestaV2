@@ -449,6 +449,176 @@ func TestNormalizeServerOperationalInfoPriorizaCompactionDebtSobreQuotaSiYaHayWo
 	}
 }
 
+func TestNormalizeServerOperationalInfoPrefiereStartSiQuedaFrenteArrancableSinWorker(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	now := time.Now().UTC()
+	resetAt := now.Add(30 * time.Minute)
+	storeAgentPanelSnapshot([]agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"},
+			EstadoOperativo: "trabajando",
+			OpenTasks:       1,
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 33, State: db.TareaEnProgreso},
+		},
+		{
+			Agente:          &db.Agente{Nombre: "Codex2", Activo: true, EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+			EstadoOperativo: "bloqueado_por_cuota",
+			OpenTasks:       1,
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 41, State: db.TareaEnProgreso},
+		},
+	}, now)
+
+	info := normalizeServerOperationalInfo(buildServerOperationalInfo(apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex10", Activo: true},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex10", Activo: true},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "Codex2", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		TareasEnProgreso: []tareaLite{
+			{ID: 33, Estado: db.TareaEnProgreso, Agente: "Codex10"},
+			{ID: 41, Estado: db.TareaEnProgreso, Agente: "Codex2"},
+		},
+	}))
+	if info.Recovery == nil || info.Recovery.SuggestedAction != "start_or_assign_workers" {
+		t.Fatalf("deberia preferir start_or_assign_workers antes que wait_quota_reset si queda un frente arrancable: %+v", info.Recovery)
+	}
+	if info.LaunchableMissingWorkerFronts != 1 {
+		t.Fatalf("conteo launchableMissingWorkerFronts inesperado: %+v", info)
+	}
+}
+
+func TestNormalizeServerOperationalInfoMantieneCompactionDebtAunqueQuedeContinuidadPendiente(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:                    &db.Agente{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"},
+		EstadoOperativo:           "trabajando",
+		WorkerAlive:               true,
+		WorkerState:               "ready",
+		WorkerHeartbeat:           ptrTimeServerOperational(now),
+		OpenTasks:                 2,
+		CurrentTask:               &agentesapp.TaskFocus{TaskID: 33, State: db.TareaEnProgreso},
+		LastAutonomyAction:        "continuar_trabajo",
+		LastAutonomySource:        "mailbox",
+		LastAutonomyState:         "pending",
+		MailboxContinuityPending:  1,
+		MailboxPending:            1,
+		MailboxActionablePending:  1,
+	}}, now)
+
+	info := normalizeServerOperationalInfo(buildServerOperationalInfo(apiStatusResponse{
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex10", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex10", Activo: true}},
+		TareasActivas: []tareaLite{
+			{ID: 4, Estado: db.TareaAsignada, Agente: "Codex10"},
+			{ID: 33, Estado: db.TareaEnProgreso, Agente: "Codex10"},
+		},
+		TareasEnProgreso: []tareaLite{
+			{ID: 33, Estado: db.TareaEnProgreso, Agente: "Codex10"},
+		},
+		TareasPorEstado: map[string]int{
+			string(db.TareaEnProgreso): 1,
+			string(db.TareaAsignada):   1,
+		},
+	}))
+	if info.CompactionDebtAgents != 1 || info.CompactionDebtTasks != 1 {
+		t.Fatalf("deberia mantener deuda de compactacion aunque quede continuidad pendiente: %+v", info)
+	}
+	if info.Recovery == nil || info.Recovery.Kind != "compaction_debt" || info.Recovery.SuggestedAction != "compact_or_reassign_active_tasks" {
+		t.Fatalf("recovery de compactacion inesperado: %+v", info.Recovery)
+	}
+}
+
+func TestNormalizeServerOperationalInfoMarcaCompactionDebtConWorkerAliveYFrenteAsignado(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:             &db.Agente{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"},
+		EstadoOperativo:    "trabajando",
+		WorkerAlive:        true,
+		OpenTasks:          2,
+		CurrentTask:        &agentesapp.TaskFocus{TaskID: 33, State: db.TareaAsignada},
+		LastAutonomyAction: "continuar_trabajo",
+		LastAutonomySource: "work_queue",
+		LastAutonomyState:  "pending",
+	}}, now)
+
+	info := normalizeServerOperationalInfo(buildServerOperationalInfo(apiStatusResponse{
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex10", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex10", Activo: true}},
+		TareasActivas: []tareaLite{
+			{ID: 4, Estado: db.TareaAsignada, Agente: "Codex10"},
+			{ID: 33, Estado: db.TareaAsignada, Agente: "Codex10"},
+		},
+		TareasPorEstado: map[string]int{
+			string(db.TareaAsignada): 2,
+			string(db.TareaEnProgreso): 0,
+		},
+	}))
+	if info.CompactionDebtAgents != 1 || info.CompactionDebtTasks != 1 {
+		t.Fatalf("deberia marcar compactacion con worker vivo y frente asignado duplicado: %+v", info)
+	}
+	if info.Recovery == nil || info.Recovery.Kind != "compaction_debt" || info.Recovery.SuggestedAction != "compact_or_reassign_active_tasks" {
+		t.Fatalf("recovery de compactacion inesperado: %+v", info.Recovery)
+	}
+}
+
+func TestNormalizeServerOperationalInfoUsaPanelStaleValidoParaCompactionDebt(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshotWithTTL([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"},
+		EstadoOperativo: "trabajando",
+		WorkerAlive:     true,
+		OpenTasks:       2,
+		CurrentTask:     &agentesapp.TaskFocus{TaskID: 33, State: db.TareaAsignada},
+	}}, now.Add(-6*time.Second), 5*time.Second, 30*time.Second)
+
+	info := normalizeServerOperationalInfo(buildServerOperationalInfo(apiStatusResponse{
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex10", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex10", Activo: true}},
+		TareasActivas: []tareaLite{
+			{ID: 4, Estado: db.TareaAsignada, Agente: "Codex10"},
+			{ID: 33, Estado: db.TareaAsignada, Agente: "Codex10"},
+		},
+	}))
+	if info.CompactionDebtAgents != 1 || info.CompactionDebtTasks != 1 {
+		t.Fatalf("deberia reutilizar panel stale valido para compactacion: %+v", info)
+	}
+}
+
+func TestNormalizeServerOperationalInfoDerivaCompactionDebtDesdeTareasActivasSiPanelNoLaExpone(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	info := normalizeServerOperationalInfo(buildServerOperationalInfo(apiStatusResponse{
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex10", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex10", Activo: true}},
+		TareasActivas: []tareaLite{
+			{ID: 4, Estado: db.TareaAsignada, Agente: "Codex10"},
+			{ID: 33, Estado: db.TareaAsignada, Agente: "Codex10"},
+		},
+	}))
+	if info.CompactionDebtAgents != 1 || info.CompactionDebtTasks != 1 {
+		t.Fatalf("deberia derivar compactacion desde tareas activas visibles: %+v", info)
+	}
+	if info.Recovery == nil || info.Recovery.Kind != "compaction_debt" || info.Recovery.SuggestedAction != "compact_or_reassign_active_tasks" {
+		t.Fatalf("recovery de compactacion inesperado: %+v", info.Recovery)
+	}
+}
+
 func TestReconcileStatusSnapshotWithFreshPanelActualizaEstadosDeTareaYConteos(t *testing.T) {
 	resetAgentPanelSnapshotCache()
 	defer resetAgentPanelSnapshotCache()
@@ -1331,6 +1501,61 @@ func TestBuildServerOperationalInfoFastFromDBRefrescaSnapshotStaleConPanelFresco
 	}
 	if info.QuotaAgents != 0 || info.Reason != "control_plane_responsive" {
 		t.Fatalf("no deberia arrastrar cuota stale desde status: %+v", info)
+	}
+}
+
+func TestBuildServerOperationalInfoFastFromDBDerivaCompactionDebtDesdePanelSinTareasActivasEnSnapshot(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	prevAgents := serverOperationalListAgentsFetcher
+	prevTasks := serverOperationalCountTasksFetcher
+	prevNow := statusNowFunc
+	defer func() {
+		serverOperationalListAgentsFetcher = prevAgents
+		serverOperationalCountTasksFetcher = prevTasks
+		statusNowFunc = prevNow
+	}()
+
+	now := time.Date(2026, 4, 30, 18, 55, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return now }
+	storeAgentPanelSnapshotWithTTL([]agentesapp.Row{{
+		Agente:             &db.Agente{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"},
+		EstadoOperativo:    "trabajando",
+		WorkerAlive:        true,
+		WorkerState:        "ready",
+		OpenTasks:          2,
+		CurrentTask:        &agentesapp.TaskFocus{TaskID: 33, State: db.TareaAsignada},
+		LastAutonomyAction: "continuar_trabajo",
+		LastAutonomySource: "work_queue",
+		LastAutonomyState:  "pending",
+	}}, now, 0, 30*time.Second)
+	resetAt := now.Add(30 * time.Minute)
+
+	serverOperationalListAgentsFetcher = func() ([]*db.Agente, error) {
+		return []*db.Agente{
+			{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"},
+			{Nombre: "Codex2", Activo: false, EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		}, nil
+	}
+	serverOperationalCountTasksFetcher = func() (map[string]int, error) {
+		return map[string]int{
+			string(db.TareaAsignada):   2,
+			string(db.TareaEnProgreso): 1,
+		}, nil
+	}
+
+	info, err := buildServerOperationalInfoFastFromDB()
+	if err != nil {
+		t.Fatalf("buildServerOperationalInfoFastFromDB: %v", err)
+	}
+	if info.CompactionDebtAgents != 1 || info.CompactionDebtTasks != 1 {
+		t.Fatalf("deberia derivar compactacion desde panel aunque el snapshot DB no traiga tareas activas: %+v", info)
+	}
+	if info.Recovery == nil || info.Recovery.Kind != "compaction_debt" || info.Recovery.SuggestedAction != "compact_or_reassign_active_tasks" {
+		t.Fatalf("recovery de compactacion inesperado: %+v", info.Recovery)
 	}
 }
 

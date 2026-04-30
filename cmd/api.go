@@ -1680,22 +1680,8 @@ func fetchStatusReadOnlyLiteDirect(timeout time.Duration) (apiStatusResponse, bo
 	}
 	now := time.Now().UTC()
 	status := buildUltraLiteStatusReadOnly(now, result.agentes, result.cuentas, tareaLiteFromDB(result.tareas))
-	if rows, ok := readAgentPanelSnapshotFresh(); ok {
-		status.TareasActivas = reconciliarTareasActivasConPanelRows(status.TareasActivas, rows)
-		status.TareasEnProgreso = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso)
-		status.TareasReservadas = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada)
-		status.TareasPorEstado = reconciliarConteoTareasActivasVisible(status.TareasPorEstado, status.TareasActivas)
-		status.ConteoTareas = status.TareasPorEstado
-		status.ResumenTareas = status.TareasPorEstado
-		activos, trabajando, saturados, atascados, authManual, quotaBlocked, _ := agentesVisiblesPorEstadoOperativoRows(status.Agentes, rows)
-		activos, trabajando, saturados = normalizarAgentesVisiblesStatus(activos, trabajando, saturados)
-		status.AgentesActivos = activos
-		status.AgentesTrabajando = trabajando
-		status.AgentesSaturados = saturados
-		status.AgentesAtascados = atascados
-		status.AgentesAuthManual = authManual
-		status.AgentesQuotaBlocked = quotaBlocked
-		status.Autonomia = resumirAutonomiaRows(rows, now)
+	if rows, ok := serverOperationalPanelRows(now); ok {
+		reconcileStatusSnapshotWithPanelRows(&status, rows)
 	}
 	return status, true
 }

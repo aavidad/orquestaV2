@@ -45,7 +45,7 @@ func readAgentPanelSnapshotAny() ([]agentesapp.Row, bool) {
 	if !agentPanelSnapshotState.ok {
 		return nil, false
 	}
-	if !agentPanelSnapshotState.staleUntil.IsZero() && !time.Now().UTC().Before(agentPanelSnapshotState.staleUntil) {
+	if !agentPanelSnapshotState.staleUntil.IsZero() && !statusNowFunc().UTC().Before(agentPanelSnapshotState.staleUntil) {
 		return nil, false
 	}
 	return cloneAgentPanelRows(agentPanelSnapshotState.rows), true
@@ -57,7 +57,7 @@ func readAgentPanelSnapshotFresh() ([]agentesapp.Row, bool) {
 	if !agentPanelSnapshotState.ok {
 		return nil, false
 	}
-	if agentPanelSnapshotState.expires.IsZero() || !time.Now().UTC().Before(agentPanelSnapshotState.expires) {
+	if agentPanelSnapshotState.expires.IsZero() || !statusNowFunc().UTC().Before(agentPanelSnapshotState.expires) {
 		return nil, false
 	}
 	return cloneAgentPanelRows(agentPanelSnapshotState.rows), true

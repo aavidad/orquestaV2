@@ -127,7 +127,7 @@ func statusVisibleWorkerCounters(agentesActivos, agentesTrabajando []*db.Agente,
 	workersActivos := visibleWorkerCount(len(agentesActivos), autonomia.Supervisando)
 	workersTrabajando := visibleWorkerCount(len(agentesTrabajando), autonomia.Supervisando)
 	supervisorNames := autonomia.supervisorNames
-	if len(supervisorNames) == 0 {
+	if len(supervisorNames) == 0 && autonomia.Supervisando > 0 {
 		names := statusSupervisorAgentNames()
 		if len(names) > 0 {
 			supervisorNames = make(map[string]struct{}, len(names))
