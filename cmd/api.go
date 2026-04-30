@@ -3221,7 +3221,7 @@ func buildOpenClawOperatorStatusBase(status *estadoResumen, rows []agentesapp.Ro
 		EnCuota:             compactOpenClawAgents(agentesBloqueadosPorCuotaVisibles(status), status.TareasActivas, rows),
 		MailboxPendiente:    []apiOpenClawMailboxLite{},
 		RetenidasPorCuota:   tareasRetenidasPorCuota(status.TareasActivas, status.Agentes, status.AgentesQuotaBlocked),
-		TareasActivas:       filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso),
+		TareasActivas:       filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada),
 		TareasReservadas:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
 		PropuestasAbiertas:  status.PropuestasAbiertas,
 		CapacitySummary:     buildOpenClawCapacitySummary(agentesActivos, agentesTrabajando, status.TareasActivas, status.TareasPorEstado),

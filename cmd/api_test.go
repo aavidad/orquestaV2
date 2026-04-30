@@ -2105,6 +2105,26 @@ func TestBuildOpenClawOperatorStatusBasePrefiereRowsParaTrabajandoCanonico(t *te
 	}
 }
 
+func TestBuildOpenClawOperatorStatusBaseIncluyeTareasBloqueadasEnPayloadOperativo(t *testing.T) {
+	status := &estadoResumen{
+		TareasActivas: []tareaLite{
+			{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex10", Titulo: "runtime mailbox"},
+			{ID: 28, Estado: db.TareaBloqueada, Agente: "Codex1", Titulo: "estado de proyecto"},
+			{ID: 4, Estado: db.TareaAsignada, Agente: "Codex2", Titulo: "arquitectura"},
+		},
+	}
+	resumen := buildOpenClawOperatorStatusBase(status, nil)
+	if len(resumen.TareasActivas) != 2 {
+		t.Fatalf("tareas activas operativas inesperadas: %+v", resumen.TareasActivas)
+	}
+	if resumen.TareasActivas[0].ID != 40 || resumen.TareasActivas[1].ID != 28 {
+		t.Fatalf("deberia incluir en_progreso y bloqueada, no asignada: %+v", resumen.TareasActivas)
+	}
+	if len(resumen.TareasReservadas) != 1 || resumen.TareasReservadas[0].ID != 4 {
+		t.Fatalf("tareas reservadas inesperadas: %+v", resumen.TareasReservadas)
+	}
+}
+
 func TestResolveOpenClawAPIStatusReconcilaVisiblesConPanelFresco(t *testing.T) {
 	resetAgentPanelSnapshotCache()
 	resetStatusSnapshotCache()

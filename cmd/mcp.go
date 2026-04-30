@@ -6585,6 +6585,7 @@ func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mail
 		})
 	}
 	actions = append(actions, buildSupervisorAutonomyActions(status.Autonomia.Recent)...)
+	actions = append(actions, buildSupervisorVisibleBlockedTaskActions(status, actions)...)
 	actions = supervisorApplyLiveProgressToAutonomyActions(actions, status)
 	actions = supervisorFilterDispatchActionsBlockedByManualFollowups(actions)
 	if !fast {
@@ -6593,6 +6594,53 @@ func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mail
 	}
 	sortSupervisorRecommendedActionsFast(actions)
 	return actions
+}
+
+func buildSupervisorVisibleBlockedTaskActions(status apiStatusResponse, existing []supervisorRecommendedAction) []supervisorRecommendedAction {
+	if len(status.TareasActivas) == 0 {
+		return nil
+	}
+	out := make([]supervisorRecommendedAction, 0, len(status.TareasActivas))
+	for _, task := range status.TareasActivas {
+		if task.ID <= 0 || task.Estado != db.TareaBloqueada {
+			continue
+		}
+		target := fmt.Sprintf("tarea:%d", task.ID)
+		if supervisorTaskAlreadyHasFollowup(existing, target) {
+			continue
+		}
+		action := supervisorRecommendedAction{
+			Kind:     "blocked_front",
+			Target:   target,
+			Action:   "resolver_followup_bloqueado",
+			Reason:   "Hay una tarea bloqueada visible sin follow-up autónomo vigente; revisar desbloqueo real, reasignación o siguiente slice.",
+			Priority: "alta",
+			Assignee: nombreAgenteCanonico(strings.TrimSpace(task.Agente)),
+		}
+		action.Reason = strings.TrimSpace(action.Reason + supervisorBlockedFrontReasonSuffix(task))
+		if supervisorTaskBlocksRealIntegration(action, task) {
+			action.Reason = strings.TrimSpace(action.Reason + " Bloquea integración real.")
+		}
+		out = append(out, action)
+	}
+	return out
+}
+
+func supervisorTaskAlreadyHasFollowup(actions []supervisorRecommendedAction, target string) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return false
+	}
+	for _, action := range actions {
+		if strings.TrimSpace(action.Target) != target {
+			continue
+		}
+		switch strings.TrimSpace(action.Action) {
+		case "resolver_followup_bloqueado", "inspeccionar_handoff_fallido", "seguir_reasignacion", "verificar_handoff_consolidado":
+			return true
+		}
+	}
+	return false
 }
 
 func supervisorIdleLaunchCandidates() []string {

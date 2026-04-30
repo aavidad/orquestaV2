@@ -5832,6 +5832,68 @@ func TestBuildSupervisorOperationalActionsElevaFollowupBloqueadoQueBloqueaIntegr
 	}
 }
 
+func TestBuildSupervisorOperationalActionsSintetizaFollowupDesdeTareaBloqueadaVisibleSinEvento(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	status := apiStatusResponse{
+		TareasActivas: []tareaLite{{
+			ID:        90451,
+			Estado:    db.TareaBloqueada,
+			Agente:    "Codex1",
+			Titulo:    "Integrar API MCP",
+			Modulo:    "mcp",
+			Prioridad: db.PrioridadAlta,
+		}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	item := findSupervisorAction(actions, "resolver_followup_bloqueado", "tarea:90451")
+	if item == nil {
+		t.Fatalf("falta followup sintetizado para tarea bloqueada visible: %+v", actions)
+	}
+	if item.Assignee != "codex1" {
+		t.Fatalf("deberia conservar el agente visible del frente bloqueado: %+v", item)
+	}
+	if item.Priority != "alta" {
+		t.Fatalf("deberia priorizar alto un frente bloqueado visible: %+v", item)
+	}
+	if !strings.Contains(item.Reason, "sin follow-up autónomo vigente") || !strings.Contains(item.Reason, "Bloquea integración real") {
+		t.Fatalf("deberia explicar el followup sintetizado y el bloqueo real: %+v", item)
+	}
+}
+
+func TestBuildSupervisorOperationalActionsNoDuplicaFollowupBloqueadoSiAutonomiaYaLoCubre(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	taskID := int64(90452)
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "post_remediation_blocked_escalated",
+				CreatedAt:   time.Now().UTC(),
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+				Reason:      "review y merge pendientes",
+			}},
+		},
+		TareasActivas: []tareaLite{{
+			ID:        taskID,
+			Estado:    db.TareaBloqueada,
+			Agente:    "Codex4",
+			Titulo:    "Integrar API MCP",
+			Modulo:    "mcp",
+			Prioridad: db.PrioridadAlta,
+		}},
+	}
+	actions := buildSupervisorOperationalActions(status, nil)
+	count := 0
+	for _, action := range actions {
+		if action.Action == "resolver_followup_bloqueado" && action.Target == "tarea:90452" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("no deberia duplicar followups bloqueados ya cubiertos por autonomia, count=%d actions=%+v", count, actions)
+	}
+}
+
 func TestBuildSupervisorOperationalActionsDegradaFollowupBloqueadoSiElFrenteYaProgresaSano(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	prevRows := supervisorPanelRowsBuilder
