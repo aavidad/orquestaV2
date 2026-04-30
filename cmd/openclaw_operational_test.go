@@ -69,3 +69,35 @@ func TestBuildOpenClawOperationalInfoWithStatusPrefiereFetcherSano(t *testing.T)
 		t.Fatalf("deberia preferir fetcher sano: %+v", info)
 	}
 }
+
+func TestBuildOpenClawOperationalInfoWithStatusPrefiereStatusMasFrescoQueFetcherViejo(t *testing.T) {
+	prevFetcher := controlPlaneOperationalInfoFetcher
+	prevTimeout := openClawOperationalInfoTimeout
+	t.Cleanup(func() {
+		controlPlaneOperationalInfoFetcher = prevFetcher
+		openClawOperationalInfoTimeout = prevTimeout
+	})
+
+	controlPlaneOperationalInfoFetcher = func() (serverOperationalInfo, error) {
+		return serverOperationalInfo{
+			State:            "ready",
+			Operational:      true,
+			Reason:           "control_plane_responsive",
+			ActiveAgents:     2,
+			WorkingAgents:    2,
+			ConnectedWorkers: 1,
+			WorkingWorkers:   1,
+			Generated:        "2026-04-29T08:31:00Z",
+		}, nil
+	}
+	openClawOperationalInfoTimeout = 50 * time.Millisecond
+
+	info := buildOpenClawOperationalInfoWithStatus(apiStatusResponse{
+		Generado:         "2026-04-29T08:31:10Z",
+		TareasEnProgreso: []tareaLite{{ID: 40, Agente: "", Estado: db.TareaEnProgreso}},
+	})
+
+	if info.Generated != "2026-04-29T08:31:10Z" || info.Operational || info.State != "degraded" || info.Reason != "tasks_without_workers" {
+		t.Fatalf("deberia preferir fallback fresco del status: %+v", info)
+	}
+}

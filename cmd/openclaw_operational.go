@@ -26,7 +26,42 @@ func buildOpenClawOperationalInfoWithStatus(status apiStatusResponse) serverOper
 		}
 		return fallback
 	}
-	return normalizeServerOperationalInfo(info)
+	info = normalizeServerOperationalInfo(info)
+	if openClawOperationalFallbackIsNewer(status, info.Generated) {
+		return fallback
+	}
+	return info
+}
+
+func openClawOperationalFallbackIsNewer(status apiStatusResponse, generated string) bool {
+	statusGenerated := strings.TrimSpace(status.Generado)
+	infoGenerated := strings.TrimSpace(generated)
+	if statusGenerated == "" || infoGenerated == "" {
+		return false
+	}
+	statusAt, ok := parseOpenClawOperationalGenerated(statusGenerated)
+	if !ok {
+		return false
+	}
+	infoAt, ok := parseOpenClawOperationalGenerated(infoGenerated)
+	if !ok {
+		return false
+	}
+	return statusAt.After(infoAt)
+}
+
+func parseOpenClawOperationalGenerated(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
+	}
+	if parsed, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		return parsed.UTC(), true
+	}
+	if parsed, err := time.Parse(time.RFC3339, raw); err == nil {
+		return parsed.UTC(), true
+	}
+	return time.Time{}, false
 }
 
 func statusCarriesOperationalSignal(status apiStatusResponse) bool {
