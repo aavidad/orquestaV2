@@ -6,6 +6,7 @@ SUPERVISOR="${SUPERVISOR:-OpenClaw}"
 OUTER_SLEEP="${OUTER_SLEEP:-20}"
 IDLE_SLEEP="${IDLE_SLEEP:-60}"
 QUIET_SLEEP="${QUIET_SLEEP:-90}"
+PASSIVE_RECOVERY_SLEEP="${PASSIVE_RECOVERY_SLEEP:-300}"
 EXIT_ON_COMPLETE="${EXIT_ON_COMPLETE:-true}"
 LOG_FILE="${LOG_FILE:-/tmp/orquesta-openclaw-autoloop.log}"
 MAX_SAFE_ACTIONS_PER_TICK="${MAX_SAFE_ACTIONS_PER_TICK:-1}"
@@ -108,6 +109,7 @@ print("compaction_debt=" + str(server.get("compactionDebtTasks", 0)))
 print("next_recovery_action=" + str(plan.get("action", "")))
 print("next_recovery_auto=" + str(plan.get("autoExecutable", False)).lower())
 print("next_recovery_requires_rearm=" + str(plan.get("requiresRearm", False)).lower())
+print("next_quota_reset_at=" + str(server.get("nextQuotaResetAt", "")))
 print("next_action=" + str(next_action.get("action", "")))
 print("next_action_target=" + str(next_action.get("target", "")))
 print("next_safe_action=" + str(next_safe.get("action", "")))
@@ -227,6 +229,9 @@ PY
   elif [[ "${kv[next_recovery_action]}" != "" ]]; then
     should_self_heal="true"
   fi
+  if [[ "${kv[next_recovery_action]}" == "wait_quota_reset" ]]; then
+    should_self_heal="false"
+  fi
 
   if [[ "$should_self_heal" == "true" && ! self_heal_cooldown_active ]]; then
     if self_heal_response="$(call_tool "orquesta.server.self_heal" "{\"supervisor\":\"${SUPERVISOR}\"}")"; then
@@ -301,6 +306,22 @@ PY
     break
   fi
   sleep_for="${OUTER_SLEEP}"
+  if [[ "${kv[next_recovery_action]}" == "wait_quota_reset" && "${kv[safe_queue_total]}" == "0" ]]; then
+    sleep_for="${PASSIVE_RECOVERY_SLEEP}"
+    if [[ -n "${kv[next_quota_reset_at]}" ]]; then
+      now_ts="$(date +%s)"
+      reset_ts="$(date -d "${kv[next_quota_reset_at]}" +%s 2>/dev/null || echo 0)"
+      if [[ "$reset_ts" -gt "$now_ts" ]]; then
+        delta="$((reset_ts - now_ts))"
+        if [[ "$delta" -lt "$sleep_for" ]]; then
+          sleep_for="$delta"
+        fi
+        if [[ "$sleep_for" -lt 60 ]]; then
+          sleep_for=60
+        fi
+      fi
+    fi
+  fi
   if [[ "${kv[operational]}" == "true" && "${kv[next_recovery_action]}" == "" && "${kv[safe_queue_total]}" == "0" ]]; then
     sleep_for="${IDLE_SLEEP}"
     if [[ "${kv[next_action]}" == "" ]]; then
