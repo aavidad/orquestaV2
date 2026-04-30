@@ -8034,6 +8034,22 @@ func attachSupervisorSafeQueueContext(result map[string]any, safeQueue []supervi
 	return result
 }
 
+func supervisorStaleSafeActionResult(supervisor string, snapshot map[string]any, safeQueue []supervisorRecommendedAction, selected *supervisorRecommendedAction, assignee, reason string) map[string]any {
+	result := map[string]any{
+		"ok":           true,
+		"noop":         true,
+		"stale_action": true,
+		"supervisor":   supervisor,
+		"assignee":     strings.TrimSpace(assignee),
+		"reason":       strings.TrimSpace(reason),
+	}
+	if selected != nil {
+		result["action"] = *selected
+	}
+	result = attachSupervisorSafeQueueContext(result, safeQueue, selected)
+	return attachSupervisorCriticalProjectRisk(result, snapshot)
+}
+
 func buildSupervisorPostActionVerification(supervisor string) map[string]any {
 	verification := map[string]any{
 		"verified_at": time.Now().UTC().Format(time.RFC3339),
@@ -8183,6 +8199,7 @@ func applySupervisorRecommendedActionInternal(supervisor, actionName, target, as
 	}
 	actions, _ := snapshot["safe_action_queue"].([]supervisorRecommendedAction)
 	selected := pickSupervisorRecommendedAction(actions, strings.TrimSpace(actionName), strings.TrimSpace(target), strings.TrimSpace(assignee))
+	selectedFromQueue := selected != nil
 	if selected == nil {
 		selected = fallbackSupervisorRecommendedAction(strings.TrimSpace(actionName), strings.TrimSpace(target), strings.TrimSpace(assignee))
 	}
@@ -8225,6 +8242,9 @@ func applySupervisorRecommendedActionInternal(supervisor, actionName, target, as
 				return nil, err
 			}
 		default:
+			if selectedFromQueue {
+				return supervisorStaleSafeActionResult(supervisor, snapshot, actions, selected, worker, fmt.Sprintf("la tarea #%d ya no está libre para dispatch", taskID)), nil
+			}
 			return nil, fmt.Errorf("la tarea #%d no está libre para dispatch", taskID)
 		}
 		result := map[string]any{
@@ -8255,6 +8275,9 @@ func applySupervisorRecommendedActionInternal(supervisor, actionName, target, as
 				return nil, err
 			}
 		default:
+			if selectedFromQueue {
+				return supervisorStaleSafeActionResult(supervisor, snapshot, actions, selected, worker, fmt.Sprintf("la tarea #%d ya no está libre para reserva", taskID)), nil
+			}
 			return nil, fmt.Errorf("la tarea #%d no está libre para reserva", taskID)
 		}
 		result := map[string]any{
@@ -8311,6 +8334,9 @@ func applySupervisorRecommendedActionInternal(supervisor, actionName, target, as
 			return nil, fmt.Errorf("tarea #%d no encontrada", taskID)
 		}
 		if task.Estado != db.TareaAsignada {
+			if selectedFromQueue {
+				return supervisorStaleSafeActionResult(supervisor, snapshot, actions, selected, worker, fmt.Sprintf("la tarea #%d ya no está reservada para rebalanceo", taskID)), nil
+			}
 			return nil, fmt.Errorf("la tarea #%d no está reservada para rebalanceo", taskID)
 		}
 		if err := tareasService.Reassign(taskID, worker); err != nil {
