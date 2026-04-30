@@ -344,7 +344,7 @@ func TestNormalizeServerOperationalInfoMarcaCompactionDebtConFilaFresca(t *testi
 	prevNow := statusNowFunc
 	defer func() { statusNowFunc = prevNow }()
 
-	now := time.Date(2026, 4, 29, 13, 0, 0, 0, time.UTC)
+	now := time.Now().UTC()
 	statusNowFunc = func() time.Time { return now }
 	storeAgentPanelSnapshot([]agentesapp.Row{{
 		Agente:            &db.Agente{Nombre: "Codex7", Activo: true, EstadoCuota: "activo"},
@@ -366,8 +366,8 @@ func TestNormalizeServerOperationalInfoMarcaCompactionDebtConFilaFresca(t *testi
 			{ID: 26, Estado: db.TareaEnProgreso, Agente: "Codex7"},
 		},
 	}))
-	if !info.Operational || info.Reason != "control_plane_responsive" {
-		t.Fatalf("el servidor sigue operativo; solo deberia marcar deuda de compactacion: %+v", info)
+	if info.Operational || info.State != "degraded" || info.Reason != "tasks_without_workers" {
+		t.Fatalf("deberia mantener el gap real de workers pero priorizar recovery por compactacion: %+v", info)
 	}
 	if info.CompactionDebtAgents != 1 || info.CompactionDebtTasks != 2 {
 		t.Fatalf("deuda de compactacion inesperada: %+v", info)
@@ -387,7 +387,7 @@ func TestNormalizeServerOperationalInfoNoMarcaCompactionDebtSinSenalReal(t *test
 	prevNow := statusNowFunc
 	defer func() { statusNowFunc = prevNow }()
 
-	now := time.Date(2026, 4, 29, 13, 5, 0, 0, time.UTC)
+	now := time.Now().UTC()
 	statusNowFunc = func() time.Time { return now }
 	storeAgentPanelSnapshot([]agentesapp.Row{{
 		Agente:          &db.Agente{Nombre: "Codex8", Activo: true, EstadoCuota: "activo"},
@@ -407,6 +407,45 @@ func TestNormalizeServerOperationalInfoNoMarcaCompactionDebtSinSenalReal(t *test
 	}
 	if info.Recovery == nil || info.Recovery.Kind != "worker_gap" {
 		t.Fatalf("deberia seguir priorizando el gap real de workers: %+v", info.Recovery)
+	}
+}
+
+func TestNormalizeServerOperationalInfoPriorizaCompactionDebtSobreQuotaSiYaHayWorkersOcupados(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "Codex14", Activo: true, EstadoCuota: "activo"},
+		EstadoOperativo: "trabajando",
+		WorkerAlive:     true,
+		WorkerState:     "running",
+		WorkerHeartbeat: ptrTimeServerOperational(now),
+		OpenTasks:       2,
+		CurrentTask:     &agentesapp.TaskFocus{TaskID: 34, State: db.EstadoEnProgreso},
+	}}, now)
+
+	resetAt := now.Add(30 * time.Minute)
+	info := normalizeServerOperationalInfo(buildServerOperationalInfo(apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex1", Activo: true},
+			{Nombre: "Codex14", Activo: true},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex1", Activo: true},
+			{Nombre: "Codex14", Activo: true},
+		},
+		AgentesQuotaBlocked: []*db.Agente{
+			{Nombre: "Codex2", EstadoCuota: "enfriamiento", ReanimarAt: &resetAt},
+		},
+		TareasEnProgreso: []tareaLite{
+			{ID: 33, Estado: db.TareaEnProgreso, Agente: "Codex14"},
+			{ID: 34, Estado: db.TareaEnProgreso, Agente: "Codex14"},
+			{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex1"},
+		},
+	}))
+	if info.Recovery == nil || info.Recovery.Kind != "compaction_debt" || info.Recovery.SuggestedAction != "compact_or_reassign_active_tasks" {
+		t.Fatalf("deberia priorizar compactacion sobre wait_quota_reset si ya hay workers ocupados: %+v", info.Recovery)
 	}
 }
 

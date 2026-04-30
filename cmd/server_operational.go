@@ -334,6 +334,13 @@ func buildServerOperationalRecoveryHint(info serverOperationalInfo) *serverOpera
 			hint.Detail = fmt.Sprintf("%d worker(s) conectados pero solo %d trabajando; conviene consumir primero la capacidad ya visible antes de esperar cuota", info.ConnectedWorkers, info.WorkingWorkers)
 			return hint
 		}
+		if info.CompactionDebtTasks > 0 && info.WorkingWorkers > 0 {
+			hint.Kind = "compaction_debt"
+			hint.AffectedTasks = info.CompactionDebtTasks
+			hint.SuggestedAction = "compact_or_reassign_active_tasks"
+			hint.Detail = fmt.Sprintf("%d tarea(s) abiertas exceden la señal real de trabajo en %d agente(s); conviene compactar antes de esperar cuota", max(info.CompactionDebtTasks, 1), max(info.CompactionDebtAgents, 1))
+			return hint
+		}
 		if info.QuotaAgents > 0 {
 			hint.SuggestedAction = "wait_quota_reset"
 			hint.Detail = fmt.Sprintf("%d worker(s) bloqueados por cuota; próximo reset visible %s", info.QuotaAgents, withFallback(info.NextQuotaResetAt, "pendiente"))
