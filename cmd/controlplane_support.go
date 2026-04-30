@@ -1303,7 +1303,7 @@ func revalidarYVerificarAgenteDisponibleParaTrabajo(nombre string) error {
 	if err := validarEstadoOperativoAgenteParaTrabajo(nombre); err != nil {
 		return err
 	}
-	if _, err := revalidarPresupuestoAgenteSiCorresponde(nombre, presupuestoPreflightRevalidationAge(), true); err != nil && err != sql.ErrNoRows {
+	if _, err := revalidarPresupuestoAgenteSiCorresponde(nombre, presupuestoPreflightRevalidationAge(), false); err != nil && err != sql.ErrNoRows {
 		return err
 	}
 	agente, err = db.GetAgente(nombre)

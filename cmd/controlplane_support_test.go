@@ -149,6 +149,53 @@ func TestRevalidarYVerificarAgenteDisponibleParaTrabajoNoCaeAStatusSiFaltaEnBD(t
 	}
 }
 
+func TestRevalidarYVerificarAgenteDisponibleParaTrabajoNoUsaArtifactsCarosEnPreflight(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexPreflight", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexPreflight",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	prevProfile := observeCodexProfileStatusFn
+	prevArtifacts := observeCodexArtifactsFn
+	t.Cleanup(func() {
+		observeCodexProfileStatusFn = prevProfile
+		observeCodexArtifactsFn = prevArtifacts
+	})
+	observeCodexProfileStatusFn = func(obj controlruntime.ObjetivoProceso) (*controlruntime.CodexObservedArtifacts, error) {
+		return nil, nil
+	}
+	artifactsCalls := 0
+	observeCodexArtifactsFn = func(obj controlruntime.ObjetivoProceso) (*controlruntime.CodexObservedArtifacts, error) {
+		artifactsCalls++
+		return nil, nil
+	}
+
+	if err := revalidarYVerificarAgenteDisponibleParaTrabajo("CodexPreflight"); err != nil {
+		t.Fatalf("revalidarYVerificarAgenteDisponibleParaTrabajo: %v", err)
+	}
+	if artifactsCalls != 0 {
+		t.Fatalf("el preflight no deberia usar ObserveCodexArtifacts, calls=%d", artifactsCalls)
+	}
+}
+
 func TestConstruirInstruccionMailboxInteractivoAceptaPipelineLocal(t *testing.T) {
 	msg := &db.RuntimeMailboxMessage{
 		Kind:        "pipeline_local",
