@@ -251,7 +251,6 @@ var (
 	apiStatusUltraLiteFetcher      = fetchStatusUltraLiteFallback
 	apiStatusReadOnlyLiteFetcher   = db.ListarEstadoLigeroReadOnly
 	apiStatusListActiveTasksLiteFn = listarTareasActivasRapido
-	apiStatusFallbackRichGrace     = 200 * time.Millisecond
 	apiListRuntimeOrdersTimeout    = 2 * time.Second
 	apiListRuntimeMailboxTimeout   = 2 * time.Second
 	apiRuntimeMailboxDefaultLimit  = 100
@@ -1562,82 +1561,18 @@ func fetchStatusForAPIAllowDirectFallback(timeout, fallbackTimeout time.Duration
 }
 
 func fetchStatusFallbackRace(timeout time.Duration) (apiStatusResponse, error) {
-	type result struct {
-		status apiStatusResponse
-		ok     bool
-		rich   bool
-	}
 	if timeout <= 0 {
 		timeout = time.Second
 	}
-	ch := make(chan result, 2)
-	launched := 0
 	if fetcher := statusFastFetcher; fetcher != nil {
-		launched++
-		go func() {
-			status, err := runStatusFetcherWithTimeout(fetcher, timeout)
-			ch <- result{status: status, ok: err == nil, rich: true}
-		}()
+		if status, err := runStatusFetcherWithTimeout(fetcher, timeout); err == nil {
+			return status, nil
+		}
 	}
 	if fetcher := apiStatusUltraLiteFetcher; fetcher != nil {
-		launched++
-		go func() {
-			status, ok := fetcher(timeout)
-			ch <- result{status: status, ok: ok, rich: false}
-		}()
-	}
-	if launched == 0 {
-		return apiStatusResponse{}, errStatusFetchTimeout
-	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	var graceTimer *time.Timer
-	var graceC <-chan time.Time
-	defer func() {
-		if graceTimer != nil {
-			graceTimer.Stop()
+		if status, ok := fetcher(timeout); ok {
+			return status, nil
 		}
-	}()
-	failures := 0
-	var fallback *apiStatusResponse
-	for failures < launched {
-		select {
-		case res := <-ch:
-			if res.ok && res.rich {
-				return res.status, nil
-			}
-			if res.ok {
-				if fallback == nil {
-					status := res.status
-					fallback = &status
-					if failures+1 >= launched {
-						return *fallback, nil
-					}
-					if apiStatusFallbackRichGrace <= 0 {
-						return *fallback, nil
-					}
-					graceTimer = time.NewTimer(apiStatusFallbackRichGrace)
-					graceC = graceTimer.C
-				}
-				continue
-			}
-			failures++
-			if failures >= launched && fallback != nil {
-				return *fallback, nil
-			}
-		case <-graceC:
-			if fallback != nil {
-				return *fallback, nil
-			}
-		case <-timer.C:
-			if fallback != nil {
-				return *fallback, nil
-			}
-			return apiStatusResponse{}, errStatusFetchTimeout
-		}
-	}
-	if fallback != nil {
-		return *fallback, nil
 	}
 	return apiStatusResponse{}, errStatusFetchTimeout
 }

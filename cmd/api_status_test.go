@@ -693,18 +693,17 @@ func TestFetchStatusForAPIAllowDirectFallbackPrefiereReadOnlyAntesDeFastFallback
 	}
 }
 
-func TestFetchStatusFallbackRacePrefiereFastSiLlegaTrasGraciaCorta(t *testing.T) {
+func TestFetchStatusFallbackRacePrefiereFastSinLanzarUltraLite(t *testing.T) {
 	prevFast := statusFastFetcher
 	prevUltraLite := apiStatusUltraLiteFetcher
-	prevGrace := apiStatusFallbackRichGrace
 	t.Cleanup(func() {
 		statusFastFetcher = prevFast
 		apiStatusUltraLiteFetcher = prevUltraLite
-		apiStatusFallbackRichGrace = prevGrace
 	})
 
-	apiStatusFallbackRichGrace = 40 * time.Millisecond
+	ultraCalls := 0
 	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) {
+		ultraCalls++
 		return apiStatusResponse{
 			Generado:         "ultra",
 			AgentesActivos:   []*db.Agente{{Nombre: "CodexLite", Activo: true}},
@@ -712,7 +711,6 @@ func TestFetchStatusFallbackRacePrefiereFastSiLlegaTrasGraciaCorta(t *testing.T)
 		}, true
 	}
 	statusFastFetcher = func() (apiStatusResponse, error) {
-		time.Sleep(10 * time.Millisecond)
 		return apiStatusResponse{
 			Generado:          "fast",
 			AgentesActivos:    []*db.Agente{{Nombre: "CodexFast", Activo: true}},
@@ -728,19 +726,19 @@ func TestFetchStatusFallbackRacePrefiereFastSiLlegaTrasGraciaCorta(t *testing.T)
 	if status.Generado != "fast" || len(status.AgentesTrabajando) != 1 || status.AgentesTrabajando[0].Nombre != "CodexFast" {
 		t.Fatalf("deberia preferir resultado fast: %+v", status)
 	}
+	if ultraCalls != 0 {
+		t.Fatalf("no deberia lanzar ultra-lite si fast ya resolvio, calls=%d", ultraCalls)
+	}
 }
 
-func TestFetchStatusFallbackRaceDevuelveUltraLiteSiFastNoLlegaEnGracia(t *testing.T) {
+func TestFetchStatusFallbackRaceDevuelveUltraLiteSiFastFallaOTimeout(t *testing.T) {
 	prevFast := statusFastFetcher
 	prevUltraLite := apiStatusUltraLiteFetcher
-	prevGrace := apiStatusFallbackRichGrace
 	t.Cleanup(func() {
 		statusFastFetcher = prevFast
 		apiStatusUltraLiteFetcher = prevUltraLite
-		apiStatusFallbackRichGrace = prevGrace
 	})
 
-	apiStatusFallbackRichGrace = 15 * time.Millisecond
 	apiStatusUltraLiteFetcher = func(timeout time.Duration) (apiStatusResponse, bool) {
 		return apiStatusResponse{
 			Generado:       "ultra",
@@ -756,7 +754,7 @@ func TestFetchStatusFallbackRaceDevuelveUltraLiteSiFastNoLlegaEnGracia(t *testin
 		}, nil
 	}
 
-	status, err := fetchStatusFallbackRace(100 * time.Millisecond)
+	status, err := fetchStatusFallbackRace(15 * time.Millisecond)
 	if err != nil {
 		t.Fatalf("fetchStatusFallbackRace: %v", err)
 	}
