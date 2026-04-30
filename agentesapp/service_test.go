@@ -83,6 +83,7 @@ type fakeStore struct {
 	budgetCalls                 int
 	governanceCalls             int
 	mailboxCoveredCalls         int
+	sharedAccountCalls          int
 	pausedAgent                 string
 	pausedMinutes               int
 	pausedReason                string
@@ -1690,6 +1691,7 @@ func (f *fakeStore) ListMemoryEntities(filtro db.FiltroEntidadesMemoria) ([]*db.
 }
 
 func (f *fakeStore) SharedAccountAllowsActivation(nombre string) (bool, string, error) {
+	f.sharedAccountCalls++
 	if f.accountAvailable != nil {
 		if item, ok := f.accountAvailable[nombre]; ok {
 			return item.ok, item.occupiedBy, nil
@@ -5297,6 +5299,41 @@ func TestBuildDetailCompactEvitaResumenPesadoDeMailbox(t *testing.T) {
 	}
 	if store.listSessionsCalls != 0 || store.getActiveCalls == 0 || store.getLastCalls != 0 {
 		t.Fatalf("compact deberia evitar listar sesiones historicas y usar solo activa: list=%d active=%d last=%d", store.listSessionsCalls, store.getActiveCalls, store.getLastCalls)
+	}
+}
+
+func TestBuildDetailCompactOmiteDisponibilidadDeCuentaCompartida(t *testing.T) {
+	store := &fakeStore{
+		agents: []*db.Agente{{
+			Nombre:      "Codex2",
+			Rol:         "programador",
+			Habilitado:  true,
+			EstadoCuota: "activo",
+		}},
+		accountAvailable: map[string]struct {
+			ok         bool
+			occupiedBy string
+		}{
+			"Codex2": {ok: false, occupiedBy: "Codex9"},
+		},
+	}
+
+	svc := NewService(store, nil)
+	detail, err := svc.BuildDetailCompact("Codex2")
+	if err != nil {
+		t.Fatalf("BuildDetailCompact: %v", err)
+	}
+	if _, err := svc.BuildDetailCompact("Codex2"); err != nil {
+		t.Fatalf("BuildDetailCompact #2: %v", err)
+	}
+	if detail == nil || detail.Entity == nil {
+		t.Fatalf("detail/entity nil: %+v", detail)
+	}
+	if store.sharedAccountCalls != 1 {
+		t.Fatalf("BuildDetailCompact deberia cachear SharedAccountAllowsActivation, calls=%d", store.sharedAccountCalls)
+	}
+	if detail.Entity.AccountAvailable || detail.Entity.AccountOccupiedBy != "Codex9" {
+		t.Fatalf("compact detail deberia conservar disponibilidad compartida: %+v", detail.Entity)
 	}
 }
 

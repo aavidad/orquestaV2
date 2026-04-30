@@ -66,6 +66,7 @@ var (
 	statusAutonomyEventsFetchLimit  = 50
 	statusAutonomyEventsRecentLimit = 8
 	statusAutonomySurfaceFetcher    = buildStatusAutonomySurfaceLocal
+	statusAutonomySurfaceCacheTTL   = 10 * time.Second
 	statusAutonomyEventsFetcher     = func(since time.Time, limit int) ([]autonomyEventSummary, error) {
 		items, err := db.ListarAutonomyEvents(db.FiltroAutonomyEvents{
 			Desde:  &since,
@@ -95,6 +96,13 @@ var (
 		waitCh  chan struct{}
 		rows    []agentesapp.Row
 		err     error
+	}
+	statusAutonomySurfaceState struct {
+		mu         sync.Mutex
+		value      *autonomySurface
+		expires    time.Time
+		refreshing bool
+		waitCh     chan struct{}
 	}
 )
 
@@ -861,10 +869,103 @@ func canonicalizeStatusAutonomyRisk(surface *autonomySurface, risk statusWorkspa
 	return surface, risk
 }
 
+func cloneStatusAutonomySurface(surface *autonomySurface) *autonomySurface {
+	if surface == nil {
+		return nil
+	}
+	out := &autonomySurface{
+		Events:     surface.Events,
+		ByKind:     make(map[string]int, len(surface.ByKind)),
+		Highlights: append([]string(nil), surface.Highlights...),
+		Recent:     make([]autonomySurfaceRecentItem, 0, len(surface.Recent)),
+		Projects:   make([]autonomyProjectSurface, 0, len(surface.Projects)),
+	}
+	if surface.LastAt != nil {
+		last := *surface.LastAt
+		out.LastAt = &last
+	}
+	for key, value := range surface.ByKind {
+		out.ByKind[key] = value
+	}
+	for _, item := range surface.Recent {
+		out.Recent = append(out.Recent, item)
+	}
+	for _, item := range surface.Projects {
+		project := autonomyProjectSurface{
+			Project:    item.Project,
+			Events:     item.Events,
+			ByKind:     make(map[string]int, len(item.ByKind)),
+			Highlights: append([]string(nil), item.Highlights...),
+			Recent:     append([]autonomyEventSummary(nil), item.Recent...),
+		}
+		if item.LastAt != nil {
+			last := *item.LastAt
+			project.LastAt = &last
+		}
+		for key, value := range item.ByKind {
+			project.ByKind[key] = value
+		}
+		out.Projects = append(out.Projects, project)
+	}
+	return out
+}
+
+func fetchStatusAutonomySurfaceCached() (*autonomySurface, error) {
+	if statusAutonomySurfaceFetcher == nil {
+		return nil, nil
+	}
+	if statusAutonomySurfaceCacheTTL <= 0 {
+		return statusAutonomySurfaceFetcher()
+	}
+	now := statusNowFunc().UTC()
+	statusAutonomySurfaceState.mu.Lock()
+	if cached := statusAutonomySurfaceState.value; cached != nil && now.Before(statusAutonomySurfaceState.expires) {
+		out := cloneStatusAutonomySurface(cached)
+		statusAutonomySurfaceState.mu.Unlock()
+		return out, nil
+	}
+	if statusAutonomySurfaceState.refreshing && statusAutonomySurfaceState.waitCh != nil {
+		waitCh := statusAutonomySurfaceState.waitCh
+		cached := cloneStatusAutonomySurface(statusAutonomySurfaceState.value)
+		statusAutonomySurfaceState.mu.Unlock()
+		if cached != nil {
+			return cached, nil
+		}
+		<-waitCh
+		statusAutonomySurfaceState.mu.Lock()
+		out := cloneStatusAutonomySurface(statusAutonomySurfaceState.value)
+		statusAutonomySurfaceState.mu.Unlock()
+		return out, nil
+	}
+	waitCh := make(chan struct{})
+	statusAutonomySurfaceState.refreshing = true
+	statusAutonomySurfaceState.waitCh = waitCh
+	statusAutonomySurfaceState.mu.Unlock()
+
+	surface, err := statusAutonomySurfaceFetcher()
+
+	statusAutonomySurfaceState.mu.Lock()
+	if err == nil {
+		statusAutonomySurfaceState.value = cloneStatusAutonomySurface(surface)
+		statusAutonomySurfaceState.expires = now.Add(statusAutonomySurfaceCacheTTL)
+	}
+	statusAutonomySurfaceState.refreshing = false
+	if statusAutonomySurfaceState.waitCh == waitCh {
+		statusAutonomySurfaceState.waitCh = nil
+	}
+	close(waitCh)
+	out := cloneStatusAutonomySurface(statusAutonomySurfaceState.value)
+	statusAutonomySurfaceState.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func loadStatusAutonomySurfaceAndRisk() (*autonomySurface, statusWorkspaceRiskSummary) {
 	var surface *autonomySurface
 	if out, ok := runStatusOptional(statusOptionalSectionTimeout, func() (*autonomySurface, error) {
-		return statusAutonomySurfaceFetcher()
+		return fetchStatusAutonomySurfaceCached()
 	}); ok {
 		surface = out
 	}
@@ -2102,6 +2203,12 @@ func resetStatusSnapshotCache() {
 	statusCacheState.retryAfter = time.Time{}
 	statusCacheState.refreshing = false
 	statusCacheState.waitCh = nil
+	statusAutonomySurfaceState.mu.Lock()
+	statusAutonomySurfaceState.value = nil
+	statusAutonomySurfaceState.expires = time.Time{}
+	statusAutonomySurfaceState.refreshing = false
+	statusAutonomySurfaceState.waitCh = nil
+	statusAutonomySurfaceState.mu.Unlock()
 	if agentesService != nil {
 		agentesService.InvalidateCompactDetailCache()
 	}
@@ -2117,6 +2224,12 @@ func invalidateStatusSnapshotCache() {
 		}
 	}
 	statusCacheState.retryAfter = time.Time{}
+	statusAutonomySurfaceState.mu.Lock()
+	statusAutonomySurfaceState.value = nil
+	statusAutonomySurfaceState.expires = time.Time{}
+	statusAutonomySurfaceState.refreshing = false
+	statusAutonomySurfaceState.waitCh = nil
+	statusAutonomySurfaceState.mu.Unlock()
 	if agentesService != nil {
 		agentesService.InvalidateCompactDetailCache()
 	}
@@ -2129,6 +2242,12 @@ func invalidateStatusSnapshotCacheHard() {
 		statusCacheState.hardStale = true
 	}
 	statusCacheState.retryAfter = time.Time{}
+	statusAutonomySurfaceState.mu.Lock()
+	statusAutonomySurfaceState.value = nil
+	statusAutonomySurfaceState.expires = time.Time{}
+	statusAutonomySurfaceState.refreshing = false
+	statusAutonomySurfaceState.waitCh = nil
+	statusAutonomySurfaceState.mu.Unlock()
 	if agentesService != nil {
 		agentesService.InvalidateCompactDetailCache()
 	}

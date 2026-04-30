@@ -137,7 +137,7 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 		if stream == "pty_out" {
 			sawRuntimeOutput = true
 		}
-		if err := registrarEventoDerivadoTranscript(id, handle, runtime, texto); err != nil {
+		if err := registrarEventoDerivadoTranscript(id, handle, runtime, texto, classification); err != nil {
 			return total, err
 		}
 	}
@@ -167,11 +167,10 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 	return total, nil
 }
 
-func registrarEventoDerivadoTranscript(transcriptID int64, handle *RuntimeHandle, runtime *RuntimeInstance, texto string) error {
+func registrarEventoDerivadoTranscript(transcriptID int64, handle *RuntimeHandle, runtime *RuntimeInstance, texto, classification string) error {
 	if handle == nil || runtime == nil {
 		return nil
 	}
-	classification := clasificarTextoTranscript(normalizarTextoTranscript(texto))
 	if classification == "" {
 		return nil
 	}

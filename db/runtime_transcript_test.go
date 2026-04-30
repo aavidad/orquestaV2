@@ -180,6 +180,48 @@ func TestIngestarRuntimeTranscriptHandleClasificaYGeneraEventos(t *testing.T) {
 	}
 }
 
+func TestRegistrarEventoDerivadoTranscriptOmiteClasificacionVacia(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, _ := GetRuntimeBySesionID(sesion.ID)
+	handle, _ := GetRuntimeHandleBySesionID(sesion.ID)
+
+	if err := registrarEventoDerivadoTranscript(41, handle, runtime, "línea sin clasificación", ""); err != nil {
+		t.Fatalf("registrarEventoDerivadoTranscript: %v", err)
+	}
+
+	var count int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM runtime_events WHERE runtime_id=?`, runtime.ID).Scan(&count); err != nil {
+		t.Fatalf("count runtime_events: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("no debería registrar runtime_events para clasificación vacía, got=%d", count)
+	}
+}
+
 func TestRegistrarRuntimeTranscriptInputPersisteLinea(t *testing.T) {
 	abrirDBTemporalRuntimeObservabilidad(t)
 

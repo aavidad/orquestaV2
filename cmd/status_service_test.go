@@ -1221,15 +1221,22 @@ func TestFetchStatusFastFallbackCompletaHandoffsDesdeFetcher(t *testing.T) {
 func TestFetchStatusFastFallbackIncluyeAutonomySurfaceCanonica(t *testing.T) {
 	prevRowsFetcher := statusRowsFetcher
 	prevSurfaceFetcher := statusAutonomySurfaceFetcher
+	prevSurfaceTTL := statusAutonomySurfaceCacheTTL
 	defer func() {
 		statusRowsFetcher = prevRowsFetcher
 		statusAutonomySurfaceFetcher = prevSurfaceFetcher
+		statusAutonomySurfaceCacheTTL = prevSurfaceTTL
+		resetStatusSnapshotCache()
 	}()
+	resetStatusSnapshotCache()
+	statusAutonomySurfaceCacheTTL = time.Minute
 
 	statusRowsFetcher = func() ([]agentesapp.Row, error) {
 		return nil, errors.New("rows degradado")
 	}
+	calls := 0
 	statusAutonomySurfaceFetcher = func() (*autonomySurface, error) {
+		calls++
 		now := time.Date(2026, 4, 24, 10, 0, 0, 0, time.UTC)
 		return &autonomySurface{
 			Events: 1,
@@ -1247,6 +1254,16 @@ func TestFetchStatusFastFallbackIncluyeAutonomySurfaceCanonica(t *testing.T) {
 	}
 	if status.AutonomySurface == nil || status.AutonomySurface.Events != 1 || status.AutonomySurface.ByKind["task_reassigned"] != 1 {
 		t.Fatalf("autonomySurface inesperada: %+v", status.AutonomySurface)
+	}
+	status, err = fetchStatusFastFallback()
+	if err != nil {
+		t.Fatalf("fetchStatusFastFallback segunda llamada: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("autonomySurface deberia cachearse en fast fallback, calls=%d", calls)
+	}
+	if status.AutonomySurface == nil || status.AutonomySurface.Events != 1 {
+		t.Fatalf("autonomySurface cacheada inesperada: %+v", status.AutonomySurface)
 	}
 }
 

@@ -98,6 +98,7 @@ type Service struct {
 	tickOutputCache          map[string]cachedTickOutput
 	tickOutputFlight         map[string]*tickOutputFlight
 	tickBudgetPauseCache     map[string]cachedTickBudgetPause
+	accountAvailabilityCache map[string]cachedAccountAvailability
 	compactDetailCache       map[string]cachedCompactDetail
 	compactDetailFlight      map[string]*compactDetailFlight
 	reanimCache              map[string]cachedReanimationSchedule
@@ -108,6 +109,7 @@ const defaultWorkerOutputStaleSeconds = 20 * 60
 
 var compactDetailCacheTTL = 2 * time.Second
 var compactDetailStaleWhileRevalidateTTL = 15 * time.Second
+var compactAccountAvailabilityCacheTTL = 15 * time.Second
 var activeReanimationScheduleCacheTTL = 2 * time.Second
 var activeReanimationScheduleStaleWhileRevalidateTTL = 15 * time.Second
 
@@ -224,6 +226,7 @@ func NewService(store Store, modelPolicyProvider ModelPolicyProvider) *Service {
 		tickOutputCache:          map[string]cachedTickOutput{},
 		tickOutputFlight:         map[string]*tickOutputFlight{},
 		tickBudgetPauseCache:     map[string]cachedTickBudgetPause{},
+		accountAvailabilityCache: map[string]cachedAccountAvailability{},
 		compactDetailCache:       map[string]cachedCompactDetail{},
 		compactDetailFlight:      map[string]*compactDetailFlight{},
 		reanimCache:              map[string]cachedReanimationSchedule{},
@@ -234,6 +237,12 @@ func NewService(store Store, modelPolicyProvider ModelPolicyProvider) *Service {
 type cachedCompactDetail struct {
 	detail  *Detail
 	expires time.Time
+}
+
+type cachedAccountAvailability struct {
+	ok         bool
+	occupiedBy string
+	expires    time.Time
 }
 
 type cachedPrepareAgent struct {
@@ -1153,6 +1162,37 @@ func (s *Service) BuildDetailCompact(nombre string) (*Detail, error) {
 	})
 }
 
+func (s *Service) sharedAccountAllowsActivationCached(nombre string) (bool, string, error) {
+	if s == nil || s.store == nil {
+		return true, "", nil
+	}
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" || compactAccountAvailabilityCacheTTL <= 0 {
+		return s.store.SharedAccountAllowsActivation(nombre)
+	}
+	now := time.Now().UTC()
+	s.cacheMu.Lock()
+	if cached, ok := s.accountAvailabilityCache[nombre]; ok && now.Before(cached.expires) {
+		s.cacheMu.Unlock()
+		return cached.ok, cached.occupiedBy, nil
+	}
+	s.cacheMu.Unlock()
+
+	ok, occupiedBy, err := s.store.SharedAccountAllowsActivation(nombre)
+	if err != nil {
+		return false, "", err
+	}
+
+	s.cacheMu.Lock()
+	s.accountAvailabilityCache[nombre] = cachedAccountAvailability{
+		ok:         ok,
+		occupiedBy: strings.TrimSpace(occupiedBy),
+		expires:    now.Add(compactAccountAvailabilityCacheTTL),
+	}
+	s.cacheMu.Unlock()
+	return ok, strings.TrimSpace(occupiedBy), nil
+}
+
 func (s *Service) InvalidateCompactDetailCache(names ...string) {
 	if s == nil {
 		return
@@ -1219,9 +1259,16 @@ func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 			return nil, err
 		}
 		mailboxPendingVisible := compactMailboxPendingVisible(row, now)
+		entity := buildAgentEntityWithOptions(s.store, row, tareas, true)
+		if entity != nil {
+			if ok, ocupadoPor, err := s.sharedAccountAllowsActivationCached(strings.TrimSpace(nombre)); err == nil {
+				entity.AccountAvailable = ok
+				entity.AccountOccupiedBy = ocupadoPor
+			}
+		}
 		return &Detail{
 			Row:                     row,
-			Entity:                  buildAgentEntity(s.store, row, tareas),
+			Entity:                  entity,
 			Asignaciones:            asignaciones,
 			MailboxTotalCount:       row.MailboxPending,
 			MailboxPendingVisible:   mailboxPendingVisible,
