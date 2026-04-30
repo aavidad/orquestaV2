@@ -11621,7 +11621,7 @@ func rowBloqueadoSinRuntimeUtilParaAutonomia(row agentesapp.Row, now time.Time) 
 	if row.Sesion != nil && row.Sesion.Activa && strings.EqualFold(strings.TrimSpace(row.Sesion.Estado), "activa") {
 		return false
 	}
-	if row.WorkerAlive || row.WorkerFresh(now) {
+	if row.WorkerAlive {
 		return false
 	}
 	if row.MailboxActionablePending > 0 ||
