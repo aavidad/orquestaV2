@@ -6834,6 +6834,9 @@ func supervisorAdjustAutonomyActionByRows(action supervisorRecommendedAction, ro
 			action.Priority = "media"
 		}
 		if hasVisibleTask && task.Estado == db.TareaEnProgreso {
+			if strings.TrimSpace(action.Action) == "seguir_reinicio_runtime" && !supervisorActionBlocksGlobalProgress(action, task) {
+				return action, false
+			}
 			action.Reason = strings.TrimSpace(action.Reason + " Ya hay progreso reciente del worker destino. El frente ya está en progreso visible y con progreso sin bloqueo visible.")
 			if supervisorActionBlocksGlobalProgress(action, task) {
 				action.Priority = "media"

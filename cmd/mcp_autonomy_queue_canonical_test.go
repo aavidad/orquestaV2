@@ -159,3 +159,39 @@ func TestBuildSupervisorOperationalActionsFastOmiteFollowupZombiePorOverviewCano
 		t.Fatalf("el fast path no deberia mantener followup zombie: %+v", actions)
 	}
 }
+
+func TestBuildSupervisorOperationalActionsOmiteReinicioRuntimeSiCodex10YaProgresaSinBloqueoGlobal(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	now := time.Now().UTC()
+	progress := now.Add(-time.Minute)
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:             &db.Agente{Nombre: "Codex10"},
+			EstadoOperativo:    "trabajando",
+			WorkerLastProgress: &progress,
+		}}, nil
+	}
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "runtime_restart_requested",
+				CreatedAt:   now,
+				Agent:       "Codex10",
+				TargetAgent: "Codex10",
+			}},
+		},
+		TareasActivas: []tareaLite{{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex10", Prioridad: db.PrioridadAlta}},
+	}
+
+	actions := buildSupervisorOperationalActions(status, nil)
+	if containsSupervisorAction(actions, "seguir_reinicio_runtime", "agente:Codex10") {
+		t.Fatalf("no deberia mantener followup manual si Codex10 ya progresa: %+v", actions)
+	}
+}

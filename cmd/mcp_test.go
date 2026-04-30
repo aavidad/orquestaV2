@@ -34,15 +34,23 @@ import (
 )
 
 type gitStatsCollectorStub struct {
-	gotCWD   string
-	gotSince time.Time
-	response *gitestadisticasapp.Stats
-	err      error
+	gotCWD    string
+	gotCWDs   []string
+	gotSince  time.Time
+	response  *gitestadisticasapp.Stats
+	responses map[string]*gitestadisticasapp.Stats
+	err       error
 }
 
 func (s *gitStatsCollectorStub) Collect(cwd string, since time.Time) (*gitestadisticasapp.Stats, error) {
 	s.gotCWD = cwd
+	s.gotCWDs = append(s.gotCWDs, cwd)
 	s.gotSince = since
+	if s.responses != nil {
+		if item, ok := s.responses[cwd]; ok {
+			return item, s.err
+		}
+	}
 	return s.response, s.err
 }
 
@@ -1530,7 +1538,7 @@ func TestMCPGitStatsSurfaceSeLista(t *testing.T) {
 		templates := mcpResourceTemplates()
 		foundTemplate := false
 		for _, item := range templates {
-			if item.URITemplate == "orquesta://git/stats{?proyecto,path,cwd,desde}" {
+			if item.URITemplate == "orquesta://git/stats{?scope,proyecto,agente,path,cwd,desde}" {
 				foundTemplate = true
 				break
 			}
@@ -1640,6 +1648,126 @@ func TestMCPToolGitStatsAceptaCwdCanonico(t *testing.T) {
 	}
 	if structured.Stats == nil || structured.Stats.FilesChanged != 2 || structured.Stats.LinesNet != 6 {
 		t.Fatalf("stats inesperados: %+v", structured.Stats)
+	}
+}
+
+func TestMCPToolGitStatsAceptaScopeAgente(t *testing.T) {
+	prevService := apiGitStatsService
+	prevLookup := apiGitStatsProjectLookupFn
+	prevAgentDetail := apiGitStatsAgentDetailFn
+	defer func() {
+		apiGitStatsService = prevService
+		apiGitStatsProjectLookupFn = prevLookup
+		apiGitStatsAgentDetailFn = prevAgentDetail
+	}()
+
+	collector := &gitStatsCollectorStub{
+		response: &gitestadisticasapp.Stats{
+			RepoRoot:          "/tmp/repo",
+			CWD:               "/tmp/repo/wt",
+			TouchedFiles:      []string{"cmd/mcp.go"},
+			PendingAddedLines: 2,
+			RecentCommitCount: 1,
+		},
+	}
+	apiGitStatsService = gitOperationalStatsService{collector: collector}
+	apiGitStatsProjectLookupFn = func(ref string) (*db.Proyecto, error) {
+		if ref != "orquestador" {
+			t.Fatalf("project lookup inesperado: %q", ref)
+		}
+		return &db.Proyecto{Slug: "orquestador"}, nil
+	}
+	apiGitStatsAgentDetailFn = func(agent string) (*agentesapp.Detail, error) {
+		if agent != "Codex1" {
+			t.Fatalf("agente inesperado: %q", agent)
+		}
+		return &agentesapp.Detail{
+			Row: agentesapp.Row{Agente: &db.Agente{Nombre: "Codex1"}},
+			Sesiones: []*db.Sesion{{
+				Agente:       "Codex1",
+				ProyectoSlug: "orquestador",
+				CWD:          "/tmp/repo/wt",
+				Inicio:       time.Date(2026, 4, 30, 10, 0, 0, 0, time.UTC),
+			}},
+		}, nil
+	}
+
+	result, err := callMCPTool("orquesta.git.stats", map[string]any{
+		"agente":   "Codex1",
+		"proyecto": "orquestador",
+	})
+	if err != nil {
+		t.Fatalf("callMCPTool git.stats agente: %v", err)
+	}
+	if collector.gotCWD != "/tmp/repo/wt" {
+		t.Fatalf("cwd agente inesperado en collector: %q", collector.gotCWD)
+	}
+	structured, ok := result["structuredContent"].(apiGitStatsResponse)
+	if !ok {
+		t.Fatalf("structuredContent inesperado: %#v", result["structuredContent"])
+	}
+	if structured.Scope != "agente" || structured.Agent != "Codex1" || structured.Project != "orquestador" || structured.Path != "/tmp/repo/wt" {
+		t.Fatalf("scope agente MCP inesperado: %+v", structured)
+	}
+}
+
+func TestMCPToolGitStatsAceptaScopeGlobal(t *testing.T) {
+	prevService := apiGitStatsService
+	prevPanelRows := apiGitStatsPanelRowsFn
+	prevAgentDetail := apiGitStatsAgentDetailFn
+	defer func() {
+		apiGitStatsService = prevService
+		apiGitStatsPanelRowsFn = prevPanelRows
+		apiGitStatsAgentDetailFn = prevAgentDetail
+	}()
+
+	collector := &gitStatsCollectorStub{
+		responses: map[string]*gitestadisticasapp.Stats{
+			"/tmp/repo/a": {RepoRoot: "/tmp/repo", CWD: "/tmp/repo/a", TouchedFiles: []string{"cmd/a.go"}, PendingAddedLines: 2, RecentCommitCount: 1},
+			"/tmp/repo/b": {RepoRoot: "/tmp/repo", CWD: "/tmp/repo/b", TouchedFiles: []string{"cmd/b.go"}, CommittedAddedLines: 3, PendingDeletedLines: 1, RecentCommitCount: 2},
+		},
+	}
+	apiGitStatsService = gitOperationalStatsService{collector: collector}
+	apiGitStatsPanelRowsFn = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{
+			{Agente: &db.Agente{Nombre: "CodexA"}, Asignacion: &db.Asignacion{ProyectoSlug: "demo-a"}},
+			{Agente: &db.Agente{Nombre: "CodexB"}, Asignacion: &db.Asignacion{ProyectoSlug: "demo-b"}},
+		}, nil
+	}
+	apiGitStatsAgentDetailFn = func(agent string) (*agentesapp.Detail, error) {
+		switch agent {
+		case "CodexA":
+			return &agentesapp.Detail{
+				Row:      agentesapp.Row{Agente: &db.Agente{Nombre: agent}},
+				Sesiones: []*db.Sesion{{Agente: agent, ProyectoSlug: "demo-a", CWD: "/tmp/repo/a", Inicio: time.Now().UTC()}},
+			}, nil
+		case "CodexB":
+			return &agentesapp.Detail{
+				Row:      agentesapp.Row{Agente: &db.Agente{Nombre: agent}},
+				Sesiones: []*db.Sesion{{Agente: agent, ProyectoSlug: "demo-b", CWD: "/tmp/repo/b", Inicio: time.Now().UTC()}},
+			}, nil
+		default:
+			t.Fatalf("agente inesperado: %q", agent)
+			return nil, nil
+		}
+	}
+
+	result, err := callMCPTool("orquesta.git.stats", map[string]any{
+		"scope": "global",
+		"desde": "2026-04-24T13:00:00Z",
+	})
+	if err != nil {
+		t.Fatalf("callMCPTool git.stats global: %v", err)
+	}
+	if !reflect.DeepEqual(collector.gotCWDs, []string{"/tmp/repo/a", "/tmp/repo/b"}) {
+		t.Fatalf("cwds globales inesperados: %+v", collector.gotCWDs)
+	}
+	structured, ok := result["structuredContent"].(apiGitStatsResponse)
+	if !ok {
+		t.Fatalf("structuredContent inesperado: %#v", result["structuredContent"])
+	}
+	if structured.Scope != "global" || len(structured.Worktrees) != 2 || structured.Stats == nil || structured.Stats.FilesChanged != 2 || structured.Stats.Insertions != 5 || structured.Stats.Deletions != 1 {
+		t.Fatalf("resultado global inesperado: %+v", structured)
 	}
 }
 
@@ -5624,7 +5752,7 @@ func TestBuildSupervisorOperationalActionsMantieneReasignacionAsignadaSinProgres
 	}
 }
 
-func TestBuildSupervisorOperationalActionsDegradaReinicioRuntimeSiFrenteVisibleYaProgresa(t *testing.T) {
+func TestBuildSupervisorOperationalActionsOmiteReinicioRuntimeSiFrenteVisibleYaProgresa(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	prevRows := supervisorPanelRowsBuilder
 	prevThreshold := supervisorSemanticProgressRecentThreshold
@@ -5655,15 +5783,8 @@ func TestBuildSupervisorOperationalActionsDegradaReinicioRuntimeSiFrenteVisibleY
 		TareasActivas: []tareaLite{{ID: 9041, Estado: db.TareaEnProgreso, Agente: "Codex1"}},
 	}
 	actions := buildSupervisorOperationalActions(status, nil)
-	item := findSupervisorAction(actions, "seguir_reinicio_runtime", "agente:Codex1")
-	if item == nil {
-		t.Fatalf("falta accion de reinicio runtime: %+v", actions)
-	}
-	if item.Priority != "baja" {
-		t.Fatalf("deberia degradar fuerte si el frente ya progresa: %+v", item)
-	}
-	if !strings.Contains(item.Reason, "Ya hay progreso reciente") || !strings.Contains(item.Reason, "progreso sin bloqueo visible") || !strings.Contains(item.Reason, "No parece bloquear integración/progreso global") || !strings.Contains(item.Reason, "Frente local o no bloqueante") {
-		t.Fatalf("deberia explicar progreso reciente y frente visible en curso: %+v", item)
+	if item := findSupervisorAction(actions, "seguir_reinicio_runtime", "agente:Codex1"); item != nil {
+		t.Fatalf("no deberia mantener restart followup si el frente visible ya progresa: %+v", item)
 	}
 }
 
