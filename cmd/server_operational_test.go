@@ -705,6 +705,220 @@ func TestNormalizeServerOperationalInfoNoMarcaCompactionAutoExecutableSinSliceDe
 	}
 }
 
+func TestNormalizeServerOperationalInfoMarcaBlockedFrontsAutoExecutable(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-blocked-front-autoexec",
+		Nombre:  "Orquestador Blocked Front Autoexec",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"CodexBloq", "CodexIdle"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente bloqueado"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente bloqueado autoejecutable",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexBloq"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexBloq"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "orquesta", "Agente CodexBloq en estado bloqueado: runtime stale sin worker"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexBloq", Activo: false, EstadoCuota: "activo"},
+			Asignacion:      &db.Asignacion{Agente: "CodexBloq", ProyectoID: proyectoID, ProyectoSlug: "orquestador-blocked-front-autoexec", Estado: db.AsignacionActiva},
+			EstadoOperativo: "bloqueado",
+			BlockedTasks:    1,
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: tareaID, State: db.TareaBloqueada, ProjectID: &proyectoID},
+		},
+		{
+			Agente:          &db.Agente{Nombre: "CodexIdle", Activo: false, EstadoCuota: "activo"},
+			Asignacion:      &db.Asignacion{Agente: "CodexIdle", ProyectoID: proyectoID, ProyectoSlug: "orquestador-blocked-front-autoexec", Estado: db.AsignacionActiva},
+			EstadoOperativo: "sin_tarea",
+			OpenTasks:       0,
+			BlockedTasks:    0,
+			WorkerAlive:     false,
+		},
+	}, now)
+
+	info := normalizeServerOperationalInfo(buildServerOperationalInfo(apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "CodexIdle", Activo: true},
+		},
+		TareasActivas: []tareaLite{
+			{ID: tareaID, Estado: db.TareaBloqueada, Agente: "CodexBloq"},
+		},
+		TareasPorEstado: map[string]int{
+			string(db.TareaBloqueada): 1,
+		},
+	}))
+	if !info.Operational || info.State != "ready" {
+		t.Fatalf("el control plane deberia seguir ready en este caso: %+v", info)
+	}
+	if info.Recovery == nil || info.Recovery.Kind != "blocked_fronts" || info.Recovery.SuggestedAction != "recover_blocked_fronts" {
+		t.Fatalf("recovery de blocked fronts inesperado: %+v", info.Recovery)
+	}
+	if info.NextRecoveryPlan == nil || info.NextRecoveryPlan.Action != "recover_blocked_fronts" || !info.NextRecoveryPlan.AutoExecutable {
+		t.Fatalf("nextRecoveryPlan de blocked fronts inesperado: %+v", info.NextRecoveryPlan)
+	}
+}
+
+func TestNormalizeServerOperationalInfoPriorizaBlockedFrontsSobreStartOrAssign(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-blocked-front-priority",
+		Nombre:  "Orquestador Blocked Front Priority",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"CodexBloq", "CodexIdle", "CodexWork"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente bloqueado"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente bloqueado prioritario",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea bloqueada: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexBloq"); err != nil {
+		t.Fatalf("tomar tarea bloqueada: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexBloq"); err != nil {
+		t.Fatalf("iniciar tarea bloqueada: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "orquesta", "Agente CodexBloq en estado bloqueado: runtime stale sin worker"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexBloq", Activo: false, EstadoCuota: "activo"},
+			Asignacion:      &db.Asignacion{Agente: "CodexBloq", ProyectoID: proyectoID, ProyectoSlug: "orquestador-blocked-front-priority", Estado: db.AsignacionActiva},
+			EstadoOperativo: "bloqueado",
+			BlockedTasks:    1,
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: tareaID, State: db.TareaBloqueada, ProjectID: &proyectoID},
+		},
+		{
+			Agente:          &db.Agente{Nombre: "CodexIdle", Activo: false, EstadoCuota: "activo"},
+			Asignacion:      &db.Asignacion{Agente: "CodexIdle", ProyectoID: proyectoID, ProyectoSlug: "orquestador-blocked-front-priority", Estado: db.AsignacionActiva},
+			EstadoOperativo: "sin_tarea",
+			OpenTasks:       0,
+			BlockedTasks:    0,
+			WorkerAlive:     false,
+		},
+		{
+			Agente:          &db.Agente{Nombre: "CodexWork", Activo: true, EstadoCuota: "activo"},
+			Asignacion:      &db.Asignacion{Agente: "CodexWork", ProyectoID: proyectoID, ProyectoSlug: "orquestador-blocked-front-priority", Estado: db.AsignacionActiva},
+			EstadoOperativo: "trabajando",
+			OpenTasks:       1,
+			WorkerAlive:     true,
+			WorkerState:     "running",
+			WorkerHeartbeat: ptrTimeServerOperational(now),
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 999, State: db.TareaEnProgreso, ProjectID: &proyectoID},
+		},
+	}, now)
+
+	info := normalizeServerOperationalInfo(buildServerOperationalInfo(apiStatusResponse{
+		AgentesActivos:    []*db.Agente{{Nombre: "CodexWork", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "CodexWork", Activo: true}},
+		TareasEnProgreso: []tareaLite{
+			{ID: 999, Estado: db.TareaEnProgreso, Agente: "CodexWork"},
+			{ID: 1000, Estado: db.TareaEnProgreso, Agente: "CodexIdle"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 999, Estado: db.TareaEnProgreso, Agente: "CodexWork"},
+			{ID: 1000, Estado: db.TareaEnProgreso, Agente: "CodexIdle"},
+			{ID: tareaID, Estado: db.TareaBloqueada, Agente: "CodexBloq"},
+		},
+		TareasPorEstado: map[string]int{
+			string(db.TareaEnProgreso): 2,
+			string(db.TareaBloqueada):  1,
+		},
+	}))
+	if info.Recovery == nil || info.Recovery.Kind != "blocked_fronts" || info.Recovery.SuggestedAction != "recover_blocked_fronts" {
+		t.Fatalf("deberia priorizar blocked fronts sobre start_or_assign: %+v", info.Recovery)
+	}
+	if info.NextRecoveryPlan == nil || info.NextRecoveryPlan.Action != "recover_blocked_fronts" || !info.NextRecoveryPlan.AutoExecutable {
+		t.Fatalf("nextRecoveryPlan de blocked fronts inesperado: %+v", info.NextRecoveryPlan)
+	}
+}
+
+func TestNormalizeServerOperationalInfoMarcaStuckWorkersAutoExecutable(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "CodexTMUX", Activo: true, EstadoCuota: "activo"},
+		Handle:          &db.RuntimeHandle{Estado: "activo", Transporte: "tmux"},
+		EstadoOperativo: "atascado",
+		OpenTasks:       1,
+		WorkerAlive:     true,
+		WorkerState:     "running",
+		WorkerDriver:    "tmux_cli_session",
+		WorkerHeartbeat: ptrTimeServerOperational(now),
+		WorkerUpdatedAt: ptrTimeServerOperational(now),
+		CurrentTask:     &agentesapp.TaskFocus{TaskID: 40, State: db.TareaEnProgreso},
+	}}, now)
+
+	info := normalizeServerOperationalInfo(buildServerOperationalInfo(apiStatusResponse{
+		AgentesActivos:    []*db.Agente{{Nombre: "CodexTMUX", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "CodexTMUX", Activo: true}},
+		AgentesAtascados:  []*db.Agente{{Nombre: "CodexTMUX", Activo: true}},
+		TareasEnProgreso:  []tareaLite{{ID: 40, Estado: db.TareaEnProgreso, Agente: "CodexTMUX"}},
+		Autonomia:         autonomiaResumen{WorkConfirmed: 0},
+	}))
+	if info.Recovery == nil || info.Recovery.Kind != "stuck_workers" || info.Recovery.SuggestedAction != "inspect_stuck_workers" {
+		t.Fatalf("recovery de stuck workers inesperado: %+v", info.Recovery)
+	}
+	if info.NextRecoveryPlan == nil || info.NextRecoveryPlan.Action != "inspect_stuck_workers" || !info.NextRecoveryPlan.AutoExecutable {
+		t.Fatalf("nextRecoveryPlan de stuck workers inesperado: %+v", info.NextRecoveryPlan)
+	}
+}
+
 func TestReconcileStatusSnapshotWithFreshPanelActualizaEstadosDeTareaYConteos(t *testing.T) {
 	resetAgentPanelSnapshotCache()
 	defer resetAgentPanelSnapshotCache()

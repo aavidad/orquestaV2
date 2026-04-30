@@ -261,6 +261,16 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 	}
 	markPhase("compaction", phaseStart)
 	phaseStart = time.Now()
+	if err := mcpServerSelfHealAutoExecuteBlockedFronts(&result, enabled); err != nil {
+		appendErr("blocked_fronts", err)
+	}
+	markPhase("blocked_fronts", phaseStart)
+	phaseStart = time.Now()
+	if err := mcpServerSelfHealAutoExecuteStuckWorkers(&result, enabled); err != nil {
+		appendErr("stuck_workers", err)
+	}
+	markPhase("stuck_workers", phaseStart)
+	phaseStart = time.Now()
 	startOrAssignApplied := false
 	if applied, err := mcpServerSelfHealAutoExecuteStartOrAssignWorkers(&result, enabled); err != nil {
 		appendErr("dispatch", err)
@@ -363,6 +373,84 @@ func mcpServerSelfHealAutoExecuteCompaction(result *apiRuntimeSelfHealResponse, 
 	}
 	plan := result.Operational.NextRecoveryPlan
 	if plan == nil || strings.TrimSpace(plan.Action) != "compact_or_reassign_active_tasks" {
+		return nil
+	}
+	if enabled("degradados") {
+		summary, err := runtimeProcessDegradadosBatchDetailed()
+		result.Degradados.OK = result.Degradados.OK && err == nil
+		result.Degradados.Count += summary.Count
+		result.Degradados.GhostAssignmentsCompacted += summary.GhostAssignmentsCompacted
+		result.Degradados.ReactivatedWithoutRuntime += summary.ReactivatedWithoutRuntime
+		result.Degradados.IdleAutoassigned += summary.IdleAutoassigned
+		if summary.Count > 0 {
+			invalidateStatusSnapshotCache()
+		}
+		if err != nil {
+			result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
+			syncMCPServerSelfHealRecovery(result)
+			return err
+		}
+	}
+	if enabled("autonomia") {
+		count, err := runtimeProcessAutonomiaBatch()
+		result.Autonomia.OK = result.Autonomia.OK && err == nil
+		result.Autonomia.Count += count
+		if err != nil {
+			result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
+			syncMCPServerSelfHealRecovery(result)
+			return err
+		}
+	}
+	result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
+	syncMCPServerSelfHealRecovery(result)
+	return nil
+}
+
+func mcpServerSelfHealAutoExecuteBlockedFronts(result *apiRuntimeSelfHealResponse, enabled func(string) bool) error {
+	if result == nil || enabled == nil {
+		return nil
+	}
+	plan := result.Operational.NextRecoveryPlan
+	if plan == nil || strings.TrimSpace(plan.Action) != "recover_blocked_fronts" {
+		return nil
+	}
+	if enabled("degradados") {
+		summary, err := runtimeProcessDegradadosBatchDetailed()
+		result.Degradados.OK = result.Degradados.OK && err == nil
+		result.Degradados.Count += summary.Count
+		result.Degradados.GhostAssignmentsCompacted += summary.GhostAssignmentsCompacted
+		result.Degradados.ReactivatedWithoutRuntime += summary.ReactivatedWithoutRuntime
+		result.Degradados.IdleAutoassigned += summary.IdleAutoassigned
+		if summary.Count > 0 {
+			invalidateStatusSnapshotCache()
+		}
+		if err != nil {
+			result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
+			syncMCPServerSelfHealRecovery(result)
+			return err
+		}
+	}
+	if enabled("autonomia") {
+		count, err := runtimeProcessAutonomiaBatch()
+		result.Autonomia.OK = result.Autonomia.OK && err == nil
+		result.Autonomia.Count += count
+		if err != nil {
+			result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
+			syncMCPServerSelfHealRecovery(result)
+			return err
+		}
+	}
+	result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
+	syncMCPServerSelfHealRecovery(result)
+	return nil
+}
+
+func mcpServerSelfHealAutoExecuteStuckWorkers(result *apiRuntimeSelfHealResponse, enabled func(string) bool) error {
+	if result == nil || enabled == nil {
+		return nil
+	}
+	plan := result.Operational.NextRecoveryPlan
+	if plan == nil || strings.TrimSpace(plan.Action) != "inspect_stuck_workers" {
 		return nil
 	}
 	if enabled("degradados") {

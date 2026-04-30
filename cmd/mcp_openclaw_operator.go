@@ -235,7 +235,7 @@ func buildOpenClawNextRecoveryAction(info serverOperationalInfo) *supervisorReco
 		Assignee: resolveSupervisorName(""),
 	}
 	switch strings.TrimSpace(recovery.Kind) {
-	case "worker_gap", "stuck_workers":
+	case "worker_gap", "stuck_workers", "blocked_fronts":
 		action.Priority = "alta"
 	case "quota_cooldown":
 		action.Priority = "baja"

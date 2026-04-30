@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/db"
 )
 
@@ -914,6 +916,260 @@ func TestMCPToolServerSelfHealAutoEjecutaCompactionDebt(t *testing.T) {
 	}
 	if payload.NextRecoveryAction != nil || payload.NextRecoveryPlan != nil {
 		t.Fatalf("no deberia quedar recovery pendiente tras compactacion: action=%+v plan=%+v", payload.NextRecoveryAction, payload.NextRecoveryPlan)
+	}
+}
+
+func TestMCPToolServerSelfHealAutoEjecutaBlockedFronts(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	prevWakeOrders := apiRuntimeWakeOrdersFn
+	prevWakeMailbox := apiRuntimeWakeMailboxFn
+	prevWakeWarm := apiRuntimeWakeWarmFn
+	prevOrdersExec := apiRuntimeProcessOrdersExecutor
+	prevMailboxExec := apiRuntimeProcessMailboxExecutor
+	prevHygiene := runtimeProcessHygieneBatch
+	prevDegradados := runtimeProcessDegradadosBatchDetailed
+	prevAutonomia := runtimeProcessAutonomiaBatch
+	prevReanimations := runtimeProcessReanimationsBatchFn
+	prevOperational := mcpBuildServerOperationalInfoFn
+	defer func() {
+		apiRuntimeWakeOrdersFn = prevWakeOrders
+		apiRuntimeWakeMailboxFn = prevWakeMailbox
+		apiRuntimeWakeWarmFn = prevWakeWarm
+		apiRuntimeProcessOrdersExecutor = prevOrdersExec
+		apiRuntimeProcessMailboxExecutor = prevMailboxExec
+		runtimeProcessHygieneBatch = prevHygiene
+		runtimeProcessDegradadosBatchDetailed = prevDegradados
+		runtimeProcessAutonomiaBatch = prevAutonomia
+		runtimeProcessReanimationsBatchFn = prevReanimations
+		mcpBuildServerOperationalInfoFn = prevOperational
+	}()
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-selfheal-blocked-front",
+		Nombre:  "Orquestador SelfHeal Blocked Front",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"CodexBloq", "CodexIdle"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente bloqueado"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente bloqueado self-heal",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexBloq"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexBloq"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "orquesta", "Agente CodexBloq en estado bloqueado: runtime stale sin worker"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexBloq", Activo: false, EstadoCuota: "activo"},
+			Asignacion:      &db.Asignacion{Agente: "CodexBloq", ProyectoID: proyectoID, ProyectoSlug: "orquestador-selfheal-blocked-front", Estado: db.AsignacionActiva},
+			EstadoOperativo: "bloqueado",
+			BlockedTasks:    1,
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: tareaID, State: db.TareaBloqueada, ProjectID: &proyectoID},
+		},
+		{
+			Agente:          &db.Agente{Nombre: "CodexIdle", Activo: false, EstadoCuota: "activo"},
+			Asignacion:      &db.Asignacion{Agente: "CodexIdle", ProyectoID: proyectoID, ProyectoSlug: "orquestador-selfheal-blocked-front", Estado: db.AsignacionActiva},
+			EstadoOperativo: "sin_tarea",
+			OpenTasks:       0,
+			BlockedTasks:    0,
+			WorkerAlive:     false,
+		},
+	}, now)
+
+	apiRuntimeWakeOrdersFn = func() bool { return true }
+	apiRuntimeWakeMailboxFn = func() bool { return true }
+	apiRuntimeWakeWarmFn = func() bool { return false }
+	apiRuntimeProcessOrdersExecutor = func() (int, error) { return 0, nil }
+	apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) { return 0, nil }
+	runtimeProcessHygieneBatch = func() (int, error) { return 0, nil }
+	runtimeProcessReanimationsBatchFn = func() apiRuntimeProcessReanimationsResponse {
+		return apiRuntimeProcessReanimationsResponse{OK: true}
+	}
+
+	degradadosCalls := 0
+	autonomiaCalls := 0
+	runtimeProcessDegradadosBatchDetailed = func() (runtimeProcessDegradadosSummary, error) {
+		degradadosCalls++
+		return runtimeProcessDegradadosSummary{Count: 1}, nil
+	}
+	runtimeProcessAutonomiaBatch = func() (int, error) {
+		autonomiaCalls++
+		return 1, nil
+	}
+
+	operationalCalls := 0
+	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
+		operationalCalls++
+		if operationalCalls <= 2 {
+			return buildServerOperationalInfo(apiStatusResponse{
+				AgentesActivos: []*db.Agente{
+					{Nombre: "CodexIdle", Activo: true},
+				},
+				TareasActivas: []tareaLite{
+					{ID: tareaID, Estado: db.TareaBloqueada, Agente: "CodexBloq"},
+				},
+				TareasPorEstado: map[string]int{
+					string(db.TareaBloqueada): 1,
+				},
+			})
+		}
+		return serverOperationalInfo{
+			State:       "ready",
+			Operational: true,
+			Reason:      "control_plane_responsive",
+		}
+	}
+
+	result, err := callMCPTool("orquesta.server.self_heal", map[string]any{
+		"reanimaciones": false,
+		"rearm":         false,
+	})
+	if err != nil {
+		t.Fatalf("server self_heal MCP: %v", err)
+	}
+	if result["isError"] != false {
+		t.Fatalf("server self_heal no deberia marcar error tras autoejecutar blocked fronts: %#v", result)
+	}
+	payload, _ := result["structuredContent"].(apiRuntimeSelfHealResponse)
+	if degradadosCalls < 2 || autonomiaCalls < 2 {
+		t.Fatalf("self_heal deberia reintentar degradados/autonomia para blocked fronts: degradados=%d autonomia=%d", degradadosCalls, autonomiaCalls)
+	}
+	if !payload.Operational.Operational || payload.Operational.State != "ready" {
+		t.Fatalf("self_heal deberia converger tras blocked fronts autoejecutable: %+v", payload.Operational)
+	}
+	if payload.NextRecoveryAction != nil || payload.NextRecoveryPlan != nil {
+		t.Fatalf("no deberia quedar recovery pendiente tras blocked fronts: action=%+v plan=%+v", payload.NextRecoveryAction, payload.NextRecoveryPlan)
+	}
+}
+
+func TestMCPToolServerSelfHealAutoEjecutaStuckWorkers(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	prevWakeOrders := apiRuntimeWakeOrdersFn
+	prevWakeMailbox := apiRuntimeWakeMailboxFn
+	prevWakeWarm := apiRuntimeWakeWarmFn
+	prevOrdersExec := apiRuntimeProcessOrdersExecutor
+	prevMailboxExec := apiRuntimeProcessMailboxExecutor
+	prevHygiene := runtimeProcessHygieneBatch
+	prevDegradados := runtimeProcessDegradadosBatchDetailed
+	prevAutonomia := runtimeProcessAutonomiaBatch
+	prevReanimations := runtimeProcessReanimationsBatchFn
+	prevOperational := mcpBuildServerOperationalInfoFn
+	defer func() {
+		apiRuntimeWakeOrdersFn = prevWakeOrders
+		apiRuntimeWakeMailboxFn = prevWakeMailbox
+		apiRuntimeWakeWarmFn = prevWakeWarm
+		apiRuntimeProcessOrdersExecutor = prevOrdersExec
+		apiRuntimeProcessMailboxExecutor = prevMailboxExec
+		runtimeProcessHygieneBatch = prevHygiene
+		runtimeProcessDegradadosBatchDetailed = prevDegradados
+		runtimeProcessAutonomiaBatch = prevAutonomia
+		runtimeProcessReanimationsBatchFn = prevReanimations
+		mcpBuildServerOperationalInfoFn = prevOperational
+	}()
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "CodexTMUX", Activo: true, EstadoCuota: "activo"},
+		Handle:          &db.RuntimeHandle{Estado: "activo", Transporte: "tmux"},
+		EstadoOperativo: "atascado",
+		OpenTasks:       1,
+		WorkerAlive:     true,
+		WorkerState:     "running",
+		WorkerDriver:    "tmux_cli_session",
+		WorkerHeartbeat: &now,
+		WorkerUpdatedAt: &now,
+		CurrentTask:     &agentesapp.TaskFocus{TaskID: 40, State: db.TareaEnProgreso},
+	}}, now)
+
+	apiRuntimeWakeOrdersFn = func() bool { return true }
+	apiRuntimeWakeMailboxFn = func() bool { return true }
+	apiRuntimeWakeWarmFn = func() bool { return false }
+	apiRuntimeProcessOrdersExecutor = func() (int, error) { return 0, nil }
+	apiRuntimeProcessMailboxExecutor = func(filter db.FiltroRuntimeMailbox) (int, error) { return 0, nil }
+	runtimeProcessHygieneBatch = func() (int, error) { return 0, nil }
+	runtimeProcessReanimationsBatchFn = func() apiRuntimeProcessReanimationsResponse {
+		return apiRuntimeProcessReanimationsResponse{OK: true}
+	}
+
+	degradadosCalls := 0
+	autonomiaCalls := 0
+	runtimeProcessDegradadosBatchDetailed = func() (runtimeProcessDegradadosSummary, error) {
+		degradadosCalls++
+		return runtimeProcessDegradadosSummary{Count: 1}, nil
+	}
+	runtimeProcessAutonomiaBatch = func() (int, error) {
+		autonomiaCalls++
+		return 1, nil
+	}
+
+	operationalCalls := 0
+	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
+		operationalCalls++
+		if operationalCalls <= 2 {
+			return buildServerOperationalInfo(apiStatusResponse{
+				AgentesActivos:    []*db.Agente{{Nombre: "CodexTMUX", Activo: true}},
+				AgentesTrabajando: []*db.Agente{{Nombre: "CodexTMUX", Activo: true}},
+				AgentesAtascados:  []*db.Agente{{Nombre: "CodexTMUX", Activo: true}},
+				TareasEnProgreso:  []tareaLite{{ID: 40, Estado: db.TareaEnProgreso, Agente: "CodexTMUX"}},
+				Autonomia:         autonomiaResumen{WorkConfirmed: 0},
+			})
+		}
+		return serverOperationalInfo{
+			State:       "ready",
+			Operational: true,
+			Reason:      "control_plane_responsive",
+		}
+	}
+
+	result, err := callMCPTool("orquesta.server.self_heal", map[string]any{
+		"reanimaciones": false,
+		"rearm":         false,
+	})
+	if err != nil {
+		t.Fatalf("server self_heal MCP: %v", err)
+	}
+	if result["isError"] != false {
+		t.Fatalf("server self_heal no deberia marcar error tras autoejecutar stuck workers: %#v", result)
+	}
+	payload, _ := result["structuredContent"].(apiRuntimeSelfHealResponse)
+	if degradadosCalls < 2 || autonomiaCalls < 2 {
+		t.Fatalf("self_heal deberia reintentar degradados/autonomia para stuck workers: degradados=%d autonomia=%d", degradadosCalls, autonomiaCalls)
+	}
+	if !payload.Operational.Operational || payload.Operational.State != "ready" {
+		t.Fatalf("self_heal deberia converger tras stuck workers autoejecutable: %+v", payload.Operational)
+	}
+	if payload.NextRecoveryAction != nil || payload.NextRecoveryPlan != nil {
+		t.Fatalf("no deberia quedar recovery pendiente tras stuck workers: action=%+v plan=%+v", payload.NextRecoveryAction, payload.NextRecoveryPlan)
 	}
 }
 

@@ -298,6 +298,17 @@ func buildServerOperationalRecoveryHint(info serverOperationalInfo) *serverOpera
 			Detail:          fmt.Sprintf("%d tarea(s) abiertas exceden la señal real de trabajo en %d agente(s)", max(info.CompactionDebtTasks, 1), max(info.CompactionDebtAgents, 1)),
 		}
 	}
+	if info.Operational &&
+		strings.TrimSpace(info.Reason) == "control_plane_responsive" &&
+		info.BlockedTasks > 0 &&
+		serverOperationalBlockedFrontAutoExecutable(statusNowFunc().UTC()) {
+		return &serverOperationalRecoveryHint{
+			Kind:            "blocked_fronts",
+			AffectedTasks:   info.BlockedTasks,
+			SuggestedAction: "recover_blocked_fronts",
+			Detail:          fmt.Sprintf("%d tarea(s) bloqueadas tienen relevo o recovery canónico listo para ejecutar", max(info.BlockedTasks, 1)),
+		}
+	}
 	reason := strings.TrimSpace(info.Reason)
 	if reason == "" {
 		return nil
@@ -345,6 +356,13 @@ func buildServerOperationalRecoveryHint(info serverOperationalInfo) *serverOpera
 			hint.AffectedTasks = info.CompactionDebtTasks
 			hint.SuggestedAction = "compact_or_reassign_active_tasks"
 			hint.Detail = fmt.Sprintf("%d tarea(s) abiertas exceden la señal real de trabajo en %d agente(s); conviene compactar antes de esperar cuota", max(info.CompactionDebtTasks, 1), max(info.CompactionDebtAgents, 1))
+			return hint
+		}
+		if info.BlockedTasks > 0 && serverOperationalBlockedFrontAutoExecutable(statusNowFunc().UTC()) {
+			hint.Kind = "blocked_fronts"
+			hint.AffectedTasks = info.BlockedTasks
+			hint.SuggestedAction = "recover_blocked_fronts"
+			hint.Detail = fmt.Sprintf("%d tarea(s) bloqueadas tienen relevo o recovery canónico listo; conviene resolverlas antes de abrir más frentes", max(info.BlockedTasks, 1))
 			return hint
 		}
 		if info.LaunchableMissingWorkerFronts > 0 {
@@ -473,7 +491,9 @@ func buildServerOperationalRecoveryPlan(info serverOperationalInfo, action *supe
 	}
 	plan.RequiresRearm = plan.Action == "server_rearm"
 	plan.AutoExecutable = (plan.RequiresRearm && plan.RearmAvailable) ||
-		(strings.TrimSpace(plan.Action) == "compact_or_reassign_active_tasks" && serverOperationalCompactionAutoExecutable())
+		(strings.TrimSpace(plan.Action) == "compact_or_reassign_active_tasks" && serverOperationalCompactionAutoExecutable()) ||
+		(strings.TrimSpace(plan.Action) == "recover_blocked_fronts" && serverOperationalBlockedFrontAutoExecutable(statusNowFunc().UTC())) ||
+		(strings.TrimSpace(plan.Action) == "inspect_stuck_workers" && serverOperationalStuckWorkersAutoExecutable(statusNowFunc().UTC()))
 	if plan.RequiresRearm && info.Rearm != nil {
 		plan.Tool = strings.TrimSpace(info.Rearm.Tool)
 		plan.Endpoint = strings.TrimSpace(info.Rearm.Endpoint)
@@ -487,6 +507,8 @@ func buildServerOperationalRecoveryPlan(info serverOperationalInfo, action *supe
 func defaultServerOperationalRecoveryPriority(kind string) string {
 	switch strings.TrimSpace(kind) {
 	case "worker_gap", "reserved_gap", "manual_auth", "stuck_workers":
+		return "alta"
+	case "blocked_fronts":
 		return "alta"
 	case "quota_cooldown":
 		return "baja"
@@ -512,6 +534,8 @@ func buildServerOperationalRecoveryPlanSummary(plan *serverOperationalRecoveryPl
 		return fmt.Sprintf("Desbloquear %d worker(s) atascados", max(plan.StuckAgents, 1))
 	case "compaction_debt":
 		return fmt.Sprintf("Compactar o reasignar %d tarea(s) con deuda operativa", max(plan.AffectedTasks, 1))
+	case "blocked_fronts":
+		return fmt.Sprintf("Desbloquear o reasignar %d frente(s) bloqueados", max(plan.AffectedTasks, 1))
 	case "rearm":
 		return "Aplicar el rearm seguro del control plane"
 	default:
@@ -562,6 +586,8 @@ func serverOperationalRecoveryPrimaryStepName(action string) string {
 		return "start_or_assign_workers"
 	case "compact_or_reassign_active_tasks":
 		return "compact_or_reassign_active_tasks"
+	case "recover_blocked_fronts":
+		return "recover_blocked_fronts"
 	default:
 		return "apply_recovery_action"
 	}
@@ -589,6 +615,8 @@ func buildServerOperationalRecoveryPrimaryStepDetail(plan *serverOperationalReco
 		return "Asignar o arrancar workers útiles para retomar las tareas afectadas."
 	case "compact_or_reassign_active_tasks":
 		return "Compactar deuda operativa o reasignar tareas activas inconsistentes."
+	case "recover_blocked_fronts":
+		return "Reasignar o reactivar frentes bloqueados con recovery autónomo ya disponible."
 	default:
 		return ""
 	}
@@ -928,6 +956,132 @@ func serverOperationalLaunchableMissingWorkerFronts(now time.Time) int {
 		return 0
 	}
 	return serverOperationalLaunchableMissingWorkerFrontsFromRows(rows, now)
+}
+
+func serverOperationalStuckWorkersAutoExecutable(now time.Time) bool {
+	rows, ok := serverOperationalPanelRows(now)
+	if !ok {
+		return false
+	}
+	return len(agentesWorkersAtascadosRecuperables(rows, now)) > 0
+}
+
+func serverOperationalBlockedFrontAutoExecutable(now time.Time) bool {
+	rows, ok := serverOperationalPanelRows(now)
+	if !ok {
+		return false
+	}
+	_, tareasBloqueadasPorAgente, bloqueosPorTarea, err := cargarTareasYBloqueosAutonomiaPorAgente()
+	if err != nil || len(tareasBloqueadasPorAgente) == 0 {
+		return false
+	}
+	openTasksProjected := openTasksProjectedFromRows(rows)
+	criticalProject := &controlPlaneCriticalProjectSignal{}
+	for _, row := range priorizarRowsAutonomiaBloqueadas(rows, tareasBloqueadasPorAgente, criticalProject) {
+		blockedOrphan := rowBloqueadoSinRuntimeUtilParaAutonomia(row, now)
+		if row.Agente == nil || (!estadoOperativoAutoIntervencion(row.EstadoOperativo) && !blockedOrphan) {
+			continue
+		}
+		if rowControlOrderPending(row, now) {
+			continue
+		}
+		agente := strings.TrimSpace(row.Agente.Nombre)
+		if agente == "" {
+			continue
+		}
+		tareas := append([]*db.Tarea(nil), tareasBloqueadasPorAgente[agente]...)
+		sortTasksByCriticalProjectFirst(tareas, criticalProject)
+		for _, tarea := range tareas {
+			if tarea == nil {
+				continue
+			}
+			actual, err := db.GetTarea(tarea.ID)
+			if err != nil || actual == nil || actual.Agente == nil {
+				continue
+			}
+			if !strings.EqualFold(strings.TrimSpace(*actual.Agente), agente) || actual.Estado != db.EstadoBloqueada {
+				continue
+			}
+			bloqueo, ok := bloqueosPorTarea[actual.ID]
+			if !ok || !esBloqueoAutonomiaAgenteRecuperable(agente, strings.TrimSpace(bloqueo.Agente), strings.TrimSpace(bloqueo.Motivo)) {
+				continue
+			}
+			if degradedTaskRecentlyAutoReassigned(actual, now) {
+				continue
+			}
+			criticalImmediate := criticalProjectNeedsImmediateIntervention(actual, row, criticalProject)
+			if strings.TrimSpace(row.EstadoOperativo) == "atascado" && !criticalImmediate && !rowAtascadoShouldEscalate(row, now) {
+				continue
+			}
+			if !criticalImmediate && !blockedOrphan && !degradedTaskShouldIntervene(actual, now) && !degradedTaskRequiresImmediateIntervention(row, now) {
+				continue
+			}
+			if serverOperationalBlockedFrontHasRelayCandidate(rows, openTasksProjected, actual, agente, now) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func serverOperationalBlockedFrontHasRelayCandidate(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string, now time.Time) bool {
+	if tarea == nil {
+		return false
+	}
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		agente := strings.TrimSpace(row.Agente.Nombre)
+		if agente == "" || strings.EqualFold(agente, agenteBloqueado) {
+			continue
+		}
+		agenteCanonico, ok, err := resolverAgenteRelevoAutonomia(agente)
+		if err != nil || !ok {
+			continue
+		}
+		agente = agenteCanonico
+		if relevoAutonomiaDebeOmitirsePorReserva(row, tarea) || row.OrdersOpen > 0 {
+			continue
+		}
+		estado := strings.TrimSpace(row.EstadoOperativo)
+		candidateCeiling := autonomiaBlockedTaskRecoveryBurstCeiling
+		if dynamic := autonomiaOpenTasksCeilingForRow(row, now); dynamic > candidateCeiling {
+			candidateCeiling = dynamic
+		}
+		if rowHasFreshTMUXWorkerForRecovery(row, now) {
+			burst := controlPlaneConfigIntOrDefault("autonomia_tmux_blocked_recovery_open_tasks_ceiling", autonomiaTMUXBlockedRecoveryOpenTasksDefault)
+			if burst > candidateCeiling {
+				candidateCeiling = burst
+			}
+		}
+		allowIdleLaunchCandidate := estado == "sin_tarea" &&
+			openTasksProjected[agente] == 0 &&
+			row.OpenTasks == 0 &&
+			row.BlockedTasks == 0 &&
+			row.OrdersOpen == 0 &&
+			!row.WorkerAlive &&
+			!row.WorkerFresh(now)
+		if estado != "disponible" && !(candidateCeiling > 0 && estado == "trabajando") && !allowIdleLaunchCandidate {
+			continue
+		}
+		if disponible, _, err := autonomiaCuentaCompartidaDisponible(agente); err == nil && !disponible {
+			workerVivo := row.WorkerFresh(now) && (estado == "disponible" || estado == "trabajando")
+			if !workerVivo {
+				continue
+			}
+		}
+		if allowIdleLaunchCandidate {
+			return true
+		}
+		if candidateCeiling <= 0 {
+			continue
+		}
+		if openTasksProjected[agente] < candidateCeiling {
+			return true
+		}
+	}
+	return false
 }
 
 func serverOperationalPanelRows(now time.Time) ([]agentesapp.Row, bool) {
