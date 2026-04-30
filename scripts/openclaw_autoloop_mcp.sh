@@ -11,6 +11,8 @@ MCP_TIMEOUT="${MCP_TIMEOUT:-8}"
 SAFE_ACTION_WHITELIST="${SAFE_ACTION_WHITELIST:-asignar_tarea_libre,reservar_tarea_libre,replanificar_por_cuota,rebalancear_reserva,seguir_guidance_durable}"
 REJECT_COOLDOWN_SECS="${REJECT_COOLDOWN_SECS:-120}"
 REJECT_STATE_FILE="${REJECT_STATE_FILE:-/tmp/orquesta-openclaw-autoloop.rejects}"
+SELF_HEAL_COOLDOWN_SECS="${SELF_HEAL_COOLDOWN_SECS:-20}"
+SELF_HEAL_STATE_FILE="${SELF_HEAL_STATE_FILE:-/tmp/orquesta-openclaw-autoloop.self_heal}"
 
 mkdir -p "$(dirname "$LOG_FILE")"
 
@@ -63,6 +65,19 @@ record_reject() {
   fi
   printf '%s|%s\n' "$signature" "$now_ts" >> "$tmp_file"
   mv "$tmp_file" "$REJECT_STATE_FILE"
+}
+
+self_heal_cooldown_active() {
+  local now_ts last_ts
+  now_ts="$(date +%s)"
+  [[ -f "$SELF_HEAL_STATE_FILE" ]] || return 1
+  last_ts="$(cat "$SELF_HEAL_STATE_FILE" 2>/dev/null || true)"
+  [[ -n "$last_ts" ]] || return 1
+  (( now_ts - last_ts < SELF_HEAL_COOLDOWN_SECS ))
+}
+
+record_self_heal() {
+  date +%s > "$SELF_HEAL_STATE_FILE"
 }
 
 while true; do
@@ -200,6 +215,73 @@ PY
     kv[next_safe_action]="${apply_kv[verified_next_safe_action]}"
     kv[safe_queue_total]="${apply_kv[verified_safe_queue_total]}"
   done
+
+  should_self_heal="false"
+  if [[ "${kv[operational]}" != "true" ]]; then
+    should_self_heal="true"
+  elif [[ "${kv[next_recovery_action]}" != "" && "${kv[next_recovery_auto]}" == "true" ]]; then
+    should_self_heal="true"
+  fi
+
+  if [[ "$should_self_heal" == "true" && ! self_heal_cooldown_active ]]; then
+    if self_heal_response="$(call_tool "orquesta.server.self_heal" "{\"supervisor\":\"${SUPERVISOR}\"}")"; then
+      printf '%s self_heal %s\n' "$timestamp" "$self_heal_response" >> "$LOG_FILE"
+      record_self_heal
+      mapfile -t heal_summary < <(python3 - "$self_heal_response" <<'PY'
+import json, sys
+resp = json.loads(sys.argv[1])
+result = resp.get("result", {})
+if resp.get("error") or resp.get("isError") or result.get("isError"):
+    print("heal_ok=false")
+    print("heal_operational=false")
+    print("heal_state=")
+    print("heal_reason=self_heal_error")
+    print("heal_tasks_active=0")
+    print("heal_tasks_reserved=0")
+    print("heal_next_recovery_action=")
+    raise SystemExit(0)
+payload = result.get("structuredContent", {}) or {}
+server = payload.get("operational") or {}
+plan = server.get("nextRecoveryPlan") or {}
+print("heal_ok=" + str(payload.get("ok", False)).lower())
+print("heal_operational=" + str(server.get("operational", False)).lower())
+print("heal_state=" + str(server.get("state", "")))
+print("heal_reason=" + str(server.get("reason", "")))
+print("heal_tasks_active=" + str(server.get("tasksInProgress", 0)))
+print("heal_tasks_reserved=" + str(server.get("reservedTasks", 0)))
+print("heal_next_recovery_action=" + str(plan.get("action", "")))
+print("heal_next_recovery_auto=" + str(plan.get("autoExecutable", False)).lower())
+print("heal_next_recovery_requires_rearm=" + str(plan.get("requiresRearm", False)).lower())
+PY
+)
+      declare -A heal_kv=()
+      for line in "${heal_summary[@]}"; do
+        key="${line%%=*}"
+        value="${line#*=}"
+        heal_kv["$key"]="$value"
+      done
+      printf '%s self_heal_verified ok=%s operational=%s tasks=%s reserved=%s next_recovery=%s state=%s reason=%s\n' \
+        "$timestamp" \
+        "${heal_kv[heal_ok]}" \
+        "${heal_kv[heal_operational]}" \
+        "${heal_kv[heal_tasks_active]}" \
+        "${heal_kv[heal_tasks_reserved]}" \
+        "${heal_kv[heal_next_recovery_action]}" \
+        "${heal_kv[heal_state]}" \
+        "${heal_kv[heal_reason]}"
+      kv[operational]="${heal_kv[heal_operational]}"
+      kv[state]="${heal_kv[heal_state]}"
+      kv[reason]="${heal_kv[heal_reason]}"
+      kv[tasks_active]="${heal_kv[heal_tasks_active]}"
+      kv[tasks_reserved]="${heal_kv[heal_tasks_reserved]}"
+      kv[next_recovery_action]="${heal_kv[heal_next_recovery_action]}"
+      kv[next_recovery_auto]="${heal_kv[heal_next_recovery_auto]}"
+      kv[next_recovery_requires_rearm]="${heal_kv[heal_next_recovery_requires_rearm]}"
+    else
+      printf '%s self_heal_error\n' "$timestamp" >> "$LOG_FILE"
+      record_self_heal
+    fi
+  fi
 
   if [[ "${kv[next_recovery_action]}" == "server_rearm" && "${kv[next_recovery_auto]}" == "true" && "${kv[next_recovery_requires_rearm]}" == "true" ]]; then
     if ! rearm_response="$(call_tool "orquesta.server.rearm" "{\"supervisor\":\"${SUPERVISOR}\"}")"; then
