@@ -775,10 +775,10 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "application/json",
 		},
 		{
-			URITemplate: "orquesta://git/stats{?proyecto,path,cwd,desde}",
+			URITemplate: "orquesta://git/stats{?scope,proyecto,agente,path,cwd,desde}",
 			Name:        "git-stats",
 			Title:       "Git stats canónicos",
-			Description: "Métricas Git canónicas por proyecto o path/cwd; admite ?desde=1h o RFC3339",
+			Description: "Métricas Git canónicas por global, proyecto, agente o path/cwd; admite ?desde=1h o RFC3339",
 			MIMEType:    "application/json",
 		},
 		{
@@ -806,50 +806,8 @@ func parseMCPProjectControlSince(raw string) (time.Time, error) {
 	return parseStatsSince(raw)
 }
 
-func mcpResolveGitStatsScope(projectRef, path, cwd string) (string, string, string, error) {
-	projectRef = strings.TrimSpace(projectRef)
-	path = normalizeGitStatsPath(path)
-	cwd = normalizeGitStatsPath(cwd)
-	if path == "" {
-		path = cwd
-	}
-	if projectRef != "" && path != "" {
-		return "", "", "", fmt.Errorf("usa proyecto o path/cwd, pero no ambos")
-	}
-	if projectRef != "" {
-		project, err := apiGitStatsProjectLookupFn(projectRef)
-		if err != nil {
-			return "", "", "", err
-		}
-		if project == nil || strings.TrimSpace(project.RutaAbs) == "" {
-			return "", "", "", fmt.Errorf("proyecto sin ruta git: %s", projectRef)
-		}
-		return "proyecto", strings.TrimSpace(project.Slug), normalizeGitStatsPath(project.RutaAbs), nil
-	}
-	if path != "" {
-		return "path", "", path, nil
-	}
-	return "", "", "", fmt.Errorf("path/cwd o proyecto es obligatorio")
-}
-
-func mcpGitStatsResponse(projectRef, path, cwd string, since time.Time) (apiGitStatsResponse, error) {
-	scope, project, resolvedPath, err := mcpResolveGitStatsScope(projectRef, path, cwd)
-	if err != nil {
-		return apiGitStatsResponse{}, err
-	}
-	stats, err := apiGitStatsService.Collect(resolvedPath, since)
-	if err != nil {
-		return apiGitStatsResponse{}, err
-	}
-	return apiGitStatsResponse{
-		OK:        true,
-		Scope:     scope,
-		Project:   project,
-		Path:      resolvedPath,
-		Since:     since.UTC(),
-		Generated: time.Now().UTC(),
-		Stats:     stats,
-	}, nil
+func mcpGitStatsResponse(scopeRef, projectRef, agentRef, path, cwd string, since time.Time) (apiGitStatsResponse, error) {
+	return gitStatsResponseFromQuery(scopeRef, projectRef, agentRef, path, cwd, since)
 }
 
 func mcpRuntimeTraceResponse(handleID int64, agente, proyecto string, maxBytes int) (apiRuntimeTraceResponse, error) {
@@ -987,7 +945,7 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := mcpGitStatsResponse(parsed.Query().Get("proyecto"), parsed.Query().Get("path"), parsed.Query().Get("cwd"), since)
+		resp, err := mcpGitStatsResponse(parsed.Query().Get("scope"), parsed.Query().Get("proyecto"), parsed.Query().Get("agente"), parsed.Query().Get("path"), parsed.Query().Get("cwd"), since)
 		if err != nil {
 			return nil, err
 		}
@@ -3005,11 +2963,13 @@ func listMCPTools() []mcpTool {
 		{
 			Name:        "orquesta.git.stats",
 			Title:       "Git stats canónicos",
-			Description: "Devuelve métricas Git canónicas por proyecto o path/cwd",
+			Description: "Devuelve métricas Git canónicas por proyecto, agente o path/cwd",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"proyecto": map[string]any{"type": "string"},
+					"scope":    map[string]any{"type": "string"},
+					"agente":   map[string]any{"type": "string"},
 					"path":     map[string]any{"type": "string"},
 					"cwd":      map[string]any{"type": "string"},
 					"desde":    map[string]any{"type": "string"},
@@ -4908,7 +4868,9 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return toolResult(err.Error(), nil, true), nil
 		}
 		resp, err := mcpGitStatsResponse(
+			optionalStringArg(args, "scope"),
 			optionalStringArg(args, "proyecto"),
+			optionalStringArg(args, "agente"),
 			optionalStringArg(args, "path"),
 			optionalStringArg(args, "cwd"),
 			since,
@@ -6475,6 +6437,9 @@ func buildSupervisorSafeActionQueueFast(actions []supervisorRecommendedAction) [
 }
 
 var supervisorPanelRowsBuilder = buildPanelRowsForControlPlane
+var supervisorAgentDetailBuilder = func(agent string) (*agentesapp.Detail, error) {
+	return agentesService.BuildDetailCompact(agent)
+}
 
 var supervisorSemanticProgressRecentThreshold = 5 * time.Minute
 
@@ -6622,6 +6587,36 @@ func supervisorAdjustAutonomyActionByRows(action supervisorRecommendedAction, ro
 	if strings.TrimSpace(action.Kind) != "autonomy_event" {
 		return action, true
 	}
+	agent := nombreAgenteCanonico(strings.TrimSpace(action.Assignee))
+	if agent == "" {
+		if strings.HasPrefix(strings.TrimSpace(action.Target), "agente:") {
+			agent = nombreAgenteCanonico(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(action.Target), "agente:")))
+		}
+	}
+	row, ok := rowByAgent[agent]
+	if !ok {
+		if detail, detailOK := supervisorCanonicalDetailForAutonomyAction(agent); detailOK {
+			row = detail.Row
+			ok = true
+		}
+	}
+	if !ok {
+		if taskID := parseSupervisorActionTargetID("tarea:", action.Target); taskID != nil {
+			switch strings.TrimSpace(action.Action) {
+			case "verificar_handoff_consolidado", "seguir_reasignacion":
+				if _, ok := visibleTasks[*taskID]; !ok {
+					return action, false
+				}
+			}
+		}
+		if adjusted, keep, handled := supervisorAdjustAutonomyFollowupByVisibleTask(action, visibleTasks, visibleTasksByAgent); handled {
+			return adjusted, keep
+		}
+		return action, true
+	}
+	if supervisorAutonomyActionResolvedByCanonicalRow(action, row) {
+		return action, false
+	}
 	if taskID := parseSupervisorActionTargetID("tarea:", action.Target); taskID != nil {
 		switch strings.TrimSpace(action.Action) {
 		case "verificar_handoff_consolidado", "seguir_reasignacion":
@@ -6632,16 +6627,6 @@ func supervisorAdjustAutonomyActionByRows(action supervisorRecommendedAction, ro
 	}
 	if adjusted, keep, handled := supervisorAdjustAutonomyFollowupByVisibleTask(action, visibleTasks, visibleTasksByAgent); handled {
 		return adjusted, keep
-	}
-	agent := nombreAgenteCanonico(strings.TrimSpace(action.Assignee))
-	if agent == "" {
-		if strings.HasPrefix(strings.TrimSpace(action.Target), "agente:") {
-			agent = nombreAgenteCanonico(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(action.Target), "agente:")))
-		}
-	}
-	row, ok := rowByAgent[agent]
-	if !ok {
-		return action, true
 	}
 	task, hasVisibleTask := supervisorVisibleTaskForAutonomyAction(action, visibleTasks, visibleTasksByAgent)
 	if !supervisorRowShowsRecentSemanticProgress(row, now) {
@@ -6748,6 +6733,50 @@ func supervisorAdjustAutonomyActionByRows(action supervisorRecommendedAction, ro
 	default:
 		return action, true
 	}
+}
+
+func supervisorAutonomyActionResolvedByCanonicalRow(action supervisorRecommendedAction, row agentesapp.Row) bool {
+	switch strings.TrimSpace(action.Action) {
+	case "seguir_reinicio_runtime", "verificar_handoff_consolidado", "seguir_reasignacion", "resolver_followup_bloqueado", "inspeccionar_handoff_fallido":
+	default:
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(row.EstadoOperativo)) {
+	case "sin_tarea", "retirado":
+	default:
+		return false
+	}
+	if row.OpenTasks > 0 || row.BlockedTasks > 0 || row.CurrentTask != nil {
+		return false
+	}
+	if row.MailboxPending > 0 || row.MailboxActionablePending > 0 || row.MailboxContinuityPending > 0 {
+		return false
+	}
+	if row.OrdersOpen > 0 || row.ControlOrdersOpen > 0 || row.DominantOrder != nil {
+		return false
+	}
+	if row.WorkerAlive || strings.TrimSpace(row.WorkerState) != "" {
+		return false
+	}
+	if row.Runtime != nil || row.Handle != nil {
+		return false
+	}
+	return true
+}
+
+func supervisorCanonicalDetailForAutonomyAction(agent string) (*agentesapp.Detail, bool) {
+	if supervisorAgentDetailBuilder == nil {
+		return nil, false
+	}
+	agent = nombreAgenteCanonico(strings.TrimSpace(agent))
+	if agent == "" {
+		return nil, false
+	}
+	detail, err := supervisorAgentDetailBuilder(agent)
+	if err != nil || detail == nil {
+		return nil, false
+	}
+	return detail, true
 }
 
 func supervisorRowShowsRecentSemanticProgress(row agentesapp.Row, now time.Time) bool {
