@@ -220,11 +220,19 @@ func fetchAgentPanelRowsCached(timeout time.Duration) ([]agentesapp.Row, error) 
 func fetchAgentPanelRowsReadOnlyCached(timeout time.Duration) ([]agentesapp.Row, error) {
 	if rows, ok := readAgentPanelSnapshotFresh(); ok {
 		if agentPanelRowsNeedImmediateRefresh(rows) {
+			if refreshed, ok := tryBuildAgentPanelRowsNow(timeout); ok {
+				return refreshed, nil
+			}
 			maybeRefreshAgentPanelSnapshotAsync(timeout)
 		}
 		return rows, nil
 	}
 	if rows, ok := readAgentPanelSnapshotAny(); ok {
+		if agentPanelRowsNeedImmediateRefresh(rows) {
+			if refreshed, ok := tryBuildAgentPanelRowsNow(timeout); ok {
+				return refreshed, nil
+			}
+		}
 		maybeRefreshAgentPanelSnapshotAsync(timeout)
 		return rows, nil
 	}
@@ -232,6 +240,9 @@ func fetchAgentPanelRowsReadOnlyCached(timeout time.Duration) ([]agentesapp.Row,
 		rows := buildAgentPanelRowsFromStatusSnapshot(status)
 		storeAgentPanelSnapshotWithTTL(rows, time.Now().UTC(), 0, agentPanelSnapshotStaleTTL)
 		if agentPanelRowsNeedImmediateRefresh(rows) {
+			if refreshed, ok := tryBuildAgentPanelRowsNow(timeout); ok {
+				return refreshed, nil
+			}
 			maybeRefreshAgentPanelSnapshotAsync(timeout)
 		}
 		return rows, nil
@@ -243,6 +254,9 @@ func fetchAgentPanelRowsReadOnlyCached(timeout time.Duration) ([]agentesapp.Row,
 			rows := buildAgentPanelRowsFromStatusSnapshot(status)
 			storeAgentPanelSnapshotWithTTL(rows, now, 0, agentPanelSnapshotStaleTTL)
 			if agentPanelRowsNeedImmediateRefresh(rows) {
+				if refreshed, ok := tryBuildAgentPanelRowsNow(timeout); ok {
+					return refreshed, nil
+				}
 				maybeRefreshAgentPanelSnapshotAsync(timeout)
 			}
 			return rows, nil

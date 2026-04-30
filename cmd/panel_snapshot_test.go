@@ -269,6 +269,46 @@ func TestFetchAgentPanelRowsReadOnlyCachedNoBloqueaPorRefrescoInmediato(t *testi
 	}
 }
 
+func TestFetchAgentPanelRowsReadOnlyCachedRefrescaSnapshotFreshConFilasRicasSiEntraEnBudget(t *testing.T) {
+	prevBuilder := apiAgentPanelRowsBuilder
+	defer func() {
+		apiAgentPanelRowsBuilder = prevBuilder
+		resetAgentPanelSnapshotCache()
+		resetStatusSnapshotCache()
+	}()
+	resetAgentPanelSnapshotCache()
+	resetStatusSnapshotCache()
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "Codex20", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		EstadoOperativo: "trabajando",
+		OpenTasks:       2,
+		CurrentTask:     &agentesapp.TaskFocus{TaskID: 29, State: db.TareaEnProgreso},
+	}}, now)
+
+	apiAgentPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:          &db.Agente{Nombre: "Codex20", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+			EstadoOperativo: "trabajando",
+			OpenTasks:       1,
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 4, State: db.TareaEnProgreso},
+			WorkerState:     "ready",
+			WorkerAlive:     true,
+			Runtime:         &db.RuntimeInstance{Agente: "Codex20", LogicalState: "activo"},
+			Handle:          &db.RuntimeHandle{Agente: "Codex20", Estado: "activo"},
+		}}, nil
+	}
+
+	rows, err := fetchAgentPanelRowsReadOnlyCached(50 * time.Millisecond)
+	if err != nil {
+		t.Fatalf("fetchAgentPanelRowsReadOnlyCached: %v", err)
+	}
+	if len(rows) != 1 || rows[0].CurrentTask == nil || rows[0].CurrentTask.TaskID != 4 || !rows[0].WorkerAlive || rows[0].Runtime == nil || rows[0].Handle == nil {
+		t.Fatalf("deberia refrescar snapshot fresh a filas ricas, rows=%+v", rows)
+	}
+}
+
 func TestFetchAgentPanelRowsCachedRefrescaSnapshotSinteticaConAtascadoHeredado(t *testing.T) {
 	prevBuilder := apiAgentPanelRowsBuilder
 	defer func() {
