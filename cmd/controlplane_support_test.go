@@ -42660,6 +42660,23 @@ func TestAutonomiaOpenTasksCeilingForRowReduceAMonotareaConTrabajoConfirmadoSinC
 	}
 }
 
+func TestAutonomiaOpenTasksCeilingForRowReduceAMonotareaConWorkerAliveNoFresh(t *testing.T) {
+	now := time.Now().UTC()
+	row := agentesapp.Row{
+		WorkerState:       "ready",
+		WorkerAlive:       true,
+		WorkerHeartbeat:   timePtr(now.Add(-11 * time.Minute)),
+		WorkerUpdatedAt:   timePtr(now.Add(-11 * time.Minute)),
+		EstadoOperativo:   "trabajando",
+		LastAutonomyState: "work_confirmed",
+		OpenTasks:         2,
+	}
+
+	if got := autonomiaOpenTasksCeilingForRow(row, now); got != 1 {
+		t.Fatalf("ceiling monotarea con worker alive no fresh inesperado: %d", got)
+	}
+}
+
 func TestProcesarAgentesDegradadosAutonomiaBatchRecuperaBloqueoPorSobrecargaHastaTechoTMUX(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetStatusSnapshotCache()

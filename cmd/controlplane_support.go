@@ -15433,9 +15433,10 @@ func taskNotesMarkedManualTakeover(notas string) bool {
 }
 
 func autonomiaOpenTasksCeilingForRow(row agentesapp.Row, now time.Time) int {
-	if row.WorkerFresh(now) &&
+	workerConfirmed := row.WorkerFresh(now) ||
+		(row.WorkerAlive && strings.EqualFold(strings.TrimSpace(row.EstadoOperativo), "trabajando"))
+	if workerConfirmed &&
 		row.OpenTasks > 1 &&
-		strings.EqualFold(strings.TrimSpace(row.EstadoOperativo), "trabajando") &&
 		strings.EqualFold(strings.TrimSpace(row.LastAutonomyState), "work_confirmed") {
 		return 1
 	}
