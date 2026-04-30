@@ -537,6 +537,36 @@ func TestControlPlaneQuotaBlockedIdleGuardUsaFetcherLigeroInyectable(t *testing.
 	}
 }
 
+func TestControlPlaneQuotaBlockedIdleGuardToleraBlockedYContinuingSiElRecoveryCanonicoEsWaitQuotaReset(t *testing.T) {
+	prev := controlPlaneOperationalInfoFetcher
+	defer func() { controlPlaneOperationalInfoFetcher = prev }()
+
+	controlPlaneOperationalInfoFetcher = func() (serverOperationalInfo, error) {
+		return serverOperationalInfo{
+			State:              "idle",
+			Reason:             "workers_quota_blocked",
+			ConnectedWorkers:   0,
+			WorkingWorkers:     0,
+			StuckAgents:        0,
+			AuthAgents:         0,
+			ReservedTasks:      0,
+			BlockedTasks:       1,
+			AutonomyContinuing: 1,
+			Recovery: &serverOperationalRecoveryHint{
+				SuggestedAction: "wait_quota_reset",
+			},
+		}, nil
+	}
+
+	skip, motivo, err := controlPlaneQuotaBlockedIdleGuard()
+	if err != nil {
+		t.Fatalf("controlPlaneQuotaBlockedIdleGuard: %v", err)
+	}
+	if !skip || motivo != "workers_quota_blocked" {
+		t.Fatalf("deberia saltar si el recovery canonico ya es wait_quota_reset: skip=%v motivo=%q", skip, motivo)
+	}
+}
+
 func TestBuildServerOperationalInfoUsaCuotaVisibleAunqueSnapshotNoTraigaQuotaBlockedExplicito(t *testing.T) {
 	reset := time.Now().UTC().Add(20 * time.Minute)
 	info := buildServerOperationalInfo(apiStatusResponse{

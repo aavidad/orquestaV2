@@ -115,14 +115,17 @@ func controlPlaneQuotaBlockedIdleGuard() (bool, string, error) {
 	if info.StuckAgents > 0 || info.AuthAgents > 0 {
 		return false, "", nil
 	}
-	if info.ReservedTasks > 0 || info.BlockedTasks > 0 {
+	if info.ReservedTasks > 0 {
 		return false, "", nil
 	}
 	if info.DispatchPending > 0 || info.DispatchNotified > 0 || info.DispatchFailed > 0 {
 		return false, "", nil
 	}
-	if info.AutonomyPending > 0 || info.AutonomyHandoffs > 0 || info.AutonomyContinuing > 0 {
+	if info.AutonomyPending > 0 || info.AutonomyHandoffs > 0 {
 		return false, "", nil
+	}
+	if info.Recovery != nil && strings.TrimSpace(info.Recovery.SuggestedAction) == "wait_quota_reset" {
+		return true, "workers_quota_blocked", nil
 	}
 	return true, "workers_quota_blocked", nil
 }
