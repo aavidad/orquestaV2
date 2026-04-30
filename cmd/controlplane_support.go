@@ -10886,7 +10886,7 @@ func procesarAutonomiaAgentesBatch() (int, error) {
 	procesadas += n
 	autonomiaTickDebugf("redistribucion_prime duration=%s procesadas=%d", time.Since(redistribucionPrimeStart).Round(time.Millisecond), n)
 	if n > 0 {
-		rows, err = buildPanelRowsForControlPlane()
+		rows, err = refreshPanelRowsForControlPlane()
 		if err != nil {
 			if controlPlaneRowsTimedOut(err) {
 				if procesadas > 0 {

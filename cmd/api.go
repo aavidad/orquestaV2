@@ -3406,7 +3406,7 @@ func supervisorPipelineItemsFromSnapshot(pipeline map[string]any) []*db.Supervis
 
 func fillOpenClawOperationalQueuesFromStatusFallback(status apiStatusResponse, operational serverOperationalInfo, mailbox []apiOpenClawMailboxLite, actionQueue, safeActionQueue []supervisorRecommendedAction, nextAction, nextSafeAction any) ([]supervisorRecommendedAction, []supervisorRecommendedAction, any, any) {
 	if len(actionQueue) > 0 || nextAction != nil || len(safeActionQueue) > 0 || nextSafeAction != nil {
-		if !operational.Operational {
+		if serverOperationalBlocksSafeDispatch(operational) {
 			return actionQueue, nil, nextAction, nil
 		}
 		return actionQueue, safeActionQueue, nextAction, nextSafeAction
@@ -3421,7 +3421,7 @@ func fillOpenClawOperationalQueuesFromStatusFallback(status apiStatusResponse, o
 		item := actionQueue[0]
 		nextAction = &item
 	}
-	if !operational.Operational {
+	if serverOperationalBlocksSafeDispatch(operational) {
 		return actionQueue, nil, nextAction, nil
 	}
 	if len(safeActionQueue) > 0 {

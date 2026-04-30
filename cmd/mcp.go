@@ -8519,6 +8519,7 @@ func buildSupervisorActionSnapshot(supervisor string) (map[string]any, error) {
 	safeQueue = cloneSupervisorRecommendedActions(safeQueue)
 	snapshot["action_queue"] = actionQueue
 	snapshot["safe_action_queue"] = safeQueue
+	operational, _ := snapshot["server_operational"].(serverOperationalInfo)
 
 	risk := supervisorCriticalProjectRiskFromSnapshot(snapshot)
 	if risk == nil && len(actionQueue) > 0 {
@@ -8533,9 +8534,17 @@ func buildSupervisorActionSnapshot(supervisor string) (map[string]any, error) {
 	if risk != nil && len(actionQueue) > 0 {
 		projectRisk := supervisorProjectRiskMapFromCriticalProjectRisk(risk)
 		sortSupervisorExecutionActionsWithProjectRisk(actionQueue, projectRisk)
-		safeQueue = buildSupervisorSafeActionQueueFast(actionQueue)
+		if serverOperationalBlocksSafeDispatch(operational) {
+			safeQueue = nil
+		} else {
+			safeQueue = buildSupervisorSafeActionQueueFast(actionQueue)
+		}
 		snapshot["action_queue"] = actionQueue
 		snapshot["safe_action_queue"] = safeQueue
+	}
+	if serverOperationalBlocksSafeDispatch(operational) {
+		safeQueue = nil
+		snapshot["safe_action_queue"] = nil
 	}
 	snapshot["queue_summary"] = buildOpenClawQueueSummaryFromActions(actionQueue, safeQueue)
 	if len(actionQueue) > 0 {

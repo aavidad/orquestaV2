@@ -2221,6 +2221,7 @@ func invalidateStatusSnapshotCache() {
 		}
 	}
 	statusCacheState.retryAfter = time.Time{}
+	resetControlPlanePanelRowsCache()
 	if agentesService != nil {
 		agentesService.InvalidateCompactDetailCache()
 	}
@@ -2233,6 +2234,7 @@ func invalidateStatusSnapshotCacheHard() {
 		statusCacheState.hardStale = true
 	}
 	statusCacheState.retryAfter = time.Time{}
+	resetControlPlanePanelRowsCache()
 	if agentesService != nil {
 		agentesService.InvalidateCompactDetailCache()
 	}

@@ -611,6 +611,19 @@ func buildServerOperationalRearmHint(info serverOperationalInfo) *serverOperatio
 	return hint
 }
 
+func serverOperationalBlocksSafeDispatch(info serverOperationalInfo) bool {
+	if !info.Operational {
+		return true
+	}
+	if info.NextRecoveryPlan != nil && strings.TrimSpace(info.NextRecoveryPlan.Action) != "" {
+		return true
+	}
+	if info.Recovery != nil && strings.TrimSpace(info.Recovery.SuggestedAction) != "" {
+		return true
+	}
+	return false
+}
+
 func serverOperationalApplyNextAction(supervisor string) (map[string]any, error) {
 	supervisor = resolveSupervisorName(supervisor)
 	return serverOperationalApplyNextActionFn(supervisor)

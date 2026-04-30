@@ -362,6 +362,45 @@ func TestFillOpenClawOperationalQueuesFromStatusFallbackOmiteSafeQueueSiOperatio
 	}
 }
 
+func TestFillOpenClawOperationalQueuesFromStatusFallbackOmiteSafeQueueSiHayRecoveryPendienteAunqueEsteReady(t *testing.T) {
+	status := apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasPorEstado: map[string]int{string(db.TareaLibre): 1},
+	}
+
+	queue, safe, next, nextSafe := fillOpenClawOperationalQueuesFromStatusFallback(
+		status,
+		serverOperationalInfo{
+			State:       "ready",
+			Operational: true,
+			Reason:      "control_plane_responsive",
+			Recovery: &serverOperationalRecoveryHint{
+				Kind:            "compaction_debt",
+				SuggestedAction: "compact_or_reassign_active_tasks",
+			},
+		},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if len(queue) == 0 || queue[0].Action != "asignar_tarea_libre" {
+		t.Fatalf("action_queue amplia inesperada con recovery pendiente: %#v", queue)
+	}
+	if len(safe) != 0 {
+		t.Fatalf("safe_action_queue deberia vaciarse con recovery pendiente: %#v", safe)
+	}
+	if next == nil {
+		t.Fatalf("next_action amplio deberia conservarse con recovery pendiente")
+	}
+	if nextSafe != nil {
+		t.Fatalf("next_safe_action deberia anularse con recovery pendiente: %#v", nextSafe)
+	}
+}
+
 func TestBuildOpenClawSubagentFollowupsBestEffortToleraFallbackLento(t *testing.T) {
 	prevBuilder := openClawSubagentFollowupsDirectBuilder
 	prevTimeout := openClawSubagentFollowupsDirectTimeout
