@@ -6497,7 +6497,7 @@ func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mail
 				target = fmt.Sprintf("tarea:%d", libres[0].ID)
 			}
 		}
-		if assignee != "" {
+		if assignee != "" && !supervisorAgentAlreadyCarriesVisibleFront(status, assignee) {
 			if libresCount := countLibreTasks(status); libresCount > 0 || strings.HasPrefix(target, "tarea:") {
 				actions = append(actions, supervisorRecommendedAction{
 					Kind:     "dispatch",
@@ -6567,6 +6567,40 @@ func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mail
 	}
 	sortSupervisorRecommendedActionsFast(actions)
 	return actions
+}
+
+func supervisorAgentAlreadyCarriesVisibleFront(status apiStatusResponse, assignee string) bool {
+	assignee = nombreAgenteCanonico(strings.TrimSpace(assignee))
+	if assignee == "" {
+		return false
+	}
+	for _, task := range status.TareasActivas {
+		if nombreAgenteCanonico(strings.TrimSpace(task.Agente)) != assignee {
+			continue
+		}
+		switch task.Estado {
+		case db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada:
+			return true
+		}
+	}
+	for _, task := range status.TareasReservadas {
+		if nombreAgenteCanonico(strings.TrimSpace(task.Agente)) != assignee {
+			continue
+		}
+		switch task.Estado {
+		case db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada:
+			return true
+		}
+	}
+	for _, task := range status.TareasEnProgreso {
+		if nombreAgenteCanonico(strings.TrimSpace(task.Agente)) != assignee {
+			continue
+		}
+		if task.Estado == db.TareaEnProgreso {
+			return true
+		}
+	}
+	return false
 }
 
 func supervisorFilterDispatchActionsBlockedByManualFollowups(actions []supervisorRecommendedAction) []supervisorRecommendedAction {

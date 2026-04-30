@@ -130,3 +130,25 @@ func TestBuildSupervisorOperationalActionsFastNoReservaSobreAgenteConRecoveryMan
 		t.Fatalf("no deberia abrir backlog nuevo sobre un agente con recovery manual pendiente: %+v", actions)
 	}
 }
+
+func TestBuildSupervisorOperationalActionsFastNoReservaSobreAgenteConFrenteYaVisible(t *testing.T) {
+	status := apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex10", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex10", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex10", Prioridad: db.PrioridadAlta},
+		},
+		TareasPorEstado: map[string]int{
+			string(db.TareaLibre): 4,
+		},
+	}
+
+	actions := buildSupervisorOperationalActionsFast(status, nil)
+	if containsSupervisorAction(actions, "reservar_tarea_libre", "backlog:libre") {
+		t.Fatalf("no deberia reservar otra tarea sobre un agente que ya tiene un frente visible: %+v", actions)
+	}
+}
