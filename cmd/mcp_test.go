@@ -5826,6 +5826,43 @@ func TestBuildSupervisorOperationalActionsOmiteReinicioRuntimeSiFrenteVisibleYaP
 	}
 }
 
+func TestBuildSupervisorOperationalActionsOmiteReasignacionSiFrenteVisibleYaProgresa(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevThreshold := supervisorSemanticProgressRecentThreshold
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorSemanticProgressRecentThreshold = prevThreshold
+	}()
+	supervisorSemanticProgressRecentThreshold = 10 * time.Minute
+	now := time.Now().UTC()
+	progress := now.Add(-time.Minute)
+	taskID := int64(9032)
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:             &db.Agente{Nombre: "Codex4"},
+			EstadoOperativo:    "trabajando",
+			WorkerLastProgress: &progress,
+		}}, nil
+	}
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "task_reassigned",
+				CreatedAt:   now,
+				TaskID:      &taskID,
+				TargetAgent: "Codex4",
+			}},
+		},
+		TareasActivas: []tareaLite{{ID: 9032, Estado: db.TareaEnProgreso, Agente: "Codex4"}},
+	}
+
+	actions := buildSupervisorOperationalActions(status, nil)
+	if containsSupervisorAction(actions, "seguir_reasignacion", "tarea:9032") {
+		t.Fatalf("no deberia mantener followup de reasignacion si el relevo ya progresa sin bloqueo global: %+v", actions)
+	}
+}
+
 func TestBuildSupervisorOperationalActionsElevaFollowupBloqueadoQueBloqueaIntegracionReal(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	prevRows := supervisorPanelRowsBuilder
