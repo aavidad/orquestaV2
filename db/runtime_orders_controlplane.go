@@ -2447,7 +2447,7 @@ func canonicalRuntimeCheckpointPanelSummaryCWD(cp *RuntimeCheckpoint, projectRou
 	projectID := *cp.ProyectoID
 	rutaProyecto, ok := projectRoute[projectID]
 	if !ok {
-		rutaProyecto = rutaProyectoWorktreeEfectiva(projectID)
+		rutaProyecto = rutaProyectoWorktreeRaw(projectID)
 		projectRoute[projectID] = rutaProyecto
 	}
 	agent := strings.TrimSpace(cp.Agente)
@@ -2457,7 +2457,7 @@ func canonicalRuntimeCheckpointPanelSummaryCWD(cp *RuntimeCheckpoint, projectRou
 	key := runtimeCheckpointProjectAgentKey{projectID: projectID, agent: agent}
 	rutaWorktree, ok := worktreeRoute[key]
 	if !ok {
-		rutaWorktree = rutaWorktreeActivaAgenteProyecto(projectID, agent)
+		rutaWorktree = rutaWorktreeActivaPrepareLiteMainDB(projectID, agent, rutaProyecto)
 		worktreeRoute[key] = rutaWorktree
 	}
 	return rutaRuntimeCanonicaConProyecto(rutaProyecto, rutaWorktree, cwd)
