@@ -2471,6 +2471,58 @@ func TestProcessTickCacheaSesionActivaLigera(t *testing.T) {
 	}
 }
 
+func TestProcessTickCacheaDecisionDePresupuestoFresco(t *testing.T) {
+	now := time.Now().UTC()
+	resetAt := now.Add(20 * time.Minute)
+	store := &fakeStore{
+		project: &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()},
+		agents: []*db.Agente{
+			{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex2", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		sessions: []*db.Sesion{
+			{ID: 11, Agente: "Codex2", ProyectoID: int64Ptr(7), Estado: "activa", Inicio: now, HeartbeatAt: timePtr(now)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex2"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente activo"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex2", ProyectoID: int64Ptr(7), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		canonicalHandles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(21), Estado: "activo", UpdatedAt: now},
+		},
+		latestBudget: &db.PresupuestoSesion{
+			SesionID:         11,
+			BudgetSource:     "codex",
+			CheckedAt:        now,
+			ResetAt:          &resetAt,
+			RemainingSeconds: int64Ptr(30),
+		},
+	}
+	svc := NewService(store, nil)
+
+	out1, err := svc.ProcessTick(TickInput{Agente: "Codex2", Proyecto: "orquestador"})
+	if err != nil {
+		t.Fatalf("ProcessTick primera: %v", err)
+	}
+	out2, err := svc.ProcessTick(TickInput{Agente: "Codex2", Proyecto: "orquestador"})
+	if err != nil {
+		t.Fatalf("ProcessTick segunda: %v", err)
+	}
+	if out1 == nil || out2 == nil || out1.AccionRecomendada != "pausar_por_cuota" || out2.AccionRecomendada != "pausar_por_cuota" {
+		t.Fatalf("salidas inesperadas: out1=%+v out2=%+v", out1, out2)
+	}
+	if store.budgetCalls != 1 {
+		t.Fatalf("debería reutilizar la decision de presupuesto fresco en ticks consecutivos, calls=%d", store.budgetCalls)
+	}
+}
+
 func TestProcessTickThrottleaWriteHeartbeatSesionActivaReciente(t *testing.T) {
 	now := time.Now().UTC()
 	store := &fakeStore{

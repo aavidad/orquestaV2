@@ -1992,14 +1992,23 @@ func bloqueoAutonomiaRecuperableSinSesionActiva(agente, motivo string) bool {
 }
 
 func (s *Service) shouldPauseByFreshBudget(agente string) (bool, string, error) {
-	p, _, err := s.store.GetLatestAgentBudget(strings.TrimSpace(agente))
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return false, "", nil
+	}
+	if pause, reason, ok := s.cachedTickBudgetPauseDecision(agente); ok {
+		return pause, reason, nil
+	}
+	p, _, err := s.store.GetLatestAgentBudget(agente)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			s.storeTickBudgetPauseDecision(agente, false, "")
 			return false, "", nil
 		}
 		return false, "", err
 	}
 	if p == nil || !db.PresupuestoSesionFresco(p) {
+		s.storeTickBudgetPauseDecision(agente, false, "")
 		return false, "", nil
 	}
 	ev, err := db.EvaluarPresupuestoSesion(p)
@@ -2007,13 +2016,56 @@ func (s *Service) shouldPauseByFreshBudget(agente string) (bool, string, error) 
 		return false, "", err
 	}
 	if ev == nil || !ev.DebeHandoff {
+		s.storeTickBudgetPauseDecision(agente, false, "")
 		return false, "", nil
 	}
 	motivo := strings.TrimSpace(ev.Motivo)
 	if motivo == "" {
 		motivo = "presupuesto crítico"
 	}
-	return true, "Presupuesto crítico. Pausa y relevo recomendados: " + motivo, nil
+	reason := "Presupuesto crítico. Pausa y relevo recomendados: " + motivo
+	s.storeTickBudgetPauseDecision(agente, true, reason)
+	return true, reason, nil
+}
+
+func (s *Service) cachedTickBudgetPauseDecision(agente string) (bool, string, bool) {
+	if s == nil {
+		return false, "", false
+	}
+	key := strings.ToLower(strings.TrimSpace(agente))
+	if key == "" {
+		return false, "", false
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	entry, ok := s.tickBudgetPauseCache[key]
+	if !ok || time.Now().UTC().After(entry.expires) {
+		if ok {
+			delete(s.tickBudgetPauseCache, key)
+		}
+		return false, "", false
+	}
+	return entry.pause, entry.reason, true
+}
+
+func (s *Service) storeTickBudgetPauseDecision(agente string, pause bool, reason string) {
+	if s == nil {
+		return
+	}
+	key := strings.ToLower(strings.TrimSpace(agente))
+	if key == "" {
+		return
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if s.tickBudgetPauseCache == nil {
+		s.tickBudgetPauseCache = map[string]cachedTickBudgetPause{}
+	}
+	s.tickBudgetPauseCache[key] = cachedTickBudgetPause{
+		pause:   pause,
+		reason:  strings.TrimSpace(reason),
+		expires: time.Now().UTC().Add(tickBudgetPauseCacheTTL),
+	}
 }
 
 func (s *Service) resolveActiveAssignment(agente string, proyectoID int64) (bool, string, error) {

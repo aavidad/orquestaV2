@@ -80,6 +80,7 @@ type fakeStore struct {
 	checkReanimationsCalls      int
 	pendingVotesCalls           int
 	openProposalsCalls          int
+	budgetCalls                 int
 	governanceCalls             int
 	mailboxCoveredCalls         int
 	pausedAgent                 string
@@ -1651,6 +1652,7 @@ func (f *fakeStore) ListProjectOpenProposals(proyectoID int64) ([]*db.Propuesta,
 }
 
 func (f *fakeStore) GetLatestAgentBudget(agente string) (*db.PresupuestoSesion, *db.Sesion, error) {
+	f.budgetCalls++
 	if f.latestBudget == nil {
 		return nil, nil, sql.ErrNoRows
 	}

@@ -97,6 +97,7 @@ type Service struct {
 	prepareOutputFlight      map[string]*prepareOutputFlight
 	tickOutputCache          map[string]cachedTickOutput
 	tickOutputFlight         map[string]*tickOutputFlight
+	tickBudgetPauseCache     map[string]cachedTickBudgetPause
 	compactDetailCache       map[string]cachedCompactDetail
 	compactDetailFlight      map[string]*compactDetailFlight
 	reanimCache              map[string]cachedReanimationSchedule
@@ -119,6 +120,7 @@ var prepareGovernanceCacheTTL = 45 * time.Second
 var prepareModelPolicyCacheTTL = 45 * time.Second
 var prepareOutputCacheTTL = 20 * time.Second
 var tickOutputCacheTTL = 1500 * time.Millisecond
+var tickBudgetPauseCacheTTL = 15 * time.Second
 
 func agentDetailDebugf(format string, args ...any) {
 	if !agentDetailDebugEnabled() {
@@ -221,6 +223,7 @@ func NewService(store Store, modelPolicyProvider ModelPolicyProvider) *Service {
 		prepareOutputFlight:      map[string]*prepareOutputFlight{},
 		tickOutputCache:          map[string]cachedTickOutput{},
 		tickOutputFlight:         map[string]*tickOutputFlight{},
+		tickBudgetPauseCache:     map[string]cachedTickBudgetPause{},
 		compactDetailCache:       map[string]cachedCompactDetail{},
 		compactDetailFlight:      map[string]*compactDetailFlight{},
 		reanimCache:              map[string]cachedReanimationSchedule{},
@@ -257,6 +260,12 @@ type cachedPrepareSession struct {
 type cachedPrepareConnector struct {
 	connector *db.Conector
 	expires   time.Time
+}
+
+type cachedTickBudgetPause struct {
+	pause   bool
+	reason  string
+	expires time.Time
 }
 
 type cachedPrepareModelPolicy struct {
