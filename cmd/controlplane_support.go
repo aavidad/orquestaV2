@@ -14092,7 +14092,7 @@ func procesarSobrecargaAgentesAutonomiaBatch(rows []agentesapp.Row, tareasActiva
 			if actual.Estado != db.EstadoAsignada && actual.Estado != db.EstadoEnProgreso {
 				continue
 			}
-			relevo := seleccionarRelevoAutonomiaConLimiteConSignal(rows, openTasksProjected, actual, agente, autonomiaWorkerOpenTasksCeiling, criticalProject)
+			relevo := seleccionarRelevoAutonomiaSobrecargaConSignal(rows, openTasksProjected, actual, agente, autonomiaWorkerOpenTasksCeiling, criticalProject)
 			if relevo == "" {
 				if err := bloquearTareaAutonomiaSinRelevo(actual.ID, agente, "Sobrecarga operativa: sin relevo sano disponible", fmt.Sprintf("Bloqueada automáticamente en %s por sobrecarga operativa sin relevo sano", agente)); err != nil {
 					return procesadas, err
@@ -15063,6 +15063,16 @@ func seleccionarRelevoAutonomiaConLimiteConSignal(rows []agentesapp.Row, openTas
 	}, false, false, criticalProject)
 }
 
+func seleccionarRelevoAutonomiaSobrecargaConSignal(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string, maxOpenTasksPerRecoveryWorker int, criticalProject *controlPlaneCriticalProjectSignal) string {
+	relevo := seleccionarRelevoAutonomiaConLimiteConSignal(rows, openTasksProjected, tarea, agenteBloqueado, maxOpenTasksPerRecoveryWorker, criticalProject)
+	if relevo == "" && tarea != nil && (tarea.Estado == db.EstadoAsignada || tarea.Estado == db.EstadoEnProgreso) {
+		idleLaunchTarea := *tarea
+		idleLaunchTarea.Estado = db.EstadoBloqueada
+		relevo = seleccionarRelevoAutonomiaConLimiteConSignal(rows, openTasksProjected, &idleLaunchTarea, agenteBloqueado, maxOpenTasksPerRecoveryWorker, criticalProject)
+	}
+	return relevo
+}
+
 func seleccionarRelevoAutonomiaDrenajePrime(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string) string {
 	return seleccionarRelevoAutonomiaConTechoConSignal(rows, openTasksProjected, tarea, agenteBloqueado, func(row agentesapp.Row, now time.Time) int {
 		candidateCeiling := autonomiaWorkerOpenTasksCeiling
@@ -15424,7 +15434,6 @@ func taskNotesMarkedManualTakeover(notas string) bool {
 
 func autonomiaOpenTasksCeilingForRow(row agentesapp.Row, now time.Time) int {
 	if row.WorkerFresh(now) &&
-		row.CurrentTask != nil &&
 		row.OpenTasks > 1 &&
 		strings.EqualFold(strings.TrimSpace(row.EstadoOperativo), "trabajando") &&
 		strings.EqualFold(strings.TrimSpace(row.LastAutonomyState), "work_confirmed") {

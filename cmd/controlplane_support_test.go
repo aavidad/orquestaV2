@@ -42208,6 +42208,169 @@ func TestProcesarAgentesDegradadosAutonomiaBatchRedistribuyeSobrecargaWorkerSano
 	}
 }
 
+func TestSeleccionarRelevoAutonomiaSobrecargaPermiteIdleLaunchCandidateParaActiva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-sobrecarga-idle-launch",
+		Nombre:  "Orquestador Sobrecarga Idle Launch",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"CodexCargado", "CodexIdle"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente sobrecarga"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Sobrecarga activa con idle launch",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexCargado"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexCargado"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil || tarea == nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	now := time.Now().UTC()
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexCargado", Activo: true, EstadoCuota: "activo"},
+			Asignacion:      &db.Asignacion{Agente: "CodexCargado", ProyectoID: proyectoID, ProyectoSlug: "orquestador-sobrecarga-idle-launch", Estado: db.AsignacionActiva},
+			EstadoOperativo: "trabajando",
+			WorkerAlive:     true,
+			WorkerState:     "ready",
+			WorkerHeartbeat: &now,
+			OpenTasks:       2,
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: tareaID, State: db.TareaEnProgreso, ProjectID: &proyectoID},
+			LastAutonomyState: "work_confirmed",
+		},
+		{
+			Agente:          &db.Agente{Nombre: "CodexIdle", Activo: true, EstadoCuota: "activo"},
+			Asignacion:      &db.Asignacion{Agente: "CodexIdle", ProyectoID: proyectoID, ProyectoSlug: "orquestador-sobrecarga-idle-launch", Estado: db.AsignacionActiva},
+			EstadoOperativo: "sin_tarea",
+			OpenTasks:       0,
+			BlockedTasks:    0,
+			OrdersOpen:      0,
+			WorkerAlive:     false,
+			WorkerState:     "",
+		},
+	}
+	relevo := seleccionarRelevoAutonomiaSobrecargaConSignal(rows, openTasksProjectedFromRows(rows), tarea, "CodexCargado", autonomiaWorkerOpenTasksCeiling, nil)
+	if relevo != "CodexIdle" {
+		t.Fatalf("deberia usar idle launch candidate como relevo, got=%q", relevo)
+	}
+}
+
+func TestProcesarSobrecargaAgentesAutonomiaBatchUsaIdleLaunchCandidateParaActiva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-sobrecarga-idle-launch-batch",
+		Nombre:  "Orquestador Sobrecarga Idle Launch Batch",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"CodexCargado", "CodexIdle"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente sobrecarga"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+	var ids []int64
+	for i := 0; i < 2; i++ {
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      fmt.Sprintf("Sobrecarga batch idle %d", i+1),
+			Descripcion: "test",
+			ProyectoID:  &proyectoID,
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea %d: %v", i+1, err)
+		}
+		if err := db.TomarTarea(tareaID, "CodexCargado"); err != nil {
+			t.Fatalf("tomar tarea %d: %v", i+1, err)
+		}
+		if err := db.IniciarTarea(tareaID, "CodexCargado"); err != nil {
+			t.Fatalf("iniciar tarea %d: %v", i+1, err)
+		}
+		ids = append(ids, tareaID)
+	}
+
+	now := time.Now().UTC()
+	rows := []agentesapp.Row{
+		{
+			Agente:            &db.Agente{Nombre: "CodexCargado", Activo: true, EstadoCuota: "activo"},
+			Asignacion:        &db.Asignacion{Agente: "CodexCargado", ProyectoID: proyectoID, ProyectoSlug: "orquestador-sobrecarga-idle-launch-batch", Estado: db.AsignacionActiva},
+			EstadoOperativo:   "trabajando",
+			WorkerAlive:       true,
+			WorkerState:       "ready",
+			WorkerHeartbeat:   &now,
+			OpenTasks:         2,
+			LastAutonomyState: "work_confirmed",
+		},
+		{
+			Agente:          &db.Agente{Nombre: "CodexIdle", Activo: true, EstadoCuota: "activo"},
+			Asignacion:      &db.Asignacion{Agente: "CodexIdle", ProyectoID: proyectoID, ProyectoSlug: "orquestador-sobrecarga-idle-launch-batch", Estado: db.AsignacionActiva},
+			EstadoOperativo: "sin_tarea",
+			OpenTasks:       0,
+			BlockedTasks:    0,
+			OrdersOpen:      0,
+			WorkerAlive:     false,
+		},
+	}
+	tareasActivas, _, _, err := cargarTareasYBloqueosAutonomiaPorAgente()
+	if err != nil {
+		t.Fatalf("cargar tareas activas: %v", err)
+	}
+	procesadas, err := procesarSobrecargaAgentesAutonomiaBatch(rows, tareasActivas, openTasksProjectedFromRows(rows), now)
+	if err != nil {
+		t.Fatalf("procesarSobrecargaAgentesAutonomiaBatch: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia redistribuir una tarea al idle launch candidate, got=%d", procesadas)
+	}
+	reasignadas := 0
+	for _, tareaID := range ids {
+		tarea, err := db.GetTarea(tareaID)
+		if err != nil {
+			t.Fatalf("get tarea %d: %v", tareaID, err)
+		}
+		if tarea.Agente != nil && *tarea.Agente == "CodexIdle" && tarea.Estado == db.EstadoEnProgreso {
+			reasignadas++
+		}
+	}
+	if reasignadas != 1 {
+		t.Fatalf("deberia haber exactamente una tarea redistribuida al idle launch candidate, got=%d", reasignadas)
+	}
+}
+
 func TestProcesarAgentesDegradadosAutonomiaBatchBloqueaSobrecargaSinRelevoSano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetStatusSnapshotCache()
@@ -42475,6 +42638,25 @@ func TestAutonomiaOpenTasksCeilingForRowReduceAMonotareaConTrabajoConfirmado(t *
 
 	if got := autonomiaOpenTasksCeilingForRow(row, now); got != 1 {
 		t.Fatalf("ceiling monotarea inesperado: %d", got)
+	}
+}
+
+func TestAutonomiaOpenTasksCeilingForRowReduceAMonotareaConTrabajoConfirmadoSinCurrentTask(t *testing.T) {
+	now := time.Now().UTC()
+	row := agentesapp.Row{
+		WorkerDriver:      "tmux_cli_session",
+		WorkerTransport:   "tmux",
+		WorkerState:       "running",
+		WorkerAlive:       true,
+		WorkerHeartbeat:   timePtr(now),
+		WorkerUpdatedAt:   timePtr(now),
+		EstadoOperativo:   "trabajando",
+		LastAutonomyState: "work_confirmed",
+		OpenTasks:         2,
+	}
+
+	if got := autonomiaOpenTasksCeilingForRow(row, now); got != 1 {
+		t.Fatalf("ceiling monotarea sin current task inesperado: %d", got)
 	}
 }
 
