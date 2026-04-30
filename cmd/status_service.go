@@ -1229,11 +1229,15 @@ func agentesVisiblesPorEstadoOperativoRows(agentes []*db.Agente, rows []agentesa
 			agentesActivos = append(agentesActivos, agente)
 		case "trabajando":
 			agentesActivos = append(agentesActivos, agente)
-			agentesTrabajando = append(agentesTrabajando, agente)
+			if rowCountsAsWorkingVisible(row) {
+				agentesTrabajando = append(agentesTrabajando, agente)
+			}
 		case "saturado":
 			agentesActivos = append(agentesActivos, agente)
-			agentesTrabajando = append(agentesTrabajando, agente)
-			agentesSaturados = append(agentesSaturados, agente)
+			if rowCountsAsWorkingVisible(row) {
+				agentesTrabajando = append(agentesTrabajando, agente)
+				agentesSaturados = append(agentesSaturados, agente)
+			}
 		case "atascado", "mailbox_atascada":
 			agentesAtascados = append(agentesAtascados, agente)
 			if rowCountsAsConnected(row) {
@@ -1251,6 +1255,16 @@ func agentesVisiblesPorEstadoOperativoRows(agentes []*db.Agente, rows []agentesa
 		}
 	}
 	return agentesActivos, agentesTrabajando, agentesSaturados, agentesAtascados, agentesAuthManual, agentesQuotaBlocked, true
+}
+
+func rowCountsAsWorkingVisible(row agentesapp.Row) bool {
+	if row.OpenTasks > 0 || row.BlockedTasks > 0 {
+		return true
+	}
+	if row.CurrentTask != nil && row.CurrentTask.TaskID != 0 {
+		return true
+	}
+	return false
 }
 
 func rowEsResiduoPausadoSinTrabajo(row agentesapp.Row, now time.Time) bool {

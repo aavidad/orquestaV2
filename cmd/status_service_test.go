@@ -1825,6 +1825,40 @@ func TestResumirAutonomiaRowsCuentaSupervisorConNotaSupervisionAutomatica(t *tes
 	}
 }
 
+func TestAgentesVisiblesPorEstadoOperativoRowsNoCuentaSupervisorSinFrenteComoTrabajando(t *testing.T) {
+	now := time.Now().UTC()
+	agentes := []*db.Agente{
+		{Nombre: "Codex2", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+	}
+	rows := []agentesapp.Row{{
+		Agente:             &db.Agente{Nombre: "Codex2"},
+		Asignacion:         &db.Asignacion{Agente: "Codex2", ProyectoID: 1, Estado: db.AsignacionActiva, Nota: "supervision_automatica"},
+		WorkerAlive:        true,
+		WorkerHeartbeat:    ptrTimeStatus(now),
+		WorkerUpdatedAt:    ptrTimeStatus(now),
+		EstadoOperativo:    "trabajando",
+		DetalleOperativo:   "supervision autonoma viva",
+		LastAutonomyAction: "supervisar_proyecto",
+		MailboxPending:     1,
+		OpenTasks:          0,
+		BlockedTasks:       0,
+	}}
+
+	activos, trabajando, saturados, atascados, authManual, quotaBlocked, ok := agentesVisiblesPorEstadoOperativoRows(agentes, rows)
+	if !ok {
+		t.Fatalf("deberia resolver filas operativas")
+	}
+	if len(activos) != 1 || activos[0].Nombre != "Codex2" {
+		t.Fatalf("activos inesperados: %+v", activos)
+	}
+	if len(trabajando) != 0 {
+		t.Fatalf("no deberia contar supervisor sin frente como trabajando: %+v", trabajando)
+	}
+	if len(saturados) != 0 || len(atascados) != 0 || len(authManual) != 0 || len(quotaBlocked) != 0 {
+		t.Fatalf("listas operativas inesperadas: saturados=%+v atascados=%+v auth=%+v quota=%+v", saturados, atascados, authManual, quotaBlocked)
+	}
+}
+
 func TestResumirAutonomiaRowsMantieneSupervisorConHeartbeatQuietoSiRuntimeSigueFresco(t *testing.T) {
 	now := time.Now().UTC()
 	hb := now.Add(-70 * time.Second)
