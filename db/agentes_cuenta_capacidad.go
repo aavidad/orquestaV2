@@ -17,6 +17,17 @@ func CuentaClaveAgente(agente *Agente) string {
 	if email := strings.ToLower(strings.TrimSpace(agente.CuentaEmail)); email != "" {
 		return email
 	}
+	if identidad := UltimaIdentidadCuentaObservadaAgente(strings.TrimSpace(agente.Nombre)); !identidadCuentaVacia(identidad) {
+		if accountID := strings.ToLower(strings.TrimSpace(identidad.accountID)); accountID != "" {
+			return accountID
+		}
+		if email := strings.ToLower(strings.TrimSpace(identidad.email)); email != "" {
+			return email
+		}
+		if usuario := strings.ToLower(strings.TrimSpace(identidad.usuario)); usuario != "" {
+			return usuario
+		}
+	}
 	return strings.ToLower(strings.TrimSpace(agente.CuentaUsuario))
 }
 

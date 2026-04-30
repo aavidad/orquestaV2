@@ -17,6 +17,27 @@ func TestCuentaClaveAgentePrefiereAccountIDSobreEmail(t *testing.T) {
 	}
 }
 
+func TestCuentaClaveAgenteUsaIdentidadObservadaSiAgenteNoTieneCuentaPersistida(t *testing.T) {
+	prepararDBTemporal(t)
+	if err := RegistrarAgente("Codex20", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := UpsertAgenteIdentidadObservadaCanonica("Codex20", "acc-shared", "shared@example.com", "Codex20", "codex_profile_status", &now); err != nil {
+		t.Fatalf("UpsertAgenteIdentidadObservadaCanonica: %v", err)
+	}
+	agente, err := GetAgente("Codex20")
+	if err != nil || agente == nil {
+		t.Fatalf("GetAgente: %+v err=%v", agente, err)
+	}
+	agente.CuentaID = ""
+	agente.CuentaEmail = ""
+	agente.CuentaUsuario = ""
+	if got := CuentaClaveAgente(agente); got != "acc-shared" {
+		t.Fatalf("la clave deberia caer a la identidad observada, got=%q", got)
+	}
+}
+
 func TestAgenteOcupaCapacidadCuentaIgnoraOrdenVivaStaleSinRuntimeNiSesion(t *testing.T) {
 	prepararDBTemporal(t)
 	if err := ConfigSet("runtime_shared_account_order_hold_seconds", "300"); err != nil {

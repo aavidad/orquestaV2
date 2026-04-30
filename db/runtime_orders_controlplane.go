@@ -419,6 +419,9 @@ func crearHandoffAgente(origen, destino string, tareaID *int64, motivo, resumenC
 	if sesionOrigen != nil && sesionOrigen.ProyectoID != nil {
 		proyectoID = sesionOrigen.ProyectoID
 	}
+	if strings.TrimSpace(externalSessionID) == "" && sesionOrigen != nil {
+		externalSessionID = strings.TrimSpace(sesionOrigen.ExternalSessionID)
+	}
 
 	sesionDestino, err := GetSesionActiva(destino, nil)
 	if err != nil && err != sql.ErrNoRows {

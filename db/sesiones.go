@@ -1594,26 +1594,32 @@ func aplicarUsoObservadoAgente(a *Agente, p *PresupuestoSesion) {
 		return
 	}
 	sessionUsage, _ := raw["session_usage"].(map[string]any)
-	if sessionUsage == nil {
-		return
+	if sessionUsage != nil {
+		if totalRaw, ok := sessionUsage["total_tokens"]; ok {
+			total := int64FromAny(totalRaw)
+			a.ObservedUsageTokens = &total
+		}
+		if cost, ok := float64FromAny(sessionUsage["estimated_cost_usd"]); ok {
+			a.ObservedUsageCostUSD = &cost
+		}
+		if count, ok := intFromAnyWithBool(sessionUsage["message_count"]); ok {
+			a.ObservedUsageMessages = &count
+		}
+		if turns, ok := intFromAnyWithBool(sessionUsage["turns"]); ok {
+			a.ObservedUsageTurns = &turns
+		}
+		if updatedAt := timeFromAny(sessionUsage["updated_at"]); updatedAt != nil {
+			a.ObservedUsageUpdatedAt = updatedAt
+		}
 	}
-	if totalRaw, ok := sessionUsage["total_tokens"]; ok {
-		total := int64FromAny(totalRaw)
-		a.ObservedUsageTokens = &total
+	sessionPath := ""
+	if sessionUsage != nil {
+		sessionPath = strings.TrimSpace(stringFromMap(sessionUsage, "session_path", ""))
 	}
-	if cost, ok := float64FromAny(sessionUsage["estimated_cost_usd"]); ok {
-		a.ObservedUsageCostUSD = &cost
+	if sessionPath == "" {
+		sessionPath = strings.TrimSpace(stringFromMap(raw, "session_path", ""))
 	}
-	if count, ok := intFromAnyWithBool(sessionUsage["message_count"]); ok {
-		a.ObservedUsageMessages = &count
-	}
-	if turns, ok := intFromAnyWithBool(sessionUsage["turns"]); ok {
-		a.ObservedUsageTurns = &turns
-	}
-	if updatedAt := timeFromAny(sessionUsage["updated_at"]); updatedAt != nil {
-		a.ObservedUsageUpdatedAt = updatedAt
-	}
-	a.ObservedSessionPath = strings.TrimSpace(stringFromMap(sessionUsage, "session_path", ""))
+	a.ObservedSessionPath = sessionPath
 }
 
 func proyectarEstadoCuotaVisibleDesdePresupuesto(a *Agente) {

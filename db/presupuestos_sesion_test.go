@@ -1020,6 +1020,37 @@ func TestGetAgenteConservaCuotaObservadaYUsoClaudeMasReciente(t *testing.T) {
 	}
 }
 
+func TestGetAgenteLeeObservedSessionPathTopLevelComoFallback(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex20", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex20")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	now := time.Now().UTC()
+	rawObserved := `{"account_email":"codex20@example.com","account_user":"Codex20","session_path":"/tmp/codex/session-20.jsonl"}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "unknown",
+		BudgetSource:    "codex_profile_status",
+		RawSnapshotJSON: rawObserved,
+		CheckedAt:       now,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion observed: %v", err)
+	}
+
+	agente, err := GetAgente("codex20")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.ObservedSessionPath != "/tmp/codex/session-20.jsonl" {
+		t.Fatalf("session_path top-level deberia proyectarse como fallback: %+v", agente)
+	}
+}
+
 func TestGetAgenteConsolidaCuotaCanonicaPorCuentaCompartida(t *testing.T) {
 	abrirDBTemporalMemoria(t)
 

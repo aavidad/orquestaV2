@@ -181,6 +181,48 @@ func TestCrearHandoffAgenteStalePermiteSesionAbiertaSinHandleActivo(t *testing.T
 	}
 }
 
+func TestCrearHandoffAgenteStaleHeredaExternalSessionIDDeSesionOrigen(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	sesionOrigenID, err := IniciarSesion("Codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion origen: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE sesiones SET external_session_id=? WHERE id=?`, "ext-parent-123", sesionOrigenID); err != nil {
+		t.Fatalf("update external_session_id origen: %v", err)
+	}
+	if _, err := IniciarSesion("Codex2"); err != nil {
+		t.Fatalf("IniciarSesion destino: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='cerrado' WHERE agente=?`, "Codex1"); err != nil {
+		t.Fatalf("cerrar handles origen: %v", err)
+	}
+
+	orderID, err := CrearHandoffAgenteStale("Codex1", "Codex2", nil, "watchdog", "continuar", "")
+	if err != nil {
+		t.Fatalf("CrearHandoffAgenteStale: %v", err)
+	}
+	agente := "Codex2"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, Estado: &estado})
+	if err != nil || len(orders) == 0 || orders[0] == nil {
+		t.Fatalf("ListarRuntimeOrders: %+v err=%v", orders, err)
+	}
+	var payload HandoffPayload
+	if err := json.Unmarshal([]byte(orders[0].PayloadJSON), &payload); err != nil {
+		t.Fatalf("payload json: %v", err)
+	}
+	if payload.ExternalSessionID != "ext-parent-123" {
+		t.Fatalf("deberia heredar external_session_id de la sesion origen order=%d payload=%+v", orderID, payload)
+	}
+}
+
 func TestCrearHandoffAgenteVivoReutilizaPendienteEquivalente(t *testing.T) {
 	prepararDBTemporal(t)
 
