@@ -160,6 +160,58 @@ func TestBuildSupervisorOperationalActionsFastOmiteFollowupZombiePorOverviewCano
 	}
 }
 
+func TestBuildSupervisorOperationalActionsOmiteReinicioRuntimeSiElDetailSoloTieneResiduosRuntimeYPausaDeHandoff(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	prevRows := supervisorPanelRowsBuilder
+	prevDetail := supervisorAgentDetailBuilder
+	defer func() {
+		supervisorPanelRowsBuilder = prevRows
+		supervisorAgentDetailBuilder = prevDetail
+	}()
+	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
+		return []agentesapp.Row{{
+			Agente:          &db.Agente{Nombre: "Codex1"},
+			EstadoOperativo: "trabajando",
+		}}, nil
+	}
+	supervisorAgentDetailBuilder = func(agent string) (*agentesapp.Detail, error) {
+		if !strings.EqualFold(agent, "Codex10") {
+			return nil, nil
+		}
+		return &agentesapp.Detail{
+			Row: agentesapp.Row{
+				Agente:          &db.Agente{Nombre: "Codex10"},
+				EstadoOperativo: "bloqueado_por_runtime",
+				WorkerAlive:     true,
+				WorkerState:     "running",
+				Runtime:         &db.RuntimeInstance{ID: 646, Agente: "Codex10"},
+				Handle:          &db.RuntimeHandle{ID: 744, Agente: "Codex10", Estado: "fallido"},
+			},
+			Asignaciones: []*db.Asignacion{{
+				Agente: "Codex10",
+				Estado: db.AsignacionPausada,
+				Nota:   "handoff_cedido_a_Codex1",
+			}},
+		}, nil
+	}
+	now := time.Now().UTC()
+	status := apiStatusResponse{
+		Autonomia: autonomiaResumen{
+			Recent: []autonomyEventSummary{{
+				Kind:        "runtime_restart_requested",
+				CreatedAt:   now,
+				Agent:       "Codex10",
+				TargetAgent: "Codex10",
+			}},
+		},
+	}
+
+	actions := buildSupervisorOperationalActions(status, nil)
+	if containsSupervisorAction(actions, "seguir_reinicio_runtime", "agente:Codex10") {
+		t.Fatalf("no deberia mantener followup manual si solo quedan residuos runtime y asignacion pausada: %+v", actions)
+	}
+}
+
 func TestBuildSupervisorOperationalActionsOmiteReinicioRuntimeSiCodex10YaProgresaSinBloqueoGlobal(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	prevRows := supervisorPanelRowsBuilder

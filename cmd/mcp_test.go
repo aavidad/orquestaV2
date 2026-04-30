@@ -4591,6 +4591,44 @@ func TestMCPToolSupervisorAplicaSiguiente(t *testing.T) {
 	})
 }
 
+func TestBuildSupervisorOperationalActionsFastLanzaIdleDesdeSnapshotDePanel(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "Codex11", Rol: "programador", Habilitado: true},
+			EstadoOperativo: "sin_tarea",
+		},
+		{
+			Agente:          &db.Agente{Nombre: "OpenClaw", Rol: "supervisor", Habilitado: true},
+			EstadoOperativo: "sin_tarea",
+		},
+	}, now)
+
+	status := apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex11", Rol: "programador", Habilitado: true},
+		},
+		TareasPorEstado: map[string]int{
+			string(db.TareaLibre): 3,
+		},
+	}
+
+	actions := buildSupervisorOperationalActionsFast(status, nil)
+	item := findSupervisorAction(actions, "asignar_tarea_libre", "backlog:libre")
+	if item == nil {
+		t.Fatalf("deberia abrir un frente launchable desde snapshot de panel: %+v", actions)
+	}
+	if item.Assignee != "codex11" {
+		t.Fatalf("assignee launchable inesperado: %+v", item)
+	}
+	if strings.Contains(strings.ToLower(item.Reason), "openclaw") {
+		t.Fatalf("no deberia contar al supervisor como candidato launchable: %+v", item)
+	}
+}
+
 func TestMCPToolsPropuestasCrearYAccionarOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")

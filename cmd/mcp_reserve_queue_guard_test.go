@@ -131,6 +131,50 @@ func TestBuildSupervisorOperationalActionsFastNoReservaSobreAgenteConRecoveryMan
 	}
 }
 
+func TestBuildSupervisorOperationalActionsFastPrefiereIdleLanzableSiElConectadoEstaBloqueadoPorRuntime(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "Codex10", Rol: "programador", Habilitado: true},
+			EstadoOperativo: "bloqueado_por_runtime",
+			WorkerAlive:     true,
+			WorkerState:     "running",
+		},
+		{
+			Agente:          &db.Agente{Nombre: "Codex11", Rol: "programador", Habilitado: true},
+			EstadoOperativo: "sin_tarea",
+		},
+	}, now)
+
+	status := apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			{Nombre: "Codex10", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex1", Prioridad: db.PrioridadAlta},
+		},
+		TareasPorEstado: map[string]int{
+			string(db.TareaLibre): 4,
+		},
+	}
+
+	actions := buildSupervisorOperationalActionsFast(status, nil)
+	item := findSupervisorAction(actions, "asignar_tarea_libre", "backlog:libre")
+	if item == nil {
+		t.Fatalf("deberia abrir frente con idle lanzable cuando el conectado esta bloqueado por runtime: %+v", actions)
+	}
+	if item.Assignee != "codex11" {
+		t.Fatalf("assignee inesperado: %+v", item)
+	}
+}
+
 func TestBuildSupervisorOperationalActionsFastNoReservaSobreAgenteConFrenteYaVisible(t *testing.T) {
 	status := apiStatusResponse{
 		AgentesActivos: []*db.Agente{

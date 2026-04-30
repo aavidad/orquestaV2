@@ -315,6 +315,28 @@ func TestNormalizeServerOperationalInfoDerivaRecoveryHintDeCuotaSinRearm(t *test
 	}
 }
 
+func TestNormalizeServerOperationalInfoPrefiereWorkersConectadosOciososAntesQueQuotaReset(t *testing.T) {
+	info := normalizeServerOperationalInfo(serverOperationalInfo{
+		State:            "degraded",
+		Operational:      false,
+		Reason:           "tasks_without_workers",
+		TasksInProgress:  3,
+		ConnectedWorkers: 2,
+		WorkingWorkers:   1,
+		QuotaAgents:      1,
+		NextQuotaResetAt: "2026-04-29T11:00:00Z",
+	})
+	if info.Recovery == nil {
+		t.Fatalf("recovery hint ausente: %+v", info)
+	}
+	if info.Recovery.SuggestedAction != "inspect_connected_idle_workers" {
+		t.Fatalf("deberia preferir worker ocioso visible antes que wait_quota_reset: %+v", info.Recovery)
+	}
+	if info.NextRecoveryPlan == nil || info.NextRecoveryPlan.Action != "inspect_connected_idle_workers" {
+		t.Fatalf("recovery plan inesperado: %+v", info.NextRecoveryPlan)
+	}
+}
+
 func TestNormalizeServerOperationalInfoMarcaCompactionDebtConFilaFresca(t *testing.T) {
 	resetAgentPanelSnapshotCache()
 	defer resetAgentPanelSnapshotCache()

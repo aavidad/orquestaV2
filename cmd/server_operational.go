@@ -329,6 +329,11 @@ func buildServerOperationalRecoveryHint(info serverOperationalInfo) *serverOpera
 			hint.Detail = fmt.Sprintf("%d worker(s) requieren autenticación manual antes de retomar el trabajo", info.AuthAgents)
 			return hint
 		}
+		if info.ConnectedWorkers > info.WorkingWorkers {
+			hint.SuggestedAction = "inspect_connected_idle_workers"
+			hint.Detail = fmt.Sprintf("%d worker(s) conectados pero solo %d trabajando; conviene consumir primero la capacidad ya visible antes de esperar cuota", info.ConnectedWorkers, info.WorkingWorkers)
+			return hint
+		}
 		if info.QuotaAgents > 0 {
 			hint.SuggestedAction = "wait_quota_reset"
 			hint.Detail = fmt.Sprintf("%d worker(s) bloqueados por cuota; próximo reset visible %s", info.QuotaAgents, withFallback(info.NextQuotaResetAt, "pendiente"))

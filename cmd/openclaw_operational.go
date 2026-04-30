@@ -6,6 +6,7 @@ import (
 )
 
 var openClawOperationalInfoTimeout = 150 * time.Millisecond
+var openClawOperationalFallbackSkew = 2 * time.Second
 
 func buildOpenClawOperationalInfo() serverOperationalInfo {
 	return buildOpenClawOperationalInfoWithStatus(apiStatusResponse{})
@@ -47,7 +48,7 @@ func openClawOperationalFallbackIsNewer(status apiStatusResponse, generated stri
 	if !ok {
 		return false
 	}
-	return statusAt.After(infoAt)
+	return statusAt.After(infoAt.Add(openClawOperationalFallbackSkew))
 }
 
 func parseOpenClawOperationalGenerated(raw string) (time.Time, bool) {

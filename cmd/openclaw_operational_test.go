@@ -101,3 +101,42 @@ func TestBuildOpenClawOperationalInfoWithStatusPrefiereStatusMasFrescoQueFetcher
 		t.Fatalf("deberia preferir fallback fresco del status: %+v", info)
 	}
 }
+
+func TestBuildOpenClawOperationalInfoWithStatusToleraSkewPequenoYPrefiereFetcherCanonico(t *testing.T) {
+	prevFetcher := controlPlaneOperationalInfoFetcher
+	prevTimeout := openClawOperationalInfoTimeout
+	prevSkew := openClawOperationalFallbackSkew
+	t.Cleanup(func() {
+		controlPlaneOperationalInfoFetcher = prevFetcher
+		openClawOperationalInfoTimeout = prevTimeout
+		openClawOperationalFallbackSkew = prevSkew
+	})
+
+	controlPlaneOperationalInfoFetcher = func() (serverOperationalInfo, error) {
+		return serverOperationalInfo{
+			State:            "degraded",
+			Operational:      false,
+			Reason:           "tasks_without_workers",
+			ConnectedWorkers: 2,
+			WorkingWorkers:   1,
+			QuotaAgents:      0,
+			Generated:        "2026-04-29T08:31:10Z",
+		}, nil
+	}
+	openClawOperationalInfoTimeout = 50 * time.Millisecond
+	openClawOperationalFallbackSkew = 2 * time.Second
+
+	info := buildOpenClawOperationalInfoWithStatus(apiStatusResponse{
+		Generado:          "2026-04-29T08:31:11Z",
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		TareasEnProgreso: []tareaLite{
+			{ID: 40, Agente: "Codex1", Estado: db.TareaEnProgreso},
+			{ID: 41, Agente: "Codex11", Estado: db.TareaEnProgreso},
+		},
+	})
+
+	if info.Generated != "2026-04-29T08:31:10Z" || info.ConnectedWorkers != 2 || info.QuotaAgents != 0 {
+		t.Fatalf("deberia preferir fetcher canonico si el skew es pequeno: %+v", info)
+	}
+}

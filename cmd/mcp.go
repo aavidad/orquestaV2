@@ -6460,10 +6460,12 @@ func buildSupervisorOperationalActionsFast(status apiStatusResponse, mailboxPend
 
 func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mailboxPendiente []apiOpenClawMailboxLite, fast bool) []supervisorRecommendedAction {
 	actions := make([]supervisorRecommendedAction, 0, 4+len(mailboxPendiente))
-	idle := idleSupervisorWorkers(status.AgentesActivos, status.AgentesTrabajando)
+	idle := supervisorDispatchableIdleWorkers(status, fast)
 	visibleWorkers := visibleNonSupervisorAgents(status.AgentesActivos)
 	var launchableIdle []string
-	if !fast {
+	if fast {
+		launchableIdle = supervisorIdleLaunchCandidatesFromSnapshot()
+	} else {
 		launchableIdle = supervisorIdleLaunchCandidates()
 	}
 	if len(idle) > 0 {
@@ -6647,11 +6649,25 @@ func supervisorIdleLaunchCandidates() []string {
 	if supervisorPanelRowsBuilder == nil {
 		return nil
 	}
-	supervisores := configuredSupervisorAgentSet()
 	rows, err := supervisorPanelRowsBuilder()
 	if err != nil {
 		return nil
 	}
+	return supervisorIdleLaunchCandidatesFromRows(rows)
+}
+
+func supervisorIdleLaunchCandidatesFromSnapshot() []string {
+	if rows, ok := readAgentPanelSnapshotFresh(); ok {
+		return supervisorIdleLaunchCandidatesFromRows(rows)
+	}
+	if rows, ok := readAgentPanelSnapshotAny(); ok {
+		return supervisorIdleLaunchCandidatesFromRows(rows)
+	}
+	return nil
+}
+
+func supervisorIdleLaunchCandidatesFromRows(rows []agentesapp.Row) []string {
+	supervisores := configuredSupervisorAgentSet()
 	out := make([]string, 0, len(rows))
 	seen := map[string]struct{}{}
 	for _, row := range rows {
@@ -6663,6 +6679,9 @@ func supervisorIdleLaunchCandidates() []string {
 			continue
 		}
 		if _, dup := seen[name]; dup {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(row.Agente.Rol), "supervisor") {
 			continue
 		}
 		if _, supervisor := supervisores[name]; supervisor {
@@ -6687,6 +6706,68 @@ func supervisorIdleLaunchCandidates() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func supervisorDispatchableIdleWorkers(status apiStatusResponse, fast bool) []string {
+	idle := idleSupervisorWorkers(status.AgentesActivos, status.AgentesTrabajando)
+	if len(idle) == 0 {
+		return nil
+	}
+	var rows []agentesapp.Row
+	if fast {
+		if snapshot, ok := readAgentPanelSnapshotFresh(); ok {
+			rows = snapshot
+		} else if snapshot, ok := readAgentPanelSnapshotAny(); ok {
+			rows = snapshot
+		}
+	} else if supervisorPanelRowsBuilder != nil {
+		if snapshot, err := supervisorPanelRowsBuilder(); err == nil {
+			rows = snapshot
+		}
+	}
+	if len(rows) == 0 {
+		return idle
+	}
+	rowByAgent := make(map[string]agentesapp.Row, len(rows))
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		name := nombreAgenteCanonico(strings.TrimSpace(row.Agente.Nombre))
+		if name == "" {
+			continue
+		}
+		rowByAgent[name] = row
+	}
+	out := make([]string, 0, len(idle))
+	for _, agent := range idle {
+		row, ok := rowByAgent[nombreAgenteCanonico(strings.TrimSpace(agent))]
+		if !ok || supervisorRowLooksDispatchableIdle(row) {
+			out = append(out, agent)
+		}
+	}
+	return out
+}
+
+func supervisorRowLooksDispatchableIdle(row agentesapp.Row) bool {
+	if row.WorkerAlive && row.CurrentTask == nil {
+		switch strings.TrimSpace(row.EstadoOperativo) {
+		case "bloqueado_por_runtime", "bloqueado_por_cuota", "mailbox_atascada", "atascado", "caido", "saturado", "trabajando":
+			return false
+		}
+	}
+	if row.OpenTasks > 0 || row.BlockedTasks > 0 || row.CurrentTask != nil {
+		return false
+	}
+	if row.MailboxActionablePending > 0 || row.MailboxContinuityPending > 0 || row.OrdersOpen > 0 || row.ControlOrdersOpen > 0 {
+		return false
+	}
+	switch strings.TrimSpace(row.EstadoOperativo) {
+	case "", "sin_tarea", "disponible":
+		return true
+	default:
+		return false
+	}
 }
 
 func supervisorAgentAlreadyCarriesVisibleFront(status apiStatusResponse, assignee string) bool {
@@ -6811,8 +6892,10 @@ func supervisorAdjustAutonomyActionByRows(action supervisorRecommendedAction, ro
 		}
 	}
 	row, ok := rowByAgent[agent]
+	var detail *agentesapp.Detail
 	if !ok {
-		if detail, detailOK := supervisorCanonicalDetailForAutonomyAction(agent); detailOK {
+		if canonicalDetail, detailOK := supervisorCanonicalDetailForAutonomyAction(agent); detailOK {
+			detail = canonicalDetail
 			row = detail.Row
 			ok = true
 		}
@@ -6832,6 +6915,9 @@ func supervisorAdjustAutonomyActionByRows(action supervisorRecommendedAction, ro
 		return action, true
 	}
 	if supervisorAutonomyActionResolvedByCanonicalRow(action, row) {
+		return action, false
+	}
+	if detail != nil && supervisorAutonomyActionResolvedByCanonicalDetail(action, detail, visibleTasksByAgent) {
 		return action, false
 	}
 	if taskID := parseSupervisorActionTargetID("tarea:", action.Target); taskID != nil {
@@ -7155,6 +7241,59 @@ func supervisorAutonomyActionUsesVisibleFrontState(action string) bool {
 	default:
 		return false
 	}
+}
+
+func supervisorAutonomyActionResolvedByCanonicalDetail(action supervisorRecommendedAction, detail *agentesapp.Detail, visibleTasksByAgent map[string]tareaLite) bool {
+	if detail == nil {
+		return false
+	}
+	if strings.TrimSpace(action.Action) != "seguir_reinicio_runtime" {
+		return false
+	}
+	row := detail.Row
+	if row.OpenTasks > 0 || row.BlockedTasks > 0 || row.CurrentTask != nil {
+		return false
+	}
+	if row.MailboxPending > 0 || row.MailboxActionablePending > 0 || row.MailboxContinuityPending > 0 {
+		return false
+	}
+	if row.OrdersOpen > 0 || row.ControlOrdersOpen > 0 || row.DominantOrder != nil {
+		return false
+	}
+	agent := nombreAgenteCanonico(strings.TrimSpace(action.Assignee))
+	if agent == "" && strings.HasPrefix(strings.TrimSpace(action.Target), "agente:") {
+		agent = nombreAgenteCanonico(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(action.Target), "agente:")))
+	}
+	if _, ok := visibleTasksByAgent[agent]; ok {
+		return false
+	}
+	if supervisorDetailHasLiveAssignment(detail) {
+		return false
+	}
+	switch strings.TrimSpace(row.EstadoOperativo) {
+	case "sin_tarea", "bloqueado_por_runtime", "desconocido":
+		return true
+	default:
+		return false
+	}
+}
+
+func supervisorDetailHasLiveAssignment(detail *agentesapp.Detail) bool {
+	if detail == nil {
+		return false
+	}
+	for _, item := range detail.Asignaciones {
+		if item == nil {
+			continue
+		}
+		switch item.Estado {
+		case db.AsignacionPausada, db.AsignacionCerrada:
+			continue
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 func supervisorTaskBlocksRealIntegration(action supervisorRecommendedAction, task tareaLite) bool {
