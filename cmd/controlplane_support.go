@@ -15040,6 +15040,11 @@ func seleccionarRelevoAutonomiaDrenajePrime(rows []agentesapp.Row, openTasksProj
 
 func seleccionarRelevoAutonomiaSinRuntime(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string) string {
 	relevo := seleccionarRelevoAutonomiaConLimite(rows, openTasksProjected, tarea, agenteBloqueado, autonomiaWorkerOpenTasksCeiling)
+	if relevo == "" && tarea != nil && (tarea.Estado == db.EstadoAsignada || tarea.Estado == db.EstadoEnProgreso) {
+		idleLaunchTarea := *tarea
+		idleLaunchTarea.Estado = db.EstadoBloqueada
+		relevo = seleccionarRelevoAutonomiaConLimite(rows, openTasksProjected, &idleLaunchTarea, agenteBloqueado, autonomiaWorkerOpenTasksCeiling)
+	}
 	if relevo == "" {
 		return ""
 	}
