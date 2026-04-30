@@ -118,6 +118,7 @@ func newAutonomiaBatchSnapshot(sesiones []*db.Sesion) (*autonomiaBatchSnapshot, 
 			continue
 		}
 		snapshot.agentesByName[key] = agente
+		snapshot.agentBudgetLoaded[key] = struct{}{}
 	}
 	return snapshot, nil
 }

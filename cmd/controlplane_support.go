@@ -11152,7 +11152,11 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 	}
 	resumen.Count += repairHelpersCerrados
 	if repairHelpersCerrados > 0 {
-		rows, err = buildPanelRowsForControlPlane()
+		if len(agentesAtascados) > 0 {
+			rows, err = refrescarRowsCompactPorAgente(rows, agentesAtascados)
+		} else {
+			rows, err = buildPanelRowsForControlPlane()
+		}
 		if err != nil {
 			if controlPlaneRowsTimedOut(err) {
 				return resumen, nil
@@ -11176,27 +11180,12 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 		return resumen, err
 	}
 	resumen.Count += compactadasExclusivas
-	if compactadasExclusivas > 0 {
-		rows, err = buildPanelRowsForControlPlane()
-		if err != nil {
-			if controlPlaneRowsTimedOut(err) {
-				return resumen, nil
-			}
-			return resumen, err
-		}
-		rowsPorAgente = rowsPorAgenteMap(rows)
-		tareasActivasPorAgente, tareasBloqueadasPorAgente, bloqueosPorTarea, err = cargarTareasYBloqueosAutonomiaPorAgente()
-		if err != nil {
-			return resumen, err
-		}
-		openTasksProjected = openTasksProjectedFromRows(rows)
-	}
 	compactadasMixtas, err := procesarCompactacionFrentesPremiumBatch(rows, tareasActivasPorAgente)
 	if err != nil {
 		return resumen, err
 	}
 	resumen.Count += compactadasMixtas
-	if compactadasMixtas > 0 {
+	if compactadasExclusivas > 0 || compactadasMixtas > 0 {
 		rows, err = buildPanelRowsForControlPlane()
 		if err != nil {
 			if controlPlaneRowsTimedOut(err) {
@@ -11233,8 +11222,11 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 	resumen.ReactivatedWithoutRuntime = reactivadosSinRuntime
 	resumen.Count += reactivadosSinRuntime
 	if reactivadosSinRuntime > 0 {
-		_ = agentesSinRuntime
-		rows, err = buildPanelRowsForControlPlane()
+		if len(agentesSinRuntime) > 0 {
+			rows, err = refrescarRowsCompactPorAgente(rows, agentesSinRuntime)
+		} else {
+			rows, err = buildPanelRowsForControlPlane()
+		}
 		if err != nil {
 			if controlPlaneRowsTimedOut(err) {
 				return resumen, nil
@@ -17192,6 +17184,7 @@ func persistirPausaPorCuotaAutonomia(agente, motivo string) error {
 	if agente == "" {
 		return nil
 	}
+	now := time.Now().UTC()
 	infoAgente, err := agenteIfExists(agente)
 	if err != nil {
 		return err
@@ -17199,14 +17192,22 @@ func persistirPausaPorCuotaAutonomia(agente, motivo string) error {
 	if infoAgente == nil {
 		return nil
 	}
-	if infoAgente != nil && strings.EqualFold(strings.TrimSpace(infoAgente.EstadoCuota), "enfriamiento") && infoAgente.ReanimarAt != nil && infoAgente.ReanimarAt.After(time.Now().UTC()) {
+	if infoAgente != nil && strings.EqualFold(strings.TrimSpace(infoAgente.EstadoCuota), "enfriamiento") && infoAgente.ReanimarAt != nil && infoAgente.ReanimarAt.After(now) {
+		return bloquearTareasActivasPorCuotaAutonomia(agente, motivo)
+	}
+	if shouldPause, _ := agenteDebePausarPorPresupuestoVisible(infoAgente); shouldPause &&
+		infoAgente.PresupuestoResetAt != nil &&
+		infoAgente.PresupuestoResetAt.After(now) {
+		if err := db.PausarAgenteHasta(agente, infoAgente.PresupuestoResetAt.UTC(), motivo); err != nil {
+			return err
+		}
 		return bloquearTareasActivasPorCuotaAutonomia(agente, motivo)
 	}
 	p, _, err := db.UltimoPresupuestoAgente(agente)
 	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
-	if err == nil && p != nil && db.PresupuestoSesionFresco(p) && p.ResetAt != nil && p.ResetAt.After(time.Now().UTC()) {
+	if err == nil && p != nil && db.PresupuestoSesionFresco(p) && p.ResetAt != nil && p.ResetAt.After(now) {
 		if err := db.PausarAgenteHasta(agente, p.ResetAt.UTC(), motivo); err != nil {
 			return err
 		}
