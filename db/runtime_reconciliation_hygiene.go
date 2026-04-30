@@ -358,34 +358,38 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 }
 
 func reconciliarRuntimeMailboxPendientePorTarea() (int, error) {
-	estado := "pendiente"
-	items, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{Estado: &estado})
-	if err != nil {
-		return 0, err
-	}
 	processed := 0
-	for _, msg := range items {
-		if msg == nil {
-			continue
-		}
-		taskID := runtimeMailboxPayloadTaskIDJSON(msg.PayloadJSON)
-		if taskID <= 0 {
-			continue
-		}
-		obsoleta, err := runtimeMailboxPendienteObsoletaPorTarea(msg, taskID)
+	for _, estado := range []string{"pendiente", "entregado"} {
+		estado := estado
+		items, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{Estado: &estado})
 		if err != nil {
 			return processed, err
 		}
-		if !obsoleta {
-			continue
+		for _, msg := range items {
+			if msg == nil {
+				continue
+			}
+			taskID := runtimeMailboxPayloadTaskIDJSON(msg.PayloadJSON)
+			if taskID <= 0 {
+				continue
+			}
+			obsoleta, err := runtimeMailboxPendienteObsoletaPorTarea(msg, taskID)
+			if err != nil {
+				return processed, err
+			}
+			if !obsoleta {
+				continue
+			}
+			if !strings.EqualFold(strings.TrimSpace(msg.Estado), "entregado") {
+				if err := MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+					return processed, err
+				}
+			}
+			if err := MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+				return processed, err
+			}
+			processed++
 		}
-		if err := MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
-			return processed, err
-		}
-		if err := MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
-			return processed, err
-		}
-		processed++
 	}
 	return processed, nil
 }

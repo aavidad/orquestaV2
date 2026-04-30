@@ -949,6 +949,11 @@ func (s *Service) hasRecoverableAssignedProjectWork(agente string, proyectoID in
 	} else if taskProjectID == proyectoID {
 		return true, nil
 	}
+	if pendiente, err := s.existsPendingAutonomyMailbox(agente, &proyectoID, "continuar_trabajo", nil); err != nil {
+		return false, err
+	} else if pendiente {
+		return true, nil
+	}
 	return false, nil
 }
 

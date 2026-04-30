@@ -146,6 +146,75 @@ func TestProcesarHigieneRuntimesAutonomosBatchConsumeMailboxPendientePorTareaNoA
 	}
 }
 
+func TestProcesarHigieneRuntimesAutonomosBatchConsumeMailboxEntregadaPorTareaNoAccionable(t *testing.T) {
+	prepararDBTemporal(t)
+	stubRuntimeHygieneTMUX(t)
+
+	for _, agente := range []string{"Codex1", "Codex2"} {
+		if err := RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "mailbox-hygiene-delivered",
+		Nombre:  "Mailbox Hygiene Delivered",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Frente libre",
+		Descripcion: "demo",
+		ProyectoID:  &proyectoID,
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "Codex2"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "Codex2"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE tareas SET estado='libre', agente=NULL WHERE id=?`, tareaID); err != nil {
+		t.Fatalf("liberar tarea: %v", err)
+	}
+
+	msgID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "Codex1",
+		ToAgente:    "Codex2",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","tarea_id":` + jsonNumber(tareaID) + `}`,
+	})
+	if err != nil {
+		t.Fatalf("enviar mailbox: %v", err)
+	}
+	if err := MarcarRuntimeMailboxEntregado(msgID); err != nil {
+		t.Fatalf("marcar mailbox entregado: %v", err)
+	}
+
+	n, err := ProcesarHigieneRuntimesAutonomosBatch()
+	if err != nil {
+		t.Fatalf("procesar higiene: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("deberia consumir al menos una mailbox entregada obsoleta, got=%d", n)
+	}
+	msg, err := GetRuntimeMailbox(msgID)
+	if err != nil {
+		t.Fatalf("get mailbox: %v", err)
+	}
+	if msg == nil || msg.Estado != "consumido" {
+		t.Fatalf("mailbox entregada deberia quedar consumida: %+v", msg)
+	}
+}
+
 func TestProcesarHigieneRuntimesAutonomosBatchCierraWorktreeDuplicadaPorTarea(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	stubRuntimeHygieneTMUX(t)
