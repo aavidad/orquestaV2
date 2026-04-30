@@ -365,6 +365,9 @@ func settleMCPServerSelfHealOperational(info serverOperationalInfo) serverOperat
 	if info.Operational || mcpServerSelfHealSettleAttempts <= 0 {
 		return info
 	}
+	if info.NextRecoveryPlan != nil && !info.NextRecoveryPlan.AutoExecutable {
+		return info
+	}
 	for attempt := 0; attempt < mcpServerSelfHealSettleAttempts; attempt++ {
 		if mcpServerSelfHealSettleDelay > 0 {
 			time.Sleep(mcpServerSelfHealSettleDelay)

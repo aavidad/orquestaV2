@@ -1775,12 +1775,6 @@ func statusSnapshotNeedsImmediateRefresh(status apiStatusResponse) bool {
 	if len(status.AgentesAuthManual) > 0 {
 		return true
 	}
-	if len(status.AgentesAtascados) > 0 {
-		return true
-	}
-	if status.Autonomia.ContinuidadPendiente > 0 || status.Autonomia.Handoffs > 0 {
-		return true
-	}
 	tasksInProgress := len(status.TareasEnProgreso)
 	if tasksInProgress == 0 && status.TareasPorEstado != nil {
 		tasksInProgress = status.TareasPorEstado[string(db.TareaEnProgreso)]
@@ -1794,6 +1788,12 @@ func statusSnapshotNeedsImmediateRefresh(status apiStatusResponse) bool {
 				tasksInProgress++
 			}
 		}
+	}
+	if len(status.AgentesAtascados) > 0 && tasksInProgress > 0 {
+		return true
+	}
+	if status.Autonomia.ContinuidadPendiente > 0 || status.Autonomia.Handoffs > 0 {
+		return true
 	}
 	if len(status.AgentesActivos) > 0 {
 		if tasksInProgress > 0 && len(status.AgentesTrabajando) == 0 && status.Autonomia.WorkConfirmed == 0 {

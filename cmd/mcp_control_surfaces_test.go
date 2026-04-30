@@ -605,6 +605,51 @@ func TestMCPToolServerSelfHealExponeNextRecoveryPlanSiSigueDegradado(t *testing.
 	}
 }
 
+func TestSettleMCPServerSelfHealOperationalOmiteEsperaEnRecoveryManual(t *testing.T) {
+	prevOperational := mcpBuildServerOperationalInfoFn
+	prevSettleAttempts := mcpServerSelfHealSettleAttempts
+	prevSettleDelay := mcpServerSelfHealSettleDelay
+	defer func() {
+		mcpBuildServerOperationalInfoFn = prevOperational
+		mcpServerSelfHealSettleAttempts = prevSettleAttempts
+		mcpServerSelfHealSettleDelay = prevSettleDelay
+	}()
+
+	calls := 0
+	mcpBuildServerOperationalInfoFn = func() serverOperationalInfo {
+		calls++
+		return serverOperationalInfo{
+			State:       "degraded",
+			Operational: false,
+			Reason:      "workers_stuck",
+			NextRecoveryPlan: &serverOperationalRecoveryPlan{
+				Kind:           "stuck_workers",
+				Action:         "inspect_stuck_workers",
+				AutoExecutable: false,
+			},
+		}
+	}
+	mcpServerSelfHealSettleAttempts = 3
+	mcpServerSelfHealSettleDelay = 0
+
+	info := settleMCPServerSelfHealOperational(serverOperationalInfo{
+		State:       "degraded",
+		Operational: false,
+		Reason:      "workers_stuck",
+		NextRecoveryPlan: &serverOperationalRecoveryPlan{
+			Kind:           "stuck_workers",
+			Action:         "inspect_stuck_workers",
+			AutoExecutable: false,
+		},
+	})
+	if info.Reason != "workers_stuck" {
+		t.Fatalf("settle no deberia mutar recovery manual: %+v", info)
+	}
+	if calls != 0 {
+		t.Fatalf("settle no deberia relanzar operational cuando el recovery restante es manual, calls=%d", calls)
+	}
+}
+
 func TestMCPToolServerSelfHealCortaMantenimientoPesadoEnWaitQuotaReset(t *testing.T) {
 	prevWakeOrders := apiRuntimeWakeOrdersFn
 	prevWakeMailbox := apiRuntimeWakeMailboxFn
@@ -747,13 +792,13 @@ func TestMCPToolServerSelfHealAutoEjecutaCompactionDebt(t *testing.T) {
 		operationalCalls++
 		if operationalCalls <= 2 {
 			return serverOperationalInfo{
-				State:            "degraded",
-				Operational:      false,
-				Reason:           "tasks_without_workers",
-				NextQuotaResetAt: "2026-04-29T10:00:00Z",
-				TasksInProgress:  3,
-				WorkingWorkers:   1,
-				ConnectedWorkers: 1,
+				State:                "degraded",
+				Operational:          false,
+				Reason:               "tasks_without_workers",
+				NextQuotaResetAt:     "2026-04-29T10:00:00Z",
+				TasksInProgress:      3,
+				WorkingWorkers:       1,
+				ConnectedWorkers:     1,
 				CompactionDebtAgents: 1,
 				CompactionDebtTasks:  1,
 			}

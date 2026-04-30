@@ -1773,6 +1773,19 @@ func TestStatusSnapshotIsDegenerateNoDescartaAutonomiaReciente(t *testing.T) {
 	}
 }
 
+func TestStatusSnapshotNeedsImmediateRefreshNoFuerzaAtascadoSinTrabajoVivo(t *testing.T) {
+	status := apiStatusResponse{
+		AgentesAtascados: []*db.Agente{{Nombre: "Codex14"}},
+		TareasPorEstado:  map[string]int{string(db.TareaEnProgreso): 0},
+		TareasActivas: []tareaLite{
+			{ID: 28, Estado: db.TareaBloqueada, Agente: "Codex12"},
+		},
+	}
+	if statusSnapshotNeedsImmediateRefresh(status) {
+		t.Fatalf("no deberia forzar refresh inmediato solo por agente atascado sin trabajo vivo: %+v", status)
+	}
+}
+
 func TestResumirAutonomiaLigeraNoCuentaComoSupervisorAConfiguradoSiEstaEjecutandoTarea(t *testing.T) {
 	prevAutonomy := statusListAutonomyFetcher
 	prevConfig := statusConfigGet
@@ -1937,9 +1950,9 @@ func TestAgentesVisiblesPorEstadoOperativoRowsNoCuentaReservaComoTrabajoActivo(t
 		{Nombre: "Codex2", Activo: true, Habilitado: true, EstadoCuota: "activo"},
 	}
 	rows := []agentesapp.Row{{
-		Agente:          &db.Agente{Nombre: "Codex2"},
-		EstadoOperativo: "trabajando",
-		DetalleOperativo:"worker ready",
+		Agente:           &db.Agente{Nombre: "Codex2"},
+		EstadoOperativo:  "trabajando",
+		DetalleOperativo: "worker ready",
 		CurrentTask: &agentesapp.TaskFocus{
 			TaskID: 4,
 			Title:  "Reserva viva",
