@@ -313,7 +313,7 @@ func TestFillOpenClawOperationalQueuesFromStatusFallbackUsaCarrilRapidoSinPanelV
 		TareasPorEstado:   map[string]int{string(db.TareaLibre): 1},
 	}
 
-	queue, safe, next, nextSafe := fillOpenClawOperationalQueuesFromStatusFallback(status, nil, nil, nil, nil, nil)
+	queue, safe, next, nextSafe := fillOpenClawOperationalQueuesFromStatusFallback(status, serverOperationalInfo{State: "ready", Operational: true}, nil, nil, nil, nil, nil)
 	if len(queue) == 0 || queue[0].Action != "asignar_tarea_libre" || queue[0].Target != "backlog:libre" {
 		t.Fatalf("queue fallback rapido inesperada: %#v", queue)
 	}
@@ -327,6 +327,38 @@ func TestFillOpenClawOperationalQueuesFromStatusFallbackUsaCarrilRapidoSinPanelV
 	parsedSafe, ok := nextSafe.(*supervisorRecommendedAction)
 	if !ok || parsedSafe == nil || parsedSafe.Target == "" {
 		t.Fatalf("next_safe_action fallback rapido inesperada: %#v", nextSafe)
+	}
+}
+
+func TestFillOpenClawOperationalQueuesFromStatusFallbackOmiteSafeQueueSiOperationalDegraded(t *testing.T) {
+	status := apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{},
+		TareasPorEstado:   map[string]int{string(db.TareaLibre): 1},
+	}
+
+	queue, safe, next, nextSafe := fillOpenClawOperationalQueuesFromStatusFallback(
+		status,
+		serverOperationalInfo{State: "degraded", Operational: false, Reason: "workers_stuck"},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if len(queue) == 0 || queue[0].Action != "asignar_tarea_libre" {
+		t.Fatalf("action_queue amplia inesperada en degradado: %#v", queue)
+	}
+	if len(safe) != 0 {
+		t.Fatalf("safe_action_queue deberia vaciarse en degradado: %#v", safe)
+	}
+	if next == nil {
+		t.Fatalf("next_action amplio deberia conservarse en degradado")
+	}
+	if nextSafe != nil {
+		t.Fatalf("next_safe_action deberia anularse en degradado: %#v", nextSafe)
 	}
 }
 

@@ -153,7 +153,7 @@ func TestBuildSupervisorOperationalActionsFastNoReservaSobreAgenteConFrenteYaVis
 	}
 }
 
-func TestBuildSupervisorOperationalActionsFastAbreFrenteConAgenteIdleDelPanelCanonico(t *testing.T) {
+func TestBuildSupervisorOperationalActionsAbreFrenteConAgenteIdleDelPanelCanonico(t *testing.T) {
 	prevRows := supervisorPanelRowsBuilder
 	defer func() { supervisorPanelRowsBuilder = prevRows }()
 	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
@@ -188,7 +188,7 @@ func TestBuildSupervisorOperationalActionsFastAbreFrenteConAgenteIdleDelPanelCan
 		},
 	}
 
-	actions := buildSupervisorOperationalActionsFast(status, nil)
+	actions := buildSupervisorOperationalActions(status, nil)
 	item := findSupervisorAction(actions, "asignar_tarea_libre", "backlog:libre")
 	if item == nil {
 		t.Fatalf("deberia abrir frente con agente idle del panel canonico: %+v", actions)
@@ -198,7 +198,7 @@ func TestBuildSupervisorOperationalActionsFastAbreFrenteConAgenteIdleDelPanelCan
 	}
 }
 
-func TestBuildSupervisorOperationalActionsFastPrefiereAbrirFrenteSobreReservaSiHayIdleLanzable(t *testing.T) {
+func TestBuildSupervisorOperationalActionsPrefiereAbrirFrenteSobreReservaSiHayIdleLanzable(t *testing.T) {
 	prevRows := supervisorPanelRowsBuilder
 	defer func() { supervisorPanelRowsBuilder = prevRows }()
 	supervisorPanelRowsBuilder = func() ([]agentesapp.Row, error) {
@@ -233,7 +233,7 @@ func TestBuildSupervisorOperationalActionsFastPrefiereAbrirFrenteSobreReservaSiH
 		},
 	}
 
-	actions := buildSupervisorOperationalActionsFast(status, nil)
+	actions := buildSupervisorOperationalActions(status, nil)
 	if reserve := findSupervisorAction(actions, "reservar_tarea_libre", "backlog:libre"); reserve != nil {
 		t.Fatalf("no deberia reservar si ya va a abrir frente con agente idle lanzable: %+v", actions)
 	}

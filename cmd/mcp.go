@@ -6462,7 +6462,10 @@ func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mail
 	actions := make([]supervisorRecommendedAction, 0, 4+len(mailboxPendiente))
 	idle := idleSupervisorWorkers(status.AgentesActivos, status.AgentesTrabajando)
 	visibleWorkers := visibleNonSupervisorAgents(status.AgentesActivos)
-	launchableIdle := supervisorIdleLaunchCandidates()
+	var launchableIdle []string
+	if !fast {
+		launchableIdle = supervisorIdleLaunchCandidates()
+	}
 	if len(idle) > 0 {
 		assignee := idle[0]
 		target := "backlog:libre"
@@ -6714,6 +6717,16 @@ func supervisorDispatchActionOpensExtraFront(action string) bool {
 
 func supervisorApplyLiveProgressToAutonomyActions(actions []supervisorRecommendedAction, status apiStatusResponse) []supervisorRecommendedAction {
 	if len(actions) == 0 || supervisorPanelRowsBuilder == nil {
+		return actions
+	}
+	hasAutonomy := false
+	for _, action := range actions {
+		if strings.TrimSpace(action.Kind) == "autonomy_event" {
+			hasAutonomy = true
+			break
+		}
+	}
+	if !hasAutonomy {
 		return actions
 	}
 	rows, err := supervisorPanelRowsBuilder()

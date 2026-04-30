@@ -39,7 +39,7 @@ func buildOpenClawOperatorSnapshotFallback(supervisor string, apiStatus apiStatu
 	status := buildOpenClawBaseStatusFromAPIStatus(apiStatus)
 	statusResumen := buildOpenClawOperatorStatusBase(status, nil)
 	operationalInfo := buildOpenClawOperationalInfoWithStatus(apiStatus)
-	actionQueue, safeActionQueue, nextAction, nextSafeAction := fillOpenClawOperationalQueuesFromStatusFallback(apiStatus, statusResumen.MailboxPendiente, nil, nil, nil, nil)
+	actionQueue, safeActionQueue, nextAction, nextSafeAction := fillOpenClawOperationalQueuesFromStatusFallback(apiStatus, operationalInfo, statusResumen.MailboxPendiente, nil, nil, nil, nil)
 	nextRecoveryAction := buildOpenClawNextRecoveryAction(operationalInfo)
 	nextRecoveryPlan := operationalInfo.NextRecoveryPlan
 	queueSummary := buildOpenClawQueueSummaryFromActions(actionQueue, safeActionQueue)
@@ -150,7 +150,7 @@ func buildOpenClawOperatorSnapshotCore(supervisor string, apiStatus apiStatusRes
 	nextAction := supervisorNextActionFromReviewOrPipelineSnapshot(revision, pipeline)
 	nextSafeAction := supervisorNextSafeActionFromReviewSnapshot(revision)
 	operationalInfo := buildOpenClawOperationalInfoWithStatus(apiStatus)
-	actionQueue, safeActionQueue, nextAction, nextSafeAction = fillOpenClawOperationalQueuesFromStatusFallback(apiStatus, statusResumen.MailboxPendiente, actionQueue, safeActionQueue, nextAction, nextSafeAction)
+	actionQueue, safeActionQueue, nextAction, nextSafeAction = fillOpenClawOperationalQueuesFromStatusFallback(apiStatus, operationalInfo, statusResumen.MailboxPendiente, actionQueue, safeActionQueue, nextAction, nextSafeAction)
 	nextRecoveryAction := buildOpenClawNextRecoveryAction(operationalInfo)
 	nextRecoveryPlan := operationalInfo.NextRecoveryPlan
 	queueSummary := buildOpenClawQueueSummaryFromActions(actionQueue, safeActionQueue)
