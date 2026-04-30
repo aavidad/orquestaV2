@@ -10859,11 +10859,21 @@ func procesarAutonomiaAgentesBatch() (int, error) {
 	}
 	procesadas += n
 	autonomiaTickDebugf("agentes_degradados duration=%s procesadas=%d", time.Since(degradadosStart).Round(time.Millisecond), n)
+	rows, err := buildPanelRowsForControlPlane()
+	if err != nil {
+		if controlPlaneRowsTimedOut(err) {
+			if procesadas > 0 {
+				invalidateStatusSnapshotCache()
+			}
+			return procesadas, nil
+		}
+		return procesadas, err
+	}
 	redistribucionPrimeStart := time.Now()
 	n, err = ejecutarPasoAutonomiaConTimeout(
 		"redistribucion_prime",
 		autonomiaDegradedBatchTimeout(),
-		func() (int, error) { return procesarRedistribucionPrimeAutonomiaBatch() },
+		func() (int, error) { return procesarRedistribucionPrimeAutonomiaBatchConRows(rows) },
 	)
 	if err != nil {
 		db.Audit("server", "autonomia_redistribucion_prime_error", "runtime", 0, err.Error())
@@ -10875,11 +10885,23 @@ func procesarAutonomiaAgentesBatch() (int, error) {
 	}
 	procesadas += n
 	autonomiaTickDebugf("redistribucion_prime duration=%s procesadas=%d", time.Since(redistribucionPrimeStart).Round(time.Millisecond), n)
+	if n > 0 {
+		rows, err = buildPanelRowsForControlPlane()
+		if err != nil {
+			if controlPlaneRowsTimedOut(err) {
+				if procesadas > 0 {
+					invalidateStatusSnapshotCache()
+				}
+				return procesadas, nil
+			}
+			return procesadas, err
+		}
+	}
 	expansionWorkersStart := time.Now()
 	n, err = ejecutarPasoAutonomiaConTimeout(
 		"expansion_workers",
 		autonomiaDegradedBatchTimeout(),
-		func() (int, error) { return procesarExpansionWorkersAutonomiaBatch() },
+		func() (int, error) { return procesarExpansionWorkersAutonomiaBatchConRows(rows) },
 	)
 	if err != nil {
 		db.Audit("server", "autonomia_expansion_workers_error", "runtime", 0, err.Error())
