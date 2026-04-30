@@ -6560,12 +6560,53 @@ func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mail
 	}
 	actions = append(actions, buildSupervisorAutonomyActions(status.Autonomia.Recent)...)
 	actions = supervisorApplyLiveProgressToAutonomyActions(actions, status)
+	actions = supervisorFilterDispatchActionsBlockedByManualFollowups(actions)
 	if !fast {
 		sortSupervisorRecommendedActions(actions)
 		return actions
 	}
 	sortSupervisorRecommendedActionsFast(actions)
 	return actions
+}
+
+func supervisorFilterDispatchActionsBlockedByManualFollowups(actions []supervisorRecommendedAction) []supervisorRecommendedAction {
+	if len(actions) == 0 {
+		return actions
+	}
+	blockedAgents := make(map[string]struct{})
+	for _, action := range actions {
+		if supervisorActionIsAutomaticallyApplicable(action.Action) {
+			continue
+		}
+		assignee := nombreAgenteCanonico(strings.TrimSpace(action.Assignee))
+		if assignee == "" {
+			continue
+		}
+		blockedAgents[assignee] = struct{}{}
+	}
+	if len(blockedAgents) == 0 {
+		return actions
+	}
+	filtered := make([]supervisorRecommendedAction, 0, len(actions))
+	for _, action := range actions {
+		if supervisorDispatchActionOpensExtraFront(action.Action) {
+			assignee := nombreAgenteCanonico(strings.TrimSpace(action.Assignee))
+			if _, blocked := blockedAgents[assignee]; blocked {
+				continue
+			}
+		}
+		filtered = append(filtered, action)
+	}
+	return filtered
+}
+
+func supervisorDispatchActionOpensExtraFront(action string) bool {
+	switch strings.TrimSpace(action) {
+	case "asignar_tarea_libre", "reservar_tarea_libre", "rebalancear_reserva", "replanificar_por_cuota":
+		return true
+	default:
+		return false
+	}
 }
 
 func supervisorApplyLiveProgressToAutonomyActions(actions []supervisorRecommendedAction, status apiStatusResponse) []supervisorRecommendedAction {
