@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -616,6 +617,91 @@ func TestNormalizeServerOperationalInfoDerivaCompactionDebtDesdeTareasActivasSiP
 	}
 	if info.Recovery == nil || info.Recovery.Kind != "compaction_debt" || info.Recovery.SuggestedAction != "compact_or_reassign_active_tasks" {
 		t.Fatalf("recovery de compactacion inesperado: %+v", info.Recovery)
+	}
+}
+
+func TestNormalizeServerOperationalInfoNoMarcaCompactionAutoExecutableSinSliceDerivable(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	if err := db.RegistrarAgente("Codex10", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	t1, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente amplio legacy",
+		Descripcion: "Trabajo amplio sin contrato premium acotado.",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear t1: %v", err)
+	}
+	if err := db.TomarTarea(t1, "Codex10"); err != nil {
+		t.Fatalf("tomar t1: %v", err)
+	}
+	if err := db.IniciarTarea(t1, "Codex10"); err != nil {
+		t.Fatalf("iniciar t1: %v", err)
+	}
+	t2, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Segundo frente legacy",
+		Descripcion: "Trabajo amplio sin contrato premium acotado.",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear t2: %v", err)
+	}
+	if err := db.TomarTarea(t2, "Codex10"); err != nil {
+		t.Fatalf("tomar t2: %v", err)
+	}
+	if err := db.IniciarTarea(t2, "Codex10"); err != nil {
+		t.Fatalf("iniciar t2: %v", err)
+	}
+
+	now := time.Now().UTC()
+	storeAgentPanelSnapshot([]agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "Codex10", Activo: true, EstadoCuota: "activo"},
+		EstadoOperativo: "trabajando",
+		WorkerAlive:     true,
+		WorkerState:     "running",
+		WorkerHeartbeat: ptrTimeServerOperational(now),
+		OpenTasks:       2,
+		CurrentTask:     &agentesapp.TaskFocus{TaskID: t1, State: db.TareaEnProgreso, ProjectID: &proyectoID},
+	}}, now)
+
+	info := normalizeServerOperationalInfo(buildServerOperationalInfo(apiStatusResponse{
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex10", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex10", Activo: true}},
+		TareasActivas: []tareaLite{
+			{ID: t1, Estado: db.TareaEnProgreso, Agente: "Codex10"},
+			{ID: t2, Estado: db.TareaEnProgreso, Agente: "Codex10"},
+		},
+		TareasEnProgreso: []tareaLite{
+			{ID: t1, Estado: db.TareaEnProgreso, Agente: "Codex10"},
+			{ID: t2, Estado: db.TareaEnProgreso, Agente: "Codex10"},
+		},
+	}))
+	if info.Recovery == nil || info.Recovery.Kind != "compaction_debt" {
+		t.Fatalf("faltaba recovery de compactacion: %+v", info.Recovery)
+	}
+	if info.NextRecoveryPlan == nil || info.NextRecoveryPlan.Action != "compact_or_reassign_active_tasks" {
+		t.Fatalf("faltaba nextRecoveryPlan de compactacion: %+v", info.NextRecoveryPlan)
+	}
+	if info.NextRecoveryPlan.AutoExecutable {
+		t.Fatalf("no deberia prometer autoExecutable sin slice derivable: %+v", info.NextRecoveryPlan)
 	}
 }
 

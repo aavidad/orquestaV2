@@ -12558,15 +12558,9 @@ func procesarCompactacionFrentesPremiumBatch(rows []agentesapp.Row, tareasActiva
 		if proyectoID <= 0 {
 			continue
 		}
-		keep, err := tareasService.Get(row.CurrentTask.TaskID)
-		if err != nil {
-			return procesadas, err
-		}
-		if keep == nil || !tareaDBTieneContratoPremiumAcotado(keep) {
-			continue
-		}
 		frentesActivos := 0
 		tareasCanon := make([]*db.Tarea, 0, len(tareasActivasPorAgente[agente]))
+		candidatas := make([]*db.Tarea, 0, len(tareasActivasPorAgente[agente]))
 		for _, tarea := range tareasActivasPorAgente[agente] {
 			if tarea == nil || tarea.ID <= 0 {
 				continue
@@ -12579,11 +12573,21 @@ func procesarCompactacionFrentesPremiumBatch(rows []agentesapp.Row, tareasActiva
 				continue
 			}
 			tareasCanon = append(tareasCanon, actual)
+			if tareaEsFrentePremiumCompactable(actual, agente) {
+				candidatas = append(candidatas, actual)
+			}
 			if tareaCuentaComoFrenteActivoCompactable(actual, proyectoID, agente) {
 				frentesActivos++
 			}
 		}
-		if frentesActivos <= 1 {
+		if frentesActivos <= 1 || len(candidatas) == 0 {
+			continue
+		}
+		keep, err := resolverKeepCompactacionFrentesPremiumBatch(candidatas, proyectoID, agente)
+		if err != nil {
+			return procesadas, err
+		}
+		if keep == nil {
 			continue
 		}
 		for _, tarea := range tareasCanon {
@@ -12600,6 +12604,24 @@ func procesarCompactacionFrentesPremiumBatch(rows []agentesapp.Row, tareasActiva
 		invalidateStatusSnapshotCache()
 	}
 	return procesadas, nil
+}
+
+func resolverKeepCompactacionFrentesPremiumBatch(candidatas []*db.Tarea, proyectoID int64, agente string) (*db.Tarea, error) {
+	keep := seleccionarFrentePremiumCanonicSesionActiva(candidatas)
+	if keep != nil && tareaDBTieneContratoPremiumAcotado(keep) {
+		return keep, nil
+	}
+	if keep == nil || (!tareaAutonomiaFinishApp(keep) && !strings.Contains(strings.TrimSpace(keep.Notas), "autonomia:premium_frontier")) {
+		return nil, nil
+	}
+	derivada, err := derivarFrentePremiumAcotadoDesdeSemilla(proyectoID, agente, keep.ID)
+	if err != nil {
+		return nil, err
+	}
+	if derivada != nil && tareaDBTieneContratoPremiumAcotado(derivada) {
+		return derivada, nil
+	}
+	return nil, nil
 }
 
 func procesarRuntimesFueraDeAsignacionActivaBatch(rows []agentesapp.Row, now time.Time) (int, error) {

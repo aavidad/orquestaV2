@@ -472,7 +472,8 @@ func buildServerOperationalRecoveryPlan(info serverOperationalInfo, action *supe
 		plan.Assignee = resolveSupervisorName("")
 	}
 	plan.RequiresRearm = plan.Action == "server_rearm"
-	plan.AutoExecutable = (plan.RequiresRearm && plan.RearmAvailable) || strings.TrimSpace(plan.Action) == "compact_or_reassign_active_tasks"
+	plan.AutoExecutable = (plan.RequiresRearm && plan.RearmAvailable) ||
+		(strings.TrimSpace(plan.Action) == "compact_or_reassign_active_tasks" && serverOperationalCompactionAutoExecutable())
 	if plan.RequiresRearm && info.Rearm != nil {
 		plan.Tool = strings.TrimSpace(info.Rearm.Tool)
 		plan.Endpoint = strings.TrimSpace(info.Rearm.Endpoint)
@@ -591,6 +592,83 @@ func buildServerOperationalRecoveryPrimaryStepDetail(plan *serverOperationalReco
 	default:
 		return ""
 	}
+}
+
+func serverOperationalCompactionAutoExecutable() bool {
+	rows, ok := serverOperationalPanelRows(statusNowFunc().UTC())
+	if !ok {
+		return false
+	}
+	now := statusNowFunc().UTC()
+	for _, row := range rows {
+		okRow, err := rowAllowsAutoExecutableCompaction(row, now)
+		if err == nil && okRow {
+			return true
+		}
+	}
+	return false
+}
+
+func rowAllowsAutoExecutableCompaction(row agentesapp.Row, now time.Time) (bool, error) {
+	if !rowHasCompactionDebt(row, now) || row.Agente == nil || row.CurrentTask == nil || row.CurrentTask.TaskID <= 0 {
+		return false, nil
+	}
+	agente := strings.TrimSpace(row.Agente.Nombre)
+	if agente == "" {
+		return false, nil
+	}
+	proyectoID := int64(0)
+	if row.CurrentTask.ProjectID != nil {
+		proyectoID = *row.CurrentTask.ProjectID
+	}
+	if proyectoID <= 0 {
+		if preferido := rowProyectoIDPreferido(row); preferido != nil {
+			proyectoID = *preferido
+		}
+	}
+	if proyectoID <= 0 {
+		return false, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		return false, err
+	}
+	candidatas := make([]*db.Tarea, 0, len(tareas))
+	for _, tarea := range tareas {
+		if tareaEsFrentePremiumCompactable(tarea, agente) {
+			candidatas = append(candidatas, tarea)
+		}
+	}
+	if keep := seleccionarFrentePremiumCanonicSesionActiva(candidatas); keep != nil && tareaDBTieneContratoPremiumAcotado(keep) {
+		return true, nil
+	}
+	actual, err := tareasService.Get(row.CurrentTask.TaskID)
+	if err != nil || actual == nil {
+		return false, err
+	}
+	if !tareaAutonomiaFinishApp(actual) && !strings.Contains(strings.TrimSpace(actual.Notas), "autonomia:premium_frontier") {
+		return false, nil
+	}
+	return existeFrentePremiumAcotadoReutilizableParaAgente(proyectoID, agente, actual.ID)
+}
+
+func existeFrentePremiumAcotadoReutilizableParaAgente(proyectoID int64, agente string, excluirTaskID int64) (bool, error) {
+	if proyectoID <= 0 || strings.TrimSpace(agente) == "" {
+		return false, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		return false, err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.ID == excluirTaskID || !tareaEsFrentePremiumAcotadoReutilizable(tarea) {
+			continue
+		}
+		if puntuarFrentePremiumAcotadoReutilizable(tarea, agente) >= 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func buildServerOperationalRearmHint(info serverOperationalInfo) *serverOperationalRearmHint {
