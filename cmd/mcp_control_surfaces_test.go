@@ -917,6 +917,39 @@ func TestMCPToolServerSelfHealAutoEjecutaCompactionDebt(t *testing.T) {
 	}
 }
 
+func TestNextSupervisorStartOrAssignActionUsaDispatchVisibleDelSnapshot(t *testing.T) {
+	prevBuilder := supervisorActionSnapshotBuilder
+	defer func() {
+		supervisorActionSnapshotBuilder = prevBuilder
+	}()
+	supervisorActionSnapshotBuilder = func(supervisor string) (map[string]any, error) {
+		return map[string]any{
+			"action_queue": []supervisorRecommendedAction{{
+				Kind:     "dispatch",
+				Target:   "backlog:libre",
+				Action:   "asignar_tarea_libre",
+				Reason:   "hay frente arrancable sin worker",
+				Priority: "media",
+				Assignee: "Codex12",
+			}},
+			"safe_action_queue": []supervisorRecommendedAction{},
+			"server_operational": serverOperationalInfo{
+				State:       "degraded",
+				Operational: false,
+				Reason:      "tasks_without_workers",
+			},
+		}, nil
+	}
+
+	action, err := nextSupervisorStartOrAssignAction("OpenClaw")
+	if err != nil {
+		t.Fatalf("nextSupervisorStartOrAssignAction: %v", err)
+	}
+	if action == nil || action.Action != "asignar_tarea_libre" || action.Target != "backlog:libre" || !strings.EqualFold(strings.TrimSpace(action.Assignee), "Codex12") {
+		t.Fatalf("accion start_or_assign inesperada: %+v", action)
+	}
+}
+
 func TestMCPToolServerSelfHealMarcaErrorSiDrainOrdersFalla(t *testing.T) {
 	prevOperational := mcpBuildServerOperationalInfoFn
 	prevOrdersExec := apiRuntimeProcessOrdersExecutor

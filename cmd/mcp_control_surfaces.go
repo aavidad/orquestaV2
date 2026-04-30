@@ -261,7 +261,15 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 	}
 	markPhase("compaction", phaseStart)
 	phaseStart = time.Now()
-	if enabled("rearm") {
+	startOrAssignApplied := false
+	if applied, err := mcpServerSelfHealAutoExecuteStartOrAssignWorkers(&result, enabled); err != nil {
+		appendErr("dispatch", err)
+	} else {
+		startOrAssignApplied = applied
+	}
+	markPhase("dispatch", phaseStart)
+	phaseStart = time.Now()
+	if enabled("rearm") && !startOrAssignApplied {
 		for attempts := 0; attempts < mcpServerSelfHealRearmLimit; attempts++ {
 			rearm := result.Operational.Rearm
 			if result.Operational.Operational || rearm == nil || !rearm.Needed || !rearm.Available {
@@ -386,6 +394,46 @@ func mcpServerSelfHealAutoExecuteCompaction(result *apiRuntimeSelfHealResponse, 
 	result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
 	syncMCPServerSelfHealRecovery(result)
 	return nil
+}
+
+func mcpServerSelfHealAutoExecuteStartOrAssignWorkers(result *apiRuntimeSelfHealResponse, enabled func(string) bool) (bool, error) {
+	if result == nil || enabled == nil {
+		return false, nil
+	}
+	plan := result.Operational.NextRecoveryPlan
+	if plan == nil || strings.TrimSpace(plan.Action) != "start_or_assign_workers" {
+		return false, nil
+	}
+	action, err := nextSupervisorStartOrAssignAction(resolveSupervisorName(""))
+	if err != nil || action == nil {
+		return false, err
+	}
+	applied, err := applySupervisorRecommendedActionInternal(resolveSupervisorName(""), action.Action, action.Target, action.Assignee)
+	if err != nil {
+		return false, err
+	}
+	if applied != nil {
+		invalidateSupervisorPostMutationCaches()
+	}
+	result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
+	syncMCPServerSelfHealRecovery(result)
+	return applied != nil, nil
+}
+
+func nextSupervisorStartOrAssignAction(supervisor string) (*supervisorRecommendedAction, error) {
+	snapshot, err := buildSupervisorActionSnapshot(supervisor)
+	if err != nil {
+		return nil, err
+	}
+	actions, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+	for _, item := range actions {
+		switch strings.TrimSpace(item.Action) {
+		case "asignar_tarea_libre", "replanificar_por_cuota", "rebalancear_reserva":
+			copy := item
+			return &copy, nil
+		}
+	}
+	return nil, nil
 }
 
 func mcpServerSelfHealMarkSkippedHeavyPhases(result *apiRuntimeSelfHealResponse, enabled func(string) bool) {
