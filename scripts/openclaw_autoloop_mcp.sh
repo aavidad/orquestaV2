@@ -3,11 +3,11 @@ set -euo pipefail
 
 MCP_URL="${ORQUESTA_MCP_URL:-http://127.0.0.1:16543/api/mcp}"
 SUPERVISOR="${SUPERVISOR:-OpenClaw}"
-OUTER_SLEEP="${OUTER_SLEEP:-15}"
+OUTER_SLEEP="${OUTER_SLEEP:-20}"
 EXIT_ON_COMPLETE="${EXIT_ON_COMPLETE:-true}"
 LOG_FILE="${LOG_FILE:-/tmp/orquesta-openclaw-autoloop.log}"
 MAX_SAFE_ACTIONS_PER_TICK="${MAX_SAFE_ACTIONS_PER_TICK:-1}"
-MCP_TIMEOUT="${MCP_TIMEOUT:-8}"
+MCP_TIMEOUT="${MCP_TIMEOUT:-20}"
 SAFE_ACTION_WHITELIST="${SAFE_ACTION_WHITELIST:-asignar_tarea_libre,reservar_tarea_libre,replanificar_por_cuota,rebalancear_reserva,seguir_guidance_durable}"
 REJECT_COOLDOWN_SECS="${REJECT_COOLDOWN_SECS:-120}"
 REJECT_STATE_FILE="${REJECT_STATE_FILE:-/tmp/orquesta-openclaw-autoloop.rejects}"
@@ -150,7 +150,6 @@ PY
     fi
     if ! apply_response="$(call_tool "orquesta.supervision.acciones.aplicar_siguiente" "{\"supervisor\":\"${SUPERVISOR}\"}")"; then
       printf '%s apply_error action=%s target=%s\n' "$timestamp" "${kv[next_safe_action]}" "${kv[next_safe_target]}" >> "$LOG_FILE"
-      record_reject "$reject_signature"
       break
     fi
     printf '%s apply_next %s\n' "$timestamp" "$apply_response" >> "$LOG_FILE"
@@ -219,7 +218,7 @@ PY
   should_self_heal="false"
   if [[ "${kv[operational]}" != "true" ]]; then
     should_self_heal="true"
-  elif [[ "${kv[next_recovery_action]}" != "" && "${kv[next_recovery_auto]}" == "true" ]]; then
+  elif [[ "${kv[next_recovery_action]}" != "" ]]; then
     should_self_heal="true"
   fi
 

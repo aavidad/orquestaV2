@@ -108,3 +108,33 @@ func TestApplySupervisorRecommendedActionInternalToleraRebalanceoStaleDesdeSafeQ
 		}
 	})
 }
+
+func TestApplySupervisorRecommendedActionInternalToleraSafeActionSinAssigneeDesdeQueue(t *testing.T) {
+	prev := supervisorActionSnapshotBuilder
+	supervisorActionSnapshotBuilder = func(supervisor string) (map[string]any, error) {
+		action := supervisorRecommendedAction{
+			Kind:   "dispatch",
+			Target: "backlog:libre",
+			Action: "reservar_tarea_libre",
+		}
+		return map[string]any{
+			"safe_action_queue": []supervisorRecommendedAction{action},
+			"next_safe_action":  action,
+		}, nil
+	}
+	t.Cleanup(func() { supervisorActionSnapshotBuilder = prev })
+
+	result, err := applySupervisorRecommendedActionInternal("OpenClaw", "reservar_tarea_libre", "backlog:libre", "")
+	if err != nil {
+		t.Fatalf("apply safe action sin assignee: %v", err)
+	}
+	if ok, _ := result["ok"].(bool); !ok {
+		t.Fatalf("resultado no-ok: %#v", result)
+	}
+	if noop, _ := result["noop"].(bool); !noop {
+		t.Fatalf("deberia marcar noop: %#v", result)
+	}
+	if stale, _ := result["stale_action"].(bool); !stale {
+		t.Fatalf("deberia marcar stale_action: %#v", result)
+	}
+}

@@ -6461,6 +6461,7 @@ func buildSupervisorOperationalActionsFast(status apiStatusResponse, mailboxPend
 func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mailboxPendiente []apiOpenClawMailboxLite, fast bool) []supervisorRecommendedAction {
 	actions := make([]supervisorRecommendedAction, 0, 4+len(mailboxPendiente))
 	idle := idleSupervisorWorkers(status.AgentesActivos, status.AgentesTrabajando)
+	visibleWorkers := visibleNonSupervisorAgents(status.AgentesActivos)
 	if len(idle) > 0 {
 		assignee := idle[0]
 		target := "backlog:libre"
@@ -6486,7 +6487,7 @@ func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mail
 			})
 		}
 	}
-	if len(idle) == 0 && len(status.AgentesActivos) > 0 && countReservedTasks(status) == 0 {
+	if len(idle) == 0 && len(visibleWorkers) > 0 && countReservedTasks(status) == 0 {
 		assignee := preferredSupervisorWorker(status)
 		target := "backlog:libre"
 		reason := "Hay backlog libre y workers conectados, pero ninguno ocioso; conviene reservar el siguiente frente sin arrancarlo aún."
@@ -6496,34 +6497,38 @@ func buildSupervisorOperationalActionsWithOptions(status apiStatusResponse, mail
 				target = fmt.Sprintf("tarea:%d", libres[0].ID)
 			}
 		}
-		if libresCount := countLibreTasks(status); libresCount > 0 || strings.HasPrefix(target, "tarea:") {
-			actions = append(actions, supervisorRecommendedAction{
-				Kind:     "dispatch",
-				Target:   target,
-				Action:   "reservar_tarea_libre",
-				Reason:   reason,
-				Priority: "baja",
-				Assignee: assignee,
-			})
+		if assignee != "" {
+			if libresCount := countLibreTasks(status); libresCount > 0 || strings.HasPrefix(target, "tarea:") {
+				actions = append(actions, supervisorRecommendedAction{
+					Kind:     "dispatch",
+					Target:   target,
+					Action:   "reservar_tarea_libre",
+					Reason:   reason,
+					Priority: "baja",
+					Assignee: assignee,
+				})
+			}
 		}
 	}
 	actions = append(actions, buildSupervisorReserveRebalanceActions(status)...)
 	retenidas := tareasRetenidasPorCuota(status.TareasActivas, status.Agentes, status.AgentesQuotaBlocked)
 	if len(retenidas) > 0 {
 		priority := "media"
-		if len(status.AgentesActivos) == 0 {
+		if len(visibleWorkers) == 0 {
 			priority = "alta"
 		}
 		assignee := preferredSupervisorWorker(status)
-		for _, retenida := range retenidas {
-			actions = append(actions, supervisorRecommendedAction{
-				Kind:     "quota_hold",
-				Target:   fmt.Sprintf("tarea:%d", retenida.ID),
-				Action:   "replanificar_por_cuota",
-				Reason:   "Hay trabajo retenido por cuota; revisar reasignación o secuenciación sin esperar al agente bloqueado.",
-				Priority: priority,
-				Assignee: assignee,
-			})
+		if assignee != "" {
+			for _, retenida := range retenidas {
+				actions = append(actions, supervisorRecommendedAction{
+					Kind:     "quota_hold",
+					Target:   fmt.Sprintf("tarea:%d", retenida.ID),
+					Action:   "replanificar_por_cuota",
+					Reason:   "Hay trabajo retenido por cuota; revisar reasignación o secuenciación sin esperar al agente bloqueado.",
+					Priority: priority,
+					Assignee: assignee,
+				})
+			}
 		}
 	}
 	for _, item := range mailboxPendiente {
@@ -8228,6 +8233,9 @@ func applySupervisorRecommendedActionInternal(supervisor, actionName, target, as
 		worker = strings.TrimSpace(assignee)
 	}
 	if worker == "" {
+		if selectedFromQueue {
+			return supervisorStaleSafeActionResult(supervisor, snapshot, actions, selected, "", "la acción segura ya no tiene worker visible disponible"), nil
+		}
 		return nil, fmt.Errorf("la acción no tiene assignee sugerido ni explícito")
 	}
 	if strings.TrimSpace(selected.Action) == "asignar_tarea_libre" ||
