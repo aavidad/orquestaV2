@@ -1218,12 +1218,13 @@ func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 		if err := s.reconcileDetailRowWithPanelSnapshot(nombre, &row); err != nil {
 			return nil, err
 		}
+		mailboxPendingVisible := compactMailboxPendingVisible(row, now)
 		return &Detail{
 			Row:                     row,
 			Entity:                  buildAgentEntity(s.store, row, tareas),
 			Asignaciones:            asignaciones,
-			MailboxTotalCount:       row.MailboxTotal,
-			MailboxPendingVisible:   compactMailboxPendingVisible(row, now),
+			MailboxTotalCount:       row.MailboxPending,
+			MailboxPendingVisible:   mailboxPendingVisible,
 			MailboxCoveredBootstrap: 0,
 		}, nil
 	}
