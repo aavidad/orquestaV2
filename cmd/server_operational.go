@@ -461,7 +461,7 @@ func buildServerOperationalRecoveryPlan(info serverOperationalInfo, action *supe
 		plan.Assignee = resolveSupervisorName("")
 	}
 	plan.RequiresRearm = plan.Action == "server_rearm"
-	plan.AutoExecutable = plan.RequiresRearm && plan.RearmAvailable
+	plan.AutoExecutable = (plan.RequiresRearm && plan.RearmAvailable) || strings.TrimSpace(plan.Action) == "compact_or_reassign_active_tasks"
 	if plan.RequiresRearm && info.Rearm != nil {
 		plan.Tool = strings.TrimSpace(info.Rearm.Tool)
 		plan.Endpoint = strings.TrimSpace(info.Rearm.Endpoint)

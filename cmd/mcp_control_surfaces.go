@@ -218,6 +218,11 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 	}
 	markPhase("drain", phaseStart)
 	phaseStart = time.Now()
+	if err := mcpServerSelfHealAutoExecuteCompaction(&result, enabled); err != nil {
+		appendErr("compaction", err)
+	}
+	markPhase("compaction", phaseStart)
+	phaseStart = time.Now()
 	if enabled("rearm") {
 		for attempts := 0; attempts < mcpServerSelfHealRearmLimit; attempts++ {
 			rearm := result.Operational.Rearm
@@ -260,6 +265,9 @@ func callMCPServerSelfHeal(args map[string]any) (map[string]any, error) {
 
 func mcpServerSelfHealCanShortCircuit(info serverOperationalInfo) bool {
 	info = normalizeServerOperationalInfo(info)
+	if mcpServerSelfHealPassiveQuotaWait(info) {
+		return true
+	}
 	if !info.Operational {
 		return false
 	}
@@ -273,6 +281,56 @@ func mcpServerSelfHealCanShortCircuit(info serverOperationalInfo) bool {
 		return false
 	}
 	return true
+}
+
+func mcpServerSelfHealPassiveQuotaWait(info serverOperationalInfo) bool {
+	info = normalizeServerOperationalInfo(info)
+	if info.Rearm != nil && info.Rearm.Needed && info.Rearm.Available {
+		return false
+	}
+	if info.NextRecoveryPlan != nil && strings.TrimSpace(info.NextRecoveryPlan.Action) == "wait_quota_reset" {
+		return true
+	}
+	if info.Recovery != nil && strings.TrimSpace(info.Recovery.SuggestedAction) == "wait_quota_reset" {
+		return true
+	}
+	return false
+}
+
+func mcpServerSelfHealAutoExecuteCompaction(result *apiRuntimeSelfHealResponse, enabled func(string) bool) error {
+	if result == nil || enabled == nil {
+		return nil
+	}
+	plan := result.Operational.NextRecoveryPlan
+	if plan == nil || strings.TrimSpace(plan.Action) != "compact_or_reassign_active_tasks" {
+		return nil
+	}
+	if enabled("degradados") {
+		summary, err := runtimeProcessDegradadosBatchDetailed()
+		result.Degradados.OK = result.Degradados.OK && err == nil
+		result.Degradados.Count += summary.Count
+		result.Degradados.GhostAssignmentsCompacted += summary.GhostAssignmentsCompacted
+		result.Degradados.ReactivatedWithoutRuntime += summary.ReactivatedWithoutRuntime
+		result.Degradados.IdleAutoassigned += summary.IdleAutoassigned
+		if err != nil {
+			result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
+			syncMCPServerSelfHealRecovery(result)
+			return err
+		}
+	}
+	if enabled("autonomia") {
+		count, err := runtimeProcessAutonomiaBatch()
+		result.Autonomia.OK = result.Autonomia.OK && err == nil
+		result.Autonomia.Count += count
+		if err != nil {
+			result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
+			syncMCPServerSelfHealRecovery(result)
+			return err
+		}
+	}
+	result.Operational = normalizeServerOperationalInfo(mcpBuildServerOperationalInfoFn())
+	syncMCPServerSelfHealRecovery(result)
+	return nil
 }
 
 func mcpServerSelfHealMarkSkippedHeavyPhases(result *apiRuntimeSelfHealResponse, enabled func(string) bool) {
