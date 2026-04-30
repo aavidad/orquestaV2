@@ -410,6 +410,113 @@ func TestNormalizeServerOperationalInfoNoMarcaCompactionDebtSinSenalReal(t *test
 	}
 }
 
+func TestReconcileStatusSnapshotWithFreshPanelActualizaEstadosDeTareaYConteos(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	now := time.Date(2026, 4, 30, 15, 20, 0, 0, time.UTC)
+	storeAgentPanelSnapshot([]agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "Codex12", Activo: true, EstadoCuota: "activo"},
+			EstadoOperativo: "bloqueado",
+			BlockedTasks:    1,
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 28, State: db.TareaBloqueada},
+		},
+		{
+			Agente:          &db.Agente{Nombre: "Codex1", Activo: true, EstadoCuota: "activo"},
+			EstadoOperativo: "trabajando",
+			WorkerAlive:     true,
+			WorkerState:     "running",
+			WorkerHeartbeat: ptrTimeServerOperational(now),
+			OpenTasks:       1,
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 40, State: db.TareaEnProgreso},
+		},
+	}, now)
+
+	snapshot := apiStatusResponse{
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex1", Activo: true}, {Nombre: "Codex12", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		TareasActivas: []tareaLite{
+			{ID: 28, Estado: db.TareaEnProgreso, Agente: "Codex12"},
+			{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex1"},
+		},
+		TareasEnProgreso: []tareaLite{
+			{ID: 28, Estado: db.TareaEnProgreso, Agente: "Codex12"},
+			{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex1"},
+		},
+		TareasPorEstado: map[string]int{
+			string(db.TareaEnProgreso): 2,
+			string(db.TareaBloqueada):  0,
+		},
+	}
+
+	reconcileStatusSnapshotWithFreshPanel(&snapshot)
+
+	if got := len(snapshot.TareasEnProgreso); got != 1 || snapshot.TareasEnProgreso[0].ID != 40 {
+		t.Fatalf("tareas en progreso reconciliadas inesperadas: %+v", snapshot.TareasEnProgreso)
+	}
+	if snapshot.TareasPorEstado[string(db.TareaEnProgreso)] != 1 || snapshot.TareasPorEstado[string(db.TareaBloqueada)] != 1 {
+		t.Fatalf("conteo de tareas reconciliado inesperado: %+v", snapshot.TareasPorEstado)
+	}
+	var tarea28 tareaLite
+	for _, tarea := range snapshot.TareasActivas {
+		if tarea.ID == 28 {
+			tarea28 = tarea
+			break
+		}
+	}
+	if tarea28.Estado != db.TareaBloqueada {
+		t.Fatalf("la tarea 28 deberia quedar bloqueada en el snapshot reconciliado: %+v", snapshot.TareasActivas)
+	}
+}
+
+func TestReconcileStatusSnapshotWithFreshPanelEliminaTareaStaleSinFrenteVisible(t *testing.T) {
+	resetAgentPanelSnapshotCache()
+	defer resetAgentPanelSnapshotCache()
+
+	now := time.Date(2026, 4, 30, 15, 24, 0, 0, time.UTC)
+	storeAgentPanelSnapshot([]agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "Codex13", Activo: true, EstadoCuota: "activo"},
+			EstadoOperativo: "sin_tarea",
+		},
+		{
+			Agente:          &db.Agente{Nombre: "Codex1", Activo: true, EstadoCuota: "activo"},
+			EstadoOperativo: "trabajando",
+			WorkerAlive:     true,
+			WorkerState:     "running",
+			WorkerHeartbeat: ptrTimeServerOperational(now),
+			OpenTasks:       1,
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 40, State: db.TareaEnProgreso},
+		},
+	}, now)
+
+	snapshot := apiStatusResponse{
+		AgentesActivos:    []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		AgentesTrabajando: []*db.Agente{{Nombre: "Codex1", Activo: true}},
+		TareasActivas: []tareaLite{
+			{ID: 29, Estado: db.TareaEnProgreso, Agente: "Codex13"},
+			{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex1"},
+		},
+		TareasEnProgreso: []tareaLite{
+			{ID: 29, Estado: db.TareaEnProgreso, Agente: "Codex13"},
+			{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex1"},
+		},
+		TareasPorEstado: map[string]int{
+			string(db.TareaEnProgreso): 2,
+		},
+	}
+
+	reconcileStatusSnapshotWithFreshPanel(&snapshot)
+
+	if got := len(snapshot.TareasActivas); got != 1 || snapshot.TareasActivas[0].ID != 40 {
+		t.Fatalf("deberia desaparecer la tarea stale sin frente visible: %+v", snapshot.TareasActivas)
+	}
+	if snapshot.TareasPorEstado[string(db.TareaEnProgreso)] != 1 {
+		t.Fatalf("conteo de tareas en progreso inesperado: %+v", snapshot.TareasPorEstado)
+	}
+}
+
 func TestControlPlaneQuotaBlockedIdleGuardSaltaSinWorkersUtiles(t *testing.T) {
 	resetStatusSnapshotCache()
 	defer resetStatusSnapshotCache()

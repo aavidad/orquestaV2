@@ -889,6 +889,10 @@ func reconcileStatusSnapshotWithFreshPanel(snapshot *apiStatusResponse) {
 	snapshot.AgentesAuthManual = authManual
 	snapshot.AgentesQuotaBlocked = quotaBlocked
 	snapshot.Autonomia = resumirAutonomiaRows(rows, statusNowFunc().UTC())
+	snapshot.TareasActivas = reconciliarTareasActivasConPanelRows(snapshot.TareasActivas, rows)
+	snapshot.TareasEnProgreso = filtrarOpenClawTareasPorEstado(snapshot.TareasActivas, db.TareaEnProgreso)
+	snapshot.TareasReservadas = filtrarOpenClawTareasPorEstado(snapshot.TareasActivas, db.TareaAsignada)
+	snapshot.TareasPorEstado = reconciliarConteoTareasActivasVisible(snapshot.TareasPorEstado, snapshot.TareasActivas)
 	snapshot.WorkersConectados, snapshot.WorkersTrabajando, snapshot.SupervisoresActivos = statusVisibleWorkerCounters(
 		snapshot.AgentesActivos,
 		snapshot.AgentesTrabajando,

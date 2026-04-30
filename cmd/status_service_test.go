@@ -2005,6 +2005,66 @@ func TestResumirAutonomiaRowsCuentaSupervisorBloqueadoPorRuntimeSiSigueVivo(t *t
 	}
 }
 
+func TestReconciliarTareasActivasConPanelRowsActualizaEstadoDesdeCurrentTask(t *testing.T) {
+	tareas := []tareaLite{
+		{ID: 28, Estado: db.TareaEnProgreso, Agente: "Codex12"},
+		{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex1"},
+	}
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "Codex12"},
+			EstadoOperativo: "bloqueado",
+			BlockedTasks:    1,
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 28, State: db.TareaBloqueada},
+		},
+		{
+			Agente:          &db.Agente{Nombre: "Codex1"},
+			EstadoOperativo: "trabajando",
+			OpenTasks:       1,
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 40, State: db.TareaEnProgreso},
+		},
+	}
+
+	out := reconciliarTareasActivasConPanelRows(tareas, rows)
+	if len(out) != 2 {
+		t.Fatalf("tareas reconciliadas inesperadas: %+v", out)
+	}
+	var estado28 db.EstadoTarea
+	for _, tarea := range out {
+		if tarea.ID == 28 {
+			estado28 = tarea.Estado
+			break
+		}
+	}
+	if estado28 != db.TareaBloqueada {
+		t.Fatalf("la tarea 28 deberia quedar bloqueada tras reconciliar con panel: %+v", out)
+	}
+}
+
+func TestReconciliarTareasActivasConPanelRowsEliminaTareaStaleSinFrenteVisible(t *testing.T) {
+	tareas := []tareaLite{
+		{ID: 29, Estado: db.TareaEnProgreso, Agente: "Codex13"},
+		{ID: 40, Estado: db.TareaEnProgreso, Agente: "Codex1"},
+	}
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "Codex13"},
+			EstadoOperativo: "sin_tarea",
+		},
+		{
+			Agente:          &db.Agente{Nombre: "Codex1"},
+			EstadoOperativo: "trabajando",
+			OpenTasks:       1,
+			CurrentTask:     &agentesapp.TaskFocus{TaskID: 40, State: db.TareaEnProgreso},
+		},
+	}
+
+	out := reconciliarTareasActivasConPanelRows(tareas, rows)
+	if len(out) != 1 || out[0].ID != 40 {
+		t.Fatalf("la tarea stale sin frente visible deberia desaparecer: %+v", out)
+	}
+}
+
 func TestResumirAutonomiaRowsNoCuentaContinuityPendingSiWorkerYaTieneTareaActiva(t *testing.T) {
 	now := time.Now().UTC()
 	resumen := resumirAutonomiaRows([]agentesapp.Row{{

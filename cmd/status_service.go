@@ -2272,20 +2272,43 @@ func reconciliarTareasActivasConPanelRows(tareas []tareaLite, rows []agentesapp.
 		openTasks     int
 	}
 	constraints := make(map[string]agentConstraint, len(rows))
+	taskStates := make(map[int64]db.EstadoTarea, len(rows))
+	withoutVisibleTask := make(map[string]struct{}, len(rows))
 	for _, row := range rows {
-		if row.CurrentTask == nil || row.OpenTasks != 1 || row.Agente == nil {
+		if row.Agente == nil {
 			continue
 		}
 		nombre := nombreAgenteCanonico(row.Agente.Nombre)
 		if nombre == "" {
 			continue
 		}
-		constraints[nombre] = agentConstraint{
-			currentTaskID: row.CurrentTask.TaskID,
-			openTasks:     row.OpenTasks,
+		if row.CurrentTask == nil &&
+			row.OpenTasks == 0 &&
+			row.BlockedTasks == 0 &&
+			row.MailboxPending == 0 &&
+			row.MailboxActionablePending == 0 &&
+			row.MailboxContinuityPending == 0 &&
+			row.OrdersOpen == 0 &&
+			row.ControlOrdersOpen == 0 {
+			withoutVisibleTask[nombre] = struct{}{}
+			continue
+		}
+		delete(withoutVisibleTask, nombre)
+		if row.CurrentTask == nil {
+			continue
+		}
+		if row.OpenTasks == 1 {
+			constraints[nombre] = agentConstraint{
+				currentTaskID: row.CurrentTask.TaskID,
+				openTasks:     row.OpenTasks,
+			}
+		}
+		switch row.CurrentTask.State {
+		case db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada:
+			taskStates[row.CurrentTask.TaskID] = row.CurrentTask.State
 		}
 	}
-	if len(constraints) == 0 {
+	if len(constraints) == 0 && len(taskStates) == 0 {
 		return tareas
 	}
 	out := make([]tareaLite, 0, len(tareas))
@@ -2293,7 +2316,13 @@ func reconciliarTareasActivasConPanelRows(tareas []tareaLite, rows []agentesapp.
 		if !tareaLiteValida(tarea) {
 			continue
 		}
+		if state, ok := taskStates[tarea.ID]; ok && tarea.Estado != state {
+			tarea.Estado = state
+		}
 		nombre := nombreAgenteCanonico(tarea.Agente)
+		if _, ok := withoutVisibleTask[nombre]; ok {
+			continue
+		}
 		if constraint, ok := constraints[nombre]; ok {
 			switch tarea.Estado {
 			case db.TareaAsignada, db.TareaEnProgreso:
