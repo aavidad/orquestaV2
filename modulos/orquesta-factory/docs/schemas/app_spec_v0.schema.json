@@ -1,0 +1,635 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orquesta.local/orquesta-factory/schemas/app_spec_v0.schema.json",
+  "title": "AppSpecV0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "spec_id",
+    "request_id",
+    "created_at",
+    "locale",
+    "request_kind",
+    "execution_mode",
+    "app",
+    "scope",
+    "architecture",
+    "i18n",
+    "data",
+    "connectors",
+    "platforms",
+    "deploy",
+    "quality",
+    "docs",
+    "agent_preferences",
+    "defaults_applied",
+    "validation"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "app_spec.v0"
+    },
+    "spec_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 120,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 120,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "locale": {
+      "$ref": "#/$defs/locale"
+    },
+    "request_kind": {
+      "$ref": "#/$defs/request_kind"
+    },
+    "execution_mode": {
+      "$ref": "#/$defs/execution_mode"
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nombre",
+        "slug",
+        "objetivo",
+        "tipo_app",
+        "usuarios_objetivo"
+      ],
+      "properties": {
+        "nombre": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "objetivo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "descripcion": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "tipo_app": {
+          "$ref": "#/$defs/tipo_app"
+        },
+        "usuarios_objetivo": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "objetivos",
+        "fuera_de_alcance",
+        "supuestos",
+        "preguntas_abiertas"
+      ],
+      "properties": {
+        "objetivos": {
+          "$ref": "#/$defs/string_list"
+        },
+        "fuera_de_alcance": {
+          "$ref": "#/$defs/string_list"
+        },
+        "supuestos": {
+          "$ref": "#/$defs/string_list"
+        },
+        "preguntas_abiertas": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "patron",
+        "modulos_iniciales",
+        "fronteras",
+        "contratos_esperados"
+      ],
+      "properties": {
+        "patron": {
+          "const": "hexagonal"
+        },
+        "modulos_iniciales": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/module_boundary"
+          }
+        },
+        "fronteras": {
+          "$ref": "#/$defs/string_list"
+        },
+        "contratos_esperados": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    },
+    "i18n": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "default_locale",
+        "locales"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "default_locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "locales": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/locale"
+          },
+          "uniqueItems": true
+        },
+        "justificacion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": false
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          },
+          "then": {
+            "required": [
+              "justificacion"
+            ]
+          }
+        }
+      ]
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "persistence_required",
+        "needs"
+      ],
+      "properties": {
+        "persistence_required": {
+          "type": "boolean"
+        },
+        "needs": {
+          "$ref": "#/$defs/string_list"
+        },
+        "sensitivity": {
+          "type": "string",
+          "enum": [
+            "publica",
+            "interna",
+            "personal",
+            "sensible",
+            "secreta"
+          ]
+        },
+        "connector": {
+          "type": "string",
+          "enum": [
+            "persistence"
+          ]
+        },
+        "retention": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "provider"
+            ]
+          },
+          {
+            "required": [
+              "db_provider"
+            ]
+          },
+          {
+            "required": [
+              "dialect"
+            ]
+          },
+          {
+            "required": [
+              "tables"
+            ]
+          },
+          {
+            "required": [
+              "sql"
+            ]
+          },
+          {
+            "required": [
+              "connection_string"
+            ]
+          }
+        ]
+      }
+    },
+    "connectors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required",
+        "optional"
+      ],
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/connector_spec"
+          }
+        },
+        "optional": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/connector_spec"
+          }
+        }
+      }
+    },
+    "platforms": {
+      "$ref": "#/$defs/string_list"
+    },
+    "deploy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "restrictions"
+      ],
+      "properties": {
+        "target": {
+          "type": "string",
+          "enum": [
+            "sin_preferencia",
+            "local",
+            "contenedor",
+            "paas",
+            "serverless",
+            "kubernetes",
+            "desktop",
+            "mobile_store"
+          ]
+        },
+        "restrictions": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tests",
+        "accessibility",
+        "security",
+        "compliance",
+        "observability"
+      ],
+      "properties": {
+        "tests": {
+          "type": "string",
+          "enum": [
+            "basica",
+            "media",
+            "alta"
+          ]
+        },
+        "accessibility": {
+          "type": "string",
+          "enum": [
+            "no_aplica",
+            "basica",
+            "wcag_aa"
+          ]
+        },
+        "security": {
+          "$ref": "#/$defs/string_list"
+        },
+        "compliance": {
+          "$ref": "#/$defs/string_list"
+        },
+        "observability": {
+          "type": "boolean"
+        }
+      }
+    },
+    "docs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "user",
+        "development",
+        "systems",
+        "locales"
+      ],
+      "properties": {
+        "user": {
+          "type": "boolean"
+        },
+        "development": {
+          "type": "boolean"
+        },
+        "systems": {
+          "type": "boolean"
+        },
+        "locales": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/locale"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "agent_preferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "human_review",
+        "autonomy"
+      ],
+      "properties": {
+        "human_review": {
+          "type": "boolean"
+        },
+        "autonomy": {
+          "type": "string",
+          "enum": [
+            "baja",
+            "media",
+            "alta"
+          ]
+        },
+        "notes": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    },
+    "defaults_applied": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/default_applied"
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "estado",
+        "warnings",
+        "errores"
+      ],
+      "properties": {
+        "estado": {
+          "type": "string",
+          "enum": [
+            "valida",
+            "invalida",
+            "provisional"
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/public_issue"
+          }
+        },
+        "errores": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/public_issue"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "locale": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    "request_kind": {
+      "type": "string",
+      "enum": [
+        "documentar_app",
+        "analizar_app",
+        "brainstorming_arquitectura",
+        "planificar_app",
+        "crear_app_completa",
+        "programar_modulo",
+        "modificar_app_existente",
+        "revisar_codigo",
+        "pruebas_y_validacion",
+        "seguridad",
+        "deploy",
+        "operacion_soporte",
+        "integracion_externa",
+        "i18n_l10n",
+        "migracion_refactor",
+        "investigacion_tecnica"
+      ]
+    },
+    "execution_mode": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "debug"
+      ]
+    },
+    "tipo_app": {
+      "type": "string",
+      "enum": [
+        "web",
+        "api",
+        "cli",
+        "desktop",
+        "mobile",
+        "automation",
+        "data",
+        "plugin",
+        "mixed"
+      ]
+    },
+    "string_list": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      }
+    },
+    "module_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nombre",
+        "responsabilidad"
+      ],
+      "properties": {
+        "nombre": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "responsabilidad": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "puertos": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    },
+    "connector_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nombre",
+        "proposito"
+      ],
+      "properties": {
+        "nombre": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "not": {
+            "enum": [
+              "postgres",
+              "postgresql",
+              "mysql",
+              "sqlite",
+              "mongodb",
+              "redis",
+              "runtime",
+              "filesystem",
+              "fs",
+              "llm",
+              "cache",
+              "queue",
+              "cola",
+              "deploy",
+              "database",
+              "db"
+            ]
+          }
+        },
+        "proposito": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "contrato": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        }
+      }
+    },
+    "default_applied": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "campo",
+        "valor",
+        "motivo"
+      ],
+      "properties": {
+        "campo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "valor": {
+          "type": [
+            "string",
+            "boolean",
+            "number",
+            "array",
+            "object",
+            "null"
+          ]
+        },
+        "motivo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    },
+    "public_issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "app_spec_invalida",
+            "opcion_incompatible",
+            "target_no_soportado",
+            "idioma_invalido",
+            "conector_requerido_no_disponible"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      }
+    }
+  }
+}

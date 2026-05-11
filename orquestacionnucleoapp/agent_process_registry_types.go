@@ -1,0 +1,6 @@
+package orquestacionnucleoapp
+
+import orquestaagentprocessregistry "orquesta/modulos/orquesta-agent-process-registry"
+
+type AgentProcessRegistryPortV0 = orquestaagentprocessregistry.AgentProcessRegistryPortV0
+type AgentProcessRegistryRecordV0 = orquestaagentprocessregistry.AgentProcessRegistryRecordV0

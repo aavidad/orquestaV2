@@ -1,0 +1,73 @@
+package orquestacoreworkflow
+
+import "strings"
+
+func ensureRegisterPhaseArtifactCommandAllowedV0(
+	current OrchestrationRunV0,
+	command OrchestrationCommandV0,
+	payload RegisterPhaseArtifactCommandPayloadV0,
+) error {
+	if err := ensureActiveRunForCommandV0(current, command); err != nil {
+		return err
+	}
+	if err := ensurePhaseArtifactCommandPhaseCurrentV0(current, payload.PhaseID); err != nil {
+		return err
+	}
+	if !agentRequestAlreadyReflectedV0(current, payload.AgentRef) {
+		return commandErrorV0(ErrTransicionInvalidaV0, "payload.agent_ref")
+	}
+	if !agentStartedAlreadyReflectedV0(current, payload.AgentRef) {
+		return commandErrorV0(ErrTransicionInvalidaV0, "payload.agent_ref")
+	}
+	if agentFailedAlreadyReflectedV0(current, payload.AgentRef) ||
+		agentStopAlreadyReflectedV0(current, payload.AgentRef) {
+		return commandErrorV0(ErrTransicionInvalidaV0, "payload.agent_ref")
+	}
+	return nil
+}
+
+func ensurePhaseArtifactRegisteredEventAllowedV0(
+	current OrchestrationRunV0,
+	event OrchestrationEventV0,
+	payload PhaseArtifactRegisteredPayloadV0,
+) error {
+	if err := ensureRunCanApplyEventV0(current, event); err != nil {
+		return err
+	}
+	if err := ensurePhaseArtifactEventPhaseCurrentV0(current, payload.PhaseID); err != nil {
+		return err
+	}
+	if !agentRequestAlreadyReflectedV0(current, payload.AgentRef) {
+		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.agent_ref")
+	}
+	if !agentStartedAlreadyReflectedV0(current, payload.AgentRef) {
+		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.agent_ref")
+	}
+	if agentFailedAlreadyReflectedV0(current, payload.AgentRef) ||
+		agentStopAlreadyReflectedV0(current, payload.AgentRef) {
+		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.agent_ref")
+	}
+	return nil
+}
+
+func ensurePhaseArtifactCommandPhaseCurrentV0(run OrchestrationRunV0, phaseID string) error {
+	phase := OrchestrationPhaseIDV0(strings.TrimSpace(phaseID))
+	if normalizePhaseIDV0(run.CurrentPhase) != phase {
+		return commandErrorV0(ErrTransicionInvalidaV0, "payload.phase_id")
+	}
+	if !phaseIsCurrentAndActiveV0(run, phase) {
+		return commandErrorV0(ErrTransicionInvalidaV0, "phase.status")
+	}
+	return nil
+}
+
+func ensurePhaseArtifactEventPhaseCurrentV0(run OrchestrationRunV0, phaseID string) error {
+	phase := OrchestrationPhaseIDV0(strings.TrimSpace(phaseID))
+	if normalizePhaseIDV0(run.CurrentPhase) != phase {
+		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.phase_id")
+	}
+	if !phaseIsCurrentAndActiveV0(run, phase) {
+		return eventErrorV0(ErrSecuenciaInvalidaV0, "phase.status")
+	}
+	return nil
+}

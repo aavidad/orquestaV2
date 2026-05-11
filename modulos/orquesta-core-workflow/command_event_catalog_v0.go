@@ -1,0 +1,85 @@
+package orquestacoreworkflow
+
+func SupportedOrchestrationCommandTypesV0() []string {
+	return cloneStringCatalogV0(orchestrationCommandTypeCatalogV0)
+}
+
+func SupportedOrchestrationEventTypesV0() []string {
+	return cloneStringCatalogV0(orchestrationEventTypeCatalogV0)
+}
+
+func cloneStringCatalogV0(values []string) []string {
+	result := make([]string, 0, len(values))
+	result = append(result, values...)
+	return result
+}
+
+var orchestrationCommandTypeCatalogV0 = []string{
+	OrchestrationCommandStartRunV0,
+	OrchestrationCommandOpenPhaseV0,
+	OrchestrationCommandClosePhaseV0,
+	OrchestrationCommandBlockRunV0,
+	OrchestrationCommandAskDirectorV0,
+	OrchestrationCommandAnswerDirectorQuestionV0,
+	OrchestrationCommandRequestBrainstormV0,
+	OrchestrationCommandRequestVoteV0,
+	OrchestrationCommandAcceptDecisionV0,
+	OrchestrationCommandPublishFunctionContractV0,
+	OrchestrationCommandCreateMicrotaskV0,
+	OrchestrationCommandRequestCapacityV0,
+	OrchestrationCommandRegisterCapacityDecisionV0,
+	OrchestrationCommandRequestAgentV0,
+	OrchestrationCommandRegisterAgentStartedV0,
+	OrchestrationCommandRegisterAgentFailedV0,
+	OrchestrationCommandRegisterAgentLeaseExpiredV0,
+	OrchestrationCommandStopAgentV0,
+	OrchestrationCommandRegisterAgentStopConfirmedV0,
+	OrchestrationCommandAssessAgentWorkV0,
+	OrchestrationCommandRecordConcurrencyGateV0,
+	OrchestrationCommandRecordQualityGateV0,
+	OrchestrationCommandRegisterPhaseArtifactV0,
+	OrchestrationCommandRegisterDeliveryV0,
+	OrchestrationCommandRequestReviewV0,
+	OrchestrationCommandAcceptReviewV0,
+	OrchestrationCommandRecordReviewResultV0,
+	OrchestrationCommandRequestReworkV0,
+	OrchestrationCommandRecordReplanDecisionV0,
+	OrchestrationCommandCloseTaskV0,
+	OrchestrationCommandRegisterFinalValidationV0,
+	OrchestrationCommandCloseRunV0,
+}
+
+var orchestrationEventTypeCatalogV0 = []string{
+	OrchestrationEventRunStartedV0,
+	OrchestrationEventPhaseOpenedV0,
+	OrchestrationEventPhaseClosedV0,
+	OrchestrationEventRunBlockedV0,
+	OrchestrationEventDirectorQuestionRaisedV0,
+	OrchestrationEventDirectorQuestionAnsweredV0,
+	OrchestrationEventBrainstormRequestedV0,
+	OrchestrationEventVoteRequestedV0,
+	OrchestrationEventArchitectureDecisionAcceptedV0,
+	OrchestrationEventFunctionContractPublishedV0,
+	OrchestrationEventMicrotaskCreatedV0,
+	OrchestrationEventCapacityRequestedV0,
+	OrchestrationEventCapacityDecidedV0,
+	OrchestrationEventAgentRequestedV0,
+	OrchestrationEventAgentStartedV0,
+	OrchestrationEventAgentFailedV0,
+	OrchestrationEventAgentLeaseExpiredV0,
+	OrchestrationEventAgentStopRequestedV0,
+	OrchestrationEventAgentStopConfirmedV0,
+	OrchestrationEventAgentWorkAssessedV0,
+	OrchestrationEventConcurrencyGateRecordedV0,
+	OrchestrationEventQualityGateRecordedV0,
+	OrchestrationEventPhaseArtifactRegisteredV0,
+	OrchestrationEventDeliveryRegisteredV0,
+	OrchestrationEventReviewRequestedV0,
+	OrchestrationEventReviewAcceptedV0,
+	OrchestrationEventReviewResultRecordedV0,
+	OrchestrationEventReworkRequestedV0,
+	OrchestrationEventReplanDecisionRecordedV0,
+	OrchestrationEventTaskClosedV0,
+	OrchestrationEventFinalValidationRegisteredV0,
+	OrchestrationEventRunClosedV0,
+}

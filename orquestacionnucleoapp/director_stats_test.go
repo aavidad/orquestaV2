@@ -1,0 +1,284 @@
+package orquestacionnucleoapp
+
+import (
+	"context"
+	"testing"
+
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
+)
+
+func TestBuildDirectorRunStatsV0ResumeRunYAgentes(t *testing.T) {
+	run := directorStatsRunForTestV0(t)
+	stats := BuildDirectorRunStatsV0(run)
+
+	if stats.SchemaVersion != DirectorRunStatsSchemaVersionV0 ||
+		stats.RunRef != run.RunID ||
+		stats.CurrentPhase != string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0) {
+		t.Fatalf("stats base=%+v", stats)
+	}
+	if stats.Counts.TasksTotal != 3 ||
+		stats.Counts.TasksClosed != 1 ||
+		stats.Counts.TasksOpen != 2 ||
+		stats.Counts.AgentsRequested != 3 ||
+		stats.Counts.AgentsStarted != 2 ||
+		stats.Counts.AgentsInFlight != 1 ||
+		stats.Counts.AgentsControlMissing != 0 {
+		t.Fatalf("counts=%+v", stats.Counts)
+	}
+	if len(stats.Refs.OpenTasks) != 2 ||
+		!containsNucleoRefV0(stats.Refs.OpenTasks, "task-ref-stats-001") ||
+		!containsNucleoRefV0(stats.Refs.OpenTasks, "task-ref-stats-003") {
+		t.Fatalf("refs=%+v", stats.Refs)
+	}
+	if len(stats.Phases) == 0 || len(stats.Agents) != 3 {
+		t.Fatalf("phases=%+v agents=%+v", stats.Phases, stats.Agents)
+	}
+	running := findDirectorAgentStatsForTestV0(t, stats, "agent-ref-stats-001")
+	if running.Status != DirectorAgentStatusRunningV0 ||
+		running.ControlState != DirectorAgentControlStateNotLoadedV0 ||
+		running.NeedsAttention {
+		t.Fatalf("running agent=%+v", running)
+	}
+}
+
+func TestBuildDirectorRunStatsV0ExponeCierreBloqueadoPorHitosGenericos(t *testing.T) {
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-closure-blocked-001")
+	run.Tasks = []string{"task-ref-closure-001"}
+	stats := BuildDirectorRunStatsV0(run)
+
+	if stats.Closure.Status != DirectorClosureStatusBlockedV0 ||
+		!stats.Closure.Blocked ||
+		stats.Closure.Ready ||
+		stats.Closure.Closed {
+		t.Fatalf("closure=%+v", stats.Closure)
+	}
+	for _, reason := range []string{
+		DirectorClosureBlockedByContratosV0,
+		DirectorClosureBlockedByProgramacionEntregasV0,
+		DirectorClosureBlockedByRevisionFinalV0,
+		DirectorClosureBlockedByValidacionFinalV0,
+		DirectorClosureBlockedByFaseCierreV0,
+	} {
+		if !containsNucleoRefV0(stats.Closure.BlockedBy, reason) {
+			t.Fatalf("blocked_by=%+v, falta %s", stats.Closure.BlockedBy, reason)
+		}
+	}
+}
+
+func TestBuildDirectorRunStatsV0ExponeCierreReadyYCerrado(t *testing.T) {
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-closure-ready-001")
+	run.Tasks = []string{"task-ref-closure-ready-001"}
+	run.ClosedTasks = []string{"task-ref-closure-ready-001"}
+	run.FunctionContracts = []string{"contract-ref-closure-ready-001"}
+	run.Deliveries = []string{"delivery-ref-closure-ready-001"}
+	run.AcceptedReviews = []string{"accepted-review-ref-closure-ready-001"}
+	run.Validations = []string{"validation-ref-closure-ready-001"}
+	run.CurrentPhase = orquestacoreworkflow.OrchestrationPhaseCierreV0
+	markDirectorStatsPhaseForTestV0(&run, orquestacoreworkflow.OrchestrationPhaseCierreV0, orquestacoreworkflow.OrchestrationPhaseStatusActiveV0)
+
+	stats := BuildDirectorRunStatsV0(run)
+	if stats.Closure.Status != DirectorClosureStatusReadyV0 ||
+		!stats.Closure.Ready ||
+		stats.Closure.Blocked ||
+		len(stats.Closure.BlockedBy) != 0 {
+		t.Fatalf("closure ready=%+v", stats.Closure)
+	}
+
+	run.Status = orquestacoreworkflow.OrchestrationRunStatusClosedV0
+	run.Closures = []string{"closure-ref-ready-001"}
+	closed := BuildDirectorRunStatsV0(run)
+	if closed.Closure.Status != DirectorClosureStatusClosedV0 ||
+		!closed.Closure.Closed ||
+		closed.Closure.Blocked ||
+		closed.Closure.Ready {
+		t.Fatalf("closure closed=%+v", closed.Closure)
+	}
+}
+
+func TestBuildDirectorRunStatsWithProcessRegistryV0EnriqueceControl(t *testing.T) {
+	run := directorStatsRunForTestV0(t)
+	registry := NewInMemoryAgentProcessRegistryV0()
+	if err := registry.RecordAgentProcessV0(context.Background(), AgentProcessRecordV0{
+		RunID:          run.RunID,
+		AgentRequestID: "agent-ref-stats-001",
+		ProcessRef:     "process-ref-stats-001",
+		SessionRef:     "session-ref-stats-001",
+		LaunchRef:      "launch-ref-stats-001",
+		ReadinessRef:   "readiness-ref-stats-001",
+		EvidenceRefs:   []string{"evidence-ref-stats-process-001"},
+	}); err != nil {
+		t.Fatalf("record process: %v", err)
+	}
+
+	stats := BuildDirectorRunStatsWithProcessRegistryV0(context.Background(), run, registry)
+	agent := findDirectorAgentStatsForTestV0(t, stats, "agent-ref-stats-001")
+	if !agent.ControlRegistered ||
+		agent.Process == nil ||
+		agent.Process.SessionRef != "session-ref-stats-001" ||
+		!agent.CanStop ||
+		stats.Counts.AgentsControlMissing != 0 ||
+		stats.Counts.AgentsControlRegistered != 1 {
+		t.Fatalf("agent=%+v counts=%+v", agent, stats.Counts)
+	}
+}
+
+func TestBuildDirectorRunStatsWithObservationsV0ExponeProgresoPorAgenteYTarea(t *testing.T) {
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-progress-001")
+	run.Tasks = []string{"task-ref-progress-001", "task-ref-progress-002", "task-ref-progress-003"}
+	run.ClosedTasks = []string{"task-ref-progress-003"}
+	run.Agents = []string{"agent-ref-progress-001", "agent-ref-progress-002", "agent-ref-progress-003"}
+	run.StartedAgents = []string{"agent-ref-progress-001", "agent-ref-progress-002", "agent-ref-progress-003"}
+
+	stats := BuildDirectorRunStatsWithObservationsV0(run, []AgentProgressObservationV0{
+		directorStatsProgressObservationForTestV0(
+			run.RunID,
+			"agent-ref-progress-001",
+			"task-ref-progress-001",
+			orquestaruntime.AgentProgressingV0,
+		),
+		directorStatsProgressObservationForTestV0(
+			run.RunID,
+			"agent-ref-progress-002",
+			"task-ref-progress-002",
+			orquestaruntime.AgentStalledV0,
+		),
+	}, nil)
+
+	if stats.Progress.SourceStatus != DirectorProgressSourceLoadedV0 ||
+		stats.Progress.PercentComplete != 33 ||
+		stats.Progress.TasksObserved != 2 ||
+		stats.Progress.ProgressingAgents != 1 ||
+		stats.Progress.StalledAgents != 1 ||
+		!containsNucleoRefV0(stats.Progress.NoSignalAgentRefs, "agent-ref-progress-003") {
+		t.Fatalf("progress=%+v", stats.Progress)
+	}
+	agent := findDirectorAgentStatsForTestV0(t, stats, "agent-ref-progress-002")
+	if agent.LastProgress == nil ||
+		agent.LastProgress.Status != string(orquestaruntime.AgentStalledV0) ||
+		!agent.NeedsAttention {
+		t.Fatalf("agent=%+v", agent)
+	}
+	task := findDirectorTaskProgressForTestV0(t, stats.Progress, "task-ref-progress-002")
+	if task.Status != DirectorTaskProgressStalledV0 ||
+		task.AgentRequestID != "agent-ref-progress-002" {
+		t.Fatalf("task=%+v", task)
+	}
+}
+
+func TestBuildAutonomousDirectorLoopStatsV0IncluyeDecisionYLoop(t *testing.T) {
+	run := directorStatsRunForTestV0(t)
+	decision := AutonomousDirectorDecisionV0{
+		TeamSize:             3,
+		MaxParallelAgents:    2,
+		RecommendedCapacity:  orquestacoreworkflow.OrchestrationCapacityHighV0,
+		MaxCommandsPerCycle:  6,
+		MaxOutboxPerCycle:    2,
+		MaxBursts:            4,
+		MaxStepsPerBurst:     3,
+		MaxDispatchesPerWait: 2,
+	}
+	stats := BuildAutonomousDirectorLoopStatsV0(decision, ProgressiveLoopResultV0{
+		Status:             ProgressiveLoopStatusWaitExternalV0,
+		Run:                run,
+		TotalExecutedSteps: 2,
+		PendingOutboxCount: 1,
+	})
+	if stats.SchemaVersion != DirectorLoopStatsSchemaVersionV0 ||
+		stats.Decision.TeamSize != 3 ||
+		stats.Loop.Status != string(ProgressiveLoopStatusWaitExternalV0) ||
+		stats.Loop.TotalExecutedSteps != 2 ||
+		stats.Run.Counts.AgentsInFlight != 1 {
+		t.Fatalf("stats=%+v", stats)
+	}
+}
+
+func directorStatsProgressObservationForTestV0(
+	runRef string,
+	agentRef string,
+	taskRef string,
+	status orquestaruntime.AgentProgressStatusV0,
+) AgentProgressObservationV0 {
+	return AgentProgressObservationV0{
+		Report: orquestaruntime.AgentProgressReportV0{
+			ReportID:            "agent-progress-report-ref-" + agentRef,
+			RunID:               runRef,
+			AgentRequestID:      agentRef,
+			Status:              status,
+			NoProgressTicks:     2,
+			RepeatedActionCount: 1,
+			Summary:             "Progreso compacto observado.",
+			EvidenceRefs:        []string{"evidence-ref-progress-" + agentRef},
+		},
+		TaskRef:      taskRef,
+		EvidenceRefs: []string{"evidence-ref-observation-" + agentRef},
+	}
+}
+
+func directorStatsRunForTestV0(
+	t *testing.T,
+) orquestacoreworkflow.OrchestrationRunV0 {
+	t.Helper()
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-stats-001")
+	run.Tasks = []string{"task-ref-stats-001", "task-ref-stats-002", "task-ref-stats-003"}
+	run.ClosedTasks = []string{"task-ref-stats-002"}
+	run.CapacityRequests = []string{"capacity-ref-stats-001"}
+	run.CapacityDecisions = []string{"capacity-ref-stats-001"}
+	run.Agents = []string{"agent-ref-stats-001", "agent-ref-stats-002", "agent-ref-stats-003"}
+	run.StartedAgents = []string{"agent-ref-stats-001", "agent-ref-stats-002"}
+	run.FailedAgents = []string{"agent-ref-stats-003"}
+	run.StoppedAgents = []string{"agent-ref-stats-002"}
+	run.ConfirmedStoppedAgents = []string{"agent-ref-stats-002"}
+	run.Deliveries = []string{"delivery-ref-stats-001"}
+	run.Reviews = []string{"review-ref-stats-001"}
+	run.ReplanDecisions = []string{"replan-ref-stats-001"}
+	run.DirectorQuestions = []string{"question-ref-stats-001"}
+	return run
+}
+
+func findDirectorAgentStatsForTestV0(
+	t *testing.T,
+	stats DirectorRunStatsV0,
+	agentRef string,
+) DirectorAgentStatsV0 {
+	t.Helper()
+	for _, agent := range stats.Agents {
+		if agent.AgentRequestID == agentRef {
+			return agent
+		}
+	}
+	t.Fatalf("agent no encontrado: %s en %+v", agentRef, stats.Agents)
+	return DirectorAgentStatsV0{}
+}
+
+func findDirectorTaskProgressForTestV0(
+	t *testing.T,
+	progress DirectorProgressStatsV0,
+	taskRef string,
+) DirectorTaskProgressV0 {
+	t.Helper()
+	for _, task := range progress.Tasks {
+		if task.TaskRef == taskRef {
+			return task
+		}
+	}
+	t.Fatalf("task no encontrada: %s en %+v", taskRef, progress.Tasks)
+	return DirectorTaskProgressV0{}
+}
+
+func markDirectorStatsPhaseForTestV0(
+	run *orquestacoreworkflow.OrchestrationRunV0,
+	phaseID orquestacoreworkflow.OrchestrationPhaseIDV0,
+	status orquestacoreworkflow.OrchestrationPhaseStatusV0,
+) {
+	for index := range run.Phases {
+		if run.Phases[index].ID == phaseID {
+			run.Phases[index].Status = status
+			return
+		}
+	}
+	run.Phases = append(run.Phases, orquestacoreworkflow.OrchestrationPhaseV0{
+		ID:     phaseID,
+		Status: status,
+	})
+}

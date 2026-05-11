@@ -1,0 +1,368 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://orquesta.local/orquesta-runtime/schemas/runtime_launch_request_v0.schema.json",
+  "title": "RuntimeLaunchRequestV0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "correlation_id",
+    "idempotency_key",
+    "requested_at",
+    "source",
+    "locale",
+    "launch_mode",
+    "task",
+    "function_contract",
+    "capacity_decision",
+    "runtime_binding",
+    "evidence_refs",
+    "delivery",
+    "safety"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "runtime_launch_request.v0"
+    },
+    "request_id": {
+      "$ref": "#/definitions/opaque_ref"
+    },
+    "correlation_id": {
+      "$ref": "#/definitions/opaque_ref"
+    },
+    "idempotency_key": {
+      "$ref": "#/definitions/opaque_ref"
+    },
+    "requested_at": {
+      "$ref": "#/definitions/utc_instant"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "module",
+        "adapter_ref"
+      ],
+      "properties": {
+        "module": {
+          "const": "orquesta-core"
+        },
+        "adapter_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        }
+      }
+    },
+    "locale": {
+      "$ref": "#/definitions/locale"
+    },
+    "launch_mode": {
+      "const": "new_session"
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_ref",
+        "priority"
+      ],
+      "properties": {
+        "task_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "project_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "phase_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "low",
+            "normal",
+            "high",
+            "critical"
+          ]
+        }
+      }
+    },
+    "function_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_contract",
+        "contract_ref",
+        "contract_version",
+        "state",
+        "titulo",
+        "objetivo",
+        "archivo_objetivo",
+        "simbolo_objetivo",
+        "write_set",
+        "tests_obligatorios",
+        "criterio_cierre"
+      ],
+      "properties": {
+        "source_contract": {
+          "const": "FunctionContractV0"
+        },
+        "contract_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "contract_version": {
+          "const": "v0"
+        },
+        "state": {
+          "const": "activa"
+        },
+        "titulo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "objetivo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "archivo_objetivo": {
+          "$ref": "#/definitions/relative_path"
+        },
+        "simbolo_objetivo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "write_set": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/relative_path"
+          },
+          "uniqueItems": true
+        },
+        "tests_obligatorios": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "criterio_cierre": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      }
+    },
+    "capacity_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision_ref",
+        "contract_version",
+        "nivel_capacidad",
+        "reasoning_effort",
+        "pool_ref",
+        "model_ref",
+        "quota_ref"
+      ],
+      "properties": {
+        "decision_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "contract_version": {
+          "const": "v0"
+        },
+        "nivel_capacidad": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
+        "reasoning_effort": {
+          "type": "string",
+          "enum": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
+        "pool_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "model_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "quota_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        }
+      }
+    },
+    "runtime_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "logical_agent_ref",
+        "runtime_kind",
+        "connector_ref",
+        "provider_ref",
+        "model_ref",
+        "home_ref",
+        "credential_kind",
+        "credential_ref"
+      ],
+      "properties": {
+        "logical_agent_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "runtime_kind": {
+          "type": "string",
+          "enum": [
+            "cli",
+            "api",
+            "local_runtime",
+            "browser",
+            "mobile_runtime",
+            "remote_runtime",
+            "other"
+          ]
+        },
+        "connector_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "provider_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "model_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "home_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "credential_kind": {
+          "type": "string",
+          "enum": [
+            "oauth_ref",
+            "api_key_ref",
+            "local_profile_ref",
+            "service_ref",
+            "none"
+          ]
+        },
+        "credential_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        }
+      }
+    },
+    "evidence_refs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mailbox_ref",
+        "ack_ref",
+        "readiness_ref"
+      ],
+      "properties": {
+        "mailbox_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "ack_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "readiness_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "checkpoint_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        }
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mailbox_protocol",
+        "ack_required",
+        "readiness_timeout_seconds",
+        "max_startup_seconds"
+      ],
+      "properties": {
+        "mailbox_protocol": {
+          "const": "orquesta_mailbox_ref.v0"
+        },
+        "ack_required": {
+          "const": true
+        },
+        "readiness_timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
+        "max_startup_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "secrets_policy",
+        "home_paths_policy",
+        "provider_policy",
+        "write_set_policy"
+      ],
+      "properties": {
+        "secrets_policy": {
+          "const": "references_only"
+        },
+        "home_paths_policy": {
+          "const": "opaque_refs_only"
+        },
+        "provider_policy": {
+          "const": "opaque_refs_only"
+        },
+        "write_set_policy": {
+          "const": "closed"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "opaque_ref": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*://)(?!.*(^|/)\\.\\.(/|$))(?!.*\\$HOME)(?!.*~)[A-Za-z0-9._+={}/,@-]+$"
+    },
+    "locale": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    "utc_instant": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    }
+  }
+}

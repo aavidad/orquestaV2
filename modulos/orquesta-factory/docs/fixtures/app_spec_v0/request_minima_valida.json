@@ -1,0 +1,19 @@
+{
+  "case": "request_minima_valida",
+  "request": {
+    "schema_version": "app_spec_request.v0",
+    "request_id": "req-fty-001-minima",
+    "source": "orquesta-web",
+    "locale": "es-ES",
+    "nombre": "Panel de reservas",
+    "objetivo": "Permitir que un equipo gestione solicitudes de reserva desde una interfaz web.",
+    "tipo_app": "web"
+  },
+  "expected": {
+    "valid": true,
+    "public_error": null,
+    "notes": [
+      "El caso de uso debe aplicar defaults explicitos para arquitectura hexagonal, i18n y documentacion."
+    ]
+  }
+}

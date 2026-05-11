@@ -1,0 +1,72 @@
+{
+  "schema_version": "runtime_launch_request.v0",
+  "request_id": "req-runtime-003-home-no-opaco",
+  "correlation_id": "corr-runtime-003",
+  "idempotency_key": "idem-runtime-003",
+  "requested_at": "2026-05-04T10:10:00Z",
+  "source": {
+    "module": "orquesta-core",
+    "adapter_ref": "core-launch-usecase-v0"
+  },
+  "locale": "es-ES",
+  "launch_mode": "new_session",
+  "task": {
+    "task_ref": "task-ref-003",
+    "priority": "normal"
+  },
+  "function_contract": {
+    "source_contract": "FunctionContractV0",
+    "contract_ref": "function-contract-ref-003",
+    "contract_version": "v0",
+    "state": "activa",
+    "titulo": "Contrato con HOME no opaco",
+    "objetivo": "Ejercer el error publico ruta_home_real_detectada sin usar una ruta real de usuario.",
+    "archivo_objetivo": "modulos/orquesta-runtime/docs/contratos.md",
+    "simbolo_objetivo": "RuntimeLaunchRequestV0",
+    "write_set": [
+      "modulos/orquesta-runtime/docs/contratos.md"
+    ],
+    "tests_obligatorios": [
+      "npx --yes ajv-cli validate --spec=draft7 -s docs/schemas/runtime_launch_request_v0.schema.json -d docs/fixtures/runtime_launch_request_v0/request_home_ref_no_opaca_invalida.json"
+    ],
+    "criterio_cierre": [
+      "Debe fallar porque home_ref no es una referencia opaca."
+    ]
+  },
+  "capacity_decision": {
+    "decision_ref": "capacity-decision-ref-003",
+    "contract_version": "v0",
+    "nivel_capacidad": "medium",
+    "reasoning_effort": "medium",
+    "pool_ref": "pool-ref-remoto-a",
+    "model_ref": "model-ref-medium-a",
+    "quota_ref": "quota-ref-003"
+  },
+  "runtime_binding": {
+    "logical_agent_ref": "logical-agent-ref-003",
+    "runtime_kind": "cli",
+    "connector_ref": "connector-ref-cli-a",
+    "provider_ref": "provider-ref-remoto-a",
+    "model_ref": "model-ref-medium-a",
+    "home_ref": "~runtime-home",
+    "credential_kind": "oauth_ref",
+    "credential_ref": "credential-ref-oauth-a"
+  },
+  "evidence_refs": {
+    "mailbox_ref": "mailbox-ref-003",
+    "ack_ref": "ack-ref-003",
+    "readiness_ref": "readiness-ref-003"
+  },
+  "delivery": {
+    "mailbox_protocol": "orquesta_mailbox_ref.v0",
+    "ack_required": true,
+    "readiness_timeout_seconds": 120,
+    "max_startup_seconds": 180
+  },
+  "safety": {
+    "secrets_policy": "references_only",
+    "home_paths_policy": "opaque_refs_only",
+    "provider_policy": "opaque_refs_only",
+    "write_set_policy": "closed"
+  }
+}

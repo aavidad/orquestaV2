@@ -1,0 +1,26 @@
+{
+  "case": "request_i18n_invalida",
+  "request": {
+    "schema_version": "app_spec_request.v0",
+    "request_id": "req-fty-002-i18n",
+    "source": "orquesta-web",
+    "locale": "es-ES",
+    "nombre": "Panel de reservas",
+    "objetivo": "Permitir que un equipo gestione solicitudes de reserva desde una interfaz web.",
+    "tipo_app": "web",
+    "i18n": {
+      "enabled": false,
+      "default_locale": "es-ES",
+      "locales": [
+        "es-ES"
+      ]
+    }
+  },
+  "expected": {
+    "valid": false,
+    "public_error": "opcion_incompatible",
+    "notes": [
+      "i18n.enabled=false requiere i18n.justificacion."
+    ]
+  }
+}

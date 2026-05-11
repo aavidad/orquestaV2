@@ -1,0 +1,84 @@
+{
+  "schema_version": "runtime_launch_request.v0",
+  "request_id": "req-runtime-001-minima",
+  "correlation_id": "corr-runtime-001",
+  "idempotency_key": "idem-runtime-001",
+  "requested_at": "2026-05-04T10:00:00Z",
+  "source": {
+    "module": "orquesta-core",
+    "adapter_ref": "core-launch-usecase-v0"
+  },
+  "locale": "es-ES",
+  "launch_mode": "new_session",
+  "task": {
+    "task_ref": "task-ref-001",
+    "project_ref": "project-ref-001",
+    "phase_ref": "phase-ref-implementacion",
+    "priority": "normal"
+  },
+  "function_contract": {
+    "source_contract": "FunctionContractV0",
+    "contract_ref": "function-contract-ref-001",
+    "contract_version": "v0",
+    "state": "activa",
+    "titulo": "Definir contrato local RuntimeLaunchRequest v0",
+    "objetivo": "Documentar un contrato validable sin arrancar runtime real.",
+    "archivo_objetivo": "modulos/orquesta-runtime/docs/contratos.md",
+    "simbolo_objetivo": "RuntimeLaunchRequestV0",
+    "write_set": [
+      "modulos/orquesta-runtime/docs/contratos.md",
+      "modulos/orquesta-runtime/docs/tareas.md",
+      "modulos/orquesta-runtime/docs/pruebas.md",
+      "modulos/orquesta-runtime/docs/decisiones.md",
+      "modulos/orquesta-runtime/docs/schemas/runtime_launch_request_v0.schema.json",
+      "modulos/orquesta-runtime/docs/fixtures/runtime_launch_request_v0/request_minima_valida.json",
+      "modulos/orquesta-runtime/docs/fixtures/runtime_launch_request_v0/request_sin_capacity_invalida.json",
+      "modulos/orquesta-runtime/docs/fixtures/runtime_launch_request_v0/request_home_ref_no_opaca_invalida.json"
+    ],
+    "tests_obligatorios": [
+      "jq empty docs/schemas/runtime_launch_request_v0.schema.json",
+      "npx --yes ajv-cli validate --spec=draft7 -s docs/schemas/runtime_launch_request_v0.schema.json -d docs/fixtures/runtime_launch_request_v0/request_minima_valida.json"
+    ],
+    "criterio_cierre": [
+      "El schema y el fixture positivo validan localmente.",
+      "Los fixtures negativos fallan con errores publicos documentados."
+    ]
+  },
+  "capacity_decision": {
+    "decision_ref": "capacity-decision-ref-001",
+    "contract_version": "v0",
+    "nivel_capacidad": "medium",
+    "reasoning_effort": "medium",
+    "pool_ref": "pool-ref-remoto-a",
+    "model_ref": "model-ref-medium-a",
+    "quota_ref": "quota-ref-001"
+  },
+  "runtime_binding": {
+    "logical_agent_ref": "logical-agent-ref-001",
+    "runtime_kind": "cli",
+    "connector_ref": "connector-ref-cli-a",
+    "provider_ref": "provider-ref-remoto-a",
+    "model_ref": "model-ref-medium-a",
+    "home_ref": "home-ref-runtime-a",
+    "credential_kind": "oauth_ref",
+    "credential_ref": "credential-ref-oauth-a"
+  },
+  "evidence_refs": {
+    "mailbox_ref": "mailbox-ref-001",
+    "ack_ref": "ack-ref-001",
+    "readiness_ref": "readiness-ref-001",
+    "checkpoint_ref": "checkpoint-ref-001"
+  },
+  "delivery": {
+    "mailbox_protocol": "orquesta_mailbox_ref.v0",
+    "ack_required": true,
+    "readiness_timeout_seconds": 120,
+    "max_startup_seconds": 180
+  },
+  "safety": {
+    "secrets_policy": "references_only",
+    "home_paths_policy": "opaque_refs_only",
+    "provider_policy": "opaque_refs_only",
+    "write_set_policy": "closed"
+  }
+}

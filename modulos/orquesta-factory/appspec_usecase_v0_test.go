@@ -1,0 +1,205 @@
+package orquestafactory
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+)
+
+func TestSolicitarNuevaAppV0AppliesDefaults(t *testing.T) {
+	now := time.Date(2026, 5, 4, 10, 30, 0, 0, time.UTC)
+	spec, issues := SolicitarNuevaAppV0(validMinimalRequestV0(), now)
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %+v", issues)
+	}
+	if spec.SchemaVersion != AppSpecSchemaV0 {
+		t.Fatalf("schema=%q, want %q", spec.SchemaVersion, AppSpecSchemaV0)
+	}
+	if spec.SpecID != "spec-panel-de-reservas-req-fty-003-minima" {
+		t.Fatalf("spec id=%q", spec.SpecID)
+	}
+	if spec.CreatedAt != "2026-05-04T10:30:00Z" {
+		t.Fatalf("created_at=%q", spec.CreatedAt)
+	}
+	if spec.App.Slug != "panel-de-reservas" {
+		t.Fatalf("slug=%q", spec.App.Slug)
+	}
+	if spec.Architecture.Patron != "hexagonal" {
+		t.Fatalf("architecture=%q", spec.Architecture.Patron)
+	}
+	if !spec.I18N.Enabled || spec.I18N.DefaultLocale != "es-ES" {
+		t.Fatalf("i18n=%+v", spec.I18N)
+	}
+	if !spec.Docs.User || !spec.Docs.Development || !spec.Docs.Systems {
+		t.Fatalf("docs defaults not applied: %+v", spec.Docs)
+	}
+	if spec.Deploy.Target != "sin_preferencia" {
+		t.Fatalf("deploy target=%q", spec.Deploy.Target)
+	}
+	if spec.RequestKind != RequestKindCrearAppCompletaV0 || spec.ExecutionMode != ExecutionModeNormalV0 {
+		t.Fatalf("request policy: kind=%q mode=%q", spec.RequestKind, spec.ExecutionMode)
+	}
+	if spec.Validation.Estado != "valida" {
+		t.Fatalf("validation=%+v", spec.Validation)
+	}
+	if len(spec.DefaultsApplied) == 0 {
+		t.Fatalf("expected defaults_applied")
+	}
+}
+
+func TestSolicitarNuevaAppV0HonorsExplicitOptions(t *testing.T) {
+	no := false
+	req := validMinimalRequestV0()
+	req.Datos = DatosRequestV0{
+		DBRequired:         true,
+		NecesidadFuncional: "Guardar reservas y cambios de estado.",
+		Sensibilidad:       "interna",
+		Retencion:          "12 meses",
+	}
+	req.Calidad.Observabilidad = &no
+	req.Documentacion.Usuario = &no
+	req.Agentes.RevisionHumana = &no
+	req.Agentes.Autonomia = "alta"
+	req.RequestKind = RequestKindDocumentarAppV0
+	req.ExecutionMode = ExecutionModeDebugV0
+
+	spec, issues := SolicitarNuevaAppV0(req, time.Date(2026, 5, 4, 11, 0, 0, 0, time.UTC))
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %+v", issues)
+	}
+	if !spec.Data.PersistenceRequired || spec.Data.Connector != "persistence" {
+		t.Fatalf("data=%+v", spec.Data)
+	}
+	if len(spec.Connectors.Required) != 1 || spec.Connectors.Required[0].Nombre != "persistence" {
+		t.Fatalf("required connectors=%+v", spec.Connectors.Required)
+	}
+	if spec.Quality.Observability {
+		t.Fatalf("observability should honor explicit false")
+	}
+	if spec.Docs.User {
+		t.Fatalf("docs user should honor explicit false")
+	}
+	if spec.AgentPreferences.HumanReview {
+		t.Fatalf("human review should honor explicit false")
+	}
+	if spec.AgentPreferences.Autonomy != "alta" {
+		t.Fatalf("autonomy=%q", spec.AgentPreferences.Autonomy)
+	}
+	if spec.RequestKind != RequestKindDocumentarAppV0 || spec.ExecutionMode != ExecutionModeDebugV0 {
+		t.Fatalf("request policy not honored: kind=%q mode=%q", spec.RequestKind, spec.ExecutionMode)
+	}
+}
+
+func TestSolicitarNuevaAppV0ReturnsValidationIssues(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.Nombre = ""
+	_, issues := SolicitarNuevaAppV0(req, time.Time{})
+	if !hasIssueCodeV0(issues, ErrAppSpecInvalida) {
+		t.Fatalf("expected validation issue, got %+v", issues)
+	}
+}
+
+func TestSolicitarNuevaAppV0BuildsASCIISlug(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.Nombre = "Aplicaci\u00f3n de Tesoreria"
+	spec, issues := SolicitarNuevaAppV0(req, time.Date(2026, 5, 4, 11, 30, 0, 0, time.UTC))
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %+v", issues)
+	}
+	if spec.App.Slug != "aplicacion-de-tesoreria" {
+		t.Fatalf("slug=%q", spec.App.Slug)
+	}
+}
+
+func TestDecodeAppSpecRequestV0AcceptsSpanishJSONTags(t *testing.T) {
+	raw := []byte(`{
+		"schema_version":"app_spec_request.v0",
+		"request_id":"req-fty-004-tags",
+		"source":"orquesta-web",
+		"locale":"es-ES",
+		"nombre":"Panel de reservas",
+		"objetivo":"Gestionar reservas.",
+		"tipo_app":"web",
+		"calidad":{"accesibilidad":"wcag_aa","observabilidad":false},
+		"documentacion":{"usuario":false,"desarrollo":true,"sistemas":true},
+		"agentes":{"revision_humana":false,"autonomia":"alta","preferencias":["review externo"]}
+	}`)
+	req, issues := DecodeAppSpecRequestV0(raw)
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %+v", issues)
+	}
+	if req.Documentacion.Usuario == nil || *req.Documentacion.Usuario {
+		t.Fatalf("documentacion.usuario not decoded: %+v", req.Documentacion)
+	}
+	if req.Agentes.RevisionHumana == nil || *req.Agentes.RevisionHumana {
+		t.Fatalf("agentes.revision_humana not decoded: %+v", req.Agentes)
+	}
+	if req.Calidad.Observabilidad == nil || *req.Calidad.Observabilidad {
+		t.Fatalf("calidad.observabilidad not decoded: %+v", req.Calidad)
+	}
+}
+
+func TestValidateAppSpecRequestV0RejectsUnsupportedDeployTarget(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.Deploy.Target = "mainframe"
+	issues := ValidateAppSpecRequestV0(req)
+	if !hasIssueCodeV0(issues, ErrTargetNoSoportado) {
+		t.Fatalf("expected %s, got %+v", ErrTargetNoSoportado, issues)
+	}
+}
+
+func TestValidateAppSpecRequestV0RejectsDirectConnectorProvider(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.Integraciones = []ConnectorRequestV0{{
+		Nombre:    "postgres",
+		Proposito: "Guardar datos",
+		Requerido: true,
+	}}
+	issues := ValidateAppSpecRequestV0(req)
+	if !hasIssueCodeV0(issues, ErrConectorRequeridoNoDisponible) {
+		t.Fatalf("expected %s, got %+v", ErrConectorRequeridoNoDisponible, issues)
+	}
+}
+
+func TestValidateAppSpecRequestV0RejectsUnsupportedRequestPolicy(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.RequestKind = "hacer_lo_que_sea"
+	req.ExecutionMode = "rapido"
+
+	issues := ValidateAppSpecRequestV0(req)
+
+	if !hasIssueFieldV0(issues, "request_kind") || !hasIssueFieldV0(issues, "execution_mode") {
+		t.Fatalf("expected request policy issues, got %+v", issues)
+	}
+}
+
+func TestAppSpecV0SerializesPublicIssueShape(t *testing.T) {
+	spec, issues := SolicitarNuevaAppV0(validMinimalRequestV0(), time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC))
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %+v", issues)
+	}
+	data, err := json.Marshal(spec)
+	if err != nil {
+		t.Fatalf("marshal spec: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("decode marshaled spec: %v", err)
+	}
+	if decoded["schema_version"] != AppSpecSchemaV0 {
+		t.Fatalf("schema_version missing from JSON: %s", data)
+	}
+	assertJSONArrayV0(t, decoded, "defaults_applied")
+	assertJSONArrayV0(t, decoded["validation"].(map[string]any), "warnings")
+	assertJSONArrayV0(t, decoded["validation"].(map[string]any), "errores")
+	assertJSONArrayV0(t, decoded["connectors"].(map[string]any), "required")
+	assertJSONArrayV0(t, decoded["connectors"].(map[string]any), "optional")
+	assertJSONArrayV0(t, decoded["app"].(map[string]any), "usuarios_objetivo")
+}
+
+func assertJSONArrayV0(t *testing.T, object map[string]any, key string) {
+	t.Helper()
+	if _, ok := object[key].([]any); !ok {
+		t.Fatalf("%s should be JSON array, got %#v", key, object[key])
+	}
+}

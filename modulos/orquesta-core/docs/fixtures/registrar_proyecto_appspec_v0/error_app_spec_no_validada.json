@@ -1,0 +1,60 @@
+{
+  "idempotency_key": "idem-core-fixture-002",
+  "app_spec": {
+    "schema_version": "app_spec.v0",
+    "spec_id": "spec-core-fixture-002",
+    "request_id": "req-core-fixture-002",
+    "created_at": "2026-05-04T12:30:00Z",
+    "locale": "es-ES",
+    "app": {
+      "nombre": "Panel de reservas",
+      "slug": "panel-de-reservas",
+      "objetivo": "Gestionar solicitudes de reserva.",
+      "tipo_app": "web",
+      "usuarios_objetivo": []
+    },
+    "validation": {
+      "estado": "provisional",
+      "warnings": [],
+      "errores": []
+    }
+  },
+  "app_spec_version": "v0",
+  "backlog": {
+    "schema_version": "backlog_inicial_propuesto.v0",
+    "spec_id": "spec-core-fixture-002",
+    "fases": [
+      {
+        "id": "discovery",
+        "nombre": "Descubrimiento",
+        "objetivo": "Cerrar alcance inicial.",
+        "orden": 10
+      }
+    ],
+    "microtareas": [
+      {
+        "id": "BLG-001",
+        "fase": "discovery",
+        "modulo_sugerido": "core",
+        "objetivo": "Definir contrato inicial.",
+        "write_set_previsto": [
+          "docs/contratos.md"
+        ],
+        "contrato": "AppSpecV0",
+        "validacion": "Contrato revisado sin adaptadores.",
+        "bloqueos": []
+      }
+    ],
+    "contratos_requeridos": [
+      "AppSpecV0",
+      "FunctionContract v0"
+    ],
+    "riesgos": [],
+    "preguntas_abiertas": []
+  },
+  "backlog_version": "v0",
+  "origen": "orquesta-factory",
+  "correlation_id": "corr-core-fixture-002",
+  "request_id": "req-core-fixture-002",
+  "solicitado_en": "2026-05-04T12:35:00Z"
+}
