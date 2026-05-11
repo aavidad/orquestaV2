@@ -48,6 +48,15 @@ func assessmentDecisionFromProgressStatusV0(input AgentProgressSupervisionInputV
 		return orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0,
 			orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
 			orquestacoreworkflow.AgentAssessmentSeverityCriticalV0
+	case orquestaruntime.AgentStoppedV0:
+		if !agentProgressStopAllowedV0(input) {
+			return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+				orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+				orquestacoreworkflow.AgentAssessmentSeverityHighV0
+		}
+		return orquestacoreworkflow.AgentAssessmentVerdictGarbageV0,
+			orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+			orquestacoreworkflow.AgentAssessmentSeverityHighV0
 	default:
 		return orquestacoreworkflow.AgentAssessmentVerdictAcceptableV0,
 			orquestacoreworkflow.AgentAssessmentActionContinueV0,
@@ -74,7 +83,7 @@ func assessmentSummaryFromProgressReportV0(report orquestaruntime.AgentProgressR
 	case orquestaruntime.AgentLoopDetectedV0:
 		return compactCounterSummaryV0("Bucle detectado; detener agente logico.", report)
 	case orquestaruntime.AgentStoppedV0:
-		return "Parada observada; continuar sin accion adicional."
+		return "Proceso detenido sin entrega; detener agente logico y replanificar."
 	default:
 		return "Progreso aceptable observado; continuar."
 	}

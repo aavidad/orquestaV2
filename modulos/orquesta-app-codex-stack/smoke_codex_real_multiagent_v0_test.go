@@ -66,7 +66,7 @@ func TestNuevaAppWebCodexStackRealMultiagentOptInV0(t *testing.T) {
 			t.Fatalf("ack no validado para %s: %v\n%s", descriptor.AgentRef, err, codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
 		}
 	}
-	drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+	if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
 		RunRef:               descriptors[0].RunID,
 		CorrelationID:        "corr-app-stack-real-multi-drain",
 		MaxBursts:            16,
@@ -75,8 +75,7 @@ func TestNuevaAppWebCodexStackRealMultiagentOptInV0(t *testing.T) {
 		MaxCommands:          20,
 		MaxOutboxPerCycle:    8,
 		MaxExternalWaits:     maxExternalWaits,
-	})
-	if err != nil {
+	}); err != nil {
 		t.Fatalf("DrainRunV0: %v\n%s", err, codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
 	}
 	run, err := stores.RunStore.LoadRunV0(ctx, descriptors[0].RunID)
@@ -98,37 +97,26 @@ func TestNuevaAppWebCodexStackRealMultiagentOptInV0(t *testing.T) {
 			codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir),
 		)
 	}
+	programmingDrain := codexStackRealSmokeDrainUntilProgrammingDeliveredV0(
+		t,
+		ctx,
+		stack,
+		stores,
+		descriptors[0].RunID,
+		cfg.RuntimeWorkDir,
+		maxExternalWaits,
+	)
+	run = programmingDrain.Run
+	allDescriptors = programmingDrain.Descriptors
 	programmingDescriptors := codexStackRealSmokeProgrammingReceiptDescriptorsV0(allDescriptors)
-	if err := codexStackRealSmokeWaitForDescriptorsAckV0(ctx, programmingDescriptors); err != nil {
-		t.Fatalf("ack programacion no validado: %v\n%s", err, codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
-	}
-	drain, err = stack.DrainRunV0(ctx, DrainRunRequestV0{
-		RunRef:               descriptors[0].RunID,
-		CorrelationID:        "corr-app-stack-real-programming-drain",
-		MaxBursts:            16,
-		MaxStepsPerBurst:     12,
-		MaxDispatchesPerWait: 8,
-		MaxCommands:          20,
-		MaxOutboxPerCycle:    8,
-		MaxExternalWaits:     maxExternalWaits,
-	})
-	if err != nil {
-		t.Fatalf("DrainRunV0 programacion: %v\n%s", err, codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
-	}
-	run, err = stores.RunStore.LoadRunV0(ctx, descriptors[0].RunID)
-	if err != nil {
-		t.Fatalf("LoadRunV0 tras programacion: %v", err)
-	}
-	allDescriptors = codexStackRealSmokeDescriptorsV0(t, stores.ReceiptStore)
-	programmingDescriptors = codexStackRealSmokeProgrammingReceiptDescriptorsV0(allDescriptors)
 	if !codexStackRealSmokeAllProgrammingDeliveriesRegisteredV0(run.Deliveries, programmingDescriptors) {
 		t.Fatalf(
 			"deliveries=%v programming=%v drain_status=%s attempts=%d waits=%d\n%s",
 			run.Deliveries,
 			codexStackRealSmokeProgrammingDescriptorsV0(allDescriptors),
-			drain.Status,
-			len(drain.Attempts),
-			len(drain.ExternalWaits),
+			programmingDrain.Drain.Status,
+			programmingDrain.Drain.Attempts,
+			programmingDrain.Drain.Waits,
 			codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir),
 		)
 	}
@@ -137,9 +125,9 @@ func TestNuevaAppWebCodexStackRealMultiagentOptInV0(t *testing.T) {
 		t.Fatalf(
 			"phase_artifacts=%v drain_status=%s attempts=%d waits=%d observations=%d phase=%s started=%v agents=%v descriptors=%v",
 			run.PhaseArtifacts,
-			drain.Status,
-			len(drain.Attempts),
-			len(drain.ExternalWaits),
+			programmingDrain.Drain.Status,
+			programmingDrain.Drain.Attempts,
+			programmingDrain.Drain.Waits,
 			len(observations),
 			run.CurrentPhase,
 			run.StartedAgents,

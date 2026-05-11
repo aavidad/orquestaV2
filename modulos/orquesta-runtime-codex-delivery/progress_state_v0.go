@@ -274,7 +274,8 @@ func validateCodexProgressReportMarkV0(mark CodexProgressReportMarkV0) error {
 		return err
 	}
 	switch mark.Status {
-	case orquestaruntime.AgentStalledV0,
+	case orquestaruntime.AgentProgressingV0,
+		orquestaruntime.AgentStalledV0,
 		orquestaruntime.AgentLoopDetectedV0,
 		orquestaruntime.AgentStoppedV0:
 		return nil

@@ -251,7 +251,8 @@ Alternativas:
     fallo de esperas largas sin diagnostico.
 Impacto: `CodexProgressObservationSourceV0` usa descriptors externos, registry
 de procesos y `CodexProgressStateStorePortV0`; solo emite `AgentProgressReportV0`
-cuando hay estancamiento real y evita repetir el mismo aviso.
+cuando hay estancamiento real y solo silencia avisos ya materializados en el
+run.
 Estado: aceptada.
 ```
 
@@ -269,5 +270,44 @@ Alternativas:
 Impacto: `FileCodexProgressStateStoreV0` persiste JSON versionado en directorio
 absoluto configurado por operador, recupera al recrear instancia y mantiene
 errores compactos sin filtrar rutas.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: Una lectura de progreso no consume una decision si el run no la ha
+materializado.
+Motivo: web/MCP/director pueden consultar progreso para estadisticas antes de
+que el scheduler procese el candidato. Si el source marca el aviso como emitido
+y luego lo silencia sin mirar el estado del run, una observacion pasiva puede
+dejar un agente real esperando indefinidamente.
+Alternativas:
+  - No deduplicar nunca: descartado porque puede generar ruido despues de que
+    el run ya refleje assessment, parada o confirmacion.
+  - Deduplicar solo por firma local: descartado porque el estado operacional del
+    conector no demuestra que el core haya aplicado la decision.
+Impacto: `CodexProgressObservationSourceV0` reemite stalled/loop/stopped hasta
+que `OrchestrationRunV0` contiene la evaluacion, parada, confirmacion o cierre
+equivalente. Una escalada posterior de stalled a loop no queda tapada por una
+pregunta previa al director.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: Un proceso Codex parado sin ACK se trata como decision de supervision
+inmediata.
+Motivo: un proceso que termina sin `agent_ack.json` no puede contarse como
+trabajo pendiente normal. En pruebas reales ocurrio por cuota externa agotada;
+Orquesta debe cerrar el agente logico o consultar al director, no seguir
+esperando ciclos largos.
+Alternativas:
+  - Esperar hasta timeout global: descartado porque reproduce el bucle de v1/v2.
+  - Convertirlo en entrega fallida generica: descartado porque mezcla fallo de
+    runtime con calidad del trabajo.
+Impacto: el reporte `AgentStoppedV0` incluye contexto compacto si detecta cuota
+en stderr, sin filtrar proveedor/modelo/HOME. El director decide `stop_agent`
+si la parada es segura; los agentes de direccion protegidos pueden preguntar al
+director, pero un proceso ya parado no queda protegido artificialmente.
 Estado: aceptada.
 ```

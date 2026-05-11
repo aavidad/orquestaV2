@@ -361,6 +361,34 @@ go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-director-ag
 
 Resultado 2026-05-11: `ok`.
 
+Pruebas locales 2026-05-11 de drenaje estricto y proceso parado sin ACK:
+
+```bash
+go test ./modulos/orquesta-app-codex-stack \
+  -run 'TestDrainRunV0TrasEntregaBootstrapLanzaFronteraDependiente|TestDrainRunV0ProcesoParadoSinACKNoQuedaEsperandoIndefinido|TestNuevaAppWebCodexStackRealMultiagentOptInV0' \
+  -count=1 -v
+```
+
+Resultado local sin smoke real: `ok` para frontera dependiente y proceso parado
+sin ACK. El smoke real estricto queda opt-in.
+
+Evidencia:
+
+- tras entregar bootstrap, Orquesta lanza en paralelo las tareas dependientes de
+  dominio, HTTP, web y documentacion;
+- si un runtime queda `stopped` sin ACK, el stack no deja agentes pendientes
+  indefinidos y proyecta assessment/parada/confirmacion;
+- el helper de smoke real ya no acepta como exito una app que solo haya
+  completado bootstrap.
+
+Intento real estricto 2026-05-11:
+
+- workdir: `/home/alberto/Trabajo/orquesta_smokes/stack_multiagent_real_app_strict_002`;
+- resultado: abortado manualmente tras detectar cuota externa agotada;
+- los procesos Codex iniciales devolvieron error de uso/cuota antes de ACK;
+- no quedaron procesos `codex exec` vivos asociados al smoke;
+- el hallazgo origino la regla de proceso parado sin ACK documentada arriba.
+
 Smoke real multiagente repetido el 2026-05-11 con app Go/API/web:
 
 - workdir: `/tmp/orquesta-smokes/multiagent-20260511143049/project`;

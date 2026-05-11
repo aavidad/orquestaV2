@@ -153,9 +153,9 @@ func TestBuildAgentProgressSupervisionV0SalidaSinDetallesProhibidos(t *testing.T
 		}
 	}
 	payload := decodeAssessAgentWorkPayloadV0(t, result.AssessCommand)
-	if payload.Verdict != orquestacoreworkflow.AgentAssessmentVerdictAcceptableV0 ||
-		payload.Action != orquestacoreworkflow.AgentAssessmentActionContinueV0 ||
-		payload.Severity != orquestacoreworkflow.AgentAssessmentSeverityLowV0 {
+	if payload.Verdict != orquestacoreworkflow.AgentAssessmentVerdictGarbageV0 ||
+		payload.Action != orquestacoreworkflow.AgentAssessmentActionStopAgentV0 ||
+		payload.Severity != orquestacoreworkflow.AgentAssessmentSeverityHighV0 {
 		t.Fatalf("payload stopped inesperado: %+v", payload)
 	}
 }

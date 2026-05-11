@@ -258,3 +258,24 @@ provider del nucleo sin filtrar paths ni logs y permite que el loop gestionado
 pare el proceso real registrado por `ProcessAgentStopperV0`. Tambien valida que
 un aviso `stalled` ya despachado al target `director` no bloquea una parada
 posterior si la evidencia empeora a bucle.
+
+Revalidacion 2026-05-11 de materializacion de progreso:
+
+```bash
+go test ./modulos/orquesta-runtime-codex-delivery \
+  -run 'TestCodexProgressObservationSourceV0|TestCodexProgressObservationV0StalledEscalaYParaPorBucle|TestCodexProgressReportWithProcessFailureContextV0' \
+  -count=1 -v
+```
+
+Resultado: `ok`.
+
+Evidencia anadida:
+
+- `TestCodexProgressObservationSourceV0ReemiteSiElRunNoHaMaterializadoDecision`
+  asegura que una lectura previa de progreso no roba el candidato al scheduler.
+- `TestCodexProgressObservationSourceV0ReportaProcesoParadoSinACKEnPrimerTick`
+  cubre proceso terminado sin ACK desde el primer tick.
+- `TestCodexProgressReportWithProcessFailureContextV0ClasificaCuotaSinFiltrarProveedor`
+  compacta cuota externa agotada sin exponer proveedor, modelo, HOME ni paths.
+- `TestCodexProgressObservationV0StalledEscalaYParaPorBucle` confirma que una
+  pregunta previa por stalled no bloquea la escalada posterior a loop.

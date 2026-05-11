@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func protectedDirectionAgentObservationV0(
@@ -29,6 +30,9 @@ func protectedDirectionStopAllowedV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	observation AgentProgressObservationV0,
 ) *bool {
+	if observation.Report.Status == orquestaruntime.AgentStoppedV0 {
+		return nil
+	}
 	if !protectedDirectionAgentObservationV0(run, observation) {
 		return nil
 	}

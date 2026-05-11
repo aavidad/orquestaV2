@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 type CodexProcessSnapshotSourcePortV0 interface {
@@ -46,7 +46,7 @@ func (source CodexProgressObservationSourceV0) BuildAgentProgressObservationsV0(
 	}
 	observations := make([]orquestacionnucleoapp.AgentProgressObservationV0, 0, len(descriptors))
 	for _, descriptor := range descriptors {
-		observation, ready, err := source.observationFromDescriptorV0(ctx, descriptor)
+		observation, ready, err := source.observationFromDescriptorV0(ctx, request, descriptor)
 		if err != nil {
 			return nil, err
 		}
@@ -86,6 +86,7 @@ func codexReceiptDescriptorRequestFromProgressV0(
 
 func (source CodexProgressObservationSourceV0) observationFromDescriptorV0(
 	ctx context.Context,
+	request orquestacionnucleoapp.AgentProgressObservationRequestV0,
 	descriptor CodexReceiptDescriptorV0,
 ) (orquestacionnucleoapp.AgentProgressObservationV0, bool, error) {
 	ackReady, err := codexProgressAckReadyV0(descriptor)
@@ -134,13 +135,14 @@ func (source CodexProgressObservationSourceV0) observationFromDescriptorV0(
 		)
 	}
 	report = source.reportWithBudgetV0(report, state)
+	report = codexProgressReportWithProcessFailureContextV0(descriptor, report)
 	decisionRequired := codexProgressReportDecisionRequiredV0(report)
 	if report.Status == orquestaruntime.AgentProgressingV0 &&
 		!codexProgressBudgetPolicyEnabledV0(source.BudgetPolicy) &&
 		!decisionRequired {
 		return orquestacionnucleoapp.AgentProgressObservationV0{}, false, nil
 	}
-	if decisionRequired && codexProgressReportAlreadyEmittedV0(state, report.Status) {
+	if decisionRequired && codexProgressReportAlreadyHandledV0(request.Run, report) {
 		return orquestacionnucleoapp.AgentProgressObservationV0{}, false, nil
 	}
 	if decisionRequired {
@@ -155,16 +157,6 @@ func (source CodexProgressObservationSourceV0) observationFromDescriptorV0(
 		}
 	}
 	return codexProgressObservationV0(descriptor, report, decisionRequired), true, nil
-}
-
-func codexProgressReportAlreadyEmittedV0(
-	state CodexProgressObservationStateV0,
-	status orquestaruntime.AgentProgressStatusV0,
-) bool {
-	if state.ReportedSignature != state.Signature {
-		return false
-	}
-	return state.ReportedStatus == status
 }
 
 func codexProgressAckReadyV0(

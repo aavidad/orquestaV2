@@ -15,6 +15,33 @@ Estado: aceptada.
 
 ```text
 Fecha: 2026-05-11
+Decision: `DrainRunV0` no espera indefinidamente un agente externo cuyo proceso
+ya paro sin ACK.
+Motivo: en una prueba real Codex devolvio error de cuota antes de escribir
+`agent_ack.json`. Si el stack solo espera al ACK, una app pequena puede quedarse
+minutos sin producir nada y repetir el problema historico de loops de bugfix.
+Impacto: el stack consume `AgentProgressReportV0 stopped`, deja que el director
+genere assessment y parada logica, ejecuta el stopper por puerto y registra
+confirmacion. El runtime concreto sigue fuera del core y la decision queda
+visible para web/MCP/estadisticas.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: El smoke real multiagente estricto debe drenar hasta entregar o cerrar
+todas las tareas emitidas por el director.
+Motivo: una prueba que solo valida bootstrap puede ocultar que Orquesta lanza la
+primera ola pero no la frontera dependiente. Para medir autonomia real hay que
+seguir hasta que cada task del plan este en `delivered_tasks` o `closed_tasks`.
+Impacto: el helper opt-in de smoke real reentra por `DrainRunV0`, aplica ACKs
+tardios y falla si quedan tareas vivas sin entrega/cierre. Sigue siendo opt-in
+por coste de cuota.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
 Decision: El conector Codex recibe `reasoning_effort` explicito desde la
 configuracion del stack.
 Motivo: los smokes reales heredaban `model_reasoning_effort` del entorno del

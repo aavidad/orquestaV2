@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestCodexProgressObservationSourceV0ReportaEstancamientoSinACKNiProgreso(t *testing.T) {
@@ -55,6 +55,8 @@ func TestCodexProgressObservationSourceV0NoEscalaABucleSoloPorACKSinCambios(t *t
 	}
 	if got, err := source.BuildAgentProgressObservationsV0(context.Background(), request); err != nil || len(got) != 1 {
 		t.Fatalf("second observations=%+v err=%v", got, err)
+	} else {
+		request.Run.AgentAssessments = append(request.Run.AgentAssessments, codexProgressAssessmentProjectionForTestV0(got[0]))
 	}
 	third, err := source.BuildAgentProgressObservationsV0(context.Background(), request)
 	if err != nil {
@@ -62,6 +64,27 @@ func TestCodexProgressObservationSourceV0NoEscalaABucleSoloPorACKSinCambios(t *t
 	}
 	if len(third) != 0 {
 		t.Fatalf("third observations=%+v", third)
+	}
+}
+
+func TestCodexProgressObservationSourceV0ReemiteSiElRunNoHaMaterializadoDecision(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	request := codexProgressRequestForTestV0(spec)
+
+	if _, err := source.BuildAgentProgressObservationsV0(context.Background(), request); err != nil {
+		t.Fatalf("first BuildAgentProgressObservationsV0: %v", err)
+	}
+	firstDecision, err := source.BuildAgentProgressObservationsV0(context.Background(), request)
+	if err != nil || len(firstDecision) != 1 {
+		t.Fatalf("first decision observations=%+v err=%v", firstDecision, err)
+	}
+	secondDecision, err := source.BuildAgentProgressObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("second decision BuildAgentProgressObservationsV0: %v", err)
+	}
+	if len(secondDecision) != 1 {
+		t.Fatalf("second decision observations=%+v", secondDecision)
 	}
 }
 
@@ -107,6 +130,37 @@ func TestCodexProgressObservationSourceV0NoReportaSiHayAvanceDeLogs(t *testing.T
 	if len(got) != 0 {
 		t.Fatalf("observations=%+v", got)
 	}
+}
+
+func TestCodexProgressObservationSourceV0ReportaProcesoParadoSinACKEnPrimerTick(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	source.SnapshotSource = stoppedSnapshotSourceForProgressTestV0{}
+
+	got, err := source.BuildAgentProgressObservationsV0(
+		context.Background(),
+		codexProgressRequestForTestV0(spec),
+	)
+	if err != nil {
+		t.Fatalf("BuildAgentProgressObservationsV0: %v", err)
+	}
+	if len(got) != 1 || got[0].Report.Status != orquestaruntime.AgentStoppedV0 {
+		t.Fatalf("observations=%+v", got)
+	}
+}
+
+type stoppedSnapshotSourceForProgressTestV0 struct{}
+
+func (stoppedSnapshotSourceForProgressTestV0) SnapshotV0(
+	processRef string,
+) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
+	return orquestaruntime.ProcessRuntimeSnapshotV0{
+		SchemaVersion: orquestaruntime.ProcessRuntimeConnectorVersionV0,
+		ProcessRef:    processRef,
+		SessionRef:    "session-ref-progress-001",
+		LaunchRef:     "launch-ref-progress-001",
+		Status:        orquestaruntime.ProcessRuntimeStoppedV0,
+	}, nil
 }
 
 func TestCodexProgressObservationSourceV0OmiteSiACKYaEstaListo(t *testing.T) {
@@ -287,4 +341,22 @@ func codexProgressObservationLeaksPathV0(
 		}
 	}
 	return false
+}
+
+func codexProgressAssessmentProjectionForTestV0(
+	observation orquestacionnucleoapp.AgentProgressObservationV0,
+) string {
+	return orquestacoreworkflow.AgentAssessmentProjectionRefV0(
+		orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+			AssessmentRef:  "assessment-ref-" + observation.Report.ReportID,
+			PhaseID:        observation.PhaseID,
+			AgentRequestID: observation.Report.AgentRequestID,
+			TaskRef:        observation.TaskRef,
+			Verdict:        orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+			Action:         orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+			Severity:       orquestacoreworkflow.AgentAssessmentSeverityMediumV0,
+			Summary:        "Assessment fake ya materializado.",
+			EvidenceRefs:   observation.EvidenceRefs,
+		},
+	)
 }
