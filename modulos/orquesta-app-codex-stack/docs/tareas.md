@@ -517,6 +517,8 @@ Cerrado despues:
   confirmados o no habia agentes que parar;
 - el cierre terminal queda bloqueado si todavia existe outbox
   `StopRuntimeAgent` pendiente.
+- la politica autonoma del nucleo acepta `DirectorRunStatsV0` y usa senales de
+  progreso/presupuesto para subir capacidad y acotar paralelismo.
 
 Pendiente separado:
 

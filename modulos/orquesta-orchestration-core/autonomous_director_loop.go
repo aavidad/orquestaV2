@@ -22,8 +22,10 @@ func (service ServiceV0) RunAutonomousDirectorLoopV0(
 	if policy == nil {
 		policy = HeuristicAutonomousDirectorPolicyV0{}
 	}
+	stats := autonomousDirectorStatsForLoopV0(run, request.Stats)
 	decision, err := policy.DecideAutonomousDirectorV0(ctx, AutonomousDirectorDecisionInputV0{
 		Run:    run,
+		Stats:  stats,
 		Limits: request.Limits,
 		Requests: AutonomousDirectorRequestHintsV0{
 			CorrelationID: loop.CorrelationID,

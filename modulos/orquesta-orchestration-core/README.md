@@ -227,6 +227,9 @@ actual.
 - Integracion batch + supervision: dos procesos reales controlados pueden
   arrancar en paralelo por batch; si solo uno reporta `loop_detected`, el
   stopper para ese `process_ref` y el otro proceso sigue en ejecucion.
+- Politica autonoma con estadisticas: `RunAutonomousDirectorLoopV0` puede
+  recibir `DirectorRunStatsV0`; si detecta progreso atascado, bucle o
+  presupuesto sin actividad, sube capacidad a `xhigh` y limita paralelismo.
 - Regla arquitectonica: sin imports de `cmd`, `db` ni conectores de runtime.
 
 ## Que no cierra

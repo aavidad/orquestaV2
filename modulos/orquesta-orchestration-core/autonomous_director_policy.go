@@ -23,12 +23,16 @@ func (HeuristicAutonomousDirectorPolicyV0) DecideAutonomousDirectorV0(
 		return AutonomousDirectorDecisionV0{}, err
 	}
 	limits := normalizeAutonomousDirectorLimitsV0(input.Limits)
-	workload := autonomousOpenWorkloadV0(input.Run)
+	stats := autonomousDirectorStatsForLoopV0(input.Run, input.Stats)
+	workload := autonomousWorkloadFromStatsV0(input.Run, stats)
 	teamSize := boundedAutonomousTeamSizeV0(
-		autonomousBaseTeamSizeV0(input.Run, workload),
+		autonomousTeamSizeForStatsV0(
+			autonomousBaseTeamSizeV0(input.Run, workload),
+			stats,
+		),
 		limits.MaxTeamSize,
 	)
-	parallel := boundedAutonomousTeamSizeV0(teamSize, limits.MaxParallelAgents)
+	parallel := autonomousParallelForStatsV0(teamSize, limits.MaxParallelAgents, stats)
 	return AutonomousDirectorDecisionV0{
 		TeamSize:             teamSize,
 		MaxParallelAgents:    parallel,
@@ -37,8 +41,8 @@ func (HeuristicAutonomousDirectorPolicyV0) DecideAutonomousDirectorV0(
 		MaxDispatchesPerWait: boundedAutonomousLimitV0(parallel, limits.MaxDispatchesPerWait),
 		MaxCommandsPerCycle:  boundedAutonomousLimitV0(teamSize*2, limits.MaxCommandsPerCycle),
 		MaxOutboxPerCycle:    boundedAutonomousLimitV0(parallel, limits.MaxOutboxPerCycle),
-		RecommendedCapacity:  autonomousCapacityForPhaseV0(input.Run.CurrentPhase, workload),
-		Summary:              autonomousDirectorSummaryV0(input.Run, teamSize, parallel),
+		RecommendedCapacity:  autonomousCapacityForStatsV0(input.Run.CurrentPhase, workload, stats),
+		Summary:              autonomousDirectorSummaryV0(input.Run, stats, teamSize, parallel),
 		EvidenceRefs:         compactStringsV0(append(input.Requests.EvidenceRefs, "evidence-ref-autonomous-director-v0")),
 	}, nil
 }
@@ -84,6 +88,27 @@ func autonomousOpenWorkloadV0(run orquestacoreworkflow.OrchestrationRunV0) int {
 	return open
 }
 
+func autonomousDirectorStatsForLoopV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	stats DirectorRunStatsV0,
+) DirectorRunStatsV0 {
+	if strings.TrimSpace(stats.RunRef) != "" ||
+		strings.TrimSpace(stats.SchemaVersion) != "" {
+		return stats
+	}
+	return BuildDirectorRunStatsV0(run)
+}
+
+func autonomousWorkloadFromStatsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	stats DirectorRunStatsV0,
+) int {
+	if stats.Counts.TasksTotal > 0 || stats.Counts.TasksOpen > 0 {
+		return stats.Counts.TasksOpen
+	}
+	return autonomousOpenWorkloadV0(run)
+}
+
 func autonomousStringSetV0(values []string) map[string]bool {
 	set := make(map[string]bool, len(values))
 	for _, value := range values {
@@ -93,6 +118,31 @@ func autonomousStringSetV0(values []string) map[string]bool {
 		}
 	}
 	return set
+}
+
+func autonomousTeamSizeForStatsV0(
+	base int,
+	stats DirectorRunStatsV0,
+) int {
+	if autonomousCriticalProgressSignalsV0(stats) && base < 2 {
+		return 2
+	}
+	return base
+}
+
+func autonomousParallelForStatsV0(
+	teamSize int,
+	maxParallel int,
+	stats DirectorRunStatsV0,
+) int {
+	parallel := boundedAutonomousTeamSizeV0(teamSize, maxParallel)
+	if autonomousCriticalProgressSignalsV0(stats) && parallel > 2 {
+		return 2
+	}
+	if stats.Progress.OverBudgetButActiveAgents > 0 && parallel > 3 {
+		return 3
+	}
+	return parallel
 }
 
 func autonomousBaseTeamSizeV0(
@@ -139,6 +189,27 @@ func autonomousCapacityForPhaseV0(
 	return orquestacoreworkflow.OrchestrationCapacityMediumV0
 }
 
+func autonomousCapacityForStatsV0(
+	phase orquestacoreworkflow.OrchestrationPhaseIDV0,
+	workload int,
+	stats DirectorRunStatsV0,
+) orquestacoreworkflow.OrchestrationCapacityRecommendationV0 {
+	if autonomousCriticalProgressSignalsV0(stats) {
+		return orquestacoreworkflow.OrchestrationCapacityXHighV0
+	}
+	if stats.Progress.OverBudgetButActiveAgents > 0 ||
+		stats.Progress.SourceStatus == DirectorProgressSourceErrorV0 {
+		return orquestacoreworkflow.OrchestrationCapacityHighV0
+	}
+	return autonomousCapacityForPhaseV0(phase, workload)
+}
+
+func autonomousCriticalProgressSignalsV0(stats DirectorRunStatsV0) bool {
+	return stats.Progress.StalledAgents > 0 ||
+		stats.Progress.LoopDetectedAgents > 0 ||
+		stats.Progress.OverBudgetNoActivityAgents > 0
+}
+
 func boundedAutonomousTeamSizeV0(value int, max int) int {
 	if value < 1 {
 		return 1
@@ -161,6 +232,7 @@ func boundedAutonomousLimitV0(value int, max int) int {
 
 func autonomousDirectorSummaryV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
+	stats DirectorRunStatsV0,
 	teamSize int,
 	parallel int,
 ) string {
@@ -170,5 +242,19 @@ func autonomousDirectorSummaryV0(
 	}
 	return "director autonomo: fase " + phase +
 		", equipo " + strconv.Itoa(teamSize) +
-		", paralelo " + strconv.Itoa(parallel)
+		", paralelo " + strconv.Itoa(parallel) +
+		autonomousDirectorProgressSummaryV0(stats)
+}
+
+func autonomousDirectorProgressSummaryV0(stats DirectorRunStatsV0) string {
+	if stats.Progress.StalledAgents == 0 &&
+		stats.Progress.LoopDetectedAgents == 0 &&
+		stats.Progress.OverBudgetNoActivityAgents == 0 &&
+		stats.Progress.OverBudgetButActiveAgents == 0 {
+		return ""
+	}
+	return ", senales progreso stalled=" + strconv.Itoa(stats.Progress.StalledAgents) +
+		", loop=" + strconv.Itoa(stats.Progress.LoopDetectedAgents) +
+		", over_budget_no_activity=" + strconv.Itoa(stats.Progress.OverBudgetNoActivityAgents) +
+		", over_budget_active=" + strconv.Itoa(stats.Progress.OverBudgetButActiveAgents)
 }

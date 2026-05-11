@@ -15,6 +15,7 @@ type AutonomousDirectorPolicyPortV0 interface {
 
 type AutonomousDirectorDecisionInputV0 struct {
 	Run      orquestacoreworkflow.OrchestrationRunV0
+	Stats    DirectorRunStatsV0
 	Limits   AutonomousDirectorLimitsV0
 	Requests AutonomousDirectorRequestHintsV0
 }
@@ -49,6 +50,7 @@ type AutonomousDirectorDecisionV0 struct {
 
 type AutonomousDirectorLoopRequestV0 struct {
 	Loop   ProgressiveLoopRequestV0
+	Stats  DirectorRunStatsV0
 	Policy AutonomousDirectorPolicyPortV0
 	Limits AutonomousDirectorLimitsV0
 }

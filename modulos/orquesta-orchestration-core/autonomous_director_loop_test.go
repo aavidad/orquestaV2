@@ -2,6 +2,7 @@ package orquestacionnucleoapp
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -41,6 +42,83 @@ func TestRunAutonomousDirectorLoopV0DecideLimitesYDevuelveStats(t *testing.T) {
 		result.Stats.Decision.TeamSize != result.Decision.TeamSize ||
 		result.Stats.Loop.Status != string(result.Loop.Status) {
 		t.Fatalf("stats=%+v loop=%+v", result.Stats, result.Loop)
+	}
+}
+
+func TestRunAutonomousDirectorLoopV0UsaStatsDeProgresoParaCapacidad(t *testing.T) {
+	runRef := "run-nucleo-autonomous-director-progress-001"
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.Tasks = []string{
+		"task-ref-auto-progress-001",
+		"task-ref-auto-progress-002",
+		"task-ref-auto-progress-003",
+		"task-ref-auto-progress-004",
+		"task-ref-auto-progress-005",
+	}
+	stats := BuildDirectorRunStatsV0(run)
+	stats.Progress.SourceStatus = DirectorProgressSourceLoadedV0
+	stats.Progress.StalledAgents = 1
+	stats.Progress.LoopDetectedAgents = 1
+	stats.Progress.OverBudgetNoActivityAgents = 1
+
+	result, err := ServiceV0{
+		RunStore:          NewInMemoryRunStoreV0(run),
+		CandidateProvider: StaticCandidateProviderV0{},
+		OutboxLedger:      NewInMemoryOutboxLedgerV0(),
+	}.RunAutonomousDirectorLoopV0(context.Background(), AutonomousDirectorLoopRequestV0{
+		Loop: ProgressiveLoopRequestV0{
+			RunRef:     runRef,
+			OccurredAt: "2026-05-10T10:05:00Z",
+		},
+		Stats: stats,
+		Limits: AutonomousDirectorLimitsV0{
+			MaxTeamSize:       6,
+			MaxParallelAgents: 6,
+		},
+	})
+	if err != nil {
+		t.Fatalf("autonomous loop: %v", err)
+	}
+	if result.Decision.RecommendedCapacity != orquestacoreworkflow.OrchestrationCapacityXHighV0 ||
+		result.Decision.MaxParallelAgents != 2 ||
+		!strings.Contains(result.Decision.Summary, "senales progreso") {
+		t.Fatalf("decision=%+v", result.Decision)
+	}
+}
+
+func TestHeuristicAutonomousDirectorPolicyV0LimitaPresupuestoActivo(t *testing.T) {
+	runRef := "run-nucleo-autonomous-director-budget-active-001"
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.Tasks = []string{
+		"task-ref-auto-budget-001",
+		"task-ref-auto-budget-002",
+		"task-ref-auto-budget-003",
+		"task-ref-auto-budget-004",
+		"task-ref-auto-budget-005",
+		"task-ref-auto-budget-006",
+		"task-ref-auto-budget-007",
+		"task-ref-auto-budget-008",
+	}
+	stats := BuildDirectorRunStatsV0(run)
+	stats.Progress.OverBudgetButActiveAgents = 1
+
+	decision, err := HeuristicAutonomousDirectorPolicyV0{}.DecideAutonomousDirectorV0(
+		context.Background(),
+		AutonomousDirectorDecisionInputV0{
+			Run:   run,
+			Stats: stats,
+			Limits: AutonomousDirectorLimitsV0{
+				MaxTeamSize:       6,
+				MaxParallelAgents: 6,
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+	if decision.RecommendedCapacity != orquestacoreworkflow.OrchestrationCapacityHighV0 ||
+		decision.MaxParallelAgents != 3 {
+		t.Fatalf("decision=%+v", decision)
 	}
 }
 
