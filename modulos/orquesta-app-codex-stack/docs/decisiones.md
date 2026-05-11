@@ -15,6 +15,45 @@ Estado: aceptada.
 
 ```text
 Fecha: 2026-05-11
+Decision: El conector Codex recibe `reasoning_effort` explicito desde la
+configuracion del stack.
+Motivo: los smokes reales heredaban `model_reasoning_effort` del entorno del
+operador. Una prueba pequena podia ejecutarse como `xhigh` y parecer bloqueada
+aunque Orquesta hubiera lanzado bien al agente.
+Impacto: el wrapper llama `codex exec -c model_reasoning_effort=...`. Los
+smokes opt-in usan `ORQUESTA_CODEX_REASONING_EFFORT` con fallback `medium`.
+Produccion puede seguir elevando capacidad por politica de conectores.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: El adaptador de ficheros del director normaliza campos redundantes de
+decisiones externas antes de validar contra el nucleo.
+Motivo: agentes reales omitieron `schema_version` por decision o mezclaron
+`decision.phase_id` con la fase fuente. El nucleo debe seguir siendo estricto,
+pero el borde puede convertir una salida compacta y no ambigua al DTO canonico.
+Impacto: se completan schemas faltantes y `decision.phase_id` se deriva del
+payload ejecutable en comandos con phase_id. `open_phase` conserva la semantica
+source -> target. El resto de validaciones siguen rechazando contratos ambiguos.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: El stack completa `depends_on` hacia bootstrap Go cuando el plan lo
+hace deducible sin ambiguedad.
+Motivo: un director real creo bootstrap con `go.mod` y microtareas posteriores
+sin dependencia explicita. Rechazarlo protege, pero bloquea por un dato que
+Orquesta puede inferir de forma determinista.
+Impacto: antes de validar, las microtareas Go que necesitan modulo y no cubren
+`go.mod` dependen del primer bootstrap con `go.mod`. Si no hay bootstrap, la
+politica sigue rechazando el plan.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
 Decision: El supervisor global ejecuta pasadas acotadas, no un daemon interno.
 Motivo: un daemon con sleeps o bucles abiertos volveria a consumir cuota y
 tiempo sin control cuando una app no produce progreso. La unidad segura es una

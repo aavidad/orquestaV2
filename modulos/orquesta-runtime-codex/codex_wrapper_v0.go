@@ -1,12 +1,16 @@
 package orquestaruntimecodex
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 func BuildCodexWrapperScriptV0(profile CodexConnectorProfileV0) string {
 	args := []string{shellQuoteV0(profile.CommandPath)}
 	args = append(args, codexOptionalFlagArgsV0("--ask-for-approval", profile.ApprovalPolicy)...)
 	args = append(args, "exec")
 	args = append(args, codexOptionalFlagArgsV0("-m", profile.Model)...)
+	args = append(args, codexConfigValueArgsV0("model_reasoning_effort", profile.ReasoningEffort)...)
 	args = append(args, codexOptionalFlagArgsV0("-p", profile.Profile)...)
 	args = append(args, codexOptionalFlagArgsV0("--sandbox", profile.Sandbox)...)
 	args = append(args, codexRuntimeWritableArgsV0(profile)...)
@@ -54,6 +58,14 @@ func codexOptionalFlagArgsV0(flag, value string) []string {
 		return nil
 	}
 	return []string{flag, shellQuoteV0(value)}
+}
+
+func codexConfigValueArgsV0(key, value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return []string{"-c", shellQuoteV0(key + "=" + strconv.Quote(value))}
 }
 
 func codexOutputLastMessageArgsV0(profile CodexConnectorProfileV0) []string {

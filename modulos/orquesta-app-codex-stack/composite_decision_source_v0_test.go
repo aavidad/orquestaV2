@@ -122,7 +122,7 @@ func TestCompositeDirectorDecisionSourceV0NoPermiteAnswerQuestionTaparPlanInvali
 	}
 }
 
-func TestCompositeDirectorDecisionSourceV0RechazaPlanGoSinDependsOnBootstrap(t *testing.T) {
+func TestCompositeDirectorDecisionSourceV0CompletaDependsOnBootstrap(t *testing.T) {
 	decisions := codexStackBatchDirectorDecisionsForTestV0(
 		"run-ref-stack-policy-dep-001",
 		"brainstorm-ref-stack-policy-dep-001",
@@ -140,13 +140,17 @@ func TestCompositeDirectorDecisionSourceV0RechazaPlanGoSinDependsOnBootstrap(t *
 		},
 	}
 
-	_, err := source.ListDirectorAgentDecisionsV0(
+	got, err := source.ListDirectorAgentDecisionsV0(
 		context.Background(),
 		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{},
 	)
 
-	if err == nil || !strings.Contains(err.Error(), "depends_on") {
+	if err != nil {
 		t.Fatalf("err=%v", err)
+	}
+	task, ok := codexStackMicrotaskForPolicyTestV0(got, "task-ref-stack-agenda-domain")
+	if !ok || !codexStackStringInSetForTestV0(task.DependsOn, "task-ref-stack-agenda-bootstrap") {
+		t.Fatalf("depends_on no completado: %+v", task)
 	}
 }
 
@@ -266,4 +270,20 @@ func codexStackMutateTaskForPolicyTestV0(
 		return out
 	}
 	return out
+}
+
+func codexStackMicrotaskForPolicyTestV0(
+	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
+	taskID string,
+) (orquestadirectoragent.DirectorAgentMicrotaskV0, bool) {
+	for _, decision := range decisions {
+		if decision.CreateMicrotask == nil {
+			continue
+		}
+		task := decision.CreateMicrotask.Task
+		if task.TaskID == taskID {
+			return task, true
+		}
+	}
+	return orquestadirectoragent.DirectorAgentMicrotaskV0{}, false
 }

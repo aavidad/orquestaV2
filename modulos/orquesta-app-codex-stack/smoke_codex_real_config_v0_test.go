@@ -11,20 +11,21 @@ import (
 )
 
 type codexStackRealSmokeConfigV0 struct {
-	CommandPath    string
-	ProjectWorkDir string
-	RuntimeWorkDir string
-	CodeHomeDir    string
-	HomeDir        string
-	PathEnv        string
-	Model          string
-	Profile        string
-	Sandbox        string
-	ApprovalPolicy string
-	ExtraArgs      []string
-	MaxBatchReady  int
-	MaxConcurrency int
-	Timeout        time.Duration
+	CommandPath     string
+	ProjectWorkDir  string
+	RuntimeWorkDir  string
+	CodeHomeDir     string
+	HomeDir         string
+	PathEnv         string
+	Model           string
+	ReasoningEffort string
+	Profile         string
+	Sandbox         string
+	ApprovalPolicy  string
+	ExtraArgs       []string
+	MaxBatchReady   int
+	MaxConcurrency  int
+	Timeout         time.Duration
 }
 
 func codexStackRealSmokeConfigForTestV0(t *testing.T) codexStackRealSmokeConfigV0 {
@@ -39,21 +40,30 @@ func codexStackRealSmokeConfigForTestV0(t *testing.T) codexStackRealSmokeConfigV
 		runtimeDir = filepath.Join(t.TempDir(), "runtime")
 	}
 	return codexStackRealSmokeConfigV0{
-		CommandPath:    codexStackRealSmokeCommandPathV0(t),
-		ProjectWorkDir: projectDir,
-		RuntimeWorkDir: codexStackRealSmokeEnsureDirV0(t, "ORQUESTA_CODEX_RUNTIME_WORKDIR", runtimeDir),
-		CodeHomeDir:    codexStackRealSmokeRequiredAbsDirEnvV0(t, "ORQUESTA_CODEX_CODE_HOME"),
-		HomeDir:        codexStackRealSmokeRequiredAbsDirEnvV0(t, "ORQUESTA_CODEX_HOME"),
-		PathEnv:        codexStackRealSmokeRequiredEnvV0(t, "ORQUESTA_CODEX_PATH"),
-		Model:          strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_MODEL")),
-		Profile:        strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_PROFILE")),
-		Sandbox:        sandbox,
-		ApprovalPolicy: codexStackRealSmokeRequiredEnvV0(t, "ORQUESTA_CODEX_APPROVAL_POLICY"),
-		ExtraArgs:      strings.Fields(os.Getenv("ORQUESTA_CODEX_EXTRA_ARGS")),
-		MaxBatchReady:  1,
-		MaxConcurrency: 1,
-		Timeout:        codexStackRealSmokeTimeoutV0(t),
+		CommandPath:     codexStackRealSmokeCommandPathV0(t),
+		ProjectWorkDir:  projectDir,
+		RuntimeWorkDir:  codexStackRealSmokeEnsureDirV0(t, "ORQUESTA_CODEX_RUNTIME_WORKDIR", runtimeDir),
+		CodeHomeDir:     codexStackRealSmokeRequiredAbsDirEnvV0(t, "ORQUESTA_CODEX_CODE_HOME"),
+		HomeDir:         codexStackRealSmokeRequiredAbsDirEnvV0(t, "ORQUESTA_CODEX_HOME"),
+		PathEnv:         codexStackRealSmokeRequiredEnvV0(t, "ORQUESTA_CODEX_PATH"),
+		Model:           strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_MODEL")),
+		ReasoningEffort: codexStackRealSmokeReasoningEffortV0(),
+		Profile:         strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_PROFILE")),
+		Sandbox:         sandbox,
+		ApprovalPolicy:  codexStackRealSmokeRequiredEnvV0(t, "ORQUESTA_CODEX_APPROVAL_POLICY"),
+		ExtraArgs:       strings.Fields(os.Getenv("ORQUESTA_CODEX_EXTRA_ARGS")),
+		MaxBatchReady:   1,
+		MaxConcurrency:  1,
+		Timeout:         codexStackRealSmokeTimeoutV0(t),
 	}
+}
+
+func codexStackRealSmokeReasoningEffortV0() string {
+	value := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_REASONING_EFFORT"))
+	if value == "" {
+		return "medium"
+	}
+	return value
 }
 
 func codexStackRealSmokeProjectDirV0(t *testing.T) string {

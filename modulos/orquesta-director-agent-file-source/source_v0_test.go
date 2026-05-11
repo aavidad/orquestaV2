@@ -42,6 +42,65 @@ func TestDirectorAgentDecisionFileSourceV0ReadsEnvelope(t *testing.T) {
 	}
 }
 
+func TestDirectorAgentDecisionFileSourceV0NormalizaSchemasCompactos(t *testing.T) {
+	decision := validMicrotaskDecisionForTestV0("run-ref-001")
+	decision.SchemaVersion = ""
+	decision.CreateMicrotask.Task.SchemaVersion = ""
+	data := mustDecisionFileJSONForTestV0(t, []orquestadirectoragent.DirectorAgentDecisionV0{decision})
+	source := DirectorAgentDecisionFileSourceV0{
+		DescriptorProvider: decisionFileDescriptorProviderForTestV0{
+			Descriptors: []DirectorAgentDecisionFileDescriptorV0{{
+				RunID: "run-ref-001",
+				Path:  "compact.json",
+			}},
+		},
+		Reader: memoryDecisionFileReaderForTestV0{
+			Files: map[string][]byte{"compact.json": data},
+		},
+	}
+
+	decisions, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		decisionSourceRequestForTestV0("run-ref-001"),
+	)
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	got := decisions[0]
+	if got.SchemaVersion != orquestadirectoragent.DirectorAgentDecisionSchemaVersionV0 ||
+		got.CreateMicrotask.Task.SchemaVersion != orquestadirectoragent.DirectorAgentMicrotaskSchemaVersionV0 {
+		t.Fatalf("schemas no normalizados: %+v", got)
+	}
+}
+
+func TestDirectorAgentDecisionFileSourceV0NormalizaFaseDesdePayload(t *testing.T) {
+	decision := validVoteDecisionForTestV0("run-ref-001")
+	decision.PhaseID = string(orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0)
+	data := mustDecisionFileJSONForTestV0(t, []orquestadirectoragent.DirectorAgentDecisionV0{decision})
+	source := DirectorAgentDecisionFileSourceV0{
+		DescriptorProvider: decisionFileDescriptorProviderForTestV0{
+			Descriptors: []DirectorAgentDecisionFileDescriptorV0{{
+				RunID: "run-ref-001",
+				Path:  "phase.json",
+			}},
+		},
+		Reader: memoryDecisionFileReaderForTestV0{
+			Files: map[string][]byte{"phase.json": data},
+		},
+	}
+
+	decisions, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		decisionSourceRequestForTestV0("run-ref-001"),
+	)
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	if decisions[0].PhaseID != string(orquestacoreworkflow.OrchestrationPhaseVotacionYDecisionV0) {
+		t.Fatalf("phase_id no normalizado: %+v", decisions[0])
+	}
+}
+
 func TestDirectorAgentDecisionFileSourceV0FiltersForeignRun(t *testing.T) {
 	source := DirectorAgentDecisionFileSourceV0{
 		DescriptorProvider: decisionFileDescriptorProviderForTestV0{
@@ -193,6 +252,62 @@ func validOpenVoteDecisionForTestV0(
 		OpenPhase: &orquestadirectoragent.DirectorAgentOpenPhaseCommandV0{
 			PhaseID: string(orquestacoreworkflow.OrchestrationPhaseVotacionYDecisionV0),
 			Reason:  "Preparar decision.",
+		},
+	}
+}
+
+func validMicrotaskDecisionForTestV0(
+	runRef string,
+) orquestadirectoragent.DirectorAgentDecisionV0 {
+	return orquestadirectoragent.DirectorAgentDecisionV0{
+		SchemaVersion: orquestadirectoragent.DirectorAgentDecisionSchemaVersionV0,
+		DecisionRef:   "director-decision-file-task-001",
+		RunID:         runRef,
+		PhaseID:       "planificacion_microtareas",
+		CommandType:   orquestadirectoragent.DirectorAgentCommandCreateMicrotaskV0,
+		CommandRef:    "command-ref-file-task-001",
+		Summary:       "Crear microtarea.",
+		EvidenceRefs:  []string{"evidence-ref-file-task-001"},
+		CreateMicrotask: &orquestadirectoragent.DirectorAgentCreateMicrotaskCommandV0{
+			Task: orquestadirectoragent.DirectorAgentMicrotaskV0{
+				SchemaVersion:      orquestadirectoragent.DirectorAgentMicrotaskSchemaVersionV0,
+				TaskID:             "task-file-source-001",
+				RunID:              runRef,
+				PhaseID:            "programacion",
+				Title:              "Implementar pieza pequena",
+				Summary:            "Trabajo acotado.",
+				WriteSet:           []string{"internal/app/app.go"},
+				AcceptanceCriteria: []string{"Pieza creada."},
+				RequiredTests:      []string{"go test ./..."},
+				FunctionContractRefs: []orquestadirectoragent.DirectorAgentFunctionContractRefV0{{
+					ContractRef:  "contract-file-source-001",
+					FunctionName: "Build",
+				}},
+			},
+		},
+	}
+}
+
+func validVoteDecisionForTestV0(
+	runRef string,
+) orquestadirectoragent.DirectorAgentDecisionV0 {
+	return orquestadirectoragent.DirectorAgentDecisionV0{
+		SchemaVersion: orquestadirectoragent.DirectorAgentDecisionSchemaVersionV0,
+		DecisionRef:   "director-decision-file-vote-001",
+		RunID:         runRef,
+		PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseVotacionYDecisionV0),
+		CommandType:   orquestadirectoragent.DirectorAgentCommandRequestVoteV0,
+		CommandRef:    "command-ref-file-vote-001",
+		Summary:       "Solicitar voto tecnico.",
+		EvidenceRefs:  []string{"evidence-ref-file-vote-001"},
+		RequestVote: &orquestadirectoragent.DirectorAgentVoteCommandV0{
+			VoteRequestID:              "vote-request-file-001",
+			PhaseID:                    string(orquestacoreworkflow.OrchestrationPhaseVotacionYDecisionV0),
+			DecisionTopicRef:           "decision-topic-file-001",
+			BrainstormRef:              "brainstorm-ref-file-001",
+			Summary:                    "Elegir arquitectura.",
+			MinimumRecommendedCapacity: orquestadirectoragent.DirectorAgentCapacityHighV0,
+			EvidenceRefs:               []string{"evidence-ref-file-vote-001"},
 		},
 	}
 }

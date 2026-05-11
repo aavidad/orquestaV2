@@ -26,6 +26,17 @@ func TestCodexWrapperV0NoAnadeRuntimeWritableSinWorkspaceWrite(t *testing.T) {
 	}
 }
 
+func TestCodexWrapperV0FijaEsfuerzoDeRazonamiento(t *testing.T) {
+	profile := codexProfileForTestV0(t)
+	profile.ReasoningEffort = "medium"
+
+	wrapper := BuildCodexWrapperScriptV0(profile)
+	want := "-c " + shellQuoteV0(`model_reasoning_effort="medium"`)
+	if !strings.Contains(wrapper, want) {
+		t.Fatalf("wrapper no fija esfuerzo de razonamiento: falta %q\n%s", want, wrapper)
+	}
+}
+
 func TestCodexProfileV0WorkspaceWriteRechazaRuntimeFueraDelProyecto(t *testing.T) {
 	profile := codexProfileForTestV0(t)
 	profile.RuntimeWorkDir = t.TempDir()

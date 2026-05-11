@@ -36,20 +36,21 @@ const (
 )
 
 type CodexConnectorProfileV0 struct {
-	SchemaVersion  string   `json:"schema_version"`
-	OptIn          bool     `json:"opt_in"`
-	CommandPath    string   `json:"command_path"`
-	ProjectWorkDir string   `json:"project_work_dir"`
-	RuntimeWorkDir string   `json:"runtime_work_dir"`
-	CodeHomeDir    string   `json:"code_home_dir,omitempty"`
-	HomeDir        string   `json:"home_dir,omitempty"`
-	PathEnv        string   `json:"path_env,omitempty"`
-	Model          string   `json:"model,omitempty"`
-	Profile        string   `json:"profile,omitempty"`
-	Sandbox        string   `json:"sandbox,omitempty"`
-	ApprovalPolicy string   `json:"approval_policy,omitempty"`
-	ExtraArgs      []string `json:"extra_args,omitempty"`
-	PromptHints    []string `json:"prompt_hints,omitempty"`
+	SchemaVersion   string   `json:"schema_version"`
+	OptIn           bool     `json:"opt_in"`
+	CommandPath     string   `json:"command_path"`
+	ProjectWorkDir  string   `json:"project_work_dir"`
+	RuntimeWorkDir  string   `json:"runtime_work_dir"`
+	CodeHomeDir     string   `json:"code_home_dir,omitempty"`
+	HomeDir         string   `json:"home_dir,omitempty"`
+	PathEnv         string   `json:"path_env,omitempty"`
+	Model           string   `json:"model,omitempty"`
+	ReasoningEffort string   `json:"reasoning_effort,omitempty"`
+	Profile         string   `json:"profile,omitempty"`
+	Sandbox         string   `json:"sandbox,omitempty"`
+	ApprovalPolicy  string   `json:"approval_policy,omitempty"`
+	ExtraArgs       []string `json:"extra_args,omitempty"`
+	PromptHints     []string `json:"prompt_hints,omitempty"`
 }
 
 func ValidateCodexConnectorProfileV0(
@@ -70,6 +71,7 @@ func ValidateCodexConnectorProfileV0(
 	v.optionalAbsPath("home_dir", profile.HomeDir)
 	v.optionalSafeValue("path_env", profile.PathEnv)
 	v.optionalSafeValue("model", profile.Model)
+	v.optionalSafeValue("reasoning_effort", profile.ReasoningEffort)
 	v.optionalSafeValue("profile", profile.Profile)
 	v.optionalSafeValue("sandbox", profile.Sandbox)
 	v.optionalSafeValue("approval_policy", profile.ApprovalPolicy)

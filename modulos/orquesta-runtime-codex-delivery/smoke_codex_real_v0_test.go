@@ -2,6 +2,7 @@ package orquestaruntimecodexdelivery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,9 +12,9 @@ import (
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestCodexReceiptDeliveryLoopV0SmokeCodexRealOptIn(t *testing.T) {
@@ -57,7 +58,7 @@ func TestCodexReceiptDeliveryLoopV0SmokeCodexRealOptIn(t *testing.T) {
 	defer cancel()
 	result, err := codexRealSmokeRunLoopForTestV0(ctx, service, runRef, dispatchers)
 	if err != nil {
-		t.Fatalf("launch loop: %v\n%s", err, codexRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
+		t.Fatalf("launch loop: %s\n%s", codexRealSmokeErrorDetailsV0(err), codexRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
 	}
 	if !codexDeliveryLoopContainsRefV0(result.Run.StartedAgents, spec.RequestID) {
 		t.Fatalf("started_agents=%v", result.Run.StartedAgents)
@@ -69,7 +70,7 @@ func TestCodexReceiptDeliveryLoopV0SmokeCodexRealOptIn(t *testing.T) {
 	}
 	result, err = codexRealSmokeRunLoopForTestV0(ctx, service, runRef, dispatchers)
 	if err != nil {
-		t.Fatalf("delivery loop: %v\n%s", err, codexRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
+		t.Fatalf("delivery loop: %s\n%s", codexRealSmokeErrorDetailsV0(err), codexRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
 	}
 	if !codexDeliveryLoopContainsRefV0(result.Run.Deliveries, spec.AgentPacket.DeliveryRefs.AckRef) {
 		t.Fatalf("deliveries=%v\n%s", result.Run.Deliveries, codexRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
@@ -165,19 +166,20 @@ func codexRealSmokeDispatchersForTestV0(
 
 func codexRealSmokeProfileV0(cfg codexRealSmokeConfigV0) orquestaruntimecodex.CodexConnectorProfileV0 {
 	return orquestaruntimecodex.CodexConnectorProfileV0{
-		SchemaVersion:  orquestaruntimecodex.CodexConnectorProfileSchemaVersionV0,
-		OptIn:          true,
-		CommandPath:    cfg.CommandPath,
-		ProjectWorkDir: cfg.ProjectWorkDir,
-		RuntimeWorkDir: cfg.RuntimeWorkDir,
-		CodeHomeDir:    cfg.CodeHomeDir,
-		HomeDir:        cfg.HomeDir,
-		PathEnv:        cfg.PathEnv,
-		Model:          cfg.Model,
-		Profile:        cfg.Profile,
-		Sandbox:        cfg.Sandbox,
-		ApprovalPolicy: cfg.ApprovalPolicy,
-		ExtraArgs:      cfg.ExtraArgs,
+		SchemaVersion:   orquestaruntimecodex.CodexConnectorProfileSchemaVersionV0,
+		OptIn:           true,
+		CommandPath:     cfg.CommandPath,
+		ProjectWorkDir:  cfg.ProjectWorkDir,
+		RuntimeWorkDir:  cfg.RuntimeWorkDir,
+		CodeHomeDir:     cfg.CodeHomeDir,
+		HomeDir:         cfg.HomeDir,
+		PathEnv:         cfg.PathEnv,
+		Model:           cfg.Model,
+		ReasoningEffort: cfg.ReasoningEffort,
+		Profile:         cfg.Profile,
+		Sandbox:         cfg.Sandbox,
+		ApprovalPolicy:  cfg.ApprovalPolicy,
+		ExtraArgs:       cfg.ExtraArgs,
 		PromptHints: []string{
 			"Smoke real opt-in: trabaja solo dentro del write-set del paquete.",
 			"Escribe el ACK exactamente en el path indicado al terminar.",
@@ -253,6 +255,22 @@ func codexRealSmokeStopProcessForTestV0(
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, _ = processRuntime.StopV0(ctx, record.ProcessRef)
+}
+
+func codexRealSmokeErrorDetailsV0(err error) string {
+	if err == nil {
+		return ""
+	}
+	var nucleoErr orquestacionnucleoapp.ErrorV0
+	if errors.As(err, &nucleoErr) {
+		return fmt.Sprintf(
+			"%s field=%s message=%s",
+			nucleoErr.Code,
+			nucleoErr.Field,
+			nucleoErr.Message,
+		)
+	}
+	return err.Error()
 }
 
 func codexRealSmokeDiagnosticsV0(runtimeDir string) string {

@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 type CodexLaunchSpecResolverV0 struct {
@@ -59,20 +59,21 @@ func codexProfileV0(
 	runtimeDir string,
 ) orquestaruntimecodex.CodexConnectorProfileV0 {
 	return orquestaruntimecodex.CodexConnectorProfileV0{
-		SchemaVersion:  orquestaruntimecodex.CodexConnectorProfileSchemaVersionV0,
-		OptIn:          true,
-		CommandPath:    strings.TrimSpace(config.CommandPath),
-		ProjectWorkDir: strings.TrimSpace(config.ProjectWorkDir),
-		RuntimeWorkDir: strings.TrimSpace(runtimeDir),
-		CodeHomeDir:    strings.TrimSpace(config.CodeHomeDir),
-		HomeDir:        strings.TrimSpace(config.HomeDir),
-		PathEnv:        strings.TrimSpace(config.PathEnv),
-		Model:          strings.TrimSpace(config.Model),
-		Profile:        strings.TrimSpace(config.Profile),
-		Sandbox:        strings.TrimSpace(config.Sandbox),
-		ApprovalPolicy: strings.TrimSpace(config.ApprovalPolicy),
-		ExtraArgs:      append([]string(nil), config.ExtraArgs...),
-		PromptHints:    codexPromptHintsV0(config.PromptHints),
+		SchemaVersion:   orquestaruntimecodex.CodexConnectorProfileSchemaVersionV0,
+		OptIn:           true,
+		CommandPath:     strings.TrimSpace(config.CommandPath),
+		ProjectWorkDir:  strings.TrimSpace(config.ProjectWorkDir),
+		RuntimeWorkDir:  strings.TrimSpace(runtimeDir),
+		CodeHomeDir:     strings.TrimSpace(config.CodeHomeDir),
+		HomeDir:         strings.TrimSpace(config.HomeDir),
+		PathEnv:         strings.TrimSpace(config.PathEnv),
+		Model:           strings.TrimSpace(config.Model),
+		ReasoningEffort: strings.TrimSpace(config.ReasoningEffort),
+		Profile:         strings.TrimSpace(config.Profile),
+		Sandbox:         strings.TrimSpace(config.Sandbox),
+		ApprovalPolicy:  strings.TrimSpace(config.ApprovalPolicy),
+		ExtraArgs:       append([]string(nil), config.ExtraArgs...),
+		PromptHints:     codexPromptHintsV0(config.PromptHints),
 	}
 }
 

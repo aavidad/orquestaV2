@@ -8,13 +8,13 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
 	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 	orquestaweb "orquesta/modulos/orquesta-web"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 type ConfigV0 struct {
@@ -57,18 +57,19 @@ type CodexReceiptStorePortV0 interface {
 }
 
 type CodexRuntimeConfigV0 struct {
-	CommandPath    string
-	ProjectWorkDir string
-	RuntimeWorkDir string
-	CodeHomeDir    string
-	HomeDir        string
-	PathEnv        string
-	Model          string
-	Profile        string
-	Sandbox        string
-	ApprovalPolicy string
-	ExtraArgs      []string
-	PromptHints    []string
+	CommandPath     string
+	ProjectWorkDir  string
+	RuntimeWorkDir  string
+	CodeHomeDir     string
+	HomeDir         string
+	PathEnv         string
+	Model           string
+	ReasoningEffort string
+	Profile         string
+	Sandbox         string
+	ApprovalPolicy  string
+	ExtraArgs       []string
+	PromptHints     []string
 
 	Runtime        orquestaruntime.ExternalAgentProcessRuntimePortV0
 	ProcessStopper orquestacionnucleoapp.ProcessRuntimeStopPortV0

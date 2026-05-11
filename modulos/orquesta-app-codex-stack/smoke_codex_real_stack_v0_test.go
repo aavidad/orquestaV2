@@ -7,11 +7,11 @@ import (
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 	orquestaweb "orquesta/modulos/orquesta-web"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 type codexStackRealSmokeStoresV0 struct {
@@ -57,17 +57,18 @@ func codexStackRealSmokeBuildStackV0(
 			RunQueue:        stores.RunMemory,
 		},
 		Codex: CodexRuntimeConfigV0{
-			CommandPath:    cfg.CommandPath,
-			ProjectWorkDir: cfg.ProjectWorkDir,
-			RuntimeWorkDir: cfg.RuntimeWorkDir,
-			CodeHomeDir:    cfg.CodeHomeDir,
-			HomeDir:        cfg.HomeDir,
-			PathEnv:        cfg.PathEnv,
-			Model:          cfg.Model,
-			Profile:        cfg.Profile,
-			Sandbox:        cfg.Sandbox,
-			ApprovalPolicy: cfg.ApprovalPolicy,
-			ExtraArgs:      cfg.ExtraArgs,
+			CommandPath:     cfg.CommandPath,
+			ProjectWorkDir:  cfg.ProjectWorkDir,
+			RuntimeWorkDir:  cfg.RuntimeWorkDir,
+			CodeHomeDir:     cfg.CodeHomeDir,
+			HomeDir:         cfg.HomeDir,
+			PathEnv:         cfg.PathEnv,
+			Model:           cfg.Model,
+			ReasoningEffort: cfg.ReasoningEffort,
+			Profile:         cfg.Profile,
+			Sandbox:         cfg.Sandbox,
+			ApprovalPolicy:  cfg.ApprovalPolicy,
+			ExtraArgs:       cfg.ExtraArgs,
 			PromptHints: []string{
 				"Smoke real de Orquesta desde /nueva-app: entrega documentos breves y accionables.",
 				"Prioriza terminar con ACK valido antes que ampliar alcance.",
