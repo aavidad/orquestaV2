@@ -1,0 +1,111 @@
+package orquestaappcodexstack
+
+import (
+	"time"
+
+	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
+	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
+	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
+	orquestaweb "orquesta/modulos/orquesta-web"
+	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+)
+
+type ConfigV0 struct {
+	Enabled        bool
+	Clock          orquestafactory.AppSpecHTTPClockV0
+	Timeout        time.Duration
+	DirectorLimits orquestaweb.WebArrancarDirectorAppLimitsV0
+	Stores         StoresV0
+	RunQueue       RunQueueConfigV0
+	RunSupervisor  RunSupervisorConfigV0
+	Codex          CodexRuntimeConfigV0
+	Capacity       CapacityConfigV0
+	ReviewGate     ReviewGateConfigV0
+	AppChange      orquestaappchange.AppChangePortsV0
+}
+
+type StoresV0 struct {
+	RunStore        orquestacionnucleoapp.RunStorePortV0
+	EventSink       orquestacionnucleoapp.EventSinkPortV0
+	OutboxLedger    OutboxLedgerPortV0
+	TaskStore       orquestaappdirectorservice.AppDirectorWorkflowTaskStorePortV0
+	AppChangeStore  orquestaappchange.AppChangeRecordStorePortV0
+	ReceiptStore    CodexReceiptStorePortV0
+	ProgressState   orquestaruntimecodexdelivery.CodexProgressStateStorePortV0
+	ProcessRegistry orquestacionnucleoapp.AgentProcessRegistryPortV0
+	RunControl      orquestaruncontrol.RunControlPortV0
+	RunQueue        orquestarunqueue.RunQueuePortV0
+}
+
+type OutboxLedgerPortV0 interface {
+	orquestadirectorcycleoutbox.DirectorCycleOutboxLedgerPortV0
+	orquestaoutboxdispatch.PendingOutboxReaderPortV0
+	orquestaoutboxdispatch.OutboxDispatchClaimerPortV0
+	orquestaoutboxdispatch.OutboxDispatchAckPortV0
+}
+
+type CodexReceiptStorePortV0 interface {
+	orquestaruntimecodexdelivery.CodexReceiptDescriptorStorePortV0
+	orquestaruntimecodexdelivery.CodexReceiptDescriptorRecorderPortV0
+}
+
+type CodexRuntimeConfigV0 struct {
+	CommandPath    string
+	ProjectWorkDir string
+	RuntimeWorkDir string
+	CodeHomeDir    string
+	HomeDir        string
+	PathEnv        string
+	Model          string
+	Profile        string
+	Sandbox        string
+	ApprovalPolicy string
+	ExtraArgs      []string
+	PromptHints    []string
+
+	Runtime        orquestaruntime.ExternalAgentProcessRuntimePortV0
+	ProcessStopper orquestacionnucleoapp.ProcessRuntimeStopPortV0
+	SnapshotSource orquestaruntimecodexdelivery.CodexProcessSnapshotSourcePortV0
+
+	MaxBatchReady  int
+	MaxConcurrency int
+	WaitInterval   time.Duration
+	ProgressPolicy orquestaruntime.AgentProgressHeartbeatPolicyV0
+	ProgressBudget orquestaruntimecodexdelivery.CodexBudgetActivityPolicyV0
+}
+
+type RunQueueConfigV0 struct {
+	QueueRef             string
+	DefaultPriorityScore int
+	QueueLimit           int
+	MaxRunsPerTick       int
+}
+
+type RunSupervisorConfigV0 struct {
+	MaxTicks          int
+	MaxExecutions     int
+	StopOnNoExecution bool
+	AllowRepeatedRuns bool
+}
+
+type CapacityConfigV0 struct {
+	Tier            orquestacoreworkflow.OrchestrationCapacityRecommendationV0
+	ReasoningEffort orquestacoreworkflow.OrchestrationCapacityRecommendationV0
+	OccurredAt      string
+	RequestedBy     string
+	Summary         string
+	EvidenceRefs    []string
+}
+
+type ReviewGateConfigV0 struct {
+	FileEvidence    orquestaruntimecodexdelivery.CodexReviewGateFileEvidenceResultProviderPortV0
+	MaxLinesPerFile int
+	FailureStatus   orquestacoreworkflow.ReviewResultStatusV0
+}

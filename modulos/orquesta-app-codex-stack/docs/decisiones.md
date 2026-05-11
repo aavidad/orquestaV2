@@ -1,0 +1,628 @@
+# Decisiones: orquesta-app-codex-stack
+
+```text
+Fecha: 2026-05-10
+Decision: El stack exige un puerto explicito de evidencia para el review gate.
+Motivo: si el review gate no lee ficheros reales, una entrega con ACK correcto
+puede aceptar codigo inexistente o demasiado grande. Si lo lee por default
+oculto, repetimos acoplamiento a filesystem. La composition debe recibir el
+adaptador como puerto.
+Impacto: `ConfigV0.ReviewGate.FileEvidence` es requerido; los tests y smokes
+inyectan `CodexReviewGateProjectFileEvidenceV0`; el core sigue sin conocer
+filesystem, Codex, proveedor, modelo ni DB.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: El supervisor global ejecuta pasadas acotadas, no un daemon interno.
+Motivo: un daemon con sleeps o bucles abiertos volveria a consumir cuota y
+tiempo sin control cuando una app no produce progreso. La unidad segura es una
+pasada con `MaxTicks`, `MaxExecutions` y parada por ausencia de ejecucion.
+Impacto: `orquesta-run-supervisor` queda como modulo puro; el stack expone
+`RunGlobalSupervisorV0`. Quien quiera continuidad debe invocar nuevas pasadas
+desde un operador externo, MCP futuro o servicio opt-in, siempre con
+presupuesto.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: Una misma pasada supervisada no repite una run ya ejecutada salvo
+permiso explicito.
+Motivo: si la run de mayor prioridad queda en cola, un supervisor ingenuo la
+ejecutaria una y otra vez y bloquearia otras apps. Mutar prioridad desde el
+supervisor seria mezclar politica de cola con ejecucion.
+Impacto: el supervisor pasa `ExcludeRunRefs` al coordinador tras cada ejecucion.
+La exclusion es temporal, visible como skip `run_excluded` y no modifica la
+cola persistente.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: El tick global multiapp es API interna de composition, no herramienta
+MCP publica en esta fase.
+Motivo: MCP ya puede cambiar prioridad y controlar runs. Exponer el tick ahora
+duplicaria superficie antes de estabilizar el contrato y haria que el transporte
+conociera detalles operativos del scheduler global.
+Impacto: se crea `orquesta-run-coordinator` puro y el stack lo compone con
+`RunGlobalTickV0`. REST/MCP/web seguiran pidiendo control, stats y prioridad por
+contratos finos; cuando haya consumidor externo real se abrira una herramienta
+opt-in para disparar ticks.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: Al arrancar un director de app, el stack encola automaticamente la
+run en la cola global.
+Motivo: si la cola solo se alimenta con `set_priority` manual, Orquesta no puede
+autogobernar varias apps a la vez. El alta en cola pertenece a composition
+porque conecta el resultado publico del arranque con el puerto global de
+prioridad.
+Impacto: `QueuedArrancarDirectorExecutorV0` envuelve el executor MCP existente,
+usa `RunQueuePriorityWriterPortV0` inyectado y registra `queue_ref`,
+`priority_score`, `app_ref` y `updated_at`. No toca DB ni scheduler interno.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: El control de una app completa vive fuera del core workflow y entra
+por puertos `RunControl`.
+Motivo: un humano, el director o MCP deben poder pausar, reanudar, pedir stop
+o cancelar una app sin conocer procesos, DB ni estado interno del scheduler.
+Impacto: `orquesta-run-control` define el contrato puro; `orquesta-run-memory`
+es solo conector de memoria; `orquestacionnucleoapp` consulta el reader antes
+de planificar y antes de despachar. Si no hay estado de control para una run,
+el contrato tipado `RunControlStateNotFoundErrorV0` se interpreta como
+`running` por defecto; otros errores siguen siendo fatales.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: La prioridad multiapp se gestiona como cola global independiente.
+Motivo: Orquesta debe poder crear multiples apps simultaneas y decidir cual
+recibe trabajo segun `priority_score`, aging y estado de ejecucion, sin meter
+la politica global dentro del scheduler interno de cada run.
+Impacto: `orquesta-run-queue` rankea candidatos por puerto; MCP expone
+`orquesta.run_queue.priority.v0` con `rank` y `set_priority`; el stack lo
+cablea por REST/MCP usando solo conectores inyectados.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: Las estadisticas de agentes separan progreso de uso de recursos.
+Motivo: el director, la web y el humano necesitan ver modelo, capacidad, cuota
+y tokens por agente, pero mezclar esos datos con `AgentProgressReportV0`
+romperia el contrato de progreso compacto y podria filtrar detalles operativos.
+Impacto: el nucleo expone `AgentUsageStatsProviderPortV0` y
+`DirectorAgentStatsV0.Usage`. MCP/web pueden pedir `include_agent_usage=true`.
+El stack Codex publica modelo/capacidad desde configuracion y marca cuota como
+`not_configured` hasta conectar un proveedor real de cuota/tokens. No se
+exponen HOME, OAuth, tokens de credencial ni rutas locales.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: La multitarea de apps necesita cola global por run, no cambios en el
+scheduler interno de cada run.
+Motivo: el scheduler actual ordena trabajo dentro de un `run_ref`; si se usa
+para decidir entre apps distintas se mezclan responsabilidades y se repite el
+error de v1/v2 de acoplar control global a detalles internos.
+Impacto: se crea un miniproyecto separado `orquesta-run-queue` con ranking por
+`priority_score`, aging/fairness y filtro de runs no ejecutables. El score solo
+decide que run recibe el siguiente ciclo; dentro del run sigue mandando el
+director/scheduler existente.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: Parar una app completa requiere control de run con checkpoint, no
+matar procesos directamente.
+Motivo: detener agentes sin checkpoint puede perder diffs, entregas parciales,
+leases y decisiones del director. Ademas `StoppedAgents` significa solicitud,
+no confirmacion.
+Impacto: `PauseRun`, `ResumeRun`, `StopRun` y `CancelRun` quedan como contrato
+pendiente de core/app service. La politica segura sera bloquear nuevo
+scheduling/outbox, pedir checkpoint al director y agentes activos, confirmar
+estado durable y solo despues emitir stops. Forced stop sera modo explicito y
+auditado.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: La parada de runtime por supervision exige identidad de proceso y los
+agentes de direccion protegidos no son parables automaticamente.
+Motivo: el smoke real mostro que el director puede tardar mas que otros agentes
+y que un falso positivo de progreso no debe matar el proceso que gobierna el
+run. Ademas, parar solo por `process_ref` es insuficiente cuando existen varias
+sesiones/procesos registrados.
+Impacto: `ProcessAgentStopperV0` valida `process_ref`, `session_ref` y
+`launch_ref` cuando el runtime expone snapshot; el progreso de un director en
+`brainstorming_arquitectura` se degrada a `ask_director`, con `CanStop=false`
+en stats, en vez de emitir `StopRuntimeAgent`.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: Un ACK valido registrado limpia el proceso externo como operacion de
+runtime, sin marcar el agente como parado en el workflow.
+Motivo: en smoke real varios Codex escribieron `agent_ack.json`, Orquesta
+registro entrega y siguieron vivos durante minutos. Eso consume cuota y puede
+confundirse con trabajo pendiente.
+Impacto: el stack envuelve el `EventSink` con cleanup terminal para eventos
+`DeliveryRegistered` y `PhaseArtifactRegistered`. La limpieza usa el stopper
+seguro inyectado y no emite `AgentStopConfirmed`, no toca `StoppedAgents` y no
+cambia la semantica de entrega.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: El siguiente cierre de madurez debe introducir presupuestos por
+agente/tarea/ACK, no solo timeout global del run.
+Motivo: la app Go/API/web parcial compilo y tenia calidad suficiente, pero el
+tercer agente de HTTP/web/i18n no alcanzo ACK antes del limite global. El
+problema no es la arquitectura de app generada sino la falta de contrato
+temporal por microtarea.
+Impacto: queda pendiente separar microtareas grandes automaticamente y exponer
+en stats/MCP edad de agente, ultima actividad, tiempo sin ACK y accion tomada
+por presupuesto. No se debe resolver aumentando sin limite el timeout global.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: El stack rechaza planes Go iniciales que no cubren `go.mod`,
+`cmd/server` y `go test ./...` antes de lanzar la programacion.
+Motivo: el smoke real multiagente `multiagent3` demostro que aceptar solo ACKs
+y archivos generados no basta. Los agentes reales trabajaron bien dentro de
+write-set, pero el plan no les dio permiso para crear modulo ni entrypoint, por
+lo que la app no podia ser autonoma.
+Alternativas: parchear la app generada; ampliar write-set desde el runtime;
+relajar el smoke final; esperar al timeout para descubrirlo tarde.
+Impacto: `compositeDirectorDecisionSourceV0` valida el lote de decisiones del
+director. Para planes Go iniciales exige al menos una microtarea con `go.mod`,
+una con `cmd/server` o `cmd/**`, y `required_tests` con `go test ./...`. Los
+cambios ya respondidos por el director no se tratan como bootstrap inicial.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-11
+Decision: Una smoke multiagente verde no basta para aceptar una app Go completa.
+Motivo: la prueba real multiagente lanzo director y agentes reales en paralelo,
+registro ACKs y artefactos, pero la revision manual encontro una app Go no
+autonoma: faltaba go.mod, no habia entrypoint bajo cmd/ y varios paquetes usaban
+imports relativos. Eso es trabajo real, pero no producto terminado.
+Impacto: las microtareas pueden transportar `required_tests`; el prompt de
+programacion exige modulo Go autonomo, entrypoint cmd/server o equivalente,
+imports de modulo y ausencia de imports relativos. La smoke real de app stack
+ahora falla si el proyecto Go generado no tiene go.mod, entrypoint bajo cmd/,
+imports limpios y `go test ./...` verde.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: La revision se conecta en `StartAppDirectorPortsV0`, no en web ni MCP.
+Motivo: web/API/MCP solo expresan intenciones y consultan estado. La decision
+de aceptar o pedir cambios debe salir del scheduler/director con los mismos
+puertos que el resto del workflow.
+Impacto: `buildDirectorPortsV0` inyecta `ReviewGateSource`; cuando el run esta
+en `revision`, `ReviewGateCandidateProviderV0` crea candidatos de review sin
+intervencion de la sesion principal.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: El stack Codex inyecta tambien `ProcessRegistry` y `ProgressSource`
+en el tool de stats del director.
+Motivo: si web/MCP o el director piden estadisticas, necesitan saber si cada
+agente tiene control de parada y si hay senales de progreso, no solo contadores
+del run.
+Impacto: `/director-stats` puede devolver `source_status=loaded`,
+`no_signal_agent_refs` y `can_stop` usando puertos hexagonales; el core sigue
+sin conocer Codex, filesystem, DB, proveedor ni modelo.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: El smoke real de cambio a mitad valida Orquesta, no coordinacion manual.
+Motivo: la prueba valida el producto solo si la orden entra por la frontera de
+app (`/nueva-app` y `/app-change`) y Orquesta lanza director/agentes por sus
+propios puertos. Intervenir desde Codex humano ocultaria fallos de scheduler,
+idempotencia o drenaje.
+Impacto: `TestNuevaAppWebCodexStackRealCambioMitadOptInV0` crea una app real,
+espera decisiones iniciales del director, inyecta un cambio por HTTP y exige un
+agente adicional con write-set `docs/change-request-midrun.md`.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: El prompt del director aplica minimos por `request_kind` y politica
+de recorte por `execution_mode`.
+Motivo: una peticion de documentacion no debe forzar codigo, y una app completa
+no puede cerrar solo con docs salvo debug. El criterio debe estar en el encargo
+del agente, no improvisado por el operador.
+Impacto: `directorTaskV0` extrae los tokens neutros del summary y anade
+instrucciones/done criteria para app completa, documentacion, analisis,
+seguridad, deploy y debug, manteniendo write-set pequeno.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: El drenaje con agentes pendientes solo corta temprano si se anaden
+agentes nuevos.
+Motivo: una evaluacion interna de supervision puede incrementar la secuencia
+del run sin cerrar ni abrir trabajo. Cortar `DrainRunV0` en ese punto impedia
+registrar ACKs tardios ya disponibles y reproducia esperas falsas.
+Impacto: cuando hay agentes externos pendientes, `DrainRunV0` sigue esperando y
+observando si el director solo hizo progreso interno; si el director lanza una
+nueva microtarea, retorna para dejar ese agente correr en paralelo.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: El contrato textual del director exige refs superiores unicas por
+comando.
+Motivo: un payload puede apuntar a una decision aceptada previa, pero la
+decision ejecutable de nivel superior debe tener `decision_ref` y `command_ref`
+propios. Reutilizar refs provoca colision de idempotencia y mezcla comandos.
+Impacto: el prompt distingue `decision_ref`/`command_ref` del comando actual de
+los refs de negocio que viajan dentro del payload.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: Crear un modulo exterior separado para composition real con Codex.
+Motivo: app-gateway productivo debe seguir siendo una raiz neutra de handlers,
+y el core no debe importar runtime Codex ni conectores reales.
+Impacto: el stack opt-in puede importar runtime Codex y stores externos sin
+contaminar el nucleo ni la ruta productiva.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: El stack compone la fuente de decisiones de fichero con una fuente
+derivada de `AppChangeRecordV0`.
+Motivo: los cambios escritos desde web/MCP/API deben entrar por el mismo puerto
+del director que las decisiones generadas por agentes, sin leer DB ni runtime
+desde el transporte.
+Impacto: `BuildStackV0` exige `AppChangeStore`; `RequestAppChange` persiste la
+solicitud y solo usa el notifier para levantar la pregunta al director. El
+drenaje del run puede crear microtareas de cambio sin intervencion manual.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: La solicitud de cambio se registra primero como `AskDirector`.
+Motivo: el transporte web/REST/MCP no debe decidir tareas ni agentes. El usuario
+expresa intencion; el director decide si pregunta, replanifica, sube capacidad o
+lanza microtareas.
+Impacto: `orquesta-app-codex-stack` usa `AppChangeRequestV0` y puertos del
+workflow para reflejar el cambio como pregunta durable del director. La ruta
+queda preparada para que el siguiente cierre consuma esa pregunta y emita
+decisiones ejecutables.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: El contrato del director debe fijar IDs encadenados y vocabulario
+seguro para campos que cruzan el core.
+Motivo: el core no puede inferir que `vote-ref-x` significa
+`vote-request-x`; aceptar decision exige el mismo ref emitido por
+`request_vote`. Ademas, terminos sensibles literales en summaries provocan
+rechazo antes de programacion.
+Impacto: el prompt obliga a que `accept_decision.vote_ref` sea igual al
+`request_vote.vote_request_id`, que contratos y microtareas referencien refs
+previos exactos, y que seguridad se exprese como `datos sensibles` en campos
+de decision. No se anade traduccion tolerante.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: Las `evidence_refs` del director son identificadores compactos, no
+rutas ni texto humano.
+Motivo: en smoke real el director escribio `director_decisions.json` con DTO
+correcto, pero uso refs con slash, espacios y etiquetas de documento. El puerto
+las rechazo con razon: esas refs cruzan core y deben ser trazabilidad opaca.
+Impacto: el contrato textual ahora prohibe espacios, slash, rutas y etiquetas
+humanas en `evidence_refs`; solo acepta letras, numeros, punto, guion, guion
+bajo o dos puntos. No se anade conversor ad hoc ni se relaja el core.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: Validar la ruta real multiagente desde `/nueva-app`, no desde
+coordinacion manual externa.
+Motivo: la app debe demostrar que Orquesta crea la cohorte y gobierna los
+agentes; si Codex humano coordina uno a uno, la prueba no valida el producto.
+Impacto: `TestNuevaAppWebCodexStackRealMultiagentOptInV0` arranca 4 Codex
+reales en paralelo por batch, espera ACKs validos y drena los artefactos de
+fase. La evidencia real paso en 148.207s.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: No interpretar una firma de runtime sin cambios como bucle real.
+Motivo: un agente Codex puede estar pensando decenas de segundos sin escribir
+ACK ni logs. Pararlo por ausencia temporal de cambios reproduce el fallo de
+v1/v2: gastar cuota arreglando falsos positivos del supervisor.
+Impacto: el adaptador Codex conserva conteo de no-progreso para reportar
+`stalled`, pero no genera `loop_detected` sin una senal explicita de accion
+repetida. Los umbrales del stack real son conservadores.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: Dividir los smokes del stack en ficheros pequenos por responsabilidad.
+Motivo: aunque sean tests, un fichero grande degrada revision, depuracion y
+contexto de agentes; repetir esa pauta fue uno de los problemas historicos.
+Impacto: el flujo queda separado de config, fixtures, runtime fake,
+peticiones y assertions. La repeticion real posterior paso en 82.09s.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: El primer smoke real del stack exterior usa un solo director desde
+`/nueva-app`.
+Motivo: valida la frontera completa web -> REST interno -> MCP -> director ->
+runtime real con coste y tiempo acotados antes de escalar a cohorte completa.
+Impacto: el test real exige ACK, documentos del write-set y
+`PhaseArtifactRegistered`; la prueba multiagente real queda como siguiente
+escalon, no como prerequisito del primer cierre.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: `ack_not_ready` es espera valida en el smoke, no fallo definitivo.
+Motivo: el POST de `/nueva-app` puede devolver con el proceso externo vivo
+mientras el ACK aun no existe; cortar en ese punto mataria agentes que siguen
+trabajando correctamente.
+Impacto: el test espera hasta timeout acotado y solo falla si el ACK queda
+invalido, si no hay progreso antes del limite o si falta el artefacto durable.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: No definir defaults de DB, proveedor ni modelo.
+Motivo: un default oculto convierte una prueba real en comportamiento
+productivo implicito y repite acoplamientos historicos.
+Impacto: la composition falla si el operador no inyecta puertos/configuracion
+explicitos. La documentacion y el script solo validan presencia de config.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: Reutilizar `StartAppDirectorPortsV0` como frontera de arranque.
+Motivo: web, REST y MCP ya convergen en el servicio de director; crear un camino
+paralelo para Codex duplicaria semantica y tests.
+Impacto: el stack prepara puertos reales para el servicio existente y mantiene
+transportes finos.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: Implementar composition Go local, pero solo como stack exterior
+opt-in.
+Motivo: necesitamos probar web/API/MCP con agentes reales inyectables sin
+convertir el app-gateway productivo ni el core en adaptadores de proveedor.
+Impacto: `BuildStackV0` compone handlers, stores, runtime, dispatcher batch,
+waiter de ACK y capacidad por configuracion. La ruta solo existe si el operador
+inyecta todos los puertos.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: El smoke real debe ser opt-in y delegar en comandos explicitos.
+Motivo: Codex real consume cuota, credenciales y procesos locales; no puede
+ejecutarse por defecto en tests ni arranques ordinarios.
+Impacto: `arrancar_codex.sh` exige opt-in y configuracion completa antes de
+delegar en el comando indicado por el operador.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: Las refs publicas del stack exterior son neutrales.
+Motivo: el core debe poder validar que ningun evento, outbox o paquete de
+agente filtra proveedor, modelo, HOME, credenciales, runtime ni nombre del
+conector real.
+Impacto: el paquete puede usar internamente el conector real, pero evidence
+refs, target_module, profile_ref, connector_ref y summaries que cruzan core
+usan nombres opacos tipo app-stack.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: La prueba web/API debe lanzar ejecuciones independientes con el mismo
+nombre visible de app.
+Motivo: reutilizar solo el slug de la app en task/agent refs ocultaba una
+colision de outbox entre solicitudes distintas.
+Impacto: el intake queda corregido para generar refs por spec; el stack prueba
+que API y web arrancan cohortes separadas aunque el usuario repita nombre.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: El director principal debe emitir decisiones ejecutables en
+`director_decisions.json` cuando el objetivo lo requiera.
+Motivo: documentar arquitectura no basta para autonomia; Orquesta ya tenia el
+puerto de decision y el task store, pero el agente real no recibia run_id,
+brainstorm_ref ni secuencia minima de fases.
+Impacto: el contrato del director incluye run_id, brainstorm_ref, schema
+`director_agent_decisions_file.v0` y cadena minima hasta `programacion`. Las
+areas especializadas documentan, pero no emiten decisiones de control.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: Los agentes con rol `implementacion` se clasifican como area
+`programacion`, no como `director`.
+Motivo: el fallback a `director` mezclaba prompts, target_module y ficheros de
+control del director con trabajo de programacion.
+Impacto: el stack separa director y programacion sin tocar el core; el
+programming agent recibe su task concreta y no contrato de decisiones.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: El contrato textual del director nombra los campos ejecutables
+obligatorios y prohibe aliases genericos.
+Motivo: En prueba real el director genero un JSON razonable pero no aplicable
+porque uso campos como action, decision_id, payload y refs. El contrato debe
+guiar al agente hacia el DTO exacto que consume el puerto de decisiones.
+Impacto: el prompt del director enumera phase_id de nivel superior,
+decision_ref, command_type, command_ref, summary, evidence_refs y payloads
+tipados por comando, incluidos los campos internos obligatorios de open_phase,
+request_vote, accept_decision, publish_function_contract y create_microtask.task.
+El stack mantiene el parseo estricto y no acepta conversiones ad hoc.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: `DrainRunV0` continua el director completo y no solo registra ACKs.
+Motivo: en ejecucion real `director_decisions.json` aparece despues del primer
+arranque. Registrar ACKs sin reentrar al servicio del director deja la fase en
+documentacion y no lanza agentes de programacion.
+Impacto: el stack usa `ContinueAppDirectorV0` para drenar runs existentes,
+consume decisiones tardias y arranca microtareas. Mantiene la espera externa en
+el borde del stack para no meter temporizadores en core.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: El endpoint inicial web/API/MCP arranca el run pero no consume
+decisiones del director ni espera la siguiente ola de programacion.
+Motivo: en prueba real el POST llego a lanzar programacion, pero quedo
+bloqueado esperando ACKs de la nueva ola y devolvio 502 aunque Orquesta estaba
+trabajando. La entrada de usuario debe ser corta; la continuidad pertenece al
+drain/worker.
+Impacto: `BuildStackV0` compone el handler inicial con puertos start-only
+sin `DirectorDecisionSource` ni `ExternalWaiter`; `StackV0` conserva los
+puertos completos para `DrainRunV0`. Si `DrainRunV0` lanza nuevos agentes
+externos, devuelve control y deja el siguiente avance a otro drain.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: El stack marca `SendDirectorQuestion` como entregado mediante un
+dispatcher fino.
+Motivo: las preguntas no bloqueantes ya quedan persistidas en el run; dejarlas
+como outbox sin dispatcher paraba el loop en `wait_unhandled_outbox` e impedia
+recoger ACKs tardios.
+Impacto: el dispatcher no decide ni responde la pregunta; solo ACKea la
+entrega para que web/MCP/estadisticas lean la pregunta durable sin bloquear el
+flujo de agentes.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: La ola de programacion se recoge en una reentrada posterior, no en
+el mismo drain que la lanza.
+Motivo: si `DrainRunV0` lanza agentes externos y ademas espera sus ACKs en la
+misma llamada, vuelve el bloqueo largo que hizo fallar el POST inicial. Cada
+reentrada debe consumir lo ya producido y, si crea nueva ola externa, devolver
+control.
+Impacto: `DrainRunV0` usa un control interno `StopAfterAttempt` cuando hay
+agentes pendientes. El siguiente drain recoge ACKs y registra entregas.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: Las refs de entrega del paquete de agente son unicas por agente.
+Motivo: varios agentes de programacion compartian refs derivadas solo del area,
+por ejemplo `ack-ref-app-stack-programacion`. Eso podia colapsar ACKs y
+mailboxes entre microtareas.
+Impacto: `DeliveryRefs` y refs de bundle usan sufijo de agente/tarea mas area.
+El test `TestAgentPacketV0UsaDeliveryRefsUnicasPorAgente` fija el contrato.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: Un write-set puede apuntar a fichero o directorio.
+Motivo: la prueba real `real-11` fallo porque el smoke intento leer
+`internal/agenda/domain` como fichero. El contrato de trabajo por modulo puede
+ser directorio si el agente crea varios ficheros pequenos dentro.
+Impacto: el verificador acepta directorios con contenido y sigue rechazando
+write-sets vacios o ausentes.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: La guarda automatizada inicial de tamano se aplica a ficheros Go
+generados con limite de 300 lineas.
+Motivo: el problema historico eran ficheros de codigo enormes dificiles de
+depurar. La primera guarda debe proteger codigo ejecutable sin bloquear specs
+largas que requieran politica propia.
+Impacto: el smoke real falla si cualquier `.go` generado supera 300 lineas.
+`web/agenda/openapi.yaml` de 310 lineas queda como observacion y futura regla
+si se decide limitar tambien especificaciones.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: APP-CODEX-STACK-011 cierra estadisticas y replanificacion antes de
+llamar maduro al nucleo.
+Motivo: Orquesta ya puede crear una app pequena con agentes reales, pero el
+director aun necesita datos estructurados de progreso, tests, duracion,
+write-set y no-progreso para tomar decisiones como las de supervision humana.
+Impacto: la siguiente tarea no cambia el modelo de orquestacion; expone datos
+por puertos hexagonales para MCP/web/director y permite rechazar o replanificar
+entregas invalidas.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-10
+Decision: Cambiar una app existente usa `AppChangeRequestV0`, separado de
+`AppSpecRequestV0`.
+Motivo: crear una app y modificar una app viva tienen contexto, write-set,
+criterios de aceptacion y riesgos distintos. Reutilizar el contrato de nueva app
+empujaria a los transportes a inferir estado desde DB, filesystem o UI.
+Impacto: web, REST y MCP solo validan y entregan la solicitud; el director
+reconstruye contexto por puertos, pregunta si falta informacion, y replanifica
+con microtareas ligadas a `change_ref`. El modulo mantiene i18n en bordes
+visibles y no hardcodea DB, proveedor, modelo ni paths.
+Estado: aceptada.
+```
