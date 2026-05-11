@@ -1,0 +1,112 @@
+{
+  "schema_version": "PersistenceRepositoryV0",
+  "contrato": "PersistenceRepositoryV0",
+  "operacion": "guardar_proyecto_borrador",
+  "adapter_metadata": {
+    "connector_profile_refs": [
+      "persistence_connector_profile_ref_001"
+    ],
+    "capacidades": [
+      "transacciones",
+      "idempotencia",
+      "payload_versionado"
+    ]
+  },
+  "unidad_trabajo": {
+    "transaccion_id": "tx_per_006_002",
+    "estado": "activa",
+    "read_only": false,
+    "aislamiento": "read_committed"
+  },
+  "request": {
+    "request_id": "req_per_006_002",
+    "correlation_id": "corr_per_006_002",
+    "idempotency_key": "idem_per_006_002",
+    "connector_ref": "persistence_connector_ref_forbidden_001",
+    "payload_version": "ProyectoPlanBorradorV0",
+    "payload": {
+      "proyecto_id_propuesto": "proyecto_borrador_002",
+      "nombre": "Panel operativo de tareas",
+      "estado": "borrador",
+      "app_spec_ref": "app_spec_ref_002",
+      "request_id": "req_factory_002",
+      "fases_iniciales": [
+        {
+          "id": "fase_descubrimiento",
+          "nombre": "Descubrimiento",
+          "orden": 1,
+          "estado": "pendiente",
+          "criterios_entrada": [
+            "AppSpecV0 validada disponible."
+          ],
+          "criterios_salida": [
+            "Backlog inicial normalizado."
+          ]
+        }
+      ],
+      "microtareas": [
+        {
+          "id": "mt_definir_contrato",
+          "titulo": "Definir contrato de tablero",
+          "descripcion": "Preparar contrato funcional sin escribir implementacion.",
+          "fase_id": "fase_descubrimiento",
+          "modulo_sugerido": "orquesta-core",
+          "prioridad": "alta",
+          "dependencias": [],
+          "criterios_aceptacion": [
+            "Contrato documentado con write-set cerrado."
+          ],
+          "contrato_requerido": "FunctionContractV0",
+          "write_set_previsto": [
+            "docs/contratos.md"
+          ],
+          "fuente_backlog_id": "backlog_item_002"
+        }
+      ],
+      "backlog_normalizado": [
+        {
+          "id": "mt_definir_contrato",
+          "titulo": "Definir contrato de tablero",
+          "descripcion": "Preparar contrato funcional sin escribir implementacion.",
+          "fase_id": "fase_descubrimiento",
+          "modulo_sugerido": "orquesta-core",
+          "prioridad": "alta",
+          "dependencias": [],
+          "criterios_aceptacion": [
+            "Contrato documentado con write-set cerrado."
+          ],
+          "contrato_requerido": "FunctionContractV0",
+          "write_set_previsto": [
+            "docs/contratos.md"
+          ],
+          "fuente_backlog_id": "backlog_item_002"
+        }
+      ],
+      "contratos_requeridos": [
+        "FunctionContractV0"
+      ],
+      "criterios_cierre": [
+        "Borrador serializable sin acoplamiento a persistencia operativa, runtime ni filesystem."
+      ],
+      "dependencias_pendientes": [
+        "PersistenceRepository v0 esta compartido globalmente; este corte no implementa almacenamiento operativo ni migraciones."
+      ]
+    }
+  },
+  "response": {
+    "status": "persistido",
+    "proyecto_id": "persisted_project_002",
+    "idempotency_key": "idem_per_006_002",
+    "payload_version": "ProyectoPlanBorradorV0",
+    "created_at": "2026-05-04T10:05:00Z",
+    "updated_at": "2026-05-04T10:05:00Z"
+  },
+  "errores_publicos": [
+    "persistencia_no_disponible",
+    "payload_invalido",
+    "conector_persistencia_no_soportado",
+    "conflicto_idempotencia",
+    "transaccion_fallida",
+    "regla_negocio_en_adaptador"
+  ]
+}

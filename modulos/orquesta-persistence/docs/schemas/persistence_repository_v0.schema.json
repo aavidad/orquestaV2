@@ -1,0 +1,410 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://orquesta.local/schemas/orquesta-persistence/persistence_repository_v0.schema.json",
+  "title": "PersistenceRepositoryV0GuardarProyectoPlanBorrador",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contrato",
+    "operacion",
+    "adapter_metadata",
+    "unidad_trabajo",
+    "request",
+    "response",
+    "errores_publicos"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "PersistenceRepositoryV0"
+    },
+    "contrato": {
+      "const": "PersistenceRepositoryV0"
+    },
+    "operacion": {
+      "const": "guardar_proyecto_borrador"
+    },
+    "adapter_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connector_profile_refs",
+        "capacidades"
+      ],
+      "properties": {
+        "connector_profile_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/definitions/connectorProfileRef"
+          }
+        },
+        "capacidades": {
+          "type": "array",
+          "minItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "transacciones",
+              "idempotencia",
+              "payload_versionado",
+              "lectura_por_id",
+              "lectura_por_idempotency_key"
+            ]
+          },
+          "allOf": [
+            {
+              "contains": {
+                "const": "transacciones"
+              }
+            },
+            {
+              "contains": {
+                "const": "idempotencia"
+              }
+            },
+            {
+              "contains": {
+                "const": "payload_versionado"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "unidad_trabajo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transaccion_id",
+        "estado",
+        "read_only",
+        "aislamiento"
+      ],
+      "properties": {
+        "transaccion_id": {
+          "$ref": "#/definitions/opaqueId"
+        },
+        "estado": {
+          "const": "activa"
+        },
+        "read_only": {
+          "const": false
+        },
+        "aislamiento": {
+          "enum": [
+            "default",
+            "read_committed",
+            "repeatable_read",
+            "serializable"
+          ]
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request_id",
+        "correlation_id",
+        "idempotency_key",
+        "payload_version",
+        "payload"
+      ],
+      "properties": {
+        "request_id": {
+          "$ref": "#/definitions/opaqueId"
+        },
+        "correlation_id": {
+          "$ref": "#/definitions/opaqueId"
+        },
+        "idempotency_key": {
+          "$ref": "#/definitions/opaqueId"
+        },
+        "payload_version": {
+          "const": "ProyectoPlanBorradorV0"
+        },
+        "payload": {
+          "$ref": "#/definitions/proyectoPlanBorradorV0"
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "proyecto_id",
+        "idempotency_key",
+        "payload_version",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "status": {
+          "const": "persistido"
+        },
+        "proyecto_id": {
+          "$ref": "#/definitions/opaqueId"
+        },
+        "idempotency_key": {
+          "$ref": "#/definitions/opaqueId"
+        },
+        "payload_version": {
+          "const": "ProyectoPlanBorradorV0"
+        },
+        "created_at": {
+          "$ref": "#/definitions/instant"
+        },
+        "updated_at": {
+          "$ref": "#/definitions/instant"
+        }
+      }
+    },
+    "errores_publicos": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/definitions/errorPublico"
+      },
+      "allOf": [
+        {
+          "contains": {
+            "const": "persistencia_no_disponible"
+          }
+        },
+        {
+          "contains": {
+            "const": "payload_invalido"
+          }
+        },
+        {
+          "contains": {
+            "const": "conector_persistencia_no_soportado"
+          }
+        },
+        {
+          "contains": {
+            "const": "conflicto_idempotencia"
+          }
+        },
+        {
+          "contains": {
+            "const": "transaccion_fallida"
+          }
+        },
+        {
+          "contains": {
+            "const": "regla_negocio_en_adaptador"
+          }
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "errorPublico": {
+      "enum": [
+        "persistencia_no_disponible",
+        "payload_invalido",
+        "conector_persistencia_no_soportado",
+        "conflicto_idempotencia",
+        "transaccion_fallida",
+        "regla_negocio_en_adaptador"
+      ]
+    },
+    "opaqueId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "connectorProfileRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "allOf": [
+        {
+          "$ref": "#/definitions/noConcretePersistenceTerm"
+        }
+      ]
+    },
+    "safeString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 400
+    },
+    "noConcretePersistenceTerm": {
+      "not": {
+        "pattern": "(^|[^A-Za-z0-9])(postgresql|postgres|sqlite|mysql|mariadb|cockroach|oracle|mssql|sqlserver|mongodb|mongo|redis|dynamodb|cassandra|neo4j|firebird|duckdb|snowflake|bigquery|redshift|db2|database|db|driver|dsn|sql|connector_ref)([^A-Za-z0-9]|$)"
+      }
+    },
+    "instant": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "stringList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/safeString"
+      },
+      "uniqueItems": true
+    },
+    "fasePlanificadaV0": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "nombre",
+        "orden",
+        "estado",
+        "criterios_entrada",
+        "criterios_salida"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/opaqueId"
+        },
+        "nombre": {
+          "$ref": "#/definitions/safeString"
+        },
+        "orden": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "estado": {
+          "const": "pendiente"
+        },
+        "criterios_entrada": {
+          "$ref": "#/definitions/stringList"
+        },
+        "criterios_salida": {
+          "$ref": "#/definitions/stringList"
+        }
+      }
+    },
+    "itemBacklogCoreV0": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "titulo",
+        "descripcion",
+        "fase_id",
+        "modulo_sugerido",
+        "prioridad",
+        "dependencias",
+        "criterios_aceptacion",
+        "contrato_requerido",
+        "write_set_previsto",
+        "fuente_backlog_id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/opaqueId"
+        },
+        "titulo": {
+          "$ref": "#/definitions/safeString"
+        },
+        "descripcion": {
+          "$ref": "#/definitions/safeString"
+        },
+        "fase_id": {
+          "$ref": "#/definitions/opaqueId"
+        },
+        "modulo_sugerido": {
+          "$ref": "#/definitions/safeString"
+        },
+        "prioridad": {
+          "enum": [
+            "baja",
+            "media",
+            "alta"
+          ]
+        },
+        "dependencias": {
+          "$ref": "#/definitions/stringList"
+        },
+        "criterios_aceptacion": {
+          "$ref": "#/definitions/stringList"
+        },
+        "contrato_requerido": {
+          "$ref": "#/definitions/safeString"
+        },
+        "write_set_previsto": {
+          "$ref": "#/definitions/stringList"
+        },
+        "fuente_backlog_id": {
+          "$ref": "#/definitions/opaqueId"
+        }
+      }
+    },
+    "proyectoPlanBorradorV0": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "proyecto_id_propuesto",
+        "nombre",
+        "estado",
+        "app_spec_ref",
+        "request_id",
+        "fases_iniciales",
+        "microtareas",
+        "backlog_normalizado",
+        "contratos_requeridos",
+        "criterios_cierre",
+        "dependencias_pendientes"
+      ],
+      "properties": {
+        "proyecto_id_propuesto": {
+          "$ref": "#/definitions/opaqueId"
+        },
+        "nombre": {
+          "$ref": "#/definitions/safeString"
+        },
+        "estado": {
+          "const": "borrador"
+        },
+        "app_spec_ref": {
+          "$ref": "#/definitions/opaqueId"
+        },
+        "request_id": {
+          "$ref": "#/definitions/opaqueId"
+        },
+        "fases_iniciales": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/fasePlanificadaV0"
+          }
+        },
+        "microtareas": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/itemBacklogCoreV0"
+          }
+        },
+        "backlog_normalizado": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/itemBacklogCoreV0"
+          }
+        },
+        "contratos_requeridos": {
+          "$ref": "#/definitions/stringList"
+        },
+        "criterios_cierre": {
+          "$ref": "#/definitions/stringList"
+        },
+        "dependencias_pendientes": {
+          "$ref": "#/definitions/stringList"
+        }
+      }
+    }
+  }
+}

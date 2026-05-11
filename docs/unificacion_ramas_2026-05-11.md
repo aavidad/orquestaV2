@@ -75,6 +75,25 @@ Validacion:
 Notas: No se ha fusionado la rama V2. Solo se ha portado esta unidad.
 ```
 
+```text
+Fecha: 2026-05-11
+Origen: reinicio-orquesta-v2-2026-05-04
+Destino: master
+Modulo: modulos/orquesta-persistence
+Decision: Extraer el contrato de persistencia y ledger outbox en memoria.
+Motivo: Aporta persistencia hexagonal validable, idempotencia y ACK de outbox
+sin elegir SQLite, Postgres, MySQL ni ningun motor concreto. Los nombres de
+motores aparecen solo en listas de rechazo y fixtures invalidos.
+Adaptacion aplicada: el test de conflicto de outbox se actualizo al contrato
+actual de `orquesta-core-workflow`, que exige `task_ref` y
+`capacity_request_ref` en `LaunchRuntimeAgent`.
+Validacion:
+  - go test -count=1 ./modulos/orquesta-persistence ./modulos/orquesta-core-workflow
+  - jq empty modulos/orquesta-persistence/docs/schemas/*.json modulos/orquesta-persistence/docs/fixtures/*/*.json
+  - git diff --check
+Notas: No se ha fusionado la rama V2. Solo se ha portado esta unidad.
+```
+
 ## Validacion
 
 Comando ejecutado:
