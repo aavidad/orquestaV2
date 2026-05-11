@@ -25,7 +25,7 @@ func (service ServiceV0) RunProgressiveLoopV0(
 		return service.finishProgressiveLoopV0(ctx, request, result), err
 	}
 	if !gate.Allowed {
-		return service.finishProgressiveRunControlGateV0(ctx, request, result, gate), nil
+		return service.finishProgressiveRunControlGateV0(ctx, request, result, gate)
 	}
 	for burstNumber := 1; burstNumber <= request.MaxBursts; burstNumber++ {
 		burst, err := service.runProgressiveBurstV0(ctx, request, burstNumber)
@@ -45,7 +45,7 @@ func (service ServiceV0) RunProgressiveLoopV0(
 			return service.finishProgressiveLoopV0(ctx, request, result), err
 		}
 		if !gate.Allowed {
-			return service.finishProgressiveRunControlGateV0(ctx, request, result, gate), nil
+			return service.finishProgressiveRunControlGateV0(ctx, request, result, gate)
 		}
 		dispatched, err := service.dispatchProgressiveWaitV0(ctx, request)
 		result.Dispatches = append(result.Dispatches, dispatched.Once...)

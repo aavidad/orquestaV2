@@ -410,3 +410,21 @@ runtime.
 Un estado ausente no debe romper una run recien creada: si el conector devuelve
 `RunControlStateNotFoundErrorV0`, el nucleo usa `running` por defecto. Cualquier
 otro error del conector se considera fallo operativo y detiene el loop.
+
+## Decision 2026-05-11: stop/cancel drena agentes vivos
+
+Cuando `RunControl` devuelve `stop_requested` o `cancel_requested` con
+checkpoint registrado o modo forzado, el nucleo no planifica trabajo nuevo. En
+su lugar:
+
+1. carga la run por `RunStorePortV0`;
+2. detecta agentes vivos desde `StartedAgents` menos `FailedAgents`,
+   `StoppedAgents` y `ConfirmedStoppedAgents`;
+3. materializa un `StopAgent` idempotente por agente vivo;
+4. guarda el outbox `StopRuntimeAgent` en el ledger inyectado;
+5. despacha solo dispatchers cuyo `message_type` sea `StopRuntimeAgent`.
+
+Esto evita que una peticion de parada lance trabajo pendiente por accidente. El
+nucleo sigue sin conocer procesos, sesiones, proveedores, HOME, OAuth ni DB; la
+parada fisica real ocurre solo si existe un `AgentStopperPortV0` o batch
+equivalente configurado por el operador.

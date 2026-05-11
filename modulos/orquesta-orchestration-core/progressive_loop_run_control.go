@@ -8,8 +8,11 @@ import (
 )
 
 type progressiveRunControlGateV0 struct {
-	Allowed bool
-	Status  ProgressiveLoopStatusV0
+	Allowed           bool
+	Status            ProgressiveLoopStatusV0
+	StopAgentsAllowed bool
+	ReasonCode        string
+	EvidenceRefs      []string
 }
 
 func (service ServiceV0) evaluateProgressiveRunControlGateV0(
@@ -35,8 +38,11 @@ func (service ServiceV0) evaluateProgressiveRunControlGateV0(
 		return progressiveRunControlGateV0{Allowed: true}, nil
 	}
 	return progressiveRunControlGateV0{
-		Allowed: false,
-		Status:  progressiveRunControlStatusV0(state),
+		Allowed:           false,
+		Status:            progressiveRunControlStatusV0(state),
+		StopAgentsAllowed: evaluation.StopAgentsAllowed,
+		ReasonCode:        progressiveRunControlReasonCodeV0(state),
+		EvidenceRefs:      compactStringsV0(state.EvidenceRefs),
 	}, nil
 }
 
@@ -63,7 +69,29 @@ func (service ServiceV0) finishProgressiveRunControlGateV0(
 	request ProgressiveLoopRequestV0,
 	result ProgressiveLoopResultV0,
 	gate progressiveRunControlGateV0,
-) ProgressiveLoopResultV0 {
+) (ProgressiveLoopResultV0, error) {
 	result.Status = gate.Status
-	return service.finishProgressiveLoopV0(ctx, request, result)
+	if gate.StopAgentsAllowed {
+		dispatched, err := service.stopRunControlAgentsV0(ctx, request, gate)
+		result.Dispatches = append(result.Dispatches, dispatched.Once...)
+		result.BatchDispatches = append(result.BatchDispatches, dispatched.Batch...)
+		if err != nil {
+			result.Status = ProgressiveLoopStatusStopErrorV0
+			return service.finishProgressiveLoopV0(ctx, request, result), err
+		}
+	}
+	return service.finishProgressiveLoopV0(ctx, request, result), nil
+}
+
+func progressiveRunControlReasonCodeV0(
+	state orquestaruncontrol.RunControlStateV0,
+) string {
+	switch orquestaruncontrol.NormalizeRunControlStatusV0(state.Status) {
+	case orquestaruncontrol.RunControlStatusCancelRequestedV0:
+		return "run_cancel_requested"
+	case orquestaruncontrol.RunControlStatusStopRequestedV0:
+		return "run_stop_requested"
+	default:
+		return "run_control_blocked"
+	}
 }

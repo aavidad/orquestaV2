@@ -495,7 +495,7 @@ Objetivo: control humano/orquestador de una app completa: pause, resume, stop y
 cancel.
 
 Estado: hecho en contratos, MCP/REST, stack y gate del nucleo; pendiente
-checkpoint/cierre fisico de agentes para stop/cancel terminal.
+checkpoint/cierre terminal de estado para stop/cancel.
 
 Trabajo minimo:
 
@@ -513,6 +513,6 @@ Trabajo minimo:
 Pendiente separado:
 
 - checkpoint real antes de stop/cancel no forzado;
-- parada fisica coordinada de agentes vivos de una run completa usando el
-  registro de procesos;
+- escritura terminal `stopped/canceled` cuando todos los agentes vivos han sido
+  confirmados o no habia agentes que parar;
 - UI web para botones de control y cambio de prioridad.
