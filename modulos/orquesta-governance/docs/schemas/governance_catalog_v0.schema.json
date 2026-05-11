@@ -1,0 +1,531 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://orquesta.local/schemas/governance_catalog_v0.schema.json",
+  "title": "GovernanceCatalogV0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "catalog_version",
+    "owner",
+    "activation_policy",
+    "source_policy",
+    "secret_control_policy",
+    "catalogs"
+  ],
+  "properties": {
+    "contract": {
+      "const": "GovernanceCatalogV0"
+    },
+    "catalog_version": {
+      "const": "v0"
+    },
+    "owner": {
+      "const": "orquesta-governance"
+    },
+    "activation_policy": {
+      "const": "historical_entries_require_review"
+    },
+    "source_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dbv1_is_forensic_only",
+        "legacy_ids_are_not_canonical",
+        "historical_activation_requires_review"
+      ],
+      "properties": {
+        "dbv1_is_forensic_only": {
+          "const": true
+        },
+        "legacy_ids_are_not_canonical": {
+          "const": true
+        },
+        "historical_activation_requires_review": {
+          "const": true
+        }
+      }
+    },
+    "secret_control_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "structured_controls_required",
+        "free_text_scan_only_allowed",
+        "prohibited_material"
+      ],
+      "properties": {
+        "structured_controls_required": {
+          "const": true
+        },
+        "free_text_scan_only_allowed": {
+          "const": false
+        },
+        "prohibited_material": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "credentials",
+              "tokens",
+              "private_home_paths",
+              "raw_transcripts",
+              "runtime_account_details"
+            ]
+          }
+        }
+      }
+    },
+    "catalogs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "effective",
+        "proposed",
+        "quarantine"
+      ],
+      "properties": {
+        "effective": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/effectiveEntry"
+          }
+        },
+        "proposed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/proposedEntry"
+          }
+        },
+        "quarantine": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/quarantineEntry"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "entryBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "name",
+        "summary",
+        "scope",
+        "status",
+        "version",
+        "origin",
+        "promotion",
+        "secret_controls"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "rule",
+            "skill",
+            "workflow"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 3
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 10
+        },
+        "scope": {
+          "$ref": "#/definitions/scope"
+        },
+        "status": {
+          "$ref": "#/definitions/status"
+        },
+        "version": {
+          "$ref": "#/definitions/version"
+        },
+        "origin": {
+          "$ref": "#/definitions/origin"
+        },
+        "promotion": {
+          "$ref": "#/definitions/promotion"
+        },
+        "secret_controls": {
+          "$ref": "#/definitions/secretControls"
+        }
+      }
+    },
+    "effectiveEntry": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/entryBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "status",
+            "promotion"
+          ],
+          "properties": {
+            "status": {
+              "type": "object",
+              "required": [
+                "catalog_state",
+                "review_state"
+              ],
+              "properties": {
+                "catalog_state": {
+                  "const": "effective"
+                },
+                "review_state": {
+                  "const": "approved_effective"
+                }
+              }
+            },
+            "promotion": {
+              "type": "object",
+              "required": [
+                "decision_ref",
+                "promoted_at",
+                "historical_review_required"
+              ],
+              "properties": {
+                "decision_ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "promoted_at": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                },
+                "historical_review_required": {
+                  "const": true
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "required": [
+              "origin"
+            ],
+            "properties": {
+              "origin": {
+                "type": "object",
+                "required": [
+                  "source_type"
+                ],
+                "properties": {
+                  "source_type": {
+                    "const": "dbv1"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "object",
+                "properties": {
+                  "document_version": {
+                    "not": {
+                      "const": "v1-historical"
+                    }
+                  }
+                }
+              },
+              "promotion": {
+                "type": "object",
+                "properties": {
+                  "decision_ref": {
+                    "type": "string",
+                    "pattern": "^(GOV|DEC|DIRECTOR)-[A-Z0-9-]+$"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "proposedEntry": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/entryBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "type": "object",
+              "required": [
+                "catalog_state",
+                "review_state"
+              ],
+              "properties": {
+                "catalog_state": {
+                  "const": "proposed"
+                },
+                "review_state": {
+                  "enum": [
+                    "pending_review",
+                    "reviewed_candidate"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "quarantineEntry": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/entryBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "type": "object",
+              "required": [
+                "catalog_state",
+                "review_state"
+              ],
+              "properties": {
+                "catalog_state": {
+                  "const": "quarantine"
+                },
+                "review_state": {
+                  "enum": [
+                    "quarantined",
+                    "rejected_for_v2"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ],
+      "properties": {
+        "level": {
+          "enum": [
+            "global",
+            "module",
+            "role",
+            "phase",
+            "domain_template",
+            "legacy_process"
+          ]
+        },
+        "modules": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^orquesta-[a-z0-9-]+$"
+          }
+        },
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3
+          }
+        },
+        "phases": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "planning",
+              "implementation",
+              "review",
+              "handoff",
+              "closure"
+            ]
+          }
+        },
+        "tags": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          }
+        }
+      }
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "catalog_state",
+        "review_state"
+      ],
+      "properties": {
+        "catalog_state": {
+          "enum": [
+            "effective",
+            "proposed",
+            "quarantine"
+          ]
+        },
+        "review_state": {
+          "enum": [
+            "pending_review",
+            "reviewed_candidate",
+            "approved_effective",
+            "quarantined",
+            "rejected_for_v2"
+          ]
+        }
+      }
+    },
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "document_version",
+        "source_version_evidence"
+      ],
+      "properties": {
+        "contract_version": {
+          "const": "v0"
+        },
+        "document_version": {
+          "type": "string",
+          "pattern": "^v0[-a-z0-9]*$"
+        },
+        "source_version_evidence": {
+          "type": "string",
+          "minLength": 3
+        }
+      }
+    },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_type",
+        "source_ref",
+        "forensic_inventory_ref",
+        "legacy_public_id_policy"
+      ],
+      "properties": {
+        "source_type": {
+          "enum": [
+            "dbv1",
+            "local_doc",
+            "director_decision"
+          ]
+        },
+        "source_ref": {
+          "type": "string",
+          "minLength": 6
+        },
+        "forensic_inventory_ref": {
+          "type": "string",
+          "minLength": 3
+        },
+        "legacy_public_id_policy": {
+          "const": "no_legacy_ids_as_canon"
+        }
+      }
+    },
+    "promotion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "criterion",
+        "decision_ref",
+        "promoted_at",
+        "historical_review_required"
+      ],
+      "properties": {
+        "criterion": {
+          "type": "string",
+          "minLength": 12
+        },
+        "decision_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "promoted_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "historical_review_required": {
+          "const": true
+        }
+      }
+    },
+    "secretControls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contains_secret_material",
+        "review_method",
+        "structured_markers_checked"
+      ],
+      "properties": {
+        "contains_secret_material": {
+          "const": false
+        },
+        "review_method": {
+          "enum": [
+            "structured_policy",
+            "structured_policy_and_text_scan",
+            "structured_policy_and_redaction"
+          ]
+        },
+        "structured_markers_checked": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "secret_kind",
+              "redaction_required",
+              "scope_allows_sensitive_material",
+              "source_is_public_contract",
+              "source_has_credentials"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

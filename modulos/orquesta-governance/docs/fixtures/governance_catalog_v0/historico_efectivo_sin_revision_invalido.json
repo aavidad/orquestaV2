@@ -1,0 +1,67 @@
+{
+  "contract": "GovernanceCatalogV0",
+  "catalog_version": "v0",
+  "owner": "orquesta-governance",
+  "activation_policy": "historical_entries_require_review",
+  "source_policy": {
+    "dbv1_is_forensic_only": true,
+    "legacy_ids_are_not_canonical": true,
+    "historical_activation_requires_review": true
+  },
+  "secret_control_policy": {
+    "structured_controls_required": true,
+    "free_text_scan_only_allowed": false,
+    "prohibited_material": [
+      "credentials",
+      "tokens"
+    ]
+  },
+  "catalogs": {
+    "effective": [
+      {
+        "kind": "rule",
+        "name": "Sin secretos hardcodeados",
+        "summary": "Regla historica de DB v1 que no puede activarse automaticamente como canon V2.",
+        "scope": {
+          "level": "global",
+          "roles": [
+            "programador"
+          ],
+          "phases": [
+            "implementation"
+          ]
+        },
+        "status": {
+          "catalog_state": "effective",
+          "review_state": "pending_review"
+        },
+        "version": {
+          "contract_version": "v0",
+          "document_version": "v0-documental",
+          "source_version_evidence": "DBv1.reglas_versiones version_num=1 actor=orquesta action=seed"
+        },
+        "origin": {
+          "source_type": "dbv1",
+          "source_ref": "DBv1.reglas(role=programador, category=seguridad, name=Sin secretos hardcodeados)",
+          "forensic_inventory_ref": "DBV1-000",
+          "legacy_public_id_policy": "no_legacy_ids_as_canon"
+        },
+        "promotion": {
+          "criterion": "Ejemplo invalido: intenta activar una entrada historica sin decision de promocion V2.",
+          "decision_ref": null,
+          "promoted_at": null,
+          "historical_review_required": true
+        },
+        "secret_controls": {
+          "contains_secret_material": false,
+          "review_method": "structured_policy",
+          "structured_markers_checked": [
+            "secret_kind"
+          ]
+        }
+      }
+    ],
+    "proposed": [],
+    "quarantine": []
+  }
+}

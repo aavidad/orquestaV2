@@ -128,6 +128,24 @@ adaptadores son dry-run puros; no generan Dockerfile, compose, manifests,
 scripts, IaC ni conectan a servicios externos.
 ```
 
+```text
+Fecha: 2026-05-11
+Origen: reinicio-orquesta-v2-2026-05-04
+Destino: master
+Modulo: modulos/orquesta-governance
+Decision: Extraer catalogo de gobernanza y consulta publica read-only.
+Motivo: Aporta reglas/skills/workflows como catalogo versionado, separando
+effective/proposed/quarantine para no activar historicos V1 automaticamente.
+Adaptacion aplicada: se sustituyeron rutas absolutas de la DB forense por una
+referencia relativa al snapshot local cuando exista.
+Validacion:
+  - go test -count=1 ./modulos/orquesta-governance
+  - jq empty modulos/orquesta-governance/docs/schemas/*.json modulos/orquesta-governance/docs/fixtures/*/*.json
+  - git diff --check
+Notas: Governance publica catalogos; no ejecuta tareas, no decide runtime y no
+asigna permisos operativos.
+```
+
 ## Validacion
 
 Comando ejecutado:

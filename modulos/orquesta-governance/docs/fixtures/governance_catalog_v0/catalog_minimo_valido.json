@@ -1,0 +1,173 @@
+{
+  "contract": "GovernanceCatalogV0",
+  "catalog_version": "v0",
+  "owner": "orquesta-governance",
+  "activation_policy": "historical_entries_require_review",
+  "source_policy": {
+    "dbv1_is_forensic_only": true,
+    "legacy_ids_are_not_canonical": true,
+    "historical_activation_requires_review": true
+  },
+  "secret_control_policy": {
+    "structured_controls_required": true,
+    "free_text_scan_only_allowed": false,
+    "prohibited_material": [
+      "credentials",
+      "tokens",
+      "private_home_paths",
+      "raw_transcripts",
+      "runtime_account_details"
+    ]
+  },
+  "catalogs": {
+    "effective": [
+      {
+        "kind": "rule",
+        "name": "Entradas historicas requieren revision",
+        "summary": "Ninguna regla, skill o workflow historico de DB v1 puede activarse en V2 sin revision y decision trazable.",
+        "scope": {
+          "level": "global",
+          "modules": [
+            "orquesta-governance"
+          ],
+          "phases": [
+            "planning",
+            "review"
+          ],
+          "tags": [
+            "historical-review",
+            "activation"
+          ]
+        },
+        "status": {
+          "catalog_state": "effective",
+          "review_state": "approved_effective"
+        },
+        "version": {
+          "contract_version": "v0",
+          "document_version": "v0-local",
+          "source_version_evidence": "docs/decisiones.md 2026-05-04"
+        },
+        "origin": {
+          "source_type": "local_doc",
+          "source_ref": "docs/decisiones.md#governancecatalog-v0-compartido-global",
+          "forensic_inventory_ref": "GOV-001",
+          "legacy_public_id_policy": "no_legacy_ids_as_canon"
+        },
+        "promotion": {
+          "criterion": "Aprobada localmente para impedir que evidencia historica de DB v1 se trate como canon vivo.",
+          "decision_ref": "GOV-004-SCHEMA",
+          "promoted_at": "2026-05-04",
+          "historical_review_required": true
+        },
+        "secret_controls": {
+          "contains_secret_material": false,
+          "review_method": "structured_policy_and_text_scan",
+          "structured_markers_checked": [
+            "secret_kind",
+            "redaction_required",
+            "source_has_credentials"
+          ]
+        }
+      }
+    ],
+    "proposed": [
+      {
+        "kind": "skill",
+        "name": "fix-bug",
+        "summary": "Skill historico candidato para reparar defectos con reproduccion, minimo impacto y pruebas locales.",
+        "scope": {
+          "level": "role",
+          "roles": [
+            "programador"
+          ],
+          "phases": [
+            "implementation",
+            "review"
+          ],
+          "tags": [
+            "bugfix",
+            "candidate"
+          ]
+        },
+        "status": {
+          "catalog_state": "proposed",
+          "review_state": "reviewed_candidate"
+        },
+        "version": {
+          "contract_version": "v0",
+          "document_version": "v0-documental",
+          "source_version_evidence": "DBv1.skills_versiones version_num=1 actor=orquesta action=seed"
+        },
+        "origin": {
+          "source_type": "dbv1",
+          "source_ref": "DBv1.skills(role=programador, name=fix-bug)",
+          "forensic_inventory_ref": "DBV1-000",
+          "legacy_public_id_policy": "no_legacy_ids_as_canon"
+        },
+        "promotion": {
+          "criterion": "Promocionar solo si se reescribe como skill V2 con entrada/salida, write-set y pruebas obligatorias.",
+          "decision_ref": null,
+          "promoted_at": null,
+          "historical_review_required": true
+        },
+        "secret_controls": {
+          "contains_secret_material": false,
+          "review_method": "structured_policy",
+          "structured_markers_checked": [
+            "secret_kind",
+            "source_has_credentials"
+          ]
+        }
+      }
+    ],
+    "quarantine": [
+      {
+        "kind": "workflow",
+        "name": "inicio-sesion",
+        "summary": "Workflow historico ligado a CLI v1 y a tareas de la aplicacion antigua; no gobierna V2.",
+        "scope": {
+          "level": "legacy_process",
+          "roles": [
+            "programador"
+          ],
+          "phases": [
+            "planning"
+          ],
+          "tags": [
+            "legacy-cli"
+          ]
+        },
+        "status": {
+          "catalog_state": "quarantine",
+          "review_state": "quarantined"
+        },
+        "version": {
+          "contract_version": "v0",
+          "document_version": "v0-documental",
+          "source_version_evidence": "DBv1.workflows_versiones version_num=1 actor=orquesta action=seed"
+        },
+        "origin": {
+          "source_type": "dbv1",
+          "source_ref": "DBv1.workflows(role=programador, name=inicio-sesion)",
+          "forensic_inventory_ref": "DBV1-000",
+          "legacy_public_id_policy": "no_legacy_ids_as_canon"
+        },
+        "promotion": {
+          "criterion": "Solo podria rescatarse como concepto de briefing si MCP/director definen un workflow V2 nuevo.",
+          "decision_ref": null,
+          "promoted_at": null,
+          "historical_review_required": true
+        },
+        "secret_controls": {
+          "contains_secret_material": false,
+          "review_method": "structured_policy",
+          "structured_markers_checked": [
+            "secret_kind",
+            "source_has_credentials"
+          ]
+        }
+      }
+    ]
+  }
+}
