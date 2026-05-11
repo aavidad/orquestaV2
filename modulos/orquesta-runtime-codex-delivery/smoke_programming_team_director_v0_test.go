@@ -8,7 +8,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func programmingTeamDirectorPacketV0(

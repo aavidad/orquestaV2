@@ -9,7 +9,7 @@ import (
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestRESTArrancarDirectorAppClientV0FlujoVerticalMCP(t *testing.T) {

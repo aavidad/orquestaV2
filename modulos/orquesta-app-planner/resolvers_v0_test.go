@@ -7,7 +7,7 @@ import (
 
 	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestAppPlanResolversConstruyenRuntimeLaunchValidoV0(t *testing.T) {

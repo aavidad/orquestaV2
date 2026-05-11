@@ -6,7 +6,7 @@ import (
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestAppPlanCandidateProviderV0EmiteSoloOlaLista(t *testing.T) {

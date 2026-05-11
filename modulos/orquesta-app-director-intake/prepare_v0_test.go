@@ -8,7 +8,7 @@ import (
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestafactory "orquesta/modulos/orquesta-factory"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestPrepareAppDirectorIntakeV0CreatesBrainstormRun(t *testing.T) {

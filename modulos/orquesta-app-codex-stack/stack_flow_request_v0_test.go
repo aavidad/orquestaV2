@@ -12,7 +12,7 @@ import (
 	orquestafactory "orquesta/modulos/orquesta-factory"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaweb "orquesta/modulos/orquesta-web"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func postDirectorAPIV0(

@@ -3,7 +3,7 @@ package orquestamcp
 import (
 	orquestaapprunner "orquesta/modulos/orquesta-app-runner"
 	orquestafactory "orquesta/modulos/orquesta-factory"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 const (

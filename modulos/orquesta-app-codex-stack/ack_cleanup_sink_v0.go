@@ -9,7 +9,7 @@ import (
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 const ackRuntimeCleanupTimeoutV0 = 2 * time.Second

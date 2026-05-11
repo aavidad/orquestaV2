@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestMCPDirectorStatsHTTPHandlerV0OKConExecutorFake(t *testing.T) {

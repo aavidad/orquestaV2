@@ -13,7 +13,7 @@ import (
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestCodexReceiptDeliveryLoopV0SmokeCodexRealOptIn(t *testing.T) {

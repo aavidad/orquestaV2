@@ -14,7 +14,7 @@ import (
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestaweb "orquesta/modulos/orquesta-web"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestNuevaAppPOSTDelegaEnAppDirectorRESTSinCmdDBRuntimeV0(t *testing.T) {

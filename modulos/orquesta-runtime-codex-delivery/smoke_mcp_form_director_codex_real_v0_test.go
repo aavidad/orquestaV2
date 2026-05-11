@@ -15,7 +15,7 @@ import (
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaweb "orquesta/modulos/orquesta-web"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestMCPFormularioDirectorCodexRealOptInV0(t *testing.T) {

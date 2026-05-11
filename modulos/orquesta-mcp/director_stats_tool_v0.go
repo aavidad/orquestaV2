@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	orquestaobservability "orquesta/modulos/orquesta-observability"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 const (

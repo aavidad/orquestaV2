@@ -14,7 +14,7 @@ import (
 	orquestadirectorsupervisedburst "orquesta/modulos/orquesta-director-supervised-burst"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestDrainRunV0ConsumeDecisionFileConLoteProgramacionGrande(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
 	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestStartAppDirectorV0ConsumesDecisionsAndRerunsProgrammingLoop(t *testing.T) {

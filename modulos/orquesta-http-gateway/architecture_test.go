@@ -56,7 +56,7 @@ func isForbiddenImportPath(importPath string) bool {
 		"orquesta/modulos/orquesta-web",
 		"orquesta/modulos/orquesta-mcp",
 		"orquesta/modulos/orquesta-factory",
-		"orquesta/orquestacionnucleoapp",
+		"orquesta/modulos/orquesta-orchestration-core",
 		"orquesta/runtimeagente",
 	} {
 		if importPath == prefix || strings.HasPrefix(importPath, prefix+"/") {

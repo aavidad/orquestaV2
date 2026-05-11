@@ -10,7 +10,7 @@ import (
 	"time"
 
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestCodexReceiptDeliveryLoopV0SmokeCodexRealAppOptIn(t *testing.T) {

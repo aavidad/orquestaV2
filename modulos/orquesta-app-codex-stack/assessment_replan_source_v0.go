@@ -8,7 +8,7 @@ import (
 	orquestacorereplanner "orquesta/modulos/orquesta-core-replanner"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 type AssessmentReplanSourceV0 struct {

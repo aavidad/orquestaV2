@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	orquestaapprunner "orquesta/modulos/orquesta-app-runner"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func NewMCPEjecutarOrquestacionAppOKResultV0(

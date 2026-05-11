@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 type CodexReceiptAckPathResolverPortV0 interface {

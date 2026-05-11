@@ -3,7 +3,7 @@ package orquestaapprunner
 import (
 	"context"
 
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func runPreparedAutonomousLoopRequestV0(

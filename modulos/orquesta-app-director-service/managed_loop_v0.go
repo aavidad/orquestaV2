@@ -4,7 +4,7 @@ import (
 	"context"
 
 	orquestaappdirectorintake "orquesta/modulos/orquesta-app-director-intake"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func runPreparedDirectorAutonomyLoopV0(

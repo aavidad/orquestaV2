@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "orquesta": {
-      "transport": "http",
-      "url": "http://127.0.0.1:16543/api/mcp"
-    }
-  }
-}

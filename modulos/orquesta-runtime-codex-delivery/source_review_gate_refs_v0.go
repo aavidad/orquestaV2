@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func codexReviewGateReviewRequestIDV0(deliveryRef string) string {

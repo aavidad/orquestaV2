@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestApplyDirectorAgentDecisionV0AplicaCloseTaskPorPuertos(t *testing.T) {

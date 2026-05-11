@@ -1,6 +1,6 @@
 package orquestaappdirectorservice
 
-import orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+import orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 
 func composeStartAppDirectorProviderV0(
 	base orquestacionnucleoapp.CandidateProviderPortV0,

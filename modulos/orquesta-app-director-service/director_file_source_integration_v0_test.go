@@ -9,7 +9,7 @@ import (
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestStartAppDirectorV0ConsumesDecisionFileSourceAndStartsWorkflowAgent(t *testing.T) {

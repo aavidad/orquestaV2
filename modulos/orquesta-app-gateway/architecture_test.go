@@ -40,7 +40,7 @@ func forbiddenProductionImportV0(path string) bool {
 		"orquesta/cmd",
 		"orquesta/db",
 		"orquesta/runtimeagente",
-		"orquesta/orquestacionnucleoapp",
+		"orquesta/modulos/orquesta-orchestration-core",
 		"github.com/spf13/cobra",
 		"github.com/go-sql-driver/mysql",
 		"github.com/jackc/pgx",

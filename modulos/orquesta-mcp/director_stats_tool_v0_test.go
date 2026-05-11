@@ -8,7 +8,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestMCPDirectorStatsToolDescriptorV0ExponeContratoCompacto(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	orquestacoreconcurrency "orquesta/modulos/orquesta-core-concurrency"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 type AppPlanCandidateProviderV0 struct {

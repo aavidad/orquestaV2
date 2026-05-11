@@ -6,7 +6,7 @@ import (
 	"time"
 
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func (stack StackV0) RunGlobalTickV0(

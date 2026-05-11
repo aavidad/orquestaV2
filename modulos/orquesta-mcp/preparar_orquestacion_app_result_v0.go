@@ -6,7 +6,7 @@ import (
 
 	orquestaappplanner "orquesta/modulos/orquesta-app-planner"
 	orquestaapprunner "orquesta/modulos/orquesta-app-runner"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func ExecuteMCPPrepararOrquestacionAppToolV0(

@@ -7,7 +7,7 @@ import (
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestafactory "orquesta/modulos/orquesta-factory"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestPrepareAppOrchestrationV0CreatesRunAndProvider(t *testing.T) {

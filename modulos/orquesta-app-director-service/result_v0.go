@@ -3,7 +3,7 @@ package orquestaappdirectorservice
 import (
 	orquestaappdirectorintake "orquesta/modulos/orquesta-app-director-intake"
 	orquestafactory "orquesta/modulos/orquesta-factory"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func invalidStartAppDirectorResultV0(

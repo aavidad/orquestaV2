@@ -15,7 +15,7 @@ import (
 	orquestadirectorsupervisedburst "orquesta/modulos/orquesta-director-supervised-burst"
 	orquestafactory "orquesta/modulos/orquesta-factory"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestMCPArrancarDirectorAppToolExecutorV0UsaServicioCanonico(t *testing.T) {

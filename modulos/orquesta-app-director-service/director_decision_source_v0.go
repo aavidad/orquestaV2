@@ -4,7 +4,7 @@ import (
 	"context"
 
 	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func consumeStartAppDirectorDecisionsV0(

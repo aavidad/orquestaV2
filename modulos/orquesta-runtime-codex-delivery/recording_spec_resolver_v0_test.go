@@ -9,7 +9,7 @@ import (
 
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestCodexReceiptRecordingSpecResolverV0RegistraDescriptor(t *testing.T) {

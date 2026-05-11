@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestMCPTransportV0DirectorStatsInvocaPuerto(t *testing.T) {

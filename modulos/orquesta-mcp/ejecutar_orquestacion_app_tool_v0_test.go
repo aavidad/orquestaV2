@@ -7,7 +7,7 @@ import (
 
 	orquestaapprunner "orquesta/modulos/orquesta-app-runner"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestMCPEjecutarOrquestacionAppToolExecutorV0ArrancaBootstrap(t *testing.T) {

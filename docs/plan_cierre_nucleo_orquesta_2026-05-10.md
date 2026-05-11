@@ -42,7 +42,7 @@ validar, cerrar o bloquear cierre con causa observable.
 
 ## Criterios de cierre
 
-- `go test -count=1 ./modulos/... ./orquestacionnucleoapp` pasa.
+- `go test -count=1 ./modulos/... ./modulos/orquesta-orchestration-core` pasa.
 - Existe prueba de app completa normal que no permite cerrar si solo hay docs.
 - Existe prueba de app completa normal que permite cerrar con programacion,
   revision aceptada y validacion.
@@ -155,7 +155,7 @@ validar, cerrar o bloquear cierre con causa observable.
 
 ### Validado con tests locales
 
-- `go test -count=1 ./modulos/... ./orquestacionnucleoapp`: OK en
+- `go test -count=1 ./modulos/... ./modulos/orquesta-orchestration-core`: OK en
   2026-05-10.
 - La suite local cubre los contratos principales de cierre: app completa normal,
   bloqueo por ausencia de evidencias suficientes, revision aceptada, rework,
@@ -224,14 +224,14 @@ El cierre del nucleo esta al 100% cuando se cumplen simultaneamente:
 Ejecutado tras integrar los subfrentes:
 
 ```bash
-go test -count=1 ./modulos/... ./orquestacionnucleoapp
+go test -count=1 ./modulos/... ./modulos/orquesta-orchestration-core
 ```
 
 Resultado: OK. Revalidado en esta sesion el 2026-05-11 con el mismo comando.
 
 Tambien se verifico `git diff --check` en los frentes tocados y que no quedan
 ficheros Go por encima de 300 lineas en `modulos/` ni en
-`orquestacionnucleoapp/`.
+`modulos/orquesta-orchestration-core/`.
 
 El smoke real largo de Codex ya se repitio con cuota disponible y paso en
 `/tmp/orquesta-smokes/programming-team-pass4-20260510`.
@@ -273,7 +273,7 @@ Validacion posterior:
 
 ```bash
 go test ./modulos/orquesta-app-codex-stack -count=1
-go test ./orquestacionnucleoapp ./modulos/orquesta-director ./modulos/orquesta-director-scheduler ./modulos/orquesta-runtime ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-outbox-dispatch -count=1
+go test ./modulos/orquesta-orchestration-core ./modulos/orquesta-director ./modulos/orquesta-director-scheduler ./modulos/orquesta-runtime ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-outbox-dispatch -count=1
 ```
 
 Resultado: OK.
@@ -310,7 +310,7 @@ Validacion:
 ```bash
 go test -count=1 ./modulos/orquesta-run-queue ./modulos/orquesta-run-memory ./modulos/orquesta-run-coordinator
 go test -count=1 ./modulos/orquesta-app-codex-stack
-go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway ./orquestacionnucleoapp ./modulos/orquesta-app-director-service
+go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service
 ```
 
 Resultado: OK.
@@ -344,7 +344,7 @@ Validacion:
 
 ```bash
 go test -count=1 ./modulos/orquesta-run-coordinator ./modulos/orquesta-run-supervisor ./modulos/orquesta-app-codex-stack
-go test -count=1 ./modulos/orquesta-run-queue ./modulos/orquesta-run-control ./modulos/orquesta-run-memory ./modulos/orquesta-run-coordinator ./modulos/orquesta-run-supervisor ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-app-director-service ./orquestacionnucleoapp ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-director-scheduler ./modulos/orquesta-director ./modulos/orquesta-web
+go test -count=1 ./modulos/orquesta-run-queue ./modulos/orquesta-run-control ./modulos/orquesta-run-memory ./modulos/orquesta-run-coordinator ./modulos/orquesta-run-supervisor ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-app-director-service ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-director-scheduler ./modulos/orquesta-director ./modulos/orquesta-web
 ```
 
 Resultado: OK.
@@ -390,7 +390,7 @@ Se cerraron piezas locales que salian de la prueba real anterior:
 Validacion local:
 
 ```bash
-go test -count=1 ./modulos/orquesta-run-queue ./modulos/orquesta-app-codex-stack ./modulos/orquesta-mcp ./modulos/orquesta-web ./orquestacionnucleoapp ./modulos/orquesta-director-scheduler ./modulos/orquesta-director ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-runtime
+go test -count=1 ./modulos/orquesta-run-queue ./modulos/orquesta-app-codex-stack ./modulos/orquesta-mcp ./modulos/orquesta-web ./modulos/orquesta-orchestration-core ./modulos/orquesta-director-scheduler ./modulos/orquesta-director ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-runtime
 ```
 
 Resultado: OK.
@@ -416,7 +416,7 @@ gobernar desarrollos completos sin tocar el nucleo interno:
 - MCP/REST:
   - `orquesta.runs.control.v0` con `pause/resume/stop/cancel`;
   - `orquesta.run_queue.priority.v0` con `rank/set_priority`;
-- `orquestacionnucleoapp` consulta `RunControlReaderPortV0` antes de planificar
+- `orquesta-orchestration-core` consulta `RunControlReaderPortV0` antes de planificar
   y antes de despachar;
 - el stack expone control/prioridad por API y los cablea solo por puertos
   inyectados.
@@ -430,7 +430,7 @@ Decision de base:
 Validacion:
 
 ```bash
-go test -count=1 ./modulos/orquesta-run-queue ./modulos/orquesta-run-control ./modulos/orquesta-run-memory ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-app-director-service ./orquestacionnucleoapp ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-director-scheduler ./modulos/orquesta-director ./modulos/orquesta-web
+go test -count=1 ./modulos/orquesta-run-queue ./modulos/orquesta-run-control ./modulos/orquesta-run-memory ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-app-director-service ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-director-scheduler ./modulos/orquesta-director ./modulos/orquesta-web
 ```
 
 Resultado: OK.

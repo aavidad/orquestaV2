@@ -2,7 +2,7 @@ package orquestaapprunner
 
 import (
 	orquestaappplanner "orquesta/modulos/orquesta-app-planner"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func basePreparedAppProviderV0(

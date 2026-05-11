@@ -7,7 +7,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
 	orquestafactory "orquesta/modulos/orquesta-factory"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestContinueAppDirectorV0BloqueaCierreAppCompletaNormalSinEvidencias(t *testing.T) {

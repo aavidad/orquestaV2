@@ -7,7 +7,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
 	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestStartAppDirectorV0ConsumesDirectorDecisionSource(t *testing.T) {

@@ -15,9 +15,12 @@ certs/
 .codex-sandbox-workspace/
 tmp/
 .cache/
-\*\*claw-code-dev-rust/
-\*\*claw-code-main/
-\*\*oh-my-codex-main/
+**claw-code-dev-rust/
+**claw-code-main/
+**oh-my-codex-main/
+claw-code-dev-rust/
+oh-my-codex-main/
+**claw-code-main/
 orquesta.db*.bak-relpaths-*
 reporte_bloqueo_agentes.md
 logs/

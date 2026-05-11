@@ -7,7 +7,7 @@ import (
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
 	orquestafactory "orquesta/modulos/orquesta-factory"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 const (

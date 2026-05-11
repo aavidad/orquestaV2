@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestDrainRunV0IgnoraArtefactoYaRegistradoPorLoopGestionado(t *testing.T) {

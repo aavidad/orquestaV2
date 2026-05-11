@@ -7,7 +7,7 @@ import (
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
-	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func programmingTeamAppendSourceProbeDiagnosticsV0(
