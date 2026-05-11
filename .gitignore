@@ -4,6 +4,7 @@ orquesta.db-wal
 orquesta.db-shm
 orquesta.db-journal
 .orquesta-runtime/
+.orquesta-runs/
 .orquesta-worktrees/
 backups/
 certs/
