@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "$id": "https://orquesta.local/orquesta-i18n-docs/schemas/i18n_bundle_v0.schema.json",
+  "title": "I18nBundleV0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "structure_version",
+    "scope",
+    "default_locale",
+    "locales",
+    "catalogs",
+    "required_keys",
+    "namespace"
+  ],
+  "properties": {
+    "structure_version": {
+      "const": "i18n-bundle/v0"
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "web",
+        "factory"
+      ]
+    },
+    "default_locale": {
+      "$ref": "#/$defs/locale"
+    },
+    "locales": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/locale"
+      },
+      "uniqueItems": true
+    },
+    "catalogs": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$": {
+          "$ref": "#/$defs/i18n_catalog"
+        }
+      }
+    },
+    "required_keys": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/message_key"
+      },
+      "uniqueItems": true
+    },
+    "namespace": {
+      "$ref": "#/$defs/namespace"
+    }
+  },
+  "$defs": {
+    "locale": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    "namespace": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9]+)*$"
+    },
+    "message_key": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 180,
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9]+)+$"
+    },
+    "i18n_catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "locale",
+        "messages"
+      ],
+      "properties": {
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "messages": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(\\.[a-z0-9]+)+$": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            }
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "source": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "generated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "pending_keys": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/message_key"
+              },
+              "uniqueItems": true
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,160 @@
+{
+  "contract_version": "v0",
+  "app_id_hint": "panel-reservas",
+  "source_contract": "AppSpecV0",
+  "ui_default_locale": "es-ES",
+  "docs_default_locale": "es-ES",
+  "web_bundle": {
+    "structure_version": "i18n-bundle/v0",
+    "scope": "web",
+    "default_locale": "es-ES",
+    "locales": [
+      "es-ES"
+    ],
+    "catalogs": {
+      "es-ES": {
+        "locale": "es-ES",
+        "messages": {
+          "app.title": "Panel de reservas",
+          "app.action.primary": "Crear reserva",
+          "docs.user.title": "Manual de usuario",
+          "docs.user.content": "Contenido inicial del manual de usuario.",
+          "docs.user.overview.title": "Resumen",
+          "docs.user.overview.content": "Resumen funcional inicial.",
+          "docs.developer.title": "Manual de desarrollador",
+          "docs.developer.content": "Contenido inicial del manual de desarrollador.",
+          "docs.developer.architecture.title": "Arquitectura",
+          "docs.developer.architecture.content": "Resumen tecnico inicial.",
+          "docs.systems.title": "Manual de sistemas",
+          "docs.systems.content": "Contenido inicial del manual de sistemas.",
+          "docs.systems.operations.title": "Operaciones",
+          "docs.systems.operations.content": "Resumen operativo inicial."
+        },
+        "metadata": {
+          "source": "fixture-local"
+        }
+      }
+    },
+    "required_keys": [
+      "app.title",
+      "app.action.primary",
+      "docs.user.title",
+      "docs.user.content",
+      "docs.user.overview.title",
+      "docs.user.overview.content",
+      "docs.developer.title",
+      "docs.developer.content",
+      "docs.developer.architecture.title",
+      "docs.developer.architecture.content",
+      "docs.systems.title",
+      "docs.systems.content",
+      "docs.systems.operations.title",
+      "docs.systems.operations.content"
+    ],
+    "namespace": "app"
+  },
+  "factory_bundle": {
+    "structure_version": "i18n-bundle/v0",
+    "scope": "factory",
+    "default_locale": "es-ES",
+    "locales": [
+      "es-ES"
+    ],
+    "catalogs": {
+      "es-ES": {
+        "locale": "es-ES",
+        "messages": {
+          "factory.plan.created": "Plan inicial creado",
+          "factory.warning.review": "Revisar supuestos antes de generar archivos"
+        },
+        "metadata": {
+          "source": "fixture-local"
+        }
+      }
+    },
+    "required_keys": [
+      "factory.plan.created",
+      "factory.warning.review"
+    ],
+    "namespace": "factory"
+  },
+  "docs_bundle": {
+    "structure_version": "docs-bundle/v0",
+    "default_locale": "es-ES",
+    "locales": [
+      "es-ES"
+    ],
+    "docs": [
+      {
+        "doc_id": "user-manual.es-es",
+        "doc_type": "user_manual",
+        "locale": "es-ES",
+        "title_key": "docs.user.title",
+        "content_key": "docs.user.content",
+        "format": "markdown",
+        "sections": [
+          {
+            "section_id": "overview",
+            "title_key": "docs.user.overview.title",
+            "content_key": "docs.user.overview.content",
+            "order": 0,
+            "required": true
+          }
+        ]
+      },
+      {
+        "doc_id": "developer-manual.es-es",
+        "doc_type": "developer_manual",
+        "locale": "es-ES",
+        "title_key": "docs.developer.title",
+        "content_key": "docs.developer.content",
+        "format": "markdown",
+        "sections": [
+          {
+            "section_id": "architecture",
+            "title_key": "docs.developer.architecture.title",
+            "content_key": "docs.developer.architecture.content",
+            "order": 0,
+            "required": true
+          }
+        ]
+      },
+      {
+        "doc_id": "systems-manual.es-es",
+        "doc_type": "systems_manual",
+        "locale": "es-ES",
+        "title_key": "docs.systems.title",
+        "content_key": "docs.systems.content",
+        "format": "markdown",
+        "sections": [
+          {
+            "section_id": "operations",
+            "title_key": "docs.systems.operations.title",
+            "content_key": "docs.systems.operations.content",
+            "order": 0,
+            "required": true
+          }
+        ]
+      }
+    ],
+    "required_doc_types": [
+      "user_manual",
+      "developer_manual",
+      "systems_manual"
+    ],
+    "template_set": "initial-docs/v0"
+  },
+  "skeleton_loader_shape": {
+    "structure_version": "i18n-bundle/v0",
+    "loader_contract": "i18n-loader/v0",
+    "catalog_path_pattern": "i18n/{locale}/{namespace}.json",
+    "default_locale_strategy": "app_spec",
+    "fallback_locale": "es-ES",
+    "required_namespaces": [
+      "app",
+      "factory"
+    ],
+    "required_keys_hash": "sha256:3b6cbbe4d8a2f6517298d933759164560638a8c9e9b4e901853f8b494b4a7ab0"
+  },
+  "warnings": []
+}

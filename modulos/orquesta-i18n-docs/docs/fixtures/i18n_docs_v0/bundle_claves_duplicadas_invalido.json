@@ -1,0 +1,23 @@
+{
+  "structure_version": "i18n-bundle/v0",
+  "scope": "web",
+  "default_locale": "es-ES",
+  "locales": [
+    "es-ES"
+  ],
+  "catalogs": {
+    "es-ES": {
+      "locale": "es-ES",
+      "messages": {
+        "app.title": "Panel de reservas",
+        "app.action.primary": "Crear reserva"
+      }
+    }
+  },
+  "required_keys": [
+    "app.title",
+    "app.title",
+    "app.action.primary"
+  ],
+  "namespace": "app"
+}

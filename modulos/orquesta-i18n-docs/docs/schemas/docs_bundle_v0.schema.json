@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "$id": "https://orquesta.local/orquesta-i18n-docs/schemas/docs_bundle_v0.schema.json",
+  "title": "DocsBundleV0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "structure_version",
+    "default_locale",
+    "locales",
+    "docs",
+    "required_doc_types",
+    "template_set"
+  ],
+  "properties": {
+    "structure_version": {
+      "const": "docs-bundle/v0"
+    },
+    "default_locale": {
+      "$ref": "#/$defs/locale"
+    },
+    "locales": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/locale"
+      },
+      "uniqueItems": true
+    },
+    "docs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/generated_doc"
+      }
+    },
+    "required_doc_types": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/doc_type"
+      },
+      "uniqueItems": true
+    },
+    "template_set": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[a-z][a-z0-9-]*/v[0-9]+$"
+    }
+  },
+  "$defs": {
+    "locale": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    "doc_type": {
+      "type": "string",
+      "enum": [
+        "user_manual",
+        "developer_manual",
+        "systems_manual"
+      ]
+    },
+    "key_ref": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 180,
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9]+)+$"
+    },
+    "generated_doc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "doc_id",
+        "doc_type",
+        "locale",
+        "title_key",
+        "content_key",
+        "format",
+        "sections"
+      ],
+      "properties": {
+        "doc_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)*$"
+        },
+        "doc_type": {
+          "$ref": "#/$defs/doc_type"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "title_key": {
+          "$ref": "#/$defs/key_ref"
+        },
+        "content_key": {
+          "$ref": "#/$defs/key_ref"
+        },
+        "format": {
+          "const": "markdown"
+        },
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/doc_section"
+          }
+        }
+      }
+    },
+    "doc_section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "section_id",
+        "title_key",
+        "content_key",
+        "order",
+        "required"
+      ],
+      "properties": {
+        "section_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)*$"
+        },
+        "title_key": {
+          "$ref": "#/$defs/key_ref"
+        },
+        "content_key": {
+          "$ref": "#/$defs/key_ref"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

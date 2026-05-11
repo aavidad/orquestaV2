@@ -94,6 +94,22 @@ Validacion:
 Notas: No se ha fusionado la rama V2. Solo se ha portado esta unidad.
 ```
 
+```text
+Fecha: 2026-05-11
+Origen: reinicio-orquesta-v2-2026-05-04
+Destino: master
+Modulo: modulos/orquesta-i18n-docs
+Decision: Extraer el builder y contratos i18n/docs iniciales.
+Motivo: i18n y documentacion son reglas transversales por defecto para apps
+generadas. El modulo produce planes serializables sin LLM, DB, runtime ni
+filesystem productivo.
+Validacion:
+  - go test -count=1 ./modulos/orquesta-i18n-docs
+  - jq empty modulos/orquesta-i18n-docs/docs/schemas/*.json modulos/orquesta-i18n-docs/docs/fixtures/*/*.json
+  - git diff --check
+Notas: No se ha fusionado la rama V2. Solo se ha portado esta unidad.
+```
+
 ## Validacion
 
 Comando ejecutado:
