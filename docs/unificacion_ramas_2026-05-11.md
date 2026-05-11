@@ -2,13 +2,15 @@
 
 ## Resultado
 
-`master` se ha avanzado por fast-forward hasta `candidato_refactor` y se ha subido a GitHub.
+`master` se ha avanzado por fast-forward hasta `candidato_refactor` y se ha subido a GitHub. Despues de documentar la decision, `candidato_refactor` tambien se ha eliminado porque ya no aportaba nada distinto de `master`.
 
 Commit final comun:
 
-- `a21892f Ignore generated Orquesta run artifacts`
+- `b11cfe7 Document branch unification decisions`
 
 Esto deja en `master` el nucleo nuevo revisado y probado. No se han fusionado ramas legacy completas porque vuelven a mezclar `cmd`, `db` e `internal/controlruntime` como superficies grandes, con conflictos y deuda que ya causaron problemas en V1/V2.
+
+El remoto `origin` queda reducido a `origin/master`. Las ramas antiguas no fusionadas se han archivado como tags antes de borrarlas.
 
 ## Criterio usado
 
@@ -26,14 +28,24 @@ Solo se integra codigo que cumpla estas condiciones:
 | Rama | Estado | Decision |
 | --- | --- | --- |
 | `master` | Estaba detras de `candidato_refactor` | Fast-forward aplicado y subido. |
-| `candidato_refactor` | Rama buena de trabajo | Queda como igual a `master` tras el avance. |
-| `origin/feature/wizard-app-factory` | Sin commits unicos frente a `master` | Ya esta absorbida; se puede borrar como rama remota obsoleta. |
-| `backup/feature-wizard-app-factory-remote-20260411` | 1 commit unico, 99 ficheros, 15k lineas, conflictos en `cmd`, `db`, `internal/controlruntime` | No fusionar completa. Solo sirve como referencia forense; muchas ideas ya estan supersedidas por modulos nuevos. |
-| `berserk/salvage-stash-20260330` | 3 commits unicos, scripts con rutas locales y cambio de runtime viejo | No fusionar completa. La parte buena de handles fantasma ya existe en `runtimesapp` con una solucion mas completa. |
-| `orq-orquesta-codex2` | 1 commit unico sobre merge aislado de worktrees | No fusionar completa. La capacidad ya esta en `gitoperaciones` con promocion aislada, worktree detached y proteccion de rama activa. |
-| `orq-orquestador-codex11` | 1 commit unico sobre token_count de Codex | No fusionar completa. La capacidad ya esta en `internal/controlruntime` con `searchAnchor` y `accountAnchor`. |
-| `orq-orquestador-codex1-t20` | 4 commits unicos, cockpit/API/pipeline sobre `cmd` y `db` | No fusionar por bloque. Puede aportar ideas de estadisticas, pero deben reimplementarse como puertos/modulos, no como ampliacion legacy. |
+| `candidato_refactor` | Igual a `master` | Eliminada local y remotamente tras avanzar `master`. |
+| `origin/feature/wizard-app-factory` | Sin commits unicos frente a `master` | Eliminada como rama remota obsoleta. |
+| `backup/feature-wizard-app-factory-remote-20260411` | 1 commit unico, 99 ficheros, 15k lineas, conflictos en `cmd`, `db`, `internal/controlruntime` | Archivada como tag y eliminada como rama. No fusionar completa. |
+| `berserk/salvage-stash-20260330` | 3 commits unicos, scripts con rutas locales y cambio de runtime viejo | Archivada como tag y eliminada como rama. La parte buena de handles fantasma ya existe en `runtimesapp`. |
+| `orq-orquesta-codex2` | 1 commit unico sobre merge aislado de worktrees | Archivada como tag y eliminada como rama. La capacidad ya esta en `gitoperaciones`. |
+| `orq-orquestador-codex11` | 1 commit unico sobre token_count de Codex | Archivada como tag y eliminada como rama. La capacidad ya esta en `internal/controlruntime`. |
+| `orq-orquestador-codex1-t20` | 4 commits unicos, cockpit/API/pipeline sobre `cmd` y `db` | Archivada como tag y eliminada como rama. Sus ideas de estadisticas deben reimplementarse como puertos/modulos. |
 | `reinicio-orquesta-v2-2026-05-04` | 145 commits unicos, muchos modulos/documentacion V2 | Mantener como fuente temporal de extraccion controlada. No hacer merge completo por conflictos de ficheros anadidos en ambos lados. |
+
+## Tags de archivo
+
+Tags subidos a `origin` para conservar el historico exacto de ramas eliminadas:
+
+- `archive/branches/2026-05-11/backup-feature-wizard-app-factory`
+- `archive/branches/2026-05-11/berserk-salvage-stash`
+- `archive/branches/2026-05-11/orq-orquesta-codex2`
+- `archive/branches/2026-05-11/orq-orquestador-codex1-t20`
+- `archive/branches/2026-05-11/orq-orquestador-codex11`
 
 ## Capacidades ya retenidas
 
@@ -63,7 +75,7 @@ Resultado:
 
 Acciones recomendadas:
 
-1. Borrar ramas remotas ya absorbidas, empezando por `origin/feature/wizard-app-factory`.
-2. Para ramas no absorbidas, crear una etiqueta de archivo antes de borrar si se quiere conservar el commit exacto.
-3. Mantener `reinicio-orquesta-v2-2026-05-04` hasta terminar la extraccion de modulos V2 que realmente aporten capacidades nuevas.
-4. No fusionar `backup/*`, `berserk/*` ni ramas `orq-*` por merge completo; si se reutiliza algo, se porta por microtarea con test.
+1. Revisar `reinicio-orquesta-v2-2026-05-04` por modulos, no por merge completo.
+2. Extraer solo capacidades V2 que no existan ya en `master`.
+3. Cuando termine esa extraccion, archivar tambien `reinicio-orquesta-v2-2026-05-04` como tag y eliminar la rama/worktree.
+4. No restaurar `backup/*`, `berserk/*` ni ramas `orq-*` por merge completo; si se reutiliza algo, se porta por microtarea con test.
