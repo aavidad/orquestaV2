@@ -1,6 +1,21 @@
 # Decisiones: orquesta-app-director-service
 
 ```text
+Fecha: 2026-05-11
+Decision: El servicio compone tambien el review gate como fuente externa
+inyectada.
+Motivo: REST, MCP y web no deben saber cuando hay que leer ACKs, evidencias de
+ficheros o resultados de revision. El servicio ya compone delivery, progreso,
+decisiones y replan; dejar review gate fuera obligaria a cada transporte a
+conocer el scheduler.
+Impacto: `StartAppDirectorPortsV0.ReviewGateSource` entra en el provider de
+candidatos. `ContinueAppDirectorV0` puede registrar revision, resultado y
+rework usando solo puertos inyectados, sin DB, filesystem ni runtime
+hardcodeados.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-09
 Decision: Separar servicio de app de los adaptadores REST/MCP/web.
 Motivo: los adaptadores deben ser finos y no conocer scheduler, outbox ni

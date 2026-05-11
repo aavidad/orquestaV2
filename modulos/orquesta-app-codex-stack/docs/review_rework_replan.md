@@ -25,3 +25,12 @@ deja de emitir cuando el agente de retry ya aparece en `agents` o
 
 La capacidad minima sale de `CapacityConfig.Tier`. Si no viene configurada, el
 plan usa `high`.
+
+Integracion con review gate:
+
+- el source de review gate no se apaga al proyectar `RequestReview`;
+- para accepted se considera terminal cuando existe `AcceptedReviews`;
+- para changes_requested/rejected se considera terminal cuando existe
+  `ReworkRequests` enlazado a la entrega;
+- esto permite que `DrainRunV0` avance por pasos reales del scheduler hasta
+  reabrir `programacion` y lanzar el agente de retry.

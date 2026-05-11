@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestCodexReviewGateObservationSourceV0AceptaACKValido(t *testing.T) {
@@ -63,6 +63,70 @@ func TestCodexReviewGateObservationSourceV0ListaDescriptorYaEntregado(t *testing
 	}
 	if len(observations) != 1 {
 		t.Fatalf("observations=%d", len(observations))
+	}
+}
+
+func TestCodexReviewGateObservationSourceV0ContinuaTrasRequestReviewPendiente(t *testing.T) {
+	spec := codexDeliverySpecForTestV0()
+	ack := codexDeliveryAckForTestV0(spec)
+	path := writeCodexDeliveryAckForTestV0(t, spec, ack)
+	store := NewInMemoryCodexReceiptDescriptorStoreV0(CodexReceiptDescriptorV0{
+		DescriptorRef: "receipt-ref-001",
+		RunID:         "run-ref-001",
+		AgentRef:      spec.RequestID,
+		Spec:          spec,
+		AckPath:       path,
+	})
+	request := codexReviewGateRequestForTestV0(spec, nil)
+	request.Run.Reviews = []string{codexReviewGateReviewRequestIDV0(ack.AckRef)}
+
+	observations, err := (CodexReviewGateObservationSourceV0{Store: store}).
+		BuildReviewGateObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildReviewGateObservationsV0: %v", err)
+	}
+	if len(observations) != 1 {
+		t.Fatalf("observations=%d", len(observations))
+	}
+}
+
+func TestCodexReviewGateObservationSourceV0OmiteTrasReworkSolicitado(t *testing.T) {
+	spec := codexDeliverySpecForTestV0()
+	ack := codexDeliveryAckForTestV0(spec)
+	path := writeCodexDeliveryAckForTestV0(t, spec, ack)
+	store := NewInMemoryCodexReceiptDescriptorStoreV0(CodexReceiptDescriptorV0{
+		DescriptorRef: "receipt-ref-001",
+		RunID:         "run-ref-001",
+		AgentRef:      spec.RequestID,
+		Spec:          spec,
+		AckPath:       path,
+	})
+	fileEvidence := staticCodexReviewGateFileEvidenceV0{
+		Files: []orquestacionnucleoapp.AutoprogrammingReviewGateFileV0{{
+			Path:      "README.md",
+			LineCount: 301,
+		}},
+	}
+	reviewResultRef := codexReviewGateReviewResultRefV0(ack.AckRef)
+	request := codexReviewGateRequestForTestV0(spec, []string{
+		reviewResultRef + "#review_result:changes_requested#review_request:" +
+			codexReviewGateReviewRequestIDV0(ack.AckRef) + "#delivery:" + ack.AckRef,
+	})
+	request.Run.ReworkRequests = []string{
+		"rework-request-ref-" + reviewResultRef + "#review_result:" + reviewResultRef +
+			"#review_request:" + codexReviewGateReviewRequestIDV0(ack.AckRef) +
+			"#delivery:" + ack.AckRef,
+	}
+
+	observations, err := (CodexReviewGateObservationSourceV0{
+		Store:        store,
+		FileEvidence: fileEvidence,
+	}).BuildReviewGateObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildReviewGateObservationsV0: %v", err)
+	}
+	if len(observations) != 0 {
+		t.Fatalf("observations=%+v", observations)
 	}
 }
 

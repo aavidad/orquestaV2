@@ -32,6 +32,10 @@ Cobertura Go actual:
   stack conecta review gate y acepta una entrega con fichero real manejable.
 - `TestCodexStackV0ReviewGatePideCambiosSiFicheroEsDemasiadoGrande` valida que
   una entrega registrada pasa a `changes_requested` si supera 300 lineas.
+- `TestCodexStackV0ReviewChangesRequestedReplanificaYArrancaAgente` valida el
+  flujo vertical completo: entrega registrada, revision con evidencia real,
+  `changes_requested`, `RequestRework`, `retry_task`, decision de capacidad y
+  arranque de un nuevo agente sin intervencion manual del test.
 
 Guardas esperadas para pruebas futuras:
 

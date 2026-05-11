@@ -42,6 +42,10 @@ Cobertura:
 - acepta la revision si ACK, tests, write-set y ficheros reales son validos;
 - pide cambios si falta un test obligatorio, falta un fichero o un fichero
   supera el limite de lineas;
+- sigue emitiendo la observacion de review gate tras `RequestReview` para que
+  el scheduler pueda registrar resultado y pedir rework en ciclos posteriores;
+- deja de emitir la observacion cuando el rework de esa entrega ya esta
+  proyectado;
 - valida que el source de revision no queda bloqueado por el filtro de
   deliveries ya registradas del store;
 - permite un smoke opt-in con Codex real: Orquesta lanza el proceso, tolera que el

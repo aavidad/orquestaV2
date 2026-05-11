@@ -42,6 +42,8 @@ Evidencia 2026-05-09:
 - cobertura indirecta desde `orquesta-app-codex-stack`:
   `TestDrainRunV0ConsumeDecisionFileTardioYArrancaProgramacion`;
 - `TestStartAppDirectorV0ConsumesDirectorDeliverySource`;
+- `TestComposeStartAppDirectorProviderV0IncludesReviewGateSource`;
+- `TestContinueAppDirectorV0ProcessesReviewGateSource`;
 - `TestStartAppDirectorV0ReturnsFactoryValidationIssues`;
 - `TestStartAppDirectorV0RequiresInjectedPorts`;
 - `TestAppDirectorServiceArchitectureV0NoImportaLegacyNiDBHardcodeada`.

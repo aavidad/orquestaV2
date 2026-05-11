@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 type CodexReviewGateFileEvidenceProviderPortV0 interface {
@@ -114,6 +114,9 @@ func (source CodexReviewGateObservationSourceV0) observationFromReviewGateDescri
 	result := orquestacionnucleoapp.EvaluateAutoprogrammingReviewGateV0(input)
 	result = codexReviewGateMergeGateIssuesV0(result, fileIssues)
 	result = codexReviewGateMergeConnectorIssuesV0(result, issues)
+	if codexReviewGateTerminalProjectedV0(request.Run, deliveryRef, source.reviewGateStatusV0(result)) {
+		return orquestacionnucleoapp.ReviewGateObservationV0{}, false, nil
+	}
 	return source.reviewGateObservationV0(ack, result), true, nil
 }
 
@@ -133,8 +136,7 @@ func codexReviewGateDeliveryEligibleV0(
 		agentRef = strings.TrimSpace(descriptor.Spec.RequestID)
 	}
 	return stringInCodexDeliverySetV0(request.Run.Deliveries, deliveryRef) &&
-		codexDeliveryObservationAgentEligibleV0(codexReviewGateDeliveryRequestV0(request), agentRef) &&
-		!codexReviewGateAlreadyProjectedV0(request.Run, deliveryRef)
+		codexDeliveryObservationAgentEligibleV0(codexReviewGateDeliveryRequestV0(request), agentRef)
 }
 
 func codexReviewGateDeliveryRequestV0(
@@ -145,29 +147,6 @@ func codexReviewGateDeliveryRequestV0(
 		CorrelationID: request.CorrelationID,
 		EvidenceRefs:  request.EvidenceRefs,
 	}
-}
-
-func codexReviewGateAlreadyProjectedV0(
-	run orquestacoreworkflow.OrchestrationRunV0,
-	deliveryRef string,
-) bool {
-	reviewRequestID := codexReviewGateReviewRequestIDV0(deliveryRef)
-	reviewResultRef := codexReviewGateReviewResultRefV0(deliveryRef)
-	acceptedReviewRef := codexReviewGateAcceptedReviewRefV0(deliveryRef)
-	return stringInCodexDeliverySetV0(run.Reviews, reviewRequestID) ||
-		codexReviewGateResultRefInSetV0(run.ReviewResults, reviewResultRef) ||
-		stringInCodexDeliverySetV0(run.AcceptedReviews, acceptedReviewRef)
-}
-
-func codexReviewGateResultRefInSetV0(values []string, reviewResultRef string) bool {
-	reviewResultRef = strings.TrimSpace(reviewResultRef)
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == reviewResultRef || strings.HasPrefix(value, reviewResultRef+"#") {
-			return true
-		}
-	}
-	return false
 }
 
 func (source CodexReviewGateObservationSourceV0) reviewGateInputV0(

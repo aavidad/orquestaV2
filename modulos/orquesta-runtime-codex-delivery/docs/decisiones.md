@@ -1,6 +1,26 @@
 # Decisiones: orquesta-runtime-codex-delivery
 
 ```text
+Fecha: 2026-05-11
+Decision: La observacion de review gate permanece viva hasta una proyeccion terminal.
+Motivo: el scheduler aplica el review gate en pasos progresivos. Primero pide
+revision, despues registra resultado y, si hay cambios solicitados, pide
+rework. Si el source deja de emitir al ver `RequestReview`, el flujo queda
+atascado con una revision pendiente y nunca llega a `RequestRework`.
+Alternativas:
+  - Subir limites de drenaje: descartado porque no corrige la ausencia de
+    candidatos.
+  - Crear comandos manuales en el stack: descartado porque haria que el
+    adaptador suplante al scheduler.
+  - Mantener la observacion hasta aceptar o pedir rework: aceptado.
+Impacto: `CodexReviewGateObservationSourceV0` solo omite una entrega cuando ya
+existe `AcceptedReviews` para accepted o `ReworkRequests` para
+changes_requested/rejected. La logica de proyeccion queda separada en fichero
+pequeno para mantener el modulo depurable.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-10
 Decision: El smoke de app pequena completa nace desde StartAppDirectorV0 y no desde tareas preparadas por el test.
 Motivo: una prueba de app completa debe demostrar que Orquesta arranca el director, consume decisiones ejecutables, lanza agentes de programacion y registra artefactos/entregas sin que el test haga de orquestador.
