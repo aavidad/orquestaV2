@@ -1,0 +1,290 @@
+package orquestaruntimecodexdelivery
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
+	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+)
+
+func TestCodexProgressObservationSourceV0ReportaEstancamientoSinACKNiProgreso(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	request := codexProgressRequestForTestV0(spec)
+
+	first, err := source.BuildAgentProgressObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("first BuildAgentProgressObservationsV0: %v", err)
+	}
+	if len(first) != 0 {
+		t.Fatalf("first observations=%+v", first)
+	}
+
+	second, err := source.BuildAgentProgressObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("second BuildAgentProgressObservationsV0: %v", err)
+	}
+	if len(second) != 1 {
+		t.Fatalf("second observations=%+v", second)
+	}
+	got := second[0]
+	if got.Report.Status != orquestaruntime.AgentStalledV0 ||
+		got.Report.AgentRequestID != spec.RequestID ||
+		got.TaskRef != spec.AgentPacket.Task.TaskRef {
+		t.Fatalf("observacion no correlada: %+v", got)
+	}
+	if codexProgressObservationLeaksPathV0(got, ackPath) {
+		t.Fatalf("observacion filtra path: %+v", got)
+	}
+}
+
+func TestCodexProgressObservationSourceV0NoEscalaABucleSoloPorACKSinCambios(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	source.Policy.LoopAfterRepeatedActions = 3
+	request := codexProgressRequestForTestV0(spec)
+
+	if got, err := source.BuildAgentProgressObservationsV0(context.Background(), request); err != nil || len(got) != 0 {
+		t.Fatalf("first observations=%+v err=%v", got, err)
+	}
+	if got, err := source.BuildAgentProgressObservationsV0(context.Background(), request); err != nil || len(got) != 1 {
+		t.Fatalf("second observations=%+v err=%v", got, err)
+	}
+	third, err := source.BuildAgentProgressObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("third BuildAgentProgressObservationsV0: %v", err)
+	}
+	if len(third) != 0 {
+		t.Fatalf("third observations=%+v", third)
+	}
+}
+
+func TestCodexProgressObservationSourceV0EscalaABucleTrasRepeticionSostenida(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	source.Policy.LoopAfterRepeatedActions = 3
+	request := codexProgressRequestForTestV0(spec)
+
+	for i := 0; i < 3; i++ {
+		if _, err := source.BuildAgentProgressObservationsV0(context.Background(), request); err != nil {
+			t.Fatalf("BuildAgentProgressObservationsV0 %d: %v", i+1, err)
+		}
+	}
+	got, err := source.BuildAgentProgressObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("fourth BuildAgentProgressObservationsV0: %v", err)
+	}
+	if len(got) != 1 || got[0].Report.Status != orquestaruntime.AgentLoopDetectedV0 {
+		t.Fatalf("loop observation=%+v", got)
+	}
+	if got[0].Report.RepeatedActionCount != 3 {
+		t.Fatalf("repeated_action_count=%d", got[0].Report.RepeatedActionCount)
+	}
+}
+
+func TestCodexProgressObservationSourceV0NoReportaSiHayAvanceDeLogs(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	request := codexProgressRequestForTestV0(spec)
+	logPath := filepath.Join(filepath.Dir(ackPath), orquestaruntimecodex.CodexStdoutFileNameV0)
+
+	if _, err := source.BuildAgentProgressObservationsV0(context.Background(), request); err != nil {
+		t.Fatalf("first BuildAgentProgressObservationsV0: %v", err)
+	}
+	if err := os.WriteFile(logPath, []byte("avance compacto"), 0o600); err != nil {
+		t.Fatalf("write progress log: %v", err)
+	}
+	got, err := source.BuildAgentProgressObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("second BuildAgentProgressObservationsV0: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("observations=%+v", got)
+	}
+}
+
+func TestCodexProgressObservationSourceV0OmiteSiACKYaEstaListo(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	if err := os.WriteFile(ackPath, codexProgressACKBytesForTestV0(t, spec), 0o600); err != nil {
+		t.Fatalf("write ack: %v", err)
+	}
+
+	got, err := source.BuildAgentProgressObservationsV0(
+		context.Background(),
+		codexProgressRequestForTestV0(spec),
+	)
+	if err != nil {
+		t.Fatalf("BuildAgentProgressObservationsV0: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("observations=%+v", got)
+	}
+}
+
+func TestCodexProgressObservationSourceV0ExigeRegistroDeProceso(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	store := NewInMemoryCodexReceiptDescriptorStoreV0(codexProgressDescriptorForTestV0(spec, ackPath))
+	source := CodexProgressObservationSourceV0{
+		Store:           store,
+		ProcessRegistry: orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0(),
+		State:           NewInMemoryCodexProgressStateStoreV0(),
+		Policy:          orquestaruntime.AgentProgressHeartbeatPolicyV0{StalledAfterNoProgressTicks: 1},
+	}
+
+	_, err := source.BuildAgentProgressObservationsV0(
+		context.Background(),
+		codexProgressRequestForTestV0(spec),
+	)
+	if err == nil {
+		t.Fatalf("esperaba error por process registry vacio")
+	}
+}
+
+func TestCodexProgressObservationSourceV0AlimentaCandidateProvider(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	request := orquestacionnucleoapp.SchedulerCandidateRequestV0{
+		Run:           codexProgressRunForTestV0(spec),
+		OccurredAt:    "2026-05-09T12:30:00Z",
+		CorrelationID: "corr-progress-provider-001",
+	}
+	provider := orquestacionnucleoapp.ProgressSupervisionCandidateProviderV0{
+		ProgressSource: source,
+		RequestedBy:    "orquesta",
+	}
+
+	if _, err := provider.BuildSchedulerCandidatesV0(context.Background(), request); err != nil {
+		t.Fatalf("first BuildSchedulerCandidatesV0: %v", err)
+	}
+	got, err := provider.BuildSchedulerCandidatesV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("second BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(got.ProgressSupervisionCandidates) != 1 {
+		t.Fatalf("progress candidates=%+v", got.ProgressSupervisionCandidates)
+	}
+	candidate := got.ProgressSupervisionCandidates[0]
+	if candidate.SupervisionInput.Report.Status != orquestaruntime.AgentStalledV0 ||
+		candidate.SupervisionInput.QuestionID == "" {
+		t.Fatalf("candidate=%+v", candidate)
+	}
+}
+
+func codexProgressSpecAndAckPathForTestV0(
+	t *testing.T,
+) (orquestaruntime.ExternalAgentLaunchSpecV0, string) {
+	t.Helper()
+	spec := codexDeliverySpecForTestV0()
+	ackPath := filepath.Join(t.TempDir(), orquestaruntimecodex.CodexAgentAckFileNameV0)
+	return spec, ackPath
+}
+
+func codexProgressSourceForTestV0(
+	t *testing.T,
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+	ackPath string,
+) CodexProgressObservationSourceV0 {
+	t.Helper()
+	registry := orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0()
+	if err := registry.RecordAgentProcessV0(context.Background(), codexProgressProcessRecordForTestV0(spec)); err != nil {
+		t.Fatalf("RecordAgentProcessV0: %v", err)
+	}
+	return CodexProgressObservationSourceV0{
+		Store:           NewInMemoryCodexReceiptDescriptorStoreV0(codexProgressDescriptorForTestV0(spec, ackPath)),
+		ProcessRegistry: registry,
+		State:           NewInMemoryCodexProgressStateStoreV0(),
+		Policy: orquestaruntime.AgentProgressHeartbeatPolicyV0{
+			StalledAfterNoProgressTicks: 1,
+			LoopAfterRepeatedActions:    4,
+		},
+	}
+}
+
+func codexProgressRequestForTestV0(
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+) orquestacionnucleoapp.AgentProgressObservationRequestV0 {
+	return orquestacionnucleoapp.AgentProgressObservationRequestV0{
+		Run:           codexProgressRunForTestV0(spec),
+		CorrelationID: "corr-progress-001",
+	}
+}
+
+func codexProgressRunForTestV0(
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+) orquestacoreworkflow.OrchestrationRunV0 {
+	return orquestacoreworkflow.OrchestrationRunV0{
+		RunID:         "run-ref-001",
+		StartedAgents: []string{spec.RequestID},
+		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+	}
+}
+
+func codexProgressDescriptorForTestV0(
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+	ackPath string,
+) CodexReceiptDescriptorV0 {
+	return CodexReceiptDescriptorV0{
+		DescriptorRef: "receipt-ref-progress-001",
+		RunID:         "run-ref-001",
+		AgentRef:      spec.RequestID,
+		Spec:          spec,
+		AckPath:       ackPath,
+	}
+}
+
+func codexProgressProcessRecordForTestV0(
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+) orquestacionnucleoapp.AgentProcessRegistryRecordV0 {
+	return orquestacionnucleoapp.AgentProcessRegistryRecordV0{
+		RunID:          "run-ref-001",
+		AgentRequestID: spec.RequestID,
+		ProcessRef:     "process-ref-progress-001",
+		SessionRef:     "session-ref-progress-001",
+		LaunchRef:      "launch-ref-progress-001",
+		ReadinessRef:   "readiness-ref-progress-001",
+		EvidenceRefs:   []string{"process-ref-progress-001", "session-ref-progress-001"},
+	}
+}
+
+func codexProgressACKBytesForTestV0(
+	t *testing.T,
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+) []byte {
+	t.Helper()
+	path := writeCodexDeliveryAckForTestV0(t, spec, codexDeliveryAckForTestV0(spec))
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ack: %v", err)
+	}
+	return data
+}
+
+func codexProgressObservationLeaksPathV0(
+	observation orquestacionnucleoapp.AgentProgressObservationV0,
+	path string,
+) bool {
+	values := append([]string{
+		observation.CandidateRef,
+		observation.PhaseID,
+		observation.TaskRef,
+		observation.DeliveryRef,
+		observation.AssessmentRef,
+		observation.QuestionID,
+		observation.Report.ReportID,
+		observation.Report.Summary,
+	}, observation.EvidenceRefs...)
+	values = append(values, observation.Report.EvidenceRefs...)
+	for _, value := range values {
+		if strings.Contains(value, path) {
+			return true
+		}
+	}
+	return false
+}

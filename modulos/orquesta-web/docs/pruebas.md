@@ -1,0 +1,255 @@
+# Pruebas locales: orquesta-web
+
+Registra pruebas obligatorias del modulo.
+
+## Plantilla
+
+```text
+Caso:
+Tipo: unit | contract | integration | smoke
+Comando:
+Evidencia esperada:
+Ultima ejecucion:
+Riesgos:
+```
+
+## Pruebas previstas
+
+```text
+Caso: WEB-CT-001 mapper form minimo a AppSpecRequestV0
+Tipo: contract
+Comando: `go test ./modulos/orquesta-web`
+Evidencia esperada: `schema_version=app_spec_request.v0`, `source=orquesta-web`, `request_id`, `locale`, `nombre`, `objetivo` y `tipo_app` presentes; sin DB directa ni runtime.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: Divergencia con schemas futuros de factory si cambian campos obligatorios.
+```
+
+```text
+Caso: WEB-CT-002 errores publicos de SolicitarNuevaApp v0
+Tipo: contract
+Comando: `go test ./modulos/orquesta-web`
+Evidencia esperada: 400 REST con errores publicos se convierte en `WebNuevaAppViewModelV0` estado `invalida`, preserva `request_id` y `locale`, no inventa backlog y no devuelve error de transporte.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: Que el transporte real envuelva errores sin codigo publico estable.
+```
+
+```text
+Caso: WEB-CT-003 cliente REST SolicitarNuevaApp v0
+Tipo: contract
+Comando: `go test ./modulos/orquesta-web`
+Evidencia esperada: `httptest` verifica `POST /api/v0/apps/spec`, JSON `AppSpecRequestV0`, header `X-Correlation-ID`, timeout configurable, creacion de `request_id` si falta, respuesta 2xx a viewmodel con spec/backlog y 500/transport timeout como `error_transporte`.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: El envelope REST canonico ya esta fijado en `../../CONTRATOS.md` como 2xx `app_spec` + `backlog` y 400 `errores`; los alias `spec` y `backlog_inicial_propuesto` solo cubren compatibilidad transitoria de arranque.
+```
+
+```text
+Caso: WEB-UT-001 ViewModel compacto de AppSpecV0 y BacklogInicialPropuestoV0
+Tipo: unit
+Comando: `go test ./modulos/orquesta-web`
+Evidencia esperada: Render model contiene resumen, defaults, warnings, preguntas abiertas, fases y microtareas; no contiene transcript, structs privados, tablas SQL ni detalles de proveedor.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: Sobreexponer `AppSpecV0` completo por comodidad de render.
+```
+
+```text
+Caso: WEB-UT-003 mapper form rico preserva campos publicos
+Tipo: unit
+Comando: `go test ./modulos/orquesta-web`
+Evidencia esperada: El mapper preserva i18n, documentacion, datos, deploy, calidad, agentes, conectores, restricciones, plataformas y preferencias sin invocar validacion de negocio.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: Si factory renombra campos publicos, el mapper debe actualizarse en el mismo contrato versionado.
+```
+
+```text
+Caso: WEB-UT-004 errores publicos en viewmodel
+Tipo: unit
+Comando: `go test ./modulos/orquesta-web`
+Evidencia esperada: Errores `ValidationIssue` publicos se proyectan como `errores_publicos`, preservando `request_id` y `locale`, sin inventar fases ni microtareas.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: Los errores de transporte quedan para WEB-002/WEB-006; este corte solo cubre errores publicos de validacion.
+```
+
+```text
+Caso: WEB-UT-002 i18n de nueva app
+Tipo: unit
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: ES/EN cubren secciones principales, errores publicos, labels de campos y estados; fallback controlado para locale no soportado.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: El catalogo es minimo para la futura pantalla; al ampliar UI se deben anadir claves antes de renderizar texto nuevo.
+```
+
+```text
+Caso: WEB-INT-001 GET nueva app no toca DB ni runtime
+Tipo: integration
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `TestNuevaAppWebEndpointV0GETRenderInicialLocalizadoYOpcionesDelForm` valida render inicial localizado, formulario/proyeccion vacia, opciones de locale y campos derivados de `WebNuevaAppFormV0`; fake confirma cero llamadas al cliente.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: Reintroducir selector de proyecto heredado que fuerce DB.
+```
+
+```text
+Caso: WEB-INT-002 POST nueva app usa SolicitarNuevaApp v0
+Tipo: integration
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `TestNuevaAppWebEndpointV0POSTJSONDelegaAlClienteYRenderizaViewModel`, `TestNuevaAppWebEndpointV0POSTFormURLEncodedDelegaSinTemplates`, `TestNuevaAppWebEndpointV0POSTErrorClienteDevuelveErrorPublicoLocalizado` y `TestNuevaAppWebEndpointV0MetodoNoSoportadoNoDelega` validan delegacion al puerto `SolicitarNuevaAppClientV0`, render estable, locale preservado, errores publicos localizados y cero materializacion de backlog/DB/runtime.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: Confundir preview de backlog propuesto con fabricacion real.
+```
+
+```text
+Caso: WEB-UT-007 preview compacto de BacklogInicialPropuestoV0
+Tipo: unit
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `TestWebNuevaAppBacklogPreviewV0CompactaFasesYMicrotareas` valida snapshot controlado con key, fase, titulo, modulo/frontera, write-set previsto, bloqueo y criterio de cierre; no expone structs internos ni campos del DTO de factory como dump.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: Mantener compatibilidad con la proyeccion previa `fases`/`microtareas` hasta que exista UI final.
+```
+
+```text
+Caso: WEB-INT-007 handler JSON renderiza backlog_preview
+Tipo: integration
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `TestNuevaAppWebEndpointV0POSTJSONRenderizaBacklogPreviewCompacto` valida con `httptest` que el JSON de pagina incluye textos i18n del preview y semantica basica para fases/microtareas sin servidor real ni frontend pesado.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: La accesibilidad queda limitada a estructura JSON/i18n; una UI HTML futura necesitara pruebas propias.
+```
+
+```text
+Caso: WEB-INT-006A flujo vertical REST nueva app
+Tipo: integration
+Comando: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-factory`
+Evidencia esperada: `RESTSolicitarNuevaAppClientV0` consume `orquestafactory.NewAppSpecHTTPHandlerV0` con `httptest.NewServer`; request valida desde `WebNuevaAppFormV0` devuelve `WebNuevaAppViewModelV0` estado `valida`, resumen, fases, microtareas, schema y correlation/request id coherentes; request invalida devuelve estado `invalida`, errores publicos y sin backlog inventado.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: No cubre UI real ni handler de submit; eso queda para WEB-006.
+```
+
+```text
+Caso: WEB-CT-014 cliente REST ArrancarDirectorApp v0
+Tipo: contract
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `RESTArrancarDirectorAppClientV0` envia `POST /api/v0/apps/director` con `app_spec_request`, correlation header y limites opcionales; respuesta `ok` se proyecta a `WebNuevaAppViewModelV0` estado `director_arrancado`, y respuesta `error` se mantiene como error publico renderizable.
+Ultima ejecucion: 2026-05-10; pasa.
+Riesgos: El bridge REST productivo debe inyectarse fuera de web; web no construye puertos internos.
+```
+
+```text
+Caso: WEB-INT-014 POST nueva app arranca director por puerto opt-in
+Tipo: integration
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `NuevaAppWebEndpointV0` usa `DirectorClient` si esta configurado, no llama `SolicitarNuevaAppClientV0`, renderiza `run_ref`, `director_tasks`, `started_agents` y texto i18n `director_arrancado`.
+Ultima ejecucion: 2026-05-10; pasa.
+Riesgos: No sustituye aun la UI conversacional; solo cambia el destino del submit cuando el puerto existe.
+```
+
+```text
+Caso: WEB-INT-014A flujo vertical web -> REST -> MCP -> director
+Tipo: integration
+Comando: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-mcp`
+Evidencia esperada: Cliente web llama al bridge REST de `orquesta.apps.arrancar_director.v0`; el handler MCP invoca `StartAppDirectorV0` con stores/dispatchers fake y devuelve `run_ref` y agente director arrancado.
+Ultima ejecucion: 2026-05-10; pasa.
+Riesgos: Usa fake lifecycle launcher; la prueba real con Codex queda en `orquesta-runtime-codex-delivery`.
+```
+
+```text
+Caso: WEB-UT-015 director stats 400 publico
+Tipo: unit
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `RESTDirectorStatsClientV0` renderiza `estado:error` con HTTP 400 como panel de errores publicos y conserva 400 ambiguo como `error_transporte`.
+Ultima ejecucion: 2026-05-10; pasa.
+Riesgos: No arranca RunStore ni registry real; solo alinea semantica cliente/bridge REST.
+```
+
+```text
+Caso: WEB-INT-015A flujo vertical web -> REST -> MCP director stats
+Tipo: integration
+Comando: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-mcp`
+Evidencia esperada: `RESTDirectorStatsClientV0` consume `NewMCPDirectorStatsHTTPHandlerV0`, el executor MCP lee un RunStore in-memory y la web proyecta run, fase, tareas, agentes y estado de fuente de progreso.
+Ultima ejecucion: 2026-05-10; pasa.
+Riesgos: No configura registry/progress source productivos; verifica el contrato de transporte y proyeccion.
+```
+
+```text
+Caso: WEB-UT-016 director stats expone brainstorming inicial
+Tipo: unit/integration
+Comando: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway`
+Evidencia esperada: la web proyecta `counts.brainstorms` desde el nucleo y el
+gateway verifica que arrancar director deja `tasks_total=0` pero
+`brainstorms=1` y `agents_started=1`.
+Ultima ejecucion: 2026-05-10; pasa.
+Riesgos: No modela contador separado de `director_task`; mantiene la frontera
+del workflow.
+```
+
+```text
+Caso: WEB-ARCH-001 guard contra DB/runtime/fabricar-app en flujo nueva app
+Tipo: smoke
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `TestNuevaAppNoDBNoRuntimeGuardV0` parsea ficheros productivos `nueva_app_*.go`, falla con imports directos a DB/runtime/cmd/herencia y con literales de `fabricar-app`, materializacion de backlog o referencias obligatorias a proveedor runtime/agente.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: El guard permite campos contractuales como `db_required` porque expresan necesidad funcional, no acceso directo a DB.
+```
+
+```text
+Caso: WEB-UT-009 panel compacto de estado operativo
+Tipo: unit
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `TestWebOperationalStatusQueryV0UsaContratoPublicoReadOnly`, `TestWebOperationalStatusPanelV0CompactaDiagnosticoSinDumpInterno` y `TestWebOperationalStatusPanelV0EstadoDesconocidoNoInventaFases` validan query `OperationalStatusQueryV0` para `orquesta-web/web`, proyeccion compacta de `DiagnosticoCompactoV0` con fase/progreso/bloqueos/salud/frescura y degradacion a `unknown` sin dumps internos.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: Todavia no existe cliente ni endpoint real para consultar observability; este corte solo fija el shape web puro.
+```
+
+```text
+Caso: WEB-SMOKE-010 saneamiento de tamano de endpoint nueva app
+Tipo: smoke
+Comando: `gofmt` sobre Go tocados; `go test -count=1 ./modulos/orquesta-web`; `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-factory ./modulos/orquesta-observability`; `git diff --check -- modulos/orquesta-web`; `wc -l` de Go tocados.
+Evidencia esperada: El endpoint mantiene los tests existentes de GET/POST/error/i18n/backlog preview, no cambia shape JSON ni codigos HTTP, y los Go tocados quedan por debajo de 300 lineas.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: Refactor mecanico; cualquier cambio futuro en pagina JSON debe cuidar que request/response/handler sigan separados.
+```
+
+```text
+Caso: WEB-SMOKE-011 saneamiento zona amarilla web
+Tipo: smoke
+Comando: `gofmt` sobre Go tocados; `go test -count=1 ./modulos/orquesta-web`; `git diff --check -- modulos/orquesta-web`; `wc -l` de Go tocados.
+Evidencia esperada: i18n mantiene claves/textos ES/EN y fallback; viewmodel nueva app mantiene shape JSON y preview; panel operativo mantiene query/proyeccion compacta; tests endpoint conservan expectations por escenario; todos los Go tocados quedan por debajo de 300 lineas.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: Refactor mecanico; no anade cobertura nueva ni cambia contratos REST/JSON.
+```
+
+```text
+Caso: WEB-INT-013 primera UI HTML nueva app
+Tipo: integration
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar`, `TestNuevaAppHTMLHandlerV0POSTValidoDelegaYRenderizaResultado` y `TestNuevaAppHTMLHandlerV0POSTInvalidoRenderizaErrorPublico` validan GET HTML en `/nueva-app`, POST form-urlencoded contra fake `SolicitarNuevaAppClientV0`, render de estado/resumen/backlog y error publico localizado, sin DB, runtime, provider/model, HOME ni OAuth.
+Ultima ejecucion: 2026-05-06; pasa.
+Riesgos: UI v0 server-rendered y deliberadamente basica; no preserva todos los valores del formulario tras submit ni incluye interacciones cliente.
+```
+
+```text
+Caso: WEB-UT-012 bootstrap director para web
+Tipo: unit
+Comando: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-director`
+Evidencia esperada: `LocalBootstrapProyectoDesdeAppSpecClientV0` delega en un puerto publico del director o fake inyectado; errores publicos `director_bootstrap_invalido` se proyectan como viewmodel invalido; errores no publicos quedan con codigo estable de cliente; `WebBootstrapProyectoViewModelV0` muestra refs, registro, StartRun y eventos compactos sin payload ni entrada completa.
+Ultima ejecucion: 2026-05-04; pasa.
+Riesgos: El transporte inbound real del director aun no existe; si se define REST/MCP posterior, debe reemplazar el cliente local sin cambiar el viewmodel.
+```
+
+## Validaciones realizadas en este arranque
+
+```text
+Caso: WEB-DOC-001 lectura de contexto obligatorio
+Tipo: smoke
+Comando: `sed -n` sobre AGENTS.md, README.md, docs locales, `modulos/CONTRATOS.md` y `orquesta-factory/docs/contratos.md`.
+Evidencia esperada: Contexto leido y decisiones documentadas en docs locales.
+Ultima ejecucion: 2026-05-04.
+Riesgos: No valida comportamiento de codigo; solo reduce riesgo de arrancar contra contrato incorrecto.
+```
+
+```text
+Caso: WEB-DOC-002 inventario acotado de herencia
+Tipo: smoke
+Comando: `rg -n "SolicitarNuevaApp|NuevaApp|nueva app|fabricar app|fabricar|solicitar.*app|app nueva|request.*app|create.*app|new app"` y lecturas acotadas de `cmd/proyectos_web.go`, `cmd/cliente_servidor_recursos.go`, `cmd/api.go`, tests e i18n.
+Evidencia esperada: Reutilizacion/cuarentena registrada sin copiar codigo.
+Ultima ejecucion: 2026-05-04.
+Riesgos: Inventario deliberadamente acotado; puede haber UI relacionada fuera de los terminos buscados.
+```

@@ -1,0 +1,315 @@
+# Decisiones locales: orquesta-mcp
+
+Las decisiones de este archivo solo afectan a `orquesta-mcp`. Si afectan a otro modulo, deben elevarse al director y registrarse en `../../CONTRATOS.md`.
+
+## Plantilla
+
+```text
+Fecha:
+Decision:
+Motivo:
+Alternativas:
+Impacto:
+Contratos afectados:
+Estado:
+```
+
+## Decisiones tomadas
+
+```text
+Fecha: 2026-05-10
+Decision: `orquesta.director.stats.v0` expone `DirectorRunStatsV0` completo
+como contrato observable para director, API y web.
+Motivo: el director necesita la misma informacion operativa que usa la
+supervision humana para decidir si espera, replanifica, sube capacidad, para un
+agente o bloquea el cierre; la web debe consultarlo sin conocer stores ni
+runtime.
+Alternativas: leer runtime/filesystem desde web; duplicar reglas del servicio
+director en MCP; devolver solo contadores basicos.
+Impacto: el tool lee el run por puerto, enriquece opcionalmente con registro de
+procesos y observaciones de progreso, y publica counts/refs de tareas, agentes,
+rework, replan, `progress` y `closure` compactos sin rutas, proveedor, modelo,
+DB ni credenciales.
+Contratos afectados: mcp.tool.orquesta.director.stats.v0;
+rest.bridge.orquesta.director.stats.v0; DirectorRunStatsV0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-09
+Decision: Exponer `orquesta.director_agent.apply_decision.v0` como tool MCP opt-in.
+Motivo: para que Orquesta y el director se gobiernen solos, la IA directora debe poder devolver una decision compacta sin construir comandos internos del workflow a mano.
+Alternativas: usar solo `orquesta.core_workflow.handle_command.v0`; leer ficheros de decision desde MCP; acoplar MCP al runtime del agente.
+Impacto: MCP delega en `orquesta-director-agent-workflow`, usa puertos inyectados y devuelve un resultado compacto sin payloads completos.
+Contratos afectados: DirectorAgentDecisionV0; ApplyDirectorAgentDecisionV0; mcp.transport.registry.v0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-10
+Decision: MCP-031 publica `POST /api/v0/director/stats` como bridge REST fino sobre `orquesta.director.stats.v0`.
+Motivo: Web y adaptadores HTTP locales necesitan consultar stats del director sin conocer MCP ni crear puertos productivos dentro del handler.
+Alternativas: Crear un handler que construya RunStore/registry/progress source; exponer un servidor MCP/HTTP completo; reutilizar un endpoint de app runner.
+Impacto: `NewMCPDirectorStatsHTTPHandlerV0` solo decodifica JSON, delega en `MCPTransportDirectorStatsExecutorV0`, codifica JSON y propaga `X-Correlation-ID`.
+Contratos afectados: rest.bridge.orquesta.director.stats.v0; mcp.tool.orquesta.director.stats.v0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-09
+Decision: Preparar orquestacion de app por MCP se expone como tool puro separado de arrancar director.
+Motivo: el wizard necesita obtener run, plan grande y progreso inicial sin inyectar stores/outbox ni conocer scheduler; arrancar director sigue siendo el flujo operativo con puertos.
+Alternativas: ampliar solicitar_nueva_app; ampliar arrancar_director_app; duplicar planner dentro de MCP.
+Impacto: `orquesta.apps.preparar_orquestacion.v0` delega solo en `orquesta-app-runner`, no expone CandidateProvider, mantiene payload compacto y no decide DB/runtime/proveedor/modelo.
+Contratos afectados: mcp.tool.orquesta.apps.preparar_orquestacion.v0.puro; PrepareAppOrchestrationV0; AppMicrotaskPlanV0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-09
+Decision: Ejecutar orquestacion de app por MCP es opt-in y neutraliza refs externas antes de tocar core/outbox.
+Motivo: el wizard necesita una orden unica para que Orquesta arranque el loop, pero el core prohibe detalles de transporte como mcp, web, cli, provider, HOME o runtime en referencias internas y outbox.
+Alternativas: relajar validaciones del core; cambiar tests para evitar refs con mcp; acoplar MCP directamente a outbox. Se descartan porque reintroducen los fallos de v1/v2 y rompen la frontera hexagonal.
+Impacto: `orquesta.apps.ejecutar_orquestacion.v0` exige executor/puertos inyectados, usa refs internas neutras con hash de refs externas y delega en `RunPreparedAppOrchestrationV0`.
+Contratos afectados: mcp.tool.orquesta.apps.ejecutar_orquestacion.v0; PrepareAppOrchestrationV0; RunPreparedAppOrchestrationV0; mcp.transport.registry.v0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-07
+Decision: El resource de workflow MCP expone el quality gate durable publicado por el core.
+Motivo: Una IA directora necesita ver `RecordQualityGate` y `QualityGateRecorded` para gobernar validaciones de calidad sin leer internals del core ni deducirlas desde replay.
+Alternativas: Esperar al servidor MCP real; dejar el catalogo en 30/30; tratar quality gates como detalle privado de revisiones.
+Impacto: El resource pasa a 31 comandos y 31 eventos, incorpora `quality_gates` al shape compacto y mantiene sincronizacion contra los catalogos publicos del core.
+Contratos afectados: orquesta.core_workflow.contracts.v0, RecordQualityGate, QualityGateRecorded.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-09
+Decision: MCP-012 anade `orquesta.apps.arrancar_director.v0` como adaptador fino hacia `orquesta-app-director-service`.
+Motivo: El wizard/formulario debe poder pedir una app por MCP/REST sin conocer factory, workflow, scheduler, outbox ni runtime. El servicio canonico ya concentra esa composicion por puertos.
+Alternativas:
+  - Llamar al factory desde MCP y que el operador arranque agentes manualmente: descartado porque no prueba Orquesta.
+  - Acoplar MCP al launcher Codex: descartado porque proveedor/modelo/HOME son conectores externos.
+  - Pasar request_id/correlation_id del adaptador tal cual al core: descartado porque filtra detalles como mcp/web/api en refs internas.
+Impacto: MCP traduce refs externas a refs internas neutras, delega en `StartAppDirectorV0` y devuelve una respuesta compacta con run, fase y director arrancado.
+Contratos afectados: mcp.tool.orquesta.apps.arrancar_director.v0; StartAppDirectorV0; AppSpecRequestV0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-10
+Decision: MCP-012A expone `/api/v0/apps/director` como bridge REST del tool `orquesta.apps.arrancar_director.v0`.
+Motivo: `orquesta-web` necesita un conector REST/API sustituible para arrancar el director desde el wizard sin importar MCP ni construir puertos internos.
+Alternativas: Que web importe el executor MCP; crear servidor productivo dentro de `orquesta-mcp`; mantener solo el registro MCP opt-in.
+Impacto: El bridge recibe el mismo envelope del tool, usa executor inyectado y devuelve el mismo resultado compacto. El servidor productivo sigue fuera del modulo.
+Contratos afectados: rest.bridge.orquesta.apps.arrancar_director.v0; mcp.tool.orquesta.apps.arrancar_director.v0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-07
+Decision: El transporte MCP real se prepara como puerto de registro opt-in y no como servidor dentro de `orquesta-mcp`.
+Motivo: La frontera hexagonal debe permitir enchufar un servidor MCP externo sin que este modulo abra sockets, lea estado productivo o conozca internals.
+Alternativas: Implementar servidor MCP real aqui; registrar herramientas directamente contra DB/outbox/runtime; esperar a otro corte sin contrato de transporte.
+Impacto: `RegisterMCPTransportV0` publica resources/tools existentes mediante envelopes compactos y handlers neutros. Los tools con dependencia externa usan puertos inyectados o quedan `mcp_transport_tool_unbound`.
+Contratos afectados: mcp.transport.registry.v0.puro; orquesta.operator.operations.v0; orquesta.core_workflow.handle_command.v0; orquesta.director.bootstrap_appspec.v0; orquesta.apps.solicitar_nueva.v0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-06
+Decision: El resource de workflow MCP expone tambien la confirmacion durable de parada.
+Motivo: Una IA directora necesita distinguir stop solicitado (`stopped_agents`) de stop confirmado (`confirmed_stopped_agents`) para no replanificar sobre una suposicion falsa.
+Alternativas: Esperar al servidor MCP real; dejar que la IA deduzca la confirmacion desde ACK de outbox; ocultar la nueva transicion hasta scheduler.
+Impacto: El resource pasa a 30 comandos y 30 eventos y conserva sincronizacion automatica contra el catalogo publico del core.
+Contratos afectados: orquesta.core_workflow.contracts.v0, RegisterAgentStopConfirmed, AgentStopConfirmed.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-06
+Decision: MCP-015 registra `orquesta.operator.operations.v0` como adaptador MCP puro sobre puertos de `orquesta-operator-mcp`.
+Motivo: Una IA debe poder descubrir y pedir estado, burst supervisado, outbox pendiente y consultas dirigidas sin conocer internals del nucleo ni abrir un servidor MCP real en este corte.
+Alternativas: conectar transporte MCP real ahora; hacer que MCP lea event-store/outbox directamente; duplicar reglas del director en MCP.
+Impacto: `orquesta-mcp` queda como adaptador fino: valida envelopes, exige puerto inyectado y devuelve errores publicos. El transporte MCP real queda como conector opt-in posterior.
+Contratos afectados: orquesta.operator.operations.v0; OperatorMCPStatusPortV0; OperatorMCPBurstPortV0; OperatorMCPOutboxPortV0; OperatorMCPDirectedQueryPortV0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-06
+Decision: MCP expone un tool puro `orquesta.core_workflow.handle_command.v0` para gobernar comandos del workflow sin efectos externos.
+Motivo: El cierre del nucleo exige que una IA pueda gobernar por MCP sin leer DB ni conocer runtime; un resource contractual no basta si no existe una forma testeada de aplicar comandos al core.
+Alternativas: Esperar al servidor MCP real; ejecutar CLI; persistir desde MCP; exponer payloads completos de eventos/outbox.
+Impacto: El tool recibe estado y comando publicos, invoca `HandleCommandV0`, aplica eventos con `ApplyEventV0` solo para devolver `state_after` compacto, y no ejecuta outbox ni guarda estado. Puede devolver `state_public` solo con `include_state=true` para harness o servidor MCP sin persistence productiva.
+Contratos afectados: mcp.tool.orquesta.core_workflow.handle_command.v0.puro; OrchestrationCommandV0; OrchestrationRunV0; OrchestrationCommandResultV0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-06
+Decision: El resource `orquesta.core_workflow.contracts.v0` se sincroniza contra los catalogos publicos del core y no mantiene una lista antigua paralela.
+Motivo: El nucleo habia avanzado hasta stop, lifecycle, leases, concurrencia, resultado de revision, rework, replan y respuestas del director, pero MCP seguia exponiendo 18 comandos/eventos. Una IA externa no puede gobernar con un mapa incompleto.
+Alternativas: Mantener 18/18 hasta servidor MCP real; copiar a mano comandos nuevos sin test contra core; leer docs en runtime.
+Impacto: El resource expone el catalogo completo de comandos/eventos; los tests comparan contra `SupportedOrchestrationCommandTypesV0` y `SupportedOrchestrationEventTypesV0`; summary_key por transicion se deriva en lookup para mantener payload menor de 10 KB.
+Contratos afectados: mcp.resource.orquesta.core_workflow.contracts.v0.puro; OrchestrationCommandV0; OrchestrationEventV0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-09
+Decision: Exponer `RegisterPhaseArtifact` y `PhaseArtifactRegistered` en el resource MCP del workflow.
+Motivo: El director o una IA externa no debe deducir la nueva transicion leyendo codigo interno; MCP es la frontera de gobierno.
+Alternativas: Esperar al cableado de ACK; dejar solo docs locales del core; ampliar el resource sin test de catalogo.
+Impacto: `orquesta.core_workflow.contracts.v0` incluye 32 comandos/eventos, la ref `phase_artifacts` y mantiene el payload bajo 10 KB acortando guardrails y referencias canonicas.
+Contratos afectados: mcp.resource.orquesta.core_workflow.contracts.v0.puro, RegisterPhaseArtifact, PhaseArtifactRegistered.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-04
+Decision: El primer slice MCP para nueva app sera un tool fino llamado orquesta.apps.solicitar_nueva.v0.
+Motivo: SolicitarNuevaApp v0 ya esta declarado como contrato compartido para orquesta-mcp y su propietario es orquesta-factory.
+Alternativas: Crear un flujo MCP propio; reutilizar CLI; acceder a DB para crear proyecto.
+Impacto: MCP queda como adaptador inbound y no como nucleo de negocio.
+Contratos afectados: mcp.tool.orquesta.apps.solicitar_nueva.v0; SolicitarNuevaApp v0 como dependencia externa.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-04
+Decision: No copiar ni ampliar un cmd/mcp.go gigante para este arranque.
+Motivo: AGENTS.md prohibe ampliar un fichero MCP gigante y exige tools/resources pequenos conectados por puertos.
+Alternativas: Copiar cmd/mcp.go existente; centralizar todos los tools en un unico entrypoint grande.
+Impacto: La implementacion futura debera separar registro MCP, handlers de tools, resources/prompts y conectores hacia casos de uso.
+Contratos afectados: Ningun contrato global; afecta estructura interna futura de orquesta-mcp.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-04
+Decision: El resource minimo sera contractual, no una proyeccion de estado.
+Motivo: Para pedir una app nueva, la IA necesita conocer el contrato SolicitarNuevaApp v0 antes de invocar el tool; no necesita leer DB ni runtime.
+Alternativas: Exponer proyectos existentes; exponer tablas; generar documentacion larga.
+Impacto: orquesta://contracts/solicitar-nueva-app/v0 sera compacto, estable y sin datos internos.
+Contratos afectados: mcp.resource.orquesta.contracts.solicitar_nueva_app.v0
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-04
+Decision: El prompt minimo guiara aclaraciones antes del tool y no inventara campos obligatorios.
+Motivo: El contrato global indica que, si falta informacion no inferible, la respuesta devuelve preguntas abiertas o supuestos, no contratos inventados.
+Alternativas: Inferir todo desde texto libre; imponer campos desde MCP.
+Impacto: El prompt queda bloqueado para ejemplos completos hasta que factory publique el schema canonico de AppSpecRequestV0.
+Contratos afectados: mcp.prompt.orquesta.solicitar_nueva_app.v0
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-04
+Decision: MCP consumira los schemas canonicos de `AppSpecRequestV0` y `AppSpecV0` desde `orquesta-factory/docs/schemas/`, enlazados por `modulos/CONTRATOS.md`.
+Motivo: factory es propietario del contrato `SolicitarNuevaApp v0`; duplicar schemas en MCP crearia divergencia.
+Alternativas: copiar schemas dentro de MCP; describir campos a mano en el resource; bloquear MCP hasta implementacion.
+Impacto: MCP documenta y valida el envelope del tool, pero referencia los schemas/fixtures canonicos de factory para la carga de datos.
+Contratos afectados: mcp.tool.orquesta.apps.solicitar_nueva.v0, mcp.resource.orquesta.contracts.solicitar_nueva_app.v0, SolicitarNuevaApp v0.
+Estado: aceptada por el director y registrada
+```
+
+```text
+Fecha: 2026-05-04
+Decision: MCP-005A implementa solo descriptor, DTOs locales y mappers puros del tool orquesta.apps.solicitar_nueva.v0.
+Motivo: El corte solicitado excluye servidor MCP real, transporte, DB, CLI, runtime, filesystem y reglas duplicadas de factory.
+Alternativas: Crear handler MCP real; llamar directamente al caso de uso de factory; copiar schemas completos en MCP.
+Impacto: El modulo ya tiene una superficie Go testeada para integrar el servidor futuro sin fijar transporte ni duplicar negocio.
+Contratos afectados: mcp.adapter.orquesta.apps.solicitar_nueva.v0.puro; mcp.tool.orquesta.apps.solicitar_nueva.v0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-04
+Decision: MCP-006 publica un resource puro `orquesta.contracts.shared.v0` y descriptors por contrato compartido v0, sin servidor MCP real.
+Motivo: MCP debe permitir que una IA consulte contratos y progreso compacto sin leer contextos globales enormes ni acceder a DB/CLI/runtime/filesystem productivo.
+Alternativas: Leer `../../CONTRATOS.md` en runtime; duplicar documentacion extensa por contrato; implementar transporte MCP real en este corte.
+Impacto: El modulo expone un catalogo compacto estable de contratos compartidos con message keys de resumen/progreso y referencias canonicas a los modulos propietarios.
+Contratos afectados: mcp.resource.orquesta.contracts.shared.v0.puro; SolicitarNuevaApp v0; PersistenceRepository v0; RuntimeLaunchRequest v0; OrquestaEvent v0; GovernanceCatalog v0; OperationalStatusQuery v0; DeploymentPlan v0; GenerarI18nDocsIniciales v0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-04
+Decision: MCP-007 publica un resource puro `orquesta.project.roadmap.v0` para roadmap y decisiones compactas de nucleo.
+Motivo: Una IA necesita entender el estado accionable de `orquesta-core` sin cargar docs globales completos ni tocar DB, runtime, servidor MCP real o filesystem productivo.
+Alternativas: Leer `../CONTRATOS.md` en runtime; copiar docs completos de core; exponer eventos o progreso desde observability en este corte.
+Impacto: El modulo expone una proyeccion estatica versionada de hitos y decisiones de nucleo con refs canonicas, lookup puro y tests de saneamiento.
+Contratos afectados: mcp.resource.orquesta.project.roadmap.v0.puro; RegistrarProyectoDesdeAppSpec v0; FunctionContract v0; ProyectoPlanBorradorV0; PersistenceRepository v0; OrquestaEvent v0; RuntimeLaunchRequest v0; CapacityDecision v0; GovernanceCatalog v0; DeploymentPlan v0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-04
+Decision: MCP-008 se limita a un resource puro e independiente para `OperationalStatusQuery v0`, sin tool ni servidor MCP real.
+Motivo: El contrato compartido ya existe y `shared_contracts_resource_v0.go` ya da catalogo general, pero una IA necesita una guia compacta y dedicada de invocacion/shape sin cargar docs largas ni abrir otro frente tecnico.
+Alternativas: ampliar `shared_contracts_resource_v0.go` con mas detalle; crear un tool MCP read-only; conectar ya un servidor/transporte MCP.
+Impacto: `operational_status_resource_v0.go` expone summary, consumers permitidos, endpoint recomendado, scopes, secciones, invariantes y errores publicos como proyeccion estatica testeada.
+Contratos afectados: mcp.resource.orquesta.observability.operational_status.v0.puro; OperationalStatusQuery v0; DiagnosticoCompactoV0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-04
+Decision: MCP-005 se ejecuta como adaptador HTTP local fino contra `POST /api/v0/apps/spec` publicado por orquesta-factory.
+Motivo: El puerto publicado ya existe y permite cerrar el tool sin meter servidor MCP real, sin duplicar negocio y sin acoplar MCP al nucleo interno de factory.
+Alternativas: Llamar directamente a `SolicitarNuevaAppV0` y `GenerarBacklogInicialPropuestoV0`; esperar a un servidor MCP completo; copiar validaciones de factory en MCP.
+Impacto: `solicitar_nueva_app_tool_executor_v0.go` queda como conector pequeno de transporte; los 400 publicos se traducen al resultado canonico del tool y los fallos de transporte/configuracion quedan como error Go local.
+Contratos afectados: mcp.adapter.orquesta.apps.solicitar_nueva.v0.http_local; SolicitarNuevaApp v0; AppSpecHTTPResponseV0; AppSpecHTTPErrorResponseV0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-04
+Decision: MCP-009 publica un resource puro `orquesta.core_workflow.contracts.v0` para consultar el workflow durable tras NCW-025.
+Motivo: Una IA necesita ver fases, comandos, eventos y shape de estado de `orquesta-core-workflow` sin cargar docs extensas ni ejecutar workflow.
+Alternativas: Leer docs de workflow en runtime; crear un tool MCP mutador; duplicar contratos completos en MCP.
+Impacto: MCP expone un descriptor compacto basado en constantes publicas del modulo propietario, sin servidor MCP real ni efectos externos.
+Contratos afectados: mcp.resource.orquesta.core_workflow.contracts.v0.puro; OrchestrationRunV0; OrchestrationCommandV0; OrchestrationEventV0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-04
+Decision: MCP-010 divide `project_roadmap_resource_v0.go` y `shared_contracts_resource_v0.go` en shells publicos, payloads, lookup y descriptors estaticos.
+Motivo: AGENTS.md prohibe ampliar ficheros MCP gigantes y estos resources habian superado 400 lineas cada uno.
+Alternativas: Mantener ficheros rojos; extraer un paquete nuevo; cambiar contratos para reducir payload.
+Impacto: La API publica, URIs, content-types, payloads, errores y textos observados por tests se mantienen; la responsabilidad queda separada en ficheros menores de 300 lineas.
+Contratos afectados: mcp.resource.orquesta.project.roadmap.v0.puro; mcp.resource.orquesta.contracts.shared.v0.puro.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-04
+Decision: MCP-011 expone `BootstrapProyectoDesdeAppSpec v0` como resource contractual compacto y tool puro local.
+Motivo: La IA necesita coordinar el bootstrap desde AppSpec sin duplicar el flujo ni activar persistencia/runtime; el propietario del caso de uso es `orquesta-director`.
+Alternativas: Crear un resource solo documental; implementar servidor MCP real; llamar por separado a factory, core y workflow desde MCP.
+Impacto: `ExecuteMCPBootstrapToolV0` recibe `BootstrapProyectoDesdeAppSpecCommandV0`, normaliza solo el envelope, invoca solo `orquesta-director.BootstrapProyectoDesdeAppSpecV0` y devuelve refs/contadores/eventos compactos.
+Contratos afectados: mcp.tool.orquesta.director.bootstrap_appspec.v0.puro; mcp.resource.orquesta.director.bootstrap_appspec.v0.puro; BootstrapProyectoDesdeAppSpec v0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-10
+Decision: Los tools MCP de nueva app/director publican que AppSpecRequestV0
+puede transportar `request_kind` y `execution_mode`.
+Motivo: la IA que gobierne Orquesta debe poder pedir solo documentacion,
+analisis, programacion, deploy o app completa sin depender de campos libres de
+objetivo ni de una UI concreta.
+Alternativas: crear un tool MCP por cada tipo de peticion; dejarlo como
+convencion textual; duplicar validacion de factory.
+Impacto: MCP conserva adaptadores finos y sigue delegando validacion en
+factory, pero el descriptor ya informa del contrato de tipo/modo.
+Contratos afectados: orquesta.apps.solicitar_nueva.v0,
+orquesta.apps.arrancar_director.v0, AppSpecRequestV0.
+Estado: aceptada localmente.
+```

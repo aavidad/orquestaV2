@@ -1,0 +1,43 @@
+{
+  "schema_version": "orquesta_event.v0",
+  "event_id": "evt_20260504_000001",
+  "event_type": "core.project_draft.accepted",
+  "source_area": "core",
+  "occurred_at": "2026-05-04T00:45:00Z",
+  "severity": "info",
+  "outcome": "accepted",
+  "correlation": {
+    "correlation_id": "corr_20260504_000001",
+    "request_id": "req_20260504_000001"
+  },
+  "subject": {
+    "kind": "project",
+    "id": "project_ref_000001",
+    "version": "v0"
+  },
+  "producer": {
+    "module": "orquesta-core",
+    "port": "PublicarOrquestaEvent"
+  },
+  "privacy": {
+    "contains_secret": false,
+    "contains_transcript": false,
+    "classification": "internal_operational",
+    "redaction_level": "summarized"
+  },
+  "summary": "Proyecto borrador aceptado por core para observacion compacta.",
+  "links": [
+    {
+      "rel": "related_to",
+      "target_type": "task",
+      "target_id": "task_ref_000001"
+    }
+  ],
+  "payload": {
+    "contract": "RegistrarProyectoDesdeAppSpecV0",
+    "phase": "draft",
+    "items_count": 3,
+    "warnings_count": 0,
+    "duration_ms": 42
+  }
+}

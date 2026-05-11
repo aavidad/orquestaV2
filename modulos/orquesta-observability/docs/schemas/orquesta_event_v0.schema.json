@@ -1,0 +1,369 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://orquesta.local/schemas/orquesta-observability/orquesta_event_v0.schema.json",
+  "title": "OrquestaEventV0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "event_type",
+    "source_area",
+    "occurred_at",
+    "severity",
+    "outcome",
+    "correlation",
+    "subject",
+    "producer",
+    "privacy",
+    "summary",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "orquesta_event.v0"
+    },
+    "event_id": {
+      "$ref": "#/definitions/opaque_id"
+    },
+    "event_type": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 96,
+      "pattern": "^(core|runtime|capacity|review)\\.[a-z0-9_]+(\\.[a-z0-9_]+)?$"
+    },
+    "source_area": {
+      "type": "string",
+      "enum": [
+        "core",
+        "runtime",
+        "capacity",
+        "review"
+      ]
+    },
+    "occurred_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "debug",
+        "info",
+        "warning",
+        "error"
+      ]
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "observed",
+        "accepted",
+        "rejected",
+        "running",
+        "completed",
+        "failed",
+        "degraded",
+        "skipped"
+      ]
+    },
+    "correlation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "correlation_id"
+      ],
+      "properties": {
+        "correlation_id": {
+          "$ref": "#/definitions/opaque_id"
+        },
+        "request_id": {
+          "$ref": "#/definitions/opaque_id"
+        },
+        "causation_id": {
+          "$ref": "#/definitions/opaque_id"
+        },
+        "trace_id": {
+          "$ref": "#/definitions/opaque_id"
+        }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "project",
+            "task",
+            "agent_run",
+            "capacity_decision",
+            "review",
+            "merge",
+            "artifact",
+            "system"
+          ]
+        },
+        "id": {
+          "$ref": "#/definitions/opaque_id"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        }
+      }
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "module",
+        "port"
+      ],
+      "properties": {
+        "module": {
+          "type": "string",
+          "enum": [
+            "orquesta-core",
+            "orquesta-runtime",
+            "orquesta-capacity",
+            "orquesta-review"
+          ]
+        },
+        "port": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]*$"
+        },
+        "adapter": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]*$"
+        }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contains_secret",
+        "contains_transcript",
+        "classification",
+        "redaction_level"
+      ],
+      "properties": {
+        "contains_secret": {
+          "const": false
+        },
+        "contains_transcript": {
+          "const": false
+        },
+        "classification": {
+          "type": "string",
+          "enum": [
+            "public_operational",
+            "internal_operational"
+          ]
+        },
+        "redaction_level": {
+          "type": "string",
+          "enum": [
+            "none",
+            "metadata_only",
+            "summarized",
+            "redacted"
+          ]
+        }
+      }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 280
+    },
+    "links": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rel",
+          "target_type",
+          "target_id"
+        ],
+        "properties": {
+          "rel": {
+            "type": "string",
+            "enum": [
+              "caused_by",
+              "part_of",
+              "related_to",
+              "artifact",
+              "run",
+              "parent",
+              "follow_up"
+            ]
+          },
+          "target_type": {
+            "type": "string",
+            "enum": [
+              "event",
+              "project",
+              "task",
+              "agent_run",
+              "capacity_decision",
+              "review",
+              "artifact"
+            ]
+          },
+          "target_id": {
+            "$ref": "#/definitions/opaque_id"
+          }
+        }
+      }
+    },
+    "payload": {
+      "$ref": "#/definitions/compact_object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source_area": {
+            "const": "core"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "pattern": "^core\\."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_area": {
+            "const": "runtime"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "pattern": "^runtime\\."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_area": {
+            "const": "capacity"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "pattern": "^capacity\\."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_area": {
+            "const": "review"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "pattern": "^review\\."
+          }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "opaque_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 96,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    },
+    "safe_property_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "not": {
+        "pattern": "(secret|token|password|credential|api_key|oauth|transcript|prompt|completion|raw_text|full_text|sql|dsn|connection|table|provider|model_name|home_path)"
+      }
+    },
+    "compact_object": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {
+        "$ref": "#/definitions/safe_property_name"
+      },
+      "additionalProperties": {
+        "$ref": "#/definitions/compact_value"
+      }
+    },
+    "compact_array": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "$ref": "#/definitions/compact_value"
+      }
+    },
+    "compact_value": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 512
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/definitions/compact_array"
+        },
+        {
+          "$ref": "#/definitions/compact_object"
+        }
+      ]
+    }
+  }
+}

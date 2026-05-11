@@ -1,0 +1,31 @@
+{
+  "schema_version": "orquesta_event.v0",
+  "event_id": "evt_20260504_000002",
+  "event_type": "runtime.agent_run.completed",
+  "source_area": "runtime",
+  "occurred_at": "2026-05-04T00:46:00Z",
+  "severity": "info",
+  "outcome": "completed",
+  "correlation": {
+    "correlation_id": "corr_20260504_000002"
+  },
+  "subject": {
+    "kind": "agent_run",
+    "id": "run_ref_000002"
+  },
+  "producer": {
+    "module": "orquesta-runtime",
+    "port": "PublicarOrquestaEvent"
+  },
+  "privacy": {
+    "contains_secret": false,
+    "contains_transcript": false,
+    "classification": "internal_operational",
+    "redaction_level": "summarized"
+  },
+  "summary": "Ejecucion runtime completada.",
+  "payload": {
+    "status": "completed",
+    "transcript": "Usuario: texto completo de la conversacion. Agente: respuesta completa. Este campo no esta permitido en OrquestaEvent v0."
+  }
+}

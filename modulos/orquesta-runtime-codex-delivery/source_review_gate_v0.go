@@ -1,0 +1,293 @@
+package orquestaruntimecodexdelivery
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
+	orquestacionnucleoapp "orquesta/orquestacionnucleoapp"
+)
+
+type CodexReviewGateFileEvidenceProviderPortV0 interface {
+	BuildCodexReviewGateFilesV0(
+		context.Context,
+		CodexReceiptDescriptorV0,
+		orquestaruntimecodex.CodexAgentAckV0,
+	) ([]orquestacionnucleoapp.AutoprogrammingReviewGateFileV0, error)
+}
+
+type CodexReviewGateFileEvidenceResultProviderPortV0 interface {
+	BuildCodexReviewGateFileEvidenceV0(
+		context.Context,
+		CodexReceiptDescriptorV0,
+		orquestaruntimecodex.CodexAgentAckV0,
+	) (CodexReviewGateFileEvidenceV0, error)
+}
+
+type CodexReviewGateFileEvidenceV0 struct {
+	Files  []orquestacionnucleoapp.AutoprogrammingReviewGateFileV0
+	Issues []orquestacionnucleoapp.AutoprogrammingReviewGateIssueV0
+}
+
+type CodexReviewGateObservationSourceV0 struct {
+	Store              CodexReceiptDescriptorStorePortV0
+	FileEvidence       CodexReviewGateFileEvidenceProviderPortV0
+	FileEvidenceResult CodexReviewGateFileEvidenceResultProviderPortV0
+	MaxLinesPerFile    int
+	FailureStatus      orquestacoreworkflow.ReviewResultStatusV0
+	QualityGateRefFn   func(deliveryRef string) string
+}
+
+var _ orquestacionnucleoapp.ReviewGateObservationProviderPortV0 = CodexReviewGateObservationSourceV0{}
+
+func (source CodexReviewGateObservationSourceV0) BuildReviewGateObservationsV0(
+	ctx context.Context,
+	request orquestacionnucleoapp.ReviewGateObservationRequestV0,
+) ([]orquestacionnucleoapp.ReviewGateObservationV0, error) {
+	if source.Store == nil {
+		return nil, fmt.Errorf("codex_review_gate_observation_source: store requerido")
+	}
+	descriptors, err := source.Store.ListCodexReceiptDescriptorsV0(
+		ctx,
+		codexReviewGateDescriptorRequestV0(request),
+	)
+	if err != nil {
+		return nil, err
+	}
+	observations := make([]orquestacionnucleoapp.ReviewGateObservationV0, 0, len(descriptors))
+	for _, descriptor := range descriptors {
+		observation, ready, err := source.observationFromReviewGateDescriptorV0(ctx, request, descriptor)
+		if err != nil {
+			return nil, err
+		}
+		if ready {
+			observations = append(observations, observation)
+		}
+	}
+	return observations, nil
+}
+
+func codexReviewGateDescriptorRequestV0(
+	request orquestacionnucleoapp.ReviewGateObservationRequestV0,
+) CodexReceiptDescriptorRequestV0 {
+	return CodexReceiptDescriptorRequestV0{
+		RunID:          strings.TrimSpace(request.Run.RunID),
+		StartedAgents:  compactCodexDeliveryRefsV0(request.Run.StartedAgents),
+		Deliveries:     nil,
+		PhaseArtifacts: nil,
+		CorrelationID:  strings.TrimSpace(request.CorrelationID),
+		EvidenceRefs:   compactCodexDeliveryRefsV0(request.EvidenceRefs),
+	}
+}
+
+func (source CodexReviewGateObservationSourceV0) observationFromReviewGateDescriptorV0(
+	ctx context.Context,
+	request orquestacionnucleoapp.ReviewGateObservationRequestV0,
+	descriptor CodexReceiptDescriptorV0,
+) (orquestacionnucleoapp.ReviewGateObservationV0, bool, error) {
+	ack, issues := orquestaruntimecodex.ReadAndValidateCodexAgentAckFileV0(
+		strings.TrimSpace(descriptor.AckPath),
+		descriptor.Spec,
+	)
+	if len(issues) > 0 && codexReceiptIssueMeansAckNotReadyV0(issues[0]) {
+		return orquestacionnucleoapp.ReviewGateObservationV0{}, false, nil
+	}
+	if len(issues) > 0 && (!codexReviewGateCanEvaluateAckV0(ack) ||
+		!codexReviewGateIssuesEvaluableV0(issues)) {
+		return orquestacionnucleoapp.ReviewGateObservationV0{}, false, fmt.Errorf(
+			"codex_review_gate_observation: %s:%s",
+			issues[0].Code,
+			issues[0].Field,
+		)
+	}
+	deliveryRef := strings.TrimSpace(ack.AckRef)
+	if !codexReviewGateDeliveryEligibleV0(request, descriptor, deliveryRef) {
+		return orquestacionnucleoapp.ReviewGateObservationV0{}, false, nil
+	}
+	input, fileIssues, err := source.reviewGateInputV0(ctx, descriptor, ack)
+	if err != nil {
+		return orquestacionnucleoapp.ReviewGateObservationV0{}, false, err
+	}
+	result := orquestacionnucleoapp.EvaluateAutoprogrammingReviewGateV0(input)
+	result = codexReviewGateMergeGateIssuesV0(result, fileIssues)
+	result = codexReviewGateMergeConnectorIssuesV0(result, issues)
+	return source.reviewGateObservationV0(ack, result), true, nil
+}
+
+func codexReviewGateCanEvaluateAckV0(ack orquestaruntimecodex.CodexAgentAckV0) bool {
+	return strings.TrimSpace(ack.AckRef) != "" &&
+		strings.TrimSpace(ack.RequestID) != "" &&
+		strings.TrimSpace(ack.Status) != ""
+}
+
+func codexReviewGateDeliveryEligibleV0(
+	request orquestacionnucleoapp.ReviewGateObservationRequestV0,
+	descriptor CodexReceiptDescriptorV0,
+	deliveryRef string,
+) bool {
+	agentRef := strings.TrimSpace(descriptor.AgentRef)
+	if agentRef == "" {
+		agentRef = strings.TrimSpace(descriptor.Spec.RequestID)
+	}
+	return stringInCodexDeliverySetV0(request.Run.Deliveries, deliveryRef) &&
+		codexDeliveryObservationAgentEligibleV0(codexReviewGateDeliveryRequestV0(request), agentRef) &&
+		!codexReviewGateAlreadyProjectedV0(request.Run, deliveryRef)
+}
+
+func codexReviewGateDeliveryRequestV0(
+	request orquestacionnucleoapp.ReviewGateObservationRequestV0,
+) orquestacionnucleoapp.AgentDeliveryObservationRequestV0 {
+	return orquestacionnucleoapp.AgentDeliveryObservationRequestV0{
+		Run:           request.Run,
+		CorrelationID: request.CorrelationID,
+		EvidenceRefs:  request.EvidenceRefs,
+	}
+}
+
+func codexReviewGateAlreadyProjectedV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	deliveryRef string,
+) bool {
+	reviewRequestID := codexReviewGateReviewRequestIDV0(deliveryRef)
+	reviewResultRef := codexReviewGateReviewResultRefV0(deliveryRef)
+	acceptedReviewRef := codexReviewGateAcceptedReviewRefV0(deliveryRef)
+	return stringInCodexDeliverySetV0(run.Reviews, reviewRequestID) ||
+		codexReviewGateResultRefInSetV0(run.ReviewResults, reviewResultRef) ||
+		stringInCodexDeliverySetV0(run.AcceptedReviews, acceptedReviewRef)
+}
+
+func codexReviewGateResultRefInSetV0(values []string, reviewResultRef string) bool {
+	reviewResultRef = strings.TrimSpace(reviewResultRef)
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == reviewResultRef || strings.HasPrefix(value, reviewResultRef+"#") {
+			return true
+		}
+	}
+	return false
+}
+
+func (source CodexReviewGateObservationSourceV0) reviewGateInputV0(
+	ctx context.Context,
+	descriptor CodexReceiptDescriptorV0,
+	ack orquestaruntimecodex.CodexAgentAckV0,
+) (orquestacionnucleoapp.AutoprogrammingReviewGateInputV0, []orquestacionnucleoapp.AutoprogrammingReviewGateIssueV0, error) {
+	evidence, err := source.reviewGateFileEvidenceV0(ctx, descriptor, ack)
+	if err != nil {
+		return orquestacionnucleoapp.AutoprogrammingReviewGateInputV0{}, nil, err
+	}
+	return orquestacionnucleoapp.AutoprogrammingReviewGateInputV0{
+		ACK: orquestacionnucleoapp.AutoprogrammingReviewGateACKV0{
+			Present: true,
+			Status:  strings.TrimSpace(ack.Status),
+		},
+		RequiredTests:   compactCodexDeliveryRefsV0(descriptor.Spec.AgentPacket.Task.RequiredTests),
+		Tests:           codexReviewGateTestsV0(ack.Tests),
+		Files:           evidence.Files,
+		WriteSet:        codexReviewGateAllowedFilesV0(descriptor.Spec, ack),
+		MaxLinesPerFile: source.MaxLinesPerFile,
+	}, evidence.Issues, nil
+}
+
+func (source CodexReviewGateObservationSourceV0) reviewGateFileEvidenceV0(
+	ctx context.Context,
+	descriptor CodexReceiptDescriptorV0,
+	ack orquestaruntimecodex.CodexAgentAckV0,
+) (CodexReviewGateFileEvidenceV0, error) {
+	if source.FileEvidenceResult != nil {
+		return source.FileEvidenceResult.BuildCodexReviewGateFileEvidenceV0(ctx, descriptor, ack)
+	}
+	if source.FileEvidence != nil {
+		files, err := source.FileEvidence.BuildCodexReviewGateFilesV0(ctx, descriptor, ack)
+		return CodexReviewGateFileEvidenceV0{Files: files}, err
+	}
+	files := make([]orquestacionnucleoapp.AutoprogrammingReviewGateFileV0, 0, len(ack.Files))
+	for _, path := range compactCodexDeliveryRefsV0(ack.Files) {
+		files = append(files, orquestacionnucleoapp.AutoprogrammingReviewGateFileV0{Path: path})
+	}
+	return CodexReviewGateFileEvidenceV0{Files: files}, nil
+}
+
+func codexReviewGateTestsV0(
+	values []string,
+) []orquestacionnucleoapp.AutoprogrammingReviewGateTestV0 {
+	tests := make([]orquestacionnucleoapp.AutoprogrammingReviewGateTestV0, 0, len(values))
+	for _, command := range compactCodexDeliveryRefsV0(values) {
+		tests = append(tests, orquestacionnucleoapp.AutoprogrammingReviewGateTestV0{
+			Command: command,
+			Passed:  true,
+			Status:  "passed",
+		})
+	}
+	return tests
+}
+
+func codexReviewGateAllowedFilesV0(
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+	ack orquestaruntimecodex.CodexAgentAckV0,
+) []string {
+	allowed := compactCodexDeliveryRefsV0(spec.AgentPacket.Task.WriteSet)
+	for _, file := range compactCodexDeliveryRefsV0(ack.Files) {
+		if codexReviewGatePathAllowedByWriteSetV0(file, allowed) {
+			allowed = append(allowed, file)
+		}
+	}
+	return compactCodexDeliveryRefsV0(allowed)
+}
+
+func codexReviewGatePathAllowedByWriteSetV0(path string, writeSet []string) bool {
+	path = strings.TrimSpace(path)
+	for _, allowed := range writeSet {
+		allowed = strings.TrimSpace(allowed)
+		if path == allowed || strings.HasPrefix(path, allowed+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+func (source CodexReviewGateObservationSourceV0) reviewGateObservationV0(
+	ack orquestaruntimecodex.CodexAgentAckV0,
+	result orquestacionnucleoapp.AutoprogrammingReviewGateResultV0,
+) orquestacionnucleoapp.ReviewGateObservationV0 {
+	deliveryRef := strings.TrimSpace(ack.AckRef)
+	observation := orquestacionnucleoapp.ReviewGateObservationV0{
+		CandidateRef:    "review-gate-candidate-ref-" + deliveryRef,
+		ReviewRequestID: codexReviewGateReviewRequestIDV0(deliveryRef),
+		ReviewResultRef: codexReviewGateReviewResultRefV0(deliveryRef),
+		DeliveryRef:     deliveryRef,
+		PhaseID:         string(orquestacoreworkflow.OrchestrationPhaseRevisionV0),
+		Status:          source.reviewGateStatusV0(result),
+		Summary:         codexReviewGateSummaryV0(result),
+		QualityGateRef:  source.qualityGateRefV0(deliveryRef),
+		EvidenceRefs:    codexReviewGateEvidenceRefsV0(ack, result),
+	}
+	if result.Accepted {
+		observation.AcceptedReviewRef = codexReviewGateAcceptedReviewRefV0(deliveryRef)
+	}
+	return observation
+}
+
+func (source CodexReviewGateObservationSourceV0) reviewGateStatusV0(
+	result orquestacionnucleoapp.AutoprogrammingReviewGateResultV0,
+) orquestacoreworkflow.ReviewResultStatusV0 {
+	if result.Accepted {
+		return orquestacoreworkflow.ReviewResultStatusAcceptedV0
+	}
+	if source.FailureStatus != "" {
+		return source.FailureStatus
+	}
+	return orquestacoreworkflow.ReviewResultStatusChangesRequestedV0
+}
+
+func (source CodexReviewGateObservationSourceV0) qualityGateRefV0(deliveryRef string) string {
+	if source.QualityGateRefFn != nil {
+		if ref := strings.TrimSpace(source.QualityGateRefFn(deliveryRef)); ref != "" {
+			return ref
+		}
+	}
+	return "quality-gate-ref-" + strings.TrimSpace(deliveryRef)
+}

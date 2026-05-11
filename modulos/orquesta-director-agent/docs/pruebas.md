@@ -1,0 +1,40 @@
+# Pruebas locales
+
+Comando local:
+
+```bash
+go test -count=1 ./modulos/orquesta-director-agent
+```
+
+Cobertura local:
+
+- acepta `request_brainstorm` compacto;
+- acepta `open_phase`, `request_vote` y `accept_decision`;
+- acepta `publish_function_contract` compacto;
+- acepta `create_microtask` con contrato funcional explicito;
+- acepta `ask_director` y `ask_user` compactos;
+- acepta `request_capacity` y `request_agent` compactos;
+- acepta `propose_autonomous_plan_team` compacto;
+- acepta `request_rework` y `record_replan_decision` compactos;
+- acepta `close_task` entre `accept_review` y `open_phase validacion_final`;
+- acepta `register_final_validation` y `close_run` compactos;
+- acepta `DirectorAgentCompactStatsV0` con contadores y refs pendientes;
+- rechaza proveedor/modelo y payloads largos;
+- rechaza microtareas sin contrato funcional.
+- rechaza microtareas de programacion sin `required_tests`.
+- rechaza plan/equipo con detalle operativo o asignaciones inexistentes.
+- rechaza cierre con fase incoherente o evidencias con rutas.
+- rechaza `close_task` sin evidencias o fuera de `revision`.
+- rechaza status de revision no soportado.
+- rechaza stats con rutas o detalle operativo.
+
+Prueba real opt-in:
+
+```bash
+ORQUESTA_PRUEBA_REAL_OPT_IN=1 \
+ORQUESTA_PRUEBA_REAL_DIRECTOR_COMMAND_PATH=/abs/director-cli-wrapper \
+ORQUESTA_PRUEBA_REAL_DIRECTOR_WORKDIR=/abs/workdir \
+./scripts/probar_director_agente_real_orquesta_v2.sh
+```
+
+Una ejecucion solo cuenta como real si el agente externo lo lanza Orquesta y el ACK/artifact correlaciona con `AgentStartPacketV0`.
