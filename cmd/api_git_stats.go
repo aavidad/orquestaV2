@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/db"
 	"orquesta/gitestadisticasapp"
 )
@@ -40,13 +41,22 @@ type gitOperationalStats struct {
 }
 
 type apiGitStatsResponse struct {
-	OK        bool                 `json:"ok"`
-	Scope     string               `json:"scope"`
-	Project   string               `json:"project,omitempty"`
-	Path      string               `json:"path,omitempty"`
-	Since     time.Time            `json:"since"`
-	Generated time.Time            `json:"generated"`
-	Stats     *gitOperationalStats `json:"stats"`
+	OK        bool                  `json:"ok"`
+	Scope     string                `json:"scope"`
+	Project   string                `json:"project,omitempty"`
+	Agent     string                `json:"agent,omitempty"`
+	Path      string                `json:"path,omitempty"`
+	Since     time.Time             `json:"since"`
+	Generated time.Time             `json:"generated"`
+	Stats     *gitOperationalStats  `json:"stats"`
+	Worktrees []apiGitStatsWorktree `json:"worktrees,omitempty"`
+}
+
+type apiGitStatsWorktree struct {
+	Agent   string               `json:"agent,omitempty"`
+	Project string               `json:"project,omitempty"`
+	Path    string               `json:"path,omitempty"`
+	Stats   *gitOperationalStats `json:"stats,omitempty"`
 }
 
 type gitChangeTotals struct {
@@ -60,6 +70,12 @@ var (
 	apiGitStatsService         = gitOperationalStatsService{collector: gitestadisticasapp.NewService()}
 	apiGitStatsProjectLookupFn = func(ref string) (*db.Proyecto, error) {
 		return apiGetProyectoConRutaEfectivaTimeboxed(ref, "")
+	}
+	apiGitStatsAgentDetailFn = func(agent string) (*agentesapp.Detail, error) {
+		return apiAgentDetailBuilder(agent, true)
+	}
+	apiGitStatsPanelRowsFn = func() ([]agentesapp.Row, error) {
+		return apiAgentPanelRowsBuilder()
 	}
 )
 
