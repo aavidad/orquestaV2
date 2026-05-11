@@ -510,9 +510,15 @@ Trabajo minimo:
   `running` por defecto;
 - test de stack pausa una app por API y lee el estado por puerto.
 
+Cerrado despues:
+
+- escritura terminal `stopped/canceled` mediante
+  `RunControlTerminalWriterPortV0` cuando todos los agentes vivos han sido
+  confirmados o no habia agentes que parar;
+- el cierre terminal queda bloqueado si todavia existe outbox
+  `StopRuntimeAgent` pendiente.
+
 Pendiente separado:
 
 - checkpoint real antes de stop/cancel no forzado;
-- escritura terminal `stopped/canceled` cuando todos los agentes vivos han sido
-  confirmados o no habia agentes que parar;
 - UI web para botones de control y cambio de prioridad.

@@ -45,7 +45,12 @@ type RunControlWriterPortV0 interface {
 	CancelRunV0(context.Context, CancelRunCommandV0) (RunControlStateV0, error)
 }
 
+type RunControlTerminalWriterPortV0 interface {
+	CompleteRunControlV0(context.Context, CompleteRunControlCommandV0) (RunControlStateV0, error)
+}
+
 type RunControlPortV0 interface {
 	RunControlReaderPortV0
 	RunControlWriterPortV0
+	RunControlTerminalWriterPortV0
 }

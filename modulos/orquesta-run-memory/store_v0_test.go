@@ -78,6 +78,60 @@ func TestRunMemoryStoreStopCancelV0(t *testing.T) {
 	}
 }
 
+func TestRunMemoryStoreCompleteRunControlV0(t *testing.T) {
+	store := NewRunMemoryStoreV0()
+	ctx := context.Background()
+
+	_, err := store.StopRunV0(ctx, orquestaruncontrol.StopRunCommandV0{
+		RunRef: " run-2 ",
+		Forced: true,
+	})
+	if err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+	completed, err := store.CompleteRunControlV0(ctx, orquestaruncontrol.CompleteRunControlCommandV0{
+		RunRef:         " run-2 ",
+		TargetStatus:   " STOPPED ",
+		RequestedBy:    " director ",
+		Reason:         " drained ",
+		IdempotencyKey: " idem-1 ",
+		EvidenceRefs:   []string{" ev-1 ", "ev-1"},
+	})
+	if err != nil {
+		t.Fatalf("complete stopped: %v", err)
+	}
+	if completed.Status != orquestaruncontrol.RunControlStatusStoppedV0 ||
+		completed.Forced ||
+		completed.RunRef != "run-2" ||
+		completed.Meta.RequestedBy != "director" ||
+		!reflect.DeepEqual(completed.EvidenceRefs, []string{"ev-1"}) {
+		t.Fatalf("completed=%+v", completed)
+	}
+
+	completed, err = store.CompleteRunControlV0(ctx, orquestaruncontrol.CompleteRunControlCommandV0{
+		RunRef:       "run-2",
+		TargetStatus: orquestaruncontrol.RunControlStatusCanceledV0,
+	})
+	if err != nil {
+		t.Fatalf("complete canceled: %v", err)
+	}
+	if completed.Status != orquestaruncontrol.RunControlStatusCanceledV0 {
+		t.Fatalf("completed=%+v", completed)
+	}
+}
+
+func TestRunMemoryStoreCompleteRunControlRejectsNonFinalStatusV0(t *testing.T) {
+	store := NewRunMemoryStoreV0()
+	_, err := store.CompleteRunControlV0(context.Background(), orquestaruncontrol.CompleteRunControlCommandV0{
+		RunRef:       "run-2",
+		TargetStatus: orquestaruncontrol.RunControlStatusRunningV0,
+	})
+	var typed orquestaruncontrol.RunControlCompletionTargetErrorV0
+	if err == nil || !errors.As(err, &typed) {
+		t.Fatalf("err=%v typed=%+v", err, typed)
+	}
+}
+
 func TestRunMemoryStoreReadReturnsSnapshotV0(t *testing.T) {
 	store := NewRunMemoryStoreV0()
 	ctx := context.Background()

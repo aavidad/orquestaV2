@@ -68,13 +68,14 @@ func startAppDirectorLoopServiceV0(
 		request.RequestedBy,
 	)
 	return orquestacionnucleoapp.ServiceV0{
-		RunStore:          ports.RunStore,
-		EventSink:         ports.EventSink,
-		CandidateProvider: provider,
-		RunControl:        ports.RunControl,
-		OutboxLedger:      ports.OutboxLedger,
-		MaxCommands:       request.MaxCommands,
-		MaxOutboxPerCycle: request.MaxOutboxPerCycle,
+		RunStore:           ports.RunStore,
+		EventSink:          ports.EventSink,
+		CandidateProvider:  provider,
+		RunControl:         ports.RunControl,
+		RunControlTerminal: ports.RunControlTerminal,
+		OutboxLedger:       ports.OutboxLedger,
+		MaxCommands:        request.MaxCommands,
+		MaxOutboxPerCycle:  request.MaxOutboxPerCycle,
 	}
 }
 

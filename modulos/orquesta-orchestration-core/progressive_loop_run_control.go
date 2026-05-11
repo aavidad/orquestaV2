@@ -79,6 +79,14 @@ func (service ServiceV0) finishProgressiveRunControlGateV0(
 			result.Status = ProgressiveLoopStatusStopErrorV0
 			return service.finishProgressiveLoopV0(ctx, request, result), err
 		}
+		completed, err := service.completeRunControlIfDrainedV0(ctx, request, gate)
+		if err != nil {
+			result.Status = ProgressiveLoopStatusStopErrorV0
+			return service.finishProgressiveLoopV0(ctx, request, result), err
+		}
+		if completed {
+			result.Status = ProgressiveLoopStatusRunTerminalV0
+		}
 	}
 	return service.finishProgressiveLoopV0(ctx, request, result), nil
 }

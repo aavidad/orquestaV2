@@ -144,3 +144,22 @@ func (store *RunMemoryStoreV0) CancelRunV0(
 		evidenceRefs: command.EvidenceRefs,
 	})
 }
+
+func (store *RunMemoryStoreV0) CompleteRunControlV0(
+	ctx context.Context,
+	command orquestaruncontrol.CompleteRunControlCommandV0,
+) (orquestaruncontrol.RunControlStateV0, error) {
+	command = orquestaruncontrol.NormalizeCompleteRunControlCommandV0(command)
+	if !orquestaruncontrol.IsCompleteRunControlTargetV0(command.TargetStatus) {
+		return orquestaruncontrol.RunControlStateV0{},
+			orquestaruncontrol.RunControlCompletionTargetErrorV0{TargetStatus: command.TargetStatus}
+	}
+	return store.setControlStateV0(ctx, controlCommandV0{
+		runRef:       command.RunRef,
+		status:       command.TargetStatus,
+		requestedBy:  command.RequestedBy,
+		reason:       command.Reason,
+		idempotency:  command.IdempotencyKey,
+		evidenceRefs: command.EvidenceRefs,
+	})
+}

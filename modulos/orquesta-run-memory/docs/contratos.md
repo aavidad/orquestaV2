@@ -25,6 +25,8 @@ Reglas:
 3. `stop` deja la run en `stop_requested`.
 4. `cancel` deja la run en `cancel_requested`.
 5. `forced`, `evidence_refs` y metadatos del comando se copian al estado.
+6. `CompleteRunControlV0` solo acepta `stopped` o `canceled`, normaliza el
+   comando y preserva el checkpoint previo.
 
 ## Cola de runs
 

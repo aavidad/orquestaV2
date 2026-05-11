@@ -19,3 +19,14 @@ No se crea esqueleto i18n porque este modulo no expone interfaz funcional ni tex
 ## Sin superficies externas
 
 No se implementan DB, HTTP, MCP, runtime, scheduler interno ni workflow core.
+
+## Escritura terminal separada
+
+`stop_requested` y `cancel_requested` son intenciones de control, no cierres
+reales. Por eso el cierre se expresa con `RunControlTerminalWriterPortV0` y
+`CompleteRunControlV0`.
+
+El nucleo o el director solo deben invocarlo despues de comprobar que no quedan
+agentes vivos sin confirmar ni mensajes de parada pendientes. Esta separacion
+evita parchear el estado con otro `StopRunV0` y deja claro quien toma la
+decision de cierre.

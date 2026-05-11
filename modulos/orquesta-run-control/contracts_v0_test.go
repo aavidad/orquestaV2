@@ -33,3 +33,8 @@ func (fake fakeRunControlPortV0) CancelRunV0(_ context.Context, command CancelRu
 	fake.state.Forced = command.Forced
 	return fake.state, nil
 }
+
+func (fake fakeRunControlPortV0) CompleteRunControlV0(_ context.Context, command CompleteRunControlCommandV0) (RunControlStateV0, error) {
+	fake.state.Status = command.TargetStatus
+	return fake.state, nil
+}

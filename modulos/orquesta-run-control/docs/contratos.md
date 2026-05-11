@@ -27,6 +27,17 @@ fallo operativo del conector.
 - `StopRunV0`
 - `CancelRunV0`
 
+`RunControlTerminalWriterPortV0` expone `CompleteRunControlV0` para marcar la
+run como `stopped` o `canceled` cuando el consumidor ya ha comprobado que el
+drenaje es seguro. No acepta volver a `running`, `paused`,
+`stop_requested` ni `cancel_requested`.
+
+`CompleteRunControlCommandV0` contiene:
+
+- `run_ref`
+- `target_status`: solo `stopped` o `canceled`
+- `requested_by`, `reason`, `idempotency_key` y `evidence_refs`
+
 Los puertos no definen transporte ni almacenamiento. Cualquier adaptador real debe vivir fuera de este microproyecto.
 
 ## Evaluacion

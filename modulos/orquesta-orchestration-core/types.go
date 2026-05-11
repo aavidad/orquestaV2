@@ -61,15 +61,16 @@ type SchedulerCandidateSetV0 struct {
 }
 
 type ServiceV0 struct {
-	RunStore          RunStorePortV0
-	EventSink         EventSinkPortV0
-	CandidateProvider CandidateProviderPortV0
-	RunControl        orquestaruncontrol.RunControlReaderPortV0
-	OutboxLedger      orquestadirectorcycleoutbox.DirectorCycleOutboxLedgerPortV0
-	StepExecutor      orquestadirectorsupervisedburst.DirectorCycleStepExecutorPortV0
-	Supervisor        orquestadirectorsupervisedburst.DirectorSupervisorPolicyPortV0
-	MaxCommands       int
-	MaxOutboxPerCycle int
+	RunStore           RunStorePortV0
+	EventSink          EventSinkPortV0
+	CandidateProvider  CandidateProviderPortV0
+	RunControl         orquestaruncontrol.RunControlReaderPortV0
+	RunControlTerminal orquestaruncontrol.RunControlTerminalWriterPortV0
+	OutboxLedger       orquestadirectorcycleoutbox.DirectorCycleOutboxLedgerPortV0
+	StepExecutor       orquestadirectorsupervisedburst.DirectorCycleStepExecutorPortV0
+	Supervisor         orquestadirectorsupervisedburst.DirectorSupervisorPolicyPortV0
+	MaxCommands        int
+	MaxOutboxPerCycle  int
 }
 
 type SupervisedBurstRequestV0 struct {

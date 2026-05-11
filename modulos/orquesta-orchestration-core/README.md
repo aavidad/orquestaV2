@@ -428,3 +428,12 @@ Esto evita que una peticion de parada lance trabajo pendiente por accidente. El
 nucleo sigue sin conocer procesos, sesiones, proveedores, HOME, OAuth ni DB; la
 parada fisica real ocurre solo si existe un `AgentStopperPortV0` o batch
 equivalente configurado por el operador.
+
+Si ademas existe `RunControlTerminalWriterPortV0`, el nucleo marca la run como
+`stopped` o `canceled` despues del drenaje solo cuando:
+
+1. no quedan agentes iniciados sin fallo ni confirmacion de parada;
+2. no quedan mensajes `StopRuntimeAgent` pendientes para esa run.
+
+Sin ese puerto, el nucleo mantiene la compatibilidad anterior y deja el estado
+en `stop_requested` o `cancel_requested`.

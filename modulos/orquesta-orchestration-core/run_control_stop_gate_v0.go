@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 )
 
 func (service ServiceV0) stopRunControlAgentsV0(
@@ -83,6 +85,110 @@ func runControlStoppableAgentRefsV0(
 		out = append(out, agentRef)
 	}
 	return out
+}
+
+func (service ServiceV0) completeRunControlIfDrainedV0(
+	ctx context.Context,
+	request ProgressiveLoopRequestV0,
+	gate progressiveRunControlGateV0,
+) (bool, error) {
+	if service.RunControlTerminal == nil ||
+		!gate.StopAgentsAllowed ||
+		!runControlCanCompleteGateV0(gate) {
+		return false, nil
+	}
+	run, err := service.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return false, err
+	}
+	if len(runControlUnconfirmedAgentRefsV0(run)) > 0 {
+		return false, nil
+	}
+	pendingStop, err := service.hasPendingRunControlStopOutboxV0(ctx, request.RunRef)
+	if err != nil || pendingStop {
+		return false, err
+	}
+	target := runControlCompletionTargetV0(gate)
+	_, err = service.RunControlTerminal.CompleteRunControlV0(
+		ctx,
+		orquestaruncontrol.CompleteRunControlCommandV0{
+			RunRef:       request.RunRef,
+			TargetStatus: target,
+			RequestedBy:  "orquesta-run-control",
+			Reason:       "agentes drenados por control de run",
+			IdempotencyKey: "idem-run-control-complete-" +
+				runControlStopSafeRefPartV0(request.RunRef) + "-" + string(target),
+			EvidenceRefs: runControlCompletionEvidenceRefsV0(request, gate, target),
+		},
+	)
+	return err == nil, err
+}
+
+func runControlCanCompleteGateV0(gate progressiveRunControlGateV0) bool {
+	switch gate.Status {
+	case ProgressiveLoopStatusRunStopRequestedV0, ProgressiveLoopStatusRunCanceledV0:
+		return true
+	default:
+		return false
+	}
+}
+
+func runControlCompletionTargetV0(
+	gate progressiveRunControlGateV0,
+) orquestaruncontrol.RunControlStatusV0 {
+	if gate.Status == ProgressiveLoopStatusRunCanceledV0 {
+		return orquestaruncontrol.RunControlStatusCanceledV0
+	}
+	return orquestaruncontrol.RunControlStatusStoppedV0
+}
+
+func runControlUnconfirmedAgentRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []string {
+	failed := autonomousStringSetV0(run.FailedAgents)
+	confirmed := autonomousStringSetV0(run.ConfirmedStoppedAgents)
+	out := make([]string, 0, len(run.StartedAgents))
+	for _, agentRef := range compactStringsV0(run.StartedAgents) {
+		if failed[agentRef] || confirmed[agentRef] {
+			continue
+		}
+		out = append(out, agentRef)
+	}
+	return out
+}
+
+func (service ServiceV0) hasPendingRunControlStopOutboxV0(
+	ctx context.Context,
+	runRef string,
+) (bool, error) {
+	pending, issues := service.OutboxLedger.ListPending(
+		ctx,
+		orquestadirectorcycleoutbox.DirectorCycleOutboxPendingFilterV0{
+			RunRef:     runRef,
+			TargetPort: orquestacoreworkflow.OutboxTargetAgentLauncherV0,
+		},
+	)
+	if len(issues) > 0 {
+		return false, errorV0(ErrNucleoOrquestacionStoreV0, "outbox_ledger", issues[0].Code)
+	}
+	for _, message := range pending {
+		if strings.TrimSpace(message.MessageType) == orquestacoreworkflow.OutboxMessageStopRuntimeAgentV0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func runControlCompletionEvidenceRefsV0(
+	request ProgressiveLoopRequestV0,
+	gate progressiveRunControlGateV0,
+	target orquestaruncontrol.RunControlStatusV0,
+) []string {
+	refs := append([]string(nil), gate.EvidenceRefs...)
+	refs = append(refs, request.EvidenceRefs...)
+	refs = append(refs, "evidence-ref-run-control-complete-"+
+		runControlStopSafeRefPartV0(request.RunRef)+"-"+string(target))
+	return compactStringsV0(refs)
 }
 
 func runControlStopCommandMetaV0(

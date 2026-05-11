@@ -113,13 +113,14 @@ func existingDirectorLoopServiceV0(
 	ports StartAppDirectorPortsV0,
 ) orquestacionnucleoapp.ServiceV0 {
 	return orquestacionnucleoapp.ServiceV0{
-		RunStore:          ports.RunStore,
-		EventSink:         ports.EventSink,
-		CandidateProvider: composeStartAppDirectorProviderV0(nil, ports, request.RequestedBy),
-		RunControl:        ports.RunControl,
-		OutboxLedger:      ports.OutboxLedger,
-		MaxCommands:       request.MaxCommands,
-		MaxOutboxPerCycle: request.MaxOutboxPerCycle,
+		RunStore:           ports.RunStore,
+		EventSink:          ports.EventSink,
+		CandidateProvider:  composeStartAppDirectorProviderV0(nil, ports, request.RequestedBy),
+		RunControl:         ports.RunControl,
+		RunControlTerminal: ports.RunControlTerminal,
+		OutboxLedger:       ports.OutboxLedger,
+		MaxCommands:        request.MaxCommands,
+		MaxOutboxPerCycle:  request.MaxOutboxPerCycle,
 	}
 }
 

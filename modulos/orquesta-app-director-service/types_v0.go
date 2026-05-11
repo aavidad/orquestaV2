@@ -6,8 +6,8 @@ import (
 	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
 	orquestafactory "orquesta/modulos/orquesta-factory"
-	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 )
 
 const (
@@ -44,6 +44,7 @@ type StartAppDirectorPortsV0 struct {
 	ReviewReworkReplanSource orquestacionnucleoapp.ReviewReworkReplanPlanProviderPortV0
 	ProgressSource           orquestacionnucleoapp.AgentProgressObservationProviderPortV0
 	RunControl               orquestaruncontrol.RunControlReaderPortV0
+	RunControlTerminal       orquestaruncontrol.RunControlTerminalWriterPortV0
 	LeaseSource              orquestacionnucleoapp.AgentLeaseAssessmentProviderPortV0
 	AssessmentReplanSource   orquestacionnucleoapp.AgentAssessmentReplanPlanProviderPortV0
 	DirectorDecisionSource   orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0

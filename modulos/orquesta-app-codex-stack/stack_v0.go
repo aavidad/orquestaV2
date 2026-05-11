@@ -7,8 +7,8 @@ import (
 	orquestaappgateway "orquesta/modulos/orquesta-app-gateway"
 	orquestafactory "orquesta/modulos/orquesta-factory"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
-	orquestaweb "orquesta/modulos/orquesta-web"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaweb "orquesta/modulos/orquesta-web"
 )
 
 type StackV0 struct {
@@ -78,6 +78,7 @@ func buildDirectorPortsV0(
 		AssessmentReplanSource:   assessmentReplanSourceV0(config),
 		ProgressSource:           progressSourceV0(config),
 		RunControl:               config.Stores.RunControl,
+		RunControlTerminal:       config.Stores.RunControl,
 		DirectorDecisionSource:   directorDecisionSourceV0(config),
 		DirectorTaskStore:        config.Stores.TaskStore,
 		ExternalWaiter:           ackWaiterV0(config),
