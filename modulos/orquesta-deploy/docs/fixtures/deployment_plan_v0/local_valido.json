@@ -1,0 +1,139 @@
+{
+  "schema_version": "DeploymentPlanV0",
+  "request_id": "req_dep_004_local",
+  "app_spec_id": "app_spec_opaca_002",
+  "app_spec_version": "AppSpecV0",
+  "deploy_target": "local",
+  "sistemas_operativos": [
+    "linux",
+    "darwin",
+    "windows"
+  ],
+  "aceptacion_contenedor": false,
+  "restricciones": [
+    {
+      "clave": "sin_credenciales",
+      "valor": "El plan no incluye credenciales ni valores privados."
+    },
+    {
+      "clave": "sin_aislamiento",
+      "valor": "El consumidor no acepto aislamiento de contenedor para ejecucion local."
+    }
+  ],
+  "plan_id": "plan_dep_004_local",
+  "target_resuelto": "local",
+  "matriz_os": [
+    {
+      "os": "linux",
+      "aplica": true,
+      "motivo": "Preparacion local aplicable con comprobaciones propias del sistema.",
+      "requisitos_previos": [
+        "Permisos de usuario suficientes.",
+        "Dependencias declaradas por la aplicacion validadas externamente."
+      ]
+    },
+    {
+      "os": "darwin",
+      "aplica": true,
+      "motivo": "Preparacion local aplicable con comprobaciones propias del sistema.",
+      "requisitos_previos": [
+        "Permisos de usuario suficientes.",
+        "Dependencias declaradas por la aplicacion validadas externamente."
+      ]
+    },
+    {
+      "os": "windows",
+      "aplica": true,
+      "motivo": "Preparacion local aplicable con comprobaciones propias del sistema.",
+      "requisitos_previos": [
+        "Permisos de usuario suficientes.",
+        "Dependencias declaradas por la aplicacion validadas externamente."
+      ]
+    }
+  ],
+  "validacion_entorno": [
+    {
+      "id": "comprobar_target",
+      "descripcion": "Confirmar que el target local esta soportado en v0.",
+      "obligatoria": true
+    },
+    {
+      "id": "comprobar_permisos",
+      "descripcion": "Confirmar permisos de usuario sin solicitar credenciales privadas.",
+      "obligatoria": true
+    },
+    {
+      "id": "comprobar_os",
+      "descripcion": "Confirmar presencia explicita de linux, darwin y windows.",
+      "obligatoria": true
+    }
+  ],
+  "artefactos_previstos": [
+    {
+      "id": "descriptor_local",
+      "tipo": "descriptor_declarativo",
+      "descripcion": "Plan local declarativo sin archivo ejecutable.",
+      "ruta_logica": "deploy/local/descriptor"
+    },
+    {
+      "id": "registro_healthcheck",
+      "tipo": "registro_healthcheck",
+      "descripcion": "Registro previsto de comprobaciones locales.",
+      "ruta_logica": "deploy/local/healthcheck"
+    }
+  ],
+  "healthcheck": [
+    {
+      "id": "verificar_proceso",
+      "descripcion": "Comprobar que la aplicacion local informa estado saludable definido por el consumidor.",
+      "obligatoria": true
+    },
+    {
+      "id": "verificar_configuracion",
+      "descripcion": "Comprobar que la configuracion declarada coincide con el plan.",
+      "obligatoria": true
+    }
+  ],
+  "rollback": {
+    "reversible": true,
+    "motivo": "Los cambios locales son declarativos y pueden revertirse a la referencia opaca anterior.",
+    "pasos_previstos": [
+      {
+        "orden": 1,
+        "tipo": "registrar_rollback",
+        "descripcion": "Registrar referencia opaca previa a cualquier preparacion local.",
+        "requiere_contenedor": false
+      },
+      {
+        "orden": 2,
+        "tipo": "publicar_declarativo",
+        "descripcion": "Restaurar referencia declarativa previa si la verificacion falla.",
+        "requiere_contenedor": false
+      }
+    ]
+  },
+  "acciones_previstas": [
+    {
+      "orden": 1,
+      "tipo": "validar_entorno",
+      "descripcion": "Validar target local, matriz de sistemas y permisos.",
+      "requiere_contenedor": false
+    },
+    {
+      "orden": 2,
+      "tipo": "preparar_artefactos",
+      "descripcion": "Preparar descriptors locales sin generar archivos ejecutables.",
+      "requiere_contenedor": false
+    },
+    {
+      "orden": 3,
+      "tipo": "verificar_salud",
+      "descripcion": "Ejecutar comprobaciones declaradas por el consumidor.",
+      "requiere_contenedor": false
+    }
+  ],
+  "advertencias": [
+    "No se requiere aislamiento de contenedor porque no fue aceptado.",
+    "Las dependencias concretas quedan fuera de este contrato."
+  ]
+}

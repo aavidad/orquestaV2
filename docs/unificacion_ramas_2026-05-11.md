@@ -110,6 +110,24 @@ Validacion:
 Notas: No se ha fusionado la rama V2. Solo se ha portado esta unidad.
 ```
 
+```text
+Fecha: 2026-05-11
+Origen: reinicio-orquesta-v2-2026-05-04
+Destino: master
+Modulo: modulos/orquesta-deploy
+Decision: Extraer DeploymentPlan v0 y adaptadores dry-run.
+Motivo: Cubre preparacion de entorno/deploy, matriz multi-OS, healthcheck,
+rollback y targets local/contenedor/kubernetes/paas/desktop/mobile_store sin
+crear artefactos reales ni elegir proveedor.
+Validacion:
+  - go test -count=1 ./modulos/orquesta-deploy
+  - jq empty modulos/orquesta-deploy/docs/schemas/*.json modulos/orquesta-deploy/docs/fixtures/*/*.json
+  - git diff --check
+Notas: No se ha fusionado la rama V2. Solo se ha portado esta unidad. Los
+adaptadores son dry-run puros; no generan Dockerfile, compose, manifests,
+scripts, IaC ni conectan a servicios externos.
+```
+
 ## Validacion
 
 Comando ejecutado:

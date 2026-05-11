@@ -1,0 +1,134 @@
+{
+  "schema_version": "DeploymentPlanV0",
+  "request_id": "req_dep_004_contenedor",
+  "app_spec_id": "app_spec_opaca_001",
+  "app_spec_version": "AppSpecV0",
+  "deploy_target": "contenedor",
+  "sistemas_operativos": [
+    "linux",
+    "darwin",
+    "windows"
+  ],
+  "aceptacion_contenedor": "no_aplica",
+  "restricciones": [
+    {
+      "clave": "sin_credenciales",
+      "valor": "El plan no incluye credenciales ni valores privados."
+    },
+    {
+      "clave": "destino_generico",
+      "valor": "El plan conserva proveedor pendiente y generico."
+    }
+  ],
+  "plan_id": "plan_dep_004_contenedor",
+  "target_resuelto": "contenedor",
+  "matriz_os": [
+    {
+      "os": "linux",
+      "aplica": true,
+      "motivo": "Sistema principal para preparar una unidad portable declarativa.",
+      "requisitos_previos": [
+        "Permiso del consumidor para usar aislamiento de contenedor.",
+        "Herramienta compatible disponible en entorno objetivo."
+      ]
+    },
+    {
+      "os": "darwin",
+      "aplica": "herramienta_cliente",
+      "motivo": "Aplica para preparacion y comprobacion desde estacion de trabajo.",
+      "requisitos_previos": [
+        "Herramienta cliente compatible disponible.",
+        "Permiso del consumidor para usar aislamiento de contenedor."
+      ]
+    },
+    {
+      "os": "windows",
+      "aplica": "herramienta_cliente",
+      "motivo": "Aplica para preparacion y comprobacion desde estacion de trabajo.",
+      "requisitos_previos": [
+        "Herramienta cliente compatible disponible.",
+        "Permiso del consumidor para usar aislamiento de contenedor."
+      ]
+    }
+  ],
+  "validacion_entorno": [
+    {
+      "id": "comprobar_target",
+      "descripcion": "Confirmar que el target solicitado permite aislamiento de contenedor.",
+      "obligatoria": true
+    },
+    {
+      "id": "comprobar_os",
+      "descripcion": "Confirmar que cada sistema operativo tiene estado explicito en la matriz.",
+      "obligatoria": true
+    }
+  ],
+  "artefactos_previstos": [
+    {
+      "id": "descriptor_plan",
+      "tipo": "descriptor_declarativo",
+      "descripcion": "Descripcion portable de artefactos esperados sin archivo ejecutable.",
+      "ruta_logica": "deploy/descriptor_plan"
+    },
+    {
+      "id": "informe_validacion",
+      "tipo": "informe_validacion",
+      "descripcion": "Registro declarativo de validaciones previas.",
+      "ruta_logica": "deploy/informe_validacion"
+    }
+  ],
+  "healthcheck": [
+    {
+      "id": "verificar_respuesta",
+      "descripcion": "Comprobar que el servicio expone una respuesta saludable definida por el consumidor.",
+      "obligatoria": true
+    },
+    {
+      "id": "verificar_estado",
+      "descripcion": "Comprobar que el estado publicado coincide con el plan solicitado.",
+      "obligatoria": true
+    }
+  ],
+  "rollback": {
+    "reversible": true,
+    "motivo": "El plan solo prepara pasos declarativos y conserva estado previo como referencia opaca.",
+    "pasos_previstos": [
+      {
+        "orden": 1,
+        "tipo": "registrar_rollback",
+        "descripcion": "Registrar referencia opaca al estado anterior antes de publicar cambios.",
+        "requiere_contenedor": false
+      },
+      {
+        "orden": 2,
+        "tipo": "publicar_declarativo",
+        "descripcion": "Restaurar la referencia declarativa previa si falla el healthcheck.",
+        "requiere_contenedor": true
+      }
+    ]
+  },
+  "acciones_previstas": [
+    {
+      "orden": 1,
+      "tipo": "validar_entorno",
+      "descripcion": "Validar target, matriz de sistemas y aceptacion de contenedor.",
+      "requiere_contenedor": false
+    },
+    {
+      "orden": 2,
+      "tipo": "preparar_artefactos",
+      "descripcion": "Preparar descriptors declarativos sin generar archivos ejecutables.",
+      "requiere_contenedor": true
+    },
+    {
+      "orden": 3,
+      "tipo": "verificar_salud",
+      "descripcion": "Ejecutar comprobaciones declaradas por el consumidor despues de publicar.",
+      "requiere_contenedor": false
+    }
+  ],
+  "advertencias": [
+    "No se genera archivo ejecutable ni configuracion real en v0.",
+    "La herramienta concreta queda pendiente de contrato futuro."
+  ]
+}

@@ -1,0 +1,439 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://orquesta.local/schemas/orquesta-deploy/deployment_plan_v0.schema.json",
+  "title": "DeploymentPlanV0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "app_spec_id",
+    "app_spec_version",
+    "deploy_target",
+    "sistemas_operativos",
+    "aceptacion_contenedor",
+    "restricciones",
+    "plan_id",
+    "target_resuelto",
+    "matriz_os",
+    "validacion_entorno",
+    "artefactos_previstos",
+    "healthcheck",
+    "rollback",
+    "acciones_previstas",
+    "advertencias"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "DeploymentPlanV0"
+    },
+    "request_id": {
+      "$ref": "#/definitions/opaqueId"
+    },
+    "app_spec_id": {
+      "$ref": "#/definitions/opaqueId"
+    },
+    "app_spec_version": {
+      "const": "AppSpecV0"
+    },
+    "deploy_target": {
+      "$ref": "#/definitions/deployTarget"
+    },
+    "sistemas_operativos": {
+      "$ref": "#/definitions/osMatrix"
+    },
+    "aceptacion_contenedor": {
+      "enum": [
+        true,
+        false,
+        "no_aplica"
+      ]
+    },
+    "restricciones": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/restriccion"
+      },
+      "uniqueItems": true
+    },
+    "plan_id": {
+      "$ref": "#/definitions/opaqueId"
+    },
+    "target_resuelto": {
+      "$ref": "#/definitions/deployTarget"
+    },
+    "matriz_os": {
+      "$ref": "#/definitions/matrizOsDetalle"
+    },
+    "validacion_entorno": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/comprobacion"
+      }
+    },
+    "artefactos_previstos": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/artefactoPrevisto"
+      }
+    },
+    "healthcheck": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/comprobacion"
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reversible",
+        "motivo",
+        "pasos_previstos"
+      ],
+      "properties": {
+        "reversible": {
+          "type": "boolean"
+        },
+        "motivo": {
+          "$ref": "#/definitions/safeString"
+        },
+        "pasos_previstos": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/accionPrevista"
+          }
+        }
+      }
+    },
+    "acciones_previstas": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/accionPrevista"
+      }
+    },
+    "advertencias": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/safeString"
+      },
+      "uniqueItems": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "deploy_target": {
+            "const": "local"
+          },
+          "aceptacion_contenedor": {
+            "const": false
+          }
+        },
+        "required": [
+          "deploy_target",
+          "aceptacion_contenedor"
+        ]
+      },
+      "then": {
+        "properties": {
+          "target_resuelto": {
+            "const": "local"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "deploy_target": {
+            "const": "contenedor"
+          }
+        },
+        "required": [
+          "deploy_target"
+        ]
+      },
+      "then": {
+        "properties": {
+          "target_resuelto": {
+            "const": "contenedor"
+          },
+          "aceptacion_contenedor": {
+            "enum": [
+              true,
+              "no_aplica"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "deployTarget": {
+      "enum": [
+        "sin_preferencia",
+        "local",
+        "contenedor",
+        "paas",
+        "serverless",
+        "kubernetes",
+        "desktop",
+        "mobile_store"
+      ]
+    },
+    "os": {
+      "enum": [
+        "linux",
+        "darwin",
+        "windows"
+      ]
+    },
+    "osMatrix": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/definitions/os"
+      },
+      "allOf": [
+        {
+          "contains": {
+            "const": "linux"
+          }
+        },
+        {
+          "contains": {
+            "const": "darwin"
+          }
+        },
+        {
+          "contains": {
+            "const": "windows"
+          }
+        }
+      ]
+    },
+    "matrizOsDetalle": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/definitions/filaOs"
+      },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "os"
+            ],
+            "properties": {
+              "os": {
+                "const": "linux"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "os"
+            ],
+            "properties": {
+              "os": {
+                "const": "darwin"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "os"
+            ],
+            "properties": {
+              "os": {
+                "const": "windows"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "filaOs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "aplica",
+        "motivo",
+        "requisitos_previos"
+      ],
+      "properties": {
+        "os": {
+          "$ref": "#/definitions/os"
+        },
+        "aplica": {
+          "enum": [
+            true,
+            false,
+            "herramienta_cliente"
+          ]
+        },
+        "motivo": {
+          "$ref": "#/definitions/safeString"
+        },
+        "requisitos_previos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/safeString"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "restriccion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clave",
+        "valor"
+      ],
+      "properties": {
+        "clave": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,63}$",
+          "not": {
+            "pattern": "([sS][eE][cC][rR][eE][tT]|[tT][oO][kK][eE][nN]|[pP][aA][sS][sS][wW][oO][rR][dD]|[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL]|[pP][rR][oO][vV][eE][eE][dD][oO][rR]|[dD][bB]|[dD][aA][tT][aA][bB][aA][sS][eE]|[rR][uU][nN][tT][iI][mM][eE]|[aA][gG][eE][nN][tT][eE]|[mM][oO][dD][eE][lL][oO]|[mM][oO][dD][eE][lL])"
+          }
+        },
+        "valor": {
+          "$ref": "#/definitions/safeString"
+        }
+      }
+    },
+    "comprobacion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "descripcion",
+        "obligatoria"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/safeId"
+        },
+        "descripcion": {
+          "$ref": "#/definitions/safeString"
+        },
+        "obligatoria": {
+          "type": "boolean"
+        }
+      }
+    },
+    "artefactoPrevisto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "tipo",
+        "descripcion",
+        "ruta_logica"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/safeId"
+        },
+        "tipo": {
+          "enum": [
+            "descriptor_declarativo",
+            "paquete_previsto",
+            "configuracion_prevista",
+            "informe_validacion",
+            "registro_healthcheck",
+            "plan_rollback"
+          ]
+        },
+        "descripcion": {
+          "$ref": "#/definitions/safeString"
+        },
+        "ruta_logica": {
+          "$ref": "#/definitions/logicalPath"
+        }
+      }
+    },
+    "accionPrevista": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orden",
+        "tipo",
+        "descripcion",
+        "requiere_contenedor"
+      ],
+      "properties": {
+        "orden": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "tipo": {
+          "enum": [
+            "validar_entorno",
+            "preparar_artefactos",
+            "publicar_declarativo",
+            "verificar_salud",
+            "registrar_rollback",
+            "solicitar_decision"
+          ]
+        },
+        "descripcion": {
+          "$ref": "#/definitions/safeString"
+        },
+        "requiere_contenedor": {
+          "type": "boolean"
+        }
+      }
+    },
+    "opaqueId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{2,80}$",
+      "not": {
+        "pattern": "([sS][eE][cC][rR][eE][tT]|[tT][oO][kK][eE][nN]|[pP][aA][sS][sS][wW][oO][rR][dD]|[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL]|/[hH][oO][mM][eE]/|/[uU][sS][eE][rR][sS]/|[cC]:\\\\[uU][sS][eE][rR][sS])"
+      }
+    },
+    "safeId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "not": {
+        "pattern": "([sS][eE][cC][rR][eE][tT]|[tT][oO][kK][eE][nN]|[pP][aA][sS][sS][wW][oO][rR][dD]|[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL]|[dD][bB]|[dD][aA][tT][aA][bB][aA][sS][eE]|[rR][uU][nN][tT][iI][mM][eE]|[aA][gG][eE][nN][tT][eE]|[mM][oO][dD][eE][lL][oO]|[mM][oO][dD][eE][lL]|[dD][oO][cC][kK][eE][rR][fF][iI][lL][eE]|[cC][oO][mM][pP][oO][sS][eE]|[pP][iI][pP][eE][lL][iI][nN][eE]|[mM][aA][nN][iI][fF][eE][sS][tT])"
+      }
+    },
+    "logicalPath": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_/-]{2,120}$",
+      "not": {
+        "pattern": "(/[hH][oO][mM][eE]/|/[uU][sS][eE][rR][sS]/|[cC]:\\\\[uU][sS][eE][rR][sS]|[sS][eE][cC][rR][eE][tT]|[tT][oO][kK][eE][nN]|[pP][aA][sS][sS][wW][oO][rR][dD]|[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL]|[dD][oO][cC][kK][eE][rR][fF][iI][lL][eE]|[cC][oO][mM][pP][oO][sS][eE]|[pP][iI][pP][eE][lL][iI][nN][eE]|[mM][aA][nN][iI][fF][eE][sS][tT]|\\.sh$|\\.ps1$|\\.bat$)"
+      }
+    },
+    "safeString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "not": {
+        "pattern": "([sS][eE][cC][rR][eE][tT]|[tT][oO][kK][eE][nN]|[pP][aA][sS][sS][wW][oO][rR][dD]|[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL]|/[hH][oO][mM][eE]/|/[uU][sS][eE][rR][sS]/|[cC]:\\\\[uU][sS][eE][rR][sS]|[aA][wW][sS]|[aA][zZ][uU][rR][eE]|[gG][cC][pP]|[gG][oO][oO][gG][lL][eE] [cC][lL][oO][uU][dD]|[hH][eE][rR][oO][kK][uU]|[vV][eE][rR][cC][eE][lL]|[nN][eE][tT][lL][iI][fF][yY]|[rR][aA][iI][lL][wW][aA][yY]|[fF][lL][yY]\\.io|[dD][bB]|[dD][aA][tT][aA][bB][aA][sS][eE]|[rR][uU][nN][tT][iI][mM][eE]|[aA][gG][eE][nN][tT][eE]|[mM][oO][dD][eE][lL][oO]|[mM][oO][dD][eE][lL]|[dD][oO][cC][kK][eE][rR][fF][iI][lL][eE]|[cC][oO][mM][pP][oO][sS][eE]|[pP][iI][pP][eE][lL][iI][nN][eE]|[mM][aA][nN][iI][fF][eE][sS][tT]|\\.sh|\\.ps1|\\.bat)"
+      }
+    }
+  }
+}

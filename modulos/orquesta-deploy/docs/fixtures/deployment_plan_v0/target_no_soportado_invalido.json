@@ -1,0 +1,81 @@
+{
+  "schema_version": "DeploymentPlanV0",
+  "request_id": "req_dep_004_target_invalido",
+  "app_spec_id": "app_spec_opaca_003",
+  "app_spec_version": "AppSpecV0",
+  "deploy_target": "baremetal",
+  "sistemas_operativos": [
+    "linux",
+    "darwin",
+    "windows"
+  ],
+  "aceptacion_contenedor": "no_aplica",
+  "restricciones": [],
+  "plan_id": "plan_dep_004_target_invalido",
+  "target_resuelto": "sin_preferencia",
+  "matriz_os": [
+    {
+      "os": "linux",
+      "aplica": false,
+      "motivo": "Target desconocido para v0.",
+      "requisitos_previos": []
+    },
+    {
+      "os": "darwin",
+      "aplica": false,
+      "motivo": "Target desconocido para v0.",
+      "requisitos_previos": []
+    },
+    {
+      "os": "windows",
+      "aplica": false,
+      "motivo": "Target desconocido para v0.",
+      "requisitos_previos": []
+    }
+  ],
+  "validacion_entorno": [
+    {
+      "id": "comprobar_target",
+      "descripcion": "Debe producir deploy_target_no_soportado antes de cualquier accion ejecutable.",
+      "obligatoria": true
+    }
+  ],
+  "artefactos_previstos": [
+    {
+      "id": "informe_validacion",
+      "tipo": "informe_validacion",
+      "descripcion": "Registro declarativo del rechazo por target desconocido.",
+      "ruta_logica": "deploy/informe_validacion"
+    }
+  ],
+  "healthcheck": [
+    {
+      "id": "verificar_rechazo",
+      "descripcion": "Confirmar que no se publica plan operativo para target desconocido.",
+      "obligatoria": true
+    }
+  ],
+  "rollback": {
+    "reversible": false,
+    "motivo": "No hay cambios que revertir porque el target no esta soportado.",
+    "pasos_previstos": [
+      {
+        "orden": 1,
+        "tipo": "registrar_rollback",
+        "descripcion": "Registrar que no se produjo estado nuevo.",
+        "requiere_contenedor": false
+      }
+    ]
+  },
+  "acciones_previstas": [
+    {
+      "orden": 1,
+      "tipo": "solicitar_decision",
+      "descripcion": "Rechazar target desconocido con error publico deploy_target_no_soportado.",
+      "requiere_contenedor": false
+    }
+  ],
+  "advertencias": [
+    "Fixture negativo: debe fallar por enum de target desconocido."
+  ]
+}

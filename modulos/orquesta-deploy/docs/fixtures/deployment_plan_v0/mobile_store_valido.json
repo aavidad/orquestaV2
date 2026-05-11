@@ -1,0 +1,100 @@
+{
+  "schema_version": "DeploymentPlanV0",
+  "request_id": "req-deploy-mobile-store-001",
+  "app_spec_id": "appspec-001",
+  "app_spec_version": "AppSpecV0",
+  "deploy_target": "mobile_store",
+  "sistemas_operativos": ["linux", "darwin", "windows"],
+  "aceptacion_contenedor": false,
+  "restricciones": [
+    {
+      "clave": "mobile_store.signing",
+      "valor": "deshabilitado_en_v0"
+    }
+  ],
+  "plan_id": "plan-mobile-store-001",
+  "target_resuelto": "mobile_store",
+  "matriz_os": [
+    {
+      "os": "linux",
+      "aplica": false,
+      "motivo": "No aplica salvo herramienta cliente para revisar metadata de publicacion.",
+      "requisitos_previos": ["cliente_metadata_publicacion"]
+    },
+    {
+      "os": "darwin",
+      "aplica": true,
+      "motivo": "Aplica para ecosistema mobile_store y preparacion declarativa sin firma.",
+      "requisitos_previos": ["metadata_publicacion", "bundle_mobile_preparado"]
+    },
+    {
+      "os": "windows",
+      "aplica": false,
+      "motivo": "No aplica salvo herramienta cliente para validar checklist de tienda.",
+      "requisitos_previos": ["cliente_metadata_publicacion"]
+    }
+  ],
+  "validacion_entorno": [
+    {
+      "id": "metadata-publicacion",
+      "descripcion": "Confirmar metadata y checklist de publicacion sin credenciales.",
+      "obligatoria": true
+    }
+  ],
+  "artefactos_previstos": [
+    {
+      "id": "mobile-store-metadata",
+      "tipo": "metadata_publicacion",
+      "descripcion": "Metadata compacta para publicacion manual en tienda.",
+      "ruta_logica": "deploy/mobile_store/metadata"
+    },
+    {
+      "id": "mobile-bundle",
+      "tipo": "paquete_mobile",
+      "descripcion": "Paquete mobile previsto sin firmado ni subida.",
+      "ruta_logica": "deploy/mobile_store/package"
+    }
+  ],
+  "healthcheck": [
+    {
+      "id": "metadata-review",
+      "descripcion": "Verificar que metadata, bundle y rollback declarativo son consistentes.",
+      "obligatoria": true
+    }
+  ],
+  "rollback": {
+    "reversible": true,
+    "motivo": "El slice v0 solo registra retirada declarativa de la propuesta de publicacion.",
+    "pasos_previstos": [
+      {
+        "orden": 1,
+        "tipo": "registrar_rollback",
+        "descripcion": "Registrar retirada de metadata y paquete previsto sin tocar tienda real.",
+        "requiere_contenedor": false
+      }
+    ]
+  },
+  "acciones_previstas": [
+    {
+      "orden": 1,
+      "tipo": "validar_entorno",
+      "descripcion": "Validar metadata y checklist de publicacion sin credenciales.",
+      "requiere_contenedor": false
+    },
+    {
+      "orden": 2,
+      "tipo": "preparar_artefactos",
+      "descripcion": "Preparar paquete mobile y metadata sin firmar ni subir.",
+      "requiere_contenedor": false
+    },
+    {
+      "orden": 3,
+      "tipo": "solicitar_decision",
+      "descripcion": "Escalar al director la aprobacion manual previa a cualquier tienda.",
+      "requiere_contenedor": false
+    }
+  ],
+  "advertencias": [
+    "Sin firmado, notarizacion ni publicacion real en DEP-010."
+  ]
+}

@@ -1,0 +1,129 @@
+{
+  "schema_version": "DeploymentPlanV0",
+  "request_id": "req_dep_011_paas",
+  "app_spec_id": "app_spec_opaca_011",
+  "app_spec_version": "AppSpecV0",
+  "deploy_target": "paas",
+  "sistemas_operativos": [
+    "linux",
+    "darwin",
+    "windows"
+  ],
+  "aceptacion_contenedor": "no_aplica",
+  "restricciones": [
+    {
+      "clave": "plataforma_objetivo",
+      "valor": "pendiente_opaco_sin_sdk_ni_cuenta_real"
+    },
+    {
+      "clave": "ejecutor_gestionado",
+      "valor": "pendiente_hasta_microtarea_posterior"
+    }
+  ],
+  "plan_id": "plan_dep_011_paas",
+  "target_resuelto": "paas",
+  "matriz_os": [
+    {
+      "os": "linux",
+      "aplica": true,
+      "motivo": "Entorno de ejecucion generico para preparar una publicacion declarativa PaaS sin plataforma concreta.",
+      "requisitos_previos": [
+        "Contrato de aplicacion validado por el consumidor.",
+        "Plataforma tratada como restriccion opaca o pendiente."
+      ]
+    },
+    {
+      "os": "darwin",
+      "aplica": "herramienta_cliente",
+      "motivo": "Herramienta cliente para revisar plan PaaS sin SDK, cuenta ni region reales.",
+      "requisitos_previos": [
+        "Validacion documental de restricciones opacas.",
+        "Sin acceso a credenciales ni servicios gestionados."
+      ]
+    },
+    {
+      "os": "windows",
+      "aplica": "herramienta_cliente",
+      "motivo": "Herramienta cliente para revisar plan PaaS sin SDK, cuenta ni region reales.",
+      "requisitos_previos": [
+        "Validacion documental de restricciones opacas.",
+        "Sin acceso a credenciales ni servicios gestionados."
+      ]
+    }
+  ],
+  "validacion_entorno": [
+    {
+      "id": "confirmar_target_paas",
+      "descripcion": "Confirmar que el target PaaS fue solicitado explicitamente.",
+      "obligatoria": true
+    },
+    {
+      "id": "confirmar_plataforma_opaca",
+      "descripcion": "Confirmar que plataforma, ejecutor, cuenta y region quedan opacos o pendientes.",
+      "obligatoria": true
+    }
+  ],
+  "artefactos_previstos": [
+    {
+      "id": "descriptor_paas",
+      "tipo": "descriptor_declarativo",
+      "descripcion": "Descripcion portable de publicacion PaaS sin IaC ni archivo de plataforma.",
+      "ruta_logica": "deploy/paas/descriptor"
+    },
+    {
+      "id": "informe_validacion_paas",
+      "tipo": "informe_validacion",
+      "descripcion": "Registro de validaciones previas sin SDK ni plataforma real.",
+      "ruta_logica": "deploy/paas/informe_validacion"
+    }
+  ],
+  "healthcheck": [
+    {
+      "id": "verificar_estado_declarado",
+      "descripcion": "Comprobar que la publicacion declarativa conserva healthcheck sin contactar servicio real.",
+      "obligatoria": true
+    }
+  ],
+  "rollback": {
+    "reversible": true,
+    "motivo": "El slice solo prepara una publicacion declarativa y mantiene referencia opaca anterior.",
+    "pasos_previstos": [
+      {
+        "orden": 1,
+        "tipo": "registrar_rollback",
+        "descripcion": "Registrar referencia opaca previa a cualquier publicacion gestionada futura.",
+        "requiere_contenedor": false
+      },
+      {
+        "orden": 2,
+        "tipo": "publicar_declarativo",
+        "descripcion": "Restaurar declarativamente la referencia anterior si una integracion futura falla.",
+        "requiere_contenedor": false
+      }
+    ]
+  },
+  "acciones_previstas": [
+    {
+      "orden": 1,
+      "tipo": "validar_entorno",
+      "descripcion": "Validar target PaaS, matriz OS y restricciones opacas.",
+      "requiere_contenedor": false
+    },
+    {
+      "orden": 2,
+      "tipo": "preparar_artefactos",
+      "descripcion": "Preparar descriptor declarativo en memoria sin escribir IaC.",
+      "requiere_contenedor": false
+    },
+    {
+      "orden": 3,
+      "tipo": "publicar_declarativo",
+      "descripcion": "Dejar lista una publicacion declarativa sin SDK ni servicio real.",
+      "requiere_contenedor": false
+    }
+  ],
+  "advertencias": [
+    "No se elige plataforma, ejecutor, cuenta ni region en DEP-011.",
+    "No se escriben archivos de plataforma ni IaC."
+  ]
+}

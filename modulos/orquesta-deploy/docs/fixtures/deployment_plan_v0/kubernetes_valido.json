@@ -1,0 +1,134 @@
+{
+  "schema_version": "DeploymentPlanV0",
+  "request_id": "req_dep_008_kubernetes",
+  "app_spec_id": "app_spec_opaca_003",
+  "app_spec_version": "AppSpecV0",
+  "deploy_target": "kubernetes",
+  "sistemas_operativos": [
+    "linux",
+    "darwin",
+    "windows"
+  ],
+  "aceptacion_contenedor": "no_aplica",
+  "restricciones": [
+    {
+      "clave": "sin_kubeconfig_real",
+      "valor": "El plan no lee kubeconfig, contexto actual ni secretos reales."
+    },
+    {
+      "clave": "sin_proveedor",
+      "valor": "Proveedor, cluster, namespace y credenciales permanecen opacos o pendientes."
+    }
+  ],
+  "plan_id": "plan_dep_008_kubernetes",
+  "target_resuelto": "kubernetes",
+  "matriz_os": [
+    {
+      "os": "linux",
+      "aplica": true,
+      "motivo": "Nodo de ejecucion o herramienta compatible para preparar una publicacion declarativa portable.",
+      "requisitos_previos": [
+        "Descriptor de despliegue validado por el consumidor.",
+        "Permiso explicito para preparar el target kubernetes en modo dry-run."
+      ]
+    },
+    {
+      "os": "darwin",
+      "aplica": "herramienta_cliente",
+      "motivo": "Herramienta cliente para preparar y revisar publicacion declarativa sin acceso real al cluster.",
+      "requisitos_previos": [
+        "CLI o integracion cliente declarada externamente.",
+        "Sin lectura de kubeconfig ni contexto actual en v0."
+      ]
+    },
+    {
+      "os": "windows",
+      "aplica": "herramienta_cliente",
+      "motivo": "Herramienta cliente para preparar y revisar publicacion declarativa sin acceso real al cluster.",
+      "requisitos_previos": [
+        "CLI o integracion cliente declarada externamente.",
+        "Sin lectura de kubeconfig ni contexto actual en v0."
+      ]
+    }
+  ],
+  "validacion_entorno": [
+    {
+      "id": "comprobar_target",
+      "descripcion": "Confirmar que el target kubernetes fue solicitado explicitamente.",
+      "obligatoria": true
+    },
+    {
+      "id": "comprobar_matriz_cliente",
+      "descripcion": "Confirmar que darwin y windows se documentan como herramienta cliente cuando aplique.",
+      "obligatoria": true
+    }
+  ],
+  "artefactos_previstos": [
+    {
+      "id": "descriptor_publicacion",
+      "tipo": "descriptor_declarativo",
+      "descripcion": "Descripcion portable de publicacion kubernetes sin manifest materializado.",
+      "ruta_logica": "deploy/kubernetes/descriptor_publicacion"
+    },
+    {
+      "id": "informe_validacion",
+      "tipo": "informe_validacion",
+      "descripcion": "Registro declarativo de validaciones previas al publish.",
+      "ruta_logica": "deploy/kubernetes/informe_validacion"
+    }
+  ],
+  "healthcheck": [
+    {
+      "id": "verificar_estado_publicado",
+      "descripcion": "Comprobar que el estado publicado coincide con el contrato declarado por el consumidor.",
+      "obligatoria": true
+    },
+    {
+      "id": "verificar_salud_logica",
+      "descripcion": "Comprobar la salud logica declarada sin contactar cluster real.",
+      "obligatoria": true
+    }
+  ],
+  "rollback": {
+    "reversible": true,
+    "motivo": "El slice solo prepara pasos declarativos y mantiene la referencia opaca del estado anterior.",
+    "pasos_previstos": [
+      {
+        "orden": 1,
+        "tipo": "registrar_rollback",
+        "descripcion": "Registrar referencia opaca previa a cualquier publicacion declarativa.",
+        "requiere_contenedor": false
+      },
+      {
+        "orden": 2,
+        "tipo": "publicar_declarativo",
+        "descripcion": "Restaurar la referencia declarativa anterior si falla la comprobacion posterior.",
+        "requiere_contenedor": false
+      }
+    ]
+  },
+  "acciones_previstas": [
+    {
+      "orden": 1,
+      "tipo": "validar_entorno",
+      "descripcion": "Validar target kubernetes, matriz OS y restricciones declaradas.",
+      "requiere_contenedor": false
+    },
+    {
+      "orden": 2,
+      "tipo": "preparar_artefactos",
+      "descripcion": "Preparar descriptors de publicacion sin escribir manifests ni charts.",
+      "requiere_contenedor": false
+    },
+    {
+      "orden": 3,
+      "tipo": "publicar_declarativo",
+      "descripcion": "Dejar lista una publicacion declarativa en memoria sin aplicar recursos reales.",
+      "requiere_contenedor": false
+    }
+  ],
+  "advertencias": [
+    "No se escriben manifests, charts ni overlays en v0.",
+    "Cluster, namespace y proveedor permanecen fuera de este contrato."
+  ]
+}

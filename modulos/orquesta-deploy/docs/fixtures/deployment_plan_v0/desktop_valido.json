@@ -1,0 +1,100 @@
+{
+  "schema_version": "DeploymentPlanV0",
+  "request_id": "req-deploy-desktop-001",
+  "app_spec_id": "appspec-001",
+  "app_spec_version": "AppSpecV0",
+  "deploy_target": "desktop",
+  "sistemas_operativos": ["linux", "darwin", "windows"],
+  "aceptacion_contenedor": false,
+  "restricciones": [
+    {
+      "clave": "desktop.signing",
+      "valor": "deshabilitado_en_v0"
+    }
+  ],
+  "plan_id": "plan-desktop-001",
+  "target_resuelto": "desktop",
+  "matriz_os": [
+    {
+      "os": "linux",
+      "aplica": true,
+      "motivo": "Aplica para paquete desktop en Linux con validacion local.",
+      "requisitos_previos": ["toolchain_go", "metadata_paquete_desktop"]
+    },
+    {
+      "os": "darwin",
+      "aplica": true,
+      "motivo": "Aplica para bundle desktop en darwin sin firmado ni notarizacion.",
+      "requisitos_previos": ["toolchain_go", "metadata_bundle_desktop"]
+    },
+    {
+      "os": "windows",
+      "aplica": true,
+      "motivo": "Aplica para paquete desktop en Windows sin instalador real.",
+      "requisitos_previos": ["toolchain_go", "metadata_paquete_desktop"]
+    }
+  ],
+  "validacion_entorno": [
+    {
+      "id": "toolchain_local",
+      "descripcion": "Confirmar toolchain local sin tocar filesystem productivo.",
+      "obligatoria": true
+    }
+  ],
+  "artefactos_previstos": [
+    {
+      "id": "desktop-package",
+      "tipo": "paquete_desktop",
+      "descripcion": "Paquete desktop declarativo por OS.",
+      "ruta_logica": "deploy/desktop/package"
+    },
+    {
+      "id": "desktop-manifest",
+      "tipo": "metadata",
+      "descripcion": "Metadata del paquete desktop sin firma.",
+      "ruta_logica": "deploy/desktop/metadata"
+    }
+  ],
+  "healthcheck": [
+    {
+      "id": "desktop-healthcheck",
+      "descripcion": "Verificar que el artefacto previsto expone metadata consistente.",
+      "obligatoria": true
+    }
+  ],
+  "rollback": {
+    "reversible": true,
+    "motivo": "El slice v0 solo registra rollback declarativo del paquete desktop.",
+    "pasos_previstos": [
+      {
+        "orden": 1,
+        "tipo": "registrar_rollback",
+        "descripcion": "Registrar retiro del paquete desktop sin borrar artefactos reales.",
+        "requiere_contenedor": false
+      }
+    ]
+  },
+  "acciones_previstas": [
+    {
+      "orden": 1,
+      "tipo": "validar_entorno",
+      "descripcion": "Validar toolchain y metadata desktop por OS.",
+      "requiere_contenedor": false
+    },
+    {
+      "orden": 2,
+      "tipo": "preparar_artefactos",
+      "descripcion": "Preparar descriptor de paquete desktop por OS sin materializar archivos.",
+      "requiere_contenedor": false
+    },
+    {
+      "orden": 3,
+      "tipo": "verificar_salud",
+      "descripcion": "Comprobar consistencia de metadata y rollback declarativo.",
+      "requiere_contenedor": false
+    }
+  ],
+  "advertencias": [
+    "Sin firmado ni notarizacion en DEP-010."
+  ]
+}
