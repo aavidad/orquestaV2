@@ -220,6 +220,21 @@ Contratos afectados: `WebDirectorStatsCountsV0`, `WebDirectorRunStatsContractV0`
 Estado: aceptada localmente.
 ```
 
+```text
+Fecha: 2026-05-11
+Decision: El panel de estadisticas proyecta uso agregado sin conocer proveedor.
+Motivo: la web debe poder mostrar cuanto ha consumido una app al terminar o en
+ejecucion, pero no puede depender de Codex, Claude, Gemini, HOME, OAuth ni APIs
+de cuota concretas.
+Impacto: `WebDirectorRunStatsContractV0` acepta `usage_summary` del nucleo y
+`WebDirectorStatsSummaryV0` expone `usage_agents`, `usage_quota_status`,
+`usage_total_tokens` y `usage_cost_micros`. Los datos vienen ya saneados por
+MCP/director stats.
+Contratos afectados: `WebDirectorRunStatsContractV0`,
+`WebDirectorStatsSummaryV0`.
+Estado: aceptada localmente.
+```
+
 ## Inventario acotado de herencia
 
 ```text

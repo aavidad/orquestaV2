@@ -166,10 +166,11 @@ Motivo: el director, la web y el humano necesitan ver modelo, capacidad, cuota
 y tokens por agente, pero mezclar esos datos con `AgentProgressReportV0`
 romperia el contrato de progreso compacto y podria filtrar detalles operativos.
 Impacto: el nucleo expone `AgentUsageStatsProviderPortV0` y
-`DirectorAgentStatsV0.Usage`. MCP/web pueden pedir `include_agent_usage=true`.
-El stack Codex publica modelo/capacidad desde configuracion y marca cuota como
-`not_configured` hasta conectar un proveedor real de cuota/tokens. No se
-exponen HOME, OAuth, tokens de credencial ni rutas locales.
+`DirectorAgentStatsV0.Usage` y `UsageSummary`. MCP/web pueden pedir
+`include_agent_usage=true`. El stack Codex publica modelo/capacidad desde
+configuracion, acepta un `CodexStackAgentUsageMetricsProviderPortV0` inyectado
+y marca cuota como `not_configured` cuando no hay conector real. No se exponen
+HOME, OAuth, tokens de credencial ni rutas locales.
 Estado: aceptada.
 ```
 

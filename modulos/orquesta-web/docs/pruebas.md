@@ -253,3 +253,15 @@ Evidencia esperada: Reutilizacion/cuarentena registrada sin copiar codigo.
 Ultima ejecucion: 2026-05-04.
 Riesgos: Inventario deliberadamente acotado; puede haber UI relacionada fuera de los terminos buscados.
 ```
+
+```text
+Caso: WEB-UT-017 director stats proyecta usage summary
+Tipo: unit
+Comando: `go test -count=1 ./modulos/orquesta-web -run 'TestWebDirectorStats' -v`
+Evidencia esperada: `NewWebDirectorStatsPanelV0` conserva totales de uso
+agregado (`usage_total_tokens`, `usage_cost_micros`, `usage_quota_status`) sin
+exponer provider, HOME, OAuth, rutas runtime ni credenciales.
+Ultima ejecucion: 2026-05-11; pasa.
+Riesgos: La web solo proyecta el contrato; la fuente real de cuota/tokens vive
+en conectores del stack/director.
+```

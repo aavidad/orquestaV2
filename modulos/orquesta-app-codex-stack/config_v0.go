@@ -80,6 +80,7 @@ type CodexRuntimeConfigV0 struct {
 	WaitInterval   time.Duration
 	ProgressPolicy orquestaruntime.AgentProgressHeartbeatPolicyV0
 	ProgressBudget orquestaruntimecodexdelivery.CodexBudgetActivityPolicyV0
+	UsageMetrics   CodexStackAgentUsageMetricsProviderPortV0
 }
 
 type RunQueueConfigV0 struct {

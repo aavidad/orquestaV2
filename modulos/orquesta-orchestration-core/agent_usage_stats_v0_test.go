@@ -43,6 +43,12 @@ func TestBuildDirectorRunStatsWithTelemetryPortsV0IncluyeUsoDeAgente(t *testing.
 		agent.Usage.TotalTokens != 1500 {
 		t.Fatalf("usage=%+v", agent.Usage)
 	}
+	if stats.UsageSummary == nil ||
+		stats.UsageSummary.AgentsObserved != 1 ||
+		stats.UsageSummary.QuotaStatus != DirectorAgentUsageQuotaAvailableV0 ||
+		stats.UsageSummary.TotalTokens != 1500 {
+		t.Fatalf("usage_summary=%+v", stats.UsageSummary)
+	}
 }
 
 func TestBuildDirectorRunStatsWithTelemetryPortsV0ReportaErrorDeUso(t *testing.T) {

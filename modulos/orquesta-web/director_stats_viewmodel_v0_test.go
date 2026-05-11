@@ -25,7 +25,8 @@ func TestWebDirectorStatsPanelV0ProyectaRunCountsProgresoYErrores(t *testing.T) 
 		panel.Estado != WebDirectorStatsInboundEstadoOKV0 ||
 		panel.RunRef != "run-ref-web-stats-001" ||
 		panel.Resumen.PercentComplete != 50 ||
-		panel.Resumen.ProgressingAgents != 1 {
+		panel.Resumen.ProgressingAgents != 1 ||
+		panel.Resumen.UsageTotalTokens != 1500 {
 		t.Fatalf("panel=%+v", panel)
 	}
 	if panel.Counts.TasksTotal != 2 ||
@@ -129,6 +130,12 @@ func directorStatsResultForWebTestV0() WebDirectorStatsInboundResultV0 {
 					LastReportRef:  "report-ref-web-stats-001",
 					EvidenceRefs:   []string{"evidence-ref-web-stats-001", "evidence-ref-web-stats-001"},
 				}},
+			},
+			UsageSummary: &WebDirectorRunUsageSummaryV0{
+				AgentsObserved: 1,
+				QuotaStatus:    "available",
+				TotalTokens:    1500,
+				CostMicros:     500,
 			},
 			Agents: []WebDirectorAgentStatsContractV0{{
 				AgentRequestID: "agent-ref-web-stats-001",

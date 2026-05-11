@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func TestWebDirectorStatsViewModelV0ProyectaProgresoYAtencion(t *testing.T) {
@@ -22,6 +22,7 @@ func TestWebDirectorStatsViewModelV0ProyectaProgresoYAtencion(t *testing.T) {
 		vm.Progress.StalledAgents != 1 ||
 		vm.Counts.AgentsNeedAttention != 1 ||
 		vm.Counts.Brainstorms != 1 ||
+		vm.Resumen.UsageTotalTokens != 1750 ||
 		len(vm.Tasks) != 2 ||
 		vm.Agents[0].ProgressStatus == "" {
 		t.Fatalf("vm=%+v", vm)
@@ -131,6 +132,12 @@ func webDirectorStatsFixtureV0() WebDirectorRunStatsContractV0 {
 	var out WebDirectorRunStatsContractV0
 	if err := json.Unmarshal(raw, &out); err != nil {
 		panic(err)
+	}
+	out.UsageSummary = &WebDirectorRunUsageSummaryV0{
+		AgentsObserved: 2,
+		QuotaStatus:    "limited",
+		TotalTokens:    1750,
+		CostMicros:     900,
 	}
 	return out
 }

@@ -11,10 +11,10 @@ import (
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 	orquestaweb "orquesta/modulos/orquesta-web"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestCodexStackV0DirectorStatsIncluyeProcesoYProgresoPorPuertos(t *testing.T) {
@@ -53,6 +53,60 @@ func TestCodexStackV0DirectorStatsIncluyeProcesoYProgresoPorPuertos(t *testing.T
 			agent.QuotaStatus != orquestacionnucleoapp.DirectorAgentUsageQuotaNotConfiguredV0 {
 			t.Fatalf("agent sin usage esperado: %+v", agent)
 		}
+	}
+}
+
+func TestCodexStackAgentUsageSourceV0UneMetricasInyectadas(t *testing.T) {
+	ctx := context.Background()
+	runtime := newPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	agentRef := firstStartedDirectorAgentV0(director.StartedAgents)
+	if agentRef == "" {
+		t.Fatalf("sin agente para usage: %+v", director)
+	}
+	source := CodexStackAgentUsageSourceV0{
+		Store:           stack.Stores.ReceiptStore,
+		ModelAlias:      "gpt-5.5",
+		ReasoningEffort: "xhigh",
+		UsageMetrics: staticCodexStackUsageMetricsSourceV0{
+			Metrics: []CodexStackAgentUsageMetricV0{{
+				AgentRequestID:   agentRef,
+				QuotaStatus:      orquestacionnucleoapp.DirectorAgentUsageQuotaLimitedV0,
+				QuotaRemaining:   42,
+				QuotaLimit:       100,
+				PromptTokens:     1000,
+				CompletionTokens: 250,
+				TotalTokens:      1250,
+				CostMicros:       700,
+				EvidenceRefs:     []string{"usage-evidence-ref-stack-001"},
+			}},
+		},
+	}
+
+	stats := orquestacionnucleoapp.BuildDirectorRunStatsWithTelemetryPortsV0(
+		ctx,
+		run,
+		nil,
+		nil,
+		source,
+		orquestacionnucleoapp.DirectorProgressSourceRequestV0{
+			CorrelationID: "corr-stack-usage-metrics-001",
+		},
+	)
+
+	agent := findStackDirectorAgentStatsForTestV0(t, stats, agentRef)
+	if agent.Usage == nil ||
+		agent.Usage.QuotaStatus != orquestacionnucleoapp.DirectorAgentUsageQuotaLimitedV0 ||
+		agent.Usage.TotalTokens != 1250 {
+		t.Fatalf("usage=%+v", agent.Usage)
+	}
+	if stats.UsageSummary == nil ||
+		stats.UsageSummary.AgentsObserved != len(director.StartedAgents) ||
+		stats.UsageSummary.TotalTokens != 1250 ||
+		stats.UsageSummary.QuotaStatus != orquestacionnucleoapp.DirectorAgentUsageQuotaLimitedV0 {
+		t.Fatalf("usage_summary=%+v", stats.UsageSummary)
 	}
 }
 
@@ -132,6 +186,36 @@ func TestCodexStackV0ProgressLoopDetectedProtegeDirectorInicial(t *testing.T) {
 			t.Fatalf("evento de parada inesperado %s: %+v", eventType, sink.EventsV0())
 		}
 	}
+}
+
+type staticCodexStackUsageMetricsSourceV0 struct {
+	Metrics []CodexStackAgentUsageMetricV0
+	Err     error
+}
+
+func (source staticCodexStackUsageMetricsSourceV0) BuildCodexStackAgentUsageMetricsV0(
+	context.Context,
+	CodexStackAgentUsageMetricsRequestV0,
+) ([]CodexStackAgentUsageMetricV0, error) {
+	if source.Err != nil {
+		return nil, source.Err
+	}
+	return append([]CodexStackAgentUsageMetricV0(nil), source.Metrics...), nil
+}
+
+func findStackDirectorAgentStatsForTestV0(
+	t *testing.T,
+	stats orquestacionnucleoapp.DirectorRunStatsV0,
+	agentRef string,
+) orquestacionnucleoapp.DirectorAgentStatsV0 {
+	t.Helper()
+	for _, agent := range stats.Agents {
+		if agent.AgentRequestID == agentRef {
+			return agent
+		}
+	}
+	t.Fatalf("agent stats no encontrado agent=%s stats=%+v", agentRef, stats.Agents)
+	return orquestacionnucleoapp.DirectorAgentStatsV0{}
 }
 
 type pendingAckCodexStackRuntimeV0 struct {

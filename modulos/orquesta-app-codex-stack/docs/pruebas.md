@@ -389,6 +389,25 @@ Intento real estricto 2026-05-11:
 - no quedaron procesos `codex exec` vivos asociados al smoke;
 - el hallazgo origino la regla de proceso parado sin ACK documentada arriba.
 
+Pruebas locales 2026-05-11 de uso/cuota por conector:
+
+```bash
+go test ./modulos/orquesta-app-codex-stack \
+  -run 'TestCodexStackAgentUsageSourceV0UneMetricasInyectadas|TestCodexStackV0DirectorStatsIncluyeProcesoYProgresoPorPuertos' \
+  -count=1 -v
+```
+
+Resultado: `ok`.
+
+Evidencia:
+
+- el stack sigue devolviendo `not_configured` si no hay proveedor de metricas;
+- con `CodexStackAgentUsageMetricsProviderPortV0` fake se proyectan cuota,
+  tokens y coste por agente;
+- `DirectorRunStatsV0.UsageSummary` acumula tokens/coste para que MCP/web y el
+  director puedan responder cuanto se ha usado en una app;
+- no se introduce proveedor, HOME, OAuth, DB ni API concreta en el core.
+
 Smoke real multiagente repetido el 2026-05-11 con app Go/API/web:
 
 - workdir: `/tmp/orquesta-smokes/multiagent-20260511143049/project`;

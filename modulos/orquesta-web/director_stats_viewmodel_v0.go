@@ -65,6 +65,10 @@ type WebDirectorStatsSummaryV0 struct {
 	StalledAgents      int      `json:"stalled_agents"`
 	LoopDetectedAgents int      `json:"loop_detected_agents"`
 	StoppedAgents      int      `json:"stopped_agents"`
+	UsageAgents        int      `json:"usage_agents,omitempty"`
+	UsageQuotaStatus   string   `json:"usage_quota_status,omitempty"`
+	UsageTotalTokens   int64    `json:"usage_total_tokens,omitempty"`
+	UsageCostMicros    int64    `json:"usage_cost_micros,omitempty"`
 	NoSignalAgentRefs  []string `json:"no_signal_agent_refs"`
 }
 
@@ -115,7 +119,7 @@ func NewWebDirectorStatsPanelV0(
 	vm.FaseActual = trimDirectorStatsV0(stats.CurrentPhase)
 	vm.Counts = directorStatsCountsV0(*stats)
 	vm.Progress = directorStatsProgressV0(stats.Progress)
-	vm.Resumen = directorStatsSummaryV0(stats.Progress)
+	vm.Resumen = directorStatsSummaryV0(stats.Progress, stats.UsageSummary)
 	vm.Agents = directorStatsAgentsV0(stats.Agents)
 	vm.Agentes = vm.Agents
 	vm.Tasks = directorStatsTasksV0(stats.Progress.Tasks)
@@ -180,8 +184,11 @@ func directorStatsProgressV0(progress WebDirectorProgressStatsContractV0) WebDir
 	}
 }
 
-func directorStatsSummaryV0(progress WebDirectorProgressStatsContractV0) WebDirectorStatsSummaryV0 {
-	return WebDirectorStatsSummaryV0{
+func directorStatsSummaryV0(
+	progress WebDirectorProgressStatsContractV0,
+	usage *WebDirectorRunUsageSummaryV0,
+) WebDirectorStatsSummaryV0 {
+	summary := WebDirectorStatsSummaryV0{
 		TasksTotal:         progress.TasksTotal,
 		TasksClosed:        progress.TasksClosed,
 		TasksObserved:      progress.TasksObserved,
@@ -194,6 +201,13 @@ func directorStatsSummaryV0(progress WebDirectorProgressStatsContractV0) WebDire
 		StoppedAgents:      progress.StoppedAgents,
 		NoSignalAgentRefs:  compactOperationalStringsV0(progress.NoSignalAgentRefs),
 	}
+	if usage != nil {
+		summary.UsageAgents = usage.AgentsObserved
+		summary.UsageQuotaStatus = trimDirectorStatsV0(usage.QuotaStatus)
+		summary.UsageTotalTokens = usage.TotalTokens
+		summary.UsageCostMicros = usage.CostMicros
+	}
+	return summary
 }
 
 func directorStatsAttentionStateV0(vm WebDirectorStatsViewModelV0) string {

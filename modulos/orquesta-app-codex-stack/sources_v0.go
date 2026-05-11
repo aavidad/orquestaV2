@@ -53,6 +53,7 @@ func agentUsageSourceV0(config ConfigV0) CodexStackAgentUsageSourceV0 {
 		Store:           config.Stores.ReceiptStore,
 		ModelAlias:      config.Codex.Model,
 		ReasoningEffort: string(config.Capacity.ReasoningEffort),
+		UsageMetrics:    config.Codex.UsageMetrics,
 	}
 }
 

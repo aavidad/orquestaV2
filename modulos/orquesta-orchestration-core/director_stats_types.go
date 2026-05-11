@@ -49,6 +49,7 @@ type DirectorRunStatsV0 struct {
 	Refs          DirectorRunStatsRefsV0   `json:"refs,omitempty"`
 	Progress      DirectorProgressStatsV0  `json:"progress"`
 	Closure       DirectorClosureStatsV0   `json:"closure"`
+	UsageSummary  *DirectorRunUsageStatsV0 `json:"usage_summary,omitempty"`
 	Phases        []DirectorPhaseStatsV0   `json:"phases,omitempty"`
 	Agents        []DirectorAgentStatsV0   `json:"agents,omitempty"`
 }

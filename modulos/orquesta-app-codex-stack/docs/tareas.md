@@ -384,7 +384,8 @@ Validacion esperada:
 
 Objetivo: exponer uso de recursos por agente para director, MCP y web.
 
-Estado: iniciado.
+Estado: hecho para puerto y acumulado por run; pendiente conector productivo de
+proveedor.
 
 Trabajo aplicado:
 
@@ -395,13 +396,16 @@ Trabajo aplicado:
   `quota_remaining`, `quota_limit` y `total_tokens`;
 - stack Codex publica modelo/capacidad desde configuracion y cuota
   `not_configured` hasta conectar proveedor real.
+- `CodexStackAgentUsageMetricsProviderPortV0` permite inyectar metricas por
+  agente sin que el stack conozca proveedor, HOME, OAuth ni API remota;
+- `DirectorRunStatsV0.UsageSummary` acumula agentes observados, cuota, tokens y
+  coste por run;
+- web proyecta el resumen en `resumen.usage_*`.
 
 Pendiente:
 
 - conector real de cuota/tokens por proveedor o runtime;
-- acumulado final por run: numero de agentes usados, tokens totales, coste y
-  quota consumida;
-- tests con proveedor fake de cuota que simule limite disponible/agostado;
+- politica final para coste real si el proveedor no entrega precio;
 - decidir politica de privacidad para mostrar modelo literal vs alias publico.
 
 ## APP-CODEX-STACK-015

@@ -46,6 +46,7 @@ type WebDirectorRunStatsContractV0 struct {
 	CurrentPhase  string                             `json:"current_phase,omitempty"`
 	Counts        map[string]int                     `json:"counts"`
 	Progress      WebDirectorProgressStatsContractV0 `json:"progress"`
+	UsageSummary  *WebDirectorRunUsageSummaryV0      `json:"usage_summary,omitempty"`
 	Agents        []WebDirectorAgentStatsContractV0  `json:"agents,omitempty"`
 }
 
@@ -111,6 +112,17 @@ type WebDirectorAgentUsageV0 struct {
 	QuotaRemaining   int64  `json:"quota_remaining,omitempty"`
 	QuotaLimit       int64  `json:"quota_limit,omitempty"`
 	QuotaResetAt     string `json:"quota_reset_at,omitempty"`
+	PromptTokens     int64  `json:"prompt_tokens,omitempty"`
+	CompletionTokens int64  `json:"completion_tokens,omitempty"`
+	TotalTokens      int64  `json:"total_tokens,omitempty"`
+	CostMicros       int64  `json:"cost_micros,omitempty"`
+}
+
+type WebDirectorRunUsageSummaryV0 struct {
+	AgentsObserved   int    `json:"agents_observed"`
+	QuotaStatus      string `json:"quota_status,omitempty"`
+	QuotaRemaining   int64  `json:"quota_remaining,omitempty"`
+	QuotaLimit       int64  `json:"quota_limit,omitempty"`
 	PromptTokens     int64  `json:"prompt_tokens,omitempty"`
 	CompletionTokens int64  `json:"completion_tokens,omitempty"`
 	TotalTokens      int64  `json:"total_tokens,omitempty"`

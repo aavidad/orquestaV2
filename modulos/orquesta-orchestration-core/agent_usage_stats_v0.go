@@ -65,6 +65,18 @@ type DirectorAgentUsageStatsV0 struct {
 	EvidenceRefs     []string `json:"evidence_refs,omitempty"`
 }
 
+type DirectorRunUsageStatsV0 struct {
+	AgentsObserved   int      `json:"agents_observed"`
+	QuotaStatus      string   `json:"quota_status,omitempty"`
+	QuotaRemaining   int64    `json:"quota_remaining,omitempty"`
+	QuotaLimit       int64    `json:"quota_limit,omitempty"`
+	PromptTokens     int64    `json:"prompt_tokens,omitempty"`
+	CompletionTokens int64    `json:"completion_tokens,omitempty"`
+	TotalTokens      int64    `json:"total_tokens,omitempty"`
+	CostMicros       int64    `json:"cost_micros,omitempty"`
+	EvidenceRefs     []string `json:"evidence_refs,omitempty"`
+}
+
 func ApplyDirectorAgentUsageStatsV0(
 	stats *DirectorRunStatsV0,
 	observations []AgentUsageStatsObservationV0,
@@ -81,6 +93,7 @@ func ApplyDirectorAgentUsageStatsV0(
 		usage := directorAgentUsageStatsFromObservationV0(observation)
 		stats.Agents[index].Usage = &usage
 	}
+	stats.UsageSummary = directorRunUsageSummaryFromObservationsV0(byAgent)
 }
 
 func latestAgentUsageStatsByAgentV0(
@@ -116,6 +129,50 @@ func directorAgentUsageStatsFromObservationV0(
 		CostMicros:       nonNegativeInt64V0(observation.CostMicros),
 		EvidenceRefs:     compactStringsV0(observation.EvidenceRefs),
 	}
+}
+
+func directorRunUsageSummaryFromObservationsV0(
+	byAgent map[string]AgentUsageStatsObservationV0,
+) *DirectorRunUsageStatsV0 {
+	if len(byAgent) == 0 {
+		return nil
+	}
+	summary := DirectorRunUsageStatsV0{
+		AgentsObserved: len(byAgent),
+		QuotaStatus:    DirectorAgentUsageQuotaNotConfiguredV0,
+	}
+	for _, observation := range byAgent {
+		summary.QuotaStatus = aggregateDirectorQuotaStatusV0(
+			summary.QuotaStatus,
+			normalizeDirectorAgentQuotaStatusV0(observation.QuotaStatus),
+		)
+		summary.QuotaRemaining += nonNegativeInt64V0(observation.QuotaRemaining)
+		summary.QuotaLimit += nonNegativeInt64V0(observation.QuotaLimit)
+		summary.PromptTokens += nonNegativeInt64V0(observation.PromptTokens)
+		summary.CompletionTokens += nonNegativeInt64V0(observation.CompletionTokens)
+		summary.TotalTokens += nonNegativeInt64V0(observation.TotalTokens)
+		summary.CostMicros += nonNegativeInt64V0(observation.CostMicros)
+		summary.EvidenceRefs = compactStringsV0(append(summary.EvidenceRefs, observation.EvidenceRefs...))
+	}
+	return &summary
+}
+
+func aggregateDirectorQuotaStatusV0(current string, next string) string {
+	current = normalizeDirectorAgentQuotaStatusV0(current)
+	next = normalizeDirectorAgentQuotaStatusV0(next)
+	if current == DirectorAgentUsageQuotaExhaustedV0 || next == DirectorAgentUsageQuotaExhaustedV0 {
+		return DirectorAgentUsageQuotaExhaustedV0
+	}
+	if current == DirectorAgentUsageQuotaLimitedV0 || next == DirectorAgentUsageQuotaLimitedV0 {
+		return DirectorAgentUsageQuotaLimitedV0
+	}
+	if current == DirectorAgentUsageQuotaAvailableV0 || next == DirectorAgentUsageQuotaAvailableV0 {
+		return DirectorAgentUsageQuotaAvailableV0
+	}
+	if current == DirectorAgentUsageQuotaUnknownV0 || next == DirectorAgentUsageQuotaUnknownV0 {
+		return DirectorAgentUsageQuotaUnknownV0
+	}
+	return DirectorAgentUsageQuotaNotConfiguredV0
 }
 
 func normalizeDirectorAgentQuotaStatusV0(status string) string {
