@@ -57,6 +57,24 @@ Estas capacidades de ramas antiguas ya existen en `master` y no justifican mante
 - arranque que puede superseder handles degradados o fantasmas sin pisar handles sanos: `runtimesapp/service.go`;
 - pruebas asociadas en `gitoperaciones`, `internal/controlruntime` y `runtimesapp`.
 
+## Extracciones V2 realizadas
+
+```text
+Fecha: 2026-05-11
+Origen: reinicio-orquesta-v2-2026-05-04
+Destino: master
+Modulo: modulos/orquesta-capacity
+Decision: Extraer el modulo completo como capacidad pura e independiente.
+Motivo: Cubre seleccion dinamica de capacidad, low/medium/high/xhigh,
+multi-HOME, cuota, handoff preventivo y politica de escalado sin DB, runtime,
+proveedor ni modelo hardcodeado.
+Validacion:
+  - go test -count=1 ./modulos/orquesta-capacity
+  - jq empty modulos/orquesta-capacity/docs/schemas/*.json modulos/orquesta-capacity/docs/fixtures/*/*.json
+  - git diff --check
+Notas: No se ha fusionado la rama V2. Solo se ha portado esta unidad.
+```
+
 ## Validacion
 
 Comando ejecutado:

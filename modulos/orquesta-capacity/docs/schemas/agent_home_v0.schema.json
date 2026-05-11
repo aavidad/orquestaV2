@@ -1,0 +1,684 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://orquesta.local/orquesta-capacity/schemas/agent_home_v0.schema.json",
+  "title": "AgentHomeV0",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/agent_home"
+    },
+    {
+      "$ref": "#/definitions/agent_home_collection"
+    }
+  ],
+  "definitions": {
+    "agent_home_collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "homes"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "agent_home_collection.v0"
+        },
+        "homes": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/definitions/agent_home"
+          }
+        }
+      }
+    },
+    "agent_home": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "logical_agent_ref",
+        "home_ref",
+        "pool_id",
+        "runtime_ref",
+        "provider_ref",
+        "account_ref",
+        "credential_kind",
+        "account_kind",
+        "entitlement_kind",
+        "enabled",
+        "quota_state",
+        "active_sessions",
+        "reserved_sessions",
+        "max_concurrent_sessions"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "agent_home.v0"
+        },
+        "logical_agent_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "home_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "pool_id": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "runtime_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "provider_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "account_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "credential_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "credential_kind": {
+          "type": "string",
+          "enum": [
+            "oauth",
+            "api_key",
+            "browser_session",
+            "local_runtime",
+            "none",
+            "unknown"
+          ]
+        },
+        "account_kind": {
+          "type": "string",
+          "enum": [
+            "personal",
+            "service",
+            "pro",
+            "premium",
+            "enterprise",
+            "local",
+            "ephemeral",
+            "unknown"
+          ]
+        },
+        "entitlement_kind": {
+          "type": "string",
+          "enum": [
+            "free",
+            "pro",
+            "premium",
+            "enterprise",
+            "local",
+            "unknown"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "paused_until": {
+          "$ref": "#/definitions/utc_instant"
+        },
+        "cooldown_until": {
+          "$ref": "#/definitions/utc_instant"
+        },
+        "quota_state": {
+          "type": "string",
+          "enum": [
+            "active",
+            "limited",
+            "exhausted",
+            "paused",
+            "unknown"
+          ]
+        },
+        "quota": {
+          "$ref": "#/definitions/quota_snapshot"
+        },
+        "active_sessions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "reserved_sessions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "max_concurrent_sessions": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "daily_limit_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "weekly_limit_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "usage_observed": {
+          "$ref": "#/definitions/usage_observed"
+        },
+        "last_checked_at": {
+          "$ref": "#/definitions/utc_instant"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "credential_kind": {
+                "enum": [
+                  "oauth",
+                  "api_key",
+                  "browser_session"
+                ]
+              }
+            },
+            "required": [
+              "credential_kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "credential_ref"
+            ]
+          }
+        },
+        {
+          "$ref": "#/definitions/session_bounds"
+        }
+      ]
+    },
+    "session_bounds": {
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 1
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 1
+              },
+              "reserved_sessions": {
+                "maximum": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 2
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 2
+              },
+              "reserved_sessions": {
+                "maximum": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 3
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 3
+              },
+              "reserved_sessions": {
+                "maximum": 3
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 4
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 4
+              },
+              "reserved_sessions": {
+                "maximum": 4
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 5
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 5
+              },
+              "reserved_sessions": {
+                "maximum": 5
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 6
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 6
+              },
+              "reserved_sessions": {
+                "maximum": 6
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 7
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 7
+              },
+              "reserved_sessions": {
+                "maximum": 7
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 8
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 8
+              },
+              "reserved_sessions": {
+                "maximum": 8
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 9
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 9
+              },
+              "reserved_sessions": {
+                "maximum": 9
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 10
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 10
+              },
+              "reserved_sessions": {
+                "maximum": 10
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 11
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 11
+              },
+              "reserved_sessions": {
+                "maximum": 11
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 12
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 12
+              },
+              "reserved_sessions": {
+                "maximum": 12
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 13
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 13
+              },
+              "reserved_sessions": {
+                "maximum": 13
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 14
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 14
+              },
+              "reserved_sessions": {
+                "maximum": 14
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 15
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 15
+              },
+              "reserved_sessions": {
+                "maximum": 15
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "max_concurrent_sessions": {
+                "const": 16
+              }
+            },
+            "required": [
+              "max_concurrent_sessions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "active_sessions": {
+                "maximum": 16
+              },
+              "reserved_sessions": {
+                "maximum": 16
+              }
+            }
+          }
+        }
+      ]
+    },
+    "quota_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "freshness",
+        "scope",
+        "window_kind"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": [
+            "real",
+            "estimated",
+            "manual",
+            "unavailable"
+          ]
+        },
+        "freshness": {
+          "type": "string",
+          "enum": [
+            "fresh",
+            "stale",
+            "obsolete",
+            "unknown"
+          ]
+        },
+        "checked_at": {
+          "$ref": "#/definitions/utc_instant"
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "pool",
+            "account",
+            "home",
+            "model",
+            "provider",
+            "unknown"
+          ]
+        },
+        "window_kind": {
+          "type": "string",
+          "enum": [
+            "primary",
+            "short",
+            "daily",
+            "weekly",
+            "provider",
+            "unknown"
+          ]
+        },
+        "reset_at": {
+          "$ref": "#/definitions/utc_instant"
+        },
+        "remaining_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "remaining_messages": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "remaining_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "remaining_credits": {
+          "type": "number",
+          "minimum": 0
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "raw_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        }
+      }
+    },
+    "usage_observed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "messages": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "credits": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "opaque_ref": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "not": {
+        "$ref": "#/definitions/forbidden_string_patterns"
+      }
+    },
+    "utc_instant": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "forbidden_string_patterns": {
+      "anyOf": [
+        {
+          "pattern": "(^|[._:-])(openai|OpenAI|anthropic|Anthropic|google|Google|gemini|Gemini|claude|Claude|gpt|GPT|openrouter|OpenRouter|mistral|Mistral|deepseek|DeepSeek|ollama|Ollama|azure|Azure|bedrock|Bedrock|vertex|Vertex|groq|Groq|cohere|Cohere)([._:-]|$)"
+        },
+        {
+          "pattern": "(^|[._:-])(secret|Secret|password|Password|passwd|token|Token|api_key|apikey|APIKEY|bearer|Bearer)([._:-]|$)"
+        },
+        {
+          "pattern": "^(sk|ghp|xoxb|xoxa|xoxp|ya29)[A-Za-z0-9._:-]*"
+        },
+        {
+          "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+        }
+      ]
+    }
+  }
+}

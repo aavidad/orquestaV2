@@ -1,0 +1,160 @@
+{
+  "schema_version": "capacity_decision.v0",
+  "request": {
+    "task_ref": "task-cap-ct-012-xhigh-valid",
+    "perfil_tarea": "analisis",
+    "fase": "arquitectura",
+    "riesgo": "critical",
+    "calidad_requerida": "critica",
+    "contexto_estimado": {
+      "status": "known",
+      "estimated_tokens": 12000,
+      "estimated_messages": 12,
+      "estimated_seconds": 1800
+    },
+    "restricciones": {
+      "local_only": false,
+      "remote_allowed": true,
+      "paid_allowed": true,
+      "max_coste_relativo": 3,
+      "requiere_handoff_preventivo": true,
+      "requiere_privacidad_alta": false
+    },
+    "evidencia": {
+      "quality_signals": [
+        {
+          "signal_ref": "signal-quality-critical-a",
+          "kind": "quality",
+          "source": "real",
+          "freshness": "fresh",
+          "weight": "critical",
+          "summary": "revision previa bloqueo la decision de arquitectura"
+        }
+      ],
+      "benchmark_signals": [],
+      "telemetry_signals": [],
+      "quota_signals": [
+        {
+          "signal_ref": "signal-quota-fresh-xh",
+          "kind": "quota",
+          "source": "adapter",
+          "freshness": "fresh",
+          "weight": "high",
+          "summary": "ventana suficiente para esfuerzo excepcional"
+        }
+      ],
+      "failure_signals": [
+        {
+          "signal_ref": "signal-failure-critical-a",
+          "kind": "failure",
+          "source": "real",
+          "freshness": "fresh",
+          "weight": "critical",
+          "summary": "fallo repetido de revision contractual"
+        }
+      ],
+      "human_signals": []
+    }
+  },
+  "response": {
+    "decision_id": "capdec-ct-012-xhigh-valid",
+    "nivel_capacidad": "xhigh",
+    "reasoning_effort": "xhigh",
+    "pool": {
+      "pool_id": "pool-ref-remote-xh",
+      "provider_kind": "remote",
+      "runtime_kind": "api",
+      "plan_kind": "enterprise",
+      "paid": true,
+      "active": true,
+      "total_slots": 2,
+      "reserved_slots": 0,
+      "allows_child_agents": true,
+      "allows_multi_model": true,
+      "allows_overcost": false,
+      "handoff_policy": "preventivo",
+      "telemetry_source": "real",
+      "credential_modes": [
+        "oauth"
+      ],
+      "quota_scope": "home",
+      "modelos": [
+        {
+          "model_ref": "model-ref-xcap-a",
+          "enabled": true,
+          "priority": 1,
+          "relative_cost": 2.5,
+          "locality": "remote",
+          "known_limits": {
+            "tokens": 64000,
+            "window": "primary"
+          },
+          "execution_mode": "remote_api",
+          "enablement_source": "adapter_declared",
+          "supported_efforts": [
+            "high",
+            "xhigh"
+          ]
+        }
+      ]
+    },
+    "modelo": {
+      "model_ref": "model-ref-xcap-a",
+      "enabled": true,
+      "priority": 1,
+      "relative_cost": 2.5,
+      "locality": "remote",
+      "known_limits": {
+        "tokens": 64000,
+        "window": "primary"
+      },
+      "execution_mode": "remote_api",
+      "enablement_source": "adapter_declared",
+      "supported_efforts": [
+        "high",
+        "xhigh"
+      ]
+    },
+    "home": {
+      "logical_agent_ref": "logical-agent-ref-a",
+      "home_ref": "home-ref-remote-xh",
+      "pool_id": "pool-ref-remote-xh",
+      "runtime_ref": "runtime-ref-api-xh",
+      "provider_ref": "provider-ref-remote-xh",
+      "account_ref": "account-ref-enterprise-xh",
+      "credential_ref": "credential-ref-oauth-xh"
+    },
+    "cuota": {
+      "source": "real",
+      "freshness": "fresh",
+      "checked_at": "2026-05-04T08:15:00Z",
+      "scope": "home",
+      "window_kind": "primary",
+      "remaining_seconds": 14400,
+      "remaining_messages": 80,
+      "confidence": 1,
+      "raw_ref": "quota-ref-xh"
+    },
+    "politica_escalado": "policy-capacity-default:v0",
+    "handoff": "preventivo",
+    "motivos": [
+      "riesgo critico con fallo fresco de calidad",
+      "ventana fresca permite esfuerzo excepcional",
+      "handoff preventivo activado por contexto amplio"
+    ],
+    "alternativas": [
+      {
+        "priority": 5,
+        "pool_id": "pool-ref-remote-high",
+        "model_ref": "model-ref-high-a",
+        "relative_cost": 1.8,
+        "availability": "available",
+        "reason": "degradacion high viable si cambia la cuota"
+      }
+    ],
+    "degradacion": {
+      "action": "none",
+      "reason": "gate xhigh satisfecho con evidencia fresca"
+    }
+  }
+}

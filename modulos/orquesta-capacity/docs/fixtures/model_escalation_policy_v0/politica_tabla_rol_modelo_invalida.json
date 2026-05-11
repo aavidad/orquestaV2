@@ -1,0 +1,87 @@
+{
+  "schema_version": "model_escalation_policy.v0",
+  "policy_ref": "policy-capacity-role-table-invalid:v0",
+  "phase_rules": [
+    {
+      "rule_ref": "phase-review-role-table-invalid-v0",
+      "perfil_tarea": "revision",
+      "fase": "revision",
+      "base_level": "medium",
+      "max_without_evidence": "high",
+      "allowed_levels": [
+        "medium",
+        "high"
+      ],
+      "model_ref": "model-ref-fixed-review",
+      "rationale": "fixture invalido porque intenta fijar un modelo por rol"
+    }
+  ],
+  "risk_quality_rules": [
+    {
+      "rule_ref": "risk-medium-role-table-invalid-v0",
+      "riesgo": "medium",
+      "calidad_requerida": "alta",
+      "adjustment": "keep",
+      "allowed_levels": [
+        "medium"
+      ],
+      "requires_evidence": false
+    }
+  ],
+  "evidence_rules": [
+    {
+      "rule_ref": "evidence-role-table-invalid-v0",
+      "signal_kind": "quality",
+      "source": "estimated",
+      "freshness": "unknown",
+      "weight": "low",
+      "effect": "keep"
+    }
+  ],
+  "quota_rules": [
+    {
+      "rule_ref": "quota-role-table-invalid-v0",
+      "source": "estimated",
+      "freshness": "fresh",
+      "scope": "pool",
+      "effect": "allow",
+      "preferred_actions": [
+        "cambiar_home"
+      ]
+    }
+  ],
+  "locality_rules": [
+    {
+      "rule_ref": "locality-role-table-invalid-v0",
+      "locality": "remote",
+      "effect": "preferred",
+      "requires_runtime_available": true,
+      "requires_quota_freshness": "fresh",
+      "rationale": "fixture invalido por tabla fija"
+    }
+  ],
+  "xhigh_gate": {
+    "allowed": true,
+    "required_risk": [
+      "critical"
+    ],
+    "required_evidence_freshness": "fresh",
+    "accepted_justifications": [
+      "riesgo_critico"
+    ],
+    "minimum_evidence_count": 1,
+    "human_override_allowed": false,
+    "outcome_without_gate": "degrade_to_high"
+  },
+  "degradation_order": [
+    "bajar_effort",
+    "cambiar_modelo",
+    "cambiar_home"
+  ],
+  "role_model_table": [
+    {
+      "role": "reviewer",
+      "model_ref": "model-ref-fixed-review"
+    }
+  ]
+}

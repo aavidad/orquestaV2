@@ -1,0 +1,143 @@
+{
+  "schema_version": "capacity_decision.v0",
+  "request": {
+    "task_ref": "task-cap-ct-011-min",
+    "perfil_tarea": "implementacion",
+    "fase": "ejecucion",
+    "riesgo": "medium",
+    "calidad_requerida": "alta",
+    "contexto_estimado": {
+      "status": "known",
+      "estimated_tokens": 6000,
+      "estimated_messages": 6,
+      "estimated_seconds": 900
+    },
+    "restricciones": {
+      "local_only": false,
+      "remote_allowed": true,
+      "paid_allowed": true,
+      "max_coste_relativo": 2,
+      "requiere_handoff_preventivo": false,
+      "requiere_privacidad_alta": false
+    },
+    "evidencia": {
+      "quality_signals": [],
+      "benchmark_signals": [],
+      "telemetry_signals": [],
+      "quota_signals": [
+        {
+          "signal_ref": "signal-quota-fresh-a",
+          "kind": "quota",
+          "source": "adapter",
+          "freshness": "fresh",
+          "weight": "medium",
+          "summary": "cuota fresca para la ventana estimada"
+        }
+      ],
+      "failure_signals": [],
+      "human_signals": []
+    }
+  },
+  "response": {
+    "decision_id": "capdec-ct-011-min",
+    "nivel_capacidad": "medium",
+    "reasoning_effort": "medium",
+    "pool": {
+      "pool_id": "pool-ref-remote-a",
+      "provider_kind": "remote",
+      "runtime_kind": "api",
+      "plan_kind": "paid",
+      "paid": true,
+      "active": true,
+      "total_slots": 4,
+      "reserved_slots": 1,
+      "allows_child_agents": true,
+      "allows_multi_model": true,
+      "allows_overcost": false,
+      "handoff_policy": "preventivo",
+      "telemetry_source": "real",
+      "credential_modes": [
+        "oauth"
+      ],
+      "quota_scope": "home",
+      "modelos": [
+        {
+          "model_ref": "model-ref-balanced-a",
+          "enabled": true,
+          "priority": 10,
+          "relative_cost": 1,
+          "locality": "remote",
+          "known_limits": {
+            "tokens": 20000,
+            "window": "primary"
+          },
+          "execution_mode": "remote_api",
+          "enablement_source": "adapter_declared",
+          "supported_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      ]
+    },
+    "modelo": {
+      "model_ref": "model-ref-balanced-a",
+      "enabled": true,
+      "priority": 10,
+      "relative_cost": 1,
+      "locality": "remote",
+      "known_limits": {
+        "tokens": 20000,
+        "window": "primary"
+      },
+      "execution_mode": "remote_api",
+      "enablement_source": "adapter_declared",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "home": {
+      "logical_agent_ref": "logical-agent-ref-a",
+      "home_ref": "home-ref-remote-a",
+      "pool_id": "pool-ref-remote-a",
+      "runtime_ref": "runtime-ref-api-a",
+      "provider_ref": "provider-ref-remote-a",
+      "account_ref": "account-ref-pro-a",
+      "credential_ref": "credential-ref-oauth-a"
+    },
+    "cuota": {
+      "source": "real",
+      "freshness": "fresh",
+      "checked_at": "2026-05-04T08:00:00Z",
+      "scope": "home",
+      "window_kind": "primary",
+      "remaining_seconds": 7200,
+      "remaining_messages": 40,
+      "confidence": 1,
+      "raw_ref": "quota-ref-home-a"
+    },
+    "politica_escalado": "policy-capacity-default:v0",
+    "handoff": "none",
+    "motivos": [
+      "fase ejecucion con riesgo medio y cuota fresca",
+      "pool activo con concurrencia disponible"
+    ],
+    "alternativas": [
+      {
+        "priority": 20,
+        "pool_id": "pool-ref-remote-b",
+        "model_ref": "model-ref-balanced-b",
+        "relative_cost": 1.2,
+        "availability": "available",
+        "reason": "alternativa remota con cuota estimada fresca"
+      }
+    ],
+    "degradacion": {
+      "action": "none",
+      "reason": "sin bloqueo de cuota ni concurrencia"
+    }
+  }
+}

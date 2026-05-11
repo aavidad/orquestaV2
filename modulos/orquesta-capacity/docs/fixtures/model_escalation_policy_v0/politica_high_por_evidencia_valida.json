@@ -1,0 +1,103 @@
+{
+  "schema_version": "model_escalation_policy.v0",
+  "policy_ref": "policy-capacity-high-evidence:v0",
+  "phase_rules": [
+    {
+      "rule_ref": "phase-revision-v0",
+      "perfil_tarea": "revision",
+      "fase": "revision",
+      "base_level": "medium",
+      "max_without_evidence": "high",
+      "allowed_levels": [
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "triggers": [
+        "revision_fallida",
+        "impacto_contractual"
+      ],
+      "rationale": "revision sube con fallo fresco o impacto contractual"
+    }
+  ],
+  "risk_quality_rules": [
+    {
+      "rule_ref": "risk-high-critica-v0",
+      "riesgo": "high",
+      "calidad_requerida": "critica",
+      "adjustment": "raise_to_high",
+      "allowed_levels": [
+        "high",
+        "xhigh"
+      ],
+      "requires_evidence": true
+    }
+  ],
+  "evidence_rules": [
+    {
+      "rule_ref": "evidence-failure-fresh-v0",
+      "signal_kind": "failure",
+      "source": "real",
+      "freshness": "fresh",
+      "weight": "high",
+      "effect": "raise",
+      "requires_summary": true,
+      "rationale": "fallo fresco de revision habilita high"
+    },
+    {
+      "rule_ref": "evidence-quality-stale-v0",
+      "signal_kind": "quality",
+      "source": "estimated",
+      "freshness": "stale",
+      "weight": "medium",
+      "effect": "keep",
+      "requires_summary": true,
+      "rationale": "senal stale no basta para xhigh"
+    }
+  ],
+  "quota_rules": [
+    {
+      "rule_ref": "quota-stale-account-v0",
+      "source": "estimated",
+      "freshness": "stale",
+      "scope": "account",
+      "effect": "degrade",
+      "preferred_actions": [
+        "cambiar_home",
+        "bajar_effort"
+      ],
+      "rationale": "cuota estimada stale reduce confianza de escalado"
+    }
+  ],
+  "locality_rules": [
+    {
+      "rule_ref": "locality-remote-quota-v0",
+      "locality": "remote",
+      "effect": "eligible",
+      "requires_runtime_available": true,
+      "requires_quota_freshness": "fresh_or_stale",
+      "rationale": "remoto requiere cuota observable y credencial viable"
+    }
+  ],
+  "xhigh_gate": {
+    "allowed": true,
+    "required_risk": [
+      "critical"
+    ],
+    "required_evidence_freshness": "fresh",
+    "accepted_justifications": [
+      "riesgo_critico",
+      "revision_bloqueada",
+      "solicitud_humana_justificada"
+    ],
+    "minimum_evidence_count": 2,
+    "human_override_allowed": true,
+    "outcome_without_gate": "degrade_to_high"
+  },
+  "degradation_order": [
+    "bajar_effort",
+    "cambiar_modelo",
+    "cambiar_home",
+    "handoff_preventivo"
+  ]
+}

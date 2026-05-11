@@ -1,0 +1,117 @@
+{
+  "schema_version": "capacity_decision.v0",
+  "request": {
+    "task_ref": "task-cap-ct-012-local-invalid",
+    "perfil_tarea": "script",
+    "fase": "ejecucion",
+    "riesgo": "medium",
+    "calidad_requerida": "alta",
+    "contexto_estimado": {
+      "status": "known",
+      "estimated_tokens": 3000,
+      "estimated_messages": 3,
+      "estimated_seconds": 300
+    },
+    "restricciones": {
+      "local_only": true,
+      "remote_allowed": false,
+      "paid_allowed": false,
+      "max_coste_relativo": 1,
+      "requiere_handoff_preventivo": false,
+      "requiere_privacidad_alta": true
+    },
+    "evidencia": {
+      "quality_signals": [],
+      "benchmark_signals": [],
+      "telemetry_signals": [],
+      "quota_signals": [],
+      "failure_signals": [],
+      "human_signals": []
+    }
+  },
+  "response": {
+    "decision_id": "capdec-ct-012-local-invalid",
+    "nivel_capacidad": "medium",
+    "reasoning_effort": "medium",
+    "pool": {
+      "pool_id": "pool-ref-local-a",
+      "provider_kind": "local",
+      "runtime_kind": "local_runtime",
+      "plan_kind": "local",
+      "paid": false,
+      "active": true,
+      "total_slots": 1,
+      "reserved_slots": 0,
+      "allows_child_agents": false,
+      "allows_multi_model": true,
+      "allows_overcost": false,
+      "handoff_policy": "manual",
+      "telemetry_source": "estimated",
+      "credential_modes": [
+        "local_runtime"
+      ],
+      "quota_scope": "model",
+      "modelos": [
+        {
+          "model_ref": "model-ref-local-candidate",
+          "enabled": true,
+          "priority": 1,
+          "relative_cost": 0.2,
+          "locality": "local",
+          "execution_mode": "local_service",
+          "enablement_source": "manual_candidate",
+          "supported_efforts": [
+            "medium"
+          ],
+          "score": {
+            "materia": "codigo",
+            "score_base": 0.5,
+            "score_observado": 0.4,
+            "score_total": 0.45,
+            "confianza": 0.4,
+            "muestras": 0,
+            "benchmarks": 0
+          }
+        }
+      ]
+    },
+    "modelo": {
+      "model_ref": "model-ref-local-candidate",
+      "enabled": true,
+      "priority": 1,
+      "relative_cost": 0.2,
+      "locality": "local",
+      "execution_mode": "local_service",
+      "enablement_source": "manual_candidate",
+      "supported_efforts": [
+        "medium"
+      ],
+      "score": {
+        "materia": "codigo",
+        "score_base": 0.5,
+        "score_observado": 0.4,
+        "score_total": 0.45,
+        "confianza": 0.4,
+        "muestras": 0,
+        "benchmarks": 0
+      }
+    },
+    "cuota": {
+      "source": "estimated",
+      "freshness": "fresh",
+      "scope": "model",
+      "window_kind": "unknown",
+      "confidence": 0.5
+    },
+    "politica_escalado": "policy-capacity-default:v0",
+    "handoff": "none",
+    "motivos": [
+      "fixture invalido porque local carece de score probado"
+    ],
+    "alternativas": [],
+    "degradacion": {
+      "action": "none",
+      "reason": "local seleccionado sin evidencia suficiente"
+    }
+  }
+}

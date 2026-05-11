@@ -1,0 +1,37 @@
+{
+  "schema_version": "agent_home.v0",
+  "logical_agent_ref": "logical-agent-ref-cap-b",
+  "home_ref": "home-ref-remote-obsolete",
+  "pool_id": "pool-ref-remote-a",
+  "runtime_ref": "runtime-ref-api-a",
+  "provider_ref": "provider-ref-remote-a",
+  "account_ref": "account-ref-pro-obsolete",
+  "credential_ref": "credential-ref-oauth-obsolete",
+  "credential_kind": "oauth",
+  "account_kind": "pro",
+  "entitlement_kind": "pro",
+  "enabled": true,
+  "quota_state": "limited",
+  "quota": {
+    "source": "real",
+    "freshness": "obsolete",
+    "checked_at": "2026-05-03T08:30:00Z",
+    "scope": "home",
+    "window_kind": "primary",
+    "remaining_seconds": 600,
+    "remaining_messages": 2,
+    "confidence": 1,
+    "raw_ref": "quota-ref-home-obsolete"
+  },
+  "active_sessions": 0,
+  "reserved_sessions": 0,
+  "max_concurrent_sessions": 2,
+  "daily_limit_seconds": 21600,
+  "weekly_limit_seconds": 108000,
+  "usage_observed": {
+    "seconds": 5400,
+    "messages": 30,
+    "tokens": 16000
+  },
+  "last_checked_at": "2026-05-03T08:30:00Z"
+}

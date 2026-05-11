@@ -1,0 +1,124 @@
+{
+  "schema_version": "capacity_decision.v0",
+  "request": {
+    "task_ref": "task-cap-ct-012-quota-obsolete",
+    "perfil_tarea": "handoff",
+    "fase": "orquestacion",
+    "riesgo": "high",
+    "calidad_requerida": "alta",
+    "contexto_estimado": {
+      "status": "known",
+      "estimated_tokens": 18000,
+      "estimated_messages": 18,
+      "estimated_seconds": 3600
+    },
+    "restricciones": {
+      "local_only": false,
+      "remote_allowed": true,
+      "paid_allowed": true,
+      "max_coste_relativo": 2,
+      "requiere_handoff_preventivo": true,
+      "requiere_privacidad_alta": false
+    },
+    "evidencia": {
+      "quality_signals": [],
+      "benchmark_signals": [],
+      "telemetry_signals": [],
+      "quota_signals": [
+        {
+          "signal_ref": "signal-quota-obsolete-a",
+          "kind": "quota",
+          "source": "real",
+          "freshness": "obsolete",
+          "weight": "high",
+          "summary": "cuota observada fuera de ventana util"
+        }
+      ],
+      "failure_signals": [],
+      "human_signals": []
+    }
+  },
+  "response": {
+    "decision_id": "capdec-ct-012-quota-obsolete",
+    "nivel_capacidad": "medium",
+    "reasoning_effort": "medium",
+    "pool": {
+      "pool_id": "pool-ref-remote-limited",
+      "provider_kind": "remote",
+      "runtime_kind": "api",
+      "plan_kind": "paid",
+      "paid": true,
+      "active": true,
+      "total_slots": 2,
+      "reserved_slots": 1,
+      "allows_child_agents": false,
+      "allows_multi_model": true,
+      "allows_overcost": false,
+      "handoff_policy": "preventivo",
+      "telemetry_source": "real",
+      "credential_modes": [
+        "oauth"
+      ],
+      "quota_scope": "home",
+      "modelos": [
+        {
+          "model_ref": "model-ref-medium-a",
+          "enabled": true,
+          "priority": 10,
+          "relative_cost": 1,
+          "locality": "remote",
+          "execution_mode": "remote_api",
+          "enablement_source": "adapter_declared",
+          "supported_efforts": [
+            "medium",
+            "high"
+          ]
+        }
+      ]
+    },
+    "modelo": {
+      "model_ref": "model-ref-medium-a",
+      "enabled": true,
+      "priority": 10,
+      "relative_cost": 1,
+      "locality": "remote",
+      "execution_mode": "remote_api",
+      "enablement_source": "adapter_declared",
+      "supported_efforts": [
+        "medium",
+        "high"
+      ]
+    },
+    "cuota": {
+      "source": "real",
+      "freshness": "obsolete",
+      "checked_at": "2026-05-03T08:00:00Z",
+      "scope": "home",
+      "window_kind": "primary",
+      "remaining_seconds": 900,
+      "confidence": 1,
+      "raw_ref": "quota-ref-obsolete-a"
+    },
+    "politica_escalado": "policy-capacity-default:v0",
+    "handoff": "preventivo",
+    "motivos": [
+      "cuota obsoleta impide high",
+      "ventana insuficiente exige handoff preventivo"
+    ],
+    "alternativas": [
+      {
+        "priority": 30,
+        "pool_id": "pool-ref-local-proven",
+        "model_ref": "model-ref-local-proven",
+        "relative_cost": 0.4,
+        "availability": "limited",
+        "reason": "alternativa local solo si score sigue fresco"
+      }
+    ],
+    "degradacion": {
+      "action": "handoff_preventivo",
+      "target_level": "medium",
+      "reason": "high bloqueado por cuota obsoleta"
+    }
+  }
+}

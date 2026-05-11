@@ -1,0 +1,581 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://orquesta.local/orquesta-capacity/schemas/model_escalation_policy_v0.schema.json",
+  "title": "ModelEscalationPolicyV0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_ref",
+    "phase_rules",
+    "risk_quality_rules",
+    "evidence_rules",
+    "quota_rules",
+    "locality_rules",
+    "xhigh_gate",
+    "degradation_order"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "model_escalation_policy.v0"
+    },
+    "policy_ref": {
+      "$ref": "#/definitions/versioned_policy_ref"
+    },
+    "phase_rules": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/definitions/phase_rule"
+      }
+    },
+    "risk_quality_rules": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/definitions/risk_quality_rule"
+      }
+    },
+    "evidence_rules": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/definitions/evidence_rule"
+      }
+    },
+    "quota_rules": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/definitions/quota_rule"
+      }
+    },
+    "locality_rules": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/definitions/locality_rule"
+      }
+    },
+    "xhigh_gate": {
+      "$ref": "#/definitions/xhigh_gate"
+    },
+    "degradation_order": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 6,
+      "items": {
+        "$ref": "#/definitions/degradation_action"
+      },
+      "uniqueItems": true
+    }
+  },
+  "definitions": {
+    "phase_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule_ref",
+        "perfil_tarea",
+        "fase",
+        "base_level",
+        "max_without_evidence",
+        "allowed_levels",
+        "rationale"
+      ],
+      "properties": {
+        "rule_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "perfil_tarea": {
+          "$ref": "#/definitions/perfil_tarea"
+        },
+        "fase": {
+          "$ref": "#/definitions/phase_ref"
+        },
+        "base_level": {
+          "$ref": "#/definitions/capacity_level"
+        },
+        "max_without_evidence": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "allowed_levels": {
+          "$ref": "#/definitions/capacity_level_set"
+        },
+        "triggers": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "string",
+            "enum": [
+              "ambiguedad_material",
+              "riesgo_alto",
+              "calidad_critica",
+              "fallo_pruebas",
+              "revision_fallida",
+              "impacto_contractual",
+              "ventana_insuficiente",
+              "solicitud_humana"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "rationale": {
+          "$ref": "#/definitions/safe_text"
+        }
+      }
+    },
+    "risk_quality_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule_ref",
+        "riesgo",
+        "calidad_requerida",
+        "adjustment",
+        "allowed_levels",
+        "requires_evidence"
+      ],
+      "properties": {
+        "rule_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "riesgo": {
+          "$ref": "#/definitions/riesgo"
+        },
+        "calidad_requerida": {
+          "$ref": "#/definitions/calidad_requerida"
+        },
+        "adjustment": {
+          "type": "string",
+          "enum": [
+            "keep",
+            "raise_one",
+            "raise_to_high",
+            "allow_xhigh_with_gate",
+            "degrade"
+          ]
+        },
+        "allowed_levels": {
+          "$ref": "#/definitions/capacity_level_set"
+        },
+        "requires_evidence": {
+          "type": "boolean"
+        }
+      }
+    },
+    "evidence_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule_ref",
+        "signal_kind",
+        "source",
+        "freshness",
+        "weight",
+        "effect"
+      ],
+      "properties": {
+        "rule_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "signal_kind": {
+          "type": "string",
+          "enum": [
+            "quality",
+            "benchmark",
+            "telemetry",
+            "quota",
+            "failure",
+            "human"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "real",
+            "estimated",
+            "manual",
+            "adapter",
+            "benchmark",
+            "observed_score",
+            "human",
+            "unavailable"
+          ]
+        },
+        "freshness": {
+          "type": "string",
+          "enum": [
+            "fresh",
+            "stale",
+            "obsolete",
+            "unknown"
+          ]
+        },
+        "weight": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "effect": {
+          "type": "string",
+          "enum": [
+            "raise",
+            "keep",
+            "degrade",
+            "block",
+            "require_handoff"
+          ]
+        },
+        "requires_summary": {
+          "type": "boolean"
+        },
+        "rationale": {
+          "$ref": "#/definitions/safe_text"
+        }
+      }
+    },
+    "quota_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule_ref",
+        "source",
+        "freshness",
+        "scope",
+        "effect",
+        "preferred_actions"
+      ],
+      "properties": {
+        "rule_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "real",
+            "estimated",
+            "manual",
+            "unavailable"
+          ]
+        },
+        "freshness": {
+          "type": "string",
+          "enum": [
+            "fresh",
+            "stale",
+            "obsolete",
+            "unknown"
+          ]
+        },
+        "scope": {
+          "$ref": "#/definitions/quota_scope"
+        },
+        "effect": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "degrade",
+            "block_escalation",
+            "require_handoff"
+          ]
+        },
+        "preferred_actions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": {
+            "$ref": "#/definitions/degradation_action"
+          },
+          "uniqueItems": true
+        },
+        "rationale": {
+          "$ref": "#/definitions/safe_text"
+        }
+      }
+    },
+    "locality_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule_ref",
+        "locality",
+        "effect",
+        "requires_runtime_available",
+        "requires_quota_freshness",
+        "rationale"
+      ],
+      "properties": {
+        "rule_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "locality": {
+          "type": "string",
+          "enum": [
+            "remote",
+            "local",
+            "hybrid"
+          ]
+        },
+        "effect": {
+          "type": "string",
+          "enum": [
+            "eligible",
+            "preferred",
+            "degrade",
+            "blocked"
+          ]
+        },
+        "minimum_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "minimum_samples": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "requires_runtime_available": {
+          "type": "boolean"
+        },
+        "requires_quota_freshness": {
+          "type": "string",
+          "enum": [
+            "fresh",
+            "fresh_or_stale",
+            "any",
+            "not_applicable"
+          ]
+        },
+        "rationale": {
+          "$ref": "#/definitions/safe_text"
+        }
+      }
+    },
+    "xhigh_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowed",
+        "required_risk",
+        "required_evidence_freshness",
+        "accepted_justifications",
+        "minimum_evidence_count",
+        "human_override_allowed",
+        "outcome_without_gate"
+      ],
+      "properties": {
+        "allowed": {
+          "const": true
+        },
+        "required_risk": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "high",
+              "critical"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "required_evidence_freshness": {
+          "type": "string",
+          "enum": [
+            "fresh",
+            "fresh_or_stale"
+          ]
+        },
+        "accepted_justifications": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "enum": [
+              "fallo_fresco",
+              "riesgo_critico",
+              "arquitectura_critica",
+              "revision_bloqueada",
+              "ambiguedad_material",
+              "solicitud_humana_justificada"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "minimum_evidence_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "human_override_allowed": {
+          "type": "boolean"
+        },
+        "outcome_without_gate": {
+          "type": "string",
+          "enum": [
+            "degrade_to_high",
+            "degrade_to_medium",
+            "require_handoff",
+            "block"
+          ]
+        }
+      }
+    },
+    "capacity_level_set": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/definitions/capacity_level"
+      },
+      "uniqueItems": true
+    },
+    "degradation_action": {
+      "type": "string",
+      "enum": [
+        "bajar_effort",
+        "cambiar_modelo",
+        "cambiar_home",
+        "cambiar_pool",
+        "handoff_preventivo",
+        "bloquear"
+      ]
+    },
+    "perfil_tarea": {
+      "type": "string",
+      "enum": [
+        "analisis",
+        "implementacion",
+        "revision",
+        "documentacion",
+        "script",
+        "handoff",
+        "orquestacion",
+        "otro"
+      ]
+    },
+    "riesgo": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "calidad_requerida": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "alta",
+        "critica"
+      ]
+    },
+    "capacity_level": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    "quota_scope": {
+      "type": "string",
+      "enum": [
+        "pool",
+        "account",
+        "home",
+        "model",
+        "provider",
+        "unknown"
+      ]
+    },
+    "phase_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "not": {
+        "$ref": "#/definitions/forbidden_string_patterns"
+      }
+    },
+    "versioned_policy_ref": {
+      "type": "string",
+      "minLength": 6,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*:v[0-9]+$",
+      "not": {
+        "$ref": "#/definitions/forbidden_string_patterns"
+      }
+    },
+    "opaque_ref": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "not": {
+        "$ref": "#/definitions/forbidden_string_patterns"
+      }
+    },
+    "safe_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 320,
+      "not": {
+        "$ref": "#/definitions/forbidden_text_patterns"
+      }
+    },
+    "forbidden_string_patterns": {
+      "anyOf": [
+        {
+          "pattern": "(^|[._:-])(openai|OpenAI|anthropic|Anthropic|google|Google|gemini|Gemini|claude|Claude|gpt|GPT|openrouter|OpenRouter|mistral|Mistral|deepseek|DeepSeek|ollama|Ollama|azure|Azure|bedrock|Bedrock|vertex|Vertex|groq|Groq|cohere|Cohere)([._:-]|$)"
+        },
+        {
+          "pattern": "(^|[._:-])(secret|Secret|password|Password|passwd|token|Token|api_key|apikey|APIKEY|bearer|Bearer)([._:-]|$)"
+        },
+        {
+          "pattern": "^(sk|ghp|xoxb|xoxa|xoxp|ya29)[A-Za-z0-9._:-]*"
+        },
+        {
+          "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+        }
+      ]
+    },
+    "forbidden_text_patterns": {
+      "anyOf": [
+        {
+          "pattern": "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+        },
+        {
+          "pattern": "(^|\\s)(/home/|/Users/|[A-Za-z]:\\\\|~|\\$HOME)"
+        },
+        {
+          "pattern": "(^|\\s)(sk-[A-Za-z0-9]|ghp_[A-Za-z0-9]|xox[baprs]-|ya29\\.)"
+        },
+        {
+          "pattern": "[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+"
+        },
+        {
+          "pattern": "(openai|OpenAI|anthropic|Anthropic|google|Google|gemini|Gemini|claude|Claude|gpt|GPT|openrouter|OpenRouter|mistral|Mistral|deepseek|DeepSeek|ollama|Ollama|azure|Azure|bedrock|Bedrock|vertex|Vertex|groq|Groq|cohere|Cohere)"
+        }
+      ]
+    }
+  }
+}

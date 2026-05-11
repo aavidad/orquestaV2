@@ -1,0 +1,79 @@
+{
+  "schema_version": "agent_home_collection.v0",
+  "homes": [
+    {
+      "schema_version": "agent_home.v0",
+      "logical_agent_ref": "logical-agent-ref-cap-a",
+      "home_ref": "home-ref-remote-a",
+      "pool_id": "pool-ref-remote-a",
+      "runtime_ref": "runtime-ref-api-a",
+      "provider_ref": "provider-ref-remote-a",
+      "account_ref": "account-ref-pro-a",
+      "credential_ref": "credential-ref-oauth-a",
+      "credential_kind": "oauth",
+      "account_kind": "pro",
+      "entitlement_kind": "pro",
+      "enabled": true,
+      "quota_state": "active",
+      "quota": {
+        "source": "real",
+        "freshness": "fresh",
+        "checked_at": "2026-05-04T08:20:00Z",
+        "scope": "home",
+        "window_kind": "primary",
+        "remaining_seconds": 7200,
+        "remaining_messages": 35,
+        "confidence": 1,
+        "raw_ref": "quota-ref-home-a"
+      },
+      "active_sessions": 1,
+      "reserved_sessions": 0,
+      "max_concurrent_sessions": 2,
+      "daily_limit_seconds": 21600,
+      "weekly_limit_seconds": 108000,
+      "usage_observed": {
+        "seconds": 1200,
+        "messages": 8,
+        "tokens": 4200
+      },
+      "last_checked_at": "2026-05-04T08:20:00Z"
+    },
+    {
+      "schema_version": "agent_home.v0",
+      "logical_agent_ref": "logical-agent-ref-cap-a",
+      "home_ref": "home-ref-remote-b",
+      "pool_id": "pool-ref-remote-a",
+      "runtime_ref": "runtime-ref-api-a",
+      "provider_ref": "provider-ref-remote-a",
+      "account_ref": "account-ref-premium-b",
+      "credential_ref": "credential-ref-oauth-b",
+      "credential_kind": "oauth",
+      "account_kind": "premium",
+      "entitlement_kind": "premium",
+      "enabled": true,
+      "quota_state": "limited",
+      "quota": {
+        "source": "estimated",
+        "freshness": "fresh",
+        "checked_at": "2026-05-04T08:22:00Z",
+        "scope": "account",
+        "window_kind": "daily",
+        "remaining_seconds": 3600,
+        "remaining_messages": 12,
+        "confidence": 0.8,
+        "raw_ref": "quota-ref-home-b"
+      },
+      "active_sessions": 0,
+      "reserved_sessions": 1,
+      "max_concurrent_sessions": 2,
+      "daily_limit_seconds": 21600,
+      "weekly_limit_seconds": 108000,
+      "usage_observed": {
+        "seconds": 3600,
+        "messages": 18,
+        "tokens": 9000
+      },
+      "last_checked_at": "2026-05-04T08:22:00Z"
+    }
+  ]
+}

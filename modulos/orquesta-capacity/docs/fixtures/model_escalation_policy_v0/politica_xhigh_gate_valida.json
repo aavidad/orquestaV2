@@ -1,0 +1,99 @@
+{
+  "schema_version": "model_escalation_policy.v0",
+  "policy_ref": "policy-capacity-xhigh-gate:v0",
+  "phase_rules": [
+    {
+      "rule_ref": "phase-architecture-xhigh-v0",
+      "perfil_tarea": "analisis",
+      "fase": "arquitectura",
+      "base_level": "medium",
+      "max_without_evidence": "high",
+      "allowed_levels": [
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "triggers": [
+        "riesgo_alto",
+        "ambiguedad_material",
+        "solicitud_humana"
+      ],
+      "rationale": "xhigh solo si gate aporta evidencia fresca"
+    }
+  ],
+  "risk_quality_rules": [
+    {
+      "rule_ref": "risk-critical-xhigh-v0",
+      "riesgo": "critical",
+      "calidad_requerida": "critica",
+      "adjustment": "allow_xhigh_with_gate",
+      "allowed_levels": [
+        "high",
+        "xhigh"
+      ],
+      "requires_evidence": true
+    }
+  ],
+  "evidence_rules": [
+    {
+      "rule_ref": "evidence-critical-fresh-v0",
+      "signal_kind": "failure",
+      "source": "real",
+      "freshness": "fresh",
+      "weight": "critical",
+      "effect": "raise",
+      "requires_summary": true,
+      "rationale": "fallo fresco critico puede abrir xhigh"
+    }
+  ],
+  "quota_rules": [
+    {
+      "rule_ref": "quota-real-fresh-xhigh-v0",
+      "source": "real",
+      "freshness": "fresh",
+      "scope": "home",
+      "effect": "allow",
+      "preferred_actions": [
+        "cambiar_home",
+        "cambiar_pool",
+        "handoff_preventivo"
+      ],
+      "rationale": "xhigh requiere cuota fresca del binding operativo"
+    }
+  ],
+  "locality_rules": [
+    {
+      "rule_ref": "locality-hybrid-xhigh-v0",
+      "locality": "hybrid",
+      "effect": "eligible",
+      "minimum_confidence": 0.7,
+      "minimum_samples": 2,
+      "requires_runtime_available": true,
+      "requires_quota_freshness": "fresh",
+      "rationale": "hibrido compara local probado y remoto con cuota"
+    }
+  ],
+  "xhigh_gate": {
+    "allowed": true,
+    "required_risk": [
+      "critical"
+    ],
+    "required_evidence_freshness": "fresh",
+    "accepted_justifications": [
+      "fallo_fresco",
+      "riesgo_critico",
+      "arquitectura_critica",
+      "solicitud_humana_justificada"
+    ],
+    "minimum_evidence_count": 2,
+    "human_override_allowed": true,
+    "outcome_without_gate": "degrade_to_high"
+  },
+  "degradation_order": [
+    "bajar_effort",
+    "cambiar_modelo",
+    "cambiar_home",
+    "cambiar_pool",
+    "handoff_preventivo"
+  ]
+}

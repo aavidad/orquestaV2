@@ -1,0 +1,105 @@
+{
+  "schema_version": "capacity_decision.v0",
+  "request": {
+    "task_ref": "task-cap-ct-011-provider-invalid",
+    "perfil_tarea": "revision",
+    "fase": "revision",
+    "riesgo": "medium",
+    "calidad_requerida": "alta",
+    "contexto_estimado": {
+      "status": "known",
+      "estimated_tokens": 4000
+    },
+    "restricciones": {
+      "local_only": false,
+      "remote_allowed": true,
+      "paid_allowed": true,
+      "requiere_handoff_preventivo": false,
+      "requiere_privacidad_alta": false
+    },
+    "evidencia": {
+      "quality_signals": [],
+      "benchmark_signals": [],
+      "telemetry_signals": [],
+      "quota_signals": [],
+      "failure_signals": [],
+      "human_signals": []
+    }
+  },
+  "response": {
+    "decision_id": "capdec-ct-011-provider-invalid",
+    "nivel_capacidad": "medium",
+    "reasoning_effort": "medium",
+    "pool": {
+      "pool_id": "pool-ref-remote-a",
+      "provider_kind": "remote",
+      "runtime_kind": "api",
+      "plan_kind": "paid",
+      "paid": true,
+      "active": true,
+      "total_slots": 2,
+      "reserved_slots": 0,
+      "allows_child_agents": false,
+      "allows_multi_model": true,
+      "allows_overcost": false,
+      "handoff_policy": "preventivo",
+      "telemetry_source": "real",
+      "credential_modes": [
+        "oauth"
+      ],
+      "quota_scope": "home",
+      "modelos": [
+        {
+          "model_ref": "gpt-5",
+          "enabled": true,
+          "priority": 1,
+          "relative_cost": 1,
+          "locality": "remote",
+          "execution_mode": "remote_api",
+          "enablement_source": "adapter_declared",
+          "supported_efforts": [
+            "medium"
+          ]
+        }
+      ]
+    },
+    "modelo": {
+      "model_ref": "gpt-5",
+      "enabled": true,
+      "priority": 1,
+      "relative_cost": 1,
+      "locality": "remote",
+      "execution_mode": "remote_api",
+      "enablement_source": "adapter_declared",
+      "supported_efforts": [
+        "medium"
+      ]
+    },
+    "home": {
+      "logical_agent_ref": "logical-agent-ref-a",
+      "home_ref": "home-ref-remote-a",
+      "pool_id": "pool-ref-remote-a",
+      "runtime_ref": "runtime-ref-api-a",
+      "provider_ref": "openai",
+      "account_ref": "account-ref-a",
+      "credential_ref": "credential-ref-a"
+    },
+    "cuota": {
+      "source": "real",
+      "freshness": "fresh",
+      "scope": "home",
+      "window_kind": "primary",
+      "remaining_seconds": 3600
+    },
+    "politica_escalado": "policy-capacity-default:v0",
+    "handoff": "none",
+    "motivos": [
+      "fixture invalido por proveedor y modelo hardcodeados"
+    ],
+    "alternativas": [],
+    "degradacion": {
+      "action": "none",
+      "reason": "debe usar referencias opacas"
+    }
+  }
+}

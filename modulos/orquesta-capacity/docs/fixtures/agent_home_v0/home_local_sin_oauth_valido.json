@@ -1,0 +1,32 @@
+{
+  "schema_version": "agent_home.v0",
+  "logical_agent_ref": "logical-agent-ref-local-a",
+  "home_ref": "home-ref-local-a",
+  "pool_id": "pool-ref-local-a",
+  "runtime_ref": "runtime-ref-local-a",
+  "provider_ref": "provider-ref-local-a",
+  "account_ref": "account-ref-local-a",
+  "credential_kind": "local_runtime",
+  "account_kind": "local",
+  "entitlement_kind": "local",
+  "enabled": true,
+  "quota_state": "active",
+  "quota": {
+    "source": "manual",
+    "freshness": "fresh",
+    "checked_at": "2026-05-04T08:30:00Z",
+    "scope": "model",
+    "window_kind": "unknown",
+    "confidence": 0.7,
+    "raw_ref": "quota-ref-local-a"
+  },
+  "active_sessions": 0,
+  "reserved_sessions": 0,
+  "max_concurrent_sessions": 1,
+  "usage_observed": {
+    "seconds": 0,
+    "messages": 0,
+    "tokens": 0
+  },
+  "last_checked_at": "2026-05-04T08:30:00Z"
+}

@@ -1,0 +1,116 @@
+{
+  "schema_version": "model_escalation_policy.v0",
+  "policy_ref": "policy-capacity-degrade:v0",
+  "phase_rules": [
+    {
+      "rule_ref": "phase-handoff-degrade-v0",
+      "perfil_tarea": "handoff",
+      "fase": "orquestacion",
+      "base_level": "medium",
+      "max_without_evidence": "high",
+      "allowed_levels": [
+        "medium",
+        "high"
+      ],
+      "triggers": [
+        "ventana_insuficiente",
+        "impacto_contractual"
+      ],
+      "rationale": "handoff escala por perdida probable de contexto"
+    }
+  ],
+  "risk_quality_rules": [
+    {
+      "rule_ref": "risk-high-alta-degrade-v0",
+      "riesgo": "high",
+      "calidad_requerida": "alta",
+      "adjustment": "raise_one",
+      "allowed_levels": [
+        "medium",
+        "high"
+      ],
+      "requires_evidence": true
+    }
+  ],
+  "evidence_rules": [
+    {
+      "rule_ref": "evidence-quota-obsolete-v0",
+      "signal_kind": "quota",
+      "source": "real",
+      "freshness": "obsolete",
+      "weight": "high",
+      "effect": "require_handoff",
+      "requires_summary": true,
+      "rationale": "cuota obsoleta bloquea escalado preferido"
+    }
+  ],
+  "quota_rules": [
+    {
+      "rule_ref": "quota-obsolete-home-v0",
+      "source": "real",
+      "freshness": "obsolete",
+      "scope": "home",
+      "effect": "require_handoff",
+      "preferred_actions": [
+        "handoff_preventivo",
+        "cambiar_home",
+        "bajar_effort"
+      ],
+      "rationale": "home con cuota obsoleta no autoriza high"
+    },
+    {
+      "rule_ref": "quota-unavailable-model-v0",
+      "source": "unavailable",
+      "freshness": "unknown",
+      "scope": "model",
+      "effect": "block_escalation",
+      "preferred_actions": [
+        "cambiar_modelo",
+        "cambiar_pool"
+      ],
+      "rationale": "modelo sin cuota observable requiere alternativa"
+    }
+  ],
+  "locality_rules": [
+    {
+      "rule_ref": "locality-local-low-score-v0",
+      "locality": "local",
+      "effect": "blocked",
+      "minimum_confidence": 0.6,
+      "minimum_samples": 1,
+      "requires_runtime_available": true,
+      "requires_quota_freshness": "not_applicable",
+      "rationale": "local se bloquea sin score probado"
+    },
+    {
+      "rule_ref": "locality-remote-fallback-v0",
+      "locality": "remote",
+      "effect": "eligible",
+      "requires_runtime_available": true,
+      "requires_quota_freshness": "fresh_or_stale",
+      "rationale": "remoto es alternativa si privacidad lo permite"
+    }
+  ],
+  "xhigh_gate": {
+    "allowed": true,
+    "required_risk": [
+      "critical"
+    ],
+    "required_evidence_freshness": "fresh",
+    "accepted_justifications": [
+      "riesgo_critico",
+      "revision_bloqueada"
+    ],
+    "minimum_evidence_count": 2,
+    "human_override_allowed": true,
+    "outcome_without_gate": "degrade_to_high"
+  },
+  "degradation_order": [
+    "bajar_effort",
+    "cambiar_modelo",
+    "cambiar_home",
+    "cambiar_pool",
+    "handoff_preventivo",
+    "bloquear"
+  ]
+}

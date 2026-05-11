@@ -1,0 +1,112 @@
+{
+  "schema_version": "model_escalation_policy.v0",
+  "policy_ref": "policy-capacity-base:v0",
+  "phase_rules": [
+    {
+      "rule_ref": "phase-discovery-v0",
+      "perfil_tarea": "analisis",
+      "fase": "discovery",
+      "base_level": "medium",
+      "max_without_evidence": "medium",
+      "allowed_levels": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "triggers": [
+        "ambiguedad_material",
+        "riesgo_alto"
+      ],
+      "rationale": "base por fase sin asignar modelo fijo"
+    },
+    {
+      "rule_ref": "phase-script-v0",
+      "perfil_tarea": "script",
+      "fase": "ejecucion",
+      "base_level": "low",
+      "max_without_evidence": "medium",
+      "allowed_levels": [
+        "low",
+        "medium"
+      ],
+      "triggers": [
+        "ventana_insuficiente"
+      ],
+      "rationale": "script mecanico empieza bajo y escala solo con senales"
+    }
+  ],
+  "risk_quality_rules": [
+    {
+      "rule_ref": "risk-medium-alta-v0",
+      "riesgo": "medium",
+      "calidad_requerida": "alta",
+      "adjustment": "keep",
+      "allowed_levels": [
+        "medium",
+        "high"
+      ],
+      "requires_evidence": false
+    }
+  ],
+  "evidence_rules": [
+    {
+      "rule_ref": "evidence-quality-fresh-v0",
+      "signal_kind": "quality",
+      "source": "real",
+      "freshness": "fresh",
+      "weight": "high",
+      "effect": "raise",
+      "requires_summary": true,
+      "rationale": "senal fresca de calidad puede subir capacidad"
+    }
+  ],
+  "quota_rules": [
+    {
+      "rule_ref": "quota-fresh-home-v0",
+      "source": "real",
+      "freshness": "fresh",
+      "scope": "home",
+      "effect": "allow",
+      "preferred_actions": [
+        "cambiar_home",
+        "cambiar_pool"
+      ],
+      "rationale": "cuota fresca de home permite decidir sin inventar limite"
+    }
+  ],
+  "locality_rules": [
+    {
+      "rule_ref": "locality-local-proven-v0",
+      "locality": "local",
+      "effect": "eligible",
+      "minimum_confidence": 0.6,
+      "minimum_samples": 1,
+      "requires_runtime_available": true,
+      "requires_quota_freshness": "not_applicable",
+      "rationale": "local solo participa con score probado"
+    }
+  ],
+  "xhigh_gate": {
+    "allowed": true,
+    "required_risk": [
+      "high",
+      "critical"
+    ],
+    "required_evidence_freshness": "fresh",
+    "accepted_justifications": [
+      "fallo_fresco",
+      "riesgo_critico",
+      "ambiguedad_material"
+    ],
+    "minimum_evidence_count": 1,
+    "human_override_allowed": true,
+    "outcome_without_gate": "degrade_to_high"
+  },
+  "degradation_order": [
+    "bajar_effort",
+    "cambiar_modelo",
+    "cambiar_home",
+    "cambiar_pool",
+    "handoff_preventivo"
+  ]
+}

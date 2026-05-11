@@ -1,0 +1,19 @@
+{
+  "schema_version": "agent_home.v0",
+  "logical_agent_ref": "logical-agent-ref-cap-g",
+  "home_ref": "home-ref-remote-hardcoded",
+  "pool_id": "pool-ref-remote-a",
+  "runtime_ref": "runtime-ref-api-a",
+  "provider_ref": "openai",
+  "account_ref": "account-ref-pro-hardcoded",
+  "credential_ref": "credential-ref-oauth-hardcoded",
+  "credential_kind": "oauth",
+  "account_kind": "pro",
+  "entitlement_kind": "pro",
+  "enabled": true,
+  "quota_state": "active",
+  "active_sessions": 0,
+  "reserved_sessions": 0,
+  "max_concurrent_sessions": 2,
+  "last_checked_at": "2026-05-04T08:55:00Z"
+}

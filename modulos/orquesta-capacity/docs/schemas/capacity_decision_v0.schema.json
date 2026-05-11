@@ -1,0 +1,1126 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://orquesta.local/orquesta-capacity/schemas/capacity_decision_v0.schema.json",
+  "title": "CapacityDecisionV0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request",
+    "response"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "capacity_decision.v0"
+    },
+    "request": {
+      "$ref": "#/definitions/capacity_request"
+    },
+    "response": {
+      "$ref": "#/definitions/capacity_response"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "response": {
+            "properties": {
+              "nivel_capacidad": {
+                "const": "xhigh"
+              }
+            },
+            "required": [
+              "nivel_capacidad"
+            ]
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "then": {
+        "properties": {
+          "request": {
+            "properties": {
+              "riesgo": {
+                "enum": [
+                  "high",
+                  "critical"
+                ]
+              },
+              "evidencia": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "failure_signals": {
+                        "contains": {
+                          "$ref": "#/definitions/fresh_escalation_signal"
+                        }
+                      }
+                    },
+                    "required": [
+                      "failure_signals"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "quality_signals": {
+                        "contains": {
+                          "$ref": "#/definitions/fresh_escalation_signal"
+                        }
+                      }
+                    },
+                    "required": [
+                      "quality_signals"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "human_signals": {
+                        "contains": {
+                          "$ref": "#/definitions/fresh_escalation_signal"
+                        }
+                      }
+                    },
+                    "required": [
+                      "human_signals"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "riesgo",
+              "evidencia"
+            ]
+          }
+        },
+        "required": [
+          "request"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "response": {
+            "properties": {
+              "cuota": {
+                "properties": {
+                  "freshness": {
+                    "const": "obsolete"
+                  }
+                },
+                "required": [
+                  "freshness"
+                ]
+              }
+            },
+            "required": [
+              "cuota"
+            ]
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "then": {
+        "properties": {
+          "response": {
+            "properties": {
+              "nivel_capacidad": {
+                "enum": [
+                  "low",
+                  "medium"
+                ]
+              },
+              "handoff": {
+                "enum": [
+                  "preventivo",
+                  "requerido"
+                ]
+              },
+              "degradacion": {
+                "properties": {
+                  "action": {
+                    "enum": [
+                      "bajar_nivel",
+                      "cambiar_modelo",
+                      "cambiar_home",
+                      "cambiar_pool",
+                      "handoff_preventivo"
+                    ]
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              }
+            },
+            "required": [
+              "nivel_capacidad",
+              "handoff",
+              "degradacion"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "capacity_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_ref",
+        "perfil_tarea",
+        "riesgo",
+        "calidad_requerida",
+        "contexto_estimado",
+        "restricciones",
+        "evidencia"
+      ],
+      "properties": {
+        "task_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "perfil_tarea": {
+          "$ref": "#/definitions/perfil_tarea"
+        },
+        "fase": {
+          "$ref": "#/definitions/phase_ref"
+        },
+        "riesgo": {
+          "$ref": "#/definitions/riesgo"
+        },
+        "calidad_requerida": {
+          "$ref": "#/definitions/calidad_requerida"
+        },
+        "contexto_estimado": {
+          "$ref": "#/definitions/contexto_estimado"
+        },
+        "restricciones": {
+          "$ref": "#/definitions/restricciones"
+        },
+        "evidencia": {
+          "$ref": "#/definitions/evidence_bundle"
+        }
+      }
+    },
+    "capacity_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision_id",
+        "nivel_capacidad",
+        "reasoning_effort",
+        "pool",
+        "modelo",
+        "cuota",
+        "politica_escalado",
+        "handoff",
+        "motivos",
+        "alternativas",
+        "degradacion"
+      ],
+      "properties": {
+        "decision_id": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "nivel_capacidad": {
+          "$ref": "#/definitions/capacity_level"
+        },
+        "reasoning_effort": {
+          "$ref": "#/definitions/reasoning_effort"
+        },
+        "pool": {
+          "$ref": "#/definitions/pool_capacidad"
+        },
+        "modelo": {
+          "$ref": "#/definitions/model_capacity_ref"
+        },
+        "home": {
+          "$ref": "#/definitions/agent_home_summary"
+        },
+        "cuota": {
+          "$ref": "#/definitions/quota_snapshot"
+        },
+        "politica_escalado": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "handoff": {
+          "type": "string",
+          "enum": [
+            "none",
+            "preventivo",
+            "requerido",
+            "bloqueado"
+          ]
+        },
+        "motivos": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/definitions/safe_text"
+          },
+          "uniqueItems": true
+        },
+        "alternativas": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/definitions/capacity_alternative"
+          }
+        },
+        "degradacion": {
+          "$ref": "#/definitions/degradacion"
+        }
+      }
+    },
+    "pool_capacidad": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pool_id",
+        "provider_kind",
+        "runtime_kind",
+        "plan_kind",
+        "paid",
+        "active",
+        "total_slots",
+        "reserved_slots",
+        "allows_child_agents",
+        "allows_multi_model",
+        "allows_overcost",
+        "handoff_policy",
+        "telemetry_source",
+        "credential_modes",
+        "quota_scope",
+        "modelos"
+      ],
+      "properties": {
+        "pool_id": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "provider_kind": {
+          "type": "string",
+          "enum": [
+            "remote",
+            "local",
+            "hybrid"
+          ]
+        },
+        "runtime_kind": {
+          "type": "string",
+          "enum": [
+            "cli",
+            "api",
+            "local_runtime",
+            "browser",
+            "mobile_runtime",
+            "otro"
+          ]
+        },
+        "plan_kind": {
+          "type": "string",
+          "enum": [
+            "free",
+            "paid",
+            "enterprise",
+            "local",
+            "unknown"
+          ]
+        },
+        "paid": {
+          "type": "boolean"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "total_slots": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "reserved_slots": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "allows_child_agents": {
+          "type": "boolean"
+        },
+        "allows_multi_model": {
+          "type": "boolean"
+        },
+        "allows_overcost": {
+          "type": "boolean"
+        },
+        "handoff_policy": {
+          "type": "string",
+          "enum": [
+            "preventivo",
+            "estricto",
+            "manual",
+            "none"
+          ]
+        },
+        "telemetry_source": {
+          "type": "string",
+          "enum": [
+            "real",
+            "estimated",
+            "manual",
+            "unavailable"
+          ]
+        },
+        "credential_modes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "oauth",
+              "api_key",
+              "browser_session",
+              "local_runtime",
+              "none",
+              "unknown"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "quota_scope": {
+          "$ref": "#/definitions/quota_scope"
+        },
+        "modelos": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/definitions/model_capacity_ref"
+          }
+        }
+      }
+    },
+    "model_capacity_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_ref",
+        "enabled",
+        "priority",
+        "relative_cost",
+        "locality",
+        "execution_mode",
+        "enablement_source"
+      ],
+      "properties": {
+        "model_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "relative_cost": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100
+        },
+        "locality": {
+          "type": "string",
+          "enum": [
+            "remote",
+            "local",
+            "unknown"
+          ]
+        },
+        "known_limits": {
+          "$ref": "#/definitions/known_limits"
+        },
+        "execution_mode": {
+          "type": "string",
+          "enum": [
+            "remote_api",
+            "remote_cli",
+            "local_process",
+            "local_service",
+            "browser",
+            "unknown"
+          ]
+        },
+        "enablement_source": {
+          "type": "string",
+          "enum": [
+            "benchmark",
+            "observed_score",
+            "manual_candidate",
+            "adapter_declared",
+            "unknown"
+          ]
+        },
+        "supported_efforts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/reasoning_effort"
+          },
+          "uniqueItems": true
+        },
+        "score": {
+          "$ref": "#/definitions/model_evidence_score"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "locality": {
+                "const": "local"
+              }
+            },
+            "required": [
+              "locality"
+            ]
+          },
+          "then": {
+            "required": [
+              "score"
+            ],
+            "properties": {
+              "enablement_source": {
+                "enum": [
+                  "benchmark",
+                  "observed_score"
+                ]
+              },
+              "score": {
+                "$ref": "#/definitions/proven_model_evidence_score"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "agent_home_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "logical_agent_ref",
+        "home_ref",
+        "pool_id",
+        "runtime_ref",
+        "provider_ref",
+        "account_ref"
+      ],
+      "properties": {
+        "logical_agent_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "home_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "pool_id": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "runtime_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "provider_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "account_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "credential_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        }
+      }
+    },
+    "quota_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "freshness",
+        "scope",
+        "window_kind"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": [
+            "real",
+            "estimated",
+            "manual",
+            "unavailable"
+          ]
+        },
+        "freshness": {
+          "type": "string",
+          "enum": [
+            "fresh",
+            "stale",
+            "obsolete",
+            "unknown"
+          ]
+        },
+        "checked_at": {
+          "$ref": "#/definitions/utc_instant"
+        },
+        "scope": {
+          "$ref": "#/definitions/quota_scope"
+        },
+        "window_kind": {
+          "type": "string",
+          "enum": [
+            "primary",
+            "short",
+            "daily",
+            "weekly",
+            "provider",
+            "unknown"
+          ]
+        },
+        "reset_at": {
+          "$ref": "#/definitions/utc_instant"
+        },
+        "remaining_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "remaining_messages": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "remaining_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "remaining_credits": {
+          "type": "number",
+          "minimum": 0
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "raw_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        }
+      }
+    },
+    "model_evidence_score": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "materia",
+        "score_base",
+        "score_observado",
+        "score_total",
+        "confianza",
+        "muestras",
+        "benchmarks"
+      ],
+      "properties": {
+        "materia": {
+          "type": "string",
+          "enum": [
+            "codigo",
+            "documentacion",
+            "analisis",
+            "revision",
+            "otro"
+          ]
+        },
+        "score_base": {
+          "type": "number"
+        },
+        "score_observado": {
+          "type": "number"
+        },
+        "score_total": {
+          "type": "number"
+        },
+        "confianza": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "muestras": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "benchmarks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_observed_at": {
+          "$ref": "#/definitions/utc_instant"
+        }
+      }
+    },
+    "proven_model_evidence_score": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/model_evidence_score"
+        },
+        {
+          "properties": {
+            "confianza": {
+              "type": "number",
+              "minimum": 0.6,
+              "maximum": 1
+            }
+          },
+          "anyOf": [
+            {
+              "properties": {
+                "muestras": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "muestras"
+              ]
+            },
+            {
+              "properties": {
+                "benchmarks": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "benchmarks"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "known_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "messages": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "credits": {
+          "type": "number",
+          "minimum": 0
+        },
+        "window": {
+          "type": "string",
+          "enum": [
+            "primary",
+            "short",
+            "daily",
+            "weekly",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "capacity_alternative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "priority",
+        "pool_id",
+        "model_ref",
+        "relative_cost",
+        "availability",
+        "reason"
+      ],
+      "properties": {
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "pool_id": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "model_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "relative_cost": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100
+        },
+        "availability": {
+          "type": "string",
+          "enum": [
+            "available",
+            "limited",
+            "blocked",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "$ref": "#/definitions/safe_text"
+        }
+      }
+    },
+    "degradacion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "reason"
+      ],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "none",
+            "bajar_nivel",
+            "cambiar_modelo",
+            "cambiar_home",
+            "cambiar_pool",
+            "handoff_preventivo",
+            "bloqueado"
+          ]
+        },
+        "target_level": {
+          "$ref": "#/definitions/capacity_level"
+        },
+        "target_pool_id": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "target_model_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "reason": {
+          "$ref": "#/definitions/safe_text"
+        }
+      }
+    },
+    "contexto_estimado": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "known",
+            "unknown"
+          ]
+        },
+        "estimated_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "estimated_messages": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "estimated_seconds": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "restricciones": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "local_only",
+        "remote_allowed",
+        "paid_allowed",
+        "requiere_handoff_preventivo",
+        "requiere_privacidad_alta"
+      ],
+      "properties": {
+        "local_only": {
+          "type": "boolean"
+        },
+        "remote_allowed": {
+          "type": "boolean"
+        },
+        "paid_allowed": {
+          "type": "boolean"
+        },
+        "max_coste_relativo": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100
+        },
+        "requiere_handoff_preventivo": {
+          "type": "boolean"
+        },
+        "requiere_privacidad_alta": {
+          "type": "boolean"
+        }
+      }
+    },
+    "evidence_bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "quality_signals",
+        "benchmark_signals",
+        "telemetry_signals",
+        "quota_signals",
+        "failure_signals",
+        "human_signals"
+      ],
+      "properties": {
+        "quality_signals": {
+          "$ref": "#/definitions/evidence_signal_array"
+        },
+        "benchmark_signals": {
+          "$ref": "#/definitions/evidence_signal_array"
+        },
+        "telemetry_signals": {
+          "$ref": "#/definitions/evidence_signal_array"
+        },
+        "quota_signals": {
+          "$ref": "#/definitions/evidence_signal_array"
+        },
+        "failure_signals": {
+          "$ref": "#/definitions/evidence_signal_array"
+        },
+        "human_signals": {
+          "$ref": "#/definitions/evidence_signal_array"
+        }
+      }
+    },
+    "evidence_signal_array": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "$ref": "#/definitions/evidence_signal"
+      }
+    },
+    "evidence_signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "signal_ref",
+        "kind",
+        "source",
+        "freshness",
+        "weight"
+      ],
+      "properties": {
+        "signal_ref": {
+          "$ref": "#/definitions/opaque_ref"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "quality",
+            "benchmark",
+            "telemetry",
+            "quota",
+            "failure",
+            "human"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "real",
+            "estimated",
+            "manual",
+            "adapter",
+            "benchmark",
+            "observed_score",
+            "human",
+            "unavailable"
+          ]
+        },
+        "freshness": {
+          "type": "string",
+          "enum": [
+            "fresh",
+            "stale",
+            "obsolete",
+            "unknown"
+          ]
+        },
+        "weight": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "summary": {
+          "$ref": "#/definitions/safe_text"
+        }
+      }
+    },
+    "fresh_escalation_signal": {
+      "type": "object",
+      "properties": {
+        "freshness": {
+          "const": "fresh"
+        },
+        "weight": {
+          "enum": [
+            "high",
+            "critical"
+          ]
+        }
+      },
+      "required": [
+        "freshness",
+        "weight"
+      ]
+    },
+    "perfil_tarea": {
+      "type": "string",
+      "enum": [
+        "analisis",
+        "implementacion",
+        "revision",
+        "documentacion",
+        "script",
+        "handoff",
+        "orquestacion",
+        "otro"
+      ]
+    },
+    "riesgo": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "calidad_requerida": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "alta",
+        "critica"
+      ]
+    },
+    "capacity_level": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    "reasoning_effort": {
+      "type": "string",
+      "enum": [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    "quota_scope": {
+      "type": "string",
+      "enum": [
+        "pool",
+        "account",
+        "home",
+        "model",
+        "provider",
+        "task",
+        "unknown"
+      ]
+    },
+    "phase_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "not": {
+        "$ref": "#/definitions/forbidden_string_patterns"
+      }
+    },
+    "opaque_ref": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "not": {
+        "$ref": "#/definitions/forbidden_string_patterns"
+      }
+    },
+    "safe_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 320,
+      "not": {
+        "$ref": "#/definitions/forbidden_text_patterns"
+      }
+    },
+    "utc_instant": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "forbidden_string_patterns": {
+      "anyOf": [
+        {
+          "pattern": "(^|[._:-])(openai|OpenAI|anthropic|Anthropic|google|Google|gemini|Gemini|claude|Claude|gpt|GPT|openrouter|OpenRouter|mistral|Mistral|deepseek|DeepSeek|ollama|Ollama|azure|Azure|bedrock|Bedrock|vertex|Vertex|groq|Groq|cohere|Cohere)([._:-]|$)"
+        },
+        {
+          "pattern": "(^|[._:-])(secret|Secret|password|Password|passwd|token|Token|api_key|apikey|APIKEY|bearer|Bearer)([._:-]|$)"
+        },
+        {
+          "pattern": "^(sk|ghp|xoxb|xoxa|xoxp|ya29)[A-Za-z0-9._:-]*"
+        },
+        {
+          "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+        }
+      ]
+    },
+    "forbidden_text_patterns": {
+      "anyOf": [
+        {
+          "pattern": "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+        },
+        {
+          "pattern": "(^|\\s)(/home/|/Users/|[A-Za-z]:\\\\|~|\\$HOME)"
+        },
+        {
+          "pattern": "(^|\\s)(sk-[A-Za-z0-9]|ghp_[A-Za-z0-9]|xox[baprs]-|ya29\\.)"
+        },
+        {
+          "pattern": "[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+"
+        },
+        {
+          "pattern": "(openai|OpenAI|anthropic|Anthropic|google|Google|gemini|Gemini|claude|Claude|gpt|GPT|openrouter|OpenRouter|mistral|Mistral|deepseek|DeepSeek|ollama|Ollama|azure|Azure|bedrock|Bedrock|vertex|Vertex|groq|Groq|cohere|Cohere)"
+        }
+      ]
+    }
+  }
+}
