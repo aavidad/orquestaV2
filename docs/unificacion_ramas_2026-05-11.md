@@ -146,6 +146,21 @@ Notas: Governance publica catalogos; no ejecuta tareas, no decide runtime y no
 asigna permisos operativos.
 ```
 
+```text
+Fecha: 2026-05-11
+Origen: reinicio-orquesta-v2-2026-05-04
+Destino: master
+Modulo: modulos/orquesta-cli
+Decision: Extraer la CLI como cliente secundario fino.
+Motivo: Aporta clientes REST versionados para contratos publicos sin fallback
+local, sin DB, sin runtime directo y sin logica de negocio en CLI.
+Validacion:
+  - go test -count=1 ./modulos/orquesta-cli
+  - git diff --check
+Notas: CLI sigue siendo secundario frente a API/MCP/Web. Las rutas concretas
+quedan aisladas en adaptadores REST locales.
+```
+
 ## Validacion
 
 Comando ejecutado:
