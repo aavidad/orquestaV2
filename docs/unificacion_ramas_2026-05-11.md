@@ -35,7 +35,7 @@ Solo se integra codigo que cumpla estas condiciones:
 | `orq-orquesta-codex2` | 1 commit unico sobre merge aislado de worktrees | Archivada como tag y eliminada como rama. La capacidad ya esta en `gitoperaciones`. |
 | `orq-orquestador-codex11` | 1 commit unico sobre token_count de Codex | Archivada como tag y eliminada como rama. La capacidad ya esta en `internal/controlruntime`. |
 | `orq-orquestador-codex1-t20` | 4 commits unicos, cockpit/API/pipeline sobre `cmd` y `db` | Archivada como tag y eliminada como rama. Sus ideas de estadisticas deben reimplementarse como puertos/modulos. |
-| `reinicio-orquesta-v2-2026-05-04` | 145 commits unicos, muchos modulos/documentacion V2 | Mantener como fuente temporal de extraccion controlada. No hacer merge completo por conflictos de ficheros anadidos en ambos lados. |
+| `reinicio-orquesta-v2-2026-05-04` | 145 commits unicos, muchos modulos/documentacion V2 | Archivada como tag tras extraer los modulos utiles. No fusionar completa. |
 
 ## Tags de archivo
 
@@ -46,6 +46,7 @@ Tags subidos a `origin` para conservar el historico exacto de ramas eliminadas:
 - `archive/branches/2026-05-11/orq-orquesta-codex2`
 - `archive/branches/2026-05-11/orq-orquestador-codex1-t20`
 - `archive/branches/2026-05-11/orq-orquestador-codex11`
+- `archive/branches/2026-05-11/reinicio-orquesta-v2`
 
 ## Capacidades ya retenidas
 
@@ -179,7 +180,7 @@ Resultado:
 
 Acciones recomendadas:
 
-1. Revisar `reinicio-orquesta-v2-2026-05-04` por modulos, no por merge completo.
-2. Extraer solo capacidades V2 que no existan ya en `master`.
-3. Cuando termine esa extraccion, archivar tambien `reinicio-orquesta-v2-2026-05-04` como tag y eliminar la rama/worktree.
-4. No restaurar `backup/*`, `berserk/*` ni ramas `orq-*` por merge completo; si se reutiliza algo, se porta por microtarea con test.
+1. Mantener `master` como unica rama viva de trabajo.
+2. No restaurar `backup/*`, `berserk/*`, `orq-*` ni `reinicio-orquesta-v2-*` por merge completo.
+3. Si se reutiliza algo archivado, se porta por microtarea con test y commit pequeno.
+4. Los tags `archive/branches/2026-05-11/*` quedan solo como referencia historica.
