@@ -14,8 +14,8 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorsupervisedburst "orquesta/modulos/orquesta-director-supervised-burst"
 	orquestafactory "orquesta/modulos/orquesta-factory"
-	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 )
 
 func TestMCPArrancarDirectorAppToolExecutorV0UsaServicioCanonico(t *testing.T) {

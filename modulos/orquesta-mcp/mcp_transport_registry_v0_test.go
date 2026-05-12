@@ -36,6 +36,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		MCPDirectorStatsToolNameV0,
 		MCPPrepararOrquestacionAppToolNameV0,
 		MCPEjecutarOrquestacionAppToolNameV0,
+		MCPAutoprogrammingValidateRequestToolNameV0,
 		MCPBootstrapToolNameV0,
 		MCPCoreWorkflowCommandToolNameV0,
 		MCPRunControlToolNameV0,

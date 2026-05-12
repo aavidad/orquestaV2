@@ -1,0 +1,34 @@
+# Contratos
+
+## STF-001: StoreV0
+
+`StoreV0` implementa los puertos de estado que hoy pueden montarse en memoria:
+
+- `RunStorePortV0`
+- `EventSinkPortV0`
+- `WorkflowTaskStorePortV0`
+- `WorkflowTaskWriterPortV0`
+- `AgentProcessRegistryPortV0`
+
+## STF-002: FileOutboxLedgerV0
+
+El subpaquete `outbox` implementa:
+
+- `DirectorCycleOutboxLedgerPortV0`
+- `PendingOutboxReaderPortV0`
+- `OutboxDispatchClaimerPortV0`
+- `OutboxDispatchAckPortV0`
+
+Mantiene pending, claim y ack en JSON atomico. Es un conector independiente del
+store de runs/tareas para evitar mezclar responsabilidades.
+
+## Persistencia
+
+- `runs/`: un documento por `run_id`.
+- `events/`: un documento por `run_id`.
+- `workflow_tasks/`: un documento por `run_id + task_id`.
+- `agent_processes/`: un documento por `run_id + agent_request_id`.
+- `outbox_ledger_v0.json`: ledger durable del subpaquete `outbox`.
+
+Los nombres de fichero derivan de hashes de refs normalizadas para que refs
+opacas no se conviertan en rutas.

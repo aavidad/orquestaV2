@@ -18,3 +18,12 @@ El daemon no contiene logica del nucleo de orquestacion. Solo llama a un puerto
 `RunGlobalSupervisorV0` con una orden acotada. El stack concreto decide que
 runs drenar.
 
+## SRV-004: estado operativo durable por conectores
+
+El statefile del proceso no basta para autoprogramacion larga. Runs, eventos,
+outbox, tareas, cambios solicitados, cola, control y registro de procesos deben
+entrar por puertos persistentes reemplazables.
+
+La implementacion local inicial puede ser file-based con JSON atomico. No se
+autoriza acoplar el servidor a SQLite, Postgres ni otra base concreta. Si en el
+futuro se usa una base de datos, sera otro conector con los mismos contratos.

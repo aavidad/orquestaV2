@@ -18,3 +18,20 @@ Crear bucle de supervision acotado y testeado.
 Crear comando fino que arranque `run`, `start`, `status` y `stop` sin meter
 logica del nucleo en `cmd`.
 
+## SRV-TASK-004: cablear estado durable
+
+Objetivo: el servidor residente debe arrancar con conectores persistentes para
+estado operativo, de forma que una ejecucion de autoprogramacion pueda
+reanudarse tras corte o reinicio.
+
+Write-set previsto:
+
+- `cmd/orquesta-server/stack.go`
+- modulo adaptador file-based bajo `modulos/`
+- tests de arranque/recreacion de stores
+
+Validacion:
+
+- los stores recuperan estado al recrear instancia;
+- `go test -count=1 ./...`;
+- ninguna dependencia de DB concreta queda en el servidor.

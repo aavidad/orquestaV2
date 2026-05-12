@@ -878,3 +878,90 @@ Pruebas de contrato:
   - `set_priority` delega en writer fake.
   - Transporte queda opt-in sin binding.
 ```
+
+## Contrato minimo para mejorar una app existente
+
+Orquesta acepta hoy dos entradas complementarias para pedir mejoras sobre una
+app existente sin acoplar MCP/API a una implementacion concreta:
+
+1. `AppSpecRequestV0` con `request_kind=modificar_app_existente` por el tool
+   `orquesta.apps.arrancar_director.v0` o el bridge `POST /api/v0/apps/director`.
+   Sirve para abrir un run de director sobre una app ya existente. El payload
+   debe describir objetivo, tipo de app, alcance y restricciones; no debe
+   incluir DB, runtime, proveedor, modelo, rutas HOME ni credenciales concretas.
+2. `AutoprogrammingRequestV0` por el tool
+   `orquesta.autoprogramming.validate_request.v0`. Sirve como preflight de
+   alcance antes de pedir que Orquesta se modifique a si misma o a otro repo.
+   El tool solo valida el contrato del core; no ejecuta agentes, tests, VCS,
+   comandos ni cambios en disco.
+
+Payload minimo recomendado para mejorar este repo:
+
+```json
+{
+  "request_id": "request-ref-autoprogramming-orquesta-001",
+  "correlation_id": "corr-autoprogramming-orquesta-001",
+  "autoprogramming_request": {
+    "request_ref": "request-ref-autoprogramming-orquesta-001",
+    "project_ref": "project-ref-orquesta",
+    "worktree_ref": "worktree-ref-orquesta-aislada-001",
+    "worktree_isolated": true,
+    "branch_ref": "branch-ref-autoprogramming-orquesta-001",
+    "tasks": [
+      {
+        "task_ref": "task-ref-mcp-autoprogramming-001",
+        "area": "orquesta-mcp"
+      }
+    ],
+    "write_set": [
+      "modulos/orquesta-mcp/autoprogramming_validate_request_tool_v0.go",
+      "modulos/orquesta-mcp/autoprogramming_validate_request_tool_v0_test.go",
+      "modulos/orquesta-mcp/docs/contratos.md"
+    ],
+    "required_tests": [
+      "go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-orchestration-core"
+    ]
+  }
+}
+```
+
+Reglas minimas:
+
+- `project_ref`, `worktree_ref` y `branch_ref` son referencias opacas.
+- `worktree_isolated=true` es obligatorio.
+- `tasks` se agrupa por area y queda limitado por defecto a 3 tareas y 2 areas.
+- `write_set` debe ser relativo, pequeno y sin `..`; por defecto maximo 5 entradas.
+- `required_tests` es obligatorio; la ejecucion real pertenece a un adaptador externo.
+
+```text
+Nombre: mcp.tool.orquesta.autoprogramming.validate_request.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: cliente IA MCP, director futuro y operador
+Campos:
+  descriptor:
+    name: orquesta.autoprogramming.validate_request.v0
+    resource_uri: orquesta://contracts/autoprogramming-request/v0
+  input:
+    request_id, correlation_id: refs externas opcionales
+    autoprogramming_request: AutoprogrammingRequestV0
+  output_ok:
+    estado: ok
+    accepted: true
+    groups, write_set, required_tests: proyecciones compactas validadas
+  output_error:
+    estado: error
+    accepted: false
+    errores_publicos: issues del core como code, field y message
+Invariantes:
+  - Adaptador inbound fino.
+  - Delegacion unica en `ValidateAutoprogrammingRequestV0`.
+  - No crea run, no persiste, no ejecuta tests, no toca VCS ni disco.
+  - No elige implementacion de cambio, DB, runtime, proveedor ni modelo.
+Pruebas de contrato:
+  - Descriptor compacto y saneado.
+  - Executor acepta una solicitud aislada pequena.
+  - Executor devuelve issues publicos para branch/write-set invalidos.
+  - Registro MCP publica el tool y permite invocarlo sin puertos productivos.
+```

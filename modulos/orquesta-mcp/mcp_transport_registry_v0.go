@@ -157,6 +157,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 	stats := MCPDirectorStatsDescriptorV0()
 	preparar := MCPPrepararOrquestacionAppDescriptorV0()
 	ejecutar := MCPEjecutarOrquestacionAppDescriptorV0()
+	autoprogramming := MCPAutoprogrammingValidateRequestDescriptorV0()
 	bootstrap := MCPBootstrapToolDescriptorV0Value()
 	workflow := MCPCoreWorkflowCommandToolDescriptorV0Value()
 	runControl := MCPRunControlDescriptorV0()
@@ -169,6 +170,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 		mcpTransportToolEnvelopeV0(stats.Name, stats.Version, stats.ResourceURI, stats.InputSchema, stats.Output, mcpDirectorStatsTransportHandlerV0(bindings.DirectorStats)),
 		mcpTransportToolEnvelopeV0(preparar.Name, preparar.Version, preparar.ResourceURI, preparar.InputSchema, preparar.Output, mcpPrepararOrquestacionAppTransportHandlerV0),
 		mcpTransportToolEnvelopeV0(ejecutar.Name, ejecutar.Version, ejecutar.ResourceURI, ejecutar.InputSchema, ejecutar.Output, mcpEjecutarOrquestacionAppTransportHandlerV0(bindings.EjecutarOrquestacion)),
+		mcpTransportToolEnvelopeV0(autoprogramming.Name, autoprogramming.Version, autoprogramming.ResourceURI, autoprogramming.InputSchema, autoprogramming.Output, mcpAutoprogrammingValidateRequestTransportHandlerV0(MCPAutoprogrammingValidateRequestToolExecutorV0{})),
 		mcpTransportToolEnvelopeV0(bootstrap.Name, bootstrap.Version, bootstrap.ResourceURI, bootstrap.InputSchema, bootstrap.Output, mcpBootstrapTransportHandlerV0),
 		mcpTransportToolEnvelopeV0(workflow.Name, workflow.Version, workflow.ResourceURI, workflow.InputSchema, workflow.Output, mcpCoreWorkflowTransportHandlerV0),
 		mcpTransportToolEnvelopeV0(runControl.Name, runControl.Version, runControl.ResourceURI, runControl.InputSchema, runControl.Output, mcpRunControlTransportHandlerV0(bindings.RunControl)),

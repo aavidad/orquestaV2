@@ -8,14 +8,14 @@ import (
 	"strings"
 	"time"
 
-	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
-	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
+	orquestarunfile "orquesta/modulos/orquesta-run-file"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 	orquestaserver "orquesta/modulos/orquesta-server"
+	orquestastatefile "orquesta/modulos/orquesta-state-file"
+	orquestastatefileoutbox "orquesta/modulos/orquesta-state-file/outbox"
 	orquestaweb "orquesta/modulos/orquesta-web"
 )
 
@@ -46,22 +46,39 @@ func buildStackFromEnvV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
-	runMemory := orquestarunmemory.NewRunMemoryStoreV0()
+	stateStore, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{
+		RootDir: filepath.Join(serverConfig.StateDir, "orchestration-state"),
+	})
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
+	outboxLedger, err := orquestastatefileoutbox.NewFileOutboxLedgerV0(
+		filepath.Join(serverConfig.StateDir, "outbox-state"),
+	)
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
+	runFileStore, err := orquestarunfile.NewRunFileStoreV0(
+		filepath.Join(serverConfig.StateDir, "run-state"),
+	)
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
 	return orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
 		Timeout:        30 * time.Second,
 		DirectorLimits: directorLimitsV0(),
 		Stores: orquestaappcodexstack.StoresV0{
-			RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(),
-			EventSink:       orquestacionnucleoapp.NewInMemoryEventSinkV0(),
-			OutboxLedger:    orquestacionnucleoapp.NewInMemoryOutboxLedgerV0(),
-			TaskStore:       orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(),
-			AppChangeStore:  orquestaappchange.NewInMemoryAppChangeStoreV0(),
+			RunStore:        stateStore,
+			EventSink:       stateStore,
+			OutboxLedger:    outboxLedger,
+			TaskStore:       stateStore,
+			AppChangeStore:  runFileStore,
 			ReceiptStore:    receiptStore,
 			ProgressState:   progressStore,
-			ProcessRegistry: orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0(),
-			RunControl:      runMemory,
-			RunQueue:        runMemory,
+			ProcessRegistry: stateStore,
+			RunControl:      runFileStore,
+			RunQueue:        runFileStore,
 		},
 		RunQueue: orquestaappcodexstack.RunQueueConfigV0{
 			QueueRef:       "global",
