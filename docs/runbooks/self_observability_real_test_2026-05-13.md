@@ -61,10 +61,10 @@ de dominio.
 
 ## Hueco pendiente
 
-Queda pendiente cerrar la continuidad entre `continuation` y `deliveries`.
-Durante la prueba la observabilidad pudo mostrar progreso, stalled y stop
-confirmado, pero aun falta una evidencia end-to-end que conecte de forma
-inequivoca:
+Queda pendiente cerrar con agentes reales la continuidad entre `continuation` y
+`deliveries`. Durante la prueba la observabilidad pudo mostrar progreso,
+stalled y stop confirmado, pero aun falta una evidencia end-to-end real que
+conecte de forma inequivoca:
 
 - decisiones de continuation del director;
 - entregas materializadas en `deliveries`;
@@ -74,3 +74,18 @@ inequivoca:
 Hasta cerrar ese hueco, la prueba demuestra control y observabilidad del run,
 pero no debe considerarse una validacion completa del contrato de continuacion y
 entrega final.
+
+## Cobertura determinista posterior
+
+Tras la prueba real se agrego cobertura local de stack para la misma frontera:
+
+- `TestDrainRunV0RegistraEntregasDeProgramacionTrasDecisionDirector` valida
+  `decision -> microtarea -> worker ACK -> DeliveryRegistered` con runtime fake
+  y sin inventar entregas si no hay ACK valido.
+- `TestCodexStackV0StopForzadoPorAPIDrenaAgentesYActualizaStats` valida
+  `POST /api/v0/runs/control action=stop forced=true -> RunGlobalTickV0 ->
+  StopRuntimeAgent -> agents_stop_confirmed -> agents_in_flight=0`.
+
+Esto cierra el riesgo de regresion de nucleo en pruebas rapidas. La validacion
+con Codex real sigue siendo necesaria para declarar cerrado el flujo productivo
+completo.

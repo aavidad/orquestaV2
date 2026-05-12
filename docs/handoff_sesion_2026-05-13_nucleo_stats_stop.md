@@ -9,6 +9,9 @@ Estado: listo para retomar desde otro equipo tras commit de avances.
 - Se corrigio el falso `no_signal` cuando ya existe assessment compacto.
 - Se corrigio el coordinador global para drenar runs `stop_requested` forzados.
 - Se documentaron las pruebas reales y el hueco pendiente de continuidad hasta delivery.
+- Se agregaron pruebas deterministas de stack para cerrar dos huecos de regresion:
+  `DeliveryRegistered` desde ACK de workers de programacion y stop forzado por
+  API con stats finales coherentes.
 - Se documento el procedimiento actual de apagado controlado en
   `docs/runbooks/apagado_controlado_servidor_y_agentes.md`.
 
@@ -63,7 +66,10 @@ No quedaron procesos Orquesta/Codex vivos de la prueba.
 
 ## Pendiente principal
 
-Orquesta ya arranca director y workers, y detecta atasco. Falta cerrar la continuidad productiva hasta `DeliveryRegistered`:
+Orquesta ya arranca director y workers, detecta atasco y tiene prueba
+determinista de continuidad `decision -> microtarea -> worker ACK ->
+DeliveryRegistered`. Falta validar esa misma continuidad con agentes Codex
+reales en una app completa sin cortar el run antes del ACK:
 
 - workers deben escribir ACK valido;
 - el supervisor debe seguir drenando sin intervencion;
@@ -89,3 +95,11 @@ go test -count=1 ./modulos/orquesta-run-coordinator ./modulos/orquesta-run-super
 ```
 
 Tambien se ejecutaron pruebas focales previas en `orquesta-run-control`, `orquesta-run-memory`, `orquesta-run-file`, `orquesta-mcp`, `orquesta-app-gateway`, `orquesta-runtime` y `orquesta-orchestration-core`.
+
+Validacion posterior al retomar:
+
+```bash
+go test ./modulos/orquesta-app-codex-stack -run 'TestDrainRunV0RegistraEntregasDeProgramacionTrasDecisionDirector|TestCodexStackV0StopForzadoPorAPIDrenaAgentesYActualizaStats' -count=1 -v
+go test ./modulos/orquesta-app-codex-stack ./modulos/orquesta-orchestration-core ./modulos/orquesta-run-coordinator ./modulos/orquesta-mcp ./modulos/orquesta-web -count=1
+go test ./... -count=1
+```
