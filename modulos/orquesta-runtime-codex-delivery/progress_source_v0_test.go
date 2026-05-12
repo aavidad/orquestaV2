@@ -88,7 +88,7 @@ func TestCodexProgressObservationSourceV0ReemiteSiElRunNoHaMaterializadoDecision
 	}
 }
 
-func TestCodexProgressObservationSourceV0EscalaABucleTrasRepeticionSostenida(t *testing.T) {
+func TestCodexProgressObservationSourceV0SilencioSostenidoReportaEstancamientoSinBucle(t *testing.T) {
 	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
 	source := codexProgressSourceForTestV0(t, spec, ackPath)
 	source.Policy.LoopAfterRepeatedActions = 3
@@ -103,11 +103,11 @@ func TestCodexProgressObservationSourceV0EscalaABucleTrasRepeticionSostenida(t *
 	if err != nil {
 		t.Fatalf("fourth BuildAgentProgressObservationsV0: %v", err)
 	}
-	if len(got) != 1 || got[0].Report.Status != orquestaruntime.AgentLoopDetectedV0 {
-		t.Fatalf("loop observation=%+v", got)
+	if len(got) != 1 || got[0].Report.Status != orquestaruntime.AgentStalledV0 {
+		t.Fatalf("stalled observation=%+v", got)
 	}
-	if got[0].Report.RepeatedActionCount != 3 {
-		t.Fatalf("repeated_action_count=%d", got[0].Report.RepeatedActionCount)
+	if got[0].Report.RepeatedActionCount != 0 || got[0].Report.NoProgressTicks == 0 {
+		t.Fatalf("progress counters=%+v", got[0].Report)
 	}
 }
 
@@ -146,6 +146,46 @@ func TestCodexProgressObservationSourceV0ReportaProcesoParadoSinACKEnPrimerTick(
 	}
 	if len(got) != 1 || got[0].Report.Status != orquestaruntime.AgentStoppedV0 {
 		t.Fatalf("observations=%+v", got)
+	}
+	if !stringInCodexDeliverySetV0(got[0].Report.EvidenceRefs, "evidence-ref-no-ack") {
+		t.Fatalf("evidence refs sin no_ack compacto: %+v", got[0].Report.EvidenceRefs)
+	}
+}
+
+func TestCodexProgressObservationSourceV0ClasificaCapacidadLimitadaSinACK(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	source.SnapshotSource = stoppedSnapshotSourceForProgressTestV0{}
+	stderrPath := filepath.Join(filepath.Dir(ackPath), orquestaruntimecodex.CodexStderrFileNameV0)
+	if err := os.WriteFile(
+		stderrPath,
+		[]byte("ERROR: Selected model is at capacity. Please try a different model."),
+		0o600,
+	); err != nil {
+		t.Fatalf("write stderr: %v", err)
+	}
+
+	got, err := source.BuildAgentProgressObservationsV0(
+		context.Background(),
+		codexProgressRequestForTestV0(spec),
+	)
+	if err != nil {
+		t.Fatalf("BuildAgentProgressObservationsV0: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("observations=%+v", got)
+	}
+	report := got[0].Report
+	if report.Status != orquestaruntime.AgentStoppedV0 ||
+		report.BudgetStatus != orquestaruntime.AgentProgressBudgetCapacityLimitedV0 ||
+		!report.DecisionRequired {
+		t.Fatalf("report capacity inesperado: %+v", report)
+	}
+	if !stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-capacity-warning") {
+		t.Fatalf("evidence refs sin capacity_warning compacto: %+v", report.EvidenceRefs)
+	}
+	if codexProgressObservationLeaksPathV0(got[0], ackPath) {
+		t.Fatalf("observacion filtra path: %+v", got[0])
 	}
 }
 

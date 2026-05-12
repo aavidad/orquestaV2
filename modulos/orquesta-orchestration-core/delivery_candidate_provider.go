@@ -43,7 +43,7 @@ func (provider DeliveryCandidateProviderV0) BuildSchedulerCandidatesV0(
 			}
 			candidates.DeliveryCandidates = append(candidates.DeliveryCandidates, candidate)
 			candidates.EvidenceRefs = compactStringsV0(append(candidates.EvidenceRefs, candidate.EvidenceRefs...))
-			continue
+			return candidates, nil
 		}
 		candidate, err := provider.phaseArtifactCandidateV0(request, observation)
 		if err != nil {
@@ -51,6 +51,7 @@ func (provider DeliveryCandidateProviderV0) BuildSchedulerCandidatesV0(
 		}
 		candidates.PhaseArtifactCandidates = append(candidates.PhaseArtifactCandidates, candidate)
 		candidates.EvidenceRefs = compactStringsV0(append(candidates.EvidenceRefs, candidate.EvidenceRefs...))
+		return candidates, nil
 	}
 	return candidates, nil
 }

@@ -9,6 +9,12 @@ import (
 
 func TestReviewGateCandidateProviderV0BuildsReworkForChangesRequested(t *testing.T) {
 	run := mustReviewGateReadyRunV0(t, "run-nucleo-review-gate-rework-001")
+	run = mustApplyCommandV0(t, run, mustReviewReworkRequestReviewCommandV0(t, run.RunID))
+	run = mustApplyCommandV0(t, run, mustReviewReworkResultCommandV0(
+		t,
+		run.RunID,
+		orquestacoreworkflow.ReviewResultStatusChangesRequestedV0,
+	))
 	provider := ReviewGateCandidateProviderV0{
 		GateSource: staticReviewGateObservationSourceV0{Observations: []ReviewGateObservationV0{
 			reviewGateObservationForTestV0(orquestacoreworkflow.ReviewResultStatusChangesRequestedV0),
@@ -32,6 +38,9 @@ func TestReviewGateCandidateProviderV0BuildsReworkForChangesRequested(t *testing
 	if candidate.AcceptReview != nil {
 		t.Fatalf("accept_review no debe existir: %+v", candidate.AcceptReview)
 	}
+	if candidate.RequestReview != nil || candidate.RecordReviewResult != nil {
+		t.Fatalf("candidate debe contener solo request_rework: %+v", candidate)
+	}
 	if candidate.RequestRework == nil {
 		t.Fatalf("request_rework requerido: %+v", candidate)
 	}
@@ -46,6 +55,12 @@ func TestReviewGateCandidateProviderV0BuildsReworkForChangesRequested(t *testing
 
 func TestReviewGateCandidateProviderV0BuildsAcceptForAccepted(t *testing.T) {
 	run := mustReviewGateReadyRunV0(t, "run-nucleo-review-gate-accept-001")
+	run = mustApplyCommandV0(t, run, mustReviewReworkRequestReviewCommandV0(t, run.RunID))
+	run = mustApplyCommandV0(t, run, mustReviewReworkResultCommandV0(
+		t,
+		run.RunID,
+		orquestacoreworkflow.ReviewResultStatusAcceptedV0,
+	))
 	observation := reviewGateObservationForTestV0(orquestacoreworkflow.ReviewResultStatusAcceptedV0)
 	observation.AcceptedReviewRef = "accepted-review-ref-nucleo-review-001"
 	provider := ReviewGateCandidateProviderV0{
@@ -70,8 +85,70 @@ func TestReviewGateCandidateProviderV0BuildsAcceptForAccepted(t *testing.T) {
 	if candidate.RequestRework != nil {
 		t.Fatalf("request_rework no debe existir: %+v", candidate.RequestRework)
 	}
+	if candidate.RequestReview != nil || candidate.RecordReviewResult != nil {
+		t.Fatalf("candidate debe contener solo accept_review: %+v", candidate)
+	}
 	if candidate.AcceptReview.CommandMeta.RequestedBy != "orquesta-nucleo-review-gate" {
 		t.Fatalf("requested_by=%q", candidate.AcceptReview.CommandMeta.RequestedBy)
+	}
+}
+
+func TestReviewGateCandidateProviderV0LimitaUnCandidatoPorTick(t *testing.T) {
+	run := mustReviewGateReadyRunV0(t, "run-nucleo-review-gate-single-tick-001")
+	second := reviewGateObservationForTestV0(orquestacoreworkflow.ReviewResultStatusChangesRequestedV0)
+	second.CandidateRef = "review-gate-candidate-ref-nucleo-review-002"
+	second.ReviewRequestID = "review-request-ref-nucleo-review-002"
+	second.ReviewResultRef = "review-result-ref-nucleo-review-002"
+	second.DeliveryRef = "delivery-ref-nucleo-review-002"
+	provider := ReviewGateCandidateProviderV0{
+		GateSource: staticReviewGateObservationSourceV0{Observations: []ReviewGateObservationV0{
+			reviewGateObservationForTestV0(orquestacoreworkflow.ReviewResultStatusChangesRequestedV0),
+			second,
+		}},
+	}
+
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        run,
+		OccurredAt: "2026-05-10T09:32:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.ReviewGateCandidates) != 1 {
+		t.Fatalf("review_gate_candidates=%d", len(candidates.ReviewGateCandidates))
+	}
+	candidate := candidates.ReviewGateCandidates[0]
+	if candidate.RequestReview == nil ||
+		candidate.RequestReview.Payload.ReviewRequestID != "review-request-ref-nucleo-review-001" {
+		t.Fatalf("request_review=%+v", candidate.RequestReview)
+	}
+	if candidate.RecordReviewResult != nil || candidate.RequestRework != nil || candidate.AcceptReview != nil {
+		t.Fatalf("candidate debe contener solo request_review: %+v", candidate)
+	}
+}
+
+func TestReviewGateCandidateProviderV0EmiteSoloResultadoTrasReview(t *testing.T) {
+	run := mustReviewGateReadyRunV0(t, "run-nucleo-review-gate-result-001")
+	run = mustApplyCommandV0(t, run, mustReviewReworkRequestReviewCommandV0(t, run.RunID))
+	provider := ReviewGateCandidateProviderV0{
+		GateSource: staticReviewGateObservationSourceV0{Observations: []ReviewGateObservationV0{
+			reviewGateObservationForTestV0(orquestacoreworkflow.ReviewResultStatusChangesRequestedV0),
+		}},
+	}
+
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        run,
+		OccurredAt: "2026-05-10T09:33:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	candidate := candidates.ReviewGateCandidates[0]
+	if candidate.RecordReviewResult == nil ||
+		candidate.RequestReview != nil ||
+		candidate.RequestRework != nil ||
+		candidate.AcceptReview != nil {
+		t.Fatalf("candidate debe contener solo record_review_result: %+v", candidate)
 	}
 }
 

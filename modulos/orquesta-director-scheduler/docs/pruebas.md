@@ -1,6 +1,28 @@
 # Pruebas locales: orquesta-director-scheduler
 
 ```text
+Caso: scheduler_tick_progress_no_ack_interrupted_capacity_causal
+Tipo: unit
+Comando: go test -count=1 ./modulos/orquesta-director-scheduler -run 'TestBuildDirectorSchedulerTickV0(InterruptedWithoutAckStopsBeforeWork|CapacityLimitedStopPrecedesReplanFollowup|CapacityLimitedReemitsStopBeforeReplan|StoppedProgressYieldsToReplanAfterStopReflected|StoppedProgressDoesNotRepeatAfterStopReflected)'
+Evidencia esperada: no_ack/interrupted produce assessment garbage/stop_agent;
+capacity_limited produce assessment capacity_limited/stop_agent; un replan
+explicito no se procesa hasta que la parada logica este reflejada en
+stopped_agents; despues de stopped_agents no se duplica assessment y se permite
+RecordReplanDecision -> RequestCapacity.
+Estado: completada en SCH-014
+```
+
+```text
+Caso: scheduler_tick_progress_stop_reconstruction_capacity_limited
+Tipo: unit
+Comando: go test -count=1 ./modulos/orquesta-director-scheduler -run 'TestBuildDirectorSchedulerTickV0(CapacityLimitedReconstructsMissingStop|StoppedWithoutAckReconstructsMissingStop)'
+Evidencia esperada: un progress candidate `capacity_limited` o `stopped` con
+assessment_ref ya durable y sin stopped_agent vuelve a emitir AssessAgentWork
+stop_agent para que el workflow materialice la parada/outbox pendiente.
+Estado: completada en SCH-013
+```
+
+```text
 Caso: scheduler_tick_replan_split_create_microtasks
 Tipo: unit
 Comando: go test -count=1 ./modulos/orquesta-director-scheduler -run TestBuildDirectorSchedulerTickV0ReplanSplitCreatesMicrotasksAfterOpenPhase

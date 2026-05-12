@@ -136,17 +136,16 @@ func codexReviewGateDeliveryEligibleV0(
 		agentRef = strings.TrimSpace(descriptor.Spec.RequestID)
 	}
 	return stringInCodexDeliverySetV0(request.Run.Deliveries, deliveryRef) &&
-		codexDeliveryObservationAgentEligibleV0(codexReviewGateDeliveryRequestV0(request), agentRef)
+		codexReviewGateAgentEligibleV0(request, agentRef)
 }
 
-func codexReviewGateDeliveryRequestV0(
+func codexReviewGateAgentEligibleV0(
 	request orquestacionnucleoapp.ReviewGateObservationRequestV0,
-) orquestacionnucleoapp.AgentDeliveryObservationRequestV0 {
-	return orquestacionnucleoapp.AgentDeliveryObservationRequestV0{
-		Run:           request.Run,
-		CorrelationID: request.CorrelationID,
-		EvidenceRefs:  request.EvidenceRefs,
-	}
+	agentRef string,
+) bool {
+	return stringInCodexDeliverySetV0(request.Run.Agents, agentRef) &&
+		stringInCodexDeliverySetV0(request.Run.StartedAgents, agentRef) &&
+		!stringInCodexDeliverySetV0(request.Run.FailedAgents, agentRef)
 }
 
 func (source CodexReviewGateObservationSourceV0) reviewGateInputV0(

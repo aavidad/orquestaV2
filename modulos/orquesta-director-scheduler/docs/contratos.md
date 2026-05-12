@@ -39,6 +39,13 @@ Invariantes:
   - Si hay `review_gate_candidates`, procesa como maximo el primero y no evalua progress, replan ni work.
   - Un `ReviewGateCandidate` solo es accionable en fase `revision`.
   - Si hay `progress_supervision_candidates`, procesa como maximo el primero usando `BuildAgentProgressSupervisionV0` y no evalua replan ni work.
+  - Si el primer progress candidate apunta a un agente ya observado en
+    `stopped_agents`, y hay `replan_followup_candidates` explicitos, el
+    scheduler puede tratar esa supervision como ya materializada y evaluar
+    replan en el mismo tick; no evalua work por esa excepcion.
+  - Si el assessment del progress candidate ya es durable pero la parada
+    logica aun no aparece en `stopped_agents`, reemite `AssessAgentWork`
+    antes de cualquier replan para que el workflow materialice `StopAgent`.
   - Si hay `replan_followup_candidates`, usa `BuildReplanFollowupsV0` antes que work.
   - Para `split_task` de `review_rework`, puede ordenar
     `RecordReplanDecision -> OpenPhase -> CreateMicrotask` desde candidates
@@ -204,6 +211,12 @@ Invariantes:
   - `BuildAgentProgressSupervisionV0` construye `AssessAgentWork` y, para stalled, `AskDirector` separado.
   - `assessment_ref`, `question_id`, `agent_request_id` y `run_ref` deben venir explicitos.
   - Dedupe por `agent_assessments`, `director_questions` y `director_answered_questions`.
+  - Si `assessment_ref` ya es durable pero el comando de assessment calculado
+    por el director implica `stop_agent` y el agente aun no aparece en
+    `stopped_agents`, puede reconstruir `AssessAgentWork` para materializar la
+    parada/outbox pendiente sin interpretar proveedor, modelo ni runtime.
+  - Si el agente ya aparece en `stopped_agents`, el progress candidate no
+    duplica la decision y puede dejar pasar un replan followup explicito.
 ```
 
 ## `SchedulableReplanFollowupCandidateV0`

@@ -86,6 +86,26 @@ func TestRunSupervisedBurstV0StopsQuiescentWithoutCandidates(t *testing.T) {
 	}
 }
 
+func TestRunSupervisedBurstV0AcotaPresupuestoAlRunner(t *testing.T) {
+	runRef := "run-nucleo-budget-bound-001"
+	service := ServiceV0{
+		RunStore:          newMemoryRunStoreV0(mustActiveProgrammingRunV0(t, runRef)),
+		CandidateProvider: StaticCandidateProviderV0{},
+		OutboxLedger:      &memoryOutboxLedgerV0{},
+		MaxCommands:       24,
+		MaxOutboxPerCycle: 24,
+	}
+
+	_, err := service.RunSupervisedBurstV0(context.Background(), SupervisedBurstRequestV0{
+		RunRef:     runRef,
+		OccurredAt: "2026-05-08T10:06:00Z",
+		MaxSteps:   2,
+	})
+	if err != nil {
+		t.Fatalf("run burst with bounded budget: %v", err)
+	}
+}
+
 func TestRunSupervisedBurstV0RejectsMissingPorts(t *testing.T) {
 	_, err := (ServiceV0{}).RunSupervisedBurstV0(context.Background(), SupervisedBurstRequestV0{})
 	assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "run_store")

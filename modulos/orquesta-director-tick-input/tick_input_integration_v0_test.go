@@ -57,6 +57,14 @@ func TestBuildDirectorSchedulerTickInputV0PendingOutboxHaceEsperarScheduler(t *t
 	if err != nil {
 		t.Fatalf("build scheduler input: %v", err)
 	}
+	if len(input.WorkCandidates) != 0 ||
+		len(input.WorkClaims) != 0 ||
+		len(input.DeliveryCandidates) != 0 ||
+		len(input.ReviewGateCandidates) != 0 ||
+		len(input.ProgressSupervisionCandidates) != 0 ||
+		len(input.ReplanFollowupCandidates) != 0 {
+		t.Fatalf("pending outbox debe vaciar candidatos: %+v", input)
+	}
 	plan, err := orquestadirectorscheduler.BuildDirectorSchedulerTickV0(input)
 	if err != nil {
 		t.Fatalf("scheduler: %v", err)

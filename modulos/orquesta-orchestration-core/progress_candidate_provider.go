@@ -46,6 +46,7 @@ func (provider ProgressSupervisionCandidateProviderV0) BuildSchedulerCandidatesV
 		}
 		candidates.ProgressSupervisionCandidates = append(candidates.ProgressSupervisionCandidates, candidate)
 		candidates.EvidenceRefs = compactStringsV0(append(candidates.EvidenceRefs, candidate.EvidenceRefs...))
+		return candidates, nil
 	}
 	return candidates, nil
 }

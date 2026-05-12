@@ -45,13 +45,14 @@ func (provider CodexReceiptDirectorDecisionFileDescriptorProviderV0) ListDirecto
 	if err != nil {
 		return nil, err
 	}
-	return directorDecisionDescriptorsFromReceiptsV0(receipts, runID, fileName)
+	return directorDecisionDescriptorsFromReceiptsV0(receipts, runID, fileName, request)
 }
 
 func directorDecisionDescriptorsFromReceiptsV0(
 	receipts []CodexReceiptDescriptorV0,
 	runID string,
 	fileName string,
+	request orquestadirectoragentfilesource.DirectorAgentDecisionFileListRequestV0,
 ) ([]orquestadirectoragentfilesource.DirectorAgentDecisionFileDescriptorV0, error) {
 	descriptors := make(
 		[]orquestadirectoragentfilesource.DirectorAgentDecisionFileDescriptorV0,
@@ -61,6 +62,9 @@ func directorDecisionDescriptorsFromReceiptsV0(
 	for _, receipt := range receipts {
 		receiptRunID := strings.TrimSpace(receipt.RunID)
 		if runID != "" && receiptRunID != runID {
+			continue
+		}
+		if !directorDecisionReceiptReflectedV0(receipt, request) {
 			continue
 		}
 		ackPath := strings.TrimSpace(receipt.AckPath)
@@ -82,6 +86,18 @@ func directorDecisionDescriptorsFromReceiptsV0(
 		})
 	}
 	return descriptors, nil
+}
+
+func directorDecisionReceiptReflectedV0(
+	receipt CodexReceiptDescriptorV0,
+	request orquestadirectoragentfilesource.DirectorAgentDecisionFileListRequestV0,
+) bool {
+	ackRef := strings.TrimSpace(receipt.Spec.AgentPacket.DeliveryRefs.AckRef)
+	if ackRef == "" {
+		return true
+	}
+	return stringInCodexDeliverySetV0(request.Deliveries, ackRef) ||
+		codexReceiptArtifactRefRegisteredV0(request.PhaseArtifacts, ackRef)
 }
 
 func directorDecisionFileExistsV0(path string) (bool, error) {

@@ -34,6 +34,16 @@ func assessmentFromAgentProgressReportV0(
 }
 
 func assessmentDecisionFromProgressStatusV0(input AgentProgressSupervisionInputV0) (string, string, string) {
+	if agentProgressCapacityLimitedV0(input.Report) {
+		if !agentProgressStopAllowedV0(input) {
+			return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+				orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+				orquestacoreworkflow.AgentAssessmentSeverityHighV0
+		}
+		return orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0,
+			orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+			orquestacoreworkflow.AgentAssessmentSeverityHighV0
+	}
 	switch input.Report.Status {
 	case orquestaruntime.AgentStalledV0:
 		return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
@@ -64,6 +74,10 @@ func assessmentDecisionFromProgressStatusV0(input AgentProgressSupervisionInputV
 	}
 }
 
+func agentProgressCapacityLimitedV0(report orquestaruntime.AgentProgressReportV0) bool {
+	return report.BudgetStatus == orquestaruntime.AgentProgressBudgetCapacityLimitedV0
+}
+
 func agentProgressStopAllowedV0(input AgentProgressSupervisionInputV0) bool {
 	return input.StopAllowed == nil || *input.StopAllowed
 }
@@ -83,6 +97,9 @@ func assessmentSummaryFromProgressReportV0(report orquestaruntime.AgentProgressR
 	case orquestaruntime.AgentLoopDetectedV0:
 		return compactCounterSummaryV0("Bucle detectado; detener agente logico.", report)
 	case orquestaruntime.AgentStoppedV0:
+		if agentProgressCapacityLimitedV0(report) {
+			return "Capacidad externa limitada; cerrar agente y replanificar."
+		}
 		return "Proceso detenido sin entrega; detener agente logico y replanificar."
 	default:
 		return "Progreso aceptable observado; continuar."

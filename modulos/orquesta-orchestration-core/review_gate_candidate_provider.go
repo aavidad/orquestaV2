@@ -36,12 +36,16 @@ func (provider ReviewGateCandidateProviderV0) BuildSchedulerCandidatesV0(
 		return SchedulerCandidateSetV0{}, err
 	}
 	for _, observation := range observations {
-		candidate, err := provider.reviewGateCandidateV0(request, observation)
+		candidate, ok, err := provider.reviewGateCandidateV0(request, observation)
 		if err != nil {
 			return SchedulerCandidateSetV0{}, err
 		}
+		if !ok {
+			continue
+		}
 		candidates.ReviewGateCandidates = append(candidates.ReviewGateCandidates, candidate)
 		candidates.EvidenceRefs = compactStringsV0(append(candidates.EvidenceRefs, candidate.EvidenceRefs...))
+		return candidates, nil
 	}
 	return candidates, nil
 }
@@ -72,10 +76,10 @@ func reviewGateObservationRequestV0(request SchedulerCandidateRequestV0) ReviewG
 func (provider ReviewGateCandidateProviderV0) reviewGateCandidateV0(
 	request SchedulerCandidateRequestV0,
 	observation ReviewGateObservationV0,
-) (orquestadirectorscheduler.SchedulableReviewGateCandidateV0, error) {
+) (orquestadirectorscheduler.SchedulableReviewGateCandidateV0, bool, error) {
 	observation = normalizeReviewGateObservationV0(request, observation)
 	if err := validateReviewGateObservationV0(request, observation); err != nil {
-		return orquestadirectorscheduler.SchedulableReviewGateCandidateV0{}, err
+		return orquestadirectorscheduler.SchedulableReviewGateCandidateV0{}, false, err
 	}
 	candidate := orquestadirectorscheduler.SchedulableReviewGateCandidateV0{
 		CandidateRef: observation.CandidateRef,
@@ -130,7 +134,8 @@ func (provider ReviewGateCandidateProviderV0) reviewGateCandidateV0(
 			},
 		}
 	}
-	return candidate, nil
+	next, ok := nextReviewGateCandidateV0(request.Run, candidate)
+	return next, ok, nil
 }
 
 func normalizeReviewGateObservationV0(

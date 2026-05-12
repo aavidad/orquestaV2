@@ -58,6 +58,18 @@ func TestValidateAgentProgressReportV0AceptaCamposDePresupuesto(t *testing.T) {
 	}
 }
 
+func TestValidateAgentProgressReportV0AceptaCapacidadLimitada(t *testing.T) {
+	report := agentProgressReportValidoV0()
+	report.Status = AgentStoppedV0
+	report.BudgetStatus = AgentProgressBudgetCapacityLimitedV0
+	report.BudgetReason = "Capacidad externa limitada antes de ACK."
+	report.DecisionRequired = true
+
+	if issues := ValidateAgentProgressReportV0(report); len(issues) != 0 {
+		t.Fatalf("errores inesperados: %#v", issues)
+	}
+}
+
 func TestValidateAgentProgressReportV0RechazaBudgetStatusInvalido(t *testing.T) {
 	report := agentProgressReportValidoV0()
 	report.BudgetStatus = "invalid"

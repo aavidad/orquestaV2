@@ -89,13 +89,12 @@ func TestProgressSupervisionLoopDetectedStopsAgentThroughOutbox(t *testing.T) {
 	}
 }
 
-func TestProgressSupervisionLoopDetectedProtectedDirectorDoesNotStopAgent(t *testing.T) {
+func TestProgressSupervisionLoopDetectedProtectedDirectorStopsAgent(t *testing.T) {
 	runRef := "run-nucleo-progress-protected-director-001"
 	agentRef := "agent-ref-protected-director-001"
 	store := NewInMemoryRunStoreV0(mustActiveBrainstormingRunWithStartedAgentV0(t, runRef, agentRef))
 	ledger := NewInMemoryOutboxLedgerV0()
 	sink := NewInMemoryEventSinkV0()
-	runtime := orquestaruntime.NewRuntimeFakeLifecycleV0()
 
 	service := ServiceV0{
 		RunStore:  store,
@@ -121,22 +120,22 @@ func TestProgressSupervisionLoopDetectedProtectedDirectorDoesNotStopAgent(t *tes
 		CorrelationID:        "corr-progress-protected-director-001",
 		EvidenceRefs:         []string{"evidence-ref-progress-protected-director-001"},
 		Dispatchers: []OutboxDispatcherBindingV0{
-			agentStopperDispatcherForProgressTestV0(store, sink, ledger, runtime),
+			recordingAgentStopperDispatcherForProgressTestV0(store, sink, ledger),
 		},
 	})
 	if err != nil {
-		t.Fatalf("progressive loop protected supervision: %v", err)
+		t.Fatalf("progressive loop protected supervision: %#v result=%+v", err, result)
 	}
-	if containsNucleoRefV0(result.Run.StoppedAgents, agentRef) ||
-		containsNucleoRefV0(result.Run.ConfirmedStoppedAgents, agentRef) {
-		t.Fatalf("director protegido parado: %+v", result.Run)
+	if !containsNucleoRefV0(result.Run.StoppedAgents, agentRef) ||
+		!containsNucleoRefV0(result.Run.ConfirmedStoppedAgents, agentRef) {
+		t.Fatalf("director en loop no parado: %+v", result.Run)
 	}
 	for _, eventType := range []string{
 		orquestacoreworkflow.OrchestrationEventAgentStopRequestedV0,
 		orquestacoreworkflow.OrchestrationEventAgentStopConfirmedV0,
 	} {
-		if sinkHasEventTypeV0(sink, eventType) {
-			t.Fatalf("sink contiene parada inesperada %s: %+v", eventType, sink.EventsV0())
+		if !sinkHasEventTypeV0(sink, eventType) {
+			t.Fatalf("sink no contiene parada %s: %+v", eventType, sink.EventsV0())
 		}
 	}
 	if pending := pendingOutboxRefsForTargetV0(t, ledger, runRef, orquestacoreworkflow.OutboxTargetAgentLauncherV0); len(pending) != 0 {
@@ -196,4 +195,42 @@ func agentStopperDispatcherForProgressTestV0(
 		},
 		Acker: ledger,
 	}
+}
+
+func recordingAgentStopperDispatcherForProgressTestV0(
+	store *InMemoryRunStoreV0,
+	sink *InMemoryEventSinkV0,
+	ledger *InMemoryOutboxLedgerV0,
+) OutboxDispatcherBindingV0 {
+	return OutboxDispatcherBindingV0{
+		TargetPort: orquestacoreworkflow.OutboxTargetAgentLauncherV0,
+		Reader:     ledger,
+		Claimer:    ledger,
+		Executor: AgentStopperExecutorV0{
+			RunStore:   store,
+			EventSink:  sink,
+			Stopper:    recordingAgentStopperForProgressTestV0{},
+			ObservedAt: "2026-05-09T10:06:00Z",
+		},
+		Acker: ledger,
+	}
+}
+
+type recordingAgentStopperForProgressTestV0 struct{}
+
+func (recordingAgentStopperForProgressTestV0) StopAgentV0(
+	ctx context.Context,
+	inbound orquestaruntime.AgentStopperInboundV0,
+) (AgentStopResultV0, error) {
+	if err := ctx.Err(); err != nil {
+		return AgentStopResultV0{}, err
+	}
+	return AgentStopResultV0{
+		AgentRequestID:  inbound.Payload.AgentRequestID,
+		ConfirmationRef: "stop-ref-progress-protected-director-001",
+		EvidenceRefs: []string{
+			"evidence-ref-stop-progress-protected-director-001",
+			"stop-ref-progress-protected-director-001",
+		},
+	}, nil
 }

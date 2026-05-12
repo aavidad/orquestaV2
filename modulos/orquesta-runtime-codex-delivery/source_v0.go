@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 type CodexReceiptDescriptorStorePortV0 interface {
@@ -63,6 +63,9 @@ func (source CodexDeliveryObservationSourceV0) BuildAgentDeliveryObservationsV0(
 	}
 	observations := make([]orquestacionnucleoapp.AgentDeliveryObservationV0, 0, len(descriptors))
 	for _, descriptor := range descriptors {
+		if codexReceiptDescriptorAlreadyReflectedV0(request, descriptor) {
+			continue
+		}
 		observation, ready, err := source.observationFromDescriptorV0(ctx, descriptor)
 		if err != nil {
 			return nil, err
@@ -82,6 +85,18 @@ func (source CodexDeliveryObservationSourceV0) BuildAgentDeliveryObservationsV0(
 		observations = append(observations, observation)
 	}
 	return observations, nil
+}
+
+func codexReceiptDescriptorAlreadyReflectedV0(
+	request orquestacionnucleoapp.AgentDeliveryObservationRequestV0,
+	descriptor CodexReceiptDescriptorV0,
+) bool {
+	ackRef := strings.TrimSpace(descriptor.Spec.AgentPacket.DeliveryRefs.AckRef)
+	if ackRef == "" {
+		return false
+	}
+	return stringInCodexDeliverySetV0(request.Run.Deliveries, ackRef) ||
+		codexReceiptArtifactRefRegisteredV0(request.Run.PhaseArtifacts, ackRef)
 }
 
 func codexDeliveryObservationAgentEligibleV0(
@@ -117,7 +132,8 @@ func (source CodexDeliveryObservationSourceV0) observationFromDescriptorV0(
 	)
 	if len(issues) > 0 {
 		issue := issues[0]
-		if codexReceiptIssueMeansAckNotReadyV0(issue) {
+		if codexReceiptIssueMeansAckNotReadyV0(issue) ||
+			codexReceiptIssueMeansAckWithoutDeliveryV0(issue) {
 			return orquestacionnucleoapp.AgentDeliveryObservationV0{}, false, nil
 		}
 		return orquestacionnucleoapp.AgentDeliveryObservationV0{}, false, fmt.Errorf(
@@ -139,6 +155,14 @@ func (source CodexDeliveryObservationSourceV0) observationFromDescriptorV0(
 		Summary:      codexObservation.Summary,
 		EvidenceRefs: compactCodexDeliveryRefsV0(codexObservation.EvidenceRefs),
 	}, true, nil
+}
+
+func codexReceiptIssueMeansAckWithoutDeliveryV0(
+	issue orquestaruntime.ExternalAgentConnectorErrorV0,
+) bool {
+	return string(issue.Code) == string(orquestaruntimecodex.CodexConnectorAckInvalidV0) &&
+		strings.TrimSpace(issue.Field) == "status" &&
+		stringInCodexDeliverySetV0(issue.Evidence, "status_not_completed")
 }
 
 func codexReceiptIssueMeansAckNotReadyV0(

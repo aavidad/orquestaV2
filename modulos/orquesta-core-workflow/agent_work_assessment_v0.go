@@ -1,10 +1,11 @@
 package orquestacoreworkflow
 
 const (
-	AgentAssessmentVerdictAcceptableV0    = "acceptable"
-	AgentAssessmentVerdictNeedsRevisionV0 = "needs_revision"
-	AgentAssessmentVerdictGarbageV0       = "garbage"
-	AgentAssessmentVerdictLoopDetectedV0  = "loop_detected"
+	AgentAssessmentVerdictAcceptableV0      = "acceptable"
+	AgentAssessmentVerdictNeedsRevisionV0   = "needs_revision"
+	AgentAssessmentVerdictGarbageV0         = "garbage"
+	AgentAssessmentVerdictLoopDetectedV0    = "loop_detected"
+	AgentAssessmentVerdictCapacityLimitedV0 = "capacity_limited"
 
 	AgentAssessmentActionContinueV0        = "continue"
 	AgentAssessmentActionRequestRevisionV0 = "request_revision"

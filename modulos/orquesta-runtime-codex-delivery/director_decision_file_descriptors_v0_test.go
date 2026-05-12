@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func TestCodexReceiptDirectorDecisionFileDescriptorProviderV0MapeaDecisionJuntoAlACK(t *testing.T) {
@@ -115,6 +116,57 @@ func TestCodexReceiptDirectorDecisionFileDescriptorProviderV0OmiteDecisionAusent
 	}
 	if len(got) != 0 {
 		t.Fatalf("len=%d want 0: %+v", len(got), got)
+	}
+}
+
+func TestCodexReceiptDirectorDecisionFileDescriptorProviderV0EsperaACKReflejado(t *testing.T) {
+	baseDir := t.TempDir()
+	ackPath := filepath.Join(baseDir, "run-ref-001", "agent-director-001", "agent_ack.json")
+	writeCodexReceiptDecisionFilesForTestV0(t, ackPath, DefaultDirectorAgentDecisionFileNameV0)
+	store := &directorDecisionReceiptStoreForTestV0{
+		Descriptors: []CodexReceiptDescriptorV0{{
+			DescriptorRef: "codex-receipt-ref-director-001",
+			RunID:         "run-ref-001",
+			AgentRef:      "agent-director-001",
+			AckPath:       ackPath,
+			Spec: orquestaruntime.ExternalAgentLaunchSpecV0{
+				AgentPacket: orquestaruntime.AgentStartPacketV0{
+					DeliveryRefs: orquestaruntime.AgentStartDeliveryRefsV0{
+						AckRef: "ack-ref-director-001",
+					},
+				},
+			},
+		}},
+	}
+	provider := CodexReceiptDirectorDecisionFileDescriptorProviderV0{Store: store}
+
+	got, err := provider.ListDirectorAgentDecisionFilesV0(
+		context.Background(),
+		orquestadirectoragentfilesource.DirectorAgentDecisionFileListRequestV0{
+			RunID: "run-ref-001",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionFilesV0 sin ACK reflejado: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("descriptors sin ACK reflejado=%+v", got)
+	}
+
+	got, err = provider.ListDirectorAgentDecisionFilesV0(
+		context.Background(),
+		orquestadirectoragentfilesource.DirectorAgentDecisionFileListRequestV0{
+			RunID: "run-ref-001",
+			PhaseArtifacts: []string{
+				"ack-ref-director-001#phase:brainstorming_arquitectura#agent:agent-director-001",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionFilesV0 con ACK reflejado: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("descriptors con ACK reflejado=%d want 1: %+v", len(got), got)
 	}
 }
 

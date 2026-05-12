@@ -103,6 +103,40 @@ func TestBuildAgentProgressSupervisionV0StalledPreguntaNoBloqueanteAlDirector(t 
 	}
 }
 
+func TestBuildAgentProgressSupervisionV0CapacidadLimitadaCierraParaRelevo(t *testing.T) {
+	const (
+		taskRef       = "task-ref-supervisor-capacity-001"
+		agentRef      = "agent-request-ref-supervisor-capacity-001"
+		assessmentRef = "assessment-ref-supervisor-capacity-001"
+	)
+	h := newSupervisionHarnessWithAgentV0(t, taskRef, agentRef, "capacity")
+	report := validSupervisionProgressReportV0(h.run.RunID, agentRef, orquestaruntime.AgentStoppedV0)
+	report.ReportID = "agent-progress-report-ref-supervisor-capacity-001"
+	report.BudgetStatus = orquestaruntime.AgentProgressBudgetCapacityLimitedV0
+	report.BudgetReason = "Capacidad externa limitada antes de ACK."
+	report.DecisionRequired = true
+
+	result, err := BuildAgentProgressSupervisionV0(AgentProgressSupervisionInputV0{
+		CommandMeta:   h.meta("agent-supervision-capacity"),
+		Report:        report,
+		PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		TaskRef:       taskRef,
+		AssessmentRef: assessmentRef,
+	})
+	if err != nil {
+		t.Fatalf("BuildAgentProgressSupervisionV0: %v", err)
+	}
+	if result.AskDirectorCommand != nil {
+		t.Fatalf("AskDirector no esperado para relevo automatico: %+v", result.AskDirectorCommand)
+	}
+	payload := decodeAssessAgentWorkPayloadV0(t, result.AssessCommand)
+	if payload.Verdict != orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0 ||
+		payload.Action != orquestacoreworkflow.AgentAssessmentActionStopAgentV0 ||
+		payload.Severity != orquestacoreworkflow.AgentAssessmentSeverityHighV0 {
+		t.Fatalf("payload capacity inesperado: %+v", payload)
+	}
+}
+
 func TestBuildAgentProgressSupervisionV0RechazaReporteInvalido(t *testing.T) {
 	h := newProgressiveHarnessV0(t)
 	report := validSupervisionProgressReportV0(h.run.RunID, "agent-request-ref-invalid-001", orquestaruntime.AgentStalledV0)

@@ -1,6 +1,49 @@
 # Decisiones: orquesta-runtime-codex-delivery
 
 ```text
+Fecha: 2026-05-12
+Decision: Los descriptors ya reflejados se omiten antes de leer ACK o verificar
+worktree.
+Motivo: una entrega ya registrada puede ser revisada mas tarde y provocar
+cambios legitimos de rework en el mismo worktree. Si el source de deliveries
+vuelve a verificar descriptors historicos antes de saltarlos, esos cambios
+posteriores parecen violaciones del write-set de agentes que ya cerraron.
+Alternativas:
+  - Relajar el verificador de worktree: descartado porque perderia deteccion de
+    interferencias reales en entregas nuevas.
+  - Borrar descriptors al registrar delivery: descartado porque review gate y
+    auditoria necesitan el descriptor.
+  - Saltar por `ack_ref` ya reflejado antes de parsear/verificar: aceptado.
+Impacto: `CodexDeliveryObservationSourceV0` usa el `ack_ref` del descriptor
+para omitir deliveries/phase artifacts ya reflejados sin tocar filesystem ni
+releer ACK. Las entregas nuevas siguen verificando write-set estricto.
+Estado: aceptada.
+```
+
+
+```text
+Fecha: 2026-05-12
+Decision: Un ACK Codex con `status=failed` es no-entrega terminal, no error
+fatal del source de deliveries.
+Motivo: en trabajo multiagente real un agente puede fallar por su propio
+write-set mientras otros agentes ya tienen ACK completados. Si el source
+propaga el ACK failed como error global, Orquesta bloquea entregas validas y
+vuelve al patron de v1/v2 de atascar todo el run por un fallo parcial.
+Alternativas:
+  - Aceptar el ACK failed como entrega: descartado porque permitiria registrar
+    trabajo fallido como delivery valida.
+  - Fallar todo el drenaje: descartado porque impide procesar ACKs completados
+    independientes.
+  - Omitir el ACK failed en delivery source y dejarlo a progreso/revision:
+    aceptado.
+Impacto: `CodexDeliveryObservationSourceV0` omite ACKs no completados por
+status y sigue leyendo el resto de descriptors. El fallo queda disponible para
+supervision, assessment, replan o rework por otros puertos, pero no se acepta
+como entrega.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-11
 Decision: La observacion de review gate permanece viva hasta una proyeccion terminal.
 Motivo: el scheduler aplica el review gate en pasos progresivos. Primero pide
@@ -39,6 +82,24 @@ Alternativas:
   - Relajar el store global: descartado porque reintroduce duplicados en delivery.
   - Duplicar descriptors en otro store: descartado por complejidad y estado extra.
 Impacto: `CodexReviewGateObservationSourceV0` lista descriptors por run/agente sin `deliveries` ni `phase_artifacts`, y luego filtra por `run.Deliveries` y review no proyectado.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-12
+Decision: El review gate puede revisar entregas de agentes ya cerrados.
+Motivo: `StoppedAgents` y `ConfirmedStoppedAgents` describen el ciclo de vida
+del proceso externo, no la validez de una entrega ya registrada. Si la entrega
+esta en `Run.Deliveries`, el review gate debe evaluarla aunque el proceso se
+haya parado correctamente despues del ACK.
+Alternativas:
+  - Reutilizar la elegibilidad de delivery pendiente: descartado porque oculta
+    entregas registradas y bloquea review/rework.
+  - Mantener agentes vivos hasta terminar revision: descartado porque acopla
+    revision a runtime y gasta cuota sin necesidad.
+Impacto: `CodexReviewGateObservationSourceV0` valida agente conocido,
+arrancado y no fallido, pero no filtra por `StoppedAgents` para revisar
+deliveries ya reflejadas.
 Estado: aceptada.
 ```
 
@@ -329,5 +390,72 @@ Impacto: el reporte `AgentStoppedV0` incluye contexto compacto si detecta cuota
 en stderr, sin filtrar proveedor/modelo/HOME. El director decide `stop_agent`
 si la parada es segura; los agentes de direccion protegidos pueden preguntar al
 director, pero un proceso ya parado no queda protegido artificialmente.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-12
+Decision: Una interrupcion Codex sin ACK se publica como parada gobernable y no
+como capacidad salvo evidencia explicita.
+Motivo: una salida terminal con `turn interrupted` o `tokens used` y sin
+`agent_ack.json` no es una entrega ni un simple pendiente. Antes el contexto de
+fallo solo especializaba capacidad/cuota desde stderr; si la senal venia en
+stdout o `codex_last_message.txt`, el scheduler recibia una parada generica sin
+evidencia no-ACK compacta.
+Alternativas:
+  - Propagar stdout/stderr al nucleo: descartado porque filtraria HOME, paths,
+    proveedor, modelo o transcripts.
+  - Tratar cualquier interrupcion como `capacity_limited`: descartado porque
+    mezcla fallo terminal sin ACK con saturacion externa recuperable.
+  - Mantener solo `stopped` generico: descartado porque oculta causa gobernable
+    al director/scheduler.
+Impacto: `CodexProgressObservationSourceV0` mantiene `status=stopped` para el
+proceso parado sin ACK, anade evidencia opaca de no-ACK interrumpido y prioriza
+`capacity_limited` si cualquiera de las salidas controladas indica capacidad.
+El adaptador lee solo logs acotados del runtime Codex y no expone texto crudo,
+HOME, rutas, proveedor ni modelo.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-12
+Decision: Distinguir capacidad externa limitada de cuota agotada y de trabajo
+basura.
+Motivo: en smoke real un agente termino sin ACK con error de runtime indicando
+capacidad externa saturada. Eso no prueba mala calidad del agente ni bucle; es
+una senal operativa para cerrar el agente logico y pedir relevo/capacidad
+alternativa sin dejar el run esperando indefinidamente.
+Alternativas:
+  - Reutilizar over_budget: descartado porque mezcla cuota agotada con modelo o
+    runtime temporalmente no disponible.
+  - Marcar garbage: descartado porque castigaria una entrega no producida por
+    una condicion externa.
+  - Esperar al timeout global: descartado porque reproduce bucles de v1/v2.
+Impacto: el adaptador convierte stderr de capacidad limitada en
+`AgentProgressReportV0` con `budget_status=capacity_limited`, resumen neutral,
+evidencia compacta y sin filtrar proveedor, modelo, HOME, rutas ni stderr. La
+decision posterior queda para director/scheduler mediante contratos publicos.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-12
+Decision: `director_decisions.json` es sidecar causal del ACK del agente que lo
+produjo.
+Motivo: en smoke real el director escribio decisiones que abrian `programacion`
+antes de que su ACK de `brainstorming_arquitectura` estuviera reflejado en el
+run. Consumir ese sidecar primero rompia la fase actual y hacia fallar el ACK
+tardio con `payload.phase_id`.
+Alternativas:
+  - Ignorar `transicion_invalida`: descartado porque el core protege una
+    invariante correcta.
+  - Reordenar fases a mano en el stack: descartado por parche puntual y por
+    acoplarse a nombres de fase.
+  - Meter espera/sleep: descartado porque reproduce los bloqueos de v1/v2.
+Impacto: `CodexReceiptDirectorDecisionFileDescriptorProviderV0` solo expone
+ficheros de decisiones cuando el `ack_ref` del descriptor ya aparece en
+`PhaseArtifacts` o `Deliveries` del run. La decision file sigue siendo externa;
+el conector solo aplica causalidad con refs compactas, sin leer core interno,
+proveedor, modelo, HOME ni rutas fuera del descriptor.
 Estado: aceptada.
 ```

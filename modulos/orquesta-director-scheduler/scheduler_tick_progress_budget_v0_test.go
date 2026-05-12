@@ -47,6 +47,23 @@ func TestBuildDirectorSchedulerTickV0OverBudgetNoActivityProgrammingCanStopAsses
 	)
 }
 
+func TestBuildDirectorSchedulerTickV0CapacityLimitedStopsForReplacement(t *testing.T) {
+	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentStoppedV0)
+	input.ProgressSupervisionCandidates[0].SupervisionInput.Report.BudgetStatus =
+		orquestaruntime.AgentProgressBudgetCapacityLimitedV0
+	input.ProgressSupervisionCandidates[0].SupervisionInput.Report.BudgetReason =
+		"Capacidad externa limitada antes de ACK."
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandAssessAgentWorkV0)
+	assertSchedulerProgressAssessmentV0(t, plan.Commands[0],
+		orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0,
+		orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+	)
+}
+
 func TestBuildDirectorSchedulerTickV0ProtectedDirectorBudgetNeverStops(t *testing.T) {
 	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentProgressingV0)
 	input.Snapshot.CurrentPhaseID = string(orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0)

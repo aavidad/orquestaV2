@@ -172,7 +172,7 @@ func (record codexProgressStateRecordV0) nextHeartbeatV0(
 		ProcessRef:          sample.ProcessRef,
 		TickCounter:         tick,
 		ProgressCounter:     progress,
-		RepeatedActionCount: noProgress,
+		RepeatedActionCount: record.RepeatedCount,
 		EvidenceRefs:        compactCodexDeliveryRefsV0(sample.EvidenceRefs),
 	}
 	return codexProgressStateRecordV0{

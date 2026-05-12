@@ -44,7 +44,10 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	}
 	b.WriteString(".\n")
 	b.WriteString("Mantén cada fichero Go por debajo de 300 lineas; divide responsabilidades si se acerca a ese limite.\n")
-	b.WriteString("Activa $caveman o compact si esta disponible; usa salida minima y evidencia corta.\n")
+	b.WriteString("PROTOCOLO COMPACTO OBLIGATORIO: activa $caveman full si existe; si no existe, usa compact equivalente.\n")
+	b.WriteString("Sin narrativa visible. Final visible maximo una linea: ACK ")
+	b.WriteString(packet.DeliveryRefs.AckRef)
+	b.WriteString(" <status>. Incumplir este protocolo invalida la entrega.\n")
 	b.WriteString("Si falta contexto, no inventes: escribe una nota CONSULTA AL DIRECTOR en el ACK.\n")
 	b.WriteString("Aplica arquitectura hexagonal e i18n si la tarea genera app o UI.\n")
 	b.WriteString("La persistencia concreta solo pertenece a la app generada si la tarea la pide; Orquesta no usa DB por defecto.\n")
@@ -57,6 +60,7 @@ func BuildCodexAgentPromptWithControlFilesV0(
 		b.WriteString(decisionPath)
 		b.WriteString(" solo para decisiones ejecutables del director; no pertenece al write-set.\n")
 		b.WriteString("Es obligatorio solo si objetivo o criterios de cierre lo piden.\n")
+		b.WriteString("Si escribes decision_path, despues escribe ACK y termina; no sigas pensando ni ampliando alcance.\n")
 	}
 	b.WriteString("En el ACK, files debe listar todos los paths tocados del write-set y nada fuera de el.\n")
 	b.WriteString("En el ACK, tests debe listar solo pruebas pasadas; cada test obligatorio pasado debe aparecer exactamente como aparece en el paquete.\n")

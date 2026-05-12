@@ -28,7 +28,7 @@ func TestFileCodexProgressStateStoreV0RecuperaHeartbeatTrasRecrearInstancia(t *t
 		t.Fatalf("observe second: %v", err)
 	}
 	if second.Current.TickCounter != 2 ||
-		second.Current.RepeatedActionCount != 1 ||
+		second.Current.RepeatedActionCount != 0 ||
 		second.Previous == nil {
 		t.Fatalf("second=%+v", second)
 	}

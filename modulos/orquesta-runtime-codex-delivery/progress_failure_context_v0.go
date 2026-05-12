@@ -11,6 +11,14 @@ import (
 
 const maxCodexProgressFailureLogBytesV0 = 64 * 1024
 
+type codexProgressFailureClassV0 string
+
+const (
+	codexProgressFailureNoACKV0           codexProgressFailureClassV0 = "no_ack"
+	codexProgressFailureInterruptedV0     codexProgressFailureClassV0 = "interrupted"
+	codexProgressFailureCapacityWarningV0 codexProgressFailureClassV0 = "capacity_warning"
+)
+
 func codexProgressReportWithProcessFailureContextV0(
 	descriptor CodexReceiptDescriptorV0,
 	report orquestaruntime.AgentProgressReportV0,
@@ -20,41 +28,89 @@ func codexProgressReportWithProcessFailureContextV0(
 	}
 	failure := codexProgressFailureClassFromDescriptorV0(descriptor)
 	switch failure {
-	case "quota_exhausted":
-		report.Summary = "Proceso detenido sin ACK por cuota externa agotada."
-		report.BudgetReason = "Cuota externa agotada antes de entregar ACK."
+	case codexProgressFailureCapacityWarningV0:
+		report.Summary = "Proceso detenido por aviso de capacidad externa; requiere relevo."
+		report.BudgetStatus = orquestaruntime.AgentProgressBudgetCapacityLimitedV0
+		report.BudgetReason = "Aviso de capacidad externa antes de ACK."
 		report.DecisionRequired = true
 		report.EvidenceRefs = compactCodexDeliveryRefsV0(append(
 			report.EvidenceRefs,
-			"evidence-ref-codex-quota-exhausted",
+			"evidence-ref-capacity-warning",
+			"evidence-ref-capacity-limited",
 		))
-	default:
-		if strings.TrimSpace(report.Summary) == "" {
-			report.Summary = "Proceso detenido sin ACK."
-		}
+	case codexProgressFailureInterruptedV0:
+		report.Summary = "Proceso detenido sin ACK tras interrupcion compacta."
+		report.DecisionRequired = true
+		report.EvidenceRefs = compactCodexDeliveryRefsV0(append(
+			report.EvidenceRefs,
+			"evidence-ref-no-ack",
+			"evidence-ref-no-ack-interrupted",
+		))
+	case codexProgressFailureNoACKV0:
+		report.Summary = "Proceso detenido sin ACK."
+		report.DecisionRequired = true
+		report.EvidenceRefs = compactCodexDeliveryRefsV0(append(
+			report.EvidenceRefs,
+			"evidence-ref-no-ack",
+		))
 	}
 	return report
 }
 
 func codexProgressFailureClassFromDescriptorV0(
 	descriptor CodexReceiptDescriptorV0,
-) string {
-	stderr, ok := codexProgressReadFailureLogV0(
-		filepath.Join(
-			filepath.Dir(strings.TrimSpace(descriptor.AckPath)),
-			orquestaruntimecodex.CodexStderrFileNameV0,
-		),
-	)
-	if !ok {
-		return ""
+) codexProgressFailureClassV0 {
+	logs := codexProgressFailureLogsFromDescriptorV0(descriptor)
+	for _, log := range logs {
+		if codexProgressTextHasCapacitySignalV0(log) {
+			return codexProgressFailureCapacityWarningV0
+		}
 	}
-	normalized := strings.ToLower(stderr)
-	if strings.Contains(normalized, "usage limit") ||
+	for _, log := range logs {
+		if codexProgressTextHasInterruptedNoACKSignalV0(log) {
+			return codexProgressFailureInterruptedV0
+		}
+	}
+	return codexProgressFailureNoACKV0
+}
+
+func codexProgressFailureLogsFromDescriptorV0(
+	descriptor CodexReceiptDescriptorV0,
+) []string {
+	ackPath := strings.TrimSpace(descriptor.AckPath)
+	if ackPath == "" {
+		return nil
+	}
+	dir := filepath.Dir(ackPath)
+	names := []string{
+		orquestaruntimecodex.CodexStderrFileNameV0,
+		orquestaruntimecodex.CodexStdoutFileNameV0,
+		orquestaruntimecodex.CodexLastMessageFileNameV0,
+	}
+	logs := make([]string, 0, len(names))
+	for _, name := range names {
+		log, ok := codexProgressReadFailureLogV0(filepath.Join(dir, name))
+		if ok {
+			logs = append(logs, log)
+		}
+	}
+	return logs
+}
+
+func codexProgressTextHasCapacitySignalV0(text string) bool {
+	normalized := strings.ToLower(text)
+	return strings.Contains(normalized, "usage limit") ||
 		strings.Contains(normalized, "quota") ||
-		strings.Contains(normalized, "credits") {
-		return "quota_exhausted"
-	}
-	return ""
+		strings.Contains(normalized, "at capacity") ||
+		strings.Contains(normalized, "capacity") ||
+		strings.Contains(normalized, "credits")
+}
+
+func codexProgressTextHasInterruptedNoACKSignalV0(text string) bool {
+	normalized := strings.ToLower(text)
+	return strings.Contains(normalized, "turn interrupted") ||
+		strings.Contains(normalized, "turn was interrupted") ||
+		strings.Contains(normalized, "tokens used")
 }
 
 func codexProgressReadFailureLogV0(path string) (string, bool) {

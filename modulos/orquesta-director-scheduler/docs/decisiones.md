@@ -1,6 +1,27 @@
 # Decisiones locales: orquesta-director-scheduler
 
 ```text
+Fecha: 2026-05-12
+Decision: Un progress candidate ya parado puede ceder el tick a replan explicito.
+Motivo: tras no_ack, interrupcion o capacity_limited, el tick debe conservar el
+orden causal. Si falta `stopped_agents`, reemite `AssessAgentWork` para que el
+workflow materialice la parada. Si `stopped_agents` ya refleja esa parada, el
+progress candidate queda inservible como decision nueva y no debe impedir el
+followup de replan que escala capacidad/modelo o pide agente desde candidates
+explicitos.
+Alternativas:
+  - Mantener prioridad absoluta de progress: descartado porque un candidate
+    obsoleto podia dejar el run quiescent y ocultar el replan causal.
+  - Lanzar work directamente tras la parada: descartado porque saltaria
+    `RecordReplanDecision` y los candidates de capacidad/agente.
+Impacto: progress sigue antes que replan mientras falte assessment/stop; con
+`stopped_agents` observado, el tick puede emitir
+`RecordReplanDecision -> RequestCapacity` sin duplicar assessment ni inventar
+refs, proveedor, modelo, HOME, OAuth, DB ni runtime.
+Estado: aceptada
+```
+
+```text
 Fecha: 2026-05-10
 Decision: El scheduler puede ordenar `CreateMicrotask` como followup de `split_task` solo si llega dentro de `ReplanFollowupCandidates`.
 Motivo: el scheduler debe conservar la prioridad replan > work y no debe inventar microtareas ni refs; aun asi necesita ordenar los comandos para que el workflow autorice tareas antes de planificarlas.
@@ -191,6 +212,24 @@ Decision: ProgressSupervisionCandidates se delega a `BuildAgentProgressSupervisi
 Motivo: El scheduler no evalua progreso ni lee runtime; solo transforma candidates ya observados por adaptadores externos.
 Alternativas: Interpretar logs/progreso dentro del tick; consultar runtime directamente.
 Impacto: loop_detected puede pedir stop y stalled puede preguntar al director sin mezclar runtime real ni contexto ampliado.
+Estado: aceptada
+```
+
+```text
+Fecha: 2026-05-12
+Decision: El scheduler materializa `capacity_limited` como progreso prioritario,
+sin interpretar runtime.
+Motivo: la deteccion de capacidad externa limitada llega ya condensada por el
+adaptador y el director. El scheduler debe aplicar esos comandos antes de abrir
+trabajo nuevo, pero no debe leer stderr, proveedor, modelo, HOME ni rutas.
+Alternativas:
+  - Decidir el relevo dentro del scheduler: descartado porque requeriria
+    politica de capacidad y conocimiento de runtime.
+  - Tratarlo como stalled: descartado porque el proceso ya termino y no habra
+    ACK tardio.
+Impacto: `ProgressSupervisionCandidates` conserva prioridad sobre replan/work;
+un candidate `capacity_limited` produce assessment y parada/relevo segun el
+director, sin duplicar comandos si el snapshot ya contiene la decision.
 Estado: aceptada
 ```
 

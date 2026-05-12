@@ -31,7 +31,7 @@ func schedulerProgressBudgetForcesDirectorReviewV0(
 	input orquestadirector.AgentProgressSupervisionInputV0,
 ) bool {
 	return input.Report.Status == orquestaruntime.AgentLoopDetectedV0 &&
-		!schedulerProgressBudgetStopAssessmentAllowedV0(input)
+		!progressSupervisionStopAllowedV0(input)
 }
 
 func schedulerProgressBudgetStopAssessmentAllowedV0(

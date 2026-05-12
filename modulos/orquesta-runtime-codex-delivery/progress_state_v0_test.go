@@ -8,7 +8,7 @@ import (
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
-func TestCodexProgressStateV0MuestrasRepetidasAumentanRepeatedActionCount(t *testing.T) {
+func TestCodexProgressStateV0MuestrasSinCambioAumentanNoProgressSinRepeticion(t *testing.T) {
 	store := NewInMemoryCodexProgressStateStoreV0()
 	sample := codexProgressStateSampleForTestV0("firma-repetida")
 
@@ -18,21 +18,21 @@ func TestCodexProgressStateV0MuestrasRepetidasAumentanRepeatedActionCount(t *tes
 	}
 
 	second := codexProgressStateObserveForTestV0(t, store, sample)
-	if second.Current.RepeatedActionCount != 1 ||
+	if second.Current.RepeatedActionCount != 0 ||
 		second.Current.ProgressCounter != 1 ||
 		second.Previous == nil {
 		t.Fatalf("second=%+v", second)
 	}
 
 	third := codexProgressStateObserveForTestV0(t, store, sample)
-	if third.Current.RepeatedActionCount != 2 ||
+	if third.Current.RepeatedActionCount != 0 ||
 		third.Current.ProgressCounter != 1 ||
 		third.Previous == nil {
 		t.Fatalf("third=%+v", third)
 	}
 }
 
-func TestCodexProgressStateV0RepeatedActionCountPermiteReportarLoop(t *testing.T) {
+func TestCodexProgressStateV0SilencioSostenidoReportaStalledNoLoop(t *testing.T) {
 	store := NewInMemoryCodexProgressStateStoreV0()
 	sample := codexProgressStateSampleForTestV0("firma-loop")
 	_ = codexProgressStateObserveForTestV0(t, store, sample)
@@ -45,15 +45,15 @@ func TestCodexProgressStateV0RepeatedActionCountPermiteReportarLoop(t *testing.T
 		state.Previous,
 		state.Current,
 		orquestaruntime.AgentProgressHeartbeatPolicyV0{
-			StalledAfterNoProgressTicks: 99,
+			StalledAfterNoProgressTicks: 2,
 			LoopAfterRepeatedActions:    2,
 		},
 	)
 	if len(issues) > 0 {
 		t.Fatalf("report issues=%+v", issues)
 	}
-	if report.Status != orquestaruntime.AgentLoopDetectedV0 ||
-		report.RepeatedActionCount != 2 ||
+	if report.Status != orquestaruntime.AgentStalledV0 ||
+		report.RepeatedActionCount != 0 ||
 		report.NoProgressTicks != 2 {
 		t.Fatalf("report=%+v", report)
 	}

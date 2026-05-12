@@ -30,7 +30,8 @@ func protectedDirectionStopAllowedV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	observation AgentProgressObservationV0,
 ) *bool {
-	if observation.Report.Status == orquestaruntime.AgentStoppedV0 {
+	if observation.Report.Status == orquestaruntime.AgentStoppedV0 ||
+		observation.Report.Status == orquestaruntime.AgentLoopDetectedV0 {
 		return nil
 	}
 	if !protectedDirectionAgentObservationV0(run, observation) {

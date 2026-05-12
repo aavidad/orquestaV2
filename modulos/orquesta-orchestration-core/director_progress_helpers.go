@@ -109,7 +109,8 @@ func applyDirectorAgentProgressV0(
 			progress.DecisionRequired {
 			stats.Agents[index].NeedsAttention = true
 		}
-		if protectedDirectionAgentObservationV0(run, observation) {
+		if protectedDirectionAgentObservationV0(run, observation) &&
+			progress.Status != string(orquestaruntime.AgentLoopDetectedV0) {
 			stats.Agents[index].CanStop = false
 		}
 	}

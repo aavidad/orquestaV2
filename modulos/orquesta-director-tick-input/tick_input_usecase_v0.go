@@ -31,6 +31,7 @@ func BuildDirectorSchedulerTickInputV0(
 		WorkCandidates:                cloneWorkCandidatesV0(request.WorkCandidates),
 		EvidenceRefs:                  request.EvidenceRefs,
 	}
+	output = compactTickInputForActiveLaneV0(output)
 	normalized := orquestadirectorscheduler.NormalizeDirectorSchedulerTickInputV0(output)
 	if err := orquestadirectorscheduler.ValidateDirectorSchedulerTickInputV0(normalized); err != nil {
 		return orquestadirectorscheduler.DirectorSchedulerTickInputV0{}, tickInputErrorV0("scheduler_input")

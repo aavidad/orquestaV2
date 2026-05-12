@@ -1,6 +1,39 @@
 # Tareas locales: orquesta-director-scheduler
 
 ```text
+ID: SCH-014
+Objetivo: No bloquear replan causal con progress candidates ya parados.
+Causa raiz: tras una recuperacion no_ack/interrupted/capacity_limited, un
+progress candidate obsoleto podia conservar prioridad absoluta aunque
+`stopped_agents` ya reflejara la parada logica. Eso impedia materializar el
+followup explicito de replan/capacidad y dejaba el run sin siguiente decision.
+Tipo: contrato_scheduler
+Contrato afectado: BuildDirectorSchedulerTick v0 + SchedulableProgressSupervisionCandidateV0 + SchedulableReplanFollowupCandidateV0
+Test rojo minimo: si falta `stopped_agents`, capacity_limited reemite
+AssessAgentWork stop_agent antes de replan; si `stopped_agents` ya existe, no
+duplica assessment y emite RecordReplanDecision -> RequestCapacity desde
+candidates explicitos.
+Write-set: scheduler_tick_progress_*_v0.go, scheduler_tick_v0.go, tests, docs locales
+Validacion: go test -count=1 ./modulos/orquesta-director-scheduler
+Riesgo de acoplamiento: bajo; no lee ACK bruto, DB, runtime, proveedor,
+modelo, HOME, OAuth ni inventa refs.
+Estado: completada
+```
+
+```text
+ID: SCH-013
+Objetivo: Reconstruir la parada pendiente cuando progreso ya evaluado indica stop_agent.
+Causa raiz: el dedupe de progreso solo permitia reconstruir la parada para `loop_detected`; si `capacity_limited` o `stopped` ya tenian assessment durable pero faltaba `stopped_agent`, el scheduler quedaba quiescent aunque el workflow aun podia materializar StopAgent/outbox al repetir el comando.
+Tipo: contrato_scheduler
+Contrato afectado: BuildDirectorSchedulerTick v0 + SchedulableProgressSupervisionCandidateV0
+Test rojo minimo: progress candidate `capacity_limited` o `stopped` con `assessment_ref` ya observado y sin `stopped_agent` vuelve a emitir `AssessAgentWork` stop_agent.
+Write-set: scheduler_tick_progress_*_v0.go, tests, docs locales
+Validacion: go test -count=1 ./modulos/orquesta-director-scheduler
+Riesgo de acoplamiento: bajo; se usa el comando calculado por el director, sin DB/runtime/proveedor/modelo/HOME/OAuth.
+Estado: completada
+```
+
+```text
 ID: SCH-012
 Objetivo: Ordenar microtareas de split desde ReplanFollowupCandidates sin inventar payloads.
 Causa raiz: el rework de revision podia reabrir programacion, pero `split_task` solo podia preguntar al director y no autorizar microtareas nuevas.

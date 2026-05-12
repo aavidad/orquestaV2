@@ -22,6 +22,7 @@ const (
 	AgentProgressBudgetOverBudgetButActiveV0  AgentProgressBudgetStatusV0 = "over_budget_but_active"
 	AgentProgressBudgetOverBudgetNoActivityV0 AgentProgressBudgetStatusV0 = "over_budget_no_activity"
 	AgentProgressBudgetAckCleanupV0           AgentProgressBudgetStatusV0 = "ack_registered_cleanup"
+	AgentProgressBudgetCapacityLimitedV0      AgentProgressBudgetStatusV0 = "capacity_limited"
 )
 
 type AgentProgressReportErrorCodeV0 string
@@ -138,6 +139,7 @@ func (v *agentProgressReportValidatorV0) requireBudgetStatus(field string, statu
 		string(AgentProgressBudgetOverBudgetButActiveV0),
 		string(AgentProgressBudgetOverBudgetNoActivityV0),
 		string(AgentProgressBudgetAckCleanupV0),
+		string(AgentProgressBudgetCapacityLimitedV0),
 	) {
 		v.add(AgentProgressStatusInvalidoV0, field)
 	}

@@ -8,6 +8,9 @@ Cobertura:
 
 - lee un ACK valido desde path externo y devuelve una observacion neutral;
 - omite deliveries ya registradas en el run;
+- omite descriptors ya reflejados antes de invocar el verificador de worktree;
+- omite un ACK con `status=failed` sin bloquear otros ACKs completados del
+  mismo run;
 - propaga ACK invalido como error publico sin incluir la ruta local del ACK;
 - registra descriptors mediante `CodexReceiptRecordingSpecResolverV0`;
 - permite que el source lea posteriormente el descriptor registrado;
@@ -32,6 +35,9 @@ Cobertura:
   firma compacta no cambie;
 - valida que una consulta `stalled` se despacha al director sin convertirse en
   parada automatica por falso bucle;
+- clasifica salida `turn interrupted`/`tokens used` con proceso parado sin ACK
+  como `stopped` gobernable y evidencia no-ACK compacta;
+- prioriza `capacity_limited` si la misma salida tambien indica capacidad;
 - el smoke de programacion real queda cableado con supervision de progreso
   conservadora para detectar agentes sin ACK en ciclos futuros;
 - valida un loop Orquesta completo con capacidad, request de agente, launcher,
@@ -44,6 +50,8 @@ Cobertura:
   supera el limite de lineas;
 - sigue emitiendo la observacion de review gate tras `RequestReview` para que
   el scheduler pueda registrar resultado y pedir rework en ciclos posteriores;
+- sigue emitiendo la observacion de review gate si el agente ya esta parado y
+  confirmado despues de registrar su entrega;
 - deja de emitir la observacion cuando el rework de esa entrega ya esta
   proyectado;
 - valida que el source de revision no queda bloqueado por el filtro de
@@ -283,3 +291,65 @@ Evidencia anadida:
   compacta cuota externa agotada sin exponer proveedor, modelo, HOME ni paths.
 - `TestCodexProgressObservationV0StalledEscalaYParaPorBucle` confirma que una
   pregunta previa por stalled no bloquea la escalada posterior a loop.
+
+Revalidacion 2026-05-12 de capacidad externa limitada:
+
+```bash
+go test -count=1 ./modulos/orquesta-runtime ./modulos/orquesta-runtime-codex-delivery
+```
+
+Resultado: `ok`.
+
+Evidencia anadida:
+
+- `TestValidateAgentProgressReportV0AceptaCapacidadLimitada` fija el enum
+  `capacity_limited` como estado de presupuesto/progreso valido.
+- `TestCodexProgressReportWithProcessFailureContextV0ClasificaCuotaSinFiltrarProveedor`
+  espera ahora `capacity_limited` para proceso parado sin ACK por capacidad
+  externa limitada.
+- `TestCodexProgressObservationSourceV0ClasificaCapacidadLimitadaSinACK`
+  valida que un proceso detenido sin ACK no queda pendiente, no filtra paths ni
+  stderr, y pide decision de relevo mediante reporte compacto.
+
+Revalidacion 2026-05-12 de interrupcion Codex sin ACK:
+
+```bash
+go test -count=1 ./modulos/orquesta-runtime-codex-delivery \
+  -run 'TestCodexProgressObservationSourceV0ClasificaInterrupcionSinACKComoStopped|TestCodexProgressObservationSourceV0PriorizaCapacidadSobreInterrupcion'
+```
+
+Resultado: `ok`.
+
+Evidencia anadida:
+
+- `TestCodexProgressObservationSourceV0ClasificaInterrupcionSinACKComoStopped`
+  valida que `turn interrupted`/`tokens used` sin ACK sale como `stopped`,
+  requiere decision y no filtra HOME, modelo, proveedor, texto crudo ni paths.
+- `TestCodexProgressObservationSourceV0PriorizaCapacidadSobreInterrupcion`
+  valida que una senal de capacidad en la misma salida se mantiene como
+  `capacity_limited` y no se mezcla con la evidencia no-ACK.
+
+Revalidacion final 2026-05-12 del modulo:
+
+```bash
+go test -count=1 ./modulos/orquesta-runtime-codex-delivery
+```
+
+Resultado: `ok`. No se ejecutaron smokes reales.
+
+Revalidacion 2026-05-12 de causalidad ACK -> decisiones:
+
+```bash
+go test -count=1 ./modulos/orquesta-director-agent-file-source ./modulos/orquesta-runtime-codex-delivery \
+  -run 'TestDirectorAgentDecisionFileSourceV0PasaProyeccionesRunAlProvider|TestCodexReceiptDirectorDecisionFileDescriptorProviderV0EsperaACKReflejado' -v
+```
+
+Resultado: `ok`.
+
+Evidencia anadida:
+
+- `TestDirectorAgentDecisionFileSourceV0PasaProyeccionesRunAlProvider` asegura
+  que el source entrega `phase_artifacts` y `deliveries` compactos al provider.
+- `TestCodexReceiptDirectorDecisionFileDescriptorProviderV0EsperaACKReflejado`
+  impide exponer `director_decisions.json` si el `ack_ref` productor aun no
+  esta reflejado en el run.

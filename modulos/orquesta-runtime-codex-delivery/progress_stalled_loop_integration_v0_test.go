@@ -6,13 +6,13 @@ import (
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
-func TestCodexProgressObservationV0StalledEscalaYParaPorBucle(t *testing.T) {
+func TestCodexProgressObservationV0SilencioSostenidoPreguntaDirectorSinParar(t *testing.T) {
 	ctx := context.Background()
 	runRef := "run-ref-progress-stalled-loop-001"
 	spec := codexDeliverySpecForTestV0()
@@ -70,19 +70,18 @@ func TestCodexProgressObservationV0StalledEscalaYParaPorBucle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunManagedProgressiveLoopV0: %v status=%s", err, result.Status)
 	}
-	if result.Status != orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 {
+	if result.Status != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 {
 		t.Fatalf("status=%s final=%+v", result.Status, result.Final)
 	}
 	if !codexDeliveryLoopHasEventV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventDirectorQuestionRaisedV0) {
 		t.Fatalf("sin DirectorQuestionRaised: %+v", sink.EventsV0())
 	}
-	if !codexDeliveryLoopHasEventV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentStopConfirmedV0) {
-		t.Fatalf("sin AgentStopConfirmed: %+v", sink.EventsV0())
+	if codexDeliveryLoopHasEventV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentStopConfirmedV0) {
+		t.Fatalf("stop no esperado por silencio: %+v", sink.EventsV0())
 	}
-	if !codexDeliveryLoopContainsRefV0(result.Final.Run.ConfirmedStoppedAgents, spec.RequestID) {
-		t.Fatalf("agente no confirmado como parado: %+v", result.Final.Run)
+	if codexDeliveryLoopContainsRefV0(result.Final.Run.ConfirmedStoppedAgents, spec.RequestID) {
+		t.Fatalf("agente no debe estar confirmado como parado: %+v", result.Final.Run)
 	}
-	codexProgressAssertNoPendingTargetV0(t, ledger, runRef, orquestacoreworkflow.OutboxTargetDirectorV0)
 	codexProgressAssertNoPendingTargetV0(t, ledger, runRef, orquestacoreworkflow.OutboxTargetAgentLauncherV0)
 }
 

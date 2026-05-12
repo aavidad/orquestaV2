@@ -17,6 +17,23 @@ func TestBuildDirectorSchedulerTickV0ProgressLoopPriorityOverWorkCandidate(t *te
 	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandAssessAgentWorkV0)
 }
 
+func TestBuildDirectorSchedulerTickV0ProgressLoopOutsideProgrammingStopsAgent(t *testing.T) {
+	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentLoopDetectedV0)
+	input.Snapshot.CurrentPhaseID = string(orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0)
+	input.ProgressSupervisionCandidates[0].SupervisionInput.PhaseID =
+		string(orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0)
+	input.ProgressSupervisionCandidates[0].SupervisionInput.QuestionID = ""
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandAssessAgentWorkV0)
+	assertSchedulerProgressAssessmentV0(t, plan.Commands[0],
+		orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0,
+		orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+	)
+}
+
 func TestBuildDirectorSchedulerTickV0ProgressStalledAsksDirectorBeforeWork(t *testing.T) {
 	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentStalledV0)
 
@@ -79,6 +96,124 @@ func TestBuildDirectorSchedulerTickV0ProgressAllowsPartialStopReconstruction(t *
 
 	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
 	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandAssessAgentWorkV0)
+}
+
+func TestBuildDirectorSchedulerTickV0CapacityLimitedReconstructsMissingStop(t *testing.T) {
+	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentStoppedV0)
+	input.Snapshot.AgentAssessments = []string{"assessment-ref-progress-scheduler-001"}
+	input.ProgressSupervisionCandidates[0].SupervisionInput.Report.BudgetStatus =
+		orquestaruntime.AgentProgressBudgetCapacityLimitedV0
+	input.ProgressSupervisionCandidates[0].SupervisionInput.Report.BudgetReason =
+		"Capacidad externa limitada antes de ACK."
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandAssessAgentWorkV0)
+	assertSchedulerProgressAssessmentV0(t, plan.Commands[0],
+		orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0,
+		orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+	)
+}
+
+func TestBuildDirectorSchedulerTickV0StoppedWithoutAckReconstructsMissingStop(t *testing.T) {
+	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentStoppedV0)
+	input.Snapshot.AgentAssessments = []string{"assessment-ref-progress-scheduler-001"}
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandAssessAgentWorkV0)
+	assertSchedulerProgressAssessmentV0(t, plan.Commands[0],
+		orquestacoreworkflow.AgentAssessmentVerdictGarbageV0,
+		orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+	)
+}
+
+func TestBuildDirectorSchedulerTickV0InterruptedWithoutAckStopsBeforeWork(t *testing.T) {
+	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentStoppedV0)
+	input.ProgressSupervisionCandidates[0].SupervisionInput.Report.Summary =
+		"Interrupcion externa sin entrega observada."
+	input.ProgressSupervisionCandidates[0].SupervisionInput.Report.DecisionRequired = true
+	input.ProgressSupervisionCandidates[0].SupervisionInput.Report.SecondsSinceAck = 180
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandAssessAgentWorkV0)
+	assertSchedulerProgressAssessmentV0(t, plan.Commands[0],
+		orquestacoreworkflow.AgentAssessmentVerdictGarbageV0,
+		orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+	)
+}
+
+func TestBuildDirectorSchedulerTickV0CapacityLimitedStopPrecedesReplanFollowup(t *testing.T) {
+	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentStoppedV0)
+	input.ReplanFollowupCandidates = []SchedulableReplanFollowupCandidateV0{
+		validSchedulableReplanFollowupCandidateV0(orquestacoreworkflow.ReplanDecisionActionRetryTaskV0),
+	}
+	input.ProgressSupervisionCandidates[0].SupervisionInput.Report.BudgetStatus =
+		orquestaruntime.AgentProgressBudgetCapacityLimitedV0
+	input.ProgressSupervisionCandidates[0].SupervisionInput.Report.BudgetReason =
+		"Capacidad externa limitada antes de ACK."
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandAssessAgentWorkV0)
+	assertSchedulerProgressAssessmentV0(t, plan.Commands[0],
+		orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0,
+		orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+	)
+}
+
+func TestBuildDirectorSchedulerTickV0CapacityLimitedReemitsStopBeforeReplan(t *testing.T) {
+	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentStoppedV0)
+	input.Snapshot.AgentAssessments = []string{"assessment-ref-progress-scheduler-001"}
+	input.ReplanFollowupCandidates = []SchedulableReplanFollowupCandidateV0{
+		validSchedulableReplanFollowupCandidateV0(orquestacoreworkflow.ReplanDecisionActionRetryTaskV0),
+	}
+	input.ProgressSupervisionCandidates[0].SupervisionInput.Report.BudgetStatus =
+		orquestaruntime.AgentProgressBudgetCapacityLimitedV0
+	input.ProgressSupervisionCandidates[0].SupervisionInput.Report.BudgetReason =
+		"Capacidad externa limitada antes de ACK."
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandAssessAgentWorkV0)
+	assertSchedulerProgressAssessmentV0(t, plan.Commands[0],
+		orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0,
+		orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+	)
+}
+
+func TestBuildDirectorSchedulerTickV0StoppedProgressYieldsToReplanAfterStopReflected(t *testing.T) {
+	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentStoppedV0)
+	input.Snapshot.AgentAssessments = []string{"assessment-ref-progress-scheduler-001"}
+	input.Snapshot.StoppedAgents = []string{"agent-ref-scheduler-001"}
+	input.ReplanFollowupCandidates = []SchedulableReplanFollowupCandidateV0{
+		validSchedulableReplanFollowupCandidateV0(orquestacoreworkflow.ReplanDecisionActionRetryTaskV0),
+	}
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 2)
+	assertSchedulerCommandTypesV0(t, plan,
+		orquestacoreworkflow.OrchestrationCommandRecordReplanDecisionV0,
+		orquestacoreworkflow.OrchestrationCommandRequestCapacityV0,
+	)
+}
+
+func TestBuildDirectorSchedulerTickV0StoppedProgressDoesNotRepeatAfterStopReflected(t *testing.T) {
+	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentStoppedV0)
+	input.WorkCandidates = nil
+	input.Snapshot.AgentAssessments = []string{"assessment-ref-progress-scheduler-001"}
+	input.Snapshot.StoppedAgents = []string{"agent-ref-scheduler-001"}
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusQuiescentV0, 0)
 }
 
 func TestBuildDirectorSchedulerTickV0PendingOutboxBlocksProgressSupervision(t *testing.T) {

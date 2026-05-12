@@ -28,12 +28,84 @@ func TestCodexProgressReportWithProcessFailureContextV0ClasificaCuotaSinFiltrarP
 	)
 
 	if !got.DecisionRequired ||
-		got.BudgetReason != "Cuota externa agotada antes de entregar ACK." ||
-		got.Summary != "Proceso detenido sin ACK por cuota externa agotada." {
+		got.BudgetStatus != orquestaruntime.AgentProgressBudgetCapacityLimitedV0 ||
+		got.BudgetReason != "Aviso de capacidad externa antes de ACK." ||
+		got.Summary != "Proceso detenido por aviso de capacidad externa; requiere relevo." {
 		t.Fatalf("report=%+v", got)
+	}
+	if !stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-capacity-warning") {
+		t.Fatalf("evidence refs sin capacity_warning compacto: %+v", got.EvidenceRefs)
 	}
 	if issues := orquestaruntime.ValidateAgentProgressReportV0(got); len(issues) > 0 {
 		t.Fatalf("progress report invalido: %+v", issues)
+	}
+}
+
+func TestCodexProgressReportWithProcessFailureContextV0ClasificaNoACKSinLogs(t *testing.T) {
+	report := validCodexProgressFailureReportForTestV0()
+
+	got := codexProgressReportWithProcessFailureContextV0(
+		CodexReceiptDescriptorV0{
+			AckPath: filepath.Join(t.TempDir(), orquestaruntimecodex.CodexAgentAckFileNameV0),
+		},
+		report,
+	)
+
+	if !got.DecisionRequired ||
+		got.Summary != "Proceso detenido sin ACK." ||
+		!stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-no-ack") {
+		t.Fatalf("report=%+v", got)
+	}
+	if got.BudgetStatus != "" || got.BudgetReason != "" {
+		t.Fatalf("no_ack no debe marcar presupuesto: %+v", got)
+	}
+	if issues := orquestaruntime.ValidateAgentProgressReportV0(got); len(issues) > 0 {
+		t.Fatalf("progress report invalido: %+v", issues)
+	}
+}
+
+func TestCodexProgressFailureClassFromDescriptorV0ClasificaSenalesCompactas(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    codexProgressFailureClassV0
+	}{
+		{
+			name:    "interrupted",
+			content: "turn interrupted\n42 tokens used\n",
+			want:    codexProgressFailureInterruptedV0,
+		},
+		{
+			name:    "capacity_warning_priority",
+			content: "turn interrupted\nlow remaining capacity for this model\n",
+			want:    codexProgressFailureCapacityWarningV0,
+		},
+		{
+			name:    "no_ack_without_signal",
+			content: "",
+			want:    codexProgressFailureNoACKV0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tt.content != "" {
+				if err := os.WriteFile(
+					filepath.Join(dir, orquestaruntimecodex.CodexLastMessageFileNameV0),
+					[]byte(tt.content),
+					0o600,
+				); err != nil {
+					t.Fatalf("write last message: %v", err)
+				}
+			}
+			got := codexProgressFailureClassFromDescriptorV0(CodexReceiptDescriptorV0{
+				AckPath: filepath.Join(dir, orquestaruntimecodex.CodexAgentAckFileNameV0),
+			})
+			if got != tt.want {
+				t.Fatalf("failure class=%s want=%s", got, tt.want)
+			}
+		})
 	}
 }
 

@@ -34,10 +34,15 @@ func BuildDirectorSchedulerTickV0(input DirectorSchedulerTickInputV0) (DirectorS
 		return collector.planV0(), nil
 	}
 	if len(normalized.ProgressSupervisionCandidates) > 0 {
-		if err := collector.collectProgressSupervisionCandidateV0(normalized.ProgressSupervisionCandidates[0]); err != nil {
-			return DirectorSchedulerTickPlanV0{}, err
+		progressCandidate := normalized.ProgressSupervisionCandidates[0]
+		if schedulerProgressCandidateCanYieldToReplanV0(normalized, progressCandidate) {
+			collector.addInFlightAgentWaitIfAnyV0()
+		} else {
+			if err := collector.collectProgressSupervisionCandidateV0(progressCandidate); err != nil {
+				return DirectorSchedulerTickPlanV0{}, err
+			}
+			return collector.planV0(), nil
 		}
-		return collector.planV0(), nil
 	}
 	if schedulerHasBlockingQualityGateBeforeWorkV0(normalized) {
 		candidates := schedulerReplanFollowupCandidatesForBlockingQualityGateV0(normalized)

@@ -139,6 +139,31 @@ func TestDeliveryCandidateProviderV0UsaRequestedByNeutralPorDefecto(t *testing.T
 	}
 }
 
+func TestDeliveryCandidateProviderV0LimitaUnCandidatoPorTick(t *testing.T) {
+	second := deliveryObservationForTestV0()
+	second.DeliveryRef = "delivery-ref-nucleo-002"
+	provider := DeliveryCandidateProviderV0{
+		DeliverySource: staticAgentDeliveryObservationSourceV0{Observations: []AgentDeliveryObservationV0{
+			deliveryObservationForTestV0(),
+			second,
+		}},
+	}
+
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        mustDeliveryReadyRunV0(t, "run-nucleo-delivery-single-tick-001"),
+		OccurredAt: "2026-05-09T13:04:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.DeliveryCandidates) != 1 {
+		t.Fatalf("delivery_candidates=%d", len(candidates.DeliveryCandidates))
+	}
+	if candidates.DeliveryCandidates[0].Payload.DeliveryRef != "delivery-ref-nucleo-001" {
+		t.Fatalf("delivery_ref=%q", candidates.DeliveryCandidates[0].Payload.DeliveryRef)
+	}
+}
+
 type staticAgentDeliveryObservationSourceV0 struct {
 	Observations []AgentDeliveryObservationV0
 }

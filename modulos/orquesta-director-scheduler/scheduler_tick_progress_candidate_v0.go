@@ -1,8 +1,10 @@
 package orquestadirectorscheduler
 
 import (
+	"encoding/json"
+
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirector "orquesta/modulos/orquesta-director"
-	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func (collector *schedulerTickCollectorV0) collectProgressSupervisionCandidateV0(
@@ -49,7 +51,7 @@ func (collector *schedulerTickCollectorV0) collectProgressSupervisionResultV0(
 	result orquestadirector.AgentProgressSupervisionResultV0,
 ) {
 	assessmentRef := input.AssessmentRef
-	if collector.progressAssessmentCommandAllowedV0(input) {
+	if collector.progressAssessmentCommandAllowedV0(input, result.AssessCommand) {
 		collector.addReadyCommandV0(result.AssessCommand)
 		collector.plannedAgentAssessments[assessmentRef] = true
 	}
@@ -63,14 +65,34 @@ func (collector *schedulerTickCollectorV0) progressAgentKnownV0(agentRef string)
 	return collector.agents[agentRef] || collector.startedAgents[agentRef]
 }
 
+func schedulerProgressCandidateCanYieldToReplanV0(
+	input DirectorSchedulerTickInputV0,
+	candidate SchedulableProgressSupervisionCandidateV0,
+) bool {
+	if len(input.ReplanFollowupCandidates) == 0 {
+		return false
+	}
+	agentRef := candidate.SupervisionInput.Report.AgentRequestID
+	if agentRef == "" {
+		return false
+	}
+	agents := schedulerStringSetV0(input.Snapshot.Agents)
+	started := schedulerStringSetV0(input.Snapshot.StartedAgents)
+	failed := schedulerStringSetV0(input.Snapshot.FailedAgents)
+	stopped := schedulerStringSetV0(input.Snapshot.StoppedAgents)
+	return (agents[agentRef] || started[agentRef]) &&
+		!failed[agentRef] &&
+		stopped[agentRef]
+}
+
 func (collector *schedulerTickCollectorV0) progressAssessmentCommandAllowedV0(
 	input orquestadirector.AgentProgressSupervisionInputV0,
+	command orquestacoreworkflow.OrchestrationCommandV0,
 ) bool {
 	if !collector.progressAssessmentDoneV0(input.AssessmentRef) {
 		return true
 	}
-	return input.Report.Status == orquestaruntime.AgentLoopDetectedV0 &&
-		progressSupervisionStopAllowedV0(input) &&
+	return progressSupervisionAssessmentStopsAgentV0(command) &&
 		!collector.stoppedAgents[input.Report.AgentRequestID]
 }
 
@@ -78,6 +100,19 @@ func progressSupervisionStopAllowedV0(
 	input orquestadirector.AgentProgressSupervisionInputV0,
 ) bool {
 	return input.StopAllowed == nil || *input.StopAllowed
+}
+
+func progressSupervisionAssessmentStopsAgentV0(
+	command orquestacoreworkflow.OrchestrationCommandV0,
+) bool {
+	if command.CommandType != orquestacoreworkflow.OrchestrationCommandAssessAgentWorkV0 {
+		return false
+	}
+	var payload orquestacoreworkflow.AssessAgentWorkCommandPayloadV0
+	if err := json.Unmarshal(command.Payload, &payload); err != nil {
+		return false
+	}
+	return payload.Action == orquestacoreworkflow.AgentAssessmentActionStopAgentV0
 }
 
 func (collector *schedulerTickCollectorV0) progressAssessmentDoneV0(assessmentRef string) bool {

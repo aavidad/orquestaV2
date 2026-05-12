@@ -90,6 +90,31 @@ func TestCodexReviewGateObservationSourceV0ContinuaTrasRequestReviewPendiente(t 
 	}
 }
 
+func TestCodexReviewGateObservationSourceV0RevisaEntregaDeAgenteYaCerrado(t *testing.T) {
+	spec := codexDeliverySpecForTestV0()
+	ack := codexDeliveryAckForTestV0(spec)
+	path := writeCodexDeliveryAckForTestV0(t, spec, ack)
+	store := NewInMemoryCodexReceiptDescriptorStoreV0(CodexReceiptDescriptorV0{
+		DescriptorRef: "receipt-ref-001",
+		RunID:         "run-ref-001",
+		AgentRef:      spec.RequestID,
+		Spec:          spec,
+		AckPath:       path,
+	})
+	request := codexReviewGateRequestForTestV0(spec, nil)
+	request.Run.StoppedAgents = []string{spec.RequestID}
+	request.Run.ConfirmedStoppedAgents = []string{spec.RequestID}
+
+	observations, err := (CodexReviewGateObservationSourceV0{Store: store}).
+		BuildReviewGateObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildReviewGateObservationsV0: %v", err)
+	}
+	if len(observations) != 1 {
+		t.Fatalf("review gate debe revisar entregas cerradas: observations=%d", len(observations))
+	}
+}
+
 func TestCodexReviewGateObservationSourceV0OmiteTrasReworkSolicitado(t *testing.T) {
 	spec := codexDeliverySpecForTestV0()
 	ack := codexDeliveryAckForTestV0(spec)

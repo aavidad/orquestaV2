@@ -7,7 +7,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 )
 
-func TestDirectorRunStatsWithObservationsV0MarksProtectedDirectorCanStopFalse(t *testing.T) {
+func TestDirectorRunStatsWithObservationsV0MarksProtectedDirectorLoopCanStop(t *testing.T) {
 	runRef := "run-nucleo-director-stats-protected-001"
 	agentRef := "agent-ref-stats-protected-director-001"
 	run := mustActiveBrainstormingRunWithStartedAgentV0(t, runRef, agentRef)
@@ -33,7 +33,7 @@ func TestDirectorRunStatsWithObservationsV0MarksProtectedDirectorCanStopFalse(t 
 	}}, nil)
 
 	agent := findDirectorAgentStatsForTestV0(t, stats, agentRef)
-	if !agent.ControlRegistered || agent.Process == nil || agent.CanStop {
-		t.Fatalf("agent protegido=%+v", agent)
+	if !agent.ControlRegistered || agent.Process == nil || !agent.CanStop {
+		t.Fatalf("agent protegido en loop=%+v", agent)
 	}
 }

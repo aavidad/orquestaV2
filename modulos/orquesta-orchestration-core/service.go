@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	orquestadirectorrunner "orquesta/modulos/orquesta-director-runner"
 	orquestadirectorsupervisedburst "orquesta/modulos/orquesta-director-supervised-burst"
 )
 
@@ -29,8 +30,8 @@ func (service ServiceV0) RunSupervisedBurstV0(
 		OutboxLedger:      service.OutboxLedger,
 		Workflow:          workflow,
 		Request:           request,
-		MaxCommands:       service.MaxCommands,
-		MaxOutboxPerCycle: service.MaxOutboxPerCycle,
+		MaxCommands:       boundedServiceMaxCommandsV0(service.MaxCommands),
+		MaxOutboxPerCycle: boundedServiceMaxOutboxV0(service.MaxOutboxPerCycle),
 	}
 	burst, burstErr := orquestadirectorsupervisedburst.RunDirectorSupervisedBurstV0(ctx,
 		orquestadirectorsupervisedburst.DirectorSupervisedBurstInputV0{
@@ -84,6 +85,21 @@ func (service ServiceV0) validateV0(request SupervisedBurstRequestV0) error {
 		return errorV0(ErrNucleoOrquestacionInvalidoV0, "max_steps", "max_steps debe ser mayor que cero")
 	}
 	return nil
+}
+
+func boundedServiceMaxCommandsV0(value int) int {
+	return boundedServicePositiveLimitV0(value, orquestadirectorrunner.DirectorCycleMaxCommandsV0)
+}
+
+func boundedServiceMaxOutboxV0(value int) int {
+	return boundedServicePositiveLimitV0(value, orquestadirectorrunner.DirectorCycleMaxOutboxV0)
+}
+
+func boundedServicePositiveLimitV0(value int, max int) int {
+	if value > max {
+		return max
+	}
+	return value
 }
 
 func (service ServiceV0) stepExecutorV0() orquestadirectorsupervisedburst.DirectorCycleStepExecutorPortV0 {

@@ -232,6 +232,29 @@ Contratos afectados: BuildReplanFollowups v0, RecordReplanDecision v0, OpenPhase
 Estado: aceptada_local
 ```
 
+```text
+Fecha: 2026-05-12
+Decision: `capacity_limited` cierra el agente parado y fuerza relevo controlado.
+Motivo: si un runtime externo se detiene antes de ACK por capacidad limitada, el
+director no debe esperar mas ciclos ni clasificar el trabajo como basura. El
+trabajo no existe aun; la accion correcta es liberar el agente logico y dejar
+que capacidad/replanificacion escojan otra opcion.
+Alternativas:
+  - AskDirector bloqueante siempre: descartado porque deja proceso ya parado
+    como deuda operativa y puede bloquear la app.
+  - Tratarlo como over_budget: descartado porque no hay evidencia de cuota
+    consumida o agotada, solo capacidad externa no disponible.
+  - Reintentar desde el director inventando modelo/proveedor: descartado por
+    romper hexagonal y filtrar politica de capacidad al core.
+Impacto: BuildAgentProgressSupervisionV0 emite assessment
+`capacity_limited` y accion `stop_agent` cuando la parada es segura; si el
+agente esta protegido, pregunta al director sin inventar runtime, modelo,
+provider, HOME ni OAuth.
+Contratos afectados: AgentProgressReport v0, AssessAgentWork v0,
+BuildAgentProgressSupervision v0.
+Estado: aceptada_local
+```
+
 ## Plantilla
 
 ```text

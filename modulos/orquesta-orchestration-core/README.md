@@ -77,8 +77,10 @@ El contrato operativo de receipt de agente es:
 3. `DeliveryCandidateProviderV0` genera:
    - `SchedulableDeliveryCandidateV0` si la fase es `programacion`;
    - `SchedulablePhaseArtifactCandidateV0` si la fase no es `programacion`;
-4. el scheduler exige agente existente, started_agent y fase actual;
-5. el workflow registra `DeliveryRegistered` para programacion o
+4. el provider emite como maximo un candidato por tick; el resto se reevalua
+   con el run actualizado para mantener el input compacto;
+5. el scheduler exige agente existente, started_agent y fase actual;
+6. el workflow registra `DeliveryRegistered` para programacion o
    `PhaseArtifactRegistered` para brainstorming/documentacion/revision/etc.
 
 El contrato operativo de review gate es:
@@ -90,8 +92,10 @@ El contrato operativo de review gate es:
    `RequestReview` y `RecordReviewResult`;
 4. si el status es `accepted`, anade `AcceptReview`;
 5. si el status es `changes_requested` o `rejected`, anade `RequestRework`;
-6. el scheduler materializa un comando por tick segun estado durable observado;
-7. el workflow deduplica con `Reviews`, `ReviewResults`, `AcceptedReviews` y
+6. el provider emite como maximo un candidato por tick para que una revision
+   con muchas entregas no infle el input del scheduler;
+7. el scheduler materializa un comando por tick segun estado durable observado;
+8. el workflow deduplica con `Reviews`, `ReviewResults`, `AcceptedReviews` y
    `ReworkRequests`.
 
 El nucleo no lee tests, ficheros, ACKs, transcripts, runtime ni proveedor para
@@ -129,6 +133,23 @@ El contrato operativo de microtarea programable es:
    `orquesta-director-candidates`, no con structs fabricados a mano;
 5. el scheduler decide `RequestCapacity -> RequestAgent` sin conocer DB,
    runtime, proveedor, modelo, HOME ni OAuth.
+
+El contrato operativo de solicitud de autoprogramacion es:
+
+1. un adaptador externo crea `AutoprogrammingRequestV0` para una `project_ref`
+   opaca que representa Orquesta fuera del nucleo;
+2. el core solo valida refs y alcance, no ejecuta agentes, smokes, VCS ni
+   comandos;
+3. la solicitud exige `worktree_ref` aislada y `branch_ref` opaca obligatoria;
+4. las tareas se agrupan por area con `GroupAutoprogrammingTasksByAreaV0`;
+5. el alcance queda limitado por defecto a 3 tareas, 2 areas y 5 entradas de
+   `write_set`;
+6. `required_tests` es obligatorio y queda como contrato que un adaptador de
+   ejecucion debe satisfacer fuera del core.
+
+`branch_ref`, `worktree_ref` y `project_ref` son referencias neutrales. Este
+paquete no decide Git, proveedor, modelo, runtime, DB, HOME, credenciales ni
+estrategia de merge.
 
 La capacidad real de lanzamiento por proceso queda, por diseno, fuera del
 nucleo: debe vivir en un conector de runtime configurado por el operador. Ese
@@ -222,6 +243,9 @@ actual.
 - Microtareas de workflow a scheduling: `WorkflowTaskCandidateProviderV0`
   rehidrata `WorkflowTaskV0` por puerto externo, respeta `run.Tasks` como lista
   autorizada y construye work candidates por builder validado.
+- Contrato preflight de autoprogramacion: `ValidateAutoprogrammingRequestV0`
+  acepta solo solicitudes sobre refs opacas, worktree aislada, branch/ref,
+  alcance compacto y tests obligatorios, sin ejecutar agentes ni smokes.
 - Store de microtareas en memoria para tests y smoke: `InMemoryWorkflowTaskStoreV0`
   guarda DTOs validados sin introducir DB ni repositorio legacy.
 - Integracion batch + supervision: dos procesos reales controlados pueden
@@ -298,11 +322,13 @@ progreso.
   replan usando `orquesta-core-replanner`; solo materializa `retry_task`,
   `replace_agent` y `escalate_capacity`.
 - `DeliveryCandidateProviderV0`, adaptador que agrega observaciones compactas
-  de receipt a los candidatos del scheduler por puerto.
+  de receipt a los candidatos del scheduler por puerto; emite una observacion
+  por tick y deja el resto al siguiente ciclo durable.
 - `ReviewGateCandidateProviderV0`, adaptador que agrega observaciones compactas
   de revision a los candidatos del scheduler por puerto. Para
   `changes_requested` o `rejected` genera `RequestRework`; para `accepted`
-  genera `AcceptReview`.
+  genera `AcceptReview`. Emite una observacion por tick para preservar el
+  presupuesto compacto del scheduler.
 - `ContextBundleRuntimeMaterializerV0`, adaptador de materializacion de
   contexto sobre `orquesta-context` y reader inyectado.
 - `AgentReadinessProbePortV0`, puerto opcional de readiness por refs opacas.
@@ -354,8 +380,8 @@ go test ./modulos/orquesta-orchestration-core -run 'TestRunManagedProgressiveLoo
 go test ./modulos/orquesta-orchestration-core -run 'TestExternalProcessAgentBatchExecutorV0' -count=1
 go test ./modulos/orquesta-orchestration-core -run 'TestWorkflowTaskCandidateProviderV0' -count=1
 go test ./modulos/orquesta-orchestration-core -run 'TestProgressSupervisionCandidateProviderV0' -count=1
-go test ./modulos/orquesta-orchestration-core -run 'TestDeliveryCandidateProviderV0' -count=1
-go test ./modulos/orquesta-orchestration-core -run 'TestEvaluateAutoprogrammingReviewGateV0' -count=1
+go test ./modulos/orquesta-orchestration-core -run 'Test(DeliveryCandidateProviderV0|ReviewGateCandidateProviderV0)' -count=1
+go test ./modulos/orquesta-orchestration-core -run 'Test(ValidateAutoprogrammingRequestV0|EvaluateAutoprogrammingReviewGateV0)' -count=1
 go test ./modulos/orquesta-orchestration-core -run 'TestProgressSupervisionLoopDetectedStopsAgentThroughOutbox' -count=1
 go test ./modulos/orquesta-orchestration-core -run 'TestProgressiveLoopV0StopsAgentFromLeaseAssessment' -count=1
 go test ./modulos/orquesta-orchestration-core -run 'TestProgressiveLoopV0ReplansFromStoppedAgentAssessment' -count=1
