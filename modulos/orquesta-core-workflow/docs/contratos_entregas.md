@@ -56,7 +56,9 @@ Invariantes:
   - `agent_ref` debe tener `AgentStarted` previo.
   - `agent_ref` no puede tener `AgentFailed` previo.
   - `agent_ref` no puede estar en `stopped_agents`.
-  - `ApplyEventV0` proyecta `delivery_ref` en `deliveries` sin duplicar y registra/verifica `CommandEffects`.
+  - `ApplyEventV0` proyecta `delivery_ref` en `deliveries`, `task_id` en `delivered_tasks` y `agent_ref` en `delivered_agents` sin duplicar.
+  - La proyeccion `delivered_agents` es la fuente canonica para stats de agentes completados por entrega; no se infiere desde nombres de ACK.
+  - Registra/verifica `CommandEffects`.
   - No contiene implementacion, diff, transcripts ni detalles de runtime/adaptadores.
 Errores:
   - evento_invalido

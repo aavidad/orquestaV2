@@ -143,6 +143,7 @@ func validRunForSerializationTestV0() OrchestrationRunV0 {
 		Agents:            []string{"agent_ref_001"},
 		Deliveries:        []string{"delivery_ref_001"},
 		DeliveredTasks:    []string{"task_ref_001"},
+		DeliveredAgents:   []string{"agent_ref_001"},
 		Reviews:           []string{"review_ref_001"},
 		AcceptedReviews:   []string{"accepted_review_ref_001"},
 		ClosedTasks:       []string{"task_ref_001"},

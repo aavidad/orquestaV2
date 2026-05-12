@@ -13,13 +13,33 @@ func reflectedDirectorAgentSetV0(
 ) map[string]bool {
 	started := compactStringsV0(run.StartedAgents)
 	out := map[string]bool{}
+	for _, agentRef := range compactStringsV0(run.DeliveredAgents) {
+		out[agentRef] = true
+	}
 	for _, projection := range run.PhaseArtifacts {
 		markReflectedDirectorAgentV0(out, started, projection)
 	}
 	for _, deliveryRef := range run.Deliveries {
 		markReflectedDirectorAgentV0(out, started, deliveryRef)
 	}
+	markDeliveredAssessmentAgentsReflectedV0(out, run)
 	return out
+}
+
+func markDeliveredAssessmentAgentsReflectedV0(
+	out map[string]bool,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) {
+	deliveredTasks := autonomousStringSetV0(run.DeliveredTasks)
+	for _, value := range run.AgentAssessments {
+		assessment, ok := orquestacoreworkflow.ParseAgentAssessmentProjectionV0(value)
+		if !ok || strings.TrimSpace(assessment.AgentRequestID) == "" {
+			continue
+		}
+		if deliveredTasks[assessment.TaskRef] {
+			out[assessment.AgentRequestID] = true
+		}
+	}
 }
 
 func markReflectedDirectorAgentV0(

@@ -30,8 +30,10 @@ func TestWebDirectorStatsPanelV0ProyectaRunCountsProgresoYErrores(t *testing.T) 
 		t.Fatalf("panel=%+v", panel)
 	}
 	if panel.Counts.TasksTotal != 2 ||
+		panel.Counts.TasksDelivered != 1 ||
 		panel.Counts.Brainstorms != 1 ||
-		panel.Counts.AgentsStarted != 1 {
+		panel.Counts.AgentsStarted != 1 ||
+		panel.Counts.AgentsDelivered != 1 {
 		t.Fatalf("counts=%+v", panel.Counts)
 	}
 	if len(panel.Tareas) != 1 ||
@@ -113,10 +115,12 @@ func directorStatsResultForWebTestV0() WebDirectorStatsInboundResultV0 {
 			Status:        "running",
 			CurrentPhase:  "programacion",
 			Counts: map[string]int{
-				"tasks_total":    2,
-				"tasks_closed":   1,
-				"brainstorms":    1,
-				"agents_started": 1,
+				"tasks_total":      2,
+				"tasks_closed":     1,
+				"tasks_delivered":  1,
+				"brainstorms":      1,
+				"agents_started":   1,
+				"agents_delivered": 1,
 			},
 			Progress: WebDirectorProgressStatsContractV0{
 				SourceStatus:      "loaded",

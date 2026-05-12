@@ -77,6 +77,7 @@ type OrchestrationRunV0 struct {
 	PhaseArtifacts            []string                 `json:"phase_artifacts"`
 	Deliveries                []string                 `json:"deliveries"`
 	DeliveredTasks            []string                 `json:"delivered_tasks"`
+	DeliveredAgents           []string                 `json:"delivered_agents"`
 	Reviews                   []string                 `json:"reviews"`
 	ReviewResults             []string                 `json:"review_results"`
 	ReworkRequests            []string                 `json:"rework_requests"`

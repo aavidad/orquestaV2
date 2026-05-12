@@ -59,6 +59,7 @@ type DirectorRunStatsCountsV0 struct {
 	TasksTotal              int `json:"tasks_total"`
 	TasksClosed             int `json:"tasks_closed"`
 	TasksOpen               int `json:"tasks_open"`
+	TasksDelivered          int `json:"tasks_delivered"`
 	Brainstorms             int `json:"brainstorms"`
 	Votes                   int `json:"votes"`
 	FunctionContracts       int `json:"function_contracts"`
@@ -70,6 +71,7 @@ type DirectorRunStatsCountsV0 struct {
 	AgentsFailed            int `json:"agents_failed"`
 	AgentsStopRequested     int `json:"agents_stop_requested"`
 	AgentsStopConfirmed     int `json:"agents_stop_confirmed"`
+	AgentsDelivered         int `json:"agents_delivered"`
 	AgentsInFlight          int `json:"agents_in_flight"`
 	AgentsControlRegistered int `json:"agents_control_registered"`
 	AgentsControlMissing    int `json:"agents_control_missing"`
@@ -95,6 +97,7 @@ type DirectorRunStatsCountsV0 struct {
 type DirectorRunStatsRefsV0 struct {
 	OpenTasks             []string `json:"open_tasks,omitempty"`
 	ClosedTasks           []string `json:"closed_tasks,omitempty"`
+	DeliveredTasks        []string `json:"delivered_tasks,omitempty"`
 	Brainstorms           []string `json:"brainstorms,omitempty"`
 	Votes                 []string `json:"votes,omitempty"`
 	FunctionContracts     []string `json:"function_contracts,omitempty"`
@@ -106,6 +109,7 @@ type DirectorRunStatsRefsV0 struct {
 	AgentsFailed          []string `json:"agents_failed,omitempty"`
 	AgentsStopRequested   []string `json:"agents_stop_requested,omitempty"`
 	AgentsStopConfirmed   []string `json:"agents_stop_confirmed,omitempty"`
+	AgentsDelivered       []string `json:"agents_delivered,omitempty"`
 	AgentAssessments      []string `json:"agent_assessments,omitempty"`
 	AgentLeaseExpirations []string `json:"agent_lease_expirations,omitempty"`
 	ConcurrencyGates      []string `json:"concurrency_gates,omitempty"`

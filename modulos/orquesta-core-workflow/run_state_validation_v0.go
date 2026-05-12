@@ -130,6 +130,7 @@ func validateRunRefsV0(run OrchestrationRunV0) []OrchestrationValidationIssueV0 
 		"phase_artifacts":             run.PhaseArtifacts,
 		"deliveries":                  run.Deliveries,
 		"delivered_tasks":             run.DeliveredTasks,
+		"delivered_agents":            run.DeliveredAgents,
 		"reviews":                     run.Reviews,
 		"review_results":              run.ReviewResults,
 		"rework_requests":             run.ReworkRequests,

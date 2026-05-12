@@ -749,3 +749,12 @@ criterios o tests en silencio.
 Contratos afectados: WorkflowTaskV0, CreateMicrotask, WorkflowTaskStorePortV0.
 Estado: aceptada local en NCW-071
 ```
+
+```text
+Fecha: 2026-05-13
+Decision: Persistir agentes entregados como `delivered_agents`.
+Motivo: La prueba real `director -> microtarea -> worker Codex -> ACK -> DeliveryRegistered` mostro que stats no puede depender de inferir el agente desde `delivery_ref`; algunos ACK incluyen el agent id y otros no. El payload de `DeliveryRegistered` ya contiene `agent_ref`, por lo que descartarlo era perdida de informacion.
+Impacto: `DeliveryRegistered` proyecta `agent_ref` en `OrchestrationRunV0.DeliveredAgents`; stats usa esa proyeccion para marcar agente `completed`, limpiar progreso/assessment obsoleto y evitar falsos `no_signal`/`stalled`.
+Contratos afectados: DeliveryRegistered, OrchestrationRunV0, DirectorRunStatsV0.
+Estado: aceptada local en NCW-072
+```

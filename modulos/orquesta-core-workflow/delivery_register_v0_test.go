@@ -33,12 +33,19 @@ func TestApplyDeliveryRegisteredV0ProjectsRefOnce(t *testing.T) {
 		t.Fatalf("apply DeliveryRegistered: %v", err)
 	}
 	if !reflect.DeepEqual(got.Deliveries, []string{"delivery-001"}) ||
-		!reflect.DeepEqual(got.DeliveredTasks, []string{"task-ncw-009"}) {
-		t.Fatalf("deliveries=%v delivered_tasks=%v", got.Deliveries, got.DeliveredTasks)
+		!reflect.DeepEqual(got.DeliveredTasks, []string{"task-ncw-009"}) ||
+		!reflect.DeepEqual(got.DeliveredAgents, []string{"agent-request-001"}) {
+		t.Fatalf(
+			"deliveries=%v delivered_tasks=%v delivered_agents=%v",
+			got.Deliveries,
+			got.DeliveredTasks,
+			got.DeliveredAgents,
+		)
 	}
 	again := mustApplyReducerEventV0(t, got, event)
 	if !reflect.DeepEqual(again.Deliveries, got.Deliveries) ||
-		!reflect.DeepEqual(again.DeliveredTasks, got.DeliveredTasks) {
+		!reflect.DeepEqual(again.DeliveredTasks, got.DeliveredTasks) ||
+		!reflect.DeepEqual(again.DeliveredAgents, got.DeliveredAgents) {
 		t.Fatalf("delivery projection duplicated: %+v", again)
 	}
 }
@@ -59,6 +66,9 @@ func TestReplayDurableEventsV0AcceptsDeliveryRegistered(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got.DeliveredTasks, []string{"task-ncw-009"}) {
 		t.Fatalf("delivered_tasks=%v", got.DeliveredTasks)
+	}
+	if !reflect.DeepEqual(got.DeliveredAgents, []string{"agent-request-001"}) {
+		t.Fatalf("delivered_agents=%v", got.DeliveredAgents)
 	}
 }
 

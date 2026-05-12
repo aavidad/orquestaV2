@@ -44,6 +44,7 @@ func applyRunStartedEventV0(current OrchestrationRunV0, event OrchestrationEvent
 		PhaseArtifacts:            []string{},
 		Deliveries:                []string{},
 		DeliveredTasks:            []string{},
+		DeliveredAgents:           []string{},
 		Reviews:                   []string{},
 		ReviewResults:             []string{},
 		ReworkRequests:            []string{},

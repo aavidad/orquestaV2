@@ -13,6 +13,9 @@ Decision:
 
 - El nucleo de estadisticas considera `completed` a un agente arrancado cuando
   su trabajo ya quedo reflejado en `phase_artifacts` o `deliveries`.
+- `DeliveryRegistered` proyecta `agent_ref` en `delivered_agents`; stats debe
+  usar esa proyeccion para marcar agentes completados, no inferencias por nombre
+  de ACK o ruta de fichero.
 - `no_signal_agent_refs` solo incluye agentes arrancados que no tienen progreso,
   no han fallado, no han sido parados y tampoco tienen entrega reflejada.
 - La web pide por defecto `include_process_refs`, `include_agent_progress` e
@@ -26,6 +29,9 @@ Razonamiento:
 
 - Un agente que ya entrego no debe figurar como perdido ni inflar
   `agents_in_flight`; eso lleva al director y a la web a diagnosticos falsos.
+- La prueba real mostro que inferir el agente desde `delivery_ref` es fragil:
+  algunos ACK incluyen el agent id y otros no. El dato correcto ya existe en el
+  payload de `DeliveryRegistered`, por lo que debe persistirse en el estado.
 - La prueba no fallo por falta de ideas del director, sino por una diferencia de
   defaults entre la frontera paralela de microtareas y el presupuesto del
   servidor residente. Subir el presupuesto al maximo validado por el core evita
@@ -50,5 +56,8 @@ Validacion real 2026-05-13:
 - La prueba de self-observability documento el flujo REST real, stats con
   progreso vivo, deteccion stalled, stop por run-control y confirmacion
   `agents_stop_confirmed`.
-- Queda pendiente cerrar la evidencia end-to-end entre continuation y
-  deliveries antes de considerar completa la frontera de finalizacion del run.
+- Una prueba real posterior valido `director -> microtareas -> worker Codex real
+  -> agent_ack.json -> DeliveryRegistered` para la primera microtarea de
+  programacion.
+- Queda pendiente repetirlo hasta completar una app entera con review,
+  validacion y cierre.

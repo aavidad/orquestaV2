@@ -181,6 +181,7 @@ func TestBuildDirectorRunStatsWithObservationsV0NoMarcaSinSenalAgentesConEntrega
 	run.Deliveries = []string{
 		"ack-ref-app-stack-agent-ref-reflected-delivery-001",
 	}
+	run.DeliveredAgents = []string{"agent-ref-reflected-delivery-001"}
 
 	stats := BuildDirectorRunStatsWithObservationsV0(run, []AgentProgressObservationV0{}, nil)
 
@@ -198,6 +199,51 @@ func TestBuildDirectorRunStatsWithObservationsV0NoMarcaSinSenalAgentesConEntrega
 	deliveryAgent := findDirectorAgentStatsForTestV0(t, stats, "agent-ref-reflected-delivery-001")
 	if deliveryAgent.Status != DirectorAgentStatusCompletedV0 || deliveryAgent.InFlight {
 		t.Fatalf("delivery_agent=%+v", deliveryAgent)
+	}
+}
+
+func TestBuildDirectorRunStatsV0IgnoraAssessmentObsoletoTrasDelivery(t *testing.T) {
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-progress-delivered-001")
+	taskRef := "task-ref-delivered-001"
+	agentRef := WorkflowTaskAgentRequestRefV0(taskRef)
+	run.Tasks = []string{taskRef}
+	run.DeliveredTasks = []string{taskRef}
+	run.Deliveries = []string{"ack-ref-app-stack-" + agentRef}
+	run.DeliveredAgents = []string{agentRef}
+	run.Agents = []string{agentRef}
+	run.StartedAgents = []string{agentRef}
+	run.AgentAssessments = []string{
+		orquestacoreworkflow.AgentAssessmentProjectionRefV0(orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+			AssessmentRef:  "assessment-ref-delivered-stale-001",
+			PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			AgentRequestID: agentRef,
+			TaskRef:        taskRef,
+			Verdict:        orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+			Action:         orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+			Severity:       orquestacoreworkflow.AgentAssessmentSeverityHighV0,
+		}),
+	}
+
+	stats := BuildDirectorRunStatsWithObservationsV0(run, []AgentProgressObservationV0{}, nil)
+
+	if stats.Counts.TasksDelivered != 1 ||
+		stats.Progress.ObservedAgents != 0 ||
+		stats.Progress.StalledAgents != 0 ||
+		stats.Progress.TasksObserved != 1 {
+		t.Fatalf("counts=%+v progress=%+v", stats.Counts, stats.Progress)
+	}
+	agent := findDirectorAgentStatsForTestV0(t, stats, agentRef)
+	if agent.Status != DirectorAgentStatusCompletedV0 ||
+		agent.InFlight ||
+		agent.NeedsAttention ||
+		agent.LastProgress != nil {
+		t.Fatalf("agent=%+v", agent)
+	}
+	task := findDirectorTaskProgressForTestV0(t, stats.Progress, taskRef)
+	if task.Status != DirectorTaskProgressDeliveredV0 ||
+		task.DecisionRequired ||
+		task.LastReportRef != "" {
+		t.Fatalf("task=%+v", task)
 	}
 }
 

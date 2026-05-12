@@ -12,6 +12,10 @@ Estado: listo para retomar desde otro equipo tras commit de avances.
 - Se agregaron pruebas deterministas de stack para cerrar dos huecos de regresion:
   `DeliveryRegistered` desde ACK de workers de programacion y stop forzado por
   API con stats finales coherentes.
+- Se ejecuto una prueba real acotada posterior que llego a
+  `worker real -> agent_ack.json -> DeliveryRegistered`.
+- Se corrigio la perdida de `agent_ref` en entregas persistiendo
+  `delivered_agents`.
 - Se documento el procedimiento actual de apagado controlado en
   `docs/runbooks/apagado_controlado_servidor_y_agentes.md`.
 
@@ -28,6 +32,12 @@ Estado: listo para retomar desde otro equipo tras commit de avances.
   - Stats proyecta progreso desde `AgentWorkAssessed`.
   - `no_signal_agent_refs` excluye agentes parados, reflejados, stop_requested y assessed.
   - Se conserva progreso compacto para web/director aunque no haya observacion runtime viva.
+  - Una entrega real tiene prioridad sobre progreso/assessment obsoleto:
+    `delivered_tasks` marca la tarea como `delivered` y `delivered_agents`
+    marca el agente como `completed`.
+- `orquesta-core-workflow`:
+  - `DeliveryRegistered` proyecta `delivery_ref`, `task_id` y `agent_ref` en
+    `deliveries`, `delivered_tasks` y `delivered_agents`.
 - `orquesta-run-coordinator`:
   - `stop_requested forced=true` ya no se salta por `DispatchAllowed=false`.
   - El coordinador llama al drainer para permitir `StopRuntimeAgent` y confirmaciones.
@@ -58,6 +68,36 @@ Resultado observado:
 
 No quedaron procesos Orquesta/Codex vivos de la prueba.
 
+## Prueba real posterior con entrega
+
+Servidor e2e aislado:
+
+- Proyecto: `/home/alberto/Trabajo/orquesta-e2e-real-20260512T225636Z/project`
+- Run: `run-spec-notas-mini-api-web-req-notas-mini-api-web-2ea80660`
+- Modelo: `gpt-5.5`, reasoning `xhigh`
+
+Resultado observado:
+
+- El director real genero `docs/arquitectura.md`,
+  `docs/plan_microtareas.md`, `docs/api.md`, `docs/web.md` y
+  `docs/persistencia.md`.
+- Orquesta abrio `programacion` y creo 6 microtareas.
+- Orquesta arranco worker real para `task-programacion-bootstrap-go`.
+- El worker entrego `go.mod`, `cmd/server/main.go` e
+  `internal/app/bootstrap.go`.
+- El worker dejo `agent_ack.json` valido y Orquesta registro
+  `DeliveryRegistered`.
+- La prueba se corto de forma controlada tras la primera entrega real, por lo
+  que valida la frontera minima de entrega pero no una app completa.
+
+Hallazgo corregido:
+
+- Stats mantenia progreso/assessment obsoleto despues de la entrega.
+- Causa raiz: `DeliveryRegistered` no proyectaba `agent_ref` en el estado del
+  run.
+- Solucion: `OrchestrationRunV0.DeliveredAgents` y stats basadas en esa
+  proyeccion, sin depender de convenciones de nombres de ACK.
+
 ## Subagentes
 
 - Cicero: confirmo que `decision -> microtarea -> worker` ya existe. El hueco real es continuidad hasta `DeliveryRegistered` y ACK valido de workers.
@@ -66,13 +106,14 @@ No quedaron procesos Orquesta/Codex vivos de la prueba.
 
 ## Pendiente principal
 
-Orquesta ya arranca director y workers, detecta atasco y tiene prueba
-determinista de continuidad `decision -> microtarea -> worker ACK ->
-DeliveryRegistered`. Falta validar esa misma continuidad con agentes Codex
-reales en una app completa sin cortar el run antes del ACK:
+Orquesta ya arranca director y workers, detecta atasco, registra una primera
+entrega real y tiene prueba determinista de continuidad `decision -> microtarea
+-> worker ACK -> DeliveryRegistered`. Falta validar esa misma continuidad con
+agentes Codex reales hasta completar una app sin cortar el run tras el primer
+ACK:
 
-- workers deben escribir ACK valido;
-- el supervisor debe seguir drenando sin intervencion;
+- todos los workers deben escribir ACK valido;
+- el supervisor debe seguir drenando sin intervencion hasta review/cierre;
 - documentacion ejecutable hoy debe ir como microtarea de `programacion` sobre `docs/...` o crear un provider hexagonal especifico para fase `documentacion`;
 - no se deben inventar deliveries si el run se para antes del ACK.
 

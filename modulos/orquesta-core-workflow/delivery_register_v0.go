@@ -94,6 +94,7 @@ func applyDeliveryRegisteredEventV0(current OrchestrationRunV0, event Orchestrat
 	next := cloneRunForReducerV0(current)
 	next.Deliveries = appendUniqueCompactRefV0(next.Deliveries, payload.DeliveryRef)
 	next.DeliveredTasks = appendUniqueCompactRefV0(next.DeliveredTasks, payload.TaskID)
+	next.DeliveredAgents = appendUniqueCompactRefV0(next.DeliveredAgents, payload.AgentRef)
 	effects, err := appendCommandEffectFromEventV0(next.CommandEffects, event, payload.DeliveryRef)
 	if err != nil {
 		return current, err

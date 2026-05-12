@@ -9,6 +9,7 @@ const (
 const (
 	DirectorTaskProgressPendingV0      = "pending"
 	DirectorTaskProgressInProgressV0   = "in_progress"
+	DirectorTaskProgressDeliveredV0    = "delivered"
 	DirectorTaskProgressStalledV0      = "stalled"
 	DirectorTaskProgressLoopDetectedV0 = "loop_detected"
 	DirectorTaskProgressStoppedV0      = "stopped"

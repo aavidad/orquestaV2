@@ -59,7 +59,7 @@ proveedores concretos ni a rutas fisicas. Los nombres expuestos al usuario
 deben mantenerse en la capa de i18n/documentacion, no incrustados como logica
 de dominio.
 
-## Hueco pendiente
+## Hueco inicial detectado
 
 Queda pendiente cerrar con agentes reales la continuidad entre `continuation` y
 `deliveries`. Durante la prueba la observabilidad pudo mostrar progreso,
@@ -75,6 +75,41 @@ Hasta cerrar ese hueco, la prueba demuestra control y observabilidad del run,
 pero no debe considerarse una validacion completa del contrato de continuacion y
 entrega final.
 
+## Validacion real posterior
+
+Despues de la cobertura determinista se ejecuto una prueba REST real acotada
+con Codex real:
+
+- director real creo documentacion de arquitectura y plan de microtareas;
+- Orquesta abrio `programacion`;
+- Orquesta creo 6 microtareas de programacion;
+- Orquesta arranco worker real para `task-programacion-bootstrap-go`;
+- el worker escribio `go.mod`, `cmd/server/main.go` e
+  `internal/app/bootstrap.go`;
+- el worker genero `agent_ack.json` valido;
+- Orquesta registro `DeliveryRegistered` para esa microtarea;
+- las stats reflejaron `tasks_total=6`, `phase_artifacts=4`,
+  `deliveries=1`, `agents_started=5` y `agents_in_flight=0`;
+- el run se paro por `POST /api/v0/runs/control action=stop forced=true`;
+- todos los agentes arrancados quedaron en `agents_stop_confirmed`.
+
+Directorio conservado para inspeccion:
+
+```text
+/home/alberto/Trabajo/orquesta-e2e-real-20260512T225636Z
+```
+
+Esta prueba cierra la evidencia real minima de
+`director -> microtareas -> worker real -> ACK -> DeliveryRegistered`. No
+cierra todavia una app completa: se corto de forma controlada tras la primera
+entrega real para mantener la prueba acotada.
+
+Hallazgo: la primera version de stats conservaba progreso/assessment obsoleto
+despues de `DeliveryRegistered`. La causa raiz era perdida de informacion:
+`DeliveryRegistered` traia `agent_ref`, pero `OrchestrationRunV0` no lo
+proyectaba. Se corrigio guardando `delivered_agents` y haciendo que stats use
+esa proyeccion fuerte en lugar de inferir agentes por nombres de ACK.
+
 ## Cobertura determinista posterior
 
 Tras la prueba real se agrego cobertura local de stack para la misma frontera:
@@ -88,4 +123,4 @@ Tras la prueba real se agrego cobertura local de stack para la misma frontera:
 
 Esto cierra el riesgo de regresion de nucleo en pruebas rapidas. La validacion
 con Codex real sigue siendo necesaria para declarar cerrado el flujo productivo
-completo.
+completo de una app, pero la primera entrega real ya esta validada.

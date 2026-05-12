@@ -34,9 +34,11 @@ type WebDirectorStatsCountsV0 struct {
 	TasksTotal          int `json:"tasks_total"`
 	TasksClosed         int `json:"tasks_closed"`
 	TasksOpen           int `json:"tasks_open"`
+	TasksDelivered      int `json:"tasks_delivered"`
 	Brainstorms         int `json:"brainstorms"`
 	AgentsRequested     int `json:"agents_requested"`
 	AgentsStarted       int `json:"agents_started"`
+	AgentsDelivered     int `json:"agents_delivered"`
 	AgentsInFlight      int `json:"agents_in_flight"`
 	AgentsNeedAttention int `json:"agents_need_attention"`
 	Deliveries          int `json:"deliveries"`
@@ -164,9 +166,11 @@ func directorStatsCountsV0(stats WebDirectorRunStatsContractV0) WebDirectorStats
 		TasksTotal:          stats.Counts["tasks_total"],
 		TasksClosed:         stats.Counts["tasks_closed"],
 		TasksOpen:           stats.Counts["tasks_open"],
+		TasksDelivered:      stats.Counts["tasks_delivered"],
 		Brainstorms:         stats.Counts["brainstorms"],
 		AgentsRequested:     stats.Counts["agents_requested"],
 		AgentsStarted:       stats.Counts["agents_started"],
+		AgentsDelivered:     stats.Counts["agents_delivered"],
 		AgentsInFlight:      stats.Counts["agents_in_flight"],
 		AgentsNeedAttention: webDirectorStatsAttentionCountV0(stats.Agents),
 		Deliveries:          stats.Counts["deliveries"],

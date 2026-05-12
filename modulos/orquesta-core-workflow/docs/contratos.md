@@ -298,7 +298,7 @@ Invariantes:
   - `CapacityDecided` proyecta una decision compacta por `capacity_request_id`, registra huella `CommandEffects` y habilita `RequestAgent`; no transporta proveedor/modelo/HOME/cuotas reales.
   - Eventos de arquitectura proyectan refs compactas en `brainstorms`, `votes` y `decisions`.
   - `MicrotaskCreated` proyecta `task_id` en `tasks` y refs compactas de contratos de funcion en `function_contracts`.
-  - `DeliveryRegistered` proyecta `delivery_ref` en `deliveries` y registra huella `CommandEffects`.
+  - `DeliveryRegistered` proyecta `delivery_ref` en `deliveries`, `task_id` en `delivered_tasks` y `agent_ref` en `delivered_agents`; registra huella `CommandEffects`.
   - `DeliveryRegistered` exige agente arrancado y rechaza agentes fallidos o con parada solicitada.
   - `ReviewRequested` proyecta `review_request_id` en `reviews` y registra huella `CommandEffects`.
   - `ReviewAccepted` proyecta `accepted_review_ref` en `accepted_reviews` y registra huella `CommandEffects`.

@@ -22,6 +22,7 @@ func cloneRunForReducerV0(run OrchestrationRunV0) OrchestrationRunV0 {
 	next.PhaseArtifacts = cloneStringsV0(run.PhaseArtifacts)
 	next.Deliveries = cloneStringsV0(run.Deliveries)
 	next.DeliveredTasks = cloneStringsV0(run.DeliveredTasks)
+	next.DeliveredAgents = cloneStringsV0(run.DeliveredAgents)
 	next.Reviews = cloneStringsV0(run.Reviews)
 	next.ReviewResults = cloneStringsV0(run.ReviewResults)
 	next.ReworkRequests = cloneStringsV0(run.ReworkRequests)

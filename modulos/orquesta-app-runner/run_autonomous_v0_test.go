@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	orquestaappplanner "orquesta/modulos/orquesta-app-planner"
-	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func TestRunPreparedAppOrchestrationV0UsaDirectorAutonomoOptInYPropagaStats(t *testing.T) {
@@ -69,7 +69,7 @@ func TestRunPreparedAppOrchestrationV0DirectorAutonomoMantieneEsperaExterna(t *t
 	}
 }
 
-func TestRunPreparedAppOrchestrationV0DirectorAutonomoEnriqueceStatsConProgressSource(t *testing.T) {
+func TestRunPreparedAppOrchestrationV0DirectorAutonomoNoMantieneProgressObsoletoTrasDelivery(t *testing.T) {
 	prepared := validPreparedLargeAppForRunTestV0(t)
 	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
 	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
@@ -95,22 +95,22 @@ func TestRunPreparedAppOrchestrationV0DirectorAutonomoEnriqueceStatsConProgressS
 	}
 	progress := result.DirectorLoopStats.Run.Progress
 	if progress.SourceStatus != orquestacionnucleoapp.DirectorProgressSourceLoadedV0 ||
-		progress.ProgressingAgents != 1 ||
-		progress.StalledAgents != 1 ||
+		progress.ProgressingAgents != 0 ||
+		progress.StalledAgents != 0 ||
 		progress.TasksObserved != 2 {
 		t.Fatalf("progress=%+v", progress)
 	}
 	if !runnerStatsContainTaskStatusV0(
 		progress.Tasks,
-		orquestacionnucleoapp.DirectorTaskProgressStalledV0,
+		orquestacionnucleoapp.DirectorTaskProgressDeliveredV0,
 	) {
-		t.Fatalf("tasks sin estancamiento util: %+v", progress.Tasks)
+		t.Fatalf("tasks sin delivery reflejado: %+v", progress.Tasks)
 	}
-	if !runnerStatsContainAgentProgressV0(
+	if runnerStatsContainAgentProgressV0(
 		result.DirectorLoopStats.Run.Agents,
 		string(orquestaruntime.AgentStalledV0),
 	) {
-		t.Fatalf("agents sin last_progress stalled: %+v", result.DirectorLoopStats.Run.Agents)
+		t.Fatalf("agents mantienen last_progress obsoleto: %+v", result.DirectorLoopStats.Run.Agents)
 	}
 }
 

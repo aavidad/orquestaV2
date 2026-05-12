@@ -12,6 +12,7 @@ func buildDirectorTaskProgressV0(
 	observations []AgentProgressObservationV0,
 ) []DirectorTaskProgressV0 {
 	closed := autonomousStringSetV0(run.ClosedTasks)
+	delivered := autonomousStringSetV0(run.DeliveredTasks)
 	byTask := latestDirectorProgressByTaskV0(observations)
 	byAssessedTask := latestDirectorAssessmentByTaskV0(run.AgentAssessments)
 	tasks := compactStringsV0(append(append(run.Tasks, observedTaskRefsV0(observations)...), assessedTaskRefsV0(run.AgentAssessments)...))
@@ -24,8 +25,20 @@ func buildDirectorTaskProgressV0(
 		} else if assessment, assessed := byAssessedTask[taskRef]; assessed {
 			task = directorTaskProgressFromAssessmentV0(assessment)
 		}
+		if delivered[taskRef] {
+			task.Status = DirectorTaskProgressDeliveredV0
+			if task.AgentRequestID == "" {
+				task.AgentRequestID = WorkflowTaskAgentRequestRefV0(taskRef)
+			}
+			task.LastReportRef = ""
+			task.ProgressStatus = ""
+			task.NoProgressTicks = 0
+			task.RepeatedActionCount = 0
+			task.DecisionRequired = false
+		}
 		if closed[taskRef] {
 			task.Status = DirectorTaskProgressClosedV0
+			task.DecisionRequired = false
 		}
 		out = append(out, task)
 	}
@@ -59,8 +72,13 @@ func summarizeDirectorProgressV0(
 ) DirectorProgressStatsV0 {
 	byAgent := latestDirectorProgressByAgentV0(observations)
 	byAssessmentAgent := latestDirectorAssessmentByAgentV0(run.AgentAssessments)
+	reflected := reflectedDirectorAgentSetV0(run)
 	progress.ObservedAgents = len(byAgent)
 	for _, observation := range byAgent {
+		if directorProgressObservationResolvedV0(run, observation, reflected) {
+			progress.ObservedAgents--
+			continue
+		}
 		progress = countDirectorBudgetClassificationV0(observation, progress)
 		switch observation.Report.Status {
 		case orquestaruntime.AgentStalledV0:
@@ -75,6 +93,9 @@ func summarizeDirectorProgressV0(
 	}
 	for agentRef, assessment := range byAssessmentAgent {
 		if _, observed := byAgent[agentRef]; observed {
+			continue
+		}
+		if directorAssessmentProgressResolvedV0(run, assessment, reflected) {
 			continue
 		}
 		progress.ObservedAgents++
@@ -93,6 +114,44 @@ func summarizeDirectorProgressV0(
 		progress.NoSignalAgentRefs = noSignalDirectorAgentRefsV0(run, byAgent, byAssessmentAgent)
 	}
 	return progress
+}
+
+func directorProgressObservationResolvedV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	observation AgentProgressObservationV0,
+	reflectedAgents map[string]bool,
+) bool {
+	agentRef := strings.TrimSpace(observation.Report.AgentRequestID)
+	if reflectedAgents[agentRef] {
+		return true
+	}
+	return directorProgressTaskResolvedV0(
+		run,
+		observation.TaskRef,
+	)
+}
+
+func directorAssessmentProgressResolvedV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	assessment orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
+	reflectedAgents map[string]bool,
+) bool {
+	if reflectedAgents[strings.TrimSpace(assessment.AgentRequestID)] {
+		return true
+	}
+	return directorProgressTaskResolvedV0(
+		run,
+		assessment.TaskRef,
+	)
+}
+
+func directorProgressTaskResolvedV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	taskRef string,
+) bool {
+	refs := append(append([]string{}, run.DeliveredTasks...), run.ClosedTasks...)
+	resolvedTasks := autonomousStringSetV0(refs)
+	return resolvedTasks[strings.TrimSpace(taskRef)]
 }
 
 func countDirectorBudgetClassificationV0(
@@ -121,9 +180,13 @@ func applyDirectorAgentProgressV0(
 		return
 	}
 	byAgent := latestDirectorProgressByAgentV0(observations)
+	reflected := reflectedDirectorAgentSetV0(run)
 	for index := range stats.Agents {
 		observation, ok := byAgent[stats.Agents[index].AgentRequestID]
 		if !ok {
+			continue
+		}
+		if directorProgressObservationResolvedV0(run, observation, reflected) {
 			continue
 		}
 		progress := directorAgentProgressFromObservationV0(observation)
@@ -148,9 +211,13 @@ func applyDirectorAgentAssessmentProgressV0(
 	if len(byAgent) == 0 {
 		return
 	}
+	reflected := reflectedDirectorAgentSetV0(run)
 	for index := range stats.Agents {
 		assessment, ok := byAgent[stats.Agents[index].AgentRequestID]
 		if !ok {
+			continue
+		}
+		if directorAssessmentProgressResolvedV0(run, assessment, reflected) {
 			continue
 		}
 		progress := directorAgentProgressFromAssessmentV0(assessment)
@@ -245,7 +312,8 @@ func assessedTaskRefsV0(assessments []string) []string {
 func countObservedDirectorTasksV0(tasks []DirectorTaskProgressV0) int {
 	count := 0
 	for _, task := range tasks {
-		if task.LastReportRef != "" {
+		if task.LastReportRef != "" ||
+			task.Status == DirectorTaskProgressDeliveredV0 {
 			count++
 		}
 	}
