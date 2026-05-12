@@ -9,6 +9,8 @@ Estado: listo para retomar desde otro equipo tras commit de avances.
 - Se corrigio el falso `no_signal` cuando ya existe assessment compacto.
 - Se corrigio el coordinador global para drenar runs `stop_requested` forzados.
 - Se documentaron las pruebas reales y el hueco pendiente de continuidad hasta delivery.
+- Se documento el procedimiento actual de apagado controlado en
+  `docs/runbooks/apagado_controlado_servidor_y_agentes.md`.
 
 ## Cambios clave
 
@@ -67,6 +69,15 @@ Orquesta ya arranca director y workers, y detecta atasco. Falta cerrar la contin
 - el supervisor debe seguir drenando sin intervencion;
 - documentacion ejecutable hoy debe ir como microtarea de `programacion` sobre `docs/...` o crear un provider hexagonal especifico para fase `documentacion`;
 - no se deben inventar deliveries si el run se para antes del ACK.
+
+Tambien queda pendiente el shutdown graceful completo:
+
+- hoy `orquesta-server stop` para el servidor, pero no solicita checkpoint a
+  cada agente antes de cortar;
+- el cierre seguro actual requiere parar cada run por RunControl y esperar
+  `agents_in_flight=0`;
+- falta implementar `orquesta.server.shutdown.v0` con quiesce, checkpoint,
+  stop, confirmacion y cierre final.
 
 ## Validacion local
 
