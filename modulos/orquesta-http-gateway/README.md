@@ -17,6 +17,9 @@ Rutas v0:
 - `/api/v0/apps/spec`
 - `/api/v0/apps/director`
 - `/api/v0/director/stats`
+- `/api/v0/autoprogramming/validate-request`
+- `/api/v0/runs/control`
+- `/api/v0/runs/queue/priority`
 
 Fuera de alcance:
 

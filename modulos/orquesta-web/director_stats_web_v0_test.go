@@ -69,8 +69,10 @@ func TestDirectorStatsWebEndpointV0GETPreparaRefreshSemitiempoReal(t *testing.T)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if !client.Query.IncludeAgentProgress || client.Query.IncludeProcessRefs {
-		t.Fatalf("query no pide progreso compacto de agentes: %+v", client.Query)
+	if !client.Query.IncludeAgentProgress ||
+		!client.Query.IncludeProcessRefs ||
+		!client.Query.IncludeAgentUsage {
+		t.Fatalf("query no pide estado completo de agentes: %+v", client.Query)
 	}
 	var page WebDirectorStatsPageV0
 	if err := json.NewDecoder(rec.Body).Decode(&page); err != nil {
@@ -79,7 +81,9 @@ func TestDirectorStatsWebEndpointV0GETPreparaRefreshSemitiempoReal(t *testing.T)
 	if !page.Refresh.Enabled ||
 		page.Refresh.Method != http.MethodGet ||
 		page.Refresh.IntervalMillis != WebDirectorStatsRefreshIntervalMsV0 ||
+		!strings.Contains(page.Refresh.Href, "include_process_refs=true") ||
 		!strings.Contains(page.Refresh.Href, "include_agent_progress=true") ||
+		!strings.Contains(page.Refresh.Href, "include_agent_usage=true") ||
 		!strings.Contains(page.Refresh.Href, "run_ref=run-web-director-stats-001") {
 		t.Fatalf("refresh=%+v", page.Refresh)
 	}

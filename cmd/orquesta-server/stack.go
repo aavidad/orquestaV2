@@ -145,6 +145,10 @@ func codexRuntimeConfigV0(
 			StalledAfterNoProgressTicks: intEnvOrDefaultV0("ORQUESTA_CODEX_STALLED_TICKS", 8),
 			LoopAfterRepeatedActions:    intEnvOrDefaultV0("ORQUESTA_CODEX_LOOP_TICKS", 12),
 		},
+		ProgressBudget: orquestaruntimecodexdelivery.CodexBudgetActivityPolicyV0{
+			MaxExpected:     time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_EXPECTED_SECONDS", 1200)) * time.Second,
+			NoActivityLimit: time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_NO_ACTIVITY_SECONDS", 90)) * time.Second,
+		},
 	}
 }
 

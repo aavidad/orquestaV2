@@ -99,7 +99,9 @@ func (endpoint DirectorStatsWebEndpointV0) page(
 func directorStatsQueryWithAgentProgressV0(query WebDirectorStatsQueryV0) WebDirectorStatsQueryV0 {
 	query.RunRef = trimDirectorStatsV0(query.RunRef)
 	if query.RunRef != "" {
+		query.IncludeProcessRefs = true
 		query.IncludeAgentProgress = true
+		query.IncludeAgentUsage = true
 	}
 	return query
 }
@@ -115,10 +117,9 @@ func directorStatsRefreshV0(
 	values := url.Values{}
 	values.Set("run_ref", runRef)
 	values.Set("locale", normalizeDirectorStatsLocaleV0(firstDirectorStatsNonEmptyV0(query.Locale, locale)))
+	values.Set("include_process_refs", "true")
 	values.Set("include_agent_progress", "true")
-	if query.IncludeAgentUsage {
-		values.Set("include_agent_usage", "true")
-	}
+	values.Set("include_agent_usage", "true")
 	return WebDirectorStatsRefreshV0{
 		Enabled:        true,
 		Method:         http.MethodGet,

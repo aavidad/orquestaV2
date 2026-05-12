@@ -894,6 +894,9 @@ app existente sin acoplar MCP/API a una implementacion concreta:
    alcance antes de pedir que Orquesta se modifique a si misma o a otro repo.
    El tool solo valida el contrato del core; no ejecuta agentes, tests, VCS,
    comandos ni cambios en disco.
+   El mismo contrato esta expuesto por REST en
+   `POST /api/v0/autoprogramming/validate-request` para que la web y otros
+   adaptadores puedan validar una solicitud antes de arrancar director.
 
 Payload minimo recomendado para mejorar este repo:
 
@@ -943,6 +946,9 @@ Campos:
   descriptor:
     name: orquesta.autoprogramming.validate_request.v0
     resource_uri: orquesta://contracts/autoprogramming-request/v0
+  rest:
+    method: POST
+    path: /api/v0/autoprogramming/validate-request
   input:
     request_id, correlation_id: refs externas opcionales
     autoprogramming_request: AutoprogrammingRequestV0
@@ -962,6 +968,7 @@ Invariantes:
 Pruebas de contrato:
   - Descriptor compacto y saneado.
   - Executor acepta una solicitud aislada pequena.
+  - HTTP acepta JSON snake_case del contrato publico.
   - Executor devuelve issues publicos para branch/write-set invalidos.
   - Registro MCP publica el tool y permite invocarlo sin puertos productivos.
 ```

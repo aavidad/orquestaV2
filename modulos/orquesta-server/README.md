@@ -10,3 +10,11 @@ El supervisor global se ejecuta por pulsos acotados mediante un puerto. Si el
 usuario cierra la sesion de Codex, el daemon sigue vivo y el operador puede
 reengancharse leyendo el statefile y consultando la API.
 
+La composicion productiva configura presupuesto de progreso para agentes Codex
+por entorno:
+
+- `ORQUESTA_CODEX_MAX_EXPECTED_SECONDS`: tiempo esperado antes de pedir decision.
+- `ORQUESTA_CODEX_NO_ACTIVITY_SECONDS`: ventana sin actividad antes de marcar
+  riesgo operativo.
+
+Estos valores alimentan estadisticas de director y no pertenecen al nucleo.

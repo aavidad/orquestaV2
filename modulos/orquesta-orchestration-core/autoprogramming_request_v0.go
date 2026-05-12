@@ -12,18 +12,18 @@ const (
 )
 
 type AutoprogrammingRequestV0 struct {
-	RequestRef       string
-	ProjectRef       string
-	WorktreeRef      string
-	WorktreeIsolated bool
-	BranchRef        string
-	Tasks            []AutoprogrammingTaskGroupCandidateV0
-	WriteSet         []string
-	RequiredTests    []string
+	RequestRef       string                                `json:"request_ref"`
+	ProjectRef       string                                `json:"project_ref"`
+	WorktreeRef      string                                `json:"worktree_ref"`
+	WorktreeIsolated bool                                  `json:"worktree_isolated"`
+	BranchRef        string                                `json:"branch_ref"`
+	Tasks            []AutoprogrammingTaskGroupCandidateV0 `json:"tasks"`
+	WriteSet         []string                              `json:"write_set"`
+	RequiredTests    []string                              `json:"required_tests"`
 
-	MaxTaskRefs        int
-	MaxAreas           int
-	MaxWriteSetEntries int
+	MaxTaskRefs        int `json:"max_task_refs,omitempty"`
+	MaxAreas           int `json:"max_areas,omitempty"`
+	MaxWriteSetEntries int `json:"max_write_set_entries,omitempty"`
 }
 
 type AutoprogrammingRequestValidationResultV0 struct {

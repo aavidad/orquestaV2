@@ -75,6 +75,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 				RunQueuePriority: markerHandler("run-queue-priority"),
 			},
 		},
+		{
+			name:  "autoprogramming validate request",
+			route: RouteAutoprogrammingValidateRequestV0,
+			handlers: RouteHandlersV0{
+				AutoprogrammingValidateRequest: markerHandler("autoprogramming-validate-request"),
+			},
+		},
 	}
 
 	for _, tc := range cases {

@@ -3,27 +3,29 @@ package orquestahttpgateway
 import "net/http"
 
 const (
-	RouteNuevaAppV0          = "/nueva-app"
-	RouteAppChangePageV0     = "/app-change"
-	RouteDirectorStatsPageV0 = "/director-stats"
-	RouteAppSpecV0           = "/api/v0/apps/spec"
-	RouteAppDirectorV0       = "/api/v0/apps/director"
-	RouteAppChangeV0         = "/api/v0/apps/"
-	RouteDirectorStatsV0     = "/api/v0/director/stats"
-	RouteRunControlV0        = "/api/v0/runs/control"
-	RouteRunQueuePriorityV0  = "/api/v0/runs/queue/priority"
+	RouteNuevaAppV0                       = "/nueva-app"
+	RouteAppChangePageV0                  = "/app-change"
+	RouteDirectorStatsPageV0              = "/director-stats"
+	RouteAppSpecV0                        = "/api/v0/apps/spec"
+	RouteAppDirectorV0                    = "/api/v0/apps/director"
+	RouteAppChangeV0                      = "/api/v0/apps/"
+	RouteDirectorStatsV0                  = "/api/v0/director/stats"
+	RouteRunControlV0                     = "/api/v0/runs/control"
+	RouteRunQueuePriorityV0               = "/api/v0/runs/queue/priority"
+	RouteAutoprogrammingValidateRequestV0 = "/api/v0/autoprogramming/validate-request"
 )
 
 type RouteHandlersV0 struct {
-	NuevaApp          http.Handler
-	AppChangePage     http.Handler
-	DirectorStatsPage http.Handler
-	AppSpec           http.Handler
-	AppDirector       http.Handler
-	AppChange         http.Handler
-	DirectorStats     http.Handler
-	RunControl        http.Handler
-	RunQueuePriority  http.Handler
+	NuevaApp                       http.Handler
+	AppChangePage                  http.Handler
+	DirectorStatsPage              http.Handler
+	AppSpec                        http.Handler
+	AppDirector                    http.Handler
+	AppChange                      http.Handler
+	DirectorStats                  http.Handler
+	RunControl                     http.Handler
+	RunQueuePriority               http.Handler
+	AutoprogrammingValidateRequest http.Handler
 }
 
 func NewAppGatewayMuxV0(handlers RouteHandlersV0) http.Handler {
@@ -38,6 +40,7 @@ func NewAppGatewayMuxV0(handlers RouteHandlersV0) http.Handler {
 	handleIfPresent(mux, RouteDirectorStatsV0, handlers.DirectorStats)
 	handleIfPresent(mux, RouteRunControlV0, handlers.RunControl)
 	handleIfPresent(mux, RouteRunQueuePriorityV0, handlers.RunQueuePriority)
+	handleIfPresent(mux, RouteAutoprogrammingValidateRequestV0, handlers.AutoprogrammingValidateRequest)
 
 	return mux
 }

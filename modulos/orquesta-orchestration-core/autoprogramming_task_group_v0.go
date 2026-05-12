@@ -6,13 +6,13 @@ import (
 )
 
 type AutoprogrammingTaskGroupCandidateV0 struct {
-	TaskRef string
-	Area    string
+	TaskRef string `json:"task_ref"`
+	Area    string `json:"area"`
 }
 
 type AutoprogrammingTaskGroupV0 struct {
-	Area     string
-	TaskRefs []string
+	Area     string   `json:"area"`
+	TaskRefs []string `json:"task_refs"`
 }
 
 func GroupAutoprogrammingTasksByAreaV0(
