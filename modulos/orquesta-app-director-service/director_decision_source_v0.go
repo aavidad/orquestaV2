@@ -19,10 +19,13 @@ func consumeStartAppDirectorDecisionsV0(
 	decisions, err := ports.DirectorDecisionSource.ListDirectorAgentDecisionsV0(
 		ctx,
 		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{
-			Run:           loop.Run,
-			OccurredAt:    request.OccurredAt,
-			CorrelationID: request.CorrelationID,
-			RequestedBy:   request.RequestedBy,
+			Run:            loop.Run,
+			RequestKind:    request.AppSpecRequest.RequestKind,
+			ExecutionMode:  request.AppSpecRequest.ExecutionMode,
+			ObjectiveHints: directorDecisionObjectiveHintsV0(request.AppSpecRequest),
+			OccurredAt:     request.OccurredAt,
+			CorrelationID:  request.CorrelationID,
+			RequestedBy:    request.RequestedBy,
 		},
 	)
 	if err != nil {

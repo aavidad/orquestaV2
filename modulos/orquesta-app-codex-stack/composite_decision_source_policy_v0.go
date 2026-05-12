@@ -10,12 +10,21 @@ import (
 
 func validateCompositeDirectorDecisionBatchV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
+	requestKind string,
+	objectiveHints []string,
 	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
 ) error {
 	if err := validateCompositeDirectorDecisionRefsV0(run, decisions); err != nil {
 		return err
 	}
 	tasks := compositeProgrammingMicrotasksV0(decisions)
+	if err := validateCompositeProgrammingMicrotaskAnchorsV0(
+		requestKind,
+		objectiveHints,
+		tasks,
+	); err != nil {
+		return err
+	}
 	if len(tasks) == 0 || !compositeLooksLikeGoAppPlanV0(tasks) {
 		return nil
 	}

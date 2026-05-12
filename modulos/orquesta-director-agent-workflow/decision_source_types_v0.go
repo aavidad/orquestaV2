@@ -8,11 +8,14 @@ import (
 )
 
 type DirectorAgentDecisionSourceRequestV0 struct {
-	Run           orquestacoreworkflow.OrchestrationRunV0
-	Stats         orquestadirectoragent.DirectorAgentCompactStatsV0
-	OccurredAt    string
-	CorrelationID string
-	RequestedBy   string
+	Run            orquestacoreworkflow.OrchestrationRunV0
+	Stats          orquestadirectoragent.DirectorAgentCompactStatsV0
+	RequestKind    string
+	ExecutionMode  string
+	ObjectiveHints []string
+	OccurredAt     string
+	CorrelationID  string
+	RequestedBy    string
 }
 
 type DirectorAgentDecisionSourcePortV0 interface {
