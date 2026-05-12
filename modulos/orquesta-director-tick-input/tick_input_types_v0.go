@@ -1,6 +1,8 @@
 package orquestadirectortickinput
 
 import (
+	"strings"
+
 	orquestacoreconcurrency "orquesta/modulos/orquesta-core-concurrency"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
@@ -30,5 +32,9 @@ type DirectorTickInputBuildErrorV0 struct {
 }
 
 func (err DirectorTickInputBuildErrorV0) Error() string {
-	return err.Code
+	parts := []string{strings.TrimSpace(err.Code)}
+	if field := strings.TrimSpace(err.Field); field != "" {
+		parts = append(parts, "field="+field)
+	}
+	return strings.Join(compactTickInputRefsV0(parts), ": ")
 }

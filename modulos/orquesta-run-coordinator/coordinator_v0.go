@@ -51,7 +51,7 @@ func CoordinateRunsTickV0(
 			return RunCoordinatorTickResultV0{}, readErr
 		}
 		evaluation := orquestaruncontrol.EvaluateRunControlV0(state)
-		if !evaluation.DispatchAllowed {
+		if !evaluation.DispatchAllowed && !evaluation.StopAgentsAllowed {
 			result.Skips = append(result.Skips, controlSkipV0(candidate, state))
 			continue
 		}

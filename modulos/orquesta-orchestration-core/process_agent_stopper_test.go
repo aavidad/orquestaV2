@@ -2,6 +2,7 @@ package orquestacionnucleoapp
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -130,6 +131,35 @@ func TestProcessAgentStopperV0RejectsMismatchedSessionRefBeforeStop(t *testing.T
 	}
 	if running.Status != orquestaruntime.ProcessRuntimeRunningV0 || running.StopRef != "" {
 		t.Fatalf("mismatched process was stopped: %+v", running)
+	}
+}
+
+func TestProcessAgentStopperV0NoConfirmaStopSiRuntimeReiniciadoOlvidoProcessRef(t *testing.T) {
+	previousRuntime := orquestaruntime.NewProcessRuntimeConnectorV0()
+	process := launchWaitProcessForStopperTestV0(t, previousRuntime)
+	registry := NewInMemoryAgentProcessRegistryV0()
+	recordProcessForStopperTestV0(t, registry, "run-nucleo-process-stopper-001", "agent-ref-001", process)
+	restartedRuntime := orquestaruntime.NewProcessRuntimeConnectorV0()
+	stopper := ProcessAgentStopperV0{
+		Registry: registry,
+		Runtime:  restartedRuntime,
+	}
+
+	result, err := stopper.StopAgentV0(context.Background(), validAgentStopperInboundForProcessTestV0())
+
+	var runtimeErr orquestaruntime.ProcessRuntimeErrorV0
+	if !errors.As(err, &runtimeErr) || runtimeErr.Code != orquestaruntime.ProcessRuntimeNoEncontradoV0 {
+		t.Fatalf("err=%v, want process_runtime_no_encontrado", err)
+	}
+	if result.ConfirmationRef != "" || len(result.EvidenceRefs) != 0 {
+		t.Fatalf("stop no confirmado debe devolver resultado vacio: %+v", result)
+	}
+	running, snapErr := previousRuntime.SnapshotV0(process.ProcessRef)
+	if snapErr != nil {
+		t.Fatalf("snapshot previous runtime: %v", snapErr)
+	}
+	if running.Status != orquestaruntime.ProcessRuntimeRunningV0 || running.StopRef != "" {
+		t.Fatalf("runtime reiniciado no debe confirmar ni parar por process_ref olvidado: %+v", running)
 	}
 }
 

@@ -112,6 +112,8 @@ func runFromDirectorStatsV0(
 		FailedAgents:           append([]string{}, stats.Refs.AgentsFailed...),
 		StoppedAgents:          append([]string{}, stats.Refs.AgentsStopRequested...),
 		ConfirmedStoppedAgents: append([]string{}, stats.Refs.AgentsStopConfirmed...),
+		AgentAssessments:       append([]string{}, stats.Refs.AgentAssessments...),
+		PhaseArtifacts:         append([]string{}, stats.Refs.PhaseArtifacts...),
 		Deliveries:             append([]string{}, stats.Refs.Deliveries...),
 	}
 }

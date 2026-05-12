@@ -70,7 +70,7 @@ func concurrencyGateRefV0(planRef string, subjects []string) string {
 	if subjectKey == "" {
 		subjectKey = "claims:none"
 	}
-	return "concurrency_gate:" + planRef + ":" + subjectKey
+	return "concurrency_gate:" + planRef + ":" + shortConcurrencyDigestV0(subjectKey)
 }
 
 func concurrencyGateSummaryV0(decision ConcurrencyGateDecisionV0, subjects []string, plan ParallelGroupPlanV0) string {

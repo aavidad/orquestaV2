@@ -48,6 +48,52 @@ func TestCoordinateRunsTickSkipsPausedV0(t *testing.T) {
 	}
 }
 
+func TestCoordinateRunsTickDrainsForcedStopRequestedV0(t *testing.T) {
+	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		candidateV0("run-stop", "app", 9),
+	})
+	deps.ControlReader.(*fakeControlReaderV0).states["run-stop"] = orquestaruncontrol.RunControlStateV0{
+		RunRef: "run-stop",
+		Status: orquestaruncontrol.RunControlStatusStopRequestedV0,
+		Forced: true,
+	}
+
+	result, err := CoordinateRunsTickV0(context.Background(), deps, tickCommandV0(1))
+	if err != nil {
+		t.Fatalf("coordinate tick: %v", err)
+	}
+
+	assertRunRefsV0(t, executionRefsV0(result.Executions), []string{"run-stop"})
+	if len(result.Skips) != 0 {
+		t.Fatalf("skips=%+v", result.Skips)
+	}
+	drainer := deps.Drainer.(*fakeDrainerV0)
+	if len(drainer.requests) != 1 || drainer.requests[0].RunRef != "run-stop" {
+		t.Fatalf("drain requests=%+v", drainer.requests)
+	}
+}
+
+func TestCoordinateRunsTickSkipsStopRequestedConCheckpointPendienteV0(t *testing.T) {
+	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		candidateV0("run-stop", "app", 9),
+	})
+	deps.ControlReader.(*fakeControlReaderV0).states["run-stop"] = orquestaruncontrol.RunControlStateV0{
+		RunRef: "run-stop",
+		Status: orquestaruncontrol.RunControlStatusStopRequestedV0,
+		Forced: false,
+	}
+
+	result, err := CoordinateRunsTickV0(context.Background(), deps, tickCommandV0(1))
+	if err != nil {
+		t.Fatalf("coordinate tick: %v", err)
+	}
+
+	assertRunRefsV0(t, skipRefsV0(result.Skips), []string{"run-stop"})
+	if len(result.Executions) != 0 {
+		t.Fatalf("executions=%+v", result.Executions)
+	}
+}
+
 func TestCoordinateRunsTickDefaultsRunningWhenControlStateMissingV0(t *testing.T) {
 	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
 		candidateV0("run-missing", "app", 9),

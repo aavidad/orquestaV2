@@ -75,3 +75,20 @@ func TestEvaluateConcurrencyGateV0EsDeterminista(t *testing.T) {
 		t.Fatalf("gate no determinista:\nfirst=%+v\nsecond=%+v", first, second)
 	}
 }
+
+func TestEvaluateConcurrencyGateV0RefsAcotadasConMuchosClaims(t *testing.T) {
+	var claims []WorksetClaimV0
+	for index := 0; index < 12; index++ {
+		claims = append(claims, parallelGroupClaimV0(
+			"claim-ref-agenda-equipo-programacion-paralela-muy-larga-"+string(rune('a'+index)),
+			nil,
+			[]string{"modulos/agenda/internal/componentes/muy/largos/archivo.go"},
+		))
+	}
+
+	evaluation := EvaluateConcurrencyGateV0(claims, []string{claims[0].ClaimRef})
+
+	if len(evaluation.PlanRef) > 120 || len(evaluation.GateRef) > 180 {
+		t.Fatalf("refs demasiado largas plan=%d gate=%d %+v", len(evaluation.PlanRef), len(evaluation.GateRef), evaluation)
+	}
+}

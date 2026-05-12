@@ -41,6 +41,7 @@ func buildDirectorAgentStatsV0(
 	failed := autonomousStringSetV0(run.FailedAgents)
 	stopped := autonomousStringSetV0(run.StoppedAgents)
 	confirmed := autonomousStringSetV0(run.ConfirmedStoppedAgents)
+	completed := reflectedDirectorAgentSetV0(run)
 	stats := make([]DirectorAgentStatsV0, 0, len(agentRefs))
 	for _, ref := range agentRefs {
 		agent := DirectorAgentStatsV0{
@@ -50,8 +51,9 @@ func buildDirectorAgentStatsV0(
 			Failed:         failed[ref],
 			StopRequested:  stopped[ref],
 			StopConfirmed:  confirmed[ref],
+			Completed:      completed[ref],
 		}
-		agent.InFlight = agent.Started && !agent.Failed && !agent.StopConfirmed
+		agent.InFlight = agent.Started && !agent.Failed && !agent.StopConfirmed && !agent.Completed
 		agent.Status = directorAgentStatusV0(agent)
 		agent.NeedsAttention = directorAgentNeedsAttentionV0(agent)
 		agent.ControlState = DirectorAgentControlStateNotLoadedV0
@@ -66,6 +68,8 @@ func directorAgentStatusV0(agent DirectorAgentStatsV0) string {
 		return DirectorAgentStatusFailedV0
 	case agent.StopConfirmed:
 		return DirectorAgentStatusStoppedV0
+	case agent.Completed:
+		return DirectorAgentStatusCompletedV0
 	case agent.StopRequested:
 		return DirectorAgentStatusStopRequestedV0
 	case agent.Started:

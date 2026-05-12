@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
@@ -21,6 +22,9 @@ func TestFileCodexProgressStateStoreV0RecuperaHeartbeatTrasRecrearInstancia(t *t
 	if first.Current.TickCounter != 1 || first.Previous != nil {
 		t.Fatalf("first=%+v", first)
 	}
+	if !first.SampleAccepted || first.ObservedAt.IsZero() || first.FirstObservedAt.IsZero() {
+		t.Fatalf("first state incompleto=%+v", first)
+	}
 
 	reopened := newFileCodexProgressStateStoreForTestV0(t, dir)
 	second, err := reopened.ObserveCodexProgressV0(context.Background(), sample)
@@ -31,6 +35,36 @@ func TestFileCodexProgressStateStoreV0RecuperaHeartbeatTrasRecrearInstancia(t *t
 		second.Current.RepeatedActionCount != 0 ||
 		second.Previous == nil {
 		t.Fatalf("second=%+v", second)
+	}
+	if !second.SampleAccepted || second.ObservedAt.IsZero() {
+		t.Fatalf("second state incompleto=%+v", second)
+	}
+}
+
+func TestFileCodexProgressStateStoreV0RespetaIntervaloDeMuestra(t *testing.T) {
+	dir := t.TempDir()
+	store := newFileCodexProgressStateStoreForTestV0(t, dir)
+	observedAt := time.Date(2026, 5, 12, 10, 0, 0, 0, time.UTC)
+	sample := codexProgressSampleForFileStoreTestV0("firma-intervalo")
+	sample.ObservedAt = observedAt
+	sample.MinUnchangedInterval = time.Minute
+
+	first, err := store.ObserveCodexProgressV0(context.Background(), sample)
+	if err != nil {
+		t.Fatalf("observe first: %v", err)
+	}
+	sample.ObservedAt = observedAt.Add(30 * time.Second)
+	second, err := store.ObserveCodexProgressV0(context.Background(), sample)
+	if err != nil {
+		t.Fatalf("observe second: %v", err)
+	}
+
+	if !first.SampleAccepted || second.SampleAccepted {
+		t.Fatalf("accepted first=%v second=%v", first.SampleAccepted, second.SampleAccepted)
+	}
+	if second.Current.TickCounter != first.Current.TickCounter ||
+		!second.ObservedAt.Equal(first.ObservedAt) {
+		t.Fatalf("second debe devolver estado previo sin avanzar: first=%+v second=%+v", first, second)
 	}
 }
 

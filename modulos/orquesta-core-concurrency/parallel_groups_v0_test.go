@@ -2,6 +2,7 @@ package orquestacoreconcurrency
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -15,7 +16,7 @@ func TestEvaluateParallelGroupsV0CombinaDependenciasYConflictos(t *testing.T) {
 
 	plan := EvaluateParallelGroupsV0(claims)
 
-	if plan.PlanRef != "parallel_group_plan:run:1:claim:a+claim:b+claim:safe+claim:wait" {
+	if !strings.HasPrefix(plan.PlanRef, "parallel_group_plan:run:1:") || len(plan.PlanRef) > 64 {
 		t.Fatalf("plan_ref=%q", plan.PlanRef)
 	}
 	if plan.RunRef != "run:1" {

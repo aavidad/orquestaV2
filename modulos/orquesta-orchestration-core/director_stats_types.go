@@ -10,6 +10,7 @@ const (
 const (
 	DirectorAgentStatusRequestedV0      = "requested"
 	DirectorAgentStatusRunningV0        = "running"
+	DirectorAgentStatusCompletedV0      = "completed"
 	DirectorAgentStatusFailedV0         = "failed"
 	DirectorAgentStatusStopRequestedV0  = "stop_requested"
 	DirectorAgentStatusStoppedV0        = "stopped"
@@ -150,6 +151,7 @@ type DirectorAgentStatsV0 struct {
 	Failed            bool                         `json:"failed"`
 	StopRequested     bool                         `json:"stop_requested"`
 	StopConfirmed     bool                         `json:"stop_confirmed"`
+	Completed         bool                         `json:"completed"`
 	InFlight          bool                         `json:"in_flight"`
 	NeedsAttention    bool                         `json:"needs_attention"`
 	ControlRegistered bool                         `json:"control_registered"`

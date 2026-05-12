@@ -132,6 +132,28 @@ func TestCodexProgressObservationSourceV0NoReportaSiHayAvanceDeLogs(t *testing.T
 	}
 }
 
+func TestCodexProgressObservationSourceV0PuedeEmitirProgresoParaEstadisticas(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	source.EmitProgressing = true
+
+	got, err := source.BuildAgentProgressObservationsV0(
+		context.Background(),
+		codexProgressRequestForTestV0(spec),
+	)
+	if err != nil {
+		t.Fatalf("BuildAgentProgressObservationsV0: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("observations=%+v", got)
+	}
+	if got[0].Report.Status != orquestaruntime.AgentProgressingV0 ||
+		got[0].DecisionRequired ||
+		got[0].Report.DecisionRequired {
+		t.Fatalf("progress report inesperado: %+v", got[0])
+	}
+}
+
 func TestCodexProgressObservationSourceV0ReportaProcesoParadoSinACKEnPrimerTick(t *testing.T) {
 	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
 	source := codexProgressSourceForTestV0(t, spec, ackPath)
@@ -149,6 +171,39 @@ func TestCodexProgressObservationSourceV0ReportaProcesoParadoSinACKEnPrimerTick(
 	}
 	if !stringInCodexDeliverySetV0(got[0].Report.EvidenceRefs, "evidence-ref-no-ack") {
 		t.Fatalf("evidence refs sin no_ack compacto: %+v", got[0].Report.EvidenceRefs)
+	}
+}
+
+func TestCodexProgressObservationSourceV0SnapshotPerdidoEsProcesoParado(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	source.SnapshotSource = missingSnapshotSourceForProgressTestV0{}
+
+	got, err := source.BuildAgentProgressObservationsV0(
+		context.Background(),
+		codexProgressRequestForTestV0(spec),
+	)
+	if err != nil {
+		t.Fatalf("BuildAgentProgressObservationsV0: %v", err)
+	}
+	if len(got) != 1 || got[0].Report.Status != orquestaruntime.AgentStoppedV0 {
+		t.Fatalf("observations=%+v", got)
+	}
+	if !got[0].DecisionRequired || !got[0].Report.DecisionRequired {
+		t.Fatalf("proceso perdido debe requerir decision: %+v", got[0])
+	}
+}
+
+type missingSnapshotSourceForProgressTestV0 struct{}
+
+func (missingSnapshotSourceForProgressTestV0) SnapshotV0(
+	string,
+) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
+	return orquestaruntime.ProcessRuntimeSnapshotV0{}, orquestaruntime.ProcessRuntimeErrorV0{
+		Code:       orquestaruntime.ProcessRuntimeNoEncontradoV0,
+		MessageKey: "process_runtime.no_encontrado",
+		Field:      "process_ref",
+		Retryable:  true,
 	}
 }
 

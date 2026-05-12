@@ -34,12 +34,11 @@ func TestRESTConsultarDirectorStatsClientV0EnviaPOSTJSONYProyectaPanel(t *testin
 
 	client := NewRESTConsultarDirectorStatsClientV0(server.URL, time.Second)
 	panel, err := client.ConsultarDirectorStats(context.Background(), WebDirectorStatsQueryV0{
-		RequestID:            "request-ref-web-stats-001",
-		CorrelationID:        "corr-web-stats-001",
-		Locale:               "es",
-		RunRef:               " run-ref-web-stats-001 ",
-		OccurredAt:           "2026-05-10T10:00:00Z",
-		IncludeAgentProgress: true,
+		RequestID:     "request-ref-web-stats-001",
+		CorrelationID: "corr-web-stats-001",
+		Locale:        "es",
+		RunRef:        " run-ref-web-stats-001 ",
+		OccurredAt:    "2026-05-10T10:00:00Z",
 	})
 	if err != nil {
 		t.Fatalf("ConsultarDirectorStats: %v", err)
@@ -47,7 +46,8 @@ func TestRESTConsultarDirectorStatsClientV0EnviaPOSTJSONYProyectaPanel(t *testin
 	if received.Locale != "es-ES" ||
 		received.RunRef != "run-ref-web-stats-001" ||
 		!received.IncludeAgentProgress ||
-		received.IncludeProcessRefs {
+		!received.IncludeProcessRefs ||
+		!received.IncludeAgentUsage {
 		t.Fatalf("request=%+v", received)
 	}
 	if panel.RunRef != "run-ref-web-stats-001" ||

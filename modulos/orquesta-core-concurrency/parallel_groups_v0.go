@@ -1,6 +1,8 @@
 package orquestacoreconcurrency
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"strconv"
 	"strings"
 )
@@ -101,7 +103,12 @@ func parallelGroupPlanRefV0(runRef string, claims []WorksetClaimV0) string {
 	if runRef == "" {
 		runRef = "run:none"
 	}
-	return "parallel_group_plan:" + runRef + ":" + claimKey
+	return "parallel_group_plan:" + runRef + ":" + shortConcurrencyDigestV0(claimKey)
+}
+
+func shortConcurrencyDigestV0(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])[:24]
 }
 
 func parallelGroupSummaryV0(ready []string, blocked []string, conflicts []string, issues []WorksetDependencyIssueV0) string {

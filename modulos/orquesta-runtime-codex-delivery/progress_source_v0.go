@@ -2,6 +2,7 @@ package orquestaruntimecodexdelivery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,6 +27,7 @@ type CodexProgressObservationSourceV0 struct {
 	Policy                     orquestaruntime.AgentProgressHeartbeatPolicyV0
 	BudgetPolicy               CodexBudgetActivityPolicyV0
 	MinUnchangedSampleInterval time.Duration
+	EmitProgressing            bool
 }
 
 var _ orquestacionnucleoapp.AgentProgressObservationProviderPortV0 = CodexProgressObservationSourceV0{}
@@ -139,6 +141,7 @@ func (source CodexProgressObservationSourceV0) observationFromDescriptorV0(
 	decisionRequired := codexProgressReportDecisionRequiredV0(report)
 	if report.Status == orquestaruntime.AgentProgressingV0 &&
 		!codexProgressBudgetPolicyEnabledV0(source.BudgetPolicy) &&
+		!source.EmitProgressing &&
 		!decisionRequired {
 		return orquestacionnucleoapp.AgentProgressObservationV0{}, false, nil
 	}
@@ -170,7 +173,14 @@ func (source CodexProgressObservationSourceV0) snapshotV0(
 	record orquestacionnucleoapp.AgentProcessRegistryRecordV0,
 ) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
 	if source.SnapshotSource != nil {
-		return source.SnapshotSource.SnapshotV0(record.ProcessRef)
+		snapshot, err := source.SnapshotSource.SnapshotV0(record.ProcessRef)
+		if err == nil {
+			return snapshot, nil
+		}
+		if codexProgressSnapshotMissingV0(err) {
+			return stoppedCodexProgressSnapshotV0(record), nil
+		}
+		return orquestaruntime.ProcessRuntimeSnapshotV0{}, err
 	}
 	return orquestaruntime.ProcessRuntimeSnapshotV0{
 		SchemaVersion: orquestaruntime.ProcessRuntimeConnectorVersionV0,
@@ -179,6 +189,24 @@ func (source CodexProgressObservationSourceV0) snapshotV0(
 		LaunchRef:     strings.TrimSpace(record.LaunchRef),
 		Status:        orquestaruntime.ProcessRuntimeRunningV0,
 	}, nil
+}
+
+func codexProgressSnapshotMissingV0(err error) bool {
+	var runtimeErr orquestaruntime.ProcessRuntimeErrorV0
+	return errors.As(err, &runtimeErr) &&
+		runtimeErr.Code == orquestaruntime.ProcessRuntimeNoEncontradoV0
+}
+
+func stoppedCodexProgressSnapshotV0(
+	record orquestacionnucleoapp.AgentProcessRegistryRecordV0,
+) orquestaruntime.ProcessRuntimeSnapshotV0 {
+	return orquestaruntime.ProcessRuntimeSnapshotV0{
+		SchemaVersion: orquestaruntime.ProcessRuntimeConnectorVersionV0,
+		ProcessRef:    strings.TrimSpace(record.ProcessRef),
+		SessionRef:    strings.TrimSpace(record.SessionRef),
+		LaunchRef:     strings.TrimSpace(record.LaunchRef),
+		Status:        orquestaruntime.ProcessRuntimeStoppedV0,
+	}
 }
 
 func codexProgressObservationV0(

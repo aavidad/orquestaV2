@@ -24,6 +24,7 @@ func BuildDirectorRunStatsV0(
 		Phases:        buildDirectorPhaseStatsV0(run.Phases),
 		Agents:        buildDirectorAgentStatsV0(run),
 	}
+	applyDirectorAgentProgressV0(&stats, run, nil)
 	refreshDirectorControlCountsV0(&stats, false)
 	return stats
 }

@@ -43,7 +43,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		DirectorStats: orquestamcp.MCPDirectorStatsToolExecutorV0{
 			RunStore:         config.Stores.RunStore,
 			ProcessRegistry:  config.Stores.ProcessRegistry,
-			ProgressSource:   progressSourceV0(config),
+			ProgressSource:   statsProgressSourceV0(config),
 			AgentUsageSource: agentUsageSourceV0(config),
 		},
 		RunControl: orquestamcp.NewMCPRunControlToolExecutorV0(config.Stores.RunControl),

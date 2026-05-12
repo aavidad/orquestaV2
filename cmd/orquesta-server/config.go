@@ -37,7 +37,7 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 				MaxBursts:            intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_BURSTS", 4),
 				MaxStepsPerBurst:     intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_STEPS", 6),
 				MaxDispatchesPerWait: intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_DISPATCHES", 4),
-				MaxCommands:          intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_COMMANDS", 8),
+				MaxCommands:          intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_COMMANDS", 20),
 				MaxOutboxPerCycle:    intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_OUTBOX", 4),
 				MaxDecisionCycles:    intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_DECISIONS", 1),
 				MaxExternalWaits:     intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS", 1),

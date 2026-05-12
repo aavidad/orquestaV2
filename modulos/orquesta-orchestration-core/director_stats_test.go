@@ -45,7 +45,7 @@ func TestBuildDirectorRunStatsV0ResumeRunYAgentes(t *testing.T) {
 func TestBuildDirectorRunStatsV0ExponeCierreBloqueadoPorHitosGenericos(t *testing.T) {
 	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-closure-blocked-001")
 	run.Tasks = []string{"task-ref-closure-001"}
-	stats := BuildDirectorRunStatsV0(run)
+	stats := BuildDirectorRunStatsWithObservationsV0(run, []AgentProgressObservationV0{}, nil)
 
 	if stats.Closure.Status != DirectorClosureStatusBlockedV0 ||
 		!stats.Closure.Blocked ||
@@ -162,6 +162,118 @@ func TestBuildDirectorRunStatsWithObservationsV0ExponeProgresoPorAgenteYTarea(t 
 	task := findDirectorTaskProgressForTestV0(t, stats.Progress, "task-ref-progress-002")
 	if task.Status != DirectorTaskProgressStalledV0 ||
 		task.AgentRequestID != "agent-ref-progress-002" {
+		t.Fatalf("task=%+v", task)
+	}
+}
+
+func TestBuildDirectorRunStatsWithObservationsV0NoMarcaSinSenalAgentesConEntrega(t *testing.T) {
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-progress-reflected-001")
+	run.Tasks = []string{"task-ref-reflected-001", "task-ref-reflected-002", "task-ref-reflected-003"}
+	run.Agents = []string{
+		"agent-ref-reflected-phase-001",
+		"agent-ref-reflected-delivery-001",
+		"agent-ref-reflected-missing-001",
+	}
+	run.StartedAgents = append([]string{}, run.Agents...)
+	run.PhaseArtifacts = []string{
+		"artifact-reflected-001#phase:brainstorming_arquitectura#agent:agent-ref-reflected-phase-001",
+	}
+	run.Deliveries = []string{
+		"ack-ref-app-stack-agent-ref-reflected-delivery-001",
+	}
+
+	stats := BuildDirectorRunStatsWithObservationsV0(run, []AgentProgressObservationV0{}, nil)
+
+	if stats.Counts.AgentsInFlight != 1 ||
+		stats.Progress.ObservedAgents != 0 ||
+		!containsNucleoRefV0(stats.Progress.NoSignalAgentRefs, "agent-ref-reflected-missing-001") ||
+		containsNucleoRefV0(stats.Progress.NoSignalAgentRefs, "agent-ref-reflected-phase-001") ||
+		containsNucleoRefV0(stats.Progress.NoSignalAgentRefs, "agent-ref-reflected-delivery-001") {
+		t.Fatalf("counts=%+v progress=%+v", stats.Counts, stats.Progress)
+	}
+	phaseAgent := findDirectorAgentStatsForTestV0(t, stats, "agent-ref-reflected-phase-001")
+	if phaseAgent.Status != DirectorAgentStatusCompletedV0 || phaseAgent.InFlight {
+		t.Fatalf("phase_agent=%+v", phaseAgent)
+	}
+	deliveryAgent := findDirectorAgentStatsForTestV0(t, stats, "agent-ref-reflected-delivery-001")
+	if deliveryAgent.Status != DirectorAgentStatusCompletedV0 || deliveryAgent.InFlight {
+		t.Fatalf("delivery_agent=%+v", deliveryAgent)
+	}
+}
+
+func TestBuildDirectorRunStatsWithObservationsV0NoMarcaSinSenalAgenteStopRequested(t *testing.T) {
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-progress-stop-requested-001")
+	run.Tasks = []string{"task-ref-stop-requested-001"}
+	run.Agents = []string{"agent-ref-stop-requested-001"}
+	run.StartedAgents = []string{"agent-ref-stop-requested-001"}
+	run.StoppedAgents = []string{"agent-ref-stop-requested-001"}
+	run.AgentAssessments = []string{
+		orquestacoreworkflow.AgentAssessmentProjectionRefV0(orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+			AssessmentRef:  "assessment-ref-stop-requested-001",
+			PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			AgentRequestID: "agent-ref-stop-requested-001",
+			TaskRef:        "task-ref-stop-requested-001",
+			Verdict:        orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0,
+			Action:         orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+			Severity:       orquestacoreworkflow.AgentAssessmentSeverityHighV0,
+		}),
+	}
+
+	stats := BuildDirectorRunStatsWithObservationsV0(run, []AgentProgressObservationV0{}, nil)
+
+	if stats.Counts.AgentAssessments != 1 ||
+		stats.Counts.AgentsStopRequested != 1 ||
+		containsNucleoRefV0(stats.Progress.NoSignalAgentRefs, "agent-ref-stop-requested-001") {
+		t.Fatalf("counts=%+v progress=%+v", stats.Counts, stats.Progress)
+	}
+	agent := findDirectorAgentStatsForTestV0(t, stats, "agent-ref-stop-requested-001")
+	if agent.Status != DirectorAgentStatusStopRequestedV0 ||
+		agent.LastProgress == nil ||
+		agent.LastProgress.ReportRef != "assessment-ref-stop-requested-001" ||
+		agent.LastProgress.Status != string(orquestaruntime.AgentLoopDetectedV0) {
+		t.Fatalf("agent=%+v", agent)
+	}
+}
+
+func TestBuildDirectorRunStatsV0ExponeProgresoCompactoDesdeAssessment(t *testing.T) {
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-progress-assessment-001")
+	run.Tasks = []string{"task-ref-assessment-001"}
+	run.Agents = []string{"agent-ref-assessment-001"}
+	run.StartedAgents = []string{"agent-ref-assessment-001"}
+	run.AgentAssessments = []string{
+		orquestacoreworkflow.AgentAssessmentProjectionRefV0(orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+			AssessmentRef:  "assessment-ref-progress-compact-001",
+			PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			AgentRequestID: "agent-ref-assessment-001",
+			TaskRef:        "task-ref-assessment-001",
+			DeliveryRef:    "delivery-ref-assessment-001",
+			Verdict:        orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+			Action:         orquestacoreworkflow.AgentAssessmentActionRequestRevisionV0,
+			Severity:       orquestacoreworkflow.AgentAssessmentSeverityMediumV0,
+		}),
+	}
+
+	stats := BuildDirectorRunStatsV0(run)
+
+	if stats.Progress.ObservedAgents != 1 ||
+		stats.Progress.StalledAgents != 1 ||
+		stats.Progress.TasksObserved != 1 ||
+		containsNucleoRefV0(stats.Progress.NoSignalAgentRefs, "agent-ref-assessment-001") {
+		t.Fatalf("progress=%+v", stats.Progress)
+	}
+	agent := findDirectorAgentStatsForTestV0(t, stats, "agent-ref-assessment-001")
+	if agent.LastProgress == nil ||
+		agent.LastProgress.ReportRef != "assessment-ref-progress-compact-001" ||
+		agent.LastProgress.TaskRef != "task-ref-assessment-001" ||
+		agent.LastProgress.Status != string(orquestaruntime.AgentStalledV0) ||
+		!agent.LastProgress.DecisionRequired {
+		t.Fatalf("agent=%+v", agent)
+	}
+	task := findDirectorTaskProgressForTestV0(t, stats.Progress, "task-ref-assessment-001")
+	if task.Status != DirectorTaskProgressStalledV0 ||
+		task.LastReportRef != "assessment-ref-progress-compact-001" ||
+		task.AgentRequestID != "agent-ref-assessment-001" ||
+		task.DeliveryRef != "delivery-ref-assessment-001" {
 		t.Fatalf("task=%+v", task)
 	}
 }

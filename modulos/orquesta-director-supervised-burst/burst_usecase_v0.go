@@ -82,7 +82,7 @@ func runDirectorSupervisedBurstStepV0(
 		return orquestadirectorcycle.DirectorCycleStepResultV0{},
 			orquestadirectorsupervisor.DirectorSupervisorDecisionV0{},
 			nil,
-			burstErrorV0(input, ErrDirectorSupervisedBurstStepInputV0, "builder de paso fallo", "step_input_builder", true)
+			burstErrorV0(input, ErrDirectorSupervisedBurstStepInputV0, err.Error(), "step_input_builder", true)
 	}
 	stepResult, stepErr := input.StepExecutor.ExecuteDirectorCycleStepV0(ctx, stepInput)
 	decision, decisionErr := input.Supervisor.DecideDirectorSupervisorNextActionV0(

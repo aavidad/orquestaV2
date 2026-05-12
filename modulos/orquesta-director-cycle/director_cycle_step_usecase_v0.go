@@ -26,7 +26,7 @@ func ExecuteDirectorCycleStepV0(
 	result.PendingOutboxBeforeRefs = pendingBefore.PendingOutboxRefs
 	schedulerInput, err := buildCycleStepSchedulerInputV0(input, pendingBefore.PendingOutboxRefs)
 	if err != nil {
-		return resultWithCycleStepIssueV0(result, input, ErrDirectorCycleStepTickInputV0, "tick_input", "tick input fallo", false)
+		return resultWithCycleStepIssueV0(result, input, ErrDirectorCycleStepTickInputV0, "tick_input", err.Error(), false)
 	}
 	runnerResult, err := orquestadirectorrunner.RunDirectorCycleV0(ctx, orquestadirectorrunner.DirectorCycleInputV0{
 		Scheduler:      input.Scheduler,

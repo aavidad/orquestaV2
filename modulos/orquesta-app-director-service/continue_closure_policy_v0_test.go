@@ -34,13 +34,13 @@ func TestContinueAppDirectorV0BloqueaCierreAppCompletaNormalSinEvidencias(t *tes
 			sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
 			ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
 
-			_, err := ContinueAppDirectorV0(
+			result, err := ContinueAppDirectorV0(
 				context.Background(),
 				serviceContinueClosureRequestForTestV0(run.RunID),
 				serviceContinueClosurePortsForTestV0(store, sink, ledger, tc.decision),
 			)
-			if err == nil || err.Error() != "app_director_service_invalido: director_decision.request_policy.contratos" {
-				t.Fatalf("error=%v", err)
+			if err != nil {
+				t.Fatalf("ContinueAppDirectorV0: %v", err)
 			}
 			got, loadErr := store.LoadRunV0(context.Background(), run.RunID)
 			if loadErr != nil {
@@ -49,6 +49,12 @@ func TestContinueAppDirectorV0BloqueaCierreAppCompletaNormalSinEvidencias(t *tes
 			if len(got.Validations) != 0 || len(got.Closures) != 0 {
 				t.Fatalf("cierre no debe aplicarse: validations=%v closures=%v", got.Validations, got.Closures)
 			}
+			requireServiceDecisionRecoveryBlockV0(
+				t,
+				result.Run,
+				sink.EventsV0(),
+				"director_decision.request_policy.contratos",
+			)
 		})
 	}
 }

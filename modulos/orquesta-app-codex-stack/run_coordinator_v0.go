@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 )
 
 func (stack StackV0) RunGlobalTickV0(
@@ -93,7 +93,7 @@ func normalizeGlobalDrainLimitsV0(
 		limits.MaxDispatchesPerWait = 4
 	}
 	if limits.MaxCommands <= 0 {
-		limits.MaxCommands = 8
+		limits.MaxCommands = 20
 	}
 	if limits.MaxOutboxPerCycle <= 0 {
 		limits.MaxOutboxPerCycle = 4

@@ -1,6 +1,8 @@
 package orquestadirectortickinput
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 
 	orquestacoreconcurrency "orquesta/modulos/orquesta-core-concurrency"
@@ -35,12 +37,21 @@ func projectionPrefixRefsV0(refs []string, separator string) []string {
 	for _, ref := range refs {
 		prefix, _, ok := strings.Cut(strings.TrimSpace(ref), separator)
 		if ok {
-			out = append(out, strings.TrimSpace(prefix))
+			out = append(out, boundedProjectionRefV0(prefix))
 			continue
 		}
-		out = append(out, strings.TrimSpace(ref))
+		out = append(out, boundedProjectionRefV0(ref))
 	}
 	return compactTickInputRefsV0(out)
+}
+
+func boundedProjectionRefV0(ref string) string {
+	ref = strings.TrimSpace(ref)
+	if len(ref) <= maxTickInputStringV0 {
+		return ref
+	}
+	sum := sha256.Sum256([]byte(ref))
+	return "projection-ref-" + hex.EncodeToString(sum[:])[:32]
 }
 
 func cloneLeaseCandidatesV0(

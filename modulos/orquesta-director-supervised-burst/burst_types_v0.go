@@ -1,5 +1,7 @@
 package orquestadirectorsupervisedburst
 
+import "strings"
+
 import (
 	"context"
 
@@ -90,5 +92,36 @@ type DirectorSupervisedBurstErrorV0 struct {
 }
 
 func (err DirectorSupervisedBurstErrorV0) Error() string {
-	return err.Code
+	parts := []string{strings.TrimSpace(err.Code)}
+	if field := strings.TrimSpace(err.Field); field != "" {
+		parts = append(parts, "field="+field)
+	}
+	if message := strings.TrimSpace(err.Message); message != "" {
+		parts = append(parts, message)
+	}
+	if len(err.Issues) > 0 {
+		issue := mostSpecificBurstIssueV0(err.Issues)
+		detail := compactBurstErrorIssueV0([]string{
+			strings.TrimSpace(issue.Code),
+			strings.TrimSpace(issue.Field),
+			strings.TrimSpace(issue.Message),
+		})
+		if detail != "" {
+			parts = append(parts, "issue="+detail)
+		}
+	}
+	return compactBurstErrorIssueV0(parts)
+}
+
+func compactBurstErrorIssueV0(parts []string) string {
+	return strings.Join(compactBurstStringsV0(parts), ": ")
+}
+
+func mostSpecificBurstIssueV0(issues []DirectorSupervisedBurstIssueV0) DirectorSupervisedBurstIssueV0 {
+	for index := len(issues) - 1; index >= 0; index-- {
+		if strings.TrimSpace(issues[index].Code) != "" {
+			return issues[index]
+		}
+	}
+	return DirectorSupervisedBurstIssueV0{}
 }

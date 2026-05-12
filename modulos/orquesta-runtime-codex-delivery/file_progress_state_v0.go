@@ -67,17 +67,14 @@ func (store *FileCodexProgressStateStoreV0) ObserveCodexProgressV0(
 	store.ensureRecordsLockedV0()
 	key := codexProgressSampleKeyV0(sample)
 	record := store.records[key]
+	if !record.acceptsSampleV0(sample) {
+		return record.observationStateV0(sample.Signature, false), nil
+	}
 	next := record.nextHeartbeatV0(sample)
 	if err := store.persistNextV0(key, next); err != nil {
 		return CodexProgressObservationStateV0{}, err
 	}
-	return CodexProgressObservationStateV0{
-		Current:           next.Current,
-		Previous:          next.progressBaselineHeartbeatV0(),
-		Signature:         sample.Signature,
-		ReportedSignature: next.ReportedSignature,
-		ReportedStatus:    next.ReportedStatus,
-	}, nil
+	return next.observationStateV0(sample.Signature, true), nil
 }
 
 func (store *FileCodexProgressStateStoreV0) MarkCodexProgressReportedV0(

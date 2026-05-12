@@ -13,13 +13,16 @@ func buildDirectorTaskProgressV0(
 ) []DirectorTaskProgressV0 {
 	closed := autonomousStringSetV0(run.ClosedTasks)
 	byTask := latestDirectorProgressByTaskV0(observations)
-	tasks := compactStringsV0(append(run.Tasks, observedTaskRefsV0(observations)...))
+	byAssessedTask := latestDirectorAssessmentByTaskV0(run.AgentAssessments)
+	tasks := compactStringsV0(append(append(run.Tasks, observedTaskRefsV0(observations)...), assessedTaskRefsV0(run.AgentAssessments)...))
 	out := make([]DirectorTaskProgressV0, 0, len(tasks))
 	for _, taskRef := range tasks {
 		observation, observed := byTask[taskRef]
 		task := DirectorTaskProgressV0{TaskRef: taskRef, Status: DirectorTaskProgressPendingV0}
 		if observed {
 			task = directorTaskProgressFromObservationV0(taskRef, observation)
+		} else if assessment, assessed := byAssessedTask[taskRef]; assessed {
+			task = directorTaskProgressFromAssessmentV0(assessment)
 		}
 		if closed[taskRef] {
 			task.Status = DirectorTaskProgressClosedV0
@@ -55,6 +58,7 @@ func summarizeDirectorProgressV0(
 	progress DirectorProgressStatsV0,
 ) DirectorProgressStatsV0 {
 	byAgent := latestDirectorProgressByAgentV0(observations)
+	byAssessmentAgent := latestDirectorAssessmentByAgentV0(run.AgentAssessments)
 	progress.ObservedAgents = len(byAgent)
 	for _, observation := range byAgent {
 		progress = countDirectorBudgetClassificationV0(observation, progress)
@@ -69,8 +73,24 @@ func summarizeDirectorProgressV0(
 			progress.ProgressingAgents++
 		}
 	}
+	for agentRef, assessment := range byAssessmentAgent {
+		if _, observed := byAgent[agentRef]; observed {
+			continue
+		}
+		progress.ObservedAgents++
+		switch directorAssessmentProgressStatusV0(assessment) {
+		case string(orquestaruntime.AgentLoopDetectedV0):
+			progress.LoopDetectedAgents++
+		case string(orquestaruntime.AgentStoppedV0):
+			progress.StoppedAgents++
+		case string(orquestaruntime.AgentStalledV0):
+			progress.StalledAgents++
+		default:
+			progress.ProgressingAgents++
+		}
+	}
 	if observations != nil {
-		progress.NoSignalAgentRefs = noSignalDirectorAgentRefsV0(run, byAgent)
+		progress.NoSignalAgentRefs = noSignalDirectorAgentRefsV0(run, byAgent, byAssessmentAgent)
 	}
 	return progress
 }
@@ -93,7 +113,11 @@ func applyDirectorAgentProgressV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	observations []AgentProgressObservationV0,
 ) {
-	if stats == nil || len(observations) == 0 {
+	if stats == nil {
+		return
+	}
+	applyDirectorAgentAssessmentProgressV0(stats, run)
+	if len(observations) == 0 {
 		return
 	}
 	byAgent := latestDirectorProgressByAgentV0(observations)
@@ -116,6 +140,29 @@ func applyDirectorAgentProgressV0(
 	}
 }
 
+func applyDirectorAgentAssessmentProgressV0(
+	stats *DirectorRunStatsV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) {
+	byAgent := latestDirectorAssessmentByAgentV0(run.AgentAssessments)
+	if len(byAgent) == 0 {
+		return
+	}
+	for index := range stats.Agents {
+		assessment, ok := byAgent[stats.Agents[index].AgentRequestID]
+		if !ok {
+			continue
+		}
+		progress := directorAgentProgressFromAssessmentV0(assessment)
+		stats.Agents[index].LastProgress = &progress
+		if progress.Status == string(orquestaruntime.AgentStalledV0) ||
+			progress.Status == string(orquestaruntime.AgentLoopDetectedV0) ||
+			progress.DecisionRequired {
+			stats.Agents[index].NeedsAttention = true
+		}
+	}
+}
+
 func directorAgentProgressFromObservationV0(
 	observation AgentProgressObservationV0,
 ) DirectorAgentProgressV0 {
@@ -130,6 +177,36 @@ func directorAgentProgressFromObservationV0(
 		DirectorProgressTemporalV0: directorProgressTemporalFromReportV0(report),
 		Summary:                    strings.TrimSpace(report.Summary),
 		EvidenceRefs:               compactStringsV0(append(observation.EvidenceRefs, report.EvidenceRefs...)),
+	}
+}
+
+func directorAgentProgressFromAssessmentV0(
+	assessment orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
+) DirectorAgentProgressV0 {
+	return DirectorAgentProgressV0{
+		TaskRef:     strings.TrimSpace(assessment.TaskRef),
+		DeliveryRef: strings.TrimSpace(assessment.DeliveryRef),
+		ReportRef:   strings.TrimSpace(assessment.AssessmentRef),
+		Status:      directorAssessmentProgressStatusV0(assessment),
+		DirectorProgressTemporalV0: DirectorProgressTemporalV0{
+			DecisionRequired: directorAssessmentDecisionRequiredV0(assessment),
+		},
+	}
+}
+
+func directorTaskProgressFromAssessmentV0(
+	assessment orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
+) DirectorTaskProgressV0 {
+	return DirectorTaskProgressV0{
+		TaskRef:        strings.TrimSpace(assessment.TaskRef),
+		Status:         directorTaskStatusFromAssessmentV0(assessment),
+		AgentRequestID: strings.TrimSpace(assessment.AgentRequestID),
+		DeliveryRef:    strings.TrimSpace(assessment.DeliveryRef),
+		LastReportRef:  strings.TrimSpace(assessment.AssessmentRef),
+		ProgressStatus: directorAssessmentProgressStatusV0(assessment),
+		DirectorProgressTemporalV0: DirectorProgressTemporalV0{
+			DecisionRequired: directorAssessmentDecisionRequiredV0(assessment),
+		},
 	}
 }
 
@@ -154,6 +231,17 @@ func observedTaskRefsV0(observations []AgentProgressObservationV0) []string {
 	return compactStringsV0(refs)
 }
 
+func assessedTaskRefsV0(assessments []string) []string {
+	refs := make([]string, 0, len(assessments))
+	for _, value := range assessments {
+		assessment, ok := orquestacoreworkflow.ParseAgentAssessmentProjectionV0(value)
+		if ok {
+			refs = append(refs, assessment.TaskRef)
+		}
+	}
+	return compactStringsV0(refs)
+}
+
 func countObservedDirectorTasksV0(tasks []DirectorTaskProgressV0) int {
 	count := 0
 	for _, task := range tasks {
@@ -167,12 +255,18 @@ func countObservedDirectorTasksV0(tasks []DirectorTaskProgressV0) int {
 func noSignalDirectorAgentRefsV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	byAgent map[string]AgentProgressObservationV0,
+	byAssessmentAgent map[string]orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
 ) []string {
 	missing := make([]string, 0)
 	failed := autonomousStringSetV0(run.FailedAgents)
-	stopped := autonomousStringSetV0(run.ConfirmedStoppedAgents)
+	stopRequested := autonomousStringSetV0(run.StoppedAgents)
+	stopConfirmed := autonomousStringSetV0(run.ConfirmedStoppedAgents)
+	reflected := reflectedDirectorAgentSetV0(run)
 	for _, agentRef := range compactStringsV0(run.StartedAgents) {
-		if failed[agentRef] || stopped[agentRef] {
+		if failed[agentRef] || stopRequested[agentRef] || stopConfirmed[agentRef] || reflected[agentRef] {
+			continue
+		}
+		if _, ok := byAssessmentAgent[agentRef]; ok {
 			continue
 		}
 		if _, ok := byAgent[agentRef]; !ok {
@@ -180,4 +274,83 @@ func noSignalDirectorAgentRefsV0(
 		}
 	}
 	return missing
+}
+
+func latestDirectorAssessmentByAgentV0(
+	assessments []string,
+) map[string]orquestacoreworkflow.AgentWorkAssessmentProjectionV0 {
+	latest := map[string]orquestacoreworkflow.AgentWorkAssessmentProjectionV0{}
+	for _, value := range assessments {
+		assessment, ok := orquestacoreworkflow.ParseAgentAssessmentProjectionV0(value)
+		if !ok {
+			continue
+		}
+		agentRef := strings.TrimSpace(assessment.AgentRequestID)
+		if agentRef != "" {
+			latest[agentRef] = assessment
+		}
+	}
+	return latest
+}
+
+func latestDirectorAssessmentByTaskV0(
+	assessments []string,
+) map[string]orquestacoreworkflow.AgentWorkAssessmentProjectionV0 {
+	latest := map[string]orquestacoreworkflow.AgentWorkAssessmentProjectionV0{}
+	for _, value := range assessments {
+		assessment, ok := orquestacoreworkflow.ParseAgentAssessmentProjectionV0(value)
+		if !ok {
+			continue
+		}
+		taskRef := strings.TrimSpace(assessment.TaskRef)
+		if taskRef != "" {
+			latest[taskRef] = assessment
+		}
+	}
+	return latest
+}
+
+func directorAssessmentProgressStatusV0(
+	assessment orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
+) string {
+	switch strings.TrimSpace(assessment.Verdict) {
+	case orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0:
+		return string(orquestaruntime.AgentLoopDetectedV0)
+	case orquestacoreworkflow.AgentAssessmentVerdictGarbageV0,
+		orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+		orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0:
+		return string(orquestaruntime.AgentStalledV0)
+	}
+	if strings.TrimSpace(assessment.Action) == orquestacoreworkflow.AgentAssessmentActionStopAgentV0 {
+		return string(orquestaruntime.AgentStoppedV0)
+	}
+	return string(orquestaruntime.AgentProgressingV0)
+}
+
+func directorTaskStatusFromAssessmentV0(
+	assessment orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
+) string {
+	switch directorAssessmentProgressStatusV0(assessment) {
+	case string(orquestaruntime.AgentLoopDetectedV0):
+		return DirectorTaskProgressLoopDetectedV0
+	case string(orquestaruntime.AgentStoppedV0):
+		return DirectorTaskProgressStoppedV0
+	case string(orquestaruntime.AgentStalledV0):
+		return DirectorTaskProgressStalledV0
+	default:
+		return DirectorTaskProgressInProgressV0
+	}
+}
+
+func directorAssessmentDecisionRequiredV0(
+	assessment orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
+) bool {
+	switch strings.TrimSpace(assessment.Action) {
+	case orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+		orquestacoreworkflow.AgentAssessmentActionRequestRevisionV0,
+		orquestacoreworkflow.AgentAssessmentActionStopAgentV0:
+		return true
+	default:
+		return false
+	}
 }

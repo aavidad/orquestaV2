@@ -29,7 +29,14 @@ func consumeStartAppDirectorDecisionsV0(
 		},
 	)
 	if err != nil {
-		return loop, false, err
+		recovered, recoveryErr := recoverStartAppDirectorDecisionFailureV0(
+			ctx,
+			request,
+			ports,
+			loop,
+			startAppDirectorDecisionSourceRecoveryV0(),
+		)
+		return recovered, false, recoveryErr
 	}
 	progressed := false
 	for _, decision := range decisions {
@@ -48,7 +55,14 @@ func consumeStartAppDirectorDecisionsV0(
 			continue
 		}
 		if err := guardStartAppDirectorClosurePolicyV0(loop.Run, decision); err != nil {
-			return loop, progressed, err
+			recovered, recoveryErr := recoverStartAppDirectorDecisionFailureV0(
+				ctx,
+				request,
+				ports,
+				loop,
+				startAppDirectorDecisionPolicyRecoveryV0(decision, err),
+			)
+			return recovered, false, recoveryErr
 		}
 		applied, err := orquestadirectoragentworkflow.ApplyDirectorAgentDecisionV0(
 			ctx,
@@ -68,12 +82,24 @@ func consumeStartAppDirectorDecisionsV0(
 			if startAppDirectorDecisionTransitionPendingV0(err) {
 				return loop, progressed, nil
 			}
-			return loop, progressed, err
+			recovered, recoveryErr := recoverStartAppDirectorDecisionFailureV0(
+				ctx,
+				request,
+				ports,
+				loop,
+				startAppDirectorDecisionApplyRecoveryV0(decision, err),
+			)
+			return recovered, false, recoveryErr
 		}
 		if len(applied.Issues) > 0 {
-			return loop, progressed, AppDirectorServiceIssueV0{
-				Field: "director_decision." + applied.Issues[0].Field,
-			}
+			recovered, recoveryErr := recoverStartAppDirectorDecisionFailureV0(
+				ctx,
+				request,
+				ports,
+				loop,
+				startAppDirectorDecisionWorkflowIssueRecoveryV0(decision, applied.Issues[0]),
+			)
+			return recovered, false, recoveryErr
 		}
 		loop.Run = applied.Run
 		if applied.EventsCount > 0 {

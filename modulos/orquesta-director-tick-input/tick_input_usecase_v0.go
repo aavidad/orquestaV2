@@ -1,6 +1,7 @@
 package orquestadirectortickinput
 
 import (
+	"errors"
 	"strings"
 
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
@@ -33,10 +34,26 @@ func BuildDirectorSchedulerTickInputV0(
 	}
 	output = compactTickInputForActiveLaneV0(output)
 	normalized := orquestadirectorscheduler.NormalizeDirectorSchedulerTickInputV0(output)
+	normalized = compactTickInputPayloadV0(normalized)
 	if err := orquestadirectorscheduler.ValidateDirectorSchedulerTickInputV0(normalized); err != nil {
-		return orquestadirectorscheduler.DirectorSchedulerTickInputV0{}, tickInputErrorV0("scheduler_input")
+		return orquestadirectorscheduler.DirectorSchedulerTickInputV0{}, tickInputSchedulerErrorV0(err)
 	}
 	return normalized, nil
+}
+
+func tickInputSchedulerErrorV0(err error) DirectorTickInputBuildErrorV0 {
+	if field := tickInputSchedulerErrorFieldV0(err); field != "" {
+		return tickInputErrorV0("scheduler_input." + field)
+	}
+	return tickInputErrorV0("scheduler_input")
+}
+
+func tickInputSchedulerErrorFieldV0(err error) string {
+	var schedulerErr orquestadirectorscheduler.DirectorSchedulerTickErrorV0
+	if errors.As(err, &schedulerErr) {
+		return strings.TrimSpace(schedulerErr.Field)
+	}
+	return ""
 }
 
 func buildRunSchedulingSnapshotV0(

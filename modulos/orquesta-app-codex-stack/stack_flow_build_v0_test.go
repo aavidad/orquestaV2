@@ -108,3 +108,19 @@ func TestProgressSourceV0UsaWaitIntervalComoVentanaMinima(t *testing.T) {
 		t.Fatalf("min interval=%s want %s", source.MinUnchangedSampleInterval, waitInterval)
 	}
 }
+
+func TestStatsProgressSourceV0EmiteProgresoNormal(t *testing.T) {
+	source := statsProgressSourceV0(ConfigV0{
+		Stores: StoresV0{
+			ReceiptStore:    orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(),
+			ProgressState:   orquestaruntimecodexdelivery.NewInMemoryCodexProgressStateStoreV0(),
+			ProcessRegistry: orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0(),
+		},
+	})
+	if !source.EmitProgressing {
+		t.Fatalf("stats progress source debe emitir progreso normal")
+	}
+	if progressSourceV0(ConfigV0{}).EmitProgressing {
+		t.Fatalf("progress source de decision no debe emitir progreso normal")
+	}
+}

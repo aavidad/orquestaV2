@@ -133,6 +133,11 @@ func normalizeDirectorStatsQueryV0(query WebDirectorStatsQueryV0) WebDirectorSta
 	query.Locale = normalizeDirectorStatsLocaleV0(query.Locale)
 	query.RunRef = trimDirectorStatsV0(query.RunRef)
 	query.OccurredAt = trimDirectorStatsV0(query.OccurredAt)
+	if query.RunRef != "" {
+		query.IncludeProcessRefs = true
+		query.IncludeAgentProgress = true
+		query.IncludeAgentUsage = true
+	}
 	return query
 }
 

@@ -49,6 +49,12 @@ func progressSourceV0(config ConfigV0) orquestaruntimecodexdelivery.CodexProgres
 	}
 }
 
+func statsProgressSourceV0(config ConfigV0) orquestaruntimecodexdelivery.CodexProgressObservationSourceV0 {
+	source := progressSourceV0(config)
+	source.EmitProgressing = true
+	return source
+}
+
 func agentUsageSourceV0(config ConfigV0) CodexStackAgentUsageSourceV0 {
 	return CodexStackAgentUsageSourceV0{
 		Store:           config.Stores.ReceiptStore,
