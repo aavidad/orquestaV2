@@ -235,6 +235,16 @@ Contratos afectados: `WebDirectorRunStatsContractV0`,
 Estado: aceptada localmente.
 ```
 
+```text
+Fecha: 2026-05-12
+Decision: `/director-stats` prepara refresco semitiempo-real de progreso de agentes reutilizando `DirectorStatsClientV0`.
+Motivo: El contrato `/api/v0/director/stats` ya existe; la web puede pedir progreso compacto de agentes y publicar un `refresh.href` sin inventar backend, SSE, DB ni runtime propio.
+Alternativas: Crear endpoint nuevo de progreso; leer registry/progress source desde web; esperar a una SPA.
+Impacto: El endpoint web activa `include_agent_progress=true` cuando hay `run_ref`, conserva senales compactas por agente (`in_flight`, ticks sin progreso y repeticiones) y devuelve metadatos de polling GET localizados.
+Contratos afectados: `DirectorStatsClientV0`, `WebDirectorStatsPageV0`, `WebDirectorStatsAgentV0`.
+Estado: aceptada localmente.
+```
+
 ## Inventario acotado de herencia
 
 ```text

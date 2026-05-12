@@ -21,12 +21,16 @@ func directorStatsAgentsV0(
 			AgentRequestID: trimDirectorStatsV0(agent.AgentRequestID),
 			Status:         trimDirectorStatsV0(agent.Status),
 			ControlState:   trimDirectorStatsV0(agent.ControlState),
+			InFlight:       agent.InFlight,
 			CanStop:        agent.CanStop,
 			NeedsAttention: agent.NeedsAttention,
 		}
 		if agent.LastProgress != nil {
-			item.ProgressStatus = trimDirectorStatsV0(agent.LastProgress.Status)
-			item.TaskRef = trimDirectorStatsV0(agent.LastProgress.TaskRef)
+			progress := agent.LastProgress
+			item.ProgressStatus = trimDirectorStatsV0(progress.Status)
+			item.TaskRef = trimDirectorStatsV0(progress.TaskRef)
+			item.NoProgressTicks = progress.NoProgressTicks
+			item.RepeatedActionCount = progress.RepeatedActionCount
 		}
 		if agent.Usage != nil {
 			item.ModelAlias = trimDirectorStatsV0(agent.Usage.ModelAlias)

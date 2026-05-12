@@ -2,9 +2,11 @@ package orquestaweb
 
 const (
 	WebDirectorStatsInboundEndpointV0      = "/api/v0/director/stats"
+	WebDirectorStatsPageEndpointV0         = "/director-stats"
 	WebDirectorStatsCorrelationHeaderV0    = "X-Correlation-ID"
 	WebDirectorStatsPageSchemaV0           = "web_director_stats_page.v0"
 	WebDirectorStatsPanelSchemaV0          = "web_director_stats_panel.v0"
+	WebDirectorStatsRefreshIntervalMsV0    = 5000
 	WebDirectorStatsInboundEstadoOKV0      = "ok"
 	WebDirectorStatsInboundEstadoErrorV0   = "error"
 	WebDirectorStatsEstadoOKV0             = "ok"

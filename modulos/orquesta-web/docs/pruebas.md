@@ -265,3 +265,15 @@ Ultima ejecucion: 2026-05-11; pasa.
 Riesgos: La web solo proyecta el contrato; la fuente real de cuota/tokens vive
 en conectores del stack/director.
 ```
+
+```text
+Caso: WEB-UT-018 director stats prepara refresco de agentes
+Tipo: unit/integration
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `/director-stats` activa `include_agent_progress=true`
+cuando hay `run_ref`, proyecta `in_flight`, ticks sin progreso y repeticiones de
+accion por agente, y devuelve `refresh.href` localizable para polling GET.
+Ultima ejecucion: 2026-05-12; pasa con `go test -count=1 ./modulos/orquesta-web`.
+Riesgos: El progreso real depende de que el bridge MCP reciba un
+`ProgressSource` configurado; la web solo consume el contrato existente.
+```

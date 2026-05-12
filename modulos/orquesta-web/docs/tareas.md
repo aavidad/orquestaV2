@@ -218,6 +218,17 @@ como proyeccion canonica en nucleo, no como contador inventado por web.
 Estado: completada.
 ```
 
+```text
+ID: WEB-018
+Objetivo: Preparar `/director-stats` para refresco semitiempo-real de progreso y estado de agentes usando el endpoint existente.
+Write-set: director_stats_*_v0.go, tests y docs locales.
+Simbolo foco: WebDirectorStatsPageV0.Refresh
+Contrato: Consume `DirectorStatsClientV0` contra `/api/v0/director/stats`; el polling vuelve a `/director-stats` con `include_agent_progress=true`.
+Validacion: `go test -count=1 ./modulos/orquesta-web`.
+Bloqueos: El progreso real solo aparecera si el gateway/MCP inyecta `AgentProgressObservationProviderPortV0`; sin ese puerto la web muestra `source_status` degradado/no configurado.
+Estado: completada como preparacion UI semitiempo-real sobre contrato existente.
+```
+
 ## CONSULTA AL DIRECTOR
 
 ```text

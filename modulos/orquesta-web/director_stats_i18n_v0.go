@@ -9,6 +9,7 @@ func directorStatsTextsV0(locale string) WebDirectorStatsTextsV0 {
 			TaskProgress:  "Task progress",
 			AgentProgress: "Agent progress",
 			PublicErrors:  "Public errors",
+			Refresh:       "Refresh agent progress",
 		}
 	default:
 		return WebDirectorStatsTextsV0{
@@ -17,6 +18,7 @@ func directorStatsTextsV0(locale string) WebDirectorStatsTextsV0 {
 			TaskProgress:  "Progreso de tareas",
 			AgentProgress: "Progreso de agentes",
 			PublicErrors:  "Errores publicos",
+			Refresh:       "Actualizar progreso de agentes",
 		}
 	}
 }

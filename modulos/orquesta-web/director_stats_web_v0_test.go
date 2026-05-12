@@ -54,6 +54,40 @@ func TestDirectorStatsWebEndpointV0GETConsultaCliente(t *testing.T) {
 	}
 }
 
+func TestDirectorStatsWebEndpointV0GETPreparaRefreshSemitiempoReal(t *testing.T) {
+	client := &fakeDirectorStatsClientV0{VM: NewWebDirectorStatsViewModelV0(webDirectorStatsFixtureV0())}
+	endpoint := NewDirectorStatsWebEndpointV0(client)
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/director-stats?run_ref=run-web-director-stats-001&locale=es",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+
+	endpoint.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !client.Query.IncludeAgentProgress || client.Query.IncludeProcessRefs {
+		t.Fatalf("query no pide progreso compacto de agentes: %+v", client.Query)
+	}
+	var page WebDirectorStatsPageV0
+	if err := json.NewDecoder(rec.Body).Decode(&page); err != nil {
+		t.Fatalf("decode page: %v", err)
+	}
+	if !page.Refresh.Enabled ||
+		page.Refresh.Method != http.MethodGet ||
+		page.Refresh.IntervalMillis != WebDirectorStatsRefreshIntervalMsV0 ||
+		!strings.Contains(page.Refresh.Href, "include_agent_progress=true") ||
+		!strings.Contains(page.Refresh.Href, "run_ref=run-web-director-stats-001") {
+		t.Fatalf("refresh=%+v", page.Refresh)
+	}
+	if page.ViewModel.Textos.Refresh != "Actualizar progreso de agentes" {
+		t.Fatalf("texto refresh=%q", page.ViewModel.Textos.Refresh)
+	}
+}
+
 func TestRESTDirectorStatsClientV0DecodificaStats(t *testing.T) {
 	stats := webDirectorStatsFixtureV0()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

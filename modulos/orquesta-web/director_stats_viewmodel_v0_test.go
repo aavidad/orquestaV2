@@ -42,6 +42,9 @@ func TestWebDirectorStatsPanelV0ProyectaRunCountsProgresoYErrores(t *testing.T) 
 	if len(panel.Agentes) != 1 ||
 		panel.Agentes[0].TaskRef != "task-ref-web-stats-001" ||
 		panel.Agentes[0].ProgressStatus != "progressing" ||
+		!panel.Agentes[0].InFlight ||
+		panel.Agentes[0].NoProgressTicks != 2 ||
+		panel.Agentes[0].RepeatedActionCount != 1 ||
 		panel.Agentes[0].ModelAlias != "gpt-5.5" ||
 		panel.Agentes[0].QuotaRemaining != 90 ||
 		panel.Agentes[0].TotalTokens != 1500 {
@@ -142,9 +145,11 @@ func directorStatsResultForWebTestV0() WebDirectorStatsInboundResultV0 {
 				Status:         "running",
 				InFlight:       true,
 				LastProgress: &WebDirectorAgentProgressV0{
-					TaskRef:   "task-ref-web-stats-001",
-					ReportRef: " report-ref-web-stats-001 ",
-					Status:    "progressing",
+					TaskRef:             "task-ref-web-stats-001",
+					ReportRef:           " report-ref-web-stats-001 ",
+					Status:              "progressing",
+					NoProgressTicks:     2,
+					RepeatedActionCount: 1,
 				},
 				Usage: &WebDirectorAgentUsageV0{
 					ModelAlias:     " gpt-5.5 ",

@@ -3,6 +3,7 @@ package orquestaweb
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -15,7 +16,15 @@ type WebDirectorStatsPageV0 struct {
 	SchemaVersion string                      `json:"schema_version"`
 	Locale        string                      `json:"locale"`
 	Query         WebDirectorStatsQueryV0     `json:"query"`
+	Refresh       WebDirectorStatsRefreshV0   `json:"refresh"`
 	ViewModel     WebDirectorStatsViewModelV0 `json:"view_model"`
+}
+
+type WebDirectorStatsRefreshV0 struct {
+	Enabled        bool   `json:"enabled"`
+	Method         string `json:"method,omitempty"`
+	Href           string `json:"href,omitempty"`
+	IntervalMillis int    `json:"interval_millis,omitempty"`
 }
 
 func NewDirectorStatsWebEndpointV0(client DirectorStatsClientV0) DirectorStatsWebEndpointV0 {
@@ -58,6 +67,7 @@ func (endpoint DirectorStatsWebEndpointV0) handleDirectorStats(
 		writeDirectorStatsPageV0(w, http.StatusBadRequest, endpoint.page(locale, query, vm))
 		return
 	}
+	query = directorStatsQueryWithAgentProgressV0(query)
 	if endpoint.Client == nil {
 		vm := NewWebDirectorStatsErrorViewModelV0(query.RunRef, WebNuevaAppErrTransporteNoConfiguradoV0)
 		writeDirectorStatsPageV0(w, http.StatusServiceUnavailable, endpoint.page(locale, query, vm))
@@ -81,7 +91,39 @@ func (endpoint DirectorStatsWebEndpointV0) page(
 		SchemaVersion: WebDirectorStatsPageSchemaV0,
 		Locale:        endpoint.catalog().normalizeLocale(locale),
 		Query:         query,
+		Refresh:       directorStatsRefreshV0(locale, query),
 		ViewModel:     vm,
+	}
+}
+
+func directorStatsQueryWithAgentProgressV0(query WebDirectorStatsQueryV0) WebDirectorStatsQueryV0 {
+	query.RunRef = trimDirectorStatsV0(query.RunRef)
+	if query.RunRef != "" {
+		query.IncludeAgentProgress = true
+	}
+	return query
+}
+
+func directorStatsRefreshV0(
+	locale string,
+	query WebDirectorStatsQueryV0,
+) WebDirectorStatsRefreshV0 {
+	runRef := trimDirectorStatsV0(query.RunRef)
+	if runRef == "" {
+		return WebDirectorStatsRefreshV0{}
+	}
+	values := url.Values{}
+	values.Set("run_ref", runRef)
+	values.Set("locale", normalizeDirectorStatsLocaleV0(firstDirectorStatsNonEmptyV0(query.Locale, locale)))
+	values.Set("include_agent_progress", "true")
+	if query.IncludeAgentUsage {
+		values.Set("include_agent_usage", "true")
+	}
+	return WebDirectorStatsRefreshV0{
+		Enabled:        true,
+		Method:         http.MethodGet,
+		Href:           WebDirectorStatsPageEndpointV0 + "?" + values.Encode(),
+		IntervalMillis: WebDirectorStatsRefreshIntervalMsV0,
 	}
 }
 

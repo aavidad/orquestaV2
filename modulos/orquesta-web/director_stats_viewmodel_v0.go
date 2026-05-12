@@ -27,6 +27,7 @@ type WebDirectorStatsTextsV0 struct {
 	TaskProgress  string `json:"task_progress"`
 	AgentProgress string `json:"agent_progress"`
 	PublicErrors  string `json:"public_errors"`
+	Refresh       string `json:"refresh"`
 }
 
 type WebDirectorStatsCountsV0 struct {
@@ -73,19 +74,22 @@ type WebDirectorStatsSummaryV0 struct {
 }
 
 type WebDirectorStatsAgentV0 struct {
-	AgentRequestID string `json:"agent_request_id"`
-	Status         string `json:"status"`
-	ControlState   string `json:"control_state,omitempty"`
-	CanStop        bool   `json:"can_stop"`
-	NeedsAttention bool   `json:"needs_attention"`
-	ProgressStatus string `json:"progress_status,omitempty"`
-	TaskRef        string `json:"task_ref,omitempty"`
-	ModelAlias     string `json:"model_alias,omitempty"`
-	CapacityLevel  string `json:"capacity_level,omitempty"`
-	QuotaStatus    string `json:"quota_status,omitempty"`
-	QuotaRemaining int64  `json:"quota_remaining,omitempty"`
-	QuotaLimit     int64  `json:"quota_limit,omitempty"`
-	TotalTokens    int64  `json:"total_tokens,omitempty"`
+	AgentRequestID      string `json:"agent_request_id"`
+	Status              string `json:"status"`
+	ControlState        string `json:"control_state,omitempty"`
+	InFlight            bool   `json:"in_flight"`
+	CanStop             bool   `json:"can_stop"`
+	NeedsAttention      bool   `json:"needs_attention"`
+	ProgressStatus      string `json:"progress_status,omitempty"`
+	TaskRef             string `json:"task_ref,omitempty"`
+	NoProgressTicks     int    `json:"no_progress_ticks,omitempty"`
+	RepeatedActionCount int    `json:"repeated_action_count,omitempty"`
+	ModelAlias          string `json:"model_alias,omitempty"`
+	CapacityLevel       string `json:"capacity_level,omitempty"`
+	QuotaStatus         string `json:"quota_status,omitempty"`
+	QuotaRemaining      int64  `json:"quota_remaining,omitempty"`
+	QuotaLimit          int64  `json:"quota_limit,omitempty"`
+	TotalTokens         int64  `json:"total_tokens,omitempty"`
 }
 
 type WebDirectorStatsTaskV0 struct {
