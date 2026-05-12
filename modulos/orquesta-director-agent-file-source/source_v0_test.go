@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -39,6 +40,38 @@ func TestDirectorAgentDecisionFileSourceV0ReadsEnvelope(t *testing.T) {
 	if len(decisions) != 1 ||
 		decisions[0].CommandType != orquestadirectoragent.DirectorAgentCommandOpenPhaseV0 {
 		t.Fatalf("decisions=%+v", decisions)
+	}
+}
+
+func TestDirectorAgentDecisionFileSourceV0PasaProyeccionesRunAlProvider(t *testing.T) {
+	data := mustDecisionFileJSONForTestV0(t, []orquestadirectoragent.DirectorAgentDecisionV0{
+		validOpenVoteDecisionForTestV0("run-ref-001"),
+	})
+	provider := &recordingDecisionFileDescriptorProviderForTestV0{
+		Descriptors: []DirectorAgentDecisionFileDescriptorV0{{
+			DescriptorRef: "descriptor-ref-001",
+			RunID:         "run-ref-001",
+			Path:          "artifact-ref-001.json",
+		}},
+	}
+	source := DirectorAgentDecisionFileSourceV0{
+		DescriptorProvider: provider,
+		Reader: memoryDecisionFileReaderForTestV0{
+			Files: map[string][]byte{"artifact-ref-001.json": data},
+		},
+	}
+	request := decisionSourceRequestForTestV0("run-ref-001")
+	request.Run.PhaseArtifacts = []string{" artifact-ref-001#phase:brainstorming_arquitectura ", "artifact-ref-001#phase:brainstorming_arquitectura"}
+	request.Run.Deliveries = []string{" delivery-ref-001 ", "delivery-ref-001"}
+
+	if _, err := source.ListDirectorAgentDecisionsV0(context.Background(), request); err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	if !reflect.DeepEqual(provider.LastRequest.PhaseArtifacts, []string{"artifact-ref-001#phase:brainstorming_arquitectura"}) {
+		t.Fatalf("phase_artifacts=%v", provider.LastRequest.PhaseArtifacts)
+	}
+	if !reflect.DeepEqual(provider.LastRequest.Deliveries, []string{"delivery-ref-001"}) {
+		t.Fatalf("deliveries=%v", provider.LastRequest.Deliveries)
 	}
 }
 
@@ -98,6 +131,34 @@ func TestDirectorAgentDecisionFileSourceV0NormalizaFaseDesdePayload(t *testing.T
 	}
 	if decisions[0].PhaseID != string(orquestacoreworkflow.OrchestrationPhaseVotacionYDecisionV0) {
 		t.Fatalf("phase_id no normalizado: %+v", decisions[0])
+	}
+}
+
+func TestDirectorAgentDecisionFileSourceV0NormalizaCreateMicrotaskPhaseObjetivo(t *testing.T) {
+	decision := validMicrotaskDecisionForTestV0("run-ref-001")
+	decision.PhaseID = decision.CreateMicrotask.Task.PhaseID
+	data := mustDecisionFileJSONForTestV0(t, []orquestadirectoragent.DirectorAgentDecisionV0{decision})
+	source := DirectorAgentDecisionFileSourceV0{
+		DescriptorProvider: decisionFileDescriptorProviderForTestV0{
+			Descriptors: []DirectorAgentDecisionFileDescriptorV0{{
+				RunID: "run-ref-001",
+				Path:  "microtask-phase.json",
+			}},
+		},
+		Reader: memoryDecisionFileReaderForTestV0{
+			Files: map[string][]byte{"microtask-phase.json": data},
+		},
+	}
+
+	decisions, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		decisionSourceRequestForTestV0("run-ref-001"),
+	)
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	if decisions[0].PhaseID != orquestadirectoragent.DirectorAgentPlanningPhaseIDV0 {
+		t.Fatalf("phase_id create_microtask no normalizado: %+v", decisions[0])
 	}
 }
 
@@ -187,6 +248,22 @@ func (provider decisionFileDescriptorProviderForTestV0) ListDirectorAgentDecisio
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	return append([]DirectorAgentDecisionFileDescriptorV0(nil), provider.Descriptors...), nil
+}
+
+type recordingDecisionFileDescriptorProviderForTestV0 struct {
+	Descriptors []DirectorAgentDecisionFileDescriptorV0
+	LastRequest DirectorAgentDecisionFileListRequestV0
+}
+
+func (provider *recordingDecisionFileDescriptorProviderForTestV0) ListDirectorAgentDecisionFilesV0(
+	ctx context.Context,
+	request DirectorAgentDecisionFileListRequestV0,
+) ([]DirectorAgentDecisionFileDescriptorV0, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	provider.LastRequest = request
 	return append([]DirectorAgentDecisionFileDescriptorV0(nil), provider.Descriptors...), nil
 }
 

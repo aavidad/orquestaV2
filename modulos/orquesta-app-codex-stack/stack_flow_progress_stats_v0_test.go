@@ -110,7 +110,7 @@ func TestCodexStackAgentUsageSourceV0UneMetricasInyectadas(t *testing.T) {
 	}
 }
 
-func TestCodexStackV0ProgressLoopDetectedProtegeDirectorInicial(t *testing.T) {
+func TestCodexStackV0ProgressStalledProtegeDirectorInicial(t *testing.T) {
 	ctx := context.Background()
 	runtime := newPendingAckCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
@@ -126,8 +126,8 @@ func TestCodexStackV0ProgressLoopDetectedProtegeDirectorInicial(t *testing.T) {
 		SnapshotSource:  runtime,
 		State:           stack.Stores.ProgressState,
 		Policy: orquestaruntime.AgentProgressHeartbeatPolicyV0{
-			StalledAfterNoProgressTicks: 99,
-			LoopAfterRepeatedActions:    1,
+			StalledAfterNoProgressTicks: 1,
+			LoopAfterRepeatedActions:    99,
 		},
 	}
 

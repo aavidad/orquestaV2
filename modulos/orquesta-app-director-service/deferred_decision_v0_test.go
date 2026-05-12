@@ -22,6 +22,19 @@ func TestStartAppDirectorDecisionDeferredV0RetieneRevisionHastaEntregas(t *testi
 	}
 }
 
+func TestStartAppDirectorDecisionDeferredV0RetieneProgramacionHastaMicrotareas(t *testing.T) {
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		CurrentPhase: orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
+	}
+	if !startAppDirectorDecisionDeferredV0(run, programmingOpenDecisionForServiceTestV0()) {
+		t.Fatalf("expected programming deferred while tasks are missing")
+	}
+	run.Tasks = append(run.Tasks, "task-a")
+	if startAppDirectorDecisionDeferredV0(run, programmingOpenDecisionForServiceTestV0()) {
+		t.Fatalf("expected programming allowed when tasks exist")
+	}
+}
+
 func TestStartAppDirectorDecisionTransitionPendingV0DetectaTransicion(t *testing.T) {
 	err := orquestacoreworkflow.OrchestrationCommandErrorV0{
 		Code:  orquestacoreworkflow.ErrTransicionInvalidaV0,
@@ -29,6 +42,16 @@ func TestStartAppDirectorDecisionTransitionPendingV0DetectaTransicion(t *testing
 	}
 	if !startAppDirectorDecisionTransitionPendingV0(err) {
 		t.Fatalf("expected transition pending")
+	}
+}
+
+func programmingOpenDecisionForServiceTestV0() orquestadirectoragent.DirectorAgentDecisionV0 {
+	return orquestadirectoragent.DirectorAgentDecisionV0{
+		CommandType: orquestadirectoragent.DirectorAgentCommandOpenPhaseV0,
+		OpenPhase: &orquestadirectoragent.DirectorAgentOpenPhaseCommandV0{
+			PhaseID: string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			Reason:  "Microtareas listas para programacion.",
+		},
 	}
 }
 

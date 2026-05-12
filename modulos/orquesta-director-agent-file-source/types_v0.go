@@ -18,9 +18,11 @@ type DirectorAgentDecisionFileDescriptorV0 struct {
 }
 
 type DirectorAgentDecisionFileListRequestV0 struct {
-	RunID         string `json:"run_id"`
-	CorrelationID string `json:"correlation_id,omitempty"`
-	RequestedBy   string `json:"requested_by,omitempty"`
+	RunID          string   `json:"run_id"`
+	PhaseArtifacts []string `json:"phase_artifacts,omitempty"`
+	Deliveries     []string `json:"deliveries,omitempty"`
+	CorrelationID  string   `json:"correlation_id,omitempty"`
+	RequestedBy    string   `json:"requested_by,omitempty"`
 }
 
 type DirectorAgentDecisionFileDescriptorProviderPortV0 interface {

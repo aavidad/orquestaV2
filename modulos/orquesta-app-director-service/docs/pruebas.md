@@ -32,6 +32,8 @@ Evidencia 2026-05-09:
 - `TestStartAppDirectorV0AutonomiaAltaStartsDirectorTeamThroughBatch`;
 - `TestStartAppDirectorV0ConsumesDirectorDecisionSource`;
 - `TestStartAppDirectorV0IgnoresPersistedDirectorDecisionsAlreadyApplied`;
+- `TestStartAppDirectorV0NoSaltaDecisionPendienteDelDirector`;
+- `TestStartAppDirectorDecisionDeferredV0RetieneProgramacionHastaMicrotareas`;
 - `TestStartAppDirectorV0ConsumesDecisionsAndRerunsProgrammingLoop`;
 - `TestStartAppDirectorV0WaitsExternalBeforeConsumingDirectorDecisions`;
 - `TestGuardStartAppDirectorClosurePolicyV0BloqueaAppCompletaSinCodigo`;

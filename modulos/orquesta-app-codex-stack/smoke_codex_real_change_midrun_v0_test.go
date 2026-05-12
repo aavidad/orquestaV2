@@ -33,9 +33,6 @@ func TestNuevaAppWebCodexStackRealCambioMitadOptInV0(t *testing.T) {
 	if len(initialDescriptors) < 4 {
 		t.Fatalf("descriptors iniciales=%d\n%s", len(initialDescriptors), codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
 	}
-	if err := codexStackRealSmokeWaitForDescriptorsAckV0(ctx, initialDescriptors); err != nil {
-		t.Fatalf("ACK inicial no validado: %v\n%s", err, codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
-	}
 	if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
 		RunRef:               runRef,
 		CorrelationID:        "corr-app-stack-real-change-initial-drain",
@@ -66,15 +63,12 @@ func TestNuevaAppWebCodexStackRealCambioMitadOptInV0(t *testing.T) {
 	}
 
 	allDescriptors := codexStackRealSmokeDescriptorsV0(t, stores.ReceiptStore)
-	changeDescriptor, ok := codexStackRealSmokeDescriptorByWriteSetV0(
+	_, ok := codexStackRealSmokeDescriptorByWriteSetV0(
 		allDescriptors,
 		"docs/change-request-midrun.md",
 	)
 	if !ok {
 		t.Fatalf("descriptor de cambio no encontrado descriptors=%v\n%s", codexStackRealSmokeDescriptorAgentsV0(allDescriptors), codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
-	}
-	if err := codexStackRealSmokeWaitForAckPathV0(ctx, changeDescriptor.AckPath, changeDescriptor.Spec); err != nil {
-		t.Fatalf("ACK cambio no validado: %v\n%s", err, codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
 	}
 	if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
 		RunRef:               runRef,

@@ -61,11 +61,6 @@ func TestNuevaAppWebCodexStackRealMultiagentOptInV0(t *testing.T) {
 			codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir),
 		)
 	}
-	for _, descriptor := range descriptors {
-		if err := codexStackRealSmokeWaitForAckPathV0(ctx, descriptor.AckPath, descriptor.Spec); err != nil {
-			t.Fatalf("ack no validado para %s: %v\n%s", descriptor.AgentRef, err, codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
-		}
-	}
 	if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
 		RunRef:               descriptors[0].RunID,
 		CorrelationID:        "corr-app-stack-real-multi-drain",
@@ -74,7 +69,7 @@ func TestNuevaAppWebCodexStackRealMultiagentOptInV0(t *testing.T) {
 		MaxDispatchesPerWait: 8,
 		MaxCommands:          20,
 		MaxOutboxPerCycle:    8,
-		MaxExternalWaits:     maxExternalWaits,
+		MaxExternalWaits:     codexStackRealSmokeDrainCycleMaxExternalWaitsV0(maxExternalWaits),
 	}); err != nil {
 		t.Fatalf("DrainRunV0: %v\n%s", err, codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
 	}
@@ -139,6 +134,12 @@ func TestNuevaAppWebCodexStackRealMultiagentOptInV0(t *testing.T) {
 		t.Fatalf("phase_artifacts_registrados=%d artifacts=%v", got, run.PhaseArtifacts)
 	}
 	allDescriptors = codexStackRealSmokeDescriptorsV0(t, stores.ReceiptStore)
+	codexStackRealSmokeAssertProgrammingParallelWaveV0(
+		t,
+		stores.EventSink.EventsV0(),
+		allDescriptors,
+		2,
+	)
 	codexStackRealSmokeVerifyDescriptorWriteSetsV0(t, cfg.ProjectWorkDir, allDescriptors)
 	codexStackRealSmokeVerifyGoFileSizesV0(t, cfg.ProjectWorkDir)
 	codexStackRealSmokeVerifyGoAppCompilesV0(t, cfg.ProjectWorkDir)

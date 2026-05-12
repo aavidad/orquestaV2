@@ -1,6 +1,22 @@
 # Decisiones: orquesta-app-director-service
 
 ```text
+Fecha: 2026-05-12
+Decision: Una decision del director pendiente corta el lote actual.
+Motivo: un director real emitio una cadena con `accept_decision.vote_ref`
+incoherente. El servicio saltaba esa transicion pendiente y aplicaba decisiones
+posteriores, llegando a abrir `programacion` sin microtareas. Eso recreaba el
+problema historico de v1/v2: avanzar por apariencia de progreso aunque falte un
+prerrequisito causal.
+Impacto: si `ApplyDirectorAgentDecisionV0` devuelve `ErrTransicionInvalidaV0`,
+el servicio conserva el progreso ya reflejado y detiene el consumo del lote.
+Las decisiones posteriores se reintentan en otro ciclo solo cuando la decision
+pendiente ya pueda aplicarse. Ademas `open_phase(programacion)` queda diferido
+si no hay microtareas materializadas.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-11
 Decision: El servicio compone tambien el review gate como fuente externa
 inyectada.

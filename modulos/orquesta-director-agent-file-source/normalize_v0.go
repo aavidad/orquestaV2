@@ -61,6 +61,8 @@ func normalizeDirectorAgentDecisionFilePhaseV0(
 	decision orquestadirectoragent.DirectorAgentDecisionV0,
 ) orquestadirectoragent.DirectorAgentDecisionV0 {
 	switch {
+	case decision.CreateMicrotask != nil:
+		decision.PhaseID = normalizeDirectorAgentDecisionFileMicrotaskPhaseV0(decision)
 	case decision.RequestBrainstorm != nil:
 		decision.PhaseID = decision.RequestBrainstorm.PhaseID
 	case decision.RequestVote != nil:
@@ -89,4 +91,15 @@ func normalizeDirectorAgentDecisionFilePhaseV0(
 		decision.PhaseID = decision.ProposePlanTeam.Plan.PhaseID
 	}
 	return decision
+}
+
+func normalizeDirectorAgentDecisionFileMicrotaskPhaseV0(
+	decision orquestadirectoragent.DirectorAgentDecisionV0,
+) string {
+	current := strings.TrimSpace(decision.PhaseID)
+	taskPhase := strings.TrimSpace(decision.CreateMicrotask.Task.PhaseID)
+	if current == "" || current == taskPhase {
+		return orquestadirectoragent.DirectorAgentPlanningPhaseIDV0
+	}
+	return current
 }

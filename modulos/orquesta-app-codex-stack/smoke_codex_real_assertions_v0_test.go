@@ -8,10 +8,10 @@ import (
 	"time"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func codexStackRealSmokeDescriptorsV0(
@@ -168,9 +168,7 @@ func codexStackRealSmokeProgrammingReceiptDescriptorsV0(
 ) []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0 {
 	programming := make([]orquestaruntimecodexdelivery.CodexReceiptDescriptorV0, 0, len(descriptors))
 	for _, descriptor := range descriptors {
-		packet := descriptor.Spec.AgentPacket
-		if packet.TargetModule == "orquesta-app-stack-programacion" ||
-			strings.Contains(packet.Task.TaskRef, "programacion") {
+		if descriptor.Spec.AgentPacket.Phase == string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0) {
 			programming = append(programming, descriptor)
 		}
 	}

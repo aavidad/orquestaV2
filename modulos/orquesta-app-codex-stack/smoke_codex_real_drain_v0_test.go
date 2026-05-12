@@ -31,15 +31,33 @@ func codexStackRealSmokeDrainUntilProgrammingDeliveredV0(
 	maxExternalWaits int,
 ) codexStackRealSmokeProgrammingDrainV0 {
 	t.Helper()
+	result, err := codexStackRealSmokeDrainUntilProgrammingDeliveredResultV0(
+		t,
+		ctx,
+		stack,
+		stores,
+		runRef,
+		maxExternalWaits,
+	)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, codexStackRealSmokeDiagnosticsV0(runtimeWorkDir))
+	}
+	return result
+}
+
+func codexStackRealSmokeDrainUntilProgrammingDeliveredResultV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	stores codexStackRealSmokeStoresV0,
+	runRef string,
+	maxExternalWaits int,
+) (codexStackRealSmokeProgrammingDrainV0, error) {
+	t.Helper()
 	var last codexStackRealSmokeProgrammingDrainV0
+	previousSequence := mustLoadCodexStackRunForTestV0(t, stack, runRef).LastSequence
+	previousFingerprint := codexStackRealSmokeDrainFingerprintV0(t, stores, stack, runRef)
 	for cycle := 1; cycle <= 8; cycle++ {
-		descriptors := codexStackRealSmokeDescriptorsV0(t, stores.ReceiptStore)
-		if err := codexStackRealSmokeWaitForDescriptorsAckV0(
-			ctx,
-			codexStackRealSmokePendingProgrammingDescriptorsV0(t, stack, runRef, descriptors),
-		); err != nil {
-			t.Fatalf("ack programacion ciclo=%d: %v\n%s", cycle, err, codexStackRealSmokeDiagnosticsV0(runtimeWorkDir))
-		}
 		drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
 			RunRef:               runRef,
 			CorrelationID:        fmt.Sprintf("corr-app-stack-real-programming-drain-%03d", cycle),
@@ -48,10 +66,10 @@ func codexStackRealSmokeDrainUntilProgrammingDeliveredV0(
 			MaxDispatchesPerWait: 8,
 			MaxCommands:          20,
 			MaxOutboxPerCycle:    8,
-			MaxExternalWaits:     maxExternalWaits,
+			MaxExternalWaits:     codexStackRealSmokeDrainCycleMaxExternalWaitsV0(maxExternalWaits),
 		})
 		if err != nil {
-			t.Fatalf("DrainRunV0 programacion ciclo=%d: %v", cycle, err)
+			return last, fmt.Errorf("DrainRunV0 programacion ciclo=%d: %w", cycle, err)
 		}
 		run := mustLoadCodexStackRunForTestV0(t, stack, runRef)
 		last = codexStackRealSmokeProgrammingDrainV0{
@@ -63,16 +81,34 @@ func codexStackRealSmokeDrainUntilProgrammingDeliveredV0(
 			Run:         run,
 			Descriptors: codexStackRealSmokeDescriptorsV0(t, stores.ReceiptStore),
 		}
+		fingerprint := codexStackRealSmokeDrainFingerprintFromRunV0(last.Run, last.Descriptors)
+		progressed := run.LastSequence != previousSequence || fingerprint != previousFingerprint
+		previousSequence = run.LastSequence
+		previousFingerprint = fingerprint
 		if codexStackRealSmokeAllRunTasksDeliveredV0(run) {
-			return last
+			return last, nil
 		}
-		if !drainRunHasPendingExternalAgentsV0(run) &&
-			len(compactStringsV0(run.Tasks)) > 0 &&
-			len(compactStringsV0(run.DeliveredTasks)) == 0 {
-			t.Fatalf("run sin progreso de programacion ciclo=%d tasks=%v delivered=%v", cycle, run.Tasks, run.DeliveredTasks)
+		if cause := codexStackRealSmokeProgrammingCausalIssueV0(run, last.Descriptors); cause != "" {
+			return last, fmt.Errorf(
+				"programacion incompleta con causa observable ciclo=%d: %s status=%s attempts=%d waits=%d",
+				cycle,
+				cause,
+				last.Drain.Status,
+				last.Drain.Attempts,
+				last.Drain.Waits,
+			)
+		}
+		if !drainRunHasPendingExternalAgentsV0(run) && !progressed {
+			return last, fmt.Errorf(
+				"run sin progreso de programacion ciclo=%d tasks=%v delivered=%v sequence=%d",
+				cycle,
+				run.Tasks,
+				run.DeliveredTasks,
+				run.LastSequence,
+			)
 		}
 	}
-	t.Fatalf(
+	return last, fmt.Errorf(
 		"programacion incompleta tras ciclos: tasks=%v delivered=%v started=%v status=%s attempts=%d waits=%d",
 		last.Run.Tasks,
 		last.Run.DeliveredTasks,
@@ -81,7 +117,6 @@ func codexStackRealSmokeDrainUntilProgrammingDeliveredV0(
 		last.Drain.Attempts,
 		last.Drain.Waits,
 	)
-	return last
 }
 
 func codexStackRealSmokePendingProgrammingDescriptorsV0(

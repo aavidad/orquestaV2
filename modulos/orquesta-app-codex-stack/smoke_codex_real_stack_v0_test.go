@@ -80,8 +80,8 @@ func codexStackRealSmokeBuildStackV0(
 			MaxConcurrency: cfg.MaxConcurrency,
 			WaitInterval:   2 * time.Second,
 			ProgressPolicy: orquestaruntime.AgentProgressHeartbeatPolicyV0{
-				StalledAfterNoProgressTicks: 45,
-				LoopAfterRepeatedActions:    180,
+				StalledAfterNoProgressTicks: 8,
+				LoopAfterRepeatedActions:    12,
 			},
 		},
 		Capacity: CapacityConfigV0{

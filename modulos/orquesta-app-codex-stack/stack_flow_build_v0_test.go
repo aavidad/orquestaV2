@@ -7,11 +7,11 @@ import (
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 	orquestaweb "orquesta/modulos/orquesta-web"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 type codexStackRuntimeForTestV0 interface {
@@ -89,5 +89,22 @@ func codexStackProgressPolicyForTestV0() orquestaruntime.AgentProgressHeartbeatP
 	return orquestaruntime.AgentProgressHeartbeatPolicyV0{
 		StalledAfterNoProgressTicks: 10000,
 		LoopAfterRepeatedActions:    10000,
+	}
+}
+
+func TestProgressSourceV0UsaWaitIntervalComoVentanaMinima(t *testing.T) {
+	waitInterval := 2 * time.Second
+	source := progressSourceV0(ConfigV0{
+		Stores: StoresV0{
+			ReceiptStore:    orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(),
+			ProgressState:   orquestaruntimecodexdelivery.NewInMemoryCodexProgressStateStoreV0(),
+			ProcessRegistry: orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0(),
+		},
+		Codex: CodexRuntimeConfigV0{
+			WaitInterval: waitInterval,
+		},
+	})
+	if source.MinUnchangedSampleInterval != waitInterval {
+		t.Fatalf("min interval=%s want %s", source.MinUnchangedSampleInterval, waitInterval)
 	}
 }

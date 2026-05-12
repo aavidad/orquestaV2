@@ -12,9 +12,9 @@ import (
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
 	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 	orquestadirectorsupervisedburst "orquesta/modulos/orquesta-director-supervised-burst"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestDrainRunV0ConsumeDecisionFileConLoteProgramacionGrande(t *testing.T) {
@@ -55,6 +55,46 @@ func TestDrainRunV0ConsumeDecisionFileConLoteProgramacionGrande(t *testing.T) {
 	}
 }
 
+func TestDrainRunV0NormalizaCreateMicrotaskPhaseObjetivoDelDirectorReal(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+
+	director := postDirectorAPIV0(t, stack)
+	codexStackWriteDelayedBatchDirectorDecisionsWithMicrotaskPhaseForTestV0(
+		t,
+		stack,
+		director.RunRef,
+		string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+	)
+
+	drain, err := stack.DrainRunV0(context.Background(), DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-batch-decisions-real-phase-001",
+		MaxBursts:            16,
+		MaxStepsPerBurst:     12,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		MaxExternalWaits:     4,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0 batch real phase: %v issues=%+v drain=%+v",
+			err,
+			codexStackBurstIssuesForErrorV0(err),
+			drain,
+		)
+	}
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	for _, taskRef := range codexStackBatchDecisionTaskRefsForTestV0() {
+		if !codexStackStringInSetForTestV0(run.Tasks, taskRef) {
+			t.Fatalf("tasks=%v missing=%s", run.Tasks, taskRef)
+		}
+	}
+}
+
 func codexStackBurstIssuesForErrorV0(err error) []orquestadirectorsupervisedburst.DirectorSupervisedBurstIssueV0 {
 	var burstErr orquestadirectorsupervisedburst.DirectorSupervisedBurstErrorV0
 	if errors.As(err, &burstErr) {
@@ -83,6 +123,27 @@ func codexStackWriteDelayedBatchDirectorDecisionsForTestV0(
 	t.Fatalf("descriptor director no encontrado")
 }
 
+func codexStackWriteDelayedBatchDirectorDecisionsWithMicrotaskPhaseForTestV0(
+	t *testing.T,
+	stack StackV0,
+	runRef string,
+	phaseID string,
+) {
+	t.Helper()
+	store, ok := stack.Stores.ReceiptStore.(*orquestaruntimecodexdelivery.InMemoryCodexReceiptDescriptorStoreV0)
+	if !ok {
+		t.Fatalf("receipt store inesperado: %T", stack.Stores.ReceiptStore)
+	}
+	for _, descriptor := range codexStackRealSmokeDescriptorsV0(t, store) {
+		if descriptor.Spec.AgentPacket.TargetModule != "orquesta-app-stack-director" {
+			continue
+		}
+		writeDelayedBatchDirectorDecisionFileWithMicrotaskPhaseForTestV0(t, descriptor, runRef, phaseID)
+		return
+	}
+	t.Fatalf("descriptor director no encontrado")
+}
+
 func writeDelayedBatchDirectorDecisionFileForTestV0(
 	t *testing.T,
 	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
@@ -106,6 +167,39 @@ func writeDelayedBatchDirectorDecisionFileForTestV0(
 	path := filepath.Join(filepath.Dir(descriptor.AckPath), orquestaruntimecodex.CodexDirectorDecisionsFileNameV0)
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatalf("write batch decisions: %v", err)
+	}
+}
+
+func writeDelayedBatchDirectorDecisionFileWithMicrotaskPhaseForTestV0(
+	t *testing.T,
+	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+	runRef string,
+	phaseID string,
+) {
+	t.Helper()
+	brainstormRef := codexStackObjectiveValueForTestV0(
+		descriptor.Spec.AgentPacket.Task.Objective,
+		"BrainstormRef inicial:",
+	)
+	if brainstormRef == "" {
+		t.Fatalf("brainstorm ref vacio en objetivo director")
+	}
+	decisions := codexStackBatchDirectorDecisionsForTestV0(runRef, brainstormRef)
+	for i := range decisions {
+		if decisions[i].CreateMicrotask != nil {
+			decisions[i].PhaseID = phaseID
+		}
+	}
+	data, err := json.Marshal(orquestadirectoragentfilesource.DirectorAgentDecisionFileEnvelopeV0{
+		SchemaVersion: orquestadirectoragentfilesource.DirectorAgentDecisionFileSchemaVersionV0,
+		Decisions:     decisions,
+	})
+	if err != nil {
+		t.Fatalf("marshal batch decisions real phase: %v", err)
+	}
+	path := filepath.Join(filepath.Dir(descriptor.AckPath), orquestaruntimecodex.CodexDirectorDecisionsFileNameV0)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write batch decisions real phase: %v", err)
 	}
 }
 

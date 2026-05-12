@@ -39,12 +39,13 @@ func assessmentReplanSourceV0(config ConfigV0) AssessmentReplanSourceV0 {
 
 func progressSourceV0(config ConfigV0) orquestaruntimecodexdelivery.CodexProgressObservationSourceV0 {
 	return orquestaruntimecodexdelivery.CodexProgressObservationSourceV0{
-		Store:           config.Stores.ReceiptStore,
-		ProcessRegistry: config.Stores.ProcessRegistry,
-		SnapshotSource:  config.Codex.SnapshotSource,
-		State:           config.Stores.ProgressState,
-		Policy:          codexStackProgressPolicyV0(config.Codex.ProgressPolicy),
-		BudgetPolicy:    config.Codex.ProgressBudget,
+		Store:                      config.Stores.ReceiptStore,
+		ProcessRegistry:            config.Stores.ProcessRegistry,
+		SnapshotSource:             config.Codex.SnapshotSource,
+		State:                      config.Stores.ProgressState,
+		Policy:                     codexStackProgressPolicyV0(config.Codex.ProgressPolicy),
+		BudgetPolicy:               config.Codex.ProgressBudget,
+		MinUnchangedSampleInterval: config.Codex.WaitInterval,
 	}
 }
 

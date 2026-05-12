@@ -3,6 +3,8 @@ package orquestaappdirectorservice
 import (
 	"strings"
 	"time"
+
+	orquestadirectorrunner "orquesta/modulos/orquesta-director-runner"
 )
 
 const (
@@ -43,9 +45,17 @@ func normalizeStartAppDirectorRequestV0(
 	if request.MaxCommands <= 0 {
 		request.MaxCommands = defaultStartAppDirectorMaxCommandsV0
 	}
+	request.MaxCommands = boundedStartAppDirectorLimitV0(
+		request.MaxCommands,
+		orquestadirectorrunner.DirectorCycleMaxCommandsV0,
+	)
 	if request.MaxOutboxPerCycle <= 0 {
 		request.MaxOutboxPerCycle = defaultStartAppDirectorMaxOutboxPerCycleV0
 	}
+	request.MaxOutboxPerCycle = boundedStartAppDirectorLimitV0(
+		request.MaxOutboxPerCycle,
+		orquestadirectorrunner.DirectorCycleMaxOutboxV0,
+	)
 	if request.MaxDecisionCycles <= 0 {
 		request.MaxDecisionCycles = defaultStartAppDirectorMaxDecisionCyclesV0
 	}
@@ -53,6 +63,13 @@ func normalizeStartAppDirectorRequestV0(
 		request.MaxExternalWaits = defaultStartAppDirectorMaxExternalWaitsV0
 	}
 	return request
+}
+
+func boundedStartAppDirectorLimitV0(value int, max int) int {
+	if value > max {
+		return max
+	}
+	return value
 }
 
 func startAppDirectorNowV0(occurredAt string) (time.Time, error) {

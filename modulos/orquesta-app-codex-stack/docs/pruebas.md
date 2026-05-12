@@ -36,6 +36,19 @@ Cobertura Go actual:
   flujo vertical completo: entrega registrada, revision con evidencia real,
   `changes_requested`, `RequestRework`, `retry_task`, decision de capacidad y
   arranque de un nuevo agente sin intervencion manual del test.
+- `TestNuevaAppWebCodexStackRealReviewReworkOptInV0` queda desactivado por
+  defecto y valida con Codex reales el ciclo: app multiagente, entregas de
+  programacion, revision `changes_requested` por evidencia real de fichero
+  demasiado grande, `RequestRework`, `retry_task`, agente real de rework y ACK
+  del rework. La version actual exige ademas que la entrega del rework sea
+  aceptada por el review gate con evidencia real.
+- `TestCompositeDirectorDecisionSourceV0RechazaVoteRefIncoherente` valida que
+  el stack no consume un lote del director con refs causales rotas entre
+  votacion, decision, contrato y microtareas.
+- `TestCodexStackRealSmokeDetectaACKFaltanteConProyectoCompilable` reproduce
+  localmente el caso real de programacion paralela con write-set materializado,
+  app Go compilable y un ACK faltante; el helper devuelve
+  `project_compiles_but_ack_missing` en vez de esperar al deadline global.
 
 Guardas esperadas para pruebas futuras:
 
@@ -47,7 +60,66 @@ Guardas esperadas para pruebas futuras:
 - ACK valido antes de registrar entrega o artefacto;
 - verificacion de write-set antes de aceptar ACK;
 - la supervision no convierte silencio temporal de logs/ACK en bucle terminal;
+- los helpers de drenaje real no deben confundir `tasks=[]` temporal con falta
+  de progreso cuando `LastSequence` avanzo;
+- el smoke de app completa debe exigir una ola de programacion paralela real:
+  varios `AgentStarted` de programacion antes del primer `DeliveryRegistered`
+  de esa ola;
+- si el write-set de una microtarea esta completo y el proyecto Go generado
+  compila pero falta ACK valido, el fallo esperado es causal
+  `project_compiles_but_ack_missing`, no `context deadline exceeded`;
+- el smoke de review/rework no debe modificar evidencia mientras queden agentes
+  externos pendientes o ACKs completados sin registrar, porque eso falsea el
+  verificador real de write-set;
 - errores publicos sin paths locales, tokens, prompts ni transcripts.
+
+Smoke real review/rework opt-in:
+
+```bash
+ORQUESTA_CODEX_STACK_REVIEW_REWORK_SMOKE=1 \
+ORQUESTA_CODEX_COMMAND="$(command -v codex)" \
+ORQUESTA_CODEX_HOME="$HOME" \
+ORQUESTA_CODEX_CODE_HOME="${CODEX_HOME:-$HOME/.codex}" \
+ORQUESTA_CODEX_PATH="$PATH" \
+ORQUESTA_CODEX_APPROVAL_POLICY=never \
+ORQUESTA_CODEX_SANDBOX=workspace-write \
+ORQUESTA_CODEX_MODEL=gpt-5.5 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=900 \
+ORQUESTA_CODEX_PROJECT_WORKDIR=/tmp/orquesta-smokes/review-rework-20260512/project \
+ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-smokes/review-rework-20260512/project/.orquesta-codex-runtime \
+go test ./modulos/orquesta-app-codex-stack \
+  -run TestNuevaAppWebCodexStackRealReviewReworkOptInV0 \
+  -count=1 -timeout 1100s -v
+```
+
+Contrato validado por el smoke:
+
+- Orquesta arranca una app multiagente con agentes Codex reales, no fakes ni
+  subagentes manuales;
+- recoge entregas reales de programacion mediante ACK y write-set;
+- espera una cohorte estable sin agentes pendientes ni ACKs completados sin
+  registrar antes de inyectar una incidencia artificial;
+- altera una evidencia textual entregada para superar el limite de 300 lineas;
+- abre `revision` y el review gate lee evidencia real por puerto inyectado;
+- proyecta resultado `changes_requested` sin aceptar la entrega original;
+- emite `RequestRework` y replanificacion `retry_task`;
+- arranca un agente Codex real de rework localizado por contrato de task, no
+  por prefijo interno del nombre;
+- espera y valida el ACK del agente de rework;
+- registra la entrega del rework en una reentrada posterior de `DrainRunV0`;
+- evalua la entrega del rework con el review gate real y exige `accepted`;
+- limpia procesos con los conectores de runtime, sin depender de HOME, DB,
+  proveedor ni filesystem dentro del core.
+
+Riesgo observado en este smoke:
+
+- un director real puede aplicar varias decisiones y aumentar `LastSequence`
+  antes de que existan tareas materializadas para programacion o rework;
+- por tanto, `tasks=[]` durante una pasada de drenaje es estado intermedio,
+  no prueba de ausencia de progreso;
+- el helper de smoke debe considerar progreso cualquier avance de secuencia,
+  proyeccion, ACK, descriptor o proceso observable, y solo fallar cuando no hay
+  avance durante el presupuesto configurado.
 
 Prueba real de cambio a mitad de ejecucion:
 
@@ -387,7 +459,7 @@ Evidencia:
 
 Intento real estricto 2026-05-11:
 
-- workdir: `/home/alberto/Trabajo/orquesta_smokes/stack_multiagent_real_app_strict_002`;
+- workdir: ruta local de smoke real aislada fuera del repo;
 - resultado: abortado manualmente tras detectar cuota externa agotada;
 - los procesos Codex iniciales devolvieron error de uso/cuota antes de ACK;
 - no quedaron procesos `codex exec` vivos asociados al smoke;
@@ -500,6 +572,9 @@ Smoke real multiagente repetido el 2026-05-11 tras endurecer verificador:
   violar el contrato;
 - decision aplicada: `required_tests` obligatorio en programacion y validacion
   temprana del lote de decisiones Go antes de lanzar agentes.
+- prueba local posterior: un fichero `director_decisions.json` con microtareas
+  reales que traen `decision.phase_id=programacion` se normaliza en el borde y
+  `DrainRunV0` materializa todas las microtareas antes de abrir agentes.
 
 Pruebas locales tras la decision:
 
@@ -508,3 +583,86 @@ go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-director-ag
 ```
 
 Resultado 2026-05-11: `ok`.
+
+Revalidacion 2026-05-12 de proceso parado por capacidad limitada:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack \
+  -run 'TestDrainRunV0ProcesoParadoPorCapacidadLimitadaNoMarcaBasura|TestDrainRunV0ProcesoParadoSinACKNoQuedaEsperandoIndefinido' -v
+```
+
+Resultado: `ok`.
+
+Evidencia:
+
+- un proceso parado sin ACK con senal de capacidad externa limitada no queda
+  como agente pendiente;
+- Orquesta registra `#verdict:capacity_limited` y `#action:stop_agent`;
+- no se marca `garbage` ni `loop_detected`;
+- el smoke real de review/rework imprime `issues` estructurados tambien en el
+  primer drain para diagnosticar fallos largos sin leer manualmente todos los
+  logs.
+
+Revalidacion global 2026-05-12:
+
+```bash
+go test -count=1 ./...
+```
+
+Resultado: `ok`.
+
+Smoke real review/rework 2026-05-12:
+
+- workdir: `/tmp/orquesta-smokes/app-codex-stack-review-rework-real-20260512102054/project`;
+- modelo configurado por conector: `gpt-5.5`, razonamiento `xhigh`;
+- Orquesta lanzo 4 agentes reales en paralelo: director, API, web y
+  persistencia;
+- API, web y persistencia escribieron ACK y documentacion;
+- el director escribio ACK y `director_decisions.json`;
+- resultado: FAIL controlado en 424.627s por orden causal, no por timeout ni
+  cuota.
+
+Causa raiz:
+
+- `director_decisions.json` se consumio antes de que el ACK del propio director
+  estuviera reflejado como `PhaseArtifactRegistered`;
+- las decisiones abrieron `programacion`;
+- despues el ACK de `brainstorming_arquitectura` fallo correctamente con
+  `payload.phase_id` porque la fase actual ya habia cambiado.
+
+Fix de base aplicado:
+
+- `director_decisions.json` queda tratado como sidecar causal del ACK productor;
+- el conector Codex no expone el fichero de decisiones hasta que el `ack_ref`
+  ya aparece en `PhaseArtifacts` o `Deliveries`;
+- no se ignora `transicion_invalida` ni se mete sleep.
+
+Regresion local:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack \
+  -run 'TestDrainRunV0RegistraACKDirectorAntesDeConsumirDecisionFile|TestCodexStackV0ConsumeDecisionFileYArrancaProgramacion|TestDrainRunV0ConsumeDecisionFileTardioYArrancaProgramacion' -v
+```
+
+Resultado: `ok`.
+
+Regresion local 2026-05-12 del caso app compilable sin ACK:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack \
+  -run 'TestCodexStackRealSmokeDetectaACKFaltanteConProyectoCompilable|TestNuevaAppWebCodexStackRealMultiagentOptInV0' -v
+```
+
+Resultado local sin opt-in real: `ok` para la regresion fake; el smoke real
+sigue desactivado si no se define `ORQUESTA_CODEX_STACK_MULTIAGENT_SMOKE=1`.
+
+Evidencia fijada:
+
+- Orquesta consume decisiones del director y lanza varias microtareas de
+  programacion;
+- al menos dos agentes de programacion quedan `AgentStarted` antes de la
+  primera entrega de esa ola, probando paralelismo del stack;
+- una microtarea materializa su write-set pero no escribe ACK;
+- el proyecto Go temporal tiene `go.mod`, `cmd/server` y pasa `go test ./...`;
+- el helper del smoke devuelve `project_compiles_but_ack_missing` con
+  `task_ref` y `ack_ref`, en vez de agotar el timeout global.

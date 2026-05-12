@@ -88,6 +88,43 @@ func TestStartAppDirectorV0IgnoresPersistedDirectorDecisionsAlreadyApplied(t *te
 	}
 }
 
+func TestStartAppDirectorV0NoSaltaDecisionPendienteDelDirector(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+
+	request := validStartAppDirectorRequestForTestV0()
+	request.MaxDecisionCycles = 3
+	request.MaxBursts = 8
+
+	result, err := StartAppDirectorV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{
+			RunStore:               store,
+			EventSink:              sink,
+			OutboxLedger:           ledger,
+			DeliverySource:         serviceDirectorArtifactSourceForTestV0{},
+			DirectorDecisionSource: servicePendingDecisionSourceForTestV0{},
+			DirectorTaskStore:      taskStore,
+			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+				serviceCapacityDispatcherForTestV0(store, sink, ledger),
+				serviceAgentLauncherDispatcherForTestV0(store, sink, ledger),
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("StartAppDirectorV0: %v", err)
+	}
+	if result.Run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseVotacionYDecisionV0 {
+		t.Fatalf("current_phase=%s, want votacion_y_decision", result.Run.CurrentPhase)
+	}
+	if len(result.Run.Tasks) != 0 {
+		t.Fatalf("tasks=%v, want empty", result.Run.Tasks)
+	}
+}
+
 type serviceDirectorDecisionSourceForTestV0 struct {
 	Decisions []orquestadirectoragent.DirectorAgentDecisionV0
 }
@@ -115,6 +152,24 @@ func (source *servicePersistentDecisionSourceForTestV0) ListDirectorAgentDecisio
 	}
 	source.calls++
 	return serviceDirectorPlanDecisionsForTestV0(request.Run), nil
+}
+
+type servicePendingDecisionSourceForTestV0 struct{}
+
+func (source servicePendingDecisionSourceForTestV0) ListDirectorAgentDecisionsV0(
+	ctx context.Context,
+	request orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0,
+) ([]orquestadirectoragent.DirectorAgentDecisionV0, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	decisions := serviceDirectorPlanDecisionsForTestV0(request.Run)
+	for i := range decisions {
+		if decisions[i].AcceptDecision != nil {
+			decisions[i].AcceptDecision.VoteRef = "vote-ref-pending-mismatch-001"
+		}
+	}
+	return decisions, nil
 }
 
 func serviceOpenVoteDirectorDecisionForTestV0(runRef string) orquestadirectoragent.DirectorAgentDecisionV0 {

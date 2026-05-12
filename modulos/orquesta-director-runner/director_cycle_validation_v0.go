@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	maxDirectorCycleCommandsV0 = 20
+	DirectorCycleMaxCommandsV0 = 20
+	DirectorCycleMaxOutboxV0   = DirectorCycleMaxCommandsV0
 	maxDirectorCycleRefsV0     = 40
 	maxDirectorCycleStringV0   = 600
 )
@@ -33,10 +34,10 @@ func validateDirectorCycleInputV0(ctx context.Context, input DirectorCycleInputV
 	if input.SchedulerInput.RunRef != input.RunRef {
 		return directorCycleErrorV0(input, ErrDirectorRunnerCycleInvalidoV0, "run_ref no coincide", "scheduler_input.run_ref", false, nil)
 	}
-	if input.MaxCommands < 1 || input.MaxCommands > maxDirectorCycleCommandsV0 {
+	if input.MaxCommands < 1 || input.MaxCommands > DirectorCycleMaxCommandsV0 {
 		return directorCycleErrorV0(input, ErrDirectorRunnerCycleInvalidoV0, "max_commands fuera de rango", "max_commands", false, nil)
 	}
-	if input.MaxOutbox < 1 || input.MaxOutbox > maxDirectorCycleCommandsV0 {
+	if input.MaxOutbox < 1 || input.MaxOutbox > DirectorCycleMaxOutboxV0 {
 		return directorCycleErrorV0(input, ErrDirectorRunnerCycleInvalidoV0, "max_outbox fuera de rango", "max_outbox", false, nil)
 	}
 	if refsInvalidDirectorCycleV0(input.EvidenceRefs) {

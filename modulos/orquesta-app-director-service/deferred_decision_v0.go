@@ -17,10 +17,20 @@ func startAppDirectorDecisionDeferredV0(
 		return false
 	}
 	next := orquestacoreworkflow.OrchestrationPhaseIDV0(decision.OpenPhase.PhaseID)
-	if next != orquestacoreworkflow.OrchestrationPhaseRevisionV0 {
+	switch next {
+	case orquestacoreworkflow.OrchestrationPhaseProgramacionV0:
+		return !startAppDirectorProgrammingTasksReadyV0(run)
+	case orquestacoreworkflow.OrchestrationPhaseRevisionV0:
+		return !startAppDirectorProgrammingDeliveriesReadyV0(run)
+	default:
 		return false
 	}
-	return !startAppDirectorProgrammingDeliveriesReadyV0(run)
+}
+
+func startAppDirectorProgrammingTasksReadyV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	return len(compactServiceRefsV0(run.Tasks)) > 0
 }
 
 func startAppDirectorProgrammingDeliveriesReadyV0(

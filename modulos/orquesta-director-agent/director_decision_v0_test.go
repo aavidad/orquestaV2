@@ -29,6 +29,15 @@ func TestValidateDirectorAgentDecisionV0AceptaMicrotareaCompacta(t *testing.T) {
 	}
 }
 
+func TestValidateDirectorAgentDecisionV0AceptaMicrotareaDuranteProgramacion(t *testing.T) {
+	decision := validDirectorAgentCreateMicrotaskDecisionV0()
+	decision.PhaseID = decision.CreateMicrotask.Task.PhaseID
+
+	if issues := ValidateDirectorAgentDecisionV0(decision); len(issues) != 0 {
+		t.Fatalf("issues inesperados: %+v", issues)
+	}
+}
+
 func TestValidateDirectorAgentDecisionV0RechazaProveedorYModelo(t *testing.T) {
 	decision := validDirectorAgentDecisionV0()
 	decision.Summary = "usar provider y modelo concretos"
@@ -37,6 +46,15 @@ func TestValidateDirectorAgentDecisionV0RechazaProveedorYModelo(t *testing.T) {
 		ValidateDirectorAgentDecisionV0(decision),
 		"director_agent_texto_invalido",
 	)
+}
+
+func TestValidateDirectorAgentDecisionV0NoRechazaModelarComoModelo(t *testing.T) {
+	decision := validDirectorAgentCreateMicrotaskDecisionV0()
+	decision.CreateMicrotask.Task.Summary = "Modelar eventos, rangos horarios y errores de negocio."
+
+	if issues := ValidateDirectorAgentDecisionV0(decision); len(issues) != 0 {
+		t.Fatalf("issues inesperados: %+v", issues)
+	}
 }
 
 func TestValidateDirectorAgentDecisionV0RechazaComandoSinPayload(t *testing.T) {

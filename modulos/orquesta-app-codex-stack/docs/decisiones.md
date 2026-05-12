@@ -1,6 +1,86 @@
 # Decisiones: orquesta-app-codex-stack
 
 ```text
+Fecha: 2026-05-12
+Decision: El smoke real de app completa corta por causa cuando el proyecto
+compila pero falta un ACK de programacion.
+Motivo: un smoke real lanzo la cohorte inicial, consumio decisiones del
+director, programo varias microtareas en paralelo y produjo una app Go que
+compilaba manualmente, pero un agente HTTP/i18n no escribio ACK antes del
+deadline global. Esperar al timeout ocultaba el dato causal: el write-set ya
+existia y el contrato roto era la ausencia de ACK.
+Impacto: el helper de drenaje de app completa usa presupuestos acotados por
+pasada, considera progreso por secuencia/proyecciones/descriptores/ACKs y
+detecta `project_compiles_but_ack_missing` cuando el write-set del descriptor
+esta materializado, `go test ./...` pasa y la entrega no esta registrable por
+falta de ACK valido. El smoke tambien exige una ola de programacion con varios
+`AgentStarted` antes del primer `DeliveryRegistered`, para probar
+orquestacion paralela real. No se introduce logica de dominio, DB, proveedor,
+modelo ni paths productivos.
+Estado: aceptada.
+```
+
+
+```text
+Fecha: 2026-05-12
+Decision: El stack valida las referencias causales del lote del director antes
+de consumirlo.
+Motivo: en un smoke real el director escribio `request_vote.vote_request_id` con
+una ref y `accept_decision.vote_ref` con otra. El core hizo bien al considerar
+pendiente la aceptacion, pero el stack necesitaba un diagnostico temprano y
+legible para no perder tiempo esperando una cadena imposible.
+Impacto: `compositeDirectorDecisionSourceV0` comprueba que `accept_decision`
+referencie un `request_vote` previo, que `publish_function_contract` referencie
+un `accept_decision` previo y que las microtareas referencien contratos ya
+publicados en el lote o en el run. No corrige refs inventadas ni acopla modelo,
+proveedor, DB o runtime; rechaza el batch para que el director regenere.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-12
+Decision: El smoke real de review/rework solo inyecta incidencias cuando la
+cohorte de programacion esta estable.
+Motivo: en una ejecucion real el test modifico `go.mod` tras la primera entrega
+de programacion mientras otro agente seguia activo. El verificador de diff hizo
+lo correcto: rechazo el ACK posterior porque el worktree contenia un cambio
+fuera del write-set de ese agente. El problema no era el verificador, sino que
+la prueba contaminaba trabajo concurrente.
+Alternativas:
+  - Relajar `CodexReceiptWorktreeVerifierV0`: descartado porque aceptaria
+    interferencias reales entre agentes.
+  - Danar solo ficheros no Go: descartado porque no resuelve la carrera de
+    write-set.
+  - Esperar ausencia de agentes pendientes y ACKs completados sin registrar:
+    aceptado.
+Impacto: el helper de smoke espera una entrega de programacion estable antes de
+forzar `changes_requested`; asi la revision prueba rework real sin invalidar
+entregas independientes.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-12
+Decision: El smoke real de review/rework comprueba reparacion aceptada, no solo
+arranque de agente.
+Motivo: un rework real puede escribir ACK sin corregir la evidencia que origino
+`changes_requested`. Si la prueba solo mira que existe agente/ACK, da falso
+verde y el director creeria que Orquesta sabe reparar cuando solo sabe
+reintentar.
+Alternativas:
+  - Validar solo prefijo interno de agente de rework: descartado porque acopla
+    el test a naming del adapter.
+  - Esperar cierre completo de la app: descartado para este smoke, porque
+    mezcla calidad del rework con exito de tareas independientes.
+  - Derivar el rework por task/ACK original y pasar review gate real: aceptado.
+Impacto: `TestNuevaAppWebCodexStackRealReviewReworkOptInV0` toma la primera
+entrega de programacion registrada, fuerza una incidencia de tamano, valida
+`RequestRework`/`retry_task`, localiza el rework por contrato de task y exige
+que su entrega sea aceptada por el review gate con evidencia real.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-10
 Decision: El stack exige un puerto explicito de evidencia para el review gate.
 Motivo: si el review gate no lee ficheros reales, una entrega con ACK correcto
@@ -476,6 +556,22 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-05-12
+Decision: Los helpers de drenaje real usan avance de `LastSequence` como
+progreso aunque `tasks=[]` sea temporal.
+Motivo: en ejecucion con director real, Orquesta puede aplicar varias decisiones
+de control antes de materializar microtareas. Tratar `tasks=[]` como ausencia
+de progreso reabre el problema historico de falsos bloqueos y timeouts
+parcheados: el run avanzo, pero el helper miro solo una proyeccion incompleta.
+Impacto: los smokes reales deben distinguir entre ausencia de tareas y ausencia
+de progreso. El criterio de progreso incluye `LastSequence`, proyecciones del
+run, ACKs, descriptors y procesos observables, siempre con presupuesto acotado.
+No se mete runtime, proveedor, filesystem ni DB en core; el criterio vive en
+helpers/adaptadores de stack.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-10
 Decision: No definir defaults de DB, proveedor ni modelo.
 Motivo: un default oculto convierte una prueba real en comportamiento
@@ -576,6 +672,23 @@ decision_ref, command_type, command_ref, summary, evidence_refs y payloads
 tipados por comando, incluidos los campos internos obligatorios de open_phase,
 request_vote, accept_decision, publish_function_contract y create_microtask.task.
 El stack mantiene el parseo estricto y no acepta conversiones ad hoc.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-12
+Decision: `create_microtask` separa fase de decision y fase objetivo.
+Motivo: en smoke real el director escribio microtareas validas en contenido,
+pero puso `decision.phase_id=programacion`. El core solo debe crear microtareas
+iniciales antes de abrir programacion desde `planificacion_microtareas`;
+`programacion` es la fase objetivo de ejecucion dentro de
+`create_microtask.task.phase_id`.
+Impacto: el prompt del director ahora exige
+`decision.phase_id=planificacion_microtareas` y
+`create_microtask.task.phase_id=programacion` para la primera entrega. El DTO
+sigue permitiendo microtareas en `programacion` para cambios en caliente; el
+lector de fichero normaliza el error inequivoco de directores externos antes de
+validar.
 Estado: aceptada.
 ```
 
@@ -691,5 +804,37 @@ Impacto: web, REST y MCP solo validan y entregan la solicitud; el director
 reconstruye contexto por puertos, pregunta si falta informacion, y replanifica
 con microtareas ligadas a `change_ref`. El modulo mantiene i18n en bordes
 visibles y no hardcodea DB, proveedor, modelo ni paths.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-12
+Decision: El stack no deja pendiente un agente real parado por capacidad
+externa limitada.
+Motivo: en una prueba real un agente inicial genero documentacion parcial, pero
+no escribio ACK porque el runtime externo respondio que la capacidad seleccionada
+no estaba disponible. La app debe distinguir esa condicion de basura, bucle o
+cuota agotada y debe cerrar el agente para que el run pueda replanificar.
+Impacto: `DrainRunV0` consume el reporte `capacity_limited`, registra
+assessment y `stop_agent`, y evita que `drainRunHasPendingExternalAgentsV0`
+mantenga una espera indefinida. La seleccion de modelo/proveedor queda fuera
+del stack, detras del conector de capacidad.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-12
+Decision: El drain respeta orden causal ACK -> sidecars -> decisiones.
+Motivo: en smoke real los agentes iniciales trabajaron en paralelo y el
+director produjo `director_decisions.json` antes de que su ACK quedase
+registrado como artefacto de fase. Consumir primero las decisiones abria
+`programacion`; despues el ACK de `brainstorming_arquitectura` fallaba por
+fase actual incorrecta.
+Impacto: el stack no consume decisiones de un agente hasta que el conector
+Codex confirma que el ACK productor ya esta proyectado. La prueba
+`TestDrainRunV0RegistraACKDirectorAntesDeConsumirDecisionFile` fija que
+`PhaseArtifactRegistered` del director ocurre antes del primer `PhaseOpened`
+derivado de sus decisiones. No se anaden sleeps, excepciones de fase ni logica
+de proveedor/modelo.
 Estado: aceptada.
 ```

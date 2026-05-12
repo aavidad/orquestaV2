@@ -24,9 +24,11 @@ func (source DirectorAgentDecisionFileSourceV0) ListDirectorAgentDecisionsV0(
 	descriptors, err := source.DescriptorProvider.ListDirectorAgentDecisionFilesV0(
 		ctx,
 		DirectorAgentDecisionFileListRequestV0{
-			RunID:         runRef,
-			CorrelationID: strings.TrimSpace(request.CorrelationID),
-			RequestedBy:   strings.TrimSpace(request.RequestedBy),
+			RunID:          runRef,
+			PhaseArtifacts: compactDirectorAgentFileSourceRefsV0(request.Run.PhaseArtifacts),
+			Deliveries:     compactDirectorAgentFileSourceRefsV0(request.Run.Deliveries),
+			CorrelationID:  strings.TrimSpace(request.CorrelationID),
+			RequestedBy:    strings.TrimSpace(request.RequestedBy),
 		},
 	)
 	if err != nil {
@@ -91,4 +93,18 @@ func (source DirectorAgentDecisionFileSourceV0) maxBytesV0() int {
 		return source.MaxBytes
 	}
 	return DefaultDirectorAgentDecisionFileMaxBytesV0
+}
+
+func compactDirectorAgentFileSourceRefsV0(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
 }

@@ -2,10 +2,13 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
 
 func TestDrainRunV0ProcesoParadoSinACKNoQuedaEsperandoIndefinido(t *testing.T) {
@@ -42,6 +45,79 @@ func TestDrainRunV0ProcesoParadoSinACKNoQuedaEsperandoIndefinido(t *testing.T) {
 		len(compactStringsV0(run.ConfirmedStoppedAgents)) == 0 {
 		t.Fatalf("sin parada confirmada: stopped=%v confirmed=%v", run.StoppedAgents, run.ConfirmedStoppedAgents)
 	}
+}
+
+func TestDrainRunV0ProcesoParadoPorCapacidadLimitadaNoMarcaBasura(t *testing.T) {
+	ctx := context.Background()
+	runtime := newCapacityLimitedPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+
+	if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-capacity-limited-no-ack-001",
+		MaxBursts:            12,
+		MaxStepsPerBurst:     8,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		MaxExternalWaits:     2,
+	}); err != nil {
+		t.Fatalf("DrainRunV0: %v", err)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if drainRunHasPendingExternalAgentsV0(run) {
+		t.Fatalf("run sigue pendiente tras capacidad limitada: stopped=%v confirmed=%v", run.StoppedAgents, run.ConfirmedStoppedAgents)
+	}
+	if !codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0) ||
+		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionStopAgentV0) {
+		t.Fatalf("sin assessment capacity_limited stop_agent: %+v", run.AgentAssessments)
+	}
+	if codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictGarbageV0) ||
+		codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0) {
+		t.Fatalf("capacity_limited no debe clasificarse como basura/bucle: %+v", run.AgentAssessments)
+	}
+}
+
+func TestDrainRunHasPendingExternalAgentsV0StopRequestedSinConfirmarSiguePendiente(t *testing.T) {
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		StartedAgents: []string{"agent-ref-stack-stop-pending-001"},
+		StoppedAgents: []string{"agent-ref-stack-stop-pending-001"},
+	}
+	if !drainRunHasPendingExternalAgentsV0(run) {
+		t.Fatalf("stop solicitado sin confirmacion debe seguir pendiente: %+v", run)
+	}
+
+	run.ConfirmedStoppedAgents = []string{"agent-ref-stack-stop-pending-001"}
+	if drainRunHasPendingExternalAgentsV0(run) {
+		t.Fatalf("stop confirmado debe cerrar pendiente: %+v", run)
+	}
+}
+
+type capacityLimitedPendingAckCodexStackRuntimeV0 struct {
+	*stoppedPendingAckCodexStackRuntimeV0
+}
+
+func newCapacityLimitedPendingAckCodexStackRuntimeV0() *capacityLimitedPendingAckCodexStackRuntimeV0 {
+	return &capacityLimitedPendingAckCodexStackRuntimeV0{
+		stoppedPendingAckCodexStackRuntimeV0: newStoppedPendingAckCodexStackRuntimeV0(),
+	}
+}
+
+func (runtime *capacityLimitedPendingAckCodexStackRuntimeV0) LaunchV0(
+	ctx context.Context,
+	req orquestaruntime.ProcessRuntimeLaunchRequestV0,
+) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
+	snapshot, err := runtime.stoppedPendingAckCodexStackRuntimeV0.LaunchV0(ctx, req)
+	if err != nil {
+		return snapshot, err
+	}
+	stderrPath := filepath.Join(filepath.Dir(req.CommandPath), orquestaruntimecodex.CodexStderrFileNameV0)
+	return snapshot, os.WriteFile(
+		stderrPath,
+		[]byte("ERROR: Selected model is at capacity. Please try a different model."),
+		0o600,
+	)
 }
 
 type stoppedPendingAckCodexStackRuntimeV0 struct {

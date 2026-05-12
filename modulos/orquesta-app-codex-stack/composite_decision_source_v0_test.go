@@ -35,6 +35,32 @@ func TestCompositeDirectorDecisionSourceV0AceptaPlanGoConBootstrap(t *testing.T)
 	}
 }
 
+func TestCompositeDirectorDecisionSourceV0RechazaVoteRefIncoherente(t *testing.T) {
+	decisions := codexStackDirectorDecisionsForTestV0(
+		"run-ref-stack-policy-vote-ref-001",
+		"brainstorm-ref-stack-policy-vote-ref-001",
+	)
+	for i := range decisions {
+		if decisions[i].AcceptDecision != nil {
+			decisions[i].AcceptDecision.VoteRef = "vote-ref-no-publicado-001"
+		}
+	}
+	source := compositeDirectorDecisionSourceV0{
+		Sources: []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0{
+			codexStackStaticDecisionSourceForTestV0{Decisions: decisions},
+		},
+	}
+
+	_, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{},
+	)
+
+	if err == nil || !strings.Contains(err.Error(), "accept_decision.vote_ref") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestCompositeDirectorDecisionSourceV0RechazaPlanGoSinGoMod(t *testing.T) {
 	decisions := codexStackDirectorDecisionsForTestV0(
 		"run-ref-stack-policy-002",

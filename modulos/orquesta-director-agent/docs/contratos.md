@@ -37,7 +37,7 @@ Invariantes:
 - el agente externo no aplica el comando: solo propone decision.
 - el director no hace el trabajo pesado: solo decide el siguiente movimiento y delega en agentes especializados con contexto pequeno.
 - `create_microtask` no puede incluir proveedor, modelo, HOME, OAuth, DB, runtime ni secretos en `write_set`, criterios o refs.
-- en `create_microtask`, `phase_id` de la decision es la fase actual `planificacion_microtareas`; `task.phase_id` es la fase objetivo de ejecucion, normalmente `programacion`.
+- en `create_microtask`, `phase_id` de la decision es la fase actual que autoriza crear trabajo: `planificacion_microtareas` para el plan inicial o `programacion` para cambios en caliente; `task.phase_id` es la fase objetivo de ejecucion, normalmente `programacion`.
 - `propose_autonomous_plan_team` vive en `planificacion_microtareas`, cita contratos funcionales por ref y solo describe miembros, capacidades y unidades de trabajo compactas.
 - `close_task` debe citar `task_id`, `phase_id=revision`, `delivery_ref`, `accepted_review_ref`, `summary` y `evidence_refs`; queda entre `accept_review` y `open_phase` hacia `validacion_final`.
 - `register_final_validation` y `close_run` deben incluir `request_kind`, `execution_mode` y `minimum_deliverables` para que la capa de aplicacion pueda impedir cierres parciales fuera de `debug`.

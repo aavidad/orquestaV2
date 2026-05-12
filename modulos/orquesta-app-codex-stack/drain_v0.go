@@ -253,6 +253,6 @@ func drainRunHasPendingExternalAgentsV0(run orquestacoreworkflow.OrchestrationRu
 	closed := len(compactStringsV0(run.Deliveries)) +
 		len(compactStringsV0(run.PhaseArtifacts)) +
 		len(compactStringsV0(run.FailedAgents)) +
-		len(compactStringsV0(run.StoppedAgents))
+		len(compactStringsV0(run.ConfirmedStoppedAgents))
 	return started > closed
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirectorrunner "orquesta/modulos/orquesta-director-runner"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
@@ -202,9 +203,17 @@ func normalizeContinueAppDirectorRequestV0(
 	if request.MaxCommands <= 0 {
 		request.MaxCommands = defaultStartAppDirectorMaxCommandsV0
 	}
+	request.MaxCommands = boundedStartAppDirectorLimitV0(
+		request.MaxCommands,
+		orquestadirectorrunner.DirectorCycleMaxCommandsV0,
+	)
 	if request.MaxOutboxPerCycle <= 0 {
 		request.MaxOutboxPerCycle = defaultStartAppDirectorMaxOutboxPerCycleV0
 	}
+	request.MaxOutboxPerCycle = boundedStartAppDirectorLimitV0(
+		request.MaxOutboxPerCycle,
+		orquestadirectorrunner.DirectorCycleMaxOutboxV0,
+	)
 	if request.MaxDecisionCycles <= 0 {
 		request.MaxDecisionCycles = defaultStartAppDirectorMaxDecisionCyclesV0
 	}

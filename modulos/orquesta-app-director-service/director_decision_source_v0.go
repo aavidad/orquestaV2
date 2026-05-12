@@ -63,7 +63,7 @@ func consumeStartAppDirectorDecisionsV0(
 		)
 		if err != nil {
 			if startAppDirectorDecisionTransitionPendingV0(err) {
-				continue
+				return loop, progressed, nil
 			}
 			return loop, progressed, err
 		}

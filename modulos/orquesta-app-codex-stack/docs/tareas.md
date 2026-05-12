@@ -349,7 +349,8 @@ Pendiente relacionado:
 Objetivo: cerrar presupuestos por agente/tarea/ACK para que una app grande no
 dependa de un timeout global.
 
-Estado: hecho en contrato local; pendiente repetir smoke real largo.
+Estado: hecho para helper/test local de stack; pendiente repetir smoke real
+largo con Codex real.
 
 Contexto real:
 
@@ -370,6 +371,20 @@ Trabajo minimo:
 - exigir que el stack no mate directores protegidos por presupuesto automatico;
 - mantener cleanup terminal tras ACK como operacion runtime, no como stop de
   workflow.
+
+Trabajo aplicado en stack:
+
+- el helper de app completa capea cada pasada de `DrainRunV0` para no consumir
+  el timeout global en una sola espera externa;
+- el criterio de progreso incluye secuencia, tareas, entregas, artefactos,
+  assessments, descriptores y ACKs observables;
+- si un descriptor de programacion tiene write-set completo, el proyecto Go
+  compila y no hay ACK registrable, el smoke falla temprano con
+  `project_compiles_but_ack_missing`;
+- el smoke real multiagente exige una ola paralela de programacion con varios
+  `AgentStarted` antes del primer `DeliveryRegistered`;
+- `TestCodexStackRealSmokeDetectaACKFaltanteConProyectoCompilable` reproduce
+  localmente el caso sin lanzar Codex real ni depender de intervencion manual.
 
 Validacion esperada:
 
