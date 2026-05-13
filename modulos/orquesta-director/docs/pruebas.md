@@ -187,10 +187,10 @@ Riesgos: no aplica comandos ni valida estado durable de quality_gates; esa cober
 ```text
 Caso: DIR-P020 stalled no bloquea entregas tardias
 Tipo: unit_contract + smoke_real
-Comando: go test -count=1 ./modulos/orquesta-director -run TestBuildAgentProgressSupervisionV0StalledPreguntaNoBloqueanteAlDirector
-Evidencia esperada: BuildAgentProgressSupervisionV0 construye AssessAgentWork ask_director y AskDirector con blocking=false; core emite SendDirectorQuestion y no emite RunBlocked.
-Ultima ejecucion: pendiente en este corte.
-Riesgos: la prueba real Codex stack debe confirmar que un director lento puede entregar `agent_ack.json` y `director_decisions.json` sin que supervision bloquee el run antes de consumirlos.
+Comando: go test -count=1 ./modulos/orquesta-director -run TestBuildAgentProgressSupervisionV0StalledPreguntaNoBloqueanteAlDirector; go test -count=1 ./modulos/orquesta-app-codex-stack -run TestCodexStackV0ProgressStalledProtegeDirectorInicial
+Evidencia esperada: BuildAgentProgressSupervisionV0 construye AssessAgentWork ask_director y AskDirector con blocking=false; core emite SendDirectorQuestion y no emite RunBlocked. En stack, el director inicial con progreso stalled queda protegido, registra assessment/pregunta y no emite AgentStopRequested ni AgentStopConfirmed.
+Ultima ejecucion: 2026-05-13, ok.
+Riesgos: la prueba real Codex stack completa ya cubre decision files tardios; este caso focal no ejecuta Codex real para mantenerlo rapido y determinista.
 ```
 
 ```text

@@ -179,9 +179,9 @@ ID: DIR-020
 Objetivo: Convertir stalled de progreso en consulta no bloqueante al director.
 Write-set: agent_progress_supervisor_helpers_v0.go, agent_progress_supervisor_v0_test.go, docs locales.
 Contrato: BuildAgentProgressSupervision v0, AskDirector v0, AgentProgressReport v0.
-Validacion: pendiente en este corte; debe pasar go test -count=1 ./modulos/orquesta-director y prueba real Codex stack.
+Validacion: 2026-05-13, ok; go test -count=1 ./modulos/orquesta-director -run TestBuildAgentProgressSupervisionV0StalledPreguntaNoBloqueanteAlDirector; go test -count=1 ./modulos/orquesta-app-codex-stack -run TestCodexStackV0ProgressStalledProtegeDirectorInicial.
 Bloqueos: no modifica loop_detected ni lease timeout; no permite entregas en runs bloqueados por otras causas.
-Estado: en_curso
+Estado: completada ejecutable
 ```
 
 ```text
