@@ -93,6 +93,22 @@ Elegirlo por:
 9. Ante atasco operativo, preferir `repair-helper local rápido` antes que subir directamente a `prime`.
 10. En entorno local/Ollama, mantener un solo modelo cargado a la vez salvo excepción explícita; si hacen falta varios agentes, reusar primero el mismo modelo.
 
+## Excepciones de dominio aprobadas
+
+### OPES: documentacion de temarios
+
+- alcance: trabajos OPES cuyo objetivo sea crear, revisar o actualizar
+  documentacion de temario, bloques documentales, fuentes o ensamblado
+  editorial;
+- modelo minimo: `gpt-5.5`;
+- razonamiento minimo: `xhigh`;
+- alternativa valida: modelo posterior/superior disponible con capacidad igual
+  o mayor;
+- mini modelos: prohibidos salvo tareas mecanicas sin contenido doctrinal, como
+  formateo trivial o renombrado de refs;
+- frontera: OPES no decide el modelo ni lo guarda como decision de dominio. La
+  resolucion vive en la politica de capacidad/modelos de Orquesta.
+
 ## Regla de evaluacion para modelos locales
 
 Los modelos locales que aspiren a trabajar como agentes programadores no se promocionan por impresion subjetiva.

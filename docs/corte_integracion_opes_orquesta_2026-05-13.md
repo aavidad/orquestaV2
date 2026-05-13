@@ -49,6 +49,9 @@ OPES conserva:
 - No asumir SQLite, Postgres ni ningun backend.
 - No pasar conceptos de agente a OPES como decisiones de dominio.
 - No introducir REST/MCP dentro de `orquesta-domain-work`.
+- Para documentacion de temarios OPES, Orquesta debe reservar `gpt-5.5` con
+  razonamiento `xhigh` o un modelo posterior/superior disponible; esta regla es
+  politica operativa de Orquesta, no contrato interno de OPES.
 - El codigo productivo queda limitado al cliente REST de jobs/artefactos y sus
   tests con `httptest`; no toca OPES real.
 

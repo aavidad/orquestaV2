@@ -43,9 +43,11 @@ Dentro de OPES deben vivir:
 - No asumir SQLite, Postgres, rutas locales ni estructura interna de OPES.
 - No pasar conceptos de agente a OPES; si falta informacion se pide como campo
   de dominio o `external_refs`.
-- Para documentacion profesional, Orquesta puede preferir `gpt-5.5` con
-  razonamiento `xhigh` o un modelo posterior/superior disponible; OPES no elige
-  modelo.
+- Para documentacion de temarios OPES, Orquesta debe usar `gpt-5.5` con
+  razonamiento `xhigh` o un modelo posterior/superior disponible, salvo
+  override explicito del operador. OPES no elige modelo ni lo envia como campo
+  de dominio; la seleccion vive en la politica de capacidad/modelos de
+  Orquesta.
 
 ## Pendiente En Orquesta
 
