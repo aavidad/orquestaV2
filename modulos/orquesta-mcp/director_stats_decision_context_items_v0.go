@@ -78,16 +78,18 @@ func mcpDirectorDecisionAgentsV0(
 	out := make([]orquestaobservability.DirectorDecisionAgentV0, 0, len(stats.Agents))
 	for _, agent := range stats.Agents {
 		item := orquestaobservability.DirectorDecisionAgentV0{
-			AgentRequestID: strings.TrimSpace(agent.AgentRequestID),
-			Status:         strings.TrimSpace(agent.Status),
-			ControlState:   strings.TrimSpace(agent.ControlState),
-			Running:        agent.Status == orquestacionnucleoapp.DirectorAgentStatusRunningV0,
-			Failed:         agent.Failed,
-			StopRequested:  agent.StopRequested,
-			Stopped:        agent.StopConfirmed,
-			InFlight:       agent.InFlight,
-			NeedsAttention: agent.NeedsAttention,
-			CanStop:        agent.CanStop,
+			AgentRequestID:   strings.TrimSpace(agent.AgentRequestID),
+			Status:           strings.TrimSpace(agent.Status),
+			ControlState:     strings.TrimSpace(agent.ControlState),
+			Running:          agent.Status == orquestacionnucleoapp.DirectorAgentStatusRunningV0,
+			Failed:           agent.Failed,
+			StopRequested:    agent.StopRequested,
+			Stopped:          agent.StopConfirmed,
+			StopReasonCode:   strings.TrimSpace(agent.StopReasonCode),
+			StopReasonSource: strings.TrimSpace(agent.StopReasonSource),
+			InFlight:         agent.InFlight,
+			NeedsAttention:   agent.NeedsAttention,
+			CanStop:          agent.CanStop,
 		}
 		if agent.Process != nil {
 			item.ProcessRef = strings.TrimSpace(agent.Process.ProcessRef)

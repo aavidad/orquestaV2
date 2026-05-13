@@ -115,6 +115,8 @@ type DirectorDecisionAgentV0 struct {
 	Failed              bool     `json:"failed"`
 	StopRequested       bool     `json:"stop_requested"`
 	Stopped             bool     `json:"stopped"`
+	StopReasonCode      string   `json:"stop_reason_code,omitempty"`
+	StopReasonSource    string   `json:"stop_reason_source,omitempty"`
 	InFlight            bool     `json:"in_flight"`
 	NeedsAttention      bool     `json:"needs_attention"`
 	CanStop             bool     `json:"can_stop"`

@@ -280,6 +280,11 @@ func TestMCPDirectorStatsToolExecutorV0DecisionContextCompletoParaDirector(t *te
 		agent.StopReasonSource != orquestacionnucleoapp.DirectorAgentStopReasonSourceStopRequestV0 {
 		t.Fatalf("agent stop reason=%+v", agent)
 	}
+	contextAgent := mcpDirectorContextAgentForTestV0(t, context, "agent-ref-stats-003")
+	if contextAgent.StopReasonCode != "run_stop_requested" ||
+		contextAgent.StopReasonSource != orquestacionnucleoapp.DirectorAgentStopReasonSourceStopRequestV0 {
+		t.Fatalf("context agent stop reason=%+v", contextAgent)
+	}
 }
 
 func TestMCPTransportV0DirectorStatsQuedaOptInSinPuerto(t *testing.T) {

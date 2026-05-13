@@ -148,7 +148,7 @@ func validDirectorDecisionContextV0() DirectorDecisionContextV0 {
 		},
 		Agents: []DirectorDecisionAgentV0{
 			{AgentRequestID: "agent-ref-director-context-001", Status: "running", Running: true, InFlight: true, ProcessRef: "process-ref-director-context-001", SessionRef: "session-ref-director-context-001"},
-			{AgentRequestID: "agent-ref-director-context-002", Status: "failed", Failed: true, NeedsAttention: true},
+			{AgentRequestID: "agent-ref-director-context-002", Status: "failed", Failed: true, NeedsAttention: true, StopReasonCode: "loop_detected", StopReasonSource: "agent_stop_request"},
 		},
 		Blockers: []DirectorDecisionBlockerV0{
 			{BlockerRef: "blocker-ref-director-context-001", Cause: "validacion_final", Source: "closure", SummaryKey: "director.decision_context.blocker.closure_blocked"},

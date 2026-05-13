@@ -52,6 +52,24 @@ func mcpDirectorStatsAgentForTestV0(
 	return orquestacionnucleoapp.DirectorAgentStatsV0{}
 }
 
+func mcpDirectorContextAgentForTestV0(
+	t *testing.T,
+	context *orquestaobservability.DirectorDecisionContextV0,
+	agentRef string,
+) orquestaobservability.DirectorDecisionAgentV0 {
+	t.Helper()
+	if context == nil {
+		t.Fatalf("context nil buscando agent %s", agentRef)
+	}
+	for _, agent := range context.Agents {
+		if agent.AgentRequestID == agentRef {
+			return agent
+		}
+	}
+	t.Fatalf("context agent no encontrado: %s en %+v", agentRef, context.Agents)
+	return orquestaobservability.DirectorDecisionAgentV0{}
+}
+
 type mcpDirectorStatsProgressSourceForTestV0 struct {
 	Observations []orquestacionnucleoapp.AgentProgressObservationV0
 }

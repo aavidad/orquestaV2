@@ -142,6 +142,8 @@ func validateDirectorDecisionAgentsV0(agents []DirectorDecisionAgentV0, prefix s
 		validateRequiredOperationalRefV0(agent.AgentRequestID, fieldV0(itemPrefix, "agent_request_id"), add)
 		validateOperationalTokenTextV0(agent.Status, fieldV0(itemPrefix, "status"), add)
 		validateOptionalDirectorDecisionTokenV0(agent.ControlState, fieldV0(itemPrefix, "control_state"), add)
+		validateOptionalDirectorDecisionTokenV0(agent.StopReasonCode, fieldV0(itemPrefix, "stop_reason_code"), add)
+		validateOptionalDirectorDecisionTokenV0(agent.StopReasonSource, fieldV0(itemPrefix, "stop_reason_source"), add)
 		validateOptionalOperationalRefV0(agent.ProcessRef, fieldV0(itemPrefix, "process_ref"), add)
 		validateOptionalOperationalRefV0(agent.SessionRef, fieldV0(itemPrefix, "session_ref"), add)
 		validateOptionalOperationalRefV0(agent.LaunchRef, fieldV0(itemPrefix, "launch_ref"), add)
