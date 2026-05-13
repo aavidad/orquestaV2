@@ -127,11 +127,26 @@ Avance posterior: se implemento la primera version de shutdown de servidor:
   puertos hexagonales;
 - si `shutdown_ready=false`, CLI no corta el servidor.
 
-Sigue pendiente el protocolo graceful completo con checkpoint:
+Actualizacion posterior: el checkpoint cooperativo Codex ya no esta pendiente
+como idea general; existe una version inicial implementada:
 
-- `prepare_shutdown`/ACK durable por agente;
-- deadline controlado antes de forzar stop;
-- stats de razon de cierre por agente.
+- `modulos/orquesta-server-shutdown` prepara checkpoint antes de pedir stop si
+  `forced=false`;
+- `modulos/orquesta-app-codex-stack` escribe
+  `orquesta_shutdown_request.json`, espera
+  `agent_shutdown_checkpoint_ack.json` y registra evidencia compacta;
+- MCP/REST exponen `pending_checkpoint_agent_refs`,
+  `checkpoint_evidence_refs`, `checkpoint_agents_pending` y estado
+  `waiting_checkpoint` sin filtrar rutas internas ni runtime details.
+
+Pendiente real de shutdown:
+
+- extender el protocolo cooperativo a runtimes/proveedores no Codex mediante el
+  mismo puerto hexagonal;
+- definir politica de deadline para pasar de espera cooperativa a stop forzado
+  sin cortar trabajo que aun progresa;
+- proyectar razon de cierre por agente en estadisticas historicas, no solo en
+  el resultado inmediato del shutdown.
 
 ## Validacion local
 

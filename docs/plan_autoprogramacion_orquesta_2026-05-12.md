@@ -27,15 +27,25 @@ Ya existe:
   parada de agentes;
 - politica de no copiar legacy en bloque.
 
+Actualizacion 2026-05-13:
+
+- `cmd/orquesta-server` ya cablea conectores file-based para `RunStore`,
+  `EventSink`, `WorkflowTaskStore/Writer`, `AgentProcessRegistry`,
+  outbox, `RunControl`, `RunQueue` y `AppChangeRecordStore`;
+- el gap ya no es "todo el estado operativo vive en memoria" en el servidor
+  residente por defecto;
+- el siguiente bloqueo serio es demostrar continuidad E2E de una ejecucion
+  larga: reinicio de daemon, rehidratacion de cola/outbox/procesos, supervision
+  posterior y cierre de entregas sin intervencion humana.
+
 Gap que bloquea autoprogramacion robusta:
 
-- el servidor residente monta todavia parte del estado operativo en memoria:
-  runs, eventos, outbox, tareas, cambios de app, registro de procesos, control y
-  cola de runs;
-- si el daemon cae o se reinicia, puede perder cola y contexto operativo aunque
-  el statefile del servidor siga existiendo;
-- por tanto Orquesta puede hacer pruebas reales, pero aun no es aceptable para
-  una ejecucion larga de autoprogramacion sin persistencia de puertos.
+- falta una prueba real temporal sobre el propio repositorio que sobreviva a
+  reinicio controlado del daemon y continue hasta delivery/review;
+- falta asegurar que todos los puertos necesarios para una ejecucion larga se
+  rehidratan desde conectores, sin fallback silencioso a memoria;
+- falta politica de parada cooperativa con deadline cuando los agentes siguen
+  progresando pero no han emitido checkpoint final.
 
 ## Decision de arquitectura
 
@@ -49,17 +59,31 @@ Postgres ni otro backend.
 
 ## Trabajo repartible
 
-1. `state-file core`: conector durable para `RunStore`, `EventSink`,
-   `WorkflowTaskStore/Writer` y `AgentProcessRegistry`.
-2. `state-file outbox`: conector durable para pending, claim y ack del outbox.
-3. `state-file control`: conector durable para `RunControl`, `RunQueue` y
-   `AppChangeRecordStore`.
-4. `mcp/autoprogramacion`: contrato REST/MCP para pedir mejora de app existente
-   o autoprogramacion, validando alcance, write-set y tests requeridos.
-5. `server wiring`: reemplazar memoria por conectores persistentes cuando el
-   servidor residente arranca en modo durable.
+1. `state-file core`: cerrado en version inicial. Conector durable para
+   `RunStore`, `EventSink`, `WorkflowTaskStore/Writer` y
+   `AgentProcessRegistry`.
+2. `state-file outbox`: cerrado en version inicial. Conector durable para
+   pending, claim y ack del outbox.
+3. `state-file control`: cerrado en version inicial. Conector durable para
+   `RunControl`, `RunQueue` y `AppChangeRecordStore`.
+4. `mcp/autoprogramacion`: version inicial disponible para validar requests de
+   mejora de app existente o autoprogramacion. Queda ampliar pruebas reales y
+   politica de aceptacion.
+5. `server wiring`: cerrado en version inicial. El servidor residente usa los
+   conectores file-based indicados arriba.
 6. `smoke real`: lanzar una orden sobre el propio repo con director y agentes
-   reales, comprobar estadisticas, progreso, parada y continuidad.
+   reales, comprobar estadisticas, progreso, parada, reinicio y continuidad.
+
+Trabajo futuro, no cerrado:
+
+1. `mcp/autoprogramacion`: endurecer contrato REST/MCP para pedir mejora de app
+   existente o autoprogramacion, validando alcance, write-set y tests
+   requeridos.
+2. `continuidad daemon`: test temporal con estado aislado que arranca una orden,
+   reinicia daemon y verifica que no se pierden cola, outbox, procesos ni
+   entregas.
+3. `shutdown cooperativo largo`: deadline y razon de cierre por agente para
+   runs con progreso real.
 
 ## Criterios de aceptacion
 
@@ -71,4 +95,3 @@ Postgres ni otro backend.
   no filtra detalles internos de runtime, HOME, DB o proveedor al core.
 - La prueba real se considera valida solo si los agentes son arrancados por
   Orquesta y no por la sesion humana.
-
