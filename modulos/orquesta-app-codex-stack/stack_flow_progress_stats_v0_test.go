@@ -47,8 +47,11 @@ func TestCodexStackV0DirectorStatsIncluyeProcesoYProgresoPorPuertos(t *testing.T
 		t.Fatalf("agents=%+v director=%+v", page.ViewModel.Agents, director)
 	}
 	for _, agent := range page.ViewModel.Agents {
-		if !agent.CanStop {
+		if !agent.CanStop && !strings.Contains(agent.AgentRequestID, "-director") {
 			t.Fatalf("agent sin control de parada: %+v", agent)
+		}
+		if !agent.CanStop && agent.ControlState != orquestacionnucleoapp.DirectorAgentControlStateRegisteredV0 {
+			t.Fatalf("director protegido sin registro de control: %+v", agent)
 		}
 		if agent.ModelAlias != "gpt-5.5" ||
 			agent.QuotaStatus != orquestacionnucleoapp.DirectorAgentUsageQuotaNotConfiguredV0 {

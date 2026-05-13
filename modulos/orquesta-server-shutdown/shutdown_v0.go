@@ -105,6 +105,10 @@ func stopShutdownTargetsV0(
 		}
 		checkpointRef := ""
 		if !command.Forced && !state.CheckpointRecorded {
+			state, err = requestShutdownStopV0(ctx, deps, command, runRef)
+			if err != nil {
+				return nil, err
+			}
 			prepared, ref, ok, err := prepareShutdownCheckpointV0(
 				ctx,
 				deps,
@@ -117,7 +121,6 @@ func stopShutdownTargetsV0(
 			}
 			if !ok {
 				pending := shutdownRunFromStateV0(candidate, state)
-				pending.StopRequested = false
 				pending.CheckpointRequired = true
 				pending.Ready = false
 				pending.CheckpointRef = ref
@@ -126,23 +129,33 @@ func stopShutdownTargetsV0(
 			}
 			state = prepared
 			checkpointRef = ref
-		}
-		state, err = deps.RunControlWriter.StopRunV0(ctx, orquestaruncontrol.StopRunCommandV0{
-			RunRef:         runRef,
-			RequestedBy:    command.RequestedBy,
-			Reason:         command.Reason,
-			Forced:         command.Forced,
-			IdempotencyKey: command.IdempotencyKey,
-			EvidenceRefs:   command.EvidenceRefs,
-		})
-		if err != nil {
-			return nil, err
+		} else {
+			state, err = requestShutdownStopV0(ctx, deps, command, runRef)
+			if err != nil {
+				return nil, err
+			}
 		}
 		stopped := shutdownRunFromStateV0(candidate, state)
 		stopped.CheckpointRef = checkpointRef
 		targets = append(targets, stopped)
 	}
 	return targets, nil
+}
+
+func requestShutdownStopV0(
+	ctx context.Context,
+	deps ServerShutdownDepsV0,
+	command ServerShutdownCommandV0,
+	runRef string,
+) (orquestaruncontrol.RunControlStateV0, error) {
+	return deps.RunControlWriter.StopRunV0(ctx, orquestaruncontrol.StopRunCommandV0{
+		RunRef:         runRef,
+		RequestedBy:    command.RequestedBy,
+		Reason:         command.Reason,
+		Forced:         command.Forced,
+		IdempotencyKey: command.IdempotencyKey,
+		EvidenceRefs:   command.EvidenceRefs,
+	})
 }
 
 func queueCandidateTerminalV0(candidate orquestarunqueue.RunSchedulingCandidateV0) bool {

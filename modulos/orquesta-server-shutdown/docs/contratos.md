@@ -18,8 +18,9 @@ Puertos:
 Invariantes:
 
 - no toca stores ni procesos directamente;
-- `forced=false` intenta preparar checkpoint por puerto y solo solicita stop si
-  hay ACK registrado;
+- `forced=false` solicita `stop_requested` para bloquear trabajo nuevo, intenta
+  preparar checkpoint por puerto y no ejecuta drainer hasta que haya ACK
+  registrado;
 - `forced=true` permite drenar agentes sin checkpoint previo;
 - `shutdown_ready=true` solo cuando todas las runs objetivo estan terminales o
   sin agentes en vuelo segun stats compactas y sin checkpoint pendiente.

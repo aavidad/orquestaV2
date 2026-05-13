@@ -60,6 +60,9 @@ func TestShutdownServerV0NoDrenaSiFaltaCheckpoint(t *testing.T) {
 		deps.supervisor.calls != 0 {
 		t.Fatalf("result=%+v supervisor=%+v", result, deps.supervisor)
 	}
+	if !reflect.DeepEqual(deps.control.stopped, []string{"run-checkpoint"}) {
+		t.Fatalf("stop requests=%+v", deps.control.stopped)
+	}
 }
 
 func TestShutdownServerV0PreparaCheckpointAntesDeStopNoForzado(t *testing.T) {

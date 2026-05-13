@@ -83,10 +83,11 @@ Payload minimo para cierre operativo forzado:
 Efecto esperado:
 
 - el caso de uso lista runs activos por `RunQueueReaderPortV0`;
-- si `forced=false`, intenta preparar checkpoint por
-  `PrepareAgentShutdownPortV0` y registra ACK durable por
-  `RunControlCheckpointWriterPortV0`;
 - solicita `stop` por `RunControlWriterPortV0`;
+- si `forced=false`, esa solicitud deja la run en `stop_requested` para
+  bloquear trabajo nuevo y despues intenta preparar checkpoint por
+  `PrepareAgentShutdownPortV0`;
+- registra ACK durable por `RunControlCheckpointWriterPortV0` cuando existe;
 - ejecuta el supervisor global para drenar stop/outbox/confirmaciones;
 - lee stats de cierre por run;
 - devuelve `shutdown_ready=true` solo si no quedan agentes en vuelo ni
