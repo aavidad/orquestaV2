@@ -46,6 +46,8 @@ Gap que bloquea autoprogramacion robusta:
   rehidratan desde conectores, sin fallback silencioso a memoria;
 - falta politica de parada cooperativa con deadline cuando los agentes siguen
   progresando pero no han emitido checkpoint final.
+- cerrado en NCW-073: estadisticas historicas exponen motivo compacto de
+  parada por agente sin leer payloads largos.
 
 ## Decision de arquitectura
 

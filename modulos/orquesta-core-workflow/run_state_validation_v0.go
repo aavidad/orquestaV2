@@ -122,6 +122,7 @@ func validateRunRefsV0(run OrchestrationRunV0) []OrchestrationValidationIssueV0 
 		"started_agents":              run.StartedAgents,
 		"failed_agents":               run.FailedAgents,
 		"stopped_agents":              run.StoppedAgents,
+		"agent_stop_requests":         run.AgentStopRequests,
 		"confirmed_stopped_agents":    run.ConfirmedStoppedAgents,
 		"agent_assessments":           run.AgentAssessments,
 		"agent_lease_expirations":     run.AgentLeaseExpirations,
@@ -152,6 +153,9 @@ func validateRunRefsV0(run OrchestrationRunV0) []OrchestrationValidationIssueV0 
 	}
 	if stoppedAgentRefsInvalidV0(run) {
 		return []OrchestrationValidationIssueV0{issueV0(OrchestrationEstadoInconsistenteV0, "stopped_agents")}
+	}
+	if agentStopRequestRefsInvalidV0(run) {
+		return []OrchestrationValidationIssueV0{issueV0(OrchestrationEstadoInconsistenteV0, "agent_stop_requests")}
 	}
 	if confirmedStoppedAgentRefsInvalidV0(run) {
 		return []OrchestrationValidationIssueV0{issueV0(OrchestrationEstadoInconsistenteV0, "confirmed_stopped_agents")}
@@ -235,6 +239,24 @@ func stoppedAgentRefsInvalidV0(run OrchestrationRunV0) bool {
 		if !agentRequestAlreadyReflectedV0(run, stopped) {
 			return true
 		}
+	}
+	return false
+}
+
+func agentStopRequestRefsInvalidV0(run OrchestrationRunV0) bool {
+	seen := map[string]bool{}
+	for _, projectionRef := range run.AgentStopRequests {
+		projection, ok := ParseAgentStopRequestProjectionV0(projectionRef)
+		if !ok {
+			return true
+		}
+		if !agentStopAlreadyReflectedV0(run, projection.AgentRequestID) {
+			return true
+		}
+		if seen[projection.AgentRequestID] {
+			return true
+		}
+		seen[projection.AgentRequestID] = true
 	}
 	return false
 }

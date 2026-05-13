@@ -803,3 +803,12 @@ Evidencia esperada: `RegisterPhaseArtifact` registra artefactos compactos en fas
 Ultima ejecucion: 2026-05-09, ok, go test -count=1 ./modulos/orquesta-core-workflow.
 Riesgos: El core no guarda contenido ni lee ACKs; el cableado de receipts vive en adaptadores externos y queda cubierto por `orquesta-runtime-codex-delivery`.
 ```
+
+```text
+Caso: ncw_073_agent_stop_reason_projection
+Tipo: contrato
+Comando: go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-orchestration-core
+Evidencia esperada: `AgentStopRequested` proyecta `agent_stop_requests` con `agent_request_id` y `reason_code`; replay no duplica; razones con separador inseguro se rechazan; `DirectorRunStatsV0` expone `stop_reason_code`, `stop_reason_source` y `stop_reason_ref` por agente parado.
+Ultima ejecucion: 2026-05-13, ok, go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-orchestration-core.
+Riesgos: La proyeccion es compacta y no reemplaza al payload historico del event log; los conectores externos siguen siendo responsables de evidencias detalladas.
+```

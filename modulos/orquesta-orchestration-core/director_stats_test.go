@@ -253,6 +253,13 @@ func TestBuildDirectorRunStatsWithObservationsV0NoMarcaSinSenalAgenteStopRequest
 	run.Agents = []string{"agent-ref-stop-requested-001"}
 	run.StartedAgents = []string{"agent-ref-stop-requested-001"}
 	run.StoppedAgents = []string{"agent-ref-stop-requested-001"}
+	run.AgentStopRequests = []string{
+		orquestacoreworkflow.AgentStopRequestProjectionRefV0(orquestacoreworkflow.AgentStopRequestedPayloadV0{
+			AgentRequestID: "agent-ref-stop-requested-001",
+			ReasonCode:     "loop_detected",
+			Summary:        "Detener agente por bucle detectado.",
+		}),
+	}
 	run.AgentAssessments = []string{
 		orquestacoreworkflow.AgentAssessmentProjectionRefV0(orquestacoreworkflow.AgentWorkAssessedPayloadV0{
 			AssessmentRef:  "assessment-ref-stop-requested-001",
@@ -274,9 +281,39 @@ func TestBuildDirectorRunStatsWithObservationsV0NoMarcaSinSenalAgenteStopRequest
 	}
 	agent := findDirectorAgentStatsForTestV0(t, stats, "agent-ref-stop-requested-001")
 	if agent.Status != DirectorAgentStatusStopRequestedV0 ||
+		agent.StopReasonCode != "loop_detected" ||
+		agent.StopReasonSource != DirectorAgentStopReasonSourceStopRequestV0 ||
 		agent.LastProgress == nil ||
 		agent.LastProgress.ReportRef != "assessment-ref-stop-requested-001" ||
 		agent.LastProgress.Status != string(orquestaruntime.AgentLoopDetectedV0) {
+		t.Fatalf("agent=%+v", agent)
+	}
+}
+
+func TestBuildDirectorRunStatsV0UsaAssessmentComoMotivoLegacyDeParada(t *testing.T) {
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-stop-reason-legacy-001")
+	run.Tasks = []string{"task-ref-stop-reason-legacy-001"}
+	run.Agents = []string{"agent-ref-stop-reason-legacy-001"}
+	run.StartedAgents = []string{"agent-ref-stop-reason-legacy-001"}
+	run.StoppedAgents = []string{"agent-ref-stop-reason-legacy-001"}
+	run.AgentAssessments = []string{
+		orquestacoreworkflow.AgentAssessmentProjectionRefV0(orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+			AssessmentRef:  "assessment-ref-stop-reason-legacy-001",
+			PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			AgentRequestID: "agent-ref-stop-reason-legacy-001",
+			TaskRef:        "task-ref-stop-reason-legacy-001",
+			Verdict:        orquestacoreworkflow.AgentAssessmentVerdictGarbageV0,
+			Action:         orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+			Severity:       orquestacoreworkflow.AgentAssessmentSeverityHighV0,
+		}),
+	}
+
+	stats := BuildDirectorRunStatsV0(run)
+	agent := findDirectorAgentStatsForTestV0(t, stats, "agent-ref-stop-reason-legacy-001")
+
+	if agent.StopReasonCode != orquestacoreworkflow.AgentAssessmentVerdictGarbageV0 ||
+		agent.StopReasonSource != DirectorAgentStopReasonSourceAssessmentV0 ||
+		agent.StopReasonRef != "assessment-ref-stop-reason-legacy-001" {
 		t.Fatalf("agent=%+v", agent)
 	}
 }

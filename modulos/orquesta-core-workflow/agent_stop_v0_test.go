@@ -52,9 +52,16 @@ func TestApplyAgentStopRequestedV0ProjectsRefOnce(t *testing.T) {
 	if !reflect.DeepEqual(got.StoppedAgents, []string{"agent-request-001"}) {
 		t.Fatalf("stopped_agents=%v, want [agent-request-001]", got.StoppedAgents)
 	}
+	wantProjection := AgentStopRequestProjectionRefV0(agentStopRequestedPayloadFromCommandV0(validStopAgentPayloadV0("agent-request-001")))
+	if !reflect.DeepEqual(got.AgentStopRequests, []string{wantProjection}) {
+		t.Fatalf("agent_stop_requests=%v, want [%s]", got.AgentStopRequests, wantProjection)
+	}
 	again := mustApplyReducerEventV0(t, got, event)
 	if !reflect.DeepEqual(again.StoppedAgents, got.StoppedAgents) {
 		t.Fatalf("stopped_agents duplicated: %v", again.StoppedAgents)
+	}
+	if !reflect.DeepEqual(again.AgentStopRequests, got.AgentStopRequests) {
+		t.Fatalf("agent_stop_requests duplicated: %v", again.AgentStopRequests)
 	}
 }
 
@@ -94,6 +101,10 @@ func TestReplayDurableEventsV0AcceptsAgentStopRequestedAndExactDuplicate(t *test
 	}
 	if !reflect.DeepEqual(got.StoppedAgents, []string{"agent-request-001"}) {
 		t.Fatalf("stopped_agents=%v, want [agent-request-001]", got.StoppedAgents)
+	}
+	if len(got.AgentStopRequests) != 1 ||
+		AgentStopRequestProjectionAgentIDV0(got.AgentStopRequests[0]) != "agent-request-001" {
+		t.Fatalf("agent_stop_requests=%v", got.AgentStopRequests)
 	}
 }
 

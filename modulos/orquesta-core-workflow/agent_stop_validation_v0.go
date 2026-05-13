@@ -23,6 +23,9 @@ func validateStopAgentCommandPayloadDataV0(payload StopAgentCommandPayloadV0) er
 	if agentRequestHasForbiddenDetailsV0(stopAgentTextFieldsV0(payload)) {
 		return commandErrorV0(ErrDetalleProhibidoV0, "payload")
 	}
+	if agentStopProjectionFieldUnsafeV0(payload) {
+		return commandErrorV0(ErrPayloadInvalidoV0, "payload")
+	}
 	return validateStopAgentPayloadSizeV0(payload)
 }
 
@@ -35,6 +38,9 @@ func validateAgentStopRequestedPayloadDataV0(payload AgentStopRequestedPayloadV0
 	}
 	if agentRequestHasForbiddenDetailsV0(stopAgentTextFieldsV0(StopAgentCommandPayloadV0(payload))) {
 		return eventErrorV0(ErrDetalleProhibidoV0, "payload")
+	}
+	if agentStopProjectionFieldUnsafeV0(StopAgentCommandPayloadV0(payload)) {
+		return eventErrorV0(ErrPayloadInvalidoV0, "payload")
 	}
 	return validateAgentStopPayloadSizeV0(payload)
 }

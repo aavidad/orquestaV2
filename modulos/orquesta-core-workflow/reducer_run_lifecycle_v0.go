@@ -36,6 +36,7 @@ func applyRunStartedEventV0(current OrchestrationRunV0, event OrchestrationEvent
 		StartedAgents:             []string{},
 		FailedAgents:              []string{},
 		StoppedAgents:             []string{},
+		AgentStopRequests:         []string{},
 		ConfirmedStoppedAgents:    []string{},
 		AgentAssessments:          []string{},
 		AgentLeaseExpirations:     []string{},

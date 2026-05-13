@@ -145,8 +145,12 @@ Pendiente real de shutdown:
   mismo puerto hexagonal;
 - validar en smoke real temporal la politica de deadline ya modelada por
   contrato (`checkpoint_deadline_at` frente a `occurred_at`);
-- proyectar razon de cierre por agente en estadisticas historicas, no solo en
-  el resultado inmediato del shutdown.
+
+Ya cerrado en NCW-073:
+
+- `AgentStopRequested` proyecta `agent_stop_requests` con motivo compacto;
+- `DirectorRunStatsV0` expone `stop_reason_code`, `stop_reason_source` y
+  `stop_reason_ref` por agente parado, con fallback a assessment legacy.
 
 ## Validacion local
 

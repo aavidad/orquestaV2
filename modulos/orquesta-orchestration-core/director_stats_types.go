@@ -25,6 +25,11 @@ const (
 )
 
 const (
+	DirectorAgentStopReasonSourceStopRequestV0 = "agent_stop_request"
+	DirectorAgentStopReasonSourceAssessmentV0  = "agent_assessment"
+)
+
+const (
 	DirectorClosureStatusBlockedV0 = "blocked"
 	DirectorClosureStatusReadyV0   = "ready"
 	DirectorClosureStatusClosedV0  = "closed"
@@ -108,6 +113,7 @@ type DirectorRunStatsRefsV0 struct {
 	AgentsStarted         []string `json:"agents_started,omitempty"`
 	AgentsFailed          []string `json:"agents_failed,omitempty"`
 	AgentsStopRequested   []string `json:"agents_stop_requested,omitempty"`
+	AgentStopRequests     []string `json:"agent_stop_requests,omitempty"`
 	AgentsStopConfirmed   []string `json:"agents_stop_confirmed,omitempty"`
 	AgentsDelivered       []string `json:"agents_delivered,omitempty"`
 	AgentAssessments      []string `json:"agent_assessments,omitempty"`
@@ -155,6 +161,9 @@ type DirectorAgentStatsV0 struct {
 	Failed            bool                         `json:"failed"`
 	StopRequested     bool                         `json:"stop_requested"`
 	StopConfirmed     bool                         `json:"stop_confirmed"`
+	StopReasonCode    string                       `json:"stop_reason_code,omitempty"`
+	StopReasonSource  string                       `json:"stop_reason_source,omitempty"`
+	StopReasonRef     string                       `json:"stop_reason_ref,omitempty"`
 	Completed         bool                         `json:"completed"`
 	InFlight          bool                         `json:"in_flight"`
 	NeedsAttention    bool                         `json:"needs_attention"`

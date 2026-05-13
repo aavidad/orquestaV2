@@ -24,6 +24,7 @@ func BuildDirectorRunStatsV0(
 		Phases:        buildDirectorPhaseStatsV0(run.Phases),
 		Agents:        buildDirectorAgentStatsV0(run),
 	}
+	applyDirectorAgentStopReasonsV0(&stats, run)
 	applyDirectorAgentProgressV0(&stats, run, nil)
 	refreshDirectorControlCountsV0(&stats, false)
 	return stats
@@ -198,6 +199,7 @@ func buildDirectorRunRefsV0(
 		AgentsStarted:         compactStringsV0(run.StartedAgents),
 		AgentsFailed:          compactStringsV0(run.FailedAgents),
 		AgentsStopRequested:   compactStringsV0(run.StoppedAgents),
+		AgentStopRequests:     compactStringsV0(run.AgentStopRequests),
 		AgentsStopConfirmed:   compactStringsV0(run.ConfirmedStoppedAgents),
 		AgentsDelivered:       compactStringsV0(run.DeliveredAgents),
 		AgentAssessments:      compactStringsV0(run.AgentAssessments),

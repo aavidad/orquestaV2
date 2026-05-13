@@ -743,3 +743,13 @@ Validacion: 2026-05-06, ok, go test -count=1 ./modulos/orquesta-core-workflow.
 Bloqueos: Brainstorm/votacion/revision/cierre quedan para cortes separados por contrato, no mezclados en esta microtarea.
 Estado: completada local
 ```
+
+```text
+ID: NCW-073
+Objetivo: Exponer motivo historico compacto de parada por agente para director/web sin depender de payloads largos ni adaptadores.
+Write-set: agent_stop_projection_v0.go, agent_stop_handler_v0.go, agent_stop_validation_v0.go, run_state_v0.go, run_state_validation_v0.go, director_agent_stop_reason_v0.go, director_stats_*_v0.go, tests y docs locales.
+Contrato: AgentStopRequested, OrchestrationRunV0.AgentStopRequests, DirectorRunStatsV0.Agents[].stop_reason_*.
+Validacion: 2026-05-13, ok, go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-orchestration-core.
+Bloqueos: No sustituye evidencias completas ni parada fisica; esas piezas siguen en event log, outbox y puertos runtime.
+Estado: completada local
+```

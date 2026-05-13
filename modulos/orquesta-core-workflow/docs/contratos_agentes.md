@@ -62,6 +62,7 @@ Invariantes:
   - Si coincide y la parada no esta confirmada, reemite solo outbox `StopRuntimeAgent`; si ya esta confirmada, devuelve no-op idempotente.
   - No puede existir `AgentFailed` previo para el mismo agente.
   - Payload compacto, sin DB, HOME, OAuth, Codex, Claude, Ollama, vLLM ni secretos.
+  - `agent_request_id` y `reason_code` no pueden contener `#`, porque forman una proyeccion compacta parseable en `agent_stop_requests`.
 Errores:
   - payload_invalido
   - detalle_prohibido
@@ -193,6 +194,7 @@ Payload:
 Invariantes:
   - Evento compacto y append-only.
   - `ApplyEventV0` exige que el agente exista en `agents` y proyecta `agent_request_id` en `stopped_agents` sin duplicar.
+  - Proyecta `agent_request_id#reason:<reason_code>` en `agent_stop_requests` para observabilidad historica sin payload largo.
   - Proyecta una huella `CommandEffects` por `(AgentStopRequested, agent_request_id)`.
   - Rechaza otro stop durable para el mismo agente con distinta key, event_id, causation_id o payload.
   - Rechaza `agent_request_id` si ya existe en `failed_agents`.
@@ -203,7 +205,7 @@ Errores:
   - payload_invalido
   - detalle_prohibido
   - secuencia_invalida
-Estado: implementado local en NCW-028; endurecido en NCW-053 y NCW-055.
+Estado: implementado local en NCW-028; endurecido en NCW-053, NCW-055 y NCW-073.
 ```
 
 ## `AgentStopConfirmed`

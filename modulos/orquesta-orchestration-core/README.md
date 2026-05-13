@@ -410,6 +410,12 @@ Las estadisticas de cierre quedan cubiertas por:
 go test ./modulos/orquesta-orchestration-core -run 'TestBuildDirectorRunStatsV0ExponeCierre' -count=1
 ```
 
+`DirectorRunStatsV0` tambien expone por agente `stop_reason_code`,
+`stop_reason_source` y `stop_reason_ref` cuando existe parada solicitada o
+confirmada. La fuente preferida es la proyeccion durable `agent_stop_requests`;
+en runs antiguos puede caer a `agent_assessment` si la evaluacion pidio
+`stop_agent`. No se leen payloads largos ni detalles de runtime.
+
 El corte de proceso real minimo cubre lanzamiento, batch, readiness opcional,
 registro estructural, `AgentFailed` ante launch bloqueado, parada por
 `process_ref` y supervision selectiva con procesos locales controlados. Quedan

@@ -55,6 +55,7 @@ func applyAgentStopRequestedEventV0(current OrchestrationRunV0, event Orchestrat
 	}
 	next := cloneRunForReducerV0(current)
 	next.StoppedAgents = appendUniqueCompactRefV0(next.StoppedAgents, payload.AgentRequestID)
+	next.AgentStopRequests = appendUniqueCompactRefV0(next.AgentStopRequests, AgentStopRequestProjectionRefV0(payload))
 	effects, err := appendCommandEffectFromEventV0(next.CommandEffects, event, payload.AgentRequestID)
 	if err != nil {
 		return current, err

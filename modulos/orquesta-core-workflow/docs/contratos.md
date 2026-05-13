@@ -312,7 +312,7 @@ Invariantes:
   - `AgentStarted` rechaza failed/stopped previos; `AgentFailed` rechaza started/stopped previos.
   - `AgentStopRequested` rechaza failed previo.
   - `AgentLeaseExpired` proyecta expiracion observada en `agent_lease_expirations`, registra huella `CommandEffects` y no emite outbox ni efectos operativos.
-  - `AgentStopRequested` proyecta `agent_request_id` en `stopped_agents` sin duplicar, exige agente ya proyectado y registra huella `CommandEffects`.
+  - `AgentStopRequested` proyecta `agent_request_id` en `stopped_agents` sin duplicar, proyecta `agent_stop_requests` con motivo compacto, exige agente ya proyectado y registra huella `CommandEffects`.
   - `AgentStopConfirmed` proyecta `agent_request_id` en `confirmed_stopped_agents` sin duplicar, exige parada solicitada previa y registra huella `CommandEffects`.
   - `ConcurrencyGateRecorded` proyecta un gate evaluado en `concurrency_gates`, registra huella `CommandEffects` y no crea scheduler ni outbox.
   - `QualityGateRecorded` proyecta un gate de calidad en `quality_gates`, registra huella `CommandEffects` y no crea cierre, rework, bloqueo ni outbox.

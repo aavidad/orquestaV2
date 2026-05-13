@@ -758,3 +758,13 @@ Impacto: `DeliveryRegistered` proyecta `agent_ref` en `OrchestrationRunV0.Delive
 Contratos afectados: DeliveryRegistered, OrchestrationRunV0, DirectorRunStatsV0.
 Estado: aceptada local en NCW-072
 ```
+
+```text
+Fecha: 2026-05-13
+Decision: Persistir motivo compacto de parada de agente como `agent_stop_requests`.
+Motivo: El director y la web necesitan saber por que se pidio parar un agente sin reconstruir payloads de eventos ni inferirlo de contadores. Esa informacion es necesaria para decidir reintentos, replanificacion o cierre controlado.
+Alternativas: Leer siempre el event log completo; guardar resumen largo en el run; inferir motivo desde assessments. Leer el ledger acopla stats a historia interna, el resumen largo rompe la regla de contexto compacto y la inferencia pierde la razon exacta de `StopAgent`.
+Impacto: `AgentStopRequested` proyecta `agent_request_id#reason:<reason_code>` en `OrchestrationRunV0.AgentStopRequests`; `DirectorRunStatsV0` expone `stop_reason_code/source/ref`. `#` queda prohibido en `agent_request_id` y `reason_code` de parada para mantener la proyeccion parseable.
+Contratos afectados: StopAgent, AgentStopRequested, OrchestrationRunV0, DirectorRunStatsV0.
+Estado: aceptada local en NCW-073
+```
