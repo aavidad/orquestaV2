@@ -23,7 +23,15 @@ func protectedDirectionAgentObservationV0(
 		return false
 	}
 	agentRef := strings.TrimSpace(observation.Report.AgentRequestID)
+	if !protectedDirectionPrimaryAgentRefV0(agentRef) {
+		return false
+	}
 	return stringInSetV0(agentRef, run.Agents) || stringInSetV0(agentRef, run.StartedAgents)
+}
+
+func protectedDirectionPrimaryAgentRefV0(agentRef string) bool {
+	agentRef = strings.ToLower(strings.TrimSpace(agentRef))
+	return strings.HasSuffix(agentRef, "-director")
 }
 
 func protectedDirectionStopAllowedV0(

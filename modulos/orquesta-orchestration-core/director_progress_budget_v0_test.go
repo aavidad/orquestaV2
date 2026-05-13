@@ -84,7 +84,7 @@ func TestBuildDirectorRunStatsWithObservationsV0TransportaEdadActividadYAck(t *t
 
 func TestBuildDirectorRunStatsWithObservationsV0BudgetNoHabilitaStopDeDirectorProtegido(t *testing.T) {
 	runRef := "run-nucleo-progress-budget-protected-001"
-	agentRef := "agent-ref-progress-budget-protected-001"
+	agentRef := "agent-spec-progress-budget-protected-director"
 	run := mustActiveBrainstormingRunWithStartedAgentV0(t, runRef, agentRef)
 	registry := NewInMemoryAgentProcessRegistryV0()
 	if err := registry.RecordAgentProcessV0(context.Background(), AgentProcessRecordV0{

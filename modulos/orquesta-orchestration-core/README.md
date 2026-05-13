@@ -69,6 +69,16 @@ procesos/sesiones que haya arrancado y registrado por `run_id + agent_request_id
 No se permite barrer procesos por nombre de comando porque podria cortar un
 director, una sesion humana o un agente de otro run.
 
+Durante `brainstorming_arquitectura`, el agente director primario queda
+protegido frente a paradas automaticas por progreso dudoso: una observacion
+`stalled` o `over_budget_no_activity` se transforma en consulta al director, no
+en `StopRuntimeAgent`. En v0 esa proteccion se limita a refs primarias con
+sufijo `-director`, que es el contrato generado por `orquesta-app-director-intake`
+para el director inicial. Los directores especializados de area, como refs con
+sufijo `-web`, `-api`, `-persistencia`, `-i18n` o `-calidad`, no heredan esa
+proteccion: si tienen proceso registrado, `CanStop=true` y pueden ser gobernados
+por RunControl/supervision.
+
 El contrato operativo de receipt de agente es:
 
 1. el agente externo produce un receipt compacto validado por su conector;

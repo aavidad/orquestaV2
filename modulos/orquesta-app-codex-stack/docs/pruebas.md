@@ -27,7 +27,8 @@ Cobertura Go actual:
   `ORQUESTA_CODEX_STACK_MULTIAGENT_SMOKE=1`.
 - `TestCodexStackV0DirectorStatsIncluyeProcesoYProgresoPorPuertos` valida que
   `/director-stats` usa los puertos inyectados del stack para exponer control
-  de parada y progreso de agentes sin ACK.
+  de parada y progreso de agentes sin ACK; solo el director inicial puede
+  aparecer protegido, no los directores especializados.
 - `TestCodexStackV0ReviewGateAceptaEntregaConEvidenciaReal` valida que el
   stack conecta review gate y acepta una entrega con fichero real manejable.
 - `TestCodexStackV0ReviewGatePideCambiosSiFicheroEsDemasiadoGrande` valida que
@@ -543,8 +544,9 @@ Decisiones y fixes aplicados despues del hallazgo:
   ante `loop_detected`; generan assessment y pregunta al director;
 - el stack hace cleanup terminal del runtime tras registrar ACK valido, sin
   emitir `AgentStopConfirmed` ni contaminar `StoppedAgents`;
-- la prueba de stack se actualizo para exigir que el director inicial no sea
-  parable automaticamente.
+- la prueba de stack se actualizo para distinguir la ref explicita del director
+  inicial protegido frente a directores especializados, que siguen siendo
+  parables si tienen proceso registrado.
 
 Validacion local posterior:
 

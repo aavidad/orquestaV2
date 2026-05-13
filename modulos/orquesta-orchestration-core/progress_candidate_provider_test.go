@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
@@ -91,6 +92,55 @@ func TestProgressSupervisionCandidateProviderV0LimitaPrimeraObservacionAccionabl
 	if got != "report-loop-001" {
 		t.Fatalf("report id=%s", got)
 	}
+}
+
+func TestProgressSupervisionCandidateProviderV0ProtectsPrimaryBrainstormingDirector(t *testing.T) {
+	runRef := "run-nucleo-progress-primary-director-001"
+	agentRef := "agent-spec-progress-primary-director"
+	candidate := progressSupervisionCandidateForBrainstormingAgentV0(t, runRef, agentRef)
+
+	if candidate.SupervisionInput.StopAllowed == nil ||
+		*candidate.SupervisionInput.StopAllowed ||
+		candidate.SupervisionInput.QuestionID == "" {
+		t.Fatalf("candidate primary director=%+v", candidate.SupervisionInput)
+	}
+}
+
+func TestProgressSupervisionCandidateProviderV0DoesNotProtectSpecializedBrainstormingDirector(t *testing.T) {
+	runRef := "run-nucleo-progress-specialized-director-001"
+	agentRef := "agent-spec-agenda-api-web-req-agenda-api-web-001-web"
+	candidate := progressSupervisionCandidateForBrainstormingAgentV0(t, runRef, agentRef)
+
+	if candidate.SupervisionInput.StopAllowed != nil {
+		t.Fatalf("candidate specialized director=%+v", candidate.SupervisionInput)
+	}
+}
+
+func progressSupervisionCandidateForBrainstormingAgentV0(
+	t *testing.T,
+	runRef string,
+	agentRef string,
+) orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0 {
+	t.Helper()
+	provider := ProgressSupervisionCandidateProviderV0{
+		ProgressSource: staticAgentProgressObservationSourceV0{Observations: []AgentProgressObservationV0{{
+			Report:  progressObservationReportV0(runRef, agentRef, orquestaruntime.AgentStalledV0),
+			PhaseID: string(orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0),
+			TaskRef: "task-ref-brainstorming-area-001",
+		}}},
+		RequestedBy: "orquestacion-nucleo-test",
+	}
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        mustActiveBrainstormingRunWithStartedAgentV0(t, runRef, agentRef),
+		OccurredAt: "2026-05-09T12:10:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.ProgressSupervisionCandidates) != 1 {
+		t.Fatalf("progress candidates=%+v", candidates.ProgressSupervisionCandidates)
+	}
+	return candidates.ProgressSupervisionCandidates[0]
 }
 
 func TestProgressSupervisionCandidateProviderV0PropagatesInvalidProgressReport(t *testing.T) {

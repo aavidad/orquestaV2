@@ -46,9 +46,17 @@ func TestCodexStackV0DirectorStatsIncluyeProcesoYProgresoPorPuertos(t *testing.T
 	if len(page.ViewModel.Agents) != len(director.StartedAgents) {
 		t.Fatalf("agents=%+v director=%+v", page.ViewModel.Agents, director)
 	}
+	initialDirectorAgentRef := strings.TrimSpace(director.DirectorTask.AgentRequestID)
+	if initialDirectorAgentRef == "" {
+		t.Fatalf("director inicial sin agent_request_id: %+v", director.DirectorTask)
+	}
 	for _, agent := range page.ViewModel.Agents {
-		if !agent.CanStop && !strings.Contains(agent.AgentRequestID, "-director") {
-			t.Fatalf("agent sin control de parada: %+v", agent)
+		if agent.AgentRequestID != initialDirectorAgentRef && !agent.CanStop {
+			t.Fatalf(
+				"agente especializado sin control de parada: initial_director=%s agent=%+v",
+				initialDirectorAgentRef,
+				agent,
+			)
 		}
 		if !agent.CanStop && agent.ControlState != orquestacionnucleoapp.DirectorAgentControlStateRegisteredV0 {
 			t.Fatalf("director protegido sin registro de control: %+v", agent)
@@ -66,8 +74,8 @@ func TestCodexStackAgentUsageSourceV0UneMetricasInyectadas(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, runtime)
 	director := postDirectorAPIV0(t, stack)
 	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
-	agentRef := firstStartedDirectorAgentV0(director.StartedAgents)
-	if agentRef == "" {
+	agentRef := strings.TrimSpace(director.DirectorTask.AgentRequestID)
+	if agentRef == "" || !codexStackHasRefV0(director.StartedAgents, agentRef) {
 		t.Fatalf("sin agente para usage: %+v", director)
 	}
 	source := CodexStackAgentUsageSourceV0{
@@ -153,8 +161,8 @@ func TestCodexStackV0ProgressStalledProtegeDirectorInicial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadRunV0: %v", err)
 	}
-	agentRef := firstStartedDirectorAgentV0(director.StartedAgents)
-	if agentRef == "" {
+	agentRef := strings.TrimSpace(director.DirectorTask.AgentRequestID)
+	if agentRef == "" || !codexStackHasRefV0(director.StartedAgents, agentRef) {
 		t.Fatalf("run sin director arrancado: run=%+v drain=%+v", run, drain)
 	}
 	if !codexStackRefsContainPartV0(run.AgentAssessments, "assessment-ref-agent-progress-report-ref-"+agentRef) ||
@@ -254,15 +262,6 @@ func (runtime *pendingAckCodexStackRuntimeV0) LaunchV0(
 func firstConfirmedStoppedAgentV0(started []string, stopped []string) string {
 	for _, agentRef := range compactStringsV0(started) {
 		if codexStackHasRefV0(stopped, agentRef) {
-			return agentRef
-		}
-	}
-	return ""
-}
-
-func firstStartedDirectorAgentV0(started []string) string {
-	for _, agentRef := range compactStringsV0(started) {
-		if strings.Contains(agentRef, "-director") {
 			return agentRef
 		}
 	}

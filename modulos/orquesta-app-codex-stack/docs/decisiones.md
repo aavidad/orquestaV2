@@ -329,7 +329,10 @@ sesiones/procesos registrados.
 Impacto: `ProcessAgentStopperV0` valida `process_ref`, `session_ref` y
 `launch_ref` cuando el runtime expone snapshot; el progreso de un director en
 `brainstorming_arquitectura` se degrada a `ask_director`, con `CanStop=false`
-en stats, en vez de emitir `StopRuntimeAgent`.
+en stats, en vez de emitir `StopRuntimeAgent`. Esta proteccion aplica a la ref
+explicita del director inicial; los directores especializados como
+`director_web`, `director_api` o `director_persistencia` son agentes de area y
+deben seguir siendo parables cuando existe proceso registrado.
 Estado: aceptada.
 ```
 
