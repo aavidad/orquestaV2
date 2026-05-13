@@ -7,6 +7,7 @@ Incluye:
 - nueva app;
 - panel de agentes;
 - panel de fases;
+- panel de control de runs;
 - panel de cola multiapp;
 - revision de propuestas;
 - acciones seguras;

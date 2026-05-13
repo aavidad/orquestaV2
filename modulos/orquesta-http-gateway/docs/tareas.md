@@ -9,6 +9,8 @@
 - Anadir test de arquitectura contra imports prohibidos en codigo productivo.
 - Anadir ruta web `/director-stats` para montar panel de estadisticas sin
   mezclarlo con la API REST `/api/v0/director/stats`.
+- Anadir ruta web `/run-control` para montar panel de control sin mezclarlo con
+  la API REST/MCP `/api/v0/runs/control`.
 - Anadir ruta web `/run-queue` para montar panel de cola multiapp sin mezclarlo
   con la API REST/MCP `/api/v0/runs/queue/priority`.
 

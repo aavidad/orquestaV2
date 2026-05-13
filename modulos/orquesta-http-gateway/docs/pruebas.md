@@ -15,6 +15,8 @@ git diff --check -- modulos/orquesta-http-gateway
 - Barrera de arquitectura para imports productivos prohibidos.
 - Cobertura de ruta web `/director-stats` separada de API
   `/api/v0/director/stats`.
+- Cobertura de ruta web `/run-control` separada de API
+  `/api/v0/runs/control`.
 - Cobertura de ruta web `/run-queue` separada de API
   `/api/v0/runs/queue/priority`.
 - La auditoria de stats se limita al routing: el contenido de

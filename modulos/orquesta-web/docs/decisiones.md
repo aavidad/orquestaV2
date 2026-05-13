@@ -285,6 +285,23 @@ Estado: aceptada localmente.
 
 ```text
 Fecha: 2026-05-13
+Decision: El control humano/director de runs se expone en web como POST
+`/run-control` encima del bridge REST `orquesta.runs.control.v0`.
+Motivo: pausar, reanudar, parar o cancelar una run es una mutacion operativa.
+La web debe poder emitirla, pero no debe leer ni mutar stores/runtime por su
+cuenta.
+Alternativas: botones GET con query params; duplicar RunControl en la web; leer
+el store de control desde UI.
+Impacto: `RunControlWebEndpointV0` solo acepta POST JSON/form y usa
+`RunControlClientV0`. El estado devuelto es el resultado publico de MCP; el
+checkpoint/parada cooperativa siguen fuera del panel.
+Contratos afectados: `WebRunControlCommandV0`, `WebRunControlViewModelV0`,
+`RESTRunControlClientV0`.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-05-13
 Decision: `/app-change` acepta refs opacas de trabajo externo, pero no importa
 ninguna logica de la app propietaria.
 Motivo: Orquesta debe poder coordinar trabajos sobre OPES u otra app mediante

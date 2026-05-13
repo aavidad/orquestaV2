@@ -542,7 +542,8 @@ Cerrado despues:
 Pendiente separado:
 
 - checkpoint real antes de stop/cancel no forzado;
-- UI web para botones de control y cambio de prioridad.
+- UI web de control queda cubierta por `/run-control`; cambio de prioridad por
+  `/run-queue`.
 
 ## APP-CODEX-STACK-019
 

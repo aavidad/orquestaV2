@@ -9,6 +9,8 @@ Rutas montadas:
 - `/nueva-app`: handler web HTML.
 - `/app-change`: handler web JSON/HTML de cambios sobre app existente.
 - `/director-stats`: handler web JSON para panel de estadisticas.
+- `/run-control`: handler web JSON para pausar, reanudar, parar o cancelar
+  runs.
 - `/run-queue`: handler web JSON para cola multiapp y cambio de prioridad.
 - `/api/v0/apps/spec`: REST de factory.
 - `/api/v0/apps/director`: bridge REST de MCP para arrancar director.
@@ -53,3 +55,5 @@ Entrada de composicion:
   `decision_context`.
 - `/run-queue` consulta `/api/v0/runs/queue/priority` por cliente REST
   in-process; el gateway no interpreta ranking, score, aging ni estado de cola.
+- `/run-control` consulta `/api/v0/runs/control` por cliente REST in-process;
+  el gateway no interpreta estados, checkpoint, parada fisica ni runtime.

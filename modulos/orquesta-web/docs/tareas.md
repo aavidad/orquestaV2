@@ -185,6 +185,19 @@ Estado: completada.
 ```
 
 ```text
+ID: WEB-022
+Objetivo: Exponer panel web JSON para pausar, reanudar, parar o cancelar runs
+sin que la web conozca RunControl, runtime ni stores.
+Write-set: run_control_*_v0.go, tests y docs locales.
+Simbolo foco: WebRunControlPanelV0
+Contrato: Consume `orquesta.runs.control.v0` por REST interno.
+Validacion: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
+Bloqueos: El checkpoint real antes de parada no forzada sigue en
+`orquesta-server-shutdown`/RunControl; este panel solo emite la orden.
+Estado: completada.
+```
+
+```text
 ID: WEB-020
 Objetivo: Permitir que `/app-change` envie refs opacas de trabajo externo sin
 acoplar la web a OPES ni a otra app propietaria.

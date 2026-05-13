@@ -7,6 +7,7 @@ Este modulo ensambla handlers ya existentes:
 - web `/nueva-app`;
 - web `/app-change`;
 - web `/director-stats`;
+- web `/run-control`;
 - web `/run-queue`;
 - REST `/api/v0/apps/spec`;
 - REST `/api/v0/apps/director`;

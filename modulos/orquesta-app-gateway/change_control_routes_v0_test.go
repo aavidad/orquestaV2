@@ -94,6 +94,32 @@ func TestRunQueuePageDelegaEnAPIInternaSinCmdDBRuntimeV0(t *testing.T) {
 	}
 }
 
+func TestRunControlPageDelegaEnAPIInternaSinCmdDBRuntimeV0(t *testing.T) {
+	control := &recordingRunControlExecutorV0{}
+	handler := NewHTTPHandlerV0(ConfigV0{
+		RunControl: control,
+		Timeout:    time.Second,
+	})
+	values := url.Values{}
+	values.Set("action", "stop")
+	values.Set("run_ref", "run-app-gateway-control-page-001")
+	values.Set("forced", "true")
+	req := httptest.NewRequest(http.MethodPost, "/run-control", strings.NewReader(values.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if control.Input.Action != "stop" ||
+		control.Input.RunRef != "run-app-gateway-control-page-001" ||
+		!control.Input.Forced {
+		t.Fatalf("input=%+v", control.Input)
+	}
+}
+
 func TestAppChangePageDelegaEnAPIInternaSinCmdDBRuntimeV0(t *testing.T) {
 	executor := &recordingRequestAppChangeExecutorV0{}
 	handler := NewHTTPHandlerV0(ConfigV0{

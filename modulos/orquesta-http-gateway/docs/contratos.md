@@ -25,6 +25,7 @@ Campos:
 - `NuevaApp`;
 - `AppChangePage`;
 - `DirectorStatsPage`;
+- `RunControlPage`;
 - `RunQueuePage`;
 - `AppSpec`;
 - `AppDirector`;
@@ -40,6 +41,7 @@ Campos:
 - `RouteNuevaAppV0`: `/nueva-app`;
 - `RouteAppChangePageV0`: `/app-change`;
 - `RouteDirectorStatsPageV0`: `/director-stats`;
+- `RouteRunControlPageV0`: `/run-control`;
 - `RouteRunQueuePageV0`: `/run-queue`;
 - `RouteAppSpecV0`: `/api/v0/apps/spec`;
 - `RouteAppDirectorV0`: `/api/v0/apps/director`;
@@ -58,6 +60,10 @@ tareas, agentes, rework, replan, progreso, cierre ni `decision_context`.
 `RouteRunQueuePageV0` y `RouteRunQueuePriorityV0` son rutas separadas: la
 primera apunta al panel web inyectado y la segunda al contrato REST/MCP de
 cola. El gateway no conoce ranking, prioridad, aging, fairness ni stores.
+
+`RouteRunControlPageV0` y `RouteRunControlV0` son rutas separadas: la primera
+apunta al panel web inyectado y la segunda al contrato REST/MCP de control. El
+gateway no conoce pausa, parada, checkpoint, procesos ni runtime.
 
 ## Invariantes
 

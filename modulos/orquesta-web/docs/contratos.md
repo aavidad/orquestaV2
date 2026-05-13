@@ -145,6 +145,34 @@ Pruebas de contrato:
 - Endpoint POST `/run-queue` delega cambio de prioridad.
 ```
 
+```text
+Nombre: WebRunControlPanelV0
+Tipo: puerto_entrada + dto
+Version: v0
+Propietario: orquesta-web
+Consumidores: operador humano / navegador en `/run-control`
+Contrato externo consumido: `orquesta.runs.control.v0`
+Campos:
+- command: action, run_ref, requested_by, reason, forced, evidence_refs.
+- view_model: estado, action, run_ref, status, checkpoint_recorded, forced,
+  evidence_refs y errores.
+Invariantes:
+- La web llama al bridge REST `/api/v0/runs/control`; no lee RunControl store,
+  runtime, procesos, scheduler, DB ni filesystem.
+- `pause`, `resume`, `stop` y `cancel` solo se aceptan por POST para evitar
+  mutaciones por polling o enlace GET.
+- El checkpoint cooperativo y la parada fisica pertenecen a puertos de
+  RunControl/shutdown/runtime, no al panel web.
+Errores:
+- run_control_error_transporte
+- run_control_respuesta_invalida
+- errores publicos de `orquesta.runs.control.v0`
+Pruebas de contrato:
+- Cliente REST serializa pause/resume/stop/cancel hacia el bridge MCP REST.
+- Endpoint POST `/run-control` delega accion por cliente inyectado.
+- Gateway app monta `/run-control` encima de `/api/v0/runs/control`.
+```
+
 ## Contratos consumidos
 
 ```text

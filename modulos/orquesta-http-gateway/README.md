@@ -15,6 +15,7 @@ Rutas v0:
 - `/nueva-app`
 - `/app-change`
 - `/director-stats`
+- `/run-control`
 - `/run-queue`
 - `/api/v0/apps/spec`
 - `/api/v0/apps/director`

@@ -305,3 +305,16 @@ Ultima ejecucion: 2026-05-13; pasa con `go test -count=1 ./modulos/orquesta-web`
 Riesgos: el panel muestra ranking/prioridad; progreso profundo por run sigue en
 `/director-stats`.
 ```
+
+```text
+Caso: WEB-INT-021 panel de control de runs
+Tipo: integration/contract
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `RESTRunControlClientV0` serializa acciones
+`pause|resume|stop|cancel` hacia `/api/v0/runs/control`, conserva errores
+publicos 400 del contrato MCP, y `RunControlWebEndpointV0` solo acepta POST
+JSON/form sin leer stores, runtime, procesos, scheduler ni DB.
+Ultima ejecucion: 2026-05-13; pasa con `go test -count=1 ./modulos/orquesta-web`.
+Riesgos: checkpoint y parada fisica siguen fuera de la web; el panel solo emite
+la orden publica.
+```
