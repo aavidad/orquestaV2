@@ -116,6 +116,26 @@ func TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinWriteSet(t *test
 	}
 }
 
+func TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinCriterios(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.AcceptanceCriteria = nil
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	if len(decisions) != 0 {
+		t.Fatalf("decisions=%+v", decisions)
+	}
+}
+
 func TestAppChangeDirectorDecisionSourceV0ConsumeCambioRecibidoComoEvento(t *testing.T) {
 	store := orquestaappchange.NewInMemoryAppChangeStoreV0()
 	event := orquestaappchange.AppChangeIntentEventV0{

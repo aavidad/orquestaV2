@@ -26,9 +26,7 @@ Validacion:
 Objetivo: convertir el cambio aceptado en replanificacion completa de trabajo
 por parte del director.
 
-Estado: pendiente.
-Estado implementado parcial: hecho para solicitudes concretas con
-`allowed_write_set` y `acceptance_criteria`.
+Estado: hecho.
 
 Entrada:
 
@@ -36,8 +34,22 @@ Entrada:
 - `orquesta-app-change-director-source` convierte el cambio en respuesta al
   director, votacion, decision aceptada, contrato funcional, microtarea y vuelta
   a programacion;
-- si faltan write-set o criterios, no inventa trabajo y deja la consulta para el
-  director.
+- si el run ya esta en `programacion` y existe decision base, crea la unidad
+  pequena directamente como contrato y microtarea programable;
+- cada microtarea conserva `allowed_write_set`, criterios de aceptacion y
+  pruebas requeridas;
+- si faltan write-set o criterios, no inventa trabajo y deja la consulta para
+  el director;
+- la fuente usa solo puertos y refs compactas: no conoce DB, runtime, proveedor
+  ni nucleo interno de la app.
+
+Validacion:
+
+- `TestAppChangeDirectorDecisionSourceV0GeneraCadenaCompleta`;
+- `TestAppChangeDirectorDecisionSourceV0ConsumeCambioRecibidoComoEvento`;
+- `TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinWriteSet`;
+- `TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinCriterios`;
+- `go test -count=1 ./modulos/orquesta-app-change ./modulos/orquesta-app-change-director-source`.
 
 ## APP-CHANGE-004
 
