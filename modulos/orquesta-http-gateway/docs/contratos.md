@@ -35,6 +35,7 @@ Campos:
 - `RunQueuePriority`;
 - `ServerShutdown`;
 - `AutoprogrammingValidateRequest`.
+- `DomainWork`.
 
 ## Rutas estables
 
@@ -51,6 +52,7 @@ Campos:
 - `RouteRunQueuePriorityV0`: `/api/v0/runs/queue/priority`;
 - `RouteAutoprogrammingValidateRequestV0`: `/api/v0/autoprogramming/validate-request`;
 - `RouteServerShutdownV0`: `/api/v0/server/shutdown`.
+- `RouteDomainWorkV0`: `/api/v0/domain-work`.
 
 `RouteDirectorStatsPageV0` y `RouteDirectorStatsV0` son rutas separadas: la
 primera apunta al handler web inyectado y la segunda al contrato REST que
@@ -64,6 +66,10 @@ cola. El gateway no conoce ranking, prioridad, aging, fairness ni stores.
 `RouteRunControlPageV0` y `RouteRunControlV0` son rutas separadas: la primera
 apunta al panel web inyectado y la segunda al contrato REST/MCP de control. El
 gateway no conoce pausa, parada, checkpoint, procesos ni runtime.
+
+`RouteDomainWorkV0` apunta al contrato REST/MCP de trabajo de dominio externo.
+El gateway solo registra el handler inyectado; no conoce OPES, contratos de
+dominio, conectores REST, DB, runtime ni proveedores.
 
 ## Invariantes
 

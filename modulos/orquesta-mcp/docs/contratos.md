@@ -17,6 +17,68 @@ Pruebas de contrato:
 ```
 
 ```text
+Nombre: mcp.tool.orquesta.domain_work.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: servidor MCP futuro, cliente IA director y bridge HTTP local
+Campos:
+  descriptor:
+    name: orquesta.domain_work.v0
+    version: v0
+    resource_uri: orquesta://contracts/domain-work/v0
+  input:
+    request_id, correlation_id: refs externas opcionales
+    action: create_job | submit_artifact
+    job_request: DomainWorkJobRequestV0 cuando action=create_job
+    artifact_submission: DomainWorkArtifactSubmissionV0 cuando
+      action=submit_artifact
+  output_ok:
+    estado: ok
+    action
+    job: DomainWorkJobV0 para create_job
+    receipt: DomainWorkArtifactReceiptV0 para submit_artifact
+  output_error:
+    estado: error
+    errores_publicos
+Invariantes:
+  - Adaptador inbound fino.
+  - `create_job` delega solo en `DomainWorkJobCreatorPortV0` inyectado.
+  - `submit_artifact` delega solo en `DomainWorkArtifactSubmitterPortV0`
+    inyectado.
+  - No importa OPES, conector REST, DB, runtime, filesystem ni proveedor.
+  - El registro en transporte central es opt-in: si no se inyecta executor, el
+    tool devuelve `mcp_transport_tool_unbound`.
+Pruebas de contrato:
+  - Descriptor compacto del tool.
+  - Executor delega `create_job` al creator.
+  - Executor delega `submit_artifact` al submitter.
+  - Transporte queda opt-in/unbound si falta puerto.
+  - `RegisterMCPTransportV0` registra el tool en el catalogo global.
+  - HTTP bridge `POST /api/v0/domain-work` delega y propaga correlacion.
+  - Test de arquitectura impide importar OPES o conector REST.
+```
+
+```text
+Nombre: rest.bridge.orquesta.domain_work.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: adaptadores HTTP locales
+Campos:
+  path: POST /api/v0/domain-work
+  input: mismo envelope que `orquesta.domain_work.v0`
+  output: mismo resultado compacto del tool
+Invariantes:
+  - Bridge REST fino; no abre servidor ni crea puertos productivos.
+  - Usa executor inyectado de `orquesta.domain_work.v0`.
+  - No conoce OPES, conector REST, DB, runtime, proveedor, HOME ni OAuth.
+Pruebas de contrato:
+  - Handler HTTP invoca executor fake.
+  - Propaga `X-Correlation-ID` desde resultado/input/header.
+```
+
+```text
 Nombre: mcp.tool.orquesta.apps.arrancar_director.v0
 Tipo: puerto_entrada
 Version: v0

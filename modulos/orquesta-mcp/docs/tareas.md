@@ -15,6 +15,32 @@ Bloqueos:
 Estado:
 ```
 
+```text
+ID: MCP-034
+Objetivo: Exponer herramienta MCP fina para trabajo de dominio externo.
+Write-set: domain_work_*_v0.go, domain_work_*_v0_test.go, docs locales.
+Simbolo foco: orquesta.domain_work.v0
+Contrato: DomainWorkJobCreatorPortV0 y DomainWorkArtifactSubmitterPortV0.
+Validacion: go test -count=1 ./modulos/orquesta-mcp -run TestMCPDomainWork.
+Bloqueos: No registra el tool en `mcp_transport_registry_v0.go` porque esta
+tarea no tiene ese fichero en write-set. No importa OPES, conector REST, DB,
+runtime ni filesystem.
+Estado: hecho
+```
+
+```text
+ID: MCP-032
+Objetivo: Registrar `orquesta.domain_work.v0` en el transporte MCP global.
+Write-set: mcp_transport_registry_v0.go, mcp_transport_registry_v0_test.go,
+docs locales.
+Simbolo foco: mcp.transport.registry.v0
+Contrato: MCPDomainWorkExecutorPortV0 y mcpDomainWorkTransportHandlerV0.
+Validacion: go test -count=1 ./modulos/orquesta-mcp.
+Bloqueos: No inyecta OPES ni conector REST; solo publica binding opt-in para
+que un borde superior conecte el executor productivo.
+Estado: hecho
+```
+
 ## Backlog inicial
 
 ```text

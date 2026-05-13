@@ -11,6 +11,7 @@ import (
 	"time"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -127,6 +128,55 @@ func TestDirectorStatsPageDelegaEnDirectorStatsRESTSinCmdDBRuntimeV0(t *testing.
 	}
 }
 
+func TestDomainWorkAPIDelegaEnExecutorRESTSinOPESNiDBRuntimeV0(t *testing.T) {
+	executor := &recordingDomainWorkExecutorV0{}
+	handler := NewHTTPHandlerV0(ConfigV0{
+		DomainWork: executor,
+		Timeout:    time.Second,
+	})
+	input := orquestamcp.MCPDomainWorkToolInputV0{
+		RequestID:     "request-ref-domain-work-app-gateway-001",
+		CorrelationID: "corr-domain-work-app-gateway-001",
+		Action:        orquestamcp.MCPDomainWorkActionCreateJobV0,
+		JobRequest: orquestadomainwork.DomainWorkJobRequestV0{
+			SchemaVersion:  orquestadomainwork.DomainWorkJobRequestSchemaV0,
+			RequestID:      "request-ref-domain-work-app-gateway-001",
+			CorrelationID:  "corr-domain-work-app-gateway-001",
+			IdempotencyKey: "idem-domain-work-app-gateway-001",
+			RequestedBy:    "director",
+			DomainRef:      "domain-opes",
+			WorkKind:       "syllabus",
+			Objective:      "crear temario inicial",
+		},
+	}
+	body, err := json.Marshal(input)
+	if err != nil {
+		t.Fatalf("marshal input: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/domain-work", strings.NewReader(string(body)))
+	req.Header.Set("Content-Type", "application/json")
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if executor.Input.Action != orquestamcp.MCPDomainWorkActionCreateJobV0 ||
+		executor.Input.JobRequest.DomainRef != "domain-opes" {
+		t.Fatalf("input no delegado=%+v", executor.Input)
+	}
+	var result orquestamcp.MCPDomainWorkToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPDomainWorkEstadoOKV0 ||
+		result.Job == nil ||
+		result.Job.JobRef != "job-domain-work-app-gateway-001" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestInProcessTransportV0PreservaRequestYResponse(t *testing.T) {
 	transport := InProcessTransportV0{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPatch || r.URL.Path != "/api/v0/test" {
@@ -227,6 +277,32 @@ func (executor *recordingRunQueuePriorityExecutorV0) Execute(
 		Action:        input.Action,
 		CorrelationID: input.CorrelationID,
 		Count:         1,
+	}, nil
+}
+
+type recordingDomainWorkExecutorV0 struct {
+	Input orquestamcp.MCPDomainWorkToolInputV0
+}
+
+func (executor *recordingDomainWorkExecutorV0) Execute(
+	_ context.Context,
+	input orquestamcp.MCPDomainWorkToolInputV0,
+) (orquestamcp.MCPDomainWorkToolResultV0, error) {
+	executor.Input = input
+	return orquestamcp.MCPDomainWorkToolResultV0{
+		Estado:        orquestamcp.MCPDomainWorkEstadoOKV0,
+		RequestID:     input.RequestID,
+		CorrelationID: input.CorrelationID,
+		Action:        input.Action,
+		Job: &orquestadomainwork.DomainWorkJobV0{
+			SchemaVersion:  orquestadomainwork.DomainWorkJobSchemaV0,
+			Status:         orquestadomainwork.DomainWorkStatusAcceptedV0,
+			JobRef:         "job-domain-work-app-gateway-001",
+			DomainRef:      input.JobRequest.DomainRef,
+			WorkKind:       input.JobRequest.WorkKind,
+			CorrelationID:  input.CorrelationID,
+			IdempotencyKey: input.JobRequest.IdempotencyKey,
+		},
 	}, nil
 }
 

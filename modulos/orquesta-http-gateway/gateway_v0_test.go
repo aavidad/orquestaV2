@@ -103,6 +103,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 				AutoprogrammingValidateRequest: markerHandler("autoprogramming-validate-request"),
 			},
 		},
+		{
+			name:  "domain work",
+			route: RouteDomainWorkV0,
+			handlers: RouteHandlersV0{
+				DomainWork: markerHandler("domain-work"),
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -198,6 +205,7 @@ func TestNewAppGatewayMuxV0Returns404ForUnconfiguredRoutes(t *testing.T) {
 		RouteAppDirectorV0,
 		RouteDirectorStatsPageV0,
 		RouteDirectorStatsV0,
+		RouteDomainWorkV0,
 		"/no-existe",
 	} {
 		t.Run(route, func(t *testing.T) {

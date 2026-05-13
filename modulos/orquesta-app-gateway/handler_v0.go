@@ -38,6 +38,7 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 		RunQueuePriority:               apiHandlers.RunQueuePriority,
 		ServerShutdown:                 apiHandlers.ServerShutdown,
 		AutoprogrammingValidateRequest: apiHandlers.AutoprogrammingValidateRequest,
+		DomainWork:                     apiHandlers.DomainWork,
 	}
 }
 
@@ -51,5 +52,6 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 		RunQueuePriority:               orquestamcp.NewMCPRunQueuePriorityHTTPHandlerV0(config.RunQueuePriority),
 		ServerShutdown:                 orquestamcp.NewMCPServerShutdownHTTPHandlerV0(config.ServerShutdown),
 		AutoprogrammingValidateRequest: orquestamcp.NewMCPAutoprogrammingValidateRequestHTTPHandlerV0(),
+		DomainWork:                     orquestamcp.NewMCPDomainWorkHTTPHandlerV0(config.DomainWork),
 	}
 }

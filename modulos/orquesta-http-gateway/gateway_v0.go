@@ -16,6 +16,7 @@ const (
 	RouteRunQueuePriorityV0               = "/api/v0/runs/queue/priority"
 	RouteServerShutdownV0                 = "/api/v0/server/shutdown"
 	RouteAutoprogrammingValidateRequestV0 = "/api/v0/autoprogramming/validate-request"
+	RouteDomainWorkV0                     = "/api/v0/domain-work"
 )
 
 type RouteHandlersV0 struct {
@@ -32,6 +33,7 @@ type RouteHandlersV0 struct {
 	RunQueuePriority               http.Handler
 	ServerShutdown                 http.Handler
 	AutoprogrammingValidateRequest http.Handler
+	DomainWork                     http.Handler
 }
 
 func NewAppGatewayMuxV0(handlers RouteHandlersV0) http.Handler {
@@ -50,6 +52,7 @@ func NewAppGatewayMuxV0(handlers RouteHandlersV0) http.Handler {
 	handleIfPresent(mux, RouteRunQueuePriorityV0, handlers.RunQueuePriority)
 	handleIfPresent(mux, RouteServerShutdownV0, handlers.ServerShutdown)
 	handleIfPresent(mux, RouteAutoprogrammingValidateRequestV0, handlers.AutoprogrammingValidateRequest)
+	handleIfPresent(mux, RouteDomainWorkV0, handlers.DomainWork)
 
 	return mux
 }

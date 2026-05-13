@@ -28,6 +28,8 @@ Rutas montadas:
 - `/api/v0/autoprogramming/validate-request`: bridge REST de validacion de
   peticiones de autoprogramacion.
 - `/api/v0/server/shutdown`: bridge REST de MCP para cierre controlado.
+- `/api/v0/domain-work`: bridge REST de MCP para crear trabajo de dominio
+  externo o entregar artefactos mediante un executor inyectado.
 
 ## `ConfigV0`
 
@@ -41,6 +43,7 @@ Entrada de composicion:
 - `RunControl`: executor MCP inyectado para control de runs.
 - `RunQueuePriority`: executor MCP inyectado para cola multiapp.
 - `ServerShutdown`: executor MCP inyectado para cierre controlado.
+- `DomainWork`: executor MCP inyectado para trabajo de dominio externo.
 - `HTTPClient`: cliente opcional para que web llame a APIs REST.
 - `Timeout`: timeout de clientes REST creados por defecto.
 
@@ -57,3 +60,5 @@ Entrada de composicion:
   in-process; el gateway no interpreta ranking, score, aging ni estado de cola.
 - `/run-control` consulta `/api/v0/runs/control` por cliente REST in-process;
   el gateway no interpreta estados, checkpoint, parada fisica ni runtime.
+- `/api/v0/domain-work` delega en `orquesta-mcp`; este modulo no interpreta
+  `DomainWorkJobRequestV0`, no importa OPES y no crea conectores reales.

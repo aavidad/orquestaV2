@@ -17,6 +17,24 @@ Estado:
 ## Decisiones tomadas
 
 ```text
+Fecha: 2026-05-13
+Decision: `orquesta.domain_work.v0` se implementa como adaptador MCP fino sobre
+puertos de `orquesta-domain-work`.
+Motivo: el director necesita crear trabajo de dominio y entregar artefactos sin
+conocer OPES, REST, DB, runtime ni conectores concretos.
+Alternativas: importar el conector OPES desde MCP; registrar directamente un
+cliente REST; esperar al servidor MCP real sin contrato local.
+Impacto: el tool acepta `create_job` y `submit_artifact`, delega solo en
+`DomainWorkJobCreatorPortV0` y `DomainWorkArtifactSubmitterPortV0`, y publica
+handler MCP opt-in mas bridge HTTP local. El transporte central lo registra
+como tool opt-in y devuelve `mcp_transport_tool_unbound` si falta executor.
+Contratos afectados: mcp.tool.orquesta.domain_work.v0;
+rest.bridge.orquesta.domain_work.v0; DomainWorkJobRequestV0;
+DomainWorkArtifactSubmissionV0.
+Estado: aceptada localmente
+```
+
+```text
 Fecha: 2026-05-10
 Decision: `orquesta.director.stats.v0` expone `DirectorRunStatsV0` completo
 como contrato observable para director, API y web.
