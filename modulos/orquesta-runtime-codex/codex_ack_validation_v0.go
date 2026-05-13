@@ -133,6 +133,11 @@ func (v *codexAckValidatorV0) validateCompletedEvidence(
 		v.add(CodexConnectorAckArtifactV0, "tests", "failed_test_evidence")
 		return
 	}
+	if codexPacketHasRequiredTruncatedContextV0(packet) &&
+		!codexAckContainsNotePrefixV0(ack.Notes, "contexto_truncado_resuelto") {
+		v.add(CodexConnectorAckArtifactV0, "notes", "required_context_truncated")
+		return
+	}
 	for _, required := range packet.Task.RequiredTests {
 		if !codexAckContainsTrimmedV0(ack.Tests, required) {
 			v.add(CodexConnectorAckArtifactV0, "tests", "missing_required_test")
@@ -225,6 +230,19 @@ func codexAckContainsTrimmedV0(values []string, want string) bool {
 	}
 	for _, value := range values {
 		if strings.TrimSpace(value) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func codexAckContainsNotePrefixV0(values []string, want string) bool {
+	want = strings.ToLower(strings.TrimSpace(want))
+	for _, value := range values {
+		normalized := strings.ToLower(strings.TrimSpace(value))
+		if normalized == want ||
+			strings.HasPrefix(normalized, want+":") ||
+			strings.HasPrefix(normalized, want+" ") {
 			return true
 		}
 	}

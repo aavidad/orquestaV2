@@ -22,6 +22,9 @@ Cobertura Go actual:
   el flujo REST que usara OPES: arranque de director, `POST
   /api/v0/apps/opes/changes` con `external_work`, microtarea de dominio externo
   sin `allowed_write_set` local y consulta de `/api/v0/director/stats`;
+- `TestDefaultDomainWorkArtifactSubmissionBuilderV0NoFiltraPathsComoPayloadRefs`
+  valida que el builder no convierte rutas de `ack.files` en `payload_refs`
+  invalidas ni filtra paths internos al contrato de dominio;
 - las refs publicas del paquete de agente son neutrales y no filtran el
   conector real;
 - dos solicitudes con el mismo nombre visible no colisionan porque el intake
@@ -692,6 +695,20 @@ go test ./cmd/orquesta-server ./modulos/orquesta-server-shutdown ./modulos/orque
 
 Resultado: `ok`.
 
+Validacion external-work-run 2026-05-13:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack \
+  -run TestCodexStackV0ExternalWorkRunCreaRunSinDirectorInicial
+```
+
+Evidencia:
+
+- el endpoint `POST /api/v0/external-work/run` crea run en `programacion`;
+- registra pregunta de director durable para app-change;
+- encola la run con `app_ref=opes`;
+- no arranca agentes ni director inicial antes del tick global.
+
 Evidencia:
 
 - `BuildStackV0` cablea `/api/v0/server/shutdown` con
@@ -771,3 +788,17 @@ Evidencia:
 - `RunFileStoreV0` no pierde `external_work` tras reinicio;
 - el ledger de entregas de dominio puede persistir y deduplicar
   `idempotency_key` despues de recrear el conector.
+
+Validacion de contexto externo amplio 2026-05-13:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack \
+  -run 'TestProgrammingTaskV0TrabajoExternoUsaUnidadTrabajoNoMicrotareaMinima|TestCodexLaunchSpecResolverV0MarcaContextoExternoTruncadoComoRiesgoDeCierre'
+```
+
+Evidencia esperada:
+
+- `ApplyExternalDomainWorkV0` se lanza como unidad de trabajo externa, no como
+  microtarea minima;
+- si `agent_packet.context` contiene entradas requeridas truncadas, el packet
+  exige validar contexto no truncado o justificar materializacion externa.

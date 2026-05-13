@@ -401,3 +401,28 @@ Evidencia esperada: `NewMCPDirectorStatsHTTPHandlerV0` acepta `POST /api/v0/dire
 Ultima ejecucion: 2026-05-10; pasa con go test -count=1 ./modulos/orquesta-mcp.
 Riesgos: No abre servidor real ni configura RunStore/registry/progress source productivos; solo fija el bridge HTTP.
 ```
+# Prueba external-work-run 2026-05-13
+
+Comando:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp \
+  -run 'TestRegisterMCPTransportV0ExponeOperacionesExistentes'
+```
+
+Evidencia esperada: el registro MCP publica `orquesta.external_work.run.v0`
+como tool opt-in. Sin executor productivo devuelve unbound por transporte; con
+executor inyectado el handler REST delega en el caso de uso.
+
+## Prueba stats con run_ref obsoleto 2026-05-13
+
+Comando:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp \
+  -run TestMCPDirectorStatsToolExecutorV0RecuperaRunCanonicoSiRunRefObsoleto
+```
+
+Evidencia esperada: si `run_ref` no carga pero `external_job_ref` es valido,
+`orquesta.director.stats.v0` resuelve la run canonica por puerto externo y
+devuelve `estado=ok`, `run_ref` canonico y `external_job`.

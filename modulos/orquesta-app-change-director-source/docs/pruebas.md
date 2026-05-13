@@ -26,6 +26,9 @@ Casos focales:
 - `TestAppChangeDirectorDecisionSourceV0ResumenPermiteGranularidadPequena`:
   `summarize_chapter` admite tarea pequena porque es artefacto derivado y exige
   trazabilidad y conservacion de matices criticos.
+- `TestAppChangeDirectorDecisionSourceV0CompactaCriteriosExternosAlLimiteDelDirector`:
+  reproduce un job OPES con criterios generados y de usuario que antes excedian
+  el limite compacto del DTO del director.
 - `TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinWriteSetNiExternalWork`:
   sin write-set ni `external_work` no hay microtarea automatica.
 - `TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinCriterios`: sin

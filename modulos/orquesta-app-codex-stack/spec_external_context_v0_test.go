@@ -89,6 +89,79 @@ func TestCodexLaunchSpecResolverV0MaterializaContextoDominioExterno(t *testing.T
 	}
 }
 
+func TestCodexLaunchSpecResolverV0MarcaContextoExternoTruncadoComoRiesgoDeCierre(t *testing.T) {
+	changeRef := "opes-job-job-ref-truncado-001"
+	taskRef := orquestaappchangedirectorsource.AppChangeTaskRefV0(changeRef)
+	runRef := "run-ref-opes-context-truncado-001"
+	task := orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion: orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:        taskRef,
+		RunID:         runRef,
+		PhaseID:       orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Title:         "Redactar capitulo documental OPES",
+		Summary:       "Redactar unidad editorial amplia con paquete de dominio suficiente.",
+		WriteSet:      []string{"external/opes/draft_content_block"},
+		AcceptanceCriteria: []string{
+			"usar paquete de dominio suficiente",
+		},
+		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+			ContractRef:  "contract:function:app-change:opes:v0",
+			FunctionName: "ApplyExternalDomainWorkV0",
+		}},
+	}
+	resolver := CodexLaunchSpecResolverV0{
+		Config: CodexRuntimeConfigV0{
+			RuntimeWorkDir: t.TempDir(),
+			ProjectWorkDir: t.TempDir(),
+		},
+		TaskStore: orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(task),
+		AppChangeStore: orquestaappchange.NewInMemoryAppChangeStoreV0(
+			orquestaappchange.AppChangeRecordV0{
+				Request: orquestaappchange.AppChangeRequestV0{
+					RunRef:     runRef,
+					AppRef:     "opes",
+					ChangeRef:  changeRef,
+					UserIntent: "Crear capitulo completo de temario.",
+					ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+						ProjectRef: "opes",
+						JobRef:     "job-ref-truncado-001",
+						WorkKind:   "draft_content_block",
+						InputFields: []orquestadomainwork.DomainWorkFieldV0{{
+							Name:  "syllabus_full",
+							Value: strings.Repeat("contenido ", externalWorkContextMaxFieldBytesV0),
+						}},
+					},
+				},
+			},
+		),
+	}
+
+	resolution, err := resolver.ResolveExternalAgentLaunchSpecV0(
+		context.Background(),
+		orquestaruntime.AgentLauncherInboundV0{
+			CorrelationID: "corr-opes-context-truncado-001",
+			Payload: &orquestaruntime.LaunchRuntimeAgentRequestV0{
+				RunID:          runRef,
+				AgentRequestID: "agent-ref-opes-context-truncado-001",
+				PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+				Role:           "implementacion",
+				TaskRef:        taskRef,
+				Summary:        "external_work",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ResolveExternalAgentLaunchSpecV0: %v", err)
+	}
+
+	packet := resolution.Spec.AgentPacket
+	if !contextBundleHasRequiredTruncatedEntryV0(packet.Context) ||
+		!stringInSetV0(packet.Task.RequiredTests, externalContextTruncatedRequiredTestV0) ||
+		!stringInSetV0(packet.Task.DoneCriteria, externalContextTruncatedDoneCriteriaV0) {
+		t.Fatalf("packet=%+v", packet)
+	}
+}
+
 func codexStackContextContainsForTestV0(
 	entries []orquestacontext.ContextMaterializedEntryV0,
 	want string,

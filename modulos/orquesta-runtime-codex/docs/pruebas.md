@@ -35,6 +35,9 @@ Cobertura:
 - rechaza ACK corrupto o incompleto con error publico;
 - rechaza ACK `completed` sin artifacts del write-set o con artifacts fuera de write-set;
 - acepta ACK con artifacts concretos que encajan en write-set con glob cerrado;
+- advierte en el prompt cuando hay contexto requerido truncado;
+- rechaza ACK `completed` con contexto requerido truncado si no justifica
+  `contexto_truncado_resuelto`;
 - rechaza ACK con HOME real, token/secreto, OAuth, prompt/completion o transcript completo.
 - lee `agent_ack.json` y construye `CodexDeliveryObservationV0` neutral;
 - rechaza observaciones que filtren detalles prohibidos para el core, incluido

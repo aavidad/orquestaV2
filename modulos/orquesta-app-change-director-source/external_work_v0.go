@@ -6,6 +6,8 @@ import (
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 )
 
+const maxAppChangeTaskCriteriaV0 = 10
+
 func appChangeContractSummaryV0(request orquestaappchange.AppChangeRequestV0) string {
 	if appChangeIsDraftContentBlockWorkV0(request) {
 		return "Contrato para redactar bloque documental externo con paquete de dominio suficiente."
@@ -83,7 +85,16 @@ func appChangeTaskSummaryV0(request orquestaappchange.AppChangeRequestV0) string
 func appChangeTaskCriteriaV0(request orquestaappchange.AppChangeRequestV0) []string {
 	criteria := []string{"Mantener arquitectura hexagonal e i18n si aplica."}
 	criteria = append(criteria, appChangeExternalWorkCriteriaV0(request)...)
-	return append(criteria, request.AcceptanceCriteria...)
+	criteria = append(criteria, request.AcceptanceCriteria...)
+	return compactAppChangeTaskCriteriaV0(criteria)
+}
+
+func compactAppChangeTaskCriteriaV0(criteria []string) []string {
+	criteria = compactAppChangeSourceRefsV0(criteria)
+	if len(criteria) <= maxAppChangeTaskCriteriaV0 {
+		return criteria
+	}
+	return append([]string(nil), criteria[:maxAppChangeTaskCriteriaV0]...)
 }
 
 func appChangeExternalWorkCriteriaV0(

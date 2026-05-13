@@ -119,6 +119,18 @@ Impacto: los cambios de codigo siguen exigiendo `allowed_write_set`; solo el
 trabajo externo con `external_work` obtiene scopes derivados. La microtarea
 sigue pasando por contrato, criterios de aceptacion y pruebas obligatorias.
 
+## Criterios compactos
+
+Decision: La fuente compacta criterios de microtarea a un maximo de 10.
+
+Motivo: el DTO validado del director limita listas compactas para mantener
+contexto pequeno. Un job OPES puede sumar criterios estructurales de Orquesta,
+criterios de dominio y criterios de usuario; emitir 11 o mas crea una decision
+invalida y bloquea el run antes de lanzar el agente.
+
+Impacto: se conservan primero los criterios estructurales generados por
+Orquesta y despues los primeros criterios del solicitante hasta el limite.
+
 ## Revision del cambio entregado
 
 Decision: La fuente de cambios abre `revision` cuando la microtarea del cambio

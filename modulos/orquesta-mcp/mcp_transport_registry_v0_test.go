@@ -43,6 +43,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		MCPRunQueuePriorityToolNameV0,
 		MCPServerShutdownToolNameV0,
 		MCPDomainWorkToolNameV0,
+		MCPExternalWorkRunToolNameV0,
 		operator.OperatorMCPStatusToolNameV0,
 		operator.OperatorMCPBurstToolNameV0,
 		operator.OperatorMCPOutboxToolNameV0,

@@ -49,6 +49,18 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-05-13
+Decision: El builder de artefactos no copia rutas de `ack.files` a
+`payload_refs`.
+Motivo: `ack.files` contiene rutas relativas del worktree del agente, como
+`external/opes/draft_content_block`. `domain-work` exige refs compactas sin `/`
+y OPES no debe recibir rutas internas de Orquesta como contrato de dominio.
+Impacto: el contenido del fichero sigue entrando en `payload_fields.body`, y la
+trazabilidad queda en `evidence_refs`/`external_refs` con refs opacas.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-12
 Decision: El smoke real de app completa corta por causa cuando el proyecto
 compila pero falta un ACK de programacion.
@@ -806,6 +818,18 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-05-13
+Decision: El stack cablea `external_work_run` separado de `arrancar_director`.
+Motivo: el smoke OPES no debe levantar un director LLM inicial para un job
+externo ya descrito; hacerlo deja procesos sobrantes y consume cuota sin aportar
+decision.
+Impacto: `/api/v0/external-work/run` usa stores, app-change, event-sink y
+run-queue inyectados. El supervisor global procesa despues la microtarea por la
+cola normal.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-10
 Decision: El stack marca `SendDirectorQuestion` como entregado mediante un
 dispatcher fino.
@@ -922,5 +946,19 @@ Codex confirma que el ACK productor ya esta proyectado. La prueba
 `PhaseArtifactRegistered` del director ocurre antes del primer `PhaseOpened`
 derivado de sus decisiones. No se anaden sleeps, excepciones de fase ni logica
 de proveedor/modelo.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-13
+Decision: Los trabajos externos documentales son unidades de trabajo
+adaptativas, no microtareas minimas obligatorias.
+Motivo: OPES puede pedir bloque, subcapitulo o capitulo si aporta paquete de
+dominio suficiente. Forzar microtareas por parrafo romperia continuidad y
+repetiria el error de v1/v2 de arreglar sintomas sin entender el dominio.
+Impacto: `programmingObjectiveV0` presenta `ApplyExternalDomainWorkV0` como
+unidad de trabajo externa. Si el contexto requerido llega truncado, el packet
+anade una prueba/criterio de cierre que obliga a justificar materializacion
+externa o bloquear con consulta al director.
 Estado: aceptada.
 ```

@@ -41,6 +41,20 @@ Dentro de OPES deben vivir:
 - endpoints de dominio para revisiones, fuentes u objetos que no sean
   `content_block`.
 
+## Granularidad Editorial
+
+OPES decide la unidad editorial: bloque, subcapitulo o capitulo. Orquesta no
+divide por defecto un tema de 50 folios en microtareas minimas; solo pide split
+si excede contexto, trazabilidad, capacidad de revision o si falta paquete de
+dominio suficiente.
+
+Para trabajos amplios, OPES debe mandar refs y paquete acotado: `topic_id`,
+`chapter_id`, posicion de bloque/capitulo, esquema, contexto vecino, fuentes,
+criterios y longitud esperada. El temario completo no debe viajar como campo
+inline gigante. Si Orquesta detecta contexto requerido truncado, el agente solo
+puede completar si justifica `contexto_truncado_resuelto: ...`; si no, debe
+bloquear con consulta al director.
+
 ## Restricciones
 
 - No asumir SQLite, Postgres, rutas locales ni estructura interna de OPES.
@@ -60,5 +74,5 @@ Dentro de OPES deben vivir:
 - El conector REST opt-in de jobs/artefactos ya existe.
 - Siguiente corte: ejecutar smoke real contra OPES con
   `ORQUESTA_OPES_BASE_URL`, usando `topic_id` y `chapter_id` reales.
-- Siguiente corte de producto: traducir jobs OPES a microtareas/agentes de
-  Orquesta y registrar entregas con `evidence_refs` hacia OPES.
+- Siguiente corte de producto: traducir jobs OPES a unidades de trabajo/agentes
+  de Orquesta y registrar entregas con `evidence_refs` hacia OPES.

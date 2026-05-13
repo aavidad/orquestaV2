@@ -18,6 +18,9 @@ Campos principales:
   `value_json` para objetos/arrays estructurados de dominio como
   `block_position` o `neighbor_context`;
 - `work_refs`, `input_refs`, `external_refs` y `evidence_refs`: refs compactas.
+  Para material largo, como temas OPES de decenas de folios, el texto completo
+  no debe viajar como un unico `input_field`; debe viajar como refs/materiales
+  externos mas un paquete editorial acotado.
 
 Invariantes:
 
@@ -25,6 +28,10 @@ Invariantes:
 - no transporta payloads sin contrato; `value_json` solo se permite dentro de
   campos nombrados y validados por adaptadores de dominio;
 - no decide agentes, capacidad, sesiones ni reintentos;
+- no exige granularidad minima: una unidad puede ser bloque, subcapitulo o
+  capitulo si el dominio aporta contexto suficiente y revisable;
+- si una materializacion requerida llega truncada, el agente debe bloquear o
+  justificar en ACK que resolvio por refs/materializacion externa;
 - todo conector real queda fuera de este modulo.
 
 ## DomainWorkArtifactSubmissionV0

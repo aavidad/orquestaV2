@@ -54,9 +54,13 @@ func (resolver CodexLaunchSpecResolverV0) programmingTaskV0(
 }
 
 func programmingObjectiveV0(task orquestacoreworkflow.WorkflowTaskV0) string {
+	unit := "contrato de esta microtarea"
+	if workflowTaskHasDomainWorkContractV0(task) {
+		unit = "contrato de esta unidad de trabajo externa"
+	}
 	return strings.Join([]string{
 		strings.TrimSpace(task.Summary),
-		"Implementa solo el contrato de esta microtarea.",
+		"Implementa solo el " + unit + ".",
 		"No cambies ficheros fuera del write-set.",
 		"Si la app es Go completa, debe quedar como modulo autonomo con go.mod, entrypoint bajo cmd/server o equivalente documentado, imports de modulo y sin imports relativos ../.",
 		"Ejecuta pruebas focales razonables y registra el resultado en el ACK.",

@@ -54,3 +54,39 @@ func TestProgrammingTaskV0PropagaRequiredTestsYContratoGoCompleto(t *testing.T) 
 		}
 	}
 }
+
+func TestProgrammingTaskV0TrabajoExternoUsaUnidadTrabajoNoMicrotareaMinima(t *testing.T) {
+	task := orquestacoreworkflow.WorkflowTaskV0{
+		TaskID:  "task-programacion-opes-001",
+		RunID:   "run-programacion-opes-001",
+		PhaseID: orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Title:   "Redactar capitulo OPES",
+		Summary: "Redactar unidad editorial amplia con paquete de dominio suficiente.",
+		WriteSet: []string{
+			"external/opes/draft_content_block",
+		},
+		AcceptanceCriteria: []string{
+			"usar paquete de dominio suficiente",
+		},
+		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+			ContractRef:  "contract:function:app-change:opes:v0",
+			FunctionName: "ApplyExternalDomainWorkV0",
+		}},
+	}
+	resolver := CodexLaunchSpecResolverV0{
+		TaskStore: orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(task),
+	}
+
+	got, err := resolver.agentTaskV0(context.Background(), orquestaruntime.LaunchRuntimeAgentRequestV0{
+		RunID:   task.RunID,
+		PhaseID: string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		TaskRef: task.TaskID,
+	}, "programacion")
+	if err != nil {
+		t.Fatalf("agentTaskV0: %v", err)
+	}
+	if !strings.Contains(got.Objective, "unidad de trabajo externa") ||
+		strings.Contains(got.Objective, "microtarea") {
+		t.Fatalf("objective=%s", got.Objective)
+	}
+}

@@ -138,6 +138,49 @@ func TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExternoSinWriteSetLocal
 	}
 }
 
+func TestAppChangeDirectorDecisionSourceV0CompactaCriteriosExternosAlLimiteDelDirector(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.AllowedWriteSet = nil
+	record.Request.AcceptanceCriteria = []string{
+		"markdown valido",
+		"sin placeholders",
+		"fuentes verificables cuando aplique",
+		"contenido listo para revision editorial",
+		"entrega en fichero bajo write set externo",
+	}
+	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    "opes",
+		JobRef:        "34f317ccf529318fd2943466c246756f",
+		InterfaceRefs: []string{"opes-rest-v0", "opes-mcp-v0"},
+		WorkKind:      "draft_content_block",
+		WorkRefs: []string{
+			"opes-topic-e712a4a2e848d18d1f5efd90434a1ea7",
+			"opes-chapter-9088fb1124055f2a0e69d6964c73590e",
+		},
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	task := decisions[6].CreateMicrotask.Task
+	if len(task.AcceptanceCriteria) != maxAppChangeTaskCriteriaV0 ||
+		!stringInSetV0(task.AcceptanceCriteria, "markdown valido") ||
+		!stringInSetV0(task.AcceptanceCriteria, "contenido listo para revision editorial") {
+		t.Fatalf("criteria=%+v", task.AcceptanceCriteria)
+	}
+	if issues := orquestadirectoragent.ValidateDirectorAgentDecisionV0(decisions[6]); len(issues) != 0 {
+		t.Fatalf("decision invalida: %+v", issues)
+	}
+}
+
 func TestAppChangeDirectorDecisionSourceV0ResumenPermiteGranularidadPequena(t *testing.T) {
 	record := appChangeRecordForSourceTestV0()
 	record.Request.AllowedWriteSet = nil

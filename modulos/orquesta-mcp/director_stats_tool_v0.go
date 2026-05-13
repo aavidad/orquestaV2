@@ -130,6 +130,19 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 	}
 	run, err := executor.RunStore.LoadRunV0(ctx, runRef)
 	if err != nil {
+		if externalJobRef != "" {
+			resolved, ok, resolveErr := executor.resolveExternalJobStatsV0(ctx, input, "")
+			if resolveErr != nil {
+				return newMCPDirectorStatsErrorV0(input, "external_job_stats_error", "external_job_ref", "external job stats no disponible"), nil
+			}
+			if ok && strings.TrimSpace(resolved.RunRef) != "" {
+				externalJob = &resolved
+				runRef = strings.TrimSpace(resolved.RunRef)
+				run, err = executor.RunStore.LoadRunV0(ctx, runRef)
+			}
+		}
+	}
+	if err != nil {
 		return newMCPDirectorStatsErrorV0(input, "run_no_disponible", "run_ref", "run no disponible"), nil
 	}
 	if externalJobRef != "" && externalJob == nil {

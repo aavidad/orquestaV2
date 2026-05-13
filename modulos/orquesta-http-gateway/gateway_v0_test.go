@@ -110,6 +110,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 				DomainWork: markerHandler("domain-work"),
 			},
 		},
+		{
+			name:  "external work run",
+			route: RouteExternalWorkRunV0,
+			handlers: RouteHandlersV0{
+				ExternalWorkRun: markerHandler("external-work-run"),
+			},
+		},
 	}
 
 	for _, tc := range cases {

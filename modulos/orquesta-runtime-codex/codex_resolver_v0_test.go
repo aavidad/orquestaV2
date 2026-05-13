@@ -143,6 +143,31 @@ func TestCodexExecResolverV0PromptUsaControlFilesDelRuntime(t *testing.T) {
 	}
 }
 
+func TestCodexExecResolverV0PromptAdvierteContextoRequeridoTruncado(t *testing.T) {
+	profile := codexProfileForTestV0(t)
+	spec := codexSpecForTestV0()
+	spec.AgentPacket.Context.Entries[0].Truncated = true
+	_, issues := NewCodexExecResolverV0(profile).
+		ResolveExternalAgentProcessCommandV0(context.Background(), spec)
+	if len(issues) != 0 {
+		t.Fatalf("issues inesperadas: %+v", issues)
+	}
+
+	prompt, err := os.ReadFile(filepath.Join(profile.RuntimeWorkDir, CodexAgentPromptFileNameV0))
+	if err != nil {
+		t.Fatalf("read prompt: %v", err)
+	}
+	for _, want := range []string{
+		"CONTEXTO TRUNCADO REQUERIDO",
+		"contexto_truncado_resuelto",
+		"CONSULTA AL DIRECTOR",
+	} {
+		if !strings.Contains(string(prompt), want) {
+			t.Fatalf("prompt no contiene %q:\n%s", want, string(prompt))
+		}
+	}
+}
+
 func TestCodexExecResolverV0NoFiltraDetallesOperacionalesAlRequest(t *testing.T) {
 	profile := codexProfileForTestV0(t)
 	profile.CodeHomeDir = filepath.Join(t.TempDir(), "codex-home")

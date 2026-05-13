@@ -79,6 +79,10 @@ func buildStackHTTPHandlerV0(
 		},
 		ServerShutdown: serverShutdownExecutorV0(config, stack),
 		DomainWork:     config.DomainWork,
+		ExternalWorkRun: externalWorkRunExecutorV0(
+			config,
+			queueConfig,
+		),
 		Timeout:        config.Timeout,
 		DirectorLimits: config.DirectorLimits,
 	})

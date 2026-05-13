@@ -67,6 +67,12 @@ temario de 50 folios en trozos minimos; esa granularidad la decide OPES desde
 su plan editorial. Orquesta solo debe subdividir si el job excede contexto,
 trazabilidad o capacidad de revision.
 
+El material largo no debe viajar como texto completo inline si supera el
+contexto pequeno del agente. OPES debe mandar refs opacas, paquete editorial
+acotado, fuentes y vecinos suficientes; si una entrada requerida llega truncada,
+el agente debe bloquear o justificar en el ACK que puede resolverla por refs o
+materializacion externa. No se acepta completar inventando huecos.
+
 La fuente no ejecuta el review gate. Solo abre la fase `revision`; la
 validacion de ficheros, pruebas, write-set y tamano pertenece al proveedor de
 observaciones de review gate inyectado en el stack.

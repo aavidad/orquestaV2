@@ -151,3 +151,19 @@ Motivo: el prompt base lo exponia como opcional y podia contradecir tareas de di
 Impacto: el conector mantiene `director_decisions.json` fuera del write-set, pero aclara que debe escribirse si objetivo o criterios de cierre lo piden.
 Estado: aceptada.
 ```
+
+## RTCODEX-DEC-007
+
+```text
+Fecha: 2026-05-13
+Decision: Un ACK `completed` con contexto requerido truncado debe justificar
+materializacion externa.
+Motivo: OPES puede necesitar temas amplios, pero Orquesta mantiene contextos
+pequenos. Si un campo obligatorio se corta y el agente completa sin declararlo,
+aceptariamos contenido inventado o parcial.
+Impacto: el prompt avisa cuando `agent_packet.context.entries` tiene
+`required=true` y `truncated=true`; el validador rechaza `completed` salvo que
+`notes` incluya `contexto_truncado_resuelto: ...`. Si no puede resolverlo, el
+agente debe devolver `failed` con `CONSULTA AL DIRECTOR`.
+Estado: aceptada.
+```

@@ -1,0 +1,71 @@
+# Smoke OPES External Work Con Agente Real
+
+Objetivo: validar el recorrido productivo minimo OPES -> Orquesta -> agente
+real -> artefacto OPES sin usar DB, ficheros internos ni subagentes manuales.
+
+## Alcance
+
+Este smoke no sustituye al smoke directo `domain-work`. Prueba otra frontera:
+
+1. OPES crea `topic` y `chapter` reales.
+2. OPES crea un job externo `draft_content_block`.
+3. Orquesta recibe el trabajo por `/api/v0/external-work/run`.
+4. Orquesta crea un run operativo, abre `programacion` y lo encola.
+5. La fuente determinista de app-change materializa una tarea
+   `ApplyExternalDomainWorkV0` sin arrancar director LLM inicial.
+6. Orquesta arranca un Codex real para esa tarea.
+7. El ACK del agente se transforma en `submit_artifact`.
+8. OPES recibe un artefacto y materializa bloque si el dominio lo permite.
+
+## Ejecucion
+
+OPES debe estar levantado y exponer su API publica:
+
+```bash
+ORQUESTA_OPES_AGENT_SMOKE_CONFIRM=1 \
+OPES_BASE_URL=http://127.0.0.1:18082 \
+ORQUESTA_CODEX_COMMAND="$(command -v codex)" \
+ORQUESTA_CODEX_HOME="$HOME" \
+ORQUESTA_CODEX_CODE_HOME="${CODEX_HOME:-$HOME/.codex}" \
+ORQUESTA_CODEX_PATH="$PATH" \
+ORQUESTA_CODEX_MODEL=gpt-5.5 \
+ORQUESTA_CODEX_REASONING_EFFORT=xhigh \
+ORQUESTA_OPES_AGENT_SMOKE_TIMEOUT_SECONDS=900 \
+scripts/smoke_opes_external_work_agent_real.sh
+```
+
+El script conserva evidencias por defecto bajo:
+
+```text
+/tmp/orquesta-opes-agent-smoke/<SMOKE_ID>/out
+```
+
+## Evidencias Esperadas
+
+- `external_work_run_response.json` contiene `run_ref` y
+  `director_question_ref`.
+- `opes_job_response.json` contiene `job.id` y `execution_mode=external`.
+- `stats_response_final.json` muestra el job externo con proceso, progreso y
+  uso si el agente llego a arrancar.
+- `opes_artifacts_final.json` o `opes_blocks_final.json` contiene al menos un
+  resultado.
+- `summary.txt` incluye `run_ref`, `job_ref`, conteo de artefactos y bloques.
+
+## Guardas
+
+- El smoke exige `ORQUESTA_OPES_AGENT_SMOKE_CONFIRM=1` porque consume cuota real.
+- Orquesta arranca un servidor temporal y lo apaga por
+  `/api/v0/server/shutdown`.
+- El smoke no llama a `/api/v0/apps/director`; si aparece un director inicial
+  en runtime, la prueba debe considerarse fallida aunque OPES reciba artefacto.
+- El paquete enviado al agente incluye temario, esquema, objetivo, contexto
+  vecino, fuentes y longitud esperada; no se manda un parrafo aislado.
+- Las refs siguen siendo opacas y compactas.
+- Si no aparece artefacto antes del timeout, el fallo es valido: hay que leer
+  `stats_response_*.json`, logs del servidor y runtime del agente conservados.
+
+## No Objetivos
+
+- No prueba el ensamblado completo de un tema de 50 folios.
+- No evalua calidad academica final; solo valida orquestacion real y entrega.
+- No selecciona modelos dentro del core: modelo y esfuerzo entran por entorno.

@@ -36,6 +36,7 @@ Campos:
 - `ServerShutdown`;
 - `AutoprogrammingValidateRequest`.
 - `DomainWork`.
+- `ExternalWorkRun`.
 
 ## Rutas estables
 
@@ -53,6 +54,7 @@ Campos:
 - `RouteAutoprogrammingValidateRequestV0`: `/api/v0/autoprogramming/validate-request`;
 - `RouteServerShutdownV0`: `/api/v0/server/shutdown`.
 - `RouteDomainWorkV0`: `/api/v0/domain-work`.
+- `RouteExternalWorkRunV0`: `/api/v0/external-work/run`.
 
 `RouteDirectorStatsPageV0` y `RouteDirectorStatsV0` son rutas separadas: la
 primera apunta al handler web inyectado y la segunda al contrato REST que
@@ -70,6 +72,10 @@ gateway no conoce pausa, parada, checkpoint, procesos ni runtime.
 `RouteDomainWorkV0` apunta al contrato REST/MCP de trabajo de dominio externo.
 El gateway solo registra el handler inyectado; no conoce OPES, contratos de
 dominio, conectores REST, DB, runtime ni proveedores.
+
+`RouteExternalWorkRunV0` apunta al contrato REST/MCP que crea un run operativo
+para un trabajo externo ya definido. El gateway no crea runs, no abre fases y no
+encola por si mismo; solo monta el handler inyectado.
 
 ## Invariantes
 

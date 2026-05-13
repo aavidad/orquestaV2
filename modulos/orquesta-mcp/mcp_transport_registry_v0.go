@@ -59,6 +59,7 @@ type MCPTransportBindingsV0 struct {
 	RunQueuePriority     MCPTransportRunQueuePriorityExecutorV0
 	ServerShutdown       MCPTransportServerShutdownExecutorV0
 	DomainWork           MCPDomainWorkExecutorPortV0
+	ExternalWorkRun      MCPTransportExternalWorkRunExecutorV0
 	OperatorStatus       operator.OperatorMCPStatusPortV0
 	OperatorBurst        operator.OperatorMCPBurstPortV0
 	OperatorOutbox       operator.OperatorMCPOutboxPortV0
@@ -118,6 +119,13 @@ type MCPTransportServerShutdownExecutorV0 interface {
 	) (MCPServerShutdownToolResultV0, error)
 }
 
+type MCPTransportExternalWorkRunExecutorV0 interface {
+	Execute(
+		context.Context,
+		MCPExternalWorkRunToolInputV0,
+	) (MCPExternalWorkRunToolResultV0, error)
+}
+
 type MCPTransportToolErrorV0 struct {
 	Estado    string `json:"estado"`
 	Tool      string `json:"tool"`
@@ -173,6 +181,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 	runQueue := MCPRunQueuePriorityDescriptorV0()
 	serverShutdown := MCPServerShutdownDescriptorV0()
 	domainWork := MCPDomainWorkDescriptorV0()
+	externalWorkRun := MCPExternalWorkRunDescriptorV0()
 	return []MCPTransportToolEnvelopeV0{
 		mcpTransportToolEnvelopeV0(nueva.Name, nueva.Version, nueva.ResourceURI, nueva.InputSchema, nueva.Output, mcpNuevaAppTransportHandlerV0(bindings.NuevaApp)),
 		mcpTransportToolEnvelopeV0(director.Name, director.Version, director.ResourceURI, director.InputSchema, director.Output, mcpArrancarDirectorAppTransportHandlerV0(bindings.ArrancarDirector)),
@@ -188,6 +197,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 		mcpTransportToolEnvelopeV0(runQueue.Name, runQueue.Version, runQueue.ResourceURI, runQueue.InputSchema, runQueue.Output, mcpRunQueuePriorityTransportHandlerV0(bindings.RunQueuePriority)),
 		mcpTransportToolEnvelopeV0(serverShutdown.Name, serverShutdown.Version, serverShutdown.ResourceURI, serverShutdown.InputSchema, serverShutdown.Output, mcpServerShutdownTransportHandlerV0(bindings.ServerShutdown)),
 		mcpTransportToolEnvelopeV0(domainWork.Name, domainWork.Version, domainWork.ResourceURI, domainWork.InputSchema, domainWork.Output, mcpDomainWorkTransportHandlerV0(bindings.DomainWork)),
+		mcpTransportToolEnvelopeV0(externalWorkRun.Name, externalWorkRun.Version, externalWorkRun.ResourceURI, externalWorkRun.InputSchema, externalWorkRun.Output, mcpExternalWorkRunTransportHandlerV0(bindings.ExternalWorkRun)),
 		mcpOperatorTransportToolV0(operator.OperatorMCPStatusToolNameV0, bindings.OperatorStatus),
 		mcpOperatorTransportToolV0(operator.OperatorMCPBurstToolNameV0, bindings.OperatorBurst),
 		mcpOperatorTransportToolV0(operator.OperatorMCPOutboxToolNameV0, bindings.OperatorOutbox),

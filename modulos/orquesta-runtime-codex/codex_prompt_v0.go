@@ -59,6 +59,9 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString(packet.DeliveryRefs.AckRef)
 	b.WriteString(" <status>. Incumplir este protocolo invalida la entrega.\n")
 	b.WriteString("Si falta contexto, no inventes: escribe una nota CONSULTA AL DIRECTOR en el ACK.\n")
+	if codexPacketHasRequiredTruncatedContextV0(packet) {
+		b.WriteString("CONTEXTO TRUNCADO REQUERIDO: agent_packet.context contiene entradas required=true y truncated=true. No completes salvo que puedas resolverlo con refs/materializacion externa; si completas, notes debe incluir contexto_truncado_resuelto: <motivo>. Si no, usa status failed y CONSULTA AL DIRECTOR.\n")
+	}
 	b.WriteString("Aplica arquitectura hexagonal e i18n si la tarea genera app o UI.\n")
 	b.WriteString("La persistencia concreta solo pertenece a la app generada si la tarea la pide; Orquesta no usa DB por defecto.\n")
 	b.WriteString("Ejecuta las pruebas obligatorias que aparezcan en el paquete si son razonables para el workdir.\n")
@@ -171,4 +174,15 @@ func cleanControlPathV0(value string, fallback string) string {
 		return fallback
 	}
 	return filepath.Clean(trimmed)
+}
+
+func codexPacketHasRequiredTruncatedContextV0(
+	packet orquestaruntime.AgentStartPacketV0,
+) bool {
+	for _, entry := range packet.Context.Entries {
+		if entry.Required && entry.Truncated {
+			return true
+		}
+	}
+	return false
 }

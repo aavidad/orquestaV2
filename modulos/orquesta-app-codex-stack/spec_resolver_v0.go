@@ -42,6 +42,11 @@ func (resolver CodexLaunchSpecResolverV0) ResolveExternalAgentLaunchSpecV0(
 	if err != nil {
 		return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{}, err
 	}
+	contextBundle, err := resolver.agentContextV0(ctx, *inbound.Payload, area, task)
+	if err != nil {
+		return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{}, err
+	}
+	task = taskWithContextGuardV0(task, contextBundle)
 	spec := resolver.launchSpecV0(
 		agentRef,
 		strings.TrimSpace(inbound.CorrelationID),
@@ -49,10 +54,7 @@ func (resolver CodexLaunchSpecResolverV0) ResolveExternalAgentLaunchSpecV0(
 		area,
 		task,
 	)
-	spec.AgentPacket.Context, err = resolver.agentContextV0(ctx, *inbound.Payload, area, task)
-	if err != nil {
-		return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{}, err
-	}
+	spec.AgentPacket.Context = contextBundle
 	profile := codexProfileV0(resolver.Config, runtimeDir)
 	return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{
 		Spec:            spec,

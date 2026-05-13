@@ -42,7 +42,6 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 			ArtifactType:   domainWorkArtifactTypeForWorkKindV0(work.WorkKind),
 			Summary:        input.Observation.Summary,
 			PayloadFields:  fields,
-			PayloadRefs:    append([]string(nil), input.Ack.Files...),
 			ExternalRefs:   domainWorkArtifactExternalRefsV0(input),
 			EvidenceRefs:   append([]string{input.Descriptor.DescriptorRef}, input.Observation.EvidenceRefs...),
 			CompleteJob:    true,

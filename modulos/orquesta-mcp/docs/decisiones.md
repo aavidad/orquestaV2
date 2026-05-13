@@ -18,6 +18,21 @@ Estado:
 
 ```text
 Fecha: 2026-05-13
+Decision: Exponer `orquesta.external_work.run.v0` como tool MCP/REST propio.
+Motivo: las apps externas como OPES necesitan pedir ejecucion de un job ya
+definido sin arrancar el flujo de nueva app ni un director LLM inicial.
+Alternativas: reutilizar `/api/v0/apps/director`; llamar a `request_change`
+despues de crear el run manualmente; crear un endpoint OPES especifico. Se
+descartan porque mezclan responsabilidades o acoplan Orquesta a una app.
+Impacto: MCP delega en `orquesta-external-work-run`, queda opt-in por executor
+inyectado y publica `POST /api/v0/external-work/run`.
+Contratos afectados: mcp.tool.orquesta.external_work.run.v0;
+rest.bridge.orquesta.external_work.run.v0; StartExternalWorkRunV0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-13
 Decision: `orquesta.runs.control.v0` puede resolver la run asociada a
 `external_job_ref`.
 Motivo: OPES y otras apps externas pueden necesitar pausar, reanudar, parar o
@@ -386,5 +401,20 @@ publica como `POST /api/v0/server/shutdown`. El proceso servidor solo debe
 recibir senal final cuando `shutdown_ready=true`.
 Contratos afectados: mcp.tool.orquesta.server.shutdown.v0,
 orquesta://contracts/server-shutdown/v0, /api/v0/server/shutdown.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-05-13
+Decision: Las stats del director recuperan la run canonica por
+`external_job_ref` si el cliente envia un `run_ref` obsoleto.
+Motivo: los trabajos externos pueden normalizar `run_ref` al aceptar la orden.
+La web, OPES o un smoke antiguo pueden conservar el ref preliminar; fallar sin
+intentar resolver por job externo rompe observabilidad.
+Impacto: `orquesta.director.stats.v0` mantiene `run_ref` como preferente, pero
+si no carga y existe `external_job_ref`, consulta el puerto externo sin filtrar
+por el ref obsoleto y continua con la run canonica.
+Contratos afectados: mcp.tool.orquesta.director.stats.v0;
+rest.bridge.orquesta.director.stats.v0.
 Estado: aceptada localmente.
 ```
