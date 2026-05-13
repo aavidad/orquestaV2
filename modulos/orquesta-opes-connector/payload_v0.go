@@ -1,6 +1,7 @@
 package orquestaopesconnector
 
 import (
+	"encoding/json"
 	"net/url"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -85,6 +86,13 @@ func opesArtifactPayloadV0(
 func domainWorkFieldsToObjectV0(fields []orquestadomainwork.DomainWorkFieldV0) map[string]any {
 	out := map[string]any{}
 	for _, field := range fields {
+		if len(field.ValueJSON) > 0 {
+			var value any
+			if err := json.Unmarshal(field.ValueJSON, &value); err == nil {
+				out[field.Name] = value
+				continue
+			}
+		}
 		if len(field.Values) > 0 {
 			out[field.Name] = append([]string(nil), field.Values...)
 			continue

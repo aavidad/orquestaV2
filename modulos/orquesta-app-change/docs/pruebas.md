@@ -17,6 +17,8 @@ Cobertura esperada:
   director;
 - write-set inseguro se rechaza;
 - puertos ausentes no producen aceptacion falsa.
+- `external_work.input_fields` se normaliza, rechaza nombres no compactos y se
+  preserva como `DomainWorkJobRequestV0.InputFields`.
 - MCP/REST/web delegan sin `cmd`, DB ni runtime.
 - El stack registra el cambio como pregunta del director, outbox durable y, tras
   `DrainRunV0`, microtarea programable cuando el cambio es concreto.

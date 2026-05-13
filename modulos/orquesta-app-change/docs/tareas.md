@@ -82,3 +82,26 @@ Validacion:
 
 - `TestRequestAppChangeV0RechazaExternalWorkNoCompacto`;
 - `TestReceiveAppChangeIntentEventV0RegistraSolicitudDeCambio`.
+
+## APP-CHANGE-006
+
+Objetivo: permitir que `external_work` transporte campos de entrada de dominio
+sin inflar el contexto global.
+
+Estado: hecho.
+
+Contrato:
+
+- `AppChangeExternalWorkV0.input_fields` usa
+  `orquesta-domain-work.DomainWorkFieldV0`;
+- los campos se normalizan y compactan al entrar por solicitud o evento;
+- los nombres de campo no compactos invalidan la solicitud;
+- `DomainWorkJobRequestFromAppChangeV0` conserva esos campos como
+  `DomainWorkJobRequestV0.InputFields`.
+
+Validacion:
+
+- `TestRequestAppChangeV0RechazaExternalWorkInputFieldNoCompacto`;
+- `TestReceiveAppChangeIntentEventV0RegistraSolicitudDeCambio`;
+- `TestDomainWorkJobRequestFromAppChangeV0ConvierteExternalWork`;
+- `go test -count=1 ./modulos/orquesta-app-change`.

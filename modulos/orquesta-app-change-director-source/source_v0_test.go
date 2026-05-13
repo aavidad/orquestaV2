@@ -89,9 +89,12 @@ func TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno(t *testing.T) {
 	if contract == nil ||
 		len(contract.FunctionNames) != 1 ||
 		contract.FunctionNames[0] != "ApplyExternalDomainWorkV0" ||
-		task.Title != "Resolver trabajo documental externo" ||
-		task.Summary == "" ||
-		!stringInSetV0(task.RequiredTests, "validar contrato externo de dominio") {
+		task.Title != "Resolver trabajo documental OPES" ||
+		task.Summary != "Resolver trabajo documental con paquete de dominio suficiente: temario, esquema, objetivo, fuentes, criterios y longitud si llegan." ||
+		!stringInSetV0(task.AcceptanceCriteria, "Tratar el paquete de dominio OPES como entrada suficiente, no como contexto minimo.") ||
+		!stringInSetV0(task.AcceptanceCriteria, "Usar temario, esquema, objetivo, fuentes, criterios y longitud si llegan en input_fields.") ||
+		!stringInSetV0(task.RequiredTests, "validar contrato externo de dominio") ||
+		!stringInSetV0(task.RequiredTests, "validar paquete documental de dominio") {
 		t.Fatalf("contract=%+v task=%+v", contract, task)
 	}
 }
@@ -121,9 +124,14 @@ func TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExternoSinWriteSetLocal
 		t.Fatalf("decisions=%+v", decisions)
 	}
 	task := decisions[6].CreateMicrotask.Task
-	if task.Title != "Resolver bloque documental externo" ||
+	if task.Title != "Redactar bloque documental OPES" ||
+		task.Summary != "Redactar bloque con paquete de dominio suficiente: temario completo, esquema, objetivo de capitulo, posicion de bloque, vecinos, fuentes, criterios y longitud si llegan." ||
 		!stringInSetV0(task.WriteSet, "external/opes/draft_content_block") ||
-		!stringInSetV0(task.WriteSet, "external/opes/opes-job-001") {
+		!stringInSetV0(task.WriteSet, "external/opes/opes-job-001") ||
+		!stringInSetV0(task.AcceptanceCriteria, "Tratar el paquete de dominio OPES como entrada suficiente, no como contexto minimo.") ||
+		!stringInSetV0(task.AcceptanceCriteria, "Para draft_content_block, usar temario completo, esquema, objetivo de capitulo, posicion de bloque, vecinos, fuentes, criterios y longitud si llegan en input_fields.") ||
+		!stringInSetV0(task.RequiredTests, "validar paquete de bloque documental") ||
+		!stringInSetV0(task.RequiredTests, "validar fuentes, criterios y longitud si llegan") {
 		t.Fatalf("task=%+v", task)
 	}
 }

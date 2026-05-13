@@ -59,6 +59,25 @@ Impacto: la fuente solo consume refs compactas ya guardadas en
 `AppChangeRequestV0.external_work`; las decisiones siguen validadas por el
 contrato comun del director.
 
+## Paquete documental externo suficiente
+
+Decision: Para `draft_content_block` y trabajos documentales, la fuente declara
+en `title`, `summary`, `criteria` y `required_tests` que el agente debe resolver
+el contrato con un paquete de dominio suficiente, no con contexto minimo.
+
+Motivo: OPES puede entregar temario completo, esquema, objetivo de capitulo,
+posicion del bloque, vecinos, fuentes, criterios y longitud. Si esos campos
+llegan por `input_fields`, la microtarea debe exigir que se usen y que no se
+inventen valores ausentes.
+
+Alternativas descartadas: esconder esa expectativa en la capa de ejecucion,
+acoplar la fuente al nucleo de OPES o relajar los criterios de cierre de
+trabajos documentales.
+
+Impacto: mientras `AppChangeExternalWorkV0.input_fields` no exista, la fuente
+mantiene compatibilidad y no lo lee. Cuando exista, el contrato esperado es una
+lista opcional de campos `{name,value,values}` con nombres de dominio estables.
+
 ## Trabajo externo sin write-set local
 
 Decision: Un `external_work` puede crear microtarea aunque

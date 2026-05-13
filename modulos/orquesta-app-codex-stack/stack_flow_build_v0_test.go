@@ -89,6 +89,9 @@ func mustBuildCodexStackWithDomainWorkForTestV0(
 			FileEvidence: orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 		},
 		DomainWork: domainWork,
+		DomainDelivery: DomainWorkDeliveryBridgeConfigV0{
+			Enabled: domainWork != nil,
+		},
 	})
 	if err != nil {
 		t.Fatalf("BuildStackV0: %v", err)

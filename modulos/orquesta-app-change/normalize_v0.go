@@ -1,6 +1,10 @@
 package orquestaappchange
 
-import "strings"
+import (
+	"strings"
+
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+)
 
 func normalizeAppChangeRequestV0(request AppChangeRequestV0) AppChangeRequestV0 {
 	request.SchemaVersion = strings.TrimSpace(request.SchemaVersion)
@@ -40,17 +44,32 @@ func normalizeAppChangeExternalWorkV0(
 	}
 	normalized := AppChangeExternalWorkV0{
 		ProjectRef:    strings.TrimSpace(work.ProjectRef),
+		JobRef:        strings.TrimSpace(work.JobRef),
 		InterfaceRefs: compactAppChangeStringsV0(work.InterfaceRefs),
 		WorkKind:      strings.TrimSpace(work.WorkKind),
 		WorkRefs:      compactAppChangeStringsV0(work.WorkRefs),
+		InputFields:   normalizeAppChangeExternalWorkFieldsV0(work.InputFields),
 	}
 	if normalized.ProjectRef == "" &&
+		normalized.JobRef == "" &&
 		len(normalized.InterfaceRefs) == 0 &&
 		normalized.WorkKind == "" &&
-		len(normalized.WorkRefs) == 0 {
+		len(normalized.WorkRefs) == 0 &&
+		len(normalized.InputFields) == 0 {
 		return nil
 	}
 	return &normalized
+}
+
+func normalizeAppChangeExternalWorkFieldsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	request := orquestadomainwork.NormalizeDomainWorkJobRequestV0(
+		orquestadomainwork.DomainWorkJobRequestV0{
+			InputFields: fields,
+		},
+	)
+	return request.InputFields
 }
 
 func compactAppChangeStringsV0(values []string) []string {

@@ -19,8 +19,9 @@ func DomainWorkJobRequestFromAppChangeV0(
 			DomainRef:          work.ProjectRef,
 			InterfaceRefs:      append([]string(nil), work.InterfaceRefs...),
 			WorkKind:           work.WorkKind,
-			WorkRefs:           append([]string(nil), work.WorkRefs...),
+			WorkRefs:           domainWorkRefsFromExternalWorkV0(work),
 			Objective:          request.UserIntent,
+			InputFields:        copyDomainWorkFieldsFromAppChangeV0(work.InputFields),
 			InputRefs:          append([]string(nil), request.CurrentStateRefs...),
 			Constraints:        append([]string(nil), request.Constraints...),
 			AcceptanceCriteria: append([]string(nil), request.AcceptanceCriteria...),
@@ -28,6 +29,38 @@ func DomainWorkJobRequestFromAppChangeV0(
 			EvidenceRefs:       append([]string(nil), request.MetadataRefs...),
 		},
 	), true
+}
+
+func domainWorkRefsFromExternalWorkV0(
+	work *AppChangeExternalWorkV0,
+) []string {
+	if work == nil {
+		return []string{}
+	}
+	refs := make([]string, 0, len(work.WorkRefs)+1)
+	if work.JobRef != "" {
+		refs = append(refs, work.JobRef)
+	}
+	refs = append(refs, work.WorkRefs...)
+	return compactAppChangeStringsV0(refs)
+}
+
+func copyDomainWorkFieldsFromAppChangeV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	out := make([]orquestadomainwork.DomainWorkFieldV0, 0, len(fields))
+	for _, field := range fields {
+		out = append(out, orquestadomainwork.DomainWorkFieldV0{
+			Name:      field.Name,
+			Value:     field.Value,
+			Values:    append([]string(nil), field.Values...),
+			ValueJSON: append([]byte(nil), field.ValueJSON...),
+		})
+	}
+	if out == nil {
+		return []orquestadomainwork.DomainWorkFieldV0{}
+	}
+	return out
 }
 
 func domainWorkExternalRefsFromAppChangeV0(

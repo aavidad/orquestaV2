@@ -3,6 +3,8 @@ package orquestaappchange
 import (
 	"context"
 	"testing"
+
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 )
 
 func TestReceiveAppChangeIntentEventV0RegistraSolicitudDeCambio(t *testing.T) {
@@ -33,7 +35,12 @@ func TestReceiveAppChangeIntentEventV0RegistraSolicitudDeCambio(t *testing.T) {
 		records[0].Request.UserIntent != "Quiero modificar la vista semanal." ||
 		records[0].ReceivedAt != "2026-05-10T10:20:00Z" ||
 		records[0].Request.ExternalWork == nil ||
-		records[0].Request.ExternalWork.WorkKind != "documentation" {
+		records[0].Request.ExternalWork.WorkKind != "documentation" ||
+		len(records[0].Request.ExternalWork.InputFields) != 2 ||
+		records[0].Request.ExternalWork.InputFields[0].Name != "topic_ref" ||
+		records[0].Request.ExternalWork.InputFields[0].Value != "topic-ref-docs" ||
+		len(records[0].Request.ExternalWork.InputFields[1].Values) != 1 ||
+		records[0].Request.ExternalWork.InputFields[1].Values[0] != "source-ref-law-001" {
 		t.Fatalf("records=%+v", records)
 	}
 }
@@ -101,6 +108,13 @@ func validAppChangeIntentEventForTestV0() AppChangeIntentEventV0 {
 			InterfaceRefs: []string{"mcp-contract-ref-agenda-v0"},
 			WorkKind:      "documentation",
 			WorkRefs:      []string{"domain-work-ref-agenda-docs"},
+			InputFields: []orquestadomainwork.DomainWorkFieldV0{
+				{Name: " topic_ref ", Value: " topic-ref-docs "},
+				{
+					Name:   "source_refs",
+					Values: []string{" source-ref-law-001 ", "source-ref-law-001"},
+				},
+			},
 		},
 	}
 }

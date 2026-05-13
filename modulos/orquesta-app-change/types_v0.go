@@ -1,6 +1,10 @@
 package orquestaappchange
 
-import "context"
+import (
+	"context"
+
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+)
 
 const (
 	AppChangeRequestSchemaV0 = "app_change_request.v0"
@@ -19,6 +23,7 @@ const (
 	ErrAppChangeCurrentStateRefV0       = "app_change_current_state_ref_invalid"
 	ErrAppChangeMetadataRefV0           = "app_change_metadata_ref_invalid"
 	ErrAppChangeExternalWorkRefV0       = "app_change_external_work_ref_invalid"
+	ErrAppChangeExternalWorkFieldNameV0 = "app_change_external_work_field_name_invalid"
 	ErrAppChangeIntentEventSchemaV0     = "app_change_intent_event_schema_invalid"
 	ErrAppChangeIntentEventRefV0        = "app_change_intent_event_ref_required"
 	ErrAppChangeIntentEventRefInvalidV0 = "app_change_intent_event_ref_invalid"
@@ -47,10 +52,12 @@ type AppChangeRequestV0 struct {
 }
 
 type AppChangeExternalWorkV0 struct {
-	ProjectRef    string   `json:"project_ref,omitempty"`
-	InterfaceRefs []string `json:"interface_refs,omitempty"`
-	WorkKind      string   `json:"work_kind,omitempty"`
-	WorkRefs      []string `json:"work_refs,omitempty"`
+	ProjectRef    string                                 `json:"project_ref,omitempty"`
+	JobRef        string                                 `json:"job_ref,omitempty"`
+	InterfaceRefs []string                               `json:"interface_refs,omitempty"`
+	WorkKind      string                                 `json:"work_kind,omitempty"`
+	WorkRefs      []string                               `json:"work_refs,omitempty"`
+	InputFields   []orquestadomainwork.DomainWorkFieldV0 `json:"input_fields,omitempty"`
 }
 
 type AppChangeRecordV0 struct {

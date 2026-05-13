@@ -1,6 +1,25 @@
 # Decisiones: orquesta-app-codex-stack
 
 ```text
+Fecha: 2026-05-13
+Decision: Las entregas de trabajos de dominio externo se devuelven desde el
+stack mediante un bridge hexagonal de artefactos, no desde el core.
+Motivo: OPES y cualquier otra app de dominio deben seguir siendo independientes
+de Orquesta. El core solo sabe registrar entregas de agentes; la composition es
+la que conoce el conector `orquesta-domain-work`, el job externo y el contrato
+REST/MCP del dominio propietario. Meter el envio de artefactos en core mezclaria
+workflow con integracion de dominio.
+Impacto: `DrainRunV0` intenta reenviar artefactos externos ya registrados y
+tambien los recien observados. El builder exige `external_work.job_ref` explicito
+y convierte el ACK validado en `DomainWorkArtifactSubmissionV0`; el ledger evita
+doble envio dentro del proceso y la `idempotency_key` determinista permite que
+el dominio deduplique reintentos. El contexto del agente se materializa desde
+`external_work.input_fields`, incluidos campos `value_json`, para que OPES pueda
+pasar paquetes editoriales suficientes sin exponer internals ni compartir DB.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-12
 Decision: El smoke real de app completa corta por causa cuando el proyecto
 compila pero falta un ACK de programacion.

@@ -57,6 +57,33 @@ Reglas:
 - El bridge `domain_work` solo se activa si el borde superior inyecta un
   executor; este stack no importa OPES ni crea clientes REST de dominio.
 
+## Bridge de entregas a dominio externo
+
+Contrato opt-in:
+
+```text
+ACK Codex validado
+  -> DeliveryRegistered en workflow
+  -> DomainWorkArtifactSubmissionV0 construido por builder inyectado/default
+  -> DomainWork submit_artifact
+  -> ledger idempotente por delivery_ref
+```
+
+Invariantes:
+
+- vive solo en `orquesta-app-codex-stack`; el core no conoce OPES ni
+  `DomainWork`;
+- solo actua si `DomainWorkDeliveryBridgeConfigV0.Enabled=true` y existe
+  executor `DomainWork`;
+- usa `external_work.job_ref` para devolver artefactos, sin inferir IDs desde
+  prefijos de OPES;
+- si una delivery ya estaba registrada y el submit no ocurrio, el siguiente
+  `DrainRunV0` reintenta mediante ledger e `idempotency_key` deterministica;
+- el builder default mapea `draft_content_block` a `content_block`,
+  revisiones a `block_revision` y trabajos de fuentes a `source`;
+- los payloads de dominio salen de `external_work.input_fields` y del fichero
+  permitido por el ACK, no del core ni de internals de OPES.
+
 ## Shutdown cooperativo de agentes Codex
 
 Contrato interno del stack:
@@ -136,9 +163,12 @@ Invariantes:
   evidencia compacta antes de cerrar el cambio.
 - Ningun transporte puede ampliar el `allowed_write_set` despues de validar la
   solicitud.
-- `external_work` solo puede contener `project_ref`, `interface_refs`,
-  `work_kind` y `work_refs` compactas; no contiene rutas reales, DB, proveedor,
-  token, prompt ni contrato interno de la app propietaria.
+- `external_work` solo puede contener `project_ref`, `job_ref`, `interface_refs`,
+  `work_kind`, `work_refs` e `input_fields` compactos; no contiene rutas reales,
+  DB, proveedor, token, prompt ni contrato interno de la app propietaria.
+- `input_fields` es el paquete de dominio curado para el agente. Puede usar
+  `value`, `values` o `value_json`; el stack lo materializa en el contexto del
+  agente y lo reenvia como payload de artefacto cuando corresponde.
 
 Flujo por transportes:
 

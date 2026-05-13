@@ -10,6 +10,10 @@ func appChangeQuestionRefV0(changeRef string) string {
 	return "question-ref-app-change-" + strings.TrimSpace(changeRef)
 }
 
+func AppChangeTaskRefV0(changeRef string) string {
+	return appChangeRefsV0(changeRef).TaskRef
+}
+
 func appChangeSuffixV0(changeRef string) string {
 	hash := fnv.New32a()
 	_, _ = hash.Write([]byte(strings.TrimSpace(changeRef)))

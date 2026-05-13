@@ -118,7 +118,7 @@ func appChangeMicrotaskDecisionV0(
 			Title:              appChangeTaskTitleV0(request),
 			Summary:            appChangeTaskSummaryV0(request),
 			WriteSet:           appChangeTaskWriteSetV0(request),
-			AcceptanceCriteria: appChangeTaskCriteriaV0(request.AcceptanceCriteria),
+			AcceptanceCriteria: appChangeTaskCriteriaV0(request),
 			RequiredTests:      appChangeTaskRequiredTestsV0(request),
 			FunctionContractRefs: []orquestadirectoragent.DirectorAgentFunctionContractRefV0{{
 				ContractRef:  refs.ContractRef,
@@ -139,8 +139,4 @@ func appChangeBasisDecisionRefV0(
 		}
 	}
 	return refs.DecisionRef, false
-}
-
-func appChangeTaskCriteriaV0(criteria []string) []string {
-	return append([]string{"Mantener arquitectura hexagonal e i18n si aplica."}, criteria...)
 }

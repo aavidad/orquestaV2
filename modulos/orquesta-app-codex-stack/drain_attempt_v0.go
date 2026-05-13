@@ -28,6 +28,9 @@ func (stack StackV0) drainRunAttemptControlV0(
 	if err != nil {
 		return drainRunAttemptControlV0{}, err
 	}
+	if err := stack.submitPendingDomainWorkArtifactsV0(ctx, request, run); err != nil {
+		return drainRunAttemptControlV0{}, err
+	}
 	observations, err := stack.drainAvailableObservationsV0(ctx, request, run)
 	if err != nil {
 		return drainRunAttemptControlV0{}, err
@@ -35,6 +38,9 @@ func (stack StackV0) drainRunAttemptControlV0(
 	if len(observations) > 0 {
 		run, err = stack.applyDrainObservationsV0(ctx, request, observations)
 		if err != nil {
+			return drainRunAttemptControlV0{}, err
+		}
+		if err := stack.submitDomainWorkArtifactsAfterDrainObservationsV0(ctx, request, run, observations); err != nil {
 			return drainRunAttemptControlV0{}, err
 		}
 		if drainRunHasPendingExternalAgentsV0(run) {

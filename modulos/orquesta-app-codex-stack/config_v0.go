@@ -31,6 +31,7 @@ type ConfigV0 struct {
 	ReviewGate     ReviewGateConfigV0
 	AppChange      orquestaappchange.AppChangePortsV0
 	DomainWork     orquestamcp.MCPDomainWorkExecutorPortV0
+	DomainDelivery DomainWorkDeliveryBridgeConfigV0
 }
 
 type StoresV0 struct {

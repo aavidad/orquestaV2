@@ -108,6 +108,9 @@ func buildStackFromEnvV0(
 			FileEvidence: orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 		},
 		DomainWork: domainWorkExecutorFromEnvV0(),
+		DomainDelivery: orquestaappcodexstack.DomainWorkDeliveryBridgeConfigV0{
+			Enabled: strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BASE_URL")) != "",
+		},
 	})
 }
 

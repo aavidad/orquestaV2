@@ -3,6 +3,8 @@ package orquestaappchange
 import (
 	"context"
 	"testing"
+
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 )
 
 func TestRequestAppChangeV0PersisteYNotificaDirector(t *testing.T) {
@@ -107,6 +109,27 @@ func TestRequestAppChangeV0RechazaExternalWorkNoCompacto(t *testing.T) {
 	}
 }
 
+func TestRequestAppChangeV0RechazaExternalWorkInputFieldNoCompacto(t *testing.T) {
+	request := validAppChangeRequestForTestV0()
+	request.ExternalWork.InputFields = []orquestadomainwork.DomainWorkFieldV0{
+		{Name: "topic id", Value: "topic-ref-week-view"},
+	}
+
+	result, err := RequestAppChangeV0(
+		context.Background(),
+		request,
+		AppChangePortsV0{Store: &fakeAppChangeStoreV0{}, DirectorNotifier: &fakeAppChangeNotifierV0{}},
+	)
+	if err != nil {
+		t.Fatalf("RequestAppChangeV0: %v", err)
+	}
+	if result.Status != AppChangeStatusInvalidV0 ||
+		result.Issues[0].Code != ErrAppChangeExternalWorkFieldNameV0 ||
+		result.Issues[0].Field != "external_work.input_fields" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestRequestAppChangeV0RequierePuertos(t *testing.T) {
 	result, err := RequestAppChangeV0(context.Background(), validAppChangeRequestForTestV0(), AppChangePortsV0{})
 	if err != nil {
@@ -133,9 +156,14 @@ func validAppChangeRequestForTestV0() AppChangeRequestV0 {
 		AllowedWriteSet:    []string{"web/agenda", "internal/agenda/delivery"},
 		ExternalWork: &AppChangeExternalWorkV0{
 			ProjectRef:    "project-ref-agenda",
+			JobRef:        "job-ref-agenda-week-view",
 			InterfaceRefs: []string{"mcp-contract-ref-agenda-v0"},
 			WorkKind:      "programming",
 			WorkRefs:      []string{"domain-work-ref-agenda-week-view"},
+			InputFields: []orquestadomainwork.DomainWorkFieldV0{
+				{Name: "topic_ref", Value: "topic-ref-week-view"},
+				{Name: "source_refs", Values: []string{"source-ref-calendar"}},
+			},
 		},
 	}
 }

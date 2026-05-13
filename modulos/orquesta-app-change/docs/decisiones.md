@@ -52,6 +52,35 @@ Estado: aceptada localmente.
 
 ```text
 Fecha: 2026-05-13
+Decision: `external_work` expone `job_ref` como referencia opaca opcional del
+trabajo externo.
+Motivo: el retorno de artefactos necesita un job estable y no debe inferirlo
+desde `work_refs` ni desde prefijos de una app concreta como OPES.
+Alternativas: usar el primer `work_ref`; crear reglas por dominio externo;
+consultar internals de la app propietaria.
+Impacto: si la app externa ya creo el job, envia `job_ref`; Orquesta lo
+normaliza y lo conserva como ref de trabajo para trazabilidad y devolucion de
+artefactos.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-05-13
+Decision: `external_work` puede transportar `input_fields` opcionales usando
+`orquesta-domain-work.DomainWorkFieldV0`.
+Motivo: OPES y otras apps externas necesitan pasar contexto de dominio acotado
+al trabajo externo sin inflar el contexto global ni convertirlo en JSON libre.
+Alternativas: duplicar un DTO de campos en app-change; meter todo en
+`user_intent`; ampliar refs globales con datos de dominio.
+Impacto: app-change normaliza esos campos con el contrato de domain-work,
+rechaza nombres no compactos y los conserva como `InputFields` al construir
+`DomainWorkJobRequestV0`. La semantica de cada campo sigue perteneciendo al
+dominio externo.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-05-13
 Decision: Las apps externas declaran trabajo de dominio mediante
 `external_work` opaco, no integrando su nucleo en Orquesta.
 Motivo: OPES u otra app de dominio debe seguir siendo propietaria de sus

@@ -2,9 +2,9 @@ package orquestaappcodexstack
 
 import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func capacityDispatcherV0(config ConfigV0) orquestacionnucleoapp.OutboxDispatcherBindingV0 {
@@ -99,8 +99,9 @@ func recordingSpecResolverV0(
 ) orquestaruntimecodexdelivery.CodexReceiptRecordingSpecResolverV0 {
 	return orquestaruntimecodexdelivery.CodexReceiptRecordingSpecResolverV0{
 		Inner: CodexLaunchSpecResolverV0{
-			Config:    config.Codex,
-			TaskStore: config.Stores.TaskStore,
+			Config:         config.Codex,
+			TaskStore:      config.Stores.TaskStore,
+			AppChangeStore: config.Stores.AppChangeStore,
 		},
 		Recorder: config.Stores.ReceiptStore,
 		AckPathResolver: orquestaruntimecodexdelivery.AgentScopedCodexReceiptAckPathResolverV0{

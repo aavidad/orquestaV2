@@ -11,7 +11,9 @@ Responsabilidad:
 - notificar al director por puerto inyectado;
 - devolver un resultado compacto apto para web, REST y MCP.
 - transportar `external_work` como refs opacas cuando la solicitud representa
-  trabajo de dominio de una app externa.
+  trabajo de dominio de una app externa, incluyendo `job_ref` e
+  `input_fields` opcionales con nombres compactos cuando hacen falta datos de
+  dominio acotados.
 
 No decide agentes, modelos, DB, runtime ni write-sets finales. Eso lo decide el
 director al reentrar en Orquesta.

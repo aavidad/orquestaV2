@@ -156,6 +156,11 @@ El conector futuro debe adaptar OPES a:
 `domain_ref` debe ser `opes`. `interface_refs` debe apuntar a refs publicas
 REST/MCP, no a rutas locales ni internals de OPES.
 
+`DomainWorkFieldV0.value_json` se proyecta como JSON estructurado dentro de
+`input` o `payload_json`. Se usa para campos publicos de OPES como
+`topic_outline`, `block_position`, `neighbor_context` o `quality_criteria`
+cuando no bastan `value` ni `values`.
+
 ## Estado
 
 Aceptado como contrato local. Implementado primer corte REST para crear jobs y

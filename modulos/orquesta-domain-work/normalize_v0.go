@@ -1,6 +1,10 @@
 package orquestadomainwork
 
-import "strings"
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+)
 
 func NormalizeDomainWorkJobRequestV0(
 	request DomainWorkJobRequestV0,
@@ -135,14 +139,17 @@ func compactDomainWorkFieldsV0(values []DomainWorkFieldV0) []DomainWorkFieldV0 {
 	out := make([]DomainWorkFieldV0, 0, len(values))
 	for _, value := range values {
 		field := DomainWorkFieldV0{
-			Name:   strings.TrimSpace(value.Name),
-			Value:  strings.TrimSpace(value.Value),
-			Values: compactDomainWorkStringsV0(value.Values),
+			Name:      strings.TrimSpace(value.Name),
+			Value:     strings.TrimSpace(value.Value),
+			Values:    compactDomainWorkStringsV0(value.Values),
+			ValueJSON: normalizeDomainWorkFieldJSONV0(value.ValueJSON),
 		}
-		if field.Name == "" || (field.Value == "" && len(field.Values) == 0) {
+		if field.Name == "" ||
+			(field.Value == "" && len(field.Values) == 0 && len(field.ValueJSON) == 0) {
 			continue
 		}
-		key := field.Name + "\x00" + field.Value + "\x00" + strings.Join(field.Values, "\x00")
+		key := field.Name + "\x00" + field.Value + "\x00" +
+			strings.Join(field.Values, "\x00") + "\x00" + string(field.ValueJSON)
 		if _, ok := seen[key]; ok {
 			continue
 		}
@@ -153,4 +160,20 @@ func compactDomainWorkFieldsV0(values []DomainWorkFieldV0) []DomainWorkFieldV0 {
 		return []DomainWorkFieldV0{}
 	}
 	return out
+}
+
+func normalizeDomainWorkFieldJSONV0(value json.RawMessage) json.RawMessage {
+	trimmed := bytes.TrimSpace(value)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+	var raw any
+	if err := json.Unmarshal(trimmed, &raw); err != nil {
+		return append(json.RawMessage(nil), trimmed...)
+	}
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return append(json.RawMessage(nil), trimmed...)
+	}
+	return append(json.RawMessage(nil), data...)
 }

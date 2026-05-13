@@ -731,3 +731,22 @@ go test ./modulos/orquesta-app-codex-stack -run Test.*Shutdown.* -count=1
 ```
 
 Resultado local 2026-05-13 sin opt-in: `ok`, 0.005s.
+
+Validacion OPES/domain-work 2026-05-13:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack \
+  -run 'TestCodexStackV0OPESExternalWork|TestCodexLaunchSpecResolverV0MaterializaContextoDominioExterno|TestBuildStackV0CableaDomainWorkOptIn' -v
+```
+
+Resultado: `ok`.
+
+Evidencia:
+
+- `external_work.input_fields` llega al `agent_packet.context.entries` como
+  contexto de dominio acotado;
+- una entrega real fake de `draft_content_block` invoca `DomainWork`
+  `submit_artifact`;
+- el artefacto usa `job_ref`, `content_block`, `body` leido desde fichero del
+  ACK y refs externas `run_ref/task_ref/delivery_ref`;
+- el replay se controla por ledger e idempotencia de `delivery_ref`.

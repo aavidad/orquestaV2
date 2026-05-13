@@ -14,13 +14,16 @@ Campos principales:
 - `work_kind`: tipo de trabajo de dominio, sin semantica de programacion;
 - `input_fields`: campos de dominio ya normalizados por un adaptador superior,
   por ejemplo `program_id`, `topic_id`, `level`, `language_code` o
-  `source_refs`;
+  `source_refs`. Cada campo acepta `value` string, `values` lista de strings o
+  `value_json` para objetos/arrays estructurados de dominio como
+  `block_position` o `neighbor_context`;
 - `work_refs`, `input_refs`, `external_refs` y `evidence_refs`: refs compactas.
 
 Invariantes:
 
 - no contiene DB, rutas locales, HOME, OAuth, proveedor, modelo ni runtime;
-- no transporta JSON libre ni payloads sin contrato;
+- no transporta payloads sin contrato; `value_json` solo se permite dentro de
+  campos nombrados y validados por adaptadores de dominio;
 - no decide agentes, capacidad, sesiones ni reintentos;
 - todo conector real queda fuera de este modulo.
 
@@ -34,7 +37,8 @@ Campos principales:
 - `artifact_ref`: artefacto producido por Orquesta;
 - `artifact_type`: tipo de artefacto de dominio;
 - `payload_fields`: campos de resultado normalizados por el adaptador, por
-  ejemplo `title`, `body`, `source_refs` o `stable_id`;
+  ejemplo `title`, `body`, `source_refs` o `stable_id`; tambien aceptan
+  `value_json` cuando el dominio externo requiere estructura;
 - `payload_refs`: referencias a payloads/materializaciones externas;
 - `complete_job`: senal opcional para indicar cierre del job externo.
 

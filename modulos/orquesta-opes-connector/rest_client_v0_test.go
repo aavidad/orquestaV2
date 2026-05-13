@@ -58,6 +58,10 @@ func TestRESTClientV0CreateDomainWorkJobCreaJobExterno(t *testing.T) {
 		received.Input["level"] != "A1/A2" {
 		t.Fatalf("payload=%+v", received)
 	}
+	blockPosition, ok := received.Input["block_position"].(map[string]any)
+	if !ok || blockPosition["block_order"].(float64) != 2 {
+		t.Fatalf("block_position=%#v", received.Input["block_position"])
+	}
 	sourceRefs, ok := received.Input["source_refs"].([]any)
 	if !ok || len(sourceRefs) != 1 || sourceRefs[0] != "boe-ref-001" {
 		t.Fatalf("source_refs=%#v", received.Input["source_refs"])
@@ -155,6 +159,7 @@ func opesJobRequestForTestV0() orquestadomainwork.DomainWorkJobRequestV0 {
 			{Name: "chapter_id", Value: "chapter-ref-001"},
 			{Name: "level", Value: "A1/A2"},
 			{Name: "language_code", Value: "es"},
+			{Name: "block_position", ValueJSON: []byte(`{"chapter_order":1,"block_order":2}`)},
 			{Name: "source_refs", Values: []string{"boe-ref-001"}},
 		},
 		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{

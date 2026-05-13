@@ -1,6 +1,9 @@
 package orquestadomainwork
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 const (
 	DomainWorkJobRequestSchemaV0         = "domain_work_job_request.v0"
@@ -26,6 +29,7 @@ const (
 	ErrDomainWorkJobRefRequiredV0       = "domain_work_job_ref_required"
 	ErrDomainWorkArtifactRefRequiredV0  = "domain_work_artifact_ref_required"
 	ErrDomainWorkArtifactTypeRequiredV0 = "domain_work_artifact_type_required"
+	ErrDomainWorkFieldJSONInvalidV0     = "domain_work_field_json_invalid"
 )
 
 type DomainWorkJobRequestV0 struct {
@@ -97,9 +101,10 @@ type DomainWorkExternalRefV0 struct {
 }
 
 type DomainWorkFieldV0 struct {
-	Name   string   `json:"name"`
-	Value  string   `json:"value,omitempty"`
-	Values []string `json:"values,omitempty"`
+	Name      string          `json:"name"`
+	Value     string          `json:"value,omitempty"`
+	Values    []string        `json:"values,omitempty"`
+	ValueJSON json.RawMessage `json:"value_json,omitempty"`
 }
 
 type DomainWorkIssueV0 struct {

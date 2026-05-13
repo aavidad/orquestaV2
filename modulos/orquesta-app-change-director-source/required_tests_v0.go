@@ -12,6 +12,17 @@ func appChangeTaskRequiredTestsV0(
 	tests := []string{"validar criterios de aceptacion del cambio"}
 	if appChangeHasExternalWorkV0(request) {
 		tests = append(tests, "validar contrato externo de dominio")
+		if appChangeIsDraftContentBlockWorkV0(request) {
+			tests = append(tests,
+				"validar paquete de bloque documental",
+				"validar fuentes, criterios y longitud si llegan",
+			)
+		} else if appChangeIsDocumentaryExternalWorkV0(request) {
+			tests = append(tests,
+				"validar paquete documental de dominio",
+				"validar fuentes y criterios documentales",
+			)
+		}
 	}
 	if appChangeWriteSetLooksLikeGoV0(request.AllowedWriteSet) {
 		tests = append([]string{"go test ./..."}, tests...)

@@ -19,6 +19,8 @@ type StackV0 struct {
 	RunSupervisor  RunSupervisorConfigV0
 	DirectorLimits orquestaweb.WebArrancarDirectorAppLimitsV0
 	Clock          orquestafactory.AppSpecHTTPClockV0
+	DomainWork     orquestamcp.MCPDomainWorkExecutorPortV0
+	DomainDelivery DomainWorkDeliveryBridgeConfigV0
 }
 
 func BuildStackV0(config ConfigV0) (StackV0, error) {
@@ -35,6 +37,8 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		RunSupervisor:  supervisorConfig,
 		DirectorLimits: config.DirectorLimits,
 		Clock:          config.Clock,
+		DomainWork:     config.DomainWork,
+		DomainDelivery: normalizeDomainWorkDeliveryBridgeConfigV0(config.DomainDelivery),
 	}
 	stack.Handler = buildStackHTTPHandlerV0(config, ports, queueConfig, &stack)
 	return stack, nil

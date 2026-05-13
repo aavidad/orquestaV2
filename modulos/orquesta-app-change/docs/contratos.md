@@ -17,12 +17,22 @@ Campos principales:
   quiere acotar el cambio.
 - `external_work`: metadata opaca opcional para trabajos de dominio de una app
   externa, por ejemplo una fabrica documental. Incluye `project_ref`,
-  `interface_refs`, `work_kind` y `work_refs`.
+  `job_ref`, `interface_refs`, `work_kind`, `work_refs` e `input_fields`.
 
 `external_work` no contiene rutas reales, endpoints, DB, HOME, proveedor ni
 modelo. La app propietaria conserva su dominio; Orquesta solo recibe trabajo
 acotado para que el director lo convierta en microtareas si tambien hay
 `allowed_write_set` y `acceptance_criteria`.
+
+`external_work.input_fields` usa `orquesta-domain-work.DomainWorkFieldV0`.
+Sirve para transportar contexto de dominio ya normalizado por el borde, como
+`program_id`, `topic_id`, `level`, `language_code` o refs de fuentes. Los
+nombres de campo deben ser compactos: sin espacios, barras ni saltos de linea.
+Los campos vacios se eliminan y los duplicados exactos se compactan.
+
+`external_work.job_ref` es la referencia opaca del trabajo externo si la app
+propietaria ya lo ha creado. Orquesta la conserva para trazabilidad y para
+devolver artefactos sin inferir IDs desde prefijos como `opes-job-*`.
 
 ## Puertos
 

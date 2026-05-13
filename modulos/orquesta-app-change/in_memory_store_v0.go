@@ -81,7 +81,21 @@ func copyAppChangeRecordV0(record AppChangeRecordV0) AppChangeRecordV0 {
 	record.Request.Constraints = append([]string(nil), record.Request.Constraints...)
 	record.Request.AllowedWriteSet = append([]string(nil), record.Request.AllowedWriteSet...)
 	record.Request.MetadataRefs = append([]string(nil), record.Request.MetadataRefs...)
+	record.Request.ExternalWork = copyAppChangeExternalWorkV0(record.Request.ExternalWork)
 	return record
+}
+
+func copyAppChangeExternalWorkV0(
+	work *AppChangeExternalWorkV0,
+) *AppChangeExternalWorkV0 {
+	if work == nil {
+		return nil
+	}
+	out := *work
+	out.InterfaceRefs = append([]string(nil), work.InterfaceRefs...)
+	out.WorkRefs = append([]string(nil), work.WorkRefs...)
+	out.InputFields = copyDomainWorkFieldsFromAppChangeV0(work.InputFields)
+	return &out
 }
 
 func normalizeAppChangeRecordV0(record AppChangeRecordV0) AppChangeRecordV0 {

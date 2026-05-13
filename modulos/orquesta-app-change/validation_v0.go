@@ -32,9 +32,7 @@ func validateAppChangeRequestV0(request AppChangeRequestV0) []AppChangeIssueV0 {
 			break
 		}
 	}
-	if !isValidAppChangeExternalWorkV0(request.ExternalWork) {
-		issues = append(issues, appChangeIssueV0(ErrAppChangeExternalWorkRefV0, "external_work"))
-	}
+	issues = append(issues, validateAppChangeExternalWorkV0(request.ExternalWork)...)
 	for _, entry := range request.AllowedWriteSet {
 		if !isSafeRelativeWriteSetV0(entry) {
 			issues = append(issues, appChangeIssueV0(ErrAppChangeWriteSetInvalidV0, "allowed_write_set"))
@@ -44,27 +42,45 @@ func validateAppChangeRequestV0(request AppChangeRequestV0) []AppChangeIssueV0 {
 	return issues
 }
 
-func isValidAppChangeExternalWorkV0(work *AppChangeExternalWorkV0) bool {
+func validateAppChangeExternalWorkV0(work *AppChangeExternalWorkV0) []AppChangeIssueV0 {
 	if work == nil {
-		return true
+		return nil
 	}
+	var issues []AppChangeIssueV0
 	if work.ProjectRef != "" && !isCompactAppChangeRefV0(work.ProjectRef) {
-		return false
+		issues = append(issues, appChangeIssueV0(ErrAppChangeExternalWorkRefV0, "external_work"))
+	}
+	if work.JobRef != "" && !isCompactAppChangeRefV0(work.JobRef) {
+		issues = append(issues, appChangeIssueV0(ErrAppChangeExternalWorkRefV0, "external_work"))
 	}
 	if work.WorkKind != "" && !isCompactAppChangeRefV0(work.WorkKind) {
-		return false
+		issues = append(issues, appChangeIssueV0(ErrAppChangeExternalWorkRefV0, "external_work"))
 	}
 	for _, ref := range work.InterfaceRefs {
 		if !isCompactAppChangeRefV0(ref) {
-			return false
+			issues = append(issues, appChangeIssueV0(ErrAppChangeExternalWorkRefV0, "external_work"))
+			break
 		}
 	}
 	for _, ref := range work.WorkRefs {
 		if !isCompactAppChangeRefV0(ref) {
-			return false
+			issues = append(issues, appChangeIssueV0(ErrAppChangeExternalWorkRefV0, "external_work"))
+			break
 		}
 	}
-	return true
+	for _, field := range work.InputFields {
+		if !isCompactAppChangeRefV0(field.Name) {
+			issues = append(
+				issues,
+				appChangeIssueV0(
+					ErrAppChangeExternalWorkFieldNameV0,
+					"external_work.input_fields",
+				),
+			)
+			break
+		}
+	}
+	return issues
 }
 
 func validateAppChangePortsV0(ports AppChangePortsV0) []AppChangeIssueV0 {

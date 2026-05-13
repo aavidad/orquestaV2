@@ -34,3 +34,17 @@ Validacion:
 - `TestAppChangeDirectorDecisionSourceV0AbreRevisionTrasEntrega`;
 - `TestCodexStackV0CambioProgresivoPasaReviewGate`;
 - `go test -count=1 ./modulos/orquesta-app-change-director-source ./modulos/orquesta-app-codex-stack`.
+
+## ACDS-004
+
+Objetivo: proyectar trabajos documentales externos, especialmente
+`draft_content_block` de OPES, como microtareas que declaran paquete de dominio
+suficiente y no contexto minimo.
+
+Estado: hecho.
+
+Validacion:
+
+- `TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno`;
+- `TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExternoSinWriteSetLocal`;
+- `go test -count=1 ./modulos/orquesta-app-change-director-source`.

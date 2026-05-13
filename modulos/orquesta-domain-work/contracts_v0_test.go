@@ -15,6 +15,7 @@ func TestDomainWorkJobRequestV0NormalizaContratoExterno(t *testing.T) {
 		InputFields: []DomainWorkFieldV0{
 			{Name: " level ", Value: " A1/A2 "},
 			{Name: " source_refs ", Values: []string{" BOE-A-1 ", "BOE-A-1"}},
+			{Name: " block_position ", ValueJSON: []byte(`{"block_order":2,"chapter_order":1}`)},
 		},
 		ExternalRefs: []DomainWorkExternalRefV0{
 			{Kind: " run_ref ", Ref: " run-ref-001 "},
@@ -30,9 +31,10 @@ func TestDomainWorkJobRequestV0NormalizaContratoExterno(t *testing.T) {
 		request.CorrelationID != "req-domain-work-001" ||
 		request.IdempotencyKey != "req-domain-work-001" ||
 		len(request.InterfaceRefs) != 1 ||
-		len(request.InputFields) != 2 ||
+		len(request.InputFields) != 3 ||
 		request.InputFields[0].Value != "A1/A2" ||
 		len(request.InputFields[1].Values) != 1 ||
+		string(request.InputFields[2].ValueJSON) != `{"block_order":2,"chapter_order":1}` ||
 		len(request.ExternalRefs) != 1 {
 		t.Fatalf("request=%+v", request)
 	}
@@ -50,6 +52,19 @@ func TestDomainWorkJobRequestV0RechazaRefsNoCompactas(t *testing.T) {
 	if len(issues) != 1 ||
 		issues[0].Code != ErrDomainWorkRefInvalidV0 ||
 		issues[0].Field != "work_refs" {
+		t.Fatalf("issues=%+v", issues)
+	}
+}
+
+func TestDomainWorkJobRequestV0RechazaJSONInvalido(t *testing.T) {
+	request := validDomainWorkJobRequestForTestV0()
+	request.InputFields = []DomainWorkFieldV0{
+		{Name: "block_position", ValueJSON: []byte(`{"broken"`)},
+	}
+
+	issues := ValidateDomainWorkJobRequestV0(request)
+
+	if len(issues) == 0 || issues[0].Code != ErrDomainWorkFieldJSONInvalidV0 {
 		t.Fatalf("issues=%+v", issues)
 	}
 }

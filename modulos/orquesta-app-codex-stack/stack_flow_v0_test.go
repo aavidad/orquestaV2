@@ -86,6 +86,7 @@ func TestBuildStackV0CableaDomainWorkOptIn(t *testing.T) {
 type fakeCodexStackDomainWorkExecutorV0 struct {
 	called int
 	input  orquestamcp.MCPDomainWorkToolInputV0
+	inputs []orquestamcp.MCPDomainWorkToolInputV0
 }
 
 func (executor *fakeCodexStackDomainWorkExecutorV0) Execute(
@@ -94,6 +95,22 @@ func (executor *fakeCodexStackDomainWorkExecutorV0) Execute(
 ) (orquestamcp.MCPDomainWorkToolResultV0, error) {
 	executor.called++
 	executor.input = input
+	executor.inputs = append(executor.inputs, input)
+	if input.Action == orquestamcp.MCPDomainWorkActionSubmitArtifactV0 {
+		return orquestamcp.MCPDomainWorkToolResultV0{
+			Estado:        orquestamcp.MCPDomainWorkEstadoOKV0,
+			RequestID:     input.RequestID,
+			CorrelationID: input.CorrelationID,
+			Action:        input.Action,
+			Receipt: &orquestadomainwork.DomainWorkArtifactReceiptV0{
+				SchemaVersion: orquestadomainwork.DomainWorkArtifactReceiptSchemaV0,
+				Status:        orquestadomainwork.DomainWorkStatusAcceptedV0,
+				JobRef:        input.ArtifactSubmission.JobRef,
+				ArtifactRef:   input.ArtifactSubmission.ArtifactRef,
+				ReceiptRef:    "receipt-ref-" + input.ArtifactSubmission.ArtifactRef,
+			},
+		}, nil
+	}
 	return orquestamcp.MCPDomainWorkToolResultV0{
 		Estado:        orquestamcp.MCPDomainWorkEstadoOKV0,
 		RequestID:     input.RequestID,

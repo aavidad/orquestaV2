@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -13,8 +14,9 @@ import (
 )
 
 type CodexLaunchSpecResolverV0 struct {
-	Config    CodexRuntimeConfigV0
-	TaskStore orquestacionnucleoapp.WorkflowTaskStorePortV0
+	Config         CodexRuntimeConfigV0
+	TaskStore      orquestacionnucleoapp.WorkflowTaskStorePortV0
+	AppChangeStore orquestaappchange.AppChangeRecordSourcePortV0
 }
 
 var _ orquestacionnucleoapp.ExternalAgentLaunchSpecResolverPortV0 = CodexLaunchSpecResolverV0{}
@@ -47,6 +49,10 @@ func (resolver CodexLaunchSpecResolverV0) ResolveExternalAgentLaunchSpecV0(
 		area,
 		task,
 	)
+	spec.AgentPacket.Context, err = resolver.agentContextV0(ctx, *inbound.Payload, area, task)
+	if err != nil {
+		return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{}, err
+	}
 	profile := codexProfileV0(resolver.Config, runtimeDir)
 	return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{
 		Spec:            spec,

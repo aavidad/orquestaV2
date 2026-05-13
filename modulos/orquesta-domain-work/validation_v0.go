@@ -1,6 +1,9 @@
 package orquestadomainwork
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 func ValidateDomainWorkJobRequestV0(
 	request DomainWorkJobRequestV0,
@@ -147,6 +150,9 @@ func validateDomainWorkFieldsV0(values []DomainWorkFieldV0, field string) []Doma
 	for _, value := range values {
 		if !isCompactDomainWorkRefV0(value.Name) {
 			return []DomainWorkIssueV0{{Code: ErrDomainWorkFieldNameInvalidV0, Field: field}}
+		}
+		if len(value.ValueJSON) > 0 && !json.Valid(value.ValueJSON) {
+			return []DomainWorkIssueV0{{Code: ErrDomainWorkFieldJSONInvalidV0, Field: field}}
 		}
 	}
 	return nil

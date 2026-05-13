@@ -15,11 +15,13 @@ Casos focales:
   pasa a respuesta, decision, contrato, microtarea con write-set permitido,
   criterios y vuelta a programacion.
 - `TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno`: un
-  `external_work` publica contrato `ApplyExternalDomainWorkV0` y microtarea de
-  dominio externo.
+  `external_work` publica contrato `ApplyExternalDomainWorkV0` y microtarea
+  documental con paquete de dominio suficiente.
 - `TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExternoSinWriteSetLocal`:
-  un `external_work` de OPES crea microtarea usando scopes externos derivados
-  sin exigir rutas locales en `allowed_write_set`.
+  un `external_work` `draft_content_block` de OPES crea microtarea usando
+  scopes externos derivados, sin exigir rutas locales en `allowed_write_set`, y
+  declara temario, esquema, objetivo, posicion, vecinos, fuentes, criterios y
+  longitud si llegan por `input_fields`.
 - `TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinWriteSetNiExternalWork`:
   sin write-set ni `external_work` no hay microtarea automatica.
 - `TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinCriterios`: sin

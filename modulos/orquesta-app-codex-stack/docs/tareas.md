@@ -572,6 +572,30 @@ Pendiente separado:
 - UI web de control queda cubierta por `/run-control`; cambio de prioridad por
   `/run-queue`.
 
+## APP-CODEX-STACK-020
+
+Objetivo: permitir que OPES y otras apps externas reciban artefactos producidos
+por agentes de Orquesta.
+
+Estado: hecho en bridge opt-in inicial.
+
+Trabajo aplicado:
+
+- `DomainWorkDeliveryBridgeConfigV0` con builder y ledger hexagonales;
+- `DrainRunV0` intenta enviar artefactos tras observar ACKs y tambien reintenta
+  deliveries ya registradas sin ledger;
+- builder default usa `external_work.job_ref`, `input_fields`, ACK validado y
+  fichero permitido por el write-set;
+- mapeo generico de `draft_content_block -> content_block`,
+  revisiones -> `block_revision` y fuentes -> `source`;
+- cmd server activa el bridge solo si `ORQUESTA_OPES_BASE_URL` esta definido.
+
+Validacion:
+
+- `TestCodexStackV0OPESExternalWorkDeliveryEnviaArtefactoDomainWork`;
+- `TestCodexLaunchSpecResolverV0MaterializaContextoDominioExterno`;
+- `go test -count=1 ./modulos/orquesta-app-codex-stack`.
+
 ## APP-CODEX-STACK-019
 
 Objetivo: preparar smoke opt-in de shutdown cooperativo real de Codex.
