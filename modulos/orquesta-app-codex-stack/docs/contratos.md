@@ -168,7 +168,11 @@ Invariantes:
   DB, proveedor, token, prompt ni contrato interno de la app propietaria.
 - `input_fields` es el paquete de dominio curado para el agente. Puede usar
   `value`, `values` o `value_json`; el stack lo materializa en el contexto del
-  agente y lo reenvia como payload de artefacto cuando corresponde.
+  agente y lo reenvia como payload de artefacto cuando corresponde. Para
+  trabajos largos, el dominio puede indicar `context_budget_profile`,
+  `context_profile`, `work_granularity` o `editorial_granularity` con valores
+  compactos `compact`, `standard` o `large`; Orquesta usa esos hints solo para
+  dimensionar la ventana de contexto, no para decidir el dominio.
 
 Flujo por transportes:
 

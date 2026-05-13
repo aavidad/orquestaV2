@@ -962,3 +962,18 @@ anade una prueba/criterio de cierre que obliga a justificar materializacion
 externa o bloquear con consulta al director.
 Estado: aceptada.
 ```
+
+```text
+Fecha: 2026-05-13
+Decision: El contexto externo documental usa ventanas elasticas acotadas.
+Motivo: OPES necesita mandar paquetes editoriales suficientes para temas largos,
+pero Orquesta no puede volver a prompts gigantes. Un limite fijo de 1800 bytes
+por campo era demasiado agresivo para `draft_content_block` y trabajos de
+expansion/revision; quitar el limite recrearia problemas de v1/v2.
+Impacto: el stack usa perfiles `compact`, `standard` y `large`. Los trabajos
+longform (`draft_content_block`, `expand_topic_from_summary`, revisiones,
+validacion y ensamblado) reciben por defecto hasta 12 KB por campo y 72 KB
+totales. Si se agota la ventana, el packet queda marcado como truncado y el
+ACK no puede cerrar sin justificar materializacion externa o bloquear.
+Estado: aceptada.
+```

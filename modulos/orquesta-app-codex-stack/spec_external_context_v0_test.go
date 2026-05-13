@@ -128,7 +128,7 @@ func TestCodexLaunchSpecResolverV0MarcaContextoExternoTruncadoComoRiesgoDeCierre
 						WorkKind:   "draft_content_block",
 						InputFields: []orquestadomainwork.DomainWorkFieldV0{{
 							Name:  "syllabus_full",
-							Value: strings.Repeat("contenido ", externalWorkContextMaxFieldBytesV0),
+							Value: strings.Repeat("contenido ", externalWorkContextLargeFieldBytesV0),
 						}},
 					},
 				},

@@ -5,17 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestaappchangedirectorsource "orquesta/modulos/orquesta-app-change-director-source"
 	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
-)
-
-const (
-	externalWorkContextMaxFieldBytesV0 = 1800
-	externalWorkContextMaxFieldsV0     = 24
 )
 
 func (resolver CodexLaunchSpecResolverV0) agentContextV0(
@@ -99,17 +95,24 @@ func externalWorkContextEntriesV0(
 	if work == nil || len(work.InputFields) == 0 {
 		return nil
 	}
+	policy := externalWorkContextPolicyForWorkV0(work)
 	limit := len(work.InputFields)
-	if limit > externalWorkContextMaxFieldsV0 {
-		limit = externalWorkContextMaxFieldsV0
+	if limit > policy.MaxFields {
+		limit = policy.MaxFields
 	}
-	entries := make([]orquestacontext.ContextMaterializedEntryV0, 0, limit)
+	entries := make([]orquestacontext.ContextMaterializedEntryV0, 0, limit+1)
+	remaining := policy.TotalMaxBytes
+	omitted := len(work.InputFields) - limit
 	for index, field := range work.InputFields[:limit] {
+		if remaining <= 0 {
+			omitted += limit - index
+			break
+		}
 		content := externalWorkFieldContentV0(field)
 		if content == "" {
 			continue
 		}
-		content, truncated := boundedExternalWorkContextContentV0(content)
+		content, truncated := boundedExternalWorkContextContentV0(content, minIntV0(policy.FieldMaxBytes, remaining))
 		name := externalContextRefPartV0(field.Name)
 		refSuffix := packetRefSuffixV0(taskRef, area, name, fmt.Sprintf("%02d", index+1))
 		entries = append(entries, orquestacontext.ContextMaterializedEntryV0{
@@ -123,6 +126,10 @@ func externalWorkContextEntriesV0(
 			Truncated: truncated,
 			Required:  true,
 		})
+		remaining -= len(content)
+	}
+	if omitted > 0 {
+		entries = append(entries, externalWorkContextBudgetEntryV0(area, taskRef, omitted))
 	}
 	return entries
 }
@@ -144,12 +151,15 @@ func externalWorkFieldContentV0(
 	return sanitizeExternalWorkContextContentV0(string(raw))
 }
 
-func boundedExternalWorkContextContentV0(value string) (string, bool) {
+func boundedExternalWorkContextContentV0(value string, maxBytes int) (string, bool) {
 	value = strings.TrimSpace(value)
-	if len(value) <= externalWorkContextMaxFieldBytesV0 {
+	if maxBytes <= 0 {
+		return "", true
+	}
+	if len(value) <= maxBytes {
 		return value, false
 	}
-	return value[:externalWorkContextMaxFieldBytesV0], true
+	return truncateExternalWorkContextByBytesV0(value, maxBytes), true
 }
 
 func sanitizeExternalWorkContextContentV0(value string) string {
@@ -179,4 +189,47 @@ func externalContextRefPartV0(value string) string {
 		return "field"
 	}
 	return value
+}
+
+func externalWorkContextBudgetEntryV0(
+	area string,
+	taskRef string,
+	omitted int,
+) orquestacontext.ContextMaterializedEntryV0 {
+	refSuffix := packetRefSuffixV0(taskRef, area, "context-budget", fmt.Sprintf("%02d", omitted))
+	content := fmt.Sprintf(
+		`{"name":"external_context_budget","value":"omitted_input_fields","omitted_fields":%d}`,
+		omitted,
+	)
+	return orquestacontext.ContextMaterializedEntryV0{
+		EntryRef:  "entry-ref-app-stack-external-" + refSuffix,
+		Layer:     orquestacontext.ContextLayerTaskContextV0,
+		Kind:      orquestacontext.ContextEntryDocRefV0,
+		SourceRef: "source-ref-app-stack-external-" + refSuffix,
+		Mode:      orquestacontext.ContextMaterializationModeContentV0,
+		Content:   content,
+		Bytes:     len(content),
+		Truncated: true,
+		Required:  true,
+	}
+}
+
+func minIntV0(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func truncateExternalWorkContextByBytesV0(value string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if len(value) <= maxBytes {
+		return value
+	}
+	for maxBytes > 0 && !utf8.ValidString(value[:maxBytes]) {
+		maxBytes--
+	}
+	return value[:maxBytes]
 }

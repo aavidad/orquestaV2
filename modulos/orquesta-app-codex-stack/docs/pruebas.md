@@ -793,12 +793,16 @@ Validacion de contexto externo amplio 2026-05-13:
 
 ```bash
 go test -count=1 ./modulos/orquesta-app-codex-stack \
-  -run 'TestProgrammingTaskV0TrabajoExternoUsaUnidadTrabajoNoMicrotareaMinima|TestCodexLaunchSpecResolverV0MarcaContextoExternoTruncadoComoRiesgoDeCierre'
+  -run 'TestProgrammingTaskV0TrabajoExternoUsaUnidadTrabajoNoMicrotareaMinima|TestCodexLaunchSpecResolverV0PermiteContextoAmplioEnTrabajoDocumentalLargo|TestCodexLaunchSpecResolverV0MarcaContextoExternoTruncadoComoRiesgoDeCierre|TestCodexLaunchSpecResolverV0MarcaPresupuestoTotalAgotado'
 ```
 
 Evidencia esperada:
 
 - `ApplyExternalDomainWorkV0` se lanza como unidad de trabajo externa, no como
   microtarea minima;
+- `draft_content_block` admite una ventana editorial mas amplia sin truncar un
+  paquete razonable;
 - si `agent_packet.context` contiene entradas requeridas truncadas, el packet
   exige validar contexto no truncado o justificar materializacion externa.
+- si el paquete externo excede el presupuesto total, queda una entrada
+  `external_context_budget` truncada para impedir cierres silenciosos.
