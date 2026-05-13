@@ -13,5 +13,6 @@ Cobertura esperada:
 - `stop_requested` y `cancel_requested` requieren checkpoint antes de parar agentes.
 - `forced=true` permite parar agentes sin checkpoint previo.
 - checkpoint registrado permite parar agentes.
+- `RecordRunCheckpointV0` registra checkpoint sin cambiar el estado de control.
 - `stopped` y `canceled` son terminales.
 - la arquitectura de produccion no importa paquetes de adaptadores ni contiene terminos de persistencia, red, MCP o runtime.

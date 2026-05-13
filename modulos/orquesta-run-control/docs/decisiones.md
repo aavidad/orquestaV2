@@ -30,3 +30,10 @@ El nucleo o el director solo deben invocarlo despues de comprobar que no quedan
 agentes vivos sin confirmar ni mensajes de parada pendientes. Esta separacion
 evita parchear el estado con otro `StopRunV0` y deja claro quien toma la
 decision de cierre.
+
+## Checkpoint separado de stop
+
+`RecordRunCheckpointV0` no cambia `status`; solo marca
+`checkpoint_recorded=true` y adjunta evidencia compacta. Esto evita colar una
+parada segura con otro `StopRunV0` y permite que `forced=false` tenga una
+frontera verificable: primero ACK durable de checkpoint, despues stop/drain.

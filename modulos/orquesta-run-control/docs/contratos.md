@@ -27,6 +27,11 @@ fallo operativo del conector.
 - `StopRunV0`
 - `CancelRunV0`
 
+`RunControlCheckpointWriterPortV0` expone `RecordRunCheckpointV0` para
+registrar un ACK durable de checkpoint sin cambiar el estado de control de la
+run. Conserva el estado actual (`running`, `stop_requested`, etc.) y marca
+`checkpoint_recorded=true`.
+
 `RunControlTerminalWriterPortV0` expone `CompleteRunControlV0` para marcar la
 run como `stopped` o `canceled` cuando el consumidor ya ha comprobado que el
 drenaje es seguro. No acepta volver a `running`, `paused`,
@@ -36,6 +41,11 @@ drenaje es seguro. No acepta volver a `running`, `paused`,
 
 - `run_ref`
 - `target_status`: solo `stopped` o `canceled`
+- `requested_by`, `reason`, `idempotency_key` y `evidence_refs`
+
+`RecordRunCheckpointCommandV0` contiene:
+
+- `run_ref`
 - `requested_by`, `reason`, `idempotency_key` y `evidence_refs`
 
 Los puertos no definen transporte ni almacenamiento. Cualquier adaptador real debe vivir fuera de este microproyecto.

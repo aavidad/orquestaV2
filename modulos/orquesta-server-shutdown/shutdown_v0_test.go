@@ -62,6 +62,33 @@ func TestShutdownServerV0NoDrenaSiFaltaCheckpoint(t *testing.T) {
 	}
 }
 
+func TestShutdownServerV0PreparaCheckpointAntesDeStopNoForzado(t *testing.T) {
+	deps := newServerShutdownDepsForTestV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		{RunRef: "run-graceful", AppRef: "app-a", Status: "ready"},
+	})
+	deps.checkpoint.recorded["run-graceful"] = true
+	deps.stats.stats["run-graceful"] = RunShutdownStatsV0{RunRef: "run-graceful"}
+
+	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
+		RequestedBy:   "operator",
+		Reason:        "apagado graceful",
+		CorrelationID: "corr-shutdown-test-002",
+	})
+	if err != nil {
+		t.Fatalf("ShutdownServerV0: %v", err)
+	}
+	if !result.ShutdownReady ||
+		result.Status != ServerShutdownStatusReadyV0 ||
+		result.CheckpointsPending != 0 ||
+		deps.supervisor.calls != 1 {
+		t.Fatalf("result=%+v supervisor=%+v", result, deps.supervisor)
+	}
+	if !deps.control.states["run-graceful"].CheckpointRecorded ||
+		!reflect.DeepEqual(deps.control.stopped, []string{"run-graceful"}) {
+		t.Fatalf("control=%+v", deps.control)
+	}
+}
+
 func TestShutdownServerV0SinRunsQuedaReady(t *testing.T) {
 	deps := newServerShutdownDepsForTestV0(nil)
 
@@ -79,6 +106,7 @@ func TestShutdownServerV0SinRunsQuedaReady(t *testing.T) {
 type serverShutdownDepsForTestV0 struct {
 	queue      fakeShutdownQueueV0
 	control    *fakeShutdownControlV0
+	checkpoint *fakeShutdownCheckpointPreparerV0
 	supervisor *fakeShutdownSupervisorV0
 	stats      *fakeShutdownStatsV0
 }
@@ -91,6 +119,9 @@ func newServerShutdownDepsForTestV0(
 		control: &fakeShutdownControlV0{
 			states: map[string]orquestaruncontrol.RunControlStateV0{},
 		},
+		checkpoint: &fakeShutdownCheckpointPreparerV0{
+			recorded: map[string]bool{},
+		},
 		supervisor: &fakeShutdownSupervisorV0{},
 		stats:      &fakeShutdownStatsV0{stats: map[string]RunShutdownStatsV0{}},
 	}
@@ -98,11 +129,13 @@ func newServerShutdownDepsForTestV0(
 
 func (deps serverShutdownDepsForTestV0) deps() ServerShutdownDepsV0 {
 	return ServerShutdownDepsV0{
-		QueueReader:      deps.queue,
-		RunControlReader: deps.control,
-		RunControlWriter: deps.control,
-		Supervisor:       deps.supervisor,
-		StatsReader:      deps.stats,
+		QueueReader:         deps.queue,
+		RunControlReader:    deps.control,
+		RunControlWriter:    deps.control,
+		RunCheckpointWriter: deps.control,
+		CheckpointPreparer:  deps.checkpoint,
+		Supervisor:          deps.supervisor,
+		StatsReader:         deps.stats,
 	}
 }
 
@@ -147,6 +180,24 @@ func (fake *fakeShutdownControlV0) StopRunV0(
 		},
 	}
 	fake.stopped = append(fake.stopped, command.RunRef)
+	if previous, ok := fake.states[command.RunRef]; ok {
+		state.CheckpointRecorded = previous.CheckpointRecorded
+		state.EvidenceRefs = append([]string(nil), previous.EvidenceRefs...)
+	}
+	fake.states[command.RunRef] = state
+	return state, nil
+}
+
+func (fake *fakeShutdownControlV0) RecordRunCheckpointV0(
+	_ context.Context,
+	command orquestaruncontrol.RecordRunCheckpointCommandV0,
+) (orquestaruncontrol.RunControlStateV0, error) {
+	state, ok := fake.states[command.RunRef]
+	if !ok {
+		state = orquestaruncontrol.DefaultRunControlStateV0(command.RunRef)
+	}
+	state.CheckpointRecorded = true
+	state.EvidenceRefs = append([]string(nil), command.EvidenceRefs...)
 	fake.states[command.RunRef] = state
 	return state, nil
 }
@@ -170,6 +221,25 @@ func (fake *fakeShutdownControlV0) CancelRunV0(
 	orquestaruncontrol.CancelRunCommandV0,
 ) (orquestaruncontrol.RunControlStateV0, error) {
 	return orquestaruncontrol.RunControlStateV0{}, nil
+}
+
+type fakeShutdownCheckpointPreparerV0 struct {
+	recorded map[string]bool
+}
+
+func (fake *fakeShutdownCheckpointPreparerV0) PrepareAgentShutdownV0(
+	_ context.Context,
+	command PrepareAgentShutdownCommandV0,
+) (PrepareAgentShutdownResultV0, error) {
+	if fake.recorded[command.RunRef] {
+		return PrepareAgentShutdownResultV0{
+			RunRef:             command.RunRef,
+			CheckpointRecorded: true,
+			CheckpointRef:      "checkpoint-ref-" + command.RunRef,
+			EvidenceRefs:       []string{"evidence-ref-" + command.RunRef},
+		}, nil
+	}
+	return PrepareAgentShutdownResultV0{RunRef: command.RunRef}, nil
 }
 
 type fakeShutdownSupervisorV0 struct {

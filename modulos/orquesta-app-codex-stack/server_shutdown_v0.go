@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"strings"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -15,11 +16,13 @@ func serverShutdownExecutorV0(
 ) orquestamcp.MCPServerShutdownToolExecutorV0 {
 	return orquestamcp.NewMCPServerShutdownToolExecutorV0(
 		orquestaservershutdown.ServerShutdownDepsV0{
-			QueueReader:      config.Stores.RunQueue,
-			RunControlReader: config.Stores.RunControl,
-			RunControlWriter: config.Stores.RunControl,
-			Supervisor:       stackShutdownSupervisorV0{Stack: stack},
-			StatsReader:      stackShutdownStatsReaderV0{Config: config},
+			QueueReader:         config.Stores.RunQueue,
+			RunControlReader:    config.Stores.RunControl,
+			RunControlWriter:    config.Stores.RunControl,
+			RunCheckpointWriter: config.Stores.RunControl,
+			CheckpointPreparer:  stackShutdownCheckpointPreparerV0{Config: config},
+			Supervisor:          stackShutdownSupervisorV0{Stack: stack},
+			StatsReader:         stackShutdownStatsReaderV0{Config: config},
 		},
 	)
 }
@@ -68,4 +71,50 @@ func (reader stackShutdownStatsReaderV0) ReadRunShutdownStatsV0(
 		AgentsStopConfirmed: stats.Counts.AgentsStopConfirmed,
 		EvidenceRefs:        compactStringsV0(request.EvidenceRefs),
 	}, nil
+}
+
+type stackShutdownCheckpointPreparerV0 struct {
+	Config ConfigV0
+}
+
+func (preparer stackShutdownCheckpointPreparerV0) PrepareAgentShutdownV0(
+	ctx context.Context,
+	command orquestaservershutdown.PrepareAgentShutdownCommandV0,
+) (orquestaservershutdown.PrepareAgentShutdownResultV0, error) {
+	stats, err := stackShutdownStatsReaderV0{Config: preparer.Config}.ReadRunShutdownStatsV0(
+		ctx,
+		orquestaservershutdown.RunShutdownStatsRequestV0{
+			RunRef:        command.RunRef,
+			CorrelationID: command.CorrelationID,
+			EvidenceRefs:  command.EvidenceRefs,
+		},
+	)
+	if err != nil {
+		return orquestaservershutdown.PrepareAgentShutdownResultV0{}, err
+	}
+	if stats.AgentsInFlight > 0 {
+		return orquestaservershutdown.PrepareAgentShutdownResultV0{
+			RunRef:             strings.TrimSpace(command.RunRef),
+			CheckpointRecorded: false,
+			EvidenceRefs:       compactStringsV0(command.EvidenceRefs),
+		}, nil
+	}
+	checkpointRef := "checkpoint-ref-shutdown-" + safeStackShutdownRefPartV0(command.RunRef)
+	return orquestaservershutdown.PrepareAgentShutdownResultV0{
+		RunRef:             strings.TrimSpace(command.RunRef),
+		CheckpointRecorded: true,
+		CheckpointRef:      checkpointRef,
+		EvidenceRefs:       compactStringsV0(append(command.EvidenceRefs, checkpointRef)),
+	}, nil
+}
+
+func safeStackShutdownRefPartV0(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.ReplaceAll(value, "\\", "-")
+	value = strings.ReplaceAll(value, "/", "-")
+	value = strings.ReplaceAll(value, " ", "-")
+	if value == "" {
+		return "unknown"
+	}
+	return value
 }

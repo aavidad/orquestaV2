@@ -62,6 +62,7 @@ type MCPServerShutdownRunV0 struct {
 	AppRef              string `json:"app_ref,omitempty"`
 	ControlStatus       string `json:"control_status,omitempty"`
 	CheckpointRequired  bool   `json:"checkpoint_required,omitempty"`
+	CheckpointRef       string `json:"checkpoint_ref,omitempty"`
 	Terminal            bool   `json:"terminal,omitempty"`
 	StopRequested       bool   `json:"stop_requested,omitempty"`
 	AgentsInFlight      int    `json:"agents_in_flight"`
@@ -160,6 +161,7 @@ func mcpServerShutdownRunsV0(
 			AppRef:              strings.TrimSpace(run.AppRef),
 			ControlStatus:       strings.TrimSpace(run.ControlStatus),
 			CheckpointRequired:  run.CheckpointRequired,
+			CheckpointRef:       strings.TrimSpace(run.CheckpointRef),
 			Terminal:            run.Terminal,
 			StopRequested:       run.StopRequested,
 			AgentsInFlight:      run.AgentsInFlight,

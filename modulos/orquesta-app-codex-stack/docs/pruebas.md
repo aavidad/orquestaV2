@@ -679,8 +679,9 @@ Evidencia:
 
 - `BuildStackV0` cablea `/api/v0/server/shutdown` con
   `orquesta-server-shutdown`;
-- el caso de uso lista runs por cola, solicita stop por RunControl, ejecuta el
-  supervisor global y reconstruye readiness con stats del director;
+- el caso de uso lista runs por cola, prepara checkpoint en modo no forzado,
+  solicita stop por RunControl, ejecuta el supervisor global y reconstruye
+  readiness con stats del director;
 - `orquesta-server stop` llama primero al endpoint de shutdown y solo envia
   senal al servidor si `shutdown_ready=true`;
 - el test de stats de progreso del stack valida el contrato estable:

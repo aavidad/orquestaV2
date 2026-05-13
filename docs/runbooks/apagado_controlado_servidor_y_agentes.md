@@ -83,6 +83,9 @@ Payload minimo para cierre operativo forzado:
 Efecto esperado:
 
 - el caso de uso lista runs activos por `RunQueueReaderPortV0`;
+- si `forced=false`, intenta preparar checkpoint por
+  `PrepareAgentShutdownPortV0` y registra ACK durable por
+  `RunControlCheckpointWriterPortV0`;
 - solicita `stop` por `RunControlWriterPortV0`;
 - ejecuta el supervisor global para drenar stop/outbox/confirmaciones;
 - lee stats de cierre por run;
@@ -125,8 +128,12 @@ es la frontera unica de cierre coordinado.
 Orquesta todavia no tiene implementado un protocolo completo de checkpoint
 antes de apagar agentes.
 
-Existe estado `CheckpointRecorded` en RunControl, pero falta la operacion
-end-to-end:
+Existe `RecordRunCheckpointV0` en RunControl y `PrepareAgentShutdownPortV0` en
+shutdown. El stack actual lo usa de forma conservadora: si no hay agentes en
+vuelo puede registrar checkpoint y continuar; si hay agentes vivos devuelve
+`waiting_checkpoint`.
+
+Falta la operacion interactiva end-to-end para agentes vivos:
 
 - enviar orden `prepare_shutdown` o equivalente al agente;
 - pedir resumen/checkpoint de continuidad;
@@ -137,8 +144,8 @@ end-to-end:
 Por tanto, hoy hay dos modos:
 
 - `forced=true`: drena y detiene agentes sin exigir checkpoint previo;
-- `forced=false`: puede requerir checkpoint, pero no hay todavia pipeline
-  completo para solicitarlo y verificarlo automaticamente.
+- `forced=false`: exige checkpoint durable; hoy queda en `waiting_checkpoint`
+  si hay agentes vivos porque falta conector interactivo fiable.
 
 ## Regla operativa hasta cerrar el hueco
 
@@ -152,10 +159,10 @@ Para trabajo importante, antes de parar:
 ## Mejora pendiente
 
 `orquesta.server.shutdown.v0` ya existe como caso de uso hexagonal para
-stop/drain/stats. Falta elevarlo a protocolo graceful completo con checkpoint:
+checkpoint conservador, stop, drain y stats. Falta elevarlo a protocolo
+graceful completo para agentes vivos:
 
-- puerto `PrepareAgentShutdownPortV0`;
-- puerto `CheckpointStorePortV0`;
+- conector real de `PrepareAgentShutdownPortV0` por runtime/proveedor;
 - politica de deadline por agente;
 - orden `prepare_shutdown` antes de stop cuando `forced=false`;
 - ACK durable de checkpoint;

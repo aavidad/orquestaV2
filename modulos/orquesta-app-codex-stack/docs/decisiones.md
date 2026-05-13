@@ -35,6 +35,19 @@ servidor solo se senaliza despues de readiness positivo.
 Estado: aceptada.
 ```
 
+```text
+Fecha: 2026-05-13
+Decision: El preparador de checkpoint del stack es conservador.
+Motivo: hoy no existe canal interactivo fiable para pedir a un proceso Codex ya
+vivo que escriba un checkpoint nuevo. Inventar uno desde el stack reabriria el
+bucle de parches. Por tanto, `forced=false` solo registra checkpoint automatico
+cuando las stats indican que no hay agentes en vuelo.
+Impacto: el shutdown no forzado de una run activa queda en
+`waiting_checkpoint`; el cierre forzado sigue disponible por operador/CLI. El
+futuro conector interactivo debera implementar `PrepareAgentShutdownPortV0`.
+Estado: aceptada.
+```
+
 
 ```text
 Fecha: 2026-05-12

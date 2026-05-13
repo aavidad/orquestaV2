@@ -84,3 +84,39 @@ func TestRunFileStoreControlMissingAndInvalidCompletionV0(t *testing.T) {
 		t.Fatalf("err=%v invalid=%+v", err, invalid)
 	}
 }
+
+func TestRunFileStoreRecordRunCheckpointPersisteV0(t *testing.T) {
+	dir := t.TempDir()
+	store := mustNewRunFileStoreV0(t, dir)
+	ctx := context.Background()
+	if _, err := store.StopRunV0(ctx, orquestaruncontrol.StopRunCommandV0{
+		RunRef:       "run-checkpoint",
+		EvidenceRefs: []string{"stop-ref"},
+	}); err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+	state, err := store.RecordRunCheckpointV0(ctx, orquestaruncontrol.RecordRunCheckpointCommandV0{
+		RunRef:       "run-checkpoint",
+		RequestedBy:  "preparer",
+		Reason:       "ack durable",
+		EvidenceRefs: []string{"checkpoint-ref-001"},
+	})
+	if err != nil {
+		t.Fatalf("RecordRunCheckpointV0: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusStopRequestedV0 ||
+		!state.CheckpointRecorded ||
+		!reflect.DeepEqual(state.EvidenceRefs, []string{"stop-ref", "checkpoint-ref-001"}) {
+		t.Fatalf("state=%+v", state)
+	}
+	reopened := mustNewRunFileStoreV0(t, dir)
+	read, err := reopened.ReadRunControlStateV0(ctx, orquestaruncontrol.RunControlReadRequestV0{
+		RunRef: "run-checkpoint",
+	})
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if !reflect.DeepEqual(read, state) {
+		t.Fatalf("read=%+v state=%+v", read, state)
+	}
+}

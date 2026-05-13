@@ -103,6 +103,30 @@ func stopShutdownTargetsV0(
 		if orquestaruncontrol.IsTerminalRunControlStatusV0(state.Status) {
 			continue
 		}
+		checkpointRef := ""
+		if !command.Forced && !state.CheckpointRecorded {
+			prepared, ref, ok, err := prepareShutdownCheckpointV0(
+				ctx,
+				deps,
+				command,
+				candidate,
+				state,
+			)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				pending := shutdownRunFromStateV0(candidate, state)
+				pending.StopRequested = false
+				pending.CheckpointRequired = true
+				pending.Ready = false
+				pending.CheckpointRef = ref
+				targets = append(targets, pending)
+				continue
+			}
+			state = prepared
+			checkpointRef = ref
+		}
 		state, err = deps.RunControlWriter.StopRunV0(ctx, orquestaruncontrol.StopRunCommandV0{
 			RunRef:         runRef,
 			RequestedBy:    command.RequestedBy,
@@ -114,7 +138,9 @@ func stopShutdownTargetsV0(
 		if err != nil {
 			return nil, err
 		}
-		targets = append(targets, shutdownRunFromStateV0(candidate, state))
+		stopped := shutdownRunFromStateV0(candidate, state)
+		stopped.CheckpointRef = checkpointRef
+		targets = append(targets, stopped)
 	}
 	return targets, nil
 }
@@ -220,55 +246,4 @@ func refreshShutdownRunsV0(
 		out = append(out, run)
 	}
 	return out, nil
-}
-
-func applyShutdownControlStateV0(
-	run ServerShutdownRunResultV0,
-	state orquestaruncontrol.RunControlStateV0,
-) ServerShutdownRunResultV0 {
-	evaluation := orquestaruncontrol.EvaluateRunControlV0(state)
-	run.ControlStatus = string(orquestaruncontrol.NormalizeRunControlStatusV0(state.Status))
-	run.CheckpointRequired = evaluation.CheckpointRequired
-	run.Terminal = evaluation.Terminal
-	run.Ready = evaluation.Terminal
-	return run
-}
-
-func applyShutdownStatsV0(
-	run ServerShutdownRunResultV0,
-	stats RunShutdownStatsV0,
-) ServerShutdownRunResultV0 {
-	run.AgentsInFlight = stats.AgentsInFlight
-	run.AgentsStopRequested = stats.AgentsStopRequested
-	run.AgentsStopConfirmed = stats.AgentsStopConfirmed
-	if !run.Ready && !run.CheckpointRequired {
-		run.Ready = stats.AgentsInFlight == 0 &&
-			stats.AgentsStopRequested == stats.AgentsStopConfirmed
-	}
-	return run
-}
-
-func summarizeShutdownResultV0(
-	result ServerShutdownResultV0,
-) ServerShutdownResultV0 {
-	result.Status = ServerShutdownStatusReadyV0
-	result.ShutdownReady = true
-	for _, run := range result.Runs {
-		result.AgentsInFlight += run.AgentsInFlight
-		if run.Ready {
-			result.RunsStopped++
-		}
-		if run.CheckpointRequired {
-			result.CheckpointsPending++
-		}
-		if !run.Ready {
-			result.ShutdownReady = false
-			if run.CheckpointRequired {
-				result.Status = ServerShutdownStatusWaitingCheckpointV0
-			} else if result.Status == ServerShutdownStatusReadyV0 {
-				result.Status = ServerShutdownStatusWaitingDrainV0
-			}
-		}
-	}
-	return result
 }

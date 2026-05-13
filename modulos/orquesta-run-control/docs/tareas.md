@@ -5,6 +5,7 @@
 - Definir `RunControlStateV0` y catalogo de estados.
 - Definir puertos reader/writer para control de runs.
 - Definir comandos puros `PauseRunV0`, `ResumeRunV0`, `StopRunV0` y `CancelRunV0`.
+- Definir `RecordRunCheckpointV0` como escritura separada de ACK durable.
 - Implementar `EvaluateRunControlV0`.
 - Cubrir reglas de scheduling, dispatch, checkpoint, parada de agentes y terminalidad con tests unitarios.
 

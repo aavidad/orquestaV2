@@ -904,7 +904,8 @@ Campos:
     status: ready | waiting_drain | waiting_checkpoint
     shutdown_ready: true solo si todos los runs objetivo estan listos
     runs_requested, runs_stopped, agents_in_flight, checkpoints_pending
-    runs: resumen por run con estado de control, stats y readiness
+    runs: resumen por run con estado de control, checkpoint_ref opcional,
+      stats y readiness
   output_error:
     estado: error
     errores_publicos compactos si faltan puertos obligatorios o falla HTTP
@@ -912,7 +913,8 @@ Invariantes:
   - Adaptador inbound fino: delega en `orquesta-server-shutdown`.
   - No envia senales al PID del servidor ni mata runtimes directamente.
   - No lee DB, filesystem, HOME, OAuth, proveedor ni modelo.
-  - Usa solo puertos inyectados de RunQueue, RunControl, supervisor y stats.
+  - Usa solo puertos inyectados de RunQueue, RunControl, checkpoint,
+    supervisor y stats.
   - El apagado real del proceso servidor queda en el borde externo cuando
     `shutdown_ready=true`.
 Pruebas de contrato:

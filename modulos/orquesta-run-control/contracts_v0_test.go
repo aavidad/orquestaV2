@@ -34,6 +34,11 @@ func (fake fakeRunControlPortV0) CancelRunV0(_ context.Context, command CancelRu
 	return fake.state, nil
 }
 
+func (fake fakeRunControlPortV0) RecordRunCheckpointV0(context.Context, RecordRunCheckpointCommandV0) (RunControlStateV0, error) {
+	fake.state.CheckpointRecorded = true
+	return fake.state, nil
+}
+
 func (fake fakeRunControlPortV0) CompleteRunControlV0(_ context.Context, command CompleteRunControlCommandV0) (RunControlStateV0, error) {
 	fake.state.Status = command.TargetStatus
 	return fake.state, nil

@@ -39,11 +39,13 @@ type ServerShutdownCommandV0 struct {
 }
 
 type ServerShutdownDepsV0 struct {
-	QueueReader      orquestarunqueue.RunQueueReaderPortV0
-	RunControlReader orquestaruncontrol.RunControlReaderPortV0
-	RunControlWriter orquestaruncontrol.RunControlWriterPortV0
-	Supervisor       RunSupervisorPortV0
-	StatsReader      RunStatsReaderPortV0
+	QueueReader         orquestarunqueue.RunQueueReaderPortV0
+	RunControlReader    orquestaruncontrol.RunControlReaderPortV0
+	RunControlWriter    orquestaruncontrol.RunControlWriterPortV0
+	RunCheckpointWriter orquestaruncontrol.RunControlCheckpointWriterPortV0
+	CheckpointPreparer  PrepareAgentShutdownPortV0
+	Supervisor          RunSupervisorPortV0
+	StatsReader         RunStatsReaderPortV0
 }
 
 type RunSupervisorPortV0 interface {
@@ -58,6 +60,31 @@ type RunStatsReaderPortV0 interface {
 		context.Context,
 		RunShutdownStatsRequestV0,
 	) (RunShutdownStatsV0, error)
+}
+
+type PrepareAgentShutdownPortV0 interface {
+	PrepareAgentShutdownV0(
+		context.Context,
+		PrepareAgentShutdownCommandV0,
+	) (PrepareAgentShutdownResultV0, error)
+}
+
+type PrepareAgentShutdownCommandV0 struct {
+	RunRef        string    `json:"run_ref"`
+	AppRef        string    `json:"app_ref,omitempty"`
+	RequestedBy   string    `json:"requested_by,omitempty"`
+	Reason        string    `json:"reason,omitempty"`
+	CorrelationID string    `json:"correlation_id,omitempty"`
+	EvidenceRefs  []string  `json:"evidence_refs,omitempty"`
+	OccurredAt    time.Time `json:"occurred_at"`
+}
+
+type PrepareAgentShutdownResultV0 struct {
+	RunRef             string   `json:"run_ref"`
+	CheckpointRecorded bool     `json:"checkpoint_recorded"`
+	CheckpointRef      string   `json:"checkpoint_ref,omitempty"`
+	PendingAgentRefs   []string `json:"pending_agent_refs,omitempty"`
+	EvidenceRefs       []string `json:"evidence_refs,omitempty"`
 }
 
 type RunShutdownStatsRequestV0 struct {
@@ -92,6 +119,7 @@ type ServerShutdownRunResultV0 struct {
 	AppRef              string `json:"app_ref,omitempty"`
 	ControlStatus       string `json:"control_status,omitempty"`
 	CheckpointRequired  bool   `json:"checkpoint_required,omitempty"`
+	CheckpointRef       string `json:"checkpoint_ref,omitempty"`
 	Terminal            bool   `json:"terminal,omitempty"`
 	StopRequested       bool   `json:"stop_requested,omitempty"`
 	AgentsInFlight      int    `json:"agents_in_flight"`

@@ -236,6 +236,11 @@ Puertos usados:
 
 - `RunQueueReaderPortV0` desde el store de cola;
 - `RunControlReaderPortV0` y `RunControlWriterPortV0` desde el store de control;
+- `RunControlCheckpointWriterPortV0` desde el store de control para dejar ACK
+  durable cuando el shutdown no es forzado;
+- `PrepareAgentShutdownPortV0` implementado por el stack de forma conservadora:
+  solo registra checkpoint automatico si las stats no muestran agentes en
+  vuelo;
 - `RunGlobalSupervisorV0` del propio stack como supervisor hexagonal;
 - stats de shutdown calculadas desde `RunStore`, telemetria, progreso y usage
   inyectados en `StackConfigV0`.
@@ -245,8 +250,8 @@ Invariantes:
 - el stack no mata procesos del servidor;
 - el stack no lee DB, runtime, HOME, OAuth, proveedor ni modelo fuera de los
   puertos ya inyectados;
-- `forced=false` puede devolver `waiting_checkpoint` si RunControl requiere
-  checkpoint;
+- `forced=false` devuelve `waiting_checkpoint` mientras existan agentes en
+  vuelo o no haya ACK durable de checkpoint;
 - `forced=true` drena por supervisor y exige stats sin agentes en vuelo antes
   de que CLI pueda enviar la senal final al servidor;
 - la decision de cerrar el proceso servidor pertenece al borde operativo
