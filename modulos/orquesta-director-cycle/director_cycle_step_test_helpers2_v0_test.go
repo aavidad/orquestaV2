@@ -1,6 +1,7 @@
 package orquestadirectorcycle
 
 import (
+	"encoding/json"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -22,6 +23,41 @@ func cycleStepCapacityCandidateV0() *orquestadirectorscheduler.SchedulerCapacity
 			EvidenceRefs:               []string{"evidence-ref-cycle-step-capacity-001"},
 		},
 	}
+}
+
+func cycleStepCapacityOutboxMessageV0(
+	t *testing.T,
+	runRef string,
+	messageID string,
+) orquestacoreworkflow.OutboxMessageV0 {
+	t.Helper()
+	payload, err := json.Marshal(orquestacoreworkflow.CapacityDecisionRequestV0{
+		CapacityRequestID:          "capacity-ref-cycle-step-pending-001",
+		RunID:                      runRef,
+		PhaseID:                    string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		TaskRef:                    "task-ref-cycle-step-001",
+		ReasonCode:                 "programacion_siguiente_paso",
+		Summary:                    "Decision compacta para siguiente paso.",
+		MinimumRecommendedCapacity: orquestacoreworkflow.OrchestrationCapacityMediumV0,
+		EvidenceRefs:               []string{"evidence-ref-cycle-step-pending-001"},
+	})
+	if err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	message := orquestacoreworkflow.OutboxMessageV0{
+		MessageID:      messageID,
+		MessageType:    orquestacoreworkflow.OutboxMessageRequestCapacityDecisionV0,
+		RunID:          runRef,
+		IdempotencyKey: "idem-" + messageID,
+		CorrelationID:  "corr-cycle-step-001",
+		TargetPort:     orquestacoreworkflow.OutboxTargetCapacityV0,
+		PayloadVersion: orquestacoreworkflow.OutboxPayloadVersionV0,
+		Payload:        payload,
+	}
+	if err := orquestacoreworkflow.ValidateOutboxMessageV0(message); err != nil {
+		t.Fatalf("outbox message: %v", err)
+	}
+	return message
 }
 
 func cycleStepStartCommandV0(t *testing.T) orquestacoreworkflow.OrchestrationCommandV0 {

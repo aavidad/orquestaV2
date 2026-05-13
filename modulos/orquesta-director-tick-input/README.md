@@ -8,7 +8,14 @@ Responsabilidad v0:
 - construir `RunSchedulingSnapshotV0`;
 - convertir proyecciones internas compactas del workflow a refs canonicas del scheduler;
 - adjuntar candidates explicitos sin modificarlos semanticamente;
+- adjuntar refs de outbox pendiente recibidas desde un coordinador externo;
 - devolver `DirectorSchedulerTickInputV0` validado por el scheduler.
+
+Frontera de composicion:
+
+- el puerto que lista outbox pendiente vive fuera de este modulo;
+- `orquesta-director-cycle` es el ensamblador superior que consulta el ledger
+  inyectado y pasa `pending_outbox_refs` a este builder.
 
 Fuera de alcance:
 

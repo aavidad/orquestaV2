@@ -41,6 +41,8 @@ Invariantes:
 - Ejecuta un unico paso; no reintenta ni hace loops.
 - Si ya hay outbox pendiente, el scheduler debe devolver espera y no aplicar comandos.
 - Si el runner produce outbox, se registra antes de devolver resultado.
+- La consulta de outbox pendiente se hace por `OutboxLedger` inyectado y sus
+  refs se pasan a `orquesta-director-tick-input` como datos.
 
 Errores publicos:
 

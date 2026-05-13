@@ -10,6 +10,10 @@ Responsabilidad v0:
 - registrar outbox nueva con `orquesta-director-cycle-outbox`;
 - devolver estado compacto para que un supervisor externo decida si repetir.
 
+Este modulo es el ensamblador superior de la frontera DTI-006: combina run
+durable recibido, candidates explicitos y ledger de outbox inyectado sin elegir
+DB, runtime ni adaptadores productivos.
+
 Fuera de alcance:
 
 - daemon, bucles o temporizadores;

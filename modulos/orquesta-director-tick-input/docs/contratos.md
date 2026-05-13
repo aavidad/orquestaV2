@@ -35,6 +35,13 @@ Invariantes:
 - La salida solo contiene refs compactas.
 - Las refs duplicadas o con espacios se compactan.
 
+Frontera DTI-005/DTI-006:
+
+- Este modulo no define ni invoca un puerto de outbox.
+- El caller entrega `pending_outbox_refs` ya calculadas.
+- El ensamblador superior vive en `orquesta-director-cycle`, que usa el puerto
+  de ledger de `orquesta-director-cycle-outbox` y pasa las refs a este builder.
+
 Normalizacion de proyecciones:
 
 - `capacity_request#capacity_decision:decision_ref` -> `capacity_request`

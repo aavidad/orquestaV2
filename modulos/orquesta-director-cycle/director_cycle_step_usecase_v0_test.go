@@ -3,6 +3,7 @@ package orquestadirectorcycle
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -42,6 +43,36 @@ func TestExecuteDirectorCycleStepV0RegistraOutboxYSegundoPasoEspera(t *testing.T
 	if len(second.WaitingReasons) != 1 ||
 		second.WaitingReasons[0] != orquestadirectorscheduler.SchedulerWaitingOutboxPendingV0 {
 		t.Fatalf("second waiting reasons: %+v", second.WaitingReasons)
+	}
+}
+
+func TestExecuteDirectorCycleStepV0PasaOutboxPendientePreviaAlTickInput(t *testing.T) {
+	workflow := newCycleStepWorkflowV0(t)
+	ledger := newCycleStepLedgerAdapterV0()
+	pendingRef := "outbox-ref-cycle-step-pending-001"
+	_, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{
+		cycleStepCapacityOutboxMessageV0(t, workflow.run.RunID, pendingRef),
+	})
+	if len(issues) != 0 {
+		t.Fatalf("seed pending outbox: %+v", issues)
+	}
+
+	result, err := ExecuteDirectorCycleStepV0(
+		context.Background(),
+		validCycleStepInputV0(workflow, ledger, "cycle-ref-step-pending", "tick-ref-step-pending"),
+	)
+	if err != nil {
+		t.Fatalf("cycle step: %v", err)
+	}
+	if result.Status != orquestadirectorrunner.DirectorCycleStatusWaitingV0 ||
+		result.SchedulerStatus != orquestadirectorscheduler.SchedulerTickStatusWaitingV0 {
+		t.Fatalf("status: %+v", result)
+	}
+	if !reflect.DeepEqual(result.PendingOutboxBeforeRefs, []string{pendingRef}) {
+		t.Fatalf("pending before: %+v", result.PendingOutboxBeforeRefs)
+	}
+	if len(result.AppliedCommands) != 0 || result.OutboxSavedCount != 0 {
+		t.Fatalf("applied work with pending outbox: %+v", result)
 	}
 }
 
