@@ -12,6 +12,9 @@ func appChangeContractSummaryV0(request orquestaappchange.AppChangeRequestV0) st
 	if appChangeIsDraftContentBlockWorkV0(request) {
 		return "Contrato para redactar bloque documental externo con paquete de dominio suficiente."
 	}
+	if appChangeIsVisualExternalWorkV0(request) {
+		return "Contrato para generar recurso visual pedagogico externo con entrega auditable."
+	}
 	if appChangeIsDocumentaryExternalWorkV0(request) {
 		return "Contrato para resolver trabajo documental externo con paquete de dominio suficiente."
 	}
@@ -35,6 +38,8 @@ func appChangeTaskTitleV0(request orquestaappchange.AppChangeRequestV0) string {
 	switch strings.TrimSpace(request.ExternalWork.WorkKind) {
 	case "draft_content_block":
 		return "Redactar bloque documental " + appChangeExternalWorkTitleScopeV0(request.ExternalWork)
+	case "generate_visual_asset":
+		return "Generar recurso visual " + appChangeExternalWorkTitleScopeV0(request.ExternalWork)
 	case "summarize_block":
 		return "Resumir bloque documental externo"
 	case "summarize_chapter":
@@ -70,6 +75,9 @@ func appChangeTaskSummaryV0(request orquestaappchange.AppChangeRequestV0) string
 	if appChangeIsDraftContentBlockWorkV0(request) {
 		return "Redactar unidad editorial amplia con paquete de dominio suficiente; no trocear un temario largo en parrafos sin continuidad."
 	}
+	if appChangeIsVisualExternalWorkV0(request) {
+		return appChangeVisualTaskSummaryV0()
+	}
 	if appChangeIsSummaryExternalWorkV0(request) {
 		return "Crear resumen derivado compacto con trazabilidad a bloques, capitulos, tema y fuentes de origen."
 	}
@@ -104,6 +112,9 @@ func appChangeExternalWorkCriteriaV0(
 		return nil
 	}
 	criteria := []string{"Resolver solo el contrato externo de dominio con refs opacas."}
+	if appChangeIsVisualExternalWorkV0(request) {
+		return append(criteria, appChangeVisualWorkCriteriaV0(request)...)
+	}
 	if !appChangeIsDocumentaryExternalWorkV0(request) {
 		return criteria
 	}

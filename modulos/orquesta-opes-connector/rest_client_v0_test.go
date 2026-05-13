@@ -123,6 +123,45 @@ func TestRESTClientV0SubmitDomainWorkArtifactEnviaArtefacto(t *testing.T) {
 	}
 }
 
+func TestRESTClientV0SubmitDomainWorkArtifactEnviaVisualAsset(t *testing.T) {
+	var received opesArtifactRequestV0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs/job-ref-visual-001/artifacts" || r.Method != http.MethodPost {
+			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":              "artifact-receipt-ref-visual-001",
+			"artifact_id":     "artifact-receipt-ref-visual-001",
+			"job_id":          "job-ref-visual-001",
+			"correlation_id":  "corr-visual-001",
+			"idempotency_key": "idem-visual-delivery-001",
+			"external_refs":   map[string]string{"delivery_ref": "delivery-ref-visual-001"},
+		})
+	}))
+	defer server.Close()
+
+	client := NewRESTClientV0(RESTClientConfigV0{BaseURL: server.URL})
+	result, err := client.SubmitDomainWorkArtifactV0(context.Background(), opesVisualArtifactSubmissionForTestV0())
+
+	if err != nil {
+		t.Fatalf("SubmitDomainWorkArtifactV0: %v", err)
+	}
+	if result.Status != orquestadomainwork.DomainWorkStatusAcceptedV0 ||
+		result.JobRef != "job-ref-visual-001" {
+		t.Fatalf("result=%+v", result)
+	}
+	if received.ArtifactType != "visual_asset" ||
+		received.PayloadJSON["format"] != "svg" ||
+		received.PayloadJSON["caption"] != "Topologia con nodo central." ||
+		received.PayloadJSON["alt_text"] != "Switch central conectado a equipos cliente." ||
+		received.PayloadJSON["body"] == "" {
+		t.Fatalf("payload=%+v", received)
+	}
+}
+
 func TestRESTClientV0EntradaInvalidaNoLlamaHTTP(t *testing.T) {
 	called := false
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -186,6 +225,34 @@ func opesArtifactSubmissionForTestV0() orquestadomainwork.DomainWorkArtifactSubm
 		},
 		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
 			{Kind: "delivery_ref", Ref: "delivery-ref-001"},
+		},
+		CompleteJob: true,
+	})
+}
+
+func opesVisualArtifactSubmissionForTestV0() orquestadomainwork.DomainWorkArtifactSubmissionV0 {
+	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(orquestadomainwork.DomainWorkArtifactSubmissionV0{
+		RequestID:      "req-visual-delivery-001",
+		CorrelationID:  "corr-visual-001",
+		IdempotencyKey: "idem-visual-delivery-001",
+		RequestedBy:    "orquesta",
+		DomainRef:      "opes",
+		JobRef:         "job-ref-visual-001",
+		ArtifactRef:    "artifact-ref-visual-001",
+		ArtifactType:   "visual_asset",
+		Summary:        "Visual de red en estrella",
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "topic_id", Value: "topic-ref-001"},
+			{Name: "chapter_id", Value: "chapter-ref-001"},
+			{Name: "asset_type", Value: "vignette"},
+			{Name: "format", Value: "svg"},
+			{Name: "title", Value: "Red en estrella"},
+			{Name: "caption", Value: "Topologia con nodo central."},
+			{Name: "alt_text", Value: "Switch central conectado a equipos cliente."},
+			{Name: "body", Value: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420"></svg>`},
+		},
+		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
+			{Kind: "delivery_ref", Ref: "delivery-ref-visual-001"},
 		},
 		CompleteJob: true,
 	})

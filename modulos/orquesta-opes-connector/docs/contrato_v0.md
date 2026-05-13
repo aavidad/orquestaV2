@@ -80,6 +80,36 @@ Ejemplo documental:
 }
 ```
 
+Ejemplo visual:
+
+```json
+{
+  "artifact_type": "visual_asset",
+  "summary": "Vineta tecnica de red en estrella",
+  "idempotency_key": "orquesta-visual-delivery-id",
+  "payload_json": {
+    "topic_id": "TOPIC_ID",
+    "chapter_id": "CHAPTER_ID",
+    "asset_type": "vignette",
+    "format": "svg",
+    "content_type": "image/svg+xml",
+    "title": "Red en estrella",
+    "caption": "Topologia donde todos los equipos se conectan a un nodo central.",
+    "alt_text": "Switch central conectado a cinco equipos cliente.",
+    "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 420\"></svg>",
+    "placement": "after_block",
+    "language_code": "es",
+    "source_refs": []
+  },
+  "external_refs": {
+    "run_ref": "run-id",
+    "task_ref": "task-id",
+    "delivery_ref": "delivery-id"
+  },
+  "complete_job": true
+}
+```
+
 ## Confirmacion OPES 2026-05-13
 
 OPES confirma que:
@@ -90,6 +120,9 @@ OPES confirma que:
 - `draft_content_block` es job valido para redaccion de bloques;
 - `POST /api/jobs/{id}/artifacts` materializa `content_block`,
   `block_revision` y `source` si el `payload_json` trae campos completos;
+- OPES publica `generate_visual_asset` y acepta `visual_asset` como artefacto
+  preferente para esquemas, vinetas, flujogramas, mapas conceptuales e
+  infografias;
 - la deduplicacion funciona por `idempotency_key` en jobs y por
   `(job_id, idempotency_key)` en artefactos;
 - replay de job puede devolver HTTP `200` con `created=false`; creacion nueva
@@ -99,6 +132,12 @@ Para materializar un `content_block` vivo, `topic_id` y `chapter_id` deben
 existir previamente en OPES. Si Orquesta usa refs inventadas, OPES puede
 aceptar el job y auditar el artefacto, pero no debe crear un bloque vivo contra
 un tema o capitulo inexistente.
+
+Para materializar un `visual_asset`, Orquesta debe enviar `asset_type`,
+`format`, `title`, `caption`, `alt_text`, `body`, `placement`,
+`language_code` y `source_refs` si aplica. Cuando `format=svg`, el SVG debe
+ser autocontenido y sin scripts, eventos JavaScript, `foreignObject` ni URLs
+remotas.
 
 Respuesta de job aceptada por el conector:
 

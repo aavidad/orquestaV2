@@ -26,6 +26,10 @@ Casos focales:
 - `TestAppChangeDirectorDecisionSourceV0ResumenPermiteGranularidadPequena`:
   `summarize_chapter` admite tarea pequena porque es artefacto derivado y exige
   trazabilidad y conservacion de matices criticos.
+- `TestAppChangeDirectorDecisionSourceV0ProyectaVisualAssetOPES`:
+  `generate_visual_asset` crea unidad de trabajo externa con criterios de SVG
+  seguro, accesibilidad, caption, alt text, ausencia de placeholders y entrega
+  `visual_asset`.
 - `TestAppChangeDirectorDecisionSourceV0CompactaCriteriosExternosAlLimiteDelDirector`:
   reproduce un job OPES con criterios generados y de usuario que antes excedian
   el limite compacto del DTO del director.

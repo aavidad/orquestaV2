@@ -23,13 +23,8 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 	}
 	body := readDomainWorkDeliveryBodyV0(input.Descriptor, input.Ack)
 	fields := copyDomainWorkFieldsForContextV0(work.InputFields)
-	fields = append(fields,
-		orquestadomainwork.DomainWorkFieldV0{Name: "content_type", Value: "text/markdown"},
-		orquestadomainwork.DomainWorkFieldV0{Name: "title", Value: input.Task.Title},
-	)
-	if body != "" {
-		fields = append(fields, orquestadomainwork.DomainWorkFieldV0{Name: "body", Value: body})
-	}
+	artifactType := domainWorkArtifactTypeForWorkKindV0(work.WorkKind)
+	fields = domainWorkDeliveryPayloadFieldsV0(fields, artifactType, input.Task.Title, body)
 	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(
 		orquestadomainwork.DomainWorkArtifactSubmissionV0{
 			RequestID:      "req-domain-work-artifact-" + input.Observation.DeliveryRef,
@@ -39,7 +34,7 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 			DomainRef:      work.ProjectRef,
 			JobRef:         work.JobRef,
 			ArtifactRef:    input.Observation.DeliveryRef,
-			ArtifactType:   domainWorkArtifactTypeForWorkKindV0(work.WorkKind),
+			ArtifactType:   artifactType,
 			Summary:        input.Observation.Summary,
 			PayloadFields:  fields,
 			ExternalRefs:   domainWorkArtifactExternalRefsV0(input),
@@ -53,6 +48,8 @@ func domainWorkArtifactTypeForWorkKindV0(workKind string) string {
 	switch strings.TrimSpace(workKind) {
 	case "draft_content_block", "generate_block", "generate_program_topic_draft":
 		return "content_block"
+	case "generate_visual_asset":
+		return "visual_asset"
 	case "review_legal", "review_pedagogical", "review_quality", "validate_topic":
 		return "block_revision"
 	case "research_sources", "download_source", "verify_sources":
@@ -60,6 +57,82 @@ func domainWorkArtifactTypeForWorkKindV0(workKind string) string {
 	default:
 		return "work_delivery"
 	}
+}
+
+func domainWorkDeliveryPayloadFieldsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	artifactType string,
+	title string,
+	body string,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	fields = appendDomainWorkFieldIfMissingV0(
+		fields,
+		"content_type",
+		domainWorkDeliveryContentTypeV0(fields, artifactType),
+	)
+	fields = appendDomainWorkFieldIfMissingV0(fields, "title", title)
+	if strings.TrimSpace(body) != "" {
+		fields = append(fields, orquestadomainwork.DomainWorkFieldV0{Name: "body", Value: strings.TrimSpace(body)})
+	}
+	return fields
+}
+
+func appendDomainWorkFieldIfMissingV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	name string,
+	value string,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	name = strings.TrimSpace(name)
+	value = strings.TrimSpace(value)
+	if name == "" || value == "" || domainWorkFieldHasNameV0(fields, name) {
+		return fields
+	}
+	return append(fields, orquestadomainwork.DomainWorkFieldV0{Name: name, Value: value})
+}
+
+func domainWorkFieldHasNameV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	name string,
+) bool {
+	name = strings.TrimSpace(name)
+	for _, field := range fields {
+		if strings.TrimSpace(field.Name) == name {
+			return true
+		}
+	}
+	return false
+}
+
+func domainWorkDeliveryContentTypeV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	artifactType string,
+) string {
+	if artifactType != "visual_asset" {
+		return "text/markdown"
+	}
+	switch strings.ToLower(strings.TrimSpace(domainWorkFieldStringValueV0(fields, "format"))) {
+	case "svg":
+		return "image/svg+xml"
+	case "mermaid":
+		return "text/mermaid"
+	case "html_panel":
+		return "text/html"
+	default:
+		return "text/markdown"
+	}
+}
+
+func domainWorkFieldStringValueV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	name string,
+) string {
+	name = strings.TrimSpace(name)
+	for _, field := range fields {
+		if strings.TrimSpace(field.Name) == name {
+			return strings.TrimSpace(field.Value)
+		}
+	}
+	return ""
 }
 
 func domainWorkArtifactExternalRefsV0(

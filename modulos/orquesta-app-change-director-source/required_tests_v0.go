@@ -18,6 +18,8 @@ func appChangeTaskRequiredTestsV0(
 				"validar granularidad editorial coherente",
 				"validar fuentes, criterios y longitud si llegan",
 			)
+		} else if appChangeIsVisualExternalWorkV0(request) {
+			tests = append(tests, appChangeVisualRequiredTestsV0()...)
 		} else if appChangeIsSummaryExternalWorkV0(request) {
 			tests = append(tests,
 				"validar trazabilidad del resumen",

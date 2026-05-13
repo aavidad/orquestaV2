@@ -80,9 +80,14 @@ Invariantes:
 - si una delivery ya estaba registrada y el submit no ocurrio, el siguiente
   `DrainRunV0` reintenta mediante ledger e `idempotency_key` deterministica;
 - el builder default mapea `draft_content_block` a `content_block`,
-  revisiones a `block_revision` y trabajos de fuentes a `source`;
+  `generate_visual_asset` a `visual_asset`, revisiones a `block_revision` y
+  trabajos de fuentes a `source`;
 - los payloads de dominio salen de `external_work.input_fields` y del fichero
   permitido por el ACK, no del core ni de internals de OPES.
+- para `visual_asset`, el builder conserva `asset_type`, `format`, `title`,
+  `caption`, `alt_text`, `placement`, `language_code` y refs enviadas por OPES;
+  el fichero del ACK se proyecta como `body` y `format=svg` usa
+  `content_type=image/svg+xml`.
 
 ## Shutdown cooperativo de agentes Codex
 

@@ -768,6 +768,21 @@ Evidencia:
   ACK y refs externas `run_ref/task_ref/delivery_ref`;
 - el replay se controla por ledger e idempotencia de `delivery_ref`.
 
+Validacion visual asset OPES 2026-05-13:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack \
+  -run TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaVisualAssetOPES
+```
+
+Evidencia esperada:
+
+- `generate_visual_asset` se entrega como `artifact_type=visual_asset`;
+- `format=svg` produce `content_type=image/svg+xml`;
+- `title`, `caption`, `alt_text`, `placement`, `language_code` y refs de OPES
+  permanecen como payload de dominio;
+- el SVG generado por el agente viaja como `body`, sin filtrar rutas locales.
+
 Validacion de stats OPES/job externo 2026-05-13:
 
 ```bash

@@ -45,7 +45,10 @@ Campos principales:
 - `artifact_type`: tipo de artefacto de dominio;
 - `payload_fields`: campos de resultado normalizados por el adaptador, por
   ejemplo `title`, `body`, `source_refs` o `stable_id`; tambien aceptan
-  `value_json` cuando el dominio externo requiere estructura;
+  `value_json` cuando el dominio externo requiere estructura. Para
+  `visual_asset`, los campos esperados son `asset_type`, `format`, `title`,
+  `caption`, `alt_text`, `body`, `placement`, `language_code` y `source_refs`
+  si aplica;
 - `payload_refs`: referencias a payloads/materializaciones externas;
 - `complete_job`: senal opcional para indicar cierre del job externo.
 

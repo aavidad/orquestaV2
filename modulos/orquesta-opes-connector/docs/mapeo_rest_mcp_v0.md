@@ -94,12 +94,18 @@ Artefactos materializables documentados:
 content_block
 block_revision
 source
+visual_asset
 ```
 
 Para `content_block`, OPES exige integridad editorial: `topic_id` y
 `chapter_id` deben existir antes de entregar el artefacto si se quiere crear un
 bloque vivo. El smoke completo debe preparar esos IDs con endpoints publicos de
 OPES, no por DB ni por ficheros internos.
+
+Para `visual_asset`, Orquesta entrega `artifact_type=visual_asset` con campos
+`asset_type`, `format`, `title`, `caption`, `alt_text`, `body`, `placement`,
+`language_code` y `source_refs` si aplica. `format=svg` debe ser autocontenido
+y sin scripts, eventos JavaScript, `foreignObject` ni URLs remotas.
 
 Para otros objetos de dominio, el conector debe usar endpoints OPES especificos
 cuando OPES los publique. No debe resolverlos por DB ni ficheros.
@@ -113,6 +119,7 @@ research_sources
 split_syllabus_topic
 draft_topic_outline
 draft_content_block
+generate_visual_asset
 review_legal
 review_pedagogical
 review_quality

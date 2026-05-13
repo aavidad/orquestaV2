@@ -147,3 +147,17 @@ Impacto: la decision nueva es solo `open_phase(revision)` con refs compactas.
 No lee ficheros, runtime, DB, proveedor, modelo ni detalles de la app externa.
 Si hay otro cambio listo para crear microtarea, se prioriza materializarlo antes
 de abrir revision para no revisar un conjunto de tareas incompleto.
+
+## Visuales OPES como trabajo externo
+
+Decision: `generate_visual_asset` publica el mismo contrato externo
+`ApplyExternalDomainWorkV0`, pero la tarea declara criterios especificos de
+visual pedagogico.
+
+Motivo: OPES quiere tratar esquemas, vinetas, flujogramas e infografias como
+artefactos de dominio. Si Orquesta lo tratase como bloque textual generico, el
+agente no tendria criterios de seguridad SVG, accesibilidad ni trazabilidad.
+
+Impacto: la fuente no conoce ficheros ni persistencia OPES. Solo proyecta
+title, summary, acceptance criteria y required tests para que el agente entregue
+`visual_asset` por el bridge de dominio externo.

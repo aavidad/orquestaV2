@@ -977,3 +977,16 @@ totales. Si se agota la ventana, el packet queda marcado como truncado y el
 ACK no puede cerrar sin justificar materializacion externa o bloquear.
 Estado: aceptada.
 ```
+
+```text
+Fecha: 2026-05-13
+Decision: `generate_visual_asset` se entrega como `visual_asset`.
+Motivo: OPES tratara esquemas, vinetas, flujogramas, mapas conceptuales e
+infografias como artefactos de dominio, no como bloques de texto ni ficheros
+locales. El fallback `content_block` solo seria temporal y perderia semantica.
+Impacto: el builder default de entregas externas mapea `generate_visual_asset`
+a `visual_asset`, conserva campos editoriales de OPES y lee el fichero del ACK
+como `body`. Si `format=svg`, declara `content_type=image/svg+xml`. El core no
+conoce visuales ni OPES; esto vive en el bridge de dominio externo.
+Estado: aceptada.
+```
