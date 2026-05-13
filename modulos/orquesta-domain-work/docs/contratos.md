@@ -1,0 +1,47 @@
+# Contratos: orquesta-domain-work
+
+## DomainWorkJobRequestV0
+
+Entrada generica para pedir un trabajo de dominio externo.
+
+Campos principales:
+
+- `correlation_id`: correlacion estable entre app externa y Orquesta;
+- `idempotency_key`: deduplicacion de reintentos;
+- `requested_by`: origen de la peticion, por defecto `orquesta`;
+- `domain_ref`: app o dominio externo, por ejemplo `opes`;
+- `interface_refs`: contratos REST/MCP externos expresados como refs;
+- `work_kind`: tipo de trabajo de dominio, sin semantica de programacion;
+- `input_fields`: campos de dominio ya normalizados por un adaptador superior,
+  por ejemplo `program_id`, `topic_id`, `level`, `language_code` o
+  `source_refs`;
+- `work_refs`, `input_refs`, `external_refs` y `evidence_refs`: refs compactas.
+
+Invariantes:
+
+- no contiene DB, rutas locales, HOME, OAuth, proveedor, modelo ni runtime;
+- no transporta JSON libre ni payloads sin contrato;
+- no decide agentes, capacidad, sesiones ni reintentos;
+- todo conector real queda fuera de este modulo.
+
+## DomainWorkArtifactSubmissionV0
+
+Salida generica para devolver artefactos al dominio externo.
+
+Campos principales:
+
+- `job_ref`: job externo aceptado por el dominio propietario;
+- `artifact_ref`: artefacto producido por Orquesta;
+- `artifact_type`: tipo de artefacto de dominio;
+- `payload_fields`: campos de resultado normalizados por el adaptador, por
+  ejemplo `title`, `body`, `source_refs` o `stable_id`;
+- `payload_refs`: referencias a payloads/materializaciones externas;
+- `complete_job`: senal opcional para indicar cierre del job externo.
+
+## Puertos
+
+- `DomainWorkJobCreatorPortV0`
+- `DomainWorkArtifactSubmitterPortV0`
+
+Ambos son puertos hexagonales. Un conector OPES o de otra app debe vivir en otro
+modulo y consumir estos contratos sin filtrar internals al nucleo.
