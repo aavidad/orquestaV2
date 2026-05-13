@@ -44,6 +44,15 @@ func newStatsClientV0(
 	return out
 }
 
+func newRunQueueClientV0(
+	config ConfigV0,
+	client *http.Client,
+) *orquestaweb.RESTRunQueueClientV0 {
+	out := orquestaweb.NewRESTRunQueueClientV0(InternalBaseURLV0, config.Timeout)
+	out.HTTPClient = client
+	return out
+}
+
 func newAppChangeClientV0(
 	config ConfigV0,
 	client *http.Client,

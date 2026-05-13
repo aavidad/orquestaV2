@@ -444,9 +444,11 @@ Trabajo minimo:
   internos de cada app;
 - tests de stack que validan alta en cola, prioridad y pausa.
 
-Pendiente separado:
+Cerrado separado en `orquesta-web` y gateway:
 
-- vista web de cola/progreso multiapp.
+- vista web `/run-queue` para ranking de cola global y cambio de prioridad;
+- progreso profundo por run sigue en `/director-stats` para no duplicar el
+  contrato de estadisticas.
 
 ## APP-CODEX-STACK-017
 

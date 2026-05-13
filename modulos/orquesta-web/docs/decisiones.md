@@ -268,6 +268,23 @@ Estado: aceptada localmente.
 
 ```text
 Fecha: 2026-05-13
+Decision: La cola multiapp se expone en web como panel JSON `/run-queue`
+encima del bridge REST `orquesta.run_queue.priority.v0`.
+Motivo: la web debe permitir ver ranking y cambiar prioridad, pero no debe leer
+RunQueue, RunControl, stores ni scheduler. El contrato MCP/REST ya existe y es
+el borde estable para humanos e IA.
+Alternativas: leer el store de cola desde web; duplicar ranking en UI; mezclar
+cola global dentro de `/director-stats`.
+Impacto: `RunQueueWebEndpointV0` soporta GET rank y POST set_priority mediante
+`RunQueueClientV0`; el refresco solo aplica a `rank`. El progreso profundo por
+run sigue en `/director-stats`.
+Contratos afectados: `WebRunQueueQueryV0`, `WebRunQueueViewModelV0`,
+`RESTRunQueueClientV0`.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-05-13
 Decision: `/app-change` acepta refs opacas de trabajo externo, pero no importa
 ninguna logica de la app propietaria.
 Motivo: Orquesta debe poder coordinar trabajos sobre OPES u otra app mediante

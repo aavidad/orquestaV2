@@ -28,6 +28,7 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 		NuevaApp:                       orquestaweb.NuevaAppHTMLHandlerV0{Endpoint: nuevaEndpoint},
 		AppChangePage:                  changeEndpoint,
 		DirectorStatsPage:              orquestaweb.NewDirectorStatsWebEndpointV0(newStatsClientV0(config, client)),
+		RunQueuePage:                   orquestaweb.NewRunQueueWebEndpointV0(newRunQueueClientV0(config, client)),
 		AppSpec:                        apiHandlers.AppSpec,
 		AppDirector:                    apiHandlers.AppDirector,
 		AppChange:                      apiHandlers.AppChange,

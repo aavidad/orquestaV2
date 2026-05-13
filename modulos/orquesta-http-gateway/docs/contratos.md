@@ -23,24 +23,41 @@ Contenedor de handlers `net/http` ya construidos por otro borde de composicion.
 Campos:
 
 - `NuevaApp`;
+- `AppChangePage`;
 - `DirectorStatsPage`;
+- `RunQueuePage`;
 - `AppSpec`;
 - `AppDirector`;
-- `DirectorStats`.
+- `AppChange`;
+- `DirectorStats`;
+- `RunControl`;
+- `RunQueuePriority`;
+- `ServerShutdown`;
+- `AutoprogrammingValidateRequest`.
 
 ## Rutas estables
 
 - `RouteNuevaAppV0`: `/nueva-app`;
+- `RouteAppChangePageV0`: `/app-change`;
 - `RouteDirectorStatsPageV0`: `/director-stats`;
+- `RouteRunQueuePageV0`: `/run-queue`;
 - `RouteAppSpecV0`: `/api/v0/apps/spec`;
 - `RouteAppDirectorV0`: `/api/v0/apps/director`;
+- `RouteAppChangeV0`: `/api/v0/apps/`;
 - `RouteDirectorStatsV0`: `/api/v0/director/stats`.
+- `RouteRunControlV0`: `/api/v0/runs/control`;
+- `RouteRunQueuePriorityV0`: `/api/v0/runs/queue/priority`;
+- `RouteAutoprogrammingValidateRequestV0`: `/api/v0/autoprogramming/validate-request`;
 - `RouteServerShutdownV0`: `/api/v0/server/shutdown`.
 
 `RouteDirectorStatsPageV0` y `RouteDirectorStatsV0` son rutas separadas: la
 primera apunta al handler web inyectado y la segunda al contrato REST que
 transporta `DirectorRunStatsV0` completo. El gateway no inspecciona campos de
 tareas, agentes, rework, replan, progreso, cierre ni `decision_context`.
+
+`RouteRunQueuePageV0` y `RouteRunQueuePriorityV0` son rutas separadas: la
+primera apunta al panel web inyectado y la segunda al contrato REST/MCP de
+cola. El gateway no conoce ranking, prioridad, aging, fairness ni stores.
 
 ## Invariantes
 

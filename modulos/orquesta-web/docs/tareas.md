@@ -172,6 +172,19 @@ Estado: completada como slice separado sin tocar flujo nueva app, DB, runtime, f
 ```
 
 ```text
+ID: WEB-021
+Objetivo: Exponer panel web JSON de cola multiapp y cambio de prioridad sin
+leer stores desde web.
+Write-set: run_queue_*_v0.go, tests y docs locales.
+Simbolo foco: WebRunQueuePanelV0
+Contrato: Consume `orquesta.run_queue.priority.v0` por REST interno.
+Validacion: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
+Bloqueos: El progreso detallado por run sigue viniendo de `/director-stats`;
+este panel solo rankea runs y muta prioridad base.
+Estado: completada.
+```
+
+```text
 ID: WEB-020
 Objetivo: Permitir que `/app-change` envie refs opacas de trabajo externo sin
 acoplar la web a OPES ni a otra app propietaria.

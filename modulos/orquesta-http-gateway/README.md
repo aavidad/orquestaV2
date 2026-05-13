@@ -13,9 +13,12 @@ Responsabilidades:
 Rutas v0:
 
 - `/nueva-app`
+- `/app-change`
 - `/director-stats`
+- `/run-queue`
 - `/api/v0/apps/spec`
 - `/api/v0/apps/director`
+- `/api/v0/apps/{app_ref}/changes`
 - `/api/v0/director/stats`
 - `/api/v0/autoprogramming/validate-request`
 - `/api/v0/runs/control`

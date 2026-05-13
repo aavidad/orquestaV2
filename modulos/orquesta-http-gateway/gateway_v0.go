@@ -6,6 +6,7 @@ const (
 	RouteNuevaAppV0                       = "/nueva-app"
 	RouteAppChangePageV0                  = "/app-change"
 	RouteDirectorStatsPageV0              = "/director-stats"
+	RouteRunQueuePageV0                   = "/run-queue"
 	RouteAppSpecV0                        = "/api/v0/apps/spec"
 	RouteAppDirectorV0                    = "/api/v0/apps/director"
 	RouteAppChangeV0                      = "/api/v0/apps/"
@@ -20,6 +21,7 @@ type RouteHandlersV0 struct {
 	NuevaApp                       http.Handler
 	AppChangePage                  http.Handler
 	DirectorStatsPage              http.Handler
+	RunQueuePage                   http.Handler
 	AppSpec                        http.Handler
 	AppDirector                    http.Handler
 	AppChange                      http.Handler
@@ -36,6 +38,7 @@ func NewAppGatewayMuxV0(handlers RouteHandlersV0) http.Handler {
 	handleIfPresent(mux, RouteNuevaAppV0, handlers.NuevaApp)
 	handleIfPresent(mux, RouteAppChangePageV0, handlers.AppChangePage)
 	handleIfPresent(mux, RouteDirectorStatsPageV0, handlers.DirectorStatsPage)
+	handleIfPresent(mux, RouteRunQueuePageV0, handlers.RunQueuePage)
 	handleIfPresent(mux, RouteAppSpecV0, handlers.AppSpec)
 	handleIfPresent(mux, RouteAppDirectorV0, handlers.AppDirector)
 	handleIfPresent(mux, RouteAppChangeV0, handlers.AppChange)

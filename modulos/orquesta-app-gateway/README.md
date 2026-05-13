@@ -5,10 +5,17 @@ Raiz de composicion HTTP de Orquesta.
 Este modulo ensambla handlers ya existentes:
 
 - web `/nueva-app`;
+- web `/app-change`;
 - web `/director-stats`;
+- web `/run-queue`;
 - REST `/api/v0/apps/spec`;
 - REST `/api/v0/apps/director`;
-- REST `/api/v0/director/stats`.
+- REST `/api/v0/apps/{app_ref}/changes`;
+- REST `/api/v0/director/stats`;
+- REST `/api/v0/runs/control`;
+- REST `/api/v0/runs/queue/priority`;
+- REST `/api/v0/autoprogramming/validate-request`;
+- REST `/api/v0/server/shutdown`.
 
 No es servidor real y no abre sockets. Devuelve un `http.Handler` listo para que
 otro adaptador superior lo sirva.
@@ -18,7 +25,7 @@ Fuera de alcance:
 - DB, migraciones, drivers o stores concretos;
 - runtime real, procesos, Codex, HOME, OAuth o modelos;
 - `cmd`, flags, env, `ListenAndServe`;
-- logica de negocio de director, scheduler, factory o web.
+- logica de negocio de director, scheduler, factory, cola o web.
 
 Validacion local:
 

@@ -73,6 +73,27 @@ func TestRunControlYRunQueueAPIDeleganEnMCPPortsV0(t *testing.T) {
 	}
 }
 
+func TestRunQueuePageDelegaEnAPIInternaSinCmdDBRuntimeV0(t *testing.T) {
+	queue := &recordingRunQueuePriorityExecutorV0{}
+	handler := NewHTTPHandlerV0(ConfigV0{
+		RunQueuePriority: queue,
+		Timeout:          time.Second,
+	})
+	req := httptest.NewRequest(http.MethodGet, "/run-queue?action=rank&queue_ref=global&limit=5", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if queue.Input.Action != "rank" ||
+		queue.Input.QueueRef != "global" ||
+		queue.Input.Limit != 5 {
+		t.Fatalf("input=%+v", queue.Input)
+	}
+}
+
 func TestAppChangePageDelegaEnAPIInternaSinCmdDBRuntimeV0(t *testing.T) {
 	executor := &recordingRequestAppChangeExecutorV0{}
 	handler := NewHTTPHandlerV0(ConfigV0{

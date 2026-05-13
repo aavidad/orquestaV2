@@ -41,6 +41,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			},
 		},
 		{
+			name:  "run queue page",
+			route: RouteRunQueuePageV0,
+			handlers: RouteHandlersV0{
+				RunQueuePage: markerHandler("run-queue-page"),
+			},
+		},
+		{
 			name:  "app director",
 			route: RouteAppDirectorV0,
 			handlers: RouteHandlersV0{

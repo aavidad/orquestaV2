@@ -11,8 +11,12 @@ git diff --check -- modulos/orquesta-app-gateway
 
 - `/nueva-app` usa `RESTArrancarDirectorAppClientV0` contra el bridge MCP REST.
 - `/director-stats` usa `RESTDirectorStatsClientV0` contra el bridge MCP REST.
+- `/run-queue` usa `RESTRunQueueClientV0` contra el bridge MCP REST de cola
+  multiapp; el gateway solo compone cliente in-process.
 - `/api/v0/apps/director` con executor real in-memory comparte RunStore con
   `/director-stats`.
+- `/api/v0/runs/control` y `/api/v0/runs/queue/priority` delegan en executors
+  MCP inyectados.
 - `/api/v0/director/stats` mantiene el contrato MCP/API completo de
   `DirectorRunStatsV0` y `DirectorDecisionContextV0`; el gateway solo compone
   rutas y transporte in-process.

@@ -118,6 +118,33 @@ Pruebas de contrato:
 - POST form-urlencoded preserva refs externas hacia el puerto local.
 ```
 
+```text
+Nombre: WebRunQueuePanelV0
+Tipo: puerto_entrada + dto
+Version: v0
+Propietario: orquesta-web
+Consumidores: operador humano / navegador en `/run-queue`
+Contrato externo consumido: `orquesta.run_queue.priority.v0`
+Campos:
+- query: action, queue_ref, app_refs, run_ref, app_ref, priority_score, limit.
+- view_model: estado, action, queue_ref, count, ranked, updated y errores.
+Invariantes:
+- La web llama al bridge REST `/api/v0/runs/queue/priority`; no lee stores,
+  runtime, DB, scheduler ni cola concreta.
+- `rank` muestra candidatos ya saneados por MCP y `set_priority` delega la
+  mutacion al puerto `RunQueuePriorityWriterPortV0`.
+- Solo expone refs compactas de run/app/evidencia; no procesos, HOME, OAuth,
+  proveedor, modelo, DSN ni detalles de almacenamiento.
+Errores:
+- run_queue_error_transporte
+- run_queue_respuesta_invalida
+- errores publicos de `orquesta.run_queue.priority.v0`
+Pruebas de contrato:
+- Cliente REST serializa rank/set_priority hacia el bridge MCP REST.
+- Endpoint GET `/run-queue` consulta ranking y prepara refresh compacto.
+- Endpoint POST `/run-queue` delega cambio de prioridad.
+```
+
 ## Contratos consumidos
 
 ```text

@@ -7,15 +7,25 @@ Construye un `http.Handler` publico sin abrir servidor.
 Rutas montadas:
 
 - `/nueva-app`: handler web HTML.
+- `/app-change`: handler web JSON/HTML de cambios sobre app existente.
 - `/director-stats`: handler web JSON para panel de estadisticas.
+- `/run-queue`: handler web JSON para cola multiapp y cambio de prioridad.
 - `/api/v0/apps/spec`: REST de factory.
 - `/api/v0/apps/director`: bridge REST de MCP para arrancar director.
+- `/api/v0/apps/{app_ref}/changes`: bridge REST de MCP para cambios de app.
 - `/api/v0/director/stats`: bridge REST de MCP para estadisticas; devuelve el
   `DirectorRunStatsV0` canonico dentro de `stats`, con tareas, agentes, rework,
   replan, progreso y cierre. Tambien devuelve `decision_context`
   `DirectorDecisionContextV0`, con progreso por fase/tarea/agente, procesos y
   sesiones opacas cuando se solicitan, actividad reciente, bloqueos, cierre,
   rework/replan, duraciones y quietud.
+- `/api/v0/runs/control`: bridge REST de MCP para pausa, reanudacion, cancelado
+  y parada por `run_ref`.
+- `/api/v0/runs/queue/priority`: bridge REST de MCP para ranking de cola global
+  y cambio de prioridad.
+- `/api/v0/autoprogramming/validate-request`: bridge REST de validacion de
+  peticiones de autoprogramacion.
+- `/api/v0/server/shutdown`: bridge REST de MCP para cierre controlado.
 
 ## `ConfigV0`
 
@@ -23,7 +33,12 @@ Entrada de composicion:
 
 - `Clock`: reloj opcional para factory.
 - `ArrancarDirector`: executor MCP inyectado.
+- `RequestAppChange`: executor MCP inyectado para cambios de app.
+- `DirectorLimits`: limites web para arranque de director.
 - `DirectorStats`: executor MCP inyectado.
+- `RunControl`: executor MCP inyectado para control de runs.
+- `RunQueuePriority`: executor MCP inyectado para cola multiapp.
+- `ServerShutdown`: executor MCP inyectado para cierre controlado.
 - `HTTPClient`: cliente opcional para que web llame a APIs REST.
 - `Timeout`: timeout de clientes REST creados por defecto.
 
@@ -36,3 +51,5 @@ Entrada de composicion:
 - `/director-stats` consulta `/api/v0/director/stats` por cliente REST
   in-process; el gateway no interpreta ni recorta `stats` ni
   `decision_context`.
+- `/run-queue` consulta `/api/v0/runs/queue/priority` por cliente REST
+  in-process; el gateway no interpreta ranking, score, aging ni estado de cola.
