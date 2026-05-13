@@ -39,7 +39,8 @@ func TestCodexStackV0DirectorStatsIncluyeProcesoYProgresoPorPuertos(t *testing.T
 		t.Fatalf("decode stats: %v", err)
 	}
 	if page.ViewModel.Progress.SourceStatus != orquestacionnucleoapp.DirectorProgressSourceLoadedV0 ||
-		len(page.ViewModel.Progress.NoSignalAgentRefs) != len(director.StartedAgents) {
+		page.ViewModel.Progress.ProgressingAgents+len(page.ViewModel.Progress.NoSignalAgentRefs) != len(director.StartedAgents) ||
+		page.ViewModel.Progress.StalledAgents != 0 {
 		t.Fatalf("progress=%+v director=%+v", page.ViewModel.Progress, director)
 	}
 	if len(page.ViewModel.Agents) != len(director.StartedAgents) {

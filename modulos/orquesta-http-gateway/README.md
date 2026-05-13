@@ -20,6 +20,7 @@ Rutas v0:
 - `/api/v0/autoprogramming/validate-request`
 - `/api/v0/runs/control`
 - `/api/v0/runs/queue/priority`
+- `/api/v0/server/shutdown`
 
 Fuera de alcance:
 

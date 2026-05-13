@@ -666,3 +666,23 @@ Evidencia fijada:
 - el proyecto Go temporal tiene `go.mod`, `cmd/server` y pasa `go test ./...`;
 - el helper del smoke devuelve `project_compiles_but_ack_missing` con
   `task_ref` y `ack_ref`, en vez de agotar el timeout global.
+
+Revalidacion 2026-05-13 de shutdown controlado en stack:
+
+```bash
+go test ./cmd/orquesta-server ./modulos/orquesta-server-shutdown ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack -count=1
+```
+
+Resultado: `ok`.
+
+Evidencia:
+
+- `BuildStackV0` cablea `/api/v0/server/shutdown` con
+  `orquesta-server-shutdown`;
+- el caso de uso lista runs por cola, solicita stop por RunControl, ejecuta el
+  supervisor global y reconstruye readiness con stats del director;
+- `orquesta-server stop` llama primero al endpoint de shutdown y solo envia
+  senal al servidor si `shutdown_ready=true`;
+- el test de stats de progreso del stack valida el contrato estable:
+  agentes arrancados = agentes progresando + agentes sin senal, sin exigir que
+  todos caigan siempre en una sola categoria observable.

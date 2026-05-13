@@ -35,6 +35,7 @@ Campos:
 - `RouteAppSpecV0`: `/api/v0/apps/spec`;
 - `RouteAppDirectorV0`: `/api/v0/apps/director`;
 - `RouteDirectorStatsV0`: `/api/v0/director/stats`.
+- `RouteServerShutdownV0`: `/api/v0/server/shutdown`.
 
 `RouteDirectorStatsPageV0` y `RouteDirectorStatsV0` son rutas separadas: la
 primera apunta al handler web inyectado y la segunda al contrato REST que

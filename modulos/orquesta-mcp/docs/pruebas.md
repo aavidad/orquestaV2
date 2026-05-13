@@ -16,6 +16,20 @@ Riesgos:
 ## Pruebas previstas
 
 ```text
+Caso: MCP-CT-030 apagado controlado de servidor por MCP/REST
+Tipo: contract
+Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway
+Evidencia esperada: `orquesta.server.shutdown.v0` queda publicado como tool
+MCP opt-in, `POST /api/v0/server/shutdown` delega en el executor inyectado,
+conserva `X-Correlation-ID`, devuelve `shutdown_ready`, contadores de runs,
+agentes en vuelo y checkpoints pendientes, y falla de forma publica si falta
+binding. MCP/REST no paran procesos ni leen runtime/DB.
+Ultima ejecucion: 2026-05-13; pasa en bateria focal junto a gateway.
+Riesgos: el endpoint coordina stop/drain/stats; el borde que cierre el proceso
+servidor debe invocarlo antes de enviar la senal final.
+```
+
+```text
 Caso: MCP-CT-029 stats del director con progreso y cierre observables
 Tipo: contract
 Comando: go test -count=1 ./orquestacionnucleoapp ./modulos/orquesta-mcp

@@ -1,7 +1,7 @@
 # Apagado controlado de servidor y agentes
 
-Estado: runbook operativo v0. Documenta lo que Orquesta hace hoy y el hueco
-pendiente para un cierre graceful completo.
+Estado: runbook operativo v0. Documenta el cierre controlado disponible y el
+hueco pendiente para un protocolo graceful con checkpoint completo.
 
 ## Principio
 
@@ -63,19 +63,62 @@ Condiciones de cierre del run:
 
 ## Cierre del servidor
 
-Cuando todos los runs activos estan drenados:
+Entrada canonica de cierre de servidor:
+
+```http
+POST /api/v0/server/shutdown
+```
+
+Payload minimo para cierre operativo forzado:
+
+```json
+{
+  "requested_by": "operator",
+  "reason": "apagado controlado",
+  "forced": true,
+  "idempotency_key": "idem-server-shutdown"
+}
+```
+
+Efecto esperado:
+
+- el caso de uso lista runs activos por `RunQueueReaderPortV0`;
+- solicita `stop` por `RunControlWriterPortV0`;
+- ejecuta el supervisor global para drenar stop/outbox/confirmaciones;
+- lee stats de cierre por run;
+- devuelve `shutdown_ready=true` solo si no quedan agentes en vuelo ni
+  checkpoints pendientes en los runs objetivo.
+
+Respuesta relevante:
+
+```json
+{
+  "estado": "ok",
+  "status": "ready",
+  "shutdown_ready": true,
+  "runs_requested": 1,
+  "runs_stopped": 1,
+  "agents_in_flight": 0,
+  "checkpoints_pending": 0
+}
+```
+
+Cuando el endpoint devuelve `shutdown_ready=true`:
 
 ```bash
 orquesta-server stop
 ```
 
-El comando envia `os.Interrupt` al proceso servidor. El runtime del servidor:
+El comando CLI llama primero a `/api/v0/server/shutdown` con `forced=true`.
+Solo si el endpoint responde `shutdown_ready=true` envia `os.Interrupt` al
+proceso servidor. El runtime del servidor:
 
 - cierra el HTTP server con `Shutdown`;
 - persiste estado `stopped`;
 - termina el loop supervisor.
 
-Este paso no debe usarse como sustituto del cierre de runs.
+Este paso no debe usarse como sustituto de stats ni de RunControl; el endpoint
+es la frontera unica de cierre coordinado.
 
 ## Limitacion actual
 
@@ -108,16 +151,16 @@ Para trabajo importante, antes de parar:
 
 ## Mejora pendiente
 
-Implementar `orquesta.server.shutdown.v0` como caso de uso hexagonal:
+`orquesta.server.shutdown.v0` ya existe como caso de uso hexagonal para
+stop/drain/stats. Falta elevarlo a protocolo graceful completo con checkpoint:
 
-- puerto inbound REST/MCP para shutdown;
-- puerto de lectura de runs activos;
 - puerto `PrepareAgentShutdownPortV0`;
 - puerto `CheckpointStorePortV0`;
 - politica de deadline por agente;
-- parada via `StopAgentPortV0`;
-- stats de cierre por run y agente;
-- modo `graceful` y modo `forced`.
+- orden `prepare_shutdown` antes de stop cuando `forced=false`;
+- ACK durable de checkpoint;
+- parada via runtime solo despues de ACK o deadline controlado;
+- stats de cierre por run y agente con razon de cierre.
 
-El servidor debe aceptar una orden unica de apagado y coordinar la secuencia:
-quiesce, checkpoint, stop, confirmacion y cierre final.
+La secuencia objetivo completa queda:
+quiesce, prepare checkpoint, ACK durable, stop, confirmacion y cierre final.

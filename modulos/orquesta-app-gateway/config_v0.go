@@ -19,6 +19,7 @@ type ConfigV0 struct {
 	DirectorStats    orquestamcp.MCPTransportDirectorStatsExecutorV0
 	RunControl       orquestamcp.MCPTransportRunControlExecutorV0
 	RunQueuePriority orquestamcp.MCPTransportRunQueuePriorityExecutorV0
+	ServerShutdown   orquestamcp.MCPTransportServerShutdownExecutorV0
 	HTTPClient       *http.Client
 	Timeout          time.Duration
 }

@@ -214,3 +214,40 @@ Invariantes:
 - una entrega invalida queda como `changes_requested` y deja evidencia compacta;
 - rework/replan posterior pertenece al director y a los puertos de workflow, no
   al adaptador de revision.
+
+## Shutdown controlado de servidor
+
+El stack publica el binding productivo del caso de uso
+`orquesta-server-shutdown` para REST/MCP/CLI.
+
+Contrato de composicion:
+
+```text
+POST /api/v0/server/shutdown
+  -> tool MCP orquesta.server.shutdown.v0
+  -> orquesta-server-shutdown.ShutdownServerV0
+  -> RunQueueReaderPortV0 lista runs no terminales
+  -> RunControlWriterPortV0 solicita stop
+  -> RunGlobalSupervisorV0 drena stop/confirmaciones
+  -> stats de director calculan readiness
+```
+
+Puertos usados:
+
+- `RunQueueReaderPortV0` desde el store de cola;
+- `RunControlReaderPortV0` y `RunControlWriterPortV0` desde el store de control;
+- `RunGlobalSupervisorV0` del propio stack como supervisor hexagonal;
+- stats de shutdown calculadas desde `RunStore`, telemetria, progreso y usage
+  inyectados en `StackConfigV0`.
+
+Invariantes:
+
+- el stack no mata procesos del servidor;
+- el stack no lee DB, runtime, HOME, OAuth, proveedor ni modelo fuera de los
+  puertos ya inyectados;
+- `forced=false` puede devolver `waiting_checkpoint` si RunControl requiere
+  checkpoint;
+- `forced=true` drena por supervisor y exige stats sin agentes en vuelo antes
+  de que CLI pueda enviar la senal final al servidor;
+- la decision de cerrar el proceso servidor pertenece al borde operativo
+  (`cmd/orquesta-server` o futuro runtime de servidor), no al caso de uso.

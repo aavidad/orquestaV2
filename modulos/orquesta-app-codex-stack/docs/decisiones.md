@@ -20,6 +20,21 @@ modelo ni paths productivos.
 Estado: aceptada.
 ```
 
+```text
+Fecha: 2026-05-13
+Decision: El stack cablea shutdown de servidor mediante un caso de uso externo
+hexagonal.
+Motivo: el cierre controlado no debe estar repartido entre CLI, gateway y
+supervisor. El stack ya conoce los puertos productivos de cola, control,
+supervisor y stats, por lo que es el lugar correcto para componerlos sin que el
+gateway conozca internos.
+Impacto: `server_shutdown_v0.go` adapta `StackV0` a
+`orquesta-server-shutdown` con wrappers pequenos. La ruta
+`/api/v0/server/shutdown` queda disponible para CLI, web y MCP; el proceso
+servidor solo se senaliza despues de readiness positivo.
+Estado: aceptada.
+```
+
 
 ```text
 Fecha: 2026-05-12

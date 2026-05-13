@@ -117,14 +117,21 @@ ACK:
 - documentacion ejecutable hoy debe ir como microtarea de `programacion` sobre `docs/...` o crear un provider hexagonal especifico para fase `documentacion`;
 - no se deben inventar deliveries si el run se para antes del ACK.
 
-Tambien queda pendiente el shutdown graceful completo:
+Avance posterior: se implemento la primera version de shutdown de servidor:
 
-- hoy `orquesta-server stop` para el servidor, pero no solicita checkpoint a
-  cada agente antes de cortar;
-- el cierre seguro actual requiere parar cada run por RunControl y esperar
-  `agents_in_flight=0`;
-- falta implementar `orquesta.server.shutdown.v0` con quiesce, checkpoint,
-  stop, confirmacion y cierre final.
+- nuevo modulo `modulos/orquesta-server-shutdown`;
+- nuevo tool `orquesta.server.shutdown.v0`;
+- nueva ruta `POST /api/v0/server/shutdown`;
+- `orquesta-server stop` llama al endpoint antes de enviar la senal final;
+- el cierre disponible coordina RunQueue, RunControl, supervisor y stats por
+  puertos hexagonales;
+- si `shutdown_ready=false`, CLI no corta el servidor.
+
+Sigue pendiente el protocolo graceful completo con checkpoint:
+
+- `prepare_shutdown`/ACK durable por agente;
+- deadline controlado antes de forzar stop;
+- stats de razon de cierre por agente.
 
 ## Validacion local
 
@@ -143,4 +150,5 @@ Validacion posterior al retomar:
 go test ./modulos/orquesta-app-codex-stack -run 'TestDrainRunV0RegistraEntregasDeProgramacionTrasDecisionDirector|TestCodexStackV0StopForzadoPorAPIDrenaAgentesYActualizaStats' -count=1 -v
 go test ./modulos/orquesta-app-codex-stack ./modulos/orquesta-orchestration-core ./modulos/orquesta-run-coordinator ./modulos/orquesta-mcp ./modulos/orquesta-web -count=1
 go test ./... -count=1
+go test ./cmd/orquesta-server ./modulos/orquesta-server-shutdown ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack -count=1
 ```

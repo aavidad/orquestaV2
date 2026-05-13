@@ -76,6 +76,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			},
 		},
 		{
+			name:  "server shutdown",
+			route: RouteServerShutdownV0,
+			handlers: RouteHandlersV0{
+				ServerShutdown: markerHandler("server-shutdown"),
+			},
+		},
+		{
 			name:  "autoprogramming validate request",
 			route: RouteAutoprogrammingValidateRequestV0,
 			handlers: RouteHandlersV0{

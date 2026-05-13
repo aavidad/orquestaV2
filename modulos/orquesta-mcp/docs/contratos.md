@@ -879,6 +879,49 @@ Pruebas de contrato:
   - Transporte queda opt-in sin binding.
 ```
 
+```text
+Nombre: mcp.tool.orquesta.server.shutdown.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: IA directora, operador humano, CLI y web de administracion
+Campos:
+  descriptor:
+    name: orquesta.server.shutdown.v0
+    version: v0
+    input_schema: envelope compacto con queue/app filters, forced,
+      limites de supervisor, requested_by, reason, idempotency_key y
+      evidence_refs
+    resource_uri: orquesta://contracts/server-shutdown/v0
+  input:
+    request_id, correlation_id: refs externas opcionales
+    queue_ref, app_refs, queue_limit: filtro de runs a cerrar
+    max_ticks, max_runs_per_tick, max_executions: limites del drainer
+    forced: true permite drenar sin exigir checkpoint previo
+    requested_by, reason, idempotency_key, evidence_refs: auditoria compacta
+  output_ok:
+    estado: ok
+    status: ready | waiting_drain | waiting_checkpoint
+    shutdown_ready: true solo si todos los runs objetivo estan listos
+    runs_requested, runs_stopped, agents_in_flight, checkpoints_pending
+    runs: resumen por run con estado de control, stats y readiness
+  output_error:
+    estado: error
+    errores_publicos compactos si faltan puertos obligatorios o falla HTTP
+Invariantes:
+  - Adaptador inbound fino: delega en `orquesta-server-shutdown`.
+  - No envia senales al PID del servidor ni mata runtimes directamente.
+  - No lee DB, filesystem, HOME, OAuth, proveedor ni modelo.
+  - Usa solo puertos inyectados de RunQueue, RunControl, supervisor y stats.
+  - El apagado real del proceso servidor queda en el borde externo cuando
+    `shutdown_ready=true`.
+Pruebas de contrato:
+  - Descriptor/resource y registro MCP publican el tool.
+  - Executor transforma input MCP y delega en puerto fake de shutdown.
+  - HTTP `POST /api/v0/server/shutdown` conserva correlacion y errores
+    publicos.
+```
+
 ## Contrato minimo para mejorar una app existente
 
 Orquesta acepta hoy dos entradas complementarias para pedir mejoras sobre una

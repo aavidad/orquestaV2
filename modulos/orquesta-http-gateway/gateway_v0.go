@@ -12,6 +12,7 @@ const (
 	RouteDirectorStatsV0                  = "/api/v0/director/stats"
 	RouteRunControlV0                     = "/api/v0/runs/control"
 	RouteRunQueuePriorityV0               = "/api/v0/runs/queue/priority"
+	RouteServerShutdownV0                 = "/api/v0/server/shutdown"
 	RouteAutoprogrammingValidateRequestV0 = "/api/v0/autoprogramming/validate-request"
 )
 
@@ -25,6 +26,7 @@ type RouteHandlersV0 struct {
 	DirectorStats                  http.Handler
 	RunControl                     http.Handler
 	RunQueuePriority               http.Handler
+	ServerShutdown                 http.Handler
 	AutoprogrammingValidateRequest http.Handler
 }
 
@@ -40,6 +42,7 @@ func NewAppGatewayMuxV0(handlers RouteHandlersV0) http.Handler {
 	handleIfPresent(mux, RouteDirectorStatsV0, handlers.DirectorStats)
 	handleIfPresent(mux, RouteRunControlV0, handlers.RunControl)
 	handleIfPresent(mux, RouteRunQueuePriorityV0, handlers.RunQueuePriority)
+	handleIfPresent(mux, RouteServerShutdownV0, handlers.ServerShutdown)
 	handleIfPresent(mux, RouteAutoprogrammingValidateRequestV0, handlers.AutoprogrammingValidateRequest)
 
 	return mux

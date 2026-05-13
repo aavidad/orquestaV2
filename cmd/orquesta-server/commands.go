@@ -78,6 +78,10 @@ func stopServerCommandV0(stdout io.Writer, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server stop: %v\n", err)
 		return 1
 	}
+	if err := requestServerShutdownV0(state.Addr); err != nil {
+		_, _ = fmt.Fprintf(stderr, "orquesta-server stop: %v\n", err)
+		return 1
+	}
 	if err := signalProcessV0(state.PID); err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server stop: %v\n", err)
 		return 1

@@ -313,3 +313,23 @@ Contratos afectados: orquesta.apps.solicitar_nueva.v0,
 orquesta.apps.arrancar_director.v0, AppSpecRequestV0.
 Estado: aceptada localmente.
 ```
+
+```text
+Fecha: 2026-05-13
+Decision: El apagado de servidor se expone como tool MCP/REST propio y no como
+senal directa desde MCP.
+Motivo: cortar el proceso servidor sin drenar runs vivos repite el fallo de
+orquestacion manual. El director y la web necesitan una orden unica observable
+que solicite stop por RunControl, ejecute supervisor/drain y lea stats antes de
+permitir cerrar el proceso.
+Alternativas: reutilizar `orquesta.runs.control.v0` para cada run desde la UI;
+hacer que CLI envie SIGINT directamente; meter logica de shutdown dentro del
+gateway.
+Impacto: `orquesta.server.shutdown.v0` delega en
+`orquesta-server-shutdown`, queda opt-in por executor inyectado y tambien se
+publica como `POST /api/v0/server/shutdown`. El proceso servidor solo debe
+recibir senal final cuando `shutdown_ready=true`.
+Contratos afectados: mcp.tool.orquesta.server.shutdown.v0,
+orquesta://contracts/server-shutdown/v0, /api/v0/server/shutdown.
+Estado: aceptada localmente.
+```

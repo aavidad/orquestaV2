@@ -28,6 +28,24 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 	ports := buildDirectorPortsV0(config)
 	queueConfig := normalizeRunQueueConfigV0(config.RunQueue)
 	supervisorConfig := normalizeRunSupervisorConfigV0(config.RunSupervisor)
+	stack := StackV0{
+		Ports:          ports,
+		Stores:         config.Stores,
+		RunQueue:       queueConfig,
+		RunSupervisor:  supervisorConfig,
+		DirectorLimits: config.DirectorLimits,
+		Clock:          config.Clock,
+	}
+	stack.Handler = buildStackHTTPHandlerV0(config, ports, queueConfig, &stack)
+	return stack, nil
+}
+
+func buildStackHTTPHandlerV0(
+	config ConfigV0,
+	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
+	queueConfig RunQueueConfigV0,
+	stack *StackV0,
+) http.Handler {
 	arrancar := NewQueuedArrancarDirectorExecutorV0(QueuedArrancarDirectorConfigV0{
 		Inner:  orquestamcp.NewMCPArrancarDirectorAppToolExecutorV0(startOnlyPortsV0(ports)),
 		Writer: config.Stores.RunQueue,
@@ -51,18 +69,11 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 			Reader: config.Stores.RunQueue,
 			Writer: config.Stores.RunQueue,
 		},
+		ServerShutdown: serverShutdownExecutorV0(config, stack),
 		Timeout:        config.Timeout,
 		DirectorLimits: config.DirectorLimits,
 	})
-	return StackV0{
-		Handler:        handler,
-		Ports:          ports,
-		Stores:         config.Stores,
-		RunQueue:       queueConfig,
-		RunSupervisor:  supervisorConfig,
-		DirectorLimits: config.DirectorLimits,
-		Clock:          config.Clock,
-	}, nil
+	return handler
 }
 
 func buildDirectorPortsV0(
