@@ -33,18 +33,32 @@ func (HeuristicAutonomousDirectorPolicyV0) DecideAutonomousDirectorV0(
 		limits.MaxTeamSize,
 	)
 	parallel := autonomousParallelForStatsV0(teamSize, limits.MaxParallelAgents, stats)
+	qualityRecommendations := buildAutonomousQualityRecommendationsV0(stats)
 	return AutonomousDirectorDecisionV0{
-		TeamSize:             teamSize,
-		MaxParallelAgents:    parallel,
-		MaxBursts:            boundedAutonomousLimitV0(teamSize*3, limits.MaxBursts),
-		MaxStepsPerBurst:     boundedAutonomousLimitV0(teamSize*2, limits.MaxStepsPerBurst),
-		MaxDispatchesPerWait: boundedAutonomousLimitV0(parallel, limits.MaxDispatchesPerWait),
-		MaxCommandsPerCycle:  boundedAutonomousLimitV0(teamSize*2, limits.MaxCommandsPerCycle),
-		MaxOutboxPerCycle:    boundedAutonomousLimitV0(parallel, limits.MaxOutboxPerCycle),
-		RecommendedCapacity:  autonomousCapacityForStatsV0(input.Run.CurrentPhase, workload, stats),
-		Summary:              autonomousDirectorSummaryV0(input.Run, stats, teamSize, parallel),
-		EvidenceRefs:         compactStringsV0(append(input.Requests.EvidenceRefs, "evidence-ref-autonomous-director-v0")),
+		TeamSize:               teamSize,
+		MaxParallelAgents:      parallel,
+		MaxBursts:              boundedAutonomousLimitV0(teamSize*3, limits.MaxBursts),
+		MaxStepsPerBurst:       boundedAutonomousLimitV0(teamSize*2, limits.MaxStepsPerBurst),
+		MaxDispatchesPerWait:   boundedAutonomousLimitV0(parallel, limits.MaxDispatchesPerWait),
+		MaxCommandsPerCycle:    boundedAutonomousLimitV0(teamSize*2, limits.MaxCommandsPerCycle),
+		MaxOutboxPerCycle:      boundedAutonomousLimitV0(parallel, limits.MaxOutboxPerCycle),
+		RecommendedCapacity:    autonomousCapacityForStatsV0(input.Run.CurrentPhase, workload, stats),
+		QualityRecommendations: qualityRecommendations,
+		Summary:                autonomousDirectorSummaryV0(input.Run, stats, teamSize, parallel),
+		EvidenceRefs: compactStringsV0(
+			append(input.Requests.EvidenceRefs, autonomousQualityEvidenceRefsV0(qualityRecommendations)...),
+		),
 	}, nil
+}
+
+func autonomousQualityEvidenceRefsV0(
+	recommendations []AutonomousQualityRecommendationV0,
+) []string {
+	refs := []string{"evidence-ref-autonomous-director-v0"}
+	for _, recommendation := range recommendations {
+		refs = append(refs, recommendation.EvidenceRefs...)
+	}
+	return compactStringsV0(refs)
 }
 
 func normalizeAutonomousDirectorLimitsV0(

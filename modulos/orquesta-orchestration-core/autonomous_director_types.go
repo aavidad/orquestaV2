@@ -36,16 +36,33 @@ type AutonomousDirectorLimitsV0 struct {
 }
 
 type AutonomousDirectorDecisionV0 struct {
-	TeamSize             int
-	MaxParallelAgents    int
-	MaxBursts            int
-	MaxStepsPerBurst     int
-	MaxDispatchesPerWait int
-	MaxCommandsPerCycle  int
-	MaxOutboxPerCycle    int
-	RecommendedCapacity  orquestacoreworkflow.OrchestrationCapacityRecommendationV0
-	Summary              string
-	EvidenceRefs         []string
+	TeamSize               int
+	MaxParallelAgents      int
+	MaxBursts              int
+	MaxStepsPerBurst       int
+	MaxDispatchesPerWait   int
+	MaxCommandsPerCycle    int
+	MaxOutboxPerCycle      int
+	RecommendedCapacity    orquestacoreworkflow.OrchestrationCapacityRecommendationV0
+	QualityRecommendations []AutonomousQualityRecommendationV0
+	Summary                string
+	EvidenceRefs           []string
+}
+
+const (
+	AutonomousQualityActionReplanV0      = "replan"
+	AutonomousQualityActionAskDirectorV0 = "ask_director"
+	AutonomousQualityActionStopAgentV0   = "stop_agent"
+)
+
+type AutonomousQualityRecommendationV0 struct {
+	SubjectRef        string   `json:"subject_ref"`
+	SubjectKind       string   `json:"subject_kind"`
+	SignalRef         string   `json:"signal_ref"`
+	ReasonCode        string   `json:"reason_code"`
+	RecommendedAction string   `json:"recommended_action"`
+	Summary           string   `json:"summary"`
+	EvidenceRefs      []string `json:"evidence_refs,omitempty"`
 }
 
 type AutonomousDirectorLoopRequestV0 struct {

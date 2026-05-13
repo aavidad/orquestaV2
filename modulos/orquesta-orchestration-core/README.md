@@ -254,6 +254,9 @@ actual.
 - Politica autonoma con estadisticas: `RunAutonomousDirectorLoopV0` puede
   recibir `DirectorRunStatsV0`; si detecta progreso atascado, bucle o
   presupuesto sin actividad, sube capacidad a `xhigh` y limita paralelismo.
+- Recomendaciones compactas de calidad/replan: la politica autonoma proyecta
+  `replan`, `ask_director` o `stop_agent` desde quality gates, revisiones no
+  aceptadas, agentes fallidos y progreso problematico ya compactado.
 - Regla arquitectonica: sin imports de `cmd`, `db` ni conectores de runtime.
 
 ## Que no cierra
