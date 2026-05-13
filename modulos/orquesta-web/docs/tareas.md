@@ -180,7 +180,8 @@ Simbolo foco: WebRunQueuePanelV0
 Contrato: Consume `orquesta.run_queue.priority.v0` por REST interno.
 Validacion: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
 Bloqueos: El progreso detallado por run sigue viniendo de `/director-stats`;
-este panel solo rankea runs y muta prioridad base.
+este panel solo rankea runs, muta prioridad base y enlaza cada run a sus stats
+vivas.
 Estado: completada.
 ```
 

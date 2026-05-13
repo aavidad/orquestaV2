@@ -128,11 +128,16 @@ Contrato externo consumido: `orquesta.run_queue.priority.v0`
 Campos:
 - query: action, queue_ref, app_refs, run_ref, app_ref, priority_score, limit.
 - view_model: estado, action, queue_ref, count, ranked, updated y errores.
+- cada candidato `ranked` incluye `stats_href` hacia `/director-stats` para
+  consultar agentes, modelo, cuota y progreso por run sin que la cola replique
+  ese contrato.
 Invariantes:
 - La web llama al bridge REST `/api/v0/runs/queue/priority`; no lee stores,
   runtime, DB, scheduler ni cola concreta.
 - `rank` muestra candidatos ya saneados por MCP y `set_priority` delega la
   mutacion al puerto `RunQueuePriorityWriterPortV0`.
+- La navegacion a stats usa solo `run_ref` opaca y `include_agent_progress`;
+  no expone runtime ni stores.
 - Solo expone refs compactas de run/app/evidencia; no procesos, HOME, OAuth,
   proveedor, modelo, DSN ni detalles de almacenamiento.
 Errores:

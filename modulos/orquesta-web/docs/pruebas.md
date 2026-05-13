@@ -300,10 +300,11 @@ Comando: `go test -count=1 ./modulos/orquesta-web`
 Evidencia esperada: `RESTRunQueueClientV0` serializa `rank` y `set_priority`
 hacia `/api/v0/runs/queue/priority`, conserva errores publicos 400 del contrato
 MCP, y `RunQueueWebEndpointV0` expone GET/POST `/run-queue` sin leer stores,
-runtime, DB, scheduler ni cola concreta.
+runtime, DB, scheduler ni cola concreta. El viewmodel incluye `stats_href` por
+run para saltar al panel de progreso vivo.
 Ultima ejecucion: 2026-05-13; pasa con `go test -count=1 ./modulos/orquesta-web`.
-Riesgos: el panel muestra ranking/prioridad; progreso profundo por run sigue en
-`/director-stats`.
+Riesgos: el panel muestra ranking/prioridad; progreso profundo por run no se
+duplica y sigue en `/director-stats`.
 ```
 
 ```text

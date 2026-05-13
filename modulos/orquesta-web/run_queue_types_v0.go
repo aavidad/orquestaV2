@@ -1,6 +1,10 @@
 package orquestaweb
 
-import orquestamcp "orquesta/modulos/orquesta-mcp"
+import (
+	"net/url"
+
+	orquestamcp "orquesta/modulos/orquesta-mcp"
+)
 
 const (
 	WebRunQueuePageEndpointV0    = "/run-queue"
@@ -53,6 +57,7 @@ type WebRunQueueCandidateV0 struct {
 	AgingBoost       int      `json:"aging_boost,omitempty"`
 	UpdatedAt        string   `json:"updated_at,omitempty"`
 	FairnessGroupRef string   `json:"fairness_group_ref,omitempty"`
+	StatsHref        string   `json:"stats_href,omitempty"`
 	EvidenceRefs     []string `json:"evidence_refs,omitempty"`
 }
 
@@ -115,17 +120,30 @@ func webRunQueueCandidatesV0(
 func webRunQueueCandidateV0(
 	value orquestamcp.MCPRunQueueRankedCandidateCompactV0,
 ) WebRunQueueCandidateV0 {
+	runRef := trimV0(value.RunRef)
 	return WebRunQueueCandidateV0{
 		Rank:             value.Rank,
-		RunRef:           trimV0(value.RunRef),
+		RunRef:           runRef,
 		AppRef:           trimV0(value.AppRef),
 		Status:           trimV0(value.Status),
 		PriorityScore:    value.PriorityScore,
 		AgingBoost:       value.AgingBoost,
 		UpdatedAt:        trimV0(value.UpdatedAt),
 		FairnessGroupRef: trimV0(value.FairnessGroupRef),
+		StatsHref:        runQueueStatsHrefV0(runRef),
 		EvidenceRefs:     compactStringsV0(value.EvidenceRefs),
 	}
+}
+
+func runQueueStatsHrefV0(runRef string) string {
+	runRef = trimV0(runRef)
+	if runRef == "" {
+		return ""
+	}
+	values := url.Values{}
+	values.Set("run_ref", runRef)
+	values.Set("include_agent_progress", "true")
+	return WebDirectorStatsPageEndpointV0 + "?" + values.Encode()
 }
 
 func webRunQueueIssuesV0(values []orquestamcp.MCPValidationIssueV0) []WebRunQueuePublicIssueV0 {

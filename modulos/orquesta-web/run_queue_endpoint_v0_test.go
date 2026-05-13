@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
 
 func TestRunQueueWebEndpointV0GETConsultaRanking(t *testing.T) {
@@ -21,6 +23,7 @@ func TestRunQueueWebEndpointV0GETConsultaRanking(t *testing.T) {
 				RunRef:        "run-ref-web-queue-001",
 				AppRef:        "app-ref-web-queue-001",
 				PriorityScore: 90,
+				StatsHref:     "/director-stats?include_agent_progress=true&run_ref=run-ref-web-queue-001",
 			}},
 		},
 	}
@@ -41,7 +44,8 @@ func TestRunQueueWebEndpointV0GETConsultaRanking(t *testing.T) {
 		client.query.QueueRef != "global" ||
 		client.query.Limit != 3 ||
 		page.Refresh.Href == "" ||
-		len(page.ViewModel.Ranked) != 1 {
+		len(page.ViewModel.Ranked) != 1 ||
+		page.ViewModel.Ranked[0].StatsHref != "/director-stats?include_agent_progress=true&run_ref=run-ref-web-queue-001" {
 		t.Fatalf("query=%+v page=%+v", client.query, page)
 	}
 }
@@ -77,6 +81,24 @@ func TestRunQueueWebEndpointV0POSTSetPriority(t *testing.T) {
 		client.query.RunRef != "run-ref-web-queue-002" ||
 		client.query.PriorityScore != 120 {
 		t.Fatalf("query=%+v", client.query)
+	}
+}
+
+func TestWebRunQueueViewModelV0IncluyeHrefStatsPorRun(t *testing.T) {
+	vm := NewWebRunQueueViewModelV0("es", orquestamcp.MCPRunQueuePriorityToolResultV0{
+		Estado: WebRunQueueEstadoOKV0,
+		Action: WebRunQueueActionRankV0,
+		Ranked: []orquestamcp.MCPRunQueueRankedCandidateCompactV0{{
+			Rank:          1,
+			RunRef:        "run-ref-web-queue-003",
+			AppRef:        "app-ref-web-queue-003",
+			PriorityScore: 90,
+		}},
+	})
+
+	if len(vm.Ranked) != 1 ||
+		vm.Ranked[0].StatsHref != "/director-stats?include_agent_progress=true&run_ref=run-ref-web-queue-003" {
+		t.Fatalf("vm=%+v", vm)
 	}
 }
 
