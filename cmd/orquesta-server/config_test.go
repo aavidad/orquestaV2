@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	orquestadirectorrunner "orquesta/modulos/orquesta-director-runner"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
 func TestServerConfigFromEnvV0UsaPresupuestoDeComandosParaFronteraParalela(t *testing.T) {
@@ -22,6 +24,72 @@ func TestServerConfigFromEnvV0UsaPresupuestoDeComandosParaFronteraParalela(t *te
 	got := config.SupervisorCommand.DrainLimits.MaxCommands
 	if got != orquestadirectorrunner.DirectorCycleMaxCommandsV0 {
 		t.Fatalf("max_commands=%d want %d", got, orquestadirectorrunner.DirectorCycleMaxCommandsV0)
+	}
+}
+
+func TestCodexRuntimeConfigV0UsaUmbralesConservadoresPorDefecto(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_STALLED_TICKS", "")
+	t.Setenv("ORQUESTA_CODEX_LOOP_TICKS", "")
+	t.Setenv("ORQUESTA_CODEX_WAIT_INTERVAL_MS", "")
+	t.Setenv("ORQUESTA_CODEX_NO_ACTIVITY_SECONDS", "")
+	t.Setenv("ORQUESTA_CODEX_MAX_EXPECTED_SECONDS", "")
+
+	config := codexRuntimeConfigV0(orquestaserver.ConfigV0{
+		ProjectWorkDir: t.TempDir(),
+		RuntimeWorkDir: t.TempDir(),
+	}, nil)
+
+	if config.WaitInterval != 2*time.Second {
+		t.Fatalf("wait_interval=%s want 2s", config.WaitInterval)
+	}
+	if config.ProgressPolicy.StalledAfterNoProgressTicks != defaultCodexStalledTicksV0 {
+		t.Fatalf(
+			"stalled_ticks=%d want %d",
+			config.ProgressPolicy.StalledAfterNoProgressTicks,
+			defaultCodexStalledTicksV0,
+		)
+	}
+	if config.ProgressPolicy.LoopAfterRepeatedActions != defaultCodexLoopTicksV0 {
+		t.Fatalf(
+			"loop_ticks=%d want %d",
+			config.ProgressPolicy.LoopAfterRepeatedActions,
+			defaultCodexLoopTicksV0,
+		)
+	}
+	if config.ProgressBudget.NoActivityLimit != 10*time.Minute {
+		t.Fatalf("no_activity=%s want 10m", config.ProgressBudget.NoActivityLimit)
+	}
+	if config.ProgressBudget.MaxExpected != 20*time.Minute {
+		t.Fatalf("max_expected=%s want 20m", config.ProgressBudget.MaxExpected)
+	}
+}
+
+func TestCodexRuntimeConfigV0PermiteSobrescribirUmbralesDeProgreso(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_STALLED_TICKS", "7")
+	t.Setenv("ORQUESTA_CODEX_LOOP_TICKS", "11")
+	t.Setenv("ORQUESTA_CODEX_WAIT_INTERVAL_MS", "500")
+	t.Setenv("ORQUESTA_CODEX_NO_ACTIVITY_SECONDS", "17")
+	t.Setenv("ORQUESTA_CODEX_MAX_EXPECTED_SECONDS", "19")
+
+	config := codexRuntimeConfigV0(orquestaserver.ConfigV0{
+		ProjectWorkDir: t.TempDir(),
+		RuntimeWorkDir: t.TempDir(),
+	}, nil)
+
+	if config.WaitInterval != 500*time.Millisecond {
+		t.Fatalf("wait_interval=%s want 500ms", config.WaitInterval)
+	}
+	if config.ProgressPolicy.StalledAfterNoProgressTicks != 7 {
+		t.Fatalf("stalled_ticks=%d want 7", config.ProgressPolicy.StalledAfterNoProgressTicks)
+	}
+	if config.ProgressPolicy.LoopAfterRepeatedActions != 11 {
+		t.Fatalf("loop_ticks=%d want 11", config.ProgressPolicy.LoopAfterRepeatedActions)
+	}
+	if config.ProgressBudget.NoActivityLimit != 17*time.Second {
+		t.Fatalf("no_activity=%s want 17s", config.ProgressBudget.NoActivityLimit)
+	}
+	if config.ProgressBudget.MaxExpected != 19*time.Second {
+		t.Fatalf("max_expected=%s want 19s", config.ProgressBudget.MaxExpected)
 	}
 }
 

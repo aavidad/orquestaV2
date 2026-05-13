@@ -40,6 +40,28 @@ El script conserva evidencias por defecto bajo:
 /tmp/orquesta-opes-agent-smoke/<SMOKE_ID>/out
 ```
 
+## Ejecucion Validada
+
+El 2026-05-13 se ejecuto contra OPES en `http://127.0.0.1:18080` con
+`ORQUESTA_CODEX_MODEL=gpt-5.5` y `ORQUESTA_CODEX_REASONING_EFFORT=xhigh`.
+
+Resultado:
+
+- `smoke_id`: `20260513T200104Z`
+- `job_ref`: `8f7b3cf58599efd0e2c88561c1dfe220`
+- `run_ref`: `run-external-work-opes-8f7b3cf58599efd0e2c88561c1dfe220-opes-job-8f7b3cf58599efd0e2c88561c1dfe220`
+- `stats_response_final.json`: `tasks_total=1`, `tasks_delivered=1`,
+  `agents_started=1`, `agents_delivered=1`, `agents_failed=0`.
+- OPES recibio 1 artefacto y materializo 1 bloque en
+  `pendiente_revision`.
+
+Incidencia detectada y corregida despues de la ejecucion: el comando
+`orquesta-server` usaba defaults de debug para progreso Codex
+(`8` ticks de `stalled` con intervalo de 2s). El agente estaba trabajando y
+termino bien, pero las estadisticas intermedias lo marcaban como
+`needs_attention`. La composicion productiva queda ajustada a 300 ticks por
+defecto y 10 minutos sin actividad.
+
 ## Evidencias Esperadas
 
 - `external_work_run_response.json` contiene `run_ref` y

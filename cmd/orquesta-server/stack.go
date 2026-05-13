@@ -22,6 +22,20 @@ import (
 	orquestaweb "orquesta/modulos/orquesta-web"
 )
 
+const (
+	defaultCodexWaitIntervalMSV0        = 2000
+	defaultCodexStalledTicksV0          = 300
+	defaultCodexLoopTicksV0             = 300
+	defaultCodexMaxExpectedSecondsV0    = 1200
+	defaultCodexNoActivitySecondsV0     = 600
+	defaultCodexMaxBatchReadyV0         = 4
+	defaultCodexMaxConcurrencyV0        = 4
+	defaultCodexServerMaxRunsPerTickV0  = 2
+	defaultCodexServerQueueLimitV0      = 20
+	defaultCodexServerDefaultPriorityV0 = 50
+	defaultCodexServerMaxExecutionsV0   = 2
+)
+
 func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 	serverConfig, err := serverConfigFromEnvV0()
 	if err != nil {
@@ -85,15 +99,15 @@ func buildStackFromEnvV0(
 		},
 		RunQueue: orquestaappcodexstack.RunQueueConfigV0{
 			QueueRef:       "global",
-			MaxRunsPerTick: intEnvOrDefaultV0("ORQUESTA_SERVER_MAX_RUNS_PER_TICK", 2),
-			QueueLimit:     intEnvOrDefaultV0("ORQUESTA_SERVER_QUEUE_LIMIT", 20),
+			MaxRunsPerTick: intEnvOrDefaultV0("ORQUESTA_SERVER_MAX_RUNS_PER_TICK", defaultCodexServerMaxRunsPerTickV0),
+			QueueLimit:     intEnvOrDefaultV0("ORQUESTA_SERVER_QUEUE_LIMIT", defaultCodexServerQueueLimitV0),
 			DefaultPriorityScore: intEnvOrDefaultV0(
-				"ORQUESTA_SERVER_DEFAULT_PRIORITY", 50,
+				"ORQUESTA_SERVER_DEFAULT_PRIORITY", defaultCodexServerDefaultPriorityV0,
 			),
 		},
 		RunSupervisor: orquestaappcodexstack.RunSupervisorConfigV0{
 			MaxTicks:      1,
-			MaxExecutions: intEnvOrDefaultV0("ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK", 2),
+			MaxExecutions: intEnvOrDefaultV0("ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK", defaultCodexServerMaxExecutionsV0),
 		},
 		Codex: codexRuntimeConfigV0(serverConfig, processRuntime),
 		Capacity: orquestaappcodexstack.CapacityConfigV0{
@@ -156,16 +170,16 @@ func codexRuntimeConfigV0(
 		Runtime:         processRuntime,
 		ProcessStopper:  processRuntime,
 		SnapshotSource:  processRuntime,
-		MaxBatchReady:   intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_BATCH_READY", 4),
-		MaxConcurrency:  intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_CONCURRENCY", 4),
-		WaitInterval:    time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_WAIT_INTERVAL_MS", 2000)) * time.Millisecond,
+		MaxBatchReady:   intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_BATCH_READY", defaultCodexMaxBatchReadyV0),
+		MaxConcurrency:  intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_CONCURRENCY", defaultCodexMaxConcurrencyV0),
+		WaitInterval:    time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_WAIT_INTERVAL_MS", defaultCodexWaitIntervalMSV0)) * time.Millisecond,
 		ProgressPolicy: orquestaruntime.AgentProgressHeartbeatPolicyV0{
-			StalledAfterNoProgressTicks: intEnvOrDefaultV0("ORQUESTA_CODEX_STALLED_TICKS", 8),
-			LoopAfterRepeatedActions:    intEnvOrDefaultV0("ORQUESTA_CODEX_LOOP_TICKS", 12),
+			StalledAfterNoProgressTicks: intEnvOrDefaultV0("ORQUESTA_CODEX_STALLED_TICKS", defaultCodexStalledTicksV0),
+			LoopAfterRepeatedActions:    intEnvOrDefaultV0("ORQUESTA_CODEX_LOOP_TICKS", defaultCodexLoopTicksV0),
 		},
 		ProgressBudget: orquestaruntimecodexdelivery.CodexBudgetActivityPolicyV0{
-			MaxExpected:     time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_EXPECTED_SECONDS", 1200)) * time.Second,
-			NoActivityLimit: time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_NO_ACTIVITY_SECONDS", 90)) * time.Second,
+			MaxExpected:     time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_EXPECTED_SECONDS", defaultCodexMaxExpectedSecondsV0)) * time.Second,
+			NoActivityLimit: time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_NO_ACTIVITY_SECONDS", defaultCodexNoActivitySecondsV0)) * time.Second,
 		},
 	}
 }

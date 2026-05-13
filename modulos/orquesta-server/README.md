@@ -16,5 +16,9 @@ por entorno:
 - `ORQUESTA_CODEX_MAX_EXPECTED_SECONDS`: tiempo esperado antes de pedir decision.
 - `ORQUESTA_CODEX_NO_ACTIVITY_SECONDS`: ventana sin actividad antes de marcar
   riesgo operativo.
+- `ORQUESTA_CODEX_STALLED_TICKS`: muestras sin cambio compacto antes de pedir
+  atencion del director. Por defecto son 300 ticks con intervalo de 2s.
+- `ORQUESTA_CODEX_LOOP_TICKS`: muestras repetidas antes de marcar posible
+  bucle. Por defecto son 300 ticks con intervalo de 2s.
 
 Estos valores alimentan estadisticas de director y no pertenecen al nucleo.
