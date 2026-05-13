@@ -14,7 +14,9 @@ Salida: decisiones `director_agent_decision.v0` ya validadas:
 - `open_phase` a `planificacion_microtareas`;
 - `publish_function_contract`;
 - `create_microtask`;
-- `open_phase` a `programacion`.
+- `open_phase` a `programacion`;
+- `open_phase` a `revision` cuando la microtarea del cambio ya existe en el
+  run y todas las tareas de programacion tienen entrega.
 
 Si el cambio no tiene `allowed_write_set` o `acceptance_criteria`, la fuente no
 inventa microtareas: deja la consulta pendiente para el director.
@@ -31,3 +33,7 @@ conocer la app externa. Solo cambia la proyeccion compacta:
   `review` o generico);
 - exige validar el contrato externo de dominio junto a los criterios de
   aceptacion.
+
+La fuente no ejecuta el review gate. Solo abre la fase `revision`; la
+validacion de ficheros, pruebas, write-set y tamano pertenece al proveedor de
+observaciones de review gate inyectado en el stack.

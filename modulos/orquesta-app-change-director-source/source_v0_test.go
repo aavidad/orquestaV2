@@ -161,6 +161,64 @@ func TestAppChangeDirectorDecisionSourceV0ConsumeCambioRecibidoComoEvento(t *tes
 	}
 }
 
+func TestAppChangeDirectorDecisionSourceV0AbreRevisionTrasEntrega(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+	refs := appChangeRefsV0(record.Request.ChangeRef)
+	run.CurrentPhase = orquestacoreworkflow.OrchestrationPhaseProgramacionV0
+	run.DirectorAnsweredQuestions = []string{refs.QuestionRef}
+	run.Tasks = []string{"task-ref-base-001", refs.TaskRef}
+	run.Deliveries = []string{"delivery-ref-base-001", "delivery-ref-change-001"}
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	if len(decisions) != 1 ||
+		decisions[0].CommandType != orquestadirectoragent.DirectorAgentCommandOpenPhaseV0 ||
+		decisions[0].OpenPhase == nil ||
+		decisions[0].OpenPhase.PhaseID != string(orquestacoreworkflow.OrchestrationPhaseRevisionV0) {
+		t.Fatalf("decisions=%+v", decisions)
+	}
+}
+
+func TestAppChangeDirectorDecisionSourceV0PriorizaCambioPendienteAntesDeRevision(t *testing.T) {
+	delivered := appChangeRecordForSourceTestV0()
+	pending := appChangeRecordForSourceTestV0()
+	pending.Request.ChangeRef = "change-ref-source-pending-002"
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(delivered, pending)
+	run := appChangeRunForSourceTestV0(delivered)
+	deliveredRefs := appChangeRefsV0(delivered.Request.ChangeRef)
+	pendingRefs := appChangeRefsV0(pending.Request.ChangeRef)
+	run.CurrentPhase = orquestacoreworkflow.OrchestrationPhaseProgramacionV0
+	run.DirectorQuestions = append(run.DirectorQuestions, pendingRefs.QuestionRef)
+	run.DirectorAnsweredQuestions = []string{deliveredRefs.QuestionRef}
+	run.Tasks = []string{deliveredRefs.TaskRef}
+	run.Deliveries = []string{"delivery-ref-change-001"}
+	run.Decisions = []string{"decision-ref-source-base-001"}
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	if len(decisions) == 0 ||
+		decisions[0].CommandType != orquestadirectoragent.DirectorAgentCommandAnswerQuestionV0 ||
+		containsOpenReviewDecisionForTestV0(decisions) {
+		t.Fatalf("decisions=%+v", decisions)
+	}
+}
+
 func appChangeRecordForSourceTestV0() orquestaappchange.AppChangeRecordV0 {
 	return orquestaappchange.AppChangeRecordV0{
 		Request: orquestaappchange.AppChangeRequestV0{
@@ -171,6 +229,18 @@ func appChangeRecordForSourceTestV0() orquestaappchange.AppChangeRecordV0 {
 			AllowedWriteSet:    []string{"web/agenda"},
 		},
 	}
+}
+
+func containsOpenReviewDecisionForTestV0(
+	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
+) bool {
+	for _, decision := range decisions {
+		if decision.OpenPhase != nil &&
+			decision.OpenPhase.PhaseID == string(orquestacoreworkflow.OrchestrationPhaseRevisionV0) {
+			return true
+		}
+	}
+	return false
 }
 
 type appChangeSourceNoopNotifierV0 struct{}

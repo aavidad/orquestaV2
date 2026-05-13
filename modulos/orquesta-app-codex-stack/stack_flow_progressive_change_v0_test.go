@@ -7,8 +7,8 @@ import (
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
 func TestCodexStackV0FlujoProgresivoAPIMCPProgramaYCambiaSinIntervencionManual(t *testing.T) {
@@ -122,6 +122,53 @@ func TestCodexStackV0FlujoProgresivoAPIMCPProgramaYCambiaSinIntervencionManual(t
 	}
 }
 
+func TestCodexStackV0CambioProgresivoPasaReviewGate(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newDecisionWritingFakeCodexStackRuntimeV0())
+	director := postDirectorAPIV0(t, stack)
+
+	drainCodexStackRunForTestV0(t, ctx, stack, director.RunRef, "bootstrap")
+	drainCodexStackRunForTestV0(t, ctx, stack, director.RunRef, "deliveries")
+
+	change := progressiveCodexStackAppChangeRequestV0(director.RunRef)
+	mustPostCodexStackAppChangeV0(t, stack, change)
+	drainCodexStackRunForTestV0(t, ctx, stack, director.RunRef, "change-plan")
+
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	changeTaskRef := codexStackTaskIDByWriteSetForTestV0(
+		t,
+		stack,
+		director.RunRef,
+		run.Tasks,
+		"docs/change-request-midrun.md",
+	)
+	changeDescriptor, ok := codexStackRealSmokeDescriptorByWriteSetV0(
+		codexStackDescriptorsForTestV0(t, stack),
+		"docs/change-request-midrun.md",
+	)
+	if !ok {
+		t.Fatalf("descriptor de cambio no encontrado para task=%s", changeTaskRef)
+	}
+	changeDeliveryRef := changeDescriptor.Spec.AgentPacket.DeliveryRefs.AckRef
+
+	drainCodexStackRunForTestV0(t, ctx, stack, director.RunRef, "change-delivery")
+	drainCodexStackRunForTestV0(t, ctx, stack, director.RunRef, "change-review")
+
+	run = mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if !codexStackStringInSetForTestV0(run.Deliveries, changeDeliveryRef) ||
+		!codexStackStringInSetForTestV0(run.AcceptedReviews, "accepted-review-ref-"+changeDeliveryRef) {
+		t.Fatalf(
+			"cambio sin review aceptada delivery=%s phase=%s deliveries=%v reviews=%v results=%v accepted=%v",
+			changeDeliveryRef,
+			run.CurrentPhase,
+			run.Deliveries,
+			run.Reviews,
+			run.ReviewResults,
+			run.AcceptedReviews,
+		)
+	}
+}
+
 func progressiveCodexStackAppChangeRequestV0(runRef string) orquestaappchange.AppChangeRequestV0 {
 	return orquestaappchange.AppChangeRequestV0{
 		RunRef:             runRef,
@@ -132,6 +179,26 @@ func progressiveCodexStackAppChangeRequestV0(runRef string) orquestaappchange.Ap
 		CurrentStateRefs:   []string{"delivery-ref-programacion-001"},
 		AcceptanceCriteria: []string{"documentar vista mensual en el fichero solicitado"},
 		AllowedWriteSet:    []string{"docs/change-request-midrun.md"},
+	}
+}
+
+func drainCodexStackRunForTestV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	runRef string,
+	step string,
+) {
+	t.Helper()
+	if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               runRef,
+		CorrelationID:        "corr-stack-progressive-" + step,
+		MaxBursts:            16,
+		MaxStepsPerBurst:     8,
+		MaxDispatchesPerWait: 8,
+		MaxExternalWaits:     1,
+	}); err != nil {
+		t.Fatalf("DrainRunV0 %s: %v", step, err)
 	}
 }
 

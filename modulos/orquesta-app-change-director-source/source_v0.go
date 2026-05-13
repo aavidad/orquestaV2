@@ -59,6 +59,23 @@ func (source AppChangeDirectorDecisionSourceV0) decisionsFromRecordsV0(
 		}
 		out = append(out, decisions...)
 	}
+	if len(out) > 0 {
+		return out, nil
+	}
+	reviewPhasePlanned := false
+	for _, record := range records {
+		refs := appChangeRefsV0(record.Request.ChangeRef)
+		if !reviewPhasePlanned && appChangeReadyForReviewPhaseV0(request.Run, refs) {
+			decisions := []orquestadirectoragent.DirectorAgentDecisionV0{
+				appChangeOpenReviewPhaseV0(request.Run.RunID, refs),
+			}
+			if err := validateAppChangeDirectorDecisionsV0(decisions); err != nil {
+				return nil, err
+			}
+			out = append(out, decisions...)
+			reviewPhasePlanned = true
+		}
+	}
 	return out, nil
 }
 

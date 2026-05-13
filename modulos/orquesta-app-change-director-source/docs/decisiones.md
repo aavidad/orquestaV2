@@ -58,3 +58,20 @@ microtarea sin contrato.
 Impacto: la fuente solo consume refs compactas ya guardadas en
 `AppChangeRequestV0.external_work`; las decisiones siguen validadas por el
 contrato comun del director.
+
+## Revision del cambio entregado
+
+Decision: La fuente de cambios abre `revision` cuando la microtarea del cambio
+esta en el run y el conjunto de entregas cubre las tareas de programacion.
+
+Motivo: el review gate ya sabe validar ACK, ficheros reales, write-set, tests y
+tamano. El hueco estaba antes del gate: un cambio entregado podia quedarse en
+`programacion` si no habia una decision explicita posterior del director.
+
+Alternativas descartadas: ejecutar review gate desde `app-change`, cerrar el
+cambio al registrar la entrega, o abrir revision desde el transporte web/MCP.
+
+Impacto: la decision nueva es solo `open_phase(revision)` con refs compactas.
+No lee ficheros, runtime, DB, proveedor, modelo ni detalles de la app externa.
+Si hay otro cambio listo para crear microtarea, se prioriza materializarlo antes
+de abrir revision para no revisar un conjunto de tareas incompleto.

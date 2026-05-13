@@ -188,11 +188,9 @@ Estado implementado:
 - `orquesta-app-codex-stack` registra el cambio como `AskDirector` durable en
   el workflow y deja outbox de director pendiente;
 - `orquesta-app-change-director-source` lee cambios concretos por puerto y
-  emite decisiones ejecutables para replanificar una microtarea de cambio.
-
-Pendiente:
-
-- cerrar validacion/revision especifica del cambio tras la entrega del agente.
+  emite decisiones ejecutables para replanificar una microtarea de cambio;
+- cuando la entrega del cambio ya existe y la programacion esta cubierta, la
+  fuente abre `revision` y el review gate generico valida la entrega.
 
 Reglas de arquitectura:
 

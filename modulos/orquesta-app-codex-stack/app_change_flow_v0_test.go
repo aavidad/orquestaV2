@@ -73,7 +73,7 @@ func TestCodexStackV0AppChangeNotificaDirectorPorWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load run after drain: %v", err)
 	}
-	if run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 {
+	if run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseRevisionV0 {
 		t.Fatalf("current_phase=%s", run.CurrentPhase)
 	}
 	if len(run.Tasks) != 1 {

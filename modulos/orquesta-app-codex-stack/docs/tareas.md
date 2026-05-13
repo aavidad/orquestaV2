@@ -333,16 +333,14 @@ Write-set aplicado:
 - stack Codex traduce el cambio a `AskDirector` y guarda outbox del director;
 - store de cambios inyectado por puerto, sin DB concreta;
 - fuente compuesta de decisiones que convierte cambios concretos en respuesta al
-  director, votacion, contrato funcional, microtarea y vuelta a `programacion`.
+  director, votacion, contrato funcional, microtarea y vuelta a `programacion`;
+- fuente de cambios abre `revision` cuando la entrega del cambio ya existe y el
+  review gate generico acepta o pide rework con evidencia real.
 
 Validacion:
 
-- `go test -count=1 ./modulos/orquesta-app-change ./modulos/orquesta-mcp ./modulos/orquesta-web ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack`
-
-Pendiente relacionado:
-
-- cerrar revision/calidad especifica del cambio despues de la entrega del
-  agente de programacion.
+- `go test -count=1 ./modulos/orquesta-app-change ./modulos/orquesta-app-change-director-source ./modulos/orquesta-mcp ./modulos/orquesta-web ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack`
+- `TestCodexStackV0CambioProgresivoPasaReviewGate`.
 
 ## APP-CODEX-STACK-013
 

@@ -45,6 +45,21 @@ func appChangeOpenPhaseV0(
 	return decision
 }
 
+func appChangeOpenReviewPhaseV0(
+	runRef string,
+	refs appChangeRefSetV0,
+) orquestadirectoragent.DirectorAgentDecisionV0 {
+	decision := appChangeOpenPhaseV0(
+		runRef,
+		orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		orquestacoreworkflow.OrchestrationPhaseRevisionV0,
+		"open-review",
+		refs,
+	)
+	decision.OpenPhase.Reason = "Entregas del cambio listas para revision."
+	return decision
+}
+
 func appChangeSummaryForActionV0(action string) string {
 	switch action {
 	case "answer":
@@ -57,6 +72,8 @@ func appChangeSummaryForActionV0(action string) string {
 		return "Publicar contrato funcional del cambio."
 	case "task":
 		return "Crear microtarea del cambio."
+	case "open-review":
+		return "Abrir revision del cambio entregado."
 	default:
 		return "Avanzar replanificacion del cambio."
 	}

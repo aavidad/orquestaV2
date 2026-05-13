@@ -22,3 +22,15 @@ Validacion:
 
 - `TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno`;
 - `go test -count=1 ./modulos/orquesta-app-change-director-source`.
+
+## ACDS-003
+
+Objetivo: abrir revision cuando un cambio de app ya esta entregado.
+
+Estado: hecho.
+
+Validacion:
+
+- `TestAppChangeDirectorDecisionSourceV0AbreRevisionTrasEntrega`;
+- `TestCodexStackV0CambioProgresivoPasaReviewGate`;
+- `go test -count=1 ./modulos/orquesta-app-change-director-source ./modulos/orquesta-app-codex-stack`.
