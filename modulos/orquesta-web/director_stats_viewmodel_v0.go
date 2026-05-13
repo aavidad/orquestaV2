@@ -92,6 +92,9 @@ type WebDirectorStatsAgentV0 struct {
 	InFlight            bool   `json:"in_flight"`
 	CanStop             bool   `json:"can_stop"`
 	NeedsAttention      bool   `json:"needs_attention"`
+	StopReasonCode      string `json:"stop_reason_code,omitempty"`
+	StopReasonSource    string `json:"stop_reason_source,omitempty"`
+	StopReasonRef       string `json:"stop_reason_ref,omitempty"`
 	ProgressStatus      string `json:"progress_status,omitempty"`
 	TaskRef             string `json:"task_ref,omitempty"`
 	NoProgressTicks     int    `json:"no_progress_ticks,omitempty"`

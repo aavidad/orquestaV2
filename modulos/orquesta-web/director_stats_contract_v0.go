@@ -72,14 +72,17 @@ type WebDirectorProgressStatsContractV0 struct {
 }
 
 type WebDirectorAgentStatsContractV0 struct {
-	AgentRequestID string                      `json:"agent_request_id"`
-	Status         string                      `json:"status"`
-	ControlState   string                      `json:"control_state,omitempty"`
-	InFlight       bool                        `json:"in_flight"`
-	NeedsAttention bool                        `json:"needs_attention"`
-	CanStop        bool                        `json:"can_stop"`
-	LastProgress   *WebDirectorAgentProgressV0 `json:"last_progress,omitempty"`
-	Usage          *WebDirectorAgentUsageV0    `json:"usage,omitempty"`
+	AgentRequestID   string                      `json:"agent_request_id"`
+	Status           string                      `json:"status"`
+	ControlState     string                      `json:"control_state,omitempty"`
+	InFlight         bool                        `json:"in_flight"`
+	NeedsAttention   bool                        `json:"needs_attention"`
+	CanStop          bool                        `json:"can_stop"`
+	StopReasonCode   string                      `json:"stop_reason_code,omitempty"`
+	StopReasonSource string                      `json:"stop_reason_source,omitempty"`
+	StopReasonRef    string                      `json:"stop_reason_ref,omitempty"`
+	LastProgress     *WebDirectorAgentProgressV0 `json:"last_progress,omitempty"`
+	Usage            *WebDirectorAgentUsageV0    `json:"usage,omitempty"`
 }
 
 type WebDirectorTaskProgressV0 struct {

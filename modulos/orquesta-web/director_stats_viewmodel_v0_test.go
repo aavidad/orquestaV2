@@ -47,6 +47,9 @@ func TestWebDirectorStatsPanelV0ProyectaRunCountsProgresoYErrores(t *testing.T) 
 		!panel.Agentes[0].InFlight ||
 		panel.Agentes[0].NoProgressTicks != 2 ||
 		panel.Agentes[0].RepeatedActionCount != 1 ||
+		panel.Agentes[0].StopReasonCode != "loop_detected" ||
+		panel.Agentes[0].StopReasonSource != "agent_stop_request" ||
+		panel.Agentes[0].StopReasonRef != "agent-ref-web-stats-001#reason:loop_detected" ||
 		panel.Agentes[0].ModelAlias != "gpt-5.5" ||
 		panel.Agentes[0].QuotaRemaining != 90 ||
 		panel.Agentes[0].TotalTokens != 1500 {
@@ -171,9 +174,12 @@ func directorStatsResultForWebTestV0() WebDirectorStatsInboundResultV0 {
 				CostMicros:     500,
 			},
 			Agents: []WebDirectorAgentStatsContractV0{{
-				AgentRequestID: "agent-ref-web-stats-001",
-				Status:         "running",
-				InFlight:       true,
+				AgentRequestID:   "agent-ref-web-stats-001",
+				Status:           "running",
+				InFlight:         true,
+				StopReasonCode:   "loop_detected",
+				StopReasonSource: " agent_stop_request ",
+				StopReasonRef:    " agent-ref-web-stats-001#reason:loop_detected ",
 				LastProgress: &WebDirectorAgentProgressV0{
 					TaskRef:             "task-ref-web-stats-001",
 					ReportRef:           " report-ref-web-stats-001 ",

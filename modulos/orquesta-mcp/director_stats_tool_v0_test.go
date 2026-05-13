@@ -221,6 +221,13 @@ func TestMCPDirectorStatsToolExecutorV0DecisionContextCompletoParaDirector(t *te
 	run.StartedAgents = []string{"agent-ref-stats-001", "agent-ref-stats-002", "agent-ref-stats-003"}
 	run.FailedAgents = []string{"agent-ref-stats-002"}
 	run.StoppedAgents = []string{"agent-ref-stats-003"}
+	run.AgentStopRequests = []string{
+		orquestacoreworkflow.AgentStopRequestProjectionRefV0(orquestacoreworkflow.AgentStopRequestedPayloadV0{
+			AgentRequestID: "agent-ref-stats-003",
+			ReasonCode:     "run_stop_requested",
+			Summary:        "Parada solicitada por control de run.",
+		}),
+	}
 	run.ConfirmedStoppedAgents = []string{"agent-ref-stats-003"}
 	run.ReworkRequests = []string{"rework-ref-mcp-director-stats-001"}
 	run.ReplanDecisions = []string{"replan-ref-mcp-director-stats-001"}
@@ -267,6 +274,11 @@ func TestMCPDirectorStatsToolExecutorV0DecisionContextCompletoParaDirector(t *te
 	}
 	if !mcpDirectorContextHasCurrentPhaseDurationV0(context, "programacion", 3600) {
 		t.Fatalf("phases sin duracion actual: %+v", context.Phases)
+	}
+	agent := mcpDirectorStatsAgentForTestV0(t, *result.Stats, "agent-ref-stats-003")
+	if agent.StopReasonCode != "run_stop_requested" ||
+		agent.StopReasonSource != orquestacionnucleoapp.DirectorAgentStopReasonSourceStopRequestV0 {
+		t.Fatalf("agent stop reason=%+v", agent)
 	}
 }
 

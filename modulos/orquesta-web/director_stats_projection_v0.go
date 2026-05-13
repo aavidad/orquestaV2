@@ -18,12 +18,15 @@ func directorStatsAgentsV0(
 	out := make([]WebDirectorStatsAgentV0, 0, len(agents))
 	for _, agent := range agents {
 		item := WebDirectorStatsAgentV0{
-			AgentRequestID: trimDirectorStatsV0(agent.AgentRequestID),
-			Status:         trimDirectorStatsV0(agent.Status),
-			ControlState:   trimDirectorStatsV0(agent.ControlState),
-			InFlight:       agent.InFlight,
-			CanStop:        agent.CanStop,
-			NeedsAttention: agent.NeedsAttention,
+			AgentRequestID:   trimDirectorStatsV0(agent.AgentRequestID),
+			Status:           trimDirectorStatsV0(agent.Status),
+			ControlState:     trimDirectorStatsV0(agent.ControlState),
+			InFlight:         agent.InFlight,
+			CanStop:          agent.CanStop,
+			NeedsAttention:   agent.NeedsAttention,
+			StopReasonCode:   trimDirectorStatsV0(agent.StopReasonCode),
+			StopReasonSource: trimDirectorStatsV0(agent.StopReasonSource),
+			StopReasonRef:    trimDirectorStatsV0(agent.StopReasonRef),
 		}
 		if agent.LastProgress != nil {
 			progress := agent.LastProgress
