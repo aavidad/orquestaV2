@@ -1,9 +1,11 @@
-package orquestacionnucleoapp
+package orquestaagentprocessregistrymemory
 
 import (
 	"context"
 	"errors"
 	"testing"
+
+	orquestaagentprocessregistry "orquesta/modulos/orquesta-agent-process-registry"
 )
 
 func TestInMemoryAgentProcessRegistryV0RecordsAndResolves(t *testing.T) {
@@ -44,7 +46,7 @@ func TestInMemoryAgentProcessRegistryV0RejectsForbiddenDetail(t *testing.T) {
 
 	err := registry.RecordAgentProcessV0(context.Background(), record)
 
-	assertAgentProcessRegistryErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "agent_process.process_ref")
+	assertAgentProcessRegistryErrorV0(t, err, orquestaagentprocessregistry.ErrAgentProcessRegistryInvalidV0, "agent_process.process_ref")
 }
 
 func TestInMemoryAgentProcessRegistryV0ReplayIdempotente(t *testing.T) {
@@ -70,7 +72,7 @@ func TestInMemoryAgentProcessRegistryV0ConflictoNoSobrescribe(t *testing.T) {
 	}
 	err := registry.RecordAgentProcessV0(context.Background(), conflict)
 
-	assertAgentProcessRegistryErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "agent_process_registry")
+	assertAgentProcessRegistryErrorV0(t, err, orquestaagentprocessregistry.ErrAgentProcessRegistryInvalidV0, "agent_process_registry")
 	got, err := registry.ResolveAgentProcessV0(
 		context.Background(),
 		record.RunID,
@@ -92,7 +94,7 @@ func TestInMemoryAgentProcessRegistryV0RejectsInvalidLookupRefs(t *testing.T) {
 
 	_, err := registry.ResolveAgentProcessV0(context.Background(), "run-process-registry-001", "agent/request/raw")
 
-	assertAgentProcessRegistryErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "agent_process.agent_request_id")
+	assertAgentProcessRegistryErrorV0(t, err, orquestaagentprocessregistry.ErrAgentProcessRegistryInvalidV0, "agent_process.agent_request_id")
 }
 
 func TestInMemoryAgentProcessRegistryV0ReturnsStoreErrorWhenMissing(t *testing.T) {
@@ -104,7 +106,7 @@ func TestInMemoryAgentProcessRegistryV0ReturnsStoreErrorWhenMissing(t *testing.T
 		"agent-process-registry-001",
 	)
 
-	assertAgentProcessRegistryErrorV0(t, err, ErrNucleoOrquestacionStoreV0, "agent_process_registry")
+	assertAgentProcessRegistryErrorV0(t, err, orquestaagentprocessregistry.ErrAgentProcessRegistryNotFoundV0, "agent_process_registry")
 }
 
 func TestInMemoryAgentProcessRegistryV0HonorsContextCancellation(t *testing.T) {
@@ -140,7 +142,7 @@ func assertAgentProcessRegistryErrorV0(
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	var publicErr ErrorV0
+	var publicErr orquestaagentprocessregistry.ErrorV0
 	if !errors.As(err, &publicErr) {
 		t.Fatalf("unexpected error type %T: %v", err, err)
 	}

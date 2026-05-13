@@ -2,8 +2,10 @@ package orquestacionnucleoapp
 
 import (
 	"context"
+	"errors"
 	"strings"
 
+	orquestaagentprocessregistry "orquesta/modulos/orquesta-agent-process-registry"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
@@ -42,7 +44,7 @@ func (stopper ProcessAgentStopperV0) StopAgentV0(
 		payload.AgentRequestID,
 	)
 	if err != nil {
-		return AgentStopResultV0{}, err
+		return AgentStopResultV0{}, processAgentStopRegistryErrorV0(err)
 	}
 	if err := stopper.validateRegisteredProcessIdentityV0(record); err != nil {
 		return AgentStopResultV0{}, err
@@ -66,6 +68,25 @@ func (stopper ProcessAgentStopperV0) StopAgentV0(
 		)
 	}
 	return processAgentStopResultV0(record, snapshot), nil
+}
+
+func processAgentStopRegistryErrorV0(err error) error {
+	if err == nil {
+		return nil
+	}
+	var coreErr ErrorV0
+	if errors.As(err, &coreErr) {
+		return err
+	}
+	var registryErr orquestaagentprocessregistry.ErrorV0
+	if errors.As(err, &registryErr) {
+		code := ErrNucleoOrquestacionStoreV0
+		if registryErr.Code == orquestaagentprocessregistry.ErrAgentProcessRegistryInvalidV0 {
+			code = ErrNucleoOrquestacionInvalidoV0
+		}
+		return errorV0(code, registryErr.Field, registryErr.Message)
+	}
+	return errorV0(ErrNucleoOrquestacionStoreV0, "agent_process_registry", err.Error())
 }
 
 func (stopper ProcessAgentStopperV0) validateV0(

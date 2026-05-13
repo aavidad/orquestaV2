@@ -1,0 +1,9 @@
+package orquestacionnucleoapp
+
+import orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
+
+type InMemoryAgentProcessRegistryV0 = orquestaagentprocessregistrymemory.InMemoryAgentProcessRegistryV0
+
+func NewInMemoryAgentProcessRegistryV0() *InMemoryAgentProcessRegistryV0 {
+	return orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
+}

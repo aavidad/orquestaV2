@@ -3,7 +3,8 @@ package orquestaagentprocessregistry
 import "context"
 
 const (
-	ErrAgentProcessRegistryInvalidV0 = "agent_process_registry_invalid"
+	ErrAgentProcessRegistryInvalidV0  = "agent_process_registry_invalid"
+	ErrAgentProcessRegistryNotFoundV0 = "agent_process_registry_not_found"
 )
 
 type AgentProcessRegistryPortV0 interface {

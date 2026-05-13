@@ -8,11 +8,12 @@ import (
 	"testing"
 	"time"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestProgrammingTeamCodexRealOptInV0(t *testing.T) {
@@ -34,7 +35,7 @@ func TestProgrammingTeamCodexRealOptInV0(t *testing.T) {
 	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
 	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
 	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
-	processRegistry := orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0()
+	processRegistry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
 	processRuntime := orquestaruntime.NewProcessRuntimeConnectorV0()
 	dispatchers := []orquestacionnucleoapp.OutboxDispatcherBindingV0{
 		codexDeliveryCapacityDispatcherForTestV0(store, sink, ledger),

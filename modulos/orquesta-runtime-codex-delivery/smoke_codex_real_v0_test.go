@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -33,7 +34,7 @@ func TestCodexReceiptDeliveryLoopV0SmokeCodexRealOptIn(t *testing.T) {
 	store := orquestacionnucleoapp.NewInMemoryRunStoreV0(run)
 	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
 	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
-	processRegistry := orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0()
+	processRegistry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
 	processRuntime := orquestaruntime.NewProcessRuntimeConnectorV0()
 	service := codexRealSmokeServiceForTestV0(
 		store,

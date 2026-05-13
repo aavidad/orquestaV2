@@ -8,11 +8,12 @@ import (
 	"testing"
 	"time"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 const codexProgressStopChildEnvV0 = "ORQUESTA_CODEX_PROGRESS_STOP_CHILD"
@@ -35,7 +36,7 @@ func TestCodexProgressObservationV0NoParaProcesoRealSoloPorACKSinCambios(t *test
 	processRuntime := orquestaruntime.NewProcessRuntimeConnectorV0()
 	process := codexProgressStopLaunchProcessV0(t, processRuntime)
 	defer func() { _, _ = processRuntime.StopV0(context.Background(), process.ProcessRef) }()
-	registry := orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0()
+	registry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
 	codexProgressStopRecordProcessV0(t, registry, runRef, spec, process)
 	ackPath := filepath.Join(t.TempDir(), orquestaruntimecodex.CodexAgentAckFileNameV0)
 	receiptStore := NewInMemoryCodexReceiptDescriptorStoreV0(

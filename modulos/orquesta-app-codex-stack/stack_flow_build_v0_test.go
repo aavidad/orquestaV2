@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -57,7 +58,7 @@ func mustBuildCodexStackWithDomainWorkForTestV0(
 			AppChangeStore:  orquestaappchange.NewInMemoryAppChangeStoreV0(),
 			ReceiptStore:    orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(),
 			ProgressState:   orquestaruntimecodexdelivery.NewInMemoryCodexProgressStateStoreV0(),
-			ProcessRegistry: orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0(),
+			ProcessRegistry: orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0(),
 			RunControl:      runMemory,
 			RunQueue:        runMemory,
 		},
@@ -112,7 +113,7 @@ func TestProgressSourceV0UsaWaitIntervalComoVentanaMinima(t *testing.T) {
 		Stores: StoresV0{
 			ReceiptStore:    orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(),
 			ProgressState:   orquestaruntimecodexdelivery.NewInMemoryCodexProgressStateStoreV0(),
-			ProcessRegistry: orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0(),
+			ProcessRegistry: orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0(),
 		},
 		Codex: CodexRuntimeConfigV0{
 			WaitInterval: waitInterval,
@@ -128,7 +129,7 @@ func TestStatsProgressSourceV0EmiteProgresoNormal(t *testing.T) {
 		Stores: StoresV0{
 			ReceiptStore:    orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(),
 			ProgressState:   orquestaruntimecodexdelivery.NewInMemoryCodexProgressStateStoreV0(),
-			ProcessRegistry: orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0(),
+			ProcessRegistry: orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0(),
 		},
 	})
 	if !source.EmitProgressing {

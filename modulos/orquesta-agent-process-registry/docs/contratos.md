@@ -16,6 +16,8 @@ Invariantes:
   - No decide persistencia, runtime, modelo, proveedor ni workflow.
 Errores:
   - agent_process_registry_invalid
+  - agent_process_registry_not_found, para adaptadores que no encuentran la clave
+    solicitada.
 Pruebas de contrato:
   - `go test -count=1 ./modulos/orquesta-agent-process-registry`
 ```

@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	orquestaruntime "orquesta/modulos/orquesta-runtime"
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func TestCodexReceiptDeliveryLoopV0SmokeCodexRealAppOptIn(t *testing.T) {
@@ -26,7 +27,7 @@ func TestCodexReceiptDeliveryLoopV0SmokeCodexRealAppOptIn(t *testing.T) {
 	store := orquestacionnucleoapp.NewInMemoryRunStoreV0(run)
 	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
 	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
-	processRegistry := orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0()
+	processRegistry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
 	processRuntime := orquestaruntime.NewProcessRuntimeConnectorV0()
 	service := codexRealSmokeServiceForTestV0(store, sink, ledger, receiptStore, runRef, spec)
 	dispatchers := codexRealSmokeDispatchersForTestV0(

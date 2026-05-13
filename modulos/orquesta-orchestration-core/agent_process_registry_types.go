@@ -4,3 +4,4 @@ import orquestaagentprocessregistry "orquesta/modulos/orquesta-agent-process-reg
 
 type AgentProcessRegistryPortV0 = orquestaagentprocessregistry.AgentProcessRegistryPortV0
 type AgentProcessRegistryRecordV0 = orquestaagentprocessregistry.AgentProcessRegistryRecordV0
+type AgentProcessRecordV0 = AgentProcessRegistryRecordV0

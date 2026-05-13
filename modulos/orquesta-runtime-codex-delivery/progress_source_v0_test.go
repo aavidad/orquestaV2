@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -282,7 +283,7 @@ func TestCodexProgressObservationSourceV0ExigeRegistroDeProceso(t *testing.T) {
 	store := NewInMemoryCodexReceiptDescriptorStoreV0(codexProgressDescriptorForTestV0(spec, ackPath))
 	source := CodexProgressObservationSourceV0{
 		Store:           store,
-		ProcessRegistry: orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0(),
+		ProcessRegistry: orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0(),
 		State:           NewInMemoryCodexProgressStateStoreV0(),
 		Policy:          orquestaruntime.AgentProgressHeartbeatPolicyV0{StalledAfterNoProgressTicks: 1},
 	}
@@ -341,7 +342,7 @@ func codexProgressSourceForTestV0(
 	ackPath string,
 ) CodexProgressObservationSourceV0 {
 	t.Helper()
-	registry := orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0()
+	registry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
 	if err := registry.RecordAgentProcessV0(context.Background(), codexProgressProcessRecordForTestV0(spec)); err != nil {
 		t.Fatalf("RecordAgentProcessV0: %v", err)
 	}

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
@@ -100,7 +101,7 @@ func smokeDrainStoresFromStackForTestV0(
 		AppChangeStore:  stack.Stores.AppChangeStore.(*orquestaappchange.InMemoryAppChangeStoreV0),
 		ReceiptStore:    stack.Stores.ReceiptStore.(*orquestaruntimecodexdelivery.InMemoryCodexReceiptDescriptorStoreV0),
 		ProgressState:   stack.Stores.ProgressState.(*orquestaruntimecodexdelivery.InMemoryCodexProgressStateStoreV0),
-		ProcessRegistry: stack.Stores.ProcessRegistry.(*orquestacionnucleoapp.InMemoryAgentProcessRegistryV0),
+		ProcessRegistry: stack.Stores.ProcessRegistry.(*orquestaagentprocessregistrymemory.InMemoryAgentProcessRegistryV0),
 		RunMemory:       stack.Stores.RunControl.(*orquestarunmemory.RunMemoryStoreV0),
 	}
 }

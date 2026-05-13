@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -22,7 +23,7 @@ type codexStackRealSmokeStoresV0 struct {
 	AppChangeStore  *orquestaappchange.InMemoryAppChangeStoreV0
 	ReceiptStore    *orquestaruntimecodexdelivery.InMemoryCodexReceiptDescriptorStoreV0
 	ProgressState   *orquestaruntimecodexdelivery.InMemoryCodexProgressStateStoreV0
-	ProcessRegistry *orquestacionnucleoapp.InMemoryAgentProcessRegistryV0
+	ProcessRegistry *orquestaagentprocessregistrymemory.InMemoryAgentProcessRegistryV0
 	RunMemory       *orquestarunmemory.RunMemoryStoreV0
 }
 
@@ -111,7 +112,7 @@ func newCodexStackRealSmokeStoresV0() codexStackRealSmokeStoresV0 {
 		AppChangeStore:  orquestaappchange.NewInMemoryAppChangeStoreV0(),
 		ReceiptStore:    orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(),
 		ProgressState:   orquestaruntimecodexdelivery.NewInMemoryCodexProgressStateStoreV0(),
-		ProcessRegistry: orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0(),
+		ProcessRegistry: orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0(),
 		RunMemory:       orquestarunmemory.NewRunMemoryStoreV0(),
 	}
 }

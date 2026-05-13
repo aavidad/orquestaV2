@@ -7,8 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	orquestaruntime "orquesta/modulos/orquesta-runtime"
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func mcpFormDirectorTeamSmokeDescriptorsV0(
@@ -92,7 +93,7 @@ func mcpFormDirectorTeamSmokeVerifyDocsV0(t *testing.T, projectDir string) {
 func mcpFormDirectorTeamSmokeStopProcessesV0(
 	t *testing.T,
 	processRuntime *orquestaruntime.ProcessRuntimeConnectorV0,
-	registry *orquestacionnucleoapp.InMemoryAgentProcessRegistryV0,
+	registry *orquestaagentprocessregistrymemory.InMemoryAgentProcessRegistryV0,
 	runRef string,
 	agents []string,
 ) {

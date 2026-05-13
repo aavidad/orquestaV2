@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -64,7 +65,7 @@ func codexStackRealSmokeAckNotReadyV0(issue orquestaruntime.ExternalAgentConnect
 func codexStackRealSmokeStopProcessV0(
 	t *testing.T,
 	processRuntime *orquestaruntime.ProcessRuntimeConnectorV0,
-	registry *orquestacionnucleoapp.InMemoryAgentProcessRegistryV0,
+	registry *orquestaagentprocessregistrymemory.InMemoryAgentProcessRegistryV0,
 	runRef string,
 	agentRef string,
 ) {
@@ -81,7 +82,7 @@ func codexStackRealSmokeStopProcessV0(
 func codexStackRealSmokeStopAllProcessesV0(
 	t *testing.T,
 	processRuntime *orquestaruntime.ProcessRuntimeConnectorV0,
-	registry *orquestacionnucleoapp.InMemoryAgentProcessRegistryV0,
+	registry *orquestaagentprocessregistrymemory.InMemoryAgentProcessRegistryV0,
 	store *orquestaruntimecodexdelivery.InMemoryCodexReceiptDescriptorStoreV0,
 ) {
 	t.Helper()

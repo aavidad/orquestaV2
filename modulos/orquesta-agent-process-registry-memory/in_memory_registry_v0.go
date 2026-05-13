@@ -1,13 +1,15 @@
-package orquestacionnucleoapp
+package orquestaagentprocessregistrymemory
 
 import (
 	"context"
 	"sync"
+
+	orquestaagentprocessregistry "orquesta/modulos/orquesta-agent-process-registry"
 )
 
-type AgentProcessRecordV0 = AgentProcessRegistryRecordV0
+type AgentProcessRecordV0 = orquestaagentprocessregistry.AgentProcessRegistryRecordV0
 
-var _ AgentProcessRegistryPortV0 = (*InMemoryAgentProcessRegistryV0)(nil)
+var _ orquestaagentprocessregistry.AgentProcessRegistryPortV0 = (*InMemoryAgentProcessRegistryV0)(nil)
 
 type InMemoryAgentProcessRegistryV0 struct {
 	mu      sync.Mutex
@@ -30,8 +32,8 @@ func (registry *InMemoryAgentProcessRegistryV0) RecordAgentProcessV0(
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	record = normalizeAgentProcessRecordV0(record)
-	if err := validateAgentProcessRecordV0(record); err != nil {
+	record = orquestaagentprocessregistry.NormalizeAgentProcessRegistryRecordV0(record)
+	if err := orquestaagentprocessregistry.ValidateAgentProcessRegistryRecordV0(record); err != nil {
 		return err
 	}
 	registry.mu.Lock()
@@ -43,8 +45,8 @@ func (registry *InMemoryAgentProcessRegistryV0) RecordAgentProcessV0(
 		if agentProcessRecordEqualV0(existing, record) {
 			return nil
 		}
-		return errorV0(
-			ErrNucleoOrquestacionInvalidoV0,
+		return registryMemoryErrorV0(
+			orquestaagentprocessregistry.ErrAgentProcessRegistryInvalidV0,
 			"agent_process_registry",
 			"agent_process conflict",
 		)
@@ -64,7 +66,7 @@ func (registry *InMemoryAgentProcessRegistryV0) ResolveAgentProcessV0(
 	if err := ctx.Err(); err != nil {
 		return AgentProcessRecordV0{}, err
 	}
-	runID, agentRequestID = NormalizeAgentProcessRegistryLookupV0(runID, agentRequestID)
+	runID, agentRequestID = orquestaagentprocessregistry.NormalizeAgentProcessRegistryLookupV0(runID, agentRequestID)
 	key := agentProcessRegistryKeyV0{
 		runID:          runID,
 		agentRequestID: agentRequestID,
@@ -77,13 +79,25 @@ func (registry *InMemoryAgentProcessRegistryV0) ResolveAgentProcessV0(
 	registry.ensureRecordsLockedV0()
 	record, ok := registry.records[key]
 	if !ok {
-		return AgentProcessRecordV0{}, errorV0(
-			ErrNucleoOrquestacionStoreV0,
+		return AgentProcessRecordV0{}, registryMemoryErrorV0(
+			orquestaagentprocessregistry.ErrAgentProcessRegistryNotFoundV0,
 			"agent_process_registry",
 			"agent_process no encontrado",
 		)
 	}
 	return record, nil
+}
+
+func validateAgentProcessLookupV0(key agentProcessRegistryKeyV0) error {
+	return orquestaagentprocessregistry.ValidateAgentProcessRegistryLookupV0(key.runID, key.agentRequestID)
+}
+
+func registryMemoryErrorV0(code string, field string, message string) orquestaagentprocessregistry.ErrorV0 {
+	return orquestaagentprocessregistry.ErrorV0{
+		Code:    code,
+		Field:   field,
+		Message: message,
+	}
 }
 
 func (registry *InMemoryAgentProcessRegistryV0) ensureRecordsLockedV0() {

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -93,7 +94,7 @@ func newStackShutdownCheckpointFixtureV0(t *testing.T) stackShutdownCheckpointFi
 				RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(stackShutdownRunForTestV0(runRef, agentRef)),
 				ReceiptStore:    receiptStore,
 				ProgressState:   orquestaruntimecodexdelivery.NewInMemoryCodexProgressStateStoreV0(),
-				ProcessRegistry: orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0(),
+				ProcessRegistry: orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0(),
 			},
 		}},
 		command: orquestaservershutdown.PrepareAgentShutdownCommandV0{

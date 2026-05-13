@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"os"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func codexDeliveryCapacityDispatcherForTestV0(
@@ -56,7 +57,7 @@ func codexDeliveryAgentDispatcherForTestV0(
 		Recorder:        receiptStore,
 		AckPathResolver: StaticCodexReceiptAckPathResolverV0{AckPath: ackPath},
 	}
-	registry := orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0()
+	registry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
 	return orquestacionnucleoapp.OutboxDispatcherBindingV0{
 		TargetPort: orquestacoreworkflow.OutboxTargetAgentLauncherV0,
 		Reader:     ledger,

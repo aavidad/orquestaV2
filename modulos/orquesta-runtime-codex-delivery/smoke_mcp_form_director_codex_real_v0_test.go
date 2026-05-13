@@ -8,14 +8,15 @@ import (
 	"testing"
 	"time"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaweb "orquesta/modulos/orquesta-web"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestMCPFormularioDirectorCodexRealOptInV0(t *testing.T) {
@@ -31,7 +32,7 @@ func TestMCPFormularioDirectorCodexRealOptInV0(t *testing.T) {
 	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
 	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
 	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
-	processRegistry := orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0()
+	processRegistry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
 	processRuntime := orquestaruntime.NewProcessRuntimeConnectorV0()
 	executor := orquestamcp.NewMCPArrancarDirectorAppToolExecutorV0(
 		orquestaappdirectorservice.StartAppDirectorPortsV0{

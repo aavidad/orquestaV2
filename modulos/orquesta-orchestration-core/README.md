@@ -337,7 +337,6 @@ progreso.
 - `ContextBundleRuntimeMaterializerV0`, adaptador de materializacion de
   contexto sobre `orquesta-context` y reader inyectado.
 - `AgentReadinessProbePortV0`, puerto opcional de readiness por refs opacas.
-- `InMemoryAgentProcessRegistryV0`, registro en memoria para tests y dry-run.
 - `ProcessAgentStopperV0`, stopper opt-in que resuelve `process_ref` por puerto
   y delega parada en runtime inyectado.
 - `AgentLauncherExecutorV0.FailureStopper`, puerto opcional para parar un
@@ -345,6 +344,9 @@ progreso.
 - `AgentProcessRegistryPortV0` y `AgentProcessRegistryRecordV0` son alias del
   contrato neutral `modulos/orquesta-agent-process-registry`; asi persistence
   puede implementar el registro durable sin importar el nucleo.
+- El adaptador en memoria vive en
+  `modulos/orquesta-agent-process-registry-memory`; el paquete productivo del
+  core no lo importa.
 - `BuildDirectorRunStatsV0` expone `closure` con estado `blocked`, `ready` o
   `closed`, mas causas compactas (`contratos`, `programacion_entregas`,
   `revision_final`, `validacion_final`, `fase_cierre`, `run_blockers`). Es una
@@ -391,7 +393,7 @@ go test ./modulos/orquesta-orchestration-core -run 'TestProgressSupervisionLoopD
 go test ./modulos/orquesta-orchestration-core -run 'TestProgressiveLoopV0StopsAgentFromLeaseAssessment' -count=1
 go test ./modulos/orquesta-orchestration-core -run 'TestProgressiveLoopV0ReplansFromStoppedAgentAssessment' -count=1
 go test ./modulos/orquesta-orchestration-core -run 'TestComposedAgentLauncherDependenciesResolverV0|TestExternalAgentLaunchSpecResolverV0' -count=1
-go test ./modulos/orquesta-orchestration-core -run 'Test(InMemoryAgentProcessRegistryV0|ProcessAgentStopperV0)' -count=1
+go test ./modulos/orquesta-agent-process-registry-memory ./modulos/orquesta-orchestration-core -run 'Test(InMemoryAgentProcessRegistryV0|ProcessAgentStopperV0)' -count=1
 go test ./modulos/orquesta-orchestration-core -run 'TestAgentLauncherExecutorV0WorkflowFailureStopsLaunchedProcess' -count=1
 go test ./modulos/orquesta-runtime -run 'TestProcessRuntimeConnectorV0StopEsIdempotente' -count=1
 ```

@@ -32,12 +32,6 @@ func ValidateAgentProcessRegistryRecordV0(
 	)
 }
 
-func validateAgentProcessLookupV0(
-	key agentProcessRegistryKeyV0,
-) error {
-	return ValidateAgentProcessRegistryLookupV0(key.runID, key.agentRequestID)
-}
-
 func NormalizeAgentProcessRegistryLookupV0(
 	runID string,
 	agentRequestID string,

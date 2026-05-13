@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -29,7 +30,7 @@ func TestMCPDirectorStatsToolDescriptorV0ExponeContratoCompacto(t *testing.T) {
 
 func TestMCPDirectorStatsToolExecutorV0DevuelveStatsDeRunStore(t *testing.T) {
 	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-001")
-	registry := orquestacionnucleoapp.NewInMemoryAgentProcessRegistryV0()
+	registry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
 	if err := registry.RecordAgentProcessV0(context.Background(), orquestacionnucleoapp.AgentProcessRecordV0{
 		RunID:          run.RunID,
 		AgentRequestID: "agent-ref-stats-001",
