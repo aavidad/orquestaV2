@@ -69,7 +69,10 @@ func buildStackHTTPHandlerV0(
 			AgentUsageSource:  agentUsageSourceV0(config),
 			ExternalJobSource: externalJobStatsSourceV0(config),
 		},
-		RunControl: orquestamcp.NewMCPRunControlToolExecutorV0(config.Stores.RunControl),
+		RunControl: orquestamcp.MCPRunControlToolExecutorV0{
+			Port:              config.Stores.RunControl,
+			ExternalJobSource: externalJobStatsSourceV0(config),
+		},
 		RunQueuePriority: orquestamcp.MCPRunQueuePriorityToolExecutorV0{
 			Reader: config.Stores.RunQueue,
 			Writer: config.Stores.RunQueue,

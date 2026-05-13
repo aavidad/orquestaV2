@@ -8,7 +8,8 @@ import (
 )
 
 type MCPRunControlToolExecutorV0 struct {
-	Port orquestaruncontrol.RunControlWriterPortV0
+	Port              orquestaruncontrol.RunControlWriterPortV0
+	ExternalJobSource MCPDirectorExternalJobStatsSourcePortV0
 }
 
 func NewMCPRunControlToolExecutorV0(
@@ -24,20 +25,54 @@ func (executor MCPRunControlToolExecutorV0) Execute(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if strings.TrimSpace(input.RunRef) == "" {
+	resolved, ok, err := executor.resolveRunControlInputV0(ctx, input)
+	if err != nil {
+		return newMCPRunControlErrorV0(input, "external_job_run_ref_error", "external_job_ref"), nil
+	}
+	if !ok || strings.TrimSpace(resolved.RunRef) == "" {
 		return newMCPRunControlErrorV0(input, "run_ref_requerido", "run_ref"), nil
 	}
 	if executor.Port == nil {
-		return newMCPRunControlErrorV0(input, "run_control_port_no_disponible", "port"), nil
+		return newMCPRunControlErrorV0(resolved, "run_control_port_no_disponible", "port"), nil
 	}
 	if !isMCPRunControlActionSupportedV0(input.Action) {
-		return newMCPRunControlErrorV0(input, "action_no_soportada", "action"), nil
+		return newMCPRunControlErrorV0(resolved, "action_no_soportada", "action"), nil
 	}
-	state, err := executor.executeActionV0(ctx, input)
+	state, err := executor.executeActionV0(ctx, resolved)
 	if err != nil {
 		return MCPRunControlToolResultV0{}, err
 	}
-	return newMCPRunControlResultV0(input, state), nil
+	return newMCPRunControlResultV0(resolved, state), nil
+}
+
+func (executor MCPRunControlToolExecutorV0) resolveRunControlInputV0(
+	ctx context.Context,
+	input MCPRunControlToolInputV0,
+) (MCPRunControlToolInputV0, bool, error) {
+	input.RunRef = strings.TrimSpace(input.RunRef)
+	if input.RunRef != "" {
+		return input, true, nil
+	}
+	if strings.TrimSpace(input.ExternalJobRef) == "" {
+		return input, false, nil
+	}
+	if executor.ExternalJobSource == nil {
+		return input, false, nil
+	}
+	stats, ok, err := executor.ExternalJobSource.ResolveDirectorExternalJobStatsV0(
+		ctx,
+		MCPDirectorExternalJobStatsRequestV0{
+			AppRef:         strings.TrimSpace(input.AppRef),
+			ExternalJobRef: strings.TrimSpace(input.ExternalJobRef),
+			CorrelationID:  firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
+		},
+	)
+	if err != nil || !ok || strings.TrimSpace(stats.RunRef) == "" {
+		return input, ok, err
+	}
+	input.RunRef = strings.TrimSpace(stats.RunRef)
+	input.EvidenceRefs = compactStringsMCPV0(append(input.EvidenceRefs, stats.JobRef, stats.TaskRef, stats.AgentRef))
+	return input, true, nil
 }
 
 func (executor MCPRunControlToolExecutorV0) executeActionV0(

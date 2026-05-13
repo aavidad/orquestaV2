@@ -755,7 +755,7 @@ Validacion de stats OPES/job externo 2026-05-13:
 
 ```bash
 go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./modulos/orquesta-run-file \
-  -run 'TestMCPDirectorStatsToolExecutorV0ResuelveRunPorJobExterno|TestCodexStackV0OPESExternalWorkRESTCreaMicrotareaSinWriteSetLocal|TestRunFileStoreAppChangePersistsAfterRecreateAndReplacesV0|TestFileDomainWorkArtifactSubmissionLedgerV0PersisteYRecupera'
+  -run 'TestMCPDirectorStatsToolExecutorV0ResuelveRunPorJobExterno|TestMCPRunControlExecutorV0ResuelveRunPorJobExterno|TestCodexStackV0OPESExternalWorkRESTCreaMicrotareaSinWriteSetLocal|TestRunFileStoreAppChangePersistsAfterRecreateAndReplacesV0|TestFileDomainWorkArtifactSubmissionLedgerV0PersisteYRecupera'
 ```
 
 Resultado: `ok`.
@@ -764,6 +764,8 @@ Evidencia:
 
 - `orquesta.director.stats.v0` resuelve `run_ref` desde `external_job_ref`
   mediante puerto inyectado;
+- `orquesta.runs.control.v0` puede aplicar `pause/resume/stop/cancel` sobre la
+  run asociada a `external_job_ref`;
 - la respuesta incluye `external_job` con `job_ref`, `run_ref`, `task_ref`,
   `agent_ref`, `status` y `delivery_refs` cuando existan;
 - `RunFileStoreV0` no pierde `external_work` tras reinicio;

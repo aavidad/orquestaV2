@@ -923,12 +923,14 @@ Nombre: mcp.tool.orquesta.runs.control.v0
 Tipo: puerto_entrada
 Version: v0
 Propietario: orquesta-mcp
-Consumidores: IA directora, web futura y operador humano
+Consumidores: IA directora, web futura, operador humano y apps externas como
+OPES
 Campos:
   descriptor:
     name: orquesta.runs.control.v0
-    input_schema: action pause|resume|stop|cancel, run_ref, reason?,
-      requested_by?, forced?, idempotency_key?, evidence_refs?
+    input_schema: action pause|resume|stop|cancel, run_ref? o
+      external_job_ref?, app_ref?, reason?, requested_by?, forced?,
+      idempotency_key?, evidence_refs?
   output_ok:
     estado, run_ref, action, status, checkpoint_recorded, forced, evidence_refs
   output_error:
@@ -936,9 +938,13 @@ Campos:
 Invariantes:
   - Adaptador inbound fino.
   - Delega solo en `RunControlWriterPortV0` inyectado.
+  - `external_job_ref` se usa solo para resolver la run asociada por puerto; la
+    accion controla la run completa, no un bloque OPES aislado dentro de una
+    run compartida.
   - No usa DB, runtime, filesystem, scheduler interno ni proceso de agente.
 Pruebas de contrato:
   - Executor delega en puerto fake.
+  - Executor resuelve run por job externo mediante puerto fake.
   - Transporte queda opt-in sin binding.
   - HTTP POST delega y propaga correlacion.
 ```

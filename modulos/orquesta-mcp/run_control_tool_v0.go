@@ -27,7 +27,9 @@ type MCPRunControlToolInputV0 struct {
 	RequestID      string   `json:"request_id,omitempty"`
 	CorrelationID  string   `json:"correlation_id,omitempty"`
 	Action         string   `json:"action"`
-	RunRef         string   `json:"run_ref"`
+	RunRef         string   `json:"run_ref,omitempty"`
+	AppRef         string   `json:"app_ref,omitempty"`
+	ExternalJobRef string   `json:"external_job_ref,omitempty"`
 	RequestedBy    string   `json:"requested_by,omitempty"`
 	Reason         string   `json:"reason,omitempty"`
 	Forced         bool     `json:"forced,omitempty"`
@@ -52,13 +54,14 @@ func MCPRunControlDescriptorV0() MCPRunControlToolDescriptorV0 {
 	return MCPRunControlToolDescriptorV0{
 		Name:        MCPRunControlToolNameV0,
 		Version:     MCPRunControlToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,action:pause|resume|stop|cancel,run_ref,requested_by?,reason?,forced?,idempotency_key?,evidence_refs?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,action:pause|resume|stop|cancel,run_ref?|external_job_ref?,app_ref?,requested_by?,reason?,forced?,idempotency_key?,evidence_refs?}",
 		Output:      "ok:{run_ref,action,status,checkpoint_recorded,forced?,evidence_refs?}|error:{errores_publicos}",
 		ResourceURI: MCPRunControlResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
 			"una sola tool con action pause resume stop cancel",
 			"delega en RunControlWriterPortV0 inyectado",
+			"external_job_ref solo resuelve la run asociada por puerto inyectado",
 			"no usa DB runtime filesystem ni scheduler interno",
 		},
 	}

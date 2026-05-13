@@ -611,6 +611,8 @@ Trabajo aplicado:
   mediante puerto MCP;
 - `RunFileStoreV0` conserva `external_work.job_ref` e `input_fields` al
   persistir y reabrir estado;
+- `orquesta.runs.control.v0` puede resolver `external_job_ref` y controlar la
+  run asociada;
 - el servidor usa ledger de artefactos persistente en
   `ORQUESTA_DOMAIN_DELIVERY_LEDGER_PATH` o en `StateDir` por defecto.
 
@@ -618,6 +620,7 @@ Validacion:
 
 - `TestMCPDirectorStatsToolExecutorV0ResuelveRunPorJobExterno`;
 - `TestCodexStackV0OPESExternalWorkRESTCreaMicrotareaSinWriteSetLocal`;
+- `TestMCPRunControlExecutorV0ResuelveRunPorJobExterno`;
 - `TestRunFileStoreAppChangePersistsAfterRecreateAndReplacesV0`;
 - `TestFileDomainWorkArtifactSubmissionLedgerV0PersisteYRecupera`.
 

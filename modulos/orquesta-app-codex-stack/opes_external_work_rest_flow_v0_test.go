@@ -79,6 +79,12 @@ func TestCodexStackV0OPESExternalWorkRESTCreaMicrotareaSinWriteSetLocal(t *testi
 		jobStats.ExternalJob.Status == "" {
 		t.Fatalf("jobStats=%+v", jobStats)
 	}
+	control := postOPESRunControlByJobV0(t, stack, "job-ref-opes-001")
+	if control.Estado != orquestamcp.MCPRunControlEstadoOKV0 ||
+		control.RunRef != director.RunRef ||
+		control.Status != "paused" {
+		t.Fatalf("control=%+v", control)
+	}
 }
 
 func TestCodexStackV0OPESExternalWorkDeliveryEnviaArtefactoDomainWork(t *testing.T) {
@@ -330,6 +336,38 @@ func postOPESDirectorJobStatsV0(
 	var result orquestamcp.MCPDirectorStatsToolResultV0
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode job stats: %v", err)
+	}
+	return result
+}
+
+func postOPESRunControlByJobV0(
+	t *testing.T,
+	stack StackV0,
+	jobRef string,
+) orquestamcp.MCPRunControlToolResultV0 {
+	t.Helper()
+	body := new(bytes.Buffer)
+	if err := json.NewEncoder(body).Encode(orquestamcp.MCPRunControlToolInputV0{
+		RequestID:      "req-opes-rest-job-control-001",
+		CorrelationID:  "corr-opes-rest-job-control-001",
+		Action:         "pause",
+		AppRef:         "opes",
+		ExternalJobRef: jobRef,
+		RequestedBy:    "opes",
+		Reason:         "pausa solicitada por job OPES",
+	}); err != nil {
+		t.Fatalf("encode job control: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/runs/control", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	stack.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("job control status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPRunControlToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode job control: %v", err)
 	}
 	return result
 }

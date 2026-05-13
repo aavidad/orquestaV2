@@ -71,6 +71,43 @@ func TestMCPRunControlExecutorV0ValidaAction(t *testing.T) {
 	}
 }
 
+func TestMCPRunControlExecutorV0ResuelveRunPorJobExterno(t *testing.T) {
+	port := &fakeMCPRunControlPortV0{}
+	executor := MCPRunControlToolExecutorV0{
+		Port: port,
+		ExternalJobSource: mcpDirectorExternalJobStatsSourceForTestV0{
+			Stats: MCPDirectorExternalJobStatsV0{
+				AppRef:   "opes",
+				JobRef:   "job-ref-opes-001",
+				RunRef:   "run-ref-opes-001",
+				TaskRef:  "task-ref-opes-001",
+				AgentRef: "agent-ref-opes-001",
+				Status:   "running",
+			},
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), MCPRunControlToolInputV0{
+		RequestID:      "req-run-control-opes-001",
+		CorrelationID:  "corr-run-control-opes-001",
+		Action:         "pause",
+		AppRef:         "opes",
+		ExternalJobRef: "job-ref-opes-001",
+		RequestedBy:    "opes",
+		Reason:         "pausa solicitada desde job OPES",
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPRunControlEstadoOKV0 ||
+		result.RunRef != "run-ref-opes-001" ||
+		result.Status != string(orquestaruncontrol.RunControlStatusPausedV0) ||
+		port.pause.RunRef != "run-ref-opes-001" ||
+		!containsStringMCPTestV0(port.pause.EvidenceRefs, "job-ref-opes-001") {
+		t.Fatalf("result=%+v pause=%+v", result, port.pause)
+	}
+}
+
 type fakeMCPRunControlPortV0 struct {
 	pause  orquestaruncontrol.PauseRunCommandV0
 	resume orquestaruncontrol.ResumeRunCommandV0

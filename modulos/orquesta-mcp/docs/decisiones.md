@@ -18,6 +18,24 @@ Estado:
 
 ```text
 Fecha: 2026-05-13
+Decision: `orquesta.runs.control.v0` puede resolver la run asociada a
+`external_job_ref`.
+Motivo: OPES y otras apps externas pueden necesitar pausar, reanudar, parar o
+cancelar el trabajo tecnico que Orquesta esta ejecutando para un job sin
+interpretar la run completa.
+Alternativas: exigir siempre `run_ref`; anadir control granular por task/agente;
+crear un endpoint OPES especifico. Se evita el control granular en este corte
+porque podria parar solo parte de una run compartida sin contrato claro.
+Impacto: el input acepta `app_ref` y `external_job_ref`; el executor usa un
+puerto de resolucion externo para obtener `run_ref` y aplica la accion normal
+de RunControl. La accion controla la run asociada, no un bloque OPES aislado.
+Contratos afectados: mcp.tool.orquesta.runs.control.v0;
+rest.bridge.orquesta.runs.control.v0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-13
 Decision: `orquesta.director.stats.v0` puede resolver una run por
 `external_job_ref` mediante puerto inyectado.
 Motivo: OPES dirige su propio backlog editorial y necesita preguntar por el
