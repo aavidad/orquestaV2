@@ -1,9 +1,9 @@
-package orquestacionnucleoapp
+package orquestaautoprogramming
 
 import "testing"
 
 func TestEvaluateAutoprogrammingReviewGateV0(t *testing.T) {
-	requiredTest := "go test ./orquestacionnucleoapp -run TestEvaluateAutoprogrammingReviewGateV0 -count=1"
+	requiredTest := "go test ./modulos/orquesta-autoprogramming -run TestEvaluateAutoprogrammingReviewGateV0 -count=1"
 
 	t.Run("acepta ack completed tests verdes y ficheros pequenos", func(t *testing.T) {
 		result := EvaluateAutoprogrammingReviewGateV0(AutoprogrammingReviewGateInputV0{
@@ -16,9 +16,9 @@ func TestEvaluateAutoprogrammingReviewGateV0(t *testing.T) {
 				{Command: requiredTest, Passed: true},
 			},
 			Files: []AutoprogrammingReviewGateFileV0{
-				{Path: "orquestacionnucleoapp/autoprogramming_review_gate_v0.go", LineCount: 300},
+				{Path: "modulos/orquesta-autoprogramming/autoprogramming_review_gate_v0.go", LineCount: 300},
 			},
-			WriteSet: []string{"orquestacionnucleoapp/autoprogramming_review_gate_v0.go"},
+			WriteSet: []string{"modulos/orquesta-autoprogramming/autoprogramming_review_gate_v0.go"},
 		})
 
 		if !result.Accepted {
@@ -76,7 +76,7 @@ func TestEvaluateAutoprogrammingReviewGateV0(t *testing.T) {
 
 	t.Run("rechaza ficheros fuera del write-set", func(t *testing.T) {
 		result := EvaluateAutoprogrammingReviewGateV0(validAutoprogrammingReviewGateInputV0(requiredTest, func(input *AutoprogrammingReviewGateInputV0) {
-			input.Files[0].Path = "orquestacionnucleoapp/fuera.go"
+			input.Files[0].Path = "modulos/orquesta-autoprogramming/fuera.go"
 		}))
 
 		if result.Accepted {
@@ -100,9 +100,9 @@ func validAutoprogrammingReviewGateInputV0(
 			{Command: requiredTest, Passed: true},
 		},
 		Files: []AutoprogrammingReviewGateFileV0{
-			{Path: "orquestacionnucleoapp/autoprogramming_review_gate_v0.go", LineCount: 300},
+			{Path: "modulos/orquesta-autoprogramming/autoprogramming_review_gate_v0.go", LineCount: 300},
 		},
-		WriteSet: []string{"orquestacionnucleoapp/autoprogramming_review_gate_v0.go"},
+		WriteSet: []string{"modulos/orquesta-autoprogramming/autoprogramming_review_gate_v0.go"},
 	}
 	if mutate != nil {
 		mutate(&input)

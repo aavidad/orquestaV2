@@ -1,4 +1,4 @@
-package orquestacionnucleoapp
+package orquestaautoprogramming
 
 import "testing"
 

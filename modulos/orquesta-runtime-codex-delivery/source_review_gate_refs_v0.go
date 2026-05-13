@@ -3,8 +3,8 @@ package orquestaruntimecodexdelivery
 import (
 	"strings"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func codexReviewGateReviewRequestIDV0(deliveryRef string) string {
@@ -20,7 +20,7 @@ func codexReviewGateAcceptedReviewRefV0(deliveryRef string) string {
 }
 
 func codexReviewGateSummaryV0(
-	result orquestacionnucleoapp.AutoprogrammingReviewGateResultV0,
+	result orquestaautoprogramming.AutoprogrammingReviewGateResultV0,
 ) string {
 	if result.Accepted {
 		return "Entrega aceptada por gate de revision."
@@ -33,7 +33,7 @@ func codexReviewGateSummaryV0(
 
 func codexReviewGateEvidenceRefsV0(
 	ack orquestaruntimecodex.CodexAgentAckV0,
-	result orquestacionnucleoapp.AutoprogrammingReviewGateResultV0,
+	result orquestaautoprogramming.AutoprogrammingReviewGateResultV0,
 ) []string {
 	values := []string{strings.TrimSpace(ack.AckRef)}
 	for _, issue := range result.Issues {

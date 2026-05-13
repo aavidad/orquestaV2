@@ -144,22 +144,14 @@ El contrato operativo de microtarea programable es:
 5. el scheduler decide `RequestCapacity -> RequestAgent` sin conocer DB,
    runtime, proveedor, modelo, HOME ni OAuth.
 
-El contrato operativo de solicitud de autoprogramacion es:
+El contrato operativo de solicitud de autoprogramacion vive fuera del nucleo en
+`modulos/orquesta-autoprogramming`. Este paquete solo ve observaciones,
+candidatos y puertos genericos; no valida `write_set`, no decide tests
+obligatorios y no conoce reglas especificas de programacion.
 
-1. un adaptador externo crea `AutoprogrammingRequestV0` para una `project_ref`
-   opaca que representa Orquesta fuera del nucleo;
-2. el core solo valida refs y alcance, no ejecuta agentes, smokes, VCS ni
-   comandos;
-3. la solicitud exige `worktree_ref` aislada y `branch_ref` opaca obligatoria;
-4. las tareas se agrupan por area con `GroupAutoprogrammingTasksByAreaV0`;
-5. el alcance queda limitado por defecto a 3 tareas, 2 areas y 5 entradas de
-   `write_set`;
-6. `required_tests` es obligatorio y queda como contrato que un adaptador de
-   ejecucion debe satisfacer fuera del core.
-
-`branch_ref`, `worktree_ref` y `project_ref` son referencias neutrales. Este
-paquete no decide Git, proveedor, modelo, runtime, DB, HOME, credenciales ni
-estrategia de merge.
+`branch_ref`, `worktree_ref` y `project_ref`, cuando aparezcan en adaptadores,
+son referencias neutrales. Este paquete no decide Git, proveedor, modelo,
+runtime, DB, HOME, credenciales ni estrategia de merge.
 
 La capacidad real de lanzamiento por proceso queda, por diseno, fuera del
 nucleo: debe vivir en un conector de runtime configurado por el operador. Ese
@@ -253,9 +245,9 @@ actual.
 - Microtareas de workflow a scheduling: `WorkflowTaskCandidateProviderV0`
   rehidrata `WorkflowTaskV0` por puerto externo, respeta `run.Tasks` como lista
   autorizada y construye work candidates por builder validado.
-- Contrato preflight de autoprogramacion: `ValidateAutoprogrammingRequestV0`
-  acepta solo solicitudes sobre refs opacas, worktree aislada, branch/ref,
-  alcance compacto y tests obligatorios, sin ejecutar agentes ni smokes.
+- Contrato preflight de autoprogramacion movido a
+  `modulos/orquesta-autoprogramming`: el core ya no posee reglas especificas de
+  `write_set`, tests obligatorios ni revision de codigo.
 - Store de microtareas en memoria para tests y smoke: `InMemoryWorkflowTaskStoreV0`
   guarda DTOs validados sin introducir DB ni repositorio legacy.
 - Integracion batch + supervision: dos procesos reales controlados pueden
@@ -394,7 +386,7 @@ go test ./modulos/orquesta-orchestration-core -run 'TestExternalProcessAgentBatc
 go test ./modulos/orquesta-orchestration-core -run 'TestWorkflowTaskCandidateProviderV0' -count=1
 go test ./modulos/orquesta-orchestration-core -run 'TestProgressSupervisionCandidateProviderV0' -count=1
 go test ./modulos/orquesta-orchestration-core -run 'Test(DeliveryCandidateProviderV0|ReviewGateCandidateProviderV0)' -count=1
-go test ./modulos/orquesta-orchestration-core -run 'Test(ValidateAutoprogrammingRequestV0|EvaluateAutoprogrammingReviewGateV0)' -count=1
+go test ./modulos/orquesta-autoprogramming -run 'Test(ValidateAutoprogrammingRequestV0|EvaluateAutoprogrammingReviewGateV0)' -count=1
 go test ./modulos/orquesta-orchestration-core -run 'TestProgressSupervisionLoopDetectedStopsAgentThroughOutbox' -count=1
 go test ./modulos/orquesta-orchestration-core -run 'TestProgressiveLoopV0StopsAgentFromLeaseAssessment' -count=1
 go test ./modulos/orquesta-orchestration-core -run 'TestProgressiveLoopV0ReplansFromStoppedAgentAssessment' -count=1

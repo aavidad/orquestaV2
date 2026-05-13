@@ -1,4 +1,4 @@
-package orquestacionnucleoapp
+package orquestaautoprogramming
 
 import (
 	"strings"
@@ -31,14 +31,14 @@ func GroupAutoprogrammingTasksByAreaV0(
 		area := normalizeAutoprogrammingTaskAreaV0(task.Area)
 		if taskRef == "" {
 			return nil, errorV0(
-				ErrNucleoOrquestacionInvalidoV0,
+				ErrAutoprogrammingInvalidoV0,
 				"task_ref",
 				"task_ref requerido",
 			)
 		}
 		if area == "" {
 			return nil, errorV0(
-				ErrNucleoOrquestacionInvalidoV0,
+				ErrAutoprogrammingInvalidoV0,
 				"area",
 				"area requerida",
 			)

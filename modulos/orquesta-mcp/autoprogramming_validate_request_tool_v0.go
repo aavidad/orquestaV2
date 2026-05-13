@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 )
 
 const (
@@ -25,20 +25,20 @@ type MCPAutoprogrammingValidateRequestToolDescriptorV0 struct {
 }
 
 type MCPAutoprogrammingValidateRequestToolInputV0 struct {
-	RequestID              string                                         `json:"request_id,omitempty"`
-	CorrelationID          string                                         `json:"correlation_id,omitempty"`
-	AutoprogrammingRequest orquestacionnucleoapp.AutoprogrammingRequestV0 `json:"autoprogramming_request"`
+	RequestID              string                                           `json:"request_id,omitempty"`
+	CorrelationID          string                                           `json:"correlation_id,omitempty"`
+	AutoprogrammingRequest orquestaautoprogramming.AutoprogrammingRequestV0 `json:"autoprogramming_request"`
 }
 
 type MCPAutoprogrammingValidateRequestToolResultV0 struct {
-	Estado        string                                             `json:"estado"`
-	RequestID     string                                             `json:"request_id,omitempty"`
-	CorrelationID string                                             `json:"correlation_id,omitempty"`
-	Accepted      bool                                               `json:"accepted"`
-	Groups        []orquestacionnucleoapp.AutoprogrammingTaskGroupV0 `json:"groups,omitempty"`
-	WriteSet      []string                                           `json:"write_set,omitempty"`
-	RequiredTests []string                                           `json:"required_tests,omitempty"`
-	Errores       []MCPValidationIssueV0                             `json:"errores_publicos,omitempty"`
+	Estado        string                                               `json:"estado"`
+	RequestID     string                                               `json:"request_id,omitempty"`
+	CorrelationID string                                               `json:"correlation_id,omitempty"`
+	Accepted      bool                                                 `json:"accepted"`
+	Groups        []orquestaautoprogramming.AutoprogrammingTaskGroupV0 `json:"groups,omitempty"`
+	WriteSet      []string                                             `json:"write_set,omitempty"`
+	RequiredTests []string                                             `json:"required_tests,omitempty"`
+	Errores       []MCPValidationIssueV0                               `json:"errores_publicos,omitempty"`
 }
 
 type MCPAutoprogrammingValidateRequestToolExecutorV0 struct{}
@@ -52,7 +52,7 @@ func MCPAutoprogrammingValidateRequestDescriptorV0() MCPAutoprogrammingValidateR
 		ResourceURI: MCPAutoprogrammingValidateRequestResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
-			"delega la validacion en orquesta-orchestration-core",
+			"delega la validacion en orquesta-autoprogramming",
 			"no ejecuta agentes pruebas VCS comandos ni filesystem",
 			"no elige DB runtime ni implementacion de cambio",
 		},
@@ -67,13 +67,13 @@ func (executor MCPAutoprogrammingValidateRequestToolExecutorV0) Execute(
 		ctx = context.Background()
 	}
 	request := autoprogrammingRequestFromMCPV0(input)
-	result := orquestacionnucleoapp.ValidateAutoprogrammingRequestV0(request)
+	result := orquestaautoprogramming.ValidateAutoprogrammingRequestV0(request)
 	return newMCPAutoprogrammingValidateRequestResultV0(input, request, result), nil
 }
 
 func autoprogrammingRequestFromMCPV0(
 	input MCPAutoprogrammingValidateRequestToolInputV0,
-) orquestacionnucleoapp.AutoprogrammingRequestV0 {
+) orquestaautoprogramming.AutoprogrammingRequestV0 {
 	request := input.AutoprogrammingRequest
 	if strings.TrimSpace(request.RequestRef) == "" {
 		request.RequestRef = firstNonEmptyMCPV0(input.RequestID, input.CorrelationID)
@@ -83,8 +83,8 @@ func autoprogrammingRequestFromMCPV0(
 
 func newMCPAutoprogrammingValidateRequestResultV0(
 	input MCPAutoprogrammingValidateRequestToolInputV0,
-	request orquestacionnucleoapp.AutoprogrammingRequestV0,
-	validation orquestacionnucleoapp.AutoprogrammingRequestValidationResultV0,
+	request orquestaautoprogramming.AutoprogrammingRequestV0,
+	validation orquestaautoprogramming.AutoprogrammingRequestValidationResultV0,
 ) MCPAutoprogrammingValidateRequestToolResultV0 {
 	estado := MCPAutoprogrammingValidateRequestEstadoOKV0
 	if !validation.Accepted {
@@ -95,7 +95,7 @@ func newMCPAutoprogrammingValidateRequestResultV0(
 		RequestID:     strings.TrimSpace(request.RequestRef),
 		CorrelationID: firstNonEmptyMCPV0(input.CorrelationID, input.RequestID, request.RequestRef),
 		Accepted:      validation.Accepted,
-		Groups:        append([]orquestacionnucleoapp.AutoprogrammingTaskGroupV0(nil), validation.Groups...),
+		Groups:        append([]orquestaautoprogramming.AutoprogrammingTaskGroupV0(nil), validation.Groups...),
 		WriteSet:      compactStringsMCPV0(validation.WriteSet),
 		RequiredTests: compactStringsMCPV0(validation.RequiredTests),
 		Errores:       autoprogrammingRequestIssuesMCPV0(validation.Issues),
@@ -103,7 +103,7 @@ func newMCPAutoprogrammingValidateRequestResultV0(
 }
 
 func autoprogrammingRequestIssuesMCPV0(
-	issues []orquestacionnucleoapp.AutoprogrammingRequestIssueV0,
+	issues []orquestaautoprogramming.AutoprogrammingRequestIssueV0,
 ) []MCPValidationIssueV0 {
 	out := make([]MCPValidationIssueV0, 0, len(issues))
 	for _, issue := range issues {

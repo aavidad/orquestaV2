@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 type CodexReviewGateProjectFileEvidenceV0 struct{}
@@ -26,7 +26,7 @@ func (provider CodexReviewGateProjectFileEvidenceV0) BuildCodexReviewGateFileEvi
 	root, ok := codexReviewGateProjectRootV0(descriptor.ProjectWorkDir)
 	if !ok {
 		return CodexReviewGateFileEvidenceV0{
-			Issues: []orquestacionnucleoapp.AutoprogrammingReviewGateIssueV0{
+			Issues: []orquestaautoprogramming.AutoprogrammingReviewGateIssueV0{
 				codexReviewGateFileIssueV0("project_workdir_invalid", "project_workdir"),
 			},
 		}, nil
@@ -38,7 +38,7 @@ func (provider CodexReviewGateProjectFileEvidenceV0) BuildCodexReviewGateFilesV0
 	ctx context.Context,
 	descriptor CodexReceiptDescriptorV0,
 	ack orquestaruntimecodex.CodexAgentAckV0,
-) ([]orquestacionnucleoapp.AutoprogrammingReviewGateFileV0, error) {
+) ([]orquestaautoprogramming.AutoprogrammingReviewGateFileV0, error) {
 	evidence, err := provider.BuildCodexReviewGateFileEvidenceV0(ctx, descriptor, ack)
 	return evidence.Files, err
 }
@@ -66,22 +66,22 @@ func (provider CodexReviewGateProjectFileEvidenceV0) fileEvidenceFromRootV0(
 func codexReviewGateProjectFileV0(
 	root string,
 	rawPath string,
-) (orquestacionnucleoapp.AutoprogrammingReviewGateFileV0, []orquestacionnucleoapp.AutoprogrammingReviewGateIssueV0) {
+) (orquestaautoprogramming.AutoprogrammingReviewGateFileV0, []orquestaautoprogramming.AutoprogrammingReviewGateIssueV0) {
 	rel, ok := codexReviewGateRelPathV0(rawPath)
 	if !ok {
-		return orquestacionnucleoapp.AutoprogrammingReviewGateFileV0{Path: strings.TrimSpace(rawPath)},
-			[]orquestacionnucleoapp.AutoprogrammingReviewGateIssueV0{
+		return orquestaautoprogramming.AutoprogrammingReviewGateFileV0{Path: strings.TrimSpace(rawPath)},
+			[]orquestaautoprogramming.AutoprogrammingReviewGateIssueV0{
 				codexReviewGateFileIssueV0("delivery_path_invalid", "files.path"),
 			}
 	}
 	fullPath := filepath.Join(root, filepath.FromSlash(rel))
 	lineCount, issue := codexReviewGateLineCountFromFileV0(fullPath)
-	file := orquestacionnucleoapp.AutoprogrammingReviewGateFileV0{
+	file := orquestaautoprogramming.AutoprogrammingReviewGateFileV0{
 		Path:      rel,
 		LineCount: lineCount,
 	}
 	if issue != nil {
-		return file, []orquestacionnucleoapp.AutoprogrammingReviewGateIssueV0{*issue}
+		return file, []orquestaautoprogramming.AutoprogrammingReviewGateIssueV0{*issue}
 	}
 	return file, nil
 }
@@ -113,7 +113,7 @@ func codexReviewGateRelPathV0(value string) (string, bool) {
 
 func codexReviewGateLineCountFromFileV0(
 	path string,
-) (int, *orquestacionnucleoapp.AutoprogrammingReviewGateIssueV0) {
+) (int, *orquestaautoprogramming.AutoprogrammingReviewGateIssueV0) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return 0, codexReviewGateFileIssuePtrV0("delivery_file_missing", "files.path")
@@ -153,7 +153,7 @@ func codexReviewGateCountLinesV0(reader io.Reader) (int, error) {
 func codexReviewGateFileIssuePtrV0(
 	code string,
 	field string,
-) *orquestacionnucleoapp.AutoprogrammingReviewGateIssueV0 {
+) *orquestaautoprogramming.AutoprogrammingReviewGateIssueV0 {
 	issue := codexReviewGateFileIssueV0(code, field)
 	return &issue
 }
@@ -161,8 +161,8 @@ func codexReviewGateFileIssuePtrV0(
 func codexReviewGateFileIssueV0(
 	code string,
 	field string,
-) orquestacionnucleoapp.AutoprogrammingReviewGateIssueV0 {
-	return orquestacionnucleoapp.AutoprogrammingReviewGateIssueV0{
+) orquestaautoprogramming.AutoprogrammingReviewGateIssueV0 {
+	return orquestaautoprogramming.AutoprogrammingReviewGateIssueV0{
 		Code:  code,
 		Field: field,
 	}

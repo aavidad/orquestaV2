@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -127,7 +128,7 @@ func TestCodexReviewGateObservationSourceV0OmiteTrasReworkSolicitado(t *testing.
 		AckPath:       path,
 	})
 	fileEvidence := staticCodexReviewGateFileEvidenceV0{
-		Files: []orquestacionnucleoapp.AutoprogrammingReviewGateFileV0{{
+		Files: []orquestaautoprogramming.AutoprogrammingReviewGateFileV0{{
 			Path:      "README.md",
 			LineCount: 301,
 		}},
@@ -169,7 +170,7 @@ func TestCodexReviewGateObservationSourceV0RequiereRevisionPorFicheroGrande(t *t
 		}},
 	}
 	fileEvidence := staticCodexReviewGateFileEvidenceV0{
-		Files: []orquestacionnucleoapp.AutoprogrammingReviewGateFileV0{{
+		Files: []orquestaautoprogramming.AutoprogrammingReviewGateFileV0{{
 			Path:      "README.md",
 			LineCount: 301,
 		}},
@@ -209,15 +210,15 @@ func TestCodexReviewGateObservationSourceV0RequiereRevisionPorTestObligatorioAus
 }
 
 type staticCodexReviewGateFileEvidenceV0 struct {
-	Files []orquestacionnucleoapp.AutoprogrammingReviewGateFileV0
+	Files []orquestaautoprogramming.AutoprogrammingReviewGateFileV0
 }
 
 func (provider staticCodexReviewGateFileEvidenceV0) BuildCodexReviewGateFilesV0(
 	_ context.Context,
 	_ CodexReceiptDescriptorV0,
 	_ orquestaruntimecodex.CodexAgentAckV0,
-) ([]orquestacionnucleoapp.AutoprogrammingReviewGateFileV0, error) {
-	return append([]orquestacionnucleoapp.AutoprogrammingReviewGateFileV0(nil), provider.Files...), nil
+) ([]orquestaautoprogramming.AutoprogrammingReviewGateFileV0, error) {
+	return append([]orquestaautoprogramming.AutoprogrammingReviewGateFileV0(nil), provider.Files...), nil
 }
 
 func codexReviewGateRequestForTestV0(

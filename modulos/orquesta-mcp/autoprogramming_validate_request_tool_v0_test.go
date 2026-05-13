@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 )
 
 func TestMCPAutoprogrammingValidateRequestDescriptorV0EsAdaptadorFino(t *testing.T) {
@@ -94,13 +94,13 @@ func TestMCPAutoprogrammingValidateRequestTransportV0RegistradoEInvocable(t *tes
 	assertTransportPayloadSaneadoMCPTestV0(t, output, 1400)
 }
 
-func validMCPAutoprogrammingRequestV0() orquestacionnucleoapp.AutoprogrammingRequestV0 {
-	return orquestacionnucleoapp.AutoprogrammingRequestV0{
+func validMCPAutoprogrammingRequestV0() orquestaautoprogramming.AutoprogrammingRequestV0 {
+	return orquestaautoprogramming.AutoprogrammingRequestV0{
 		ProjectRef:       "project-ref-orquesta",
 		WorktreeRef:      "worktree-ref-orquesta-aislada-001",
 		WorktreeIsolated: true,
 		BranchRef:        "branch-ref-autoprogramming-orquesta-001",
-		Tasks: []orquestacionnucleoapp.AutoprogrammingTaskGroupCandidateV0{
+		Tasks: []orquestaautoprogramming.AutoprogrammingTaskGroupCandidateV0{
 			{TaskRef: "task-ref-mcp-autoprogramming-a", Area: "MCP"},
 			{TaskRef: "task-ref-mcp-autoprogramming-b", Area: "mcp"},
 		},

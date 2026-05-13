@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -16,7 +17,7 @@ type CodexReviewGateFileEvidenceProviderPortV0 interface {
 		context.Context,
 		CodexReceiptDescriptorV0,
 		orquestaruntimecodex.CodexAgentAckV0,
-	) ([]orquestacionnucleoapp.AutoprogrammingReviewGateFileV0, error)
+	) ([]orquestaautoprogramming.AutoprogrammingReviewGateFileV0, error)
 }
 
 type CodexReviewGateFileEvidenceResultProviderPortV0 interface {
@@ -28,8 +29,8 @@ type CodexReviewGateFileEvidenceResultProviderPortV0 interface {
 }
 
 type CodexReviewGateFileEvidenceV0 struct {
-	Files  []orquestacionnucleoapp.AutoprogrammingReviewGateFileV0
-	Issues []orquestacionnucleoapp.AutoprogrammingReviewGateIssueV0
+	Files  []orquestaautoprogramming.AutoprogrammingReviewGateFileV0
+	Issues []orquestaautoprogramming.AutoprogrammingReviewGateIssueV0
 }
 
 type CodexReviewGateObservationSourceV0 struct {
@@ -111,7 +112,7 @@ func (source CodexReviewGateObservationSourceV0) observationFromReviewGateDescri
 	if err != nil {
 		return orquestacionnucleoapp.ReviewGateObservationV0{}, false, err
 	}
-	result := orquestacionnucleoapp.EvaluateAutoprogrammingReviewGateV0(input)
+	result := orquestaautoprogramming.EvaluateAutoprogrammingReviewGateV0(input)
 	result = codexReviewGateMergeGateIssuesV0(result, fileIssues)
 	result = codexReviewGateMergeConnectorIssuesV0(result, issues)
 	if codexReviewGateTerminalProjectedV0(request.Run, deliveryRef, source.reviewGateStatusV0(result)) {
@@ -152,13 +153,13 @@ func (source CodexReviewGateObservationSourceV0) reviewGateInputV0(
 	ctx context.Context,
 	descriptor CodexReceiptDescriptorV0,
 	ack orquestaruntimecodex.CodexAgentAckV0,
-) (orquestacionnucleoapp.AutoprogrammingReviewGateInputV0, []orquestacionnucleoapp.AutoprogrammingReviewGateIssueV0, error) {
+) (orquestaautoprogramming.AutoprogrammingReviewGateInputV0, []orquestaautoprogramming.AutoprogrammingReviewGateIssueV0, error) {
 	evidence, err := source.reviewGateFileEvidenceV0(ctx, descriptor, ack)
 	if err != nil {
-		return orquestacionnucleoapp.AutoprogrammingReviewGateInputV0{}, nil, err
+		return orquestaautoprogramming.AutoprogrammingReviewGateInputV0{}, nil, err
 	}
-	return orquestacionnucleoapp.AutoprogrammingReviewGateInputV0{
-		ACK: orquestacionnucleoapp.AutoprogrammingReviewGateACKV0{
+	return orquestaautoprogramming.AutoprogrammingReviewGateInputV0{
+		ACK: orquestaautoprogramming.AutoprogrammingReviewGateACKV0{
 			Present: true,
 			Status:  strings.TrimSpace(ack.Status),
 		},
@@ -182,19 +183,19 @@ func (source CodexReviewGateObservationSourceV0) reviewGateFileEvidenceV0(
 		files, err := source.FileEvidence.BuildCodexReviewGateFilesV0(ctx, descriptor, ack)
 		return CodexReviewGateFileEvidenceV0{Files: files}, err
 	}
-	files := make([]orquestacionnucleoapp.AutoprogrammingReviewGateFileV0, 0, len(ack.Files))
+	files := make([]orquestaautoprogramming.AutoprogrammingReviewGateFileV0, 0, len(ack.Files))
 	for _, path := range compactCodexDeliveryRefsV0(ack.Files) {
-		files = append(files, orquestacionnucleoapp.AutoprogrammingReviewGateFileV0{Path: path})
+		files = append(files, orquestaautoprogramming.AutoprogrammingReviewGateFileV0{Path: path})
 	}
 	return CodexReviewGateFileEvidenceV0{Files: files}, nil
 }
 
 func codexReviewGateTestsV0(
 	values []string,
-) []orquestacionnucleoapp.AutoprogrammingReviewGateTestV0 {
-	tests := make([]orquestacionnucleoapp.AutoprogrammingReviewGateTestV0, 0, len(values))
+) []orquestaautoprogramming.AutoprogrammingReviewGateTestV0 {
+	tests := make([]orquestaautoprogramming.AutoprogrammingReviewGateTestV0, 0, len(values))
 	for _, command := range compactCodexDeliveryRefsV0(values) {
-		tests = append(tests, orquestacionnucleoapp.AutoprogrammingReviewGateTestV0{
+		tests = append(tests, orquestaautoprogramming.AutoprogrammingReviewGateTestV0{
 			Command: command,
 			Passed:  true,
 			Status:  "passed",
@@ -229,7 +230,7 @@ func codexReviewGatePathAllowedByWriteSetV0(path string, writeSet []string) bool
 
 func (source CodexReviewGateObservationSourceV0) reviewGateObservationV0(
 	ack orquestaruntimecodex.CodexAgentAckV0,
-	result orquestacionnucleoapp.AutoprogrammingReviewGateResultV0,
+	result orquestaautoprogramming.AutoprogrammingReviewGateResultV0,
 ) orquestacionnucleoapp.ReviewGateObservationV0 {
 	deliveryRef := strings.TrimSpace(ack.AckRef)
 	observation := orquestacionnucleoapp.ReviewGateObservationV0{
@@ -250,7 +251,7 @@ func (source CodexReviewGateObservationSourceV0) reviewGateObservationV0(
 }
 
 func (source CodexReviewGateObservationSourceV0) reviewGateStatusV0(
-	result orquestacionnucleoapp.AutoprogrammingReviewGateResultV0,
+	result orquestaautoprogramming.AutoprogrammingReviewGateResultV0,
 ) orquestacoreworkflow.ReviewResultStatusV0 {
 	if result.Accepted {
 		return orquestacoreworkflow.ReviewResultStatusAcceptedV0

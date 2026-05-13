@@ -1034,8 +1034,8 @@ app existente sin acoplar MCP/API a una implementacion concreta:
 2. `AutoprogrammingRequestV0` por el tool
    `orquesta.autoprogramming.validate_request.v0`. Sirve como preflight de
    alcance antes de pedir que Orquesta se modifique a si misma o a otro repo.
-   El tool solo valida el contrato del core; no ejecuta agentes, tests, VCS,
-   comandos ni cambios en disco.
+   El tool solo valida el contrato de `orquesta-autoprogramming`; no ejecuta
+   agentes, tests, VCS, comandos ni cambios en disco.
    El mismo contrato esta expuesto por REST en
    `POST /api/v0/autoprogramming/validate-request` para que la web y otros
    adaptadores puedan validar una solicitud antes de arrancar director.
@@ -1064,7 +1064,7 @@ Payload minimo recomendado para mejorar este repo:
       "modulos/orquesta-mcp/docs/contratos.md"
     ],
     "required_tests": [
-      "go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-orchestration-core"
+      "go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-autoprogramming"
     ]
   }
 }
@@ -1101,7 +1101,7 @@ Campos:
   output_error:
     estado: error
     accepted: false
-    errores_publicos: issues del core como code, field y message
+    errores_publicos: issues de orquesta-autoprogramming como code, field y message
 Invariantes:
   - Adaptador inbound fino.
   - Delegacion unica en `ValidateAutoprogrammingRequestV0`.

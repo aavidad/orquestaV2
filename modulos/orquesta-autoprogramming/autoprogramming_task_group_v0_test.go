@@ -1,6 +1,7 @@
-package orquestacionnucleoapp
+package orquestaautoprogramming
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -30,7 +31,7 @@ func TestGroupAutoprogrammingTasksByAreaV0RejectsMissingTaskRef(t *testing.T) {
 		{Area: "task-groups"},
 	})
 
-	assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "task_ref")
+	assertAutoprogrammingErrorV0(t, err, ErrAutoprogrammingInvalidoV0, "task_ref")
 }
 
 func TestGroupAutoprogrammingTasksByAreaV0RejectsMissingArea(t *testing.T) {
@@ -38,5 +39,16 @@ func TestGroupAutoprogrammingTasksByAreaV0RejectsMissingArea(t *testing.T) {
 		{TaskRef: "task-ref-a", Area: " - _ "},
 	})
 
-	assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "area")
+	assertAutoprogrammingErrorV0(t, err, ErrAutoprogrammingInvalidoV0, "area")
+}
+
+func assertAutoprogrammingErrorV0(t *testing.T, err error, code string, field string) {
+	t.Helper()
+	var publicErr ErrorV0
+	if !errors.As(err, &publicErr) {
+		t.Fatalf("err=%T, want ErrorV0", err)
+	}
+	if publicErr.Code != code || publicErr.Field != field {
+		t.Fatalf("err=%+v, want code=%q field=%q", publicErr, code, field)
+	}
 }

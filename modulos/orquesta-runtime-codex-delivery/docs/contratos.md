@@ -172,8 +172,8 @@ Invariantes:
 - lista descriptors sin filtrar por deliveries ya registradas, porque revision
   solo tiene sentido sobre entregas ya reflejadas en el run;
 - despues filtra por `run.Deliveries`, agente elegible y review no proyectado;
-- usa `EvaluateAutoprogrammingReviewGateV0` para validar ACK completado, tests
-  requeridos, write-set y limite de lineas;
+- usa `orquesta-autoprogramming.EvaluateAutoprogrammingReviewGateV0` para
+  validar ACK completado, tests requeridos, write-set y limite de lineas;
 - una entrega valida produce `accepted` y `accepted_review_ref`;
 - una entrega invalida produce `changes_requested` por defecto y evidencia de
   incidencias compactas;

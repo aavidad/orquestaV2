@@ -3,9 +3,9 @@ package orquestaruntimecodexdelivery
 import (
 	"strings"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func codexReviewGateIssuesEvaluableV0(
@@ -20,9 +20,9 @@ func codexReviewGateIssuesEvaluableV0(
 }
 
 func codexReviewGateMergeConnectorIssuesV0(
-	result orquestacionnucleoapp.AutoprogrammingReviewGateResultV0,
+	result orquestaautoprogramming.AutoprogrammingReviewGateResultV0,
 	issues []orquestaruntime.ExternalAgentConnectorErrorV0,
-) orquestacionnucleoapp.AutoprogrammingReviewGateResultV0 {
+) orquestaautoprogramming.AutoprogrammingReviewGateResultV0 {
 	if len(issues) == 0 {
 		return result
 	}
@@ -30,7 +30,7 @@ func codexReviewGateMergeConnectorIssuesV0(
 		for _, code := range issue.Evidence {
 			code = strings.TrimSpace(code)
 			if code != "" && !codexReviewGateResultHasIssueV0(result, code) {
-				result.Issues = append(result.Issues, orquestacionnucleoapp.AutoprogrammingReviewGateIssueV0{
+				result.Issues = append(result.Issues, orquestaautoprogramming.AutoprogrammingReviewGateIssueV0{
 					Code:  code,
 					Field: strings.TrimSpace(issue.Field),
 				})
@@ -42,9 +42,9 @@ func codexReviewGateMergeConnectorIssuesV0(
 }
 
 func codexReviewGateMergeGateIssuesV0(
-	result orquestacionnucleoapp.AutoprogrammingReviewGateResultV0,
-	issues []orquestacionnucleoapp.AutoprogrammingReviewGateIssueV0,
-) orquestacionnucleoapp.AutoprogrammingReviewGateResultV0 {
+	result orquestaautoprogramming.AutoprogrammingReviewGateResultV0,
+	issues []orquestaautoprogramming.AutoprogrammingReviewGateIssueV0,
+) orquestaautoprogramming.AutoprogrammingReviewGateResultV0 {
 	for _, issue := range issues {
 		code := strings.TrimSpace(issue.Code)
 		if code != "" && !codexReviewGateResultHasIssueV0(result, code) {
@@ -56,7 +56,7 @@ func codexReviewGateMergeGateIssuesV0(
 }
 
 func codexReviewGateResultHasIssueV0(
-	result orquestacionnucleoapp.AutoprogrammingReviewGateResultV0,
+	result orquestaautoprogramming.AutoprogrammingReviewGateResultV0,
 	code string,
 ) bool {
 	for _, issue := range result.Issues {
