@@ -21,8 +21,14 @@ Invariantes:
 - `forced=false` prepara checkpoint por puerto y registra ACK durable antes de
   solicitar `StopRunV0`; si falta ACK, no pide stop ni ejecuta drainer;
 - `forced=true` permite drenar agentes sin checkpoint previo;
+- `checkpoint_deadline_at` permite declarar que la espera cooperativa ya vencio;
+  si llega vencido junto a `occurred_at`, el caso de uso pide `StopRunV0`
+  forzado y devuelve evidencia de deadline, sin ocultar que faltaba checkpoint;
 - si falta checkpoint, el resultado expone `pending_checkpoint_agent_refs`,
   `checkpoint_evidence_refs` y `checkpoint_agents_pending` con refs compactas,
   sin rutas ni detalles de runtime;
+- si el deadline de checkpoint vence, el resultado expone
+  `checkpoint_deadline_expired`, `forced_after_checkpoint_deadline` y
+  `checkpoint_deadlines_expired`;
 - `shutdown_ready=true` solo cuando todas las runs objetivo estan terminales o
   sin agentes en vuelo segun stats compactas y sin checkpoint pendiente.

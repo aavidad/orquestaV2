@@ -116,6 +116,20 @@ func stopShutdownTargetsV0(
 				return nil, err
 			}
 			if !ok {
+				if checkpointDeadlineExpiredV0(command) {
+					forcedCommand := forcedShutdownCommandAfterCheckpointDeadlineV0(command)
+					state, err = requestShutdownStopV0(ctx, deps, forcedCommand, runRef)
+					if err != nil {
+						return nil, err
+					}
+					stopped := shutdownRunFromStateV0(candidate, state)
+					stopped.CheckpointDeadlineExpired = true
+					stopped.ForcedAfterCheckpointDeadline = true
+					stopped.PendingCheckpointAgentRefs = compactServerShutdownStringsV0(checkpoint.PendingAgentRefs)
+					stopped.CheckpointEvidenceRefs = compactServerShutdownStringsV0(checkpoint.EvidenceRefs)
+					targets = append(targets, stopped)
+					continue
+				}
 				pending := shutdownRunFromStateV0(candidate, state)
 				pending.CheckpointRequired = true
 				pending.Ready = false

@@ -47,6 +47,9 @@ func summarizeShutdownResultV0(
 		if run.CheckpointRequired {
 			result.CheckpointsPending++
 		}
+		if run.ForcedAfterCheckpointDeadline {
+			result.CheckpointDeadlinesExpired++
+		}
 		if !run.Ready {
 			result.ShutdownReady = false
 			if run.CheckpointRequired {

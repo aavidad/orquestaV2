@@ -126,6 +126,41 @@ func TestShutdownServerV0NoPideStopSiCheckpointNoEstaListo(t *testing.T) {
 	}
 }
 
+func TestShutdownServerV0FuerzaStopSiDeadlineCheckpointExpirado(t *testing.T) {
+	deps := newServerShutdownDepsForTestV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		{RunRef: "run-deadline", AppRef: "app-a", Status: "ready"},
+	})
+	deps.checkpoint.pending["run-deadline"] = []string{"agent-ref-a"}
+	deps.checkpoint.evidence["run-deadline"] = []string{"shutdown-checkpoint-issue-pending-agent_ack"}
+	deps.stats.stats["run-deadline"] = RunShutdownStatsV0{RunRef: "run-deadline"}
+
+	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
+		RequestedBy:          "operator",
+		Reason:               "apagado no forzado con deadline",
+		OccurredAt:           time.Date(2026, 5, 13, 12, 5, 0, 0, time.UTC),
+		CheckpointDeadlineAt: time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("ShutdownServerV0: %v", err)
+	}
+	if !result.ShutdownReady ||
+		result.Status != ServerShutdownStatusReadyV0 ||
+		result.CheckpointsPending != 0 ||
+		result.CheckpointDeadlinesExpired != 1 ||
+		!result.Runs[0].ForcedAfterCheckpointDeadline ||
+		!result.Runs[0].CheckpointDeadlineExpired ||
+		!deps.control.states["run-deadline"].Forced ||
+		deps.supervisor.calls != 1 {
+		t.Fatalf("result=%+v control=%+v supervisor=%+v", result, deps.control, deps.supervisor)
+	}
+	if !reflect.DeepEqual(shutdownEventsForTestV0(deps.events), []string{
+		"prepare:run-deadline",
+		"stop:run-deadline",
+	}) {
+		t.Fatalf("orden shutdown=%v", shutdownEventsForTestV0(deps.events))
+	}
+}
+
 func TestShutdownServerV0SinRunsQuedaReady(t *testing.T) {
 	deps := newServerShutdownDepsForTestV0(nil)
 

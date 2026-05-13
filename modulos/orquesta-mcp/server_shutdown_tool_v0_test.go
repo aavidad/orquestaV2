@@ -3,6 +3,7 @@ package orquestamcp
 import (
 	"context"
 	"testing"
+	"time"
 
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
@@ -56,18 +57,33 @@ func TestMCPServerShutdownToolExecutorV0DrenaPorCasoDeUso(t *testing.T) {
 
 func TestMCPServerShutdownRunsV0ExponeCheckpointPendientePorAgente(t *testing.T) {
 	runs := mcpServerShutdownRunsV0([]orquestaservershutdown.ServerShutdownRunResultV0{{
-		RunRef:                     "run-ref-shutdown-pending-001",
-		CheckpointRequired:         true,
-		PendingCheckpointAgentRefs: []string{"agent-ref-a", "agent-ref-a", "agent-ref-b"},
-		CheckpointEvidenceRefs:     []string{"shutdown-checkpoint-issue-pending-ack", "shutdown-checkpoint-issue-pending-ack"},
+		RunRef:                        "run-ref-shutdown-pending-001",
+		CheckpointRequired:            true,
+		CheckpointDeadlineExpired:     true,
+		ForcedAfterCheckpointDeadline: true,
+		PendingCheckpointAgentRefs:    []string{"agent-ref-a", "agent-ref-a", "agent-ref-b"},
+		CheckpointEvidenceRefs:        []string{"shutdown-checkpoint-issue-pending-ack", "shutdown-checkpoint-issue-pending-ack"},
 	}})
 
 	if len(runs) != 1 ||
 		len(runs[0].PendingCheckpointAgentRefs) != 2 ||
 		runs[0].PendingCheckpointAgentRefs[0] != "agent-ref-a" ||
 		runs[0].PendingCheckpointAgentRefs[1] != "agent-ref-b" ||
-		len(runs[0].CheckpointEvidenceRefs) != 1 {
+		len(runs[0].CheckpointEvidenceRefs) != 1 ||
+		!runs[0].CheckpointDeadlineExpired ||
+		!runs[0].ForcedAfterCheckpointDeadline {
 		t.Fatalf("runs=%+v", runs)
+	}
+}
+
+func TestMCPServerShutdownCommandFromMCPV0IncluyeDeadlineCheckpoint(t *testing.T) {
+	command := serverShutdownCommandFromMCPV0(MCPServerShutdownToolInputV0{
+		OccurredAt:           "2026-05-13T12:05:00Z",
+		CheckpointDeadlineAt: "2026-05-13T12:00:00Z",
+	})
+	if !command.OccurredAt.Equal(time.Date(2026, 5, 13, 12, 5, 0, 0, time.UTC)) ||
+		!command.CheckpointDeadlineAt.Equal(time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)) {
+		t.Fatalf("command=%+v", command)
 	}
 }
 

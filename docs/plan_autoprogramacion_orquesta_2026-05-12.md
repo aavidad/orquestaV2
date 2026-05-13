@@ -85,8 +85,8 @@ Trabajo futuro, no cerrado:
 2. `continuidad daemon larga`: test temporal con estado aislado que arranca una
    orden real con agentes, reinicia daemon y verifica que no se pierden cola,
    outbox, procesos ni entregas.
-3. `shutdown cooperativo largo`: deadline y razon de cierre por agente para
-   runs con progreso real.
+3. `shutdown cooperativo largo`: validar deadline en smoke real y proyectar
+   razon de cierre por agente para runs con progreso real.
 
 ## Criterios de aceptacion
 

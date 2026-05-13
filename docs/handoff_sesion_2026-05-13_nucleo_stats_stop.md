@@ -143,8 +143,8 @@ Pendiente real de shutdown:
 
 - extender el protocolo cooperativo a runtimes/proveedores no Codex mediante el
   mismo puerto hexagonal;
-- definir politica de deadline para pasar de espera cooperativa a stop forzado
-  sin cortar trabajo que aun progresa;
+- validar en smoke real temporal la politica de deadline ya modelada por
+  contrato (`checkpoint_deadline_at` frente a `occurred_at`);
 - proyectar razon de cierre por agente en estadisticas historicas, no solo en
   el resultado inmediato del shutdown.
 
