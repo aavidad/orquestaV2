@@ -152,6 +152,14 @@ Ya cerrado en NCW-073:
 - `DirectorRunStatsV0` expone `stop_reason_code`, `stop_reason_source` y
   `stop_reason_ref` por agente parado, con fallback a assessment legacy.
 
+Avance posterior de continuidad:
+
+- `cmd/orquesta-server` tiene prueba de wiring productivo que exige conectores
+  file-based para stores de run, eventos, tareas, procesos, outbox, cola,
+  control, cambios, receipts y progreso.
+- Esa guarda evita que una refactorizacion vuelva a memoria sin hacerlo
+  explicito en test/debug.
+
 ## Validacion local
 
 Comandos ejecutados:
@@ -170,4 +178,5 @@ go test ./modulos/orquesta-app-codex-stack -run 'TestDrainRunV0RegistraEntregasD
 go test ./modulos/orquesta-app-codex-stack ./modulos/orquesta-orchestration-core ./modulos/orquesta-run-coordinator ./modulos/orquesta-mcp ./modulos/orquesta-web -count=1
 go test ./... -count=1
 go test ./cmd/orquesta-server ./modulos/orquesta-server-shutdown ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack -count=1
+go test -count=1 ./cmd/orquesta-server
 ```

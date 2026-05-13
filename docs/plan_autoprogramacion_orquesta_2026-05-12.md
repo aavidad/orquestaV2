@@ -32,6 +32,8 @@ Actualizacion 2026-05-13:
 - `cmd/orquesta-server` ya cablea conectores file-based para `RunStore`,
   `EventSink`, `WorkflowTaskStore/Writer`, `AgentProcessRegistry`,
   outbox, `RunControl`, `RunQueue` y `AppChangeRecordStore`;
+- existe guarda de regresion en `cmd/orquesta-server` para impedir que el
+  servidor residente vuelva a stores en memoria por accidente;
 - el gap ya no es "todo el estado operativo vive en memoria" en el servidor
   residente por defecto;
 - el siguiente bloqueo serio es demostrar continuidad E2E de una ejecucion
@@ -42,8 +44,8 @@ Gap que bloquea autoprogramacion robusta:
 
 - falta una prueba real temporal sobre el propio repositorio que sobreviva a
   reinicio controlado del daemon y continue hasta delivery/review;
-- falta asegurar que todos los puertos necesarios para una ejecucion larga se
-  rehidratan desde conectores, sin fallback silencioso a memoria;
+- falta validar continuidad larga con agentes reales; el wiring productivo ya
+  queda cubierto por test para evitar fallback silencioso a memoria;
 - falta politica de parada cooperativa con deadline cuando los agentes siguen
   progresando pero no han emitido checkpoint final.
 - cerrado en NCW-073: estadisticas historicas exponen motivo compacto de
@@ -72,7 +74,8 @@ Postgres ni otro backend.
    mejora de app existente o autoprogramacion. Queda ampliar pruebas reales y
    politica de aceptacion.
 5. `server wiring`: cerrado en version inicial. El servidor residente usa los
-   conectores file-based indicados arriba.
+   conectores file-based indicados arriba y tiene test de regresion contra
+   stores en memoria.
 6. `smoke continuidad servidor`: cerrado en version inicial sin agentes reales.
    `scripts/smoke_orquesta_server_restart_state.sh` valida que RunQueue
    persiste y reabre tras reinicio con estado temporal.
