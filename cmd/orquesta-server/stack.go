@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,8 @@ import (
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestaopesconnector "orquesta/modulos/orquesta-opes-connector"
 	orquestarunfile "orquesta/modulos/orquesta-run-file"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
@@ -104,6 +107,7 @@ func buildStackFromEnvV0(
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence: orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 		},
+		DomainWork: domainWorkExecutorFromEnvV0(),
 	})
 }
 
@@ -185,6 +189,21 @@ func homeDirV0() string {
 		return ""
 	}
 	return home
+}
+
+func domainWorkExecutorFromEnvV0() orquestamcp.MCPDomainWorkExecutorPortV0 {
+	baseURL := strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BASE_URL"))
+	if baseURL == "" {
+		return nil
+	}
+	client := orquestaopesconnector.NewRESTClientV0(orquestaopesconnector.RESTClientConfigV0{
+		BaseURL: baseURL,
+		HTTPClient: &http.Client{
+			Timeout: time.Duration(intEnvOrDefaultV0("ORQUESTA_OPES_TIMEOUT_SECONDS", 30)) * time.Second,
+		},
+		DefaultMaxAttempts: intEnvOrDefaultV0("ORQUESTA_OPES_DEFAULT_MAX_ATTEMPTS", 1),
+	})
+	return orquestamcp.NewMCPDomainWorkToolExecutorV0(client, client)
 }
 
 func validateCodexCommandAvailableV0() error {

@@ -7,6 +7,7 @@ import (
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -23,6 +24,15 @@ type codexStackRuntimeForTestV0 interface {
 func mustBuildCodexStackForTestV0(
 	t *testing.T,
 	runtime codexStackRuntimeForTestV0,
+) StackV0 {
+	t.Helper()
+	return mustBuildCodexStackWithDomainWorkForTestV0(t, runtime, nil)
+}
+
+func mustBuildCodexStackWithDomainWorkForTestV0(
+	t *testing.T,
+	runtime codexStackRuntimeForTestV0,
+	domainWork orquestamcp.MCPDomainWorkExecutorPortV0,
 ) StackV0 {
 	t.Helper()
 	projectDir := t.TempDir()
@@ -78,6 +88,7 @@ func mustBuildCodexStackForTestV0(
 		ReviewGate: ReviewGateConfigV0{
 			FileEvidence: orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 		},
+		DomainWork: domainWork,
 	})
 	if err != nil {
 		t.Fatalf("BuildStackV0: %v", err)

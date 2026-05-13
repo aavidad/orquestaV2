@@ -35,3 +35,16 @@ Validacion:
 - los stores recuperan estado al recrear instancia;
 - `go test -count=1 ./...`;
 - ninguna dependencia de DB concreta queda en el servidor.
+
+## SRV-TASK-005: conector OPES opt-in desde cmd
+
+Objetivo: permitir que el servidor productivo inyecte `domain_work` hacia OPES
+sin que el runtime residente conozca OPES.
+
+Estado: hecho.
+
+Validacion:
+
+- `ORQUESTA_OPES_BASE_URL` activa el executor REST OPES;
+- sin `ORQUESTA_OPES_BASE_URL`, el executor queda `nil`;
+- `go test -count=1 ./cmd/orquesta-server`.

@@ -16,6 +16,8 @@ Cobertura Go actual:
   runtime fake inyectado;
 - `POST /nueva-app` usa el cliente REST interno y arranca otra cohorte
   independiente;
+- `POST /api/v0/domain-work` delega en el executor `DomainWork` inyectado sin
+  que el stack importe OPES ni conectores reales;
 - las refs publicas del paquete de agente son neutrales y no filtran el
   conector real;
 - dos solicitudes con el mismo nombre visible no colisionan porque el intake

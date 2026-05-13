@@ -8,6 +8,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
 	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
@@ -29,6 +30,7 @@ type ConfigV0 struct {
 	Capacity       CapacityConfigV0
 	ReviewGate     ReviewGateConfigV0
 	AppChange      orquestaappchange.AppChangePortsV0
+	DomainWork     orquestamcp.MCPDomainWorkExecutorPortV0
 }
 
 type StoresV0 struct {

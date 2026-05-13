@@ -17,6 +17,8 @@ Campos conceptuales:
 - `worktree`: resolutores de proyecto, runtime dir, baseline y verificacion;
 - `review_gate`: evidencia de ficheros, politica de tamano y estado de fallo;
 - `capacity`: decision externa de capacidad/proveedor/modelo;
+- `domain_work`: executor opt-in para trabajo de dominio externo, por ejemplo
+  OPES, recibido como puerto generico ya construido;
 - `persistence`: referencia externa a persistencia operacional, si aplica.
 
 Invariantes:
@@ -52,6 +54,8 @@ Reglas:
 - Los puertos de Codex delivery/progress se conectan como observadores del
   servicio, no como dependencias del core.
 - Si falta un puerto real requerido, el arranque falla antes de lanzar agentes.
+- El bridge `domain_work` solo se activa si el borde superior inyecta un
+  executor; este stack no importa OPES ni crea clientes REST de dominio.
 
 ## Shutdown cooperativo de agentes Codex
 

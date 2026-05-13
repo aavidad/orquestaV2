@@ -60,6 +60,28 @@ Reglas cerradas:
 - no filtrar nombre de conector real en payloads, evidence refs ni refs
   publicas del core.
 
+## APP-CODEX-STACK-022
+
+Objetivo: cablear `domain_work` como executor opt-in en el stack HTTP.
+
+Estado: hecho.
+
+Write-set aplicado:
+
+- `ConfigV0.DomainWork` como puerto MCP generico;
+- `BuildStackV0` pasa ese executor a `orquesta-app-gateway`;
+- test de `/api/v0/domain-work` con executor fake inyectado.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack`
+
+Reglas cerradas:
+
+- no importar OPES ni conectores REST en este modulo;
+- no crear DB, runtime, proveedor ni modelo por defecto;
+- si no hay executor inyectado, el endpoint queda apagado por opt-in.
+
 ## APP-CODEX-STACK-005
 
 Objetivo: smoke opt-in desde `/nueva-app` con Codex real, ACK de director y

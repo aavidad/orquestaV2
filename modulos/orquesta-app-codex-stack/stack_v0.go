@@ -70,6 +70,7 @@ func buildStackHTTPHandlerV0(
 			Writer: config.Stores.RunQueue,
 		},
 		ServerShutdown: serverShutdownExecutorV0(config, stack),
+		DomainWork:     config.DomainWork,
 		Timeout:        config.Timeout,
 		DirectorLimits: config.DirectorLimits,
 	})
