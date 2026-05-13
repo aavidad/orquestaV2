@@ -71,7 +71,10 @@ Postgres ni otro backend.
    politica de aceptacion.
 5. `server wiring`: cerrado en version inicial. El servidor residente usa los
    conectores file-based indicados arriba.
-6. `smoke real`: lanzar una orden sobre el propio repo con director y agentes
+6. `smoke continuidad servidor`: cerrado en version inicial sin agentes reales.
+   `scripts/smoke_orquesta_server_restart_state.sh` valida que RunQueue
+   persiste y reabre tras reinicio con estado temporal.
+7. `smoke real`: lanzar una orden sobre el propio repo con director y agentes
    reales, comprobar estadisticas, progreso, parada, reinicio y continuidad.
 
 Trabajo futuro, no cerrado:
@@ -79,9 +82,9 @@ Trabajo futuro, no cerrado:
 1. `mcp/autoprogramacion`: endurecer contrato REST/MCP para pedir mejora de app
    existente o autoprogramacion, validando alcance, write-set y tests
    requeridos.
-2. `continuidad daemon`: test temporal con estado aislado que arranca una orden,
-   reinicia daemon y verifica que no se pierden cola, outbox, procesos ni
-   entregas.
+2. `continuidad daemon larga`: test temporal con estado aislado que arranca una
+   orden real con agentes, reinicia daemon y verifica que no se pierden cola,
+   outbox, procesos ni entregas.
 3. `shutdown cooperativo largo`: deadline y razon de cierre por agente para
    runs con progreso real.
 
