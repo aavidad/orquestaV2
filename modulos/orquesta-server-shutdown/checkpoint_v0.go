@@ -14,9 +14,9 @@ func prepareShutdownCheckpointV0(
 	command ServerShutdownCommandV0,
 	candidate orquestarunqueue.RunSchedulingCandidateV0,
 	state orquestaruncontrol.RunControlStateV0,
-) (orquestaruncontrol.RunControlStateV0, string, bool, error) {
+) (orquestaruncontrol.RunControlStateV0, PrepareAgentShutdownResultV0, bool, error) {
 	if deps.CheckpointPreparer == nil || deps.RunCheckpointWriter == nil {
-		return state, "", false, nil
+		return state, PrepareAgentShutdownResultV0{}, false, nil
 	}
 	prepared, err := deps.CheckpointPreparer.PrepareAgentShutdownV0(
 		ctx,
@@ -31,11 +31,14 @@ func prepareShutdownCheckpointV0(
 		},
 	)
 	if err != nil {
-		return state, "", false, err
+		return state, PrepareAgentShutdownResultV0{}, false, err
 	}
 	checkpointRef := strings.TrimSpace(prepared.CheckpointRef)
 	if !prepared.CheckpointRecorded {
-		return state, checkpointRef, false, nil
+		prepared.CheckpointRef = checkpointRef
+		prepared.PendingAgentRefs = compactServerShutdownStringsV0(prepared.PendingAgentRefs)
+		prepared.EvidenceRefs = compactServerShutdownStringsV0(prepared.EvidenceRefs)
+		return state, prepared, false, nil
 	}
 	refs := append([]string(nil), command.EvidenceRefs...)
 	refs = append(refs, prepared.EvidenceRefs...)
@@ -53,9 +56,11 @@ func prepareShutdownCheckpointV0(
 		},
 	)
 	if err != nil {
-		return state, checkpointRef, false, err
+		return state, PrepareAgentShutdownResultV0{}, false, err
 	}
-	return recorded, checkpointRef, true, nil
+	prepared.CheckpointRef = checkpointRef
+	prepared.EvidenceRefs = compactServerShutdownStringsV0(prepared.EvidenceRefs)
+	return recorded, prepared, true, nil
 }
 
 func safeServerShutdownRefPartV0(value string) string {

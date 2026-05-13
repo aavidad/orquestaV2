@@ -109,7 +109,7 @@ func stopShutdownTargetsV0(
 			if err != nil {
 				return nil, err
 			}
-			prepared, ref, ok, err := prepareShutdownCheckpointV0(
+			prepared, checkpoint, ok, err := prepareShutdownCheckpointV0(
 				ctx,
 				deps,
 				command,
@@ -123,12 +123,14 @@ func stopShutdownTargetsV0(
 				pending := shutdownRunFromStateV0(candidate, state)
 				pending.CheckpointRequired = true
 				pending.Ready = false
-				pending.CheckpointRef = ref
+				pending.CheckpointRef = checkpoint.CheckpointRef
+				pending.PendingCheckpointAgentRefs = compactServerShutdownStringsV0(checkpoint.PendingAgentRefs)
+				pending.CheckpointEvidenceRefs = compactServerShutdownStringsV0(checkpoint.EvidenceRefs)
 				targets = append(targets, pending)
 				continue
 			}
 			state = prepared
-			checkpointRef = ref
+			checkpointRef = checkpoint.CheckpointRef
 		} else {
 			state, err = requestShutdownStopV0(ctx, deps, command, runRef)
 			if err != nil {

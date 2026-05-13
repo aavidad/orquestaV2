@@ -903,9 +903,10 @@ Campos:
     estado: ok
     status: ready | waiting_drain | waiting_checkpoint
     shutdown_ready: true solo si todos los runs objetivo estan listos
-    runs_requested, runs_stopped, agents_in_flight, checkpoints_pending
+    runs_requested, runs_stopped, agents_in_flight, checkpoints_pending,
+      checkpoint_agents_pending
     runs: resumen por run con estado de control, checkpoint_ref opcional,
-      stats y readiness
+      pending_checkpoint_agent_refs, checkpoint_evidence_refs, stats y readiness
   output_error:
     estado: error
     errores_publicos compactos si faltan puertos obligatorios o falla HTTP

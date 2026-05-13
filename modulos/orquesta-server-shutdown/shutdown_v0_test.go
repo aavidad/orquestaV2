@@ -46,6 +46,8 @@ func TestShutdownServerV0NoDrenaSiFaltaCheckpoint(t *testing.T) {
 	deps := newServerShutdownDepsForTestV0([]orquestarunqueue.RunSchedulingCandidateV0{
 		{RunRef: "run-checkpoint", AppRef: "app-a", Status: "ready"},
 	})
+	deps.checkpoint.pending["run-checkpoint"] = []string{"agent-ref-a"}
+	deps.checkpoint.evidence["run-checkpoint"] = []string{"shutdown-checkpoint-issue-pending-agent_ack"}
 
 	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
 		RequestedBy: "operator",
@@ -57,8 +59,14 @@ func TestShutdownServerV0NoDrenaSiFaltaCheckpoint(t *testing.T) {
 	if result.ShutdownReady ||
 		result.Status != ServerShutdownStatusWaitingCheckpointV0 ||
 		result.CheckpointsPending != 1 ||
+		result.CheckpointAgentsPending != 1 ||
 		deps.supervisor.calls != 0 {
 		t.Fatalf("result=%+v supervisor=%+v", result, deps.supervisor)
+	}
+	if len(result.Runs) != 1 ||
+		!reflect.DeepEqual(result.Runs[0].PendingCheckpointAgentRefs, []string{"agent-ref-a"}) ||
+		!reflect.DeepEqual(result.Runs[0].CheckpointEvidenceRefs, []string{"shutdown-checkpoint-issue-pending-agent_ack"}) {
+		t.Fatalf("pending checkpoint no expuesto: %+v", result.Runs)
 	}
 	if !reflect.DeepEqual(deps.control.stopped, []string{"run-checkpoint"}) {
 		t.Fatalf("stop requests=%+v", deps.control.stopped)
@@ -124,6 +132,8 @@ func newServerShutdownDepsForTestV0(
 		},
 		checkpoint: &fakeShutdownCheckpointPreparerV0{
 			recorded: map[string]bool{},
+			pending:  map[string][]string{},
+			evidence: map[string][]string{},
 		},
 		supervisor: &fakeShutdownSupervisorV0{},
 		stats:      &fakeShutdownStatsV0{stats: map[string]RunShutdownStatsV0{}},
@@ -228,6 +238,8 @@ func (fake *fakeShutdownControlV0) CancelRunV0(
 
 type fakeShutdownCheckpointPreparerV0 struct {
 	recorded map[string]bool
+	pending  map[string][]string
+	evidence map[string][]string
 }
 
 func (fake *fakeShutdownCheckpointPreparerV0) PrepareAgentShutdownV0(
@@ -242,7 +254,11 @@ func (fake *fakeShutdownCheckpointPreparerV0) PrepareAgentShutdownV0(
 			EvidenceRefs:       []string{"evidence-ref-" + command.RunRef},
 		}, nil
 	}
-	return PrepareAgentShutdownResultV0{RunRef: command.RunRef}, nil
+	return PrepareAgentShutdownResultV0{
+		RunRef:           command.RunRef,
+		PendingAgentRefs: append([]string(nil), fake.pending[command.RunRef]...),
+		EvidenceRefs:     append([]string(nil), fake.evidence[command.RunRef]...),
+	}, nil
 }
 
 type fakeShutdownSupervisorV0 struct {

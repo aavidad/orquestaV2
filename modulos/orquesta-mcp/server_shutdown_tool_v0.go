@@ -43,32 +43,35 @@ type MCPServerShutdownToolInputV0 struct {
 }
 
 type MCPServerShutdownToolResultV0 struct {
-	Estado             string                   `json:"estado"`
-	RequestID          string                   `json:"request_id,omitempty"`
-	CorrelationID      string                   `json:"correlation_id,omitempty"`
-	Status             string                   `json:"status,omitempty"`
-	ShutdownReady      bool                     `json:"shutdown_ready"`
-	RunsRequested      int                      `json:"runs_requested"`
-	RunsStopped        int                      `json:"runs_stopped"`
-	AgentsInFlight     int                      `json:"agents_in_flight"`
-	CheckpointsPending int                      `json:"checkpoints_pending"`
-	Runs               []MCPServerShutdownRunV0 `json:"runs,omitempty"`
-	EvidenceRefs       []string                 `json:"evidence_refs,omitempty"`
-	Errores            []MCPValidationIssueV0   `json:"errores_publicos,omitempty"`
+	Estado                  string                   `json:"estado"`
+	RequestID               string                   `json:"request_id,omitempty"`
+	CorrelationID           string                   `json:"correlation_id,omitempty"`
+	Status                  string                   `json:"status,omitempty"`
+	ShutdownReady           bool                     `json:"shutdown_ready"`
+	RunsRequested           int                      `json:"runs_requested"`
+	RunsStopped             int                      `json:"runs_stopped"`
+	AgentsInFlight          int                      `json:"agents_in_flight"`
+	CheckpointsPending      int                      `json:"checkpoints_pending"`
+	CheckpointAgentsPending int                      `json:"checkpoint_agents_pending,omitempty"`
+	Runs                    []MCPServerShutdownRunV0 `json:"runs,omitempty"`
+	EvidenceRefs            []string                 `json:"evidence_refs,omitempty"`
+	Errores                 []MCPValidationIssueV0   `json:"errores_publicos,omitempty"`
 }
 
 type MCPServerShutdownRunV0 struct {
-	RunRef              string `json:"run_ref"`
-	AppRef              string `json:"app_ref,omitempty"`
-	ControlStatus       string `json:"control_status,omitempty"`
-	CheckpointRequired  bool   `json:"checkpoint_required,omitempty"`
-	CheckpointRef       string `json:"checkpoint_ref,omitempty"`
-	Terminal            bool   `json:"terminal,omitempty"`
-	StopRequested       bool   `json:"stop_requested,omitempty"`
-	AgentsInFlight      int    `json:"agents_in_flight"`
-	AgentsStopRequested int    `json:"agents_stop_requested"`
-	AgentsStopConfirmed int    `json:"agents_stop_confirmed"`
-	Ready               bool   `json:"ready"`
+	RunRef                     string   `json:"run_ref"`
+	AppRef                     string   `json:"app_ref,omitempty"`
+	ControlStatus              string   `json:"control_status,omitempty"`
+	CheckpointRequired         bool     `json:"checkpoint_required,omitempty"`
+	CheckpointRef              string   `json:"checkpoint_ref,omitempty"`
+	PendingCheckpointAgentRefs []string `json:"pending_checkpoint_agent_refs,omitempty"`
+	CheckpointEvidenceRefs     []string `json:"checkpoint_evidence_refs,omitempty"`
+	Terminal                   bool     `json:"terminal,omitempty"`
+	StopRequested              bool     `json:"stop_requested,omitempty"`
+	AgentsInFlight             int      `json:"agents_in_flight"`
+	AgentsStopRequested        int      `json:"agents_stop_requested"`
+	AgentsStopConfirmed        int      `json:"agents_stop_confirmed"`
+	Ready                      bool     `json:"ready"`
 }
 
 func MCPServerShutdownDescriptorV0() MCPServerShutdownToolDescriptorV0 {
@@ -76,7 +79,7 @@ func MCPServerShutdownDescriptorV0() MCPServerShutdownToolDescriptorV0 {
 		Name:        MCPServerShutdownToolNameV0,
 		Version:     MCPServerShutdownToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,queue_ref?,app_refs?,forced?,max_ticks?,max_runs_per_tick?,max_executions?,requested_by?,reason?,idempotency_key?,evidence_refs?}",
-		Output:      "ok:{status,shutdown_ready,runs_requested,runs_stopped,agents_in_flight,runs?}|error:{errores_publicos}",
+		Output:      "ok:{status,shutdown_ready,runs_requested,runs_stopped,agents_in_flight,checkpoint_agents_pending,runs?}|error:{errores_publicos}",
 		ResourceURI: MCPServerShutdownResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -96,18 +99,19 @@ func newMCPServerShutdownResultV0(
 		estado = MCPServerShutdownEstadoErrorV0
 	}
 	return MCPServerShutdownToolResultV0{
-		Estado:             estado,
-		RequestID:          strings.TrimSpace(input.RequestID),
-		CorrelationID:      firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
-		Status:             strings.TrimSpace(result.Status),
-		ShutdownReady:      result.ShutdownReady,
-		RunsRequested:      result.RunsRequested,
-		RunsStopped:        result.RunsStopped,
-		AgentsInFlight:     result.AgentsInFlight,
-		CheckpointsPending: result.CheckpointsPending,
-		Runs:               mcpServerShutdownRunsV0(result.Runs),
-		EvidenceRefs:       compactStringsMCPV0(result.EvidenceRefs),
-		Errores:            serverShutdownErrorsV0(result.Status),
+		Estado:                  estado,
+		RequestID:               strings.TrimSpace(input.RequestID),
+		CorrelationID:           firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
+		Status:                  strings.TrimSpace(result.Status),
+		ShutdownReady:           result.ShutdownReady,
+		RunsRequested:           result.RunsRequested,
+		RunsStopped:             result.RunsStopped,
+		AgentsInFlight:          result.AgentsInFlight,
+		CheckpointsPending:      result.CheckpointsPending,
+		CheckpointAgentsPending: result.CheckpointAgentsPending,
+		Runs:                    mcpServerShutdownRunsV0(result.Runs),
+		EvidenceRefs:            compactStringsMCPV0(result.EvidenceRefs),
+		Errores:                 serverShutdownErrorsV0(result.Status),
 	}
 }
 
@@ -157,17 +161,19 @@ func mcpServerShutdownRunsV0(
 	out := make([]MCPServerShutdownRunV0, 0, len(runs))
 	for _, run := range runs {
 		out = append(out, MCPServerShutdownRunV0{
-			RunRef:              strings.TrimSpace(run.RunRef),
-			AppRef:              strings.TrimSpace(run.AppRef),
-			ControlStatus:       strings.TrimSpace(run.ControlStatus),
-			CheckpointRequired:  run.CheckpointRequired,
-			CheckpointRef:       strings.TrimSpace(run.CheckpointRef),
-			Terminal:            run.Terminal,
-			StopRequested:       run.StopRequested,
-			AgentsInFlight:      run.AgentsInFlight,
-			AgentsStopRequested: run.AgentsStopRequested,
-			AgentsStopConfirmed: run.AgentsStopConfirmed,
-			Ready:               run.Ready,
+			RunRef:                     strings.TrimSpace(run.RunRef),
+			AppRef:                     strings.TrimSpace(run.AppRef),
+			ControlStatus:              strings.TrimSpace(run.ControlStatus),
+			CheckpointRequired:         run.CheckpointRequired,
+			CheckpointRef:              strings.TrimSpace(run.CheckpointRef),
+			PendingCheckpointAgentRefs: compactStringsMCPV0(run.PendingCheckpointAgentRefs),
+			CheckpointEvidenceRefs:     compactStringsMCPV0(run.CheckpointEvidenceRefs),
+			Terminal:                   run.Terminal,
+			StopRequested:              run.StopRequested,
+			AgentsInFlight:             run.AgentsInFlight,
+			AgentsStopRequested:        run.AgentsStopRequested,
+			AgentsStopConfirmed:        run.AgentsStopConfirmed,
+			Ready:                      run.Ready,
 		})
 	}
 	if out == nil {

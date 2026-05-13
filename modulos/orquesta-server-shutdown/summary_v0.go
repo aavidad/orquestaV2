@@ -40,6 +40,7 @@ func summarizeShutdownResultV0(
 	result.ShutdownReady = true
 	for _, run := range result.Runs {
 		result.AgentsInFlight += run.AgentsInFlight
+		result.CheckpointAgentsPending += len(compactServerShutdownStringsV0(run.PendingCheckpointAgentRefs))
 		if run.Ready {
 			result.RunsStopped++
 		}

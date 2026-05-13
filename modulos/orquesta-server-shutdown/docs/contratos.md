@@ -22,5 +22,8 @@ Invariantes:
   preparar checkpoint por puerto y no ejecuta drainer hasta que haya ACK
   registrado;
 - `forced=true` permite drenar agentes sin checkpoint previo;
+- si falta checkpoint, el resultado expone `pending_checkpoint_agent_refs`,
+  `checkpoint_evidence_refs` y `checkpoint_agents_pending` con refs compactas,
+  sin rutas ni detalles de runtime;
 - `shutdown_ready=true` solo cuando todas las runs objetivo estan terminales o
   sin agentes en vuelo segun stats compactas y sin checkpoint pendiente.

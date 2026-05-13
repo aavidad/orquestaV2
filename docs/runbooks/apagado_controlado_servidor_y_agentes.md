@@ -142,8 +142,8 @@ por ficheros de control:
 6. Despues el supervisor puede drenar stop/outbox y confirmar parada.
 
 Si falta descriptor, runtime dir o ACK valido, el endpoint devuelve
-`waiting_checkpoint`, `checkpoint_recorded=false` y refs de agentes pendientes
-en el resultado interno del preparador. No se inventa checkpoint.
+`waiting_checkpoint`, `checkpoint_agents_pending`, `pending_checkpoint_agent_refs`
+por run y `checkpoint_evidence_refs` compactas. No se inventa checkpoint.
 
 Modos operativos:
 

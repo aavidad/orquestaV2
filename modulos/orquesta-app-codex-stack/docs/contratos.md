@@ -74,7 +74,9 @@ Invariantes:
 - Si hay agentes en vuelo, escribe una request por agente y exige ACK
   `codex_shutdown_checkpoint_ack.v0`.
 - Si falta descriptor, runtime dir o ACK valido, devuelve
-  `checkpoint_recorded=false` y `pending_agent_refs`.
+  `checkpoint_recorded=false`, `pending_agent_refs` y evidencia compacta; el
+  caso de uso de shutdown lo proyecta como `pending_checkpoint_agent_refs`,
+  `checkpoint_evidence_refs` y `checkpoint_agents_pending` para REST/MCP/web.
 - No se exponen rutas de runtime, HOME, modelo, proveedor ni DB en el contrato
   publico; solo refs compactas.
 

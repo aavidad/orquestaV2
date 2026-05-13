@@ -10,13 +10,14 @@ import (
 )
 
 type serverShutdownClientResultV0 struct {
-	Estado             string `json:"estado"`
-	Status             string `json:"status"`
-	ShutdownReady      bool   `json:"shutdown_ready"`
-	RunsRequested      int    `json:"runs_requested"`
-	RunsStopped        int    `json:"runs_stopped"`
-	AgentsInFlight     int    `json:"agents_in_flight"`
-	CheckpointsPending int    `json:"checkpoints_pending"`
+	Estado                  string `json:"estado"`
+	Status                  string `json:"status"`
+	ShutdownReady           bool   `json:"shutdown_ready"`
+	RunsRequested           int    `json:"runs_requested"`
+	RunsStopped             int    `json:"runs_stopped"`
+	AgentsInFlight          int    `json:"agents_in_flight"`
+	CheckpointsPending      int    `json:"checkpoints_pending"`
+	CheckpointAgentsPending int    `json:"checkpoint_agents_pending"`
 }
 
 func requestServerShutdownV0(addr string) error {
@@ -52,12 +53,13 @@ func requestServerShutdownV0(addr string) error {
 	}
 	if !result.ShutdownReady {
 		return fmt.Errorf(
-			"shutdown_not_ready status=%s runs=%d/%d agents_in_flight=%d checkpoints=%d",
+			"shutdown_not_ready status=%s runs=%d/%d agents_in_flight=%d checkpoints=%d checkpoint_agents=%d",
 			result.Status,
 			result.RunsStopped,
 			result.RunsRequested,
 			result.AgentsInFlight,
 			result.CheckpointsPending,
+			result.CheckpointAgentsPending,
 		)
 	}
 	return nil

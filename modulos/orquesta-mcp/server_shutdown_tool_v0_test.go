@@ -54,6 +54,23 @@ func TestMCPServerShutdownToolExecutorV0DrenaPorCasoDeUso(t *testing.T) {
 	}
 }
 
+func TestMCPServerShutdownRunsV0ExponeCheckpointPendientePorAgente(t *testing.T) {
+	runs := mcpServerShutdownRunsV0([]orquestaservershutdown.ServerShutdownRunResultV0{{
+		RunRef:                     "run-ref-shutdown-pending-001",
+		CheckpointRequired:         true,
+		PendingCheckpointAgentRefs: []string{"agent-ref-a", "agent-ref-a", "agent-ref-b"},
+		CheckpointEvidenceRefs:     []string{"shutdown-checkpoint-issue-pending-ack", "shutdown-checkpoint-issue-pending-ack"},
+	}})
+
+	if len(runs) != 1 ||
+		len(runs[0].PendingCheckpointAgentRefs) != 2 ||
+		runs[0].PendingCheckpointAgentRefs[0] != "agent-ref-a" ||
+		runs[0].PendingCheckpointAgentRefs[1] != "agent-ref-b" ||
+		len(runs[0].CheckpointEvidenceRefs) != 1 {
+		t.Fatalf("runs=%+v", runs)
+	}
+}
+
 type fakeMCPServerShutdownQueueV0 struct {
 	candidates []orquestarunqueue.RunSchedulingCandidateV0
 }
