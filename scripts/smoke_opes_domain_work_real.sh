@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${ORQUESTA_OPES_DOMAIN_SMOKE_CONFIRM:-0}" != "1" ]]; then
+  echo "smoke domain_work real desactivado: exporta ORQUESTA_OPES_DOMAIN_SMOKE_CONFIRM=1" >&2
+  exit 2
+fi
+
 ORQUESTA_BASE_URL="${ORQUESTA_BASE_URL:-http://127.0.0.1:18787}"
 OPES_BASE_URL="${OPES_BASE_URL:-http://127.0.0.1:18082}"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"

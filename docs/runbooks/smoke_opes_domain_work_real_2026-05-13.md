@@ -53,6 +53,7 @@ scripts/smoke_opes_domain_work_real.sh
 Uso:
 
 ```bash
+ORQUESTA_OPES_DOMAIN_SMOKE_CONFIRM=1 \
 ORQUESTA_BASE_URL=http://127.0.0.1:18787 \
 OPES_BASE_URL=http://127.0.0.1:18082 \
 SMOKE_ID=opes-real-001 \
@@ -70,6 +71,10 @@ El script:
 - comprueba que OPES materializa exactamente un bloque;
 - repite job y artefacto con la misma `idempotency_key`;
 - comprueba que el replay no crea un segundo bloque.
+
+Guarda operativa: desde el 2026-05-13 el script exige
+`ORQUESTA_OPES_DOMAIN_SMOKE_CONFIRM=1` para evitar crear topics, chapters y
+jobs en una instancia OPES que este generando un temario real.
 
 ## Resultado observado
 
