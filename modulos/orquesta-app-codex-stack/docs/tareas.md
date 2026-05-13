@@ -543,3 +543,33 @@ Pendiente separado:
 
 - checkpoint real antes de stop/cancel no forzado;
 - UI web para botones de control y cambio de prioridad.
+
+## APP-CODEX-STACK-019
+
+Objetivo: preparar smoke opt-in de shutdown cooperativo real de Codex.
+
+Estado: hecho como prueba opt-in; pendiente ejecucion manual con Codex real por
+operador.
+
+Trabajo aplicado:
+
+- nuevo `TestCodexStackRealShutdownCheckpointOptInV0`, desactivado salvo
+  `ORQUESTA_CODEX_STACK_SHUTDOWN_SMOKE=1`;
+- el smoke lanza `/nueva-app`, exige proceso Codex vivo, llama
+  `POST /api/v0/server/shutdown` con `forced=false` y valida
+  `orquesta_shutdown_request.json`;
+- el agente recibe instrucciones en el `AGENTS.md` temporal para esperar la
+  request y responder con `agent_shutdown_checkpoint_ack.json`;
+- una segunda llamada de shutdown exige checkpoint registrado o falla con
+  diagnostico de pending/checkpoint y logs compactos;
+- cleanup final usa el conector de proceso real ya inyectado.
+
+Validacion:
+
+- `go test ./modulos/orquesta-app-codex-stack -run Test.*Shutdown.* -count=1`
+
+Reglas cerradas:
+
+- no lanza Codex real por defecto;
+- no introduce defaults de modelo, HOME, CODEX_HOME, PATH ni runtime;
+- el endpoint REST/MCP sigue siendo el borde; el core solo ve refs compactas.

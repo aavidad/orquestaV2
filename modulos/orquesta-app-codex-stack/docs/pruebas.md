@@ -54,6 +54,10 @@ Cobertura Go actual:
   vivo si aun no hay ACK.
 - `TestStackShutdownCheckpointV0RegistraCuandoTodosLosAgentesResponden` valida
   que el stack registra checkpoint solo despues de ACK de checkpoint valido.
+- `TestCodexStackRealShutdownCheckpointOptInV0` queda desactivado por defecto
+  y valida con Codex real el ciclo: agente vivo, `POST /api/v0/server/shutdown`
+  con `forced=false`, request de shutdown, ACK de checkpoint y registro en una
+  segunda llamada.
 
 Guardas esperadas para pruebas futuras:
 
@@ -692,3 +696,30 @@ Evidencia:
 - el test de stats de progreso del stack valida el contrato estable:
   agentes arrancados = agentes progresando + agentes sin senal, sin exigir que
   todos caigan siempre en una sola categoria observable.
+
+Smoke real opt-in de shutdown cooperativo Codex:
+
+```bash
+ORQUESTA_CODEX_STACK_SHUTDOWN_SMOKE=1 \
+ORQUESTA_CODEX_COMMAND="$(command -v codex)" \
+ORQUESTA_CODEX_HOME="$HOME" \
+ORQUESTA_CODEX_CODE_HOME="${CODEX_HOME:-$HOME/.codex}" \
+ORQUESTA_CODEX_PATH="$PATH" \
+ORQUESTA_CODEX_APPROVAL_POLICY=never \
+ORQUESTA_CODEX_SANDBOX=workspace-write \
+ORQUESTA_CODEX_MODEL=gpt-5.5 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=240 \
+ORQUESTA_CODEX_PROJECT_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-shutdown-real/project \
+ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-shutdown-real/project/.orquesta-runtime \
+go test ./modulos/orquesta-app-codex-stack \
+  -run TestCodexStackRealShutdownCheckpointOptInV0 \
+  -count=1 -timeout 300s -v
+```
+
+Validacion sin opt-in:
+
+```bash
+go test ./modulos/orquesta-app-codex-stack -run Test.*Shutdown.* -count=1
+```
+
+Resultado local 2026-05-13 sin opt-in: `ok`, 0.005s.
