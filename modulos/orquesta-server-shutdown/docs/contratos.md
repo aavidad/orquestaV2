@@ -18,9 +18,8 @@ Puertos:
 Invariantes:
 
 - no toca stores ni procesos directamente;
-- `forced=false` solicita `stop_requested` para bloquear trabajo nuevo, intenta
-  preparar checkpoint por puerto y no ejecuta drainer hasta que haya ACK
-  registrado;
+- `forced=false` prepara checkpoint por puerto y registra ACK durable antes de
+  solicitar `StopRunV0`; si falta ACK, no pide stop ni ejecuta drainer;
 - `forced=true` permite drenar agentes sin checkpoint previo;
 - si falta checkpoint, el resultado expone `pending_checkpoint_agent_refs`,
   `checkpoint_evidence_refs` y `checkpoint_agents_pending` con refs compactas,

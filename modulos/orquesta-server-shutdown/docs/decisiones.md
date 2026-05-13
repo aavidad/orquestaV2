@@ -15,8 +15,8 @@ en el drainer.
 Motivo: El bug historico seria tratar `forced=false` como seguro solo porque no
 hay agentes en vuelo en stats. La regla correcta es registrar ACK durable por
 `RunControlCheckpointWriterPortV0` antes de pedir `StopRunV0`.
-Impacto: `ShutdownServerV0` deja primero la run en `stop_requested` para
-bloquear trabajo nuevo. Luego usa `PrepareAgentShutdownPortV0` y, si falta ACK,
-devuelve `waiting_checkpoint` sin ejecutar supervisor ni marcar readiness.
+Impacto: `ShutdownServerV0` usa primero `PrepareAgentShutdownPortV0`, registra
+el ACK durable y solo despues pide `StopRunV0`. Si falta ACK, devuelve
+`waiting_checkpoint` sin pedir stop, ejecutar supervisor ni marcar readiness.
 Estado: aceptada local
 ```

@@ -538,10 +538,15 @@ Cerrado despues:
   `StopRuntimeAgent` pendiente.
 - la politica autonoma del nucleo acepta `DirectorRunStatsV0` y usa senales de
   progreso/presupuesto para subir capacidad y acotar paralelismo.
+- checkpoint real antes de stop/cancel no forzado queda cubierto en
+  `orquesta-server-shutdown` por
+  `TestShutdownServerV0PreparaCheckpointAntesDeStopNoForzado` y
+  `TestShutdownServerV0NoPideStopSiCheckpointNoEstaListo`; el stack mantiene el
+  puerto real con `TestStackShutdownCheckpointV0SolicitaAckSiHayAgenteEnVuelo`
+  y `TestStackShutdownCheckpointV0RegistraCuandoTodosLosAgentesResponden`.
 
 Pendiente separado:
 
-- checkpoint real antes de stop/cancel no forzado;
 - UI web de control queda cubierta por `/run-control`; cambio de prioridad por
   `/run-queue`.
 

@@ -257,7 +257,9 @@ POST /api/v0/server/shutdown
   -> tool MCP orquesta.server.shutdown.v0
   -> orquesta-server-shutdown.ShutdownServerV0
   -> RunQueueReaderPortV0 lista runs no terminales
-  -> RunControlWriterPortV0 solicita stop
+  -> PrepareAgentShutdownPortV0 pide checkpoint si forced=false
+  -> RunControlCheckpointWriterPortV0 registra ACK durable si todos responden
+  -> RunControlWriterPortV0 solicita stop despues del checkpoint
   -> RunGlobalSupervisorV0 drena stop/confirmaciones
   -> stats de director calculan readiness
 ```

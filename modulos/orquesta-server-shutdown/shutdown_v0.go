@@ -105,10 +105,6 @@ func stopShutdownTargetsV0(
 		}
 		checkpointRef := ""
 		if !command.Forced && !state.CheckpointRecorded {
-			state, err = requestShutdownStopV0(ctx, deps, command, runRef)
-			if err != nil {
-				return nil, err
-			}
 			prepared, checkpoint, ok, err := prepareShutdownCheckpointV0(
 				ctx,
 				deps,
@@ -131,6 +127,10 @@ func stopShutdownTargetsV0(
 			}
 			state = prepared
 			checkpointRef = checkpoint.CheckpointRef
+			state, err = requestShutdownStopV0(ctx, deps, command, runRef)
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			state, err = requestShutdownStopV0(ctx, deps, command, runRef)
 			if err != nil {
@@ -200,8 +200,18 @@ func shutdownRunFromStateV0(
 		ControlStatus:      string(orquestaruncontrol.NormalizeRunControlStatusV0(state.Status)),
 		CheckpointRequired: evaluation.CheckpointRequired,
 		Terminal:           evaluation.Terminal,
-		StopRequested:      true,
+		StopRequested:      shutdownStopRequestedV0(state.Status),
 		Ready:              evaluation.Terminal,
+	}
+}
+
+func shutdownStopRequestedV0(status orquestaruncontrol.RunControlStatusV0) bool {
+	switch orquestaruncontrol.NormalizeRunControlStatusV0(status) {
+	case orquestaruncontrol.RunControlStatusStopRequestedV0,
+		orquestaruncontrol.RunControlStatusCancelRequestedV0:
+		return true
+	default:
+		return false
 	}
 }
 
