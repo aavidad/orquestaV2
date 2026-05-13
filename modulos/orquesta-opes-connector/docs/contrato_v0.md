@@ -80,6 +80,72 @@ Ejemplo documental:
 }
 ```
 
+## Confirmacion OPES 2026-05-13
+
+OPES confirma que:
+
+- `POST /api/jobs` acepta jobs documentales externos con
+  `execution_mode=external`;
+- `cmd/opes-worker` no reclama esos jobs externos;
+- `draft_content_block` es job valido para redaccion de bloques;
+- `POST /api/jobs/{id}/artifacts` materializa `content_block`,
+  `block_revision` y `source` si el `payload_json` trae campos completos;
+- la deduplicacion funciona por `idempotency_key` en jobs y por
+  `(job_id, idempotency_key)` en artefactos;
+- replay de job puede devolver HTTP `200` con `created=false`; creacion nueva
+  puede devolver HTTP `201` con `created=true`.
+
+Para materializar un `content_block` vivo, `topic_id` y `chapter_id` deben
+existir previamente en OPES. Si Orquesta usa refs inventadas, OPES puede
+aceptar el job y auditar el artefacto, pero no debe crear un bloque vivo contra
+un tema o capitulo inexistente.
+
+Respuesta de job aceptada por el conector:
+
+```json
+{
+  "id": "job-ref",
+  "status": "accepted",
+  "correlation_id": "corr",
+  "idempotency_key": "idem",
+  "external_refs": {},
+  "job": {
+    "id": "job-ref",
+    "type": "draft_content_block",
+    "status": "pending",
+    "execution_mode": "external"
+  },
+  "created": true
+}
+```
+
+Respuesta de artefacto aceptada por el conector:
+
+```json
+{
+  "id": "artifact-ref",
+  "artifact_id": "artifact-ref",
+  "job_id": "job-ref",
+  "correlation_id": "corr",
+  "idempotency_key": "idem",
+  "external_refs": {},
+  "artifact": {
+    "id": "artifact-ref",
+    "job_id": "job-ref",
+    "type": "content_block",
+    "reference_id": "block-ref"
+  },
+  "job": {
+    "id": "job-ref",
+    "status": "completed",
+    "execution_mode": "external"
+  },
+  "block": {
+    "id": "block-ref"
+  }
+}
+```
+
 ## Mapeo con `orquesta-domain-work`
 
 El conector futuro debe adaptar OPES a:

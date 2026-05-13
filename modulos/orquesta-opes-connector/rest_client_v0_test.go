@@ -19,13 +19,20 @@ func TestRESTClientV0CreateDomainWorkJobCreaJobExterno(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		_ = json.NewEncoder(w).Encode(opesJobResponseV0{
-			ID:             "job-ref-opes-001",
-			Type:           "draft_content_block",
-			Status:         "pending",
-			CorrelationID:  "corr-opes-001",
-			IdempotencyKey: "idem-opes-001",
-			ExternalRefs:   map[string]string{"run_ref": "run-ref-001"},
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":              "job-ref-opes-001",
+			"status":          "accepted",
+			"correlation_id":  "corr-opes-001",
+			"idempotency_key": "idem-opes-001",
+			"external_refs":   map[string]string{"run_ref": "run-ref-001"},
+			"created":         true,
+			"job": map[string]any{
+				"id":             "job-ref-opes-001",
+				"type":           "draft_content_block",
+				"status":         "pending",
+				"execution_mode": "external",
+			},
 		})
 	}))
 	defer server.Close()
@@ -66,12 +73,27 @@ func TestRESTClientV0SubmitDomainWorkArtifactEnviaArtefacto(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		_ = json.NewEncoder(w).Encode(opesArtifactResponseV0{
-			ID:             "artifact-receipt-ref-001",
-			JobID:          "job-ref-opes-001",
-			CorrelationID:  "corr-opes-001",
-			IdempotencyKey: "idem-delivery-001",
-			ExternalRefs:   map[string]string{"delivery_ref": "delivery-ref-001"},
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":              "artifact-receipt-ref-001",
+			"artifact_id":     "artifact-receipt-ref-001",
+			"job_id":          "job-ref-opes-001",
+			"correlation_id":  "corr-opes-001",
+			"idempotency_key": "idem-delivery-001",
+			"external_refs":   map[string]string{"delivery_ref": "delivery-ref-001"},
+			"artifact": map[string]any{
+				"id":           "artifact-receipt-ref-001",
+				"job_id":       "job-ref-opes-001",
+				"type":         "content_block",
+				"reference_id": "block-ref-001",
+			},
+			"job": map[string]any{
+				"id":             "job-ref-opes-001",
+				"status":         "completed",
+				"execution_mode": "external",
+			},
+			"block": map[string]any{
+				"id": "block-ref-001",
+			},
 		})
 	}))
 	defer server.Close()

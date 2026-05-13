@@ -21,6 +21,9 @@ trabajo externo con refs opacas.
   artefactos equivalentes.
 - Orquesta devuelve resultados por `POST /api/jobs/{id}/artifacts` o
   `submit_job_artifact`.
+- OPES puede devolver HTTP `201` con `created=true` al crear y HTTP `200` con
+  `created=false` en replay idempotente; Orquesta debe aceptar ambos como
+  respuestas correctas.
 
 ## Frontera Hexagonal
 
@@ -48,9 +51,14 @@ Dentro de OPES deben vivir:
   override explicito del operador. OPES no elige modelo ni lo envia como campo
   de dominio; la seleccion vive en la politica de capacidad/modelos de
   Orquesta.
+- Para un smoke de `content_block` materializado, no usar `topic_id` ni
+  `chapter_id` inventados. Deben crearse o seleccionarse previamente mediante
+  API publica de OPES.
 
 ## Pendiente En Orquesta
 
-Crear un conector `opes_rest_mcp` o equivalente, opt-in, que traduzca jobs OPES
-a microtareas/agentes de Orquesta y publique artefactos de vuelta sin acoplarse
-al nucleo de OPES.
+- El conector REST opt-in de jobs/artefactos ya existe.
+- Siguiente corte: ejecutar smoke real contra OPES con
+  `ORQUESTA_OPES_BASE_URL`, usando `topic_id` y `chapter_id` reales.
+- Siguiente corte de producto: traducir jobs OPES a microtareas/agentes de
+  Orquesta y registrar entregas con `evidence_refs` hacia OPES.

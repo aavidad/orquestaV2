@@ -38,7 +38,7 @@ func domainWorkArtifactReceiptFromOPESV0(
 		CorrelationID:  firstNonEmptyV0(response.CorrelationID, submission.CorrelationID),
 		IdempotencyKey: firstNonEmptyV0(response.IdempotencyKey, submission.IdempotencyKey),
 		ExternalRefs:   externalRefsFromMapV0(response.ExternalRefs, submission.ExternalRefs),
-		EvidenceRefs:   []string{"opes-artifact-ref-" + firstNonEmptyV0(response.ID, submission.ArtifactRef)},
+		EvidenceRefs:   []string{"opes-artifact-ref-" + firstNonEmptyV0(response.ID, response.ArtifactID, submission.ArtifactRef)},
 	}
 }
 

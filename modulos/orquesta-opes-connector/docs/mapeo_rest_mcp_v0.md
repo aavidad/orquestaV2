@@ -96,6 +96,11 @@ block_revision
 source
 ```
 
+Para `content_block`, OPES exige integridad editorial: `topic_id` y
+`chapter_id` deben existir antes de entregar el artefacto si se quiere crear un
+bloque vivo. El smoke completo debe preparar esos IDs con endpoints publicos de
+OPES, no por DB ni por ficheros internos.
+
 Para otros objetos de dominio, el conector debe usar endpoints OPES especificos
 cuando OPES los publique. No debe resolverlos por DB ni ficheros.
 
