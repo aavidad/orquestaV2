@@ -64,6 +64,14 @@ func agentUsageSourceV0(config ConfigV0) CodexStackAgentUsageSourceV0 {
 	}
 }
 
+func externalJobStatsSourceV0(config ConfigV0) CodexStackExternalJobStatsSourceV0 {
+	return CodexStackExternalJobStatsSourceV0{
+		RunStore:       config.Stores.RunStore,
+		AppChangeStore: config.Stores.AppChangeStore,
+		ReceiptStore:   config.Stores.ReceiptStore,
+	}
+}
+
 func codexStackProgressPolicyV0(
 	policy orquestaruntime.AgentProgressHeartbeatPolicyV0,
 ) orquestaruntime.AgentProgressHeartbeatPolicyV0 {

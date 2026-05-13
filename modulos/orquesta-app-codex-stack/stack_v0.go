@@ -63,10 +63,11 @@ func buildStackHTTPHandlerV0(
 		ArrancarDirector: arrancar,
 		RequestAppChange: orquestamcp.NewMCPRequestAppChangeToolExecutorV0(appChangePortsV0(config)),
 		DirectorStats: orquestamcp.MCPDirectorStatsToolExecutorV0{
-			RunStore:         config.Stores.RunStore,
-			ProcessRegistry:  config.Stores.ProcessRegistry,
-			ProgressSource:   statsProgressSourceV0(config),
-			AgentUsageSource: agentUsageSourceV0(config),
+			RunStore:          config.Stores.RunStore,
+			ProcessRegistry:   config.Stores.ProcessRegistry,
+			ProgressSource:    statsProgressSourceV0(config),
+			AgentUsageSource:  agentUsageSourceV0(config),
+			ExternalJobSource: externalJobStatsSourceV0(config),
 		},
 		RunControl: orquestamcp.NewMCPRunControlToolExecutorV0(config.Stores.RunControl),
 		RunQueuePriority: orquestamcp.MCPRunQueuePriorityToolExecutorV0{

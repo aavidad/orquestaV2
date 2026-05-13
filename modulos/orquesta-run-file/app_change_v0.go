@@ -1,11 +1,14 @@
 package orquestarunfile
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 )
 
 const runFileAppChangeSchemaVersionV0 = "orquesta.run_file.app_change.v0"
@@ -117,6 +120,7 @@ func copyRunFileAppChangeRecordV0(
 	record.Request.Constraints = append([]string(nil), record.Request.Constraints...)
 	record.Request.AllowedWriteSet = append([]string(nil), record.Request.AllowedWriteSet...)
 	record.Request.MetadataRefs = append([]string(nil), record.Request.MetadataRefs...)
+	record.Request.ExternalWork = copyRunFileAppChangeExternalWorkV0(record.Request.ExternalWork)
 	return record
 }
 
@@ -152,6 +156,7 @@ func normalizeRunFileAppChangeRequestV0(
 	request.Constraints = compactRunFileStringsOrEmptyV0(request.Constraints)
 	request.AllowedWriteSet = compactRunFileStringsOrEmptyV0(request.AllowedWriteSet)
 	request.MetadataRefs = compactRunFileStringsOrEmptyV0(request.MetadataRefs)
+	request.ExternalWork = normalizeRunFileAppChangeExternalWorkV0(request.ExternalWork)
 	if request.RequestID == "" {
 		request.RequestID = request.ChangeRef
 	}
@@ -159,6 +164,85 @@ func normalizeRunFileAppChangeRequestV0(
 		request.CorrelationID = request.RequestID
 	}
 	return request
+}
+
+func normalizeRunFileAppChangeExternalWorkV0(
+	work *orquestaappchange.AppChangeExternalWorkV0,
+) *orquestaappchange.AppChangeExternalWorkV0 {
+	if work == nil {
+		return nil
+	}
+	out := &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    strings.TrimSpace(work.ProjectRef),
+		JobRef:        strings.TrimSpace(work.JobRef),
+		InterfaceRefs: compactRunFileStringsOrEmptyV0(work.InterfaceRefs),
+		WorkKind:      strings.TrimSpace(work.WorkKind),
+		WorkRefs:      compactRunFileStringsOrEmptyV0(work.WorkRefs),
+		InputFields:   normalizeRunFileDomainWorkFieldsV0(work.InputFields),
+	}
+	if out.ProjectRef == "" &&
+		out.JobRef == "" &&
+		len(out.InterfaceRefs) == 0 &&
+		out.WorkKind == "" &&
+		len(out.WorkRefs) == 0 &&
+		len(out.InputFields) == 0 {
+		return nil
+	}
+	return out
+}
+
+func copyRunFileAppChangeExternalWorkV0(
+	work *orquestaappchange.AppChangeExternalWorkV0,
+) *orquestaappchange.AppChangeExternalWorkV0 {
+	return normalizeRunFileAppChangeExternalWorkV0(work)
+}
+
+func normalizeRunFileDomainWorkFieldsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	seen := map[string]struct{}{}
+	out := make([]orquestadomainwork.DomainWorkFieldV0, 0, len(fields))
+	for _, field := range fields {
+		normalized := orquestadomainwork.DomainWorkFieldV0{
+			Name:      strings.TrimSpace(field.Name),
+			Value:     strings.TrimSpace(field.Value),
+			Values:    compactRunFileStringsV0(field.Values),
+			ValueJSON: normalizeRunFileDomainWorkFieldJSONV0(field.ValueJSON),
+		}
+		if normalized.Name == "" ||
+			(normalized.Value == "" && len(normalized.Values) == 0 && len(normalized.ValueJSON) == 0) {
+			continue
+		}
+		key := normalized.Name + "\x00" + normalized.Value + "\x00" +
+			strings.Join(normalized.Values, "\x00") + "\x00" + string(normalized.ValueJSON)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, normalized)
+	}
+	if out == nil {
+		return []orquestadomainwork.DomainWorkFieldV0{}
+	}
+	return out
+}
+
+func normalizeRunFileDomainWorkFieldJSONV0(
+	value json.RawMessage,
+) json.RawMessage {
+	trimmed := bytes.TrimSpace(value)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+	var raw any
+	if err := json.Unmarshal(trimmed, &raw); err != nil {
+		return append(json.RawMessage(nil), trimmed...)
+	}
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return append(json.RawMessage(nil), trimmed...)
+	}
+	return append(json.RawMessage(nil), data...)
 }
 
 func runFileAppChangeRecordKeyV0(

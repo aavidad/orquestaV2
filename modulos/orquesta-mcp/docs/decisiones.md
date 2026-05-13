@@ -18,6 +18,25 @@ Estado:
 
 ```text
 Fecha: 2026-05-13
+Decision: `orquesta.director.stats.v0` puede resolver una run por
+`external_job_ref` mediante puerto inyectado.
+Motivo: OPES dirige su propio backlog editorial y necesita preguntar por el
+estado de un job concreto sin conocer la topologia interna de una run de
+Orquesta.
+Alternativas: obligar a OPES a guardar solo `run_ref`; crear un endpoint OPES
+especifico dentro de Orquesta; importar app-change o OPES directamente desde
+MCP.
+Impacto: el input acepta `app_ref` y `external_job_ref`; el resultado puede
+incluir `external_job` con refs compactas de job, task, agente, estado y
+deliveries. MCP sigue siendo hexagonal porque la resolucion se delega en
+`MCPDirectorExternalJobStatsSourcePortV0`.
+Contratos afectados: mcp.tool.orquesta.director.stats.v0;
+rest.bridge.orquesta.director.stats.v0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-05-13
 Decision: `orquesta.domain_work.v0` se implementa como adaptador MCP fino sobre
 puertos de `orquesta-domain-work`.
 Motivo: el director necesita crear trabajo de dominio y entregar artefactos sin

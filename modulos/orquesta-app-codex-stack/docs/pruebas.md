@@ -750,3 +750,22 @@ Evidencia:
 - el artefacto usa `job_ref`, `content_block`, `body` leido desde fichero del
   ACK y refs externas `run_ref/task_ref/delivery_ref`;
 - el replay se controla por ledger e idempotencia de `delivery_ref`.
+
+Validacion de stats OPES/job externo 2026-05-13:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./modulos/orquesta-run-file \
+  -run 'TestMCPDirectorStatsToolExecutorV0ResuelveRunPorJobExterno|TestCodexStackV0OPESExternalWorkRESTCreaMicrotareaSinWriteSetLocal|TestRunFileStoreAppChangePersistsAfterRecreateAndReplacesV0|TestFileDomainWorkArtifactSubmissionLedgerV0PersisteYRecupera'
+```
+
+Resultado: `ok`.
+
+Evidencia:
+
+- `orquesta.director.stats.v0` resuelve `run_ref` desde `external_job_ref`
+  mediante puerto inyectado;
+- la respuesta incluye `external_job` con `job_ref`, `run_ref`, `task_ref`,
+  `agent_ref`, `status` y `delivery_refs` cuando existan;
+- `RunFileStoreV0` no pierde `external_work` tras reinicio;
+- el ledger de entregas de dominio puede persistir y deduplicar
+  `idempotency_key` despues de recrear el conector.

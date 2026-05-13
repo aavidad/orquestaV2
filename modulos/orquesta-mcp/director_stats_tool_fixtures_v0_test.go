@@ -74,6 +74,23 @@ func (source mcpDirectorStatsUsageSourceForTestV0) BuildAgentUsageStatsV0(
 	return source.Observations, nil
 }
 
+type mcpDirectorExternalJobStatsSourceForTestV0 struct {
+	Stats MCPDirectorExternalJobStatsV0
+}
+
+func (source mcpDirectorExternalJobStatsSourceForTestV0) ResolveDirectorExternalJobStatsV0(
+	_ context.Context,
+	request MCPDirectorExternalJobStatsRequestV0,
+) (MCPDirectorExternalJobStatsV0, bool, error) {
+	if source.Stats.JobRef != request.ExternalJobRef {
+		return MCPDirectorExternalJobStatsV0{}, false, nil
+	}
+	if request.AppRef != "" && source.Stats.AppRef != request.AppRef {
+		return MCPDirectorExternalJobStatsV0{}, false, nil
+	}
+	return source.Stats, true, nil
+}
+
 func mcpDirectorStatsProgressObservationForTestV0(
 	runRef string,
 ) orquestacionnucleoapp.AgentProgressObservationV0 {

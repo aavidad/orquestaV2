@@ -110,8 +110,19 @@ func buildStackFromEnvV0(
 		DomainWork: domainWorkExecutorFromEnvV0(),
 		DomainDelivery: orquestaappcodexstack.DomainWorkDeliveryBridgeConfigV0{
 			Enabled: strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BASE_URL")) != "",
+			Ledger:  domainDeliveryLedgerFromEnvV0(serverConfig),
 		},
 	})
+}
+
+func domainDeliveryLedgerFromEnvV0(
+	serverConfig orquestaserver.ConfigV0,
+) orquestaappcodexstack.DomainWorkArtifactSubmissionLedgerPortV0 {
+	path := strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_DELIVERY_LEDGER_PATH"))
+	if path == "" {
+		path = filepath.Join(serverConfig.StateDir, "domain-work-artifact-ledger.json")
+	}
+	return orquestaappcodexstack.NewFileDomainWorkArtifactSubmissionLedgerV0(path)
 }
 
 func directorLimitsV0() orquestaweb.WebArrancarDirectorAppLimitsV0 {

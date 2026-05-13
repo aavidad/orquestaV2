@@ -596,6 +596,31 @@ Validacion:
 - `TestCodexLaunchSpecResolverV0MaterializaContextoDominioExterno`;
 - `go test -count=1 ./modulos/orquesta-app-codex-stack`.
 
+## APP-CODEX-STACK-021
+
+Objetivo: permitir que OPES consulte progreso por job externo sin conocer la
+estructura interna de la run.
+
+Estado: hecho como proyeccion opt-in de stats.
+
+Trabajo aplicado:
+
+- `CodexStackExternalJobStatsSourceV0` resuelve `external_job_ref` desde
+  `AppChangeStore`, deriva `task_ref/agent_ref` y proyecta status compacto;
+- `/api/v0/director/stats` acepta `external_job_ref` y puede resolver `run_ref`
+  mediante puerto MCP;
+- `RunFileStoreV0` conserva `external_work.job_ref` e `input_fields` al
+  persistir y reabrir estado;
+- el servidor usa ledger de artefactos persistente en
+  `ORQUESTA_DOMAIN_DELIVERY_LEDGER_PATH` o en `StateDir` por defecto.
+
+Validacion:
+
+- `TestMCPDirectorStatsToolExecutorV0ResuelveRunPorJobExterno`;
+- `TestCodexStackV0OPESExternalWorkRESTCreaMicrotareaSinWriteSetLocal`;
+- `TestRunFileStoreAppChangePersistsAfterRecreateAndReplacesV0`;
+- `TestFileDomainWorkArtifactSubmissionLedgerV0PersisteYRecupera`.
+
 ## APP-CODEX-STACK-019
 
 Objetivo: preparar smoke opt-in de shutdown cooperativo real de Codex.

@@ -104,6 +104,45 @@ func TestMCPDirectorStatsToolExecutorV0DevuelveIssuesPublicos(t *testing.T) {
 	}
 }
 
+func TestMCPDirectorStatsToolExecutorV0ResuelveRunPorJobExterno(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-job-001")
+	source := mcpDirectorExternalJobStatsSourceForTestV0{
+		Stats: MCPDirectorExternalJobStatsV0{
+			AppRef:       "opes",
+			JobRef:       "job-ref-opes-001",
+			WorkKind:     "draft_content_block",
+			ChangeRef:    "opes-job-job-ref-opes-001",
+			RunRef:       run.RunID,
+			TaskRef:      "task-ref-opes-001",
+			AgentRef:     "agent-ref-opes-001",
+			Status:       "running",
+			DeliveryRefs: []string{"delivery-ref-opes-001"},
+		},
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:          orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		ExternalJobSource: source,
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{
+		RequestID:      "request-ref-mcp-director-stats-job-001",
+		CorrelationID:  "corr-mcp-director-stats-job-001",
+		AppRef:         "opes",
+		ExternalJobRef: "job-ref-opes-001",
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.RunRef != run.RunID ||
+		result.ExternalJob == nil ||
+		result.ExternalJob.JobRef != "job-ref-opes-001" ||
+		result.ExternalJob.TaskRef != "task-ref-opes-001" ||
+		result.Stats == nil {
+		t.Fatalf("result=%+v", result)
+	}
+	assertTransportPayloadSaneadoMCPTestV0(t, result, 12000)
+}
+
 func TestMCPDirectorStatsToolExecutorV0IncluyeUsoDeAgentesOptIn(t *testing.T) {
 	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-usage-001")
 

@@ -2,6 +2,35 @@
 
 ```text
 Fecha: 2026-05-13
+Decision: OPES consulta progreso por `external_job_ref`; Orquesta no obliga a
+OPES a interpretar la run completa.
+Motivo: OPES es el director de dominio editorial y solo necesita saber como va
+su job externo. Exponerle solo `run_ref` lo obligaria a conocer detalles de
+tareas, agentes y deliveries internas de Orquesta.
+Impacto: el stack inyecta `CodexStackExternalJobStatsSourceV0` en
+`orquesta.director.stats.v0`. La fuente resuelve `job_ref -> run_ref/task_ref`
+desde `AppChangeStore`, deriva `agent_ref`, consulta deliveries por
+`ReceiptStore` y proyecta `status` compacto. El `RunFileStoreV0` conserva
+`external_work` persistido para que esa resolucion sobreviva a reinicios.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-13
+Decision: El ledger de artefactos de dominio externo tiene conector de fichero
+opt-in en servidor.
+Motivo: el ledger en memoria evita duplicados dentro del proceso, pero tras un
+reinicio Orquesta debe conservar la deduplicacion local además de la
+idempotencia del dominio propietario.
+Impacto: `FileDomainWorkArtifactSubmissionLedgerV0` implementa el puerto de
+ledger y persiste por escritura atomica JSON. `cmd/orquesta-server` lo cablea en
+`ORQUESTA_DOMAIN_DELIVERY_LEDGER_PATH` o en `StateDir` por defecto. El core no
+conoce filesystem, OPES, DB ni runtime.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-13
 Decision: Las entregas de trabajos de dominio externo se devuelven desde el
 stack mediante un bridge hexagonal de artefactos, no desde el core.
 Motivo: OPES y cualquier otra app de dominio deben seguir siendo independientes

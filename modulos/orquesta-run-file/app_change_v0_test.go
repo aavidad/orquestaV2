@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 )
 
 func TestRunFileStoreAppChangePersistsAfterRecreateAndReplacesV0(t *testing.T) {
@@ -36,18 +37,24 @@ func TestRunFileStoreAppChangePersistsAfterRecreateAndReplacesV0(t *testing.T) {
 		records[0].Request.RunRef != "run-a" ||
 		records[0].Request.ChangeRef != "change-1" ||
 		records[0].Request.RequestID != "change-1" ||
-		records[0].Request.AcceptanceCriteria[0] != "criterio-original" {
+		records[0].Request.AcceptanceCriteria[0] != "criterio-original" ||
+		records[0].Request.ExternalWork == nil ||
+		records[0].Request.ExternalWork.JobRef != "job-ref-opes-001" ||
+		records[0].Request.ExternalWork.InputFields[0].Name != "topic_id" ||
+		records[0].Request.ExternalWork.InputFields[2].ValueJSON == nil {
 		t.Fatalf("records=%+v", records)
 	}
 
 	records[0].Request.AcceptanceCriteria[0] = "mutated-output"
+	records[0].Request.ExternalWork.InputFields[0].Value = "mutated-topic"
 	records, err = reopened.ListAppChangeRecordsV0(ctx, orquestaappchange.AppChangeRecordFilterV0{
 		RunRef: "run-a",
 	})
 	if err != nil {
 		t.Fatalf("ListAppChangeRecordsV0 again: %v", err)
 	}
-	if records[0].Request.AcceptanceCriteria[0] != "criterio-original" {
+	if records[0].Request.AcceptanceCriteria[0] != "criterio-original" ||
+		records[0].Request.ExternalWork.InputFields[0].Value != "topic-ref-opes-001" {
 		t.Fatalf("record leaked mutable slices: %+v", records[0])
 	}
 
@@ -98,6 +105,18 @@ func appChangeRecordForRunFileTestV0(
 			AcceptanceCriteria: []string{" criterio-original ", "criterio-original"},
 			AllowedWriteSet:    []string{" modulos/app/main.go "},
 			MetadataRefs:       []string{" meta-1 "},
+			ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+				ProjectRef:    " opes ",
+				JobRef:        " job-ref-opes-001 ",
+				InterfaceRefs: []string{" opes-rest-v0 ", "opes-rest-v0"},
+				WorkKind:      " draft_content_block ",
+				WorkRefs:      []string{" topic-ref-opes-001 ", "topic-ref-opes-001"},
+				InputFields: []orquestadomainwork.DomainWorkFieldV0{
+					{Name: " topic_id ", Value: " topic-ref-opes-001 "},
+					{Name: " source_refs ", Values: []string{" BOE-A-001 ", "BOE-A-001"}},
+					{Name: " block_position ", ValueJSON: []byte(` { "block_order": 1 } `)},
+				},
+			},
 		},
 		ReceivedAt:  " 2026-05-12T09:00:00Z ",
 		RequestedBy: " user ",

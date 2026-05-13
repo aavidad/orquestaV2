@@ -60,6 +60,34 @@ Pruebas de contrato:
 ```
 
 ```text
+Nombre: mcp.tool.orquesta.director.stats.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: web, REST local, director IA y apps externas como OPES
+Campos:
+  input:
+    run_ref: ref de run opcional si se consulta por `external_job_ref`
+    app_ref: app externa opcional
+    external_job_ref: job externo de dominio, por ejemplo OPES
+    include_process_refs, include_agent_progress, include_agent_usage
+  output_ok:
+    stats: DirectorRunStatsV0 completo
+    external_job: proyeccion compacta opcional con job_ref, work_kind,
+      change_ref, run_ref, task_ref, agent_ref, status y delivery_refs
+    decision_context
+Invariantes:
+  - Si llega `external_job_ref`, MCP delega la resolucion en un puerto
+    inyectado; no conoce OPES, app-change internals, filesystem ni runtime.
+  - Si falta `run_ref`, el puerto puede resolverlo desde el job externo.
+  - La salida conserva `DirectorRunStatsV0`; `external_job` es una proyeccion
+    aditiva para que OPES no tenga que interpretar toda la run.
+Pruebas de contrato:
+  - Executor resuelve `run_ref` por job externo mediante puerto fake.
+  - HTTP bridge conserva el mismo envelope REST.
+```
+
+```text
 Nombre: rest.bridge.orquesta.domain_work.v0
 Tipo: puerto_entrada
 Version: v0

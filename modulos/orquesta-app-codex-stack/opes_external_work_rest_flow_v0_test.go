@@ -69,6 +69,16 @@ func TestCodexStackV0OPESExternalWorkRESTCreaMicrotareaSinWriteSetLocal(t *testi
 		stats.Stats.Counts.TasksTotal == 0 {
 		t.Fatalf("stats=%+v", stats)
 	}
+	jobStats := postOPESDirectorJobStatsV0(t, stack, "job-ref-opes-001")
+	if jobStats.Estado != orquestamcp.MCPDirectorStatsEstadoOKV0 ||
+		jobStats.RunRef != director.RunRef ||
+		jobStats.ExternalJob == nil ||
+		jobStats.ExternalJob.JobRef != "job-ref-opes-001" ||
+		jobStats.ExternalJob.TaskRef == "" ||
+		jobStats.ExternalJob.AgentRef == "" ||
+		jobStats.ExternalJob.Status == "" {
+		t.Fatalf("jobStats=%+v", jobStats)
+	}
 }
 
 func TestCodexStackV0OPESExternalWorkDeliveryEnviaArtefactoDomainWork(t *testing.T) {
@@ -291,6 +301,35 @@ func postOPESDirectorStatsV0(
 	var result orquestamcp.MCPDirectorStatsToolResultV0
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode stats: %v", err)
+	}
+	return result
+}
+
+func postOPESDirectorJobStatsV0(
+	t *testing.T,
+	stack StackV0,
+	jobRef string,
+) orquestamcp.MCPDirectorStatsToolResultV0 {
+	t.Helper()
+	body := new(bytes.Buffer)
+	if err := json.NewEncoder(body).Encode(orquestamcp.MCPDirectorStatsToolInputV0{
+		RequestID:      "req-opes-rest-job-stats-001",
+		CorrelationID:  "corr-opes-rest-job-stats-001",
+		AppRef:         "opes",
+		ExternalJobRef: jobRef,
+	}); err != nil {
+		t.Fatalf("encode job stats: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/director/stats", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	stack.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("job stats status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPDirectorStatsToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode job stats: %v", err)
 	}
 	return result
 }
