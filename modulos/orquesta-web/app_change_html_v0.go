@@ -15,7 +15,14 @@ func appChangePageV0(locale string, vm WebAppChangeViewModelV0) appChangePageDat
 	if locale == "" {
 		locale = "es"
 	}
-	keys := []string{"title", "submit", "run_ref", "app_ref", "change_ref", "locale", "user_intent", "target_area", "criteria", "write_set", "current_refs", "constraints", "accepted", "initial", "error", "help_run", "help_change", "help_intent", "help_write_set"}
+	keys := []string{
+		"title", "submit", "run_ref", "app_ref", "change_ref", "locale",
+		"user_intent", "target_area", "criteria", "write_set",
+		"current_refs", "constraints", "accepted", "initial", "error",
+		"help_run", "help_change", "help_intent", "help_write_set",
+		"external_work", "external_project_ref", "external_interface_refs",
+		"external_work_kind", "external_work_refs", "help_external_work",
+	}
 	text := map[string]string{}
 	for _, key := range keys {
 		text[key] = appChangeTextV0(locale, key)
@@ -67,6 +74,16 @@ var appChangeHTMLTemplateV0 = template.Must(template.New("app_change_html_v0").P
         <label title="{{index .Text "help_write_set"}}">{{index .Text "write_set"}}<input name="allowed_write_set"></label>
         <label>{{index .Text "current_refs"}}<input name="current_state_refs"></label>
         <label>{{index .Text "constraints"}}<input name="constraints"></label>
+      </div>
+    </fieldset>
+    <fieldset title="{{index .Text "help_external_work"}}">
+      <legend>{{index .Text "external_work"}}</legend>
+      <p class="hint">{{index .Text "help_external_work"}}</p>
+      <div class="grid">
+        <label>{{index .Text "external_project_ref"}}<input name="external_project_ref"></label>
+        <label>{{index .Text "external_interface_refs"}}<input name="external_interface_refs"></label>
+        <label>{{index .Text "external_work_kind"}}<input name="external_work_kind"></label>
+        <label>{{index .Text "external_work_refs"}}<input name="external_work_refs"></label>
       </div>
     </fieldset>
     <button type="submit">{{index .Text "submit"}}</button>

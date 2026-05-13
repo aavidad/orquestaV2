@@ -95,6 +95,29 @@ Errores:
 Pruebas de contrato:
 ```
 
+```text
+Nombre: WebAppChangeFormV0.external_work
+Tipo: dto
+Version: v0
+Propietario: orquesta-web
+Consumidores: MCP/REST `orquesta.apps.request_change.v0`
+Campos:
+- external_project_ref
+- external_interface_refs
+- external_work_kind
+- external_work_refs
+Invariantes:
+- Solo transporta refs opacas compactas hacia `AppChangeRequestV0`.
+- La web no interpreta el dominio externo ni decide agentes, modelo, DB,
+  runtime, filesystem, proveedor ni rutas internas de la app propietaria.
+- El campo es opcional; si no hay datos, no se materializa `external_work`.
+Errores:
+- Los errores de validacion pertenecen a `orquesta-app-change`.
+Pruebas de contrato:
+- Mapper de form a MCP conserva refs externas.
+- POST form-urlencoded preserva refs externas hacia el puerto local.
+```
+
 ## Contratos consumidos
 
 ```text

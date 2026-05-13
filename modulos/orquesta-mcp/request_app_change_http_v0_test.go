@@ -37,6 +37,10 @@ func TestMCPRequestAppChangeHTTPV0InyectaAppRefDesdeRuta(t *testing.T) {
 	if executor.input.AppChangeRequest.AppRef != "agenda-equipo" {
 		t.Fatalf("app_ref=%q", executor.input.AppChangeRequest.AppRef)
 	}
+	if executor.input.AppChangeRequest.ExternalWork == nil ||
+		executor.input.AppChangeRequest.ExternalWork.ProjectRef != "project-ref-opes" {
+		t.Fatalf("external_work=%+v", executor.input.AppChangeRequest.ExternalWork)
+	}
 }
 
 func TestMCPRequestAppChangeHTTPV0Devuelve400SiContratoInvalido(t *testing.T) {
@@ -66,6 +70,12 @@ func validMCPRequestAppChangeHTTPInputV0() orquestaappchange.AppChangeRequestV0 
 		RunRef:     "run-ref-http-change-001",
 		ChangeRef:  "change-ref-http-001",
 		UserIntent: "Cambiar la web para mostrar vista semanal.",
+		ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+			ProjectRef:    "project-ref-opes",
+			InterfaceRefs: []string{"mcp-contract-ref-opes-v0"},
+			WorkKind:      "documentation",
+			WorkRefs:      []string{"domain-work-ref-opes-topic-001"},
+		},
 	}
 }
 

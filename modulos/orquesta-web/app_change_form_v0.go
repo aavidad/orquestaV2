@@ -20,6 +20,10 @@ type WebAppChangeFormV0 struct {
 	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
 	Constraints        []string `json:"constraints,omitempty"`
 	AllowedWriteSet    []string `json:"allowed_write_set,omitempty"`
+	ExternalProjectRef string   `json:"external_project_ref,omitempty"`
+	ExternalInterfaces []string `json:"external_interface_refs,omitempty"`
+	ExternalWorkKind   string   `json:"external_work_kind,omitempty"`
+	ExternalWorkRefs   []string `json:"external_work_refs,omitempty"`
 }
 
 func (form WebAppChangeFormV0) ToMCPRequestAppChangeInputV0() orquestamcp.MCPRequestAppChangeToolInputV0 {
@@ -37,10 +41,29 @@ func (form WebAppChangeFormV0) ToMCPRequestAppChangeInputV0() orquestamcp.MCPReq
 		AcceptanceCriteria: compactStringsV0(form.AcceptanceCriteria),
 		Constraints:        compactStringsV0(form.Constraints),
 		AllowedWriteSet:    compactStringsV0(form.AllowedWriteSet),
+		ExternalWork:       webAppChangeExternalWorkV0(form),
 	}
 	return orquestamcp.MCPRequestAppChangeToolInputV0{
 		RequestID:        request.RequestID,
 		CorrelationID:    request.CorrelationID,
 		AppChangeRequest: request,
 	}
+}
+
+func webAppChangeExternalWorkV0(
+	form WebAppChangeFormV0,
+) *orquestaappchange.AppChangeExternalWorkV0 {
+	work := orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    strings.TrimSpace(form.ExternalProjectRef),
+		InterfaceRefs: compactStringsV0(form.ExternalInterfaces),
+		WorkKind:      strings.TrimSpace(form.ExternalWorkKind),
+		WorkRefs:      compactStringsV0(form.ExternalWorkRefs),
+	}
+	if work.ProjectRef == "" &&
+		len(work.InterfaceRefs) == 0 &&
+		work.WorkKind == "" &&
+		len(work.WorkRefs) == 0 {
+		return nil
+	}
+	return &work
 }

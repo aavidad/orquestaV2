@@ -172,6 +172,20 @@ Estado: completada como slice separado sin tocar flujo nueva app, DB, runtime, f
 ```
 
 ```text
+ID: WEB-020
+Objetivo: Permitir que `/app-change` envie refs opacas de trabajo externo sin
+acoplar la web a OPES ni a otra app propietaria.
+Write-set: app_change_*_v0.go, tests y docs locales.
+Simbolo foco: WebAppChangeFormV0.external_work
+Contrato: `AppChangeRequestV0.external_work` consume project/interface/work
+refs compactas.
+Validacion: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack`.
+Bloqueos: El wizard conversacional futuro debe construir estos campos por
+puerto de intake/director, no por reglas de dominio en la web.
+Estado: completada.
+```
+
+```text
 ID: WEB-013
 Objetivo: Sustituir el formulario largo de nueva app por un flujo conversacional guiado por agente de intake, sin perder `AppSpecV0` como contrato canonico.
 Write-set: docs/tareas.md, docs/contratos.md, nueva_app_intake_session_v0.go, nueva_app_intake_session_v0_test.go

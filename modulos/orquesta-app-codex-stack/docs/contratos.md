@@ -117,6 +117,8 @@ Campos:
 - `constraints`: limites de seguridad, compatibilidad, datos y despliegue;
 - `allowed_write_set`: ficheros o directorios permitidos para la ejecucion;
 - `metadata_refs`: refs opacas adicionales para auditoria o trazabilidad.
+- `external_work`: refs opacas de trabajo de dominio externo cuando Orquesta
+  coordina otra app sin importar su nucleo.
 
 Invariantes:
 
@@ -130,6 +132,9 @@ Invariantes:
   evidencia compacta antes de cerrar el cambio.
 - Ningun transporte puede ampliar el `allowed_write_set` despues de validar la
   solicitud.
+- `external_work` solo puede contener `project_ref`, `interface_refs`,
+  `work_kind` y `work_refs` compactas; no contiene rutas reales, DB, proveedor,
+  token, prompt ni contrato interno de la app propietaria.
 
 Flujo por transportes:
 

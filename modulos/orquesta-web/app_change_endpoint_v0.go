@@ -75,5 +75,9 @@ func appChangeFormFromValuesV0(values map[string][]string) WebAppChangeFormV0 {
 		AcceptanceCriteria: formValuesV0(values, "acceptance_criteria"),
 		Constraints:        formValuesV0(values, "constraints"),
 		AllowedWriteSet:    formValuesV0(values, "allowed_write_set"),
+		ExternalProjectRef: formValueV0(values, "external_project_ref"),
+		ExternalInterfaces: formValuesV0(values, "external_interface_refs"),
+		ExternalWorkKind:   formValueV0(values, "external_work_kind"),
+		ExternalWorkRefs:   formValuesV0(values, "external_work_refs"),
 	}
 }

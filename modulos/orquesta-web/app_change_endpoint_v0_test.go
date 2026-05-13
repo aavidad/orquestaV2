@@ -24,6 +24,10 @@ func TestAppChangeWebEndpointV0POSTLlamaClienteYRenderizaDirector(t *testing.T) 
 	values.Set("run_ref", "run-ref-web-change-001")
 	values.Set("change_ref", "change-ref-web-001")
 	values.Set("user_intent", "Cambiar la web para vista semanal.")
+	values.Set("external_project_ref", "project-ref-opes")
+	values.Set("external_interface_refs", "mcp-contract-ref-opes-v0")
+	values.Set("external_work_kind", "documentation")
+	values.Set("external_work_refs", "domain-work-ref-opes-topic-001")
 	req := httptest.NewRequest(http.MethodPost, "/app-change", strings.NewReader(values.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -35,6 +39,7 @@ func TestAppChangeWebEndpointV0POSTLlamaClienteYRenderizaDirector(t *testing.T) 
 	}
 	if client.form.ChangeRef != "change-ref-web-001" ||
 		client.form.UserIntent != "Cambiar la web para vista semanal." ||
+		client.form.ExternalProjectRef != "project-ref-opes" ||
 		!strings.Contains(rec.Body.String(), "question-ref-web-change-001") {
 		t.Fatalf("form=%+v body=%s", client.form, rec.Body.String())
 	}
@@ -50,6 +55,7 @@ func TestAppChangeWebEndpointV0GETMuestraMensajeParaDirector(t *testing.T) {
 	body := rec.Body.String()
 	if rec.Code != http.StatusOK ||
 		!strings.Contains(body, `name="user_intent"`) ||
+		!strings.Contains(body, `name="external_project_ref"`) ||
 		!strings.Contains(body, "Mensaje para el director") ||
 		!strings.Contains(body, "cambios, instrucciones o peticiones") {
 		t.Fatalf("status=%d body=%s", rec.Code, body)

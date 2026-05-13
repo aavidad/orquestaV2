@@ -107,7 +107,20 @@ func appChangeEvidenceRefsV0(request orquestaappchange.AppChangeRequestV0) []str
 	refs := []string{request.ChangeRef}
 	refs = append(refs, request.CurrentStateRefs...)
 	refs = append(refs, request.MetadataRefs...)
+	refs = append(refs, appChangeExternalWorkRefsV0(request.ExternalWork)...)
 	return compactCodexStackStringsV0(refs)
+}
+
+func appChangeExternalWorkRefsV0(
+	work *orquestaappchange.AppChangeExternalWorkV0,
+) []string {
+	if work == nil {
+		return nil
+	}
+	refs := []string{work.ProjectRef, work.WorkKind}
+	refs = append(refs, work.InterfaceRefs...)
+	refs = append(refs, work.WorkRefs...)
+	return refs
 }
 
 func firstAppChangeNonEmptyV0(values ...string) string {

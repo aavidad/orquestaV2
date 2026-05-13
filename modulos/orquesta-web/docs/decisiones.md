@@ -267,6 +267,23 @@ Estado: aceptada localmente.
 ## Inventario acotado de herencia
 
 ```text
+Fecha: 2026-05-13
+Decision: `/app-change` acepta refs opacas de trabajo externo, pero no importa
+ninguna logica de la app propietaria.
+Motivo: Orquesta debe poder coordinar trabajos sobre OPES u otra app mediante
+contratos, sin convertir orquesta-web en un frontend especifico de ese dominio.
+Alternativas: crear un formulario OPES dentro de Orquesta; pasar paths reales;
+duplicar contratos externos en la web.
+Impacto: `WebAppChangeFormV0` mapea `external_project_ref`,
+`external_interface_refs`, `external_work_kind` y `external_work_refs` a
+`AppChangeRequestV0.external_work`. El core valida refs compactas y el stack las
+mantiene como evidencia para el director.
+Contratos afectados: `WebAppChangeFormV0`, `AppChangeRequestV0`,
+`orquesta.apps.request_change.v0`.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-05-10
 Decision: El wizard/formulario web expone `request_kind` y `execution_mode`
 como entrada de operador.
