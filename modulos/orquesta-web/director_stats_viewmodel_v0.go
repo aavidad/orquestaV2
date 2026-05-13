@@ -12,6 +12,7 @@ type WebDirectorStatsViewModelV0 struct {
 	Counts          WebDirectorStatsCountsV0        `json:"counts"`
 	Progress        WebDirectorStatsProgressV0      `json:"progress"`
 	Resumen         WebDirectorStatsSummaryV0       `json:"resumen"`
+	Checkpoint      WebDirectorStatsCheckpointV0    `json:"checkpoint"`
 	Agents          []WebDirectorStatsAgentV0       `json:"agents,omitempty"`
 	Agentes         []WebDirectorStatsAgentV0       `json:"agentes,omitempty"`
 	Tasks           []WebDirectorStatsTaskV0        `json:"tasks,omitempty"`
@@ -22,28 +23,30 @@ type WebDirectorStatsViewModelV0 struct {
 type WebDirectorStatsPanelV0 = WebDirectorStatsViewModelV0
 
 type WebDirectorStatsTextsV0 struct {
-	Title         string `json:"title"`
-	Counts        string `json:"counts"`
-	TaskProgress  string `json:"task_progress"`
-	AgentProgress string `json:"agent_progress"`
-	PublicErrors  string `json:"public_errors"`
-	Refresh       string `json:"refresh"`
+	Title              string `json:"title"`
+	Counts             string `json:"counts"`
+	TaskProgress       string `json:"task_progress"`
+	AgentProgress      string `json:"agent_progress"`
+	CheckpointProgress string `json:"checkpoint_progress"`
+	PublicErrors       string `json:"public_errors"`
+	Refresh            string `json:"refresh"`
 }
 
 type WebDirectorStatsCountsV0 struct {
-	TasksTotal          int `json:"tasks_total"`
-	TasksClosed         int `json:"tasks_closed"`
-	TasksOpen           int `json:"tasks_open"`
-	TasksDelivered      int `json:"tasks_delivered"`
-	Brainstorms         int `json:"brainstorms"`
-	AgentsRequested     int `json:"agents_requested"`
-	AgentsStarted       int `json:"agents_started"`
-	AgentsDelivered     int `json:"agents_delivered"`
-	AgentsInFlight      int `json:"agents_in_flight"`
-	AgentsNeedAttention int `json:"agents_need_attention"`
-	Deliveries          int `json:"deliveries"`
-	Reviews             int `json:"reviews"`
-	Blockers            int `json:"blockers"`
+	TasksTotal              int `json:"tasks_total"`
+	TasksClosed             int `json:"tasks_closed"`
+	TasksOpen               int `json:"tasks_open"`
+	TasksDelivered          int `json:"tasks_delivered"`
+	Brainstorms             int `json:"brainstorms"`
+	AgentsRequested         int `json:"agents_requested"`
+	AgentsStarted           int `json:"agents_started"`
+	AgentsDelivered         int `json:"agents_delivered"`
+	AgentsInFlight          int `json:"agents_in_flight"`
+	AgentsNeedAttention     int `json:"agents_need_attention"`
+	CheckpointAgentsPending int `json:"checkpoint_agents_pending"`
+	Deliveries              int `json:"deliveries"`
+	Reviews                 int `json:"reviews"`
+	Blockers                int `json:"blockers"`
 }
 
 type WebDirectorStatsProgressV0 struct {
@@ -73,6 +76,13 @@ type WebDirectorStatsSummaryV0 struct {
 	UsageTotalTokens   int64    `json:"usage_total_tokens,omitempty"`
 	UsageCostMicros    int64    `json:"usage_cost_micros,omitempty"`
 	NoSignalAgentRefs  []string `json:"no_signal_agent_refs"`
+}
+
+type WebDirectorStatsCheckpointV0 struct {
+	CheckpointAgentsPending    int      `json:"checkpoint_agents_pending"`
+	PendingCheckpointAgentRefs []string `json:"pending_checkpoint_agent_refs"`
+	CheckpointEvidenceRefs     []string `json:"checkpoint_evidence_refs"`
+	RequiresAttention          bool     `json:"requires_attention"`
 }
 
 type WebDirectorStatsAgentV0 struct {
@@ -126,6 +136,7 @@ func NewWebDirectorStatsPanelV0(
 	vm.Counts = directorStatsCountsV0(*stats)
 	vm.Progress = directorStatsProgressV0(stats.Progress)
 	vm.Resumen = directorStatsSummaryV0(stats.Progress, stats.UsageSummary)
+	vm.Checkpoint = directorStatsCheckpointV0(*stats)
 	vm.Agents = directorStatsAgentsV0(stats.Agents)
 	vm.Agentes = vm.Agents
 	vm.Tasks = directorStatsTasksV0(stats.Progress.Tasks)
@@ -163,19 +174,20 @@ func NewWebDirectorStatsErrorViewModelV0(
 
 func directorStatsCountsV0(stats WebDirectorRunStatsContractV0) WebDirectorStatsCountsV0 {
 	return WebDirectorStatsCountsV0{
-		TasksTotal:          stats.Counts["tasks_total"],
-		TasksClosed:         stats.Counts["tasks_closed"],
-		TasksOpen:           stats.Counts["tasks_open"],
-		TasksDelivered:      stats.Counts["tasks_delivered"],
-		Brainstorms:         stats.Counts["brainstorms"],
-		AgentsRequested:     stats.Counts["agents_requested"],
-		AgentsStarted:       stats.Counts["agents_started"],
-		AgentsDelivered:     stats.Counts["agents_delivered"],
-		AgentsInFlight:      stats.Counts["agents_in_flight"],
-		AgentsNeedAttention: webDirectorStatsAttentionCountV0(stats.Agents),
-		Deliveries:          stats.Counts["deliveries"],
-		Reviews:             stats.Counts["reviews"],
-		Blockers:            stats.Counts["blockers"],
+		TasksTotal:              stats.Counts["tasks_total"],
+		TasksClosed:             stats.Counts["tasks_closed"],
+		TasksOpen:               stats.Counts["tasks_open"],
+		TasksDelivered:          stats.Counts["tasks_delivered"],
+		Brainstorms:             stats.Counts["brainstorms"],
+		AgentsRequested:         stats.Counts["agents_requested"],
+		AgentsStarted:           stats.Counts["agents_started"],
+		AgentsDelivered:         stats.Counts["agents_delivered"],
+		AgentsInFlight:          stats.Counts["agents_in_flight"],
+		AgentsNeedAttention:     webDirectorStatsAttentionCountV0(stats.Agents),
+		CheckpointAgentsPending: stats.CheckpointAgentsPending,
+		Deliveries:              stats.Counts["deliveries"],
+		Reviews:                 stats.Counts["reviews"],
+		Blockers:                stats.Counts["blockers"],
 	}
 }
 
@@ -221,7 +233,8 @@ func directorStatsSummaryV0(
 func directorStatsAttentionStateV0(vm WebDirectorStatsViewModelV0) string {
 	if vm.Progress.StalledAgents > 0 ||
 		vm.Progress.LoopDetectedAgents > 0 ||
-		vm.Counts.AgentsNeedAttention > 0 {
+		vm.Counts.AgentsNeedAttention > 0 ||
+		vm.Checkpoint.RequiresAttention {
 		return WebDirectorStatsEstadoAtencionV0
 	}
 	return WebDirectorStatsEstadoOKV0

@@ -66,6 +66,23 @@ func directorStatsTasksV0(
 	return out
 }
 
+func directorStatsCheckpointV0(
+	stats WebDirectorRunStatsContractV0,
+) WebDirectorStatsCheckpointV0 {
+	pendingRefs := compactOperationalStringsV0(stats.PendingCheckpointAgentRefs)
+	evidenceRefs := compactOperationalStringsV0(stats.CheckpointEvidenceRefs)
+	agentsPending := stats.CheckpointAgentsPending
+	if agentsPending == 0 && len(pendingRefs) > 0 {
+		agentsPending = len(pendingRefs)
+	}
+	return WebDirectorStatsCheckpointV0{
+		CheckpointAgentsPending:    agentsPending,
+		PendingCheckpointAgentRefs: pendingRefs,
+		CheckpointEvidenceRefs:     evidenceRefs,
+		RequiresAttention:          agentsPending > 0 || len(pendingRefs) > 0,
+	}
+}
+
 func directorStatsIssuesV0(
 	first []WebDirectorStatsPublicIssueV0,
 	second []WebDirectorStatsPublicIssueV0,

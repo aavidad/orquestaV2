@@ -103,6 +103,32 @@ func TestWebDirectorStatsPanelV0ErroresPublicosSinStats(t *testing.T) {
 	}
 }
 
+func TestWebDirectorStatsPanelV0ProyectaCheckpointPendienteSiLlegaPorContrato(t *testing.T) {
+	result := directorStatsResultForWebTestV0()
+	result.Stats.CheckpointAgentsPending = 1
+	result.Stats.PendingCheckpointAgentRefs = []string{
+		" agent-ref-checkpoint-001 ",
+		"agent-ref-checkpoint-001",
+	}
+	result.Stats.CheckpointEvidenceRefs = []string{
+		"shutdown-checkpoint-issue-pending-ack",
+		"shutdown-checkpoint-issue-pending-ack",
+	}
+
+	panel := NewWebDirectorStatsPanelV0("es", result)
+
+	if panel.Estado != WebDirectorStatsEstadoAtencionV0 ||
+		panel.Counts.CheckpointAgentsPending != 1 ||
+		panel.Checkpoint.CheckpointAgentsPending != 1 ||
+		!panel.Checkpoint.RequiresAttention ||
+		len(panel.Checkpoint.PendingCheckpointAgentRefs) != 1 ||
+		panel.Checkpoint.PendingCheckpointAgentRefs[0] != "agent-ref-checkpoint-001" ||
+		len(panel.Checkpoint.CheckpointEvidenceRefs) != 1 ||
+		panel.Textos.CheckpointProgress != "Progreso de checkpoint" {
+		t.Fatalf("checkpoint=%+v panel=%+v", panel.Checkpoint, panel)
+	}
+}
+
 func directorStatsResultForWebTestV0() WebDirectorStatsInboundResultV0 {
 	return WebDirectorStatsInboundResultV0{
 		Estado:        WebDirectorStatsInboundEstadoOKV0,

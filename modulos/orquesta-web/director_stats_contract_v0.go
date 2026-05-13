@@ -40,16 +40,19 @@ type WebDirectorStatsInboundResultV0 struct {
 }
 
 type WebDirectorRunStatsContractV0 struct {
-	SchemaVersion string                             `json:"schema_version"`
-	RunRef        string                             `json:"run_ref"`
-	ProjectRef    string                             `json:"project_ref,omitempty"`
-	AppSpecRef    string                             `json:"app_spec_ref,omitempty"`
-	Status        string                             `json:"status,omitempty"`
-	CurrentPhase  string                             `json:"current_phase,omitempty"`
-	Counts        map[string]int                     `json:"counts"`
-	Progress      WebDirectorProgressStatsContractV0 `json:"progress"`
-	UsageSummary  *WebDirectorRunUsageSummaryV0      `json:"usage_summary,omitempty"`
-	Agents        []WebDirectorAgentStatsContractV0  `json:"agents,omitempty"`
+	SchemaVersion              string                             `json:"schema_version"`
+	RunRef                     string                             `json:"run_ref"`
+	ProjectRef                 string                             `json:"project_ref,omitempty"`
+	AppSpecRef                 string                             `json:"app_spec_ref,omitempty"`
+	Status                     string                             `json:"status,omitempty"`
+	CurrentPhase               string                             `json:"current_phase,omitempty"`
+	Counts                     map[string]int                     `json:"counts"`
+	Progress                   WebDirectorProgressStatsContractV0 `json:"progress"`
+	UsageSummary               *WebDirectorRunUsageSummaryV0      `json:"usage_summary,omitempty"`
+	Agents                     []WebDirectorAgentStatsContractV0  `json:"agents,omitempty"`
+	CheckpointAgentsPending    int                                `json:"checkpoint_agents_pending,omitempty"`
+	PendingCheckpointAgentRefs []string                           `json:"pending_checkpoint_agent_refs,omitempty"`
+	CheckpointEvidenceRefs     []string                           `json:"checkpoint_evidence_refs,omitempty"`
 }
 
 type WebDirectorProgressStatsContractV0 struct {

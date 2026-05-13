@@ -279,3 +279,16 @@ Ultima ejecucion: 2026-05-12; pasa con `go test -count=1 ./modulos/orquesta-web`
 Riesgos: El progreso real depende de que el bridge MCP reciba un
 `ProgressSource` configurado; la web solo consume el contrato existente.
 ```
+
+```text
+Caso: WEB-UT-019 director stats proyecta checkpoint pendiente preparado
+Tipo: unit
+Comando: `go test -count=1 ./modulos/orquesta-web -run 'TestWebDirectorStatsPanelV0ProyectaCheckpointPendienteSiLlegaPorContrato'`
+Evidencia esperada: si el contrato consumido entrega
+`checkpoint_agents_pending`, `pending_checkpoint_agent_refs` y
+`checkpoint_evidence_refs`, el panel web marca atencion, expone refs opacas
+deduplicadas y usa texto i18n para progreso de checkpoint.
+Ultima ejecucion: 2026-05-13; pasa con `go test -count=1 ./modulos/orquesta-web -run 'TestWebDirectorStatsPanelV0ProyectaCheckpointPendienteSiLlegaPorContrato'`.
+Riesgos: `/director-stats` aun no consume `orquesta.server.shutdown.v0`; la
+proyeccion queda preparada sin construir un adaptador a shutdown desde web.
+```

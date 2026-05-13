@@ -221,6 +221,25 @@ Estado: aceptada localmente.
 ```
 
 ```text
+Fecha: 2026-05-13
+Decision: El panel `director_stats` acepta y proyecta checkpoint pendiente solo
+si llega ya saneado por el contrato consumido.
+Motivo: `server-shutdown` y MCP ya exponen `checkpoint_agents_pending`,
+`pending_checkpoint_agent_refs` y `checkpoint_evidence_refs`, pero la web no
+tiene todavia un cliente/handler de shutdown. La UI puede preparar el DTO y el
+viewmodel sin leer runtime, ficheros de ACK, RunStore ni server-shutdown.
+Alternativas: llamar a `orquesta.server.shutdown.v0` desde `/director-stats`;
+crear un endpoint web nuevo de shutdown; ignorar el campo hasta integrar
+shutdown.
+Impacto: `WebDirectorRunStatsContractV0` acepta los campos opcionales y
+`WebDirectorStatsCheckpointV0` los muestra como refs opacas deduplicadas. El
+estado del panel pasa a `attention` si hay agentes pendientes de checkpoint.
+Contratos afectados: `WebDirectorRunStatsContractV0`,
+`WebDirectorStatsViewModelV0`, `WebDirectorStatsCheckpointV0`.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-05-11
 Decision: El panel de estadisticas proyecta uso agregado sin conocer proveedor.
 Motivo: la web debe poder mostrar cuanto ha consumido una app al terminar o en

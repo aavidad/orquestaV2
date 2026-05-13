@@ -229,6 +229,22 @@ Bloqueos: El progreso real solo aparecera si el gateway/MCP inyecta `AgentProgre
 Estado: completada como preparacion UI semitiempo-real sobre contrato existente.
 ```
 
+```text
+ID: WEB-019
+Objetivo: Preparar visibilidad web de checkpoint pendiente por run sin acoplar
+la web a shutdown/runtime.
+Write-set: director_stats_*_v0.go, tests y docs locales.
+Simbolo foco: WebDirectorStatsCheckpointV0
+Contrato: si el contrato consumido entrega `checkpoint_agents_pending`,
+`pending_checkpoint_agent_refs` y `checkpoint_evidence_refs`, la web los
+proyecta como refs opacas y marca atencion.
+Validacion: `go test -count=1 ./modulos/orquesta-web`.
+Bloqueos: `/director-stats` no consume todavia `orquesta.server.shutdown.v0`;
+la integracion productiva debe llegar por un handler/API que entregue esos
+campos saneados, no por acceso directo a stores/runtime desde web.
+Estado: completada como DTO/proyeccion preparada.
+```
+
 ## CONSULTA AL DIRECTOR
 
 ```text

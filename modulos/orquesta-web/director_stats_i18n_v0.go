@@ -4,21 +4,23 @@ func directorStatsTextsV0(locale string) WebDirectorStatsTextsV0 {
 	switch normalizeDirectorStatsLocaleV0(locale) {
 	case "en-US":
 		return WebDirectorStatsTextsV0{
-			Title:         "Director statistics",
-			Counts:        "Counts",
-			TaskProgress:  "Task progress",
-			AgentProgress: "Agent progress",
-			PublicErrors:  "Public errors",
-			Refresh:       "Refresh agent progress",
+			Title:              "Director statistics",
+			Counts:             "Counts",
+			TaskProgress:       "Task progress",
+			AgentProgress:      "Agent progress",
+			CheckpointProgress: "Checkpoint progress",
+			PublicErrors:       "Public errors",
+			Refresh:            "Refresh agent progress",
 		}
 	default:
 		return WebDirectorStatsTextsV0{
-			Title:         "Estadisticas del director",
-			Counts:        "Contadores",
-			TaskProgress:  "Progreso de tareas",
-			AgentProgress: "Progreso de agentes",
-			PublicErrors:  "Errores publicos",
-			Refresh:       "Actualizar progreso de agentes",
+			Title:              "Estadisticas del director",
+			Counts:             "Contadores",
+			TaskProgress:       "Progreso de tareas",
+			AgentProgress:      "Progreso de agentes",
+			CheckpointProgress: "Progreso de checkpoint",
+			PublicErrors:       "Errores publicos",
+			Refresh:            "Actualizar progreso de agentes",
 		}
 	}
 }
