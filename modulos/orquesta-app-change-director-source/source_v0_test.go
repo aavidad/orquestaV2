@@ -64,6 +64,38 @@ func TestAppChangeDirectorDecisionSourceV0ExigeGoTestSiTocaCodigoGo(t *testing.T
 	}
 }
 
+func TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    "project-ref-opes",
+		InterfaceRefs: []string{"mcp-contract-ref-opes-v0"},
+		WorkKind:      "documentation",
+		WorkRefs:      []string{"domain-work-ref-opes-topic-001"},
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	contract := decisions[5].PublishContract
+	task := decisions[6].CreateMicrotask.Task
+	if contract == nil ||
+		len(contract.FunctionNames) != 1 ||
+		contract.FunctionNames[0] != "ApplyExternalDomainWorkV0" ||
+		task.Title != "Resolver trabajo documental externo" ||
+		task.Summary == "" ||
+		!stringInSetV0(task.RequiredTests, "validar contrato externo de dominio") {
+		t.Fatalf("contract=%+v task=%+v", contract, task)
+	}
+}
+
 func TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinWriteSet(t *testing.T) {
 	record := appChangeRecordForSourceTestV0()
 	record.Request.AllowedWriteSet = nil

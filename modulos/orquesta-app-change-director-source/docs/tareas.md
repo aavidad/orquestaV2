@@ -10,3 +10,15 @@ Validacion:
 
 - `go test -count=1 ./modulos/orquesta-app-change-director-source`.
 - `TestAppChangeDirectorDecisionSourceV0ConsumeCambioRecibidoComoEvento`.
+
+## ACDS-002
+
+Objetivo: proyectar trabajo externo de dominio como contrato/microtarea sin
+acoplar la fuente a OPES, REST, MCP ni runtime.
+
+Estado: hecho.
+
+Validacion:
+
+- `TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno`;
+- `go test -count=1 ./modulos/orquesta-app-change-director-source`.

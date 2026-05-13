@@ -51,3 +51,22 @@ Validacion:
 - `TestReceiveAppChangeIntentEventV0RegistraSolicitudDeCambio`;
 - `TestReceiveAppChangeIntentEventV0DerivaChangeRefDesdeEvento`;
 - `TestReceiveAppChangeIntentEventV0InvalidoNoTocaPuertos`.
+
+## APP-CHANGE-005
+
+Objetivo: permitir que una app externa declare trabajo de dominio acotado sin
+integrarse dentro de Orquesta.
+
+Estado: hecho.
+
+Contrato:
+
+- `AppChangeRequestV0.external_work` transporta solo refs opacas de proyecto,
+  interfaz y trabajo externo;
+- no se aceptan refs no compactas;
+- el evento externo conserva `external_work` al normalizar a solicitud.
+
+Validacion:
+
+- `TestRequestAppChangeV0RechazaExternalWorkNoCompacto`;
+- `TestReceiveAppChangeIntentEventV0RegistraSolicitudDeCambio`.

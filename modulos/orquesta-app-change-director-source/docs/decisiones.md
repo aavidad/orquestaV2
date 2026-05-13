@@ -40,3 +40,21 @@ que si se exige al bootstrap inicial.
 
 Alternativas descartadas: dejar tests vacios en cambios, relajar el validador
 para cambios, o inferir pruebas en el runtime despues de haber lanzado agentes.
+
+## Trabajo externo como contrato de dominio
+
+Decision: Si un cambio trae `external_work`, la fuente publica
+`ApplyExternalDomainWorkV0` y crea una microtarea de dominio externo, pero no
+lee la app externa ni conoce sus rutas reales.
+
+Motivo: OPES y futuras apps de dominio deben poder pedir trabajo a Orquesta sin
+que Orquesta incorpore su nucleo ni repita gestion propia de agentes dentro de
+cada app.
+
+Alternativas descartadas: integrar OPES como modulo interno de Orquesta,
+mantener una rama especial por app externa o convertir cualquier texto libre en
+microtarea sin contrato.
+
+Impacto: la fuente solo consume refs compactas ya guardadas en
+`AppChangeRequestV0.external_work`; las decisiones siguen validadas por el
+contrato comun del director.

@@ -22,6 +22,7 @@ func normalizeAppChangeRequestV0(request AppChangeRequestV0) AppChangeRequestV0 
 	request.Constraints = compactAppChangeStringsV0(request.Constraints)
 	request.AllowedWriteSet = compactAppChangeStringsV0(request.AllowedWriteSet)
 	request.MetadataRefs = compactAppChangeStringsV0(request.MetadataRefs)
+	request.ExternalWork = normalizeAppChangeExternalWorkV0(request.ExternalWork)
 	if request.RequestID == "" {
 		request.RequestID = request.ChangeRef
 	}
@@ -29,6 +30,27 @@ func normalizeAppChangeRequestV0(request AppChangeRequestV0) AppChangeRequestV0 
 		request.CorrelationID = request.RequestID
 	}
 	return request
+}
+
+func normalizeAppChangeExternalWorkV0(
+	work *AppChangeExternalWorkV0,
+) *AppChangeExternalWorkV0 {
+	if work == nil {
+		return nil
+	}
+	normalized := AppChangeExternalWorkV0{
+		ProjectRef:    strings.TrimSpace(work.ProjectRef),
+		InterfaceRefs: compactAppChangeStringsV0(work.InterfaceRefs),
+		WorkKind:      strings.TrimSpace(work.WorkKind),
+		WorkRefs:      compactAppChangeStringsV0(work.WorkRefs),
+	}
+	if normalized.ProjectRef == "" &&
+		len(normalized.InterfaceRefs) == 0 &&
+		normalized.WorkKind == "" &&
+		len(normalized.WorkRefs) == 0 {
+		return nil
+	}
+	return &normalized
 }
 
 func compactAppChangeStringsV0(values []string) []string {

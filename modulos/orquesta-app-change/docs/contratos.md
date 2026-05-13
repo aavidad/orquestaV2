@@ -15,6 +15,14 @@ Campos principales:
 - `acceptance_criteria`: criterios visibles de cierre;
 - `allowed_write_set`: rutas relativas permitidas si el usuario/director ya
   quiere acotar el cambio.
+- `external_work`: metadata opaca opcional para trabajos de dominio de una app
+  externa, por ejemplo una fabrica documental. Incluye `project_ref`,
+  `interface_refs`, `work_kind` y `work_refs`.
+
+`external_work` no contiene rutas reales, endpoints, DB, HOME, proveedor ni
+modelo. La app propietaria conserva su dominio; Orquesta solo recibe trabajo
+acotado para que el director lo convierta en microtareas si tambien hay
+`allowed_write_set` y `acceptance_criteria`.
 
 ## Puertos
 

@@ -54,6 +54,7 @@ func normalizeAppChangeIntentEventV0(
 	event.Constraints = compactAppChangeStringsV0(event.Constraints)
 	event.AllowedWriteSet = compactAppChangeStringsV0(event.AllowedWriteSet)
 	event.MetadataRefs = compactAppChangeStringsV0(event.MetadataRefs)
+	event.ExternalWork = normalizeAppChangeExternalWorkV0(event.ExternalWork)
 	if event.ChangeRef == "" && event.EventID != "" {
 		event.ChangeRef = "change-ref-" + safeAppChangeRefPartV0(event.EventID)
 	}
@@ -102,6 +103,7 @@ func appChangeRequestFromIntentEventV0(
 		Constraints:        event.Constraints,
 		AllowedWriteSet:    event.AllowedWriteSet,
 		MetadataRefs:       append([]string(nil), event.MetadataRefs...),
+		ExternalWork:       event.ExternalWork,
 	})
 }
 

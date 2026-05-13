@@ -31,7 +31,9 @@ func TestReceiveAppChangeIntentEventV0RegistraSolicitudDeCambio(t *testing.T) {
 	}
 	if len(records) != 1 ||
 		records[0].Request.UserIntent != "Quiero modificar la vista semanal." ||
-		records[0].ReceivedAt != "2026-05-10T10:20:00Z" {
+		records[0].ReceivedAt != "2026-05-10T10:20:00Z" ||
+		records[0].Request.ExternalWork == nil ||
+		records[0].Request.ExternalWork.WorkKind != "documentation" {
 		t.Fatalf("records=%+v", records)
 	}
 }
@@ -94,5 +96,11 @@ func validAppChangeIntentEventForTestV0() AppChangeIntentEventV0 {
 		CurrentStateRefs:   []string{"delivery-ref-web-001"},
 		AcceptanceCriteria: []string{"vista semanal modificada"},
 		AllowedWriteSet:    []string{"web/agenda"},
+		ExternalWork: &AppChangeExternalWorkV0{
+			ProjectRef:    "project-ref-agenda",
+			InterfaceRefs: []string{"mcp-contract-ref-agenda-v0"},
+			WorkKind:      "documentation",
+			WorkRefs:      []string{"domain-work-ref-agenda-docs"},
+		},
 	}
 }

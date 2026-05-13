@@ -18,6 +18,7 @@ const (
 	ErrAppChangePortUnavailableV0       = "app_change_port_unavailable"
 	ErrAppChangeCurrentStateRefV0       = "app_change_current_state_ref_invalid"
 	ErrAppChangeMetadataRefV0           = "app_change_metadata_ref_invalid"
+	ErrAppChangeExternalWorkRefV0       = "app_change_external_work_ref_invalid"
 	ErrAppChangeIntentEventSchemaV0     = "app_change_intent_event_schema_invalid"
 	ErrAppChangeIntentEventRefV0        = "app_change_intent_event_ref_required"
 	ErrAppChangeIntentEventRefInvalidV0 = "app_change_intent_event_ref_invalid"
@@ -26,22 +27,30 @@ const (
 )
 
 type AppChangeRequestV0 struct {
-	SchemaVersion      string   `json:"schema_version"`
-	RequestID          string   `json:"request_id,omitempty"`
-	CorrelationID      string   `json:"correlation_id,omitempty"`
-	RunRef             string   `json:"run_ref"`
-	AppRef             string   `json:"app_ref,omitempty"`
-	ChangeRef          string   `json:"change_ref"`
-	ActorRef           string   `json:"actor_ref,omitempty"`
-	Locale             string   `json:"locale,omitempty"`
-	UserIntent         string   `json:"user_intent"`
-	TargetArea         string   `json:"target_area,omitempty"`
-	CurrentStateRefs   []string `json:"current_state_refs,omitempty"`
-	Scope              []string `json:"scope,omitempty"`
-	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
-	Constraints        []string `json:"constraints,omitempty"`
-	AllowedWriteSet    []string `json:"allowed_write_set,omitempty"`
-	MetadataRefs       []string `json:"metadata_refs,omitempty"`
+	SchemaVersion      string                   `json:"schema_version"`
+	RequestID          string                   `json:"request_id,omitempty"`
+	CorrelationID      string                   `json:"correlation_id,omitempty"`
+	RunRef             string                   `json:"run_ref"`
+	AppRef             string                   `json:"app_ref,omitempty"`
+	ChangeRef          string                   `json:"change_ref"`
+	ActorRef           string                   `json:"actor_ref,omitempty"`
+	Locale             string                   `json:"locale,omitempty"`
+	UserIntent         string                   `json:"user_intent"`
+	TargetArea         string                   `json:"target_area,omitempty"`
+	CurrentStateRefs   []string                 `json:"current_state_refs,omitempty"`
+	Scope              []string                 `json:"scope,omitempty"`
+	AcceptanceCriteria []string                 `json:"acceptance_criteria,omitempty"`
+	Constraints        []string                 `json:"constraints,omitempty"`
+	AllowedWriteSet    []string                 `json:"allowed_write_set,omitempty"`
+	MetadataRefs       []string                 `json:"metadata_refs,omitempty"`
+	ExternalWork       *AppChangeExternalWorkV0 `json:"external_work,omitempty"`
+}
+
+type AppChangeExternalWorkV0 struct {
+	ProjectRef    string   `json:"project_ref,omitempty"`
+	InterfaceRefs []string `json:"interface_refs,omitempty"`
+	WorkKind      string   `json:"work_kind,omitempty"`
+	WorkRefs      []string `json:"work_refs,omitempty"`
 }
 
 type AppChangeRecordV0 struct {

@@ -22,7 +22,7 @@ func buildAppChangeDecisionsV0(
 		if ok {
 			return []orquestadirectoragent.DirectorAgentDecisionV0{
 				appChangeAnswerDecisionV0(runRef, current, refs),
-				appChangeContractDecisionV0(runRef, current, decisionRef, refs),
+				appChangeContractDecisionV0(runRef, current, decisionRef, request, refs),
 				appChangeMicrotaskDecisionV0(runRef, current, request, refs),
 			}
 		}
@@ -34,7 +34,7 @@ func buildAppChangeDecisionsV0(
 		appChangeVoteDecisionV0(runRef, refs),
 		appChangeAcceptDecisionV0(runRef, refs),
 		appChangeOpenPhaseV0(runRef, orquestacoreworkflow.OrchestrationPhaseVotacionYDecisionV0, orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0, "open-plan", refs),
-		appChangeContractDecisionV0(runRef, orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0, refs.DecisionRef, refs),
+		appChangeContractDecisionV0(runRef, orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0, refs.DecisionRef, request, refs),
 		appChangeMicrotaskDecisionV0(runRef, orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0, request, refs),
 		appChangeOpenPhaseV0(runRef, orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0, orquestacoreworkflow.OrchestrationPhaseProgramacionV0, "open-program", refs),
 	}
@@ -87,6 +87,7 @@ func appChangeContractDecisionV0(
 	runRef string,
 	phase orquestacoreworkflow.OrchestrationPhaseIDV0,
 	decisionRef string,
+	request orquestaappchange.AppChangeRequestV0,
 	refs appChangeRefSetV0,
 ) orquestadirectoragent.DirectorAgentDecisionV0 {
 	decision := appChangeDecisionV0(runRef, phase, "contract", orquestadirectoragent.DirectorAgentCommandPublishContractV0, refs)
@@ -94,8 +95,8 @@ func appChangeContractDecisionV0(
 		ContractRef:   refs.ContractRef,
 		PhaseID:       string(phase),
 		DecisionRef:   decisionRef,
-		Summary:       "Contrato para aplicar cambio aislado.",
-		FunctionNames: []string{"ApplyAppChangeV0"},
+		Summary:       appChangeContractSummaryV0(request),
+		FunctionNames: appChangeFunctionNamesV0(request),
 		EvidenceRefs:  []string{refs.EvidenceRef},
 	}
 	return decision
@@ -114,14 +115,14 @@ func appChangeMicrotaskDecisionV0(
 			TaskID:             refs.TaskRef,
 			RunID:              runRef,
 			PhaseID:            string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
-			Title:              "Aplicar cambio de app",
-			Summary:            "Implementar solo el cambio aceptado.",
+			Title:              appChangeTaskTitleV0(request),
+			Summary:            appChangeTaskSummaryV0(request),
 			WriteSet:           append([]string(nil), request.AllowedWriteSet...),
 			AcceptanceCriteria: appChangeTaskCriteriaV0(request.AcceptanceCriteria),
 			RequiredTests:      appChangeTaskRequiredTestsV0(request),
 			FunctionContractRefs: []orquestadirectoragent.DirectorAgentFunctionContractRefV0{{
 				ContractRef:  refs.ContractRef,
-				FunctionName: "ApplyAppChangeV0",
+				FunctionName: appChangeFunctionNamesV0(request)[0],
 			}},
 		},
 	}

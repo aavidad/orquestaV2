@@ -32,6 +32,9 @@ func validateAppChangeRequestV0(request AppChangeRequestV0) []AppChangeIssueV0 {
 			break
 		}
 	}
+	if !isValidAppChangeExternalWorkV0(request.ExternalWork) {
+		issues = append(issues, appChangeIssueV0(ErrAppChangeExternalWorkRefV0, "external_work"))
+	}
 	for _, entry := range request.AllowedWriteSet {
 		if !isSafeRelativeWriteSetV0(entry) {
 			issues = append(issues, appChangeIssueV0(ErrAppChangeWriteSetInvalidV0, "allowed_write_set"))
@@ -39,6 +42,29 @@ func validateAppChangeRequestV0(request AppChangeRequestV0) []AppChangeIssueV0 {
 		}
 	}
 	return issues
+}
+
+func isValidAppChangeExternalWorkV0(work *AppChangeExternalWorkV0) bool {
+	if work == nil {
+		return true
+	}
+	if work.ProjectRef != "" && !isCompactAppChangeRefV0(work.ProjectRef) {
+		return false
+	}
+	if work.WorkKind != "" && !isCompactAppChangeRefV0(work.WorkKind) {
+		return false
+	}
+	for _, ref := range work.InterfaceRefs {
+		if !isCompactAppChangeRefV0(ref) {
+			return false
+		}
+	}
+	for _, ref := range work.WorkRefs {
+		if !isCompactAppChangeRefV0(ref) {
+			return false
+		}
+	}
+	return true
 }
 
 func validateAppChangePortsV0(ports AppChangePortsV0) []AppChangeIssueV0 {

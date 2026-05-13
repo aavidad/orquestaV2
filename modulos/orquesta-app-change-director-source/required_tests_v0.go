@@ -10,6 +10,9 @@ func appChangeTaskRequiredTestsV0(
 	request orquestaappchange.AppChangeRequestV0,
 ) []string {
 	tests := []string{"validar criterios de aceptacion del cambio"}
+	if appChangeHasExternalWorkV0(request) {
+		tests = append(tests, "validar contrato externo de dominio")
+	}
 	if appChangeWriteSetLooksLikeGoV0(request.AllowedWriteSet) {
 		tests = append([]string{"go test ./..."}, tests...)
 	}

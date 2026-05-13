@@ -24,7 +24,9 @@ func TestRequestAppChangeV0PersisteYNotificaDirector(t *testing.T) {
 	if result.Status != AppChangeStatusAcceptedV0 ||
 		result.DirectorQuestionRef != "question-ref-change-001" ||
 		store.saved.Request.ChangeRef != "change-ref-001" ||
-		notifier.notified.Request.RunRef != "run-ref-agenda-001" {
+		notifier.notified.Request.RunRef != "run-ref-agenda-001" ||
+		store.saved.Request.ExternalWork == nil ||
+		store.saved.Request.ExternalWork.ProjectRef != "project-ref-agenda" {
 		t.Fatalf("resultado inesperado: %+v store=%+v notifier=%+v", result, store.saved, notifier.notified)
 	}
 }
@@ -86,6 +88,25 @@ func TestRequestAppChangeV0RechazaRefsNoCompactas(t *testing.T) {
 	}
 }
 
+func TestRequestAppChangeV0RechazaExternalWorkNoCompacto(t *testing.T) {
+	request := validAppChangeRequestForTestV0()
+	request.ExternalWork = &AppChangeExternalWorkV0{
+		ProjectRef: "project ref unsafe",
+	}
+
+	result, err := RequestAppChangeV0(
+		context.Background(),
+		request,
+		AppChangePortsV0{Store: &fakeAppChangeStoreV0{}, DirectorNotifier: &fakeAppChangeNotifierV0{}},
+	)
+	if err != nil {
+		t.Fatalf("RequestAppChangeV0: %v", err)
+	}
+	if result.Status != AppChangeStatusInvalidV0 || result.Issues[0].Code != ErrAppChangeExternalWorkRefV0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestRequestAppChangeV0RequierePuertos(t *testing.T) {
 	result, err := RequestAppChangeV0(context.Background(), validAppChangeRequestForTestV0(), AppChangePortsV0{})
 	if err != nil {
@@ -110,6 +131,12 @@ func validAppChangeRequestForTestV0() AppChangeRequestV0 {
 		CurrentStateRefs:   []string{"delivery-ref-web-001"},
 		AcceptanceCriteria: []string{"vista semanal visible"},
 		AllowedWriteSet:    []string{"web/agenda", "internal/agenda/delivery"},
+		ExternalWork: &AppChangeExternalWorkV0{
+			ProjectRef:    "project-ref-agenda",
+			InterfaceRefs: []string{"mcp-contract-ref-agenda-v0"},
+			WorkKind:      "programming",
+			WorkRefs:      []string{"domain-work-ref-agenda-week-view"},
+		},
 	}
 }
 

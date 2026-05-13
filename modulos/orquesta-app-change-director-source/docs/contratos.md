@@ -22,3 +22,12 @@ inventa microtareas: deja la consulta pendiente para el director.
 La fuente no diferencia si el `AppChangeRecordV0` procede de una solicitud
 directa o de `AppChangeIntentEventV0`: solo exige store, pregunta de director
 pendiente en el run, write-set y criterios.
+
+Si `AppChangeRequestV0.external_work` esta presente, la fuente sigue sin
+conocer la app externa. Solo cambia la proyeccion compacta:
+
+- publica contrato `ApplyExternalDomainWorkV0`;
+- titula la microtarea segun `work_kind` (`documentation`, `generation`,
+  `review` o generico);
+- exige validar el contrato externo de dominio junto a los criterios de
+  aceptacion.

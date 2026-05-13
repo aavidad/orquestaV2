@@ -49,3 +49,20 @@ Impacto: el evento solo normaliza refs y metadatos. La validacion, persistencia
 y notificacion siguen pasando por el caso de uso existente.
 Estado: aceptada localmente.
 ```
+
+```text
+Fecha: 2026-05-13
+Decision: Las apps externas declaran trabajo de dominio mediante
+`external_work` opaco, no integrando su nucleo en Orquesta.
+Motivo: OPES u otra app de dominio debe seguir siendo propietaria de sus
+temarios, fuentes, bloques o artefactos. Orquesta solo necesita saber que existe
+un trabajo externo acotado y verificable para convertirlo en microtareas de
+agentes.
+Alternativas: importar la app externa como modulo de Orquesta; meter rutas,
+endpoints o jobs concretos en el core; tratarlo como texto libre sin contrato.
+Impacto: `AppChangeRequestV0` y `AppChangeIntentEventV0` aceptan
+`external_work` con refs compactas. La interpretacion concreta queda en
+adaptadores/contratos externos; el modulo no conoce REST, MCP, DB, OPES,
+runtime ni proveedor.
+Estado: aceptada localmente.
+```
