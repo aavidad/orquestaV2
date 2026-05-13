@@ -18,6 +18,10 @@ Cobertura Go actual:
   independiente;
 - `POST /api/v0/domain-work` delega en el executor `DomainWork` inyectado sin
   que el stack importe OPES ni conectores reales;
+- `TestCodexStackV0OPESExternalWorkRESTCreaMicrotareaSinWriteSetLocal` valida
+  el flujo REST que usara OPES: arranque de director, `POST
+  /api/v0/apps/opes/changes` con `external_work`, microtarea de dominio externo
+  sin `allowed_write_set` local y consulta de `/api/v0/director/stats`;
 - las refs publicas del paquete de agente son neutrales y no filtran el
   conector real;
 - dos solicitudes con el mismo nombre visible no colisionan porque el intake

@@ -14,8 +14,14 @@ Casos focales:
 - `TestAppChangeDirectorDecisionSourceV0GeneraCadenaCompleta`: cambio aceptado
   pasa a respuesta, decision, contrato, microtarea con write-set permitido,
   criterios y vuelta a programacion.
-- `TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinWriteSet`: sin
-  write-set no hay microtarea automatica.
+- `TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno`: un
+  `external_work` publica contrato `ApplyExternalDomainWorkV0` y microtarea de
+  dominio externo.
+- `TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExternoSinWriteSetLocal`:
+  un `external_work` de OPES crea microtarea usando scopes externos derivados
+  sin exigir rutas locales en `allowed_write_set`.
+- `TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinWriteSetNiExternalWork`:
+  sin write-set ni `external_work` no hay microtarea automatica.
 - `TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinCriterios`: sin
   criterios no hay microtarea automatica.
 - `TestArquitecturaAppChangeDirectorSourceNoImportaAdaptadoresConcretosV0`: la

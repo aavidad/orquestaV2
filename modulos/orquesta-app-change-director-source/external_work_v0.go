@@ -25,6 +25,16 @@ func appChangeTaskTitleV0(request orquestaappchange.AppChangeRequestV0) string {
 		return "Aplicar cambio de app"
 	}
 	switch strings.TrimSpace(request.ExternalWork.WorkKind) {
+	case "draft_content_block":
+		return "Resolver bloque documental externo"
+	case "research_sources":
+		return "Resolver investigacion externa"
+	case "review_legal":
+		return "Resolver revision legal externa"
+	case "review_pedagogical":
+		return "Resolver revision pedagogica externa"
+	case "review_quality":
+		return "Resolver revision de calidad externa"
 	case "documentation":
 		return "Resolver trabajo documental externo"
 	case "generation":
@@ -49,4 +59,55 @@ func appChangeHasExternalWorkV0(request orquestaappchange.AppChangeRequestV0) bo
 			request.ExternalWork.WorkKind != "" ||
 			len(request.ExternalWork.InterfaceRefs) > 0 ||
 			len(request.ExternalWork.WorkRefs) > 0)
+}
+
+func appChangeTaskWriteSetV0(request orquestaappchange.AppChangeRequestV0) []string {
+	if len(request.AllowedWriteSet) > 0 {
+		return append([]string(nil), request.AllowedWriteSet...)
+	}
+	if !appChangeHasExternalWorkV0(request) {
+		return nil
+	}
+	return appChangeExternalWorkScopesV0(request.ExternalWork)
+}
+
+func appChangeExternalWorkScopesV0(
+	work *orquestaappchange.AppChangeExternalWorkV0,
+) []string {
+	if work == nil {
+		return nil
+	}
+	project := appChangeScopePartV0(work.ProjectRef)
+	if project == "" {
+		project = "external"
+	}
+	scopes := []string{}
+	if kind := appChangeScopePartV0(work.WorkKind); kind != "" {
+		scopes = append(scopes, "external/"+project+"/"+kind)
+	}
+	for _, ref := range work.WorkRefs {
+		part := appChangeScopePartV0(ref)
+		if part == "" {
+			continue
+		}
+		scopes = append(scopes, "external/"+project+"/"+part)
+	}
+	return compactAppChangeSourceRefsV0(scopes)
+}
+
+func appChangeScopePartV0(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = strings.NewReplacer(
+		" ", "-",
+		"\t", "-",
+		"\n", "-",
+		"\r", "-",
+		"/", "-",
+		"\\", "-",
+	).Replace(value)
+	value = strings.Trim(value, "-")
+	if value == "" {
+		return ""
+	}
+	return value
 }

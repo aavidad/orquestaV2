@@ -16,9 +16,13 @@ var forbiddenAutoPlanFragmentsV0 = []string{
 }
 
 func appChangeReadyForAutoPlanV0(request orquestaappchange.AppChangeRequestV0) bool {
-	return len(request.AllowedWriteSet) > 0 &&
+	return appChangeHasRunnableScopeV0(request) &&
 		len(request.AcceptanceCriteria) > 0 &&
 		!containsForbiddenAutoPlanTextV0(request.AcceptanceCriteria...)
+}
+
+func appChangeHasRunnableScopeV0(request orquestaappchange.AppChangeRequestV0) bool {
+	return len(request.AllowedWriteSet) > 0 || appChangeHasExternalWorkV0(request)
 }
 
 func appChangeQuestionReadyV0(

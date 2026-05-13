@@ -96,7 +96,39 @@ func TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno(t *testing.T) {
 	}
 }
 
-func TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinWriteSet(t *testing.T) {
+func TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExternoSinWriteSetLocal(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.AllowedWriteSet = nil
+	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    "opes",
+		InterfaceRefs: []string{"opes-rest-v0", "opes-mcp-v0"},
+		WorkKind:      "draft_content_block",
+		WorkRefs:      []string{"opes-job-001", "opes-topic-001"},
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	if len(decisions) != 8 {
+		t.Fatalf("decisions=%+v", decisions)
+	}
+	task := decisions[6].CreateMicrotask.Task
+	if task.Title != "Resolver bloque documental externo" ||
+		!stringInSetV0(task.WriteSet, "external/opes/draft_content_block") ||
+		!stringInSetV0(task.WriteSet, "external/opes/opes-job-001") {
+		t.Fatalf("task=%+v", task)
+	}
+}
+
+func TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinWriteSetNiExternalWork(t *testing.T) {
 	record := appChangeRecordForSourceTestV0()
 	record.Request.AllowedWriteSet = nil
 	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)

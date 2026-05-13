@@ -59,6 +59,26 @@ Impacto: la fuente solo consume refs compactas ya guardadas en
 `AppChangeRequestV0.external_work`; las decisiones siguen validadas por el
 contrato comun del director.
 
+## Trabajo externo sin write-set local
+
+Decision: Un `external_work` puede crear microtarea aunque
+`allowed_write_set` este vacio. En ese caso la fuente deriva `write_set` como
+scopes externos opacos, por ejemplo `external/opes/draft_content_block` y
+`external/opes/opes-job-001`.
+
+Motivo: OPES no debe mandar rutas locales de Orquesta ni fingir un write-set de
+codigo para pedir un trabajo editorial. La frontera correcta es una ref externa
+compacta del job/topic/chapter de OPES; Orquesta la usa como scope de
+coordinacion y mantiene fuera los internals de OPES.
+
+Alternativas descartadas: obligar a OPES a enviar rutas locales, relajar el
+validador comun para permitir microtareas sin `write_set`, o meter casos
+especiales de OPES en el core.
+
+Impacto: los cambios de codigo siguen exigiendo `allowed_write_set`; solo el
+trabajo externo con `external_work` obtiene scopes derivados. La microtarea
+sigue pasando por contrato, criterios de aceptacion y pruebas obligatorias.
+
 ## Revision del cambio entregado
 
 Decision: La fuente de cambios abre `revision` cuando la microtarea del cambio

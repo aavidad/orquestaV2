@@ -117,7 +117,7 @@ func appChangeMicrotaskDecisionV0(
 			PhaseID:            string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
 			Title:              appChangeTaskTitleV0(request),
 			Summary:            appChangeTaskSummaryV0(request),
-			WriteSet:           append([]string(nil), request.AllowedWriteSet...),
+			WriteSet:           appChangeTaskWriteSetV0(request),
 			AcceptanceCriteria: appChangeTaskCriteriaV0(request.AcceptanceCriteria),
 			RequiredTests:      appChangeTaskRequiredTestsV0(request),
 			FunctionContractRefs: []orquestadirectoragent.DirectorAgentFunctionContractRefV0{{
