@@ -1,7 +1,8 @@
 # Apagado controlado de servidor y agentes
 
 Estado: runbook operativo v0. Documenta el cierre controlado disponible y el
-hueco pendiente para un protocolo graceful con checkpoint completo.
+protocolo cooperativo de checkpoint para agentes Codex arrancados con prompt
+compatible.
 
 ## Principio
 
@@ -124,51 +125,51 @@ proceso servidor. El runtime del servidor:
 Este paso no debe usarse como sustituto de stats ni de RunControl; el endpoint
 es la frontera unica de cierre coordinado.
 
-## Limitacion actual
+## Checkpoint cooperativo
 
-Orquesta todavia no tiene implementado un protocolo completo de checkpoint
-antes de apagar agentes.
+Para agentes Codex arrancados con el prompt actual, el stack usa un protocolo
+por ficheros de control:
 
-Existe `RecordRunCheckpointV0` en RunControl y `PrepareAgentShutdownPortV0` en
-shutdown. El stack actual lo usa de forma conservadora: si no hay agentes en
-vuelo puede registrar checkpoint y continuar; si hay agentes vivos devuelve
-`waiting_checkpoint`.
+1. `PrepareAgentShutdownPortV0` lee stats y descriptors del run por puertos.
+2. Si hay agentes en vuelo, escribe `orquesta_shutdown_request.json` en el
+   runtime dir de cada agente.
+3. El agente debe detectar esa request antes de bloques largos, parar en punto
+   consistente y escribir `agent_shutdown_checkpoint_ack.json`.
+4. Orquesta valida `codex_shutdown_checkpoint_ack.v0` y exige correlacion de
+   `run_ref`, `agent_ref` y `checkpoint_ref`.
+5. Solo cuando todos los agentes en vuelo han respondido se llama a
+   `RecordRunCheckpointV0`.
+6. Despues el supervisor puede drenar stop/outbox y confirmar parada.
 
-Falta la operacion interactiva end-to-end para agentes vivos:
+Si falta descriptor, runtime dir o ACK valido, el endpoint devuelve
+`waiting_checkpoint`, `checkpoint_recorded=false` y refs de agentes pendientes
+en el resultado interno del preparador. No se inventa checkpoint.
 
-- enviar orden `prepare_shutdown` o equivalente al agente;
-- pedir resumen/checkpoint de continuidad;
-- recibir ACK durable del checkpoint;
-- esperar hasta deadline;
-- parar proceso solo despues del ACK o por timeout controlado.
-
-Por tanto, hoy hay dos modos:
+Modos operativos:
 
 - `forced=true`: drena y detiene agentes sin exigir checkpoint previo;
-- `forced=false`: exige checkpoint durable; hoy queda en `waiting_checkpoint`
-  si hay agentes vivos porque falta conector interactivo fiable.
+- `forced=false`: exige checkpoint durable por ACK cooperativo o queda en
+  `waiting_checkpoint`.
 
-## Regla operativa hasta cerrar el hueco
+## Regla operativa
 
 Para trabajo importante, antes de parar:
 
-- pedir al director o al operador que fuerce una entrega/checkpoint documental;
-- comprobar stats y artefactos;
-- despues ejecutar `POST /api/v0/runs/control action=stop forced=true`;
+- usar `POST /api/v0/server/shutdown forced=false`;
+- comprobar si quedan checkpoints pendientes;
+- si un agente no responde, decidir si se espera, se pide intervencion al
+  director o se fuerza el cierre;
 - no asumir continuidad si no existe ACK/checkpoint durable.
 
 ## Mejora pendiente
 
-`orquesta.server.shutdown.v0` ya existe como caso de uso hexagonal para
-checkpoint conservador, stop, drain y stats. Falta elevarlo a protocolo
-graceful completo para agentes vivos:
+Queda elevar el protocolo a todos los runtimes/proveedores, no solo Codex
+cooperativo por prompt:
 
-- conector real de `PrepareAgentShutdownPortV0` por runtime/proveedor;
+- conectores equivalentes para Claude, Gemini, agentes API o runtimes locales;
 - politica de deadline por agente;
-- orden `prepare_shutdown` antes de stop cuando `forced=false`;
-- ACK durable de checkpoint;
-- parada via runtime solo despues de ACK o deadline controlado;
-- stats de cierre por run y agente con razon de cierre.
+- exposicion REST/MCP/web de `pending_agent_refs` y razones sanitizadas;
+- parada via runtime solo despues de ACK o deadline controlado.
 
 La secuencia objetivo completa queda:
 quiesce, prepare checkpoint, ACK durable, stop, confirmacion y cierre final.

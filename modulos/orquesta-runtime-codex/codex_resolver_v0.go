@@ -100,9 +100,11 @@ func (r CodexExecResolverV0) materializeFilesV0(
 		spec.AgentPacket,
 		r.profile.PromptHints,
 		CodexControlFilesV0{
-			PacketPath:   packetPath,
-			AckPath:      filepath.Join(r.profile.RuntimeWorkDir, CodexAgentAckFileNameV0),
-			DecisionPath: filepath.Join(r.profile.RuntimeWorkDir, CodexDirectorDecisionsFileNameV0),
+			PacketPath:          packetPath,
+			AckPath:             filepath.Join(r.profile.RuntimeWorkDir, CodexAgentAckFileNameV0),
+			DecisionPath:        filepath.Join(r.profile.RuntimeWorkDir, CodexDirectorDecisionsFileNameV0),
+			ShutdownRequestPath: filepath.Join(r.profile.RuntimeWorkDir, CodexShutdownRequestFileNameV0),
+			ShutdownAckPath:     filepath.Join(r.profile.RuntimeWorkDir, CodexShutdownCheckpointAckFileNameV0),
 		},
 	)
 	if err := os.WriteFile(promptPath, []byte(prompt), 0o600); err != nil {

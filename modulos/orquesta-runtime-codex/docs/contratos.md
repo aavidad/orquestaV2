@@ -32,11 +32,52 @@ Invariantes:
   control viva en un directorio oculto del proyecto.
 - `ProcessRuntimeLaunchRequestV0` solo expone el wrapper y el workdir del proyecto; no expone argumentos, entorno, HOME, OAuth ni modelo.
 - El agente externo debe escribir `agent_ack.json` en la ruta absoluta indicada en el prompt.
+- El prompt tambien publica rutas de control para apagado cooperativo:
+  `orquesta_shutdown_request.json` y `agent_shutdown_checkpoint_ack.json`.
+  El agente debe comprobar la request antes de bloques largos de edicion o
+  pruebas y responder con ACK de checkpoint si Orquesta solicita cierre.
 - El prompt exige `$caveman` o `compact` cuando este disponible, salida minima y evidencia corta.
 - Varios agentes Codex pueden compartir `project_work_dir` si cada uno usa un `runtime_work_dir` distinto y write-sets disjuntos.
 - `prompt_hints` es configuracion del conector para requisitos de producto que no deben entrar en el core.
 - `path_env` solo existe dentro del wrapper opt-in para runtimes que lo necesitan; no se serializa al request publico.
 - `codex_stdout.log` y `codex_stderr.log` son evidencia operacional local para diagnosticar fallos de conector.
+
+## CodexShutdownCheckpointAckV0
+
+Contrato local del conector para cierre cooperativo de un agente vivo.
+
+Request escrita por Orquesta:
+
+- `schema_version`: `codex_shutdown_request.v0`
+- `run_ref`
+- `agent_ref`
+- `correlation_id`
+- `requested_by`
+- `reason`
+- `checkpoint_ref`
+- `evidence_refs`
+
+ACK esperado del agente:
+
+- `schema_version`: `codex_shutdown_checkpoint_ack.v0`
+- `run_ref`
+- `agent_ref`
+- `checkpoint_ref`
+- `status`: `checkpoint_ready`
+- `summary`
+- `evidence_refs`
+
+Invariantes:
+
+- La request y el ACK viven en `runtime_work_dir`, no en el write-set de la
+  app generada.
+- El ACK debe correlacionar `run_ref`, `agent_ref` y `checkpoint_ref` con la
+  request.
+- Si no existe ACK, el conector devuelve error retryable
+  `checkpoint_ack_not_ready`; Orquesta no registra checkpoint.
+- Un ACK corrupto, de otro agente o con detalles prohibidos no se acepta como
+  cierre seguro.
+- El contrato no expone HOME, OAuth, modelo, proveedor ni DB al nucleo.
 
 ## CodexAgentAckV0
 

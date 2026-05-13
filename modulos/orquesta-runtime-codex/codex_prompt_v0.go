@@ -9,9 +9,11 @@ import (
 )
 
 type CodexControlFilesV0 struct {
-	PacketPath   string
-	AckPath      string
-	DecisionPath string
+	PacketPath          string
+	AckPath             string
+	DecisionPath        string
+	ShutdownRequestPath string
+	ShutdownAckPath     string
 }
 
 func BuildCodexAgentPromptV0(packet orquestaruntime.AgentStartPacketV0, hints []string) string {
@@ -29,6 +31,8 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	packetPath := cleanControlPathV0(control.PacketPath, CodexAgentPacketFileNameV0)
 	ackPath := cleanControlPathV0(control.AckPath, CodexAgentAckFileNameV0)
 	decisionPath := cleanControlPathV0(control.DecisionPath, "")
+	shutdownRequestPath := cleanControlPathV0(control.ShutdownRequestPath, "")
+	shutdownAckPath := cleanControlPathV0(control.ShutdownAckPath, "")
 	var b strings.Builder
 	b.WriteString("Eres un agente externo gobernado por OrquestaV2.\n")
 	b.WriteString("Lee ")
@@ -38,10 +42,16 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString("No edites archivos fuera del write-set salvo ")
 	b.WriteString(ackPath)
 	if decisionPath != "" {
-		b.WriteString(" y ")
+		b.WriteString(", ")
 		b.WriteString(decisionPath)
-		b.WriteString(" como archivos de control")
 	}
+	if shutdownRequestPath != "" && shutdownAckPath != "" {
+		b.WriteString(", ")
+		b.WriteString(shutdownRequestPath)
+		b.WriteString(" y ")
+		b.WriteString(shutdownAckPath)
+	}
+	b.WriteString(" como archivos de control")
 	b.WriteString(".\n")
 	b.WriteString("Mantén cada fichero Go por debajo de 300 lineas; divide responsabilidades si se acerca a ese limite.\n")
 	b.WriteString("PROTOCOLO COMPACTO OBLIGATORIO: activa $caveman full si existe; si no existe, usa compact equivalente.\n")
@@ -52,6 +62,7 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString("Aplica arquitectura hexagonal e i18n si la tarea genera app o UI.\n")
 	b.WriteString("La persistencia concreta solo pertenece a la app generada si la tarea la pide; Orquesta no usa DB por defecto.\n")
 	b.WriteString("Ejecuta las pruebas obligatorias que aparezcan en el paquete si son razonables para el workdir.\n")
+	writeShutdownProtocolV0(&b, shutdownRequestPath, shutdownAckPath)
 	b.WriteString("Al terminar, escribe ")
 	b.WriteString(ackPath)
 	b.WriteString(" con schema codex_agent_ack.v0.\n\n")
@@ -102,6 +113,19 @@ func BuildCodexAgentPromptWithControlFilesV0(
 		}
 	}
 	return b.String()
+}
+
+func writeShutdownProtocolV0(b *strings.Builder, requestPath string, ackPath string) {
+	if requestPath == "" || ackPath == "" {
+		return
+	}
+	b.WriteString("CHECKPOINT DE APAGADO: antes de cada bloque de edicion o prueba comprueba si existe ")
+	b.WriteString(requestPath)
+	b.WriteString(".\n")
+	b.WriteString("Si existe, lee ese JSON, para en un punto consistente, no amplias alcance y escribe ")
+	b.WriteString(ackPath)
+	b.WriteString(" con schema codex_shutdown_checkpoint_ack.v0, run_ref, agent_ref, checkpoint_ref y status checkpoint_ready.\n")
+	b.WriteString("Despues del ACK de checkpoint no sigas ejecutando trabajo largo; termina con salida compacta.\n")
 }
 
 func promptJSONStringArrayV0(values []string) string {

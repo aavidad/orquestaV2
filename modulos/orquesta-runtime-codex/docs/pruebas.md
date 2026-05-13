@@ -20,6 +20,12 @@ Cobertura:
   `--add-dir` para que el agente pueda escribir `agent_ack.json`;
 - `decision_path` aparece como archivo de control y se marca obligatorio solo
   si objetivo o criterios de cierre lo piden;
+- el prompt materializa `orquesta_shutdown_request.json` y
+  `agent_shutdown_checkpoint_ack.json` como ficheros de control de cierre
+  cooperativo;
+- escribe request de shutdown, valida ACK `checkpoint_ready` y trata el ACK
+  ausente como pendiente retryable;
+- rechaza ACK de checkpoint de otro agente/run/checkpoint;
 - con sandbox `workspace-write`, rechaza `runtime_work_dir` fuera de
   `project_work_dir` para no depender de permisos externos ambiguos;
 - fuera de `workspace-write`, el wrapper no anade writable roots extra;

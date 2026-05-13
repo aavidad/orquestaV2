@@ -53,6 +53,31 @@ Reglas:
   servicio, no como dependencias del core.
 - Si falta un puerto real requerido, el arranque falla antes de lanzar agentes.
 
+## Shutdown cooperativo de agentes Codex
+
+Contrato interno del stack:
+
+```text
+PrepareAgentShutdownPortV0
+  -> stats del run por puertos
+  -> descriptors de agentes Codex por ReceiptStore
+  -> request de checkpoint en runtime_work_dir
+  -> ACK de checkpoint validado por runtime-codex
+  -> RecordRunCheckpointV0 solo si todos responden
+```
+
+Invariantes:
+
+- El stack no conoce detalles internos del core; usa `RunStore`,
+  `ReceiptStore`, `ProcessRegistry`, progreso y uso por puertos.
+- Si no hay agentes en vuelo, registra checkpoint conservador como antes.
+- Si hay agentes en vuelo, escribe una request por agente y exige ACK
+  `codex_shutdown_checkpoint_ack.v0`.
+- Si falta descriptor, runtime dir o ACK valido, devuelve
+  `checkpoint_recorded=false` y `pending_agent_refs`.
+- No se exponen rutas de runtime, HOME, modelo, proveedor ni DB en el contrato
+  publico; solo refs compactas.
+
 ## Ruta `/nueva-app` opt-in
 
 Contrato funcional:
@@ -238,9 +263,9 @@ Puertos usados:
 - `RunControlReaderPortV0` y `RunControlWriterPortV0` desde el store de control;
 - `RunControlCheckpointWriterPortV0` desde el store de control para dejar ACK
   durable cuando el shutdown no es forzado;
-- `PrepareAgentShutdownPortV0` implementado por el stack de forma conservadora:
-  solo registra checkpoint automatico si las stats no muestran agentes en
-  vuelo;
+- `PrepareAgentShutdownPortV0` implementado por el stack: si no hay agentes en
+  vuelo registra checkpoint conservador; si los hay, pide ACK cooperativo por
+  runtime dir de cada agente Codex;
 - `RunGlobalSupervisorV0` del propio stack como supervisor hexagonal;
 - stats de shutdown calculadas desde `RunStore`, telemetria, progreso y usage
   inyectados en `StackConfigV0`.

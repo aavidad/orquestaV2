@@ -11,14 +11,16 @@ import (
 const (
 	CodexConnectorProfileSchemaVersionV0 = "codex_connector_profile.v0"
 
-	CodexAgentPacketFileNameV0       = "agent_packet.json"
-	CodexAgentPromptFileNameV0       = "agent_prompt.txt"
-	CodexAgentAckFileNameV0          = "agent_ack.json"
-	CodexDirectorDecisionsFileNameV0 = "director_decisions.json"
-	CodexLastMessageFileNameV0       = "codex_last_message.txt"
-	CodexStdoutFileNameV0            = "codex_stdout.log"
-	CodexStderrFileNameV0            = "codex_stderr.log"
-	CodexWrapperFileNameV0           = "orquesta_codex_exec_v0.sh"
+	CodexAgentPacketFileNameV0           = "agent_packet.json"
+	CodexAgentPromptFileNameV0           = "agent_prompt.txt"
+	CodexAgentAckFileNameV0              = "agent_ack.json"
+	CodexDirectorDecisionsFileNameV0     = "director_decisions.json"
+	CodexShutdownRequestFileNameV0       = "orquesta_shutdown_request.json"
+	CodexShutdownCheckpointAckFileNameV0 = "agent_shutdown_checkpoint_ack.json"
+	CodexLastMessageFileNameV0           = "codex_last_message.txt"
+	CodexStdoutFileNameV0                = "codex_stdout.log"
+	CodexStderrFileNameV0                = "codex_stderr.log"
+	CodexWrapperFileNameV0               = "orquesta_codex_exec_v0.sh"
 )
 
 type CodexConnectorIssueCodeV0 string

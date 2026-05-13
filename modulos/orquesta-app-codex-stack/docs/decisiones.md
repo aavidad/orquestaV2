@@ -37,14 +37,21 @@ Estado: aceptada.
 
 ```text
 Fecha: 2026-05-13
-Decision: El preparador de checkpoint del stack es conservador.
-Motivo: hoy no existe canal interactivo fiable para pedir a un proceso Codex ya
-vivo que escriba un checkpoint nuevo. Inventar uno desde el stack reabriria el
-bucle de parches. Por tanto, `forced=false` solo registra checkpoint automatico
-cuando las stats indican que no hay agentes en vuelo.
-Impacto: el shutdown no forzado de una run activa queda en
-`waiting_checkpoint`; el cierre forzado sigue disponible por operador/CLI. El
-futuro conector interactivo debera implementar `PrepareAgentShutdownPortV0`.
+Decision: El preparador de checkpoint del stack usa protocolo cooperativo por
+ficheros de control, no stdin interactivo inventado.
+Motivo: Codex real en modo `exec` no garantiza un canal vivo para ordenar
+checkpoint. Sin embargo, si el prompt inicial obliga a comprobar una request de
+shutdown, el runtime dir si es una frontera verificable y durable.
+Alternativas:
+  - Registrar checkpoint solo si no hay agentes en vuelo: insuficiente para
+    trabajos largos.
+  - Cortar procesos y asumir continuidad: descartado porque no deja ACK.
+  - Meter rutas/proveedor en core: descartado por romper hexagonal.
+Impacto: cuando `forced=false`, el stack lista agentes en vuelo, escribe
+`orquesta_shutdown_request.json` en el runtime de cada agente y solo llama a
+`RecordRunCheckpointV0` cuando todos devuelven
+`agent_shutdown_checkpoint_ack.json` valido. Si falta algo, devuelve
+`pending_agent_refs` y mantiene `waiting_checkpoint`.
 Estado: aceptada.
 ```
 

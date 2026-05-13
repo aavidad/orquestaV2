@@ -1,5 +1,29 @@
 # Decisiones: orquesta-runtime-codex
 
+## RTCODEX-DEC-009
+
+```text
+Fecha: 2026-05-13
+Decision: El cierre seguro de Codex usa un protocolo cooperativo por ficheros
+de control en `runtime_work_dir`.
+Motivo: `codex exec` arranca con prompt de entrada y no ofrece un canal stdin
+interactivo fiable para decirle a cualquier agente vivo que pare y guarde
+checkpoint. Fingir esa capacidad repetiria el problema de v1/v2: esperar o
+parchear sin contrato real.
+Alternativas:
+  - Mandar senales al proceso y asumir continuidad: descartado porque no genera
+    evidencia durable de checkpoint.
+  - Usar rutas o detalles de proceso dentro del core: descartado por romper
+    hexagonal y filtrar runtime.
+  - Esperar a que no haya agentes vivos: conservador, pero insuficiente para
+    cierre no forzado de trabajos largos.
+Impacto: cada prompt incluye `orquesta_shutdown_request.json`; si aparece, el
+agente debe escribir `agent_shutdown_checkpoint_ack.json` con schema
+`codex_shutdown_checkpoint_ack.v0`. El stack solo podra registrar checkpoint
+cuando ese ACK exista, correle y no filtre detalles prohibidos.
+Estado: aceptada.
+```
+
 ## RTCODEX-DEC-008
 
 ```text

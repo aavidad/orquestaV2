@@ -49,6 +49,11 @@ Cobertura Go actual:
   localmente el caso real de programacion paralela con write-set materializado,
   app Go compilable y un ACK faltante; el helper devuelve
   `project_compiles_but_ack_missing` en vez de esperar al deadline global.
+- `TestStackShutdownCheckpointV0SolicitaAckSiHayAgenteEnVuelo` valida que el
+  shutdown no forzado escribe request de checkpoint y deja pendiente al agente
+  vivo si aun no hay ACK.
+- `TestStackShutdownCheckpointV0RegistraCuandoTodosLosAgentesResponden` valida
+  que el stack registra checkpoint solo despues de ACK de checkpoint valido.
 
 Guardas esperadas para pruebas futuras:
 
