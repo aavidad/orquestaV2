@@ -78,6 +78,27 @@ Impacto: mientras `AppChangeExternalWorkV0.input_fields` no exista, la fuente
 mantiene compatibilidad y no lo lee. Cuando exista, el contrato esperado es una
 lista opcional de campos `{name,value,values}` con nombres de dominio estables.
 
+## Granularidad editorial de OPES
+
+Decision: En OPES, `draft_content_block` no se sobreatomiza. Aunque el core
+mantenga el nombre historico `create_microtask`, la tarea creada representa una
+unidad editorial durable: bloque, subcapitulo o capitulo coherente segun lo
+haya decidido OPES. Los trabajos `summarize_*` y `create_exam_outline` si pueden
+ser pequenos porque son derivados y trazables.
+
+Motivo: para temarios de 45-50 folios, partir la redaccion en fragmentos
+minimos degrada continuidad, estructura, tono y trazabilidad. El problema no se
+arregla lanzando mas agentes sobre parrafos aislados; se arregla dando a cada
+agente un paquete editorial suficiente y una unidad con sentido.
+
+Alternativas descartadas: forzar una microtarea por parrafo, pedir al agente un
+tema completo de 50 folios sin paquete editorial, o dejar que Orquesta decida
+la granularidad de OPES sin contexto de dominio.
+
+Impacto: la fuente anade criterios y pruebas para validar granularidad
+editorial coherente. Orquesta solo debe pedir division adicional a OPES si el
+job excede contexto, trazabilidad o capacidad de revision.
+
 ## Trabajo externo sin write-set local
 
 Decision: Un `external_work` puede crear microtarea aunque

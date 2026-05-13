@@ -33,8 +33,20 @@ func appChangeTaskTitleV0(request orquestaappchange.AppChangeRequestV0) string {
 	switch strings.TrimSpace(request.ExternalWork.WorkKind) {
 	case "draft_content_block":
 		return "Redactar bloque documental " + appChangeExternalWorkTitleScopeV0(request.ExternalWork)
+	case "summarize_block":
+		return "Resumir bloque documental externo"
+	case "summarize_chapter":
+		return "Resumir capitulo documental externo"
+	case "summarize_topic":
+		return "Resumir tema documental externo"
+	case "create_exam_outline":
+		return "Crear esquema de examen externo"
 	case "research_sources":
 		return "Resolver investigacion externa"
+	case "split_syllabus_topic":
+		return "Dividir tema de temario externo"
+	case "draft_topic_outline":
+		return "Preparar esquema de tema externo"
 	case "review_legal":
 		return "Resolver revision legal externa"
 	case "review_pedagogical":
@@ -54,7 +66,10 @@ func appChangeTaskTitleV0(request orquestaappchange.AppChangeRequestV0) string {
 
 func appChangeTaskSummaryV0(request orquestaappchange.AppChangeRequestV0) string {
 	if appChangeIsDraftContentBlockWorkV0(request) {
-		return "Redactar bloque con paquete de dominio suficiente: temario completo, esquema, objetivo de capitulo, posicion de bloque, vecinos, fuentes, criterios y longitud si llegan."
+		return "Redactar unidad editorial amplia con paquete de dominio suficiente; no trocear un temario largo en parrafos sin continuidad."
+	}
+	if appChangeIsSummaryExternalWorkV0(request) {
+		return "Crear resumen derivado compacto con trazabilidad a bloques, capitulos, tema y fuentes de origen."
 	}
 	if appChangeIsDocumentaryExternalWorkV0(request) {
 		return "Resolver trabajo documental con paquete de dominio suficiente: temario, esquema, objetivo, fuentes, criterios y longitud si llegan."
@@ -87,7 +102,13 @@ func appChangeExternalWorkCriteriaV0(
 	)
 	if appChangeIsDraftContentBlockWorkV0(request) {
 		criteria = append(criteria,
-			"Para draft_content_block, usar temario completo, esquema, objetivo de capitulo, posicion de bloque, vecinos, fuentes, criterios y longitud si llegan en input_fields.",
+			"Para draft_content_block, usar paquete editorial suficiente y no sobreatomizar: bloque, subcapitulo o capitulo coherente si OPES lo envio asi.",
+			"No redactar un tema de 50 folios sin paquete suficiente; pedir division editorial a OPES si excede contexto o trazabilidad.",
+		)
+	} else if appChangeIsSummaryExternalWorkV0(request) {
+		criteria = append(criteria,
+			"Para summarize_* y create_exam_outline, aceptar granularidad pequena porque son artefactos derivados y trazables.",
+			"Conservar matices, excepciones, plazos, organos, fuentes criticas y advertencias de examen del material de origen.",
 		)
 	} else {
 		criteria = append(criteria,
@@ -113,7 +134,36 @@ func appChangeIsDocumentaryExternalWorkV0(
 		return false
 	}
 	switch strings.TrimSpace(request.ExternalWork.WorkKind) {
-	case "draft_content_block", "documentation":
+	case "draft_content_block",
+		"documentation",
+		"research_sources",
+		"split_syllabus_topic",
+		"draft_topic_outline",
+		"summarize_block",
+		"summarize_chapter",
+		"summarize_topic",
+		"create_exam_outline",
+		"review_legal",
+		"review_pedagogical",
+		"review_quality",
+		"validate_topic",
+		"assemble_topic",
+		"export_topic",
+		"verify_sources":
+		return true
+	default:
+		return false
+	}
+}
+
+func appChangeIsSummaryExternalWorkV0(
+	request orquestaappchange.AppChangeRequestV0,
+) bool {
+	if !appChangeHasExternalWorkV0(request) {
+		return false
+	}
+	switch strings.TrimSpace(request.ExternalWork.WorkKind) {
+	case "summarize_block", "summarize_chapter", "summarize_topic", "create_exam_outline":
 		return true
 	default:
 		return false

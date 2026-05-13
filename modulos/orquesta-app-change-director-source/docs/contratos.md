@@ -30,12 +30,18 @@ conocer la app externa. Solo cambia la proyeccion compacta:
 
 - publica contrato `ApplyExternalDomainWorkV0`;
 - titula la microtarea segun `work_kind` (`documentation`, `generation`,
-  `draft_content_block`, `review` o generico);
+  `draft_content_block`, `summarize_*`, `review` o generico);
 - exige validar el contrato externo de dominio junto a los criterios de
   aceptacion.
 - para trabajos documentales, deja explicito que el agente no recibe contexto
   minimo sino un paquete de dominio suficiente, con fuentes y longitud cuando
   el contrato las aporte.
+- para `draft_content_block`, declara que la unidad es editorial y amplia:
+  bloque, subcapitulo o capitulo coherente segun lo haya decidido OPES; no un
+  parrafo aislado sin continuidad.
+- para `summarize_block`, `summarize_chapter`, `summarize_topic` y
+  `create_exam_outline`, permite granularidad pequena porque son artefactos
+  derivados y trazables.
 
 `AppChangeExternalWorkV0.input_fields` es opcional y compatible hacia atras,
 con la forma `[]DomainWorkFieldV0` ya usada por `orquesta-domain-work`: objetos
@@ -54,6 +60,12 @@ con la forma `[]DomainWorkFieldV0` ya usada por `orquesta-domain-work`: objetos
 La fuente no interpreta esos campos ni conoce OPES. Solo proyecta `title`,
 `summary`, `criteria` y `required_tests` para que el agente valide el paquete
 por el contrato externo y no invente campos de dominio.
+
+Aunque el comando del core se llame `create_microtask`, en trabajos externos
+representa una unidad durable de workflow. Para OPES no implica partir un
+temario de 50 folios en trozos minimos; esa granularidad la decide OPES desde
+su plan editorial. Orquesta solo debe subdividir si el job excede contexto,
+trazabilidad o capacidad de revision.
 
 La fuente no ejecuta el review gate. Solo abre la fase `revision`; la
 validacion de ficheros, pruebas, write-set y tamano pertenece al proveedor de

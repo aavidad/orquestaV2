@@ -15,7 +15,13 @@ func appChangeTaskRequiredTestsV0(
 		if appChangeIsDraftContentBlockWorkV0(request) {
 			tests = append(tests,
 				"validar paquete de bloque documental",
+				"validar granularidad editorial coherente",
 				"validar fuentes, criterios y longitud si llegan",
+			)
+		} else if appChangeIsSummaryExternalWorkV0(request) {
+			tests = append(tests,
+				"validar trazabilidad del resumen",
+				"validar conservacion de matices criticos",
 			)
 		} else if appChangeIsDocumentaryExternalWorkV0(request) {
 			tests = append(tests,

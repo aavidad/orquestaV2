@@ -125,13 +125,47 @@ func TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExternoSinWriteSetLocal
 	}
 	task := decisions[6].CreateMicrotask.Task
 	if task.Title != "Redactar bloque documental OPES" ||
-		task.Summary != "Redactar bloque con paquete de dominio suficiente: temario completo, esquema, objetivo de capitulo, posicion de bloque, vecinos, fuentes, criterios y longitud si llegan." ||
+		task.Summary != "Redactar unidad editorial amplia con paquete de dominio suficiente; no trocear un temario largo en parrafos sin continuidad." ||
 		!stringInSetV0(task.WriteSet, "external/opes/draft_content_block") ||
 		!stringInSetV0(task.WriteSet, "external/opes/opes-job-001") ||
 		!stringInSetV0(task.AcceptanceCriteria, "Tratar el paquete de dominio OPES como entrada suficiente, no como contexto minimo.") ||
-		!stringInSetV0(task.AcceptanceCriteria, "Para draft_content_block, usar temario completo, esquema, objetivo de capitulo, posicion de bloque, vecinos, fuentes, criterios y longitud si llegan en input_fields.") ||
+		!stringInSetV0(task.AcceptanceCriteria, "Para draft_content_block, usar paquete editorial suficiente y no sobreatomizar: bloque, subcapitulo o capitulo coherente si OPES lo envio asi.") ||
+		!stringInSetV0(task.AcceptanceCriteria, "No redactar un tema de 50 folios sin paquete suficiente; pedir division editorial a OPES si excede contexto o trazabilidad.") ||
 		!stringInSetV0(task.RequiredTests, "validar paquete de bloque documental") ||
+		!stringInSetV0(task.RequiredTests, "validar granularidad editorial coherente") ||
 		!stringInSetV0(task.RequiredTests, "validar fuentes, criterios y longitud si llegan") {
+		t.Fatalf("task=%+v", task)
+	}
+}
+
+func TestAppChangeDirectorDecisionSourceV0ResumenPermiteGranularidadPequena(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.AllowedWriteSet = nil
+	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    "opes",
+		InterfaceRefs: []string{"opes-rest-v0", "opes-mcp-v0"},
+		WorkKind:      "summarize_chapter",
+		WorkRefs:      []string{"opes-topic-001", "opes-chapter-001"},
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	task := decisions[6].CreateMicrotask.Task
+	if task.Title != "Resumir capitulo documental externo" ||
+		task.Summary != "Crear resumen derivado compacto con trazabilidad a bloques, capitulos, tema y fuentes de origen." ||
+		!stringInSetV0(task.AcceptanceCriteria, "Para summarize_* y create_exam_outline, aceptar granularidad pequena porque son artefactos derivados y trazables.") ||
+		!stringInSetV0(task.AcceptanceCriteria, "Conservar matices, excepciones, plazos, organos, fuentes criticas y advertencias de examen del material de origen.") ||
+		!stringInSetV0(task.RequiredTests, "validar trazabilidad del resumen") ||
+		!stringInSetV0(task.RequiredTests, "validar conservacion de matices criticos") {
 		t.Fatalf("task=%+v", task)
 	}
 }

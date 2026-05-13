@@ -21,7 +21,11 @@ Casos focales:
   un `external_work` `draft_content_block` de OPES crea microtarea usando
   scopes externos derivados, sin exigir rutas locales en `allowed_write_set`, y
   declara temario, esquema, objetivo, posicion, vecinos, fuentes, criterios y
-  longitud si llegan por `input_fields`.
+  longitud si llegan por `input_fields`, ademas de no sobreatomizar temarios
+  largos.
+- `TestAppChangeDirectorDecisionSourceV0ResumenPermiteGranularidadPequena`:
+  `summarize_chapter` admite tarea pequena porque es artefacto derivado y exige
+  trazabilidad y conservacion de matices criticos.
 - `TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinWriteSetNiExternalWork`:
   sin write-set ni `external_work` no hay microtarea automatica.
 - `TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinCriterios`: sin
