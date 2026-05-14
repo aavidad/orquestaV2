@@ -74,7 +74,7 @@ func BuildExternalWorkRunRequestWithContextV0(
 		CurrentStateRefs:   currentStateRefsForJobV0(safeJob, workRefs),
 		AcceptanceCriteria: acceptanceCriteriaForJobV0(job.Type),
 		Constraints:        constraintsForJobV0(),
-		AllowedWriteSet:    []string{"external/opes/" + workKind},
+		AllowedWriteSet:    []string{opesJobWriteSetV0(workKind, safeJob)},
 		ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
 			ProjectRef:    config.ProjectRef,
 			JobRef:        job.ID,
@@ -318,6 +318,10 @@ func constraintsForJobV0() []string {
 		"usar solo el paquete de dominio recibido",
 		"si falta contexto obligatorio declarar bloqueo",
 	}
+}
+
+func opesJobWriteSetV0(workKind string, safeJob string) string {
+	return "external/opes/" + strings.TrimSpace(workKind) + "/" + strings.TrimSpace(safeJob)
 }
 
 func appendExpansionDocumentContractFieldsV0(

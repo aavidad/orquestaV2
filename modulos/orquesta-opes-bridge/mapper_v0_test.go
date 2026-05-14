@@ -40,7 +40,7 @@ func TestBuildExternalWorkRunRequestV0MapeaSummarizeTopic(t *testing.T) {
 	if req.ProjectRef != "opes" ||
 		req.AppChangeRequest.AppRef != "opes" ||
 		req.AppChangeRequest.ChangeRef != "opes-job-job-ref-summary-001" ||
-		req.AppChangeRequest.AllowedWriteSet[0] != "external/opes/summarize_topic" ||
+		req.AppChangeRequest.AllowedWriteSet[0] != "external/opes/summarize_topic/job-ref-summary-001" ||
 		work == nil ||
 		work.JobRef != "job-ref-summary-001" ||
 		work.WorkKind != "summarize_topic" ||
@@ -68,7 +68,7 @@ func TestBuildExternalWorkRunRequestV0MapeaExpansionComoLarge(t *testing.T) {
 		t.Fatalf("request no construida")
 	}
 	fields := req.AppChangeRequest.ExternalWork.InputFields
-	if req.AppChangeRequest.AllowedWriteSet[0] != "external/opes/expand_topic_from_summary" ||
+	if req.AppChangeRequest.AllowedWriteSet[0] != "external/opes/expand_topic_from_summary/job-ref-expansion-001" ||
 		!fieldValueForTestV0(fields, "expected_artifact_type", "topic_expansion_package") ||
 		!fieldValueForTestV0(fields, "context_budget_profile", "large") ||
 		!fieldValuesForTestV0(fields, "required_document_variants", []string{
