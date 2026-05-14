@@ -227,6 +227,7 @@ func TestBuildDirectorRunStatsV0IgnoraAssessmentObsoletoTrasDelivery(t *testing.
 	stats := BuildDirectorRunStatsWithObservationsV0(run, []AgentProgressObservationV0{}, nil)
 
 	if stats.Counts.TasksDelivered != 1 ||
+		stats.Progress.PercentComplete != 100 ||
 		stats.Progress.ObservedAgents != 0 ||
 		stats.Progress.StalledAgents != 0 ||
 		stats.Progress.TasksObserved != 1 {

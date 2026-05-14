@@ -61,3 +61,16 @@ Validacion real 2026-05-13:
   programacion.
 - Queda pendiente repetirlo hasta completar una app entera con review,
   validacion y cierre.
+
+Ampliacion 2026-05-14:
+
+- En trabajos externos de OPES, `delivered` ya significa que Orquesta recibio
+  ACK valido, registro `DeliveryRegistered` y entrego el artefacto al conector
+  externo. Aunque la tarea no este formalmente cerrada por `CloseTask`, el
+  porcentaje operativo debe contar esa tarea como resuelta.
+- `progress.percent_complete` se calcula con tareas resueltas:
+  `delivered_tasks union closed_tasks`. `progress.tasks_closed` sigue contando
+  solo cierre formal para no mezclar estados contractuales.
+- Validacion: prueba real OPES `summarize_topic` con Codex `gpt-5.5 xhigh`
+  genero `topic_summary`, Orquesta lo entrego a OPES y el nucleo ya tiene test
+  que exige `percent_complete=100` cuando una unica tarea esta `delivered`.

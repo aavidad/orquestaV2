@@ -15,9 +15,10 @@ func BuildDirectorProgressStatsV0(
 ) DirectorProgressStatsV0 {
 	tasks := compactStringsV0(run.Tasks)
 	closed := autonomousStringSetV0(run.ClosedTasks)
+	resolved := directorResolvedTaskCountV0(tasks, run)
 	progress := DirectorProgressStatsV0{
 		SourceStatus:    progressSourceStatusV0(observations, issues),
-		PercentComplete: directorProgressPercentV0(len(tasks), len(closed)),
+		PercentComplete: directorProgressPercentV0(len(tasks), resolved),
 		TasksTotal:      len(tasks),
 		TasksClosed:     len(closed),
 		Issues:          issues,
@@ -94,6 +95,20 @@ func directorProgressPercentV0(total int, closed int) int {
 		closed = total
 	}
 	return (closed * 100) / total
+}
+
+func directorResolvedTaskCountV0(
+	tasks []string,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) int {
+	resolved := autonomousStringSetV0(append(append([]string{}, run.DeliveredTasks...), run.ClosedTasks...))
+	count := 0
+	for _, taskRef := range tasks {
+		if resolved[strings.TrimSpace(taskRef)] {
+			count++
+		}
+	}
+	return count
 }
 
 func runFromDirectorStatsV0(
