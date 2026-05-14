@@ -60,7 +60,7 @@ func TestCodexExecResolverV0MaterializaPacketPromptYWrapper(t *testing.T) {
 
 func TestCodexExecResolverV0NoMaterializaSiProcessRequestEsInvalido(t *testing.T) {
 	profile := codexProfileForTestV0(t)
-	profile.RuntimeWorkDir = filepath.Join(t.TempDir(), "token-work")
+	profile.RuntimeWorkDir = profile.ProjectWorkDir
 
 	_, issues := NewCodexExecResolverV0(profile).
 		ResolveExternalAgentProcessCommandV0(context.Background(), codexSpecForTestV0())
@@ -197,7 +197,7 @@ func codexProfileForTestV0(t *testing.T) CodexConnectorProfileV0 {
 		OptIn:          true,
 		CommandPath:    filepath.Join(root, "bin", "codex"),
 		ProjectWorkDir: filepath.Join(root, "project"),
-		RuntimeWorkDir: filepath.Join(root, "project", ".orquesta-codex-runtime", "agent"),
+		RuntimeWorkDir: filepath.Join(root, "runtime", "agent"),
 		Sandbox:        "workspace-write",
 		ApprovalPolicy: "never",
 	}

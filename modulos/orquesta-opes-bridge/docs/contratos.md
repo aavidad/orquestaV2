@@ -23,6 +23,9 @@ Reglas:
 - para `summarize_topic`, el bridge hidrata `topic_blocks` desde
   `GET /api/topics/{topic_id}/blocks`; si no puede obtenerlos, no crea el run
   para evitar resumenes pobres;
+- para `expand_topic_from_summary`, el bridge exige paquete editorial
+  multiformato: `tema_grande`, `tema_mediano`, `resumen`,
+  `esquema_repaso` y `plan_visuales`;
 - `allowed_write_set` se limita a `external/opes/<work_kind>/<job_id>` para que
   cada job tenga una entrega unica y varios agentes del mismo tipo no se pisen;
 - los artefactos esperados se expresan como input fields, no como decisiones de

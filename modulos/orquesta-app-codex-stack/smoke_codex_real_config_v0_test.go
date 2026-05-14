@@ -34,7 +34,7 @@ func codexStackRealSmokeConfigForTestV0(t *testing.T) codexStackRealSmokeConfigV
 	sandbox := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_SANDBOX"))
 	runtimeDir := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_RUNTIME_WORKDIR"))
 	if runtimeDir == "" && sandbox == "workspace-write" {
-		runtimeDir = filepath.Join(projectDir, ".orquesta-runtime")
+		runtimeDir = filepath.Join(filepath.Dir(projectDir), ".orquesta-runtime", filepath.Base(projectDir))
 	}
 	if runtimeDir == "" {
 		runtimeDir = filepath.Join(t.TempDir(), "runtime")

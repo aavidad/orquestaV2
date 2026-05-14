@@ -24,12 +24,12 @@ Invariantes:
 - El resolver materializa `agent_packet.json`, `agent_prompt.txt`, `agent_ack.json` esperado y logs bajo `runtime_work_dir`, no bajo el workdir compartido del proyecto.
 - `ProcessRuntimeLaunchRequestV0` ejecuta el wrapper con `working_dir=project_work_dir` para que el proceso externo materialice codigo/documentacion en el proyecto.
 - El wrapper refuerza el mismo contrato con `cd project_work_dir` y `-C project_work_dir`, pero lee prompt desde `runtime_work_dir` y redirige stdout/stderr/last-message tambien a `runtime_work_dir`.
-- Si `sandbox=workspace-write`, `runtime_work_dir` debe estar dentro de
-  `project_work_dir`; el conector rechaza perfiles que dejen el ACK en un
-  sibling externo.
+- Si `sandbox=workspace-write`, `runtime_work_dir` debe estar fuera de
+  `project_work_dir` y no puede contenerlo. El conector rechaza runtime igual,
+  interno o ancestro del proyecto para evitar contaminacion entre agentes.
 - En `workspace-write`, el wrapper tambien pasa `--add-dir runtime_work_dir`
-  como defensa adicional, pero el contrato principal es que el runtime de
-  control viva en un directorio oculto del proyecto.
+  para que Codex pueda escribir ACK/logs/control sin exponer esos ficheros al
+  contexto normal del proyecto.
 - `ProcessRuntimeLaunchRequestV0` solo expone el wrapper y el workdir del proyecto; no expone argumentos, entorno, HOME, OAuth ni modelo.
 - El agente externo debe escribir `agent_ack.json` en la ruta absoluta indicada en el prompt.
 - El prompt tambien publica rutas de control para apagado cooperativo:
@@ -37,7 +37,7 @@ Invariantes:
   El agente debe comprobar la request antes de bloques largos de edicion o
   pruebas y responder con ACK de checkpoint si Orquesta solicita cierre.
 - El prompt exige `$caveman` o `compact` cuando este disponible, salida minima y evidencia corta.
-- Varios agentes Codex pueden compartir `project_work_dir` si cada uno usa un `runtime_work_dir` distinto y write-sets disjuntos.
+- Varios agentes Codex pueden compartir `project_work_dir` si cada uno usa un `runtime_work_dir` externo distinto y write-sets disjuntos.
 - `prompt_hints` es configuracion del conector para requisitos de producto que no deben entrar en el core.
 - `path_env` solo existe dentro del wrapper opt-in para runtimes que lo necesitan; no se serializa al request publico.
 - `codex_stdout.log` y `codex_stderr.log` son evidencia operacional local para diagnosticar fallos de conector.

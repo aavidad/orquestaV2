@@ -60,7 +60,7 @@ func codexRealSmokeRuntimeDirForTestV0(t *testing.T, projectDir string, sandbox 
 	t.Helper()
 	value := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_RUNTIME_WORKDIR"))
 	if value == "" && sandbox == "workspace-write" {
-		value = filepath.Join(projectDir, ".orquesta-codex-runtime")
+		value = filepath.Join(filepath.Dir(projectDir), ".orquesta-codex-runtime", filepath.Base(projectDir))
 	}
 	if value != "" {
 		return codexRealSmokeEnsureDirV0(t, "ORQUESTA_CODEX_RUNTIME_WORKDIR", value)

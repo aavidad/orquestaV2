@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +27,38 @@ func TestServerConfigFromEnvV0UsaPresupuestoDeComandosParaFronteraParalela(t *te
 	if got != orquestadirectorrunner.DirectorCycleMaxCommandsV0 {
 		t.Fatalf("max_commands=%d want %d", got, orquestadirectorrunner.DirectorCycleMaxCommandsV0)
 	}
+}
+
+func TestServerConfigFromEnvV0AislaControlFueraDelProyectoPorDefecto(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)
+	t.Setenv("ORQUESTA_SERVER_STATE_DIR", "")
+	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", "")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	for name, dir := range map[string]string{
+		"state":   config.StateDir,
+		"runtime": config.RuntimeWorkDir,
+	} {
+		if pathIsInsideForTestV0(t, dir, projectDir) {
+			t.Fatalf("%s dir dentro del proyecto: %s", name, dir)
+		}
+		if filepath.Dir(filepath.Dir(dir)) != filepath.Join(filepath.Dir(projectDir), ".orquesta-control") {
+			t.Fatalf("%s dir inesperado: %s", name, dir)
+		}
+	}
+}
+
+func pathIsInsideForTestV0(t *testing.T, child string, parent string) bool {
+	t.Helper()
+	rel, err := filepath.Rel(filepath.Clean(parent), filepath.Clean(child))
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 func TestCodexRuntimeConfigV0UsaUmbralesConservadoresPorDefecto(t *testing.T) {

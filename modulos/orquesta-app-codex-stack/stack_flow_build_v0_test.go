@@ -37,7 +37,7 @@ func mustBuildCodexStackWithDomainWorkForTestV0(
 ) StackV0 {
 	t.Helper()
 	projectDir := t.TempDir()
-	runtimeDir := filepath.Join(projectDir, ".orquesta-runtime")
+	runtimeDir := filepath.Join(t.TempDir(), "runtime")
 	runMemory := orquestarunmemory.NewRunMemoryStoreV0()
 	stack, err := BuildStackV0(ConfigV0{
 		Enabled: true,

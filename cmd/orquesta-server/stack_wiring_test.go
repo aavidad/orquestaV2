@@ -14,7 +14,7 @@ import (
 func TestBuildStackFromEnvV0UsaConectoresDurablesFileBased(t *testing.T) {
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()
-	runtimeDir := filepath.Join(projectDir, ".orquesta-runtime")
+	runtimeDir := filepath.Join(t.TempDir(), "runtime")
 	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)
 	t.Setenv("ORQUESTA_SERVER_STATE_DIR", stateDir)
 	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", runtimeDir)

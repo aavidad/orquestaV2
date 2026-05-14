@@ -19,9 +19,9 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		return orquestaserver.ConfigV0{}, err
 	}
 	stateDir := absDirEnvOrDefaultV0("ORQUESTA_SERVER_STATE_DIR",
-		filepath.Join(projectDir, ".orquesta-server"))
+		filepath.Join(defaultControlDirV0(projectDir), "state"))
 	runtimeDir := absDirEnvOrDefaultV0("ORQUESTA_CODEX_RUNTIME_WORKDIR",
-		filepath.Join(projectDir, ".orquesta-runtime"))
+		filepath.Join(defaultControlDirV0(projectDir), "runtime"))
 	config := orquestaserver.ConfigV0{
 		Addr:           envOrDefaultV0("ORQUESTA_SERVER_ADDR", orquestaserver.DefaultAddrV0),
 		StateDir:       stateDir,
@@ -45,6 +45,15 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		},
 	}
 	return orquestaserver.NormalizeConfigV0(config), orquestaserver.ValidateConfigV0(config)
+}
+
+func defaultControlDirV0(projectDir string) string {
+	cleanProject := filepath.Clean(projectDir)
+	base := filepath.Base(cleanProject)
+	if base == "" || base == "." || base == string(os.PathSeparator) {
+		base = "project"
+	}
+	return filepath.Join(filepath.Dir(cleanProject), ".orquesta-control", base)
 }
 
 func projectDirFromEnvV0() (string, error) {

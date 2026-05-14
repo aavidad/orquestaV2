@@ -1,5 +1,31 @@
 # Decisiones: orquesta-runtime-codex
 
+## RTCODEX-DEC-010
+
+```text
+Fecha: 2026-05-14
+Decision: Con sandbox `workspace-write`, `runtime_work_dir` debe estar fuera de
+`project_work_dir`; el wrapper lo autoriza con `--add-dir`.
+Motivo: una prueba real OPES con varios agentes mostro contaminacion de
+contexto: al vivir `.orquesta-runtime` dentro del proyecto, un agente podia leer
+`agent_packet.json` y `codex_stderr.log` de otros agentes. Eso rompe el
+aislamiento, aumenta contexto y reproduce el patron de v1/v2 de bucles por
+estado oculto compartido.
+Evidencia: smoke real local del 2026-05-14 con `codex exec`, `workspace-write`
+y `--add-dir runtime_work_dir` externo escribio correctamente artifact del
+proyecto y `agent_ack.json` en runtime externo.
+Alternativas:
+  - Mantener runtime dentro del proyecto: descartado por contaminacion entre
+    agentes paralelos.
+  - Ejecutar OPES en secuencial: valido como fallback operativo, descartado como
+    solucion principal porque Orquesta debe paralelizar sin mezclar contexto.
+  - Usar `danger-full-access`: descartado como default porque amplia permisos.
+Impacto: el conector rechaza runtime igual, interno o ancestro del proyecto. El
+server usa por defecto `.orquesta-control/<proyecto>/runtime` como sibling
+externo al proyecto. Cada agente sigue teniendo runtime propio por run/agente.
+Estado: aceptada; sustituye RTCODEX-DEC-008.
+```
+
 ## RTCODEX-DEC-009
 
 ```text
@@ -35,7 +61,7 @@ Alternativas:
   - Mantener runtime externo con `--add-dir`: descartado como solucion principal porque la prueba real siguio sin poder escribir el ACK.
   - Mezclar ACK con artifacts del usuario: descartado; el runtime queda en directorio oculto de control y fuera del write-set de producto.
 Impacto: El runtime sigue fuera del core y del request publico, pero queda dentro del arbol escribible real del agente para evitar esperas infinitas por entregas ya hechas sin receipt.
-Estado: aceptada.
+Estado: sustituida por RTCODEX-DEC-010.
 ```
 
 ## RTCODEX-DEC-007

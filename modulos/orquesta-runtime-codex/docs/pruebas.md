@@ -26,8 +26,10 @@ Cobertura:
 - escribe request de shutdown, valida ACK `checkpoint_ready` y trata el ACK
   ausente como pendiente retryable;
 - rechaza ACK de checkpoint de otro agente/run/checkpoint;
-- con sandbox `workspace-write`, rechaza `runtime_work_dir` fuera de
-  `project_work_dir` para no depender de permisos externos ambiguos;
+- con sandbox `workspace-write`, acepta `runtime_work_dir` externo al proyecto
+  cuando el wrapper lo autoriza con `--add-dir`;
+- con sandbox `workspace-write`, rechaza `runtime_work_dir` igual, interno o
+  ancestro de `project_work_dir` para evitar contaminacion de contexto;
 - fuera de `workspace-write`, el wrapper no anade writable roots extra;
 - devuelve `ProcessRuntimeLaunchRequestV0` sin args/env operacionales;
 - no filtra provider/model/HOME/OAuth al request publico de proceso;

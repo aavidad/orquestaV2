@@ -68,7 +68,7 @@ func ValidateCodexConnectorProfileV0(
 	v.requireAbsPath("command_path", profile.CommandPath)
 	v.requireAbsPath("project_work_dir", profile.ProjectWorkDir)
 	v.requireAbsPath("runtime_work_dir", profile.RuntimeWorkDir)
-	v.validateWorkspaceWriteRuntimeV0(profile)
+	v.validateWorkspaceWriteRuntimeIsolationV0(profile)
 	v.optionalAbsPath("code_home_dir", profile.CodeHomeDir)
 	v.optionalAbsPath("home_dir", profile.HomeDir)
 	v.optionalSafeValue("path_env", profile.PathEnv)
@@ -112,7 +112,7 @@ func (v *codexProfileValidatorV0) optionalSafeValue(field, value string) {
 	}
 }
 
-func (v *codexProfileValidatorV0) validateWorkspaceWriteRuntimeV0(
+func (v *codexProfileValidatorV0) validateWorkspaceWriteRuntimeIsolationV0(
 	profile CodexConnectorProfileV0,
 ) {
 	if strings.TrimSpace(profile.Sandbox) != "workspace-write" ||
@@ -120,7 +120,9 @@ func (v *codexProfileValidatorV0) validateWorkspaceWriteRuntimeV0(
 		strings.TrimSpace(profile.RuntimeWorkDir) == "" {
 		return
 	}
-	if !codexPathInsideV0(profile.RuntimeWorkDir, profile.ProjectWorkDir) {
+	if filepath.Clean(profile.RuntimeWorkDir) == filepath.Clean(profile.ProjectWorkDir) ||
+		codexPathInsideV0(profile.RuntimeWorkDir, profile.ProjectWorkDir) ||
+		codexPathInsideV0(profile.ProjectWorkDir, profile.RuntimeWorkDir) {
 		v.add(CodexConnectorPathInvalidV0, "runtime_work_dir")
 	}
 }

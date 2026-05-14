@@ -1,6 +1,7 @@
 package orquestaruntimecodex
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -37,9 +38,29 @@ func TestCodexWrapperV0FijaEsfuerzoDeRazonamiento(t *testing.T) {
 	}
 }
 
-func TestCodexProfileV0WorkspaceWriteRechazaRuntimeFueraDelProyecto(t *testing.T) {
+func TestCodexProfileV0WorkspaceWriteAceptaRuntimeAisladoFueraDelProyecto(t *testing.T) {
 	profile := codexProfileForTestV0(t)
 	profile.RuntimeWorkDir = t.TempDir()
+
+	issues := ValidateCodexConnectorProfileV0(profile)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues inesperadas: %+v", issues)
+	}
+}
+
+func TestCodexProfileV0WorkspaceWriteRechazaRuntimeDentroDelProyecto(t *testing.T) {
+	profile := codexProfileForTestV0(t)
+	profile.RuntimeWorkDir = profile.ProjectWorkDir + "/.orquesta-runtime"
+
+	issues := ValidateCodexConnectorProfileV0(profile)
+
+	requireCodexIssueV0(t, issues, CodexConnectorPathInvalidV0)
+}
+
+func TestCodexProfileV0WorkspaceWriteRechazaRuntimeQueContieneProyecto(t *testing.T) {
+	profile := codexProfileForTestV0(t)
+	profile.RuntimeWorkDir = filepath.Dir(profile.ProjectWorkDir)
 
 	issues := ValidateCodexConnectorProfileV0(profile)
 
