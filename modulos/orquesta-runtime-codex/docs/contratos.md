@@ -32,6 +32,9 @@ Invariantes:
   contexto normal del proyecto.
 - `ProcessRuntimeLaunchRequestV0` solo expone el wrapper y el workdir del proyecto; no expone argumentos, entorno, HOME, OAuth ni modelo.
 - El agente externo debe escribir `agent_ack.json` en la ruta absoluta indicada en el prompt.
+- Si `agent_ack.json` esta fuera de `project_work_dir`, el prompt exige
+  escribirlo desde `runtime_work_dir` por shell, no mediante `apply_patch` de
+  proyecto. La linea visible `ACK ...` no sustituye el JSON durable.
 - El prompt tambien publica rutas de control para apagado cooperativo:
   `orquesta_shutdown_request.json` y `agent_shutdown_checkpoint_ack.json`.
   El agente debe comprobar la request antes de bloques largos de edicion o

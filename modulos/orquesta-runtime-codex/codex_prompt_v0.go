@@ -69,6 +69,7 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString("Al terminar, escribe ")
 	b.WriteString(ackPath)
 	b.WriteString(" con schema codex_agent_ack.v0.\n\n")
+	writeAckWriteProtocolV0(&b, ackPath)
 	if decisionPath != "" {
 		b.WriteString("decision_path: ")
 		b.WriteString(decisionPath)
@@ -116,6 +117,19 @@ func BuildCodexAgentPromptWithControlFilesV0(
 		}
 	}
 	return b.String()
+}
+
+func writeAckWriteProtocolV0(b *strings.Builder, ackPath string) {
+	if !filepath.IsAbs(ackPath) {
+		return
+	}
+	b.WriteString("PROTOCOLO ACK FUERA DEL PROYECTO: ")
+	b.WriteString(ackPath)
+	b.WriteString(" es fichero de control, no artifact del proyecto. No uses apply_patch para escribirlo. Escribelo con shell desde su directorio de control: cd ")
+	b.WriteString(filepath.Dir(ackPath))
+	b.WriteString(" && crear ")
+	b.WriteString(filepath.Base(ackPath))
+	b.WriteString(". La linea visible ACK no sustituye este JSON.\n\n")
 }
 
 func writeShutdownProtocolV0(b *strings.Builder, requestPath string, ackPath string) {

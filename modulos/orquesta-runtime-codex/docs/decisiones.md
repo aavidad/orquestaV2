@@ -23,6 +23,8 @@ Alternativas:
 Impacto: el conector rechaza runtime igual, interno o ancestro del proyecto. El
 server usa por defecto `.orquesta-control/<proyecto>/runtime` como sibling
 externo al proyecto. Cada agente sigue teniendo runtime propio por run/agente.
+El prompt explicita que el ACK externo se escribe desde runtime por shell, no
+por `apply_patch` de proyecto.
 Estado: aceptada; sustituye RTCODEX-DEC-008.
 ```
 

@@ -16,6 +16,8 @@ Cobertura:
 - el prompt exige `$caveman` o `compact` si esta disponible y salida minima;
 - la plantilla de ACK generada incluye los `files` del write-set y los
   `tests` obligatorios esperados, no arrays vacios;
+- el prompt advierte que el ACK externo al proyecto debe escribirse desde el
+  directorio runtime por shell y que la linea visible no sustituye el JSON;
 - con sandbox `workspace-write`, el wrapper autoriza `runtime_work_dir` con
   `--add-dir` para que el agente pueda escribir `agent_ack.json`;
 - `decision_path` aparece como archivo de control y se marca obligatorio solo
