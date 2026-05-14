@@ -71,8 +71,18 @@ func TestBuildExternalWorkRunRequestV0MapeaExpansionComoLarge(t *testing.T) {
 	if req.AppChangeRequest.AllowedWriteSet[0] != "external/opes/expand_topic_from_summary" ||
 		!fieldValueForTestV0(fields, "expected_artifact_type", "topic_expansion_package") ||
 		!fieldValueForTestV0(fields, "context_budget_profile", "large") ||
+		!fieldValuesForTestV0(fields, "required_document_variants", []string{
+			"tema_grande",
+			"tema_mediano",
+			"resumen",
+			"esquema_repaso",
+			"plan_visuales",
+		}) ||
 		!fieldJSONForTestV0(fields, "summary_payload_json") {
 		t.Fatalf("request=%+v", req)
+	}
+	if !containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "incluir resumen/memoria de repaso derivado del tema desarrollado") {
+		t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
 	}
 }
 

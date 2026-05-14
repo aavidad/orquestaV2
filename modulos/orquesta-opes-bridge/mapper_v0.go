@@ -59,6 +59,7 @@ func BuildExternalWorkRunRequestWithContextV0(
 	fields = appendFieldIfMissingV0(fields, "job_type", job.Type)
 	fields = appendFieldIfMissingV0(fields, "expected_artifact_type", expectedArtifactTypeV0(job.Type))
 	fields = appendFieldIfMissingV0(fields, "context_budget_profile", contextProfileForJobTypeV0(job.Type))
+	fields = appendExpansionDocumentContractFieldsV0(fields, job.Type)
 	workRefs := workRefsForPayloadV0(job, fields)
 	change := orquestaappchange.AppChangeRequestV0{
 		SchemaVersion:      orquestaappchange.AppChangeRequestSchemaV0,
@@ -292,13 +293,22 @@ func userIntentForJobV0(jobType string) string {
 }
 
 func acceptanceCriteriaForJobV0(jobType string) []string {
-	return []string{
+	criteria := []string{
 		"devolver artifact_type=" + expectedArtifactTypeV0(jobType),
 		"payload_json valido y trazable",
 		"sin placeholders",
 		"sin leer internals de OPES",
 		"entrega en fichero unico bajo allowed_write_set",
 	}
+	if strings.TrimSpace(jobType) == "expand_topic_from_summary" {
+		criteria = append(criteria,
+			"paquete apto para tema_grande con capitulos y bloques trazables",
+			"conservar base para tema_mediano sin perder autores normativa ni procedimientos",
+			"incluir resumen/memoria de repaso derivado del tema desarrollado",
+			"incluir esquema de examen y plan de visuales cuando aporten valor",
+		)
+	}
+	return criteria
 }
 
 func constraintsForJobV0() []string {
@@ -308,6 +318,26 @@ func constraintsForJobV0() []string {
 		"usar solo el paquete de dominio recibido",
 		"si falta contexto obligatorio declarar bloqueo",
 	}
+}
+
+func appendExpansionDocumentContractFieldsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	jobType string,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if strings.TrimSpace(jobType) != "expand_topic_from_summary" ||
+		fieldHasNameV0(fields, "required_document_variants") {
+		return fields
+	}
+	return append(fields, orquestadomainwork.DomainWorkFieldV0{
+		Name: "required_document_variants",
+		Values: []string{
+			"tema_grande",
+			"tema_mediano",
+			"resumen",
+			"esquema_repaso",
+			"plan_visuales",
+		},
+	})
 }
 
 func compactOPESBridgeRefV0(value string) string {
