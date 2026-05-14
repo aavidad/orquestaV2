@@ -162,6 +162,47 @@ func TestRESTClientV0SubmitDomainWorkArtifactEnviaVisualAsset(t *testing.T) {
 	}
 }
 
+func TestRESTClientV0ListExternalJobsConsultaColaPublica(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		if r.URL.Query().Get("execution_mode") != "external" ||
+			r.URL.Query().Get("status") != "pending" ||
+			r.URL.Query().Get("job_type") != "summarize_topic" ||
+			r.URL.Query().Get("limit") != "3" {
+			t.Fatalf("query=%s", r.URL.RawQuery)
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-summary-001",
+			"type":           "summarize_topic",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   `{"topic_id":"topic-ref-001"}`,
+			"requested_by":   "opes",
+		}})
+	}))
+	defer server.Close()
+
+	client := NewRESTClientV0(RESTClientConfigV0{BaseURL: server.URL})
+	jobs, err := client.ListExternalJobsV0(context.Background(), ExternalJobQueryV0{
+		ExecutionMode: "external",
+		Status:        "pending",
+		JobType:       "summarize_topic",
+		Limit:         3,
+	})
+
+	if err != nil {
+		t.Fatalf("ListExternalJobsV0: %v", err)
+	}
+	if len(jobs) != 1 ||
+		jobs[0].ID != "job-ref-summary-001" ||
+		jobs[0].Type != "summarize_topic" ||
+		jobs[0].PayloadJSON != `{"topic_id":"topic-ref-001"}` {
+		t.Fatalf("jobs=%+v", jobs)
+	}
+}
+
 func TestRESTClientV0EntradaInvalidaNoLlamaHTTP(t *testing.T) {
 	called := false
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {

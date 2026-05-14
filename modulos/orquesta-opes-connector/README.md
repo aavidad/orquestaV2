@@ -2,13 +2,16 @@
 
 Miniproyecto para el conector opt-in entre Orquesta y OPES.
 
-Estado actual: contrato documental y cliente REST minimo para crear jobs
-externos y enviar artefactos mediante endpoints publicos de OPES.
+Estado actual: contrato documental y cliente REST minimo para consultar jobs
+externos, crear jobs externos y enviar artefactos mediante endpoints publicos
+de OPES.
 
 ## Responsabilidad
 
 - traducir jobs documentales OPES a contratos `orquesta-domain-work`;
 - hablar con OPES solo por REST o MCP;
+- consultar ventanas pequenas de `GET /api/jobs` cuando un bridge externo debe
+  drenar cola OPES;
 - conservar `correlation_id`, `idempotency_key`, `requested_by=orquesta` y
   `external_refs`;
 - registrar entregas de Orquesta con `evidence_refs` hacia jobs y artefactos

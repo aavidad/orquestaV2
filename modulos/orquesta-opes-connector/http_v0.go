@@ -9,6 +9,31 @@ import (
 	"strings"
 )
 
+func (client RESTClientV0) getJSONV0(
+	ctx context.Context,
+	path string,
+	target any,
+) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+path, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/json")
+	res, err := client.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		_, _ = io.Copy(io.Discard, res.Body)
+		return connectorErrorV0{code: ErrOPESHTTPStatusV0}
+	}
+	if err := json.NewDecoder(res.Body).Decode(target); err != nil {
+		return connectorErrorV0{code: ErrOPESResponseInvalidV0}
+	}
+	return nil
+}
+
 func (client RESTClientV0) postJSONV0(
 	ctx context.Context,
 	path string,

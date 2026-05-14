@@ -16,6 +16,30 @@ const (
 	ErrOPESArtifactJobRequiredV0 = "opes_artifact_job_required"
 )
 
+type ExternalJobQueryV0 struct {
+	ExecutionMode string
+	Status        string
+	JobType       string
+	Limit         int
+}
+
+type ExternalJobV0 struct {
+	ID             string            `json:"id"`
+	Type           string            `json:"type"`
+	Status         string            `json:"status"`
+	ExecutionMode  string            `json:"execution_mode"`
+	PayloadJSON    string            `json:"payload_json"`
+	CorrelationID  string            `json:"correlation_id,omitempty"`
+	IdempotencyKey string            `json:"idempotency_key,omitempty"`
+	RequestedBy    string            `json:"requested_by,omitempty"`
+	Attempts       int               `json:"attempts,omitempty"`
+	MaxAttempts    int               `json:"max_attempts,omitempty"`
+	LastError      string            `json:"last_error,omitempty"`
+	LockedBy       string            `json:"locked_by,omitempty"`
+	ExternalRefs   map[string]string `json:"external_refs,omitempty"`
+	CreatedAt      string            `json:"created_at,omitempty"`
+}
+
 type RESTClientConfigV0 struct {
 	BaseURL            string
 	HTTPClient         *http.Client

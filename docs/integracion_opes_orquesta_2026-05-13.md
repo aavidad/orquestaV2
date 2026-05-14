@@ -21,6 +21,10 @@ trabajo externo con refs opacas.
   artefactos equivalentes.
 - Orquesta devuelve resultados por `POST /api/jobs/{id}/artifacts` o
   `submit_job_artifact`.
+- Si OPES ya tiene cola externa pendiente, el adaptador opt-in
+  `orquesta-server opes-drain-once` consulta ventanas pequenas por
+  `GET /api/jobs?execution_mode=external&status=pending&limit=n` y crea runs
+  por `/api/v0/external-work/run`.
 - OPES puede devolver HTTP `201` con `created=true` al crear y HTTP `200` con
   `created=false` en replay idempotente; Orquesta debe aceptar ambos como
   respuestas correctas.
@@ -69,10 +73,11 @@ bloquear con consulta al director.
   `chapter_id` inventados. Deben crearse o seleccionarse previamente mediante
   API publica de OPES.
 
-## Pendiente En Orquesta
+## Estado En Orquesta
 
-- El conector REST opt-in de jobs/artefactos ya existe.
-- Siguiente corte: ejecutar smoke real contra OPES con
-  `ORQUESTA_OPES_BASE_URL`, usando `topic_id` y `chapter_id` reales.
-- Siguiente corte de producto: traducir jobs OPES a unidades de trabajo/agentes
-  de Orquesta y registrar entregas con `evidence_refs` hacia OPES.
+- El conector REST opt-in de jobs/artefactos existe.
+- El bridge opt-in de cola OPES existe para `opes-drain-once`.
+- El mapeo de artefactos cubre `content_block`, `block_revision`, `source`,
+  `visual_asset`, `topic_summary` y `topic_expansion_package`.
+- Queda ejecutar pruebas reales con agentes contra una instancia OPES controlada
+  antes de drenar muchas tareas del temario real.

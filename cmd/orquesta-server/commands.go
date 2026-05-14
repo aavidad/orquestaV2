@@ -27,6 +27,8 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
 		return statusServerCommandV0(stdout, stderr)
 	case "stop":
 		return stopServerCommandV0(stdout, stderr)
+	case "opes-drain-once":
+		return opesDrainOnceCommandV0(stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "comando no soportado: %s\n", command)
 		return 2

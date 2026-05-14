@@ -36,6 +36,12 @@ GET /api/jobs
 GET /api/jobs/{id}
 ```
 
+Implementado para ventanas pequenas de cola externa:
+
+```text
+GET /api/jobs?execution_mode=external&status=pending&job_type=<opcional>&limit=<n>
+```
+
 MCP:
 
 ```text
@@ -95,6 +101,8 @@ content_block
 block_revision
 source
 visual_asset
+topic_summary
+topic_expansion_package
 ```
 
 Para `content_block`, OPES exige integridad editorial: `topic_id` y
@@ -106,6 +114,15 @@ Para `visual_asset`, Orquesta entrega `artifact_type=visual_asset` con campos
 `asset_type`, `format`, `title`, `caption`, `alt_text`, `body`, `placement`,
 `language_code` y `source_refs` si aplica. `format=svg` debe ser autocontenido
 y sin scripts, eventos JavaScript, `foreignObject` ni URLs remotas.
+
+Para `summarize_topic`, `summarize_chapter`, `summarize_block` y
+`create_exam_outline`, Orquesta entrega `artifact_type=topic_summary`. Si el
+agente produce JSON estructurado, se envia como `payload_json` sin envolverlo
+en `body`.
+
+Para `expand_topic_from_summary`, Orquesta entrega
+`artifact_type=topic_expansion_package`. El agente debe producir un JSON con
+`topic_id`, `language_code` y `chapters`; OPES materializa capitulos y bloques.
 
 Para otros objetos de dominio, el conector debe usar endpoints OPES especificos
 cuando OPES los publique. No debe resolverlos por DB ni ficheros.
@@ -119,6 +136,8 @@ research_sources
 split_syllabus_topic
 draft_topic_outline
 draft_content_block
+summarize_topic
+expand_topic_from_summary
 generate_visual_asset
 review_legal
 review_pedagogical

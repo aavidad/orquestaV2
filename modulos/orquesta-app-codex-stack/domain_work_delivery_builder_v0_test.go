@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -84,6 +85,173 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0NoFiltraPathsComoPayloadRef
 	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) != 0 {
 		t.Fatalf("submission invalida: %+v", issues)
 	}
+}
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaTopicSummaryOPES(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "summarize_topic")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	payload := `{
+		"markdown":"Resumen contrastado del tema.",
+		"coverage":["prevencion","factores de riesgo"],
+		"key_concepts":["prevencion primaria","epidemiologia"],
+		"cross_topic_links":["tema-88"],
+		"source_refs":["fuente-ref-001"]
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-summary-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-summary-001", Title: "Resumir tema OPES"},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-summary-001",
+						ChangeRef:     "change-ref-summary-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-summary-001",
+							WorkKind:   "summarize_topic",
+							InputFields: []orquestadomainwork.DomainWorkFieldV0{
+								{Name: "topic_id", Value: "topic-ref-001"},
+							},
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-summary-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{"external/opes/summarize_topic"},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef:  "ack-ref-summary-001",
+					AgentRef:     "agent-ref-summary-001",
+					Summary:      "Resumen validado.",
+					EvidenceRefs: []string{"ack-ref-summary-001"},
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if submission.ArtifactType != "topic_summary" ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "markdown", "Resumen contrastado del tema.") ||
+		!domainWorkFieldValuesForTestV0(submission.PayloadFields, "coverage", []string{"prevencion", "factores de riesgo"}) ||
+		domainWorkFieldValueForTestV0(submission.PayloadFields, "body", "Resumen contrastado del tema.") {
+		t.Fatalf("submission=%+v", submission)
+	}
+	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) != 0 {
+		t.Fatalf("submission invalida: %+v", issues)
+	}
+}
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaExpansionPackageOPES(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "expand_topic_from_summary")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	payload := `{
+		"topic_id":"topic-ref-001",
+		"language_code":"es",
+		"chapters":[
+			{"title":"Capitulo 1","order":1,"blocks":[
+				{"block_type":"doctrine","title":"Bloque 1","markdown":"Contenido ampliado.","source_refs":["fuente-ref-001"]}
+			]}
+		]
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-expansion-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-expansion-001", Title: "Ampliar tema OPES"},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-expansion-001",
+						ChangeRef:     "change-ref-expansion-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-expansion-001",
+							WorkKind:   "expand_topic_from_summary",
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-expansion-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{"external/opes/expand_topic_from_summary"},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef:  "ack-ref-expansion-001",
+					AgentRef:     "agent-ref-expansion-001",
+					Summary:      "Expansion validada.",
+					EvidenceRefs: []string{"ack-ref-expansion-001"},
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if submission.ArtifactType != "topic_expansion_package" ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "topic_id", "topic-ref-001") ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "chapters") {
+		t.Fatalf("submission=%+v", submission)
+	}
+	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) != 0 {
+		t.Fatalf("submission invalida: %+v", issues)
+	}
+}
+
+func domainWorkFieldValuesForTestV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	name string,
+	values []string,
+) bool {
+	for _, field := range fields {
+		if field.Name != name || len(field.Values) != len(values) {
+			continue
+		}
+		matches := true
+		for index := range values {
+			if field.Values[index] != values[index] {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return true
+		}
+	}
+	return false
+}
+
+func domainWorkFieldHasJSONForTestV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	name string,
+) bool {
+	for _, field := range fields {
+		if field.Name == name && len(field.ValueJSON) > 0 && json.Valid(field.ValueJSON) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaVisualAssetOPES(t *testing.T) {

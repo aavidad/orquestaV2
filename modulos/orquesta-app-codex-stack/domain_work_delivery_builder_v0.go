@@ -2,8 +2,10 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -54,6 +56,10 @@ func domainWorkArtifactTypeForWorkKindV0(workKind string) string {
 		return "block_revision"
 	case "research_sources", "download_source", "verify_sources":
 		return "source"
+	case "summarize_block", "summarize_chapter", "summarize_topic", "create_exam_outline":
+		return "topic_summary"
+	case "expand_topic_from_summary":
+		return "topic_expansion_package"
 	default:
 		return "work_delivery"
 	}
@@ -65,6 +71,15 @@ func domainWorkDeliveryPayloadFieldsV0(
 	title string,
 	body string,
 ) []orquestadomainwork.DomainWorkFieldV0 {
+	if parsed, ok := domainWorkDeliveryJSONPayloadFieldsV0(body); ok {
+		fields = appendDomainWorkFieldIfMissingV0(
+			fields,
+			"content_type",
+			domainWorkDeliveryContentTypeV0(fields, artifactType),
+		)
+		fields = appendDomainWorkFieldIfMissingV0(fields, "title", title)
+		return append(fields, parsed...)
+	}
 	fields = appendDomainWorkFieldIfMissingV0(
 		fields,
 		"content_type",
@@ -72,9 +87,59 @@ func domainWorkDeliveryPayloadFieldsV0(
 	)
 	fields = appendDomainWorkFieldIfMissingV0(fields, "title", title)
 	if strings.TrimSpace(body) != "" {
-		fields = append(fields, orquestadomainwork.DomainWorkFieldV0{Name: "body", Value: strings.TrimSpace(body)})
+		bodyField := "body"
+		if artifactType == "topic_summary" {
+			bodyField = "markdown"
+		}
+		fields = append(fields, orquestadomainwork.DomainWorkFieldV0{Name: bodyField, Value: strings.TrimSpace(body)})
 	}
 	return fields
+}
+
+func domainWorkDeliveryJSONPayloadFieldsV0(
+	body string,
+) ([]orquestadomainwork.DomainWorkFieldV0, bool) {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return nil, false
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(body), &payload); err != nil || len(payload) == 0 {
+		return nil, false
+	}
+	keys := make([]string, 0, len(payload))
+	for name := range payload {
+		keys = append(keys, name)
+	}
+	sort.Strings(keys)
+	fields := make([]orquestadomainwork.DomainWorkFieldV0, 0, len(payload))
+	for _, name := range keys {
+		field, ok := domainWorkDeliveryJSONFieldV0(name, payload[name])
+		if !ok {
+			continue
+		}
+		fields = append(fields, field)
+	}
+	return fields, len(fields) > 0
+}
+
+func domainWorkDeliveryJSONFieldV0(
+	name string,
+	raw json.RawMessage,
+) (orquestadomainwork.DomainWorkFieldV0, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" || len(raw) == 0 || !json.Valid(raw) {
+		return orquestadomainwork.DomainWorkFieldV0{}, false
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return orquestadomainwork.DomainWorkFieldV0{Name: name, Value: strings.TrimSpace(text)}, true
+	}
+	var texts []string
+	if err := json.Unmarshal(raw, &texts); err == nil {
+		return orquestadomainwork.DomainWorkFieldV0{Name: name, Values: compactCodexStackStringsV0(texts)}, true
+	}
+	return orquestadomainwork.DomainWorkFieldV0{Name: name, ValueJSON: append([]byte(nil), raw...)}, true
 }
 
 func appendDomainWorkFieldIfMissingV0(

@@ -22,6 +22,10 @@ contratos publicos.
 - Entrega de revisiones como `block_revision`.
 - Entrega de fuentes como `source`.
 - Entrega de `generate_visual_asset` como `visual_asset`.
+- Entrega de `summarize_*` como `topic_summary`.
+- Entrega de `expand_topic_from_summary` como `topic_expansion_package`.
+- Bridge opt-in `orquesta-server opes-drain-once` para leer ventanas pequenas
+  de jobs OPES pendientes y convertirlos en runs por `/api/v0/external-work/run`.
 - Contexto externo acotado pero ampliable por perfil `compact`, `standard` o
   `large`, con `large` por defecto para trabajos largos OPES.
 - Estadisticas por `external_job_ref` para que OPES o web consulten progreso.
@@ -37,13 +41,16 @@ contratos publicos.
 - Smoke REST directo OPES-Orquesta para `content_block`.
 - Smoke con agente real para `draft_content_block`.
 - Smoke REST directo OPES-Orquesta para `visual_asset`.
+- Dry-run real contra cola OPES `summarize_topic` en
+  `http://127.0.0.1:18080`, sin crear runs ni artefactos.
 - Guardas de smoke: los scripts no crean datos si no se exporta la variable de
   confirmacion correspondiente.
 
 ## Pendiente No Bloqueante
 
 - Repetir prueba real completa de OPES creando un tema cuando OPES termine el
-  trabajo actual. No lanzar mientras haya un temario en curso.
+  trabajo actual o usando una instancia separada. No lanzar smokes contra la
+  instancia que crea el temario real.
 - Probar `generate_visual_asset` con agente real, no solo con entrega REST
   directa. Debe hacerse contra una instancia OPES de smoke.
 - Revisar calidad de artefactos OPES generados por agentes reales: estructura,
@@ -61,6 +68,32 @@ contratos publicos.
 - No ejecutar smokes contra la instancia que crea el temario real.
 - No crear topics, chapters, jobs ni artifacts de prueba en la instancia activa.
 - No modificar ficheros de OPES desde esta sesion de Orquesta.
+
+## Drenar Cola OPES
+
+Dry-run seguro:
+
+```bash
+ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
+ORQUESTA_OPES_BRIDGE_DRY_RUN=1 \
+ORQUESTA_OPES_BRIDGE_LIMIT=2 \
+ORQUESTA_OPES_BRIDGE_JOB_TYPE=summarize_topic \
+go run ./cmd/orquesta-server opes-drain-once
+```
+
+Ejecucion real, solo con Orquesta server levantado:
+
+```bash
+ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
+ORQUESTA_BASE_URL=http://127.0.0.1:<puerto-orquesta> \
+ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
+ORQUESTA_OPES_BRIDGE_LIMIT=3 \
+ORQUESTA_OPES_BRIDGE_JOB_TYPE=summarize_topic \
+go run ./cmd/orquesta-server opes-drain-once
+```
+
+El bridge no cambia OPES directamente: solo convierte jobs pendientes en runs.
+OPES se completa cuando Orquesta entrega el artefacto por el conector publico.
 
 ## Siguiente Paso Recomendado
 
