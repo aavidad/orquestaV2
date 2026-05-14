@@ -26,9 +26,21 @@ type JobRunConfigV0 struct {
 	RequestedBy   string
 }
 
+type JobContextV0 struct {
+	TopicBlocks []orquestaopesconnector.TopicBlockV0
+}
+
 func BuildExternalWorkRunRequestV0(
 	job orquestaopesconnector.ExternalJobV0,
 	config JobRunConfigV0,
+) (orquestaexternalworkrun.StartExternalWorkRunRequestV0, bool) {
+	return BuildExternalWorkRunRequestWithContextV0(job, config, JobContextV0{})
+}
+
+func BuildExternalWorkRunRequestWithContextV0(
+	job orquestaopesconnector.ExternalJobV0,
+	config JobRunConfigV0,
+	jobContext JobContextV0,
 ) (orquestaexternalworkrun.StartExternalWorkRunRequestV0, bool) {
 	job.ID = strings.TrimSpace(job.ID)
 	job.Type = strings.TrimSpace(job.Type)
@@ -42,6 +54,7 @@ func BuildExternalWorkRunRequestV0(
 	if !ok {
 		return orquestaexternalworkrun.StartExternalWorkRunRequestV0{}, false
 	}
+	fields = appendTopicBlocksFieldV0(fields, jobContext.TopicBlocks)
 	fields = appendFieldIfMissingV0(fields, "job_id", job.ID)
 	fields = appendFieldIfMissingV0(fields, "job_type", job.Type)
 	fields = appendFieldIfMissingV0(fields, "expected_artifact_type", expectedArtifactTypeV0(job.Type))
@@ -82,6 +95,49 @@ func BuildExternalWorkRunRequestV0(
 		RequestedBy:      config.RequestedBy,
 		AppChangeRequest: change,
 	}, true
+}
+
+type topicBlockContextV0 struct {
+	ID         string          `json:"id,omitempty"`
+	StableID   string          `json:"stable_id,omitempty"`
+	ChapterID  string          `json:"chapter_id,omitempty"`
+	Type       string          `json:"type,omitempty"`
+	Status     string          `json:"status,omitempty"`
+	Title      string          `json:"title,omitempty"`
+	Markdown   string          `json:"markdown,omitempty"`
+	SourceRefs []string        `json:"source_refs,omitempty"`
+	Citations  json.RawMessage `json:"citations,omitempty"`
+}
+
+func appendTopicBlocksFieldV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	blocks []orquestaopesconnector.TopicBlockV0,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if len(blocks) == 0 || fieldHasNameV0(fields, "topic_blocks") {
+		return fields
+	}
+	payload := make([]topicBlockContextV0, 0, len(blocks))
+	for _, block := range blocks {
+		payload = append(payload, topicBlockContextV0{
+			ID:         strings.TrimSpace(block.ID),
+			StableID:   strings.TrimSpace(block.StableID),
+			ChapterID:  strings.TrimSpace(block.ChapterID),
+			Type:       strings.TrimSpace(block.Type),
+			Status:     strings.TrimSpace(block.Status),
+			Title:      strings.TrimSpace(block.Title),
+			Markdown:   strings.TrimSpace(block.Markdown),
+			SourceRefs: compactStringsV0(block.SourceRefs),
+			Citations:  append([]byte(nil), block.Citations...),
+		})
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return fields
+	}
+	return append(fields, orquestadomainwork.DomainWorkFieldV0{
+		Name:      "topic_blocks",
+		ValueJSON: raw,
+	})
 }
 
 func normalizeJobRunConfigV0(config JobRunConfigV0) JobRunConfigV0 {
@@ -216,7 +272,8 @@ func expectedArtifactTypeV0(jobType string) string {
 
 func contextProfileForJobTypeV0(jobType string) string {
 	switch strings.TrimSpace(jobType) {
-	case "expand_topic_from_summary",
+	case "summarize_topic",
+		"expand_topic_from_summary",
 		"draft_content_block",
 		"review_legal",
 		"review_pedagogical",

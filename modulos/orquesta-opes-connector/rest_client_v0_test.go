@@ -203,6 +203,41 @@ func TestRESTClientV0ListExternalJobsConsultaColaPublica(t *testing.T) {
 	}
 }
 
+func TestRESTClientV0ListTopicBlocksUsaAPIPublica(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/topics/topic-ref-001/blocks" || r.Method != http.MethodGet {
+			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"ID":               "block-ref-001",
+			"StableID":         "stable-ref-001",
+			"CanonicalTopicID": "topic-ref-001",
+			"ChapterID":        "chapter-ref-001",
+			"Type":             "technical",
+			"Status":           "pendiente_revision",
+			"Title":            "Bloque 1",
+			"Markdown":         "Contenido del bloque.",
+			"LanguageCode":     "es",
+			"SourceRefs":       []string{"source-ref-001"},
+		}})
+	}))
+	defer server.Close()
+
+	client := NewRESTClientV0(RESTClientConfigV0{BaseURL: server.URL})
+	blocks, err := client.ListTopicBlocksV0(context.Background(), "topic-ref-001")
+
+	if err != nil {
+		t.Fatalf("ListTopicBlocksV0: %v", err)
+	}
+	if len(blocks) != 1 ||
+		blocks[0].ID != "block-ref-001" ||
+		blocks[0].StableID != "stable-ref-001" ||
+		blocks[0].Markdown != "Contenido del bloque." ||
+		len(blocks[0].SourceRefs) != 1 {
+		t.Fatalf("blocks=%+v", blocks)
+	}
+}
+
 func TestRESTClientV0EntradaInvalidaNoLlamaHTTP(t *testing.T) {
 	called := false
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {

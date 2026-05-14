@@ -25,6 +25,9 @@ trabajo externo con refs opacas.
   `orquesta-server opes-drain-once` consulta ventanas pequenas por
   `GET /api/jobs?execution_mode=external&status=pending&limit=n` y crea runs
   por `/api/v0/external-work/run`.
+- Para `summarize_topic`, el adaptador enriquece el paquete con bloques por API
+  publica `GET /api/topics/{topic_id}/blocks`; si no puede obtener texto de
+  bloques, no arranca agentes para evitar trabajo basura.
 - OPES puede devolver HTTP `201` con `created=true` al crear y HTTP `200` con
   `created=false` en replay idempotente; Orquesta debe aceptar ambos como
   respuestas correctas.

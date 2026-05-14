@@ -26,6 +26,8 @@ contratos publicos.
 - Entrega de `expand_topic_from_summary` como `topic_expansion_package`.
 - Bridge opt-in `orquesta-server opes-drain-once` para leer ventanas pequenas
   de jobs OPES pendientes y convertirlos en runs por `/api/v0/external-work/run`.
+- Hidratacion de `summarize_topic` por API publica
+  `GET /api/topics/{topic_id}/blocks`; si no hay bloques, no se crea run.
 - Contexto externo acotado pero ampliable por perfil `compact`, `standard` o
   `large`, con `large` por defecto para trabajos largos OPES.
 - Estadisticas por `external_job_ref` para que OPES o web consulten progreso.
@@ -42,7 +44,8 @@ contratos publicos.
 - Smoke con agente real para `draft_content_block`.
 - Smoke REST directo OPES-Orquesta para `visual_asset`.
 - Dry-run real contra cola OPES `summarize_topic` en
-  `http://127.0.0.1:18080`, sin crear runs ni artefactos.
+  `http://127.0.0.1:18080`, sin crear runs ni artefactos, hidratando 3 bloques
+  para el primer job y 2 para el segundo.
 - Guardas de smoke: los scripts no crean datos si no se exporta la variable de
   confirmacion correspondiente.
 

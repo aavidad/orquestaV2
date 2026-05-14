@@ -9,7 +9,7 @@ import (
 )
 
 func TestBuildExternalWorkRunRequestV0MapeaSummarizeTopic(t *testing.T) {
-	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
+	req, ok := BuildExternalWorkRunRequestWithContextV0(orquestaopesconnector.ExternalJobV0{
 		ID:             "job-ref-summary-001",
 		Type:           "summarize_topic",
 		Status:         "pending",
@@ -23,7 +23,15 @@ func TestBuildExternalWorkRunRequestV0MapeaSummarizeTopic(t *testing.T) {
 			"official_order":90,
 			"quality_criteria":["derivar solo del temario contrastado","no inventar"]
 		}`,
-	}, JobRunConfigV0{PriorityScore: 80})
+	}, JobRunConfigV0{PriorityScore: 80}, JobContextV0{
+		TopicBlocks: []orquestaopesconnector.TopicBlockV0{{
+			ID:         "block-ref-001",
+			StableID:   "stable-ref-001",
+			Title:      "Bloque 1",
+			Markdown:   "Texto del bloque.",
+			SourceRefs: []string{"source-ref-001"},
+		}},
+	})
 
 	if !ok {
 		t.Fatalf("request no construida")
@@ -37,7 +45,9 @@ func TestBuildExternalWorkRunRequestV0MapeaSummarizeTopic(t *testing.T) {
 		work.JobRef != "job-ref-summary-001" ||
 		work.WorkKind != "summarize_topic" ||
 		!fieldValueForTestV0(work.InputFields, "expected_artifact_type", "topic_summary") ||
+		!fieldValueForTestV0(work.InputFields, "context_budget_profile", "large") ||
 		!fieldValuesForTestV0(work.InputFields, "quality_criteria", []string{"derivar solo del temario contrastado", "no inventar"}) ||
+		!fieldJSONForTestV0(work.InputFields, "topic_blocks") ||
 		!containsStringForTestV0(work.WorkRefs, "opes-topic_id-topic-ref-001") {
 		t.Fatalf("request=%+v work=%+v", req, work)
 	}

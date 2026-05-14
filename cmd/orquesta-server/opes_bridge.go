@@ -29,11 +29,12 @@ type opesDrainSummaryV0 struct {
 }
 
 type opesDrainJobResultV0 struct {
-	JobRef    string `json:"job_ref"`
-	WorkKind  string `json:"work_kind"`
-	RunRef    string `json:"run_ref,omitempty"`
-	ChangeRef string `json:"change_ref,omitempty"`
-	Status    string `json:"status"`
+	JobRef        string `json:"job_ref"`
+	WorkKind      string `json:"work_kind"`
+	ContextBlocks int    `json:"context_blocks,omitempty"`
+	RunRef        string `json:"run_ref,omitempty"`
+	ChangeRef     string `json:"change_ref,omitempty"`
+	Status        string `json:"status"`
 }
 
 type opesDrainPublicErrorV0 struct {
@@ -146,7 +147,16 @@ func runOPESDrainOnceV0(
 	}
 	for _, job := range jobs {
 		result := opesDrainJobResultV0{JobRef: job.ID, WorkKind: job.Type}
-		request, ok := orquestaopesbridge.BuildExternalWorkRunRequestV0(job, config.RunConfig)
+		jobContext, err := opesJobContextV0(ctx, client, job)
+		if err != nil {
+			summary.Skipped++
+			result.Status = "context_error"
+			summary.Results = append(summary.Results, result)
+			summary.Errors = append(summary.Errors, opesDrainPublicErrorV0{JobRef: job.ID, Code: err.Error()})
+			continue
+		}
+		result.ContextBlocks = len(jobContext.TopicBlocks)
+		request, ok := orquestaopesbridge.BuildExternalWorkRunRequestWithContextV0(job, config.RunConfig, jobContext)
 		if !ok {
 			summary.Skipped++
 			result.Status = "skipped"
@@ -174,6 +184,40 @@ func runOPESDrainOnceV0(
 		summary.Results = append(summary.Results, result)
 	}
 	return summary, nil
+}
+
+func opesJobContextV0(
+	ctx context.Context,
+	client orquestaopesconnector.RESTClientV0,
+	job orquestaopesconnector.ExternalJobV0,
+) (orquestaopesbridge.JobContextV0, error) {
+	if strings.TrimSpace(job.Type) != "summarize_topic" {
+		return orquestaopesbridge.JobContextV0{}, nil
+	}
+	topicID := opesJobPayloadStringV0(job.PayloadJSON, "topic_id")
+	if topicID == "" {
+		return orquestaopesbridge.JobContextV0{}, fmt.Errorf("topic_id_required")
+	}
+	blocks, err := client.ListTopicBlocksV0(ctx, topicID)
+	if err != nil {
+		return orquestaopesbridge.JobContextV0{}, fmt.Errorf("topic_blocks_fetch_error")
+	}
+	if len(blocks) == 0 {
+		return orquestaopesbridge.JobContextV0{}, fmt.Errorf("topic_blocks_empty")
+	}
+	return orquestaopesbridge.JobContextV0{TopicBlocks: blocks}, nil
+}
+
+func opesJobPayloadStringV0(payload string, key string) string {
+	var values map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(strings.TrimSpace(payload)), &values); err != nil {
+		return ""
+	}
+	var value string
+	if raw := values[key]; len(raw) > 0 && json.Unmarshal(raw, &value) == nil {
+		return strings.TrimSpace(value)
+	}
+	return ""
 }
 
 func submitOPESExternalWorkRunV0(

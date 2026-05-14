@@ -20,6 +20,9 @@ Reglas:
 - `external_work.job_ref` conserva `job.id`;
 - `external_work.work_kind` conserva `job.type`;
 - `input_fields` copia el `payload_json` sin interpretar dominio;
+- para `summarize_topic`, el bridge hidrata `topic_blocks` desde
+  `GET /api/topics/{topic_id}/blocks`; si no puede obtenerlos, no crea el run
+  para evitar resumenes pobres;
 - `allowed_write_set` se limita a `external/opes/<work_kind>` para que el
   agente produzca una entrega unica;
 - los artefactos esperados se expresan como input fields, no como decisiones de

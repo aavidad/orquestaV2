@@ -1,6 +1,7 @@
 package orquestaopesconnector
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 )
@@ -38,6 +39,22 @@ type ExternalJobV0 struct {
 	LockedBy       string            `json:"locked_by,omitempty"`
 	ExternalRefs   map[string]string `json:"external_refs,omitempty"`
 	CreatedAt      string            `json:"created_at,omitempty"`
+}
+
+type TopicBlockV0 struct {
+	ID               string          `json:"ID"`
+	StableID         string          `json:"StableID"`
+	CanonicalTopicID string          `json:"CanonicalTopicID"`
+	ChapterID        string          `json:"ChapterID"`
+	Type             string          `json:"Type"`
+	Status           string          `json:"Status"`
+	Title            string          `json:"Title"`
+	Markdown         string          `json:"Markdown"`
+	LanguageCode     string          `json:"LanguageCode"`
+	SourceRefs       []string        `json:"SourceRefs"`
+	Citations        json.RawMessage `json:"Citations,omitempty"`
+	VersionNumber    int             `json:"VersionNumber,omitempty"`
+	CreatedAt        string          `json:"CreatedAt,omitempty"`
 }
 
 type RESTClientConfigV0 struct {
