@@ -19,11 +19,23 @@ func appChangeTaskRequiredTestsV0(
 				"validar fuentes, criterios y longitud si llegan",
 			)
 		} else if appChangeIsVisualExternalWorkV0(request) {
-			tests = append(tests, appChangeVisualRequiredTestsV0()...)
+			tests = append(tests, appChangeVisualRequiredTestsV0(request)...)
 		} else if appChangeIsSummaryExternalWorkV0(request) {
 			tests = append(tests,
 				"validar trazabilidad del resumen",
 				"validar conservacion de matices criticos",
+			)
+		} else if appChangeIsExpansionExternalWorkV0(request) {
+			tests = append(tests,
+				"validar topic_expansion_package",
+				"validar longitud declarada del tema grande",
+				"validar variantes documentales requeridas",
+			)
+		} else if appChangeIsDocumentPlanWorkV0(request) {
+			tests = append(tests,
+				"validar document_plan",
+				"validar secciones y entregables del plan",
+				"validar criterios de calidad documentales",
 			)
 		} else if appChangeIsDocumentaryExternalWorkV0(request) {
 			tests = append(tests,

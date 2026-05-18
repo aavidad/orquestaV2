@@ -1,6 +1,69 @@
 # Decisiones: orquesta-app-director-service
 
 ```text
+Fecha: 2026-05-17
+Decision: Materializar el primer tramo del Director Operativo desde
+ContinueAppDirectorV0, no desde StartAppDirectorV0.
+Motivo: el arranque normal abre el run y el equipo/director inicial, pero un
+plan operativo listo necesita un run ya compatible, contratos de funcion
+publicados y stores inyectados. Meterlo en Start mezclaria bootstrap con
+programacion y repetiria el problema de crear microtareas antes de que el
+director tenga estado causal.
+Impacto: ContinueAppDirectorV0 acepta `OperationalDirectorPlanV0`, llama al
+materializador, deriva wait por ola/cohorte, registra `WorkflowTaskWaitStateV0`
+si hay writer y reentra al loop progresivo con refs acotadas. El siguiente
+corte debe llevar la salida de ese wait a review/replan/cierre.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-17
+Decision: Guardar el estado vivo inicial del plan operativo como
+OperationalDirectorPlanStateV0.
+Motivo: el plan `OperationalDirectorPlanV0` declara intencion, pero no conserva
+el avance observado. Despues de materializar la primera ola, una reentrada debe
+saber que `launch_subagents` quedo aceptado, que `wait_subagents` esta activo y
+que refs concretas pertenecen al scope.
+Impacto: `StartAppDirectorPortsV0` acepta `OperationalPlanStateWriter` y
+`OperationalPlanStateStore`; `ContinueAppDirectorV0` guarda
+`OperationalDirectorPlanStateV0` con ola/cohorte, tasks, agentes, pendientes y
+`wait_ref`, y puede leerlo para reentrada inicial por
+`operational_director_plan_ref`. El corte restante debe actualizarlo al consumir
+review/tests/replan/cierre.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-17
+Decision: Guardar la resolucion de wait del Director como
+WorkflowTaskWaitStateV0.
+Motivo: devolver solo `wait_external` no explica por que se espera ni que
+agentes/tareas siguen pendientes. Los futuros agentes necesitan una foto
+durable del bloqueo sin obligar al stack Codex a conocer cohortes u olas.
+Impacto: `StartAppDirectorPortsV0` acepta `WaitStateWriter`; cuando un filtro
+de espera se resuelve desde workflow tasks, el servicio guarda causa, scope,
+task refs, agent refs y pending agent refs. La persistencia concreta sigue
+siendo un adaptador.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-17
+Decision: Resolver esperas por cohorte, ola o parent task en el servicio del
+director antes de entrar al loop progresivo.
+Motivo: el stack Codex ya sabe esperar `WaitAgentRefs`, pero no debe conocer la
+semantica operativa de `cohort_ref`, `wave_ref` ni linaje de microtareas. Esa
+semantica pertenece al plano de aplicacion del director, que tiene acceso al
+run y al `DirectorTaskStore`.
+Impacto: `StartAppDirectorRequestV0` y `ContinueAppDirectorRequestV0` aceptan
+`wait_cohort_ref`, `wait_wave_ref` y `wait_parent_task_ref`. El servicio carga
+las `WorkflowTaskV0` autorizadas por el run, deriva refs de agente con
+`WorkflowTaskWaitAgentRefsV0`, conserva refs explicitas y falla de forma
+publica si se pide filtro sin `DirectorTaskStore`.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-12
 Decision: Una decision del director pendiente corta el lote actual.
 Motivo: un director real emitio una cadena con `accept_decision.vote_ref`

@@ -37,7 +37,9 @@ func TestCodexProgressObservationSourceV0ReportaEstancamientoSinACKNiProgreso(t 
 	got := second[0]
 	if got.Report.Status != orquestaruntime.AgentStalledV0 ||
 		got.Report.AgentRequestID != spec.RequestID ||
-		got.TaskRef != spec.AgentPacket.Task.TaskRef {
+		got.TaskRef != spec.AgentPacket.Task.TaskRef ||
+		got.DecisionRequired ||
+		got.Report.DecisionRequired {
 		t.Fatalf("observacion no correlada: %+v", got)
 	}
 	if codexProgressObservationLeaksPathV0(got, ackPath) {
@@ -63,19 +65,20 @@ func TestCodexProgressObservationSourceV0NoEscalaABucleSoloPorACKSinCambios(t *t
 	if err != nil {
 		t.Fatalf("third BuildAgentProgressObservationsV0: %v", err)
 	}
-	if len(third) != 0 {
+	if len(third) != 1 ||
+		third[0].Report.Status != orquestaruntime.AgentStalledV0 ||
+		third[0].DecisionRequired ||
+		third[0].Report.DecisionRequired {
 		t.Fatalf("third observations=%+v", third)
 	}
 }
 
-func TestCodexProgressObservationSourceV0ReemiteSiElRunNoHaMaterializadoDecision(t *testing.T) {
+func TestCodexProgressObservationSourceV0ReemiteDecisionSiElRunNoLaMaterializa(t *testing.T) {
 	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
 	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	source.SnapshotSource = stoppedSnapshotSourceForProgressTestV0{}
 	request := codexProgressRequestForTestV0(spec)
 
-	if _, err := source.BuildAgentProgressObservationsV0(context.Background(), request); err != nil {
-		t.Fatalf("first BuildAgentProgressObservationsV0: %v", err)
-	}
 	firstDecision, err := source.BuildAgentProgressObservationsV0(context.Background(), request)
 	if err != nil || len(firstDecision) != 1 {
 		t.Fatalf("first decision observations=%+v err=%v", firstDecision, err)
@@ -84,7 +87,9 @@ func TestCodexProgressObservationSourceV0ReemiteSiElRunNoHaMaterializadoDecision
 	if err != nil {
 		t.Fatalf("second decision BuildAgentProgressObservationsV0: %v", err)
 	}
-	if len(secondDecision) != 1 {
+	if len(secondDecision) != 1 ||
+		secondDecision[0].Report.Status != orquestaruntime.AgentStoppedV0 ||
+		!secondDecision[0].DecisionRequired {
 		t.Fatalf("second decision observations=%+v", secondDecision)
 	}
 }
@@ -104,7 +109,10 @@ func TestCodexProgressObservationSourceV0SilencioSostenidoReportaEstancamientoSi
 	if err != nil {
 		t.Fatalf("fourth BuildAgentProgressObservationsV0: %v", err)
 	}
-	if len(got) != 1 || got[0].Report.Status != orquestaruntime.AgentStalledV0 {
+	if len(got) != 1 ||
+		got[0].Report.Status != orquestaruntime.AgentStalledV0 ||
+		got[0].DecisionRequired ||
+		got[0].Report.DecisionRequired {
 		t.Fatalf("stalled observation=%+v", got)
 	}
 	if got[0].Report.RepeatedActionCount != 0 || got[0].Report.NoProgressTicks == 0 {
@@ -130,6 +138,52 @@ func TestCodexProgressObservationSourceV0NoReportaSiHayAvanceDeLogs(t *testing.T
 	}
 	if len(got) != 0 {
 		t.Fatalf("observations=%+v", got)
+	}
+}
+
+func TestCodexProgressObservationSourceV0DetectaBuclePorDiffRepetidoConLogCreciendo(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	source.Policy.StalledAfterNoProgressTicks = 99
+	source.Policy.LoopAfterRepeatedActions = 2
+	request := codexProgressRequestForTestV0(spec)
+	stderrPath := filepath.Join(filepath.Dir(ackPath), orquestaruntimecodex.CodexStderrFileNameV0)
+	diffBlock := strings.Join([]string{
+		"diff --git a/tmp/run/project/docs/manual_usuario.md b/tmp/run/project/docs/manual_usuario.md",
+		"new file mode 100644",
+		"@@ -0,0 +1,2 @@",
+		"+# Manual",
+		"+Contenido",
+		"",
+	}, "\n")
+
+	if err := os.WriteFile(stderrPath, []byte(diffBlock), 0o600); err != nil {
+		t.Fatalf("write stderr first: %v", err)
+	}
+	if got, err := source.BuildAgentProgressObservationsV0(context.Background(), request); err != nil || len(got) != 0 {
+		t.Fatalf("first observations=%+v err=%v", got, err)
+	}
+	if err := appendCodexProgressTestLogV0(stderrPath, diffBlock); err != nil {
+		t.Fatalf("append stderr second: %v", err)
+	}
+	if got, err := source.BuildAgentProgressObservationsV0(context.Background(), request); err != nil || len(got) != 0 {
+		t.Fatalf("second observations=%+v err=%v", got, err)
+	}
+	if err := appendCodexProgressTestLogV0(stderrPath, diffBlock); err != nil {
+		t.Fatalf("append stderr third: %v", err)
+	}
+	got, err := source.BuildAgentProgressObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("third BuildAgentProgressObservationsV0: %v", err)
+	}
+	if len(got) != 1 ||
+		got[0].Report.Status != orquestaruntime.AgentLoopDetectedV0 ||
+		got[0].Report.RepeatedActionCount != 2 ||
+		!got[0].DecisionRequired {
+		t.Fatalf("loop observation=%+v", got)
+	}
+	if !stringInCodexDeliverySetV0(got[0].Report.EvidenceRefs, "evidence-ref-repeated-action") {
+		t.Fatalf("evidence refs sin repeated action: %+v", got[0].Report.EvidenceRefs)
 	}
 }
 
@@ -172,6 +226,36 @@ func TestCodexProgressObservationSourceV0ReportaProcesoParadoSinACKEnPrimerTick(
 	}
 	if !stringInCodexDeliverySetV0(got[0].Report.EvidenceRefs, "evidence-ref-no-ack") {
 		t.Fatalf("evidence refs sin no_ack compacto: %+v", got[0].Report.EvidenceRefs)
+	}
+}
+
+func TestCodexProgressObservationSourceV0ReportaArtefactoSinACKComoRevision(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	projectDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(projectDir, "README.md"), []byte("# entrega\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	descriptor := codexProgressDescriptorForTestV0(spec, ackPath)
+	descriptor.ProjectWorkDir = projectDir
+	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	source.Store = NewInMemoryCodexReceiptDescriptorStoreV0(descriptor)
+	source.SnapshotSource = stoppedSnapshotSourceForProgressTestV0{}
+
+	got, err := source.BuildAgentProgressObservationsV0(
+		context.Background(),
+		codexProgressRequestForTestV0(spec),
+	)
+	if err != nil {
+		t.Fatalf("BuildAgentProgressObservationsV0: %v", err)
+	}
+	if len(got) != 1 || got[0].Report.Status != orquestaruntime.AgentStoppedV0 {
+		t.Fatalf("observations=%+v", got)
+	}
+	if !stringInCodexDeliverySetV0(got[0].Report.EvidenceRefs, "evidence-ref-artifact-without-ack") {
+		t.Fatalf("evidence refs sin artifact_without_ack: %+v", got[0].Report.EvidenceRefs)
+	}
+	if codexProgressObservationLeaksPathV0(got[0], projectDir) {
+		t.Fatalf("observacion filtra path: %+v", got[0])
 	}
 }
 
@@ -300,6 +384,7 @@ func TestCodexProgressObservationSourceV0ExigeRegistroDeProceso(t *testing.T) {
 func TestCodexProgressObservationSourceV0AlimentaCandidateProvider(t *testing.T) {
 	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
 	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	source.SnapshotSource = stoppedSnapshotSourceForProgressTestV0{}
 	request := orquestacionnucleoapp.SchedulerCandidateRequestV0{
 		Run:           codexProgressRunForTestV0(spec),
 		OccurredAt:    "2026-05-09T12:30:00Z",
@@ -321,8 +406,9 @@ func TestCodexProgressObservationSourceV0AlimentaCandidateProvider(t *testing.T)
 		t.Fatalf("progress candidates=%+v", got.ProgressSupervisionCandidates)
 	}
 	candidate := got.ProgressSupervisionCandidates[0]
-	if candidate.SupervisionInput.Report.Status != orquestaruntime.AgentStalledV0 ||
-		candidate.SupervisionInput.QuestionID == "" {
+	if candidate.SupervisionInput.Report.Status != orquestaruntime.AgentStoppedV0 ||
+		!candidate.SupervisionInput.Report.DecisionRequired ||
+		candidate.SupervisionInput.AssessmentRef == "" {
 		t.Fatalf("candidate=%+v", candidate)
 	}
 }
@@ -414,6 +500,16 @@ func codexProgressACKBytesForTestV0(
 		t.Fatalf("read ack: %v", err)
 	}
 	return data
+}
+
+func appendCodexProgressTestLogV0(path string, value string) error {
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	_, err = file.WriteString(value)
+	return err
 }
 
 func codexProgressObservationLeaksPathV0(

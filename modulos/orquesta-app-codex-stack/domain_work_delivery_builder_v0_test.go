@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
@@ -154,6 +155,145 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaTopicSummaryOPES(t *
 	}
 }
 
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0NormalizaSourceRefsRicosContentBlockOPES(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "draft_content_block")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	payload := `{
+		"artifact_type":"content_block",
+		"payload_json":{
+			"topic_id":"topic-ref-001",
+			"chapter_id":"chapter-ref-001",
+			"type":"doctrine",
+			"title":"Fundamentos",
+			"markdown":"Contenido con fuentes trazables.",
+			"language_code":"es",
+			"source_refs":[
+				{"source_ref":"beck-1976","title":"Cognitive Therapy"},
+				{"source_ref":"beck-1976","title":"duplicada"},
+				{"source_ref":"ley-41-2002","title":"Autonomia del paciente"}
+			],
+			"citations":[{"source_ref":"beck-1976","locator":"cap. 1","claim":"apoyo doctrinal"}]
+		}
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-content-rich-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-content-rich-001", Title: "Redactar bloque OPES"},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-content-rich-001",
+						ChangeRef:     "change-ref-content-rich-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-content-rich-001",
+							WorkKind:   "draft_content_block",
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-content-rich-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{"external/opes/draft_content_block"},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef:  "ack-ref-content-rich-001",
+					AgentRef:     "agent-ref-content-rich-001",
+					Summary:      "Bloque validado.",
+					EvidenceRefs: []string{"ack-ref-content-rich-001"},
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if submission.ArtifactType != "content_block" ||
+		!domainWorkFieldValuesForTestV0(submission.PayloadFields, "source_refs", []string{"beck-1976", "ley-41-2002"}) ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "source_ref_details") {
+		t.Fatalf("submission=%+v", submission)
+	}
+}
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0AceptaEnvelopeConNombreLibreOPES(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "draft_content_block")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	payload := `{
+		"artifact_type":"el_director_lo_llamo_como_quiso",
+		"payload_json":{
+			"tema_id":"topic-ref-001",
+			"id_capitulo":"chapter-ref-001",
+			"tipo_bloque":"doctrine",
+			"titulo":"Fundamentos",
+			"contenido":"Contenido materializable aunque cambien los nombres.",
+			"idioma":"es",
+			"fuentes":["fuente-ref-001"]
+		}
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-content-alias-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-content-alias-001", Title: "Redactar bloque OPES"},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-content-alias-001",
+						ChangeRef:     "change-ref-content-alias-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-content-alias-001",
+							WorkKind:   "draft_content_block",
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-content-alias-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{"external/opes/draft_content_block"},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef:  "ack-ref-content-alias-001",
+					AgentRef:     "agent-ref-content-alias-001",
+					Summary:      "Bloque validado.",
+					EvidenceRefs: []string{"ack-ref-content-alias-001"},
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if submission.ArtifactType != "content_block" ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "topic_id", "topic-ref-001") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "chapter_id", "chapter-ref-001") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "block_type", "doctrine") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "title", "Fundamentos") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "body", "Contenido materializable aunque cambien los nombres.") ||
+		!domainWorkFieldValuesForTestV0(submission.PayloadFields, "source_refs", []string{"fuente-ref-001"}) {
+		t.Fatalf("submission=%+v", submission)
+	}
+}
+
 func TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaExpansionPackageOPES(t *testing.T) {
 	projectDir := t.TempDir()
 	bodyPath := filepath.Join(projectDir, "external", "opes", "expand_topic_from_summary")
@@ -216,6 +356,315 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaExpansionPackageOPES
 	}
 	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) != 0 {
 		t.Fatalf("submission invalida: %+v", issues)
+	}
+}
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaAssembledTopicOPES(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "assemble_topic")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	payload := `{
+		"topic_id":"topic-ref-001",
+		"title":"Tema ensamblado",
+		"language_code":"es",
+		"sections":[{"title":"Introduccion","markdown":"Contenido ensamblado."}],
+		"source_refs":["fuente-ref-001"]
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-assemble-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-assemble-001", Title: "Ensamblar tema OPES"},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-assemble-001",
+						ChangeRef:     "change-ref-assemble-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-assemble-001",
+							WorkKind:   "assemble_topic",
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-assemble-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{"external/opes/assemble_topic"},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef:  "ack-ref-assemble-001",
+					AgentRef:     "agent-ref-assemble-001",
+					Summary:      "Tema ensamblado validado.",
+					EvidenceRefs: []string{"ack-ref-assemble-001"},
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if submission.ArtifactType != "assembled_topic" ||
+		submission.ArtifactType == "work_delivery" ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "topic_id", "topic-ref-001") ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "sections") {
+		t.Fatalf("submission=%+v", submission)
+	}
+	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) != 0 {
+		t.Fatalf("submission invalida: %+v", issues)
+	}
+}
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0CanonicalizaDocumentPlanAliasesOPES(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "plan_tema", "job-ref-plan-001")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	payload := `{
+		"schema_version":"domain_document_plan.v0",
+		"artifact_type":"document_plan",
+		"work_kind":"plan_tema",
+		"job_id":"job-ref-plan-001",
+		"topic_id":"topic-ref-080",
+		"topic_title":"Evaluacion diagnostica en psicologia",
+		"document_kind":"tema_oposicion",
+		"language_code":"es",
+		"target_pages":{"min":45,"max":50},
+		"sections":[{
+			"section_id":"sec-01-presentacion",
+			"title":"Presentacion",
+			"objective":"Situar el proceso diagnostico.",
+			"work_kind":"draft_content_block",
+			"planned_pages":2,
+			"required_points":["definiciones"],
+			"acceptance_criteria":["lectura facil"]
+		}],
+		"review_steps":[{
+			"review_id":"rev-01-legal",
+			"work_kind":"review_legal",
+			"scope":"Normativa y proteccion de datos."
+		}],
+		"deliverables":[{
+			"deliverable_id":"del-01-topic-expansion-package",
+			"name":"topic_expansion_package",
+			"description":"Tema grande completo."
+		}]
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-plan-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-plan-001", Title: "Planificar tema"},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-plan-001",
+						UserIntent:    "Planificar tema OPES.",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-plan-001",
+							WorkKind:   "plan_tema",
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{"external/opes/plan_tema/job-ref-plan-001"},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef: "ack-ref-plan-001",
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if submission.ArtifactType != orquestadomainwork.DomainDocumentPlanArtifactTypeV0 ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "plan_ref", "plan-job-ref-plan-001") ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "sections") ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "deliverables") {
+		t.Fatalf("submission=%+v", submission)
+	}
+}
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0IdempotenciaEstablePorJobYArtefacto(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "draft_content_block")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(bodyPath, []byte("# Entrega\n"), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+	baseInput := DomainWorkArtifactSubmissionBuildInputV0{
+		Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-idem-001"},
+		Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-idem-001", Title: "Redactar bloque"},
+		Record: orquestaappchange.AppChangeRecordV0{
+			Request: orquestaappchange.AppChangeRequestV0{
+				CorrelationID: "corr-ref-idem-001",
+				ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+					ProjectRef: "opes",
+					JobRef:     "job-ref-idem-001",
+					WorkKind:   "draft_content_block",
+				},
+			},
+		},
+		Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{ProjectWorkDir: projectDir},
+		Ack:        orquestaruntimecodex.CodexAgentAckV0{Files: []string{"external/opes/draft_content_block"}},
+	}
+	firstInput := baseInput
+	firstInput.Observation = orquestacionnucleoapp.AgentDeliveryObservationV0{DeliveryRef: "ack-ref-original"}
+	secondInput := baseInput
+	secondInput.Observation = orquestacionnucleoapp.AgentDeliveryObservationV0{DeliveryRef: "ack-ref-rework"}
+
+	first, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(context.Background(), firstInput)
+	if err != nil || !ok {
+		t.Fatalf("first ok=%v err=%v", ok, err)
+	}
+	second, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(context.Background(), secondInput)
+	if err != nil || !ok {
+		t.Fatalf("second ok=%v err=%v", ok, err)
+	}
+	if first.IdempotencyKey != second.IdempotencyKey ||
+		first.IdempotencyKey != "idem-domain-work-artifact-opes-job-ref-idem-001-content_block" {
+		t.Fatalf("idempotency first=%s second=%s", first.IdempotencyKey, second.IdempotencyKey)
+	}
+}
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0DesenvuelveExpansionPackageOPES(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "expand_topic_from_summary")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	payload := `{
+		"artifact_type":"topic_expansion_package",
+		"payload_json":{
+			"topic_id":"topic-ref-001",
+			"language_code":"es",
+			"chapters":[
+				{"title":"Capitulo 1","order":1,"blocks":[
+					{"block_type":"doctrine","title":"Bloque 1","markdown":"uno dos tres cuatro cinco seis siete ocho","source_refs":["fuente-ref-001"]}
+				]}
+			]
+		}
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-expansion-envelope-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-expansion-envelope-001", Title: "Ampliar tema OPES"},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-expansion-envelope-001",
+						ChangeRef:     "change-ref-expansion-envelope-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-expansion-envelope-001",
+							WorkKind:   "expand_topic_from_summary",
+							InputFields: []orquestadomainwork.DomainWorkFieldV0{
+								{Name: "target_words_min", Value: "8"},
+							},
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-expansion-envelope-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{"external/opes/expand_topic_from_summary"},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef:  "ack-ref-expansion-envelope-001",
+					AgentRef:     "agent-ref-expansion-envelope-001",
+					Summary:      "Expansion validada.",
+					EvidenceRefs: []string{"ack-ref-expansion-envelope-001"},
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if submission.ArtifactType != "topic_expansion_package" ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "topic_id", "topic-ref-001") ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "chapters") ||
+		domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "payload_json") {
+		t.Fatalf("submission=%+v", submission)
+	}
+}
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0RechazaExpansionCortaOPES(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "expand_topic_from_summary")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	payload := `{
+		"topic_id":"topic-ref-001",
+		"chapters":[{"title":"Capitulo 1","blocks":[{"title":"Bloque 1","markdown":"Texto corto."}]}]
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	_, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-expansion-short-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-expansion-short-001", Title: "Ampliar tema OPES"},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-expansion-short-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-expansion-short-001",
+							WorkKind:   "expand_topic_from_summary",
+							InputFields: []orquestadomainwork.DomainWorkFieldV0{
+								{Name: "target_words_min", Value: "100"},
+							},
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{"external/opes/expand_topic_from_summary"},
+				},
+			},
+		)
+
+	if err == nil || ok {
+		t.Fatalf("esperaba quality gate err, ok=%v err=%v", ok, err)
+	}
+	if !strings.Contains(err.Error(), "domain_work_artifact_quality_gate_failed") {
+		t.Fatalf("err=%v", err)
 	}
 }
 

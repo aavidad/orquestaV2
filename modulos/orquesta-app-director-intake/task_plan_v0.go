@@ -32,9 +32,37 @@ func primaryDirectorTaskAreaV0(spec orquestafactory.AppSpecV0) directorTaskAreaV
 		Suffix:   "director",
 		Role:     "director",
 		Summary:  directorTaskSummaryV0(spec, "Dirigir solicitud de app con contexto pequeno."),
-		Capacity: orquestacoreworkflow.OrchestrationCapacityHighV0,
-		WriteSet: []string{"docs/arquitectura.md", "docs/plan_microtareas.md"},
+		Capacity: primaryDirectorCapacityV0(spec),
+		WriteSet: primaryDirectorWriteSetV0(spec),
 	}
+}
+
+func primaryDirectorCapacityV0(spec orquestafactory.AppSpecV0) orquestacoreworkflow.OrchestrationCapacityRecommendationV0 {
+	if orquestafactory.NormalizeExecutionModeV0(spec.ExecutionMode) == orquestafactory.ExecutionModeDebugV0 {
+		return orquestacoreworkflow.OrchestrationCapacityHighV0
+	}
+	return orquestacoreworkflow.OrchestrationCapacityXHighV0
+}
+
+func primaryDirectorWriteSetV0(spec orquestafactory.AppSpecV0) []string {
+	paths := []string{
+		"docs/arquitectura.md",
+		"docs/plan_microtareas.md",
+		"docs/decisiones.md",
+		"docs/pruebas.md",
+		"docs/pendientes.md",
+	}
+	switch orquestafactory.NormalizeRequestKindV0(spec.RequestKind) {
+	case orquestafactory.RequestKindDocumentarAppV0,
+		orquestafactory.RequestKindCrearAppCompletaV0,
+		orquestafactory.RequestKindPlanificarAppV0:
+		paths = append(paths,
+			"docs/manual_usuario.md",
+			"docs/manual_desarrollador.md",
+			"docs/manual_sistemas_deploy.md",
+		)
+	}
+	return paths
 }
 
 func directorTaskSummaryV0(spec orquestafactory.AppSpecV0, base string) string {

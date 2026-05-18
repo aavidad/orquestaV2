@@ -92,24 +92,12 @@ func validateRegisterDeliveryRequiredV0(payload RegisterDeliveryCommandPayloadV0
 
 func validateRegisterDeliveryCommandPhaseIDV0(phaseID string) error {
 	phase := OrchestrationPhaseIDV0(strings.TrimSpace(phaseID))
-	if err := ValidateOrchestrationPhaseIDV0(phase); err != nil {
-		return err
-	}
-	if phase != OrchestrationPhaseProgramacionV0 {
-		return commandErrorV0(ErrTransicionInvalidaV0, "payload.phase_id")
-	}
-	return nil
+	return ValidateOrchestrationPhaseIDV0(phase)
 }
 
 func validateDeliveryRegisteredPhaseIDV0(phaseID string) error {
 	phase := OrchestrationPhaseIDV0(strings.TrimSpace(phaseID))
-	if err := ValidateOrchestrationPhaseIDV0(phase); err != nil {
-		return err
-	}
-	if phase != OrchestrationPhaseProgramacionV0 {
-		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.phase_id")
-	}
-	return nil
+	return ValidateOrchestrationPhaseIDV0(phase)
 }
 
 func validateRegisterDeliveryPayloadSizeV0(payload RegisterDeliveryCommandPayloadV0) error {

@@ -42,7 +42,7 @@ func TestBuildDirectorSchedulerTickV0OverBudgetNoActivityProgrammingCanStopAsses
 	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
 	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandAssessAgentWorkV0)
 	assertSchedulerProgressAssessmentV0(t, plan.Commands[0],
-		orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0,
+		orquestacoreworkflow.AgentAssessmentVerdictTimeoutV0,
 		orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
 	)
 }

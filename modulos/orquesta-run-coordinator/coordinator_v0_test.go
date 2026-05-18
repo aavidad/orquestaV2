@@ -152,6 +152,35 @@ func TestCoordinateRunsTickExecutesUntilMaxRunsV0(t *testing.T) {
 	assertRunRefsV0(t, executionRefsV0(result.Executions), []string{"run-a", "run-b"})
 }
 
+func TestCoordinateRunsTickRotaRunsEjecutadosConMismaPrioridadV0(t *testing.T) {
+	now := time.Date(2026, 5, 11, 10, 0, 0, 0, time.UTC)
+	queue := &fakeQueueStoreV0{candidates: []orquestarunqueue.RunSchedulingCandidateV0{
+		candidateWithUpdatedAtV0("run-a", "app", 9, now.Add(-time.Hour)),
+		candidateWithUpdatedAtV0("run-b", "app", 9, now.Add(-time.Hour)),
+	}}
+	deps := RunCoordinatorDepsV0{
+		QueueReader:   queue,
+		QueueUpdater:  queue,
+		ControlReader: &fakeControlReaderV0{states: map[string]orquestaruncontrol.RunControlStateV0{}, missing: map[string]bool{}},
+		Drainer:       &fakeDrainerV0{},
+	}
+	command := tickCommandV0(1)
+	command.OccurredAt = now
+	command.RankingPolicy = orquestarunqueue.DefaultRunQueueRankingPolicyV0(now)
+
+	first, err := CoordinateRunsTickV0(context.Background(), deps, command)
+	if err != nil {
+		t.Fatalf("first tick: %v", err)
+	}
+	second, err := CoordinateRunsTickV0(context.Background(), deps, command)
+	if err != nil {
+		t.Fatalf("second tick: %v", err)
+	}
+
+	assertRunRefsV0(t, executionRefsV0(first.Executions), []string{"run-a"})
+	assertRunRefsV0(t, executionRefsV0(second.Executions), []string{"run-b"})
+}
+
 func TestCoordinateRunsTickSkipsExcludedRunsV0(t *testing.T) {
 	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
 		candidateV0("run-a", "app", 9),
@@ -245,6 +274,33 @@ func (fake *fakeQueueReaderV0) ListRunSchedulingCandidatesV0(
 	return fake.candidates, nil
 }
 
+type fakeQueueStoreV0 struct {
+	candidates []orquestarunqueue.RunSchedulingCandidateV0
+}
+
+func (fake *fakeQueueStoreV0) ListRunSchedulingCandidatesV0(
+	_ context.Context,
+	_ orquestarunqueue.RunQueueReadRequestV0,
+) ([]orquestarunqueue.RunSchedulingCandidateV0, error) {
+	return cloneCandidatesV0(fake.candidates), nil
+}
+
+func (fake *fakeQueueStoreV0) SetRunPriorityV0(
+	_ context.Context,
+	command orquestarunqueue.RunQueuePriorityCommandV0,
+) (orquestarunqueue.RunSchedulingCandidateV0, error) {
+	for index := range fake.candidates {
+		if fake.candidates[index].RunRef != command.RunRef {
+			continue
+		}
+		fake.candidates[index].UpdatedAt = command.UpdatedAt
+		fake.candidates[index].PriorityScore = command.PriorityScore
+		fake.candidates[index].EvidenceRefs = append([]string(nil), command.EvidenceRefs...)
+		return fake.candidates[index], nil
+	}
+	return orquestarunqueue.RunSchedulingCandidateV0{}, errors.New("run not found")
+}
+
 type fakeControlReaderV0 struct {
 	states  map[string]orquestaruncontrol.RunControlStateV0
 	missing map[string]bool
@@ -301,12 +357,26 @@ func tickCommandV0(maxRuns int) RunCoordinatorTickCommandV0 {
 }
 
 func candidateV0(runRef string, appRef string, priority int) orquestarunqueue.RunSchedulingCandidateV0 {
+	return candidateWithUpdatedAtV0(
+		runRef,
+		appRef,
+		priority,
+		time.Date(2026, 5, 11, 9, 0, 0, 0, time.UTC),
+	)
+}
+
+func candidateWithUpdatedAtV0(
+	runRef string,
+	appRef string,
+	priority int,
+	updatedAt time.Time,
+) orquestarunqueue.RunSchedulingCandidateV0 {
 	return orquestarunqueue.RunSchedulingCandidateV0{
 		RunRef:        runRef,
 		AppRef:        appRef,
 		Status:        "queued",
 		PriorityScore: priority,
-		UpdatedAt:     time.Date(2026, 5, 11, 9, 0, 0, 0, time.UTC),
+		UpdatedAt:     updatedAt,
 	}
 }
 

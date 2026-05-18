@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -140,6 +141,10 @@ func TestCodexStackV0ProgressStalledProtegeDirectorInicial(t *testing.T) {
 		Policy: orquestaruntime.AgentProgressHeartbeatPolicyV0{
 			StalledAfterNoProgressTicks: 1,
 			LoopAfterRepeatedActions:    99,
+		},
+		BudgetPolicy: orquestaruntimecodexdelivery.CodexBudgetActivityPolicyV0{
+			MaxExpected:     time.Nanosecond,
+			NoActivityLimit: time.Nanosecond,
 		},
 	}
 

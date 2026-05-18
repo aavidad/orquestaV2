@@ -15,6 +15,26 @@ Estado: aceptada_local
 ```
 
 ```text
+Fecha: 2026-05-15
+Decision: La supervision prioriza presupuesto operativo antes que `stalled`.
+Motivo: un agente puede emitir primero `stalled` y preguntar al director sin
+bloquear, pero si despues queda `over_budget_no_activity` ya no es una simple
+duda de progreso: hay que cerrar el agente logico para evitar gasto sin
+avance. Si el presupuesto esta excedido pero hay actividad reciente, el director
+pregunta porque puede ser trabajo real lento.
+Alternativas: subir timeouts; mapear timeout a loop_detected; mantener siempre
+AskDirector para cualquier stalled. Las tres opciones reproducen bucles de
+v1/v2 o mezclan causas.
+Impacto: BuildAgentProgressSupervisionV0 emite `timeout/stop_agent/high` para
+`over_budget_no_activity` si la parada es segura; emite
+`needs_revision/ask_director/high` para `over_budget_but_active`; artefactos sin
+ACK se conservan como evidencia, pero no bloquean la parada por timeout.
+Contratos afectados: BuildAgentProgressSupervisionV0, AgentProgressReportV0,
+AssessAgentWorkV0, AskDirectorV0.
+Estado: aceptada_local
+```
+
+```text
 Fecha: 2026-05-04
 Decision: Crear `orquesta-director` como modulo de composicion, no meter el flujo global en web, factory ni core-workflow.
 Motivo: web/MCP/CLI deben ser adaptadores finos; factory genera spec/backlog; core registra el proyecto; core-workflow mantiene estado durable. La composicion entre esos contratos necesita un propietario separado.

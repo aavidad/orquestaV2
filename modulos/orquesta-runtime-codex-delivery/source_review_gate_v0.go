@@ -74,9 +74,13 @@ func (source CodexReviewGateObservationSourceV0) BuildReviewGateObservationsV0(
 func codexReviewGateDescriptorRequestV0(
 	request orquestacionnucleoapp.ReviewGateObservationRequestV0,
 ) CodexReceiptDescriptorRequestV0 {
+	startedAgents := compactCodexDeliveryRefsV0(request.Run.StartedAgents)
+	if len(request.WaitAgentRefs) > 0 {
+		startedAgents = codexReviewGateScopedStartedAgentsV0(startedAgents, request.WaitAgentRefs)
+	}
 	return CodexReceiptDescriptorRequestV0{
 		RunID:          strings.TrimSpace(request.Run.RunID),
-		StartedAgents:  compactCodexDeliveryRefsV0(request.Run.StartedAgents),
+		StartedAgents:  startedAgents,
 		Deliveries:     nil,
 		PhaseArtifacts: nil,
 		CorrelationID:  strings.TrimSpace(request.CorrelationID),
@@ -144,9 +148,25 @@ func codexReviewGateAgentEligibleV0(
 	request orquestacionnucleoapp.ReviewGateObservationRequestV0,
 	agentRef string,
 ) bool {
+	if len(request.WaitAgentRefs) > 0 && !stringInCodexDeliverySetV0(request.WaitAgentRefs, agentRef) {
+		return false
+	}
 	return stringInCodexDeliverySetV0(request.Run.Agents, agentRef) &&
 		stringInCodexDeliverySetV0(request.Run.StartedAgents, agentRef) &&
 		!stringInCodexDeliverySetV0(request.Run.FailedAgents, agentRef)
+}
+
+func codexReviewGateScopedStartedAgentsV0(
+	startedAgents []string,
+	waitAgentRefs []string,
+) []string {
+	out := make([]string, 0, len(startedAgents))
+	for _, agentRef := range compactCodexDeliveryRefsV0(startedAgents) {
+		if stringInCodexDeliverySetV0(waitAgentRefs, agentRef) {
+			out = append(out, agentRef)
+		}
+	}
+	return compactCodexDeliveryRefsV0(out)
 }
 
 func (source CodexReviewGateObservationSourceV0) reviewGateInputV0(

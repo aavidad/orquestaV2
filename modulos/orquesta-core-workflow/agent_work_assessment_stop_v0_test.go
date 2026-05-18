@@ -61,6 +61,30 @@ func TestHandleAssessAgentWorkCommandV0StopAgentAlreadyStoppedOnlyAssesses(t *te
 	}
 }
 
+func TestHandleAssessAgentWorkCommandV0TimeoutPuedePararAgente(t *testing.T) {
+	run := mustRunWithRequestedAgentV0(t, "agent-request-timeout")
+	payload := validAssessmentPayloadV0("assessment-timeout", "agent-request-timeout")
+	payload.Verdict = AgentAssessmentVerdictTimeoutV0
+	payload.Action = AgentAssessmentActionStopAgentV0
+	payload.Severity = AgentAssessmentSeverityHighV0
+	command := mustAssessAgentWorkCommandV0(t, "cmd-assess-timeout", "idem-assess-timeout", payload)
+
+	result, err := HandleCommandV0(run, command)
+	if err != nil {
+		t.Fatalf("handle AssessAgentWork timeout: %v", err)
+	}
+	if got := eventTypesV0(result.Events); !reflect.DeepEqual(got, []string{OrchestrationEventAgentWorkAssessedV0, OrchestrationEventAgentStopRequestedV0}) {
+		t.Fatalf("event types=%v", got)
+	}
+	var outboxPayload StopRuntimeAgentRequestV0
+	if err := json.Unmarshal(result.Outbox[0].Payload, &outboxPayload); err != nil {
+		t.Fatalf("decode outbox payload: %v", err)
+	}
+	if outboxPayload.AgentRequestID != "agent-request-timeout" || outboxPayload.ReasonCode != AgentAssessmentVerdictTimeoutV0 {
+		t.Fatalf("unexpected stop payload: %+v", outboxPayload)
+	}
+}
+
 func TestAssessAgentWorkCommandV0RetriesPendingStopAfterPartialPersist(t *testing.T) {
 	run := mustRunWithRequestedAgentV0(t, "agent-request-partial")
 	payload := validAssessmentPayloadV0("assessment-partial", "agent-request-partial")

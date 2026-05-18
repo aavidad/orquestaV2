@@ -33,7 +33,7 @@ func TestNewMCPCoreWorkflowContractsResourceV0CompactoTrasNCW025(t *testing.T) {
 	if resource.StateShape.SchemaVersion != "orchestration_run.v0" {
 		t.Fatalf("schema de estado inesperado: %+v", resource.StateShape)
 	}
-	if len(resource.Phases) != 10 || len(resource.Commands) != 32 || len(resource.Events) != 32 {
+	if len(resource.Phases) != 10 || len(resource.Commands) != 33 || len(resource.Events) != 33 {
 		t.Fatalf("catalogo incompleto: phases=%d commands=%d events=%d", len(resource.Phases), len(resource.Commands), len(resource.Events))
 	}
 	assertTransitionNamesMCPTestV0(t, resource.Commands, orquestacoreworkflow.SupportedOrchestrationCommandTypesV0())
@@ -43,10 +43,13 @@ func TestNewMCPCoreWorkflowContractsResourceV0CompactoTrasNCW025(t *testing.T) {
 		!containsTransitionMCPTestV0(resource.Events, "RunClosed") ||
 		!containsStringMCPTestV0(resource.StateShape.Refs, "quality_gates") ||
 		!containsStringMCPTestV0(resource.StateShape.Refs, "phase_artifacts") ||
+		!containsStringMCPTestV0(resource.StateShape.Refs, "lost_agents") ||
 		!containsTransitionMCPTestV0(resource.Commands, orquestacoreworkflow.OrchestrationCommandRecordQualityGateV0) ||
 		!containsTransitionMCPTestV0(resource.Events, orquestacoreworkflow.OrchestrationEventQualityGateRecordedV0) ||
 		!containsTransitionMCPTestV0(resource.Commands, orquestacoreworkflow.OrchestrationCommandRegisterPhaseArtifactV0) ||
-		!containsTransitionMCPTestV0(resource.Events, orquestacoreworkflow.OrchestrationEventPhaseArtifactRegisteredV0) {
+		!containsTransitionMCPTestV0(resource.Events, orquestacoreworkflow.OrchestrationEventPhaseArtifactRegisteredV0) ||
+		!containsTransitionMCPTestV0(resource.Commands, orquestacoreworkflow.OrchestrationCommandRegisterAgentLostV0) ||
+		!containsTransitionMCPTestV0(resource.Events, orquestacoreworkflow.OrchestrationEventAgentLostV0) {
 		t.Fatalf("NCW-025 no reflejado: %+v", resource)
 	}
 	if len(resource.PublicErrors) < 10 || len(resource.Guardrails) == 0 || len(resource.CanonicalRefs) < 3 {
@@ -72,7 +75,7 @@ func TestNewMCPCoreWorkflowContractsResourceV0CompactoTrasNCW025(t *testing.T) {
 			t.Fatalf("resource contiene detalle no compacto %q: %s", forbidden, text)
 		}
 	}
-	if len(text) > 10000 {
+	if len(text) > 11000 {
 		t.Fatalf("resource demasiado largo: %d bytes", len(text))
 	}
 }
@@ -88,6 +91,8 @@ func TestMCPCoreWorkflowTransitionByNameV0NormalizaEntradas(t *testing.T) {
 		"register phase artifact":   "RegisterPhaseArtifact",
 		"PhaseArtifactRegistered":   "event",
 		"QualityGateRecorded":       "event",
+		"register agent lost":       "RegisterAgentLost",
+		"AgentLost":                 "event",
 		"register final validation": "RegisterFinalValidation",
 	}
 

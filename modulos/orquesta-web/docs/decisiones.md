@@ -17,6 +17,16 @@ Estado:
 ## Decisiones iniciales
 
 ```text
+Fecha: 2026-05-15
+Decision: `stalled` informativo no cambia el panel a `attention`.
+Motivo: un agente premium puede estar pensando varios ticks sin escribir artefactos. La web debe mostrar esa telemetria, pero solo pedir atencion si core marca `needs_attention`, hay `loop_detected`, proceso `stopped` o checkpoint pendiente.
+Alternativas: mantener cualquier `stalled` como alerta; ocultar stalled; duplicar reglas de decision en web.
+Impacto: `directorStatsAttentionStateV0` ya no usa `stalled_agents` como disparador de atencion. El contador sigue visible para supervision, pero no implica actuacion humana ni del director.
+Contratos afectados: `WebDirectorStatsViewModelV0`, `WebDirectorStatsProgressV0`.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-05-04
 Decision: `orquesta-web` arrancara el flujo de nueva app como adaptador fino de `SolicitarNuevaApp v0`.
 Motivo: El contrato publico de `orquesta-factory` define que el puerto valida, normaliza y propone, sin persistir estado, crear tareas directas, arrancar runtime ni decidir reglas de negocio en la UI.

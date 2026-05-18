@@ -17,6 +17,11 @@ func TestArquitecturaAppChangeDirectorSourceNoImportaAdaptadoresConcretosV0(t *t
 		text := string(data)
 		for _, forbidden := range []string{
 			`"database/sql"`,
+			`"github.com/go-sql-driver/mysql"`,
+			`"github.com/jackc/pgx"`,
+			`"github.com/lib/pq"`,
+			`"github.com/mattn/go-sqlite3"`,
+			`"modernc.org/sqlite"`,
 			`"orquesta/cmd"`,
 			`"orquesta/db"`,
 			`"os/exec"`,

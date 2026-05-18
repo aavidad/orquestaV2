@@ -78,3 +78,13 @@ func compactAppRunnerRefsV0(values []string) []string {
 	}
 	return result
 }
+
+func appRunnerStringInSetV0(values []string, wanted string) bool {
+	wanted = strings.TrimSpace(wanted)
+	for _, value := range values {
+		if strings.TrimSpace(value) == wanted {
+			return true
+		}
+	}
+	return false
+}

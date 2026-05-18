@@ -36,7 +36,10 @@ func (provider DeliveryCandidateProviderV0) BuildSchedulerCandidatesV0(
 	}
 	for _, observation := range observations {
 		observation = normalizeDeliveryObservationV0(request, observation)
-		if observation.PhaseID == string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0) {
+		if !deliveryObservationMatchesWaitAgentRefsV0(request, observation) {
+			continue
+		}
+		if observationHasTaskDeliveryV0(request.Run, observation) {
 			candidate, err := provider.deliveryCandidateV0(request, observation)
 			if err != nil {
 				return SchedulerCandidateSetV0{}, err
@@ -54,6 +57,27 @@ func (provider DeliveryCandidateProviderV0) BuildSchedulerCandidatesV0(
 		return candidates, nil
 	}
 	return candidates, nil
+}
+
+func observationHasTaskDeliveryV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	observation AgentDeliveryObservationV0,
+) bool {
+	return strings.TrimSpace(observation.DeliveryRef) != "" &&
+		orchestrationRunHasTaskRefV0(run, observation.TaskID)
+}
+
+func orchestrationRunHasTaskRefV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	taskRef string,
+) bool {
+	taskRef = strings.TrimSpace(taskRef)
+	for _, value := range run.Tasks {
+		if strings.TrimSpace(value) == taskRef {
+			return true
+		}
+	}
+	return false
 }
 
 func (provider DeliveryCandidateProviderV0) baseCandidatesV0(
@@ -78,6 +102,7 @@ func agentDeliveryObservationRequestV0(
 		CorrelationID:    request.CorrelationID,
 		EvidenceRefs:     request.EvidenceRefs,
 		PreviousDecision: request.PreviousDecision,
+		WaitAgentRefs:    request.WaitAgentRefs,
 	}
 }
 
@@ -247,4 +272,25 @@ func phaseArtifactSummaryV0(value string) string {
 		return value
 	}
 	return "Artefacto compacto validado por recibo de agente."
+}
+
+func deliveryObservationMatchesWaitAgentRefsV0(
+	request SchedulerCandidateRequestV0,
+	observation AgentDeliveryObservationV0,
+) bool {
+	waitAgentRefs := compactStringsV0(request.WaitAgentRefs)
+	if len(waitAgentRefs) == 0 {
+		return true
+	}
+	return stringInDeliveryCandidateSetV0(waitAgentRefs, observation.AgentRef)
+}
+
+func stringInDeliveryCandidateSetV0(values []string, want string) bool {
+	want = strings.TrimSpace(want)
+	for _, value := range values {
+		if strings.TrimSpace(value) == want {
+			return true
+		}
+	}
+	return false
 }

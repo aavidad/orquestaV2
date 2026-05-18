@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestafactory "orquesta/modulos/orquesta-factory"
 )
 
@@ -17,7 +18,7 @@ func TestBuildGoAPIWebMicrotaskPlanFromAppSpecV0UsaContratoFactoryV0(t *testing.
 	if plan.AppRef != spec.App.Slug || plan.RunRef != "run-ref-factory-plan-001" {
 		t.Fatalf("plan refs=%+v spec=%+v", plan, spec.App)
 	}
-	assertAppUnitForTestV0(t, plan, "bootstrap", nil, []string{
+	assertAppUnitForTestV0(t, plan, "bootstrap", orquestacoreworkflow.OrchestrationPhaseProgramacionV0, nil, []string{
 		"go.mod",
 		"AGENTS.md",
 		"README.md",

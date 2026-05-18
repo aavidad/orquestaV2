@@ -6,8 +6,8 @@ Lee este archivo y `README.md` antes de editar este modulo.
 
 - Este modulo contiene un conector REST opt-in minimo. Cualquier ampliacion debe
   mantener tests de contrato.
-- Mantener frontera hexagonal: el conector futuro sera adaptador externo y no
-  debe contaminar `orquesta-domain-work` con semantica OPES.
+- Mantener frontera hexagonal: este conector es adaptador externo y no debe
+  contaminar `orquesta-domain-work` con semantica OPES.
 - No acceder a DB, ficheros internos, rutas locales, workers ni estructura
   interna de OPES.
 - No hardcodear backend de persistencia.

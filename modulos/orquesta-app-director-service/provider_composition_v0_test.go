@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	orquestacorereplanner "orquesta/modulos/orquesta-core-replanner"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorsupervisedburst "orquesta/modulos/orquesta-director-supervised-burst"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -31,6 +32,45 @@ func TestComposeStartAppDirectorProviderV0IncludesReviewReworkReplanSource(t *te
 	}
 	if !source.called {
 		t.Fatalf("review rework replan source no fue invocado")
+	}
+}
+
+func TestComposeStartAppDirectorProviderV0PassesTaskWriterToReviewReworkReplanSource(t *testing.T) {
+	runRef := "run-ref-service-review-rework-split-001"
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(serviceReviewOriginalTaskV0(runRef))
+	provider := composeStartAppDirectorProviderV0(
+		orquestacionnucleoapp.StaticCandidateProviderV0{},
+		StartAppDirectorPortsV0{
+			DirectorTaskStore:        taskStore,
+			ReviewReworkReplanSource: splitReviewReworkReplanSourceV0{},
+		},
+		"director-service-test",
+	)
+
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), orquestacionnucleoapp.SchedulerCandidateRequestV0{
+		Run: orquestacoreworkflow.OrchestrationRunV0{
+			RunID:        runRef,
+			CurrentPhase: orquestacoreworkflow.OrchestrationPhaseRevisionV0,
+			Tasks:        []string{"task-ref-service-review-original-001"},
+			ReworkRequests: []string{
+				"rework-request-ref-service-review-split-001#review_result:review-result-ref-service-review-split-001",
+			},
+		},
+		OccurredAt:    "2026-05-10T10:07:00Z",
+		CorrelationID: "corr-service-review-rework-split-001",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.ReplanFollowupCandidates) != 1 {
+		t.Fatalf("replan followups=%d candidates=%+v", len(candidates.ReplanFollowupCandidates), candidates)
+	}
+	followups := candidates.ReplanFollowupCandidates[0].ReplanFollowupsInput.MicrotaskCandidates
+	if len(followups) != 1 || followups[0].Payload.Task.TaskID != "task-ref-service-review-split-a" {
+		t.Fatalf("microtareas de replan no compuestas: %+v", followups)
+	}
+	if _, err := taskStore.LoadWorkflowTasksV0(context.Background(), runRef, []string{"task-ref-service-review-split-a"}); err != nil {
+		t.Fatalf("microtarea split no guardada por DirectorTaskStore: %v", err)
 	}
 }
 
@@ -130,6 +170,67 @@ func (source *recordingReviewReworkReplanSourceV0) BuildReviewReworkReplanPlansV
 ) ([]orquestacionnucleoapp.ReviewReworkReplanPlanV0, error) {
 	source.called = true
 	return nil, nil
+}
+
+type splitReviewReworkReplanSourceV0 struct{}
+
+func (source splitReviewReworkReplanSourceV0) BuildReviewReworkReplanPlansV0(
+	_ context.Context,
+	request orquestacionnucleoapp.ReviewReworkReplanPlanRequestV0,
+) ([]orquestacionnucleoapp.ReviewReworkReplanPlanV0, error) {
+	return []orquestacionnucleoapp.ReviewReworkReplanPlanV0{{
+		CandidateRef:     "candidate-ref-service-review-split-001",
+		ReplanRef:        "replan-ref-service-review-split-001",
+		SignalRef:        "signal-ref-service-review-split-001",
+		ReworkRequestRef: "rework-request-ref-service-review-split-001",
+		TaskRef:          "task-ref-service-review-original-001",
+		ReasonRef:        "review-split-required",
+		RequestedAction:  orquestacorereplanner.ReplanActionSplitTaskV0,
+		Summary:          "Dividir retrabajo de revision.",
+		EvidenceRefs:     []string{"evidence-ref-service-review-split-001"},
+		ReviewResult: orquestacoreworkflow.ReviewResultV0{
+			ReviewResultRef: "review-result-ref-service-review-split-001",
+			ReviewRequestID: "review-request-ref-service-review-split-001",
+			DeliveryRef:     "delivery-ref-service-review-split-001",
+			Status:          orquestacoreworkflow.ReviewResultStatusChangesRequestedV0,
+			Summary:         "Cambios requeridos.",
+			EvidenceRefs:    []string{"evidence-ref-review-result-service-split-001"},
+		},
+		SplitTasks: []orquestacoreworkflow.WorkflowTaskV0{
+			serviceReviewReworkSplitTaskV0(request.Run.RunID),
+		},
+	}}, nil
+}
+
+func serviceReviewReworkSplitTaskV0(runRef string) orquestacoreworkflow.WorkflowTaskV0 {
+	return orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion: orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:        "task-ref-service-review-split-a",
+		RunID:         runRef,
+		PhaseID:       orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Title:         "Microtarea de retrabajo",
+		Summary:       "Corregir entrega dividida por revision.",
+		WriteSet:      []string{"app/rework_split_a.go"},
+		AcceptanceCriteria: []string{
+			"Entrega corregida lista para revision.",
+		},
+		RequiredTests: []string{"go test ./..."},
+	}
+}
+
+func serviceReviewOriginalTaskV0(runRef string) orquestacoreworkflow.WorkflowTaskV0 {
+	return orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion: orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:        "task-ref-service-review-original-001",
+		RunID:         runRef,
+		PhaseID:       orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Title:         "Microtarea original",
+		Summary:       "Trabajo original entregado a revision.",
+		WriteSet:      []string{"app/original.go"},
+		AcceptanceCriteria: []string{
+			"Entrega inicial trazable.",
+		},
+	}
 }
 
 type recordingReviewGateSourceV0 struct {

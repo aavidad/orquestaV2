@@ -9,6 +9,40 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 ## Documentos principales
 
+- `estado_actual_2026-05-17.md`
+  Foto vigente del estado del repo: nucleo neutral reutilizable, composiciones
+  Codex/OPES, evidencias de prueba, documentos stale, riesgos y ruta siguiente.
+
+- `matriz_pruebas_reales_y_smoke_2026-05-17.md`
+  Matriz operativa para smokes offline, OPES reales, Codex reales, reinicio,
+  shutdown, replan y metricas. Distingue comandos existentes de pendientes.
+
+- `guia_nucleo_orquestacion_2026-05-17.md`
+  Mapa de piezas, invariantes y flujo de trabajo para que nuevos agentes no
+  vuelvan a acoplar el core a Codex, OPES, persistencia concreta o UI.
+
+- `principio_orquesta_piensa_director.md`
+  Decision transversal vigente: Orquesta aporta el juicio mediante director y
+  agentes; las apps de dominio aportan reglas, datos, validacion y ensamblado.
+
+- `corte_opes_como_consumidor_orquesta_2026-05-18.md`
+  Corte vigente de OPES como consumidor de Orquesta: conector REST opt-in,
+  bridge externo, `plan_temario -> document_plan`, politica editorial OPES y
+  frontera hexagonal.
+
+- `runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md`
+  Runbook para probar `plan_temario` de Operario con `xhigh`, bridge OPES,
+  supervisor, entrega `document_plan` y automatizacion de derivados por pases
+  con `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE`.
+
+- `resultado_prueba_opes_orquesta_plan_temario_operario_2026-05-18.md`
+  Evidencia real acotada: OPES temporal, Orquesta REST bridge, Codex real
+  `xhigh`, `document_plan` entregado, job OPES completado y derivados creados.
+
+- `director_operativo_v1_2026-05-17.md`
+  Guia del primer corte de Director Operativo V1: plan vivo, subagentes,
+  espera, review, replan, cierre con pruebas y fronteras que no debe cruzar.
+
 - `orquesta_v1_vision.md`
   Vision funcional y arquitectonica completa.
 

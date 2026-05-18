@@ -15,6 +15,53 @@ Estado:
 ```
 
 ```text
+Fecha: 2026-05-17
+Decision: `MicrotaskCreated` conserva la autorizacion compacta de una
+microtarea en el run, pero la metadata rica de `WorkflowTaskV0` pertenece al
+`WorkflowTaskStore` de la capa de aplicacion.
+Motivo: el workflow puro debe poder replayar refs de tareas sin importar stores,
+DB, runtime ni dominio. Campos como `wave_ref`, `cohort_ref`,
+`parent_task_ref`, `child_task_refs`, write-set, criterios y limites de
+delegacion son necesarios para scheduler/waits/revision, pero no deben convertir
+el evento compacto en un snapshot completo de trabajo externo.
+Alternativas: guardar todo `WorkflowTaskV0` dentro de `MicrotaskCreated`;
+duplicar metadata en `OrchestrationRunV0`; inferir ola/cohorte desde texto o
+refs de agente; aceptar que waits no sean recuperables tras reinicio.
+Impacto: cualquier bundle productivo debe persistir o rematerializar
+`WorkflowTaskStore` junto al replay de eventos. Un replay event-only reconstruye
+`run.Tasks`, no `wave_ref`/`cohort_ref` ni linaje completo. Los helpers de
+orquestacion solo deben esperar por metadata rica cuando el store este
+disponible.
+Contratos afectados: CreateMicrotask, MicrotaskCreated, WorkflowTaskV0,
+OrchestrationRunV0.Tasks, WorkflowTaskStorePortV0.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-15
+Decision: Los agentes arrancados cuyo proceso/sesion deja de ser controlable se
+registran como `AgentLost`, separado de `AgentFailed` y de `AgentStopConfirmed`.
+Motivo: tras reinicios o perdida del runtime, Orquesta puede conservar que un
+agente fue arrancado y tener incluso una parada solicitada, pero no puede
+probar que el proceso se haya detenido. Confirmar parada sin evidencia falsea
+la historia; marcarlo como `AgentFailed` mezcla un fallo posterior con fallo de
+launch.
+Alternativas: reutilizar `failed_agents` con un `reason_code` especial;
+confirmar parada por timeout; dejar el run bloqueado esperando un proceso que
+ya no existe; guardar detalles del runtime dentro del core.
+Impacto: `lost_agents` es una proyeccion compacta terminal para agentes
+arrancados sin entrega. `StopAgent`, `RegisterDelivery`,
+`RegisterPhaseArtifact`, `RegisterAgentStopConfirmed`, `RegisterAgentStarted`
+y `RegisterAgentFailed` rechazan estados contradictorios. `RecordReplanDecision`
+acepta `source_kind=agent_lost` en programacion para que el director cree un
+reemplazo explicito.
+Contratos afectados: RegisterAgentLost, AgentLost, StopAgent,
+RegisterAgentStopConfirmed, RegisterDelivery, RegisterPhaseArtifact,
+RecordReplanDecision, OrchestrationRunV0.LostAgents.
+Estado: aceptada e implementada en NCW-074
+```
+
+```text
 Fecha: 2026-05-07
 Decision: `RecordQualityGate` se registra como transicion durable pura mediante `QualityGateRecorded` y proyeccion compacta `quality_gates`.
 Motivo: La calidad debe quedar como evidencia reproducible antes de que director/revision decidan cerrar, pedir retrabajo, bloquear o consultar; mezclar esas acciones en el gate recrearia acoplamiento entre dominio, scheduler y adaptadores.
@@ -767,4 +814,21 @@ Alternativas: Leer siempre el event log completo; guardar resumen largo en el ru
 Impacto: `AgentStopRequested` proyecta `agent_request_id#reason:<reason_code>` en `OrchestrationRunV0.AgentStopRequests`; `DirectorRunStatsV0` expone `stop_reason_code/source/ref`. `#` queda prohibido en `agent_request_id` y `reason_code` de parada para mantener la proyeccion parseable.
 Contratos afectados: StopAgent, AgentStopRequested, OrchestrationRunV0, DirectorRunStatsV0.
 Estado: aceptada local en NCW-073
+```
+
+```text
+Fecha: 2026-05-15
+Decision: `timeout` es veredicto propio para parar agentes sin actividad reciente.
+Motivo: reutilizar `loop_detected` o `garbage` para un agente excedido en tiempo
+pero sin evidencia de bucle o mala calidad mezcla causas distintas y dificulta
+que el director tome decisiones. El caso real OPES mostro que un `stalled`
+previo no debe impedir una parada posterior cuando el presupuesto indica
+`over_budget_no_activity`.
+Impacto: `AssessAgentWork action=stop_agent` acepta `verdict=timeout`; el
+outbox `StopRuntimeAgent` transporta ese reason_code compacto. El core no
+decide proveedor, modelo, HOME, runtime ni DB: solo valida y persiste la causa
+durable.
+Contratos afectados: AssessAgentWork, AgentWorkAssessed, AgentStopRequested,
+StopRuntimeAgentRequestV0.
+Estado: aceptada local en NCW-074
 ```

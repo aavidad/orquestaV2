@@ -12,6 +12,7 @@ const (
 	DirectorAgentStatusRunningV0        = "running"
 	DirectorAgentStatusCompletedV0      = "completed"
 	DirectorAgentStatusFailedV0         = "failed"
+	DirectorAgentStatusLostV0           = "lost"
 	DirectorAgentStatusStopRequestedV0  = "stop_requested"
 	DirectorAgentStatusStoppedV0        = "stopped"
 	DirectorAgentStatusControlUnknownV0 = "control_unknown"
@@ -74,6 +75,7 @@ type DirectorRunStatsCountsV0 struct {
 	AgentsRequested         int `json:"agents_requested"`
 	AgentsStarted           int `json:"agents_started"`
 	AgentsFailed            int `json:"agents_failed"`
+	AgentsLost              int `json:"agents_lost"`
 	AgentsStopRequested     int `json:"agents_stop_requested"`
 	AgentsStopConfirmed     int `json:"agents_stop_confirmed"`
 	AgentsDelivered         int `json:"agents_delivered"`
@@ -112,6 +114,7 @@ type DirectorRunStatsRefsV0 struct {
 	AgentsRequested       []string `json:"agents_requested,omitempty"`
 	AgentsStarted         []string `json:"agents_started,omitempty"`
 	AgentsFailed          []string `json:"agents_failed,omitempty"`
+	AgentsLost            []string `json:"agents_lost,omitempty"`
 	AgentsStopRequested   []string `json:"agents_stop_requested,omitempty"`
 	AgentStopRequests     []string `json:"agent_stop_requests,omitempty"`
 	AgentsStopConfirmed   []string `json:"agents_stop_confirmed,omitempty"`
@@ -159,6 +162,7 @@ type DirectorAgentStatsV0 struct {
 	Requested         bool                         `json:"requested"`
 	Started           bool                         `json:"started"`
 	Failed            bool                         `json:"failed"`
+	Lost              bool                         `json:"lost"`
 	StopRequested     bool                         `json:"stop_requested"`
 	StopConfirmed     bool                         `json:"stop_confirmed"`
 	StopReasonCode    string                       `json:"stop_reason_code,omitempty"`

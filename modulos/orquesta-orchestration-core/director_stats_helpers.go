@@ -32,13 +32,14 @@ func buildDirectorAgentStatsV0(
 	agentRefs := compactStringsV0(append(
 		append(append(append([]string{}, run.Agents...), run.StartedAgents...),
 			run.FailedAgents...),
-		append(run.StoppedAgents, run.ConfirmedStoppedAgents...)...,
+		append(append(run.StoppedAgents, run.ConfirmedStoppedAgents...), run.LostAgents...)...,
 	))
 	if len(agentRefs) == 0 {
 		return nil
 	}
 	started := autonomousStringSetV0(run.StartedAgents)
 	failed := autonomousStringSetV0(run.FailedAgents)
+	lost := autonomousStringSetV0(run.LostAgents)
 	stopped := autonomousStringSetV0(run.StoppedAgents)
 	confirmed := autonomousStringSetV0(run.ConfirmedStoppedAgents)
 	completed := reflectedDirectorAgentSetV0(run)
@@ -49,11 +50,12 @@ func buildDirectorAgentStatsV0(
 			Requested:      true,
 			Started:        started[ref],
 			Failed:         failed[ref],
+			Lost:           lost[ref],
 			StopRequested:  stopped[ref],
 			StopConfirmed:  confirmed[ref],
 			Completed:      completed[ref],
 		}
-		agent.InFlight = agent.Started && !agent.Failed && !agent.StopConfirmed && !agent.Completed
+		agent.InFlight = agent.Started && !agent.Failed && !agent.Lost && !agent.StopConfirmed && !agent.Completed
 		agent.Status = directorAgentStatusV0(agent)
 		agent.NeedsAttention = directorAgentNeedsAttentionV0(agent)
 		agent.ControlState = DirectorAgentControlStateNotLoadedV0
@@ -66,6 +68,8 @@ func directorAgentStatusV0(agent DirectorAgentStatsV0) string {
 	switch {
 	case agent.Failed:
 		return DirectorAgentStatusFailedV0
+	case agent.Lost:
+		return DirectorAgentStatusLostV0
 	case agent.StopConfirmed:
 		return DirectorAgentStatusStoppedV0
 	case agent.Completed:
@@ -80,7 +84,7 @@ func directorAgentStatusV0(agent DirectorAgentStatsV0) string {
 }
 
 func directorAgentNeedsAttentionV0(agent DirectorAgentStatsV0) bool {
-	return agent.Failed || (agent.StopRequested && !agent.StopConfirmed)
+	return agent.Failed || agent.Lost || (agent.StopRequested && !agent.StopConfirmed && !agent.Lost)
 }
 
 func directorProcessStatsFromRecordV0(

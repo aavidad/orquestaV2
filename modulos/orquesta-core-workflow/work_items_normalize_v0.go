@@ -14,6 +14,12 @@ func NormalizeWorkflowTaskV0(task WorkflowTaskV0) WorkflowTaskV0 {
 		AcceptanceCriteria:   normalizeWorkflowTaskStringsV0(task.AcceptanceCriteria),
 		RequiredTests:        normalizeWorkflowTaskStringsV0(task.RequiredTests),
 		DependsOn:            normalizeWorkflowTaskStringsV0(task.DependsOn),
+		ParentTaskRef:        strings.TrimSpace(task.ParentTaskRef),
+		CohortRef:            strings.TrimSpace(task.CohortRef),
+		WaveRef:              strings.TrimSpace(task.WaveRef),
+		DelegationDepth:      task.DelegationDepth,
+		MaxChildAgents:       task.MaxChildAgents,
+		ChildTaskRefs:        normalizeWorkflowTaskStringsV0(task.ChildTaskRefs),
 		FunctionContractRefs: normalizeWorkflowFunctionContractRefsV0(task.FunctionContractRefs),
 	}
 }

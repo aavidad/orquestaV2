@@ -1,6 +1,7 @@
 package orquestaruntimecodexdelivery
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,7 +24,17 @@ func codexProgressReportWithProcessFailureContextV0(
 	descriptor CodexReceiptDescriptorV0,
 	report orquestaruntime.AgentProgressReportV0,
 ) orquestaruntime.AgentProgressReportV0 {
+	materialized := codexProgressWriteSetMaterializedV0(descriptor)
 	if report.Status != orquestaruntime.AgentStoppedV0 {
+		if materialized && codexProgressStatusNeedsMaterializedArtifactReviewV0(report.Status) {
+			report.DecisionRequired = true
+			report.Summary = "Proceso sin ACK pero con artefacto en write-set; requiere validacion antes de replanificar."
+			report.EvidenceRefs = compactCodexDeliveryRefsV0(append(
+				report.EvidenceRefs,
+				"evidence-ref-no-ack",
+				"evidence-ref-artifact-without-ack",
+			))
+		}
 		return report
 	}
 	failure := codexProgressFailureClassFromDescriptorV0(descriptor)
@@ -39,7 +50,11 @@ func codexProgressReportWithProcessFailureContextV0(
 			"evidence-ref-capacity-limited",
 		))
 	case codexProgressFailureInterruptedV0:
-		report.Summary = "Proceso detenido sin ACK tras interrupcion compacta."
+		if materialized {
+			report.Summary = "Proceso detenido sin ACK tras interrupcion compacta pero con artefacto en write-set; requiere validacion."
+		} else {
+			report.Summary = "Proceso detenido sin ACK tras interrupcion compacta."
+		}
 		report.DecisionRequired = true
 		report.EvidenceRefs = compactCodexDeliveryRefsV0(append(
 			report.EvidenceRefs,
@@ -47,14 +62,31 @@ func codexProgressReportWithProcessFailureContextV0(
 			"evidence-ref-no-ack-interrupted",
 		))
 	case codexProgressFailureNoACKV0:
-		report.Summary = "Proceso detenido sin ACK."
+		if materialized {
+			report.Summary = "Proceso detenido sin ACK pero con artefacto en write-set; requiere validacion."
+		} else {
+			report.Summary = "Proceso detenido sin ACK."
+		}
 		report.DecisionRequired = true
 		report.EvidenceRefs = compactCodexDeliveryRefsV0(append(
 			report.EvidenceRefs,
 			"evidence-ref-no-ack",
 		))
 	}
+	if materialized {
+		report.EvidenceRefs = compactCodexDeliveryRefsV0(append(
+			report.EvidenceRefs,
+			"evidence-ref-artifact-without-ack",
+		))
+	}
 	return report
+}
+
+func codexProgressStatusNeedsMaterializedArtifactReviewV0(
+	status orquestaruntime.AgentProgressStatusV0,
+) bool {
+	return status == orquestaruntime.AgentStalledV0 ||
+		status == orquestaruntime.AgentLoopDetectedV0
 }
 
 func codexProgressFailureClassFromDescriptorV0(
@@ -125,4 +157,54 @@ func codexProgressReadFailureLogV0(path string) (string, bool) {
 		data = data[len(data)-maxCodexProgressFailureLogBytesV0:]
 	}
 	return string(data), true
+}
+
+func codexProgressWriteSetMaterializedV0(
+	descriptor CodexReceiptDescriptorV0,
+) bool {
+	projectDir := strings.TrimSpace(descriptor.ProjectWorkDir)
+	if projectDir == "" {
+		return false
+	}
+	for _, raw := range descriptor.Spec.AgentPacket.Task.WriteSet {
+		rel, ok := cleanCodexReceiptAckFilePathV0(raw)
+		if !ok {
+			continue
+		}
+		if codexProgressPathMaterializedV0(filepath.Join(projectDir, filepath.FromSlash(rel))) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexProgressPathMaterializedV0(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	if !info.IsDir() {
+		return info.Size() > 0
+	}
+	found := false
+	visited := 0
+	_ = filepath.WalkDir(path, func(_ string, entry fs.DirEntry, err error) error {
+		if err != nil || found {
+			return nil
+		}
+		visited++
+		if visited > 512 {
+			return filepath.SkipAll
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err == nil && info.Size() > 0 {
+			found = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found
 }

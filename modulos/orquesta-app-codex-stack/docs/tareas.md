@@ -653,3 +653,62 @@ Reglas cerradas:
 - no lanza Codex real por defecto;
 - no introduce defaults de modelo, HOME, CODEX_HOME, PATH ni runtime;
 - el endpoint REST/MCP sigue siendo el borde; el core solo ve refs compactas.
+
+## APP-CODEX-STACK-023
+
+Objetivo: introducir la pieza minima para que Orquesta pueda supervisar una
+sesion Codex y empujarla con `sigue` sin intervencion manual.
+
+Estado: hecho como contrato unitario, adaptador de stack y API HTTP generica
+`POST /api/v0/runs/supervise` sobre el ciclo normal de agentes Orquesta.
+Pendiente smoke real recursivo padre/hijo/nieto y, si se quiere, cliente CLI
+fino contra esa API.
+
+Trabajo aplicado:
+
+- `CodexSupervisorAgentLifecyclePortV0` con `LaunchV0` y `ContinueV0`;
+- alias compatible `CodexSupervisorRuntimePortV0` para no romper el test/contrato
+  inicial;
+- `SuperviseCodexV0` con tick 1 de launch, ticks posteriores de continue y
+  mensaje por defecto `sigue`;
+- estados terminales `done`/`failed`, corte por contexto, error de runtime o
+  `max_ticks`;
+- historial compacto para que el borde superior pueda auditar que Orquesta
+  empujo la sesion;
+- `CodexSupervisorStackLifecycleV0`, que implementa
+  `CodexSupervisorAgentLifecyclePortV0` sin stdin ni canal paralelo:
+  - con `RunRef` usa `DrainRunV0` para avanzar una run existente;
+  - sin `RunRef` usa `RunGlobalSupervisorV0` para avanzar la cola global;
+  - ambos caminos reutilizan `DrainRunV0` / `ContinueAppDirectorV0` / replan /
+    outbox `LaunchRuntimeAgent` / dispatcher existente;
+  - el snapshot traduce estados del loop del nucleo a
+    `pending|running|stopped|done|failed` para que `SuperviseCodexV0` pueda
+    seguir empujando hasta terminal o `max_ticks`;
+- contrato publico neutral `orquesta.runs.supervisor.v0` en `orquesta-mcp`;
+- ruta neutral `POST /api/v0/runs/supervise` en `orquesta-http-gateway` y
+  `orquesta-app-gateway`;
+- executor `CodexStackRunSupervisorExecutorV0` en este stack, que adapta el
+  contrato neutral al supervisor Codex del borde sin filtrar Codex al gateway.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexSupervisorV0'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexSupervisor(StackLifecycle|RuntimeState)|TestCodexSupervisorV0'`
+- `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPRunSupervisor|TestRegisterMCPTransportV0ExponeOperacionesExistentes'`
+- `go test -count=1 ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway -run 'TestNewAppGatewayMuxV0RegistersConfiguredRoutes|TestRunControlYRunQueueAPIDeleganEnMCPPortsV0'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackRunSupervisorAPI|TestCodexSupervisorStackLifecycle|TestCodexSupervisorV0'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack`
+
+Reglas cerradas:
+
+- no tocar el core para esta pieza;
+- `ContinueV0("sigue")` no es stdin ni runtime interactivo;
+- el adaptador de stack avanza el flujo normal: `RunGlobalSupervisorV0` /
+  `DrainRunV0` / `ContinueAppDirectorV0`, observaciones ACK/progreso, replan y
+  outbox `LaunchRuntimeAgent`;
+- la API publica es de runs (`/api/v0/runs/supervise`), no de Codex; Codex vive
+  solo en el executor de este stack;
+- si hace falta arrancar otro Codex, se hace por `ExternalProcessAgentBatchExecutorV0`
+  y `ProcessRegistry`, no por un lanzador paralelo;
+- no declarar cerrada la recursion real hasta tener smoke con parent/child refs,
+  presupuesto global, profundidad/fanout y review causal.

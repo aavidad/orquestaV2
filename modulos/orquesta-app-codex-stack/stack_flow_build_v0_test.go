@@ -63,20 +63,21 @@ func mustBuildCodexStackWithDomainWorkForTestV0(
 			RunQueue:        runMemory,
 		},
 		Codex: CodexRuntimeConfigV0{
-			CommandPath:    filepath.Join(projectDir, "codex-bin"),
-			ProjectWorkDir: projectDir,
-			RuntimeWorkDir: runtimeDir,
-			Model:          "gpt-5.5",
-			Sandbox:        "workspace-write",
-			Runtime:        runtime,
-			ProcessStopper: runtime,
-			SnapshotSource: runtime,
-			MaxBatchReady:  4,
-			MaxConcurrency: 4,
-			WaitInterval:   time.Millisecond,
-			ProgressPolicy: codexStackProgressPolicyForTestV0(),
-			ApprovalPolicy: "never",
-			PromptHints:    []string{"Prueba fake: escribe ACK compacto."},
+			CommandPath:     filepath.Join(projectDir, "codex-bin"),
+			ProjectWorkDir:  projectDir,
+			RuntimeWorkDir:  runtimeDir,
+			Model:           "gpt-5.5",
+			ReasoningEffort: string(orquestacoreworkflow.OrchestrationCapacityXHighV0),
+			Sandbox:         "workspace-write",
+			Runtime:         runtime,
+			ProcessStopper:  runtime,
+			SnapshotSource:  runtime,
+			MaxBatchReady:   4,
+			MaxConcurrency:  4,
+			WaitInterval:    time.Millisecond,
+			ProgressPolicy:  codexStackProgressPolicyForTestV0(),
+			ApprovalPolicy:  "never",
+			PromptHints:     []string{"Prueba fake: escribe ACK compacto."},
 		},
 		Capacity: CapacityConfigV0{
 			Tier:            orquestacoreworkflow.OrchestrationCapacityXHighV0,
@@ -104,6 +105,21 @@ func codexStackProgressPolicyForTestV0() orquestaruntime.AgentProgressHeartbeatP
 	return orquestaruntime.AgentProgressHeartbeatPolicyV0{
 		StalledAfterNoProgressTicks: 10000,
 		LoopAfterRepeatedActions:    10000,
+	}
+}
+
+func TestOperationalPlanStateStoreV0UsaStoreExplicitoOWriterLegible(t *testing.T) {
+	explicitStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
+	if got := operationalPlanStateStoreV0(ConfigV0{Stores: StoresV0{
+		OperationalPlanStateStore: explicitStore,
+	}}); got != explicitStore {
+		t.Fatalf("store explicito=%T want explicit", got)
+	}
+	writerStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
+	if got := operationalPlanStateStoreV0(ConfigV0{Stores: StoresV0{
+		OperationalPlanStateWriter: writerStore,
+	}}); got != writerStore {
+		t.Fatalf("writer legible=%T want writerStore", got)
 	}
 }
 

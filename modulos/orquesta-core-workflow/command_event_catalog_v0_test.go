@@ -4,8 +4,8 @@ import "testing"
 
 func TestSupportedOrchestrationCommandTypesV0CompletoYClonado(t *testing.T) {
 	got := SupportedOrchestrationCommandTypesV0()
-	if len(got) != 32 {
-		t.Fatalf("command catalog size=%d, want 32: %v", len(got), got)
+	if len(got) != 33 {
+		t.Fatalf("command catalog size=%d, want 33: %v", len(got), got)
 	}
 	for _, commandType := range got {
 		if !isSupportedCommandTypeV0(commandType) {
@@ -21,8 +21,8 @@ func TestSupportedOrchestrationCommandTypesV0CompletoYClonado(t *testing.T) {
 
 func TestSupportedOrchestrationEventTypesV0CompletoYClonado(t *testing.T) {
 	got := SupportedOrchestrationEventTypesV0()
-	if len(got) != 32 {
-		t.Fatalf("event catalog size=%d, want 32: %v", len(got), got)
+	if len(got) != 33 {
+		t.Fatalf("event catalog size=%d, want 33: %v", len(got), got)
 	}
 	for _, eventType := range got {
 		if !isSupportedEventTypeV0(eventType) {

@@ -31,3 +31,38 @@ func TestAgentPacketV0UsaDeliveryRefsUnicasPorAgente(t *testing.T) {
 		t.Fatalf("context bundle refs duplicadas: %s", first.Context.BundleRef)
 	}
 }
+
+func TestAgentPacketV0DirectorNormalUsaXHigh(t *testing.T) {
+	packet := agentPacketV0(
+		"agent-ref-director-001",
+		"corr-spec-packet-director-001",
+		"brainstorming_arquitectura",
+		"director",
+		orquestaruntime.AgentStartTaskV0{
+			TaskRef:   "task-director-001",
+			Objective: "Modo de ejecucion: normal.",
+		},
+	)
+
+	if packet.CapacityLevel != "xhigh" {
+		t.Fatalf("capacity=%q", packet.CapacityLevel)
+	}
+}
+
+func TestAgentPacketV0PlanTemarioUsaXHigh(t *testing.T) {
+	packet := agentPacketV0(
+		"agent-ref-plan-temario-001",
+		"corr-spec-packet-plan-temario-001",
+		"programacion",
+		"programacion",
+		orquestaruntime.AgentStartTaskV0{
+			TaskRef:  "task-plan-temario-001",
+			Title:    "Planificar temario",
+			WriteSet: []string{"external/opes/plan_temario/job-ref-plan-operadores-001"},
+		},
+	)
+
+	if packet.CapacityLevel != "xhigh" {
+		t.Fatalf("capacity=%q", packet.CapacityLevel)
+	}
+}

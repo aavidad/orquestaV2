@@ -19,10 +19,32 @@ func codexProgressReportAlreadyHandledV0(
 	case orquestaruntime.AgentStoppedV0, orquestaruntime.AgentLoopDetectedV0:
 		return codexProgressAgentStopHandledV0(run, report, agentRef)
 	case orquestaruntime.AgentStalledV0:
+		if codexProgressRequiresFreshStopDecisionV0(report) {
+			return codexProgressAgentTerminalHandledV0(run, agentRef)
+		}
 		return codexProgressAssessmentHandledV0(run.AgentAssessments, report, agentRef)
 	default:
+		if codexProgressRequiresFreshStopDecisionV0(report) {
+			return codexProgressAgentTerminalHandledV0(run, agentRef)
+		}
 		return false
 	}
+}
+
+func codexProgressRequiresFreshStopDecisionV0(
+	report orquestaruntime.AgentProgressReportV0,
+) bool {
+	return report.BudgetStatus == orquestaruntime.AgentProgressBudgetOverBudgetNoActivityV0
+}
+
+func codexProgressAgentTerminalHandledV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	agentRef string,
+) bool {
+	return codexProgressStringInSetV0(run.StoppedAgents, agentRef) ||
+		codexProgressStringInSetV0(run.ConfirmedStoppedAgents, agentRef) ||
+		codexProgressStringInSetV0(run.FailedAgents, agentRef) ||
+		codexProgressStringInSetV0(run.LostAgents, agentRef)
 }
 
 func codexProgressAgentStopHandledV0(
@@ -30,9 +52,7 @@ func codexProgressAgentStopHandledV0(
 	report orquestaruntime.AgentProgressReportV0,
 	agentRef string,
 ) bool {
-	if codexProgressStringInSetV0(run.StoppedAgents, agentRef) ||
-		codexProgressStringInSetV0(run.ConfirmedStoppedAgents, agentRef) ||
-		codexProgressStringInSetV0(run.FailedAgents, agentRef) {
+	if codexProgressAgentTerminalHandledV0(run, agentRef) {
 		return true
 	}
 	if report.Status == orquestaruntime.AgentLoopDetectedV0 &&

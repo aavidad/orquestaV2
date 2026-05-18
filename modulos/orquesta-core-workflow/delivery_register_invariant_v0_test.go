@@ -5,12 +5,104 @@ import (
 	"testing"
 )
 
-func TestRegisterDeliveryCommandV0RejectsNonProgrammingPhase(t *testing.T) {
+func TestRegisterDeliveryCommandV0RejectsNonCurrentPhase(t *testing.T) {
 	run := mustFunctionContractReadyRunV0(t)
 	command := mustRegisterDeliveryCommandV0(t, "cmd-delivery-phase", "idem-delivery-phase", "delivery-phase")
 
 	_, err := HandleCommandV0(run, command)
 	assertRegisterDeliveryCommandErrorV0(t, err, ErrTransicionInvalidaV0)
+}
+
+func TestRegisterDeliveryCommandV0AcceptsDocumentationPhaseTask(t *testing.T) {
+	run := mustDocumentationDeliveryReadyRunV0(t)
+	command := mustRegisterDeliveryCommandForPhaseV0(
+		t,
+		"cmd-delivery-doc-phase",
+		"idem-delivery-doc-phase",
+		"delivery-doc-phase",
+		OrchestrationPhaseDocumentacionV0,
+		"task-doc-001",
+		"agent-doc-001",
+	)
+
+	result, err := HandleCommandV0(run, command)
+	if err != nil {
+		t.Fatalf("HandleCommandV0: %v", err)
+	}
+	assertSingleEventTypeV0(t, result, OrchestrationEventDeliveryRegisteredV0)
+}
+
+func mustDocumentationDeliveryReadyRunV0(t *testing.T) OrchestrationRunV0 {
+	t.Helper()
+	const taskRef = "task-doc-001"
+	const agentRef = "agent-doc-001"
+	const capacityRef = "capacity-doc-001"
+
+	run := mustFunctionContractReadyRunV0(t)
+	task := validMicrotaskWorkflowTaskV0(taskRef)
+	task.PhaseID = OrchestrationPhaseDocumentacionV0
+	task.WriteSet = []string{"docs/manual.md"}
+	create, err := NewCreateMicrotaskCommandV0(
+		validCommandMetaV0("cmd-create-doc-task", "idem-create-doc-task"),
+		CreateMicrotaskCommandPayloadV0{Task: task},
+	)
+	run = mustApplySingleCommandEventV0(t, run, mustCommandV0(t, create, err))
+	open := mustOpenPhaseCommandV0(t, "cmd-open-doc-delivery", "idem-open-doc-delivery", OrchestrationPhaseDocumentacionV0)
+	run = mustApplySingleCommandEventV0(t, run, open)
+
+	capacityPayload := validRequestCapacityPayloadV0(capacityRef)
+	capacityPayload.PhaseID = string(OrchestrationPhaseDocumentacionV0)
+	capacityPayload.TaskRef = taskRef
+	capacity := mustRequestCapacityCommandWithPayloadV0(
+		t,
+		"cmd-capacity-doc",
+		"idem-capacity-doc",
+		capacityPayload,
+	)
+	run = mustApplySingleCommandEventV0(t, run, capacity)
+	decision := mustRegisterCapacityDecisionCommandV0(
+		t,
+		"cmd-capacity-decision-doc",
+		"idem-capacity-decision-doc",
+		capacityRef,
+	)
+	run = mustApplySingleCommandEventV0(t, run, decision)
+
+	agentPayload := validRequestAgentPayloadV0(agentRef)
+	agentPayload.PhaseID = string(OrchestrationPhaseDocumentacionV0)
+	agentPayload.TaskRef = taskRef
+	agentPayload.CapacityRequestRef = capacityRef
+	agent := mustRequestAgentCommandWithPayloadV0(
+		t,
+		"cmd-agent-doc",
+		"idem-agent-doc",
+		agentPayload,
+	)
+	run = mustApplySingleCommandEventV0(t, run, agent)
+	started := mustRegisterAgentStartedCommandV0(t, "cmd-agent-doc-started", "idem-agent-doc-started", agentRef)
+	return mustApplySingleCommandEventV0(t, run, started)
+}
+
+func mustRequestCapacityCommandWithPayloadV0(
+	t *testing.T,
+	commandID string,
+	idempotencyKey string,
+	payload RequestCapacityCommandPayloadV0,
+) OrchestrationCommandV0 {
+	t.Helper()
+	command, err := NewRequestCapacityCommandV0(validCommandMetaV0(commandID, idempotencyKey), payload)
+	return mustCommandV0(t, command, err)
+}
+
+func mustRequestAgentCommandWithPayloadV0(
+	t *testing.T,
+	commandID string,
+	idempotencyKey string,
+	payload RequestAgentCommandPayloadV0,
+) OrchestrationCommandV0 {
+	t.Helper()
+	command, err := NewRequestAgentCommandV0(validCommandMetaV0(commandID, idempotencyKey), payload)
+	return mustCommandV0(t, command, err)
 }
 
 func TestRegisterDeliveryCommandV0RejectsMissingTask(t *testing.T) {

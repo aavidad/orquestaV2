@@ -71,6 +71,8 @@ func TestBuildExternalWorkRunRequestV0MapeaExpansionComoLarge(t *testing.T) {
 	if req.AppChangeRequest.AllowedWriteSet[0] != "external/opes/expand_topic_from_summary/job-ref-expansion-001" ||
 		!fieldValueForTestV0(fields, "expected_artifact_type", "topic_expansion_package") ||
 		!fieldValueForTestV0(fields, "context_budget_profile", "large") ||
+		!fieldValueForTestV0(fields, "target_words_min", defaultExpansionTargetWordsMinV0) ||
+		!fieldValuesForTestV0(fields, "minimum_quality_gates", expansionQualityGatesV0()) ||
 		!fieldValuesForTestV0(fields, "required_document_variants", []string{
 			"tema_grande",
 			"tema_mediano",
@@ -83,6 +85,99 @@ func TestBuildExternalWorkRunRequestV0MapeaExpansionComoLarge(t *testing.T) {
 	}
 	if !containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "incluir resumen/memoria de repaso derivado del tema desarrollado") {
 		t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+	}
+	if !containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "tema_grande debe alcanzar target_words_min si esta declarado") {
+		t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+	}
+}
+
+func TestBuildExternalWorkRunRequestV0MapeaPlanTemaComoDocumentPlan(t *testing.T) {
+	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
+		ID:   "job-ref-plan-001",
+		Type: "plan_tema",
+		PayloadJSON: `{
+			"program_id":"program-ref-001",
+			"topic_id":"topic-ref-080",
+			"topic_title":"Evaluacion diagnostica en psicologia",
+			"quality_criteria":["pedagogico","autores y teorias","legislacion asociada"]
+		}`,
+	}, JobRunConfigV0{})
+
+	if !ok {
+		t.Fatalf("request no construida")
+	}
+	fields := req.AppChangeRequest.ExternalWork.InputFields
+	if req.AppChangeRequest.AllowedWriteSet[0] != "external/opes/plan_tema/job-ref-plan-001" ||
+		!fieldValueForTestV0(fields, "expected_artifact_type", orquestadomainwork.DomainDocumentPlanArtifactTypeV0) ||
+		!fieldValueForTestV0(fields, "context_budget_profile", "large") ||
+		!fieldValueForTestV0(fields, "expected_schema", orquestadomainwork.DomainDocumentPlanSchemaV0) ||
+		!fieldValuesForTestV0(fields, "required_plan_parts", documentPlanRequiredPartsV0()) ||
+		!fieldValuesForTestV0(fields, "allowed_document_plan_work_kinds", documentPlanAllowedWorkKindsV0()) ||
+		!fieldValuesForTestV0(fields, "opes_level_derivation_policy", documentPlanOPESLevelDerivationPolicyV0()) ||
+		!fieldValuesForTestV0(fields, "opes_assimilation_method", documentPlanOPESAssimilationMethodV0()) ||
+		!containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "devolver DomainDocumentPlanV0 valido") ||
+		!containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "no redactar el documento final dentro del plan") ||
+		!containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "si existe maestro A1/A2 o A1 equivalente, planificar primero ese maestro y despues derivar B/C1/C2/AP por resumen, reduccion editorial y adaptacion de nivel") {
+		t.Fatalf("request=%+v", req)
+	}
+}
+
+func TestBuildExternalWorkRunRequestV0MapeaPlanTemarioOperadoresComoDocumentPlan(t *testing.T) {
+	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
+		ID:   "job-ref-plan-operadores-001",
+		Type: "plan_temario",
+		PayloadJSON: `{
+			"program_id":"program-ref-operadores-001",
+			"document_kind":"temario_oposicion",
+			"language_code":"es",
+			"title":"Temario operadores",
+			"official_outline":"Operadores, tipos, precedencia, asociatividad y usos.",
+			"quality_criteria":["completo","sin placeholders","derivado del programa oficial"],
+			"target_pages_min":20,
+			"target_pages_max":40
+		}`,
+	}, JobRunConfigV0{})
+
+	if !ok {
+		t.Fatalf("request no construida")
+	}
+	fields := req.AppChangeRequest.ExternalWork.InputFields
+	if req.AppChangeRequest.AllowedWriteSet[0] != "external/opes/plan_temario/job-ref-plan-operadores-001" ||
+		req.AppChangeRequest.ExternalWork.WorkKind != "plan_temario" ||
+		!fieldValueForTestV0(fields, "expected_artifact_type", orquestadomainwork.DomainDocumentPlanArtifactTypeV0) ||
+		!fieldValueForTestV0(fields, "context_budget_profile", "large") ||
+		!fieldValueForTestV0(fields, "expected_schema", orquestadomainwork.DomainDocumentPlanSchemaV0) ||
+		!fieldValueForTestV0(fields, "document_kind", "temario_oposicion") ||
+		!fieldValuesForTestV0(fields, "allowed_document_plan_work_kinds", documentPlanAllowedWorkKindsV0()) ||
+		!fieldValuesForTestV0(fields, "opes_editorial_workflow", documentPlanOPESEditorialWorkflowV0()) ||
+		!fieldValuesForTestV0(fields, "opes_level_derivation_policy", documentPlanOPESLevelDerivationPolicyV0()) ||
+		!fieldValuesForTestV0(fields, "opes_quality_requirements", documentPlanOPESQualityRequirementsV0()) ||
+		!containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "devolver DomainDocumentPlanV0 valido") ||
+		!containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "para OPES, respetar flujo editorial: inventario, agrupacion, mapa de dependencias, temas maestros, derivacion por nivel, revision y HTML publicable") {
+		t.Fatalf("request=%+v", req)
+	}
+}
+
+func TestBuildExternalWorkRunRequestV0MapeaAssembleTopicComoAssembledTopic(t *testing.T) {
+	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
+		ID:   "job-ref-assemble-001",
+		Type: "assemble_topic",
+		PayloadJSON: `{
+			"topic_id":"topic-ref-001",
+			"document_plan_artifact_id":"artifact-plan-001"
+		}`,
+	}, JobRunConfigV0{})
+
+	if !ok {
+		t.Fatalf("request no construida")
+	}
+	fields := req.AppChangeRequest.ExternalWork.InputFields
+	if req.AppChangeRequest.AllowedWriteSet[0] != "external/opes/assemble_topic/job-ref-assemble-001" ||
+		!fieldValueForTestV0(fields, "expected_artifact_type", "assembled_topic") ||
+		!fieldValueForTestV0(fields, "context_budget_profile", "large") ||
+		!containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "devolver artifact_type=assembled_topic") ||
+		containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "devolver artifact_type=work_delivery") {
+		t.Fatalf("request=%+v", req)
 	}
 }
 

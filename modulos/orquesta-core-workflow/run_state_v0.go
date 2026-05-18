@@ -68,6 +68,7 @@ type OrchestrationRunV0 struct {
 	Agents                    []string                 `json:"agents"`
 	StartedAgents             []string                 `json:"started_agents"`
 	FailedAgents              []string                 `json:"failed_agents"`
+	LostAgents                []string                 `json:"lost_agents,omitempty"`
 	StoppedAgents             []string                 `json:"stopped_agents"`
 	AgentStopRequests         []string                 `json:"agent_stop_requests,omitempty"`
 	ConfirmedStoppedAgents    []string                 `json:"confirmed_stopped_agents"`

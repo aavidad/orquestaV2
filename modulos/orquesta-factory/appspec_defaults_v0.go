@@ -68,6 +68,8 @@ func defaultPlatformsV0(tipoApp string) []string {
 		return []string{"data"}
 	case "plugin":
 		return []string{"plugin"}
+	case "documentacion", "documentation":
+		return []string{"documentation"}
 	default:
 		return []string{"mixed"}
 	}

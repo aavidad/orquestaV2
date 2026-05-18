@@ -72,6 +72,22 @@ func NormalizeDomainWorkArtifactSubmissionV0(
 	return submission
 }
 
+func NormalizeDomainWorkJobRecordFilterV0(
+	filter DomainWorkJobRecordFilterV0,
+) DomainWorkJobRecordFilterV0 {
+	filter.DomainRef = strings.TrimSpace(filter.DomainRef)
+	filter.WorkKind = strings.TrimSpace(filter.WorkKind)
+	filter.JobRef = strings.TrimSpace(filter.JobRef)
+	filter.CorrelationID = strings.TrimSpace(filter.CorrelationID)
+	filter.IdempotencyKey = strings.TrimSpace(filter.IdempotencyKey)
+	filter.Status = strings.TrimSpace(filter.Status)
+	filter.ExternalRefs = compactDomainWorkExternalRefsV0(filter.ExternalRefs)
+	if filter.Limit < 0 {
+		filter.Limit = 0
+	}
+	return filter
+}
+
 func defaultDomainWorkSchemaV0(value string, fallback string) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {

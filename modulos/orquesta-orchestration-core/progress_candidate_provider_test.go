@@ -94,6 +94,30 @@ func TestProgressSupervisionCandidateProviderV0LimitaPrimeraObservacionAccionabl
 	}
 }
 
+func TestProgressSupervisionCandidateProviderV0IgnoraStalledInformativo(t *testing.T) {
+	runRef := "run-nucleo-progress-stalled-informativo-001"
+	provider := ProgressSupervisionCandidateProviderV0{
+		ProgressSource: staticAgentProgressObservationSourceV0{Observations: []AgentProgressObservationV0{
+			{
+				Report:  progressObservationReportWithIDV0(runRef, "agent-ref-stalled-info-001", "report-stalled-info-001", orquestaruntime.AgentStalledV0),
+				TaskRef: "task-ref-stalled-info-001",
+			},
+		}},
+		RequestedBy: "orquestacion-nucleo",
+	}
+
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        mustActiveProgrammingRunV0(t, runRef),
+		OccurredAt: "2026-05-09T12:10:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.ProgressSupervisionCandidates) != 0 {
+		t.Fatalf("stalled informativo no debe generar candidate=%+v", candidates.ProgressSupervisionCandidates)
+	}
+}
+
 func TestProgressSupervisionCandidateProviderV0ProtectsPrimaryBrainstormingDirector(t *testing.T) {
 	runRef := "run-nucleo-progress-primary-director-001"
 	agentRef := "agent-spec-progress-primary-director"
@@ -124,7 +148,11 @@ func progressSupervisionCandidateForBrainstormingAgentV0(
 	t.Helper()
 	provider := ProgressSupervisionCandidateProviderV0{
 		ProgressSource: staticAgentProgressObservationSourceV0{Observations: []AgentProgressObservationV0{{
-			Report:  progressObservationReportV0(runRef, agentRef, orquestaruntime.AgentStalledV0),
+			Report: progressObservationDecisionReportV0(
+				runRef,
+				agentRef,
+				orquestaruntime.AgentStalledV0,
+			),
 			PhaseID: string(orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0),
 			TaskRef: "task-ref-brainstorming-area-001",
 		}}},
@@ -223,4 +251,14 @@ func progressObservationReportWithIDV0(
 		Summary:             "Evidencia compacta de progreso del agente.",
 		EvidenceRefs:        []string{"evidence-ref-progress-observacion-report-001"},
 	}
+}
+
+func progressObservationDecisionReportV0(
+	runRef string,
+	agentRef string,
+	status orquestaruntime.AgentProgressStatusV0,
+) orquestaruntime.AgentProgressReportV0 {
+	report := progressObservationReportV0(runRef, agentRef, status)
+	report.DecisionRequired = true
+	return report
 }

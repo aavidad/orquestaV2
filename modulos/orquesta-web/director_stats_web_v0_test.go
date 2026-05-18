@@ -13,14 +13,14 @@ import (
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
-func TestWebDirectorStatsViewModelV0ProyectaProgresoYAtencion(t *testing.T) {
+func TestWebDirectorStatsViewModelV0ProyectaStalledInformativoSinAtencion(t *testing.T) {
 	stats := webDirectorStatsFixtureV0()
 
 	vm := NewWebDirectorStatsViewModelV0(stats)
 
-	if vm.Estado != WebDirectorStatsEstadoAtencionV0 ||
+	if vm.Estado != WebDirectorStatsEstadoOKV0 ||
 		vm.Progress.StalledAgents != 1 ||
-		vm.Counts.AgentsNeedAttention != 1 ||
+		vm.Counts.AgentsNeedAttention != 0 ||
 		vm.Counts.Brainstorms != 1 ||
 		vm.Resumen.UsageTotalTokens != 1750 ||
 		len(vm.Tasks) != 2 ||

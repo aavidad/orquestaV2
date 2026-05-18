@@ -52,6 +52,18 @@ func validateAgentProgressSupervisionInputV0(input AgentProgressSupervisionInput
 }
 
 func progressSupervisionNeedsQuestionV0(input AgentProgressSupervisionInputV0) bool {
+	if agentProgressCapacityLimitedV0(input.Report) {
+		return !agentProgressStopAllowedV0(input)
+	}
+	if agentProgressOverBudgetNoActivityV0(input.Report) {
+		return !agentProgressStopAllowedV0(input)
+	}
+	if agentProgressOverBudgetButActiveV0(input.Report) {
+		return true
+	}
+	if agentProgressHasArtifactWithoutAckV0(input.Report) {
+		return true
+	}
 	return input.Report.Status == orquestaruntime.AgentStalledV0 ||
 		(input.Report.Status == orquestaruntime.AgentLoopDetectedV0 && !agentProgressStopAllowedV0(input))
 }

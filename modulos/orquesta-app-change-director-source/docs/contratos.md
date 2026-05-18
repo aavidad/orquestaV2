@@ -42,6 +42,10 @@ conocer la app externa. Solo cambia la proyeccion compacta:
 - para `summarize_block`, `summarize_chapter`, `summarize_topic` y
   `create_exam_outline`, permite granularidad pequena porque son artefactos
   derivados y trazables.
+- para `plan_tema`, `plan_temario` y `plan_documento`, crea una tarea de
+  planificacion documental, exige `artifact_type=document_plan` compatible con
+  `DomainDocumentPlanV0` y prohibe redactar o ensamblar el documento final en
+  esa misma tarea.
 
 `AppChangeExternalWorkV0.input_fields` es opcional y compatible hacia atras,
 con la forma `[]DomainWorkFieldV0` ya usada por `orquesta-domain-work`: objetos

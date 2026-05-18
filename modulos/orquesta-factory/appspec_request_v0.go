@@ -156,7 +156,7 @@ func validateEnumsV0(req AppSpecRequestV0) []ValidationIssue {
 	if req.Source != "" && !containsV0(req.Source, "orquesta-web", "orquesta-mcp", "orquesta-cli") {
 		issues = append(issues, issue(ErrAppSpecInvalida, "source", "source no soportado"))
 	}
-	if req.TipoApp != "" && !containsV0(req.TipoApp, "web", "api", "cli", "desktop", "mobile", "automation", "data", "plugin", "mixed") {
+	if req.TipoApp != "" && !containsV0(req.TipoApp, "web", "api", "cli", "desktop", "mobile", "automation", "data", "plugin", "mixed", "documentacion", "documentation") {
 		issues = append(issues, issue(ErrAppSpecInvalida, "tipo_app", "tipo_app no soportado"))
 	}
 	if req.RequestKind != "" && !RequestKindSupportedV0(req.RequestKind) {

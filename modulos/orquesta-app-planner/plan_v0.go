@@ -112,7 +112,7 @@ func appUnitV0(
 		ClaimRef:            claimRefV0(request, key),
 		AgentRequestID:      agentRefV0(request, key),
 		DeliveryRef:         deliveryRefV0(request, key),
-		PhaseID:             orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		PhaseID:             appPhaseForRoleV0(role),
 		Role:                role,
 		Capacity:            capacity,
 		Title:               title,
@@ -122,5 +122,18 @@ func appUnitV0(
 		RequiredTests:       []string{"go test ./..."},
 		DependsOnDeliveries: compactAppPlannerStringsV0(deps),
 		EvidenceRefs:        []string{"evidence-ref-" + request.AppRef + "-" + key},
+	}
+}
+
+func appPhaseForRoleV0(role string) orquestacoreworkflow.OrchestrationPhaseIDV0 {
+	switch role {
+	case "documentacion":
+		return orquestacoreworkflow.OrchestrationPhaseDocumentacionV0
+	case "integracion", "entorno":
+		return orquestacoreworkflow.OrchestrationPhaseIntegracionV0
+	case "revision":
+		return orquestacoreworkflow.OrchestrationPhaseRevisionV0
+	default:
+		return orquestacoreworkflow.OrchestrationPhaseProgramacionV0
 	}
 }

@@ -2,6 +2,13 @@
 
 Fecha: 2026-05-13.
 
+Nota 2026-05-18: documento historico. Para el estado vigente usar
+`docs/corte_opes_como_consumidor_orquesta_2026-05-18.md` y
+`docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md`. La ruta
+funcional OPES actual es REST opt-in; `orquesta.domain_work.v0` ya existe como
+tool MCP generico para IA, y un cliente MCP especifico contra OPES queda fuera
+del corte salvo que aporte algo frente al contrato generico.
+
 ## Decision
 
 OPES queda como aplicacion de dominio editorial independiente. Orquesta no

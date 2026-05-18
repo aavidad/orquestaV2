@@ -214,7 +214,6 @@ func (source *mcpReadyStartedAgentReceiptsForTestV0) BuildAgentDeliveryObservati
 		observations = append(observations, orquestacionnucleoapp.AgentDeliveryObservationV0{
 			CandidateRef: "delivery-candidate-ref-" + deliveryRef,
 			DeliveryRef:  deliveryRef,
-			PhaseID:      string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
 			TaskID:       taskRef,
 			AgentRef:     agentRef,
 			Summary:      "Receipt compacto de prueba MCP.",

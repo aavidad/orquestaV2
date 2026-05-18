@@ -113,7 +113,7 @@ Payload:
   - agent_request_id
   - task_ref opcional
   - delivery_ref opcional
-  - verdict: acceptable | needs_revision | garbage | loop_detected
+  - verdict: acceptable | needs_revision | garbage | loop_detected | capacity_limited | timeout
   - action: continue | request_revision | stop_agent | ask_director
   - severity: low | medium | high | critical
   - summary
@@ -130,7 +130,7 @@ Invariantes:
   - Si `assessment_ref` ya esta en `run.agent_assessments`, el comando debe coincidir con la huella `CommandEffects` original.
   - Si `AgentWorkAssessed` ya quedo proyectado pero falta `AgentStopRequested`, repetir el mismo comando emite solo `AgentStopRequested` y outbox `StopRuntimeAgent`.
   - Si tambien quedo proyectado `AgentStopRequested` pero se perdio el outbox, repetir el mismo comando reconstruye solo `StopRuntimeAgent` con la idempotency key del evento de parada.
-  - `action=stop_agent` solo es valida para `verdict=garbage` o `verdict=loop_detected`.
+  - `action=stop_agent` solo es valida para `verdict=garbage`, `verdict=loop_detected`, `verdict=capacity_limited` o `verdict=timeout`.
   - Si el agente ya esta en `stopped_agents`, una nueva evaluacion se registra sin reenviar outbox de parada.
   - Payload compacto, sin DB, HOME, OAuth, Codex, Claude, Ollama, vLLM ni secretos.
 Errores:
@@ -235,6 +235,47 @@ Errores:
   - detalle_prohibido
   - secuencia_invalida
 Estado: implementado local en NCW-049; identidad fuerte extendida en NCW-062.
+```
+
+## `RegisterAgentLost` / `AgentLost`
+
+```text
+Nombre: RegisterAgentLost / AgentLost
+Tipo: comando_evento
+Version: v0 candidato local
+Propietario: orquesta-core-workflow
+Consumidores: reducer, replay durable, observability, director, replanificador
+Payload:
+  - agent_request_id
+  - loss_ref
+  - reason_code
+  - observed_at
+  - retryable
+  - evidence_refs opcional
+Invariantes:
+  - Representa un agente ya arrancado cuyo proceso/sesion ya no es controlable
+    por el adaptador que lo habia registrado.
+  - No equivale a `AgentFailed`: el fallo de launch ocurre antes de
+    `AgentStarted`; `AgentLost` ocurre despues de `AgentStarted`.
+  - No equivale a `AgentStopConfirmed`: una parada solo se confirma con
+    evidencia positiva del stopper.
+  - `agent_request_id` debe existir en `agents` y `started_agents`.
+  - Rechaza agentes con `failed_agents`, `confirmed_stopped_agents` o entregas
+    ya registradas para ese agente.
+  - Puede registrarse despues de `AgentStopRequested` si la parada no pudo ser
+    confirmada por perdida del proceso/sesion.
+  - Proyecta `agent_request_id` en `lost_agents` sin duplicar y registra/verifica
+    `CommandEffects` por `loss_ref`.
+  - `RecordReplanDecision` puede usar `source_kind=agent_lost` en
+    `programacion` para crear un reemplazo explicito.
+  - Payload compacto, sin DB, HOME, OAuth, proveedor, modelo, adaptador, PID,
+    ruta, comando ni secreto.
+Errores:
+  - payload_invalido
+  - detalle_prohibido
+  - transicion_invalida
+  - secuencia_invalida
+Estado: implementado local en NCW-074.
 ```
 
 ## `StopRuntimeAgentRequestV0`

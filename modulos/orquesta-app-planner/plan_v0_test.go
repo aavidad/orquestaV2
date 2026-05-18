@@ -14,7 +14,7 @@ func TestBuildGoAPIWebMicrotaskPlanV0DivideAppEnCortesPequenos(t *testing.T) {
 	if len(plan.Units) != 6 {
 		t.Fatalf("units=%d", len(plan.Units))
 	}
-	assertAppUnitForTestV0(t, plan, "bootstrap", nil, []string{
+	assertAppUnitForTestV0(t, plan, "bootstrap", orquestacoreworkflow.OrchestrationPhaseProgramacionV0, nil, []string{
 		"go.mod",
 		"AGENTS.md",
 		"README.md",
@@ -23,11 +23,11 @@ func TestBuildGoAPIWebMicrotaskPlanV0DivideAppEnCortesPequenos(t *testing.T) {
 		"docs/pruebas.md",
 		"docs/decisiones.md",
 	})
-	assertAppUnitForTestV0(t, plan, "agenda-core", []string{"ack-agenda-bootstrap"}, []string{"internal/agenda"})
-	assertAppUnitForTestV0(t, plan, "web", []string{"ack-agenda-bootstrap"}, []string{"web"})
-	assertAppUnitForTestV0(t, plan, "api", []string{"ack-agenda-agenda-core", "ack-agenda-web"}, []string{"cmd/server"})
-	assertAppUnitForTestV0(t, plan, "docs", []string{"ack-agenda-api"}, []string{"README.md"})
-	assertAppUnitForTestV0(t, plan, "review", []string{"ack-agenda-docs"}, []string{"docs/revision.md"})
+	assertAppUnitForTestV0(t, plan, "agenda-core", orquestacoreworkflow.OrchestrationPhaseProgramacionV0, []string{"ack-agenda-bootstrap"}, []string{"internal/agenda"})
+	assertAppUnitForTestV0(t, plan, "web", orquestacoreworkflow.OrchestrationPhaseProgramacionV0, []string{"ack-agenda-bootstrap"}, []string{"web"})
+	assertAppUnitForTestV0(t, plan, "api", orquestacoreworkflow.OrchestrationPhaseProgramacionV0, []string{"ack-agenda-agenda-core", "ack-agenda-web"}, []string{"cmd/server"})
+	assertAppUnitForTestV0(t, plan, "docs", orquestacoreworkflow.OrchestrationPhaseDocumentacionV0, []string{"ack-agenda-api"}, []string{"README.md"})
+	assertAppUnitForTestV0(t, plan, "review", orquestacoreworkflow.OrchestrationPhaseRevisionV0, []string{"ack-agenda-docs"}, []string{"docs/revision.md"})
 }
 
 func TestRuntimeFunctionContractForUnitV0ConservaCorteVerificable(t *testing.T) {
@@ -67,13 +67,14 @@ func assertAppUnitForTestV0(
 	t *testing.T,
 	plan AppMicrotaskPlanV0,
 	key string,
+	wantPhase orquestacoreworkflow.OrchestrationPhaseIDV0,
 	wantDeps []string,
 	wantWriteSet []string,
 ) {
 	t.Helper()
 	unit := appUnitByKeyForTestV0(t, plan, key)
-	if unit.PhaseID != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 {
-		t.Fatalf("%s phase=%s", key, unit.PhaseID)
+	if unit.PhaseID != wantPhase {
+		t.Fatalf("%s phase=%s want=%s", key, unit.PhaseID, wantPhase)
 	}
 	if !sameStringSetForTestV0(unit.DependsOnDeliveries, wantDeps) {
 		t.Fatalf("%s deps=%v want=%v", key, unit.DependsOnDeliveries, wantDeps)

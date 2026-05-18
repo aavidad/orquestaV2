@@ -1,6 +1,20 @@
 # Decisiones: orquesta-app-planner
 
 ```text
+Fecha: 2026-05-14
+Decision: La fase de cada unidad se deriva de su rol, no de una constante de
+programacion.
+Motivo: Orquesta debe saber si esta programando, documentando, integrando o
+revisando sin usar una variable global. La app es multitarea: el tipo de
+peticion vive en `request_kind`, pero la ejecucion real se gobierna por
+`phase_id` de cada unidad.
+Impacto: `documentacion` genera `phase_id=documentacion`; `integracion` y
+`entorno`, `phase_id=integracion`; `revision`, `phase_id=revision`; el resto
+queda en `programacion`. El planner valida fases contra el catalogo del core.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-09
 Decision: Separar planificacion de app real del nucleo y de fabricaapp legacy.
 Motivo: la prueba con Codex real mostro que una app completa como unica tarea

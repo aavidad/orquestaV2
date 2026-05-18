@@ -24,6 +24,7 @@ const (
 	OrchestrationEventAgentRequestedV0               = "AgentRequested"
 	OrchestrationEventAgentStartedV0                 = "AgentStarted"
 	OrchestrationEventAgentFailedV0                  = "AgentFailed"
+	OrchestrationEventAgentLostV0                    = "AgentLost"
 	OrchestrationEventAgentLeaseExpiredV0            = "AgentLeaseExpired"
 	OrchestrationEventAgentStopRequestedV0           = "AgentStopRequested"
 	OrchestrationEventAgentStopConfirmedV0           = "AgentStopConfirmed"

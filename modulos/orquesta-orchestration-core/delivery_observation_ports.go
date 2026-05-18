@@ -23,6 +23,7 @@ type AgentDeliveryObservationRequestV0 struct {
 	CorrelationID    string
 	EvidenceRefs     []string
 	PreviousDecision string
+	WaitAgentRefs    []string
 }
 
 type AgentDeliveryObservationV0 struct {

@@ -8,7 +8,11 @@
 - Definir `DomainWorkFieldV0` para entradas y payloads normalizados.
 - Definir puertos `DomainWorkJobCreatorPortV0` y
   `DomainWorkArtifactSubmitterPortV0`.
+- Definir `DomainDocumentPlanV0` con aliases `PlanTemaV0` y `PlanTemarioV0`
+  para planes documentales producidos por director.
 - Validar refs compactas e idempotencia minima.
+- Validar planes documentales con secciones, visuales, revisiones y
+  entregables.
 - Documentar frontera con OPES/programacion/otras apps.
 - Crear primer conector REST OPES de jobs/artefactos en
   `orquesta-opes-connector`.

@@ -3,14 +3,45 @@
 Comando:
 
 ```sh
-go test -count=1 ./modulos/orquesta-domain-work
+go test -count=1 ./modulos/orquesta-domain-work/...
 ```
 
 Cobertura:
 
-- normalizacion de job externo tipo OPES sin importar OPES;
+- normalizacion de job externo sin importar adaptadores concretos;
+- normalizacion y validacion de `DomainDocumentPlanV0` como
+  `PlanTemaV0`/`PlanTemarioV0`;
+- rechazo de planes sin secciones, sin entregables, con rangos invalidos o con
+  `work_kind` que no sea de planificacion;
 - deduplicacion de refs e idempotency/correlation por defecto;
 - rechazo de refs no compactas;
 - validacion de entrega de artefacto;
-- puertos hexagonales sin adaptadores concretos;
+- normalizacion de filtros `DomainWorkJobRecordFilterV0`;
+- puertos hexagonales de comando, lectura y entrega sin adaptadores concretos;
+- suite reusable `contracttest` para stores `DomainWorkJobRecordStorePortV0`;
 - guard de arquitectura contra DB, red, runtime, filesystem y legacy.
+
+Prueba relacionada:
+
+```sh
+go test -count=1 ./modulos/orquesta-domain-work-memory
+```
+
+Ese modulo ejecuta la suite `contracttest` sobre una implementacion neutral de
+`DomainWorkJobRecordStorePortV0` y anade integracion offline con
+`orquesta-document-plan-expander`.
+
+```sh
+go test -count=1 ./modulos/orquesta-domain-work-file
+```
+
+Ese adaptador ejecuta la misma suite `contracttest` y anade persistencia durable
+con snapshot JSON, replay tras reinstanciar, corrupcion visible, escritura
+atomica y frontera contra OPES, Codex, runtime, red y DB.
+
+```sh
+go test -count=1 ./modulos/orquesta-domain-work-sql
+```
+
+Ese adaptador ejecuta la misma suite `contracttest` sobre `database/sql` con un
+driver fake local de tests. No registra drivers reales ni fija SQLite/Postgres.

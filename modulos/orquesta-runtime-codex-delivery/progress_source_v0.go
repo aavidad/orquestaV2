@@ -112,6 +112,7 @@ func (source CodexProgressObservationSourceV0) observationFromDescriptorV0(
 		AgentRequestID:       record.AgentRequestID,
 		ProcessRef:           record.ProcessRef,
 		Signature:            codexProgressSignatureV0(descriptor),
+		ActionSignature:      codexProgressActionSignatureV0(descriptor),
 		EvidenceRefs:         codexProgressEvidenceRefsV0(record),
 		ObservedAt:           time.Now().UTC(),
 		MinUnchangedInterval: source.MinUnchangedSampleInterval,
@@ -138,6 +139,7 @@ func (source CodexProgressObservationSourceV0) observationFromDescriptorV0(
 	}
 	report = source.reportWithBudgetV0(report, state)
 	report = codexProgressReportWithProcessFailureContextV0(descriptor, report)
+	report = codexProgressReportWithRepeatedActionEvidenceV0(report)
 	decisionRequired := codexProgressReportDecisionRequiredV0(report)
 	if report.Status == orquestaruntime.AgentProgressingV0 &&
 		!codexProgressBudgetPolicyEnabledV0(source.BudgetPolicy) &&
@@ -229,9 +231,21 @@ func codexProgressReportDecisionRequiredV0(report orquestaruntime.AgentProgressR
 	if report.DecisionRequired {
 		return true
 	}
-	return report.Status == orquestaruntime.AgentStalledV0 ||
-		report.Status == orquestaruntime.AgentLoopDetectedV0 ||
+	return report.Status == orquestaruntime.AgentLoopDetectedV0 ||
 		report.Status == orquestaruntime.AgentStoppedV0
+}
+
+func codexProgressReportWithRepeatedActionEvidenceV0(
+	report orquestaruntime.AgentProgressReportV0,
+) orquestaruntime.AgentProgressReportV0 {
+	if report.RepeatedActionCount <= 0 {
+		return report
+	}
+	report.EvidenceRefs = compactCodexDeliveryRefsV0(append(
+		report.EvidenceRefs,
+		"evidence-ref-repeated-action",
+	))
+	return report
 }
 
 func codexProgressSignatureV0(

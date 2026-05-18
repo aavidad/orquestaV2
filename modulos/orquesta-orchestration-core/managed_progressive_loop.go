@@ -86,6 +86,7 @@ func externalProgressWaitRequestV0(
 		LastResult:    last,
 		CorrelationID: request.Loop.CorrelationID,
 		EvidenceRefs:  request.Loop.EvidenceRefs,
+		WaitAgentRefs: request.Loop.WaitAgentRefs,
 	}
 }
 

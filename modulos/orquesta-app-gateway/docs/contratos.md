@@ -25,6 +25,8 @@ Rutas montadas:
   y parada por `run_ref`.
 - `/api/v0/runs/queue/priority`: bridge REST de MCP para ranking de cola global
   y cambio de prioridad.
+- `/api/v0/runs/supervise`: bridge REST de MCP para pedir una pasada acotada
+  de supervision sobre una run concreta o sobre la cola inyectada.
 - `/api/v0/autoprogramming/validate-request`: bridge REST de validacion de
   peticiones de autoprogramacion.
 - `/api/v0/server/shutdown`: bridge REST de MCP para cierre controlado.
@@ -42,6 +44,7 @@ Entrada de composicion:
 - `DirectorStats`: executor MCP inyectado.
 - `RunControl`: executor MCP inyectado para control de runs.
 - `RunQueuePriority`: executor MCP inyectado para cola multiapp.
+- `RunSupervisor`: executor MCP inyectado para supervision acotada de runs.
 - `ServerShutdown`: executor MCP inyectado para cierre controlado.
 - `DomainWork`: executor MCP inyectado para trabajo de dominio externo.
 - `HTTPClient`: cliente opcional para que web llame a APIs REST.
@@ -60,5 +63,7 @@ Entrada de composicion:
   in-process; el gateway no interpreta ranking, score, aging ni estado de cola.
 - `/run-control` consulta `/api/v0/runs/control` por cliente REST in-process;
   el gateway no interpreta estados, checkpoint, parada fisica ni runtime.
+- `/api/v0/runs/supervise` delega en `orquesta-mcp`; este modulo no sabe si el
+  executor usa Codex, trabajo de dominio u otra composicion.
 - `/api/v0/domain-work` delega en `orquesta-mcp`; este modulo no interpreta
   `DomainWorkJobRequestV0`, no importa OPES y no crea conectores reales.

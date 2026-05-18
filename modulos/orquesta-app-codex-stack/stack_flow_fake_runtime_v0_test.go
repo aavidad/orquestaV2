@@ -13,14 +13,26 @@ import (
 )
 
 type fakeCodexStackRuntimeV0 struct {
-	mu        sync.Mutex
-	next      int
-	snapshots map[string]orquestaruntime.ProcessRuntimeSnapshotV0
-	stops     []string
+	mu                   sync.Mutex
+	next                 int
+	snapshots            map[string]orquestaruntime.ProcessRuntimeSnapshotV0
+	stops                []string
+	deliveryBodyByTarget map[string]string
 }
 
 func newFakeCodexStackRuntimeV0() *fakeCodexStackRuntimeV0 {
-	return &fakeCodexStackRuntimeV0{snapshots: map[string]orquestaruntime.ProcessRuntimeSnapshotV0{}}
+	return &fakeCodexStackRuntimeV0{
+		snapshots:            map[string]orquestaruntime.ProcessRuntimeSnapshotV0{},
+		deliveryBodyByTarget: map[string]string{},
+	}
+}
+
+func (runtime *fakeCodexStackRuntimeV0) withDeliveryBodyForTargetV0(
+	target string,
+	body string,
+) *fakeCodexStackRuntimeV0 {
+	runtime.deliveryBodyByTarget[filepath.ToSlash(filepath.Clean(target))] = body
+	return runtime
 }
 
 func (runtime *fakeCodexStackRuntimeV0) LaunchV0(
@@ -112,11 +124,12 @@ func (runtime *fakeCodexStackRuntimeV0) writeAckV0(
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(
-		filepath.Join(runtimeDir, orquestaruntimecodex.CodexAgentAckFileNameV0),
-		ackData,
-		0o600,
-	)
+	ackPath := filepath.Join(runtimeDir, orquestaruntimecodex.CodexAgentAckFileNameV0)
+	tmpPath := ackPath + ".tmp"
+	if err := os.WriteFile(tmpPath, ackData, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, ackPath)
 }
 
 func (runtime *fakeCodexStackRuntimeV0) writeDeliveryFilesV0(
@@ -133,12 +146,20 @@ func (runtime *fakeCodexStackRuntimeV0) writeDeliveryFilesV0(
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return nil, err
 		}
-		if err := os.WriteFile(path, []byte("entrega fake para revision\n"), 0o600); err != nil {
+		if err := os.WriteFile(path, []byte(runtime.deliveryBodyForTargetV0(target)), 0o600); err != nil {
 			return nil, err
 		}
 		files = append(files, file)
 	}
 	return files, nil
+}
+
+func (runtime *fakeCodexStackRuntimeV0) deliveryBodyForTargetV0(target string) string {
+	target = filepath.ToSlash(filepath.Clean(target))
+	if body := runtime.deliveryBodyByTarget[target]; body != "" {
+		return body
+	}
+	return "entrega fake para revision\n"
 }
 
 func codexStackFakeDeliveryFileV0(target string) string {

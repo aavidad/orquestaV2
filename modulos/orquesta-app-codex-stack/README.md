@@ -31,8 +31,14 @@ Principios:
 - smokes reales acotados: se reutiliza la experiencia de
   `orquesta-runtime-codex-delivery`, con ACK, write-set y progreso por corte.
 
-Estado actual: composition Go opt-in con test fake y smoke real desactivado por
-defecto.
+Estado actual: composition Go opt-in con test fake, smoke real desactivado por
+defecto y supervisor Codex unitario para `launch -> sigue -> done` sobre el ciclo
+normal de agentes.
+
+El supervisor Codex vive en `codex_supervisor_v0.go`. Expone
+`CodexSupervisorAgentLifecyclePortV0`: el adaptador real debe avanzar
+`RunGlobalSupervisorV0`/`DrainRunV0`/`ContinueAppDirectorV0` y usar el outbox
+`LaunchRuntimeAgent` existente si necesita arrancar otro Codex.
 
 Arranque manual de un smoke configurado:
 
@@ -61,4 +67,5 @@ Validacion de este subtrabajo:
 ```bash
 git diff --check -- modulos/orquesta-app-codex-stack
 go test -count=1 ./modulos/orquesta-app-codex-stack
+go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexSupervisorV0'
 ```

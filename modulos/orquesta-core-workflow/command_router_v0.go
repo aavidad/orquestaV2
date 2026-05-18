@@ -24,6 +24,7 @@ var commandHandlersV0 = map[string]commandHandlerV0{
 	OrchestrationCommandRequestAgentV0:               handleRequestAgentCommandV0,
 	OrchestrationCommandRegisterAgentStartedV0:       handleRegisterAgentStartedCommandV0,
 	OrchestrationCommandRegisterAgentFailedV0:        handleRegisterAgentFailedCommandV0,
+	OrchestrationCommandRegisterAgentLostV0:          handleRegisterAgentLostCommandV0,
 	OrchestrationCommandRegisterAgentLeaseExpiredV0:  handleRegisterAgentLeaseExpiredCommandV0,
 	OrchestrationCommandStopAgentV0:                  handleStopAgentCommandV0,
 	OrchestrationCommandRegisterAgentStopConfirmedV0: handleRegisterAgentStopConfirmedCommandV0,

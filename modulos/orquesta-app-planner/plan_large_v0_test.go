@@ -21,28 +21,40 @@ func TestBuildGoAPIWebMicrotaskPlanV0ParaAppGrandeDividePorContratos(t *testing.
 	if len(plan.Units) != 11 {
 		t.Fatalf("units=%d", len(plan.Units))
 	}
-	assertAppUnitForTestV0(t, plan, "architecture", []string{"ack-erp-bootstrap"}, []string{
+	assertAppUnitForTestV0(t, plan, "architecture", orquestacoreworkflow.OrchestrationPhaseProgramacionV0, []string{"ack-erp-bootstrap"}, []string{
 		"docs/arquitectura.md",
 		"docs/contratos.md",
 		"docs/decisiones.md",
 	})
-	assertAppUnitForTestV0(t, plan, "persistence-port", []string{"ack-erp-architecture"}, []string{
+	assertAppUnitForTestV0(t, plan, "persistence-port", orquestacoreworkflow.OrchestrationPhaseProgramacionV0, []string{"ack-erp-architecture"}, []string{
 		"internal/persistence",
 		"internal/testadapters",
 	})
-	assertAppUnitForTestV0(t, plan, "api", []string{"ack-erp-domain", "ack-erp-persistence-port"}, []string{
+	assertAppUnitForTestV0(t, plan, "api", orquestacoreworkflow.OrchestrationPhaseProgramacionV0, []string{"ack-erp-domain", "ack-erp-persistence-port"}, []string{
 		"internal/api",
 		"cmd/server",
 	})
-	assertAppUnitForTestV0(t, plan, "integration", []string{
+	assertAppUnitForTestV0(t, plan, "integration", orquestacoreworkflow.OrchestrationPhaseIntegracionV0, []string{
 		"ack-erp-domain",
 		"ack-erp-persistence-port",
 		"ack-erp-api",
 		"ack-erp-web",
 		"ack-erp-i18n",
 	}, []string{"internal/app", "internal/integration"})
+	assertAppUnitForTestV0(t, plan, "deploy", orquestacoreworkflow.OrchestrationPhaseIntegracionV0, []string{"ack-erp-architecture"}, []string{
+		"deploy",
+		"docs/deploy.md",
+	})
+	assertAppUnitForTestV0(t, plan, "docs", orquestacoreworkflow.OrchestrationPhaseDocumentacionV0, []string{"ack-erp-integration", "ack-erp-deploy"}, []string{
+		"README.md",
+		"docs/operacion.md",
+		"docs/pruebas.md",
+	})
 
 	review := appUnitByKeyForTestV0(t, plan, "review")
+	if review.PhaseID != orquestacoreworkflow.OrchestrationPhaseRevisionV0 {
+		t.Fatalf("review phase=%s", review.PhaseID)
+	}
 	if review.Capacity != orquestacoreworkflow.OrchestrationCapacityXHighV0 {
 		t.Fatalf("review capacity=%s", review.Capacity)
 	}

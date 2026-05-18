@@ -97,6 +97,18 @@ func TestDirectorTaskV0IncluyeContratoDeDecisionesEjecutables(t *testing.T) {
 	if !codexStackDoneCriteriaContainsForTestV0(task.DoneCriteria, "arquitectura, contratos, programacion") {
 		t.Fatalf("done_criteria no recoge minimos por request_kind: %v", task.DoneCriteria)
 	}
+	for _, path := range []string{
+		"docs/manual_usuario.md",
+		"docs/manual_desarrollador.md",
+		"docs/manual_sistemas_deploy.md",
+		"docs/decisiones.md",
+		"docs/pruebas.md",
+		"docs/pendientes.md",
+	} {
+		if !codexStackStringInSetForTestV0(task.WriteSet, path) {
+			t.Fatalf("write_set no contiene %s: %+v", path, task.WriteSet)
+		}
+	}
 }
 
 func TestDirectorTaskV0NoOrdenaCierreEnPrimeraEntrega(t *testing.T) {
@@ -144,6 +156,38 @@ func TestDirectorTaskV0NoExigeDecisionFileEnAreasEspecializadas(t *testing.T) {
 	}
 	if !codexStackDoneCriteriaContainsForTestV0(task.DoneCriteria, "entregables omitidos por debug") {
 		t.Fatalf("done_criteria debug=%v", task.DoneCriteria)
+	}
+}
+
+func TestDirectorTaskV0DocumentarNormalNoQuedaSoloEnPlan(t *testing.T) {
+	payload := orquestaruntime.LaunchRuntimeAgentRequestV0{
+		RunID:   "run-ref-docs-normal-001",
+		TaskRef: "task-docs-normal-director",
+		Summary: "Documentacion completa. request_kind=documentar_app execution_mode=normal.",
+	}
+
+	task := directorTaskV0(payload, "director")
+
+	for _, want := range []string{
+		"No eres un worker de area",
+		"No te limites a planificar",
+		"Minimos documentar_app: manual_usuario, manual_desarrollador, manual_sistemas_deploy, decisiones, pruebas_documentales, pendientes.",
+	} {
+		if !strings.Contains(task.Objective, want) {
+			t.Fatalf("objective no contiene %q:\n%s", want, task.Objective)
+		}
+	}
+	for _, path := range []string{
+		"docs/manual_usuario.md",
+		"docs/manual_desarrollador.md",
+		"docs/manual_sistemas_deploy.md",
+		"docs/decisiones.md",
+		"docs/pruebas.md",
+		"docs/pendientes.md",
+	} {
+		if !codexStackStringInSetForTestV0(task.WriteSet, path) {
+			t.Fatalf("write_set no contiene %s: %+v", path, task.WriteSet)
+		}
 	}
 }
 

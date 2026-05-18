@@ -17,11 +17,47 @@ Pruebas de contrato:
 ```
 
 ```text
+Nombre: mcp.tool.orquesta.runs.supervisor.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: gateway HTTP, servidor residente y operadores automatizados
+Campos:
+  descriptor:
+    name: orquesta.runs.supervisor.v0
+    resource_uri: orquesta://contracts/run-supervisor/v0
+  rest:
+    method: POST
+    path: /api/v0/runs/supervise
+  input:
+    request_id, correlation_id: refs externas opcionales
+    run_ref: opcional; si existe limita la accion a esa run
+    queue_ref: opcional; si no hay run_ref permite avanzar cola inyectada
+    max_ticks, continue_message y limites acotados de drain/supervisor
+  output_ok:
+    estado: ok
+    run_ref, stop_reason, ticks, last, history?, evidence_refs?
+  output_error:
+    estado: error
+    errores_publicos: issues compactos
+Invariantes:
+  - Adaptador inbound fino y opt-in por executor inyectado.
+  - No usa stdin ni canal paralelo de agentes.
+  - No conoce Codex, OPES, DB ni runtime concreto.
+  - La composicion decide si el executor reentra por drain, cola global o
+    supervisor residente.
+Pruebas de contrato:
+  - HTTP delega en executor fake y preserva correlation id.
+  - Transporte MCP queda opt-in y devuelve unbound si falta puerto.
+  - Payload compacto sin secretos ni detalles internos.
+```
+
+```text
 Nombre: mcp.tool.orquesta.domain_work.v0
 Tipo: puerto_entrada
 Version: v0
 Propietario: orquesta-mcp
-Consumidores: servidor MCP futuro, cliente IA director y bridge HTTP local
+Consumidores: transporte/servidor MCP opt-in, cliente IA director y bridge HTTP local
 Campos:
   descriptor:
     name: orquesta.domain_work.v0
@@ -49,6 +85,8 @@ Invariantes:
   - No importa OPES, conector REST, DB, runtime, filesystem ni proveedor.
   - El registro en transporte central es opt-in: si no se inyecta executor, el
     tool devuelve `mcp_transport_tool_unbound`.
+  - OPES puede quedar detras de este tool mediante un adaptador REST inyectado;
+    el tool no debe importar ni nombrar OPES.
 Pruebas de contrato:
   - Descriptor compacto del tool.
   - Executor delega `create_job` al creator.

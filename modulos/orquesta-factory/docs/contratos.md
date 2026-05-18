@@ -103,7 +103,7 @@ Campos:
 - `objetivo`: resultado que la app debe conseguir.
 - `descripcion`: contexto libre y breve.
 - `tipo_app`: `web`, `api`, `cli`, `desktop`, `mobile`, `automation`,
-  `data`, `plugin` o `mixed`.
+  `data`, `plugin`, `mixed`, `documentacion` o `documentation`.
 - `usuarios_objetivo`: perfiles principales.
 - `plataformas`: plataformas objetivo.
 - `integraciones`: conectores externos esperados.

@@ -65,6 +65,9 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString("Aplica arquitectura hexagonal e i18n si la tarea genera app o UI.\n")
 	b.WriteString("La persistencia concreta solo pertenece a la app generada si la tarea la pide; Orquesta no usa DB por defecto.\n")
 	b.WriteString("Ejecuta las pruebas obligatorias que aparezcan en el paquete si son razonables para el workdir.\n")
+	b.WriteString("No uses git status como criterio obligatorio; si el workdir no es repositorio git, ignora esa comprobacion.\n")
+	b.WriteString("Si los tests obligatorios pasan y los ficheros del write-set existen, escribe ACK status completed aunque git no aplique.\n")
+	b.WriteString("No imprimas diffs ni pegues artefactos completos; valida en compacto, escribe agent_ack.json y termina con la linea ACK.\n")
 	writeShutdownProtocolV0(&b, shutdownRequestPath, shutdownAckPath)
 	b.WriteString("Al terminar, escribe ")
 	b.WriteString(ackPath)
@@ -75,7 +78,7 @@ func BuildCodexAgentPromptWithControlFilesV0(
 		b.WriteString(decisionPath)
 		b.WriteString(" solo para decisiones ejecutables del director; no pertenece al write-set.\n")
 		b.WriteString("Es obligatorio solo si objetivo o criterios de cierre lo piden.\n")
-		b.WriteString("Si escribes decision_path, despues escribe ACK y termina; no sigas pensando ni ampliando alcance.\n")
+		b.WriteString("Si escribes decision_path, completa antes los ficheros pedidos del write-set, despues escribe ACK y termina; no sigas pensando ni ampliando alcance.\n")
 	}
 	b.WriteString("En el ACK, files debe listar todos los paths tocados del write-set y nada fuera de el.\n")
 	b.WriteString("En el ACK, tests debe listar solo pruebas pasadas; cada test obligatorio pasado debe aparecer exactamente como aparece en el paquete.\n")
@@ -97,7 +100,9 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString(promptJSONStringArrayV0(packet.Task.WriteSet))
 	b.WriteString(",\"tests\":")
 	b.WriteString(promptJSONStringArrayV0(packet.Task.RequiredTests))
-	b.WriteString(",\"notes\":[]}\n\n")
+	b.WriteString(",\"notes\":")
+	b.WriteString(promptJSONStringArrayV0(promptACKNotesV0(packet)))
+	b.WriteString("}\n\n")
 	b.WriteString("Titulo: ")
 	b.WriteString(packet.Task.Title)
 	b.WriteString("\nObjetivo: ")
@@ -151,6 +156,13 @@ func promptJSONStringArrayV0(values []string) string {
 		return "[]"
 	}
 	return string(data)
+}
+
+func promptACKNotesV0(packet orquestaruntime.AgentStartPacketV0) []string {
+	if !codexPacketHasRequiredTruncatedContextV0(packet) {
+		return nil
+	}
+	return []string{"contexto_truncado_resuelto: <motivo>"}
 }
 
 func writePromptListSectionV0(b *strings.Builder, title string, values []string) {

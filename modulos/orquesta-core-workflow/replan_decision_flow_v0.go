@@ -8,6 +8,7 @@ const (
 	replanDecisionSourceNoneV0        replanDecisionSourceKindV0 = ""
 	replanDecisionSourceReworkV0      replanDecisionSourceKindV0 = "rework"
 	replanDecisionSourceAgentV0       replanDecisionSourceKindV0 = "agent_failed"
+	replanDecisionSourceAgentLostV0   replanDecisionSourceKindV0 = "agent_lost"
 	replanDecisionSourceAssessmentV0  replanDecisionSourceKindV0 = "agent_assessment"
 	replanDecisionSourceQualityGateV0 replanDecisionSourceKindV0 = "quality_gate_blocked"
 )
@@ -63,6 +64,9 @@ func replanDecisionSourceKindForRefV0(current OrchestrationRunV0, sourceRef stri
 	if agentFailedAlreadyReflectedV0(current, sourceRef) {
 		return replanDecisionSourceAgentV0
 	}
+	if agentLostAlreadyReflectedV0(current, sourceRef) {
+		return replanDecisionSourceAgentLostV0
+	}
 	if agentAssessmentAlreadyReflectedV0(current, sourceRef) {
 		return replanDecisionSourceAssessmentV0
 	}
@@ -76,7 +80,8 @@ func replanDecisionPhaseAllowedForSourceV0(current OrchestrationRunV0, sourceKin
 	switch sourceKind {
 	case replanDecisionSourceReworkV0:
 		return reviewPhaseCurrentV0(current, string(OrchestrationPhaseRevisionV0))
-	case replanDecisionSourceAgentV0, replanDecisionSourceAssessmentV0,
+	case replanDecisionSourceAgentV0, replanDecisionSourceAgentLostV0,
+		replanDecisionSourceAssessmentV0,
 		replanDecisionSourceQualityGateV0:
 		return phaseIsCurrentAndActiveV0(current, OrchestrationPhaseProgramacionV0)
 	default:

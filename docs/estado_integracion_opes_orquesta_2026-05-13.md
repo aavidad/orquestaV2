@@ -2,6 +2,13 @@
 
 Fecha: 2026-05-13.
 
+Nota 2026-05-18: documento historico. Para estado vigente de OPES como
+consumidor de Orquesta, usar
+`docs/corte_opes_como_consumidor_orquesta_2026-05-18.md` y el runbook
+`docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md`. REST OPES es
+la ruta funcional actual; `orquesta.domain_work.v0` es MCP generico ya
+existente; un cliente MCP especifico contra OPES queda opcional.
+
 ## Resumen
 
 Desde Orquesta no queda un bloqueo conocido para que OPES pida trabajos

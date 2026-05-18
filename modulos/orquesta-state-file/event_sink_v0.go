@@ -42,8 +42,36 @@ func (store *StoreV0) AppendRunEventsV0(
 	if err := validateEventsDocumentV0(document, runRef); err != nil {
 		return err
 	}
-	document.Events = append(document.Events, cloneEventsV0(events)...)
+	for _, event := range cloneEventsV0(events) {
+		if duplicate, err := eventAlreadyPersistedV0(document.Events, event); err != nil {
+			return err
+		} else if duplicate {
+			continue
+		}
+		document.Events = append(document.Events, event)
+	}
 	return writeJSONAtomicV0(store.eventsPathV0(runRef), document)
+}
+
+func eventAlreadyPersistedV0(
+	events []orquestacoreworkflow.OrchestrationEventV0,
+	event orquestacoreworkflow.OrchestrationEventV0,
+) (bool, error) {
+	eventID := normalizeRefV0(event.EventID)
+	if eventID == "" {
+		return false, nil
+	}
+	runRef := normalizeRefV0(event.RunID)
+	for _, existing := range events {
+		if normalizeRefV0(existing.RunID) != runRef || normalizeRefV0(existing.EventID) != eventID {
+			continue
+		}
+		if bytes.Equal(compactRawMessageV0(existing.Payload), event.Payload) {
+			return true, nil
+		}
+		return false, storeErrorV0("events.idempotency", "event_id conflictivo")
+	}
+	return false, nil
 }
 
 func (store *StoreV0) LoadRunEventsV0(

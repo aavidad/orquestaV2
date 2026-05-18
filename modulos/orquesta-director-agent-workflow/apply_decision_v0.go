@@ -15,6 +15,9 @@ func ApplyDirectorAgentDecisionV0(
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if request.Decision.CommandType == orquestadirectoragent.DirectorAgentCommandProposePlanTeamV0 {
+		return applyDirectorAgentPlanTeamDecisionV0(ctx, request, ports)
+	}
 	if issues := validateApplyDirectorAgentDecisionPortsV0(ports); len(issues) > 0 {
 		return ApplyDirectorAgentDecisionResultV0{Issues: issues}, nil
 	}

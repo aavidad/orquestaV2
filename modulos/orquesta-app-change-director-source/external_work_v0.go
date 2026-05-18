@@ -8,6 +8,52 @@ import (
 
 const maxAppChangeTaskCriteriaV0 = 10
 
+type appChangeExternalWorkKindClassV0 string
+
+const (
+	appChangeExternalWorkKindGenericV0           appChangeExternalWorkKindClassV0 = "generic"
+	appChangeExternalWorkKindDocumentaryV0       appChangeExternalWorkKindClassV0 = "documentary"
+	appChangeExternalWorkKindDraftContentBlockV0 appChangeExternalWorkKindClassV0 = "draft_content_block"
+	appChangeExternalWorkKindSummaryV0           appChangeExternalWorkKindClassV0 = "summary"
+	appChangeExternalWorkKindExpansionV0         appChangeExternalWorkKindClassV0 = "expansion"
+	appChangeExternalWorkKindDocumentPlanV0      appChangeExternalWorkKindClassV0 = "document_plan"
+	appChangeExternalWorkKindVisualV0            appChangeExternalWorkKindClassV0 = "visual"
+)
+
+type appChangeExternalWorkKindRuleV0 struct {
+	Class             appChangeExternalWorkKindClassV0
+	Title             string
+	ScopedTitlePrefix string
+}
+
+// Known external domain-work aliases. Keeping them in one internal table avoids
+// spreading documentary source rules through generic app-change projection code.
+var appChangeExternalWorkKindRulesV0 = map[string]appChangeExternalWorkKindRuleV0{
+	"draft_content_block":       {Class: appChangeExternalWorkKindDraftContentBlockV0, ScopedTitlePrefix: "Redactar bloque documental "},
+	"generate_visual_asset":     {Class: appChangeExternalWorkKindVisualV0, ScopedTitlePrefix: "Generar recurso visual "},
+	"summarize_block":           {Class: appChangeExternalWorkKindSummaryV0, Title: "Resumir bloque documental externo"},
+	"summarize_chapter":         {Class: appChangeExternalWorkKindSummaryV0, Title: "Resumir capitulo documental externo"},
+	"summarize_topic":           {Class: appChangeExternalWorkKindSummaryV0, Title: "Resumir tema documental externo"},
+	"expand_topic_from_summary": {Class: appChangeExternalWorkKindExpansionV0, Title: "Ampliar tema documental externo"},
+	"plan_documento":            {Class: appChangeExternalWorkKindDocumentPlanV0, Title: "Planificar documento externo"},
+	"plan_tema":                 {Class: appChangeExternalWorkKindDocumentPlanV0, Title: "Planificar tema documental externo"},
+	"plan_temario":              {Class: appChangeExternalWorkKindDocumentPlanV0, Title: "Planificar temario externo"},
+	"create_exam_outline":       {Class: appChangeExternalWorkKindSummaryV0, Title: "Crear esquema de examen externo"},
+	"research_sources":          {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver investigacion externa"},
+	"split_syllabus_topic":      {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Dividir tema de temario externo"},
+	"draft_topic_outline":       {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Preparar esquema de tema externo"},
+	"review_legal":              {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver revision legal externa"},
+	"review_pedagogical":        {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver revision pedagogica externa"},
+	"review_quality":            {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver revision de calidad externa"},
+	"validate_topic":            {Class: appChangeExternalWorkKindDocumentaryV0},
+	"assemble_topic":            {Class: appChangeExternalWorkKindDocumentaryV0},
+	"export_topic":              {Class: appChangeExternalWorkKindDocumentaryV0},
+	"verify_sources":            {Class: appChangeExternalWorkKindDocumentaryV0},
+	"documentation":             {Class: appChangeExternalWorkKindDocumentaryV0, ScopedTitlePrefix: "Resolver trabajo documental "},
+	"generation":                {Class: appChangeExternalWorkKindGenericV0, Title: "Resolver trabajo de generacion externo"},
+	"review":                    {Class: appChangeExternalWorkKindGenericV0, Title: "Resolver revision externa"},
+}
+
 func appChangeContractSummaryV0(request orquestaappchange.AppChangeRequestV0) string {
 	if appChangeIsDraftContentBlockWorkV0(request) {
 		return "Contrato para redactar bloque documental externo con paquete de dominio suficiente."
@@ -35,40 +81,15 @@ func appChangeTaskTitleV0(request orquestaappchange.AppChangeRequestV0) string {
 	if !appChangeHasExternalWorkV0(request) {
 		return "Aplicar cambio de app"
 	}
-	switch strings.TrimSpace(request.ExternalWork.WorkKind) {
-	case "draft_content_block":
-		return "Redactar bloque documental " + appChangeExternalWorkTitleScopeV0(request.ExternalWork)
-	case "generate_visual_asset":
-		return "Generar recurso visual " + appChangeExternalWorkTitleScopeV0(request.ExternalWork)
-	case "summarize_block":
-		return "Resumir bloque documental externo"
-	case "summarize_chapter":
-		return "Resumir capitulo documental externo"
-	case "summarize_topic":
-		return "Resumir tema documental externo"
-	case "create_exam_outline":
-		return "Crear esquema de examen externo"
-	case "research_sources":
-		return "Resolver investigacion externa"
-	case "split_syllabus_topic":
-		return "Dividir tema de temario externo"
-	case "draft_topic_outline":
-		return "Preparar esquema de tema externo"
-	case "review_legal":
-		return "Resolver revision legal externa"
-	case "review_pedagogical":
-		return "Resolver revision pedagogica externa"
-	case "review_quality":
-		return "Resolver revision de calidad externa"
-	case "documentation":
-		return "Resolver trabajo documental " + appChangeExternalWorkTitleScopeV0(request.ExternalWork)
-	case "generation":
-		return "Resolver trabajo de generacion externo"
-	case "review":
-		return "Resolver revision externa"
-	default:
-		return "Resolver trabajo externo de app"
+	if rule, ok := appChangeExternalWorkKindRuleForRequestV0(request); ok {
+		if rule.ScopedTitlePrefix != "" {
+			return rule.ScopedTitlePrefix + appChangeExternalWorkTitleScopeV0(request.ExternalWork)
+		}
+		if rule.Title != "" {
+			return rule.Title
+		}
 	}
+	return "Resolver trabajo externo de app"
 }
 
 func appChangeTaskSummaryV0(request orquestaappchange.AppChangeRequestV0) string {
@@ -80,6 +101,12 @@ func appChangeTaskSummaryV0(request orquestaappchange.AppChangeRequestV0) string
 	}
 	if appChangeIsSummaryExternalWorkV0(request) {
 		return "Crear resumen derivado compacto con trazabilidad a bloques, capitulos, tema y fuentes de origen."
+	}
+	if appChangeIsExpansionExternalWorkV0(request) {
+		return "Ampliar tema documental completo desde resumen trazable y paquete de dominio suficiente."
+	}
+	if appChangeIsDocumentPlanWorkV0(request) {
+		return "Crear plan documental validable; no redactar ni ensamblar el documento final en esta tarea."
 	}
 	if appChangeIsDocumentaryExternalWorkV0(request) {
 		return "Resolver trabajo documental con paquete de dominio suficiente: temario, esquema, objetivo, fuentes, criterios y longitud si llegan."
@@ -99,10 +126,65 @@ func appChangeTaskCriteriaV0(request orquestaappchange.AppChangeRequestV0) []str
 
 func compactAppChangeTaskCriteriaV0(criteria []string) []string {
 	criteria = compactAppChangeSourceRefsV0(criteria)
+	criteria = sanitizeAppChangeTaskCriteriaV0(criteria)
 	if len(criteria) <= maxAppChangeTaskCriteriaV0 {
 		return criteria
 	}
 	return append([]string(nil), criteria[:maxAppChangeTaskCriteriaV0]...)
+}
+
+func sanitizeAppChangeTaskCriteriaV0(criteria []string) []string {
+	out := make([]string, 0, len(criteria))
+	for _, criterion := range criteria {
+		sanitized := strings.TrimSpace(sanitizeAppChangeTaskCriterionV0(criterion))
+		if sanitized != "" {
+			out = append(out, sanitized)
+		}
+	}
+	return out
+}
+
+func sanitizeAppChangeTaskCriterionV0(value string) string {
+	replacer := strings.NewReplacer(
+		"base de datos", "almacen interno",
+		"Base de datos", "Almacen interno",
+		"BASE DE DATOS", "ALMACEN INTERNO",
+		"database", "almacen interno",
+		"Database", "Almacen interno",
+		"DATABASE", "ALMACEN INTERNO",
+		"DB", "almacen interno",
+		"db", "almacen interno",
+		"SQL", "consulta interna",
+		"sql", "consulta interna",
+		"runtime", "ejecucion interna",
+		"Runtime", "Ejecucion interna",
+		"provider", "adaptador",
+		"Provider", "Adaptador",
+		"proveedor", "adaptador",
+		"Proveedor", "Adaptador",
+		"HOME", "directorio interno",
+		"home", "directorio interno",
+		"OAuth", "identidad externa",
+		"oauth", "identidad externa",
+		"Docker", "contenedor",
+		"docker", "contenedor",
+		"tmux", "multiplexor externo",
+		"secret", "dato sensible",
+		"Secret", "Dato sensible",
+		"secreto", "dato sensible",
+		"Secreto", "Dato sensible",
+		"token", "dato sensible",
+		"Token", "Dato sensible",
+		"password", "dato sensible",
+		"Password", "Dato sensible",
+		"credential", "dato sensible",
+		"Credential", "Dato sensible",
+		"credencial", "dato sensible",
+		"Credencial", "Dato sensible",
+		"api_key", "clave externa",
+		"API_KEY", "clave externa",
+	)
+	return replacer.Replace(value)
 }
 
 func appChangeExternalWorkCriteriaV0(
@@ -123,9 +205,17 @@ func appChangeExternalWorkCriteriaV0(
 		"Tratar el paquete de dominio "+scope+" como entrada suficiente, no como contexto minimo.",
 	)
 	if appChangeIsDraftContentBlockWorkV0(request) {
+		owner := appChangeExternalWorkOwnerLabelV0(request.ExternalWork)
 		criteria = append(criteria,
-			"Para draft_content_block, usar paquete editorial suficiente y no sobreatomizar: bloque, subcapitulo o capitulo coherente si OPES lo envio asi.",
-			"No redactar un tema de 50 folios sin paquete suficiente; pedir division editorial a OPES si excede contexto o trazabilidad.",
+			"Para draft_content_block, usar paquete editorial suficiente y no sobreatomizar: bloque, subcapitulo o capitulo coherente si "+owner+" lo envio asi.",
+			"No redactar un tema de 50 folios sin paquete suficiente; pedir division editorial a "+owner+" si excede contexto o trazabilidad.",
+		)
+	} else if appChangeIsDocumentPlanWorkV0(request) {
+		criteria = append(criteria,
+			"Devolver artifact_type=document_plan compatible con DomainDocumentPlanV0.",
+			"Incluir sections, deliverables, quality_criteria y review_steps suficientes para ejecutar despues.",
+			"Planificar visuales, revisiones, ensamblado y exportacion cuando el objetivo lo requiera.",
+			"No redactar el documento final en esta tarea; solo plan verificable.",
 		)
 	} else if appChangeIsSummaryExternalWorkV0(request) {
 		criteria = append(criteria,
@@ -145,47 +235,71 @@ func appChangeExternalWorkCriteriaV0(
 func appChangeIsDraftContentBlockWorkV0(
 	request orquestaappchange.AppChangeRequestV0,
 ) bool {
-	return appChangeHasExternalWorkV0(request) &&
-		strings.TrimSpace(request.ExternalWork.WorkKind) == "draft_content_block"
+	return appChangeExternalWorkKindHasClassV0(
+		request,
+		appChangeExternalWorkKindDraftContentBlockV0,
+	)
 }
 
 func appChangeIsDocumentaryExternalWorkV0(
 	request orquestaappchange.AppChangeRequestV0,
 ) bool {
-	if !appChangeHasExternalWorkV0(request) {
-		return false
-	}
-	switch strings.TrimSpace(request.ExternalWork.WorkKind) {
-	case "draft_content_block",
-		"documentation",
-		"research_sources",
-		"split_syllabus_topic",
-		"draft_topic_outline",
-		"summarize_block",
-		"summarize_chapter",
-		"summarize_topic",
-		"create_exam_outline",
-		"review_legal",
-		"review_pedagogical",
-		"review_quality",
-		"validate_topic",
-		"assemble_topic",
-		"export_topic",
-		"verify_sources":
-		return true
-	default:
-		return false
-	}
+	rule, ok := appChangeExternalWorkKindRuleForRequestV0(request)
+	return ok && rule.isDocumentaryV0()
+}
+
+func appChangeIsExpansionExternalWorkV0(
+	request orquestaappchange.AppChangeRequestV0,
+) bool {
+	return appChangeExternalWorkKindHasClassV0(
+		request,
+		appChangeExternalWorkKindExpansionV0,
+	)
+}
+
+func appChangeIsDocumentPlanWorkV0(
+	request orquestaappchange.AppChangeRequestV0,
+) bool {
+	return appChangeExternalWorkKindHasClassV0(
+		request,
+		appChangeExternalWorkKindDocumentPlanV0,
+	)
 }
 
 func appChangeIsSummaryExternalWorkV0(
 	request orquestaappchange.AppChangeRequestV0,
 ) bool {
+	return appChangeExternalWorkKindHasClassV0(
+		request,
+		appChangeExternalWorkKindSummaryV0,
+	)
+}
+
+func appChangeExternalWorkKindHasClassV0(
+	request orquestaappchange.AppChangeRequestV0,
+	class appChangeExternalWorkKindClassV0,
+) bool {
+	rule, ok := appChangeExternalWorkKindRuleForRequestV0(request)
+	return ok && rule.Class == class
+}
+
+func appChangeExternalWorkKindRuleForRequestV0(
+	request orquestaappchange.AppChangeRequestV0,
+) (appChangeExternalWorkKindRuleV0, bool) {
 	if !appChangeHasExternalWorkV0(request) {
-		return false
+		return appChangeExternalWorkKindRuleV0{}, false
 	}
-	switch strings.TrimSpace(request.ExternalWork.WorkKind) {
-	case "summarize_block", "summarize_chapter", "summarize_topic", "create_exam_outline":
+	rule, ok := appChangeExternalWorkKindRulesV0[strings.TrimSpace(request.ExternalWork.WorkKind)]
+	return rule, ok
+}
+
+func (rule appChangeExternalWorkKindRuleV0) isDocumentaryV0() bool {
+	switch rule.Class {
+	case appChangeExternalWorkKindDocumentaryV0,
+		appChangeExternalWorkKindDraftContentBlockV0,
+		appChangeExternalWorkKindSummaryV0,
+		appChangeExternalWorkKindExpansionV0,
+		appChangeExternalWorkKindDocumentPlanV0:
 		return true
 	default:
 		return false
@@ -205,6 +319,16 @@ func appChangeExternalWorkTitleScopeV0(
 		return "externo"
 	}
 	return strings.ToUpper(project)
+}
+
+func appChangeExternalWorkOwnerLabelV0(
+	work *orquestaappchange.AppChangeExternalWorkV0,
+) string {
+	scope := appChangeExternalWorkTitleScopeV0(work)
+	if scope == "externo" {
+		return "la app externa"
+	}
+	return scope
 }
 
 func appChangeHasExternalWorkV0(request orquestaappchange.AppChangeRequestV0) bool {

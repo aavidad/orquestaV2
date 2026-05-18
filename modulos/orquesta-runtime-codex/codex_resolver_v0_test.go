@@ -132,7 +132,10 @@ func TestCodexExecResolverV0PromptUsaControlFilesDelRuntime(t *testing.T) {
 		"PROTOCOLO COMPACTO OBLIGATORIO",
 		"$caveman full",
 		"Incumplir este protocolo invalida la entrega.",
-		"Si escribes decision_path, despues escribe ACK y termina",
+		"No uses git status como criterio obligatorio",
+		"ACK status completed aunque git no aplique",
+		"No imprimas diffs ni pegues artefactos completos",
+		"Si escribes decision_path, completa antes los ficheros pedidos del write-set",
 		"Write-set permitido:",
 		"README.md",
 		"Tests obligatorios:",
@@ -163,6 +166,7 @@ func TestCodexExecResolverV0PromptAdvierteContextoRequeridoTruncado(t *testing.T
 	for _, want := range []string{
 		"CONTEXTO TRUNCADO REQUERIDO",
 		"contexto_truncado_resuelto",
+		`"notes":["contexto_truncado_resuelto: \u003cmotivo\u003e"]`,
 		"CONSULTA AL DIRECTOR",
 	} {
 		if !strings.Contains(string(prompt), want) {

@@ -48,6 +48,9 @@ func (waiter AckAwareWaiterV0) allStartedAgentsHaveAckV0(
 	request orquestacionnucleoapp.ExternalProgressWaitRequestV0,
 ) (bool, error) {
 	started := compactStringsV0(request.LastResult.Run.StartedAgents)
+	if len(request.WaitAgentRefs) > 0 {
+		started = waiterStartedAgentRefsForWaitV0(started, request.WaitAgentRefs)
+	}
 	if len(started) == 0 {
 		return false, nil
 	}
@@ -62,6 +65,23 @@ func (waiter AckAwareWaiterV0) allStartedAgentsHaveAckV0(
 		return false, err
 	}
 	return descriptorsHaveReadyAckV0(started, descriptors)
+}
+
+func waiterStartedAgentRefsForWaitV0(
+	started []string,
+	waitAgentRefs []string,
+) []string {
+	allowed := map[string]bool{}
+	for _, agentRef := range compactStringsV0(waitAgentRefs) {
+		allowed[agentRef] = true
+	}
+	out := make([]string, 0, len(started))
+	for _, agentRef := range compactStringsV0(started) {
+		if allowed[agentRef] {
+			out = append(out, agentRef)
+		}
+	}
+	return out
 }
 
 func descriptorsHaveReadyAckV0(

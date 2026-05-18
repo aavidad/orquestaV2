@@ -12,9 +12,9 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
 	orquestadirectorsupervisedburst "orquesta/modulos/orquesta-director-supervised-burst"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func programmingTeamSmokeStateDiagnosticsV0(

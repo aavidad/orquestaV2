@@ -4,6 +4,11 @@
 - `go test -count=1 ./cmd/orquesta-server`
 - `cmd/orquesta-server` prueba que `ORQUESTA_OPES_BASE_URL` activa un executor
   `domain_work` OPES opt-in y que sin esa variable queda apagado.
+- `cmd/orquesta-server` prueba que `ORQUESTA_DOMAIN_WORK_FILE_ENABLED=1`
+  activa un creator durable file-based para `create_job`, sin habilitar
+  `submit_artifact` ni `DomainDelivery`.
+- `cmd/orquesta-server` prueba que OPES y el backend file de `domain_work` no
+  pueden activarse a la vez.
 - `cmd/orquesta-server` prueba que los umbrales productivos por defecto para
   agentes Codex no vuelven a valores agresivos de debug, y que siguen siendo
   sobreescribibles por entorno.

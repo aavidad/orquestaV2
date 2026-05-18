@@ -6,8 +6,13 @@ Implementa:
 
 - `RunStorePortV0`;
 - `EventSinkPortV0`;
+- `RunEventReaderPortV0`;
 - `WorkflowTaskStorePortV0`;
 - `WorkflowTaskWriterPortV0`;
+- `WorkflowTaskWaitStateStorePortV0` / `WorkflowTaskWaitStateWriterPortV0`;
+- `RequiredTestEvidenceStorePortV0`;
+- `OperationalDirectorPlanStateStorePortV0` /
+  `OperationalDirectorPlanStateWriterPortV0`;
 - `AgentProcessRegistryPortV0`.
 
 El subpaquete `outbox` implementa el ledger durable de outbox usado por el

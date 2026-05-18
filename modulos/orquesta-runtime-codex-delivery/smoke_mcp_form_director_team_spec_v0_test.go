@@ -6,10 +6,10 @@ import (
 
 	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaweb "orquesta/modulos/orquesta-web"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 type mcpFormDirectorTeamCodexSpecResolverV0 struct {

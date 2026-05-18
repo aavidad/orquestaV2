@@ -121,6 +121,10 @@ func agentQualityRecommendationsV0(
 			out = append(out, recommendation)
 			continue
 		}
+		if recommendation, ok := lostAgentQualityRecommendationV0(agent); ok {
+			out = append(out, recommendation)
+			continue
+		}
 		if recommendation, ok := progressAgentQualityRecommendationV0(agent); ok {
 			out = append(out, recommendation)
 		}
@@ -152,6 +156,23 @@ func failedAgentQualityRecommendationV0(
 		ReasonCode:        "agent_failed",
 		RecommendedAction: AutonomousQualityActionReplanV0,
 		Summary:           "Agente fallido; replan compacto requerido.",
+		EvidenceRefs:      []string{agent.AgentRequestID},
+	}, true
+}
+
+func lostAgentQualityRecommendationV0(
+	agent DirectorAgentStatsV0,
+) (AutonomousQualityRecommendationV0, bool) {
+	if !agent.Lost {
+		return AutonomousQualityRecommendationV0{}, false
+	}
+	return AutonomousQualityRecommendationV0{
+		SubjectRef:        agent.AgentRequestID,
+		SubjectKind:       autonomousQualityKindAgentV0,
+		SignalRef:         agent.AgentRequestID,
+		ReasonCode:        "agent_lost",
+		RecommendedAction: AutonomousQualityActionReplanV0,
+		Summary:           "Agente perdido; replan compacto requerido.",
 		EvidenceRefs:      []string{agent.AgentRequestID},
 	}, true
 }

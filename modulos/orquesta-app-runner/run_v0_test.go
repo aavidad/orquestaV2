@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	orquestaappplanner "orquesta/modulos/orquesta-app-planner"
-	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
@@ -171,7 +170,7 @@ func runnerDeliveryObservationForUnitTestV0(unit orquestaappplanner.AppWorkUnitV
 	return orquestacionnucleoapp.AgentDeliveryObservationV0{
 		CandidateRef: "delivery-candidate-ref-" + unit.DeliveryRef,
 		DeliveryRef:  unit.DeliveryRef,
-		PhaseID:      string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		PhaseID:      string(unit.PhaseID),
 		TaskID:       unit.TaskRef,
 		AgentRef:     unit.AgentRequestID,
 		Summary:      "Entrega compacta de prueba.",

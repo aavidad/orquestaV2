@@ -99,6 +99,122 @@ func TestStartExternalWorkRunV0NoCreaRunSiFaltaExternalWork(t *testing.T) {
 	}
 }
 
+func TestStartExternalWorkRunV0BloqueaMissingContextAntesDeCrearRun(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	queue := &fakeExternalWorkRunQueueV0{}
+	request := validExternalWorkRunRequestForTestV0()
+	request.AppChangeRequest.ExternalWork.InputFields = append(
+		request.AppChangeRequest.ExternalWork.InputFields,
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:   "missing_context",
+			Values: []string{"topic_outline"},
+		},
+	)
+
+	result, err := StartExternalWorkRunV0(
+		context.Background(),
+		request,
+		StartExternalWorkRunPortsV0{
+			RunStore:  store,
+			EventSink: orquestacionnucleoapp.NewInMemoryEventSinkV0(),
+			RunQueue:  queue,
+			AppChange: orquestaappchange.AppChangePortsV0{
+				Store:            orquestaappchange.NewInMemoryAppChangeStoreV0(),
+				DirectorNotifier: fakeExternalWorkRunNotifierV0{},
+			},
+		},
+		StartExternalWorkRunConfigV0{OccurredAt: "2026-05-10T10:00:00Z"},
+	)
+	if err != nil {
+		t.Fatalf("StartExternalWorkRunV0: %v", err)
+	}
+	if result.Status != ExternalWorkRunStatusInvalidV0 ||
+		!reflect.DeepEqual(issueCodesV0(result.Issues), []string{ErrExternalWorkRunMissingContextV0}) {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(queue.commands) != 0 {
+		t.Fatalf("queue no debe mutar: %+v", queue.commands)
+	}
+	if _, err := store.LoadRunV0(context.Background(), result.RunRef); !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
+		t.Fatalf("run no debe existir, err=%v", err)
+	}
+}
+
+func TestStartExternalWorkRunV0BloqueaRequiredInputFieldsAusentes(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	queue := &fakeExternalWorkRunQueueV0{}
+	request := validExternalWorkRunRequestForTestV0()
+	request.AppChangeRequest.ExternalWork.InputFields = append(
+		request.AppChangeRequest.ExternalWork.InputFields,
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:   "required_input_fields",
+			Values: []string{"topic_id", "source_refs"},
+		},
+	)
+
+	result, err := StartExternalWorkRunV0(
+		context.Background(),
+		request,
+		StartExternalWorkRunPortsV0{
+			RunStore:  store,
+			EventSink: orquestacionnucleoapp.NewInMemoryEventSinkV0(),
+			RunQueue:  queue,
+			AppChange: orquestaappchange.AppChangePortsV0{
+				Store:            orquestaappchange.NewInMemoryAppChangeStoreV0(),
+				DirectorNotifier: fakeExternalWorkRunNotifierV0{},
+			},
+		},
+		StartExternalWorkRunConfigV0{OccurredAt: "2026-05-10T10:00:00Z"},
+	)
+	if err != nil {
+		t.Fatalf("StartExternalWorkRunV0: %v", err)
+	}
+	if result.Status != ExternalWorkRunStatusInvalidV0 ||
+		!reflect.DeepEqual(issueCodesV0(result.Issues), []string{ErrExternalWorkRunRequiredInputMissingV0}) {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(queue.commands) != 0 {
+		t.Fatalf("queue no debe mutar: %+v", queue.commands)
+	}
+	if _, err := store.LoadRunV0(context.Background(), result.RunRef); !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
+		t.Fatalf("run no debe existir, err=%v", err)
+	}
+}
+
+func TestStartExternalWorkRunV0AceptaRequiredInputFieldsPresentes(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	queue := &fakeExternalWorkRunQueueV0{}
+	request := validExternalWorkRunRequestForTestV0()
+	request.AppChangeRequest.ExternalWork.InputFields = append(
+		request.AppChangeRequest.ExternalWork.InputFields,
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:   "required_input_fields",
+			Values: []string{"topic_id"},
+		},
+	)
+
+	result, err := StartExternalWorkRunV0(
+		context.Background(),
+		request,
+		StartExternalWorkRunPortsV0{
+			RunStore:  store,
+			EventSink: orquestacionnucleoapp.NewInMemoryEventSinkV0(),
+			RunQueue:  queue,
+			AppChange: orquestaappchange.AppChangePortsV0{
+				Store:            orquestaappchange.NewInMemoryAppChangeStoreV0(),
+				DirectorNotifier: fakeExternalWorkRunNotifierV0{},
+			},
+		},
+		StartExternalWorkRunConfigV0{OccurredAt: "2026-05-10T10:00:00Z"},
+	)
+	if err != nil {
+		t.Fatalf("StartExternalWorkRunV0: %v", err)
+	}
+	if result.Status != ExternalWorkRunStatusAcceptedV0 || len(queue.commands) != 1 {
+		t.Fatalf("result=%+v queue=%+v", result, queue.commands)
+	}
+}
+
 func TestStartExternalWorkRunV0IncluyeProyectoYCambioEnRunRefDerivado(t *testing.T) {
 	requestA := validExternalWorkRunRequestForTestV0()
 	requestA.AppChangeRequest.AppRef = "opes"

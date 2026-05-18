@@ -71,6 +71,7 @@ func NewMCPCoreWorkflowContractsResourceV0() MCPCoreWorkflowContractsResourceV0 
 		CanonicalRefs: compactStringsMCPV0([]string{
 			"orquesta-core-workflow/docs/contratos.md",
 			"orquesta-core-workflow/docs/contratos_estado_fases.md",
+			"orquesta-core-workflow/docs/contratos_agentes.md",
 			"orquesta-core-workflow/docs/contratos_quality_gates.md",
 		}),
 		StateShape: MCPCoreWorkflowStateShapeV0{
@@ -84,8 +85,8 @@ func NewMCPCoreWorkflowContractsResourceV0() MCPCoreWorkflowContractsResourceV0 
 			Refs: []string{
 				"project_ref", "app_spec_ref", "brainstorms", "votes", "tasks", "function_contracts",
 				"decisions", "capacity_requests", "capacity_decisions", "agents", "started_agents",
-				"failed_agents", "stopped_agents", "confirmed_stopped_agents", "agent_assessments",
-				"agent_lease_expirations", "concurrency_gates", "deliveries", "reviews",
+				"failed_agents", "stopped_agents", "confirmed_stopped_agents", "lost_agents",
+				"agent_assessments", "agent_lease_expirations", "concurrency_gates", "deliveries", "reviews",
 				"quality_gates", "phase_artifacts", "review_results", "rework_requests", "replan_decisions",
 				"accepted_reviews", "closed_tasks", "validations", "closures", "director_questions",
 				"director_answers", "director_answered_questions", "blockers",
@@ -150,6 +151,7 @@ func coreWorkflowCommandGuidesMCPV0() []MCPCoreWorkflowTransitionGuideV0 {
 		coreWorkflowTransitionMCPV0(orquestacoreworkflow.OrchestrationCommandRegisterAgentLeaseExpiredV0, "command", "", []string{"agent_request_id", "lease_ref"}, []string{"agent_lease_expirations"}),
 		coreWorkflowTransitionMCPV0(orquestacoreworkflow.OrchestrationCommandStopAgentV0, "command", "", []string{"agent_request_id", "stop_request_ref"}, []string{"stopped_agents", "outbox:agent_launcher"}),
 		coreWorkflowTransitionMCPV0(orquestacoreworkflow.OrchestrationCommandRegisterAgentStopConfirmedV0, "command", "", []string{"agent_request_id", "confirmation_ref"}, []string{"confirmed_stopped_agents"}),
+		coreWorkflowTransitionMCPV0(orquestacoreworkflow.OrchestrationCommandRegisterAgentLostV0, "command", "", []string{"agent_request_id", "loss_ref"}, []string{"lost_agents"}),
 		coreWorkflowTransitionMCPV0(orquestacoreworkflow.OrchestrationCommandAssessAgentWorkV0, "command", "", []string{"agent_request_id", "assessment_ref"}, []string{"agent_assessments"}),
 		coreWorkflowTransitionMCPV0(orquestacoreworkflow.OrchestrationCommandRecordConcurrencyGateV0, "command", "", []string{"gate_ref", "decision"}, []string{"concurrency_gates"}),
 		coreWorkflowTransitionMCPV0(orquestacoreworkflow.OrchestrationCommandRecordQualityGateV0, "command", "", []string{"run_ref", "gate_ref", "phase_id", "subject_ref", "decision", "summary"}, []string{"quality_gates"}),
@@ -187,6 +189,7 @@ func coreWorkflowEventGuidesMCPV0() []MCPCoreWorkflowTransitionGuideV0 {
 		coreWorkflowTransitionMCPV0(orquestacoreworkflow.OrchestrationEventAgentLeaseExpiredV0, "event", "", []string{"agent_request_id", "lease_ref"}, []string{"agent_lease_expirations"}),
 		coreWorkflowTransitionMCPV0(orquestacoreworkflow.OrchestrationEventAgentStopRequestedV0, "event", "", []string{"agent_request_id", "stop_request_ref"}, []string{"stopped_agents"}),
 		coreWorkflowTransitionMCPV0(orquestacoreworkflow.OrchestrationEventAgentStopConfirmedV0, "event", "", []string{"agent_request_id", "confirmation_ref"}, []string{"confirmed_stopped_agents"}),
+		coreWorkflowTransitionMCPV0(orquestacoreworkflow.OrchestrationEventAgentLostV0, "event", "", []string{"agent_request_id", "loss_ref"}, []string{"lost_agents"}),
 		coreWorkflowTransitionMCPV0(orquestacoreworkflow.OrchestrationEventAgentWorkAssessedV0, "event", "", []string{"agent_request_id", "assessment_ref"}, []string{"agent_assessments"}),
 		coreWorkflowTransitionMCPV0(orquestacoreworkflow.OrchestrationEventConcurrencyGateRecordedV0, "event", "", []string{"gate_ref", "decision"}, []string{"concurrency_gates"}),
 		coreWorkflowTransitionMCPV0(orquestacoreworkflow.OrchestrationEventQualityGateRecordedV0, "event", "", []string{"run_ref", "gate_ref", "phase_id", "subject_ref", "decision", "summary"}, []string{"quality_gates"}),

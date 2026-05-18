@@ -35,16 +35,19 @@ type ConfigV0 struct {
 }
 
 type StoresV0 struct {
-	RunStore        orquestacionnucleoapp.RunStorePortV0
-	EventSink       orquestacionnucleoapp.EventSinkPortV0
-	OutboxLedger    OutboxLedgerPortV0
-	TaskStore       orquestaappdirectorservice.AppDirectorWorkflowTaskStorePortV0
-	AppChangeStore  orquestaappchange.AppChangeRecordStorePortV0
-	ReceiptStore    CodexReceiptStorePortV0
-	ProgressState   orquestaruntimecodexdelivery.CodexProgressStateStorePortV0
-	ProcessRegistry orquestacionnucleoapp.AgentProcessRegistryPortV0
-	RunControl      orquestaruncontrol.RunControlPortV0
-	RunQueue        orquestarunqueue.RunQueuePortV0
+	RunStore                   orquestacionnucleoapp.RunStorePortV0
+	EventSink                  orquestacionnucleoapp.EventSinkPortV0
+	OutboxLedger               OutboxLedgerPortV0
+	TaskStore                  orquestaappdirectorservice.AppDirectorWorkflowTaskStorePortV0
+	OperationalPlanStateWriter orquestacionnucleoapp.OperationalDirectorPlanStateWriterPortV0
+	OperationalPlanStateStore  orquestacionnucleoapp.OperationalDirectorPlanStateStorePortV0
+	RequiredTestEvidenceStore  orquestacionnucleoapp.RequiredTestEvidenceStorePortV0
+	AppChangeStore             orquestaappchange.AppChangeRecordStorePortV0
+	ReceiptStore               CodexReceiptStorePortV0
+	ProgressState              orquestaruntimecodexdelivery.CodexProgressStateStorePortV0
+	ProcessRegistry            orquestacionnucleoapp.AgentProcessRegistryPortV0
+	RunControl                 orquestaruncontrol.RunControlPortV0
+	RunQueue                   orquestarunqueue.RunQueuePortV0
 }
 
 type OutboxLedgerPortV0 interface {

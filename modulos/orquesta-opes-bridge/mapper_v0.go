@@ -60,6 +60,7 @@ func BuildExternalWorkRunRequestWithContextV0(
 	fields = appendFieldIfMissingV0(fields, "expected_artifact_type", expectedArtifactTypeV0(job.Type))
 	fields = appendFieldIfMissingV0(fields, "context_budget_profile", contextProfileForJobTypeV0(job.Type))
 	fields = appendExpansionDocumentContractFieldsV0(fields, job.Type)
+	fields = appendDocumentPlanContractFieldsV0(fields, job.Type)
 	workRefs := workRefsForPayloadV0(job, fields)
 	change := orquestaappchange.AppChangeRequestV0{
 		SchemaVersion:      orquestaappchange.AppChangeRequestSchemaV0,
@@ -266,6 +267,10 @@ func expectedArtifactTypeV0(jobType string) string {
 		return "topic_summary"
 	case "expand_topic_from_summary":
 		return "topic_expansion_package"
+	case "plan_documento", "plan_tema", "plan_temario":
+		return orquestadomainwork.DomainDocumentPlanArtifactTypeV0
+	case "assemble_topic":
+		return "assembled_topic"
 	default:
 		return "work_delivery"
 	}
@@ -275,11 +280,15 @@ func contextProfileForJobTypeV0(jobType string) string {
 	switch strings.TrimSpace(jobType) {
 	case "summarize_topic",
 		"expand_topic_from_summary",
+		"plan_documento",
+		"plan_tema",
+		"plan_temario",
 		"draft_content_block",
 		"review_legal",
 		"review_pedagogical",
 		"review_quality",
-		"validate_topic":
+		"validate_topic",
+		"assemble_topic":
 		return "large"
 	default:
 		return "standard"
@@ -301,12 +310,10 @@ func acceptanceCriteriaForJobV0(jobType string) []string {
 		"entrega en fichero unico bajo allowed_write_set",
 	}
 	if strings.TrimSpace(jobType) == "expand_topic_from_summary" {
-		criteria = append(criteria,
-			"paquete apto para tema_grande con capitulos y bloques trazables",
-			"conservar base para tema_mediano sin perder autores normativa ni procedimientos",
-			"incluir resumen/memoria de repaso derivado del tema desarrollado",
-			"incluir esquema de examen y plan de visuales cuando aporten valor",
-		)
+		criteria = append(criteria, expansionAcceptanceCriteriaV0()...)
+	}
+	if isDocumentPlanJobTypeV0(jobType) {
+		criteria = append(criteria, documentPlanAcceptanceCriteriaV0()...)
 	}
 	return criteria
 }
@@ -322,26 +329,6 @@ func constraintsForJobV0() []string {
 
 func opesJobWriteSetV0(workKind string, safeJob string) string {
 	return "external/opes/" + strings.TrimSpace(workKind) + "/" + strings.TrimSpace(safeJob)
-}
-
-func appendExpansionDocumentContractFieldsV0(
-	fields []orquestadomainwork.DomainWorkFieldV0,
-	jobType string,
-) []orquestadomainwork.DomainWorkFieldV0 {
-	if strings.TrimSpace(jobType) != "expand_topic_from_summary" ||
-		fieldHasNameV0(fields, "required_document_variants") {
-		return fields
-	}
-	return append(fields, orquestadomainwork.DomainWorkFieldV0{
-		Name: "required_document_variants",
-		Values: []string{
-			"tema_grande",
-			"tema_mediano",
-			"resumen",
-			"esquema_repaso",
-			"plan_visuales",
-		},
-	})
 }
 
 func compactOPESBridgeRefV0(value string) string {

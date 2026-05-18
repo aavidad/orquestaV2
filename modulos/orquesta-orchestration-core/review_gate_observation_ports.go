@@ -23,6 +23,7 @@ type ReviewGateObservationRequestV0 struct {
 	CorrelationID    string
 	EvidenceRefs     []string
 	PreviousDecision string
+	WaitAgentRefs    []string
 }
 
 type ReviewGateObservationV0 struct {

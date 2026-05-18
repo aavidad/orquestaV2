@@ -89,6 +89,23 @@ Estado: aceptada localmente.
 ```
 
 ```text
+Fecha: 2026-05-15
+Decision: El director principal en modo normal usa capacidad xhigh y write-set
+global documental cuando la peticion exige entregables completos.
+Motivo: la prueba real "director total" mostro que Orquesta arrancaba agentes
+reales, pero el director quedaba tratado como worker acotado: solo podia crear
+`docs/arquitectura.md` y `docs/plan_microtareas.md`. Eso impedia que hiciera
+lo que hace un director humano: producir manuales, decisiones, pruebas y
+pendientes cuando la peticion lo exige.
+Impacto: `primaryDirectorTaskAreaV0` usa xhigh salvo debug y anade
+`docs/manual_usuario.md`, `docs/manual_desarrollador.md`,
+`docs/manual_sistemas_deploy.md`, `docs/decisiones.md`, `docs/pruebas.md` y
+`docs/pendientes.md` para `documentar_app`, `crear_app_completa` y
+`planificar_app`. Los directores especializados mantienen write-set pequeno.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-05-10
 Decision: El wizard de intake devuelve preguntas compactas con claves i18n y
 solo crea `AppSpecV0` cuando `orquesta-factory` valida el borrador.

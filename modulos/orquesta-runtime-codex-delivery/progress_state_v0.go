@@ -23,6 +23,7 @@ type CodexProgressSampleV0 struct {
 	AgentRequestID       string
 	ProcessRef           string
 	Signature            string
+	ActionSignature      string
 	EvidenceRefs         []string
 	ObservedAt           time.Time
 	MinUnchangedInterval time.Duration
@@ -121,6 +122,7 @@ func (store *InMemoryCodexProgressStateStoreV0) ensureRecordsLockedV0() {
 type codexProgressStateRecordV0 struct {
 	Current           orquestaruntime.AgentProgressHeartbeatV0
 	Signature         string
+	ActionSignature   string
 	TickCounter       int
 	ProgressCounter   int
 	RepeatedCount     int
@@ -149,6 +151,7 @@ func (record codexProgressStateRecordV0) nextHeartbeatV0(
 	tick := record.TickCounter + 1
 	progress := record.ProgressCounter
 	noProgress := record.NoProgressCount
+	repeated := record.RepeatedCount
 	reported := record.ReportedSignature
 	reportedStatus := record.ReportedStatus
 	firstObservedAt := record.FirstObservedAt
@@ -156,12 +159,20 @@ func (record codexProgressStateRecordV0) nextHeartbeatV0(
 	if firstObservedAt.IsZero() {
 		firstObservedAt = sample.ObservedAt
 	}
-	if record.Signature == "" || record.Signature != sample.Signature {
+	signatureChanged := record.Signature == "" || record.Signature != sample.Signature
+	if signatureChanged {
 		progress++
 		noProgress = 0
 		reported = ""
 		reportedStatus = ""
 		lastActivityAt = sample.ObservedAt
+		if record.ActionSignature != "" &&
+			sample.ActionSignature != "" &&
+			record.ActionSignature == sample.ActionSignature {
+			repeated++
+		} else {
+			repeated = 0
+		}
 	} else {
 		noProgress++
 	}
@@ -172,15 +183,16 @@ func (record codexProgressStateRecordV0) nextHeartbeatV0(
 		ProcessRef:          sample.ProcessRef,
 		TickCounter:         tick,
 		ProgressCounter:     progress,
-		RepeatedActionCount: record.RepeatedCount,
+		RepeatedActionCount: repeated,
 		EvidenceRefs:        compactCodexDeliveryRefsV0(sample.EvidenceRefs),
 	}
 	return codexProgressStateRecordV0{
 		Current:           current,
 		Signature:         sample.Signature,
+		ActionSignature:   sample.ActionSignature,
 		TickCounter:       tick,
 		ProgressCounter:   progress,
-		RepeatedCount:     0,
+		RepeatedCount:     repeated,
 		NoProgressCount:   noProgress,
 		ReportedSignature: reported,
 		ReportedStatus:    reportedStatus,
@@ -231,6 +243,7 @@ func normalizeCodexProgressSampleV0(sample CodexProgressSampleV0) CodexProgressS
 	sample.AgentRequestID = strings.TrimSpace(sample.AgentRequestID)
 	sample.ProcessRef = strings.TrimSpace(sample.ProcessRef)
 	sample.Signature = strings.TrimSpace(sample.Signature)
+	sample.ActionSignature = strings.TrimSpace(sample.ActionSignature)
 	sample.EvidenceRefs = compactCodexDeliveryRefsV0(sample.EvidenceRefs)
 	if sample.ObservedAt.IsZero() {
 		sample.ObservedAt = time.Now().UTC()

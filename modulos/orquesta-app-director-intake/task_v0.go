@@ -7,13 +7,7 @@ import (
 
 func directorTaskFromAppSpecV0(spec orquestafactory.AppSpecV0) AppDirectorTaskV0 {
 	appRef := appDirectorTaskRefPrefixV0(spec)
-	return directorTaskForAreaV0(appRef, directorTaskAreaV0{
-		Suffix:   "director",
-		Role:     "director",
-		Summary:  directorTaskSummaryV0(spec, "Dirigir solicitud de app con contexto pequeno."),
-		Capacity: orquestacoreworkflow.OrchestrationCapacityHighV0,
-		WriteSet: []string{"docs/arquitectura.md", "docs/plan_microtareas.md"},
-	})
+	return directorTaskForAreaV0(appRef, primaryDirectorTaskAreaV0(spec))
 }
 
 func directorTaskForAreaV0(appRef string, area directorTaskAreaV0) AppDirectorTaskV0 {

@@ -4,13 +4,28 @@ import (
 	orquestaappchangedirectorsource "orquesta/modulos/orquesta-app-change-director-source"
 	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
-func deliverySourceV0(config ConfigV0) orquestaruntimecodexdelivery.CodexDeliveryObservationSourceV0 {
-	return orquestaruntimecodexdelivery.CodexDeliveryObservationSourceV0{
+func deliverySourceV0(config ConfigV0) orquestacionnucleoapp.AgentDeliveryObservationProviderPortV0 {
+	base := orquestaruntimecodexdelivery.CodexDeliveryObservationSourceV0{
 		Store: config.Stores.ReceiptStore,
+	}
+	recovery := domainWorkRecoveryDeliverySourceV0{
+		Stores:         config.Stores,
+		DomainWork:     config.DomainWork,
+		DomainDelivery: config.DomainDelivery,
+	}
+	if !recovery.readyV0() {
+		return base
+	}
+	return compositeAgentDeliveryObservationSourceV0{
+		Sources: []orquestacionnucleoapp.AgentDeliveryObservationProviderPortV0{
+			base,
+			recovery,
+		},
 	}
 }
 

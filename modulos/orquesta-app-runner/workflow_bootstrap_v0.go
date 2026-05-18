@@ -113,19 +113,27 @@ func applyWorkflowCommandV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	command orquestacoreworkflow.OrchestrationCommandV0,
 ) (orquestacoreworkflow.OrchestrationRunV0, error) {
+	next, _, err := applyWorkflowCommandWithEventsV0(run, command)
+	return next, err
+}
+
+func applyWorkflowCommandWithEventsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	command orquestacoreworkflow.OrchestrationCommandV0,
+) (orquestacoreworkflow.OrchestrationRunV0, []orquestacoreworkflow.OrchestrationEventV0, error) {
 	result, err := orquestacoreworkflow.HandleCommandV0(run, command)
 	if err != nil {
-		return run, err
+		return run, nil, err
 	}
 	next := run
 	for _, event := range result.Events {
 		applied, err := orquestacoreworkflow.ApplyEventV0(next, event)
 		if err != nil {
-			return next, err
+			return next, result.Events, err
 		}
 		next = applied
 	}
-	return next, nil
+	return next, result.Events, nil
 }
 
 func appRunCommandMetaV0(

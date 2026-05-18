@@ -6,6 +6,7 @@ const (
 	AgentAssessmentVerdictGarbageV0         = "garbage"
 	AgentAssessmentVerdictLoopDetectedV0    = "loop_detected"
 	AgentAssessmentVerdictCapacityLimitedV0 = "capacity_limited"
+	AgentAssessmentVerdictTimeoutV0         = "timeout"
 
 	AgentAssessmentActionContinueV0        = "continue"
 	AgentAssessmentActionRequestRevisionV0 = "request_revision"

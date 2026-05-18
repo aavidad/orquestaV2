@@ -7,6 +7,20 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # Arquitectura objetivo de Orquesta
 
+## Aviso vigente 2026-05-17
+
+La foto operativa actual se ha actualizado despues del giro a nucleo
+reutilizable para apps externas. Antes de usar este documento como fuente
+canonica, leer:
+
+- `docs/estado_actual_2026-05-17.md`
+- `docs/guia_nucleo_orquestacion_2026-05-17.md`
+- `AGENTS.md`
+
+Este fichero conserva contexto historico y vision amplia. Cualquier referencia
+al antiguo control-plane, `db/`, rutas legacy o programacion como unico dominio
+queda subordinada a la frontera vigente del nucleo neutral.
+
 Documento canonico consolidado:
 
 - `docs/BIBLIA_APP_ORQUESTA.md`

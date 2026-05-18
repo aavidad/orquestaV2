@@ -24,6 +24,7 @@ const (
 	OrchestrationCommandRequestAgentV0               = "RequestAgent"
 	OrchestrationCommandRegisterAgentStartedV0       = "RegisterAgentStarted"
 	OrchestrationCommandRegisterAgentFailedV0        = "RegisterAgentFailed"
+	OrchestrationCommandRegisterAgentLostV0          = "RegisterAgentLost"
 	OrchestrationCommandRegisterAgentLeaseExpiredV0  = "RegisterAgentLeaseExpired"
 	OrchestrationCommandStopAgentV0                  = "StopAgent"
 	OrchestrationCommandRegisterAgentStopConfirmedV0 = "RegisterAgentStopConfirmed"

@@ -17,7 +17,7 @@ func TestDrainRunV0ProcesoParadoSinACKNoQuedaEsperandoIndefinido(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, runtime)
 	director := postDirectorAPIV0(t, stack)
 	started := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
-	if drainRunHasPendingExternalAgentsV0(started) {
+	if drainRunHasPendingExternalAgentsV0(started, nil) {
 		t.Fatalf("postDirector dejo agentes parados sin cerrar: started=%v stopped=%v confirmed=%v", started.StartedAgents, started.StoppedAgents, started.ConfirmedStoppedAgents)
 	}
 
@@ -35,7 +35,7 @@ func TestDrainRunV0ProcesoParadoSinACKNoQuedaEsperandoIndefinido(t *testing.T) {
 		t.Fatalf("DrainRunV0: %v", err)
 	}
 	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
-	if drainRunHasPendingExternalAgentsV0(run) {
+	if drainRunHasPendingExternalAgentsV0(run, nil) {
 		t.Fatalf("run sigue con agentes externos pendientes: status=%s started=%v stopped=%v confirmed=%v", drain.Status, run.StartedAgents, run.StoppedAgents, run.ConfirmedStoppedAgents)
 	}
 	if !codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionStopAgentV0) {
@@ -66,7 +66,7 @@ func TestDrainRunV0ProcesoParadoPorCapacidadLimitadaNoMarcaBasura(t *testing.T) 
 		t.Fatalf("DrainRunV0: %v", err)
 	}
 	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
-	if drainRunHasPendingExternalAgentsV0(run) {
+	if drainRunHasPendingExternalAgentsV0(run, nil) {
 		t.Fatalf("run sigue pendiente tras capacidad limitada: stopped=%v confirmed=%v", run.StoppedAgents, run.ConfirmedStoppedAgents)
 	}
 	if !codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0) ||
@@ -84,13 +84,29 @@ func TestDrainRunHasPendingExternalAgentsV0StopRequestedSinConfirmarSiguePendien
 		StartedAgents: []string{"agent-ref-stack-stop-pending-001"},
 		StoppedAgents: []string{"agent-ref-stack-stop-pending-001"},
 	}
-	if !drainRunHasPendingExternalAgentsV0(run) {
+	if !drainRunHasPendingExternalAgentsV0(run, nil) {
 		t.Fatalf("stop solicitado sin confirmacion debe seguir pendiente: %+v", run)
 	}
 
 	run.ConfirmedStoppedAgents = []string{"agent-ref-stack-stop-pending-001"}
-	if drainRunHasPendingExternalAgentsV0(run) {
+	if drainRunHasPendingExternalAgentsV0(run, nil) {
 		t.Fatalf("stop confirmado debe cerrar pendiente: %+v", run)
+	}
+}
+
+func TestDrainRunHasPendingExternalAgentsV0FiltraCohorteObjetivo(t *testing.T) {
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		StartedAgents:   []string{"agent-old", "agent-new"},
+		DeliveredAgents: []string{"agent-new"},
+	}
+	if drainRunHasPendingExternalAgentsV0(run, []string{"agent-new"}) {
+		t.Fatalf("cohorte nueva entregada no debe esperar agent-old: %+v", run)
+	}
+	if !drainRunHasPendingExternalAgentsV0(run, []string{"agent-old"}) {
+		t.Fatalf("cohorte vieja pendiente debe esperar: %+v", run)
+	}
+	if !drainRunHasPendingExternalAgentsV0(run, nil) {
+		t.Fatalf("WaitAgentRefs vacio mantiene compatibilidad legacy y debe esperar agent-old: %+v", run)
 	}
 }
 

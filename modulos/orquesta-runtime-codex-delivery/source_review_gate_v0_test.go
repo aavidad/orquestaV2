@@ -67,6 +67,47 @@ func TestCodexReviewGateObservationSourceV0ListaDescriptorYaEntregado(t *testing
 	}
 }
 
+func TestCodexReviewGateObservationSourceV0WaitAgentRefsFiltraScope(t *testing.T) {
+	firstSpec := codexDeliverySpecWithRefsForTestV0("agent-ref-scope-001", "task-ref-scope-001", "ack-ref-scope-001")
+	secondSpec := codexDeliverySpecWithRefsForTestV0("agent-ref-outside-001", "task-ref-outside-001", "ack-ref-outside-001")
+	store := NewInMemoryCodexReceiptDescriptorStoreV0(
+		CodexReceiptDescriptorV0{
+			DescriptorRef: "receipt-ref-scope-001",
+			RunID:         "run-ref-001",
+			AgentRef:      firstSpec.RequestID,
+			Spec:          firstSpec,
+			AckPath:       writeCodexDeliveryAckForTestV0(t, firstSpec, codexDeliveryAckForTestV0(firstSpec)),
+		},
+		CodexReceiptDescriptorV0{
+			DescriptorRef: "receipt-ref-outside-001",
+			RunID:         "run-ref-001",
+			AgentRef:      secondSpec.RequestID,
+			Spec:          secondSpec,
+			AckPath:       writeCodexDeliveryAckForTestV0(t, secondSpec, codexDeliveryAckForTestV0(secondSpec)),
+		},
+	)
+	request := codexReviewGateRequestForTestV0(firstSpec, nil)
+	request.Run.Agents = []string{firstSpec.RequestID, secondSpec.RequestID}
+	request.Run.StartedAgents = []string{firstSpec.RequestID, secondSpec.RequestID}
+	request.Run.Deliveries = []string{
+		firstSpec.AgentPacket.DeliveryRefs.AckRef,
+		secondSpec.AgentPacket.DeliveryRefs.AckRef,
+	}
+	request.WaitAgentRefs = []string{firstSpec.RequestID}
+
+	observations, err := (CodexReviewGateObservationSourceV0{Store: store}).
+		BuildReviewGateObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildReviewGateObservationsV0: %v", err)
+	}
+	if len(observations) != 1 {
+		t.Fatalf("observations=%+v", observations)
+	}
+	if observations[0].DeliveryRef != firstSpec.AgentPacket.DeliveryRefs.AckRef {
+		t.Fatalf("delivery fuera de scope: %+v", observations[0])
+	}
+}
+
 func TestCodexReviewGateObservationSourceV0ContinuaTrasRequestReviewPendiente(t *testing.T) {
 	spec := codexDeliverySpecForTestV0()
 	ack := codexDeliveryAckForTestV0(spec)

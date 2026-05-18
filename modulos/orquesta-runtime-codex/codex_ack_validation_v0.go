@@ -18,9 +18,12 @@ func ReadAndValidateCodexAgentAckFileV0(
 ) (CodexAgentAckV0, []orquestaruntime.ExternalAgentConnectorErrorV0) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return CodexAgentAckV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{
-			codexIssueV0(CodexConnectorAckInvalidV0, CodexAgentAckFileNameV0, spec.CorrelationID, "read_failed"),
+		issue := codexIssueV0(CodexConnectorAckInvalidV0, CodexAgentAckFileNameV0, spec.CorrelationID, "read_failed")
+		if os.IsNotExist(err) {
+			issue.Retryable = true
+			issue.Evidence = []string{"ack_not_ready"}
 		}
+		return CodexAgentAckV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{issue}
 	}
 	return ValidateCodexAgentAckBytesForSpecV0(data, spec)
 }

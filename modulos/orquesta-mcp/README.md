@@ -11,3 +11,12 @@ Incluye:
 - validacion de entrada/salida.
 
 MCP es adaptador inbound. No es el cerebro del sistema.
+
+Estado vigente:
+
+- `orquesta.domain_work.v0` es el tool generico para que una IA cree trabajos de
+  dominio y entregue artefactos sin conocer OPES, DB ni runtime.
+- `/api/v0/domain-work` es el bridge HTTP local del mismo executor.
+- OPES se conecta hoy inyectando su cliente REST como adaptador de dominio; si se
+  usa MCPO o servidor MCP real, debe envolver estos tools como transporte opt-in,
+  no duplicar logica en el nucleo.

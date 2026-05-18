@@ -57,6 +57,7 @@ type MCPTransportBindingsV0 struct {
 	DirectorStats        MCPTransportDirectorStatsExecutorV0
 	RunControl           MCPTransportRunControlExecutorV0
 	RunQueuePriority     MCPTransportRunQueuePriorityExecutorV0
+	RunSupervisor        MCPTransportRunSupervisorExecutorV0
 	ServerShutdown       MCPTransportServerShutdownExecutorV0
 	DomainWork           MCPDomainWorkExecutorPortV0
 	ExternalWorkRun      MCPTransportExternalWorkRunExecutorV0
@@ -110,6 +111,13 @@ type MCPTransportRunQueuePriorityExecutorV0 interface {
 		context.Context,
 		MCPRunQueuePriorityToolInputV0,
 	) (MCPRunQueuePriorityToolResultV0, error)
+}
+
+type MCPTransportRunSupervisorExecutorV0 interface {
+	Execute(
+		context.Context,
+		MCPRunSupervisorToolInputV0,
+	) (MCPRunSupervisorToolResultV0, error)
 }
 
 type MCPTransportServerShutdownExecutorV0 interface {
@@ -179,6 +187,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 	workflow := MCPCoreWorkflowCommandToolDescriptorV0Value()
 	runControl := MCPRunControlDescriptorV0()
 	runQueue := MCPRunQueuePriorityDescriptorV0()
+	runSupervisor := MCPRunSupervisorDescriptorV0()
 	serverShutdown := MCPServerShutdownDescriptorV0()
 	domainWork := MCPDomainWorkDescriptorV0()
 	externalWorkRun := MCPExternalWorkRunDescriptorV0()
@@ -195,6 +204,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 		mcpTransportToolEnvelopeV0(workflow.Name, workflow.Version, workflow.ResourceURI, workflow.InputSchema, workflow.Output, mcpCoreWorkflowTransportHandlerV0),
 		mcpTransportToolEnvelopeV0(runControl.Name, runControl.Version, runControl.ResourceURI, runControl.InputSchema, runControl.Output, mcpRunControlTransportHandlerV0(bindings.RunControl)),
 		mcpTransportToolEnvelopeV0(runQueue.Name, runQueue.Version, runQueue.ResourceURI, runQueue.InputSchema, runQueue.Output, mcpRunQueuePriorityTransportHandlerV0(bindings.RunQueuePriority)),
+		mcpTransportToolEnvelopeV0(runSupervisor.Name, runSupervisor.Version, runSupervisor.ResourceURI, runSupervisor.InputSchema, runSupervisor.Output, mcpRunSupervisorTransportHandlerV0(bindings.RunSupervisor)),
 		mcpTransportToolEnvelopeV0(serverShutdown.Name, serverShutdown.Version, serverShutdown.ResourceURI, serverShutdown.InputSchema, serverShutdown.Output, mcpServerShutdownTransportHandlerV0(bindings.ServerShutdown)),
 		mcpTransportToolEnvelopeV0(domainWork.Name, domainWork.Version, domainWork.ResourceURI, domainWork.InputSchema, domainWork.Output, mcpDomainWorkTransportHandlerV0(bindings.DomainWork)),
 		mcpTransportToolEnvelopeV0(externalWorkRun.Name, externalWorkRun.Version, externalWorkRun.ResourceURI, externalWorkRun.InputSchema, externalWorkRun.Output, mcpExternalWorkRunTransportHandlerV0(bindings.ExternalWorkRun)),

@@ -54,6 +54,7 @@ func pendingLaunchRuntimeAgentResultV0(current OrchestrationRunV0, command Orche
 func agentLaunchTerminalAlreadyReflectedV0(current OrchestrationRunV0, agentRequestID string) bool {
 	return agentStartedAlreadyReflectedV0(current, agentRequestID) ||
 		agentFailedAlreadyReflectedV0(current, agentRequestID) ||
+		agentLostAlreadyReflectedV0(current, agentRequestID) ||
 		agentStopAlreadyReflectedV0(current, agentRequestID)
 }
 

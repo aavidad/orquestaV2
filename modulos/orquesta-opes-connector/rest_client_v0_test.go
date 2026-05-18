@@ -162,6 +162,59 @@ func TestRESTClientV0SubmitDomainWorkArtifactEnviaVisualAsset(t *testing.T) {
 	}
 }
 
+func TestRESTClientV0SubmitDomainWorkArtifactEnviaDocumentPlan(t *testing.T) {
+	var received opesArtifactRequestV0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs/job-ref-plan-temario-001/artifacts" || r.Method != http.MethodPost {
+			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":              "artifact-receipt-ref-plan-001",
+			"artifact_id":     "artifact-receipt-ref-plan-001",
+			"job_id":          "job-ref-plan-temario-001",
+			"correlation_id":  "corr-plan-temario-001",
+			"idempotency_key": "idem-plan-temario-delivery-001",
+			"external_refs":   map[string]string{"delivery_ref": "delivery-ref-plan-temario-001"},
+		})
+	}))
+	defer server.Close()
+
+	client := NewRESTClientV0(RESTClientConfigV0{BaseURL: server.URL})
+	result, err := client.SubmitDomainWorkArtifactV0(
+		context.Background(),
+		opesDocumentPlanArtifactSubmissionForTestV0(),
+	)
+
+	if err != nil {
+		t.Fatalf("SubmitDomainWorkArtifactV0: %v", err)
+	}
+	if result.Status != orquestadomainwork.DomainWorkStatusAcceptedV0 ||
+		result.JobRef != "job-ref-plan-temario-001" ||
+		result.ReceiptRef != "artifact-receipt-ref-plan-001" {
+		t.Fatalf("result=%+v", result)
+	}
+	sections, ok := received.PayloadJSON["sections"].([]any)
+	if !ok || len(sections) != 1 {
+		t.Fatalf("sections=%#v", received.PayloadJSON["sections"])
+	}
+	deliverables, ok := received.PayloadJSON["deliverables"].([]any)
+	if !ok || len(deliverables) != 1 {
+		t.Fatalf("deliverables=%#v", received.PayloadJSON["deliverables"])
+	}
+	if received.ArtifactType != orquestadomainwork.DomainDocumentPlanArtifactTypeV0 ||
+		received.IdempotencyKey != "idem-plan-temario-delivery-001" ||
+		!received.CompleteJob ||
+		received.ExternalRefs["delivery_ref"] != "delivery-ref-plan-temario-001" ||
+		received.PayloadJSON["schema_version"] != orquestadomainwork.DomainDocumentPlanSchemaV0 ||
+		received.PayloadJSON["work_kind"] != orquestadomainwork.DomainWorkKindPlanSyllabusV0 ||
+		received.PayloadJSON["plan_ref"] != "plan-ref-operadores-001" {
+		t.Fatalf("payload=%+v", received)
+	}
+}
+
 func TestRESTClientV0ListExternalJobsConsultaColaPublica(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
@@ -199,6 +252,70 @@ func TestRESTClientV0ListExternalJobsConsultaColaPublica(t *testing.T) {
 		jobs[0].ID != "job-ref-summary-001" ||
 		jobs[0].Type != "summarize_topic" ||
 		jobs[0].PayloadJSON != `{"topic_id":"topic-ref-001"}` {
+		t.Fatalf("jobs=%+v", jobs)
+	}
+}
+
+func TestRESTClientV0ListExternalJobsFiltraRespuestaMixta(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		if r.URL.Query().Get("job_ref") != "job-ref-plan-001" {
+			t.Fatalf("query=%s", r.URL.RawQuery)
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"id":             "job-ref-other-001",
+				"type":           "plan_temario",
+				"status":         "pending",
+				"execution_mode": "external",
+			},
+			{
+				"id":             "job-ref-plan-001",
+				"type":           "plan_temario",
+				"status":         "running",
+				"execution_mode": "external",
+			},
+			{
+				"id":             "job-ref-plan-001",
+				"type":           "plan_tema",
+				"status":         "pending",
+				"execution_mode": "external",
+			},
+			{
+				"id":             "job-ref-plan-001",
+				"type":           "plan_temario",
+				"status":         "pending",
+				"execution_mode": "internal",
+			},
+			{
+				"id":             "job-ref-plan-001",
+				"type":           "plan_temario",
+				"status":         "pending",
+				"execution_mode": "external",
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewRESTClientV0(RESTClientConfigV0{BaseURL: server.URL})
+	jobs, err := client.ListExternalJobsV0(context.Background(), ExternalJobQueryV0{
+		ExecutionMode: "external",
+		Status:        "pending",
+		JobType:       "plan_temario",
+		JobRef:        "job-ref-plan-001",
+		Limit:         1,
+	})
+
+	if err != nil {
+		t.Fatalf("ListExternalJobsV0: %v", err)
+	}
+	if len(jobs) != 1 ||
+		jobs[0].ID != "job-ref-plan-001" ||
+		jobs[0].Type != "plan_temario" ||
+		jobs[0].Status != "pending" ||
+		jobs[0].ExecutionMode != "external" {
 		t.Fatalf("jobs=%+v", jobs)
 	}
 }
@@ -329,6 +446,39 @@ func opesVisualArtifactSubmissionForTestV0() orquestadomainwork.DomainWorkArtifa
 		},
 		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
 			{Kind: "delivery_ref", Ref: "delivery-ref-visual-001"},
+		},
+		CompleteJob: true,
+	})
+}
+
+func opesDocumentPlanArtifactSubmissionForTestV0() orquestadomainwork.DomainWorkArtifactSubmissionV0 {
+	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(orquestadomainwork.DomainWorkArtifactSubmissionV0{
+		RequestID:      "req-plan-temario-delivery-001",
+		CorrelationID:  "corr-plan-temario-001",
+		IdempotencyKey: "idem-plan-temario-delivery-001",
+		RequestedBy:    "orquesta",
+		DomainRef:      "opes",
+		JobRef:         "job-ref-plan-temario-001",
+		ArtifactRef:    "artifact-ref-plan-temario-001",
+		ArtifactType:   orquestadomainwork.DomainDocumentPlanArtifactTypeV0,
+		Summary:        "Plan de temario operadores",
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "schema_version", Value: orquestadomainwork.DomainDocumentPlanSchemaV0},
+			{Name: "artifact_type", Value: orquestadomainwork.DomainDocumentPlanArtifactTypeV0},
+			{Name: "plan_ref", Value: "plan-ref-operadores-001"},
+			{Name: "domain_ref", Value: "opes"},
+			{Name: "work_kind", Value: orquestadomainwork.DomainWorkKindPlanSyllabusV0},
+			{Name: "document_kind", Value: "temario_oposicion"},
+			{Name: "scope_ref", Value: "program-ref-operadores-001"},
+			{Name: "language_code", Value: "es"},
+			{Name: "title", Value: "Temario operadores"},
+			{Name: "objective", Value: "Planificar temario sin redactarlo."},
+			{Name: "sections", ValueJSON: []byte(`[{"section_ref":"section-operadores-001","order":1,"title":"Operadores","objective":"Cubrir operadores basicos.","work_kind":"draft_content_block"}]`)},
+			{Name: "deliverables", ValueJSON: []byte(`[{"deliverable_ref":"deliverable-operadores-001","artifact_type":"assembled_topic","title":"Temario ensamblado","required":true}]`)},
+			{Name: "quality_criteria", Values: []string{"derivacion desde maestro superior si existe", "sin placeholders"}},
+		},
+		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
+			{Kind: "delivery_ref", Ref: "delivery-ref-plan-temario-001"},
 		},
 		CompleteJob: true,
 	})

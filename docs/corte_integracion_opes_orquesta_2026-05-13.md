@@ -2,6 +2,12 @@
 
 Fecha: 2026-05-13.
 
+Nota 2026-05-18: documento historico. Para el estado vigente usar
+`docs/corte_opes_como_consumidor_orquesta_2026-05-18.md` y
+`docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md`. El conector
+REST OPES ya existe; la superficie AI-first de Orquesta es el tool MCP generico
+`orquesta.domain_work.v0`, con REST OPES como adaptador de composicion.
+
 ## Propuesta aceptada localmente
 
 Preparar la integracion OPES en Orquesta, sin tocar OPES, creando primero la
@@ -31,6 +37,7 @@ nucleo de Orquesta ni del contrato generico `orquesta-domain-work`.
 
 Orquesta conserva:
 
+- juicio y planificacion mediante director/agentes;
 - seleccion de agente, modelo, capacidad y razonamiento;
 - leases, sesiones, runtime, handoff, reintentos y watchdogs;
 - Codex, Claude, Gemini u otros proveedores;
@@ -42,16 +49,29 @@ OPES conserva:
 - validacion y persistencia editorial;
 - jobs documentales y artefactos de dominio;
 - endpoints REST/MCP publicos.
+- ensamblado final de documentos y PDFs.
 
 ## Restricciones
 
 - No acceder a DB, ficheros internos ni rutas locales de OPES.
 - No asumir SQLite, Postgres ni ningun backend.
 - No pasar conceptos de agente a OPES como decisiones de dominio.
+- OPES no debe planificar con juicio propio: si necesita decidir orden,
+  dependencias, estructura pedagogica o agentes, debe pedir a Orquesta un
+  trabajo de planificacion documental para que piense el director.
 - No introducir REST/MCP dentro de `orquesta-domain-work`.
 - Para documentacion de temarios OPES, Orquesta debe reservar `gpt-5.5` con
   razonamiento `xhigh` o un modelo posterior/superior disponible; esta regla es
   politica operativa de Orquesta, no contrato interno de OPES.
+- Los temas largos no deben ejecutarse como una unica sesion opaca. OPES debe
+  pedir trabajos de tamano editorial controlado (`draft_content_block` por
+  capitulo, subcapitulo o bloque amplio), y Orquesta debe exigir artefacto
+  trazable al cierre de cada unidad. Si una unidad larga no produce evidencia
+  observable durante el presupuesto configurado, el director debe parar,
+  replanificar o dividir el trabajo antes de gastar mas cuota.
+- El scheduler de Orquesta debe repartir turno entre runs de igual prioridad.
+  Al drenar una run se refresca su posicion temporal en cola para que otro job
+  equivalente pueda avanzar en el siguiente tick.
 - El codigo productivo queda limitado al cliente REST de jobs/artefactos y sus
   tests con `httptest`; no toca OPES real.
 

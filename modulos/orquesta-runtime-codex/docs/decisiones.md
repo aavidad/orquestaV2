@@ -1,5 +1,22 @@
 # Decisiones: orquesta-runtime-codex
 
+## RTCODEX-DEC-011
+
+```text
+Fecha: 2026-05-15
+Decision: `decision_path` no debe cortar entregables obligatorios del
+director.
+Motivo: el fichero de decisiones es un mecanismo de control, no el resultado
+completo. En una peticion normal de documentacion o app completa, el director
+puede necesitar escribir decisiones y tambien manuales/documentos del
+write-set. Ordenar terminar inmediatamente tras `decision_path` recortaba el
+trabajo real.
+Impacto: el prompt mantiene salida compacta y cierre por ACK, pero exige
+completar antes los ficheros pedidos del write-set. Los workers siguen sin
+permiso para editar fuera de su write-set.
+Estado: aceptada.
+```
+
 ## RTCODEX-DEC-010
 
 ```text

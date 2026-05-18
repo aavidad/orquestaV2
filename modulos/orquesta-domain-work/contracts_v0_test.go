@@ -83,10 +83,42 @@ func TestDomainWorkArtifactSubmissionV0ValidaEntrega(t *testing.T) {
 	}
 }
 
+func TestDomainWorkJobRecordFilterV0NormalizaContratoDeLectura(t *testing.T) {
+	filter := NormalizeDomainWorkJobRecordFilterV0(DomainWorkJobRecordFilterV0{
+		DomainRef:      " dominio-demo ",
+		WorkKind:       " generate_content_package ",
+		JobRef:         " job-ref-001 ",
+		CorrelationID:  " corr-001 ",
+		IdempotencyKey: " idem-001 ",
+		Status:         " accepted ",
+		ExternalRefs: []DomainWorkExternalRefV0{
+			{Kind: " run_ref ", Ref: " run-ref-001 "},
+			{Kind: "run_ref", Ref: "run-ref-001"},
+			{Kind: "", Ref: "ignored"},
+		},
+		Limit: -1,
+	})
+
+	if filter.DomainRef != "dominio-demo" ||
+		filter.WorkKind != "generate_content_package" ||
+		filter.JobRef != "job-ref-001" ||
+		filter.CorrelationID != "corr-001" ||
+		filter.IdempotencyKey != "idem-001" ||
+		filter.Status != DomainWorkStatusAcceptedV0 ||
+		len(filter.ExternalRefs) != 1 ||
+		filter.ExternalRefs[0].Kind != "run_ref" ||
+		filter.ExternalRefs[0].Ref != "run-ref-001" ||
+		filter.Limit != 0 {
+		t.Fatalf("filter=%+v", filter)
+	}
+}
+
 func TestDomainWorkPortsV0SonInterfacesHexagonales(t *testing.T) {
 	creator := fakeDomainWorkConnectorV0{}
 	submitter := fakeDomainWorkConnectorV0{}
 	var _ DomainWorkJobCreatorPortV0 = creator
+	var _ DomainWorkJobRecordSourcePortV0 = creator
+	var _ DomainWorkJobRecordStorePortV0 = creator
 	var _ DomainWorkArtifactSubmitterPortV0 = submitter
 }
 
@@ -145,4 +177,14 @@ func (fakeDomainWorkConnectorV0) SubmitDomainWorkArtifactV0(
 	DomainWorkArtifactSubmissionV0,
 ) (DomainWorkArtifactReceiptV0, error) {
 	return DomainWorkArtifactReceiptV0{Status: DomainWorkStatusAcceptedV0}, nil
+}
+
+func (fakeDomainWorkConnectorV0) ListDomainWorkJobRecordsV0(
+	context.Context,
+	DomainWorkJobRecordFilterV0,
+) ([]DomainWorkJobRecordV0, error) {
+	return []DomainWorkJobRecordV0{{
+		Request: validDomainWorkJobRequestForTestV0(),
+		Job:     DomainWorkJobV0{Status: DomainWorkStatusAcceptedV0},
+	}}, nil
 }

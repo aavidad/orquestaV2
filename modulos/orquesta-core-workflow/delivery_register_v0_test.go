@@ -150,6 +150,23 @@ func mustRegisterDeliveryCommandV0(t *testing.T, commandID string, idempotencyKe
 	return mustRegisterDeliveryCommandWithPayloadV0(t, commandID, idempotencyKey, validRegisterDeliveryPayloadV0(deliveryRef))
 }
 
+func mustRegisterDeliveryCommandForPhaseV0(
+	t *testing.T,
+	commandID string,
+	idempotencyKey string,
+	deliveryRef string,
+	phase OrchestrationPhaseIDV0,
+	taskRef string,
+	agentRef string,
+) OrchestrationCommandV0 {
+	t.Helper()
+	payload := validRegisterDeliveryPayloadV0(deliveryRef)
+	payload.PhaseID = string(phase)
+	payload.TaskID = taskRef
+	payload.AgentRef = agentRef
+	return mustRegisterDeliveryCommandWithPayloadV0(t, commandID, idempotencyKey, payload)
+}
+
 func mustRegisterDeliveryCommandWithPayloadV0(t *testing.T, commandID string, idempotencyKey string, payload RegisterDeliveryCommandPayloadV0) OrchestrationCommandV0 {
 	t.Helper()
 	command, err := NewRegisterDeliveryCommandV0(validCommandMetaV0(commandID, idempotencyKey), payload)

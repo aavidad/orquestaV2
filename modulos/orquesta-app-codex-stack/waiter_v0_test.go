@@ -1,11 +1,15 @@
 package orquestaappcodexstack
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
@@ -33,11 +37,89 @@ func TestDescriptorsHaveReadyAckV0ValidaContenidoNoSoloPath(t *testing.T) {
 	}
 }
 
+func TestWaiterStartedAgentRefsForWaitV0FiltraCohorte(t *testing.T) {
+	got := waiterStartedAgentRefsForWaitV0(
+		[]string{"agent-old", "agent-new", "agent-new"},
+		[]string{"agent-new"},
+	)
+	if len(got) != 1 || got[0] != "agent-new" {
+		t.Fatalf("got=%v", got)
+	}
+}
+
+func TestAckAwareWaiterV0WaitAgentRefsNoEsperaAgenteViejoVivo(t *testing.T) {
+	newDescriptor := waiterDescriptorForAgentForTestV0(t, "agent-new")
+	writeWaiterAckForTestV0(t, newDescriptor)
+	waiter := AckAwareWaiterV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			newDescriptor,
+		),
+		Interval: time.Millisecond,
+	}
+
+	ready, err := waiter.allStartedAgentsHaveAckV0(
+		context.Background(),
+		orquestacionnucleoapp.ExternalProgressWaitRequestV0{
+			RunRef:        newDescriptor.RunID,
+			WaitAgentRefs: []string{"agent-new"},
+			LastResult: orquestacionnucleoapp.ProgressiveLoopResultV0{
+				Run: orquestacoreworkflow.OrchestrationRunV0{
+					StartedAgents: []string{"agent-old", "agent-new"},
+				},
+			},
+		},
+	)
+	if err != nil || !ready {
+		t.Fatalf("cohorte nueva con ACK no debe quedar bloqueada por agente viejo: ready=%v err=%v", ready, err)
+	}
+}
+
+func TestAckAwareWaiterV0WaitAgentRefsVacioMantieneEsperaLegacy(t *testing.T) {
+	oldDescriptor := waiterDescriptorForAgentForTestV0(t, "agent-old")
+	newDescriptor := waiterDescriptorForAgentForTestV0(t, "agent-new")
+	writeWaiterAckForTestV0(t, newDescriptor)
+	waiter := AckAwareWaiterV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			oldDescriptor,
+			newDescriptor,
+		),
+		Interval: time.Millisecond,
+	}
+	request := orquestacionnucleoapp.ExternalProgressWaitRequestV0{
+		RunRef: newDescriptor.RunID,
+		LastResult: orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				StartedAgents: []string{"agent-old", "agent-new"},
+			},
+		},
+	}
+
+	ready, err := waiter.allStartedAgentsHaveAckV0(context.Background(), request)
+	if err != nil || ready {
+		t.Fatalf("WaitAgentRefs vacio debe esperar todos los agentes arrancados: ready=%v err=%v", ready, err)
+	}
+	writeWaiterAckForTestV0(t, oldDescriptor)
+	ready, err = waiter.allStartedAgentsHaveAckV0(context.Background(), request)
+	if err != nil || !ready {
+		t.Fatalf("WaitAgentRefs vacio debe continuar cuando todos tienen ACK: ready=%v err=%v", ready, err)
+	}
+}
+
 func waiterDescriptorForTestV0(t *testing.T) orquestaruntimecodexdelivery.CodexReceiptDescriptorV0 {
 	t.Helper()
+	return waiterDescriptorForAgentForTestV0(t, "agent-ref-waiter-001")
+}
+
+func waiterDescriptorForAgentForTestV0(
+	t *testing.T,
+	agentRef string,
+) orquestaruntimecodexdelivery.CodexReceiptDescriptorV0 {
+	t.Helper()
 	spec := waiterSpecForTestV0()
+	spec.RequestID = agentRef
+	spec.AgentPacket.RequestID = agentRef
 	return orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
-		DescriptorRef:  "descriptor-ref-waiter-001",
+		DescriptorRef:  "descriptor-ref-waiter-" + agentRef,
 		RunID:          "run-ref-waiter-001",
 		AgentRef:       spec.RequestID,
 		Spec:           spec,

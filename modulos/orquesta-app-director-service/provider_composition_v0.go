@@ -26,6 +26,7 @@ func composeStartAppDirectorProviderV0(
 		provider = orquestacionnucleoapp.ReviewReworkReplanCandidateProviderV0{
 			Base:        provider,
 			PlanSource:  ports.ReviewReworkReplanSource,
+			TaskWriter:  ports.DirectorTaskStore,
 			RequestedBy: requestedBy,
 		}
 	}
@@ -52,9 +53,10 @@ func composeStartAppDirectorProviderV0(
 	}
 	if ports.DirectorTaskStore != nil {
 		provider = orquestacionnucleoapp.WorkflowTaskCandidateProviderV0{
-			Base:        provider,
-			TaskStore:   ports.DirectorTaskStore,
-			RequestedBy: requestedBy,
+			Base:            provider,
+			TaskStore:       ports.DirectorTaskStore,
+			RequestedBy:     requestedBy,
+			DefaultCapacity: ports.WorkflowTaskDefaultCapacity,
 		}
 	}
 	return provider

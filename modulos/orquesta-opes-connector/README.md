@@ -3,12 +3,20 @@
 Miniproyecto para el conector opt-in entre Orquesta y OPES.
 
 Estado actual: contrato documental y cliente REST minimo para consultar jobs
-externos, crear jobs externos y enviar artefactos mediante endpoints publicos
-de OPES.
+externos, leer bloques publicos de tema, crear jobs externos y enviar
+artefactos mediante endpoints publicos de OPES. El artefacto `document_plan`
+queda cubierto para `plan_tema`, `plan_temario` y `plan_documento`.
+
+MCP de Orquesta ya existe como adaptador generico `orquesta.domain_work.v0` y
+puede delegar en este conector cuando el stack lo inyecta. Lo que no hay aqui
+es un cliente MCP especifico contra tools OPES; REST es la ruta funcional actual
+para OPES.
 
 ## Responsabilidad
 
 - traducir jobs documentales OPES a contratos `orquesta-domain-work`;
+- permitir que OPES pida planificacion documental a Orquesta cuando haga falta
+  juicio de director;
 - hablar con OPES solo por REST o MCP;
 - consultar ventanas pequenas de `GET /api/jobs` cuando un bridge externo debe
   drenar cola OPES;
@@ -24,14 +32,17 @@ de OPES.
 - acceder a base de datos, ficheros internos, rutas locales o workers de OPES;
 - introducir conceptos de agente, sesion, lease, runtime, proveedor o modelo en
   OPES;
+- planificar temarios con logica local: el conector solo transporta la peticion
+  para que Orquesta piense mediante director;
 - asumir SQLite, Postgres u otro backend de OPES.
 
 ## Documentos
 
 - `docs/contrato_v0.md`: frontera y contrato que debe respetar el conector.
-- `docs/mapeo_rest_mcp_v0.md`: endpoints/tools OPES que el conector podria
-  usar cuando exista implementacion.
-- `docs/plan_integracion_v0.md`: cortes propuestos y criterios de aceptacion.
+- `docs/mapeo_rest_mcp_v0.md`: endpoints REST actuales, MCP generico de
+  Orquesta y posible cliente MCP especifico OPES futuro.
+- `docs/plan_integracion_v0.md`: cortes cerrados, pendientes y criterios de
+  aceptacion.
 
 ## Validacion
 

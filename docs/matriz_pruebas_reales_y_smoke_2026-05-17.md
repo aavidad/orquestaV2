@@ -1,0 +1,173 @@
+# Matriz de pruebas reales y smoke
+
+Fecha: 2026-05-17.
+
+## Alcance
+
+Esta matriz convierte los pendientes de pruebas reales en casos ejecutables o
+documentados. No se ha ejecutado Codex real ni OPES real durante la preparacion
+de este documento.
+
+Reglas operativas:
+
+- ejecutar pruebas reales solo sobre instancias temporales o de smoke;
+- no tocar una instancia OPES que este creando un temario real;
+- para OPES, exigir filtro por tipo de job cuando el bridge lo soporte
+  (`ORQUESTA_OPES_BRIDGE_JOB_TYPE`) o por job exacto
+  (`ORQUESTA_OPES_BRIDGE_JOB_REF`) y limites bajos
+  (`ORQUESTA_OPES_BRIDGE_LIMIT`);
+- no ejecutar drenados amplios de OPES para "ver que pasa";
+- usar `ORQUESTA_*_CONFIRM=1` solo cuando el operador haya validado instancia,
+  cuota, workdirs y estado aislado;
+- conservar evidencias bajo `/tmp` o bajo el directorio de run indicado por el
+  smoke;
+- si no existe script claro, este documento marca el caso como pendiente y no
+  inventa un comando nuevo.
+
+Fuentes revisadas:
+
+- `docs/handoff_sesion_2026-05-12_core_smoke_review_rework.md`;
+- `docs/decision_director_objetivo_actual_2026-05-12.md`;
+- `docs/incidente_autoprogramacion_real_2026-05-12.md`;
+- `docs/plan_autoprogramacion_orquesta_2026-05-12.md`;
+- `docs/estado_integracion_opes_orquesta_2026-05-13.md`;
+- `docs/corte_integracion_opes_orquesta_2026-05-13.md`;
+- `docs/integracion_opes_orquesta_2026-05-13.md`;
+- `docs/handoff_sesion_2026-05-13_nucleo_stats_stop.md`;
+- `docs/resultado_prueba_opes_orquesta_plan_2026-05-14.md`;
+- `docs/resultado_prueba_opes_orquesta_plan_limpia_2026-05-15.md`;
+- `docs/corte_opes_como_consumidor_orquesta_2026-05-18.md`;
+- `docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md`;
+- `docs/runbooks/smoke_opes_domain_work_real_2026-05-13.md`;
+- `docs/runbooks/smoke_opes_external_work_agent_real_2026-05-13.md`;
+- `docs/runbooks/smoke_opes_visual_asset_real_2026-05-13.md`;
+- `docs/runbooks/smoke_servidor_reinicio_estado.md`;
+- `docs/runbooks/smoke_servidor_rest_director.md`;
+- `docs/runbooks/self_observability_real_test_2026-05-13.md`;
+- `docs/runbooks/apagado_controlado_servidor_y_agentes.md`;
+- `modulos/orquesta-app-codex-stack/docs/contratos.md`;
+- `modulos/orquesta-app-codex-stack/docs/pruebas.md`;
+- `modulos/orquesta-app-codex-stack/docs/decisiones.md`;
+- `modulos/orquesta-app-codex-stack/docs/review_rework_replan.md`;
+- `modulos/orquesta-server-shutdown/docs/contratos.md`;
+- `modulos/orquesta-server-shutdown/docs/pruebas.md`.
+
+## Matriz
+
+| ID | Caso | Tipo | Prerrequisitos y env vars | Comando existente | Criterio de exito | Riesgos y limites |
+| --- | --- | --- | --- | --- | --- | --- |
+| OPES-PLAN-REAL | OPES `plan_tema` completo: OPES crea job, Orquesta drena, Codex real entrega `document_plan`, OPES completa y crea derivados. | Real, invasivo, con cuota. | OPES temporal con job `plan_tema` pendiente; Orquesta temporal levantada con `ORQUESTA_OPES_BASE_URL` al mismo OPES; `ORQUESTA_BASE_URL`; Codex configurado por operador; `ORQUESTA_OPES_BRIDGE_CONFIRM=1`; `ORQUESTA_OPES_BRIDGE_JOB_TYPE=plan_tema`; `ORQUESTA_OPES_BRIDGE_LIMIT=1`. | `go run ./cmd/orquesta-server opes-drain-once` con las env anteriores. | Un solo artefacto `document_plan` en OPES; job `plan_tema` `completed`; sin duplicar `document_plan`; jobs derivados creados desde el plan con tipos ejecutables (`draft_content_block`, `generate_visual_asset`, `review_*`, `validate_topic`, `assemble_topic`). La entrega de `assemble_topic` debe validarse como `assembled_topic`. | No ejecutar contra OPES activo. Si se omite `ORQUESTA_OPES_BRIDGE_JOB_TYPE=plan_tema`, el bridge puede enviar derivados y lanzar trabajo no focal. Puede consumir decenas de miles de tokens. |
+| OPES-PLAN-TEMARIO-OPERADORES | OPES `plan_temario` de Operario como `document_plan`: OPES temporal, Orquesta bridge REST residente, supervisor, Codex real xhigh, entrega y derivados. | Real acotado cerrado para plan; automatizacion de derivados por fases cubierta offline. | OPES temporal con `Operario.txt`; Orquesta temporal con `ORQUESTA_OPES_BASE_URL`; `ORQUESTA_OPES_BRIDGE_CONFIRM=1`; para plan usar `ORQUESTA_OPES_BRIDGE_JOB_TYPE=plan_temario` y `ORQUESTA_OPES_BRIDGE_JOB_REF=<job>`; para derivados usar `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic`; `ORQUESTA_OPES_BRIDGE_LIMIT=1`; Codex `gpt-5.5` con `ORQUESTA_CODEX_REASONING_EFFORT=xhigh`. | Runbook `docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md`; evidencia `docs/resultado_prueba_opes_orquesta_plan_temario_operario_2026-05-18.md`. Tests focales: `go test -count=1 ./cmd/orquesta-server -run 'TestOPESBridgeLoop|TestRunOPESDrainOnceV0'`. | Cerrado el 2026-05-18 para plan: `job_ref=9784a562f074769a08043707fdd79eb2`, `artifact_id=576d0a93563c2c40e7a6dc41c74261e8`, job OPES `completed`, 20 derivados creados. Aniadido despues: el bridge automatiza pases y no avanza si el primer tipo pendiente ya fue enviado segun ledger. | Falta smoke real completo de derivados hasta `assemble_topic`. OPES no filtra por `program_id`; ejecutar secuencia contra OPES temporal o cola acotada. MCP/MCPO no participa; REST es la via funcional. |
+| OPES-DOMAIN-REST | Puente REST directo `domain_work` para `draft_content_block -> content_block`, idempotencia incluida. | Real contra OPES, sin agente Codex. | OPES y Orquesta temporales sanos; Orquesta con `ORQUESTA_OPES_BASE_URL`; `ORQUESTA_OPES_DOMAIN_SMOKE_CONFIRM=1`; `ORQUESTA_BASE_URL`; `OPES_BASE_URL`; `SMOKE_ID`; opcional `SMOKE_OUT_DIR`. | `scripts/smoke_opes_domain_work_real.sh`. | Crea topic/chapter reales de smoke; crea job OPES desde Orquesta; entrega `content_block`; replay no duplica bloque; `summary.txt` contiene `job_ref`, `receipt_ref` y `block_count_after_replay=1`. | Crea datos en OPES. No valida agente real ni calidad editorial. |
+| OPES-DER-DRAFT-AGENT | Derivado OPES `draft_content_block` con agente real: `/api/v0/external-work/run -> Codex -> submit_artifact`. | Real, invasivo, con cuota. | OPES temporal; `ORQUESTA_OPES_AGENT_SMOKE_CONFIRM=1`; `OPES_BASE_URL`; `ORQUESTA_CODEX_COMMAND`; `ORQUESTA_CODEX_HOME`; `ORQUESTA_CODEX_CODE_HOME`; `ORQUESTA_CODEX_PATH`; `ORQUESTA_CODEX_MODEL`; `ORQUESTA_CODEX_REASONING_EFFORT`; opcional timeout/poll. | `scripts/smoke_opes_external_work_agent_real.sh`. | `stats_response_final.json` con `tasks_total=1`, `tasks_delivered=1`, `agents_started=1`, `agents_delivered=1`, `agents_failed=0`; OPES recibe artefacto o bloque; Orquesta apaga servidor temporal por `/api/v0/server/shutdown`. | Consume cuota y crea datos. No prueba director inicial ni ensamblado de tema completo. |
+| OPES-DER-VISUAL-REST | Derivado OPES `generate_visual_asset -> visual_asset` por REST directo. | Real contra OPES, sin agente Codex. | OPES actualizado que acepte `generate_visual_asset`; Orquesta temporal con `ORQUESTA_OPES_BASE_URL`; `ORQUESTA_OPES_VISUAL_SMOKE_CONFIRM=1`; `ORQUESTA_BASE_URL`; `OPES_BASE_URL`; `SMOKE_ID`. | `scripts/smoke_opes_visual_asset_real.sh`. | Un job `generate_visual_asset`; un artefacto `visual_asset`; un bloque OPES `visual_asset`; `format=svg`, `content_type=image/svg+xml`, `caption` y `alt_text` presentes. | No valida agente real para visual. Instancias OPES antiguas pueden responder `invalid document job`. |
+| OPES-DER-RESTO | Derivados de plan: `draft_content_block`, `generate_visual_asset`, `review_legal`, `review_pedagogical`, `review_quality`, `validate_topic`, `assemble_topic`. | Pendiente real; automatizacion de pases implementada. | OPES temporal con jobs derivados concretos; Orquesta temporal; bridge residente con `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE`; `ORQUESTA_OPES_BRIDGE_LIMIT=1`; politica de modelo `gpt-5.5`/`xhigh` o superior si aplica. | `go run ./cmd/orquesta-server run` con la secuencia documentada en el runbook; tests offline `go test -count=1 ./cmd/orquesta-server -run 'TestOPESBridgeLoop|TestRunOPESDrainOnceV0'`. | Para cerrar el caso real, cada tipo debe demostrar: job externo aceptado, run Orquesta creado, artefacto valido devuelto por contrato, OPES deduplica reintentos y stats por `external_job_ref`; `assemble_topic` devuelve `assembled_topic`. | Riesgo de mezclar derivados reales con smoke si OPES no esta acotado. OPES no tiene filtro por `program_id`; usar OPES temporal. Riesgo editorial: artefactos formalmente validos pero pobres o con placeholders. |
+| EXT-NO-OPES | App externa no-OPES por contrato generico `external_work`/`DomainWork`. | Offline determinista parcial; smoke real pendiente. | Sin OPES; usar tests con fake executor; dominio externo debe entrar por refs compactas, no DB/rutas internas. | `go test -count=1 ./modulos/orquesta-app-change ./modulos/orquesta-app-codex-stack -run 'TestDomainWorkJobRequestFromAppChangeV0ConvierteExternalWork|TestCodexStackV0ExternalWorkRunAceptaContratoAmplioV0'`. | `AppChange` convierte `external_work` de `project-ref-agenda` en `DomainWorkJobRequestV0`; refs deduplicadas y compactas; `/api/v0/external-work/run` acepta contrato amplio sin director inicial. | No hay script real no-OPES con servidor temporal. El riesgo es que la cobertura real siga sesgada a nombres OPES aunque el contrato sea generico. |
+| DOCPLAN-EXPAND-OFFLINE | Expander neutral `DomainDocumentPlanV0 -> DomainWorkJobRequestV0[]` para jobs derivados sin app externa real. | Offline determinista. | Sin app externa, sin Codex, sin red, sin DB, sin filesystem productivo; el expander vive en capa neutral y acepta solo contratos/refs opacas. | `go test -count=1 ./modulos/orquesta-document-plan-expander`. | Un plan valido produce jobs derivados estables para secciones, visuales, revisiones, validacion y ensamblado; cada job conserva `correlation_id`, `idempotency_key`, `requested_by`, `domain_ref`, refs compactas, dependencias y `work_kind` neutral; un plan invalido se rechaza sin jobs parciales; el guard local no permite adaptadores concretos. | Riesgo de esconder juicio de planificacion en un expander deterministico. El expander solo materializa derivados ya declarados por el plan validado; ejecutar jobs, DB y colas pertenece a conectores. |
+| DOMAIN-WORK-FILE-OFFLINE | Conector durable file-based para `DomainWorkJobRecordStorePortV0`, replay y lectura filtrada de jobs derivados tras reinicio. | Offline determinista. | Sin app externa, sin Codex, sin red, sin DB; usa directorios temporales. | `go test -count=1 ./modulos/orquesta-domain-work/... ./modulos/orquesta-domain-work-memory ./modulos/orquesta-domain-work-file ./cmd/orquesta-server -run 'Test.*DomainWork.*File|TestDomainWorkExecutorFromEnvV0|Test.*DomainWorkJobRecord'`. | Crea jobs aceptados, ejecuta contract tests compartidos sobre memory/file, escribe snapshot JSON versionado, reabre y replaya con el mismo `job_ref`, lista records `Request+Job` con filtros AND y limite, rechaza conflictos sin sobrescribir, falla ante snapshot corrupto, prueba integracion offline con `orquesta-document-plan-expander` y wiring opt-in del servidor para `/api/v0/domain-work create_job`. | No sustituye un conector DB productivo ni un smoke real de app externa. Es adaptador filesystem de referencia, no habilita `submit_artifact` y no debe ser consumido directamente por el nucleo. |
+| DOMAIN-WORK-SQL-OFFLINE | Adaptador SQL driver-neutral para `DomainWorkJobRecordStorePortV0`. | Offline determinista con driver fake local. | Sin app externa, sin Codex, sin red, sin driver DB real; usa `database/sql` con driver fake de test. | `go test -count=1 ./modulos/orquesta-domain-work-sql`. | Ejecuta `contracttest` con placeholders `question` y `dollar`, crea jobs aceptados, replaya por idempotencia, rechaza conflictos sin sobrescribir, lista records `Request+Job` con filtros AND y limite, propaga contexto cancelado, simula unique violation concurrente y mantiene frontera sin drivers concretos. | No prueba Postgres/MySQL/SQLite real, no crea schema productivo y no esta cableado al servidor. Un driver real debe entrar despues por composicion opt-in con `IsUniqueViolation` propio. |
+| DOMAIN-WORK-SQL-REAL-DIALECT | Bundle futuro con DB temporal real para cada dialecto soportado. | Pendiente documentado; real opt-in por motor. | DB temporal aislada, driver elegido en modulo de composicion, DSN secreto/temporal, migracion/schema explicito, backend no compartido con apps externas. | Sin script claro en repo. No se documenta comando nuevo. | Debe probar schema real, placeholders del driver, unicidad `(domain_ref,idempotency_key)` y `job_ref`, replay tras reinicio, carrera concurrente replay/conflict, tipos JSON/TEXT, filtros/limit y teardown limpio. | No debe importar drivers desde core/domain/director. Riesgo de convertir SQL en persistencia global incompleta si se cablea antes de definir bundle y migraciones. |
+| DAEMON-RESTART | Reinicio de daemon con estado file-based: cola persiste tras parar y arrancar servidor. | Smoke offline no invasivo. | `go`, `curl`, `python3`; opcional `ORQUESTA_KEEP_SMOKE_DIR=1`, `ORQUESTA_SMOKE_ROOT`, `ORQUESTA_SMOKE_REQUEST_TIMEOUT_SECONDS`. | `./scripts/smoke_orquesta_server_restart_state.sh`. | Salida con `servidor before listo`, `rank_verificado=<run_ref> priority=80`, `servidor after listo`, verificacion tras reinicio, `priority=95`, `agents_launched=false`, `opes_touched=false`. | No valida agentes reales ni rehidratacion de procesos Codex vivos. Cubre continuidad basica de estado operativo. |
+| SHUTDOWN-COOP-OFFLINE | Shutdown cooperativo por contrato sin Codex real. | Offline determinista. | Sin procesos externos; paquetes de stack y shutdown. | `go test ./modulos/orquesta-app-codex-stack ./modulos/orquesta-server-shutdown -run 'Test.*Shutdown.*|TestShutdownServerV0.*' -count=1`. | `forced=false` no pide stop si falta checkpoint; con ACK registra checkpoint; deadline vencido fuerza stop con evidencia; `shutdown_ready` solo si no quedan agentes en vuelo ni checkpoints pendientes. | No valida que Codex real lea `orquesta_shutdown_request.json`. |
+| SHUTDOWN-COOP-REAL | Shutdown cooperativo Codex real con request y ACK de checkpoint. | Real, opt-in, con cuota. | `ORQUESTA_CODEX_STACK_SHUTDOWN_SMOKE=1`; `ORQUESTA_CODEX_COMMAND`; `ORQUESTA_CODEX_HOME`; `ORQUESTA_CODEX_CODE_HOME`; `ORQUESTA_CODEX_PATH`; `ORQUESTA_CODEX_APPROVAL_POLICY=never`; `ORQUESTA_CODEX_SANDBOX=workspace-write`; `ORQUESTA_CODEX_MODEL`; workdirs temporales dentro del proyecto. | `go test ./modulos/orquesta-app-codex-stack -run TestCodexStackRealShutdownCheckpointOptInV0 -count=1 -timeout 300s -v`. | Agente vivo; `POST /api/v0/server/shutdown forced=false`; se escribe `orquesta_shutdown_request.json`; agente responde `agent_shutdown_checkpoint_ack.json`; segunda llamada registra checkpoint o muestra pending compacto. | Solo cubre Codex cooperativo por prompt; otros runtimes/proveedores siguen pendientes. |
+| INVALID-REPLAN-OFFLINE | Entrega invalida, review gate y replan/rework sin procesos reales. | Offline determinista. | Sin Codex real. | `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackV0ReviewGatePideCambiosSiFicheroEsDemasiadoGrande|TestCodexStackV0ReviewChangesRequestedReplanificaYArrancaAgente|TestValidateDomainWorkDeliveryQualityV0RechazaDocumentPlanIncompleto|TestCompositeDirectorDecisionSourceV0RechazaVoteRefIncoherente'`. | Entrega grande queda `changes_requested`; se emite `RequestRework`; `retry_task` enlaza descriptor de entrega; `document_plan` incompleto se rechaza; lote de director con refs causales rotas no se consume. | No mide calidad semantica del rework real. |
+| INVALID-REPLAN-REAL | Review/rework real: app multiagente, evidencia invalida, rework con Codex real y aceptacion final. | Real, opt-in, largo, con cuota. | `ORQUESTA_CODEX_STACK_REVIEW_REWORK_SMOKE=1`; `ORQUESTA_CODEX_COMMAND`; `ORQUESTA_CODEX_HOME`; `ORQUESTA_CODEX_CODE_HOME`; `ORQUESTA_CODEX_PATH`; `ORQUESTA_CODEX_APPROVAL_POLICY=never`; `ORQUESTA_CODEX_SANDBOX=workspace-write`; `ORQUESTA_CODEX_MODEL`; `ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS`; workdirs temporales. | `go test ./modulos/orquesta-app-codex-stack -run TestNuevaAppWebCodexStackRealReviewReworkOptInV0 -count=1 -timeout 1100s -v`. | Varios agentes reales de programacion; entrega registrada; evidencia se invalida; review gate pide cambios; Orquesta replanifica `retry_task`; agente real de rework entrega ACK; rework queda `accepted`. | Largo y sensible a cuota/modelo. `tasks=[]` puede ser estado intermedio si `LastSequence` avanza; no subir timeouts antes de diagnosticar la transicion que falta. |
+| CODEX-RECURSION-REAL | Recursion Codex gobernada: agente padre propone hijos, el director materializa, espera, revisa y cierra con parent/child refs. | Pendiente documentado. | Workdir temporal; proveedor Codex con cuota; Director Operativo materializado; limites de profundidad/fanout; `WaitAgentRefs` o `wave_ref` por cohorte. | Sin script claro en repo. No se documenta comando nuevo. | Para cerrar: evidencia de padre, hijos y al menos un nieto o delegacion rechazada por limite; refs parent/child durables; presupuesto global consumido; review causal antes de cerrar. | Riesgo de spawn libre o cierre textual. No ejecutar hasta que el materializador cubra espera/review/replan y el smoke tenga guardas opt-in. |
+| WAIT-COHORT-OFFLINE | Derivacion de espera por cohorte/ola/parent task hacia `WaitAgentRefs` y registro de `WorkflowTaskWaitStateV0`. | Offline determinista. | Sin proveedor real; run y task store en memoria. | `go test -count=1 ./modulos/orquesta-app-director-service ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-file -run 'Test.*WaitAgentRefs|Test.*WorkflowTaskWait|TestExistingDirectorLoopRequestV0|TestStoreV0RecuperaWorkflowTaskWaitState'`. | `WorkflowTaskWaitAgentRefsV0` carga solo tasks abiertas autorizadas por `run.Tasks`, descarta cerradas y deduplica; `BuildWorkflowTaskWaitSnapshotV0` conserva tasks/agentes pendientes; `app-director-service` resuelve `wait_cohort_ref`, `wait_wave_ref` o `wait_parent_task_ref` antes del loop progresivo; el state-file persiste el wait state. | No prueba espera real con Codex. Cubre contrato y persistencia offline del filtro previo al loop; el cierre de ingesta Codex esta cubierto aparte por `WAIT-SCOPE-INGEST-OFFLINE`. |
+| WAIT-SCOPE-INGEST-OFFLINE | Drain Codex acotado por `WaitAgentRefs`: pending, wait e ingesta de ACK/deliveries usan el mismo scope. | Offline determinista cerrado para P1 WaitAgentRefs. | Sin proveedor real; fake runtime/fuente de observaciones con dos agentes del mismo run, uno dentro de `WaitAgentRefs` y otro fuera. | `go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack -run 'TestDeliveryCandidateProviderV0PropagaYFiltraWaitAgentRefs|TestRunProgressiveLoopV0PropagaWaitAgentRefsAObservationSource|TestCodexDeliveryObservationSourceV0WaitAgentRefs|TestDrainRunV0WaitAgentRefsNoIngiereACKFueraDeScope|TestDrainRunHasPendingExternalAgentsV0FiltraCohorteObjetivo|TestDomainWork.*WaitAgentRefs'`. | `WaitAgentRefs` viaja desde loop progresivo hasta `AgentDeliveryObservationRequestV0`; el source Codex no lee/verifica ACKs fuera del scope; `DrainRunV0` registra solo ACK/delivery dentro del scope; `domain_work` no hace submit/recovery fuera de scope; legacy de run completo sigue cuando `WaitAgentRefs` esta vacio. | Cierra scope de ingesta/pending/wait, no el ciclo funcional completo de una ola. Siguen pendientes camino negativo de review por ola, runner/adaptador real de tests, cierre/replan y actualizaciones posteriores del plan state. |
+| DIRECTOR-GENERIC-CLOSURE-OFFLINE | Cierre causal generico del Director Operativo tras una espera por ola/cohorte. | Offline determinista cerrado para cierre causal; wiring productivo pendiente por composicion. | Sin proveedor real, sin OPES real, sin DB real; core + `app-director-service` + source real del stack Codex sobre task store y eventos persistidos. | `go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service ./modulos/orquesta-app-codex-stack -run 'TestOperationalDirectorClosureV0|TestContinueAppDirectorV0InvocaCierreOperativoTrasLoopQuiescent|TestContinueAppDirectorV0NoInvocaCierreOperativoMientrasEsperaAgente|TestMaybeCloseOperationalDirectorV0PasaScopeResueltoAlSource|TestMaybeCloseOperationalDirectorV0PasaRequiredTestEvidenceRefsDelPlanStateAlSource|TestMaybeCloseOperationalDirectorV0CierraPlanStateTrasCierreOperativoExitoso|TestMaybeCloseOperationalDirectorV0BloqueaPlanStateConIssuesDeCierre|TestMaybeCloseOperationalDirectorV0BloqueaPlanStateSiSourceNoConstruyeRequest|TestOperationalClosureSourceV0'`. | El cierre solo se intenta en `quiescent` con outbox cero; el source recibe `WaitAgentRefs` resuelto y `RequiredTestEvidenceRefs` aceptadas por `PlanState`; la peticion se deriva de `WorkflowTaskStore` + eventos; task/delivery/review aceptada deben pertenecer a la misma cadena causal; `programming` exige evidencia durable de tests requeridos; el cierre exitoso marca el `PlanState` como `closed`; issues o source insuficiente lo bloquean con `closure_reason`. | No ejecuta runner real ni DB real. Siguen pendientes replan automatico para blockers negativos y replay/idempotencia completa. |
+| DIRECTOR-WAVE-REVIEW-OFFLINE | `review_deliveries` por ola/cohorte del Director Operativo. | Offline determinista cerrado para review positiva y observacion negativa durable. | Sin proveedor real; usa run, eventos durables y `OperationalDirectorPlanStateV0` con `wave_ref`/`cohort_ref`/`parent_task_ref`. | `go test -count=1 ./modulos/orquesta-app-director-service -run 'TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeReviewATestsRequeridos|TestUpdateOperationalDirectorPlanStateAfterLoopV0ReviewNegativaRegistraReworkReplan|TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeReviewAReplanSinTests|TestUpdateOperationalDirectorPlanStateAfterLoopV0NoAvanzaReviewFueraDeScope|TestUpdateOperationalDirectorPlanStateAfterLoopV0NoAvanzaReviewConOutboxPendiente|TestContinueRequestWithOperationalDirectorPlanStateV0ReentraReviewConScope'`. | Una ola solo avanza por cadena aceptada `DeliveryRegistered -> ReviewRequested -> ReviewResultRecorded(accepted) -> ReviewAccepted`; entregas de otra ola no avanzan la ola activa. Si el historial durable trae `ReviewResultRecorded(changes_requested|rejected) -> ReworkRequested -> ReplanDecisionRecorded`, el `PlanState` marca `changes_requested`, guarda refs de delivery/review/rework/replan e incrementa attempts. | No genera rework/replan nuevo por si mismo; observa eventos ya emitidos por el nucleo. El cierre por quietud sigue bloqueado mientras el plan state este en review/tests. |
+| DIRECTOR-REQUIRED-TESTS-DURABLE-OFFLINE | `run_required_tests` durable antes de cierre en modo `programming`. | Offline determinista cerrado como consumo de evidencia; runner real pendiente. | Sin proveedor real, sin shell runner, sin OPES; usa `RequiredTestEvidenceV0` en store in-memory/file y eventos durables del scope. | `go test -count=1 ./modulos/orquesta-app-director-service ./modulos/orquesta-app-codex-stack -run 'TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeTestsAReplanConEvidenciaPassed|TestUpdateOperationalDirectorPlanStateAfterLoopV0BloqueaTestsConEvidenciaFailed|TestUpdateOperationalDirectorPlanStateAfterLoopV0NoAvanzaTestsConEvidenciaDeOtraReview|TestOperationalClosureSourceV0UsaRequiredTestEvidenceRefsDelRequest'`. | `review_deliveries` activa tests en modo `programming`; `run_required_tests` carga refs explícitas de `RequiredTestEvidenceRefs` o, por compatibilidad del stack, refs de evidencia del review result; solo acepta `passed` con run/task/test/delivery/review request/review result/accepted review exactos; `failed` bloquea con `required-tests-failed`; la ref aceptada pasa a `replan_or_close` y al cierre. | No ejecuta comandos del sistema ni crea evidencias por si mismo. Falta runner/adaptador opt-in que genere `RequiredTestEvidenceV0` y rama replan negativa ante fallos. |
+| DIRECTOR-REPLAN-CLOSE-OFFLINE | `replan_or_close`/`close` causal del Director Operativo. | Parcial: close offline cerrado, replan automatico pendiente. | Sin proveedor real; deliveries, reviews, tests, outbox y task store fakes; usa `OperationalClosureSource` opcional para evaluar cierre offline. | `go test -count=1 ./modulos/orquesta-app-director-service ./modulos/orquesta-orchestration-core -run 'TestMaybeCloseOperationalDirectorV0CierraPlanStateTrasCierreOperativoExitoso|TestMaybeCloseOperationalDirectorV0BloqueaPlanStateConIssuesDeCierre|TestMaybeCloseOperationalDirectorV0BloqueaPlanStateSiSourceNoConstruyeRequest|TestOperationalDirectorClosureV0'`. | Cierra tarea/ola/run solo con review aceptada, evidencias, tests requeridos, estado `quiescent` y outbox cero; si el cerrador devuelve issues o el source no construye request, bloquea el `PlanState` con causa. | Pendiente: emitir rework/replan automatico con causa para test fallido/faltante, task abierta, outbox no vacio u otras condiciones negativas; replay/idempotencia completa. |
+| DIRECTOR-PLAN-STATE-OFFLINE | `OperationalDirectorPlanStateV0`: estado vivo del plan operativo. | Offline determinista parcial cerrado; incluye reentrada, wait->review, review positiva, tests durables, review negativa observada y cierre/bloqueo post-closure. | Sin proveedor real; store durable/fake para plan state, run, `WorkflowTaskStore`, `WorkflowTaskWaitStateV0`, eventos/outbox y evidencias fakes. | `go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-file ./modulos/orquesta-app-director-service ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server -run 'Test.*OperationalDirectorPlanState|Test.*PlanState|TestContinueAppDirectorV0.*PlanState|TestContinueRequestWithOperationalDirectorPlanStateV0|TestUpdateOperationalDirectorPlanStateAfterLoopV0|TestMaybeCloseOperationalDirectorV0|TestOperationalPlanStateStoreV0|TestBuildStackFromEnvV0UsaConectoresDurablesFileBased|TestBuildStackV0RequiresOptInAndExplicitPorts'`. | DTO, validacion, store en memoria y store file-based existen; `ContinueAppDirectorV0` persiste `launch_subagents -> wait_subagents`, reentra por `operational_director_plan_ref`, avanza a `review_deliveries`, registra refs causales de review positiva, consume `RequiredTestEvidenceV0`, bloquea tests fallidos, registra review negativa con refs de `ReworkRequested`/`ReplanDecisionRecorded`, y marca cierre/bloqueo con `closure_reason`. | Pendiente restante: runner/adaptador real de tests, replan automatico para blockers negativos y replay/idempotencia completa. |
+| DIRECTOR-TARDE-OFFLINE | Corte minimo para dejar el Director continuable hoy: contrato operativo, materializador parcial, waits por metadata, continue loop, ingesta acotada, plan state y review/rework offline. | Offline determinista. | Sin proveedor real. Usar stores en memoria/fakes de los paquetes existentes. | `go test -count=1 ./modulos/orquesta-director-operativo ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service ./modulos/orquesta-app-codex-stack -run 'Test.*OperationalDirector|Test.*WaitAgentRefs|Test.*ContinueAppDirector|Test.*ReviewRework|Test.*Replan|TestDrainRunV0WaitAgentRefsNoIngiereACKFueraDeScope'`. | Plan operativo valido, materializacion de `launch_subagents`, refs de ola/cohorte preservadas, waits derivados por metadata, `WorkflowTaskWaitStateV0` persistible, plan state persistible, reentrada con refs concretas, `DrainRunV0` no ingiere ACK fuera de scope, review positiva del PlanState avanza por cadena causal, tests durables por `RequiredTestEvidenceV0` pasan o bloquean, y review/rework/replan offline sigue pasando. | No prueba runtime real ni recursion con hijos/nietos. El materializador sigue sin cubrir runner real de tests, `replan_or_close`/`close` ni actualizacion posterior completa del plan state. |
+| USAGE-METRICS-OFFLINE | Metricas de uso por agente y resumen por run sin proveedor real. | Offline determinista. | Sin proveedor real; fake usage source. | `go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-mcp ./modulos/orquesta-web ./modulos/orquesta-app-codex-stack -run 'TestBuildDirectorRunStatsWithTelemetryPortsV0IncluyeUsoDeAgente|TestMCPDirectorStatsToolExecutorV0IncluyeUsoDeAgentesOptIn|TestRESTConsultarDirectorStatsClientV0EnviaPOSTJSONYProyectaPanel|TestCodexStackAgentUsageSourceV0UneMetricasInyectadas|TestCodexStackV0DirectorStatsIncluyeProcesoYProgresoPorPuertos'`. | Stats incluyen `Usage`, `UsageSummary`, modelo/capacidad, tokens y cuota; web pide `include_agent_usage`; MCP solo incluye uso en opt-in. | Conector productivo de cuota/tokens por proveedor sigue pendiente; coste real depende de politica futura. |
+| USAGE-METRICS-REAL | Stats REST de servidor con proceso, progreso y uso durante run real. | Smoke real, puede lanzar Codex. | `go`, `curl`, `python3`; `codex` y env de runtime si se quiere agente real; opcional `ORQUESTA_SMOKE_STATS_POLLS`, `ORQUESTA_SMOKE_MIN_PARALLEL_AGENTS`, `ORQUESTA_KEEP_SMOKE_DIR`. | `./scripts/smoke_orquesta_server_rest_director.sh`. | `POST /api/v0/apps/director -> HTTP 2xx`; `run_ref`; tres polls a `/api/v0/director/stats`; salida con `stats_verificadas=process_refs,progress,usage,parallel_agents`; parada limpia. | El script no tiene guarda de confirmacion propia; tratarlo como real y no meter en CI rapida. |
+
+## Secuencia recomendada
+
+1. Ejecutar primero los casos offline: `DAEMON-RESTART`,
+   `SHUTDOWN-COOP-OFFLINE`, `INVALID-REPLAN-OFFLINE`,
+   `USAGE-METRICS-OFFLINE`, `EXT-NO-OPES`, `WAIT-COHORT-OFFLINE`,
+   `WAIT-SCOPE-INGEST-OFFLINE` y despues
+   `DIRECTOR-GENERIC-CLOSURE-OFFLINE`.
+2. Ejecutar smokes OPES sin agente contra OPES temporal:
+   `OPES-DOMAIN-REST` y `OPES-DER-VISUAL-REST`.
+3. `OPES-PLAN-TEMARIO-OPERADORES` ya quedo cerrado para plan real acotado.
+   Ejecutar smokes OPES con agente real cuando haya cuota y OPES aislado:
+   `OPES-DER-DRAFT-AGENT`, derivados de ese plan y despues `OPES-PLAN-REAL`.
+4. Ejecutar smokes Codex largos solo en ventana operativa controlada:
+   `SHUTDOWN-COOP-REAL`, `INVALID-REPLAN-REAL` y
+   `USAGE-METRICS-REAL`.
+
+## Siguiente incremento
+
+El siguiente paquete de pruebas debe seguir siendo offline y determinista antes
+de cualquier smoke Codex/OPES real. Las casillas siguientes son pendientes hasta
+que haya test claro y se actualice la fila correspondiente de la matriz.
+
+- [x] `DIRECTOR-WAVE-REVIEW-OFFLINE`: queda cerrada la salida positiva por
+  review aceptada, entrega ajena al scope y observacion negativa con
+  `ReworkRequested`/`ReplanDecisionRecorded` en el `PlanState`.
+- [x] `DIRECTOR-REQUIRED-TESTS-DURABLE-OFFLINE`: `run_required_tests` consume
+  `RequiredTestEvidenceV0` causal, avanza con `passed`, bloquea con `failed` y
+  rechaza evidencia de otra review. Pendiente separado: runner/adaptador real
+  que genere esas evidencias.
+- [~] `DIRECTOR-REPLAN-CLOSE-OFFLINE`: close offline ya marca el `PlanState` como
+  cerrado o bloqueado; sigue pendiente que review rechazada, test faltante/fallido,
+  outbox no vacio o task abierta produzcan `RequestRework`/`RecordReplanDecision`
+  con refs causales.
+- [~] `DIRECTOR-PLAN-STATE-OFFLINE`: el corte cubre reentrada, wait->review,
+  review positiva, tests durables, review negativa observada y cierre/bloqueo.
+  Faltan runner real, replan automatico de blockers y replay/idempotencia completa.
+  Debe demostrar que no se reconstruye desde stats ni desde agentes vivos
+  globales.
+- [ ] Evento/comando idempotente: agregar prueba de replay para que review,
+  resultado de tests, replan y cierre no se dupliquen con la misma clave
+  causal. La clave debe derivar de refs estables del run/task/ola/cohorte, no de
+  timestamps ni summaries.
+
+No mover estos casos a "cerrado" por existir `WaitAgentRefs`, por pasar un
+smoke real o por tener un source de cierre parcial. Cada frente necesita
+evidencia focal propia.
+
+## Huecos pendientes
+
+- No hay script claro para derivados OPES de revision, validacion y ensamblado.
+- No hay smoke real no-OPES con servidor temporal y dominio externo fake por
+  REST; la cobertura actual es determinista y contractual.
+- El expander neutral de `DomainDocumentPlanV0 -> DomainWorkJobRequestV0[]`
+  tiene cobertura offline y ya se integra con un conector durable file-based;
+  falta un smoke real de app externa no acoplada.
+- `generate_visual_asset` tiene smoke REST directo, pero falta agente real.
+- No hay smoke real para recursion Codex gobernada con parent/child refs y
+  revision del director.
+- Hay cobertura offline de derivacion `cohort_ref`/`wave_ref` a
+  `WaitAgentRefs`, persistencia `WorkflowTaskWaitStateV0` e ingesta Codex
+  acotada por scope. Falta smoke real que lo pruebe como cohorte/ola formal del
+  Director Operativo con agentes Codex vivos.
+- `DIRECTOR-GENERIC-CLOSURE-OFFLINE` tiene tramo offline parcial cerrado:
+  cierre causal en core + `app-director-service` y source real del stack Codex
+  para tasks del Director Operativo. No sustituye los pendientes de ola completa,
+  runner/adaptador real de tests, replan negativo ni actualizacion posterior
+  completa del plan state.
+- Falta completar `DIRECTOR-WAVE-REVIEW-OFFLINE` en camino negativo:
+  `review_deliveries` ya avanza por review aceptada del scope y no por entregas
+  de otro scope. El codigo ya observa `ReworkRequested` y
+  `ReplanDecisionRecorded` en el PlanState, pero falta prueba focal dedicada
+  antes de marcar esa casilla cerrada.
+- `DIRECTOR-REQUIRED-TESTS-DURABLE-OFFLINE` queda cerrado como consumo de
+  evidencia durable causal antes de cierre. Falta el runner/adaptador real que
+  cree esas evidencias y la rama de replan ante fallo.
+- Falta cerrar `DIRECTOR-REPLAN-CLOSE-OFFLINE`: `replan_or_close`/`close` causal
+  con review aceptada, evidencias, refs de tests durables si aplica, estado
+  `quiescent`, outbox cero y sin tasks abiertas en el scope.
+- `DIRECTOR-PLAN-STATE-OFFLINE` tiene contrato, stores, escritura inicial,
+  reentrada, avance wait->review, salida positiva review->tests/replan y consumo
+  de tests durables cerrados; falta materializar replan/cierre con refs causales
+  sin duplicar la verdad de `WorkflowTaskStore`, `WorkflowTaskWaitStateV0`,
+  eventos/outbox ni `RequiredTestEvidenceV0`.
+- Shutdown cooperativo esta validado para Codex; otros runtimes/proveedores
+  necesitan su propio puerto de checkpoint.
+- Uso/coste real necesita conector productivo de proveedor; hoy la cobertura
+  offline prueba el contrato y la web/MCP, no el dato remoto.

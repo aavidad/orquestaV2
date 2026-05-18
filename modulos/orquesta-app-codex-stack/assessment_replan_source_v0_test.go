@@ -42,6 +42,28 @@ func TestAssessmentReplanSourceV0PlanificaReemplazoTrasStopConfirmado(t *testing
 	}
 }
 
+func TestAssessmentReplanSourceV0PlanificaReemplazoTrasAgentePerdido(t *testing.T) {
+	runRef := "run-ref-assessment-replan-stack-lost-001"
+	oldAgentRef := "agent-ref-assessment-lost-001"
+	taskRef := "task-ref-assessment-stack-lost-001"
+	source := AssessmentReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			assessmentReplanDescriptorForTestV0(runRef, oldAgentRef, taskRef),
+		),
+	}
+	request := assessmentReplanRequestForTestV0(runRef, oldAgentRef, taskRef, false)
+	request.Run.ConfirmedStoppedAgents = nil
+	request.Run.LostAgents = []string{oldAgentRef}
+
+	plans, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentAssessmentReplanPlansV0 lost: %v", err)
+	}
+	if len(plans) != 1 || plans[0].Assessment.AgentRequestID != oldAgentRef {
+		t.Fatalf("plans lost=%+v", plans)
+	}
+}
+
 func TestAssessmentReplanSourceV0NoDuplicaSiReplacementYaExiste(t *testing.T) {
 	runRef := "run-ref-assessment-replan-stack-002"
 	oldAgentRef := "agent-ref-assessment-old-002"

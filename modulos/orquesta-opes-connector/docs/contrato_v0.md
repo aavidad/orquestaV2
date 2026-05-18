@@ -4,12 +4,17 @@ Fecha: 2026-05-13.
 
 ## Decision
 
-El conector `opes_rest_mcp` sera opt-in y vivira fuera del nucleo de Orquesta.
-Su unica responsabilidad sera traducir el contrato publico de OPES a trabajos y
+El conector `opes_rest_mcp` es opt-in y vive fuera del nucleo de Orquesta.
+Su unica responsabilidad es traducir el contrato publico de OPES a trabajos y
 entregas externas de Orquesta.
 
 OPES sigue siendo la aplicacion de dominio editorial. Orquesta sigue siendo el
 plano de orquestacion de agentes.
+
+OPES no planifica con juicio propio. Si necesita decidir estructura de un
+temario, dependencias entre temas, orden de creacion, visuales, revisiones o
+agentes, debe crear un job externo de planificacion para que Orquesta arranque
+un director documental y devuelva un plan validable por OPES.
 
 ## Frontera
 
@@ -25,6 +30,7 @@ El conector no puede conocer ni asumir:
 - base de datos, tablas, dialecto SQL o rutas de OPES;
 - workers internos, colas internas o estructura de ficheros de OPES;
 - decisiones de agente dentro de OPES;
+- estrategia documental decidida sin director de Orquesta;
 - sesiones, leases, `tmux`, runtime o proveedor como campos de dominio OPES;
 - payloads internos no documentados por OPES.
 
@@ -191,6 +197,9 @@ El conector futuro debe adaptar OPES a:
 
 - `DomainWorkJobRequestV0` al crear o aceptar trabajo externo;
 - `DomainWorkArtifactSubmissionV0` al devolver artefactos.
+- `DomainDocumentPlanV0` cuando OPES pida `plan_tema`, `plan_temario` o
+  `plan_documento`; OPES lo tratara como `PlanTemaV0`/`PlanTemarioV0`
+  validable por sus reglas de dominio.
 
 `domain_ref` debe ser `opes`. `interface_refs` debe apuntar a refs publicas
 REST/MCP, no a rutas locales ni internals de OPES.
@@ -202,5 +211,14 @@ cuando no bastan `value` ni `values`.
 
 ## Estado
 
-Aceptado como contrato local. Implementado primer corte REST para crear jobs y
-enviar artefactos; MCP queda pendiente.
+Aceptado como contrato local. Implementado corte REST para:
+
+- consultar ventanas pequenas de `GET /api/jobs`;
+- leer bloques publicos de tema con `GET /api/topics/{id}/blocks`;
+- crear jobs externos con `POST /api/jobs`;
+- enviar artefactos con `POST /api/jobs/{id}/artifacts`, incluido
+  `document_plan`.
+
+Orquesta ya expone el adaptador MCP generico `orquesta.domain_work.v0`, que
+puede usar este conector cuando la composicion lo inyecta. Queda fuera de este
+corte un cliente MCP especifico contra tools OPES.

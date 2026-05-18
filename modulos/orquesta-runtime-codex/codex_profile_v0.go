@@ -121,7 +121,6 @@ func (v *codexProfileValidatorV0) validateWorkspaceWriteRuntimeIsolationV0(
 		return
 	}
 	if filepath.Clean(profile.RuntimeWorkDir) == filepath.Clean(profile.ProjectWorkDir) ||
-		codexPathInsideV0(profile.RuntimeWorkDir, profile.ProjectWorkDir) ||
 		codexPathInsideV0(profile.ProjectWorkDir, profile.RuntimeWorkDir) {
 		v.add(CodexConnectorPathInvalidV0, "runtime_work_dir")
 	}

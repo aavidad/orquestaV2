@@ -60,6 +60,13 @@ El contrato operativo de parada es:
 6. el executor registra `AgentStopConfirmed` solo cuando el stopper devuelve
    evidencia aceptada.
 
+Si el stopper informa que el proceso/sesion registrado ya no existe, el
+executor no confirma la parada ni lo convierte en fallo de lanzamiento:
+registra `AgentLost` mediante el workflow. Ese estado permite replanificar con
+evidencia durable y evita que el drain espere indefinidamente a un agente que ya
+no puede gobernarse. El detalle operativo de por que se perdio queda fuera del
+nucleo y solo entra como refs compactas.
+
 `agent_request_id`, `process_ref` y `session_ref` son referencias opacas. El
 nucleo no deriva `process_ref` desde evidencias, transcripts, rutas, PID ni
 detalles del proveedor. La persistencia del mapeo pertenece a un conector o
@@ -79,19 +86,34 @@ sufijo `-web`, `-api`, `-persistencia`, `-i18n` o `-calidad`, no heredan esa
 proteccion: si tienen proceso registrado, `CanStop=true` y pueden ser gobernados
 por RunControl/supervision.
 
+Decision 2026-05-15: las estadisticas no reutilizan progreso obsoleto de un
+agente ya completado. Si un agente queda reflejado por delivery o artefacto de
+fase, una observacion `stalled` anterior no debe aparecer como tarea atascada ni
+como `last_progress`, porque el director y la web tomarian decisiones con estado
+viejo.
+
+Decision 2026-05-15: `stalled` informativo no crea supervision. El scheduler
+solo convierte progreso en candidato si la observacion marca
+`decision_required`, si el reporte trae `DecisionRequired`, si hay
+`loop_detected` o si el proceso esta `stopped`. Asi la web puede mostrar agentes
+sin avance reciente sin obligar al director a intervenir antes de tiempo.
+
 El contrato operativo de receipt de agente es:
 
 1. el agente externo produce un receipt compacto validado por su conector;
 2. el conector lo expone como `AgentDeliveryObservationV0`, sin paths, logs,
    transcripts, modelo, HOME, DB ni proveedor;
 3. `DeliveryCandidateProviderV0` genera:
-   - `SchedulableDeliveryCandidateV0` si la fase es `programacion`;
-   - `SchedulablePhaseArtifactCandidateV0` si la fase no es `programacion`;
+   - `SchedulableDeliveryCandidateV0` si `task_id` existe en
+     `OrchestrationRunV0.Tasks`, sea cual sea la fase activa;
+   - `SchedulablePhaseArtifactCandidateV0` si el receipt pertenece a una fase
+     pero no a una microtarea durable del run;
 4. el provider emite como maximo un candidato por tick; el resto se reevalua
    con el run actualizado para mantener el input compacto;
 5. el scheduler exige agente existente, started_agent y fase actual;
-6. el workflow registra `DeliveryRegistered` para programacion o
-   `PhaseArtifactRegistered` para brainstorming/documentacion/revision/etc.
+6. el workflow registra `DeliveryRegistered` para tareas durables y
+   `PhaseArtifactRegistered` para artefactos de fase como brainstorming o
+   documentos del director que no son microtareas.
 
 El contrato operativo de review gate es:
 
@@ -144,6 +166,25 @@ El contrato operativo de microtarea programable es:
 5. el scheduler decide `RequestCapacity -> RequestAgent` sin conocer DB,
    runtime, proveedor, modelo, HOME ni OAuth.
 
+El contrato de espera por microtareas usa la misma fuente: `WaitAgentRefs`
+pueden derivarse desde `WorkflowTaskV0` abiertas mediante
+`WorkflowTaskWaitAgentRefsV0`, filtrando por `cohort_ref`, `wave_ref` o
+`parent_task_ref`. No se debe inferir la cohorte desde nombres de agentes,
+acceptance criteria ni agentes vivos del run.
+
+`BuildWorkflowTaskWaitSnapshotV0` amplía esa derivacion con refs de tasks y
+agentes pendientes. `WorkflowTaskWaitStateV0` es el agregado neutral que guarda
+la espera viva del Director: causa, filtro, task refs, agent refs, pending agent
+refs, intento, limites, evidencias y deadline. El core define el contrato y los
+puertos; la persistencia concreta pertenece a adaptadores como
+`orquesta-state-file`.
+
+Nota de recuperacion: `OrchestrationRunV0.Tasks` y `MicrotaskCreated` conservan
+refs compactas. La metadata completa de `WorkflowTaskV0` debe estar disponible
+en `WorkflowTaskStorePortV0` y el wait vivo en
+`WorkflowTaskWaitStateStorePortV0`, o rematerializarse idempotentemente antes de
+reanudar waits por ola/cohorte.
+
 El contrato operativo de solicitud de autoprogramacion vive fuera del nucleo en
 `modulos/orquesta-autoprogramming`. Este paquete solo ve observaciones,
 candidatos y puertos genericos; no valida `write_set`, no decide tests
@@ -191,6 +232,8 @@ actual.
   `run_id + agent_request_id -> process_ref + session_ref` con refs opacas.
 - Stop real minimo de proceso por `process_ref` mediante stopper y runtime
   inyectados, con ACK solo tras resultado aceptado.
+- Registro de `AgentLost` cuando una parada solicitada no puede confirmarse
+  porque el proceso/sesion registrado ya no es controlable.
 - Cortes anti-bucle: outbox pendiente, outbox no manejado, quietud, error de
   workflow y max steps.
 - Loop gestionado `RunManagedProgressiveLoopV0`: cuando el loop queda en
@@ -245,6 +288,9 @@ actual.
 - Microtareas de workflow a scheduling: `WorkflowTaskCandidateProviderV0`
   rehidrata `WorkflowTaskV0` por puerto externo, respeta `run.Tasks` como lista
   autorizada y construye work candidates por builder validado.
+- Espera de microtareas por metadata neutral: `WorkflowTaskWaitAgentRefsV0`
+  deriva refs de agente desde tasks abiertas autorizadas por `run.Tasks`,
+  descarta `run.ClosedTasks`, filtra por ola/cohorte/parent task y deduplica.
 - Contrato preflight de autoprogramacion movido a
   `modulos/orquesta-autoprogramming`: el core ya no posee reglas especificas de
   `write_set`, tests obligatorios ni revision de codigo.
@@ -268,6 +314,9 @@ actual.
 - Eleccion de DB, cola, lock distribuido o runtime operativo.
 - Protocolo productivo de readiness/ACK emitido por un proveedor real.
 - Adaptador productivo durable que lea ACK real de proveedor fuera de memoria.
+- Recuperacion event-only de metadata rica de `WorkflowTaskV0`: el store de
+  microtareas sigue siendo parte del estado operacional que debe persistirse o
+  rematerializarse.
 - Registro durable productivo del mapeo `agent_request_id -> process_ref`.
 - Parada operativa de sesiones/procesos de proveedores reales con idempotencia
   demostrada por conector.

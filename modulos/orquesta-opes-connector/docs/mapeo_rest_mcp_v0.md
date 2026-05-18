@@ -3,8 +3,11 @@
 Fecha: 2026-05-13.
 
 Este documento fija las superficies publicas de OPES que consume o podria
-consumir el conector. REST para jobs y artefactos ya tiene primer cliente local;
-MCP queda como extension futura.
+consumir el conector. REST para jobs, bloques publicos de tema y artefactos ya
+tiene cliente local. Orquesta tambien publica MCP generico
+`orquesta.domain_work.v0`, que puede delegar en este conector por puertos
+inyectados. Lo que queda como extension futura es un cliente MCP especifico
+contra tools OPES, si aporta ventaja frente a REST.
 
 ## Crear jobs externos
 
@@ -124,6 +127,12 @@ Para `expand_topic_from_summary`, Orquesta entrega
 `artifact_type=topic_expansion_package`. El agente debe producir un JSON con
 `topic_id`, `language_code` y `chapters`; OPES materializa capitulos y bloques.
 
+Para `plan_tema`, `plan_temario` y `plan_documento`, Orquesta entrega
+`artifact_type=document_plan` con payload compatible con
+`DomainDocumentPlanV0`. OPES valida ese plan como `PlanTemaV0` o
+`PlanTemarioV0` y decide despues que jobs concretos crear para redaccion,
+visuales, revision, ensamblado y exportacion.
+
 Para otros objetos de dominio, el conector debe usar endpoints OPES especificos
 cuando OPES los publique. No debe resolverlos por DB ni ficheros.
 
@@ -133,6 +142,9 @@ Contrato OPES actual:
 
 ```text
 research_sources
+plan_documento
+plan_tema
+plan_temario
 split_syllabus_topic
 draft_topic_outline
 draft_content_block

@@ -19,6 +19,30 @@ Cobertura esperada:
   reentrar al loop gestionado para arrancar agentes derivados;
 - `ContinueAppDirectorV0` permite reentrar sobre un run existente sin recrear
   AppSpec/intake y usando solo puertos inyectados;
+- `ContinueAppDirectorV0` deriva `WaitAgentRefs` desde `wait_cohort_ref`,
+  `wait_wave_ref` o `wait_parent_task_ref` usando `DirectorTaskStore`, sin que
+  Codex interprete semantica de ola/cohorte;
+- `ContinueAppDirectorV0` materializa un `OperationalDirectorPlanV0` listo,
+  guarda la task, lanza la microtarea y registra `WorkflowTaskWaitStateV0` para
+  la ola materializada;
+- `ContinueAppDirectorV0` puede reentrar desde `OperationalDirectorPlanStateV0`
+  con `operational_director_plan_ref`, sin volver al scope global del run;
+- el plan state avanza de `wait_subagents` a `review_deliveries` cuando los
+  agentes pendientes entregaron y el loop queda `quiescent`;
+- el plan state avanza de `review_deliveries` a `run_required_tests` o
+  `replan_or_close` solo si la cadena causal de eventos del scope activo queda
+  aceptada; una delivery de otra ola no avanza el state y outbox pendiente
+  bloquea la transicion;
+- el plan state avanza de `run_required_tests` a `replan_or_close` con
+  `RequiredTestEvidenceV0` `passed` causal, bloquea con `failed` y no acepta
+  evidencia de otra review;
+- el plan state observa review negativa cuando hay `ReworkRequested` y
+  `ReplanDecisionRecorded` causales, marcando `changes_requested`, refs de
+  rework/replan y `replan_attempts`;
+- el cierre operativo no se invoca si hay plan state activo en
+  `review_deliveries` o `run_required_tests`;
+- tras cierre operativo exitoso, el plan state queda `closed`; si hay issues de
+  cierre o source insuficiente, queda `blocked` con `closure_reason`;
 - politica de cierre: `crear_app_completa` normal no puede cerrarse solo con
   documentacion; `debug` permite alcance reducido;
 - reentrada automatica tras decisiones del director crea microtarea y arranca
@@ -41,6 +65,31 @@ Evidencia 2026-05-09:
 - `TestGuardStartAppDirectorClosurePolicyV0PermiteAppCompletaConEvidencia`;
 - `TestContinueAppDirectorV0BloqueaCierreAppCompletaNormalSinEvidencias`;
 - `TestContinueAppDirectorV0PermiteCierreAppCompletaNormalConEvidencias`;
+- `TestExistingDirectorLoopRequestV0DerivaWaitAgentRefsPorCohorte`;
+- `TestExistingDirectorLoopRequestV0RegistraWaitStatePorOla`;
+- `TestExistingDirectorLoopRequestV0RequiereTaskStoreConFiltroWait`;
+- `TestExistingDirectorLoopRequestV0RefsExplicitosNoRequierenFiltro`;
+- `TestContinueAppDirectorV0MaterializaOperationalDirectorPlanYEsperaOla`;
+- `TestContinueAppDirectorV0ReentraDesdeOperationalDirectorPlanState`;
+- `TestContinueAppDirectorV0PlanStateReentradaRequiereStore`;
+- `TestContinueRequestWithOperationalDirectorPlanStateV0RechazaActiveStepNoSoportado`;
+- `TestContinueRequestWithOperationalDirectorPlanStateV0ReentraReviewConScope`;
+- `TestContinueRequestWithOperationalDirectorPlanStateV0ReentraRunRequiredTestsConScope`;
+- `TestContinueRequestWithOperationalDirectorPlanStateV0RespetaWaitExplicito`;
+- `TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaAReviewTrasWaitConsumido`;
+- `TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeReviewATestsRequeridos`;
+- `TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeTestsAReplanConEvidenciaPassed`;
+- `TestUpdateOperationalDirectorPlanStateAfterLoopV0ReviewNegativaRegistraReworkReplan`;
+- `TestUpdateOperationalDirectorPlanStateAfterLoopV0BloqueaTestsConEvidenciaFailed`;
+- `TestUpdateOperationalDirectorPlanStateAfterLoopV0NoAvanzaTestsConEvidenciaDeOtraReview`;
+- `TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeReviewAReplanSinTests`;
+- `TestUpdateOperationalDirectorPlanStateAfterLoopV0NoAvanzaReviewFueraDeScope`;
+- `TestUpdateOperationalDirectorPlanStateAfterLoopV0NoAvanzaReviewConOutboxPendiente`;
+- `TestMaybeCloseOperationalDirectorV0PasaRequiredTestEvidenceRefsDelPlanStateAlSource`;
+- `TestMaybeCloseOperationalDirectorV0NoCierraConPlanStatePostWaitActivo`;
+- `TestMaybeCloseOperationalDirectorV0CierraPlanStateTrasCierreOperativoExitoso`;
+- `TestMaybeCloseOperationalDirectorV0BloqueaPlanStateConIssuesDeCierre`;
+- `TestMaybeCloseOperationalDirectorV0BloqueaPlanStateSiSourceNoConstruyeRequest`;
 - cobertura indirecta desde `orquesta-app-codex-stack`:
   `TestDrainRunV0ConsumeDecisionFileTardioYArrancaProgramacion`;
 - `TestStartAppDirectorV0ConsumesDirectorDeliverySource`;

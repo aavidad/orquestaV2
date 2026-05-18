@@ -35,12 +35,13 @@ func normalizeOutboxRecordV0(stored outboxLedgerRecordV0) (*outboxLedgerRecordV0
 		Message:            message,
 		messageFingerprint: append([]byte(nil), fingerprint...),
 	}
-	if stored.Claim != nil {
+	if stored.Claim != nil && stored.Ack == nil {
 		claim := normalizeStoredClaimV0(*stored.Claim)
 		if !claimMatchesRecordV0(claim, record) {
 			return nil, fmt.Errorf("file_outbox_ledger: claim_invalid")
 		}
-		record.Claim = &claim
+		// A claim without ack is process-local reservation. After reload it must
+		// be retried idempotently instead of blocking the message forever.
 	}
 	if stored.Ack != nil {
 		ack := normalizeStoredAckV0(*stored.Ack)
@@ -48,6 +49,8 @@ func normalizeOutboxRecordV0(stored outboxLedgerRecordV0) (*outboxLedgerRecordV0
 			return nil, fmt.Errorf("file_outbox_ledger: ack_invalid")
 		}
 		record.Ack = &ack
+	} else {
+		record.Claim = nil
 	}
 	return record, nil
 }

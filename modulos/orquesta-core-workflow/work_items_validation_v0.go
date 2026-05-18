@@ -57,6 +57,9 @@ func validateWorkflowTaskCollectionsV0(task WorkflowTaskV0) error {
 	if err := validateWorkflowTaskDependsOnV0(task); err != nil {
 		return err
 	}
+	if err := validateWorkflowTaskLineageV0(task); err != nil {
+		return err
+	}
 	return validateWorkflowFunctionContractRefsV0(task.FunctionContractRefs)
 }
 
@@ -99,6 +102,60 @@ func validateWorkflowTaskDependsOnV0(task WorkflowTaskV0) error {
 		seen[dep] = true
 	}
 	return nil
+}
+
+func validateWorkflowTaskLineageV0(task WorkflowTaskV0) error {
+	taskID := strings.TrimSpace(task.TaskID)
+	if task.DelegationDepth < 0 || task.DelegationDepth > maxWorkflowTaskCollectionV0 {
+		return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "delegation_depth")
+	}
+	if task.MaxChildAgents < 0 || task.MaxChildAgents > maxWorkflowTaskCollectionV0 {
+		return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "max_child_agents")
+	}
+	if err := validateWorkflowTaskOptionalRefV0(task.ParentTaskRef, "parent_task_ref"); err != nil {
+		return err
+	}
+	if strings.TrimSpace(task.ParentTaskRef) != "" && strings.TrimSpace(task.ParentTaskRef) == taskID {
+		return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "parent_task_ref")
+	}
+	if err := validateWorkflowTaskOptionalRefV0(task.CohortRef, "cohort_ref"); err != nil {
+		return err
+	}
+	if err := validateWorkflowTaskOptionalRefV0(task.WaveRef, "wave_ref"); err != nil {
+		return err
+	}
+	if len(task.ChildTaskRefs) > maxWorkflowTaskCollectionV0 {
+		return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "child_task_refs")
+	}
+	seen := map[string]bool{}
+	for _, child := range task.ChildTaskRefs {
+		child = strings.TrimSpace(child)
+		if child == "" || child == taskID || child == strings.TrimSpace(task.ParentTaskRef) ||
+			seen[child] || !workflowTaskOptionalRefIsCompactV0(child) ||
+			workflowTaskStringHasForbiddenDetailV0(child) {
+			return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "child_task_refs")
+		}
+		seen[child] = true
+	}
+	return nil
+}
+
+func validateWorkflowTaskOptionalRefV0(value string, field string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if !workflowTaskOptionalRefIsCompactV0(value) || workflowTaskStringHasForbiddenDetailV0(value) {
+		return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, field)
+	}
+	return nil
+}
+
+func workflowTaskOptionalRefIsCompactV0(value string) bool {
+	if len(value) > maxWorkflowTaskStringV0 {
+		return false
+	}
+	return !strings.ContainsAny(value, " \t\r\n")
 }
 
 func validateWorkflowTaskDependencyRefsExistV0(current OrchestrationRunV0, task WorkflowTaskV0) error {
@@ -193,6 +250,10 @@ func workflowTaskTextFieldsV0(task WorkflowTaskV0) map[string][]string {
 		"summary":                []string{task.Summary},
 		"acceptance_criteria":    task.AcceptanceCriteria,
 		"depends_on":             task.DependsOn,
+		"parent_task_ref":        []string{task.ParentTaskRef},
+		"cohort_ref":             []string{task.CohortRef},
+		"wave_ref":               []string{task.WaveRef},
+		"child_task_refs":        task.ChildTaskRefs,
 		"function_contract_refs": workflowFunctionContractRefStringsV0(task.FunctionContractRefs),
 	}
 }

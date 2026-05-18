@@ -335,6 +335,12 @@ Caso: assess_agent_work_stop_agent
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-core-workflow
 Evidencia esperada: `AssessAgentWork` con verdict loop_detected/action stop_agent produce `AgentWorkAssessed`, `AgentStopRequested` y outbox `StopRuntimeAgent` con target `agent_launcher`.
+
+Caso: assess_agent_work_timeout_stop_agent
+Modulo: orquesta-core-workflow
+Comando: go test -count=1 ./modulos/orquesta-core-workflow -run TestHandleAssessAgentWorkCommandV0TimeoutPuedePararAgente
+Ultima ejecucion: 2026-05-15, ok
+Evidencia esperada: `AssessAgentWork` con verdict timeout/action stop_agent produce `AgentWorkAssessed`, `AgentStopRequested` y `StopRuntimeAgent` con reason_code `timeout`.
 Ultima ejecucion: 2026-05-05, ok, go test -count=1 ./modulos/orquesta-core-workflow
 Riesgos: La parada real pertenece al adaptador del puerto `agent_launcher`.
 ```

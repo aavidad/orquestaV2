@@ -39,7 +39,7 @@ func TestPrepareAppDirectorIntakeV0CreatesBrainstormRun(t *testing.T) {
 	if prepared.DirectorTask.TaskRef == "" || len(prepared.Run.Tasks) != 0 {
 		t.Fatalf("director_task no debe entrar en Run.Tasks: task=%+v run_tasks=%v", prepared.DirectorTask, prepared.Run.Tasks)
 	}
-	if prepared.DirectorTask.Capacity != orquestacoreworkflow.OrchestrationCapacityHighV0 {
+	if prepared.DirectorTask.Capacity != orquestacoreworkflow.OrchestrationCapacityXHighV0 {
 		t.Fatalf("capacity=%q", prepared.DirectorTask.Capacity)
 	}
 }
@@ -80,6 +80,37 @@ func TestPrepareAppDirectorIntakeV0PropagaPoliticaDePeticionEnSummary(t *testing
 	if !strings.Contains(prepared.DirectorTask.Summary, "request_kind=documentar_app") ||
 		!strings.Contains(prepared.DirectorTask.Summary, "execution_mode=debug") {
 		t.Fatalf("summary no transporta politica: %q", prepared.DirectorTask.Summary)
+	}
+}
+
+func TestPrepareAppDirectorIntakeV0DirectorNormalPuedeCrearManuales(t *testing.T) {
+	req := validFactoryAppSpecRequestForDirectorIntakeTestV0()
+	req.RequestKind = orquestafactory.RequestKindDocumentarAppV0
+	req.ExecutionMode = orquestafactory.ExecutionModeNormalV0
+	spec, issues := orquestafactory.SolicitarNuevaAppV0(req, time.Date(2026, 5, 10, 12, 0, 0, 0, time.UTC))
+	if len(issues) > 0 {
+		t.Fatalf("build spec: %+v", issues)
+	}
+
+	prepared, err := PrepareAppDirectorIntakeV0(PrepareAppDirectorIntakeRequestV0{AppSpec: spec})
+	if err != nil {
+		t.Fatalf("PrepareAppDirectorIntakeV0: %v", err)
+	}
+
+	if prepared.DirectorTask.Capacity != orquestacoreworkflow.OrchestrationCapacityXHighV0 {
+		t.Fatalf("capacity=%q", prepared.DirectorTask.Capacity)
+	}
+	for _, path := range []string{
+		"docs/manual_usuario.md",
+		"docs/manual_desarrollador.md",
+		"docs/manual_sistemas_deploy.md",
+		"docs/decisiones.md",
+		"docs/pruebas.md",
+		"docs/pendientes.md",
+	} {
+		if !directorIntakeStringInSetV0(prepared.DirectorTask.WriteSet, path) {
+			t.Fatalf("write_set no contiene %s: %+v", path, prepared.DirectorTask.WriteSet)
+		}
 	}
 }
 

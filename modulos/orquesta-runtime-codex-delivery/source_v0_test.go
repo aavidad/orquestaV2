@@ -97,6 +97,105 @@ func TestCodexDeliveryObservationSourceV0OmiteAgenteCerrado(t *testing.T) {
 	}
 }
 
+func TestCodexDeliveryObservationSourceV0WaitAgentRefsAcotaACKs(t *testing.T) {
+	scopedSpec := codexDeliverySpecWithRefsForTestV0(
+		"agent-ref-scoped-001",
+		"task-ref-scoped-001",
+		"ack-ref-scoped-001",
+	)
+	outOfScopeSpec := codexDeliverySpecWithRefsForTestV0(
+		"agent-ref-out-of-scope-001",
+		"task-ref-out-of-scope-001",
+		"ack-ref-out-of-scope-001",
+	)
+	outOfScopeAckPath := filepath.Join(t.TempDir(), orquestaruntimecodex.CodexAgentAckFileNameV0)
+	if err := os.WriteFile(outOfScopeAckPath, []byte(`{"schema_version":"codex_agent_ack.v0"}`), 0o600); err != nil {
+		t.Fatalf("write ack out of scope: %v", err)
+	}
+	store := &staticCodexReceiptStoreV0{
+		Descriptors: []CodexReceiptDescriptorV0{
+			{
+				DescriptorRef: "receipt-ref-out-of-scope-001",
+				Spec:          outOfScopeSpec,
+				AckPath:       outOfScopeAckPath,
+			},
+			{
+				DescriptorRef: "receipt-ref-scoped-001",
+				Spec:          scopedSpec,
+				AckPath:       writeCodexDeliveryAckForTestV0(t, scopedSpec, codexDeliveryAckForTestV0(scopedSpec)),
+			},
+		},
+	}
+	request := codexDeliveryRequestForTestV0(scopedSpec, nil)
+	request.Run.Agents = []string{outOfScopeSpec.RequestID, scopedSpec.RequestID}
+	request.Run.StartedAgents = []string{
+		outOfScopeSpec.RequestID,
+		" " + scopedSpec.RequestID + " ",
+		scopedSpec.RequestID,
+	}
+	request.WaitAgentRefs = []string{" " + scopedSpec.RequestID + " ", scopedSpec.RequestID}
+
+	observations, err := (CodexDeliveryObservationSourceV0{Store: store}).
+		BuildAgentDeliveryObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentDeliveryObservationsV0: %v", err)
+	}
+	if len(observations) != 1 ||
+		observations[0].AgentRef != scopedSpec.RequestID ||
+		observations[0].DeliveryRef != scopedSpec.AgentPacket.DeliveryRefs.AckRef {
+		t.Fatalf("observations=%+v", observations)
+	}
+	if len(store.LastRequest.StartedAgents) != 1 ||
+		store.LastRequest.StartedAgents[0] != scopedSpec.RequestID {
+		t.Fatalf("started_agents store=%+v", store.LastRequest.StartedAgents)
+	}
+}
+
+func TestCodexDeliveryObservationSourceV0WaitAgentRefsVacioMantieneRunCompleto(t *testing.T) {
+	firstSpec := codexDeliverySpecWithRefsForTestV0(
+		"agent-ref-legacy-a-001",
+		"task-ref-legacy-a-001",
+		"ack-ref-legacy-a-001",
+	)
+	secondSpec := codexDeliverySpecWithRefsForTestV0(
+		"agent-ref-legacy-b-001",
+		"task-ref-legacy-b-001",
+		"ack-ref-legacy-b-001",
+	)
+	store := &staticCodexReceiptStoreV0{
+		Descriptors: []CodexReceiptDescriptorV0{
+			{
+				DescriptorRef: "receipt-ref-legacy-a-001",
+				Spec:          firstSpec,
+				AckPath:       writeCodexDeliveryAckForTestV0(t, firstSpec, codexDeliveryAckForTestV0(firstSpec)),
+			},
+			{
+				DescriptorRef: "receipt-ref-legacy-b-001",
+				Spec:          secondSpec,
+				AckPath:       writeCodexDeliveryAckForTestV0(t, secondSpec, codexDeliveryAckForTestV0(secondSpec)),
+			},
+		},
+	}
+	request := codexDeliveryRequestForTestV0(firstSpec, nil)
+	request.Run.Agents = []string{firstSpec.RequestID, secondSpec.RequestID}
+	request.Run.StartedAgents = []string{firstSpec.RequestID, secondSpec.RequestID}
+	request.WaitAgentRefs = []string{" ", ""}
+
+	observations, err := (CodexDeliveryObservationSourceV0{Store: store}).
+		BuildAgentDeliveryObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentDeliveryObservationsV0: %v", err)
+	}
+	if len(observations) != 2 ||
+		!codexDeliveryObservationRefsForTestV0(observations, firstSpec.RequestID) ||
+		!codexDeliveryObservationRefsForTestV0(observations, secondSpec.RequestID) {
+		t.Fatalf("observations=%+v", observations)
+	}
+	if len(store.LastRequest.StartedAgents) != 2 {
+		t.Fatalf("started_agents store=%+v", store.LastRequest.StartedAgents)
+	}
+}
+
 func TestCodexDeliveryObservationSourceV0OmiteACKNoListoSinError(t *testing.T) {
 	spec := codexDeliverySpecForTestV0()
 	path := filepath.Join(t.TempDir(), orquestaruntimecodex.CodexAgentAckFileNameV0)
@@ -200,6 +299,22 @@ func codexDeliverySpecForTestV0() orquestaruntime.ExternalAgentLaunchSpecV0 {
 	}
 }
 
+func codexDeliverySpecWithRefsForTestV0(
+	agentRef string,
+	taskRef string,
+	ackRef string,
+) orquestaruntime.ExternalAgentLaunchSpecV0 {
+	spec := codexDeliverySpecForTestV0()
+	spec.RequestID = agentRef
+	spec.CorrelationID = "corr-" + agentRef
+	spec.AgentPacket.RequestID = agentRef
+	spec.AgentPacket.CorrelationID = spec.CorrelationID
+	spec.AgentPacket.Task.TaskRef = taskRef
+	spec.AgentPacket.Context.WorkOrderRef = taskRef
+	spec.AgentPacket.DeliveryRefs.AckRef = ackRef
+	return spec
+}
+
 func codexDeliveryAckForTestV0(
 	spec orquestaruntime.ExternalAgentLaunchSpecV0,
 ) orquestaruntimecodex.CodexAgentAckV0 {
@@ -247,6 +362,18 @@ func observationLeaksCodexDeliveryPathV0(
 	}, observation.EvidenceRefs...)
 	for _, value := range values {
 		if strings.Contains(value, path) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexDeliveryObservationRefsForTestV0(
+	observations []orquestacionnucleoapp.AgentDeliveryObservationV0,
+	agentRef string,
+) bool {
+	for _, observation := range observations {
+		if observation.AgentRef == agentRef {
 			return true
 		}
 	}

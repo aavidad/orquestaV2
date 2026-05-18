@@ -10,17 +10,48 @@ import (
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
+type waitAgentRefsDeliverySourceV0 struct {
+	Inner         orquestacionnucleoapp.AgentDeliveryObservationProviderPortV0
+	WaitAgentRefs []string
+}
+
+func drainDeliverySourceForWaitAgentRefsV0(
+	inner orquestacionnucleoapp.AgentDeliveryObservationProviderPortV0,
+	waitAgentRefs []string,
+) orquestacionnucleoapp.AgentDeliveryObservationProviderPortV0 {
+	if inner == nil || len(compactStringsV0(waitAgentRefs)) == 0 {
+		return inner
+	}
+	return waitAgentRefsDeliverySourceV0{
+		Inner:         inner,
+		WaitAgentRefs: compactStringsV0(waitAgentRefs),
+	}
+}
+
+func (source waitAgentRefsDeliverySourceV0) BuildAgentDeliveryObservationsV0(
+	ctx context.Context,
+	request orquestacionnucleoapp.AgentDeliveryObservationRequestV0,
+) ([]orquestacionnucleoapp.AgentDeliveryObservationV0, error) {
+	observations, err := source.Inner.BuildAgentDeliveryObservationsV0(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return drainObservationsForWaitAgentRefsV0(observations, source.WaitAgentRefs), nil
+}
+
 type DrainRunRequestV0 struct {
-	RunRef               string
-	OccurredAt           string
-	CorrelationID        string
-	MaxBursts            int
-	MaxStepsPerBurst     int
-	MaxDispatchesPerWait int
-	MaxCommands          int
-	MaxOutboxPerCycle    int
-	MaxDecisionCycles    int
-	MaxExternalWaits     int
+	RunRef                     string
+	OccurredAt                 string
+	CorrelationID              string
+	MaxBursts                  int
+	MaxStepsPerBurst           int
+	MaxDispatchesPerWait       int
+	MaxCommands                int
+	MaxOutboxPerCycle          int
+	MaxDecisionCycles          int
+	MaxExternalWaits           int
+	WaitAgentRefs              []string
+	OperationalDirectorPlanRef string
 }
 
 func (stack StackV0) DrainRunV0(
@@ -41,7 +72,7 @@ func (stack StackV0) DrainRunV0(
 		if err != nil {
 			return result, err
 		}
-		if !drainRunHasPendingExternalAgentsV0(loop.Run) || attempt > request.MaxExternalWaits {
+		if !drainRunHasPendingExternalAgentsV0(loop.Run, request.WaitAgentRefs) || attempt > request.MaxExternalWaits {
 			return result, nil
 		}
 		if stack.Ports.ExternalWaiter == nil {
@@ -55,6 +86,7 @@ func (stack StackV0) DrainRunV0(
 				LastResult:    loop,
 				CorrelationID: request.CorrelationID,
 				EvidenceRefs:  []string{"evidence-ref-app-stack-drain-wait"},
+				WaitAgentRefs: request.WaitAgentRefs,
 			},
 		)
 		if err != nil {
@@ -76,6 +108,8 @@ func normalizeDrainRunRequestV0(request DrainRunRequestV0) DrainRunRequestV0 {
 	request.RunRef = strings.TrimSpace(request.RunRef)
 	request.OccurredAt = strings.TrimSpace(request.OccurredAt)
 	request.CorrelationID = strings.TrimSpace(request.CorrelationID)
+	request.WaitAgentRefs = compactStringsV0(request.WaitAgentRefs)
+	request.OperationalDirectorPlanRef = strings.TrimSpace(request.OperationalDirectorPlanRef)
 	if request.OccurredAt == "" {
 		request.OccurredAt = "2026-05-10T12:00:00Z"
 	}
@@ -110,6 +144,9 @@ func (stack StackV0) applyDrainObservationsV0(
 ) (orquestacoreworkflow.OrchestrationRunV0, error) {
 	var run orquestacoreworkflow.OrchestrationRunV0
 	for _, observation := range observations {
+		if !drainObservationMatchesWaitAgentRefsV0(observation, request.WaitAgentRefs) {
+			continue
+		}
 		current, err := stack.Stores.RunStore.LoadRunV0(ctx, request.RunRef)
 		if err != nil {
 			return run, err
@@ -118,7 +155,7 @@ func (stack StackV0) applyDrainObservationsV0(
 			run = current
 			continue
 		}
-		command, err := drainObservationCommandV0(request, observation)
+		command, err := drainObservationCommandV0(request, current, observation)
 		if err != nil {
 			return run, err
 		}
@@ -138,7 +175,7 @@ func drainObservationAlreadyRegisteredV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	observation orquestacionnucleoapp.AgentDeliveryObservationV0,
 ) bool {
-	if strings.TrimSpace(observation.PhaseID) == string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0) {
+	if drainObservationIsTaskDeliveryV0(run, observation) {
 		return stringInDrainSetV0(run.Deliveries, observation.DeliveryRef)
 	}
 	return phaseArtifactInDrainSetV0(run.PhaseArtifacts, observation.ArtifactRef)
@@ -209,8 +246,10 @@ func drainObservationApplyErrorV0(
 
 func drainObservationCommandV0(
 	request DrainRunRequestV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
 	observation orquestacionnucleoapp.AgentDeliveryObservationV0,
 ) (orquestacoreworkflow.OrchestrationCommandV0, error) {
+	phaseID := drainObservationPhaseIDV0(run, observation)
 	meta := orquestacoreworkflow.OrchestrationCommandMetaV0{
 		CommandID:      "cmd-app-stack-drain-" + strings.TrimSpace(observation.DeliveryRef),
 		RunID:          request.RunRef,
@@ -219,10 +258,10 @@ func drainObservationCommandV0(
 		RequestedBy:    "orquesta-app-codex-stack-drain",
 		OccurredAt:     request.OccurredAt,
 	}
-	if strings.TrimSpace(observation.PhaseID) == string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0) {
+	if drainObservationIsTaskDeliveryV0(run, observation) {
 		return orquestacoreworkflow.NewRegisterDeliveryCommandV0(meta, orquestacoreworkflow.RegisterDeliveryCommandPayloadV0{
 			DeliveryRef:  observation.DeliveryRef,
-			PhaseID:      observation.PhaseID,
+			PhaseID:      phaseID,
 			TaskID:       observation.TaskID,
 			AgentRef:     observation.AgentRef,
 			Summary:      observation.Summary,
@@ -231,11 +270,35 @@ func drainObservationCommandV0(
 	}
 	return orquestacoreworkflow.NewRegisterPhaseArtifactCommandV0(meta, orquestacoreworkflow.RegisterPhaseArtifactCommandPayloadV0{
 		ArtifactRef:  observation.ArtifactRef,
-		PhaseID:      observation.PhaseID,
+		PhaseID:      phaseID,
 		AgentRef:     observation.AgentRef,
 		Summary:      observation.Summary,
 		EvidenceRefs: observation.EvidenceRefs,
 	})
+}
+
+func drainObservationIsTaskDeliveryV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	observation orquestacionnucleoapp.AgentDeliveryObservationV0,
+) bool {
+	taskRef := strings.TrimSpace(observation.TaskID)
+	for _, value := range run.Tasks {
+		if strings.TrimSpace(value) == taskRef {
+			return strings.TrimSpace(observation.DeliveryRef) != ""
+		}
+	}
+	return false
+}
+
+func drainObservationPhaseIDV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	observation orquestacionnucleoapp.AgentDeliveryObservationV0,
+) string {
+	phaseID := strings.TrimSpace(observation.PhaseID)
+	if phaseID != "" {
+		return phaseID
+	}
+	return strings.TrimSpace(string(run.CurrentPhase))
 }
 
 func drainProgressiveResultV0(
@@ -248,11 +311,70 @@ func drainProgressiveResultV0(
 	}
 }
 
-func drainRunHasPendingExternalAgentsV0(run orquestacoreworkflow.OrchestrationRunV0) bool {
+func drainRunHasPendingExternalAgentsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	waitAgentRefs []string,
+) bool {
+	if len(compactStringsV0(waitAgentRefs)) > 0 {
+		return drainRunHasPendingExternalAgentRefsV0(run, waitAgentRefs)
+	}
 	started := len(compactStringsV0(run.StartedAgents))
 	closed := len(compactStringsV0(run.Deliveries)) +
 		len(compactStringsV0(run.PhaseArtifacts)) +
 		len(compactStringsV0(run.FailedAgents)) +
+		len(compactStringsV0(run.LostAgents)) +
 		len(compactStringsV0(run.ConfirmedStoppedAgents))
 	return started > closed
+}
+
+func drainRunHasPendingExternalAgentRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	agentRefs []string,
+) bool {
+	started := compactStringsV0(run.StartedAgents)
+	delivered := compactStringsV0(run.DeliveredAgents)
+	failed := compactStringsV0(run.FailedAgents)
+	lost := compactStringsV0(run.LostAgents)
+	confirmedStopped := compactStringsV0(run.ConfirmedStoppedAgents)
+	for _, agentRef := range compactStringsV0(agentRefs) {
+		if !codexStackStringInSetV0(started, agentRef) {
+			continue
+		}
+		if codexStackStringInSetV0(delivered, agentRef) ||
+			codexStackStringInSetV0(failed, agentRef) ||
+			codexStackStringInSetV0(lost, agentRef) ||
+			codexStackStringInSetV0(confirmedStopped, agentRef) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func drainObservationsForWaitAgentRefsV0(
+	observations []orquestacionnucleoapp.AgentDeliveryObservationV0,
+	waitAgentRefs []string,
+) []orquestacionnucleoapp.AgentDeliveryObservationV0 {
+	waitAgentRefs = compactStringsV0(waitAgentRefs)
+	if len(waitAgentRefs) == 0 {
+		return observations
+	}
+	filtered := make([]orquestacionnucleoapp.AgentDeliveryObservationV0, 0, len(observations))
+	for _, observation := range observations {
+		if drainObservationMatchesWaitAgentRefsV0(observation, waitAgentRefs) {
+			filtered = append(filtered, observation)
+		}
+	}
+	return filtered
+}
+
+func drainObservationMatchesWaitAgentRefsV0(
+	observation orquestacionnucleoapp.AgentDeliveryObservationV0,
+	waitAgentRefs []string,
+) bool {
+	waitAgentRefs = compactStringsV0(waitAgentRefs)
+	if len(waitAgentRefs) == 0 {
+		return true
+	}
+	return codexStackStringInSetV0(waitAgentRefs, observation.AgentRef)
 }

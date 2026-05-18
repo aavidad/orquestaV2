@@ -86,7 +86,8 @@ func assessmentReplanProjectionReadyV0(
 	agentRef := strings.TrimSpace(projection.AgentRequestID)
 	return agentRef != "" &&
 		stringInSetV0(run.StoppedAgents, agentRef) &&
-		stringInSetV0(run.ConfirmedStoppedAgents, agentRef)
+		(stringInSetV0(run.ConfirmedStoppedAgents, agentRef) ||
+			stringInSetV0(run.LostAgents, agentRef))
 }
 
 func assessmentReplanTaskRefV0(

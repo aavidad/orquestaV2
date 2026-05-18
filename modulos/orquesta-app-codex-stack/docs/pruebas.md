@@ -25,6 +25,28 @@ Cobertura Go actual:
 - `TestDefaultDomainWorkArtifactSubmissionBuilderV0NoFiltraPathsComoPayloadRefs`
   valida que el builder no convierte rutas de `ack.files` en `payload_refs`
   invalidas ni filtra paths internos al contrato de dominio;
+- `TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaDocumentPlanOPES`
+  valida que `plan_tema` se entrega como `document_plan`, usa
+  `content_type=application/json` y conserva `sections`/`deliverables` como
+  JSON validable;
+- `TestValidateDomainWorkDeliveryQualityV0AceptaDocumentPlanValido` y
+  `TestValidateDomainWorkDeliveryQualityV0RechazaDocumentPlanIncompleto`
+  validan que el stack no acepta planes documentales incompletos;
+- `TestCodexStackV0OPESPlanTemaDeliveryEnviaDocumentPlan` valida el flujo
+  vertical corto: cambio externo `plan_tema`, drenaje, ACK de agente y envio de
+  `document_plan` al puerto `DomainWork`.
+- `TestCodexStackV0OPESPlanTemarioOperadoresSupervisorXHighEnviaDocumentPlan`
+  valida el smoke local completo para un job OPES `plan_temario` de operadores:
+  el bridge crea `/api/v0/external-work/run`, `POST /api/v0/runs/supervise`
+  empuja la run, el agente fake entrega `document_plan`, el puente envia
+  `submit_artifact` a `DomainWork`, el paquete de agente marca `capacity=xhigh`
+  y el wrapper Codex materializado incluye `model_reasoning_effort="xhigh"`;
+  tambien comprueba que el contexto del agente contiene la regla OPES de
+  derivacion descendente A1/A2 o A1 -> B/C1 -> C2/AP y el metodo de
+  asimilacion.
+- `DrainRunV0` ejecuta `submitPendingDomainWorkArtifactsV0` tambien despues de
+  `ContinueAppDirectorV0`; asi una entrega registrada dentro del mismo ciclo no
+  queda como run `quiescent` antes de enviar el artefacto al conector de dominio.
 - las refs publicas del paquete de agente son neutrales y no filtran el
   conector real;
 - dos solicitudes con el mismo nombre visible no colisionan porque el intake
@@ -46,6 +68,10 @@ Cobertura Go actual:
   flujo vertical completo: entrega registrada, revision con evidencia real,
   `changes_requested`, `RequestRework`, `retry_task`, decision de capacidad y
   arranque de un nuevo agente sin intervencion manual del test.
+- El stack cablea `OperationalPlanStateWriter` y `OperationalPlanStateStore`
+  hacia `ContinueAppDirectorV0`; la prueba focal del state vive en
+  `orquesta-app-director-service` y `TestOperationalPlanStateStoreV0UsaStoreExplicitoOWriterLegible`
+  cubre el fallback de composicion.
 - `TestNuevaAppWebCodexStackRealReviewReworkOptInV0` queda desactivado por
   defecto y valida con Codex reales el ciclo: app multiagente, entregas de
   programacion, revision `changes_requested` por evidencia real de fichero
@@ -68,6 +94,22 @@ Cobertura Go actual:
   y valida con Codex real el ciclo: agente vivo, `POST /api/v0/server/shutdown`
   con `forced=false`, request de shutdown, ACK de checkpoint y registro en una
   segunda llamada.
+- `TestCodexSupervisorV0LanzaPrimeroYContinuaHastaDoneV0` fija el contrato
+  minimo de supervisor Codex: primer tick `LaunchV0`, ticks siguientes
+  `ContinueV0(ctx, "sigue")` y parada al observar `done`.
+- `TestCodexSupervisorV0CortaPorMaxTicksSinDoneV0` fija que `pending`/`stopped`
+  no cierran la sesion y que el supervisor corta por `max_ticks` si no llega
+  `done`.
+- `TestCodexSupervisorStackLifecycleV0SupervisaRunExistenteSinCanalParaleloV0`
+  prueba el adaptador real de stack sobre una run ya creada: `SuperviseCodexV0`
+  hace `launch` y luego `continue`, ambos por `DrainRunV0`, sin relanzar agentes.
+- `TestCodexSupervisorStackLifecycleV0UsaSupervisorGlobalExistenteV0` prueba el
+  camino sin `RunRef`, que reutiliza `RunGlobalSupervisorV0` y la cola global.
+- `TestCodexSupervisorRuntimeStateFromLoopV0MapeaEstadosDelNucleoV0` fija la
+  traduccion de estados del loop del nucleo a snapshot del supervisor Codex.
+- `TestCodexStackRunSupervisorAPIV0EmpujaRunExistenteSinRelanzarAgentes` prueba
+  `POST /api/v0/runs/supervise` sobre `stack.Handler`: reentra por el adaptador
+  real, conserva `run_ref`, expone evidencia y no relanza agentes ya vivos.
 
 Guardas esperadas para pruebas futuras:
 
@@ -91,6 +133,10 @@ Guardas esperadas para pruebas futuras:
   externos pendientes o ACKs completados sin registrar, porque eso falsea el
   verificador real de write-set;
 - errores publicos sin paths locales, tokens, prompts ni transcripts.
+- el adaptador de `CodexSupervisorAgentLifecyclePortV0.ContinueV0` usa el manejo
+  normal de agentes de Orquesta: tick/drain/replan/outbox `LaunchRuntimeAgent`,
+  registry, ACK y progreso. No debe crear un canal paralelo al dispatcher
+  existente.
 
 Smoke real review/rework opt-in:
 
@@ -821,3 +867,118 @@ Evidencia esperada:
   exige validar contexto no truncado o justificar materializacion externa.
 - si el paquete externo excede el presupuesto total, queda una entrada
   `external_context_budget` truncada para impedir cierres silenciosos.
+
+Validacion recuperacion neutral DomainWork/ACK 2026-05-14:
+
+```bash
+go test -count=1 ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server
+```
+
+Resultado local: `ok`.
+
+Casos cubiertos:
+
+- `TestCodexStackV0OPESExternalWorkRecuperaEntregaSinACKConArtefactoValido`;
+- `TestDomainWorkRecoveryArtifactFilesV0AceptaDirectorioPermitido`;
+- `TestDomainWorkRecoveryDirectSubmitEligibleV0RechazaAgenteAssessment`;
+- `TestDomainWorkRecoveryAckFailureDetectaSandboxEnStderr`;
+- `TestCodexStackV0RunGlobalTickRecuperaDomainWorkParadoAntesFiltroControl`.
+
+Evidencia:
+
+- la recuperacion solo acepta artefactos reales bajo write-set y contrato
+  `ApplyExternalDomainWorkV0`;
+- el ACK sintetico valida contra la misma spec que un ACK escrito por agente;
+- el ledger evita replay por `idempotency_key`;
+- un agente parado/terminal puede entregar por `direct submit` si el artefacto
+  es valido y el ACK fallo por sandbox;
+- los agentes de assessment no pueden usar esta ruta de entrega directa.
+
+Smoke real OPES 2026-05-14:
+
+- Orquesta server vivo en la run
+  `/home/alberto/Trabajo/OPES/opes-uso/runs/temario_psicologia_autonomo_20260514T204913`;
+- OPES API y program-runner siguen vivos;
+- el bridge `opes-drain-once` sigue enviando jobs pendientes a Orquesta;
+- el job `d9e501a5352f011a0e8fd6d9f67cac16` paso de pendiente a completado
+  tras recuperar una entrega valida sin ACK escrito;
+- nuevos jobs (`a178cbdda95b5f1f8d52030b090c49b2`,
+  `586320266a25fc2b4d59ee23e0c2c9a3`,
+  `ab6200e9bd75cd6f92b6e2d9c40c6e41`) quedaron reenviados por el bridge para
+  continuar el temario.
+
+Validacion runner generico de puentes externos 2026-05-14:
+
+```bash
+go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector ./modulos/orquesta-app-codex-stack
+```
+
+Resultado local: `ok`.
+
+Casos cubiertos:
+
+- `external_bridge_loop` no ejecuta ticks si esta desactivado;
+- un error transitorio de tick se registra y no tumba el servidor;
+- `opes_bridge_loop` usa el fallback del server para `ORQUESTA_BASE_URL`;
+- el ledger generico evita reenviar el mismo job externo OPES pendiente;
+- OPES queda como adaptador opt-in y no entra en el core.
+
+Revalidacion de drenaje por microtarea durable 2026-05-14:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack \
+  -run 'TestCodexStackV0GatewayAPIYWebArrancanEquipoDirectorConRuntimeInyectado|TestCodexStackV0CleanupRuntimeTrasACKRegistrado|TestDrainRunV0IgnoraArtefactoYaRegistradoPorLoopGestionado'
+```
+
+Resultado local: `ok`.
+
+Evidencia:
+
+- los ACK de director inicial siguen entrando como `PhaseArtifactRegistered`;
+- el cleanup de runtime se dispara tras ACK registrado;
+- el drenaje idempotente ignora ACK ya reflejado por el loop gestionado.
+
+Validacion normalizacion `content_block` OPES 2026-05-15:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack \
+  -run 'TestDefaultDomainWorkArtifactSubmissionBuilderV0NormalizaSourceRefsRicosContentBlockOPES|TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaTopicSummaryOPES'
+
+go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server \
+  ./modulos/orquesta-app-codex-stack ./modulos/orquesta-opes-bridge \
+  ./modulos/orquesta-opes-connector
+```
+
+Resultado local: `ok`.
+
+Smoke real:
+
+- job OPES `6e7468ddeb377d6151f8ad4974113c09` estaba `pending` con ACK y
+  contenido escrito, pero sin artefacto OPES por `source_refs` ricos;
+- tras compilar y reiniciar Orquesta, el mismo run entrego por DomainWork sin
+  tocar OPES a mano;
+- OPES creo el artefacto `0c5d157e88ada08dcc60cdc2dfd41fd6` y marco el job
+  como `completed`;
+- el bloque vivo creado en OPES es `ebfae56a4741bd3f0e0e3470bf849d0d`, tipo
+  `doctrine`, capitulo `37274eef9db47452a80acff3bedcf832`, unas 2627 palabras.
+
+Validacion tolerancia de nombres OPES 2026-05-18:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack \
+  -run 'TestDefaultDomainWorkArtifactSubmissionBuilderV0AceptaEnvelopeConNombreLibreOPES|TestDefaultDomainWorkArtifactSubmissionBuilderV0NormalizaSourceRefsRicosContentBlockOPES|TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaVisualAssetOPES'
+
+go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector
+```
+
+Resultado local: `ok`.
+
+Cobertura:
+
+- el `artifact_type` del sobre de agente puede llamarse de otra forma si el
+  job externo ya fija el contrato esperado;
+- aliases como `tema_id`, `id_capitulo`, `titulo`, `contenido`, `idioma` y
+  `fuentes` se normalizan a `topic_id`, `chapter_id`, `title`, `body`,
+  `language_code` y `source_refs`;
+- `topic_summary` conserva `markdown` para no romper contratos existentes;
+- la entrega sigue bloqueada si el payload no es materializable.

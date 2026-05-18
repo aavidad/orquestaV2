@@ -13,6 +13,16 @@ func runPreparedAppLoopV0(
 ) (appRunnerLoopResultV0, error) {
 	service := runPreparedAppServiceV0(request, ports)
 	loopRequest := runPreparedAppLoopRequestV0(request, ports)
+	return runPreparedAppLoopAcrossPlanPhasesV0(ctx, request, ports, service, loopRequest)
+}
+
+func runPreparedSingleAppLoopV0(
+	ctx context.Context,
+	request RunPreparedAppOrchestrationRequestV0,
+	ports RunPreparedAppOrchestrationPortsV0,
+	service orquestacionnucleoapp.ServiceV0,
+	loopRequest orquestacionnucleoapp.ProgressiveLoopRequestV0,
+) (appRunnerLoopResultV0, error) {
 	if request.UseAutonomousDirectorLoop {
 		return runPreparedAutonomousAppLoopV0(ctx, request, ports, service, loopRequest)
 	}

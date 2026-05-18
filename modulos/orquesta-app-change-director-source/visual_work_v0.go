@@ -1,16 +1,14 @@
 package orquestaappchangedirectorsource
 
-import (
-	"strings"
-
-	orquestaappchange "orquesta/modulos/orquesta-app-change"
-)
+import orquestaappchange "orquesta/modulos/orquesta-app-change"
 
 func appChangeIsVisualExternalWorkV0(
 	request orquestaappchange.AppChangeRequestV0,
 ) bool {
-	return appChangeHasExternalWorkV0(request) &&
-		strings.TrimSpace(request.ExternalWork.WorkKind) == "generate_visual_asset"
+	return appChangeExternalWorkKindHasClassV0(
+		request,
+		appChangeExternalWorkKindVisualV0,
+	)
 }
 
 func appChangeVisualTaskSummaryV0() string {
@@ -33,9 +31,12 @@ func appChangeVisualWorkCriteriaV0(
 	}
 }
 
-func appChangeVisualRequiredTestsV0() []string {
+func appChangeVisualRequiredTestsV0(
+	request orquestaappchange.AppChangeRequestV0,
+) []string {
+	scope := appChangeExternalWorkTitleScopeV0(request.ExternalWork)
 	return []string{
-		"validar contrato visual OPES",
+		"validar contrato visual " + scope,
 		"validar formato visual solicitado",
 		"validar SVG seguro si format=svg",
 		"validar titulo, caption y alt_text",

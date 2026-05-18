@@ -18,7 +18,7 @@ import (
 
 var _ orquestaappcodexstack.OutboxLedgerPortV0 = (*FileOutboxLedgerV0)(nil)
 
-func TestFileOutboxLedgerV0RecuperaPendingClaimedYAckedTrasRecrearInstancia(t *testing.T) {
+func TestFileOutboxLedgerV0ReabreClaimSinAckTrasRecrearInstancia(t *testing.T) {
 	dir := t.TempDir()
 	ledger := newFileOutboxLedgerForTestV0(t, dir)
 	messages := validOutboxMessagesV0(t)
@@ -60,7 +60,7 @@ func TestFileOutboxLedgerV0RecuperaPendingClaimedYAckedTrasRecrearInstancia(t *t
 	}
 
 	reclaimed, dispatchIssues := reopened.ClaimOutboxDispatchV0(claim)
-	if len(dispatchIssues) != 0 || !reclaimed.AlreadyClaimed {
+	if len(dispatchIssues) != 0 || !reclaimed.Claimed || reclaimed.AlreadyClaimed {
 		t.Fatalf("reclaim result=%+v issues=%+v", reclaimed, dispatchIssues)
 	}
 	ackedClaim, dispatchIssues := reopened.ClaimOutboxDispatchV0(claimFromMessageV0(messages[1]))

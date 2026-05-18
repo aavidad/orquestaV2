@@ -64,6 +64,82 @@ func TestCodexProgressReportWithProcessFailureContextV0ClasificaNoACKSinLogs(t *
 	}
 }
 
+func TestCodexProgressReportWithProcessFailureContextV0NoACKConArtefactoRequiereValidacion(t *testing.T) {
+	projectDir := t.TempDir()
+	spec := codexDeliverySpecForTestV0()
+	spec.AgentPacket.Task.WriteSet = []string{"external/opes/topic"}
+	if err := os.MkdirAll(filepath.Join(projectDir, "external/opes"), 0o700); err != nil {
+		t.Fatalf("mkdir write-set: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(projectDir, "external/opes/topic"),
+		[]byte(`{"artifact_type":"topic_expansion_package"}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	report := validCodexProgressFailureReportForTestV0()
+
+	got := codexProgressReportWithProcessFailureContextV0(
+		CodexReceiptDescriptorV0{
+			AckPath:        filepath.Join(t.TempDir(), orquestaruntimecodex.CodexAgentAckFileNameV0),
+			ProjectWorkDir: projectDir,
+			Spec:           spec,
+		},
+		report,
+	)
+
+	if !got.DecisionRequired ||
+		got.Summary != "Proceso detenido sin ACK pero con artefacto en write-set; requiere validacion." ||
+		!stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-no-ack") ||
+		!stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-artifact-without-ack") {
+		t.Fatalf("report=%+v", got)
+	}
+	if got.BudgetStatus != "" || got.BudgetReason != "" {
+		t.Fatalf("artefacto sin ACK no debe marcar presupuesto: %+v", got)
+	}
+	if issues := orquestaruntime.ValidateAgentProgressReportV0(got); len(issues) > 0 {
+		t.Fatalf("progress report invalido: %+v", issues)
+	}
+}
+
+func TestCodexProgressReportWithProcessFailureContextV0StalledConArtefactoRequiereValidacion(t *testing.T) {
+	projectDir := t.TempDir()
+	spec := codexDeliverySpecForTestV0()
+	spec.AgentPacket.Task.WriteSet = []string{"external/opes/topic"}
+	if err := os.MkdirAll(filepath.Join(projectDir, "external/opes"), 0o700); err != nil {
+		t.Fatalf("mkdir write-set: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(projectDir, "external/opes/topic"),
+		[]byte(`{"artifact_type":"topic_expansion_package"}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	report := validCodexProgressFailureReportForTestV0()
+	report.Status = orquestaruntime.AgentStalledV0
+
+	got := codexProgressReportWithProcessFailureContextV0(
+		CodexReceiptDescriptorV0{
+			AckPath:        filepath.Join(t.TempDir(), orquestaruntimecodex.CodexAgentAckFileNameV0),
+			ProjectWorkDir: projectDir,
+			Spec:           spec,
+		},
+		report,
+	)
+
+	if !got.DecisionRequired ||
+		got.Summary != "Proceso sin ACK pero con artefacto en write-set; requiere validacion antes de replanificar." ||
+		!stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-no-ack") ||
+		!stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-artifact-without-ack") {
+		t.Fatalf("report=%+v", got)
+	}
+	if issues := orquestaruntime.ValidateAgentProgressReportV0(got); len(issues) > 0 {
+		t.Fatalf("progress report invalido: %+v", issues)
+	}
+}
+
 func TestCodexProgressFailureClassFromDescriptorV0ClasificaSenalesCompactas(t *testing.T) {
 	tests := []struct {
 		name    string

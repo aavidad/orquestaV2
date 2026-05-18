@@ -30,6 +30,10 @@ type EventSinkPortV0 interface {
 	) error
 }
 
+type RunEventReaderPortV0 interface {
+	LoadRunEventsV0(ctx context.Context, runRef string) ([]orquestacoreworkflow.OrchestrationEventV0, error)
+}
+
 type CandidateProviderPortV0 interface {
 	BuildSchedulerCandidatesV0(
 		ctx context.Context,
@@ -46,6 +50,7 @@ type SchedulerCandidateRequestV0 struct {
 	CorrelationID    string
 	EvidenceRefs     []string
 	PreviousDecision string
+	WaitAgentRefs    []string
 }
 
 type SchedulerCandidateSetV0 struct {
@@ -79,6 +84,7 @@ type SupervisedBurstRequestV0 struct {
 	MaxSteps      int
 	CorrelationID string
 	EvidenceRefs  []string
+	WaitAgentRefs []string
 }
 
 type SupervisedBurstResultV0 struct {

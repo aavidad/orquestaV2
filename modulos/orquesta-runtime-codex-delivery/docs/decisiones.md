@@ -1,6 +1,49 @@
 # Decisiones: orquesta-runtime-codex-delivery
 
 ```text
+Fecha: 2026-05-15
+Decision: `stalled` corto es telemetria, no decision automatica.
+Motivo: en pruebas reales con agentes `xhigh`, algunos procesos pasan varios
+ticks sin escribir ACK ni artefactos aunque sigan pensando. Si cada `stalled`
+genera pregunta al director, la web y el director reciben ruido y Orquesta
+parece rota antes de que haya evidencia de fallo real.
+Alternativas:
+  - Subir mucho `stalled_ticks`: descartado porque oculta senal temprana para
+    estadisticas.
+  - Mantener pregunta para todo stalled: descartado porque reintroduce bucles de
+    supervision.
+  - Separar telemetria de decision: aceptado.
+Impacto: `AgentStalledV0` se emite para estadisticas, pero solo exige decision
+si viene con `DecisionRequired` por presupuesto/contexto, si escala a
+`loop_detected`, si el proceso se observa parado o si hay no-actividad real
+fuera de presupuesto. El nucleo puede mostrar stalled sin tratarlo como alerta
+fuerte.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-15
+Decision: Separar actividad fisica de logs y accion semantica repetida.
+Motivo: en una prueba real el director genero los manuales pedidos, pero quedo
+vivo repitiendo el mismo diff sin escribir `agent_ack.json`. El progreso por
+tamano/modtime de logs lo clasificaba como activo aunque no producia trabajo
+nuevo. Esto reproduce el patron de v1/v2: gastar cuota en bucles que parecen
+actividad.
+Alternativas:
+  - Bajar timeouts globales: descartado porque corta agentes lentos que si
+    estan trabajando.
+  - Tratar cualquier log largo como progreso valido: descartado porque oculta
+    bucles de diff/salida repetida.
+  - Anadir firma compacta de accion en el conector Codex: aceptado.
+Impacto: `CodexProgressSampleV0` conserva `Signature` para actividad real de
+ficheros, y anade `ActionSignature` para detectar la misma accion compacta
+repetida mientras crece el log. Si se repite hasta el umbral, el reporte pasa a
+`loop_detected` y el nucleo puede parar el agente. No se exponen rutas,
+transcripts ni detalles de proveedor/modelo; la firma es hash compacto.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-12
 Decision: Los descriptors ya reflejados se omiten antes de leer ACK o verificar
 worktree.
@@ -17,6 +60,25 @@ Alternativas:
 Impacto: `CodexDeliveryObservationSourceV0` usa el `ack_ref` del descriptor
 para omitir deliveries/phase artifacts ya reflejados sin tocar filesystem ni
 releer ACK. Las entregas nuevas siguen verificando write-set estricto.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-15
+Decision: `over_budget_no_activity` no queda suprimido por un assessment
+`stalled` previo.
+Motivo: el deduplicador de progreso evita repetir la misma pregunta al
+director, pero esa proteccion no puede tapar una escalada posterior de
+presupuesto. Si un agente ya fue marcado como `stalled` y despues supera el
+limite sin actividad, Orquesta debe publicar una nueva observacion para que el
+director pueda emitir `timeout/stop_agent`.
+Alternativas: borrar todos los assessments previos; ignorar deduplicacion;
+subir limites de actividad. Borrar historia pierde trazabilidad, ignorar
+deduplicacion genera ruido, y subir limites oculta agentes perdidos.
+Impacto: `codexProgressReportAlreadyHandledV0` solo considera tratado un
+`over_budget_no_activity` si el agente ya esta parado, confirmado, fallido o
+perdido. El conector mantiene refs compactas y no expone logs, HOME, proveedor,
+modelo ni rutas.
 Estado: aceptada.
 ```
 
@@ -435,6 +497,21 @@ Impacto: el adaptador convierte stderr de capacidad limitada en
 `AgentProgressReportV0` con `budget_status=capacity_limited`, resumen neutral,
 evidencia compacta y sin filtrar proveedor, modelo, HOME, rutas ni stderr. La
 decision posterior queda para director/scheduler mediante contratos publicos.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-14
+Decision: La clasificacion delivery vs artefacto no depende solo de la fase.
+Motivo: Orquesta ya puede tener microtareas durables en documentacion,
+integracion o revision, pero los agentes directores tambien llevan `task_ref`
+en su paquete sin que eso sea una microtarea del run. Decidir solo por fase o
+solo por `task_id` mezcla dos contratos distintos.
+Impacto: `CodexDeliveryObservationSourceV0` sigue exponiendo `delivery_ref`,
+`artifact_ref`, `task_id` y `phase_id` compactos; el provider del nucleo
+registra `DeliveryRegistered` solo si `task_id` existe en `run.Tasks`, y
+`PhaseArtifactRegistered` si el ACK pertenece a una fase sin microtarea
+durable.
 Estado: aceptada.
 ```
 

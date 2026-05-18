@@ -99,6 +99,23 @@ Impacto: la fuente anade criterios y pruebas para validar granularidad
 editorial coherente. Orquesta solo debe pedir division adicional a OPES si el
 job excede contexto, trazabilidad o capacidad de revision.
 
+## Planificacion documental como contrato propio
+
+Decision: `plan_tema`, `plan_temario` y `plan_documento` no se tratan como
+redaccion ni como trabajo generico. La fuente crea una tarea de planificacion
+que debe devolver `artifact_type=document_plan` compatible con
+`DomainDocumentPlanV0`.
+
+Motivo: OPES no tiene juicio propio; Orquesta/director debe pensar el plan antes
+de pedir redaccion, revision, visuales, ensamblado o exportacion. Si el plan
+entra como `work_delivery` generico, no hay forma fiable de validar secciones,
+entregables, criterios de calidad ni pasos posteriores.
+
+Impacto: la tarea exige secciones, entregables, criterios y revisiones
+ejecutables, y declara explicitamente que no se redacta el documento final en
+esa fase. OPES conserva su dominio y Orquesta conserva el juicio de
+orquestacion.
+
 ## Trabajo externo sin write-set local
 
 Decision: Un `external_work` puede crear microtarea aunque

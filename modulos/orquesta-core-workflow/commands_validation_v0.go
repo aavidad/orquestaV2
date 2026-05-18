@@ -109,6 +109,9 @@ func validateExtendedCommandPayloadV0(command OrchestrationCommandV0) error {
 	case OrchestrationCommandRegisterAgentFailedV0:
 		_, err := decodeRegisterAgentFailedCommandPayloadV0(command.Payload)
 		return err
+	case OrchestrationCommandRegisterAgentLostV0:
+		_, err := decodeRegisterAgentLostCommandPayloadV0(command.Payload)
+		return err
 	case OrchestrationCommandRegisterAgentLeaseExpiredV0:
 		_, err := decodeRegisterAgentLeaseExpiredCommandPayloadV0(command.Payload)
 		return err

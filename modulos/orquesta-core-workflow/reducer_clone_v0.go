@@ -13,6 +13,7 @@ func cloneRunForReducerV0(run OrchestrationRunV0) OrchestrationRunV0 {
 	next.Agents = cloneStringsV0(run.Agents)
 	next.StartedAgents = cloneStringsV0(run.StartedAgents)
 	next.FailedAgents = cloneStringsV0(run.FailedAgents)
+	next.LostAgents = cloneStringsV0(run.LostAgents)
 	next.StoppedAgents = cloneStringsV0(run.StoppedAgents)
 	next.AgentStopRequests = cloneStringsV0(run.AgentStopRequests)
 	next.ConfirmedStoppedAgents = cloneStringsV0(run.ConfirmedStoppedAgents)

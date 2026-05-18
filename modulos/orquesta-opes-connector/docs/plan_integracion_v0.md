@@ -2,21 +2,27 @@
 
 Fecha: 2026-05-13.
 
-## Propuesta de corte
+## Corte vigente
 
-La integracion debe seguir siendo opt-in. El primer corte implementa REST para
-crear jobs y enviar artefactos sin acoplar OPES al nucleo de Orquesta.
+La integracion sigue siendo opt-in. El corte vigente implementa REST para
+consultar jobs, leer bloques publicos de tema, crear jobs y enviar artefactos
+sin acoplar OPES al nucleo de Orquesta.
 
-## Cortes propuestos
+## Cortes y estado
 
-1. Documentar contrato OPES-Orquesta en Orquesta.
-2. Mantener `orquesta-domain-work` como contrato generico sin semantica OPES.
-3. Crear el modulo `orquesta-opes-connector`.
-4. Implementar adaptador REST configurable para jobs y artefactos.
-5. En corte posterior, cablear el adaptador desde stack/MCP/web si procede.
-6. En corte posterior, anadir MCP si aporta ventaja frente a REST.
+1. Cerrado: documentar contrato OPES-Orquesta en Orquesta.
+2. Cerrado: mantener `orquesta-domain-work` como contrato generico sin
+   semantica OPES.
+3. Cerrado: crear el modulo `orquesta-opes-connector`.
+4. Cerrado: implementar adaptador REST configurable para jobs, bloques publicos
+   de tema
+   y artefactos.
+5. Cerrado para stack/HTTP actual: cablear el adaptador por
+   `ORQUESTA_OPES_BASE_URL` y el tool generico `orquesta.domain_work.v0`.
+6. Pendiente opcional: anadir cliente MCP especifico contra OPES si aporta
+   ventaja frente a REST.
 
-## Criterios de aceptacion del futuro conector
+## Criterios de aceptacion del conector
 
 - No accede a DB, ficheros ni rutas internas de OPES.
 - No hardcodea SQLite, Postgres ni ningun backend.
@@ -31,9 +37,14 @@ crear jobs y enviar artefactos sin acoplar OPES al nucleo de Orquesta.
 
 ## Riesgos abiertos
 
-- REST queda elegido para la primera implementacion; MCP queda pendiente.
-- Falta definir donde se configuraran URL, credenciales y timeouts.
-- Falta decidir como se representara `RegisterDelivery` en el flujo actual.
+- REST queda elegido como ruta productiva actual; MCP especifico de OPES queda
+  pendiente solo si hace falta frente al tool generico `orquesta.domain_work.v0`.
+- La URL y timeout REST se configuran por composicion con
+  `ORQUESTA_OPES_BASE_URL`, `ORQUESTA_OPES_TIMEOUT_SECONDS` y
+  `ORQUESTA_OPES_DEFAULT_MAX_ATTEMPTS`.
+- `RegisterDelivery` se representa hacia OPES mediante
+  `DomainWorkArtifactSubmissionV0` y `POST /api/jobs/{id}/artifacts`, con
+  ledger idempotente en el stack.
 - Falta validar el tratamiento i18n si el conector expone texto visible en UI o
   CLI.
 

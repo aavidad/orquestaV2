@@ -39,9 +39,11 @@ func TestAppChangeAPIDelegaEnMCPRequestChangeSinCmdDBRuntimeV0(t *testing.T) {
 func TestRunControlYRunQueueAPIDeleganEnMCPPortsV0(t *testing.T) {
 	control := &recordingRunControlExecutorV0{}
 	queue := &recordingRunQueuePriorityExecutorV0{}
+	supervisor := &recordingRunSupervisorExecutorV0{}
 	handler := NewHTTPHandlerV0(ConfigV0{
 		RunControl:       control,
 		RunQueuePriority: queue,
+		RunSupervisor:    supervisor,
 		Timeout:          time.Second,
 	})
 
@@ -70,6 +72,20 @@ func TestRunControlYRunQueueAPIDeleganEnMCPPortsV0(t *testing.T) {
 		queue.Input.Action != "set_priority" ||
 		queue.Input.PriorityScore != 75 {
 		t.Fatalf("queue status=%d input=%+v body=%s", queueRec.Code, queue.Input, queueRec.Body.String())
+	}
+
+	supervisorRec := httptest.NewRecorder()
+	supervisorReq := httptest.NewRequest(http.MethodPost, "/api/v0/runs/supervise", strings.NewReader(`{
+		"run_ref":"run-app-gateway-control-001",
+		"max_ticks":2
+	}`))
+	supervisorReq.Header.Set("Content-Type", "application/json")
+	handler.ServeHTTP(supervisorRec, supervisorReq)
+
+	if supervisorRec.Code != http.StatusOK ||
+		supervisor.Input.RunRef != "run-app-gateway-control-001" ||
+		supervisor.Input.MaxTicks != 2 {
+		t.Fatalf("supervisor status=%d input=%+v body=%s", supervisorRec.Code, supervisor.Input, supervisorRec.Body.String())
 	}
 }
 

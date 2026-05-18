@@ -3,6 +3,7 @@ package orquestacoreworkflow
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -42,6 +43,82 @@ func TestWorkflowTaskV0KeepsFunctionNameOnlyRefCompatible(t *testing.T) {
 	}
 	if got.FunctionContractRefs[0].ContractRef != "" || got.FunctionContractRefs[0].FunctionName != "NewWorkflowTaskV0" {
 		t.Fatalf("function_contract_refs=%+v", got.FunctionContractRefs)
+	}
+}
+
+func TestWorkflowTaskV0AcceptsNeutralLineageMetadata(t *testing.T) {
+	task := validWorkflowTaskV0()
+	task.ParentTaskRef = " task-parent-001 "
+	task.CohortRef = " cohort-wave-001 "
+	task.WaveRef = " wave-001 "
+	task.DelegationDepth = 2
+	task.MaxChildAgents = 3
+	task.ChildTaskRefs = []string{" task-child-001 ", "task-child-002"}
+
+	got, err := NewWorkflowTaskV0(task)
+	if err != nil {
+		t.Fatalf("NewWorkflowTaskV0 lineage metadata: %v", err)
+	}
+	if got.ParentTaskRef != "task-parent-001" ||
+		got.CohortRef != "cohort-wave-001" ||
+		got.WaveRef != "wave-001" ||
+		got.DelegationDepth != 2 ||
+		got.MaxChildAgents != 3 ||
+		!reflect.DeepEqual(got.ChildTaskRefs, []string{"task-child-001", "task-child-002"}) {
+		t.Fatalf("lineage metadata not normalized: %+v", got)
+	}
+}
+
+func TestValidateWorkflowTaskV0RejectsInvalidLineageMetadata(t *testing.T) {
+	cases := map[string]struct {
+		mutate func(*WorkflowTaskV0)
+		field  string
+	}{
+		"self_parent": {
+			mutate: func(task *WorkflowTaskV0) { task.ParentTaskRef = task.TaskID },
+			field:  "parent_task_ref",
+		},
+		"parent_ref_not_compact": {
+			mutate: func(task *WorkflowTaskV0) { task.ParentTaskRef = "task parent" },
+			field:  "parent_task_ref",
+		},
+		"negative_depth": {
+			mutate: func(task *WorkflowTaskV0) { task.DelegationDepth = -1 },
+			field:  "delegation_depth",
+		},
+		"too_many_child_agents": {
+			mutate: func(task *WorkflowTaskV0) { task.MaxChildAgents = maxWorkflowTaskCollectionV0 + 1 },
+			field:  "max_child_agents",
+		},
+		"self_child": {
+			mutate: func(task *WorkflowTaskV0) { task.ChildTaskRefs = []string{task.TaskID} },
+			field:  "child_task_refs",
+		},
+		"duplicate_child": {
+			mutate: func(task *WorkflowTaskV0) { task.ChildTaskRefs = []string{"task-child-001", "task-child-001"} },
+			field:  "child_task_refs",
+		},
+		"child_ref_not_compact": {
+			mutate: func(task *WorkflowTaskV0) { task.ChildTaskRefs = []string{"task child"} },
+			field:  "child_task_refs",
+		},
+		"child_matches_parent": {
+			mutate: func(task *WorkflowTaskV0) {
+				task.ParentTaskRef = "task-parent-001"
+				task.ChildTaskRefs = []string{"task-parent-001"}
+			},
+			field: "child_task_refs",
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			task := validWorkflowTaskV0()
+			tc.mutate(&task)
+
+			err := ValidateWorkflowTaskV0(NormalizeWorkflowTaskV0(task))
+			assertWorkflowTaskErrorV0(t, err, ErrWorkflowTaskInvalidaV0, tc.field)
+		})
 	}
 }
 

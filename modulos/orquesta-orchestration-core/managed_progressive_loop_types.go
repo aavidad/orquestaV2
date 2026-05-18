@@ -15,6 +15,7 @@ type ExternalProgressWaitRequestV0 struct {
 	LastResult    ProgressiveLoopResultV0
 	CorrelationID string
 	EvidenceRefs  []string
+	WaitAgentRefs []string
 }
 
 type ExternalProgressWaitResultV0 struct {

@@ -85,7 +85,8 @@ func assessmentActionMatchesVerdictV0(payload AssessAgentWorkCommandPayloadV0) b
 	}
 	return payload.Verdict == AgentAssessmentVerdictGarbageV0 ||
 		payload.Verdict == AgentAssessmentVerdictLoopDetectedV0 ||
-		payload.Verdict == AgentAssessmentVerdictCapacityLimitedV0
+		payload.Verdict == AgentAssessmentVerdictCapacityLimitedV0 ||
+		payload.Verdict == AgentAssessmentVerdictTimeoutV0
 }
 
 func validateAssessmentPayloadSizeV0(payload AssessAgentWorkCommandPayloadV0) error {
@@ -117,7 +118,7 @@ func validAssessmentVerdictV0(value string) bool {
 	switch strings.TrimSpace(value) {
 	case AgentAssessmentVerdictAcceptableV0, AgentAssessmentVerdictNeedsRevisionV0,
 		AgentAssessmentVerdictGarbageV0, AgentAssessmentVerdictLoopDetectedV0,
-		AgentAssessmentVerdictCapacityLimitedV0:
+		AgentAssessmentVerdictCapacityLimitedV0, AgentAssessmentVerdictTimeoutV0:
 		return true
 	default:
 		return false

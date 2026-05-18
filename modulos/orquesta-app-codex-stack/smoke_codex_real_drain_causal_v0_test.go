@@ -67,7 +67,7 @@ func codexStackRealSmokeProgrammingCausalIssueV0(
 			return "project_compiles_but_ack_missing " + strings.Join(pending, ",")
 		}
 	}
-	if !drainRunHasPendingExternalAgentsV0(run) {
+	if !drainRunHasPendingExternalAgentsV0(run, nil) {
 		return "no_external_agents_but_ack_missing " + strings.Join(pending, ",")
 	}
 	return ""

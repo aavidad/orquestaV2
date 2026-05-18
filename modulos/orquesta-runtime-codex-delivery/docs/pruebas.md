@@ -21,8 +21,11 @@ Cobertura:
 - filtra descriptors por run, agente arrancado y delivery ya registrada;
 - observa agentes Codex sin ACK listo y emite progreso `stalled` solo si no hay
   avance observable;
+- verifica que `stalled` corto queda como telemetria sin `decision_required`;
 - no escala una firma repetida sin ACK a `loop_detected` si no hay senal real
   de accion repetida;
+- detecta como `loop_detected` un log que sigue creciendo con el mismo diff
+  compacto repetido y sin ACK;
 - no emite supervision si el ACK ya esta listo o si los logs compactos avanzan;
 - exige registro de proceso antes de construir supervision de progreso;
 - recupera heartbeats/reportes de `FileCodexProgressStateStoreV0` tras recrear
@@ -328,6 +331,14 @@ Evidencia anadida:
 - `TestCodexProgressObservationSourceV0PriorizaCapacidadSobreInterrupcion`
   valida que una senal de capacidad en la misma salida se mantiene como
   `capacity_limited` y no se mezcla con la evidencia no-ACK.
+
+Caso: progress_timeout_no_tapado_por_stalled
+Comando: go test -count=1 ./modulos/orquesta-runtime-codex-delivery -run TestCodexProgressReportAlreadyHandledV0TimeoutNoQuedaTapadoPorStalledPrevio
+Ultima ejecucion: 2026-05-15, ok
+Evidencia esperada: un reporte `stalled` con `budget_status=over_budget_no_activity`
+no queda silenciado por un assessment AskDirector previo; solo se considera
+tratado si el agente ya esta en `stopped`, `confirmed_stopped`, `failed` o
+`lost`.
 
 Revalidacion final 2026-05-12 del modulo:
 

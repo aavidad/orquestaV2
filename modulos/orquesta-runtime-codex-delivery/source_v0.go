@@ -63,6 +63,9 @@ func (source CodexDeliveryObservationSourceV0) BuildAgentDeliveryObservationsV0(
 	}
 	observations := make([]orquestacionnucleoapp.AgentDeliveryObservationV0, 0, len(descriptors))
 	for _, descriptor := range descriptors {
+		if !codexDeliveryObservationDescriptorMatchesWaitAgentRefsV0(request, descriptor) {
+			continue
+		}
 		if codexReceiptDescriptorAlreadyReflectedV0(request, descriptor) {
 			continue
 		}
@@ -103,10 +106,46 @@ func codexDeliveryObservationAgentEligibleV0(
 	request orquestacionnucleoapp.AgentDeliveryObservationRequestV0,
 	agentRef string,
 ) bool {
+	if !codexDeliveryObservationAgentMatchesWaitAgentRefsV0(request, agentRef) {
+		return false
+	}
 	return stringInCodexDeliverySetV0(request.Run.Agents, agentRef) &&
 		stringInCodexDeliverySetV0(request.Run.StartedAgents, agentRef) &&
 		!stringInCodexDeliverySetV0(request.Run.FailedAgents, agentRef) &&
 		!stringInCodexDeliverySetV0(request.Run.StoppedAgents, agentRef)
+}
+
+func codexDeliveryObservationDescriptorMatchesWaitAgentRefsV0(
+	request orquestacionnucleoapp.AgentDeliveryObservationRequestV0,
+	descriptor CodexReceiptDescriptorV0,
+) bool {
+	return codexDeliveryObservationAgentMatchesWaitAgentRefsV0(
+		request,
+		codexReceiptDescriptorAgentRefV0(descriptor),
+	)
+}
+
+func codexDeliveryObservationAgentMatchesWaitAgentRefsV0(
+	request orquestacionnucleoapp.AgentDeliveryObservationRequestV0,
+	agentRef string,
+) bool {
+	waitAgentRefs := compactCodexDeliveryRefsV0(request.WaitAgentRefs)
+	if len(waitAgentRefs) == 0 {
+		return true
+	}
+	return stringInCodexDeliverySetV0(waitAgentRefs, agentRef)
+}
+
+func codexReceiptDescriptorAgentRefV0(descriptor CodexReceiptDescriptorV0) string {
+	agentRef := strings.TrimSpace(descriptor.AgentRef)
+	if agentRef != "" {
+		return agentRef
+	}
+	agentRef = strings.TrimSpace(descriptor.Spec.RequestID)
+	if agentRef != "" {
+		return agentRef
+	}
+	return strings.TrimSpace(descriptor.Spec.AgentPacket.RequestID)
 }
 
 func codexReceiptDescriptorRequestFromNucleoV0(
@@ -114,12 +153,29 @@ func codexReceiptDescriptorRequestFromNucleoV0(
 ) CodexReceiptDescriptorRequestV0 {
 	return CodexReceiptDescriptorRequestV0{
 		RunID:          strings.TrimSpace(request.Run.RunID),
-		StartedAgents:  compactCodexDeliveryRefsV0(request.Run.StartedAgents),
+		StartedAgents:  codexDeliveryObservationStartedAgentsForDescriptorRequestV0(request),
 		Deliveries:     compactCodexDeliveryRefsV0(request.Run.Deliveries),
 		PhaseArtifacts: compactCodexDeliveryRefsV0(request.Run.PhaseArtifacts),
 		CorrelationID:  strings.TrimSpace(request.CorrelationID),
 		EvidenceRefs:   compactCodexDeliveryRefsV0(request.EvidenceRefs),
 	}
+}
+
+func codexDeliveryObservationStartedAgentsForDescriptorRequestV0(
+	request orquestacionnucleoapp.AgentDeliveryObservationRequestV0,
+) []string {
+	startedAgents := compactCodexDeliveryRefsV0(request.Run.StartedAgents)
+	waitAgentRefs := compactCodexDeliveryRefsV0(request.WaitAgentRefs)
+	if len(waitAgentRefs) == 0 {
+		return startedAgents
+	}
+	scoped := make([]string, 0, len(startedAgents))
+	for _, agentRef := range startedAgents {
+		if stringInCodexDeliverySetV0(waitAgentRefs, agentRef) {
+			scoped = append(scoped, agentRef)
+		}
+	}
+	return scoped
 }
 
 func (source CodexDeliveryObservationSourceV0) observationFromDescriptorV0(

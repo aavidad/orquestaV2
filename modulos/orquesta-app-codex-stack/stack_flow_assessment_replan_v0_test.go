@@ -107,6 +107,67 @@ func TestCodexStackV0AssessmentLoopStoppedWorkflowTaskReplansReplacementAgent(t 
 	}
 }
 
+func TestCodexStackV0AssessmentLoopStopNoConfirmadoMarcaLostYReplanifica(t *testing.T) {
+	ctx := context.Background()
+	runtime := newProgrammingLostOnFirstStopCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+	codexStackWriteDelayedDirectorDecisionsForTestV0(t, stack, director.RunRef)
+
+	taskRef := "task-ref-stack-agenda-001"
+	oldAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	replacementAgentRef := "agent-ref-stack-assessment-replan-lost-001"
+
+	if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-assessment-lost-start-001",
+		MaxBursts:            16,
+		MaxStepsPerBurst:     8,
+		MaxDispatchesPerWait: 8,
+		MaxExternalWaits:     2,
+	}); err != nil {
+		t.Fatalf("DrainRunV0 start programming: %v", err)
+	}
+	runtime.loseNextSnapshotV0()
+	stack.Ports.ProgressSource = loopOnceProgressSourceForTestV0{
+		AgentRef: oldAgentRef,
+		TaskRef:  taskRef,
+	}
+	stack.Ports.AssessmentReplanSource = assessmentLoopReplacementSourceForTestV0{
+		OldAgentRef:         oldAgentRef,
+		TaskRef:             taskRef,
+		ReplacementAgentRef: replacementAgentRef,
+	}
+
+	drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		OccurredAt:           "2026-05-10T12:45:00Z",
+		CorrelationID:        "corr-stack-assessment-lost-001",
+		MaxBursts:            20,
+		MaxStepsPerBurst:     6,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		MaxExternalWaits:     3,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0 replan lost: %#v status=%s final=%+v", err, drain.Status, drain.Final)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if !codexStackHasRefV0(run.LostAgents, oldAgentRef) ||
+		codexStackHasRefV0(run.ConfirmedStoppedAgents, oldAgentRef) ||
+		!codexStackHasRefV0(run.ReplanDecisions, stackAssessmentReplanProjectionForTestV0(oldAgentRef, taskRef, replacementAgentRef)) ||
+		!codexStackHasRefV0(run.Agents, replacementAgentRef) ||
+		!codexStackHasRefV0(run.StartedAgents, replacementAgentRef) {
+		t.Fatalf("run final sin replan lost old=%s replacement=%s: %+v", oldAgentRef, replacementAgentRef, run)
+	}
+
+	sink := stack.Stores.EventSink.(*orquestacionnucleoapp.InMemoryEventSinkV0)
+	if !codexStackRealSmokeHasEventV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentLostV0) {
+		t.Fatalf("falta AgentLost: %+v", sink.EventsV0())
+	}
+}
+
 type programmingPendingCodexStackRuntimeV0 struct {
 	*fakeCodexStackRuntimeV0
 }
@@ -143,6 +204,41 @@ func (runtime *programmingPendingCodexStackRuntimeV0) LaunchV0(
 	}
 	runtime.snapshots[snapshot.ProcessRef] = snapshot
 	return snapshot, nil
+}
+
+type programmingLostOnFirstStopCodexStackRuntimeV0 struct {
+	*programmingPendingCodexStackRuntimeV0
+	lostSnapshotPending bool
+}
+
+func newProgrammingLostOnFirstStopCodexStackRuntimeV0() *programmingLostOnFirstStopCodexStackRuntimeV0 {
+	return &programmingLostOnFirstStopCodexStackRuntimeV0{
+		programmingPendingCodexStackRuntimeV0: newProgrammingPendingCodexStackRuntimeV0(),
+	}
+}
+
+func (runtime *programmingLostOnFirstStopCodexStackRuntimeV0) loseNextSnapshotV0() {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	runtime.lostSnapshotPending = true
+}
+
+func (runtime *programmingLostOnFirstStopCodexStackRuntimeV0) SnapshotV0(
+	processRef string,
+) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
+	runtime.mu.Lock()
+	if runtime.lostSnapshotPending {
+		runtime.lostSnapshotPending = false
+		runtime.mu.Unlock()
+		return orquestaruntime.ProcessRuntimeSnapshotV0{}, orquestaruntime.ProcessRuntimeErrorV0{
+			Code:       orquestaruntime.ProcessRuntimeNoEncontradoV0,
+			MessageKey: "process.no_encontrado",
+			Field:      "process_ref",
+			Retryable:  false,
+		}
+	}
+	runtime.mu.Unlock()
+	return runtime.fakeCodexStackRuntimeV0.SnapshotV0(processRef)
 }
 
 func codexStackLaunchPacketForTestV0(
@@ -207,7 +303,8 @@ func (source assessmentLoopReplacementSourceForTestV0) BuildAgentAssessmentRepla
 	request orquestacionnucleoapp.AgentAssessmentReplanPlanRequestV0,
 ) ([]orquestacionnucleoapp.AgentAssessmentReplanPlanV0, error) {
 	if request.Run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 ||
-		!codexStackHasRefV0(request.Run.ConfirmedStoppedAgents, source.OldAgentRef) ||
+		(!codexStackHasRefV0(request.Run.ConfirmedStoppedAgents, source.OldAgentRef) &&
+			!codexStackHasRefV0(request.Run.LostAgents, source.OldAgentRef)) ||
 		!codexStackRefsContainPartV0(request.Run.AgentAssessments, stackAssessmentLoopRefForTestV0(source.OldAgentRef)) ||
 		codexStackHasRefV0(request.Run.Agents, source.ReplacementAgentRef) {
 		return nil, nil

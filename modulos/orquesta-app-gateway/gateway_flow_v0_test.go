@@ -280,6 +280,23 @@ func (executor *recordingRunQueuePriorityExecutorV0) Execute(
 	}, nil
 }
 
+type recordingRunSupervisorExecutorV0 struct {
+	Input orquestamcp.MCPRunSupervisorToolInputV0
+}
+
+func (executor *recordingRunSupervisorExecutorV0) Execute(
+	_ context.Context,
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+) (orquestamcp.MCPRunSupervisorToolResultV0, error) {
+	executor.Input = input
+	return orquestamcp.MCPRunSupervisorToolResultV0{
+		Estado:     orquestamcp.MCPRunSupervisorEstadoOKV0,
+		RunRef:     input.RunRef,
+		StopReason: "max_ticks",
+		Ticks:      input.MaxTicks,
+	}, nil
+}
+
 type recordingDomainWorkExecutorV0 struct {
 	Input orquestamcp.MCPDomainWorkToolInputV0
 }

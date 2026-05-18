@@ -59,6 +59,9 @@ func CoordinateRunsTickV0(
 		if drainErr != nil {
 			return RunCoordinatorTickResultV0{}, drainErr
 		}
+		if err := rotateExecutedRunV0(ctx, deps.QueueUpdater, candidate, command); err != nil {
+			return RunCoordinatorTickResultV0{}, err
+		}
 		result.Executions = append(result.Executions, executionSummaryV0(candidate, executed))
 	}
 	return result, nil
@@ -103,6 +106,30 @@ func drainRequestV0(
 		CorrelationID: strings.TrimSpace(command.CorrelationID),
 		Limits:        command.DrainLimits,
 	}
+}
+
+func rotateExecutedRunV0(
+	ctx context.Context,
+	updater orquestarunqueue.RunQueuePriorityWriterPortV0,
+	candidate orquestarunqueue.RankedRunCandidateV0,
+	command RunCoordinatorTickCommandV0,
+) error {
+	if updater == nil || command.OccurredAt.IsZero() {
+		return nil
+	}
+	refs := append([]string(nil), candidate.EvidenceRefs...)
+	refs = append(refs, "evidence-ref-run-coordinator-executed")
+	_, err := updater.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        candidate.RunRef,
+		QueueRef:      command.QueueRef,
+		AppRef:        candidate.AppRef,
+		PriorityScore: candidate.PriorityScore,
+		UpdatedAt:     command.OccurredAt,
+		RequestedBy:   "orquesta-run-coordinator",
+		Reason:        "run_executed_rotation",
+		EvidenceRefs:  refs,
+	})
+	return err
 }
 
 func compactRankedV0(ranked []orquestarunqueue.RankedRunCandidateV0) []RankedRunSummaryV0 {

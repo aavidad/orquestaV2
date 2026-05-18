@@ -7,8 +7,8 @@ import (
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestafactory "orquesta/modulos/orquesta-factory"
-	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 )
 
 func TestPrepareAppDirectorIntakeV0AutonomiaAltaCreatesDirectorTeam(t *testing.T) {

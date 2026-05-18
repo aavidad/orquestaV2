@@ -24,6 +24,7 @@ var eventAppliersV0 = map[string]eventApplierV0{
 	OrchestrationEventAgentRequestedV0:               applyAgentRequestedEventV0,
 	OrchestrationEventAgentStartedV0:                 applyAgentStartedEventV0,
 	OrchestrationEventAgentFailedV0:                  applyAgentFailedEventV0,
+	OrchestrationEventAgentLostV0:                    applyAgentLostEventV0,
 	OrchestrationEventAgentLeaseExpiredV0:            applyAgentLeaseExpiredEventV0,
 	OrchestrationEventAgentStopRequestedV0:           applyAgentStopRequestedEventV0,
 	OrchestrationEventAgentStopConfirmedV0:           applyAgentStopConfirmedEventV0,

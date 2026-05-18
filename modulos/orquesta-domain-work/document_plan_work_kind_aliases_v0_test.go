@@ -1,0 +1,65 @@
+package orquestadomainwork
+
+import (
+	"encoding/json"
+	"testing"
+)
+
+func TestCanonicalDomainDocumentPlanPayloadJSONV0NormalizaWorkKindsDeAgente(t *testing.T) {
+	payload := `{
+		"schema_version":"domain_document_plan.v0",
+		"artifact_type":"document_plan",
+		"work_kind":"planificacion_documental",
+		"plan_ref":"plan-ref-opes-080",
+		"domain_ref":"opes",
+		"document_kind":"tema_oposicion",
+		"language_code":"es",
+		"title":"Evaluacion diagnostica",
+		"objective":"Planificar un tema completo sin redactarlo.",
+		"estimated_pages_min":45,
+		"estimated_pages_max":60,
+		"sections":[
+			{"section_ref":"sec-01","order":1,"title":"Marco","objective":"Crear base conceptual","work_kind":"redaccion_tema","target_words_min":900,"target_words_max":1200},
+			{"section_ref":"sec-02","order":2,"title":"Sintesis","objective":"Preparar repaso","work_kind":"sintesis_pedagogica","target_words_min":500,"target_words_max":800}
+		],
+		"visuals":[
+			{"visual_ref":"vis-01","visual_type":"diagrama_flujo","placement_ref":"sec-01","objective":"Mostrar el proceso","work_kind":"visual_asset_plan"}
+		],
+		"review_steps":[
+			{"review_ref":"rev-01","order":1,"work_kind":"validacion_contrato","objective":"Validar contrato"},
+			{"review_ref":"rev-02","order":2,"work_kind":"revision_psicologia","objective":"Revisar contenido"},
+			{"review_ref":"rev-03","order":3,"work_kind":"revision_pedagogica","objective":"Revisar pedagogia"},
+			{"review_ref":"rev-04","order":4,"work_kind":"ensamblado_y_exportacion","objective":"Preparar ensamblado"}
+		],
+		"quality_criteria":[
+			{"title":"Lectura pedagogica y clara","rule":"Debe leerse con facilidad"},
+			{"title":"Autores relevantes y teorias","rule":"Debe cubrir autores"}
+		],
+		"deliverables":[{"deliverable_ref":"del-01","artifact_type":"tema_grande","title":"Tema grande","required":true}]
+	}`
+
+	canonical, ok := CanonicalDomainDocumentPlanPayloadJSONV0(payload, DomainDocumentPlanPayloadDefaultsV0{
+		WorkKind: "plan_tema",
+	})
+	if !ok {
+		t.Fatalf("payload no canonicalizado")
+	}
+	var plan DomainDocumentPlanV0
+	if err := json.Unmarshal([]byte(canonical), &plan); err != nil {
+		t.Fatalf("json canonico invalido: %v", err)
+	}
+	if issues := ValidateDomainDocumentPlanV0(plan); len(issues) != 0 {
+		t.Fatalf("issues=%+v canonical=%s", issues, canonical)
+	}
+	if plan.WorkKind != "plan_tema" ||
+		plan.Sections[0].WorkKind != "draft_content_block" ||
+		plan.Sections[1].WorkKind != "draft_content_block" ||
+		plan.Visuals[0].WorkKind != "generate_visual_asset" ||
+		plan.ReviewSteps[0].WorkKind != "validate_topic" ||
+		plan.ReviewSteps[1].WorkKind != "review_quality" ||
+		plan.ReviewSteps[2].WorkKind != "review_pedagogical" ||
+		plan.ReviewSteps[3].WorkKind != "assemble_topic" ||
+		len(plan.QualityCriteria) != 2 {
+		t.Fatalf("plan=%+v", plan)
+	}
+}

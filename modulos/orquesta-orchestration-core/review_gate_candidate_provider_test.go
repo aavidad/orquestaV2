@@ -152,6 +152,37 @@ func TestReviewGateCandidateProviderV0EmiteSoloResultadoTrasReview(t *testing.T)
 	}
 }
 
+func TestReviewGateCandidateProviderV0PropagaWaitAgentRefsAReviewGateSource(t *testing.T) {
+	run := mustReviewGateReadyRunV0(t, "run-nucleo-review-gate-wait-scope-001")
+	source := &capturingReviewGateObservationSourceV0{}
+	provider := ReviewGateCandidateProviderV0{GateSource: source}
+
+	_, err := provider.BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:           run,
+		OccurredAt:    "2026-05-17T15:00:00Z",
+		CorrelationID: "corr-review-gate-wait-scope-001",
+		WaitAgentRefs: []string{"agent-ref-nucleo-001"},
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(source.Request.WaitAgentRefs) != 1 || source.Request.WaitAgentRefs[0] != "agent-ref-nucleo-001" {
+		t.Fatalf("wait_agent_refs no propagadas: %+v", source.Request)
+	}
+}
+
+type capturingReviewGateObservationSourceV0 struct {
+	Request ReviewGateObservationRequestV0
+}
+
+func (source *capturingReviewGateObservationSourceV0) BuildReviewGateObservationsV0(
+	_ context.Context,
+	request ReviewGateObservationRequestV0,
+) ([]ReviewGateObservationV0, error) {
+	source.Request = request
+	return nil, nil
+}
+
 type staticReviewGateObservationSourceV0 struct {
 	Observations []ReviewGateObservationV0
 }

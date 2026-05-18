@@ -9,14 +9,17 @@ import (
 )
 
 const (
-	runsDirV0           = "runs"
-	eventsDirV0         = "events"
-	workflowTasksDirV0  = "workflow_tasks"
-	agentProcessesDirV0 = "agent_processes"
+	runsDirV0                  = "runs"
+	eventsDirV0                = "events"
+	workflowTasksDirV0         = "workflow_tasks"
+	workflowWaitsDirV0         = "workflow_waits"
+	requiredTestEvidenceDirV0  = "required_test_evidence"
+	operationalPlanStatesDirV0 = "operational_director_plan_states"
+	agentProcessesDirV0        = "agent_processes"
 )
 
 func ensureStoreDirsV0(rootDir string) error {
-	for _, dir := range []string{runsDirV0, eventsDirV0, workflowTasksDirV0, agentProcessesDirV0} {
+	for _, dir := range []string{runsDirV0, eventsDirV0, workflowTasksDirV0, workflowWaitsDirV0, requiredTestEvidenceDirV0, operationalPlanStatesDirV0, agentProcessesDirV0} {
 		if err := os.MkdirAll(filepath.Join(rootDir, dir), 0o700); err != nil {
 			return err
 		}
@@ -34,6 +37,18 @@ func (store *StoreV0) eventsPathV0(runRef string) string {
 
 func (store *StoreV0) workflowTaskPathV0(runRef string, taskRef string) string {
 	return filepath.Join(store.rootDir, workflowTasksDirV0, hashRefsV0(runRef), hashRefsV0(taskRef)+".json")
+}
+
+func (store *StoreV0) workflowWaitPathV0(runRef string, waitRef string) string {
+	return filepath.Join(store.rootDir, workflowWaitsDirV0, hashRefsV0(runRef), hashRefsV0(waitRef)+".json")
+}
+
+func (store *StoreV0) requiredTestEvidencePathV0(runRef string, evidenceRef string) string {
+	return filepath.Join(store.rootDir, requiredTestEvidenceDirV0, hashRefsV0(runRef), hashRefsV0(evidenceRef)+".json")
+}
+
+func (store *StoreV0) operationalDirectorPlanStatePathV0(runRef string, planRef string) string {
+	return filepath.Join(store.rootDir, operationalPlanStatesDirV0, hashRefsV0(runRef), hashRefsV0(planRef)+".json")
 }
 
 func (store *StoreV0) agentProcessPathV0(runRef string, agentRequestRef string) string {

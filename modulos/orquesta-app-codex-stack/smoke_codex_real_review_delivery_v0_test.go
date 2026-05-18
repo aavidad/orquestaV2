@@ -59,7 +59,7 @@ func codexStackRealSmokeDrainUntilFirstProgrammingDeliveryV0(
 		}
 		progressed := run.LastSequence != previousSequence
 		previousSequence = run.LastSequence
-		if !drainRunHasPendingExternalAgentsV0(run) && !progressed {
+		if !drainRunHasPendingExternalAgentsV0(run, nil) && !progressed {
 			t.Fatalf("sin primera entrega de programacion ciclo=%d phase=%s status=%s agents=%v started=%v failed=%v stopped=%v confirmed=%v artifacts=%v tasks=%v delivered=%v sequence=%d descriptors=%v",
 				cycle,
 				run.CurrentPhase,
@@ -103,7 +103,7 @@ func codexStackRealSmokeStableProgrammingDescriptorV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
 ) (orquestaruntimecodexdelivery.CodexReceiptDescriptorV0, bool) {
-	if drainRunHasPendingExternalAgentsV0(run) ||
+	if drainRunHasPendingExternalAgentsV0(run, nil) ||
 		!codexStackRealSmokeCompletedProgrammingACKsRegisteredV0(run, descriptors) {
 		return orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{}, false
 	}

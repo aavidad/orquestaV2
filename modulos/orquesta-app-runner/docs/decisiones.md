@@ -1,6 +1,20 @@
 # Decisiones: orquesta-app-runner
 
 ```text
+Fecha: 2026-05-14
+Decision: Ejecutar el plan preparado por fases reales, tambien con director
+autonomo.
+Motivo: `request_kind` describe el objetivo global del run, pero cada unidad
+tiene su propia `phase_id`. Mantener documentacion, integracion o revision como
+programacion duplicaba semantica y rompia la lectura de progreso del director.
+Impacto: el runner abre la siguiente fase con unidades listas cuando el loop
+queda quiescent y el plan no esta completo. El modo `UseAutonomousDirectorLoop`
+usa el mismo avance multi-fase que el runner normal. Las entregas de cualquier
+fase son `DeliveryRegistered` solo si corresponden a una microtarea durable.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-10
 Decision: Integrar `RunAutonomousDirectorLoopV0` solo por opt-in.
 Motivo: el loop autonomo decide limites y concurrencia antes de ejecutar; usarlo

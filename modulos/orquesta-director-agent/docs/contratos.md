@@ -36,6 +36,12 @@ Invariantes:
 - refs opacas y compactas;
 - el agente externo no aplica el comando: solo propone decision.
 - el director no hace el trabajo pesado: solo decide el siguiente movimiento y delega en agentes especializados con contexto pequeno.
+- el director es neutral de dominio: puede planificar programacion,
+  documentacion, OPES, seguridad, deploy, refactor o migracion si el contrato
+  de entrada aporta reglas y refs suficientes.
+- las apps externas no deben reemplazar al director con logica de juicio; deben
+  pedirle planificacion a Orquesta y conservar solo reglas/validacion/ensamblado
+  de dominio.
 - `create_microtask` no puede incluir proveedor, modelo, HOME, OAuth, DB, runtime ni secretos en `write_set`, criterios o refs.
 - en `create_microtask`, `phase_id` de la decision es la fase actual que autoriza crear trabajo: `planificacion_microtareas` para el plan inicial o `programacion` para cambios en caliente; `task.phase_id` es la fase objetivo de ejecucion, normalmente `programacion`.
 - `propose_autonomous_plan_team` vive en `planificacion_microtareas`, cita contratos funcionales por ref y solo describe miembros, capacidades y unidades de trabajo compactas.

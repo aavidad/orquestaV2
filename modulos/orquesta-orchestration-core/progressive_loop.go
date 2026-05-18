@@ -60,7 +60,7 @@ func (service ServiceV0) RunProgressiveLoopV0(
 		}
 	}
 	result = service.finishProgressiveLoopV0(ctx, request, result)
-	result.Status = progressiveStatusAfterMaxBurstsV0(result.Run)
+	result.Status = progressiveStatusAfterMaxBurstsV0(result.Run, request.WaitAgentRefs, request.WaitScopeApplied)
 	return result, nil
 }
 
@@ -71,6 +71,7 @@ func normalizeProgressiveLoopRequestV0(
 	request.OccurredAt = strings.TrimSpace(request.OccurredAt)
 	request.CorrelationID = strings.TrimSpace(request.CorrelationID)
 	request.EvidenceRefs = compactStringsV0(request.EvidenceRefs)
+	request.WaitAgentRefs = compactStringsV0(request.WaitAgentRefs)
 	if request.MaxBursts <= 0 {
 		request.MaxBursts = 1
 	}

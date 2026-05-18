@@ -81,6 +81,11 @@ Caso: DIR-P008 supervisor puro de progreso de agente
 Tipo: unit_contract
 Comando: go test -count=1 ./modulos/orquesta-director ./modulos/orquesta-runtime ./modulos/orquesta-core-workflow
 Evidencia esperada: BuildAgentProgressSupervisionV0 valida AgentProgressReportV0 con runtime, loop_detected genera AssessAgentWork stop_agent y al aplicarlo core emite AgentWorkAssessed + AgentStopRequested + outbox StopRuntimeAgent; stalled genera AssessAgentWork ask_director y AskDirector separado que emite SendDirectorQuestion; stopped/progressing quedan acceptable/continue/low; reporte invalido devuelve error local y JSON de salida no filtra detalles prohibidos.
+
+Caso: agent_progress_supervision_budget_operativo
+Comando: go test -count=1 ./modulos/orquesta-director -run 'TestBuildAgentProgressSupervisionV0Tiempo'
+Ultima ejecucion: 2026-05-15, ok
+Evidencia esperada: `over_budget_no_activity` genera `timeout/stop_agent/high` aunque el reporte venga como `stalled` y exista artefacto sin ACK; `over_budget_but_active` genera `needs_revision/ask_director/high` sin parada directa.
 Ultima ejecucion: 2026-05-05, ok, go test -count=1 ./modulos/orquesta-director ./modulos/orquesta-runtime ./modulos/orquesta-core-workflow
 Riesgos: la decision es pura y compacta; no observa procesos reales, no persiste y no resuelve la parada efectiva fuera del outbox contractual.
 ```

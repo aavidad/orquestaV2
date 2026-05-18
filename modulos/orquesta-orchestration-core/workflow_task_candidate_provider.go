@@ -28,8 +28,7 @@ func (provider WorkflowTaskCandidateProviderV0) BuildSchedulerCandidatesV0(
 	if err != nil {
 		return SchedulerCandidateSetV0{}, err
 	}
-	if request.Run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 ||
-		len(request.Run.Tasks) == 0 {
+	if len(request.Run.Tasks) == 0 {
 		return candidates, nil
 	}
 	taskRefs := workflowTaskRefsForSchedulingV0(request.Run)
@@ -103,7 +102,7 @@ func (provider WorkflowTaskCandidateProviderV0) workflowTaskCandidateV0(
 		orquestadirectorcandidates.SchedulableWorkCandidateInputV0{
 			CandidateRef:     "work-ref-" + suffix,
 			RunRef:           request.Run.RunID,
-			PhaseID:          string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			PhaseID:          string(task.PhaseID),
 			TaskRef:          task.TaskID,
 			SubjectClaimRefs: []string{claimRef},
 			ScopeClaims: []orquestadirectorcandidates.WorkCandidateScopeClaimV0{{
@@ -170,7 +169,7 @@ func workflowTaskSchedulableV0(
 	task orquestacoreworkflow.WorkflowTaskV0,
 ) bool {
 	return task.RunID == run.RunID &&
-		task.PhaseID == orquestacoreworkflow.OrchestrationPhaseProgramacionV0 &&
+		task.PhaseID == run.CurrentPhase &&
 		workflowTaskDependenciesSatisfiedV0(run, task)
 }
 

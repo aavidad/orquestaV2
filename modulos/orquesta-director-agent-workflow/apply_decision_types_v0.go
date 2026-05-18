@@ -39,6 +39,7 @@ type ApplyDirectorAgentDecisionPortsV0 struct {
 
 type ApplyDirectorAgentDecisionResultV0 struct {
 	Command     orquestacoreworkflow.OrchestrationCommandV0
+	Commands    []orquestacoreworkflow.OrchestrationCommandV0
 	Run         orquestacoreworkflow.OrchestrationRunV0
 	EventsCount int
 	Idempotent  bool

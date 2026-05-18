@@ -49,13 +49,15 @@ func TestCodexProfileV0WorkspaceWriteAceptaRuntimeAisladoFueraDelProyecto(t *tes
 	}
 }
 
-func TestCodexProfileV0WorkspaceWriteRechazaRuntimeDentroDelProyecto(t *testing.T) {
+func TestCodexProfileV0WorkspaceWriteAceptaRuntimeDentroDelProyecto(t *testing.T) {
 	profile := codexProfileForTestV0(t)
 	profile.RuntimeWorkDir = profile.ProjectWorkDir + "/.orquesta-runtime"
 
 	issues := ValidateCodexConnectorProfileV0(profile)
 
-	requireCodexIssueV0(t, issues, CodexConnectorPathInvalidV0)
+	if len(issues) != 0 {
+		t.Fatalf("issues inesperadas: %+v", issues)
+	}
 }
 
 func TestCodexProfileV0WorkspaceWriteRechazaRuntimeQueContieneProyecto(t *testing.T) {

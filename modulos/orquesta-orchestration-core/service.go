@@ -62,6 +62,7 @@ func normalizeSupervisedBurstRequestV0(
 	request.OccurredAt = strings.TrimSpace(request.OccurredAt)
 	request.CorrelationID = strings.TrimSpace(request.CorrelationID)
 	request.EvidenceRefs = compactStringsV0(request.EvidenceRefs)
+	request.WaitAgentRefs = compactStringsV0(request.WaitAgentRefs)
 	return request
 }
 

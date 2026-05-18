@@ -29,3 +29,11 @@ global.
 `ExcludeRunRefs` permite que un supervisor haga una pasada justa sin mutar la
 cola. El coordinador conserva el ranking visible y devuelve la run excluida
 como skip `run_excluded`; la politica de exclusion vive fuera del coordinador.
+
+## Rotacion tras ejecucion
+
+Cuando el stack inyecta un `QueueUpdater`, el coordinador refresca `updated_at`
+de la run que acaba de drenar. Esto evita que varios runs antiguos con la misma
+prioridad monopolicen todos los ticks del servidor. La prioridad numerica se
+mantiene intacta: el usuario o el orquestador siguen pudiendo favorecer una app
+con mas puntos, pero entre runs equivalentes se reparte turno.

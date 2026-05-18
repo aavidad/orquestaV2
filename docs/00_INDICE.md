@@ -7,6 +7,14 @@
 - [M02 - Roadmap Orquesta V1](orquesta_v1_roadmap.md)
 - [M03 - Uso Actual de la App Orquesta](uso_actual_app_orquesta.md)
 - [M04 - Operativa de Agentes Manuales](operacion_agentes_manuales.md)
+- [M05 - Estado actual 2026-05-17](estado_actual_2026-05-17.md)
+- [M06 - Matriz de pruebas reales y smoke 2026-05-17](matriz_pruebas_reales_y_smoke_2026-05-17.md)
+- [M07 - Guia del nucleo de orquestacion 2026-05-17](guia_nucleo_orquestacion_2026-05-17.md)
+- [M08 - Director Operativo V1 2026-05-17](director_operativo_v1_2026-05-17.md)
+- [M09 - Corte Director funcionando esta tarde 2026-05-17](corte_director_funcionando_tarde_2026-05-17.md)
+- [M10 - Corte OPES como consumidor 2026-05-18](corte_opes_como_consumidor_orquesta_2026-05-18.md)
+- [M11 - Runbook OPES plan_temario Operario 2026-05-18](runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md)
+- [M12 - Resultado OPES-Orquesta plan_temario Operario 2026-05-18](resultado_prueba_opes_orquesta_plan_temario_operario_2026-05-18.md)
 
 ## Políticas de Gobernanza
 - [P01 - Política de Selección de Lenguaje (ES)](politica_seleccion_lenguaje_es.md) | [(EN)](politica_seleccion_lenguaje_en.md)

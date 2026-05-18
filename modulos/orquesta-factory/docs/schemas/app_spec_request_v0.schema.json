@@ -89,7 +89,9 @@
         "automation",
         "data",
         "plugin",
-        "mixed"
+        "mixed",
+        "documentacion",
+        "documentation"
       ]
     },
     "usuarios_objetivo": {

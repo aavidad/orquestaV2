@@ -11,7 +11,6 @@ import (
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
-	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
@@ -22,6 +21,10 @@ func (stack StackV0) submitDomainWorkArtifactsAfterDrainObservationsV0(
 	observations []orquestacionnucleoapp.AgentDeliveryObservationV0,
 ) error {
 	if !stack.domainWorkDeliveryBridgeReadyV0() || len(observations) == 0 {
+		return nil
+	}
+	observations = drainObservationsForWaitAgentRefsV0(observations, request.WaitAgentRefs)
+	if len(observations) == 0 {
 		return nil
 	}
 	tasks, err := stack.Stores.TaskStore.LoadWorkflowTasksV0(ctx, run.RunID, run.Tasks)
@@ -79,6 +82,9 @@ func (stack StackV0) submitPendingDomainWorkArtifactsV0(
 		if !ok {
 			continue
 		}
+		if !domainWorkDescriptorMatchesWaitAgentRefsV0(descriptor, request.WaitAgentRefs) {
+			continue
+		}
 		observations = append(observations, orquestacionnucleoapp.AgentDeliveryObservationV0{
 			DeliveryRef: deliveryRef,
 			ArtifactRef: deliveryRef,
@@ -119,6 +125,24 @@ func domainWorkDescriptorForDeliveryRefV0(
 	return orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{}, false
 }
 
+func domainWorkDescriptorMatchesWaitAgentRefsV0(
+	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+	waitAgentRefs []string,
+) bool {
+	waitAgentRefs = compactStringsV0(waitAgentRefs)
+	if len(waitAgentRefs) == 0 {
+		return true
+	}
+	agentRef := strings.TrimSpace(descriptor.AgentRef)
+	if agentRef == "" {
+		agentRef = strings.TrimSpace(descriptor.Spec.RequestID)
+	}
+	if agentRef == "" {
+		agentRef = strings.TrimSpace(descriptor.Spec.AgentPacket.RequestID)
+	}
+	return codexStackStringInSetV0(waitAgentRefs, agentRef)
+}
+
 func (stack StackV0) submitDomainWorkArtifactForObservationV0(
 	ctx context.Context,
 	request DrainRunRequestV0,
@@ -128,6 +152,9 @@ func (stack StackV0) submitDomainWorkArtifactForObservationV0(
 	records []orquestaappchange.AppChangeRecordV0,
 	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
 ) error {
+	if !drainObservationMatchesWaitAgentRefsV0(observation, request.WaitAgentRefs) {
+		return nil
+	}
 	task, ok := domainWorkTaskForObservationV0(tasks, observation)
 	if !ok {
 		return nil
@@ -140,11 +167,8 @@ func (stack StackV0) submitDomainWorkArtifactForObservationV0(
 	if !ok {
 		return nil
 	}
-	ack, issues := orquestaruntimecodex.ReadAndValidateCodexAgentAckFileV0(
-		descriptor.AckPath,
-		descriptor.Spec,
-	)
-	if len(issues) > 0 {
+	ack, ok := domainWorkSubmissionAckV0(descriptor, task, record)
+	if !ok {
 		return nil
 	}
 	input := DomainWorkArtifactSubmissionBuildInputV0{

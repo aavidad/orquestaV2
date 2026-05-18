@@ -23,7 +23,7 @@ func agentPacketV0(
 		WorkOrderRef:  task.TaskRef,
 		TargetModule:  "orquesta-app-stack-" + area,
 		Phase:         phase,
-		CapacityLevel: "high",
+		CapacityLevel: packetCapacityLevelV0(area, task),
 		Locale:        "es-ES",
 		Task:          task,
 		Context:       contextBundleV0(area, task.TaskRef),
@@ -34,6 +34,34 @@ func agentPacketV0(
 		},
 		Policies: []string{"write_set_closed", "ack_required", "context_small_by_refs"},
 	}
+}
+
+func packetCapacityLevelV0(area string, task orquestaruntime.AgentStartTaskV0) string {
+	if area == "director" && strings.Contains(task.Objective, "Modo de ejecucion: normal.") {
+		return "xhigh"
+	}
+	if taskRequiresXHighPacketCapacityV0(task) {
+		return "xhigh"
+	}
+	return "high"
+}
+
+func taskRequiresXHighPacketCapacityV0(task orquestaruntime.AgentStartTaskV0) bool {
+	value := strings.ToLower(strings.Join(append(
+		[]string{task.TaskRef, task.Title, task.Objective},
+		task.WriteSet...,
+	), "\n"))
+	for _, marker := range []string{
+		"plan_temario",
+		"plan_tema",
+		"plan_documento",
+		"document_plan",
+	} {
+		if strings.Contains(value, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func contextBundleV0(area string, taskRef string) orquestacontext.ContextMaterializedBundleV0 {

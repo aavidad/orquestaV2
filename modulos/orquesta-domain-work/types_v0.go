@@ -64,6 +64,22 @@ type DomainWorkJobV0 struct {
 	Issues         []DomainWorkIssueV0       `json:"issues,omitempty"`
 }
 
+type DomainWorkJobRecordV0 struct {
+	Request DomainWorkJobRequestV0 `json:"request"`
+	Job     DomainWorkJobV0        `json:"job"`
+}
+
+type DomainWorkJobRecordFilterV0 struct {
+	DomainRef      string                    `json:"domain_ref,omitempty"`
+	WorkKind       string                    `json:"work_kind,omitempty"`
+	JobRef         string                    `json:"job_ref,omitempty"`
+	CorrelationID  string                    `json:"correlation_id,omitempty"`
+	IdempotencyKey string                    `json:"idempotency_key,omitempty"`
+	Status         string                    `json:"status,omitempty"`
+	ExternalRefs   []DomainWorkExternalRefV0 `json:"external_refs,omitempty"`
+	Limit          int                       `json:"limit,omitempty"`
+}
+
 type DomainWorkArtifactSubmissionV0 struct {
 	SchemaVersion  string                    `json:"schema_version"`
 	RequestID      string                    `json:"request_id,omitempty"`
@@ -114,6 +130,15 @@ type DomainWorkIssueV0 struct {
 
 type DomainWorkJobCreatorPortV0 interface {
 	CreateDomainWorkJobV0(context.Context, DomainWorkJobRequestV0) (DomainWorkJobV0, error)
+}
+
+type DomainWorkJobRecordSourcePortV0 interface {
+	ListDomainWorkJobRecordsV0(context.Context, DomainWorkJobRecordFilterV0) ([]DomainWorkJobRecordV0, error)
+}
+
+type DomainWorkJobRecordStorePortV0 interface {
+	DomainWorkJobCreatorPortV0
+	DomainWorkJobRecordSourcePortV0
 }
 
 type DomainWorkArtifactSubmitterPortV0 interface {

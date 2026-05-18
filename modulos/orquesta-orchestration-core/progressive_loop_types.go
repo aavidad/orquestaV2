@@ -50,6 +50,8 @@ type ProgressiveLoopRequestV0 struct {
 	MaxDispatchesPerWait int
 	CorrelationID        string
 	EvidenceRefs         []string
+	WaitAgentRefs        []string
+	WaitScopeApplied     bool
 	Dispatchers          []OutboxDispatcherBindingV0
 	BatchDispatchers     []OutboxBatchDispatcherBindingV0
 }

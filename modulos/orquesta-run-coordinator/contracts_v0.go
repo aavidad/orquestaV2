@@ -16,6 +16,7 @@ type RunDrainerPortV0 interface {
 
 type RunCoordinatorDepsV0 struct {
 	QueueReader   orquestarunqueue.RunQueueReaderPortV0
+	QueueUpdater  orquestarunqueue.RunQueuePriorityWriterPortV0
 	ControlReader orquestaruncontrol.RunControlReaderPortV0
 	Drainer       RunDrainerPortV0
 }

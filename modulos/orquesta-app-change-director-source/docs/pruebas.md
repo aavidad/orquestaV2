@@ -17,6 +17,9 @@ Casos focales:
 - `TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno`: un
   `external_work` publica contrato `ApplyExternalDomainWorkV0` y microtarea
   documental con paquete de dominio suficiente.
+- `TestAppChangeDirectorDecisionSourceV0ProyectaPlanDocumental`: `plan_tema`
+  crea tarea de planificacion documental, exige `document_plan` y no permite
+  redactar el documento final dentro del plan.
 - `TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExternoSinWriteSetLocal`:
   un `external_work` `draft_content_block` de OPES crea microtarea usando
   scopes externos derivados, sin exigir rutas locales en `allowed_write_set`, y

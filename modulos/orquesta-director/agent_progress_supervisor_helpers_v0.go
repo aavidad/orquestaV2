@@ -44,6 +44,26 @@ func assessmentDecisionFromProgressStatusV0(input AgentProgressSupervisionInputV
 			orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
 			orquestacoreworkflow.AgentAssessmentSeverityHighV0
 	}
+	if agentProgressOverBudgetNoActivityV0(input.Report) {
+		if !agentProgressStopAllowedV0(input) {
+			return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+				orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+				orquestacoreworkflow.AgentAssessmentSeverityHighV0
+		}
+		return orquestacoreworkflow.AgentAssessmentVerdictTimeoutV0,
+			orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+			orquestacoreworkflow.AgentAssessmentSeverityHighV0
+	}
+	if agentProgressOverBudgetButActiveV0(input.Report) {
+		return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+			orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+			orquestacoreworkflow.AgentAssessmentSeverityHighV0
+	}
+	if agentProgressHasArtifactWithoutAckV0(input.Report) {
+		return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+			orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+			orquestacoreworkflow.AgentAssessmentSeverityHighV0
+	}
 	switch input.Report.Status {
 	case orquestaruntime.AgentStalledV0:
 		return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
@@ -59,6 +79,11 @@ func assessmentDecisionFromProgressStatusV0(input AgentProgressSupervisionInputV
 			orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
 			orquestacoreworkflow.AgentAssessmentSeverityCriticalV0
 	case orquestaruntime.AgentStoppedV0:
+		if agentProgressHasArtifactWithoutAckV0(input.Report) {
+			return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+				orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+				orquestacoreworkflow.AgentAssessmentSeverityHighV0
+		}
 		if !agentProgressStopAllowedV0(input) {
 			return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
 				orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
@@ -78,6 +103,23 @@ func agentProgressCapacityLimitedV0(report orquestaruntime.AgentProgressReportV0
 	return report.BudgetStatus == orquestaruntime.AgentProgressBudgetCapacityLimitedV0
 }
 
+func agentProgressOverBudgetNoActivityV0(report orquestaruntime.AgentProgressReportV0) bool {
+	return report.BudgetStatus == orquestaruntime.AgentProgressBudgetOverBudgetNoActivityV0
+}
+
+func agentProgressOverBudgetButActiveV0(report orquestaruntime.AgentProgressReportV0) bool {
+	return report.BudgetStatus == orquestaruntime.AgentProgressBudgetOverBudgetButActiveV0
+}
+
+func agentProgressHasArtifactWithoutAckV0(report orquestaruntime.AgentProgressReportV0) bool {
+	for _, ref := range report.EvidenceRefs {
+		if strings.TrimSpace(ref) == "evidence-ref-artifact-without-ack" {
+			return true
+		}
+	}
+	return false
+}
+
 func agentProgressStopAllowedV0(input AgentProgressSupervisionInputV0) bool {
 	return input.StopAllowed == nil || *input.StopAllowed
 }
@@ -91,14 +133,32 @@ func stalledSeverityFromCountersV0(report orquestaruntime.AgentProgressReportV0)
 }
 
 func assessmentSummaryFromProgressReportV0(report orquestaruntime.AgentProgressReportV0) string {
+	if agentProgressOverBudgetNoActivityV0(report) {
+		if agentProgressHasArtifactWithoutAckV0(report) {
+			return "Tiempo excedido sin actividad reciente y artefacto sin ACK; detener agente logico y conservar evidencias."
+		}
+		return "Tiempo excedido sin actividad reciente; detener agente logico."
+	}
+	if agentProgressOverBudgetButActiveV0(report) {
+		return "Tiempo excedido con actividad reciente; consultar direccion antes de intervenir."
+	}
 	switch report.Status {
 	case orquestaruntime.AgentStalledV0:
+		if agentProgressHasArtifactWithoutAckV0(report) {
+			return "Entrega sin ACK con artefacto materializado; validar antes de replanificar."
+		}
 		return compactCounterSummaryV0("Estancamiento observado; consultar direccion.", report)
 	case orquestaruntime.AgentLoopDetectedV0:
+		if agentProgressHasArtifactWithoutAckV0(report) {
+			return "Entrega sin ACK con artefacto materializado; validar antes de replanificar."
+		}
 		return compactCounterSummaryV0("Bucle detectado; detener agente logico.", report)
 	case orquestaruntime.AgentStoppedV0:
 		if agentProgressCapacityLimitedV0(report) {
 			return "Capacidad externa limitada; cerrar agente y replanificar."
+		}
+		if agentProgressHasArtifactWithoutAckV0(report) {
+			return "Entrega sin ACK con artefacto materializado; validar antes de replanificar."
 		}
 		return "Proceso detenido sin entrega; detener agente logico y replanificar."
 	default:

@@ -121,6 +121,7 @@ func validateRunRefsV0(run OrchestrationRunV0) []OrchestrationValidationIssueV0 
 		"agents":                      run.Agents,
 		"started_agents":              run.StartedAgents,
 		"failed_agents":               run.FailedAgents,
+		"lost_agents":                 run.LostAgents,
 		"stopped_agents":              run.StoppedAgents,
 		"agent_stop_requests":         run.AgentStopRequests,
 		"confirmed_stopped_agents":    run.ConfirmedStoppedAgents,
@@ -153,6 +154,9 @@ func validateRunRefsV0(run OrchestrationRunV0) []OrchestrationValidationIssueV0 
 	}
 	if stoppedAgentRefsInvalidV0(run) {
 		return []OrchestrationValidationIssueV0{issueV0(OrchestrationEstadoInconsistenteV0, "stopped_agents")}
+	}
+	if lostAgentRefsInvalidV0(run) {
+		return []OrchestrationValidationIssueV0{issueV0(OrchestrationEstadoInconsistenteV0, "lost_agents")}
 	}
 	if agentStopRequestRefsInvalidV0(run) {
 		return []OrchestrationValidationIssueV0{issueV0(OrchestrationEstadoInconsistenteV0, "agent_stop_requests")}
@@ -237,6 +241,19 @@ func reviewResultRefsInvalidV0(run OrchestrationRunV0) bool {
 func stoppedAgentRefsInvalidV0(run OrchestrationRunV0) bool {
 	for _, stopped := range run.StoppedAgents {
 		if !agentRequestAlreadyReflectedV0(run, stopped) {
+			return true
+		}
+	}
+	return false
+}
+
+func lostAgentRefsInvalidV0(run OrchestrationRunV0) bool {
+	for _, lost := range run.LostAgents {
+		if !agentRequestAlreadyReflectedV0(run, lost) ||
+			!agentStartedAlreadyReflectedV0(run, lost) ||
+			agentFailedAlreadyReflectedV0(run, lost) ||
+			agentStopConfirmedAlreadyReflectedV0(run, lost) ||
+			agentDeliveredAlreadyReflectedV0(run, lost) {
 			return true
 		}
 	}

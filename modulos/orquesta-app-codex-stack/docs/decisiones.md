@@ -1,6 +1,71 @@
 # Decisiones: orquesta-app-codex-stack
 
 ```text
+Fecha: 2026-05-15
+Decision: El paquete Codex distingue director global de worker de area.
+Motivo: la prueba real de "director total" demostro que el stack podia lanzar
+varios Codex en paralelo, pero seguia encerrando al director en el mismo patron
+que un worker: write-set de arquitectura/plan y prompt que favorecia terminar
+tras escribir decisiones. Eso producia documentos parciales y bloqueaba los
+manuales exigidos por `documentar_app`.
+Impacto: `directorTaskV0` da al area `director` un write-set global con
+manuales, decisiones, pruebas y pendientes cuando el request_kind lo requiere;
+el objetivo aclara que el director no debe limitarse a planificar si se piden
+artefactos reales. Las areas `web`, `api`, `i18n`, `calidad` y persistencia
+siguen con write-set cerrado de un solo documento.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-18
+Decision: El nombre que devuelva un agente para el artefacto no es vinculante
+si el job externo ya declara el contrato esperado.
+Motivo: en trabajos OPES/Orquesta el director o un subagente puede cambiar
+`artifact_type` o nombres de campos (`titulo`, `contenido`, `tema_id`) aunque
+el contenido sea correcto. Rechazar todo el trabajo por nomenclatura recrea
+fallos falsos y desperdicia ejecuciones xhigh.
+Impacto: el builder de entregas desenvuelve `payload_json` aunque el
+`artifact_type` del sobre no coincida, usa el tipo esperado por `work_kind` y
+normaliza aliases frecuentes de campos antes de cruzar el puerto DomainWork.
+La aceptacion sigue dependiendo de que el payload sea materializable para el
+job: por ejemplo, `content_block` necesita tema/capitulo reales y cuerpo
+usable. El core sigue neutral; esta tolerancia vive en el borde de entrega.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-15
+Decision: El stack trata `AgentLost` como cierre terminal recuperable para
+drenaje, estadisticas y replanificacion.
+Motivo: un agente real puede quedar arrancado en el workflow pero perder su
+proceso/sesion tras reinicio o fallo del conector. Si el stack espera
+indefinidamente, vuelve el bucle de v1/v2; si confirma parada sin evidencia,
+falsea el estado. La salida correcta es registrar perdida y pedir replan con
+fuente durable `agent_lost`.
+Impacto: `drainRunHasPendingExternalAgentsV0` considera `lost_agents` como
+terminal, `AssessmentReplanSource` puede crear reemplazo cuando hay stop
+solicitado y perdida, `ProgressReportHandled` no deja reportes vivos para ese
+agente, y las estadisticas del director muestran estado `lost` con
+`needs_attention=true`.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-14
+Decision: `plan_tema`, `plan_temario` y `plan_documento` se entregan como
+`document_plan` validado por contrato de dominio.
+Motivo: para que OPES cree temarios solo, Orquesta debe poder pensar y devolver
+un plan ejecutable antes de redactar. Si el stack lo aceptase como
+`work_delivery` generico, volveriamos al fallo de v1/v2: trabajos que parecen
+completos pero no se pueden validar ni encadenar.
+Impacto: el builder default mapea los work kinds de planificacion a
+`document_plan`, exige `DomainDocumentPlanV0`, proyecta `content_type=application/json`
+y rechaza planes sin secciones o entregables. El core sigue sin conocer OPES ni
+reglas editoriales.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-13
 Decision: OPES consulta progreso por `external_job_ref`; Orquesta no obliga a
 OPES a interpretar la run completa.
@@ -12,6 +77,68 @@ Impacto: el stack inyecta `CodexStackExternalJobStatsSourceV0` en
 desde `AppChangeStore`, deriva `agent_ref`, consulta deliveries por
 `ReceiptStore` y proyecta `status` compacto. El `RunFileStoreV0` conserva
 `external_work` persistido para que esa resolucion sobreviva a reinicios.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-14
+Decision: El runner residente de puentes externos es generico; OPES es solo un adaptador opt-in.
+Motivo: Orquesta debe servir a OPES, programacion, documentacion, auditorias u
+otras apps futuras sin absorber su dominio. Convertir el server en un bridge de
+OPES repetiria el acoplamiento de v1/v2 y dificultaria reutilizar el nucleo.
+Impacto: `cmd/orquesta-server` arranca un `external_bridge_loop` neutral y OPES
+solo aporta configuracion y una funcion `opes-drain-once`. El core no conoce
+temarios, visuales, categorias ni politica editorial. Cualquier app externa
+debe entrar por contratos/puertos equivalentes, con idempotencia y supervisores
+acotados.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-14
+Decision: Los puentes externos residentes tienen ledger de entrada generico.
+Motivo: un job externo puede seguir como `pending` mientras Orquesta ya lo ha
+aceptado. Sin memoria local, el runner residente reenviaria el mismo trabajo
+en cada tick y volveriamos al patron de bucles de v1/v2.
+Impacto: `external_bridge_input_ledger` guarda `external_system`, `job_ref`,
+`run_ref`, `change_ref` y estado. OPES lo usa para marcar `already_submitted`,
+pero el ledger no contiene reglas de OPES y puede ser reutilizado por cualquier
+adaptador futuro. El submit sigue siendo idempotente; el ledger reduce ruido y
+token/coste sin tocar el core.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-14
+Decision: Orquesta es nucleo agnostico; Codex es solo un conector de agente.
+Motivo: OPES confirmo que el mismo nucleo debe servir para documentar temarios,
+programar apps, auditar seguridad, investigar, refactorizar o cualquier otro
+trabajo externo. Si el core se disena como "orquestador de programacion" o
+"orquestador de documentacion", volveremos al error de v1/v2: mezclar dominio,
+proveedor, runtime y politica de producto en los mismos flujos.
+Impacto: `orquesta-app-codex-stack` solo coordina runs, tareas, fases,
+capacidad, agentes, observabilidad y entregas por contratos. Codex, Claude,
+Gemini, agentes locales, REST/MCP, OPES o una web son adaptadores/puertos. El
+contrato neutral para dominio externo es `ApplyExternalDomainWorkV0`; OPES
+decide temarios, bloques, visuales y calidad pedagogica. Orquesta no sabe de
+psicologia, oposiciones, Go, SQLite ni PDF salvo por campos de contrato.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-14
+Decision: La recuperacion de ACK fallido se hace por contrato neutral de
+DomainWork, no por reglas OPES ni por parches de proveedor.
+Motivo: agentes Codex reales generaron artefactos validos dentro del write-set
+pero fallaron al escribir `agent_ack.json` en ruta de control fuera del proyecto.
+El problema raiz no era OPES ni el contenido: era una entrega externa valida
+sin confirmacion formal por una restriccion de runtime/sandbox.
+Impacto: el stack recupera solo cuando falta ACK, existe artefacto no vacio bajo
+write-set, la tarea tiene `ApplyExternalDomainWorkV0`, el builder produce una
+submission valida, el ledger no la tiene registrada y hay evidencia explicita
+del fallo de ACK. Si el agente ya esta parado o terminal, el tick global puede
+hacer `direct submit` antes de que el filtro de control ignore la run. Los
+agentes de assessment quedan excluidos. El core sigue sin conocer OPES.
 Estado: aceptada.
 ```
 
@@ -918,6 +1045,21 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-05-14
+Decision: El stack drena ACKs segun microtarea durable, no segun nombre de
+fase.
+Motivo: documentacion, integracion y revision pueden contener trabajo de tarea
+real, mientras que el brainstorming del director produce artefactos de fase.
+La frontera correcta es `task_id` presente en `run.Tasks`; no una constante
+`programacion` ni el mero hecho de traer `task_id` en el packet.
+Impacto: `DrainRunV0` registra `DeliveryRegistered` cuando el ACK corresponde
+a una microtarea durable del run y `PhaseArtifactRegistered` cuando corresponde
+a trabajo de fase del director. Asi el stack conserva cleanup por ACK,
+causalidad de sidecars y compatibilidad con fases no-programacion.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-12
 Decision: El stack no deja pendiente un agente real parado por capacidad
 externa limitada.
@@ -988,5 +1130,20 @@ Impacto: el builder default de entregas externas mapea `generate_visual_asset`
 a `visual_asset`, conserva campos editoriales de OPES y lee el fichero del ACK
 como `body`. Si `format=svg`, declara `content_type=image/svg+xml`. El core no
 conoce visuales ni OPES; esto vive en el bridge de dominio externo.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-15
+Decision: Las entregas `content_block` normalizan `source_refs` ricos antes de
+cruzar el puerto de dominio externo.
+Motivo: en prueba real OPES -> Orquesta -> Codex, un agente `gpt-5.5 xhigh`
+genero un bloque valido, pero devolvio `source_refs` como objetos con metadatos
+bibliograficos. OPES espera `source_refs` como lista compacta de strings y
+rechazo la entrega, aunque el contenido y el ACK fueran correctos.
+Impacto: el builder del bridge DomainWork convierte
+`source_refs:[{source_ref:...}]` en `source_refs:["..."]` y conserva el original
+en `source_ref_details`. El core sigue neutral; la adaptacion vive en el borde
+de entrega externa y sirve para cualquier agente que devuelva fuentes ricas.
 Estado: aceptada.
 ```

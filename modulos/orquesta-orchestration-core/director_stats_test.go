@@ -156,7 +156,7 @@ func TestBuildDirectorRunStatsWithObservationsV0ExponeProgresoPorAgenteYTarea(t 
 	agent := findDirectorAgentStatsForTestV0(t, stats, "agent-ref-progress-002")
 	if agent.LastProgress == nil ||
 		agent.LastProgress.Status != string(orquestaruntime.AgentStalledV0) ||
-		!agent.NeedsAttention {
+		agent.NeedsAttention {
 		t.Fatalf("agent=%+v", agent)
 	}
 	task := findDirectorTaskProgressForTestV0(t, stats.Progress, "task-ref-progress-002")
@@ -199,6 +199,41 @@ func TestBuildDirectorRunStatsWithObservationsV0NoMarcaSinSenalAgentesConEntrega
 	deliveryAgent := findDirectorAgentStatsForTestV0(t, stats, "agent-ref-reflected-delivery-001")
 	if deliveryAgent.Status != DirectorAgentStatusCompletedV0 || deliveryAgent.InFlight {
 		t.Fatalf("delivery_agent=%+v", deliveryAgent)
+	}
+}
+
+func TestBuildDirectorRunStatsWithObservationsV0IgnoraProgresoObsoletoDeAgenteCompletado(t *testing.T) {
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-progress-reflected-stale-001")
+	agentRef := "agent-ref-reflected-stale-001"
+	taskRef := "task-ref-reflected-stale-001"
+	run.Tasks = nil
+	run.Agents = []string{agentRef}
+	run.StartedAgents = []string{agentRef}
+	run.PhaseArtifacts = []string{
+		"artifact-reflected-stale-001#phase:brainstorming_arquitectura#agent:" + agentRef,
+	}
+
+	stats := BuildDirectorRunStatsWithObservationsV0(run, []AgentProgressObservationV0{
+		directorStatsProgressObservationForTestV0(
+			run.RunID,
+			agentRef,
+			taskRef,
+			orquestaruntime.AgentStalledV0,
+		),
+	}, nil)
+
+	if stats.Progress.ObservedAgents != 0 ||
+		stats.Progress.StalledAgents != 0 ||
+		stats.Progress.TasksObserved != 0 ||
+		len(stats.Progress.Tasks) != 0 {
+		t.Fatalf("progress=%+v", stats.Progress)
+	}
+	agent := findDirectorAgentStatsForTestV0(t, stats, agentRef)
+	if agent.Status != DirectorAgentStatusCompletedV0 ||
+		agent.InFlight ||
+		agent.NeedsAttention ||
+		agent.LastProgress != nil {
+		t.Fatalf("agent=%+v", agent)
 	}
 }
 

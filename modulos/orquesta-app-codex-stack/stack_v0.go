@@ -27,6 +27,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 	if err := validateConfigV0(config); err != nil {
 		return StackV0{}, err
 	}
+	config.DomainDelivery = normalizeDomainWorkDeliveryBridgeConfigV0(config.DomainDelivery)
 	ports := buildDirectorPortsV0(config)
 	queueConfig := normalizeRunQueueConfigV0(config.RunQueue)
 	supervisorConfig := normalizeRunSupervisorConfigV0(config.RunSupervisor)
@@ -38,7 +39,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		DirectorLimits: config.DirectorLimits,
 		Clock:          config.Clock,
 		DomainWork:     config.DomainWork,
-		DomainDelivery: normalizeDomainWorkDeliveryBridgeConfigV0(config.DomainDelivery),
+		DomainDelivery: config.DomainDelivery,
 	}
 	stack.Handler = buildStackHTTPHandlerV0(config, ports, queueConfig, &stack)
 	return stack, nil
@@ -77,6 +78,7 @@ func buildStackHTTPHandlerV0(
 			Reader: config.Stores.RunQueue,
 			Writer: config.Stores.RunQueue,
 		},
+		RunSupervisor:  NewCodexStackRunSupervisorExecutorV0(stack),
 		ServerShutdown: serverShutdownExecutorV0(config, stack),
 		DomainWork:     config.DomainWork,
 		ExternalWorkRun: externalWorkRunExecutorV0(
@@ -93,19 +95,26 @@ func buildDirectorPortsV0(
 	config ConfigV0,
 ) orquestaappdirectorservice.StartAppDirectorPortsV0 {
 	return orquestaappdirectorservice.StartAppDirectorPortsV0{
-		RunStore:                 config.Stores.RunStore,
-		EventSink:                ackRuntimeCleanupSinkV0(config),
-		OutboxLedger:             config.Stores.OutboxLedger,
-		DeliverySource:           deliverySourceV0(config),
-		ReviewGateSource:         reviewGateSourceV0(config),
-		ReviewReworkReplanSource: reviewReworkReplanSourceV0(config),
-		AssessmentReplanSource:   assessmentReplanSourceV0(config),
-		ProgressSource:           progressSourceV0(config),
-		RunControl:               config.Stores.RunControl,
-		RunControlTerminal:       config.Stores.RunControl,
-		DirectorDecisionSource:   directorDecisionSourceV0(config),
-		DirectorTaskStore:        config.Stores.TaskStore,
-		ExternalWaiter:           ackWaiterV0(config),
+		RunStore:                    config.Stores.RunStore,
+		EventSink:                   ackRuntimeCleanupSinkV0(config),
+		EventReader:                 eventReaderV0(config),
+		OutboxLedger:                config.Stores.OutboxLedger,
+		DeliverySource:              deliverySourceV0(config),
+		ReviewGateSource:            reviewGateSourceV0(config),
+		ReviewReworkReplanSource:    reviewReworkReplanSourceV0(config),
+		AssessmentReplanSource:      assessmentReplanSourceV0(config),
+		ProgressSource:              progressSourceV0(config),
+		RunControl:                  config.Stores.RunControl,
+		RunControlTerminal:          config.Stores.RunControl,
+		DirectorDecisionSource:      directorDecisionSourceV0(config),
+		DirectorTaskStore:           config.Stores.TaskStore,
+		WorkflowTaskDefaultCapacity: config.Capacity.Tier,
+		WaitStateWriter:             waitStateWriterV0(config),
+		OperationalPlanStateWriter:  operationalPlanStateWriterV0(config),
+		OperationalPlanStateStore:   operationalPlanStateStoreV0(config),
+		RequiredTestEvidenceStore:   requiredTestEvidenceStoreV0(config),
+		ExternalWaiter:              ackWaiterV0(config),
+		OperationalClosureSource:    operationalClosureSourceV0(config),
 		Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
 			capacityDispatcherV0(config),
 			stopperDispatcherV0(config),
@@ -115,6 +124,47 @@ func buildDirectorPortsV0(
 			agentBatchDispatcherV0(config),
 		},
 	}
+}
+
+func requiredTestEvidenceStoreV0(
+	config ConfigV0,
+) orquestacionnucleoapp.RequiredTestEvidenceStorePortV0 {
+	if config.Stores.RequiredTestEvidenceStore != nil {
+		return config.Stores.RequiredTestEvidenceStore
+	}
+	store, _ := config.Stores.TaskStore.(orquestacionnucleoapp.RequiredTestEvidenceStorePortV0)
+	return store
+}
+
+func waitStateWriterV0(
+	config ConfigV0,
+) orquestacionnucleoapp.WorkflowTaskWaitStateWriterPortV0 {
+	writer, _ := config.Stores.TaskStore.(orquestacionnucleoapp.WorkflowTaskWaitStateWriterPortV0)
+	return writer
+}
+
+func operationalPlanStateWriterV0(
+	config ConfigV0,
+) orquestacionnucleoapp.OperationalDirectorPlanStateWriterPortV0 {
+	if config.Stores.OperationalPlanStateWriter != nil {
+		return config.Stores.OperationalPlanStateWriter
+	}
+	writer, _ := config.Stores.TaskStore.(orquestacionnucleoapp.OperationalDirectorPlanStateWriterPortV0)
+	return writer
+}
+
+func operationalPlanStateStoreV0(
+	config ConfigV0,
+) orquestacionnucleoapp.OperationalDirectorPlanStateStorePortV0 {
+	if config.Stores.OperationalPlanStateStore != nil {
+		return config.Stores.OperationalPlanStateStore
+	}
+	store, _ := config.Stores.OperationalPlanStateWriter.(orquestacionnucleoapp.OperationalDirectorPlanStateStorePortV0)
+	if store != nil {
+		return store
+	}
+	store, _ = config.Stores.TaskStore.(orquestacionnucleoapp.OperationalDirectorPlanStateStorePortV0)
+	return store
 }
 
 func ackRuntimeCleanupSinkV0(config ConfigV0) orquestacionnucleoapp.EventSinkPortV0 {

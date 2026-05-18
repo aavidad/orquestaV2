@@ -90,6 +90,20 @@ func TestSolicitarNuevaAppV0HonorsExplicitOptions(t *testing.T) {
 	}
 }
 
+func TestSolicitarNuevaAppV0DocumentationTypeUsesDocumentationPlatform(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.TipoApp = "documentacion"
+	req.RequestKind = RequestKindDocumentarAppV0
+
+	spec, issues := SolicitarNuevaAppV0(req, time.Date(2026, 5, 15, 9, 0, 0, 0, time.UTC))
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %+v", issues)
+	}
+	if len(spec.Platforms) != 1 || spec.Platforms[0] != "documentation" {
+		t.Fatalf("platforms=%+v", spec.Platforms)
+	}
+}
+
 func TestSolicitarNuevaAppV0ReturnsValidationIssues(t *testing.T) {
 	req := validMinimalRequestV0()
 	req.Nombre = ""

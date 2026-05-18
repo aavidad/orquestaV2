@@ -14,10 +14,14 @@ func (stack StackV0) RunGlobalTickV0(
 	command orquestaruncoordinator.RunCoordinatorTickCommandV0,
 ) (orquestaruncoordinator.RunCoordinatorTickResultV0, error) {
 	command = stack.normalizeRunCoordinatorCommandV0(command)
+	if err := stack.recoverQueuedControlledDomainWorkArtifactsV0(ctx, command); err != nil {
+		return orquestaruncoordinator.RunCoordinatorTickResultV0{}, err
+	}
 	return orquestaruncoordinator.CoordinateRunsTickV0(
 		ctx,
 		orquestaruncoordinator.RunCoordinatorDepsV0{
 			QueueReader:   stack.Stores.RunQueue,
+			QueueUpdater:  stack.Stores.RunQueue,
 			ControlReader: stack.Stores.RunControl,
 			Drainer:       stackRunDrainerV0{stack: stack},
 		},

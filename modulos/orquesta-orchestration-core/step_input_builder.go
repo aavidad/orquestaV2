@@ -37,6 +37,7 @@ func (builder cycleStepInputBuilderV0) BuildDirectorCycleStepInputV0(
 		CorrelationID:    request.CorrelationID,
 		EvidenceRefs:     request.EvidenceRefs,
 		PreviousDecision: previousDecisionActionV0(request),
+		WaitAgentRefs:    builder.Request.WaitAgentRefs,
 	})
 	if err != nil {
 		return orquestadirectorcycle.DirectorCycleStepInputV0{}, err

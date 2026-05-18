@@ -97,6 +97,8 @@ func validateEventPayloadV0(event OrchestrationEventV0) error {
 		return validateAgentStartedPayloadV0(event)
 	case OrchestrationEventAgentFailedV0:
 		return validateAgentFailedPayloadV0(event)
+	case OrchestrationEventAgentLostV0:
+		return validateAgentLostPayloadV0(event)
 	case OrchestrationEventAgentLeaseExpiredV0:
 		return validateAgentLeaseExpiredPayloadV0(event)
 	case OrchestrationEventAgentStopRequestedV0:

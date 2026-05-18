@@ -98,6 +98,53 @@ func TestWorkflowTaskCandidateProviderV0RequiresTaskStoreForProgramacion(t *test
 	assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "workflow_task_store")
 }
 
+func TestWorkflowTaskCandidateProviderV0UsaFaseActualDelRun(t *testing.T) {
+	runRef := "run-nucleo-workflow-task-current-phase-001"
+	task := workflowTaskForCandidateProviderTestV0(runRef, "task-workitem-docs", []string{"docs/uso.md"})
+	task.PhaseID = orquestacoreworkflow.OrchestrationPhaseDocumentacionV0
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.CurrentPhase = orquestacoreworkflow.OrchestrationPhaseDocumentacionV0
+	run.Tasks = []string{task.TaskID}
+
+	candidates, err := (WorkflowTaskCandidateProviderV0{
+		TaskStore: NewInMemoryWorkflowTaskStoreV0(task),
+	}).BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        run,
+		OccurredAt: "2026-05-17T11:00:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.WorkCandidates) != 1 {
+		t.Fatalf("work candidates=%+v", candidates.WorkCandidates)
+	}
+	payload := candidates.WorkCandidates[0].AgentCandidate.Payload
+	if payload.PhaseID != string(orquestacoreworkflow.OrchestrationPhaseDocumentacionV0) {
+		t.Fatalf("phase_id=%s", payload.PhaseID)
+	}
+}
+
+func TestWorkflowTaskCandidateProviderV0IgnoraTareaDeOtraFase(t *testing.T) {
+	runRef := "run-nucleo-workflow-task-other-phase-001"
+	task := workflowTaskForCandidateProviderTestV0(runRef, "task-workitem-other-phase", []string{"docs/uso.md"})
+	task.PhaseID = orquestacoreworkflow.OrchestrationPhaseDocumentacionV0
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.Tasks = []string{task.TaskID}
+
+	candidates, err := (WorkflowTaskCandidateProviderV0{
+		TaskStore: NewInMemoryWorkflowTaskStoreV0(task),
+	}).BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        run,
+		OccurredAt: "2026-05-17T11:05:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.WorkCandidates) != 0 {
+		t.Fatalf("work candidates=%+v", candidates.WorkCandidates)
+	}
+}
+
 func TestWorkflowTaskCandidateProviderV0SkipsClosedTasks(t *testing.T) {
 	runRef := "run-nucleo-workflow-task-closed-001"
 	task := workflowTaskForCandidateProviderTestV0(runRef, "task-workitem-closed", []string{"app/closed.go"})

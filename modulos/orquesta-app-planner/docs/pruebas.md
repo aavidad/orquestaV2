@@ -28,6 +28,8 @@ Cobertura:
 - la unidad API standard usa `cmd/server` como entrypoint Go.
 - la unidad API large usa `internal/api` + `cmd/server`.
 - `go test ./...` se conserva como test obligatorio de contrato runtime.
+- las unidades de docs, integracion y revision salen con su `phase_id`
+  especifico, no como programacion.
 
 Validacion 2026-05-11:
 

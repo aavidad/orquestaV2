@@ -42,7 +42,10 @@ func runPreparedDirectorLoopV0(
 	prepared orquestaappdirectorintake.AppDirectorIntakePreparedV0,
 ) (orquestacionnucleoapp.ProgressiveLoopResultV0, error) {
 	service := startAppDirectorLoopServiceV0(request, ports, prepared)
-	loopRequest := startAppDirectorLoopRequestV0(request, ports, prepared)
+	loopRequest, err := startAppDirectorLoopRequestV0(ctx, request, ports, prepared)
+	if err != nil {
+		return orquestacionnucleoapp.ProgressiveLoopResultV0{}, err
+	}
 	if ports.ExternalWaiter == nil {
 		return service.RunProgressiveLoopV0(ctx, loopRequest)
 	}
@@ -80,19 +83,42 @@ func startAppDirectorLoopServiceV0(
 }
 
 func startAppDirectorLoopRequestV0(
+	ctx context.Context,
 	request StartAppDirectorRequestV0,
 	ports StartAppDirectorPortsV0,
 	prepared orquestaappdirectorintake.AppDirectorIntakePreparedV0,
-) orquestacionnucleoapp.ProgressiveLoopRequestV0 {
+) (orquestacionnucleoapp.ProgressiveLoopRequestV0, error) {
+	waitResolution, err := appDirectorResolvedWaitV0(
+		ctx,
+		prepared.Run.RunID,
+		request.WaitAgentRefs,
+		appDirectorWaitFilterV0{
+			CohortRef:     request.WaitCohortRef,
+			WaveRef:       request.WaitWaveRef,
+			ParentTaskRef: request.WaitParentTaskRef,
+		},
+		ports,
+		appDirectorWaitStateMetaV0{
+			OccurredAt:       request.OccurredAt,
+			CorrelationID:    request.CorrelationID,
+			EvidenceRefs:     prepared.EvidenceRefs,
+			MaxExternalWaits: request.MaxExternalWaits,
+		},
+	)
+	if err != nil {
+		return orquestacionnucleoapp.ProgressiveLoopRequestV0{}, err
+	}
 	return orquestacionnucleoapp.ProgressiveLoopRequestV0{
 		RunRef:               prepared.Run.RunID,
 		OccurredAt:           request.OccurredAt,
 		MaxBursts:            request.MaxBursts,
 		MaxStepsPerBurst:     request.MaxStepsPerBurst,
 		MaxDispatchesPerWait: request.MaxDispatchesPerWait,
+		WaitAgentRefs:        waitResolution.AgentRefs,
+		WaitScopeApplied:     waitResolution.ScopeApplied,
 		CorrelationID:        request.CorrelationID,
 		EvidenceRefs:         prepared.EvidenceRefs,
 		Dispatchers:          ports.Dispatchers,
 		BatchDispatchers:     ports.BatchDispatchers,
-	}
+	}, nil
 }

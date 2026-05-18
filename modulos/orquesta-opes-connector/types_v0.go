@@ -21,6 +21,7 @@ type ExternalJobQueryV0 struct {
 	ExecutionMode string
 	Status        string
 	JobType       string
+	JobRef        string
 	Limit         int
 }
 

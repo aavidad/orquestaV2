@@ -21,7 +21,7 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 	stateDir := absDirEnvOrDefaultV0("ORQUESTA_SERVER_STATE_DIR",
 		filepath.Join(defaultControlDirV0(projectDir), "state"))
 	runtimeDir := absDirEnvOrDefaultV0("ORQUESTA_CODEX_RUNTIME_WORKDIR",
-		filepath.Join(defaultControlDirV0(projectDir), "runtime"))
+		filepath.Join(projectDir, ".orquesta-runtime"))
 	config := orquestaserver.ConfigV0{
 		Addr:           envOrDefaultV0("ORQUESTA_SERVER_ADDR", orquestaserver.DefaultAddrV0),
 		StateDir:       stateDir,

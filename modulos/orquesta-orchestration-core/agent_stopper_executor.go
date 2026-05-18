@@ -34,6 +34,9 @@ func (executor AgentStopperExecutorV0) ExecuteOutboxDispatchV0(
 	}
 	result, err := executor.Stopper.StopAgentV0(context.Background(), inbound)
 	if err != nil {
+		if stopperRuntimeLostV0(err) {
+			return executor.registerAgentLostAfterUnconfirmedStopV0(intent, inbound)
+		}
 		return orquestaoutboxdispatch.OutboxDispatchExecutionResultV0{}, err
 	}
 	command, err := executor.agentStopConfirmedCommandV0(intent, inbound, result)

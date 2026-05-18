@@ -26,12 +26,17 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 	body := readDomainWorkDeliveryBodyV0(input.Descriptor, input.Ack)
 	fields := copyDomainWorkFieldsForContextV0(work.InputFields)
 	artifactType := domainWorkArtifactTypeForWorkKindV0(work.WorkKind)
-	fields = domainWorkDeliveryPayloadFieldsV0(fields, artifactType, input.Task.Title, body)
+	payloadBody := domainWorkDeliveryPayloadBodyV0(body, artifactType)
+	payloadBody = canonicalDomainWorkDeliveryPayloadBodyV0(artifactType, payloadBody, input)
+	if err := validateDomainWorkDeliveryQualityV0(fields, artifactType, body, payloadBody); err != nil {
+		return orquestadomainwork.DomainWorkArtifactSubmissionV0{}, false, err
+	}
+	fields = domainWorkDeliveryPayloadFieldsV0(fields, artifactType, input.Task.Title, payloadBody)
 	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(
 		orquestadomainwork.DomainWorkArtifactSubmissionV0{
-			RequestID:      "req-domain-work-artifact-" + input.Observation.DeliveryRef,
+			RequestID:      domainWorkArtifactRequestIDV0(work, artifactType),
 			CorrelationID:  input.Record.Request.CorrelationID,
-			IdempotencyKey: "idem-domain-work-artifact-" + input.Observation.DeliveryRef,
+			IdempotencyKey: domainWorkArtifactIdempotencyKeyV0(work, artifactType),
 			RequestedBy:    "orquesta",
 			DomainRef:      work.ProjectRef,
 			JobRef:         work.JobRef,
@@ -60,6 +65,10 @@ func domainWorkArtifactTypeForWorkKindV0(workKind string) string {
 		return "topic_summary"
 	case "expand_topic_from_summary":
 		return "topic_expansion_package"
+	case "plan_documento", "plan_tema", "plan_temario":
+		return orquestadomainwork.DomainDocumentPlanArtifactTypeV0
+	case "assemble_topic":
+		return "assembled_topic"
 	default:
 		return "work_delivery"
 	}
@@ -71,7 +80,7 @@ func domainWorkDeliveryPayloadFieldsV0(
 	title string,
 	body string,
 ) []orquestadomainwork.DomainWorkFieldV0 {
-	if parsed, ok := domainWorkDeliveryJSONPayloadFieldsV0(body); ok {
+	if parsed, ok := domainWorkDeliveryJSONPayloadFieldsV0(body, artifactType); ok {
 		fields = appendDomainWorkFieldIfMissingV0(
 			fields,
 			"content_type",
@@ -96,8 +105,28 @@ func domainWorkDeliveryPayloadFieldsV0(
 	return fields
 }
 
+func domainWorkDeliveryPayloadBodyV0(body string, artifactType string) string {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return ""
+	}
+	var envelope struct {
+		ArtifactType string          `json:"artifact_type"`
+		PayloadJSON  json.RawMessage `json:"payload_json"`
+	}
+	if err := json.Unmarshal([]byte(body), &envelope); err != nil || len(envelope.PayloadJSON) == 0 {
+		return body
+	}
+	payload := strings.TrimSpace(string(envelope.PayloadJSON))
+	if payload == "" || payload == "null" || !json.Valid(envelope.PayloadJSON) {
+		return body
+	}
+	return payload
+}
+
 func domainWorkDeliveryJSONPayloadFieldsV0(
 	body string,
+	artifactType string,
 ) ([]orquestadomainwork.DomainWorkFieldV0, bool) {
 	body = strings.TrimSpace(body)
 	if body == "" {
@@ -114,7 +143,7 @@ func domainWorkDeliveryJSONPayloadFieldsV0(
 	sort.Strings(keys)
 	fields := make([]orquestadomainwork.DomainWorkFieldV0, 0, len(payload))
 	for _, name := range keys {
-		field, ok := domainWorkDeliveryJSONFieldV0(name, payload[name])
+		field, ok := domainWorkDeliveryJSONFieldV0(artifactType, name, payload[name])
 		if !ok {
 			continue
 		}
@@ -124,12 +153,18 @@ func domainWorkDeliveryJSONPayloadFieldsV0(
 }
 
 func domainWorkDeliveryJSONFieldV0(
+	artifactType string,
 	name string,
 	raw json.RawMessage,
 ) (orquestadomainwork.DomainWorkFieldV0, bool) {
-	name = strings.TrimSpace(name)
+	name = domainWorkDeliveryCanonicalPayloadFieldNameV0(artifactType, name)
 	if name == "" || len(raw) == 0 || !json.Valid(raw) {
 		return orquestadomainwork.DomainWorkFieldV0{}, false
+	}
+	if name == "source_refs" && !sourceRefsAlreadyCompactV0(raw) {
+		if refs, ok := compactSourceRefsFromRichPayloadV0(raw); ok {
+			return orquestadomainwork.DomainWorkFieldV0{Name: name, Values: refs}, true
+		}
 	}
 	var text string
 	if err := json.Unmarshal(raw, &text); err == nil {
@@ -172,6 +207,9 @@ func domainWorkDeliveryContentTypeV0(
 	fields []orquestadomainwork.DomainWorkFieldV0,
 	artifactType string,
 ) string {
+	if artifactType == orquestadomainwork.DomainDocumentPlanArtifactTypeV0 {
+		return "application/json"
+	}
 	if artifactType != "visual_asset" {
 		return "text/markdown"
 	}

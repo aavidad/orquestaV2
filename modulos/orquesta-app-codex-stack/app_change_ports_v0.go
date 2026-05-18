@@ -2,12 +2,21 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+)
+
+const (
+	appChangeDirectorMaxSummaryLenV0     = 700
+	appChangeDirectorMaxOptionsV0        = 5
+	appChangeDirectorMaxOptionLenV0      = 180
+	appChangeDirectorMaxEvidenceRefsV0   = 10
+	appChangeDirectorMaxEvidenceRefLenV0 = 180
 )
 
 func appChangePortsV0(config ConfigV0) orquestaappchange.AppChangePortsV0 {
@@ -80,9 +89,9 @@ func appChangeAskDirectorCommandV0(
 			QuestionID:   appChangeQuestionRefV0(request.ChangeRef),
 			SourceGroup:  "user",
 			TargetGroup:  "director",
-			Summary:      appChangeSummaryV0(request),
-			Options:      append([]string(nil), request.AcceptanceCriteria...),
-			EvidenceRefs: appChangeEvidenceRefsV0(request),
+			Summary:      appChangeDirectorSummaryV0(request),
+			Options:      appChangeDirectorOptionsV0(request),
+			EvidenceRefs: appChangeDirectorEvidenceRefsV0(request),
 			Blocking:     false,
 		},
 	)
@@ -92,7 +101,7 @@ func appChangeQuestionRefV0(changeRef string) string {
 	return "question-ref-app-change-" + strings.TrimSpace(changeRef)
 }
 
-func appChangeSummaryV0(request orquestaappchange.AppChangeRequestV0) string {
+func appChangeDirectorSummaryV0(request orquestaappchange.AppChangeRequestV0) string {
 	parts := []string{"Cambio solicitado", request.UserIntent}
 	if request.TargetArea != "" {
 		parts = append(parts, "area "+request.TargetArea)
@@ -100,7 +109,7 @@ func appChangeSummaryV0(request orquestaappchange.AppChangeRequestV0) string {
 	if request.AppRef != "" {
 		parts = append(parts, "app "+request.AppRef)
 	}
-	return strings.Join(parts, ": ")
+	return appChangeCompactTextV0(strings.Join(parts, ": "), appChangeDirectorMaxSummaryLenV0)
 }
 
 func appChangeEvidenceRefsV0(request orquestaappchange.AppChangeRequestV0) []string {
@@ -109,6 +118,31 @@ func appChangeEvidenceRefsV0(request orquestaappchange.AppChangeRequestV0) []str
 	refs = append(refs, request.MetadataRefs...)
 	refs = append(refs, appChangeExternalWorkRefsV0(request.ExternalWork)...)
 	return compactCodexStackStringsV0(refs)
+}
+
+func appChangeDirectorOptionsV0(request orquestaappchange.AppChangeRequestV0) []string {
+	criteria := compactCodexStackStringsV0(request.AcceptanceCriteria)
+	if len(criteria) == 0 {
+		criteria = compactCodexStackStringsV0(request.Constraints)
+	}
+	if len(criteria) == 0 {
+		return nil
+	}
+	if len(criteria) <= appChangeDirectorMaxOptionsV0 {
+		return appChangeCompactListV0(criteria, appChangeDirectorMaxOptionsV0, appChangeDirectorMaxOptionLenV0)
+	}
+	kept := appChangeDirectorMaxOptionsV0 - 1
+	options := appChangeCompactListV0(criteria[:kept], kept, appChangeDirectorMaxOptionLenV0)
+	options = append(options, fmt.Sprintf("contrato completo persistido en app_change: %d criterios", len(criteria)))
+	return options
+}
+
+func appChangeDirectorEvidenceRefsV0(request orquestaappchange.AppChangeRequestV0) []string {
+	return appChangeCompactListV0(
+		appChangeEvidenceRefsV0(request),
+		appChangeDirectorMaxEvidenceRefsV0,
+		appChangeDirectorMaxEvidenceRefLenV0,
+	)
 }
 
 func appChangeExternalWorkRefsV0(
@@ -130,6 +164,33 @@ func firstAppChangeNonEmptyV0(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func appChangeCompactListV0(values []string, maxItems int, maxLen int) []string {
+	if maxItems <= 0 || maxLen <= 0 {
+		return nil
+	}
+	compacted := compactCodexStackStringsV0(values)
+	if len(compacted) > maxItems {
+		compacted = compacted[:maxItems]
+	}
+	out := make([]string, 0, len(compacted))
+	for _, value := range compacted {
+		out = append(out, appChangeCompactTextV0(value, maxLen))
+	}
+	return out
+}
+
+func appChangeCompactTextV0(value string, maxLen int) string {
+	value = strings.TrimSpace(value)
+	if maxLen <= 0 || len(value) <= maxLen {
+		return value
+	}
+	const suffix = "..."
+	if maxLen <= len(suffix) {
+		return value[:maxLen]
+	}
+	return strings.TrimSpace(value[:maxLen-len(suffix)]) + suffix
 }
 
 func compactCodexStackStringsV0(values []string) []string {

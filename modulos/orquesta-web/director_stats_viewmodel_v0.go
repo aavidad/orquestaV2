@@ -234,8 +234,8 @@ func directorStatsSummaryV0(
 }
 
 func directorStatsAttentionStateV0(vm WebDirectorStatsViewModelV0) string {
-	if vm.Progress.StalledAgents > 0 ||
-		vm.Progress.LoopDetectedAgents > 0 ||
+	if vm.Progress.LoopDetectedAgents > 0 ||
+		vm.Progress.StoppedAgents > 0 ||
 		vm.Counts.AgentsNeedAttention > 0 ||
 		vm.Checkpoint.RequiresAttention {
 		return WebDirectorStatsEstadoAtencionV0

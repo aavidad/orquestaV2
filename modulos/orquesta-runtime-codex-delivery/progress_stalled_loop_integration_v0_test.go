@@ -13,7 +13,7 @@ import (
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
 
-func TestCodexProgressObservationV0SilencioSostenidoPreguntaDirectorSinParar(t *testing.T) {
+func TestCodexProgressObservationV0SilencioSostenidoNoPreguntaDirectorSinPresupuesto(t *testing.T) {
 	ctx := context.Background()
 	runRef := "run-ref-progress-stalled-loop-001"
 	spec := codexDeliverySpecForTestV0()
@@ -74,8 +74,8 @@ func TestCodexProgressObservationV0SilencioSostenidoPreguntaDirectorSinParar(t *
 	if result.Status != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 {
 		t.Fatalf("status=%s final=%+v", result.Status, result.Final)
 	}
-	if !codexDeliveryLoopHasEventV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventDirectorQuestionRaisedV0) {
-		t.Fatalf("sin DirectorQuestionRaised: %+v", sink.EventsV0())
+	if codexDeliveryLoopHasEventV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventDirectorQuestionRaisedV0) {
+		t.Fatalf("DirectorQuestionRaised no esperado por stalled informativo: %+v", sink.EventsV0())
 	}
 	if codexDeliveryLoopHasEventV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentStopConfirmedV0) {
 		t.Fatalf("stop no esperado por silencio: %+v", sink.EventsV0())

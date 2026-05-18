@@ -137,6 +137,170 @@ func TestBuildAgentProgressSupervisionV0CapacidadLimitadaCierraParaRelevo(t *tes
 	}
 }
 
+func TestBuildAgentProgressSupervisionV0TiempoSinActividadDetieneAunqueHayaStalledPrevio(t *testing.T) {
+	const (
+		taskRef       = "task-ref-supervisor-timeout-001"
+		agentRef      = "agent-request-ref-supervisor-timeout-001"
+		assessmentRef = "assessment-ref-supervisor-timeout-001"
+	)
+	h := newSupervisionHarnessWithAgentV0(t, taskRef, agentRef, "timeout")
+	report := validSupervisionProgressReportV0(h.run.RunID, agentRef, orquestaruntime.AgentStalledV0)
+	report.ReportID = "agent-progress-report-ref-supervisor-timeout-001"
+	report.BudgetStatus = orquestaruntime.AgentProgressBudgetOverBudgetNoActivityV0
+	report.BudgetReason = "Tiempo excedido sin actividad reciente."
+	report.DecisionRequired = true
+	report.EvidenceRefs = append(report.EvidenceRefs, "evidence-ref-artifact-without-ack")
+
+	result, err := BuildAgentProgressSupervisionV0(AgentProgressSupervisionInputV0{
+		CommandMeta:   h.meta("agent-supervision-timeout"),
+		Report:        report,
+		PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		TaskRef:       taskRef,
+		AssessmentRef: assessmentRef,
+	})
+	if err != nil {
+		t.Fatalf("BuildAgentProgressSupervisionV0: %v", err)
+	}
+	if result.AskDirectorCommand != nil {
+		t.Fatalf("AskDirector no esperado para timeout sin actividad: %+v", result.AskDirectorCommand)
+	}
+	payload := decodeAssessAgentWorkPayloadV0(t, result.AssessCommand)
+	if payload.Verdict != orquestacoreworkflow.AgentAssessmentVerdictTimeoutV0 ||
+		payload.Action != orquestacoreworkflow.AgentAssessmentActionStopAgentV0 ||
+		payload.Severity != orquestacoreworkflow.AgentAssessmentSeverityHighV0 ||
+		!strings.Contains(payload.Summary, "artefacto sin ACK") {
+		t.Fatalf("payload timeout inesperado: %+v", payload)
+	}
+	handled := h.handle(result.AssessCommand)
+	if len(handled.Outbox) != 1 ||
+		handled.Outbox[0].MessageType != orquestacoreworkflow.OutboxMessageStopRuntimeAgentV0 {
+		t.Fatalf("outbox timeout inesperado: %+v", handled.Outbox)
+	}
+}
+
+func TestBuildAgentProgressSupervisionV0TiempoExcedidoConActividadPreguntaDirector(t *testing.T) {
+	const (
+		taskRef       = "task-ref-supervisor-over-budget-active-001"
+		agentRef      = "agent-request-ref-supervisor-over-budget-active-001"
+		assessmentRef = "assessment-ref-supervisor-over-budget-active-001"
+		questionID    = "question-ref-supervisor-over-budget-active-001"
+	)
+	h := newSupervisionHarnessWithAgentV0(t, taskRef, agentRef, "over-budget-active")
+	report := validSupervisionProgressReportV0(h.run.RunID, agentRef, orquestaruntime.AgentProgressingV0)
+	report.ReportID = "agent-progress-report-ref-supervisor-over-budget-active-001"
+	report.BudgetStatus = orquestaruntime.AgentProgressBudgetOverBudgetButActiveV0
+	report.BudgetReason = "Tiempo excedido con actividad reciente."
+	report.DecisionRequired = true
+
+	result, err := BuildAgentProgressSupervisionV0(AgentProgressSupervisionInputV0{
+		CommandMeta:   h.meta("agent-supervision-over-budget-active"),
+		Report:        report,
+		PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		TaskRef:       taskRef,
+		AssessmentRef: assessmentRef,
+		QuestionID:    questionID,
+	})
+	if err != nil {
+		t.Fatalf("BuildAgentProgressSupervisionV0: %v", err)
+	}
+	payload := decodeAssessAgentWorkPayloadV0(t, result.AssessCommand)
+	if payload.Verdict != orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0 ||
+		payload.Action != orquestacoreworkflow.AgentAssessmentActionAskDirectorV0 ||
+		payload.Severity != orquestacoreworkflow.AgentAssessmentSeverityHighV0 {
+		t.Fatalf("payload over budget activo inesperado: %+v", payload)
+	}
+	if result.AskDirectorCommand == nil {
+		t.Fatalf("AskDirector command requerido")
+	}
+	handled := h.handle(result.AssessCommand)
+	if len(handled.Outbox) != 0 {
+		t.Fatalf("over budget activo no debe parar directamente: %+v", handled.Outbox)
+	}
+}
+
+func TestBuildAgentProgressSupervisionV0ArtefactoSinACKPreguntaDirector(t *testing.T) {
+	const (
+		taskRef       = "task-ref-supervisor-artifact-001"
+		agentRef      = "agent-request-ref-supervisor-artifact-001"
+		assessmentRef = "assessment-ref-supervisor-artifact-001"
+		questionID    = "question-ref-supervisor-artifact-001"
+	)
+	h := newSupervisionHarnessWithAgentV0(t, taskRef, agentRef, "artifact")
+	report := validSupervisionProgressReportV0(h.run.RunID, agentRef, orquestaruntime.AgentStoppedV0)
+	report.ReportID = "agent-progress-report-ref-supervisor-artifact-001"
+	report.DecisionRequired = true
+	report.EvidenceRefs = append(report.EvidenceRefs, "evidence-ref-no-ack", "evidence-ref-artifact-without-ack")
+
+	result, err := BuildAgentProgressSupervisionV0(AgentProgressSupervisionInputV0{
+		CommandMeta:   h.meta("agent-supervision-artifact"),
+		Report:        report,
+		PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		TaskRef:       taskRef,
+		AssessmentRef: assessmentRef,
+		QuestionID:    questionID,
+	})
+	if err != nil {
+		t.Fatalf("BuildAgentProgressSupervisionV0: %v", err)
+	}
+	payload := decodeAssessAgentWorkPayloadV0(t, result.AssessCommand)
+	if payload.Verdict != orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0 ||
+		payload.Action != orquestacoreworkflow.AgentAssessmentActionAskDirectorV0 ||
+		payload.Severity != orquestacoreworkflow.AgentAssessmentSeverityHighV0 {
+		t.Fatalf("payload artifact inesperado: %+v", payload)
+	}
+	if result.AskDirectorCommand == nil {
+		t.Fatalf("AskDirector command requerido")
+	}
+	handled := h.handle(result.AssessCommand)
+	if len(handled.Outbox) != 0 {
+		t.Fatalf("artefacto sin ACK no debe pedir stop inmediato: %+v", handled.Outbox)
+	}
+	askPayload := decodeAskDirectorPayloadV0(t, *result.AskDirectorCommand)
+	if askPayload.Blocking {
+		t.Fatalf("revision de artefacto no debe bloquear el run: %+v", askPayload)
+	}
+}
+
+func TestBuildAgentProgressSupervisionV0LoopConArtefactoNoDetieneSinRevision(t *testing.T) {
+	const (
+		taskRef       = "task-ref-supervisor-loop-artifact-001"
+		agentRef      = "agent-request-ref-supervisor-loop-artifact-001"
+		assessmentRef = "assessment-ref-supervisor-loop-artifact-001"
+		questionID    = "question-ref-supervisor-loop-artifact-001"
+	)
+	h := newSupervisionHarnessWithAgentV0(t, taskRef, agentRef, "loop-artifact")
+	report := validSupervisionProgressReportV0(h.run.RunID, agentRef, orquestaruntime.AgentLoopDetectedV0)
+	report.ReportID = "agent-progress-report-ref-supervisor-loop-artifact-001"
+	report.DecisionRequired = true
+	report.RepeatedActionCount = 4
+	report.EvidenceRefs = append(report.EvidenceRefs, "evidence-ref-no-ack", "evidence-ref-artifact-without-ack")
+
+	result, err := BuildAgentProgressSupervisionV0(AgentProgressSupervisionInputV0{
+		CommandMeta:   h.meta("agent-supervision-loop-artifact"),
+		Report:        report,
+		PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		TaskRef:       taskRef,
+		AssessmentRef: assessmentRef,
+		QuestionID:    questionID,
+	})
+	if err != nil {
+		t.Fatalf("BuildAgentProgressSupervisionV0: %v", err)
+	}
+	payload := decodeAssessAgentWorkPayloadV0(t, result.AssessCommand)
+	if payload.Verdict != orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0 ||
+		payload.Action != orquestacoreworkflow.AgentAssessmentActionAskDirectorV0 ||
+		payload.Summary != "Entrega sin ACK con artefacto materializado; validar antes de replanificar." {
+		t.Fatalf("payload artifact inesperado: %+v", payload)
+	}
+	handled := h.handle(result.AssessCommand)
+	if len(handled.Outbox) != 0 {
+		t.Fatalf("artefacto en loop no debe pedir stop inmediato: %+v", handled.Outbox)
+	}
+	if result.AskDirectorCommand == nil {
+		t.Fatalf("AskDirector command requerido")
+	}
+}
+
 func TestBuildAgentProgressSupervisionV0RechazaReporteInvalido(t *testing.T) {
 	h := newProgressiveHarnessV0(t)
 	report := validSupervisionProgressReportV0(h.run.RunID, "agent-request-ref-invalid-001", orquestaruntime.AgentStalledV0)

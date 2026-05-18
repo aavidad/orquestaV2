@@ -1,0 +1,132 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	orquestaopesbridge "orquesta/modulos/orquesta-opes-bridge"
+)
+
+type opesDrainConfigV0 struct {
+	OPESBaseURL     string
+	OrquestaBaseURL string
+	Limit           int
+	JobType         string
+	JobTypeSequence []string
+	JobRef          string
+	DryRun          bool
+	HTTPTimeout     time.Duration
+	RunConfig       orquestaopesbridge.JobRunConfigV0
+	InputLedger     externalBridgeInputLedgerV0
+}
+
+func opesDrainConfigFromEnvV0() (opesDrainConfigV0, error) {
+	return opesDrainConfigFromEnvWithBaseURLV0("")
+}
+
+func opesDrainConfigFromEnvWithBaseURLV0(
+	orquestaBaseURLFallback string,
+) (opesDrainConfigV0, error) {
+	opesBaseURL := firstNonEmptyEnvV0("ORQUESTA_OPES_BASE_URL", "OPES_BASE_URL")
+	if opesBaseURL == "" {
+		return opesDrainConfigV0{}, fmt.Errorf("ORQUESTA_OPES_BASE_URL u OPES_BASE_URL requerido")
+	}
+	dryRun := strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BRIDGE_DRY_RUN")) == "1"
+	orquestaBaseURL, err := orquestaBaseURLFromEnvOrStateOrFallbackV0(
+		dryRun,
+		orquestaBaseURLFallback,
+	)
+	if err != nil {
+		return opesDrainConfigV0{}, err
+	}
+	inputLedger, err := opesBridgeInputLedgerFromEnvV0(dryRun)
+	if err != nil {
+		return opesDrainConfigV0{}, err
+	}
+	jobType := strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BRIDGE_JOB_TYPE"))
+	jobTypeSequence := opesBridgeJobTypeSequenceFromEnvV0()
+	jobRef := strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BRIDGE_JOB_REF"))
+	if len(jobTypeSequence) > 0 && jobType != "" {
+		return opesDrainConfigV0{}, fmt.Errorf("ORQUESTA_OPES_BRIDGE_JOB_TYPE incompatible con ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE")
+	}
+	if len(jobTypeSequence) > 0 && jobRef != "" {
+		return opesDrainConfigV0{}, fmt.Errorf("ORQUESTA_OPES_BRIDGE_JOB_REF incompatible con ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE")
+	}
+	return opesDrainConfigV0{
+		OPESBaseURL:     strings.TrimRight(opesBaseURL, "/"),
+		OrquestaBaseURL: strings.TrimRight(orquestaBaseURL, "/"),
+		Limit:           intEnvOrDefaultV0("ORQUESTA_OPES_BRIDGE_LIMIT", 3),
+		JobType:         jobType,
+		JobTypeSequence: jobTypeSequence,
+		JobRef:          jobRef,
+		DryRun:          dryRun,
+		HTTPTimeout:     time.Duration(intEnvOrDefaultV0("ORQUESTA_OPES_BRIDGE_TIMEOUT_SECONDS", 30)) * time.Second,
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: intEnvOrDefaultV0("ORQUESTA_OPES_BRIDGE_PRIORITY", 70),
+			RequestedBy:   "orquesta-opes-bridge",
+		},
+		InputLedger: inputLedger,
+	}, nil
+}
+
+func orquestaBaseURLFromEnvOrStateV0(dryRun bool) (string, error) {
+	return orquestaBaseURLFromEnvOrStateOrFallbackV0(dryRun, "")
+}
+
+func orquestaBaseURLFromEnvOrStateOrFallbackV0(
+	dryRun bool,
+	fallback string,
+) (string, error) {
+	if value := strings.TrimSpace(os.Getenv("ORQUESTA_BASE_URL")); value != "" {
+		return value, nil
+	}
+	if value := strings.TrimSpace(fallback); value != "" {
+		return value, nil
+	}
+	if dryRun {
+		return "dry-run", nil
+	}
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		return "", err
+	}
+	state, err := loadStateV0(config)
+	if err != nil {
+		return "", fmt.Errorf("ORQUESTA_BASE_URL requerido si no hay estado de servidor")
+	}
+	if strings.TrimSpace(state.Addr) == "" {
+		return "", fmt.Errorf("estado de servidor sin addr")
+	}
+	return "http://" + strings.TrimSpace(state.Addr), nil
+}
+
+func firstNonEmptyEnvV0(keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func opesBridgeJobTypeSequenceFromEnvV0() []string {
+	return parseOPESBridgeJobTypeSequenceV0(os.Getenv("ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE"))
+}
+
+func parseOPESBridgeJobTypeSequenceV0(raw string) []string {
+	raw = strings.NewReplacer(",", " ", ";", " ", "\n", " ", "\t", " ").Replace(raw)
+	parts := strings.Fields(raw)
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	if out == nil {
+		return []string{}
+	}
+	return out
+}

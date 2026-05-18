@@ -95,9 +95,10 @@ func TestRunPreparedAppOrchestrationV0DirectorAutonomoNoMantieneProgressObsoleto
 	}
 	progress := result.DirectorLoopStats.Run.Progress
 	if progress.SourceStatus != orquestacionnucleoapp.DirectorProgressSourceLoadedV0 ||
+		progress.ObservedAgents != 0 ||
 		progress.ProgressingAgents != 0 ||
 		progress.StalledAgents != 0 ||
-		progress.TasksObserved != 2 {
+		progress.TasksObserved != result.DirectorLoopStats.Run.Counts.TasksDelivered {
 		t.Fatalf("progress=%+v", progress)
 	}
 	if !runnerStatsContainTaskStatusV0(

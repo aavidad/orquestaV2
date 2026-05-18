@@ -11,6 +11,7 @@ import (
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadomainworkfile "orquesta/modulos/orquesta-domain-work-file"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaopesconnector "orquesta/modulos/orquesta-opes-connector"
 	orquestarunfile "orquesta/modulos/orquesta-run-file"
@@ -81,21 +82,28 @@ func buildStackFromEnvV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	domainWorkExecutor, err := domainWorkExecutorFromEnvV0(serverConfig)
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
 	return orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
 		Timeout:        30 * time.Second,
 		DirectorLimits: directorLimitsV0(),
 		Stores: orquestaappcodexstack.StoresV0{
-			RunStore:        stateStore,
-			EventSink:       stateStore,
-			OutboxLedger:    outboxLedger,
-			TaskStore:       stateStore,
-			AppChangeStore:  runFileStore,
-			ReceiptStore:    receiptStore,
-			ProgressState:   progressStore,
-			ProcessRegistry: stateStore,
-			RunControl:      runFileStore,
-			RunQueue:        runFileStore,
+			RunStore:                   stateStore,
+			EventSink:                  stateStore,
+			OutboxLedger:               outboxLedger,
+			TaskStore:                  stateStore,
+			OperationalPlanStateWriter: stateStore,
+			OperationalPlanStateStore:  stateStore,
+			RequiredTestEvidenceStore:  stateStore,
+			AppChangeStore:             runFileStore,
+			ReceiptStore:               receiptStore,
+			ProgressState:              progressStore,
+			ProcessRegistry:            stateStore,
+			RunControl:                 runFileStore,
+			RunQueue:                   runFileStore,
 		},
 		RunQueue: orquestaappcodexstack.RunQueueConfigV0{
 			QueueRef:       "global",
@@ -121,9 +129,9 @@ func buildStackFromEnvV0(
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence: orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 		},
-		DomainWork: domainWorkExecutorFromEnvV0(),
+		DomainWork: domainWorkExecutor,
 		DomainDelivery: orquestaappcodexstack.DomainWorkDeliveryBridgeConfigV0{
-			Enabled: strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BASE_URL")) != "",
+			Enabled: firstNonEmptyEnvV0("ORQUESTA_OPES_BASE_URL", "OPES_BASE_URL") != "",
 			Ledger:  domainDeliveryLedgerFromEnvV0(serverConfig),
 		},
 	})
@@ -155,24 +163,27 @@ func codexRuntimeConfigV0(
 	processRuntime *orquestaruntime.ProcessRuntimeConnectorV0,
 ) orquestaappcodexstack.CodexRuntimeConfigV0 {
 	return orquestaappcodexstack.CodexRuntimeConfigV0{
-		CommandPath:     codexCommandPathV0(),
-		ProjectWorkDir:  serverConfig.ProjectWorkDir,
-		RuntimeWorkDir:  serverConfig.RuntimeWorkDir,
-		CodeHomeDir:     codeHomeDirV0(),
-		HomeDir:         homeDirV0(),
-		PathEnv:         envOrDefaultV0("ORQUESTA_CODEX_PATH", os.Getenv("PATH")),
-		Model:           strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_MODEL")),
-		ReasoningEffort: strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_REASONING_EFFORT")),
-		Profile:         strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_PROFILE")),
-		Sandbox:         envOrDefaultV0("ORQUESTA_CODEX_SANDBOX", "workspace-write"),
-		ApprovalPolicy:  envOrDefaultV0("ORQUESTA_CODEX_APPROVAL_POLICY", "never"),
-		ExtraArgs:       strings.Fields(os.Getenv("ORQUESTA_CODEX_EXTRA_ARGS")),
-		Runtime:         processRuntime,
-		ProcessStopper:  processRuntime,
-		SnapshotSource:  processRuntime,
-		MaxBatchReady:   intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_BATCH_READY", defaultCodexMaxBatchReadyV0),
-		MaxConcurrency:  intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_CONCURRENCY", defaultCodexMaxConcurrencyV0),
-		WaitInterval:    time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_WAIT_INTERVAL_MS", defaultCodexWaitIntervalMSV0)) * time.Millisecond,
+		CommandPath:    codexCommandPathV0(),
+		ProjectWorkDir: serverConfig.ProjectWorkDir,
+		RuntimeWorkDir: serverConfig.RuntimeWorkDir,
+		CodeHomeDir:    codeHomeDirV0(),
+		HomeDir:        homeDirV0(),
+		PathEnv:        envOrDefaultV0("ORQUESTA_CODEX_PATH", os.Getenv("PATH")),
+		Model:          strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_MODEL")),
+		ReasoningEffort: envOrDefaultV0(
+			"ORQUESTA_CODEX_REASONING_EFFORT",
+			string(orquestacoreworkflow.OrchestrationCapacityXHighV0),
+		),
+		Profile:        strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_PROFILE")),
+		Sandbox:        envOrDefaultV0("ORQUESTA_CODEX_SANDBOX", "workspace-write"),
+		ApprovalPolicy: envOrDefaultV0("ORQUESTA_CODEX_APPROVAL_POLICY", "never"),
+		ExtraArgs:      strings.Fields(os.Getenv("ORQUESTA_CODEX_EXTRA_ARGS")),
+		Runtime:        processRuntime,
+		ProcessStopper: processRuntime,
+		SnapshotSource: processRuntime,
+		MaxBatchReady:  intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_BATCH_READY", defaultCodexMaxBatchReadyV0),
+		MaxConcurrency: intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_CONCURRENCY", defaultCodexMaxConcurrencyV0),
+		WaitInterval:   time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_WAIT_INTERVAL_MS", defaultCodexWaitIntervalMSV0)) * time.Millisecond,
 		ProgressPolicy: orquestaruntime.AgentProgressHeartbeatPolicyV0{
 			StalledAfterNoProgressTicks: intEnvOrDefaultV0("ORQUESTA_CODEX_STALLED_TICKS", defaultCodexStalledTicksV0),
 			LoopAfterRepeatedActions:    intEnvOrDefaultV0("ORQUESTA_CODEX_LOOP_TICKS", defaultCodexLoopTicksV0),
@@ -219,19 +230,41 @@ func homeDirV0() string {
 	return home
 }
 
-func domainWorkExecutorFromEnvV0() orquestamcp.MCPDomainWorkExecutorPortV0 {
-	baseURL := strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BASE_URL"))
-	if baseURL == "" {
-		return nil
+func domainWorkExecutorFromEnvV0(
+	serverConfig orquestaserver.ConfigV0,
+) (orquestamcp.MCPDomainWorkExecutorPortV0, error) {
+	baseURL := firstNonEmptyEnvV0("ORQUESTA_OPES_BASE_URL", "OPES_BASE_URL")
+	fileDir := strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_FILE_DIR"))
+	fileEnabled := strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED")) == "1" ||
+		fileDir != ""
+	if baseURL != "" && fileEnabled {
+		return nil, fmt.Errorf("domain_work_backend_ambiguous")
 	}
-	client := orquestaopesconnector.NewRESTClientV0(orquestaopesconnector.RESTClientConfigV0{
-		BaseURL: baseURL,
-		HTTPClient: &http.Client{
-			Timeout: time.Duration(intEnvOrDefaultV0("ORQUESTA_OPES_TIMEOUT_SECONDS", 30)) * time.Second,
-		},
-		DefaultMaxAttempts: intEnvOrDefaultV0("ORQUESTA_OPES_DEFAULT_MAX_ATTEMPTS", 1),
-	})
-	return orquestamcp.NewMCPDomainWorkToolExecutorV0(client, client)
+	if baseURL != "" {
+		client := orquestaopesconnector.NewRESTClientV0(orquestaopesconnector.RESTClientConfigV0{
+			BaseURL: baseURL,
+			HTTPClient: &http.Client{
+				Timeout: time.Duration(intEnvOrDefaultV0("ORQUESTA_OPES_TIMEOUT_SECONDS", 30)) * time.Second,
+			},
+			DefaultMaxAttempts: intEnvOrDefaultV0("ORQUESTA_OPES_DEFAULT_MAX_ATTEMPTS", 1),
+		})
+		return orquestamcp.NewMCPDomainWorkToolExecutorV0(client, client), nil
+	}
+	if !fileEnabled {
+		return nil, nil
+	}
+	if fileDir == "" {
+		fileDir = filepath.Join(serverConfig.StateDir, "domain-work-jobs")
+	}
+	fileDir, err := filepath.Abs(fileDir)
+	if err != nil {
+		return nil, fmt.Errorf("domain_work_file_dir_invalid")
+	}
+	creator, err := orquestadomainworkfile.NewFileDomainWorkJobCreatorV0(fileDir)
+	if err != nil {
+		return nil, err
+	}
+	return orquestamcp.NewMCPDomainWorkToolExecutorV0(creator, nil), nil
 }
 
 func validateCodexCommandAvailableV0() error {

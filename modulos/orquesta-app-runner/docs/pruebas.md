@@ -24,6 +24,8 @@ Cobertura:
 - con `UseAutonomousDirectorLoop=true`, el runner usa
   `RunAutonomousDirectorLoopV0`, pasa limites locales a la politica y propaga
   `director_loop_stats`;
+- con `UseAutonomousDirectorLoop=true`, las esperas externas y el avance
+  multi-fase cierran tambien unidades de documentacion, integracion y revision;
 - con `UseAutonomousDirectorLoop=true` y `ProgressSource` inyectado, el runner
   reconsulta el puerto al cerrar stats y expone progreso final util en
   `director_loop_stats.run.progress`: agentes observados, progressing/stalled,

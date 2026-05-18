@@ -22,3 +22,19 @@ por entorno:
   bucle. Por defecto son 300 ticks con intervalo de 2s.
 
 Estos valores alimentan estadisticas de director y no pertenecen al nucleo.
+
+## Bridge OPES residente
+
+`cmd/orquesta-server run` puede arrancar el bridge OPES por opt-in:
+
+```sh
+ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
+ORQUESTA_OPES_BRIDGE_ENABLED=1 \
+ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
+ORQUESTA_OPES_BRIDGE_LIMIT=1 \
+ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic \
+go run ./cmd/orquesta-server run
+```
+
+La secuencia de tipos es composicion OPES, no contrato del runtime residente.
+Cada tick usa el loop generico y drena solo el primer tipo que siga pendiente.

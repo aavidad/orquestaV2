@@ -40,3 +40,14 @@ La composicion productiva usa ahora defaults conservadores: 300 ticks para
 `stalled`, 300 ticks para posible bucle, 10 minutos sin actividad y 20 minutos
 como presupuesto esperado. El nucleo no conoce esos numeros; siguen entrando
 por configuracion y pueden ajustarse por entorno.
+
+## SRV-006: backend file opt-in para domain_work generico
+
+`cmd/orquesta-server` puede inyectar `orquesta-domain-work-file` como backend
+de `DomainWorkJobCreatorPortV0` cuando se configura
+`ORQUESTA_DOMAIN_WORK_FILE_ENABLED=1` o `ORQUESTA_DOMAIN_WORK_FILE_DIR`.
+
+Esto cablea `/api/v0/domain-work` para `create_job` sin depender de OPES y sin
+importar filesystem desde paquetes puros. No habilita `submit_artifact` ni el
+bridge de entrega, porque el adaptador file solo crea jobs. Si tambien existe
+`ORQUESTA_OPES_BASE_URL`, el servidor falla por backend ambiguo.

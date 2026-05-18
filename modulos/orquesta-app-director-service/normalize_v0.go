@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorrunner "orquesta/modulos/orquesta-director-runner"
 )
 
@@ -25,6 +26,15 @@ func normalizeStartAppDirectorRequestV0(
 	request.OccurredAt = strings.TrimSpace(request.OccurredAt)
 	request.CorrelationID = strings.TrimSpace(request.CorrelationID)
 	request.RequestedBy = strings.TrimSpace(request.RequestedBy)
+	request.WaitAgentRefs = compactStartAppDirectorStringsV0(request.WaitAgentRefs)
+	request.WaitCohortRef = strings.TrimSpace(request.WaitCohortRef)
+	request.WaitWaveRef = strings.TrimSpace(request.WaitWaveRef)
+	request.WaitParentTaskRef = strings.TrimSpace(request.WaitParentTaskRef)
+	request.OperationalDirectorFunctionContractRefs = normalizeServiceWorkflowFunctionContractRefsV0(request.OperationalDirectorFunctionContractRefs)
+	request.OperationalDirectorTargetPhaseID = orquestacoreworkflow.OrchestrationPhaseIDV0(strings.TrimSpace(string(request.OperationalDirectorTargetPhaseID)))
+	if request.OperationalDirectorMaxItems < 0 {
+		request.OperationalDirectorMaxItems = 0
+	}
 	request.AppSpecRequest.RequestID = strings.TrimSpace(request.AppSpecRequest.RequestID)
 	request.AppSpecRequest.Source = strings.TrimSpace(request.AppSpecRequest.Source)
 	if request.CorrelationID == "" {

@@ -45,7 +45,11 @@ Puertos requeridos por composicion:
 - outbox ledger;
 - dispatchers del loop;
 - fuentes opcionales de entrega, progreso, leases, replan y decisiones;
-- store de microtareas de director cuando una decision crea trabajo nuevo.
+- store de microtareas de director cuando una decision crea trabajo nuevo;
+- writer/store de `OperationalDirectorPlanStateV0` si la composicion quiere
+  estado vivo del plan durable y reentrada por `operational_director_plan_ref`.
+  Si no se pasan explicitos, el stack intenta usar el writer cuando tambien lee
+  y despues el `TaskStore` cuando implementa ese puerto.
 
 Reglas:
 
@@ -56,6 +60,65 @@ Reglas:
 - Si falta un puerto real requerido, el arranque falla antes de lanzar agentes.
 - El bridge `domain_work` solo se activa si el borde superior inyecta un
   executor; este stack no importa OPES ni crea clientes REST de dominio.
+
+## Supervisor de agente Codex V0
+
+Contrato interno de composicion para avanzar un agente Codex gestionado por
+Orquesta:
+
+```text
+SuperviseCodexV0
+  tick 1 -> AgentLifecycle.LaunchV0(ctx)
+  tick 2..N -> AgentLifecycle.ContinueV0(ctx, "sigue")
+  stop -> done | failed | max_ticks | context_done | runtime_error
+```
+
+Invariantes:
+
+- el primer tick siempre lanza la sesion;
+- los ticks siguientes empujan la sesion con `continue_message`, por defecto
+  `sigue`;
+- `done`, `completed` y `complete` cierran como `done`;
+- `failed`, `error` y `errored` cierran como `failed`;
+- `pending`, `running` y `stopped` no son terminales para esta pieza: se siguen
+  empujando hasta `done`, error, cancelacion de contexto o `max_ticks`;
+- el resultado conserva historial compacto de tick, accion y snapshot;
+- el contrato es un puerto del borde Codex, no del core;
+- `CodexSupervisorRuntimePortV0` queda como alias compatible, pero el concepto
+  correcto es `CodexSupervisorAgentLifecyclePortV0`: ciclo de vida de agente
+  Orquesta, no stdin ni runtime interactivo.
+
+Manejo real de agentes en Orquesta:
+
+- las tareas se convierten en outbox `LaunchRuntimeAgent`;
+- `agentBatchDispatcherV0` ejecuta `ExternalProcessAgentBatchExecutorV0`;
+- el launcher resuelve spec Codex, arranca proceso, registra `AgentStarted` y
+  escribe `AgentProcessRegistryRecordV0`;
+- `CodexReceiptRecordingSpecResolverV0` deja descriptor ACK por agente;
+- `CodexDeliveryObservationSourceV0` observa `agent_ack.json` y devuelve
+  `AgentDeliveryObservationV0`;
+- `DrainRunV0` aplica ACKs, reentra `ContinueAppDirectorV0` y despacha nuevas
+  decisiones;
+- progreso parado/lento entra por `ProgressSupervisionCandidateProviderV0` y el
+  replan por `AssessmentReplanSourceV0`, que puede pedir `replace_agent`.
+
+`CodexSupervisorStackLifecycleV0` es el adaptador de stack para
+`ContinueV0("sigue")`: con `RunRef` reentra por `DrainRunV0`; sin `RunRef`
+ejecuta `RunGlobalSupervisorV0`. En ambos casos el avance real sigue siendo tick
+de supervisor/drain/replan/outbox. Si hace falta otro Codex, debe salir por
+`LaunchRuntimeAgent` y el dispatcher existente, no por un canal paralelo.
+
+Superficie publica de app:
+
+```text
+POST /api/v0/runs/supervise
+  input: run_ref?, queue_ref?, max_ticks?, continue_message?, limites?
+  output: estado, run_ref, stop_reason, ticks, last, history?, evidence_refs
+```
+
+La ruta es neutral de runs. El gateway y `orquesta-mcp` no conocen Codex. Este
+stack inyecta `CodexStackRunSupervisorExecutorV0`, que adapta ese contrato al
+supervisor Codex del borde.
 
 ## Bridge de entregas a dominio externo
 
@@ -82,6 +145,9 @@ Invariantes:
 - el builder default mapea `draft_content_block` a `content_block`,
   `generate_visual_asset` a `visual_asset`, revisiones a `block_revision` y
   trabajos de fuentes a `source`;
+- el builder default mapea `plan_tema`, `plan_temario` y `plan_documento` a
+  `document_plan`, desenvuelve envelopes compatibles y rechaza payloads que no
+  validen como `DomainDocumentPlanV0`;
 - los payloads de dominio salen de `external_work.input_fields` y del fichero
   permitido por el ACK, no del core ni de internals de OPES.
 - para `visual_asset`, el builder conserva `asset_type`, `format`, `title`,

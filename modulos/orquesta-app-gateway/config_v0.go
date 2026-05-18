@@ -19,6 +19,7 @@ type ConfigV0 struct {
 	DirectorStats    orquestamcp.MCPTransportDirectorStatsExecutorV0
 	RunControl       orquestamcp.MCPTransportRunControlExecutorV0
 	RunQueuePriority orquestamcp.MCPTransportRunQueuePriorityExecutorV0
+	RunSupervisor    orquestamcp.MCPTransportRunSupervisorExecutorV0
 	ServerShutdown   orquestamcp.MCPTransportServerShutdownExecutorV0
 	DomainWork       orquestamcp.MCPDomainWorkExecutorPortV0
 	ExternalWorkRun  orquestamcp.MCPTransportExternalWorkRunExecutorV0

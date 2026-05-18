@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	orquestacoreconcurrency "orquesta/modulos/orquesta-core-concurrency"
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 )
 
 type AppPlannerIssueV0 struct {
@@ -75,6 +76,9 @@ func validateAppWorkUnitV0(unit AppWorkUnitV0) error {
 	}
 	if len(unit.WriteSet) == 0 || len(unit.AcceptanceCriteria) == 0 {
 		return AppPlannerIssueV0{Field: "work"}
+	}
+	if err := orquestacoreworkflow.ValidateOrchestrationPhaseIDV0(unit.PhaseID); err != nil {
+		return AppPlannerIssueV0{Field: "phase_id"}
 	}
 	for _, value := range unit.WriteSet {
 		if _, issues := orquestacoreconcurrency.NewScopeRefV0(value); len(issues) > 0 {

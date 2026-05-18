@@ -75,11 +75,12 @@ func runControlStoppableAgentRefsV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) []string {
 	failed := autonomousStringSetV0(run.FailedAgents)
+	lost := autonomousStringSetV0(run.LostAgents)
 	stopped := autonomousStringSetV0(run.StoppedAgents)
 	confirmed := autonomousStringSetV0(run.ConfirmedStoppedAgents)
 	out := make([]string, 0, len(run.StartedAgents))
 	for _, agentRef := range compactStringsV0(run.StartedAgents) {
-		if failed[agentRef] || stopped[agentRef] || confirmed[agentRef] {
+		if failed[agentRef] || lost[agentRef] || stopped[agentRef] || confirmed[agentRef] {
 			continue
 		}
 		out = append(out, agentRef)
@@ -146,10 +147,11 @@ func runControlUnconfirmedAgentRefsV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) []string {
 	failed := autonomousStringSetV0(run.FailedAgents)
+	lost := autonomousStringSetV0(run.LostAgents)
 	confirmed := autonomousStringSetV0(run.ConfirmedStoppedAgents)
 	out := make([]string, 0, len(run.StartedAgents))
 	for _, agentRef := range compactStringsV0(run.StartedAgents) {
-		if failed[agentRef] || confirmed[agentRef] {
+		if failed[agentRef] || lost[agentRef] || confirmed[agentRef] {
 			continue
 		}
 		out = append(out, agentRef)

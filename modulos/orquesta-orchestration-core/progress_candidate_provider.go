@@ -37,6 +37,10 @@ func (provider ProgressSupervisionCandidateProviderV0) BuildSchedulerCandidatesV
 		return SchedulerCandidateSetV0{}, err
 	}
 	for _, observation := range observations {
+		observation = normalizeProgressObservationV0(request, observation)
+		if err := validateProgressObservationV0(request, observation); err != nil {
+			return SchedulerCandidateSetV0{}, err
+		}
 		if !progressObservationRequiresSchedulerDecisionV0(observation) {
 			continue
 		}
@@ -57,7 +61,8 @@ func progressObservationRequiresSchedulerDecisionV0(
 	if observation.DecisionRequired || observation.Report.DecisionRequired {
 		return true
 	}
-	return observation.Report.Status != orquestaruntime.AgentProgressingV0
+	return observation.Report.Status == orquestaruntime.AgentLoopDetectedV0 ||
+		observation.Report.Status == orquestaruntime.AgentStoppedV0
 }
 
 func (provider ProgressSupervisionCandidateProviderV0) baseCandidatesV0(

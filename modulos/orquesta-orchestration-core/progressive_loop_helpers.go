@@ -19,6 +19,7 @@ func (service ServiceV0) runProgressiveBurstV0(
 		MaxSteps:      request.MaxStepsPerBurst,
 		CorrelationID: progressiveCorrelationIDV0(request, burstNumber),
 		EvidenceRefs:  request.EvidenceRefs,
+		WaitAgentRefs: request.WaitAgentRefs,
 	})
 }
 

@@ -36,13 +36,24 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
 }
 
 func runServerCommandV0(_ io.Writer, stderr io.Writer) int {
+	serverConfig, err := serverConfigFromEnvV0()
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "orquesta-server: %v\n", err)
+		return 1
+	}
 	runtime, err := buildRuntimeFromEnvV0()
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server: %v\n", err)
 		return 1
 	}
+	bridgeConfig, err := opesBridgeLoopConfigFromEnvV0("http://" + serverConfig.Addr)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "orquesta-server opes-bridge: %v\n", err)
+		return 1
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
+	go runOPESBridgeLoopV0(ctx, bridgeConfig, stderr, runOPESDrainOnceV0)
 	if err := runtime.RunV0(ctx); err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server: %v\n", err)
 		return 1

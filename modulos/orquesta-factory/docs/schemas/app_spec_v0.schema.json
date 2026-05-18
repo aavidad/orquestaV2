@@ -491,7 +491,9 @@
         "automation",
         "data",
         "plugin",
-        "mixed"
+        "mixed",
+        "documentacion",
+        "documentation"
       ]
     },
     "string_list": {

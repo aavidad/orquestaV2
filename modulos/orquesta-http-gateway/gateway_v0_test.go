@@ -90,6 +90,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			},
 		},
 		{
+			name:  "run supervisor",
+			route: RouteRunSupervisorV0,
+			handlers: RouteHandlersV0{
+				RunSupervisor: markerHandler("run-supervisor"),
+			},
+		},
+		{
 			name:  "server shutdown",
 			route: RouteServerShutdownV0,
 			handlers: RouteHandlersV0{

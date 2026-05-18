@@ -72,6 +72,63 @@ func TestAgentStopperExecutorV0ConfirmsStopAndAcksOutbox(t *testing.T) {
 	}
 }
 
+func TestAgentStopperExecutorV0MarcaLostSiStopNoPuedeConfirmarProcess(t *testing.T) {
+	runRef := "run-nucleo-agent-stopper-lost-001"
+	store := NewInMemoryRunStoreV0(mustActiveProgrammingRunV0(t, runRef))
+	ledger := NewInMemoryOutboxLedgerV0()
+	sink := NewInMemoryEventSinkV0()
+	runtime := orquestaruntime.NewRuntimeFakeLifecycleV0()
+	service := ServiceV0{
+		RunStore:  store,
+		EventSink: sink,
+		CandidateProvider: StaticCandidateProviderV0{Candidates: SchedulerCandidateSetV0{
+			WorkCandidates: []orquestadirectorscheduler.SchedulableWorkCandidateV0{
+				workCandidateWithAgentV0(runRef),
+			},
+		}},
+		OutboxLedger: ledger,
+		MaxCommands:  4,
+	}
+
+	launched := runProgressiveLoopWithFakeAgentRuntimeV0(t, service, store, sink, ledger, runtime, runRef)
+	saveStopOutboxV0(t, store, ledger, launched.Run, "agent-ref-001")
+
+	dispatch, err := RunOutboxDispatchOnceV0(context.Background(), OutboxDispatchOnceRequestV0{
+		RunRef:     runRef,
+		TargetPort: orquestacoreworkflow.OutboxTargetAgentLauncherV0,
+		Reader:     ledger,
+		Claimer:    ledger,
+		Executor: AgentStopperExecutorV0{
+			RunStore:   store,
+			EventSink:  sink,
+			Stopper:    lostAgentStopperForTestV0{},
+			ObservedAt: "2026-05-08T10:45:00Z",
+		},
+		Acker: ledger,
+	})
+	if err != nil {
+		t.Fatalf("dispatch lost stop: %v", err)
+	}
+	if dispatch.Status != "dispatched" || dispatch.DispatchRef == "" {
+		t.Fatalf("dispatch=%+v", dispatch)
+	}
+	finalRun, err := store.LoadRunV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("load final run: %v", err)
+	}
+	if !containsNucleoRefV0(finalRun.LostAgents, "agent-ref-001") ||
+		containsNucleoRefV0(finalRun.ConfirmedStoppedAgents, "agent-ref-001") {
+		t.Fatalf("lost=%v confirmed=%v", finalRun.LostAgents, finalRun.ConfirmedStoppedAgents)
+	}
+	if pending := pendingOutboxRefsForTargetV0(t, ledger, runRef, orquestacoreworkflow.OutboxTargetAgentLauncherV0); len(pending) != 0 {
+		t.Fatalf("pending agent_launcher=%v", pending)
+	}
+	if !sinkHasEventTypeV0(sink, orquestacoreworkflow.OrchestrationEventAgentLostV0) ||
+		sinkHasEventTypeV0(sink, orquestacoreworkflow.OrchestrationEventAgentStopConfirmedV0) {
+		t.Fatalf("sink events=%+v", sink.EventsV0())
+	}
+}
+
 func TestAgentStopperExecutorV0RejectsNonStopRuntimeAgentOutbox(t *testing.T) {
 	executor := AgentStopperExecutorV0{
 		RunStore:   NewInMemoryRunStoreV0(),
@@ -104,6 +161,20 @@ func TestAgentStopperExecutorV0KeepsWorkflowAgentRequestID(t *testing.T) {
 
 	if got != "agent-ref-workflow-001" {
 		t.Fatalf("agent_request_id=%q", got)
+	}
+}
+
+type lostAgentStopperForTestV0 struct{}
+
+func (lostAgentStopperForTestV0) StopAgentV0(
+	context.Context,
+	orquestaruntime.AgentStopperInboundV0,
+) (AgentStopResultV0, error) {
+	return AgentStopResultV0{}, orquestaruntime.ProcessRuntimeErrorV0{
+		Code:       orquestaruntime.ProcessRuntimeNoEncontradoV0,
+		MessageKey: "process.no_encontrado",
+		Field:      "process_ref",
+		Retryable:  false,
 	}
 }
 

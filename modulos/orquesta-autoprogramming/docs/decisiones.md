@@ -16,6 +16,9 @@ Consecuencia:
   scheduling.
 - Cualquier nuevo dominio debe crear su propio modulo de contrato, no meter
   reglas en el core.
+- La capacidad de juicio no vive aqui: Orquesta usa director/agentes para
+  decidir plan, fases y estrategia. Este modulo solo aporta contratos de
+  programacion para que el director tenga reglas verificables.
 
 ## 2026-05-13: sin adaptadores dentro del modulo
 

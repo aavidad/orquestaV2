@@ -26,6 +26,17 @@ Reglas:
 - para `expand_topic_from_summary`, el bridge exige paquete editorial
   multiformato: `tema_grande`, `tema_mediano`, `resumen`,
   `esquema_repaso` y `plan_visuales`;
+- para `plan_tema`, `plan_temario` y `plan_documento`, el bridge declara
+  `expected_artifact_type=document_plan`, `expected_schema=domain_document_plan.v0`
+  y partes minimas del plan: `sections`, `deliverables`, `quality_criteria`,
+  `review_steps` y visuales cuando aporten valor;
+- esos trabajos documentales tambien reciben la metodologia editorial OPES como
+  campos de dominio: `opes_editorial_workflow`,
+  `opes_level_derivation_policy`, `opes_assimilation_method` y
+  `opes_quality_requirements`. La regla clave es descendente: si existe maestro
+  A1/A2 o A1 equivalente, se planifica primero ese maestro y despues se derivan
+  B/C1/C2/AP por resumen, reduccion editorial y adaptacion de nivel; si no hay
+  equivalente superior, el plan debe marcar `creacion_directa_nivel`;
 - `allowed_write_set` se limita a `external/opes/<work_kind>/<job_id>` para que
   cada job tenga una entrega unica y varios agentes del mismo tipo no se pisen;
 - los artefactos esperados se expresan como input fields, no como decisiones de

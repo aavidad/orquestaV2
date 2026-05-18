@@ -15,6 +15,7 @@ Cobertura local:
 - devuelve error claro si faltan `QueueReader` o `Drainer`;
 - salta runs excluidas por `ExcludeRunRefs`;
 - ejecuta hasta `MaxRuns`;
+- rota runs ejecutados de igual prioridad actualizando `updated_at`;
 - propaga limite de cola, `occurred_at`, `correlation_id` y `DrainLimits`;
 - no muta los candidatos recibidos de la cola;
 - bloquea imports de adaptadores o stack en codigo de produccion.

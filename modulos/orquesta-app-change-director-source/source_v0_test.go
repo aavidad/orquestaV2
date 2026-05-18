@@ -2,6 +2,7 @@ package orquestaappchangedirectorsource
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
@@ -99,6 +100,37 @@ func TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno(t *testing.T) {
 	}
 }
 
+func TestAppChangeDirectorDecisionSourceV0ProyectaPlanDocumental(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    "opes",
+		InterfaceRefs: []string{"opes-rest-v0", "opes-mcp-v0"},
+		WorkKind:      "plan_tema",
+		WorkRefs:      []string{"opes-job-plan-001", "opes-topic-080"},
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	task := decisions[6].CreateMicrotask.Task
+	if task.Title != "Planificar tema documental externo" ||
+		task.Summary != "Crear plan documental validable; no redactar ni ensamblar el documento final en esta tarea." ||
+		!stringInSetV0(task.AcceptanceCriteria, "Devolver artifact_type=document_plan compatible con DomainDocumentPlanV0.") ||
+		!stringInSetV0(task.AcceptanceCriteria, "No redactar el documento final en esta tarea; solo plan verificable.") ||
+		!stringInSetV0(task.RequiredTests, "validar document_plan") ||
+		!stringInSetV0(task.RequiredTests, "validar secciones y entregables del plan") {
+		t.Fatalf("task=%+v", task)
+	}
+}
+
 func TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExternoSinWriteSetLocal(t *testing.T) {
 	record := appChangeRecordForSourceTestV0()
 	record.Request.AllowedWriteSet = nil
@@ -135,6 +167,76 @@ func TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExternoSinWriteSetLocal
 		!stringInSetV0(task.RequiredTests, "validar granularidad editorial coherente") ||
 		!stringInSetV0(task.RequiredTests, "validar fuentes, criterios y longitud si llegan") {
 		t.Fatalf("task=%+v", task)
+	}
+}
+
+func TestAppChangeDirectorDecisionSourceV0DraftContentBlockExternoNoHeredaOPES(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.AllowedWriteSet = nil
+	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    "external-editorial",
+		InterfaceRefs: []string{"domain-contract-v0"},
+		WorkKind:      "draft_content_block",
+		WorkRefs:      []string{"job-001", "topic-001"},
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	task := decisions[6].CreateMicrotask.Task
+	if task.Title != "Redactar bloque documental externo" ||
+		!stringInSetV0(task.AcceptanceCriteria, "Para draft_content_block, usar paquete editorial suficiente y no sobreatomizar: bloque, subcapitulo o capitulo coherente si la app externa lo envio asi.") ||
+		!stringInSetV0(task.AcceptanceCriteria, "No redactar un tema de 50 folios sin paquete suficiente; pedir division editorial a la app externa si excede contexto o trazabilidad.") ||
+		containsFragmentInSetForTestV0(task.AcceptanceCriteria, "OPES") {
+		t.Fatalf("task=%+v", task)
+	}
+}
+
+func TestAppChangeDirectorDecisionSourceV0SaneaGuardasInternasEnExpansion(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.AllowedWriteSet = []string{"external/opes/expand_topic_from_summary/job-ref-001"}
+	record.Request.AcceptanceCriteria = []string{
+		"devolver artifact_type=topic_expansion_package",
+		"no leer DB ni ficheros internos de OPES",
+	}
+	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    "opes",
+		InterfaceRefs: []string{"opes-rest-v0", "opes-mcp-v0"},
+		WorkKind:      "expand_topic_from_summary",
+		WorkRefs:      []string{"opes-job-001", "opes-topic-001"},
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	task := decisions[6].CreateMicrotask.Task
+	if task.Title != "Ampliar tema documental externo" ||
+		task.Summary != "Ampliar tema documental completo desde resumen trazable y paquete de dominio suficiente." ||
+		!stringInSetV0(task.RequiredTests, "validar topic_expansion_package") ||
+		!stringInSetV0(task.RequiredTests, "validar longitud declarada del tema grande") {
+		t.Fatalf("task=%+v", task)
+	}
+	if stringInSetV0(task.AcceptanceCriteria, "no leer DB ni ficheros internos de OPES") {
+		t.Fatalf("criterio no saneado: %+v", task.AcceptanceCriteria)
+	}
+	if _, err := orquestacoreworkflow.NewWorkflowTaskV0(workflowTaskFromDirectorTaskForTestV0(task)); err != nil {
+		t.Fatalf("workflow task invalida tras saneo: %v task=%+v", err, task)
 	}
 }
 
@@ -209,6 +311,38 @@ func TestAppChangeDirectorDecisionSourceV0ResumenPermiteGranularidadPequena(t *t
 		!stringInSetV0(task.AcceptanceCriteria, "Conservar matices, excepciones, plazos, organos, fuentes criticas y advertencias de examen del material de origen.") ||
 		!stringInSetV0(task.RequiredTests, "validar trazabilidad del resumen") ||
 		!stringInSetV0(task.RequiredTests, "validar conservacion de matices criticos") {
+		t.Fatalf("task=%+v", task)
+	}
+}
+
+func TestAppChangeDirectorDecisionSourceV0CaracterizaAliasDocumentalGenerico(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.AllowedWriteSet = nil
+	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    "external-editorial",
+		InterfaceRefs: []string{"domain-contract-v0"},
+		WorkKind:      "validate_topic",
+		WorkRefs:      []string{"topic-001"},
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	task := decisions[6].CreateMicrotask.Task
+	if task.Title != "Resolver trabajo externo de app" ||
+		task.Summary != "Resolver trabajo documental con paquete de dominio suficiente: temario, esquema, objetivo, fuentes, criterios y longitud si llegan." ||
+		!stringInSetV0(task.WriteSet, "external/external-editorial/validate_topic") ||
+		!stringInSetV0(task.AcceptanceCriteria, "Usar temario, esquema, objetivo, fuentes, criterios y longitud si llegan en input_fields.") ||
+		!stringInSetV0(task.RequiredTests, "validar paquete documental de dominio") ||
+		!stringInSetV0(task.RequiredTests, "validar fuentes y criterios documentales") {
 		t.Fatalf("task=%+v", task)
 	}
 }
@@ -378,6 +512,40 @@ func containsOpenReviewDecisionForTestV0(
 		}
 	}
 	return false
+}
+
+func containsFragmentInSetForTestV0(values []string, fragment string) bool {
+	for _, value := range values {
+		if strings.Contains(value, fragment) {
+			return true
+		}
+	}
+	return false
+}
+
+func workflowTaskFromDirectorTaskForTestV0(
+	task orquestadirectoragent.DirectorAgentMicrotaskV0,
+) orquestacoreworkflow.WorkflowTaskV0 {
+	refs := make([]orquestacoreworkflow.WorkflowFunctionContractRefV0, 0, len(task.FunctionContractRefs))
+	for _, ref := range task.FunctionContractRefs {
+		refs = append(refs, orquestacoreworkflow.WorkflowFunctionContractRefV0{
+			ContractRef:  ref.ContractRef,
+			FunctionName: ref.FunctionName,
+		})
+	}
+	return orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion:        task.SchemaVersion,
+		TaskID:               task.TaskID,
+		RunID:                task.RunID,
+		PhaseID:              orquestacoreworkflow.OrchestrationPhaseIDV0(task.PhaseID),
+		Title:                task.Title,
+		Summary:              task.Summary,
+		WriteSet:             task.WriteSet,
+		AcceptanceCriteria:   task.AcceptanceCriteria,
+		RequiredTests:        task.RequiredTests,
+		DependsOn:            task.DependsOn,
+		FunctionContractRefs: refs,
+	}
 }
 
 type appChangeSourceNoopNotifierV0 struct{}

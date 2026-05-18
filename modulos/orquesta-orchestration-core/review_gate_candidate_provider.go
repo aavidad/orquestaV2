@@ -70,6 +70,7 @@ func reviewGateObservationRequestV0(request SchedulerCandidateRequestV0) ReviewG
 		CorrelationID:    request.CorrelationID,
 		EvidenceRefs:     request.EvidenceRefs,
 		PreviousDecision: request.PreviousDecision,
+		WaitAgentRefs:    append([]string(nil), request.WaitAgentRefs...),
 	}
 }
 

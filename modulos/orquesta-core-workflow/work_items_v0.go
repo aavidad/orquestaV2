@@ -45,6 +45,12 @@ type WorkflowTaskV0 struct {
 	AcceptanceCriteria   []string                        `json:"acceptance_criteria"`
 	RequiredTests        []string                        `json:"required_tests,omitempty"`
 	DependsOn            []string                        `json:"depends_on,omitempty"`
+	ParentTaskRef        string                          `json:"parent_task_ref,omitempty"`
+	CohortRef            string                          `json:"cohort_ref,omitempty"`
+	WaveRef              string                          `json:"wave_ref,omitempty"`
+	DelegationDepth      int                             `json:"delegation_depth,omitempty"`
+	MaxChildAgents       int                             `json:"max_child_agents,omitempty"`
+	ChildTaskRefs        []string                        `json:"child_task_refs,omitempty"`
 	FunctionContractRefs []WorkflowFunctionContractRefV0 `json:"function_contract_refs,omitempty"`
 }
 

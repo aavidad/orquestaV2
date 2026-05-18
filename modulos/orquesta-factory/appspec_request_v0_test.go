@@ -54,6 +54,16 @@ func TestValidateAppSpecRequestV0RejectsInvalidLocale(t *testing.T) {
 	}
 }
 
+func TestValidateAppSpecRequestV0AcceptsDocumentationType(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.TipoApp = "documentacion"
+	req.RequestKind = RequestKindDocumentarAppV0
+
+	if issues := ValidateAppSpecRequestV0(req); len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+}
+
 func validMinimalRequestV0() AppSpecRequestV0 {
 	return AppSpecRequestV0{
 		SchemaVersion: AppSpecRequestSchemaV0,

@@ -19,6 +19,9 @@ func handleRegisterAgentStopConfirmedCommandV0(current OrchestrationRunV0, comma
 	if !agentStopAlreadyReflectedV0(current, payload.AgentRequestID) {
 		return emptyCommandResultV0(), commandErrorV0(ErrTransicionInvalidaV0, "payload.agent_request_id")
 	}
+	if agentLostAlreadyReflectedV0(current, payload.AgentRequestID) {
+		return emptyCommandResultV0(), commandErrorV0(ErrTransicionInvalidaV0, "payload.agent_request_id")
+	}
 	event, err := NewAgentStopConfirmedEventV0(commandEventMetaV0(current, command, OrchestrationEventAgentStopConfirmedV0), agentStopConfirmedPayloadFromCommandV0(payload))
 	return eventCommandResultV0(event, err)
 }
@@ -33,6 +36,9 @@ func applyAgentStopConfirmedEventV0(current OrchestrationRunV0, event Orchestrat
 		return current, err
 	}
 	if !agentStopAlreadyReflectedV0(current, payload.AgentRequestID) {
+		return current, eventErrorV0(ErrSecuenciaInvalidaV0, "payload.agent_request_id")
+	}
+	if agentLostAlreadyReflectedV0(current, payload.AgentRequestID) {
 		return current, eventErrorV0(ErrSecuenciaInvalidaV0, "payload.agent_request_id")
 	}
 	if err := ensureEventEffectCompatibleV0(current, event, payload.AgentRequestID); err != nil {

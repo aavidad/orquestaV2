@@ -59,6 +59,38 @@ func TestCodexProgressStateV0SilencioSostenidoReportaStalledNoLoop(t *testing.T)
 	}
 }
 
+func TestCodexProgressStateV0ActividadConMismaAccionEscalaABucle(t *testing.T) {
+	store := NewInMemoryCodexProgressStateStoreV0()
+	sample := codexProgressStateSampleForTestV0("firma-accion-001")
+	sample.ActionSignature = "action-sig-diff-progress-state-001"
+
+	_ = codexProgressStateObserveForTestV0(t, store, sample)
+	sample.Signature = "firma-accion-002"
+	second := codexProgressStateObserveForTestV0(t, store, sample)
+	sample.Signature = "firma-accion-003"
+	third := codexProgressStateObserveForTestV0(t, store, sample)
+
+	report, issues := orquestaruntime.BuildAgentProgressReportFromHeartbeatV0(
+		"agent-progress-report-ref-state-repeated-action-001",
+		codexProgressStateSnapshotForTestV0(third.Current.ProcessRef),
+		third.Previous,
+		third.Current,
+		orquestaruntime.AgentProgressHeartbeatPolicyV0{
+			StalledAfterNoProgressTicks: 99,
+			LoopAfterRepeatedActions:    2,
+		},
+	)
+	if len(issues) > 0 {
+		t.Fatalf("report issues=%+v", issues)
+	}
+	if second.Current.RepeatedActionCount != 1 ||
+		report.Status != orquestaruntime.AgentLoopDetectedV0 ||
+		report.RepeatedActionCount != 2 ||
+		report.NoProgressTicks != 0 {
+		t.Fatalf("second=%+v report=%+v", second.Current, report)
+	}
+}
+
 func codexProgressStateSampleForTestV0(signature string) CodexProgressSampleV0 {
 	return CodexProgressSampleV0{
 		RunID:          "run-ref-progress-state-001",

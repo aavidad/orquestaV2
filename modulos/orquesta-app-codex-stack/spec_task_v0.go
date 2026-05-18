@@ -71,7 +71,7 @@ func directorTaskV0(
 	payload orquestaruntime.LaunchRuntimeAgentRequestV0,
 	area string,
 ) orquestaruntime.AgentStartTaskV0 {
-	writeSet := directorWriteSetV0(area)
+	writeSet := directorWriteSetV0(payload, area)
 	return orquestaruntime.AgentStartTaskV0{
 		TaskRef:      strings.TrimSpace(payload.TaskRef),
 		Priority:     "alta",
@@ -106,6 +106,12 @@ func directorObjectiveV0(
 		"Separa brainstorming, documentacion, programacion, pruebas, seguridad y revision final.",
 		"Cumple los minimos del tipo de peticion; solo puedes recortar alcance si execution_mode=debug y debes listar lo omitido.",
 		"Si falta informacion no inferible, deja CONSULTA AL DIRECTOR en el documento.",
+	}
+	if area == "director" {
+		lines = append(lines,
+			"No eres un worker de area: tienes autoridad practica para producir todos los entregables globales pedidos dentro de tu write-set.",
+			"No te limites a planificar si la peticion exige artefactos reales; crea los documentos minimos y deja evidencias.",
+		)
 	}
 	lines = append(lines, directorRequestKindInstructionsV0(kind, mode)...)
 	if area == "director" {
@@ -165,7 +171,7 @@ func directorSummaryTokenV0(summary string, key string, fallback string) string 
 	return fallback
 }
 
-func directorWriteSetV0(area string) []string {
+func directorWriteSetV0(payload orquestaruntime.LaunchRuntimeAgentRequestV0, area string) []string {
 	switch area {
 	case "web":
 		return []string{"docs/web.md"}
@@ -178,6 +184,27 @@ func directorWriteSetV0(area string) []string {
 	case "calidad":
 		return []string{"docs/calidad.md"}
 	default:
-		return []string{"docs/arquitectura.md", "docs/plan_microtareas.md"}
+		return directorGlobalWriteSetV0(directorRequestKindV0(payload))
 	}
+}
+
+func directorGlobalWriteSetV0(kind string) []string {
+	paths := []string{
+		"docs/arquitectura.md",
+		"docs/plan_microtareas.md",
+		"docs/decisiones.md",
+		"docs/pruebas.md",
+		"docs/pendientes.md",
+	}
+	switch orquestafactory.NormalizeRequestKindV0(kind) {
+	case orquestafactory.RequestKindDocumentarAppV0,
+		orquestafactory.RequestKindCrearAppCompletaV0,
+		orquestafactory.RequestKindPlanificarAppV0:
+		paths = append(paths,
+			"docs/manual_usuario.md",
+			"docs/manual_desarrollador.md",
+			"docs/manual_sistemas_deploy.md",
+		)
+	}
+	return paths
 }

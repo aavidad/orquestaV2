@@ -13,16 +13,24 @@ func buildDirectorTaskProgressV0(
 ) []DirectorTaskProgressV0 {
 	closed := autonomousStringSetV0(run.ClosedTasks)
 	delivered := autonomousStringSetV0(run.DeliveredTasks)
+	runTaskSet := autonomousStringSetV0(run.Tasks)
+	reflectedAgents := reflectedDirectorAgentSetV0(run)
 	byTask := latestDirectorProgressByTaskV0(observations)
 	byAssessedTask := latestDirectorAssessmentByTaskV0(run.AgentAssessments)
 	tasks := compactStringsV0(append(append(run.Tasks, observedTaskRefsV0(observations)...), assessedTaskRefsV0(run.AgentAssessments)...))
 	out := make([]DirectorTaskProgressV0, 0, len(tasks))
 	for _, taskRef := range tasks {
 		observation, observed := byTask[taskRef]
+		if observed && directorTaskProgressReflectedAgentOnlyV0(taskRef, runTaskSet, reflectedAgents, observation.Report.AgentRequestID) {
+			continue
+		}
 		task := DirectorTaskProgressV0{TaskRef: taskRef, Status: DirectorTaskProgressPendingV0}
 		if observed {
 			task = directorTaskProgressFromObservationV0(taskRef, observation)
 		} else if assessment, assessed := byAssessedTask[taskRef]; assessed {
+			if directorTaskProgressReflectedAgentOnlyV0(taskRef, runTaskSet, reflectedAgents, assessment.AgentRequestID) {
+				continue
+			}
 			task = directorTaskProgressFromAssessmentV0(assessment)
 		}
 		if delivered[taskRef] {
@@ -43,6 +51,16 @@ func buildDirectorTaskProgressV0(
 		out = append(out, task)
 	}
 	return out
+}
+
+func directorTaskProgressReflectedAgentOnlyV0(
+	taskRef string,
+	runTaskSet map[string]bool,
+	reflectedAgents map[string]bool,
+	agentRef string,
+) bool {
+	return !runTaskSet[strings.TrimSpace(taskRef)] &&
+		reflectedAgents[strings.TrimSpace(agentRef)]
 }
 
 func directorTaskProgressFromObservationV0(
@@ -191,8 +209,7 @@ func applyDirectorAgentProgressV0(
 		}
 		progress := directorAgentProgressFromObservationV0(observation)
 		stats.Agents[index].LastProgress = &progress
-		if progress.Status == string(orquestaruntime.AgentStalledV0) ||
-			progress.Status == string(orquestaruntime.AgentLoopDetectedV0) ||
+		if progress.Status == string(orquestaruntime.AgentLoopDetectedV0) ||
 			progress.DecisionRequired {
 			stats.Agents[index].NeedsAttention = true
 		}
@@ -222,8 +239,7 @@ func applyDirectorAgentAssessmentProgressV0(
 		}
 		progress := directorAgentProgressFromAssessmentV0(assessment)
 		stats.Agents[index].LastProgress = &progress
-		if progress.Status == string(orquestaruntime.AgentStalledV0) ||
-			progress.Status == string(orquestaruntime.AgentLoopDetectedV0) ||
+		if progress.Status == string(orquestaruntime.AgentLoopDetectedV0) ||
 			progress.DecisionRequired {
 			stats.Agents[index].NeedsAttention = true
 		}
@@ -327,11 +343,12 @@ func noSignalDirectorAgentRefsV0(
 ) []string {
 	missing := make([]string, 0)
 	failed := autonomousStringSetV0(run.FailedAgents)
+	lost := autonomousStringSetV0(run.LostAgents)
 	stopRequested := autonomousStringSetV0(run.StoppedAgents)
 	stopConfirmed := autonomousStringSetV0(run.ConfirmedStoppedAgents)
 	reflected := reflectedDirectorAgentSetV0(run)
 	for _, agentRef := range compactStringsV0(run.StartedAgents) {
-		if failed[agentRef] || stopRequested[agentRef] || stopConfirmed[agentRef] || reflected[agentRef] {
+		if failed[agentRef] || lost[agentRef] || stopRequested[agentRef] || stopConfirmed[agentRef] || reflected[agentRef] {
 			continue
 		}
 		if _, ok := byAssessmentAgent[agentRef]; ok {

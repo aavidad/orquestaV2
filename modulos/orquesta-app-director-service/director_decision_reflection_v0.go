@@ -19,6 +19,9 @@ func startAppDirectorDecisionAlreadyReflectedV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	decision orquestadirectoragent.DirectorAgentDecisionV0,
 ) (bool, error) {
+	if decision.CommandType == orquestadirectoragent.DirectorAgentCommandProposePlanTeamV0 {
+		return startAppDirectorPlanTeamAlreadyReflectedV0(run, decision), nil
+	}
 	command, issues := orquestadirectoragentworkflow.BuildDirectorAgentWorkflowCommandV0(
 		orquestadirectoragentworkflow.DirectorAgentWorkflowCommandRequestV0{
 			Decision:      decision,
@@ -31,6 +34,31 @@ func startAppDirectorDecisionAlreadyReflectedV0(
 		return false, nil
 	}
 	return startAppDirectorRunHasCommandEffectV0(run, command)
+}
+
+func startAppDirectorPlanTeamAlreadyReflectedV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	decision orquestadirectoragent.DirectorAgentDecisionV0,
+) bool {
+	if decision.ProposePlanTeam == nil {
+		return false
+	}
+	for _, unit := range decision.ProposePlanTeam.Plan.WorkUnits {
+		if !startAppDirectorStringInSetV0(run.Tasks, unit.WorkUnitRef) {
+			return false
+		}
+	}
+	return len(decision.ProposePlanTeam.Plan.WorkUnits) > 0
+}
+
+func startAppDirectorStringInSetV0(values []string, expected string) bool {
+	expected = strings.TrimSpace(expected)
+	for _, value := range values {
+		if strings.TrimSpace(value) == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func startAppDirectorRunHasCommandEffectV0(

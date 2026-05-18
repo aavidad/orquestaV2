@@ -33,6 +33,7 @@ Campos:
 - `DirectorStats`;
 - `RunControl`;
 - `RunQueuePriority`;
+- `RunSupervisor`;
 - `ServerShutdown`;
 - `AutoprogrammingValidateRequest`.
 - `DomainWork`.
@@ -51,6 +52,7 @@ Campos:
 - `RouteDirectorStatsV0`: `/api/v0/director/stats`.
 - `RouteRunControlV0`: `/api/v0/runs/control`;
 - `RouteRunQueuePriorityV0`: `/api/v0/runs/queue/priority`;
+- `RouteRunSupervisorV0`: `/api/v0/runs/supervise`;
 - `RouteAutoprogrammingValidateRequestV0`: `/api/v0/autoprogramming/validate-request`;
 - `RouteServerShutdownV0`: `/api/v0/server/shutdown`.
 - `RouteDomainWorkV0`: `/api/v0/domain-work`.
@@ -68,6 +70,11 @@ cola. El gateway no conoce ranking, prioridad, aging, fairness ni stores.
 `RouteRunControlPageV0` y `RouteRunControlV0` son rutas separadas: la primera
 apunta al panel web inyectado y la segunda al contrato REST/MCP de control. El
 gateway no conoce pausa, parada, checkpoint, procesos ni runtime.
+
+`RouteRunSupervisorV0` apunta al contrato REST/MCP que ejecuta una pasada
+acotada de supervision sobre una run o sobre la cola inyectada. El gateway solo
+monta el handler; no conoce Codex, OPES, scheduler, runtime, DB ni reglas de
+dominio.
 
 `RouteDomainWorkV0` apunta al contrato REST/MCP de trabajo de dominio externo.
 El gateway solo registra el handler inyectado; no conoce OPES, contratos de
