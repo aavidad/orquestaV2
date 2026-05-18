@@ -175,7 +175,7 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0NormalizaSourceRefsRicosCon
 				{"source_ref":"beck-1976","title":"duplicada"},
 				{"source_ref":"ley-41-2002","title":"Autonomia del paciente"}
 			],
-			"citations":[{"source_ref":"beck-1976","locator":"cap. 1","claim":"apoyo doctrinal"}]
+			"citations":[{"ref":"beck-1976","locator":"cap. 1","claim":"apoyo doctrinal","url":"https://example.invalid/beck"}]
 		}
 	}`
 	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
@@ -220,7 +220,9 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0NormalizaSourceRefsRicosCon
 	}
 	if submission.ArtifactType != "content_block" ||
 		!domainWorkFieldValuesForTestV0(submission.PayloadFields, "source_refs", []string{"beck-1976", "ley-41-2002"}) ||
-		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "source_ref_details") {
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "source_ref_details") ||
+		!domainWorkCitationSourceRefForTestV0(submission.PayloadFields, "beck-1976") ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "citation_details") {
 		t.Fatalf("submission=%+v", submission)
 	}
 }
@@ -698,6 +700,30 @@ func domainWorkFieldHasJSONForTestV0(
 	for _, field := range fields {
 		if field.Name == name && len(field.ValueJSON) > 0 && json.Valid(field.ValueJSON) {
 			return true
+		}
+	}
+	return false
+}
+
+func domainWorkCitationSourceRefForTestV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	sourceRef string,
+) bool {
+	for _, field := range fields {
+		if field.Name != "citations" || len(field.ValueJSON) == 0 {
+			continue
+		}
+		var citations []struct {
+			SourceRef string `json:"source_ref"`
+			Note      string `json:"note"`
+		}
+		if err := json.Unmarshal(field.ValueJSON, &citations); err != nil {
+			continue
+		}
+		for _, citation := range citations {
+			if citation.SourceRef == sourceRef && strings.Contains(citation.Note, "claim: apoyo doctrinal") {
+				return true
+			}
 		}
 	}
 	return false

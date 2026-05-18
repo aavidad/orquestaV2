@@ -14,24 +14,30 @@ func canonicalDomainWorkContentBlockPayloadJSONV0(body string) (string, bool) {
 	if err := json.Unmarshal([]byte(body), &payload); err != nil || len(payload) == 0 {
 		return "", false
 	}
-	rawRefs, ok := payload["source_refs"]
-	if !ok || len(rawRefs) == 0 {
-		return body, true
+	changed := false
+	if rawRefs, ok := payload["source_refs"]; ok && len(rawRefs) > 0 && !sourceRefsAlreadyCompactV0(rawRefs) {
+		if refs, ok := compactSourceRefsFromRichPayloadV0(rawRefs); ok {
+			encodedRefs, err := json.Marshal(refs)
+			if err == nil {
+				payload["source_refs"] = encodedRefs
+				if _, exists := payload["source_ref_details"]; !exists {
+					payload["source_ref_details"] = append([]byte(nil), rawRefs...)
+				}
+				changed = true
+			}
+		}
 	}
-	if sourceRefsAlreadyCompactV0(rawRefs) {
-		return body, true
+	if rawCitations, ok := payload["citations"]; ok && len(rawCitations) > 0 {
+		if encodedCitations, ok := compactContentBlockCitationsV0(rawCitations); ok {
+			payload["citations"] = encodedCitations
+			if _, exists := payload["citation_details"]; !exists {
+				payload["citation_details"] = append([]byte(nil), rawCitations...)
+			}
+			changed = true
+		}
 	}
-	refs, ok := compactSourceRefsFromRichPayloadV0(rawRefs)
-	if !ok {
+	if !changed {
 		return body, true
-	}
-	encodedRefs, err := json.Marshal(refs)
-	if err != nil {
-		return body, true
-	}
-	payload["source_refs"] = encodedRefs
-	if _, exists := payload["source_ref_details"]; !exists {
-		payload["source_ref_details"] = append([]byte(nil), rawRefs...)
 	}
 	canonical, err := json.Marshal(payload)
 	if err != nil {
@@ -67,15 +73,82 @@ func compactSourceRefsFromRichPayloadV0(raw json.RawMessage) ([]string, bool) {
 }
 
 func sourceRefFromRichEntryV0(entry map[string]json.RawMessage) string {
-	for _, key := range []string{"source_ref", "ref", "id"} {
+	for _, key := range []string{"source_ref", "ref", "source_ref_id", "source_id", "source", "id", "fuente"} {
 		raw, ok := entry[key]
 		if !ok {
 			continue
 		}
-		var value string
-		if err := json.Unmarshal(raw, &value); err == nil {
-			return strings.TrimSpace(value)
+		if value := stringFromRawJSONV0(raw); value != "" {
+			return value
 		}
+	}
+	return ""
+}
+
+func compactContentBlockCitationsV0(raw json.RawMessage) (json.RawMessage, bool) {
+	var entries []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &entries); err != nil || len(entries) == 0 {
+		return nil, false
+	}
+	normalized := make([]map[string]json.RawMessage, 0, len(entries))
+	changed := false
+	for _, entry := range entries {
+		ref := sourceRefFromRichEntryV0(entry)
+		if ref == "" {
+			changed = true
+			continue
+		}
+		sourceRef, err := json.Marshal(ref)
+		if err != nil {
+			continue
+		}
+		if stringFromRawJSONV0(entry["source_ref"]) != ref {
+			entry["source_ref"] = sourceRef
+			changed = true
+		}
+		if strings.TrimSpace(stringFromRawJSONV0(entry["note"])) == "" {
+			if note := citationNoteFromRichEntryV0(entry); note != "" {
+				encodedNote, err := json.Marshal(note)
+				if err == nil {
+					entry["note"] = encodedNote
+					changed = true
+				}
+			}
+		}
+		normalized = append(normalized, entry)
+	}
+	if len(normalized) == 0 {
+		return nil, false
+	}
+	if !changed {
+		return nil, false
+	}
+	encoded, err := json.Marshal(normalized)
+	if err != nil {
+		return nil, false
+	}
+	return encoded, true
+}
+
+func citationNoteFromRichEntryV0(entry map[string]json.RawMessage) string {
+	var parts []string
+	for _, key := range []string{"title", "url", "usage", "claim"} {
+		value := stringFromRawJSONV0(entry[key])
+		if value == "" {
+			continue
+		}
+		parts = append(parts, key+": "+value)
+	}
+	return strings.Join(parts, "; ")
+}
+
+func stringFromRawJSONV0(raw json.RawMessage) string {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return ""
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return strings.TrimSpace(value)
 	}
 	return ""
 }
