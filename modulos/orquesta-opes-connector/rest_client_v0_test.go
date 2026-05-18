@@ -258,43 +258,17 @@ func TestRESTClientV0ListExternalJobsConsultaColaPublica(t *testing.T) {
 
 func TestRESTClientV0ListExternalJobsFiltraRespuestaMixta(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+		if r.URL.Path != "/api/jobs/job-ref-plan-001" || r.Method != http.MethodGet {
 			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
 		}
-		if r.URL.Query().Get("job_ref") != "job-ref-plan-001" {
+		if r.URL.RawQuery != "" {
 			t.Fatalf("query=%s", r.URL.RawQuery)
 		}
-		_ = json.NewEncoder(w).Encode([]map[string]any{
-			{
-				"id":             "job-ref-other-001",
-				"type":           "plan_temario",
-				"status":         "pending",
-				"execution_mode": "external",
-			},
-			{
-				"id":             "job-ref-plan-001",
-				"type":           "plan_temario",
-				"status":         "running",
-				"execution_mode": "external",
-			},
-			{
-				"id":             "job-ref-plan-001",
-				"type":           "plan_tema",
-				"status":         "pending",
-				"execution_mode": "external",
-			},
-			{
-				"id":             "job-ref-plan-001",
-				"type":           "plan_temario",
-				"status":         "pending",
-				"execution_mode": "internal",
-			},
-			{
-				"id":             "job-ref-plan-001",
-				"type":           "plan_temario",
-				"status":         "pending",
-				"execution_mode": "external",
-			},
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":             "job-ref-plan-001",
+			"type":           "plan_temario",
+			"status":         "pending",
+			"execution_mode": "external",
 		})
 	}))
 	defer server.Close()

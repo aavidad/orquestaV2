@@ -14,11 +14,22 @@ func (client RESTClientV0) ListExternalJobsV0(
 	if client.baseURL == "" {
 		return nil, connectorErrorV0{code: ErrOPESBaseURLRequiredV0}
 	}
+	if strings.TrimSpace(query.JobRef) != "" {
+		var response ExternalJobV0
+		if err := client.getJSONV0(ctx, opesGetJobPathV0(query.JobRef), &response); err != nil {
+			return nil, err
+		}
+		return filterExternalJobsV0([]ExternalJobV0{response}, query), nil
+	}
 	var response []ExternalJobV0
 	if err := client.getJSONV0(ctx, opesListJobsPathV0(query), &response); err != nil {
 		return nil, err
 	}
 	return filterExternalJobsV0(response, query), nil
+}
+
+func opesGetJobPathV0(jobRef string) string {
+	return DefaultOPESCreateJobPathV0 + "/" + url.PathEscape(strings.TrimSpace(jobRef))
 }
 
 func opesListJobsPathV0(query ExternalJobQueryV0) string {

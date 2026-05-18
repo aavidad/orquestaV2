@@ -84,16 +84,13 @@ func TestRunOPESDrainOnceV0LedgerEvitaReenviarJobPendienteV0(t *testing.T) {
 
 func TestRunOPESDrainOnceV0PlanTemarioOperadoresEnviaExternalWorkDocumentPlanV0(t *testing.T) {
 	opesServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+		if r.URL.Path != "/api/jobs/job-ref-plan-operadores-001" || r.Method != http.MethodGet {
 			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
 		}
-		if r.URL.Query().Get("job_type") != "plan_temario" {
-			t.Fatalf("job_type=%q", r.URL.Query().Get("job_type"))
+		if r.URL.RawQuery != "" {
+			t.Fatalf("query=%s", r.URL.RawQuery)
 		}
-		if r.URL.Query().Get("job_ref") != "job-ref-plan-operadores-001" {
-			t.Fatalf("job_ref=%q", r.URL.Query().Get("job_ref"))
-		}
-		_ = json.NewEncoder(w).Encode([]map[string]any{{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":             "job-ref-plan-operadores-001",
 			"type":           "plan_temario",
 			"status":         "pending",
@@ -111,7 +108,7 @@ func TestRunOPESDrainOnceV0PlanTemarioOperadoresEnviaExternalWorkDocumentPlanV0(
 			"correlation_id":  "corr-job-plan-operadores-001",
 			"idempotency_key": "idem-job-plan-operadores-001",
 			"requested_by":    "opes",
-		}})
+		})
 	}))
 	defer opesServer.Close()
 
