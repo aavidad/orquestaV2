@@ -58,8 +58,8 @@ func documentPlanFromRawPayloadV0(
 			firstDocumentPlanStringsV0(raw, "constraints"),
 			firstDocumentPlanStringsV0(raw, "scope_exclusions")...,
 		)),
-		SourceRefs:   firstDocumentPlanStringsV0(raw, "source_refs"),
-		EvidenceRefs: firstDocumentPlanStringsV0(raw, "evidence_refs"),
+		SourceRefs:   firstDocumentPlanRefsV0(raw, "source_refs"),
+		EvidenceRefs: firstDocumentPlanRefsV0(raw, "evidence_refs"),
 	}
 	if plan.PlanRef == "" {
 		plan.PlanRef = prefixedDocumentPlanRefV0("plan", firstDocumentPlanStringV0(raw, "job_id"))

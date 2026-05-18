@@ -17,12 +17,12 @@ func documentPlanSectionsFromRawV0(raw json.RawMessage) []DomainDocumentPlanSect
 			Title:              firstDocumentPlanStringV0(value, "title"),
 			Objective:          firstDocumentPlanStringV0(value, "objective", "description"),
 			WorkKind:           documentPlanSectionWorkKindV0(firstDocumentPlanStringV0(value, "work_kind")),
-			DependsOn:          firstDocumentPlanStringsV0(value, "depends_on"),
+			DependsOn:          firstDocumentPlanRefsV0(value, "depends_on"),
 			TargetWordsMin:     firstPositiveDocumentPlanIntV0(plannedPages*300, documentPlanIntV0(value, "target_words_min")),
 			TargetWordsMax:     firstPositiveDocumentPlanIntV0(plannedPages*450, documentPlanIntV0(value, "target_words_max")),
 			RequiredElements:   firstDocumentPlanStringsV0(value, "required_elements", "required_points"),
 			AcceptanceCriteria: firstDocumentPlanStringsV0(value, "acceptance_criteria"),
-			SourceRefs:         firstDocumentPlanStringsV0(value, "source_refs"),
+			SourceRefs:         firstDocumentPlanRefsV0(value, "source_refs"),
 		}
 		if section.SectionRef == "" {
 			section.SectionRef = prefixedDocumentPlanRefV0("section", section.Title)
@@ -46,7 +46,7 @@ func documentPlanVisualsFromRawV0(raw json.RawMessage) []DomainDocumentPlanVisua
 			Objective:          firstDocumentPlanStringV0(value, "objective", "brief", "title"),
 			WorkKind:           documentPlanVisualWorkKindV0(firstDocumentPlanStringV0(value, "work_kind")),
 			AcceptanceCriteria: firstDocumentPlanStringsV0(value, "acceptance_criteria"),
-			SourceRefs:         firstDocumentPlanStringsV0(value, "source_refs"),
+			SourceRefs:         firstDocumentPlanRefsV0(value, "source_refs"),
 		}
 		if visual.VisualRef == "" {
 			visual.VisualRef = prefixedDocumentPlanRefV0("visual", visual.Objective)

@@ -21,8 +21,8 @@ func NormalizeDomainDocumentPlanV0(
 	plan.Deliverables = compactDocumentPlanDeliverablesV0(plan.Deliverables)
 	plan.QualityCriteria = compactDomainWorkStringsV0(plan.QualityCriteria)
 	plan.Constraints = compactDomainWorkStringsV0(plan.Constraints)
-	plan.SourceRefs = compactDomainWorkStringsV0(plan.SourceRefs)
-	plan.EvidenceRefs = compactDomainWorkStringsV0(plan.EvidenceRefs)
+	plan.SourceRefs = compactDocumentPlanRefsV0(plan.SourceRefs)
+	plan.EvidenceRefs = compactDocumentPlanRefsV0(plan.EvidenceRefs)
 	return plan
 }
 
@@ -38,12 +38,12 @@ func compactDocumentPlanSectionsV0(
 			Title:              strings.TrimSpace(value.Title),
 			Objective:          strings.TrimSpace(value.Objective),
 			WorkKind:           documentPlanSectionWorkKindV0(value.WorkKind),
-			DependsOn:          compactDomainWorkStringsV0(value.DependsOn),
+			DependsOn:          compactDocumentPlanRefsV0(value.DependsOn),
 			TargetWordsMin:     value.TargetWordsMin,
 			TargetWordsMax:     value.TargetWordsMax,
 			RequiredElements:   compactDomainWorkStringsV0(value.RequiredElements),
 			AcceptanceCriteria: compactDomainWorkStringsV0(value.AcceptanceCriteria),
-			SourceRefs:         compactDomainWorkStringsV0(value.SourceRefs),
+			SourceRefs:         compactDocumentPlanRefsV0(value.SourceRefs),
 		}
 		if section.SectionRef == "" && section.Title == "" && section.Objective == "" {
 			continue
@@ -68,7 +68,7 @@ func compactDocumentPlanVisualsV0(
 			Objective:          strings.TrimSpace(value.Objective),
 			WorkKind:           documentPlanVisualWorkKindV0(value.WorkKind),
 			AcceptanceCriteria: compactDomainWorkStringsV0(value.AcceptanceCriteria),
-			SourceRefs:         compactDomainWorkStringsV0(value.SourceRefs),
+			SourceRefs:         compactDocumentPlanRefsV0(value.SourceRefs),
 		}
 		if visual.VisualRef == "" && visual.Objective == "" {
 			continue

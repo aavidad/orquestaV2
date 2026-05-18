@@ -141,6 +141,76 @@ func TestCanonicalDomainDocumentPlanPayloadJSONV0ConvierteAliasDeAgente(t *testi
 	}
 }
 
+func TestCanonicalDomainDocumentPlanPayloadJSONV0CompactaRefsConRutasDeAgente(t *testing.T) {
+	payload := `{
+		"schema_version":"domain_document_plan.v0",
+		"plan_ref":"document-plan:opes:plan-temario:job-001",
+		"domain_ref":"opes",
+		"work_kind":"plan_temario",
+		"document_kind":"temario_oposicion",
+		"scope_ref":"program-operario-ap",
+		"language_code":"es",
+		"title":"Temario completo Operario AP",
+		"objective":"Planificar todos los temas oficiales.",
+		"estimated_pages_min":120,
+		"estimated_pages_max":180,
+		"source_refs":["OPES/administracion-especial/Operario/Operario.txt"],
+		"evidence_refs":["BOE A 2026/001"],
+		"sections":[{
+			"section_ref":"section-operario-01",
+			"order":1,
+			"title":"Tema 1",
+			"objective":"Desarrollar el primer epigrafe oficial.",
+			"work_kind":"draft_content_block",
+			"depends_on":[" Tema previo/intro "],
+			"target_words_min":1200,
+			"target_words_max":1800,
+			"source_refs":["OPES/administracion-especial/Operario/Operario.txt"]
+		}],
+		"visuals":[{
+			"visual_ref":"visual-operario-01",
+			"visual_type":"diagrama",
+			"placement_ref":"section-operario-01",
+			"objective":"Esquema de apoyo al tema.",
+			"work_kind":"generate_visual_asset",
+			"source_refs":["OPES/administracion-especial/Operario/Operario.txt"]
+		}],
+		"review_steps":[{
+			"review_ref":"review-operario-legal",
+			"order":1,
+			"work_kind":"review_legal",
+			"objective":"Comprobar encaje normativo."
+		}],
+		"deliverables":[{
+			"deliverable_ref":"deliverable-operario-topic-package",
+			"artifact_type":"topic_expansion_package",
+			"title":"Paquete de desarrollo",
+			"required":true
+		}]
+	}`
+	canonical, ok := CanonicalDomainDocumentPlanPayloadJSONV0(payload, DomainDocumentPlanPayloadDefaultsV0{})
+	if !ok {
+		t.Fatalf("payload no canonicalizado")
+	}
+	var plan DomainDocumentPlanV0
+	if err := json.Unmarshal([]byte(canonical), &plan); err != nil {
+		t.Fatalf("json canonico invalido: %v", err)
+	}
+	if issues := ValidateDomainDocumentPlanV0(plan); len(issues) != 0 {
+		t.Fatalf("issues=%+v canonical=%s", issues, canonical)
+	}
+	wantSource := "opes_administracion-especial_operario_operario.txt"
+	if plan.SourceRefs[0] != wantSource ||
+		plan.Sections[0].SourceRefs[0] != wantSource ||
+		plan.Visuals[0].SourceRefs[0] != wantSource {
+		t.Fatalf("source refs no compactas: %+v %+v %+v", plan.SourceRefs, plan.Sections[0].SourceRefs, plan.Visuals[0].SourceRefs)
+	}
+	if plan.EvidenceRefs[0] != "boe_a_2026_001" ||
+		plan.Sections[0].DependsOn[0] != "tema_previo_intro" {
+		t.Fatalf("refs no compactas: evidence=%+v depends=%+v", plan.EvidenceRefs, plan.Sections[0].DependsOn)
+	}
+}
+
 func validDomainDocumentPlanForTestV0() DomainDocumentPlanV0 {
 	return DomainDocumentPlanV0{
 		PlanRef:           " plan-tema-psicologia-001 ",

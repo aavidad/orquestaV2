@@ -26,6 +26,10 @@ func firstDocumentPlanStringsV0(raw map[string]json.RawMessage, keys ...string) 
 	return nil
 }
 
+func firstDocumentPlanRefsV0(raw map[string]json.RawMessage, keys ...string) []string {
+	return compactDocumentPlanRefsV0(firstDocumentPlanStringsV0(raw, keys...))
+}
+
 func documentPlanStringV0(raw json.RawMessage) string {
 	var value string
 	if len(raw) > 0 && json.Unmarshal(raw, &value) == nil {
@@ -128,6 +132,17 @@ func prefixedDocumentPlanRefV0(prefix string, value string) string {
 		return value
 	}
 	return prefix + "-" + value
+}
+
+func compactDocumentPlanRefsV0(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		ref := compactDocumentPlanRefTextV0(value)
+		if ref != "" {
+			out = append(out, ref)
+		}
+	}
+	return compactDomainWorkStringsV0(out)
 }
 
 func compactDocumentPlanRefTextV0(value string) string {
