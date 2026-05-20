@@ -54,7 +54,7 @@ const (
 	MaxOperationalDirectorMaxLoopsV0                 = 12
 	MaxOperationalDirectorMaxParallelAgentsV0        = 6
 	MaxOperationalDirectorMaxDelegationDepthV0       = 3
-	MaxOperationalDirectorMaxSubagentsPerAgentV0     = 5
+	MaxOperationalDirectorMaxSubagentsPerAgentV0     = 6
 )
 
 type OperationalDirectorRequestV0 struct {

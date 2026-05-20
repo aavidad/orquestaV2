@@ -83,6 +83,7 @@ type codexWaveConfigV0 struct {
 	ExtraArgs       []string
 	IsolateHome     bool
 	DryRun          bool
+	PurgeRuntime    bool
 	AgentPrompts    []string
 }
 
@@ -124,6 +125,7 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 	extraArgs := flags.String("extra-args", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_EXTRA_ARGS")), "argumentos extra para codex exec")
 	isolateHome := flags.Bool("isolate-home", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_ISOLATE_HOME", false), "copiar CODEX_HOME por agente bajo el runtime")
 	dryRun := flags.Bool("dry-run", false, "materializar prompts/wrappers sin arrancar procesos")
+	purgeRuntime := flags.Bool("purge-runtime", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_PURGE_RUNTIME", false), "purgar runtime de esta ola antes de materializar")
 
 	if err := flags.Parse(args); err != nil {
 		return codexWaveConfigV0{}, err
@@ -173,6 +175,7 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 		ExtraArgs:       strings.Fields(*extraArgs),
 		IsolateHome:     *isolateHome,
 		DryRun:          *dryRun,
+		PurgeRuntime:    *purgeRuntime,
 	}, nil
 }
 
@@ -182,6 +185,11 @@ func runCodexLaunchWaveV0(
 ) (codexWaveLaunchSummaryV0, error) {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if config.PurgeRuntime {
+		if err := codexWavePurgeRuntimeDirV0(config.RuntimeWorkDir, config.WaveRef); err != nil {
+			return codexWaveLaunchSummaryV0{}, err
+		}
 	}
 	if err := os.MkdirAll(config.RuntimeWorkDir, 0o700); err != nil {
 		return codexWaveLaunchSummaryV0{}, err
@@ -432,6 +440,25 @@ func codexWaveRuntimeDirPathV0(raw string, projectWorkDir string, waveRef string
 		return "", err
 	}
 	return abs, nil
+}
+
+func codexWavePurgeRuntimeDirV0(runtimeDir string, waveRef string) error {
+	cleanDir := filepath.Clean(strings.TrimSpace(runtimeDir))
+	cleanWaveRef := strings.TrimSpace(waveRef)
+	if cleanDir == "" || cleanDir == "." || cleanDir == string(filepath.Separator) {
+		return errors.New("runtime_dir_purge_unsafe")
+	}
+	if cleanWaveRef == "" {
+		return errors.New("wave_ref_required_for_purge")
+	}
+	base := filepath.Base(cleanDir)
+	if base != cleanWaveRef && !strings.Contains(cleanDir, string(filepath.Separator)+"codex-waves"+string(filepath.Separator)) {
+		return errors.New("runtime_dir_purge_ref_mismatch")
+	}
+	if err := os.RemoveAll(cleanDir); err != nil {
+		return err
+	}
+	return nil
 }
 
 func codexWaveCommandPathV0(raw string) (string, error) {

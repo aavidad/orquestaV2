@@ -21,6 +21,10 @@ func withOPESGlobalEditorialPolicyFieldV0(
 	return out
 }
 
+func OPESGlobalEditorialPolicyV0() []string {
+	return append([]string(nil), opesGlobalEditorialPolicyV0()...)
+}
+
 func appendDocumentPlanContractFieldsV0(
 	fields []orquestadomainwork.DomainWorkFieldV0,
 	jobType string,

@@ -180,6 +180,111 @@ func TestCodexLaunchDirectorWaveCommandV0ModoMinimoRellenaRails(t *testing.T) {
 	}
 }
 
+func TestCodexLaunchDirectorWaveCommandV0OPESRecursiveDryRunMaterializaHijosYReglas(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	runtimeDir := filepath.Join(root, "runtime", "opes-a1-wave")
+	sourceCodeHome := filepath.Join(root, "source-codex-home")
+	fakeCodex := filepath.Join(root, "codex-fake")
+	stalePath := filepath.Join(runtimeDir, "stale.txt")
+
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatalf("crear project dir: %v", err)
+	}
+	if err := os.MkdirAll(sourceCodeHome, 0o700); err != nil {
+		t.Fatalf("crear source codex home: %v", err)
+	}
+	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
+		t.Fatalf("crear runtime dir: %v", err)
+	}
+	if err := os.WriteFile(stalePath, []byte("stale"), 0o600); err != nil {
+		t.Fatalf("crear stale: %v", err)
+	}
+	if err := os.WriteFile(fakeCodex, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatalf("crear codex falso: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := codexLaunchDirectorWaveCommandV0([]string{
+		"--dry-run",
+		"--purge-runtime",
+		"--agents", "2",
+		"--allow-recursive-delegation",
+		"--max-delegation-depth", "1",
+		"--max-subagents-per-agent", "6",
+		"--wave-ref", "opes-a1-wave",
+		"--project-ref", "opes",
+		"--domain-ref", "opes",
+		"--project-dir", projectDir,
+		"--runtime-dir", runtimeDir,
+		"--command", fakeCodex,
+		"--source-code-home", sourceCodeHome,
+		"--objective", "Crear dos temas A1 OPES distintos con calidad editorial.",
+		"--write-set", "external/opes/a1/tema_001,external/opes/a1/tema_002",
+		"--required-tests", "validar A1 >=20250 palabras,validar politica editorial OPES",
+		"--branch-ref", "branch-opes-a1-wave",
+		"--worktree-ref", "worktree-opes-a1-wave",
+	}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
+		t.Fatalf("runtime no purgado, stat err=%v", err)
+	}
+
+	var summary codexDirectorWaveSummaryV0
+	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
+		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
+	}
+	if summary.Plan.MaxParallelAgents != 2 ||
+		!summary.Plan.RecursiveDelegation ||
+		summary.Plan.MaxSubagentsPerAgent != 6 ||
+		len(summary.Launch.Agents) != 2 ||
+		len(summary.ChildLaunches) != 2 {
+		t.Fatalf("summary recursivo inesperado: %+v", summary)
+	}
+	for _, child := range summary.ChildLaunches {
+		if child.Launch.AgentCount != 6 ||
+			len(child.Launch.Agents) != 6 ||
+			!child.Launch.DryRun ||
+			child.ParentAgentRef == "" {
+			t.Fatalf("child launch inesperado: %+v", child)
+		}
+	}
+
+	parentPrompt := mustReadFileStringV0(t, summary.Launch.Agents[0].PromptPath)
+	for _, want := range []string{
+		"opes_global_editorial_policy_2026_05_18",
+		"20.250",
+		"max_subagents_per_agent: 6",
+		"external/opes/a1/tema_001",
+	} {
+		if !strings.Contains(parentPrompt, want) {
+			t.Fatalf("prompt padre no contiene %q:\n%s", want, parentPrompt)
+		}
+	}
+
+	childPrompt := mustReadFileStringV0(t, summary.ChildLaunches[0].Launch.Agents[0].PromptPath)
+	for _, want := range []string{
+		"parent_agent_ref: " + summary.Launch.Agents[0].AgentRef,
+		"child_agent_index: 1 de 6",
+		"opes_global_editorial_policy_2026_05_18",
+		"no infantilizar",
+		"external/opes/a1/tema_001",
+	} {
+		if !strings.Contains(childPrompt, want) {
+			t.Fatalf("prompt hijo no contiene %q:\n%s", want, childPrompt)
+		}
+	}
+
+	secondChildPrompt := mustReadFileStringV0(t, summary.ChildLaunches[1].Launch.Agents[5].PromptPath)
+	if !strings.Contains(secondChildPrompt, "external/opes/a1/tema_002") ||
+		!strings.Contains(secondChildPrompt, "revision pedagogica") {
+		t.Fatalf("prompt hijo tema 2 incompleto:\n%s", secondChildPrompt)
+	}
+}
+
 func mustReadFileStringV0(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)
