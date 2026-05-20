@@ -139,6 +139,11 @@ func TestCodexStackV0OPESPlanTemarioOperadoresSupervisorXHighEnviaDocumentPlan(t
 		"C2/AP",
 		"opes_assimilation_method",
 		"recuperacion activa",
+		"opes_global_editorial_policy_2026_05_18",
+		"modo tutor completo",
+		"no infantilizar",
+		"notas de test separadas",
+		"20.250",
 	} {
 		if !codexStackContextContainsForTestV0(descriptor.Spec.AgentPacket.Context.Entries, want) {
 			t.Fatalf("contexto de agente no contiene %q: %+v", want, descriptor.Spec.AgentPacket.Context.Entries)

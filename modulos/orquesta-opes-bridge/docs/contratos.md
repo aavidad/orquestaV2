@@ -23,6 +23,11 @@ Reglas:
 - para `summarize_topic`, el bridge hidrata `topic_blocks` desde
   `GET /api/topics/{topic_id}/blocks`; si no puede obtenerlos, no crea el run
   para evitar resumenes pobres;
+- todos los jobs OPES reciben `opes_global_editorial_policy_2026_05_18` como
+  contexto de dominio priorizado. Esta politica sale del conector OPES y no del
+  nucleo: incluye modo tutor completo, tono adulto sin infantilizar, primera
+  lectura continua, notas de test separadas, visuales utiles, fuentes oficiales
+  y umbral A1 de 20.250-22.500 palabras;
 - para `expand_topic_from_summary`, el bridge exige paquete editorial
   multiformato: `tema_grande`, `tema_mediano`, `resumen`,
   `esquema_repaso` y `plan_visuales`;

@@ -2,6 +2,7 @@ package orquestaopesbridge
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -71,6 +72,11 @@ func TestBuildExternalWorkRunRequestV0MapeaExpansionComoLarge(t *testing.T) {
 	if req.AppChangeRequest.AllowedWriteSet[0] != "external/opes/expand_topic_from_summary/job-ref-expansion-001" ||
 		!fieldValueForTestV0(fields, "expected_artifact_type", "topic_expansion_package") ||
 		!fieldValueForTestV0(fields, "context_budget_profile", "large") ||
+		!fieldValuesContainForTestV0(fields, "opes_global_editorial_policy_2026_05_18", []string{
+			"20.250",
+			"modo tutor completo",
+			"no infantilizar",
+		}) ||
 		!fieldValueForTestV0(fields, "target_words_min", defaultExpansionTargetWordsMinV0) ||
 		!fieldValuesForTestV0(fields, "minimum_quality_gates", expansionQualityGatesV0()) ||
 		!fieldValuesForTestV0(fields, "required_document_variants", []string{
@@ -148,6 +154,11 @@ func TestBuildExternalWorkRunRequestV0MapeaPlanTemarioOperadoresComoDocumentPlan
 		!fieldValueForTestV0(fields, "context_budget_profile", "large") ||
 		!fieldValueForTestV0(fields, "expected_schema", orquestadomainwork.DomainDocumentPlanSchemaV0) ||
 		!fieldValueForTestV0(fields, "document_kind", "temario_oposicion") ||
+		!fieldValuesContainForTestV0(fields, "opes_global_editorial_policy_2026_05_18", []string{
+			"notas de test separadas",
+			"visuales utiles no decorativos",
+			"no infantilizar",
+		}) ||
 		!fieldValuesForTestV0(fields, "allowed_document_plan_work_kinds", documentPlanAllowedWorkKindsV0()) ||
 		!fieldValuesForTestV0(fields, "opes_editorial_workflow", documentPlanOPESEditorialWorkflowV0()) ||
 		!fieldValuesForTestV0(fields, "opes_level_derivation_policy", documentPlanOPESLevelDerivationPolicyV0()) ||
@@ -205,6 +216,22 @@ func fieldValuesForTestV0(fields []orquestadomainwork.DomainWorkFieldV0, name st
 		if ok {
 			return true
 		}
+	}
+	return false
+}
+
+func fieldValuesContainForTestV0(fields []orquestadomainwork.DomainWorkFieldV0, name string, wants []string) bool {
+	for _, field := range fields {
+		if field.Name != name {
+			continue
+		}
+		content := strings.Join(append([]string{field.Value}, field.Values...), "\n")
+		for _, want := range wants {
+			if !strings.Contains(content, want) {
+				return false
+			}
+		}
+		return true
 	}
 	return false
 }
