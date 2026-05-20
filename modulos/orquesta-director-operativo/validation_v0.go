@@ -93,6 +93,9 @@ func operationalDirectorWriteSetPathSafeV0(path string) bool {
 	if path == "" || strings.HasPrefix(path, "/") || strings.HasPrefix(path, "~") {
 		return false
 	}
+	if path == "." {
+		return true
+	}
 	if strings.Contains(path, "\x00") || strings.Contains(path, "\\") ||
 		strings.Contains(path, "://") || strings.Contains(path, "$") {
 		return false

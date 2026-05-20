@@ -241,7 +241,7 @@ func codexReviewGatePathAllowedByWriteSetV0(path string, writeSet []string) bool
 	path = strings.TrimSpace(path)
 	for _, allowed := range writeSet {
 		allowed = strings.TrimSpace(allowed)
-		if path == allowed || strings.HasPrefix(path, allowed+"/") {
+		if allowed == "." || path == allowed || strings.HasPrefix(path, allowed+"/") {
 			return true
 		}
 	}

@@ -166,7 +166,7 @@ func programmingTeamPacketV0(
 			WriteSet:      task.WriteSet,
 			RequiredTests: task.RequiredTests,
 			DoneCriteria: []string{
-				"Solo se modifican ficheros del write-set.",
+				"El write-set se usa como alcance primario y cualquier ampliacion queda justificada.",
 				"El codigo o web queda listo para revision.",
 				"Cada fichero queda por debajo de 300 lineas.",
 				"agent_ack.json escrito con status completed.",

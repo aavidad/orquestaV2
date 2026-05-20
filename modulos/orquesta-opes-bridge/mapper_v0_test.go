@@ -75,12 +75,21 @@ func TestBuildExternalWorkRunRequestV0MapeaExpansionComoLarge(t *testing.T) {
 		!fieldValuesContainForTestV0(fields, "opes_global_editorial_policy_2026_05_18", []string{
 			"20.250",
 			"modo tutor completo",
+			"50 preguntas",
 			"no infantilizar",
 		}) ||
 		!fieldValuesContainForTestV0(fields, "opes_html_publication_policy_2026_05_19", []string{
 			"patron web tipo Tema 11",
 			"primera lectura activa por defecto",
 			"banco de preguntas i18n externo",
+			"4 opciones",
+		}) ||
+		!fieldValuesContainForTestV0(fields, "opes_html_topic_template_v1", []string{
+			"modulos/orquesta-opes-bridge/scripts/opes_render_topic_html_v1.py",
+			"modulos/orquesta-opes-bridge/scripts/opes_validate_topic_package_v1.py",
+			"template_ref=opes_html_topic_template_v1",
+			"50 items",
+			"estructura fija",
 		}) ||
 		!fieldValueForTestV0(fields, "target_words_min", defaultExpansionTargetWordsMinV0) ||
 		!fieldValuesForTestV0(fields, "minimum_quality_gates", expansionQualityGatesV0()) ||
@@ -161,13 +170,22 @@ func TestBuildExternalWorkRunRequestV0MapeaPlanTemarioOperadoresComoDocumentPlan
 		!fieldValueForTestV0(fields, "document_kind", "temario_oposicion") ||
 		!fieldValuesContainForTestV0(fields, "opes_global_editorial_policy_2026_05_18", []string{
 			"notas de test separadas",
+			"50 preguntas",
 			"visuales utiles no decorativos",
 			"no infantilizar",
 		}) ||
 		!fieldValuesContainForTestV0(fields, "opes_html_publication_policy_2026_05_19", []string{
 			"barra lateral plegable",
 			"notas de test ocultables",
+			"4 opciones",
 			"html final debe parsear",
+		}) ||
+		!fieldValuesContainForTestV0(fields, "opes_html_topic_template_v1", []string{
+			"modulos/orquesta-opes-bridge/scripts/opes_render_topic_html_v1.py",
+			"modulos/orquesta-opes-bridge/scripts/opes_validate_topic_package_v1.py",
+			"mode-bar sticky",
+			"50 items",
+			"validacion obligatoria",
 		}) ||
 		!fieldValuesForTestV0(fields, "allowed_document_plan_work_kinds", documentPlanAllowedWorkKindsV0()) ||
 		!fieldValuesForTestV0(fields, "opes_editorial_workflow", documentPlanOPESEditorialWorkflowV0()) ||

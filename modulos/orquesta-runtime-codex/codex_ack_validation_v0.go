@@ -117,7 +117,7 @@ func (v *codexAckValidatorV0) validateCompletedEvidence(
 	ack CodexAgentAckV0,
 	packet orquestaruntime.AgentStartPacketV0,
 ) {
-	writeSet := normalizeCodexAckPathsV0(packet.Task.WriteSet)
+	writeSet := normalizeCodexAckWriteSetPathsV0(packet.Task.WriteSet)
 	files := normalizeCodexAckPathsV0(ack.Files)
 	if codexAckHasInvalidPathV0(ack.Files) {
 		v.add(CodexConnectorAckArtifactV0, "files", "artifact_path_invalid")
@@ -169,6 +169,21 @@ func normalizeCodexAckPathsV0(values []string) []string {
 	return paths
 }
 
+func normalizeCodexAckWriteSetPathsV0(values []string) []string {
+	paths := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) == "." {
+			paths = append(paths, ".")
+			continue
+		}
+		path, ok := normalizeCodexAckPathV0(value)
+		if ok {
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
 func normalizeCodexAckPathV0(value string) (string, bool) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" ||
@@ -188,6 +203,9 @@ func normalizeCodexAckPathV0(value string) (string, bool) {
 func codexAckMissingWriteSetV0(writeSet []string, files []string) []string {
 	missing := make([]string, 0)
 	for _, required := range writeSet {
+		if required == "." {
+			continue
+		}
 		found := false
 		for _, file := range files {
 			if codexAckPathMatchesWriteSetEntryV0(file, required) {
@@ -212,6 +230,9 @@ func codexAckPathAllowedV0(path string, writeSet []string) bool {
 }
 
 func codexAckPathMatchesWriteSetEntryV0(path string, entry string) bool {
+	if entry == "." {
+		return true
+	}
 	if path == entry || strings.HasPrefix(path, entry+"/") {
 		return true
 	}

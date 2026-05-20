@@ -332,7 +332,9 @@ padre incorpore esa evidencia.
 
 ## No hacer
 
-- No dar libertad total a agentes sin write-set, pruebas y criterio de cierre.
+- No lanzar agentes sin alcance, pruebas y criterio de cierre; el write-set puede
+  ser amplio (`.`) cuando el trabajo requiera reparar cualquier parte del repo,
+  y en ese caso sigue siendo trazabilidad, no una venda.
 - No crear un bucle infinito de "observar -> pensar -> lanzar otro agente" sin
   presupuesto, timeout, limite de intentos y causa compacta.
 - No aceptar planes bonitos que no esten anclados al objetivo actual.
@@ -427,7 +429,9 @@ parcial sin salir del presupuesto global.
 - Un operador puede pedir un trabajo y ver en stats/API el plan vivo, los
   agentes en curso, los bloqueos, el ultimo replan y la razon de cierre.
 - El director no genera microtareas historicas si hay objetivo actual compacto.
-- Ningun agente de implementacion puede entregar cambios fuera de write-set.
+- Ningun agente de implementacion puede entregar cambios fuera de un alcance
+  declarado; si el write-set era estrecho y tuvo que ampliarlo, la entrega debe
+  justificar esa ampliacion y pasar review.
 - Una entrega invalida produce review/rework/replan trazable, no cierre falso.
 - El run puede quedarse esperando sin parecer colgado y sin lanzar agentes
   duplicados.

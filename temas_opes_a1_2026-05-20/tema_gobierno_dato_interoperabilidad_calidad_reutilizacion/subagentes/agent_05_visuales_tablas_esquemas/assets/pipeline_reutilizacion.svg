@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 560" role="img" aria-labelledby="title desc">
+  <title id="title">Cadena de reutilizacion de informacion publica</title>
+  <desc id="desc">Cadena desde inventario y clasificacion de datos hasta publicacion, acceso, reutilizacion y retroalimentacion.</desc>
+  <defs>
+    <style>
+      .bg{fill:#f7f9fc}
+      .step{fill:#fff;stroke:#ced8e5;stroke-width:2}
+      .gate{fill:#fff7e6;stroke:#e0b45a;stroke-width:2}
+      .arrow{stroke:#5f6f83;stroke-width:3;fill:none;marker-end:url(#arrow)}
+      .h{font:700 22px Arial,sans-serif;fill:#243447}
+      .t{font:400 16px Arial,sans-serif;fill:#243447}
+      .small{font:400 14px Arial,sans-serif;fill:#52606d}
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5f6f83"/>
+    </marker>
+  </defs>
+  <rect class="bg" width="1180" height="560"/>
+  <text class="h" x="58" y="56">De informacion administrativa a dato reutilizable</text>
+  <text class="small" x="58" y="84">La reutilizacion requiere preparar, documentar, publicar y mantener el dato.</text>
+
+  <rect class="step" x="60" y="150" width="160" height="120" rx="8"/>
+  <text class="h" x="92" y="186">Inventario</text>
+  <text class="t" x="82" y="218">que datos existen</text>
+  <text class="small" x="82" y="246">fuente, responsable</text>
+
+  <rect class="gate" x="250" y="150" width="175" height="120" rx="8"/>
+  <text class="h" x="284" y="186">Clasificacion</text>
+  <text class="t" x="272" y="218">limites juridicos</text>
+  <text class="small" x="272" y="246">datos personales, seguridad</text>
+
+  <rect class="step" x="455" y="150" width="160" height="120" rx="8"/>
+  <text class="h" x="492" y="186">Calidad</text>
+  <text class="t" x="478" y="218">reglas y metricas</text>
+  <text class="small" x="478" y="246">actualidad, completitud</text>
+
+  <rect class="step" x="645" y="150" width="175" height="120" rx="8"/>
+  <text class="h" x="684" y="186">Metadatos</text>
+  <text class="t" x="666" y="218">definir y describir</text>
+  <text class="small" x="666" y="246">licencia, cobertura, formato</text>
+
+  <rect class="step" x="850" y="150" width="160" height="120" rx="8"/>
+  <text class="h" x="884" y="186">Acceso</text>
+  <text class="t" x="878" y="218">API o descarga</text>
+  <text class="small" x="878" y="246">formatos abiertos</text>
+
+  <rect class="step" x="1040" y="150" width="100" height="120" rx="8"/>
+  <text class="h" x="1054" y="186">Uso</text>
+  <text class="t" x="1054" y="218">valor</text>
+  <text class="small" x="1054" y="246">social y economico</text>
+
+  <path class="arrow" d="M220 210 L250 210"/>
+  <path class="arrow" d="M425 210 L455 210"/>
+  <path class="arrow" d="M615 210 L645 210"/>
+  <path class="arrow" d="M820 210 L850 210"/>
+  <path class="arrow" d="M1010 210 L1040 210"/>
+
+  <path class="arrow" d="M1090 274 C1080 402 205 402 150 274"/>
+  <text class="small" x="420" y="420">Retroalimentacion: incidencias, demanda de usuarios, cambios normativos y nuevas versiones.</text>
+
+  <rect class="gate" x="250" y="320" width="680" height="62" rx="8"/>
+  <text class="h" x="285" y="358">Control permanente: no publicar lo protegido, no abandonar lo publicado</text>
+</svg>

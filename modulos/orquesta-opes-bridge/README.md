@@ -12,6 +12,18 @@ particular, si existe maestro A1/A2 o A1 equivalente, el plan debe crear o
 validar primero ese maestro y despues derivar B/C1/C2/AP por resumen,
 reduccion editorial y adaptacion de nivel.
 
+El HTML de temas OPES no queda a criterio de cada agente: el contrato inyecta
+`opes_html_topic_template_v1` y el renderer
+`modulos/orquesta-opes-bridge/scripts/opes_render_topic_html_v1.py`, basado en
+`modulos/orquesta-opes-bridge/templates/opes_html_topic_template_v1.html`.
+Los agentes aportan Markdown, metadatos y assets locales; el script monta la
+estructura web canonica tipo Tema 11 y valida referencias locales.
+El cierre mecanico de cada paquete se comprueba con
+`modulos/orquesta-opes-bridge/scripts/opes_validate_topic_package_v1.py`: palabras A1, duplicados largos,
+HTML offline, banco JSON de 50 preguntas con 4 opciones, SVG y fugas de rutas
+internas. El banco es por tema, queda junto a su temario y se reserva para la
+parte de afiliados; no hay banco comun ni test de prueba publico.
+
 ## Validacion
 
 ```sh

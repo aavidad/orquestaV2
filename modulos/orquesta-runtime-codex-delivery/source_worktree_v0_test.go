@@ -40,6 +40,38 @@ func TestCodexDeliveryObservationSourceV0AceptaAckFilesEnWorktreeCompartido(t *t
 	}
 }
 
+func TestCodexDeliveryObservationSourceV0AceptaAckFilesConWriteSetRaiz(t *testing.T) {
+	spec := codexDeliverySpecForTestV0()
+	spec.AgentPacket.Task.WriteSet = []string{"."}
+	ack := codexDeliveryAckForTestV0(spec)
+	ack.Files = []string{"docs/extra.md"}
+	projectDir := t.TempDir()
+	writeCodexDeliveryProjectFileForTestV0(t, projectDir, "docs/extra.md", "entrega")
+	ackPath := writeCodexDeliveryAckForTestV0(t, spec, ack)
+	store := &staticCodexReceiptStoreV0{
+		Descriptors: []CodexReceiptDescriptorV0{{
+			DescriptorRef:  "receipt-ref-root-001",
+			Spec:           spec,
+			AckPath:        ackPath,
+			ProjectWorkDir: projectDir,
+		}},
+	}
+
+	observations, err := (CodexDeliveryObservationSourceV0{
+		Store: store,
+		WorktreeVerifier: CodexReceiptWorktreeVerifierV0{
+			Mode: CodexReceiptWorktreeAckFilesV0,
+		},
+	}).BuildAgentDeliveryObservationsV0(context.Background(), codexDeliveryRequestForTestV0(spec, nil))
+
+	if err != nil {
+		t.Fatalf("BuildAgentDeliveryObservationsV0: %v", err)
+	}
+	if len(observations) != 1 {
+		t.Fatalf("observations=%+v", observations)
+	}
+}
+
 func TestCodexDeliveryObservationSourceV0RechazaAckFileInexistente(t *testing.T) {
 	spec := codexDeliverySpecForTestV0()
 	projectDir := t.TempDir()

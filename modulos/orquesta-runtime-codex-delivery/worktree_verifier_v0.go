@@ -151,6 +151,9 @@ func cleanCodexReceiptAckFilePathV0(value string) (string, bool) {
 
 func codexReceiptPathAllowedByWriteSetV0(path string, writeSet []string) bool {
 	for _, raw := range writeSet {
+		if strings.TrimSpace(raw) == "." {
+			return true
+		}
 		allowed, ok := cleanCodexReceiptAckFilePathV0(raw)
 		if !ok {
 			continue

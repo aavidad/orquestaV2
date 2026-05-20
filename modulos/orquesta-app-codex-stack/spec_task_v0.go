@@ -61,7 +61,7 @@ func programmingObjectiveV0(task orquestacoreworkflow.WorkflowTaskV0) string {
 	return strings.Join([]string{
 		strings.TrimSpace(task.Summary),
 		"Implementa solo el " + unit + ".",
-		"No cambies ficheros fuera del write-set.",
+		"Usa el write-set como alcance primario; si debes tocar otros ficheros del repo para cumplir el objetivo o arreglar pruebas, hazlo y dejalo justificado en el ACK.",
 		"Si la app es Go completa, debe quedar como modulo autonomo con go.mod, entrypoint bajo cmd/server o equivalente documentado, imports de modulo y sin imports relativos ../.",
 		"Ejecuta pruebas focales razonables y registra el resultado en el ACK.",
 	}, "\n")

@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 620" role="img" aria-labelledby="title desc">
+  <title id="title">Flujo API gateway y microservicios</title>
+  <desc id="desc">Solicitud desde canal digital hacia API gateway, microservicios, sistemas de registro y observabilidad transversal.</desc>
+  <defs>
+    <style>
+      .bg{fill:#ffffff}
+      .zone{fill:#f8fafc;stroke:#cbd5e1;stroke-width:1.4;rx:18}
+      .client{fill:#e0f2fe;stroke:#0369a1;stroke-width:2;rx:14}
+      .gateway{fill:#dcfce7;stroke:#15803d;stroke-width:2;rx:14}
+      .svc{fill:#fef3c7;stroke:#a16207;stroke-width:2;rx:14}
+      .legacy{fill:#fee2e2;stroke:#b91c1c;stroke-width:2;rx:14}
+      .obs{fill:#f3e8ff;stroke:#7e22ce;stroke-width:2;rx:14}
+      .text{font-family:Inter,Arial,sans-serif;fill:#0f172a;font-size:19px;font-weight:700}
+      .small{font-family:Inter,Arial,sans-serif;fill:#334155;font-size:14px;font-weight:500}
+      .caption{font-family:Inter,Arial,sans-serif;fill:#475569;font-size:13px;font-weight:600}
+      .arrow{stroke:#475569;stroke-width:2.4;fill:none;marker-end:url(#arrow)}
+      .dash{stroke:#7e22ce;stroke-width:2;stroke-dasharray:7 7;fill:none;marker-end:url(#arrowPurple)}
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L8,3 z" fill="#475569"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L8,3 z" fill="#7e22ce"/>
+    </marker>
+  </defs>
+  <rect class="bg" width="1120" height="620"/>
+  <rect x="40" y="40" width="1040" height="520" class="zone"/>
+  <text x="560" y="78" text-anchor="middle" class="text">Acceso gobernado a servicios distribuidos</text>
+
+  <rect x="80" y="160" width="170" height="100" class="client"/>
+  <text x="165" y="196" text-anchor="middle" class="text">Canal digital</text>
+  <text x="165" y="222" text-anchor="middle" class="small">sede, app, portal</text>
+
+  <rect x="320" y="135" width="210" height="150" class="gateway"/>
+  <text x="425" y="170" text-anchor="middle" class="text">API gateway</text>
+  <text x="425" y="199" text-anchor="middle" class="small">autenticacion</text>
+  <text x="425" y="222" text-anchor="middle" class="small">autorizacion</text>
+  <text x="425" y="245" text-anchor="middle" class="small">rate limit y trazas</text>
+
+  <rect x="615" y="105" width="180" height="82" class="svc"/>
+  <text x="705" y="139" text-anchor="middle" class="text">Servicio A</text>
+  <text x="705" y="164" text-anchor="middle" class="small">expedientes</text>
+
+  <rect x="615" y="220" width="180" height="82" class="svc"/>
+  <text x="705" y="254" text-anchor="middle" class="text">Servicio B</text>
+  <text x="705" y="279" text-anchor="middle" class="small">notificaciones</text>
+
+  <rect x="615" y="335" width="180" height="82" class="svc"/>
+  <text x="705" y="369" text-anchor="middle" class="text">Servicio C</text>
+  <text x="705" y="394" text-anchor="middle" class="small">pagos o tasas</text>
+
+  <rect x="875" y="175" width="165" height="150" class="legacy"/>
+  <text x="957" y="218" text-anchor="middle" class="text">Registro</text>
+  <text x="957" y="244" text-anchor="middle" class="small">sistema legado</text>
+  <text x="957" y="267" text-anchor="middle" class="small">backoffice</text>
+
+  <rect x="260" y="460" width="600" height="62" class="obs"/>
+  <text x="560" y="488" text-anchor="middle" class="text">Observabilidad y auditoria</text>
+  <text x="560" y="512" text-anchor="middle" class="small">correlation id, logs, metricas, trazas, evidencias de acceso</text>
+
+  <path d="M250 210 H310" class="arrow"/>
+  <path d="M530 210 C565 146 580 146 605 146" class="arrow"/>
+  <path d="M530 210 H605" class="arrow"/>
+  <path d="M530 210 C565 376 580 376 605 376" class="arrow"/>
+  <path d="M795 146 C835 160 850 190 865 220" class="arrow"/>
+  <path d="M795 261 H865" class="arrow"/>
+  <path d="M795 376 C835 355 850 320 865 290" class="arrow"/>
+  <path d="M425 285 V450" class="dash"/>
+  <path d="M705 417 V450" class="dash"/>
+  <path d="M957 325 C957 430 900 466 870 488" class="dash"/>
+
+  <text x="280" y="125" class="caption">Entrada controlada</text>
+  <text x="610" y="89" class="caption">Capacidades acotadas</text>
+  <text x="877" y="160" class="caption">Encapsulacion del legado</text>
+</svg>

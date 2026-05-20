@@ -1,0 +1,92 @@
+[
+  {
+    "id": "aplicacion-01",
+    "locale": "es",
+    "level": "aplicacion",
+    "stem": "Una consulta interadministrativa debe registrar principalmente",
+    "options": [
+      "Solo tiempo de CPU",
+      "Finalidad, consumidor, dato y resultado",
+      "Color de la interfaz",
+      "Idioma del navegador"
+    ],
+    "correct_index": 1,
+    "diagnostic": {
+      "concept": "arquitectura distribuida, APIs e integracion publica",
+      "why_correct": "La auditoria debe permitir reconstruir acceso y finalidad.",
+      "review_hint": "Repasar definiciones, notas de test y tablas de sintesis del tema."
+    }
+  },
+  {
+    "id": "aplicacion-02",
+    "locale": "es",
+    "level": "aplicacion",
+    "stem": "Cuando conviene mensajeria asincrona?",
+    "options": [
+      "Cuando todo debe responder en la misma pantalla",
+      "Cuando se puede desacoplar trabajo y tolerar consistencia eventual",
+      "Cuando no hay fallos",
+      "Cuando se quiere eliminar trazabilidad"
+    ],
+    "correct_index": 1,
+    "diagnostic": {
+      "concept": "arquitectura distribuida, APIs e integracion publica",
+      "why_correct": "La asincronia desacopla y absorbe picos, pero exige control.",
+      "review_hint": "Repasar definiciones, notas de test y tablas de sintesis del tema."
+    }
+  },
+  {
+    "id": "aplicacion-03",
+    "locale": "es",
+    "level": "aplicacion",
+    "stem": "El API gateway sustituye a",
+    "options": [
+      "La autorizacion fina de dominio",
+      "Ninguna validacion de negocio",
+      "Controles transversales de entrada",
+      "La normativa"
+    ],
+    "correct_index": 2,
+    "diagnostic": {
+      "concept": "arquitectura distribuida, APIs e integracion publica",
+      "why_correct": "El gateway aplica politicas transversales, no reemplaza reglas de dominio.",
+      "review_hint": "Repasar definiciones, notas de test y tablas de sintesis del tema."
+    }
+  },
+  {
+    "id": "aplicacion-04",
+    "locale": "es",
+    "level": "aplicacion",
+    "stem": "Una version incompatible de API requiere",
+    "options": [
+      "Retirada inmediata sin aviso",
+      "Convivencia, comunicacion y plan de migracion",
+      "Cambiar solo el color del portal",
+      "Eliminar logs"
+    ],
+    "correct_index": 1,
+    "diagnostic": {
+      "concept": "arquitectura distribuida, APIs e integracion publica",
+      "why_correct": "El sector publico necesita continuidad y gestion de consumidores.",
+      "review_hint": "Repasar definiciones, notas de test y tablas de sintesis del tema."
+    }
+  },
+  {
+    "id": "aplicacion-05",
+    "locale": "es",
+    "level": "aplicacion",
+    "stem": "La consistencia eventual controlada implica",
+    "options": [
+      "Desorden sin reglas",
+      "Convergencia bajo reglas conocidas",
+      "Prohibicion de auditoria",
+      "Uso obligatorio de ficheros"
+    ],
+    "correct_index": 1,
+    "diagnostic": {
+      "concept": "arquitectura distribuida, APIs e integracion publica",
+      "why_correct": "La convergencia debe ser observable y reconciliable.",
+      "review_hint": "Repasar definiciones, notas de test y tablas de sintesis del tema."
+    }
+  }
+]

@@ -1,0 +1,92 @@
+[
+  {
+    "id": "examen-01",
+    "locale": "es",
+    "level": "examen",
+    "stem": "Se moderniza un monolito departamental estable. La primera decision prudente es",
+    "options": [
+      "Trocearlo en docenas de servicios",
+      "Inventariar dominios, dependencias y puntos de cambio",
+      "Eliminar la base de datos",
+      "Publicar todas las tablas"
+    ],
+    "correct_index": 1,
+    "diagnostic": {
+      "concept": "arquitectura distribuida, APIs e integracion publica",
+      "why_correct": "La modernizacion madura empieza por entender fronteras y riesgos.",
+      "review_hint": "Repasar definiciones, notas de test y tablas de sintesis del tema."
+    }
+  },
+  {
+    "id": "examen-02",
+    "locale": "es",
+    "level": "examen",
+    "stem": "Una API devuelve datos personales excesivos aunque el consumidor solo necesita verificar una condicion. El principio afectado es",
+    "options": [
+      "Minimizacion",
+      "Compresion",
+      "Escalado horizontal",
+      "Cache"
+    ],
+    "correct_index": 0,
+    "diagnostic": {
+      "concept": "arquitectura distribuida, APIs e integracion publica",
+      "why_correct": "La minimizacion exige limitar datos a lo necesario.",
+      "review_hint": "Repasar definiciones, notas de test y tablas de sintesis del tema."
+    }
+  },
+  {
+    "id": "examen-03",
+    "locale": "es",
+    "level": "examen",
+    "stem": "Un evento duplicado genera dos notificaciones. El fallo de diseño esta en",
+    "options": [
+      "Falta de idempotencia o deduplicacion",
+      "Uso de SVG",
+      "Exceso de documentacion",
+      "Tener catalogo"
+    ],
+    "correct_index": 0,
+    "diagnostic": {
+      "concept": "arquitectura distribuida, APIs e integracion publica",
+      "why_correct": "Los consumidores de eventos deben tolerar duplicados.",
+      "review_hint": "Repasar definiciones, notas de test y tablas de sintesis del tema."
+    }
+  },
+  {
+    "id": "examen-04",
+    "locale": "es",
+    "level": "examen",
+    "stem": "Un servicio interno acepta llamadas solo por estar en red privada. La medida mas adecuada es",
+    "options": [
+      "Mantenerlo igual",
+      "Identidad de servicio, autorizacion y trazabilidad",
+      "Quitar TLS",
+      "Usar una clave compartida universal"
+    ],
+    "correct_index": 1,
+    "diagnostic": {
+      "concept": "arquitectura distribuida, APIs e integracion publica",
+      "why_correct": "La confianza cero evita depender solo del perimetro.",
+      "review_hint": "Repasar definiciones, notas de test y tablas de sintesis del tema."
+    }
+  },
+  {
+    "id": "examen-05",
+    "locale": "es",
+    "level": "examen",
+    "stem": "La interoperabilidad publica se consigue cuando",
+    "options": [
+      "Hay conectividad y ademas significado, base juridica, seguridad y organizacion",
+      "Todos usan la misma pantalla",
+      "Se elimina el procedimiento",
+      "Se evita documentar"
+    ],
+    "correct_index": 0,
+    "diagnostic": {
+      "concept": "arquitectura distribuida, APIs e integracion publica",
+      "why_correct": "La conectividad es necesaria, pero no suficiente.",
+      "review_hint": "Repasar definiciones, notas de test y tablas de sintesis del tema."
+    }
+  }
+]

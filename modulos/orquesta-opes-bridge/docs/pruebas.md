@@ -10,7 +10,14 @@
 - Mapper de `plan_temario` de operadores a `document_plan` con write-set
   `external/opes/plan_temario/<job>`, contexto `large`, schema
   `domain_document_plan.v0`, contrato de plan documental, flujo editorial OPES,
-  metodo de asimilacion y requisitos de calidad.
+  metodo de asimilacion, requisitos de calidad y regla de modificacion
+  incremental cuando ya exista artefacto previo.
+- Inyeccion del contrato `opes_html_topic_template_v1`, que obliga a usar
+  `modulos/orquesta-opes-bridge/scripts/opes_render_topic_html_v1.py` y la plantilla HTML canonica para no
+  dejar la web a criterio de cada agente, y
+  `modulos/orquesta-opes-bridge/scripts/opes_validate_topic_package_v1.py` para cerrar los paquetes con las
+  mismas comprobaciones mecanicas, incluido banco de 50 preguntas con 4
+  opciones y distractores plausibles, siempre por tema y reservado a afiliados.
 - Contrato multiformato de expansion: tema grande, tema mediano, resumen,
   esquema de repaso y plan de visuales.
 - Preservacion de payload JSON como `input_fields`.

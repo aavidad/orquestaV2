@@ -143,7 +143,7 @@ func programmingTeamWorkflowTasksV0(
 			Summary:       "Microtarea acotada para la app de agenda.",
 			WriteSet:      task.WriteSet,
 			AcceptanceCriteria: []string{
-				"Solo se modifica el write-set declarado.",
+				"El write-set declarado se usa como alcance primario y cualquier ampliacion queda justificada.",
 				"El resultado queda listo para revision.",
 				"Cada fichero queda por debajo de 300 lineas.",
 			},

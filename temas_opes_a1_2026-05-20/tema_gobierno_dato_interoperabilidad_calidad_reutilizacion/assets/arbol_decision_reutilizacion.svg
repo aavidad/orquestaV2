@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="700" viewBox="0 0 1180 700" role="img" aria-labelledby="title desc">
+  <title id="title">Arbol de decision para compartir o publicar datos</title>
+  <desc id="desc">Arbol que ayuda a decidir entre publicar como dato abierto, compartir de forma controlada, agregar, aplazar o no reutilizar.</desc>
+  <defs>
+    <style>
+      .q{fill:#ffffff;stroke:#3f4f6b;stroke-width:2;rx:8}
+      .ok{fill:#e8f5e9;stroke:#3f7f4f;stroke-width:2;rx:8}
+      .warn{fill:#fff7e6;stroke:#a66a00;stroke-width:2;rx:8}
+      .stop{fill:#fdecea;stroke:#9b2c2c;stroke-width:2;rx:8}
+      .txt{font:15px Arial,sans-serif;fill:#1f2933}
+      .small{font:13px Arial,sans-serif;fill:#334155}
+      .line{stroke:#465b7c;stroke-width:2.4;fill:none;marker-end:url(#arrow)}
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#465b7c"/>
+    </marker>
+  </defs>
+  <rect x="20" y="20" width="1140" height="660" fill="#f8fafc" stroke="#d9e2ec"/>
+  <rect x="430" y="55" width="320" height="72" class="q"/>
+  <text x="590" y="86" text-anchor="middle" class="txt">El recurso entra en la funcion publica?</text>
+  <text x="590" y="110" text-anchor="middle" class="small">documento, dato, registro o dataset</text>
+  <rect x="110" y="185" width="310" height="78" class="stop"/>
+  <text x="265" y="217" text-anchor="middle" class="txt">No aplicar RISP sin mas</text>
+  <text x="265" y="241" text-anchor="middle" class="small">revisar titularidad y regimen juridico</text>
+  <rect x="520" y="185" width="310" height="78" class="q"/>
+  <text x="675" y="217" text-anchor="middle" class="txt">Hay limites o datos protegidos?</text>
+  <text x="675" y="241" text-anchor="middle" class="small">personales, secreto, seguridad, derechos</text>
+  <rect x="255" y="335" width="320" height="82" class="q"/>
+  <text x="415" y="368" text-anchor="middle" class="txt">Puede agregarse o anonimizarse?</text>
+  <text x="415" y="392" text-anchor="middle" class="small">riesgo aceptable y utilidad suficiente</text>
+  <rect x="710" y="335" width="320" height="82" class="q"/>
+  <text x="870" y="368" text-anchor="middle" class="txt">Tiene calidad y metadatos?</text>
+  <text x="870" y="392" text-anchor="middle" class="small">formato, licencia, responsable, version</text>
+  <rect x="90" y="505" width="250" height="82" class="warn"/>
+  <text x="215" y="538" text-anchor="middle" class="txt">Compartir controlado</text>
+  <text x="215" y="562" text-anchor="middle" class="small">entorno seguro o acceso restringido</text>
+  <rect x="405" y="505" width="250" height="82" class="warn"/>
+  <text x="530" y="538" text-anchor="middle" class="txt">Publicar agregado</text>
+  <text x="530" y="562" text-anchor="middle" class="small">menor detalle y advertencias</text>
+  <rect x="720" y="505" width="250" height="82" class="ok"/>
+  <text x="845" y="538" text-anchor="middle" class="txt">Publicar dato abierto</text>
+  <text x="845" y="562" text-anchor="middle" class="small">catalogo, API o descarga</text>
+  <rect x="970" y="505" width="150" height="82" class="warn"/>
+  <text x="1045" y="538" text-anchor="middle" class="txt">Aplazar</text>
+  <text x="1045" y="562" text-anchor="middle" class="small">mejorar calidad</text>
+  <path d="M430 92 H360 C290 92 265 130 265 185" class="line"/>
+  <path d="M590 127 V185 H675" class="line"/>
+  <path d="M640 263 C570 292 485 300 415 335" class="line"/>
+  <path d="M735 263 C800 292 845 305 870 335" class="line"/>
+  <path d="M380 417 C315 455 255 480 215 505" class="line"/>
+  <path d="M455 417 C485 450 510 480 530 505" class="line"/>
+  <path d="M865 417 V505" class="line"/>
+  <path d="M955 417 C1000 455 1030 480 1045 505" class="line"/>
+  <text x="385" y="151" class="small">no</text>
+  <text x="610" y="158" class="small">si</text>
+  <text x="470" y="303" class="small">si hay limites</text>
+  <text x="805" y="303" class="small">sin limites relevantes</text>
+</svg>

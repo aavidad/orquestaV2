@@ -253,7 +253,7 @@ func programmingTeamMicrotaskDecisionV0(
 
 func programmingTeamAcceptanceCriteriaV0(task programmingTeamTaskV0) []string {
 	criteria := []string{
-		"Solo se modifica el write-set declarado.",
+		"El write-set declarado se usa como alcance primario y cualquier ampliacion queda justificada.",
 		"Cada fichero queda por debajo de 300 lineas.",
 	}
 	if len(task.RequiredTests) > 0 {

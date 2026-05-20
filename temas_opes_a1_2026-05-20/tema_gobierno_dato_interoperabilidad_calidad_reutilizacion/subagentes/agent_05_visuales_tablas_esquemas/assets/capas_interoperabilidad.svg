@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 640" role="img" aria-labelledby="title desc">
+  <title id="title">Capas de interoperabilidad</title>
+  <desc id="desc">Esquema de interoperabilidad legal, organizativa, semantica y tecnica con gobernanza transversal.</desc>
+  <defs>
+    <style>
+      .bg{fill:#f8fafc}
+      .box{stroke:#ccd7e5;stroke-width:2}
+      .h{font:700 26px Arial,sans-serif;fill:#243447}
+      .t{font:400 18px Arial,sans-serif;fill:#243447}
+      .small{font:400 15px Arial,sans-serif;fill:#52606d}
+      .white{fill:#fff}
+    </style>
+  </defs>
+  <rect class="bg" width="1120" height="640"/>
+  <text class="h" x="64" y="58">Interoperabilidad: mas que conectar sistemas</text>
+  <text class="small" x="64" y="88">Cada capa elimina un tipo distinto de friccion administrativa.</text>
+
+  <rect class="box" x="90" y="130" width="940" height="82" rx="8" fill="#fff2cc"/>
+  <text class="h" x="130" y="166">Capa legal</text>
+  <text class="t" x="355" y="166">Base juridica, competencias, proteccion de datos, transparencia y reutilizacion.</text>
+  <text class="small" x="355" y="195">Pregunta: puede intercambiarse, conservarse, publicarse o reutilizarse este dato?</text>
+
+  <rect class="box" x="90" y="230" width="940" height="82" rx="8" fill="#e2f0d9"/>
+  <text class="h" x="130" y="266">Capa organizativa</text>
+  <text class="t" x="355" y="266">Procesos, responsabilidades, acuerdos, plazos y niveles de servicio.</text>
+  <text class="small" x="355" y="295">Pregunta: que organo hace que, cuando y con que responsabilidad?</text>
+
+  <rect class="box" x="90" y="330" width="940" height="82" rx="8" fill="#d9eaf7"/>
+  <text class="h" x="130" y="366">Capa semantica</text>
+  <text class="t" x="355" y="366">Definiciones, modelos de datos, codigos, vocabularios y metadatos.</text>
+  <text class="small" x="355" y="395">Pregunta: todos entienden el mismo significado cuando leen el dato?</text>
+
+  <rect class="box" x="90" y="430" width="940" height="82" rx="8" fill="#f4dddd"/>
+  <text class="h" x="130" y="466">Capa tecnica</text>
+  <text class="t" x="355" y="466">Protocolos, formatos, APIs, seguridad tecnica, redes e infraestructuras.</text>
+  <text class="small" x="355" y="495">Pregunta: como se transporta, valida y protege el intercambio?</text>
+
+  <rect x="90" y="548" width="940" height="58" rx="8" fill="#243447"/>
+  <text class="white" x="130" y="584" style="font:700 23px Arial,sans-serif">Gobernanza transversal: versionar, mantener, medir, auditar y mejorar</text>
+</svg>

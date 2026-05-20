@@ -38,8 +38,9 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString("Lee ")
 	b.WriteString(packetPath)
 	b.WriteString(" antes de tocar archivos.\n")
-	b.WriteString("Respeta estrictamente el write-set del paquete.\n")
-	b.WriteString("No edites archivos fuera del write-set salvo ")
+	b.WriteString("Usa el write-set del paquete como alcance primario; si contiene '.', tienes permiso sobre todo el repo del proyecto.\n")
+	b.WriteString("Si el write-set no contiene '.', no edites fuera de ese alcance salvo archivos de control o una ampliacion imprescindible para cumplir el objetivo, que debes justificar en notes.\n")
+	b.WriteString("Archivos de control permitidos fuera del write-set: ")
 	b.WriteString(ackPath)
 	if decisionPath != "" {
 		b.WriteString(", ")
@@ -51,7 +52,6 @@ func BuildCodexAgentPromptWithControlFilesV0(
 		b.WriteString(" y ")
 		b.WriteString(shutdownAckPath)
 	}
-	b.WriteString(" como archivos de control")
 	b.WriteString(".\n")
 	b.WriteString("Mantén cada fichero Go por debajo de 300 lineas; divide responsabilidades si se acerca a ese limite.\n")
 	b.WriteString("PROTOCOLO COMPACTO OBLIGATORIO: activa $caveman full si existe; si no existe, usa compact equivalente.\n")
@@ -80,7 +80,7 @@ func BuildCodexAgentPromptWithControlFilesV0(
 		b.WriteString("Es obligatorio solo si objetivo o criterios de cierre lo piden.\n")
 		b.WriteString("Si escribes decision_path, completa antes los ficheros pedidos del write-set, despues escribe ACK y termina; no sigas pensando ni ampliando alcance.\n")
 	}
-	b.WriteString("En el ACK, files debe listar todos los paths tocados del write-set y nada fuera de el.\n")
+	b.WriteString("En el ACK, files debe listar todos los paths de producto tocados; si alguno queda fuera del write-set estrecho, notes debe explicar por que era necesario.\n")
 	b.WriteString("En el ACK, tests debe listar solo pruebas pasadas; cada test obligatorio pasado debe aparecer exactamente como aparece en el paquete.\n")
 	b.WriteString("Si una prueba obligatoria falla, el ACK debe usar status failed y no declarar esa prueba en tests como pasada.\n")
 	b.WriteString("No incluyas HOME real, tokens, secretos, prompts, completions ni transcripts completos.\n")

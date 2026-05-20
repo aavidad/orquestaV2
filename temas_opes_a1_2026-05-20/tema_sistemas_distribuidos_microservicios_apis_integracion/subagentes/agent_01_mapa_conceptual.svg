@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 820" role="img" aria-labelledby="title desc">
+  <title id="title">Mapa conceptual de arquitecturas distribuidas, microservicios, APIs e integracion publica</title>
+  <desc id="desc">Servicio publico digital en el centro con ramas hacia marco juridico, interoperabilidad, arquitectura distribuida, microservicios, APIs e integracion, y seguridad y operacion.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .center { fill: #0f766e; stroke: #0f3f3a; stroke-width: 3; }
+      .node { fill: #ffffff; stroke-width: 2.4; }
+      .nodeA { stroke: #1d4ed8; }
+      .nodeB { stroke: #7c3aed; }
+      .nodeC { stroke: #b45309; }
+      .nodeD { stroke: #047857; }
+      .nodeE { stroke: #be123c; }
+      .nodeF { stroke: #475569; }
+      .line { fill: none; stroke: #94a3b8; stroke-width: 3; }
+      .label { font-family: Arial, Helvetica, sans-serif; fill: #0f172a; font-size: 24px; font-weight: 700; text-anchor: middle; }
+      .small { font-family: Arial, Helvetica, sans-serif; fill: #334155; font-size: 17px; text-anchor: middle; }
+      .centerText { font-family: Arial, Helvetica, sans-serif; fill: #ffffff; font-size: 28px; font-weight: 700; text-anchor: middle; }
+      .centerSmall { font-family: Arial, Helvetica, sans-serif; fill: #e6fffb; font-size: 17px; text-anchor: middle; }
+    </style>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1280" height="820" rx="0"/>
+  <path class="line" d="M640 410 C510 360 440 260 330 160"/>
+  <path class="line" d="M640 410 C650 270 700 190 835 120"/>
+  <path class="line" d="M640 410 C840 360 940 315 1065 250"/>
+  <path class="line" d="M640 410 C815 475 930 555 1060 650"/>
+  <path class="line" d="M640 410 C620 565 560 640 420 695"/>
+  <path class="line" d="M640 410 C430 455 305 475 180 540"/>
+
+  <rect class="center" x="470" y="320" width="340" height="180" rx="22"/>
+  <text class="centerText" x="640" y="380">Servicio publico</text>
+  <text class="centerText" x="640" y="416">digital</text>
+  <text class="centerSmall" x="640" y="456">garantias, trazabilidad,</text>
+  <text class="centerSmall" x="640" y="480">seguridad e interoperabilidad</text>
+
+  <rect class="node nodeA" x="115" y="62" width="430" height="170" rx="18"/>
+  <text class="label" x="330" y="108">Marco publico</text>
+  <text class="small" x="330" y="142">procedimiento, expediente, registro</text>
+  <text class="small" x="330" y="169">notificacion, archivo, accesibilidad</text>
+  <text class="small" x="330" y="196">responsabilidad administrativa</text>
+
+  <rect class="node nodeB" x="655" y="45" width="360" height="160" rx="18"/>
+  <text class="label" x="835" y="91">Interoperabilidad</text>
+  <text class="small" x="835" y="124">organizativa, semantica y tecnica</text>
+  <text class="small" x="835" y="151">ENI, EIF, Europa Interoperable</text>
+  <text class="small" x="835" y="178">modelos, acuerdos y estandares</text>
+
+  <rect class="node nodeC" x="890" y="178" width="340" height="170" rx="18"/>
+  <text class="label" x="1060" y="225">Arquitectura</text>
+  <text class="label" x="1060" y="254">distribuida</text>
+  <text class="small" x="1060" y="286">red, latencia, fallos parciales</text>
+  <text class="small" x="1060" y="313">escalado y consistencia</text>
+
+  <rect class="node nodeD" x="865" y="565" width="390" height="170" rx="18"/>
+  <text class="label" x="1060" y="612">Microservicios</text>
+  <text class="small" x="1060" y="646">dominio, autonomia y contrato</text>
+  <text class="small" x="1060" y="673">datos, despliegue, observabilidad</text>
+  <text class="small" x="1060" y="700">granularidad con criterio</text>
+
+  <rect class="node nodeE" x="210" y="615" width="420" height="150" rx="18"/>
+  <text class="label" x="420" y="660">APIs e integracion</text>
+  <text class="small" x="420" y="695">REST, SOAP, eventos, colas y lotes</text>
+  <text class="small" x="420" y="722">gateway, catalogo y versionado</text>
+
+  <rect class="node nodeF" x="35" y="455" width="360" height="170" rx="18"/>
+  <text class="label" x="215" y="502">Seguridad y operacion</text>
+  <text class="small" x="215" y="536">ENS, identidad, confianza, auditoria</text>
+  <text class="small" x="215" y="563">DevSecOps, resiliencia, continuidad</text>
+  <text class="small" x="215" y="590">logs, metricas y trazas</text>
+</svg>

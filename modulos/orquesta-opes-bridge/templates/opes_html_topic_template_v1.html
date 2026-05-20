@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>$title</title>
+  <style>
+:root{--ink:#172033;--muted:#566278;--line:#d9e2ef;--paper:#fff;--soft:#f5f8fc;--teal:#0f766e;--blue:#2563eb;--amber:#b45309;--shadow:0 16px 38px rgba(15,23,42,.10)}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--ink);background:var(--soft);font-family:Arial,Helvetica,sans-serif;line-height:1.62;overflow-x:hidden}a{color:var(--blue)}img,svg{display:block;max-width:100%;height:auto}
+.hero{position:relative;min-height:42vh;display:grid;align-items:end;overflow:hidden;background:#102033}.hero-media{position:absolute;inset:0}.hero-media img{width:100%;height:100%;object-fit:cover;opacity:.72}.hero:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(8,13,26,.88),rgba(8,13,26,.48) 58%,rgba(8,13,26,.16))}.hero-inner{position:relative;z-index:1;width:min(1180px,calc(100% - 32px));margin:0 auto;padding:54px 0 50px;color:#fff}.eyebrow{margin:0 0 14px;font-size:.9rem;font-weight:700;text-transform:uppercase;color:#b8f3e6}h1{margin:0;max-width:940px;font-size:clamp(2rem,5vw,4.6rem);line-height:1.04;letter-spacing:0}.subtitle{max-width:820px;margin:20px 0 0;font-size:clamp(1.02rem,2vw,1.2rem);color:#e5edf7}
+.mode-bar{position:sticky;top:0;z-index:4;border-bottom:1px solid var(--line);background:rgba(255,255,255,.94);backdrop-filter:blur(10px)}.mode-inner{width:min(1180px,calc(100% - 32px));margin:0 auto;min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:18px}.mode-title{font-weight:800}.mode-controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:flex-end}.switch{display:inline-flex;align-items:center;gap:9px;cursor:pointer;user-select:none;font-weight:800;color:var(--teal)}.switch input{inline-size:46px;block-size:24px;appearance:none;border-radius:999px;background:#cbd5e1;position:relative;outline:none;cursor:pointer}.switch input:before{content:"";position:absolute;inline-size:18px;block-size:18px;border-radius:50%;background:#fff;top:3px;left:3px;transition:transform .18s ease;box-shadow:0 2px 6px rgba(15,23,42,.25)}.switch input:checked{background:var(--teal)}.switch input:checked:before{transform:translateX(22px)}
+.layout{width:min(1180px,calc(100% - 32px));margin:28px auto 80px;display:grid;grid-template-columns:280px minmax(0,1fr);gap:28px;align-items:start}.layout.nav-collapsed{grid-template-columns:54px minmax(0,1fr)}.side-nav{position:sticky;top:82px;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);max-height:calc(100vh - 104px);overflow:auto}.nav-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border-bottom:1px solid var(--line)}.nav-toggle{width:34px;height:34px;border:1px solid var(--line);border-radius:7px;background:#fff;cursor:pointer}.nav-links{padding:10px 14px 16px;display:grid;gap:8px}.nav-links a{display:block;text-decoration:none;color:#334155;font-weight:700;font-size:.92rem;line-height:1.25;padding:7px 8px;border-radius:6px}.nav-links a:hover{background:#eef6ff;color:#1d4ed8}.layout.nav-collapsed .nav-links,.layout.nav-collapsed .nav-head strong{display:none}.content{min-width:0}
+.topic-section{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:30px;margin-bottom:24px;min-width:0}.topic-section h2{margin:0 0 16px;font-size:clamp(1.45rem,2.4vw,2rem);line-height:1.18;color:#123247}.topic-section h3{margin-top:1.55rem;color:#243b53}.lead{font-size:1.08rem;color:#334155}.tutor{display:none;margin:18px 0;padding:16px 18px;border-left:5px solid var(--teal);background:#ecfdf5;border-radius:8px}.tutor strong{display:block;margin-bottom:6px;color:#0f766e}.test-note{display:none;margin:18px 0;padding:16px 18px;border-left:5px solid var(--blue);background:#eff6ff;border-radius:8px;color:#1e3a8a}.test-note strong{display:block;margin-bottom:6px;color:#1d4ed8}.table-wrap{width:100%;overflow-x:auto;margin:1rem 0;border:1px solid var(--line);border-radius:8px;background:#fff}.table-wrap table{border-collapse:collapse;min-width:760px;width:100%}th,td{border-bottom:1px solid #e5edf7;padding:.72rem .78rem;vertical-align:top}th{background:#edf4fb;text-align:left;color:#18324b}.visual-card{margin:18px 0;border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}.diagram-scroll{overflow-x:auto;overscroll-behavior-x:contain}.diagram-scroll img{max-width:none;min-width:760px;width:100%;height:auto}.diagram-slider{display:none;width:calc(100% - 24px);margin:10px 12px}.visual-card.is-scrollable .diagram-slider{display:block}.visual-card figcaption{padding:10px 12px;color:var(--muted);font-size:.92rem}.question{margin:16px 0;padding:16px 18px;border:1px solid #cbd5e1;border-radius:8px;background:#fff}.case{margin:16px 0;padding:14px 16px;border:1px solid var(--line);border-radius:8px;background:#f8fafc}.case summary{cursor:pointer;font-weight:800}
+body.tutor-on .tutor{display:block}body.test-notes-on .test-note{display:block}body.visuals-off figure,body.visuals-off .visual-section{display:none!important}body.first-reading-on{background:#fff}body.first-reading-on .layout,body.first-reading-on .layout.nav-collapsed{width:min(880px,calc(100% - 32px));grid-template-columns:minmax(0,1fr)}body.first-reading-on .side-nav{display:none}body.first-reading-on .topic-section{padding:0;border:0;box-shadow:none;background:transparent}body.first-reading-on .tutor{display:block;background:#f8fafc;border-left:5px solid var(--teal)}body.first-reading-on table,body.first-reading-on figure,body.first-reading-on .question,body.first-reading-on details.case,body.first-reading-on .test-note{display:none!important}.footer-note{font-size:.9rem;color:var(--muted);margin-top:28px}
+@media (max-width:860px){.mode-inner{align-items:flex-start;flex-direction:column;padding:10px 0}.mode-controls{justify-content:flex-start}.layout,.layout.nav-collapsed{grid-template-columns:1fr}.side-nav{position:relative;top:0;max-height:none}.layout.nav-collapsed .side-nav{display:none}.topic-section{padding:22px 18px}.hero{min-height:38vh}.diagram-scroll img{min-width:680px}}@media print{.mode-bar,.side-nav{display:none}.layout{display:block;width:auto;margin:0}.topic-section{break-inside:avoid;box-shadow:none}.tutor,.test-note{display:block}}
+  </style>
+</head>
+<body class="$body_class" data-topic-key="$topic_key">
+  <header class="hero">
+    $hero_media
+    <div class="hero-inner">
+      <p class="eyebrow">$eyebrow</p>
+      <h1>$page_title</h1>
+      <p class="subtitle">$subtitle</p>
+    </div>
+  </header>
+  <div class="mode-bar">
+    <div class="mode-inner">
+      <div class="mode-title">Modo de estudio</div>
+      <div class="mode-controls">
+        <label class="switch"><input id="firstReadingToggle" type="checkbox" checked aria-label="Activar primera lectura">Primera lectura</label>
+        <label class="switch"><input id="tutorToggle" type="checkbox" aria-label="Activar modo tutor">Modo tutor</label>
+        <label class="switch"><input id="testNotesToggle" type="checkbox" aria-label="Activar notas de test">Notas de test</label>
+        <label class="switch"><input id="visualsToggle" type="checkbox" checked aria-label="Mostrar visuales">Visuales</label>
+      </div>
+    </div>
+  </div>
+  <div class="layout" id="layout">
+    <nav class="side-nav" aria-label="Indice del tema">
+      <div class="nav-head"><strong>Indice</strong><button class="nav-toggle" id="navToggle" type="button" aria-label="Mostrar u ocultar indice" aria-expanded="true">|||</button></div>
+      <div class="nav-links">
+        $nav_links
+      </div>
+    </nav>
+    <main class="content">
+      $content_sections
+      <p class="footer-note">HTML generado con opes_html_topic_template_v1. Fecha: $generated_at.</p>
+    </main>
+  </div>
+  <script>
+    const body = document.body;
+    const layout = document.getElementById('layout');
+    function syncToggle(id, cls, invert) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const apply = () => {
+        const active = invert ? !el.checked : el.checked;
+        body.classList.toggle(cls, active);
+        el.setAttribute('aria-pressed', String(el.checked));
+      };
+      el.addEventListener('change', apply);
+      apply();
+    }
+    syncToggle('firstReadingToggle', 'first-reading-on', false);
+    syncToggle('tutorToggle', 'tutor-on', false);
+    syncToggle('testNotesToggle', 'test-notes-on', false);
+    syncToggle('visualsToggle', 'visuals-off', true);
+    const navToggle = document.getElementById('navToggle');
+    if (navToggle) {
+      navToggle.addEventListener('click', () => {
+        const collapsed = layout.classList.toggle('nav-collapsed');
+        navToggle.setAttribute('aria-expanded', String(!collapsed));
+      });
+    }
+    document.querySelectorAll('.diagram-scroll').forEach((wrap) => {
+      const img = wrap.querySelector('img');
+      const slider = wrap.parentElement.querySelector('.diagram-slider');
+      if (!img || !slider) return;
+      const update = () => {
+        const max = Math.max(0, wrap.scrollWidth - wrap.clientWidth);
+        wrap.parentElement.classList.toggle('is-scrollable', max > 4);
+        slider.max = String(max);
+      };
+      slider.addEventListener('input', () => { wrap.scrollLeft = Number(slider.value); });
+      wrap.addEventListener('scroll', () => { slider.value = String(wrap.scrollLeft); });
+      window.addEventListener('resize', update);
+      img.addEventListener('load', update);
+      update();
+    });
+  </script>
+</body>
+</html>

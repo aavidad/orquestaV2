@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 620" role="img" aria-labelledby="title desc">
+  <title id="title">Mapa de arquitectura distribuida e integracion publica</title>
+  <desc id="desc">Capas de servicio publico, dominio, APIs, integracion, datos, seguridad, operacion y gobierno.</desc>
+  <defs>
+    <style>
+      .bg{fill:#f7fafc}.band{fill:#ffffff;stroke:#cfd8e3;stroke-width:2}.core{fill:#e7f3ff;stroke:#0b5cad;stroke-width:3}.sec{fill:#eaf7f1;stroke:#0f6b4f;stroke-width:2}.ops{fill:#fff3e5;stroke:#8a4b10;stroke-width:2}.txt{font-family:Arial,sans-serif;fill:#162331}.small{font-size:18px}.mid{font-size:22px;font-weight:700}.arrow{stroke:#596b7a;stroke-width:3;marker-end:url(#m)}
+    </style>
+    <marker id="m" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#596b7a"/></marker>
+  </defs>
+  <rect class="bg" width="1180" height="620"/>
+  <rect class="band" x="40" y="40" width="1100" height="540" rx="16"/>
+  <rect class="core" x="420" y="60" width="340" height="80" rx="12"/>
+  <text class="txt mid" x="590" y="94" text-anchor="middle">Servicio publico digital</text>
+  <text class="txt small" x="590" y="122" text-anchor="middle">derechos, tramites, evidencias y canales</text>
+  <rect class="core" x="110" y="210" width="230" height="95" rx="12"/>
+  <text class="txt mid" x="225" y="245" text-anchor="middle">Dominio</text>
+  <text class="txt small" x="225" y="274" text-anchor="middle">expediente, registro,</text>
+  <text class="txt small" x="225" y="298" text-anchor="middle">notificacion, pago</text>
+  <rect class="core" x="475" y="205" width="230" height="105" rx="12"/>
+  <text class="txt mid" x="590" y="240" text-anchor="middle">APIs y eventos</text>
+  <text class="txt small" x="590" y="269" text-anchor="middle">contrato, version,</text>
+  <text class="txt small" x="590" y="293" text-anchor="middle">idempotencia</text>
+  <rect class="core" x="840" y="210" width="230" height="95" rx="12"/>
+  <text class="txt mid" x="955" y="245" text-anchor="middle">Integracion</text>
+  <text class="txt small" x="955" y="274" text-anchor="middle">servicios comunes,</text>
+  <text class="txt small" x="955" y="298" text-anchor="middle">interoperabilidad</text>
+  <rect class="sec" x="95" y="410" width="250" height="90" rx="12"/>
+  <text class="txt mid" x="220" y="445" text-anchor="middle">Seguridad</text>
+  <text class="txt small" x="220" y="474" text-anchor="middle">ENS, identidad, finalidad</text>
+  <rect class="sec" x="465" y="410" width="250" height="90" rx="12"/>
+  <text class="txt mid" x="590" y="445" text-anchor="middle">Datos</text>
+  <text class="txt small" x="590" y="474" text-anchor="middle">calidad, trazabilidad, minimizacion</text>
+  <rect class="ops" x="835" y="410" width="250" height="90" rx="12"/>
+  <text class="txt mid" x="960" y="445" text-anchor="middle">Operacion</text>
+  <text class="txt small" x="960" y="474" text-anchor="middle">SLO, logs, trazas, continuidad</text>
+  <line class="arrow" x1="590" y1="140" x2="230" y2="210"/>
+  <line class="arrow" x1="590" y1="140" x2="590" y2="205"/>
+  <line class="arrow" x1="590" y1="140" x2="950" y2="210"/>
+  <line class="arrow" x1="340" y1="258" x2="475" y2="258"/>
+  <line class="arrow" x1="705" y1="258" x2="840" y2="258"/>
+  <line class="arrow" x1="225" y1="305" x2="220" y2="410"/>
+  <line class="arrow" x1="590" y1="310" x2="590" y2="410"/>
+  <line class="arrow" x1="955" y1="305" x2="960" y2="410"/>
+  <text class="txt small" x="590" y="550" text-anchor="middle">Gobierno transversal: catalogo, estandares, versionado, pruebas, adquisicion y mejora continua</text>
+</svg>

@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 680" role="img" aria-labelledby="title desc">
+  <title id="title">Mapa de gobierno del dato, interoperabilidad, calidad y reutilizacion</title>
+  <desc id="desc">Mapa conceptual que conecta marco juridico, gobierno del dato, calidad, interoperabilidad y reutilizacion de informacion publica.</desc>
+  <defs>
+    <style>
+      .bg{fill:#f7f9fc}
+      .panel{fill:#fff;stroke:#cfdae8;stroke-width:2}
+      .core{fill:#243447}
+      .line{stroke:#6b7c93;stroke-width:3;fill:none;marker-end:url(#arrow)}
+      .muted{fill:#52606d}
+      .h{font:700 25px Arial,sans-serif;fill:#243447}
+      .t{font:400 18px Arial,sans-serif;fill:#243447}
+      .small{font:400 15px Arial,sans-serif;fill:#52606d}
+      .white{fill:#fff}
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7c93"/>
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1120" height="680"/>
+  <text class="h" x="56" y="58">Dato publico como activo gobernado</text>
+  <text class="small" x="56" y="88">Una vision de examen: responsabilidad, significado, calidad y reutilizacion deben leerse juntos.</text>
+
+  <rect class="panel" x="60" y="130" width="220" height="150" rx="8"/>
+  <text class="h" x="86" y="170">Marco juridico</text>
+  <text class="t" x="86" y="205">Licitud</text>
+  <text class="t" x="86" y="232">Proteccion</text>
+  <text class="t" x="86" y="259">Transparencia</text>
+
+  <rect class="panel" x="330" y="130" width="220" height="150" rx="8"/>
+  <text class="h" x="356" y="170">Gobierno</text>
+  <text class="t" x="356" y="205">Roles</text>
+  <text class="t" x="356" y="232">Politicas</text>
+  <text class="t" x="356" y="259">Linaje</text>
+
+  <rect class="panel" x="600" y="130" width="220" height="150" rx="8"/>
+  <text class="h" x="626" y="170">Calidad</text>
+  <text class="t" x="626" y="205">Exactitud</text>
+  <text class="t" x="626" y="232">Completitud</text>
+  <text class="t" x="626" y="259">Actualidad</text>
+
+  <rect class="panel" x="870" y="130" width="220" height="150" rx="8"/>
+  <text class="h" x="896" y="170">Confianza</text>
+  <text class="t" x="896" y="205">Seguridad</text>
+  <text class="t" x="896" y="232">Trazabilidad</text>
+  <text class="t" x="896" y="259">Control</text>
+
+  <rect class="core" x="385" y="330" width="350" height="110" rx="14"/>
+  <text class="white" x="430" y="376" style="font:700 28px Arial,sans-serif">Servicio publico digital</text>
+  <text class="white" x="438" y="410" style="font:400 18px Arial,sans-serif">tramitar, decidir, intercambiar y publicar</text>
+
+  <rect class="panel" x="140" y="500" width="280" height="110" rx="8"/>
+  <text class="h" x="168" y="542">Interoperabilidad</text>
+  <text class="t" x="168" y="576">legal, organizativa, semantica y tecnica</text>
+
+  <rect class="panel" x="700" y="500" width="280" height="110" rx="8"/>
+  <text class="h" x="728" y="542">Reutilizacion</text>
+  <text class="t" x="728" y="576">catalogos, metadatos, licencias y APIs</text>
+
+  <path class="line" d="M280 205 C315 230 340 285 400 334"/>
+  <path class="line" d="M440 280 C450 305 485 322 505 334"/>
+  <path class="line" d="M710 280 C690 308 658 322 630 334"/>
+  <path class="line" d="M870 220 C810 250 755 304 700 342"/>
+  <path class="line" d="M445 440 C380 468 335 488 300 500"/>
+  <path class="line" d="M675 440 C740 468 785 488 820 500"/>
+  <path class="line" d="M420 555 C520 612 610 612 700 555"/>
+
+  <text class="small" x="438" y="640">Clave: no hay apertura fiable sin gobierno, calidad, significado comun y limites juridicos.</text>
+</svg>

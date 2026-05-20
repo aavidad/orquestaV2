@@ -191,7 +191,7 @@ func operationalDirectorAcceptanceCriteriaV0(
 	criteria := []string{"Mantener el objetivo actual: " + plan.Objective}
 	if plan.Mode == OperationalDirectorModeProgrammingV0 {
 		return append(criteria,
-			"No cambiar ficheros fuera del write-set.",
+			"Usar el write-set como alcance declarado y justificar cualquier ampliacion necesaria para cumplir el objetivo o arreglar pruebas.",
 			"Ejecutar y registrar tests obligatorios antes de cerrar.",
 		)
 	}

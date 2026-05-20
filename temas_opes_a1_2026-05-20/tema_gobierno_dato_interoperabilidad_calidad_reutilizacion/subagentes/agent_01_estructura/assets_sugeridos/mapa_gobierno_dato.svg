@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Mapa conceptual de gobierno del dato, interoperabilidad semantica, calidad y reutilizacion</title>
+  <desc id="desc">Diagrama de flujo que conecta dato administrativo, gobierno, interoperabilidad semantica, calidad, reutilizacion y valor publico, con garantias transversales.</desc>
+  <defs>
+    <style>
+      .bg{fill:#f7f8fb}
+      .box{fill:#ffffff;stroke:#21405f;stroke-width:2;rx:8}
+      .box2{fill:#eef6f2;stroke:#27704c;stroke-width:2;rx:8}
+      .box3{fill:#fff5e8;stroke:#a66300;stroke-width:2;rx:8}
+      .guard{fill:#f2eef8;stroke:#684a8a;stroke-width:2;rx:8}
+      .text{font-family:Arial,Helvetica,sans-serif;font-size:22px;fill:#1f2933}
+      .small{font-family:Arial,Helvetica,sans-serif;font-size:17px;fill:#334155}
+      .title{font-family:Arial,Helvetica,sans-serif;font-size:28px;font-weight:700;fill:#102a43}
+      .arrow{stroke:#52606d;stroke-width:3;fill:none;marker-end:url(#m)}
+      .dash{stroke:#7b8794;stroke-width:2;stroke-dasharray:8 8;fill:none;marker-end:url(#m2)}
+    </style>
+    <marker id="m" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#52606d"/>
+    </marker>
+    <marker id="m2" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#7b8794"/>
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1280" height="720"/>
+  <text class="title" x="64" y="58">Del dato administrativo al valor publico</text>
+  <text class="small" x="64" y="92">Gobernar datos significa unir responsabilidad, significado comun, calidad, reutilizacion y garantias.</text>
+
+  <rect class="box" x="70" y="170" width="180" height="110"/>
+  <text class="text" x="100" y="210">Dato</text>
+  <text class="small" x="100" y="240">expediente</text>
+  <text class="small" x="100" y="263">fuente autorizada</text>
+
+  <rect class="box2" x="310" y="150" width="210" height="150"/>
+  <text class="text" x="340" y="190">Gobierno</text>
+  <text class="small" x="340" y="222">roles</text>
+  <text class="small" x="340" y="246">politicas</text>
+  <text class="small" x="340" y="270">ciclo de vida</text>
+
+  <rect class="box" x="580" y="150" width="230" height="150"/>
+  <text class="text" x="610" y="190">Semantica</text>
+  <text class="small" x="610" y="222">modelos</text>
+  <text class="small" x="610" y="246">vocabularios</text>
+  <text class="small" x="610" y="270">metadatos</text>
+
+  <rect class="box3" x="870" y="150" width="210" height="150"/>
+  <text class="text" x="900" y="190">Calidad</text>
+  <text class="small" x="900" y="222">exactitud</text>
+  <text class="small" x="900" y="246">consistencia</text>
+  <text class="small" x="900" y="270">actualidad</text>
+
+  <rect class="box" x="70" y="420" width="230" height="130"/>
+  <text class="text" x="100" y="462">Intercambio</text>
+  <text class="small" x="100" y="494">servicios comunes</text>
+  <text class="small" x="100" y="518">API y catalogos</text>
+
+  <rect class="box2" x="370" y="420" width="230" height="130"/>
+  <text class="text" x="400" y="462">Reutilizacion</text>
+  <text class="small" x="400" y="494">datos abiertos</text>
+  <text class="small" x="400" y="518">licencias y HVD</text>
+
+  <rect class="guard" x="670" y="420" width="250" height="130"/>
+  <text class="text" x="700" y="462">Garantias</text>
+  <text class="small" x="700" y="494">proteccion de datos</text>
+  <text class="small" x="700" y="518">seguridad y etica</text>
+
+  <rect class="box3" x="990" y="420" width="220" height="130"/>
+  <text class="text" x="1020" y="462">Valor publico</text>
+  <text class="small" x="1020" y="494">transparencia</text>
+  <text class="small" x="1020" y="518">mejores servicios</text>
+
+  <path class="arrow" d="M250 225 H305"/>
+  <path class="arrow" d="M520 225 H575"/>
+  <path class="arrow" d="M810 225 H865"/>
+  <path class="arrow" d="M975 300 C975 355 185 355 185 415"/>
+  <path class="arrow" d="M300 485 H365"/>
+  <path class="arrow" d="M600 485 H665"/>
+  <path class="arrow" d="M920 485 H985"/>
+  <path class="dash" d="M795 420 C795 350 415 350 415 305"/>
+  <path class="dash" d="M795 420 C795 342 695 342 695 305"/>
+  <path class="dash" d="M795 420 C795 340 975 340 975 305"/>
+
+  <text class="small" x="64" y="650">Lectura: el dato gana valor cuando tiene responsable, significado comun, controles de calidad, mecanismos de reutilizacion y garantias.</text>
+</svg>

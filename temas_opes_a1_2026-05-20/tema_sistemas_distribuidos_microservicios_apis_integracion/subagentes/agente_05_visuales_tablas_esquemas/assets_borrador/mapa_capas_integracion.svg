@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 640" role="img" aria-labelledby="title desc">
+  <title id="title">Mapa de capas de arquitectura e integracion</title>
+  <desc id="desc">Capas de gobierno, canales, APIs, microservicios, integracion, datos, seguridad y operacion en una arquitectura distribuida de Administracion publica.</desc>
+  <defs>
+    <style>
+      .bg{fill:#f8fafc}
+      .band{fill:#eef6ff;stroke:#22577a;stroke-width:2}
+      .box{fill:#ffffff;stroke:#334155;stroke-width:1.6;rx:12}
+      .accent{fill:#e9f8ef;stroke:#2f6f4e;stroke-width:1.6;rx:12}
+      .warn{fill:#fff7e6;stroke:#9a5b00;stroke-width:1.6;rx:12}
+      .sec{fill:#f5edff;stroke:#6d3b9a;stroke-width:1.6;rx:12}
+      .text{font-family:Inter,Arial,sans-serif;fill:#0f172a;font-size:20px;font-weight:700}
+      .small{font-family:Inter,Arial,sans-serif;fill:#334155;font-size:15px;font-weight:500}
+      .label{font-family:Inter,Arial,sans-serif;fill:#ffffff;font-size:18px;font-weight:700}
+      .arrow{stroke:#475569;stroke-width:2.4;fill:none;marker-end:url(#arrow)}
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L8,3 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect class="bg" width="1040" height="640"/>
+  <rect x="48" y="40" width="944" height="72" rx="16" fill="#22577a"/>
+  <text x="520" y="85" text-anchor="middle" class="label">Decision publica, normativa, gobierno y orientacion al servicio</text>
+
+  <rect x="78" y="156" width="180" height="82" class="box"/>
+  <text x="168" y="190" text-anchor="middle" class="text">Canales</text>
+  <text x="168" y="216" text-anchor="middle" class="small">sede, app, carpeta</text>
+
+  <rect x="310" y="156" width="180" height="82" class="accent"/>
+  <text x="400" y="190" text-anchor="middle" class="text">APIs</text>
+  <text x="400" y="216" text-anchor="middle" class="small">contratos y versionado</text>
+
+  <rect x="542" y="156" width="180" height="82" class="accent"/>
+  <text x="632" y="190" text-anchor="middle" class="text">Servicios</text>
+  <text x="632" y="216" text-anchor="middle" class="small">capacidades de negocio</text>
+
+  <rect x="774" y="156" width="180" height="82" class="warn"/>
+  <text x="864" y="190" text-anchor="middle" class="text">Legado</text>
+  <text x="864" y="216" text-anchor="middle" class="small">registros y backoffice</text>
+
+  <path d="M258 197 H300" class="arrow"/>
+  <path d="M490 197 H532" class="arrow"/>
+  <path d="M722 197 H764" class="arrow"/>
+
+  <rect x="150" y="296" width="230" height="92" class="box"/>
+  <text x="265" y="330" text-anchor="middle" class="text">Integracion</text>
+  <text x="265" y="356" text-anchor="middle" class="small">bus, eventos, colas</text>
+
+  <rect x="405" y="296" width="230" height="92" class="box"/>
+  <text x="520" y="330" text-anchor="middle" class="text">Datos</text>
+  <text x="520" y="356" text-anchor="middle" class="small">modelos, calidad, metadatos</text>
+
+  <rect x="660" y="296" width="230" height="92" class="box"/>
+  <text x="775" y="330" text-anchor="middle" class="text">Interoperabilidad</text>
+  <text x="775" y="356" text-anchor="middle" class="small">juridica, semantica, tecnica</text>
+
+  <path d="M400 238 V288" class="arrow"/>
+  <path d="M632 238 V288" class="arrow"/>
+  <path d="M864 238 C864 270 820 272 790 288" class="arrow"/>
+
+  <rect x="78" y="462" width="210" height="92" class="sec"/>
+  <text x="183" y="496" text-anchor="middle" class="text">Seguridad</text>
+  <text x="183" y="522" text-anchor="middle" class="small">identidad, permisos, ENS</text>
+
+  <rect x="315" y="462" width="210" height="92" class="sec"/>
+  <text x="420" y="496" text-anchor="middle" class="text">Observabilidad</text>
+  <text x="420" y="522" text-anchor="middle" class="small">logs, metricas, trazas</text>
+
+  <rect x="552" y="462" width="210" height="92" class="sec"/>
+  <text x="657" y="496" text-anchor="middle" class="text">Continuidad</text>
+  <text x="657" y="522" text-anchor="middle" class="small">resiliencia y recuperacion</text>
+
+  <rect x="789" y="462" width="180" height="92" class="sec"/>
+  <text x="879" y="496" text-anchor="middle" class="text">Calidad</text>
+  <text x="879" y="522" text-anchor="middle" class="small">SLO y mejora</text>
+
+  <path d="M265 388 V452" class="arrow"/>
+  <path d="M520 388 V452" class="arrow"/>
+  <path d="M775 388 V452" class="arrow"/>
+</svg>

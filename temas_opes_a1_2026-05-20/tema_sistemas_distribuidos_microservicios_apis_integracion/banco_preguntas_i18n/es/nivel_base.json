@@ -1,0 +1,92 @@
+[
+  {
+    "id": "base-01",
+    "locale": "es",
+    "level": "base",
+    "stem": "Que elemento define mejor una API madura?",
+    "options": [
+      "Una URL publica",
+      "Un contrato con seguridad, versionado, errores y soporte",
+      "Un servidor rapido",
+      "Un fichero JSON"
+    ],
+    "correct_index": 1,
+    "diagnostic": {
+      "concept": "arquitectura distribuida, APIs e integracion publica",
+      "why_correct": "La API madura se gobierna como contrato, no como simple direccion tecnica.",
+      "review_hint": "Repasar definiciones, notas de test y tablas de sintesis del tema."
+    }
+  },
+  {
+    "id": "base-02",
+    "locale": "es",
+    "level": "base",
+    "stem": "Que propiedad evita duplicados por reintentos?",
+    "options": [
+      "Cache",
+      "Idempotencia",
+      "Compresion",
+      "Balanceo"
+    ],
+    "correct_index": 1,
+    "diagnostic": {
+      "concept": "arquitectura distribuida, APIs e integracion publica",
+      "why_correct": "La idempotencia permite repetir una operacion sin efectos adicionales indebidos.",
+      "review_hint": "Repasar definiciones, notas de test y tablas de sintesis del tema."
+    }
+  },
+  {
+    "id": "base-03",
+    "locale": "es",
+    "level": "base",
+    "stem": "Que capa de interoperabilidad fija el significado comun de los datos?",
+    "options": [
+      "Tecnica",
+      "Semantica",
+      "Fisica",
+      "Comercial"
+    ],
+    "correct_index": 1,
+    "diagnostic": {
+      "concept": "arquitectura distribuida, APIs e integracion publica",
+      "why_correct": "La semantica evita que distintos sistemas interpreten de forma distinta el mismo dato.",
+      "review_hint": "Repasar definiciones, notas de test y tablas de sintesis del tema."
+    }
+  },
+  {
+    "id": "base-04",
+    "locale": "es",
+    "level": "base",
+    "stem": "Que norma regula el Esquema Nacional de Seguridad vigente?",
+    "options": [
+      "Real Decreto 311/2022",
+      "Real Decreto 4/2010",
+      "Ley 30/1992",
+      "RFC 9110"
+    ],
+    "correct_index": 0,
+    "diagnostic": {
+      "concept": "arquitectura distribuida, APIs e integracion publica",
+      "why_correct": "El RD 311/2022 regula el ENS vigente.",
+      "review_hint": "Repasar definiciones, notas de test y tablas de sintesis del tema."
+    }
+  },
+  {
+    "id": "base-05",
+    "locale": "es",
+    "level": "base",
+    "stem": "Que riesgo aparece al compartir base de datos entre microservicios?",
+    "options": [
+      "Menos acoplamiento",
+      "Acoplamiento oculto",
+      "Mayor autonomia",
+      "Eliminacion de auditoria"
+    ],
+    "correct_index": 1,
+    "diagnostic": {
+      "concept": "arquitectura distribuida, APIs e integracion publica",
+      "why_correct": "La base compartida acopla modelos y despliegues.",
+      "review_hint": "Repasar definiciones, notas de test y tablas de sintesis del tema."
+    }
+  }
+]

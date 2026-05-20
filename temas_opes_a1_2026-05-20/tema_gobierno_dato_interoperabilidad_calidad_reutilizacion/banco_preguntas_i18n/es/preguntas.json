@@ -1,0 +1,247 @@
+{
+  "locale": "es",
+  "topic": "gobierno_dato_interoperabilidad_calidad_reutilizacion",
+  "version": "2026-05-20",
+  "levels": {
+    "base": [
+      {
+        "id": "b01",
+        "question": "Que distingue mejor el gobierno del dato de una simple plataforma tecnologica?",
+        "options": [
+          "Responsabilidades, reglas, calidad, metadatos y ciclo de vida",
+          "Un repositorio unico con todos los ficheros",
+          "La publicacion automatica de cualquier dato",
+          "La sustitucion de la normativa por analitica"
+        ],
+        "answer": 0,
+        "diagnostic": "El gobierno del dato es organizativo, juridico y tecnico; la herramienta solo lo soporta.",
+        "review": "Gobierno del dato"
+      },
+      {
+        "id": "b02",
+        "question": "Que resuelve principalmente la interoperabilidad semantica?",
+        "options": [
+          "Que los datos intercambiados conserven significado comun",
+          "Que los servidores tengan mas capacidad",
+          "Que todos los sistemas usen la misma marca de software",
+          "Que se eliminen los metadatos"
+        ],
+        "answer": 0,
+        "diagnostic": "La semantica alinea definiciones, codigos, modelos y metadatos.",
+        "review": "Interoperabilidad semantica"
+      },
+      {
+        "id": "b03",
+        "question": "Cual es una dimension de calidad del dato?",
+        "options": [
+          "Actualidad",
+          "Decoracion visual",
+          "Tamano de pantalla",
+          "Numero de departamentos"
+        ],
+        "answer": 0,
+        "diagnostic": "Actualidad mide si el dato esta vigente para el uso previsto.",
+        "review": "Calidad del dato"
+      },
+      {
+        "id": "b04",
+        "question": "Que elemento es imprescindible para reutilizacion fiable?",
+        "options": [
+          "Metadatos y condiciones de uso claras",
+          "Un PDF escaneado sin contexto",
+          "Ausencia de responsable",
+          "Campos sin descripcion"
+        ],
+        "answer": 0,
+        "diagnostic": "La reutilizacion exige contexto, licencia, formato y calidad.",
+        "review": "Reutilizacion"
+      },
+      {
+        "id": "b05",
+        "question": "Que afirmacion sobre seudonimizacion es correcta?",
+        "options": [
+          "Reduce riesgo, pero no equivale necesariamente a anonimizacion",
+          "Elimina siempre el RGPD",
+          "Autoriza cualquier publicacion abierta",
+          "Impide todo tratamiento publico"
+        ],
+        "answer": 0,
+        "diagnostic": "Si la reidentificacion sigue siendo posible, continua siendo dato personal.",
+        "review": "Proteccion de datos"
+      },
+      {
+        "id": "b06",
+        "question": "Que categoria pertenece a los datos de alto valor europeos?",
+        "options": [
+          "Movilidad",
+          "Preferencias internas de una unidad",
+          "Borradores sin validar",
+          "Claves de acceso"
+        ],
+        "answer": 0,
+        "diagnostic": "Movilidad es una de las categorias previstas junto a geoespacial, meteorologia, estadistica y otras.",
+        "review": "Datos de alto valor"
+      }
+    ],
+    "aplicacion": [
+      {
+        "id": "a01",
+        "question": "Un portal publica contratos menores en PDF escaneado. Que falta para reutilizacion madura?",
+        "options": [
+          "Formato procesable, metadatos, licencia, diccionario y actualizacion",
+          "Una imagen mas grande",
+          "Eliminar todo historico",
+          "Cerrar el portal"
+        ],
+        "answer": 0,
+        "diagnostic": "La visibilidad no basta si no hay reutilizacion tecnica y juridica.",
+        "review": "Datos abiertos"
+      },
+      {
+        "id": "a02",
+        "question": "Dos sistemas usan 'estado' con valores distintos. Que medida es mas adecuada?",
+        "options": [
+          "Modelo semantico, definiciones y equivalencias versionadas",
+          "Aumentar memoria del servidor",
+          "Cambiar colores de la interfaz",
+          "Ocultar el campo"
+        ],
+        "answer": 0,
+        "diagnostic": "El problema es de significado, no de infraestructura.",
+        "review": "Modelos de datos"
+      },
+      {
+        "id": "a03",
+        "question": "Un dataset contiene datos personales y se quiere abrir. Primer paso correcto?",
+        "options": [
+          "Analizar finalidad, base juridica, minimizacion, anonimacion o agregacion y riesgos",
+          "Publicarlo retirando solo el nombre",
+          "Convertirlo a CSV sin mas",
+          "Declararlo dato de alto valor automaticamente"
+        ],
+        "answer": 0,
+        "diagnostic": "La apertura debe ponderar proteccion de datos y limites.",
+        "review": "Apertura responsable"
+      },
+      {
+        "id": "a04",
+        "question": "Un indicador da cifras distintas en tres unidades. Que pieza de gobierno es clave?",
+        "options": [
+          "Definicion aprobada, fuente autorizada y linaje",
+          "Nuevo logotipo",
+          "Mas columnas sin documentar",
+          "Publicacion inmediata sin revision"
+        ],
+        "answer": 0,
+        "diagnostic": "La discrepancia exige reglas, linaje y responsabilidad funcional.",
+        "review": "Linaje"
+      },
+      {
+        "id": "a05",
+        "question": "Un dato ambiental cambia cada hora. Que mecanismo suele ser necesario?",
+        "options": [
+          "API documentada y descarga historica cuando proceda",
+          "Solo una nota de prensa anual",
+          "Un PDF mensual sin metadatos",
+          "Eliminar el historico"
+        ],
+        "answer": 0,
+        "diagnostic": "Los datos dinamicos requieren acceso automatizable y contexto.",
+        "review": "APIs"
+      },
+      {
+        "id": "a06",
+        "question": "Un formulario pide certificados ya disponibles en otra Administracion. Que enfoque procede?",
+        "options": [
+          "Interoperabilidad administrativa, consulta habilitada y trazabilidad",
+          "Portal de datos abiertos nominal",
+          "Peticion de mas copias",
+          "Publicacion de expedientes completos"
+        ],
+        "answer": 0,
+        "diagnostic": "Se trata de simplificacion e intercambio para una finalidad concreta, no de apertura general.",
+        "review": "Solo una vez"
+      }
+    ],
+    "examen_real": [
+      {
+        "id": "e01",
+        "question": "Una Administracion quiere publicar datos de ayudas con beneficiarios personas fisicas y observaciones internas. Respuesta mas completa?",
+        "options": [
+          "Crear vista publica, minimizar, anonimizar o agregar cuando proceda, normalizar campos, documentar licencia y metadatos",
+          "Publicar la hoja interna completa",
+          "Quitar solo DNI y mantener observaciones",
+          "No publicar ningun dato aunque haya obligacion"
+        ],
+        "answer": 0,
+        "diagnostic": "La respuesta equilibra transparencia, reutilizacion, calidad y proteccion de datos.",
+        "review": "Supuesto subvenciones"
+      },
+      {
+        "id": "e02",
+        "question": "Un proyecto de historia social unica integra datos de municipios, dependencia, vivienda y empleo. Que riesgo conceptual principal existe?",
+        "options": [
+          "Acumular datos con finalidades distintas sin modelo semantico, minimizacion ni control de acceso",
+          "Usar demasiados metadatos",
+          "Aplicar vocabularios comunes",
+          "Versionar definiciones"
+        ],
+        "answer": 0,
+        "diagnostic": "La integracion exige finalidad, base juridica, semantica y gobierno.",
+        "review": "Historia social"
+      },
+      {
+        "id": "e03",
+        "question": "Una pregunta menciona DCAT-AP y federacion de catalogos. Que idea debe aparecer?",
+        "options": [
+          "Perfil comun de metadatos para describir catalogos, datasets, distribuciones y servicios",
+          "Sistema de firma electronica",
+          "Base de datos interna de expedientes",
+          "Norma que permite publicar datos personales sin limite"
+        ],
+        "answer": 0,
+        "diagnostic": "DCAT-AP facilita interoperabilidad de catalogos y descubrimiento.",
+        "review": "DCAT-AP"
+      },
+      {
+        "id": "e04",
+        "question": "Un dato es exacto en origen, pero no sirve para resolver hoy porque esta desactualizado. Que dimension falla?",
+        "options": [
+          "Actualidad u oportunidad",
+          "Color de interfaz",
+          "Propiedad intelectual",
+          "Tamano del fichero"
+        ],
+        "answer": 0,
+        "diagnostic": "La calidad depende del uso temporal previsto.",
+        "review": "Dimensiones de calidad"
+      },
+      {
+        "id": "e05",
+        "question": "Una licencia prohibe todo uso comercial sin base especifica. Que problema plantea en datos abiertos?",
+        "options": [
+          "Puede ser una restriccion desproporcionada que limita reutilizacion",
+          "Aumenta automaticamente la interoperabilidad",
+          "Convierte cualquier dato en alto valor",
+          "Sustituye a los metadatos"
+        ],
+        "answer": 0,
+        "diagnostic": "Las condiciones deben ser claras, proporcionadas y no discriminatorias.",
+        "review": "Licencias"
+      },
+      {
+        "id": "e06",
+        "question": "Un intercambio funciona tecnicamente pero interpreta de forma distinta 'unidad familiar'. Que conclusion es correcta?",
+        "options": [
+          "Falla la interoperabilidad semantica y deben definirse reglas y equivalencias",
+          "Falla solo la velocidad de red",
+          "La solucion es publicar todo como abierto",
+          "No hay problema si existe API"
+        ],
+        "answer": 0,
+        "diagnostic": "La API no corrige conceptos distintos.",
+        "review": "Interoperabilidad semantica"
+      }
+    ]
+  }
+}

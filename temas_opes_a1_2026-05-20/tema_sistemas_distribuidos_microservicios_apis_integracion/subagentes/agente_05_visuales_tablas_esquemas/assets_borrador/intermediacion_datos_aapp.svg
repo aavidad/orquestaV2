@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 640" role="img" aria-labelledby="title desc">
+  <title id="title">Intermediacion de datos entre administraciones</title>
+  <desc id="desc">Organo tramitador consulta datos a traves de plataforma de intermediacion con autorizacion, auditoria y organismo cedente.</desc>
+  <defs>
+    <style>
+      .bg{fill:#ffffff}
+      .actor{fill:#e0f2fe;stroke:#0369a1;stroke-width:2;rx:14}
+      .platform{fill:#dcfce7;stroke:#15803d;stroke-width:2;rx:14}
+      .data{fill:#fef3c7;stroke:#a16207;stroke-width:2;rx:14}
+      .control{fill:#f3e8ff;stroke:#7e22ce;stroke-width:2;rx:14}
+      .text{font-family:Inter,Arial,sans-serif;fill:#0f172a;font-size:19px;font-weight:700}
+      .small{font-family:Inter,Arial,sans-serif;fill:#334155;font-size:14px;font-weight:500}
+      .arrow{stroke:#475569;stroke-width:2.5;fill:none;marker-end:url(#arrow)}
+      .return{stroke:#15803d;stroke-width:2.5;fill:none;marker-end:url(#arrowGreen)}
+      .dash{stroke:#7e22ce;stroke-width:2;stroke-dasharray:7 7;fill:none;marker-end:url(#arrowPurple)}
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L8,3 z" fill="#475569"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L8,3 z" fill="#15803d"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L8,3 z" fill="#7e22ce"/>
+    </marker>
+  </defs>
+  <rect class="bg" width="1120" height="640"/>
+  <text x="560" y="58" text-anchor="middle" class="text">Consulta intermediada de datos administrativos</text>
+
+  <rect x="60" y="170" width="210" height="114" class="actor"/>
+  <text x="165" y="210" text-anchor="middle" class="text">Organo tramitador</text>
+  <text x="165" y="237" text-anchor="middle" class="small">necesita dato para</text>
+  <text x="165" y="260" text-anchor="middle" class="small">resolver expediente</text>
+
+  <rect x="365" y="140" width="270" height="174" class="platform"/>
+  <text x="500" y="179" text-anchor="middle" class="text">Plataforma comun</text>
+  <text x="500" y="207" text-anchor="middle" class="small">valida autorizacion</text>
+  <text x="500" y="230" text-anchor="middle" class="small">normaliza peticion</text>
+  <text x="500" y="253" text-anchor="middle" class="small">registra trazabilidad</text>
+  <text x="500" y="276" text-anchor="middle" class="small">devuelve respuesta</text>
+
+  <rect x="740" y="170" width="260" height="114" class="data"/>
+  <text x="870" y="210" text-anchor="middle" class="text">Organismo cedente</text>
+  <text x="870" y="237" text-anchor="middle" class="small">dato o certificado</text>
+  <text x="870" y="260" text-anchor="middle" class="small">en sistema origen</text>
+
+  <rect x="190" y="435" width="220" height="92" class="control"/>
+  <text x="300" y="470" text-anchor="middle" class="text">Base juridica</text>
+  <text x="300" y="496" text-anchor="middle" class="small">competencia y finalidad</text>
+
+  <rect x="450" y="435" width="220" height="92" class="control"/>
+  <text x="560" y="470" text-anchor="middle" class="text">Minimizacion</text>
+  <text x="560" y="496" text-anchor="middle" class="small">solo el dato necesario</text>
+
+  <rect x="710" y="435" width="220" height="92" class="control"/>
+  <text x="820" y="470" text-anchor="middle" class="text">Auditoria</text>
+  <text x="820" y="496" text-anchor="middle" class="small">quien consulta y por que</text>
+
+  <path d="M270 213 H355" class="arrow"/>
+  <path d="M635 213 H730" class="arrow"/>
+  <path d="M740 255 H645" class="return"/>
+  <path d="M365 255 H280" class="return"/>
+  <path d="M300 435 C320 370 380 330 430 313" class="dash"/>
+  <path d="M560 435 V324" class="dash"/>
+  <path d="M820 435 C795 365 700 330 620 313" class="dash"/>
+
+  <text x="290" y="198" class="small">solicitud</text>
+  <text x="660" y="198" class="small">consulta</text>
+  <text x="660" y="280" class="small">respuesta</text>
+  <text x="288" y="280" class="small">dato validado</text>
+</svg>

@@ -26,14 +26,29 @@ Reglas:
 - todos los jobs OPES reciben `opes_global_editorial_policy_2026_05_18` como
   contexto de dominio priorizado. Esta politica sale del conector OPES y no del
   nucleo: incluye modo tutor completo, tono adulto sin infantilizar, primera
-  lectura continua, notas de test separadas, visuales utiles, fuentes oficiales
-  y umbral A1 de 20.250-22.500 palabras;
+  lectura continua, notas de test separadas, visuales utiles, fuentes oficiales,
+  umbral A1 de 20.250-22.500 palabras y regla de correccion incremental: si ya
+  existe tema o artefacto previo, se estudia que falla y se modifica lo
+  necesario; rehacer completo exige justificacion;
 - todos los jobs OPES reciben tambien
   `opes_html_publication_policy_2026_05_19` para trabajos que generen HTML:
   patron web tipo Tema 11, barra lateral plegable, primera lectura activa por
   defecto, modo tutor, notas de test ocultables con formato unico, supuestos con
   solucion ocultable, visuales locales responsivos, bancos i18n externos y
   validacion de HTML/Markdown/assets antes de publicar;
+- todos los jobs OPES reciben `opes_html_topic_template_v1`: el HTML final se
+  genera con `modulos/orquesta-opes-bridge/scripts/opes_render_topic_html_v1.py` y la plantilla versionada
+  `modulos/orquesta-opes-bridge/templates/opes_html_topic_template_v1.html`;
+  esto fija hero, barra de modo, primera lectura, indice plegable, secciones,
+  tutor, notas, visuales, supuestos, JavaScript local y validacion de enlaces;
+- el paquete final se valida con `modulos/orquesta-opes-bridge/scripts/opes_validate_topic_package_v1.py`
+  antes de marcarse listo: rango A1, duplicados largos, HTML offline, JSON,
+  SVG y ausencia de rutas internas en entregables finales;
+- el banco `banco_preguntas_i18n_es.json` es obligatorio y debe contener al
+  menos 50 preguntas por tema, 4 opciones por pregunta, respuesta correcta
+  identificable y distractores plausibles que discriminen conocimiento real;
+  queda en el mismo paquete del tema, reservado a afiliados, sin banco comun ni
+  test de prueba publico en el HTML;
 - para `expand_topic_from_summary`, el bridge exige paquete editorial
   multiformato: `tema_grande`, `tema_mediano`, `resumen`,
   `esquema_repaso` y `plan_visuales`;

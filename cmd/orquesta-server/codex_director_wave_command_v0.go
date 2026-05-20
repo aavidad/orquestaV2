@@ -15,7 +15,6 @@ import (
 	"time"
 
 	orquestadirectoroperativo "orquesta/modulos/orquesta-director-operativo"
-	orquestaopesbridge "orquesta/modulos/orquesta-opes-bridge"
 )
 
 const codexDirectorWaveSummarySchemaVersionV0 = "orquesta_codex_director_wave_launch.v0"
@@ -52,6 +51,30 @@ type codexDirectorWaveConfigV0 struct {
 	MaxDelegationDepth       int
 	MaxSubagentsPerAgent     int
 	StrictDirectorGuards     bool
+	DomainContextBlocks      []codexDirectorDomainContextBlockV0
+}
+
+type codexDirectorDomainContextBlockV0 struct {
+	SourceRef string
+	Text      string
+}
+
+type codexDirectorStringListFlagV0 []string
+
+func (flagValue *codexDirectorStringListFlagV0) String() string {
+	if flagValue == nil {
+		return ""
+	}
+	return strings.Join(*flagValue, ",")
+}
+
+func (flagValue *codexDirectorStringListFlagV0) Set(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	*flagValue = append(*flagValue, value)
+	return nil
 }
 
 func codexLaunchDirectorWaveCommandV0(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -84,6 +107,7 @@ func codexDirectorChildLaunchHasErrorsV0(childLaunches []codexDirectorChildWaveS
 func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDirectorWaveConfigV0, error) {
 	flags := flag.NewFlagSet("codex-launch-director-wave", flag.ContinueOnError)
 	flags.SetOutput(stderr)
+	var domainContextFiles codexDirectorStringListFlagV0
 
 	agents := flags.Int("agents", intEnvOrDefaultV0("ORQUESTA_CODEX_DIRECTOR_WAVE_AGENTS", 6), "numero de agentes que puede lanzar el Director")
 	waveRef := flags.String("wave-ref", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_REF")), "ref opaca de la ola")
@@ -114,6 +138,7 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 	maxDepth := flags.Int("max-delegation-depth", 0, "profundidad maxima de delegacion")
 	maxChildren := flags.Int("max-subagents-per-agent", 0, "fanout maximo por agente")
 	strictDirectorGuards := flags.Bool("strict-director-guards", false, "exigir branch/write-set/tests explicitos del Director")
+	flags.Var(&domainContextFiles, "domain-context-file", "archivo de contexto de dominio inyectado por un adaptador externo; puede repetirse")
 
 	if err := flags.Parse(args); err != nil {
 		return codexDirectorWaveConfigV0{}, err
@@ -148,12 +173,20 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 	branchValue := strings.TrimSpace(*branchRef)
 	writeSetValues := codexDirectorCSVV0(*writeSet)
 	requiredTestValues := codexDirectorCSVV0(*requiredTests)
+	domainContextFileValues := append(
+		codexDirectorCSVV0(os.Getenv("ORQUESTA_CODEX_DIRECTOR_DOMAIN_CONTEXT_FILES")),
+		[]string(domainContextFiles)...,
+	)
+	domainContextBlocks, err := codexDirectorDomainContextBlocksFromFilesV0(domainContextFileValues)
+	if err != nil {
+		return codexDirectorWaveConfigV0{}, err
+	}
 	if !*strictDirectorGuards {
 		if branchValue == "" {
 			branchValue = codexDirectorCurrentBranchRefV0(projectWorkDir)
 		}
 		if len(writeSetValues) == 0 {
-			writeSetValues = []string{"workspace"}
+			writeSetValues = []string{"."}
 		}
 		if len(requiredTestValues) == 0 {
 			requiredTestValues = []string{"operator-validation-required"}
@@ -193,6 +226,7 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 		MaxDelegationDepth:       *maxDepth,
 		MaxSubagentsPerAgent:     *maxChildren,
 		StrictDirectorGuards:     *strictDirectorGuards,
+		DomainContextBlocks:      domainContextBlocks,
 	}, nil
 }
 
@@ -237,7 +271,7 @@ func runCodexLaunchDirectorWaveV0(
 	launchConfig := config.Wave
 	launchConfig.Agents = result.Plan.MaxParallelAgents
 	launchConfig.Prompt = result.Plan.Objective
-	launchConfig.AgentPrompts = codexDirectorAgentPromptsV0(result.Plan, work)
+	launchConfig.AgentPrompts = codexDirectorAgentPromptsV0(result.Plan, work, config.DomainContextBlocks, config.StrictDirectorGuards)
 	launch, err := runCodexLaunchWaveV0(ctx, launchConfig)
 	if err != nil {
 		return summary, err
@@ -273,6 +307,8 @@ func runCodexLaunchDirectorChildWavesV0(
 		childConfig.AgentPrompts = codexDirectorChildAgentPromptsV0(
 			plan,
 			work,
+			config.DomainContextBlocks,
+			config.StrictDirectorGuards,
 			parent.AgentRef,
 			parentIndex,
 			len(parentLaunch.Agents),
@@ -294,6 +330,8 @@ func runCodexLaunchDirectorChildWavesV0(
 func codexDirectorAgentPromptsV0(
 	plan orquestadirectoroperativo.OperationalDirectorPlanV0,
 	work orquestadirectoroperativo.OperationalDirectorWaveWorkV0,
+	domainContextBlocks []codexDirectorDomainContextBlockV0,
+	strictDirectorGuards bool,
 ) []string {
 	total := plan.MaxParallelAgents
 	if total <= 0 {
@@ -302,7 +340,7 @@ func codexDirectorAgentPromptsV0(
 	prompts := make([]string, 0, total)
 	launchItem := codexDirectorLaunchItemV0(work)
 	for i := 1; i <= total; i++ {
-		prompts = append(prompts, codexDirectorAgentPromptV0(plan, work, launchItem, i, total))
+		prompts = append(prompts, codexDirectorAgentPromptV0(plan, work, launchItem, domainContextBlocks, strictDirectorGuards, i, total))
 	}
 	return prompts
 }
@@ -311,6 +349,8 @@ func codexDirectorAgentPromptV0(
 	plan orquestadirectoroperativo.OperationalDirectorPlanV0,
 	work orquestadirectoroperativo.OperationalDirectorWaveWorkV0,
 	launchItem orquestadirectoroperativo.OperationalDirectorWorkItemV0,
+	domainContextBlocks []codexDirectorDomainContextBlockV0,
+	strictDirectorGuards bool,
 	index int,
 	total int,
 ) string {
@@ -328,12 +368,12 @@ func codexDirectorAgentPromptV0(
 	b.WriteString("Objetivo:\n")
 	b.WriteString(plan.Objective + "\n\n")
 	codexDirectorWriteRecursiveConfigV0(&b, plan)
-	codexDirectorWriteDomainContextV0(&b, plan)
+	codexDirectorWriteDomainContextV0(&b, domainContextBlocks)
 	b.WriteString("Write-set global autorizado:\n")
 	codexDirectorWriteListV0(&b, plan.WriteSet)
-	b.WriteString("\nWrite-set asignado a este agente:\n")
+	b.WriteString("\nWrite-set primario asignado a este agente:\n")
 	if len(assigned) == 0 {
-		b.WriteString("- Sin shard exclusivo: trabaja solo en apoyo/review dentro del write-set global y coordina por resumen final.\n")
+		b.WriteString("- Sin shard exclusivo: trabaja en apoyo/review, o en cualquier parte necesaria del write-set global si detectas un bloqueo real.\n")
 	} else {
 		codexDirectorWriteListV0(&b, assigned)
 	}
@@ -342,8 +382,15 @@ func codexDirectorAgentPromptV0(
 	b.WriteString("\nCriterios de aceptacion:\n")
 	codexDirectorWriteListV0(&b, launchItem.AcceptanceCriteria)
 	b.WriteString("\nReglas:\n")
-	b.WriteString("- No cambies ficheros fuera del write-set autorizado.\n")
+	if strictDirectorGuards {
+		b.WriteString("- Modo estricto: no cambies ficheros fuera del write-set autorizado.\n")
+	} else {
+		b.WriteString("- El write-set asignado es ownership inicial, no una venda: si necesitas tocar otro fichero del repo para cumplir el objetivo o arreglar tests, hazlo y justifica la ampliacion en tu resumen.\n")
+	}
 	b.WriteString("- No borres nada sin revisar uso actual y dejar evidencia en tu resumen.\n")
+	b.WriteString("- Si trabajas sobre un tema o artefacto existente, estudia primero que falla y modifica solo lo necesario; rehacerlo entero es una excepcion justificada cuando sea mas sencillo o seguro que corregirlo.\n")
+	b.WriteString("- No invoques spawn_agent ni lances hijos manualmente: Orquesta ya materializo los subagentes autorizados para esta ola; coordina por artefactos dentro del write-set.\n")
+	b.WriteString("- No uses generadores para redactar contenido doctrinal final ni para inflar palabras con plantillas repetidas; los scripts solo pueden validar o ensamblar artefactos, y debes corregir cualquier repeticion estructural antes de cerrar.\n")
 	b.WriteString("- Si tu shard no basta, explica el bloqueo; no invadas el shard de otro agente sin justificarlo.\n")
 	b.WriteString("- Al terminar, resume rutas tocadas, pruebas ejecutadas, resultado y bloqueos.\n")
 	return b.String()
@@ -352,6 +399,8 @@ func codexDirectorAgentPromptV0(
 func codexDirectorChildAgentPromptsV0(
 	plan orquestadirectoroperativo.OperationalDirectorPlanV0,
 	work orquestadirectoroperativo.OperationalDirectorWaveWorkV0,
+	domainContextBlocks []codexDirectorDomainContextBlockV0,
+	strictDirectorGuards bool,
 	parentAgentRef string,
 	parentIndex int,
 	parentTotal int,
@@ -363,6 +412,8 @@ func codexDirectorChildAgentPromptsV0(
 		prompts = append(prompts, codexDirectorChildAgentPromptV0(
 			plan,
 			launchItem,
+			domainContextBlocks,
+			strictDirectorGuards,
 			parentAgentRef,
 			parentIndex,
 			parentTotal,
@@ -376,6 +427,8 @@ func codexDirectorChildAgentPromptsV0(
 func codexDirectorChildAgentPromptV0(
 	plan orquestadirectoroperativo.OperationalDirectorPlanV0,
 	launchItem orquestadirectoroperativo.OperationalDirectorWorkItemV0,
+	domainContextBlocks []codexDirectorDomainContextBlockV0,
+	strictDirectorGuards bool,
 	parentAgentRef string,
 	parentIndex int,
 	parentTotal int,
@@ -395,10 +448,10 @@ func codexDirectorChildAgentPromptV0(
 	b.WriteString("Objetivo:\n")
 	b.WriteString(plan.Objective + "\n\n")
 	codexDirectorWriteRecursiveConfigV0(&b, plan)
-	codexDirectorWriteDomainContextV0(&b, plan)
-	b.WriteString("Write-set asignado al agente padre y compartido por este subarbol:\n")
+	codexDirectorWriteDomainContextV0(&b, domainContextBlocks)
+	b.WriteString("Write-set primario del agente padre y compartido por este subarbol:\n")
 	if len(assigned) == 0 {
-		b.WriteString("- Sin shard exclusivo: trabaja solo en apoyo/review dentro del write-set global.\n")
+		b.WriteString("- Sin shard exclusivo: trabaja en apoyo/review, o en cualquier parte necesaria del write-set global si detectas un bloqueo real.\n")
 	} else {
 		codexDirectorWriteListV0(&b, assigned)
 	}
@@ -409,9 +462,15 @@ func codexDirectorChildAgentPromptV0(
 	b.WriteString("\nCriterios de aceptacion:\n")
 	codexDirectorWriteListV0(&b, launchItem.AcceptanceCriteria)
 	b.WriteString("\nReglas:\n")
-	b.WriteString("- Trabaja solo dentro del write-set del subarbol o entrega informe de bloqueo.\n")
+	if strictDirectorGuards {
+		b.WriteString("- Modo estricto: trabaja solo dentro del write-set del subarbol o entrega informe de bloqueo.\n")
+	} else {
+		b.WriteString("- El write-set del subarbol es ownership inicial; puedes tocar otro fichero del repo si es necesario para cumplir el objetivo o arreglar tests, justificandolo en tu resumen.\n")
+	}
 	b.WriteString("- No borres nada sin revisar uso actual y dejar evidencia en tu resumen.\n")
+	b.WriteString("- Si trabajas sobre un tema o artefacto existente, estudia primero que falla y modifica solo lo necesario; rehacerlo entero es una excepcion justificada cuando sea mas sencillo o seguro que corregirlo.\n")
 	b.WriteString("- No lances mas subagentes desde este hijo: la ola hija ya fue materializada por Orquesta.\n")
+	b.WriteString("- No uses generadores para redactar contenido doctrinal final ni para inflar palabras con plantillas repetidas; los scripts solo pueden validar o ensamblar artefactos.\n")
 	b.WriteString("- Al terminar, resume artefactos producidos, pruebas ejecutadas y huecos pendientes.\n")
 	return b.String()
 }
@@ -452,35 +511,24 @@ func codexDirectorWriteRecursiveConfigV0(
 
 func codexDirectorWriteDomainContextV0(
 	b *strings.Builder,
-	plan orquestadirectoroperativo.OperationalDirectorPlanV0,
+	blocks []codexDirectorDomainContextBlockV0,
 ) {
-	if !codexDirectorPlanUsesOPESV0(plan) {
+	if len(blocks) == 0 {
 		return
 	}
-	b.WriteString("Contexto de dominio OPES inyectado por el conector:\n")
-	b.WriteString("- field: opes_global_editorial_policy_2026_05_18\n")
-	for _, rule := range orquestaopesbridge.OPESGlobalEditorialPolicyV0() {
-		b.WriteString("- " + rule + "\n")
-	}
-	b.WriteString("- field: opes_html_publication_policy_2026_05_19\n")
-	for _, rule := range orquestaopesbridge.OPESHTMLPublicationPolicyV0() {
-		b.WriteString("- " + rule + "\n")
+	b.WriteString("Contexto de dominio inyectado por adaptador:\n")
+	for _, block := range blocks {
+		if strings.TrimSpace(block.Text) == "" {
+			continue
+		}
+		sourceRef := strings.TrimSpace(block.SourceRef)
+		if sourceRef == "" {
+			sourceRef = "domain-context"
+		}
+		b.WriteString("- source_ref: " + sourceRef + "\n")
+		b.WriteString(block.Text + "\n")
 	}
 	b.WriteString("\n")
-}
-
-func codexDirectorPlanUsesOPESV0(
-	plan orquestadirectoroperativo.OperationalDirectorPlanV0,
-) bool {
-	if strings.EqualFold(strings.TrimSpace(plan.ProjectRef), "opes") {
-		return true
-	}
-	for _, ref := range plan.DomainRefs {
-		if strings.EqualFold(strings.TrimSpace(ref), "opes") {
-			return true
-		}
-	}
-	return false
 }
 
 func codexDirectorLaunchItemV0(
@@ -514,6 +562,9 @@ func codexDirectorShardV0(values []string, index int, total int) []string {
 	if total <= 0 || index <= 0 {
 		return nil
 	}
+	if codexDirectorWriteSetCoversWorkspaceV0(values) {
+		return append([]string(nil), values...)
+	}
 	out := make([]string, 0)
 	for i, value := range values {
 		if i%total == index-1 {
@@ -521,6 +572,16 @@ func codexDirectorShardV0(values []string, index int, total int) []string {
 		}
 	}
 	return out
+}
+
+func codexDirectorWriteSetCoversWorkspaceV0(values []string) bool {
+	for _, value := range values {
+		switch strings.TrimSpace(value) {
+		case ".", "workspace":
+			return true
+		}
+	}
+	return false
 }
 
 func codexDirectorObjectiveTextV0(objective string, objectiveFile string, trailing []string) (string, error) {
@@ -545,6 +606,31 @@ func codexDirectorObjectiveTextV0(objective string, objectiveFile string, traili
 		}
 	}
 	return "", errors.New("objective_required")
+}
+
+func codexDirectorDomainContextBlocksFromFilesV0(
+	paths []string,
+) ([]codexDirectorDomainContextBlockV0, error) {
+	blocks := make([]codexDirectorDomainContextBlockV0, 0, len(paths))
+	for _, rawPath := range paths {
+		path := strings.TrimSpace(rawPath)
+		if path == "" {
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("domain_context_file_read_failed %s: %w", filepath.Base(path), err)
+		}
+		text := strings.TrimSpace(string(data))
+		if text == "" {
+			return nil, fmt.Errorf("domain_context_file_empty %s", filepath.Base(path))
+		}
+		blocks = append(blocks, codexDirectorDomainContextBlockV0{
+			SourceRef: filepath.Base(path),
+			Text:      text,
+		})
+	}
+	return blocks, nil
 }
 
 func codexDirectorDefaultRefV0(value string, prefix string, waveRef string) string {
