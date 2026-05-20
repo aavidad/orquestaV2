@@ -31,6 +31,12 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
 		return opesDrainOnceCommandV0(stdout, stderr)
 	case "codex-launch-wave":
 		return codexLaunchWaveCommandV0(args[1:], stdout, stderr)
+	case "codex-wave-status":
+		return codexWaveStatusCommandV0(args[1:], stdout, stderr)
+	case "codex-wave-stop":
+		return codexWaveStopCommandV0(args[1:], stdout, stderr)
+	case "codex-wave-tail":
+		return codexWaveTailCommandV0(args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "comando no soportado: %s\n", command)
 		return 2

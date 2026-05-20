@@ -16,3 +16,11 @@ func signalProcessV0(pid int) error {
 	}
 	return process.Kill()
 }
+
+func processAliveV0(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	_, err := os.FindProcess(pid)
+	return err == nil
+}

@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
-	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
 
 const codexWaveSummarySchemaVersionV0 = "orquesta_codex_wave_launch.v0"
+const codexWaveRegistryFileNameV0 = "codex_wave_registry_v0.json"
 
 type codexWaveLaunchSummaryV0 struct {
 	SchemaVersion  string                    `json:"schema_version"`
@@ -27,27 +27,36 @@ type codexWaveLaunchSummaryV0 struct {
 	AgentCount     int                       `json:"agent_count"`
 	ProjectWorkDir string                    `json:"project_work_dir"`
 	RuntimeWorkDir string                    `json:"runtime_work_dir"`
+	RegistryPath   string                    `json:"registry_path,omitempty"`
 	Sandbox        string                    `json:"sandbox"`
 	ApprovalPolicy string                    `json:"approval_policy"`
+	CreatedAt      string                    `json:"created_at,omitempty"`
+	UpdatedAt      string                    `json:"updated_at,omitempty"`
 	DryRun         bool                      `json:"dry_run,omitempty"`
 	Agents         []codexWaveAgentSummaryV0 `json:"agents"`
 	Errors         []codexWavePublicErrorV0  `json:"errors,omitempty"`
 }
 
 type codexWaveAgentSummaryV0 struct {
-	AgentRef        string `json:"agent_ref"`
-	RuntimeWorkDir  string `json:"runtime_work_dir"`
-	PromptPath      string `json:"prompt_path"`
-	WrapperPath     string `json:"wrapper_path"`
-	StdoutPath      string `json:"stdout_path"`
-	StderrPath      string `json:"stderr_path"`
-	LastMessagePath string `json:"last_message_path"`
-	HomeDir         string `json:"home_dir,omitempty"`
-	CodeHomeDir     string `json:"code_home_dir,omitempty"`
-	ProcessRef      string `json:"process_ref,omitempty"`
-	SessionRef      string `json:"session_ref,omitempty"`
-	LaunchRef       string `json:"launch_ref,omitempty"`
-	Status          string `json:"status"`
+	AgentRef         string `json:"agent_ref"`
+	RuntimeWorkDir   string `json:"runtime_work_dir"`
+	PromptPath       string `json:"prompt_path"`
+	WrapperPath      string `json:"wrapper_path"`
+	StdoutPath       string `json:"stdout_path"`
+	StderrPath       string `json:"stderr_path"`
+	LastMessagePath  string `json:"last_message_path"`
+	HomeDir          string `json:"home_dir,omitempty"`
+	CodeHomeDir      string `json:"code_home_dir,omitempty"`
+	ProcessRef       string `json:"process_ref,omitempty"`
+	SessionRef       string `json:"session_ref,omitempty"`
+	LaunchRef        string `json:"launch_ref,omitempty"`
+	PID              int    `json:"pid,omitempty"`
+	StartedAt        string `json:"started_at,omitempty"`
+	StopRequestedAt  string `json:"stop_requested_at,omitempty"`
+	StdoutBytes      int64  `json:"stdout_bytes,omitempty"`
+	StderrBytes      int64  `json:"stderr_bytes,omitempty"`
+	LastMessageBytes int64  `json:"last_message_bytes,omitempty"`
+	Status           string `json:"status"`
 }
 
 type codexWavePublicErrorV0 struct {
@@ -176,18 +185,21 @@ func runCodexLaunchWaveV0(
 		return codexWaveLaunchSummaryV0{}, err
 	}
 
+	now := time.Now().UTC().Format(time.RFC3339)
 	summary := codexWaveLaunchSummaryV0{
 		SchemaVersion:  codexWaveSummarySchemaVersionV0,
 		WaveRef:        config.WaveRef,
 		AgentCount:     config.Agents,
 		ProjectWorkDir: config.ProjectWorkDir,
 		RuntimeWorkDir: config.RuntimeWorkDir,
+		RegistryPath:   codexWaveRegistryPathV0(config.RuntimeWorkDir),
 		Sandbox:        config.Sandbox,
 		ApprovalPolicy: config.ApprovalPolicy,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 		DryRun:         config.DryRun,
 		Agents:         make([]codexWaveAgentSummaryV0, 0, config.Agents),
 	}
-	runtime := orquestaruntime.NewProcessRuntimeConnectorV0()
 	for i := 1; i <= config.Agents; i++ {
 		agent, err := codexWaveMaterializeAgentV0(config, i)
 		if err != nil {
@@ -202,11 +214,7 @@ func runCodexLaunchWaveV0(
 			summary.Agents = append(summary.Agents, agent)
 			continue
 		}
-		snapshot, err := runtime.LaunchV0(ctx, orquestaruntime.ProcessRuntimeLaunchRequestV0{
-			CommandPath: agent.WrapperPath,
-			WorkingDir:  config.ProjectWorkDir,
-			Env:         []string{},
-		})
+		pid, err := codexWaveStartAgentProcessV0(ctx, agent.WrapperPath, config.ProjectWorkDir)
 		if err != nil {
 			agent.Status = "launch_failed"
 			summary.Errors = append(summary.Errors, codexWavePublicErrorV0{
@@ -216,13 +224,40 @@ func runCodexLaunchWaveV0(
 			summary.Agents = append(summary.Agents, agent)
 			continue
 		}
-		agent.ProcessRef = snapshot.ProcessRef
-		agent.SessionRef = snapshot.SessionRef
-		agent.LaunchRef = snapshot.LaunchRef
-		agent.Status = string(snapshot.Status)
+		agent.ProcessRef = fmt.Sprintf("%s-process-%02d", config.WaveRef, i)
+		agent.SessionRef = fmt.Sprintf("%s-session-%02d", config.WaveRef, i)
+		agent.LaunchRef = fmt.Sprintf("%s-launch-%02d", config.WaveRef, i)
+		agent.PID = pid
+		agent.StartedAt = time.Now().UTC().Format(time.RFC3339)
+		agent.Status = "running"
 		summary.Agents = append(summary.Agents, agent)
 	}
+	codexWaveRefreshSummaryV0(&summary)
+	if err := codexWaveSaveRegistryV0(summary); err != nil {
+		return codexWaveLaunchSummaryV0{}, err
+	}
 	return summary, nil
+}
+
+func codexWaveStartAgentProcessV0(ctx context.Context, wrapperPath string, projectWorkDir string) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	cmd := exec.Command(wrapperPath)
+	cmd.Dir = projectWorkDir
+	cmd.Env = []string{}
+	cmd.Stdin = nil
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	configureDetachedProcessV0(cmd)
+	if err := cmd.Start(); err != nil {
+		return 0, err
+	}
+	pid := cmd.Process.Pid
+	go func() {
+		_ = cmd.Wait()
+	}()
+	return pid, nil
 }
 
 func codexWaveMaterializeAgentV0(
@@ -357,6 +392,17 @@ func codexWaveProjectDirV0(raw string) (string, error) {
 }
 
 func codexWaveRuntimeDirV0(raw string, projectWorkDir string, waveRef string) (string, error) {
+	abs, err := codexWaveRuntimeDirPathV0(raw, projectWorkDir, waveRef)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(abs, 0o700); err != nil {
+		return "", err
+	}
+	return abs, nil
+}
+
+func codexWaveRuntimeDirPathV0(raw string, projectWorkDir string, waveRef string) (string, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
 		base := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_RUNTIME_WORKDIR"))
@@ -367,9 +413,6 @@ func codexWaveRuntimeDirV0(raw string, projectWorkDir string, waveRef string) (s
 	}
 	abs, err := filepath.Abs(value)
 	if err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(abs, 0o700); err != nil {
 		return "", err
 	}
 	return abs, nil
