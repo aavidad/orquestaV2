@@ -31,6 +31,8 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
 		return opesDrainOnceCommandV0(stdout, stderr)
 	case "codex-launch-wave":
 		return codexLaunchWaveCommandV0(args[1:], stdout, stderr)
+	case "codex-launch-director-wave":
+		return codexLaunchDirectorWaveCommandV0(args[1:], stdout, stderr)
 	case "codex-wave-status":
 		return codexWaveStatusCommandV0(args[1:], stdout, stderr)
 	case "codex-wave-stop":

@@ -82,6 +82,7 @@ type codexWaveConfigV0 struct {
 	ExtraArgs       []string
 	IsolateHome     bool
 	DryRun          bool
+	AgentPrompts    []string
 }
 
 func codexLaunchWaveCommandV0(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -347,9 +348,18 @@ func codexWaveAgentPromptV0(config codexWaveConfigV0, agentRef string, index int
 	b.WriteString("- Manten el write-set estrecho y coordina mentalmente tu parte con el resto de la ola.\n")
 	b.WriteString("- Al terminar, resume cambios, rutas tocadas, pruebas ejecutadas y bloqueos.\n\n")
 	b.WriteString("Instrucciones del operador:\n")
-	b.WriteString(config.Prompt)
+	b.WriteString(codexWavePromptForAgentV0(config, index))
 	b.WriteString("\n")
 	return b.String()
+}
+
+func codexWavePromptForAgentV0(config codexWaveConfigV0, index int) string {
+	if index > 0 && index <= len(config.AgentPrompts) {
+		if prompt := strings.TrimSpace(config.AgentPrompts[index-1]); prompt != "" {
+			return prompt
+		}
+	}
+	return config.Prompt
 }
 
 func codexWavePromptTextV0(prompt string, promptFile string, trailing []string) (string, error) {
