@@ -35,6 +35,12 @@ func TestCodexLaunchWaveCommandV0LanzaOlaConCodexFalso(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(sourceCodeHome, "skills", "local", "SKILL.md"), []byte("# skill\n"), 0o600); err != nil {
 		t.Fatalf("crear skill: %v", err)
 	}
+	if err := os.MkdirAll(filepath.Join(sourceCodeHome, "rules"), 0o700); err != nil {
+		t.Fatalf("crear rules: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceCodeHome, "rules", "default.rules"), []byte("rule\n"), 0o600); err != nil {
+		t.Fatalf("crear rule: %v", err)
+	}
 	fakeScript := `#!/bin/sh
 out=""
 while [ "$#" -gt 0 ]; do
@@ -123,6 +129,9 @@ printf 'fake stdout\n'
 		}
 		if _, err := os.Stat(filepath.Join(agent.CodeHomeDir, "skills", "local", "SKILL.md")); err != nil {
 			t.Fatalf("skill copiada agente %d: %v", i, err)
+		}
+		if _, err := os.Stat(filepath.Join(agent.CodeHomeDir, "rules", "default.rules")); err != nil {
+			t.Fatalf("rule copiada agente %d: %v", i, err)
 		}
 		waitForCodexWaveTestFileV0(t, agent.LastMessagePath)
 		stdoutData, err := os.ReadFile(agent.StdoutPath)

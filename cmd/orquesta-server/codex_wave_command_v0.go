@@ -575,6 +575,9 @@ func codexWaveCopyDirIfExistsV0(source string, target string) error {
 	if !info.IsDir() {
 		return nil
 	}
+	if err := os.MkdirAll(target, 0o700); err != nil {
+		return err
+	}
 	return filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err

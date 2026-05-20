@@ -256,7 +256,9 @@ func TestCodexLaunchDirectorWaveCommandV0OPESRecursiveDryRunMaterializaHijosYReg
 	parentPrompt := mustReadFileStringV0(t, summary.Launch.Agents[0].PromptPath)
 	for _, want := range []string{
 		"opes_global_editorial_policy_2026_05_18",
+		"opes_html_publication_policy_2026_05_19",
 		"20.250",
+		"patron web tipo Tema 11",
 		"max_subagents_per_agent: 6",
 		"external/opes/a1/tema_001",
 	} {
@@ -270,7 +272,9 @@ func TestCodexLaunchDirectorWaveCommandV0OPESRecursiveDryRunMaterializaHijosYReg
 		"parent_agent_ref: " + summary.Launch.Agents[0].AgentRef,
 		"child_agent_index: 1 de 6",
 		"opes_global_editorial_policy_2026_05_18",
+		"opes_html_publication_policy_2026_05_19",
 		"no infantilizar",
+		"primera lectura activa por defecto",
 		"external/opes/a1/tema_001",
 	} {
 		if !strings.Contains(childPrompt, want) {

@@ -77,6 +77,11 @@ func TestBuildExternalWorkRunRequestV0MapeaExpansionComoLarge(t *testing.T) {
 			"modo tutor completo",
 			"no infantilizar",
 		}) ||
+		!fieldValuesContainForTestV0(fields, "opes_html_publication_policy_2026_05_19", []string{
+			"patron web tipo Tema 11",
+			"primera lectura activa por defecto",
+			"banco de preguntas i18n externo",
+		}) ||
 		!fieldValueForTestV0(fields, "target_words_min", defaultExpansionTargetWordsMinV0) ||
 		!fieldValuesForTestV0(fields, "minimum_quality_gates", expansionQualityGatesV0()) ||
 		!fieldValuesForTestV0(fields, "required_document_variants", []string{
@@ -158,6 +163,11 @@ func TestBuildExternalWorkRunRequestV0MapeaPlanTemarioOperadoresComoDocumentPlan
 			"notas de test separadas",
 			"visuales utiles no decorativos",
 			"no infantilizar",
+		}) ||
+		!fieldValuesContainForTestV0(fields, "opes_html_publication_policy_2026_05_19", []string{
+			"barra lateral plegable",
+			"notas de test ocultables",
+			"html final debe parsear",
 		}) ||
 		!fieldValuesForTestV0(fields, "allowed_document_plan_work_kinds", documentPlanAllowedWorkKindsV0()) ||
 		!fieldValuesForTestV0(fields, "opes_editorial_workflow", documentPlanOPESEditorialWorkflowV0()) ||

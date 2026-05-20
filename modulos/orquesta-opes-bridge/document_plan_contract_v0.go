@@ -21,8 +21,27 @@ func withOPESGlobalEditorialPolicyFieldV0(
 	return out
 }
 
+func withOPESHTMLPublicationPolicyFieldV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if fieldHasNameV0(fields, "opes_html_publication_policy_2026_05_19") {
+		return fields
+	}
+	out := make([]orquestadomainwork.DomainWorkFieldV0, 0, len(fields)+1)
+	out = append(out, orquestadomainwork.DomainWorkFieldV0{
+		Name:   "opes_html_publication_policy_2026_05_19",
+		Values: opesHTMLPublicationPolicyV0(),
+	})
+	out = append(out, fields...)
+	return out
+}
+
 func OPESGlobalEditorialPolicyV0() []string {
 	return append([]string(nil), opesGlobalEditorialPolicyV0()...)
+}
+
+func OPESHTMLPublicationPolicyV0() []string {
+	return append([]string(nil), opesHTMLPublicationPolicyV0()...)
 }
 
 func appendDocumentPlanContractFieldsV0(
@@ -223,5 +242,30 @@ func opesGlobalEditorialPolicyV0() []string {
 		"texto visible no muestra rutas, agentes, prompts, arquitectura, ids tecnicos ni decisiones internas",
 		"contenido visible debe ser i18n/localizable cuando vaya a produccion",
 		"prohibido: listas densas sin explicar, parrafos con demasiadas comas, tono infantil, visuales decorativos, bancos completos dentro del tema, distractores absurdos y placeholders",
+	}
+}
+
+func opesHTMLPublicationPolicyV0() []string {
+	return []string{
+		"html_publicable_2026_05_19_aplica_a_temarios_opes_cuando_se_genere_html",
+		"patron web tipo Tema 11: hero del tema, barra de modo de estudio, contenido principal y barra lateral plegable",
+		"primera lectura activa por defecto; debe poder ocultar tablas, test, visuales y notas para lectura continua",
+		"modo tutor con explicaciones adicionales separadas del texto base",
+		"notas de test ocultables y con formato unico: fondo azul, barra izquierda y texto diferenciado de la teoria",
+		"supuestos practicos con solucion ocultable cuando proceda",
+		"repaso antes del enfoque de examen y test progresivo separado del temario",
+		"banco de preguntas i18n externo por tema; el HTML solo incluye muestra progresiva o enlace/contrato local, no banco final completo",
+		"markdown_final, markdown_importable y html_final deben mantenerse sincronizados cuando existan los tres formatos",
+		"html final debe parsear correctamente y no referenciar assets inexistentes",
+		"no mostrar URLs reales visibles en Markdown/HTML final; archivar fuentes externas localmente y citar de forma editorial",
+		"URLs ficticias solo permitidas si son ejemplos tecnicos claramente no operativos",
+		"assets visuales locales por tema: mapa SVG propio y reutilizacion de esquemas A1/canones cuando existan",
+		"contenedores de esquemas con overflow/scroll horizontal y slider para evitar recortes en movil",
+		"visuales pequenos: usar SVG determinista, HTML/CSS local o flujo ligero/estable; sd35large queda reservado para fotos grandes tipo hero",
+		"fotos generadas o locales deben pasar revision humana antes de produccion si pueden no aportar valor didactico",
+		"contenido privado de staging debe permanecer en rutas privadas/autenticadas; no copiar a static, www ni rutas publicas sin permisos",
+		"servidor remoto puede revisar texto, HTML/Markdown e integracion, pero no debe usarse para generar imagenes",
+		"ficheros manejables: evitar HTML o Markdown gigantes imposibles de revisar; partir bancos y assets en ficheros independientes",
+		"cuando un paquete de nivel se adapte a otro cuerpo o grupo, crear derivacion separada y no reutilizar sin capa especifica del dominio",
 	}
 }

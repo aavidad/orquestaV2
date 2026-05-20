@@ -28,6 +28,12 @@ Reglas:
   nucleo: incluye modo tutor completo, tono adulto sin infantilizar, primera
   lectura continua, notas de test separadas, visuales utiles, fuentes oficiales
   y umbral A1 de 20.250-22.500 palabras;
+- todos los jobs OPES reciben tambien
+  `opes_html_publication_policy_2026_05_19` para trabajos que generen HTML:
+  patron web tipo Tema 11, barra lateral plegable, primera lectura activa por
+  defecto, modo tutor, notas de test ocultables con formato unico, supuestos con
+  solucion ocultable, visuales locales responsivos, bancos i18n externos y
+  validacion de HTML/Markdown/assets antes de publicar;
 - para `expand_topic_from_summary`, el bridge exige paquete editorial
   multiformato: `tema_grande`, `tema_mediano`, `resumen`,
   `esquema_repaso` y `plan_visuales`;

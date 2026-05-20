@@ -56,6 +56,7 @@ func BuildExternalWorkRunRequestWithContextV0(
 	}
 	fields = appendTopicBlocksFieldV0(fields, jobContext.TopicBlocks)
 	fields = withOPESGlobalEditorialPolicyFieldV0(fields)
+	fields = withOPESHTMLPublicationPolicyFieldV0(fields)
 	fields = appendFieldIfMissingV0(fields, "job_id", job.ID)
 	fields = appendFieldIfMissingV0(fields, "job_type", job.Type)
 	fields = appendFieldIfMissingV0(fields, "expected_artifact_type", expectedArtifactTypeV0(job.Type))

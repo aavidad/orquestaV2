@@ -462,6 +462,10 @@ func codexDirectorWriteDomainContextV0(
 	for _, rule := range orquestaopesbridge.OPESGlobalEditorialPolicyV0() {
 		b.WriteString("- " + rule + "\n")
 	}
+	b.WriteString("- field: opes_html_publication_policy_2026_05_19\n")
+	for _, rule := range orquestaopesbridge.OPESHTMLPublicationPolicyV0() {
+		b.WriteString("- " + rule + "\n")
+	}
 	b.WriteString("\n")
 }
 
