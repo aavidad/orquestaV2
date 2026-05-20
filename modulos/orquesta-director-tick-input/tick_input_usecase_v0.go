@@ -32,6 +32,10 @@ func BuildDirectorSchedulerTickInputV0(
 		WorkCandidates:                cloneWorkCandidatesV0(request.WorkCandidates),
 		EvidenceRefs:                  request.EvidenceRefs,
 	}
+	output.ProgressSupervisionCandidates = tickInputProgressCandidatesForRunV0(
+		output.ProgressSupervisionCandidates,
+		output.RunRef,
+	)
 	output = compactTickInputForActiveLaneV0(output)
 	normalized := orquestadirectorscheduler.NormalizeDirectorSchedulerTickInputV0(output)
 	normalized = compactTickInputPayloadV0(normalized)

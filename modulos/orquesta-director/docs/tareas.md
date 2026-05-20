@@ -205,3 +205,13 @@ Validacion:
 Bloqueos:
 Estado:
 ```
+```text
+ID: DIR-023
+Objetivo: Tratar `correlation_id` y refs opacas como identidad causal, no como
+contenido sujeto a filtros de detalle prohibido en `BuildAgentProgressSupervisionV0`.
+Write-set: agent_progress_supervisor_validation_v0.go, agent_progress_supervisor_v0_test.go, docs locales.
+Contrato: BuildAgentProgressSupervision v0.
+Validacion: pendiente en este corte.
+Bloqueos: no cambia summaries compactos ni evidencias filtradas; solo evita falsos positivos en identidad causal opaca.
+Estado: cerrada local
+```

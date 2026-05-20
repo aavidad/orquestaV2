@@ -55,7 +55,7 @@ func (resolver CodexLaunchSpecResolverV0) ResolveExternalAgentLaunchSpecV0(
 		task,
 	)
 	spec.AgentPacket.Context = contextBundle
-	profile := codexProfileV0(resolver.Config, runtimeDir)
+	profile := codexProfileForAreaV0(resolver.Config, runtimeDir, area)
 	return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{
 		Spec:            spec,
 		CommandResolver: orquestaruntimecodex.NewCodexExecResolverV0(profile),
@@ -66,6 +66,24 @@ func codexProfileV0(
 	config CodexRuntimeConfigV0,
 	runtimeDir string,
 ) orquestaruntimecodex.CodexConnectorProfileV0 {
+	return codexProfileForAreaV0(config, runtimeDir, "")
+}
+
+func codexProfileForAreaV0(
+	config CodexRuntimeConfigV0,
+	runtimeDir string,
+	area string,
+) orquestaruntimecodex.CodexConnectorProfileV0 {
+	sandbox := strings.TrimSpace(config.Sandbox)
+	approvalPolicy := strings.TrimSpace(config.ApprovalPolicy)
+	if strings.TrimSpace(area) == "director" {
+		if strings.TrimSpace(config.DirectorSandbox) != "" {
+			sandbox = strings.TrimSpace(config.DirectorSandbox)
+		}
+		if strings.TrimSpace(config.DirectorApprovalPolicy) != "" {
+			approvalPolicy = strings.TrimSpace(config.DirectorApprovalPolicy)
+		}
+	}
 	return orquestaruntimecodex.CodexConnectorProfileV0{
 		SchemaVersion:   orquestaruntimecodex.CodexConnectorProfileSchemaVersionV0,
 		OptIn:           true,
@@ -78,8 +96,8 @@ func codexProfileV0(
 		Model:           strings.TrimSpace(config.Model),
 		ReasoningEffort: strings.TrimSpace(config.ReasoningEffort),
 		Profile:         strings.TrimSpace(config.Profile),
-		Sandbox:         strings.TrimSpace(config.Sandbox),
-		ApprovalPolicy:  strings.TrimSpace(config.ApprovalPolicy),
+		Sandbox:         sandbox,
+		ApprovalPolicy:  approvalPolicy,
 		ExtraArgs:       append([]string(nil), config.ExtraArgs...),
 		PromptHints:     codexPromptHintsV0(config.PromptHints),
 	}

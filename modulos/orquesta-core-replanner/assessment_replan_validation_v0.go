@@ -36,7 +36,9 @@ func ValidateAgentReworkVerdictV0(verdict string) error {
 	switch strings.TrimSpace(verdict) {
 	case orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
 		orquestacoreworkflow.AgentAssessmentVerdictGarbageV0,
-		orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0:
+		orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0,
+		orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0,
+		orquestacoreworkflow.AgentAssessmentVerdictTimeoutV0:
 		return nil
 	default:
 		return agentReworkSignalErrorV0(ErrAgentReworkVerdictNoSoportadoV0, "assessment_status")
@@ -65,7 +67,9 @@ func agentReworkAssessmentActionMatchesVerdictV0(verdict string, assessmentActio
 		return assessmentAction == orquestacoreworkflow.AgentAssessmentActionRequestRevisionV0
 	}
 	if verdict == orquestacoreworkflow.AgentAssessmentVerdictGarbageV0 ||
-		verdict == orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0 {
+		verdict == orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0 ||
+		verdict == orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0 ||
+		verdict == orquestacoreworkflow.AgentAssessmentVerdictTimeoutV0 {
 		return assessmentAction == orquestacoreworkflow.AgentAssessmentActionStopAgentV0
 	}
 	return false

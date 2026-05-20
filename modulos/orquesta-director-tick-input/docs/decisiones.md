@@ -53,3 +53,15 @@ pide retrabajo.
 Consecuencia: `accepted`, `changes_requested` y `rejected` se deciden fuera de
 tick-input; este modulo solo clona candidates y reduce estado durable a refs
 compactas, sin DB, runtime, proveedor, modelo, HOME ni OAuth.
+
+## DTI-DEC-007: Progreso Ajeno No Entra Al Scheduler
+
+Decision: el builder descarta `progress_supervision_candidates` sin
+`command_meta.run_id` y `report.run_id` del run actual.
+
+Motivo: las fuentes externas pueden conservar observaciones durables de runs
+anteriores; el scheduler debe seguir estricto y no recibir candidates ajenos.
+
+Consecuencia: tick-input no evalua progreso ni corrige candidates; solo aplica
+un filtro de frontera por identidad causal suficiente antes de validar el input
+compacto.

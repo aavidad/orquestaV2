@@ -17,6 +17,10 @@ func normalizeDirectorCycleInputV0(input DirectorCycleInputV0) DirectorCycleInpu
 	input.RunRef = strings.TrimSpace(input.RunRef)
 	input.CorrelationID = strings.TrimSpace(input.CorrelationID)
 	input.EvidenceRefs = compactDirectorCycleStringsV0(input.EvidenceRefs)
+	input.SchedulerInput.ProgressSupervisionCandidates = directorCycleProgressCandidatesForRunV0(
+		input.SchedulerInput.ProgressSupervisionCandidates,
+		input.RunRef,
+	)
 	if input.MaxCommands == 0 {
 		input.MaxCommands = defaultDirectorCycleMaxCommandsV0
 	}
@@ -24,6 +28,26 @@ func normalizeDirectorCycleInputV0(input DirectorCycleInputV0) DirectorCycleInpu
 		input.MaxOutbox = defaultDirectorCycleMaxOutboxV0
 	}
 	return input
+}
+
+func directorCycleProgressCandidatesForRunV0(
+	candidates []orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0,
+	runRef string,
+) []orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0 {
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" || len(candidates) == 0 {
+		return candidates
+	}
+	filtered := make([]orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0, 0, len(candidates))
+	for _, candidate := range candidates {
+		reportRunRef := strings.TrimSpace(candidate.SupervisionInput.Report.RunID)
+		commandRunRef := strings.TrimSpace(candidate.SupervisionInput.CommandMeta.RunID)
+		if commandRunRef != runRef || reportRunRef != runRef {
+			continue
+		}
+		filtered = append(filtered, candidate)
+	}
+	return filtered
 }
 
 func newDirectorCycleResultV0(input DirectorCycleInputV0) DirectorCycleResultV0 {

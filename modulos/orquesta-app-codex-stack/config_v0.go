@@ -63,19 +63,21 @@ type CodexReceiptStorePortV0 interface {
 }
 
 type CodexRuntimeConfigV0 struct {
-	CommandPath     string
-	ProjectWorkDir  string
-	RuntimeWorkDir  string
-	CodeHomeDir     string
-	HomeDir         string
-	PathEnv         string
-	Model           string
-	ReasoningEffort string
-	Profile         string
-	Sandbox         string
-	ApprovalPolicy  string
-	ExtraArgs       []string
-	PromptHints     []string
+	CommandPath            string
+	ProjectWorkDir         string
+	RuntimeWorkDir         string
+	CodeHomeDir            string
+	HomeDir                string
+	PathEnv                string
+	Model                  string
+	ReasoningEffort        string
+	Profile                string
+	Sandbox                string
+	ApprovalPolicy         string
+	DirectorSandbox        string
+	DirectorApprovalPolicy string
+	ExtraArgs              []string
+	PromptHints            []string
 
 	Runtime        orquestaruntime.ExternalAgentProcessRuntimePortV0
 	ProcessStopper orquestacionnucleoapp.ProcessRuntimeStopPortV0

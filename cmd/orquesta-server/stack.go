@@ -47,8 +47,9 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 		return nil, err
 	}
 	return orquestaserver.NewRuntimeV0(serverConfig, orquestaserver.RuntimeDepsV0{
-		AppHandler: stack.Handler,
-		Supervisor: stack,
+		AppHandler:   stack.Handler,
+		Supervisor:   stack,
+		StartupCheck: startupCheckFromEnvV0(stack, serverConfig),
 	})
 }
 
@@ -177,6 +178,12 @@ func codexRuntimeConfigV0(
 		Profile:        strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_PROFILE")),
 		Sandbox:        envOrDefaultV0("ORQUESTA_CODEX_SANDBOX", "workspace-write"),
 		ApprovalPolicy: envOrDefaultV0("ORQUESTA_CODEX_APPROVAL_POLICY", "never"),
+		DirectorSandbox: strings.TrimSpace(
+			os.Getenv("ORQUESTA_CODEX_DIRECTOR_SANDBOX"),
+		),
+		DirectorApprovalPolicy: strings.TrimSpace(
+			os.Getenv("ORQUESTA_CODEX_DIRECTOR_APPROVAL_POLICY"),
+		),
 		ExtraArgs:      strings.Fields(os.Getenv("ORQUESTA_CODEX_EXTRA_ARGS")),
 		Runtime:        processRuntime,
 		ProcessStopper: processRuntime,

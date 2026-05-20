@@ -44,6 +44,7 @@ func TestProgrammingTaskV0PropagaRequiredTestsYContratoGoCompleto(t *testing.T) 
 		t.Fatalf("required_tests=%v", got.RequiredTests)
 	}
 	for _, want := range []string{
+		"contrato de esta tarea completa",
 		"go.mod",
 		"cmd/server",
 		"imports de modulo",
@@ -52,6 +53,9 @@ func TestProgrammingTaskV0PropagaRequiredTestsYContratoGoCompleto(t *testing.T) 
 		if !strings.Contains(got.Objective, want) && !codexStackDoneCriteriaContainsForTestV0(got.DoneCriteria, want) {
 			t.Fatalf("contrato Go completo no contiene %q: objective=%s criteria=%v", want, got.Objective, got.DoneCriteria)
 		}
+	}
+	if strings.Contains(got.Objective, "microtarea") {
+		t.Fatalf("objective no debe pedir microtareas: %s", got.Objective)
 	}
 }
 

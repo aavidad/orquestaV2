@@ -15,4 +15,6 @@ Cobertura v0:
 - app-change persiste, lista por `run_ref` y reemplaza por `(run_ref,
   change_ref)` al recrear instancia.
 - los snapshots contienen `schema_version` y `records`.
+- el servidor puede compactar snapshots de arranque y recargar el store
+  file-based para que el estado terminal no reaparezca desde memoria.
 - la arquitectura no importa `cmd`, DB, red, runtime real ni proveedores.

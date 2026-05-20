@@ -33,7 +33,8 @@ func TestDirectorTaskV0IncluyeContratoDeDecisionesEjecutables(t *testing.T) {
 		"brainstorming_arquitectura -> votacion_y_decision -> planificacion_microtareas -> programacion -> revision -> validacion_final -> cierre",
 		"Primera entrega accionable del director",
 		"open_phase(programacion)",
-		"create_microtask(s) con decision.phase_id=planificacion_microtareas y task.phase_id=programacion",
+		"create_microtask.task con una o mas tareas completas",
+		"decision.phase_id=planificacion_microtareas y task.phase_id=programacion",
 		"En la primera entrega no emitas revision",
 		"request_review",
 		"record_review_result",
@@ -63,8 +64,13 @@ func TestDirectorTaskV0IncluyeContratoDeDecisionesEjecutables(t *testing.T) {
 		"request_vote.vote_request_id",
 		"publish_function_contract.contract_ref",
 		"function_contract_refs[{contract_ref,function_name}]",
-		"microtarea bootstrap con go.mod y entrypoint",
-		"depends_on con el task_id del bootstrap",
+		"El comando legacy create_microtask conserva nombre v0",
+		"debe transportar tareas completas por entregable o area",
+		"no lo uses para trozos minimos",
+		"Para documentar_app normal, por defecto crea una sola tarea completa de documentacion",
+		"Para crear_app_completa Go normal, prefiere tareas completas verticales",
+		"una tarea puede cubrir go.mod, entrypoint, paquete interno y pruebas",
+		"depends_on con el task_id inicial",
 		"go test ./...",
 		"imports desde go.mod",
 		"sin imports relativos ../",
@@ -75,7 +81,7 @@ func TestDirectorTaskV0IncluyeContratoDeDecisionesEjecutables(t *testing.T) {
 		"register_final_validation.validation_ref",
 		"close_run.closure_ref",
 		"Cierre normal",
-		"no emitas register_final_validation/close_run hasta tener contratos, microtareas, entregas de programacion, tarea cerrada, revision aceptada y validacion",
+		"no emitas register_final_validation/close_run hasta tener contratos, tareas completas, entregas de programacion, tarea cerrada, revision aceptada y validacion",
 		"No escribas terminos prohibidos",
 		"adapter, adaptador",
 		"para seguridad usa datos sensibles",
@@ -98,6 +104,7 @@ func TestDirectorTaskV0IncluyeContratoDeDecisionesEjecutables(t *testing.T) {
 		t.Fatalf("done_criteria no recoge minimos por request_kind: %v", task.DoneCriteria)
 	}
 	for _, path := range []string{
+		"docs/plan_tareas.md",
 		"docs/manual_usuario.md",
 		"docs/manual_desarrollador.md",
 		"docs/manual_sistemas_deploy.md",
@@ -171,6 +178,7 @@ func TestDirectorTaskV0DocumentarNormalNoQuedaSoloEnPlan(t *testing.T) {
 	for _, want := range []string{
 		"No eres un worker de area",
 		"No te limites a planificar",
+		"por defecto crea una sola tarea completa de documentacion",
 		"Minimos documentar_app: manual_usuario, manual_desarrollador, manual_sistemas_deploy, decisiones, pruebas_documentales, pendientes.",
 	} {
 		if !strings.Contains(task.Objective, want) {

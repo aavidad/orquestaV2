@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirector "orquesta/modulos/orquesta-director"
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
@@ -115,6 +116,86 @@ func TestProgressSupervisionCandidateProviderV0IgnoraStalledInformativo(t *testi
 	}
 	if len(candidates.ProgressSupervisionCandidates) != 0 {
 		t.Fatalf("stalled informativo no debe generar candidate=%+v", candidates.ProgressSupervisionCandidates)
+	}
+}
+
+func TestProgressSupervisionCandidateProviderV0IgnoraObservacionesDeOtroRun(t *testing.T) {
+	runRef := "run-nucleo-progress-observacion-run-scope-001"
+	foreignRunRef := "run-nucleo-progress-observacion-run-scope-otro"
+	provider := ProgressSupervisionCandidateProviderV0{
+		ProgressSource: staticAgentProgressObservationSourceV0{Observations: []AgentProgressObservationV0{
+			{
+				Report:  progressObservationReportWithIDV0(foreignRunRef, "agent-ref-foreign-001", "report-foreign-001", orquestaruntime.AgentLoopDetectedV0),
+				TaskRef: "task-ref-foreign-001",
+			},
+			{
+				Report:  progressObservationReportWithIDV0(runRef, "agent-ref-local-001", "report-local-001", orquestaruntime.AgentLoopDetectedV0),
+				TaskRef: "task-ref-local-001",
+			},
+		}},
+		RequestedBy: "orquestacion-nucleo",
+	}
+
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        mustActiveProgrammingRunV0(t, runRef),
+		OccurredAt: "2026-05-09T12:10:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.ProgressSupervisionCandidates) != 1 {
+		t.Fatalf("progress candidates=%+v", candidates.ProgressSupervisionCandidates)
+	}
+	got := candidates.ProgressSupervisionCandidates[0].SupervisionInput.Report.ReportID
+	if got != "report-local-001" {
+		t.Fatalf("report id=%s", got)
+	}
+}
+
+func TestProgressSupervisionCandidateProviderV0FiltraCandidatesBaseDeOtroRun(t *testing.T) {
+	runRef := "run-nucleo-progress-base-run-scope-001"
+	foreignRunRef := "run-nucleo-progress-base-run-scope-otro"
+	foreignCandidate := orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0{
+		CandidateRef: "progress-candidate-ref-foreign-001",
+		SupervisionInput: orquestadirector.AgentProgressSupervisionInputV0{
+			CommandMeta: orquestacoreworkflow.OrchestrationCommandMetaV0{RunID: foreignRunRef},
+			Report:      progressObservationReportWithIDV0(foreignRunRef, "agent-ref-foreign-001", "report-foreign-001", orquestaruntime.AgentLoopDetectedV0),
+		},
+	}
+	localCandidate := orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0{
+		CandidateRef: "progress-candidate-ref-local-001",
+		SupervisionInput: orquestadirector.AgentProgressSupervisionInputV0{
+			CommandMeta: orquestacoreworkflow.OrchestrationCommandMetaV0{RunID: runRef},
+			Report:      progressObservationReportWithIDV0(runRef, "agent-ref-local-001", "report-local-001", orquestaruntime.AgentLoopDetectedV0),
+		},
+	}
+	noMetaCandidate := localCandidate
+	noMetaCandidate.CandidateRef = "progress-candidate-ref-no-meta-001"
+	noMetaCandidate.SupervisionInput.CommandMeta.RunID = ""
+	noReportCandidate := localCandidate
+	noReportCandidate.CandidateRef = "progress-candidate-ref-no-report-001"
+	noReportCandidate.SupervisionInput.Report.RunID = ""
+	provider := ProgressSupervisionCandidateProviderV0{
+		Base: StaticCandidateProviderV0{Candidates: SchedulerCandidateSetV0{
+			ProgressSupervisionCandidates: []orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0{
+				foreignCandidate,
+				noMetaCandidate,
+				noReportCandidate,
+				localCandidate,
+			},
+		}},
+	}
+
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        mustActiveProgrammingRunV0(t, runRef),
+		OccurredAt: "2026-05-09T12:10:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.ProgressSupervisionCandidates) != 1 ||
+		candidates.ProgressSupervisionCandidates[0].CandidateRef != "progress-candidate-ref-local-001" {
+		t.Fatalf("progress candidates=%+v", candidates.ProgressSupervisionCandidates)
 	}
 }
 

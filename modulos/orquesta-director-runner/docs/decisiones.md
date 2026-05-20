@@ -47,3 +47,14 @@ Decision: si el scheduler devuelve `needs_director` o `blocked` con comandos, el
 Motivo: el scheduler puede necesitar registrar un hecho durable previo, por ejemplo un lease expirado, antes de pedir una decision. Si el runner ignorase esos comandos, el siguiente tick repetiria el mismo plan y crearia bucle.
 
 Consecuencia: `waiting` y `quiescent` siguen sin efectos; `needs_director` y `blocked` pueden tener efectos durables acotados, siempre por puerto workflow y parando si aparece outbox.
+
+## DCR-DEC-007: Progreso Ajeno No Bloquea El Runner
+
+Decision: el runner descarta candidatos de progreso cuyo `command_meta.run_id` o
+`report.run_id` no coincida con el `run_ref` del ciclo.
+
+Motivo: el scheduler conserva contrato estricto, pero el runner es frontera de
+integracion y puede recibir estado durable antiguo de otros runs.
+
+Consecuencia: no se construyen candidatos nuevos ni se corrige contenido; solo
+se evita que progreso ajeno bloquee el ciclo del Director.

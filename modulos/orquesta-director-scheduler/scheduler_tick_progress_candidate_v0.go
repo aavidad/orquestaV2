@@ -33,7 +33,7 @@ func (collector *schedulerTickCollectorV0) collectProgressSupervisionCandidateV0
 		schedulerProgressSupervisionCommandInputV0(input),
 	)
 	if err != nil {
-		return err
+		return schedulerTickWrappedExternalErrorV0("progress_supervision_candidates", err)
 	}
 	collector.collectProgressSupervisionResultV0(input, result)
 	return nil

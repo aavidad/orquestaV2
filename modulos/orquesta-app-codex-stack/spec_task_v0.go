@@ -54,7 +54,7 @@ func (resolver CodexLaunchSpecResolverV0) programmingTaskV0(
 }
 
 func programmingObjectiveV0(task orquestacoreworkflow.WorkflowTaskV0) string {
-	unit := "contrato de esta microtarea"
+	unit := "contrato de esta tarea completa"
 	if workflowTaskHasDomainWorkContractV0(task) {
 		unit = "contrato de esta unidad de trabajo externa"
 	}
@@ -191,7 +191,7 @@ func directorWriteSetV0(payload orquestaruntime.LaunchRuntimeAgentRequestV0, are
 func directorGlobalWriteSetV0(kind string) []string {
 	paths := []string{
 		"docs/arquitectura.md",
-		"docs/plan_microtareas.md",
+		"docs/plan_tareas.md",
 		"docs/decisiones.md",
 		"docs/pruebas.md",
 		"docs/pendientes.md",

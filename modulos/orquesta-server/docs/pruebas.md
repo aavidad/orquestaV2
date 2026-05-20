@@ -12,6 +12,9 @@
 - `cmd/orquesta-server` prueba que los umbrales productivos por defecto para
   agentes Codex no vuelven a valores agresivos de debug, y que siguen siendo
   sobreescribibles por entorno.
+- `modulos/orquesta-server` prueba que `StartupCheckPortV0` publica
+  `startup_ready` con mensaje/evidencias y bloquea el arranque cuando la
+  composicion no esta lista.
 - Prueba manual recomendada:
   - `go run ./cmd/orquesta-server run`
   - `curl http://127.0.0.1:8787/healthz`

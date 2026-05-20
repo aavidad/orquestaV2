@@ -4,6 +4,11 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirector "orquesta/modulos/orquesta-director"
+	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func TestBuildDirectorSchedulerTickInputV0ConstruyeSnapshotCanonico(t *testing.T) {
@@ -71,6 +76,30 @@ func TestBuildDirectorSchedulerTickInputV0DerivaQualityGatesBloqueantesPendiente
 	}
 }
 
+func TestBuildDirectorSchedulerTickInputV0FiltraProgressCandidatesDeOtroRun(t *testing.T) {
+	run := tickInputProgramacionRunV0(t)
+	request := DirectorTickInputBuildRequestV0{
+		TickRef:    "tick-ref-progress-scope-001",
+		OccurredAt: "2026-05-06T12:00:00Z",
+		Run:        run,
+		ProgressSupervisionCandidates: []orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0{
+			tickInputProgressCandidateForRunV0("progress-candidate-foreign", "run-tick-input-otro", "agent-ref-foreign"),
+			tickInputProgressCandidateWithoutCommandRunV0("progress-candidate-no-meta", run.RunID, "agent-ref-no-meta"),
+			tickInputProgressCandidateWithoutReportRunV0("progress-candidate-no-report", run.RunID, "agent-ref-no-report"),
+			tickInputProgressCandidateForRunV0("progress-candidate-local", run.RunID, "agent-ref-local"),
+		},
+	}
+
+	input, err := BuildDirectorSchedulerTickInputV0(request)
+	if err != nil {
+		t.Fatalf("build tick input: %v", err)
+	}
+	if len(input.ProgressSupervisionCandidates) != 1 ||
+		input.ProgressSupervisionCandidates[0].CandidateRef != "progress-candidate-local" {
+		t.Fatalf("progress candidates=%+v", input.ProgressSupervisionCandidates)
+	}
+}
+
 func TestBuildDirectorSchedulerTickInputV0RejectsIncompleto(t *testing.T) {
 	_, err := BuildDirectorSchedulerTickInputV0(DirectorTickInputBuildRequestV0{})
 	if err == nil {
@@ -79,5 +108,51 @@ func TestBuildDirectorSchedulerTickInputV0RejectsIncompleto(t *testing.T) {
 	var publicErr DirectorTickInputBuildErrorV0
 	if !errors.As(err, &publicErr) || publicErr.Code != ErrDirectorTickInputBuildInvalidoV0 {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func tickInputProgressCandidateWithoutCommandRunV0(
+	candidateRef string,
+	runRef string,
+	agentRef string,
+) orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0 {
+	candidate := tickInputProgressCandidateForRunV0(candidateRef, runRef, agentRef)
+	candidate.SupervisionInput.CommandMeta.RunID = ""
+	return candidate
+}
+
+func tickInputProgressCandidateWithoutReportRunV0(
+	candidateRef string,
+	runRef string,
+	agentRef string,
+) orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0 {
+	candidate := tickInputProgressCandidateForRunV0(candidateRef, runRef, agentRef)
+	candidate.SupervisionInput.Report.RunID = ""
+	return candidate
+}
+
+func tickInputProgressCandidateForRunV0(
+	candidateRef string,
+	runRef string,
+	agentRef string,
+) orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0 {
+	return orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0{
+		CandidateRef: candidateRef,
+		SupervisionInput: orquestadirector.AgentProgressSupervisionInputV0{
+			CommandMeta: orquestacoreworkflow.OrchestrationCommandMetaV0{RunID: runRef},
+			Report: orquestaruntime.AgentProgressReportV0{
+				ReportID:            "progress-report-ref-" + agentRef,
+				RunID:               runRef,
+				AgentRequestID:      agentRef,
+				Status:              orquestaruntime.AgentLoopDetectedV0,
+				NoProgressTicks:     4,
+				RepeatedActionCount: 3,
+				Summary:             "Evidencia compacta de progreso del agente.",
+				EvidenceRefs:        []string{"evidence-ref-progress-scope-001"},
+			},
+			PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			AssessmentRef: "assessment-ref-" + agentRef,
+		},
+		EvidenceRefs: []string{"evidence-ref-progress-scope-001"},
 	}
 }

@@ -16,5 +16,6 @@ Resultado: `ok` el 2026-05-06.
 - Comando con outbox: detiene el ciclo y devuelve outbox pendiente.
 - `max_outbox` explicito: acumula varios outbox y conserva `outbox_pending`.
 - Error workflow: detiene el ciclo y devuelve error publico.
+- Progreso ajeno: se filtra antes del scheduler y no bloquea el ciclo.
 - Entrada incompleta: rechaza sin efectos.
 - Integracion: scheduler real produce capacidad y workflow en memoria refleja evento/outbox.

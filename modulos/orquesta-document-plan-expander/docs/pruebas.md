@@ -13,8 +13,8 @@ Cobertura:
 - aliases de `DomainDocumentPlanV0` se normalizan antes de expandir;
 - `assemble_topic` produce `expected_artifact_type=assembled_topic`;
 - plan invalido no produce jobs parciales;
-- refs invalidas en jobs derivados se detectan por el validador de
-  `orquesta-domain-work`;
+- refs invalidas que el plan proyecta a jobs derivados se detectan antes de
+  normalizar el plan, para no compactar y ocultar refs opacas defectuosas;
 - caso de uso hexagonal: crea jobs por `DomainWorkJobCreatorPortV0`;
 - puerto nil: devuelve issue sin panic;
 - plan o job derivado invalido: no llama al puerto;

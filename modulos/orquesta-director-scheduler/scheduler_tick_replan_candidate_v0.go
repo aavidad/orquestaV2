@@ -21,7 +21,7 @@ func (collector *schedulerTickCollectorV0) collectReplanFollowupCandidateV0(
 
 	result, err := orquestadirector.BuildReplanFollowupsV0(prepared)
 	if err != nil {
-		return err
+		return schedulerTickWrappedExternalErrorV0("replan_followup_candidates", err)
 	}
 	return collector.collectReplanFollowupsResultV0(result, replanRecorded, state)
 }

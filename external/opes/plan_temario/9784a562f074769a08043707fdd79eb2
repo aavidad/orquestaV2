@@ -1,0 +1,282 @@
+{
+  "artifact_type": "document_plan",
+  "payload_json": {
+    "schema_version": "domain_document_plan.v0",
+    "plan_ref": "plan-temario-9784a562f074769a08043707fdd79eb2",
+    "domain_ref": "opes",
+    "work_kind": "plan_temario",
+    "document_kind": "temario_oposicion",
+    "scope_ref": "program-1f897b2c119df92d371fea28043d7daf",
+    "language_code": "es",
+    "title": "Temario Operario AP",
+    "objective": "Planificar un temario OPES AP validable para generar despues bloques, visuales, revisiones, ensamblado y exportacion, sin redactar ni ensamblar el documento final en esta tarea.",
+    "target_audience": "Aspirantes al subgrupo AP de Operario en administracion especial.",
+    "estimated_pages_min": 120,
+    "estimated_pages_max": 180,
+    "sections": [
+      {
+        "section_ref": "sec-comun-01-constitucion-local",
+        "order": 1,
+        "title": "Comun 1 - Constitucion, Administracion Local, municipio y provincia",
+        "objective": "Planificar la derivacion AP desde maestros superiores de Constitucion espanola, regimen local y organizacion administrativa, cubriendo estructura constitucional, derechos y deberes, Administracion Local, entes locales, municipio y provincia.",
+        "work_kind": "draft_content_block",
+        "target_words_min": 3600,
+        "target_words_max": 5600,
+        "required_elements": ["official_topic_order:1", "kind:comun", "route:derive_from_superior_master", "candidate_master:constitucion_espanola", "candidate_master:regimen_local_haciendas", "candidate_master:administracion_publica_organizacion", "adaptacion_nivel:AP"],
+        "acceptance_criteria": ["trazable al epigrafe oficial 1", "planifica validacion o creacion del maestro superior antes de derivar AP", "incluye mapa inicial y claves de examen sin redactar contenido final", "declara normativa y fuentes oficiales a revisar"],
+        "source_refs": ["source-operario-oficial", "source-ap-comunes-especial", "source-ap-comunes-general"]
+      },
+      {
+        "section_ref": "sec-comun-02-empleo-publico",
+        "order": 2,
+        "title": "Comun 2 - Empleados publicos",
+        "objective": "Planificar la derivacion AP del bloque de empleados publicos desde maestro superior de empleo publico, con clases, regimen juridico, derechos y deberes.",
+        "work_kind": "draft_content_block",
+        "target_words_min": 2400,
+        "target_words_max": 3800,
+        "required_elements": ["official_topic_order:2", "kind:comun", "route:derive_from_superior_master", "candidate_master:empleo_publico", "adaptacion_nivel:AP"],
+        "acceptance_criteria": ["trazable al epigrafe oficial 2", "planifica contraste normativo antes de redactar derivados", "mantiene lenguaje AP y carga cognitiva baja", "preve preguntas de recuperacion y errores frecuentes"],
+        "source_refs": ["source-operario-oficial", "source-ap-comunes-especial", "source-ap-comunes-general"]
+      },
+      {
+        "section_ref": "sec-especifica-03-planchado",
+        "order": 3,
+        "title": "Especifica 3 - Plancha, planchado, textiles y trabajo en cadena",
+        "objective": "Planificar creacion directa AP sobre plancha y planchado, clasificacion de prendas, colores y textiles, ropa plana, simbolos internacionales, trabajo en cadena, maquinaria, tecnicas y procedimientos.",
+        "work_kind": "draft_content_block",
+        "target_words_min": 3000,
+        "target_words_max": 4600,
+        "required_elements": ["official_topic_order:3", "kind:especifica", "route:creacion_directa_nivel", "procedimientos_paso_a_paso", "tablas_simbolos_textiles", "ejemplos_operativos"],
+        "acceptance_criteria": ["trazable al epigrafe oficial 3", "marca creacion_directa_nivel si OPES no aporta maestro sectorial superior", "planifica tablas comparativas y secuencias de trabajo", "incluye riesgos, errores frecuentes y claves de examen"],
+        "source_refs": ["source-operario-oficial"]
+      },
+      {
+        "section_ref": "sec-especifica-04-lavado",
+        "order": 4,
+        "title": "Especifica 4 - Lavado industrial, suciedad y manchas",
+        "objective": "Planificar creacion directa AP sobre lavado de prendas, clasificacion, tipos de lavado, lavado industrial, lavadoras, secadoras, suciedad, clases de manchas y eliminacion en fibras textiles y otros tejidos.",
+        "work_kind": "draft_content_block",
+        "target_words_min": 3200,
+        "target_words_max": 5000,
+        "required_elements": ["official_topic_order:4", "kind:especifica", "route:creacion_directa_nivel", "procedimientos_paso_a_paso", "tabla_manchas_fibras", "maquinaria_lavanderia"],
+        "acceptance_criteria": ["trazable al epigrafe oficial 4", "separa clasificacion, maquinaria, suciedad y eliminacion de manchas", "planifica ejemplos trabajados y fading", "preve preguntas de recuperacion por subbloque"],
+        "source_refs": ["source-operario-oficial"]
+      },
+      {
+        "section_ref": "sec-especifica-05-limpieza-centros",
+        "order": 5,
+        "title": "Especifica 5 - Productos, utensilios, maquinaria y limpieza de centros",
+        "objective": "Planificar creacion directa AP sobre productos de limpieza, utensilios, maquinaria, limpieza integral y desinfeccion de centros de trabajo, habitaciones, oficinas, despachos, pistas deportivas y exteriores.",
+        "work_kind": "draft_content_block",
+        "target_words_min": 3400,
+        "target_words_max": 5200,
+        "required_elements": ["official_topic_order:5", "kind:especifica", "route:creacion_directa_nivel", "limpieza_desinfeccion", "utensilios_maquinaria", "ambitos_trabajo"],
+        "acceptance_criteria": ["trazable al epigrafe oficial 5", "planifica tabla de productos, usos y precauciones", "cubre habitaciones, oficinas, despachos, pistas y exteriores", "conecta con PRL y proteccion de usuarios"],
+        "source_refs": ["source-operario-oficial"]
+      },
+      {
+        "section_ref": "sec-especifica-06-limpieza-cocinas",
+        "order": 6,
+        "title": "Especifica 6 - Limpieza de cocinas",
+        "objective": "Planificar creacion directa AP sobre limpieza de cocinas, caracteristicas, productos, medios y normas de utilizacion.",
+        "work_kind": "draft_content_block",
+        "target_words_min": 2200,
+        "target_words_max": 3600,
+        "required_elements": ["official_topic_order:6", "kind:especifica", "route:creacion_directa_nivel", "cocina_higiene", "productos_medios_normas", "secuencia_limpieza"],
+        "acceptance_criteria": ["trazable al epigrafe oficial 6", "planifica procedimientos por zonas y superficies", "incluye seguridad de productos y normas de utilizacion", "conecta con manipulacion de alimentos sin duplicar temas posteriores"],
+        "source_refs": ["source-operario-oficial"]
+      },
+      {
+        "section_ref": "sec-especifica-07-alimentos-dietas",
+        "order": 7,
+        "title": "Especifica 7 - Alimentos, clasificacion, caracteristicas y dietas",
+        "objective": "Planificar creacion directa AP sobre alimentos, clasificacion y caracteristicas de tipos de alimentos, y conceptos basicos de tipos de dietas.",
+        "work_kind": "draft_content_block",
+        "target_words_min": 2600,
+        "target_words_max": 4200,
+        "required_elements": ["official_topic_order:7", "kind:especifica", "route:creacion_directa_nivel", "clasificacion_alimentos", "conceptos_dietas", "tablas_comparativas"],
+        "acceptance_criteria": ["trazable al epigrafe oficial 7", "planifica definiciones claras y tablas comparativas", "mantiene nivel AP sin profundidad clinica impropia", "preve ejemplos de oposicion y preguntas de repaso"],
+        "source_refs": ["source-operario-oficial"]
+      },
+      {
+        "section_ref": "sec-transversal-08-manipulacion-ambiente-residuos",
+        "order": 8,
+        "title": "Transversal 8 - Manipulacion de alimentos, medio ambiente, residuos y trazabilidad",
+        "objective": "Planificar creacion directa AP del epigrafe especifico con funcion transversal: manipulacion de alimentos, requisitos de manipuladores, proteccion medioambiental, contaminacion ambiental, residuos hosteleros, normas sanitarias y trazabilidad.",
+        "work_kind": "draft_content_block",
+        "target_words_min": 3400,
+        "target_words_max": 5400,
+        "required_elements": ["official_topic_order:8", "kind:especifica_transversal", "route:creacion_directa_nivel", "higiene_alimentaria", "proteccion_medioambiental", "residuos_hosteleros", "trazabilidad"],
+        "acceptance_criteria": ["trazable al epigrafe oficial 8", "separa higiene alimentaria, ambiente, residuos y trazabilidad", "planifica normativa y fuentes oficiales vigentes cuando proceda", "conecta con temas de cocina, alimentos y PRL"],
+        "source_refs": ["source-operario-oficial"]
+      },
+      {
+        "section_ref": "sec-especifica-09-preparacion-transporte",
+        "order": 9,
+        "title": "Especifica 9 - Preparacion, conservacion, emplatado y transporte de alimentos",
+        "objective": "Planificar creacion directa AP sobre preparacion, conservacion, emplatado y transporte de alimentos, con procedimientos seguros y criterios de examen.",
+        "work_kind": "draft_content_block",
+        "target_words_min": 2600,
+        "target_words_max": 4200,
+        "required_elements": ["official_topic_order:9", "kind:especifica", "route:creacion_directa_nivel", "procedimientos_alimentos", "conservacion_transporte", "seguridad_higienica"],
+        "acceptance_criteria": ["trazable al epigrafe oficial 9", "planifica secuencias paso a paso y puntos criticos", "conecta con manipulacion y trazabilidad sin duplicar", "incluye esquemas utiles para memoria"],
+        "source_refs": ["source-operario-oficial"]
+      },
+      {
+        "section_ref": "sec-transversal-10-prl-limpieza-cocina-incendio",
+        "order": 10,
+        "title": "Transversal 10 - PRL, productos de limpieza e incendio en cocina",
+        "objective": "Planificar creacion directa AP del epigrafe especifico con funcion transversal: conceptos basicos de prevencion de riesgos laborales, clasificacion y prevencion de riesgos, medidas preventivas con productos de limpieza en uso y almacenamiento, proteccion del trabajador y usuario, riesgo de incendio en cocina y actuaciones.",
+        "work_kind": "draft_content_block",
+        "target_words_min": 3400,
+        "target_words_max": 5400,
+        "required_elements": ["official_topic_order:10", "kind:especifica_transversal", "route:creacion_directa_nivel", "prl", "productos_limpieza", "incendio_cocina", "actuaciones"],
+        "acceptance_criteria": ["trazable al epigrafe oficial 10", "planifica medidas preventivas y actuaciones sin redactar contenido final", "conecta con limpieza, cocina y manipulacion de alimentos", "incluye claves de examen, errores frecuentes y fuentes normativas"],
+        "source_refs": ["source-operario-oficial"]
+      }
+    ],
+    "visuals": [
+      {
+        "visual_ref": "visual-mapa-temario-operario",
+        "visual_type": "mapa_conceptual",
+        "placement_ref": "sec-comun-01-constitucion-local",
+        "objective": "Planificar un mapa visual de dependencias entre comunes, transversales y especificas, con ruta de maestros superiores para temas comunes.",
+        "work_kind": "generate_visual_asset",
+        "acceptance_criteria": ["no sustituye al texto final", "muestra dependencias y ruta de derivacion", "apto para HTML publicable"],
+        "source_refs": ["source-operario-oficial"]
+      },
+      {
+        "visual_ref": "visual-flujo-lavanderia-limpieza",
+        "visual_type": "diagrama_proceso",
+        "placement_ref": "sec-especifica-04-lavado",
+        "objective": "Planificar diagrama de flujo para clasificacion, lavado, secado, tratamiento de manchas y control de riesgos.",
+        "work_kind": "generate_visual_asset",
+        "acceptance_criteria": ["apoya doble codificacion", "incluye pasos y decisiones clave", "evita contenido final extenso"],
+        "source_refs": ["source-operario-oficial"]
+      },
+      {
+        "visual_ref": "visual-tablas-alimentos-riesgos",
+        "visual_type": "tabla_comparativa",
+        "placement_ref": "sec-transversal-08-manipulacion-ambiente-residuos",
+        "objective": "Planificar tablas comparativas de alimentos, dietas, manipulacion, residuos, trazabilidad y riesgos.",
+        "work_kind": "generate_visual_asset",
+        "acceptance_criteria": ["sirve para repaso y examen", "mantiene trazabilidad a temas 7, 8 y 9", "controla carga cognitiva"],
+        "source_refs": ["source-operario-oficial"]
+      },
+      {
+        "visual_ref": "visual-plan-repaso-prl",
+        "visual_type": "cronograma_repaso",
+        "placement_ref": "sec-transversal-10-prl-limpieza-cocina-incendio",
+        "objective": "Planificar cronograma de recuperacion activa y repaso espaciado para PRL, limpieza, cocina y alimentos.",
+        "work_kind": "generate_visual_asset",
+        "acceptance_criteria": ["incluye sesiones de repaso espaciado", "relaciona temas transversales", "apto para exportacion final"],
+        "source_refs": ["source-operario-oficial"]
+      }
+    ],
+    "review_steps": [
+      {
+        "review_ref": "review-inventario-trazabilidad",
+        "order": 1,
+        "work_kind": "review_quality",
+        "objective": "Validar inventario completo de los 10 epigrafes oficiales, agrupacion en comunes, transversales y especificas, y trazabilidad por section_ref.",
+        "acceptance_criteria": ["no falta ningun epigrafe", "cada seccion conserva order oficial", "las source_refs son compactas y verificables"]
+      },
+      {
+        "review_ref": "review-legal-normativa",
+        "order": 2,
+        "work_kind": "review_legal",
+        "objective": "Revisar fuentes oficiales y encaje normativo para Constitucion, regimen local, empleo publico, higiene alimentaria, medio ambiente, residuos, trazabilidad y PRL.",
+        "acceptance_criteria": ["usa fuentes oficiales o locales controladas", "declara version normativa cuando proceda", "bloquea ready_profesional sin revision especialista"]
+      },
+      {
+        "review_ref": "review-pedagogical-ap",
+        "order": 3,
+        "work_kind": "review_pedagogical",
+        "objective": "Validar nivel AP, carga cognitiva, recuperacion activa, repaso espaciado, ejemplos trabajados, fading, intercalado y preguntas profundas.",
+        "acceptance_criteria": ["lenguaje adecuado a AP", "cada tema tiene preguntas de recuperacion", "los visuales aportan doble codificacion util"]
+      },
+      {
+        "review_ref": "review-quality-editorial",
+        "order": 4,
+        "work_kind": "review_quality",
+        "objective": "Comprobar que el plan no redacta contenido final, declara entregables y revisiones, y aplica politica OPES de maestro superior primero.",
+        "acceptance_criteria": ["sin documento final ensamblado", "sin marcar ready_profesional", "derivacion descendente documentada para comunes"]
+      },
+      {
+        "review_ref": "review-validate-temario",
+        "order": 5,
+        "work_kind": "validate_topic",
+        "objective": "Validar que los jobs derivados de secciones, visuales y revisiones cumplen contrato externo antes de ensamblar.",
+        "acceptance_criteria": ["todos los derivados tienen work_kind permitido", "cada bloque declara criterios de aceptacion", "no hay dependencias de DB o filesystem interno OPES"]
+      },
+      {
+        "review_ref": "review-assemble-export",
+        "order": 6,
+        "work_kind": "assemble_topic",
+        "objective": "Planificar ensamblado HTML publicable y exportacion final solo despues de revisiones aceptadas por OPES.",
+        "acceptance_criteria": ["ensamblado posterior a revisiones", "HTML como salida canonica", "exportacion PDF si el conector OPES la solicita"]
+      }
+    ],
+    "deliverables": [
+      {
+        "deliverable_ref": "deliverable-document-plan-operario-ap",
+        "artifact_type": "document_plan",
+        "title": "Plan documental validable del temario Operario AP",
+        "required": true
+      },
+      {
+        "deliverable_ref": "deliverable-content-blocks-operario-ap",
+        "artifact_type": "content_block",
+        "title": "Bloques redactables por seccion oficial",
+        "required": true
+      },
+      {
+        "deliverable_ref": "deliverable-visual-assets-operario-ap",
+        "artifact_type": "visual_asset",
+        "title": "Visuales utiles para doble codificacion y repaso",
+        "required": true
+      },
+      {
+        "deliverable_ref": "deliverable-review-evidence-operario-ap",
+        "artifact_type": "block_revision",
+        "title": "Evidencias de revision legal, pedagogica y editorial",
+        "required": true
+      },
+      {
+        "deliverable_ref": "deliverable-assembled-html-operario-ap",
+        "artifact_type": "assembled_topic",
+        "title": "Temario ensamblado en HTML publicable tras revisiones",
+        "required": true
+      },
+      {
+        "deliverable_ref": "deliverable-export-pdf-operario-ap",
+        "artifact_type": "pdf",
+        "title": "Exportacion PDF posterior al HTML validado",
+        "required": false
+      }
+    ],
+    "quality_criteria": [
+      "DomainDocumentPlanV0 valido con schema_version domain_document_plan.v0",
+      "artifact_type document_plan y payload_json valido",
+      "sections ejecutables y trazables a los 10 epigrafes oficiales",
+      "deliverables obligatorios declarados",
+      "review_steps para calidad legal normativa pedagogica validacion ensamblado y exportacion",
+      "sin contenido final redactado dentro del plan",
+      "politica OPES de maestro superior primero y derivacion descendente",
+      "temas comunes 1 y 2 derivados desde maestros superiores si existen",
+      "temas especificos y transversales marcados como creacion_directa_nivel si no hay maestro sectorial",
+      "metodo OPES de recuperacion activa repaso espaciado ejemplos trabajados carga cognitiva controlada doble codificacion elaboracion e intercalado"
+    ],
+    "constraints": [
+      "no usar DB filesystem interno HOME tokens ni rutas productivas OPES",
+      "usar solo refs opacas y source_refs compactas",
+      "no elevar resumen B C1 C2 AP para construir maestro A1 A2 o A1",
+      "validar o crear maestro superior antes de derivar temas comunes a AP",
+      "si no hay maestro superior equivalente marcar creacion_directa_nivel",
+      "no marcar ready_profesional sin revision editorial legal normativa y pedagogica aceptadas",
+      "HTML publicable es salida canonica posterior al plan; este artefacto no lo ensambla"
+    ],
+    "source_refs": ["source-operario-oficial", "source-ap-comunes-especial", "source-ap-comunes-general"],
+    "evidence_refs": ["evidence-agent-packet-appchange-140novx", "evidence-opes-job-9784a562f074769a08043707fdd79eb2"]
+  }
+}

@@ -21,7 +21,7 @@ func RunDirectorCycleV0(
 	}
 	plan, err := input.Scheduler.BuildDirectorSchedulerTickV0(ctx, input.SchedulerInput)
 	if err != nil {
-		return resultWithDirectorCycleIssueV0(result, input, ErrDirectorRunnerSchedulerV0, "scheduler", "scheduler fallo", true)
+		return resultWithDirectorCycleSchedulerErrorV0(result, input, err)
 	}
 	copySchedulerPlanToResultV0(&result, plan)
 	if err := validateDirectorCyclePlanV0(input, plan); err != nil {

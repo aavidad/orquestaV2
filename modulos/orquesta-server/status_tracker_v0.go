@@ -43,6 +43,52 @@ func (tracker *StatusTrackerV0) MarkServingV0(addr string, now time.Time) StateV
 	})
 }
 
+func (tracker *StatusTrackerV0) MarkStartupCheckingV0(now time.Time) StateV0 {
+	return tracker.updateV0(func(state *StateV0) {
+		state.Status = "starting"
+		state.LastHeartbeatAt = formatTimeV0(now)
+		state.LastStartupCheckAt = formatTimeV0(now)
+		state.StartupStatus = StartupCheckStatusCheckingV0
+		state.StartupReady = false
+		state.StartupMessage = ""
+		state.StartupEvidenceRefs = nil
+		state.LastError = ""
+	})
+}
+
+func (tracker *StatusTrackerV0) MarkStartupReadyV0(
+	result StartupCheckResultV0,
+	now time.Time,
+) StateV0 {
+	result = normalizeStartupCheckResultV0(result)
+	return tracker.updateV0(func(state *StateV0) {
+		state.LastHeartbeatAt = formatTimeV0(now)
+		state.LastStartupCheckAt = formatTimeV0(now)
+		state.StartupStatus = result.Status
+		state.StartupReady = true
+		state.StartupMessage = result.Message
+		state.StartupEvidenceRefs = append([]string(nil), result.EvidenceRefs...)
+		state.LastError = ""
+	})
+}
+
+func (tracker *StatusTrackerV0) MarkStartupBlockedV0(
+	result StartupCheckResultV0,
+	now time.Time,
+) StateV0 {
+	result = normalizeStartupCheckResultV0(result)
+	return tracker.updateV0(func(state *StateV0) {
+		state.Status = "startup_blocked"
+		state.LastHeartbeatAt = formatTimeV0(now)
+		state.LastStartupCheckAt = formatTimeV0(now)
+		state.StartupStatus = result.Status
+		state.StartupReady = false
+		state.StartupMessage = result.Message
+		state.StartupEvidenceRefs = append([]string(nil), result.EvidenceRefs...)
+		state.LastError = result.Message
+	})
+}
+
 func (tracker *StatusTrackerV0) MarkSupervisorV0(
 	result orquestarunsupervisor.RunSupervisorResultV0,
 	now time.Time,

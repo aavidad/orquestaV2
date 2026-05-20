@@ -34,6 +34,8 @@ Invariantes:
 - No despacha outbox.
 - La salida solo contiene refs compactas.
 - Las refs duplicadas o con espacios se compactan.
+- `progress_supervision_candidates` sin `command_meta.run_id` y `report.run_id`
+  del run actual se descartan.
 
 Frontera DTI-005/DTI-006:
 

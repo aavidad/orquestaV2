@@ -57,11 +57,13 @@ Campos:
   - task_ref
   - agent_request_id
   - source_ref
-  - assessment_status: garbage | loop_detected | failed | stopped | needs_revision
+  - assessment_status: garbage | loop_detected | capacity_limited | timeout | needs_revision
   - summary
   - evidence_refs opcional
 Invariantes:
   - No para agentes ni relanza capacidad; solo traduce evidencia a propuesta.
+  - `capacity_limited` y `timeout` son veredictos validos del workflow para
+    replanificar despues de `stop_agent`; no equivalen a retry automatico.
   - Si la fuente fue runtime, se guarda como ref compacta, no como log/transcript.
 ```
 

@@ -27,6 +27,10 @@ func (provider ProgressSupervisionCandidateProviderV0) BuildSchedulerCandidatesV
 		return SchedulerCandidateSetV0{}, err
 	}
 	if provider.ProgressSource == nil {
+		candidates.ProgressSupervisionCandidates = progressSupervisionCandidatesForRunV0(
+			candidates.ProgressSupervisionCandidates,
+			request.Run.RunID,
+		)
 		return candidates, nil
 	}
 	observations, err := provider.ProgressSource.BuildAgentProgressObservationsV0(
@@ -36,8 +40,15 @@ func (provider ProgressSupervisionCandidateProviderV0) BuildSchedulerCandidatesV
 	if err != nil {
 		return SchedulerCandidateSetV0{}, err
 	}
+	candidates.ProgressSupervisionCandidates = progressSupervisionCandidatesForRunV0(
+		candidates.ProgressSupervisionCandidates,
+		request.Run.RunID,
+	)
 	for _, observation := range observations {
 		observation = normalizeProgressObservationV0(request, observation)
+		if progressObservationFromDifferentRunV0(request, observation) {
+			continue
+		}
 		if err := validateProgressObservationV0(request, observation); err != nil {
 			return SchedulerCandidateSetV0{}, err
 		}
@@ -53,6 +64,35 @@ func (provider ProgressSupervisionCandidateProviderV0) BuildSchedulerCandidatesV
 		return candidates, nil
 	}
 	return candidates, nil
+}
+
+func progressObservationFromDifferentRunV0(
+	request SchedulerCandidateRequestV0,
+	observation AgentProgressObservationV0,
+) bool {
+	runRef := strings.TrimSpace(request.Run.RunID)
+	reportRunRef := strings.TrimSpace(observation.Report.RunID)
+	return runRef != "" && reportRunRef != "" && reportRunRef != runRef
+}
+
+func progressSupervisionCandidatesForRunV0(
+	candidates []orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0,
+	runRef string,
+) []orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0 {
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" || len(candidates) == 0 {
+		return candidates
+	}
+	filtered := make([]orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0, 0, len(candidates))
+	for _, candidate := range candidates {
+		candidateRunRef := strings.TrimSpace(candidate.SupervisionInput.Report.RunID)
+		commandRunRef := strings.TrimSpace(candidate.SupervisionInput.CommandMeta.RunID)
+		if commandRunRef != runRef || candidateRunRef != runRef {
+			continue
+		}
+		filtered = append(filtered, candidate)
+	}
+	return filtered
 }
 
 func progressObservationRequiresSchedulerDecisionV0(

@@ -34,6 +34,8 @@ Reglas:
 
 - filtra por `queue_ref` si esta informado;
 - filtra por `app_refs` si estan informados;
+- descarta estados no ejecutables (`paused`, `stopped`, `canceled`, `closed`)
+  antes de aplicar el limite;
 - aplica `limit` si es mayor que cero;
 - no rankea ni muta el estado.
 

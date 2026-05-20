@@ -1,6 +1,20 @@
 # Decisiones locales: orquesta-core-replanner
 
 ```text
+Fecha: 2026-05-18
+Decision: `capacity_limited` y `timeout` son veredictos validos para
+`AgentReworkSignalV0` cuando la accion observada es `stop_agent`.
+Motivo: `orquesta-core-workflow` ya proyecta esos estados desde supervision de
+progreso. Rechazarlos en el replanner bloqueaba al Director con
+`agent_rework_verdict_no_soportado` en vez de producir una propuesta compacta de
+replan.
+Impacto: el replanner puro puede traducir esos veredictos a `replace_agent`,
+`abort_task` o `ask_director` segun la decision recibida. No ejecuta runtime, no
+elige proveedor y no hace retry automatico.
+Estado: aceptada
+```
+
+```text
 Fecha: 2026-05-10
 Decision: `changes_requested` puede recomendar `split_task` en el replanner puro.
 Motivo: una revision que pide cambios puede detectar que repetir la misma tarea no basta y que el retrabajo debe dividirse en microtareas nuevas.

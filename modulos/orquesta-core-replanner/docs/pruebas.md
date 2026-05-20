@@ -28,7 +28,7 @@ Estado: completada en RPL-002
 Caso: agent_work_assessment_to_replan
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-core-replanner ./modulos/orquesta-core-workflow
-Evidencia esperada: `acceptable` no propone replan; `needs_revision/request_revision` propone retry_task; `garbage|loop_detected/stop_agent` propone replace_agent o abort_task; `ask_director` propone ask_director sin parar agentes ni pedir capacidad.
+Evidencia esperada: `acceptable` no propone replan; `needs_revision/request_revision` propone retry_task; `garbage|loop_detected|capacity_limited|timeout/stop_agent` propone replace_agent o abort_task; `ask_director` propone ask_director sin parar agentes ni pedir capacidad.
 Estado: completada en RPL-003
 ```
 

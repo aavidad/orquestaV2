@@ -22,6 +22,9 @@ func (store *RunMemoryStoreV0) ListRunSchedulingCandidatesV0(
 		if !filter.matches(entry) {
 			continue
 		}
+		if !orquestarunqueue.IsExecutableRunStatusV0(entry.candidate.Status) {
+			continue
+		}
 		out = append(out, cloneRunSchedulingCandidateV0(entry.candidate))
 		if filter.limitReached(len(out)) {
 			break

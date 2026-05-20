@@ -93,7 +93,7 @@ func codexStackRealSmokeStopAllProcessesV0(
 
 func codexStackRealSmokeVerifyDocsV0(t *testing.T, projectDir string) {
 	t.Helper()
-	for _, path := range []string{"docs/arquitectura.md", "docs/plan_microtareas.md"} {
+	for _, path := range []string{"docs/arquitectura.md", "docs/plan_tareas.md"} {
 		codexStackRealSmokeVerifyProjectFileV0(t, projectDir, path)
 	}
 }

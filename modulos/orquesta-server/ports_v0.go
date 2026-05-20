@@ -19,6 +19,10 @@ type StateStorePortV0 interface {
 	LoadServerStateV0(context.Context) (StateV0, error)
 }
 
+type StartupCheckPortV0 interface {
+	PrepareStartupV0(context.Context, StartupCheckCommandV0) (StartupCheckResultV0, error)
+}
+
 type ClockPortV0 interface {
 	Now() time.Time
 }

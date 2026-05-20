@@ -25,3 +25,5 @@ Resultado: `ok` el 2026-05-13.
   `RecordReviewResult`, `AcceptReview` y `RequestRework`.
 - `ReviewGateCandidates` se propagan desde el request al scheduler sin crear ni
   reinterpretar candidates en tick-input.
+- `progress_supervision_candidates` de otro run se descartan en la frontera de
+  tick-input; los candidates del run actual siguen llegando al scheduler.

@@ -81,6 +81,8 @@ Caso: DIR-P008 supervisor puro de progreso de agente
 Tipo: unit_contract
 Comando: go test -count=1 ./modulos/orquesta-director ./modulos/orquesta-runtime ./modulos/orquesta-core-workflow
 Evidencia esperada: BuildAgentProgressSupervisionV0 valida AgentProgressReportV0 con runtime, loop_detected genera AssessAgentWork stop_agent y al aplicarlo core emite AgentWorkAssessed + AgentStopRequested + outbox StopRuntimeAgent; stalled genera AssessAgentWork ask_director y AskDirector separado que emite SendDirectorQuestion; stopped/progressing quedan acceptable/continue/low; reporte invalido devuelve error local y JSON de salida no filtra detalles prohibidos.
+- `correlation_id` opaco con fragmentos que serian prohibidos en contenido no
+  bloquea la supervision.
 
 Caso: agent_progress_supervision_budget_operativo
 Comando: go test -count=1 ./modulos/orquesta-director -run 'TestBuildAgentProgressSupervisionV0Tiempo'

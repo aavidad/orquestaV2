@@ -13,6 +13,9 @@
   candidates. Estado: cerrado en `orquesta-director-cycle`.
 - DTI-007: exponer `ReviewGateCandidates` y refs durables de revision/rework en
   el snapshot compacto. Estado: cerrado.
+- DTI-008: filtrar `progress_supervision_candidates` sin
+  `command_meta.run_id` del run actual antes de validar scheduler. Estado:
+  cerrado.
 
 ## Siguientes Microtareas
 

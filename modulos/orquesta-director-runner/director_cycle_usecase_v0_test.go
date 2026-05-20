@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirector "orquesta/modulos/orquesta-director"
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func TestRunDirectorCycleV0WaitingNoAplicaWorkflow(t *testing.T) {
@@ -119,6 +121,55 @@ func TestRunDirectorCycleV0WorkflowErrorStops(t *testing.T) {
 	}
 }
 
+func TestRunDirectorCycleV0PropagaCampoPublicoDelScheduler(t *testing.T) {
+	scheduler := DirectorSchedulerFuncV0(func(context.Context, orquestadirectorscheduler.DirectorSchedulerTickInputV0) (orquestadirectorscheduler.DirectorSchedulerTickPlanV0, error) {
+		return orquestadirectorscheduler.DirectorSchedulerTickPlanV0{}, orquestadirectorscheduler.DirectorSchedulerTickErrorV0{
+			Code:  orquestadirectorscheduler.ErrDirectorSchedulerTickInvalidoV0,
+			Field: "replan_followup_candidates.payload",
+		}
+	})
+	workflow := WorkflowCommandFuncV0(func(context.Context, orquestacoreworkflow.OrchestrationCommandV0) (orquestacoreworkflow.OrchestrationCommandResultV0, error) {
+		t.Fatal("workflow should not be called")
+		return orquestacoreworkflow.OrchestrationCommandResultV0{}, nil
+	})
+
+	result, err := RunDirectorCycleV0(context.Background(), runnerValidInputV0(scheduler, workflow))
+	if err == nil {
+		t.Fatal("expected scheduler error")
+	}
+	var cycleErr DirectorCycleErrorV0
+	if !errors.As(err, &cycleErr) || cycleErr.Code != ErrDirectorRunnerSchedulerV0 {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cycleErr.Field != "scheduler.replan_followup_candidates.payload" ||
+		cycleErr.Message != "scheduler fallo: director_scheduler_tick_invalido:replan_followup_candidates.payload" {
+		t.Fatalf("unexpected scheduler error details: %+v", cycleErr)
+	}
+	if len(result.Issues) != 1 || result.Issues[0].Field != cycleErr.Field {
+		t.Fatalf("unexpected result issues: %+v", result.Issues)
+	}
+}
+
+func TestRunDirectorCycleV0FiltraProgressCandidatesAjenosAntesDeScheduler(t *testing.T) {
+	workflowCalls := 0
+	workflow := WorkflowCommandFuncV0(func(context.Context, orquestacoreworkflow.OrchestrationCommandV0) (orquestacoreworkflow.OrchestrationCommandResultV0, error) {
+		workflowCalls++
+		return orquestacoreworkflow.OrchestrationCommandResultV0{}, nil
+	})
+	input := runnerValidInputV0(DirectDirectorSchedulerPortV0{}, workflow)
+	input.SchedulerInput.ProgressSupervisionCandidates = []orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0{
+		runnerProgressCandidateV0("progress-candidate-ref-foreign-001", runnerRunRefV0, "run-runner-foreign-001"),
+	}
+
+	result, err := RunDirectorCycleV0(context.Background(), input)
+	if err != nil {
+		t.Fatalf("run cycle: %v", err)
+	}
+	if result.Status != DirectorCycleStatusQuiescentV0 || workflowCalls != 0 {
+		t.Fatalf("unexpected result calls=%d result=%+v", workflowCalls, result)
+	}
+}
+
 func TestRunDirectorCycleV0NeedsDirectorAplicaComandoDurablePrevio(t *testing.T) {
 	command := mustRunnerStartCommandV0(t, "needs-director")
 	scheduler := DirectorSchedulerFuncV0(func(context.Context, orquestadirectorscheduler.DirectorSchedulerTickInputV0) (orquestadirectorscheduler.DirectorSchedulerTickPlanV0, error) {
@@ -136,6 +187,37 @@ func TestRunDirectorCycleV0NeedsDirectorAplicaComandoDurablePrevio(t *testing.T)
 	}
 	if result.Status != DirectorCycleStatusNeedsDirectorV0 || calls != 1 {
 		t.Fatalf("unexpected result calls=%d result=%+v", calls, result)
+	}
+}
+
+func runnerProgressCandidateV0(
+	candidateRef string,
+	commandRunRef string,
+	reportRunRef string,
+) orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0 {
+	return orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0{
+		CandidateRef: candidateRef,
+		SupervisionInput: orquestadirector.AgentProgressSupervisionInputV0{
+			CommandMeta: orquestacoreworkflow.OrchestrationCommandMetaV0{
+				CommandID:      "cmd-" + candidateRef,
+				RunID:          commandRunRef,
+				IdempotencyKey: "idem-" + candidateRef,
+				CorrelationID:  "corr-runner-001",
+				RequestedBy:    "director-runner-test",
+				OccurredAt:     "2026-05-06T11:00:00Z",
+			},
+			Report: orquestaruntime.AgentProgressReportV0{
+				ReportID:         "report-ref-" + candidateRef,
+				RunID:            reportRunRef,
+				AgentRequestID:   "agent-ref-runner-progress-001",
+				Status:           orquestaruntime.AgentLoopDetectedV0,
+				Summary:          "Progreso de otro run persistido en estado durable.",
+				DecisionRequired: true,
+			},
+			PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			AssessmentRef: "assessment-ref-" + candidateRef,
+		},
+		EvidenceRefs: []string{"evidence-ref-" + candidateRef},
 	}
 }
 

@@ -53,5 +53,10 @@ func validateConfigV0(config ConfigV0) error {
 	); len(issues) > 0 {
 		return fmt.Errorf("orquesta_app_codex_stack: codex_profile.%s", issues[0].Field)
 	}
+	if issues := orquestaruntimecodex.ValidateCodexConnectorProfileV0(
+		codexProfileForAreaV0(config.Codex, config.Codex.RuntimeWorkDir, "director"),
+	); len(issues) > 0 {
+		return fmt.Errorf("orquesta_app_codex_stack: codex_director_profile.%s", issues[0].Field)
+	}
 	return nil
 }

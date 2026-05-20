@@ -6,6 +6,8 @@ Entrada:
 - `http.Handler` de aplicacion.
 - `SupervisorPortV0` opcional.
 - `StateStorePortV0` para publicar reenganche.
+- `StartupCheckPortV0` opcional para autodiagnostico/purga antes de exponer
+  HTTP y antes de activar el supervisor.
 - Configuracion explicita de direccion, statefile y ritmo de supervision.
 
 Salida:
@@ -39,3 +41,6 @@ Invariantes:
 - cada pulso del supervisor es acotado.
 - OPES y el backend file de `domain_work` se cablean desde `cmd/orquesta-server`,
   no desde el runtime residente.
+- el autodiagnostico de arranque entra por puerto: el modulo residente solo
+  publica `startup_status`, `startup_ready`, mensaje y evidencias; la purga real
+  de estado transitorio pertenece a la composicion inyectada.

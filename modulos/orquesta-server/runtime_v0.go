@@ -8,19 +8,21 @@ import (
 )
 
 type RuntimeDepsV0 struct {
-	AppHandler http.Handler
-	Supervisor SupervisorPortV0
-	StateStore StateStorePortV0
-	Clock      ClockPortV0
+	AppHandler   http.Handler
+	Supervisor   SupervisorPortV0
+	StateStore   StateStorePortV0
+	StartupCheck StartupCheckPortV0
+	Clock        ClockPortV0
 }
 
 type RuntimeV0 struct {
-	config     ConfigV0
-	appHandler http.Handler
-	supervisor SupervisorPortV0
-	stateStore StateStorePortV0
-	clock      ClockPortV0
-	tracker    *StatusTrackerV0
+	config       ConfigV0
+	appHandler   http.Handler
+	supervisor   SupervisorPortV0
+	stateStore   StateStorePortV0
+	startupCheck StartupCheckPortV0
+	clock        ClockPortV0
+	tracker      *StatusTrackerV0
 }
 
 func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
@@ -39,12 +41,13 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		deps.StateStore = store
 	}
 	return &RuntimeV0{
-		config:     config,
-		appHandler: deps.AppHandler,
-		supervisor: deps.Supervisor,
-		stateStore: deps.StateStore,
-		clock:      deps.Clock,
-		tracker:    NewStatusTrackerV0(config, deps.Clock.Now()),
+		config:       config,
+		appHandler:   deps.AppHandler,
+		supervisor:   deps.Supervisor,
+		stateStore:   deps.StateStore,
+		startupCheck: deps.StartupCheck,
+		clock:        deps.Clock,
+		tracker:      NewStatusTrackerV0(config, deps.Clock.Now()),
 	}, nil
 }
 
@@ -58,6 +61,9 @@ func (runtime *RuntimeV0) HandlerV0() http.Handler {
 func (runtime *RuntimeV0) RunV0(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if err := runtime.prepareStartupV0(ctx); err != nil {
+		return err
 	}
 	listener, err := net.Listen("tcp", runtime.config.Addr)
 	if err != nil {

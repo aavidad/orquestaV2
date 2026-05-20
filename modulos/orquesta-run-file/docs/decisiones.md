@@ -16,3 +16,10 @@ error.
 El adaptador replica las normalizaciones y copias defensivas de
 `orquesta-run-memory` e `InMemoryAppChangeStoreV0` para que el cambio de
 conector no altere la capa de aplicacion.
+
+## Recarga tras compactacion externa
+
+El servidor puede compactar snapshots durante el autodiagnostico de arranque.
+Cuando eso ocurre, `ReloadFromDiskV0` permite sincronizar el estado en memoria
+con los JSON compactados sin crear otro adaptador ni saltarse los puertos en el
+flujo normal.

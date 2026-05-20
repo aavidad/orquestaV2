@@ -146,6 +146,25 @@ func TestCodexRuntimeConfigV0PermiteSobrescribirReasoningEffort(t *testing.T) {
 	}
 }
 
+func TestCodexRuntimeConfigV0PermitePermisosEspecificosDelDirector(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_SANDBOX", "workspace-write")
+	t.Setenv("ORQUESTA_CODEX_APPROVAL_POLICY", "never")
+	t.Setenv("ORQUESTA_CODEX_DIRECTOR_SANDBOX", "danger-full-access")
+	t.Setenv("ORQUESTA_CODEX_DIRECTOR_APPROVAL_POLICY", "on-request")
+
+	config := codexRuntimeConfigV0(orquestaserver.ConfigV0{
+		ProjectWorkDir: t.TempDir(),
+		RuntimeWorkDir: t.TempDir(),
+	}, nil)
+
+	if config.Sandbox != "workspace-write" ||
+		config.ApprovalPolicy != "never" ||
+		config.DirectorSandbox != "danger-full-access" ||
+		config.DirectorApprovalPolicy != "on-request" {
+		t.Fatalf("config=%+v", config)
+	}
+}
+
 func TestDomainWorkExecutorFromEnvV0ConectaOPESOptIn(t *testing.T) {
 	var received struct {
 		CorrelationID  string `json:"correlation_id"`

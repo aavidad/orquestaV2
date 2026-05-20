@@ -32,10 +32,10 @@ func validateCompositeDirectorDecisionBatchV0(
 		return fmt.Errorf("director_decisions invalidas: app Go sin required_tests go test ./...")
 	}
 	if !compositeTasksCoverWriteSetV0(tasks, "go.mod") {
-		return fmt.Errorf("director_decisions invalidas: app Go sin microtarea para go.mod")
+		return fmt.Errorf("director_decisions invalidas: app Go sin tarea para go.mod")
 	}
 	if !compositeTasksCoverCmdEntrypointV0(tasks) {
-		return fmt.Errorf("director_decisions invalidas: app Go sin microtarea para cmd/server")
+		return fmt.Errorf("director_decisions invalidas: app Go sin tarea para cmd/server")
 	}
 	if !compositeTasksDependOnBootstrapV0(tasks) {
 		return fmt.Errorf("director_decisions invalidas: app Go sin depends_on hacia bootstrap")

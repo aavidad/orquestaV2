@@ -125,6 +125,19 @@ Estado: aceptada_local
 ```
 
 ```text
+Fecha: 2026-05-18
+Decision: Los filtros de detalle prohibido del supervisor de progreso no se
+aplican a refs opacas ni a `command_meta.correlation_id`.
+Motivo: esos campos son identidad causal, no contenido operativo; aplicar
+busqueda por subcadena a IDs provoca falsos positivos y bloquea runs limpios.
+Impacto: el supervisor sigue sin propagar summaries brutos, transcripts,
+proveedores, DB, HOME ni OAuth en contenido generado; los IDs opacos se tratan
+como trazabilidad.
+Contratos afectados: BuildAgentProgressSupervision v0 sin cambios.
+Estado: aceptada_local
+```
+
+```text
 Fecha: 2026-05-05
 Decision: Dividir el dispatcher fake de outbox runtime por responsabilidades dentro de tests locales.
 Motivo: `runtime_fake_outbox_dispatcher_v0_test.go` habia crecido a 289 lineas mezclando dispatcher principal, must helpers, conversion outbox -> inbound runtime, errores/asserts y el test de mensaje no soportado. Separarlo reduce el coste de lectura del harness sin cambiar nombres usados por otros tests ni comportamiento.

@@ -51,3 +51,14 @@ Esto cablea `/api/v0/domain-work` para `create_job` sin depender de OPES y sin
 importar filesystem desde paquetes puros. No habilita `submit_artifact` ni el
 bridge de entrega, porque el adaptador file solo crea jobs. Si tambien existe
 `ORQUESTA_OPES_BASE_URL`, el servidor falla por backend ambiguo.
+
+## SRV-007: autodiagnostico antes de supervisor
+
+El servidor residente ejecuta un `StartupCheckPortV0` opcional antes de escuchar
+HTTP y antes de arrancar el supervisor. Si el check no devuelve `ready`, el
+servidor publica `startup_blocked` en el statefile y no empieza a drenar runs.
+
+La purga concreta no vive en `orquesta-server`: una composicion puede decidir
+si diagnostica, solicita parada logica, limpia procesos de su runtime o bloquea
+el arranque. El servidor solo persiste estado, mensaje para el Director y refs
+de evidencia compactas.

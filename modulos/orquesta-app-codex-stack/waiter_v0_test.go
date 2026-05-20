@@ -37,6 +37,19 @@ func TestDescriptorsHaveReadyAckV0ValidaContenidoNoSoloPath(t *testing.T) {
 	}
 }
 
+func TestDescriptorsHaveReadyAckV0AceptaACKFallidoComoTerminal(t *testing.T) {
+	descriptor := waiterDescriptorForTestV0(t)
+	writeWaiterAckWithStatusForTestV0(t, descriptor, "failed")
+
+	ready, err := descriptorsHaveReadyAckV0(
+		[]string{descriptor.AgentRef},
+		[]orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{descriptor},
+	)
+	if err != nil || !ready {
+		t.Fatalf("failed ack terminal debe desbloquear wait: ready=%v err=%v", ready, err)
+	}
+}
+
 func TestWaiterStartedAgentRefsForWaitV0FiltraCohorte(t *testing.T) {
 	got := waiterStartedAgentRefsForWaitV0(
 		[]string{"agent-old", "agent-new", "agent-new"},
@@ -155,6 +168,15 @@ func writeWaiterAckForTestV0(
 	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
 ) {
 	t.Helper()
+	writeWaiterAckWithStatusForTestV0(t, descriptor, "completed")
+}
+
+func writeWaiterAckWithStatusForTestV0(
+	t *testing.T,
+	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+	status string,
+) {
+	t.Helper()
 	ack := orquestaruntimecodex.CodexAgentAckV0{
 		SchemaVersion: orquestaruntimecodex.CodexAgentAckSchemaVersionV0,
 		RequestID:     descriptor.Spec.RequestID,
@@ -162,7 +184,7 @@ func writeWaiterAckForTestV0(
 		AckRef:        descriptor.Spec.AgentPacket.DeliveryRefs.AckRef,
 		TargetModule:  descriptor.Spec.AgentPacket.TargetModule,
 		TaskRef:       descriptor.Spec.AgentPacket.Task.TaskRef,
-		Status:        "completed",
+		Status:        status,
 		Files:         descriptor.Spec.AgentPacket.Task.WriteSet,
 	}
 	data, err := json.Marshal(ack)

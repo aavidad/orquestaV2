@@ -49,6 +49,14 @@ func TestAgentWorkAssessmentToReplanProposalV0StopAgentCanReplaceOrAbort(t *test
 			verdict: orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0,
 			action:  ReplanActionAbortTaskV0,
 		},
+		"capacity_limited_replace": {
+			verdict: orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0,
+			action:  ReplanActionReplaceAgentV0,
+		},
+		"timeout_abort": {
+			verdict: orquestacoreworkflow.AgentAssessmentVerdictTimeoutV0,
+			action:  ReplanActionAbortTaskV0,
+		},
 	}
 
 	for name, tc := range cases {
@@ -73,6 +81,8 @@ func TestAgentWorkAssessmentToReplanProposalV0AskDirectorActionAsksDirector(t *t
 		orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
 		orquestacoreworkflow.AgentAssessmentVerdictGarbageV0,
 		orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0,
+		orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0,
+		orquestacoreworkflow.AgentAssessmentVerdictTimeoutV0,
 	} {
 		t.Run(verdict, func(t *testing.T) {
 			input := validAgentWorkAssessmentReplanInputV0(

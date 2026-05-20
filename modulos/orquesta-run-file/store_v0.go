@@ -83,6 +83,27 @@ func (store *RunFileStoreV0) loadV0() error {
 	return nil
 }
 
+func (store *RunFileStoreV0) ReloadFromDiskV0() error {
+	control, err := loadRunFileControlV0(store.controlPath)
+	if err != nil {
+		return err
+	}
+	queueRuns, err := loadRunFileQueueV0(store.queuePath)
+	if err != nil {
+		return err
+	}
+	appChangeRecords, err := loadRunFileAppChangeV0(store.appChangePath)
+	if err != nil {
+		return err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.control = control
+	store.queueRuns = queueRuns
+	store.appChangeRecords = appChangeRecords
+	return nil
+}
+
 func (store *RunFileStoreV0) ensureLockedV0() {
 	if store.control == nil {
 		store.control = map[string]orquestaruncontrol.RunControlStateV0{}

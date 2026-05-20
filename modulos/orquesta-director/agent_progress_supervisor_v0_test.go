@@ -358,6 +358,25 @@ func TestBuildAgentProgressSupervisionV0SalidaSinDetallesProhibidos(t *testing.T
 	}
 }
 
+func TestBuildAgentProgressSupervisionV0AceptaCorrelationIDOpaquo(t *testing.T) {
+	h := newSupervisionHarnessWithAgentV0(t, "task-ref-supervisor-opaque-001", "agent-request-ref-supervisor-opaque-001", "opaque")
+	report := validSupervisionProgressReportV0(h.run.RunID, "agent-request-ref-supervisor-opaque-001", orquestaruntime.AgentStoppedV0)
+	report.ReportID = "agent-progress-report-ref-supervisor-opaque-001"
+	meta := h.meta("agent-supervision-opaque")
+	meta.CorrelationID = "corr-opaco-db-home-model-001"
+
+	_, err := BuildAgentProgressSupervisionV0(AgentProgressSupervisionInputV0{
+		CommandMeta:   meta,
+		Report:        report,
+		PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		TaskRef:       "task-ref-supervisor-opaque-001",
+		AssessmentRef: "assessment-ref-supervisor-opaque-001",
+	})
+	if err != nil {
+		t.Fatalf("BuildAgentProgressSupervisionV0: %v", err)
+	}
+}
+
 func newSupervisionHarnessWithAgentV0(
 	t *testing.T,
 	taskRef string,

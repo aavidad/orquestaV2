@@ -16,6 +16,8 @@ Invariantes:
 
 - `scheduler_input.run_ref` debe coincidir con `run_ref`.
 - El runner no construye candidatos ni snapshots.
+- Antes de invocar el scheduler descarta `progress_supervision_candidates` que no
+  tengan `command_meta.run_id` y `report.run_id` iguales al `run_ref`.
 - El runner no despacha outbox.
 - `waiting` y `quiescent` no aplican comandos.
 - `commands_ready`, `blocked` y `needs_director` pueden traer comandos durables previos y se aplican en orden.

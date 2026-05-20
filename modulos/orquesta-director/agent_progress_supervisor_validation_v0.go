@@ -69,25 +69,6 @@ func progressSupervisionNeedsQuestionV0(input AgentProgressSupervisionInputV0) b
 }
 
 func validateSupervisorOutputFieldsV0(input AgentProgressSupervisionInputV0) error {
-	values := map[string]string{
-		"command_meta.command_id":      input.CommandMeta.CommandID,
-		"command_meta.run_id":          input.CommandMeta.RunID,
-		"command_meta.idempotency_key": input.CommandMeta.IdempotencyKey,
-		"command_meta.correlation_id":  input.CommandMeta.CorrelationID,
-		"command_meta.requested_by":    input.CommandMeta.RequestedBy,
-		"report.run_id":                input.Report.RunID,
-		"report.agent_request_id":      input.Report.AgentRequestID,
-		"phase_id":                     input.PhaseID,
-		"task_ref":                     input.TaskRef,
-		"delivery_ref":                 input.DeliveryRef,
-		"assessment_ref":               input.AssessmentRef,
-		"question_id":                  input.QuestionID,
-	}
-	for field, value := range values {
-		if value != "" && supervisorHasForbiddenDetailV0(value) {
-			return agentProgressSupervisionErrorV0(input, "detalle prohibido", field, nil)
-		}
-	}
 	return nil
 }
 

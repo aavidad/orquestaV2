@@ -113,7 +113,7 @@ func descriptorsHaveReadyAckV0(
 func descriptorAckReadyV0(
 	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
 ) (bool, error) {
-	_, issues := orquestaruntimecodex.ReadCodexDeliveryObservationFileV0(
+	_, issues := orquestaruntimecodex.ReadAndValidateCodexAgentAckFileV0(
 		descriptor.AckPath,
 		descriptor.Spec,
 	)
