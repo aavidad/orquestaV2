@@ -110,6 +110,7 @@ func TestCodexLaunchDirectorWaveCommandV0RechazaRequestSinTests(t *testing.T) {
 		"--dry-run",
 		"--agents", "2",
 		"--wave-ref", "director-wave-blocked",
+		"--strict-director-guards",
 		"--project-dir", projectDir,
 		"--runtime-dir", filepath.Join(root, "runtime", "director-wave-blocked"),
 		"--command", fakeCodex,
@@ -131,6 +132,51 @@ func TestCodexLaunchDirectorWaveCommandV0RechazaRequestSinTests(t *testing.T) {
 	}
 	if summary.Launch.AgentCount != 0 || len(summary.Launch.Agents) != 0 {
 		t.Fatalf("no debio lanzar: %+v", summary.Launch)
+	}
+}
+
+func TestCodexLaunchDirectorWaveCommandV0ModoMinimoRellenaRails(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	runtimeDir := filepath.Join(root, "runtime")
+	fakeCodex := filepath.Join(root, "codex-fake")
+
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatalf("crear project dir: %v", err)
+	}
+	if err := os.WriteFile(fakeCodex, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatalf("crear codex falso: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := codexLaunchDirectorWaveCommandV0([]string{
+		"--dry-run",
+		"--agents", "2",
+		"--wave-ref", "director-wave-minimal",
+		"--project-dir", projectDir,
+		"--runtime-dir", filepath.Join(runtimeDir, "director-wave-minimal"),
+		"--command", fakeCodex,
+		"--objective", "Arrancar agentes con el minimo de rails y observar.",
+	}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+
+	var summary codexDirectorWaveSummaryV0
+	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
+		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
+	}
+	if len(summary.Issues) > 0 ||
+		summary.Request.BranchRef == "" ||
+		len(summary.Plan.WriteSet) != 1 ||
+		summary.Plan.WriteSet[0] != "workspace" ||
+		len(summary.Plan.RequiredTests) != 1 ||
+		summary.Plan.RequiredTests[0] != "operator-validation-required" {
+		t.Fatalf("summary minimo inesperado: %+v", summary)
+	}
+	if !summary.Launch.DryRun || len(summary.Launch.Agents) != 2 {
+		t.Fatalf("launch minimo inesperado: %+v", summary.Launch)
 	}
 }
 

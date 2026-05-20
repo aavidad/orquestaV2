@@ -67,6 +67,7 @@ printf 'fake stdout\n'
 	exitCode := codexLaunchWaveCommandV0([]string{
 		"--agents", "2",
 		"--wave-ref", "wave-test",
+		"--isolate-home=true",
 		"--prompt", "divide este trabajo en dos partes y ejecuta una parte concreta",
 	}, &stdout, &stderr)
 	if exitCode != 0 {
@@ -264,6 +265,7 @@ while :; do /bin/sleep 1; done
 	exitCode := codexLaunchWaveCommandV0([]string{
 		"--agents", "1",
 		"--wave-ref", "wave-stop-test",
+		"--isolate-home=true",
 		"--prompt", "quedate vivo hasta que te pare el operador",
 	}, &stdout, &stderr)
 	if exitCode != 0 {

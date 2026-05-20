@@ -63,6 +63,7 @@ type codexWavePublicErrorV0 struct {
 	AgentRef string `json:"agent_ref,omitempty"`
 	Code     string `json:"code"`
 	Field    string `json:"field,omitempty"`
+	Message  string `json:"message,omitempty"`
 }
 
 type codexWaveConfigV0 struct {
@@ -121,7 +122,7 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 	sandbox := flags.String("sandbox", envOrDefaultV0("ORQUESTA_CODEX_WAVE_SANDBOX", "danger-full-access"), "sandbox Codex")
 	approval := flags.String("approval-policy", envOrDefaultV0("ORQUESTA_CODEX_WAVE_APPROVAL_POLICY", "never"), "politica de aprobacion Codex")
 	extraArgs := flags.String("extra-args", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_EXTRA_ARGS")), "argumentos extra para codex exec")
-	isolateHome := flags.Bool("isolate-home", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_ISOLATE_HOME", true), "copiar CODEX_HOME por agente bajo el runtime")
+	isolateHome := flags.Bool("isolate-home", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_ISOLATE_HOME", false), "copiar CODEX_HOME por agente bajo el runtime")
 	dryRun := flags.Bool("dry-run", false, "materializar prompts/wrappers sin arrancar procesos")
 
 	if err := flags.Parse(args); err != nil {
@@ -207,6 +208,7 @@ func runCodexLaunchWaveV0(
 			summary.Errors = append(summary.Errors, codexWavePublicErrorV0{
 				AgentRef: fmt.Sprintf("%s-agent-%02d", config.WaveRef, i),
 				Code:     "materialize_failed",
+				Message:  err.Error(),
 			})
 			continue
 		}
@@ -221,6 +223,7 @@ func runCodexLaunchWaveV0(
 			summary.Errors = append(summary.Errors, codexWavePublicErrorV0{
 				AgentRef: agent.AgentRef,
 				Code:     "launch_failed",
+				Message:  err.Error(),
 			})
 			summary.Agents = append(summary.Agents, agent)
 			continue
@@ -279,6 +282,9 @@ func codexWaveMaterializeAgentV0(
 		if err != nil {
 			return codexWaveAgentSummaryV0{}, err
 		}
+	} else {
+		homeDir = homeDirV0()
+		codeHomeDir = config.SourceCodeHome
 	}
 
 	profile := orquestaruntimecodex.CodexConnectorProfileV0{

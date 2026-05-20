@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -40,6 +41,7 @@ type codexDirectorWaveConfigV0 struct {
 	AllowRecursiveDelegation bool
 	MaxDelegationDepth       int
 	MaxSubagentsPerAgent     int
+	StrictDirectorGuards     bool
 }
 
 func codexLaunchDirectorWaveCommandV0(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -85,11 +87,12 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 	sandbox := flags.String("sandbox", envOrDefaultV0("ORQUESTA_CODEX_WAVE_SANDBOX", "danger-full-access"), "sandbox Codex")
 	approval := flags.String("approval-policy", envOrDefaultV0("ORQUESTA_CODEX_WAVE_APPROVAL_POLICY", "never"), "politica de aprobacion Codex")
 	extraArgs := flags.String("extra-args", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_EXTRA_ARGS")), "argumentos extra para codex exec")
-	isolateHome := flags.Bool("isolate-home", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_ISOLATE_HOME", true), "copiar CODEX_HOME por agente bajo el runtime")
+	isolateHome := flags.Bool("isolate-home", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_ISOLATE_HOME", false), "copiar CODEX_HOME por agente bajo el runtime")
 	dryRun := flags.Bool("dry-run", false, "materializar prompts/wrappers sin arrancar procesos")
 	allowRecursive := flags.Bool("allow-recursive-delegation", false, "permitir que el Director gobierne delegacion recursiva")
 	maxDepth := flags.Int("max-delegation-depth", 0, "profundidad maxima de delegacion")
 	maxChildren := flags.Int("max-subagents-per-agent", 0, "fanout maximo por agente")
+	strictDirectorGuards := flags.Bool("strict-director-guards", false, "exigir branch/write-set/tests explicitos del Director")
 
 	if err := flags.Parse(args); err != nil {
 		return codexDirectorWaveConfigV0{}, err
@@ -121,6 +124,20 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 	if *agents <= 0 {
 		return codexDirectorWaveConfigV0{}, errors.New("agents_out_of_range")
 	}
+	branchValue := strings.TrimSpace(*branchRef)
+	writeSetValues := codexDirectorCSVV0(*writeSet)
+	requiredTestValues := codexDirectorCSVV0(*requiredTests)
+	if !*strictDirectorGuards {
+		if branchValue == "" {
+			branchValue = codexDirectorCurrentBranchRefV0(projectWorkDir)
+		}
+		if len(writeSetValues) == 0 {
+			writeSetValues = []string{"workspace"}
+		}
+		if len(requiredTestValues) == 0 {
+			requiredTestValues = []string{"operator-validation-required"}
+		}
+	}
 
 	return codexDirectorWaveConfigV0{
 		Wave: codexWaveConfigV0{
@@ -146,12 +163,13 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 		ProjectRef:               strings.TrimSpace(*projectRef),
 		Objective:                objectiveText,
 		WorktreeRef:              codexDirectorDefaultRefV0(*worktreeRef, "worktree", ref),
-		BranchRef:                strings.TrimSpace(*branchRef),
-		WriteSet:                 codexDirectorCSVV0(*writeSet),
-		RequiredTests:            codexDirectorCSVV0(*requiredTests),
+		BranchRef:                branchValue,
+		WriteSet:                 writeSetValues,
+		RequiredTests:            requiredTestValues,
 		AllowRecursiveDelegation: *allowRecursive,
 		MaxDelegationDepth:       *maxDepth,
 		MaxSubagentsPerAgent:     *maxChildren,
+		StrictDirectorGuards:     *strictDirectorGuards,
 	}, nil
 }
 
@@ -334,6 +352,16 @@ func codexDirectorDefaultRefV0(value string, prefix string, waveRef string) stri
 		waveRef = time.Now().UTC().Format("20060102T150405Z")
 	}
 	return prefix + "-" + waveRef
+}
+
+func codexDirectorCurrentBranchRefV0(projectWorkDir string) string {
+	out, err := exec.Command("git", "-C", projectWorkDir, "branch", "--show-current").Output()
+	if err == nil {
+		if branch := strings.TrimSpace(string(out)); branch != "" {
+			return branch
+		}
+	}
+	return "local-branch"
 }
 
 func codexDirectorCSVV0(value string) []string {
