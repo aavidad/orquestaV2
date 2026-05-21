@@ -13,6 +13,7 @@ Cobertura local:
 - acepta `publish_function_contract` compacto;
 - acepta `create_microtask` con contrato funcional explicito;
 - acepta `create_microtask` con linaje recursivo neutral y refs compactas;
+- acepta `work_profile_kind` opcional en microtareas y unidades de equipo;
 - acepta `ask_director` y `ask_user` compactos;
 - acepta `request_capacity` y `request_agent` compactos;
 - acepta `propose_autonomous_plan_team` compacto;

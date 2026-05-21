@@ -256,6 +256,7 @@ func operationalDirectorWorkflowTaskFromItemV0(
 		TaskID:               itemTaskRefs[item.ItemID],
 		RunID:                request.Plan.RunRef,
 		PhaseID:              request.TargetPhaseID,
+		WorkProfileKind:      orquestacoreworkflow.WorkProfileKindV0(item.WorkProfileKind),
 		Title:                item.Title,
 		Summary:              "Materializar item del Director Operativo.",
 		WriteSet:             append([]string(nil), item.WriteSet...),

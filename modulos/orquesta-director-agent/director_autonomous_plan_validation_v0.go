@@ -76,6 +76,7 @@ func (v *directorAgentDecisionValidatorV0) validateAutonomousWorkUnits(
 	for _, unit := range units {
 		v.requireRef(field+".work_unit_ref", unit.WorkUnitRef)
 		v.requireRef(field+".phase_id", unit.PhaseID)
+		v.requireOptionalRef(field+".work_profile_kind", unit.WorkProfileKind)
 		v.requireText(field+".title", unit.Title)
 		v.requireText(field+".summary", unit.Summary)
 		v.requireRef(field+".assigned_member_ref", unit.AssignedMemberRef)

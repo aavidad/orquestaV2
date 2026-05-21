@@ -116,6 +116,7 @@ func operationalDirectorWorkItemFromStepV0(
 		SourceStepID:       step.StepID,
 		Kind:               step.Kind,
 		Title:              step.Title,
+		WorkProfileKind:    step.WorkProfileKind,
 		DependsOn:          operationalDirectorWorkItemIDsForStepsV0(step.DependsOn),
 		ParentItemID:       operationalDirectorWorkItemIDForOptionalStepV0(step.ParentStepID),
 		DelegationDepth:    step.DelegationDepth,

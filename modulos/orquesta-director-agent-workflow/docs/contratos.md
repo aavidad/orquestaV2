@@ -70,6 +70,8 @@ Invariantes:
 - preserva el linaje operativo neutral de `create_microtask` en
   `WorkflowTaskV0`: parent task, cohorte, ola, profundidad, fanout e hijos
   conocidos. El puente no interpreta ese linaje ni arranca runtime.
+- preserva `work_profile_kind` cuando el director lo declara, para que el
+  scheduler resuelva rol/capacidad sin parsear texto ni conocer conectores.
 - aplica `close_task` entre `accept_review` y `open_phase` hacia `validacion_final`; no cierra fase ni run por si mismo.
 - el bloqueo por `request_kind` no vive aqui: lo aplica la capa de aplicacion antes de llamar al puente, para no acoplar este adaptador a politica de producto.
 

@@ -153,6 +153,7 @@ func addOperationalDirectorPlanStepDetailsV0(
 	plan OperationalDirectorPlanV0,
 ) OperationalDirectorPlanV0 {
 	for i := range plan.Steps {
+		plan.Steps[i].WorkProfileKind = operationalDirectorWorkProfileKindV0(plan, plan.Steps[i].Kind)
 		switch plan.Steps[i].Kind {
 		case OperationalDirectorStepGatherContextV0,
 			OperationalDirectorStepRequestDomainContextV0:
@@ -183,6 +184,30 @@ func addOperationalDirectorPlanStepDetailsV0(
 		}
 	}
 	return plan
+}
+
+func operationalDirectorWorkProfileKindV0(
+	plan OperationalDirectorPlanV0,
+	kind OperationalDirectorStepKindV0,
+) string {
+	switch kind {
+	case OperationalDirectorStepGatherContextV0,
+		OperationalDirectorStepSplitWorkV0,
+		OperationalDirectorStepRequestDomainContextV0:
+		return "code_study"
+	case OperationalDirectorStepLaunchSubagentsV0:
+		if plan.Mode == OperationalDirectorModeDomainWorkV0 {
+			return "domain_work"
+		}
+		return "implementation"
+	case OperationalDirectorStepRunRequiredTestsV0:
+		return "required_tests"
+	case OperationalDirectorStepReviewDeliveriesV0,
+		OperationalDirectorStepReplanOrCloseV0:
+		return "review"
+	default:
+		return ""
+	}
 }
 
 func operationalDirectorAcceptanceCriteriaV0(

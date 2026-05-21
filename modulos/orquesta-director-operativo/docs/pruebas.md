@@ -18,6 +18,8 @@ Cobertura actual:
 - presupuestos se acotan y write-set se deduplica.
 - proyeccion a olas conserva contrato operativo y no expone launch cuando falta
   contexto.
+- pasos e items conservan `work_profile_kind`; el materializador lo proyecta a
+  `WorkflowTaskV0`.
 
 Pendiente de integracion:
 

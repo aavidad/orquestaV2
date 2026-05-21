@@ -115,6 +115,7 @@ func appChangeMicrotaskDecisionV0(
 			TaskID:             refs.TaskRef,
 			RunID:              runRef,
 			PhaseID:            string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			WorkProfileKind:    appChangeTaskWorkProfileKindV0(request),
 			Title:              appChangeTaskTitleV0(request),
 			Summary:            appChangeTaskSummaryV0(request),
 			WriteSet:           appChangeTaskWriteSetV0(request),

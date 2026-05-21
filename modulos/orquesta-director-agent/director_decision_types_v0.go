@@ -202,6 +202,7 @@ type DirectorAgentMicrotaskV0 struct {
 	TaskID               string                               `json:"task_id"`
 	RunID                string                               `json:"run_id"`
 	PhaseID              string                               `json:"phase_id"`
+	WorkProfileKind      string                               `json:"work_profile_kind,omitempty"`
 	Title                string                               `json:"title"`
 	Summary              string                               `json:"summary,omitempty"`
 	WriteSet             []string                             `json:"write_set"`
@@ -248,6 +249,7 @@ type DirectorAgentTeamMemberV0 struct {
 type DirectorAgentAutonomousWorkUnitV0 struct {
 	WorkUnitRef          string                               `json:"work_unit_ref"`
 	PhaseID              string                               `json:"phase_id"`
+	WorkProfileKind      string                               `json:"work_profile_kind,omitempty"`
 	Title                string                               `json:"title"`
 	Summary              string                               `json:"summary"`
 	AssignedMemberRef    string                               `json:"assigned_member_ref"`

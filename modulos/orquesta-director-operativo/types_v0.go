@@ -111,6 +111,7 @@ type OperationalDirectorStepV0 struct {
 	Kind               OperationalDirectorStepKindV0   `json:"kind"`
 	Status             OperationalDirectorStepStatusV0 `json:"status"`
 	Title              string                          `json:"title"`
+	WorkProfileKind    string                          `json:"work_profile_kind,omitempty"`
 	ParentStepID       string                          `json:"parent_step_id,omitempty"`
 	DelegationDepth    int                             `json:"delegation_depth,omitempty"`
 	MaxChildAgents     int                             `json:"max_child_agents,omitempty"`
@@ -155,6 +156,7 @@ type OperationalDirectorWorkItemV0 struct {
 	SourceStepID       string                        `json:"source_step_id"`
 	Kind               OperationalDirectorStepKindV0 `json:"kind"`
 	Title              string                        `json:"title"`
+	WorkProfileKind    string                        `json:"work_profile_kind,omitempty"`
 	DependsOn          []string                      `json:"depends_on,omitempty"`
 	ParentItemID       string                        `json:"parent_item_id,omitempty"`
 	DelegationDepth    int                           `json:"delegation_depth,omitempty"`

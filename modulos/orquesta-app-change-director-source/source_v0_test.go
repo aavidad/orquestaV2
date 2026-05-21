@@ -36,6 +36,9 @@ func TestAppChangeDirectorDecisionSourceV0GeneraCadenaCompleta(t *testing.T) {
 	if len(task.WriteSet) != 1 || task.WriteSet[0] != "web/agenda" {
 		t.Fatalf("write_set=%+v", task.WriteSet)
 	}
+	if task.WorkProfileKind != "implementation" {
+		t.Fatalf("work_profile_kind=%s", task.WorkProfileKind)
+	}
 	if len(task.RequiredTests) == 0 {
 		t.Fatalf("required_tests vacio: %+v", task)
 	}
@@ -91,6 +94,7 @@ func TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno(t *testing.T) {
 		len(contract.FunctionNames) != 1 ||
 		contract.FunctionNames[0] != "ApplyExternalDomainWorkV0" ||
 		task.Title != "Resolver trabajo documental OPES" ||
+		task.WorkProfileKind != "domain_work" ||
 		task.Summary != "Resolver trabajo documental con paquete de dominio suficiente: temario, esquema, objetivo, fuentes, criterios y longitud si llegan." ||
 		!stringInSetV0(task.AcceptanceCriteria, "Tratar el paquete de dominio OPES como entrada suficiente, no como contexto minimo.") ||
 		!stringInSetV0(task.AcceptanceCriteria, "Usar temario, esquema, objetivo, fuentes, criterios y longitud si llegan en input_fields.") ||
@@ -538,6 +542,7 @@ func workflowTaskFromDirectorTaskForTestV0(
 		TaskID:               task.TaskID,
 		RunID:                task.RunID,
 		PhaseID:              orquestacoreworkflow.OrchestrationPhaseIDV0(task.PhaseID),
+		WorkProfileKind:      orquestacoreworkflow.WorkProfileKindV0(task.WorkProfileKind),
 		Title:                task.Title,
 		Summary:              task.Summary,
 		WriteSet:             task.WriteSet,

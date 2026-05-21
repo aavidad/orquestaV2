@@ -59,6 +59,7 @@ func normalizeDirectorAgentWorkUnitsV0(
 		compact := DirectorAgentAutonomousWorkUnitV0{
 			WorkUnitRef:          strings.TrimSpace(unit.WorkUnitRef),
 			PhaseID:              strings.TrimSpace(unit.PhaseID),
+			WorkProfileKind:      strings.TrimSpace(unit.WorkProfileKind),
 			Title:                strings.TrimSpace(unit.Title),
 			Summary:              strings.TrimSpace(unit.Summary),
 			AssignedMemberRef:    strings.TrimSpace(unit.AssignedMemberRef),

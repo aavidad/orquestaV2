@@ -53,7 +53,9 @@ func TestApplyDirectorAgentDecisionV0MaterializaPlanEquipoComoMicrotareas(t *tes
 	}
 	if len(storedTasks) != 2 ||
 		storedTasks[1].DependsOn[0] != "task-ref-agenda-domain-001" ||
-		storedTasks[0].PhaseID != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 {
+		storedTasks[0].PhaseID != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 ||
+		storedTasks[0].WorkProfileKind != orquestacoreworkflow.WorkProfileImplementationV0 ||
+		storedTasks[1].WorkProfileKind != orquestacoreworkflow.WorkProfileRefactorV0 {
 		t.Fatalf("stored tasks=%+v", storedTasks)
 	}
 	if !directorAgentWorkflowSinkHasEventV0(sink, orquestacoreworkflow.OrchestrationEventMicrotaskCreatedV0) {
@@ -117,6 +119,7 @@ func validDirectorAgentWorkflowPlanTeamApplyRequestForTestV0() DirectorAgentWork
 					{
 						WorkUnitRef:       "task-ref-agenda-domain-001",
 						PhaseID:           string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+						WorkProfileKind:   "implementation",
 						Title:             "Implementar dominio de agenda",
 						Summary:           "Crear casos de uso de agenda compactos.",
 						AssignedMemberRef: "member-ref-domain-001",
@@ -132,6 +135,7 @@ func validDirectorAgentWorkflowPlanTeamApplyRequestForTestV0() DirectorAgentWork
 					{
 						WorkUnitRef:       "task-ref-agenda-api-001",
 						PhaseID:           string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+						WorkProfileKind:   "refactor",
 						Title:             "Implementar API de agenda",
 						Summary:           "Exponer interfaz compacta de agenda.",
 						AssignedMemberRef: "member-ref-api-001",

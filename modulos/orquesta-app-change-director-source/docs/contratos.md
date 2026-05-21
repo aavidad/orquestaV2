@@ -29,6 +29,8 @@ Si `AppChangeRequestV0.external_work` esta presente, la fuente sigue sin
 conocer la app externa. Solo cambia la proyeccion compacta:
 
 - publica contrato `ApplyExternalDomainWorkV0`;
+- marca la microtarea con `work_profile_kind=domain_work`; los cambios internos
+  sin `external_work` usan `implementation`.
 - titula la microtarea segun `work_kind` (`documentation`, `generation`,
   `draft_content_block`, `summarize_*`, `review` o generico);
 - exige validar el contrato externo de dominio junto a los criterios de

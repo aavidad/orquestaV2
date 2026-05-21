@@ -23,6 +23,10 @@ Plan vivo compacto con:
 
 El contrato no ejecuta runtime ni decide proveedor/modelo. Una composicion
 externa debe convertir estos pasos a comandos del workflow y outbox.
+Cada paso puede transportar `work_profile_kind` neutral: estudio de contexto,
+implementacion, trabajo de dominio, pruebas requeridas o revision. Ese dato no
+elige proveedor; solo permite que el scheduler resuelva rol/capacidad por
+contrato.
 
 La version actual conserva el contrato de cohorte en dos niveles: las olas del
 plan (`OperationalDirectorWaveWorkV0`) y la metadata neutral que el
@@ -46,6 +50,8 @@ a tareas de workflow, outbox o runtime concreto.
 La proyeccion:
 
 - agrupa pasos por olas topologicas segun `depends_on`;
+- conserva `work_profile_kind` para materializacion posterior como
+  `WorkflowTaskV0`;
 - conserva `domain_refs`, `write_set`, `required_tests`, evidencias y criterios;
 - expresa parent/child refs de delegacion como ids de work item;
 - no importa ni conoce orchestration-core, Codex, OPES, DB, HTTP, filesystem ni

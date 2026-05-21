@@ -178,3 +178,16 @@ agente no tendria criterios de seguridad SVG, accesibilidad ni trazabilidad.
 Impacto: la fuente no conoce ficheros ni persistencia OPES. Solo proyecta
 title, summary, acceptance criteria y required tests para que el agente entregue
 `visual_asset` por el bridge de dominio externo.
+
+## Perfiles neutrales de trabajo
+
+Decision: La fuente marca las microtareas de cambio con `work_profile_kind`.
+
+Motivo: el scheduler ya resuelve rol y capacidad desde perfiles neutrales. Si
+la fuente deja el campo vacio, los trabajos externos se verian como
+implementacion por compatibilidad legacy aunque realmente sean trabajo de
+dominio.
+
+Impacto: cambios internos usan `implementation`; cualquier `external_work` usa
+`domain_work`. La fuente no decide proveedor/modelo/runtime ni interpreta
+internals de OPES u otra app.

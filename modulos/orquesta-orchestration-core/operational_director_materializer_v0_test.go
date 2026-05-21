@@ -54,6 +54,7 @@ func TestOperationalDirectorPlanMaterializerV0CreaMicrotareaParaCandidatos(t *te
 		t.Fatalf("LoadWorkflowTasksV0: %v", err)
 	}
 	if len(storedTasks) != 1 ||
+		storedTasks[0].WorkProfileKind != orquestacoreworkflow.WorkProfileImplementationV0 ||
 		!stringInSetV0("go test -count=1 ./modulos/orquesta-director-operativo", storedTasks[0].RequiredTests) ||
 		!containsFragmentInValuesV0(storedTasks[0].AcceptanceCriteria, "objetivo_actual") {
 		t.Fatalf("stored tasks=%+v", storedTasks)

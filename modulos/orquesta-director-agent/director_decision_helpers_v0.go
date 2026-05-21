@@ -213,6 +213,7 @@ func normalizeDirectorAgentMicrotaskV0(task DirectorAgentMicrotaskV0) DirectorAg
 		TaskID:               strings.TrimSpace(task.TaskID),
 		RunID:                strings.TrimSpace(task.RunID),
 		PhaseID:              strings.TrimSpace(task.PhaseID),
+		WorkProfileKind:      strings.TrimSpace(task.WorkProfileKind),
 		Title:                strings.TrimSpace(task.Title),
 		Summary:              strings.TrimSpace(task.Summary),
 		WriteSet:             compactDirectorAgentStringsV0(task.WriteSet),

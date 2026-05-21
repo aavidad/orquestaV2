@@ -77,6 +77,13 @@ func appChangeFunctionNamesV0(request orquestaappchange.AppChangeRequestV0) []st
 	return []string{"ApplyAppChangeV0"}
 }
 
+func appChangeTaskWorkProfileKindV0(request orquestaappchange.AppChangeRequestV0) string {
+	if appChangeHasExternalWorkV0(request) {
+		return "domain_work"
+	}
+	return "implementation"
+}
+
 func appChangeTaskTitleV0(request orquestaappchange.AppChangeRequestV0) string {
 	if !appChangeHasExternalWorkV0(request) {
 		return "Aplicar cambio de app"

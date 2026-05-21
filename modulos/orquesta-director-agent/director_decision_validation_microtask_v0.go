@@ -10,6 +10,7 @@ func (v *directorAgentDecisionValidatorV0) validateCreateMicrotask(decision Dire
 	v.requireRef("create_microtask.task.task_id", task.TaskID)
 	v.requireRef("create_microtask.task.run_id", task.RunID)
 	v.requireRef("create_microtask.task.phase_id", task.PhaseID)
+	v.requireOptionalRef("create_microtask.task.work_profile_kind", task.WorkProfileKind)
 	v.requireText("create_microtask.task.title", task.Title)
 	v.requireText("create_microtask.task.summary", task.Summary)
 	v.requireTextList("create_microtask.task.write_set", task.WriteSet)

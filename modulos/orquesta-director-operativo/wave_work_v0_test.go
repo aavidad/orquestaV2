@@ -17,6 +17,7 @@ func TestBuildOperationalDirectorWaveWorkV0ProgrammingPreservesOperationalContra
 	}
 	launchItem := workItemByKindV0(work, OperationalDirectorStepLaunchSubagentsV0)
 	if launchItem.ItemID != "work-item-step-launch-subagents" ||
+		launchItem.WorkProfileKind != "implementation" ||
 		!stringInSetV0(launchItem.DependsOn, "work-item-step-split-work") ||
 		len(launchItem.WriteSet) != 2 ||
 		!stringInSetV0(launchItem.RequiredTests, "go test -count=1 ./modulos/orquesta-director-operativo") ||
@@ -24,7 +25,8 @@ func TestBuildOperationalDirectorWaveWorkV0ProgrammingPreservesOperationalContra
 		t.Fatalf("launch item=%+v", launchItem)
 	}
 	testItem := workItemByKindV0(work, OperationalDirectorStepRunRequiredTestsV0)
-	if !stringInSetV0(testItem.DependsOn, "work-item-step-review-deliveries") ||
+	if testItem.WorkProfileKind != "required_tests" ||
+		!stringInSetV0(testItem.DependsOn, "work-item-step-review-deliveries") ||
 		!stringInSetV0(testItem.RequiredTests, "go test -count=1 ./modulos/orquesta-director-operativo") {
 		t.Fatalf("test item=%+v", testItem)
 	}

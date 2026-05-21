@@ -8,6 +8,12 @@ func TestCodexAreaV0ClasificaImplementacionComoProgramacion(t *testing.T) {
 	}
 }
 
+func TestCodexAreaV0ClasificaDominioComoProgramacion(t *testing.T) {
+	if got := codexAreaV0("dominio", "task-ref-domain-work-001"); got != "programacion" {
+		t.Fatalf("area=%s", got)
+	}
+}
+
 func TestCodexProfileForAreaV0AplicaPermisosEspecificosDelDirector(t *testing.T) {
 	config := CodexRuntimeConfigV0{
 		Sandbox:                "workspace-write",

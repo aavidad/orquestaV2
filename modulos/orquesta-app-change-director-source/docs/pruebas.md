@@ -13,10 +13,11 @@ Casos focales:
 
 - `TestAppChangeDirectorDecisionSourceV0GeneraCadenaCompleta`: cambio aceptado
   pasa a respuesta, decision, contrato, microtarea con write-set permitido,
-  criterios y vuelta a programacion.
+  criterios, `work_profile_kind=implementation` y vuelta a programacion.
 - `TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno`: un
   `external_work` publica contrato `ApplyExternalDomainWorkV0` y microtarea
-  documental con paquete de dominio suficiente.
+  documental con `work_profile_kind=domain_work` y paquete de dominio
+  suficiente.
 - `TestAppChangeDirectorDecisionSourceV0ProyectaPlanDocumental`: `plan_tema`
   crea tarea de planificacion documental, exige `document_plan` y no permite
   redactar el documento final dentro del plan.

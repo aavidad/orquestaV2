@@ -271,6 +271,7 @@ func directorAgentWorkflowTaskV0(
 		TaskID:               task.TaskID,
 		RunID:                task.RunID,
 		PhaseID:              orquestacoreworkflow.OrchestrationPhaseIDV0(task.PhaseID),
+		WorkProfileKind:      orquestacoreworkflow.WorkProfileKindV0(task.WorkProfileKind),
 		Title:                task.Title,
 		Summary:              task.Summary,
 		WriteSet:             task.WriteSet,

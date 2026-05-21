@@ -122,6 +122,7 @@ func directorAgentPlanTeamWorkflowTasksV0(
 			TaskID:               unit.WorkUnitRef,
 			RunID:                plan.RunID,
 			PhaseID:              orquestacoreworkflow.OrchestrationPhaseIDV0(unit.PhaseID),
+			WorkProfileKind:      orquestacoreworkflow.WorkProfileKindV0(unit.WorkProfileKind),
 			Title:                unit.Title,
 			Summary:              unit.Summary,
 			WriteSet:             unit.WriteSet,

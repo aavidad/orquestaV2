@@ -58,6 +58,7 @@ func TestBuildDirectorAgentWorkflowCommandV0TraduceMicrotarea(t *testing.T) {
 	request.Decision.CreateMicrotask.Task.ParentTaskRef = "task-ref-parent-001"
 	request.Decision.CreateMicrotask.Task.CohortRef = "cohort-ref-recursive-001"
 	request.Decision.CreateMicrotask.Task.WaveRef = "wave-ref-recursive-001"
+	request.Decision.CreateMicrotask.Task.WorkProfileKind = "refactor"
 	request.Decision.CreateMicrotask.Task.DelegationDepth = 2
 	request.Decision.CreateMicrotask.Task.MaxChildAgents = 4
 	request.Decision.CreateMicrotask.Task.ChildTaskRefs = []string{"task-ref-child-001"}
@@ -85,6 +86,7 @@ func TestBuildDirectorAgentWorkflowCommandV0TraduceMicrotarea(t *testing.T) {
 	if payload.Task.ParentTaskRef != "task-ref-parent-001" ||
 		payload.Task.CohortRef != "cohort-ref-recursive-001" ||
 		payload.Task.WaveRef != "wave-ref-recursive-001" ||
+		payload.Task.WorkProfileKind != orquestacoreworkflow.WorkProfileRefactorV0 ||
 		payload.Task.DelegationDepth != 2 ||
 		payload.Task.MaxChildAgents != 4 ||
 		len(payload.Task.ChildTaskRefs) != 1 ||

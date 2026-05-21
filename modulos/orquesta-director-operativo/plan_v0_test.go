@@ -30,6 +30,7 @@ func TestBuildOperationalDirectorPlanV0ProgrammingReady(t *testing.T) {
 	}
 	launchStep := planStepByKindV0(result.Plan, OperationalDirectorStepLaunchSubagentsV0)
 	if launchStep.Status != OperationalDirectorStepPendingV0 ||
+		launchStep.WorkProfileKind != "implementation" ||
 		len(launchStep.WriteSet) != 2 ||
 		!stringInSetV0(launchStep.RequiredTests, "go test -count=1 ./modulos/orquesta-director-operativo") ||
 		!containsFragmentInSetV0(launchStep.AcceptanceCriteria, "objetivo actual") {
@@ -70,7 +71,8 @@ func TestBuildOperationalDirectorPlanV0DomainInsufficientContextBlocksLaunch(t *
 		t.Fatalf("plan=%+v", result.Plan)
 	}
 	requestContextStep := planStepByKindV0(result.Plan, OperationalDirectorStepRequestDomainContextV0)
-	if !stringInSetV0(requestContextStep.EvidenceRefs, "topic_outline") ||
+	if requestContextStep.WorkProfileKind != "code_study" ||
+		!stringInSetV0(requestContextStep.EvidenceRefs, "topic_outline") ||
 		!stringInSetV0(requestContextStep.EvidenceRefs, "source_refs") {
 		t.Fatalf("request context step=%+v", requestContextStep)
 	}
