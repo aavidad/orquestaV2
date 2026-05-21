@@ -682,11 +682,13 @@ func operationalDirectorPlanStateAfterReviewReworkReplanV0(
 	followupTaskRefs := continueOperationalDirectorTaskRefsV0(followupTasks)
 	followupAgentRefs := continueOperationalDirectorAgentRefsV0(followupTasks)
 	followupWaveRef, followupCohortRef, followupParentTaskRef, _ := operationalDirectorPlanFollowupScopeV0(followupTasks)
+	followupAgentOnlyRefs := operationalDirectorPlanReplanFollowupAgentRefsV0(loop.Run, activeStep, match)
 	waitStepID := ""
-	if followupsReady {
+	if followupsReady || len(followupAgentOnlyRefs) > 0 {
 		waitStepID = operationalDirectorPlanStateStepIDByKindV0(state, orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0)
 		if waitStepID == "" {
 			followupsReady = false
+			followupAgentOnlyRefs = nil
 		}
 	}
 	nextSteps := make([]orquestacionnucleoapp.OperationalDirectorPlanStepStateV0, 0, len(state.Steps))
@@ -722,6 +724,17 @@ func operationalDirectorPlanStateAfterReviewReworkReplanV0(
 			)}
 			nextStep.BlockerRefs = []string{"wait-subagents-replan-followups"}
 			nextStep.Reason = "review-rework-replan-followups-waiting"
+		case len(followupAgentOnlyRefs) > 0 && step.StepID == waitStepID:
+			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepRunningV0
+			nextStep.WaveRef = ""
+			nextStep.CohortRef = ""
+			nextStep.ParentTaskRef = ""
+			nextStep.TaskRefs = []string{match.TaskRef}
+			nextStep.AgentRefs = append([]string(nil), followupAgentOnlyRefs...)
+			nextStep.PendingAgentRefs = append([]string(nil), followupAgentOnlyRefs...)
+			nextStep.WaitRefs = []string{appDirectorWaitRefV0(request.RunRef, appDirectorWaitFilterV0{}, request.CorrelationID)}
+			nextStep.BlockerRefs = []string{"wait-subagents-replan-followup-agents"}
+			nextStep.Reason = "review-rework-replan-followup-agents-waiting"
 		}
 		nextSteps = append(nextSteps, nextStep)
 	}
@@ -731,6 +744,12 @@ func operationalDirectorPlanStateAfterReviewReworkReplanV0(
 		state.ActiveCohortRef = followupCohortRef
 		state.ActiveParentTaskRef = followupParentTaskRef
 		state.PendingAgentRefs = append([]string(nil), followupAgentRefs...)
+	} else if len(followupAgentOnlyRefs) > 0 {
+		state.ActiveStepID = waitStepID
+		state.ActiveWaveRef = ""
+		state.ActiveCohortRef = ""
+		state.ActiveParentTaskRef = ""
+		state.PendingAgentRefs = append([]string(nil), followupAgentOnlyRefs...)
 	} else {
 		state.ActiveStepID = activeStep.StepID
 		state.PendingAgentRefs = nil
@@ -741,12 +760,34 @@ func operationalDirectorPlanStateAfterReviewReworkReplanV0(
 	if followupsReady {
 		state.EvidenceRefs = compactServiceRefsV0(append(state.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-review-rework-replan-followups-v0"))
 	}
+	if len(followupAgentOnlyRefs) > 0 {
+		state.EvidenceRefs = compactServiceRefsV0(append(state.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-review-rework-replan-followup-agents-v0"))
+	}
 	state.UpdatedAt = request.OccurredAt
 	next, err := orquestacionnucleoapp.NewOperationalDirectorPlanStateV0(state)
 	if err != nil {
 		return state, false, err
 	}
 	return next, true, nil
+}
+
+func operationalDirectorPlanReplanFollowupAgentRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+	match operationalDirectorPlanReviewReworkReplanMatchV0,
+) []string {
+	if match.AcceptedAction != orquestacoreworkflow.ReplanDecisionActionRetryTaskV0 &&
+		match.AcceptedAction != orquestacoreworkflow.ReplanDecisionActionReplaceAgentV0 {
+		return nil
+	}
+	agentRefs := []string(nil)
+	for _, followupRef := range compactServiceRefsV0(match.FollowupRefs) {
+		if startAppDirectorStringInSetV0(run.Agents, followupRef) &&
+			!startAppDirectorStringInSetV0(activeStep.AgentRefs, followupRef) {
+			agentRefs = append(agentRefs, followupRef)
+		}
+	}
+	return compactServiceRefsV0(agentRefs)
 }
 
 func operationalDirectorPlanReplanFollowupTasksV0(

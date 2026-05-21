@@ -146,12 +146,14 @@ implementacion, test focal y evidencia en la matriz.
   idempotente de evidencia y replan ante fallo.
 - [~] Replan negativo: cerrada la observacion durable de review negativa. El
   `PlanState` guarda refs/attempt para `ReworkRequested` y
-  `ReplanDecisionRecorded`. El corte del 2026-05-21 ya convierte el caso
-  `split_task` materializado en una nueva espera acotada a followups cuando las
-  nuevas `WorkflowTaskV0` existen en `WorkflowTaskStore` y estan reflejadas en
-  `run.Tasks`; ver `docs/corte_replan_negativo_followups_split_2026-05-21.md`.
-  Siguen pendientes `retry_task`/`replace_agent`, blockers posteriores, tests
-  fallidos y cierre insuficiente como nuevos efectos idempotentes de replan.
+  `ReplanDecisionRecorded`. El corte del 2026-05-21 ya convierte followups
+  materializados en una nueva espera acotada: `split_task` cuando las nuevas
+  `WorkflowTaskV0` existen en `WorkflowTaskStore` y estan reflejadas en
+  `run.Tasks`, y `retry_task`/`replace_agent` cuando los agentes followup ya
+  estan reflejados en `run.Agents`; ver
+  `docs/corte_replan_negativo_followups_split_2026-05-21.md`. Siguen pendientes
+  blockers posteriores, tests fallidos y cierre insuficiente como nuevos efectos
+  idempotentes de replan.
 - [x] Plan state vivo inicial: contrato, stores y persistencia del tramo
   `launch_subagents -> wait_subagents`, con ola/cohorte activa, step activo,
   task refs, agent refs, pending agent refs y `wait_ref`.

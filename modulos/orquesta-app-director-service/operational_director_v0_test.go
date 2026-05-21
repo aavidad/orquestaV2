@@ -604,6 +604,127 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0ReviewChangesRequestedAbre
 	}
 }
 
+func TestUpdateOperationalDirectorPlanStateAfterLoopV0ReviewChangesRequestedAbreWaitDeRetryAgent(t *testing.T) {
+	fixture := serviceOperationalDirectorPlanStateReviewReworkReplanFixtureForTestV0(
+		t,
+		orquestacoreworkflow.ReviewResultStatusChangesRequestedV0,
+	)
+	followupAgentRef := "agent-ref-app-director-operational-plan-state-review-retry-followup"
+	capacityRef := "capacity-ref-app-director-operational-plan-state-review-retry-followup"
+	fixture.Run.CapacityRequests = append(fixture.Run.CapacityRequests, capacityRef)
+	fixture.Run.Agents = append(fixture.Run.Agents, followupAgentRef)
+	fixture.Run.ReplanDecisions = []string{
+		fixture.ReplanDecisionRef + "#source:" + fixture.ReworkRequestRef +
+			"#task:" + fixture.TaskRef +
+			"#action:" + string(orquestacoreworkflow.ReplanDecisionActionRetryTaskV0) +
+			"#followups:" + capacityRef + "+" + followupAgentRef,
+	}
+	fixture.Events[4] = serviceOperationalDirectorPlanStateEventForTestV0(t, fixture.RunRef, 5, orquestacoreworkflow.OrchestrationEventReplanDecisionRecordedV0, orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{
+		ReplanRef:      fixture.ReplanDecisionRef,
+		RunRef:         fixture.RunRef,
+		TaskRef:        fixture.TaskRef,
+		SourceRef:      fixture.ReworkRequestRef,
+		AcceptedAction: orquestacoreworkflow.ReplanDecisionActionRetryTaskV0,
+		FollowupRefs:   []string{capacityRef, followupAgentRef},
+		Summary:        "Replan retry por review negativa.",
+		EvidenceRefs:   []string{"evidence-ref-replan-decision-retry-followup"},
+	})
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(fixture.State)
+	request := ContinueAppDirectorRequestV0{
+		RunRef:                     fixture.RunRef,
+		OccurredAt:                 "2026-05-21T15:10:00Z",
+		CorrelationID:              "corr-app-director-review-retry-followup",
+		OperationalDirectorPlanRef: fixture.PlanRef,
+	}
+	ports := StartAppDirectorPortsV0{
+		EventReader:                serviceOperationalClosureEventReaderForTestV0{Events: fixture.Events},
+		OperationalPlanStateStore:  planStateStore,
+		OperationalPlanStateWriter: planStateStore,
+	}
+	loop := orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run:    fixture.Run,
+	}
+
+	if err := updateOperationalDirectorPlanStateAfterLoopV0(context.Background(), request, ports, loop); err != nil {
+		t.Fatalf("updateOperationalDirectorPlanStateAfterLoopV0 first: %v", err)
+	}
+	request.OccurredAt = "2026-05-21T15:10:01Z"
+	if err := updateOperationalDirectorPlanStateAfterLoopV0(context.Background(), request, ports, loop); err != nil {
+		t.Fatalf("updateOperationalDirectorPlanStateAfterLoopV0 replay: %v", err)
+	}
+
+	state, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), fixture.RunRef, fixture.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	reviewStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-review-deliveries")
+	waitStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-wait-subagents")
+	if state.ActiveStepID != "step-wait-subagents" ||
+		state.ActiveWaveRef != "" ||
+		state.ActiveCohortRef != "" ||
+		state.ActiveParentTaskRef != "" ||
+		state.ReplanAttempts != 1 ||
+		!serviceStringInSetV0(state.PendingAgentRefs, followupAgentRef) ||
+		serviceStringInSetV0(state.PendingAgentRefs, fixture.AgentRef) ||
+		!serviceStringInSetV0(state.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-review-rework-replan-followup-agents-v0") {
+		t.Fatalf("state=%+v", state)
+	}
+	if reviewStep.Status != orquestadirectoroperativo.OperationalDirectorStepChangesRequestedV0 ||
+		!serviceStringInSetV0(reviewStep.ReworkRequestRefs, fixture.ReworkRequestRef) ||
+		!serviceStringInSetV0(reviewStep.ReplanDecisionRefs, fixture.ReplanDecisionRef) {
+		t.Fatalf("reviewStep=%+v", reviewStep)
+	}
+	if waitStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		waitStep.Reason != "review-rework-replan-followup-agents-waiting" ||
+		!serviceStringInSetV0(waitStep.BlockerRefs, "wait-subagents-replan-followup-agents") ||
+		!serviceStringInSetV0(waitStep.TaskRefs, fixture.TaskRef) ||
+		!serviceStringInSetV0(waitStep.PendingAgentRefs, followupAgentRef) ||
+		serviceStringInSetV0(waitStep.PendingAgentRefs, fixture.AgentRef) {
+		t.Fatalf("waitStep=%+v", waitStep)
+	}
+
+	reentered, err := continueRequestWithOperationalDirectorPlanStateV0(context.Background(), ContinueAppDirectorRequestV0{
+		RunRef:                     fixture.RunRef,
+		OperationalDirectorPlanRef: fixture.PlanRef,
+	}, StartAppDirectorPortsV0{OperationalPlanStateStore: planStateStore})
+	if err != nil {
+		t.Fatalf("continueRequestWithOperationalDirectorPlanStateV0: %v", err)
+	}
+	if reentered.WaitWaveRef != "" ||
+		reentered.WaitCohortRef != "" ||
+		reentered.WaitParentTaskRef != "" ||
+		!serviceStringInSetV0(reentered.WaitAgentRefs, followupAgentRef) ||
+		serviceStringInSetV0(reentered.WaitAgentRefs, fixture.AgentRef) {
+		t.Fatalf("reentered=%+v followup=%s old=%s", reentered, followupAgentRef, fixture.AgentRef)
+	}
+
+	deliveredRetryRun := fixture.Run
+	deliveredRetryRun.DeliveredAgents = append(deliveredRetryRun.DeliveredAgents, followupAgentRef)
+	request.OccurredAt = "2026-05-21T15:10:02Z"
+	if err := updateOperationalDirectorPlanStateAfterLoopV0(context.Background(), request, ports, orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run:    deliveredRetryRun,
+	}); err != nil {
+		t.Fatalf("updateOperationalDirectorPlanStateAfterLoopV0 delivered retry: %v", err)
+	}
+	state, err = planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), fixture.RunRef, fixture.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0 delivered retry: %v", err)
+	}
+	reviewStep = serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-review-deliveries")
+	if state.ActiveStepID != "step-review-deliveries" ||
+		reviewStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		!serviceStringInSetV0(reviewStep.TaskRefs, fixture.TaskRef) ||
+		!serviceStringInSetV0(reviewStep.AgentRefs, followupAgentRef) ||
+		serviceStringInSetV0(reviewStep.AgentRefs, fixture.AgentRef) ||
+		len(reviewStep.ReviewResultRefs) != 0 ||
+		len(reviewStep.ReworkRequestRefs) != 0 ||
+		len(reviewStep.ReplanDecisionRefs) != 0 {
+		t.Fatalf("state=%+v reviewStep=%+v", state, reviewStep)
+	}
+}
+
 func TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeTestsAReplanConEvidenciaPassed(t *testing.T) {
 	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
 	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(fixture.State)
