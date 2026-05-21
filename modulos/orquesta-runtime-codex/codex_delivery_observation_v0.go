@@ -42,6 +42,7 @@ func BuildCodexDeliveryObservationV0(
 	ack CodexAgentAckV0,
 	spec orquestaruntime.ExternalAgentLaunchSpecV0,
 ) (CodexDeliveryObservationV0, []orquestaruntime.ExternalAgentConnectorErrorV0) {
+	ack = codexAgentAckWithSpecDefaultsV0(ack, spec)
 	if issues := ValidateCodexAgentAckForSpecV0(ack, spec); len(issues) > 0 {
 		return CodexDeliveryObservationV0{}, issues
 	}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -125,6 +126,214 @@ func TestCodexStackRunSupervisorAPIV0EmpujaRunExistenteSinRelanzarAgentes(t *tes
 	if runtime.launchCountV0() != len(director.StartedAgents) {
 		t.Fatalf("el endpoint relanzo agentes: launches=%d director=%+v", runtime.launchCountV0(), director)
 	}
+}
+
+func TestCodexStackRunSupervisorAPIV0ConsumeDecisionFileYArrancaProgramacion(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+	if runtime.launchCountV0() != 4 {
+		t.Fatalf("launches iniciales=%d want=4", runtime.launchCountV0())
+	}
+	codexStackWriteDelayedDirectorDecisionsForTestV0(t, stack, director.RunRef)
+
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:            "request-ref-run-supervisor-api-decisions-001",
+		CorrelationID:        "corr-run-supervisor-api-decisions-001",
+		RunRef:               director.RunRef,
+		MaxTicks:             4,
+		MaxBursts:            16,
+		MaxStepsPerBurst:     8,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		MaxDecisionCycles:    4,
+		MaxExternalWaits:     4,
+	}); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/runs/supervise", body)
+	req.Header.Set("Content-Type", "application/json")
+
+	stack.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	taskRef := "task-ref-stack-agenda-001"
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	if result.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
+		result.RunRef != director.RunRef ||
+		run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 ||
+		!codexStackStringInSetForTestV0(run.Tasks, taskRef) ||
+		!codexStackStringInSetForTestV0(run.StartedAgents, agentRef) ||
+		runtime.launchCountV0() < 5 {
+		t.Fatalf("result=%+v run_phase=%s tasks=%v started=%v launches=%d",
+			result,
+			run.CurrentPhase,
+			run.Tasks,
+			run.StartedAgents,
+			runtime.launchCountV0(),
+		)
+	}
+}
+
+func TestCodexStackRunSupervisorAPIV0ColaGlobalConsumeDecisionFileYArrancaProgramacion(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+	if runtime.launchCountV0() != 4 {
+		t.Fatalf("launches iniciales=%d want=4", runtime.launchCountV0())
+	}
+	codexStackWriteDelayedDirectorDecisionsForTestV0(t, stack, director.RunRef)
+
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:            "request-ref-run-supervisor-api-queue-decisions-001",
+		CorrelationID:        "corr-run-supervisor-api-queue-decisions-001",
+		QueueRef:             DefaultRunQueueRefV0,
+		MaxTicks:             4,
+		MaxRunsPerTick:       1,
+		MaxExecutions:        4,
+		MaxBursts:            16,
+		MaxStepsPerBurst:     8,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		MaxDecisionCycles:    4,
+		MaxExternalWaits:     4,
+		AllowRepeatedRuns:    true,
+	}); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/runs/supervise", body)
+	req.Header.Set("Content-Type", "application/json")
+
+	stack.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	taskRef := "task-ref-stack-agenda-001"
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	if result.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
+		result.RunRef != director.RunRef ||
+		run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 ||
+		!codexStackStringInSetForTestV0(run.Tasks, taskRef) ||
+		!codexStackStringInSetForTestV0(run.StartedAgents, agentRef) ||
+		runtime.launchCountV0() < 5 {
+		t.Fatalf("result=%+v run_phase=%s tasks=%v started=%v launches=%d",
+			result,
+			run.CurrentPhase,
+			run.Tasks,
+			run.StartedAgents,
+			runtime.launchCountV0(),
+		)
+	}
+}
+
+func TestCodexStackRunSupervisorAPIV0ColaGlobalConsumeDecisionFileAparecidoTrasACK(t *testing.T) {
+	runtime := newPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+	if runtime.launchCountV0() != 4 {
+		t.Fatalf("launches iniciales=%d want=4", runtime.launchCountV0())
+	}
+	for _, descriptor := range codexStackDescriptorsForTestV0(t, stack) {
+		if err := writeCodexStackMinimalAckForDescriptorV0(descriptor.AckPath); err != nil {
+			t.Fatalf("write ACK %s: %v", descriptor.AgentRef, err)
+		}
+	}
+
+	first := postRunSupervisorQueueStackV0(t, stack, "late-decision-first")
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if first.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
+		len(run.PhaseArtifacts) < len(director.StartedAgents) ||
+		len(run.Tasks) != 0 {
+		t.Fatalf("first=%+v artifacts=%v tasks=%v", first, run.PhaseArtifacts, run.Tasks)
+	}
+
+	codexStackWriteDelayedDirectorDecisionsForTestV0(t, stack, director.RunRef)
+	second := postRunSupervisorQueueStackV0(t, stack, "late-decision-second")
+	run = mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	taskRef := "task-ref-stack-agenda-001"
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	if second.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
+		second.RunRef != director.RunRef ||
+		run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 ||
+		!codexStackStringInSetForTestV0(run.Tasks, taskRef) ||
+		!codexStackStringInSetForTestV0(run.StartedAgents, agentRef) ||
+		runtime.launchCountV0() < 5 {
+		t.Fatalf("second=%+v run_phase=%s tasks=%v started=%v launches=%d",
+			second,
+			run.CurrentPhase,
+			run.Tasks,
+			run.StartedAgents,
+			runtime.launchCountV0(),
+		)
+	}
+}
+
+func postRunSupervisorQueueStackV0(
+	t *testing.T,
+	stack StackV0,
+	ref string,
+) orquestamcp.MCPRunSupervisorToolResultV0 {
+	t.Helper()
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:            "request-ref-run-supervisor-api-" + ref,
+		CorrelationID:        "corr-run-supervisor-api-" + ref,
+		QueueRef:             DefaultRunQueueRefV0,
+		MaxTicks:             4,
+		MaxRunsPerTick:       1,
+		MaxExecutions:        4,
+		MaxBursts:            16,
+		MaxStepsPerBurst:     8,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		MaxDecisionCycles:    4,
+		MaxExternalWaits:     4,
+		AllowRepeatedRuns:    true,
+	}); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/runs/supervise", body)
+	req.Header.Set("Content-Type", "application/json")
+
+	stack.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	return result
+}
+
+func writeCodexStackMinimalAckForDescriptorV0(path string) error {
+	return os.WriteFile(
+		path,
+		[]byte(`{"schema_version":"codex_agent_ack.v0","status":"completed"}`),
+		0o600,
+	)
 }
 
 func TestCodexSupervisorRuntimeStateFromLoopV0MapeaEstadosDelNucleoV0(t *testing.T) {

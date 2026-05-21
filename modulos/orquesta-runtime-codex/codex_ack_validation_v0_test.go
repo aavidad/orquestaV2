@@ -16,6 +16,34 @@ func TestCodexAgentAckReceiptV0AceptaACKValido(t *testing.T) {
 	}
 }
 
+func TestCodexAgentAckReceiptV0AceptaACKMinimoHidratadoDesdeSpec(t *testing.T) {
+	spec := codexSpecForTestV0()
+	spec.AgentPacket.Task.RequiredTests = nil
+	ack := `{"schema_version":"codex_agent_ack.v0","status":"completed"}`
+
+	got, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues inesperadas: %+v", issues)
+	}
+	if got.RequestID != spec.RequestID ||
+		got.CorrelationID != spec.CorrelationID ||
+		got.AckRef != spec.AgentPacket.DeliveryRefs.AckRef ||
+		got.TargetModule != spec.AgentPacket.TargetModule ||
+		got.TaskRef != spec.AgentPacket.Task.TaskRef {
+		t.Fatalf("ack no hidratado desde spec: %+v spec=%+v", got, spec)
+	}
+}
+
+func TestCodexAgentAckReceiptV0RechazaACKMinimoConRequiredTests(t *testing.T) {
+	spec := codexSpecForTestV0()
+	ack := `{"schema_version":"codex_agent_ack.v0","status":"completed"}`
+
+	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	requireCodexIssueV0(t, issues, CodexConnectorAckArtifactV0)
+}
+
 func TestCodexAgentAckReceiptV0RechazaCorruptoEIncompleto(t *testing.T) {
 	spec := codexSpecForTestV0()
 	cases := []struct {
@@ -29,8 +57,8 @@ func TestCodexAgentAckReceiptV0RechazaCorruptoEIncompleto(t *testing.T) {
 			code: CodexConnectorAckInvalidV0,
 		},
 		{
-			name: "sin correlacion",
-			data: `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."]}`,
+			name: "correlacion contradictoria",
+			data: `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"otra-corr","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."]}`,
 			code: CodexConnectorAckCorrelationV0,
 		},
 	}

@@ -30,6 +30,31 @@ func TestReadCodexDeliveryObservationFileV0LeeACKYConstruyeObservacion(t *testin
 	}
 }
 
+func TestReadCodexDeliveryObservationFileV0AceptaACKMinimoYCorrelacionaConSpec(t *testing.T) {
+	spec := codexNeutralSpecForDeliveryObservationTestV0()
+	spec.AgentPacket.Task.RequiredTests = nil
+	path := filepath.Join(t.TempDir(), CodexAgentAckFileNameV0)
+	if err := os.WriteFile(
+		path,
+		[]byte(`{"schema_version":"codex_agent_ack.v0","status":"completed"}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write ack: %v", err)
+	}
+
+	observation, issues := ReadCodexDeliveryObservationFileV0(path, spec)
+
+	if len(issues) > 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if observation.DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef ||
+		observation.AgentRef != spec.RequestID ||
+		observation.TaskID != spec.AgentPacket.Task.TaskRef ||
+		observation.PhaseID != spec.AgentPacket.Phase {
+		t.Fatalf("observation no correlacionada: %+v spec=%+v", observation, spec)
+	}
+}
+
 func TestReadCodexDeliveryObservationFileV0MarcaACKAusenteComoNoListo(t *testing.T) {
 	spec := codexNeutralSpecForDeliveryObservationTestV0()
 	path := filepath.Join(t.TempDir(), CodexAgentAckFileNameV0)

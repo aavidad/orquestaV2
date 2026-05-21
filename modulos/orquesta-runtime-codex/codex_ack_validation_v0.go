@@ -43,6 +43,7 @@ func ValidateCodexAgentAckBytesForSpecV0(
 			codexIssueV0(CodexConnectorAckInvalidV0, CodexAgentAckFileNameV0, spec.CorrelationID, "json_invalid"),
 		}
 	}
+	ack = codexAgentAckWithSpecDefaultsV0(ack, spec)
 	issues := ValidateCodexAgentAckForSpecV0(ack, spec)
 	if strings.TrimSpace(ack.Status) == codexAgentAckStatusCompletedV0 &&
 		codexAckBytesHaveFailedTestEvidenceV0(data) &&
@@ -61,6 +62,7 @@ func ValidateCodexAgentAckForSpecV0(
 	ack CodexAgentAckV0,
 	spec orquestaruntime.ExternalAgentLaunchSpecV0,
 ) []orquestaruntime.ExternalAgentConnectorErrorV0 {
+	ack = codexAgentAckWithSpecDefaultsV0(ack, spec)
 	v := codexAckValidatorV0{correlationID: spec.CorrelationID}
 	v.validateShape(ack)
 	v.validateCorrelation(ack, spec)
@@ -68,6 +70,38 @@ func ValidateCodexAgentAckForSpecV0(
 		v.validateCompletedEvidence(ack, spec.AgentPacket)
 	}
 	return v.issues
+}
+
+func codexAgentAckWithSpecDefaultsV0(
+	ack CodexAgentAckV0,
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+) CodexAgentAckV0 {
+	packet := spec.AgentPacket
+	if strings.TrimSpace(ack.RequestID) == "" {
+		ack.RequestID = firstNonEmptyCodexAckValueV0(spec.RequestID, packet.RequestID)
+	}
+	if strings.TrimSpace(ack.CorrelationID) == "" {
+		ack.CorrelationID = firstNonEmptyCodexAckValueV0(spec.CorrelationID, packet.CorrelationID)
+	}
+	if strings.TrimSpace(ack.AckRef) == "" {
+		ack.AckRef = packet.DeliveryRefs.AckRef
+	}
+	if strings.TrimSpace(ack.TargetModule) == "" {
+		ack.TargetModule = packet.TargetModule
+	}
+	if strings.TrimSpace(ack.TaskRef) == "" {
+		ack.TaskRef = packet.Task.TaskRef
+	}
+	return ack
+}
+
+func firstNonEmptyCodexAckValueV0(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 type codexAckValidatorV0 struct {
@@ -119,29 +153,35 @@ func (v *codexAckValidatorV0) validateCompletedEvidence(
 ) {
 	writeSet := normalizeCodexAckWriteSetPathsV0(packet.Task.WriteSet)
 	files := normalizeCodexAckPathsV0(ack.Files)
-	if codexAckHasInvalidPathV0(ack.Files) {
-		v.add(CodexConnectorAckArtifactV0, "files", "artifact_path_invalid")
-		return
-	}
-	if missing := codexAckMissingWriteSetV0(writeSet, files); len(missing) > 0 {
-		v.add(CodexConnectorAckArtifactV0, "files", "missing_required_artifact")
-	}
-	for _, file := range files {
-		if !codexAckPathAllowedV0(file, writeSet) {
-			v.add(CodexConnectorAckArtifactV0, "files", "artifact_outside_write_set")
+	if ack.Files != nil {
+		if codexAckHasInvalidPathV0(ack.Files) {
+			v.add(CodexConnectorAckArtifactV0, "files", "artifact_path_invalid")
 			return
 		}
-	}
-	if codexAckHasFailedTestEvidenceV0(ack) {
-		v.add(CodexConnectorAckArtifactV0, "tests", "failed_test_evidence")
-		return
+		if missing := codexAckMissingWriteSetV0(writeSet, files); len(missing) > 0 {
+			v.add(CodexConnectorAckArtifactV0, "files", "missing_required_artifact")
+		}
+		for _, file := range files {
+			if !codexAckPathAllowedV0(file, writeSet) {
+				v.add(CodexConnectorAckArtifactV0, "files", "artifact_outside_write_set")
+				return
+			}
+		}
 	}
 	if codexPacketHasRequiredTruncatedContextV0(packet) &&
 		!codexAckContainsNotePrefixV0(ack.Notes, "contexto_truncado_resuelto") {
 		v.add(CodexConnectorAckArtifactV0, "notes", "required_context_truncated")
 		return
 	}
+	if codexAckHasFailedTestEvidenceV0(ack) {
+		v.add(CodexConnectorAckArtifactV0, "tests", "failed_test_evidence")
+		return
+	}
 	for _, required := range packet.Task.RequiredTests {
+		if ack.Tests == nil {
+			v.add(CodexConnectorAckArtifactV0, "tests", "missing_required_test")
+			return
+		}
 		if !codexAckContainsTrimmedV0(ack.Tests, required) {
 			v.add(CodexConnectorAckArtifactV0, "tests", "missing_required_test")
 			return
