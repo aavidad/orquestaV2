@@ -702,6 +702,39 @@ func TestContinueRequestWithOperationalDirectorPlanStateV0ReentraReviewConScope(
 	}
 }
 
+func TestContinueRequestWithOperationalDirectorPlanStateV0NoReentraReviewChangesRequested(t *testing.T) {
+	fixture := serviceOperationalDirectorPlanStateReviewReworkReplanFixtureForTestV0(
+		t,
+		orquestacoreworkflow.ReviewResultStatusChangesRequestedV0,
+	)
+	fixture.State.ReplanAttempts = 1
+	for index := range fixture.State.Steps {
+		step := &fixture.State.Steps[index]
+		if step.StepID != "step-review-deliveries" {
+			continue
+		}
+		step.Status = orquestadirectoroperativo.OperationalDirectorStepChangesRequestedV0
+		step.DeliveryRefs = []string{fixture.DeliveryRef}
+		step.ReviewResultRefs = []string{fixture.ReviewResultRef}
+		step.ReworkRequestRefs = []string{fixture.ReworkRequestRef}
+		step.ReplanDecisionRefs = []string{fixture.ReplanDecisionRef}
+		step.BlockerRefs = []string{"review-rework-replan-recorded"}
+		step.Reason = "review-rework-replan-recorded"
+	}
+	store := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(fixture.State)
+	_, err := continueRequestWithOperationalDirectorPlanStateV0(context.Background(), ContinueAppDirectorRequestV0{
+		RunRef:                     fixture.RunRef,
+		OperationalDirectorPlanRef: fixture.PlanRef,
+	}, StartAppDirectorPortsV0{OperationalPlanStateStore: store})
+	if err == nil {
+		t.Fatalf("err nil")
+	}
+	issue, ok := err.(AppDirectorServiceIssueV0)
+	if !ok || issue.Field != "operational_director_plan_state.active_step" {
+		t.Fatalf("err=%T %#v", err, err)
+	}
+}
+
 func TestContinueRequestWithOperationalDirectorPlanStateV0ReentraRunRequiredTestsConScope(t *testing.T) {
 	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
 	for index := range fixture.State.Steps {

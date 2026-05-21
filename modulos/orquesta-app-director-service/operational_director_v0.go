@@ -308,11 +308,17 @@ func continueRequestWithLoadedOperationalDirectorPlanStateV0(
 	}
 	switch step.Kind {
 	case orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0:
+		if step.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+			return request, false
+		}
 		request = continueRequestWithOperationalDirectorPlanStepScopeV0(request, state, step)
 		request.WaitAgentRefs = compactServiceRefsV0(append(request.WaitAgentRefs, step.PendingAgentRefs...))
 		request.WaitAgentRefs = compactServiceRefsV0(append(request.WaitAgentRefs, state.PendingAgentRefs...))
 		return request, true
 	case orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0:
+		if step.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+			return request, false
+		}
 		if len(step.AgentRefs) == 0 {
 			return request, false
 		}
@@ -320,6 +326,9 @@ func continueRequestWithLoadedOperationalDirectorPlanStateV0(
 		request.WaitAgentRefs = compactServiceRefsV0(append(request.WaitAgentRefs, step.AgentRefs...))
 		return request, true
 	case orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0:
+		if step.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+			return request, false
+		}
 		if len(step.AgentRefs) == 0 {
 			return request, false
 		}
@@ -327,6 +336,9 @@ func continueRequestWithLoadedOperationalDirectorPlanStateV0(
 		request.WaitAgentRefs = compactServiceRefsV0(append(request.WaitAgentRefs, step.AgentRefs...))
 		return request, true
 	case orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0:
+		if step.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+			return request, false
+		}
 		if len(step.AgentRefs) == 0 {
 			return request, false
 		}
