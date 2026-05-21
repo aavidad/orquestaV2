@@ -240,11 +240,59 @@ func codexAckPathMatchesWriteSetEntryV0(path string, entry string) bool {
 		prefix := strings.TrimSuffix(entry, "/**")
 		return path == prefix || strings.HasPrefix(path, prefix+"/")
 	}
+	if strings.Contains(entry, "**") && codexAckPathGlobstarMatchV0(entry, path) {
+		return true
+	}
 	if !strings.ContainsAny(entry, "*?[") {
 		return false
 	}
 	matched, err := pathpkg.Match(entry, path)
 	return err == nil && matched
+}
+
+func codexAckPathGlobstarMatchV0(pattern string, path string) bool {
+	patternParts := strings.Split(pattern, "/")
+	pathParts := strings.Split(path, "/")
+	memo := map[[2]int]bool{}
+	var match func(int, int) bool
+	match = func(patternIndex int, pathIndex int) bool {
+		key := [2]int{patternIndex, pathIndex}
+		if value, ok := memo[key]; ok {
+			return value
+		}
+		var ok bool
+		defer func() {
+			memo[key] = ok
+		}()
+		if patternIndex == len(patternParts) {
+			ok = pathIndex == len(pathParts)
+			return ok
+		}
+		part := patternParts[patternIndex]
+		if part == "**" {
+			if match(patternIndex+1, pathIndex) {
+				ok = true
+				return ok
+			}
+			for next := pathIndex; next < len(pathParts); next++ {
+				if match(patternIndex+1, next+1) {
+					ok = true
+					return ok
+				}
+			}
+			return false
+		}
+		if pathIndex >= len(pathParts) {
+			return false
+		}
+		matched, err := pathpkg.Match(part, pathParts[pathIndex])
+		if err != nil || !matched {
+			return false
+		}
+		ok = match(patternIndex+1, pathIndex+1)
+		return ok
+	}
+	return match(0, 0)
 }
 
 func codexAckContainsTrimmedV0(values []string, want string) bool {

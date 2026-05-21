@@ -104,3 +104,82 @@ ok smoke.local/orquesta-real-smoke/internal/smoke 0.002s
 - Falta replan negativo automatico ante `required-tests-failed` o runner invalido.
 - Quedan duplicidades/historico en comandos directos de wave que conviene
   clasificar, no borrar.
+
+## Smoke real completo de servidor
+
+Directorio temporal purgado antes de ejecutar:
+
+```text
+/tmp/orquesta-real-complete-fixed-20260521
+```
+
+Flujo probado:
+
+- `orquesta-server run` con estado, runtime y proyecto temporales.
+- `POST /api/v0/apps/director` con `request_kind=crear_app_completa`,
+  `execution_mode=normal`, app Go API y arquitectura hexagonal.
+- Supervisor residente + drenaje final con `POST /api/v0/runs/supervise`.
+- Codex real con `sandbox=danger-full-access`,
+  `approval_policy=never`, `reasoning_effort=high`.
+- `RequiredTestRunner` opt-in cableado por entorno.
+
+Resultado observado:
+
+- Arranque limpio: `startup_ready=true`, sin cola sucia.
+- 4 agentes iniciales lanzados: director, api, i18n y calidad.
+- El director genero una `WorkflowTaskV0` de programacion con
+  `required_tests=["go test ./..."]`.
+- Orquesta lanzo un quinto agente de programacion:
+  `agent-ref-workflow-task-ref-programacion-biblioteca-go-v0`.
+- 5 ACKs reales escritos y validados.
+- El supervisor ya no fallo al ingerir el ACK de programacion y respondio
+  `stop_reason=done`.
+- Se registro 1 delivery de programacion en la run.
+
+Proyecto generado:
+
+```text
+cmd/server/main.go
+go.mod
+internal/application/*
+internal/domain/*
+internal/http/*
+internal/i18n/*
+internal/memory/*
+internal/ports/*
+docs/*.md
+```
+
+Validacion externa del proyecto temporal:
+
+```bash
+cd /tmp/orquesta-real-complete-fixed-20260521/project
+go test -count=1 ./...
+```
+
+Resultado: verde.
+
+Defecto encontrado y corregido durante el smoke:
+
+- El ACK de programacion declaraba artefactos de test bajo un write-set con
+  `**/*_test.go`.
+- `orquesta-runtime-codex` validaba globs con `path.Match`, que no entiende
+  `**` como globstar recursivo.
+- Efecto: `ReadCodexDeliveryObservationFileV0` devolvia
+  `missing_required_artifact` y `/api/v0/runs/supervise` acababa en 500.
+- Correccion: soporte explicito de globstar recursivo en
+  `codexAckPathMatchesWriteSetEntryV0` y prueba
+  `TestCodexAgentAckReceiptV0AceptaWriteSetConGlobstarRecursivo`.
+
+Limitacion confirmada:
+
+- El flujo legacy de app con `WorkflowTaskV0` registra la entrega de
+  programacion, pero no cierra la task ni ejecuta `RequiredTestRunner` como
+  evidencia durable: `tasks_delivered=1`, `tasks_closed=0`,
+  `required_test_evidence` vacio.
+- El cierre generico `run_required_tests -> replan_or_close -> close` sigue
+  limitado al camino de `OperationalDirectorPlanState`; falta conectarlo al
+  flujo app/director que materializa tareas desde `director_decisions.json`.
+- El shutdown ordenado del servidor queda bloqueado si la run esta quiescent
+  pero activa (`waiting_drain runs=0/1`), aunque no haya agentes vivos. Es otro
+  tramo pendiente del cierre operativo.
