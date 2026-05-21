@@ -840,6 +840,116 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0EjecutaRunnerDeTestsRequer
 	}
 }
 
+func TestContinueAppDirectorV0CierraCicloReviewRunnerYReplanOrClose(t *testing.T) {
+	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
+	fixture.Events[2] = serviceOperationalDirectorPlanStateEventForTestV0(t, fixture.RunRef, 3, orquestacoreworkflow.OrchestrationEventReviewResultRecordedV0, orquestacoreworkflow.ReviewResultV0{
+		ReviewResultRef: fixture.ReviewResultRef,
+		ReviewRequestID: fixture.ReviewRequestID,
+		DeliveryRef:     fixture.DeliveryRef,
+		Status:          orquestacoreworkflow.ReviewResultStatusAcceptedV0,
+		Summary:         "Review aceptada; el runner debe generar la evidencia durable.",
+		EvidenceRefs:    []string{"evidence-ref-review-result-accepted"},
+	})
+	run := serviceContinueClosureRunForTestV0(fixture.RunRef, orquestacoreworkflow.OrchestrationPhaseRevisionV0)
+	run.ProjectRef = fixture.Run.ProjectRef
+	run.AppSpecRef = fixture.Run.AppSpecRef
+	run.Tasks = append([]string(nil), fixture.Run.Tasks...)
+	run.Agents = append([]string(nil), fixture.Run.Agents...)
+	run.StartedAgents = append([]string(nil), fixture.Run.StartedAgents...)
+	run.DeliveredAgents = append([]string(nil), fixture.Run.DeliveredAgents...)
+	run.DeliveredTasks = append([]string(nil), fixture.Run.DeliveredTasks...)
+	run.Deliveries = append([]string(nil), fixture.Run.Deliveries...)
+	run.Reviews = append([]string(nil), fixture.Run.Reviews...)
+	run.ReviewResults = append([]string(nil), fixture.Run.ReviewResults...)
+	run.AcceptedReviews = append([]string(nil), fixture.Run.AcceptedReviews...)
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(run)
+	eventSink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	outboxLedger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(fixture.State)
+	testEvidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	executor := &fakeServiceRequiredTestCommandExecutorV0{
+		results: map[string]orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{
+			fixture.RequiredTest: {
+				Status:       orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0,
+				EvidenceRefs: []string{"artifact-ref-service-required-test-output-continue-001"},
+			},
+		},
+	}
+	closureSource := &serviceOperationalDirectorClosureSourceFromRequestForTestV0{
+		Fixture: fixture,
+	}
+
+	result, err := ContinueAppDirectorV0(
+		context.Background(),
+		ContinueAppDirectorRequestV0{
+			RunRef:                     fixture.RunRef,
+			OccurredAt:                 "2026-05-22T12:00:00Z",
+			CorrelationID:              "correlation-service-review-runner-close-001",
+			OperationalDirectorPlanRef: fixture.PlanRef,
+			MaxBursts:                  1,
+			MaxStepsPerBurst:           1,
+			MaxDispatchesPerWait:       1,
+		},
+		StartAppDirectorPortsV0{
+			RunStore:                   runStore,
+			EventSink:                  eventSink,
+			EventReader:                serviceOperationalClosureEventReaderForTestV0{Events: fixture.Events},
+			OutboxLedger:               outboxLedger,
+			DirectorTaskStore:          orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(serviceOperationalDirectorWorkflowTaskForFixtureV0(fixture)),
+			RequiredTestEvidenceStore:  testEvidenceStore,
+			RequiredTestRunner:         orquestacionnucleoapp.RequiredTestRunnerV0{Executor: executor, EvidenceWriter: testEvidenceStore},
+			OperationalClosureSource:   closureSource,
+			OperationalPlanStateStore:  planStateStore,
+			OperationalPlanStateWriter: planStateStore,
+			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+				serviceCapacityDispatcherForTestV0(runStore, eventSink, outboxLedger),
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0: %v", err)
+	}
+	if result.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 ||
+		result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		t.Fatalf("result no cerrado: %+v", result)
+	}
+	if len(executor.commands) != 1 || executor.commands[0] != fixture.RequiredTest {
+		t.Fatalf("runner no ejecutado una vez: commands=%+v", executor.commands)
+	}
+	if !closureSource.Called || len(closureSource.LastRequest.RequiredTestEvidenceRefs) != 1 {
+		t.Fatalf("closure source sin evidencia generada: called=%v request=%+v", closureSource.Called, closureSource.LastRequest)
+	}
+	evidence, err := testEvidenceStore.LoadRequiredTestEvidenceV0(
+		context.Background(),
+		fixture.RunRef,
+		closureSource.LastRequest.RequiredTestEvidenceRefs,
+	)
+	if err != nil {
+		t.Fatalf("LoadRequiredTestEvidenceV0: %v", err)
+	}
+	if len(evidence) != 1 ||
+		evidence[0].Status != orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 ||
+		evidence[0].TaskRef != fixture.TaskRef ||
+		evidence[0].DeliveryRef != fixture.DeliveryRef ||
+		evidence[0].AcceptedReviewRef != fixture.AcceptedReviewRef {
+		t.Fatalf("evidence generada invalida: %+v", evidence)
+	}
+	state, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), fixture.RunRef, fixture.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	replanStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-replan-or-close")
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 ||
+		state.ClosureReason != "operational-closure-succeeded" ||
+		replanStep.Status != orquestadirectoroperativo.OperationalDirectorStepClosedV0 ||
+		serviceCountStringV0(replanStep.RequiredTestEvidenceRefs, closureSource.LastRequest.RequiredTestEvidenceRefs[0]) != 1 {
+		t.Fatalf("plan state no cerrado por ciclo integrado: state=%+v replanStep=%+v", state, replanStep)
+	}
+	if got := serviceCountEventsByTypeV0(eventSink.EventsV0(), orquestacoreworkflow.OrchestrationEventRunClosedV0); got != 1 {
+		t.Fatalf("RunClosed esperado una vez: got=%d events=%+v", got, eventSink.EventsV0())
+	}
+}
+
 func TestUpdateOperationalDirectorPlanStateAfterLoopV0BloqueaTestsConEvidenciaFailed(t *testing.T) {
 	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
 	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(fixture.State)
@@ -2275,6 +2385,50 @@ func serviceOperationalDirectorRequiredTestEvidenceForFixtureV0(
 		OccurredAt:        "2026-05-17T14:20:00Z",
 		EvidenceRefs:      []string{"test-output-ref-" + fixture.DeliveryRef},
 	}
+}
+
+func serviceOperationalDirectorWorkflowTaskForFixtureV0(
+	fixture serviceOperationalDirectorPlanStateReviewFixtureV0,
+) orquestacoreworkflow.WorkflowTaskV0 {
+	return orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion:      orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:             fixture.TaskRef,
+		RunID:              fixture.RunRef,
+		PhaseID:            orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Title:              "Tarea del ciclo integrado del Director Operativo",
+		Summary:            "Trabajo de programacion con review, runner requerido y cierre causal.",
+		WriteSet:           []string{"modulos/orquesta-app-director-service"},
+		AcceptanceCriteria: []string{"Review aceptada, test requerido evidenciado y cierre causal."},
+		RequiredTests:      []string{fixture.RequiredTest},
+		ParentTaskRef:      fixture.ParentTaskRef,
+		CohortRef:          fixture.CohortRef,
+		WaveRef:            fixture.WaveRef,
+		DelegationDepth:    1,
+		MaxChildAgents:     0,
+	}
+}
+
+type serviceOperationalDirectorClosureSourceFromRequestForTestV0 struct {
+	Fixture     serviceOperationalDirectorPlanStateReviewFixtureV0
+	LastRequest AppDirectorOperationalClosureRequestV0
+	Called      bool
+}
+
+func (source *serviceOperationalDirectorClosureSourceFromRequestForTestV0) BuildOperationalDirectorClosureRequestV0(
+	_ context.Context,
+	request AppDirectorOperationalClosureRequestV0,
+) (orquestacionnucleoapp.OperationalDirectorClosureRequestV0, bool, error) {
+	source.Called = true
+	source.LastRequest = request
+	return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{
+		TaskID:                   source.Fixture.TaskRef,
+		DeliveryRef:              source.Fixture.DeliveryRef,
+		AcceptedReviewRef:        source.Fixture.AcceptedReviewRef,
+		ValidationRef:            "validation-ref-service-review-runner-close-001",
+		ClosureRef:               "closure-ref-service-review-runner-close-001",
+		RequiredTestEvidenceRefs: append([]string(nil), request.RequiredTestEvidenceRefs...),
+		EvidenceRefs:             compactServiceRefsV0(append(request.EvidenceRefs, "evidence-ref-service-review-runner-close-001")),
+	}, true, nil
 }
 
 func serviceOperationalDirectorReplanSplitTaskForTestV0(

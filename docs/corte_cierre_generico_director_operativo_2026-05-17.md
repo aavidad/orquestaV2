@@ -179,9 +179,11 @@ implementacion, test focal y evidencia en la matriz.
   `review_deliveries`.
 - [~] Plan state vivo restante: `run_required_tests` durable, blocker de test
   fallido, observacion de review negativa, puerta explicita de
-  `replan_or_close` y razon de cierre/bloqueo ya quedan persistidos. Falta
-  materializar replan automatico para blockers posteriores y completar replay
-  de todo el ciclo.
+  `replan_or_close` y razon de cierre/bloqueo ya quedan persistidos. Existe
+  prueba integrada offline de `ContinueAppDirectorV0` para el camino
+  `review_deliveries -> run_required_tests` con runner por puerto ->
+  `replan_or_close -> close`. Falta materializar replan automatico para blockers
+  posteriores y completar replay de todo el ciclo.
 - [~] Evento/comando idempotente: el replay de cierre exitoso y bloqueo de
   cierre ya tiene prueba focal y no duplica refs del `PlanState` ni `RunClosed`.
   Sigue pendiente extender la misma garantia a review, tests y replan con clave
@@ -273,9 +275,11 @@ pruebas claras. No deben describirse como hechas antes de cerrar la evidencia.
   observacion negativa de review con `ReworkRequested`/`ReplanDecisionRecorded`
   tiene prueba focal y persistencia de refs. El cierre exitoso marca el
   `PlanState` como `closed`; los issues, source insuficiente, source ausente o
-  task store ausente lo bloquean con `closure_reason`. El replay de cierre ya no
-  duplica refs/eventos de cierre; faltan replan automatico y replay completo del
-  resto del ciclo.
+  task store ausente lo bloquean con `closure_reason`. El camino integrado de
+  `ContinueAppDirectorV0` ya cubre review aceptada, runner de tests requerido,
+  `replan_or_close` y cierre causal en un unico ciclo offline. El replay de
+  cierre ya no duplica refs/eventos de cierre; faltan replan automatico y replay
+  completo del resto del ciclo.
 4. Reentrada offline:
    wait y review inicial ya reconstruyen scope desde plan state; las
    transiciones posteriores deben reconstruirse desde run, task store, wait
