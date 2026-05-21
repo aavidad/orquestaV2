@@ -119,11 +119,15 @@ observacion durable del state y no debe confundirse con `replan_or_close`
 completo ni con emision automatica de replan nuevo.
 Si el step activo es `run_required_tests`, carga `RequiredTestEvidenceV0` desde
 `RequiredTestEvidenceRefs` del step o, por compatibilidad del stack actual,
-desde las refs de evidencia de la review aceptada; solo avanza a
-`replan_or_close` si cada test requerido tiene evidencia `passed` causal para la
-misma task, delivery, review request, review result y accepted review. Una
-evidencia `failed` bloquea el plan con `required-tests-failed`. No ejecuta
-comandos shell ni genera evidencias por si mismo.
+desde las refs de evidencia de la review aceptada; si la composicion inyecta
+`RequiredTestRunner`, puede generar evidencias por puerto sin que el servicio
+conozca shell/runtime concreto. Solo avanza a `replan_or_close` si cada test
+requerido tiene evidencia `passed` causal para la misma task, delivery, review
+request, review result y accepted review. Una evidencia `failed` bloquea el plan
+con `required-tests-failed`, salvo que ya existan `QualityGateRecorded(blocked)`
++ `ReplanDecisionRecorded` causales y followups materializados; entonces reabre
+`wait_subagents` con refs acotadas. No genera automaticamente quality gates ni
+replan decisions desde la evidencia fallida.
 
 Regla del primer corte operativo: si `ContinueAppDirectorV0` recibe un plan
 `ready`, usa `OperationalDirectorPlanMaterializerV0`, guarda las

@@ -36,6 +36,12 @@ Cobertura esperada:
 - el plan state avanza de `run_required_tests` a `replan_or_close` con
   `RequiredTestEvidenceV0` `passed` causal, bloquea con `failed` y no acepta
   evidencia de otra review;
+- un `required-tests-failed` puede reabrir `wait_subagents` si existen quality
+  gate bloqueante, replan causal y followups materializados; si el followup
+  aparece tarde, la reentrada con plan state persistido recompone el wait
+  acotado sin volver al agente antiguo;
+- el replan por tests fallidos no reabre scopes multitarea con un unico replan
+  parcial;
 - el plan state observa review negativa cuando hay `ReworkRequested` y
   `ReplanDecisionRecorded` causales, marcando `changes_requested`, refs de
   rework/replan y `replan_attempts`;
@@ -81,6 +87,13 @@ Evidencia 2026-05-09:
 - `TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeTestsAReplanConEvidenciaPassed`;
 - `TestUpdateOperationalDirectorPlanStateAfterLoopV0ReviewNegativaRegistraReworkReplan`;
 - `TestUpdateOperationalDirectorPlanStateAfterLoopV0BloqueaTestsConEvidenciaFailed`;
+- `TestUpdateOperationalDirectorPlanStateAfterLoopV0RequiredTestsFailedSinReplanCausalPermaneceBloqueado`;
+- `TestUpdateOperationalDirectorPlanStateAfterLoopV0TestsFailedConReplanSinFollowupMaterializadoBloqueaHastaReentrada`;
+- `TestContinueRequestWithOperationalDirectorPlanStateV0RequiredTestsFailedBloqueadoReabreWaitConReplanPosterior`;
+- `TestContinueRequestWithOperationalDirectorPlanStateV0RequiredTestsFailedReentraConStateFile`;
+- `TestOperationalDirectorPlanStateAfterRequiredTestsReplanV0NoReabreScopeMultitarea`;
+- `TestEnsureContinueOperationalDirectorPlanStateFromWorkflowTasksV0ConStateBloqueadoConservaPlanRef`;
+- `TestUpdateOperationalDirectorPlanStateAfterLoopV0TestsFailedConQualityGateReplanRetryAbreWait`;
 - `TestUpdateOperationalDirectorPlanStateAfterLoopV0NoAvanzaTestsConEvidenciaDeOtraReview`;
 - `TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeReviewAReplanSinTests`;
 - `TestUpdateOperationalDirectorPlanStateAfterLoopV0NoAvanzaReviewFueraDeScope`;

@@ -291,11 +291,61 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 	if err != nil {
 		return ContinueAppDirectorRequestV0{}, err
 	}
+	state, reopened, err := continueOperationalDirectorPlanStateAfterBlockedRequiredTestsReplanV0(ctx, request, ports, state)
+	if err != nil {
+		return ContinueAppDirectorRequestV0{}, err
+	}
+	if reopened {
+		if err := ports.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, state); err != nil {
+			return ContinueAppDirectorRequestV0{}, err
+		}
+	}
 	next, applied := continueRequestWithLoadedOperationalDirectorPlanStateV0(request, state)
 	if explicitPlanRef != "" && (!applied || !continueRequestHasWaitScopeV0(next)) {
 		return ContinueAppDirectorRequestV0{}, AppDirectorServiceIssueV0{Field: "operational_director_plan_state.active_step"}
 	}
 	return next, nil
+}
+
+func continueOperationalDirectorPlanStateAfterBlockedRequiredTestsReplanV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) (orquestacionnucleoapp.OperationalDirectorPlanStateV0, bool, error) {
+	if ports.OperationalPlanStateWriter == nil || ports.RunStore == nil {
+		return state, false, nil
+	}
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok ||
+		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
+		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 ||
+		activeStep.Reason != "required-tests-failed" {
+		return state, false, nil
+	}
+	failedRefs := compactServiceRefsV0(activeStep.RequiredTestEvidenceRefs)
+	if len(failedRefs) == 0 {
+		return state, false, nil
+	}
+	run, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return state, false, err
+	}
+	matches, complete, err := operationalDirectorPlanAcceptedReviewMatchesV0(ctx, request, ports, activeStep, run)
+	if err != nil || !complete {
+		return state, false, err
+	}
+	return operationalDirectorPlanStateAfterRequiredTestsReplanV0(
+		ctx,
+		request,
+		ports,
+		state,
+		activeStep,
+		run,
+		matches,
+		failedRefs,
+	)
 }
 
 func continueRequestWithLoadedOperationalDirectorPlanStateV0(
@@ -1022,6 +1072,9 @@ func operationalDirectorPlanStateAfterRequiredTestsReplanV0(
 	matches []operationalDirectorPlanAcceptedReviewMatchV0,
 	failedRefs []string,
 ) (orquestacionnucleoapp.OperationalDirectorPlanStateV0, bool, error) {
+	if !operationalDirectorPlanRequiredTestsReplanScopeSupportedV0(activeStep, matches) {
+		return state, false, nil
+	}
 	replan, gateRef, ok, err := operationalDirectorPlanRequiredTestsReplanDecisionV0(ctx, request, ports, run, activeStep, matches, failedRefs)
 	if err != nil || !ok {
 		return state, false, err
@@ -1121,6 +1174,13 @@ func operationalDirectorPlanStateAfterRequiredTestsReplanV0(
 		return state, false, err
 	}
 	return next, true, nil
+}
+
+func operationalDirectorPlanRequiredTestsReplanScopeSupportedV0(
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+	matches []operationalDirectorPlanAcceptedReviewMatchV0,
+) bool {
+	return len(compactServiceRefsV0(activeStep.TaskRefs)) == 1 && len(matches) == 1
 }
 
 func operationalDirectorPlanRequiredTestsReplanDecisionV0(

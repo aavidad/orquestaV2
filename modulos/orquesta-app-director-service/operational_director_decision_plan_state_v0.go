@@ -67,7 +67,7 @@ func ensureContinueOperationalDirectorPlanStateFromWorkflowTasksV0(
 	if ports.OperationalPlanStateStore != nil {
 		state, err := ports.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, request.RunRef, planRef)
 		if err == nil {
-			if state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 {
+			if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 {
 				request.OperationalDirectorPlanRef = state.PlanRef
 			}
 			return request, nil
