@@ -160,8 +160,10 @@ Aniadido primer runner por puerto: si el `PlanState` entra en
 La observacion negativa de review con `ReworkRequested` y
 `ReplanDecisionRecorded` queda probada como observacion durable del `PlanState`.
 El cierre operativo ya marca el state como `closed` o `blocked` con
-`closure_reason`. Siguen pendientes el adaptador real que ejecute comandos de
-test del proyecto, replan automatico para blockers y replay/idempotencia.
+`closure_reason`. Existe adaptador externo opt-in en
+`modulos/orquesta-runtime-required-test`; siguen pendientes su wiring desde la
+composicion real, la politica de comandos permitidos del repo, replan automatico
+para blockers y replay/idempotencia.
 
 Alcance esperado:
 
