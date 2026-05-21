@@ -37,7 +37,11 @@ func (provider AppPlanCandidateProviderV0) BuildSchedulerCandidatesV0(
 	}
 	candidates := make([]orquestadirectorscheduler.SchedulableWorkCandidateV0, 0, len(ready))
 	for index, unit := range ready {
-		candidates = append(candidates, provider.workCandidateV0(request, unit, claims[index]))
+		candidate, err := provider.workCandidateV0(ctx, request, unit, claims[index])
+		if err != nil {
+			return orquestacionnucleoapp.SchedulerCandidateSetV0{}, err
+		}
+		candidates = append(candidates, candidate)
 	}
 	return orquestacionnucleoapp.SchedulerCandidateSetV0{
 		WorkClaims:     claims,
@@ -122,51 +126,90 @@ func scopeRefsForUnitV0(unit AppWorkUnitV0) ([]orquestacoreconcurrency.ScopeRefV
 }
 
 func (provider AppPlanCandidateProviderV0) workCandidateV0(
+	ctx context.Context,
 	request orquestacionnucleoapp.SchedulerCandidateRequestV0,
 	unit AppWorkUnitV0,
 	claim orquestacoreconcurrency.WorksetClaimV0,
-) orquestadirectorscheduler.SchedulableWorkCandidateV0 {
+) (orquestadirectorscheduler.SchedulableWorkCandidateV0, error) {
+	profile, err := provider.profileResolutionForUnitV0(ctx, request, unit)
+	if err != nil {
+		return orquestadirectorscheduler.SchedulableWorkCandidateV0{}, err
+	}
 	return orquestadirectorscheduler.SchedulableWorkCandidateV0{
 		CandidateRef:     "candidate-" + unit.TaskRef,
 		SubjectClaimRefs: []string{unit.ClaimRef},
 		Claims:           []orquestacoreconcurrency.WorksetClaimV0{claim},
 		CapacityCandidate: &orquestadirectorscheduler.SchedulerCapacityCommandCandidateV0{
 			CommandMeta: commandMetaForUnitV0(request, unit, "capacity", provider.requestedByV0()),
-			Payload:     capacityPayloadForUnitV0(unit),
+			Payload:     capacityPayloadForUnitV0(unit, profile),
 		},
 		AgentCandidate: &orquestadirectorscheduler.SchedulerAgentCommandCandidateV0{
 			ClaimRef:    unit.ClaimRef,
 			CommandMeta: commandMetaForUnitV0(request, unit, "agent", provider.requestedByV0()),
-			Payload:     agentPayloadForUnitV0(unit),
+			Payload:     agentPayloadForUnitV0(unit, profile),
 		},
 		GateCommandMeta:  commandMetaForUnitV0(request, unit, "gate", provider.requestedByV0()),
 		GateEvidenceRefs: unit.EvidenceRefs,
 		EvidenceRefs:     unit.EvidenceRefs,
-	}
+	}, nil
 }
 
-func capacityPayloadForUnitV0(unit AppWorkUnitV0) orquestacoreworkflow.RequestCapacityCommandPayloadV0 {
+func (provider AppPlanCandidateProviderV0) profileResolutionForUnitV0(
+	ctx context.Context,
+	request orquestacionnucleoapp.SchedulerCandidateRequestV0,
+	unit AppWorkUnitV0,
+) (orquestacionnucleoapp.WorkflowTaskProfileResolutionV0, error) {
+	task, err := WorkflowTaskForUnitV0(provider.Plan, unit)
+	if err != nil {
+		return orquestacionnucleoapp.WorkflowTaskProfileResolutionV0{}, err
+	}
+	return orquestacionnucleoapp.DefaultWorkflowTaskProfileResolverV0{}.ResolveWorkflowTaskProfileV0(
+		ctx,
+		orquestacionnucleoapp.WorkflowTaskProfileRequestV0{
+			Run:             request.Run,
+			Task:            task,
+			DefaultCapacity: unit.Capacity,
+		},
+	)
+}
+
+func capacityPayloadForUnitV0(
+	unit AppWorkUnitV0,
+	profile orquestacionnucleoapp.WorkflowTaskProfileResolutionV0,
+) orquestacoreworkflow.RequestCapacityCommandPayloadV0 {
 	return orquestacoreworkflow.RequestCapacityCommandPayloadV0{
 		CapacityRequestID:          capacityRefV0(unit),
 		PhaseID:                    string(unit.PhaseID),
 		TaskRef:                    unit.TaskRef,
-		ReasonCode:                 "app_microtask_ready",
-		Summary:                    "Capacidad para microtarea de app.",
-		MinimumRecommendedCapacity: unit.Capacity,
-		EvidenceRefs:               unit.EvidenceRefs,
+		ReasonCode:                 profile.ReasonCode,
+		Summary:                    profile.CapacitySummary,
+		MinimumRecommendedCapacity: profile.MinimumRecommendedCapacity,
+		EvidenceRefs:               appPlannerProfileEvidenceRefsV0(unit, profile),
 	}
 }
 
-func agentPayloadForUnitV0(unit AppWorkUnitV0) orquestacoreworkflow.RequestAgentCommandPayloadV0 {
+func agentPayloadForUnitV0(
+	unit AppWorkUnitV0,
+	profile orquestacionnucleoapp.WorkflowTaskProfileResolutionV0,
+) orquestacoreworkflow.RequestAgentCommandPayloadV0 {
 	return orquestacoreworkflow.RequestAgentCommandPayloadV0{
 		AgentRequestID:     unit.AgentRequestID,
 		PhaseID:            string(unit.PhaseID),
 		TaskRef:            unit.TaskRef,
 		CapacityRequestRef: capacityRefV0(unit),
-		Role:               unit.Role,
-		Summary:            "Ejecutar microtarea de app con write-set acotado.",
-		EvidenceRefs:       unit.EvidenceRefs,
+		Role:               profile.Role,
+		Summary:            profile.AgentSummary,
+		EvidenceRefs:       appPlannerProfileEvidenceRefsV0(unit, profile),
 	}
+}
+
+func appPlannerProfileEvidenceRefsV0(
+	unit AppWorkUnitV0,
+	profile orquestacionnucleoapp.WorkflowTaskProfileResolutionV0,
+) []string {
+	refs := append([]string(nil), unit.EvidenceRefs...)
+	refs = append(refs, profile.EvidenceRefs...)
+	return compactAppPlannerStringsV0(refs)
 }
 
 func commandMetaForUnitV0(

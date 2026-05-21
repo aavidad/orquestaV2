@@ -34,6 +34,8 @@ Cobertura:
   `WorkProfileV0`/`WorkflowTaskV0` sin reimplementar perfiles de programacion.
 - las dependencias por `delivery_ref` del planner se convierten a `task_ref` al
   construir `WorkflowTaskV0`.
+- el provider de candidatos reutiliza el resolver neutral de perfiles para rol,
+  razon de capacidad y resumen de agente.
 
 Validacion 2026-05-11:
 

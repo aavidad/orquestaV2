@@ -50,6 +50,8 @@ Reglas:
 - solo emite unidades cuyas dependencias ya esten en `run.deliveries`;
 - cada candidato incluye todos los claims de la ola lista para que el gate de
   concurrencia vea conflictos entre workers paralelos.
+- el payload de capacidad/agente se resuelve desde el perfil neutral del nucleo,
+  no desde textos propios del planner.
 
 ## `EvaluateAppPlanProgressV0`
 

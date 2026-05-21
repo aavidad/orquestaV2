@@ -17,6 +17,13 @@ func TestAppPlanCandidateProviderV0EmiteSoloOlaLista(t *testing.T) {
 	if len(first.WorkCandidates) != 1 || first.WorkCandidates[0].AgentCandidate.Payload.TaskRef != "task-agenda-bootstrap" {
 		t.Fatalf("first candidates=%+v", first.WorkCandidates)
 	}
+	if first.WorkCandidates[0].AgentCandidate.Payload.Role != "analisis" ||
+		first.WorkCandidates[0].CapacityCandidate.Payload.ReasonCode != "work_profile_code_study" {
+		t.Fatalf("first profile payload capacity=%+v agent=%+v",
+			first.WorkCandidates[0].CapacityCandidate.Payload,
+			first.WorkCandidates[0].AgentCandidate.Payload,
+		)
+	}
 
 	second := mustBuildAppCandidatesForTestV0(t, provider, appRunForTestV0([]string{"ack-agenda-bootstrap"}, nil))
 	if len(second.WorkCandidates) != 2 {
@@ -29,6 +36,27 @@ func TestAppPlanCandidateProviderV0EmiteSoloOlaLista(t *testing.T) {
 		if len(candidate.Claims) != 1 || candidate.Claims[0].ClaimRef != candidate.SubjectClaimRefs[0] {
 			t.Fatalf("candidate claim no acotado: %+v", candidate.Claims)
 		}
+	}
+}
+
+func TestAppPlanCandidateProviderV0UsaPerfilNeutralParaDocs(t *testing.T) {
+	plan := mustAppPlanForTestV0(t)
+	provider := AppPlanCandidateProviderV0{Plan: plan}
+	run := appRunForTestV0([]string{"ack-agenda-api"}, nil)
+	run.CurrentPhase = orquestacoreworkflow.OrchestrationPhaseDocumentacionV0
+
+	candidates := mustBuildAppCandidatesForTestV0(t, provider, run)
+	if len(candidates.WorkCandidates) != 1 {
+		t.Fatalf("candidates=%+v", candidates.WorkCandidates)
+	}
+	candidate := candidates.WorkCandidates[0]
+	if candidate.AgentCandidate.Payload.Role != "documentacion" ||
+		candidate.AgentCandidate.Payload.Summary != "Documentacion acotada lista." ||
+		candidate.CapacityCandidate.Payload.ReasonCode != "work_profile_documentation" {
+		t.Fatalf("profile payload capacity=%+v agent=%+v",
+			candidate.CapacityCandidate.Payload,
+			candidate.AgentCandidate.Payload,
+		)
 	}
 }
 

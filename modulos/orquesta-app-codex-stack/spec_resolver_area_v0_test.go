@@ -14,6 +14,14 @@ func TestCodexAreaV0ClasificaDominioComoProgramacion(t *testing.T) {
 	}
 }
 
+func TestCodexAreaV0ClasificaRolesNeutralesComoProgramacion(t *testing.T) {
+	for _, role := range []string{"analisis", "refactor", "pruebas"} {
+		if got := codexAreaV0(role, "task-ref-programacion-001"); got != "programacion" {
+			t.Fatalf("%s area=%s", role, got)
+		}
+	}
+}
+
 func TestCodexProfileForAreaV0AplicaPermisosEspecificosDelDirector(t *testing.T) {
 	config := CodexRuntimeConfigV0{
 		Sandbox:                "workspace-write",

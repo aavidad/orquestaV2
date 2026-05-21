@@ -154,6 +154,12 @@ func codexAreaV0(role string, taskRef string) string {
 	switch {
 	case strings.Contains(value, "implementacion"):
 		return "programacion"
+	case strings.Contains(value, "analisis"):
+		return "programacion"
+	case strings.Contains(value, "refactor"):
+		return "programacion"
+	case strings.Contains(value, "pruebas"):
+		return "programacion"
 	case strings.Contains(value, "dominio"):
 		return "programacion"
 	case strings.Contains(value, "director_web"):
