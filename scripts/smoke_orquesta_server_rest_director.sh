@@ -18,7 +18,7 @@ polls="${ORQUESTA_SMOKE_STATS_POLLS:-3}"
 sleep_seconds="${ORQUESTA_SMOKE_STATS_SLEEP_SECONDS:-2}"
 request_timeout="${ORQUESTA_SMOKE_REQUEST_TIMEOUT_SECONDS:-45}"
 stats_timeout="${ORQUESTA_SMOKE_STATS_TIMEOUT_SECONDS:-10}"
-min_parallel_agents="${ORQUESTA_SMOKE_MIN_PARALLEL_AGENTS:-2}"
+min_started_agents="${ORQUESTA_SMOKE_MIN_STARTED_AGENTS:-${ORQUESTA_SMOKE_MIN_PARALLEL_AGENTS:-1}}"
 keep_dir="${ORQUESTA_KEEP_SMOKE_DIR:-0}"
 stats_verified="0"
 
@@ -236,11 +236,11 @@ JSON
     exit 1
   fi
   set +e
-  python3 - "$stats_response" "$min_parallel_agents" <<'PY'
+  python3 - "$stats_response" "$min_started_agents" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as fh:
     data = json.load(fh)
-min_parallel_agents = int(sys.argv[2])
+min_started_agents = int(sys.argv[2])
 stats = data.get("stats") or data.get("director_stats") or {}
 counts = stats.get("counts") or {}
 progress = stats.get("progress") or {}
@@ -261,14 +261,14 @@ print("control_registered=%s no_signal=%s progress_source=%s usage_agents=%s" % 
 ))
 issues = []
 agents_started = int(counts.get("agents_started") or 0)
-if agents_started < min_parallel_agents:
-    issues.append("agents_started<%s" % min_parallel_agents)
+if agents_started < min_started_agents:
+    issues.append("agents_started<%s" % min_started_agents)
 if not isinstance(progress, dict) or not progress.get("source_status"):
     issues.append("progress_missing")
-if not isinstance(usage, dict) or int(usage.get("agents_observed") or 0) < min_parallel_agents:
+if not isinstance(usage, dict) or int(usage.get("agents_observed") or 0) < min_started_agents:
     issues.append("usage_missing")
 started_agents = [agent for agent in agents if agent.get("started")]
-if len(started_agents) < min_parallel_agents:
+if len(started_agents) < min_started_agents:
     issues.append("agent_details_missing")
 if any(not isinstance(agent.get("process"), dict) or not agent["process"].get("process_ref") for agent in started_agents):
     issues.append("process_refs_missing")
@@ -277,7 +277,7 @@ if any(not isinstance(agent.get("usage"), dict) or not agent["usage"].get("quota
 if issues:
     print("stats_no_verificadas=%s" % ",".join(issues))
     sys.exit(2)
-print("stats_verificadas=process_refs,progress,usage,parallel_agents")
+print("stats_verificadas=process_refs,progress,usage,director_start")
 PY
   stats_validation_status="$?"
   set -e
@@ -292,7 +292,7 @@ PY
 done
 
 if [[ "$stats_verified" != "1" ]]; then
-  echo "stats sin verificacion completa: faltan agentes paralelos, process refs, progress o usage" >&2
+  echo "stats sin verificacion completa: faltan agentes arrancados, process refs, progress o usage" >&2
   exit 1
 fi
 

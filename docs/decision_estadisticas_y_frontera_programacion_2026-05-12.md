@@ -46,10 +46,11 @@ Validacion esperada:
 - Tests del servidor verifican que el default de `MaxCommands` soporta frontera
   paralela.
 - Smoke REST real opt-in debe arrancar `orquesta-server`, crear run por
-  `POST /api/v0/apps/director`, observar agentes paralelos desde
+  `POST /api/v0/apps/director`, observar el agente director arrancado desde
   `POST /api/v0/director/stats` con `include_process_refs`,
   `include_agent_progress` e `include_agent_usage`, y parar limpio mediante el
-  `trap` del operador.
+  `trap` del operador. La observacion de olas paralelas pertenece al smoke del
+  supervisor/drain, no al endpoint REST directo `start-only`.
 
 Validacion real 2026-05-13:
 

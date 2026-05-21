@@ -2,8 +2,8 @@
 
 Objetivo: ejecutar una prueba repetible y real que arranca Orquesta como
 servidor REST, envia una solicitud `AppSpecRequestV0` de app pequena completa,
-deja que el director cree agentes Codex en paralelo, consulta
-`/api/v0/director/stats` varias veces y para limpio.
+arranca la entrada real del director, consulta `/api/v0/director/stats` varias
+veces y para limpio.
 
 ## Comando
 
@@ -17,8 +17,13 @@ El script compila un binario temporal de `cmd/orquesta-server`, arranca el
 servidor en `127.0.0.1:0`, lee el puerto real desde el statefile temporal,
 envia `POST /api/v0/apps/director`, extrae `run_ref` y hace tres polls a
 `POST /api/v0/director/stats` con progreso, referencias de proceso y uso de
-agentes activados. Antes de terminar exige observar al menos dos agentes
-arrancados y stats enriquecidas con `process`, `progress` y `usage`.
+agentes activados. Antes de terminar exige observar al menos un agente arrancado
+con stats enriquecidas con `process`, `progress` y `usage`.
+
+Este smoke mide el arranque REST directo. Ese endpoint usa la entrada
+`start-only`: crea el run y el agente director inicial. Las olas paralelas de
+trabajo deben validarse en un smoke separado del supervisor/drain, no como
+precondicion de este endpoint.
 
 ## Precondiciones
 
@@ -54,9 +59,13 @@ ORQUESTA_SMOKE_STATS_POLLS=3
 ORQUESTA_SMOKE_STATS_SLEEP_SECONDS=2
 ORQUESTA_SMOKE_REQUEST_TIMEOUT_SECONDS=45
 ORQUESTA_SMOKE_STATS_TIMEOUT_SECONDS=10
-ORQUESTA_SMOKE_MIN_PARALLEL_AGENTS=2
+ORQUESTA_SMOKE_MIN_STARTED_AGENTS=1
 ORQUESTA_KEEP_SMOKE_DIR=0
 ```
+
+`ORQUESTA_SMOKE_MIN_PARALLEL_AGENTS` se conserva como alias compatible para
+subir el umbral manualmente, pero el valor por defecto del smoke REST directo es
+un agente arrancado.
 
 Para conservar logs y payloads temporales en caso de investigacion:
 
@@ -74,13 +83,13 @@ La salida esperada contiene:
 - tres lineas `POST /api/v0/director/stats poll=N -> HTTP 2xx`;
 - lineas compactas con `control_registered`, `no_signal`, `progress_source` y
   `usage_agents`;
-- al menos una linea `stats_verificadas=process_refs,progress,usage,parallel_agents`;
+- al menos una linea `stats_verificadas=process_refs,progress,usage,director_start`;
 - parada limpia al salir del script.
 
 Si un endpoint devuelve no-2xx, el script imprime el JSON de respuesta en
-stderr y sale con error. Si los polls no llegan a mostrar agentes paralelos con
-referencias de proceso, progreso y uso, tambien falla. El `trap` de salida envia
-`SIGINT` al servidor y, si no termina, escala a `SIGTERM`.
+stderr y sale con error. Si los polls no llegan a mostrar los agentes exigidos
+con referencias de proceso, progreso y uso, tambien falla. El `trap` de salida
+envia `SIGINT` al servidor y, si no termina, escala a `SIGTERM`.
 
 ## No ejecutar como test unitario
 
