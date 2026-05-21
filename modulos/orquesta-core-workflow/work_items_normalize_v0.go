@@ -8,6 +8,7 @@ func NormalizeWorkflowTaskV0(task WorkflowTaskV0) WorkflowTaskV0 {
 		TaskID:               strings.TrimSpace(task.TaskID),
 		RunID:                strings.TrimSpace(task.RunID),
 		PhaseID:              OrchestrationPhaseIDV0(strings.TrimSpace(string(task.PhaseID))),
+		WorkProfileKind:      NormalizeWorkProfileKindV0(task.WorkProfileKind),
 		Title:                strings.TrimSpace(task.Title),
 		Summary:              strings.TrimSpace(task.Summary),
 		WriteSet:             normalizeWorkflowTaskStringsV0(task.WriteSet),

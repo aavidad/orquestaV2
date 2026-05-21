@@ -48,6 +48,11 @@ func validateWorkflowTaskCollectionsV0(task WorkflowTaskV0) error {
 	if err := validateWorkflowTaskWriteSetV0(task.WriteSet); err != nil {
 		return err
 	}
+	if strings.TrimSpace(string(task.WorkProfileKind)) != "" {
+		if _, ok := LookupWorkProfileDefinitionV0(task.WorkProfileKind); !ok {
+			return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "work_profile_kind")
+		}
+	}
 	if err := validateRequiredWorkflowTaskStringsV0(task.AcceptanceCriteria, "acceptance_criteria"); err != nil {
 		return err
 	}

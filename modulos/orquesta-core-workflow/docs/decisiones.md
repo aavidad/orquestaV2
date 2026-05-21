@@ -842,3 +842,12 @@ Impacto: `WorkProfileV0` normaliza alias, aplica fase/criterios base, exige cont
 Contratos afectados: WorkProfileV0, WorkflowTaskFromWorkProfileV0, WorkflowTaskV0.
 Estado: aceptada local en NCW-075
 ```
+
+```text
+Fecha: 2026-05-22
+Decision: `WorkflowTaskV0` puede transportar `work_profile_kind` como metadata neutral opcional.
+Motivo: el scheduler necesita derivar rol y capacidad sin inspeccionar textos ni conocer Codex, OPES o conectores. El perfil pertenece al mismo catalogo puro de `WorkProfileV0` y es compatible con tareas antiguas sin campo.
+Impacto: `WorkflowTaskFromWorkProfileV0` rellena `work_profile_kind`; `NewWorkflowTaskV0` rechaza perfiles no soportados. Las tareas legacy sin perfil siguen validando y se resuelven por fase en la capa de orquestacion.
+Contratos afectados: WorkflowTaskV0, WorkProfileV0, WorkflowTaskFromWorkProfileV0.
+Estado: aceptada local en NCW-076
+```

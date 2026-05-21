@@ -33,6 +33,9 @@ Esto implica:
   artefactos al dominio propietario;
 - los conectores externos son puertos/adaptadores de composicion; si una fuente
   real de dominio o cierre no existe, se marca como pendiente verificable;
+- los perfiles de trabajo (`code_study`, `implementation`, `refactor`,
+  `required_tests`, `documentation`, `review`, `domain_work`) son neutrales y se
+  transportan como `WorkProfileV0`/`WorkflowTaskV0.work_profile_kind`;
 - ninguna app externa debe copiar internals, compartir DB/filesystem interno ni
   decidir plan, runtime, modelo o paralelismo sin director de Orquesta.
 
@@ -50,12 +53,14 @@ El nucleo neutral vigente es el plano comun de orquestacion:
 La composicion Codex/programacion no define el nucleo. Es una app consumidora que
 usa Orquesta para crear, modificar, auditar, migrar o desplegar software. Debe
 entrar por contratos como `AppSpecV0` o trabajo de dominio equivalente.
+El stack Codex puede ejecutar perfiles neutrales, pero no define su taxonomia.
 
 La composicion OPES tampoco define el nucleo. OPES conserva oposiciones,
 programas, temas, taxonomia, fuentes, reglas pedagogicas, validadores,
 persistencia y ensamblado. Cuando necesita planificacion documental, pide trabajo
 a Orquesta (`plan_temario`, `plan_tema`, `plan_documento`, etc.) y valida despues
 los artefactos recibidos.
+OPES aporta el dominio; el nucleo conserva el perfil neutral y la orquestacion.
 
 ## Evidencia y pruebas documentadas
 

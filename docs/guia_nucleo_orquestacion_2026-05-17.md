@@ -24,7 +24,7 @@ Orquesta piensa y coordina. Las apps externas aportan dominio.
 | Pieza | Responsabilidad | Estado frente al nucleo |
 | --- | --- | --- |
 | `modulos/orquesta-core-workflow` | Maquina pura: comandos, eventos, reducer, outbox, replay. | Alineada. No debe importar runtime, DB, Codex, OPES, web ni MCP. |
-| `modulos/orquesta-orchestration-core` | Loop de aplicacion por puertos: candidatos, stores, outbox, launch/stop/delivery/review. | Alineada como capa de aplicacion. Puede importar `orquesta-runtime` neutral, no adaptadores concretos. |
+| `modulos/orquesta-orchestration-core` | Loop de aplicacion por puertos: candidatos, stores, perfiles de trabajo, outbox, launch/stop/delivery/review. | Alineada como capa de aplicacion. Puede importar `orquesta-runtime` neutral, no adaptadores concretos. |
 | `modulos/orquesta-director-operativo` | Contrato puro de Director Operativo V1: plan vivo, subagentes, espera, review, replan y delegacion recursiva gobernada. | Alineada como DTO/validacion previa a integracion. No ejecuta runtime ni duplica scheduler/replanner. |
 | `modulos/orquesta-domain-work` | Contratos genericos de jobs, records filtrables y artefactos externos. | Alineada. Debe seguir sin OPES, programacion, REST, MCP, runtime ni modelo. |
 | `modulos/orquesta-document-plan-expander` | Expande `DomainDocumentPlanV0` a `DomainWorkJobRequestV0[]` por puerto. | Alineada. No ejecuta jobs ni importa adaptadores. |
@@ -61,6 +61,12 @@ no meter reglas de esa app en `orquesta-domain-work`.
 La misma regla aplica al cierre: una app o composicion externa debe aportar por
 puerto la fuente que traduce entregas, reviews y evidencias reales a refs
 causales del nucleo; Orquesta no lee internals del producto para deducirlas.
+
+Los perfiles `code_study`, `implementation`, `refactor`, `required_tests`,
+`documentation`, `review` y `domain_work` viven como contrato neutral
+`WorkProfileV0`/`WorkflowTaskV0.work_profile_kind`. El scheduler resuelve rol y
+capacidad por `WorkflowTaskProfileResolverPortV0`; Codex, OPES o cualquier otro
+conector solo mapean ese perfil a su ejecucion concreta.
 
 ## Corte Director Operativo
 

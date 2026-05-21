@@ -23,7 +23,8 @@ Orquesta conserva:
 
 - arrancar director y agentes;
 - decidir plan, fases, granularidad y paralelismo mediante director;
-- elegir capacidad, razonamiento, modelo, proveedor y runtime por conectores;
+- elegir perfil neutral de trabajo, capacidad, razonamiento, modelo, proveedor y
+  runtime por conectores;
 - pedir aclaraciones al usuario o a otro grupo cuando falte informacion;
 - supervisar progreso, cuota, bloqueos, basura, bucles y cierre controlado;
 - registrar entregas, artefactos, estadisticas y evidencias compactas.
@@ -93,6 +94,12 @@ el director piensa arquitectura y fases, y Orquesta delega en agentes.
 Para refactor, seguridad, deploy o migraciones se usa el mismo principio:
 el dominio aporta contexto y restricciones; Orquesta, mediante director,
 decide el plan operativo y la composicion de agentes.
+
+Los perfiles de trabajo son neutrales: `code_study`, `implementation`,
+`refactor`, `required_tests`, `documentation`, `review` y `domain_work`
+describen intencion, criterios y capacidad esperada. Codex es solo un runtime
+posible para ejecutarlos; OPES u otra app son conectores de dominio que aportan
+datos, reglas y validadores.
 
 ## Invariantes
 

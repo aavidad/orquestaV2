@@ -18,6 +18,7 @@ func workflowTaskFromWorkProfileUncheckedV0(profile WorkProfileV0) (WorkflowTask
 		TaskID:               profile.TaskRef,
 		RunID:                profile.RunRef,
 		PhaseID:              profile.PhaseID,
+		WorkProfileKind:      profile.ProfileKind,
 		Title:                profile.Title,
 		Summary:              workProfileTaskSummaryV0(profile),
 		WriteSet:             append([]string(nil), profile.ScopeRefs...),

@@ -124,6 +124,80 @@ func TestWorkflowTaskCandidateProviderV0UsaFaseActualDelRun(t *testing.T) {
 	}
 }
 
+func TestWorkflowTaskCandidateProviderV0UsesWorkProfileKindForRoleAndCapacity(t *testing.T) {
+	runRef := "run-nucleo-workflow-task-profile-001"
+	task := workflowTaskFromProfileForCandidateProviderTestV0(
+		t,
+		runRef,
+		orquestacoreworkflow.WorkProfileReviewV0,
+	)
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.CurrentPhase = orquestacoreworkflow.OrchestrationPhaseRevisionV0
+	run.Tasks = []string{task.TaskID}
+
+	candidates, err := (WorkflowTaskCandidateProviderV0{
+		TaskStore: NewInMemoryWorkflowTaskStoreV0(task),
+	}).BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        run,
+		OccurredAt: "2026-05-22T10:00:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.WorkCandidates) != 1 {
+		t.Fatalf("work candidates=%+v", candidates.WorkCandidates)
+	}
+	candidate := candidates.WorkCandidates[0]
+	if candidate.AgentCandidate.Payload.Role != "revision" {
+		t.Fatalf("role=%s", candidate.AgentCandidate.Payload.Role)
+	}
+	if candidate.CapacityCandidate.Payload.MinimumRecommendedCapacity != orquestacoreworkflow.OrchestrationCapacityHighV0 {
+		t.Fatalf("capacity=%s", candidate.CapacityCandidate.Payload.MinimumRecommendedCapacity)
+	}
+	if candidate.CapacityCandidate.Payload.ReasonCode != "work_profile_review" {
+		t.Fatalf("reason=%s", candidate.CapacityCandidate.Payload.ReasonCode)
+	}
+}
+
+func TestWorkflowTaskCandidateProviderV0UsesInjectedProfileResolver(t *testing.T) {
+	runRef := "run-nucleo-workflow-task-profile-resolver-001"
+	task := workflowTaskForCandidateProviderTestV0(runRef, "task-workitem-profile-resolver", []string{"app/profile"})
+	task.RequiredTests = []string{"go test -count=1 ./..."}
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.Tasks = []string{task.TaskID}
+	profileEvidenceRef := "evidence-ref-profile-resolver-001"
+
+	candidates, err := (WorkflowTaskCandidateProviderV0{
+		TaskStore: NewInMemoryWorkflowTaskStoreV0(task),
+		ProfileResolver: staticWorkflowTaskProfileResolverForTestV0{
+			resolution: WorkflowTaskProfileResolutionV0{
+				ProfileKind:                orquestacoreworkflow.WorkProfileRefactorV0,
+				Role:                       "refactor",
+				ReasonCode:                 "work_profile_refactor",
+				CapacitySummary:            "Capacidad para refactor acotado.",
+				AgentSummary:               "Refactor acotado listo.",
+				MinimumRecommendedCapacity: orquestacoreworkflow.OrchestrationCapacityXHighV0,
+				EvidenceRefs:               []string{profileEvidenceRef},
+			},
+		},
+	}).BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        run,
+		OccurredAt: "2026-05-22T10:05:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.WorkCandidates) != 1 {
+		t.Fatalf("work candidates=%+v", candidates.WorkCandidates)
+	}
+	candidate := candidates.WorkCandidates[0]
+	if candidate.AgentCandidate.Payload.Role != "refactor" ||
+		candidate.CapacityCandidate.Payload.MinimumRecommendedCapacity != orquestacoreworkflow.OrchestrationCapacityXHighV0 ||
+		!stringInSetV0(profileEvidenceRef, candidate.EvidenceRefs) {
+		t.Fatalf("candidate=%+v", candidate)
+	}
+}
+
 func TestWorkflowTaskCandidateProviderV0IgnoraTareaDeOtraFase(t *testing.T) {
 	runRef := "run-nucleo-workflow-task-other-phase-001"
 	task := workflowTaskForCandidateProviderTestV0(runRef, "task-workitem-other-phase", []string{"docs/uso.md"})
@@ -304,6 +378,46 @@ func TestInMemoryWorkflowTaskStoreV0RejectsSameTaskWithDifferentContract(t *test
 	if err == nil {
 		t.Fatalf("expected workflow task conflict")
 	}
+}
+
+type staticWorkflowTaskProfileResolverForTestV0 struct {
+	resolution WorkflowTaskProfileResolutionV0
+}
+
+func (resolver staticWorkflowTaskProfileResolverForTestV0) ResolveWorkflowTaskProfileV0(
+	_ context.Context,
+	_ WorkflowTaskProfileRequestV0,
+) (WorkflowTaskProfileResolutionV0, error) {
+	return resolver.resolution, nil
+}
+
+func workflowTaskFromProfileForCandidateProviderTestV0(
+	t *testing.T,
+	runRef string,
+	kind orquestacoreworkflow.WorkProfileKindV0,
+) orquestacoreworkflow.WorkflowTaskV0 {
+	t.Helper()
+	task, err := orquestacoreworkflow.WorkflowTaskFromWorkProfileV0(orquestacoreworkflow.WorkProfileV0{
+		SchemaVersion: orquestacoreworkflow.WorkProfileSchemaVersionV0,
+		ProfileRef:    "work-profile-ref-candidate-001",
+		ProfileKind:   kind,
+		TaskRef:       "task-workitem-profile-001",
+		RunRef:        runRef,
+		Title:         "Revisar entrega",
+		Objective:     "Registrar revision acotada con evidencias.",
+		ScopeRefs:     []string{"docs/revision"},
+		AcceptanceCriteria: []string{
+			"Revision registrada con refs compactas.",
+		},
+		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+			ContractRef:  "contract:function:review-work:v0",
+			FunctionName: "ReviewWorkV0",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("WorkflowTaskFromWorkProfileV0: %v", err)
+	}
+	return task
 }
 
 func workflowTaskForCandidateProviderTestV0(

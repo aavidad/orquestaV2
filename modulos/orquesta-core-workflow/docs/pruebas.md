@@ -25,6 +25,15 @@ Riesgos: No decide proveedor, modelo, proceso real ni reglas internas de conecto
 ```
 
 ```text
+Caso: workflow_task_work_profile_kind_optional
+Tipo: unit | contract | regression
+Comando: go test -count=1 ./modulos/orquesta-core-workflow -run 'TestWorkflowTaskFromWorkProfileV0CodeStudyDefaultsPhaseAndCriteria|TestValidateWorkflowTaskV0RejectsUnknownWorkProfileKind'
+Evidencia esperada: `WorkflowTaskFromWorkProfileV0` propaga `work_profile_kind`; `WorkflowTaskV0` acepta campo vacio por compatibilidad y rechaza perfiles no soportados.
+Ultima ejecucion: 2026-05-22, ok, go test -count=1 ./modulos/orquesta-core-workflow.
+Riesgos: El campo no decide runtime, proveedor, modelo ni politica de conector; solo identifica el perfil neutral.
+```
+
+```text
 Caso: quality_gate_blocking_policy_por_subject
 Tipo: unit | contract | regression
 Comando: go test -count=1 ./modulos/orquesta-core-workflow -run TestPendingBlockingQualityGateRefsForSubjectV0

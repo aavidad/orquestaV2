@@ -25,6 +25,16 @@ Estado: completada local
 ```
 
 ```text
+ID: NCW-076
+Objetivo: Propagar `work_profile_kind` desde `WorkProfileV0` a `WorkflowTaskV0` para que el scheduler pueda resolver rol/capacidad sin parsear textos.
+Write-set: work_items_*.go, work_profile_task_v0.go, work_profile_v0_test.go, docs locales.
+Contrato: WorkflowTaskV0, WorkProfileV0.
+Validacion: 2026-05-22, ok, go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-orchestration-core.
+Bloqueos: La resolucion concreta de scheduler queda en `orquesta-orchestration-core`; el core solo valida el campo neutral opcional.
+Estado: completada local
+```
+
+```text
 ID: NCW-075
 Objetivo: Definir perfiles neutrales de trabajo para estudio de codigo, implementacion, refactor, pruebas, documentacion, revision y trabajo de dominio sin crear un modulo paralelo.
 Write-set: work_profile_*.go, work_profile_v0_test.go, docs/contratos.md, docs/contratos_microtareas.md, docs/pruebas.md, docs/tareas.md, docs/decisiones.md.

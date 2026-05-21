@@ -23,6 +23,7 @@ Campos:
   - task_id
   - run_id
   - phase_id
+  - work_profile_kind
   - title
   - summary
   - write_set
@@ -32,6 +33,7 @@ Invariantes:
   - DTO puro sin runtime, DB, proveedor, HOME, agentes concretos ni adaptadores.
   - Representa una unidad de trabajo acotada; el tamano lo decide el director por politica, no el core.
   - `phase_id` pertenece al catalogo de fases v0.
+  - `work_profile_kind` es opcional; si viene debe pertenecer al catalogo neutral de `WorkProfileV0`.
   - `task_id`, `run_id`, `phase_id` y `title` son obligatorios.
   - `write_set` y `acceptance_criteria` son listas compactas no vacias.
   - `function_contract_refs` contiene referencias opacas; el DTO base acepta `contract_ref` o `function_name` para compatibilidad local.
@@ -83,7 +85,7 @@ Perfiles iniciales:
   - domain_work
 Invariantes:
   - DTO puro sin adaptador, proveedor, proceso real, HOME, credenciales ni conocimiento interno de conectores.
-  - Reutiliza `WorkflowTaskV0`: `WorkflowTaskFromWorkProfileV0` valida el perfil y produce una tarea durable compacta.
+  - Reutiliza `WorkflowTaskV0`: `WorkflowTaskFromWorkProfileV0` valida el perfil y produce una tarea durable compacta con `work_profile_kind`.
   - `profile_kind` decide fase y criterios base por politica neutral; los conectores aportan refs, reglas y validadores.
   - `implementation`, `refactor` y `required_tests` exigen `required_tests` antes de poder materializarse.
   - Conserva linaje neutral de delegacion: parent task, cohorte, ola, profundidad, fanout e hijos.

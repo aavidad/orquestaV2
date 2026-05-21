@@ -10,6 +10,9 @@ func TestWorkflowTaskFromWorkProfileV0CodeStudyDefaultsPhaseAndCriteria(t *testi
 	if task.PhaseID != OrchestrationPhaseBrainstormingArquitecturaV0 {
 		t.Fatalf("phase_id=%s", task.PhaseID)
 	}
+	if task.WorkProfileKind != WorkProfileCodeStudyV0 {
+		t.Fatalf("work_profile_kind=%s", task.WorkProfileKind)
+	}
 	if len(task.AcceptanceCriteria) < 2 ||
 		task.AcceptanceCriteria[0] != "Mapa de componentes, riesgos y puntos de cambio documentado." {
 		t.Fatalf("criteria=%+v", task.AcceptanceCriteria)
@@ -66,6 +69,14 @@ func TestValidateWorkProfileV0RejectsUnsafeScopeRefsThroughWorkflowTask(t *testi
 
 	err := ValidateWorkProfileV0(profile)
 	assertWorkProfileErrorV0(t, err, ErrWorkProfileTaskInvalidaV0, "workflow_task")
+}
+
+func TestValidateWorkflowTaskV0RejectsUnknownWorkProfileKind(t *testing.T) {
+	task := validWorkflowTaskV0()
+	task.WorkProfileKind = "perfil_desconocido"
+
+	err := ValidateWorkflowTaskV0(NormalizeWorkflowTaskV0(task))
+	assertWorkflowTaskErrorV0(t, err, ErrWorkflowTaskInvalidaV0, "work_profile_kind")
 }
 
 func TestNormalizeWorkProfileKindV0Aliases(t *testing.T) {

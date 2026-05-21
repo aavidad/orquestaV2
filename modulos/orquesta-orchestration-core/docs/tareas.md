@@ -192,3 +192,27 @@ Validacion:
 ```sh
 go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-file ./modulos/orquesta-app-director-service -run 'Test.*OperationalDirectorPlanState|Test.*PlanState|TestContinueAppDirectorV0.*PlanState|TestContinueRequestWithOperationalDirectorPlanStateV0'
 ```
+
+## ORCH-CORE-DIR-009: perfiles neutrales de WorkflowTask
+
+Estado: implementado.
+
+Objetivo: quitar el hardcode directo de rol/capacidad en
+`WorkflowTaskCandidateProviderV0` y reutilizar `WorkProfileV0`/
+`WorkflowTaskV0.work_profile_kind` para programacion, estudio, refactor,
+pruebas, documentacion, revision y trabajo de dominio.
+
+Invariantes:
+
+- el resolver vive por puerto neutral `WorkflowTaskProfileResolverPortV0`;
+- el resolver por defecto mantiene compatibilidad para tareas legacy sin perfil;
+- no parsea `summary`, `acceptance_criteria` ni nombres de agentes como fuente
+  primaria;
+- no conoce Codex, OPES, modelos, procesos reales, HOME ni credenciales;
+- una composicion puede inyectar politica propia sin cambiar el scheduler.
+
+Validacion:
+
+```sh
+go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-orchestration-core -run 'TestWorkflowTaskCandidateProviderV0.*Profile|TestWorkflowTaskFromWorkProfileV0|TestValidateWorkflowTaskV0RejectsUnknownWorkProfileKind'
+```

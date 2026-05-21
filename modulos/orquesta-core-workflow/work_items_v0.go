@@ -39,6 +39,7 @@ type WorkflowTaskV0 struct {
 	TaskID               string                          `json:"task_id"`
 	RunID                string                          `json:"run_id"`
 	PhaseID              OrchestrationPhaseIDV0          `json:"phase_id"`
+	WorkProfileKind      WorkProfileKindV0               `json:"work_profile_kind,omitempty"`
 	Title                string                          `json:"title"`
 	Summary              string                          `json:"summary,omitempty"`
 	WriteSet             []string                        `json:"write_set"`

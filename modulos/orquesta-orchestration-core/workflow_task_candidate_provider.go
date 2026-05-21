@@ -13,6 +13,7 @@ import (
 type WorkflowTaskCandidateProviderV0 struct {
 	Base            CandidateProviderPortV0
 	TaskStore       WorkflowTaskStorePortV0
+	ProfileResolver WorkflowTaskProfileResolverPortV0
 	RequestedBy     string
 	DefaultCapacity orquestacoreworkflow.OrchestrationCapacityRecommendationV0
 	MaxFrontier     int
@@ -52,7 +53,7 @@ func (provider WorkflowTaskCandidateProviderV0) BuildSchedulerCandidatesV0(
 		if !workflowTaskSchedulableV0(request.Run, task) {
 			continue
 		}
-		candidate, err := provider.workflowTaskCandidateV0(request, task)
+		candidate, err := provider.workflowTaskCandidateV0(ctx, request, task)
 		if err != nil {
 			return SchedulerCandidateSetV0{}, err
 		}
@@ -82,6 +83,7 @@ func (provider WorkflowTaskCandidateProviderV0) baseCandidatesV0(
 }
 
 func (provider WorkflowTaskCandidateProviderV0) workflowTaskCandidateV0(
+	ctx context.Context,
 	request SchedulerCandidateRequestV0,
 	task orquestacoreworkflow.WorkflowTaskV0,
 ) (orquestadirectorscheduler.SchedulableWorkCandidateV0, error) {
@@ -94,6 +96,10 @@ func (provider WorkflowTaskCandidateProviderV0) workflowTaskCandidateV0(
 		)
 	}
 	task = normalized
+	profile, err := provider.workflowTaskProfileV0(ctx, request, task)
+	if err != nil {
+		return orquestadirectorscheduler.SchedulableWorkCandidateV0{}, err
+	}
 	suffix := workflowTaskCandidateSafeRefPartV0(task.TaskID)
 	claimRef := WorkflowTaskClaimRefV0(task.TaskID)
 	agentRef := WorkflowTaskAgentRequestRefV0(task.TaskID)
@@ -124,20 +130,29 @@ func (provider WorkflowTaskCandidateProviderV0) workflowTaskCandidateV0(
 			},
 			Capacity: orquestadirectorcandidates.WorkCandidateCapacityInputV0{
 				CapacityRequestID:          capacityRef,
-				ReasonCode:                 "programacion_siguiente_paso",
-				Summary:                    "Capacidad para microtarea acotada.",
-				MinimumRecommendedCapacity: provider.capacityV0(),
-				EvidenceRefs:               []string{"evidence-ref-capacity-" + suffix},
+				ReasonCode:                 profile.ReasonCode,
+				Summary:                    profile.CapacitySummary,
+				MinimumRecommendedCapacity: profile.MinimumRecommendedCapacity,
+				EvidenceRefs: compactStringsV0(append(
+					[]string{"evidence-ref-capacity-" + suffix},
+					profile.EvidenceRefs...,
+				)),
 			},
 			Agent: orquestadirectorcandidates.WorkCandidateAgentInputV0{
 				AgentRequestID: agentRef,
 				ClaimRef:       claimRef,
-				Role:           "implementacion",
-				Summary:        "Microtarea acotada lista.",
-				EvidenceRefs:   []string{"evidence-ref-agent-" + suffix},
+				Role:           profile.Role,
+				Summary:        profile.AgentSummary,
+				EvidenceRefs: compactStringsV0(append(
+					[]string{"evidence-ref-agent-" + suffix},
+					profile.EvidenceRefs...,
+				)),
 			},
 			GateEvidenceRefs: []string{"evidence-ref-gate-" + suffix},
-			EvidenceRefs:     []string{"evidence-ref-work-" + suffix},
+			EvidenceRefs: compactStringsV0(append(
+				[]string{"evidence-ref-work-" + suffix},
+				profile.EvidenceRefs...,
+			)),
 		},
 	)
 	if err != nil {
@@ -150,11 +165,25 @@ func (provider WorkflowTaskCandidateProviderV0) workflowTaskCandidateV0(
 	return candidate, nil
 }
 
-func (provider WorkflowTaskCandidateProviderV0) capacityV0() orquestacoreworkflow.OrchestrationCapacityRecommendationV0 {
-	if strings.TrimSpace(string(provider.DefaultCapacity)) != "" {
-		return provider.DefaultCapacity
+func (provider WorkflowTaskCandidateProviderV0) workflowTaskProfileV0(
+	ctx context.Context,
+	request SchedulerCandidateRequestV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+) (WorkflowTaskProfileResolutionV0, error) {
+	resolver := provider.ProfileResolver
+	if resolver == nil {
+		resolver = DefaultWorkflowTaskProfileResolverV0{}
 	}
-	return orquestacoreworkflow.OrchestrationCapacityMediumV0
+	profileRequest := WorkflowTaskProfileRequestV0{
+		Run:             request.Run,
+		Task:            task,
+		DefaultCapacity: provider.DefaultCapacity,
+	}
+	resolution, err := resolver.ResolveWorkflowTaskProfileV0(ctx, profileRequest)
+	if err != nil {
+		return WorkflowTaskProfileResolutionV0{}, err
+	}
+	return normalizeWorkflowTaskProfileResolutionV0(profileRequest, resolution)
 }
 
 func (provider WorkflowTaskCandidateProviderV0) frontierLimitV0() int {

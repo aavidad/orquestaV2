@@ -160,10 +160,12 @@ El contrato operativo de microtarea programable es:
 2. el detalle completo `WorkflowTaskV0` vive fuera del core en
    `WorkflowTaskStorePortV0`;
 3. `WorkflowTaskCandidateProviderV0` carga solo las tareas autorizadas por el
-   run, descarta cerradas y exige fase `programacion`;
+   run, descarta cerradas y exige que cada tarea pertenezca a la fase actual;
 4. cada microtarea se convierte en `SchedulableWorkCandidateV0` mediante
    `orquesta-director-candidates`, no con structs fabricados a mano;
-5. el scheduler decide `RequestCapacity -> RequestAgent` sin conocer DB,
+5. `WorkflowTaskProfileResolverPortV0` resuelve perfil neutral, rol y capacidad
+   desde `WorkflowTaskV0.work_profile_kind` o, para tareas legacy, desde la fase;
+6. el scheduler decide `RequestCapacity -> RequestAgent` sin conocer DB,
    runtime, proveedor, modelo, HOME ni OAuth.
 
 El contrato de espera por microtareas usa la misma fuente: `WaitAgentRefs`
