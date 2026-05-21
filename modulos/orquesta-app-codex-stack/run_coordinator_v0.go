@@ -106,7 +106,7 @@ func normalizeGlobalDrainLimitsV0(
 		limits.MaxDecisionCycles = 1
 	}
 	if limits.MaxExternalWaits <= 0 {
-		limits.MaxExternalWaits = 1
+		limits.MaxExternalWaits = defaultDrainRunMaxExternalWaitsV0
 	}
 	return limits
 }

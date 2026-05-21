@@ -54,6 +54,79 @@ func TestDrainRunV0ConsumeDecisionFileTardioYArrancaProgramacion(t *testing.T) {
 	}
 }
 
+func TestDrainRunV0AceptaACKTardioDeOlaInicialMientrasDirectorAvanza(t *testing.T) {
+	runtime := newPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	ctx := context.Background()
+
+	director := postDirectorAPIV0(t, stack)
+	if runtime.launchCountV0() != 4 {
+		t.Fatalf("launches iniciales=%d want=4", runtime.launchCountV0())
+	}
+	codexStackWriteDelayedDirectorDecisionsForTestV0(t, stack, director.RunRef)
+	initial := codexStackDescriptorsForTestV0(t, stack)
+	for _, target := range []string{
+		"orquesta-app-stack-director",
+		"orquesta-app-stack-web",
+		"orquesta-app-stack-persistencia",
+	} {
+		descriptor := codexStackDescriptorByTargetModuleForTestV0(t, initial, target)
+		if err := writeCodexStackAckForDescriptorV0(t, descriptor); err != nil {
+			t.Fatalf("write ACK %s: %v", target, err)
+		}
+	}
+	api := codexStackDescriptorByTargetModuleForTestV0(t, initial, "orquesta-app-stack-api")
+
+	if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-late-initial-wave-001",
+		MaxBursts:            16,
+		MaxStepsPerBurst:     12,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		MaxExternalWaits:     1,
+	}); err != nil {
+		t.Fatalf("DrainRunV0 avance parcial: %v", err)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 ||
+		runtime.launchCountV0() < 5 {
+		t.Fatalf("director no avanzo con ACKs parciales: phase=%s launches=%d artifacts=%v",
+			run.CurrentPhase,
+			runtime.launchCountV0(),
+			run.PhaseArtifacts,
+		)
+	}
+	apiObservation := drainObservationFromDescriptorForTestV0(api)
+	if drainObservationAlreadyRegisteredV0(run, apiObservation) {
+		t.Fatalf("ACK api registrado antes de existir: artifacts=%v", run.PhaseArtifacts)
+	}
+	if err := writeCodexStackAckForDescriptorV0(t, api); err != nil {
+		t.Fatalf("write late ACK api: %v", err)
+	}
+
+	if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-late-initial-wave-002",
+		MaxBursts:            16,
+		MaxStepsPerBurst:     12,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		MaxExternalWaits:     1,
+	}); err != nil {
+		t.Fatalf("DrainRunV0 ACK tardio api: %v", err)
+	}
+	run = mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if !drainObservationAlreadyRegisteredV0(run, apiObservation) {
+		t.Fatalf("ACK tardio api no registrado: artifacts=%v observation=%+v", run.PhaseArtifacts, apiObservation)
+	}
+	if run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 {
+		t.Fatalf("current_phase=%s want=%s", run.CurrentPhase, orquestacoreworkflow.OrchestrationPhaseProgramacionV0)
+	}
+}
+
 func codexStackWriteDelayedDirectorDecisionsForTestV0(
 	t *testing.T,
 	stack StackV0,
@@ -99,4 +172,19 @@ func writeDelayedDirectorDecisionFileForTestV0(
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatalf("write delayed decisions: %v", err)
 	}
+}
+
+func codexStackDescriptorByTargetModuleForTestV0(
+	t *testing.T,
+	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+	targetModule string,
+) orquestaruntimecodexdelivery.CodexReceiptDescriptorV0 {
+	t.Helper()
+	for _, descriptor := range descriptors {
+		if descriptor.Spec.AgentPacket.TargetModule == targetModule {
+			return descriptor
+		}
+	}
+	t.Fatalf("descriptor target=%s no encontrado en %v", targetModule, codexStackRealSmokeDescriptorAgentsV0(descriptors))
+	return orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{}
 }

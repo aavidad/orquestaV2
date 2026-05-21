@@ -40,7 +40,7 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 				MaxCommands:          intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_COMMANDS", 20),
 				MaxOutboxPerCycle:    intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_OUTBOX", 4),
 				MaxDecisionCycles:    intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_DECISIONS", 1),
-				MaxExternalWaits:     intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS", 1),
+				MaxExternalWaits:     intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS", 120),
 			},
 		},
 	}

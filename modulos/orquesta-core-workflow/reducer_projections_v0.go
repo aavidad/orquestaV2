@@ -127,6 +127,7 @@ func applyAgentRequestedEventV0(current OrchestrationRunV0, event OrchestrationE
 	if err := decodePayloadV0(event.Payload, &payload); err != nil {
 		return current, err
 	}
+	payload = normalizeAgentRequestedPayloadV0(payload)
 	if err := ensureRunCanApplyEventV0(current, event); err != nil {
 		return current, err
 	}
@@ -142,6 +143,7 @@ func applyAgentRequestedEventV0(current OrchestrationRunV0, event OrchestrationE
 
 	next := cloneRunForReducerV0(current)
 	next.Agents = appendUniqueCompactRefV0(next.Agents, payload.AgentRequestID)
+	next.AgentPhaseRefs = appendUniqueCompactRefV0(next.AgentPhaseRefs, agentPhaseProjectionRefV0(payload))
 	effects, err := appendCommandEffectFromEventV0(next.CommandEffects, event, payload.AgentRequestID)
 	if err != nil {
 		return current, err

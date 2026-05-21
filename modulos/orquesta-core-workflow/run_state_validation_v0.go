@@ -119,6 +119,7 @@ func validateRunRefsV0(run OrchestrationRunV0) []OrchestrationValidationIssueV0 
 		"capacity_requests":           run.CapacityRequests,
 		"capacity_decisions":          run.CapacityDecisions,
 		"agents":                      run.Agents,
+		"agent_phase_refs":            run.AgentPhaseRefs,
 		"started_agents":              run.StartedAgents,
 		"failed_agents":               run.FailedAgents,
 		"lost_agents":                 run.LostAgents,
@@ -157,6 +158,9 @@ func validateRunRefsV0(run OrchestrationRunV0) []OrchestrationValidationIssueV0 
 	}
 	if lostAgentRefsInvalidV0(run) {
 		return []OrchestrationValidationIssueV0{issueV0(OrchestrationEstadoInconsistenteV0, "lost_agents")}
+	}
+	if agentPhaseRefsInvalidV0(run) {
+		return []OrchestrationValidationIssueV0{issueV0(OrchestrationEstadoInconsistenteV0, "agent_phase_refs")}
 	}
 	if agentStopRequestRefsInvalidV0(run) {
 		return []OrchestrationValidationIssueV0{issueV0(OrchestrationEstadoInconsistenteV0, "agent_stop_requests")}

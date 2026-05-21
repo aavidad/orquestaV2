@@ -818,3 +818,12 @@ Evidencia esperada: `AgentStopRequested` proyecta `agent_stop_requests` con `age
 Ultima ejecucion: 2026-05-13, ok, go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-orchestration-core.
 Riesgos: La proyeccion es compacta y no reemplaza al payload historico del event log; los conectores externos siguen siendo responsables de evidencias detalladas.
 ```
+
+```text
+Caso: ncw_074_artefacto_fase_tardio_agente
+Tipo: contrato
+Comando: go test -count=1 ./modulos/orquesta-core-workflow -run 'TestRegisterPhaseArtifactCommandV0AcceptsLateArtifactForAgentLaunchPhase|TestRegisterPhaseArtifactCommandV0RejectsLateArtifactForOtherAgentPhase|TestReplayDurableEventsV0AcceptsLatePhaseArtifactForAgentLaunchPhase'
+Evidencia esperada: `AgentRequested` proyecta la fase de arranque del agente; `RegisterPhaseArtifact` acepta un artefacto tardio de esa fase aunque el run ya haya abierto otra fase, y rechaza el mismo agente si declara una fase distinta.
+Ultima ejecucion: 2026-05-21, ok, comando focal anterior.
+Riesgos: No relaja identidad de agente ni `programacion` como fase de artefacto; solo evita que una transicion posterior invalide ACKs tardios legitimos.
+```

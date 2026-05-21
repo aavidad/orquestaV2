@@ -66,6 +66,7 @@ type OrchestrationRunV0 struct {
 	CapacityRequests          []string                 `json:"capacity_requests"`
 	CapacityDecisions         []string                 `json:"capacity_decisions"`
 	Agents                    []string                 `json:"agents"`
+	AgentPhaseRefs            []string                 `json:"agent_phase_refs,omitempty"`
 	StartedAgents             []string                 `json:"started_agents"`
 	FailedAgents              []string                 `json:"failed_agents"`
 	LostAgents                []string                 `json:"lost_agents,omitempty"`

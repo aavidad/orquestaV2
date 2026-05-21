@@ -132,11 +132,11 @@ Estado: aceptada.
 
 ```text
 Fecha: 2026-05-09
-Decision: Permitir varias esperas externas cortas por defecto.
-Motivo: una sola espera larga oculta progreso, bloquea supervision y convierte
-un agente sin ACK en `context deadline exceeded` en vez de en un estado
-gobernable por Orquesta/director.
-Impacto: `max_external_waits` por defecto pasa a 6. Los adaptadores REST/MCP
+Decision: Permitir muchas esperas externas cortas por defecto.
+Motivo: los agentes reales pueden tardar minutos. El director debe observar
+progreso entre ciclos, pero no debe cortar una ola productiva por un presupuesto
+por defecto de pocos segundos.
+Impacto: `max_external_waits` por defecto pasa a 120. Los adaptadores REST/MCP
 pueden enviar otro limite; cada conector de espera debe preferir esperas cortas
 para dejar que el loop observe entregas, progreso y leases entre ciclos.
 Estado: aceptada.

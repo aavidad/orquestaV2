@@ -69,7 +69,7 @@ func TestDirectorTaskV0IncluyeContratoDeDecisionesEjecutables(t *testing.T) {
 		"no lo uses para trozos minimos",
 		"Para documentar_app normal, por defecto crea una sola tarea completa de documentacion",
 		"Para crear_app_completa Go normal, prefiere tareas completas verticales",
-		"una tarea puede cubrir go.mod, entrypoint, paquete interno y pruebas",
+		"una tarea puede cubrir go.mod, entrypoint, paquete interno, README.md y pruebas",
 		"depends_on con el task_id inicial",
 		"go test ./...",
 		"imports desde go.mod",

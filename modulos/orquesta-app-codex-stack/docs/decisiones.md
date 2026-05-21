@@ -1147,3 +1147,18 @@ en `source_ref_details`. El core sigue neutral; la adaptacion vive en el borde
 de entrega externa y sirve para cualquier agente que devuelva fuentes ricas.
 Estado: aceptada.
 ```
+
+```text
+Fecha: 2026-05-21
+Decision: El director puede avanzar con ACKs parciales y recoger ACKs tardios
+de la ola anterior.
+Motivo: los agentes reales no terminan todos a la vez. Esperar al ultimo deja
+al director parado, pero rechazar el ACK de un agente legitimo porque el director
+ya abrio otra fase corta trabajo valido.
+Impacto: el core proyecta la fase de arranque por agente y `DrainRunV0` puede
+consumir decisiones mientras quedan agentes vivos. Si un ACK tardio declara la
+fase donde ese agente fue arrancado, se registra; si declara otra fase, se
+rechaza. Los defaults de espera del stack suben a 120 ciclos cortos para dar
+margen de minutos sin convertir cada ciclo en una espera opaca.
+Estado: aceptada.
+```

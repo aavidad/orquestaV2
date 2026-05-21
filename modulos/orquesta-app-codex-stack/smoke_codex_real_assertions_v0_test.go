@@ -196,13 +196,89 @@ func codexStackRealSmokeAllProgrammingDeliveriesRegisteredV0(
 	deliveries []string,
 	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
 ) bool {
+	tasks := map[string]bool{}
+	deliveredTasks := map[string]bool{}
 	for _, descriptor := range descriptors {
+		taskRef := codexStackRealSmokeDescriptorTaskRefV0(descriptor)
+		if taskRef == "" {
+			return false
+		}
+		tasks[taskRef] = true
 		ackRef := descriptor.Spec.AgentPacket.DeliveryRefs.AckRef
-		if !codexStackRealSmokeContainsProjectionPartV0(deliveries, ackRef) {
+		if codexStackRealSmokeContainsProjectionPartV0(deliveries, ackRef) {
+			deliveredTasks[taskRef] = true
+		}
+	}
+	for taskRef := range tasks {
+		if !deliveredTasks[taskRef] {
 			return false
 		}
 	}
 	return true
+}
+
+func TestCodexStackRealSmokeAllProgrammingDeliveriesRegisteredV0AceptaRecoveryPorTaskRef(t *testing.T) {
+	descriptors := []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+		codexStackRealSmokeDescriptorForTaskRefV0("agent-ref-original-001", "task-ref-programming-001", "ack-ref-original-001"),
+		codexStackRealSmokeDescriptorForTaskRefV0("agent-ref-assessment-001", "task-ref-programming-001", "ack-ref-assessment-001"),
+	}
+
+	if !codexStackRealSmokeAllProgrammingDeliveriesRegisteredV0(
+		[]string{"ack-ref-assessment-001"},
+		descriptors,
+	) {
+		t.Fatalf("recovery por task_ref no aceptado")
+	}
+}
+
+func TestCodexStackRealSmokeAllProgrammingDeliveriesRegisteredV0RequiereCadaTask(t *testing.T) {
+	descriptors := []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+		codexStackRealSmokeDescriptorForTaskRefV0("agent-ref-original-001", "task-ref-programming-001", "ack-ref-original-001"),
+		codexStackRealSmokeDescriptorForTaskRefV0("agent-ref-original-002", "task-ref-programming-002", "ack-ref-original-002"),
+	}
+
+	if codexStackRealSmokeAllProgrammingDeliveriesRegisteredV0(
+		[]string{"ack-ref-original-001"},
+		descriptors,
+	) {
+		t.Fatalf("acepta lote con task sin entrega")
+	}
+}
+
+func codexStackRealSmokeDescriptorForTaskRefV0(
+	agentRef string,
+	taskRef string,
+	ackRef string,
+) orquestaruntimecodexdelivery.CodexReceiptDescriptorV0 {
+	return orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+		AgentRef: agentRef,
+		Spec: orquestaruntime.ExternalAgentLaunchSpecV0{
+			AgentPacket: orquestaruntime.AgentStartPacketV0{
+				WorkOrderRef: taskRef,
+				Task: orquestaruntime.AgentStartTaskV0{
+					TaskRef: taskRef,
+				},
+				DeliveryRefs: orquestaruntime.AgentStartDeliveryRefsV0{
+					AckRef: ackRef,
+				},
+			},
+		},
+	}
+}
+
+func codexStackRealSmokeDescriptorTaskRefV0(
+	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+) string {
+	for _, value := range []string{
+		descriptor.Spec.AgentPacket.Task.TaskRef,
+		descriptor.Spec.AgentPacket.WorkOrderRef,
+	} {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func codexStackRealSmokeAllDescriptorsStartedV0(

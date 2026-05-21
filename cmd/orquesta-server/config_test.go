@@ -30,6 +30,24 @@ func TestServerConfigFromEnvV0UsaPresupuestoDeComandosParaFronteraParalela(t *te
 	}
 }
 
+func TestServerConfigFromEnvV0DaMargenRealALosAgentesPorDefecto(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
+	t.Setenv("ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS", "")
+	t.Setenv("ORQUESTA_DIRECTOR_MAX_EXTERNAL_WAITS", "")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.SupervisorCommand.DrainLimits.MaxExternalWaits != 120 {
+		t.Fatalf("server drain max_external_waits=%d want=120", config.SupervisorCommand.DrainLimits.MaxExternalWaits)
+	}
+	limits := directorLimitsV0()
+	if limits.MaxExternalWaits != 120 {
+		t.Fatalf("director max_external_waits=%d want=120", limits.MaxExternalWaits)
+	}
+}
+
 func TestServerConfigFromEnvV0AislaEstadoYDejaRuntimeEscribiblePorDefecto(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)

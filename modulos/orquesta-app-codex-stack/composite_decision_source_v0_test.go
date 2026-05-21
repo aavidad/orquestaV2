@@ -180,6 +180,141 @@ func TestCompositeDirectorDecisionSourceV0CompletaDependsOnBootstrap(t *testing.
 	}
 }
 
+func TestCompositeDirectorDecisionSourceV0CompletaReadmeParaAppGoCompleta(t *testing.T) {
+	decisions := codexStackDirectorDecisionsForTestV0(
+		"run-ref-stack-policy-readme-001",
+		"brainstorm-ref-stack-policy-readme-001",
+	)
+	decisions = codexStackMutateFirstMicrotaskForPolicyTestV0(
+		decisions,
+		func(task *orquestadirectoragent.DirectorAgentMicrotaskV0) {
+			task.WriteSet = []string{"go.mod", "cmd/server", "internal", "web", "docs"}
+			task.RequiredTests = []string{"go test ./..."}
+		},
+	)
+	source := compositeDirectorDecisionSourceV0{
+		Sources: []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0{
+			codexStackStaticDecisionSourceForTestV0{Decisions: decisions},
+		},
+	}
+
+	got, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{},
+	)
+
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	task, ok := codexStackMicrotaskForPolicyTestV0(got, "task-ref-stack-agenda-001")
+	if !ok || !codexStackStringInSetForTestV0(task.WriteSet, "README.md") {
+		t.Fatalf("README.md no completado en write_set: %+v", task)
+	}
+}
+
+func TestCompositeDirectorDecisionSourceV0TraduceWriteSetRaizDeAppGoCompleta(t *testing.T) {
+	decisions := codexStackDirectorDecisionsForTestV0(
+		"run-ref-stack-policy-root-001",
+		"brainstorm-ref-stack-policy-root-001",
+	)
+	decisions = codexStackMutateFirstMicrotaskForPolicyTestV0(
+		decisions,
+		func(task *orquestadirectoragent.DirectorAgentMicrotaskV0) {
+			task.Summary = "Construir modulo Go autonomo con HTTP, web y pruebas."
+			task.WriteSet = []string{"."}
+			task.RequiredTests = []string{"go test ./..."}
+		},
+	)
+	source := compositeDirectorDecisionSourceV0{
+		Sources: []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0{
+			codexStackStaticDecisionSourceForTestV0{Decisions: decisions},
+		},
+	}
+
+	got, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{},
+	)
+
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	task, ok := codexStackMicrotaskForPolicyTestV0(got, "task-ref-stack-agenda-001")
+	if !ok {
+		t.Fatalf("task no encontrada")
+	}
+	for _, want := range []string{"go.mod", "cmd/server", "internal", "web", "README.md"} {
+		if !codexStackStringInSetForTestV0(task.WriteSet, want) {
+			t.Fatalf("write_set no contiene %s: %+v", want, task.WriteSet)
+		}
+	}
+	if codexStackStringInSetForTestV0(task.WriteSet, ".") {
+		t.Fatalf("write_set raiz no traducido: %+v", task.WriteSet)
+	}
+}
+
+func TestCompositeDirectorDecisionSourceV0CompletaWebSiLaAppGoLoPide(t *testing.T) {
+	decisions := codexStackDirectorDecisionsForTestV0(
+		"run-ref-stack-policy-web-001",
+		"brainstorm-ref-stack-policy-web-001",
+	)
+	decisions = codexStackMutateFirstMicrotaskForPolicyTestV0(
+		decisions,
+		func(task *orquestadirectoragent.DirectorAgentMicrotaskV0) {
+			task.Summary = "Construir modulo Go autonomo con API y web."
+			task.WriteSet = []string{"go.mod", "cmd/server/**", "internal/**", "README.md", "docs/**"}
+			task.RequiredTests = []string{"go test ./..."}
+		},
+	)
+	source := compositeDirectorDecisionSourceV0{
+		Sources: []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0{
+			codexStackStaticDecisionSourceForTestV0{Decisions: decisions},
+		},
+	}
+
+	got, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{},
+	)
+
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	task, ok := codexStackMicrotaskForPolicyTestV0(got, "task-ref-stack-agenda-001")
+	if !ok || !codexStackStringInSetForTestV0(task.WriteSet, "web") {
+		t.Fatalf("web no completado en write_set: %+v", task)
+	}
+}
+
+func TestCompositeDirectorDecisionSourceV0NoDuplicaReadmeSiOtraTareaLoCubre(t *testing.T) {
+	source := compositeDirectorDecisionSourceV0{
+		Sources: []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0{
+			codexStackStaticDecisionSourceForTestV0{
+				Decisions: codexStackBatchDirectorDecisionsForTestV0(
+					"run-ref-stack-policy-readme-002",
+					"brainstorm-ref-stack-policy-readme-002",
+				),
+			},
+		},
+	}
+
+	got, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{},
+	)
+
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	task, ok := codexStackMicrotaskForPolicyTestV0(got, "task-ref-stack-agenda-bootstrap")
+	if !ok {
+		t.Fatalf("bootstrap no encontrado")
+	}
+	if codexStackStringInSetForTestV0(task.WriteSet, "README.md") {
+		t.Fatalf("README.md duplicado en bootstrap: %+v", task.WriteSet)
+	}
+}
+
 func TestCompositeDirectorDecisionSourceV0NoPermiteQueCambioTapePlanInicialInvalido(t *testing.T) {
 	initial := codexStackDirectorDecisionsForTestV0(
 		"run-ref-stack-policy-005",

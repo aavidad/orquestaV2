@@ -54,6 +54,83 @@ func TestReplayDurableEventsV0AcceptsPhaseArtifactRegistered(t *testing.T) {
 	}
 }
 
+func TestRegisterPhaseArtifactCommandV0AcceptsLateArtifactForAgentLaunchPhase(t *testing.T) {
+	run := mustRunWithStartedPhaseAgentV0(t, OrchestrationPhaseBrainstormingArquitecturaV0, "agent-director-brainstorm")
+	run = mustApplySingleCommandEventV0(
+		t,
+		run,
+		mustOpenPhaseCommandV0(t, "cmd-open-programacion-after-brainstorm-agent", "idem-open-programacion-after-brainstorm-agent", OrchestrationPhaseProgramacionV0),
+	)
+	payload := validRegisterPhaseArtifactPayloadV0(
+		"artifact-brainstorm-late",
+		"agent-director-brainstorm",
+		OrchestrationPhaseBrainstormingArquitecturaV0,
+	)
+	command, err := NewRegisterPhaseArtifactCommandV0(
+		validCommandMetaV0("cmd-phase-artifact-late", "idem-phase-artifact-late"),
+		payload,
+	)
+	command = mustCommandV0(t, command, err)
+
+	result, err := HandleCommandV0(run, command)
+	if err != nil {
+		t.Fatalf("handle late RegisterPhaseArtifact: %v", err)
+	}
+	assertSingleEventTypeV0(t, result, OrchestrationEventPhaseArtifactRegisteredV0)
+	applied := mustApplyReducerEventV0(t, run, result.Events[0])
+	if !phaseArtifactInRunForTestV0(applied, "artifact-brainstorm-late") {
+		t.Fatalf("phase_artifacts=%v missing late artifact", applied.PhaseArtifacts)
+	}
+}
+
+func TestRegisterPhaseArtifactCommandV0RejectsLateArtifactForOtherAgentPhase(t *testing.T) {
+	run := mustRunWithStartedPhaseAgentV0(t, OrchestrationPhaseBrainstormingArquitecturaV0, "agent-director-brainstorm")
+	run = mustApplySingleCommandEventV0(
+		t,
+		run,
+		mustOpenPhaseCommandV0(t, "cmd-open-programacion-wrong-artifact", "idem-open-programacion-wrong-artifact", OrchestrationPhaseProgramacionV0),
+	)
+	payload := validRegisterPhaseArtifactPayloadV0(
+		"artifact-wrong-phase",
+		"agent-director-brainstorm",
+		OrchestrationPhaseVotacionYDecisionV0,
+	)
+	command, err := NewRegisterPhaseArtifactCommandV0(
+		validCommandMetaV0("cmd-phase-artifact-wrong", "idem-phase-artifact-wrong"),
+		payload,
+	)
+	command = mustCommandV0(t, command, err)
+
+	_, err = HandleCommandV0(run, command)
+
+	assertCommandErrorV0(t, err, ErrTransicionInvalidaV0, "payload.phase_id")
+}
+
+func TestReplayDurableEventsV0AcceptsLatePhaseArtifactForAgentLaunchPhase(t *testing.T) {
+	artifact := mustPhaseArtifactRegisteredEventWithKeyV0(t, "evt-durable-phase-artifact-late", 8, "idem-phase-artifact-late", "artifact-brainstorm-late")
+	events := []OrchestrationEventV0{
+		mustReplayRunStartedEventWithKeyV0(t, "evt-durable-start-phase-artifact-late", 1, "idem-start-phase-artifact-late"),
+		mustReplayPhaseEventWithKeyV0(t, "evt-durable-open-phase-artifact-late", 2, "idem-open-phase-artifact-late", OrchestrationPhaseBrainstormingArquitecturaV0),
+		mustCapacityRequestedPhaseEventWithKeyV0(t, "evt-durable-capacity-phase-artifact-late", 3, "idem-capacity-phase-artifact-late", "capacity-brainstorm-001", OrchestrationPhaseBrainstormingArquitecturaV0),
+		mustCapacityDecidedEventWithKeyV0(t, "evt-durable-capacity-decision-phase-artifact-late", 4, "idem-capacity-decision-phase-artifact-late", "capacity-brainstorm-001"),
+		mustAgentRequestedPhaseEventWithKeyV0(t, "evt-durable-agent-phase-artifact-late", 5, "idem-agent-phase-artifact-late", "agent-director-brainstorm", "capacity-brainstorm-001", OrchestrationPhaseBrainstormingArquitecturaV0),
+		mustAgentStartedEventWithKeyV0(t, "evt-durable-agent-started-phase-artifact-late", 6, "idem-agent-started-phase-artifact-late", "agent-director-brainstorm"),
+		mustReplayPhaseEventWithKeyV0(t, "evt-durable-open-programacion-before-late-artifact", 7, "idem-open-programacion-before-late-artifact", OrchestrationPhaseProgramacionV0),
+		artifact,
+	}
+
+	got, err := ReplayDurableEventsV0(events)
+	if err != nil {
+		t.Fatalf("replay durable late PhaseArtifactRegistered: %v", err)
+	}
+	if got.CurrentPhase != OrchestrationPhaseProgramacionV0 {
+		t.Fatalf("current_phase=%s, want %s", got.CurrentPhase, OrchestrationPhaseProgramacionV0)
+	}
+	if !phaseArtifactInRunForTestV0(got, "artifact-brainstorm-late") {
+		t.Fatalf("phase_artifacts=%v missing late artifact", got.PhaseArtifacts)
+	}
+}
+
 func TestRegisterPhaseArtifactCommandV0RequiresStartedAgent(t *testing.T) {
 	run := mustRunWithRequestedPhaseAgentV0(t, OrchestrationPhaseBrainstormingArquitecturaV0, "agent-director-not-started")
 	command := mustRegisterPhaseArtifactCommandV0(t, "cmd-phase-artifact-agent", "idem-phase-artifact-agent", "artifact-agent-001", "agent-director-not-started")
@@ -171,4 +248,9 @@ func mustPhaseArtifactRegisteredEventWithKeyV0(t *testing.T, eventID string, seq
 	payload := validRegisterPhaseArtifactPayloadV0(artifactRef, "agent-director-brainstorm", OrchestrationPhaseBrainstormingArquitecturaV0)
 	event, err := NewPhaseArtifactRegisteredEventV0(meta, phaseArtifactRegisteredPayloadFromCommandV0(payload))
 	return mustReducerEventV0(t, event, err)
+}
+
+func phaseArtifactInRunForTestV0(run OrchestrationRunV0, artifactRef string) bool {
+	_, ok := phaseArtifactProjectionForRefV0(run, artifactRef)
+	return ok
 }

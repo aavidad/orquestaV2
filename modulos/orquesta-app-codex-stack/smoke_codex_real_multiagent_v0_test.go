@@ -61,37 +61,17 @@ func TestNuevaAppWebCodexStackRealMultiagentOptInV0(t *testing.T) {
 			codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir),
 		)
 	}
-	if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
-		RunRef:               descriptors[0].RunID,
-		CorrelationID:        "corr-app-stack-real-multi-drain",
-		MaxBursts:            16,
-		MaxStepsPerBurst:     12,
-		MaxDispatchesPerWait: 8,
-		MaxCommands:          20,
-		MaxOutboxPerCycle:    8,
-		MaxExternalWaits:     codexStackRealSmokeDrainCycleMaxExternalWaitsV0(maxExternalWaits),
-	}); err != nil {
-		t.Fatalf("DrainRunV0: %v\n%s", err, codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
-	}
-	run, err := stores.RunStore.LoadRunV0(ctx, descriptors[0].RunID)
-	if err != nil {
-		t.Fatalf("LoadRunV0: %v", err)
-	}
-	if len(run.StartedAgents) < 4 {
-		t.Fatalf("started_agents=%v", run.StartedAgents)
-	}
-	allDescriptors := codexStackRealSmokeDescriptorsV0(t, stores.ReceiptStore)
-	if len(allDescriptors) < 5 || !codexStackRealSmokeHasProgrammingDescriptorV0(allDescriptors) {
-		t.Fatalf(
-			"descriptors=%d programming=%v phase=%s started=%v agents=%v\n%s",
-			len(allDescriptors),
-			codexStackRealSmokeProgrammingDescriptorsV0(allDescriptors),
-			run.CurrentPhase,
-			run.StartedAgents,
-			run.Agents,
-			codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir),
-		)
-	}
+	programmingStart := codexStackRealSmokeDrainUntilProgrammingStartedV0(
+		t,
+		ctx,
+		stack,
+		stores,
+		descriptors[0].RunID,
+		cfg.RuntimeWorkDir,
+		maxExternalWaits,
+	)
+	run := programmingStart.Run
+	allDescriptors := programmingStart.Descriptors
 	programmingDrain := codexStackRealSmokeDrainUntilProgrammingDeliveredV0(
 		t,
 		ctx,
@@ -138,7 +118,7 @@ func TestNuevaAppWebCodexStackRealMultiagentOptInV0(t *testing.T) {
 		t,
 		stores.EventSink.EventsV0(),
 		allDescriptors,
-		2,
+		1,
 	)
 	codexStackRealSmokeVerifyDescriptorWriteSetsV0(t, cfg.ProjectWorkDir, allDescriptors)
 	codexStackRealSmokeVerifyGoFileSizesV0(t, cfg.ProjectWorkDir)

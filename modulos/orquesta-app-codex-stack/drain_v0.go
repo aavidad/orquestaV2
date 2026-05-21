@@ -10,6 +10,8 @@ import (
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
+const defaultDrainRunMaxExternalWaitsV0 = 120
+
 type waitAgentRefsDeliverySourceV0 struct {
 	Inner         orquestacionnucleoapp.AgentDeliveryObservationProviderPortV0
 	WaitAgentRefs []string
@@ -132,7 +134,7 @@ func normalizeDrainRunRequestV0(request DrainRunRequestV0) DrainRunRequestV0 {
 		request.MaxDecisionCycles = 4
 	}
 	if request.MaxExternalWaits <= 0 {
-		request.MaxExternalWaits = 6
+		request.MaxExternalWaits = defaultDrainRunMaxExternalWaitsV0
 	}
 	return request
 }

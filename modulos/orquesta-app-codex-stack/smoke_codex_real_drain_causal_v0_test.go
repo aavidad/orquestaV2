@@ -17,10 +17,16 @@ func codexStackRealSmokeDrainCycleMaxExternalWaitsV0(maxExternalWaits int) int {
 	if maxExternalWaits <= 0 {
 		return 1
 	}
-	if maxExternalWaits > 30 {
-		return 30
-	}
 	return maxExternalWaits
+}
+
+func TestCodexStackRealSmokeDrainCycleMaxExternalWaitsV0NoRecortaEsperaReal(t *testing.T) {
+	if got := codexStackRealSmokeDrainCycleMaxExternalWaitsV0(120); got != 120 {
+		t.Fatalf("max_external_waits=%d want=120", got)
+	}
+	if got := codexStackRealSmokeDrainCycleMaxExternalWaitsV0(0); got != 1 {
+		t.Fatalf("max_external_waits fallback=%d want=1", got)
+	}
 }
 
 func codexStackRealSmokeDrainFingerprintV0(

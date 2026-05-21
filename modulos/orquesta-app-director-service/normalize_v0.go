@@ -15,7 +15,7 @@ const (
 	defaultStartAppDirectorMaxCommandsV0          = 20
 	defaultStartAppDirectorMaxOutboxPerCycleV0    = 8
 	defaultStartAppDirectorMaxDecisionCyclesV0    = 4
-	defaultStartAppDirectorMaxExternalWaitsV0     = 6
+	defaultStartAppDirectorMaxExternalWaitsV0     = 120
 )
 
 func normalizeStartAppDirectorRequestV0(

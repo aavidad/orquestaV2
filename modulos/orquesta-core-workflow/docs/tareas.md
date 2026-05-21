@@ -753,3 +753,13 @@ Validacion: 2026-05-13, ok, go test -count=1 ./modulos/orquesta-core-workflow ./
 Bloqueos: No sustituye evidencias completas ni parada fisica; esas piezas siguen en event log, outbox y puertos runtime.
 Estado: completada local
 ```
+
+```text
+ID: NCW-074
+Objetivo: Permitir artefactos de fase tardios cuando pertenecen al agente y fase donde fue arrancado.
+Write-set: agent_phase_projection_v0.go, run_state_v0.go, reducer_projections_v0.go, phase_artifact_flow_v0.go, tests y docs locales.
+Contrato: AgentRequested, OrchestrationRunV0.AgentPhaseRefs, RegisterPhaseArtifact, PhaseArtifactRegistered.
+Validacion: 2026-05-21, ok, go test -count=1 ./modulos/orquesta-core-workflow -run 'TestRegisterPhaseArtifactCommandV0AcceptsLateArtifactForAgentLaunchPhase|TestRegisterPhaseArtifactCommandV0RejectsLateArtifactForOtherAgentPhase|TestReplayDurableEventsV0AcceptsLatePhaseArtifactForAgentLaunchPhase'.
+Bloqueos: No guarda contenido de ACK ni conoce runtime; la observacion y validacion de archivos sigue en adaptadores externos.
+Estado: completada local
+```

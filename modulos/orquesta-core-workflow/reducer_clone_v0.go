@@ -11,6 +11,7 @@ func cloneRunForReducerV0(run OrchestrationRunV0) OrchestrationRunV0 {
 	next.CapacityRequests = cloneStringsV0(run.CapacityRequests)
 	next.CapacityDecisions = cloneStringsV0(run.CapacityDecisions)
 	next.Agents = cloneStringsV0(run.Agents)
+	next.AgentPhaseRefs = cloneStringsV0(run.AgentPhaseRefs)
 	next.StartedAgents = cloneStringsV0(run.StartedAgents)
 	next.FailedAgents = cloneStringsV0(run.FailedAgents)
 	next.LostAgents = cloneStringsV0(run.LostAgents)

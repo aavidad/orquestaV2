@@ -21,6 +21,84 @@ type codexStackRealSmokeDrainSummaryV0 struct {
 	Waits    int
 }
 
+func codexStackRealSmokeDrainUntilProgrammingStartedV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	stores codexStackRealSmokeStoresV0,
+	runRef string,
+	runtimeWorkDir string,
+	maxExternalWaits int,
+) codexStackRealSmokeProgrammingDrainV0 {
+	t.Helper()
+	result, err := codexStackRealSmokeDrainUntilProgrammingStartedResultV0(
+		t,
+		ctx,
+		stack,
+		stores,
+		runRef,
+		maxExternalWaits,
+	)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, codexStackRealSmokeDiagnosticsV0(runtimeWorkDir))
+	}
+	return result
+}
+
+func codexStackRealSmokeDrainUntilProgrammingStartedResultV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	stores codexStackRealSmokeStoresV0,
+	runRef string,
+	maxExternalWaits int,
+) (codexStackRealSmokeProgrammingDrainV0, error) {
+	t.Helper()
+	var last codexStackRealSmokeProgrammingDrainV0
+	for cycle := 1; cycle <= 16; cycle++ {
+		drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+			RunRef:               runRef,
+			CorrelationID:        fmt.Sprintf("corr-app-stack-real-programming-start-%03d", cycle),
+			MaxBursts:            16,
+			MaxStepsPerBurst:     12,
+			MaxDispatchesPerWait: 8,
+			MaxCommands:          20,
+			MaxOutboxPerCycle:    8,
+			MaxExternalWaits:     codexStackRealSmokeDrainCycleMaxExternalWaitsV0(maxExternalWaits),
+		})
+		if err != nil {
+			return last, fmt.Errorf("DrainRunV0 arranque programacion ciclo=%d: %w", cycle, err)
+		}
+		run := mustLoadCodexStackRunForTestV0(t, stack, runRef)
+		last = codexStackRealSmokeProgrammingDrainV0{
+			Drain: codexStackRealSmokeDrainSummaryV0{
+				Status:   string(drain.Status),
+				Attempts: len(drain.Attempts),
+				Waits:    len(drain.ExternalWaits),
+			},
+			Run:         run,
+			Descriptors: codexStackRealSmokeDescriptorsV0(t, stores.ReceiptStore),
+		}
+		if len(run.StartedAgents) < 4 {
+			return last, fmt.Errorf("started_agents=%v want>=4", run.StartedAgents)
+		}
+		if len(last.Descriptors) >= 5 && codexStackRealSmokeHasProgrammingDescriptorV0(last.Descriptors) {
+			return last, nil
+		}
+	}
+	return last, fmt.Errorf(
+		"programacion no arranco tras reentradas: descriptors=%d programming=%v phase=%s started=%v agents=%v status=%s attempts=%d waits=%d",
+		len(last.Descriptors),
+		codexStackRealSmokeProgrammingDescriptorsV0(last.Descriptors),
+		last.Run.CurrentPhase,
+		last.Run.StartedAgents,
+		last.Run.Agents,
+		last.Drain.Status,
+		last.Drain.Attempts,
+		last.Drain.Waits,
+	)
+}
+
 func codexStackRealSmokeDrainUntilProgrammingDeliveredV0(
 	t *testing.T,
 	ctx context.Context,
@@ -57,7 +135,7 @@ func codexStackRealSmokeDrainUntilProgrammingDeliveredResultV0(
 	var last codexStackRealSmokeProgrammingDrainV0
 	previousSequence := mustLoadCodexStackRunForTestV0(t, stack, runRef).LastSequence
 	previousFingerprint := codexStackRealSmokeDrainFingerprintV0(t, stores, stack, runRef)
-	for cycle := 1; cycle <= 8; cycle++ {
+	for cycle := 1; cycle <= 16; cycle++ {
 		drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
 			RunRef:               runRef,
 			CorrelationID:        fmt.Sprintf("corr-app-stack-real-programming-drain-%03d", cycle),
