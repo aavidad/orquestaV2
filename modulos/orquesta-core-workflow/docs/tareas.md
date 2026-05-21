@@ -25,6 +25,16 @@ Estado: completada local
 ```
 
 ```text
+ID: NCW-075
+Objetivo: Definir perfiles neutrales de trabajo para estudio de codigo, implementacion, refactor, pruebas, documentacion, revision y trabajo de dominio sin crear un modulo paralelo.
+Write-set: work_profile_*.go, work_profile_v0_test.go, docs/contratos.md, docs/contratos_microtareas.md, docs/pruebas.md, docs/tareas.md, docs/decisiones.md.
+Contrato: WorkProfileV0, WorkflowTaskFromWorkProfileV0, WorkflowTaskV0.
+Validacion: 2026-05-22, ok, go test -count=1 ./modulos/orquesta-core-workflow.
+Bloqueos: La seleccion de capacidad/rol en scheduler y la inyeccion desde conectores quedan para el siguiente corte; este corte solo cierra el contrato neutral reutilizable.
+Estado: completada local
+```
+
+```text
 ID: NCW-069
 Objetivo: Permitir `RecordReplanDecision` desde `AgentWorkAssessed` como fuente durable en fase `programacion`.
 Write-set: replan_decision_flow_v0.go, replan_decision_projection_v0.go, replan_decision_agent_assessment_v0_test.go, docs locales.

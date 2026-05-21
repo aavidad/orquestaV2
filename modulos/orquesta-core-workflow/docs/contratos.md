@@ -232,6 +232,18 @@ Detalle: ver `docs/contratos_microtareas.md`.
 Estado: implementado local en NCW-008.
 ```
 
+## `WorkProfileV0`
+
+```text
+Nombre: WorkProfileV0
+Tipo: dto/fabrica neutral
+Version: v0 candidato local
+Propietario: orquesta-core-workflow
+Consumidores: director operativo, scheduler, conectores de dominio
+Detalle: ver `docs/contratos_microtareas.md`.
+Estado: implementado local en NCW-075.
+```
+
 ## `OrchestrationEventV0`
 
 ```text

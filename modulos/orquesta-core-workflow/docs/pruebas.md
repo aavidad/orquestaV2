@@ -16,6 +16,15 @@ Detalle quality gates: `docs/pruebas_quality_gates.md`.
 ## Pruebas previstas
 
 ```text
+Caso: work_profile_to_workflow_task_neutral
+Tipo: unit | contract | regression
+Comando: go test -count=1 ./modulos/orquesta-core-workflow -run 'TestWorkflowTaskFromWorkProfileV0|TestValidateWorkProfileV0|TestNormalizeWorkProfileKindV0'
+Evidencia esperada: `WorkProfileV0` normaliza alias, aplica fase y criterios base, exige contratos de funcion, exige pruebas para implementacion/refactor/pruebas, conserva linaje y rechaza scope inseguro a traves de `WorkflowTaskV0`.
+Ultima ejecucion: 2026-05-22, ok, go test -count=1 ./modulos/orquesta-core-workflow.
+Riesgos: No decide proveedor, modelo, proceso real ni reglas internas de conectores; solo materializa contrato neutral hacia `WorkflowTaskV0`.
+```
+
+```text
 Caso: quality_gate_blocking_policy_por_subject
 Tipo: unit | contract | regression
 Comando: go test -count=1 ./modulos/orquesta-core-workflow -run TestPendingBlockingQualityGateRefsForSubjectV0

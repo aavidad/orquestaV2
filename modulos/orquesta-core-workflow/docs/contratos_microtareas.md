@@ -44,6 +44,56 @@ Errores:
 Estado: implementado local en NCW-008.
 ```
 
+## `WorkProfileV0`
+
+```text
+Nombre: WorkProfileV0
+Tipo: dto/fabrica neutral
+Version: v0 candidato local
+Propietario: orquesta-core-workflow
+Consumidores: director operativo, scheduler, conectores de dominio como entrada previa a WorkflowTaskV0
+Campos:
+  - schema_version
+  - profile_ref
+  - profile_kind
+  - task_ref
+  - run_ref
+  - phase_id
+  - title
+  - objective
+  - summary
+  - scope_refs
+  - acceptance_criteria
+  - required_tests
+  - depends_on
+  - parent_task_ref
+  - cohort_ref
+  - wave_ref
+  - delegation_depth
+  - max_child_agents
+  - child_task_refs
+  - function_contract_refs
+Perfiles iniciales:
+  - code_study
+  - implementation
+  - refactor
+  - required_tests
+  - documentation
+  - review
+  - domain_work
+Invariantes:
+  - DTO puro sin adaptador, proveedor, proceso real, HOME, credenciales ni conocimiento interno de conectores.
+  - Reutiliza `WorkflowTaskV0`: `WorkflowTaskFromWorkProfileV0` valida el perfil y produce una tarea durable compacta.
+  - `profile_kind` decide fase y criterios base por politica neutral; los conectores aportan refs, reglas y validadores.
+  - `implementation`, `refactor` y `required_tests` exigen `required_tests` antes de poder materializarse.
+  - Conserva linaje neutral de delegacion: parent task, cohorte, ola, profundidad, fanout e hijos.
+  - Exige `function_contract_refs` para no crear tareas sin contrato invocable.
+Errores:
+  - work_profile_invalido
+  - work_profile_task_invalida
+Estado: implementado local en NCW-075.
+```
+
 ## `CreateMicrotask`
 
 ```text

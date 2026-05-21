@@ -832,3 +832,13 @@ Contratos afectados: AssessAgentWork, AgentWorkAssessed, AgentStopRequested,
 StopRuntimeAgentRequestV0.
 Estado: aceptada local en NCW-074
 ```
+
+```text
+Fecha: 2026-05-22
+Decision: Crear `WorkProfileV0` dentro de `orquesta-core-workflow` como fabrica neutral de `WorkflowTaskV0`.
+Motivo: programacion, refactor, estudio de codigo, documentacion, revision y trabajo de dominio son perfiles de trabajo del nucleo, no detalles de OPES ni del adaptador Codex. Ya existia `WorkflowTaskV0` como unidad durable, por lo que crear otro modulo habria duplicado la rueda.
+Alternativas: meter reglas de perfil en el stack Codex; crear `orquesta-work-profiles`; codificar heuristicas en texto del director. Todas mezclan responsabilidades o dificultan validacion focal.
+Impacto: `WorkProfileV0` normaliza alias, aplica fase/criterios base, exige contratos de funcion, exige pruebas en perfiles de ejecucion y conserva linaje neutral antes de producir `WorkflowTaskV0`.
+Contratos afectados: WorkProfileV0, WorkflowTaskFromWorkProfileV0, WorkflowTaskV0.
+Estado: aceptada local en NCW-075
+```
