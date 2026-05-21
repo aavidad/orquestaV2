@@ -36,6 +36,8 @@ func TestReceiveAppChangeIntentEventV0RegistraSolicitudDeCambio(t *testing.T) {
 		records[0].ReceivedAt != "2026-05-10T10:20:00Z" ||
 		records[0].Request.ExternalWork == nil ||
 		records[0].Request.ExternalWork.WorkKind != "documentation" ||
+		len(records[0].Request.RequiredTests) != 1 ||
+		records[0].Request.RequiredTests[0] != "go test -count=1 ./..." ||
 		len(records[0].Request.ExternalWork.InputFields) != 2 ||
 		records[0].Request.ExternalWork.InputFields[0].Name != "topic_ref" ||
 		records[0].Request.ExternalWork.InputFields[0].Value != "topic-ref-docs" ||
@@ -103,6 +105,7 @@ func validAppChangeIntentEventForTestV0() AppChangeIntentEventV0 {
 		CurrentStateRefs:   []string{"delivery-ref-web-001"},
 		AcceptanceCriteria: []string{"vista semanal modificada"},
 		AllowedWriteSet:    []string{"web/agenda"},
+		RequiredTests:      []string{"go test -count=1 ./..."},
 		ExternalWork: &AppChangeExternalWorkV0{
 			ProjectRef:    "project-ref-agenda",
 			InterfaceRefs: []string{"mcp-contract-ref-agenda-v0"},

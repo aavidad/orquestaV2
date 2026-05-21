@@ -48,6 +48,10 @@ Evidencia 2026-05-11: la microtarea de programacion generada por la fuente
 incluye `required_tests`; si el write-set toca codigo Go, incluye
 `go test ./...`.
 
+Evidencia adicional: si `AppChangeRequestV0.required_tests` trae pruebas
+explicitas, la fuente las conserva al principio de la microtarea y solo infiere
+`go test ./...` si no llega ya un comando Go.
+
 Evidencia adicional: un `AppChangeIntentEventV0` recibido por
 `orquesta-app-change` queda en el store y la fuente lo convierte en decisiones
 de replan si el run contiene la pregunta del director.

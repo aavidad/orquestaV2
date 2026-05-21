@@ -80,9 +80,11 @@ func TestInMemoryAppChangeStoreV0UsaCopiasDefensivas(t *testing.T) {
 	store := NewInMemoryAppChangeStoreV0()
 	record := appChangeRecordForStoreTestV0("run-a", "change-1")
 	record.Request.AcceptanceCriteria = []string{"criterio-original"}
+	record.Request.RequiredTests = []string{"test-original"}
 
 	mustSaveAppChangeRecordV0(t, store, record)
 	record.Request.AcceptanceCriteria[0] = "criterio-mutado"
+	record.Request.RequiredTests[0] = "test-mutado"
 
 	records, err := store.ListAppChangeRecordsV0(
 		context.Background(),
@@ -92,6 +94,7 @@ func TestInMemoryAppChangeStoreV0UsaCopiasDefensivas(t *testing.T) {
 		t.Fatalf("ListAppChangeRecordsV0: %v", err)
 	}
 	records[0].Request.AcceptanceCriteria[0] = "criterio-mutado-desde-listado"
+	records[0].Request.RequiredTests[0] = "test-mutado-desde-listado"
 
 	records, err = store.ListAppChangeRecordsV0(
 		context.Background(),
@@ -100,7 +103,8 @@ func TestInMemoryAppChangeStoreV0UsaCopiasDefensivas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAppChangeRecordsV0: %v", err)
 	}
-	if records[0].Request.AcceptanceCriteria[0] != "criterio-original" {
+	if records[0].Request.AcceptanceCriteria[0] != "criterio-original" ||
+		records[0].Request.RequiredTests[0] != "test-original" {
 		t.Fatalf("record mutado: %+v", records[0])
 	}
 }

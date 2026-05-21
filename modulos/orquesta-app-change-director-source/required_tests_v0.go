@@ -9,7 +9,8 @@ import (
 func appChangeTaskRequiredTestsV0(
 	request orquestaappchange.AppChangeRequestV0,
 ) []string {
-	tests := []string{"validar criterios de aceptacion del cambio"}
+	tests := append([]string(nil), request.RequiredTests...)
+	tests = append(tests, "validar criterios de aceptacion del cambio")
 	if appChangeHasExternalWorkV0(request) {
 		tests = append(tests, "validar contrato externo de dominio")
 		if appChangeIsDraftContentBlockWorkV0(request) {
@@ -45,9 +46,34 @@ func appChangeTaskRequiredTestsV0(
 		}
 	}
 	if appChangeWriteSetLooksLikeGoV0(request.AllowedWriteSet) {
-		tests = append([]string{"go test ./..."}, tests...)
+		if !appChangeRequiredTestsContainGoTestV0(tests) {
+			tests = append([]string{"go test ./..."}, tests...)
+		}
 	}
-	return tests
+	return compactAppChangeDirectorStringsV0(tests)
+}
+
+func appChangeRequiredTestsContainGoTestV0(tests []string) bool {
+	for _, test := range tests {
+		if strings.HasPrefix(strings.TrimSpace(test), "go test") {
+			return true
+		}
+	}
+	return false
+}
+
+func compactAppChangeDirectorStringsV0(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" || seen[trimmed] {
+			continue
+		}
+		seen[trimmed] = true
+		out = append(out, trimmed)
+	}
+	return out
 }
 
 func appChangeWriteSetLooksLikeGoV0(writeSet []string) bool {

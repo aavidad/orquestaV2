@@ -68,6 +68,31 @@ func TestAppChangeDirectorDecisionSourceV0ExigeGoTestSiTocaCodigoGo(t *testing.T
 	}
 }
 
+func TestAppChangeDirectorDecisionSourceV0ConservaRequiredTestsExplicitos(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.AllowedWriteSet = []string{"web/agenda/view.go"}
+	record.Request.RequiredTests = []string{"go test -count=1 ./...", "npm test"}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	task := decisions[6].CreateMicrotask.Task
+	if len(task.RequiredTests) < 3 ||
+		task.RequiredTests[0] != "go test -count=1 ./..." ||
+		task.RequiredTests[1] != "npm test" ||
+		stringInSetV0(task.RequiredTests, "go test ./...") {
+		t.Fatalf("required_tests=%+v", task.RequiredTests)
+	}
+}
+
 func TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno(t *testing.T) {
 	record := appChangeRecordForSourceTestV0()
 	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{

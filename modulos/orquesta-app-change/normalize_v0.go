@@ -25,6 +25,7 @@ func normalizeAppChangeRequestV0(request AppChangeRequestV0) AppChangeRequestV0 
 	request.AcceptanceCriteria = compactAppChangeStringsV0(request.AcceptanceCriteria)
 	request.Constraints = compactAppChangeStringsV0(request.Constraints)
 	request.AllowedWriteSet = compactAppChangeStringsV0(request.AllowedWriteSet)
+	request.RequiredTests = compactAppChangeStringsV0(request.RequiredTests)
 	request.MetadataRefs = compactAppChangeStringsV0(request.MetadataRefs)
 	request.ExternalWork = normalizeAppChangeExternalWorkV0(request.ExternalWork)
 	if request.RequestID == "" {

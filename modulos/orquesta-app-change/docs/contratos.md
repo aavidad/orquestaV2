@@ -15,6 +15,9 @@ Campos principales:
 - `acceptance_criteria`: criterios visibles de cierre;
 - `allowed_write_set`: rutas relativas permitidas si el usuario/director ya
   quiere acotar el cambio.
+- `required_tests`: pruebas o validaciones explicitas que deben conservarse en
+  la microtarea del director; si faltan, el adaptador puede inferir pruebas
+  minimas por write-set o dominio.
 - `external_work`: metadata opaca opcional para trabajos de dominio de una app
   externa, por ejemplo una fabrica documental. Incluye `project_ref`,
   `job_ref`, `interface_refs`, `work_kind`, `work_refs` e `input_fields`.

@@ -12,13 +12,20 @@ func TestPrepareAppChangeRequestV0NormalizaEnvelopePublico(t *testing.T) {
 			"criterio",
 			"",
 		},
+		RequiredTests: []string{
+			" go test ./... ",
+			"go test ./...",
+			"",
+		},
 	})
 
 	if request.SchemaVersion != AppChangeRequestSchemaV0 ||
 		request.RequestID != "change-ref-001" ||
 		request.CorrelationID != "change-ref-001" ||
 		request.RunRef != "run-ref-001" ||
-		len(request.AcceptanceCriteria) != 1 {
+		len(request.AcceptanceCriteria) != 1 ||
+		len(request.RequiredTests) != 1 ||
+		request.RequiredTests[0] != "go test ./..." {
 		t.Fatalf("request normalizada inesperada: %+v", request)
 	}
 }

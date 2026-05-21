@@ -53,6 +53,7 @@ func normalizeAppChangeIntentEventV0(
 	event.AcceptanceCriteria = compactAppChangeStringsV0(event.AcceptanceCriteria)
 	event.Constraints = compactAppChangeStringsV0(event.Constraints)
 	event.AllowedWriteSet = compactAppChangeStringsV0(event.AllowedWriteSet)
+	event.RequiredTests = compactAppChangeStringsV0(event.RequiredTests)
 	event.MetadataRefs = compactAppChangeStringsV0(event.MetadataRefs)
 	event.ExternalWork = normalizeAppChangeExternalWorkV0(event.ExternalWork)
 	if event.ChangeRef == "" && event.EventID != "" {
@@ -102,6 +103,7 @@ func appChangeRequestFromIntentEventV0(
 		AcceptanceCriteria: event.AcceptanceCriteria,
 		Constraints:        event.Constraints,
 		AllowedWriteSet:    event.AllowedWriteSet,
+		RequiredTests:      event.RequiredTests,
 		MetadataRefs:       append([]string(nil), event.MetadataRefs...),
 		ExternalWork:       event.ExternalWork,
 	})

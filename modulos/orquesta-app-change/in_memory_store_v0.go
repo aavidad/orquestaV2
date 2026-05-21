@@ -80,6 +80,7 @@ func copyAppChangeRecordV0(record AppChangeRecordV0) AppChangeRecordV0 {
 	record.Request.AcceptanceCriteria = append([]string(nil), record.Request.AcceptanceCriteria...)
 	record.Request.Constraints = append([]string(nil), record.Request.Constraints...)
 	record.Request.AllowedWriteSet = append([]string(nil), record.Request.AllowedWriteSet...)
+	record.Request.RequiredTests = append([]string(nil), record.Request.RequiredTests...)
 	record.Request.MetadataRefs = append([]string(nil), record.Request.MetadataRefs...)
 	record.Request.ExternalWork = copyAppChangeExternalWorkV0(record.Request.ExternalWork)
 	return record

@@ -47,6 +47,7 @@ type AppChangeRequestV0 struct {
 	AcceptanceCriteria []string                 `json:"acceptance_criteria,omitempty"`
 	Constraints        []string                 `json:"constraints,omitempty"`
 	AllowedWriteSet    []string                 `json:"allowed_write_set,omitempty"`
+	RequiredTests      []string                 `json:"required_tests,omitempty"`
 	MetadataRefs       []string                 `json:"metadata_refs,omitempty"`
 	ExternalWork       *AppChangeExternalWorkV0 `json:"external_work,omitempty"`
 }
