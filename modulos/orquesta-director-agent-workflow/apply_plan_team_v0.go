@@ -125,7 +125,7 @@ func directorAgentPlanTeamWorkflowTasksV0(
 			Title:                unit.Title,
 			Summary:              unit.Summary,
 			WriteSet:             unit.WriteSet,
-			AcceptanceCriteria:   unit.AcceptanceCriteria,
+			AcceptanceCriteria:   directorAgentPlanTeamAcceptanceCriteriaV0(unit),
 			RequiredTests:        directorAgentAutonomousWorkUnitRequiredTestsV0(unit),
 			DependsOn:            unit.DependsOn,
 			FunctionContractRefs: directorAgentWorkflowFunctionRefsV0(unit.FunctionContractRefs),
@@ -138,6 +138,12 @@ func directorAgentPlanTeamWorkflowTasksV0(
 		tasks = append(tasks, task)
 	}
 	return tasks, nil
+}
+
+func directorAgentPlanTeamAcceptanceCriteriaV0(
+	unit orquestadirectoragent.DirectorAgentAutonomousWorkUnitV0,
+) []string {
+	return directorAgentWorkflowOperationalAcceptanceCriteriaV0(unit.PhaseID, unit.AcceptanceCriteria)
 }
 
 func directorAgentPlanTeamCreateMicrotaskCommandV0(

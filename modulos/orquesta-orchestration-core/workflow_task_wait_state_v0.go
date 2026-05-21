@@ -193,7 +193,8 @@ func ValidateWorkflowTaskWaitStateV0(state WorkflowTaskWaitStateV0) error {
 	}
 	if strings.TrimSpace(state.CohortRef) == "" &&
 		strings.TrimSpace(state.WaveRef) == "" &&
-		strings.TrimSpace(state.ParentTaskRef) == "" {
+		strings.TrimSpace(state.ParentTaskRef) == "" &&
+		len(state.AgentRefs) == 0 {
 		return errorV0(ErrNucleoOrquestacionInvalidoV0, "wait_scope", "scope de espera requerido")
 	}
 	return nil

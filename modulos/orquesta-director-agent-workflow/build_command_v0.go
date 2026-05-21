@@ -274,11 +274,17 @@ func directorAgentWorkflowTaskV0(
 		Title:                task.Title,
 		Summary:              task.Summary,
 		WriteSet:             task.WriteSet,
-		AcceptanceCriteria:   task.AcceptanceCriteria,
+		AcceptanceCriteria:   directorAgentWorkflowTaskAcceptanceCriteriaV0(task),
 		RequiredTests:        task.RequiredTests,
 		DependsOn:            task.DependsOn,
 		FunctionContractRefs: directorAgentWorkflowFunctionRefsV0(task.FunctionContractRefs),
 	}
+}
+
+func directorAgentWorkflowTaskAcceptanceCriteriaV0(
+	task orquestadirectoragent.DirectorAgentMicrotaskV0,
+) []string {
+	return directorAgentWorkflowOperationalAcceptanceCriteriaV0(task.PhaseID, task.AcceptanceCriteria)
 }
 
 func directorAgentWorkflowFunctionRefsV0(

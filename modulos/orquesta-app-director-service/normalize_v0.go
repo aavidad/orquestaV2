@@ -30,6 +30,7 @@ func normalizeStartAppDirectorRequestV0(
 	request.WaitCohortRef = strings.TrimSpace(request.WaitCohortRef)
 	request.WaitWaveRef = strings.TrimSpace(request.WaitWaveRef)
 	request.WaitParentTaskRef = strings.TrimSpace(request.WaitParentTaskRef)
+	request.OperationalDirectorPlanRef = strings.TrimSpace(request.OperationalDirectorPlanRef)
 	request.OperationalDirectorFunctionContractRefs = normalizeServiceWorkflowFunctionContractRefsV0(request.OperationalDirectorFunctionContractRefs)
 	request.OperationalDirectorTargetPhaseID = orquestacoreworkflow.OrchestrationPhaseIDV0(strings.TrimSpace(string(request.OperationalDirectorTargetPhaseID)))
 	if request.OperationalDirectorMaxItems < 0 {

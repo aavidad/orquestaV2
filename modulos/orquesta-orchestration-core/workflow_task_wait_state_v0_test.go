@@ -51,6 +51,25 @@ func TestWorkflowTaskWaitStateV0RequiereScope(t *testing.T) {
 	}
 }
 
+func TestWorkflowTaskWaitStateV0AceptaAgentRefsComoScope(t *testing.T) {
+	state, err := NewWorkflowTaskWaitStateV0(WorkflowTaskWaitStateV0{
+		SchemaVersion:    WorkflowTaskWaitStateSchemaVersionV0,
+		WaitRef:          "wait-ref-nucleo-agent-scope-001",
+		RunRef:           "run-ref-nucleo-agent-scope-001",
+		ReasonCode:       WorkflowTaskWaitReasonCohortInProgressV0,
+		AgentRefs:        []string{"agent-ref-nucleo-agent-scope-001"},
+		PendingAgentRefs: []string{"agent-ref-nucleo-agent-scope-001"},
+		Status:           WorkflowTaskWaitStateStatusWaitingV0,
+		ObservedAt:       "2026-05-21T13:01:00Z",
+	})
+	if err != nil {
+		t.Fatalf("NewWorkflowTaskWaitStateV0: %v", err)
+	}
+	if len(state.AgentRefs) != 1 || state.AgentRefs[0] != "agent-ref-nucleo-agent-scope-001" {
+		t.Fatalf("state=%+v", state)
+	}
+}
+
 func TestWorkflowTaskWaitStateV0RechazaReasonCodeDesconocido(t *testing.T) {
 	_, err := NewWorkflowTaskWaitStateV0(WorkflowTaskWaitStateV0{
 		SchemaVersion: WorkflowTaskWaitStateSchemaVersionV0,

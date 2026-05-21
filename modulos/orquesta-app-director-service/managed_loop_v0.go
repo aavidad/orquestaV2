@@ -27,6 +27,10 @@ func runPreparedDirectorAutonomyLoopV0(
 		if err != nil || !progressed {
 			return next, err
 		}
+		request, err = startRequestWithOperationalDirectorPlanStateV0(ctx, request, ports)
+		if err != nil {
+			return next, err
+		}
 		loop, err = runPreparedDirectorLoopV0(ctx, request, ports, prepared)
 		if err != nil {
 			return loop, err

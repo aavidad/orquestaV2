@@ -271,6 +271,11 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 	if continueRequestHasWaitScopeV0(request) {
 		return request, nil
 	}
+	ensured, err := ensureContinueOperationalDirectorPlanStateFromWorkflowTasksV0(ctx, request, ports)
+	if err != nil {
+		return ContinueAppDirectorRequestV0{}, err
+	}
+	request = ensured
 	explicitPlanRef := strings.TrimSpace(request.OperationalDirectorPlanRef)
 	if explicitPlanRef == "" && ports.OperationalPlanStateStore == nil {
 		return request, nil
@@ -315,6 +320,13 @@ func continueRequestWithLoadedOperationalDirectorPlanStateV0(
 		request.WaitAgentRefs = compactServiceRefsV0(append(request.WaitAgentRefs, step.AgentRefs...))
 		return request, true
 	case orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0:
+		if len(step.AgentRefs) == 0 {
+			return request, false
+		}
+		request = continueRequestWithOperationalDirectorPlanStepScopeV0(request, state, step)
+		request.WaitAgentRefs = compactServiceRefsV0(append(request.WaitAgentRefs, step.AgentRefs...))
+		return request, true
+	case orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0:
 		if len(step.AgentRefs) == 0 {
 			return request, false
 		}

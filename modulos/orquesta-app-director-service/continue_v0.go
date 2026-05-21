@@ -82,6 +82,7 @@ func ContinueAppDirectorV0(
 	if err != nil {
 		return ContinueAppDirectorResultV0{}, err
 	}
+	request = autonomy.Request
 	if err := updateOperationalDirectorPlanStateAfterLoopV0(ctx, request, ports, autonomy.Loop); err != nil {
 		return ContinueAppDirectorResultV0{}, err
 	}
@@ -93,6 +94,7 @@ func ContinueAppDirectorV0(
 }
 
 type existingDirectorAutonomyLoopResultV0 struct {
+	Request     ContinueAppDirectorRequestV0
 	Loop        orquestacionnucleoapp.ProgressiveLoopResultV0
 	LoopRequest orquestacionnucleoapp.ProgressiveLoopRequestV0
 }
@@ -104,20 +106,25 @@ func runExistingDirectorAutonomyLoopV0(
 ) (existingDirectorAutonomyLoopResultV0, error) {
 	loop, loopRequest, err := runExistingDirectorLoopV0(ctx, request, ports)
 	if err != nil || ports.DirectorDecisionSource == nil {
-		return existingDirectorAutonomyLoopResultV0{Loop: loop, LoopRequest: loopRequest}, err
+		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest}, err
 	}
 	startRequest := continueAsStartRequestV0(request)
 	for cycle := 0; cycle < request.MaxDecisionCycles; cycle++ {
 		next, progressed, err := consumeStartAppDirectorDecisionsV0(ctx, startRequest, ports, loop)
 		if err != nil || !progressed {
-			return existingDirectorAutonomyLoopResultV0{Loop: next, LoopRequest: loopRequest}, err
+			return existingDirectorAutonomyLoopResultV0{Request: request, Loop: next, LoopRequest: loopRequest}, err
 		}
+		request, err = continueRequestWithOperationalDirectorPlanStateV0(ctx, request, ports)
+		if err != nil {
+			return existingDirectorAutonomyLoopResultV0{Request: request, Loop: next, LoopRequest: loopRequest}, err
+		}
+		startRequest = continueAsStartRequestV0(request)
 		loop, loopRequest, err = runExistingDirectorLoopV0(ctx, request, ports)
 		if err != nil {
-			return existingDirectorAutonomyLoopResultV0{Loop: loop, LoopRequest: loopRequest}, err
+			return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest}, err
 		}
 	}
-	return existingDirectorAutonomyLoopResultV0{Loop: loop, LoopRequest: loopRequest}, nil
+	return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest}, nil
 }
 
 func runExistingDirectorLoopV0(

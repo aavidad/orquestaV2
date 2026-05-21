@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
@@ -51,7 +52,27 @@ func appDirectorResolvedWaitV0(
 	explicitRefs = compactServiceRefsV0(explicitRefs)
 	filter = normalizeAppDirectorWaitFilterV0(filter)
 	if appDirectorWaitFilterEmptyV0(filter) {
-		return appDirectorWaitResolutionV0{AgentRefs: explicitRefs}, nil
+		if ports.WaitStateWriter != nil && len(explicitRefs) > 0 {
+			if ports.RunStore == nil {
+				return appDirectorWaitResolutionV0{}, AppDirectorServiceIssueV0{Field: "ports.run_store"}
+			}
+			run, err := ports.RunStore.LoadRunV0(ctx, runRef)
+			if err != nil {
+				return appDirectorWaitResolutionV0{}, err
+			}
+			snapshot := appDirectorExplicitWaitSnapshotV0(run, explicitRefs)
+			state, err := appDirectorWorkflowTaskWaitStateV0(runRef, filter, snapshot, meta)
+			if err != nil {
+				return appDirectorWaitResolutionV0{}, err
+			}
+			if err := ports.WaitStateWriter.SaveWorkflowTaskWaitStateV0(ctx, state); err != nil {
+				return appDirectorWaitResolutionV0{}, err
+			}
+		}
+		return appDirectorWaitResolutionV0{
+			AgentRefs:    explicitRefs,
+			ScopeApplied: len(explicitRefs) > 0,
+		}, nil
 	}
 	if ports.DirectorTaskStore == nil {
 		return appDirectorWaitResolutionV0{}, AppDirectorServiceIssueV0{Field: "ports.director_task_store"}
@@ -76,6 +97,11 @@ func appDirectorResolvedWaitV0(
 	if err != nil {
 		return appDirectorWaitResolutionV0{}, err
 	}
+	snapshot.AgentRefs = compactServiceRefsV0(append(snapshot.AgentRefs, explicitRefs...))
+	snapshot.PendingAgentRefs = compactServiceRefsV0(append(
+		snapshot.PendingAgentRefs,
+		appDirectorExplicitPendingAgentRefsV0(run, explicitRefs)...,
+	))
 	if ports.WaitStateWriter != nil {
 		state, err := appDirectorWorkflowTaskWaitStateV0(runRef, filter, snapshot, meta)
 		if err != nil {
@@ -86,10 +112,38 @@ func appDirectorResolvedWaitV0(
 		}
 	}
 	return appDirectorWaitResolutionV0{
-		AgentRefs:    compactServiceRefsV0(append(explicitRefs, snapshot.AgentRefs...)),
+		AgentRefs:    snapshot.AgentRefs,
 		ScopeApplied: true,
 		Snapshot:     snapshot,
 	}, nil
+}
+
+func appDirectorExplicitWaitSnapshotV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	agentRefs []string,
+) orquestacionnucleoapp.WorkflowTaskWaitSnapshotV0 {
+	return orquestacionnucleoapp.WorkflowTaskWaitSnapshotV0{
+		AgentRefs:        compactServiceRefsV0(agentRefs),
+		PendingAgentRefs: appDirectorExplicitPendingAgentRefsV0(run, agentRefs),
+	}
+}
+
+func appDirectorExplicitPendingAgentRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	agentRefs []string,
+) []string {
+	pending := make([]string, 0, len(agentRefs))
+	for _, agentRef := range compactServiceRefsV0(agentRefs) {
+		if startAppDirectorStringInSetV0(run.DeliveredAgents, agentRef) ||
+			startAppDirectorStringInSetV0(run.FailedAgents, agentRef) ||
+			startAppDirectorStringInSetV0(run.LostAgents, agentRef) ||
+			startAppDirectorStringInSetV0(run.ConfirmedStoppedAgents, agentRef) ||
+			startAppDirectorStringInSetV0(run.StoppedAgents, agentRef) {
+			continue
+		}
+		pending = append(pending, agentRef)
+	}
+	return pending
 }
 
 func normalizeAppDirectorWaitFilterV0(filter appDirectorWaitFilterV0) appDirectorWaitFilterV0 {
