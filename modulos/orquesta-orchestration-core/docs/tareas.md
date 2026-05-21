@@ -113,18 +113,32 @@ go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-
 
 ## ORCH-CORE-DIR-007: runner/adaptador de run_required_tests
 
-Estado: parcial. El contrato, store, cierre y consumo desde `PlanState` ya
-existen; falta generacion real de evidencia por puerto.
+Estado: parcial avanzado. El contrato, store, cierre, consumo desde `PlanState`
+y runner puro por puerto ya existen. El runner recibe tests requeridos con refs
+causales de entrega/review, ejecuta por `RequiredTestCommandExecutorPortV0` y
+guarda `RequiredTestEvidenceV0` idempotente por
+`RequiredTestEvidenceWriterPortV0`.
 
 Objetivo: convertir el paso operativo `run_required_tests` en ejecucion o
 validacion por puerto y guardar `RequiredTestEvidenceV0` idempotente. El
-servicio ya bloquea si una evidencia causal llega como `failed`; falta emitir la
-evidencia desde un runner/adaptador y conectar replan negativo.
+servicio ya puede invocar el runner inyectado si no encuentra evidencias
+causales ya persistidas, reevalua el `PlanState` con las refs generadas y
+bloquea si una evidencia causal llega como `failed`.
+
+Pendiente: adaptador opt-in que ejecute comandos reales del proyecto y persista
+artefactos/salidas de test; conectar replan negativo automatico para blockers de
+tests fallidos o runner invalido.
 
 No basta con que el agente escriba un summary ni con que el review result
 mencione un comando. El cierre solo debe consumir evidencias durables guardadas
 por `RequiredTestEvidenceWriterPortV0` y luego leidas por
 `RequiredTestEvidenceReaderPortV0`.
+
+Validacion:
+
+```sh
+go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service -run 'TestRequiredTest(Runner|Evidence)|TestInMemoryRequiredTestEvidence|TestUpdateOperationalDirectorPlanStateAfterLoopV0(AvanzaDeTestsAReplanConEvidenciaPassed|EjecutaRunnerDeTestsRequeridos|BloqueaTestsConEvidenciaFailed|NoAvanzaTestsConEvidenciaDeOtraReview)'
+```
 
 ## ORCH-CORE-DIR-008: estado vivo del plan operativo
 

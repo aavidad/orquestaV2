@@ -413,6 +413,80 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeTestsAReplanConEvi
 	}
 }
 
+func TestUpdateOperationalDirectorPlanStateAfterLoopV0EjecutaRunnerDeTestsRequeridos(t *testing.T) {
+	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
+	fixture.Events[2] = serviceOperationalDirectorPlanStateEventForTestV0(t, fixture.RunRef, 3, orquestacoreworkflow.OrchestrationEventReviewResultRecordedV0, orquestacoreworkflow.ReviewResultV0{
+		ReviewResultRef: fixture.ReviewResultRef,
+		ReviewRequestID: fixture.ReviewRequestID,
+		DeliveryRef:     fixture.DeliveryRef,
+		Status:          orquestacoreworkflow.ReviewResultStatusAcceptedV0,
+		Summary:         "Review aceptada sin evidencia de test precocinada.",
+		EvidenceRefs:    []string{"evidence-ref-review-result-accepted"},
+	})
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(fixture.State)
+	testEvidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	executor := &fakeServiceRequiredTestCommandExecutorV0{
+		results: map[string]orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{
+			fixture.RequiredTest: {
+				Status:       orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0,
+				EvidenceRefs: []string{"artifact-ref-service-required-test-output-001"},
+			},
+		},
+	}
+
+	if err := updateOperationalDirectorPlanStateAfterLoopV0(context.Background(), ContinueAppDirectorRequestV0{
+		RunRef:                     fixture.RunRef,
+		OccurredAt:                 "2026-05-21T11:20:00Z",
+		CorrelationID:              "correlation-service-required-tests-001",
+		OperationalDirectorPlanRef: fixture.PlanRef,
+	}, StartAppDirectorPortsV0{
+		EventReader:                serviceOperationalClosureEventReaderForTestV0{Events: fixture.Events},
+		OperationalPlanStateStore:  planStateStore,
+		OperationalPlanStateWriter: planStateStore,
+		RequiredTestEvidenceStore:  testEvidenceStore,
+		RequiredTestRunner: orquestacionnucleoapp.RequiredTestRunnerV0{
+			Executor:       executor,
+			EvidenceWriter: testEvidenceStore,
+		},
+	}, orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run:    fixture.Run,
+	}); err != nil {
+		t.Fatalf("updateOperationalDirectorPlanStateAfterLoopV0: %v", err)
+	}
+
+	state, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), fixture.RunRef, fixture.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	testsStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-run-required-tests")
+	replanStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-replan-or-close")
+	if len(executor.commands) != 1 || executor.commands[0] != fixture.RequiredTest {
+		t.Fatalf("commands=%+v", executor.commands)
+	}
+	if state.ActiveStepID != "step-replan-or-close" ||
+		testsStep.Status != orquestadirectoroperativo.OperationalDirectorStepAcceptedV0 ||
+		len(testsStep.RequiredTestEvidenceRefs) != 1 ||
+		replanStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		len(replanStep.RequiredTestEvidenceRefs) != 1 {
+		t.Fatalf("state=%+v testsStep=%+v replanStep=%+v", state, testsStep, replanStep)
+	}
+
+	evidence, err := testEvidenceStore.LoadRequiredTestEvidenceV0(context.Background(), fixture.RunRef, testsStep.RequiredTestEvidenceRefs)
+	if err != nil {
+		t.Fatalf("LoadRequiredTestEvidenceV0: %v", err)
+	}
+	if len(evidence) != 1 ||
+		evidence[0].TaskRef != fixture.TaskRef ||
+		evidence[0].DeliveryRef != fixture.DeliveryRef ||
+		evidence[0].ReviewResultRef != fixture.ReviewResultRef ||
+		evidence[0].AcceptedReviewRef != fixture.AcceptedReviewRef ||
+		evidence[0].Status != orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 ||
+		!serviceStringInSetV0(evidence[0].EvidenceRefs, "artifact-ref-service-required-test-output-001") {
+		t.Fatalf("evidence=%+v", evidence)
+	}
+}
+
 func TestUpdateOperationalDirectorPlanStateAfterLoopV0BloqueaTestsConEvidenciaFailed(t *testing.T) {
 	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
 	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(fixture.State)
@@ -1009,6 +1083,22 @@ func serviceOperationalDirectorRequiredTestEvidenceForFixtureV0(
 		OccurredAt:        "2026-05-17T14:20:00Z",
 		EvidenceRefs:      []string{"test-output-ref-" + fixture.DeliveryRef},
 	}
+}
+
+type fakeServiceRequiredTestCommandExecutorV0 struct {
+	results  map[string]orquestacionnucleoapp.RequiredTestCommandExecutionResultV0
+	commands []string
+}
+
+func (executor *fakeServiceRequiredTestCommandExecutorV0) RunRequiredTestCommandV0(
+	ctx context.Context,
+	request orquestacionnucleoapp.RequiredTestCommandExecutionRequestV0,
+) (orquestacionnucleoapp.RequiredTestCommandExecutionResultV0, error) {
+	if err := ctx.Err(); err != nil {
+		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
+	}
+	executor.commands = append(executor.commands, request.TestCommand)
+	return executor.results[request.TestCommand], nil
 }
 
 func serviceOperationalDirectorPlanStateEventForTestV0(

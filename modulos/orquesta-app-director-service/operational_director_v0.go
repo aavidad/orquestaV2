@@ -726,6 +726,36 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 		return operationalDirectorPlanStateWithRequiredTestsBlockedV0(request, state, activeStep, testStatus.FailedRefs)
 	}
 	if !testStatus.Complete {
+		updatedStep, generated, err := operationalDirectorPlanRunRequiredTestsV0(
+			ctx,
+			request,
+			ports,
+			activeStep,
+			requiredTests,
+			matches,
+		)
+		if err != nil {
+			return state, false, err
+		}
+		if generated {
+			activeStep = updatedStep
+			evidence, err = operationalDirectorPlanRequiredTestEvidenceForMatchesV0(
+				ctx,
+				request.RunRef,
+				ports.RequiredTestEvidenceStore,
+				activeStep,
+				matches,
+			)
+			if err != nil {
+				return state, false, err
+			}
+			testStatus = operationalDirectorPlanEvaluateRequiredTestEvidenceV0(request.RunRef, requiredTests, matches, evidence)
+			if len(testStatus.FailedRefs) > 0 {
+				return operationalDirectorPlanStateWithRequiredTestsBlockedV0(request, state, activeStep, testStatus.FailedRefs)
+			}
+		}
+	}
+	if !testStatus.Complete {
 		return state, false, nil
 	}
 	replanStepID := operationalDirectorPlanStateStepIDByKindV0(state, orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0)
@@ -782,6 +812,47 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 		return state, false, err
 	}
 	return next, true, nil
+}
+
+func operationalDirectorPlanRunRequiredTestsV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+	requiredTests []string,
+	matches []operationalDirectorPlanAcceptedReviewMatchV0,
+) (orquestacionnucleoapp.OperationalDirectorPlanStepStateV0, bool, error) {
+	if ports.RequiredTestRunner == nil {
+		return activeStep, false, nil
+	}
+	evidenceRefs := make([]string, 0, len(requiredTests)*len(matches))
+	for _, match := range matches {
+		result, err := ports.RequiredTestRunner.RunRequiredTestsV0(ctx, orquestacionnucleoapp.RequiredTestExecutionRequestV0{
+			RunRef:            request.RunRef,
+			TaskRef:           match.TaskRef,
+			TestCommands:      requiredTests,
+			DeliveryRef:       match.DeliveryRef,
+			ReviewRequestID:   match.ReviewRequestID,
+			ReviewResultRef:   match.ReviewResultRef,
+			AcceptedReviewRef: match.AcceptedReviewRef,
+			OccurredAt:        request.OccurredAt,
+			CorrelationID:     request.CorrelationID,
+			EvidenceRefs:      match.EvidenceRefs,
+		})
+		if err != nil {
+			return activeStep, false, err
+		}
+		if len(result.Issues) > 0 {
+			return activeStep, false, result.Issues[0]
+		}
+		evidenceRefs = append(evidenceRefs, result.EvidenceRefs...)
+	}
+	evidenceRefs = compactServiceRefsV0(evidenceRefs)
+	if len(evidenceRefs) == 0 {
+		return activeStep, false, nil
+	}
+	activeStep.RequiredTestEvidenceRefs = compactServiceRefsV0(append(activeStep.RequiredTestEvidenceRefs, evidenceRefs...))
+	return activeStep, true, nil
 }
 
 func operationalDirectorPlanStateWithRequiredTestsBlockedV0(

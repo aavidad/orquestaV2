@@ -154,11 +154,14 @@ review/replan/cierre durable.
 
 Estado: parcial. Cerrado offline el camino positivo `review_deliveries` y el
 consumo durable de `run_required_tests` desde `RequiredTestEvidenceV0`.
+Aniadido primer runner por puerto: si el `PlanState` entra en
+`run_required_tests` sin evidencias causales ya guardadas, el servicio invoca
+`RequiredTestRunnerPortV0`, persiste evidencias durables y reevalua el avance.
 La observacion negativa de review con `ReworkRequested` y
 `ReplanDecisionRecorded` queda probada como observacion durable del `PlanState`.
 El cierre operativo ya marca el state como `closed` o `blocked` con
-`closure_reason`. Siguen pendientes runner/adaptador real de tests, replan
-automatico para blockers y replay/idempotencia.
+`closure_reason`. Siguen pendientes el adaptador real que ejecute comandos de
+test del proyecto, replan automatico para blockers y replay/idempotencia.
 
 Alcance esperado:
 
@@ -168,3 +171,9 @@ Alcance esperado:
 4. emitir u observar rework/replan cuando corresponda, con refs causales y
    prueba focal;
 5. cerrar solo con review aceptada y pruebas/evidencias requeridas.
+
+Validacion actual del tramo de tests requeridos:
+
+```sh
+go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service -run 'TestRequiredTest(Runner|Evidence)|TestInMemoryRequiredTestEvidence|TestUpdateOperationalDirectorPlanStateAfterLoopV0(AvanzaDeTestsAReplanConEvidenciaPassed|EjecutaRunnerDeTestsRequeridos|BloqueaTestsConEvidenciaFailed|NoAvanzaTestsConEvidenciaDeOtraReview)'
+```

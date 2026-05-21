@@ -67,6 +67,7 @@ type StartAppDirectorPortsV0 struct {
 	OperationalPlanStateWriter  orquestacionnucleoapp.OperationalDirectorPlanStateWriterPortV0
 	OperationalPlanStateStore   orquestacionnucleoapp.OperationalDirectorPlanStateStorePortV0
 	RequiredTestEvidenceStore   orquestacionnucleoapp.RequiredTestEvidenceReaderPortV0
+	RequiredTestRunner          orquestacionnucleoapp.RequiredTestRunnerPortV0
 	ExternalWaiter              orquestacionnucleoapp.ExternalProgressWaiterPortV0
 	OperationalClosureSource    AppDirectorOperationalClosureSourcePortV0
 }
