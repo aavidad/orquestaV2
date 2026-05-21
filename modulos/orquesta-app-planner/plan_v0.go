@@ -113,6 +113,7 @@ func appUnitV0(
 		AgentRequestID:      agentRefV0(request, key),
 		DeliveryRef:         deliveryRefV0(request, key),
 		PhaseID:             appPhaseForRoleV0(role),
+		WorkProfileKind:     appWorkProfileKindForRoleV0(role),
 		Role:                role,
 		Capacity:            capacity,
 		Title:               title,
@@ -122,6 +123,19 @@ func appUnitV0(
 		RequiredTests:       []string{"go test ./..."},
 		DependsOnDeliveries: compactAppPlannerStringsV0(deps),
 		EvidenceRefs:        []string{"evidence-ref-" + request.AppRef + "-" + key},
+	}
+}
+
+func appWorkProfileKindForRoleV0(role string) orquestacoreworkflow.WorkProfileKindV0 {
+	switch role {
+	case "arquitectura", "preparacion":
+		return orquestacoreworkflow.WorkProfileCodeStudyV0
+	case "documentacion":
+		return orquestacoreworkflow.WorkProfileDocumentationV0
+	case "revision":
+		return orquestacoreworkflow.WorkProfileReviewV0
+	default:
+		return orquestacoreworkflow.WorkProfileImplementationV0
 	}
 }
 

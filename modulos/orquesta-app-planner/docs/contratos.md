@@ -8,7 +8,8 @@ Campos principales:
 
 - `run_ref`, `app_ref`, `schema_version`;
 - `units[]`: tarea, claim, agente logico, delivery esperada, phase, rol,
-  capacidad recomendada, write-set, criterios y dependencias por delivery.
+  `work_profile_kind` neutral, capacidad recomendada, write-set, criterios y
+  dependencias por delivery.
 
 Invariantes:
 
@@ -20,6 +21,23 @@ Invariantes:
   persistencia por puerto, API, web, i18n, deploy, integracion, docs y revision.
 - Persistencia y deploy se expresan como contratos/conectores; el plan no elige
   SQLite, Postgres, Docker, Kubernetes ni proveedor concreto.
+- `work_profile_kind` reutiliza el contrato neutral de `orquesta-core-workflow`:
+  preparacion/arquitectura son `code_study`, implementacion/integracion/entorno
+  son `implementation`, documentacion es `documentation` y revision es `review`.
+
+## `WorkProfileForUnitV0` y `WorkflowTaskForUnitV0`
+
+Adaptadores puros desde una unidad del planner hacia `WorkProfileV0` y
+`WorkflowTaskV0`.
+
+Reglas:
+
+- no crean un perfil propio de programacion paralelo al nucleo;
+- conservan write-set, criterios, tests obligatorios y contrato de funcion;
+- traducen dependencias internas desde `delivery_ref` del plan a `task_ref` para
+  que `WorkflowTaskV0.depends_on` quede causal y reutilizable por el nucleo.
+- rechazan unidades ajenas al plan o dependencias que no puedan mapearse a una
+  unidad del plan.
 
 ## `AppPlanCandidateProviderV0`
 

@@ -80,6 +80,11 @@ func validateAppWorkUnitV0(unit AppWorkUnitV0) error {
 	if err := orquestacoreworkflow.ValidateOrchestrationPhaseIDV0(unit.PhaseID); err != nil {
 		return AppPlannerIssueV0{Field: "phase_id"}
 	}
+	if strings.TrimSpace(string(unit.WorkProfileKind)) != "" {
+		if _, ok := orquestacoreworkflow.LookupWorkProfileDefinitionV0(unit.WorkProfileKind); !ok {
+			return AppPlannerIssueV0{Field: "work_profile_kind"}
+		}
+	}
 	for _, value := range unit.WriteSet {
 		if _, issues := orquestacoreconcurrency.NewScopeRefV0(value); len(issues) > 0 {
 			return AppPlannerIssueV0{Field: "write_set"}

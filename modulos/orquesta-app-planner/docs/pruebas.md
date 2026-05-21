@@ -30,6 +30,10 @@ Cobertura:
 - `go test ./...` se conserva como test obligatorio de contrato runtime.
 - las unidades de docs, integracion y revision salen con su `phase_id`
   especifico, no como programacion.
+- cada unidad declara `work_profile_kind` neutral y puede convertirse a
+  `WorkProfileV0`/`WorkflowTaskV0` sin reimplementar perfiles de programacion.
+- las dependencias por `delivery_ref` del planner se convierten a `task_ref` al
+  construir `WorkflowTaskV0`.
 
 Validacion 2026-05-11:
 

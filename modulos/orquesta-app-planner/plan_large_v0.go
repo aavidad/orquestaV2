@@ -23,7 +23,7 @@ func appLargeArchitectureUnitV0(request AppPlanRequestV0) AppWorkUnitV0 {
 		"Disenar arquitectura de app grande",
 		"Documentar fronteras hexagonales, modulos, puertos y riesgos antes de programar.",
 		[]string{"docs/arquitectura.md", "docs/contratos.md", "docs/decisiones.md"},
-		[]string{"Fronteras y conectores definidos.", "No hay proveedor DB/runtime hardcodeado."},
+		[]string{"Fronteras y conectores definidos.", "No hay adaptador operacional concreto hardcodeado."},
 		[]string{deliveryRefV0(request, "bootstrap")},
 	)
 }
@@ -33,7 +33,7 @@ func appLargeDomainUnitV0(request AppPlanRequestV0) AppWorkUnitV0 {
 		"Crear dominio hexagonal",
 		"Implementar entidades, servicios puros y puertos sin adaptadores concretos.",
 		[]string{"internal/domain", "internal/ports"},
-		[]string{"Dominio probado.", "Puertos definidos sin DB concreta."},
+		[]string{"Dominio probado.", "Puertos definidos sin almacenamiento concreto."},
 		[]string{deliveryRefV0(request, "architecture")},
 	)
 }
@@ -41,9 +41,9 @@ func appLargeDomainUnitV0(request AppPlanRequestV0) AppWorkUnitV0 {
 func appLargePersistenceUnitV0(request AppPlanRequestV0) AppWorkUnitV0 {
 	return appUnitV0(request, "persistence-port", "implementacion", orquestacoreworkflow.OrchestrationCapacityHighV0,
 		"Preparar contrato de persistencia",
-		"Crear puerto de persistencia y adaptador fake de test sin elegir proveedor.",
+		"Crear puerto de persistencia y adaptador fake de test sin fijar tecnologia concreta.",
 		[]string{"internal/persistence", "internal/testadapters"},
-		[]string{"Persistencia expresada por interfaz.", "No aparece sqlite/postgres/mysql hardcodeado."},
+		[]string{"Persistencia expresada por interfaz.", "No aparece tecnologia concreta hardcodeada."},
 		[]string{deliveryRefV0(request, "architecture")},
 	)
 }
@@ -81,7 +81,7 @@ func appLargeI18NUnitV0(request AppPlanRequestV0) AppWorkUnitV0 {
 func appLargeDeployUnitV0(request AppPlanRequestV0) AppWorkUnitV0 {
 	return appUnitV0(request, "deploy", "entorno", orquestacoreworkflow.OrchestrationCapacityMediumV0,
 		"Preparar entorno de ejecucion",
-		"Crear contrato de despliegue y scripts seguros sin imponer proveedor.",
+		"Crear contrato de despliegue y scripts seguros sin imponer plataforma concreta.",
 		[]string{"deploy", "docs/deploy.md"},
 		[]string{"Entorno documentado.", "Deploy queda como conector configurable."},
 		[]string{deliveryRefV0(request, "architecture")},

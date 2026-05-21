@@ -36,6 +36,7 @@ type AppWorkUnitV0 struct {
 	AgentRequestID      string                                                     `json:"agent_request_id"`
 	DeliveryRef         string                                                     `json:"delivery_ref"`
 	PhaseID             orquestacoreworkflow.OrchestrationPhaseIDV0                `json:"phase_id"`
+	WorkProfileKind     orquestacoreworkflow.WorkProfileKindV0                     `json:"work_profile_kind,omitempty"`
 	Role                string                                                     `json:"role"`
 	Capacity            orquestacoreworkflow.OrchestrationCapacityRecommendationV0 `json:"capacity"`
 	Title               string                                                     `json:"title"`
