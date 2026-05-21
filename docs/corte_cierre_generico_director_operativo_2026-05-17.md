@@ -161,6 +161,13 @@ implementacion, test focal y evidencia en la matriz.
   fallidos ya se consume replan materializado por quality gate bloqueante. Siguen
   pendientes blockers posteriores y cierre insuficiente como nuevos efectos
   idempotentes de replan.
+- [~] `replan_or_close` como puerta de cierre: el cierre ya no se dispara por
+  cualquier `PlanState` activo. Si hay estado vivo, solo se evalua cierre cuando
+  el step activo es `replan_or_close` en `running`; un step anterior o
+  `replan_or_close` pendiente no invoca `OperationalClosureSource`. Si en ese
+  punto faltan `OperationalClosureSource` o `DirectorTaskStore`, el `PlanState`
+  se bloquea con causa durable. Siguen pendientes otros blockers como replan
+  causal generico.
 - [x] Plan state vivo inicial: contrato, stores y persistencia del tramo
   `launch_subagents -> wait_subagents`, con ola/cohorte activa, step activo,
   task refs, agent refs, pending agent refs y `wait_ref`.
@@ -171,13 +178,14 @@ implementacion, test focal y evidencia en la matriz.
   agentes pendientes entregaron, el state pasa de `wait_subagents` a
   `review_deliveries`.
 - [~] Plan state vivo restante: `run_required_tests` durable, blocker de test
-  fallido, observacion de review negativa y razon de cierre/bloqueo ya quedan
-  persistidos. Falta materializar replan automatico para blockers posteriores y
-  probar replay/idempotencia completa.
-- [ ] Evento/comando idempotente: todo avance de review, test, replan y cierre
-  debe tener clave idempotente estable por `run_ref`, `task_ref`, `wave_ref` o
-  `cohort_ref` y refs causales. Replay no debe duplicar reviews, tests,
-  reworks ni cierres.
+  fallido, observacion de review negativa, puerta explicita de
+  `replan_or_close` y razon de cierre/bloqueo ya quedan persistidos. Falta
+  materializar replan automatico para blockers posteriores y completar replay
+  de todo el ciclo.
+- [~] Evento/comando idempotente: el replay de cierre exitoso y bloqueo de
+  cierre ya tiene prueba focal y no duplica refs del `PlanState` ni `RunClosed`.
+  Sigue pendiente extender la misma garantia a review, tests y replan con clave
+  estable por `run_ref`, `task_ref`, `wave_ref` o `cohort_ref`.
 
 El orden recomendado ahora es: runner/adaptador real de tests por puerto,
 despues replan automatico para casos negativos y por ultimo replay/idempotencia
@@ -252,9 +260,11 @@ pruebas claras. No deben describirse como hechas antes de cerrar la evidencia.
    comando/evento/artefacto de resultado. El consumo durable ya existe; un
    summary textual no basta.
 2. `replan_or_close` causal:
-   cerrar solo con review aceptada, evidencias y validaciones requeridas. Si
-   falta algo, emitir rework/replan con causa, intento y refs de task, delivery
-   y review.
+   ya actua como puerta explicita para cierre cuando el `PlanState` esta activo:
+   solo `replan_or_close` en `running` permite invocar la fuente de cierre, y la
+   ausencia de source o task store bloquea con causa durable. Sigue pendiente
+   emitir rework/replan generico cuando falten piezas reparables, con causa,
+   intento y refs de task, delivery y review.
 3. Estado vivo del plan:
    el tramo inicial ya persiste step activo, ola/cohorte, tasks, agentes y
    `wait_ref`; avanza a `review_deliveries` cuando el wait queda consumido y a
@@ -262,8 +272,10 @@ pruebas claras. No deben describirse como hechas antes de cerrar la evidencia.
   Tests durables ya registran evidencia aceptada o blocker de fallo. La
   observacion negativa de review con `ReworkRequested`/`ReplanDecisionRecorded`
   tiene prueba focal y persistencia de refs. El cierre exitoso marca el
-  `PlanState` como `closed`, y los issues/source insuficiente lo bloquean con
-  `closure_reason`; faltan replan automatico y replay/idempotencia completa.
+  `PlanState` como `closed`; los issues, source insuficiente, source ausente o
+  task store ausente lo bloquean con `closure_reason`. El replay de cierre ya no
+  duplica refs/eventos de cierre; faltan replan automatico y replay completo del
+  resto del ciclo.
 4. Reentrada offline:
    wait y review inicial ya reconstruyen scope desde plan state; las
    transiciones posteriores deben reconstruirse desde run, task store, wait

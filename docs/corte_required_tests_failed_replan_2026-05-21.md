@@ -54,11 +54,13 @@ La regla es conservadora:
   scope explicito sigue teniendo prioridad; queda pendiente reconciliarlo con
   el `PlanState` bloqueado.
 - Falta cubrir smokes reales de runner + quality gate + replan en el stack.
-- `replan_or_close` sigue pendiente como evaluador explicito de cierre vs
-  replan.
+- `replan_or_close` ya es puerta explicita de cierre cuando hay `PlanState`
+  activo: solo el step `replan_or_close` en `running` permite invocar la fuente
+  de cierre, y la ausencia de source o task store bloquea con causa durable.
+  Sigue pendiente el evaluador completo de cierre vs replan para otros blockers.
 
 ## Evidencia
 
 ```bash
-go test -count=1 ./modulos/orquesta-app-director-service -run 'Test(EnsureContinueOperationalDirectorPlanStateFromWorkflowTasksV0ConStateBloqueadoConservaPlanRef|OperationalDirectorPlanStateAfterRequiredTestsReplanV0NoReabreScopeMultitarea|ContinueRequestWithOperationalDirectorPlanStateV0RequiredTestsFailed(ReentraConStateFile|BloqueadoReabreWaitConReplanPosterior)|UpdateOperationalDirectorPlanStateAfterLoopV0(RequiredTestsFailedSinReplanCausalPermaneceBloqueado|TestsFailedConReplanSinFollowupMaterializadoBloqueaHastaReentrada|TestsFailedConQualityGateReplanRetryAbreWait|BloqueaTestsConEvidenciaFailed)|MaybeCloseOperationalDirectorV0NoCierraConPlanStatePostWaitActivo)'
+go test -count=1 ./modulos/orquesta-app-director-service -run 'Test(EnsureContinueOperationalDirectorPlanStateFromWorkflowTasksV0ConStateBloqueadoConservaPlanRef|OperationalDirectorPlanStateAfterRequiredTestsReplanV0NoReabreScopeMultitarea|ContinueRequestWithOperationalDirectorPlanStateV0RequiredTestsFailed(ReentraConStateFile|BloqueadoReabreWaitConReplanPosterior)|UpdateOperationalDirectorPlanStateAfterLoopV0(RequiredTestsFailedSinReplanCausalPermaneceBloqueado|TestsFailedConReplanSinFollowupMaterializadoBloqueaHastaReentrada|TestsFailedConQualityGateReplanRetryAbreWait|BloqueaTestsConEvidenciaFailed)|MaybeCloseOperationalDirectorV0(NoCierraConPlanStatePostWaitActivo|NoCierraConPlanStateFueraDeReplanOrCloseRunning|BloqueaPlanStateSinClosureSourceEnReplanOrClose|BloqueaPlanStateSinTaskStoreEnReplanOrClose))'
 ```

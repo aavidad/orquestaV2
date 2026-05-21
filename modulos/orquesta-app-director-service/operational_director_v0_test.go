@@ -942,7 +942,9 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0TestsFailedEmiteQualityGat
 		state.ActiveStepID != "step-run-required-tests" ||
 		testsStep.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 ||
 		testsStep.Reason != "required-tests-failed" ||
-		!serviceStringInSetV0(testsStep.RequiredTestEvidenceRefs, fixture.RequiredTestEvidenceRef) {
+		serviceCountStringV0(testsStep.RequiredTestEvidenceRefs, fixture.RequiredTestEvidenceRef) != 1 ||
+		serviceCountStringV0(testsStep.BlockerRefs, "required-tests-failed") != 1 ||
+		serviceCountStringV0(state.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-required-tests-failed-v0") != 1 {
 		t.Fatalf("state=%+v testsStep=%+v", state, testsStep)
 	}
 

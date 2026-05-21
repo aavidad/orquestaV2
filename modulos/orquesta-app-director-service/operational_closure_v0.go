@@ -15,10 +15,32 @@ func maybeCloseOperationalDirectorV0(
 	loop orquestacionnucleoapp.ProgressiveLoopResultV0,
 	loopRequest orquestacionnucleoapp.ProgressiveLoopRequestV0,
 ) (orquestacionnucleoapp.ProgressiveLoopResultV0, []orquestacionnucleoapp.ErrorV0, error) {
-	if ports.OperationalClosureSource == nil ||
-		ports.DirectorTaskStore == nil ||
-		loop.Status != orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 ||
+	if loop.Status != orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 ||
 		loop.PendingOutboxCount > 0 {
+		return loop, nil, nil
+	}
+	if ports.OperationalClosureSource == nil {
+		if err := operationalDirectorPlanStateBlockedAtReplanOrCloseV0(
+			ctx,
+			request,
+			ports,
+			"operational-closure-source-unavailable",
+			nil,
+		); err != nil {
+			return loop, nil, err
+		}
+		return loop, nil, nil
+	}
+	if ports.DirectorTaskStore == nil {
+		if err := operationalDirectorPlanStateBlockedAtReplanOrCloseV0(
+			ctx,
+			request,
+			ports,
+			"operational-closure-task-store-unavailable",
+			nil,
+		); err != nil {
+			return loop, nil, err
+		}
 		return loop, nil, nil
 	}
 	blocked, err := operationalDirectorPlanStateBlocksClosureV0(ctx, request, ports)
@@ -89,6 +111,47 @@ func maybeCloseOperationalDirectorV0(
 	return loop, nil, nil
 }
 
+func operationalDirectorPlanStateBlockedAtReplanOrCloseV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	reason string,
+	issues []orquestacionnucleoapp.ErrorV0,
+) error {
+	atReplanOrClose, err := operationalDirectorPlanStateIsAtReplanOrCloseV0(ctx, request, ports)
+	if err != nil || !atReplanOrClose {
+		return err
+	}
+	return operationalDirectorPlanStateBlockedAfterClosureV0(ctx, request, ports, reason, issues)
+}
+
+func operationalDirectorPlanStateIsAtReplanOrCloseV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+) (bool, error) {
+	planRef := continueOperationalDirectorPlanRefV0(request)
+	if planRef == "" || ports.OperationalPlanStateStore == nil {
+		return false, nil
+	}
+	state, err := ports.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, request.RunRef, planRef)
+	if err != nil {
+		return false, err
+	}
+	if state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 {
+		return false, nil
+	}
+	if state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 {
+		return false, nil
+	}
+	step, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok {
+		return false, nil
+	}
+	return step.Kind == orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0 &&
+		step.Status == orquestadirectoroperativo.OperationalDirectorStepRunningV0, nil
+}
+
 func operationalDirectorPlanStateBlocksClosureV0(
 	ctx context.Context,
 	request ContinueAppDirectorRequestV0,
@@ -112,14 +175,11 @@ func operationalDirectorPlanStateBlocksClosureV0(
 	if !ok {
 		return false, nil
 	}
-	switch step.Kind {
-	case orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0,
-		orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0,
-		orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0:
-		return true, nil
-	default:
+	if step.Kind == orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0 &&
+		step.Status == orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
 		return false, nil
 	}
+	return true, nil
 }
 
 func operationalDirectorPlanStateRequiredTestEvidenceRefsForClosureV0(
