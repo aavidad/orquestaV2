@@ -54,10 +54,14 @@ func appRunCreateMicrotaskCommandsV0(
 	commands := make([]orquestacoreworkflow.OrchestrationCommandV0, 0, len(plan.Units))
 	contractRef := appRunContractRefV0(plan)
 	for _, unit := range plan.Units {
+		task, err := appRunWorkflowTaskV0(plan, contractRef, unit)
+		if err != nil {
+			return nil, err
+		}
 		command, err := orquestacoreworkflow.NewCreateMicrotaskCommandV0(
 			appRunCommandMetaV0(request, "create-"+unit.TaskRef),
 			orquestacoreworkflow.CreateMicrotaskCommandPayloadV0{
-				Task: appRunWorkflowTaskV0(request.RunRef, contractRef, unit),
+				Task: task,
 			},
 		)
 		if err != nil {
@@ -69,31 +73,19 @@ func appRunCreateMicrotaskCommandsV0(
 }
 
 func appRunWorkflowTaskV0(
-	runRef string,
+	plan orquestaappplanner.AppMicrotaskPlanV0,
 	contractRef string,
 	unit orquestaappplanner.AppWorkUnitV0,
-) orquestacoreworkflow.WorkflowTaskV0 {
-	return orquestacoreworkflow.WorkflowTaskV0{
-		SchemaVersion:      orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
-		TaskID:             unit.TaskRef,
-		RunID:              runRef,
-		PhaseID:            unit.PhaseID,
-		Title:              unit.Title,
-		Summary:            "Ejecutar microtarea planificada con alcance acotado.",
-		WriteSet:           unit.WriteSet,
-		AcceptanceCriteria: appRunTaskAcceptanceV0(),
-		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
-			ContractRef:  contractRef,
-			FunctionName: appRunFunctionNameV0(unit.TaskRef),
-		}},
+) (orquestacoreworkflow.WorkflowTaskV0, error) {
+	task, err := orquestaappplanner.WorkflowTaskForUnitV0(plan, unit)
+	if err != nil {
+		return orquestacoreworkflow.WorkflowTaskV0{}, err
 	}
-}
-
-func appRunTaskAcceptanceV0() []string {
-	return []string{
-		"Entrega compacta registrada.",
-		"Evidencia externa con validacion.",
-	}
+	task.FunctionContractRefs = []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+		ContractRef:  contractRef,
+		FunctionName: appRunFunctionNameV0(unit.TaskRef),
+	}}
+	return orquestacoreworkflow.NewWorkflowTaskV0(task)
 }
 
 func appRunFunctionNamesV0(plan orquestaappplanner.AppMicrotaskPlanV0) []string {

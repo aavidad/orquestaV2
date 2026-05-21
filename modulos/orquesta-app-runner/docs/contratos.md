@@ -23,6 +23,9 @@ Invariantes:
 - usa comandos/eventos del workflow para crear el run;
 - antes de abrir `programacion`, crea decision, contrato funcional y una
   microtarea durable por unidad del plan;
+- las microtareas se construyen reutilizando `WorkflowTaskForUnitV0` del
+  planner y conservan `work_profile_kind`, tests requeridos y dependencias
+  causales; el runner solo reinyecta su contrato funcional global publicado;
 - no construye estado a mano salvo por el reducer publico;
 - no decide runtime, proveedor, modelo, HOME, credenciales ni DB;
 - si la AppSpec escala a `large`, conserva el plan largo del planner y emite

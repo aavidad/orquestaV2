@@ -13,6 +13,8 @@ Cobertura:
   olas por delivery;
 - el run preparado materializa una microtarea durable por unidad del plan antes
   de programacion;
+- las microtareas materializadas reutilizan perfiles neutrales del planner y
+  conservan tests/dependencias;
 - el provider emite la primera microtarea lista;
 - el loop progresivo del nucleo solicita capacidad y agente para bootstrap;
 - `RunPreparedAppOrchestrationV0` arranca bootstrap y, al observar entrega,
@@ -43,6 +45,7 @@ Evidencia 2026-05-09:
 - `TestPrepareAppOrchestrationV0ConservaCampoPlanner`;
 - `TestPreparedAppOrchestrationV0ProgressiveLoopRequestsBootstrapAgent`
   verifica `wait_external` tras arrancar el agente y outbox vacio;
+- `TestAppRunWorkflowTaskV0ReutilizaPerfilDelPlanner`;
 - `TestRunPreparedAppOrchestrationV0ArrancaBootstrapGrande`;
 - `TestRunPreparedAppOrchestrationV0RegistraEntregaYAvanzaOla`;
 - `TestRunPreparedAppOrchestrationV0CompletaPlanGrandeConEntregas`;
