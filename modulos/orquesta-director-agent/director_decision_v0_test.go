@@ -1,6 +1,7 @@
 package orquestadirectoragent
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -32,6 +33,36 @@ func TestValidateDirectorAgentDecisionV0AceptaMicrotareaCompacta(t *testing.T) {
 func TestValidateDirectorAgentDecisionV0AceptaMicrotareaDuranteProgramacion(t *testing.T) {
 	decision := validDirectorAgentCreateMicrotaskDecisionV0()
 	decision.PhaseID = decision.CreateMicrotask.Task.PhaseID
+
+	if issues := ValidateDirectorAgentDecisionV0(decision); len(issues) != 0 {
+		t.Fatalf("issues inesperados: %+v", issues)
+	}
+}
+
+func TestValidateDirectorAgentDecisionV0AceptaMicrotareaConLinajeRecursivo(t *testing.T) {
+	decision := validDirectorAgentCreateMicrotaskDecisionV0()
+	decision.CreateMicrotask.Task.ParentTaskRef = "task-ref-parent-001"
+	decision.CreateMicrotask.Task.CohortRef = "cohort-ref-recursive-001"
+	decision.CreateMicrotask.Task.WaveRef = "wave-ref-recursive-001"
+	decision.CreateMicrotask.Task.DelegationDepth = 2
+	decision.CreateMicrotask.Task.MaxChildAgents = 4
+	decision.CreateMicrotask.Task.ChildTaskRefs = []string{"task-ref-child-001", "task-ref-child-002"}
+
+	if issues := ValidateDirectorAgentDecisionV0(decision); len(issues) != 0 {
+		t.Fatalf("issues inesperados: %+v", issues)
+	}
+}
+
+func TestValidateDirectorAgentDecisionV0AceptaChildRefsHastaLimiteRecursivo(t *testing.T) {
+	decision := validDirectorAgentCreateMicrotaskDecisionV0()
+	decision.CreateMicrotask.Task.MaxChildAgents = maxDirectorAgentRecursionLimitV0
+	decision.CreateMicrotask.Task.ChildTaskRefs = make([]string, 0, maxDirectorAgentRecursionLimitV0)
+	for index := 0; index < maxDirectorAgentRecursionLimitV0; index++ {
+		decision.CreateMicrotask.Task.ChildTaskRefs = append(
+			decision.CreateMicrotask.Task.ChildTaskRefs,
+			fmt.Sprintf("task-ref-child-%03d", index+1),
+		)
+	}
 
 	if issues := ValidateDirectorAgentDecisionV0(decision); len(issues) != 0 {
 		t.Fatalf("issues inesperados: %+v", issues)
@@ -117,6 +148,32 @@ func TestValidateDirectorAgentDecisionV0RechazaDependenciaNoCompacta(t *testing.
 	)
 }
 
+func TestValidateDirectorAgentDecisionV0RechazaLinajeRecursivoInvalido(t *testing.T) {
+	for _, mutate := range []func(*DirectorAgentDecisionV0){
+		func(decision *DirectorAgentDecisionV0) {
+			decision.CreateMicrotask.Task.ParentTaskRef = decision.CreateMicrotask.Task.TaskID
+		},
+		func(decision *DirectorAgentDecisionV0) {
+			decision.CreateMicrotask.Task.ParentTaskRef = "../task-parent"
+		},
+		func(decision *DirectorAgentDecisionV0) {
+			decision.CreateMicrotask.Task.ChildTaskRefs = []string{decision.CreateMicrotask.Task.TaskID}
+		},
+		func(decision *DirectorAgentDecisionV0) { decision.CreateMicrotask.Task.DelegationDepth = -1 },
+		func(decision *DirectorAgentDecisionV0) {
+			decision.CreateMicrotask.Task.MaxChildAgents = maxDirectorAgentRecursionLimitV0 + 1
+		},
+	} {
+		decision := validDirectorAgentCreateMicrotaskDecisionV0()
+		mutate(&decision)
+		requireDirectorAgentIssueV0(t,
+			ValidateDirectorAgentDecisionV0(decision),
+			"director_agent_ref_invalida",
+			"director_agent_numero_invalido",
+		)
+	}
+}
+
 func validDirectorAgentDecisionV0() DirectorAgentDecisionV0 {
 	return DirectorAgentDecisionV0{
 		SchemaVersion: DirectorAgentDecisionSchemaVersionV0,
@@ -192,12 +249,14 @@ func validDirectorAgentCreateMicrotaskDecisionV0() DirectorAgentDecisionV0 {
 	}
 }
 
-func requireDirectorAgentIssueV0(t *testing.T, issues []DirectorAgentDecisionIssueV0, code string) {
+func requireDirectorAgentIssueV0(t *testing.T, issues []DirectorAgentDecisionIssueV0, codes ...string) {
 	t.Helper()
 	for _, issue := range issues {
-		if issue.Code == code {
-			return
+		for _, code := range codes {
+			if issue.Code == code {
+				return
+			}
 		}
 	}
-	t.Fatalf("no se encontro issue %q en %+v", code, issues)
+	t.Fatalf("no se encontro ninguna issue de %+v en %+v", codes, issues)
 }

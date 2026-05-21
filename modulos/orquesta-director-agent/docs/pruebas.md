@@ -12,6 +12,7 @@ Cobertura local:
 - acepta `open_phase`, `request_vote` y `accept_decision`;
 - acepta `publish_function_contract` compacto;
 - acepta `create_microtask` con contrato funcional explicito;
+- acepta `create_microtask` con linaje recursivo neutral y refs compactas;
 - acepta `ask_director` y `ask_user` compactos;
 - acepta `request_capacity` y `request_agent` compactos;
 - acepta `propose_autonomous_plan_team` compacto;
@@ -22,6 +23,7 @@ Cobertura local:
 - rechaza proveedor/modelo y payloads largos;
 - rechaza microtareas sin contrato funcional.
 - rechaza microtareas de programacion sin `required_tests`.
+- rechaza linaje recursivo incoherente en microtareas.
 - rechaza plan/equipo con detalle operativo o asignaciones inexistentes.
 - rechaza cierre con fase incoherente o evidencias con rutas.
 - rechaza `close_task` sin evidencias o fuera de `revision`.

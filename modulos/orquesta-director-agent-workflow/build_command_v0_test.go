@@ -55,6 +55,12 @@ func TestBuildDirectorAgentWorkflowCommandV0TraduceContrato(t *testing.T) {
 func TestBuildDirectorAgentWorkflowCommandV0TraduceMicrotarea(t *testing.T) {
 	request := validDirectorAgentWorkflowMicrotaskRequestForTestV0()
 	request.Decision.CreateMicrotask.Task.DependsOn = []string{"task-ref-bootstrap-001"}
+	request.Decision.CreateMicrotask.Task.ParentTaskRef = "task-ref-parent-001"
+	request.Decision.CreateMicrotask.Task.CohortRef = "cohort-ref-recursive-001"
+	request.Decision.CreateMicrotask.Task.WaveRef = "wave-ref-recursive-001"
+	request.Decision.CreateMicrotask.Task.DelegationDepth = 2
+	request.Decision.CreateMicrotask.Task.MaxChildAgents = 4
+	request.Decision.CreateMicrotask.Task.ChildTaskRefs = []string{"task-ref-child-001"}
 	command, issues := BuildDirectorAgentWorkflowCommandV0(request)
 	if len(issues) != 0 {
 		t.Fatalf("issues inesperados: %+v", issues)
@@ -75,6 +81,15 @@ func TestBuildDirectorAgentWorkflowCommandV0TraduceMicrotarea(t *testing.T) {
 	}
 	if len(payload.Task.DependsOn) != 1 || payload.Task.DependsOn[0] != "task-ref-bootstrap-001" {
 		t.Fatalf("depends_on=%v", payload.Task.DependsOn)
+	}
+	if payload.Task.ParentTaskRef != "task-ref-parent-001" ||
+		payload.Task.CohortRef != "cohort-ref-recursive-001" ||
+		payload.Task.WaveRef != "wave-ref-recursive-001" ||
+		payload.Task.DelegationDepth != 2 ||
+		payload.Task.MaxChildAgents != 4 ||
+		len(payload.Task.ChildTaskRefs) != 1 ||
+		payload.Task.ChildTaskRefs[0] != "task-ref-child-001" {
+		t.Fatalf("linaje no traducido: %+v", payload.Task)
 	}
 }
 

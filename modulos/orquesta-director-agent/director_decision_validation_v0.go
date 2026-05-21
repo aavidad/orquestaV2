@@ -223,6 +223,13 @@ func (v *directorAgentDecisionValidatorV0) requireRef(field string, value string
 	}
 }
 
+func (v *directorAgentDecisionValidatorV0) requireOptionalRef(field string, value string) {
+	if value == "" {
+		return
+	}
+	v.requireRef(field, value)
+}
+
 func (v *directorAgentDecisionValidatorV0) requireText(field string, value string) {
 	if value == "" || len(value) > maxDirectorAgentStringV0 || directorAgentHasForbiddenDetailV0(value) {
 		v.add("director_agent_texto_invalido", field)
@@ -242,6 +249,16 @@ func (v *directorAgentDecisionValidatorV0) requireEvidence(field string, values 
 func (v *directorAgentDecisionValidatorV0) requireOptionalRefs(field string, values []string) {
 	if len(values) > maxDirectorAgentEvidenceRefsV0 {
 		v.add("director_agent_evidence_invalida", field)
+		return
+	}
+	for _, value := range values {
+		v.requireRef(field, value)
+	}
+}
+
+func (v *directorAgentDecisionValidatorV0) requireOptionalWorkRefs(field string, values []string) {
+	if len(values) > maxDirectorAgentRecursionLimitV0 {
+		v.add("director_agent_lista_invalida", field)
 		return
 	}
 	for _, value := range values {

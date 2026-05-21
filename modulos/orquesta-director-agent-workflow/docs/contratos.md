@@ -67,6 +67,9 @@ Invariantes:
 - aplica solo comandos publicos del workflow;
 - no abre fases ni inventa decisiones: `PublishFunctionContract` requiere fase de planificacion activa y decision ya reflejada en el run.
 - materializa la microtarea completa por `TaskStore` antes de guardar run/eventos; si falta, devuelve issue publico para no crear tareas imposibles de programar.
+- preserva el linaje operativo neutral de `create_microtask` en
+  `WorkflowTaskV0`: parent task, cohorte, ola, profundidad, fanout e hijos
+  conocidos. El puente no interpreta ese linaje ni arranca runtime.
 - aplica `close_task` entre `accept_review` y `open_phase` hacia `validacion_final`; no cierra fase ni run por si mismo.
 - el bloqueo por `request_kind` no vive aqui: lo aplica la capa de aplicacion antes de llamar al puente, para no acoplar este adaptador a politica de producto.
 

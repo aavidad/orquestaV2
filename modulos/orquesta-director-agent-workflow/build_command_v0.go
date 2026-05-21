@@ -277,6 +277,12 @@ func directorAgentWorkflowTaskV0(
 		AcceptanceCriteria:   directorAgentWorkflowTaskAcceptanceCriteriaV0(task),
 		RequiredTests:        task.RequiredTests,
 		DependsOn:            task.DependsOn,
+		ParentTaskRef:        task.ParentTaskRef,
+		CohortRef:            task.CohortRef,
+		WaveRef:              task.WaveRef,
+		DelegationDepth:      task.DelegationDepth,
+		MaxChildAgents:       task.MaxChildAgents,
+		ChildTaskRefs:        task.ChildTaskRefs,
 		FunctionContractRefs: directorAgentWorkflowFunctionRefsV0(task.FunctionContractRefs),
 	}
 }

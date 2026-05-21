@@ -3,8 +3,9 @@ package orquestadirectoragent
 import "strings"
 
 const (
-	maxDirectorAgentStringV0       = 300
-	maxDirectorAgentEvidenceRefsV0 = 10
+	maxDirectorAgentStringV0         = 300
+	maxDirectorAgentEvidenceRefsV0   = 10
+	maxDirectorAgentRecursionLimitV0 = 40
 )
 
 var forbiddenDirectorAgentFragmentsV0 = []string{
@@ -218,6 +219,12 @@ func normalizeDirectorAgentMicrotaskV0(task DirectorAgentMicrotaskV0) DirectorAg
 		AcceptanceCriteria:   compactDirectorAgentStringsV0(task.AcceptanceCriteria),
 		RequiredTests:        compactDirectorAgentStringsV0(task.RequiredTests),
 		DependsOn:            compactDirectorAgentStringsV0(task.DependsOn),
+		ParentTaskRef:        strings.TrimSpace(task.ParentTaskRef),
+		CohortRef:            strings.TrimSpace(task.CohortRef),
+		WaveRef:              strings.TrimSpace(task.WaveRef),
+		DelegationDepth:      task.DelegationDepth,
+		MaxChildAgents:       task.MaxChildAgents,
+		ChildTaskRefs:        compactDirectorAgentStringsV0(task.ChildTaskRefs),
 		FunctionContractRefs: normalizeDirectorAgentFunctionRefsV0(task.FunctionContractRefs),
 	}
 }

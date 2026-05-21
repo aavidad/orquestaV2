@@ -44,6 +44,10 @@ Invariantes:
   de dominio.
 - `create_microtask` no puede incluir proveedor, modelo, HOME, OAuth, DB, runtime ni secretos en `write_set`, criterios o refs.
 - en `create_microtask`, `phase_id` de la decision es la fase actual que autoriza crear trabajo: `planificacion_microtareas` para el plan inicial o `programacion` para cambios en caliente; `task.phase_id` es la fase objetivo de ejecucion, normalmente `programacion`.
+- `create_microtask` puede declarar linaje operativo neutral con
+  `parent_task_ref`, `cohort_ref`, `wave_ref`, `delegation_depth`,
+  `max_child_agents` y `child_task_refs`; son refs opacas compactas y limites
+  de gobierno, no permisos para abrir runtime libre ni datos de proveedor.
 - `propose_autonomous_plan_team` vive en `planificacion_microtareas`, cita contratos funcionales por ref y solo describe miembros, capacidades y unidades de trabajo compactas.
 - `close_task` debe citar `task_id`, `phase_id=revision`, `delivery_ref`, `accepted_review_ref`, `summary` y `evidence_refs`; queda entre `accept_review` y `open_phase` hacia `validacion_final`.
 - `register_final_validation` y `close_run` deben incluir `request_kind`, `execution_mode` y `minimum_deliverables` para que la capa de aplicacion pueda impedir cierres parciales fuera de `debug`.

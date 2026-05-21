@@ -20,6 +20,24 @@ func (v *directorAgentDecisionValidatorV0) validateCreateMicrotask(decision Dire
 		v.requireOptionalTextList("create_microtask.task.required_tests", task.RequiredTests)
 	}
 	v.requireOptionalRefs("create_microtask.task.depends_on", task.DependsOn)
+	v.requireOptionalRef("create_microtask.task.parent_task_ref", task.ParentTaskRef)
+	v.requireOptionalRef("create_microtask.task.cohort_ref", task.CohortRef)
+	v.requireOptionalRef("create_microtask.task.wave_ref", task.WaveRef)
+	v.requireOptionalWorkRefs("create_microtask.task.child_task_refs", task.ChildTaskRefs)
+	if task.ParentTaskRef != "" && task.ParentTaskRef == task.TaskID {
+		v.add("director_agent_ref_invalida", "create_microtask.task.parent_task_ref")
+	}
+	for _, childRef := range task.ChildTaskRefs {
+		if childRef == task.TaskID || childRef == task.ParentTaskRef {
+			v.add("director_agent_ref_invalida", "create_microtask.task.child_task_refs")
+		}
+	}
+	if task.DelegationDepth < 0 || task.DelegationDepth > maxDirectorAgentRecursionLimitV0 {
+		v.add("director_agent_numero_invalido", "create_microtask.task.delegation_depth")
+	}
+	if task.MaxChildAgents < 0 || task.MaxChildAgents > maxDirectorAgentRecursionLimitV0 {
+		v.add("director_agent_numero_invalido", "create_microtask.task.max_child_agents")
+	}
 	v.validateFunctionRefs("create_microtask.task.function_contract_refs", task.FunctionContractRefs)
 	if task.RunID != decision.RunID {
 		v.add("director_agent_run_mismatch", "create_microtask.task.run_id")
