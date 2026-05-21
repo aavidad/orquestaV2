@@ -18,6 +18,12 @@ Validacion:
 go test -count=1 ./modulos/orquesta-runtime-required-test
 ```
 
+Prueba integrada local:
+
+- `TestRequiredTestRunnerV0ConLocalCommandExecutorEjecutaGoTestReal` crea un
+  modulo Go temporal, ejecuta `go test ./...` mediante allowlist explicita y
+  guarda `RequiredTestEvidenceV0` causal con artefacto relativo.
+
 Pendiente:
 
 - prueba real de programacion con agentes/subagentes usando el runner activado;

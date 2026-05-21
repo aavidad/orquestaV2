@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -122,6 +123,62 @@ func TestLocalCommandExecutorV0RespetaContexto(t *testing.T) {
 	}
 }
 
+func TestRequiredTestRunnerV0ConLocalCommandExecutorEjecutaGoTestReal(t *testing.T) {
+	goPath, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatalf("go no encontrado: %v", err)
+	}
+	projectDir := tinyGoModuleForRequiredTestV0(t)
+	outputDir := t.TempDir()
+	store := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	runner := orquestacionnucleoapp.RequiredTestRunnerV0{
+		Executor: LocalCommandExecutorV0{
+			ProjectWorkDir: projectDir,
+			OutputDir:      outputDir,
+			AllowedCommands: map[string]string{
+				"go": goPath,
+			},
+			Env: []string{
+				"CGO_ENABLED=0",
+				"GOCACHE=" + filepath.Join(t.TempDir(), "go-build-cache"),
+				"GOPATH=" + filepath.Join(t.TempDir(), "go-path"),
+				"GOMODCACHE=" + filepath.Join(t.TempDir(), "go-mod-cache"),
+			},
+			MaxOutputBytes: 64 * 1024,
+		},
+		EvidenceWriter: store,
+	}
+
+	request := requiredTestExecutionRequestForRuntimeTestV0()
+	result, err := runner.RunRequiredTestsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("RunRequiredTestsV0: %v", err)
+	}
+	if len(result.Issues) != 0 ||
+		len(result.PassedEvidenceRefs) != 1 ||
+		len(result.FailedEvidenceRefs) != 0 {
+		t.Fatalf("result=%+v", result)
+	}
+	evidence, err := store.LoadRequiredTestEvidenceV0(context.Background(), request.RunRef, result.PassedEvidenceRefs)
+	if err != nil {
+		t.Fatalf("LoadRequiredTestEvidenceV0: %v", err)
+	}
+	if len(evidence) != 1 ||
+		evidence[0].Status != orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 ||
+		evidence[0].TestCommand != "go test ./..." ||
+		evidence[0].DeliveryRef != request.DeliveryRef ||
+		evidence[0].AcceptedReviewRef != request.AcceptedReviewRef {
+		t.Fatalf("evidence=%+v", evidence)
+	}
+	content := outputArtifactForTestV0(t, outputDir, requiredTestOutputRefForTestV0(t, evidence[0].EvidenceRefs))
+	if !strings.Contains(content, "status=passed") ||
+		!strings.Contains(content, "test_command=go test ./...") ||
+		strings.Contains(content, projectDir) ||
+		strings.Contains(content, outputDir) {
+		t.Fatalf("artifact content=%q", content)
+	}
+}
+
 func localCommandExecutorForTestV0(t *testing.T, outputDir string, childMode string) LocalCommandExecutorV0 {
 	t.Helper()
 	if !filepath.IsAbs(os.Args[0]) {
@@ -135,6 +192,55 @@ func localCommandExecutorForTestV0(t *testing.T, outputDir string, childMode str
 		},
 		Env:            []string{childModeEnvV0 + "=" + childMode},
 		MaxOutputBytes: 4096,
+	}
+}
+
+func tinyGoModuleForRequiredTestV0(t *testing.T) string {
+	t.Helper()
+	projectDir := t.TempDir()
+	files := map[string]string{
+		"go.mod": "module example.com/orquesta-required-test-smoke\n\ngo 1.22\n",
+		"calc.go": strings.Join([]string{
+			"package calc",
+			"",
+			"func Add(a int, b int) int {",
+			"\treturn a + b",
+			"}",
+			"",
+		}, "\n"),
+		"calc_test.go": strings.Join([]string{
+			"package calc",
+			"",
+			"import \"testing\"",
+			"",
+			"func TestAdd(t *testing.T) {",
+			"\tif Add(2, 3) != 5 {",
+			"\t\tt.Fatalf(\"Add fallo\")",
+			"\t}",
+			"}",
+			"",
+		}, "\n"),
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(projectDir, name), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	return projectDir
+}
+
+func requiredTestExecutionRequestForRuntimeTestV0() orquestacionnucleoapp.RequiredTestExecutionRequestV0 {
+	return orquestacionnucleoapp.RequiredTestExecutionRequestV0{
+		RunRef:            "run-runtime-required-test-real-001",
+		TaskRef:           "task-runtime-required-test-real-001",
+		TestCommands:      []string{"go test ./..."},
+		DeliveryRef:       "delivery-ref-runtime-required-test-real-001",
+		ReviewRequestID:   "review-request-ref-runtime-required-test-real-001",
+		ReviewResultRef:   "review-result-ref-runtime-required-test-real-001",
+		AcceptedReviewRef: "accepted-review-ref-runtime-required-test-real-001",
+		OccurredAt:        "2026-05-22T10:00:00Z",
+		CorrelationID:     "correlation-runtime-required-test-real-001",
+		EvidenceRefs:      []string{"review-evidence-ref-runtime-required-test-real-001"},
 	}
 }
 
@@ -159,6 +265,18 @@ func outputArtifactForTestV0(t *testing.T, outputDir string, evidenceRef string)
 		t.Fatalf("leer artifact: %v", err)
 	}
 	return string(data)
+}
+
+func requiredTestOutputRefForTestV0(t *testing.T, refs []string) string {
+	t.Helper()
+	const prefix = "required-test-output-v0/"
+	for _, ref := range refs {
+		if strings.HasPrefix(ref, prefix) {
+			return ref
+		}
+	}
+	t.Fatalf("sin ref de salida en evidence_refs=%v", refs)
+	return ""
 }
 
 func requiredTestChildWaitV0() {
