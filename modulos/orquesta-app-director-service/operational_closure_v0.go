@@ -113,7 +113,8 @@ func operationalDirectorPlanStateBlocksClosureV0(
 		return false, nil
 	}
 	switch step.Kind {
-	case orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0,
+	case orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0,
+		orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0,
 		orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0:
 		return true, nil
 	default:

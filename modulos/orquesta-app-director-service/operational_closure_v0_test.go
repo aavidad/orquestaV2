@@ -503,6 +503,7 @@ func TestMaybeCloseOperationalDirectorV0BloqueaPlanStateSiSourceNoConstruyeReque
 
 func TestMaybeCloseOperationalDirectorV0NoCierraConPlanStatePostWaitActivo(t *testing.T) {
 	for _, stepKind := range []orquestadirectoroperativo.OperationalDirectorStepKindV0{
+		orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0,
 		orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0,
 		orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0,
 	} {
@@ -513,6 +514,12 @@ func TestMaybeCloseOperationalDirectorV0NoCierraConPlanStatePostWaitActivo(t *te
 			run.Tasks = []string{"task-ref-service-operational-closure-001"}
 			run.Deliveries = []string{"delivery-ref-service-operational-closure-001"}
 			run.AcceptedReviews = []string{"accepted-review-ref-service-operational-closure-001"}
+			waitRefs := []string(nil)
+			pendingAgentRefs := []string(nil)
+			if stepKind == orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0 {
+				waitRefs = []string{"wait-ref-service-operational-closure-plan-state"}
+				pendingAgentRefs = []string{orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0("task-ref-service-operational-closure-001")}
+			}
 			source := &serviceOperationalClosureSourceForTestV0{
 				Request: orquestacionnucleoapp.OperationalDirectorClosureRequestV0{
 					TaskID:                   "task-ref-service-operational-closure-001",
@@ -536,11 +543,13 @@ func TestMaybeCloseOperationalDirectorV0NoCierraConPlanStatePostWaitActivo(t *te
 				ActiveStepID:  "step-active-post-wait",
 				ObservedAt:    "2026-05-17T14:35:00Z",
 				Steps: []orquestacionnucleoapp.OperationalDirectorPlanStepStateV0{{
-					StepID:    "step-active-post-wait",
-					Kind:      stepKind,
-					Status:    orquestadirectoroperativo.OperationalDirectorStepRunningV0,
-					TaskRefs:  []string{"task-ref-service-operational-closure-001"},
-					AgentRefs: []string{orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0("task-ref-service-operational-closure-001")},
+					StepID:           "step-active-post-wait",
+					Kind:             stepKind,
+					Status:           orquestadirectoroperativo.OperationalDirectorStepRunningV0,
+					TaskRefs:         []string{"task-ref-service-operational-closure-001"},
+					AgentRefs:        []string{orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0("task-ref-service-operational-closure-001")},
+					PendingAgentRefs: pendingAgentRefs,
+					WaitRefs:         waitRefs,
 				}},
 			}
 			planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(state)

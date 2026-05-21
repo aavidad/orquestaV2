@@ -142,8 +142,11 @@ implementacion, test focal y evidencia en la matriz.
   `RequiredTestEvidenceV0` persistido, avanza con `passed`, bloquea con
   `required-tests-failed` ante `failed` y rechaza refs de otra review. En modo
   `programming`, un summary textual o un review sin evidencia de test no basta
-  para cerrar. Pendiente separado: runner/validador por puerto, emision
-  idempotente de evidencia y replan ante fallo.
+  para cerrar. El corte del 2026-05-21 ya permite salir del fallo cuando existe
+  `QualityGateRecorded(blocked)` + `ReplanDecisionRecorded` causal y followups
+  materializados; ver
+  `docs/corte_required_tests_failed_replan_2026-05-21.md`. Pendiente separado:
+  emision automatica de quality gate/replan por puerto/fuente y smokes reales.
 - [~] Replan negativo: cerrada la observacion durable de review negativa. El
   `PlanState` guarda refs/attempt para `ReworkRequested` y
   `ReplanDecisionRecorded`. El corte del 2026-05-21 ya convierte followups
@@ -151,8 +154,9 @@ implementacion, test focal y evidencia en la matriz.
   `WorkflowTaskV0` existen en `WorkflowTaskStore` y estan reflejadas en
   `run.Tasks`, y `retry_task`/`replace_agent` cuando los agentes followup ya
   estan reflejados en `run.Agents`; ver
-  `docs/corte_replan_negativo_followups_split_2026-05-21.md`. Siguen pendientes
-  blockers posteriores, tests fallidos y cierre insuficiente como nuevos efectos
+  `docs/corte_replan_negativo_followups_split_2026-05-21.md`. Para tests
+  fallidos ya se consume replan materializado por quality gate bloqueante. Siguen
+  pendientes blockers posteriores y cierre insuficiente como nuevos efectos
   idempotentes de replan.
 - [x] Plan state vivo inicial: contrato, stores y persistencia del tramo
   `launch_subagents -> wait_subagents`, con ola/cohorte activa, step activo,

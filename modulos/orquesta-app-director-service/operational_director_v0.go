@@ -536,6 +536,8 @@ type operationalDirectorPlanReviewTraceV0 struct {
 	ReworkRequestRefs  []string
 	ReplanDecisions    map[string]orquestacoreworkflow.ReplanDecisionRecordedPayloadV0
 	ReplanDecisionRefs []string
+	QualityGates       map[string]orquestacoreworkflow.QualityGateRecordedPayloadV0
+	QualityGateRefs    []string
 }
 
 type operationalDirectorPlanAcceptedReviewMatchV0 struct {
@@ -893,6 +895,19 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 	}
 	testStatus := operationalDirectorPlanEvaluateRequiredTestEvidenceV0(request.RunRef, requiredTests, matches, evidence)
 	if len(testStatus.FailedRefs) > 0 {
+		replanned, replannedChanged, err := operationalDirectorPlanStateAfterRequiredTestsReplanV0(
+			ctx,
+			request,
+			ports,
+			state,
+			activeStep,
+			loop.Run,
+			matches,
+			testStatus.FailedRefs,
+		)
+		if err != nil || replannedChanged {
+			return replanned, replannedChanged, err
+		}
 		return operationalDirectorPlanStateWithRequiredTestsBlockedV0(request, state, activeStep, testStatus.FailedRefs)
 	}
 	if !testStatus.Complete {
@@ -921,6 +936,19 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 			}
 			testStatus = operationalDirectorPlanEvaluateRequiredTestEvidenceV0(request.RunRef, requiredTests, matches, evidence)
 			if len(testStatus.FailedRefs) > 0 {
+				replanned, replannedChanged, err := operationalDirectorPlanStateAfterRequiredTestsReplanV0(
+					ctx,
+					request,
+					ports,
+					state,
+					activeStep,
+					loop.Run,
+					matches,
+					testStatus.FailedRefs,
+				)
+				if err != nil || replannedChanged {
+					return replanned, replannedChanged, err
+				}
 				return operationalDirectorPlanStateWithRequiredTestsBlockedV0(request, state, activeStep, testStatus.FailedRefs)
 			}
 		}
@@ -982,6 +1010,200 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 		return state, false, err
 	}
 	return next, true, nil
+}
+
+func operationalDirectorPlanStateAfterRequiredTestsReplanV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	matches []operationalDirectorPlanAcceptedReviewMatchV0,
+	failedRefs []string,
+) (orquestacionnucleoapp.OperationalDirectorPlanStateV0, bool, error) {
+	replan, gateRef, ok, err := operationalDirectorPlanRequiredTestsReplanDecisionV0(ctx, request, ports, run, activeStep, matches, failedRefs)
+	if err != nil || !ok {
+		return state, false, err
+	}
+	match := operationalDirectorPlanReviewReworkReplanMatchV0{
+		TaskRef:           replan.TaskRef,
+		ReplanDecisionRef: replan.ReplanRef,
+		AcceptedAction:    replan.AcceptedAction,
+		FollowupRefs:      append([]string(nil), replan.FollowupRefs...),
+	}
+	followupTasks, followupsReady, err := operationalDirectorPlanReplanFollowupTasksV0(ctx, request, ports, run, match)
+	if err != nil {
+		return state, false, err
+	}
+	followupTaskRefs := continueOperationalDirectorTaskRefsV0(followupTasks)
+	followupAgentRefs := continueOperationalDirectorAgentRefsV0(followupTasks)
+	followupWaveRef, followupCohortRef, followupParentTaskRef, _ := operationalDirectorPlanFollowupScopeV0(followupTasks)
+	followupAgentOnlyRefs := operationalDirectorPlanReplanFollowupAgentRefsV0(run, activeStep, match)
+	waitStepID := ""
+	if followupsReady || len(followupAgentOnlyRefs) > 0 {
+		waitStepID = operationalDirectorPlanStateStepIDByKindV0(state, orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0)
+		if waitStepID == "" {
+			followupsReady = false
+			followupAgentOnlyRefs = nil
+		}
+	}
+	if !followupsReady && len(followupAgentOnlyRefs) == 0 {
+		return state, false, nil
+	}
+	nextSteps := make([]orquestacionnucleoapp.OperationalDirectorPlanStepStateV0, 0, len(state.Steps))
+	for _, step := range state.Steps {
+		nextStep := step
+		switch {
+		case step.StepID == activeStep.StepID:
+			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepBlockedV0
+			nextStep.RequiredTestEvidenceRefs = append([]string(nil), failedRefs...)
+			nextStep.ReplanDecisionRefs = []string{replan.ReplanRef}
+			nextStep.BlockerRefs = compactServiceRefsV0([]string{"required-tests-failed", gateRef})
+			nextStep.Reason = "required-tests-failed-replan-recorded"
+		case followupsReady && step.StepID == waitStepID:
+			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepRunningV0
+			nextStep.WaveRef = followupWaveRef
+			nextStep.CohortRef = followupCohortRef
+			nextStep.ParentTaskRef = followupParentTaskRef
+			nextStep.TaskRefs = append([]string(nil), followupTaskRefs...)
+			nextStep.AgentRefs = append([]string(nil), followupAgentRefs...)
+			nextStep.PendingAgentRefs = append([]string(nil), followupAgentRefs...)
+			nextStep.WaitRefs = []string{appDirectorWaitRefV0(
+				request.RunRef,
+				appDirectorWaitFilterV0{
+					WaveRef:       followupWaveRef,
+					CohortRef:     followupCohortRef,
+					ParentTaskRef: followupParentTaskRef,
+				},
+				request.CorrelationID,
+			)}
+			nextStep.BlockerRefs = []string{"wait-subagents-required-tests-replan-followups"}
+			nextStep.Reason = "required-tests-failed-replan-followups-waiting"
+		case len(followupAgentOnlyRefs) > 0 && step.StepID == waitStepID:
+			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepRunningV0
+			nextStep.WaveRef = ""
+			nextStep.CohortRef = ""
+			nextStep.ParentTaskRef = ""
+			nextStep.TaskRefs = []string{replan.TaskRef}
+			nextStep.AgentRefs = append([]string(nil), followupAgentOnlyRefs...)
+			nextStep.PendingAgentRefs = append([]string(nil), followupAgentOnlyRefs...)
+			nextStep.WaitRefs = []string{appDirectorWaitRefV0(request.RunRef, appDirectorWaitFilterV0{}, request.CorrelationID)}
+			nextStep.BlockerRefs = []string{"wait-subagents-required-tests-replan-followup-agents"}
+			nextStep.Reason = "required-tests-failed-replan-followup-agents-waiting"
+		}
+		nextSteps = append(nextSteps, nextStep)
+	}
+	if followupsReady {
+		state.ActiveWaveRef = followupWaveRef
+		state.ActiveCohortRef = followupCohortRef
+		state.ActiveParentTaskRef = followupParentTaskRef
+		state.PendingAgentRefs = append([]string(nil), followupAgentRefs...)
+	} else {
+		state.ActiveWaveRef = ""
+		state.ActiveCohortRef = ""
+		state.ActiveParentTaskRef = ""
+		state.PendingAgentRefs = append([]string(nil), followupAgentOnlyRefs...)
+	}
+	state.Status = orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0
+	state.ActiveStepID = waitStepID
+	state.ReplanAttempts++
+	state.Steps = nextSteps
+	state.EvidenceRefs = compactServiceRefsV0(append(
+		state.EvidenceRefs,
+		"evidence-ref-app-director-operational-plan-state-required-tests-failed-replan-v0",
+		gateRef,
+		replan.ReplanRef,
+	))
+	state.UpdatedAt = request.OccurredAt
+	next, err := orquestacionnucleoapp.NewOperationalDirectorPlanStateV0(state)
+	if err != nil {
+		return state, false, err
+	}
+	return next, true, nil
+}
+
+func operationalDirectorPlanRequiredTestsReplanDecisionV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+	matches []operationalDirectorPlanAcceptedReviewMatchV0,
+	failedRefs []string,
+) (orquestacoreworkflow.ReplanDecisionRecordedPayloadV0, string, bool, error) {
+	reader := operationalDirectorPlanStateEventReaderV0(ports)
+	if reader == nil {
+		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, nil
+	}
+	events, err := reader.LoadRunEventsV0(ctx, request.RunRef)
+	if err != nil {
+		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, err
+	}
+	trace := operationalDirectorPlanReviewTraceFromEventsV0(events)
+	for _, match := range matches {
+		gate, ok := operationalDirectorPlanRequiredTestsQualityGateV0(run, trace, activeStep, match.TaskRef, failedRefs)
+		if !ok {
+			continue
+		}
+		replan, ok := operationalDirectorPlanReplanForQualityGateV0(run, trace, gate.GateRef, match.TaskRef)
+		if ok {
+			return replan, strings.TrimSpace(gate.GateRef), true, nil
+		}
+	}
+	return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, nil
+}
+
+func operationalDirectorPlanRequiredTestsQualityGateV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	trace operationalDirectorPlanReviewTraceV0,
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+	taskRef string,
+	failedRefs []string,
+) (orquestacoreworkflow.QualityGateRecordedPayloadV0, bool) {
+	taskRef = strings.TrimSpace(taskRef)
+	for _, gateRef := range trace.QualityGateRefs {
+		gate := trace.QualityGates[gateRef]
+		if strings.TrimSpace(gate.RunRef) != strings.TrimSpace(run.RunID) ||
+			strings.TrimSpace(gate.SubjectRef) != taskRef ||
+			gate.Decision != orquestacoreworkflow.QualityGateDecisionBlockedV0 ||
+			!operationalDirectorPlanProjectionReflectedV0(gate.GateRef, run.QualityGates) ||
+			!operationalDirectorPlanRefsIntersectV0(failedRefs, append(gate.IssueRefs, gate.EvidenceRefs...)) {
+			continue
+		}
+		if len(activeStep.TaskRefs) > 0 && !startAppDirectorStringInSetV0(activeStep.TaskRefs, taskRef) {
+			continue
+		}
+		return gate, true
+	}
+	return orquestacoreworkflow.QualityGateRecordedPayloadV0{}, false
+}
+
+func operationalDirectorPlanReplanForQualityGateV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	trace operationalDirectorPlanReviewTraceV0,
+	gateRef string,
+	taskRef string,
+) (orquestacoreworkflow.ReplanDecisionRecordedPayloadV0, bool) {
+	for _, replanDecisionRef := range trace.ReplanDecisionRefs {
+		replan := trace.ReplanDecisions[replanDecisionRef]
+		if strings.TrimSpace(replan.SourceRef) == strings.TrimSpace(gateRef) &&
+			strings.TrimSpace(replan.TaskRef) == strings.TrimSpace(taskRef) &&
+			strings.TrimSpace(replan.RunRef) == strings.TrimSpace(run.RunID) &&
+			operationalDirectorPlanProjectionReflectedV0(replan.ReplanRef, run.ReplanDecisions) {
+			return replan, true
+		}
+	}
+	return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, false
+}
+
+func operationalDirectorPlanRefsIntersectV0(left []string, right []string) bool {
+	for _, candidate := range compactServiceRefsV0(left) {
+		if startAppDirectorStringInSetV0(right, candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 func operationalDirectorPlanRunRequiredTestsV0(
@@ -1490,6 +1712,7 @@ func operationalDirectorPlanReviewTraceFromEventsV0(
 		AcceptedReviews: map[string]orquestacoreworkflow.ReviewAcceptedPayloadV0{},
 		ReworkRequests:  map[string]orquestacoreworkflow.ReworkRequestedPayloadV0{},
 		ReplanDecisions: map[string]orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{},
+		QualityGates:    map[string]orquestacoreworkflow.QualityGateRecordedPayloadV0{},
 	}
 	for _, event := range events {
 		switch event.EventType {
@@ -1546,6 +1769,15 @@ func operationalDirectorPlanReviewTraceFromEventsV0(
 					trace.ReplanDecisionRefs = append(trace.ReplanDecisionRefs, ref)
 				}
 				trace.ReplanDecisions[ref] = payload
+			}
+		case orquestacoreworkflow.OrchestrationEventQualityGateRecordedV0:
+			var payload orquestacoreworkflow.QualityGateRecordedPayloadV0
+			if operationalDirectorPlanDecodeEventPayloadV0(event, &payload) {
+				ref := strings.TrimSpace(payload.GateRef)
+				if ref != "" && trace.QualityGates[ref].GateRef == "" {
+					trace.QualityGateRefs = append(trace.QualityGateRefs, ref)
+				}
+				trace.QualityGates[ref] = payload
 			}
 		}
 	}
