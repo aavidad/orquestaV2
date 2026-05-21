@@ -267,7 +267,7 @@ func envPathValueAllowedV0(key string, value string) bool {
 	switch strings.ToUpper(strings.TrimSpace(key)) {
 	case "PATH":
 		return envPathListAllowedV0(value)
-	case "GOCACHE", "GOTMPDIR", "TMPDIR":
+	case "GOCACHE", "GOMODCACHE", "GOPATH", "GOTMPDIR", "TMPDIR":
 		return filepath.IsAbs(value) && !pathHasCredentialMarkerV0(value)
 	default:
 		return false

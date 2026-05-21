@@ -36,6 +36,10 @@ Cobertura esperada:
 - el plan state avanza de `run_required_tests` a `replan_or_close` con
   `RequiredTestEvidenceV0` `passed` causal, bloquea con `failed` y no acepta
   evidencia de otra review;
+- ante `failed` de un unico task causal, el plan state genera
+  `QualityGateRecorded(blocked)` + `ReplanDecisionRecorded(retry_task)`,
+  reabre `programacion` si venia de `revision`, conserva idempotencia en replay
+  y no emite capacidad/agente fuera del scheduler;
 - un `required-tests-failed` puede reabrir `wait_subagents` si existen quality
   gate bloqueante, replan causal y followups materializados; si el followup
   aparece tarde, la reentrada con plan state persistido recompone el wait

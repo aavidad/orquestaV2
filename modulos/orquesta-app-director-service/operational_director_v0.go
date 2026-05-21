@@ -2,8 +2,11 @@ package orquestaappdirectorservice
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -302,9 +305,68 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 	}
 	next, applied := continueRequestWithLoadedOperationalDirectorPlanStateV0(request, state)
 	if explicitPlanRef != "" && (!applied || !continueRequestHasWaitScopeV0(next)) {
-		return ContinueAppDirectorRequestV0{}, AppDirectorServiceIssueV0{Field: "operational_director_plan_state.active_step"}
+		canProgress, err := continueOperationalDirectorPlanStateCanProgressBlockedRequiredTestsReplanV0(ctx, request, ports, state)
+		if err != nil {
+			return ContinueAppDirectorRequestV0{}, err
+		}
+		if !canProgress {
+			return ContinueAppDirectorRequestV0{}, AppDirectorServiceIssueV0{Field: "operational_director_plan_state.active_step"}
+		}
 	}
 	return next, nil
+}
+
+func continueOperationalDirectorPlanStateCanProgressBlockedRequiredTestsReplanV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) (bool, error) {
+	if ports.RunStore == nil {
+		return false, nil
+	}
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok ||
+		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
+		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 ||
+		activeStep.Reason != "required-tests-failed" {
+		return false, nil
+	}
+	failedRefs := compactServiceRefsV0(activeStep.RequiredTestEvidenceRefs)
+	if len(failedRefs) == 0 {
+		return false, nil
+	}
+	run, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return false, err
+	}
+	matches, complete, err := operationalDirectorPlanAcceptedReviewMatchesV0(ctx, request, ports, activeStep, run)
+	if err != nil || !complete {
+		return false, err
+	}
+	if !operationalDirectorPlanRequiredTestsReplanScopeSupportedV0(activeStep, matches) {
+		return false, nil
+	}
+	reader := operationalDirectorPlanStateEventReaderV0(ports)
+	if reader == nil {
+		return false, nil
+	}
+	events, err := reader.LoadRunEventsV0(ctx, request.RunRef)
+	if err != nil {
+		return false, err
+	}
+	trace := operationalDirectorPlanReviewTraceFromEventsV0(events)
+	for _, match := range matches {
+		gate, ok := operationalDirectorPlanRequiredTestsQualityGateV0(run, trace, activeStep, match.TaskRef, failedRefs)
+		if !ok {
+			continue
+		}
+		if _, ok := operationalDirectorPlanReplanForQualityGateV0(run, trace, gate.GateRef, match.TaskRef); ok {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func continueOperationalDirectorPlanStateAfterBlockedRequiredTestsReplanV0(
@@ -1211,7 +1273,237 @@ func operationalDirectorPlanRequiredTestsReplanDecisionV0(
 			return replan, strings.TrimSpace(gate.GateRef), true, nil
 		}
 	}
-	return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, nil
+	return operationalDirectorPlanEmitRequiredTestsReplanDecisionV0(
+		ctx,
+		request,
+		ports,
+		run,
+		activeStep,
+		matches,
+		failedRefs,
+	)
+}
+
+func operationalDirectorPlanEmitRequiredTestsReplanDecisionV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+	matches []operationalDirectorPlanAcceptedReviewMatchV0,
+	failedRefs []string,
+) (orquestacoreworkflow.ReplanDecisionRecordedPayloadV0, string, bool, error) {
+	if ports.RunStore == nil || ports.EventSink == nil ||
+		!operationalDirectorPlanRequiredTestsReplanScopeSupportedV0(activeStep, matches) {
+		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, nil
+	}
+	match := matches[0]
+	taskRef := strings.TrimSpace(match.TaskRef)
+	if taskRef == "" || taskRef != strings.TrimSpace(activeStep.TaskRefs[0]) {
+		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, nil
+	}
+	failedRefs = compactServiceRefsV0(failedRefs)
+	if len(failedRefs) == 0 {
+		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, nil
+	}
+	refs := operationalDirectorRequiredTestsAutoReplanRefsV0(request, match, failedRefs)
+	storedRun, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, err
+	}
+	if strings.TrimSpace(storedRun.RunID) != strings.TrimSpace(run.RunID) {
+		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, nil
+	}
+	storedRun, ready, err := operationalDirectorPlanEnsureProgrammingPhaseForRequiredTestsReplanV0(ctx, request, ports, storedRun, refs)
+	if err != nil {
+		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, err
+	}
+	if !ready || !operationalDirectorRunProgrammingPhaseActiveV0(storedRun) {
+		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, nil
+	}
+
+	gatePayload := orquestacoreworkflow.RecordQualityGateCommandPayloadV0{
+		RunRef:       request.RunRef,
+		GateRef:      refs.GateRef,
+		PhaseID:      string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		SubjectRef:   taskRef,
+		Decision:     orquestacoreworkflow.QualityGateDecisionBlockedV0,
+		IssueRefs:    append([]string(nil), failedRefs...),
+		Summary:      "Tests requeridos fallidos para una tarea causal.",
+		EvidenceRefs: operationalDirectorRequiredTestsAutoReplanEvidenceRefsV0(match, failedRefs),
+	}
+	gateCommand, err := orquestacoreworkflow.NewRecordQualityGateCommandV0(
+		orquestacoreworkflow.OrchestrationCommandMetaV0{
+			CommandID:      "cmd-" + refs.GateRef,
+			RunID:          request.RunRef,
+			IdempotencyKey: "idem-" + refs.GateRef,
+			CorrelationID:  request.CorrelationID,
+			RequestedBy:    request.RequestedBy,
+			OccurredAt:     request.OccurredAt,
+		},
+		gatePayload,
+	)
+	if err != nil {
+		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, err
+	}
+	if _, err := orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, ports.RunStore, ports.EventSink, gateCommand); err != nil {
+		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, err
+	}
+
+	replanPayload := orquestacoreworkflow.RecordReplanDecisionCommandPayloadV0{
+		ReplanRef:      refs.ReplanRef,
+		RunRef:         request.RunRef,
+		TaskRef:        taskRef,
+		SourceRef:      refs.GateRef,
+		AcceptedAction: orquestacoreworkflow.ReplanDecisionActionRetryTaskV0,
+		FollowupRefs:   []string{refs.CapacityRef, refs.AgentRef},
+		Summary:        "Reintentar tarea tras tests requeridos fallidos.",
+		EvidenceRefs:   compactServiceRefsV0(append([]string{refs.GateRef}, failedRefs...)),
+	}
+	replanCommand, err := orquestacoreworkflow.NewRecordReplanDecisionCommandV0(
+		orquestacoreworkflow.OrchestrationCommandMetaV0{
+			CommandID:      "cmd-" + refs.ReplanRef,
+			RunID:          request.RunRef,
+			IdempotencyKey: "idem-" + refs.ReplanRef,
+			CorrelationID:  request.CorrelationID,
+			RequestedBy:    request.RequestedBy,
+			OccurredAt:     request.OccurredAt,
+		},
+		replanPayload,
+	)
+	if err != nil {
+		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, err
+	}
+	if _, err := orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, ports.RunStore, ports.EventSink, replanCommand); err != nil {
+		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, err
+	}
+	return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0(replanPayload), refs.GateRef, true, nil
+}
+
+func operationalDirectorPlanEnsureProgrammingPhaseForRequiredTestsReplanV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	refs operationalDirectorRequiredTestsAutoReplanRefSetV0,
+) (orquestacoreworkflow.OrchestrationRunV0, bool, error) {
+	if operationalDirectorRunProgrammingPhaseActiveV0(run) {
+		return run, true, nil
+	}
+	if !operationalDirectorRunContainsPhaseV0(run, orquestacoreworkflow.OrchestrationPhaseProgramacionV0) {
+		return run, false, nil
+	}
+	command, err := orquestacoreworkflow.NewOpenPhaseCommandV0(
+		orquestacoreworkflow.OrchestrationCommandMetaV0{
+			CommandID:      "cmd-open-phase-" + refs.ReplanRef,
+			RunID:          request.RunRef,
+			IdempotencyKey: "idem-open-phase-" + refs.ReplanRef,
+			CorrelationID:  request.CorrelationID,
+			RequestedBy:    request.RequestedBy,
+			OccurredAt:     request.OccurredAt,
+		},
+		orquestacoreworkflow.OpenPhaseCommandPayloadV0{
+			PhaseID: string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			Reason:  "required-tests-failed-replan",
+		},
+	)
+	if err != nil {
+		return run, false, err
+	}
+	if _, err := orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, ports.RunStore, ports.EventSink, command); err != nil {
+		return run, false, err
+	}
+	updated, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return run, false, err
+	}
+	return updated, operationalDirectorRunProgrammingPhaseActiveV0(updated), nil
+}
+
+type operationalDirectorRequiredTestsAutoReplanRefSetV0 struct {
+	GateRef     string
+	ReplanRef   string
+	CapacityRef string
+	AgentRef    string
+}
+
+func operationalDirectorRequiredTestsAutoReplanRefsV0(
+	request ContinueAppDirectorRequestV0,
+	match operationalDirectorPlanAcceptedReviewMatchV0,
+	failedRefs []string,
+) operationalDirectorRequiredTestsAutoReplanRefSetV0 {
+	stem := compactRecoveryRefV0(strings.TrimSpace(match.TaskRef))
+	if len(stem) > 72 {
+		stem = strings.Trim(stem[:72], "-")
+	}
+	digest := operationalDirectorRequiredTestsAutoReplanDigestV0(
+		request.RunRef,
+		match.TaskRef,
+		match.DeliveryRef,
+		match.ReviewRequestID,
+		match.ReviewResultRef,
+		match.AcceptedReviewRef,
+		strings.Join(sortedServiceRefsV0(failedRefs), "|"),
+	)
+	base := stem + "-" + digest
+	return operationalDirectorRequiredTestsAutoReplanRefSetV0{
+		GateRef:     "quality-gate-ref-app-director-required-tests-failed-" + base,
+		ReplanRef:   "replan-ref-app-director-required-tests-failed-" + base,
+		CapacityRef: "capacity-ref-app-director-required-tests-retry-" + base,
+		AgentRef:    "agent-ref-app-director-required-tests-retry-" + base,
+	}
+}
+
+func operationalDirectorRequiredTestsAutoReplanDigestV0(parts ...string) string {
+	hash := sha256.New()
+	for _, part := range parts {
+		hash.Write([]byte(strings.TrimSpace(part)))
+		hash.Write([]byte{0})
+	}
+	return hex.EncodeToString(hash.Sum(nil))[:16]
+}
+
+func sortedServiceRefsV0(values []string) []string {
+	refs := compactServiceRefsV0(values)
+	sort.Strings(refs)
+	return refs
+}
+
+func operationalDirectorRequiredTestsAutoReplanEvidenceRefsV0(
+	match operationalDirectorPlanAcceptedReviewMatchV0,
+	failedRefs []string,
+) []string {
+	return compactServiceRefsV0(append([]string{
+		match.DeliveryRef,
+		match.ReviewRequestID,
+		match.ReviewResultRef,
+		match.AcceptedReviewRef,
+	}, append(failedRefs, match.EvidenceRefs...)...))
+}
+
+func operationalDirectorRunProgrammingPhaseActiveV0(run orquestacoreworkflow.OrchestrationRunV0) bool {
+	if strings.TrimSpace(string(run.CurrentPhase)) != string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0) {
+		return false
+	}
+	for _, phase := range run.Phases {
+		if strings.TrimSpace(string(phase.ID)) == string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0) &&
+			phase.Status == orquestacoreworkflow.OrchestrationPhaseStatusActiveV0 {
+			return true
+		}
+	}
+	return false
+}
+
+func operationalDirectorRunContainsPhaseV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	phaseID orquestacoreworkflow.OrchestrationPhaseIDV0,
+) bool {
+	for _, phase := range run.Phases {
+		if strings.TrimSpace(string(phase.ID)) == string(phaseID) {
+			return true
+		}
+	}
+	return false
 }
 
 func operationalDirectorPlanRequiredTestsQualityGateV0(

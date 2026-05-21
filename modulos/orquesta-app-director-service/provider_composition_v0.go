@@ -51,6 +51,11 @@ func composeStartAppDirectorProviderV0(
 			RequestedBy: requestedBy,
 		}
 	}
+	provider = orquestacionnucleoapp.QualityGateReplanCandidateProviderV0{
+		Base:            provider,
+		RequestedBy:     requestedBy,
+		DefaultCapacity: ports.WorkflowTaskDefaultCapacity,
+	}
 	if ports.DirectorTaskStore != nil {
 		provider = orquestacionnucleoapp.WorkflowTaskCandidateProviderV0{
 			Base:            provider,

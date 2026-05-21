@@ -3,26 +3,33 @@
 ## Alcance
 
 Este corte conecta la rama negativa de `run_required_tests` con el ciclo de
-replan ya existente, sin crear una fuente nueva de replan desde evidencias de
-test.
+replan ya existente y deja una fuente automatica acotada para el caso de un
+unico task causal.
 
 La regla es conservadora:
 
-- si una `RequiredTestEvidenceV0` causal tiene `status=failed`, el
-  `PlanState` sigue bloqueando como antes;
-- si ademas existe una `QualityGateRecorded(blocked)` reflejada en el run,
-  enlazada al task y a la evidencia fallida, y una
-  `ReplanDecisionRecorded` cuya `source_ref` es esa quality gate, entonces el
-  `PlanState` vuelve a abrir `wait_subagents` sobre los followups ya
-  materializados.
+- si una `RequiredTestEvidenceV0` causal tiene `status=failed` y el scope es
+  un unico task, `app-director-service` registra automaticamente
+  `QualityGateRecorded(blocked)` + `ReplanDecisionRecorded(retry_task)`;
+- la emision solo crea la evidencia causal y refs futuras de capacidad/agente:
+  `RequestCapacity` y `RequestAgent` siguen saliendo por el scheduler/outbox;
+- si ademas los followups ya estan reflejados, el `PlanState` vuelve a abrir
+  `wait_subagents`; si aun no lo estan, queda bloqueado con
+  `required-tests-failed` y una reentrada posterior deja avanzar el scheduler.
 
 ## Implementado
 
 - `run_required_tests` consume la evidencia `failed` y busca una quality gate
   bloqueante por eventos durables.
+- Si no existe y el scope es un unico task causal, emite `OpenPhase(programacion)`
+  cuando viene de `revision`, `QualityGateRecorded(blocked)` y
+  `ReplanDecisionRecorded(retry_task)` con refs estables.
 - El replan se acepta solo si la quality gate esta reflejada en
   `run.QualityGates` y el `ReplanDecisionRecorded` esta reflejado en
   `run.ReplanDecisions`.
+- `orquesta-orchestration-core` incluye un provider generico que reconstruye
+  `ReplanFollowupCandidates` desde quality gate bloqueante + replan reflejado;
+  el scheduler mantiene la secuencia capacidad antes que agente.
 - Para `retry_task`/`replace_agent`, el state espera solo agentes followup ya
   presentes en `run.Agents`.
 - Para `split_task`, se reutiliza la misma ruta de followups `WorkflowTaskV0`
@@ -39,9 +46,6 @@ La regla es conservadora:
 
 ## Pendiente
 
-- Este corte no genera `RecordQualityGate` ni `RecordReplanDecision`; solo los
-  consume cuando ya existen. La generacion automatica por puerto/fuente queda
-  para otro tramo.
 - El replan por tests fallidos en scopes multitarea queda bloqueado de forma
   conservadora hasta soportar una decision causal completa por task fallida.
 - Falta prueba focal de reentrada tardia con `split_task`; la ruta reutilizada

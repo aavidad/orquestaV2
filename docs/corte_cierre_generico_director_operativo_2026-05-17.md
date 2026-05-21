@@ -145,10 +145,11 @@ implementacion, test focal y evidencia en la matriz.
   para cerrar. El corte del 2026-05-21 ya permite salir del fallo cuando existe
   `QualityGateRecorded(blocked)` + `ReplanDecisionRecorded` causal y followups
   materializados, tanto en el mismo avance como en una reentrada posterior desde
-  `required-tests-failed`; ver
-  `docs/corte_required_tests_failed_replan_2026-05-21.md`. Pendiente separado:
-  emision automatica de quality gate/replan por puerto/fuente, soporte causal
-  multitarea para fallos de tests y smokes reales.
+  `required-tests-failed`. El corte del 2026-05-21 ya emite automaticamente esa
+  cadena para un unico task causal y deja capacidad/agente en manos del
+  scheduler/outbox; ver `docs/corte_required_tests_failed_replan_2026-05-21.md`.
+  Pendiente separado: soporte causal multitarea para fallos de tests y smokes
+  reales.
 - [~] Replan negativo: cerrada la observacion durable de review negativa. El
   `PlanState` guarda refs/attempt para `ReworkRequested` y
   `ReplanDecisionRecorded`. El corte del 2026-05-21 ya convierte followups

@@ -103,6 +103,36 @@ func TestComposeStartAppDirectorProviderV0IncludesReviewGateSource(t *testing.T)
 	}
 }
 
+func TestComposeStartAppDirectorProviderV0IncludesQualityGateReplanProvider(t *testing.T) {
+	provider := composeStartAppDirectorProviderV0(
+		orquestacionnucleoapp.StaticCandidateProviderV0{},
+		StartAppDirectorPortsV0{},
+		"director-service-test",
+	)
+
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), orquestacionnucleoapp.SchedulerCandidateRequestV0{
+		Run: orquestacoreworkflow.OrchestrationRunV0{
+			RunID:        "run-ref-service-quality-gate-replan-001",
+			CurrentPhase: orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+			Tasks:        []string{"task-ref-service-quality-gate-replan-001"},
+			QualityGates: []string{
+				"quality-gate-ref-service-quality-gate-replan-001#decision:blocked#subject:task-ref-service-quality-gate-replan-001",
+			},
+			ReplanDecisions: []string{
+				"replan-ref-service-quality-gate-replan-001#source:quality-gate-ref-service-quality-gate-replan-001#task:task-ref-service-quality-gate-replan-001#action:retry_task#followups:capacity-ref-service-quality-gate-replan-001+agent-ref-service-quality-gate-replan-001",
+			},
+		},
+		OccurredAt:    "2026-05-21T17:05:00Z",
+		CorrelationID: "corr-service-quality-gate-replan-001",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.ReplanFollowupCandidates) != 1 {
+		t.Fatalf("quality gate replan provider no compuesto: candidates=%+v", candidates)
+	}
+}
+
 func TestContinueAppDirectorV0ProcessesReviewGateSource(t *testing.T) {
 	runRef := "run-ref-service-review-gate-continue-001"
 	run := orquestacoreworkflow.OrchestrationRunV0{

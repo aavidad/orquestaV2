@@ -124,10 +124,13 @@ desde las refs de evidencia de la review aceptada; si la composicion inyecta
 conozca shell/runtime concreto. Solo avanza a `replan_or_close` si cada test
 requerido tiene evidencia `passed` causal para la misma task, delivery, review
 request, review result y accepted review. Una evidencia `failed` bloquea el plan
-con `required-tests-failed`, salvo que ya existan `QualityGateRecorded(blocked)`
-+ `ReplanDecisionRecorded` causales y followups materializados; entonces reabre
-`wait_subagents` con refs acotadas. No genera automaticamente quality gates ni
-replan decisions desde la evidencia fallida.
+con `required-tests-failed`. Para un unico task causal, el servicio emite
+automaticamente `QualityGateRecorded(blocked)` y
+`ReplanDecisionRecorded(retry_task)` con refs estables de capacidad/agente
+futuras, sin lanzar esos followups directamente; el scheduler los convierte en
+`RequestCapacity`/`RequestAgent` mediante candidates genericos. Si esos
+followups ya estan materializados, el state reabre `wait_subagents` con refs
+acotadas. Scopes multitarea o ambiguos siguen bloqueados de forma conservadora.
 
 Regla del primer corte operativo: si `ContinueAppDirectorV0` recibe un plan
 `ready`, usa `OperationalDirectorPlanMaterializerV0`, guarda las

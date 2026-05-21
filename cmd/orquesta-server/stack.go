@@ -295,17 +295,13 @@ func requiredTestRunnerFromEnvV0(
 	if err != nil {
 		return nil, err
 	}
-	env, err := requiredTestEnvFromEnvV0(serverConfig, allowed)
+	absOutputDir, err := requiredTestOutputDirFromEnvV0(serverConfig)
 	if err != nil {
 		return nil, err
 	}
-	outputDir := strings.TrimSpace(os.Getenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR"))
-	if outputDir == "" {
-		outputDir = filepath.Join(serverConfig.StateDir, "required-test-output")
-	}
-	absOutputDir, err := filepath.Abs(outputDir)
+	env, err := requiredTestEnvFromEnvV0(allowed, absOutputDir)
 	if err != nil {
-		return nil, fmt.Errorf("required_test_output_dir_invalid")
+		return nil, err
 	}
 	return orquestacionnucleoapp.RequiredTestRunnerV0{
 		Executor: orquestaruntimerequiredtest.LocalCommandExecutorV0{
@@ -349,12 +345,24 @@ func requiredTestAllowedCommandsFromEnvV0() (map[string]string, error) {
 	return allowed, nil
 }
 
+func requiredTestOutputDirFromEnvV0(serverConfig orquestaserver.ConfigV0) (string, error) {
+	outputDir := strings.TrimSpace(os.Getenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR"))
+	if outputDir == "" {
+		outputDir = filepath.Join(serverConfig.StateDir, "required-test-output")
+	}
+	absOutputDir, err := filepath.Abs(outputDir)
+	if err != nil {
+		return "", fmt.Errorf("required_test_output_dir_invalid")
+	}
+	return absOutputDir, nil
+}
+
 func requiredTestEnvFromEnvV0(
-	serverConfig orquestaserver.ConfigV0,
 	allowed map[string]string,
+	outputDir string,
 ) ([]string, error) {
 	env := []string(nil)
-	hasGoCache := false
+	provided := map[string]bool{}
 	for _, item := range strings.Split(os.Getenv("ORQUESTA_REQUIRED_TEST_ENV"), ",") {
 		item = strings.TrimSpace(item)
 		if item == "" {
@@ -364,17 +372,25 @@ func requiredTestEnvFromEnvV0(
 		if !ok || strings.TrimSpace(key) == "" {
 			return nil, fmt.Errorf("required_test_env_invalid")
 		}
-		if strings.EqualFold(strings.TrimSpace(key), "GOCACHE") {
-			hasGoCache = true
-		}
+		provided[strings.ToUpper(strings.TrimSpace(key))] = true
 		env = append(env, item)
 	}
-	if _, ok := allowed["go"]; ok && !hasGoCache {
-		cacheDir := filepath.Join(serverConfig.StateDir, "go-build-cache")
-		if err := os.MkdirAll(cacheDir, 0o700); err != nil {
-			return nil, fmt.Errorf("required_test_go_cache_unavailable")
+	if _, ok := allowed["go"]; ok {
+		goEnv := map[string]string{
+			"GOCACHE":    filepath.Join(outputDir, "go-build-cache"),
+			"GOPATH":     filepath.Join(outputDir, "go-path"),
+			"GOMODCACHE": filepath.Join(outputDir, "go-mod-cache"),
 		}
-		env = append(env, "GOCACHE="+cacheDir)
+		for _, key := range []string{"GOCACHE", "GOPATH", "GOMODCACHE"} {
+			if provided[key] {
+				continue
+			}
+			dir := goEnv[key]
+			if err := os.MkdirAll(dir, 0o700); err != nil {
+				return nil, fmt.Errorf("required_test_go_env_unavailable")
+			}
+			env = append(env, key+"="+dir)
+		}
 	}
 	return env, nil
 }

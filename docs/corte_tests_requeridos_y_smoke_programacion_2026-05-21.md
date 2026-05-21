@@ -101,7 +101,9 @@ ok smoke.local/orquesta-real-smoke/internal/smoke 0.002s
   `wait -> review -> run_required_tests -> replan_or_close`.
 - Falta ejecutar un smoke de servidor/director donde el `RequiredTestRunner`
   opt-in genere `RequiredTestEvidenceV0` dentro del `PlanState` real.
-- Falta replan negativo automatico ante `required-tests-failed` o runner invalido.
+- Falta smoke real de replan negativo con runner opt-in; el replan automatico
+  offline ante `required-tests-failed` de un unico task ya queda cubierto por
+  `docs/corte_required_tests_failed_replan_2026-05-21.md`.
 - Quedan duplicidades/historico en comandos directos de wave que conviene
   clasificar, no borrar.
 
