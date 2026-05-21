@@ -49,6 +49,8 @@ Cobertura Go actual:
   queda como run `quiescent` antes de enviar el artefacto al conector de dominio.
 - las refs publicas del paquete de agente son neutrales y no filtran el
   conector real;
+- el resolver de tareas de programacion conserva en el paquete de agente el
+  linaje recursivo neutral leido desde `WorkflowTaskStore`;
 - dos solicitudes con el mismo nombre visible no colisionan porque el intake
   usa identidad de spec, no solo slug.
 - `TestNuevaAppWebCodexStackRealOptInV0` queda desactivado por defecto y valida

@@ -29,6 +29,42 @@ func TestBuildAgentStartPacketV0GeneraPaqueteNeutral(t *testing.T) {
 	assertAgentStartPacketNoOperationalDetailsV0(t, packet)
 }
 
+func TestAgentStartTaskV0ConservaLinajeRecursivoEnJSON(t *testing.T) {
+	packet := AgentStartPacketV0{
+		SchemaVersion: AgentStartPacketSchemaVersionV0,
+		RequestID:     "agent-ref-child-001",
+		WorkOrderRef:  "task-ref-child-001",
+		Task: AgentStartTaskV0{
+			TaskRef:         "task-ref-child-001",
+			ParentTaskRef:   "task-ref-parent-001",
+			CohortRef:       "cohort-ref-recursive-001",
+			WaveRef:         "wave-ref-recursive-001",
+			DelegationDepth: 2,
+			MaxChildAgents:  6,
+			ChildTaskRefs:   []string{"task-ref-grandchild-001"},
+		},
+	}
+
+	data, err := json.Marshal(packet)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got AgentStartPacketV0
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Task.ParentTaskRef != "task-ref-parent-001" ||
+		got.Task.CohortRef != "cohort-ref-recursive-001" ||
+		got.Task.WaveRef != "wave-ref-recursive-001" ||
+		got.Task.DelegationDepth != 2 ||
+		got.Task.MaxChildAgents != 6 ||
+		len(got.Task.ChildTaskRefs) != 1 ||
+		got.Task.ChildTaskRefs[0] != "task-ref-grandchild-001" {
+		t.Fatalf("linaje perdido en packet: %+v", got.Task)
+	}
+	assertAgentStartPacketNoOperationalDetailsV0(t, got)
+}
+
 func TestBuildAgentStartPacketV0RechazaContextoMaterializadoAusente(t *testing.T) {
 	packet := BuildAgentStartPacketV0(runtimeLaunchRequestValidaV0(), orquestacontext.ContextMaterializedBundleV0{})
 

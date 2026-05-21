@@ -22,7 +22,13 @@ func TestProgrammingTaskV0PropagaRequiredTestsYContratoGoCompleto(t *testing.T) 
 			"go.mod e imports de modulo",
 			"sin imports relativos ../",
 		},
-		RequiredTests: []string{"go test ./..."},
+		ParentTaskRef:   "task-ref-parent-001",
+		CohortRef:       "cohort-ref-recursive-001",
+		WaveRef:         "wave-ref-recursive-001",
+		DelegationDepth: 2,
+		MaxChildAgents:  6,
+		ChildTaskRefs:   []string{"task-ref-child-002"},
+		RequiredTests:   []string{"go test ./..."},
 		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
 			ContractRef:  "contract:function:agenda-api:v0",
 			FunctionName: "CrearAPI",
@@ -42,6 +48,15 @@ func TestProgrammingTaskV0PropagaRequiredTestsYContratoGoCompleto(t *testing.T) 
 	}
 	if len(got.RequiredTests) != 1 || got.RequiredTests[0] != "go test ./..." {
 		t.Fatalf("required_tests=%v", got.RequiredTests)
+	}
+	if got.ParentTaskRef != "task-ref-parent-001" ||
+		got.CohortRef != "cohort-ref-recursive-001" ||
+		got.WaveRef != "wave-ref-recursive-001" ||
+		got.DelegationDepth != 2 ||
+		got.MaxChildAgents != 6 ||
+		len(got.ChildTaskRefs) != 1 ||
+		got.ChildTaskRefs[0] != "task-ref-child-002" {
+		t.Fatalf("linaje no propagado: %+v", got)
 	}
 	for _, want := range []string{
 		"contrato de esta tarea completa",

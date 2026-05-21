@@ -94,6 +94,10 @@ Manejo real de agentes en Orquesta:
 - `agentBatchDispatcherV0` ejecuta `ExternalProcessAgentBatchExecutorV0`;
 - el launcher resuelve spec Codex, arranca proceso, registra `AgentStarted` y
   escribe `AgentProcessRegistryRecordV0`;
+- si la tarea viene de `WorkflowTaskStore`, el paquete neutral conserva linaje
+  parent/cohorte/ola/profundidad/fanout/hijos para que el agente conozca su
+  posicion causal sin recibir proveedor, HOME, modelo ni control directo de
+  spawn;
 - `CodexReceiptRecordingSpecResolverV0` deja descriptor ACK por agente;
 - `CodexDeliveryObservationSourceV0` observa `agent_ack.json` y devuelve
   `AgentDeliveryObservationV0`;

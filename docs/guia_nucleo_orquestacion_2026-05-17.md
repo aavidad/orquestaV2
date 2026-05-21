@@ -191,6 +191,9 @@ smoke real opt-in. No se importa desde core, director, domain-work ni expander.
 - El contrato de director externo `create_microtask` y su puente a workflow ya
   preservan ese mismo linaje al crear `WorkflowTaskV0`; esto solo cierra la
   trazabilidad durable, no el smoke real de recursion con agentes vivos.
+- El paquete neutral `AgentStartTaskV0` tambien puede transportar ese linaje, y
+  el stack Codex lo copia desde `WorkflowTaskStore` al resolver tareas de
+  programacion.
 - `orquesta-orchestration-core` puede derivar `WaitAgentRefs` desde
   `WorkflowTaskV0` persistidas con `WorkflowTaskWaitAgentRefsV0`, filtrando por
   ola, cohorte o parent task.
@@ -247,8 +250,8 @@ smoke real opt-in. No se importa desde core, director, domain-work ni expander.
   ingesta de ACK/deliveries en el stack Codex. Falta el smoke real con agentes
   Codex vivos y review posterior de la cohorte.
 - La recursion Codex sigue pendiente como prueba real completa; el linaje
-  neutral ya llega a `WorkflowTaskV0`, pero no se debe asumir que el stack
-  productivo ya gobierna hijos de hijos.
+  neutral ya llega a `WorkflowTaskV0` y al paquete de arranque del agente, pero
+  no se debe asumir que el stack productivo ya gobierna hijos de hijos.
 - `modulos/orquesta-document-plan-expander` materializa de forma neutral
   `DomainDocumentPlanV0 -> DomainWorkJobRequestV0[]`, fuera de adaptadores
   concretos. Sirve a cualquier dominio que entregue un plan documental validado;

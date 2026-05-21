@@ -41,11 +41,17 @@ func (resolver CodexLaunchSpecResolverV0) programmingTaskV0(
 	}
 	task := tasks[0]
 	return orquestaruntime.AgentStartTaskV0{
-		TaskRef:   task.TaskID,
-		Priority:  "alta",
-		Title:     task.Title,
-		Objective: programmingObjectiveV0(task),
-		WriteSet:  append([]string(nil), task.WriteSet...),
+		TaskRef:         task.TaskID,
+		Priority:        "alta",
+		Title:           task.Title,
+		Objective:       programmingObjectiveV0(task),
+		WriteSet:        append([]string(nil), task.WriteSet...),
+		ParentTaskRef:   task.ParentTaskRef,
+		CohortRef:       task.CohortRef,
+		WaveRef:         task.WaveRef,
+		DelegationDepth: task.DelegationDepth,
+		MaxChildAgents:  task.MaxChildAgents,
+		ChildTaskRefs:   append([]string(nil), task.ChildTaskRefs...),
 		RequiredTests: append([]string(nil),
 			task.RequiredTests...,
 		),

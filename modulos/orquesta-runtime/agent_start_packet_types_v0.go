@@ -27,14 +27,20 @@ type AgentStartPacketV0 struct {
 }
 
 type AgentStartTaskV0 struct {
-	TaskRef       string   `json:"task_ref"`
-	Priority      string   `json:"priority"`
-	Title         string   `json:"title"`
-	Objective     string   `json:"objective"`
-	TargetSymbol  string   `json:"target_symbol"`
-	WriteSet      []string `json:"write_set"`
-	RequiredTests []string `json:"required_tests"`
-	DoneCriteria  []string `json:"done_criteria"`
+	TaskRef         string   `json:"task_ref"`
+	Priority        string   `json:"priority"`
+	Title           string   `json:"title"`
+	Objective       string   `json:"objective"`
+	TargetSymbol    string   `json:"target_symbol"`
+	WriteSet        []string `json:"write_set"`
+	RequiredTests   []string `json:"required_tests"`
+	DoneCriteria    []string `json:"done_criteria"`
+	ParentTaskRef   string   `json:"parent_task_ref,omitempty"`
+	CohortRef       string   `json:"cohort_ref,omitempty"`
+	WaveRef         string   `json:"wave_ref,omitempty"`
+	DelegationDepth int      `json:"delegation_depth,omitempty"`
+	MaxChildAgents  int      `json:"max_child_agents,omitempty"`
+	ChildTaskRefs   []string `json:"child_task_refs,omitempty"`
 }
 
 type AgentStartDeliveryRefsV0 struct {

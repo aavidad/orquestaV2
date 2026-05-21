@@ -475,6 +475,7 @@ Invariantes:
   - Contexto materializado viaja acotado y preparado por orquesta-context; runtime no lee filesystem ni expande refs por su cuenta.
   - No expone provider_ref, model_ref, home_ref, credential_ref, OAuth, tokens, HOME real, rutas operativas, PID, command_path, entorno, transcripts, prompts completos ni completions.
   - task deriva del FunctionContractV0 publico: task_ref, prioridad, titulo, objetivo, simbolo objetivo, write_set cerrado, tests obligatorios y criterio de cierre.
+  - task puede transportar linaje operativo neutral ya resuelto por la composicion: parent_task_ref, cohort_ref, wave_ref, delegation_depth, max_child_agents y child_task_refs. No autoriza spawn libre ni expone proveedor/runtime.
   - delivery_refs solo contiene mailbox_ref, ack_ref, readiness_ref y checkpoint_ref opacos.
   - policies son codigos compactos para el conector; no contienen texto UI final ni secretos.
   - Los conectores concretos traducen este paquete a su transporte sin ampliar el contrato con datos operativos privados.
