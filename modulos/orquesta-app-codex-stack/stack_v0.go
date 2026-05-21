@@ -113,6 +113,7 @@ func buildDirectorPortsV0(
 		OperationalPlanStateWriter:  operationalPlanStateWriterV0(config),
 		OperationalPlanStateStore:   operationalPlanStateStoreV0(config),
 		RequiredTestEvidenceStore:   requiredTestEvidenceStoreV0(config),
+		RequiredTestRunner:          config.RequiredTests,
 		ExternalWaiter:              ackWaiterV0(config),
 		OperationalClosureSource:    operationalClosureSourceV0(config),
 		Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{

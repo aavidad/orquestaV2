@@ -161,9 +161,9 @@ La observacion negativa de review con `ReworkRequested` y
 `ReplanDecisionRecorded` queda probada como observacion durable del `PlanState`.
 El cierre operativo ya marca el state como `closed` o `blocked` con
 `closure_reason`. Existe adaptador externo opt-in en
-`modulos/orquesta-runtime-required-test`; siguen pendientes su wiring desde la
-composicion real, la politica de comandos permitidos del repo, replan automatico
-para blockers y replay/idempotencia.
+`modulos/orquesta-runtime-required-test` y wiring desde `cmd/orquesta-server`;
+siguen pendientes la prueba real de programacion con agentes/subagentes, replan
+automatico para blockers y replay/idempotencia.
 
 Alcance esperado:
 

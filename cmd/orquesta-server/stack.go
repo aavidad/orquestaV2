@@ -14,9 +14,11 @@ import (
 	orquestadomainworkfile "orquesta/modulos/orquesta-domain-work-file"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaopesconnector "orquesta/modulos/orquesta-opes-connector"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunfile "orquesta/modulos/orquesta-run-file"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
+	orquestaruntimerequiredtest "orquesta/modulos/orquesta-runtime-required-test"
 	orquestaserver "orquesta/modulos/orquesta-server"
 	orquestastatefile "orquesta/modulos/orquesta-state-file"
 	orquestastatefileoutbox "orquesta/modulos/orquesta-state-file/outbox"
@@ -87,6 +89,10 @@ func buildStackFromEnvV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	requiredTestRunner, err := requiredTestRunnerFromEnvV0(serverConfig, stateStore)
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
 	return orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
 		Timeout:        30 * time.Second,
@@ -130,7 +136,8 @@ func buildStackFromEnvV0(
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence: orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 		},
-		DomainWork: domainWorkExecutor,
+		RequiredTests: requiredTestRunner,
+		DomainWork:    domainWorkExecutor,
 		DomainDelivery: orquestaappcodexstack.DomainWorkDeliveryBridgeConfigV0{
 			Enabled: firstNonEmptyEnvV0("ORQUESTA_OPES_BASE_URL", "OPES_BASE_URL") != "",
 			Ledger:  domainDeliveryLedgerFromEnvV0(serverConfig),
@@ -272,6 +279,104 @@ func domainWorkExecutorFromEnvV0(
 		return nil, err
 	}
 	return orquestamcp.NewMCPDomainWorkToolExecutorV0(creator, nil), nil
+}
+
+func requiredTestRunnerFromEnvV0(
+	serverConfig orquestaserver.ConfigV0,
+	evidenceWriter orquestacionnucleoapp.RequiredTestEvidenceWriterPortV0,
+) (orquestacionnucleoapp.RequiredTestRunnerPortV0, error) {
+	if strings.TrimSpace(os.Getenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED")) != "1" {
+		return nil, nil
+	}
+	if evidenceWriter == nil {
+		return nil, fmt.Errorf("required_test_evidence_writer_required")
+	}
+	allowed, err := requiredTestAllowedCommandsFromEnvV0()
+	if err != nil {
+		return nil, err
+	}
+	env, err := requiredTestEnvFromEnvV0(serverConfig, allowed)
+	if err != nil {
+		return nil, err
+	}
+	outputDir := strings.TrimSpace(os.Getenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR"))
+	if outputDir == "" {
+		outputDir = filepath.Join(serverConfig.StateDir, "required-test-output")
+	}
+	absOutputDir, err := filepath.Abs(outputDir)
+	if err != nil {
+		return nil, fmt.Errorf("required_test_output_dir_invalid")
+	}
+	return orquestacionnucleoapp.RequiredTestRunnerV0{
+		Executor: orquestaruntimerequiredtest.LocalCommandExecutorV0{
+			ProjectWorkDir:  serverConfig.ProjectWorkDir,
+			OutputDir:       absOutputDir,
+			AllowedCommands: allowed,
+			Env:             env,
+			MaxOutputBytes:  int64(intEnvOrDefaultV0("ORQUESTA_REQUIRED_TEST_MAX_OUTPUT_BYTES", 1024*1024)),
+		},
+		EvidenceWriter: evidenceWriter,
+	}, nil
+}
+
+func requiredTestAllowedCommandsFromEnvV0() (map[string]string, error) {
+	allowed := map[string]string{}
+	if goCommand := strings.TrimSpace(os.Getenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND")); goCommand != "" {
+		abs, err := filepath.Abs(goCommand)
+		if err != nil {
+			return nil, fmt.Errorf("required_test_go_command_invalid")
+		}
+		allowed["go"] = abs
+	}
+	for _, item := range strings.Split(os.Getenv("ORQUESTA_REQUIRED_TEST_ALLOWED_COMMANDS"), ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		name, path, ok := strings.Cut(item, "=")
+		if !ok || strings.TrimSpace(name) == "" || strings.TrimSpace(path) == "" {
+			return nil, fmt.Errorf("required_test_allowed_commands_invalid")
+		}
+		abs, err := filepath.Abs(strings.TrimSpace(path))
+		if err != nil {
+			return nil, fmt.Errorf("required_test_allowed_commands_invalid")
+		}
+		allowed[strings.TrimSpace(name)] = abs
+	}
+	if len(allowed) == 0 {
+		return nil, fmt.Errorf("required_test_allowed_commands_required")
+	}
+	return allowed, nil
+}
+
+func requiredTestEnvFromEnvV0(
+	serverConfig orquestaserver.ConfigV0,
+	allowed map[string]string,
+) ([]string, error) {
+	env := []string(nil)
+	hasGoCache := false
+	for _, item := range strings.Split(os.Getenv("ORQUESTA_REQUIRED_TEST_ENV"), ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		key, _, ok := strings.Cut(item, "=")
+		if !ok || strings.TrimSpace(key) == "" {
+			return nil, fmt.Errorf("required_test_env_invalid")
+		}
+		if strings.EqualFold(strings.TrimSpace(key), "GOCACHE") {
+			hasGoCache = true
+		}
+		env = append(env, item)
+	}
+	if _, ok := allowed["go"]; ok && !hasGoCache {
+		cacheDir := filepath.Join(serverConfig.StateDir, "go-build-cache")
+		if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+			return nil, fmt.Errorf("required_test_go_cache_unavailable")
+		}
+		env = append(env, "GOCACHE="+cacheDir)
+	}
+	return env, nil
 }
 
 func validateCodexCommandAvailableV0() error {

@@ -29,6 +29,7 @@ type ConfigV0 struct {
 	Codex          CodexRuntimeConfigV0
 	Capacity       CapacityConfigV0
 	ReviewGate     ReviewGateConfigV0
+	RequiredTests  orquestacionnucleoapp.RequiredTestRunnerPortV0
 	AppChange      orquestaappchange.AppChangePortsV0
 	DomainWork     orquestamcp.MCPDomainWorkExecutorPortV0
 	DomainDelivery DomainWorkDeliveryBridgeConfigV0

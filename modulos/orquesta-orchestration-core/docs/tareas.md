@@ -126,9 +126,9 @@ servicio ya puede invocar el runner inyectado si no encuentra evidencias
 causales ya persistidas, reevalua el `PlanState` con las refs generadas y
 bloquea si una evidencia causal llega como `failed`.
 
-Pendiente: wiring opt-in desde la composicion real del servidor/director,
-politica de comandos permitidos para el repo actual y replan negativo automatico
-para blockers de tests fallidos o runner invalido.
+Pendiente: prueba real de programacion con agentes/subagentes usando el runner
+activado y replan negativo automatico para blockers de tests fallidos o runner
+invalido.
 
 No basta con que el agente escriba un summary ni con que el review result
 mencione un comando. El cierre solo debe consumir evidencias durables guardadas

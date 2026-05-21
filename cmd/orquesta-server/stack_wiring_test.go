@@ -10,6 +10,7 @@ import (
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestarunfile "orquesta/modulos/orquesta-run-file"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
+	orquestaserver "orquesta/modulos/orquesta-server"
 	orquestastatefile "orquesta/modulos/orquesta-state-file"
 	orquestastatefileoutbox "orquesta/modulos/orquesta-state-file/outbox"
 )
@@ -111,6 +112,77 @@ func TestBuildStackFromEnvV0CableaOPESFallbackParaDomainWorkYDeliveryV0(t *testi
 	}
 	if !stack.DomainDelivery.Enabled {
 		t.Fatalf("DomainDelivery debe activarse con OPES_BASE_URL fallback")
+	}
+}
+
+func TestBuildStackFromEnvV0NoCableaRequiredTestRunnerPorDefecto(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)
+	t.Setenv("ORQUESTA_SERVER_STATE_DIR", stateDir)
+	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", filepath.Join(t.TempDir(), "runtime"))
+	t.Setenv("ORQUESTA_CODEX_COMMAND", filepath.Join(projectDir, "codex-bin"))
+	t.Setenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED", "")
+	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", "")
+	t.Setenv("ORQUESTA_REQUIRED_TEST_ALLOWED_COMMANDS", "")
+	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
+	t.Setenv("OPES_BASE_URL", "")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	stack, err := buildStackFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("buildStackFromEnvV0: %v", err)
+	}
+	if stack.Ports.RequiredTestRunner != nil {
+		t.Fatalf("RequiredTestRunner debe quedar apagado por defecto")
+	}
+}
+
+func TestBuildStackFromEnvV0CableaRequiredTestRunnerOptIn(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)
+	t.Setenv("ORQUESTA_SERVER_STATE_DIR", stateDir)
+	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", filepath.Join(t.TempDir(), "runtime"))
+	t.Setenv("ORQUESTA_CODEX_COMMAND", filepath.Join(projectDir, "codex-bin"))
+	t.Setenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED", "1")
+	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", filepath.Join(projectDir, "go-bin"))
+	t.Setenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR", filepath.Join(t.TempDir(), "test-output"))
+	t.Setenv("ORQUESTA_REQUIRED_TEST_ENV", "")
+	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
+	t.Setenv("OPES_BASE_URL", "")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	stack, err := buildStackFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("buildStackFromEnvV0: %v", err)
+	}
+	if stack.Ports.RequiredTestRunner == nil {
+		t.Fatalf("RequiredTestRunner opt-in no cableado")
+	}
+}
+
+func TestRequiredTestRunnerFromEnvV0RequiereAllowlist(t *testing.T) {
+	t.Setenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED", "1")
+	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", "")
+	t.Setenv("ORQUESTA_REQUIRED_TEST_ALLOWED_COMMANDS", "")
+	stateStore, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{RootDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("NewStoreV0: %v", err)
+	}
+
+	_, err = requiredTestRunnerFromEnvV0(orquestaserver.ConfigV0{
+		StateDir:       t.TempDir(),
+		ProjectWorkDir: t.TempDir(),
+	}, stateStore)
+	if err == nil || err.Error() != "required_test_allowed_commands_required" {
+		t.Fatalf("err=%v", err)
 	}
 }
 

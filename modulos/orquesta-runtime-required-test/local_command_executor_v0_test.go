@@ -89,6 +89,15 @@ func TestLocalCommandExecutorV0RequiereComandoPermitido(t *testing.T) {
 	}
 }
 
+func TestLocalCommandExecutorV0AceptaCacheGoExplicitaSinHome(t *testing.T) {
+	executor := localCommandExecutorForTestV0(t, t.TempDir(), "pass")
+	executor.Env = append(executor.Env, "GOCACHE="+filepath.Join(t.TempDir(), "go-build-cache"))
+
+	if _, err := executor.RunRequiredTestCommandV0(context.Background(), commandRequestForTestV0("orquesta-test-bin")); err != nil {
+		t.Fatalf("RunRequiredTestCommandV0: %v", err)
+	}
+}
+
 func TestLocalCommandExecutorV0RespetaContexto(t *testing.T) {
 	executor := localCommandExecutorForTestV0(t, t.TempDir(), "wait")
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)

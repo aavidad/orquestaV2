@@ -1,6 +1,7 @@
 package orquestaappcodexstack
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -34,6 +35,16 @@ func mustBuildCodexStackWithDomainWorkForTestV0(
 	t *testing.T,
 	runtime codexStackRuntimeForTestV0,
 	domainWork orquestamcp.MCPDomainWorkExecutorPortV0,
+) StackV0 {
+	t.Helper()
+	return mustBuildCodexStackWithDomainWorkAndRequiredTestsForTestV0(t, runtime, domainWork, nil)
+}
+
+func mustBuildCodexStackWithDomainWorkAndRequiredTestsForTestV0(
+	t *testing.T,
+	runtime codexStackRuntimeForTestV0,
+	domainWork orquestamcp.MCPDomainWorkExecutorPortV0,
+	requiredTests orquestacionnucleoapp.RequiredTestRunnerPortV0,
 ) StackV0 {
 	t.Helper()
 	projectDir := t.TempDir()
@@ -90,7 +101,8 @@ func mustBuildCodexStackWithDomainWorkForTestV0(
 		ReviewGate: ReviewGateConfigV0{
 			FileEvidence: orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 		},
-		DomainWork: domainWork,
+		RequiredTests: requiredTests,
+		DomainWork:    domainWork,
 		DomainDelivery: DomainWorkDeliveryBridgeConfigV0{
 			Enabled: domainWork != nil,
 		},
@@ -106,6 +118,23 @@ func codexStackProgressPolicyForTestV0() orquestaruntime.AgentProgressHeartbeatP
 		StalledAfterNoProgressTicks: 10000,
 		LoopAfterRepeatedActions:    10000,
 	}
+}
+
+func TestBuildStackV0CableaRequiredTestRunnerV0(t *testing.T) {
+	runner := fakeCodexStackRequiredTestRunnerV0{}
+	stack := mustBuildCodexStackWithDomainWorkAndRequiredTestsForTestV0(t, newFakeCodexStackRuntimeV0(), nil, runner)
+	if stack.Ports.RequiredTestRunner == nil {
+		t.Fatalf("RequiredTestRunner no cableado")
+	}
+}
+
+type fakeCodexStackRequiredTestRunnerV0 struct{}
+
+func (fakeCodexStackRequiredTestRunnerV0) RunRequiredTestsV0(
+	context.Context,
+	orquestacionnucleoapp.RequiredTestExecutionRequestV0,
+) (orquestacionnucleoapp.RequiredTestExecutionResultV0, error) {
+	return orquestacionnucleoapp.RequiredTestExecutionResultV0{}, nil
 }
 
 func TestOperationalPlanStateStoreV0UsaStoreExplicitoOWriterLegible(t *testing.T) {

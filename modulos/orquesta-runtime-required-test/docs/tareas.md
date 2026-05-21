@@ -2,7 +2,7 @@
 
 ## RTRT-001: executor local de tests requeridos
 
-Estado: hecho primer corte.
+Estado: hecho primer corte y cableado opt-in desde `cmd/orquesta-server`.
 
 Objetivo: implementar `RequiredTestCommandExecutorPortV0` fuera del nucleo para
 ejecutar comandos reales con binarios permitidos por allowlist, guardar salida
@@ -20,6 +20,5 @@ go test -count=1 ./modulos/orquesta-runtime-required-test
 
 Pendiente:
 
-- wiring opt-in desde la composicion real del servidor/director;
-- politica de comandos permitidos para el repo actual;
+- prueba real de programacion con agentes/subagentes usando el runner activado;
 - replan negativo automatico si el runner devuelve evidencia `failed`.

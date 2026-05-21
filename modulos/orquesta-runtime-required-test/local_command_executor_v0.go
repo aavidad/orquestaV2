@@ -258,12 +258,23 @@ func envEntryAllowedV0(item string) bool {
 		return false
 	}
 	if strings.ContainsAny(value, `/\`) {
-		return strings.ToUpper(strings.TrimSpace(key)) == "PATH" && envPathAllowedV0(value)
+		return envPathValueAllowedV0(key, value)
 	}
 	return true
 }
 
-func envPathAllowedV0(value string) bool {
+func envPathValueAllowedV0(key string, value string) bool {
+	switch strings.ToUpper(strings.TrimSpace(key)) {
+	case "PATH":
+		return envPathListAllowedV0(value)
+	case "GOCACHE", "GOTMPDIR", "TMPDIR":
+		return filepath.IsAbs(value) && !pathHasCredentialMarkerV0(value)
+	default:
+		return false
+	}
+}
+
+func envPathListAllowedV0(value string) bool {
 	if strings.TrimSpace(value) == "" {
 		return false
 	}
