@@ -316,6 +316,11 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 		return ContinueAppDirectorRequestV0{}, err
 	}
 	reopened = reopened || reopenedReviewReplan
+	state, reopenedClosurePrerequisite, err := continueOperationalDirectorPlanStateAfterBlockedClosurePrerequisiteV0(request, ports, state)
+	if err != nil {
+		return ContinueAppDirectorRequestV0{}, err
+	}
+	reopened = reopened || reopenedClosurePrerequisite
 	state, reopenedClosureReplan, err := continueOperationalDirectorPlanStateAfterBlockedClosureIssuesReplanV0(ctx, request, ports, state)
 	if err != nil {
 		return ContinueAppDirectorRequestV0{}, err
@@ -1578,6 +1583,80 @@ func operationalDirectorClosureReplannableBlockerRefsV0(refs []string) []string 
 		}
 	}
 	return compactServiceRefsV0(replannable)
+}
+
+func continueOperationalDirectorPlanStateAfterBlockedClosurePrerequisiteV0(
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) (orquestacionnucleoapp.OperationalDirectorPlanStateV0, bool, error) {
+	if ports.OperationalPlanStateWriter == nil {
+		return state, false, nil
+	}
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok ||
+		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
+		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 {
+		return state, false, nil
+	}
+	reason := strings.TrimSpace(state.ClosureReason)
+	if reason == "" {
+		reason = strings.TrimSpace(activeStep.Reason)
+	}
+	switch reason {
+	case "operational-closure-source-unavailable":
+		if ports.OperationalClosureSource == nil {
+			return state, false, nil
+		}
+	case "operational-closure-task-store-unavailable":
+		if ports.DirectorTaskStore == nil {
+			return state, false, nil
+		}
+	case "operational-closure-outbox-pending":
+		// The next loop is the source of truth for pending outbox. Reopen once and
+		// let maybeCloseOperationalDirectorV0 block again if the outbox is still pending.
+	default:
+		return state, false, nil
+	}
+	return operationalDirectorPlanStateWithClosurePrerequisiteReadyV0(request, state, activeStep)
+}
+
+func operationalDirectorPlanStateWithClosurePrerequisiteReadyV0(
+	request ContinueAppDirectorRequestV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+) (orquestacionnucleoapp.OperationalDirectorPlanStateV0, bool, error) {
+	nextSteps := make([]orquestacionnucleoapp.OperationalDirectorPlanStepStateV0, 0, len(state.Steps))
+	for _, step := range state.Steps {
+		nextStep := step
+		if step.StepID == activeStep.StepID {
+			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepRunningV0
+			nextStep.BlockerRefs = nil
+			nextStep.Reason = "operational-closure-prerequisite-ready"
+			nextStep.EvidenceRefs = compactServiceRefsV0(append(
+				nextStep.EvidenceRefs,
+				"evidence-ref-app-director-operational-plan-state-closure-prerequisite-ready-v0",
+			))
+		}
+		nextSteps = append(nextSteps, nextStep)
+	}
+	state.Status = orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0
+	state.ActiveStepID = activeStep.StepID
+	state.PendingAgentRefs = nil
+	state.BlockerRefs = nil
+	state.ClosureReason = ""
+	state.Steps = nextSteps
+	state.EvidenceRefs = compactServiceRefsV0(append(
+		state.EvidenceRefs,
+		"evidence-ref-app-director-operational-plan-state-closure-prerequisite-ready-v0",
+	))
+	state.UpdatedAt = request.OccurredAt
+	next, err := orquestacionnucleoapp.NewOperationalDirectorPlanStateV0(state)
+	if err != nil {
+		return state, false, err
+	}
+	return next, true, nil
 }
 
 func operationalDirectorPlanReplanFollowupAgentRefsV0(

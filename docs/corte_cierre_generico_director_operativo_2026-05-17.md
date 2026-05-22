@@ -209,8 +209,11 @@ implementacion, test focal y evidencia en la matriz.
   punto el loop esta `quiescent` pero aun hay outbox pendiente, tampoco invoca
   `OperationalClosureSource` y bloquea el `PlanState` con
   `operational-closure-outbox-pending`. Si faltan `OperationalClosureSource` o
-  `DirectorTaskStore`, el `PlanState` se bloquea con causa durable. Siguen
-  pendientes otros blockers como replan causal generico.
+  `DirectorTaskStore`, el `PlanState` se bloquea con causa durable. La reentrada
+  ya reabre `replan_or_close` cuando el source aparece, el task store aparece o
+  el outbox vuelve a estar drenado; si el prerequisito sigue faltando, el cierre
+  se vuelve a bloquear sin consultar trabajo externo indebido. Siguen pendientes
+  otros blockers como replan causal generico.
 - [x] Plan state vivo inicial: contrato, stores y persistencia del tramo
   `launch_subagents -> wait_subagents`, con ola/cohorte activa, step activo,
   task refs, agent refs, pending agent refs y `wait_ref`.
@@ -336,8 +339,10 @@ pruebas claras. No deben describirse como hechas antes de cerrar la evidencia.
   Tests durables ya registran evidencia aceptada o blocker de fallo. La
   observacion negativa de review con `ReworkRequested`/`ReplanDecisionRecorded`
   tiene prueba focal y persistencia de refs. El cierre exitoso marca el
-  `PlanState` como `closed`; los issues, source insuficiente, source ausente o
-  task store ausente lo bloquean con `closure_reason`. El camino integrado de
+  `PlanState` como `closed`; los issues, source insuficiente, source ausente,
+  task store ausente u outbox pendiente lo bloquean con `closure_reason` y los
+  prerequisitos de infraestructura reabren `replan_or_close` cuando vuelven a
+  estar disponibles. El camino integrado de
   `ContinueAppDirectorV0` ya cubre review aceptada, runner de tests requerido,
   `replan_or_close` y cierre causal en un unico ciclo offline. El replay de
   cierre ya no duplica refs/eventos de cierre; la reentrada de cierre bloqueado
