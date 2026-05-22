@@ -177,9 +177,11 @@ implementacion, test focal y evidencia en la matriz.
   los followups aparecen despues, `ContinueAppDirectorV0` reabre
   `wait_subagents` solo con esos refs sin duplicar `replan_attempts`; ver
   `docs/corte_replan_negativo_followups_split_2026-05-21.md`. Para tests
-  fallidos ya se consume replan materializado por quality gate bloqueante. Siguen
-  pendientes blockers posteriores y cierre insuficiente como nuevos efectos
-  idempotentes de replan.
+  fallidos ya se consume replan materializado por quality gate bloqueante. El
+  cierre bloqueado por `required_test_evidence_refs` tambien reentra si despues
+  aparece el followup causal reflejado por quality gate/replan. Siguen
+  pendientes blockers posteriores y cierre insuficiente no cubierto por
+  evidencias de test como nuevos efectos idempotentes de replan.
 - [~] `replan_or_close` como puerta de cierre: el cierre ya no se dispara por
   cualquier `PlanState` activo. Si hay estado vivo, solo se evalua cierre cuando
   el step activo es `replan_or_close` en `running`; un step anterior o
@@ -199,8 +201,10 @@ implementacion, test focal y evidencia en la matriz.
 - [~] Plan state vivo restante: `run_required_tests` durable, blocker de test
   fallido, blocker de evidencia de test faltante, observacion de review
   negativa, puerta explicita de `replan_or_close` y razon de cierre/bloqueo ya
-  quedan persistidos. Existe prueba integrada offline de `ContinueAppDirectorV0`
-  para el camino
+  quedan persistidos. La reentrada de un cierre bloqueado por
+  `required_test_evidence_refs` hacia `wait_subagents` con followup tardio causal
+  tambien queda cubierta. Existe prueba integrada offline de
+  `ContinueAppDirectorV0` para el camino
   `review_deliveries -> run_required_tests` con runner por puerto ->
   `replan_or_close -> close`. Falta materializar replan automatico para blockers
   posteriores y completar replay de todo el ciclo.
@@ -285,9 +289,11 @@ pruebas claras. No deben describirse como hechas antes de cerrar la evidencia.
 2. `replan_or_close` causal:
    ya actua como puerta explicita para cierre cuando el `PlanState` esta activo:
    solo `replan_or_close` en `running` permite invocar la fuente de cierre, y la
-   ausencia de source o task store bloquea con causa durable. Sigue pendiente
-   emitir rework/replan generico cuando falten piezas reparables, con causa,
-   intento y refs de task, delivery y review.
+   ausencia de source o task store bloquea con causa durable. Si el cierre queda
+   bloqueado por `required_test_evidence_refs` y ya hay quality gate/replan con
+   followup reflejado, `ContinueAppDirectorV0` reabre la espera acotada. Sigue
+   pendiente emitir rework/replan generico cuando falten otras piezas
+   reparables, con causa, intento y refs de task, delivery y review.
 3. Estado vivo del plan:
    el tramo inicial ya persiste step activo, ola/cohorte, tasks, agentes y
    `wait_ref`; avanza a `review_deliveries` cuando el wait queda consumido y a
@@ -299,8 +305,9 @@ pruebas claras. No deben describirse como hechas antes de cerrar la evidencia.
   task store ausente lo bloquean con `closure_reason`. El camino integrado de
   `ContinueAppDirectorV0` ya cubre review aceptada, runner de tests requerido,
   `replan_or_close` y cierre causal en un unico ciclo offline. El replay de
-  cierre ya no duplica refs/eventos de cierre; faltan replan automatico y replay
-  completo del resto del ciclo.
+  cierre ya no duplica refs/eventos de cierre; la reentrada de cierre bloqueado
+  por falta de evidencia requerida no duplica `replan_attempts`; faltan replan
+  automatico y replay completo del resto del ciclo.
 4. Reentrada offline:
    wait y review inicial ya reconstruyen scope desde plan state; las
    transiciones posteriores deben reconstruirse desde run, task store, wait

@@ -313,6 +313,11 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 		return ContinueAppDirectorRequestV0{}, err
 	}
 	reopened = reopened || reopenedReviewReplan
+	state, reopenedClosureReplan, err := continueOperationalDirectorPlanStateAfterBlockedClosureIssuesReplanV0(ctx, request, ports, state)
+	if err != nil {
+		return ContinueAppDirectorRequestV0{}, err
+	}
+	reopened = reopened || reopenedClosureReplan
 	if reopened {
 		if err := ports.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, state); err != nil {
 			return ContinueAppDirectorRequestV0{}, err
@@ -1195,6 +1200,91 @@ func operationalDirectorPlanStateAfterReviewReworkReplanV0(
 	return next, true, nil
 }
 
+func continueOperationalDirectorPlanStateAfterBlockedClosureIssuesReplanV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) (orquestacionnucleoapp.OperationalDirectorPlanStateV0, bool, error) {
+	if ports.OperationalPlanStateWriter == nil || ports.RunStore == nil {
+		return state, false, nil
+	}
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok ||
+		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
+		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 ||
+		activeStep.Reason != "operational-closure-issues" {
+		return state, false, nil
+	}
+	issueRefs := operationalDirectorClosureRequiredTestBlockerRefsV0(append(state.BlockerRefs, activeStep.BlockerRefs...))
+	if len(issueRefs) == 0 {
+		return state, false, nil
+	}
+	run, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return state, false, err
+	}
+	matches, complete, err := operationalDirectorPlanAcceptedReviewMatchesV0(ctx, request, ports, activeStep, run)
+	if err != nil || !complete {
+		return state, false, err
+	}
+	if !operationalDirectorPlanRequiredTestsReplanScopeSupportedV0(activeStep, matches) {
+		return state, false, nil
+	}
+	reader := operationalDirectorPlanStateEventReaderV0(ports)
+	if reader == nil {
+		return state, false, nil
+	}
+	events, err := reader.LoadRunEventsV0(ctx, request.RunRef)
+	if err != nil {
+		return state, false, err
+	}
+	trace := operationalDirectorPlanReviewTraceFromEventsV0(events)
+	for _, match := range matches {
+		gate, ok := operationalDirectorPlanRequiredTestsQualityGateV0(run, trace, activeStep, match.TaskRef, issueRefs)
+		if !ok {
+			continue
+		}
+		replan, ok := operationalDirectorPlanReplanForQualityGateV0(run, trace, gate.GateRef, match.TaskRef)
+		if !ok {
+			continue
+		}
+		return operationalDirectorPlanStateAfterQualityGateReplanFollowupsV0(
+			ctx,
+			request,
+			ports,
+			state,
+			activeStep,
+			run,
+			replan,
+			strings.TrimSpace(gate.GateRef),
+			operationalDirectorPlanQualityGateReplanTransitionV0{
+				ActiveStepReason:      "operational-closure-issues-replan-recorded",
+				ActiveStepBlockerRefs: append([]string{"operational-closure-issues"}, issueRefs...),
+				WaitFollowupsBlocker:  "wait-subagents-operational-closure-replan-followups",
+				WaitFollowupsReason:   "operational-closure-issues-replan-followups-waiting",
+				WaitAgentsBlocker:     "wait-subagents-operational-closure-replan-followup-agents",
+				WaitAgentsReason:      "operational-closure-issues-replan-followup-agents-waiting",
+				EvidenceRefs: []string{
+					"evidence-ref-app-director-operational-plan-state-closure-issues-replan-v0",
+				},
+			},
+		)
+	}
+	return state, false, nil
+}
+
+func operationalDirectorClosureRequiredTestBlockerRefsV0(refs []string) []string {
+	required := make([]string, 0, 1)
+	for _, ref := range refs {
+		if strings.TrimSpace(ref) == "required_test_evidence_refs" {
+			required = append(required, ref)
+		}
+	}
+	return compactServiceRefsV0(required)
+}
+
 func operationalDirectorPlanReplanFollowupAgentRefsV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
@@ -1492,6 +1582,54 @@ func operationalDirectorPlanStateAfterRequiredTestsReplanV0(
 	if err != nil || !ok {
 		return state, false, err
 	}
+	return operationalDirectorPlanStateAfterQualityGateReplanFollowupsV0(
+		ctx,
+		request,
+		ports,
+		state,
+		activeStep,
+		run,
+		replan,
+		gateRef,
+		operationalDirectorPlanQualityGateReplanTransitionV0{
+			SetRequiredTestEvidenceRefs: true,
+			RequiredTestEvidenceRefs:    failedRefs,
+			ActiveStepReason:            "required-tests-failed-replan-recorded",
+			ActiveStepBlockerRefs:       []string{"required-tests-failed"},
+			WaitFollowupsBlocker:        "wait-subagents-required-tests-replan-followups",
+			WaitFollowupsReason:         "required-tests-failed-replan-followups-waiting",
+			WaitAgentsBlocker:           "wait-subagents-required-tests-replan-followup-agents",
+			WaitAgentsReason:            "required-tests-failed-replan-followup-agents-waiting",
+			EvidenceRefs: []string{
+				"evidence-ref-app-director-operational-plan-state-required-tests-failed-replan-v0",
+			},
+		},
+	)
+}
+
+type operationalDirectorPlanQualityGateReplanTransitionV0 struct {
+	SetRequiredTestEvidenceRefs bool
+	RequiredTestEvidenceRefs    []string
+	ActiveStepReason            string
+	ActiveStepBlockerRefs       []string
+	WaitFollowupsBlocker        string
+	WaitFollowupsReason         string
+	WaitAgentsBlocker           string
+	WaitAgentsReason            string
+	EvidenceRefs                []string
+}
+
+func operationalDirectorPlanStateAfterQualityGateReplanFollowupsV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	replan orquestacoreworkflow.ReplanDecisionRecordedPayloadV0,
+	gateRef string,
+	transition operationalDirectorPlanQualityGateReplanTransitionV0,
+) (orquestacionnucleoapp.OperationalDirectorPlanStateV0, bool, error) {
 	match := operationalDirectorPlanReviewReworkReplanMatchV0{
 		TaskRef:           replan.TaskRef,
 		ReplanDecisionRef: replan.ReplanRef,
@@ -1523,10 +1661,12 @@ func operationalDirectorPlanStateAfterRequiredTestsReplanV0(
 		switch {
 		case step.StepID == activeStep.StepID:
 			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepBlockedV0
-			nextStep.RequiredTestEvidenceRefs = append([]string(nil), failedRefs...)
+			if transition.SetRequiredTestEvidenceRefs {
+				nextStep.RequiredTestEvidenceRefs = append([]string(nil), transition.RequiredTestEvidenceRefs...)
+			}
 			nextStep.ReplanDecisionRefs = []string{replan.ReplanRef}
-			nextStep.BlockerRefs = compactServiceRefsV0([]string{"required-tests-failed", gateRef})
-			nextStep.Reason = "required-tests-failed-replan-recorded"
+			nextStep.BlockerRefs = compactServiceRefsV0(append(append([]string(nil), transition.ActiveStepBlockerRefs...), gateRef))
+			nextStep.Reason = transition.ActiveStepReason
 		case followupsReady && step.StepID == waitStepID:
 			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepRunningV0
 			nextStep.WaveRef = followupWaveRef
@@ -1544,8 +1684,8 @@ func operationalDirectorPlanStateAfterRequiredTestsReplanV0(
 				},
 				request.CorrelationID,
 			)}
-			nextStep.BlockerRefs = []string{"wait-subagents-required-tests-replan-followups"}
-			nextStep.Reason = "required-tests-failed-replan-followups-waiting"
+			nextStep.BlockerRefs = []string{transition.WaitFollowupsBlocker}
+			nextStep.Reason = transition.WaitFollowupsReason
 		case len(followupAgentOnlyRefs) > 0 && step.StepID == waitStepID:
 			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepRunningV0
 			nextStep.WaveRef = ""
@@ -1555,8 +1695,8 @@ func operationalDirectorPlanStateAfterRequiredTestsReplanV0(
 			nextStep.AgentRefs = append([]string(nil), followupAgentOnlyRefs...)
 			nextStep.PendingAgentRefs = append([]string(nil), followupAgentOnlyRefs...)
 			nextStep.WaitRefs = []string{appDirectorWaitRefV0(request.RunRef, appDirectorWaitFilterV0{}, request.CorrelationID)}
-			nextStep.BlockerRefs = []string{"wait-subagents-required-tests-replan-followup-agents"}
-			nextStep.Reason = "required-tests-failed-replan-followup-agents-waiting"
+			nextStep.BlockerRefs = []string{transition.WaitAgentsBlocker}
+			nextStep.Reason = transition.WaitAgentsReason
 		}
 		nextSteps = append(nextSteps, nextStep)
 	}
@@ -1574,10 +1714,11 @@ func operationalDirectorPlanStateAfterRequiredTestsReplanV0(
 	state.Status = orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0
 	state.ActiveStepID = waitStepID
 	state.ReplanAttempts++
+	state.BlockerRefs = nil
+	state.ClosureReason = ""
 	state.Steps = nextSteps
 	state.EvidenceRefs = compactServiceRefsV0(append(
-		state.EvidenceRefs,
-		"evidence-ref-app-director-operational-plan-state-required-tests-failed-replan-v0",
+		append(state.EvidenceRefs, transition.EvidenceRefs...),
 		gateRef,
 		replan.ReplanRef,
 	))
