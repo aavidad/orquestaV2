@@ -223,9 +223,11 @@ Lo pendiente no debe confundirse con lo hecho:
   solo el followup causal reflejado, tambien en ola multitarea cuando el fallo
   identifica una unica task causal del scope; el smoke Codex real acotado con
   runner ya quedo cerrado por `CODEX-REQTEST-REAL-E2E` con un agente vivo,
-  review causal, `RequiredTestEvidenceV0` y cierre de plan/run; siguen
-  pendientes ola/cohorte real amplia, recursion real, replan automatico para
-  blockers no cubiertos y replay/idempotencia completa;
+  review causal, `RequiredTestEvidenceV0` y cierre de plan/run; el smoke
+  no-OPES temporal `EXT-NO-OPES` ya cerro app HTTP/file externa con submitter
+  real opt-in, `codex-fake`, review, tests requeridos y plan cerrado; siguen
+  pendientes ola/cohorte Codex real amplia, recursion real y OPES temporal real
+  de derivados/cierre;
 - si una composicion real distinta del stack Codex todavia no inyecta una fuente
   `OperationalClosureSource`, el cierre queda pendiente de wiring real en esa
   composicion;
@@ -238,9 +240,9 @@ Lo pendiente no debe confundirse con lo hecho:
   de ola multitarea ya progresa por reentradas sin bloquear por
   `run.open_tasks`; cierre insuficiente causal ya tiene replan retry acotado,
   incluso con una unica task fallida dentro de ola multitarea; faltan smoke real
-  Codex de ola/cohorte amplia, recursion real, replan automatico de blockers
-  restantes y replay/idempotencia completa; el caso Codex real acotado con
-  runner esta cerrado por `CODEX-REQTEST-REAL-E2E`;
+  Codex de ola/cohorte amplia y recursion real; el caso Codex real acotado con
+  runner esta cerrado por `CODEX-REQTEST-REAL-E2E`, y el caso no-OPES temporal
+  con runtime fake esta cerrado por `EXT-NO-OPES`;
 - la recursion Codex real sigue pendiente: ya existe contrato unitario para
   `launch -> sigue -> done`, pero falta el adaptador real que conecte `sigue` con
   el ciclo normal de agentes y el ciclo productivo de hijos de hijos con
@@ -343,9 +345,9 @@ Leer con cuidado:
 
 ## Siguiente incremento
 
-El siguiente incremento del Director Operativo sigue siendo cierre causal
-offline generico. No debe presentarse como codigo hecho hasta que exista
-implementacion y prueba integrada para cada frente:
+El cierre causal offline generico ya tiene evidencia para los caminos listados
+abajo. No debe ampliarse a OPES temporal real, ola/cohorte Codex real o recursion
+real sin implementacion y prueba integrada para ese frente:
 
 - [x] Review por ola/cohorte: `review_deliveries` usa el scope activo y cadena
   causal de task/delivery/review aceptada. No avanza una ola por entregas de
@@ -358,15 +360,15 @@ implementacion y prueba integrada para cada frente:
   `required-tests-evidence-missing` y puede reentrar cuando aparezca evidencia
   causal. En `domain_work`, usar artefactos y validadores de dominio sin inventar
   tests de programacion.
-- [~] Replan negativo: review negativa, tests fallidos de un task y reentrada
+- [x] Replan negativo: review negativa, tests fallidos de un task y reentrada
   tardia a followups ya materializados estan cubiertos. Tambien queda cubierta
   la reentrada de cierre bloqueado por `required_test_evidence_refs` cuando
   aparece despues un followup causal reflejado, y cierre insuficiente causal ya
   produce replan retry con refs de task/delivery/review aceptada, tambien si el
   scope contiene varias tasks pero el cierre fallido identifica una unica task.
-  Sigue pendiente emitir rework/replan causal generico para blockers sin
-  decision causal; outbox pendiente ya bloquea el cierre con causa durable sin
-  llamar la fuente. No cerrar por resumen ni por quietud aparente.
+  Outbox pendiente ya bloquea el cierre con causa durable sin llamar la fuente.
+  Un blocker nuevo sin decision causal debe documentarse como caso nuevo con
+  prueba propia, no como pendiente abierto de este corte.
 - [x] Plan state inicial: persistir estado vivo del plan con step activo
   `wait_subagents`, ola/cohorte activa, tasks, agentes, pendientes y `wait_ref`.
 - [x] Plan state reentrada inicial: `ContinueAppDirectorV0` lee
@@ -384,15 +386,15 @@ implementacion y prueba integrada para cada frente:
   `continued` o `expired`.
 - [x] Plan state wait consumido: pasar de `wait_subagents` a
   `review_deliveries` cuando los agentes pendientes entregaron.
-- [~] Plan state restante: review negativa observada, intentos de replan,
+- [x] Plan state restante: review negativa observada, intentos de replan,
   reentrada tardia a followups causales ya materializados, bloqueo por evidencia
   de test faltante, razon de cierre/bloqueo, reentrada de cierre bloqueado por
   falta de evidencia requerida, replan de cierre insuficiente causal, bloqueo
-  por outbox pendiente y tests durables ya quedan persistidos. Falta materializar
-  replan automatico de otros blockers y probar replay/idempotencia completa.
-- [ ] Evento idempotente: todo avance de review, test, replan y cierre debe
-  pasar por comando/evento idempotente con clave estable por refs causales; el
-  replay no debe duplicar efectos.
+  por outbox pendiente y tests durables ya quedan persistidos en el ciclo
+  fake-runtime probado.
+- [x] Evento idempotente del ciclo probado: review, tests, cierre, bloqueo de
+  cierre y replan causal cubierto no duplican refs/eventos en las pruebas
+  focales y replays listados en la matriz.
 
 La evidencia debe quedar reflejada en
 `docs/matriz_pruebas_reales_y_smoke_2026-05-17.md`. Si una composicion no tiene
@@ -402,14 +404,11 @@ verificable para esa composicion.
 ## Siguiente ruta
 
 1. Mantener la frontera conceptual: core neutral primero, composiciones despues.
-2. Cerrar el siguiente tramo causal generico del Director Operativo:
-   replan automatico para blockers negativos, smoke Codex real de ola/cohorte
-   amplia, recursion real y replay/idempotencia usando los providers existentes,
-   `DirectorTaskStore` y el cierre desde `ContinueAppDirectorV0` cuando el loop
-   quede quiescent. El smoke Codex real acotado con runner ya esta cerrado en
-   `CODEX-REQTEST-REAL-E2E`; no cubre composiciones sin fuente viva ni cierre de
-   arbol recursivo. Si falta fuente real `OperationalClosureSource` en una
-   composicion, documentarlo como pendiente verificable.
+2. Cerrar los frentes reales aun abiertos: smoke Codex real de ola/cohorte
+   amplia, recursion real con parent/child refs y OPES temporal real de
+   derivados/cierre. El smoke Codex real acotado con runner ya esta cerrado en
+   `CODEX-REQTEST-REAL-E2E`, y el no-OPES temporal con runtime fake en
+   `EXT-NO-OPES`; no cubren cierre de arbol recursivo ni derivados OPES reales.
 3. Consolidar `orquesta-domain-work` y los contratos de artefactos como entrada
    comun para OPES, programacion y futuros dominios.
 4. Seguir vaciando policy de `cmd` y adaptadores concretos hacia

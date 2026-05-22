@@ -6,8 +6,11 @@ el stack Codex. El objetivo ahora es cerrar un ciclo causal offline y generico
 del Director Operativo, sin Codex real, sin OPES real y sin DB/producto nuevo.
 
 El corte ya tiene un tramo offline integrado en core + `app-director-service` +
-`orquesta-app-codex-stack`. Si una pieza de codigo no esta integrada o no tiene
-prueba clara, se documenta como pendiente verificable, no como hecho.
+`orquesta-app-codex-stack`, un smoke Codex real acotado
+`CODEX-REQTEST-REAL-E2E` y un smoke no-OPES temporal `EXT-NO-OPES` con
+`codex-fake`, submitter real opt-in, review, required-tests y cierre operativo.
+Si una pieza de codigo no esta integrada o no tiene prueba clara, se documenta
+como pendiente verificable, no como hecho.
 
 ## Punto de partida cerrado
 
@@ -121,10 +124,10 @@ registra un `QualityGateRecorded(blocked)` idempotente para auditoria, pero no
 se crea `ReplanDecisionRecorded` automatico: puede ser latencia o falta de
 ingesta, no necesariamente trabajo defectuoso. El replay con `state-file` no
 duplica ese gate y reentra a `replan_or_close` cuando aparece evidencia `passed`
-causal posterior. El runner por puerto, el ejecutor local opt-in y el smoke
-Codex real acotado `CODEX-REQTEST-REAL-E2E` ya tienen evidencia; siguen
-pendientes ola/cohorte real amplia, recursion real y ampliar replan generico
-para blockers no cubiertos.
+causal posterior. El runner por puerto, el ejecutor local opt-in, el smoke Codex
+real acotado `CODEX-REQTEST-REAL-E2E` y el smoke no-OPES temporal
+`EXT-NO-OPES` ya tienen evidencia. Siguen pendientes ola/cohorte Codex real
+amplia, recursion real y OPES temporal real de derivados/cierre.
 
 Desde el corte del 2026-05-22, `ContinueAppDirectorV0` no bloquea el
 `PlanState` si el cierre de una task devuelve solo `run.open_tasks`: conserva el
@@ -190,9 +193,9 @@ implementacion, test focal y evidencia en la matriz.
   no hay evidencia causal ni runner efectivo, registra un quality gate
   bloqueante idempotente sin replan automatico, y reentra a `replan_or_close` si
   la evidencia `passed` aparece despues. El smoke real acotado con runner esta
-  cerrado; siguen pendientes smokes reales de ola/cohorte amplia, recursion real
-  y replan posterior con agente real tras fallo de tests.
-- [~] Replan negativo: cerrada la observacion durable de review negativa. El
+  cerrado; siguen pendientes smokes reales de ola/cohorte amplia y recursion
+  real.
+- [x] Replan negativo: cerrada la observacion durable de review negativa. El
   `PlanState` guarda refs/attempt para `ReworkRequested` y
   `ReplanDecisionRecorded`. El corte del 2026-05-21 ya convierte followups
   materializados en una nueva espera acotada: `split_task` cuando las nuevas
@@ -210,10 +213,10 @@ implementacion, test focal y evidencia en la matriz.
   aceptada) ya emite quality gate + replan retry y reabre solo el followup
   reflejado, tambien cuando el `replan_or_close` cubre una ola multitarea pero
   el fallo identifica una unica task causal. La emision de esa pareja es
-  idempotente si el run ya refleja los refs deterministas de gate/replan. Siguen
-  pendientes blockers posteriores sin decision causal como nuevos efectos
-  idempotentes de replan.
-- [~] `replan_or_close` como puerta de cierre: el cierre ya no se dispara por
+  idempotente si el run ya refleja los refs deterministas de gate/replan. Un
+  blocker nuevo sin decision causal debe entrar como caso nuevo con prueba
+  propia, no como pendiente abierto de este corte.
+- [x] `replan_or_close` como puerta de cierre: el cierre ya no se dispara por
   cualquier `PlanState` activo. Si hay estado vivo, solo se evalua cierre cuando
   el step activo es `replan_or_close` en `running`; un step anterior o
   `replan_or_close` pendiente no invoca `OperationalClosureSource`. Si en ese
@@ -223,8 +226,7 @@ implementacion, test focal y evidencia en la matriz.
   `DirectorTaskStore`, el `PlanState` se bloquea con causa durable. La reentrada
   ya reabre `replan_or_close` cuando el source aparece, el task store aparece o
   el outbox vuelve a estar drenado; si el prerequisito sigue faltando, el cierre
-  se vuelve a bloquear sin consultar trabajo externo indebido. Siguen pendientes
-  otros blockers como replan causal generico.
+  se vuelve a bloquear sin consultar trabajo externo indebido.
 - [x] Plan state vivo inicial: contrato, stores y persistencia del tramo
   `launch_subagents -> wait_subagents`, con ola/cohorte activa, step activo,
   task refs, agent refs, pending agent refs y `wait_ref`.
@@ -234,7 +236,7 @@ implementacion, test focal y evidencia en la matriz.
 - [x] Avance inicial tras wait consumido: si el loop queda `quiescent` y los
   agentes pendientes entregaron, el state pasa de `wait_subagents` a
   `review_deliveries`.
-- [~] Plan state vivo restante: `run_required_tests` durable, blocker de test
+- [x] Plan state vivo restante: `run_required_tests` durable, blocker de test
   fallido, blocker de evidencia de test faltante, observacion de review
   negativa, bloqueo por outbox pendiente antes de cierre, puerta explicita de
   `replan_or_close` y razon de cierre/bloqueo ya quedan persistidos. La
@@ -248,22 +250,20 @@ implementacion, test focal y evidencia en la matriz.
   replay directo por `ContinueAppDirectorV0` sobre un `PlanState` ya cerrado
   queda como no-op idempotente: no reentra por `active_step`, no ejecuta runner,
   no llama fuente de cierre y no duplica eventos.
-- [~] Evento/comando idempotente: el replay de cierre exitoso y bloqueo de
+- [x] Evento/comando idempotente del ciclo probado: el replay de cierre exitoso y bloqueo de
   cierre ya tiene prueba focal y no duplica refs del `PlanState` ni `RunClosed`.
   `state-file` cubre tambien el camino integrado review -> runner ->
   `replan_or_close` -> close con replay de cierre y replay directo por
-  `ContinueAppDirectorV0` con plan cerrado. Sigue pendiente extender la misma
-  garantia a todos los blockers de replan. El replan automatico por cierre
+  `ContinueAppDirectorV0` con plan cerrado. El replan automatico por cierre
   insuficiente ya corta la reemision cuando el run refleja los refs
   deterministas de `QualityGateRecorded` y `ReplanDecisionRecorded`, aun sin
   `CommandEffects` frescos.
 
-El orden recomendado ahora es: replan automatico para casos negativos restantes,
-smoke Codex real de ola/cohorte amplia y por ultimo replay/idempotencia completa
-del ciclo. El smoke Codex real acotado con runner ya quedo cerrado por
-`CODEX-REQTEST-REAL-E2E`; no cubre recursion real, ola amplia ni composiciones
-sin fuente de cierre viva. Si una composicion no aporta fuente real de cierre o
-validacion, la casilla queda pendiente para esa composicion.
+El orden recomendado ahora es: smoke Codex real de ola/cohorte amplia, recursion
+real y OPES temporal real de derivados/cierre. El smoke Codex real acotado con
+runner ya quedo cerrado por `CODEX-REQTEST-REAL-E2E`; el no-OPES temporal con
+runtime fake ya quedo cerrado por `EXT-NO-OPES`. Ninguno cubre recursion real,
+ola Codex amplia ni derivados OPES reales.
 
 ## Corte OperationalDirectorPlanStateV0
 
@@ -305,10 +305,11 @@ activo, avanzar a `review_deliveries` cuando el wait queda consumido y mover
 `review_deliveries` a `run_required_tests` o `replan_or_close` cuando la cadena
 causal de review aceptada pertenece al scope activo.
 
-Pendiente verificable para este corte: replan generico de blockers restantes,
-smoke Codex real de ola/cohorte amplia y pruebas offline de replay sin duplicar
-efectos en todo el ciclo. El runner real acotado con un agente Codex vivo ya
-tiene evidencia en `CODEX-REQTEST-REAL-E2E`.
+Pendiente verificable despues de este corte: smoke Codex real de ola/cohorte
+amplia, recursion real y OPES temporal real de derivados/cierre. El runner real
+acotado con un agente Codex vivo ya tiene evidencia en
+`CODEX-REQTEST-REAL-E2E`; el cierre no-OPES temporal esta cubierto por
+`EXT-NO-OPES`.
 
 ## Criterios de cierre operativo
 
@@ -328,8 +329,9 @@ por estado durable o por una fuente inyectada y verificable:
 
 ## Pendiente verificable
 
-Estas piezas siguen pendientes o parciales hasta que existan implementacion y
-pruebas claras. No deben describirse como hechas antes de cerrar la evidencia.
+Estas piezas ya tienen cierre offline/fake-runtime donde se indica. Lo que sigue
+pendiente es llevar la misma garantia a Codex real amplio/recursion y a OPES
+temporal real de derivados/cierre.
 
 1. Cobertura Codex real con runner:
    el runner por puerto, el executor local opt-in, el consumo de
@@ -349,9 +351,7 @@ pruebas claras. No deben describirse como hechas antes de cerrar la evidencia.
   reflejado, `ContinueAppDirectorV0` reabre la espera acotada. Si el cierre
   insuficiente conserva refs causales de task, delivery y review aceptada, ya
   emite replan retry y reabre el followup concreto; en scope multitarea exige
-  que una unica task causal del scope sea la afectada. Sigue pendiente emitir
-  rework/replan generico para otros blockers reparables, con causa, intento y
-  refs de task, delivery y review.
+  que una unica task causal del scope sea la afectada.
 3. Estado vivo del plan:
    el tramo inicial ya persiste step activo, ola/cohorte, tasks, agentes y
    `wait_ref`; avanza a `review_deliveries` cuando el wait queda consumido y a
@@ -367,17 +367,15 @@ pruebas claras. No deben describirse como hechas antes de cerrar la evidencia.
   `replan_or_close` y cierre causal en un unico ciclo offline. El replay de
   cierre ya no duplica refs/eventos de cierre; la reentrada de cierre bloqueado
   por falta de evidencia requerida y por cierre insuficiente causal no duplica
-  `replan_attempts`; faltan replan automatico para otros blockers y replay
-  completo del resto del ciclo.
+  `replan_attempts`.
 4. Reentrada offline:
    wait, review, tests, cierre exitoso, cierre bloqueado por prerequisitos y
    varios replans causales ya reconstruyen scope desde run, task store, wait
-   state, eventos y plan state, no desde agentes vivos globales ni stats. Falta
-   extender la misma garantia al replan generico de blockers restantes.
+   state, eventos y plan state, no desde agentes vivos globales ni stats.
 5. `OperationalClosureSource` por composicion:
-   el stack Codex ya tiene fuente para Director Operativo. Otras composiciones
-   deben aportar su fuente por puerto. Si la fuente no existe o devuelve estado
-   insuficiente, el cierre debe bloquearse o replanificarse con causa.
+   el stack Codex ya tiene fuente para Director Operativo y `EXT-NO-OPES` cubre
+   una composicion externa temporal por refs opacas. OPES sigue pendiente de
+   fuente/validacion real acotada contra instancia temporal.
 
 ## Criterio de done del tramo restante
 

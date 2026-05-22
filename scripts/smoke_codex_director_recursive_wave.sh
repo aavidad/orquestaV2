@@ -23,12 +23,15 @@ trap cleanup EXIT
 mkdir -p "$PROJECT_DIR" "$OUT_DIR"
 
 DRY_RUN_FLAG=""
+REAL_MODE=0
 CODEX_COMMAND="${ORQUESTA_CODEX_COMMAND:-$FAKE_CODEX}"
 if [[ "${ORQUESTA_CODEX_DIRECTOR_RECURSIVE_REAL_CONFIRM:-0}" == "1" ]]; then
+  REAL_MODE=1
   if [[ -z "${ORQUESTA_CODEX_COMMAND:-}" ]]; then
     echo "ORQUESTA_CODEX_COMMAND requerido para modo real" >&2
     exit 2
   fi
+  CODEX_COMMAND="$ORQUESTA_CODEX_COMMAND"
 else
   if [[ "${ORQUESTA_CODEX_DIRECTOR_RECURSIVE_DRY_RUN:-0}" == "1" ]]; then
     DRY_RUN_FLAG="--dry-run"
@@ -54,6 +57,10 @@ SH
 fi
 
 cd "$ROOT_DIR"
+
+go test -count=1 ./modulos/orquesta-app-codex-stack \
+  -run 'TestCodexStackDirectorRecursiveWaveOfflineCierraSubarbolConWaitsAcotadosV0'
+echo "offline_recursive_closure_review_ok=true"
 
 go run ./cmd/orquesta-server codex-launch-director-wave \
   $DRY_RUN_FLAG \
@@ -217,5 +224,6 @@ print("planned_agents=7")
 print("opaque_agent_refs=7")
 print("registry_wrappers_ready=true")
 print("fake_runtime_executed=" + str(not real_mode and not bool((summary.get("launch") or {}).get("dry_run"))).lower())
+print("real_mode=" + str(real_mode).lower())
 print("dry_run=" + str(bool((summary.get("launch") or {}).get("dry_run"))).lower())
 PY

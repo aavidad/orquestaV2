@@ -263,6 +263,104 @@ func TestOperationalClosureSourceV0CierraPadreCuandoHijosYaCerrados(t *testing.T
 	}
 }
 
+func TestCodexStackDirectorRecursiveWaveOfflineCierraSubarbolConWaitsAcotadosV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-stack-director-recursive-wave-offline-001"
+	parent := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-parent", "", "wave-recursive-root", "cohort-recursive-root", 0, 2)
+	childA := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-child-a", parent.TaskID, "wave-recursive-children", "cohort-recursive-children", 1, 2)
+	childB := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-child-b", parent.TaskID, "wave-recursive-children", "cohort-recursive-children", 1, 2)
+	grandA1 := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-grand-a1", childA.TaskID, "wave-recursive-grandchildren-a", "cohort-recursive-grandchildren-a", 2, 0)
+	grandA2 := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-grand-a2", childA.TaskID, "wave-recursive-grandchildren-a", "cohort-recursive-grandchildren-a", 2, 0)
+	grandB1 := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-grand-b1", childB.TaskID, "wave-recursive-grandchildren-b", "cohort-recursive-grandchildren-b", 2, 0)
+	grandB2 := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-grand-b2", childB.TaskID, "wave-recursive-grandchildren-b", "cohort-recursive-grandchildren-b", 2, 0)
+	parent.ChildTaskRefs = []string{childA.TaskID, childB.TaskID}
+	childA.ChildTaskRefs = []string{grandA1.TaskID, grandA2.TaskID}
+	childB.ChildTaskRefs = []string{grandB1.TaskID, grandB2.TaskID}
+	tasks := []orquestacoreworkflow.WorkflowTaskV0{parent, childA, childB, grandA1, grandA2, grandB1, grandB2}
+	stackOperationalClosureAssertRecursiveLimitsForTestV0(t, tasks, 2)
+
+	run := stackOperationalClosureRunForTestV0(runRef, parent.TaskID, childA.TaskID, childB.TaskID, grandA1.TaskID, grandA2.TaskID, grandB1.TaskID, grandB2.TaskID)
+	for _, task := range tasks {
+		deliveryRef := "delivery-ref-" + task.TaskID
+		run.Deliveries = append(run.Deliveries, deliveryRef)
+		run.AcceptedReviews = append(run.AcceptedReviews, "accepted-review-ref-"+deliveryRef)
+	}
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(tasks...)
+
+	childWait, err := orquestacionnucleoapp.BuildWorkflowTaskWaitSnapshotV0(ctx, taskStore, run, orquestacionnucleoapp.WorkflowTaskWaitFilterV0{
+		ParentTaskRef: parent.TaskID,
+	})
+	if err != nil {
+		t.Fatalf("BuildWorkflowTaskWaitSnapshotV0 childWait: %v", err)
+	}
+	stackOperationalClosureAssertRefsForTestV0(t, "child task refs", childWait.TaskRefs, []string{childA.TaskID, childB.TaskID})
+	stackOperationalClosureAssertRefsForTestV0(t, "child agent refs", childWait.AgentRefs, []string{
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(childA.TaskID),
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(childB.TaskID),
+	})
+	stackOperationalClosureAssertRefsForTestV0(t, "child pending agent refs", childWait.PendingAgentRefs, childWait.AgentRefs)
+
+	run.DeliveredAgents = []string{orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(grandA1.TaskID)}
+	grandchildWait, err := orquestacionnucleoapp.BuildWorkflowTaskWaitSnapshotV0(ctx, taskStore, run, orquestacionnucleoapp.WorkflowTaskWaitFilterV0{
+		ParentTaskRef: childA.TaskID,
+		WaveRef:       "wave-recursive-grandchildren-a",
+	})
+	if err != nil {
+		t.Fatalf("BuildWorkflowTaskWaitSnapshotV0 grandchildWait: %v", err)
+	}
+	stackOperationalClosureAssertRefsForTestV0(t, "grandchild task refs", grandchildWait.TaskRefs, []string{grandA1.TaskID, grandA2.TaskID})
+	stackOperationalClosureAssertRefsForTestV0(t, "grandchild pending agent refs", grandchildWait.PendingAgentRefs, []string{
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(grandA2.TaskID),
+	})
+
+	reader := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	if err := reader.AppendRunEventsV0(ctx, runRef, stackOperationalClosureRecursiveEventsForTestV0(t, runRef, tasks)); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	source := codexStackOperationalClosureSourceV0{
+		TaskStore:                 taskStore,
+		EventReader:               reader,
+		RequiredTestEvidenceStore: orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0(stackOperationalClosureRecursiveEvidenceForTestV0(runRef, tasks)...),
+	}
+
+	_, ok, err := source.BuildOperationalDirectorClosureRequestV0(ctx, stackOperationalClosureRecursiveClosureRequestForTestV0(run, parent.TaskID))
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0 parent abierto: %v", err)
+	}
+	if ok {
+		t.Fatalf("no debe cerrar padre con hijos directos abiertos")
+	}
+	_, ok, err = source.BuildOperationalDirectorClosureRequestV0(ctx, stackOperationalClosureRecursiveClosureRequestForTestV0(run, childA.TaskID))
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0 child abierto: %v", err)
+	}
+	if ok {
+		t.Fatalf("no debe cerrar hijo con nietos abiertos")
+	}
+
+	childAClosureRun := run
+	childAClosureRun.ClosedTasks = []string{grandA1.TaskID, grandA2.TaskID}
+	got, ok, err := source.BuildOperationalDirectorClosureRequestV0(ctx, stackOperationalClosureRecursiveClosureRequestForTestV0(childAClosureRun, childA.TaskID))
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0 child cerrado: %v", err)
+	}
+	if !ok || got.TaskID != childA.TaskID || got.DeliveryRef != "delivery-ref-"+childA.TaskID ||
+		len(got.RequiredTestEvidenceRefs) != 1 {
+		t.Fatalf("cierre hijo invalido: ok=%v request=%+v", ok, got)
+	}
+
+	parentClosureRun := run
+	parentClosureRun.ClosedTasks = []string{childA.TaskID, childB.TaskID, grandA1.TaskID, grandA2.TaskID, grandB1.TaskID, grandB2.TaskID}
+	got, ok, err = source.BuildOperationalDirectorClosureRequestV0(ctx, stackOperationalClosureRecursiveClosureRequestForTestV0(parentClosureRun, parent.TaskID))
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0 parent cerrado: %v", err)
+	}
+	if !ok || got.TaskID != parent.TaskID || got.AcceptedReviewRef != "accepted-review-ref-delivery-ref-"+parent.TaskID ||
+		len(got.RequiredTestEvidenceRefs) != 1 {
+		t.Fatalf("cierre padre invalido: ok=%v request=%+v", ok, got)
+	}
+}
+
 func TestOperationalClosureSourceV0NoCierraSinReviewRequestedCausal(t *testing.T) {
 	runRef := "run-stack-operational-closure-source-no-review-requested-001"
 	task := stackOperationalClosureTaskForTestV0(runRef, "task-stack-operational-closure-no-review-requested", nil)
@@ -531,5 +629,116 @@ func stackOperationalClosureEventForTestV0(
 		Sequence:       sequence,
 		PayloadVersion: orquestacoreworkflow.OrchestrationEventPayloadVersionV0,
 		Payload:        raw,
+	}
+}
+
+func stackOperationalClosureRecursiveTaskForTestV0(
+	runRef string,
+	taskRef string,
+	parentTaskRef string,
+	waveRef string,
+	cohortRef string,
+	delegationDepth int,
+	maxChildAgents int,
+) orquestacoreworkflow.WorkflowTaskV0 {
+	task := stackOperationalClosureTaskForTestV0(runRef, taskRef, []string{"go test ./..."})
+	task.ParentTaskRef = parentTaskRef
+	task.WaveRef = waveRef
+	task.CohortRef = cohortRef
+	task.DelegationDepth = delegationDepth
+	task.MaxChildAgents = maxChildAgents
+	return task
+}
+
+func stackOperationalClosureAssertRecursiveLimitsForTestV0(
+	t *testing.T,
+	tasks []orquestacoreworkflow.WorkflowTaskV0,
+	maxDepth int,
+) {
+	t.Helper()
+	byRef := map[string]orquestacoreworkflow.WorkflowTaskV0{}
+	for _, task := range tasks {
+		byRef[task.TaskID] = task
+		if task.DelegationDepth > maxDepth {
+			t.Fatalf("delegation_depth supera limite: task=%s depth=%d max=%d", task.TaskID, task.DelegationDepth, maxDepth)
+		}
+		if len(task.ChildTaskRefs) > task.MaxChildAgents && task.MaxChildAgents > 0 {
+			t.Fatalf("fanout supera limite: task=%s children=%v max=%d", task.TaskID, task.ChildTaskRefs, task.MaxChildAgents)
+		}
+		if task.DelegationDepth == maxDepth && len(task.ChildTaskRefs) > 0 {
+			t.Fatalf("task en profundidad maxima conserva hijos: task=%s children=%v", task.TaskID, task.ChildTaskRefs)
+		}
+	}
+	for _, task := range tasks {
+		for _, childRef := range task.ChildTaskRefs {
+			child, ok := byRef[childRef]
+			if !ok {
+				t.Fatalf("child_task_ref no existe: task=%s child=%s", task.TaskID, childRef)
+			}
+			if child.ParentTaskRef != task.TaskID || child.DelegationDepth != task.DelegationDepth+1 {
+				t.Fatalf("linaje hijo invalido: parent=%+v child=%+v", task, child)
+			}
+		}
+	}
+}
+
+func stackOperationalClosureAssertRefsForTestV0(
+	t *testing.T,
+	label string,
+	got []string,
+	want []string,
+) {
+	t.Helper()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("%s=%v, want %v", label, got, want)
+	}
+}
+
+func stackOperationalClosureRecursiveEventsForTestV0(
+	t *testing.T,
+	runRef string,
+	tasks []orquestacoreworkflow.WorkflowTaskV0,
+) []orquestacoreworkflow.OrchestrationEventV0 {
+	t.Helper()
+	events := make([]orquestacoreworkflow.OrchestrationEventV0, 0, len(tasks)*4)
+	var sequence int64
+	for _, task := range tasks {
+		deliveryRef := "delivery-ref-" + task.TaskID
+		sequence++
+		events = append(events, stackOperationalClosureDeliveryEventForTestV0(t, runRef, sequence, task.TaskID, deliveryRef))
+		sequence++
+		events = append(events, stackOperationalClosureReviewRequestedEventForTestV0(t, runRef, sequence, deliveryRef))
+		sequence++
+		events = append(events, stackOperationalClosureReviewResultEventForTestV0(t, runRef, sequence, deliveryRef, orquestacoreworkflow.ReviewResultStatusAcceptedV0))
+		sequence++
+		events = append(events, stackOperationalClosureAcceptedReviewEventForTestV0(t, runRef, sequence, deliveryRef))
+	}
+	return events
+}
+
+func stackOperationalClosureRecursiveEvidenceForTestV0(
+	runRef string,
+	tasks []orquestacoreworkflow.WorkflowTaskV0,
+) []orquestacionnucleoapp.RequiredTestEvidenceV0 {
+	evidence := make([]orquestacionnucleoapp.RequiredTestEvidenceV0, 0, len(tasks))
+	for _, task := range tasks {
+		evidence = append(evidence, stackOperationalClosureRequiredTestEvidenceForTestV0(runRef, task.TaskID, "delivery-ref-"+task.TaskID))
+	}
+	return evidence
+}
+
+func stackOperationalClosureRecursiveClosureRequestForTestV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	taskRef string,
+) orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0 {
+	return orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{
+		Run:              run,
+		LoopStatus:       orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		OccurredAt:       "2026-05-22T19:00:00Z",
+		CorrelationID:    "corr-stack-recursive-closure-" + taskRef,
+		RequestedBy:      "orquesta-app-codex-stack-test",
+		WaitScopeApplied: true,
+		WaitAgentRefs:    []string{orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)},
+		EvidenceRefs:     []string{"evidence-ref-stack-recursive-closure-" + taskRef},
 	}
 }

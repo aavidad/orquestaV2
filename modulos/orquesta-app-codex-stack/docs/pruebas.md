@@ -120,8 +120,10 @@ Cobertura Go actual:
   Operativo: task con `RequiredTests`, `WaitAgentRefs`, ACK/entrega, review
   causal aceptada, runner local de tests, `RequiredTestEvidenceV0` durable y
   cierre de plan/run. Cerrado por `CODEX-REQTEST-REAL-E2E`; no sustituye
-  recursion real, ola/cohorte amplia, cierre con app externa real no-OPES ni
-  OPES real.
+  recursion real, ola/cohorte amplia ni OPES temporal real de derivados/cierre.
+  El cierre no-OPES temporal con app HTTP/file, submitter real opt-in,
+  `codex-fake`, review, required-tests y plan cerrado queda cubierto por
+  `EXT-NO-OPES`.
 
 Guardas esperadas para pruebas futuras:
 
@@ -232,8 +234,7 @@ Pendiente no cubierto por este smoke:
 - recursion real con parent/child refs, fanout/profundidad/presupuesto y review
   causal;
 - ola/cohorte amplia con varios agentes Codex vivos;
-- cierre no-OPES con app externa real;
-- OPES real de derivados/cierre.
+- OPES temporal real de derivados/cierre.
 
 Prueba real de cambio a mitad de ejecucion:
 

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -595,4 +598,50 @@ func opesDerivedPayloadForDrainTestV0(jobType string) string {
 	default:
 		return `{"program_id":"program-ref-operadores-001","topic_id":"topic-ref-operadores-001","document_plan_artifact_id":"artifact-plan-operadores-001","scope":"tema completo"}`
 	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperFakeServerV0(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 no disponible")
+	}
+	repoRoot := filepath.Clean("../..")
+	cmd := exec.Command("bash", "scripts/smoke_opes_derivatives_rest.sh")
+	cmd.Dir = repoRoot
+	cmd.Env = cleanOPESSmokeEnvForDrainTestV0(os.Environ())
+	cmd.Env = append(cmd.Env,
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1",
+		"ORQUESTA_OPES_BRIDGE_LIMIT=1",
+		"SMOKE_ID=test-derivatives-rest-fake",
+		"SMOKE_OUT_DIR="+filepath.Join(t.TempDir(), "out"),
+	)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("script err=%v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, `"dry_run":true`) ||
+		!strings.Contains(output, `"selected_job_type":"draft_content_block"`) ||
+		!strings.Contains(output, `"job_ref":"job-ref-fake-draft-001"`) ||
+		!strings.Contains(output, `"status":"dry_run"`) {
+		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
+	}
+}
+
+func cleanOPESSmokeEnvForDrainTestV0(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, item := range env {
+		if strings.HasPrefix(item, "ORQUESTA_OPES") ||
+			strings.HasPrefix(item, "OPES_BASE_URL=") ||
+			strings.HasPrefix(item, "ORQUESTA_BASE_URL=") ||
+			strings.HasPrefix(item, "SMOKE_ID=") ||
+			strings.HasPrefix(item, "SMOKE_OUT_DIR=") {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
 }

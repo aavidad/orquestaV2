@@ -2202,17 +2202,41 @@ func TestContinueAppDirectorV0TestsFailedReplanFollowupCierraSinDuplicarEventos(
 	if first.Run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
 		t.Fatalf("first no debe cerrar tras tests fallidos: %+v", first.Run)
 	}
+	if closureSource.Called {
+		t.Fatalf("closure source no debe llamarse antes del replan: request=%+v", closureSource.LastRequest)
+	}
+	var gatePayload orquestacoreworkflow.QualityGateRecordedPayloadV0
 	var replanPayload orquestacoreworkflow.ReplanDecisionRecordedPayloadV0
+	var gateEvents, replanEvents int
 	for _, event := range eventSink.EventsV0() {
-		if event.EventType != orquestacoreworkflow.OrchestrationEventReplanDecisionRecordedV0 {
-			continue
+		switch event.EventType {
+		case orquestacoreworkflow.OrchestrationEventQualityGateRecordedV0:
+			gateEvents++
+			if err := json.Unmarshal(event.Payload, &gatePayload); err != nil {
+				t.Fatalf("QualityGateRecorded payload: %v", err)
+			}
+		case orquestacoreworkflow.OrchestrationEventReplanDecisionRecordedV0:
+			replanEvents++
+			if err := json.Unmarshal(event.Payload, &replanPayload); err != nil {
+				t.Fatalf("ReplanDecisionRecorded payload: %v", err)
+			}
 		}
-		if err := json.Unmarshal(event.Payload, &replanPayload); err != nil {
-			t.Fatalf("ReplanDecisionRecorded payload: %v", err)
-		}
+	}
+	if gateEvents != 1 || replanEvents != 1 {
+		t.Fatalf("gateEvents=%d replanEvents=%d events=%+v", gateEvents, replanEvents, eventSink.EventsV0())
+	}
+	if gatePayload.Decision != orquestacoreworkflow.QualityGateDecisionBlockedV0 ||
+		gatePayload.SubjectRef != fixture.TaskRef ||
+		!serviceStringInSetV0(gatePayload.IssueRefs, fixture.RequiredTestEvidenceRef) {
+		t.Fatalf("quality gate no causal del test fallido: %+v failed=%s", gatePayload, fixture.RequiredTestEvidenceRef)
 	}
 	if replanPayload.ReplanRef == "" || len(replanPayload.FollowupRefs) != 2 {
 		t.Fatalf("replanPayload=%+v events=%+v", replanPayload, eventSink.EventsV0())
+	}
+	if replanPayload.SourceRef != gatePayload.GateRef ||
+		replanPayload.TaskRef != fixture.TaskRef ||
+		replanPayload.AcceptedAction != orquestacoreworkflow.ReplanDecisionActionRetryTaskV0 {
+		t.Fatalf("replan no cuelga del quality gate fallido: replan=%+v gate=%+v", replanPayload, gatePayload)
 	}
 	followupAgentRef := ""
 	for _, ref := range replanPayload.FollowupRefs {
@@ -2227,6 +2251,12 @@ func TestContinueAppDirectorV0TestsFailedReplanFollowupCierraSinDuplicarEventos(
 	materializedRun, err := runStore.LoadRunV0(ctx, fixture.RunRef)
 	if err != nil {
 		t.Fatalf("LoadRunV0 materialized: %v", err)
+	}
+	if len(materializedRun.QualityGates) != 1 ||
+		len(materializedRun.ReplanDecisions) != 1 ||
+		serviceStringInSetV0(materializedRun.Agents, followupAgentRef) ||
+		materializedRun.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 {
+		t.Fatalf("run tras replan invalido: run=%+v followup=%s", materializedRun, followupAgentRef)
 	}
 	materializedRun.Agents = compactServiceRefsV0(append(materializedRun.Agents, followupAgentRef))
 	materializedRun.StartedAgents = compactServiceRefsV0(append(materializedRun.StartedAgents, followupAgentRef))
@@ -2321,6 +2351,20 @@ func TestContinueAppDirectorV0TestsFailedReplanFollowupCierraSinDuplicarEventos(
 	}); err != nil {
 		t.Fatalf("updateOperationalDirectorPlanStateAfterLoopV0 followup: %v", err)
 	}
+	stateAfterTests, err := planStateStore.LoadOperationalDirectorPlanStateV0(ctx, fixture.RunRef, fixture.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0 after tests: %v", err)
+	}
+	testsStepAfterFollowup := serviceOperationalDirectorPlanStateStepForTestV0(t, stateAfterTests, "step-run-required-tests")
+	replanStepAfterFollowup := serviceOperationalDirectorPlanStateStepForTestV0(t, stateAfterTests, "step-replan-or-close")
+	if stateAfterTests.ActiveStepID != "step-replan-or-close" ||
+		testsStepAfterFollowup.Status != orquestadirectoroperativo.OperationalDirectorStepAcceptedV0 ||
+		testsStepAfterFollowup.Reason != "required-tests-passed" ||
+		replanStepAfterFollowup.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		len(replanStepAfterFollowup.RequiredTestEvidenceRefs) != 1 ||
+		serviceStringInSetV0(replanStepAfterFollowup.RequiredTestEvidenceRefs, fixture.RequiredTestEvidenceRef) {
+		t.Fatalf("state tras followup no avanza con evidencia passed nueva: state=%+v tests=%+v replan=%+v failed=%s", stateAfterTests, testsStepAfterFollowup, replanStepAfterFollowup, fixture.RequiredTestEvidenceRef)
+	}
 	postTestsRun, err := runStore.LoadRunV0(ctx, fixture.RunRef)
 	if err != nil {
 		t.Fatalf("LoadRunV0 post tests: %v", err)
@@ -2352,13 +2396,22 @@ func TestContinueAppDirectorV0TestsFailedReplanFollowupCierraSinDuplicarEventos(
 	if !closureSource.Called || len(closureSource.LastRequest.RequiredTestEvidenceRefs) != 1 {
 		t.Fatalf("closure source request=%+v called=%v", closureSource.LastRequest, closureSource.Called)
 	}
+	if !closureSource.LastRequest.WaitScopeApplied ||
+		!serviceStringInSetV0(closureSource.LastRequest.WaitAgentRefs, followupAgentRef) ||
+		serviceStringInSetV0(closureSource.LastRequest.WaitAgentRefs, fixture.AgentRef) ||
+		serviceStringInSetV0(closureSource.LastRequest.RequiredTestEvidenceRefs, fixture.RequiredTestEvidenceRef) {
+		t.Fatalf("closure source recibio scope/evidencia no causal: request=%+v old_agent=%s failed_evidence=%s", closureSource.LastRequest, fixture.AgentRef, fixture.RequiredTestEvidenceRef)
+	}
 	evidence, err := testEvidenceStore.LoadRequiredTestEvidenceV0(ctx, fixture.RunRef, closureSource.LastRequest.RequiredTestEvidenceRefs)
 	if err != nil {
 		t.Fatalf("LoadRequiredTestEvidenceV0: %v", err)
 	}
 	if len(evidence) != 1 ||
 		evidence[0].Status != orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 ||
+		evidence[0].TaskRef != fixture.TaskRef ||
+		evidence[0].TestCommand != fixture.RequiredTest ||
 		evidence[0].DeliveryRef != followupDeliveryRef ||
+		evidence[0].ReviewRequestID != followupReviewRequestRef ||
 		evidence[0].ReviewResultRef != followupReviewResultRef ||
 		evidence[0].AcceptedReviewRef != followupAcceptedReviewRef {
 		t.Fatalf("evidence no causal del followup: %+v", evidence)
@@ -2373,6 +2426,18 @@ func TestContinueAppDirectorV0TestsFailedReplanFollowupCierraSinDuplicarEventos(
 	}
 	if blockers := orquestacoreworkflow.PendingBlockingQualityGateRefsForSubjectV0(postCloseRun, fixture.TaskRef); len(blockers) != 0 {
 		t.Fatalf("quality gate requerido no resuelto: blockers=%v gates=%v", blockers, postCloseRun.QualityGates)
+	}
+	stateAfterClose, err := planStateStore.LoadOperationalDirectorPlanStateV0(ctx, fixture.RunRef, fixture.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0 post close: %v", err)
+	}
+	closedReplanStep := serviceOperationalDirectorPlanStateStepForTestV0(t, stateAfterClose, "step-replan-or-close")
+	if stateAfterClose.Status != orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 ||
+		stateAfterClose.ClosureReason != "operational-closure-succeeded" ||
+		closedReplanStep.Status != orquestadirectoroperativo.OperationalDirectorStepClosedV0 ||
+		serviceCountStringV0(closedReplanStep.RequiredTestEvidenceRefs, evidence[0].EvidenceRef) != 1 ||
+		serviceStringInSetV0(closedReplanStep.RequiredTestEvidenceRefs, fixture.RequiredTestEvidenceRef) {
+		t.Fatalf("plan state cerrado sin evidencia passed causal: state=%+v step=%+v passed=%s failed=%s", stateAfterClose, closedReplanStep, evidence[0].EvidenceRef, fixture.RequiredTestEvidenceRef)
 	}
 	if got := serviceCountEventsByTypeV0(eventsAfterClose, orquestacoreworkflow.OrchestrationEventReplanDecisionRecordedV0); got != 1 {
 		t.Fatalf("ReplanDecisionRecorded duplicado: got=%d events=%+v", got, eventsAfterClose)

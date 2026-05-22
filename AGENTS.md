@@ -53,9 +53,12 @@ Tras los cortes del 2026-05-17, el estado real es:
   salida positiva de `review_deliveries` por ola ya avanza el `PlanState` por
   cadena causal de eventos, y `run_required_tests` ya consume
   `RequiredTestEvidenceV0` durable para pasar a `replan_or_close` o bloquear por
-  `required-tests-failed`. Sigue pendiente un runner/adaptador real que genere
-  esas evidencias, la rama negativa review/replan, `close` completo,
-  replay/idempotencia y estado vivo posterior.
+  `required-tests-failed`. El runner por puerto, el ejecutor local opt-in, la
+  rama negativa review/replan, el replan por tests fallidos, `replan_or_close`,
+  `close`, replay/idempotencia del ciclo probado y estado vivo posterior ya
+  tienen evidencia offline/fake-runtime y smokes acotados documentados. Siguen
+  pendientes los smokes con Codex real de ola/cohorte amplia, recursion Codex
+  real y OPES temporal real de derivados/cierre.
 - El nuevo handoff de cierre es
   `docs/corte_cierre_generico_director_operativo_2026-05-17.md`: P1
   `WaitAgentRefs` no se reabre salvo regresion; el foco es cierre causal
@@ -72,9 +75,11 @@ Tras los cortes del 2026-05-17, el estado real es:
   adaptador inyectado hoy, y MCPO/servidor MCP real debe quedar como transporte
   opt-in. Falta cerrar smoke real de `plan_temario` contra instancia OPES
   aislada, no tocar OPES productivo ni drenar colas amplias.
-- La recursion Codex completa sigue pendiente: subagentes de subagentes con
-  parent/child refs, presupuesto global, profundidad/fanout y review del
-  director antes de cerrar.
+- La recursion Codex productiva completa sigue pendiente. Offline/fake-runtime
+  ya existe una prueba de arbol 1 -> 2 -> 4 con parent/child refs, presupuesto
+  global, profundidad/fanout, waits acotados y bloqueo de cierre hasta cerrar
+  hijos/nietos; falta repetirlo con Codex real, entregas vivas, review causal y
+  cierre del arbol.
 - La metadata completa de `WorkflowTaskV0` vive en `WorkflowTaskStore`. Un
   replay solo desde eventos compactos reconstruye refs de tareas, no
   `wave_ref`, `cohort_ref`, parent/child refs, criterios completos ni el estado
@@ -173,12 +178,12 @@ Documentos de entrada obligatorios para cambios transversales:
    esta verificado offline. El cierre desde `ContinueAppDirectorV0` solo es real
    cuando el loop queda quiescent y hay `OperationalClosureSource` inyectado con
    refs/evidencias causales. `run_required_tests` ya valida
-   `RequiredTestEvidenceV0` causal desde el state y entrega esas refs al cierre;
-   no ejecuta comandos shell por si mismo. El siguiente foco esta en
-   `docs/corte_cierre_generico_director_operativo_2026-05-17.md`:
-   runner/adaptador real de tests, rama negativa de review/replan,
-   `replan_or_close`/`close` y replay/idempotencia, siempre como cierre causal
-   offline antes de Codex/OPES real.
+   `RequiredTestEvidenceV0` causal desde el state y entrega esas refs al cierre.
+   Si hay `RequiredTestRunner` inyectado, genera evidencia por puerto sin que el
+   nucleo conozca shell/runtime concreto. El siguiente foco esta en
+   `docs/corte_cierre_generico_director_operativo_2026-05-17.md`: smokes reales
+   de Codex con ola/cohorte amplia, recursion real y OPES temporal real de
+   derivados/cierre, sin reabrir WaitAgentRefs ni meter producto en el nucleo.
 
 ## Verificacion minima
 

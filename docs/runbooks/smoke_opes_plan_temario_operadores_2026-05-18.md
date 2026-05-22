@@ -335,7 +335,12 @@ Pruebas offline focales antes de tocar OPES real:
 ```bash
 go test -count=1 ./modulos/orquesta-opes-bridge
 go test -count=1 ./cmd/orquesta-server -run 'TestOPESBridgeLoop|TestRunOPESDrainOnceV0'
-bash -n scripts/smoke_opes_derivatives_real.sh
+bash -n scripts/smoke_opes_derivatives_rest.sh
+bash -n scripts/smoke_opes_plan_temario_operadores.sh
+ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1 \
+  scripts/smoke_opes_derivatives_rest.sh
+ORQUESTA_OPES_PLAN_TEMARIO_FAKE_SERVER=1 \
+  scripts/smoke_opes_plan_temario_operadores.sh
 ```
 
 Estas pruebas no ejecutan Codex ni llaman a OPES real. El smoke real de
@@ -347,9 +352,9 @@ Wrapper operador para derivados:
 
 ```bash
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
-ORQUESTA_OPES_DERIVATIVES_SMOKE_CONFIRM=1 \
+ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1 \
 ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
-scripts/smoke_opes_derivatives_real.sh
+scripts/smoke_opes_derivatives_rest.sh
 ```
 
 Ese modo es `dry-run-once`: consulta OPES temporal y muestra la primera fase
@@ -362,12 +367,12 @@ Para crear runs de la primera fase pendiente:
 ```bash
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
 ORQUESTA_BASE_URL=http://127.0.0.1:<puerto-orquesta> \
-ORQUESTA_OPES_DERIVATIVES_SMOKE_CONFIRM=1 \
+ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1 \
 ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=drain-once \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
-scripts/smoke_opes_derivatives_real.sh
+scripts/smoke_opes_derivatives_rest.sh
 ```
 
 El wrapper rechaza `ORQUESTA_OPES_BRIDGE_JOB_TYPE` y
@@ -382,6 +387,22 @@ operativo completo de una composicion OPES real sigue pendiente hasta tener OPES
 temporal vivo, cuota/modelo confirmados y evidencia de que cada derivado fue
 aceptado por OPES con refs causales suficientes; no se declara cerrado desde
 pruebas offline ni desde un dry-run.
+
+Wrapper operador para repetir el plan exacto `plan_temario` de Operario sin
+drenar colas amplias:
+
+```bash
+ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
+ORQUESTA_OPES_PLAN_TEMARIO_SMOKE_CONFIRM=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
+ORQUESTA_OPES_BRIDGE_JOB_REF=<job-ref-plan-temario-operario> \
+scripts/smoke_opes_plan_temario_operadores.sh
+```
+
+Para crear la run, anadir `ORQUESTA_BASE_URL`, cambiar a
+`ORQUESTA_OPES_PLAN_TEMARIO_SMOKE_MODE=drain-once` y declarar
+`ORQUESTA_OPES_PLAN_TEMARIO_EXECUTE=1`. El wrapper fija
+`JOB_TYPE=plan_temario`, exige `JOB_REF` exacto y rechaza secuencias.
 
 ## Criterio editorial para Operario
 
