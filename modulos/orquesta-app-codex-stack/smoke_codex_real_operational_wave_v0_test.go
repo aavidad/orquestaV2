@@ -61,6 +61,101 @@ func TestCodexStackRecursiveTreeFakeRuntimeV0(t *testing.T) {
 	}
 }
 
+func TestCodexStackRecursiveTreeFakeRuntimeNoCierraPadreAntesDeHijosV0(t *testing.T) {
+	ctx := context.Background()
+	cfg := codexStackRequiredTestLocalConfigV0(t)
+	cfg.MaxBatchReady = 2
+	cfg.MaxConcurrency = 2
+	writeCodexStackRequiredTestTinyGoModuleV0(t, cfg.ProjectWorkDir)
+	goCommand := codexStackRequiredTestGoCommandV0(t)
+	outputDir := filepath.Join(t.TempDir(), "required-test-output")
+
+	runtime := &codexStackRequiredTestPendingRuntimeV0{}
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	stack := codexStackRealRequiredTestRunnerStackV0(t, cfg, runtime, evidenceStore, goCommand, outputDir)
+	stack.Ports.DeliverySource = nil
+	stack.Ports.ReviewGateSource = nil
+	stack.Ports.ReviewReworkReplanSource = nil
+	stack.Ports.AssessmentReplanSource = nil
+	stack.Ports.ProgressSource = nil
+	stack.Ports.DirectorDecisionSource = nil
+	fixture := newCodexStackRecursiveTreeFixtureWithSuffixV0("no-close-parent-open-children")
+	codexStackRecursiveTreeSeedV0(t, ctx, stack, fixture)
+
+	parent := fixture.taskV0("task-recursive-parent")
+	parentAgent := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(parent.TaskID)
+	deliveryRef := "delivery-ref-" + parent.TaskID
+	events := stackOperationalClosureRecursiveEventsForTestV0(t, fixture.RunRef, []orquestacoreworkflow.WorkflowTaskV0{parent})
+	if err := stack.Stores.EventSink.AppendRunEventsV0(ctx, fixture.RunRef, events); err != nil {
+		t.Fatalf("AppendRunEventsV0 parent: %v", err)
+	}
+	if err := evidenceStore.SaveRequiredTestEvidenceV0(
+		ctx,
+		stackOperationalClosureRequiredTestEvidenceForTestV0(fixture.RunRef, parent.TaskID, deliveryRef),
+	); err != nil {
+		t.Fatalf("SaveRequiredTestEvidenceV0 parent: %v", err)
+	}
+
+	run := mustLoadCodexStackRunForTestV0(t, stack, fixture.RunRef)
+	run.CurrentPhase = orquestacoreworkflow.OrchestrationPhaseRevisionV0
+	run.Phases = codexStackRequiredTestPhasesV0()
+	run.Agents = []string{parentAgent}
+	run.StartedAgents = []string{parentAgent}
+	run.DeliveredAgents = []string{parentAgent}
+	run.DeliveredTasks = []string{parent.TaskID}
+	run.Deliveries = []string{deliveryRef}
+	run.Reviews = []string{"review-request-ref-" + deliveryRef}
+	run.ReviewResults = []string{
+		"review-result-ref-" + deliveryRef + "#review_result:accepted#review_request:review-request-ref-" + deliveryRef + "#delivery:" + deliveryRef,
+	}
+	run.AcceptedReviews = []string{"accepted-review-ref-" + deliveryRef}
+	run.LastSequence = int64(len(events))
+	run.LastEventID = events[len(events)-1].EventID
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0 parent delivery: %v", err)
+	}
+	if err := stack.Stores.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(
+		ctx,
+		codexStackRecursiveTreeParentOnlyReadyToCloseStateV0(fixture, parent, deliveryRef),
+	); err != nil {
+		t.Fatalf("SaveOperationalDirectorPlanStateV0 parent ready: %v %s", err, codexStackRequiredTestErrorDetailsV0(err))
+	}
+
+	result, err := orquestaappdirectorservice.ContinueAppDirectorV0(ctx, orquestaappdirectorservice.ContinueAppDirectorRequestV0{
+		RunRef:                     fixture.RunRef,
+		OperationalDirectorPlanRef: fixture.PlanRef,
+		OccurredAt:                 "2026-05-22T20:41:00Z",
+		CorrelationID:              "corr-recursive-tree-no-close-parent",
+		WaitAgentRefs:              []string{parentAgent},
+		MaxBursts:                  2,
+		MaxStepsPerBurst:           4,
+		MaxDispatchesPerWait:       2,
+		MaxCommands:                16,
+		MaxOutboxPerCycle:          8,
+		MaxExternalWaits:           1,
+	}, stack.Ports)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0 parent ready: %v %s", err, codexStackRequiredTestErrorDetailsV0(err))
+	}
+	if codexStackStringInSetForTestV0(result.Run.ClosedTasks, parent.TaskID) ||
+		len(result.Run.ClosedTasks) != 0 {
+		t.Fatalf("no debe cerrar padre ni hijos con child_task_refs abiertos: closed=%v run=%+v", result.Run.ClosedTasks, result.Run)
+	}
+	if result.Run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		t.Fatalf("no debe cerrar run con hijos abiertos: run=%+v", result.Run)
+	}
+	state := codexStackOperationalWaveLoadPlanStateV0(t, ctx, stack, codexStackOperationalWaveFixtureV0{
+		RunRef:  fixture.RunRef,
+		PlanRef: fixture.PlanRef,
+	})
+	if state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 {
+		t.Fatalf("no debe cerrar plan con hijos abiertos: state=%+v", state)
+	}
+	if runtime.launchCountV0() != 0 {
+		t.Fatalf("no debe lanzar agentes durante cierre acotado al padre: launches=%d", runtime.launchCountV0())
+	}
+}
+
 func TestCodexSupervisorStackLifecycleV0AvanzaArbolRecursivoFakeSinManualPorNivelV0(t *testing.T) {
 	ctx := context.Background()
 	cfg := codexStackRequiredTestLocalConfigV0(t)
@@ -1340,6 +1435,90 @@ func codexStackRecursiveTreePlanStateV0(
 				Status:    orquestadirectoroperativo.OperationalDirectorStepPendingV0,
 				WaveRef:   "wave-recursive-tree",
 				CohortRef: "cohort-recursive-tree",
+			},
+		},
+	}
+}
+
+func codexStackRecursiveTreeParentOnlyReadyToCloseStateV0(
+	fixture codexStackRecursiveTreeFixtureV0,
+	parent orquestacoreworkflow.WorkflowTaskV0,
+	deliveryRef string,
+) orquestacionnucleoapp.OperationalDirectorPlanStateV0 {
+	parentAgent := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(parent.TaskID)
+	reviewResultRef := "review-result-ref-" + deliveryRef
+	acceptedReviewRef := "accepted-review-ref-" + deliveryRef
+	requiredTestEvidenceRefs := []string{"test-evidence-ref-" + deliveryRef}
+	return orquestacionnucleoapp.OperationalDirectorPlanStateV0{
+		SchemaVersion:    orquestacionnucleoapp.OperationalDirectorPlanStateSchemaVersionV0,
+		StateRef:         "state-" + fixture.PlanRef + "-parent-only",
+		PlanRef:          fixture.PlanRef,
+		RequestRef:       "request-" + fixture.PlanRef + "-parent-only",
+		RunRef:           fixture.RunRef,
+		ProjectRef:       "project-recursive-tree-001",
+		Mode:             orquestadirectoroperativo.OperationalDirectorModeProgrammingV0,
+		Status:           orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0,
+		ActiveStepID:     "step-replan-or-close",
+		ActiveWaveRef:    parent.WaveRef,
+		ActiveCohortRef:  parent.CohortRef,
+		RequiredTestRefs: []string{"go test ./..."},
+		ObservedAt:       "2026-05-22T20:40:00Z",
+		Steps: []orquestacionnucleoapp.OperationalDirectorPlanStepStateV0{
+			{
+				StepID:    "step-launch-subagents",
+				Kind:      orquestadirectoroperativo.OperationalDirectorStepLaunchSubagentsV0,
+				Status:    orquestadirectoroperativo.OperationalDirectorStepAcceptedV0,
+				WaveRef:   parent.WaveRef,
+				CohortRef: parent.CohortRef,
+				TaskRefs:  []string{parent.TaskID},
+				AgentRefs: []string{parentAgent},
+			},
+			{
+				StepID:    "step-wait-subagents",
+				Kind:      orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0,
+				Status:    orquestadirectoroperativo.OperationalDirectorStepAcceptedV0,
+				WaveRef:   parent.WaveRef,
+				CohortRef: parent.CohortRef,
+				TaskRefs:  []string{parent.TaskID},
+				AgentRefs: []string{parentAgent},
+			},
+			{
+				StepID:             "step-review-deliveries",
+				Kind:               orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0,
+				Status:             orquestadirectoroperativo.OperationalDirectorStepAcceptedV0,
+				WaveRef:            parent.WaveRef,
+				CohortRef:          parent.CohortRef,
+				TaskRefs:           []string{parent.TaskID},
+				AgentRefs:          []string{parentAgent},
+				DeliveryRefs:       []string{deliveryRef},
+				ReviewResultRefs:   []string{reviewResultRef},
+				AcceptedReviewRefs: []string{acceptedReviewRef},
+			},
+			{
+				StepID:                   "step-run-required-tests",
+				Kind:                     orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0,
+				Status:                   orquestadirectoroperativo.OperationalDirectorStepAcceptedV0,
+				WaveRef:                  parent.WaveRef,
+				CohortRef:                parent.CohortRef,
+				TaskRefs:                 []string{parent.TaskID},
+				AgentRefs:                []string{parentAgent},
+				DeliveryRefs:             []string{deliveryRef},
+				ReviewResultRefs:         []string{reviewResultRef},
+				RequiredTestEvidenceRefs: requiredTestEvidenceRefs,
+				Reason:                   "required-tests-passed",
+			},
+			{
+				StepID:                   "step-replan-or-close",
+				Kind:                     orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0,
+				Status:                   orquestadirectoroperativo.OperationalDirectorStepRunningV0,
+				WaveRef:                  parent.WaveRef,
+				CohortRef:                parent.CohortRef,
+				TaskRefs:                 []string{parent.TaskID},
+				AgentRefs:                []string{parentAgent},
+				DeliveryRefs:             []string{deliveryRef},
+				ReviewResultRefs:         []string{reviewResultRef},
+				RequiredTestEvidenceRefs: requiredTestEvidenceRefs,
+				Reason:                   "required-tests-passed",
 			},
 		},
 	}
