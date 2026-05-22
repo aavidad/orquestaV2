@@ -169,9 +169,11 @@ La observacion negativa de review con `ReworkRequested` y
 `ReplanDecisionRecorded` queda probada como observacion durable del `PlanState`.
 El cierre operativo ya marca el state como `closed` o `blocked` con
 `closure_reason`. Existe adaptador externo opt-in en
-`modulos/orquesta-runtime-required-test` y wiring desde `cmd/orquesta-server`;
-siguen pendientes la prueba real de servidor con runner opt-in, replan
-automatico para blockers y replay/idempotencia.
+`modulos/orquesta-runtime-required-test` y wiring desde `cmd/orquesta-server`.
+El replan automatico por test fallido de una unica task causal ya queda cubierto
+offline, tambien tras reinicio `state-file`, sin duplicar quality gate, replan
+ni apertura de fase. Sigue pendiente reproducir el ciclo con proveedor real en
+ola/cohorte amplia o recursion.
 
 Alcance esperado:
 

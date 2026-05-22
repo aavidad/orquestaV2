@@ -310,6 +310,99 @@ func TestContinueAppDirectorV0StateFileReplayClosureIssueReplanNoDuplica(t *test
 	serviceAssertFullReplayReplanCountsV0(t, recoveredAgain, runRef, planRef, 1, 1, 0, 0, 1)
 }
 
+func TestContinueAppDirectorV0StateFileReplayRequiredTestsFailedReplanNoDuplica(t *testing.T) {
+	ctx := context.Background()
+	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
+	fixture.Run.CurrentPhase = orquestacoreworkflow.OrchestrationPhaseRevisionV0
+	fixture.Run.Phases = []orquestacoreworkflow.OrchestrationPhaseV0{
+		{
+			ID:                  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+			Status:              orquestacoreworkflow.OrchestrationPhaseStatusPendingV0,
+			RecommendedCapacity: orquestacoreworkflow.OrchestrationCapacityHighV0,
+		},
+		{
+			ID:                  orquestacoreworkflow.OrchestrationPhaseRevisionV0,
+			Status:              orquestacoreworkflow.OrchestrationPhaseStatusActiveV0,
+			RecommendedCapacity: orquestacoreworkflow.OrchestrationCapacityHighV0,
+		},
+	}
+	fixture.Run.LastSequence = 4
+
+	rootDir := t.TempDir()
+	store := serviceFullReplayStateFileStoreForTestV0(t, rootDir)
+	if err := store.SaveRunV0(ctx, fixture.Run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if err := store.AppendRunEventsV0(ctx, fixture.RunRef, fixture.Events); err != nil {
+		t.Fatalf("AppendRunEventsV0 seed: %v", err)
+	}
+	if err := store.SaveOperationalDirectorPlanStateV0(ctx, fixture.State); err != nil {
+		t.Fatalf("SaveOperationalDirectorPlanStateV0: %v", err)
+	}
+	if err := store.SaveRequiredTestEvidenceV0(ctx, serviceOperationalDirectorRequiredTestEvidenceForFixtureV0(
+		fixture,
+		orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0,
+	)); err != nil {
+		t.Fatalf("SaveRequiredTestEvidenceV0: %v", err)
+	}
+
+	request := ContinueAppDirectorRequestV0{
+		RunRef:                     fixture.RunRef,
+		OccurredAt:                 "2026-05-23T00:00:00Z",
+		CorrelationID:              "corr-service-required-tests-statefile-replan-replay-first",
+		RequestedBy:                "orquesta-app-director-service-test",
+		OperationalDirectorPlanRef: fixture.PlanRef,
+	}
+	firstPorts := serviceFullReplayStateFileRequiredTestsReplanPortsForTestV0(store)
+	if err := updateOperationalDirectorPlanStateAfterLoopV0(ctx, request, firstPorts, orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run:    fixture.Run,
+	}); err != nil {
+		t.Fatalf("updateOperationalDirectorPlanStateAfterLoopV0 first: %v", err)
+	}
+	serviceAssertFullReplayRequiredTestsReplanCountsV0(t, store, fixture.RunRef, fixture.PlanRef, 1, 1, 1, 0)
+
+	firstRun, err := store.LoadRunV0(ctx, fixture.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 first: %v", err)
+	}
+	if firstRun.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 ||
+		len(firstRun.QualityGates) != 1 ||
+		len(firstRun.ReplanDecisions) != 1 {
+		t.Fatalf("run tras primer replan invalido: %+v", firstRun)
+	}
+
+	recovered := serviceFullReplayStateFileStoreForTestV0(t, rootDir)
+	recoveredRun, err := recovered.LoadRunV0(ctx, fixture.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 recovered: %v", err)
+	}
+	request.OccurredAt = "2026-05-23T00:00:01Z"
+	request.CorrelationID = "corr-service-required-tests-statefile-replan-replay-second"
+	if err := updateOperationalDirectorPlanStateAfterLoopV0(ctx, request, serviceFullReplayStateFileRequiredTestsReplanPortsForTestV0(recovered), orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run:    recoveredRun,
+	}); err != nil {
+		t.Fatalf("updateOperationalDirectorPlanStateAfterLoopV0 replay: %v", err)
+	}
+	serviceAssertFullReplayRequiredTestsReplanCountsV0(t, recovered, fixture.RunRef, fixture.PlanRef, 1, 1, 1, 0)
+
+	recoveredAgain := serviceFullReplayStateFileStoreForTestV0(t, rootDir)
+	directReplayRun, err := recoveredAgain.LoadRunV0(ctx, fixture.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 recovered again: %v", err)
+	}
+	request.OccurredAt = "2026-05-23T00:00:02Z"
+	request.CorrelationID = "corr-service-required-tests-statefile-replan-replay-third"
+	if err := updateOperationalDirectorPlanStateAfterLoopV0(ctx, request, serviceFullReplayStateFileRequiredTestsReplanPortsForTestV0(recoveredAgain), orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run:    directReplayRun,
+	}); err != nil {
+		t.Fatalf("updateOperationalDirectorPlanStateAfterLoopV0 direct replay: %v", err)
+	}
+	serviceAssertFullReplayRequiredTestsReplanCountsV0(t, recoveredAgain, fixture.RunRef, fixture.PlanRef, 1, 1, 1, 0)
+}
+
 func serviceFullReplayStateFileStoreForTestV0(t *testing.T, rootDir string) *orquestastatefile.StoreV0 {
 	t.Helper()
 	store, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{RootDir: rootDir})
@@ -411,6 +504,63 @@ func serviceAssertFullReplayReplanCountsV0(
 			len(waitStep.PendingAgentRefs) != 1 {
 			t.Fatalf("wait replay invalido: state=%+v waitStep=%+v", state, waitStep)
 		}
+	}
+}
+
+func serviceFullReplayStateFileRequiredTestsReplanPortsForTestV0(
+	store *orquestastatefile.StoreV0,
+) StartAppDirectorPortsV0 {
+	return StartAppDirectorPortsV0{
+		RunStore:                   store,
+		EventSink:                  store,
+		EventReader:                store,
+		OperationalPlanStateStore:  store,
+		OperationalPlanStateWriter: store,
+		RequiredTestEvidenceStore:  store,
+	}
+}
+
+func serviceAssertFullReplayRequiredTestsReplanCountsV0(
+	t *testing.T,
+	store *orquestastatefile.StoreV0,
+	runRef string,
+	planRef string,
+	wantGate int,
+	wantReplan int,
+	wantPhaseOpened int,
+	wantReplanAttempts int,
+) {
+	t.Helper()
+	events := serviceFullReplayEventsForTestV0(t, store, runRef)
+	if got := serviceCountEventsByTypeV0(events, orquestacoreworkflow.OrchestrationEventQualityGateRecordedV0); got != wantGate {
+		t.Fatalf("QualityGateRecorded got=%d want=%d events=%+v", got, wantGate, events)
+	}
+	if got := serviceCountEventsByTypeV0(events, orquestacoreworkflow.OrchestrationEventReplanDecisionRecordedV0); got != wantReplan {
+		t.Fatalf("ReplanDecisionRecorded got=%d want=%d events=%+v", got, wantReplan, events)
+	}
+	if got := serviceCountEventsByTypeV0(events, orquestacoreworkflow.OrchestrationEventPhaseOpenedV0); got != wantPhaseOpened {
+		t.Fatalf("PhaseOpened got=%d want=%d events=%+v", got, wantPhaseOpened, events)
+	}
+	run, err := store.LoadRunV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(run.QualityGates) != wantGate || len(run.ReplanDecisions) != wantReplan {
+		t.Fatalf("run replan counts invalidos: %+v", run)
+	}
+	state, err := store.LoadOperationalDirectorPlanStateV0(context.Background(), runRef, planRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	if state.ReplanAttempts != wantReplanAttempts {
+		t.Fatalf("ReplanAttempts got=%d want=%d state=%+v", state.ReplanAttempts, wantReplanAttempts, state)
+	}
+	testsStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-run-required-tests")
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
+		state.ActiveStepID != "step-run-required-tests" ||
+		testsStep.Reason != "required-tests-failed" ||
+		len(testsStep.RequiredTestEvidenceRefs) != 1 {
+		t.Fatalf("state replan replay invalido: state=%+v testsStep=%+v", state, testsStep)
 	}
 }
 

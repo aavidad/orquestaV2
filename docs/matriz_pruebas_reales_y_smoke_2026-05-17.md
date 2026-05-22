@@ -195,12 +195,12 @@ que haya test claro y se actualice la fila correspondiente de la matriz.
   `CODEX-REQTEST-REAL-E2E`; faltan ola/cohorte real amplia y recursion real.
   Debe demostrar que no se reconstruye desde stats ni desde agentes vivos
   globales.
-- [~] Evento/comando idempotente: el cierre exitoso y el bloqueo de cierre ya
-  tienen replay focal sin duplicar refs ni `RunClosed`; el runner de tests no
-  reejecuta si la evidencia deterministica ya existe. Review aceptada ya tiene
-  replay observable sin duplicar refs del `PlanState`. Falta extenderlo a replan
-  con la misma clave causal estable. La clave debe derivar de refs
-  estables del run/task/ola/cohorte, no de timestamps ni summaries.
+- [x] Evento/comando idempotente: el cierre exitoso, el bloqueo de cierre y el
+  replan automatico por tests fallidos tienen replay focal sin duplicar eventos
+  ni refs. El runner de tests no reejecuta si la evidencia deterministica ya
+  existe, review aceptada no duplica refs del `PlanState`, y el replan usa
+  claves estables derivadas de run/task/delivery/review/evidencia, no de
+  timestamps ni summaries.
 
 No mover estos casos a "cerrado" por existir `WaitAgentRefs`, por pasar un
 smoke real o por tener un source de cierre parcial. Cada frente necesita
@@ -254,8 +254,9 @@ evidencia focal propia.
 - `DIRECTOR-PLAN-STATE-OFFLINE` tiene contrato, stores, escritura inicial,
   reentrada, avance wait->review, salida positiva review->tests/replan, consumo
   de tests durables, bloqueo por evidencia faltante y cierre/bloqueo post-closure
-  cerrados para el ciclo fake-runtime probado sin duplicar la verdad de
-  `WorkflowTaskStore`, `WorkflowTaskWaitStateV0`, eventos/outbox ni
+  cerrados para el ciclo fake-runtime probado. El replay con `state-file` ya
+  cubre cierre, bloqueo de cierre y replan por tests fallidos sin duplicar la
+  verdad de `WorkflowTaskStore`, `WorkflowTaskWaitStateV0`, eventos/outbox ni
   `RequiredTestEvidenceV0`.
 - `CODEX-REQTEST-STATEFILE-SMOKE` cubre runner opt-in y persistencia con
   configuracion Codex validada, pero no ejecuta agente Codex vivo.

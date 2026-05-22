@@ -94,18 +94,20 @@ Validacion focal:
 go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-file ./modulos/orquesta-app-director-service -run 'Test.*OperationalDirectorPlanState|Test.*PlanState|TestContinueAppDirectorV0.*PlanState|TestContinueRequestWithOperationalDirectorPlanStateV0|TestUpdateOperationalDirectorPlanStateAfterLoopV0'
 ```
 
-## Pendiente de implementacion restante
+## Pendiente operativo restante
 
-1. Materializar runner/adaptador real para generar `RequiredTestEvidenceV0`;
-   el consumo durable del step `run_required_tests` ya esta cubierto desde
-   `app-director-service`.
-2. Materializar runner/adaptador real y replan automatico para blockers
-   negativos.
-3. Agregar pruebas offline de replay/idempotencia, test faltante, blocker causal
-   y cierre solo con evidencias completas.
+`DIRECTOR-PLAN-STATE-OFFLINE` queda cerrado para el ciclo determinista probado:
+contrato, stores, escritura inicial, reentrada, review positiva por scope,
+consumo y generacion por puerto de `RequiredTestEvidenceV0`, evidencia faltante,
+test fallido con quality gate/replan, observacion negativa de review, cierre,
+bloqueo y replay/idempotencia con `state-file`.
 
-Hasta que esos puntos existan con pruebas, `DIRECTOR-PLAN-STATE-OFFLINE` queda
-parcialmente cerrado: contrato, stores, escritura inicial, reentrada, review
-positiva por scope, consumo de tests durables, observacion negativa y
-cierre/bloqueo del state existen; runner real, replan automatico de blockers y
-replay/idempotencia siguen pendientes.
+Lo que sigue pendiente no es mas transicion offline basica del `PlanState`, sino
+evidencia con runtime/proveedor vivo y dominios reales:
+
+1. Reproducir ola/cohorte amplia con Codex real y `PlanState` completo.
+2. Reproducir recursion Codex real padre/hijo/nieto con cierre del arbol.
+3. Cerrar derivados OPES reales contra instancia temporal por adaptador de
+   dominio, no por conocimiento interno del nucleo.
+4. Agregar casos nuevos solo cuando aparezca un blocker causal distinto; no
+   reabrir este tramo por smokes reales pendientes.

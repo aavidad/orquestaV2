@@ -126,9 +126,11 @@ servicio ya puede invocar el runner inyectado si no encuentra evidencias
 causales ya persistidas, reevalua el `PlanState` con las refs generadas y
 bloquea si una evidencia causal llega como `failed`.
 
-Pendiente: prueba real de programacion con agentes/subagentes usando el runner
-activado y replan negativo automatico para blockers de tests fallidos o runner
-invalido.
+Pendiente: prueba real de programacion con ola/cohorte amplia o recursion
+Codex usando el runner activado. El replan negativo automatico por test fallido
+de una unica task causal ya queda cerrado offline con replay `state-file`; si
+aparece un blocker distinto del runner, debe entrar como caso nuevo con prueba
+propia.
 
 No basta con que el agente escriba un summary ni con que el review result
 mencione un comando. El cierre solo debe consumir evidencias durables guardadas
@@ -143,7 +145,7 @@ go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-di
 
 ## ORCH-CORE-DIR-008: estado vivo del plan operativo
 
-Estado: parcial implementado.
+Estado: cerrado offline para el ciclo probado.
 
 Objetivo: introducir `OperationalDirectorPlanStateV0` como foto durable y
 reentrable del avance del plan. Debe registrar run, plan, step activo,
@@ -181,11 +183,15 @@ Implementado:
   `operational_director_plan_ref`.
 - avance de `wait_subagents` a `review_deliveries` cuando el wait queda
   consumido.
+- avance por review positiva, tests requeridos, evidencia faltante/fallida,
+  replan causal, followups tardios y cierre/bloqueo;
+- replay con `state-file` para cierre, bloqueo de cierre y replan por tests
+  fallidos sin duplicar eventos ni refs.
 
-Pendiente:
+Pendiente operativo:
 
-- actualizarlo despues de review, tests, replan y cierre;
-- pruebas de replay, entrega fuera de scope y blockers causales completos.
+- reproducir el mismo ciclo con Codex real de ola/cohorte amplia y recursion;
+- cerrar derivados OPES reales solo desde conector/adaptador de dominio.
 
 Validacion:
 
