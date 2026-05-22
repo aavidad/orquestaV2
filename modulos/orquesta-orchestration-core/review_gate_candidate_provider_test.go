@@ -93,6 +93,55 @@ func TestReviewGateCandidateProviderV0BuildsAcceptForAccepted(t *testing.T) {
 	}
 }
 
+func TestReviewGateCandidateProviderV0ProgressiveLoopAcceptsReviewSinReplan(t *testing.T) {
+	runRef := "run-nucleo-review-gate-accept-loop-001"
+	run := mustReviewGateReadyRunV0(t, runRef)
+	observation := reviewGateObservationForTestV0(orquestacoreworkflow.ReviewResultStatusAcceptedV0)
+	observation.AcceptedReviewRef = "accepted-review-ref-nucleo-review-001"
+	store := NewInMemoryRunStoreV0(run)
+	ledger := NewInMemoryOutboxLedgerV0()
+	sink := NewInMemoryEventSinkV0()
+	service := ServiceV0{
+		RunStore:  store,
+		EventSink: sink,
+		CandidateProvider: ReviewGateCandidateProviderV0{
+			GateSource:  staticReviewGateObservationSourceV0{Observations: []ReviewGateObservationV0{observation}},
+			RequestedBy: "orquesta-nucleo-test",
+		},
+		OutboxLedger:      ledger,
+		MaxCommands:       6,
+		MaxOutboxPerCycle: 2,
+	}
+
+	result, err := service.RunProgressiveLoopV0(context.Background(), ProgressiveLoopRequestV0{
+		RunRef:               runRef,
+		OccurredAt:           "2026-05-10T09:31:30Z",
+		MaxBursts:            3,
+		MaxStepsPerBurst:     4,
+		MaxDispatchesPerWait: 1,
+		CorrelationID:        "corr-review-gate-accept-loop-001",
+		EvidenceRefs:         []string{"evidence-ref-review-gate-accept-loop-001"},
+	})
+	if err != nil {
+		t.Fatalf("progressive loop accept review: %v", err)
+	}
+	if !reviewReworkRunContainsRefV0(result.Run.Reviews, "review-request-ref-nucleo-review-001") ||
+		!reviewReworkRunHasRefV0(result.Run.ReviewResults, "review-result-ref-nucleo-review-001", "#review_result:") ||
+		!reviewReworkRunContainsRefV0(result.Run.AcceptedReviews, "accepted-review-ref-nucleo-review-001") {
+		t.Fatalf("review aceptada incompleta: reviews=%v results=%v accepted=%v",
+			result.Run.Reviews, result.Run.ReviewResults, result.Run.AcceptedReviews)
+	}
+	if len(result.Run.ReworkRequests) != 0 || len(result.Run.ReplanDecisions) != 0 ||
+		result.Run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		t.Fatalf("review aceptada no debe replanificar ni cerrar: %+v", result.Run)
+	}
+	assertReviewReworkProgressiveEventsV0(t, sink, []string{
+		orquestacoreworkflow.OrchestrationEventReviewRequestedV0,
+		orquestacoreworkflow.OrchestrationEventReviewResultRecordedV0,
+		orquestacoreworkflow.OrchestrationEventReviewAcceptedV0,
+	})
+}
+
 func TestReviewGateCandidateProviderV0LimitaUnCandidatoPorTick(t *testing.T) {
 	run := mustReviewGateReadyRunV0(t, "run-nucleo-review-gate-single-tick-001")
 	second := reviewGateObservationForTestV0(orquestacoreworkflow.ReviewResultStatusChangesRequestedV0)

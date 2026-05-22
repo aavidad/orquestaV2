@@ -130,9 +130,10 @@ Primer tramo durable del Director Operativo:
 
 No crear todavia un runtime nuevo ni meter SQL/OPES en el nucleo para esto.
 
-La pieza de review/replan ya tiene el camino de escritura necesario para
-`split_task`, pero sigue faltando integrarla como estado durable del ciclo
-operativo: entrega observada -> review -> rework/replan -> nueva ola -> cierre.
+La pieza de review/replan ya esta integrada offline como estado durable del
+ciclo operativo probado: entrega observada -> review -> rework/replan ->
+nueva espera o cierre. `split_task` guarda `WorkflowTaskV0` por puerto, conserva
+linaje y puede reabrir una espera acotada cuando los followups tardios aparecen.
 
 ## P1 WaitAgentRefs cerrado
 
@@ -171,8 +172,9 @@ Continuar cierre generico causal offline sin reabrir P1:
   outbox cero y source/task store disponibles; tambien bloquea/reintenta por
   prerequisitos y por cierre insuficiente causal en casos cubiertos.
 - estado del plan: ya persiste refs de review, tests, blockers y cierre/bloqueo
-  en los tramos cubiertos. Falta completar replan generico de blockers no
-  cubiertos y replay/idempotencia completa de ese replan.
+  en los tramos cubiertos. El replay con `state-file` ya cubre cierre, bloqueo
+  de cierre y replan por tests fallidos sin duplicar eventos. Un blocker nuevo
+  no cubierto debe entrar como caso nuevo con prueba focal.
 
 Este corte debe apoyarse en los comandos ya existentes de core-workflow:
 `RecordReviewResult`, `AcceptReview`, `RequestRework`, `RecordReplanDecision` y
@@ -200,7 +202,7 @@ Recursion gobernada:
 - No esperar "todos los agentes vivos".
 - No consumir decision de agente hijo sin ACK/artefacto causal.
 - No presentar una cohorte Codex como ciclo funcional completo solo porque la
-  ingesta ya este acotada por `WaitAgentRefs`; aun faltan review por ola, tests
-  requeridos, cierre/replan y actualizaciones posteriores del plan state.
+  ingesta ya este acotada por `WaitAgentRefs`; el ciclo offline existe, pero
+  siguen faltando smokes reales de ola/cohorte amplia y recursion.
 - No cablear `orquesta-domain-work-sql` ni DB real al Director.
 - No mover conocimiento de OPES dentro de `orquesta-director-operativo`.

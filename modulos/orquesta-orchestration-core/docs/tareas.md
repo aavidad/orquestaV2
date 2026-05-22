@@ -67,7 +67,7 @@ go test -count=1 ./modulos/orquesta-orchestration-core -run Test.*WorkflowTaskWa
 
 ## ORCH-CORE-DIR-005: materializar review/rework/replan del Director Operativo
 
-Estado: pendiente parcial.
+Estado: cerrado offline para el ciclo probado.
 
 Objetivo: conectar pasos `review_deliveries`, `run_required_tests` y
 `replan_or_close` con comandos existentes del workflow:
@@ -80,11 +80,30 @@ Objetivo: conectar pasos `review_deliveries`, `run_required_tests` y
 
 Debe conservar causalidad entre delivery, review, rework/replan y cierre.
 
-Nota del corte 2026-05-17: el provider de review/replan ya soporta
-`split_task` y guarda las nuevas `WorkflowTaskV0` si recibe un
-`WorkflowTaskWriterPortV0`. La composicion de `app-director-service` ya le pasa
-`DirectorTaskStore`; lo pendiente es convertirlo en tramo durable del Director
-Operativo, no solo en candidate provider disponible.
+Implementado:
+
+- `ReviewGateCandidateProviderV0` materializa `RecordReviewResult`,
+  `AcceptReview` para review aceptada y `RequestRework` para
+  `changes_requested`/`rejected`;
+- `ReviewReworkReplanCandidateProviderV0` materializa
+  `RecordReplanDecision`, reabre `programacion` y lanza followups;
+- `split_task` crea `WorkflowTaskV0` durables por `WorkflowTaskWriterPortV0`,
+  conserva parent/child refs, ola/cohorte, profundidad y fanout;
+- `OperationalDirectorClosureV0` cierra con `CloseTask`, validacion final y
+  `RunClosed` solo tras review aceptada, tests requeridos durables y evidencias
+  causales;
+- `app-director-service` enlaza este tramo con `OperationalDirectorPlanStateV0`
+  y cubre reentrada/replay con `state-file` para cierre, bloqueo y replan por
+  tests fallidos.
+
+Pendiente operativo: repetir el ciclo con proveedor Codex real en ola/cohorte
+amplia o recursion, y con OPES solo mediante conector/adaptador de dominio.
+
+Validacion:
+
+```sh
+go test -count=1 ./modulos/orquesta-orchestration-core -run 'TestReviewGateCandidateProviderV0ProgressiveLoopAcceptsReviewSinReplan|TestReviewReworkReplanCandidateProviderV0ProgressiveLoopRoutesChangesRequestedToNewAgent|TestReviewReworkReplanCandidateProviderV0ProgressiveLoopSplitCreatesSchedulableTasks|TestOperationalDirectorClosureV0CierraRunConReviewYTests'
+```
 
 ## ORCH-CORE-DIR-006: evidencia durable minima de tests requeridos
 

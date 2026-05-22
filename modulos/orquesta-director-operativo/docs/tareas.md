@@ -37,7 +37,7 @@ Implementacion: `WorkflowTaskWaitStateV0`,
 
 ## DIR-OP-004: review/rework/replan/cierre durable
 
-Estado: parcial.
+Estado: cerrado offline fuera del modulo puro.
 
 Objetivo: convertir `review_deliveries`, `run_required_tests` y
 `replan_or_close` en comandos/estado de workflow con evidencia causal.
@@ -45,9 +45,12 @@ Objetivo: convertir `review_deliveries`, `run_required_tests` y
 No cerrar tareas por ACK textual. Cerrar solo con entrega, review aceptada,
 tests requeridos si aplica y refs de evidencia.
 
-Estado actual: review positiva y consumo de `RequiredTestEvidenceV0` ya tienen
-corte offline en `app-director-service`; sigue pendiente runner/adaptador real
-de tests, rama negativa rework/replan y cierre completo.
+Estado actual: el contrato sigue puro y no ejecuta runtime. La materializacion
+real vive en `orquesta-orchestration-core` y `app-director-service`: review
+aceptada, `RequestRework`, `RecordReplanDecision`, `split_task`, runner por
+puerto de tests requeridos, cierre causal y replay `state-file` ya tienen corte
+offline. Lo pendiente de este frente no es mas contrato puro, sino smoke con
+Codex real amplio/recursivo y dominios reales por conectores.
 
 ## DIR-OP-005: recursion gobernada real
 
