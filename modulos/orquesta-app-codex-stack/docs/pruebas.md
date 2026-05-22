@@ -125,6 +125,19 @@ Cobertura Go actual:
   `codex-fake`, review, required-tests y plan cerrado queda cubierto por
   `EXT-NO-OPES`.
 
+Estado de huecos restantes:
+
+- Los smokes multiagente reales historicos prueban paralelismo del stack Codex,
+  decisiones del director y ACK/artefactos reales, pero son anteriores al cierre
+  causal completo del Director Operativo con `PlanState` y
+  `RequiredTestEvidenceV0`; no cierran la ola/cohorte amplia formal pendiente.
+- `CODEX-REQTEST-REAL-E2E` cierra solo el caso acotado de un agente Codex vivo
+  con runner y cierre causal.
+- `EXT-NO-OPES` cierra la ruta temporal no-OPES con `codex-fake`, no una
+  politica productiva de tests de dominio ni un proveedor Codex real.
+- OPES `plan_temario` real quedo cerrado para `document_plan` y creacion de
+  derivados pendientes; falta smoke real completo de derivados/cierre OPES.
+
 Guardas esperadas para pruebas futuras:
 
 - unitarios sin Codex real, sin DB real y sin credenciales;

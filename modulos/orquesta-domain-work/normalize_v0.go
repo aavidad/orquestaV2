@@ -26,6 +26,7 @@ func NormalizeDomainWorkJobRequestV0(
 	request.InputRefs = compactDomainWorkStringsV0(request.InputRefs)
 	request.Constraints = compactDomainWorkStringsV0(request.Constraints)
 	request.AcceptanceCriteria = compactDomainWorkStringsV0(request.AcceptanceCriteria)
+	request.RequiredTests = compactDomainWorkRequiredTestsV0(request.RequiredTests)
 	request.ExternalRefs = compactDomainWorkExternalRefsV0(request.ExternalRefs)
 	request.EvidenceRefs = compactDomainWorkStringsV0(request.EvidenceRefs)
 	if request.RequestID == "" {
@@ -88,6 +89,23 @@ func NormalizeDomainWorkJobRecordFilterV0(
 	return filter
 }
 
+func NormalizeDomainWorkRequiredTestPlanV0(
+	plan DomainWorkRequiredTestPlanV0,
+) DomainWorkRequiredTestPlanV0 {
+	plan.SchemaVersion = defaultDomainWorkSchemaV0(
+		plan.SchemaVersion,
+		DomainWorkRequiredTestPlanSchemaV0,
+	)
+	plan.DomainRef = strings.TrimSpace(plan.DomainRef)
+	plan.WorkKind = strings.TrimSpace(plan.WorkKind)
+	plan.JobRef = strings.TrimSpace(plan.JobRef)
+	plan.AcceptanceCriteria = compactDomainWorkStringsV0(plan.AcceptanceCriteria)
+	plan.RequiredTests = compactDomainWorkRequiredTestsV0(plan.RequiredTests)
+	plan.ExternalRefs = compactDomainWorkExternalRefsV0(plan.ExternalRefs)
+	plan.EvidenceRefs = compactDomainWorkStringsV0(plan.EvidenceRefs)
+	return plan
+}
+
 func defaultDomainWorkSchemaV0(value string, fallback string) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -148,6 +166,49 @@ func compactDomainWorkExternalRefsV0(
 		return []DomainWorkExternalRefV0{}
 	}
 	return out
+}
+
+func compactDomainWorkRequiredTestsV0(
+	values []DomainWorkRequiredTestV0,
+) []DomainWorkRequiredTestV0 {
+	seen := map[string]struct{}{}
+	out := make([]DomainWorkRequiredTestV0, 0, len(values))
+	for _, value := range values {
+		test := DomainWorkRequiredTestV0{
+			TestRef:                strings.TrimSpace(value.TestRef),
+			AcceptanceCriteria:     compactDomainWorkStringsV0(value.AcceptanceCriteria),
+			AcceptanceCriteriaRefs: compactDomainWorkStringsV0(value.AcceptanceCriteriaRefs),
+			InputRefs:              compactDomainWorkStringsV0(value.InputRefs),
+			ExternalRefs:           compactDomainWorkExternalRefsV0(value.ExternalRefs),
+			EvidenceRefs:           compactDomainWorkStringsV0(value.EvidenceRefs),
+		}
+		if test.TestRef == "" {
+			continue
+		}
+		key := test.TestRef + "\x00" +
+			strings.Join(test.AcceptanceCriteria, "\x00") + "\x00" +
+			strings.Join(test.AcceptanceCriteriaRefs, "\x00") + "\x00" +
+			strings.Join(test.InputRefs, "\x00") + "\x00" +
+			joinDomainWorkExternalRefsV0(test.ExternalRefs) + "\x00" +
+			strings.Join(test.EvidenceRefs, "\x00")
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, test)
+	}
+	if out == nil {
+		return []DomainWorkRequiredTestV0{}
+	}
+	return out
+}
+
+func joinDomainWorkExternalRefsV0(values []DomainWorkExternalRefV0) string {
+	parts := make([]string, 0, len(values)*2)
+	for _, value := range values {
+		parts = append(parts, value.Kind, value.Ref)
+	}
+	return strings.Join(parts, "\x00")
 }
 
 func compactDomainWorkFieldsV0(values []DomainWorkFieldV0) []DomainWorkFieldV0 {

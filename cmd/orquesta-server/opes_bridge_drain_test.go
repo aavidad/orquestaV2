@@ -624,8 +624,39 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerV0(t *testing.T) {
 	}
 	output := stdout.String()
 	if !strings.Contains(output, `"dry_run":true`) ||
-		!strings.Contains(output, `"selected_job_type":"draft_content_block"`) ||
-		!strings.Contains(output, `"job_ref":"job-ref-fake-draft-001"`) ||
+		!strings.Contains(output, `"selected_job_type":"assemble_topic"`) ||
+		!strings.Contains(output, `"empty_job_types":["draft_content_block","generate_visual_asset","review_legal","review_pedagogical","review_quality","validate_topic"]`) ||
+		!strings.Contains(output, `"job_ref":"job-ref-fake-assemble-topic-001"`) ||
+		!strings.Contains(output, `"status":"dry_run"`) {
+		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
+	}
+}
+
+func TestSmokeOPESPlanTemarioWrapperFakeServerV0(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 no disponible")
+	}
+	repoRoot := filepath.Clean("../..")
+	cmd := exec.Command("bash", "scripts/smoke_opes_plan_temario_operadores.sh")
+	cmd.Dir = repoRoot
+	cmd.Env = cleanOPESSmokeEnvForDrainTestV0(os.Environ())
+	cmd.Env = append(cmd.Env,
+		"ORQUESTA_OPES_PLAN_TEMARIO_FAKE_SERVER=1",
+		"SMOKE_ID=test-plan-temario-fake",
+		"SMOKE_OUT_DIR="+filepath.Join(t.TempDir(), "out"),
+	)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("script err=%v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, `"dry_run":true`) ||
+		!strings.Contains(output, `"job_type":"plan_temario"`) ||
+		!strings.Contains(output, `"job_ref":"job-ref-fake-plan-temario-operadores-001"`) ||
 		!strings.Contains(output, `"status":"dry_run"`) {
 		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
 	}

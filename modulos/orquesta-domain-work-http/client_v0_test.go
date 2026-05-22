@@ -72,7 +72,9 @@ func TestClientV0CreaJobYEnviaArtefactoPorContratoNeutral(t *testing.T) {
 	}
 	if job.JobRef != "job-ref-non-opes-001" ||
 		job.DomainRef != "domain-ref-non-opes-001" ||
-		gotJobRequest.ExternalRefs[0].Ref != "entity-ref-non-opes-001" {
+		gotJobRequest.ExternalRefs[0].Ref != "entity-ref-non-opes-001" ||
+		gotJobRequest.RequiredTests[0].TestRef != "domain-test-ref-non-opes-001" ||
+		gotJobRequest.RequiredTests[0].AcceptanceCriteriaRefs[0] != "criteria-ref-non-opes-001" {
 		t.Fatalf("job=%+v got=%+v", job, gotJobRequest)
 	}
 
@@ -253,6 +255,17 @@ func TestClientV0MantieneRefsOpacasEnJobsYArtefactos(t *testing.T) {
 	jobRequest.WorkRefs = []string{"workflow:case#99"}
 	jobRequest.InputRefs = []string{"input:opaque#payload"}
 	jobRequest.EvidenceRefs = []string{"evidence:opaque#job"}
+	jobRequest.RequiredTests = []orquestadomainwork.DomainWorkRequiredTestV0{{
+		TestRef:                "test:opaque#domain.contract",
+		AcceptanceCriteria:     []string{"Validado por politica del dominio propietario."},
+		AcceptanceCriteriaRefs: []string{"criteria:opaque#summary"},
+		InputRefs:              []string{"input:opaque#validator"},
+		EvidenceRefs:           []string{"evidence:opaque#required-test"},
+		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{{
+			Kind: "validator_ref",
+			Ref:  "validator:opaque#nonopes",
+		}},
+	}}
 	jobRequest.ExternalRefs = []orquestadomainwork.DomainWorkExternalRefV0{{
 		Kind: "external_ticket",
 		Ref:  "ticket:nonopes#abc.123",
@@ -320,7 +333,9 @@ func TestClientV0MantieneRefsOpacasEnJobsYArtefactos(t *testing.T) {
 		job.ExternalRefs[0].Ref != "ticket:nonopes#abc.123" ||
 		job.EvidenceRefs[0] != "evidence:opaque#job" ||
 		gotJobRequest.WorkRefs[0] != "workflow:case#99" ||
-		gotJobRequest.InputRefs[0] != "input:opaque#payload" {
+		gotJobRequest.InputRefs[0] != "input:opaque#payload" ||
+		gotJobRequest.RequiredTests[0].TestRef != "test:opaque#domain.contract" ||
+		gotJobRequest.RequiredTests[0].ExternalRefs[0].Ref != "validator:opaque#nonopes" {
 		t.Fatalf("job=%+v got=%+v", job, gotJobRequest)
 	}
 	if receipt.JobRef != "job:opaque#created" ||
@@ -369,6 +384,17 @@ func validJobRequestV0() orquestadomainwork.DomainWorkJobRequestV0 {
 		DomainRef:      "domain-ref-non-opes-001",
 		WorkKind:       "compose_external_summary",
 		Objective:      "crear job en app externa no OPES",
+		AcceptanceCriteria: []string{
+			"El artefacto cumple criterios del dominio externo.",
+		},
+		RequiredTests: []orquestadomainwork.DomainWorkRequiredTestV0{{
+			TestRef:                "domain-test-ref-non-opes-001",
+			AcceptanceCriteriaRefs: []string{"criteria-ref-non-opes-001"},
+			ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{{
+				Kind: "validator_ref",
+				Ref:  "validator-ref-non-opes-001",
+			}},
+		}},
 		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{{
 			Kind: "entity_ref",
 			Ref:  "entity-ref-non-opes-001",

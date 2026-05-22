@@ -10,6 +10,8 @@ Responsabilidad:
 - modelar la creacion de un job externo por puerto;
 - modelar la lectura filtrada de records `Request+Job` por puerto separado;
 - modelar la entrega de artefactos por puerto;
+- modelar politica de tests requeridos de dominio por refs, criterios de
+  aceptacion y puerto del adaptador propietario;
 - validar que el contrato no arrastra DB, rutas, runtime, proveedor ni modelo.
 
 Este modulo permite que OPES, programacion u otra app futura consuman la
@@ -37,6 +39,9 @@ Regla de juicio:
 - el dominio externo describe objetivo, reglas y contexto;
 - Orquesta piensa mediante director/agentes;
 - el dominio externo valida y ensambla con reglas deterministicas;
+- los tests requeridos de dominio los declara o resuelve el adaptador externo
+  por `DomainWorkRequiredTestPolicyPortV0`; no existe banco comun de tests ni
+  strings OPES en este contrato;
 - si el dominio necesita planificacion inteligente, debe pedir un trabajo de
   planificacion a Orquesta, no implementarla dentro del dominio.
 

@@ -18,6 +18,9 @@ Cobertura:
 - validacion de entrega de artefacto;
 - normalizacion de filtros `DomainWorkJobRecordFilterV0`;
 - puertos hexagonales de comando, lectura y entrega sin adaptadores concretos;
+- politica de tests requeridos de dominio como contrato/puerto:
+  `required_tests` viaja por `test_ref`, criteria refs, input refs,
+  external refs y evidencias, sin banco comun ni semantica OPES;
 - suite reusable `contracttest` para stores `DomainWorkJobRecordStorePortV0`;
 - guard de arquitectura contra DB, red, runtime, filesystem y legacy.
 

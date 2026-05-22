@@ -338,6 +338,16 @@ func TestCodexStackDirectorRecursiveWaveOfflineCierraSubarbolConWaitsAcotadosV0(
 		t.Fatalf("no debe cerrar hijo con nietos abiertos")
 	}
 
+	childAPartialClosureRun := run
+	childAPartialClosureRun.ClosedTasks = []string{grandA1.TaskID}
+	_, ok, err = source.BuildOperationalDirectorClosureRequestV0(ctx, stackOperationalClosureRecursiveClosureRequestForTestV0(childAPartialClosureRun, childA.TaskID))
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0 child parcial: %v", err)
+	}
+	if ok {
+		t.Fatalf("no debe cerrar hijo con un nieto pendiente")
+	}
+
 	childAClosureRun := run
 	childAClosureRun.ClosedTasks = []string{grandA1.TaskID, grandA2.TaskID}
 	got, ok, err := source.BuildOperationalDirectorClosureRequestV0(ctx, stackOperationalClosureRecursiveClosureRequestForTestV0(childAClosureRun, childA.TaskID))

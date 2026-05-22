@@ -33,6 +33,18 @@ Ruta probada:
    `submit_artifact` por el submitter HTTP neutral, genera review aceptada,
    evidencia durable de required tests y cierre operativo.
 
+Politica productiva de tests de dominio:
+
+- los tests requeridos no-OPES deben entrar como contrato de dominio:
+  `acceptance_criteria`, `required_tests[].test_ref`, refs de criterios,
+  `input_refs`, `external_refs` y `evidence_refs`;
+- si el dominio debe derivar o adaptar esos tests, lo hace mediante
+  `DomainWorkRequiredTestPolicyPortV0` en su adaptador/composicion;
+- Orquesta no mantiene banco comun de validadores de dominio y el contrato
+  no contiene strings OPES ni rutas/DB internas para decidir que ejecutar;
+- el runner concreto que convierta esas refs en evidencia durable debe vivir
+  fuera de `orquesta-domain-work` y ser opt-in por composicion.
+
 Criterio de exito:
 
 - salida `smoke=external-domain-non-opes-real`;
@@ -45,6 +57,6 @@ Criterio de exito:
 Limites:
 
 - No consume Codex real; usa `codex-fake` para mantener el smoke barato.
-- No define politica productiva de tests de dominio; usa validador local
-  allowlist por `RequiredTestRunner`.
+- La politica productiva queda cerrada como contrato/adaptador; este smoke
+  sigue usando runtime fake y validador temporal para no acoplar un dominio real.
 - No comparte DB ni filesystem interno entre Orquesta y la app externa.

@@ -24,14 +24,21 @@ mkdir -p "$PROJECT_DIR" "$OUT_DIR"
 
 DRY_RUN_FLAG=""
 REAL_MODE=0
+REAL_CONFIG_ONLY=0
 CODEX_COMMAND="${ORQUESTA_CODEX_COMMAND:-$FAKE_CODEX}"
-if [[ "${ORQUESTA_CODEX_DIRECTOR_RECURSIVE_REAL_CONFIRM:-0}" == "1" ]]; then
+if [[ "${ORQUESTA_CODEX_DIRECTOR_RECURSIVE_REAL_CONFIG_ONLY:-0}" == "1" ]]; then
+  REAL_CONFIG_ONLY=1
+fi
+if [[ "${ORQUESTA_CODEX_DIRECTOR_RECURSIVE_REAL_CONFIRM:-0}" == "1" || "$REAL_CONFIG_ONLY" == "1" ]]; then
   REAL_MODE=1
   if [[ -z "${ORQUESTA_CODEX_COMMAND:-}" ]]; then
-    echo "ORQUESTA_CODEX_COMMAND requerido para modo real" >&2
+    echo "ORQUESTA_CODEX_COMMAND requerido para modo real/config real" >&2
     exit 2
   fi
   CODEX_COMMAND="$ORQUESTA_CODEX_COMMAND"
+  if [[ "$REAL_CONFIG_ONLY" == "1" ]]; then
+    DRY_RUN_FLAG="--dry-run"
+  fi
 else
   if [[ "${ORQUESTA_CODEX_DIRECTOR_RECURSIVE_DRY_RUN:-0}" == "1" ]]; then
     DRY_RUN_FLAG="--dry-run"
@@ -93,7 +100,8 @@ import time
 path = sys.argv[1]
 with open(path, "r", encoding="utf-8") as fh:
     summary = json.load(fh)
-real_mode = os.environ.get("ORQUESTA_CODEX_DIRECTOR_RECURSIVE_REAL_CONFIRM") == "1"
+real_config_only = os.environ.get("ORQUESTA_CODEX_DIRECTOR_RECURSIVE_REAL_CONFIG_ONLY") == "1"
+real_mode = os.environ.get("ORQUESTA_CODEX_DIRECTOR_RECURSIVE_REAL_CONFIRM") == "1" or real_config_only
 
 issues = summary.get("issues") or []
 if issues:
@@ -194,6 +202,8 @@ for node in nodes:
     runtime_work_dir = os.path.normpath(agent.get("runtime_work_dir") or "")
     if "--output-last-message" not in wrapper or last_message_path not in wrapper:
         raise SystemExit(f"wrapper_sin_last_message={agent_ref}")
+    if 'model_reasoning_effort="xhigh"' in wrapper or 'model_reasoning_effort="high"' not in wrapper:
+        raise SystemExit(f"wrapper_reasoning_effort_invalido={agent_ref}")
     if not os.path.normpath(last_message_path).startswith(runtime_work_dir + os.sep):
         raise SystemExit(f"last_message_fuera_runtime={agent_ref}")
     if (summary.get("launch") or {}).get("dry_run"):
@@ -225,5 +235,6 @@ print("opaque_agent_refs=7")
 print("registry_wrappers_ready=true")
 print("fake_runtime_executed=" + str(not real_mode and not bool((summary.get("launch") or {}).get("dry_run"))).lower())
 print("real_mode=" + str(real_mode).lower())
+print("real_config_only=" + str(real_config_only).lower())
 print("dry_run=" + str(bool((summary.get("launch") or {}).get("dry_run"))).lower())
 PY

@@ -831,8 +831,8 @@ func codexStackRealRequiredTestRunnerStackV0(
 			Runtime:        processRuntime,
 			ProcessStopper: processRuntime,
 			SnapshotSource: processRuntime,
-			MaxBatchReady:  1,
-			MaxConcurrency: 1,
+			MaxBatchReady:  cfg.MaxBatchReady,
+			MaxConcurrency: cfg.MaxConcurrency,
 			WaitInterval:   time.Second,
 		},
 		Capacity: CapacityConfigV0{

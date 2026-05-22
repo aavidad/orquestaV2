@@ -10,6 +10,7 @@ const (
 	DomainWorkJobSchemaV0                = "domain_work_job.v0"
 	DomainWorkArtifactSubmissionSchemaV0 = "domain_work_artifact_submission.v0"
 	DomainWorkArtifactReceiptSchemaV0    = "domain_work_artifact_receipt.v0"
+	DomainWorkRequiredTestPlanSchemaV0   = "domain_work_required_test_plan.v0"
 
 	DomainWorkStatusAcceptedV0 = "accepted"
 	DomainWorkStatusInvalidV0  = "invalid"
@@ -30,25 +31,27 @@ const (
 	ErrDomainWorkArtifactRefRequiredV0  = "domain_work_artifact_ref_required"
 	ErrDomainWorkArtifactTypeRequiredV0 = "domain_work_artifact_type_required"
 	ErrDomainWorkFieldJSONInvalidV0     = "domain_work_field_json_invalid"
+	ErrDomainWorkRequiredTestRefV0      = "domain_work_required_test_ref_invalid"
 )
 
 type DomainWorkJobRequestV0 struct {
-	SchemaVersion      string                    `json:"schema_version"`
-	RequestID          string                    `json:"request_id,omitempty"`
-	CorrelationID      string                    `json:"correlation_id"`
-	IdempotencyKey     string                    `json:"idempotency_key"`
-	RequestedBy        string                    `json:"requested_by"`
-	DomainRef          string                    `json:"domain_ref"`
-	InterfaceRefs      []string                  `json:"interface_refs,omitempty"`
-	WorkKind           string                    `json:"work_kind"`
-	WorkRefs           []string                  `json:"work_refs,omitempty"`
-	Objective          string                    `json:"objective"`
-	InputFields        []DomainWorkFieldV0       `json:"input_fields,omitempty"`
-	InputRefs          []string                  `json:"input_refs,omitempty"`
-	Constraints        []string                  `json:"constraints,omitempty"`
-	AcceptanceCriteria []string                  `json:"acceptance_criteria,omitempty"`
-	ExternalRefs       []DomainWorkExternalRefV0 `json:"external_refs,omitempty"`
-	EvidenceRefs       []string                  `json:"evidence_refs,omitempty"`
+	SchemaVersion      string                     `json:"schema_version"`
+	RequestID          string                     `json:"request_id,omitempty"`
+	CorrelationID      string                     `json:"correlation_id"`
+	IdempotencyKey     string                     `json:"idempotency_key"`
+	RequestedBy        string                     `json:"requested_by"`
+	DomainRef          string                     `json:"domain_ref"`
+	InterfaceRefs      []string                   `json:"interface_refs,omitempty"`
+	WorkKind           string                     `json:"work_kind"`
+	WorkRefs           []string                   `json:"work_refs,omitempty"`
+	Objective          string                     `json:"objective"`
+	InputFields        []DomainWorkFieldV0        `json:"input_fields,omitempty"`
+	InputRefs          []string                   `json:"input_refs,omitempty"`
+	Constraints        []string                   `json:"constraints,omitempty"`
+	AcceptanceCriteria []string                   `json:"acceptance_criteria,omitempty"`
+	RequiredTests      []DomainWorkRequiredTestV0 `json:"required_tests,omitempty"`
+	ExternalRefs       []DomainWorkExternalRefV0  `json:"external_refs,omitempty"`
+	EvidenceRefs       []string                   `json:"evidence_refs,omitempty"`
 }
 
 type DomainWorkJobV0 struct {
@@ -116,6 +119,27 @@ type DomainWorkExternalRefV0 struct {
 	Ref  string `json:"ref"`
 }
 
+type DomainWorkRequiredTestV0 struct {
+	TestRef                string                    `json:"test_ref"`
+	AcceptanceCriteria     []string                  `json:"acceptance_criteria,omitempty"`
+	AcceptanceCriteriaRefs []string                  `json:"acceptance_criteria_refs,omitempty"`
+	InputRefs              []string                  `json:"input_refs,omitempty"`
+	ExternalRefs           []DomainWorkExternalRefV0 `json:"external_refs,omitempty"`
+	EvidenceRefs           []string                  `json:"evidence_refs,omitempty"`
+}
+
+type DomainWorkRequiredTestPlanV0 struct {
+	SchemaVersion      string                     `json:"schema_version"`
+	DomainRef          string                     `json:"domain_ref"`
+	WorkKind           string                     `json:"work_kind"`
+	JobRef             string                     `json:"job_ref,omitempty"`
+	AcceptanceCriteria []string                   `json:"acceptance_criteria,omitempty"`
+	RequiredTests      []DomainWorkRequiredTestV0 `json:"required_tests,omitempty"`
+	ExternalRefs       []DomainWorkExternalRefV0  `json:"external_refs,omitempty"`
+	EvidenceRefs       []string                   `json:"evidence_refs,omitempty"`
+	Issues             []DomainWorkIssueV0        `json:"issues,omitempty"`
+}
+
 type DomainWorkFieldV0 struct {
 	Name      string          `json:"name"`
 	Value     string          `json:"value,omitempty"`
@@ -143,4 +167,8 @@ type DomainWorkJobRecordStorePortV0 interface {
 
 type DomainWorkArtifactSubmitterPortV0 interface {
 	SubmitDomainWorkArtifactV0(context.Context, DomainWorkArtifactSubmissionV0) (DomainWorkArtifactReceiptV0, error)
+}
+
+type DomainWorkRequiredTestPolicyPortV0 interface {
+	BuildDomainWorkRequiredTestPlanV0(context.Context, DomainWorkJobRequestV0) (DomainWorkRequiredTestPlanV0, error)
 }

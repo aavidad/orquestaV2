@@ -343,10 +343,12 @@ ORQUESTA_OPES_PLAN_TEMARIO_FAKE_SERVER=1 \
   scripts/smoke_opes_plan_temario_operadores.sh
 ```
 
-Estas pruebas no ejecutan Codex ni llaman a OPES real. El smoke real de
-derivados sigue siendo opt-in, contra instancia temporal, y debe comprobar que
-OPES recibe artefactos validos y deduplica reintentos; en particular,
-`assemble_topic` debe entregar `artifact_type=assembled_topic`.
+Estas pruebas no ejecutan Codex ni llaman a OPES real. El fake REST de
+derivados fuerza la secuencia hasta `assemble_topic` y rechaza consultas sin
+`job_type`, `status=pending`, `execution_mode=external` y `limit` esperado.
+El smoke real de derivados sigue siendo opt-in, contra instancia temporal, y
+debe comprobar que OPES recibe artefactos validos y deduplica reintentos; en
+particular, `assemble_topic` debe entregar `artifact_type=assembled_topic`.
 
 Wrapper operador para derivados:
 
@@ -378,7 +380,7 @@ scripts/smoke_opes_derivatives_rest.sh
 El wrapper rechaza `ORQUESTA_OPES_BRIDGE_JOB_TYPE` y
 `ORQUESTA_OPES_BRIDGE_JOB_REF` para derivados porque la ruta segura aqui es la
 secuencia completa por fases. Cada ejecucion real debe revisar el JSON de salida
-en `/tmp/opes-salidas/derivatives-<smoke_id>/` antes de repetir o subir el
+en `/tmp/opes-salidas/derivatives-rest-<smoke_id>/` antes de repetir o subir el
 limite.
 
 Estado de cierre OPES real: este runbook solo deja comandos acotados para

@@ -69,6 +69,55 @@ func TestDomainWorkJobRequestV0RechazaJSONInvalido(t *testing.T) {
 	}
 }
 
+func TestDomainWorkJobRequestV0TransportaTestsRequeridosDeDominio(t *testing.T) {
+	request := NormalizeDomainWorkJobRequestV0(DomainWorkJobRequestV0{
+		RequestID:          " req-domain-non-opes-001 ",
+		DomainRef:          " domain-ref-non-opes ",
+		WorkKind:           " compose_external_summary ",
+		Objective:          " Crear resumen validable por app externa. ",
+		AcceptanceCriteria: []string{" Incluye resumen ejecutivo. ", "Incluye resumen ejecutivo."},
+		RequiredTests: []DomainWorkRequiredTestV0{
+			{
+				TestRef:                " domain-test:summary-contract#v1 ",
+				AcceptanceCriteria:     []string{" Respeta criterios del job. "},
+				AcceptanceCriteriaRefs: []string{" criteria-ref-summary-001 ", "criteria-ref-summary-001"},
+				InputRefs:              []string{" domain-input-ref-001 "},
+				ExternalRefs: []DomainWorkExternalRefV0{{
+					Kind: " domain_validator ",
+					Ref:  " validator-ref-summary-001 ",
+				}},
+				EvidenceRefs: []string{" evidence-ref-required-test-001 "},
+			},
+		},
+	})
+
+	if request.DomainRef != "domain-ref-non-opes" ||
+		request.RequiredTests[0].TestRef != "domain-test:summary-contract#v1" ||
+		len(request.AcceptanceCriteria) != 1 ||
+		len(request.RequiredTests[0].AcceptanceCriteriaRefs) != 1 ||
+		request.RequiredTests[0].ExternalRefs[0].Ref != "validator-ref-summary-001" {
+		t.Fatalf("request=%+v", request)
+	}
+	if issues := ValidateDomainWorkJobRequestV0(request); len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+}
+
+func TestDomainWorkJobRequestV0RechazaRequiredTestRefNoCompacta(t *testing.T) {
+	request := validDomainWorkJobRequestForTestV0()
+	request.RequiredTests = []DomainWorkRequiredTestV0{{
+		TestRef: "test ref con espacios",
+	}}
+
+	issues := ValidateDomainWorkJobRequestV0(request)
+
+	if len(issues) == 0 ||
+		issues[0].Code != ErrDomainWorkRequiredTestRefV0 ||
+		issues[0].Field != "required_tests" {
+		t.Fatalf("issues=%+v", issues)
+	}
+}
+
 func TestDomainWorkArtifactSubmissionV0ValidaEntrega(t *testing.T) {
 	submission := validDomainWorkArtifactSubmissionForTestV0()
 
@@ -116,10 +165,40 @@ func TestDomainWorkJobRecordFilterV0NormalizaContratoDeLectura(t *testing.T) {
 func TestDomainWorkPortsV0SonInterfacesHexagonales(t *testing.T) {
 	creator := fakeDomainWorkConnectorV0{}
 	submitter := fakeDomainWorkConnectorV0{}
+	policy := fakeDomainWorkConnectorV0{}
 	var _ DomainWorkJobCreatorPortV0 = creator
 	var _ DomainWorkJobRecordSourcePortV0 = creator
 	var _ DomainWorkJobRecordStorePortV0 = creator
 	var _ DomainWorkArtifactSubmitterPortV0 = submitter
+	var _ DomainWorkRequiredTestPolicyPortV0 = policy
+}
+
+func TestDomainWorkRequiredTestPolicyV0DevuelvePlanPorPuertoDeDominio(t *testing.T) {
+	policy := fakeDomainWorkConnectorV0{}
+	plan, err := policy.BuildDomainWorkRequiredTestPlanV0(
+		context.Background(),
+		NormalizeDomainWorkJobRequestV0(DomainWorkJobRequestV0{
+			RequestID: "req-domain-non-opes-policy-001",
+			DomainRef: "domain-ref-non-opes",
+			WorkKind:  "compose_external_summary",
+			Objective: "Crear resumen validable.",
+		}),
+	)
+	if err != nil {
+		t.Fatalf("BuildDomainWorkRequiredTestPlanV0: %v", err)
+	}
+	plan = NormalizeDomainWorkRequiredTestPlanV0(plan)
+
+	if plan.SchemaVersion != DomainWorkRequiredTestPlanSchemaV0 ||
+		plan.DomainRef != "domain-ref-non-opes" ||
+		plan.WorkKind != "compose_external_summary" ||
+		plan.RequiredTests[0].TestRef != "domain-test-ref-001" ||
+		plan.AcceptanceCriteria[0] != "Criterio de aceptacion del dominio propietario." {
+		t.Fatalf("plan=%+v", plan)
+	}
+	if issues := ValidateDomainWorkRequiredTestPlanV0(plan); len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
 }
 
 func validDomainWorkJobRequestForTestV0() DomainWorkJobRequestV0 {
@@ -187,4 +266,25 @@ func (fakeDomainWorkConnectorV0) ListDomainWorkJobRecordsV0(
 		Request: validDomainWorkJobRequestForTestV0(),
 		Job:     DomainWorkJobV0{Status: DomainWorkStatusAcceptedV0},
 	}}, nil
+}
+
+func (fakeDomainWorkConnectorV0) BuildDomainWorkRequiredTestPlanV0(
+	_ context.Context,
+	request DomainWorkJobRequestV0,
+) (DomainWorkRequiredTestPlanV0, error) {
+	request = NormalizeDomainWorkJobRequestV0(request)
+	return DomainWorkRequiredTestPlanV0{
+		SchemaVersion:      DomainWorkRequiredTestPlanSchemaV0,
+		DomainRef:          request.DomainRef,
+		WorkKind:           request.WorkKind,
+		AcceptanceCriteria: []string{"Criterio de aceptacion del dominio propietario."},
+		RequiredTests: []DomainWorkRequiredTestV0{{
+			TestRef:                "domain-test-ref-001",
+			AcceptanceCriteriaRefs: []string{"criteria-ref-001"},
+			ExternalRefs: []DomainWorkExternalRefV0{{
+				Kind: "domain_validator",
+				Ref:  "validator-ref-001",
+			}},
+		}},
+	}, nil
 }

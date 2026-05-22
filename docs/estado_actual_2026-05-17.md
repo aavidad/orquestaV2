@@ -327,9 +327,11 @@ Leer con cuidado:
   sin `ORQUESTA_OPES_BRIDGE_JOB_TYPE` ni `ORQUESTA_OPES_BRIDGE_JOB_REF`.
 - La espera por agentes ya puede derivar `WaitAgentRefs` desde cohortes u olas
   declaradas, persistirse como `WorkflowTaskWaitStateV0` y acotar la ingesta de
-  ACK/deliveries en el stack Codex. Aun falta promover timeout/recovery/review
-  posterior a ciclo durable completo. Esperar todos los procesos vivos del run
-  vuelve a introducir cuelgues falsos.
+  ACK/deliveries en el stack Codex. El ciclo durable offline ya cubre wait
+  consumido, wait expirado, review positiva/negativa, tests requeridos,
+  replan/cierre y varios replays; lo que falta es repetir la garantia con Codex
+  real en ola/cohorte amplia y recursion. Esperar todos los procesos vivos del
+  run vuelve a introducir cuelgues falsos.
 - El cierre operativo desde `ContinueAppDirectorV0` depende de que el loop haya
   quedado quiescent y de una `OperationalClosureSource` real. Sin esa fuente, no
   hay que anunciar cierre productivo aunque exista el cerrador offline generico.

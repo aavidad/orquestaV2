@@ -47,8 +47,10 @@ Tras los cortes del 2026-05-17, el estado real es:
   y `domain_work` no hace submit/recovery fuera del scope. `WaitAgentRefs` vacio
   conserva compatibilidad legacy de run completo.
 - `app-director-service` ya inyecta `DirectorTaskStore` en review/replan para
-  que un `split_task` pueda persistir nuevas `WorkflowTaskV0`; sigue pendiente
-  convertir esa pieza en tramo durable del Director Operativo.
+  que un `split_task` pueda persistir nuevas `WorkflowTaskV0`. Ese camino ya
+  tiene cobertura offline/focal cuando los followups causales existen en
+  `WorkflowTaskStore` y estan reflejados en `run.Tasks`; no equivale a
+  recursion Codex real completa ni a cierre productivo del arbol.
 - El siguiente tramo no es mas scope de espera ni source basico del stack: la
   salida positiva de `review_deliveries` por ola ya avanza el `PlanState` por
   cadena causal de eventos, y `run_required_tests` ya consume
@@ -73,8 +75,10 @@ Tras los cortes del 2026-05-17, el estado real es:
   `document_plan` con politica editorial OPES y `xhigh`. La superficie para IA
   es `orquesta.domain_work.v0` en `orquesta-mcp`; REST OPES es solo el
   adaptador inyectado hoy, y MCPO/servidor MCP real debe quedar como transporte
-  opt-in. Falta cerrar smoke real de `plan_temario` contra instancia OPES
-  aislada, no tocar OPES productivo ni drenar colas amplias.
+  opt-in. El smoke real acotado de `plan_temario` contra OPES temporal ya cerro
+  solo el plan y la creacion de derivados pendientes; sigue pendiente smoke real
+  completo de derivados/cierre OPES hasta `assemble_topic`, sin tocar OPES
+  productivo ni drenar colas amplias.
 - La recursion Codex productiva completa sigue pendiente. Offline/fake-runtime
   ya existe una prueba de arbol 1 -> 2 -> 4 con parent/child refs, presupuesto
   global, profundidad/fanout, waits acotados y bloqueo de cierre hasta cerrar

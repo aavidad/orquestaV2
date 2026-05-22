@@ -377,22 +377,26 @@ temporal real de derivados/cierre.
    una composicion externa temporal por refs opacas. OPES sigue pendiente de
    fuente/validacion real acotada contra instancia temporal.
 
-## Criterio de done del tramo restante
+## Criterio de done de huecos restantes
 
 El tramo offline ya tiene tests deterministas para review positiva por scope,
-tests durables, puerta de cierre, cierre causal, replay focal y varios blockers.
-El tramo restante se considera cerrado solo cuando haya tests que demuestren:
+tests durables, puerta de cierre, cierre causal, replay focal, cierre insuficiente
+causal con replan retry y varios blockers. `CODEX-REQTEST-REAL-E2E` demuestra
+entrega de un agente Codex vivo, review, evidencia durable de test y cierre en
+caso acotado. `EXT-NO-OPES` demuestra una app externa temporal con runtime fake
+y cierre por refs opacas.
 
-- blockers reparables no cubiertos producen `RequestRework` o
-  `RecordReplanDecision` con refs causales estables;
-- el replay de esos replans no duplica gates, replan decisions, followups,
-  waits ni eventos de cierre;
-- `CODEX-REQTEST-REAL-E2E` demuestra entrega de agente Codex vivo, review,
-  evidencia durable de test y cierre en caso acotado;
-- un smoke Codex real de ola/cohorte amplia demuestra el mismo ciclo con varios
-  agentes vivos y scope formal de Director Operativo;
-- recursion Codex real queda cubierta aparte con parent/child refs, limites,
-  presupuesto y review causal.
+Los huecos restantes no se consideran cerrados hasta tener evidencia propia:
+
+- smoke Codex real de ola/cohorte amplia con varios agentes vivos, mismo ciclo
+  de review/tests/cierre y scope formal de Director Operativo;
+- recursion Codex real con parent/child refs, limites, presupuesto, entregas
+  vivas, review causal y cierre del arbol;
+- OPES temporal real de derivados/cierre hasta `assemble_topic`, con refs
+  causales suficientes y sin asumir cierre desde dry-run o automatizacion
+  offline;
+- cualquier blocker nuevo no cubierto debe traer prueba focal de replan y replay
+  idempotente antes de declararse parte del tramo cerrado.
 
 Tests existentes que respaldan el tramo cerrado estan en la matriz:
 `DIRECTOR-GENERIC-CLOSURE-OFFLINE`,

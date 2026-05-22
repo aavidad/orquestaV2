@@ -47,6 +47,7 @@ func ValidateDomainWorkJobRequestV0(
 	issues = append(issues, validateDomainWorkFieldsV0(request.InputFields, "input_fields")...)
 	issues = append(issues, validateDomainWorkRefsV0(request.InputRefs, "input_refs")...)
 	issues = append(issues, validateDomainWorkRefsV0(request.EvidenceRefs, "evidence_refs")...)
+	issues = append(issues, validateDomainWorkRequiredTestsV0(request.RequiredTests)...)
 	issues = append(issues, validateDomainWorkExternalRefsV0(request.ExternalRefs)...)
 	return issues
 }
@@ -102,6 +103,32 @@ func ValidateDomainWorkArtifactSubmissionV0(
 	return issues
 }
 
+func ValidateDomainWorkRequiredTestPlanV0(
+	plan DomainWorkRequiredTestPlanV0,
+) []DomainWorkIssueV0 {
+	plan = NormalizeDomainWorkRequiredTestPlanV0(plan)
+	var issues []DomainWorkIssueV0
+	issues = append(issues, requiredDomainWorkRefV0(
+		plan.DomainRef,
+		"domain_ref",
+		ErrDomainWorkDomainRefRequiredV0,
+		ErrDomainWorkDomainRefInvalidV0,
+	)...)
+	issues = append(issues, requiredDomainWorkRefV0(
+		plan.WorkKind,
+		"work_kind",
+		ErrDomainWorkWorkKindRequiredV0,
+		ErrDomainWorkWorkKindInvalidV0,
+	)...)
+	if strings.TrimSpace(plan.JobRef) != "" && !isCompactDomainWorkRefV0(plan.JobRef) {
+		issues = append(issues, DomainWorkIssueV0{Code: ErrDomainWorkRefInvalidV0, Field: "job_ref"})
+	}
+	issues = append(issues, validateDomainWorkRequiredTestsV0(plan.RequiredTests)...)
+	issues = append(issues, validateDomainWorkRefsV0(plan.EvidenceRefs, "evidence_refs")...)
+	issues = append(issues, validateDomainWorkExternalRefsV0(plan.ExternalRefs)...)
+	return issues
+}
+
 func requiredDomainWorkRefV0(
 	value string,
 	field string,
@@ -124,6 +151,28 @@ func requiredDomainWorkTextV0(
 ) []DomainWorkIssueV0 {
 	if strings.TrimSpace(value) == "" {
 		return []DomainWorkIssueV0{{Code: code, Field: field}}
+	}
+	return nil
+}
+
+func validateDomainWorkRequiredTestsV0(values []DomainWorkRequiredTestV0) []DomainWorkIssueV0 {
+	for _, value := range values {
+		if !isCompactDomainWorkRefV0(value.TestRef) {
+			return []DomainWorkIssueV0{{Code: ErrDomainWorkRequiredTestRefV0, Field: "required_tests"}}
+		}
+		if issues := validateDomainWorkRefsV0(value.AcceptanceCriteriaRefs, "required_tests.acceptance_criteria_refs"); len(issues) > 0 {
+			return issues
+		}
+		if issues := validateDomainWorkRefsV0(value.InputRefs, "required_tests.input_refs"); len(issues) > 0 {
+			return issues
+		}
+		if issues := validateDomainWorkRefsV0(value.EvidenceRefs, "required_tests.evidence_refs"); len(issues) > 0 {
+			return issues
+		}
+		if issues := validateDomainWorkExternalRefsV0(value.ExternalRefs); len(issues) > 0 {
+			issues[0].Field = "required_tests.external_refs"
+			return issues
+		}
 	}
 	return nil
 }
