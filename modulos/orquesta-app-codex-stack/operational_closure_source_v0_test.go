@@ -188,6 +188,81 @@ func TestOperationalClosureSourceV0UsaDeliveryAceptadaAunqueHayaDeliveryPreviaNo
 	}
 }
 
+func TestOperationalClosureSourceV0NoCierraPadreConHijosAbiertos(t *testing.T) {
+	runRef := "run-stack-operational-closure-source-parent-open-child-001"
+	parent := stackOperationalClosureTaskForTestV0(runRef, "task-stack-operational-closure-parent", nil)
+	child := stackOperationalClosureTaskForTestV0(runRef, "task-stack-operational-closure-child", nil)
+	parent.ChildTaskRefs = []string{child.TaskID}
+	child.ParentTaskRef = parent.TaskID
+	child.DelegationDepth = parent.DelegationDepth + 1
+	run := stackOperationalClosureRunForTestV0(runRef, parent.TaskID, child.TaskID)
+	deliveryRef := "delivery-ref-stack-operational-closure-parent-open-child"
+	run.Deliveries = []string{deliveryRef}
+	run.AcceptedReviews = []string{"accepted-review-ref-" + deliveryRef}
+	reader := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	if err := reader.AppendRunEventsV0(context.Background(), runRef, []orquestacoreworkflow.OrchestrationEventV0{
+		stackOperationalClosureDeliveryEventForTestV0(t, runRef, 1, parent.TaskID, deliveryRef),
+		stackOperationalClosureReviewRequestedEventForTestV0(t, runRef, 2, deliveryRef),
+		stackOperationalClosureReviewResultEventForTestV0(t, runRef, 3, deliveryRef, orquestacoreworkflow.ReviewResultStatusAcceptedV0),
+		stackOperationalClosureAcceptedReviewEventForTestV0(t, runRef, 4, deliveryRef),
+	}); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	source := codexStackOperationalClosureSourceV0{
+		TaskStore:   orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(parent, child),
+		EventReader: reader,
+	}
+
+	_, ok, err := source.BuildOperationalDirectorClosureRequestV0(
+		context.Background(),
+		orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{Run: run, OccurredAt: "2026-05-17T14:21:00Z"},
+	)
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0: %v", err)
+	}
+	if ok {
+		t.Fatalf("no debe cerrar padre con child_task_refs abiertos")
+	}
+}
+
+func TestOperationalClosureSourceV0CierraPadreCuandoHijosYaCerrados(t *testing.T) {
+	runRef := "run-stack-operational-closure-source-parent-closed-child-001"
+	parent := stackOperationalClosureTaskForTestV0(runRef, "task-stack-operational-closure-parent-closed", nil)
+	child := stackOperationalClosureTaskForTestV0(runRef, "task-stack-operational-closure-child-closed", nil)
+	parent.ChildTaskRefs = []string{child.TaskID}
+	child.ParentTaskRef = parent.TaskID
+	child.DelegationDepth = parent.DelegationDepth + 1
+	run := stackOperationalClosureRunForTestV0(runRef, parent.TaskID, child.TaskID)
+	deliveryRef := "delivery-ref-stack-operational-closure-parent-closed-child"
+	run.Deliveries = []string{deliveryRef}
+	run.AcceptedReviews = []string{"accepted-review-ref-" + deliveryRef}
+	run.ClosedTasks = []string{child.TaskID}
+	reader := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	if err := reader.AppendRunEventsV0(context.Background(), runRef, []orquestacoreworkflow.OrchestrationEventV0{
+		stackOperationalClosureDeliveryEventForTestV0(t, runRef, 1, parent.TaskID, deliveryRef),
+		stackOperationalClosureReviewRequestedEventForTestV0(t, runRef, 2, deliveryRef),
+		stackOperationalClosureReviewResultEventForTestV0(t, runRef, 3, deliveryRef, orquestacoreworkflow.ReviewResultStatusAcceptedV0),
+		stackOperationalClosureAcceptedReviewEventForTestV0(t, runRef, 4, deliveryRef),
+	}); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	source := codexStackOperationalClosureSourceV0{
+		TaskStore:   orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(parent, child),
+		EventReader: reader,
+	}
+
+	got, ok, err := source.BuildOperationalDirectorClosureRequestV0(
+		context.Background(),
+		orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{Run: run, OccurredAt: "2026-05-17T14:22:00Z"},
+	)
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0: %v", err)
+	}
+	if !ok || got.TaskID != parent.TaskID {
+		t.Fatalf("debe cerrar padre cuando hijos ya estan cerrados: ok=%v request=%+v", ok, got)
+	}
+}
+
 func TestOperationalClosureSourceV0NoCierraSinReviewRequestedCausal(t *testing.T) {
 	runRef := "run-stack-operational-closure-source-no-review-requested-001"
 	task := stackOperationalClosureTaskForTestV0(runRef, "task-stack-operational-closure-no-review-requested", nil)

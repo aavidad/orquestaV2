@@ -90,6 +90,9 @@ func codexStackOperationalClosureCandidateTasksV0(
 		if !codexStackOperationalClosureTaskIsOperationalDirectorV0(task) {
 			continue
 		}
+		if !codexStackOperationalClosureChildrenClosedV0(request, task, tasks) {
+			continue
+		}
 		if len(scopeAgents) > 0 && !scopeAgents[orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID)] {
 			continue
 		}
@@ -120,6 +123,27 @@ func codexStackOperationalClosureTaskIsOperationalDirectorV0(
 		}
 	}
 	return false
+}
+
+func codexStackOperationalClosureChildrenClosedV0(
+	request orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+	tasks []orquestacoreworkflow.WorkflowTaskV0,
+) bool {
+	childRefs := codexStackOperationalClosureCompactRefsV0(task.ChildTaskRefs)
+	if len(childRefs) == 0 {
+		return true
+	}
+	tasksByRef := make(map[string]bool, len(tasks))
+	for _, item := range tasks {
+		tasksByRef[strings.TrimSpace(item.TaskID)] = true
+	}
+	for _, childRef := range childRefs {
+		if !tasksByRef[childRef] || !codexStackOperationalClosureContainsV0(request.Run.ClosedTasks, childRef) {
+			return false
+		}
+	}
+	return true
 }
 
 func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureRequestForTaskV0(

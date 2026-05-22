@@ -138,7 +138,10 @@ Tambien desde el corte del 2026-05-22, si una ola multitarea esta en
 `closureRequest.TaskID` pertenezca al scope activo y exista cadena
 task/delivery/review aceptada. Se emite una unica pareja
 `QualityGateRecorded(blocked)` + `ReplanDecisionRecorded(retry_task)` para esa
-task y la reentrada posterior solo espera el followup reflejado. Si aparecen
+task y la reentrada posterior solo espera el followup reflejado. Si la decision
+causal ya existe pero el followup aun no esta reflejado en el run, la reentrada
+explicita conserva el bloqueo estable sin devolver `active_step` ni duplicar
+intentos; cuando el followup aparece, reabre la espera acotada. Si aparecen
 varias decisiones candidatas en el mismo scope, no elige una al azar.
 
 ## Review negativa en PlanState

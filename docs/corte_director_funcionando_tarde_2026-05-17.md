@@ -65,7 +65,10 @@ actual, pero no debe definir el nucleo.
   `wait_wave_ref` ni `wait_parent_task_ref`. Tratarlo como flujo app-plan
   separado hasta cablear contrato de Director.
 - La recursion Codex real con hijos/nietos, presupuesto global, fanout,
-  profundidad y review causal sigue pendiente.
+  profundidad y review causal sigue pendiente. Ya hay una guarda offline en el
+  stack Codex: el cierre operativo no genera cierre para una task padre si sus
+  `child_task_refs` faltan en el store o siguen abiertos; esto no completa la
+  recursion real, pero evita cerrar un subarbol antes de sus hijos.
 - No hay runtime real distinto de Codex probado end-to-end.
 
 ## Ruta para tener Orquesta usable hoy
@@ -182,7 +185,9 @@ Recursion gobernada:
 - comprobar parent/child refs, profundidad, fanout y presupuesto;
 - materializar hijos por workflow/outbox;
 - esperar por `parent_task_ref` o nueva cohorte hija;
-- no cerrar subarbol sin review causal.
+- no cerrar subarbol sin review causal. Parcial cerrado en stack Codex: una
+  task padre con `child_task_refs` solo puede generar request de cierre cuando
+  esos hijos existen en `WorkflowTaskStore` y constan en `run.closed_tasks`.
 
 ## No hacer
 

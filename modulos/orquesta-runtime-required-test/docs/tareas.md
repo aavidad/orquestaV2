@@ -23,6 +23,8 @@ Prueba integrada local:
 - `TestRequiredTestRunnerV0ConLocalCommandExecutorEjecutaGoTestReal` crea un
   modulo Go temporal, ejecuta `go test ./...` mediante allowlist explicita y
   guarda `RequiredTestEvidenceV0` causal con artefacto relativo.
+- `TestLocalCommandExecutorV0NoHeredaEntornoPadre` prueba que el proceso de test
+  requerido no recibe variables del entorno padre cuando `Env` esta vacio.
 
 Pendiente:
 

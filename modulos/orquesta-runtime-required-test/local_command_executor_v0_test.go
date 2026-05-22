@@ -16,6 +16,7 @@ import (
 
 const childModeEnvV0 = "ORQUESTA_REQUIRED_TEST_RUNTIME_CHILD"
 const childInvocationMarkerEnvV0 = "ORQUESTA_REQUIRED_TEST_RUNTIME_MARK_INVOCATION"
+const childParentEnvLeakMarkerV0 = "ORQUESTA_REQUIRED_TEST_RUNTIME_PARENT_LEAK"
 const childInvocationMarkerFileV0 = "required-test-invocations.log"
 
 func TestMain(m *testing.M) {
@@ -115,6 +116,27 @@ func TestLocalCommandExecutorV0AceptaEntornoGoExplicitoSinHome(t *testing.T) {
 
 	if _, err := executor.RunRequiredTestCommandV0(context.Background(), commandRequestForTestV0("orquesta-test-bin")); err != nil {
 		t.Fatalf("RunRequiredTestCommandV0: %v", err)
+	}
+}
+
+func TestLocalCommandExecutorV0NoHeredaEntornoPadre(t *testing.T) {
+	envPath, err := exec.LookPath("env")
+	if err != nil {
+		t.Fatalf("env no encontrado: %v", err)
+	}
+	t.Setenv(childParentEnvLeakMarkerV0, "must-not-leak")
+	outputDir := t.TempDir()
+	executor := localCommandExecutorForTestV0(t, outputDir, "pass")
+	executor.AllowedCommands = map[string]string{"env": envPath}
+	executor.Env = nil
+
+	result, err := executor.RunRequiredTestCommandV0(context.Background(), commandRequestForTestV0("env"))
+	if err != nil {
+		t.Fatalf("RunRequiredTestCommandV0: %v", err)
+	}
+	content := outputArtifactForTestV0(t, outputDir, result.EvidenceRefs[0])
+	if strings.Contains(content, "parent-env-leak") || strings.Contains(content, "must-not-leak") {
+		t.Fatalf("artifact leaked parent env: %q", content)
 	}
 }
 

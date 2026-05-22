@@ -347,6 +347,11 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 		if err != nil {
 			return ContinueAppDirectorRequestV0{}, err
 		}
+		canProgressClosureIssues, err := continueOperationalDirectorPlanStateCanProgressBlockedClosureIssuesReplanV0(ctx, request, ports, state)
+		if err != nil {
+			return ContinueAppDirectorRequestV0{}, err
+		}
+		canProgress = canProgress || canProgressClosureIssues
 		if !canProgress {
 			return ContinueAppDirectorRequestV0{}, AppDirectorServiceIssueV0{Field: "operational_director_plan_state.active_step"}
 		}
@@ -1572,6 +1577,57 @@ func continueOperationalDirectorPlanStateAfterBlockedClosureIssuesReplanV0(
 			},
 		},
 	)
+}
+
+func continueOperationalDirectorPlanStateCanProgressBlockedClosureIssuesReplanV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) (bool, error) {
+	if ports.RunStore == nil {
+		return false, nil
+	}
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok ||
+		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
+		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 ||
+		activeStep.Reason != "operational-closure-issues" {
+		return false, nil
+	}
+	issueRefs := operationalDirectorClosureReplannableBlockerRefsV0(append(state.BlockerRefs, activeStep.BlockerRefs...))
+	if len(issueRefs) == 0 {
+		return false, nil
+	}
+	run, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return false, err
+	}
+	matches, complete, err := operationalDirectorPlanAcceptedReviewMatchesV0(ctx, request, ports, activeStep, run)
+	if err != nil || !complete {
+		return false, err
+	}
+	reader := operationalDirectorPlanStateEventReaderV0(ports)
+	if reader == nil {
+		return false, nil
+	}
+	events, err := reader.LoadRunEventsV0(ctx, request.RunRef)
+	if err != nil {
+		return false, err
+	}
+	trace := operationalDirectorPlanReviewTraceFromEventsV0(events)
+	matchedReplans := 0
+	for _, match := range matches {
+		gate, ok := operationalDirectorPlanRequiredTestsQualityGateV0(run, trace, activeStep, match.TaskRef, issueRefs)
+		if !ok {
+			continue
+		}
+		if _, ok := operationalDirectorPlanReplanForQualityGateV0(run, trace, gate.GateRef, match.TaskRef); ok {
+			matchedReplans++
+		}
+	}
+	return matchedReplans == 1, nil
 }
 
 func operationalDirectorClosureReplannableBlockerRefsV0(refs []string) []string {

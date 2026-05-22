@@ -148,11 +148,18 @@ func runLocalCommandV0(
 	output := newOutputBufferV0(limit)
 	cmd := exec.CommandContext(ctx, commandPath, args...)
 	cmd.Dir = executor.ProjectWorkDir
-	cmd.Env = append([]string(nil), executor.Env...)
+	cmd.Env = isolatedLocalCommandEnvV0(executor.Env)
 	cmd.Stdout = output
 	cmd.Stderr = output
 	err := cmd.Run()
 	return *output, err
+}
+
+func isolatedLocalCommandEnvV0(env []string) []string {
+	if len(env) == 0 {
+		return []string{}
+	}
+	return append([]string(nil), env...)
 }
 
 func writeOutputArtifactV0(
