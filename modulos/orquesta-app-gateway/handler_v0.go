@@ -3,7 +3,7 @@ package orquestaappgateway
 import (
 	"net/http"
 
-	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestahttpgateway "orquesta/modulos/orquesta-http-gateway"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaweb "orquesta/modulos/orquesta-web"
@@ -47,7 +47,7 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 
 func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 	return orquestahttpgateway.RouteHandlersV0{
-		AppSpec:                        orquestafactory.NewAppSpecHTTPHandlerV0(config.Clock),
+		AppSpec:                        orquestafactoryhttp.NewAppSpecHTTPHandlerV0(config.Clock),
 		AppDirector:                    orquestamcp.NewMCPArrancarDirectorAppHTTPHandlerV0(config.ArrancarDirector),
 		AppChange:                      orquestamcp.NewMCPRequestAppChangeHTTPHandlerV0(config.RequestAppChange),
 		DirectorStats:                  orquestamcp.NewMCPDirectorStatsHTTPHandlerV0(config.DirectorStats),

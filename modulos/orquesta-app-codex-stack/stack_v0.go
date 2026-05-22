@@ -5,7 +5,7 @@ import (
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaappgateway "orquesta/modulos/orquesta-app-gateway"
-	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaweb "orquesta/modulos/orquesta-web"
@@ -18,7 +18,7 @@ type StackV0 struct {
 	RunQueue       RunQueueConfigV0
 	RunSupervisor  RunSupervisorConfigV0
 	DirectorLimits orquestaweb.WebArrancarDirectorAppLimitsV0
-	Clock          orquestafactory.AppSpecHTTPClockV0
+	Clock          orquestafactoryhttp.AppSpecHTTPClockV0
 	DomainWork     orquestamcp.MCPDomainWorkExecutorPortV0
 	DomainDelivery DomainWorkDeliveryBridgeConfigV0
 }

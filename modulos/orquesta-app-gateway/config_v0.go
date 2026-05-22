@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaweb "orquesta/modulos/orquesta-web"
 )
@@ -12,7 +12,7 @@ import (
 const InternalBaseURLV0 = "http://orquesta.internal"
 
 type ConfigV0 struct {
-	Clock                     orquestafactory.AppSpecHTTPClockV0
+	Clock                     orquestafactoryhttp.AppSpecHTTPClockV0
 	ArrancarDirector          orquestamcp.MCPTransportArrancarDirectorAppExecutorV0
 	RequestAppChange          orquestamcp.MCPTransportRequestAppChangeExecutorV0
 	DirectorLimits            orquestaweb.WebArrancarDirectorAppLimitsV0

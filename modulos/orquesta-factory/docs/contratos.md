@@ -49,6 +49,10 @@ Pruebas de contrato:
 
 ### Transporte REST v0
 
+Implementacion actual: `orquesta/modulos/orquesta-factory-http`. Este modulo
+mantiene el negocio y DTOs canonicos; el adaptador HTTP importa factory y no al
+reves.
+
 Ruta canonica: `POST /api/v0/apps/spec`
 
 Request:

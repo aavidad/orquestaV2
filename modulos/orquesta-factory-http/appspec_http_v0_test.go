@@ -1,4 +1,4 @@
-package orquestafactory
+package orquestafactoryhttp
 
 import (
 	"bytes"
@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	orquestafactory "orquesta/modulos/orquesta-factory"
 )
 
 func TestAppSpecHTTPV0PostValidoDevuelveEnvelopeCanonico(t *testing.T) {
@@ -32,13 +34,13 @@ func TestAppSpecHTTPV0PostValidoDevuelveEnvelopeCanonico(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if envelope.AppSpec.SchemaVersion != AppSpecSchemaV0 {
+	if envelope.AppSpec.SchemaVersion != orquestafactory.AppSpecSchemaV0 {
 		t.Fatalf("app_spec schema=%q", envelope.AppSpec.SchemaVersion)
 	}
 	if envelope.AppSpec.CreatedAt != "2026-05-04T14:00:00Z" {
 		t.Fatalf("created_at=%q", envelope.AppSpec.CreatedAt)
 	}
-	if envelope.Backlog.SchemaVersion != BacklogInicialPropuestoSchemaV0 {
+	if envelope.Backlog.SchemaVersion != orquestafactory.BacklogInicialPropuestoSchemaV0 {
 		t.Fatalf("backlog schema=%q", envelope.Backlog.SchemaVersion)
 	}
 	if envelope.Backlog.SpecID != envelope.AppSpec.SpecID {
@@ -73,7 +75,7 @@ func TestAppSpecHTTPV0JSONDesconocidoDevuelve400ErroresPublicos(t *testing.T) {
 
 	handler.ServeHTTP(rec, req)
 
-	assertHTTPErrorV0(t, rec, http.StatusBadRequest, ErrAppSpecInvalida)
+	assertHTTPErrorV0(t, rec, http.StatusBadRequest, orquestafactory.ErrAppSpecInvalida)
 	if strings.Contains(rec.Body.String(), string(body)) {
 		t.Fatalf("error response should not echo private body: %s", rec.Body.String())
 	}
@@ -89,7 +91,7 @@ func TestAppSpecHTTPV0RequestInvalidaDevuelve400ErroresPublicos(t *testing.T) {
 
 	handler.ServeHTTP(rec, req)
 
-	assertHTTPErrorV0(t, rec, http.StatusBadRequest, ErrAppSpecInvalida)
+	assertHTTPErrorV0(t, rec, http.StatusBadRequest, orquestafactory.ErrAppSpecInvalida)
 	if got := rec.Header().Get("X-Correlation-ID"); got != reqBody.RequestID {
 		t.Fatalf("correlation=%q", got)
 	}
@@ -103,7 +105,7 @@ func TestAppSpecHTTPV0MetodoNoPermitido(t *testing.T) {
 
 	handler.ServeHTTP(rec, req)
 
-	assertHTTPErrorV0(t, rec, http.StatusMethodNotAllowed, ErrAppSpecInvalida)
+	assertHTTPErrorV0(t, rec, http.StatusMethodNotAllowed, orquestafactory.ErrAppSpecInvalida)
 	if got := rec.Header().Get("Allow"); got != http.MethodPost {
 		t.Fatalf("allow=%q", got)
 	}
@@ -144,6 +146,18 @@ func fixedHTTPClockV0() AppSpecHTTPClockV0 {
 	}
 }
 
+func validMinimalRequestV0() orquestafactory.AppSpecRequestV0 {
+	return orquestafactory.AppSpecRequestV0{
+		SchemaVersion: orquestafactory.AppSpecRequestSchemaV0,
+		RequestID:     "req-fty-003-minima",
+		Source:        "orquesta-web",
+		Locale:        "es-ES",
+		Nombre:        "Panel de reservas",
+		Objetivo:      "Gestionar solicitudes de reserva.",
+		TipoApp:       "web",
+	}
+}
+
 func mustJSONV0(t *testing.T, value any) []byte {
 	t.Helper()
 	data, err := json.Marshal(value)
@@ -168,4 +182,35 @@ func assertHTTPErrorV0(t *testing.T, rec *httptest.ResponseRecorder, status int,
 	if !hasIssueCodeV0(envelope.Errores, code) {
 		t.Fatalf("missing error code %q in %+v", code, envelope.Errores)
 	}
+}
+
+func assertCompleteMicrotaskV0(t *testing.T, task orquestafactory.MicrotareaPropuestaV0) {
+	t.Helper()
+	required := map[string]string{
+		"fase":            task.Fase,
+		"modulo_sugerido": task.ModuloSugerido,
+		"objetivo":        task.Objetivo,
+		"contrato":        task.Contrato,
+		"validacion":      task.Validacion,
+	}
+	for field, value := range required {
+		if strings.TrimSpace(value) == "" {
+			t.Fatalf("task %s missing %s: %+v", task.ID, field, task)
+		}
+	}
+	if task.WriteSetPrevisto == nil || len(task.WriteSetPrevisto) == 0 {
+		t.Fatalf("task %s missing write-set: %+v", task.ID, task)
+	}
+	if task.Bloqueos == nil {
+		t.Fatalf("task %s should serialize bloqueos as array: %+v", task.ID, task)
+	}
+}
+
+func hasIssueCodeV0(issues []orquestafactory.ValidationIssue, code string) bool {
+	for _, issue := range issues {
+		if issue.Code == code {
+			return true
+		}
+	}
+	return false
 }

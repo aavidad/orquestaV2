@@ -103,6 +103,17 @@ Bloqueos: ninguno.
 Estado: completada; usecase reducido a shell de 15 lineas y responsabilidades separadas en ficheros de 140 lineas o menos.
 ```
 
+```text
+ID: FTY-009
+Objetivo: Extraer adaptador HTTP de AppSpec fuera de orquesta-factory.
+Write-set: appspec_http_v0.go, appspec_http_v0_test.go, ../orquesta-factory-http/**
+Simbolo foco: NewAppSpecHTTPHandlerV0
+Contrato: SolicitarNuevaApp v0 transporte REST
+Validacion: go test -count=1 ./modulos/orquesta-factory ./modulos/orquesta-factory-http; git diff --check -- modulos/orquesta-factory modulos/orquesta-factory-http.
+Bloqueos: sin bloqueos abiertos en este corte; consumidores REST migrados al paquete orquesta-factory-http.
+Estado: completada; factory queda sin import de net/http y el handler REST vive en orquesta-factory-http.
+```
+
 ## Plantilla
 
 ```text

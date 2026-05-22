@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 )
 
 const (
@@ -37,7 +37,7 @@ func NewMCPNuevaAppToolExecutorV0(serverURL string, timeout time.Duration) (*MCP
 	}
 	return &MCPNuevaAppToolExecutorV0{
 		BaseURL:  baseURL,
-		Endpoint: orquestafactory.AppSpecHTTPPathV0,
+		Endpoint: orquestafactoryhttp.AppSpecHTTPPathV0,
 		Timeout:  timeout,
 		HTTPClient: &http.Client{
 			Timeout: timeout,
@@ -77,7 +77,7 @@ func (executor *MCPNuevaAppToolExecutorV0) Execute(ctx context.Context, input MC
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusBadRequest {
-		var out orquestafactory.AppSpecHTTPErrorResponseV0
+		var out orquestafactoryhttp.AppSpecHTTPErrorResponseV0
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 			return MCPNuevaAppToolResultV0{}, fmt.Errorf("mcp nueva app decode 400: %w", err)
 		}
@@ -88,7 +88,7 @@ func (executor *MCPNuevaAppToolExecutorV0) Execute(ctx context.Context, input MC
 		return MCPNuevaAppToolResultV0{}, fmt.Errorf("mcp nueva app status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	var out orquestafactory.AppSpecHTTPResponseV0
+	var out orquestafactoryhttp.AppSpecHTTPResponseV0
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return MCPNuevaAppToolResultV0{}, fmt.Errorf("mcp nueva app decode ok: %w", err)
 	}
@@ -130,7 +130,7 @@ func endpointMCPV0(executor *MCPNuevaAppToolExecutorV0) string {
 	if executor != nil && strings.TrimSpace(executor.Endpoint) != "" {
 		return strings.TrimSpace(executor.Endpoint)
 	}
-	return orquestafactory.AppSpecHTTPPathV0
+	return orquestafactoryhttp.AppSpecHTTPPathV0
 }
 
 func joinMCPEndpointV0(baseURL, endpoint string) string {

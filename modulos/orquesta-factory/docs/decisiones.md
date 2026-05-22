@@ -121,3 +121,13 @@ El modo `debug` es la unica via para recortar alcance.
 Contratos afectados: AppSpecRequestV0, AppSpecV0, SolicitarNuevaApp v0.
 Estado: aceptada localmente.
 ```
+
+```text
+Fecha: 2026-05-23
+Decision: El transporte HTTP de AppSpec vive en `orquesta-factory-http`.
+Motivo: `orquesta-factory` debe quedar como negocio puro reutilizable sin arrastrar `net/http` a consumidores neutrales.
+Alternativas: mantener handler REST dentro de factory; crear wrappers de compatibilidad que conservaran el acoplamiento; mover el negocio al adaptador.
+Impacto: `NewAppSpecHTTPHandlerV0`, path, clock y envelopes REST pasan al paquete adaptador, que importa `orquesta-factory` para DTOs y casos de uso. Los consumidores REST migran al adaptador `orquesta-factory-http` y `orquesta-factory` queda sin transporte HTTP.
+Contratos afectados: SolicitarNuevaApp v0 transporte REST.
+Estado: aceptada localmente.
+```

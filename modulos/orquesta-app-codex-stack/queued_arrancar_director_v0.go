@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
@@ -14,7 +14,7 @@ type QueuedArrancarDirectorConfigV0 struct {
 	Inner  orquestamcp.MCPTransportArrancarDirectorAppExecutorV0
 	Writer orquestarunqueue.RunQueuePriorityWriterPortV0
 	Queue  RunQueueConfigV0
-	Clock  orquestafactory.AppSpecHTTPClockV0
+	Clock  orquestafactoryhttp.AppSpecHTTPClockV0
 	Source string
 	Reason string
 }

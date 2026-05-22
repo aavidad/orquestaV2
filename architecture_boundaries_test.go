@@ -251,6 +251,20 @@ func TestNeutralOrchestrationPackagesDoNotDependOnFactoryOrHTTP(t *testing.T) {
 	}
 }
 
+func TestFactoryDoesNotDependOnHTTPAdapter(t *testing.T) {
+	deps := packageDepsForBoundaryTest(t, "orquesta/modulos/orquesta-factory")
+	for _, forbidden := range []string{
+		"net/http",
+		"orquesta/modulos/orquesta-factory-http",
+	} {
+		for _, dep := range deps {
+			if dep == forbidden {
+				t.Fatalf("orquesta-factory depends on forbidden HTTP boundary dependency %s", dep)
+			}
+		}
+	}
+}
+
 func TestNeutralCoreDoesNotDependTransitivelyOnAdapters(t *testing.T) {
 	deps := packageDepsForBoundaryTest(t, "orquesta/modulos/orquesta-core")
 	for _, forbidden := range []string{

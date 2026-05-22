@@ -7,7 +7,7 @@ import (
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
@@ -18,7 +18,7 @@ type CodexStackAutoprogrammingPrepareRunExecutorV0 struct {
 	DefaultRequestedBy string
 	QueueWriter        orquestarunqueue.RunQueuePriorityWriterPortV0
 	Queue              RunQueueConfigV0
-	Clock              orquestafactory.AppSpecHTTPClockV0
+	Clock              orquestafactoryhttp.AppSpecHTTPClockV0
 }
 
 var _ orquestamcp.MCPTransportAutoprogrammingPrepareRunExecutorV0 = CodexStackAutoprogrammingPrepareRunExecutorV0{}
@@ -29,7 +29,7 @@ func NewCodexStackAutoprogrammingPrepareRunExecutorV0(
 	defaultRequestedBy string,
 	queueWriter orquestarunqueue.RunQueuePriorityWriterPortV0,
 	queue RunQueueConfigV0,
-	clock orquestafactory.AppSpecHTTPClockV0,
+	clock orquestafactoryhttp.AppSpecHTTPClockV0,
 ) CodexStackAutoprogrammingPrepareRunExecutorV0 {
 	return CodexStackAutoprogrammingPrepareRunExecutorV0{
 		Stack:              stack,

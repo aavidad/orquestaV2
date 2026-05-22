@@ -94,6 +94,15 @@ Ultima ejecucion: 2026-05-04, OK.
 Riesgos: no cambia cobertura funcional; verifica que la division mecanica no altera contratos publicos ni defaults.
 ```
 
+```text
+Caso: Adaptador REST AppSpec fuera de factory
+Tipo: unit
+Comando: go test -count=1 ./modulos/orquesta-factory ./modulos/orquesta-factory-http
+Evidencia esperada: factory compila sin net/http; orquesta-factory-http publica handler, path, clock y envelopes REST, delegando negocio en SolicitarNuevaAppV0 y GenerarBacklogInicialPropuestoV0.
+Ultima ejecucion: 2026-05-23, OK.
+Riesgos: nuevos consumidores no deben volver a importar transporte HTTP desde orquesta-factory; la prueba raiz de arquitectura cubre la frontera.
+```
+
 ## Plantilla
 
 ```text

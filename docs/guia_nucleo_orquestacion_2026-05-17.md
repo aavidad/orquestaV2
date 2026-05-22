@@ -420,12 +420,12 @@ conocidos (`pgx`, `lib/pq`, MySQL y SQLite) en esas capas.
 Desde el corte del 2026-05-23,
 `TestNeutralOrchestrationPackagesDoNotDependOnFactoryOrHTTP` bloquea tambien
 dependencia transitiva de los paquetes neutrales ya limpios hacia
-`orquesta/modulos/orquesta-factory` y `net/http`. El hueco conocido queda fuera
-de esa prueba para no crear rojo: `orquesta-app-director-intake`,
-`orquesta-app-director-service`, `orquesta-app-planner` y `orquesta-app-runner`
-siguen importando `orquesta-factory`, que a su vez importa `net/http`. Cuando
-ese acoplamiento se retire o se mueva a un adaptador/composicion, esos paquetes
-deben anadirse a la prueba transitiva.
+`orquesta/modulos/orquesta-factory` y `net/http`. El transporte AppSpec HTTP
+vive en `orquesta-factory-http`, y la prueba raiz `TestFactoryDoesNotDependOnHTTPAdapter`
+evita que `orquesta-factory` vuelva a arrastrar `net/http` o al adaptador HTTP.
+Los paquetes de app que aun importan `orquesta-factory` no heredan ya `net/http`;
+si se decide que pasan a ser frontera neutral, deben anadirse a la prueba
+transitiva que prohibe factory.
 
 Si falla, no la relajes para hacer pasar el cambio. Primero decide si la pieza
 esta en la capa correcta. Si hace falta un adaptador, crea o usa un modulo

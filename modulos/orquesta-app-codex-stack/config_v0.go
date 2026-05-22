@@ -7,7 +7,7 @@ import (
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
-	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
@@ -20,7 +20,7 @@ import (
 
 type ConfigV0 struct {
 	Enabled        bool
-	Clock          orquestafactory.AppSpecHTTPClockV0
+	Clock          orquestafactoryhttp.AppSpecHTTPClockV0
 	Timeout        time.Duration
 	DirectorLimits orquestaweb.WebArrancarDirectorAppLimitsV0
 	Stores         StoresV0

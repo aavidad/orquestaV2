@@ -10,6 +10,7 @@ import (
 	"time"
 
 	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 )
 
 const (
@@ -156,7 +157,7 @@ func TestNewMCPNuevaAppToolExecutorV0RejectsCredentialsInServerURL(t *testing.T)
 }
 
 func TestMCPNuevaAppToolExecutorV0ReturnsOKResultFromFactoryHTTPPort(t *testing.T) {
-	handler := orquestafactory.NewAppSpecHTTPHandlerV0(func() time.Time {
+	handler := orquestafactoryhttp.NewAppSpecHTTPHandlerV0(func() time.Time {
 		return time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
 	})
 	server := httptest.NewServer(handler)
@@ -193,7 +194,7 @@ func TestMCPNuevaAppToolExecutorV0ReturnsOKResultFromFactoryHTTPPort(t *testing.
 }
 
 func TestMCPNuevaAppToolExecutorV0ReturnsPublicErrorResultFromFactoryHTTPPort(t *testing.T) {
-	handler := orquestafactory.NewAppSpecHTTPHandlerV0(func() time.Time { return time.Now().UTC() })
+	handler := orquestafactoryhttp.NewAppSpecHTTPHandlerV0(func() time.Time { return time.Now().UTC() })
 	server := httptest.NewServer(handler)
 	defer server.Close()
 

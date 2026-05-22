@@ -117,9 +117,9 @@ Riesgos: La accesibilidad queda limitada a estructura JSON/i18n; una UI HTML fut
 ```text
 Caso: WEB-INT-006A flujo vertical REST nueva app
 Tipo: integration
-Comando: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-factory`
-Evidencia esperada: `RESTSolicitarNuevaAppClientV0` consume `orquestafactory.NewAppSpecHTTPHandlerV0` con `httptest.NewServer`; request valida desde `WebNuevaAppFormV0` devuelve `WebNuevaAppViewModelV0` estado `valida`, resumen, fases, microtareas, schema y correlation/request id coherentes; request invalida devuelve estado `invalida`, errores publicos y sin backlog inventado.
-Ultima ejecucion: 2026-05-04; pasa.
+Comando: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-factory ./modulos/orquesta-factory-http`
+Evidencia esperada: `RESTSolicitarNuevaAppClientV0` consume `orquestafactoryhttp.NewAppSpecHTTPHandlerV0` con `httptest.NewServer`; request valida desde `WebNuevaAppFormV0` devuelve `WebNuevaAppViewModelV0` estado `valida`, resumen, fases, microtareas, schema y correlation/request id coherentes; request invalida devuelve estado `invalida`, errores publicos y sin backlog inventado.
+Ultima ejecucion: 2026-05-23; pasa.
 Riesgos: No cubre UI real ni handler de submit; eso queda para WEB-006.
 ```
 

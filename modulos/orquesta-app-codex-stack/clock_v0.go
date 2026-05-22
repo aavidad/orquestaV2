@@ -3,10 +3,10 @@ package orquestaappcodexstack
 import (
 	"time"
 
-	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 )
 
-func stackNowV0(clock orquestafactory.AppSpecHTTPClockV0) time.Time {
+func stackNowV0(clock orquestafactoryhttp.AppSpecHTTPClockV0) time.Time {
 	if clock == nil {
 		return time.Now().UTC()
 	}
