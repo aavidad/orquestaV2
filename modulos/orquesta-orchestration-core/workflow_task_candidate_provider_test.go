@@ -380,6 +380,31 @@ func TestInMemoryWorkflowTaskStoreV0RejectsSameTaskWithDifferentContract(t *test
 	}
 }
 
+func TestInMemoryWorkflowTaskStoreV0LoadsTasksByParent(t *testing.T) {
+	runRef := "run-store-by-parent"
+	parent := workflowTaskForCandidateProviderTestV0(runRef, "task-parent", []string{"internal/parent"})
+	childA := workflowTaskForCandidateProviderTestV0(runRef, "task-child-a", []string{"internal/child-a"})
+	childA.ParentTaskRef = parent.TaskID
+	childB := workflowTaskForCandidateProviderTestV0(runRef, "task-child-b", []string{"internal/child-b"})
+	childB.ParentTaskRef = " " + parent.TaskID + " "
+	sibling := workflowTaskForCandidateProviderTestV0(runRef, "task-sibling", []string{"internal/sibling"})
+	sibling.ParentTaskRef = "task-parent-other"
+	otherRunChild := workflowTaskForCandidateProviderTestV0("run-store-by-parent-other", "task-child-other-run", []string{"internal/other"})
+	otherRunChild.ParentTaskRef = parent.TaskID
+	store := NewInMemoryWorkflowTaskStoreV0(parent, childB, sibling, otherRunChild, childA)
+
+	got, err := store.LoadWorkflowTasksByParentV0(context.Background(), runRef, " "+parent.TaskID+" ")
+	if err != nil {
+		t.Fatalf("LoadWorkflowTasksByParentV0: %v", err)
+	}
+	if len(got) != 2 || got[0].TaskID != childA.TaskID || got[1].TaskID != childB.TaskID {
+		t.Fatalf("children=%+v", got)
+	}
+	if _, err := store.LoadWorkflowTasksByParentV0(context.Background(), runRef, " "); err == nil {
+		t.Fatal("expected parent_task_ref requerido")
+	}
+}
+
 type staticWorkflowTaskProfileResolverForTestV0 struct {
 	resolution WorkflowTaskProfileResolutionV0
 }

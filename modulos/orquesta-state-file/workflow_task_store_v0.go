@@ -3,7 +3,10 @@ package orquestastatefile
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
+	"sort"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 )
@@ -48,6 +51,28 @@ func (store *StoreV0) LoadWorkflowTasksV0(
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	return store.loadWorkflowTasksLockedV0(runRef, compactStringsV0(taskRefs))
+}
+
+func (store *StoreV0) LoadWorkflowTasksByParentV0(
+	ctx context.Context,
+	runRef string,
+	parentTaskRef string,
+) ([]orquestacoreworkflow.WorkflowTaskV0, error) {
+	ctx = contextOrBackgroundV0(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	runRef = normalizeRefV0(runRef)
+	parentTaskRef = normalizeRefV0(parentTaskRef)
+	if runRef == "" {
+		return nil, invalidErrorV0("run_ref", "run_ref requerido")
+	}
+	if parentTaskRef == "" {
+		return nil, invalidErrorV0("parent_task_ref", "parent_task_ref requerido")
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return store.loadWorkflowTasksByParentLockedV0(runRef, parentTaskRef)
 }
 
 func (store *StoreV0) saveWorkflowTaskLockedV0(
@@ -97,6 +122,45 @@ func (store *StoreV0) loadWorkflowTasksLockedV0(
 		}
 		out = append(out, task)
 	}
+	return out, nil
+}
+
+func (store *StoreV0) loadWorkflowTasksByParentLockedV0(
+	runRef string,
+	parentTaskRef string,
+) ([]orquestacoreworkflow.WorkflowTaskV0, error) {
+	dir := filepath.Join(store.rootDir, workflowTasksDirV0, hashRefsV0(runRef))
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	out := make([]orquestacoreworkflow.WorkflowTaskV0, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		document, ok, err := readJSONFileV0[workflowTaskDocumentV0](filepath.Join(dir, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		taskRef := normalizeRefV0(document.TaskRef)
+		task, err := validateWorkflowTaskDocumentV0(document, runRef, taskRef)
+		if err != nil {
+			return nil, err
+		}
+		if normalizeRefV0(task.ParentTaskRef) == parentTaskRef {
+			out = append(out, task)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].TaskID < out[j].TaskID
+	})
 	return out, nil
 }
 

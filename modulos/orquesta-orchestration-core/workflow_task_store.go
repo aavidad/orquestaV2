@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 
@@ -18,6 +19,14 @@ type WorkflowTaskStorePortV0 interface {
 	) ([]orquestacoreworkflow.WorkflowTaskV0, error)
 }
 
+type WorkflowTaskByParentStorePortV0 interface {
+	LoadWorkflowTasksByParentV0(
+		ctx context.Context,
+		runRef string,
+		parentTaskRef string,
+	) ([]orquestacoreworkflow.WorkflowTaskV0, error)
+}
+
 type WorkflowTaskWriterPortV0 interface {
 	SaveWorkflowTaskV0(ctx context.Context, task orquestacoreworkflow.WorkflowTaskV0) error
 }
@@ -29,6 +38,7 @@ type InMemoryWorkflowTaskStoreV0 struct {
 }
 
 var _ WorkflowTaskStorePortV0 = (*InMemoryWorkflowTaskStoreV0)(nil)
+var _ WorkflowTaskByParentStorePortV0 = (*InMemoryWorkflowTaskStoreV0)(nil)
 var _ WorkflowTaskWriterPortV0 = (*InMemoryWorkflowTaskStoreV0)(nil)
 
 func NewInMemoryWorkflowTaskStoreV0(
@@ -87,6 +97,40 @@ func (store *InMemoryWorkflowTaskStoreV0) LoadWorkflowTasksV0(
 		}
 		out = append(out, task)
 	}
+	return out, nil
+}
+
+func (store *InMemoryWorkflowTaskStoreV0) LoadWorkflowTasksByParentV0(
+	ctx context.Context,
+	runRef string,
+	parentTaskRef string,
+) ([]orquestacoreworkflow.WorkflowTaskV0, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.err != nil {
+		return nil, store.err
+	}
+	runRef = strings.TrimSpace(runRef)
+	parentTaskRef = strings.TrimSpace(parentTaskRef)
+	if runRef == "" {
+		return nil, errorV0(ErrNucleoOrquestacionInvalidoV0, "run_ref", "run_ref requerido")
+	}
+	if parentTaskRef == "" {
+		return nil, errorV0(ErrNucleoOrquestacionInvalidoV0, "parent_task_ref", "parent_task_ref requerido")
+	}
+	tasksByRun := store.tasks[runRef]
+	out := make([]orquestacoreworkflow.WorkflowTaskV0, 0)
+	for _, task := range tasksByRun {
+		if strings.TrimSpace(task.ParentTaskRef) == parentTaskRef {
+			out = append(out, task)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].TaskID < out[j].TaskID
+	})
 	return out, nil
 }
 

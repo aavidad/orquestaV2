@@ -77,6 +77,7 @@ type StartAppDirectorPortsV0 struct {
 type AppDirectorWorkflowTaskStorePortV0 interface {
 	orquestadirectoragentworkflow.DirectorAgentWorkflowTaskStorePortV0
 	orquestacionnucleoapp.WorkflowTaskStorePortV0
+	orquestacionnucleoapp.WorkflowTaskByParentStorePortV0
 }
 
 type AppDirectorOperationalClosureSourcePortV0 interface {

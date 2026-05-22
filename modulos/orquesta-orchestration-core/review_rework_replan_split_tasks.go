@@ -129,10 +129,23 @@ func reviewReworkValidateRecursiveSplitTasksV0(
 		parentsByRef[parentRef] = parent
 		fanoutByParentRef[parentRef] = compactStringsV0(parent.ChildTaskRefs)
 	}
+	treeStore, ok := writer.(WorkflowTaskByParentStorePortV0)
+	if !ok {
+		return errorV0(
+			ErrNucleoOrquestacionInvalidoV0,
+			"workflow_task_by_parent_store",
+			"workflow_task_by_parent_store requerido para split_task recursivo",
+		)
+	}
 	for _, parentRef := range parentRefs {
 		if _, ok := parentsByRef[parentRef]; !ok {
 			return errorV0(ErrNucleoOrquestacionInvalidoV0, "split_task.parent_task_ref", "parent_task_ref no encontrada")
 		}
+		persistedChildren, err := treeStore.LoadWorkflowTasksByParentV0(ctx, request.Run.RunID, parentRef)
+		if err != nil {
+			return err
+		}
+		fanoutByParentRef[parentRef] = append(fanoutByParentRef[parentRef], reviewReworkSplitTaskRefsV0(persistedChildren)...)
 	}
 	for _, task := range tasks {
 		parentRef := strings.TrimSpace(task.ParentTaskRef)
