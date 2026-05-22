@@ -40,6 +40,62 @@ func TestShutdownServerV0SolicitaStopDrenaYQuedaReady(t *testing.T) {
 	}
 }
 
+func TestShutdownServerV0ReadyConRunActivoSinAgentesEnVuelo(t *testing.T) {
+	deps := newServerShutdownDepsForTestV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		{RunRef: "run-active-no-live-agents", AppRef: "app-a", Status: "ready"},
+	})
+	deps.stats.stats["run-active-no-live-agents"] = RunShutdownStatsV0{
+		RunRef:              "run-active-no-live-agents",
+		AgentsInFlight:      0,
+		AgentsStopRequested: 1,
+		AgentsStopConfirmed: 0,
+	}
+
+	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
+		Forced:      true,
+		RequestedBy: "operator",
+		Reason:      "apagado con run activo sin agentes vivos",
+	})
+	if err != nil {
+		t.Fatalf("ShutdownServerV0: %v", err)
+	}
+	if !result.ShutdownReady ||
+		result.Status != ServerShutdownStatusReadyV0 ||
+		result.RunsStopped != 1 ||
+		result.AgentsInFlight != 0 ||
+		deps.supervisor.calls != 1 {
+		t.Fatalf("result=%+v supervisor=%+v", result, deps.supervisor)
+	}
+}
+
+func TestShutdownServerV0EsperaDrainConAgentesEnVuelo(t *testing.T) {
+	deps := newServerShutdownDepsForTestV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		{RunRef: "run-active-live-agent", AppRef: "app-a", Status: "ready"},
+	})
+	deps.stats.stats["run-active-live-agent"] = RunShutdownStatsV0{
+		RunRef:              "run-active-live-agent",
+		AgentsInFlight:      1,
+		AgentsStopRequested: 1,
+		AgentsStopConfirmed: 0,
+	}
+
+	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
+		Forced:      true,
+		RequestedBy: "operator",
+		Reason:      "apagado con agente vivo",
+	})
+	if err != nil {
+		t.Fatalf("ShutdownServerV0: %v", err)
+	}
+	if result.ShutdownReady ||
+		result.Status != ServerShutdownStatusWaitingDrainV0 ||
+		result.RunsStopped != 0 ||
+		result.AgentsInFlight != 1 ||
+		deps.supervisor.calls != 1 {
+		t.Fatalf("result=%+v supervisor=%+v", result, deps.supervisor)
+	}
+}
+
 func TestShutdownServerV0NoDrenaSiFaltaCheckpoint(t *testing.T) {
 	deps := newServerShutdownDepsForTestV0([]orquestarunqueue.RunSchedulingCandidateV0{
 		{RunRef: "run-checkpoint", AppRef: "app-a", Status: "ready"},

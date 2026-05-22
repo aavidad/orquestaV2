@@ -9,6 +9,18 @@ Estado: aceptada local
 ```
 
 ```text
+Fecha: 2026-05-22
+Decision: `shutdown_ready` depende de agentes en vuelo, no de igualdad exacta
+entre stop solicitado y stop confirmado.
+Motivo: en runs activos pero quiescent puede quedar una proyeccion de stop
+solicitado sin confirmacion final aunque ya no haya procesos vivos. Bloquear
+shutdown por esa diferencia deja el servidor en `waiting_drain runs=0/1`.
+Impacto: si `AgentsInFlight=0` y no hay checkpoint pendiente, el run queda ready.
+Si hay agentes en vuelo, sigue `waiting_drain`.
+Estado: aceptada local
+```
+
+```text
 Fecha: 2026-05-13
 Decision: El deadline de checkpoint es parte del contrato de shutdown, no un sleep interno.
 Motivo: Orquesta debe poder esperar checkpoint cuando hay trabajo real, pero tambien debe cortar un bloqueo si el operador/director declara vencida la ventana cooperativa. Meter sleeps o timeouts ocultos recrearia el bug de procesos colgados sin trazabilidad.

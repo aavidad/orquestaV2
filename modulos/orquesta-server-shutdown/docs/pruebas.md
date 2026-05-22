@@ -5,6 +5,8 @@
 - `TestShutdownServerV0PreparaCheckpointAntesDeStopNoForzado`
 - `TestShutdownServerV0NoPideStopSiCheckpointNoEstaListo`
 - `TestShutdownServerV0FuerzaStopSiDeadlineCheckpointExpirado`
+- `TestShutdownServerV0ReadyConRunActivoSinAgentesEnVuelo`
+- `TestShutdownServerV0EsperaDrainConAgentesEnVuelo`
 - `TestShutdownServerV0SinRunsQuedaReady`
 
 Evidencia esperada: el caso de uso registra checkpoint por puerto antes de
@@ -18,3 +20,8 @@ Si `checkpoint_deadline_at` llega vencido contra `occurred_at`, la prueba
 espera `StopRunV0` forzado, `checkpoint_deadline_expired` y
 `forced_after_checkpoint_deadline`, manteniendo las refs pendientes como
 evidencia para diagnostico posterior.
+
+Si el run sigue activo pero stats informa `agents_in_flight=0`, shutdown queda
+`ready` aunque existan refs de stop no confirmadas; esas confirmaciones no deben
+bloquear cuando ya no hay agentes vivos. Con `agents_in_flight>0` sigue
+devolviendo `waiting_drain`.

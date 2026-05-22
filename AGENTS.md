@@ -137,6 +137,12 @@ Documentos de entrada obligatorios para cambios transversales:
 - No borres archivos, docs, tests ni piezas "legacy" solo porque parezcan
   obsoletas: revisa primero referencias, historial y uso actual; si no puedes
   cerrarlo con evidencia, deja nota de pendiente.
+- Economia de tokens: al lanzar agentes o subagentes, pide comunicacion compacta
+  y tecnicas de ahorro como `caveman` si estan disponibles. Para exploracion y
+  pruebas usa razonamiento `medium` por defecto; no uses `xhigh` salvo orden
+  explicita o riesgo tecnico justificado y documentado. Acota contexto con `rg`
+  y lecturas parciales, resume documentos largos en vez de pegarlos completos y
+  pide finales breves con solo cambios, pruebas y bloqueos.
 
 ## Checklist operativo para futuros agentes
 

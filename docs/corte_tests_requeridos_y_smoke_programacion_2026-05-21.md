@@ -187,6 +187,8 @@ Limitacion confirmada:
   inyectado y cerrar task/run con evidencias causales.
 - Sigue pendiente repetir el smoke real de servidor con `RequiredTestRunner`
   opt-in para validar el camino completo con Codex real y estado persistido.
-- El shutdown ordenado del servidor queda bloqueado si la run esta quiescent
-  pero activa (`waiting_drain runs=0/1`), aunque no haya agentes vivos. Es otro
-  tramo pendiente del cierre operativo.
+- Corte posterior 2026-05-22: el bloqueo de shutdown ordenado con run activa
+  pero sin agentes vivos queda corregido en `orquesta-server-shutdown`. Si
+  `agents_in_flight=0` y no hay checkpoint pendiente, shutdown queda `ready`
+  aunque existan refs de stop no confirmadas; con agentes vivos sigue
+  `waiting_drain`.

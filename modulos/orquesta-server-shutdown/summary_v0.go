@@ -27,8 +27,7 @@ func applyShutdownStatsV0(
 	run.AgentsStopRequested = stats.AgentsStopRequested
 	run.AgentsStopConfirmed = stats.AgentsStopConfirmed
 	if !run.Ready && !run.CheckpointRequired {
-		run.Ready = stats.AgentsInFlight == 0 &&
-			stats.AgentsStopRequested == stats.AgentsStopConfirmed
+		run.Ready = stats.AgentsInFlight == 0
 	}
 	return run
 }
