@@ -185,6 +185,12 @@ Limitacion confirmada:
   global siga con otros agentes vivos, avanzar
   `wait -> review -> run_required_tests -> replan_or_close`, ejecutar el runner
   inyectado y cerrar task/run con evidencias causales.
+- Corte posterior 2026-05-22: queda cubierta tambien la composicion de
+  `cmd/orquesta-server`. `buildStackFromEnvV0` con
+  `ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED=1` ejecuta un `go test ./...` real sobre
+  un modulo temporal, persiste `RequiredTestEvidenceV0` en `state-file`, avanza
+  `PlanState` a `replan_or_close` y cierra el run sin filtrar rutas locales en
+  los artefactos publicados.
 - Sigue pendiente repetir el smoke real de servidor con `RequiredTestRunner`
   opt-in para validar el camino completo con Codex real y estado persistido.
 - Corte posterior 2026-05-22: el bloqueo de shutdown ordenado con run activa

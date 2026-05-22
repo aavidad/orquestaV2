@@ -148,8 +148,9 @@ implementacion, test focal y evidencia en la matriz.
   `required-tests-failed`. El corte del 2026-05-21 ya emite automaticamente esa
   cadena para un unico task causal y deja capacidad/agente en manos del
   scheduler/outbox; ver `docs/corte_required_tests_failed_replan_2026-05-21.md`.
-  Pendiente separado: soporte causal multitarea para fallos de tests y smokes
-  reales.
+  El corte posterior del 2026-05-22 consume tambien replan causal parcial en
+  scopes multitarea cuando ya existe decision completa por task fallida. Siguen
+  pendientes smokes reales.
 - [~] Replan negativo: cerrada la observacion durable de review negativa. El
   `PlanState` guarda refs/attempt para `ReworkRequested` y
   `ReplanDecisionRecorded`. El corte del 2026-05-21 ya convierte followups

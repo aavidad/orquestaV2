@@ -43,6 +43,13 @@ La regla es conservadora:
   queda cubierta por prueba focal. Los `followup_refs` deben estar reflejados en
   `run.Tasks`, existir en `WorkflowTaskStore` y compartir scope de
   ola/cohorte/parent task antes de reabrir `wait_subagents`.
+- Corte posterior 2026-05-22: los scopes multitarea ya no bloquean si existe
+  una decision causal completa para una task fallida concreta. El Director
+  consume `QualityGateRecorded(blocked)` + `ReplanDecisionRecorded` reflejados,
+  reabre `wait_subagents` solo para el followup afectado y no marca como
+  pendientes agentes de otras tasks del scope. La emision automatica nueva
+  sigue acotada al caso de un unico task para no adjudicar un fallo a la task
+  equivocada.
 - Corte posterior 2026-05-22: si una reentrada trae un `wait_agent_refs`,
   `wait_wave_ref`, `wait_cohort_ref` o `wait_parent_task_ref` obsoleto junto a
   `operational_director_plan_ref`, el `PlanState` cargado desde store manda y
@@ -55,8 +62,6 @@ La regla es conservadora:
 
 ## Pendiente
 
-- El replan por tests fallidos en scopes multitarea queda bloqueado de forma
-  conservadora hasta soportar una decision causal completa por task fallida.
 - Falta cubrir smokes reales de runner + quality gate + replan en el stack.
 - `replan_or_close` ya es puerta explicita de cierre cuando hay `PlanState`
   activo: solo el step `replan_or_close` en `running` permite invocar la fuente
@@ -66,5 +71,5 @@ La regla es conservadora:
 ## Evidencia
 
 ```bash
-go test -count=1 ./modulos/orquesta-app-director-service -run 'Test(EnsureContinueOperationalDirectorPlanStateFromWorkflowTasksV0ConStateBloqueadoConservaPlanRef|OperationalDirectorPlanStateAfterRequiredTestsReplanV0NoReabreScopeMultitarea|ContinueRequestWithOperationalDirectorPlanStateV0RequiredTestsFailed(ReentraConStateFile|BloqueadoReabreWaitConReplanPosterior)|UpdateOperationalDirectorPlanStateAfterLoopV0(RequiredTestsFailedSinReplanCausalPermaneceBloqueado|TestsFailedConReplanSinFollowupMaterializadoBloqueaHastaReentrada|TestsFailedConQualityGateReplanRetryAbreWait|BloqueaTestsConEvidenciaFailed)|MaybeCloseOperationalDirectorV0(NoCierraConPlanStatePostWaitActivo|NoCierraConPlanStateFueraDeReplanOrCloseRunning|BloqueaPlanStateSinClosureSourceEnReplanOrClose|BloqueaPlanStateSinTaskStoreEnReplanOrClose))'
+go test -count=1 ./modulos/orquesta-app-director-service -run 'Test(EnsureContinueOperationalDirectorPlanStateFromWorkflowTasksV0ConStateBloqueadoConservaPlanRef|OperationalDirectorPlanStateAfterRequiredTestsReplanV0ReabreSoloFollowupCausalEnScopeMultitarea|ContinueRequestWithOperationalDirectorPlanStateV0RequiredTestsFailed(ReentraConStateFile|BloqueadoReabreWaitConReplanPosterior)|UpdateOperationalDirectorPlanStateAfterLoopV0(RequiredTestsFailedSinReplanCausalPermaneceBloqueado|TestsFailedConReplanSinFollowupMaterializadoBloqueaHastaReentrada|TestsFailedConQualityGateReplanRetryAbreWait|BloqueaTestsConEvidenciaFailed)|MaybeCloseOperationalDirectorV0(NoCierraConPlanStatePostWaitActivo|NoCierraConPlanStateFueraDeReplanOrCloseRunning|BloqueaPlanStateSinClosureSourceEnReplanOrClose|BloqueaPlanStateSinTaskStoreEnReplanOrClose))'
 ```

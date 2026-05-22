@@ -1814,7 +1814,7 @@ func TestEnsureContinueOperationalDirectorPlanStateFromWorkflowTasksV0ConStateBl
 	}
 }
 
-func TestOperationalDirectorPlanStateAfterRequiredTestsReplanV0NoReabreScopeMultitarea(t *testing.T) {
+func TestOperationalDirectorPlanStateAfterRequiredTestsReplanV0ReabreSoloFollowupCausalEnScopeMultitarea(t *testing.T) {
 	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
 	gateRef := "quality-gate-ref-app-director-required-tests-failed-multitask"
 	replanRef := "replan-ref-app-director-required-tests-failed-multitask"
@@ -1860,7 +1860,6 @@ func TestOperationalDirectorPlanStateAfterRequiredTestsReplanV0NoReabreScopeMult
 			state.Steps[index].AgentRefs = []string{fixture.AgentRef, "agent-ref-app-director-required-tests-failed-multitask-002"}
 			state.Steps[index].DeliveryRefs = []string{fixture.DeliveryRef, "delivery-ref-app-director-required-tests-failed-multitask-002"}
 			state.Steps[index].ReviewResultRefs = []string{fixture.ReviewResultRef, "review-result-ref-app-director-required-tests-failed-multitask-002"}
-			state.Steps[index].AcceptedReviewRefs = []string{fixture.AcceptedReviewRef, "accepted-review-ref-app-director-required-tests-failed-multitask-002"}
 			activeStep = state.Steps[index]
 		}
 	}
@@ -1885,9 +1884,19 @@ func TestOperationalDirectorPlanStateAfterRequiredTestsReplanV0NoReabreScopeMult
 	if err != nil {
 		t.Fatalf("operationalDirectorPlanStateAfterRequiredTestsReplanV0: %v", err)
 	}
-	if changed ||
-		next.ActiveStepID != "step-run-required-tests" ||
-		serviceStringInSetV0(next.PendingAgentRefs, followupAgentRef) {
+	testsStep := serviceOperationalDirectorPlanStateStepForTestV0(t, next, "step-run-required-tests")
+	waitStep := serviceOperationalDirectorPlanStateStepForTestV0(t, next, "step-wait-subagents")
+	if !changed ||
+		next.ActiveStepID != "step-wait-subagents" ||
+		next.ReplanAttempts != 1 ||
+		!serviceStringInSetV0(next.PendingAgentRefs, followupAgentRef) ||
+		serviceStringInSetV0(next.PendingAgentRefs, "agent-ref-app-director-required-tests-failed-multitask-002") ||
+		testsStep.Reason != "required-tests-failed-replan-recorded" ||
+		!serviceStringInSetV0(testsStep.ReplanDecisionRefs, replanRef) ||
+		waitStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		len(waitStep.TaskRefs) != 1 ||
+		waitStep.TaskRefs[0] != fixture.TaskRef ||
+		!serviceStringInSetV0(waitStep.PendingAgentRefs, followupAgentRef) {
 		t.Fatalf("next=%+v changed=%v", next, changed)
 	}
 }

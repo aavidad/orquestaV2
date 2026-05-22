@@ -1259,7 +1259,7 @@ func operationalDirectorPlanStateAfterRequiredTestsReplanV0(
 	matches []operationalDirectorPlanAcceptedReviewMatchV0,
 	failedRefs []string,
 ) (orquestacionnucleoapp.OperationalDirectorPlanStateV0, bool, error) {
-	if !operationalDirectorPlanRequiredTestsReplanScopeSupportedV0(activeStep, matches) {
+	if len(compactServiceRefsV0(activeStep.TaskRefs)) == 0 || len(matches) == 0 {
 		return state, false, nil
 	}
 	replan, gateRef, ok, err := operationalDirectorPlanRequiredTestsReplanDecisionV0(ctx, request, ports, run, activeStep, matches, failedRefs)
@@ -1397,6 +1397,9 @@ func operationalDirectorPlanRequiredTestsReplanDecisionV0(
 		if ok {
 			return replan, strings.TrimSpace(gate.GateRef), true, nil
 		}
+	}
+	if !operationalDirectorPlanRequiredTestsReplanScopeSupportedV0(activeStep, matches) {
+		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, nil
 	}
 	return operationalDirectorPlanEmitRequiredTestsReplanDecisionV0(
 		ctx,

@@ -16,6 +16,26 @@ func TestStoreV0RecuperaEstadoTrasRecrearInstancia(t *testing.T) {
 	run := validRunV0()
 	event := mustRunStartedEventV0(t, run.RunID)
 	task := mustWorkflowTaskV0(t, run.RunID)
+	task.ParentTaskRef = "task-ref-parent-state-file-001"
+	task.CohortRef = "cohort-state-file-001"
+	task.WaveRef = "wave-state-file-001"
+	task.DelegationDepth = 1
+	task.MaxChildAgents = 6
+	task.ChildTaskRefs = []string{"task-ref-child-state-file-001"}
+	waitState := stateFileWorkflowTaskWaitStateV0()
+	waitState.RunRef = run.RunID
+	waitState.ParentTaskRef = task.ParentTaskRef
+	planState := stateFileOperationalDirectorPlanStateV0()
+	planState.RunRef = run.RunID
+	planState.ProjectRef = run.ProjectRef
+	planState.ActiveParentTaskRef = task.ParentTaskRef
+	planState.PendingAgentRefs = []string{"agent-ref-state-file-001"}
+	planState.Steps[0].ParentTaskRef = task.ParentTaskRef
+	planState.Steps[0].PendingAgentRefs = []string{"agent-ref-state-file-001"}
+	planState.Steps[1].ParentTaskRef = task.ParentTaskRef
+	planState.Steps[1].WaitRefs = []string{waitState.WaitRef}
+	planState.Steps[1].AgentRefs = []string{"agent-ref-state-file-001"}
+	planState.Steps[1].PendingAgentRefs = []string{"agent-ref-state-file-001"}
 	record := validAgentProcessRecordV0(run.RunID)
 
 	if err := store.SaveRunV0(ctx, run); err != nil {
@@ -27,6 +47,12 @@ func TestStoreV0RecuperaEstadoTrasRecrearInstancia(t *testing.T) {
 	if err := store.SaveWorkflowTaskV0(ctx, task); err != nil {
 		t.Fatalf("save workflow task: %v", err)
 	}
+	if err := store.SaveWorkflowTaskWaitStateV0(ctx, waitState); err != nil {
+		t.Fatalf("save wait state: %v", err)
+	}
+	if err := store.SaveOperationalDirectorPlanStateV0(ctx, planState); err != nil {
+		t.Fatalf("save plan state: %v", err)
+	}
 	if err := store.RecordAgentProcessV0(ctx, record); err != nil {
 		t.Fatalf("record agent process: %v", err)
 	}
@@ -35,6 +61,8 @@ func TestStoreV0RecuperaEstadoTrasRecrearInstancia(t *testing.T) {
 	assertRecoveredRunV0(t, recovered, run)
 	assertRecoveredEventsV0(t, recovered, run.RunID, []orquestacoreworkflow.OrchestrationEventV0{event})
 	assertRecoveredTasksV0(t, recovered, run.RunID, []orquestacoreworkflow.WorkflowTaskV0{task})
+	assertRecoveredWaitStateV0(t, recovered, waitState)
+	assertRecoveredPlanStateV0(t, recovered, planState)
 	assertRecoveredAgentProcessV0(t, recovered, record)
 }
 
@@ -117,5 +145,35 @@ func assertRecoveredAgentProcessV0(
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("record=%+v, want=%+v", got, want)
+	}
+}
+
+func assertRecoveredWaitStateV0(
+	t *testing.T,
+	store *StoreV0,
+	want orquestacionnucleoapp.WorkflowTaskWaitStateV0,
+) {
+	t.Helper()
+	got, err := store.LoadWorkflowTaskWaitStateV0(context.Background(), want.RunRef, want.WaitRef)
+	if err != nil {
+		t.Fatalf("load wait state: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("wait state=%+v, want=%+v", got, want)
+	}
+}
+
+func assertRecoveredPlanStateV0(
+	t *testing.T,
+	store *StoreV0,
+	want orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) {
+	t.Helper()
+	got, err := store.LoadOperationalDirectorPlanStateV0(context.Background(), want.RunRef, want.PlanRef)
+	if err != nil {
+		t.Fatalf("load plan state: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("plan state=%+v, want=%+v", got, want)
 	}
 }

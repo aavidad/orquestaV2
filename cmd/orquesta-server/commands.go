@@ -25,6 +25,8 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
 		return startServerCommandV0(stdout, stderr)
 	case "status":
 		return statusServerCommandV0(stdout, stderr)
+	case "run-status":
+		return runStatusCommandV0(args[1:], stdout, stderr)
 	case "stop":
 		return stopServerCommandV0(stdout, stderr)
 	case "opes-drain-once":
