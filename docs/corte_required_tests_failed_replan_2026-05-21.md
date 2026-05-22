@@ -39,6 +39,10 @@ La regla es conservadora:
   en el run reabre `wait_subagents` y persiste el nuevo `PlanState`.
 - La reentrada tardia queda probada tambien con `orquesta-state-file`
   recreando el store entre bloqueo y reapertura.
+- Corte posterior 2026-05-22: la reentrada tardia con `split_task` tambien
+  queda cubierta por prueba focal. Los `followup_refs` deben estar reflejados en
+  `run.Tasks`, existir en `WorkflowTaskStore` y compartir scope de
+  ola/cohorte/parent task antes de reabrir `wait_subagents`.
 - Corte posterior 2026-05-22: si una reentrada trae un `wait_agent_refs`,
   `wait_wave_ref`, `wait_cohort_ref` o `wait_parent_task_ref` obsoleto junto a
   `operational_director_plan_ref`, el `PlanState` cargado desde store manda y
@@ -53,8 +57,6 @@ La regla es conservadora:
 
 - El replan por tests fallidos en scopes multitarea queda bloqueado de forma
   conservadora hasta soportar una decision causal completa por task fallida.
-- Falta prueba focal de reentrada tardia con `split_task`; la ruta reutilizada
-  es la misma de followups materializados en `WorkflowTaskStore`.
 - Falta cubrir smokes reales de runner + quality gate + replan en el stack.
 - `replan_or_close` ya es puerta explicita de cierre cuando hay `PlanState`
   activo: solo el step `replan_or_close` en `running` permite invocar la fuente
