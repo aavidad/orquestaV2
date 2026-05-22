@@ -204,7 +204,9 @@ Lo pendiente no debe confundirse con lo hecho:
   ReviewResultRecorded(accepted) -> ReviewAccepted`, y `run_required_tests`
   consume `RequiredTestEvidenceV0` causal para avanzar o bloquear; el codigo
   local observa review negativa con `ReworkRequested` y
-  `ReplanDecisionRecorded` en el `PlanState` con prueba focal; el cierre
+  `ReplanDecisionRecorded` en el `PlanState` con prueba focal, y reabre
+  `wait_subagents` en una reentrada posterior cuando los followups causales ya
+  estan materializados; el cierre
   operacional ya marca el state como `closed` o `blocked` con
   `closure_reason`; el runner/adaptador de tests por puerto existe y tiene
   replay focal sin reejecucion externa; siguen pendientes smoke Codex real con
@@ -348,9 +350,9 @@ implementacion y prueba integrada para cada frente:
 - [x] Plan state wait consumido: pasar de `wait_subagents` a
   `review_deliveries` cuando los agentes pendientes entregaron.
 - [~] Plan state restante: review negativa observada, intentos de replan,
-  razon de cierre/bloqueo y tests durables ya quedan persistidos. Falta
-  materializar replan automatico de blockers y probar replay/idempotencia
-  completa.
+  reentrada tardia a followups causales ya materializados, razon de
+  cierre/bloqueo y tests durables ya quedan persistidos. Falta materializar
+  replan automatico de blockers y probar replay/idempotencia completa.
 - [ ] Evento idempotente: todo avance de review, test, replan y cierre debe
   pasar por comando/evento idempotente con clave estable por refs causales; el
   replay no debe duplicar efectos.

@@ -170,7 +170,10 @@ implementacion, test focal y evidencia en la matriz.
   materializados en una nueva espera acotada: `split_task` cuando las nuevas
   `WorkflowTaskV0` existen en `WorkflowTaskStore` y estan reflejadas en
   `run.Tasks`, y `retry_task`/`replace_agent` cuando los agentes followup ya
-  estan reflejados en `run.Agents`; ver
+  estan reflejados en `run.Agents`. El corte del 2026-05-22 cubre tambien la
+  reentrada tardia: si `review_deliveries` ya estaba en `changes_requested` y
+  los followups aparecen despues, `ContinueAppDirectorV0` reabre
+  `wait_subagents` solo con esos refs sin duplicar `replan_attempts`; ver
   `docs/corte_replan_negativo_followups_split_2026-05-21.md`. Para tests
   fallidos ya se consume replan materializado por quality gate bloqueante. Siguen
   pendientes blockers posteriores y cierre insuficiente como nuevos efectos

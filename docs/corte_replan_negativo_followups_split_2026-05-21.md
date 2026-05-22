@@ -6,7 +6,8 @@ Este corte cierra un tramo estrecho del Director Operativo: si una review
 negativa ya genero una cadena causal durable
 `DeliveryRegistered -> ReviewRequested -> ReviewResultRecorded(changes_requested|rejected) -> ReworkRequested -> ReplanDecisionRecorded`,
 el `OperationalDirectorPlanStateV0` puede volver a abrir `wait_subagents` en dos
-casos ya materializados:
+casos ya materializados, tanto en el mismo avance del loop como en una reentrada
+posterior de `ContinueAppDirectorV0` si los followups llegaron tarde:
 
 - `split_task`, cuando sus `followup_refs` ya estan reflejados como
   `WorkflowTaskV0` del run;
@@ -41,17 +42,24 @@ los agentes vivos. Usa refs opacas, `WorkflowTaskStore`, `run.Tasks`,
 - Si falta cualquier pieza, mantiene el comportamiento anterior: review
   negativa observada y pendiente de replan materializable, sin inventar runtime
   ni relanzar trabajo.
+- Si el state ya quedo en `review_deliveries/changes_requested` con blocker
+  `review-rework-replan-recorded`, `ContinueAppDirectorV0` vuelve a leer run y
+  eventos. Cuando el replan causal ya tiene followups reflejados, reabre
+  `wait_subagents` y guarda evidencia
+  `evidence-ref-app-director-operational-plan-state-review-rework-replan-followups-late-v0`.
+  Esta reentrada no incrementa `ReplanAttempts`, porque el intento ya fue
+  registrado por la decision causal original.
 
 ## Pendiente
 
 - `retry_task`/`replace_agent` solo consumen agentes ya reflejados en el run; no
   generan capacidad/agente desde `PlanState`.
-- Tests fallidos siguen bloqueando con `required-tests-failed`; el replan
-  automatico de esa rama queda pendiente.
+- Tests fallidos tienen rama propia por quality gate; este corte no la mezcla
+  con review negativa.
 - La recursion Codex padre-hijo-nieto sigue fuera de este corte.
 
 ## Evidencia
 
 ```bash
-go test -count=1 ./modulos/orquesta-app-director-service -run 'TestUpdateOperationalDirectorPlanStateAfterLoopV0Review(ChangesRequestedIdempotenteYNoReentraWaitAntiguo|ChangesRequestedAbreWaitDeSplitFollowups|ChangesRequestedAbreWaitDeRetryAgent|NegativaRegistraReworkReplan)|TestContinueRequestWithOperationalDirectorPlanStateV0NoReentraReviewChangesRequested'
+go test -count=1 ./modulos/orquesta-app-director-service -run 'Test(UpdateOperationalDirectorPlanStateAfterLoopV0ReviewNegativaRegistraReworkReplan|UpdateOperationalDirectorPlanStateAfterLoopV0ReviewChangesRequested(IdempotenteYNoReentraWaitAntiguo|AbreWaitDeSplitFollowups|AbreWaitDeRetryAgent)|ContinueRequestWithOperationalDirectorPlanStateV0(NoReentraReviewChangesRequested|ReabreReviewChangesRequestedConFollowupTardio))$'
 ```
