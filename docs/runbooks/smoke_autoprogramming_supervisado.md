@@ -10,7 +10,7 @@ request valida
   -> ruta REST de validacion si existe
   -> POST /api/v0/autoprogramming/prepare-run
   -> cola global del stack Codex
-  -> POST /api/v0/runs/supervise sin run_ref y con Codex fake
+  -> supervisor residente del servidor con Codex fake
   -> POST /api/v0/autoprogramming/prepare-run con el mismo payload para replay
   -> external-work/run + supervisor si la composicion lo expone
   -> pruebas focales de stack fake y cierre offline segun disponibilidad
@@ -34,6 +34,8 @@ Variables utiles:
 ORQUESTA_KEEP_SMOKE_DIR=1
 ORQUESTA_SMOKE_ROOT=/tmp/orquesta-autoprogramming-supervised
 ORQUESTA_SMOKE_REQUEST_TIMEOUT_SECONDS=15
+ORQUESTA_SERVER_TICK_INTERVAL_MS=250
+ORQUESTA_SMOKE_RESIDENT_POLLS=40
 SMOKE_ID=manual-001
 ```
 
@@ -53,12 +55,11 @@ SMOKE_ID=manual-001
 - Llama a `POST /api/v0/autoprogramming/validate-request` si la ruta esta
   expuesta y exige `accepted=true`.
 - Llama a `POST /api/v0/autoprogramming/prepare-run`, exige `run_ref`,
-  `wait_agent_refs` y `continue`, y despues llama a
-  `POST /api/v0/runs/supervise` sin `run_ref`, con `queue_ref=global` y
-  limites bajos usando comando Codex fake. El smoke exige que el supervisor
-  tome de la cola exactamente el `run_ref` preparado.
+  `wait_agent_refs` y `continue`, y despues espera a que el supervisor
+  residente del servidor tome la cola global y arranque al menos un agente
+  Codex fake para ese `run_ref`.
 - Vuelve a llamar a `POST /api/v0/autoprogramming/prepare-run` con el mismo
-  payload despues de `/api/v0/runs/supervise`; exige respuesta aceptada,
+  payload despues del arranque residente; exige respuesta aceptada,
   `run_ref` estable, `wait_agent_refs` no vacio y `continue`, para cubrir
   idempotencia cuando el patch del stack este disponible.
 - Intenta `POST /api/v0/external-work/run` con un trabajo
@@ -78,7 +79,7 @@ La salida debe incluir:
 - `programmable_work_ok`;
 - `validate_request_ok=true` si la ruta REST esta disponible;
 - `prepare_run_ok=true`;
-- `prepare_run_supervisor_estado=ok`;
+- `resident_supervisor_agents_started=1` o superior;
 - `prepare_run_replay_ok=true`;
 - `codex_real_executed=false`;
 - `opes_touched=false`.
@@ -100,10 +101,10 @@ stack Codex:
 
 El smoke la cubre con tests focales y por servidor temporal. La supervision
 posterior valida el camino desatendido: `prepare-run` encola el run en la cola
-global del stack Codex y `/api/v0/runs/supervise` avanza esa cola sin recibir
-`run_ref` explicito. Tras supervisar, repite `prepare-run` con el mismo payload
-y exige que el replay idempotente conserve el `run_ref` y siga devolviendo refs
-causales.
+global del stack Codex y el supervisor residente del servidor avanza esa cola
+sin recibir `run_ref` explicito por API. Tras observar agentes arrancados por
+stats, repite `prepare-run` con el mismo payload y exige que el replay
+idempotente conserve el `run_ref` y siga devolviendo refs causales.
 `/api/v0/external-work/run` queda como fallback opcional de compatibilidad para
 otros trabajos externos; no es el launcher de autoprogramacion.
 

@@ -192,9 +192,9 @@ El primer corte ya no esta solo en documentos:
 - Desde el corte posterior del 2026-05-22, la entrada
   `POST /api/v0/autoprogramming/prepare-run` en `orquesta-app-codex-stack`
   persiste la run/tareas y tambien la deja como candidato de la cola global del
-  stack Codex. El supervisor `POST /api/v0/runs/supervise` puede arrancarla sin
-  `run_ref`; esto sigue siendo politica de composicion Codex, no contrato del
-  nucleo ni de MCP/gateway.
+  stack Codex. El supervisor residente del servidor o
+  `POST /api/v0/runs/supervise` pueden arrancarla sin `run_ref`; esto sigue
+  siendo politica de composicion Codex, no contrato del nucleo ni de MCP/gateway.
 
 Lo pendiente no debe confundirse con lo hecho:
 

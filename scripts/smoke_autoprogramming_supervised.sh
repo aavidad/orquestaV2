@@ -18,6 +18,8 @@ server_pid=""
 base_url=""
 keep_dir="${ORQUESTA_KEEP_SMOKE_DIR:-0}"
 request_timeout="${ORQUESTA_SMOKE_REQUEST_TIMEOUT_SECONDS:-15}"
+resident_polls="${ORQUESTA_SMOKE_RESIDENT_POLLS:-40}"
+resident_sleep="${ORQUESTA_SMOKE_RESIDENT_SLEEP_SECONDS:-0.25}"
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -253,7 +255,7 @@ start_server() {
   ORQUESTA_CODEX_PATH="$PATH" \
   ORQUESTA_CODEX_APPROVAL_POLICY="never" \
   ORQUESTA_CODEX_SANDBOX="workspace-write" \
-  ORQUESTA_SERVER_TICK_INTERVAL_MS="${ORQUESTA_SERVER_TICK_INTERVAL_MS:-60000}" \
+  ORQUESTA_SERVER_TICK_INTERVAL_MS="${ORQUESTA_SERVER_TICK_INTERVAL_MS:-250}" \
   ORQUESTA_OPES_BASE_URL="" \
   OPES_BASE_URL="" \
     "$bin_dir/orquesta-server" run >"$server_stdout" 2>"$server_stderr" &
@@ -484,32 +486,72 @@ with open(output, "w", encoding="utf-8") as fh:
 PY
 }
 
-write_queue_supervisor_payload() {
+write_stats_payload() {
   local output="$1"
-  python3 - "$output" "$smoke_id" <<'PY'
+  local run_ref="$2"
+  python3 - "$output" "$smoke_id" "$run_ref" <<'PY'
 import json
 import sys
 
-output, smoke_id = sys.argv[1:3]
+output, smoke_id, run_ref = sys.argv[1:4]
 payload = {
-    "request_id": f"req-autoprogramming-queue-supervisor-{smoke_id}",
-    "correlation_id": f"corr-autoprogramming-queue-supervisor-{smoke_id}",
-    "queue_ref": "global",
-    "continue_message": "sigue",
-    "max_ticks": 1,
-    "max_runs_per_tick": 1,
-    "max_executions": 1,
-    "max_bursts": 1,
-    "max_steps_per_burst": 1,
-    "max_dispatches_per_wait": 1,
-    "max_commands": 4,
-    "max_outbox_per_cycle": 4,
-    "max_external_waits": 1,
+    "request_id": f"req-autoprogramming-stats-{smoke_id}",
+    "correlation_id": f"corr-autoprogramming-stats-{smoke_id}",
+    "run_ref": run_ref,
+    "include_process_refs": True,
+    "include_agent_progress": True,
 }
 with open(output, "w", encoding="utf-8") as fh:
     json.dump(payload, fh, ensure_ascii=True, indent=2)
     fh.write("\n")
 PY
+}
+
+wait_resident_supervisor_started() {
+  local run_ref="$1"
+  local payload="$payload_dir/prepare_run_stats.json"
+  local response="$result_dir/prepare_run_resident_stats_response.json"
+  local status
+  write_stats_payload "$payload" "$run_ref"
+  for _ in $(seq 1 "$resident_polls"); do
+    status="$(
+      curl -sS -m "$request_timeout" -o "$response" -w "%{http_code}" \
+        -X POST "$base_url/api/v0/director/stats" \
+        -H "Content-Type: application/json" \
+        -H "Accept: application/json" \
+        --data-binary "@$payload" || true
+    )"
+    if [[ "$status" == 2* ]] && python3 - "$response" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    data = json.load(fh)
+stats = data.get("stats") or {}
+counts = stats.get("counts") or {}
+if data.get("estado") == "ok" and int(counts.get("agents_started") or 0) > 0:
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+    then
+      python3 - "$response" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    data = json.load(fh)
+stats = data.get("stats") or {}
+counts = stats.get("counts") or {}
+print("resident_supervisor_agents_started=" + str(counts.get("agents_started", "")))
+print("resident_supervisor_agents_in_flight=" + str(counts.get("agents_in_flight", "")))
+PY
+      return 0
+    fi
+    sleep "$resident_sleep"
+  done
+  echo "resident supervisor no arranco agentes para $run_ref" >&2
+  cat "$response" >&2 || true
+  return 1
 }
 
 extract_run_ref() {
@@ -549,8 +591,6 @@ main() {
   local validation_response="$result_dir/autoprogramming_validate_response.json"
   local prepare_response="$result_dir/autoprogramming_prepare_run_response.json"
   local prepare_replay_response="$result_dir/autoprogramming_prepare_run_replay_response.json"
-  local prepare_supervisor_payload="$payload_dir/prepare_run_supervisor.json"
-  local prepare_supervisor_response="$result_dir/prepare_run_supervisor_response.json"
   local external_payload="$payload_dir/external_work_run.json"
   local external_response="$result_dir/external_work_run_response.json"
   local supervisor_payload="$payload_dir/supervisor.json"
@@ -574,24 +614,7 @@ main() {
   post_json_required "/api/v0/autoprogramming/prepare-run" "$prepare_payload" "$prepare_response"
   verify_prepare_run_accepted "$prepare_response"
   prepare_run_ref="$(extract_run_ref "$prepare_response")"
-  write_queue_supervisor_payload "$prepare_supervisor_payload"
-  post_json_required "/api/v0/runs/supervise" "$prepare_supervisor_payload" "$prepare_supervisor_response"
-  python3 - "$prepare_supervisor_response" "$prepare_run_ref" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as fh:
-    data = json.load(fh)
-expected_run_ref = sys.argv[2]
-if data.get("estado") != "ok":
-    raise SystemExit(f"supervisor prepare-run inesperado: {data}")
-if data.get("run_ref") != expected_run_ref or (data.get("last") or {}).get("session_ref") != expected_run_ref:
-    raise SystemExit(f"supervisor prepare-run no tomo la cola esperada: {data}")
-if data.get("stop_reason") == "no_execution":
-    raise SystemExit(f"supervisor prepare-run no ejecuto la cola: {data}")
-print("prepare_run_supervisor_estado=" + str(data.get("estado", "")))
-print("prepare_run_supervisor_stop_reason=" + str(data.get("stop_reason", "")))
-PY
+  wait_resident_supervisor_started "$prepare_run_ref"
 
   post_json_required "/api/v0/autoprogramming/prepare-run" "$prepare_payload" "$prepare_replay_response"
   verify_prepare_run_replay_accepted "$prepare_response" "$prepare_replay_response"
