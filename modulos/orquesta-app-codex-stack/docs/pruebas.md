@@ -108,6 +108,10 @@ Cobertura Go actual:
 - `TestCodexSupervisorStackLifecycleV0SupervisaRunExistenteSinCanalParaleloV0`
   prueba el adaptador real de stack sobre una run ya creada: `SuperviseCodexV0`
   hace `launch` y luego `continue`, ambos por `DrainRunV0`, sin relanzar agentes.
+- `TestCodexSupervisorStackLifecycleV0AvanzaArbolRecursivoFakeSinManualPorNivelV0`
+  prueba el mismo adaptador con arbol recursivo fake 1->2->4: el supervisor
+  empuja `sigue` por `DrainRunV0`, conserva parent/child refs y waits acotados,
+  y cierra sin llamadas manuales por nivel ni relanzar agentes.
 - `TestCodexSupervisorStackLifecycleV0UsaSupervisorGlobalExistenteV0` prueba el
   camino sin `RunRef`, que reutiliza `RunGlobalSupervisorV0` y la cola global.
 - `TestCodexSupervisorRuntimeStateFromLoopV0MapeaEstadosDelNucleoV0` fija la

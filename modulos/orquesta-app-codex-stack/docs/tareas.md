@@ -663,10 +663,11 @@ Reglas cerradas:
 Objetivo: introducir la pieza minima para que Orquesta pueda supervisar una
 sesion Codex y empujarla con `sigue` sin intervencion manual.
 
-Estado: hecho como contrato unitario, adaptador de stack y API HTTP generica
-`POST /api/v0/runs/supervise` sobre el ciclo normal de agentes Orquesta.
-Pendiente smoke real recursivo padre/hijo/nieto y, si se quiere, cliente CLI
-fino contra esa API.
+Estado: hecho como contrato unitario, adaptador de stack, API HTTP generica
+`POST /api/v0/runs/supervise` sobre el ciclo normal de agentes Orquesta y
+prueba fake recursiva 1->2->4 sin llamadas manuales por nivel. Pendiente smoke
+real recursivo padre/hijo/nieto con proveedor y, si se quiere, cliente CLI fino
+contra esa API.
 
 Trabajo aplicado:
 
@@ -701,6 +702,7 @@ Validacion:
 - `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPRunSupervisor|TestRegisterMCPTransportV0ExponeOperacionesExistentes'`
 - `go test -count=1 ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway -run 'TestNewAppGatewayMuxV0RegistersConfiguredRoutes|TestRunControlYRunQueueAPIDeleganEnMCPPortsV0'`
 - `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackRunSupervisorAPI|TestCodexSupervisorStackLifecycle|TestCodexSupervisorV0'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run '^TestCodexSupervisorStackLifecycleV0AvanzaArbolRecursivoFakeSinManualPorNivelV0$'`
 - `go test -count=1 ./modulos/orquesta-app-codex-stack`
 
 Reglas cerradas:
@@ -714,8 +716,10 @@ Reglas cerradas:
   solo en el executor de este stack;
 - si hace falta arrancar otro Codex, se hace por `ExternalProcessAgentBatchExecutorV0`
   y `ProcessRegistry`, no por un lanzador paralelo;
-- no declarar cerrada la recursion real hasta tener smoke con parent/child refs,
-  presupuesto global, profundidad/fanout y review causal.
+- no declarar cerrada la recursion real hasta ejecutar el smoke con proveedor
+  vivo; el fake de supervisor recursivo ya cubre parent/child refs, presupuesto
+  global, profundidad/fanout, waits acotados y review/cierre causal sin Codex
+  real.
 
 ## APP-CODEX-STACK-024
 

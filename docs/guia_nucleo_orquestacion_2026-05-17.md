@@ -34,6 +34,7 @@ Orquesta piensa y coordina. Las apps externas aportan dominio.
 | `modulos/orquesta-domain-work-sql` | Adaptador SQL driver-neutral para crear jobs y leer records `Request+Job` filtrados. | Adaptador DB externo. Recibe `*sql.DB`; no registra drivers ni entra al nucleo. |
 | `modulos/orquesta-app-change` | Cambio de app y proyeccion de `external_work` hacia contratos. | Alineada si mantiene refs opacas y no conoce runtime/proveedor. |
 | `modulos/orquesta-app-change-director-source` | Fuente de decisiones/tareas para cambios externos ya aceptados. | Alineada con cautela: contiene taxonomia documental concentrada; no debe crecer como OPES interno. |
+| `modulos/orquesta-app-runner` | Flujo historico app-plan para preparar/ejecutar planes de app. | Separado del Director Operativo: no participa en waits por cohorte/ola/parent ni en `OperationalDirectorPlanStateV0`. |
 | `modulos/orquesta-external-work-run` | Crea run operativo para trabajo externo ya especificado. | Alineada. No decide contenido ni arranca director inicial. |
 | `modulos/orquesta-app-director-service` | Servicio de entrada/continuacion del director de app; materializa plan, espera por scope y puede cerrar despues de loop quiescent. | Capa de aplicacion. Depende de puertos inyectados; `OperationalClosureSource` real pertenece a composicion/adaptador. |
 | `modulos/orquesta-opes-connector` | Cliente publico OPES. | Adaptador de dominio, permitido fuera del nucleo. |
@@ -88,6 +89,14 @@ los agentes vivos del run. La delegacion recursiva es valida para programacion y
 dominio/OPES solo si queda gobernada por parent/child refs, presupuesto,
 profundidad/fanout, refs opacas o write-set, artefactos esperados y review de
 Orquesta.
+
+`orquesta-app-runner` no es una entrada paralela al `PlanState` del Director:
+pertenece al flujo app-plan historico. Sus unidades, progreso y refs no deben
+mezclarse con `wait_cohort_ref`, `wait_wave_ref`, `wait_parent_task_ref` ni con
+metadata de `WorkflowTaskV0` usada para waits acotados. Una migracion futura
+debe delegar en `app-director-service` o anadir metadata compatible en
+`WorkflowTaskStore`/`OperationalDirectorPlanStateV0`; no debe adaptar refs de
+app-plan como si fueran cohortes, olas o parent tasks del Director.
 
 Estado real del primer corte:
 

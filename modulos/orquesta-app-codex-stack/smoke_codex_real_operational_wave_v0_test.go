@@ -61,6 +61,87 @@ func TestCodexStackRecursiveTreeFakeRuntimeV0(t *testing.T) {
 	}
 }
 
+func TestCodexSupervisorStackLifecycleV0AvanzaArbolRecursivoFakeSinManualPorNivelV0(t *testing.T) {
+	ctx := context.Background()
+	cfg := codexStackRequiredTestLocalConfigV0(t)
+	cfg.MaxBatchReady = 2
+	cfg.MaxConcurrency = 2
+	writeCodexStackRequiredTestTinyGoModuleV0(t, cfg.ProjectWorkDir)
+	goCommand := codexStackRequiredTestGoCommandV0(t)
+	outputDir := filepath.Join(t.TempDir(), "required-test-output")
+
+	runtime := newFakeCodexStackRuntimeV0()
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	stack := codexStackRealRequiredTestRunnerStackV0(t, cfg, runtime, evidenceStore, goCommand, outputDir)
+	stack.Ports.ProgressSource = nil
+	fixture := newCodexStackRecursiveTreeFixtureWithSuffixV0("supervisor-fake")
+	codexStackRecursiveTreeSeedV0(t, ctx, stack, fixture)
+
+	launchResult := codexStackRecursiveTreeSuperviseWithStackLifecycleV0(t, ctx, stack, fixture, "", 8)
+	if launchResult.Last.SessionRef != fixture.RunRef ||
+		launchResult.Last.Status == CodexSupervisorRuntimeFailedV0 ||
+		launchResult.StopReason != CodexSupervisorStopDoneV0 {
+		t.Fatalf("launchResult=%+v", launchResult)
+	}
+	if runtime.launchCountV0() != len(fixture.Tasks) {
+		t.Fatalf("launches=%d want=%d", runtime.launchCountV0(), len(fixture.Tasks))
+	}
+	allAgents := codexStackRecursiveTreeAgentRefsV0(fixture)
+	codexStackRecursiveTreeAssertDeliveredV0(t, stack, fixture.RunRef, allAgents)
+	codexStackRecursiveTreeAssertLineageV0(t, ctx, stack, fixture)
+	codexStackRecursiveTreeAssertSupervisorWaitScopesV0(t, ctx, stack, fixture)
+
+	openCodexStackPhaseForTestV0(t, stack, fixture.RunRef, orquestacoreworkflow.OrchestrationPhaseRevisionV0, "Supervisor fake arbol recursivo: revisar entregas.")
+	causals := codexStackOperationalWaveSeedAcceptedReviewsV0(
+		t,
+		ctx,
+		stack,
+		fixture.RunRef,
+		allAgents,
+		codexStackRecursiveTreeDeliveryByAgentV0(t, stack, fixture.RunRef, allAgents),
+	)
+	if err := stack.Stores.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, codexStackRecursiveTreePlanStateV0(fixture, causals)); err != nil {
+		t.Fatalf("SaveOperationalDirectorPlanStateV0: %v %s", err, codexStackRequiredTestErrorDetailsV0(err))
+	}
+	stack.Ports.DeliverySource = nil
+	stack.Ports.ReviewGateSource = nil
+	stack.Ports.ReviewReworkReplanSource = nil
+	stack.Ports.AssessmentReplanSource = nil
+
+	var closeResult CodexSupervisorResultV0
+	var run orquestacoreworkflow.OrchestrationRunV0
+	var state orquestacionnucleoapp.OperationalDirectorPlanStateV0
+	for cycle := 1; cycle <= len(fixture.Tasks)+2; cycle++ {
+		closeResult = codexStackRecursiveTreeSuperviseWithStackLifecycleV0(t, ctx, stack, fixture, fixture.PlanRef, 12)
+		run = mustLoadCodexStackRunForTestV0(t, stack, fixture.RunRef)
+		state = codexStackOperationalWaveLoadPlanStateV0(t, ctx, stack, codexStackOperationalWaveFixtureV0{
+			RunRef:  fixture.RunRef,
+			PlanRef: fixture.PlanRef,
+		})
+		if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 &&
+			state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 {
+			break
+		}
+	}
+	if closeResult.StopReason != CodexSupervisorStopDoneV0 ||
+		run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 {
+		t.Fatalf("closeResult=%+v run=%+v state=%+v", closeResult, run, state)
+	}
+	if len(run.ClosedTasks) != len(fixture.Tasks) {
+		t.Fatalf("closed_tasks=%v want=%d", run.ClosedTasks, len(fixture.Tasks))
+	}
+	if runtime.launchCountV0() != len(fixture.Tasks) {
+		t.Fatalf("supervisor relanzo agentes durante cierre: launches=%d want=%d", runtime.launchCountV0(), len(fixture.Tasks))
+	}
+	replanStep := codexStackRequiredTestPlanStepV0(t, state, "step-replan-or-close")
+	evidence, err := evidenceStore.LoadRequiredTestEvidenceV0(ctx, fixture.RunRef, replanStep.RequiredTestEvidenceRefs)
+	if err != nil {
+		t.Fatalf("LoadRequiredTestEvidenceV0: %v", err)
+	}
+	codexStackRecursiveTreeAssertEvidenceV0(t, fixture, causals, evidence)
+}
+
 func TestCodexStackRealRecursiveTreeOptInV0(t *testing.T) {
 	if strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_REAL_RECURSIVE_TREE_SMOKE")) != "1" {
 		t.Skip("set ORQUESTA_CODEX_REAL_RECURSIVE_TREE_SMOKE=1")
@@ -916,6 +997,105 @@ func codexStackRecursiveTreeSeedV0(
 			t.Fatalf("SaveWorkflowTaskV0 %s: %v", task.TaskID, err)
 		}
 	}
+}
+
+func codexStackRecursiveTreeSuperviseWithStackLifecycleV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	fixture codexStackRecursiveTreeFixtureV0,
+	planRef string,
+	maxTicks int,
+) CodexSupervisorResultV0 {
+	t.Helper()
+	result, err := SuperviseCodexV0(ctx, CodexSupervisorDepsV0{AgentLifecycle: CodexSupervisorStackLifecycleV0{
+		Stack:  stack,
+		RunRef: fixture.RunRef,
+		DrainRequest: DrainRunRequestV0{
+			RunRef:                     fixture.RunRef,
+			OperationalDirectorPlanRef: planRef,
+			OccurredAt:                 "2026-05-22T20:30:00Z",
+			CorrelationID:              "corr-recursive-tree-supervisor-" + strings.TrimSpace(planRef),
+			MaxBursts:                  8,
+			MaxStepsPerBurst:           10,
+			MaxDispatchesPerWait:       4,
+			MaxCommands:                40,
+			MaxOutboxPerCycle:          20,
+			MaxDecisionCycles:          4,
+			MaxExternalWaits:           1,
+		},
+	}}, CodexSupervisorCommandV0{
+		MaxTicks:        maxTicks,
+		ContinueMessage: DefaultCodexSupervisorContinueMessageV0,
+	})
+	if err != nil {
+		t.Fatalf("SuperviseCodexV0 plan=%s: %v result=%+v", planRef, err, result)
+	}
+	if len(result.History) == 0 || result.History[0].Action != "launch" {
+		t.Fatalf("history sin launch inicial: %+v", result.History)
+	}
+	if len(result.History) > 1 && result.History[1].Action != "continue" {
+		t.Fatalf("history sin sigue/continue: %+v", result.History)
+	}
+	return result
+}
+
+func codexStackRecursiveTreeAssertLineageV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	fixture codexStackRecursiveTreeFixtureV0,
+) {
+	t.Helper()
+	tasks, err := stack.Stores.TaskStore.LoadWorkflowTasksV0(ctx, fixture.RunRef, codexStackRecursiveTreeTaskRefsV0(fixture))
+	if err != nil {
+		t.Fatalf("LoadWorkflowTasksV0: %v", err)
+	}
+	stackOperationalClosureAssertRecursiveLimitsForTestV0(t, tasks, 2)
+	for _, want := range fixture.Tasks {
+		var got orquestacoreworkflow.WorkflowTaskV0
+		for _, task := range tasks {
+			if task.TaskID == want.TaskID {
+				got = task
+				break
+			}
+		}
+		if got.TaskID == "" {
+			t.Fatalf("task no encontrada: %s tasks=%+v", want.TaskID, tasks)
+		}
+		if got.ParentTaskRef != want.ParentTaskRef ||
+			got.DelegationDepth != want.DelegationDepth ||
+			got.MaxChildAgents != want.MaxChildAgents ||
+			got.WaveRef != want.WaveRef ||
+			got.CohortRef != want.CohortRef {
+			t.Fatalf("lineage task=%s got=%+v want=%+v", want.TaskID, got, want)
+		}
+		stackOperationalClosureAssertRefsForTestV0(t, "child refs "+want.TaskID, got.ChildTaskRefs, want.ChildTaskRefs)
+	}
+}
+
+func codexStackRecursiveTreeAssertSupervisorWaitScopesV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	fixture codexStackRecursiveTreeFixtureV0,
+) {
+	t.Helper()
+	parent := fixture.taskV0("task-recursive-parent")
+	childA := fixture.taskV0("task-recursive-child-a")
+	childB := fixture.taskV0("task-recursive-child-b")
+	codexStackRecursiveTreeAssertWaitSnapshotV0(t, ctx, stack, fixture.RunRef, parent.TaskID, "", []string{
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(childA.TaskID),
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(childB.TaskID),
+	}, []string{})
+	codexStackRecursiveTreeAssertWaitSnapshotV0(t, ctx, stack, fixture.RunRef, childA.TaskID, childA.WaveRef, []string{
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0("task-recursive-grand-a1"),
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0("task-recursive-grand-a2"),
+	}, []string{})
+	codexStackRecursiveTreeAssertWaitSnapshotV0(t, ctx, stack, fixture.RunRef, childB.TaskID, childB.WaveRef, []string{
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0("task-recursive-grand-b1"),
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0("task-recursive-grand-b2"),
+	}, []string{})
 }
 
 func codexStackRecursiveTreeContinueLaunchV0(

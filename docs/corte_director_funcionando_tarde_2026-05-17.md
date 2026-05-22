@@ -68,9 +68,16 @@ actual, pero no debe definir el nucleo.
 - El scope de ingesta de ACK/deliveries ya esta cerrado para Codex, pero eso no
   cierra una ola funcional: falta review agrupada por ola, pruebas requeridas y
   cierre/replan durable.
-- `orquesta-app-runner` no participa todavia en `wait_cohort_ref`,
-  `wait_wave_ref` ni `wait_parent_task_ref`. Tratarlo como flujo app-plan
-  separado hasta cablear contrato de Director.
+- `orquesta-app-runner` es el flujo historico de app-plan. No participa en
+  `wait_cohort_ref`, `wait_wave_ref`, `wait_parent_task_ref`,
+  `WorkflowTaskWaitStateV0` ni `OperationalDirectorPlanStateV0`. No mezclar sus
+  refs de unidades/progreso con refs de cohorte, ola o parent task del Director
+  Operativo: hoy son linajes separados.
+- Si algun dia se migra app-runner al Director Operativo, debe hacerlo
+  delegando en `app-director-service` o persistiendo metadata compatible en
+  `WorkflowTaskStore`/`PlanState` antes de pedir waits acotados. No basta con
+  traducir nombres de refs ni usar app-plan como sustituto de
+  `wait_cohort_ref`, `wait_wave_ref` o `wait_parent_task_ref`.
 - La recursion Codex real con hijos/nietos, presupuesto global, fanout,
   profundidad y review causal sigue pendiente. Ya hay una guarda offline en el
   stack Codex: el cierre operativo no genera cierre para una task padre si sus
