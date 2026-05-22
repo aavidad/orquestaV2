@@ -1137,8 +1137,10 @@ func codexStackRequiredTestDrainUntilDeliveryV0(
 ) orquestaruntimecodexdelivery.CodexReceiptDescriptorV0 {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
+	pollInterval := 2 * time.Second
+	maxCycles := codexStackRealSmokeMaxExternalWaitsV0(timeout, pollInterval)
 	var lastRun orquestacoreworkflow.OrchestrationRunV0
-	for cycle := 1; cycle <= 24 && time.Now().Before(deadline); cycle++ {
+	for cycle := 1; cycle <= maxCycles && time.Now().Before(deadline); cycle++ {
 		if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
 			RunRef:               runRef,
 			CorrelationID:        "corr-rt-runner-e2e-delivery",
@@ -1163,7 +1165,11 @@ func codexStackRequiredTestDrainUntilDeliveryV0(
 				return descriptor
 			}
 		}
-		time.Sleep(2 * time.Second)
+		select {
+		case <-ctx.Done():
+			t.Fatalf("contexto cancelado esperando entrega Codex real: %v\n%s", ctx.Err(), codexStackRealSmokeDiagnosticsV0(runtimeWorkDir))
+		case <-time.After(pollInterval):
+		}
 	}
 	t.Fatalf("sin entrega Codex real: run=%+v descriptors=%v\n%s",
 		lastRun,

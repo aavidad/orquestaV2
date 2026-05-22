@@ -124,6 +124,14 @@ Cobertura Go actual:
   El cierre no-OPES temporal con app HTTP/file, submitter real opt-in,
   `codex-fake`, review, required-tests y plan cerrado queda cubierto por
   `EXT-NO-OPES`.
+- `TestCodexStackRecursiveTreeFakeRuntimeV0` valida el arbol recursivo completo
+  1->2->4 con runtime fake: waits por `parent_task_ref`/`wave_ref`, entregas,
+  review causal aceptada, `RequiredTestRunner`, evidencias por task y cierre de
+  las 7 tareas por `PlanState`.
+- `TestCodexStackRealRecursiveTreeOptInV0` queda desactivado por defecto y
+  reutiliza el mismo recorrido con procesos Codex reales, sin OPES y con doble
+  confirmacion; espera ACK/entregas reales por nivel antes de abrir hijos o
+  nietos, y despues exige review causal, runner y cierre del arbol.
 
 Estado de huecos restantes:
 
@@ -133,6 +141,9 @@ Estado de huecos restantes:
   `RequiredTestEvidenceV0`; no cierran la ola/cohorte amplia formal pendiente.
 - `CODEX-REQTEST-REAL-E2E` cierra solo el caso acotado de un agente Codex vivo
   con runner y cierre causal.
+- `CODEX-RECURSION-REAL` ya tiene fake-runtime end-to-end y wrapper real opt-in
+  (`scripts/smoke_codex_real_recursive_tree.sh`); queda pendiente ejecutar ese
+  modo con proveedor/cuota para marcarlo cerrado operativo.
 - `EXT-NO-OPES` cierra la ruta temporal no-OPES con `codex-fake`, no una
   politica productiva de tests de dominio ni un proveedor Codex real.
 - OPES `plan_temario` real quedo cerrado para `document_plan` y creacion de

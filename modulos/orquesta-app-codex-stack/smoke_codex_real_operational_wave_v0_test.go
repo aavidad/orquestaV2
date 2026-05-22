@@ -54,6 +54,83 @@ func TestCodexStackRecursiveTreeFakeRuntimeV0(t *testing.T) {
 	stack := codexStackRealRequiredTestRunnerStackV0(t, cfg, runtime, evidenceStore, goCommand, outputDir)
 	stack.Ports.ProgressSource = nil
 	fixture := newCodexStackRecursiveTreeFixtureV0()
+
+	codexStackRecursiveTreeRunToCloseV0(t, ctx, stack, evidenceStore, cfg, fixture, runtime, true)
+	if runtime.launchCountV0() != len(fixture.Tasks) {
+		t.Fatalf("launches=%d want=%d", runtime.launchCountV0(), len(fixture.Tasks))
+	}
+}
+
+func TestCodexStackRealRecursiveTreeOptInV0(t *testing.T) {
+	if strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_REAL_RECURSIVE_TREE_SMOKE")) != "1" {
+		t.Skip("set ORQUESTA_CODEX_REAL_RECURSIVE_TREE_SMOKE=1")
+	}
+	if strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_REAL_RECURSIVE_TREE_CONFIRM")) != "1" ||
+		strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_REAL_RECURSIVE_TREE_CODEX_EXECUTION_CONFIRMED")) != "1" {
+		t.Fatal("doble confirmacion requerida para ejecutar arbol recursivo Codex real")
+	}
+	if strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BASE_URL")) != "" ||
+		strings.TrimSpace(os.Getenv("OPES_BASE_URL")) != "" {
+		t.Fatal("este smoke no debe cablear OPES")
+	}
+
+	cfg := codexStackRealSmokeConfigForTestV0(t)
+	if cfg.Timeout < 1500*time.Second {
+		cfg.Timeout = 1500 * time.Second
+	}
+	if strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_REASONING_EFFORT")) == "" {
+		cfg.ReasoningEffort = "high"
+	}
+	if strings.TrimSpace(cfg.ReasoningEffort) == "xhigh" {
+		t.Fatal("este smoke recursivo no usa xhigh por defecto")
+	}
+	cfg.MaxBatchReady = 2
+	cfg.MaxConcurrency = 2
+	writeCodexStackRequiredTestTinyGoModuleV0(t, cfg.ProjectWorkDir)
+	codexStackRealSmokeWriteProjectContextV0(t, cfg.ProjectWorkDir)
+	goCommand := codexStackRequiredTestGoCommandV0(t)
+	outputDir := codexStackRealSmokeEnsureDirV0(t, "ORQUESTA_REQUIRED_TEST_OUTPUT_DIR", codexStackRequiredTestOutputDirV0(t))
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
+	defer cancel()
+	processRuntime := orquestaruntime.NewProcessRuntimeConnectorV0()
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	stack := codexStackRealRequiredTestRunnerStackV0(t, cfg, processRuntime, evidenceStore, goCommand, outputDir)
+	stack.Ports.ProgressSource = nil
+	defer codexStackRealSmokeStopAllProcessesV0(
+		t,
+		processRuntime,
+		stack.Stores.ProcessRegistry.(*orquestaagentprocessregistrymemory.InMemoryAgentProcessRegistryV0),
+		stack.Stores.ReceiptStore.(*orquestaruntimecodexdelivery.InMemoryCodexReceiptDescriptorStoreV0),
+	)
+
+	codexStackRecursiveTreeRunToCloseV0(
+		t,
+		ctx,
+		stack,
+		evidenceStore,
+		cfg,
+		newCodexStackRecursiveTreeFixtureWithSuffixV0("real"),
+		nil,
+		false,
+	)
+}
+
+type codexStackLaunchCounterForTestV0 interface {
+	launchCountV0() int
+}
+
+func codexStackRecursiveTreeRunToCloseV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	evidenceStore orquestacionnucleoapp.RequiredTestEvidenceStorePortV0,
+	cfg codexStackRealSmokeConfigV0,
+	fixture codexStackRecursiveTreeFixtureV0,
+	launchCounter codexStackLaunchCounterForTestV0,
+	manualAck bool,
+) {
+	t.Helper()
 	codexStackRecursiveTreeSeedV0(t, ctx, stack, fixture)
 
 	parent := fixture.taskV0("task-recursive-parent")
@@ -73,35 +150,35 @@ func TestCodexStackRecursiveTreeFakeRuntimeV0(t *testing.T) {
 		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(childB.TaskID),
 	}
 
-	codexStackRecursiveTreeContinueLaunchV0(t, ctx, stack, runtime, fixture.RunRef, appDirectorWaitFilterForRecursiveTreeV0{
+	codexStackRecursiveTreeContinueLaunchV0(t, ctx, stack, launchCounter, fixture.RunRef, appDirectorWaitFilterForRecursiveTreeV0{
 		WaveRef:   parent.WaveRef,
 		CohortRef: parent.CohortRef,
 	}, []string{rootAgent})
-	codexStackRecursiveTreeAckAndDrainV0(t, ctx, stack, fixture.RunRef, rootAgent, cfg)
+	codexStackRecursiveTreeDrainAgentV0(t, ctx, stack, fixture.RunRef, rootAgent, cfg, manualAck)
 
 	codexStackRecursiveTreeAssertWaitSnapshotV0(t, ctx, stack, fixture.RunRef, parent.TaskID, "", childAgents, childAgents)
-	codexStackRecursiveTreeContinueLaunchV0(t, ctx, stack, runtime, fixture.RunRef, appDirectorWaitFilterForRecursiveTreeV0{
+	codexStackRecursiveTreeContinueLaunchV0(t, ctx, stack, launchCounter, fixture.RunRef, appDirectorWaitFilterForRecursiveTreeV0{
 		ParentTaskRef: parent.TaskID,
 	}, childAgents)
-	codexStackRecursiveTreeAckAndDrainV0(t, ctx, stack, fixture.RunRef, childAgents[0], cfg)
+	codexStackRecursiveTreeDrainAgentV0(t, ctx, stack, fixture.RunRef, childAgents[0], cfg, manualAck)
 
 	codexStackRecursiveTreeAssertWaitSnapshotV0(t, ctx, stack, fixture.RunRef, childA.TaskID, childA.WaveRef, grandA, grandA)
-	codexStackRecursiveTreeContinueLaunchV0(t, ctx, stack, runtime, fixture.RunRef, appDirectorWaitFilterForRecursiveTreeV0{
+	codexStackRecursiveTreeContinueLaunchV0(t, ctx, stack, launchCounter, fixture.RunRef, appDirectorWaitFilterForRecursiveTreeV0{
 		ParentTaskRef: childA.TaskID,
 		WaveRef:       childA.WaveRef,
 	}, grandA)
 	for _, agentRef := range grandA {
-		codexStackRecursiveTreeAckAndDrainV0(t, ctx, stack, fixture.RunRef, agentRef, cfg)
+		codexStackRecursiveTreeDrainAgentV0(t, ctx, stack, fixture.RunRef, agentRef, cfg, manualAck)
 	}
 
-	codexStackRecursiveTreeAckAndDrainV0(t, ctx, stack, fixture.RunRef, childAgents[1], cfg)
+	codexStackRecursiveTreeDrainAgentV0(t, ctx, stack, fixture.RunRef, childAgents[1], cfg, manualAck)
 	codexStackRecursiveTreeAssertWaitSnapshotV0(t, ctx, stack, fixture.RunRef, childB.TaskID, childB.WaveRef, grandB, grandB)
-	codexStackRecursiveTreeContinueLaunchV0(t, ctx, stack, runtime, fixture.RunRef, appDirectorWaitFilterForRecursiveTreeV0{
+	codexStackRecursiveTreeContinueLaunchV0(t, ctx, stack, launchCounter, fixture.RunRef, appDirectorWaitFilterForRecursiveTreeV0{
 		ParentTaskRef: childB.TaskID,
 		WaveRef:       childB.WaveRef,
 	}, grandB)
 	for _, agentRef := range grandB {
-		codexStackRecursiveTreeAckAndDrainV0(t, ctx, stack, fixture.RunRef, agentRef, cfg)
+		codexStackRecursiveTreeDrainAgentV0(t, ctx, stack, fixture.RunRef, agentRef, cfg, manualAck)
 	}
 
 	allAgents := codexStackRecursiveTreeAgentRefsV0(fixture)
@@ -769,7 +846,15 @@ type appDirectorWaitFilterForRecursiveTreeV0 struct {
 }
 
 func newCodexStackRecursiveTreeFixtureV0() codexStackRecursiveTreeFixtureV0 {
-	runRef := "run-stack-recursive-tree-fake-001"
+	return newCodexStackRecursiveTreeFixtureWithSuffixV0("fake")
+}
+
+func newCodexStackRecursiveTreeFixtureWithSuffixV0(suffix string) codexStackRecursiveTreeFixtureV0 {
+	suffix = strings.TrimSpace(suffix)
+	if suffix == "" {
+		suffix = "smoke"
+	}
+	runRef := "run-stack-recursive-tree-" + suffix + "-001"
 	parent := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-parent", "", "wave-recursive-root", "cohort-recursive-root", 0, 2)
 	childA := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-child-a", parent.TaskID, "wave-recursive-child-a", "cohort-recursive-children", 1, 2)
 	childB := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-child-b", parent.TaskID, "wave-recursive-child-b", "cohort-recursive-children", 1, 2)
@@ -789,7 +874,7 @@ func newCodexStackRecursiveTreeFixtureV0() codexStackRecursiveTreeFixtureV0 {
 	tasks := []orquestacoreworkflow.WorkflowTaskV0{parent, childA, childB, grandA1, grandA2, grandB1, grandB2}
 	return codexStackRecursiveTreeFixtureV0{
 		RunRef:  runRef,
-		PlanRef: "plan-stack-recursive-tree-fake-001",
+		PlanRef: "plan-stack-recursive-tree-" + suffix + "-001",
 		Tasks:   tasks,
 	}
 }
@@ -837,13 +922,16 @@ func codexStackRecursiveTreeContinueLaunchV0(
 	t *testing.T,
 	ctx context.Context,
 	stack StackV0,
-	runtime *codexStackRequiredTestPendingRuntimeV0,
+	launchCounter codexStackLaunchCounterForTestV0,
 	runRef string,
 	filter appDirectorWaitFilterForRecursiveTreeV0,
 	expectedAgentRefs []string,
 ) {
 	t.Helper()
-	before := runtime.launchCountV0()
+	before := 0
+	if launchCounter != nil {
+		before = launchCounter.launchCountV0()
+	}
 	result, err := orquestaappdirectorservice.ContinueAppDirectorV0(ctx, orquestaappdirectorservice.ContinueAppDirectorRequestV0{
 		RunRef:               runRef,
 		OccurredAt:           "2026-05-22T20:00:00Z",
@@ -861,8 +949,10 @@ func codexStackRecursiveTreeContinueLaunchV0(
 	if err != nil {
 		t.Fatalf("ContinueAppDirectorV0 launch filter=%+v: %v %s", filter, err, codexStackRequiredTestErrorDetailsV0(err))
 	}
-	if got := runtime.launchCountV0() - before; got != len(expectedAgentRefs) {
-		t.Fatalf("launches nuevos=%d want=%d filter=%+v started=%v run=%+v", got, len(expectedAgentRefs), filter, result.StartedAgents, result.Run)
+	if launchCounter != nil {
+		if got := launchCounter.launchCountV0() - before; got != len(expectedAgentRefs) {
+			t.Fatalf("launches nuevos=%d want=%d filter=%+v started=%v run=%+v", got, len(expectedAgentRefs), filter, result.StartedAgents, result.Run)
+		}
 	}
 	for _, agentRef := range expectedAgentRefs {
 		if !codexStackStringInSetForTestV0(result.StartedAgents, agentRef) {
@@ -870,6 +960,27 @@ func codexStackRecursiveTreeContinueLaunchV0(
 		}
 	}
 	codexStackOperationalWaveDescriptorsForAgentsV0(t, stack, expectedAgentRefs)
+}
+
+func codexStackRecursiveTreeDrainAgentV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	runRef string,
+	agentRef string,
+	cfg codexStackRealSmokeConfigV0,
+	manualAck bool,
+) string {
+	t.Helper()
+	if manualAck {
+		return codexStackRecursiveTreeAckAndDrainV0(t, ctx, stack, runRef, agentRef, cfg)
+	}
+	delivered := codexStackRequiredTestDrainUntilDeliveryV0(t, ctx, stack, runRef, agentRef, cfg.RuntimeWorkDir, cfg.Timeout)
+	deliveryRef := strings.TrimSpace(delivered.Spec.AgentPacket.DeliveryRefs.AckRef)
+	if deliveryRef == "" {
+		t.Fatalf("delivery ref vacia agent=%s descriptor=%+v", agentRef, delivered)
+	}
+	return deliveryRef
 }
 
 func codexStackRecursiveTreeAckAndDrainV0(
