@@ -83,14 +83,51 @@ func ContinueAppDirectorV0(
 		return ContinueAppDirectorResultV0{}, err
 	}
 	request = autonomy.Request
-	if err := updateOperationalDirectorPlanStateAfterLoopV0(ctx, request, ports, autonomy.Loop); err != nil {
+	operationalLoop := operationalDirectorScopedQuiescentLoopV0(request, autonomy.Loop, autonomy.LoopRequest)
+	if err := updateOperationalDirectorPlanStateAfterLoopV0(ctx, request, ports, operationalLoop); err != nil {
 		return ContinueAppDirectorResultV0{}, err
 	}
-	loop, closureIssues, err := maybeCloseOperationalDirectorV0(ctx, request, ports, autonomy.Loop, autonomy.LoopRequest)
+	loop, closureIssues, err := maybeCloseOperationalDirectorV0(ctx, request, ports, operationalLoop, autonomy.LoopRequest)
 	if err != nil {
 		return ContinueAppDirectorResultV0{}, err
 	}
 	return continueAppDirectorResultV0(request, loop, closureIssues), nil
+}
+
+func operationalDirectorScopedQuiescentLoopV0(
+	request ContinueAppDirectorRequestV0,
+	loop orquestacionnucleoapp.ProgressiveLoopResultV0,
+	loopRequest orquestacionnucleoapp.ProgressiveLoopRequestV0,
+) orquestacionnucleoapp.ProgressiveLoopResultV0 {
+	if continueOperationalDirectorPlanRefV0(request) == "" ||
+		loop.Status != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
+		loop.PendingOutboxCount > 0 ||
+		len(loopRequest.WaitAgentRefs) == 0 ||
+		appDirectorRunHasPendingAgentRefsV0(loop.Run, loopRequest.WaitAgentRefs) {
+		return loop
+	}
+	loop.Status = orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0
+	return loop
+}
+
+func appDirectorRunHasPendingAgentRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	agentRefs []string,
+) bool {
+	for _, agentRef := range compactServiceRefsV0(agentRefs) {
+		if !startAppDirectorStringInSetV0(run.StartedAgents, agentRef) {
+			continue
+		}
+		if startAppDirectorStringInSetV0(run.DeliveredAgents, agentRef) ||
+			startAppDirectorStringInSetV0(run.FailedAgents, agentRef) ||
+			startAppDirectorStringInSetV0(run.LostAgents, agentRef) ||
+			startAppDirectorStringInSetV0(run.ConfirmedStoppedAgents, agentRef) ||
+			startAppDirectorStringInSetV0(run.StoppedAgents, agentRef) {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 type existingDirectorAutonomyLoopResultV0 struct {

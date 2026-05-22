@@ -12,7 +12,23 @@ director tenga estado causal.
 Impacto: ContinueAppDirectorV0 acepta `OperationalDirectorPlanV0`, llama al
 materializador, deriva wait por ola/cohorte, registra `WorkflowTaskWaitStateV0`
 si hay writer y reentra al loop progresivo con refs acotadas. El siguiente
-corte debe llevar la salida de ese wait a review/replan/cierre.
+corte llevo la salida positiva de ese wait a review/tests/cierre offline; queda
+smoke real de servidor con runner opt-in.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-22
+Decision: Tratar como quiescent scoped un `wait_external` global cuando el
+scope operativo ya no tiene agentes pendientes.
+Motivo: el scheduler global puede seguir viendo agentes vivos ajenos a la ola
+operativa, pero el Director Operativo debe avanzar la ola que ya entrego sin
+esperar todo el run.
+Impacto: `ContinueAppDirectorV0` conserva el loop global, pero para actualizar
+`OperationalDirectorPlanStateV0` y cerrar por fuente causal usa estado
+quiescent solo si `WaitAgentRefs` resueltos estan entregados/fallidos/perdidos o
+parados y no hay outbox pendiente. El cierre sigue rechazando tareas abiertas y
+evidencias causales incompletas.
 Estado: aceptada.
 ```
 

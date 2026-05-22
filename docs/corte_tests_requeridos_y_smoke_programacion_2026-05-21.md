@@ -175,13 +175,18 @@ Defecto encontrado y corregido durante el smoke:
 
 Limitacion confirmada:
 
-- El flujo legacy de app con `WorkflowTaskV0` registra la entrega de
-  programacion, pero no cierra la task ni ejecuta `RequiredTestRunner` como
-  evidencia durable: `tasks_delivered=1`, `tasks_closed=0`,
-  `required_test_evidence` vacio.
-- El cierre generico `run_required_tests -> replan_or_close -> close` sigue
-  limitado al camino de `OperationalDirectorPlanState`; falta conectarlo al
-  flujo app/director que materializa tareas desde `director_decisions.json`.
+- El smoke de servidor encontro que el flujo app/director con `WorkflowTaskV0`
+  registraba la entrega de programacion, pero no cerraba la task ni ejecutaba
+  `RequiredTestRunner` como evidencia durable: `tasks_delivered=1`,
+  `tasks_closed=0`, `required_test_evidence` vacio.
+- Corte posterior 2026-05-22: queda cubierta por regresion integrada offline en
+  `app-director-service`. `ContinueAppDirectorV0` ya puede tomar una microtarea
+  nacida de `director_decisions`, reconocer su scope resuelto aunque el run
+  global siga con otros agentes vivos, avanzar
+  `wait -> review -> run_required_tests -> replan_or_close`, ejecutar el runner
+  inyectado y cerrar task/run con evidencias causales.
+- Sigue pendiente repetir el smoke real de servidor con `RequiredTestRunner`
+  opt-in para validar el camino completo con Codex real y estado persistido.
 - El shutdown ordenado del servidor queda bloqueado si la run esta quiescent
   pero activa (`waiting_drain runs=0/1`), aunque no haya agentes vivos. Es otro
   tramo pendiente del cierre operativo.

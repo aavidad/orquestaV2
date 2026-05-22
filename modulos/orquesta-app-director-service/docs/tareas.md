@@ -103,8 +103,10 @@ Validacion actual:
 go test -count=1 ./modulos/orquesta-app-director-service -run 'Test.*WaitAgentRefs|TestExistingDirectorLoopRequestV0'
 ```
 
-Pendiente: que la salida de esa espera avance hasta review/replan/cierre sin
-intervencion manual.
+Actualizacion 2026-05-22: la salida positiva de esa espera ya avanza hasta
+review/tests/cierre en el scope operativo aunque el run global tenga otros
+agentes vivos. Cubierto por
+`TestContinueAppDirectorV0DecisionPlanStateEjecutaRunnerYCierra`.
 
 ## APP-DIR-SVC-012
 
@@ -152,8 +154,10 @@ go test -count=1 ./modulos/orquesta-app-director-service -run TestComposeStartAp
 Objetivo: convertir la salida de una espera del Director Operativo en
 review/replan/cierre durable.
 
-Estado: parcial. Cerrado offline el camino positivo `review_deliveries` y el
-consumo durable de `run_required_tests` desde `RequiredTestEvidenceV0`.
+Estado: parcial avanzado. Cerrado offline el camino positivo
+`wait -> review_deliveries -> run_required_tests -> replan_or_close -> close`
+para microtareas nacidas de decisiones del director y el consumo durable de
+`run_required_tests` desde `RequiredTestEvidenceV0`.
 Aniadido primer runner por puerto: si el `PlanState` entra en
 `run_required_tests` sin evidencias causales ya guardadas, el servicio invoca
 `RequiredTestRunnerPortV0`, persiste evidencias durables y reevalua el avance.
@@ -162,7 +166,7 @@ La observacion negativa de review con `ReworkRequested` y
 El cierre operativo ya marca el state como `closed` o `blocked` con
 `closure_reason`. Existe adaptador externo opt-in en
 `modulos/orquesta-runtime-required-test` y wiring desde `cmd/orquesta-server`;
-siguen pendientes la prueba real de programacion con agentes/subagentes, replan
+siguen pendientes la prueba real de servidor con runner opt-in, replan
 automatico para blockers y replay/idempotencia.
 
 Alcance esperado:

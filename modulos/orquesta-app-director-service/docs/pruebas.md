@@ -57,6 +57,10 @@ Cobertura esperada:
   documentacion; `debug` permite alcance reducido;
 - reentrada automatica tras decisiones del director crea microtarea y arranca
   el agente de programacion sin pasos manuales intermedios;
+- una microtarea creada por decisiones del director puede reentrar con scope
+  acotado, consumir entrega y review aceptada ya reflejadas, ejecutar
+  `RequiredTestRunner` inyectado y cerrar task/run sin esperar agentes ajenos al
+  scope;
 - errores de validacion de factory sin transporte;
 - sin imports legacy ni DB hardcodeada.
 
@@ -107,6 +111,7 @@ Evidencia 2026-05-09:
 - `TestMaybeCloseOperationalDirectorV0CierraPlanStateTrasCierreOperativoExitoso`;
 - `TestMaybeCloseOperationalDirectorV0BloqueaPlanStateConIssuesDeCierre`;
 - `TestMaybeCloseOperationalDirectorV0BloqueaPlanStateSiSourceNoConstruyeRequest`;
+- `TestContinueAppDirectorV0DecisionPlanStateEjecutaRunnerYCierra`;
 - cobertura indirecta desde `orquesta-app-codex-stack`:
   `TestDrainRunV0ConsumeDecisionFileTardioYArrancaProgramacion`;
 - `TestStartAppDirectorV0ConsumesDirectorDeliverySource`;
