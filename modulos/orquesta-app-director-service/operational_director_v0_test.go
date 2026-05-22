@@ -211,6 +211,7 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaAReviewTrasWaitConsu
 	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
 	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
 	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
+	waitStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskWaitStateStoreV0()
 	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
 	plan := serviceOperationalDirectorPlanForContinueTestV0(t, runRef)
 
@@ -233,6 +234,7 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaAReviewTrasWaitConsu
 		EventSink:                  sink,
 		OutboxLedger:               ledger,
 		DirectorTaskStore:          taskStore,
+		WaitStateWriter:            waitStore,
 		OperationalPlanStateWriter: planStateStore,
 		OperationalPlanStateStore:  planStateStore,
 		Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
@@ -245,6 +247,14 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaAReviewTrasWaitConsu
 	}
 	if len(first.Run.Tasks) != 1 {
 		t.Fatalf("tasks=%v", first.Run.Tasks)
+	}
+	initialState, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), runRef, plan.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0 initial: %v", err)
+	}
+	initialWaitStep := serviceOperationalDirectorPlanStateStepForTestV0(t, initialState, "step-wait-subagents")
+	if len(initialWaitStep.WaitRefs) != 1 {
+		t.Fatalf("initial wait refs=%+v", initialWaitStep.WaitRefs)
 	}
 	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(first.Run.Tasks[0])
 	deliveredRun := first.Run
@@ -259,6 +269,8 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaAReviewTrasWaitConsu
 	}, StartAppDirectorPortsV0{
 		OperationalPlanStateStore:  planStateStore,
 		OperationalPlanStateWriter: planStateStore,
+		WaitStateStore:             waitStore,
+		WaitStateWriter:            waitStore,
 	}, orquestacionnucleoapp.ProgressiveLoopResultV0{
 		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
 		Run:    deliveredRun,
@@ -285,6 +297,38 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaAReviewTrasWaitConsu
 	}
 	if !waitAccepted || !reviewRunning {
 		t.Fatalf("state=%+v waitAccepted=%v reviewRunning=%v", state, waitAccepted, reviewRunning)
+	}
+	waitState, err := waitStore.LoadWorkflowTaskWaitStateV0(context.Background(), runRef, initialWaitStep.WaitRefs[0])
+	if err != nil {
+		t.Fatalf("LoadWorkflowTaskWaitStateV0: %v", err)
+	}
+	if waitState.Status != orquestacionnucleoapp.WorkflowTaskWaitStateStatusContinuedV0 ||
+		len(waitState.PendingAgentRefs) != 0 ||
+		serviceCountStringV0(waitState.EvidenceRefs, "evidence-ref-app-director-wait-state-continued-v0") != 1 {
+		t.Fatalf("waitState=%+v", waitState)
+	}
+	if err := updateOperationalDirectorPlanStateAfterLoopV0(context.Background(), ContinueAppDirectorRequestV0{
+		RunRef:                     runRef,
+		OccurredAt:                 "2026-05-17T14:06:01Z",
+		OperationalDirectorPlanRef: plan.PlanRef,
+	}, StartAppDirectorPortsV0{
+		OperationalPlanStateStore:  planStateStore,
+		OperationalPlanStateWriter: planStateStore,
+		WaitStateStore:             waitStore,
+		WaitStateWriter:            waitStore,
+	}, orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run:    deliveredRun,
+	}); err != nil {
+		t.Fatalf("updateOperationalDirectorPlanStateAfterLoopV0 replay: %v", err)
+	}
+	replayedWaitState, err := waitStore.LoadWorkflowTaskWaitStateV0(context.Background(), runRef, initialWaitStep.WaitRefs[0])
+	if err != nil {
+		t.Fatalf("LoadWorkflowTaskWaitStateV0 replay: %v", err)
+	}
+	if replayedWaitState.Status != orquestacionnucleoapp.WorkflowTaskWaitStateStatusContinuedV0 ||
+		serviceCountStringV0(replayedWaitState.EvidenceRefs, "evidence-ref-app-director-wait-state-continued-v0") != 1 {
+		t.Fatalf("replayedWaitState=%+v", replayedWaitState)
 	}
 }
 

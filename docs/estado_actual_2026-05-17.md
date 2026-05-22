@@ -125,7 +125,9 @@ El primer corte ya no esta solo en documentos:
   Ya puede elevarse a contrato de cohorte/ola mediante
   `WorkflowTaskWaitStateV0`, que guarda causa, refs de tasks, agentes objetivo y
   pendientes. `ContinueAppDirectorV0` ya puede recuperar ese wait state
-  persistido si esta en `waiting` y no ampliar la espera a toda la ola/cohorte.
+  persistido si esta en `waiting` y no ampliar la espera a toda la ola/cohorte;
+  cuando `wait_subagents` se consume, el estado de espera se marca `continued`
+  por puerto de forma idempotente.
 - P1 WaitAgentRefs queda cerrado para el stack Codex: el mismo scope limita
   pending, wait e ingesta de ACK/deliveries. `DrainRunRequestV0.WaitAgentRefs`
   llega al request de observaciones, el `DeliverySource` queda envuelto/filtrado
@@ -358,7 +360,8 @@ implementacion y prueba integrada para cada frente:
 - [x] Plan state reentrada inicial: `ContinueAppDirectorV0` lee
   `operational_director_plan_ref` y recupera scope de wait sin mirar agentes
   vivos globales; si hay `WaitStateStore` y el step trae `wait_ref`, prefiere el
-  `WorkflowTaskWaitStateV0` persistido validado antes de recomputar scope.
+  `WorkflowTaskWaitStateV0` persistido validado antes de recomputar scope. El
+  paso a review marca ese wait state como `continued`.
 - [x] Plan state wait consumido: pasar de `wait_subagents` a
   `review_deliveries` cuando los agentes pendientes entregaron.
 - [~] Plan state restante: review negativa observada, intentos de replan,

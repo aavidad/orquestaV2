@@ -985,7 +985,54 @@ func applyOperationalDirectorPlanStateAfterLoopV0(
 	if !changed {
 		return false, nil
 	}
+	if waitChanged {
+		if err := markOperationalDirectorWorkflowTaskWaitStateContinuedV0(ctx, request, ports, state); err != nil {
+			return false, err
+		}
+	}
 	return true, ports.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, next)
+}
+
+func markOperationalDirectorWorkflowTaskWaitStateContinuedV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) error {
+	if ports.WaitStateStore == nil || ports.WaitStateWriter == nil {
+		return nil
+	}
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok ||
+		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+		return nil
+	}
+	waitRefs := compactServiceRefsV0(activeStep.WaitRefs)
+	if len(waitRefs) == 0 {
+		return nil
+	}
+	waitState, err := ports.WaitStateStore.LoadWorkflowTaskWaitStateV0(ctx, request.RunRef, waitRefs[0])
+	if err != nil {
+		if appDirectorWorkflowTaskWaitStateNotFoundV0(err) {
+			return nil
+		}
+		return err
+	}
+	if !appDirectorWorkflowTaskWaitStateMatchesPlanStepV0(request.RunRef, waitState, state, activeStep) {
+		return nil
+	}
+	waitState.Status = orquestacionnucleoapp.WorkflowTaskWaitStateStatusContinuedV0
+	waitState.PendingAgentRefs = nil
+	waitState.EvidenceRefs = compactServiceRefsV0(append(waitState.EvidenceRefs, "evidence-ref-app-director-wait-state-continued-v0"))
+	if strings.TrimSpace(request.OccurredAt) != "" {
+		waitState.ObservedAt = request.OccurredAt
+	}
+	normalized, err := orquestacionnucleoapp.NewWorkflowTaskWaitStateV0(waitState)
+	if err != nil {
+		return err
+	}
+	return ports.WaitStateWriter.SaveWorkflowTaskWaitStateV0(ctx, normalized)
 }
 
 func operationalDirectorPlanStateAfterWaitConsumedV0(

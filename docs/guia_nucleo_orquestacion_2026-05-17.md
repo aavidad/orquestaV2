@@ -110,8 +110,9 @@ Estado real del primer corte:
   agentes objetivo y agentes pendientes; `orquesta-state-file` la persiste.
 - `app-director-service` ya puede recuperar ese wait state persistido en
   reentrada, validarlo contra `PlanState` y usar sus agentes pendientes sin
-  ampliar la espera por ola/cohorte. El stack Codex y el servidor cablean el
-  store por puerto.
+  ampliar la espera por ola/cohorte. Al consumir el wait hacia review lo marca
+  `continued` de forma idempotente. El stack Codex y el servidor cablean el store
+  por puerto.
 - El stack Codex ya cierra P1 WaitAgentRefs: el scope no vacio limita pending,
   wait e ingesta de ACK/deliveries; `WaitAgentRefs` vacio conserva el drenaje
   legacy del run completo.
@@ -312,8 +313,9 @@ reconstruir waits por cohorte/ola ni recursion gobernada. Cualquier bundle
 productivo debe persistir run, tasks y wait state, o rematerializar las tasks
 desde una fuente idempotente antes de reanudar el director.
 La reentrada actual prefiere `WorkflowTaskWaitStateV0` persistido cuando hay
-`wait_ref` y estado `waiting`; los estados `continued`, `expired` y `cleared`
-siguen pendientes de actualizacion completa en el ciclo vivo.
+`wait_ref` y estado `waiting`, y el consumo normal del wait ya persiste
+`continued`; `expired` y `cleared` siguen pendientes de actualizacion completa en
+el ciclo vivo.
 
 ## Cierre de ingesta por scope
 

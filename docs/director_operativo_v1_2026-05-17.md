@@ -297,7 +297,9 @@ rematerializar las `WorkflowTaskV0` completas, cargar el
 El servicio de aplicacion ya hace ese primer tramo en reentrada: si el step
 `wait_subagents` trae `wait_ref` y hay `WaitStateStore`, usa el wait state
 persistido en estado `waiting` para derivar agentes pendientes sin ampliar la
-cohorte; si no existe, conserva el fallback compatible desde `PlanState`.
+cohorte; si no existe, conserva el fallback compatible desde `PlanState`. Cuando
+ese wait se consume y el plan avanza a `review_deliveries`, el wait state queda
+marcado como `continued`.
 
 ## Delegacion recursiva gobernada
 
@@ -415,8 +417,8 @@ Checklist de siguiente implementacion:
 2. Usar `WorkflowTaskWaitAgentRefsV0` para convertir ola/cohorte/parent task en
    `WaitAgentRefs` antes de esperar; no parsear `acceptance_criteria` para esto.
 3. Mantener `WorkflowTaskWaitStateV0` actualizado cuando el wait continue,
-   expire o se limpie; hoy la reentrada ya lee el estado `waiting`, pero falta
-   cerrar la actualizacion de estados posteriores.
+   expire o se limpie; hoy la reentrada ya lee el estado `waiting` y el consumo
+   lo marca `continued`, pero faltan expiracion y limpieza explicitas.
 4. Registrar entrega y review causal antes de permitir `replan_or_close`.
 5. Si hay rework, crear task nueva enlazada a la entrega rechazada y consumir
    intento/presupuesto.
