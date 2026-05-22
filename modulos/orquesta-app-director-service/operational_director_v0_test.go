@@ -526,13 +526,18 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0ReviewChangesRequestedIdem
 		}
 	}
 
-	got, applied := continueRequestWithLoadedOperationalDirectorPlanStateV0(
+	got, applied, err := continueRequestWithLoadedOperationalDirectorPlanStateV0(
+		context.Background(),
 		ContinueAppDirectorRequestV0{
 			RunRef:                     fixture.RunRef,
 			OperationalDirectorPlanRef: fixture.PlanRef,
 		},
 		state,
+		StartAppDirectorPortsV0{},
 	)
+	if err != nil {
+		t.Fatalf("continueRequestWithLoadedOperationalDirectorPlanStateV0: %v", err)
+	}
 	if applied ||
 		len(got.WaitAgentRefs) != 0 ||
 		got.WaitWaveRef != "" ||
@@ -2548,6 +2553,98 @@ func TestContinueRequestWithOperationalDirectorPlanStateV0RespetaWaitExplicito(t
 	}
 	if len(got.WaitAgentRefs) != 1 || got.WaitAgentRefs[0] != "agent-ref-explicit" {
 		t.Fatalf("request=%+v", got)
+	}
+}
+
+func TestContinueAppDirectorV0RecuperaWaitStatePersistidoSinAmpliarCohorte(t *testing.T) {
+	runRef := "run-app-director-operational-plan-wait-recovery"
+	planRef := "plan-ref-wait-recovery"
+	waitRef := "wait-ref-old"
+	taskA := serviceWorkflowTaskForWaitRefsTestV0(runRef, "task-wait-recovery-a", "wave-01", "cohort-a")
+	taskB := serviceWorkflowTaskForWaitRefsTestV0(runRef, "task-wait-recovery-b", "wave-01", "cohort-a")
+	agentA := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskA.TaskID)
+	agentB := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskB.TaskID)
+	state := orquestacionnucleoapp.OperationalDirectorPlanStateV0{
+		SchemaVersion:   orquestacionnucleoapp.OperationalDirectorPlanStateSchemaVersionV0,
+		StateRef:        "state-ref-wait-recovery",
+		PlanRef:         planRef,
+		RequestRef:      "request-ref-wait-recovery",
+		RunRef:          runRef,
+		ProjectRef:      "orquesta",
+		Mode:            orquestadirectoroperativo.OperationalDirectorModeProgrammingV0,
+		Status:          orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0,
+		ActiveStepID:    "step-wait-subagents",
+		ActiveWaveRef:   "wave-01",
+		ActiveCohortRef: "cohort-a",
+		PendingAgentRefs: []string{
+			agentA,
+			agentB,
+		},
+		ObservedAt: "2026-05-17T13:59:00Z",
+		Steps: []orquestacionnucleoapp.OperationalDirectorPlanStepStateV0{{
+			StepID:           "step-wait-subagents",
+			Kind:             orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0,
+			Status:           orquestadirectoroperativo.OperationalDirectorStepRunningV0,
+			WaveRef:          "wave-01",
+			CohortRef:        "cohort-a",
+			TaskRefs:         []string{taskA.TaskID, taskB.TaskID},
+			WaitRefs:         []string{waitRef},
+			AgentRefs:        []string{agentA, agentB},
+			PendingAgentRefs: []string{agentA, agentB},
+			BlockerRefs:      []string{"wait-subagents"},
+		}},
+	}
+	waitState := orquestacionnucleoapp.WorkflowTaskWaitStateV0{
+		SchemaVersion:    orquestacionnucleoapp.WorkflowTaskWaitStateSchemaVersionV0,
+		WaitRef:          waitRef,
+		RunRef:           runRef,
+		ReasonCode:       orquestacionnucleoapp.WorkflowTaskWaitReasonCohortInProgressV0,
+		CohortRef:        "cohort-a",
+		WaveRef:          "wave-01",
+		TaskRefs:         []string{taskA.TaskID},
+		AgentRefs:        []string{agentA},
+		PendingAgentRefs: []string{agentA},
+		Status:           orquestacionnucleoapp.WorkflowTaskWaitStateStatusWaitingV0,
+		Attempt:          1,
+		ObservedAt:       "2026-05-17T13:58:00Z",
+	}
+	run := serviceRunForWaitRefsTestV0(runRef, taskA.TaskID, taskB.TaskID)
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(state)
+	waitStateStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskWaitStateStoreV0(waitState)
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(taskA, taskB)
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(run)
+	request := ContinueAppDirectorRequestV0{
+		RunRef:                     runRef,
+		OperationalDirectorPlanRef: planRef,
+		OccurredAt:                 "2026-05-17T14:00:00Z",
+		CorrelationID:              "corr-wait-recovery",
+	}
+	ports := StartAppDirectorPortsV0{
+		RunStore:                  runStore,
+		DirectorTaskStore:         taskStore,
+		WaitStateStore:            waitStateStore,
+		OperationalPlanStateStore: planStateStore,
+	}
+	reentered, err := continueRequestWithOperationalDirectorPlanStateV0(context.Background(), request, ports)
+	if err != nil {
+		t.Fatalf("continueRequestWithOperationalDirectorPlanStateV0: %v", err)
+	}
+	if len(reentered.WaitAgentRefs) != 1 ||
+		reentered.WaitAgentRefs[0] != agentA ||
+		serviceStringInSetV0(reentered.WaitAgentRefs, agentB) ||
+		reentered.WaitWaveRef != "" ||
+		reentered.WaitCohortRef != "" ||
+		reentered.WaitParentTaskRef != "" {
+		t.Fatalf("reentered=%+v agentA=%s agentB=%s", reentered, agentA, agentB)
+	}
+	loopRequest, err := existingDirectorLoopRequestV0(context.Background(), reentered, ports)
+	if err != nil {
+		t.Fatalf("existingDirectorLoopRequestV0: %v", err)
+	}
+	if len(loopRequest.WaitAgentRefs) != 1 ||
+		loopRequest.WaitAgentRefs[0] != agentA ||
+		serviceStringInSetV0(loopRequest.WaitAgentRefs, agentB) {
+		t.Fatalf("loop wait refs=%+v agentA=%s agentB=%s", loopRequest.WaitAgentRefs, agentA, agentB)
 	}
 }
 

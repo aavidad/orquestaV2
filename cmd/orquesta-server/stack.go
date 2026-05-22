@@ -102,6 +102,7 @@ func buildStackFromEnvV0(
 			EventSink:                  stateStore,
 			OutboxLedger:               outboxLedger,
 			TaskStore:                  stateStore,
+			WaitStateStore:             stateStore,
 			OperationalPlanStateWriter: stateStore,
 			OperationalPlanStateStore:  stateStore,
 			RequiredTestEvidenceStore:  stateStore,

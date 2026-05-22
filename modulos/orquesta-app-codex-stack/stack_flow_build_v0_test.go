@@ -66,6 +66,7 @@ func mustBuildCodexStackWithDomainWorkAndRequiredTestsForTestV0(
 			EventSink:       orquestacionnucleoapp.NewInMemoryEventSinkV0(),
 			OutboxLedger:    orquestacionnucleoapp.NewInMemoryOutboxLedgerV0(),
 			TaskStore:       orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(),
+			WaitStateStore:  orquestacionnucleoapp.NewInMemoryWorkflowTaskWaitStateStoreV0(),
 			AppChangeStore:  orquestaappchange.NewInMemoryAppChangeStoreV0(),
 			ReceiptStore:    orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(),
 			ProgressState:   orquestaruntimecodexdelivery.NewInMemoryCodexProgressStateStoreV0(),
@@ -150,6 +151,33 @@ func TestOperationalPlanStateStoreV0UsaStoreExplicitoOWriterLegible(t *testing.T
 	}}); got != writerStore {
 		t.Fatalf("writer legible=%T want writerStore", got)
 	}
+}
+
+func TestWaitStateStoreV0UsaStoreExplicitoOTaskStoreLegible(t *testing.T) {
+	explicitStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskWaitStateStoreV0()
+	if got := waitStateStoreV0(ConfigV0{Stores: StoresV0{
+		WaitStateStore: explicitStore,
+	}}); got != explicitStore {
+		t.Fatalf("store explicito=%T want explicit", got)
+	}
+	taskStore := codexStackWorkflowTaskAndWaitStateStoreForTestV0{
+		InMemoryWorkflowTaskStoreV0:          orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(),
+		InMemoryWorkflowTaskWaitStateStoreV0: orquestacionnucleoapp.NewInMemoryWorkflowTaskWaitStateStoreV0(),
+	}
+	if got := waitStateStoreV0(ConfigV0{Stores: StoresV0{
+		TaskStore: taskStore,
+	}}); got != taskStore {
+		t.Fatalf("task store legible=%T want taskStore", got)
+	}
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	if stack.Ports.WaitStateStore == nil {
+		t.Fatalf("WaitStateStore no cableado")
+	}
+}
+
+type codexStackWorkflowTaskAndWaitStateStoreForTestV0 struct {
+	*orquestacionnucleoapp.InMemoryWorkflowTaskStoreV0
+	*orquestacionnucleoapp.InMemoryWorkflowTaskWaitStateStoreV0
 }
 
 func TestProgressSourceV0UsaWaitIntervalComoVentanaMinima(t *testing.T) {

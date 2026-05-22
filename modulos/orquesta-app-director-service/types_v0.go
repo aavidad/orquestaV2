@@ -65,6 +65,7 @@ type StartAppDirectorPortsV0 struct {
 	WorkflowTaskProfileResolver orquestacionnucleoapp.WorkflowTaskProfileResolverPortV0
 	WorkflowTaskDefaultCapacity orquestacoreworkflow.OrchestrationCapacityRecommendationV0
 	WaitStateWriter             orquestacionnucleoapp.WorkflowTaskWaitStateWriterPortV0
+	WaitStateStore              orquestacionnucleoapp.WorkflowTaskWaitStateStorePortV0
 	OperationalPlanStateWriter  orquestacionnucleoapp.OperationalDirectorPlanStateWriterPortV0
 	OperationalPlanStateStore   orquestacionnucleoapp.OperationalDirectorPlanStateStorePortV0
 	RequiredTestEvidenceStore   orquestacionnucleoapp.RequiredTestEvidenceReaderPortV0

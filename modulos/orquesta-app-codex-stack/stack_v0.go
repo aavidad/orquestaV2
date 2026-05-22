@@ -118,6 +118,7 @@ func buildDirectorPortsV0(
 		DirectorTaskStore:           config.Stores.TaskStore,
 		WorkflowTaskDefaultCapacity: config.Capacity.Tier,
 		WaitStateWriter:             waitStateWriterV0(config),
+		WaitStateStore:              waitStateStoreV0(config),
 		OperationalPlanStateWriter:  operationalPlanStateWriterV0(config),
 		OperationalPlanStateStore:   operationalPlanStateStoreV0(config),
 		RequiredTestEvidenceStore:   requiredTestEvidenceStoreV0(config),
@@ -150,6 +151,16 @@ func waitStateWriterV0(
 ) orquestacionnucleoapp.WorkflowTaskWaitStateWriterPortV0 {
 	writer, _ := config.Stores.TaskStore.(orquestacionnucleoapp.WorkflowTaskWaitStateWriterPortV0)
 	return writer
+}
+
+func waitStateStoreV0(
+	config ConfigV0,
+) orquestacionnucleoapp.WorkflowTaskWaitStateStorePortV0 {
+	if config.Stores.WaitStateStore != nil {
+		return config.Stores.WaitStateStore
+	}
+	store, _ := config.Stores.TaskStore.(orquestacionnucleoapp.WorkflowTaskWaitStateStorePortV0)
+	return store
 }
 
 func operationalPlanStateWriterV0(

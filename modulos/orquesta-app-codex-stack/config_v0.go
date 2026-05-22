@@ -40,6 +40,7 @@ type StoresV0 struct {
 	EventSink                  orquestacionnucleoapp.EventSinkPortV0
 	OutboxLedger               OutboxLedgerPortV0
 	TaskStore                  orquestaappdirectorservice.AppDirectorWorkflowTaskStorePortV0
+	WaitStateStore             orquestacionnucleoapp.WorkflowTaskWaitStateStorePortV0
 	OperationalPlanStateWriter orquestacionnucleoapp.OperationalDirectorPlanStateWriterPortV0
 	OperationalPlanStateStore  orquestacionnucleoapp.OperationalDirectorPlanStateStorePortV0
 	RequiredTestEvidenceStore  orquestacionnucleoapp.RequiredTestEvidenceStorePortV0
