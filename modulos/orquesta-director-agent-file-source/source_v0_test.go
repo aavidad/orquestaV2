@@ -162,6 +162,180 @@ func TestDirectorAgentDecisionFileSourceV0NormalizaCreateMicrotaskPhaseObjetivo(
 	}
 }
 
+func TestDirectorAgentDecisionFileSourceV0NormalizaCreateMicrotaskCommandTypeVersionado(t *testing.T) {
+	decision := validMicrotaskDecisionForTestV0("run-ref-001")
+	decision.CommandType = "create_microtask.v0"
+	data := mustDecisionFileJSONForTestV0(t, []orquestadirectoragent.DirectorAgentDecisionV0{decision})
+	source := DirectorAgentDecisionFileSourceV0{
+		DescriptorProvider: decisionFileDescriptorProviderForTestV0{
+			Descriptors: []DirectorAgentDecisionFileDescriptorV0{{
+				RunID: "run-ref-001",
+				Path:  "microtask-command-type.json",
+			}},
+		},
+		Reader: memoryDecisionFileReaderForTestV0{
+			Files: map[string][]byte{"microtask-command-type.json": data},
+		},
+	}
+
+	decisions, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		decisionSourceRequestForTestV0("run-ref-001"),
+	)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	if decisions[0].CommandType != orquestadirectoragent.DirectorAgentCommandCreateMicrotaskV0 {
+		t.Fatalf("command_type create_microtask no normalizado: %+v", decisions[0])
+	}
+}
+
+func TestDirectorAgentDecisionFileSourceV0ToleraComasFinalesDeAgente(t *testing.T) {
+	data := []byte(`{
+		"schema_version": "director_agent_decisions_file.v0",
+		"decisions": [
+			{
+				"schema_version": "director_agent_decision.v0",
+				"decision_ref": "director-decision-file-open-vote-001",
+				"run_id": "run-ref-001",
+				"phase_id": "brainstorming_arquitectura",
+				"command_type": "open_phase",
+				"command_ref": "command-ref-file-open-vote-001",
+				"summary": "Abrir fase de decision.",
+				"evidence_refs": ["evidence-ref-file-open-vote-001",],
+				"open_phase": {
+					"phase_id": "votacion_y_decision",
+					"reason": "Preparar decision.",
+				},
+			},
+		],
+	}`)
+	source := DirectorAgentDecisionFileSourceV0{
+		DescriptorProvider: decisionFileDescriptorProviderForTestV0{
+			Descriptors: []DirectorAgentDecisionFileDescriptorV0{{
+				RunID: "run-ref-001",
+				Path:  "trailing-commas.json",
+			}},
+		},
+		Reader: memoryDecisionFileReaderForTestV0{
+			Files: map[string][]byte{"trailing-commas.json": data},
+		},
+	}
+
+	decisions, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		decisionSourceRequestForTestV0("run-ref-001"),
+	)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	if len(decisions) != 1 ||
+		decisions[0].CommandType != orquestadirectoragent.DirectorAgentCommandOpenPhaseV0 {
+		t.Fatalf("decisions=%+v", decisions)
+	}
+}
+
+func TestDirectorAgentDecisionFileSourceV0NormalizaPayloadsPlanosDeAgente(t *testing.T) {
+	data := []byte(`{
+		"schema_version": "director_agent_decisions_file.v0",
+		"decisions": [
+			{
+				"schema_version": "director_agent_decision.v0",
+				"decision_ref": "decision-request-vote-architecture-v1",
+				"run_id": "run-ref-001",
+				"phase_id": "votacion_y_decision",
+				"command_type": "request_vote",
+				"command_ref": "command-request-vote-architecture-v1",
+				"summary": "Solicitar voto tecnico.",
+				"evidence_refs": ["evidence-ref-vote-v1"],
+				"vote_request_id": "vote-ref-architecture-v1",
+				"decision_topic_ref": "topic-architecture-v1",
+				"brainstorm_ref": "brainstorm-ref-v1",
+				"minimum_recommended_capacity": "high"
+			},
+			{
+				"schema_version": "director_agent_decision.v0",
+				"decision_ref": "decision-accept-architecture-v1",
+				"run_id": "run-ref-001",
+				"phase_id": "votacion_y_decision",
+				"command_type": "accept_decision",
+				"command_ref": "command-accept-architecture-v1",
+				"summary": "Aceptar opcion tecnica.",
+				"evidence_refs": ["evidence-ref-accept-v1"],
+				"vote_ref": "vote-ref-architecture-v1",
+				"accepted_option_ref": "option-hexagonal-i18n-v1"
+			},
+			{
+				"schema_version": "director_agent_decision.v0",
+				"decision_ref": "decision-publish-contract-v1",
+				"run_id": "run-ref-001",
+				"phase_id": "planificacion_microtareas",
+				"command_type": "publish_function_contract",
+				"command_ref": "command-publish-contract-v1",
+				"summary": "Publicar contrato funcional.",
+				"evidence_refs": ["evidence-ref-contract-v1"],
+				"contract_ref": "contract-ref-agenda-v1",
+				"function_names": ["CreateContact", "CreateAppointment"]
+			}
+		]
+	}`)
+	source := DirectorAgentDecisionFileSourceV0{
+		DescriptorProvider: decisionFileDescriptorProviderForTestV0{
+			Descriptors: []DirectorAgentDecisionFileDescriptorV0{{
+				RunID: "run-ref-001",
+				Path:  "flat-payloads.json",
+			}},
+		},
+		Reader: memoryDecisionFileReaderForTestV0{
+			Files: map[string][]byte{"flat-payloads.json": data},
+		},
+	}
+
+	decisions, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		decisionSourceRequestForTestV0("run-ref-001"),
+	)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	if len(decisions) != 3 ||
+		decisions[0].RequestVote == nil ||
+		decisions[1].AcceptDecision == nil ||
+		decisions[2].PublishContract == nil {
+		t.Fatalf("payloads no normalizados: %+v", decisions)
+	}
+}
+
+func TestDirectorAgentDecisionFileSourceV0RechazaCreateMicrotaskVersionadoSinPayload(t *testing.T) {
+	decision := validMicrotaskDecisionForTestV0("run-ref-001")
+	decision.CommandType = "create_microtask.v0"
+	decision.CreateMicrotask = nil
+	data := mustDecisionFileJSONForTestV0(t, []orquestadirectoragent.DirectorAgentDecisionV0{decision})
+	source := DirectorAgentDecisionFileSourceV0{
+		DescriptorProvider: decisionFileDescriptorProviderForTestV0{
+			Descriptors: []DirectorAgentDecisionFileDescriptorV0{{
+				RunID: "run-ref-001",
+				Path:  "microtask-command-type-no-payload.json",
+			}},
+		},
+		Reader: memoryDecisionFileReaderForTestV0{
+			Files: map[string][]byte{"microtask-command-type-no-payload.json": data},
+		},
+	}
+
+	_, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		decisionSourceRequestForTestV0("run-ref-001"),
+	)
+
+	if err == nil {
+		t.Fatalf("esperaba error")
+	}
+}
+
 func TestDirectorAgentDecisionFileSourceV0FiltersForeignRun(t *testing.T) {
 	source := DirectorAgentDecisionFileSourceV0{
 		DescriptorProvider: decisionFileDescriptorProviderForTestV0{
@@ -178,6 +352,34 @@ func TestDirectorAgentDecisionFileSourceV0FiltersForeignRun(t *testing.T) {
 		context.Background(),
 		decisionSourceRequestForTestV0("run-ref-001"),
 	)
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	if len(decisions) != 0 {
+		t.Fatalf("decisions=%+v", decisions)
+	}
+}
+
+func TestDirectorAgentDecisionFileSourceV0FiltraDecisionRunExtranjeroSinRunEnDescriptor(t *testing.T) {
+	data := mustDecisionFileJSONForTestV0(t, []orquestadirectoragent.DirectorAgentDecisionV0{
+		validOpenVoteDecisionForTestV0("run-ref-foreign"),
+	})
+	source := DirectorAgentDecisionFileSourceV0{
+		DescriptorProvider: decisionFileDescriptorProviderForTestV0{
+			Descriptors: []DirectorAgentDecisionFileDescriptorV0{{
+				Path: "foreign-decision.json",
+			}},
+		},
+		Reader: memoryDecisionFileReaderForTestV0{
+			Files: map[string][]byte{"foreign-decision.json": data},
+		},
+	}
+
+	decisions, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		decisionSourceRequestForTestV0("run-ref-001"),
+	)
+
 	if err != nil {
 		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
 	}

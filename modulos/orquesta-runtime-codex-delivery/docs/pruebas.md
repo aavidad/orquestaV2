@@ -364,3 +364,22 @@ Evidencia anadida:
 - `TestCodexReceiptDirectorDecisionFileDescriptorProviderV0EsperaACKReflejado`
   impide exponer `director_decisions.json` si el `ack_ref` productor aun no
   esta reflejado en el run.
+
+Revalidacion 2026-05-22 de review laxo por write-set:
+
+```bash
+go test -count=1 ./modulos/orquesta-runtime-codex-delivery
+```
+
+Resultado: `ok`.
+
+Evidencia anadida:
+
+- `TestCodexReviewGateProjectFileEvidenceV0MarcaWriteSetFaltanteComoRevision`
+  convierte un destino ausente del `write_set` en issue compacto para rework.
+- `TestCodexReviewGateProjectFileEvidenceV0AceptaDirectoriosYGlobsDelWriteSet`
+  confirma que directorios y globs con ficheros reales no se marcan como
+  faltantes.
+- `TestCodexReviewGateProjectFileEvidenceV0AceptaWebAdminInternoComoWeb`
+  confirma que una web Go embebida bajo `internal/webadmin` satisface el
+  destino funcional `web`.

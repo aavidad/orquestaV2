@@ -204,7 +204,7 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 			SourceCodeHome:  sourceHome,
 			PathEnv:         envOrDefaultV0("ORQUESTA_CODEX_WAVE_PATH", envOrDefaultV0("ORQUESTA_CODEX_PATH", os.Getenv("PATH"))),
 			Model:           strings.TrimSpace(*model),
-			ReasoningEffort: strings.TrimSpace(*reasoningEffort),
+			ReasoningEffort: codexReasoningEffortMinHighV0(*reasoningEffort),
 			Profile:         strings.TrimSpace(*profile),
 			Sandbox:         strings.TrimSpace(*sandbox),
 			ApprovalPolicy:  strings.TrimSpace(*approval),

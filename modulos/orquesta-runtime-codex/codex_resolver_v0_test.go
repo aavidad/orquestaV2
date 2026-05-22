@@ -127,6 +127,7 @@ func TestCodexExecResolverV0PromptUsaControlFilesDelRuntime(t *testing.T) {
 		"checkpoint_ready",
 		"PROTOCOLO ACK FUERA DEL PROYECTO",
 		"No uses apply_patch para escribirlo",
+		"No crees docs/codigo en ese directorio de control",
 		"La linea visible ACK no sustituye este JSON",
 		"Es obligatorio solo si objetivo o criterios de cierre lo piden.",
 		"PROTOCOLO COMPACTO OBLIGATORIO",
@@ -137,6 +138,8 @@ func TestCodexExecResolverV0PromptUsaControlFilesDelRuntime(t *testing.T) {
 		"No imprimas diffs ni pegues artefactos completos",
 		"Si escribes decision_path, completa antes los ficheros pedidos del write-set",
 		"files debe listar rutas reales de archivos de producto tocados",
+		"Las rutas del write-set son relativas al workdir del proyecto",
+		"No incluyas archivos de control en ACK.files",
 		"Write-set permitido:",
 		"README.md",
 		"Tests obligatorios:",
@@ -171,6 +174,31 @@ func TestCodexExecResolverV0PromptNoSugiereGlobsComoFilesDelACK(t *testing.T) {
 	}
 	if !strings.Contains(ackBlock, `"files":["go.mod","README.md"]`) {
 		t.Fatalf("ACK esperado debe sugerir solo ficheros concretos:\n%s", ackBlock)
+	}
+}
+
+func TestCodexExecResolverV0PromptExigeDecisionPathAlDirector(t *testing.T) {
+	packet := codexPacketForTestV0()
+	packet.TargetModule = "orquesta-app-stack-director"
+	prompt := BuildCodexAgentPromptWithControlFilesV0(
+		packet,
+		nil,
+		CodexControlFilesV0{
+			PacketPath:   "/runtime/agent_packet.json",
+			AckPath:      "/runtime/agent_ack.json",
+			DecisionPath: "/runtime/director_decisions.json",
+		},
+	)
+
+	for _, want := range []string{
+		"Como target_module de director",
+		"ACK completed solo es valido despues de escribir decision_path",
+		"si no puedes, usa ACK failed con CONSULTA AL DIRECTOR",
+		"Docs sin decision_path no completan la tarea.",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt no contiene %q:\n%s", want, prompt)
+		}
 	}
 }
 

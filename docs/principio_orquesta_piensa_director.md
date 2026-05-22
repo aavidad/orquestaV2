@@ -23,6 +23,8 @@ Orquesta conserva:
 
 - arrancar director y agentes;
 - decidir plan, fases, granularidad y paralelismo mediante director;
+- interpretar intencion razonable de agentes y adaptar nombres, alias o formas
+  equivalentes cuando no haya riesgo causal ni de seguridad;
 - elegir perfil neutral de trabajo, capacidad, razonamiento, modelo, proveedor y
   runtime por conectores;
 - pedir aclaraciones al usuario o a otro grupo cuando falte informacion;
@@ -109,6 +111,10 @@ datos, reglas y validadores.
 - Contextos pequenos por modulo, tarea y agente.
 - Tareas adaptativas: pequenas por defecto, mas amplias cuando el dominio lo
   requiera y el contexto sea suficiente.
+- Tolerancia semantica por defecto: `web_app`, `web_application`, rutas hijas,
+  globs o nombres cercanos no deben romper el ciclo si la intencion es clara.
+  El adaptador normaliza y el director corrige; solo se bloquean seguridad,
+  causalidad, refs imposibles, datos sensibles o acciones no autorizadas.
 - El director dirige; no hace todo el trabajo pesado.
 - Las apps externas no se integran como internals de Orquesta salvo contratos
   genericos y conectores opt-in.

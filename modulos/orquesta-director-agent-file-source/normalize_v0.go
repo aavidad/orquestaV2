@@ -47,12 +47,24 @@ func normalizeDirectorAgentDecisionFileDecisionV0(
 	if strings.TrimSpace(decision.SchemaVersion) == "" {
 		decision.SchemaVersion = orquestadirectoragent.DirectorAgentDecisionSchemaVersionV0
 	}
+	decision = normalizeDirectorAgentDecisionFileCommandTypeV0(decision)
 	decision = normalizeDirectorAgentDecisionFilePhaseV0(decision)
 	if decision.CreateMicrotask == nil {
 		return decision
 	}
 	if strings.TrimSpace(decision.CreateMicrotask.Task.SchemaVersion) == "" {
 		decision.CreateMicrotask.Task.SchemaVersion = orquestadirectoragent.DirectorAgentMicrotaskSchemaVersionV0
+	}
+	return decision
+}
+
+func normalizeDirectorAgentDecisionFileCommandTypeV0(
+	decision orquestadirectoragent.DirectorAgentDecisionV0,
+) orquestadirectoragent.DirectorAgentDecisionV0 {
+	commandType := strings.TrimSpace(decision.CommandType)
+	if decision.CreateMicrotask != nil &&
+		(commandType == "" || commandType == "create_microtask.v0") {
+		decision.CommandType = orquestadirectoragent.DirectorAgentCommandCreateMicrotaskV0
 	}
 	return decision
 }

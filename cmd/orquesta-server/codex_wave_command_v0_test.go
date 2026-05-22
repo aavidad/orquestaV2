@@ -213,6 +213,7 @@ func TestCodexLaunchWaveCommandV0DryRunNoExigeCodexReal(t *testing.T) {
 		"--runtime-dir", filepath.Join(root, "runtime", "wave-dry-run"),
 		"--command", fakeCodex,
 		"--source-code-home", sourceCodeHome,
+		"--reasoning-effort", "medium",
 		"--prompt", "solo materializa",
 	}, &stdout, &stderr)
 	if exitCode != 0 {
@@ -227,6 +228,14 @@ func TestCodexLaunchWaveCommandV0DryRunNoExigeCodexReal(t *testing.T) {
 	}
 	if _, err := os.Stat(summary.Agents[0].WrapperPath); err != nil {
 		t.Fatalf("wrapper no materializado: %v", err)
+	}
+	wrapperData, err := os.ReadFile(summary.Agents[0].WrapperPath)
+	if err != nil {
+		t.Fatalf("leer wrapper dry-run: %v", err)
+	}
+	if strings.Contains(string(wrapperData), `model_reasoning_effort="medium"`) ||
+		!strings.Contains(string(wrapperData), `model_reasoning_effort="high"`) {
+		t.Fatalf("wrapper no eleva reasoning a high:\n%s", string(wrapperData))
 	}
 }
 

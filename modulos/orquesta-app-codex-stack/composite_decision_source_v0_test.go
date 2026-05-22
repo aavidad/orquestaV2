@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
 	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
 )
@@ -180,6 +181,109 @@ func TestCompositeDirectorDecisionSourceV0CompletaDependsOnBootstrap(t *testing.
 	}
 }
 
+func TestCompositeDirectorDecisionSourceV0NormalizaOpenPhaseConPhaseDestino(t *testing.T) {
+	decisions := codexStackDirectorDecisionsForTestV0(
+		"run-ref-stack-policy-open-phase-001",
+		"brainstorm-ref-stack-policy-open-phase-001",
+	)
+	for i := range decisions {
+		if decisions[i].OpenPhase != nil {
+			decisions[i].PhaseID = decisions[i].OpenPhase.PhaseID
+		}
+	}
+	source := compositeDirectorDecisionSourceV0{
+		Sources: []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0{
+			codexStackStaticDecisionSourceForTestV0{Decisions: decisions},
+		},
+	}
+
+	got, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				CurrentPhase: orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0,
+			},
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	assertCodexStackOpenPhaseForPolicyTestV0(
+		t,
+		got,
+		"director-decision-stack-open-plan-001",
+		orquestacoreworkflow.OrchestrationPhaseVotacionYDecisionV0,
+	)
+	assertCodexStackOpenPhaseForPolicyTestV0(
+		t,
+		got,
+		"director-decision-stack-open-program-001",
+		orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
+	)
+}
+
+func TestCompositeDirectorDecisionSourceV0NormalizaPublishContractDecisionRefAlAcceptPrevio(t *testing.T) {
+	decisions := codexStackDirectorDecisionsForTestV0(
+		"run-ref-stack-policy-contract-ref-001",
+		"brainstorm-ref-stack-policy-contract-ref-001",
+	)
+	for i := range decisions {
+		if decisions[i].PublishContract != nil {
+			decisions[i].PublishContract.DecisionRef = decisions[i].DecisionRef
+		}
+	}
+	source := compositeDirectorDecisionSourceV0{
+		Sources: []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0{
+			codexStackStaticDecisionSourceForTestV0{Decisions: decisions},
+		},
+	}
+
+	got, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{},
+	)
+
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	contract, ok := codexStackPublishContractForPolicyTestV0(got, "director-decision-stack-contract-001")
+	if !ok || contract.DecisionRef != "decision-ref-stack-001" {
+		t.Fatalf("publish_function_contract.decision_ref no normalizado: %+v", contract)
+	}
+}
+
+func TestCompositeDirectorDecisionSourceV0NoInventaPublishContractSinAcceptPrevio(t *testing.T) {
+	decisions := codexStackDirectorDecisionsForTestV0(
+		"run-ref-stack-policy-contract-no-accept-001",
+		"brainstorm-ref-stack-policy-contract-no-accept-001",
+	)
+	filtered := make([]orquestadirectoragent.DirectorAgentDecisionV0, 0, len(decisions))
+	for _, decision := range decisions {
+		if decision.AcceptDecision != nil {
+			continue
+		}
+		if decision.PublishContract != nil {
+			decision.PublishContract.DecisionRef = decision.DecisionRef
+		}
+		filtered = append(filtered, decision)
+	}
+	source := compositeDirectorDecisionSourceV0{
+		Sources: []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0{
+			codexStackStaticDecisionSourceForTestV0{Decisions: filtered},
+		},
+	}
+
+	_, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{},
+	)
+
+	if err == nil || !strings.Contains(err.Error(), "publish_function_contract.decision_ref") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestCompositeDirectorDecisionSourceV0CompletaReadmeParaAppGoCompleta(t *testing.T) {
 	decisions := codexStackDirectorDecisionsForTestV0(
 		"run-ref-stack-policy-readme-001",
@@ -286,6 +390,104 @@ func TestCompositeDirectorDecisionSourceV0CompletaWebSiLaAppGoLoPide(t *testing.
 	}
 }
 
+func TestCompositeDirectorDecisionSourceV0NoDuplicaWebSiWebAdminInternoLoCubre(t *testing.T) {
+	decisions := codexStackDirectorDecisionsForTestV0(
+		"run-ref-stack-policy-webadmin-001",
+		"brainstorm-ref-stack-policy-webadmin-001",
+	)
+	decisions = codexStackMutateFirstMicrotaskForPolicyTestV0(
+		decisions,
+		func(task *orquestadirectoragent.DirectorAgentMicrotaskV0) {
+			task.Summary = "Construir modulo Go autonomo con API y web."
+			task.WriteSet = []string{
+				"go.mod",
+				"cmd/server/main.go",
+				"internal/domain/**",
+				"internal/httpapi/**",
+				"internal/webadmin/**",
+				"README.md",
+				"docs/**",
+			}
+			task.RequiredTests = []string{"go test ./..."}
+		},
+	)
+	source := compositeDirectorDecisionSourceV0{
+		Sources: []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0{
+			codexStackStaticDecisionSourceForTestV0{Decisions: decisions},
+		},
+	}
+
+	got, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{},
+	)
+
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	task, ok := codexStackMicrotaskForPolicyTestV0(got, "task-ref-stack-agenda-001")
+	if !ok {
+		t.Fatalf("task no encontrada")
+	}
+	if codexStackStringInSetForTestV0(task.WriteSet, "web") {
+		t.Fatalf("web duplicado pese a internal/webadmin: %+v", task.WriteSet)
+	}
+}
+
+func TestCompositeDirectorDecisionSourceV0NoRompeWriteSetMaximoPorCompletarWeb(t *testing.T) {
+	decisions := codexStackDirectorDecisionsForTestV0(
+		"run-ref-stack-policy-web-max-001",
+		"brainstorm-ref-stack-policy-web-max-001",
+	)
+	decisions = codexStackMutateFirstMicrotaskForPolicyTestV0(
+		decisions,
+		func(task *orquestadirectoragent.DirectorAgentMicrotaskV0) {
+			task.Summary = "Construir modulo Go autonomo con API y web."
+			task.WriteSet = []string{
+				"go.mod",
+				"cmd/server/main.go",
+				"internal/domain/**",
+				"internal/app/**",
+				"internal/ports/**",
+				"internal/http/**",
+				"internal/memory/**",
+				"internal/i18n/**",
+				"README.md",
+				"docs/**",
+			}
+			for len(task.WriteSet) < compositeDirectorAgentTextListMaxV0 {
+				task.WriteSet = append(task.WriteSet, fmt.Sprintf("docs/extra-%02d.md", len(task.WriteSet)))
+			}
+			task.AcceptanceCriteria = append(task.AcceptanceCriteria,
+				"Web de administracion servida por el proceso y conectada a la API.",
+			)
+			task.RequiredTests = []string{"go test ./..."}
+		},
+	)
+	source := compositeDirectorDecisionSourceV0{
+		Sources: []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0{
+			codexStackStaticDecisionSourceForTestV0{Decisions: decisions},
+		},
+	}
+
+	got, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{},
+	)
+
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	task, ok := codexStackMicrotaskForPolicyTestV0(got, "task-ref-stack-agenda-001")
+	if !ok {
+		t.Fatalf("task no encontrada")
+	}
+	if len(task.WriteSet) != compositeDirectorAgentTextListMaxV0 ||
+		codexStackStringInSetForTestV0(task.WriteSet, "web") {
+		t.Fatalf("write_set no debe ampliarse hasta invalidarse: %+v", task.WriteSet)
+	}
+}
+
 func TestCompositeDirectorDecisionSourceV0NoDuplicaReadmeSiOtraTareaLoCubre(t *testing.T) {
 	source := compositeDirectorDecisionSourceV0{
 		Sources: []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0{
@@ -362,6 +564,41 @@ func TestCompositeDirectorDecisionSourceV0PropagaErrorDeFuente(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "fuente rota") {
 		t.Fatalf("err=%v", err)
 	}
+}
+
+func assertCodexStackOpenPhaseForPolicyTestV0(
+	t *testing.T,
+	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
+	decisionRef string,
+	wantPhase orquestacoreworkflow.OrchestrationPhaseIDV0,
+) {
+	t.Helper()
+	for _, decision := range decisions {
+		if decision.DecisionRef != decisionRef {
+			continue
+		}
+		if decision.OpenPhase == nil {
+			t.Fatalf("%s no es open_phase: %+v", decisionRef, decision)
+		}
+		if decision.PhaseID != string(wantPhase) {
+			t.Fatalf("%s phase_id=%q want %q", decisionRef, decision.PhaseID, wantPhase)
+		}
+		return
+	}
+	t.Fatalf("decision %s no encontrada", decisionRef)
+}
+
+func codexStackPublishContractForPolicyTestV0(
+	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
+	decisionRef string,
+) (orquestadirectoragent.DirectorAgentPublishContractCommandV0, bool) {
+	for _, decision := range decisions {
+		if decision.DecisionRef != decisionRef || decision.PublishContract == nil {
+			continue
+		}
+		return *decision.PublishContract, true
+	}
+	return orquestadirectoragent.DirectorAgentPublishContractCommandV0{}, false
 }
 
 func codexStackAnswerQuestionDecisionForPolicyTestV0(

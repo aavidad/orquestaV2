@@ -10,6 +10,20 @@ Estado: aceptada_local
 ```
 
 ```text
+Fecha: 2026-05-22
+Decision: Separar el limite de listas de texto de las refs/evidencias compactas.
+Motivo: en smoke real el director creo una microtarea vertical Go razonable con
+12 entradas de `write_set`; el validador la rechazo porque `write_set` compartia
+el limite de 10 pensado para `evidence_refs`. Eso hacia fragil la orquestacion
+de tareas reales.
+Impacto: `evidence_refs`, refs causales y contratos siguen compactos, pero las
+listas textuales de microtarea (`write_set`, criterios y tests) admiten hasta
+24 entradas. La validacion dura queda en refs, seguridad y datos prohibidos; la
+granularidad exacta se corrige por director/review.
+Estado: aceptada_local
+```
+
+```text
 Fecha: 2026-05-11
 Decision: Toda microtarea del director con `task.phase_id=programacion` debe
 incluir `required_tests`.

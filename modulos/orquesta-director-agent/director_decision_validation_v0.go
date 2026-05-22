@@ -279,7 +279,7 @@ func (v *directorAgentDecisionValidatorV0) requireOptionalContextRefs(field stri
 }
 
 func (v *directorAgentDecisionValidatorV0) requireTextList(field string, values []string) {
-	if len(values) == 0 || len(values) > maxDirectorAgentEvidenceRefsV0 {
+	if len(values) == 0 || len(values) > maxDirectorAgentTextListV0 {
 		v.add("director_agent_lista_invalida", field)
 		return
 	}

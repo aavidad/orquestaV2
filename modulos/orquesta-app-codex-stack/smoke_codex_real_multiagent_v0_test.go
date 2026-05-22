@@ -120,6 +120,17 @@ func TestNuevaAppWebCodexStackRealMultiagentOptInV0(t *testing.T) {
 		allDescriptors,
 		1,
 	)
+	run, allDescriptors = codexStackRealSmokeRepairMissingDescriptorWriteSetsV0(
+		t,
+		ctx,
+		stack,
+		stores,
+		descriptors[0].RunID,
+		cfg.ProjectWorkDir,
+		cfg.RuntimeWorkDir,
+		maxExternalWaits,
+		allDescriptors,
+	)
 	codexStackRealSmokeVerifyDescriptorWriteSetsV0(t, cfg.ProjectWorkDir, allDescriptors)
 	codexStackRealSmokeVerifyGoFileSizesV0(t, cfg.ProjectWorkDir)
 	codexStackRealSmokeVerifyGoAppCompilesV0(t, cfg.ProjectWorkDir)

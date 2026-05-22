@@ -168,7 +168,7 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 		SourceCodeHome:  sourceHome,
 		PathEnv:         envOrDefaultV0("ORQUESTA_CODEX_WAVE_PATH", envOrDefaultV0("ORQUESTA_CODEX_PATH", os.Getenv("PATH"))),
 		Model:           strings.TrimSpace(*model),
-		ReasoningEffort: strings.TrimSpace(*reasoningEffort),
+		ReasoningEffort: codexReasoningEffortMinHighV0(*reasoningEffort),
 		Profile:         strings.TrimSpace(*profile),
 		Sandbox:         strings.TrimSpace(*sandbox),
 		ApprovalPolicy:  strings.TrimSpace(*approval),
@@ -398,6 +398,15 @@ func codexWavePromptTextV0(prompt string, promptFile string, trailing []string) 
 		}
 	}
 	return "", errors.New("prompt_required")
+}
+
+func codexReasoningEffortMinHighV0(value string) string {
+	switch strings.TrimSpace(value) {
+	case "xhigh":
+		return "xhigh"
+	default:
+		return "high"
+	}
 }
 
 func codexWaveProjectDirV0(raw string) (string, error) {

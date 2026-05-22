@@ -61,6 +61,34 @@ func TestCodexStackV0ReviewGatePideCambiosSiFicheroEsDemasiadoGrande(t *testing.
 	}
 }
 
+func TestCodexStackV0ReviewGatePideCambiosSiFaltaDestinoWriteSet(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	spec := codexStackReviewGateSpecForTestV0("ack-ref-stack-review-missing-web-001")
+	spec.AgentPacket.Task.WriteSet = []string{"internal/api", "web"}
+	projectDir := t.TempDir()
+	writeStackReviewGateFileForTestV0(t, projectDir, "internal/api/handler.go", "package api\nfunc Handler() {}\n")
+	recordStackReviewDescriptorForTestV0(t, stack, projectDir, spec, []string{"internal/api/handler.go"})
+
+	observations, err := stack.Ports.ReviewGateSource.BuildReviewGateObservationsV0(
+		context.Background(),
+		codexStackReviewGateRequestForTestV0(spec, nil),
+	)
+	if err != nil {
+		t.Fatalf("BuildReviewGateObservationsV0: %v", err)
+	}
+	if len(observations) != 1 ||
+		observations[0].Status != orquestacoreworkflow.ReviewResultStatusChangesRequestedV0 ||
+		observations[0].AcceptedReviewRef != "" {
+		t.Fatalf("observations=%+v", observations)
+	}
+	if !codexStackReviewGateHasEvidenceForTestV0(
+		observations[0].EvidenceRefs,
+		"gate-issue:write_set_target_missing:web",
+	) {
+		t.Fatalf("evidence_refs=%v", observations[0].EvidenceRefs)
+	}
+}
+
 func recordStackReviewDescriptorForTestV0(
 	t *testing.T,
 	stack StackV0,

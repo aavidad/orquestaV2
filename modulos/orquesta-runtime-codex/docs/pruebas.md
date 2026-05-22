@@ -19,10 +19,17 @@ Cobertura:
   esperados, no arrays vacios;
 - el prompt advierte que el ACK externo al proyecto debe escribirse desde el
   directorio runtime por shell y que la linea visible no sustituye el JSON;
+- el prompt aclara que el write-set se escribe relativo al workdir del
+  proyecto, no al directorio de control;
+- el prompt prohibe listar archivos de control (`agent_ack.json`,
+  `director_decisions.json`, packet, prompts, logs, checkpoints) en
+  `ACK.files`;
 - con sandbox `workspace-write`, el wrapper autoriza `runtime_work_dir` con
   `--add-dir` para que el agente pueda escribir `agent_ack.json`;
 - `decision_path` aparece como archivo de control y se marca obligatorio solo
   si objetivo o criterios de cierre lo piden;
+- para target_module de director, el prompt exige `decision_path` antes de ACK
+  `completed` y pide `failed` con `CONSULTA AL DIRECTOR` si no puede emitirlo;
 - el prompt materializa `orquesta_shutdown_request.json` y
   `agent_shutdown_checkpoint_ack.json` como ficheros de control de cierre
   cooperativo;
@@ -37,8 +44,15 @@ Cobertura:
 - devuelve `ProcessRuntimeLaunchRequestV0` sin args/env operacionales;
 - no filtra provider/model/HOME/OAuth al request publico de proceso;
 - valida ACK/receipt Codex opt-in correcto;
+- normaliza `task_ref` y `correlation_id` desde el descriptor si `request_id`,
+  `ack_ref` y `target_module` coinciden;
 - rechaza ACK corrupto o incompleto con error publico;
-- rechaza ACK `completed` sin artifacts del write-set o con artifacts fuera de write-set;
+- rechaza ACK `completed` con `files: []` o con artifacts fuera de write-set
+  sin justificacion;
+- acepta entregas parciales dentro del write-set para revisor/corrector; la
+  completitud queda en director/review/rework/tests, no en `ACK.files`;
+- acepta ampliacion de write-set justificada en `notes`, pero rechaza archivos
+  de control aunque la ampliacion este justificada;
 - acepta ACK con artifacts concretos que encajan en write-set con glob cerrado;
 - rechaza ACK `completed` que copia globs del write-set en `files`;
 - advierte en el prompt cuando hay contexto requerido truncado;

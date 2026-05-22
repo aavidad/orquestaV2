@@ -17,6 +17,100 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-05-22
+Decision: La app Codex corrige entregas incompletas por review/rework antes de
+fallar el smoke final.
+Motivo: en prueba real el director y el agente de programacion ya funcionaban,
+pero el agente omitio `web/` aunque habia generado una app Go util. Eso no debe
+invalidar todo el trabajo: el director debe conservar lo valido y lanzar una
+correccion acotada con el faltante.
+Impacto: el smoke multiagente detecta destinos reales del `write_set` ausentes,
+abre `revision`, deja que el review gate pida cambios y espera el agente de
+rework. `ReviewReworkReplanSourceV0` describe los faltantes en el summary del
+follow-up y `programmingObjectiveV0` los pasa al agente como contexto de
+correccion, sin meter Codex ni paths locales en el nucleo. Si el agente cumple
+la superficie web como paquete Go embebido `internal/webadmin`, no se exige
+ademas una carpeta literal `web/`.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-22
+Decision: El stack debe preferir correccion incremental sobre rechazo completo
+cuando un agente entrega una variante razonable.
+Motivo: los agentes no son deterministas; en ejecuciones reales pueden usar
+alias, rutas hijas, globs o entregar solo la parte corregida de un write-set
+amplio. Si Orquesta exige la forma exacta en cada rail, convierte validadores en
+NLU pobre y pierde trabajo valido.
+Impacto: la composicion Codex normaliza decisiones del director cuando hay
+causalidad suficiente, evita ampliar write-sets ya al limite, permite ACKs
+parciales dentro de alcance y deja la comprobacion de completitud a
+director/review/rework/tests. Seguridad, refs, archivos de control y datos
+sensibles siguen siendo cortes duros.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-22
+Decision: Los lanzamientos Codex reales de Orquesta no bajan de high por
+configuracion accidental.
+Motivo: con cuota suficiente, `medium` en trabajos de programacion/revision del
+director deja demasiado trabajo a medias. El objetivo operativo es dar manga
+ancha y ajustar hacia abajo solo con evidencia, no al reves.
+Impacto: la composicion del servidor, `codex-launch-wave`,
+`codex-launch-director-wave` y los smokes reales elevan `low`/`medium` a
+`high`; `xhigh` sigue permitido. El core no conoce modelos, proveedor ni cuotas.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-22
+Decision: La fuente compuesta normaliza errores menores de refs causales del
+director antes de validar, sin relajar el contrato material.
+Motivo: en prueba real el director emitio `publish_function_contract.decision_ref`
+apuntando a su propia decision de publicacion, aunque el lote contenia un
+`accept_decision` previo unico y valido. Bloquear por esa errata impide avanzar
+por un rail demasiado estrecho.
+Impacto: si `publish_function_contract.decision_ref` no referencia una decision
+aceptada previa y hay un `accept_decision` previo claro, el stack lo corrige a
+ese ref aceptado antes de la validacion causal. No se inventan contratos,
+microtareas, write-set ni tests.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-22
+Decision: En `crear_app_completa` normal el director no debe sustituir una
+tarea de programacion por una microtarea solo documental si ya hay objetivo
+funcional suficiente.
+Motivo: en smoke real el director recibio contexto pobre y aplico `CONSULTA AL
+DIRECTOR` como rail de seguridad, creando solo documentacion. Eso bloqueaba el
+run antes de lanzar el worker de programacion aunque la solicitud real pedia una
+app Go pequena verificable.
+Impacto: el contrato del director conserva `CONSULTA AL DIRECTOR` para falta
+real de informacion, pero en `crear_app_completa` normal pide fijar supuestos
+menores y crear una `create_microtask` de programacion real con `go.mod`,
+entrypoint, paquete interno, README, tests y `required_tests=["go test ./..."]`
+cuando la solicitud apunta a Go. No se toca core ni se introduce conocimiento
+OPES.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-22
+Decision: El stack normaliza `open_phase` si el agente usa la fase destino como
+`decision.phase_id`.
+Motivo: en smoke real el director produjo una microtarea de programacion valida,
+pero bloqueo el run porque `open_phase(planificacion_microtareas)` venia con
+`decision.phase_id=planificacion_microtareas` en vez de la fase actual previa.
+Era un fallo menor de formato, no un plan invalido.
+Impacto: `normalizeCompositeDirectorDecisionBatchV0` infiere la fase actual por
+secuencia y corrige solo ese caso (`phase_id` vacio o igual a la fase destino).
+Los refs causales, contratos, `required_tests` y write-set siguen validados.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-18
 Decision: El nombre que devuelva un agente para el artefacto no es vinculante
 si el job externo ya declara el contrato esperado.

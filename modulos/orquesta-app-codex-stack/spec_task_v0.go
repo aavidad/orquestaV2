@@ -44,7 +44,7 @@ func (resolver CodexLaunchSpecResolverV0) programmingTaskV0(
 		TaskRef:         task.TaskID,
 		Priority:        "alta",
 		Title:           task.Title,
-		Objective:       programmingObjectiveV0(task),
+		Objective:       programmingObjectiveV0(task, payload),
 		WriteSet:        append([]string(nil), task.WriteSet...),
 		ParentTaskRef:   task.ParentTaskRef,
 		CohortRef:       task.CohortRef,
@@ -59,18 +59,42 @@ func (resolver CodexLaunchSpecResolverV0) programmingTaskV0(
 	}, nil
 }
 
-func programmingObjectiveV0(task orquestacoreworkflow.WorkflowTaskV0) string {
+func programmingObjectiveV0(
+	task orquestacoreworkflow.WorkflowTaskV0,
+	payload orquestaruntime.LaunchRuntimeAgentRequestV0,
+) string {
 	unit := "contrato de esta tarea completa"
 	if workflowTaskHasDomainWorkContractV0(task) {
 		unit = "contrato de esta unidad de trabajo externa"
 	}
-	return strings.Join([]string{
+	lines := []string{
 		strings.TrimSpace(task.Summary),
 		"Implementa solo el " + unit + ".",
 		"Usa el write-set como alcance primario; si debes tocar otros ficheros del repo para cumplir el objetivo o arreglar pruebas, hazlo y dejalo justificado en el ACK.",
 		"Si la app es Go completa, debe quedar como modulo autonomo con go.mod, entrypoint bajo cmd/server o equivalente documentado, imports de modulo y sin imports relativos ../.",
 		"Ejecuta pruebas focales razonables y registra el resultado en el ACK.",
-	}, "\n")
+	}
+	if context := programmingReworkContextV0(payload); context != "" {
+		lines = append(lines, context)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func programmingReworkContextV0(payload orquestaruntime.LaunchRuntimeAgentRequestV0) string {
+	summary := strings.TrimSpace(payload.Summary)
+	if summary == "" {
+		return ""
+	}
+	lower := strings.ToLower(summary + "\n" + strings.Join(payload.EvidenceRefs, "\n"))
+	if !strings.Contains(lower, "revision") &&
+		!strings.Contains(lower, "rework") &&
+		!strings.Contains(lower, "retrabajo") &&
+		!strings.Contains(lower, "faltante") &&
+		!strings.Contains(lower, "missing") {
+		return ""
+	}
+	return "Contexto de revision/rework: " + summary +
+		" Corrige la entrega existente; conserva lo valido y completa lo indicado."
 }
 
 func directorTaskV0(
@@ -108,15 +132,15 @@ func directorObjectiveV0(
 		"Modo de ejecucion: " + mode + ".",
 		"Resumen de Orquesta: " + strings.TrimSpace(payload.Summary),
 		"Reglas: hexagonal, i18n si aplica, persistencia solo por puerto/conector, funciones pequenas, sin archivos gigantes.",
-		"Para una app Go completa exige modulo autonomo: go.mod, entrypoint cmd/server o equivalente documentado, imports de modulo y `go test ./...` como prueba de cierre.",
+		"Go app completa: modulo autonomo con go.mod, entrypoint cmd/server, imports de modulo y `go test ./...` para cierre.",
 		"Separa brainstorming, documentacion, programacion, pruebas, seguridad y revision final.",
 		"Cumple los minimos del tipo de peticion; solo puedes recortar alcance si execution_mode=debug y debes listar lo omitido.",
 		"Si falta informacion no inferible, deja CONSULTA AL DIRECTOR en el documento.",
 	}
 	if area == "director" {
 		lines = append(lines,
-			"No eres un worker de area: tienes autoridad practica para producir todos los entregables globales pedidos dentro de tu write-set.",
-			"No te limites a planificar si la peticion exige artefactos reales; crea los documentos minimos y deja evidencias.",
+			"No eres un worker de area: puedes producir entregables globales dentro de tu write-set.",
+			"No te limites a planificar si se piden artefactos reales; crea documentos minimos y evidencias.",
 		)
 	}
 	lines = append(lines, directorRequestKindInstructionsV0(kind, mode)...)

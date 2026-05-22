@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
@@ -31,7 +32,12 @@ func (provider CodexReviewGateProjectFileEvidenceV0) BuildCodexReviewGateFileEvi
 			},
 		}, nil
 	}
-	return provider.fileEvidenceFromRootV0(ctx, root, ack.Files), nil
+	evidence := provider.fileEvidenceFromRootV0(ctx, root, ack.Files)
+	evidence.Issues = append(
+		evidence.Issues,
+		codexReviewGateProjectWriteSetIssuesV0(ctx, root, descriptor.Spec.AgentPacket.Task.WriteSet)...,
+	)
+	return evidence, nil
 }
 
 func (provider CodexReviewGateProjectFileEvidenceV0) BuildCodexReviewGateFilesV0(
@@ -84,6 +90,157 @@ func codexReviewGateProjectFileV0(
 		return file, []orquestaautoprogramming.AutoprogrammingReviewGateIssueV0{*issue}
 	}
 	return file, nil
+}
+
+func codexReviewGateProjectWriteSetIssuesV0(
+	ctx context.Context,
+	root string,
+	writeSet []string,
+) []orquestaautoprogramming.AutoprogrammingReviewGateIssueV0 {
+	issues := make([]orquestaautoprogramming.AutoprogrammingReviewGateIssueV0, 0)
+	for _, target := range compactCodexDeliveryRefsV0(writeSet) {
+		if ctx != nil {
+			if err := ctx.Err(); err != nil {
+				return append(issues, codexReviewGateFileIssueV0("project_read_cancelled", "write_set"))
+			}
+		}
+		if codexReviewGateProjectTargetExistsV0(root, target) {
+			continue
+		}
+		issues = append(issues, codexReviewGateFileIssueV0(
+			"write_set_target_missing:"+codexReviewGateIssueTargetV0(target),
+			"write_set",
+		))
+	}
+	return issues
+}
+
+func codexReviewGateProjectTargetExistsV0(root string, rawTarget string) bool {
+	target, ok := codexReviewGateRelPathV0(rawTarget)
+	if !ok {
+		return false
+	}
+	if target == "web" && codexReviewGateProjectTargetExistsV0(root, "internal/webadmin") {
+		return true
+	}
+	if codexReviewGateHasGlobV0(target) {
+		return codexReviewGateProjectGlobHasFileV0(root, target)
+	}
+	fullPath := filepath.Join(root, filepath.FromSlash(target))
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		return false
+	}
+	if !info.IsDir() {
+		return info.Size() > 0
+	}
+	return codexReviewGateDirHasFileV0(fullPath)
+}
+
+func codexReviewGateProjectGlobHasFileV0(root string, pattern string) bool {
+	re, err := codexReviewGateGlobRegexpV0(pattern)
+	if err != nil {
+		return false
+	}
+	found := false
+	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil || entry == nil || found {
+			return nil
+		}
+		if entry.IsDir() {
+			if codexReviewGateSkipProjectDirV0(entry.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil || info.Size() == 0 {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err == nil && re.MatchString(filepath.ToSlash(rel)) {
+			found = true
+		}
+		return nil
+	})
+	return found
+}
+
+func codexReviewGateDirHasFileV0(dir string) bool {
+	found := false
+	_ = filepath.WalkDir(dir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil || entry == nil || found {
+			return nil
+		}
+		if entry.IsDir() {
+			if path != dir && codexReviewGateSkipProjectDirV0(entry.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		info, err := entry.Info()
+		if err == nil && info.Size() > 0 {
+			found = true
+		}
+		return nil
+	})
+	return found
+}
+
+func codexReviewGateSkipProjectDirV0(name string) bool {
+	switch name {
+	case ".git", ".orquesta-runtime", ".orquesta-codex-runtime":
+		return true
+	default:
+		return false
+	}
+}
+
+func codexReviewGateHasGlobV0(value string) bool {
+	return strings.ContainsAny(value, "*?[")
+}
+
+func codexReviewGateGlobRegexpV0(pattern string) (*regexp.Regexp, error) {
+	var b strings.Builder
+	b.WriteString("^")
+	for i := 0; i < len(pattern); i++ {
+		if strings.HasPrefix(pattern[i:], "**") {
+			b.WriteString(".*")
+			i++
+			continue
+		}
+		switch pattern[i] {
+		case '*':
+			b.WriteString("[^/]*")
+		case '?':
+			b.WriteString("[^/]")
+		default:
+			b.WriteString(regexp.QuoteMeta(string(pattern[i])))
+		}
+	}
+	b.WriteString("$")
+	return regexp.Compile(b.String())
+}
+
+func codexReviewGateIssueTargetV0(value string) string {
+	value = strings.TrimSpace(filepath.ToSlash(value))
+	replacer := strings.NewReplacer(
+		"\\", "-",
+		"/", "-",
+		" ", "-",
+		"*", "star",
+		"?", "q",
+		"[", "-",
+		"]", "-",
+	)
+	value = strings.Trim(replacer.Replace(value), "-")
+	if value == "" {
+		return "target"
+	}
+	if len(value) > 120 {
+		return value[:120]
+	}
+	return value
 }
 
 func codexReviewGateProjectRootV0(value string) (string, bool) {

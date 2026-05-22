@@ -61,7 +61,7 @@ func (source DirectorAgentDecisionFileSourceV0) decisionsFromDescriptorsV0(
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, decisions...)
+		out = append(out, filterDirectorAgentDecisionFileRunV0(runRef, decisions)...)
 	}
 	return out, nil
 }
@@ -86,6 +86,23 @@ func (source DirectorAgentDecisionFileSourceV0) decisionsFromDescriptorV0(
 		return nil, err
 	}
 	return validateDirectorAgentDecisionFileDecisionsV0(decisions)
+}
+
+func filterDirectorAgentDecisionFileRunV0(
+	runRef string,
+	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
+) []orquestadirectoragent.DirectorAgentDecisionV0 {
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" {
+		return decisions
+	}
+	out := make([]orquestadirectoragent.DirectorAgentDecisionV0, 0, len(decisions))
+	for _, decision := range decisions {
+		if strings.TrimSpace(decision.RunID) == runRef {
+			out = append(out, decision)
+		}
+	}
+	return out
 }
 
 func (source DirectorAgentDecisionFileSourceV0) maxBytesV0() int {

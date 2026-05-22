@@ -30,6 +30,28 @@ func TestValidateDirectorAgentDecisionV0AceptaMicrotareaCompacta(t *testing.T) {
 	}
 }
 
+func TestValidateDirectorAgentDecisionV0AceptaMicrotareaConWriteSetAmplio(t *testing.T) {
+	decision := validDirectorAgentCreateMicrotaskDecisionV0()
+	decision.CreateMicrotask.Task.WriteSet = []string{
+		"go.mod",
+		"cmd/server/main.go",
+		"internal/domain",
+		"internal/application",
+		"internal/ports",
+		"internal/httpapi",
+		"internal/webadmin",
+		"internal/i18n",
+		"internal/memory",
+		"README.md",
+		"docs",
+		"tests",
+	}
+
+	if issues := ValidateDirectorAgentDecisionV0(decision); len(issues) != 0 {
+		t.Fatalf("issues inesperados: %+v", issues)
+	}
+}
+
 func TestValidateDirectorAgentDecisionV0AceptaMicrotareaDuranteProgramacion(t *testing.T) {
 	decision := validDirectorAgentCreateMicrotaskDecisionV0()
 	decision.PhaseID = decision.CreateMicrotask.Task.PhaseID

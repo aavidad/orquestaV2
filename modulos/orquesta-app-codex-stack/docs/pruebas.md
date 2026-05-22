@@ -987,3 +987,63 @@ Cobertura:
   `language_code` y `source_refs`;
 - `topic_summary` conserva `markdown` para no romper contratos existentes;
 - la entrega sigue bloqueada si el payload no es materializable.
+
+Validacion director `crear_app_completa` con mas manga 2026-05-22:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-director-intake ./modulos/orquesta-app-codex-stack
+```
+
+Resultado local: `ok`.
+
+Cobertura:
+
+- `TestPrepareAppDirectorIntakeV0PropagaContextoFuncionalEnSummary` fija que
+  el summary del director lleva contexto funcional compacto de `AppSpecV0`;
+- `TestDirectorTaskV0IncluyeContratoDeDecisionesEjecutables` exige que
+  `crear_app_completa` normal no use `CONSULTA AL DIRECTOR` para evitar una
+  tarea de programacion si ya hay objetivo suficiente;
+- `TestCompositeDirectorDecisionSourceV0NormalizaOpenPhaseConPhaseDestino`
+  cubre el caso real en que el agente pone la fase destino como
+  `decision.phase_id` de `open_phase`;
+- `TestCompositeDirectorDecisionSourceV0NormalizaPublishContractDecisionRefAlAcceptPrevio`
+  cubre el caso real en que el agente apunta el contrato a la decision de
+  publicacion en vez del `accept_decision` previo;
+- `TestCompositeDirectorDecisionSourceV0NoInventaPublishContractSinAcceptPrevio`
+  confirma que la tolerancia no inventa causalidad si no hay
+  `accept_decision` previo;
+- `TestCompositeDirectorDecisionSourceV0NoRompeWriteSetMaximoPorCompletarWeb`
+  cubre el caso real en que el director entrega una tarea amplia ya valida y
+  Orquesta no debe invalidarla anadiendo otra ruta al `write_set`;
+- `TestDrainRunV0ConsumeDecisionFileVerticalGoConGlobsDeDirectorReal` reproduce
+  una salida realista del director con una tarea vertical Go amplia y comprueba
+  que se materializa y lanza programacion;
+- `TestCodexRuntimeConfigV0ElevaReasoningEffortBajoAHigh`,
+  `TestCodexStackCapacityConfigFromEnvV0ElevaReasoningCodexMediumAHigh`,
+  `TestCodexLaunchWaveCommandV0DryRunNoExigeCodexReal` y
+  `TestCodexLaunchDirectorWaveCommandV0DryRunConstruyePlanYPromptsPorAgente`
+  fijan que los agentes reales no bajan de `high` aunque el operador haya
+  dejado `medium`/`low` en el entorno o flags;
+- el prompt del director sigue por debajo del limite de tamano existente.
+
+Validacion rework por write-set faltante 2026-05-22:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack
+```
+
+Resultado local: `ok`.
+
+Cobertura:
+
+- `TestCodexStackV0ReviewGatePideCambiosSiFaltaDestinoWriteSet` fija que un
+  destino ausente como `web` produce `changes_requested`;
+- `TestReviewReworkReplanSourceV0DescribeWriteSetFaltanteParaElAgente` fija
+  que el follow-up de rework dice que hay que completar el faltante;
+- `TestProgrammingTaskV0IncluyeContextoDeReworkSinRehacerTodo` fija que el
+  agente recibe instrucciones de conservar lo valido y corregir lo indicado;
+- `TestCompositeDirectorDecisionSourceV0NoDuplicaWebSiWebAdminInternoLoCubre`
+  y `TestCodexStackRealSmokeProjectTargetExistsV0AceptaWebAdminInternoComoWeb`
+  cubren la equivalencia `web` -> `internal/webadmin` en apps Go;
+- el smoke real multiagente queda preparado para abrir revision y esperar el
+  rework antes de la verificacion final.

@@ -28,6 +28,15 @@ func TestCodexStackRealSmokeVerifyGoFileSizesV0AceptaFicheroManejable(t *testing
 	codexStackRealSmokeVerifyGoFileSizesV0(t, projectDir)
 }
 
+func TestCodexStackRealSmokeProjectTargetExistsV0AceptaWebAdminInternoComoWeb(t *testing.T) {
+	projectDir := t.TempDir()
+	writeSmokeVerifierFileV0(t, projectDir, "internal/webadmin/handler.go", "package webadmin\n")
+
+	if !codexStackRealSmokeProjectTargetExistsV0(projectDir, "web") {
+		t.Fatalf("web interno no reconocido como superficie web")
+	}
+}
+
 func TestCodexStackRealSmokeVerifyGoAppCompilesV0RechazaImportsRelativos(t *testing.T) {
 	projectDir := t.TempDir()
 	writeGoModuleForSmokeVerifierV0(t, projectDir)

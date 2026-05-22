@@ -65,7 +65,8 @@ Adaptadores locales:
   ACK, tests requeridos, write-set y evidencia real de ficheros. Acepta o pide
   cambios sin filtrar rutas al nucleo.
 - `CodexReviewGateProjectFileEvidenceV0`: adaptador exterior que cuenta lineas
-  reales y marca ficheros ausentes/no legibles con incidencias compactas.
+  reales y marca ficheros ausentes/no legibles o destinos del write-set no
+  materializados con incidencias compactas para review/rework.
 - `FileCodexProgressStateStoreV0`: conector filesystem explicito para conservar
   heartbeats compactos/reportes anti-bucle entre reinicios.
 - `StaticCodexReceiptAckPathResolverV0`: resolver de path para tests; en

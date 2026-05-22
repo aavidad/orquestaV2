@@ -45,6 +45,13 @@ func TestReviewReworkReplanCandidateProviderV0BuildsRetryPlanFromRework(t *testi
 	if input.CapacityCandidate == nil || input.AgentCandidate == nil {
 		t.Fatalf("followups incompletos: capacity=%+v agent=%+v", input.CapacityCandidate, input.AgentCandidate)
 	}
+	if input.AgentCandidate.Payload.Summary != "Repetir tarea tras revision no aceptada." ||
+		input.CapacityCandidate.Payload.Summary != "Repetir tarea tras revision no aceptada." {
+		t.Fatalf("summary de plan no propagado: capacity=%q agent=%q",
+			input.CapacityCandidate.Payload.Summary,
+			input.AgentCandidate.Payload.Summary,
+		)
+	}
 }
 
 func TestReviewReworkReplanCandidateProviderV0NoPropagaEvidenciaAmbientalDelRuntime(t *testing.T) {

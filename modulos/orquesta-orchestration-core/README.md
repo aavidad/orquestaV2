@@ -149,6 +149,11 @@ El contrato operativo de replan tras retrabajo de revision es:
 7. tras `CapacityDecided`, el mismo provider puede seguir en `programacion` solo
    si el replan ya esta registrado, para emitir el agente de seguimiento.
 
+El `summary` del plan de rework se propaga a la capacidad y al agente de
+seguimiento. El nucleo no interpreta ese texto ni lee ficheros: solo conserva
+el contexto compacto que aporta el adaptador para que el worker corrija lo
+indicado en vez de repetir a ciegas todo el trabajo.
+
 El provider no inventa proveedor, modelo, runtime ni DB. Si el plan requiere
 split, las microtareas deben venir por puerto como DTOs compactos; si requiere
 ask, debe traer la pregunta al director como candidate explicito.

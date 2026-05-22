@@ -130,6 +130,12 @@ Documentos de entrada obligatorios para cambios transversales:
   filesystem interno con Orquesta.
 - El dominio externo aporta datos, reglas, validadores y ensamblado. Orquesta
   aporta juicio mediante director/agentes.
+- No conviertas validadores deterministicos en NLU pobre por strings exactos. Si
+  un agente devuelve una intencion razonable con alias, nombre cercano o forma
+  equivalente (`web_application` por `web_app`, globs por alcance, rutas hijas
+  por carpeta), normaliza en el adaptador o deja que el director repare la
+  forma. Corta fuerte solo por seguridad, causalidad, refs imposibles, datos
+  sensibles o efectos externos no autorizados.
 - Si una decision requiere producto, runtime, modelo, cuota o proveedor,
   documenta la frontera y dejala en adaptador/composicion.
 - No borres documentos o codigo antiguo sin revisar. Si algo es historico,

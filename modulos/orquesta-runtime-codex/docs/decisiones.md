@@ -1,5 +1,55 @@
 # Decisiones: orquesta-runtime-codex
 
+## RTCODEX-DEC-012
+
+```text
+Fecha: 2026-05-22
+Decision: El ACK Codex puede aceptar artifacts fuera del write-set inicial si
+la ampliacion esta justificada en `notes`, pero nunca acepta archivos de
+control ni rutas de `.orquesta-runtime`.
+Motivo: en smoke real el agente de programacion creo una app Go completa y
+necesito anadir paquetes de persistencia/web no previstos exactamente por el
+director. Rechazar la entrega por una ampliacion justificada dejaba al sistema
+demasiado acotado y bloqueaba trabajo valido.
+Impacto: se conserva la validacion de rutas relativas limpias, artifacts
+obligatorios y tests requeridos. Las ampliaciones quedan como evidencia durable
+en `notes`; los ficheros de control siguen prohibidos en `ACK.files`.
+Estado: aceptada.
+```
+
+## RTCODEX-DEC-010
+
+```text
+Fecha: 2026-05-22
+Decision: `ACK.files` valida evidencia concreta y alcance, no completitud
+semantica de todo el write-set.
+Motivo: en smoke real el agente de revision/correccion modifico solo `web/*`
+dentro de una tarea amplia con `go.mod`, `cmd`, `internal`, `web`, docs y tests.
+Exigir que ese ACK repitiera evidencias de todas las zonas rompia el flujo de
+correccion incremental y hacia tirar trabajo valido.
+Impacto: el ACK `completed` sigue rechazando `files: []`, rutas invalidas,
+archivos de control y ficheros fuera de write-set sin justificacion. Si declara
+ficheros concretos dentro del alcance y los tests requeridos, el runtime acepta
+la observacion. La completitud funcional queda para director, review, rework y
+tests durables, no para el adaptador Codex.
+Estado: aceptada.
+```
+
+## RTCODEX-DEC-013
+
+```text
+Fecha: 2026-05-22
+Decision: El prompt Codex declara para target_module de director que
+`ACK completed` solo es valido despues de escribir `decision_path`.
+Motivo: en ejecuciones reales el director a veces entregaba documentos y ACK
+sin `director_decisions.json`, dejando Orquesta quiescent antes de abrir
+programacion. El contrato ya existia en la tarea, pero necesitaba una regla de
+runtime mas cercana al protocolo de cierre.
+Impacto: si el director no puede emitir decisiones ejecutables debe cerrar con
+`failed` y `CONSULTA AL DIRECTOR`, no con `completed`. No cambia el core.
+Estado: aceptada.
+```
+
 ## RTCODEX-DEC-011
 
 ```text
@@ -200,6 +250,23 @@ Estado: aceptada.
 ## RTCODEX-DEC-007
 
 ```text
+Fecha: 2026-05-22
+Decision: El prompt distingue explicitamente workdir de proyecto y directorio
+de control.
+Motivo: en smoke real el director Codex creo documentos dentro de
+`.orquesta-runtime/.../agent/docs` y metio `director_decisions.json` en
+`ACK.files`. El conector ya tenia write-set cerrado, pero la instruccion de ACK
+desde el directorio de control podia inducir ese error.
+Impacto: el prompt aclara que el write-set es relativo al workdir del proyecto,
+que docs/codigo se crean en el proyecto, que el directorio de control solo sirve
+para archivos de control y que `ACK.files` nunca debe listar `agent_ack.json`,
+`director_decisions.json`, packet, prompts, logs ni checkpoints.
+Estado: aceptada.
+```
+
+## RTCODEX-DEC-008
+
+```text
 Fecha: 2026-05-13
 Decision: Un ACK `completed` con contexto requerido truncado debe justificar
 materializacion externa.
@@ -210,5 +277,22 @@ Impacto: el prompt avisa cuando `agent_packet.context.entries` tiene
 `required=true` y `truncated=true`; el validador rechaza `completed` salvo que
 `notes` incluya `contexto_truncado_resuelto: ...`. Si no puede resolverlo, el
 agente debe devolver `failed` con `CONSULTA AL DIRECTOR`.
+Estado: aceptada.
+```
+
+## RTCODEX-DEC-009
+
+```text
+Fecha: 2026-05-22
+Decision: Si la identidad fuerte del ACK cuadra, refs redundantes se
+normalizan desde el descriptor del lanzamiento.
+Motivo: en smoke real agentes Codex copiaron mal un caracter de `task_ref` o
+compusieron mal `correlation_id`, pero mantuvieron `request_id`, `ack_ref` y
+`target_module` correctos. Rechazar esos ACKs bloquea trabajo valido por rails
+redundantes.
+Impacto: el conector acepta el ACK solo si `request_id`, `ack_ref` y
+`target_module` coinciden con el `ExternalAgentLaunchSpecV0`; entonces hidrata
+`correlation_id` y `task_ref` desde el paquete. No permite reclamar otro agente
+ni otro modulo: la observacion resultante queda ligada al descriptor original.
 Estado: aceptada.
 ```

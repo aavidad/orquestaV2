@@ -10,7 +10,8 @@ OPES es un consumidor por conectores, no el producto base del nucleo generico.
 Orquesta piensa y coordina. Las apps externas aportan dominio.
 
 - Orquesta: director, fases, tareas, capacidad, agentes, evidencias, review,
-  rework, cierre, shutdown logico y estadisticas compactas.
+  rework, cierre, shutdown logico, normalizacion de intencion razonable y
+  estadisticas compactas.
 - App externa: datos, reglas, permisos, validadores, persistencia, UI/API,
   ensamblado y publicacion final.
 - Adaptador: traduce entre contrato externo y trabajo orquestable; nunca copia
@@ -163,6 +164,10 @@ Checklist antes de extenderlo:
 - El director de Orquesta decide plan/fases/agentes/modelo/runtime mediante el
   plano de orquestacion. La app externa no esconde planificacion inteligente en
   workers propios.
+- Los contratos no deben depender de que un agente use el string perfecto. Los
+  adaptadores pueden normalizar alias y formas equivalentes; el director debe
+  poder reparar nombres cercanos. La validacion deterministica corta solo cuando
+  no puede preservar seguridad, causalidad, refs opacas o permisos.
 - Los adaptadores pueden ser concretos, pero deben vivir fuera del nucleo y ser
   opt-in si tocan red, procesos, proveedor o datos reales.
 - La persistencia real actual es file-based JSON, no una verdad arquitectonica.

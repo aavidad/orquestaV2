@@ -182,14 +182,27 @@ func TestCodexRuntimeConfigV0PermiteSobrescribirReasoningEffort(t *testing.T) {
 	}
 }
 
-func TestCodexStackCapacityConfigFromEnvV0UsaReasoningCodexMedium(t *testing.T) {
+func TestCodexRuntimeConfigV0ElevaReasoningEffortBajoAHigh(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_REASONING_EFFORT", "medium")
+
+	config := codexRuntimeConfigV0(orquestaserver.ConfigV0{
+		ProjectWorkDir: t.TempDir(),
+		RuntimeWorkDir: t.TempDir(),
+	}, nil)
+
+	if config.ReasoningEffort != "high" {
+		t.Fatalf("reasoning_effort=%q want high", config.ReasoningEffort)
+	}
+}
+
+func TestCodexStackCapacityConfigFromEnvV0ElevaReasoningCodexMediumAHigh(t *testing.T) {
 	t.Setenv("ORQUESTA_CAPACITY_REASONING_EFFORT", "")
 	t.Setenv("ORQUESTA_CODEX_REASONING_EFFORT", "medium")
 
 	config := codexStackCapacityConfigFromEnvV0()
 
-	if config.ReasoningEffort != orquestacoreworkflow.OrchestrationCapacityMediumV0 {
-		t.Fatalf("reasoning_effort=%q want medium", config.ReasoningEffort)
+	if config.ReasoningEffort != orquestacoreworkflow.OrchestrationCapacityHighV0 {
+		t.Fatalf("reasoning_effort=%q want high", config.ReasoningEffort)
 	}
 	if config.Tier != orquestacoreworkflow.OrchestrationCapacityXHighV0 {
 		t.Fatalf("tier=%q want xhigh", config.Tier)
@@ -209,8 +222,8 @@ func TestCodexStackCapacityConfigFromEnvV0PermiteSobrescribirCapacidad(t *testin
 	if config.Tier != orquestacoreworkflow.OrchestrationCapacityHighV0 {
 		t.Fatalf("tier=%q want high", config.Tier)
 	}
-	if config.ReasoningEffort != orquestacoreworkflow.OrchestrationCapacityLowV0 {
-		t.Fatalf("reasoning_effort=%q want low", config.ReasoningEffort)
+	if config.ReasoningEffort != orquestacoreworkflow.OrchestrationCapacityHighV0 {
+		t.Fatalf("reasoning_effort=%q want high", config.ReasoningEffort)
 	}
 }
 

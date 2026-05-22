@@ -104,16 +104,197 @@ func codexStackRealSmokeVerifyDescriptorWriteSetsV0(
 	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
 ) {
 	t.Helper()
+	missing := codexStackRealSmokeMissingDescriptorWriteSetTargetsV0(projectDir, descriptors)
+	if len(missing) > 0 {
+		t.Fatalf("write_set sin artefacto real: %s", strings.Join(missing, ", "))
+	}
+}
+
+func codexStackRealSmokeMissingDescriptorWriteSetTargetsV0(
+	projectDir string,
+	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+) []string {
 	seen := map[string]bool{}
+	missing := make([]string, 0)
 	for _, descriptor := range descriptors {
 		for _, path := range descriptor.Spec.AgentPacket.Task.WriteSet {
 			if seen[path] {
 				continue
 			}
 			seen[path] = true
-			codexStackRealSmokeVerifyProjectFileV0(t, projectDir, path)
+			if !codexStackRealSmokeProjectTargetExistsV0(projectDir, path) {
+				missing = append(missing, path)
+			}
 		}
 	}
+	return compactStringsV0(missing)
+}
+
+func codexStackRealSmokeRepairMissingDescriptorWriteSetsV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	stores codexStackRealSmokeStoresV0,
+	runRef string,
+	projectDir string,
+	runtimeWorkDir string,
+	maxExternalWaits int,
+	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+) (orquestacoreworkflow.OrchestrationRunV0, []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0) {
+	t.Helper()
+	missing := codexStackRealSmokeMissingDescriptorWriteSetTargetsV0(projectDir, descriptors)
+	if len(missing) == 0 {
+		return mustLoadCodexStackRunForTestV0(t, stack, runRef), descriptors
+	}
+	original, ok := codexStackRealSmokeFirstProgrammingDescriptorWithMissingWriteSetV0(projectDir, descriptors)
+	if !ok {
+		t.Fatalf("write_set faltante fuera de programacion: %s", strings.Join(missing, ", "))
+	}
+	openCodexStackPhaseForTestV0(
+		t,
+		stack,
+		runRef,
+		orquestacoreworkflow.OrchestrationPhaseRevisionV0,
+		"Smoke real: revisar entrega incompleta y lanzar correccion.",
+	)
+	reworkDescriptor := codexStackRealSmokeStartReworkForMissingWriteSetV0(
+		t,
+		ctx,
+		stack,
+		stores,
+		runRef,
+		runtimeWorkDir,
+		maxExternalWaits,
+		original,
+	)
+	run, descriptors := codexStackRealSmokeDrainReworkDeliveryV0(
+		t,
+		ctx,
+		stack,
+		stores,
+		runRef,
+		runtimeWorkDir,
+		maxExternalWaits,
+		reworkDescriptor,
+	)
+	return run, descriptors
+}
+
+func codexStackRealSmokeFirstProgrammingDescriptorWithMissingWriteSetV0(
+	projectDir string,
+	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+) (orquestaruntimecodexdelivery.CodexReceiptDescriptorV0, bool) {
+	for _, descriptor := range codexStackRealSmokeProgrammingReceiptDescriptorsV0(descriptors) {
+		for _, path := range descriptor.Spec.AgentPacket.Task.WriteSet {
+			if !codexStackRealSmokeProjectTargetExistsV0(projectDir, path) {
+				return descriptor, true
+			}
+		}
+	}
+	return orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{}, false
+}
+
+func codexStackRealSmokeStartReworkForMissingWriteSetV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	stores codexStackRealSmokeStoresV0,
+	runRef string,
+	runtimeWorkDir string,
+	maxExternalWaits int,
+	original orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+) orquestaruntimecodexdelivery.CodexReceiptDescriptorV0 {
+	t.Helper()
+	for cycle := 1; cycle <= 6; cycle++ {
+		if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+			RunRef:               runRef,
+			CorrelationID:        fmt.Sprintf("corr-app-stack-real-missing-write-set-rework-%03d", cycle),
+			MaxBursts:            24,
+			MaxStepsPerBurst:     12,
+			MaxDispatchesPerWait: 8,
+			MaxCommands:          24,
+			MaxOutboxPerCycle:    8,
+			MaxExternalWaits:     codexStackRealSmokeDrainCycleMaxExternalWaitsV0(maxExternalWaits),
+		}); err != nil {
+			t.Fatalf("DrainRunV0 rework write_set faltante ciclo=%d: %v issues=%+v\n%s",
+				cycle,
+				err,
+				codexStackBurstIssuesForErrorV0(err),
+				codexStackRealSmokeDiagnosticsV0(runtimeWorkDir),
+			)
+		}
+		run := mustLoadCodexStackRunForTestV0(t, stack, runRef)
+		descriptors := codexStackRealSmokeDescriptorsV0(t, stores.ReceiptStore)
+		if descriptor, ok := codexStackRealSmokeFindReworkDescriptorV0(run, descriptors, original); ok {
+			return descriptor
+		}
+	}
+	t.Fatalf("rework no arrancado para write_set faltante original=%s descriptors=%v\n%s",
+		original.AgentRef,
+		codexStackRealSmokeDescriptorAgentsV0(codexStackRealSmokeDescriptorsV0(t, stores.ReceiptStore)),
+		codexStackRealSmokeDiagnosticsV0(runtimeWorkDir),
+	)
+	return orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{}
+}
+
+func codexStackRealSmokeDrainReworkDeliveryV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	stores codexStackRealSmokeStoresV0,
+	runRef string,
+	runtimeWorkDir string,
+	maxExternalWaits int,
+	reworkDescriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+) (orquestacoreworkflow.OrchestrationRunV0, []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0) {
+	t.Helper()
+	ackRef := reworkDescriptor.Spec.AgentPacket.DeliveryRefs.AckRef
+	var run orquestacoreworkflow.OrchestrationRunV0
+	var descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0
+	for cycle := 1; cycle <= 16; cycle++ {
+		if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+			RunRef:               runRef,
+			CorrelationID:        fmt.Sprintf("corr-app-stack-real-missing-write-set-rework-ack-%03d", cycle),
+			MaxBursts:            16,
+			MaxStepsPerBurst:     12,
+			MaxDispatchesPerWait: 8,
+			MaxCommands:          20,
+			MaxOutboxPerCycle:    8,
+			MaxExternalWaits:     codexStackRealSmokeDrainCycleMaxExternalWaitsV0(maxExternalWaits),
+		}); err != nil {
+			t.Fatalf("DrainRunV0 ACK rework write_set faltante ciclo=%d: %v\n%s",
+				cycle,
+				err,
+				codexStackRealSmokeDiagnosticsV0(runtimeWorkDir),
+			)
+		}
+		run = mustLoadCodexStackRunForTestV0(t, stack, runRef)
+		descriptors = codexStackRealSmokeDescriptorsV0(t, stores.ReceiptStore)
+		if codexStackRealSmokeContainsProjectionPartV0(run.Deliveries, ackRef) {
+			return run, descriptors
+		}
+	}
+	t.Fatalf("delivery de rework no registrada ack=%s deliveries=%v\n%s",
+		ackRef,
+		run.Deliveries,
+		codexStackRealSmokeDiagnosticsV0(runtimeWorkDir),
+	)
+	return run, descriptors
+}
+
+func codexStackRealSmokeFindReworkDescriptorV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+	original orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+) (orquestaruntimecodexdelivery.CodexReceiptDescriptorV0, bool) {
+	taskRef := strings.TrimSpace(original.Spec.AgentPacket.Task.TaskRef)
+	originalAckRef := strings.TrimSpace(original.Spec.AgentPacket.DeliveryRefs.AckRef)
+	for _, descriptor := range descriptors {
+		if codexStackRealSmokeIsReworkDescriptorV0(run, descriptor, taskRef, originalAckRef) {
+			return descriptor, true
+		}
+	}
+	return orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{}, false
 }
 
 func codexStackRealSmokeDeliveryObservationsV0(

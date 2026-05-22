@@ -83,6 +83,40 @@ func TestPrepareAppDirectorIntakeV0PropagaPoliticaDePeticionEnSummary(t *testing
 	}
 }
 
+func TestPrepareAppDirectorIntakeV0PropagaContextoFuncionalEnSummary(t *testing.T) {
+	req := validFactoryAppSpecRequestForDirectorIntakeTestV0()
+	req.Nombre = "Inventario Review"
+	req.Objetivo = "Crear API REST en Go para gestionar articulos con HTML minimo."
+	req.Descripcion = "Arquitectura hexagonal y persistencia en memoria detras de puerto."
+	req.TipoApp = "mixed"
+	req.Plataformas = []string{"web", "api"}
+	req.Datos.NecesidadFuncional = "Gestionar articulos sin servicios externos."
+	spec, issues := orquestafactory.SolicitarNuevaAppV0(req, time.Date(2026, 5, 22, 9, 20, 0, 0, time.UTC))
+	if len(issues) > 0 {
+		t.Fatalf("build spec: %+v", issues)
+	}
+
+	prepared, err := PrepareAppDirectorIntakeV0(PrepareAppDirectorIntakeRequestV0{AppSpec: spec})
+	if err != nil {
+		t.Fatalf("PrepareAppDirectorIntakeV0: %v", err)
+	}
+
+	for _, want := range []string{
+		"app=Inventario Review",
+		"objetivo=Crear API REST en Go para gestionar articulos con HTML minimo.",
+		"descripcion=Arquitectura hexagonal y persistencia en memoria detras de puerto.",
+		"tipo=mixed",
+		"plataformas=web,api",
+		"datos=Gestionar articulos sin servicios externos.",
+		"request_kind=crear_app_completa",
+		"execution_mode=normal",
+	} {
+		if !strings.Contains(prepared.DirectorTask.Summary, want) {
+			t.Fatalf("summary no contiene %q:\n%s", want, prepared.DirectorTask.Summary)
+		}
+	}
+}
+
 func TestPrepareAppDirectorIntakeV0DirectorNormalPuedeCrearManuales(t *testing.T) {
 	req := validFactoryAppSpecRequestForDirectorIntakeTestV0()
 	req.RequestKind = orquestafactory.RequestKindDocumentarAppV0

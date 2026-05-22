@@ -40,6 +40,7 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString(packetPath)
 	b.WriteString(" antes de tocar archivos.\n")
 	b.WriteString("Usa el write-set del paquete como alcance primario; si contiene '.', tienes permiso sobre todo el repo del proyecto.\n")
+	b.WriteString("Las rutas del write-set son relativas al workdir del proyecto, no al directorio de control ni a .orquesta-runtime; crea docs/codigo en el proyecto.\n")
 	b.WriteString("Si el write-set no contiene '.', no edites fuera de ese alcance salvo archivos de control o una ampliacion imprescindible para cumplir el objetivo, que debes justificar en notes.\n")
 	b.WriteString("Archivos de control permitidos fuera del write-set: ")
 	b.WriteString(ackPath)
@@ -79,9 +80,13 @@ func BuildCodexAgentPromptWithControlFilesV0(
 		b.WriteString(decisionPath)
 		b.WriteString(" solo para decisiones ejecutables del director; no pertenece al write-set.\n")
 		b.WriteString("Es obligatorio solo si objetivo o criterios de cierre lo piden.\n")
+		if codexPacketTargetsDirectorV0(packet) {
+			b.WriteString("Como target_module de director, ACK completed solo es valido despues de escribir decision_path con decisiones ejecutables; si no puedes, usa ACK failed con CONSULTA AL DIRECTOR. Docs sin decision_path no completan la tarea.\n")
+		}
 		b.WriteString("Si escribes decision_path, completa antes los ficheros pedidos del write-set, despues escribe ACK y termina; no sigas pensando ni ampliando alcance.\n")
 	}
 	b.WriteString("En el ACK, files debe listar rutas reales de archivos de producto tocados, no globs, directorios ni el write-set completo; ejemplo cmd/server/main.go, no cmd/server/**.\n")
+	b.WriteString("No incluyas archivos de control en ACK.files: agent_ack.json, director_decisions.json, agent_packet.json, prompts, logs ni checkpoints.\n")
 	b.WriteString("Si algun archivo queda fuera del write-set estrecho, notes debe explicar por que era necesario.\n")
 	b.WriteString("En el ACK, tests debe listar solo pruebas pasadas; cada test obligatorio pasado debe aparecer exactamente como aparece en el paquete.\n")
 	b.WriteString("Si una prueba obligatoria falla, el ACK debe usar status failed y no declarar esa prueba en tests como pasada.\n")
@@ -126,6 +131,10 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	return b.String()
 }
 
+func codexPacketTargetsDirectorV0(packet orquestaruntime.AgentStartPacketV0) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(packet.TargetModule)), "director")
+}
+
 func writeAckWriteProtocolV0(b *strings.Builder, ackPath string) {
 	if !filepath.IsAbs(ackPath) {
 		return
@@ -136,7 +145,7 @@ func writeAckWriteProtocolV0(b *strings.Builder, ackPath string) {
 	b.WriteString(filepath.Dir(ackPath))
 	b.WriteString(" && crear ")
 	b.WriteString(filepath.Base(ackPath))
-	b.WriteString(". La linea visible ACK no sustituye este JSON.\n\n")
+	b.WriteString(". No crees docs/codigo en ese directorio de control. La linea visible ACK no sustituye este JSON.\n\n")
 }
 
 func writeShutdownProtocolV0(b *strings.Builder, requestPath string, ackPath string) {

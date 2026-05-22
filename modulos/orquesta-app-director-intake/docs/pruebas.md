@@ -18,6 +18,8 @@ Cobertura esperada:
   outbox pendiente y queda en `wait_external`;
 - las refs de task/agent se aislan por `spec_id` para evitar colisiones entre
   solicitudes con el mismo nombre de app;
+- el summary del director conserva contexto funcional compacto de `AppSpecV0`
+  sin transportar runtime/proveedor;
 - el wizard de intake pide el siguiente campo con pregunta de director compacta;
 - un borrador completo crea `AppSpecV0` mediante factory y prepara el run del
   director;
@@ -27,6 +29,7 @@ Evidencia 2026-05-09:
 
 - `TestPrepareAppDirectorIntakeV0CreatesBrainstormRun`;
 - `TestPrepareAppDirectorIntakeV0RefsAisladasPorSpecID`;
+- `TestPrepareAppDirectorIntakeV0PropagaContextoFuncionalEnSummary`;
 - `TestPrepareAppDirectorIntakeV0RejectsSpecNoValidada`;
 - `TestAppDirectorCandidateProviderV0EmitsDirectorAgent`;
 - `TestAppDirectorCandidateProviderV0DoesNotReemitStartedDirector`;

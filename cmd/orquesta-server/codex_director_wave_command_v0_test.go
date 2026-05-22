@@ -38,6 +38,7 @@ func TestCodexLaunchDirectorWaveCommandV0DryRunConstruyePlanYPromptsPorAgente(t 
 		"--runtime-dir", filepath.Join(runtimeDir, "director-wave-test"),
 		"--command", fakeCodex,
 		"--source-code-home", sourceCodeHome,
+		"--reasoning-effort", "medium",
 		"--objective", "Implementar el puente Director Operativo a ola Codex.",
 		"--write-set", "cmd/orquesta-server/codex_director_wave_command_v0.go,cmd/orquesta-server/codex_wave_command_v0.go,cmd/orquesta-server/codex_director_wave_command_v0_test.go",
 		"--required-tests", "go test -count=1 ./cmd/orquesta-server",
@@ -70,6 +71,11 @@ func TestCodexLaunchDirectorWaveCommandV0DryRunConstruyePlanYPromptsPorAgente(t 
 	}
 	if len(summary.Launch.Agents) != 3 {
 		t.Fatalf("agents=%d", len(summary.Launch.Agents))
+	}
+	firstWrapper := mustReadFileStringV0(t, summary.Launch.Agents[0].WrapperPath)
+	if strings.Contains(firstWrapper, `model_reasoning_effort="medium"`) ||
+		!strings.Contains(firstWrapper, `model_reasoning_effort="high"`) {
+		t.Fatalf("wrapper agente 1 no eleva reasoning a high:\n%s", firstWrapper)
 	}
 
 	firstPrompt := mustReadFileStringV0(t, summary.Launch.Agents[0].PromptPath)

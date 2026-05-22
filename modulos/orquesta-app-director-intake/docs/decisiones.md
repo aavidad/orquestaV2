@@ -89,6 +89,21 @@ Estado: aceptada localmente.
 ```
 
 ```text
+Fecha: 2026-05-22
+Decision: El summary del director transporta contexto funcional compacto de
+`AppSpecV0`.
+Motivo: un smoke real de `crear_app_completa` dejo al director sin objetivo de
+producto suficiente y este creo solo una microtarea documental con `CONSULTA AL
+DIRECTOR`. El rail era demasiado estrecho: el contrato ya tenia nombre,
+objetivo, tipo, plataformas y necesidades de datos.
+Impacto: `directorTaskSummaryV0` sigue sin transportar proveedor, modelo, HOME,
+runtime ni persistencia concreta, pero anade `app`, `objetivo`, `descripcion`,
+`tipo`, `plataformas` y una necesidad funcional compacta. El stack Codex puede
+construir un prompt accionable sin tocar el nucleo.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-05-15
 Decision: El director principal en modo normal usa capacidad xhigh y write-set
 global documental cuando la peticion exige entregables completos.

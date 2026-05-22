@@ -143,6 +143,7 @@ func codexStackCapacityConfigFromEnvV0() orquestaappcodexstack.CapacityConfigV0 
 		"ORQUESTA_CAPACITY_TIER",
 		orquestacoreworkflow.OrchestrationCapacityXHighV0,
 	)
+	tier = capacityRecommendationMinHighV0(tier)
 	reasoningEffort := capacityRecommendationEnvOrDefaultV0(
 		"ORQUESTA_CAPACITY_REASONING_EFFORT",
 		capacityRecommendationEnvOrDefaultV0(
@@ -150,6 +151,7 @@ func codexStackCapacityConfigFromEnvV0() orquestaappcodexstack.CapacityConfigV0 
 			orquestacoreworkflow.OrchestrationCapacityXHighV0,
 		),
 	)
+	reasoningEffort = capacityRecommendationMinHighV0(reasoningEffort)
 	return orquestaappcodexstack.CapacityConfigV0{
 		Tier:            tier,
 		ReasoningEffort: reasoningEffort,
@@ -158,6 +160,15 @@ func codexStackCapacityConfigFromEnvV0() orquestaappcodexstack.CapacityConfigV0 
 		Summary:         "Capacidad inicial del servidor residente.",
 		EvidenceRefs:    []string{"evidence-ref-orquesta-server"},
 	}
+}
+
+func capacityRecommendationMinHighV0(
+	value orquestacoreworkflow.OrchestrationCapacityRecommendationV0,
+) orquestacoreworkflow.OrchestrationCapacityRecommendationV0 {
+	if value == orquestacoreworkflow.OrchestrationCapacityXHighV0 {
+		return value
+	}
+	return orquestacoreworkflow.OrchestrationCapacityHighV0
 }
 
 func capacityRecommendationEnvOrDefaultV0(
@@ -211,10 +222,10 @@ func codexRuntimeConfigV0(
 		HomeDir:        homeDirV0(),
 		PathEnv:        envOrDefaultV0("ORQUESTA_CODEX_PATH", os.Getenv("PATH")),
 		Model:          strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_MODEL")),
-		ReasoningEffort: envOrDefaultV0(
+		ReasoningEffort: codexReasoningEffortMinHighV0(envOrDefaultV0(
 			"ORQUESTA_CODEX_REASONING_EFFORT",
 			string(orquestacoreworkflow.OrchestrationCapacityXHighV0),
-		),
+		)),
 		Profile:        strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_PROFILE")),
 		Sandbox:        envOrDefaultV0("ORQUESTA_CODEX_SANDBOX", "workspace-write"),
 		ApprovalPolicy: envOrDefaultV0("ORQUESTA_CODEX_APPROVAL_POLICY", "never"),

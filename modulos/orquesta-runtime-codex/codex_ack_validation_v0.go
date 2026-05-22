@@ -92,7 +92,24 @@ func codexAgentAckWithSpecDefaultsV0(
 	if strings.TrimSpace(ack.TaskRef) == "" {
 		ack.TaskRef = packet.Task.TaskRef
 	}
+	if codexAgentAckIdentityMatchesSpecV0(ack, spec) {
+		if strings.TrimSpace(ack.CorrelationID) != strings.TrimSpace(packet.CorrelationID) {
+			ack.CorrelationID = packet.CorrelationID
+		}
+		ack.TaskRef = packet.Task.TaskRef
+	}
 	return ack
+}
+
+func codexAgentAckIdentityMatchesSpecV0(
+	ack CodexAgentAckV0,
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+) bool {
+	packet := spec.AgentPacket
+	return strings.TrimSpace(ack.RequestID) == strings.TrimSpace(spec.RequestID) &&
+		strings.TrimSpace(ack.RequestID) == strings.TrimSpace(packet.RequestID) &&
+		strings.TrimSpace(ack.TargetModule) == strings.TrimSpace(packet.TargetModule) &&
+		strings.TrimSpace(ack.AckRef) == strings.TrimSpace(packet.DeliveryRefs.AckRef)
 }
 
 func firstNonEmptyCodexAckValueV0(values ...string) string {
@@ -158,14 +175,23 @@ func (v *codexAckValidatorV0) validateCompletedEvidence(
 			v.add(CodexConnectorAckArtifactV0, "files", "artifact_path_invalid")
 			return
 		}
-		if missing := codexAckMissingWriteSetV0(writeSet, files); len(missing) > 0 {
+		if codexAckHasForbiddenArtifactPathV0(files) {
+			v.add(CodexConnectorAckArtifactV0, "files", "artifact_path_forbidden")
+			return
+		}
+		if len(writeSet) > 0 && len(files) == 0 {
 			v.add(CodexConnectorAckArtifactV0, "files", "missing_required_artifact")
 		}
+		outsideWriteSet := false
 		for _, file := range files {
 			if !codexAckPathAllowedV0(file, writeSet) {
-				v.add(CodexConnectorAckArtifactV0, "files", "artifact_outside_write_set")
-				return
+				outsideWriteSet = true
+				break
 			}
+		}
+		if outsideWriteSet && !codexAckHasJustifiedWriteSetExpansionV0(ack.Notes) {
+			v.add(CodexConnectorAckArtifactV0, "files", "artifact_outside_write_set")
+			return
 		}
 	}
 	if codexPacketHasRequiredTruncatedContextV0(packet) &&
@@ -196,6 +222,38 @@ func codexAckHasInvalidPathV0(values []string) bool {
 		}
 	}
 	return false
+}
+
+func codexAckHasForbiddenArtifactPathV0(values []string) bool {
+	for _, value := range values {
+		if codexAckArtifactPathForbiddenV0(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexAckArtifactPathForbiddenV0(value string) bool {
+	path, ok := normalizeCodexAckFilePathV0(value)
+	if !ok {
+		return true
+	}
+	if strings.HasPrefix(path, ".orquesta-runtime/") ||
+		strings.HasPrefix(path, "orquesta-runtime/") {
+		return true
+	}
+	switch pathpkg.Base(path) {
+	case CodexAgentAckFileNameV0,
+		CodexAgentPacketFileNameV0,
+		CodexDirectorDecisionsFileNameV0,
+		"agent_prompt.txt",
+		"codex_stdout.log",
+		"codex_stderr.log",
+		"codex_last_message.txt":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeCodexAckPathsV0(values []string) []string {
@@ -266,6 +324,31 @@ func codexAckMissingWriteSetV0(writeSet []string, files []string) []string {
 		}
 	}
 	return missing
+}
+
+func codexAckHasJustifiedWriteSetExpansionV0(notes []string) bool {
+	for _, note := range notes {
+		normalized := strings.ToLower(strings.TrimSpace(note))
+		if normalized == "" {
+			continue
+		}
+		for _, marker := range []string{
+			"ampli",
+			"fuera del write-set",
+			"fuera de write-set",
+			"outside write-set",
+			"outside the write-set",
+			"scope expansion",
+			"expanded scope",
+			"necesit",
+			"imprescindible",
+		} {
+			if strings.Contains(normalized, marker) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func codexAckPathAllowedV0(path string, writeSet []string) bool {

@@ -68,7 +68,66 @@ func primaryDirectorWriteSetV0(spec orquestafactory.AppSpecV0) []string {
 func directorTaskSummaryV0(spec orquestafactory.AppSpecV0, base string) string {
 	kind := orquestafactory.NormalizeRequestKindV0(spec.RequestKind)
 	mode := orquestafactory.NormalizeExecutionModeV0(spec.ExecutionMode)
-	return base + " request_kind=" + kind + " execution_mode=" + mode + "."
+	parts := []string{
+		base,
+		"request_kind=" + kind,
+		"execution_mode=" + mode + ".",
+	}
+	if hints := directorTaskSummaryHintsV0(spec); len(hints) > 0 {
+		parts = append(parts, "contexto_app: "+strings.Join(hints, "; ")+".")
+	}
+	return strings.Join(compactDirectorTaskSummaryPartsV0(parts), " ")
+}
+
+func directorTaskSummaryHintsV0(spec orquestafactory.AppSpecV0) []string {
+	hints := []string{
+		directorTaskSummaryFieldV0("app", spec.App.Nombre),
+		directorTaskSummaryFieldV0("objetivo", spec.App.Objetivo),
+		directorTaskSummaryFieldV0("descripcion", spec.App.Descripcion),
+		directorTaskSummaryFieldV0("tipo", spec.App.TipoApp),
+		directorTaskSummaryListFieldV0("plataformas", spec.Platforms),
+	}
+	for _, need := range spec.Data.Needs {
+		if hint := directorTaskSummaryFieldV0("datos", need); hint != "" {
+			hints = append(hints, hint)
+			break
+		}
+	}
+	return compactDirectorTaskSummaryPartsV0(hints)
+}
+
+func directorTaskSummaryFieldV0(label string, value string) string {
+	value = compactDirectorTaskSummaryTextV0(value)
+	if label == "" || value == "" {
+		return ""
+	}
+	return label + "=" + value
+}
+
+func directorTaskSummaryListFieldV0(label string, values []string) string {
+	values = compactDirectorTaskSummaryPartsV0(values)
+	if label == "" || len(values) == 0 {
+		return ""
+	}
+	return label + "=" + strings.Join(values, ",")
+}
+
+func compactDirectorTaskSummaryTextV0(value string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+}
+
+func compactDirectorTaskSummaryPartsV0(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = compactDirectorTaskSummaryTextV0(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
 }
 
 func directorSpecializedAreasV0(spec orquestafactory.AppSpecV0) []directorTaskAreaV0 {

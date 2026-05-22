@@ -60,10 +60,10 @@ func codexStackRealSmokeConfigForTestV0(t *testing.T) codexStackRealSmokeConfigV
 
 func codexStackRealSmokeReasoningEffortV0() string {
 	value := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_REASONING_EFFORT"))
-	if value == "" {
-		return "medium"
+	if value == "xhigh" {
+		return value
 	}
-	return value
+	return "high"
 }
 
 func codexStackRealSmokeProjectDirV0(t *testing.T) string {

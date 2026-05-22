@@ -5,6 +5,7 @@ import "strings"
 const (
 	maxDirectorAgentStringV0         = 300
 	maxDirectorAgentEvidenceRefsV0   = 10
+	maxDirectorAgentTextListV0       = 24
 	maxDirectorAgentRecursionLimitV0 = 40
 )
 

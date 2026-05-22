@@ -109,3 +109,41 @@ func TestProgrammingTaskV0TrabajoExternoUsaUnidadTrabajoNoMicrotareaMinima(t *te
 		t.Fatalf("objective=%s", got.Objective)
 	}
 }
+
+func TestProgrammingTaskV0IncluyeContextoDeReworkSinRehacerTodo(t *testing.T) {
+	task := orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion:      orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:             "task-programacion-web-001",
+		RunID:              "run-programacion-web-001",
+		PhaseID:            orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Title:              "Crear web",
+		Summary:            "Implementar agenda.",
+		WriteSet:           []string{"web"},
+		AcceptanceCriteria: []string{"web completada"},
+	}
+	resolver := CodexLaunchSpecResolverV0{
+		TaskStore: orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(task),
+	}
+
+	got, err := resolver.agentTaskV0(context.Background(), orquestaruntime.LaunchRuntimeAgentRequestV0{
+		RunID:   task.RunID,
+		PhaseID: string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		TaskRef: task.TaskID,
+		Summary: "Corregir entrega tras revision; conservar lo valido y completar faltantes: web.",
+		EvidenceRefs: []string{
+			"review-rework-missing-web",
+		},
+	}, "programacion")
+	if err != nil {
+		t.Fatalf("agentTaskV0: %v", err)
+	}
+	for _, want := range []string{
+		"Contexto de revision/rework",
+		"completar faltantes: web",
+		"conserva lo valido",
+	} {
+		if !strings.Contains(got.Objective, want) {
+			t.Fatalf("objective no contiene %q:\n%s", want, got.Objective)
+		}
+	}
+}

@@ -41,7 +41,7 @@ func (provider ReviewReworkReplanCandidateProviderV0) reviewReworkCapacityCandid
 			PhaseID:                    string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
 			TaskRef:                    proposal.TaskRef,
 			ReasonCode:                 proposal.ReasonCode,
-			Summary:                    "Capacidad para repetir tarea tras revision.",
+			Summary:                    reviewReworkSummaryV0(plan, "Capacidad para repetir tarea tras revision."),
 			MinimumRecommendedCapacity: provider.reviewReworkCapacityV0(plan),
 			EvidenceRefs:               compactStringsV0(proposal.EvidenceRefs),
 		},
@@ -65,7 +65,7 @@ func (provider ReviewReworkReplanCandidateProviderV0) reviewReworkAgentCandidate
 			TaskRef:            proposal.TaskRef,
 			CapacityRequestRef: plan.CapacityRequestRef,
 			Role:               reviewReworkRoleV0(plan),
-			Summary:            "Agente para repetir tarea tras revision.",
+			Summary:            reviewReworkSummaryV0(plan, "Agente para repetir tarea tras revision."),
 			EvidenceRefs:       compactStringsV0(proposal.EvidenceRefs),
 		},
 	}
@@ -152,6 +152,13 @@ func reviewReworkRoleV0(plan ReviewReworkReplanPlanV0) string {
 		return plan.AgentRole
 	}
 	return "implementacion"
+}
+
+func reviewReworkSummaryV0(plan ReviewReworkReplanPlanV0, fallback string) string {
+	if strings.TrimSpace(plan.Summary) != "" {
+		return strings.TrimSpace(plan.Summary)
+	}
+	return fallback
 }
 
 func reviewReworkActionReturnsToProgrammingV0(action orquestacoreworkflow.ReplanDecisionActionV0) bool {

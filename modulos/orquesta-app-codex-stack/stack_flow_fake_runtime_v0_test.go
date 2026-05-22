@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -163,12 +164,62 @@ func (runtime *fakeCodexStackRuntimeV0) deliveryBodyForTargetV0(target string) s
 }
 
 func codexStackFakeDeliveryFileV0(target string) string {
-	target = filepath.ToSlash(filepath.Clean(target))
+	target = strings.TrimSpace(filepath.ToSlash(filepath.Clean(target)))
 	if target == "." || target == "" {
 		return "entrega.md"
+	}
+	if strings.ContainsAny(target, "*?[") {
+		return codexStackFakeDeliveryFileForGlobV0(target)
 	}
 	if filepath.Ext(target) == "" {
 		return target + "/entrega.md"
 	}
 	return target
+}
+
+func codexStackFakeDeliveryFileForGlobV0(pattern string) string {
+	if strings.HasSuffix(pattern, "/**") {
+		prefix := strings.TrimSuffix(pattern, "/**")
+		if prefix == "" || prefix == "." {
+			return "entrega.md"
+		}
+		return prefix + "/entrega.md"
+	}
+	parts := strings.Split(pattern, "/")
+	concrete := make([]string, 0, len(parts))
+	for index, part := range parts {
+		if part == "" {
+			continue
+		}
+		switch {
+		case part == "**":
+			concrete = append(concrete, "generated")
+		case strings.ContainsAny(part, "*?["):
+			concrete = append(concrete, codexStackFakeConcreteGlobSegmentV0(part, index == len(parts)-1))
+		default:
+			concrete = append(concrete, part)
+		}
+	}
+	file := strings.Join(concrete, "/")
+	if file == "" || file == "." {
+		return "entrega.md"
+	}
+	if filepath.Ext(file) == "" {
+		return file + "/entrega.md"
+	}
+	return file
+}
+
+func codexStackFakeConcreteGlobSegmentV0(segment string, last bool) string {
+	if strings.Contains(segment, "_test.go") {
+		return "generated_test.go"
+	}
+	extension := filepath.Ext(segment)
+	if extension != "" {
+		return "generated" + extension
+	}
+	if last {
+		return "entrega.md"
+	}
+	return "generated"
 }

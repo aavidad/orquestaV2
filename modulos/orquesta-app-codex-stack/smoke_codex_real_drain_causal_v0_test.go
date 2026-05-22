@@ -166,6 +166,9 @@ func codexStackRealSmokeProjectTargetExistsV0(projectDir string, target string) 
 	if clean == "." || clean == "" || strings.HasPrefix(clean, "../") || filepath.IsAbs(clean) {
 		return false
 	}
+	if clean == "web" && codexStackRealSmokeProjectTargetExistsV0(projectDir, "internal/webadmin") {
+		return true
+	}
 	if codexStackRealSmokeHasGlobV0(clean) {
 		return len(codexStackRealSmokeGlobMatchesNoFatalV0(projectDir, clean)) > 0
 	}

@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -126,6 +127,34 @@ func TestReviewReworkReplanSourceV0MantienePlanTrasReplanHastaAgente(t *testing.
 	}
 	if len(plans) != 0 {
 		t.Fatalf("plan debe parar tras agente solicitado: %+v", plans)
+	}
+}
+
+func TestReviewReworkReplanSourceV0DescribeWriteSetFaltanteParaElAgente(t *testing.T) {
+	projectDir := t.TempDir()
+	writeStackReviewGateFileForTestV0(t, projectDir, "internal/api/handler.go", "package api\n")
+	descriptor := reviewReworkDescriptorForTestV0("delivery-ref-target", "task-ref-target")
+	descriptor.ProjectWorkDir = projectDir
+	descriptor.Spec.AgentPacket.Task.WriteSet = []string{"internal/api", "web"}
+	source := ReviewReworkReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(descriptor),
+	}
+
+	plans, err := source.BuildReviewReworkReplanPlansV0(
+		context.Background(),
+		reviewReworkPlanRequestForTestV0(false),
+	)
+	if err != nil {
+		t.Fatalf("BuildReviewReworkReplanPlansV0: %v", err)
+	}
+	if len(plans) != 1 {
+		t.Fatalf("plans=%+v", plans)
+	}
+	if !strings.Contains(plans[0].Summary, "completar faltantes: web") {
+		t.Fatalf("summary=%q", plans[0].Summary)
+	}
+	if !reviewReworkPlanHasEvidenceForTestV0(plans[0].EvidenceRefs, "review-rework-missing-web") {
+		t.Fatalf("evidence_refs=%v", plans[0].EvidenceRefs)
 	}
 }
 

@@ -26,7 +26,7 @@ func (source compositeDirectorDecisionSourceV0) ListDirectorAgentDecisionsV0(
 		if err != nil {
 			return nil, err
 		}
-		decisions = normalizeCompositeDirectorDecisionBatchV0(decisions)
+		decisions = normalizeCompositeDirectorDecisionBatchV0(request.Run, decisions)
 		if err := validateCompositeDirectorDecisionBatchV0(
 			request.Run,
 			request.RequestKind,

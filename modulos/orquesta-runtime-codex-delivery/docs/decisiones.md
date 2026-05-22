@@ -22,6 +22,23 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-05-22
+Decision: La completitud del write-set se revisa como rework, no como rechazo
+duro del ACK.
+Motivo: un agente real puede entregar codigo util y omitir un destino esperado
+como `web/`. Rechazar el ACK entero pierde trabajo valido y reproduce el fallo
+de acotar demasiado a los agentes. La validacion de ACK debe confirmar identidad
+y evidencia basica; la completitud funcional debe vivir en review/rework.
+Impacto: `CodexReviewGateProjectFileEvidenceV0` comprueba el proyecto real
+contra el `write_set` del descriptor y emite incidencias compactas
+`write_set_target_missing:*`. Para apps Go, una superficie web embebida en
+`internal/webadmin` satisface el destino funcional `web`. El nucleo solo recibe
+refs de gate y puede pedir correccion causal; no recibe rutas locales, logs,
+HOME, proveedor ni modelo.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-15
 Decision: Separar actividad fisica de logs y accion semantica repetida.
 Motivo: en una prueba real el director genero los manuales pedidos, pero quedo

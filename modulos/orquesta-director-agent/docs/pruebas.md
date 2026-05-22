@@ -12,6 +12,8 @@ Cobertura local:
 - acepta `open_phase`, `request_vote` y `accept_decision`;
 - acepta `publish_function_contract` compacto;
 - acepta `create_microtask` con contrato funcional explicito;
+- acepta `create_microtask` con `write_set` amplio de tarea vertical real sin
+  relajar refs/evidencias compactas;
 - acepta `create_microtask` con linaje recursivo neutral y refs compactas;
 - acepta `create_microtask` con `context_refs` opacas compactas;
 - acepta `work_profile_kind` opcional en microtareas y unidades de equipo;
