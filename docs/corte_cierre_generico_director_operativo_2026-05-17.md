@@ -121,9 +121,10 @@ registra un `QualityGateRecorded(blocked)` idempotente para auditoria, pero no
 se crea `ReplanDecisionRecorded` automatico: puede ser latencia o falta de
 ingesta, no necesariamente trabajo defectuoso. El replay con `state-file` no
 duplica ese gate y reentra a `replan_or_close` cuando aparece evidencia `passed`
-causal posterior. El runner por puerto y el
-ejecutor local opt-in ya existen; sigue pendiente el smoke servidor/director con
-Codex real y ampliar replan generico para blockers no cubiertos.
+causal posterior. El runner por puerto, el ejecutor local opt-in y el smoke
+Codex real acotado `CODEX-REQTEST-REAL-E2E` ya tienen evidencia; siguen
+pendientes ola/cohorte real amplia, recursion real y ampliar replan generico
+para blockers no cubiertos.
 
 Desde el corte del 2026-05-22, `ContinueAppDirectorV0` no bloquea el
 `PlanState` si el cierre de una task devuelve solo `run.open_tasks`: conserva el
@@ -188,7 +189,9 @@ implementacion, test focal y evidencia en la matriz.
   corte del 2026-05-22 bloquea tambien `required-tests-evidence-missing` cuando
   no hay evidencia causal ni runner efectivo, registra un quality gate
   bloqueante idempotente sin replan automatico, y reentra a `replan_or_close` si
-  la evidencia `passed` aparece despues. Siguen pendientes smokes reales.
+  la evidencia `passed` aparece despues. El smoke real acotado con runner esta
+  cerrado; siguen pendientes smokes reales de ola/cohorte amplia, recursion real
+  y replan posterior con agente real tras fallo de tests.
 - [~] Replan negativo: cerrada la observacion durable de review negativa. El
   `PlanState` guarda refs/attempt para `ReworkRequested` y
   `ReplanDecisionRecorded`. El corte del 2026-05-21 ya convierte followups

@@ -52,6 +52,18 @@ importar filesystem desde paquetes puros. No habilita `submit_artifact` ni el
 bridge de entrega, porque el adaptador file solo crea jobs. Si tambien existe
 `ORQUESTA_OPES_BASE_URL`, el servidor falla por backend ambiguo.
 
+## SRV-008: backend HTTP neutral opt-in para domain_work generico
+
+`cmd/orquesta-server` puede inyectar `orquesta-domain-work-http` cuando se
+configura `ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL`. El adaptador envia
+`DomainWorkJobRequestV0` y `DomainWorkArtifactSubmissionV0` como JSON neutral a
+la app externa propietaria y espera `DomainWorkJobV0`/`DomainWorkArtifactReceiptV0`.
+
+Esto habilita `create_job`, `submit_artifact` y `DomainDelivery` sin OPES. El
+backend HTTP es excluyente con OPES y con el backend file para evitar mezclar
+propietarios de jobs. La app externa conserva persistencia, validacion y
+ensamblado; Orquesta solo conserva refs opacas y evidencia causal.
+
 ## SRV-007: autodiagnostico antes de supervisor
 
 El servidor residente ejecuta un `StartupCheckPortV0` opcional antes de escuchar

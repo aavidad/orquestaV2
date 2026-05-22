@@ -335,12 +335,53 @@ Pruebas offline focales antes de tocar OPES real:
 ```bash
 go test -count=1 ./modulos/orquesta-opes-bridge
 go test -count=1 ./cmd/orquesta-server -run 'TestOPESBridgeLoop|TestRunOPESDrainOnceV0'
+bash -n scripts/smoke_opes_derivatives_real.sh
 ```
 
 Estas pruebas no ejecutan Codex ni llaman a OPES real. El smoke real de
 derivados sigue siendo opt-in, contra instancia temporal, y debe comprobar que
 OPES recibe artefactos validos y deduplica reintentos; en particular,
 `assemble_topic` debe entregar `artifact_type=assembled_topic`.
+
+Wrapper operador para derivados:
+
+```bash
+ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
+ORQUESTA_OPES_DERIVATIVES_SMOKE_CONFIRM=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
+scripts/smoke_opes_derivatives_real.sh
+```
+
+Ese modo es `dry-run-once`: consulta OPES temporal y muestra la primera fase
+pendiente de la secuencia sin crear runs en Orquesta. Si el OPES temporal no es
+local, anadir `ORQUESTA_OPES_ALLOW_NONLOCAL_TEMPORAL=1` solo tras comprobar que
+no es productivo.
+
+Para crear runs de la primera fase pendiente:
+
+```bash
+ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
+ORQUESTA_BASE_URL=http://127.0.0.1:<puerto-orquesta> \
+ORQUESTA_OPES_DERIVATIVES_SMOKE_CONFIRM=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
+ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
+ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=drain-once \
+ORQUESTA_OPES_BRIDGE_LIMIT=1 \
+scripts/smoke_opes_derivatives_real.sh
+```
+
+El wrapper rechaza `ORQUESTA_OPES_BRIDGE_JOB_TYPE` y
+`ORQUESTA_OPES_BRIDGE_JOB_REF` para derivados porque la ruta segura aqui es la
+secuencia completa por fases. Cada ejecucion real debe revisar el JSON de salida
+en `/tmp/opes-salidas/derivatives-<smoke_id>/` antes de repetir o subir el
+limite.
+
+Estado de cierre OPES real: este runbook solo deja comandos acotados para
+materializar derivados y observar el avance por jobs/artefactos. El cierre
+operativo completo de una composicion OPES real sigue pendiente hasta tener OPES
+temporal vivo, cuota/modelo confirmados y evidencia de que cada derivado fue
+aceptado por OPES con refs causales suficientes; no se declara cerrado desde
+pruebas offline ni desde un dry-run.
 
 ## Criterio editorial para Operario
 

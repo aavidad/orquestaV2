@@ -1018,7 +1018,7 @@ func applyOperationalDirectorPlanStateAfterLoopV0(
 ) (bool, error) {
 	if ports.OperationalPlanStateStore == nil ||
 		ports.OperationalPlanStateWriter == nil ||
-		loop.Status != orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 {
+		!operationalDirectorPlanStateLoopCanAdvanceV0(loop.Status) {
 		return false, nil
 	}
 	planRef := continueOperationalDirectorPlanRefV0(request)
@@ -1072,6 +1072,18 @@ func applyOperationalDirectorPlanStateAfterLoopV0(
 		}
 	}
 	return true, ports.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, next)
+}
+
+func operationalDirectorPlanStateLoopCanAdvanceV0(
+	status orquestacionnucleoapp.ProgressiveLoopStatusV0,
+) bool {
+	switch status {
+	case orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		orquestacionnucleoapp.ProgressiveLoopStatusBlockedV0:
+		return true
+	default:
+		return false
+	}
 }
 
 func applyOperationalDirectorPlanStateAfterExternalWaitExhaustedV0(
@@ -1404,16 +1416,22 @@ func operationalDirectorPlanStateAfterReviewAcceptedV0(
 			nextStep.Reason = "review-deliveries-accepted"
 		case step.StepID == nextStepID:
 			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepRunningV0
-			if len(nextStep.TaskRefs) == 0 {
+			if nextStepKind == orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0 {
+				nextStep.TaskRefs = append([]string(nil), activeStep.TaskRefs...)
+				nextStep.AgentRefs = append([]string(nil), activeStep.AgentRefs...)
+				nextStep.DeliveryRefs = append([]string(nil), deliveryRefs...)
+				nextStep.ReviewResultRefs = append([]string(nil), reviewResultRefs...)
+				nextStep.RequiredTestEvidenceRefs = nil
+			} else if len(nextStep.TaskRefs) == 0 {
 				nextStep.TaskRefs = append([]string(nil), activeStep.TaskRefs...)
 			}
-			if len(nextStep.AgentRefs) == 0 {
+			if nextStepKind != orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0 && len(nextStep.AgentRefs) == 0 {
 				nextStep.AgentRefs = append([]string(nil), activeStep.AgentRefs...)
 			}
-			if len(nextStep.DeliveryRefs) == 0 {
+			if nextStepKind != orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0 && len(nextStep.DeliveryRefs) == 0 {
 				nextStep.DeliveryRefs = append([]string(nil), deliveryRefs...)
 			}
-			if len(nextStep.ReviewResultRefs) == 0 {
+			if nextStepKind != orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0 && len(nextStep.ReviewResultRefs) == 0 {
 				nextStep.ReviewResultRefs = append([]string(nil), reviewResultRefs...)
 			}
 			nextStep.EvidenceRefs = compactServiceRefsV0(append(nextStep.EvidenceRefs, evidenceRefs...))
@@ -2054,6 +2072,17 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 		}
 		return operationalDirectorPlanStateWithRequiredTestsEvidenceMissingV0(request, state, activeStep)
 	}
+	if err := operationalDirectorPlanRecordRequiredTestsPassedQualityGateV0(
+		ctx,
+		request,
+		ports,
+		loop.Run,
+		activeStep,
+		matches,
+		testStatus.PassedRefs,
+	); err != nil {
+		return state, false, err
+	}
 	return operationalDirectorPlanStateWithRequiredTestsPassedV0(request, state, activeStep, testStatus.PassedRefs)
 }
 
@@ -2252,6 +2281,74 @@ func operationalDirectorPlanRecordRequiredTestsEvidenceMissingQualityGateV0(
 	}
 	_, err = orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, ports.RunStore, ports.EventSink, command)
 	return err
+}
+
+func operationalDirectorPlanRecordRequiredTestsPassedQualityGateV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+	matches []operationalDirectorPlanAcceptedReviewMatchV0,
+	passedRefs []string,
+) error {
+	if ports.RunStore == nil || ports.EventSink == nil || len(matches) == 0 {
+		return nil
+	}
+	passedRefs = compactServiceRefsV0(passedRefs)
+	if len(passedRefs) == 0 {
+		return nil
+	}
+	storedRun, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(storedRun.RunID) != strings.TrimSpace(run.RunID) {
+		return nil
+	}
+	for _, match := range matches {
+		taskRef := strings.TrimSpace(match.TaskRef)
+		if taskRef == "" ||
+			!startAppDirectorStringInSetV0(activeStep.TaskRefs, taskRef) ||
+			len(orquestacoreworkflow.PendingBlockingQualityGateRefsForSubjectV0(storedRun, taskRef)) == 0 {
+			continue
+		}
+		if strings.TrimSpace(string(storedRun.CurrentPhase)) == "" {
+			continue
+		}
+		refs := operationalDirectorRequiredTestsPassedGateRefsV0(request, match, passedRefs)
+		payload := orquestacoreworkflow.RecordQualityGateCommandPayloadV0{
+			RunRef:       request.RunRef,
+			GateRef:      refs.GateRef,
+			PhaseID:      string(storedRun.CurrentPhase),
+			SubjectRef:   taskRef,
+			Decision:     orquestacoreworkflow.QualityGateDecisionAcceptedV0,
+			Summary:      "Tests requeridos pasados tras followup causal.",
+			EvidenceRefs: operationalDirectorRequiredTestsPassedGateEvidenceRefsV0(match, passedRefs),
+		}
+		command, err := orquestacoreworkflow.NewRecordQualityGateCommandV0(
+			orquestacoreworkflow.OrchestrationCommandMetaV0{
+				CommandID:      "cmd-" + refs.GateRef,
+				RunID:          request.RunRef,
+				IdempotencyKey: "idem-" + refs.GateRef,
+				CorrelationID:  request.CorrelationID,
+				RequestedBy:    request.RequestedBy,
+				OccurredAt:     request.OccurredAt,
+			},
+			payload,
+		)
+		if err != nil {
+			return err
+		}
+		if _, err := orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, ports.RunStore, ports.EventSink, command); err != nil {
+			return err
+		}
+		storedRun, err = ports.RunStore.LoadRunV0(ctx, request.RunRef)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type operationalDirectorPlanQualityGateReplanTransitionV0 struct {
@@ -2594,6 +2691,42 @@ func operationalDirectorRequiredTestsAutoReplanRefsV0(
 		CapacityRef: "capacity-ref-app-director-required-tests-retry-" + base,
 		AgentRef:    "agent-ref-app-director-required-tests-retry-" + base,
 	}
+}
+
+func operationalDirectorRequiredTestsPassedGateRefsV0(
+	request ContinueAppDirectorRequestV0,
+	match operationalDirectorPlanAcceptedReviewMatchV0,
+	passedRefs []string,
+) operationalDirectorRequiredTestsAutoReplanRefSetV0 {
+	stem := compactRecoveryRefV0(strings.TrimSpace(match.TaskRef))
+	if len(stem) > 72 {
+		stem = strings.Trim(stem[:72], "-")
+	}
+	digest := operationalDirectorRequiredTestsAutoReplanDigestV0(
+		request.RunRef,
+		match.TaskRef,
+		match.DeliveryRef,
+		match.ReviewRequestID,
+		match.ReviewResultRef,
+		match.AcceptedReviewRef,
+		strings.Join(sortedServiceRefsV0(passedRefs), "|"),
+		"required-tests-passed",
+	)
+	return operationalDirectorRequiredTestsAutoReplanRefSetV0{
+		GateRef: "quality-gate-ref-app-director-required-tests-passed-" + stem + "-" + digest,
+	}
+}
+
+func operationalDirectorRequiredTestsPassedGateEvidenceRefsV0(
+	match operationalDirectorPlanAcceptedReviewMatchV0,
+	passedRefs []string,
+) []string {
+	return compactServiceRefsV0(append([]string{
+		match.DeliveryRef,
+		match.ReviewRequestID,
+		match.ReviewResultRef,
+		match.AcceptedReviewRef,
+	}, append(passedRefs, match.EvidenceRefs...)...))
 }
 
 func operationalDirectorRequiredTestsEvidenceMissingGateRefsV0(

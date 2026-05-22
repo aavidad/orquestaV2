@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	orquestadirectoroperativo "orquesta/modulos/orquesta-director-operativo"
 )
@@ -449,6 +450,114 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaNietosConLimi
 	}
 }
 
+func TestCodexLaunchDirectorWaveCommandV0RecursiveFakeRuntimeEjecutableConLinaje(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	runtimeDir := filepath.Join(root, "runtime", "recursive-fake-runtime")
+	fakeCodex := filepath.Join(root, "codex-fake")
+
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatalf("crear project dir: %v", err)
+	}
+	fakeScript := `#!/bin/sh
+out=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    out="$1"
+  fi
+  shift || break
+done
+input=$(cat)
+if [ -n "$out" ]; then
+  printf 'fake recursive delivery\n' > "$out"
+fi
+printf '%s\n' "$input"
+`
+	if err := os.WriteFile(fakeCodex, []byte(fakeScript), 0o700); err != nil {
+		t.Fatalf("crear codex falso: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := codexLaunchDirectorWaveCommandV0([]string{
+		"--agents", "1",
+		"--allow-recursive-delegation",
+		"--max-delegation-depth", "2",
+		"--max-subagents-per-agent", "2",
+		"--recursive-agent-budget", "7",
+		"--wave-ref", "recursive-fake-runtime",
+		"--project-dir", projectDir,
+		"--runtime-dir", runtimeDir,
+		"--command", fakeCodex,
+		"--reasoning-effort", "medium",
+		"--sandbox", "workspace-write",
+		"--objective", "Ejecutar arbol recursivo Codex fake con linaje padre hijo nieto.",
+		"--write-set", "cmd/orquesta-server/codex_director_wave_command_v0.go,cmd/orquesta-server/codex_director_wave_command_v0_test.go",
+		"--required-tests", "go test -count=1 ./cmd/orquesta-server",
+		"--branch-ref", "branch-recursive-fake-runtime",
+		"--worktree-ref", "worktree-recursive-fake-runtime",
+	}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+
+	var summary codexDirectorWaveSummaryV0
+	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
+		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
+	}
+	if summary.AgentBudget.PlannedAgents != 7 ||
+		summary.AgentBudget.MaxAgents != 7 ||
+		summary.AgentBudget.Exceeded ||
+		len(summary.Launch.Agents) != 1 ||
+		len(summary.ChildLaunches) != 1 {
+		t.Fatalf("summary runtime recursivo inesperado: %+v", summary)
+	}
+	codexDirectorAssertRecursiveLineageForDrainReviewV0(t, summary)
+
+	nodes := codexDirectorCollectAgentNodesForTestV0(summary)
+	if len(nodes) != 7 {
+		t.Fatalf("agent tree size=%d", len(nodes))
+	}
+	for _, node := range nodes {
+		waitForCodexDirectorTestFileV0(t, node.agent.LastMessagePath)
+		if node.agent.ProcessRef == "" || node.agent.PID <= 0 {
+			t.Fatalf("agent sin process ref/pid: %+v", node.agent)
+		}
+		if node.agent.Status != "running" && node.agent.Status != "stopped" {
+			t.Fatalf("status inicial no ejecutable: %+v", node.agent)
+		}
+		codexDirectorAssertRegistryReadyForDrainReviewV0(t, node.launch)
+		stdoutText := mustReadFileStringV0(t, node.agent.StdoutPath)
+		if !strings.Contains(stdoutText, "Director Operativo Orquesta aprobo esta ola") &&
+			!strings.Contains(stdoutText, "Subagente Codex gobernado por Director Operativo Orquesta") {
+			t.Fatalf("stdout no contiene prompt ejecutado para %s:\n%s", node.agent.AgentRef, stdoutText)
+		}
+	}
+	for _, launch := range codexDirectorCollectLaunchesForTestV0(summary) {
+		var statusOut bytes.Buffer
+		stderr.Reset()
+		exitCode = codexWaveStatusCommandV0([]string{
+			"--runtime-dir", launch.RuntimeWorkDir,
+		}, &statusOut, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("status wave=%s exit=%d stderr=%s", launch.WaveRef, exitCode, stderr.String())
+		}
+		var status codexWaveLaunchSummaryV0
+		if err := json.Unmarshal(statusOut.Bytes(), &status); err != nil {
+			t.Fatalf("status json invalido wave=%s: %v", launch.WaveRef, err)
+		}
+		for _, agent := range status.Agents {
+			if agent.Status != "stopped" {
+				t.Fatalf("agent no quedo observable como stopped: %+v", agent)
+			}
+			if agent.LastMessageBytes == 0 || agent.StdoutBytes == 0 {
+				t.Fatalf("registry status sin evidencia de ejecucion: %+v", agent)
+			}
+		}
+	}
+}
+
 func TestCodexLaunchDirectorWaveCommandV0RecursiveBudgetBloqueaAntesDeLanzar(t *testing.T) {
 	root := t.TempDir()
 	projectDir := filepath.Join(root, "project")
@@ -599,6 +708,67 @@ func codexDirectorCollectChildAgentNodesForTestV0(
 	return nodes
 }
 
+func codexDirectorCollectLaunchesForTestV0(
+	summary codexDirectorWaveSummaryV0,
+) []codexWaveLaunchSummaryV0 {
+	launches := []codexWaveLaunchSummaryV0{summary.Launch}
+	for _, child := range summary.ChildLaunches {
+		launches = append(launches, codexDirectorCollectChildLaunchesForTestV0(child)...)
+	}
+	return launches
+}
+
+func codexDirectorCollectChildLaunchesForTestV0(
+	child codexDirectorChildWaveSummaryV0,
+) []codexWaveLaunchSummaryV0 {
+	launches := []codexWaveLaunchSummaryV0{child.Launch}
+	for _, grandchild := range child.ChildLaunches {
+		launches = append(launches, codexDirectorCollectChildLaunchesForTestV0(grandchild)...)
+	}
+	return launches
+}
+
+func codexDirectorAssertRecursiveLineageForDrainReviewV0(
+	t *testing.T,
+	summary codexDirectorWaveSummaryV0,
+) {
+	t.Helper()
+	seenAgents := map[string]bool{}
+	for _, agent := range summary.Launch.Agents {
+		seenAgents[agent.AgentRef] = true
+	}
+	for _, child := range summary.ChildLaunches {
+		codexDirectorAssertChildLineageForDrainReviewV0(t, child, summary.Launch.WaveRef, seenAgents)
+	}
+}
+
+func codexDirectorAssertChildLineageForDrainReviewV0(
+	t *testing.T,
+	child codexDirectorChildWaveSummaryV0,
+	expectedParentWaveRef string,
+	seenAgents map[string]bool,
+) {
+	t.Helper()
+	if child.ParentAgentRef == "" ||
+		!seenAgents[child.ParentAgentRef] ||
+		child.ParentWaveRef != expectedParentWaveRef ||
+		child.DelegationDepth <= 0 ||
+		!child.ReviewRequiredBeforeClose ||
+		child.Launch.WaveRef == "" ||
+		child.Launch.RegistryPath == "" {
+		t.Fatalf("linaje insuficiente para drain/review: %+v", child)
+	}
+	for _, agent := range child.Launch.Agents {
+		if seenAgents[agent.AgentRef] {
+			t.Fatalf("agent_ref duplicado en arbol: %s", agent.AgentRef)
+		}
+		seenAgents[agent.AgentRef] = true
+	}
+	for _, grandchild := range child.ChildLaunches {
+		codexDirectorAssertChildLineageForDrainReviewV0(t, grandchild, child.Launch.WaveRef, seenAgents)
+	}
+}
+
 func codexDirectorAssertRegistryReadyForDrainReviewV0(
 	t *testing.T,
 	launch codexWaveLaunchSummaryV0,
@@ -628,10 +798,22 @@ func codexDirectorAssertRegistryReadyForDrainReviewV0(
 			got.RuntimeWorkDir != agent.RuntimeWorkDir ||
 			got.WrapperPath != agent.WrapperPath ||
 			got.LastMessagePath != agent.LastMessagePath ||
-			got.Status != "dry_run" {
+			got.Status != agent.Status {
 			t.Fatalf("registry agent no coincide: got=%+v want=%+v", got, agent)
 		}
 	}
+}
+
+func waitForCodexDirectorTestFileV0(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("archivo no aparecio: %s", path)
 }
 
 func mustReadFileStringV0(t *testing.T, path string) string {

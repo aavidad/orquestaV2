@@ -853,6 +853,200 @@ func TestContinueAppDirectorV0AvanzaDeWaitAReviewAbriendoRevision(t *testing.T) 
 	}
 }
 
+func TestOperationalDirectorOlaCohorteAmpliaOfflineScopeReviewTestsClose(t *testing.T) {
+	runRef := "run-app-director-operational-wide-wave-offline"
+	planRef := "plan-ref-app-director-operational-wide-wave-offline"
+	parentTaskRef := "parent-task-app-director-operational-wide-wave-offline"
+	waveRef := "wave-service-operational-closure-plan-state"
+	cohortRef := "cohort-service-operational-closure-plan-state"
+	childA := serviceOperationalClosureTaskRefsForTestV0{
+		TaskRef:         "task-ref-app-director-wide-wave-a",
+		DeliveryRef:     "delivery-ref-app-director-wide-wave-a",
+		ReviewRequestID: "review-request-ref-app-director-wide-wave-a",
+		ReviewResultRef: "review-result-ref-app-director-wide-wave-a",
+		AcceptedRef:     "accepted-review-ref-app-director-wide-wave-a",
+		TestEvidenceRef: "test-evidence-ref-app-director-wide-wave-a",
+		ValidationRef:   "validation-ref-app-director-wide-wave-a",
+		ClosureRef:      "closure-ref-app-director-wide-wave-a",
+	}
+	childB := serviceOperationalClosureTaskRefsForTestV0{
+		TaskRef:         "task-ref-app-director-wide-wave-b",
+		DeliveryRef:     "delivery-ref-app-director-wide-wave-b",
+		ReviewRequestID: "review-request-ref-app-director-wide-wave-b",
+		ReviewResultRef: "review-result-ref-app-director-wide-wave-b",
+		AcceptedRef:     "accepted-review-ref-app-director-wide-wave-b",
+		TestEvidenceRef: "test-evidence-ref-app-director-wide-wave-b",
+		ValidationRef:   "validation-ref-app-director-wide-wave-b",
+		ClosureRef:      "closure-ref-app-director-wide-wave-b",
+	}
+	agentA := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(childA.TaskRef)
+	agentB := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(childB.TaskRef)
+	outOfScopeAgent := "agent-ref-app-director-wide-wave-out-of-scope"
+	waitAgentRefs := []string{agentA, agentB}
+	run := serviceContinueClosureRunForTestV0(runRef, orquestacoreworkflow.OrchestrationPhaseRevisionV0)
+	run.Tasks = []string{childA.TaskRef, childB.TaskRef}
+	run.Agents = []string{agentA, agentB, outOfScopeAgent}
+	run.StartedAgents = []string{agentA, agentB, outOfScopeAgent}
+	run.DeliveredAgents = []string{agentA}
+	run.DeliveredTasks = []string{childA.TaskRef}
+	run.Deliveries = []string{childA.DeliveryRef}
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(run)
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(
+		serviceOperationalDirectorWideWaveWaitStateForTestV0(
+			runRef,
+			planRef,
+			parentTaskRef,
+			waveRef,
+			cohortRef,
+			childA,
+			childB,
+		),
+	)
+	request := ContinueAppDirectorRequestV0{
+		RunRef:                     runRef,
+		OccurredAt:                 "2026-05-22T14:00:00Z",
+		CorrelationID:              "corr-app-director-wide-wave-offline",
+		OperationalDirectorPlanRef: planRef,
+		WaitWaveRef:                waveRef,
+		WaitCohortRef:              cohortRef,
+		WaitParentTaskRef:          parentTaskRef,
+	}
+	loopRequest := orquestacionnucleoapp.ProgressiveLoopRequestV0{
+		RunRef:        runRef,
+		WaitAgentRefs: waitAgentRefs,
+	}
+	partial, err := operationalDirectorPlanStatePostLoopScopeV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{RunStore: runStore, OperationalPlanStateStore: planStateStore},
+		orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+			Run:    run,
+		},
+		loopRequest,
+	)
+	if err != nil {
+		t.Fatalf("operationalDirectorPlanStatePostLoopScopeV0 partial: %v", err)
+	}
+	if partial.Status != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 {
+		t.Fatalf("delivery parcial cerro scope: %+v", partial)
+	}
+
+	run.DeliveredAgents = []string{agentA, agentB}
+	run.DeliveredTasks = []string{childA.TaskRef, childB.TaskRef}
+	run.Deliveries = []string{childA.DeliveryRef, childB.DeliveryRef}
+	run.Reviews = []string{childA.ReviewRequestID, childB.ReviewRequestID}
+	run.ReviewResults = []string{
+		serviceOperationalClosureReviewResultProjectionForTestV0(childA),
+		serviceOperationalClosureReviewResultProjectionForTestV0(childB),
+	}
+	run.AcceptedReviews = []string{childA.AcceptedRef, childB.AcceptedRef}
+	if err := runStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0 complete: %v", err)
+	}
+	eventReader := serviceOperationalClosureEventReaderForTestV0{
+		Events: serviceOperationalClosureEventsForTasksForTestV0(t, runRef, childA, childB),
+	}
+	testEvidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0(
+		serviceOperationalClosureRequiredTestEvidenceForTaskRefsV0(runRef, childA),
+		serviceOperationalClosureRequiredTestEvidenceForTaskRefsV0(runRef, childB),
+	)
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(
+		serviceOperationalClosureTaskWithRefsForTestV0(runRef, parentTaskRef, childA),
+		serviceOperationalClosureTaskWithRefsForTestV0(runRef, parentTaskRef, childB),
+	)
+	closureSource := &serviceOperationalClosureOpenTaskSourceForTestV0{
+		Requests: map[string]orquestacionnucleoapp.OperationalDirectorClosureRequestV0{
+			childA.TaskRef: serviceOperationalClosureRequestForTaskRefsV0(childA),
+			childB.TaskRef: serviceOperationalClosureRequestForTaskRefsV0(childB),
+		},
+	}
+	ports := StartAppDirectorPortsV0{
+		RunStore:                   runStore,
+		EventSink:                  orquestacionnucleoapp.NewInMemoryEventSinkV0(),
+		EventReader:                eventReader,
+		DirectorTaskStore:          taskStore,
+		RequiredTestEvidenceStore:  testEvidenceStore,
+		OperationalClosureSource:   closureSource,
+		OperationalPlanStateStore:  planStateStore,
+		OperationalPlanStateWriter: planStateStore,
+	}
+	scoped, err := operationalDirectorPlanStatePostLoopScopeV0(
+		context.Background(),
+		request,
+		ports,
+		orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+			Run:    run,
+		},
+		loopRequest,
+	)
+	if err != nil {
+		t.Fatalf("operationalDirectorPlanStatePostLoopScopeV0 complete: %v", err)
+	}
+	if scoped.Status != orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 ||
+		serviceStringInSetV0(scoped.Run.DeliveredAgents, outOfScopeAgent) {
+		t.Fatalf("scope no quedo acotado: %+v", scoped)
+	}
+	changed, err := applyOperationalDirectorPlanStateAfterLoopV0(context.Background(), request, ports, scoped)
+	if err != nil || !changed {
+		t.Fatalf("applyOperationalDirectorPlanStateAfterLoopV0 changed=%v err=%v", changed, err)
+	}
+	state, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), runRef, planRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0 after apply: %v", err)
+	}
+	reviewStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-review-deliveries")
+	testsStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-run-required-tests")
+	replanStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-replan-or-close")
+	if state.ActiveStepID != "step-replan-or-close" ||
+		reviewStep.Status != orquestadirectoroperativo.OperationalDirectorStepAcceptedV0 ||
+		testsStep.Status != orquestadirectoroperativo.OperationalDirectorStepAcceptedV0 ||
+		replanStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		!serviceStringInSetV0(reviewStep.DeliveryRefs, childA.DeliveryRef) ||
+		!serviceStringInSetV0(reviewStep.DeliveryRefs, childB.DeliveryRef) ||
+		!serviceStringInSetV0(testsStep.RequiredTestEvidenceRefs, childA.TestEvidenceRef) ||
+		!serviceStringInSetV0(testsStep.RequiredTestEvidenceRefs, childB.TestEvidenceRef) {
+		t.Fatalf("state=%+v review=%+v tests=%+v replan=%+v", state, reviewStep, testsStep, replanStep)
+	}
+
+	first, issues, err := maybeCloseOperationalDirectorV0(context.Background(), request, ports, scoped, loopRequest)
+	if err != nil || len(issues) != 0 {
+		t.Fatalf("maybeCloseOperationalDirectorV0 first err=%v issues=%+v", err, issues)
+	}
+	if first.Run.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 ||
+		!serviceStringInSetV0(first.Run.ClosedTasks, childA.TaskRef) ||
+		serviceStringInSetV0(first.Run.ClosedTasks, childB.TaskRef) {
+		t.Fatalf("primer cierre no fue parcial por task: %+v", first.Run)
+	}
+	request.OccurredAt = "2026-05-22T14:00:01Z"
+	second, issues, err := maybeCloseOperationalDirectorV0(
+		context.Background(),
+		request,
+		ports,
+		orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+			Run:    first.Run,
+		},
+		loopRequest,
+	)
+	if err != nil || len(issues) != 0 {
+		t.Fatalf("maybeCloseOperationalDirectorV0 second err=%v issues=%+v", err, issues)
+	}
+	if second.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		!serviceStringInSetV0(second.Run.ClosedTasks, childA.TaskRef) ||
+		!serviceStringInSetV0(second.Run.ClosedTasks, childB.TaskRef) ||
+		serviceStringInSetV0(second.Run.DeliveredAgents, outOfScopeAgent) {
+		t.Fatalf("cierre amplio no completo scope acotado: %+v", second.Run)
+	}
+	if len(closureSource.LastInput.WaitAgentRefs) != 2 ||
+		!serviceStringInSetV0(closureSource.LastInput.WaitAgentRefs, agentA) ||
+		!serviceStringInSetV0(closureSource.LastInput.WaitAgentRefs, agentB) ||
+		serviceStringInSetV0(closureSource.LastInput.WaitAgentRefs, outOfScopeAgent) {
+		t.Fatalf("closure source amplio scope=%+v", closureSource.LastInput.WaitAgentRefs)
+	}
+}
+
 func TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeReviewATestsRequeridos(t *testing.T) {
 	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
 	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(fixture.State)
@@ -1926,6 +2120,286 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0TestsFailedEmiteQualityGat
 	}
 	if continueRequestHasWaitScopeV0(reentered) {
 		t.Fatalf("la reentrada debe dejar avanzar al scheduler sin wait scope prematuro: %+v", reentered)
+	}
+}
+
+func TestContinueAppDirectorV0TestsFailedReplanFollowupCierraSinDuplicarEventos(t *testing.T) {
+	ctx := context.Background()
+	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
+	run := serviceContinueClosureRunForTestV0(fixture.RunRef, orquestacoreworkflow.OrchestrationPhaseRevisionV0)
+	run.ProjectRef = fixture.Run.ProjectRef
+	run.AppSpecRef = fixture.Run.AppSpecRef
+	run.Tasks = append([]string(nil), fixture.Run.Tasks...)
+	run.Agents = append([]string(nil), fixture.Run.Agents...)
+	run.StartedAgents = append([]string(nil), fixture.Run.StartedAgents...)
+	run.DeliveredAgents = append([]string(nil), fixture.Run.DeliveredAgents...)
+	run.DeliveredTasks = append([]string(nil), fixture.Run.DeliveredTasks...)
+	run.Deliveries = append([]string(nil), fixture.Run.Deliveries...)
+	run.Reviews = append([]string(nil), fixture.Run.Reviews...)
+	run.ReviewResults = append([]string(nil), fixture.Run.ReviewResults...)
+	run.AcceptedReviews = append([]string(nil), fixture.Run.AcceptedReviews...)
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(run)
+	eventSink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	if err := eventSink.AppendRunEventsV0(ctx, fixture.RunRef, fixture.Events); err != nil {
+		t.Fatalf("AppendRunEventsV0 seed: %v", err)
+	}
+	outboxLedger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(fixture.State)
+	testEvidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0(
+		serviceOperationalDirectorRequiredTestEvidenceForFixtureV0(
+			fixture,
+			orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0,
+		),
+	)
+	executor := &fakeServiceRequiredTestCommandExecutorV0{
+		results: map[string]orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{
+			fixture.RequiredTest: {
+				Status:       orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0,
+				EvidenceRefs: []string{"artifact-ref-service-required-test-output-followup-001"},
+			},
+		},
+	}
+	closureSource := &serviceOperationalDirectorClosureSourceRefsForTestV0{
+		TaskRef:           fixture.TaskRef,
+		ValidationRef:     "validation-ref-service-required-tests-replan-followup-001",
+		ClosureRef:        "closure-ref-service-required-tests-replan-followup-001",
+		DeliveryRef:       "delivery-ref-app-director-required-tests-replan-followup",
+		AcceptedReviewRef: "accepted-review-ref-app-director-required-tests-replan-followup",
+	}
+	ports := StartAppDirectorPortsV0{
+		RunStore:                   runStore,
+		EventSink:                  eventSink,
+		EventReader:                eventSink,
+		OutboxLedger:               outboxLedger,
+		DirectorTaskStore:          orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(serviceOperationalDirectorWorkflowTaskForFixtureV0(fixture)),
+		RequiredTestEvidenceStore:  testEvidenceStore,
+		RequiredTestRunner:         orquestacionnucleoapp.RequiredTestRunnerV0{Executor: executor, EvidenceWriter: testEvidenceStore},
+		OperationalClosureSource:   closureSource,
+		OperationalPlanStateStore:  planStateStore,
+		OperationalPlanStateWriter: planStateStore,
+		Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+			serviceCapacityDispatcherForTestV0(runStore, eventSink, outboxLedger),
+		},
+	}
+	request := ContinueAppDirectorRequestV0{
+		RunRef:                     fixture.RunRef,
+		OccurredAt:                 "2026-05-22T23:40:00Z",
+		CorrelationID:              "corr-service-required-tests-replan-followup-first",
+		RequestedBy:                "orquesta-app-director-service-test",
+		OperationalDirectorPlanRef: fixture.PlanRef,
+		MaxBursts:                  4,
+		MaxStepsPerBurst:           8,
+		MaxDispatchesPerWait:       2,
+		MaxCommands:                8,
+		MaxOutboxPerCycle:          8,
+		MaxExternalWaits:           1,
+	}
+
+	first, err := ContinueAppDirectorV0(ctx, request, ports)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0 first: %v", err)
+	}
+	if first.Run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		t.Fatalf("first no debe cerrar tras tests fallidos: %+v", first.Run)
+	}
+	var replanPayload orquestacoreworkflow.ReplanDecisionRecordedPayloadV0
+	for _, event := range eventSink.EventsV0() {
+		if event.EventType != orquestacoreworkflow.OrchestrationEventReplanDecisionRecordedV0 {
+			continue
+		}
+		if err := json.Unmarshal(event.Payload, &replanPayload); err != nil {
+			t.Fatalf("ReplanDecisionRecorded payload: %v", err)
+		}
+	}
+	if replanPayload.ReplanRef == "" || len(replanPayload.FollowupRefs) != 2 {
+		t.Fatalf("replanPayload=%+v events=%+v", replanPayload, eventSink.EventsV0())
+	}
+	followupAgentRef := ""
+	for _, ref := range replanPayload.FollowupRefs {
+		if strings.HasPrefix(ref, "agent-ref-") {
+			followupAgentRef = ref
+		}
+	}
+	if followupAgentRef == "" {
+		t.Fatalf("replan sin agente followup: %+v", replanPayload)
+	}
+
+	materializedRun, err := runStore.LoadRunV0(ctx, fixture.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 materialized: %v", err)
+	}
+	materializedRun.Agents = compactServiceRefsV0(append(materializedRun.Agents, followupAgentRef))
+	materializedRun.StartedAgents = compactServiceRefsV0(append(materializedRun.StartedAgents, followupAgentRef))
+	if err := runStore.SaveRunV0(ctx, materializedRun); err != nil {
+		t.Fatalf("SaveRunV0 materialized: %v", err)
+	}
+	request.OccurredAt = "2026-05-22T23:40:01Z"
+	request.CorrelationID = "corr-service-required-tests-replan-followup-wait"
+	reentered, err := continueRequestWithOperationalDirectorPlanStateV0(ctx, request, ports)
+	if err != nil {
+		t.Fatalf("continueRequestWithOperationalDirectorPlanStateV0 followup: %v", err)
+	}
+	if !serviceStringInSetV0(reentered.WaitAgentRefs, followupAgentRef) ||
+		serviceStringInSetV0(reentered.WaitAgentRefs, fixture.AgentRef) {
+		t.Fatalf("wait scope no causal: request=%+v followup=%s old=%s", reentered, followupAgentRef, fixture.AgentRef)
+	}
+
+	deliveredRun, err := runStore.LoadRunV0(ctx, fixture.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 delivered: %v", err)
+	}
+	followupDeliveryRef := closureSource.DeliveryRef
+	followupReviewRequestRef := "review-request-ref-app-director-required-tests-replan-followup"
+	followupReviewResultRef := "review-result-ref-app-director-required-tests-replan-followup"
+	followupAcceptedReviewRef := closureSource.AcceptedReviewRef
+	deliveredRun.DeliveredAgents = compactServiceRefsV0(append(deliveredRun.DeliveredAgents, followupAgentRef))
+	deliveredRun.Deliveries = compactServiceRefsV0(append(deliveredRun.Deliveries, followupDeliveryRef))
+	deliveredRun.DeliveredTasks = compactServiceRefsV0(append(deliveredRun.DeliveredTasks, fixture.TaskRef))
+	deliveredRun.Reviews = compactServiceRefsV0(append(deliveredRun.Reviews, followupReviewRequestRef))
+	deliveredRun.ReviewResults = compactServiceRefsV0(append(deliveredRun.ReviewResults,
+		followupReviewResultRef+"#review_result:accepted#review_request:"+followupReviewRequestRef+"#delivery:"+followupDeliveryRef,
+	))
+	deliveredRun.AcceptedReviews = compactServiceRefsV0(append(deliveredRun.AcceptedReviews, followupAcceptedReviewRef))
+	deliveredRun.CurrentPhase = orquestacoreworkflow.OrchestrationPhaseRevisionV0
+	for index := range deliveredRun.Phases {
+		switch deliveredRun.Phases[index].ID {
+		case orquestacoreworkflow.OrchestrationPhaseProgramacionV0:
+			deliveredRun.Phases[index].Status = orquestacoreworkflow.OrchestrationPhaseStatusClosedV0
+		case orquestacoreworkflow.OrchestrationPhaseRevisionV0:
+			deliveredRun.Phases[index].Status = orquestacoreworkflow.OrchestrationPhaseStatusActiveV0
+		default:
+			if deliveredRun.Phases[index].Status == orquestacoreworkflow.OrchestrationPhaseStatusActiveV0 {
+				deliveredRun.Phases[index].Status = orquestacoreworkflow.OrchestrationPhaseStatusPendingV0
+			}
+		}
+	}
+	if err := runStore.SaveRunV0(ctx, deliveredRun); err != nil {
+		t.Fatalf("SaveRunV0 delivered: %v", err)
+	}
+	followupEvents := []orquestacoreworkflow.OrchestrationEventV0{
+		serviceOperationalDirectorPlanStateEventForTestV0(t, fixture.RunRef, 5, orquestacoreworkflow.OrchestrationEventDeliveryRegisteredV0, orquestacoreworkflow.DeliveryRegisteredPayloadV0{
+			DeliveryRef:  followupDeliveryRef,
+			PhaseID:      string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			TaskID:       fixture.TaskRef,
+			AgentRef:     followupAgentRef,
+			Summary:      "Entrega followup causal tras replan por tests fallidos.",
+			EvidenceRefs: []string{"evidence-ref-delivery-required-tests-replan-followup"},
+		}),
+		serviceOperationalDirectorPlanStateEventForTestV0(t, fixture.RunRef, 6, orquestacoreworkflow.OrchestrationEventReviewRequestedV0, orquestacoreworkflow.ReviewRequestedPayloadV0{
+			ReviewRequestID: followupReviewRequestRef,
+			PhaseID:         string(orquestacoreworkflow.OrchestrationPhaseRevisionV0),
+			DeliveryRef:     followupDeliveryRef,
+			Summary:         "Review followup causal.",
+			EvidenceRefs:    []string{"evidence-ref-review-requested-required-tests-replan-followup"},
+		}),
+		serviceOperationalDirectorPlanStateEventForTestV0(t, fixture.RunRef, 7, orquestacoreworkflow.OrchestrationEventReviewResultRecordedV0, orquestacoreworkflow.ReviewResultV0{
+			ReviewResultRef: followupReviewResultRef,
+			ReviewRequestID: followupReviewRequestRef,
+			DeliveryRef:     followupDeliveryRef,
+			Status:          orquestacoreworkflow.ReviewResultStatusAcceptedV0,
+			Summary:         "Review followup aceptada.",
+			EvidenceRefs:    []string{"evidence-ref-review-result-required-tests-replan-followup"},
+		}),
+		serviceOperationalDirectorPlanStateEventForTestV0(t, fixture.RunRef, 8, orquestacoreworkflow.OrchestrationEventReviewAcceptedV0, orquestacoreworkflow.ReviewAcceptedPayloadV0{
+			AcceptedReviewRef: followupAcceptedReviewRef,
+			PhaseID:           string(orquestacoreworkflow.OrchestrationPhaseRevisionV0),
+			ReviewRequestID:   followupReviewRequestRef,
+			DeliveryRef:       followupDeliveryRef,
+			Summary:           "Review followup aceptada con cadena causal.",
+			EvidenceRefs:      []string{"evidence-ref-review-accepted-required-tests-replan-followup"},
+		}),
+	}
+	if err := eventSink.AppendRunEventsV0(ctx, fixture.RunRef, followupEvents); err != nil {
+		t.Fatalf("AppendRunEventsV0 followup: %v", err)
+	}
+
+	request.OccurredAt = "2026-05-22T23:40:02Z"
+	request.CorrelationID = "corr-service-required-tests-replan-followup-close"
+	if err := updateOperationalDirectorPlanStateAfterLoopV0(ctx, request, ports, orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusBlockedV0,
+		Run:    deliveredRun,
+	}); err != nil {
+		t.Fatalf("updateOperationalDirectorPlanStateAfterLoopV0 followup: %v", err)
+	}
+	postTestsRun, err := runStore.LoadRunV0(ctx, fixture.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 post tests: %v", err)
+	}
+	closed, issues, err := maybeCloseOperationalDirectorV0(
+		ctx,
+		request,
+		ports,
+		orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+			Run:    postTestsRun,
+		},
+		orquestacionnucleoapp.ProgressiveLoopRequestV0{
+			RunRef:           fixture.RunRef,
+			WaitAgentRefs:    []string{followupAgentRef},
+			WaitScopeApplied: true,
+		},
+	)
+	if err != nil || len(issues) != 0 {
+		t.Fatalf("maybeCloseOperationalDirectorV0 close: err=%v issues=%+v", err, issues)
+	}
+	if closed.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		state, _ := planStateStore.LoadOperationalDirectorPlanStateV0(ctx, fixture.RunRef, fixture.PlanRef)
+		t.Fatalf("run no cerrado: loop=%s run=%+v state=%+v", closed.Status, closed.Run, state)
+	}
+	if len(executor.commands) != 1 || executor.commands[0] != fixture.RequiredTest {
+		t.Fatalf("runner commands=%+v", executor.commands)
+	}
+	if !closureSource.Called || len(closureSource.LastRequest.RequiredTestEvidenceRefs) != 1 {
+		t.Fatalf("closure source request=%+v called=%v", closureSource.LastRequest, closureSource.Called)
+	}
+	evidence, err := testEvidenceStore.LoadRequiredTestEvidenceV0(ctx, fixture.RunRef, closureSource.LastRequest.RequiredTestEvidenceRefs)
+	if err != nil {
+		t.Fatalf("LoadRequiredTestEvidenceV0: %v", err)
+	}
+	if len(evidence) != 1 ||
+		evidence[0].Status != orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 ||
+		evidence[0].DeliveryRef != followupDeliveryRef ||
+		evidence[0].ReviewResultRef != followupReviewResultRef ||
+		evidence[0].AcceptedReviewRef != followupAcceptedReviewRef {
+		t.Fatalf("evidence no causal del followup: %+v", evidence)
+	}
+	eventsAfterClose := eventSink.EventsV0()
+	if got := serviceCountEventsByTypeV0(eventsAfterClose, orquestacoreworkflow.OrchestrationEventQualityGateRecordedV0); got != 2 {
+		t.Fatalf("QualityGateRecorded esperado fallo+aceptado: got=%d events=%+v", got, eventsAfterClose)
+	}
+	postCloseRun, err := runStore.LoadRunV0(ctx, fixture.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 post close: %v", err)
+	}
+	if blockers := orquestacoreworkflow.PendingBlockingQualityGateRefsForSubjectV0(postCloseRun, fixture.TaskRef); len(blockers) != 0 {
+		t.Fatalf("quality gate requerido no resuelto: blockers=%v gates=%v", blockers, postCloseRun.QualityGates)
+	}
+	if got := serviceCountEventsByTypeV0(eventsAfterClose, orquestacoreworkflow.OrchestrationEventReplanDecisionRecordedV0); got != 1 {
+		t.Fatalf("ReplanDecisionRecorded duplicado: got=%d events=%+v", got, eventsAfterClose)
+	}
+	if got := serviceCountEventsByTypeV0(eventsAfterClose, orquestacoreworkflow.OrchestrationEventRunClosedV0); got != 1 {
+		t.Fatalf("RunClosed esperado una vez: got=%d events=%+v", got, eventsAfterClose)
+	}
+
+	replayClosureSource := &serviceOperationalDirectorClosureSourceRefsForTestV0{
+		TaskRef:           fixture.TaskRef,
+		ValidationRef:     closureSource.ValidationRef,
+		ClosureRef:        closureSource.ClosureRef,
+		DeliveryRef:       followupDeliveryRef,
+		AcceptedReviewRef: followupAcceptedReviewRef,
+	}
+	replayPorts := ports
+	replayPorts.OperationalClosureSource = replayClosureSource
+	request.OccurredAt = "2026-05-22T23:40:03Z"
+	request.CorrelationID = "corr-service-required-tests-replan-followup-replay"
+	replay, err := ContinueAppDirectorV0(ctx, request, replayPorts)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0 replay: %v", err)
+	}
+	if replay.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		replayClosureSource.Called ||
+		len(eventSink.EventsV0()) != len(eventsAfterClose) {
+		t.Fatalf("replay duplico o llamo cierre: run=%+v called=%v before=%d after=%d", replay.Run, replayClosureSource.Called, len(eventsAfterClose), len(eventSink.EventsV0()))
 	}
 }
 
@@ -3314,6 +3788,89 @@ func TestMaterializeContinueOperationalDirectorPlanV0UsaFaseActualSiNoSeIndica(t
 	}
 }
 
+func serviceOperationalDirectorWideWaveWaitStateForTestV0(
+	runRef string,
+	planRef string,
+	parentTaskRef string,
+	waveRef string,
+	cohortRef string,
+	tasks ...serviceOperationalClosureTaskRefsForTestV0,
+) orquestacionnucleoapp.OperationalDirectorPlanStateV0 {
+	taskRefs := make([]string, 0, len(tasks))
+	agentRefs := make([]string, 0, len(tasks))
+	for _, task := range tasks {
+		taskRefs = append(taskRefs, task.TaskRef)
+		agentRefs = append(agentRefs, orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskRef))
+	}
+	return orquestacionnucleoapp.OperationalDirectorPlanStateV0{
+		SchemaVersion:       orquestacionnucleoapp.OperationalDirectorPlanStateSchemaVersionV0,
+		StateRef:            "state-ref-" + planRef,
+		PlanRef:             planRef,
+		RequestRef:          "request-ref-" + planRef,
+		RunRef:              runRef,
+		ProjectRef:          "orquesta",
+		Mode:                orquestadirectoroperativo.OperationalDirectorModeProgrammingV0,
+		Status:              orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0,
+		ActiveStepID:        "step-wait-subagents",
+		ActiveWaveRef:       waveRef,
+		ActiveCohortRef:     cohortRef,
+		ActiveParentTaskRef: parentTaskRef,
+		PendingAgentRefs:    agentRefs,
+		RequiredTestRefs:    []string{"go test ./..."},
+		ObservedAt:          "2026-05-22T13:59:00Z",
+		Steps: []orquestacionnucleoapp.OperationalDirectorPlanStepStateV0{
+			{
+				StepID:        "step-launch-subagents",
+				Kind:          orquestadirectoroperativo.OperationalDirectorStepLaunchSubagentsV0,
+				Status:        orquestadirectoroperativo.OperationalDirectorStepAcceptedV0,
+				WaveRef:       waveRef,
+				CohortRef:     cohortRef,
+				ParentTaskRef: parentTaskRef,
+				TaskRefs:      taskRefs,
+				AgentRefs:     agentRefs,
+			},
+			{
+				StepID:           "step-wait-subagents",
+				Kind:             orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0,
+				Status:           orquestadirectoroperativo.OperationalDirectorStepRunningV0,
+				WaveRef:          waveRef,
+				CohortRef:        cohortRef,
+				ParentTaskRef:    parentTaskRef,
+				TaskRefs:         taskRefs,
+				AgentRefs:        agentRefs,
+				WaitRefs:         []string{"wait-ref-" + planRef},
+				PendingAgentRefs: agentRefs,
+				BlockerRefs:      []string{"wait-subagents"},
+				Reason:           "wait-subagents-running",
+			},
+			{
+				StepID:        "step-review-deliveries",
+				Kind:          orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0,
+				Status:        orquestadirectoroperativo.OperationalDirectorStepPendingV0,
+				WaveRef:       waveRef,
+				CohortRef:     cohortRef,
+				ParentTaskRef: parentTaskRef,
+			},
+			{
+				StepID:        "step-run-required-tests",
+				Kind:          orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0,
+				Status:        orquestadirectoroperativo.OperationalDirectorStepPendingV0,
+				WaveRef:       waveRef,
+				CohortRef:     cohortRef,
+				ParentTaskRef: parentTaskRef,
+			},
+			{
+				StepID:        "step-replan-or-close",
+				Kind:          orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0,
+				Status:        orquestadirectoroperativo.OperationalDirectorStepPendingV0,
+				WaveRef:       waveRef,
+				CohortRef:     cohortRef,
+				ParentTaskRef: parentTaskRef,
+			},
+		},
+	}
+}
+
 type serviceOperationalDirectorPlanStateReviewFixtureV0 struct {
 	RunRef                  string
 	PlanRef                 string
@@ -3614,6 +4171,33 @@ func (source *serviceOperationalDirectorClosureSourceFromRequestForTestV0) Build
 		ClosureRef:               "closure-ref-service-review-runner-close-001",
 		RequiredTestEvidenceRefs: append([]string(nil), request.RequiredTestEvidenceRefs...),
 		EvidenceRefs:             compactServiceRefsV0(append(request.EvidenceRefs, "evidence-ref-service-review-runner-close-001")),
+	}, true, nil
+}
+
+type serviceOperationalDirectorClosureSourceRefsForTestV0 struct {
+	TaskRef           string
+	DeliveryRef       string
+	AcceptedReviewRef string
+	ValidationRef     string
+	ClosureRef        string
+	LastRequest       AppDirectorOperationalClosureRequestV0
+	Called            bool
+}
+
+func (source *serviceOperationalDirectorClosureSourceRefsForTestV0) BuildOperationalDirectorClosureRequestV0(
+	_ context.Context,
+	request AppDirectorOperationalClosureRequestV0,
+) (orquestacionnucleoapp.OperationalDirectorClosureRequestV0, bool, error) {
+	source.Called = true
+	source.LastRequest = request
+	return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{
+		TaskID:                   source.TaskRef,
+		DeliveryRef:              source.DeliveryRef,
+		AcceptedReviewRef:        source.AcceptedReviewRef,
+		ValidationRef:            source.ValidationRef,
+		ClosureRef:               source.ClosureRef,
+		RequiredTestEvidenceRefs: append([]string(nil), request.RequiredTestEvidenceRefs...),
+		EvidenceRefs:             compactServiceRefsV0(append(request.EvidenceRefs, "evidence-ref-service-closure-source-refs-test-v0")),
 	}, true, nil
 }
 

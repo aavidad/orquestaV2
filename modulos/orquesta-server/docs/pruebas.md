@@ -7,8 +7,11 @@
 - `cmd/orquesta-server` prueba que `ORQUESTA_DOMAIN_WORK_FILE_ENABLED=1`
   activa un creator durable file-based para `create_job`, sin habilitar
   `submit_artifact` ni `DomainDelivery`.
-- `cmd/orquesta-server` prueba que OPES y el backend file de `domain_work` no
-  pueden activarse a la vez.
+- `cmd/orquesta-server` prueba que `ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL` activa
+  un backend HTTP neutral para `create_job`, `submit_artifact` y
+  `DomainDelivery`.
+- `cmd/orquesta-server` prueba que OPES, backend file y backend HTTP neutral de
+  `domain_work` no pueden activarse a la vez.
 - `cmd/orquesta-server` prueba que los umbrales productivos por defecto para
   agentes Codex no vuelven a valores agresivos de debug, y que siguen siendo
   sobreescribibles por entorno.

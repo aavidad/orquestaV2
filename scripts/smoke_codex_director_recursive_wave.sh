@@ -22,17 +22,32 @@ trap cleanup EXIT
 
 mkdir -p "$PROJECT_DIR" "$OUT_DIR"
 
-DRY_RUN_FLAG="--dry-run"
+DRY_RUN_FLAG=""
 CODEX_COMMAND="${ORQUESTA_CODEX_COMMAND:-$FAKE_CODEX}"
 if [[ "${ORQUESTA_CODEX_DIRECTOR_RECURSIVE_REAL_CONFIRM:-0}" == "1" ]]; then
-  DRY_RUN_FLAG=""
   if [[ -z "${ORQUESTA_CODEX_COMMAND:-}" ]]; then
     echo "ORQUESTA_CODEX_COMMAND requerido para modo real" >&2
     exit 2
   fi
 else
+  if [[ "${ORQUESTA_CODEX_DIRECTOR_RECURSIVE_DRY_RUN:-0}" == "1" ]]; then
+    DRY_RUN_FLAG="--dry-run"
+  fi
   cat >"$FAKE_CODEX" <<'SH'
 #!/usr/bin/env sh
+out=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    out="$1"
+  fi
+  shift || break
+done
+input=$(cat)
+if [ -n "$out" ]; then
+  printf 'fake recursive delivery\n' > "$out"
+fi
+printf '%s\n' "$input"
 exit 0
 SH
   chmod 700 "$FAKE_CODEX"
@@ -66,10 +81,12 @@ python3 - "$SUMMARY_PATH" <<'PY'
 import json
 import os
 import sys
+import time
 
 path = sys.argv[1]
 with open(path, "r", encoding="utf-8") as fh:
     summary = json.load(fh)
+real_mode = os.environ.get("ORQUESTA_CODEX_DIRECTOR_RECURSIVE_REAL_CONFIRM") == "1"
 
 issues = summary.get("issues") or []
 if issues:
@@ -172,13 +189,33 @@ for node in nodes:
         raise SystemExit(f"wrapper_sin_last_message={agent_ref}")
     if not os.path.normpath(last_message_path).startswith(runtime_work_dir + os.sep):
         raise SystemExit(f"last_message_fuera_runtime={agent_ref}")
-    if agent.get("status") != "dry_run":
-        raise SystemExit(f"status_no_dry_run={agent}")
+    if (summary.get("launch") or {}).get("dry_run"):
+        if agent.get("status") != "dry_run":
+            raise SystemExit(f"status_no_dry_run={agent}")
+        continue
+    if not agent.get("process_ref") or not agent.get("pid"):
+        raise SystemExit(f"process_ref_pid_faltante={agent}")
+    if agent.get("status") not in ("running", "stopped"):
+        raise SystemExit(f"status_no_ejecutable={agent}")
+    if not real_mode:
+        deadline = time.time() + 2
+        while time.time() < deadline and not os.path.exists(last_message_path):
+            time.sleep(0.02)
+        if not os.path.exists(last_message_path):
+            raise SystemExit(f"last_message_no_observable={agent_ref}")
+        stdout_path = agent.get("stdout_path") or ""
+        if not os.path.exists(stdout_path):
+            raise SystemExit(f"stdout_no_existe={agent_ref}")
+        with open(stdout_path, "r", encoding="utf-8") as fh:
+            stdout = fh.read()
+        if "Director Operativo Orquesta aprobo esta ola" not in stdout and "Subagente Codex gobernado por Director Operativo Orquesta" not in stdout:
+            raise SystemExit(f"stdout_sin_prompt_ejecutado={agent_ref}")
 
 print("recursive_wave_ok=true")
 print("summary_path=" + path)
 print("planned_agents=7")
 print("opaque_agent_refs=7")
 print("registry_wrappers_ready=true")
+print("fake_runtime_executed=" + str(not real_mode and not bool((summary.get("launch") or {}).get("dry_run"))).lower())
 print("dry_run=" + str(bool((summary.get("launch") or {}).get("dry_run"))).lower())
 PY

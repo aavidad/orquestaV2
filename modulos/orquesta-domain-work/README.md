@@ -28,6 +28,9 @@ Implementaciones de referencia:
 - `modulos/orquesta-domain-work-sql`: adaptador SQL externo para
   `DomainWorkJobRecordStorePortV0`, con `*sql.DB` inyectado y sin driver
   canonico.
+- `modulos/orquesta-domain-work-http`: adaptador HTTP neutral opt-in para
+  `DomainWorkJobCreatorPortV0` y `DomainWorkArtifactSubmitterPortV0`, sin
+  semantica OPES ni rutas internas de la app externa.
 
 Regla de juicio:
 

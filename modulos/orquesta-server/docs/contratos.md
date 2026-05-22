@@ -27,8 +27,14 @@ Configuracion externa relacionada:
   no hay OPES configurado, `cmd/orquesta-server` crea un conector durable
   file-based de `DomainWorkJobCreatorPortV0` y lo inyecta en
   `/api/v0/domain-work` solo para `create_job`.
-- `ORQUESTA_OPES_BASE_URL` y `ORQUESTA_DOMAIN_WORK_FILE_*` son excluyentes para
-  evitar backends ambiguos de `domain_work`.
+- `ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL`: si no hay OPES ni backend file, activa
+  el adaptador HTTP neutral `orquesta-domain-work-http` para `create_job` y
+  `submit_artifact`. Rutas opcionales:
+  `ORQUESTA_DOMAIN_WORK_HTTP_CREATE_PATH` y
+  `ORQUESTA_DOMAIN_WORK_HTTP_SUBMIT_PATH`.
+- `ORQUESTA_OPES_BASE_URL`, `ORQUESTA_DOMAIN_WORK_FILE_*` y
+  `ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL` son excluyentes para evitar backends
+  ambiguos de `domain_work`.
 - `ORQUESTA_OPES_BRIDGE_ENABLED=1` activa el loop residente OPES desde
   `cmd/orquesta-server`. Requiere `ORQUESTA_OPES_BRIDGE_CONFIRM=1` y un filtro
   seguro: `ORQUESTA_OPES_BRIDGE_JOB_TYPE`, `ORQUESTA_OPES_BRIDGE_JOB_REF` o

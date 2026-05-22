@@ -450,6 +450,107 @@ func TestDomainWorkExecutorFromEnvV0ConectaFileCreatorOptIn(t *testing.T) {
 	}
 }
 
+func TestDomainWorkExecutorFromEnvV0ConectaHTTPNeutralOptIn(t *testing.T) {
+	var gotJobRequest orquestadomainwork.DomainWorkJobRequestV0
+	var gotSubmission orquestadomainwork.DomainWorkArtifactSubmissionV0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/jobs":
+			if err := json.NewDecoder(r.Body).Decode(&gotJobRequest); err != nil {
+				t.Fatalf("decode job: %v", err)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"job": map[string]any{
+					"schema_version":  orquestadomainwork.DomainWorkJobSchemaV0,
+					"status":          orquestadomainwork.DomainWorkStatusAcceptedV0,
+					"job_ref":         "job-ref-http-neutral-001",
+					"domain_ref":      gotJobRequest.DomainRef,
+					"work_kind":       gotJobRequest.WorkKind,
+					"correlation_id":  gotJobRequest.CorrelationID,
+					"idempotency_key": gotJobRequest.IdempotencyKey,
+				},
+			})
+		case "/artifacts":
+			if err := json.NewDecoder(r.Body).Decode(&gotSubmission); err != nil {
+				t.Fatalf("decode submission: %v", err)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"receipt": map[string]any{
+					"schema_version":  orquestadomainwork.DomainWorkArtifactReceiptSchemaV0,
+					"status":          orquestadomainwork.DomainWorkStatusAcceptedV0,
+					"job_ref":         gotSubmission.JobRef,
+					"artifact_ref":    gotSubmission.ArtifactRef,
+					"receipt_ref":     "receipt-ref-http-neutral-001",
+					"correlation_id":  gotSubmission.CorrelationID,
+					"idempotency_key": gotSubmission.IdempotencyKey,
+				},
+			})
+		default:
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
+	t.Setenv("OPES_BASE_URL", "")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_DIR", "")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL", server.URL)
+	t.Setenv("ORQUESTA_DOMAIN_WORK_HTTP_CREATE_PATH", "/jobs")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_HTTP_SUBMIT_PATH", "/artifacts")
+
+	executor, err := domainWorkExecutorFromEnvV0(orquestaserver.ConfigV0{
+		StateDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("domainWorkExecutorFromEnvV0: %v", err)
+	}
+	if executor == nil {
+		t.Fatalf("executor HTTP neutral no configurado")
+	}
+	createResult, err := executor.Execute(context.Background(), orquestamcp.MCPDomainWorkToolInputV0{
+		Action: orquestamcp.MCPDomainWorkActionCreateJobV0,
+		JobRequest: orquestadomainwork.DomainWorkJobRequestV0{
+			RequestID:      "request-ref-http-neutral-001",
+			CorrelationID:  "corr-http-neutral-001",
+			IdempotencyKey: "idem-http-neutral-001",
+			RequestedBy:    "test",
+			DomainRef:      "domain-ref-http-neutral-001",
+			WorkKind:       "compose_external_summary",
+			Objective:      "crear job por HTTP neutral",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute create: %v", err)
+	}
+	if createResult.Estado != orquestamcp.MCPDomainWorkEstadoOKV0 ||
+		createResult.Job == nil ||
+		createResult.Job.JobRef != "job-ref-http-neutral-001" {
+		t.Fatalf("createResult=%+v", createResult)
+	}
+	submitResult, err := executor.Execute(context.Background(), orquestamcp.MCPDomainWorkToolInputV0{
+		Action: orquestamcp.MCPDomainWorkActionSubmitArtifactV0,
+		ArtifactSubmission: orquestadomainwork.DomainWorkArtifactSubmissionV0{
+			RequestID:      "request-ref-http-neutral-submit-001",
+			CorrelationID:  "corr-http-neutral-001",
+			IdempotencyKey: "idem-http-neutral-submit-001",
+			RequestedBy:    "test",
+			DomainRef:      "domain-ref-http-neutral-001",
+			JobRef:         createResult.Job.JobRef,
+			ArtifactRef:    "artifact-ref-http-neutral-001",
+			ArtifactType:   "work_delivery",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute submit: %v", err)
+	}
+	if submitResult.Estado != orquestamcp.MCPDomainWorkEstadoOKV0 ||
+		submitResult.Receipt == nil ||
+		submitResult.Receipt.ReceiptRef != "receipt-ref-http-neutral-001" ||
+		gotSubmission.JobRef != "job-ref-http-neutral-001" {
+		t.Fatalf("submitResult=%+v got=%+v", submitResult, gotSubmission)
+	}
+}
+
 func TestDomainWorkExecutorFromEnvV0RechazaBackendAmbiguo(t *testing.T) {
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "http://127.0.0.1:1")
 	t.Setenv("OPES_BASE_URL", "")
@@ -467,6 +568,20 @@ func TestDomainWorkExecutorFromEnvV0RechazaFallbackAmbiguo(t *testing.T) {
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
 	t.Setenv("OPES_BASE_URL", "http://127.0.0.1:1")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "1")
+
+	executor, err := domainWorkExecutorFromEnvV0(orquestaserver.ConfigV0{
+		StateDir: t.TempDir(),
+	})
+	if err == nil || err.Error() != "domain_work_backend_ambiguous" || executor != nil {
+		t.Fatalf("executor=%v err=%v", executor, err)
+	}
+}
+
+func TestDomainWorkExecutorFromEnvV0RechazaHTTPConOtroBackend(t *testing.T) {
+	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
+	t.Setenv("OPES_BASE_URL", "")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "1")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL", "http://127.0.0.1:1")
 
 	executor, err := domainWorkExecutorFromEnvV0(orquestaserver.ConfigV0{
 		StateDir: t.TempDir(),

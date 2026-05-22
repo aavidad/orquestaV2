@@ -151,6 +151,92 @@ func TestCodexStackRequiredTestRunnerFailedReplanLanzaFollowupFakeRuntimeV0(t *t
 		!codexStackStringInSetForTestV0(testsStep.ReplanDecisionRefs, strings.Split(run.ReplanDecisions[0], "#")[0]) {
 		t.Fatalf("state no quedo listo para nueva espera: state=%+v wait=%+v tests=%+v", state, waitStep, testsStep)
 	}
+
+	writeCodexStackRequiredTestTinyGoModuleV0(t, cfg.ProjectWorkDir)
+	followupDescriptor := codexStackRequiredTestDescriptorForAgentV0(t, stack, followupAgentRef)
+	if err := writeCodexStackAckForDescriptorV0(t, followupDescriptor); err != nil {
+		t.Fatalf("write followup ack: %v", err)
+	}
+	followupDeliveryRef := strings.TrimSpace(followupDescriptor.Spec.AgentPacket.DeliveryRefs.AckRef)
+	for cycle := 1; cycle <= 6; cycle++ {
+		if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+			RunRef:                     refs.RunRef,
+			OperationalDirectorPlanRef: refs.PlanRef,
+			WaitAgentRefs:              []string{followupAgentRef},
+			CorrelationID:              fmt.Sprintf("corr-rt-runner-failed-replan-delivery-%03d", cycle),
+			MaxBursts:                  4,
+			MaxStepsPerBurst:           8,
+			MaxDispatchesPerWait:       4,
+			MaxCommands:                12,
+			MaxOutboxPerCycle:          8,
+			MaxExternalWaits:           1,
+		}); err != nil {
+			t.Fatalf("DrainRunV0 followup delivery ciclo=%d: %v", cycle, err)
+		}
+		run = mustLoadCodexStackRunForTestV0(t, stack, refs.RunRef)
+		if codexStackStringInSetForTestV0(run.DeliveredAgents, followupAgentRef) &&
+			codexStackRealSmokeContainsProjectionPartV0(run.Deliveries, followupDeliveryRef) {
+			break
+		}
+	}
+	run = mustLoadCodexStackRunForTestV0(t, stack, refs.RunRef)
+	if !codexStackStringInSetForTestV0(run.DeliveredAgents, followupAgentRef) ||
+		!codexStackRealSmokeContainsProjectionPartV0(run.Deliveries, followupDeliveryRef) {
+		t.Fatalf("followup no entrego: agent=%s delivery=%s run=%+v", followupAgentRef, followupDeliveryRef, run)
+	}
+
+	for cycle := 1; cycle <= 16; cycle++ {
+		if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+			RunRef:                     refs.RunRef,
+			OperationalDirectorPlanRef: refs.PlanRef,
+			WaitAgentRefs:              []string{followupAgentRef},
+			CorrelationID:              fmt.Sprintf("corr-rt-runner-failed-replan-close-%03d", cycle),
+			MaxBursts:                  12,
+			MaxStepsPerBurst:           16,
+			MaxDispatchesPerWait:       8,
+			MaxCommands:                64,
+			MaxOutboxPerCycle:          32,
+			MaxDecisionCycles:          8,
+			MaxExternalWaits:           2,
+		}); err != nil {
+			t.Fatalf("DrainRunV0 followup close ciclo=%d: %v", cycle, err)
+		}
+		state, err = stack.Stores.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, refs.RunRef, refs.PlanRef)
+		if err != nil {
+			t.Fatalf("LoadOperationalDirectorPlanStateV0 close ciclo=%d: %v", cycle, err)
+		}
+		run = mustLoadCodexStackRunForTestV0(t, stack, refs.RunRef)
+		if state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 &&
+			run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+			break
+		}
+	}
+	state, err = stack.Stores.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, refs.RunRef, refs.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0 closed: %v", err)
+	}
+	run = mustLoadCodexStackRunForTestV0(t, stack, refs.RunRef)
+	replanStep := codexStackRequiredTestPlanStepV0(t, state, "step-replan-or-close")
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 ||
+		run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		len(run.QualityGates) != 2 ||
+		len(run.ReplanDecisions) != 1 ||
+		len(replanStep.RequiredTestEvidenceRefs) != 1 {
+		t.Fatalf("replan followup no cerro limpiamente: state=%+v run=%+v replan=%+v", state, run, replanStep)
+	}
+	if blockers := orquestacoreworkflow.PendingBlockingQualityGateRefsForSubjectV0(run, refs.TaskRef); len(blockers) != 0 {
+		t.Fatalf("quality gate requerido no resuelto: blockers=%v gates=%v", blockers, run.QualityGates)
+	}
+	passedEvidence, err := evidenceStore.LoadRequiredTestEvidenceV0(ctx, refs.RunRef, replanStep.RequiredTestEvidenceRefs)
+	if err != nil {
+		t.Fatalf("LoadRequiredTestEvidenceV0 passed: %v", err)
+	}
+	if len(passedEvidence) != 1 ||
+		passedEvidence[0].Status != orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 ||
+		passedEvidence[0].DeliveryRef != followupDeliveryRef ||
+		passedEvidence[0].TaskRef != refs.TaskRef {
+		t.Fatalf("evidence passed invalida: %+v delivery=%s", passedEvidence, followupDeliveryRef)
+	}
 }
 
 func TestCodexStackRealRequiredTestRunnerOptInV0(t *testing.T) {
@@ -910,6 +996,21 @@ func codexStackRequiredTestFirstFollowupAgentRefV0(
 	}
 	t.Fatalf("replan sin followup agent: %+v", replan)
 	return ""
+}
+
+func codexStackRequiredTestDescriptorForAgentV0(
+	t *testing.T,
+	stack StackV0,
+	agentRef string,
+) orquestaruntimecodexdelivery.CodexReceiptDescriptorV0 {
+	t.Helper()
+	for _, descriptor := range codexStackRequiredTestReceiptDescriptorsV0(t, stack) {
+		if strings.TrimSpace(descriptor.AgentRef) == strings.TrimSpace(agentRef) {
+			return descriptor
+		}
+	}
+	t.Fatalf("descriptor no encontrado agent_ref=%s descriptors=%+v", agentRef, codexStackRequiredTestReceiptDescriptorsV0(t, stack))
+	return orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{}
 }
 
 type codexStackRequiredTestPendingRuntimeV0 struct {

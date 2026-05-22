@@ -119,6 +119,35 @@ func TestBuildStackFromEnvV0CableaOPESFallbackParaDomainWorkYDeliveryV0(t *testi
 	}
 }
 
+func TestBuildStackFromEnvV0CableaHTTPNeutralParaDomainWorkYDeliveryV0(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)
+	t.Setenv("ORQUESTA_SERVER_STATE_DIR", stateDir)
+	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", filepath.Join(t.TempDir(), "runtime"))
+	t.Setenv("ORQUESTA_CODEX_COMMAND", filepath.Join(projectDir, "codex-bin"))
+	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
+	t.Setenv("OPES_BASE_URL", "")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_DIR", "")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL", "http://127.0.0.1:18083")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	stack, err := buildStackFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("buildStackFromEnvV0: %v", err)
+	}
+	if stack.DomainWork == nil {
+		t.Fatalf("DomainWork HTTP neutral no cableado")
+	}
+	if !stack.DomainDelivery.Enabled {
+		t.Fatalf("DomainDelivery debe activarse con HTTP neutral opt-in")
+	}
+}
+
 func TestBuildStackFromEnvV0NoCableaRequiredTestRunnerPorDefecto(t *testing.T) {
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()
