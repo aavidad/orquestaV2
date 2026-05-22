@@ -664,10 +664,11 @@ Objetivo: introducir la pieza minima para que Orquesta pueda supervisar una
 sesion Codex y empujarla con `sigue` sin intervencion manual.
 
 Estado: hecho como contrato unitario, adaptador de stack, API HTTP generica
-`POST /api/v0/runs/supervise` sobre el ciclo normal de agentes Orquesta y
-prueba fake recursiva 1->2->4 sin llamadas manuales por nivel. Pendiente smoke
-real recursivo padre/hijo/nieto con proveedor y, si se quiere, cliente CLI fino
-contra esa API.
+`POST /api/v0/runs/supervise` sobre el ciclo normal de agentes Orquesta, prueba
+fake recursiva 1->2->4 sin llamadas manuales por nivel y prueba offline donde
+el arbol se genera por `review -> split_task -> WorkflowTaskStore -> launch`.
+Pendiente smoke real recursivo padre/hijo/nieto con proveedor y, si se quiere,
+cliente CLI fino contra esa API.
 
 Trabajo aplicado:
 
