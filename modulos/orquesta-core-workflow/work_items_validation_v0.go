@@ -140,6 +140,9 @@ func validateWorkflowTaskLineageV0(task WorkflowTaskV0) error {
 	if task.MaxChildAgents < 0 || task.MaxChildAgents > maxWorkflowTaskCollectionV0 {
 		return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "max_child_agents")
 	}
+	if task.MaxRecursiveAgents < 0 || task.MaxRecursiveAgents > maxWorkflowTaskRecursiveAgentsV0 {
+		return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "max_recursive_agents")
+	}
 	if err := validateWorkflowTaskOptionalRefV0(task.ParentTaskRef, "parent_task_ref"); err != nil {
 		return err
 	}

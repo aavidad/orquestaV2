@@ -176,6 +176,97 @@ func TestReviewReworkReplanSplitTaskV0ValidatesRecursiveParentLimits(t *testing.
 		}
 	})
 
+	t.Run("rechaza_presupuesto_global_con_hijos_persistidos_y_candidatos", func(t *testing.T) {
+		parent := reviewReworkRecursiveSplitParentForTestV0(runRef)
+		parent.MaxChildAgents = 3
+		parent.MaxRecursiveAgents = 2
+		parent.ChildTaskRefs = nil
+		persisted := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-budget-persisted", "app/rework_budget_persisted.go")
+		candidate := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-budget-candidate", "app/rework_budget_candidate.go")
+
+		_, store, err := reviewReworkRecursiveSplitCandidatesWithStoredTasksForTestV0(
+			t,
+			parent,
+			[]string{parent.TaskID, persisted.TaskID},
+			[]orquestacoreworkflow.WorkflowTaskV0{persisted},
+			candidate,
+		)
+		assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "split_task.max_recursive_agents")
+		if _, loadErr := store.LoadWorkflowTasksV0(context.Background(), runRef, []string{candidate.TaskID}); loadErr == nil {
+			t.Fatalf("split_task fuera de presupuesto no debe guardarse: %s", candidate.TaskID)
+		}
+	})
+
+	t.Run("acepta_presupuesto_global_y_lo_propaga_al_hijo", func(t *testing.T) {
+		parent := reviewReworkRecursiveSplitParentForTestV0(runRef)
+		parent.MaxChildAgents = 3
+		parent.MaxRecursiveAgents = 3
+		parent.ChildTaskRefs = nil
+		persisted := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-budget-ok-persisted", "app/rework_budget_ok_persisted.go")
+		candidate := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-budget-ok-candidate", "app/rework_budget_ok_candidate.go")
+
+		candidates, store, err := reviewReworkRecursiveSplitCandidatesWithStoredTasksForTestV0(
+			t,
+			parent,
+			[]string{parent.TaskID, persisted.TaskID},
+			[]orquestacoreworkflow.WorkflowTaskV0{persisted},
+			candidate,
+		)
+		if err != nil {
+			t.Fatalf("split_task dentro de max_recursive_agents: %v", err)
+		}
+		if len(candidates) != 1 {
+			t.Fatalf("candidates=%+v", candidates)
+		}
+		stored, err := store.LoadWorkflowTasksV0(context.Background(), runRef, []string{candidate.TaskID})
+		if err != nil {
+			t.Fatalf("candidate no guardado: %v", err)
+		}
+		if stored[0].MaxRecursiveAgents != parent.MaxRecursiveAgents {
+			t.Fatalf("max_recursive_agents no propagado: %+v", stored[0])
+		}
+	})
+
+	t.Run("rechaza_presupuesto_global_definido_en_ancestro", func(t *testing.T) {
+		root := reviewReworkRecursiveSplitParentForTestV0(runRef)
+		root.MaxChildAgents = 3
+		root.MaxRecursiveAgents = 2
+		root.ChildTaskRefs = nil
+		parent := reviewReworkRecursiveSplitChildForTestV0(root, "task-ref-recursive-budget-parent", "app/rework_budget_parent.go")
+		parent.MaxChildAgents = 2
+		parent.MaxRecursiveAgents = 0
+		candidate := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-budget-grandchild", "app/rework_budget_grandchild.go")
+
+		_, _, err := reviewReworkRecursiveSplitCandidatesWithStoredTasksForTestV0(
+			t,
+			parent,
+			[]string{root.TaskID, parent.TaskID},
+			[]orquestacoreworkflow.WorkflowTaskV0{root},
+			candidate,
+		)
+		assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "split_task.max_recursive_agents")
+	})
+
+	t.Run("usa_presupuesto_mas_estricto_del_ancestro", func(t *testing.T) {
+		root := reviewReworkRecursiveSplitParentForTestV0(runRef)
+		root.MaxChildAgents = 3
+		root.MaxRecursiveAgents = 2
+		root.ChildTaskRefs = nil
+		parent := reviewReworkRecursiveSplitChildForTestV0(root, "task-ref-recursive-budget-parent-high", "app/rework_budget_parent_high.go")
+		parent.MaxChildAgents = 2
+		parent.MaxRecursiveAgents = 9
+		candidate := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-budget-grandchild-high", "app/rework_budget_grandchild_high.go")
+
+		_, _, err := reviewReworkRecursiveSplitCandidatesWithStoredTasksForTestV0(
+			t,
+			parent,
+			[]string{root.TaskID, parent.TaskID},
+			[]orquestacoreworkflow.WorkflowTaskV0{root},
+			candidate,
+		)
+		assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "split_task.max_recursive_agents")
+	})
+
 	t.Run("acepta_task_ajena_del_run_sin_exigirla_en_store", func(t *testing.T) {
 		parent := reviewReworkRecursiveSplitParentForTestV0(runRef)
 		child := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-child-legacy-run", "app/rework_child_legacy.go")

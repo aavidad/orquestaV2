@@ -21,6 +21,7 @@ func NormalizeWorkflowTaskV0(task WorkflowTaskV0) WorkflowTaskV0 {
 		WaveRef:              strings.TrimSpace(task.WaveRef),
 		DelegationDepth:      task.DelegationDepth,
 		MaxChildAgents:       task.MaxChildAgents,
+		MaxRecursiveAgents:   task.MaxRecursiveAgents,
 		ChildTaskRefs:        normalizeWorkflowTaskStringsV0(task.ChildTaskRefs),
 		FunctionContractRefs: normalizeWorkflowFunctionContractRefsV0(task.FunctionContractRefs),
 	}

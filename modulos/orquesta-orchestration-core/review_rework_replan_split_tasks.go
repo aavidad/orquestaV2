@@ -164,6 +164,9 @@ func reviewReworkValidateRecursiveSplitTasksV0(
 			return errorV0(ErrNucleoOrquestacionInvalidoV0, "split_task.max_child_agents", "fanout supera max_child_agents")
 		}
 	}
+	if err := reviewReworkValidateRecursiveTreeBudgetsV0(ctx, request, store, treeStore, parentsByRef, tasks); err != nil {
+		return err
+	}
 	return nil
 }
 

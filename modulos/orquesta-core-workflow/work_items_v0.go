@@ -8,9 +8,10 @@ const (
 )
 
 const (
-	maxWorkflowTaskPayloadBytesV0 = 4096
-	maxWorkflowTaskStringV0       = 600
-	maxWorkflowTaskCollectionV0   = 40
+	maxWorkflowTaskPayloadBytesV0    = 4096
+	maxWorkflowTaskStringV0          = 600
+	maxWorkflowTaskCollectionV0      = 40
+	maxWorkflowTaskRecursiveAgentsV0 = 4096
 )
 
 var forbiddenWorkflowTaskFragmentsV0 = []string{
@@ -52,6 +53,7 @@ type WorkflowTaskV0 struct {
 	WaveRef              string                          `json:"wave_ref,omitempty"`
 	DelegationDepth      int                             `json:"delegation_depth,omitempty"`
 	MaxChildAgents       int                             `json:"max_child_agents,omitempty"`
+	MaxRecursiveAgents   int                             `json:"max_recursive_agents,omitempty"`
 	ChildTaskRefs        []string                        `json:"child_task_refs,omitempty"`
 	FunctionContractRefs []WorkflowFunctionContractRefV0 `json:"function_contract_refs,omitempty"`
 }

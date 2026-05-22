@@ -40,6 +40,7 @@ type WorkProfileV0 struct {
 	WaveRef              string                          `json:"wave_ref,omitempty"`
 	DelegationDepth      int                             `json:"delegation_depth,omitempty"`
 	MaxChildAgents       int                             `json:"max_child_agents,omitempty"`
+	MaxRecursiveAgents   int                             `json:"max_recursive_agents,omitempty"`
 	ChildTaskRefs        []string                        `json:"child_task_refs,omitempty"`
 	FunctionContractRefs []WorkflowFunctionContractRefV0 `json:"function_contract_refs,omitempty"`
 }
@@ -95,6 +96,7 @@ func NormalizeWorkProfileV0(profile WorkProfileV0) WorkProfileV0 {
 		WaveRef:              strings.TrimSpace(profile.WaveRef),
 		DelegationDepth:      profile.DelegationDepth,
 		MaxChildAgents:       profile.MaxChildAgents,
+		MaxRecursiveAgents:   profile.MaxRecursiveAgents,
 		ChildTaskRefs:        compactStringsV0(profile.ChildTaskRefs),
 		FunctionContractRefs: normalizeWorkflowFunctionContractRefsV0(profile.FunctionContractRefs),
 	}

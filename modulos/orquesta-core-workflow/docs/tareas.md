@@ -15,6 +15,16 @@ Estado:
 ## Backlog inicial
 
 ```text
+ID: NCW-078
+Objetivo: Transportar `max_recursive_agents` como presupuesto global neutral del arbol de `WorkflowTaskV0`.
+Write-set: work_items_*.go, work_profile_*.go, docs locales y tests de linaje.
+Contrato: WorkflowTaskV0, WorkProfileV0, WorkflowTaskFromWorkProfileV0.
+Validacion: 2026-05-23, tests focales de linaje en orquesta-core-workflow.
+Bloqueos: El core no cuenta arboles ni lanza agentes; solo valida y transporta metadata neutral.
+Estado: completada local
+```
+
+```text
 ID: NCW-077
 Objetivo: Transportar `context_refs` opacas en `WorkflowTaskV0` para que composiciones externas conserven refs de contexto sin campos de producto en el core.
 Write-set: work_items_*.go, tests y docs locales.

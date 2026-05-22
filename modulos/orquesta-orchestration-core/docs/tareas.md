@@ -178,6 +178,7 @@ Invariantes:
 - el state referencia `WorkflowTaskStore`, `WorkflowTaskWaitStateV0`,
   `RequiredTestEvidenceV0`, eventos y outbox; no duplica esas verdades;
 - cada transicion tiene refs causales e idempotencia estable;
+
 - si falta entrega, review, test requerido, outbox cero, contexto o cierre de
   tasks, el blocker queda explicito;
 - no hay Codex, OPES, DB concreta, runtime real ni rutas locales en el contrato.
@@ -240,4 +241,21 @@ Validacion:
 
 ```sh
 go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-orchestration-core -run 'TestWorkflowTaskCandidateProviderV0.*Profile|TestWorkflowTaskFromWorkProfileV0|TestValidateWorkflowTaskV0RejectsUnknownWorkProfileKind'
+```
+
+## ORCH-CORE-DIR-010: presupuesto global recursivo en split_task
+
+Estado: hecho offline.
+
+`split_task` valida `max_recursive_agents` desde la metadata durable de
+`WorkflowTaskV0`: localiza el ancestro/root del parent, cuenta descendientes
+persistidos por `WorkflowTaskByParentStorePortV0`, suma candidatos de la tanda y
+bloquea antes de `SaveWorkflowTaskV0` si el arbol supera el presupuesto. El
+materializador del Director Operativo propaga `Plan.MaxRecursiveAgents` a las
+tasks iniciales para que el limite sea estructurado y no salga de texto.
+
+Validacion:
+
+```sh
+go test -count=1 ./modulos/orquesta-orchestration-core -run 'TestReviewReworkReplanSplitTaskV0ValidatesRecursiveParentLimits|TestOperationalDirectorPlanMaterializerV0PreservaRefsOperativasTipadas'
 ```

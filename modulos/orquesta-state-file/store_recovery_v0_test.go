@@ -21,6 +21,7 @@ func TestStoreV0RecuperaEstadoTrasRecrearInstancia(t *testing.T) {
 	task.WaveRef = "wave-state-file-001"
 	task.DelegationDepth = 1
 	task.MaxChildAgents = 6
+	task.MaxRecursiveAgents = 18
 	task.ChildTaskRefs = []string{"task-ref-child-state-file-001"}
 	childTask := task
 	childTask.TaskID = "task-ref-child-state-file-001"

@@ -30,6 +30,7 @@ func workflowTaskFromWorkProfileUncheckedV0(profile WorkProfileV0) (WorkflowTask
 		WaveRef:              profile.WaveRef,
 		DelegationDepth:      profile.DelegationDepth,
 		MaxChildAgents:       profile.MaxChildAgents,
+		MaxRecursiveAgents:   profile.MaxRecursiveAgents,
 		ChildTaskRefs:        append([]string(nil), profile.ChildTaskRefs...),
 		FunctionContractRefs: append([]WorkflowFunctionContractRefV0(nil), profile.FunctionContractRefs...),
 	}

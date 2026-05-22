@@ -272,6 +272,7 @@ func operationalDirectorWorkflowTaskFromItemV0(
 		WaveRef:              waveRef,
 		DelegationDepth:      item.DelegationDepth,
 		MaxChildAgents:       item.MaxChildItems,
+		MaxRecursiveAgents:   request.Plan.MaxRecursiveAgents,
 		ChildTaskRefs:        operationalDirectorWorkflowTaskChildRefsV0(item.ChildItemIDs, itemTaskRefs),
 		FunctionContractRefs: append([]orquestacoreworkflow.WorkflowFunctionContractRefV0(nil), request.FunctionContractRefs...),
 	}

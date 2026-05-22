@@ -172,6 +172,7 @@ func TestOperationalDirectorPlanMaterializerV0PreservaRefsOperativasTipadas(t *t
 	run.FunctionContracts = []string{contractRef}
 	plan := operationalDirectorProgrammingPlanForMaterializerTestV0(runRef)
 	plan.RequestRef = "req-operational-director-materializer-refs-001"
+	plan.MaxRecursiveAgents = 12
 	for index := range plan.Steps {
 		if plan.Steps[index].Kind != orquestadirectoroperativo.OperationalDirectorStepLaunchSubagentsV0 {
 			continue
@@ -211,7 +212,8 @@ func TestOperationalDirectorPlanMaterializerV0PreservaRefsOperativasTipadas(t *t
 		task.ParentTaskRef != "" ||
 		len(task.ChildTaskRefs) != 0 ||
 		task.DelegationDepth != 1 ||
-		task.MaxChildAgents != 2 {
+		task.MaxChildAgents != 2 ||
+		task.MaxRecursiveAgents != 12 {
 		t.Fatalf("lineage metadata=%+v", task)
 	}
 	for _, expected := range []string{
