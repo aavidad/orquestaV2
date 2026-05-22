@@ -20,6 +20,10 @@ Cobertura esperada:
   solicitudes con el mismo nombre de app;
 - el summary del director conserva contexto funcional compacto de `AppSpecV0`
   sin transportar runtime/proveedor;
+- el camino neutral `PrepareAppDirectorInputV0` prepara el mismo run sin usar
+  `AppSpecV0` de factory;
+- el adaptador `AppDirectorInputSpecFromFactoryV0` conserva contexto funcional,
+  plataformas, datos, i18n, calidad y preferencias de agentes;
 - el wizard de intake pide el siguiente campo con pregunta de director compacta;
 - un borrador completo crea `AppSpecV0` mediante factory y prepara el run del
   director;
@@ -41,3 +45,9 @@ Evidencia 2026-05-09:
 - `TestAdvanceAppDirectorIntakeWizardV0CreaAppSpecYRunPreparado`;
 - `TestAdvanceAppDirectorIntakeWizardV0UsaFactoryParaInvalidarEnums`;
 - `TestAppDirectorIntakeArchitectureV0NoImportaLegacyNiDBHardcodeada`.
+
+Evidencia 2026-05-23:
+
+- `TestPrepareAppDirectorInputV0UsesNeutralSpecWithoutFactory`;
+- `TestAppDirectorInputSpecFromFactoryV0PreservesDirectorContext`;
+- `TestPrepareAppDirectorIntakeV0LegacyFactoryMatchesNeutralInput`.

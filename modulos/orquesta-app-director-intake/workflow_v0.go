@@ -5,7 +5,7 @@ import (
 )
 
 func buildInitialDirectorIntakeRunV0(
-	request PrepareAppDirectorIntakeRequestV0,
+	request PrepareAppDirectorInputRequestV0,
 	tasks []AppDirectorTaskV0,
 ) (
 	orquestacoreworkflow.OrchestrationRunV0,
@@ -33,7 +33,7 @@ func buildInitialDirectorIntakeRunV0(
 }
 
 func initialDirectorIntakeCommandsV0(
-	request PrepareAppDirectorIntakeRequestV0,
+	request PrepareAppDirectorInputRequestV0,
 	tasks []AppDirectorTaskV0,
 ) ([]orquestacoreworkflow.OrchestrationCommandV0, error) {
 	start, err := orquestacoreworkflow.NewStartRunCommandV0(
@@ -103,7 +103,7 @@ func applyDirectorIntakeCommandV0(
 }
 
 func directorIntakeCommandMetaV0(
-	request PrepareAppDirectorIntakeRequestV0,
+	request PrepareAppDirectorInputRequestV0,
 	kind string,
 ) orquestacoreworkflow.OrchestrationCommandMetaV0 {
 	ref := safeDirectorIntakeRefPartV0(kind + "-" + request.RunRef)
@@ -118,7 +118,7 @@ func directorIntakeCommandMetaV0(
 }
 
 func directorIntakeTaskCommandMetaV0(
-	request PrepareAppDirectorIntakeRequestV0,
+	request PrepareAppDirectorInputRequestV0,
 	task AppDirectorTaskV0,
 	kind string,
 ) orquestacoreworkflow.OrchestrationCommandMetaV0 {

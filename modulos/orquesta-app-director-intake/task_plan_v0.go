@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestafactory "orquesta/modulos/orquesta-factory"
 )
 
 type directorTaskAreaV0 struct {
@@ -17,7 +16,7 @@ type directorTaskAreaV0 struct {
 
 const maxDirectorTaskAreasV0 = 4
 
-func directorTasksFromAppSpecV0(spec orquestafactory.AppSpecV0) []AppDirectorTaskV0 {
+func directorTasksFromAppSpecV0(spec AppDirectorInputSpecV0) []AppDirectorTaskV0 {
 	appRef := appDirectorTaskRefPrefixV0(spec)
 	areas := []directorTaskAreaV0{primaryDirectorTaskAreaV0(spec)}
 	if spec.AgentPreferences.Autonomy != "alta" {
@@ -27,7 +26,7 @@ func directorTasksFromAppSpecV0(spec orquestafactory.AppSpecV0) []AppDirectorTas
 	return directorTasksForAreasV0(appRef, compactDirectorTaskAreasV0(areas))
 }
 
-func primaryDirectorTaskAreaV0(spec orquestafactory.AppSpecV0) directorTaskAreaV0 {
+func primaryDirectorTaskAreaV0(spec AppDirectorInputSpecV0) directorTaskAreaV0 {
 	return directorTaskAreaV0{
 		Suffix:   "director",
 		Role:     "director",
@@ -37,14 +36,14 @@ func primaryDirectorTaskAreaV0(spec orquestafactory.AppSpecV0) directorTaskAreaV
 	}
 }
 
-func primaryDirectorCapacityV0(spec orquestafactory.AppSpecV0) orquestacoreworkflow.OrchestrationCapacityRecommendationV0 {
-	if orquestafactory.NormalizeExecutionModeV0(spec.ExecutionMode) == orquestafactory.ExecutionModeDebugV0 {
+func primaryDirectorCapacityV0(spec AppDirectorInputSpecV0) orquestacoreworkflow.OrchestrationCapacityRecommendationV0 {
+	if normalizeDirectorInputExecutionModeV0(spec.ExecutionMode) == AppDirectorExecutionModeDebugV0 {
 		return orquestacoreworkflow.OrchestrationCapacityHighV0
 	}
 	return orquestacoreworkflow.OrchestrationCapacityXHighV0
 }
 
-func primaryDirectorWriteSetV0(spec orquestafactory.AppSpecV0) []string {
+func primaryDirectorWriteSetV0(spec AppDirectorInputSpecV0) []string {
 	paths := []string{
 		"docs/arquitectura.md",
 		"docs/plan_microtareas.md",
@@ -52,10 +51,10 @@ func primaryDirectorWriteSetV0(spec orquestafactory.AppSpecV0) []string {
 		"docs/pruebas.md",
 		"docs/pendientes.md",
 	}
-	switch orquestafactory.NormalizeRequestKindV0(spec.RequestKind) {
-	case orquestafactory.RequestKindDocumentarAppV0,
-		orquestafactory.RequestKindCrearAppCompletaV0,
-		orquestafactory.RequestKindPlanificarAppV0:
+	switch normalizeDirectorInputRequestKindV0(spec.RequestKind) {
+	case AppDirectorRequestKindDocumentarAppV0,
+		AppDirectorRequestKindCrearAppCompletaV0,
+		AppDirectorRequestKindPlanificarAppV0:
 		paths = append(paths,
 			"docs/manual_usuario.md",
 			"docs/manual_desarrollador.md",
@@ -65,9 +64,9 @@ func primaryDirectorWriteSetV0(spec orquestafactory.AppSpecV0) []string {
 	return paths
 }
 
-func directorTaskSummaryV0(spec orquestafactory.AppSpecV0, base string) string {
-	kind := orquestafactory.NormalizeRequestKindV0(spec.RequestKind)
-	mode := orquestafactory.NormalizeExecutionModeV0(spec.ExecutionMode)
+func directorTaskSummaryV0(spec AppDirectorInputSpecV0, base string) string {
+	kind := normalizeDirectorInputRequestKindV0(spec.RequestKind)
+	mode := normalizeDirectorInputExecutionModeV0(spec.ExecutionMode)
 	parts := []string{
 		base,
 		"request_kind=" + kind,
@@ -79,7 +78,7 @@ func directorTaskSummaryV0(spec orquestafactory.AppSpecV0, base string) string {
 	return strings.Join(compactDirectorTaskSummaryPartsV0(parts), " ")
 }
 
-func directorTaskSummaryHintsV0(spec orquestafactory.AppSpecV0) []string {
+func directorTaskSummaryHintsV0(spec AppDirectorInputSpecV0) []string {
 	hints := []string{
 		directorTaskSummaryFieldV0("app", spec.App.Nombre),
 		directorTaskSummaryFieldV0("objetivo", spec.App.Objetivo),
@@ -130,7 +129,7 @@ func compactDirectorTaskSummaryPartsV0(values []string) []string {
 	return out
 }
 
-func directorSpecializedAreasV0(spec orquestafactory.AppSpecV0) []directorTaskAreaV0 {
+func directorSpecializedAreasV0(spec AppDirectorInputSpecV0) []directorTaskAreaV0 {
 	areas := []directorTaskAreaV0{}
 	if appNeedsWebDirectorAreaV0(spec) {
 		areas = append(areas, directorTaskAreaV0{
@@ -205,13 +204,13 @@ func compactDirectorTaskAreasV0(areas []directorTaskAreaV0) []directorTaskAreaV0
 	return result
 }
 
-func appNeedsWebDirectorAreaV0(spec orquestafactory.AppSpecV0) bool {
+func appNeedsWebDirectorAreaV0(spec AppDirectorInputSpecV0) bool {
 	return strings.Contains(spec.App.TipoApp, "web") ||
 		spec.App.TipoApp == "mixed" ||
 		directorIntakeStringInSetV0(spec.Platforms, "web")
 }
 
-func appNeedsAPIDirectorAreaV0(spec orquestafactory.AppSpecV0) bool {
+func appNeedsAPIDirectorAreaV0(spec AppDirectorInputSpecV0) bool {
 	return strings.Contains(spec.App.TipoApp, "api") ||
 		spec.App.TipoApp == "mixed" ||
 		spec.App.TipoApp == "automation" ||

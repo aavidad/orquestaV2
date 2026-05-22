@@ -2,10 +2,9 @@ package orquestaappdirectorintake
 
 import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestafactory "orquesta/modulos/orquesta-factory"
 )
 
-func directorTaskFromAppSpecV0(spec orquestafactory.AppSpecV0) AppDirectorTaskV0 {
+func directorTaskFromAppSpecV0(spec AppDirectorInputSpecV0) AppDirectorTaskV0 {
 	appRef := appDirectorTaskRefPrefixV0(spec)
 	return directorTaskForAreaV0(appRef, primaryDirectorTaskAreaV0(spec))
 }

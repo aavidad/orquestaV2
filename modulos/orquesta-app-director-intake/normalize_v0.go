@@ -3,13 +3,15 @@ package orquestaappdirectorintake
 import "strings"
 
 func normalizePrepareAppDirectorIntakeRequestV0(
-	request PrepareAppDirectorIntakeRequestV0,
-) PrepareAppDirectorIntakeRequestV0 {
+	request PrepareAppDirectorInputRequestV0,
+) PrepareAppDirectorInputRequestV0 {
 	request.RunRef = strings.TrimSpace(request.RunRef)
 	request.ProjectRef = strings.TrimSpace(request.ProjectRef)
 	request.OccurredAt = strings.TrimSpace(request.OccurredAt)
 	request.CorrelationID = strings.TrimSpace(request.CorrelationID)
 	request.RequestedBy = strings.TrimSpace(request.RequestedBy)
+	request.AppSpec.RequestKind = normalizeDirectorInputRequestKindV0(request.AppSpec.RequestKind)
+	request.AppSpec.ExecutionMode = normalizeDirectorInputExecutionModeV0(request.AppSpec.ExecutionMode)
 	if request.RunRef == "" && request.AppSpec.SpecID != "" {
 		request.RunRef = "run-" + safeDirectorIntakeRefPartV0(request.AppSpec.SpecID)
 	}
@@ -29,6 +31,30 @@ func normalizePrepareAppDirectorIntakeRequestV0(
 		request.RequestedBy = "orquesta-app-director-intake"
 	}
 	return request
+}
+
+func normalizeDirectorInputRequestKindV0(value string) string {
+	switch strings.TrimSpace(value) {
+	case AppDirectorRequestKindDocumentarAppV0:
+		return AppDirectorRequestKindDocumentarAppV0
+	case AppDirectorRequestKindPlanificarAppV0:
+		return AppDirectorRequestKindPlanificarAppV0
+	case AppDirectorRequestKindCrearAppCompletaV0:
+		return AppDirectorRequestKindCrearAppCompletaV0
+	default:
+		return AppDirectorRequestKindCrearAppCompletaV0
+	}
+}
+
+func normalizeDirectorInputExecutionModeV0(value string) string {
+	switch strings.TrimSpace(value) {
+	case AppDirectorExecutionModeDebugV0:
+		return AppDirectorExecutionModeDebugV0
+	case AppDirectorExecutionModeNormalV0:
+		return AppDirectorExecutionModeNormalV0
+	default:
+		return AppDirectorExecutionModeNormalV0
+	}
 }
 
 func safeDirectorIntakeRefPartV0(value string) string {

@@ -62,3 +62,17 @@ Validacion:
 - `TestAdvanceAppDirectorIntakeWizardV0PideSiguienteCampo`;
 - `TestAdvanceAppDirectorIntakeWizardV0CreaAppSpecYRunPreparado`;
 - `TestAdvanceAppDirectorIntakeWizardV0UsaFactoryParaInvalidarEnums`.
+
+## APP-DIR-008
+
+Objetivo: permitir preparar el director desde un DTO neutral sin que el calculo
+interno dependa de `orquesta-factory`.
+
+Estado: hecho; `PrepareAppDirectorInputV0` usa `AppDirectorInputSpecV0` y
+`PrepareAppDirectorIntakeV0` queda como wrapper de compatibilidad.
+
+Validacion:
+
+- `TestPrepareAppDirectorInputV0UsesNeutralSpecWithoutFactory`;
+- `TestAppDirectorInputSpecFromFactoryV0PreservesDirectorContext`;
+- `TestPrepareAppDirectorIntakeV0LegacyFactoryMatchesNeutralInput`.

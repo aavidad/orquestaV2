@@ -5,11 +5,10 @@ import (
 
 	orquestacoreconcurrency "orquesta/modulos/orquesta-core-concurrency"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestafactory "orquesta/modulos/orquesta-factory"
 )
 
 func validatePrepareAppDirectorIntakeRequestV0(
-	request PrepareAppDirectorIntakeRequestV0,
+	request PrepareAppDirectorInputRequestV0,
 ) error {
 	if strings.TrimSpace(request.RunRef) == "" {
 		return AppDirectorIntakeIssueV0{Field: "run_ref"}
@@ -23,8 +22,8 @@ func validatePrepareAppDirectorIntakeRequestV0(
 	return validateDirectorIntakeAppSpecV0(request.AppSpec)
 }
 
-func validateDirectorIntakeAppSpecV0(spec orquestafactory.AppSpecV0) error {
-	if strings.TrimSpace(spec.SchemaVersion) != orquestafactory.AppSpecSchemaV0 {
+func validateDirectorIntakeAppSpecV0(spec AppDirectorInputSpecV0) error {
+	if strings.TrimSpace(spec.SchemaVersion) != AppDirectorInputSpecSchemaVersionV0 {
 		return AppDirectorIntakeIssueV0{Field: "app_spec.schema_version"}
 	}
 	if strings.TrimSpace(spec.SpecID) == "" {

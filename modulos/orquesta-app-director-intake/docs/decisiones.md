@@ -131,3 +131,15 @@ respuestas por campo; al completar el contrato se reutiliza el intake de
 director existente.
 Estado: aceptada localmente.
 ```
+
+```text
+Fecha: 2026-05-23
+Decision: El calculo interno de intake usa `AppDirectorInputSpecV0`.
+Motivo: `orquesta-factory` es una composicion de entrada de app, no debe ser el
+tipo interno que decide tareas, refs, summaries y run inicial del director.
+Impacto: `PrepareAppDirectorInputV0` queda como contrato neutral nuevo;
+`PrepareAppDirectorIntakeV0` conserva compatibilidad publica adaptando
+`AppSpecV0` a `AppDirectorInputSpecV0`. El wizard sigue siendo un corte aparte
+porque aun crea y expone `AppSpecV0`.
+Estado: aceptada localmente.
+```

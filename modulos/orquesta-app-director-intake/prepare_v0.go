@@ -3,6 +3,19 @@ package orquestaappdirectorintake
 func PrepareAppDirectorIntakeV0(
 	request PrepareAppDirectorIntakeRequestV0,
 ) (AppDirectorIntakePreparedV0, error) {
+	return PrepareAppDirectorInputV0(PrepareAppDirectorInputRequestV0{
+		RunRef:        request.RunRef,
+		ProjectRef:    request.ProjectRef,
+		OccurredAt:    request.OccurredAt,
+		CorrelationID: request.CorrelationID,
+		RequestedBy:   request.RequestedBy,
+		AppSpec:       AppDirectorInputSpecFromFactoryV0(request.AppSpec),
+	})
+}
+
+func PrepareAppDirectorInputV0(
+	request PrepareAppDirectorInputRequestV0,
+) (AppDirectorIntakePreparedV0, error) {
 	request = normalizePrepareAppDirectorIntakeRequestV0(request)
 	if err := validatePrepareAppDirectorIntakeRequestV0(request); err != nil {
 		return AppDirectorIntakePreparedV0{}, err

@@ -24,6 +24,26 @@ Invariantes:
 - no se decide proveedor, cuenta, credenciales, runtime, HOME ni DB;
 - REST/MCP/web no seleccionan numero de agentes ni fases internas.
 
+## `PrepareAppDirectorInputV0`
+
+Entrada: `PrepareAppDirectorInputRequestV0`.
+
+- `app_spec`: `AppDirectorInputSpecV0`, DTO neutral del intake;
+- `run_ref`, `project_ref`, `occurred_at`, `correlation_id`, `requested_by`;
+- si faltan refs, se derivan de `spec_id` y slug.
+
+Salida: `AppDirectorIntakePreparedV0`, igual que el wrapper legacy
+`PrepareAppDirectorIntakeV0`.
+
+Invariantes:
+
+- el calculo interno de tareas de director no necesita `orquesta-factory`;
+- `PrepareAppDirectorIntakeV0` queda como adaptador de compatibilidad desde
+  `AppSpecV0`;
+- `AppDirectorInputSpecV0` transporta solo contexto funcional, politica
+  `request_kind`/`execution_mode`, validacion y preferencias de agentes
+  necesarias para preparar el run inicial.
+
 ## `AdvanceAppDirectorIntakeWizardV0`
 
 Entrada: `AppDirectorIntakeWizardRequestV0`.
