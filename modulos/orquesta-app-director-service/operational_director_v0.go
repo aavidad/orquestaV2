@@ -993,6 +993,146 @@ func applyOperationalDirectorPlanStateAfterLoopV0(
 	return true, ports.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, next)
 }
 
+func applyOperationalDirectorPlanStateAfterExternalWaitExhaustedV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	managedLoop orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
+) (bool, error) {
+	if !managedProgressiveLoopExternalWaitExhaustedV0(request, managedLoop) ||
+		ports.OperationalPlanStateStore == nil ||
+		ports.OperationalPlanStateWriter == nil {
+		return false, nil
+	}
+	planRef := continueOperationalDirectorPlanRefV0(request)
+	if planRef == "" {
+		return false, nil
+	}
+	state, err := ports.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, request.RunRef, planRef)
+	if err != nil {
+		return false, err
+	}
+	next, changed, err := operationalDirectorPlanStateWithWaitSubagentsExpiredV0(request, state)
+	if err != nil || !changed {
+		return false, err
+	}
+	if err := markOperationalDirectorWorkflowTaskWaitStateExpiredV0(ctx, request, ports, state); err != nil {
+		return false, err
+	}
+	return true, ports.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, next)
+}
+
+func managedProgressiveLoopExternalWaitExhaustedV0(
+	request ContinueAppDirectorRequestV0,
+	managedLoop orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
+) bool {
+	if managedLoop.Status != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
+		managedLoop.Final.Status != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 {
+		return false
+	}
+	maxExternalWaits := request.MaxExternalWaits
+	if maxExternalWaits < 0 {
+		maxExternalWaits = 0
+	}
+	if len(managedLoop.Attempts) != maxExternalWaits+1 ||
+		len(managedLoop.ExternalWaits) != maxExternalWaits {
+		return false
+	}
+	for index, attempt := range managedLoop.Attempts {
+		if attempt.AttemptNumber != index+1 ||
+			attempt.Result.Status != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 {
+			return false
+		}
+	}
+	for index, wait := range managedLoop.ExternalWaits {
+		if wait.WaitNumber != index+1 || !wait.Continue {
+			return false
+		}
+	}
+	return len(managedLoop.Attempts) > 0
+}
+
+func operationalDirectorPlanStateWithWaitSubagentsExpiredV0(
+	request ContinueAppDirectorRequestV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) (orquestacionnucleoapp.OperationalDirectorPlanStateV0, bool, error) {
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok ||
+		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 ||
+		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+		return state, false, nil
+	}
+	const reason = "external-wait-exhausted"
+	nextSteps := make([]orquestacionnucleoapp.OperationalDirectorPlanStepStateV0, 0, len(state.Steps))
+	for _, step := range state.Steps {
+		nextStep := step
+		if step.StepID == activeStep.StepID {
+			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepBlockedV0
+			nextStep.PendingAgentRefs = nil
+			nextStep.BlockerRefs = []string{reason}
+			nextStep.Reason = reason
+			nextStep.EvidenceRefs = compactServiceRefsV0(append(nextStep.EvidenceRefs, "evidence-ref-app-director-wait-subagents-expired-v0"))
+		}
+		nextSteps = append(nextSteps, nextStep)
+	}
+	state.Status = orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0
+	state.PendingAgentRefs = nil
+	state.BlockerRefs = []string{reason}
+	state.Steps = nextSteps
+	state.ClosureReason = reason
+	state.EvidenceRefs = compactServiceRefsV0(append(state.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-wait-expired-v0"))
+	state.UpdatedAt = request.OccurredAt
+	next, err := orquestacionnucleoapp.NewOperationalDirectorPlanStateV0(state)
+	if err != nil {
+		return state, false, err
+	}
+	return next, true, nil
+}
+
+func markOperationalDirectorWorkflowTaskWaitStateExpiredV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) error {
+	if ports.WaitStateStore == nil || ports.WaitStateWriter == nil {
+		return nil
+	}
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok ||
+		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+		return nil
+	}
+	waitRefs := compactServiceRefsV0(activeStep.WaitRefs)
+	if len(waitRefs) == 0 {
+		return nil
+	}
+	waitState, err := ports.WaitStateStore.LoadWorkflowTaskWaitStateV0(ctx, request.RunRef, waitRefs[0])
+	if err != nil {
+		if appDirectorWorkflowTaskWaitStateNotFoundV0(err) {
+			return nil
+		}
+		return err
+	}
+	if !appDirectorWorkflowTaskWaitStateMatchesPlanStepV0(request.RunRef, waitState, state, activeStep) {
+		return nil
+	}
+	waitState.Status = orquestacionnucleoapp.WorkflowTaskWaitStateStatusExpiredV0
+	waitState.PendingAgentRefs = nil
+	waitState.Attempt = request.MaxExternalWaits + 1
+	waitState.EvidenceRefs = compactServiceRefsV0(append(waitState.EvidenceRefs, "evidence-ref-app-director-wait-state-expired-v0"))
+	if strings.TrimSpace(request.OccurredAt) != "" {
+		waitState.ObservedAt = request.OccurredAt
+	}
+	normalized, err := orquestacionnucleoapp.NewWorkflowTaskWaitStateV0(waitState)
+	if err != nil {
+		return err
+	}
+	return ports.WaitStateWriter.SaveWorkflowTaskWaitStateV0(ctx, normalized)
+}
+
 func markOperationalDirectorWorkflowTaskWaitStateContinuedV0(
 	ctx context.Context,
 	request ContinueAppDirectorRequestV0,

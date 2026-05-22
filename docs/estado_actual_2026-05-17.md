@@ -366,6 +366,10 @@ implementacion y prueba integrada para cada frente:
   vivos globales; si hay `WaitStateStore` y el step trae `wait_ref`, prefiere el
   `WorkflowTaskWaitStateV0` persistido validado antes de recomputar scope. El
   paso a review marca ese wait state como `continued`.
+- [x] Plan state wait expirado: si `ManagedProgressiveLoopV0` agota
+  `MaxExternalWaits` con `wait_external`, `ContinueAppDirectorV0` transporta esa
+  senial, marca el wait state `expired` por puerto cuando existe y bloquea el
+  `PlanState`/step con `external-wait-exhausted` sin ampliar scope.
 - [x] Plan state wait consumido: pasar de `wait_subagents` a
   `review_deliveries` cuando los agentes pendientes entregaron.
 - [~] Plan state restante: review negativa observada, intentos de replan,

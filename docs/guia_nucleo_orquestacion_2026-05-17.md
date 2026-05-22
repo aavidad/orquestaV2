@@ -314,8 +314,11 @@ productivo debe persistir run, tasks y wait state, o rematerializar las tasks
 desde una fuente idempotente antes de reanudar el director.
 La reentrada actual prefiere `WorkflowTaskWaitStateV0` persistido cuando hay
 `wait_ref` y estado `waiting`, y el consumo normal del wait ya persiste
-`continued`; `expired` y `cleared` siguen pendientes de actualizacion completa en
-el ciclo vivo.
+`continued`. Cuando el loop gestionado agota `MaxExternalWaits` con senial real
+(`attempts=max+1` y `external_waits=max`, todos continuados), el servicio marca
+el wait como `expired` y bloquea el `PlanState` en `external-wait-exhausted`
+para no reabrir la misma espera. `cleared` sigue pendiente de actualizacion
+completa en el ciclo vivo.
 
 ## Cierre de ingesta por scope
 

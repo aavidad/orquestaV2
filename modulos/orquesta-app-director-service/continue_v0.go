@@ -93,6 +93,7 @@ func ContinueAppDirectorV0(
 		ports,
 		operationalLoop,
 		autonomy.LoopRequest,
+		autonomy.ManagedLoop,
 	)
 	if err != nil {
 		return ContinueAppDirectorResultV0{}, err
@@ -113,21 +114,26 @@ func continueOperationalDirectorPlanStatePostLoopV0(
 	ports StartAppDirectorPortsV0,
 	loop orquestacionnucleoapp.ProgressiveLoopResultV0,
 	loopRequest orquestacionnucleoapp.ProgressiveLoopRequestV0,
+	managedLoop orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
 ) (existingDirectorAutonomyLoopResultV0, error) {
+	expired, err := applyOperationalDirectorPlanStateAfterExternalWaitExhaustedV0(ctx, request, ports, managedLoop)
+	if err != nil || expired {
+		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
+	}
 	changed, err := applyOperationalDirectorPlanStateAfterLoopV0(ctx, request, ports, loop)
 	if err != nil || !changed {
-		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest}, err
+		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
 	}
 	_, _, activeReview, err := operationalDirectorActiveReviewDeliveriesStepV0(ctx, request, ports)
 	if err != nil || !activeReview {
-		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest}, err
+		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
 	}
 	nextRequest, err := continueRequestWithOperationalDirectorPlanStateV0(ctx, request, ports)
 	if err != nil {
-		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest}, err
+		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
 	}
 	if _, err := ensureOperationalDirectorReviewPhaseV0(ctx, nextRequest, ports); err != nil {
-		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest}, err
+		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
 	}
 	followup, err := runExistingDirectorAutonomyLoopV0(ctx, nextRequest, ports)
 	if err != nil {
@@ -180,6 +186,7 @@ type existingDirectorAutonomyLoopResultV0 struct {
 	Request     ContinueAppDirectorRequestV0
 	Loop        orquestacionnucleoapp.ProgressiveLoopResultV0
 	LoopRequest orquestacionnucleoapp.ProgressiveLoopRequestV0
+	ManagedLoop orquestacionnucleoapp.ManagedProgressiveLoopResultV0
 }
 
 func runExistingDirectorAutonomyLoopV0(
@@ -187,45 +194,45 @@ func runExistingDirectorAutonomyLoopV0(
 	request ContinueAppDirectorRequestV0,
 	ports StartAppDirectorPortsV0,
 ) (existingDirectorAutonomyLoopResultV0, error) {
-	loop, loopRequest, err := runExistingDirectorLoopV0(ctx, request, ports)
+	loop, loopRequest, managedLoop, err := runExistingDirectorLoopV0(ctx, request, ports)
 	if err != nil || ports.DirectorDecisionSource == nil {
-		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest}, err
+		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
 	}
 	startRequest := continueAsStartRequestV0(request)
 	for cycle := 0; cycle < request.MaxDecisionCycles; cycle++ {
 		next, progressed, err := consumeStartAppDirectorDecisionsV0(ctx, startRequest, ports, loop)
 		if err != nil || !progressed {
-			return existingDirectorAutonomyLoopResultV0{Request: request, Loop: next, LoopRequest: loopRequest}, err
+			return existingDirectorAutonomyLoopResultV0{Request: request, Loop: next, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
 		}
 		request, err = continueRequestWithOperationalDirectorPlanStateV0(ctx, request, ports)
 		if err != nil {
-			return existingDirectorAutonomyLoopResultV0{Request: request, Loop: next, LoopRequest: loopRequest}, err
+			return existingDirectorAutonomyLoopResultV0{Request: request, Loop: next, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
 		}
 		if _, err := ensureOperationalDirectorReviewPhaseV0(ctx, request, ports); err != nil {
-			return existingDirectorAutonomyLoopResultV0{Request: request, Loop: next, LoopRequest: loopRequest}, err
+			return existingDirectorAutonomyLoopResultV0{Request: request, Loop: next, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
 		}
 		startRequest = continueAsStartRequestV0(request)
-		loop, loopRequest, err = runExistingDirectorLoopV0(ctx, request, ports)
+		loop, loopRequest, managedLoop, err = runExistingDirectorLoopV0(ctx, request, ports)
 		if err != nil {
-			return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest}, err
+			return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
 		}
 	}
-	return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest}, nil
+	return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, nil
 }
 
 func runExistingDirectorLoopV0(
 	ctx context.Context,
 	request ContinueAppDirectorRequestV0,
 	ports StartAppDirectorPortsV0,
-) (orquestacionnucleoapp.ProgressiveLoopResultV0, orquestacionnucleoapp.ProgressiveLoopRequestV0, error) {
+) (orquestacionnucleoapp.ProgressiveLoopResultV0, orquestacionnucleoapp.ProgressiveLoopRequestV0, orquestacionnucleoapp.ManagedProgressiveLoopResultV0, error) {
 	service := existingDirectorLoopServiceV0(request, ports)
 	loopRequest, err := existingDirectorLoopRequestV0(ctx, request, ports)
 	if err != nil {
-		return orquestacionnucleoapp.ProgressiveLoopResultV0{}, loopRequest, err
+		return orquestacionnucleoapp.ProgressiveLoopResultV0{}, loopRequest, orquestacionnucleoapp.ManagedProgressiveLoopResultV0{}, err
 	}
 	if ports.ExternalWaiter == nil {
 		loop, err := service.RunProgressiveLoopV0(ctx, loopRequest)
-		return loop, loopRequest, err
+		return loop, loopRequest, orquestacionnucleoapp.ManagedProgressiveLoopResultV0{}, err
 	}
 	managed, err := service.RunManagedProgressiveLoopV0(
 		ctx,
@@ -235,7 +242,7 @@ func runExistingDirectorLoopV0(
 			MaxExternalWaits: request.MaxExternalWaits,
 		},
 	)
-	return managed.Final, loopRequest, err
+	return managed.Final, loopRequest, managed, err
 }
 
 func existingDirectorLoopServiceV0(
