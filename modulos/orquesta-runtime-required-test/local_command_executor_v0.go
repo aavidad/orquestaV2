@@ -261,13 +261,23 @@ func commandIsShellV0(command string) bool {
 
 func envEntryAllowedV0(item string) bool {
 	key, value, ok := strings.Cut(item, "=")
-	if !ok || strings.TrimSpace(key) == "" || pathHasCredentialMarkerV0(key) || pathHasCredentialMarkerV0(value) {
+	if !ok ||
+		strings.TrimSpace(key) == "" ||
+		envKeyProhibitedV0(key) ||
+		pathHasCredentialMarkerV0(key) ||
+		pathHasCredentialMarkerV0(value) {
 		return false
 	}
 	if strings.ContainsAny(value, `/\`) {
 		return envPathValueAllowedV0(key, value)
 	}
 	return true
+}
+
+func envKeyProhibitedV0(key string) bool {
+	normalized := strings.ToUpper(strings.TrimSpace(key))
+	return strings.Contains(normalized, "HOME") ||
+		strings.Contains(normalized, "USERPROFILE")
 }
 
 func envPathValueAllowedV0(key string, value string) bool {

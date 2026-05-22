@@ -124,6 +124,11 @@ Implementado:
 - `ContinueAppDirectorV0` acepta un `OperationalDirectorPlanV0` listo,
   materializa `launch_subagents` antes del loop, deriva la primera ola/cohorte
   materializada como espera acotada y reentra sin esperar agentes ajenos.
+- `StartAppDirectorV0` acepta un `OperationalDirectorPlanV0` inicial listo solo
+  cuando la composicion aporta contratos funcionales explicitos. Antes de
+  materializar, publica voto, decision, fase y contratos por eventos causales;
+  despues reutiliza el materializador, wait acotado y plan state inicial. El
+  servicio sigue sin conocer Codex, OPES ni runtime real.
 - `WorkflowTaskWaitStateV0` registra espera durable neutral con causa, refs de
   tasks, agentes objetivo y agentes pendientes. `orquesta-state-file` persiste
   ese estado en JSON file-based.
@@ -166,9 +171,10 @@ Pendiente:
   ejecucion con proveedor;
 - conectar review/rework/replan del Director Operativo con casos reales amplios
   de `domain_work`/OPES hasta cierre de derivados;
-- cerrar recursion Codex end-to-end: hijos y nietos con parent/child refs,
-  presupuesto global, profundidad/fanout, ACK/artefactos y review antes de
-  consumir decisiones;
+- cerrar recursion Codex end-to-end con proveedor real: hijos y nietos con
+  parent/child refs, presupuesto global, profundidad/fanout, ACK/artefactos y
+  review antes de consumir decisiones. Offline/fake-runtime ya existe arbol
+  1->2->4 y supervisor fake que avanza el arbol sin llamadas manuales por nivel;
 - conectar el expander neutral `DomainDocumentPlanV0 -> DomainWorkJobRequestV0[]`
   con el ciclo real de OPES derivados/cierre. Ya existe conector durable
   file-based de referencia para `DomainWorkJobCreatorPortV0`, pero el cierre

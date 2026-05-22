@@ -110,15 +110,72 @@ func coreRegisterCommandV0(
 ) orquestacore.RegistrarProyectoDesdeAppSpecCommandV0 {
 	return orquestacore.RegistrarProyectoDesdeAppSpecCommandV0{
 		IdempotencyKey: cmd.IdempotencyKey,
-		AppSpec:        cmd.AppSpec,
+		AppSpec:        coreRegistrarAppSpecFromFactoryV0(cmd.AppSpec),
 		AppSpecVersion: orquestacore.RegistrarProyectoDesdeAppSpecVersionV0,
-		Backlog:        cmd.Backlog,
+		Backlog:        coreRegistrarBacklogFromFactoryV0(cmd.Backlog),
 		BacklogVersion: orquestacore.RegistrarProyectoDesdeAppSpecVersionV0,
 		Origen:         "orquesta-director",
 		CorrelationID:  cmd.CorrelationID,
 		RequestID:      firstNonEmptyV0(cmd.RequestID, cmd.AppSpec.RequestID),
 		SolicitadoEn:   cmd.OccurredAt,
 	}
+}
+
+func coreRegistrarAppSpecFromFactoryV0(spec orquestafactory.AppSpecV0) orquestacore.RegistrarAppSpecV0 {
+	return orquestacore.RegistrarAppSpecV0{
+		SchemaVersion: spec.SchemaVersion,
+		SpecID:        spec.SpecID,
+		RequestID:     spec.RequestID,
+		CreatedAt:     spec.CreatedAt,
+		App: orquestacore.RegistrarAppInfoV0{
+			Nombre: spec.App.Nombre,
+		},
+		Validation: orquestacore.RegistrarValidationSummaryV0{
+			Estado: spec.Validation.Estado,
+		},
+	}
+}
+
+func coreRegistrarBacklogFromFactoryV0(backlog orquestafactory.BacklogInicialPropuestoV0) orquestacore.RegistrarBacklogInicialV0 {
+	return orquestacore.RegistrarBacklogInicialV0{
+		SchemaVersion:       backlog.SchemaVersion,
+		SpecID:              backlog.SpecID,
+		Fases:               coreRegistrarFasesFromFactoryV0(backlog.Fases),
+		Microtareas:         coreRegistrarMicrotareasFromFactoryV0(backlog.Microtareas),
+		ContratosRequeridos: append([]string(nil), backlog.ContratosRequeridos...),
+		Riesgos:             append([]string(nil), backlog.Riesgos...),
+		PreguntasAbiertas:   append([]string(nil), backlog.PreguntasAbiertas...),
+	}
+}
+
+func coreRegistrarFasesFromFactoryV0(fases []orquestafactory.FaseInicialV0) []orquestacore.RegistrarFaseInicialV0 {
+	result := make([]orquestacore.RegistrarFaseInicialV0, 0, len(fases))
+	for _, fase := range fases {
+		result = append(result, orquestacore.RegistrarFaseInicialV0{
+			ID:       fase.ID,
+			Nombre:   fase.Nombre,
+			Objetivo: fase.Objetivo,
+			Orden:    fase.Orden,
+		})
+	}
+	return result
+}
+
+func coreRegistrarMicrotareasFromFactoryV0(tasks []orquestafactory.MicrotareaPropuestaV0) []orquestacore.RegistrarMicrotareaV0 {
+	result := make([]orquestacore.RegistrarMicrotareaV0, 0, len(tasks))
+	for _, task := range tasks {
+		result = append(result, orquestacore.RegistrarMicrotareaV0{
+			ID:               task.ID,
+			Fase:             task.Fase,
+			ModuloSugerido:   task.ModuloSugerido,
+			Objetivo:         task.Objetivo,
+			WriteSetPrevisto: append([]string(nil), task.WriteSetPrevisto...),
+			Contrato:         task.Contrato,
+			Validacion:       task.Validacion,
+			Bloqueos:         append([]string(nil), task.Bloqueos...),
+		})
+	}
+	return result
 }
 
 func workflowDraftV0(

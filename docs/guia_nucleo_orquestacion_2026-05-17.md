@@ -115,6 +115,12 @@ Estado real del primer corte:
 - `ContinueAppDirectorV0` ya puede recibir un `OperationalDirectorPlanV0` listo,
   materializar `launch_subagents`, derivar la primera ola/cohorte materializada
   como wait acotado y reentrar al loop progresivo.
+- `StartAppDirectorV0` ya puede hacer ese primer tramo desde un plan operativo
+  inicial cuando la request trae contratos funcionales explicitos: abre run,
+  publica voto/decision/fase/contratos por causa, materializa
+  `launch_subagents`, registra wait/plan state por puertos y entra al loop con
+  scope de ola/cohorte. Sin esos contratos, el plan directo se rechaza antes de
+  persistir.
 - `WorkflowTaskWaitStateV0` deja la espera registrada con causa, refs de tasks,
   agentes objetivo y agentes pendientes; `orquesta-state-file` la persiste.
 - `app-director-service` ya puede recuperar ese wait state persistido en
@@ -238,6 +244,9 @@ smoke real opt-in. No se importa desde core, director, domain-work ni expander.
 - `ContinueAppDirectorV0` conecta el primer tramo del Director Operativo:
   plan listo -> materializador -> workflow tasks -> wait acotado -> loop
   progresivo.
+- `StartAppDirectorV0` conecta el mismo tramo para planes iniciales listos solo
+  si la composicion aporta contratos funcionales explicitos y stores requeridos;
+  no sustituye al director vivo ni relaja causalidad.
 - `WorkflowTaskWaitStateV0` registra la causa del wait y
   `orquesta-state-file` lo guarda en JSON atomico.
 - `DrainRunV0` transporta `WaitAgentRefs` a

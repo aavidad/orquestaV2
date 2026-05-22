@@ -224,3 +224,27 @@ Validacion: `gofmt`, `go test -count=1 ./modulos/orquesta-core`, `git diff --che
 Bloqueos: Ninguno; split mecanico sin cambios de contrato, errores, invariantes ni comportamiento.
 Estado: completada
 ```
+
+## Frontera hexagonal core -> factory
+
+```text
+ID: CORE-011
+Objetivo: Romper el acoplamiento transitorio `orquesta-core -> orquesta-factory -> net/http` sin meter validacion de AppSpec ni transporte en core.
+Write-set aplicado:
+  - modulos/orquesta-core
+  - modulos/orquesta-director
+  - architecture_boundaries_test.go
+Simbolo foco: RegistrarProyectoDesdeAppSpecV0, AppSpecV0, BacklogInicialPropuestoV0
+Contrato: RegistrarProyectoDesdeAppSpec v0 consume DTOs neutrales propios del core; `orquesta-director` adapta desde `orquesta-factory` sin que core dependa de factory ni de su HTTP.
+Validacion:
+  - `go list -f '{{join .Imports "\n"}}' orquesta/modulos/orquesta-core` no debe incluir `orquesta/modulos/orquesta-factory`.
+  - `go list -deps -f '{{.ImportPath}}' orquesta/modulos/orquesta-core` no debe incluir `orquesta/modulos/orquesta-factory`, `net/http`, adaptadores producto ni persistencia concreta.
+  - `go test -count=1 . -run TestNeutralCoreDoesNotDependTransitivelyOnAdapters`.
+Implementacion:
+  - `RegistrarProyectoDesdeAppSpecCommandV0` usa `RegistrarAppSpecV0` y `RegistrarBacklogInicialV0`, DTOs minimos del core.
+  - `orquesta-director` convierte `orquestafactory.AppSpecV0` y `BacklogInicialPropuestoV0` a esos DTOs al hacer bootstrap.
+  - La prueba raiz cubre imports directos y deps transitivas de `orquesta-core`.
+Bloqueos:
+  - Queda fuera de este corte revisar si otros paquetes neutrales historicos arrastran `orquesta-factory`; este cierre protege `orquesta-core`.
+Estado: completada
+```

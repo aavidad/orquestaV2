@@ -1,11 +1,9 @@
 package orquestacore
 
-import (
-	orquestafactory "orquesta/modulos/orquesta-factory"
-)
-
 const (
 	RegistrarProyectoDesdeAppSpecVersionV0 = "v0"
+	RegistrarAppSpecSchemaV0               = "app_spec.v0"
+	RegistrarBacklogInicialSchemaV0        = "backlog_inicial_propuesto.v0"
 
 	ErrAppSpecRequeridaV0                  = "app_spec_requerida"
 	ErrAppSpecNoValidadaV0                 = "app_spec_no_validada"
@@ -21,15 +19,60 @@ const (
 )
 
 type RegistrarProyectoDesdeAppSpecCommandV0 struct {
-	IdempotencyKey string                                    `json:"idempotency_key"`
-	AppSpec        orquestafactory.AppSpecV0                 `json:"app_spec"`
-	AppSpecVersion string                                    `json:"app_spec_version"`
-	Backlog        orquestafactory.BacklogInicialPropuestoV0 `json:"backlog"`
-	BacklogVersion string                                    `json:"backlog_version"`
-	Origen         string                                    `json:"origen,omitempty"`
-	CorrelationID  string                                    `json:"correlation_id,omitempty"`
-	RequestID      string                                    `json:"request_id,omitempty"`
-	SolicitadoEn   string                                    `json:"solicitado_en,omitempty"`
+	IdempotencyKey string                    `json:"idempotency_key"`
+	AppSpec        RegistrarAppSpecV0        `json:"app_spec"`
+	AppSpecVersion string                    `json:"app_spec_version"`
+	Backlog        RegistrarBacklogInicialV0 `json:"backlog"`
+	BacklogVersion string                    `json:"backlog_version"`
+	Origen         string                    `json:"origen,omitempty"`
+	CorrelationID  string                    `json:"correlation_id,omitempty"`
+	RequestID      string                    `json:"request_id,omitempty"`
+	SolicitadoEn   string                    `json:"solicitado_en,omitempty"`
+}
+
+type RegistrarAppSpecV0 struct {
+	SchemaVersion string                       `json:"schema_version"`
+	SpecID        string                       `json:"spec_id"`
+	RequestID     string                       `json:"request_id"`
+	CreatedAt     string                       `json:"created_at"`
+	App           RegistrarAppInfoV0           `json:"app"`
+	Validation    RegistrarValidationSummaryV0 `json:"validation"`
+}
+
+type RegistrarAppInfoV0 struct {
+	Nombre string `json:"nombre"`
+}
+
+type RegistrarValidationSummaryV0 struct {
+	Estado string `json:"estado"`
+}
+
+type RegistrarBacklogInicialV0 struct {
+	SchemaVersion       string                   `json:"schema_version"`
+	SpecID              string                   `json:"spec_id"`
+	Fases               []RegistrarFaseInicialV0 `json:"fases"`
+	Microtareas         []RegistrarMicrotareaV0  `json:"microtareas"`
+	ContratosRequeridos []string                 `json:"contratos_requeridos"`
+	Riesgos             []string                 `json:"riesgos"`
+	PreguntasAbiertas   []string                 `json:"preguntas_abiertas"`
+}
+
+type RegistrarFaseInicialV0 struct {
+	ID       string `json:"id"`
+	Nombre   string `json:"nombre"`
+	Objetivo string `json:"objetivo"`
+	Orden    int    `json:"orden"`
+}
+
+type RegistrarMicrotareaV0 struct {
+	ID               string   `json:"id"`
+	Fase             string   `json:"fase"`
+	ModuloSugerido   string   `json:"modulo_sugerido"`
+	Objetivo         string   `json:"objetivo"`
+	WriteSetPrevisto []string `json:"write_set_previsto"`
+	Contrato         string   `json:"contrato"`
+	Validacion       string   `json:"validacion"`
+	Bloqueos         []string `json:"bloqueos"`
 }
 
 type RegistroProyectoAceptadoV0 struct {

@@ -31,7 +31,9 @@ Cobertura actual:
 Pendiente de integracion:
 
 - no ampliar este contrato puro con runtime, proveedor ni reglas de producto;
-- completar los smokes reales de las composiciones que consumen este contrato;
+- completar los smokes reales de las composiciones que consumen este contrato:
+  ola/cohorte Codex amplia, recursion Codex real y OPES temporal real de
+  derivados/cierre;
 - no consumir decisiones de director hijo antes de ACK registrado.
 - smoke real de recursion Codex gobernada con parent/child refs,
   profundidad/fanout, presupuesto y review causal.

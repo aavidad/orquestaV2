@@ -128,6 +128,12 @@ El primer corte ya no esta solo en documentos:
   persistido si esta en `waiting` y no ampliar la espera a toda la ola/cohorte;
   cuando `wait_subagents` se consume, el estado de espera se marca `continued`
   por puerto de forma idempotente.
+- `StartAppDirectorV0` tambien puede recibir un `OperationalDirectorPlanV0`
+  inicial listo, siempre que la composicion aporte contratos funcionales
+  explicitos. En ese modo publica causalmente voto, decision, fase y contratos
+  antes de materializar `launch_subagents`, deriva wait de ola/cohorte y
+  persiste `PlanState`/wait state por puertos. El bootstrap normal sin plan
+  directo sigue vigente; esto no mete runtime, Codex ni producto en el servicio.
 - P1 WaitAgentRefs queda cerrado para el stack Codex: el mismo scope limita
   pending, wait e ingesta de ACK/deliveries. `DrainRunRequestV0.WaitAgentRefs`
   llega al request de observaciones, el `DeliverySource` queda envuelto/filtrado
@@ -250,9 +256,10 @@ Lo pendiente no debe confundirse con lo hecho:
   tambien falta recursion real. El caso Codex real acotado con runner esta
   cerrado por `CODEX-REQTEST-REAL-E2E`, y el caso no-OPES temporal con runtime
   fake esta cerrado por `EXT-NO-OPES`;
-- la recursion Codex real sigue pendiente: ya existe contrato unitario para
-  `launch -> sigue -> done`, pero falta el adaptador real que conecte `sigue` con
-  el ciclo normal de agentes y el ciclo productivo de hijos de hijos con
+- la recursion Codex real sigue pendiente: ya existe contrato unitario
+  `launch -> sigue -> done`, adaptador de stack para supervisor/drain y prueba
+  fake que empuja un arbol recursivo sin llamadas manuales por nivel; falta
+  repetirlo con proveedor Codex real, ACK/entregas vivas, hijos/nietos con
   parent/child refs, presupuesto global, profundidad/fanout y review causal;
 - OPES tiene evidencia de `plan_tema` y `plan_temario`; el bridge ya automatiza
   derivados por fases con `JOB_TYPE_SEQUENCE`, pero los derivados de review,

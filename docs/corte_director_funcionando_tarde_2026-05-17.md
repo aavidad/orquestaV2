@@ -33,6 +33,10 @@ actual, pero no debe definir el nucleo.
 - `ContinueAppDirectorV0` puede recibir un `OperationalDirectorPlanV0` listo,
   materializar su primera ola antes del loop, derivar `WaitAgentRefs` de esa
   ola y reentrar sin esperar agentes ajenos al scope.
+- `StartAppDirectorV0` puede recibir un `OperationalDirectorPlanV0` inicial
+  listo si tambien recibe contratos funcionales explicitos; publica
+  voto/decision/fase/contratos, materializa `launch_subagents`, deriva wait
+  acotado y persiste state por puertos sin meter runtime real en el servicio.
 - `WorkflowTaskWaitStateV0` registra la espera por `cohort_ref`, `wave_ref` o
   `parent_task_ref` con causa, tasks, agentes objetivo y pendientes. El store
   file-based de `orquesta-state-file` lo persiste.
@@ -59,15 +63,18 @@ actual, pero no debe definir el nucleo.
 - El ciclo offline posterior a `wait_subagents` ya cubre review causal por
   scope, `run_required_tests` con `RequiredTestEvidenceV0`, runner por puerto,
   puerta `replan_or_close`, cierre causal, cierre por reentradas de ola
-  multitarea y varios blockers con reentrada. Lo que falta no es P1 ni el
-  tramo feliz offline, sino smoke Codex real con runner, replan generico de
-  blockers restantes y replay/idempotencia completa del replan.
+  multitarea, blockers cubiertos con reentrada y replay/idempotencia durable.
+  Lo que falta no es P1 ni el tramo feliz offline, sino ejecutar
+  `CODEX-WAVE-REAL`, recursion Codex real y OPES temporal real de
+  derivados/cierre; un blocker nuevo debe entrar como caso nuevo con prueba
+  propia.
 - `ContinueAppDirectorV0` depende aun del caller para limites como
   `MaxExternalWaits`; no asumir que mantiene vivo un wait largo si se llama con
   defaults vacios.
-- El scope de ingesta de ACK/deliveries ya esta cerrado para Codex, pero eso no
-  cierra una ola funcional: falta review agrupada por ola, pruebas requeridas y
-  cierre/replan durable.
+- El scope de ingesta de ACK/deliveries ya esta cerrado para Codex. La ola
+  funcional esta cerrada offline/fake para review agrupada, pruebas requeridas y
+  cierre/replan durable; falta repetir esa garantia con agentes Codex reales en
+  ola/cohorte amplia.
 - `orquesta-app-runner` es el flujo historico de app-plan. No participa en
   `wait_cohort_ref`, `wait_wave_ref`, `wait_parent_task_ref`,
   `WorkflowTaskWaitStateV0` ni `OperationalDirectorPlanStateV0`. No mezclar sus
@@ -79,10 +86,11 @@ actual, pero no debe definir el nucleo.
   traducir nombres de refs ni usar app-plan como sustituto de
   `wait_cohort_ref`, `wait_wave_ref` o `wait_parent_task_ref`.
 - La recursion Codex real con hijos/nietos, presupuesto global, fanout,
-  profundidad y review causal sigue pendiente. Ya hay una guarda offline en el
-  stack Codex: el cierre operativo no genera cierre para una task padre si sus
-  `child_task_refs` faltan en el store o siguen abiertos; esto no completa la
-  recursion real, pero evita cerrar un subarbol antes de sus hijos.
+  profundidad y review causal sigue pendiente. Ya hay arbol fake 1->2->4,
+  materializacion CLI fuerte y supervisor fake recursivo sin llamadas manuales
+  por nivel; ademas el cierre operativo no genera cierre para una task padre si
+  sus `child_task_refs` faltan en el store o siguen abiertos. Eso no completa la
+  recursion real, pero acota el pendiente al modo proveedor vivo.
 - No hay runtime real distinto de Codex probado end-to-end.
 
 ## Ruta para tener Orquesta usable hoy

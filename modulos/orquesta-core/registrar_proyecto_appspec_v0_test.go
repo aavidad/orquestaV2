@@ -3,9 +3,6 @@ package orquestacore
 import (
 	"errors"
 	"testing"
-	"time"
-
-	orquestafactory "orquesta/modulos/orquesta-factory"
 )
 
 func TestRegistrarProyectoDesdeAppSpecV0ProduceBorrador(t *testing.T) {
@@ -107,32 +104,69 @@ func TestRegistrarProyectoDesdeAppSpecV0IdempotenciaDeterminista(t *testing.T) {
 
 func validRegistrarProyectoCommandV0(t *testing.T) RegistrarProyectoDesdeAppSpecCommandV0 {
 	t.Helper()
-	req := orquestafactory.AppSpecRequestV0{
-		SchemaVersion: orquestafactory.AppSpecRequestSchemaV0,
-		RequestID:     "req-core-001",
-		Source:        "orquesta-web",
-		Locale:        "es-ES",
-		Nombre:        "Panel de reservas",
-		Objetivo:      "Gestionar solicitudes de reserva.",
-		TipoApp:       "web",
-	}
-	spec, issues := orquestafactory.SolicitarNuevaAppV0(req, time.Date(2026, 5, 4, 12, 30, 0, 0, time.UTC))
-	if len(issues) > 0 {
-		t.Fatalf("build app spec: %+v", issues)
-	}
-	backlog, issues := orquestafactory.GenerarBacklogInicialPropuestoV0(spec)
-	if len(issues) > 0 {
-		t.Fatalf("build backlog: %+v", issues)
-	}
+	specID := "spec-core-001"
 	return RegistrarProyectoDesdeAppSpecCommandV0{
 		IdempotencyKey: "idem-core-001",
-		AppSpec:        spec,
+		AppSpec: RegistrarAppSpecV0{
+			SchemaVersion: RegistrarAppSpecSchemaV0,
+			SpecID:        specID,
+			RequestID:     "req-core-001",
+			CreatedAt:     "2026-05-04T12:30:00Z",
+			App: RegistrarAppInfoV0{
+				Nombre: "Panel de reservas",
+			},
+			Validation: RegistrarValidationSummaryV0{
+				Estado: "valida",
+			},
+		},
 		AppSpecVersion: RegistrarProyectoDesdeAppSpecVersionV0,
-		Backlog:        backlog,
+		Backlog: RegistrarBacklogInicialV0{
+			SchemaVersion: RegistrarBacklogInicialSchemaV0,
+			SpecID:        specID,
+			Fases: []RegistrarFaseInicialV0{
+				{
+					ID:       "discovery",
+					Nombre:   "Descubrimiento",
+					Objetivo: "Cerrar alcance y supuestos.",
+					Orden:    10,
+				},
+				{
+					ID:       "implementacion",
+					Nombre:   "Implementacion",
+					Objetivo: "Construir el primer slice.",
+					Orden:    20,
+				},
+			},
+			Microtareas: []RegistrarMicrotareaV0{
+				{
+					ID:               "BLG-001",
+					Fase:             "discovery",
+					ModuloSugerido:   "producto",
+					Objetivo:         "Cerrar alcance inicial y registrar supuestos.",
+					WriteSetPrevisto: []string{"docs/app_spec.md"},
+					Contrato:         "AppSpecV0",
+					Validacion:       "AppSpec revisada.",
+					Bloqueos:         []string{"decision de producto"},
+				},
+				{
+					ID:               "BLG-002",
+					Fase:             "implementacion",
+					ModuloSugerido:   "core",
+					Objetivo:         "Implementar primer caso de uso vertical.",
+					WriteSetPrevisto: []string{"core/"},
+					Contrato:         "FunctionContract v0",
+					Validacion:       "Tests del slice en verde.",
+					Bloqueos:         []string{"BLG-001"},
+				},
+			},
+			ContratosRequeridos: []string{"AppSpecV0", "FunctionContract v0"},
+			Riesgos:             []string{"riesgo documentado"},
+			PreguntasAbiertas:   []string{"pregunta abierta"},
+		},
 		BacklogVersion: RegistrarProyectoDesdeAppSpecVersionV0,
 		Origen:         "orquesta-factory",
 		CorrelationID:  "corr-core-001",
-		RequestID:      req.RequestID,
+		RequestID:      "req-core-001",
 		SolicitadoEn:   "2026-05-04T12:35:00Z",
 	}
 }

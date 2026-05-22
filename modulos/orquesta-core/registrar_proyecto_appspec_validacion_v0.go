@@ -2,8 +2,6 @@ package orquestacore
 
 import (
 	"strings"
-
-	orquestafactory "orquesta/modulos/orquesta-factory"
 )
 
 func validarRegistrarProyectoCommandV0(cmd RegistrarProyectoDesdeAppSpecCommandV0) error {
@@ -38,17 +36,17 @@ func versionesFactorySoportadasV0(cmd RegistrarProyectoDesdeAppSpecCommandV0) bo
 	if nonEmptyNotEqualV0(cmd.BacklogVersion, RegistrarProyectoDesdeAppSpecVersionV0) {
 		return false
 	}
-	return cmd.AppSpec.SchemaVersion == orquestafactory.AppSpecSchemaV0 &&
-		cmd.Backlog.SchemaVersion == orquestafactory.BacklogInicialPropuestoSchemaV0
+	return cmd.AppSpec.SchemaVersion == RegistrarAppSpecSchemaV0 &&
+		cmd.Backlog.SchemaVersion == RegistrarBacklogInicialSchemaV0
 }
 
-func appSpecVaciaV0(spec orquestafactory.AppSpecV0) bool {
+func appSpecVaciaV0(spec RegistrarAppSpecV0) bool {
 	return strings.TrimSpace(spec.SchemaVersion) == "" &&
 		strings.TrimSpace(spec.SpecID) == "" &&
 		strings.TrimSpace(spec.App.Nombre) == ""
 }
 
-func backlogVacioCompletoV0(backlog orquestafactory.BacklogInicialPropuestoV0) bool {
+func backlogVacioCompletoV0(backlog RegistrarBacklogInicialV0) bool {
 	return strings.TrimSpace(backlog.SchemaVersion) == "" &&
 		strings.TrimSpace(backlog.SpecID) == "" &&
 		len(backlog.Fases) == 0 &&

@@ -2,8 +2,6 @@ package orquestacore
 
 import (
 	"strings"
-
-	orquestafactory "orquesta/modulos/orquesta-factory"
 )
 
 func construirProyectoPlanBorradorV0(cmd RegistrarProyectoDesdeAppSpecCommandV0) ProyectoPlanBorradorV0 {
@@ -23,7 +21,7 @@ func construirProyectoPlanBorradorV0(cmd RegistrarProyectoDesdeAppSpecCommandV0)
 	}
 }
 
-func mapFasesV0(fases []orquestafactory.FaseInicialV0) []FasePlanificadaV0 {
+func mapFasesV0(fases []RegistrarFaseInicialV0) []FasePlanificadaV0 {
 	result := make([]FasePlanificadaV0, 0, len(fases))
 	for _, fase := range fases {
 		result = append(result, FasePlanificadaV0{
@@ -38,7 +36,7 @@ func mapFasesV0(fases []orquestafactory.FaseInicialV0) []FasePlanificadaV0 {
 	return result
 }
 
-func mapMicrotareasV0(tasks []orquestafactory.MicrotareaPropuestaV0) []ItemBacklogCoreV0 {
+func mapMicrotareasV0(tasks []RegistrarMicrotareaV0) []ItemBacklogCoreV0 {
 	result := make([]ItemBacklogCoreV0, 0, len(tasks))
 	for index, task := range tasks {
 		result = append(result, ItemBacklogCoreV0{

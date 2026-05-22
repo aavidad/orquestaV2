@@ -22,6 +22,14 @@ func TestStoreV0RecuperaEstadoTrasRecrearInstancia(t *testing.T) {
 	task.DelegationDepth = 1
 	task.MaxChildAgents = 6
 	task.ChildTaskRefs = []string{"task-ref-child-state-file-001"}
+	childTask := task
+	childTask.TaskID = "task-ref-child-state-file-001"
+	childTask.Title = "Implementar hijo del director operativo"
+	childTask.ParentTaskRef = task.TaskID
+	childTask.DelegationDepth = 2
+	childTask.MaxChildAgents = 0
+	childTask.ChildTaskRefs = nil
+	run.Tasks = []string{task.TaskID, childTask.TaskID}
 	waitState := stateFileWorkflowTaskWaitStateV0()
 	waitState.RunRef = run.RunID
 	waitState.ParentTaskRef = task.ParentTaskRef
@@ -36,6 +44,11 @@ func TestStoreV0RecuperaEstadoTrasRecrearInstancia(t *testing.T) {
 	planState.Steps[1].WaitRefs = []string{waitState.WaitRef}
 	planState.Steps[1].AgentRefs = []string{"agent-ref-state-file-001"}
 	planState.Steps[1].PendingAgentRefs = []string{"agent-ref-state-file-001"}
+	evidence := stateFileRequiredTestEvidenceV0()
+	evidence.RunRef = run.RunID
+	evidence.TaskRef = task.TaskID
+	planState.RequiredTestRefs = []string{evidence.EvidenceRef}
+	planState.Steps[1].RequiredTestEvidenceRefs = []string{evidence.EvidenceRef}
 	record := validAgentProcessRecordV0(run.RunID)
 
 	if err := store.SaveRunV0(ctx, run); err != nil {
@@ -47,11 +60,17 @@ func TestStoreV0RecuperaEstadoTrasRecrearInstancia(t *testing.T) {
 	if err := store.SaveWorkflowTaskV0(ctx, task); err != nil {
 		t.Fatalf("save workflow task: %v", err)
 	}
+	if err := store.SaveWorkflowTaskV0(ctx, childTask); err != nil {
+		t.Fatalf("save child workflow task: %v", err)
+	}
 	if err := store.SaveWorkflowTaskWaitStateV0(ctx, waitState); err != nil {
 		t.Fatalf("save wait state: %v", err)
 	}
 	if err := store.SaveOperationalDirectorPlanStateV0(ctx, planState); err != nil {
 		t.Fatalf("save plan state: %v", err)
+	}
+	if err := store.SaveRequiredTestEvidenceV0(ctx, evidence); err != nil {
+		t.Fatalf("save required test evidence: %v", err)
 	}
 	if err := store.RecordAgentProcessV0(ctx, record); err != nil {
 		t.Fatalf("record agent process: %v", err)
@@ -60,9 +79,10 @@ func TestStoreV0RecuperaEstadoTrasRecrearInstancia(t *testing.T) {
 	recovered := mustStoreV0(t, rootDir)
 	assertRecoveredRunV0(t, recovered, run)
 	assertRecoveredEventsV0(t, recovered, run.RunID, []orquestacoreworkflow.OrchestrationEventV0{event})
-	assertRecoveredTasksV0(t, recovered, run.RunID, []orquestacoreworkflow.WorkflowTaskV0{task})
+	assertRecoveredTasksV0(t, recovered, run.RunID, []orquestacoreworkflow.WorkflowTaskV0{task, childTask})
 	assertRecoveredWaitStateV0(t, recovered, waitState)
 	assertRecoveredPlanStateV0(t, recovered, planState)
+	assertRecoveredRequiredTestEvidenceV0(t, recovered, evidence)
 	assertRecoveredAgentProcessV0(t, recovered, record)
 }
 
@@ -124,12 +144,31 @@ func assertRecoveredTasksV0(
 	want []orquestacoreworkflow.WorkflowTaskV0,
 ) {
 	t.Helper()
-	got, err := store.LoadWorkflowTasksV0(context.Background(), runRef, []string{want[0].TaskID})
+	refs := make([]string, 0, len(want))
+	for _, task := range want {
+		refs = append(refs, task.TaskID)
+	}
+	got, err := store.LoadWorkflowTasksV0(context.Background(), runRef, refs)
 	if err != nil {
 		t.Fatalf("load tasks: %v", err)
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("tasks=%+v, want=%+v", got, want)
+	}
+}
+
+func assertRecoveredRequiredTestEvidenceV0(
+	t *testing.T,
+	store *StoreV0,
+	want orquestacionnucleoapp.RequiredTestEvidenceV0,
+) {
+	t.Helper()
+	got, err := store.LoadRequiredTestEvidenceV0(context.Background(), want.RunRef, []string{want.EvidenceRef})
+	if err != nil {
+		t.Fatalf("load required test evidence: %v", err)
+	}
+	if !reflect.DeepEqual(got, []orquestacionnucleoapp.RequiredTestEvidenceV0{want}) {
+		t.Fatalf("required test evidence=%+v, want=%+v", got, want)
 	}
 }
 

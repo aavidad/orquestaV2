@@ -119,6 +119,26 @@ func TestLocalCommandExecutorV0AceptaEntornoGoExplicitoSinHome(t *testing.T) {
 	}
 }
 
+func TestLocalCommandExecutorV0RechazaHomeExplicitoAunqueSeaRelativo(t *testing.T) {
+	for _, item := range []string{
+		"HOME=relative-home",
+		"USERPROFILE=relative-profile",
+		"ORQUESTA_CODEX_HOME=relative-home",
+	} {
+		t.Run(item, func(t *testing.T) {
+			executor := localCommandExecutorForTestV0(t, t.TempDir(), "pass")
+			executor.Env = append(executor.Env, item)
+
+			if _, err := executor.RunRequiredTestCommandV0(
+				context.Background(),
+				commandRequestForTestV0("orquesta-test-bin"),
+			); err == nil || !strings.Contains(err.Error(), "required_test_env_invalid") {
+				t.Fatalf("err=%v, want env invalid", err)
+			}
+		})
+	}
+}
+
 func TestLocalCommandExecutorV0NoHeredaEntornoPadre(t *testing.T) {
 	envPath, err := exec.LookPath("env")
 	if err != nil {

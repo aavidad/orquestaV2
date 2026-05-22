@@ -1,9 +1,9 @@
 # Corte OperationalDirectorPlanStateV0 - 2026-05-17
 
 Este documento registra el primer corte implementado de
-`OperationalDirectorPlanStateV0`. Su objetivo es fijar que representa el estado
-vivo del plan, que invariantes debe mantener y que queda pendiente antes de
-considerar cerrado todo `DIRECTOR-PLAN-STATE-OFFLINE`.
+`OperationalDirectorPlanStateV0` y su reconciliacion posterior. Su objetivo es
+fijar que representa el estado vivo del plan, que invariantes debe mantener y
+que parte quedo cerrada offline/fake tras los cortes de replay durable.
 
 ## Por que existe
 
@@ -174,27 +174,42 @@ file-based vive en `orquesta-state-file` bajo
   `ContinueAppDirectorV0`.
 - Pruebas focales de core, state-file, servicio, stack y servidor.
 
+## Estado tras cortes posteriores
+
+`DIRECTOR-PLAN-STATE-OFFLINE` queda cerrado para el ciclo probado
+offline/fake-runtime:
+
+- `StartAppDirectorV0` puede sembrar el plan state inicial desde un
+  `OperationalDirectorPlanV0` listo si hay contratos funcionales explicitos y
+  stores inyectados.
+- `ContinueAppDirectorV0` recupera plan state y wait state persistidos sin
+  reconstruir desde agentes vivos globales.
+- `wait_subagents` pasa a `review_deliveries`; el wait state se marca
+  `continued`, `expired` o `cleared` segun causa.
+- `review_deliveries` avanza por cadena causal aceptada, registra review
+  negativa durable y reabre waits solo para followups causales ya reflejados.
+- `run_required_tests` consume o genera `RequiredTestEvidenceV0` por runner
+  inyectado, bloquea evidencia faltante/fallida y reentra cuando aparece
+  evidencia causal.
+- `replan_or_close` gobierna el cierre; outbox pendiente, source/task store
+  ausentes o cierre insuficiente bloquean con causa durable y reintentan cuando
+  el prerequisito vuelve.
+- El replay con `state-file` cubre cierre exitoso, bloqueo de cierre, replan por
+  tests fallidos y reentrada sobre plan cerrado sin duplicar eventos, evidencias
+  ni refs.
+
 Validacion:
 
 ```sh
-go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-file ./modulos/orquesta-app-director-service ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server -run 'Test.*OperationalDirectorPlanState|Test.*PlanState|TestContinueAppDirectorV0.*PlanState|TestContinueRequestWithOperationalDirectorPlanStateV0|TestUpdateOperationalDirectorPlanStateAfterLoopV0|TestOperationalPlanStateStoreV0|TestBuildStackFromEnvV0UsaConectoresDurablesFileBased|TestBuildStackV0RequiresOptInAndExplicitPorts'
+go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-file ./modulos/orquesta-app-director-service ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server -run 'Test.*OperationalDirectorPlanState|Test.*PlanState|TestStartAppDirectorV0OperationalDirectorPlan|TestContinueAppDirectorV0.*PlanState|TestContinueAppDirectorV0CierraCicloReviewRunnerYReplanOrClose|TestContinueRequestWithOperationalDirectorPlanStateV0|TestUpdateOperationalDirectorPlanStateAfterLoopV0|TestMaybeCloseOperationalDirectorV0|TestOperationalPlanStateStoreV0|TestWaitStateStoreV0|TestStoreV0RecuperaEstadoTrasRecrearInstancia|TestBuildStackFromEnvV0UsaConectoresDurablesFileBased|TestBuildStackV0RequiresOptInAndExplicitPorts|TestBuildStackFromEnvV0RequiredTestRunnerEjecutaGoTestYPersisteEvidencia'
 ```
 
 ## Pendiente verificable restante
 
-- Emitir eventos/comandos idempotentes para cada transicion de state, o fijar
-  claramente que evento existente actua como causa.
-- Integrar actualizacion del state desde replan y cierre. Hoy estan cubiertos el
-  tramo inicial, `wait_subagents -> review_deliveries`, la salida positiva
-  `review_deliveries -> run_required_tests/replan_or_close` y el consumo de
-  `RequiredTestEvidenceV0` en `run_required_tests`.
-- Ampliar la reentrada mas alla de `wait_subagents`, `review_deliveries` y
-  `run_required_tests`: replan y cierre deben avanzar por state y eventos
-  causales.
-- Probar replay y test requerido faltante; test fallido ya bloquea con
-  `required-tests-failed`.
-- Probar replay de transiciones posteriores: no se duplican reviews, tests,
-  reworks ni cierres.
+- Repetir la garantia con Codex real de ola/cohorte amplia (`CODEX-WAVE-REAL`).
+- Repetir la recursion con proveedor Codex real: hijos/nietos, ACK/entregas
+  vivas, review causal y cierre del arbol.
+- Cerrar OPES temporal real de derivados/cierre hasta `assemble_topic`.
 - Documentar como pendiente cada composicion que no tenga fuente real de
   validacion/cierre o persistencia/lectura del plan state.
 
@@ -205,6 +220,7 @@ go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-
   contrato.
 - No reconstruir el plan state desde summaries, stats agregadas o agentes vivos
   globales.
-- No aceptar `OperationalDirectorPlanV0` inicial como sustituto del estado vivo.
-- No marcar todo `DIRECTOR-PLAN-STATE-OFFLINE` como cerrado sin actualizaciones
-  posteriores y evidencia de review/tests/replan/cierre.
+- No aceptar `OperationalDirectorPlanV0` inicial como sustituto del estado vivo
+  despues de materializar o reentrar.
+- No extrapolar `DIRECTOR-PLAN-STATE-OFFLINE` a Codex real amplio, recursion real
+  u OPES real sin smoke opt-in y evidencia guardada.

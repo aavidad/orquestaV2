@@ -90,7 +90,8 @@ evidencias. Un agente no puede lanzar hijos fuera del plan ni cerrar sin review.
 Las decisiones producidas por un agente director hijo no deben consumirse hasta
 que su ACK/artefacto quede registrado causalmente.
 
-La recursion Codex productiva sigue pendiente. No basta con que el contrato
-acepte delegacion: el stack real debe probar parent/child refs, limites,
-`WaitAgentRefs` o refs de ola, presupuesto y review causal antes de anunciarla
-como cerrada.
+La recursion Codex productiva sigue pendiente en modo proveedor real. Offline y
+fake-runtime ya hay arbol 1->2->4, parent/child refs, limites, waits acotados,
+presupuesto, review causal, cierre de arbol y supervisor fake que avanza sin
+llamadas manuales por nivel. No basta para anunciar recursion real: falta
+ejecutar con Codex vivo, ACK/entregas reales y cierre causal del arbol.

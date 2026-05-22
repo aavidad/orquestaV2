@@ -14,6 +14,25 @@ func TestNeutralOrchestrationPackagesDoNotImportProductAdapters(t *testing.T) {
 		forbidden []string
 	}{
 		{
+			pkg: "orquesta/modulos/orquesta-core",
+			forbidden: []string{
+				"orquesta/cmd",
+				"orquesta/db",
+				"orquesta/modulos/orquesta-app-codex-stack",
+				"orquesta/modulos/orquesta-domain-work-file",
+				"orquesta/modulos/orquesta-domain-work-sql",
+				"orquesta/modulos/orquesta-factory",
+				"orquesta/modulos/orquesta-mcp",
+				"orquesta/modulos/orquesta-opes-",
+				"orquesta/modulos/orquesta-run-file",
+				"orquesta/modulos/orquesta-runtime",
+				"orquesta/modulos/orquesta-state-file",
+				"orquesta/modulos/orquesta-web",
+				"net/http",
+				"os/exec",
+			},
+		},
+		{
 			pkg: "orquesta/modulos/orquesta-core-workflow",
 			forbidden: []string{
 				"orquesta/cmd",
@@ -178,6 +197,7 @@ func TestNeutralOrchestrationPackagesDoNotImportProductAdapters(t *testing.T) {
 
 func TestNeutralOrchestrationPackagesDoNotDependOnProductAdapters(t *testing.T) {
 	for _, pkg := range []string{
+		"orquesta/modulos/orquesta-core",
 		"orquesta/modulos/orquesta-core-workflow",
 		"orquesta/modulos/orquesta-domain-work",
 		"orquesta/modulos/orquesta-orchestration-core",
@@ -192,6 +212,33 @@ func TestNeutralOrchestrationPackagesDoNotDependOnProductAdapters(t *testing.T) 
 				if strings.Contains(dep, forbidden) {
 					t.Fatalf("%s depends on forbidden product adapter %s", pkg, dep)
 				}
+			}
+		}
+	}
+}
+
+func TestNeutralCoreDoesNotDependTransitivelyOnAdapters(t *testing.T) {
+	deps := packageDepsForBoundaryTest(t, "orquesta/modulos/orquesta-core")
+	for _, forbidden := range []string{
+		"database/sql",
+		"orquesta/cmd",
+		"orquesta/db",
+		"orquesta/modulos/orquesta-app-codex-stack",
+		"orquesta/modulos/orquesta-domain-work-file",
+		"orquesta/modulos/orquesta-domain-work-sql",
+		"orquesta/modulos/orquesta-factory",
+		"orquesta/modulos/orquesta-mcp",
+		"orquesta/modulos/orquesta-opes-",
+		"orquesta/modulos/orquesta-run-file",
+		"orquesta/modulos/orquesta-runtime",
+		"orquesta/modulos/orquesta-state-file",
+		"orquesta/modulos/orquesta-web",
+		"net/http",
+		"os/exec",
+	} {
+		for _, dep := range deps {
+			if strings.Contains(dep, forbidden) {
+				t.Fatalf("orquesta-core depends on forbidden adapter %s", dep)
 			}
 		}
 	}
