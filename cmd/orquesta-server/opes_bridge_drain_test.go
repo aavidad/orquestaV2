@@ -632,6 +632,44 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerV0(t *testing.T) {
 	}
 }
 
+func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilAssembleV0(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 no disponible")
+	}
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("curl no disponible")
+	}
+	repoRoot := filepath.Clean("../..")
+	cmd := exec.Command("bash", "scripts/smoke_opes_derivatives_rest.sh")
+	cmd.Dir = repoRoot
+	cmd.Env = cleanOPESSmokeEnvForDrainTestV0(os.Environ())
+	cmd.Env = append(cmd.Env,
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1",
+		"ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-assemble",
+		"ORQUESTA_OPES_DERIVATIVES_EXECUTE=1",
+		"ORQUESTA_OPES_BRIDGE_LIMIT=1",
+		"ORQUESTA_OPES_BRIDGE_MAX_TICKS=10",
+		"ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS=0",
+		"SMOKE_ID=test-derivatives-rest-run-until-fake",
+		"SMOKE_OUT_DIR="+filepath.Join(t.TempDir(), "out"),
+	)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("script err=%v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, `"selected_job_type":"draft_content_block"`) ||
+		!strings.Contains(output, `"selected_job_type":"assemble_topic"`) ||
+		!strings.Contains(output, `"artifact_type": "assembled_topic"`) ||
+		!strings.Contains(output, `run_until_status=assembled`) {
+		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
+	}
+}
+
 func TestSmokeOPESPlanTemarioWrapperFakeServerV0(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 no disponible")

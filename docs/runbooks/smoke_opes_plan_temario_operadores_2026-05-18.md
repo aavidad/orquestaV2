@@ -377,11 +377,30 @@ ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 scripts/smoke_opes_derivatives_rest.sh
 ```
 
+Para dejar avanzar la secuencia completa hasta que OPES deje de exponer
+`assemble_topic` pendiente despues de supervisar su run, usar el modo
+`run-until-assemble`. Sigue siendo opt-in y temporal: crea runs fase a fase,
+supervisa cada `run_ref` devuelto por Orquesta y repite la secuencia hasta
+observar que `assemble_topic` ya no queda pendiente.
+
+```bash
+ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
+ORQUESTA_BASE_URL=http://127.0.0.1:<puerto-orquesta> \
+ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
+ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
+ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-assemble \
+ORQUESTA_OPES_BRIDGE_LIMIT=1 \
+ORQUESTA_OPES_BRIDGE_MAX_TICKS=20 \
+scripts/smoke_opes_derivatives_rest.sh
+```
+
 El wrapper rechaza `ORQUESTA_OPES_BRIDGE_JOB_TYPE` y
 `ORQUESTA_OPES_BRIDGE_JOB_REF` para derivados porque la ruta segura aqui es la
 secuencia completa por fases. Cada ejecucion real debe revisar el JSON de salida
 en `/tmp/opes-salidas/derivatives-rest-<smoke_id>/` antes de repetir o subir el
-limite.
+limite. El fake offline cubre tambien `run-until-assemble` y comprueba que
+`assemble_topic` se mapea a `assembled_topic` sin meter OPES en el nucleo.
 
 Estado de cierre OPES real: este runbook solo deja comandos acotados para
 materializar derivados y observar el avance por jobs/artefactos. El cierre

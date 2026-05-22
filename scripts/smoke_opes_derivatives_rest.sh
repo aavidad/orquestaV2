@@ -11,6 +11,9 @@ OPES_BASE_URL_EFFECTIVE="${ORQUESTA_OPES_BASE_URL:-${OPES_BASE_URL:-}}"
 ORQUESTA_BASE_URL_EFFECTIVE="${ORQUESTA_BASE_URL:-}"
 SEQUENCE="${ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE:-$DEFAULT_SEQUENCE}"
 LIMIT="${ORQUESTA_OPES_BRIDGE_LIMIT:-1}"
+INPUT_LEDGER_PATH="${ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH:-$SMOKE_OUT_DIR/external-bridge-input-ledger.json}"
+MAX_TICKS="${ORQUESTA_OPES_BRIDGE_MAX_TICKS:-20}"
+TICK_SLEEP_SECONDS="${ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS:-5}"
 FAKE_SERVER="${ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER:-0}"
 FAKE_PENDING_TYPE="${ORQUESTA_OPES_DERIVATIVES_FAKE_PENDING_TYPE:-assemble_topic}"
 FAKE_DIR=""
@@ -44,8 +47,8 @@ trap cleanup EXIT
 
 start_fake_opes() {
   require_tool python3
-  if [[ "$MODE" != "dry-run-once" ]]; then
-    echo "fake OPES solo soporta dry-run-once" >&2
+  if [[ "$MODE" != "dry-run-once" && "$MODE" != "run-until-assemble" ]]; then
+    echo "fake OPES solo soporta dry-run-once o run-until-assemble" >&2
     exit 2
   fi
   if [[ -z "$FAKE_PENDING_TYPE" ]]; then
@@ -65,7 +68,12 @@ url_file = sys.argv[1]
 sequence = [item.strip() for item in sys.argv[2].split(",") if item.strip()]
 limit = sys.argv[3]
 pending_type = sys.argv[4]
-seen_types = []
+mode = sys.argv[5]
+active_index = sequence.index(pending_type) if mode == "dry-run-once" else 0
+expected_scan_limit = limit
+if mode != "dry-run-once":
+    expected_scan_limit = str(min(max(int(limit), 1) * 10, 100))
+runs = {}
 
 payload_by_type = {
     "draft_content_block": {
@@ -112,15 +120,15 @@ class Handler(BaseHTTPRequestHandler):
         return
 
     def do_GET(self):
+        global active_index
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
         if parsed.path != "/api/jobs":
             send_json(self, 404, {"error": "unexpected_path", "path": parsed.path})
             return
         job_type = query.get("job_type", [""])[0]
-        expected = sequence[len(seen_types)] if len(seen_types) < len(sequence) else ""
-        if job_type != expected:
-            send_json(self, 400, {"error": "unexpected_job_type", "got": job_type, "want": expected, "seen": seen_types})
+        if job_type not in sequence:
+            send_json(self, 400, {"error": "unexpected_job_type", "got": job_type, "sequence": sequence})
             return
         if query.get("status", [""])[0] != "pending":
             send_json(self, 400, {"error": "missing_status_filter", "query": query})
@@ -128,11 +136,11 @@ class Handler(BaseHTTPRequestHandler):
         if query.get("execution_mode", [""])[0] != "external":
             send_json(self, 400, {"error": "missing_execution_mode_filter", "query": query})
             return
-        if query.get("limit", [""])[0] != limit:
-            send_json(self, 400, {"error": "unexpected_limit", "got": query.get("limit", [""])[0], "want": limit})
+        if query.get("limit", [""])[0] != expected_scan_limit:
+            send_json(self, 400, {"error": "unexpected_limit", "got": query.get("limit", [""])[0], "want": expected_scan_limit})
             return
-        seen_types.append(job_type)
-        if job_type != pending_type:
+        job_index = sequence.index(job_type)
+        if active_index >= len(sequence) or job_index != active_index:
             send_json(self, 200, [])
             return
         send_json(self, 200, [{
@@ -146,6 +154,47 @@ class Handler(BaseHTTPRequestHandler):
                 "requested_by": "opes-fake"
             }])
 
+    def do_POST(self):
+        global active_index
+        parsed = urlparse(self.path)
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        body = self.rfile.read(length)
+        try:
+            payload = json.loads(body.decode("utf-8") or "{}")
+        except Exception as exc:
+            send_json(self, 400, {"error": "invalid_json", "detail": str(exc)})
+            return
+        if parsed.path == "/api/v0/external-work/run":
+            request = payload.get("external_work_run_request") or {}
+            app_change = request.get("app_change_request") or {}
+            external_work = app_change.get("external_work") or {}
+            job_ref = external_work.get("job_ref") or ""
+            work_kind = external_work.get("work_kind") or ""
+            artifact_type = ""
+            for field in external_work.get("input_fields") or []:
+                if field.get("name") == "expected_artifact_type":
+                    artifact_type = field.get("value") or ""
+            if active_index >= len(sequence) or work_kind != sequence[active_index]:
+                send_json(self, 400, {"error": "unexpected_external_work", "work_kind": work_kind, "active_index": active_index})
+                return
+            run_ref = "run-ref-fake-" + job_ref
+            runs[run_ref] = {"job_ref": job_ref, "work_kind": work_kind, "artifact_type": artifact_type, "stage": active_index, "supervised": False}
+            send_json(self, 200, {"run_ref": run_ref, "estado": "accepted"})
+            return
+        if parsed.path == "/api/v0/runs/supervise":
+            run_ref = payload.get("run_ref") or ""
+            run = runs.get(run_ref)
+            if not run:
+                send_json(self, 404, {"error": "run_not_found", "run_ref": run_ref})
+                return
+            if not run["supervised"]:
+                run["supervised"] = True
+                if run["stage"] == active_index:
+                    active_index += 1
+            send_json(self, 200, {"run_ref": run_ref, "status": "supervised", "work_kind": run["work_kind"], "artifact_type": run["artifact_type"], "next_stage_index": active_index})
+            return
+        send_json(self, 404, {"error": "unexpected_path", "path": parsed.path})
+
 if pending_type not in sequence:
     raise SystemExit(f"pending type {pending_type!r} no esta en secuencia {sequence!r}")
 
@@ -154,11 +203,14 @@ with open(url_file, "w", encoding="utf-8") as fh:
     fh.write(f"http://127.0.0.1:{server.server_port}\n")
 server.serve_forever()
 PY
-  python3 "$server_py" "$url_file" "$SEQUENCE" "$LIMIT" "$FAKE_PENDING_TYPE" &
+  python3 "$server_py" "$url_file" "$SEQUENCE" "$LIMIT" "$FAKE_PENDING_TYPE" "$MODE" &
   FAKE_PID="$!"
   for _ in $(seq 1 50); do
     if [[ -s "$url_file" ]]; then
       OPES_BASE_URL_EFFECTIVE="$(cat "$url_file")"
+      if [[ "$MODE" == "run-until-assemble" ]]; then
+        ORQUESTA_BASE_URL_EFFECTIVE="$OPES_BASE_URL_EFFECTIVE"
+      fi
       return
     fi
     sleep 0.1
@@ -218,6 +270,9 @@ write_metadata() {
     echo "orquesta_base_url=$ORQUESTA_BASE_URL_EFFECTIVE"
     echo "sequence=$SEQUENCE"
     echo "limit=$LIMIT"
+    echo "input_ledger_path=$INPUT_LEDGER_PATH"
+    echo "max_ticks=$MAX_TICKS"
+    echo "tick_sleep_seconds=$TICK_SLEEP_SECONDS"
     echo "output_dir=$SMOKE_OUT_DIR"
   } >"$SMOKE_OUT_DIR/metadata.txt"
 }
@@ -246,8 +301,148 @@ run_execute_drain_once() {
   export ORQUESTA_OPES_BRIDGE_DRY_RUN=0
   export ORQUESTA_OPES_BRIDGE_LIMIT="$LIMIT"
   export ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE="$SEQUENCE"
+  export ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH="$INPUT_LEDGER_PATH"
   go run ./cmd/orquesta-server opes-drain-once |
     tee "$SMOKE_OUT_DIR/opes_derivatives_rest_drain_summary.json"
+}
+
+run_execute_drain_once_to() {
+  local output_file="$1"
+  if [[ "${ORQUESTA_OPES_DERIVATIVES_EXECUTE:-0}" != "1" ]]; then
+    echo "falta confirmacion de efectos: exporta ORQUESTA_OPES_DERIVATIVES_EXECUTE=1" >&2
+    exit 2
+  fi
+  if [[ -z "$ORQUESTA_BASE_URL_EFFECTIVE" ]]; then
+    echo "falta ORQUESTA_BASE_URL explicito para crear runs desde derivados" >&2
+    exit 2
+  fi
+  export ORQUESTA_OPES_BASE_URL="$OPES_BASE_URL_EFFECTIVE"
+  export ORQUESTA_BASE_URL="$ORQUESTA_BASE_URL_EFFECTIVE"
+  export ORQUESTA_OPES_BRIDGE_CONFIRM=1
+  export ORQUESTA_OPES_BRIDGE_DRY_RUN=0
+  export ORQUESTA_OPES_BRIDGE_LIMIT="$LIMIT"
+  export ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE="$SEQUENCE"
+  export ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH="$INPUT_LEDGER_PATH"
+  go run ./cmd/orquesta-server opes-drain-once | tee "$output_file"
+}
+
+json_summary_field() {
+  local file="$1"
+  local field="$2"
+  python3 - "$file" "$field" <<'PY'
+import json
+import sys
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+value = data.get(sys.argv[2], "")
+if isinstance(value, list):
+    print(",".join(str(item) for item in value))
+else:
+    print(value)
+PY
+}
+
+json_summary_run_refs() {
+  local file="$1"
+  python3 - "$file" <<'PY'
+import json
+import sys
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+seen = set()
+for result in data.get("results") or []:
+    ref = (result.get("run_ref") or "").strip()
+    if ref and ref not in seen:
+        seen.add(ref)
+        print(ref)
+PY
+}
+
+write_supervise_payload() {
+  local run_ref="$1"
+  local tick="$2"
+  local output_file="$3"
+  python3 - "$run_ref" "$tick" >"$output_file" <<'PY'
+import json
+import sys
+run_ref = sys.argv[1]
+tick = sys.argv[2]
+print(json.dumps({
+    "run_ref": run_ref,
+    "max_ticks": 8,
+    "max_bursts": 16,
+    "max_steps_per_burst": 8,
+    "max_dispatches_per_wait": 8,
+    "max_commands": 32,
+    "max_outbox_per_cycle": 16,
+    "max_external_waits": 2,
+    "continue_message": "smoke derivados OPES tick " + tick + ": sigue hasta entregar artefacto"
+}))
+PY
+}
+
+post_supervise_run() {
+  local run_ref="$1"
+  local tick="$2"
+  local payload_file="$SMOKE_OUT_DIR/supervise_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}.json"
+  local response_file="$SMOKE_OUT_DIR/supervise_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_response.json"
+  write_supervise_payload "$run_ref" "$tick" "$payload_file"
+  local status
+  status="$(curl -sS -m 120 -o "$response_file" -w "%{http_code}" \
+    -X POST "$ORQUESTA_BASE_URL_EFFECTIVE/api/v0/runs/supervise" \
+    -H "Content-Type: application/json" \
+    --data-binary "@$payload_file")"
+  if [[ "$status" -lt 200 || "$status" -ge 300 ]]; then
+    echo "supervise fallo run_ref=$run_ref status=$status response=$response_file" >&2
+    cat "$response_file" >&2 || true
+    exit 1
+  fi
+  cat "$response_file"
+}
+
+run_until_assemble() {
+  require_tool python3
+  require_tool curl
+  local assemble_seen=0
+  local final_summary=""
+  for tick in $(seq 1 "$MAX_TICKS"); do
+    local summary_file="$SMOKE_OUT_DIR/opes_derivatives_rest_tick_${tick}_drain_summary.json"
+    run_execute_drain_once_to "$summary_file"
+    local selected
+    selected="$(json_summary_field "$summary_file" "selected_job_type")"
+    if [[ -z "$selected" ]]; then
+      if [[ "$assemble_seen" == "1" ]]; then
+        final_summary="$summary_file"
+        echo "run_until_status=assembled"
+        echo "final_summary=$final_summary"
+        return
+      fi
+      echo "sin pendientes antes de alcanzar assemble_topic en tick $tick" >&2
+      echo "summary=$summary_file" >&2
+      exit 1
+    fi
+    if [[ "$selected" == "assemble_topic" ]]; then
+      assemble_seen=1
+    fi
+    local run_refs=()
+    while IFS= read -r run_ref; do
+      [[ -n "$run_ref" ]] && run_refs+=("$run_ref")
+    done < <(json_summary_run_refs "$summary_file")
+    if [[ "${#run_refs[@]}" -eq 0 ]]; then
+      echo "tick $tick no produjo run_ref supervisable: $summary_file" >&2
+      exit 1
+    fi
+    local run_ref
+    for run_ref in "${run_refs[@]}"; do
+      post_supervise_run "$run_ref" "$tick" |
+        tee "$SMOKE_OUT_DIR/supervise_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
+    done
+    if [[ "$tick" -lt "$MAX_TICKS" ]]; then
+      sleep "$TICK_SLEEP_SECONDS"
+    fi
+  done
+  echo "no se alcanzo assembled_topic en $MAX_TICKS ticks" >&2
+  exit 1
 }
 
 main() {
@@ -265,8 +460,11 @@ main() {
     drain-once)
       run_execute_drain_once
       ;;
+    run-until-assemble)
+      run_until_assemble
+      ;;
     *)
-      echo "modo no soportado: $MODE (usa dry-run-once o drain-once)" >&2
+      echo "modo no soportado: $MODE (usa dry-run-once, drain-once o run-until-assemble)" >&2
       exit 2
       ;;
   esac
