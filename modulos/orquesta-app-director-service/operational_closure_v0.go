@@ -549,8 +549,12 @@ func operationalDirectorPlanStateClosedAfterClosureV0(
 		return err
 	}
 	if state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 {
+		if err := markOperationalDirectorWorkflowTaskWaitStatesClearedV0(ctx, request, ports, state); err != nil {
+			return err
+		}
 		return nil
 	}
+	openState := state
 	reason := "operational-closure-succeeded"
 	closureRefs := operationalDirectorPlanStateClosureEvidenceRefsV0(closureRequest)
 	nextSteps := make([]orquestacionnucleoapp.OperationalDirectorPlanStepStateV0, 0, len(state.Steps))
@@ -586,7 +590,53 @@ func operationalDirectorPlanStateClosedAfterClosureV0(
 	if err != nil {
 		return err
 	}
+	if err := markOperationalDirectorWorkflowTaskWaitStatesClearedV0(ctx, request, ports, openState); err != nil {
+		return err
+	}
 	return ports.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, next)
+}
+
+func markOperationalDirectorWorkflowTaskWaitStatesClearedV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) error {
+	if ports.WaitStateStore == nil || ports.WaitStateWriter == nil {
+		return nil
+	}
+	for _, step := range state.Steps {
+		waitRefs := compactServiceRefsV0(step.WaitRefs)
+		for _, waitRef := range waitRefs {
+			waitState, err := ports.WaitStateStore.LoadWorkflowTaskWaitStateV0(ctx, request.RunRef, waitRef)
+			if err != nil {
+				if appDirectorWorkflowTaskWaitStateNotFoundV0(err) {
+					continue
+				}
+				return err
+			}
+			if !appDirectorWorkflowTaskWaitStateMatchesPlanStepV0(request.RunRef, waitState, state, step) {
+				continue
+			}
+			waitState.Status = orquestacionnucleoapp.WorkflowTaskWaitStateStatusClearedV0
+			waitState.PendingAgentRefs = nil
+			waitState.EvidenceRefs = compactServiceRefsV0(append(
+				waitState.EvidenceRefs,
+				"evidence-ref-app-director-wait-state-cleared-v0",
+			))
+			if strings.TrimSpace(request.OccurredAt) != "" {
+				waitState.ObservedAt = request.OccurredAt
+			}
+			normalized, err := orquestacionnucleoapp.NewWorkflowTaskWaitStateV0(waitState)
+			if err != nil {
+				return err
+			}
+			if err := ports.WaitStateWriter.SaveWorkflowTaskWaitStateV0(ctx, normalized); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func operationalDirectorPlanStateBlockedAfterClosureV0(

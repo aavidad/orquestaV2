@@ -418,9 +418,9 @@ Checklist de siguiente implementacion:
    `WaitAgentRefs` antes de esperar; no parsear `acceptance_criteria` para esto.
 3. Mantener `WorkflowTaskWaitStateV0` actualizado cuando el wait continue,
    expire o se limpie; hoy la reentrada ya lee el estado `waiting`, el consumo
-   lo marca `continued` y el agotamiento real de `MaxExternalWaits` del loop
-   gestionado lo marca `expired` bloqueando el `PlanState`. Falta limpieza
-   explicita.
+   lo marca `continued`, el agotamiento real de `MaxExternalWaits` del loop
+   gestionado lo marca `expired` bloqueando el `PlanState` y el cierre
+   operativo exitoso limpia waits antiguos aun `waiting` como `cleared`.
 4. Registrar entrega y review causal antes de permitir `replan_or_close`.
 5. Si hay rework, crear task nueva enlazada a la entrega rechazada y consumir
    intento/presupuesto.

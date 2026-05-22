@@ -370,6 +370,10 @@ implementacion y prueba integrada para cada frente:
   `MaxExternalWaits` con `wait_external`, `ContinueAppDirectorV0` transporta esa
   senial, marca el wait state `expired` por puerto cuando existe y bloquea el
   `PlanState`/step con `external-wait-exhausted` sin ampliar scope.
+- [x] Plan state wait limpiado: si el cierre operativo exitoso cierra el
+  `PlanState`, cualquier `WorkflowTaskWaitStateV0` antiguo aun `waiting`
+  referenciado por el plan se marca `cleared` por puerto, sin tocar waits ya
+  `continued` o `expired`.
 - [x] Plan state wait consumido: pasar de `wait_subagents` a
   `review_deliveries` cuando los agentes pendientes entregaron.
 - [~] Plan state restante: review negativa observada, intentos de replan,

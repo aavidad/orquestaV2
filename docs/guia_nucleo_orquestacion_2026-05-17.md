@@ -317,8 +317,9 @@ La reentrada actual prefiere `WorkflowTaskWaitStateV0` persistido cuando hay
 `continued`. Cuando el loop gestionado agota `MaxExternalWaits` con senial real
 (`attempts=max+1` y `external_waits=max`, todos continuados), el servicio marca
 el wait como `expired` y bloquea el `PlanState` en `external-wait-exhausted`
-para no reabrir la misma espera. `cleared` sigue pendiente de actualizacion
-completa en el ciclo vivo.
+para no reabrir la misma espera. Cuando el cierre operativo exitoso deja un wait
+antiguo aun `waiting` referenciado por el plan, el servicio lo marca `cleared`
+por puerto y no toca waits ya `continued` o `expired`.
 
 ## Cierre de ingesta por scope
 
