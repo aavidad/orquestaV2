@@ -69,6 +69,11 @@ sin crear un canal paralelo.
 - El supervisor global del servidor ya reentra runs por intervalo. La API
   `POST /api/v0/runs/supervise` permite pedir una pasada acotada desde la app sin
   cambiar el nucleo ni crear canal paralelo.
+- Desde el 2026-05-22, `POST /api/v0/autoprogramming/prepare-run` encola la run
+  preparada en la cola global del stack Codex. Por tanto, una pasada de
+  `/api/v0/runs/supervise` sin `run_ref` ya cubre el camino
+  `prepare-run -> cola global -> supervisor` con Codex fake en el smoke
+  `AUTOPROGRAMMING-SUPERVISED-FAKE`.
 
 ## Validacion
 

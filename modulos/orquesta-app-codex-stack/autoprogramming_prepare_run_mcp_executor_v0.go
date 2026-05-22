@@ -2,17 +2,23 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestafactory "orquesta/modulos/orquesta-factory"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
 
 type CodexStackAutoprogrammingPrepareRunExecutorV0 struct {
 	Stack              *StackV0
 	DefaultOccurredAt  string
 	DefaultRequestedBy string
+	QueueWriter        orquestarunqueue.RunQueuePriorityWriterPortV0
+	Queue              RunQueueConfigV0
+	Clock              orquestafactory.AppSpecHTTPClockV0
 }
 
 var _ orquestamcp.MCPTransportAutoprogrammingPrepareRunExecutorV0 = CodexStackAutoprogrammingPrepareRunExecutorV0{}
@@ -21,11 +27,17 @@ func NewCodexStackAutoprogrammingPrepareRunExecutorV0(
 	stack *StackV0,
 	defaultOccurredAt string,
 	defaultRequestedBy string,
+	queueWriter orquestarunqueue.RunQueuePriorityWriterPortV0,
+	queue RunQueueConfigV0,
+	clock orquestafactory.AppSpecHTTPClockV0,
 ) CodexStackAutoprogrammingPrepareRunExecutorV0 {
 	return CodexStackAutoprogrammingPrepareRunExecutorV0{
 		Stack:              stack,
 		DefaultOccurredAt:  strings.TrimSpace(defaultOccurredAt),
 		DefaultRequestedBy: strings.TrimSpace(defaultRequestedBy),
+		QueueWriter:        queueWriter,
+		Queue:              normalizeRunQueueConfigV0(queue),
+		Clock:              clock,
 	}
 }
 
@@ -55,7 +67,59 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) Execute(
 			err.Error(),
 		), nil
 	}
+	if result.Accepted {
+		if err := executor.enqueuePreparedRunV0(ctx, input, result); err != nil {
+			return orquestamcp.NewMCPAutoprogrammingPrepareRunErrorResultV0(
+				input,
+				"autoprogramming_prepare_run_queue_error",
+				"run_queue",
+				err.Error(),
+			), nil
+		}
+	}
 	return codexStackAutoprogrammingPrepareRunResultMCPV0(input, result), nil
+}
+
+func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) enqueuePreparedRunV0(
+	ctx context.Context,
+	input orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0,
+	result AutoprogrammingBridgeResultV0,
+) error {
+	if executor.QueueWriter == nil {
+		return fmt.Errorf("run_queue.writer requerido")
+	}
+	runRef := strings.TrimSpace(result.Run.RunID)
+	if runRef == "" {
+		return fmt.Errorf("run_ref preparado requerido")
+	}
+	_, err := executor.QueueWriter.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        runRef,
+		QueueRef:      executor.Queue.QueueRef,
+		AppRef:        autoprogrammingQueueAppRefV0(result),
+		PriorityScore: executor.Queue.DefaultPriorityScore,
+		UpdatedAt:     stackNowV0(executor.Clock),
+		RequestedBy: firstNonEmptyAutoprogrammingStackV0(
+			input.RequestedBy,
+			result.Continue.RequestedBy,
+			executor.DefaultRequestedBy,
+			"orquesta-app-codex-stack-autoprogramming",
+		),
+		Reason:         "autoprogramming_prepare_run",
+		IdempotencyKey: "idem-run-queue-autoprogramming-prepare-" + runRef,
+		EvidenceRefs:   []string{"evidence-ref-autoprogramming-prepare-run-enqueued"},
+	})
+	return err
+}
+
+func autoprogrammingQueueAppRefV0(
+	result AutoprogrammingBridgeResultV0,
+) string {
+	return firstNonEmptyAutoprogrammingStackV0(
+		result.Work.ProjectRef,
+		result.Run.ProjectRef,
+		result.Run.AppSpecRef,
+		result.Run.RunID,
+	)
 }
 
 func codexStackAutoprogrammingBridgeRequestFromMCPV0(

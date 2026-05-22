@@ -189,6 +189,12 @@ El primer corte ya no esta solo en documentos:
   `implementation`, `refactor` y `required_tests` mantienen `write_set`,
   `required_tests` y linaje, pero no reciben todos el mismo texto generico de
   "implementar".
+- Desde el corte posterior del 2026-05-22, la entrada
+  `POST /api/v0/autoprogramming/prepare-run` en `orquesta-app-codex-stack`
+  persiste la run/tareas y tambien la deja como candidato de la cola global del
+  stack Codex. El supervisor `POST /api/v0/runs/supervise` puede arrancarla sin
+  `run_ref`; esto sigue siendo politica de composicion Codex, no contrato del
+  nucleo ni de MCP/gateway.
 
 Lo pendiente no debe confundirse con lo hecho:
 

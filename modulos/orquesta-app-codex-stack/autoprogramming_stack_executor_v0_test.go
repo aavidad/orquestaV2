@@ -147,6 +147,68 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0PreparaRunYSupervisorArranca(t 
 	}
 }
 
+func TestCodexStackAutoprogrammingPrepareRunAPIV0EncolaYSupervisorGlobalArranca(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+
+	prepareInput := orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-queue-api-001",
+		CorrelationID:          "corr-autoprogramming-queue-api-001",
+		OccurredAt:             "2026-05-22T11:25:00Z",
+		RequestedBy:            "orquesta-stack-api-test",
+		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
+		MaxBursts:              3,
+		MaxStepsPerBurst:       3,
+		MaxDispatchesPerWait:   3,
+		MaxCommands:            5,
+		MaxOutboxPerCycle:      5,
+	}
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, prepareInput)
+	if !prepared.Accepted || prepared.RunRef == "" || len(prepared.WaitAgentRefs) != 1 {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+
+	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   orquestamcp.MCPRunQueuePriorityActionRankV0,
+		QueueRef: DefaultRunQueueRefV0,
+		Limit:    1,
+	})
+	if len(ranking.Ranked) != 1 ||
+		ranking.Ranked[0].RunRef != prepared.RunRef ||
+		ranking.Ranked[0].AppRef != prepared.ProjectRef ||
+		ranking.Ranked[0].PriorityScore != DefaultRunQueuePriorityScoreV0 {
+		t.Fatalf("ranking=%+v prepared=%+v", ranking, prepared)
+	}
+
+	supervisor := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:            "request-autoprogramming-global-supervisor-001",
+		CorrelationID:        "corr-autoprogramming-queue-api-001",
+		QueueRef:             DefaultRunQueueRefV0,
+		MaxTicks:             1,
+		MaxRunsPerTick:       1,
+		MaxExecutions:        1,
+		MaxBursts:            3,
+		MaxStepsPerBurst:     3,
+		MaxDispatchesPerWait: 3,
+		MaxCommands:          5,
+		MaxOutboxPerCycle:    5,
+		AllowRepeatedRuns:    true,
+	})
+	if supervisor.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
+		supervisor.RunRef != prepared.RunRef ||
+		supervisor.Last.SessionRef != prepared.RunRef ||
+		runtime.launchCountV0() != 1 {
+		t.Fatalf("supervisor=%+v launches=%d", supervisor, runtime.launchCountV0())
+	}
+	run, err := stack.Ports.RunStore.LoadRunV0(context.Background(), prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if !autoprogrammingBridgeStringInSetForTestV0(run.StartedAgents, prepared.WaitAgentRefs[0]) {
+		t.Fatalf("started_agents=%v wait=%v", run.StartedAgents, prepared.WaitAgentRefs)
+	}
+}
+
 func TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveErroresPublicos(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 

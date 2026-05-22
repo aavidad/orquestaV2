@@ -484,6 +484,34 @@ with open(output, "w", encoding="utf-8") as fh:
 PY
 }
 
+write_queue_supervisor_payload() {
+  local output="$1"
+  python3 - "$output" "$smoke_id" <<'PY'
+import json
+import sys
+
+output, smoke_id = sys.argv[1:3]
+payload = {
+    "request_id": f"req-autoprogramming-queue-supervisor-{smoke_id}",
+    "correlation_id": f"corr-autoprogramming-queue-supervisor-{smoke_id}",
+    "queue_ref": "global",
+    "continue_message": "sigue",
+    "max_ticks": 1,
+    "max_runs_per_tick": 1,
+    "max_executions": 1,
+    "max_bursts": 1,
+    "max_steps_per_burst": 1,
+    "max_dispatches_per_wait": 1,
+    "max_commands": 4,
+    "max_outbox_per_cycle": 4,
+    "max_external_waits": 1,
+}
+with open(output, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, ensure_ascii=True, indent=2)
+    fh.write("\n")
+PY
+}
+
 extract_run_ref() {
   python3 - "$1" <<'PY'
 import json
@@ -546,16 +574,21 @@ main() {
   post_json_required "/api/v0/autoprogramming/prepare-run" "$prepare_payload" "$prepare_response"
   verify_prepare_run_accepted "$prepare_response"
   prepare_run_ref="$(extract_run_ref "$prepare_response")"
-  write_supervisor_payload "$prepare_supervisor_payload" "$prepare_run_ref"
+  write_queue_supervisor_payload "$prepare_supervisor_payload"
   post_json_required "/api/v0/runs/supervise" "$prepare_supervisor_payload" "$prepare_supervisor_response"
-  python3 - "$prepare_supervisor_response" <<'PY'
+  python3 - "$prepare_supervisor_response" "$prepare_run_ref" <<'PY'
 import json
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as fh:
     data = json.load(fh)
+expected_run_ref = sys.argv[2]
 if data.get("estado") != "ok":
     raise SystemExit(f"supervisor prepare-run inesperado: {data}")
+if data.get("run_ref") != expected_run_ref or (data.get("last") or {}).get("session_ref") != expected_run_ref:
+    raise SystemExit(f"supervisor prepare-run no tomo la cola esperada: {data}")
+if data.get("stop_reason") == "no_execution":
+    raise SystemExit(f"supervisor prepare-run no ejecuto la cola: {data}")
 print("prepare_run_supervisor_estado=" + str(data.get("estado", "")))
 print("prepare_run_supervisor_stop_reason=" + str(data.get("stop_reason", "")))
 PY

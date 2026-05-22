@@ -9,7 +9,8 @@ request valida
   -> PrepareAutoprogrammingRunV0 / CodexStackAutoprogrammingExecutorV0 con stack fake
   -> ruta REST de validacion si existe
   -> POST /api/v0/autoprogramming/prepare-run
-  -> POST /api/v0/runs/supervise con run_ref explicito y Codex fake
+  -> cola global del stack Codex
+  -> POST /api/v0/runs/supervise sin run_ref y con Codex fake
   -> POST /api/v0/autoprogramming/prepare-run con el mismo payload para replay
   -> external-work/run + supervisor si la composicion lo expone
   -> pruebas focales de stack fake y cierre offline segun disponibilidad
@@ -53,8 +54,9 @@ SMOKE_ID=manual-001
   expuesta y exige `accepted=true`.
 - Llama a `POST /api/v0/autoprogramming/prepare-run`, exige `run_ref`,
   `wait_agent_refs` y `continue`, y despues llama a
-  `POST /api/v0/runs/supervise` con ese `run_ref` y limites bajos usando
-  comando Codex fake.
+  `POST /api/v0/runs/supervise` sin `run_ref`, con `queue_ref=global` y
+  limites bajos usando comando Codex fake. El smoke exige que el supervisor
+  tome de la cola exactamente el `run_ref` preparado.
 - Vuelve a llamar a `POST /api/v0/autoprogramming/prepare-run` con el mismo
   payload despues de `/api/v0/runs/supervise`; exige respuesta aceptada,
   `run_ref` estable, `wait_agent_refs` no vacio y `continue`, para cubrir
@@ -97,9 +99,11 @@ stack Codex:
   `orquesta-app-codex-stack`.
 
 El smoke la cubre con tests focales y por servidor temporal. La supervision
-posterior no es global: usa siempre el `run_ref` devuelto por `prepare-run`.
-Tras supervisar, repite `prepare-run` con el mismo payload y exige que el replay
-idempotente conserve el `run_ref` y siga devolviendo refs causales.
+posterior valida el camino desatendido: `prepare-run` encola el run en la cola
+global del stack Codex y `/api/v0/runs/supervise` avanza esa cola sin recibir
+`run_ref` explicito. Tras supervisar, repite `prepare-run` con el mismo payload
+y exige que el replay idempotente conserve el `run_ref` y siga devolviendo refs
+causales.
 `/api/v0/external-work/run` queda como fallback opcional de compatibilidad para
 otros trabajos externos; no es el launcher de autoprogramacion.
 
