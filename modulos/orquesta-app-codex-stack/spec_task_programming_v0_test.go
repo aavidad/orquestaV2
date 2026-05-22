@@ -147,3 +147,88 @@ func TestProgrammingTaskV0IncluyeContextoDeReworkSinRehacerTodo(t *testing.T) {
 		}
 	}
 }
+
+func TestProgrammingTaskV0EspecializaObjetivoPorWorkProfile(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		kind          orquestacoreworkflow.WorkProfileKindV0
+		wantObjective string
+		reject        string
+	}{
+		{
+			name:          "code_study",
+			kind:          orquestacoreworkflow.WorkProfileCodeStudyV0,
+			wantObjective: "Estudia el codigo",
+			reject:        "Implementa solo",
+		},
+		{
+			name:          "implementation",
+			kind:          orquestacoreworkflow.WorkProfileImplementationV0,
+			wantObjective: "Implementa solo",
+		},
+		{
+			name:          "refactor",
+			kind:          orquestacoreworkflow.WorkProfileRefactorV0,
+			wantObjective: "Refactoriza solo",
+			reject:        "Implementa solo",
+		},
+		{
+			name:          "required_tests",
+			kind:          orquestacoreworkflow.WorkProfileRequiredTestsV0,
+			wantObjective: "pruebas requeridas",
+			reject:        "Implementa solo",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			profile := orquestacoreworkflow.WorkProfileV0{
+				SchemaVersion: orquestacoreworkflow.WorkProfileSchemaVersionV0,
+				ProfileRef:    "profile-ref-" + tc.name,
+				ProfileKind:   tc.kind,
+				TaskRef:       "task-ref-" + tc.name,
+				RunRef:        "run-ref-" + tc.name,
+				PhaseID:       orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+				Title:         "Trabajo " + tc.name,
+				Objective:     "Resolver perfil " + tc.name + ".",
+				ScopeRefs:     []string{"internal/" + tc.name},
+				FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+					ContractRef:  "contract:function:" + tc.name + ":v0",
+					FunctionName: "Do" + strings.ReplaceAll(tc.name, "_", ""),
+				}},
+			}
+			if tc.kind == orquestacoreworkflow.WorkProfileImplementationV0 ||
+				tc.kind == orquestacoreworkflow.WorkProfileRefactorV0 ||
+				tc.kind == orquestacoreworkflow.WorkProfileRequiredTestsV0 {
+				profile.RequiredTests = []string{"go test ./..."}
+			}
+			task, err := orquestacoreworkflow.WorkflowTaskFromWorkProfileV0(profile)
+			if err != nil {
+				t.Fatalf("WorkflowTaskFromWorkProfileV0: %v", err)
+			}
+			resolver := CodexLaunchSpecResolverV0{
+				TaskStore: orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(task),
+			}
+
+			got, err := resolver.agentTaskV0(context.Background(), orquestaruntime.LaunchRuntimeAgentRequestV0{
+				RunID:   task.RunID,
+				PhaseID: string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+				TaskRef: task.TaskID,
+			}, "programacion")
+			if err != nil {
+				t.Fatalf("agentTaskV0: %v", err)
+			}
+			if got.TaskRef != task.TaskID ||
+				len(got.WriteSet) != 1 ||
+				got.WriteSet[0] != profile.ScopeRefs[0] ||
+				!strings.Contains(got.Objective, tc.wantObjective) {
+				t.Fatalf("perfil no propagado: task=%+v objective=%s", got, got.Objective)
+			}
+			if tc.reject != "" && strings.Contains(got.Objective, tc.reject) {
+				t.Fatalf("objective demasiado generico para %s: %s", tc.name, got.Objective)
+			}
+			if len(profile.RequiredTests) > 0 &&
+				(len(got.RequiredTests) != 1 || got.RequiredTests[0] != "go test ./...") {
+				t.Fatalf("required_tests no propagados: %+v", got.RequiredTests)
+			}
+		})
+	}
+}

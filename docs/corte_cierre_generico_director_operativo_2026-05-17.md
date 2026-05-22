@@ -70,9 +70,10 @@ mantiene: no importa Codex, OPES, DB concreta ni runtime real dentro de core.
 ## RequiredTestEvidenceV0 vigente
 
 `RequiredTestEvidenceV0` es el comprobante durable minimo que el cierre entiende
-para tests requeridos. No es un runner, no ejecuta comandos y no sustituye a
+para tests requeridos. El contrato no ejecuta comandos ni sustituye a
 `review_deliveries`; solo dice que un test declarado ya tiene resultado
-persistido y enlazado a la cadena causal correcta.
+persistido y enlazado a la cadena causal correcta. La ejecucion entra por runner
+inyectado por puerto/composicion opt-in.
 
 Campos relevantes del contrato:
 
@@ -100,6 +101,10 @@ La regla de cierre actual es estricta:
 `RequiredTestEvidenceStorePortV0` separa reader/writer por interfaz y las
 evidencias son inmutables: guardar la misma ref con el mismo payload es
 idempotente; guardar la misma ref con payload distinto es conflicto.
+Desde el corte del 2026-05-22, `RequiredTestRunnerV0` lee primero la evidencia
+deterministica si el writer tambien expone reader, o si se inyecta
+`EvidenceReader`: un replay con la misma cadena causal no reejecuta el comando
+externo ni reescribe una evidencia distinta.
 
 `orquesta-state-file` ya persiste estas evidencias y
 `orquesta-app-codex-stack` puede encontrarlas desde `RequiredTestEvidenceRefs`
@@ -109,8 +114,16 @@ construye cierre cuando existe cadena causal completa: delivery -> review
 requested -> review result accepted -> accepted review. El `PlanState` ya
 consume `RequiredTestEvidenceV0` en `run_required_tests`: `passed` causal avanza
 a `replan_or_close`, `failed` bloquea con `required-tests-failed` y las refs
-aceptadas se pasan al cierre. Lo pendiente es generar esas evidencias mediante
-runner/adaptador real por puerto y propagar replan negativo ante fallo.
+aceptadas se pasan al cierre. El runner por puerto y el ejecutor local opt-in ya
+existen; sigue pendiente el smoke servidor/director con Codex real y ampliar
+replan generico para blockers no cubiertos.
+
+Desde el corte del 2026-05-22, `ContinueAppDirectorV0` no bloquea el
+`PlanState` si el cierre de una task devuelve solo `run.open_tasks`: conserva el
+run actualizado, deja `replan_or_close` activo y permite reentrar para cerrar la
+siguiente task abierta. La prueba focal cubre dos tasks hijas con
+`parent_task_ref`, reviews aceptadas, evidencias de tests y cierre final solo
+cuando ya no quedan tasks abiertas.
 
 ## Review negativa en PlanState
 

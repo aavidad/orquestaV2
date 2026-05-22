@@ -3,6 +3,7 @@ package orquestaappdirectorservice
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -460,6 +461,141 @@ func TestMaybeCloseOperationalDirectorV0ReplayNoDuplicaCierreNiPlanState(t *test
 		step.Status != orquestadirectoroperativo.OperationalDirectorStepClosedV0 ||
 		serviceCountStringV0(step.RequiredTestEvidenceRefs, "test-evidence-ref-service-operational-closure-001") != 1 {
 		t.Fatalf("plan state replay no idempotente: state=%+v step=%+v", state, step)
+	}
+}
+
+func TestMaybeCloseOperationalDirectorV0CierraOlaMultitareaPorReentradasSinBloquear(t *testing.T) {
+	runRef := "run-service-operational-closure-multitask-wave"
+	planRef := "plan-ref-service-operational-closure-multitask-wave"
+	parentTaskRef := "parent-task-service-operational-closure-wave"
+	childA := serviceOperationalClosureTaskRefsForTestV0{
+		TaskRef:         "task-ref-service-operational-closure-child-a",
+		DeliveryRef:     "delivery-ref-service-operational-closure-child-a",
+		ReviewRequestID: "review-request-ref-service-operational-closure-child-a",
+		ReviewResultRef: "review-result-ref-service-operational-closure-child-a",
+		AcceptedRef:     "accepted-review-ref-service-operational-closure-child-a",
+		TestEvidenceRef: "test-evidence-ref-service-operational-closure-child-a",
+		ValidationRef:   "validation-ref-service-operational-closure-child-a",
+		ClosureRef:      "closure-ref-service-operational-closure-child-a",
+	}
+	childB := serviceOperationalClosureTaskRefsForTestV0{
+		TaskRef:         "task-ref-service-operational-closure-child-b",
+		DeliveryRef:     "delivery-ref-service-operational-closure-child-b",
+		ReviewRequestID: "review-request-ref-service-operational-closure-child-b",
+		ReviewResultRef: "review-result-ref-service-operational-closure-child-b",
+		AcceptedRef:     "accepted-review-ref-service-operational-closure-child-b",
+		TestEvidenceRef: "test-evidence-ref-service-operational-closure-child-b",
+		ValidationRef:   "validation-ref-service-operational-closure-child-b",
+		ClosureRef:      "closure-ref-service-operational-closure-child-b",
+	}
+	run := serviceContinueClosureRunForTestV0(runRef, orquestacoreworkflow.OrchestrationPhaseRevisionV0)
+	run.Tasks = []string{childA.TaskRef, childB.TaskRef}
+	run.Deliveries = []string{childA.DeliveryRef, childB.DeliveryRef}
+	run.DeliveredTasks = []string{childA.TaskRef, childB.TaskRef}
+	run.Reviews = []string{childA.ReviewRequestID, childB.ReviewRequestID}
+	run.ReviewResults = []string{
+		serviceOperationalClosureReviewResultProjectionForTestV0(childA),
+		serviceOperationalClosureReviewResultProjectionForTestV0(childB),
+	}
+	run.AcceptedReviews = []string{childA.AcceptedRef, childB.AcceptedRef}
+	run.Agents = []string{
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(childA.TaskRef),
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(childB.TaskRef),
+	}
+	run.StartedAgents = append([]string(nil), run.Agents...)
+	run.DeliveredAgents = append([]string(nil), run.Agents...)
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(run)
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(
+		serviceOperationalClosurePlanStateReadyForCloseTasksV0(runRef, planRef, parentTaskRef, childA, childB),
+	)
+	source := &serviceOperationalClosureOpenTaskSourceForTestV0{
+		Requests: map[string]orquestacionnucleoapp.OperationalDirectorClosureRequestV0{
+			childA.TaskRef: serviceOperationalClosureRequestForTaskRefsV0(childA),
+			childB.TaskRef: serviceOperationalClosureRequestForTaskRefsV0(childB),
+		},
+	}
+	request := ContinueAppDirectorRequestV0{
+		RunRef:                     runRef,
+		OccurredAt:                 "2026-05-22T12:00:00Z",
+		OperationalDirectorPlanRef: planRef,
+	}
+	ports := StartAppDirectorPortsV0{
+		RunStore:  runStore,
+		EventSink: orquestacionnucleoapp.NewInMemoryEventSinkV0(),
+		EventReader: serviceOperationalClosureEventReaderForTestV0{
+			Events: serviceOperationalClosureEventsForTasksForTestV0(t, runRef, childA, childB),
+		},
+		DirectorTaskStore: orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(
+			serviceOperationalClosureTaskWithRefsForTestV0(runRef, parentTaskRef, childA),
+			serviceOperationalClosureTaskWithRefsForTestV0(runRef, parentTaskRef, childB),
+		),
+		RequiredTestEvidenceStore: orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0(
+			serviceOperationalClosureRequiredTestEvidenceForTaskRefsV0(runRef, childA),
+			serviceOperationalClosureRequiredTestEvidenceForTaskRefsV0(runRef, childB),
+		),
+		OperationalClosureSource:   source,
+		OperationalPlanStateStore:  planStateStore,
+		OperationalPlanStateWriter: planStateStore,
+	}
+
+	first, issues, err := maybeCloseOperationalDirectorV0(
+		context.Background(),
+		request,
+		ports,
+		orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+			Run:    run,
+		},
+		orquestacionnucleoapp.ProgressiveLoopRequestV0{},
+	)
+	if err != nil || len(issues) != 0 {
+		t.Fatalf("maybeCloseOperationalDirectorV0 first err=%v issues=%+v", err, issues)
+	}
+	if first.Run.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 ||
+		!serviceStringInSetV0(first.Run.ClosedTasks, childA.TaskRef) ||
+		serviceStringInSetV0(first.Run.ClosedTasks, childB.TaskRef) {
+		t.Fatalf("primer cierre parcial incorrecto: %+v", first.Run)
+	}
+	state, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), runRef, planRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0 first: %v", err)
+	}
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 {
+		t.Fatalf("plan state no debe bloquearse tras cierre parcial: %+v", state)
+	}
+
+	request.OccurredAt = "2026-05-22T12:00:01Z"
+	second, issues, err := maybeCloseOperationalDirectorV0(
+		context.Background(),
+		request,
+		ports,
+		orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+			Run:    first.Run,
+		},
+		orquestacionnucleoapp.ProgressiveLoopRequestV0{},
+	)
+	if err != nil || len(issues) != 0 {
+		t.Fatalf("maybeCloseOperationalDirectorV0 second err=%v issues=%+v", err, issues)
+	}
+	if second.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		!serviceStringInSetV0(second.Run.ClosedTasks, childA.TaskRef) ||
+		!serviceStringInSetV0(second.Run.ClosedTasks, childB.TaskRef) ||
+		!serviceStringInSetV0(second.Run.Closures, childB.ClosureRef) {
+		t.Fatalf("segundo cierre no completo la ola: %+v", second.Run)
+	}
+	state, err = planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), runRef, planRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0 second: %v", err)
+	}
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 ||
+		state.ClosureReason != "operational-closure-succeeded" {
+		t.Fatalf("plan state no cerrado al final de la ola: %+v", state)
+	}
+	if len(source.TaskCalls) != 2 ||
+		source.TaskCalls[0] != childA.TaskRef ||
+		source.TaskCalls[1] != childB.TaskRef {
+		t.Fatalf("source no avanzo por tareas abiertas: %+v", source.TaskCalls)
 	}
 }
 
@@ -978,6 +1114,65 @@ func (source *serviceOperationalClosureSourceForTestV0) BuildOperationalDirector
 	return source.Request, true, nil
 }
 
+type serviceOperationalClosureOpenTaskSourceForTestV0 struct {
+	Requests  map[string]orquestacionnucleoapp.OperationalDirectorClosureRequestV0
+	LastInput AppDirectorOperationalClosureRequestV0
+	TaskCalls []string
+}
+
+func (source *serviceOperationalClosureOpenTaskSourceForTestV0) BuildOperationalDirectorClosureRequestV0(
+	_ context.Context,
+	request AppDirectorOperationalClosureRequestV0,
+) (orquestacionnucleoapp.OperationalDirectorClosureRequestV0, bool, error) {
+	source.LastInput = request
+	for _, taskRef := range request.Run.Tasks {
+		if serviceStringInSetV0(request.Run.ClosedTasks, taskRef) {
+			continue
+		}
+		closureRequest, ok := source.Requests[taskRef]
+		if !ok {
+			return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{}, false, nil
+		}
+		source.TaskCalls = append(source.TaskCalls, taskRef)
+		return closureRequest, true, nil
+	}
+	return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{}, false, nil
+}
+
+type serviceOperationalClosureTaskRefsForTestV0 struct {
+	TaskRef         string
+	DeliveryRef     string
+	ReviewRequestID string
+	ReviewResultRef string
+	AcceptedRef     string
+	TestEvidenceRef string
+	ValidationRef   string
+	ClosureRef      string
+}
+
+func serviceOperationalClosureRequestForTaskRefsV0(
+	refs serviceOperationalClosureTaskRefsForTestV0,
+) orquestacionnucleoapp.OperationalDirectorClosureRequestV0 {
+	return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{
+		TaskID:                   refs.TaskRef,
+		DeliveryRef:              refs.DeliveryRef,
+		AcceptedReviewRef:        refs.AcceptedRef,
+		ValidationRef:            refs.ValidationRef,
+		ClosureRef:               refs.ClosureRef,
+		RequiredTestEvidenceRefs: []string{refs.TestEvidenceRef},
+		EvidenceRefs:             []string{refs.DeliveryRef, refs.TestEvidenceRef},
+	}
+}
+
+func serviceOperationalClosureReviewResultProjectionForTestV0(
+	refs serviceOperationalClosureTaskRefsForTestV0,
+) string {
+	return refs.ReviewResultRef +
+		"#review_result:" + string(orquestacoreworkflow.ReviewResultStatusAcceptedV0) +
+		"#review_request:" + refs.ReviewRequestID +
+		"#delivery:" + refs.DeliveryRef
+}
+
 func serviceCountEventsByTypeV0(
 	events []orquestacoreworkflow.OrchestrationEventV0,
 	eventType string,
@@ -1052,6 +1247,62 @@ func serviceOperationalClosurePlanStateReadyForCloseV0(
 	}
 }
 
+func serviceOperationalClosurePlanStateReadyForCloseTasksV0(
+	runRef string,
+	planRef string,
+	parentTaskRef string,
+	tasks ...serviceOperationalClosureTaskRefsForTestV0,
+) orquestacionnucleoapp.OperationalDirectorPlanStateV0 {
+	state := serviceOperationalClosurePlanStateReadyForCloseV0(runRef, planRef)
+	state.ActiveParentTaskRef = parentTaskRef
+	taskRefs := make([]string, 0, len(tasks))
+	agentRefs := make([]string, 0, len(tasks))
+	deliveryRefs := make([]string, 0, len(tasks))
+	reviewResultRefs := make([]string, 0, len(tasks))
+	acceptedRefs := make([]string, 0, len(tasks))
+	testEvidenceRefs := make([]string, 0, len(tasks))
+	for _, task := range tasks {
+		taskRefs = append(taskRefs, task.TaskRef)
+		agentRefs = append(agentRefs, orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskRef))
+		deliveryRefs = append(deliveryRefs, task.DeliveryRef)
+		reviewResultRefs = append(reviewResultRefs, task.ReviewResultRef)
+		acceptedRefs = append(acceptedRefs, task.AcceptedRef)
+		testEvidenceRefs = append(testEvidenceRefs, task.TestEvidenceRef)
+	}
+	state.Steps = []orquestacionnucleoapp.OperationalDirectorPlanStepStateV0{
+		{
+			StepID:             "step-review-deliveries",
+			Kind:               orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0,
+			Status:             orquestadirectoroperativo.OperationalDirectorStepAcceptedV0,
+			TaskRefs:           taskRefs,
+			DeliveryRefs:       deliveryRefs,
+			ReviewResultRefs:   reviewResultRefs,
+			AcceptedReviewRefs: acceptedRefs,
+		},
+		{
+			StepID:                   "step-run-required-tests",
+			Kind:                     orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0,
+			Status:                   orquestadirectoroperativo.OperationalDirectorStepAcceptedV0,
+			TaskRefs:                 taskRefs,
+			RequiredTestEvidenceRefs: testEvidenceRefs,
+		},
+		{
+			StepID:                   "step-replan-or-close",
+			Kind:                     orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0,
+			Status:                   orquestadirectoroperativo.OperationalDirectorStepRunningV0,
+			WaveRef:                  "wave-service-operational-closure-plan-state",
+			CohortRef:                "cohort-service-operational-closure-plan-state",
+			ParentTaskRef:            parentTaskRef,
+			TaskRefs:                 taskRefs,
+			AgentRefs:                agentRefs,
+			DeliveryRefs:             deliveryRefs,
+			ReviewResultRefs:         reviewResultRefs,
+			RequiredTestEvidenceRefs: testEvidenceRefs,
+		},
+	}
+	return state
+}
+
 type serviceOperationalClosureEventReaderForTestV0 struct {
 	Events []orquestacoreworkflow.OrchestrationEventV0
 }
@@ -1061,6 +1312,60 @@ func (reader serviceOperationalClosureEventReaderForTestV0) LoadRunEventsV0(
 	_ string,
 ) ([]orquestacoreworkflow.OrchestrationEventV0, error) {
 	return append([]orquestacoreworkflow.OrchestrationEventV0(nil), reader.Events...), nil
+}
+
+func serviceOperationalClosureEventsForTasksForTestV0(
+	t *testing.T,
+	runRef string,
+	tasks ...serviceOperationalClosureTaskRefsForTestV0,
+) []orquestacoreworkflow.OrchestrationEventV0 {
+	t.Helper()
+	events := make([]orquestacoreworkflow.OrchestrationEventV0, 0, len(tasks)*4)
+	sequence := int64(1)
+	for _, task := range tasks {
+		events = append(events,
+			serviceOperationalClosureEventForTestV0(t, runRef, sequence, orquestacoreworkflow.OrchestrationEventDeliveryRegisteredV0, orquestacoreworkflow.DeliveryRegisteredPayloadV0{
+				DeliveryRef:  task.DeliveryRef,
+				PhaseID:      string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+				TaskID:       task.TaskRef,
+				AgentRef:     orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskRef),
+				Summary:      "Entrega para cierre operativo multitarea.",
+				EvidenceRefs: []string{task.DeliveryRef},
+			}),
+		)
+		sequence++
+		events = append(events,
+			serviceOperationalClosureEventForTestV0(t, runRef, sequence, orquestacoreworkflow.OrchestrationEventReviewRequestedV0, orquestacoreworkflow.ReviewRequestedPayloadV0{
+				ReviewRequestID: task.ReviewRequestID,
+				PhaseID:         string(orquestacoreworkflow.OrchestrationPhaseRevisionV0),
+				DeliveryRef:     task.DeliveryRef,
+				Summary:         "Review para cierre operativo multitarea.",
+			}),
+		)
+		sequence++
+		events = append(events,
+			serviceOperationalClosureEventForTestV0(t, runRef, sequence, orquestacoreworkflow.OrchestrationEventReviewResultRecordedV0, orquestacoreworkflow.ReviewResultV0{
+				ReviewResultRef: task.ReviewResultRef,
+				ReviewRequestID: task.ReviewRequestID,
+				DeliveryRef:     task.DeliveryRef,
+				Status:          orquestacoreworkflow.ReviewResultStatusAcceptedV0,
+				Summary:         "Review aceptada.",
+				EvidenceRefs:    []string{task.TestEvidenceRef},
+			}),
+		)
+		sequence++
+		events = append(events,
+			serviceOperationalClosureEventForTestV0(t, runRef, sequence, orquestacoreworkflow.OrchestrationEventReviewAcceptedV0, orquestacoreworkflow.ReviewAcceptedPayloadV0{
+				AcceptedReviewRef: task.AcceptedRef,
+				PhaseID:           string(orquestacoreworkflow.OrchestrationPhaseRevisionV0),
+				ReviewRequestID:   task.ReviewRequestID,
+				DeliveryRef:       task.DeliveryRef,
+				Summary:           "Review aceptada.",
+			}),
+		)
+		sequence++
+	}
+	return events
 }
 
 func newServiceOperationalClosureEventReaderForTestV0(
@@ -1114,7 +1419,7 @@ func serviceOperationalClosureEventForTestV0(
 		t.Fatalf("marshal payload: %v", err)
 	}
 	return orquestacoreworkflow.OrchestrationEventV0{
-		EventID:        "evt-service-operational-closure-" + eventType,
+		EventID:        "evt-service-operational-closure-" + eventType + "-" + strconv.FormatInt(sequence, 10),
 		EventType:      eventType,
 		RunID:          runRef,
 		Sequence:       sequence,
@@ -1136,6 +1441,28 @@ func serviceOperationalClosureTaskForTestV0(runRef string) orquestacoreworkflow.
 	}
 }
 
+func serviceOperationalClosureTaskWithRefsForTestV0(
+	runRef string,
+	parentTaskRef string,
+	refs serviceOperationalClosureTaskRefsForTestV0,
+) orquestacoreworkflow.WorkflowTaskV0 {
+	return orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion:      orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:             refs.TaskRef,
+		RunID:              runRef,
+		PhaseID:            orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Title:              "Task cierre operativo multitarea",
+		WriteSet:           []string{"internal/module"},
+		AcceptanceCriteria: []string{"entrega revisada"},
+		RequiredTests:      []string{"go test ./..."},
+		ParentTaskRef:      parentTaskRef,
+		CohortRef:          "cohort-service-operational-closure-plan-state",
+		WaveRef:            "wave-service-operational-closure-plan-state",
+		DelegationDepth:    1,
+		MaxChildAgents:     6,
+	}
+}
+
 func serviceOperationalClosureRequiredTestEvidenceForTestV0(
 	runRef string,
 ) orquestacionnucleoapp.RequiredTestEvidenceV0 {
@@ -1152,6 +1479,26 @@ func serviceOperationalClosureRequiredTestEvidenceForTestV0(
 		AcceptedReviewRef: "accepted-review-ref-service-operational-closure-001",
 		OccurredAt:        "2026-05-17T15:45:00Z",
 		EvidenceRefs:      []string{"evidence-ref-service-operational-closure-001"},
+	}
+}
+
+func serviceOperationalClosureRequiredTestEvidenceForTaskRefsV0(
+	runRef string,
+	refs serviceOperationalClosureTaskRefsForTestV0,
+) orquestacionnucleoapp.RequiredTestEvidenceV0 {
+	return orquestacionnucleoapp.RequiredTestEvidenceV0{
+		SchemaVersion:     orquestacionnucleoapp.RequiredTestEvidenceSchemaVersionV0,
+		EvidenceRef:       refs.TestEvidenceRef,
+		RunRef:            runRef,
+		TaskRef:           refs.TaskRef,
+		TestCommand:       "go test ./...",
+		Status:            orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0,
+		DeliveryRef:       refs.DeliveryRef,
+		ReviewRequestID:   refs.ReviewRequestID,
+		ReviewResultRef:   refs.ReviewResultRef,
+		AcceptedReviewRef: refs.AcceptedRef,
+		OccurredAt:        "2026-05-22T12:00:00Z",
+		EvidenceRefs:      []string{refs.DeliveryRef, refs.TestEvidenceRef},
 	}
 }
 

@@ -69,7 +69,7 @@ func programmingObjectiveV0(
 	}
 	lines := []string{
 		strings.TrimSpace(task.Summary),
-		"Implementa solo el " + unit + ".",
+		programmingProfileObjectiveLineV0(task, unit),
 		"Usa el write-set como alcance primario; si debes tocar otros ficheros del repo para cumplir el objetivo o arreglar pruebas, hazlo y dejalo justificado en el ACK.",
 		"Si la app es Go completa, debe quedar como modulo autonomo con go.mod, entrypoint bajo cmd/server o equivalente documentado, imports de modulo y sin imports relativos ../.",
 		"Ejecuta pruebas focales razonables y registra el resultado en el ACK.",
@@ -78,6 +78,22 @@ func programmingObjectiveV0(
 		lines = append(lines, context)
 	}
 	return strings.Join(lines, "\n")
+}
+
+func programmingProfileObjectiveLineV0(
+	task orquestacoreworkflow.WorkflowTaskV0,
+	unit string,
+) string {
+	switch task.WorkProfileKind {
+	case orquestacoreworkflow.WorkProfileCodeStudyV0:
+		return "Estudia el codigo y documenta el mapa de cambio del " + unit + "; no cambies implementacion salvo que sea imprescindible para producir evidencia verificable."
+	case orquestacoreworkflow.WorkProfileRefactorV0:
+		return "Refactoriza solo el " + unit + " conservando comportamiento publico y justificando cualquier toque fuera del write-set."
+	case orquestacoreworkflow.WorkProfileRequiredTestsV0:
+		return "Completa o ejecuta las pruebas requeridas del " + unit + " y deja evidencia clara del resultado."
+	default:
+		return "Implementa solo el " + unit + "."
+	}
 }
 
 func programmingReworkContextV0(payload orquestaruntime.LaunchRuntimeAgentRequestV0) string {

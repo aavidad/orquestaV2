@@ -184,6 +184,11 @@ El primer corte ya no esta solo en documentos:
   como ciclo de vida de agente: el adaptador real tiene que avanzar
   supervisor/drain/replan/outbox `LaunchRuntimeAgent`, registry, ACK y progreso
   ya existentes.
+- Desde el corte del 2026-05-22 el conector Codex especializa el objetivo de
+  `AgentStartTaskV0` segun `WorkflowTaskV0.WorkProfileKind`: `code_study`,
+  `implementation`, `refactor` y `required_tests` mantienen `write_set`,
+  `required_tests` y linaje, pero no reciben todos el mismo texto generico de
+  "implementar".
 
 Lo pendiente no debe confundirse con lo hecho:
 
@@ -195,8 +200,10 @@ Lo pendiente no debe confundirse con lo hecho:
   local observa review negativa con `ReworkRequested` y
   `ReplanDecisionRecorded` en el `PlanState` con prueba focal; el cierre
   operacional ya marca el state como `closed` o `blocked` con
-  `closure_reason`; siguen pendientes runner/adaptador real de tests, replan
-  automatico para blockers y replay/idempotencia;
+  `closure_reason`; el runner/adaptador de tests por puerto existe y tiene
+  replay focal sin reejecucion externa; siguen pendientes smoke Codex real con
+  runner, replan automatico para blockers no cubiertos y replay/idempotencia
+  completa;
 - si una composicion real distinta del stack Codex todavia no inyecta una fuente
   `OperationalClosureSource`, el cierre queda pendiente de wiring real en esa
   composicion;
@@ -205,8 +212,10 @@ Lo pendiente no debe confundirse con lo hecho:
   `review_deliveries` cuando el wait queda consumido y avance de review positiva
   a tests/replan por eventos causales del scope; tests requeridos durables ya
   avanzan o bloquean por evidencia causal; la observacion negativa de review y
-  el cierre/bloqueo posterior del PlanState estan cubiertos offline; faltan
-  runner real, replan automatico y replay/idempotencia completa;
+  el cierre/bloqueo posterior del PlanState estan cubiertos offline; el cierre
+  de ola multitarea ya progresa por reentradas sin bloquear por
+  `run.open_tasks`; faltan smoke real Codex con runner, replan automatico de
+  blockers y replay/idempotencia completa;
 - la recursion Codex real sigue pendiente: ya existe contrato unitario para
   `launch -> sigue -> done`, pero falta el adaptador real que conecte `sigue` con
   el ciclo normal de agentes y el ciclo productivo de hijos de hijos con

@@ -93,6 +93,10 @@ func maybeCloseOperationalDirectorV0(
 		return loop, nil, err
 	}
 	if len(closure.Issues) > 0 || closure.Run.RunID == "" {
+		if closure.Run.RunID != "" && appDirectorClosureOnlyOpenTasksIssuesV0(closure.Issues) {
+			loop.Run = closure.Run
+			return loop, nil, nil
+		}
 		if blockErr := operationalDirectorPlanStateBlockedAfterClosureV0(
 			ctx,
 			request,
@@ -109,6 +113,19 @@ func maybeCloseOperationalDirectorV0(
 	}
 	loop.Run = closure.Run
 	return loop, nil, nil
+}
+
+func appDirectorClosureOnlyOpenTasksIssuesV0(issues []orquestacionnucleoapp.ErrorV0) bool {
+	if len(issues) == 0 {
+		return false
+	}
+	for _, issue := range issues {
+		if issue.Code != orquestacionnucleoapp.ErrNucleoOrquestacionInvalidoV0 ||
+			issue.Field != "run.open_tasks" {
+			return false
+		}
+	}
+	return true
 }
 
 func operationalDirectorPlanStateBlockedAtReplanOrCloseV0(

@@ -9,6 +9,7 @@ import (
 
 type RequiredTestRunnerV0 struct {
 	Executor       RequiredTestCommandExecutorPortV0
+	EvidenceReader RequiredTestEvidenceReaderPortV0
 	EvidenceWriter RequiredTestEvidenceWriterPortV0
 }
 
@@ -72,7 +73,22 @@ func (runner RequiredTestRunnerV0) RunRequiredTestsV0(
 	}
 
 	result := RequiredTestExecutionResultV0{}
+	evidenceReader := runner.requiredTestEvidenceReaderV0()
 	for _, command := range request.TestCommands {
+		if evidenceReader != nil {
+			existing, ok, err := requiredTestRunnerExistingEvidenceForCommandV0(ctx, evidenceReader, request, command)
+			if err != nil {
+				return result, err
+			}
+			if ok {
+				if issues := validateRequiredTestExistingEvidenceForRequestV0(existing, request, command); len(issues) > 0 {
+					result.Issues = append(result.Issues, issues...)
+					continue
+				}
+				result = appendRequiredTestEvidenceResultV0(result, existing)
+				continue
+			}
+		}
 		execution, err := runner.Executor.RunRequiredTestCommandV0(
 			ctx,
 			RequiredTestCommandExecutionRequestV0{
@@ -115,15 +131,83 @@ func (runner RequiredTestRunnerV0) RunRequiredTestsV0(
 		if err := runner.EvidenceWriter.SaveRequiredTestEvidenceV0(ctx, normalized); err != nil {
 			return result, err
 		}
-		result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, normalized.EvidenceRef))
-		if normalized.Status == RequiredTestEvidenceStatusPassedV0 {
-			result.PassedEvidenceRefs = compactStringsV0(append(result.PassedEvidenceRefs, normalized.EvidenceRef))
-		}
-		if normalized.Status == RequiredTestEvidenceStatusFailedV0 {
-			result.FailedEvidenceRefs = compactStringsV0(append(result.FailedEvidenceRefs, normalized.EvidenceRef))
-		}
+		result = appendRequiredTestEvidenceResultV0(result, normalized)
 	}
 	return result, nil
+}
+
+func (runner RequiredTestRunnerV0) requiredTestEvidenceReaderV0() RequiredTestEvidenceReaderPortV0 {
+	if runner.EvidenceReader != nil {
+		return runner.EvidenceReader
+	}
+	if reader, ok := runner.EvidenceWriter.(RequiredTestEvidenceReaderPortV0); ok {
+		return reader
+	}
+	return nil
+}
+
+func requiredTestRunnerExistingEvidenceForCommandV0(
+	ctx context.Context,
+	reader RequiredTestEvidenceReaderPortV0,
+	request RequiredTestExecutionRequestV0,
+	command string,
+) (RequiredTestEvidenceV0, bool, error) {
+	ref := requiredTestEvidenceRefForCommandV0(request, command)
+	evidence, err := reader.LoadRequiredTestEvidenceV0(ctx, request.RunRef, []string{ref})
+	if err != nil {
+		if issue, ok := err.(ErrorV0); ok &&
+			issue.Code == ErrNucleoOrquestacionStoreV0 &&
+			issue.Field == "required_test_evidence" {
+			return RequiredTestEvidenceV0{}, false, nil
+		}
+		return RequiredTestEvidenceV0{}, false, err
+	}
+	if len(evidence) == 0 {
+		return RequiredTestEvidenceV0{}, false, nil
+	}
+	return NormalizeRequiredTestEvidenceV0(evidence[0]), true, nil
+}
+
+func validateRequiredTestExistingEvidenceForRequestV0(
+	evidence RequiredTestEvidenceV0,
+	request RequiredTestExecutionRequestV0,
+	command string,
+) []ErrorV0 {
+	if err := ValidateRequiredTestEvidenceV0(evidence); err != nil {
+		if issue, ok := err.(ErrorV0); ok {
+			return []ErrorV0{issue}
+		}
+		return []ErrorV0{errorV0(ErrNucleoOrquestacionInvalidoV0, "required_test_evidence", err.Error())}
+	}
+	if evidence.EvidenceRef != requiredTestEvidenceRefForCommandV0(request, command) ||
+		evidence.RunRef != request.RunRef ||
+		evidence.TaskRef != request.TaskRef ||
+		evidence.TestCommand != command ||
+		evidence.DeliveryRef != request.DeliveryRef ||
+		evidence.ReviewRequestID != request.ReviewRequestID ||
+		evidence.ReviewResultRef != request.ReviewResultRef ||
+		evidence.AcceptedReviewRef != request.AcceptedReviewRef {
+		return []ErrorV0{errorV0(
+			ErrNucleoOrquestacionStoreV0,
+			"required_test_evidence",
+			"evidencia de test existente no corresponde al request causal",
+		)}
+	}
+	return nil
+}
+
+func appendRequiredTestEvidenceResultV0(
+	result RequiredTestExecutionResultV0,
+	evidence RequiredTestEvidenceV0,
+) RequiredTestExecutionResultV0 {
+	result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, evidence.EvidenceRef))
+	if evidence.Status == RequiredTestEvidenceStatusPassedV0 {
+		result.PassedEvidenceRefs = compactStringsV0(append(result.PassedEvidenceRefs, evidence.EvidenceRef))
+	}
+	if evidence.Status == RequiredTestEvidenceStatusFailedV0 {
+		result.FailedEvidenceRefs = compactStringsV0(append(result.FailedEvidenceRefs, evidence.EvidenceRef))
+	}
+	return result
 }
 
 func normalizeRequiredTestExecutionRequestV0(

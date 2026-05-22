@@ -97,15 +97,16 @@ func TestRequiredTestRunnerV0EsIdempotenteConMismaEvidencia(t *testing.T) {
 	store := NewInMemoryRequiredTestEvidenceStoreV0()
 	request := requiredTestExecutionRequestForTestV0()
 	request.TestCommands = []string{"go test -count=1 ./modulos/orquesta-orchestration-core -run TestRequiredTestRunner"}
-	runner := RequiredTestRunnerV0{
-		Executor: &fakeRequiredTestCommandExecutorV0{
-			results: map[string]RequiredTestCommandExecutionResultV0{
-				request.TestCommands[0]: {
-					Status:       RequiredTestEvidenceStatusPassedV0,
-					EvidenceRefs: []string{"artifact-ref-idempotent-test-output-001"},
-				},
+	executor := &fakeRequiredTestCommandExecutorV0{
+		results: map[string]RequiredTestCommandExecutionResultV0{
+			request.TestCommands[0]: {
+				Status:       RequiredTestEvidenceStatusPassedV0,
+				EvidenceRefs: []string{"artifact-ref-idempotent-test-output-001"},
 			},
 		},
+	}
+	runner := RequiredTestRunnerV0{
+		Executor:       executor,
 		EvidenceWriter: store,
 	}
 
@@ -113,12 +114,16 @@ func TestRequiredTestRunnerV0EsIdempotenteConMismaEvidencia(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunRequiredTestsV0 first: %v", err)
 	}
+	request.OccurredAt = "2026-05-21T11:00:01Z"
 	second, err := runner.RunRequiredTestsV0(context.Background(), request)
 	if err != nil {
 		t.Fatalf("RunRequiredTestsV0 second: %v", err)
 	}
 	if !reflect.DeepEqual(first.EvidenceRefs, second.EvidenceRefs) {
 		t.Fatalf("refs no estables: first=%+v second=%+v", first.EvidenceRefs, second.EvidenceRefs)
+	}
+	if len(executor.commands) != 1 {
+		t.Fatalf("replay reejecuto comandos externos: commands=%+v", executor.commands)
 	}
 }
 
