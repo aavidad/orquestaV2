@@ -1383,6 +1383,10 @@ func TestContinueRequestWithOperationalDirectorPlanStateV0RequiredTestsFailedBlo
 		OccurredAt:                 "2026-05-21T17:00:01Z",
 		CorrelationID:              "corr-app-director-required-tests-failed-late-replan",
 		OperationalDirectorPlanRef: fixture.PlanRef,
+		WaitAgentRefs:              []string{fixture.AgentRef},
+		WaitWaveRef:                fixture.WaveRef,
+		WaitCohortRef:              fixture.CohortRef,
+		WaitParentTaskRef:          fixture.ParentTaskRef,
 	}, StartAppDirectorPortsV0{
 		RunStore:                   orquestacionnucleoapp.NewInMemoryRunStoreV0(replannedRun),
 		EventReader:                serviceOperationalClosureEventReaderForTestV0{Events: replannedEvents},
@@ -1393,7 +1397,10 @@ func TestContinueRequestWithOperationalDirectorPlanStateV0RequiredTestsFailedBlo
 		t.Fatalf("continueRequestWithOperationalDirectorPlanStateV0 late replan: %v", err)
 	}
 	if !serviceStringInSetV0(reentered.WaitAgentRefs, followupAgentRef) ||
-		serviceStringInSetV0(reentered.WaitAgentRefs, fixture.AgentRef) {
+		serviceStringInSetV0(reentered.WaitAgentRefs, fixture.AgentRef) ||
+		reentered.WaitWaveRef != "" ||
+		reentered.WaitCohortRef != "" ||
+		reentered.WaitParentTaskRef != "" {
 		t.Fatalf("reentered=%+v followup=%s old=%s", reentered, followupAgentRef, fixture.AgentRef)
 	}
 

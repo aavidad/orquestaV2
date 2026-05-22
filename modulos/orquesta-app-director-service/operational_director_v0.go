@@ -271,7 +271,9 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 	request ContinueAppDirectorRequestV0,
 	ports StartAppDirectorPortsV0,
 ) (ContinueAppDirectorRequestV0, error) {
-	if continueRequestHasWaitScopeV0(request) {
+	hasWaitScope := continueRequestHasWaitScopeV0(request)
+	hasPlanRef := continueOperationalDirectorPlanRefV0(request) != ""
+	if hasWaitScope && (!hasPlanRef || ports.OperationalPlanStateStore == nil) {
 		return request, nil
 	}
 	ensured, err := ensureContinueOperationalDirectorPlanStateFromWorkflowTasksV0(ctx, request, ports)
@@ -303,7 +305,14 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 			return ContinueAppDirectorRequestV0{}, err
 		}
 	}
-	next, applied := continueRequestWithLoadedOperationalDirectorPlanStateV0(request, state)
+	stateScopedRequest := request
+	if hasWaitScope {
+		stateScopedRequest = continueRequestWithoutWaitScopeV0(stateScopedRequest)
+	}
+	next, applied := continueRequestWithLoadedOperationalDirectorPlanStateV0(stateScopedRequest, state)
+	if !applied && hasWaitScope && explicitPlanRef == "" {
+		return request, nil
+	}
 	if explicitPlanRef != "" && (!applied || !continueRequestHasWaitScopeV0(next)) {
 		canProgress, err := continueOperationalDirectorPlanStateCanProgressBlockedRequiredTestsReplanV0(ctx, request, ports, state)
 		if err != nil {
@@ -509,6 +518,14 @@ func continueRequestHasWaitScopeV0(request ContinueAppDirectorRequestV0) bool {
 		strings.TrimSpace(request.WaitCohortRef) != "" ||
 		strings.TrimSpace(request.WaitWaveRef) != "" ||
 		strings.TrimSpace(request.WaitParentTaskRef) != ""
+}
+
+func continueRequestWithoutWaitScopeV0(request ContinueAppDirectorRequestV0) ContinueAppDirectorRequestV0 {
+	request.WaitAgentRefs = nil
+	request.WaitCohortRef = ""
+	request.WaitWaveRef = ""
+	request.WaitParentTaskRef = ""
+	return request
 }
 
 func continueOperationalDirectorPlanRefV0(request ContinueAppDirectorRequestV0) string {
