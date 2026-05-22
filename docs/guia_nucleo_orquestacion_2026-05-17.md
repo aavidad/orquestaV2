@@ -145,11 +145,13 @@ Estado real del primer corte:
   `launch_subagents -> wait_subagents`; `ContinueAppDirectorV0` tambien puede
   leerlo para reentrada inicial por `operational_director_plan_ref` y avanzar a
   `review_deliveries` cuando el wait queda consumido.
-- Falta convertir la salida de esa espera en `review_deliveries` por ola,
-  `run_required_tests` durables fuertes, `replan_or_close` negativo y
-  actualizaciones posteriores del plan state. Ese trabajo debe
-  documentarse y probarse como pendiente verificable hasta que exista integracion
-  real; el corte objetivo es offline y generico, no un smoke Codex/OPES.
+- La salida de esa espera ya tiene ciclo offline/fake-runtime probado:
+  `review_deliveries` por ola, `run_required_tests` con
+  `RequiredTestEvidenceV0`, runner por puerto, review negativa observada,
+  replan causal de tests/cierre, `replan_or_close`, `close`, blockers durables y
+  replay/idempotencia del ciclo probado. Esto no convierte en cerrados los
+  smokes reales de ola/cohorte Codex amplia, recursion Codex real ni OPES
+  temporal real de derivados/cierre.
 
 Checklist antes de extenderlo:
 
@@ -202,7 +204,10 @@ smoke real opt-in. No se importa desde core, director, domain-work ni expander.
 
 ## Que funciona hoy
 
-- La suite local completa pasa con `go test -count=1 ./...`.
+- La matriz documenta la suite y los cortes focales que han pasado en sus
+  respectivos cierres. Para un cambio transversal nuevo hay que reejecutar
+  `go test -count=1 ./...`; este documento no es evidencia de una reejecucion
+  actual.
 - `orquesta-core-workflow` y `orquesta-domain-work` se mantienen puros por
   imports.
 - `orquesta-orchestration-core` coordina por puertos y no importa Codex/OPES.
@@ -244,35 +249,39 @@ smoke real opt-in. No se importa desde core, director, domain-work ni expander.
 - `RequiredTestEvidenceV0`, `RequiredTestEvidenceReaderPortV0`,
   `RequiredTestEvidenceWriterPortV0` y `RequiredTestEvidenceStorePortV0` ya
   existen en `orquesta-orchestration-core`; `orquesta-state-file` los persiste.
-  Hoy son el comprobante que consume el cierre, no el mecanismo que ejecuta
-  tests.
-- OPES tiene integracion real documentada para `plan_tema` y smokes de
-  `domain_work`, `draft_content_block` y `visual_asset`; el stack reconoce
-  aliases de plan y la entrega `assemble_topic -> assembled_topic`.
+  El runner por puerto y el executor local opt-in ya generan evidencia cuando la
+  composicion los inyecta; el nucleo sigue sin conocer shell/runtime concreto.
+- OPES tiene integracion real documentada para `plan_tema` y `plan_temario`
+  acotados a plan, smokes REST de `domain_work`/visual y automatizacion offline
+  de derivados hasta `assemble_topic`; falta smoke real completo de derivados y
+  cierre OPES temporal.
 - El stack Codex entrega artefactos de domain-work y recupera algunos casos de
   ACK ausente con artefacto valido.
+- `EXT-NO-OPES` cubre una app externa temporal HTTP/file con submitter real
+  opt-in, `codex-fake`, review, tests requeridos durables y cierre operativo por
+  refs opacas.
 
 ## Huecos abiertos
 
 - `cmd/orquesta-server` todavia compone el producto sobre Codex y file stores.
   No hay modo productivo runtime-neutral completo.
-- OPES es la unica app externa validada end-to-end con caso real. Falta una app
-  externa no-OPES de smoke.
+- OPES sigue siendo la app externa real mas ejercitada, pero no es la unica ruta
+  no-core validada: `EXT-NO-OPES` cubre una app HTTP/file temporal con runtime
+  fake y cierre por refs opacas. Falta una app externa no-OPES productiva o con
+  proveedor Codex real.
 - El bridge generico existe solo como base parcial; la CLI visible sigue siendo
   `opes-drain-once`.
 - El Director Operativo ya tiene contrato, materializador parcial, espera
-  durable, plan state inicial, reentrada inicial por plan state, avance
-  wait->review e ingesta Codex acotada por `WaitAgentRefs`. Falta ejecutar
-  `review_deliveries` por ola, generacion durable de
-  `RequiredTestEvidenceV0` desde `run_required_tests`, `replan_or_close`
-  negativo y actualizaciones posteriores del plan state.
-  Fuentes
+  durable, plan state reentrable, avance wait->review, review positiva/negativa,
+  runner de tests por puerto, tests durables, replan causal, `replan_or_close`,
+  cierre/bloqueo y replay focal para el ciclo probado. Fuentes
   `OperationalClosureSource` de otras composiciones siguen siendo trabajo de
   wiring por puerto.
 - `WaitAgentRefs` cubre refs de agente y ya puede derivarse desde
   `cohort_ref`/`wave_ref` de tasks en el servicio del director. Tambien acota
-  ingesta de ACK/deliveries en el stack Codex. Falta el smoke real con agentes
-  Codex vivos y review posterior de la cohorte.
+  ingesta de ACK/deliveries en el stack Codex. Hay harness fake y test opt-in
+  real para ola/cohorte amplia (`CODEX-WAVE-REAL`); falta ejecutarlo con Codex
+  real y dejar evidencia operativa.
 - La recursion Codex sigue pendiente como prueba real completa; el linaje
   neutral ya llega a `WorkflowTaskV0` y al paquete de arranque del agente, pero
   no se debe asumir que el stack productivo ya gobierna hijos de hijos.
@@ -346,10 +355,11 @@ cohorte/ola, el mismo scope gobierna pending, wait e ingesta de observaciones:
   `TestDrainRunV0WaitAgentRefsNoIngiereACKFueraDeScope` y
   `TestDomainWork*WaitAgentRefs`.
 
-Esto no cierra el ciclo funcional de una ola. Siguen pendientes
-`review_deliveries` por ola, tests requeridos durables,
-`replan_or_close`/`close` y actualizaciones posteriores del plan state.
-El handoff de ese tramo es
+Esto cierra el scope de ingesta, no los smokes reales amplios. El ciclo
+funcional de ola esta probado offline/fake-runtime con review, tests durables,
+`replan_or_close`, `close` y plan state; queda pendiente reproducirlo con Codex
+real de ola/cohorte amplia, recursion real y OPES temporal real de
+derivados/cierre. El handoff de ese tramo es
 `corte_cierre_generico_director_operativo_2026-05-17.md`.
 
 ## Como trabajar sin romper el nucleo

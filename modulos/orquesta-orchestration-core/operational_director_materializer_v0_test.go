@@ -264,18 +264,127 @@ func TestOperationalDirectorPlanMaterializerV0UsaFaseObjetivo(t *testing.T) {
 	}
 }
 
+func TestOperationalDirectorPlanMaterializerV0MaterializaAgentesParalelosDelPlan(t *testing.T) {
+	runRef := "run-operational-director-materializer-parallel-agents-001"
+	contractRef := "contract:function:operational-director:v0"
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.FunctionContracts = []string{contractRef}
+	store := NewInMemoryRunStoreV0(run)
+	taskStore := NewInMemoryWorkflowTaskStoreV0()
+	planResult := orquestadirectoroperativo.BuildOperationalDirectorPlanV0(orquestadirectoroperativo.OperationalDirectorRequestV0{
+		RequestRef:       "req-operational-director-materializer-parallel-agents-001",
+		RunRef:           runRef,
+		ProjectRef:       "orquesta",
+		Objective:        "Levantar varios agentes paralelos gobernados por el Director Operativo.",
+		Mode:             orquestadirectoroperativo.OperationalDirectorModeProgrammingV0,
+		WorktreeRef:      "worktree-ref-operational-director-parallel-agents",
+		WorktreeIsolated: true,
+		BranchRef:        "branch-ref-operational-director-parallel-agents",
+		WriteSet: []string{
+			"modulos/orquesta-orchestration-core/operational_director_materializer_v0.go",
+			"modulos/orquesta-orchestration-core/operational_director_materializer_v0_test.go",
+			"modulos/orquesta-orchestration-core/docs/tareas.md",
+		},
+		RequiredTests:     []string{"go test -count=1 ./modulos/orquesta-orchestration-core"},
+		MaxParallelAgents: 3,
+	})
+	if !planResult.Accepted || !planResult.ReadyToLaunch {
+		t.Fatalf("plan no listo: %+v", planResult)
+	}
+
+	materialized, err := (OperationalDirectorPlanMaterializerV0{
+		RunStore:    store,
+		EventSink:   NewInMemoryEventSinkV0(),
+		TaskWriter:  taskStore,
+		RequestedBy: "orquesta-nucleo-test",
+	}).MaterializeOperationalDirectorPlanV0(context.Background(), OperationalDirectorPlanMaterializeRequestV0{
+		Plan:       planResult.Plan,
+		OccurredAt: "2026-05-22T21:10:00Z",
+		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+			ContractRef:  contractRef,
+			FunctionName: "OperationalDirectorCut",
+		}},
+		CorrelationID: "corr-operational-director-materializer-parallel-agents-001",
+	})
+	if err != nil {
+		t.Fatalf("MaterializeOperationalDirectorPlanV0: %v", err)
+	}
+	if len(materialized.Issues) != 0 || materialized.EventsCount != 3 || len(materialized.Tasks) != 3 {
+		t.Fatalf("materialized=%+v", materialized)
+	}
+	reloaded, err := store.LoadRunV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(reloaded.Tasks) != 3 {
+		t.Fatalf("run tasks=%v", reloaded.Tasks)
+	}
+	waveRef := materialized.Tasks[0].WaveRef
+	for _, task := range materialized.Tasks {
+		if task.WaveRef == "" || task.WaveRef != waveRef || task.CohortRef == "" {
+			t.Fatalf("task sin ola/cohorte comun: %+v", task)
+		}
+	}
+	if !stringInSetV0("task-operational-director-req-operational-director-materializer-parallel-agents-001-step-launch-subagents-03", reloaded.Tasks) {
+		t.Fatalf("no se materializo tercer agente: tasks=%v", reloaded.Tasks)
+	}
+}
+
+func TestOperationalDirectorPlanMaterializerV0RespetaMaxParallelAgentsDelPlan(t *testing.T) {
+	runRef := "run-operational-director-materializer-max-parallel-001"
+	contractRef := "contract:function:operational-director:v0"
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.FunctionContracts = []string{contractRef}
+	plan := operationalDirectorProgrammingPlanForMaterializerTestV0(runRef)
+	plan.RequestRef = "req-operational-director-materializer-max-parallel-001"
+	plan.MaxParallelAgents = 1
+	plan.Steps = append(plan.Steps, orquestadirectoroperativo.OperationalDirectorStepV0{
+		StepID:             "step-launch-subagents-extra",
+		Kind:               orquestadirectoroperativo.OperationalDirectorStepLaunchSubagentsV0,
+		Status:             orquestadirectoroperativo.OperationalDirectorStepPendingV0,
+		Title:              "Lanzar subagente extra dentro de la misma ola",
+		WorkProfileKind:    "implementation",
+		DependsOn:          []string{"step-split-work"},
+		WriteSet:           []string{"modulos/orquesta-orchestration-core/operational_director_materializer_v0.go"},
+		RequiredTests:      []string{"go test -count=1 ./modulos/orquesta-orchestration-core"},
+		AcceptanceCriteria: []string{"Mantener el objetivo actual."},
+	})
+
+	materialized, err := (OperationalDirectorPlanMaterializerV0{
+		RunStore:    NewInMemoryRunStoreV0(run),
+		EventSink:   NewInMemoryEventSinkV0(),
+		TaskWriter:  NewInMemoryWorkflowTaskStoreV0(),
+		RequestedBy: "orquesta-nucleo-test",
+	}).MaterializeOperationalDirectorPlanV0(context.Background(), OperationalDirectorPlanMaterializeRequestV0{
+		Plan:       plan,
+		OccurredAt: "2026-05-22T20:10:00Z",
+		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+			ContractRef:  contractRef,
+			FunctionName: "OperationalDirectorCut",
+		}},
+		CorrelationID: "corr-operational-director-materializer-max-parallel-001",
+	})
+	if err != nil {
+		t.Fatalf("MaterializeOperationalDirectorPlanV0: %v", err)
+	}
+	if len(materialized.Issues) != 0 || len(materialized.Tasks) != 1 {
+		t.Fatalf("materialized=%+v", materialized)
+	}
+}
+
 func operationalDirectorProgrammingPlanForMaterializerTestV0(
 	runRef string,
 ) orquestadirectoroperativo.OperationalDirectorPlanV0 {
 	result := orquestadirectoroperativo.BuildOperationalDirectorPlanV0(orquestadirectoroperativo.OperationalDirectorRequestV0{
-		RequestRef:       "req-operational-director-materializer-001",
-		RunRef:           runRef,
-		ProjectRef:       "orquesta",
-		Objective:        "Implementar corte pequeno del Director Operativo.",
-		Mode:             orquestadirectoroperativo.OperationalDirectorModeProgrammingV0,
-		WorktreeRef:      "worktree-ref-operational-director",
-		WorktreeIsolated: true,
-		BranchRef:        "branch-ref-operational-director",
+		RequestRef:        "req-operational-director-materializer-001",
+		RunRef:            runRef,
+		ProjectRef:        "orquesta",
+		Objective:         "Implementar corte pequeno del Director Operativo.",
+		Mode:              orquestadirectoroperativo.OperationalDirectorModeProgrammingV0,
+		WorktreeRef:       "worktree-ref-operational-director",
+		WorktreeIsolated:  true,
+		BranchRef:         "branch-ref-operational-director",
+		MaxParallelAgents: 1,
 		WriteSet: []string{
 			"modulos/orquesta-director-operativo/plan_v0.go",
 			"modulos/orquesta-director-operativo/plan_v0_test.go",

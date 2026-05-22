@@ -1,6 +1,9 @@
 package orquestadirectoroperativo
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 func BuildOperationalDirectorPlanV0(
 	request OperationalDirectorRequestV0,
@@ -110,9 +113,15 @@ func operationalDirectorReadyStepsV0(
 	steps := []OperationalDirectorStepV0{
 		stepV0("step-gather-context", OperationalDirectorStepGatherContextV0, "Leer contexto vigente y restricciones", nil),
 		stepV0("step-split-work", OperationalDirectorStepSplitWorkV0, "Dividir trabajo en piezas con write-set claro", []string{"step-gather-context"}),
-		stepV0("step-launch-subagents", OperationalDirectorStepLaunchSubagentsV0, "Lanzar subagentes por piezas independientes", []string{"step-split-work"}),
-		stepV0("step-wait-subagents", OperationalDirectorStepWaitSubagentsV0, "Esperar ACK, progreso o bloqueo de subagentes", []string{"step-launch-subagents"}),
 	}
+	launchSteps := operationalDirectorLaunchStepsV0(request.MaxParallelAgents)
+	steps = append(steps, launchSteps...)
+	steps = append(steps, stepV0(
+		"step-wait-subagents",
+		OperationalDirectorStepWaitSubagentsV0,
+		"Esperar ACK, progreso o bloqueo de subagentes",
+		operationalDirectorStepIDsV0(launchSteps),
+	))
 	if request.AllowRecursiveDelegation {
 		steps = append(steps, stepV0(
 			"step-govern-delegation",
@@ -134,6 +143,33 @@ func operationalDirectorReadyStepsV0(
 	return append(steps, stepV0("step-replan-or-close", OperationalDirectorStepReplanOrCloseV0, "Replanificar fallos o devolver artefacto validado", []string{"step-review-deliveries"}))
 }
 
+func operationalDirectorLaunchStepsV0(count int) []OperationalDirectorStepV0 {
+	if count <= 0 {
+		count = 1
+	}
+	steps := make([]OperationalDirectorStepV0, 0, count)
+	for index := 1; index <= count; index++ {
+		stepID := "step-launch-subagents"
+		title := "Lanzar subagentes por piezas independientes"
+		if index > 1 {
+			stepID = fmt.Sprintf("step-launch-subagents-%02d", index)
+		}
+		if count > 1 {
+			title = fmt.Sprintf("Lanzar subagente %d de %d por pieza independiente", index, count)
+		}
+		steps = append(steps, stepV0(stepID, OperationalDirectorStepLaunchSubagentsV0, title, []string{"step-split-work"}))
+	}
+	return steps
+}
+
+func operationalDirectorStepIDsV0(steps []OperationalDirectorStepV0) []string {
+	out := make([]string, 0, len(steps))
+	for _, step := range steps {
+		out = append(out, step.StepID)
+	}
+	return compactStringsV0(out)
+}
+
 func stepV0(
 	id string,
 	kind OperationalDirectorStepKindV0,
@@ -152,6 +188,8 @@ func stepV0(
 func addOperationalDirectorPlanStepDetailsV0(
 	plan OperationalDirectorPlanV0,
 ) OperationalDirectorPlanV0 {
+	launchStepCount := operationalDirectorStepKindCountV0(plan.Steps, OperationalDirectorStepLaunchSubagentsV0)
+	launchStepIndex := 0
 	for i := range plan.Steps {
 		plan.Steps[i].WorkProfileKind = operationalDirectorWorkProfileKindV0(plan, plan.Steps[i].Kind)
 		switch plan.Steps[i].Kind {
@@ -160,12 +198,23 @@ func addOperationalDirectorPlanStepDetailsV0(
 			plan.Steps[i].DomainRefs = append([]string(nil), plan.DomainRefs...)
 			plan.Steps[i].EvidenceRefs = append([]string(nil), plan.MissingContext...)
 		case OperationalDirectorStepSplitWorkV0,
-			OperationalDirectorStepLaunchSubagentsV0,
 			OperationalDirectorStepWaitSubagentsV0:
 			plan.Steps[i].WriteSet = append([]string(nil), plan.WriteSet...)
 			plan.Steps[i].DomainRefs = append([]string(nil), plan.DomainRefs...)
 			plan.Steps[i].RequiredTests = append([]string(nil), plan.RequiredTests...)
 			plan.Steps[i].AcceptanceCriteria = operationalDirectorAcceptanceCriteriaV0(plan)
+		case OperationalDirectorStepLaunchSubagentsV0:
+			launchStepIndex++
+			plan.Steps[i].WriteSet = operationalDirectorShardedWriteSetV0(plan.WriteSet, launchStepIndex, launchStepCount)
+			plan.Steps[i].DomainRefs = append([]string(nil), plan.DomainRefs...)
+			plan.Steps[i].RequiredTests = append([]string(nil), plan.RequiredTests...)
+			plan.Steps[i].AcceptanceCriteria = operationalDirectorAcceptanceCriteriaV0(plan)
+			if launchStepCount > 1 {
+				plan.Steps[i].AcceptanceCriteria = append(
+					plan.Steps[i].AcceptanceCriteria,
+					fmt.Sprintf("Coordinar como subagente %d de %d de la ola; el write-set asignado es ownership inicial, no limite duro.", launchStepIndex, launchStepCount),
+				)
+			}
 		case OperationalDirectorStepGovernDelegationV0:
 			plan.Steps[i].ParentStepID = "step-launch-subagents"
 			plan.Steps[i].DelegationDepth = 1
@@ -184,6 +233,40 @@ func addOperationalDirectorPlanStepDetailsV0(
 		}
 	}
 	return plan
+}
+
+func operationalDirectorStepKindCountV0(
+	steps []OperationalDirectorStepV0,
+	kind OperationalDirectorStepKindV0,
+) int {
+	count := 0
+	for _, step := range steps {
+		if step.Kind == kind {
+			count++
+		}
+	}
+	return count
+}
+
+func operationalDirectorShardedWriteSetV0(
+	writeSet []string,
+	index int,
+	total int,
+) []string {
+	writeSet = compactStringsV0(writeSet)
+	if total <= 1 || len(writeSet) <= 1 || index <= 0 {
+		return append([]string(nil), writeSet...)
+	}
+	out := make([]string, 0, len(writeSet)/total+1)
+	for pathIndex, path := range writeSet {
+		if pathIndex%total == index-1 {
+			out = append(out, path)
+		}
+	}
+	if len(out) == 0 {
+		return []string{writeSet[(index-1)%len(writeSet)]}
+	}
+	return out
 }
 
 func operationalDirectorWorkProfileKindV0(

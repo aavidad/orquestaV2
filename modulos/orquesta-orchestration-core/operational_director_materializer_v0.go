@@ -127,6 +127,10 @@ func normalizeOperationalDirectorPlanMaterializeRequestV0(
 	if request.MaxItems < 0 {
 		request.MaxItems = 0
 	}
+	if request.Plan.MaxParallelAgents > 0 &&
+		(request.MaxItems == 0 || request.MaxItems > request.Plan.MaxParallelAgents) {
+		request.MaxItems = request.Plan.MaxParallelAgents
+	}
 	return request
 }
 

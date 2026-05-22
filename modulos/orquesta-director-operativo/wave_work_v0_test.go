@@ -11,15 +11,18 @@ func TestBuildOperationalDirectorWaveWorkV0ProgrammingPreservesOperationalContra
 	}
 	if !work.ReadyToLaunch ||
 		work.PlanRef != result.Plan.PlanRef ||
-		work.MaxParallelItems != result.Plan.MaxParallelAgents ||
-		len(work.Waves) != len(result.Plan.Steps) {
+		work.MaxParallelItems != result.Plan.MaxParallelAgents {
 		t.Fatalf("work=%+v plan=%+v", work, result.Plan)
+	}
+	launchWave := waveByItemKindV0(work, OperationalDirectorStepLaunchSubagentsV0)
+	if len(launchWave.Items) != result.Plan.MaxParallelAgents {
+		t.Fatalf("launch wave=%+v plan=%+v", launchWave, result.Plan)
 	}
 	launchItem := workItemByKindV0(work, OperationalDirectorStepLaunchSubagentsV0)
 	if launchItem.ItemID != "work-item-step-launch-subagents" ||
 		launchItem.WorkProfileKind != "implementation" ||
 		!stringInSetV0(launchItem.DependsOn, "work-item-step-split-work") ||
-		len(launchItem.WriteSet) != 2 ||
+		len(launchItem.WriteSet) != 1 ||
 		!stringInSetV0(launchItem.RequiredTests, "go test -count=1 ./modulos/orquesta-director-operativo") ||
 		!containsFragmentInSetV0(launchItem.AcceptanceCriteria, "objetivo actual") {
 		t.Fatalf("launch item=%+v", launchItem)
@@ -95,6 +98,103 @@ func TestBuildOperationalDirectorWaveWorkV0ReportsUnresolvableDependencies(t *te
 	assertIssueV0(t, work.Issues, "step_dependency_cycle")
 }
 
+func TestBuildOperationalDirectorWaveWorkV0RejectsInvalidDelegationRefsAndBudgets(t *testing.T) {
+	result := BuildOperationalDirectorPlanV0(validDomainWorkRequestV0(func(request *OperationalDirectorRequestV0) {
+		request.AllowRecursiveDelegation = true
+		request.MaxDelegationDepth = 2
+		request.MaxSubagentsPerAgent = 2
+	}))
+	plan := result.Plan
+	governIndex := planStepIndexByKindV0(plan, OperationalDirectorStepGovernDelegationV0)
+	plan.Steps[governIndex].ParentStepID = "step-missing-parent"
+	plan.Steps[governIndex].ChildStepIDs = []string{"step-missing-child"}
+	plan.Steps[governIndex].DelegationDepth = plan.MaxDelegationDepth + 1
+	plan.Steps[governIndex].MaxChildAgents = plan.MaxSubagentsPerAgent + 1
+
+	work := BuildOperationalDirectorWaveWorkV0(plan)
+
+	if work.ReadyToLaunch {
+		t.Fatalf("invalid delegation plan should not be ready: %+v", work)
+	}
+	assertIssueV0(t, work.Issues, "parent_step_missing")
+	assertIssueV0(t, work.Issues, "child_step_missing")
+	assertIssueV0(t, work.Issues, "delegation_depth_exceeds_budget")
+	assertIssueV0(t, work.Issues, "max_child_agents_exceeds_budget")
+}
+
+func TestBuildOperationalDirectorWaveWorkV0RejectsReadyPlanWithoutOperationalCycle(t *testing.T) {
+	result := BuildOperationalDirectorPlanV0(validProgrammingRequestV0(nil))
+	plan := result.Plan
+	var trimmed []OperationalDirectorStepV0
+	for _, step := range plan.Steps {
+		if step.Kind == OperationalDirectorStepWaitSubagentsV0 ||
+			step.Kind == OperationalDirectorStepReviewDeliveriesV0 ||
+			step.Kind == OperationalDirectorStepRunRequiredTestsV0 {
+			continue
+		}
+		trimmed = append(trimmed, step)
+	}
+	plan.Steps = trimmed
+
+	work := BuildOperationalDirectorWaveWorkV0(plan)
+
+	if work.ReadyToLaunch {
+		t.Fatalf("incomplete operational cycle should not be ready: %+v", work)
+	}
+	assertIssueV0(t, work.Issues, "ready_step_missing")
+	assertIssueV0(t, work.Issues, "run_required_tests_missing")
+}
+
+func TestBuildOperationalDirectorWaveWorkV0RejectsDomainReadyPlanWithoutOpaqueScope(t *testing.T) {
+	result := BuildOperationalDirectorPlanV0(validDomainWorkRequestV0(nil))
+	plan := result.Plan
+	plan.DomainRefs = nil
+	plan.WriteSet = nil
+
+	work := BuildOperationalDirectorWaveWorkV0(plan)
+
+	if work.ReadyToLaunch {
+		t.Fatalf("domain work without refs/write-set should not be ready: %+v", work)
+	}
+	assertIssueV0(t, work.Issues, "domain_refs_missing")
+	assertIssueV0(t, work.Issues, "write_set_missing")
+}
+
+func TestBuildOperationalDirectorWaveWorkV0RejectsDomainReadyPlanWithUnsafeWriteSet(t *testing.T) {
+	result := BuildOperationalDirectorPlanV0(validDomainWorkRequestV0(nil))
+	plan := result.Plan
+	plan.WriteSet = []string{"../opes-interno"}
+
+	work := BuildOperationalDirectorWaveWorkV0(plan)
+
+	if work.ReadyToLaunch {
+		t.Fatalf("domain work with unsafe write-set should not be ready: %+v", work)
+	}
+	assertIssueV0(t, work.Issues, "write_set_path_invalid")
+}
+
+func TestBuildOperationalDirectorWaveWorkV0RejectsNeedsContextPlanWithLaunch(t *testing.T) {
+	result := BuildOperationalDirectorPlanV0(validDomainWorkRequestV0(func(request *OperationalDirectorRequestV0) {
+		request.ContextStatus = OperationalDirectorContextInsufficientV0
+		request.MissingContext = []string{"source_refs"}
+		request.DomainRefs = nil
+	}))
+	plan := result.Plan
+	plan.Steps = append(plan.Steps, OperationalDirectorStepV0{
+		StepID: "step-launch-illegal",
+		Kind:   OperationalDirectorStepLaunchSubagentsV0,
+		Status: OperationalDirectorStepPendingV0,
+		Title:  "Lanzamiento no permitido sin contexto",
+	})
+
+	work := BuildOperationalDirectorWaveWorkV0(plan)
+
+	if work.ReadyToLaunch {
+		t.Fatalf("needs_context plan should not be ready: %+v", work)
+	}
+	assertIssueV0(t, work.Issues, "needs_context_launch_forbidden")
+}
+
 func workItemByKindV0(
 	work OperationalDirectorWaveWorkV0,
 	kind OperationalDirectorStepKindV0,
@@ -128,4 +228,16 @@ func waveByItemKindV0(
 		}
 	}
 	return OperationalDirectorWaveV0{}
+}
+
+func planStepIndexByKindV0(
+	plan OperationalDirectorPlanV0,
+	kind OperationalDirectorStepKindV0,
+) int {
+	for index, step := range plan.Steps {
+		if step.Kind == kind {
+			return index
+		}
+	}
+	return -1
 }

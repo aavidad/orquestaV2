@@ -68,7 +68,7 @@ func (runner RequiredTestRunnerV0) RunRequiredTestsV0(
 		ctx = context.Background()
 	}
 	request = normalizeRequiredTestExecutionRequestV0(request)
-	if issues := validateRequiredTestExecutionRequestV0(request, runner); len(issues) > 0 {
+	if issues := validateRequiredTestExecutionRequestV0(request); len(issues) > 0 {
 		return RequiredTestExecutionResultV0{Issues: issues}, nil
 	}
 
@@ -88,6 +88,10 @@ func (runner RequiredTestRunnerV0) RunRequiredTestsV0(
 				result = appendRequiredTestEvidenceResultV0(result, existing)
 				continue
 			}
+		}
+		if issues := validateRequiredTestExecutionPortsV0(runner); len(issues) > 0 {
+			result.Issues = append(result.Issues, issues...)
+			return result, nil
 		}
 		execution, err := runner.Executor.RunRequiredTestCommandV0(
 			ctx,
@@ -229,15 +233,8 @@ func normalizeRequiredTestExecutionRequestV0(
 
 func validateRequiredTestExecutionRequestV0(
 	request RequiredTestExecutionRequestV0,
-	runner RequiredTestRunnerV0,
 ) []ErrorV0 {
 	issues := make([]ErrorV0, 0)
-	if runner.Executor == nil {
-		issues = append(issues, errorV0(ErrNucleoOrquestacionInvalidoV0, "required_test_executor", "required_test_executor requerido"))
-	}
-	if runner.EvidenceWriter == nil {
-		issues = append(issues, errorV0(ErrNucleoOrquestacionInvalidoV0, "required_test_evidence_writer", "required_test_evidence_writer requerido"))
-	}
 	for field, value := range map[string]string{
 		"run_ref":             request.RunRef,
 		"task_ref":            request.TaskRef,
@@ -253,6 +250,19 @@ func validateRequiredTestExecutionRequestV0(
 	}
 	if len(request.TestCommands) == 0 {
 		issues = append(issues, errorV0(ErrNucleoOrquestacionInvalidoV0, "test_commands", "test_commands requerido"))
+	}
+	return issues
+}
+
+func validateRequiredTestExecutionPortsV0(
+	runner RequiredTestRunnerV0,
+) []ErrorV0 {
+	issues := make([]ErrorV0, 0)
+	if runner.Executor == nil {
+		issues = append(issues, errorV0(ErrNucleoOrquestacionInvalidoV0, "required_test_executor", "required_test_executor requerido"))
+	}
+	if runner.EvidenceWriter == nil {
+		issues = append(issues, errorV0(ErrNucleoOrquestacionInvalidoV0, "required_test_evidence_writer", "required_test_evidence_writer requerido"))
 	}
 	return issues
 }

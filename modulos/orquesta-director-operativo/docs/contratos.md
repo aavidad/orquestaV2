@@ -6,8 +6,9 @@ Entrada pura para pedir un plan operativo. Soporta dos modos de primer nivel:
 
 - `programming`: autoprogramacion o cambios de software. Requiere worktree
   aislada, rama, write-set y tests obligatorios.
-- `domain_work`: trabajo de dominio externo. Si el contexto es insuficiente,
-  el plan pide contexto y no lanza subagentes.
+- `domain_work`: trabajo de dominio externo. Si el contexto es suficiente,
+  requiere `domain_refs` opacas y `write_set` seguro; si es insuficiente, el
+  plan pide contexto y no lanza subagentes.
 
 ## `OperationalDirectorPlanV0`
 
@@ -38,8 +39,9 @@ Primer corte real: el materializador de
 `modulos/orquesta-orchestration-core/operational_director_materializer_v0.go`
 consume planes `ready` y solo convierte items `launch_subagents` en
 `WorkflowTaskV0` + `CreateMicrotask`. La espera por ola/cohorte se puede derivar
-con `WorkflowTaskWaitAgentRefsV0`, pero todavia no esta conectada al ciclo
-completo de espera, review, tests, rework/replan ni cierre.
+con `WorkflowTaskWaitAgentRefsV0`; el ciclo completo de espera, review, tests,
+rework/replan y cierre vive en `app-director-service`/`orchestration-core`, no
+en este contrato puro.
 
 ## `OperationalDirectorWaveWorkV0`
 
@@ -53,10 +55,20 @@ La proyeccion:
 - conserva `work_profile_kind` para materializacion posterior como
   `WorkflowTaskV0`;
 - conserva `domain_refs`, `write_set`, `required_tests`, evidencias y criterios;
+- expande `MaxParallelAgents` en varios pasos/items `launch_subagents` dentro de
+  la misma ola, con sharding de `write_set` como ownership inicial para evitar
+  bloqueos de concurrencia artificiales;
 - expresa parent/child refs de delegacion como ids de work item;
 - no importa ni conoce orchestration-core, Codex, OPES, DB, HTTP, filesystem ni
   runtime;
 - marca `ready_to_launch=false` cuando el plan esta en `needs_context`.
+- rechaza planes armados externamente que declaren parent/child refs
+  inexistentes, profundidad/fanout fuera del presupuesto del plan, un ciclo
+  operativo listo sin `launch_subagents -> wait_subagents -> review_deliveries
+  -> replan_or_close`, `programming` sin `run_required_tests` o `domain_work`
+  listo sin refs opacas/write-set.
+- rechaza planes `needs_context` que intenten lanzar subagentes en vez de pedir
+  contexto.
 
 Si las dependencias del plan no son resolubles, devuelve issues y no inventa una
 ola ejecutable.

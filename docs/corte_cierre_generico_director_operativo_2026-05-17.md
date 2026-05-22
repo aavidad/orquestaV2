@@ -259,11 +259,13 @@ implementacion, test focal y evidencia en la matriz.
   deterministas de `QualityGateRecorded` y `ReplanDecisionRecorded`, aun sin
   `CommandEffects` frescos.
 
-El orden recomendado ahora es: smoke Codex real de ola/cohorte amplia, recursion
-real y OPES temporal real de derivados/cierre. El smoke Codex real acotado con
-runner ya quedo cerrado por `CODEX-REQTEST-REAL-E2E`; el no-OPES temporal con
-runtime fake ya quedo cerrado por `EXT-NO-OPES`. Ninguno cubre recursion real,
-ola Codex amplia ni derivados OPES reales.
+El orden recomendado ahora es: ejecutar `CODEX-WAVE-REAL` con Codex real de
+ola/cohorte amplia, despues recursion real y OPES temporal real de
+derivados/cierre. El harness fake de ola/cohorte ya existe, pero no cierra el
+modo real con proveedor. El smoke Codex real acotado con runner ya quedo cerrado
+por `CODEX-REQTEST-REAL-E2E`; el no-OPES temporal con runtime fake ya quedo
+cerrado por `EXT-NO-OPES`. Ninguno cubre recursion real ni derivados OPES
+reales.
 
 ## Corte OperationalDirectorPlanStateV0
 
@@ -388,8 +390,8 @@ y cierre por refs opacas.
 
 Los huecos restantes no se consideran cerrados hasta tener evidencia propia:
 
-- smoke Codex real de ola/cohorte amplia con varios agentes vivos, mismo ciclo
-  de review/tests/cierre y scope formal de Director Operativo;
+- ejecucion real de `CODEX-WAVE-REAL` con varios agentes vivos, mismo ciclo de
+  review/tests/cierre y scope formal de Director Operativo;
 - recursion Codex real con parent/child refs, limites, presupuesto, entregas
   vivas, review causal y cierre del arbol;
 - OPES temporal real de derivados/cierre hasta `assemble_topic`, con refs
@@ -430,7 +432,7 @@ TestCodexStackRealOperationalDirectorWaveCohortOptInV0
    `DIRECTOR-REQUIRED-TESTS-DURABLE-OFFLINE`,
    `DIRECTOR-REPLAN-CLOSE-OFFLINE` y
    `DIRECTOR-PLAN-STATE-OFFLINE`.
-3. Preparar smoke Codex real de ola/cohorte amplia; el caso acotado de runner ya
-   esta cerrado por `CODEX-REQTEST-REAL-E2E`.
+3. Ejecutar `CODEX-WAVE-REAL` con Codex real de ola/cohorte amplia; el caso
+   acotado de runner ya esta cerrado por `CODEX-REQTEST-REAL-E2E`.
 4. Solo despues, conectar OPES/conectores reales con guardas opt-in y filtro por
    job type.

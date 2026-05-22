@@ -149,24 +149,32 @@ Implementado:
   scope `WaitAgentRefs` y evidencias de test ya guardadas para tasks del
   Director Operativo. La fuente del stack ignora evidencia mixta no-test dentro
   del review result y exige cadena completa de review requested/result/accepted.
+- `OperationalDirectorPlanStateV0` ya cubre el ciclo offline/fake-runtime
+  probado: wait consumido, review positiva por scope, review negativa observada,
+  `run_required_tests`, runner por puerto, evidencia faltante/fallida,
+  `replan_or_close`, cierre, bloqueo, replan causal de tests/cierre, replay
+  focal y recuperacion durable con state-file.
+- `CODEX-REQTEST-REAL-E2E` cierra un caso Codex real acotado con un agente,
+  review causal, `RequiredTestEvidenceV0` y cierre. `EXT-NO-OPES` cierra una app
+  externa temporal HTTP/file con submitter real opt-in, `codex-fake`, review,
+  tests requeridos y cierre por refs opacas.
 
 Pendiente:
 
-- materializar el avance posterior a `wait_subagents` como ciclo durable:
-  `review_deliveries` por ola, ejecucion/generacion durable de
-  `RequiredTestEvidenceV0` desde `run_required_tests`,
-  `replan_or_close`/`close` y plan state completo;
-- conectar review/rework/replan del Director Operativo con entregas reales del
-  stack Codex y de `domain_work`;
+- ejecutar la misma garantia con Codex real en ola/cohorte amplia. Ya existe
+  harness fake y test opt-in real (`CODEX-WAVE-REAL`), pero falta evidencia de
+  ejecucion con proveedor;
+- conectar review/rework/replan del Director Operativo con casos reales amplios
+  de `domain_work`/OPES hasta cierre de derivados;
 - cerrar recursion Codex end-to-end: hijos y nietos con parent/child refs,
   presupuesto global, profundidad/fanout, ACK/artefactos y review antes de
   consumir decisiones;
 - conectar el expander neutral `DomainDocumentPlanV0 -> DomainWorkJobRequestV0[]`
-  con el ciclo real del director; ya existe un conector durable file-based de
-  referencia para `DomainWorkJobCreatorPortV0`, pero el ciclo real del director
-  aun no lo cablea como estado operativo;
-- crear smoke real focal del ciclo completo sin tocar OPES productivo ni colas
-  amplias.
+  con el ciclo real de OPES derivados/cierre. Ya existe conector durable
+  file-based de referencia para `DomainWorkJobCreatorPortV0`, pero el cierre
+  OPES real hasta `assemble_topic` sigue pendiente;
+- mantener todos esos smokes reales opt-in, sobre instancias temporales y sin
+  colas amplias.
 
 ## Ruta de cierre para la tarde del 2026-05-17
 
@@ -178,10 +186,11 @@ El handoff especifico del siguiente tramo esta en
 
 Estado del P0: cerrado para materializacion `launch_subagents`, wait acotado y
 estado durable de espera. P1 WaitAgentRefs tambien queda cerrado para ingesta
-Codex: pending, wait y ACK/deliveries usan el mismo scope. Queda P1 del ciclo
-del Director para conectar review/rework/replan/cierre como flujo durable
-completo. Ese P1 restante no debe describirse como integrado hasta que exista
-codigo y prueba offline clara.
+Codex: pending, wait y ACK/deliveries usan el mismo scope. El ciclo durable
+offline posterior ya tiene pruebas para review/rework/replan/cierre, runner de
+tests y replay focal. Lo que sigue pendiente no es el tramo offline, sino su
+repeticion con Codex real amplio, recursion real y OPES temporal real de
+derivados/cierre.
 
 Tramo P0 ya disponible:
 
@@ -196,19 +205,19 @@ Tramo P0 ya disponible:
    candidatos accionables.
 5. Registrar `WorkflowTaskWaitStateV0` con causa visible y agentes pendientes.
 
-Tramo P1 pendiente:
+Tramo P1 offline ya disponible:
 
-1. Usar providers existentes de delivery, review gate y rework/replan:
+1. Usa providers existentes de delivery, review gate y rework/replan:
    `DeliveryCandidateProviderV0`, `ReviewGateCandidateProviderV0` y
    `ReviewReworkReplanCandidateProviderV0`.
-2. Agrupar `review_deliveries` por ola/cohorte, no por cualquier entrega suelta
+2. Agrupa `review_deliveries` por ola/cohorte y no por cualquier entrega suelta
    del run.
-3. Registrar `run_required_tests` como evidencia durable antes de permitir
-   cierre en modo `programming`.
-4. Persistir estado vivo del plan: el tramo inicial ya guarda step activo,
-   ola/cohorte, tasks, agentes, pendientes y `wait_ref`; falta actualizar
-   blockers, evidencias, intentos de replan y razon de cierre.
-5. Cerrar solo con entrega, review aceptada, evidencias y tests requeridos si
+3. Registra `run_required_tests` como evidencia durable por store/runner antes
+   de permitir cierre en modo `programming`.
+4. Persiste estado vivo del plan: step activo, ola/cohorte, tasks, agentes,
+   pendientes, `wait_ref`, blockers, evidencias, intentos de replan y razon de
+   cierre/bloqueo.
+5. Cierra solo con entrega, review aceptada, evidencias y tests requeridos si
    aplica.
 
 Criterio de done para el corte offline:
@@ -244,14 +253,13 @@ de `WorkflowTaskV0.RequiredTests`, enlazada al mismo `run_ref`, `task_ref`,
 `accepted_review_ref` que el cierre. Si el store falta, la ref no existe, el
 status es `failed` o la cadena causal no empata, el cierre se bloquea.
 
-Lo pendiente es producir esas evidencias desde el paso operativo
-`run_required_tests`: ejecutar o validar por puerto, guardar
-`RequiredTestEvidenceV0`, registrar el fallo como causa de rework/replan y
-mantener ese estado vivo en la reentrada del plan.
-
-Hasta que ese tramo exista en codigo, debe figurar como pendiente verificable en
-la matriz: no basta con que `WaitAgentRefs` ya filtre ACK/deliveries ni con que
-un provider de review/replan pueda crear rework aislado.
+El paso operativo `run_required_tests` ya puede consumir evidencia causal,
+generarla mediante runner inyectado por puerto, guardar `RequiredTestEvidenceV0`,
+bloquear por fallo/falta de evidencia, reentrar cuando aparece evidencia
+posterior y replanificar un fallo causal acotado. Lo pendiente verificable es
+repetir esa garantia con Codex real de ola/cohorte amplia, recursion real y OPES
+temporal real; no basta con que exista un harness opt-in sin ejecucion real
+documentada.
 
 ## Espera por cohortes y oleadas
 

@@ -71,6 +71,37 @@ func TestExistingDirectorLoopRequestV0RegistraWaitStatePorOla(t *testing.T) {
 	}
 }
 
+func TestExistingDirectorLoopRequestV0DerivaWaitAgentRefsPorParentTask(t *testing.T) {
+	runRef := "run-app-director-wait-parent-001"
+	parentTaskRef := "task-app-director-wait-parent-root"
+	child := serviceWorkflowTaskForWaitRefsTestV0(runRef, "task-app-director-wait-parent-child", "wave-01", "cohort-a")
+	child.ParentTaskRef = parentTaskRef
+	sibling := serviceWorkflowTaskForWaitRefsTestV0(runRef, "task-app-director-wait-parent-sibling", "wave-01", "cohort-a")
+	sibling.ParentTaskRef = "task-app-director-wait-parent-other"
+	run := serviceRunForWaitRefsTestV0(runRef, child.TaskID, sibling.TaskID)
+	ports := StartAppDirectorPortsV0{
+		RunStore:          orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		DirectorTaskStore: orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(child, sibling),
+	}
+	request := normalizeContinueAppDirectorRequestV0(ContinueAppDirectorRequestV0{
+		RunRef:            runRef,
+		WaitParentTaskRef: " " + parentTaskRef + " ",
+	})
+
+	loop, err := existingDirectorLoopRequestV0(context.Background(), request, ports)
+	if err != nil {
+		t.Fatalf("existingDirectorLoopRequestV0: %v", err)
+	}
+	wantDerived := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(child.TaskID)
+	unwanted := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(sibling.TaskID)
+	if !loop.WaitScopeApplied ||
+		len(loop.WaitAgentRefs) != 1 ||
+		loop.WaitAgentRefs[0] != wantDerived ||
+		serviceStringInSetV0(loop.WaitAgentRefs, unwanted) {
+		t.Fatalf("wait_agent_refs=%v want=%s unwanted=%s", loop.WaitAgentRefs, wantDerived, unwanted)
+	}
+}
+
 func TestExistingDirectorLoopRequestV0RequiereTaskStoreConFiltroWait(t *testing.T) {
 	runRef := "run-app-director-wait-store-missing-001"
 	run := serviceRunForWaitRefsTestV0(runRef)

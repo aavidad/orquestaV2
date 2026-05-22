@@ -58,9 +58,10 @@ Tras los cortes del 2026-05-17, el estado real es:
   `required-tests-failed`. El runner por puerto, el ejecutor local opt-in, la
   rama negativa review/replan, el replan por tests fallidos, `replan_or_close`,
   `close`, replay/idempotencia del ciclo probado y estado vivo posterior ya
-  tienen evidencia offline/fake-runtime y smokes acotados documentados. Siguen
-  pendientes los smokes con Codex real de ola/cohorte amplia, recursion Codex
-  real y OPES temporal real de derivados/cierre.
+  tienen evidencia offline/fake-runtime. `CODEX-REQTEST-REAL-E2E` cierra un caso
+  Codex real acotado con un agente, y `EXT-NO-OPES` cierra una app externa
+  temporal con `codex-fake`; no cubren ola/cohorte Codex amplia, recursion Codex
+  real ni OPES temporal real de derivados/cierre, que siguen pendientes.
 - El nuevo handoff de cierre es
   `docs/corte_cierre_generico_director_operativo_2026-05-17.md`: P1
   `WaitAgentRefs` no se reabre salvo regresion; el foco es cierre causal
@@ -83,7 +84,9 @@ Tras los cortes del 2026-05-17, el estado real es:
   ya existe una prueba de arbol 1 -> 2 -> 4 con parent/child refs, presupuesto
   global, profundidad/fanout, waits acotados y bloqueo de cierre hasta cerrar
   hijos/nietos; falta repetirlo con Codex real, entregas vivas, review causal y
-  cierre del arbol.
+  cierre del arbol. Para ola/cohorte amplia ya hay harness fake y test opt-in
+  real (`CODEX-WAVE-REAL`), pero la ejecucion real con proveedor sigue pendiente
+  hasta que quede evidencia operativa.
 - La metadata completa de `WorkflowTaskV0` vive en `WorkflowTaskStore`. Un
   replay solo desde eventos compactos reconstruye refs de tareas, no
   `wave_ref`, `cohort_ref`, parent/child refs, criterios completos ni el estado

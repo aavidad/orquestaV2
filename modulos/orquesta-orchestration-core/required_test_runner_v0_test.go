@@ -127,6 +127,38 @@ func TestRequiredTestRunnerV0EsIdempotenteConMismaEvidencia(t *testing.T) {
 	}
 }
 
+func TestRequiredTestRunnerV0ReplayConEvidenceReaderNoExigeExecutorNiWriter(t *testing.T) {
+	request := requiredTestExecutionRequestForTestV0()
+	request.TestCommands = []string{"go test -count=1 ./modulos/orquesta-orchestration-core -run TestRequiredTestRunner"}
+	evidence := RequiredTestEvidenceV0{
+		SchemaVersion:     RequiredTestEvidenceSchemaVersionV0,
+		EvidenceRef:       requiredTestEvidenceRefForCommandV0(request, request.TestCommands[0]),
+		RunRef:            request.RunRef,
+		TaskRef:           request.TaskRef,
+		TestCommand:       request.TestCommands[0],
+		Status:            RequiredTestEvidenceStatusPassedV0,
+		DeliveryRef:       request.DeliveryRef,
+		ReviewRequestID:   request.ReviewRequestID,
+		ReviewResultRef:   request.ReviewResultRef,
+		AcceptedReviewRef: request.AcceptedReviewRef,
+		OccurredAt:        request.OccurredAt,
+		EvidenceRefs:      []string{"artifact-ref-replayed-test-output-001"},
+	}
+	store := NewInMemoryRequiredTestEvidenceStoreV0(evidence)
+
+	result, err := (RequiredTestRunnerV0{
+		EvidenceReader: store,
+	}).RunRequiredTestsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("RunRequiredTestsV0: %v", err)
+	}
+	if len(result.Issues) != 0 ||
+		len(result.PassedEvidenceRefs) != 1 ||
+		result.PassedEvidenceRefs[0] != evidence.EvidenceRef {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestRequiredTestRunnerV0RechazaResultadoSinArtefacto(t *testing.T) {
 	store := NewInMemoryRequiredTestEvidenceStoreV0()
 	request := requiredTestExecutionRequestForTestV0()

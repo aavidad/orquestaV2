@@ -65,6 +65,12 @@ func validateOperationalDirectorDomainWorkV0(
 		len(compactStringsV0(request.DomainRefs)) == 0 {
 		return []OperationalDirectorIssueV0{issueV0("domain_refs_missing", "domain_refs", "refs de dominio requeridas")}
 	}
+	if status == OperationalDirectorContextSufficientV0 {
+		issues := validateOperationalDirectorWriteSetV0(request.WriteSet)
+		if len(issues) > 0 {
+			return issues
+		}
+	}
 	if status == OperationalDirectorContextInsufficientV0 &&
 		len(compactStringsV0(request.MissingContext)) == 0 {
 		return []OperationalDirectorIssueV0{issueV0("missing_context_required", "missing_context", "campos faltantes requeridos")}

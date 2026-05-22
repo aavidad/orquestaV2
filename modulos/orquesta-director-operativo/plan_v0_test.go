@@ -28,10 +28,13 @@ func TestBuildOperationalDirectorPlanV0ProgrammingReady(t *testing.T) {
 			t.Fatalf("missing step %s in %+v", kind, result.Plan.Steps)
 		}
 	}
+	if count := planStepKindCountV0(result.Plan, OperationalDirectorStepLaunchSubagentsV0); count != DefaultOperationalDirectorMaxParallelAgentsV0 {
+		t.Fatalf("launch steps=%d plan=%+v", count, result.Plan.Steps)
+	}
 	launchStep := planStepByKindV0(result.Plan, OperationalDirectorStepLaunchSubagentsV0)
 	if launchStep.Status != OperationalDirectorStepPendingV0 ||
 		launchStep.WorkProfileKind != "implementation" ||
-		len(launchStep.WriteSet) != 2 ||
+		len(launchStep.WriteSet) != 1 ||
 		!stringInSetV0(launchStep.RequiredTests, "go test -count=1 ./modulos/orquesta-director-operativo") ||
 		!containsFragmentInSetV0(launchStep.AcceptanceCriteria, "objetivo actual") {
 		t.Fatalf("launch step=%+v", launchStep)
@@ -100,6 +103,17 @@ func TestBuildOperationalDirectorPlanV0DomainReadyUsesSameOperationalLoop(t *tes
 	}
 }
 
+func TestBuildOperationalDirectorPlanV0DomainReadyRejectsMissingWriteSet(t *testing.T) {
+	result := BuildOperationalDirectorPlanV0(validDomainWorkRequestV0(func(request *OperationalDirectorRequestV0) {
+		request.WriteSet = nil
+	}))
+
+	if result.Accepted {
+		t.Fatalf("accepted=true result=%+v", result)
+	}
+	assertIssueV0(t, result.Issues, "write_set_missing")
+}
+
 func TestBuildOperationalDirectorPlanV0RecursiveDelegationIsDirectorGoverned(t *testing.T) {
 	result := BuildOperationalDirectorPlanV0(validDomainWorkRequestV0(func(request *OperationalDirectorRequestV0) {
 		request.ProjectRef = "opes"
@@ -146,8 +160,14 @@ func TestBuildOperationalDirectorPlanV0ClampsBudgetsAndDeduplicates(t *testing.T
 	}
 	if result.Plan.LoopBudget != MaxOperationalDirectorMaxLoopsV0 ||
 		result.Plan.MaxParallelAgents != MaxOperationalDirectorMaxParallelAgentsV0 ||
-		len(result.Plan.WriteSet) != 2 {
+		len(result.Plan.WriteSet) != 2 ||
+		planStepKindCountV0(result.Plan, OperationalDirectorStepLaunchSubagentsV0) != MaxOperationalDirectorMaxParallelAgentsV0 {
 		t.Fatalf("plan=%+v", result.Plan)
+	}
+	waitStep := planStepByKindV0(result.Plan, OperationalDirectorStepWaitSubagentsV0)
+	if len(waitStep.DependsOn) != MaxOperationalDirectorMaxParallelAgentsV0 ||
+		!stringInSetV0(waitStep.DependsOn, "step-launch-subagents-06") {
+		t.Fatalf("wait step=%+v", waitStep)
 	}
 }
 
@@ -186,6 +206,7 @@ func validDomainWorkRequestV0(
 		Mode:          OperationalDirectorModeDomainWorkV0,
 		ContextStatus: OperationalDirectorContextSufficientV0,
 		DomainRefs:    []string{"domain-job-ref-001", "domain-topic-ref-001"},
+		WriteSet:      []string{"external/domain-work/domain-job-ref-001"},
 	}
 	if mutate != nil {
 		mutate(&request)
@@ -215,6 +236,19 @@ func planStepByKindV0(
 		}
 	}
 	return OperationalDirectorStepV0{}
+}
+
+func planStepKindCountV0(
+	plan OperationalDirectorPlanV0,
+	kind OperationalDirectorStepKindV0,
+) int {
+	count := 0
+	for _, step := range plan.Steps {
+		if step.Kind == kind {
+			count++
+		}
+	}
+	return count
 }
 
 func stringInSetV0(values []string, want string) bool {

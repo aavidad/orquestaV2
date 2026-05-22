@@ -61,10 +61,11 @@ func (store *StoreV0) saveWorkflowTaskLockedV0(
 		return err
 	}
 	if ok {
-		if err := validateWorkflowTaskDocumentV0(existing, runRef, taskRef); err != nil {
+		existingTask, err := validateWorkflowTaskDocumentV0(existing, runRef, taskRef)
+		if err != nil {
 			return err
 		}
-		if !reflect.DeepEqual(existing.Task, task) {
+		if !reflect.DeepEqual(existingTask, task) {
 			return storeErrorV0("workflow_task", "microtarea existente con contrato distinto")
 		}
 		return nil
@@ -90,10 +91,11 @@ func (store *StoreV0) loadWorkflowTasksLockedV0(
 		if !ok {
 			return nil, storeErrorV0("workflow_tasks", fmt.Sprintf("microtarea no encontrada: %s", taskRef))
 		}
-		if err := validateWorkflowTaskDocumentV0(document, runRef, taskRef); err != nil {
+		task, err := validateWorkflowTaskDocumentV0(document, runRef, taskRef)
+		if err != nil {
 			return nil, err
 		}
-		out = append(out, document.Task)
+		out = append(out, task)
 	}
 	return out, nil
 }
@@ -102,12 +104,19 @@ func validateWorkflowTaskDocumentV0(
 	document workflowTaskDocumentV0,
 	expectedRunRef string,
 	expectedTaskRef string,
-) error {
+) (orquestacoreworkflow.WorkflowTaskV0, error) {
 	if document.SchemaVersion != workflowTaskDocumentSchemaV0 {
-		return storeErrorV0("workflow_task.schema_version", "schema_version invalida")
+		return orquestacoreworkflow.WorkflowTaskV0{}, storeErrorV0("workflow_task.schema_version", "schema_version invalida")
 	}
 	if document.RunRef != expectedRunRef || document.TaskRef != expectedTaskRef {
-		return storeErrorV0("workflow_task.ref", "ref inconsistente")
+		return orquestacoreworkflow.WorkflowTaskV0{}, storeErrorV0("workflow_task.ref", "ref inconsistente")
 	}
-	return nil
+	task, err := orquestacoreworkflow.NewWorkflowTaskV0(document.Task)
+	if err != nil {
+		return orquestacoreworkflow.WorkflowTaskV0{}, err
+	}
+	if task.RunID != expectedRunRef || task.TaskID != expectedTaskRef {
+		return orquestacoreworkflow.WorkflowTaskV0{}, storeErrorV0("workflow_task.state_ref", "ref interna inconsistente")
+	}
+	return task, nil
 }

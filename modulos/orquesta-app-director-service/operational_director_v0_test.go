@@ -106,6 +106,90 @@ func TestContinueAppDirectorV0MaterializaOperationalDirectorPlanYEsperaOla(t *te
 	}
 }
 
+func TestContinueAppDirectorV0MaterializaAgentesParalelosDelPlanOperativo(t *testing.T) {
+	runRef := "run-app-director-operational-plan-parallel-001"
+	contractRef := "contract:function:operational-director:v0"
+	run := serviceRunForWaitRefsTestV0(runRef)
+	run.FunctionContracts = []string{contractRef}
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0(run)
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
+	waitStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskWaitStateStoreV0()
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
+	plan := serviceOperationalDirectorPlanWithParallelLaunchesForTestV0(t, runRef, 3)
+
+	result, err := ContinueAppDirectorV0(context.Background(), ContinueAppDirectorRequestV0{
+		RunRef:                  runRef,
+		OccurredAt:              "2026-05-22T21:25:00Z",
+		CorrelationID:           "corr-app-director-operational-plan-parallel-001",
+		MaxBursts:               6,
+		MaxStepsPerBurst:        6,
+		MaxDispatchesPerWait:    6,
+		MaxCommands:             30,
+		MaxOutboxPerCycle:       12,
+		OperationalDirectorPlan: plan,
+		OperationalDirectorFunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+			ContractRef:  contractRef,
+			FunctionName: "OperationalDirectorCut",
+		}},
+	}, StartAppDirectorPortsV0{
+		RunStore:                   store,
+		EventSink:                  sink,
+		OutboxLedger:               ledger,
+		DirectorTaskStore:          taskStore,
+		WaitStateWriter:            waitStore,
+		OperationalPlanStateWriter: planStateStore,
+		Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+			serviceCapacityDispatcherForTestV0(store, sink, ledger),
+			serviceAgentLauncherDispatcherForTestV0(store, sink, ledger),
+		},
+	})
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0: %v", err)
+	}
+	if result.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
+		len(result.Run.Tasks) != 3 {
+		t.Fatalf("result=%+v", result)
+	}
+	tasks, err := taskStore.LoadWorkflowTasksV0(context.Background(), runRef, result.Run.Tasks)
+	if err != nil {
+		t.Fatalf("LoadWorkflowTasksV0: %v", err)
+	}
+	waveRef := tasks[0].WaveRef
+	cohortRef := tasks[0].CohortRef
+	for _, task := range tasks {
+		agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID)
+		if task.WaveRef != waveRef ||
+			task.CohortRef != cohortRef ||
+			!serviceStringInSetV0(result.Run.StartedAgents, agentRef) {
+			t.Fatalf("task=%+v started=%v", task, result.Run.StartedAgents)
+		}
+	}
+	waitRef := appDirectorWaitRefV0(
+		runRef,
+		appDirectorWaitFilterV0{WaveRef: waveRef, CohortRef: cohortRef},
+		"corr-app-director-operational-plan-parallel-001",
+	)
+	waitState, err := waitStore.LoadWorkflowTaskWaitStateV0(context.Background(), runRef, waitRef)
+	if err != nil {
+		t.Fatalf("LoadWorkflowTaskWaitStateV0: %v", err)
+	}
+	if len(waitState.PendingAgentRefs) != 3 {
+		t.Fatalf("wait state=%+v", waitState)
+	}
+	planState, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), runRef, plan.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	if planState.ActiveStepID != "step-wait-subagents" ||
+		len(planState.PendingAgentRefs) != 3 ||
+		planState.ActiveWaveRef != waveRef ||
+		planState.ActiveCohortRef != cohortRef {
+		t.Fatalf("plan state=%+v", planState)
+	}
+}
+
 func TestContinueAppDirectorV0ReentraDesdeOperationalDirectorPlanState(t *testing.T) {
 	runRef := "run-app-director-operational-plan-reentry-001"
 	contractRef := "contract:function:operational-director:v0"
@@ -4391,22 +4475,50 @@ func serviceOperationalDirectorPlanForContinueTestV0(
 	runRef string,
 ) orquestadirectoroperativo.OperationalDirectorPlanV0 {
 	t.Helper()
+	return serviceOperationalDirectorPlanForContinueWithParallelTestV0(t, runRef, 1)
+}
+
+func serviceOperationalDirectorPlanWithParallelLaunchesForTestV0(
+	t *testing.T,
+	runRef string,
+	maxParallelAgents int,
+) orquestadirectoroperativo.OperationalDirectorPlanV0 {
+	t.Helper()
+	return serviceOperationalDirectorPlanForContinueWithParallelTestV0(t, runRef, maxParallelAgents)
+}
+
+func serviceOperationalDirectorPlanForContinueWithParallelTestV0(
+	t *testing.T,
+	runRef string,
+	maxParallelAgents int,
+) orquestadirectoroperativo.OperationalDirectorPlanV0 {
+	t.Helper()
 	result := orquestadirectoroperativo.BuildOperationalDirectorPlanV0(orquestadirectoroperativo.OperationalDirectorRequestV0{
-		RequestRef:       "req-app-director-operational-plan-001",
-		RunRef:           runRef,
-		ProjectRef:       "orquesta",
-		Objective:        "Cerrar tramo launch wait del Director Operativo.",
-		Mode:             orquestadirectoroperativo.OperationalDirectorModeProgrammingV0,
-		WorktreeRef:      "worktree-ref-app-director-operational-plan",
-		WorktreeIsolated: true,
-		BranchRef:        "branch-ref-app-director-operational-plan",
-		WriteSet: []string{
-			"docs/director_operational_plan_test.md",
-		},
-		RequiredTests: []string{"go test -count=1 ./modulos/orquesta-app-director-service"},
+		RequestRef:        "req-app-director-operational-plan-001",
+		RunRef:            runRef,
+		ProjectRef:        "orquesta",
+		Objective:         "Cerrar tramo launch wait del Director Operativo.",
+		Mode:              orquestadirectoroperativo.OperationalDirectorModeProgrammingV0,
+		WorktreeRef:       "worktree-ref-app-director-operational-plan",
+		WorktreeIsolated:  true,
+		BranchRef:         "branch-ref-app-director-operational-plan",
+		MaxParallelAgents: maxParallelAgents,
+		WriteSet:          serviceOperationalDirectorPlanWriteSetForTestV0(maxParallelAgents),
+		RequiredTests:     []string{"go test -count=1 ./modulos/orquesta-app-director-service"},
 	})
 	if !result.Accepted || !result.ReadyToLaunch {
 		t.Fatalf("plan no listo: %+v", result)
 	}
 	return result.Plan
+}
+
+func serviceOperationalDirectorPlanWriteSetForTestV0(maxParallelAgents int) []string {
+	if maxParallelAgents <= 1 {
+		return []string{"docs/director_operational_plan_test.md"}
+	}
+	return []string{
+		"docs/director_operational_plan_test.md",
+		"modulos/orquesta-app-director-service/operational_director_v0.go",
+		"modulos/orquesta-app-director-service/operational_director_v0_test.go",
+	}
 }
