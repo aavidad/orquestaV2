@@ -107,7 +107,7 @@ go test -count=1 ./modulos/orquesta-orchestration-core -run 'TestReviewGateCandi
 
 ## ORCH-CORE-DIR-006: evidencia durable minima de tests requeridos
 
-Estado: hecho como contrato/store y guarda de cierre; pendiente como runner.
+Estado: hecho como contrato/store, guarda de cierre y runner por puerto.
 
 `RequiredTestEvidenceV0` representa un resultado durable de test requerido:
 `run_ref`, `task_ref`, `test_command`, status `passed`/`failed`, delivery,
@@ -127,7 +127,7 @@ mutar runs sin evento persistido.
 Validacion:
 
 ```sh
-go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-file -run 'Test.*RequiredTestEvidence|TestOperationalDirectorClosureV0'
+go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-file ./modulos/orquesta-runtime-required-test -run 'Test.*RequiredTestEvidence|TestOperationalDirectorClosureV0|TestRequiredTestRunnerV0|TestLocalCommandExecutorV0'
 ```
 
 ## ORCH-CORE-DIR-007: runner/adaptador de run_required_tests

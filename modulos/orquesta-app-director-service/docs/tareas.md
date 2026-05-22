@@ -113,7 +113,9 @@ agentes vivos. Cubierto por
 Objetivo: conectar el Director Operativo V1 con el camino productivo de
 `StartAppDirectorV0`/`ContinueAppDirectorV0`.
 
-Estado: hecho primer corte en `ContinueAppDirectorV0`.
+Estado: hecho para `ContinueAppDirectorV0` y para decisiones del director en
+`StartAppDirectorV0`; el arranque directo con un `OperationalDirectorPlanV0`
+completo sigue fuera de este corte.
 
 Alcance hecho:
 
@@ -129,9 +131,14 @@ Validacion:
 go test -count=1 ./modulos/orquesta-app-director-service -run TestContinueAppDirectorV0MaterializaOperationalDirectorPlanYEsperaOla
 ```
 
-Pendiente: `StartAppDirectorV0` aun no materializa un plan operativo inicial por
-si mismo; para el P0 se entra por un run existente compatible y
-`ContinueAppDirectorV0`.
+Actualizacion: `StartAppDirectorV0` crea `OperationalDirectorPlanStateV0`
+reentrable cuando el director aplica decisiones que generan `WorkflowTaskV0`
+operativas, con `operational_director_plan_ref` explicito o ref por defecto.
+Eso cubre el arranque normal desde director vivo. No acepta todavia un
+`OperationalDirectorPlanV0` completo en la request inicial: ese camino necesita
+fase de programacion/planificacion y contratos funcionales publicados
+causalmente antes de `CreateMicrotask`; debe entrar como tarea separada si se
+quiere un modo "plan directo" sin director previo.
 
 ## APP-DIR-SVC-013
 
@@ -154,7 +161,7 @@ go test -count=1 ./modulos/orquesta-app-director-service -run TestComposeStartAp
 Objetivo: convertir la salida de una espera del Director Operativo en
 review/replan/cierre durable.
 
-Estado: parcial avanzado. Cerrado offline el camino positivo
+Estado: cerrado offline para el ciclo probado. Cerrado el camino positivo
 `wait -> review_deliveries -> run_required_tests -> replan_or_close -> close`
 para microtareas nacidas de decisiones del director y el consumo durable de
 `run_required_tests` desde `RequiredTestEvidenceV0`.
