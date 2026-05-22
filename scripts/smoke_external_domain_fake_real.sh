@@ -9,6 +9,7 @@ project_dir="$work_root/project"
 runtime_dir="$project_dir/.orquesta-runtime"
 bin_dir="$work_root/bin"
 out_dir="${SMOKE_OUT_DIR:-$work_root/out}"
+required_test_output_dir="$out_dir/required-test-output"
 server_pid=""
 base_url=""
 keep_dir="${ORQUESTA_KEEP_SMOKE_DIR:-0}"
@@ -80,6 +81,9 @@ start_server() {
   ORQUESTA_OPES_BASE_URL="" \
   OPES_BASE_URL="" \
   ORQUESTA_DOMAIN_WORK_FILE_ENABLED="1" \
+  ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED="1" \
+  ORQUESTA_REQUIRED_TEST_ALLOWED_COMMANDS="validar=$bin_dir/validar" \
+  ORQUESTA_REQUIRED_TEST_OUTPUT_DIR="$required_test_output_dir" \
   ORQUESTA_CODEX_COMMAND="$bin_dir/codex-fake" \
     "$bin_dir/orquesta-server" run >"$stdout_log" 2>"$stderr_log" &
   server_pid="$!"
@@ -141,6 +145,28 @@ post_json_expect_status() {
     cat "$output" >&2 || true
     exit 1
   fi
+}
+
+write_fake_required_test_validator() {
+  mkdir -p "$bin_dir"
+  cat >"$bin_dir/validar" <<'SH'
+#!/usr/bin/env sh
+set -eu
+if [ ! -d external ]; then
+  echo "external artifact dir missing" >&2
+  exit 1
+fi
+if ! find external -type f -name '*.md' -print -quit | grep -q .; then
+  echo "external artifact missing" >&2
+  exit 1
+fi
+if ! grep -R "artefacto fake neutral" external >/dev/null 2>&1; then
+  echo "external artifact content invalid" >&2
+  exit 1
+fi
+printf 'validacion no-OPES ok: %s\n' "$*"
+SH
+  chmod 700 "$bin_dir/validar"
 }
 
 write_fake_codex() {
@@ -387,6 +413,8 @@ PY
 write_supervisor_payload() {
   local output="$1"
   local run_ref="$2"
+  local request_suffix="${3:-supervise}"
+  local occurred_at="${4:-2026-05-22T12:01:00Z}"
   python3 - "$output" "$smoke_id" "$run_ref" <<'PY'
 import json
 import sys
@@ -412,6 +440,19 @@ payload = {
     "max_external_waits": 4
 }
 with open(output, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, ensure_ascii=True, indent=2)
+    fh.write("\n")
+PY
+  python3 - "$output" "$smoke_id" "$request_suffix" "$occurred_at" <<'PY'
+import json
+import sys
+
+path, smoke_id, request_suffix, occurred_at = sys.argv[1:5]
+with open(path, encoding="utf-8") as fh:
+    payload = json.load(fh)
+payload["request_id"] = f"request-ref-external-domain-fake-{request_suffix}-{smoke_id}"
+payload["occurred_at"] = occurred_at
+with open(path, "w", encoding="utf-8") as fh:
     json.dump(payload, fh, ensure_ascii=True, indent=2)
     fh.write("\n")
 PY
@@ -511,11 +552,75 @@ if int(counts.get("reviews") or 0) == 0:
 PY
 }
 
+verify_operational_live_gap() {
+  local stats_response="$1"
+  python3 - "$state_dir/orchestration-state" "$stats_response" <<'PY'
+import glob
+import json
+import os
+import sys
+
+state_root, stats_path = sys.argv[1:3]
+with open(stats_path, encoding="utf-8") as fh:
+    stats_response = json.load(fh)
+
+stats = stats_response.get("stats") or {}
+counts = stats.get("counts") or {}
+if int(counts.get("deliveries") or 0) < 1:
+    raise SystemExit("operational gap requiere delivery registrada")
+
+plan_files = sorted(glob.glob(os.path.join(state_root, "operational_director_plan_states", "*", "*.json")))
+if not plan_files:
+    raise SystemExit("no hay operational_director_plan_state tras reentrada viva")
+
+with open(plan_files[-1], encoding="utf-8") as fh:
+    envelope = json.load(fh)
+state = envelope.get("state") or {}
+steps = state.get("steps") or []
+active_step_id = state.get("active_step_id") or ""
+active = next((step for step in steps if step.get("step_id") == active_step_id), {})
+review_step = next((step for step in steps if step.get("kind") == "review_deliveries"), {})
+
+print("operational_plan_ref=" + str(state.get("plan_ref") or ""))
+plan_status = str(state.get("status") or "")
+active_kind = str(active.get("kind") or "")
+active_status = str(active.get("status") or "")
+closure_reason = str(state.get("closure_reason") or active.get("reason") or "")
+
+required_evidence_refs = []
+for step in steps:
+    required_evidence_refs.extend(step.get("required_test_evidence_refs") or [])
+
+print("operational_plan_status=" + plan_status)
+print("operational_active_step=" + str(active_step_id))
+print("operational_active_step_status=" + active_status)
+print("operational_closure_reason=" + closure_reason)
+print("operational_review_step_status=" + str(review_step.get("status") or ""))
+print("operational_reviews=" + str(counts.get("reviews", 0)))
+print("operational_review_results=" + str(counts.get("review_results", 0)))
+print("operational_accepted_reviews=" + str(counts.get("accepted_reviews", 0)))
+print("operational_required_test_evidence_refs=" + ",".join(required_evidence_refs))
+
+if plan_status != "closed":
+    raise SystemExit(f"estado operativo no cerrado: {plan_status} reason={closure_reason} active={active}")
+if active_kind != "replan_or_close" or active_status not in ("accepted", "closed"):
+    raise SystemExit(f"active step no cerro replan_or_close: {active}")
+if review_step.get("status") != "accepted":
+    raise SystemExit(f"review_deliveries inesperado: {review_step.get('status')}")
+if not required_evidence_refs:
+    raise SystemExit("no hay evidencia durable de required tests")
+for key in ("reviews", "review_results", "accepted_reviews"):
+    if int(counts.get(key) or 0) < 1:
+        raise SystemExit(f"la ruta viva no genero {key}: {counts}")
+PY
+}
+
 write_summary() {
   local job_ref="$1"
   local replay_ref="$2"
   local run_ref="$3"
   local stats_response="$4"
+  local operational_evidence="$5"
   local snapshot="$state_dir/domain-work-jobs/domain_work_jobs_v0.json"
   local closure_status
   closure_status="$(json_value "$stats_response" '.stats.closure.status')"
@@ -527,6 +632,7 @@ replay_job_ref=$replay_ref
 external_run_ref=$run_ref
 stats_response=$stats_response
 closure_status=$closure_status
+operational_evidence=$operational_evidence
 snapshot=$snapshot
 codex_fake_executed=true
 codex_real_executed=false
@@ -542,6 +648,8 @@ main() {
   need_cmd python3
   mkdir -p "$bin_dir" "$out_dir" "$project_dir" "$runtime_dir"
 
+  mkdir -p "$required_test_output_dir"
+  write_fake_required_test_validator
   write_fake_codex
   (cd "$repo_root" && go build -o "$bin_dir/orquesta-server" ./cmd/orquesta-server)
   start_server
@@ -646,6 +754,21 @@ main() {
   done
   verify_external_cycle "$stats_response"
 
+  local post_delivery_supervisor_payload="$out_dir/post_delivery_supervisor_request.json"
+  local post_delivery_supervisor_response="$out_dir/post_delivery_supervisor_response.json"
+  write_supervisor_payload "$post_delivery_supervisor_payload" "$external_run_ref" "post-delivery-supervise" "2026-05-22T12:02:00Z"
+  local post_delivery_supervisor_status
+  post_delivery_supervisor_status="$(post_json_status "$base_url/api/v0/runs/supervise" "$post_delivery_supervisor_payload" "$post_delivery_supervisor_response")"
+  post_json_required "$base_url/api/v0/director/stats" "$stats_payload" "$stats_response"
+
+  local operational_evidence="$out_dir/operational_live_gap.txt"
+  {
+    echo "post_delivery_supervisor_http=$post_delivery_supervisor_status"
+    echo "post_delivery_supervisor_response=$post_delivery_supervisor_response"
+    echo "post_delivery_supervisor_error_code=$(json_value "$post_delivery_supervisor_response" '.errores_publicos[0].code')"
+    verify_operational_live_gap "$stats_response"
+  } | tee "$operational_evidence"
+
   local ack_count artifact_count
   ack_count="$(find "$runtime_dir" -name agent_ack.json -type f | wc -l | tr -d ' ')"
   artifact_count="$(find "$project_dir/external" -type f 2>/dev/null | wc -l | tr -d ' ')"
@@ -656,7 +779,7 @@ main() {
     exit 1
   fi
 
-  write_summary "$job_ref" "$replay_ref" "$external_run_ref" "$stats_response"
+  write_summary "$job_ref" "$replay_ref" "$external_run_ref" "$stats_response" "$operational_evidence"
   cat "$out_dir/summary.txt"
 }
 

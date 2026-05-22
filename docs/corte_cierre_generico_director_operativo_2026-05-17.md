@@ -256,9 +256,11 @@ implementacion, test focal y evidencia en la matriz.
   `CommandEffects` frescos.
 
 El orden recomendado ahora es: replan automatico para casos negativos restantes,
-smoke Codex real con runner opt-in y por ultimo replay/idempotencia completa del
-ciclo. Si una composicion no aporta fuente real de cierre o validacion, la
-casilla queda pendiente para esa composicion.
+smoke Codex real de ola/cohorte amplia y por ultimo replay/idempotencia completa
+del ciclo. El smoke Codex real acotado con runner ya quedo cerrado por
+`CODEX-REQTEST-REAL-E2E`; no cubre recursion real, ola amplia ni composiciones
+sin fuente de cierre viva. Si una composicion no aporta fuente real de cierre o
+validacion, la casilla queda pendiente para esa composicion.
 
 ## Corte OperationalDirectorPlanStateV0
 
@@ -301,8 +303,9 @@ activo, avanzar a `review_deliveries` cuando el wait queda consumido y mover
 causal de review aceptada pertenece al scope activo.
 
 Pendiente verificable para este corte: replan generico de blockers restantes,
-smoke Codex real con runner opt-in y pruebas offline de replay sin duplicar
-efectos en todo el ciclo.
+smoke Codex real de ola/cohorte amplia y pruebas offline de replay sin duplicar
+efectos en todo el ciclo. El runner real acotado con un agente Codex vivo ya
+tiene evidencia en `CODEX-REQTEST-REAL-E2E`.
 
 ## Criterios de cierre operativo
 
@@ -325,12 +328,13 @@ por estado durable o por una fuente inyectada y verificable:
 Estas piezas siguen pendientes o parciales hasta que existan implementacion y
 pruebas claras. No deben describirse como hechas antes de cerrar la evidencia.
 
-1. Smoke Codex real con runner:
+1. Cobertura Codex real con runner:
    el runner por puerto, el executor local opt-in, el consumo de
-   `RequiredTestEvidenceV0`, el replay sin reejecucion externa y el smoke
-   `state-file` sin Codex vivo ya tienen evidencia focal. Sigue pendiente un
-   smoke servidor/director con agente Codex real que entregue, sea revisado y
-   use el runner antes del cierre.
+   `RequiredTestEvidenceV0`, el replay sin reejecucion externa, el smoke
+   `state-file` sin Codex vivo y el smoke Codex real acotado
+   `CODEX-REQTEST-REAL-E2E` ya tienen evidencia. Sigue pendiente llevar esa
+   cobertura a ola/cohorte amplia y recursion real con varios agentes vivos,
+   parent/child refs, review causal y cierre del arbol.
 2. `replan_or_close` causal:
    ya actua como puerta explicita para cierre cuando el `PlanState` esta activo:
    solo `replan_or_close` en `running` permite invocar la fuente de cierre, y la
@@ -382,8 +386,10 @@ El tramo restante se considera cerrado solo cuando haya tests que demuestren:
   `RecordReplanDecision` con refs causales estables;
 - el replay de esos replans no duplica gates, replan decisions, followups,
   waits ni eventos de cierre;
-- un smoke Codex real con runner opt-in demuestra entrega de agente vivo,
-  review, evidencia durable de test y cierre;
+- `CODEX-REQTEST-REAL-E2E` demuestra entrega de agente Codex vivo, review,
+  evidencia durable de test y cierre en caso acotado;
+- un smoke Codex real de ola/cohorte amplia demuestra el mismo ciclo con varios
+  agentes vivos y scope formal de Director Operativo;
 - recursion Codex real queda cubierta aparte con parent/child refs, limites,
   presupuesto y review causal.
 
@@ -396,8 +402,8 @@ Nombres sugeridos solo para huecos restantes, si no existen aun:
 ```sh
 TestOperationalDirectorPlanStateV0ReplanGenericoBlockerConRefsCausales
 TestOperationalDirectorPlanStateV0ReplayNoDuplicaReplanGenerico
-TestCodexStackRealOperationalDirectorRequiredTestRunnerOptInV0
 TestCodexStackRealRecursiveDelegationOptInV0
+TestCodexStackRealOperationalDirectorWaveCohortOptInV0
 ```
 
 ## No hacer
@@ -419,6 +425,7 @@ TestCodexStackRealRecursiveDelegationOptInV0
    `DIRECTOR-REQUIRED-TESTS-DURABLE-OFFLINE`,
    `DIRECTOR-REPLAN-CLOSE-OFFLINE` y
    `DIRECTOR-PLAN-STATE-OFFLINE`.
-3. Solo despues, preparar smoke Codex real de ola/cohorte.
+3. Preparar smoke Codex real de ola/cohorte amplia; el caso acotado de runner ya
+   esta cerrado por `CODEX-REQTEST-REAL-E2E`.
 4. Solo despues, conectar OPES/conectores reales con guardas opt-in y filtro por
    job type.

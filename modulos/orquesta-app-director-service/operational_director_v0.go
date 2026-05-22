@@ -316,6 +316,11 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 		return ContinueAppDirectorRequestV0{}, err
 	}
 	reopened = reopened || reopenedReviewReplan
+	state, reopenedLateWaitDelivery, err := continueOperationalDirectorPlanStateAfterBlockedWaitExpiredDeliveryV0(ctx, request, ports, state)
+	if err != nil {
+		return ContinueAppDirectorRequestV0{}, err
+	}
+	reopened = reopened || reopenedLateWaitDelivery
 	state, reopenedClosurePrerequisite, err := continueOperationalDirectorPlanStateAfterBlockedClosurePrerequisiteV0(request, ports, state)
 	if err != nil {
 		return ContinueAppDirectorRequestV0{}, err
@@ -327,6 +332,9 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 	}
 	reopened = reopened || reopenedClosureReplan
 	if reopened {
+		if ports.OperationalPlanStateWriter == nil {
+			return ContinueAppDirectorRequestV0{}, AppDirectorServiceIssueV0{Field: "ports.operational_plan_state_writer"}
+		}
 		if err := ports.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, state); err != nil {
 			return ContinueAppDirectorRequestV0{}, err
 		}
@@ -779,6 +787,66 @@ func continueRequestWithLoadedOperationalDirectorPlanStateV0(
 	default:
 		return request, false, nil
 	}
+}
+
+func continueOperationalDirectorPlanStateAfterBlockedWaitExpiredDeliveryV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) (orquestacionnucleoapp.OperationalDirectorPlanStateV0, bool, error) {
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok ||
+		ports.RunStore == nil ||
+		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
+		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 ||
+		activeStep.Reason != "external-wait-exhausted" {
+		return state, false, nil
+	}
+	agentRefs := compactServiceRefsV0(append(activeStep.PendingAgentRefs, state.PendingAgentRefs...))
+	if len(agentRefs) == 0 {
+		agentRefs = compactServiceRefsV0(activeStep.AgentRefs)
+	}
+	if len(agentRefs) == 0 {
+		return state, false, nil
+	}
+	run, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return state, false, err
+	}
+	if !allServiceRefsInSetV0(agentRefs, run.DeliveredAgents) {
+		return state, false, nil
+	}
+	reopened := state
+	reopened.Steps = append([]orquestacionnucleoapp.OperationalDirectorPlanStepStateV0(nil), state.Steps...)
+	reopened.Status = orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0
+	reopened.PendingAgentRefs = append([]string(nil), agentRefs...)
+	reopened.BlockerRefs = nil
+	reopened.ClosureReason = ""
+	reopened.EvidenceRefs = compactServiceRefsV0(append(
+		reopened.EvidenceRefs,
+		"evidence-ref-app-director-operational-plan-state-wait-expired-late-delivery-v0",
+	))
+	for index := range reopened.Steps {
+		step := &reopened.Steps[index]
+		if step.StepID != activeStep.StepID {
+			continue
+		}
+		step.Status = orquestadirectoroperativo.OperationalDirectorStepRunningV0
+		step.PendingAgentRefs = append([]string(nil), agentRefs...)
+		step.BlockerRefs = nil
+		step.Reason = "late-delivery-after-wait-expired"
+		step.EvidenceRefs = compactServiceRefsV0(append(
+			step.EvidenceRefs,
+			"evidence-ref-app-director-wait-subagents-late-delivery-v0",
+		))
+	}
+	next, changed, err := operationalDirectorPlanStateAfterWaitConsumedV0(request, reopened, run)
+	if err != nil || !changed {
+		return state, false, err
+	}
+	return next, true, nil
 }
 
 func continueRequestWithRecoveredWorkflowTaskWaitStateV0(

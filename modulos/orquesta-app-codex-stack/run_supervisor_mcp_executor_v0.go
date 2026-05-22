@@ -70,16 +70,17 @@ func codexStackRunSupervisorDrainRequestV0(
 	input orquestamcp.MCPRunSupervisorToolInputV0,
 ) DrainRunRequestV0 {
 	return DrainRunRequestV0{
-		RunRef:               strings.TrimSpace(input.RunRef),
-		OccurredAt:           strings.TrimSpace(input.OccurredAt),
-		CorrelationID:        firstNonEmptyQueuedSourceV0(input.CorrelationID, input.RequestID),
-		MaxBursts:            input.MaxBursts,
-		MaxStepsPerBurst:     input.MaxStepsPerBurst,
-		MaxDispatchesPerWait: input.MaxDispatchesPerWait,
-		MaxCommands:          input.MaxCommands,
-		MaxOutboxPerCycle:    input.MaxOutboxPerCycle,
-		MaxDecisionCycles:    input.MaxDecisionCycles,
-		MaxExternalWaits:     input.MaxExternalWaits,
+		RunRef:                     strings.TrimSpace(input.RunRef),
+		OccurredAt:                 strings.TrimSpace(input.OccurredAt),
+		CorrelationID:              firstNonEmptyQueuedSourceV0(input.CorrelationID, input.RequestID),
+		MaxBursts:                  input.MaxBursts,
+		MaxStepsPerBurst:           input.MaxStepsPerBurst,
+		MaxDispatchesPerWait:       input.MaxDispatchesPerWait,
+		MaxCommands:                input.MaxCommands,
+		MaxOutboxPerCycle:          input.MaxOutboxPerCycle,
+		MaxDecisionCycles:          input.MaxDecisionCycles,
+		MaxExternalWaits:           input.MaxExternalWaits,
+		OperationalDirectorPlanRef: strings.TrimSpace(input.OperationalDirectorPlanRef),
 	}
 }
 

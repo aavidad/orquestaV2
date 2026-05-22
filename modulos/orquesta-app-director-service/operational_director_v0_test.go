@@ -332,6 +332,173 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaAReviewTrasWaitConsu
 	}
 }
 
+func TestContinueOperationalDirectorPlanStatePostLoopV0ConsumeWaitAntesDeExpirarMaxWaitCero(t *testing.T) {
+	runRef := "run-app-director-operational-plan-state-max-wait-zero-001"
+	contractRef := "contract:function:operational-director:v0"
+	run := serviceContinueClosureRunForTestV0(runRef, orquestacoreworkflow.OrchestrationPhaseProgramacionV0)
+	run.FunctionContracts = []string{contractRef}
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0(run)
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
+	waitStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskWaitStateStoreV0()
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
+	plan := serviceOperationalDirectorPlanForContinueTestV0(t, runRef)
+	ports := StartAppDirectorPortsV0{
+		RunStore:                   store,
+		EventSink:                  sink,
+		OutboxLedger:               ledger,
+		DirectorTaskStore:          taskStore,
+		WaitStateStore:             waitStore,
+		WaitStateWriter:            waitStore,
+		OperationalPlanStateStore:  planStateStore,
+		OperationalPlanStateWriter: planStateStore,
+		Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+			serviceCapacityDispatcherForTestV0(store, sink, ledger),
+			serviceAgentLauncherDispatcherForTestV0(store, sink, ledger),
+		},
+	}
+
+	first, err := ContinueAppDirectorV0(context.Background(), ContinueAppDirectorRequestV0{
+		RunRef:                  runRef,
+		OccurredAt:              "2026-05-22T16:20:00Z",
+		CorrelationID:           "corr-app-director-operational-plan-state-max-wait-zero-first",
+		MaxBursts:               4,
+		MaxStepsPerBurst:        4,
+		MaxDispatchesPerWait:    4,
+		MaxCommands:             20,
+		MaxOutboxPerCycle:       8,
+		OperationalDirectorPlan: plan,
+		OperationalDirectorFunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+			ContractRef:  contractRef,
+			FunctionName: "OperationalDirectorCut",
+		}},
+	}, ports)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0 first: %v", err)
+	}
+	if len(first.Run.Tasks) != 1 {
+		t.Fatalf("tasks=%v", first.Run.Tasks)
+	}
+	initialState, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), runRef, plan.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0 initial: %v", err)
+	}
+	initialWaitStep := serviceOperationalDirectorPlanStateStepForTestV0(t, initialState, "step-wait-subagents")
+	if len(initialWaitStep.WaitRefs) != 1 {
+		t.Fatalf("initial wait refs=%+v", initialWaitStep.WaitRefs)
+	}
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(first.Run.Tasks[0])
+	deliveredRun := first.Run
+	deliveredRun.DeliveredAgents = []string{agentRef}
+	if err := store.SaveRunV0(context.Background(), deliveredRun); err != nil {
+		t.Fatalf("SaveRunV0 delivered: %v", err)
+	}
+	request := ContinueAppDirectorRequestV0{
+		RunRef:                     runRef,
+		OccurredAt:                 "2026-05-22T16:20:01Z",
+		CorrelationID:              "corr-app-director-operational-plan-state-max-wait-zero-post",
+		OperationalDirectorPlanRef: plan.PlanRef,
+		MaxBursts:                  4,
+		MaxStepsPerBurst:           4,
+		MaxDispatchesPerWait:       4,
+		MaxCommands:                20,
+		MaxOutboxPerCycle:          8,
+		MaxExternalWaits:           0,
+	}
+	_, err = continueOperationalDirectorPlanStatePostLoopV0(
+		context.Background(),
+		request,
+		ports,
+		orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status:             orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+			Run:                deliveredRun,
+			PendingOutboxCount: 1,
+		},
+		orquestacionnucleoapp.ProgressiveLoopRequestV0{
+			RunRef: runRef,
+		},
+		orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+			Final: orquestacionnucleoapp.ProgressiveLoopResultV0{
+				Status: orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+				Run:    deliveredRun,
+			},
+			Attempts: []orquestacionnucleoapp.ManagedProgressiveLoopAttemptV0{{
+				AttemptNumber: 1,
+				Result: orquestacionnucleoapp.ProgressiveLoopResultV0{
+					Status: orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+					Run:    deliveredRun,
+				},
+			}},
+		},
+	)
+	if err != nil {
+		t.Fatalf("continueOperationalDirectorPlanStatePostLoopV0 pending outbox: %v", err)
+	}
+	state, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), runRef, plan.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0 pending outbox: %v", err)
+	}
+	waitStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-wait-subagents")
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 ||
+		state.ActiveStepID != "step-wait-subagents" ||
+		waitStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		waitStep.Reason == "external-wait-exhausted" {
+		t.Fatalf("state avanzo con outbox pendiente: state=%+v wait=%+v", state, waitStep)
+	}
+	_, err = continueOperationalDirectorPlanStatePostLoopV0(
+		context.Background(),
+		request,
+		ports,
+		orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+			Run:    deliveredRun,
+		},
+		orquestacionnucleoapp.ProgressiveLoopRequestV0{
+			RunRef: runRef,
+		},
+		orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+			Final: orquestacionnucleoapp.ProgressiveLoopResultV0{
+				Status: orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+				Run:    deliveredRun,
+			},
+			Attempts: []orquestacionnucleoapp.ManagedProgressiveLoopAttemptV0{{
+				AttemptNumber: 1,
+				Result: orquestacionnucleoapp.ProgressiveLoopResultV0{
+					Status: orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+					Run:    deliveredRun,
+				},
+			}},
+		},
+	)
+	if err != nil {
+		t.Fatalf("continueOperationalDirectorPlanStatePostLoopV0 delivered: %v", err)
+	}
+	state, err = planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), runRef, plan.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0 final: %v", err)
+	}
+	waitStep = serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-wait-subagents")
+	reviewStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-review-deliveries")
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 ||
+		state.ActiveStepID != "step-review-deliveries" ||
+		waitStep.Status != orquestadirectoroperativo.OperationalDirectorStepAcceptedV0 ||
+		reviewStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		state.ClosureReason != "" {
+		t.Fatalf("state expiro en vez de avanzar: state=%+v wait=%+v review=%+v", state, waitStep, reviewStep)
+	}
+	waitState, err := waitStore.LoadWorkflowTaskWaitStateV0(context.Background(), runRef, initialWaitStep.WaitRefs[0])
+	if err != nil {
+		t.Fatalf("LoadWorkflowTaskWaitStateV0 final: %v", err)
+	}
+	if waitState.Status != orquestacionnucleoapp.WorkflowTaskWaitStateStatusContinuedV0 ||
+		serviceStringInSetV0(waitState.EvidenceRefs, "evidence-ref-app-director-wait-state-expired-v0") {
+		t.Fatalf("waitState=%+v", waitState)
+	}
+}
+
 func TestContinueAppDirectorV0BloqueaWaitSubagentsCuandoManagedWaitExpira(t *testing.T) {
 	runRef := "run-app-director-operational-wait-expired-001"
 	contractRef := "contract:function:operational-director:v0"
@@ -447,6 +614,157 @@ func TestContinueAppDirectorV0BloqueaWaitSubagentsCuandoManagedWaitExpira(t *tes
 	}
 	if serviceCountStringV0(replayedWaitState.EvidenceRefs, "evidence-ref-app-director-wait-state-expired-v0") != 1 {
 		t.Fatalf("replayedWaitState=%+v", replayedWaitState)
+	}
+}
+
+func TestContinueRequestWithOperationalDirectorPlanStateV0RecuperaDeliveryTardiaTrasWaitExpirado(t *testing.T) {
+	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, false)
+	fixture.Run.Reviews = nil
+	fixture.Run.ReviewResults = nil
+	fixture.Run.AcceptedReviews = nil
+	state := fixture.State
+	state.Status = orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0
+	state.ActiveStepID = "step-wait-subagents"
+	state.PendingAgentRefs = nil
+	state.BlockerRefs = []string{"external-wait-exhausted"}
+	state.ClosureReason = "external-wait-exhausted"
+	for index := range state.Steps {
+		step := &state.Steps[index]
+		switch step.StepID {
+		case "step-wait-subagents":
+			step.Status = orquestadirectoroperativo.OperationalDirectorStepBlockedV0
+			step.PendingAgentRefs = nil
+			step.BlockerRefs = []string{"external-wait-exhausted"}
+			step.Reason = "external-wait-exhausted"
+		case "step-review-deliveries":
+			step.Status = orquestadirectoroperativo.OperationalDirectorStepPendingV0
+			step.DeliveryRefs = nil
+			step.ReviewResultRefs = nil
+			step.AcceptedReviewRefs = nil
+			step.Reason = ""
+		}
+	}
+	planStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(state)
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(fixture.Run)
+
+	_, err := continueRequestWithOperationalDirectorPlanStateV0(context.Background(), ContinueAppDirectorRequestV0{
+		RunRef:                     fixture.RunRef,
+		OccurredAt:                 "2026-05-22T18:24:59Z",
+		CorrelationID:              "corr-app-director-late-delivery-after-expired-wait-no-writer",
+		OperationalDirectorPlanRef: fixture.PlanRef,
+	}, StartAppDirectorPortsV0{
+		RunStore:                  runStore,
+		OperationalPlanStateStore: planStore,
+	})
+	if err == nil {
+		t.Fatalf("err nil sin writer")
+	}
+	issue, ok := err.(AppDirectorServiceIssueV0)
+	if !ok || issue.Field != "ports.operational_plan_state_writer" {
+		t.Fatalf("err=%T %#v", err, err)
+	}
+
+	reentered, err := continueRequestWithOperationalDirectorPlanStateV0(context.Background(), ContinueAppDirectorRequestV0{
+		RunRef:                     fixture.RunRef,
+		OccurredAt:                 "2026-05-22T18:25:00Z",
+		CorrelationID:              "corr-app-director-late-delivery-after-expired-wait",
+		OperationalDirectorPlanRef: fixture.PlanRef,
+	}, StartAppDirectorPortsV0{
+		RunStore:                   runStore,
+		OperationalPlanStateStore:  planStore,
+		OperationalPlanStateWriter: planStore,
+	})
+	if err != nil {
+		t.Fatalf("continueRequestWithOperationalDirectorPlanStateV0: %v", err)
+	}
+	if !serviceStringInSetV0(reentered.WaitAgentRefs, fixture.AgentRef) {
+		t.Fatalf("reentered=%+v agent=%s", reentered, fixture.AgentRef)
+	}
+	recovered, err := planStore.LoadOperationalDirectorPlanStateV0(context.Background(), fixture.RunRef, fixture.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	waitStep := serviceOperationalDirectorPlanStateStepForTestV0(t, recovered, "step-wait-subagents")
+	reviewStep := serviceOperationalDirectorPlanStateStepForTestV0(t, recovered, "step-review-deliveries")
+	if recovered.Status != orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 ||
+		recovered.ActiveStepID != "step-review-deliveries" ||
+		recovered.ClosureReason != "" ||
+		waitStep.Status != orquestadirectoroperativo.OperationalDirectorStepAcceptedV0 ||
+		reviewStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		!serviceStringInSetV0(recovered.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-wait-expired-late-delivery-v0") {
+		t.Fatalf("recovered=%+v wait=%+v review=%+v", recovered, waitStep, reviewStep)
+	}
+}
+
+func TestOperationalDirectorPlanStatePostLoopScopeV0RecargaRunStoreAntesDeCerrarWait(t *testing.T) {
+	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, false)
+	state := fixture.State
+	state.ActiveStepID = "step-wait-subagents"
+	state.PendingAgentRefs = []string{fixture.AgentRef}
+	for index := range state.Steps {
+		step := &state.Steps[index]
+		switch step.StepID {
+		case "step-wait-subagents":
+			step.Status = orquestadirectoroperativo.OperationalDirectorStepRunningV0
+			step.PendingAgentRefs = []string{fixture.AgentRef}
+			step.Reason = "wait-subagents-running"
+		case "step-review-deliveries":
+			step.Status = orquestadirectoroperativo.OperationalDirectorStepPendingV0
+			step.DeliveryRefs = nil
+			step.ReviewResultRefs = nil
+			step.AcceptedReviewRefs = nil
+			step.Reason = ""
+		}
+	}
+	latest := fixture.Run
+	latest.DeliveredAgents = nil
+	latest.DeliveredTasks = nil
+	latest.Deliveries = nil
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(latest)
+	planStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(state)
+	request := ContinueAppDirectorRequestV0{
+		RunRef:                     fixture.RunRef,
+		OperationalDirectorPlanRef: fixture.PlanRef,
+	}
+	staleLoop := orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+		Run: orquestacoreworkflow.OrchestrationRunV0{
+			SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+			RunID:         fixture.RunRef,
+		},
+	}
+
+	got, err := operationalDirectorPlanStatePostLoopScopeV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{RunStore: runStore, OperationalPlanStateStore: planStore},
+		staleLoop,
+		orquestacionnucleoapp.ProgressiveLoopRequestV0{RunRef: fixture.RunRef},
+	)
+	if err != nil {
+		t.Fatalf("operationalDirectorPlanStatePostLoopScopeV0 pending: %v", err)
+	}
+	if got.Status != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 {
+		t.Fatalf("scope cerro con run stale: got=%+v latest=%+v", got, latest)
+	}
+
+	latest.DeliveredAgents = []string{fixture.AgentRef}
+	if err := runStore.SaveRunV0(context.Background(), latest); err != nil {
+		t.Fatalf("SaveRunV0 delivered: %v", err)
+	}
+	got, err = operationalDirectorPlanStatePostLoopScopeV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{RunStore: runStore, OperationalPlanStateStore: planStore},
+		staleLoop,
+		orquestacionnucleoapp.ProgressiveLoopRequestV0{RunRef: fixture.RunRef},
+	)
+	if err != nil {
+		t.Fatalf("operationalDirectorPlanStatePostLoopScopeV0 delivered: %v", err)
+	}
+	if got.Status != orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 ||
+		!serviceStringInSetV0(got.Run.DeliveredAgents, fixture.AgentRef) {
+		t.Fatalf("scope no cerro con delivery latest: got=%+v", got)
 	}
 }
 

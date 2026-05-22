@@ -1,7 +1,9 @@
 package orquesta_test
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -174,6 +176,61 @@ func TestNeutralOrchestrationPackagesDoNotImportProductAdapters(t *testing.T) {
 	}
 }
 
+func TestNeutralOrchestrationPackagesDoNotDependOnProductAdapters(t *testing.T) {
+	for _, pkg := range []string{
+		"orquesta/modulos/orquesta-core-workflow",
+		"orquesta/modulos/orquesta-domain-work",
+		"orquesta/modulos/orquesta-orchestration-core",
+	} {
+		deps := packageDepsForBoundaryTest(t, pkg)
+		for _, forbidden := range []string{
+			"orquesta/modulos/orquesta-app-codex-stack",
+			"orquesta/modulos/orquesta-opes-",
+			"orquesta/modulos/orquesta-runtime-codex",
+		} {
+			for _, dep := range deps {
+				if strings.Contains(dep, forbidden) {
+					t.Fatalf("%s depends on forbidden product adapter %s", pkg, dep)
+				}
+			}
+		}
+	}
+}
+
+func TestNeutralOrchestrationProductionCodeDoesNotHardcodeLocalPaths(t *testing.T) {
+	for _, dir := range []string{
+		"modulos/orquesta-core-workflow",
+		"modulos/orquesta-domain-work",
+		"modulos/orquesta-orchestration-core",
+	} {
+		err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return nil
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for _, forbidden := range []string{
+				"/home/alberto/",
+				"/Users/alberto/",
+				`C:\Users\`,
+			} {
+				if strings.Contains(string(content), forbidden) {
+					t.Fatalf("%s hardcodes local path marker %q", path, forbidden)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", dir, err)
+		}
+	}
+}
+
 func packageImportsForBoundaryTest(t *testing.T, pkg string) []string {
 	t.Helper()
 	cmd := exec.Command("go", "list", "-f", "{{join .Imports \"\\n\"}}", pkg)
@@ -189,6 +246,27 @@ func packageImportsForBoundaryTest(t *testing.T, pkg string) []string {
 		}
 	}
 	return imports
+}
+
+func packageDepsForBoundaryTest(t *testing.T, pkg string) []string {
+	t.Helper()
+	cmd := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", pkg)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list deps %s: %v\n%s", pkg, err, string(output))
+	}
+	return nonEmptyBoundaryLinesV0(string(output))
+}
+
+func nonEmptyBoundaryLinesV0(output string) []string {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	values := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			values = append(values, trimmed)
+		}
+	}
+	return values
 }
 
 func forbiddenNeutralDBImportsV0() []string {

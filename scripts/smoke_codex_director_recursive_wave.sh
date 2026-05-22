@@ -64,6 +64,7 @@ go run ./cmd/orquesta-server codex-launch-director-wave \
 
 python3 - "$SUMMARY_PATH" <<'PY'
 import json
+import os
 import sys
 
 path = sys.argv[1]
@@ -106,8 +107,78 @@ if grandchild.get("delegation_depth") != 2 or grandchild.get("child_launches"):
 if not grandchild.get("review_required_before_close"):
     raise SystemExit("nieto permitiria cierre sin review")
 
+nodes = []
+
+def collect_launch(launch, depth, parent_agent_ref=""):
+    for agent in launch.get("agents") or []:
+        nodes.append({
+            "depth": depth,
+            "parent_agent_ref": parent_agent_ref,
+            "launch": launch,
+            "agent": agent,
+        })
+
+def collect_children(children):
+    for child in children or []:
+        collect_launch(child.get("launch") or {}, child.get("delegation_depth"), child.get("parent_agent_ref", ""))
+        collect_children(child.get("child_launches") or [])
+
+collect_launch(summary.get("launch") or {}, 0)
+collect_children(summary.get("child_launches") or [])
+if len(nodes) != 7:
+    raise SystemExit(f"agent_tree_count_invalido={len(nodes)}")
+
+seen = set()
+for node in nodes:
+    agent = node["agent"]
+    agent_ref = agent.get("agent_ref") or ""
+    if not agent_ref:
+        raise SystemExit(f"agent_ref_vacio={agent}")
+    if agent_ref in seen:
+        raise SystemExit(f"agent_ref_duplicado={agent_ref}")
+    if node["depth"] and node["parent_agent_ref"] not in seen:
+        raise SystemExit(f"parent_agent_ref_no_observable={node}")
+    seen.add(agent_ref)
+
+registries = {}
+for node in nodes:
+    launch = node["launch"]
+    registry_path = launch.get("registry_path") or ""
+    if not registry_path:
+        raise SystemExit(f"registry_path_vacio={launch.get('wave_ref')}")
+    if registry_path not in registries:
+        if not os.path.exists(registry_path):
+            raise SystemExit(f"registry_no_existe={registry_path}")
+        with open(registry_path, "r", encoding="utf-8") as fh:
+            registry = json.load(fh)
+        expected_refs = [agent.get("agent_ref") for agent in launch.get("agents") or []]
+        registry_refs = [agent.get("agent_ref") for agent in registry.get("agents") or []]
+        if registry.get("schema_version") != "orquesta_codex_wave_launch.v0":
+            raise SystemExit(f"registry_schema_invalido={registry_path}")
+        if registry.get("wave_ref") != launch.get("wave_ref") or registry_refs != expected_refs:
+            raise SystemExit(f"registry_refs_no_coinciden={registry_path}")
+        registries[registry_path] = registry
+    agent = node["agent"]
+    agent_ref = agent.get("agent_ref") or ""
+    for key in ("prompt_path", "wrapper_path"):
+        if not os.path.exists(agent.get(key) or ""):
+            raise SystemExit(f"{key}_no_existe={agent}")
+    wrapper_path = agent.get("wrapper_path") or ""
+    with open(wrapper_path, "r", encoding="utf-8") as fh:
+        wrapper = fh.read()
+    last_message_path = agent.get("last_message_path") or ""
+    runtime_work_dir = os.path.normpath(agent.get("runtime_work_dir") or "")
+    if "--output-last-message" not in wrapper or last_message_path not in wrapper:
+        raise SystemExit(f"wrapper_sin_last_message={agent_ref}")
+    if not os.path.normpath(last_message_path).startswith(runtime_work_dir + os.sep):
+        raise SystemExit(f"last_message_fuera_runtime={agent_ref}")
+    if agent.get("status") != "dry_run":
+        raise SystemExit(f"status_no_dry_run={agent}")
+
 print("recursive_wave_ok=true")
 print("summary_path=" + path)
 print("planned_agents=7")
+print("opaque_agent_refs=7")
+print("registry_wrappers_ready=true")
 print("dry_run=" + str(bool((summary.get("launch") or {}).get("dry_run"))).lower())
 PY

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,6 +25,133 @@ import (
 	orquestaruntimerequiredtest "orquesta/modulos/orquesta-runtime-required-test"
 	orquestaweb "orquesta/modulos/orquesta-web"
 )
+
+func TestCodexStackRequiredTestRunnerFailedReplanLanzaFollowupFakeRuntimeV0(t *testing.T) {
+	ctx := context.Background()
+	cfg := codexStackRequiredTestLocalConfigV0(t)
+	writeCodexStackRequiredTestFailingGoModuleV0(t, cfg.ProjectWorkDir)
+	goCommand := codexStackRequiredTestGoCommandV0(t)
+	outputDir := filepath.Join(t.TempDir(), "required-test-output")
+
+	runtime := &codexStackRequiredTestPendingRuntimeV0{}
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	stack := codexStackRealRequiredTestRunnerStackV0(t, cfg, runtime, evidenceStore, goCommand, outputDir)
+
+	refs := (codexStackRequiredTestRefsV0{
+		RunRef:  "run-rt-runner-failed-replan-001",
+		PlanRef: "plan-rt-runner-failed-replan-001",
+		TaskRef: "task-rt-runner-failed-replan-001",
+	}).withDefaultsV0()
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, refs.runV0()); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if err := stack.Stores.EventSink.AppendRunEventsV0(ctx, refs.RunRef, refs.eventsV0(t)); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	taskWriter, ok := stack.Stores.TaskStore.(orquestacionnucleoapp.WorkflowTaskWriterPortV0)
+	if !ok {
+		t.Fatalf("TaskStore no escribe WorkflowTaskV0: %T", stack.Stores.TaskStore)
+	}
+	if err := taskWriter.SaveWorkflowTaskV0(ctx, refs.workflowTaskV0()); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+	if err := stack.Stores.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, refs.planStateV0()); err != nil {
+		t.Fatalf("SaveOperationalDirectorPlanStateV0: %v", err)
+	}
+
+	_, err := orquestaappdirectorservice.ContinueAppDirectorV0(ctx, codexStackRequiredTestContinueRequestV0(
+		refs,
+		"corr-rt-runner-failed-replan-tests",
+		"2026-05-22T18:00:00Z",
+		1,
+	), stack.Ports)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0 required tests: %v %s", err, codexStackRequiredTestErrorDetailsV0(err))
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, refs.RunRef)
+	if len(run.QualityGates) != 1 || len(run.ReplanDecisions) != 1 {
+		t.Fatalf("run sin quality gate/replan tras fallo: gates=%v replans=%v", run.QualityGates, run.ReplanDecisions)
+	}
+	replan, ok := codexStackRealSmokeParseReplanProjectionV0(run.ReplanDecisions[0])
+	if !ok ||
+		replan.TaskRef != refs.TaskRef ||
+		replan.Action != string(orquestacoreworkflow.ReplanDecisionActionRetryTaskV0) {
+		t.Fatalf("replan invalido: raw=%q parsed=%+v", run.ReplanDecisions[0], replan)
+	}
+	followupAgentRef := codexStackRequiredTestFirstFollowupAgentRefV0(t, replan)
+	state, err := stack.Stores.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, refs.RunRef, refs.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	testsStep := codexStackRequiredTestPlanStepV0(t, state, "step-run-required-tests")
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
+		testsStep.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 ||
+		testsStep.Reason != "required-tests-failed" ||
+		len(testsStep.RequiredTestEvidenceRefs) != 1 {
+		t.Fatalf("state no bloqueo por tests fallidos: state=%+v tests=%+v", state, testsStep)
+	}
+	evidence, err := evidenceStore.LoadRequiredTestEvidenceV0(ctx, refs.RunRef, testsStep.RequiredTestEvidenceRefs)
+	if err != nil {
+		t.Fatalf("LoadRequiredTestEvidenceV0 failed: %v", err)
+	}
+	if len(evidence) != 1 ||
+		evidence[0].Status != orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0 ||
+		evidence[0].TestCommand != "go test ./..." {
+		t.Fatalf("evidence failed invalida: %+v", evidence)
+	}
+
+	launched, err := orquestaappdirectorservice.ContinueAppDirectorV0(ctx, codexStackRequiredTestContinueRequestV0(
+		refs,
+		"corr-rt-runner-failed-replan-launch",
+		"2026-05-22T18:01:00Z",
+		3,
+	), stack.Ports)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0 launch followup: %v %s", err, codexStackRequiredTestErrorDetailsV0(err))
+	}
+	if !codexStackStringInSetForTestV0(launched.StartedAgents, followupAgentRef) || runtime.launchCountV0() != 1 {
+		run = mustLoadCodexStackRunForTestV0(t, stack, refs.RunRef)
+		t.Fatalf("followup no lanzado: started=%v followup=%s launches=%d run=%+v", launched.StartedAgents, followupAgentRef, runtime.launchCountV0(), run)
+	}
+	run = mustLoadCodexStackRunForTestV0(t, stack, refs.RunRef)
+	if !codexStackStringInSetForTestV0(run.Agents, followupAgentRef) ||
+		!codexStackStringInSetForTestV0(run.StartedAgents, followupAgentRef) ||
+		codexStackStringInSetForTestV0(run.DeliveredAgents, followupAgentRef) {
+		t.Fatalf("run followup inesperado: followup=%s agents=%v started=%v delivered=%v", followupAgentRef, run.Agents, run.StartedAgents, run.DeliveredAgents)
+	}
+
+	waitPorts := stack.Ports
+	waitPorts.ExternalWaiter = nil
+	waiting, err := orquestaappdirectorservice.ContinueAppDirectorV0(ctx, codexStackRequiredTestContinueRequestV0(
+		refs,
+		"corr-rt-runner-failed-replan-wait",
+		"2026-05-22T18:02:00Z",
+		1,
+	), waitPorts)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0 reopen wait: %v %s", err, codexStackRequiredTestErrorDetailsV0(err))
+	}
+	if waiting.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
+		!codexStackStringInSetForTestV0(waiting.StartedAgents, followupAgentRef) {
+		t.Fatalf("continue no quedo esperando followup: loop=%s started=%v followup=%s", waiting.LoopStatus, waiting.StartedAgents, followupAgentRef)
+	}
+	state, err = stack.Stores.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, refs.RunRef, refs.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0 final: %v", err)
+	}
+	waitStep := codexStackRequiredTestPlanStepV0(t, state, "step-wait-subagents")
+	testsStep = codexStackRequiredTestPlanStepV0(t, state, "step-run-required-tests")
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 ||
+		state.ActiveStepID != "step-wait-subagents" ||
+		state.ReplanAttempts != 1 ||
+		!codexStackStringInSetForTestV0(state.PendingAgentRefs, followupAgentRef) ||
+		waitStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		!codexStackStringInSetForTestV0(waitStep.PendingAgentRefs, followupAgentRef) ||
+		len(waitStep.WaitRefs) != 1 ||
+		!codexStackStringInSetForTestV0(testsStep.ReplanDecisionRefs, strings.Split(run.ReplanDecisions[0], "#")[0]) {
+		t.Fatalf("state no quedo listo para nueva espera: state=%+v wait=%+v tests=%+v", state, waitStep, testsStep)
+	}
+}
 
 func TestCodexStackRealRequiredTestRunnerOptInV0(t *testing.T) {
 	if strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_REAL_REQUIRED_TEST_RUNNER_SMOKE")) != "1" {
@@ -495,6 +624,16 @@ func (refs codexStackRequiredTestRefsV0) planStateV0() orquestacionnucleoapp.Ope
 				AgentRefs: []string{refs.AgentRef},
 			},
 			{
+				StepID:           "step-wait-subagents",
+				Kind:             orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0,
+				Status:           orquestadirectoroperativo.OperationalDirectorStepPendingV0,
+				WaveRef:          "wave-rt-runner-001",
+				CohortRef:        "cohort-rt-runner-001",
+				TaskRefs:         []string{refs.TaskRef},
+				AgentRefs:        []string{refs.AgentRef},
+				PendingAgentRefs: []string{refs.AgentRef},
+			},
+			{
 				StepID:             "step-review-deliveries",
 				Kind:               orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0,
 				Status:             orquestadirectoroperativo.OperationalDirectorStepAcceptedV0,
@@ -549,7 +688,7 @@ func (refs codexStackRequiredTestRefsV0) planStateForCausalReviewV0(
 func codexStackRealRequiredTestRunnerStackV0(
 	t *testing.T,
 	cfg codexStackRealSmokeConfigV0,
-	processRuntime *orquestaruntime.ProcessRuntimeConnectorV0,
+	processRuntime codexStackRuntimeForTestV0,
 	evidenceStore orquestacionnucleoapp.RequiredTestEvidenceStorePortV0,
 	goCommand string,
 	outputDir string,
@@ -672,6 +811,55 @@ func writeCodexStackRequiredTestTinyGoModuleV0(t *testing.T, dir string) {
 	}
 }
 
+func writeCodexStackRequiredTestFailingGoModuleV0(t *testing.T, dir string) {
+	t.Helper()
+	writeCodexStackRequiredTestTinyGoModuleV0(t, dir)
+	path := filepath.Join(dir, "calc_test.go")
+	content := strings.Join([]string{
+		"package calc",
+		"",
+		"import \"testing\"",
+		"",
+		"func TestAdd(t *testing.T) {",
+		"\tif Add(2, 3) != 99 {",
+		"\t\tt.Fatalf(\"Add esperado fallo controlado\")",
+		"\t}",
+		"}",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write failing calc_test.go: %v", err)
+	}
+}
+
+func codexStackRequiredTestLocalConfigV0(t *testing.T) codexStackRealSmokeConfigV0 {
+	t.Helper()
+	projectDir := t.TempDir()
+	runtimeDir := filepath.Join(t.TempDir(), "runtime")
+	homeDir := filepath.Join(t.TempDir(), "home")
+	codeHomeDir := filepath.Join(t.TempDir(), "code-home")
+	for _, dir := range []string{runtimeDir, homeDir, codeHomeDir} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatalf("mkdir local required-test cfg: %v", err)
+		}
+	}
+	return codexStackRealSmokeConfigV0{
+		CommandPath:     filepath.Join(projectDir, "codex-bin"),
+		ProjectWorkDir:  projectDir,
+		RuntimeWorkDir:  runtimeDir,
+		CodeHomeDir:     codeHomeDir,
+		HomeDir:         homeDir,
+		PathEnv:         os.Getenv("PATH"),
+		Model:           "fake-codex",
+		ReasoningEffort: "medium",
+		Sandbox:         "workspace-write",
+		ApprovalPolicy:  "never",
+		MaxBatchReady:   1,
+		MaxConcurrency:  1,
+		Timeout:         5 * time.Second,
+	}
+}
+
 func codexStackRequiredTestGoCommandV0(t *testing.T) string {
 	t.Helper()
 	raw := strings.TrimSpace(os.Getenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND"))
@@ -686,6 +874,97 @@ func codexStackRequiredTestGoCommandV0(t *testing.T) string {
 		t.Fatalf("go command no encontrado: %s", raw)
 	}
 	return path
+}
+
+func codexStackRequiredTestContinueRequestV0(
+	refs codexStackRequiredTestRefsV0,
+	correlationID string,
+	occurredAt string,
+	maxBursts int,
+) orquestaappdirectorservice.ContinueAppDirectorRequestV0 {
+	refs = refs.withDefaultsV0()
+	return orquestaappdirectorservice.ContinueAppDirectorRequestV0{
+		RunRef:                     refs.RunRef,
+		OperationalDirectorPlanRef: refs.PlanRef,
+		OccurredAt:                 occurredAt,
+		CorrelationID:              correlationID,
+		RequestedBy:                "orquesta-app-stack-required-test-failed-replan-test",
+		MaxBursts:                  maxBursts,
+		MaxStepsPerBurst:           8,
+		MaxDispatchesPerWait:       2,
+		MaxCommands:                12,
+		MaxOutboxPerCycle:          8,
+		MaxExternalWaits:           1,
+	}
+}
+
+func codexStackRequiredTestFirstFollowupAgentRefV0(
+	t *testing.T,
+	replan codexStackRealSmokeReplanProjectionV0,
+) string {
+	t.Helper()
+	for _, ref := range replan.FollowupRefs {
+		if strings.HasPrefix(ref, "agent-ref-") {
+			return ref
+		}
+	}
+	t.Fatalf("replan sin followup agent: %+v", replan)
+	return ""
+}
+
+type codexStackRequiredTestPendingRuntimeV0 struct {
+	mu        sync.Mutex
+	next      int
+	snapshots map[string]orquestaruntime.ProcessRuntimeSnapshotV0
+}
+
+func (runtime *codexStackRequiredTestPendingRuntimeV0) LaunchV0(
+	_ context.Context,
+	_ orquestaruntime.ProcessRuntimeLaunchRequestV0,
+) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	if runtime.snapshots == nil {
+		runtime.snapshots = map[string]orquestaruntime.ProcessRuntimeSnapshotV0{}
+	}
+	runtime.next++
+	ref := fmt.Sprintf("%03d", runtime.next)
+	snapshot := orquestaruntime.ProcessRuntimeSnapshotV0{
+		SchemaVersion: orquestaruntime.ProcessRuntimeConnectorVersionV0,
+		ProcessRef:    "process-ref-rt-pending-" + ref,
+		SessionRef:    "session-ref-rt-pending-" + ref,
+		LaunchRef:     "launch-ref-rt-pending-" + ref,
+		Status:        orquestaruntime.ProcessRuntimeRunningV0,
+	}
+	runtime.snapshots[snapshot.ProcessRef] = snapshot
+	return snapshot, nil
+}
+
+func (runtime *codexStackRequiredTestPendingRuntimeV0) StopV0(
+	_ context.Context,
+	processRef string,
+) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	snapshot := runtime.snapshots[processRef]
+	snapshot.Status = orquestaruntime.ProcessRuntimeStoppedV0
+	snapshot.StopRef = "stop-ref-" + processRef
+	runtime.snapshots[processRef] = snapshot
+	return snapshot, nil
+}
+
+func (runtime *codexStackRequiredTestPendingRuntimeV0) SnapshotV0(
+	processRef string,
+) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	return runtime.snapshots[processRef], nil
+}
+
+func (runtime *codexStackRequiredTestPendingRuntimeV0) launchCountV0() int {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	return runtime.next
 }
 
 func codexStackRequiredTestOutputDirV0(t *testing.T) string {

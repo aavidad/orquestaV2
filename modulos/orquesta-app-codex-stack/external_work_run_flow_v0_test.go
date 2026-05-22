@@ -6,11 +6,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestadirectoroperativo "orquesta/modulos/orquesta-director-operativo"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestCodexStackV0ExternalWorkRunCreaRunSinDirectorInicial(t *testing.T) {
@@ -97,6 +100,57 @@ func TestCodexStackV0ExternalWorkRunAceptaContratoAmplioV0(t *testing.T) {
 	}
 }
 
+func TestCodexStackV0ExternalWorkRunSupervisorConsumeDeliverySinExpirarWaitV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	planStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
+	stack.Ports.OperationalPlanStateStore = planStore
+	stack.Ports.OperationalPlanStateWriter = planStore
+	result := postExternalWorkRunStackV0(t, stack)
+
+	drain, err := stack.DrainRunV0(context.Background(), DrainRunRequestV0{
+		RunRef:               result.RunRef,
+		CorrelationID:        "corr-external-work-supervisor-delivery-001",
+		OccurredAt:           "2026-05-22T18:10:00Z",
+		MaxBursts:            16,
+		MaxStepsPerBurst:     8,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          32,
+		MaxOutboxPerCycle:    8,
+		MaxDecisionCycles:    4,
+		MaxExternalWaits:     0,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0: %v drain=%+v", err, drain)
+	}
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), result.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(run.DeliveredAgents) != 1 || len(run.Deliveries) != 1 {
+		t.Fatalf("run sin entrega: delivered=%v deliveries=%v", run.DeliveredAgents, run.Deliveries)
+	}
+	state, err := planStore.LoadOperationalDirectorPlanStateV0(
+		context.Background(),
+		result.RunRef,
+		"operational-director-plan-director-decisions-"+appChangeSafeRefPartForTestV0(result.RunRef),
+	)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	waitStep := codexStackExternalWorkPlanStepForTestV0(t, state, "step-wait-subagents")
+	reviewStep := codexStackExternalWorkPlanStepForTestV0(t, state, "step-review-deliveries")
+	if state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
+		waitStep.Status == orquestadirectoroperativo.OperationalDirectorStepBlockedV0 ||
+		waitStep.Reason == "external-wait-exhausted" {
+		t.Fatalf("wait expiro tras delivery: state=%+v wait=%+v", state, waitStep)
+	}
+	if state.ActiveStepID == "step-wait-subagents" ||
+		(reviewStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 &&
+			reviewStep.Status != orquestadirectoroperativo.OperationalDirectorStepAcceptedV0) {
+		t.Fatalf("state no avanzo a review: state=%+v review=%+v", state, reviewStep)
+	}
+}
+
 func postExternalWorkRunStackV0(
 	t *testing.T,
 	stack StackV0,
@@ -143,4 +197,27 @@ func postExternalWorkRunStackV0(
 		t.Fatalf("result=%+v", result)
 	}
 	return result
+}
+
+func codexStackExternalWorkPlanStepForTestV0(
+	t *testing.T,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	stepID string,
+) orquestacionnucleoapp.OperationalDirectorPlanStepStateV0 {
+	t.Helper()
+	for _, step := range state.Steps {
+		if step.StepID == stepID {
+			return step
+		}
+	}
+	t.Fatalf("step %s no existe en %+v", stepID, state)
+	return orquestacionnucleoapp.OperationalDirectorPlanStepStateV0{}
+}
+
+func appChangeSafeRefPartForTestV0(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.ReplaceAll(value, "\\", "-")
+	value = strings.ReplaceAll(value, "/", "-")
+	value = strings.ReplaceAll(value, " ", "-")
+	return value
 }

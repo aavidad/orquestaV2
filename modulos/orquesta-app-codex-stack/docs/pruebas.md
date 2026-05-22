@@ -115,6 +115,13 @@ Cobertura Go actual:
 - `TestCodexStackRunSupervisorAPIV0EmpujaRunExistenteSinRelanzarAgentes` prueba
   `POST /api/v0/runs/supervise` sobre `stack.Handler`: reentra por el adaptador
   real, conserva `run_ref`, expone evidencia y no relanza agentes ya vivos.
+- `TestCodexStackRealRequiredTestRunnerEndToEndOptInV0` queda desactivado por
+  defecto y valida con un agente Codex real acotado el ciclo del Director
+  Operativo: task con `RequiredTests`, `WaitAgentRefs`, ACK/entrega, review
+  causal aceptada, runner local de tests, `RequiredTestEvidenceV0` durable y
+  cierre de plan/run. Cerrado por `CODEX-REQTEST-REAL-E2E`; no sustituye
+  recursion real, ola/cohorte amplia, cierre con app externa real no-OPES ni
+  OPES real.
 
 Guardas esperadas para pruebas futuras:
 
@@ -190,6 +197,43 @@ Riesgo observado en este smoke:
 - el helper de smoke debe considerar progreso cualquier avance de secuencia,
   proyeccion, ACK, descriptor o proceso observable, y solo fallar cuando no hay
   avance durante el presupuesto configurado.
+
+Smoke real requerido con runner y cierre operativo:
+
+```bash
+ORQUESTA_CODEX_REAL_REQUIRED_TEST_RUNNER_CONFIRM=1 \
+ORQUESTA_CODEX_REAL_REQUIRED_TEST_RUNNER_EXECUTE_CODEX=1 \
+ORQUESTA_CODEX_REAL_REQUIRED_TEST_RUNNER_CODEX_EXECUTION_CONFIRMED=1 \
+ORQUESTA_CODEX_COMMAND="$(command -v codex)" \
+ORQUESTA_CODEX_HOME="$HOME" \
+ORQUESTA_CODEX_CODE_HOME="${CODEX_HOME:-$HOME/.codex}" \
+ORQUESTA_CODEX_APPROVAL_POLICY=never \
+ORQUESTA_CODEX_SANDBOX=workspace-write \
+ORQUESTA_CODEX_REASONING_EFFORT=medium \
+go test -count=1 ./modulos/orquesta-app-codex-stack \
+  -run '^TestCodexStackRealRequiredTestRunnerEndToEndOptInV0$' \
+  -timeout 720s -v
+```
+
+Resultado 2026-05-22: cerrado como `CODEX-REQTEST-REAL-E2E` mediante
+`./scripts/smoke_codex_real_required_test_runner.sh` en 64.49s.
+
+Evidencia validada:
+
+- un unico agente Codex real arranca bajo `WaitAgentRefs`;
+- registra ACK/entrega y pasa por review causal aceptada;
+- `RequiredTestRunner` ejecuta los tests declarados y persiste
+  `RequiredTestEvidenceV0`;
+- `ContinueAppDirectorV0` cierra plan/run por fuente de cierre del stack Codex;
+- no toca OPES ni core.
+
+Pendiente no cubierto por este smoke:
+
+- recursion real con parent/child refs, fanout/profundidad/presupuesto y review
+  causal;
+- ola/cohorte amplia con varios agentes Codex vivos;
+- cierre no-OPES con app externa real;
+- OPES real de derivados/cierre.
 
 Prueba real de cambio a mitad de ejecucion:
 

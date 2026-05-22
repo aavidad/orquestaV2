@@ -152,12 +152,23 @@ func continueOperationalDirectorPlanStatePostLoopV0(
 	loopRequest orquestacionnucleoapp.ProgressiveLoopRequestV0,
 	managedLoop orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
 ) (existingDirectorAutonomyLoopResultV0, error) {
-	expired, err := applyOperationalDirectorPlanStateAfterExternalWaitExhaustedV0(ctx, request, ports, managedLoop)
-	if err != nil || expired {
+	var err error
+	loop, err = operationalDirectorPlanStatePostLoopScopeV0(ctx, request, ports, loop, loopRequest)
+	if err != nil {
 		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
+	}
+	if loop.Status == orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 && loop.PendingOutboxCount > 0 {
+		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, nil
 	}
 	changed, err := applyOperationalDirectorPlanStateAfterLoopV0(ctx, request, ports, loop)
 	if err != nil || !changed {
+		if err != nil {
+			return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
+		}
+		expired, err := applyOperationalDirectorPlanStateAfterExternalWaitExhaustedV0(ctx, request, ports, managedLoop)
+		if err != nil || expired {
+			return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
+		}
 		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
 	}
 	_, _, activeReview, err := operationalDirectorActiveReviewDeliveriesStepV0(ctx, request, ports)
@@ -182,6 +193,72 @@ func continueOperationalDirectorPlanStatePostLoopV0(
 	return existingDirectorAutonomyLoopResultV0{Request: followup.Request, Loop: followupLoop, LoopRequest: followup.LoopRequest}, nil
 }
 
+func operationalDirectorPlanStatePostLoopScopeV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	loop orquestacionnucleoapp.ProgressiveLoopResultV0,
+	loopRequest orquestacionnucleoapp.ProgressiveLoopRequestV0,
+) (orquestacionnucleoapp.ProgressiveLoopResultV0, error) {
+	if continueOperationalDirectorPlanRefV0(request) == "" ||
+		loop.Status != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
+		loop.PendingOutboxCount > 0 {
+		return loop, nil
+	}
+	waitAgentRefs := compactServiceRefsV0(loopRequest.WaitAgentRefs)
+	if len(waitAgentRefs) == 0 {
+		refs, err := operationalDirectorPlanStateActiveWaitAgentRefsV0(ctx, request, ports)
+		if err != nil {
+			return loop, err
+		}
+		waitAgentRefs = refs
+	}
+	if len(waitAgentRefs) == 0 {
+		return loop, nil
+	}
+	scopedRun := loop.Run
+	if ports.RunStore != nil {
+		latestRun, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+		if err != nil {
+			return loop, err
+		}
+		scopedRun = latestRun
+	}
+	if appDirectorRunHasPendingAgentRefsV0(scopedRun, waitAgentRefs) {
+		return loop, nil
+	}
+	loop.Run = scopedRun
+	loop.Status = orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0
+	return loop, nil
+}
+
+func operationalDirectorPlanStateActiveWaitAgentRefsV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+) ([]string, error) {
+	planRef := continueOperationalDirectorPlanRefV0(request)
+	if planRef == "" || ports.OperationalPlanStateStore == nil {
+		return nil, nil
+	}
+	state, err := ports.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, request.RunRef, planRef)
+	if err != nil {
+		return nil, err
+	}
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok ||
+		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 ||
+		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+		return nil, nil
+	}
+	refs := compactServiceRefsV0(append(activeStep.PendingAgentRefs, state.PendingAgentRefs...))
+	if len(refs) == 0 {
+		refs = compactServiceRefsV0(activeStep.AgentRefs)
+	}
+	return refs, nil
+}
+
 func operationalDirectorScopedQuiescentLoopV0(
 	request ContinueAppDirectorRequestV0,
 	loop orquestacionnucleoapp.ProgressiveLoopResultV0,
@@ -203,9 +280,6 @@ func appDirectorRunHasPendingAgentRefsV0(
 	agentRefs []string,
 ) bool {
 	for _, agentRef := range compactServiceRefsV0(agentRefs) {
-		if !startAppDirectorStringInSetV0(run.StartedAgents, agentRef) {
-			continue
-		}
 		if startAppDirectorStringInSetV0(run.DeliveredAgents, agentRef) ||
 			startAppDirectorStringInSetV0(run.FailedAgents, agentRef) ||
 			startAppDirectorStringInSetV0(run.LostAgents, agentRef) ||

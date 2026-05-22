@@ -417,6 +417,36 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaNietosConLimi
 		!strings.Contains(grandchildWrapper, `model_reasoning_effort="high"`) {
 		t.Fatalf("wrapper nieto no debe usar xhigh por defecto:\n%s", grandchildWrapper)
 	}
+
+	nodes := codexDirectorCollectAgentNodesForTestV0(summary)
+	if len(nodes) != 7 {
+		t.Fatalf("agent tree size=%d", len(nodes))
+	}
+	seen := map[string]bool{}
+	for _, node := range nodes {
+		if strings.TrimSpace(node.agent.AgentRef) == "" {
+			t.Fatalf("agent_ref vacio: %+v", node.agent)
+		}
+		if seen[node.agent.AgentRef] {
+			t.Fatalf("agent_ref duplicado: %s", node.agent.AgentRef)
+		}
+		seen[node.agent.AgentRef] = true
+		if node.depth > 0 && !seen[node.parentAgentRef] {
+			t.Fatalf("parent_agent_ref sin padre previo: node=%+v parent=%s", node.agent, node.parentAgentRef)
+		}
+		codexDirectorAssertRegistryReadyForDrainReviewV0(t, node.launch)
+		wrapper := mustReadFileStringV0(t, node.agent.WrapperPath)
+		if !strings.Contains(wrapper, "--output-last-message") ||
+			!strings.Contains(wrapper, node.agent.LastMessagePath) {
+			t.Fatalf("wrapper no deja last_message observable para %s:\n%s", node.agent.AgentRef, wrapper)
+		}
+		if !strings.HasPrefix(filepath.Clean(node.agent.LastMessagePath), filepath.Clean(node.agent.RuntimeWorkDir)+string(os.PathSeparator)) {
+			t.Fatalf("last_message fuera de runtime: agent=%+v", node.agent)
+		}
+		if _, err := os.Stat(node.agent.PromptPath); err != nil {
+			t.Fatalf("prompt no materializado para %s: %v", node.agent.AgentRef, err)
+		}
+	}
 }
 
 func TestCodexLaunchDirectorWaveCommandV0RecursiveBudgetBloqueaAntesDeLanzar(t *testing.T) {
@@ -523,6 +553,83 @@ func TestCodexLaunchDirectorWaveCommandV0NoInyectaDominioPorProjectRef(t *testin
 	} {
 		if strings.Contains(prompt, forbidden) {
 			t.Fatalf("prompt contiene contexto no inyectado %q:\n%s", forbidden, prompt)
+		}
+	}
+}
+
+type codexDirectorAgentNodeForTestV0 struct {
+	depth          int
+	parentAgentRef string
+	launch         codexWaveLaunchSummaryV0
+	agent          codexWaveAgentSummaryV0
+}
+
+func codexDirectorCollectAgentNodesForTestV0(
+	summary codexDirectorWaveSummaryV0,
+) []codexDirectorAgentNodeForTestV0 {
+	nodes := make([]codexDirectorAgentNodeForTestV0, 0)
+	for _, agent := range summary.Launch.Agents {
+		nodes = append(nodes, codexDirectorAgentNodeForTestV0{
+			depth:  0,
+			launch: summary.Launch,
+			agent:  agent,
+		})
+	}
+	for _, child := range summary.ChildLaunches {
+		nodes = append(nodes, codexDirectorCollectChildAgentNodesForTestV0(child)...)
+	}
+	return nodes
+}
+
+func codexDirectorCollectChildAgentNodesForTestV0(
+	child codexDirectorChildWaveSummaryV0,
+) []codexDirectorAgentNodeForTestV0 {
+	nodes := make([]codexDirectorAgentNodeForTestV0, 0)
+	for _, agent := range child.Launch.Agents {
+		nodes = append(nodes, codexDirectorAgentNodeForTestV0{
+			depth:          child.DelegationDepth,
+			parentAgentRef: child.ParentAgentRef,
+			launch:         child.Launch,
+			agent:          agent,
+		})
+	}
+	for _, grandchild := range child.ChildLaunches {
+		nodes = append(nodes, codexDirectorCollectChildAgentNodesForTestV0(grandchild)...)
+	}
+	return nodes
+}
+
+func codexDirectorAssertRegistryReadyForDrainReviewV0(
+	t *testing.T,
+	launch codexWaveLaunchSummaryV0,
+) {
+	t.Helper()
+	if strings.TrimSpace(launch.RegistryPath) == "" {
+		t.Fatalf("registry_path vacio para wave=%s", launch.WaveRef)
+	}
+	data, err := os.ReadFile(launch.RegistryPath)
+	if err != nil {
+		t.Fatalf("leer registry %s: %v", launch.RegistryPath, err)
+	}
+	var registry codexWaveLaunchSummaryV0
+	if err := json.Unmarshal(data, &registry); err != nil {
+		t.Fatalf("registry json invalido %s: %v", launch.RegistryPath, err)
+	}
+	if registry.SchemaVersion != codexWaveSummarySchemaVersionV0 ||
+		registry.WaveRef != launch.WaveRef ||
+		registry.RegistryPath != launch.RegistryPath ||
+		registry.AgentCount != launch.AgentCount ||
+		len(registry.Agents) != len(launch.Agents) {
+		t.Fatalf("registry no coincide con launch: registry=%+v launch=%+v", registry, launch)
+	}
+	for index, agent := range launch.Agents {
+		got := registry.Agents[index]
+		if got.AgentRef != agent.AgentRef ||
+			got.RuntimeWorkDir != agent.RuntimeWorkDir ||
+			got.WrapperPath != agent.WrapperPath ||
+			got.LastMessagePath != agent.LastMessagePath ||
+			got.Status != "dry_run" {
+			t.Fatalf("registry agent no coincide: got=%+v want=%+v", got, agent)
 		}
 	}
 }

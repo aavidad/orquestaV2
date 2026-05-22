@@ -99,8 +99,10 @@ ok smoke.local/orquesta-real-smoke/internal/smoke 0.002s
 - El smoke directo `codex-launch-director-wave` demuestra lanzamiento real de
   agentes/subagentes, pero no es todavia el ciclo durable completo
   `wait -> review -> run_required_tests -> replan_or_close`.
-- Falta ejecutar un smoke de servidor/director donde el `RequiredTestRunner`
-  opt-in genere `RequiredTestEvidenceV0` dentro del `PlanState` real.
+- El smoke de servidor/director acotado donde el `RequiredTestRunner` opt-in
+  genera `RequiredTestEvidenceV0` dentro del `PlanState` real quedo cerrado el
+  2026-05-22 como `CODEX-REQTEST-REAL-E2E`. No cubre ola/cohorte amplia ni
+  recursion real.
 - Falta smoke real de replan negativo con runner opt-in; el replan automatico
   offline ante `required-tests-failed` de un unico task ya queda cubierto por
   `docs/corte_required_tests_failed_replan_2026-05-21.md`.
@@ -191,8 +193,12 @@ Limitacion confirmada:
   un modulo temporal, persiste `RequiredTestEvidenceV0` en `state-file`, avanza
   `PlanState` a `replan_or_close` y cierra el run sin filtrar rutas locales en
   los artefactos publicados.
-- Sigue pendiente repetir el smoke real de servidor con `RequiredTestRunner`
-  opt-in para validar el camino completo con Codex real y estado persistido.
+- Corte posterior 2026-05-22: ese camino quedo validado en un caso real acotado
+  por `CODEX-REQTEST-REAL-E2E`: un agente Codex vivo entrega, pasa por review
+  causal aceptada, ejecuta `RequiredTestRunner`, persiste
+  `RequiredTestEvidenceV0` y cierra plan/run con estado persistido. Sigue
+  pendiente repetirlo para ola/cohorte amplia, recursion real y replan negativo
+  con agente real.
 - Corte posterior 2026-05-22: el bloqueo de shutdown ordenado con run activa
   pero sin agentes vivos queda corregido en `orquesta-server-shutdown`. Si
   `agents_in_flight=0` y no hay checkpoint pendiente, shutdown queda `ready`
@@ -245,5 +251,30 @@ Resultado:
 
 Este reintento no valida ni invalida el tramo nuevo con runtime real: quedo
 bloqueado por cuota antes de que existiera una entrega a revisar. La evidencia
-util del cambio queda en pruebas offline; el smoke real completo debe repetirse
-cuando haya cuota.
+util de ese cambio queda en pruebas offline; el smoke real de app completa,
+ola/cohorte amplia o recursion debe repetirse cuando haya cuota.
+
+## Cierre acotado posterior 2026-05-22
+
+Despues del reintento bloqueado por cuota se cerro el caso acotado
+`CODEX-REQTEST-REAL-E2E` con `./scripts/smoke_codex_real_required_test_runner.sh`.
+
+Resultado documentado:
+
+- `TestCodexStackRealRequiredTestRunnerEndToEndOptInV0` paso con Codex real en
+  64.49s;
+- arranco un unico agente Codex real bajo `WaitAgentRefs`;
+- hubo ACK/entrega, review causal aceptada, ejecucion del
+  `RequiredTestRunner`, persistencia de `RequiredTestEvidenceV0` y cierre de
+  plan/run;
+- no toco OPES ni core.
+
+Pendiente real tras este cierre:
+
+- ola/cohorte amplia con varios agentes Codex vivos y scope formal del Director
+  Operativo;
+- recursion real con parent/child refs, profundidad/fanout, presupuesto y review
+  causal;
+- replan negativo con runner y agente real tras fallo de tests;
+- cierre vivo de composiciones no-OPES y OPES reales con sus fuentes/validadores
+  de dominio.

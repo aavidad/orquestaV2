@@ -221,9 +221,11 @@ Lo pendiente no debe confundirse con lo hecho:
   un followup causal reflejado, y el cierre insuficiente causal con
   `closure_ref`/`validation_ref` ya emite quality gate + replan retry y reabre
   solo el followup causal reflejado, tambien en ola multitarea cuando el fallo
-  identifica una unica task causal del scope; siguen pendientes smoke Codex real
-  con runner, replan automatico para blockers no cubiertos y
-  replay/idempotencia completa;
+  identifica una unica task causal del scope; el smoke Codex real acotado con
+  runner ya quedo cerrado por `CODEX-REQTEST-REAL-E2E` con un agente vivo,
+  review causal, `RequiredTestEvidenceV0` y cierre de plan/run; siguen
+  pendientes ola/cohorte real amplia, recursion real, replan automatico para
+  blockers no cubiertos y replay/idempotencia completa;
 - si una composicion real distinta del stack Codex todavia no inyecta una fuente
   `OperationalClosureSource`, el cierre queda pendiente de wiring real en esa
   composicion;
@@ -236,8 +238,9 @@ Lo pendiente no debe confundirse con lo hecho:
   de ola multitarea ya progresa por reentradas sin bloquear por
   `run.open_tasks`; cierre insuficiente causal ya tiene replan retry acotado,
   incluso con una unica task fallida dentro de ola multitarea; faltan smoke real
-  Codex con runner, replan automatico de blockers restantes y
-  replay/idempotencia completa;
+  Codex de ola/cohorte amplia, recursion real, replan automatico de blockers
+  restantes y replay/idempotencia completa; el caso Codex real acotado con
+  runner esta cerrado por `CODEX-REQTEST-REAL-E2E`;
 - la recursion Codex real sigue pendiente: ya existe contrato unitario para
   `launch -> sigue -> done`, pero falta el adaptador real que conecte `sigue` con
   el ciclo normal de agentes y el ciclo productivo de hijos de hijos con
@@ -400,11 +403,13 @@ verificable para esa composicion.
 
 1. Mantener la frontera conceptual: core neutral primero, composiciones despues.
 2. Cerrar el siguiente tramo causal generico del Director Operativo:
-   replan automatico para blockers negativos, smoke Codex real con runner opt-in
-   y replay/idempotencia usando los providers existentes, `DirectorTaskStore` y
-   el cierre desde `ContinueAppDirectorV0` cuando el loop quede quiescent. Si
-   falta fuente real `OperationalClosureSource` en una composicion, documentarlo
-   como pendiente verificable.
+   replan automatico para blockers negativos, smoke Codex real de ola/cohorte
+   amplia, recursion real y replay/idempotencia usando los providers existentes,
+   `DirectorTaskStore` y el cierre desde `ContinueAppDirectorV0` cuando el loop
+   quede quiescent. El smoke Codex real acotado con runner ya esta cerrado en
+   `CODEX-REQTEST-REAL-E2E`; no cubre composiciones sin fuente viva ni cierre de
+   arbol recursivo. Si falta fuente real `OperationalClosureSource` en una
+   composicion, documentarlo como pendiente verificable.
 3. Consolidar `orquesta-domain-work` y los contratos de artefactos como entrada
    comun para OPES, programacion y futuros dominios.
 4. Seguir vaciando policy de `cmd` y adaptadores concretos hacia

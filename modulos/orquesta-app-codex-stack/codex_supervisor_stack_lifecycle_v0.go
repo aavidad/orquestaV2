@@ -49,8 +49,12 @@ func (lifecycle CodexSupervisorStackLifecycleV0) drainRunV0(
 		request.RunRef = strings.TrimSpace(lifecycle.RunRef)
 	}
 	result, err := lifecycle.Stack.DrainRunV0(ctx, request)
-	snapshot := codexSupervisorSnapshotFromDrainV0(request.RunRef, result)
+	snapshot := lifecycle.codexSupervisorSnapshotFromDrainV0(ctx, request.RunRef, request.OperationalDirectorPlanRef, result)
 	if err != nil {
+		if codexSupervisorDrainRecoverableBlockedV0(result) {
+			snapshot.Status = CodexSupervisorRuntimeStoppedV0
+			return snapshot, nil
+		}
 		snapshot.Status = CodexSupervisorRuntimeFailedV0
 	}
 	return snapshot, err
@@ -67,19 +71,111 @@ func (lifecycle CodexSupervisorStackLifecycleV0) runGlobalSupervisorV0(
 	return snapshot, err
 }
 
-func codexSupervisorSnapshotFromDrainV0(
+func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorSnapshotFromDrainV0(
+	ctx context.Context,
 	runRef string,
+	planRef string,
 	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
 ) CodexSupervisorRuntimeSnapshotV0 {
-	return CodexSupervisorRuntimeSnapshotV0{
-		Status:     codexSupervisorRuntimeStateFromLoopV0(result.Final.Status, result.Final.Run.Status),
-		SessionRef: strings.TrimSpace(runRef),
-		ProcessRef: codexSupervisorLastRefV0(result.Final.Run.StartedAgents),
-		EvidenceRefs: compactStringsV0(append(
-			[]string{"evidence-ref-codex-supervisor-stack-drain", string(result.Status)},
-			stackDrainEvidenceRefsV0(result)...,
-		)),
+	evidenceRefs := compactStringsV0(append(
+		[]string{"evidence-ref-codex-supervisor-stack-drain", string(result.Status)},
+		append(
+			stackDrainEvidenceRefsV0(result),
+			lifecycle.codexSupervisorOperationalBlockedEvidenceRefsV0(ctx, runRef, planRef, result)...,
+		)...,
+	))
+	status := codexSupervisorRuntimeStateFromLoopV0(result.Final.Status, result.Final.Run.Status)
+	if codexSupervisorEvidenceRefsContainPartV0(evidenceRefs, "operational-director-plan-state:blocked") {
+		status = CodexSupervisorRuntimeStoppedV0
 	}
+	return CodexSupervisorRuntimeSnapshotV0{
+		Status:       status,
+		SessionRef:   strings.TrimSpace(runRef),
+		ProcessRef:   codexSupervisorLastRefV0(result.Final.Run.StartedAgents),
+		EvidenceRefs: evidenceRefs,
+	}
+}
+
+func codexSupervisorDrainRecoverableBlockedV0(
+	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
+) bool {
+	return result.Status == orquestacionnucleoapp.ProgressiveLoopStatusBlockedV0 ||
+		result.Final.Status == orquestacionnucleoapp.ProgressiveLoopStatusBlockedV0
+}
+
+func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorOperationalBlockedEvidenceRefsV0(
+	ctx context.Context,
+	runRef string,
+	planRef string,
+	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
+) []string {
+	refs := []string{}
+	if codexSupervisorDrainRecoverableBlockedV0(result) {
+		refs = append(refs, "evidence-ref-codex-supervisor-stack-drain-blocked")
+	}
+	refs = append(refs, codexSupervisorRunOperationalBlockerRefsV0(result.Final.Run)...)
+	refs = append(refs, lifecycle.codexSupervisorPlanStateEvidenceRefsV0(ctx, runRef, planRef)...)
+	return compactStringsV0(refs)
+}
+
+func codexSupervisorRunOperationalBlockerRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []string {
+	refs := []string{}
+	for _, gate := range run.QualityGates {
+		gate = strings.TrimSpace(gate)
+		if gate == "" {
+			continue
+		}
+		if strings.Contains(gate, "required-tests-evidence-missing") ||
+			strings.Contains(gate, "#decision:blocked") {
+			refs = append(refs, gate)
+		}
+	}
+	return compactStringsV0(refs)
+}
+
+func codexSupervisorEvidenceRefsContainPartV0(values []string, part string) bool {
+	part = strings.TrimSpace(part)
+	if part == "" {
+		return false
+	}
+	for _, value := range values {
+		if strings.Contains(strings.TrimSpace(value), part) {
+			return true
+		}
+	}
+	return false
+}
+
+func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorPlanStateEvidenceRefsV0(
+	ctx context.Context,
+	runRef string,
+	planRef string,
+) []string {
+	runRef = strings.TrimSpace(runRef)
+	planRef = strings.TrimSpace(planRef)
+	if runRef == "" || planRef == "" || lifecycle.Stack.Ports.OperationalPlanStateStore == nil {
+		return nil
+	}
+	state, err := lifecycle.Stack.Ports.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, runRef, planRef)
+	if err != nil || state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 {
+		return nil
+	}
+	refs := []string{
+		"operational-director-plan-state:" + strings.TrimSpace(string(state.Status)),
+	}
+	refs = append(refs, state.BlockerRefs...)
+	refs = append(refs, state.EvidenceRefs...)
+	for _, step := range state.Steps {
+		if step.Status != "blocked" {
+			continue
+		}
+		refs = append(refs, step.BlockerRefs...)
+		refs = append(refs, step.Reason)
+		refs = append(refs, step.EvidenceRefs...)
+	}
+	return compactStringsV0(refs)
 }
 
 func codexSupervisorSnapshotFromGlobalSupervisorV0(

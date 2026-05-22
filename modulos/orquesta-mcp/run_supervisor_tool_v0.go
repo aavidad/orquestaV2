@@ -20,12 +20,13 @@ type MCPRunSupervisorToolDescriptorV0 struct {
 }
 
 type MCPRunSupervisorToolInputV0 struct {
-	RequestID       string `json:"request_id,omitempty"`
-	CorrelationID   string `json:"correlation_id,omitempty"`
-	RunRef          string `json:"run_ref,omitempty"`
-	QueueRef        string `json:"queue_ref,omitempty"`
-	ContinueMessage string `json:"continue_message,omitempty"`
-	OccurredAt      string `json:"occurred_at,omitempty"`
+	RequestID                  string `json:"request_id,omitempty"`
+	CorrelationID              string `json:"correlation_id,omitempty"`
+	RunRef                     string `json:"run_ref,omitempty"`
+	OperationalDirectorPlanRef string `json:"operational_director_plan_ref,omitempty"`
+	QueueRef                   string `json:"queue_ref,omitempty"`
+	ContinueMessage            string `json:"continue_message,omitempty"`
+	OccurredAt                 string `json:"occurred_at,omitempty"`
 
 	MaxTicks             int  `json:"max_ticks,omitempty"`
 	MaxRunsPerTick       int  `json:"max_runs_per_tick,omitempty"`
@@ -70,7 +71,7 @@ func MCPRunSupervisorDescriptorV0() MCPRunSupervisorToolDescriptorV0 {
 	return MCPRunSupervisorToolDescriptorV0{
 		Name:        MCPRunSupervisorToolNameV0,
 		Version:     MCPRunSupervisorToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,queue_ref?,max_ticks?,continue_message?,limits?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,operational_director_plan_ref?,queue_ref?,max_ticks?,continue_message?,limits?}",
 		Output:      "ok:{run_ref,stop_reason,ticks,last,history?,evidence_refs?}|error:{errores_publicos}",
 		ResourceURI: MCPRunSupervisorResourceURIV0,
 		Invariantes: []string{

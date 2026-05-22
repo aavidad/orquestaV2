@@ -716,3 +716,34 @@ Reglas cerradas:
   y `ProcessRegistry`, no por un lanzador paralelo;
 - no declarar cerrada la recursion real hasta tener smoke con parent/child refs,
   presupuesto global, profundidad/fanout y review causal.
+
+## APP-CODEX-STACK-024
+
+Objetivo: cerrar el smoke Codex real acotado con runner de tests requeridos y
+cierre operativo causal.
+
+Estado: hecho como `CODEX-REQTEST-REAL-E2E`; no CI por defecto.
+
+Trabajo aplicado:
+
+- smoke opt-in `./scripts/smoke_codex_real_required_test_runner.sh`;
+- prueba directa `TestCodexStackRealRequiredTestRunnerEndToEndOptInV0`;
+- una task del Director Operativo con `RequiredTests=go test ./...`;
+- un unico agente Codex real bajo `WaitAgentRefs`;
+- ACK/entrega, review causal aceptada, `RequiredTestRunner`,
+  `RequiredTestEvidenceV0` durable y cierre de plan/run.
+
+Validacion:
+
+- `ORQUESTA_CODEX_REAL_REQUIRED_TEST_RUNNER_CONFIRM=1`;
+- `ORQUESTA_CODEX_REAL_REQUIRED_TEST_RUNNER_EXECUTE_CODEX=1`;
+- `ORQUESTA_CODEX_REAL_REQUIRED_TEST_RUNNER_CODEX_EXECUTION_CONFIRMED=1`;
+- `./scripts/smoke_codex_real_required_test_runner.sh`;
+- resultado documentado: PASS el 2026-05-22 en 64.49s.
+
+Reglas cerradas:
+
+- no lanza Codex real por defecto;
+- no toca OPES ni core;
+- no declara cerrados recursion real, ola/cohorte amplia, cierre con app externa
+  real no-OPES ni OPES real.
