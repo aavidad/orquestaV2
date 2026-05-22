@@ -218,9 +218,10 @@ Lo pendiente no debe confundirse con lo hecho:
   `required_test_evidence_refs` ya puede reabrir `wait_subagents` cuando aparece
   un followup causal reflejado, y el cierre insuficiente causal con
   `closure_ref`/`validation_ref` ya emite quality gate + replan retry y reabre
-  solo el followup causal reflejado; siguen pendientes smoke Codex real con
-  runner, replan automatico para blockers no cubiertos y replay/idempotencia
-  completa;
+  solo el followup causal reflejado, tambien en ola multitarea cuando el fallo
+  identifica una unica task causal del scope; siguen pendientes smoke Codex real
+  con runner, replan automatico para blockers no cubiertos y
+  replay/idempotencia completa;
 - si una composicion real distinta del stack Codex todavia no inyecta una fuente
   `OperationalClosureSource`, el cierre queda pendiente de wiring real en esa
   composicion;
@@ -231,8 +232,9 @@ Lo pendiente no debe confundirse con lo hecho:
   avanzan o bloquean por evidencia causal; la observacion negativa de review y
   el cierre/bloqueo posterior del PlanState estan cubiertos offline; el cierre
   de ola multitarea ya progresa por reentradas sin bloquear por
-  `run.open_tasks`; cierre insuficiente causal ya tiene replan retry acotado;
-  faltan smoke real Codex con runner, replan automatico de blockers restantes y
+  `run.open_tasks`; cierre insuficiente causal ya tiene replan retry acotado,
+  incluso con una unica task fallida dentro de ola multitarea; faltan smoke real
+  Codex con runner, replan automatico de blockers restantes y
   replay/idempotencia completa;
 - la recursion Codex real sigue pendiente: ya existe contrato unitario para
   `launch -> sigue -> done`, pero falta el adaptador real que conecte `sigue` con
@@ -355,10 +357,11 @@ implementacion y prueba integrada para cada frente:
   tardia a followups ya materializados estan cubiertos. Tambien queda cubierta
   la reentrada de cierre bloqueado por `required_test_evidence_refs` cuando
   aparece despues un followup causal reflejado, y cierre insuficiente causal ya
-  produce replan retry con refs de task/delivery/review aceptada. Sigue pendiente
-  emitir rework/replan causal generico para blockers de scopes complejos u otros
-  casos sin decision causal; outbox pendiente ya bloquea el cierre con causa
-  durable sin llamar la fuente. No cerrar por resumen ni por quietud aparente.
+  produce replan retry con refs de task/delivery/review aceptada, tambien si el
+  scope contiene varias tasks pero el cierre fallido identifica una unica task.
+  Sigue pendiente emitir rework/replan causal generico para blockers sin
+  decision causal; outbox pendiente ya bloquea el cierre con causa durable sin
+  llamar la fuente. No cerrar por resumen ni por quietud aparente.
 - [x] Plan state inicial: persistir estado vivo del plan con step activo
   `wait_subagents`, ola/cohorte activa, tasks, agentes, pendientes y `wait_ref`.
 - [x] Plan state reentrada inicial: `ContinueAppDirectorV0` lee

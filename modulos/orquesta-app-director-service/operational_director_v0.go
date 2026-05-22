@@ -1512,9 +1512,6 @@ func continueOperationalDirectorPlanStateAfterBlockedClosureIssuesReplanV0(
 	if err != nil || !complete {
 		return state, false, err
 	}
-	if !operationalDirectorPlanRequiredTestsReplanScopeSupportedV0(activeStep, matches) {
-		return state, false, nil
-	}
 	reader := operationalDirectorPlanStateEventReaderV0(ports)
 	if reader == nil {
 		return state, false, nil
@@ -1524,6 +1521,9 @@ func continueOperationalDirectorPlanStateAfterBlockedClosureIssuesReplanV0(
 		return state, false, err
 	}
 	trace := operationalDirectorPlanReviewTraceFromEventsV0(events)
+	var selectedMatch operationalDirectorPlanAcceptedReviewMatchV0
+	var selectedReplan orquestacoreworkflow.ReplanDecisionRecordedPayloadV0
+	selectedGateRef := ""
 	for _, match := range matches {
 		gate, ok := operationalDirectorPlanRequiredTestsQualityGateV0(run, trace, activeStep, match.TaskRef, issueRefs)
 		if !ok {
@@ -1533,29 +1533,37 @@ func continueOperationalDirectorPlanStateAfterBlockedClosureIssuesReplanV0(
 		if !ok {
 			continue
 		}
-		return operationalDirectorPlanStateAfterQualityGateReplanFollowupsV0(
-			ctx,
-			request,
-			ports,
-			state,
-			activeStep,
-			run,
-			replan,
-			strings.TrimSpace(gate.GateRef),
-			operationalDirectorPlanQualityGateReplanTransitionV0{
-				ActiveStepReason:      "operational-closure-issues-replan-recorded",
-				ActiveStepBlockerRefs: append([]string{"operational-closure-issues"}, issueRefs...),
-				WaitFollowupsBlocker:  "wait-subagents-operational-closure-replan-followups",
-				WaitFollowupsReason:   "operational-closure-issues-replan-followups-waiting",
-				WaitAgentsBlocker:     "wait-subagents-operational-closure-replan-followup-agents",
-				WaitAgentsReason:      "operational-closure-issues-replan-followup-agents-waiting",
-				EvidenceRefs: []string{
-					"evidence-ref-app-director-operational-plan-state-closure-issues-replan-v0",
-				},
-			},
-		)
+		if selectedGateRef != "" {
+			return state, false, nil
+		}
+		selectedMatch = match
+		selectedReplan = replan
+		selectedGateRef = strings.TrimSpace(gate.GateRef)
 	}
-	return state, false, nil
+	if selectedGateRef == "" || strings.TrimSpace(selectedMatch.TaskRef) == "" {
+		return state, false, nil
+	}
+	return operationalDirectorPlanStateAfterQualityGateReplanFollowupsV0(
+		ctx,
+		request,
+		ports,
+		state,
+		activeStep,
+		run,
+		selectedReplan,
+		selectedGateRef,
+		operationalDirectorPlanQualityGateReplanTransitionV0{
+			ActiveStepReason:      "operational-closure-issues-replan-recorded",
+			ActiveStepBlockerRefs: append([]string{"operational-closure-issues"}, issueRefs...),
+			WaitFollowupsBlocker:  "wait-subagents-operational-closure-replan-followups",
+			WaitFollowupsReason:   "operational-closure-issues-replan-followups-waiting",
+			WaitAgentsBlocker:     "wait-subagents-operational-closure-replan-followup-agents",
+			WaitAgentsReason:      "operational-closure-issues-replan-followup-agents-waiting",
+			EvidenceRefs: []string{
+				"evidence-ref-app-director-operational-plan-state-closure-issues-replan-v0",
+			},
+		},
+	)
 }
 
 func operationalDirectorClosureReplannableBlockerRefsV0(refs []string) []string {

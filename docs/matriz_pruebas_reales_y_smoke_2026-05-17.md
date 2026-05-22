@@ -129,7 +129,8 @@ que haya test claro y se actualice la fila correspondiente de la matriz.
   reentradas cuando `run.open_tasks` solo indica que quedan tareas por cerrar.
   Outbox no vacio ya bloquea el `PlanState` sin consultar source. Cierre
   insuficiente causal ya produce `QualityGateRecorded` + `ReplanDecisionRecorded`
-  y reabre solo el followup reflejado. Sigue pendiente que fallo multitarea sin
+  y reabre solo el followup reflejado, incluso en una ola multitarea si el fallo
+  identifica una unica task causal del scope. Sigue pendiente que fallos sin
   decision causal u otros blockers produzcan `RequestRework`/`RecordReplanDecision`
   con refs causales.
 - [~] `DIRECTOR-PLAN-STATE-OFFLINE`: el corte cubre reentrada, wait->review,
@@ -182,9 +183,9 @@ evidencia focal propia.
 - Falta completar `DIRECTOR-REPLAN-CLOSE-OFFLINE`: `replan_or_close` ya gobierna
   el cierre con review aceptada, evidencias, refs de tests durables si aplica,
   estado `quiescent` y outbox cero; outbox pendiente bloquea con causa durable
-  sin invocar source; cierre insuficiente causal ya replanifica por quality gate.
-  Siguen pendientes replan causal generico para blockers como scopes multitarea
-  sin decision causal.
+  sin invocar source; cierre insuficiente causal ya replanifica por quality gate,
+  tambien en scopes multitarea con una unica task afectada. Siguen pendientes
+  replan causal generico para blockers sin decision causal.
 - `DIRECTOR-PLAN-STATE-OFFLINE` tiene contrato, stores, escritura inicial,
   reentrada, avance wait->review, salida positiva review->tests/replan, consumo
   de tests durables, bloqueo por evidencia faltante y cierre/bloqueo post-closure

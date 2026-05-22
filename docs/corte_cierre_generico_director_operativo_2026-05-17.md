@@ -125,6 +125,15 @@ siguiente task abierta. La prueba focal cubre dos tasks hijas con
 `parent_task_ref`, reviews aceptadas, evidencias de tests y cierre final solo
 cuando ya no quedan tasks abiertas.
 
+Tambien desde el corte del 2026-05-22, si una ola multitarea esta en
+`replan_or_close/running` y el cierre de una task concreta falla por
+`closure_ref` o `validation_ref`, el servicio acepta replan causal siempre que
+`closureRequest.TaskID` pertenezca al scope activo y exista cadena
+task/delivery/review aceptada. Se emite una unica pareja
+`QualityGateRecorded(blocked)` + `ReplanDecisionRecorded(retry_task)` para esa
+task y la reentrada posterior solo espera el followup reflejado. Si aparecen
+varias decisiones candidatas en el mismo scope, no elige una al azar.
+
 ## Review negativa en PlanState
 
 El codigo local de `app-director-service` ya contiene observacion de review
@@ -182,8 +191,9 @@ implementacion, test focal y evidencia en la matriz.
   aparece el followup causal reflejado por quality gate/replan. El cierre
   insuficiente causal (`closure_ref`/`validation_ref` con task, delivery y review
   aceptada) ya emite quality gate + replan retry y reabre solo el followup
-  reflejado. Siguen pendientes blockers posteriores sin decision causal como
-  nuevos efectos idempotentes de replan.
+  reflejado, tambien cuando el `replan_or_close` cubre una ola multitarea pero
+  el fallo identifica una unica task causal. Siguen pendientes blockers
+  posteriores sin decision causal como nuevos efectos idempotentes de replan.
 - [~] `replan_or_close` como puerta de cierre: el cierre ya no se dispara por
   cualquier `PlanState` activo. Si hay estado vivo, solo se evalua cierre cuando
   el step activo es `replan_or_close` en `running`; un step anterior o
@@ -302,7 +312,8 @@ pruebas claras. No deben describirse como hechas antes de cerrar la evidencia.
   `required_test_evidence_refs` y ya hay quality gate/replan con followup
   reflejado, `ContinueAppDirectorV0` reabre la espera acotada. Si el cierre
   insuficiente conserva refs causales de task, delivery y review aceptada, ya
-  emite replan retry y reabre el followup concreto. Sigue pendiente emitir
+  emite replan retry y reabre el followup concreto; en scope multitarea exige
+  que una unica task causal del scope sea la afectada. Sigue pendiente emitir
   rework/replan generico para otros blockers reparables, con causa, intento y
   refs de task, delivery y review.
 3. Estado vivo del plan:

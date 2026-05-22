@@ -189,7 +189,8 @@ func operationalDirectorPlanStateReplanClosureIssuesV0(
 		run = loadedRun
 	}
 	taskRefs := compactServiceRefsV0(activeStep.TaskRefs)
-	if len(taskRefs) != 1 || strings.TrimSpace(closureRequest.TaskID) != taskRefs[0] {
+	taskRef := strings.TrimSpace(closureRequest.TaskID)
+	if taskRef == "" || !startAppDirectorStringInSetV0(taskRefs, taskRef) {
 		return nil, nil
 	}
 	match, trace, ok, err := operationalDirectorClosureIssueAcceptedReviewMatchV0(ctx, request, ports, activeStep, run, closureRequest)
