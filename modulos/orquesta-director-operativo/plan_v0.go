@@ -68,6 +68,12 @@ func normalizeOperationalDirectorRequestV0(
 			DefaultOperationalDirectorMaxSubagentsPerAgentV0,
 			MaxOperationalDirectorMaxSubagentsPerAgentV0,
 		)
+		request.MaxRecursiveAgents = clampOptionalPositiveMaxV0(
+			request.MaxRecursiveAgents,
+			MaxOperationalDirectorMaxRecursiveAgentsV0,
+		)
+	} else {
+		request.MaxRecursiveAgents = 0
 	}
 	if request.Mode == OperationalDirectorModeDomainWorkV0 && request.ContextStatus == "" {
 		request.ContextStatus = OperationalDirectorContextSufficientV0
@@ -92,6 +98,7 @@ func baseOperationalDirectorPlanV0(
 		RecursiveDelegation:  request.AllowRecursiveDelegation,
 		MaxDelegationDepth:   request.MaxDelegationDepth,
 		MaxSubagentsPerAgent: request.MaxSubagentsPerAgent,
+		MaxRecursiveAgents:   request.MaxRecursiveAgents,
 		WriteSet:             append([]string(nil), request.WriteSet...),
 		RequiredTests:        append([]string(nil), request.RequiredTests...),
 		DomainRefs:           append([]string(nil), request.DomainRefs...),
@@ -223,7 +230,7 @@ func addOperationalDirectorPlanStepDetailsV0(
 			plan.Steps[i].DomainRefs = append([]string(nil), plan.DomainRefs...)
 			plan.Steps[i].AcceptanceCriteria = []string{
 				"Cada subagente hijo conserva parent_ref, objetivo, presupuesto y criterio de review.",
-				"No lanzar hijos fuera de MaxDelegationDepth ni MaxSubagentsPerAgent.",
+				"No lanzar hijos fuera de MaxDelegationDepth, MaxSubagentsPerAgent ni MaxRecursiveAgents.",
 			}
 		case OperationalDirectorStepReviewDeliveriesV0,
 			OperationalDirectorStepRunRequiredTestsV0,

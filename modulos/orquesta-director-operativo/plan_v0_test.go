@@ -160,6 +160,7 @@ func TestBuildOperationalDirectorPlanV0RecursiveDelegationIsDirectorGoverned(t *
 		request.AllowRecursiveDelegation = true
 		request.MaxDelegationDepth = 99
 		request.MaxSubagentsPerAgent = 99
+		request.MaxRecursiveAgents = MaxOperationalDirectorMaxRecursiveAgentsV0 + 1
 	}))
 
 	if !result.Accepted || !result.ReadyToLaunch || result.Blocked {
@@ -168,6 +169,7 @@ func TestBuildOperationalDirectorPlanV0RecursiveDelegationIsDirectorGoverned(t *
 	if !result.Plan.RecursiveDelegation ||
 		result.Plan.MaxDelegationDepth != MaxOperationalDirectorMaxDelegationDepthV0 ||
 		result.Plan.MaxSubagentsPerAgent != MaxOperationalDirectorMaxSubagentsPerAgentV0 ||
+		result.Plan.MaxRecursiveAgents != MaxOperationalDirectorMaxRecursiveAgentsV0 ||
 		!planHasStepKindV0(result.Plan, OperationalDirectorStepGovernDelegationV0) {
 		t.Fatalf("plan=%+v", result.Plan)
 	}
@@ -178,12 +180,27 @@ func TestBuildOperationalDirectorPlanV0RecursiveDelegationIsDirectorGoverned(t *
 	if governStep.ParentStepID != "step-launch-subagents" ||
 		governStep.DelegationDepth != 1 ||
 		governStep.MaxChildAgents != MaxOperationalDirectorMaxSubagentsPerAgentV0 ||
-		!containsFragmentInSetV0(governStep.AcceptanceCriteria, "parent_ref") {
+		!containsFragmentInSetV0(governStep.AcceptanceCriteria, "parent_ref") ||
+		!containsFragmentInSetV0(governStep.AcceptanceCriteria, "MaxRecursiveAgents") {
 		t.Fatalf("govern step=%+v", governStep)
 	}
 	reviewStep := planStepByKindV0(result.Plan, OperationalDirectorStepReviewDeliveriesV0)
 	if !stringInSetV0(reviewStep.DependsOn, "step-govern-delegation") {
 		t.Fatalf("review step=%+v", reviewStep)
+	}
+}
+
+func TestBuildOperationalDirectorPlanV0RecursiveAgentBudgetZeroMeansUnbounded(t *testing.T) {
+	result := BuildOperationalDirectorPlanV0(validProgrammingRequestV0(func(request *OperationalDirectorRequestV0) {
+		request.AllowRecursiveDelegation = true
+		request.MaxRecursiveAgents = 0
+	}))
+
+	if !result.Accepted {
+		t.Fatalf("result=%+v", result)
+	}
+	if result.Plan.MaxRecursiveAgents != 0 {
+		t.Fatalf("max_recursive_agents=%d", result.Plan.MaxRecursiveAgents)
 	}
 }
 

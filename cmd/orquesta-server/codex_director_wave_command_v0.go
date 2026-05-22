@@ -20,21 +20,14 @@ import (
 const codexDirectorWaveSummarySchemaVersionV0 = "orquesta_codex_director_wave_launch.v0"
 
 type codexDirectorWaveSummaryV0 struct {
-	SchemaVersion string                                                  `json:"schema_version"`
-	Request       orquestadirectoroperativo.OperationalDirectorRequestV0  `json:"request"`
-	Plan          orquestadirectoroperativo.OperationalDirectorPlanV0     `json:"plan"`
-	WaveWork      orquestadirectoroperativo.OperationalDirectorWaveWorkV0 `json:"wave_work"`
-	Launch        codexWaveLaunchSummaryV0                                `json:"launch"`
-	ChildLaunches []codexDirectorChildWaveSummaryV0                       `json:"child_launches,omitempty"`
-	AgentBudget   codexDirectorAgentBudgetSummaryV0                       `json:"agent_budget"`
-	Issues        []orquestadirectoroperativo.OperationalDirectorIssueV0  `json:"issues,omitempty"`
-}
-
-type codexDirectorAgentBudgetSummaryV0 struct {
-	MaxAgents       int  `json:"max_agents,omitempty"`
-	PlannedAgents   int  `json:"planned_agents"`
-	Exceeded        bool `json:"exceeded,omitempty"`
-	RecursiveLaunch bool `json:"recursive_launch,omitempty"`
+	SchemaVersion string                                                     `json:"schema_version"`
+	Request       orquestadirectoroperativo.OperationalDirectorRequestV0     `json:"request"`
+	Plan          orquestadirectoroperativo.OperationalDirectorPlanV0        `json:"plan"`
+	WaveWork      orquestadirectoroperativo.OperationalDirectorWaveWorkV0    `json:"wave_work"`
+	Launch        codexWaveLaunchSummaryV0                                   `json:"launch"`
+	ChildLaunches []codexDirectorChildWaveSummaryV0                          `json:"child_launches,omitempty"`
+	AgentBudget   orquestadirectoroperativo.OperationalDirectorAgentBudgetV0 `json:"agent_budget"`
+	Issues        []orquestadirectoroperativo.OperationalDirectorIssueV0     `json:"issues,omitempty"`
 }
 
 type codexDirectorChildWaveSummaryV0 struct {
@@ -274,6 +267,7 @@ func runCodexLaunchDirectorWaveV0(
 		AllowRecursiveDelegation: config.AllowRecursiveDelegation,
 		MaxDelegationDepth:       config.MaxDelegationDepth,
 		MaxSubagentsPerAgent:     config.MaxSubagentsPerAgent,
+		MaxRecursiveAgents:       config.RecursiveAgentBudget,
 	}
 	result := orquestadirectoroperativo.BuildOperationalDirectorPlanV0(request)
 	summary := codexDirectorWaveSummaryV0{
@@ -285,7 +279,7 @@ func runCodexLaunchDirectorWaveV0(
 	if !result.Accepted || !result.ReadyToLaunch || result.Blocked {
 		return summary, nil
 	}
-	budget := codexDirectorAgentBudgetV0(result.Plan, config.RecursiveAgentBudget)
+	budget := orquestadirectoroperativo.BuildOperationalDirectorAgentBudgetV0(result.Plan)
 	summary.AgentBudget = budget
 	if budget.Exceeded {
 		summary.Issues = append(summary.Issues, orquestadirectoroperativo.OperationalDirectorIssueV0{
@@ -317,30 +311,6 @@ func runCodexLaunchDirectorWaveV0(
 	}
 	summary.ChildLaunches = childLaunches
 	return summary, nil
-}
-
-func codexDirectorAgentBudgetV0(
-	plan orquestadirectoroperativo.OperationalDirectorPlanV0,
-	maxAgents int,
-) codexDirectorAgentBudgetSummaryV0 {
-	planned := plan.MaxParallelAgents
-	if planned < 0 {
-		planned = 0
-	}
-	recursive := plan.RecursiveDelegation && plan.MaxDelegationDepth > 0 && plan.MaxSubagentsPerAgent > 0
-	if recursive {
-		currentDepthAgents := plan.MaxParallelAgents
-		for depth := 1; depth <= plan.MaxDelegationDepth; depth++ {
-			currentDepthAgents *= plan.MaxSubagentsPerAgent
-			planned += currentDepthAgents
-		}
-	}
-	return codexDirectorAgentBudgetSummaryV0{
-		MaxAgents:       maxAgents,
-		PlannedAgents:   planned,
-		Exceeded:        maxAgents > 0 && planned > maxAgents,
-		RecursiveLaunch: recursive,
-	}
 }
 
 func runCodexLaunchDirectorChildWavesV0(

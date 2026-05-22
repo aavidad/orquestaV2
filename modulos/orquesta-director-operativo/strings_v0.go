@@ -31,3 +31,13 @@ func clampPositiveV0(value int, fallback int, max int) int {
 	}
 	return value
 }
+
+func clampOptionalPositiveMaxV0(value int, max int) int {
+	if value <= 0 {
+		return 0
+	}
+	if value > max {
+		return max
+	}
+	return value
+}

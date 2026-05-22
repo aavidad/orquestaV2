@@ -368,6 +368,8 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaNietosConLimi
 	if !summary.Plan.RecursiveDelegation ||
 		summary.Plan.MaxDelegationDepth != 2 ||
 		summary.Plan.MaxSubagentsPerAgent != 2 ||
+		summary.Request.MaxRecursiveAgents != 32 ||
+		summary.Plan.MaxRecursiveAgents != 32 ||
 		summary.AgentBudget.PlannedAgents != 7 ||
 		summary.AgentBudget.MaxAgents != 32 ||
 		summary.AgentBudget.Exceeded ||
@@ -509,6 +511,7 @@ printf '%s\n' "$input"
 	if summary.AgentBudget.PlannedAgents != 7 ||
 		summary.AgentBudget.MaxAgents != 7 ||
 		summary.AgentBudget.Exceeded ||
+		summary.Plan.MaxRecursiveAgents != 7 ||
 		len(summary.Launch.Agents) != 1 ||
 		len(summary.ChildLaunches) != 1 {
 		t.Fatalf("summary runtime recursivo inesperado: %+v", summary)
@@ -601,6 +604,7 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveBudgetBloqueaAntesDeLanzar(t *
 	if summary.AgentBudget.PlannedAgents != 26 ||
 		summary.AgentBudget.MaxAgents != 8 ||
 		!summary.AgentBudget.Exceeded ||
+		summary.Plan.MaxRecursiveAgents != 8 ||
 		!codexDirectorHasIssueV0(summary.Issues, "recursive_agent_budget_exceeded") {
 		t.Fatalf("presupuesto inesperado: %+v", summary)
 	}

@@ -137,6 +137,7 @@ func TestBuildOperationalDirectorWaveWorkV0RejectsInvalidDelegationRefsAndBudget
 		request.AllowRecursiveDelegation = true
 		request.MaxDelegationDepth = 2
 		request.MaxSubagentsPerAgent = 2
+		request.MaxRecursiveAgents = 12
 	}))
 	plan := result.Plan
 	governIndex := planStepIndexByKindV0(plan, OperationalDirectorStepGovernDelegationV0)
@@ -154,6 +155,9 @@ func TestBuildOperationalDirectorWaveWorkV0RejectsInvalidDelegationRefsAndBudget
 	assertIssueV0(t, work.Issues, "child_step_missing")
 	assertIssueV0(t, work.Issues, "delegation_depth_exceeds_budget")
 	assertIssueV0(t, work.Issues, "max_child_agents_exceeds_budget")
+	if work.MaxRecursiveAgents != 12 {
+		t.Fatalf("max_recursive_agents no preservado: work=%+v", work)
+	}
 }
 
 func TestBuildOperationalDirectorWaveWorkV0RejectsReadyPlanWithoutOperationalCycle(t *testing.T) {

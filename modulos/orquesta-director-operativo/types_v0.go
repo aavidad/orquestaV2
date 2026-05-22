@@ -55,6 +55,7 @@ const (
 	MaxOperationalDirectorMaxParallelAgentsV0        = 6
 	MaxOperationalDirectorMaxDelegationDepthV0       = 3
 	MaxOperationalDirectorMaxSubagentsPerAgentV0     = 6
+	MaxOperationalDirectorMaxRecursiveAgentsV0       = 4096
 )
 
 type OperationalDirectorRequestV0 struct {
@@ -76,6 +77,7 @@ type OperationalDirectorRequestV0 struct {
 	AllowRecursiveDelegation bool                               `json:"allow_recursive_delegation,omitempty"`
 	MaxDelegationDepth       int                                `json:"max_delegation_depth,omitempty"`
 	MaxSubagentsPerAgent     int                                `json:"max_subagents_per_agent,omitempty"`
+	MaxRecursiveAgents       int                                `json:"max_recursive_agents,omitempty"`
 }
 
 type OperationalDirectorPlanResultV0 struct {
@@ -99,6 +101,7 @@ type OperationalDirectorPlanV0 struct {
 	RecursiveDelegation  bool                            `json:"recursive_delegation,omitempty"`
 	MaxDelegationDepth   int                             `json:"max_delegation_depth,omitempty"`
 	MaxSubagentsPerAgent int                             `json:"max_subagents_per_agent,omitempty"`
+	MaxRecursiveAgents   int                             `json:"max_recursive_agents,omitempty"`
 	WriteSet             []string                        `json:"write_set,omitempty"`
 	RequiredTests        []string                        `json:"required_tests,omitempty"`
 	DomainRefs           []string                        `json:"domain_refs,omitempty"`
@@ -130,18 +133,26 @@ type OperationalDirectorIssueV0 struct {
 	Message string `json:"message,omitempty"`
 }
 
+type OperationalDirectorAgentBudgetV0 struct {
+	MaxAgents       int  `json:"max_agents,omitempty"`
+	PlannedAgents   int  `json:"planned_agents"`
+	Exceeded        bool `json:"exceeded,omitempty"`
+	RecursiveLaunch bool `json:"recursive_launch,omitempty"`
+}
+
 type OperationalDirectorWaveWorkV0 struct {
-	PlanRef           string                          `json:"plan_ref"`
-	RequestRef        string                          `json:"request_ref"`
-	RunRef            string                          `json:"run_ref"`
-	ProjectRef        string                          `json:"project_ref"`
-	Mode              OperationalDirectorModeV0       `json:"mode"`
-	Status            OperationalDirectorPlanStatusV0 `json:"status"`
-	ReadyToLaunch     bool                            `json:"ready_to_launch"`
-	MaxParallelItems  int                             `json:"max_parallel_items"`
-	RecursiveChildren bool                            `json:"recursive_children,omitempty"`
-	Waves             []OperationalDirectorWaveV0     `json:"waves,omitempty"`
-	Issues            []OperationalDirectorIssueV0    `json:"issues,omitempty"`
+	PlanRef            string                          `json:"plan_ref"`
+	RequestRef         string                          `json:"request_ref"`
+	RunRef             string                          `json:"run_ref"`
+	ProjectRef         string                          `json:"project_ref"`
+	Mode               OperationalDirectorModeV0       `json:"mode"`
+	Status             OperationalDirectorPlanStatusV0 `json:"status"`
+	ReadyToLaunch      bool                            `json:"ready_to_launch"`
+	MaxParallelItems   int                             `json:"max_parallel_items"`
+	RecursiveChildren  bool                            `json:"recursive_children,omitempty"`
+	MaxRecursiveAgents int                             `json:"max_recursive_agents,omitempty"`
+	Waves              []OperationalDirectorWaveV0     `json:"waves,omitempty"`
+	Issues             []OperationalDirectorIssueV0    `json:"issues,omitempty"`
 }
 
 type OperationalDirectorWaveV0 struct {

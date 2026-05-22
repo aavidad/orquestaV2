@@ -6,15 +6,16 @@ func BuildOperationalDirectorWaveWorkV0(
 	plan OperationalDirectorPlanV0,
 ) OperationalDirectorWaveWorkV0 {
 	work := OperationalDirectorWaveWorkV0{
-		PlanRef:           plan.PlanRef,
-		RequestRef:        plan.RequestRef,
-		RunRef:            plan.RunRef,
-		ProjectRef:        plan.ProjectRef,
-		Mode:              plan.Mode,
-		Status:            plan.Status,
-		ReadyToLaunch:     plan.Status == OperationalDirectorPlanReadyV0,
-		MaxParallelItems:  plan.MaxParallelAgents,
-		RecursiveChildren: plan.RecursiveDelegation,
+		PlanRef:            plan.PlanRef,
+		RequestRef:         plan.RequestRef,
+		RunRef:             plan.RunRef,
+		ProjectRef:         plan.ProjectRef,
+		Mode:               plan.Mode,
+		Status:             plan.Status,
+		ReadyToLaunch:      plan.Status == OperationalDirectorPlanReadyV0,
+		MaxParallelItems:   plan.MaxParallelAgents,
+		RecursiveChildren:  plan.RecursiveDelegation,
+		MaxRecursiveAgents: plan.MaxRecursiveAgents,
 	}
 	if len(plan.Steps) == 0 {
 		work.Issues = append(work.Issues, issueV0("plan_steps_missing", "steps", "plan sin pasos operativos"))
