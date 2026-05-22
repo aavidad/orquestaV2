@@ -303,6 +303,11 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 		return ContinueAppDirectorRequestV0{}, err
 	}
 	reopened = reopened || reopenedRequiredTests
+	state, recoveredRequiredTests, err := continueOperationalDirectorPlanStateAfterBlockedRequiredTestsEvidenceV0(ctx, request, ports, state)
+	if err != nil {
+		return ContinueAppDirectorRequestV0{}, err
+	}
+	reopened = reopened || recoveredRequiredTests
 	state, reopenedReviewReplan, err := continueOperationalDirectorPlanStateAfterReviewReworkReplanFollowupsV0(ctx, request, ports, state)
 	if err != nil {
 		return ContinueAppDirectorRequestV0{}, err
@@ -522,6 +527,68 @@ func continueOperationalDirectorPlanStateAfterBlockedRequiredTestsReplanV0(
 		matches,
 		failedRefs,
 	)
+}
+
+func continueOperationalDirectorPlanStateAfterBlockedRequiredTestsEvidenceV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) (orquestacionnucleoapp.OperationalDirectorPlanStateV0, bool, error) {
+	if ports.OperationalPlanStateWriter == nil || ports.RunStore == nil || ports.RequiredTestEvidenceStore == nil {
+		return state, false, nil
+	}
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok ||
+		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
+		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 ||
+		activeStep.Reason != "required-tests-evidence-missing" {
+		return state, false, nil
+	}
+	requiredTests := compactServiceRefsV0(state.RequiredTestRefs)
+	if len(requiredTests) == 0 {
+		return state, false, nil
+	}
+	run, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return state, false, err
+	}
+	matches, complete, err := operationalDirectorPlanAcceptedReviewMatchesV0(ctx, request, ports, activeStep, run)
+	if err != nil || !complete {
+		return state, false, err
+	}
+	evidence, err := operationalDirectorPlanRequiredTestEvidenceForMatchesV0(
+		ctx,
+		request.RunRef,
+		ports.RequiredTestEvidenceStore,
+		activeStep,
+		matches,
+	)
+	if err != nil {
+		return state, false, err
+	}
+	testStatus := operationalDirectorPlanEvaluateRequiredTestEvidenceV0(request.RunRef, requiredTests, matches, evidence)
+	if len(testStatus.FailedRefs) > 0 {
+		replanned, replannedChanged, err := operationalDirectorPlanStateAfterRequiredTestsReplanV0(
+			ctx,
+			request,
+			ports,
+			state,
+			activeStep,
+			run,
+			matches,
+			testStatus.FailedRefs,
+		)
+		if err != nil || replannedChanged {
+			return replanned, replannedChanged, err
+		}
+		return operationalDirectorPlanStateWithRequiredTestsBlockedV0(request, state, activeStep, testStatus.FailedRefs)
+	}
+	if !testStatus.Complete {
+		return state, false, nil
+	}
+	return operationalDirectorPlanStateWithRequiredTestsPassedV0(request, state, activeStep, testStatus.PassedRefs)
 }
 
 func continueOperationalDirectorPlanStateAfterReviewReworkReplanFollowupsV0(
@@ -1309,8 +1376,18 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 		}
 	}
 	if !testStatus.Complete {
-		return state, false, nil
+		return operationalDirectorPlanStateWithRequiredTestsEvidenceMissingV0(request, state, activeStep)
 	}
+	return operationalDirectorPlanStateWithRequiredTestsPassedV0(request, state, activeStep, testStatus.PassedRefs)
+}
+
+func operationalDirectorPlanStateWithRequiredTestsPassedV0(
+	request ContinueAppDirectorRequestV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+	passedRefs []string,
+) (orquestacionnucleoapp.OperationalDirectorPlanStateV0, bool, error) {
+	passedRefs = compactServiceRefsV0(passedRefs)
 	replanStepID := operationalDirectorPlanStateStepIDByKindV0(state, orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0)
 	if replanStepID == "" {
 		return state, false, nil
@@ -1321,7 +1398,7 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 		switch step.StepID {
 		case activeStep.StepID:
 			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepAcceptedV0
-			nextStep.RequiredTestEvidenceRefs = append([]string(nil), testStatus.PassedRefs...)
+			nextStep.RequiredTestEvidenceRefs = append([]string(nil), passedRefs...)
 			nextStep.BlockerRefs = nil
 			nextStep.Reason = "required-tests-passed"
 		case replanStepID:
@@ -1339,7 +1416,7 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 				nextStep.ReviewResultRefs = append([]string(nil), activeStep.ReviewResultRefs...)
 			}
 			if len(nextStep.RequiredTestEvidenceRefs) == 0 {
-				nextStep.RequiredTestEvidenceRefs = append([]string(nil), testStatus.PassedRefs...)
+				nextStep.RequiredTestEvidenceRefs = append([]string(nil), passedRefs...)
 			}
 			if nextStep.WaveRef == "" {
 				nextStep.WaveRef = activeStep.WaveRef
@@ -1355,10 +1432,41 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 		}
 		nextSteps = append(nextSteps, nextStep)
 	}
+	state.Status = orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0
 	state.ActiveStepID = replanStepID
 	state.PendingAgentRefs = nil
+	state.BlockerRefs = nil
+	state.ClosureReason = ""
 	state.Steps = nextSteps
 	state.EvidenceRefs = compactServiceRefsV0(append(state.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-required-tests-passed-v0"))
+	state.UpdatedAt = request.OccurredAt
+	next, err := orquestacionnucleoapp.NewOperationalDirectorPlanStateV0(state)
+	if err != nil {
+		return state, false, err
+	}
+	return next, true, nil
+}
+
+func operationalDirectorPlanStateWithRequiredTestsEvidenceMissingV0(
+	request ContinueAppDirectorRequestV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+) (orquestacionnucleoapp.OperationalDirectorPlanStateV0, bool, error) {
+	nextSteps := make([]orquestacionnucleoapp.OperationalDirectorPlanStepStateV0, 0, len(state.Steps))
+	for _, step := range state.Steps {
+		nextStep := step
+		if step.StepID == activeStep.StepID {
+			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepBlockedV0
+			nextStep.BlockerRefs = []string{"required-tests-evidence-missing"}
+			nextStep.Reason = "required-tests-evidence-missing"
+		}
+		nextSteps = append(nextSteps, nextStep)
+	}
+	state.Status = orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0
+	state.PendingAgentRefs = nil
+	state.BlockerRefs = []string{"required-tests-evidence-missing"}
+	state.Steps = nextSteps
+	state.EvidenceRefs = compactServiceRefsV0(append(state.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-required-tests-evidence-missing-v0"))
 	state.UpdatedAt = request.OccurredAt
 	next, err := orquestacionnucleoapp.NewOperationalDirectorPlanStateV0(state)
 	if err != nil {

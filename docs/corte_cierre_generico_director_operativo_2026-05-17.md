@@ -138,7 +138,7 @@ guarda `rework_request_refs`, `replan_decision_refs`, incrementa
 Este tramo queda cerrado como observacion durable del `PlanState`: hay prueba
 focal para `changes_requested` y `rejected`, y cobertura de normalizacion y
 persistencia de `rework_request_refs`/`replan_decision_refs`. No equivale a
-`replan_or_close` completo ni a runner/adaptador real de tests.
+`replan_or_close` completo ni a replan generico de todos los blockers.
 
 ## Siguiente incremento
 
@@ -162,8 +162,10 @@ implementacion, test focal y evidencia en la matriz.
   cadena para un unico task causal y deja capacidad/agente en manos del
   scheduler/outbox; ver `docs/corte_required_tests_failed_replan_2026-05-21.md`.
   El corte posterior del 2026-05-22 consume tambien replan causal parcial en
-  scopes multitarea cuando ya existe decision completa por task fallida. Siguen
-  pendientes smokes reales.
+  scopes multitarea cuando ya existe decision completa por task fallida. El
+  corte del 2026-05-22 bloquea tambien `required-tests-evidence-missing` cuando
+  no hay evidencia causal ni runner efectivo, y reentra a `replan_or_close` si
+  la evidencia `passed` aparece despues. Siguen pendientes smokes reales.
 - [~] Replan negativo: cerrada la observacion durable de review negativa. El
   `PlanState` guarda refs/attempt para `ReworkRequested` y
   `ReplanDecisionRecorded`. El corte del 2026-05-21 ya convierte followups
@@ -195,9 +197,10 @@ implementacion, test focal y evidencia en la matriz.
   agentes pendientes entregaron, el state pasa de `wait_subagents` a
   `review_deliveries`.
 - [~] Plan state vivo restante: `run_required_tests` durable, blocker de test
-  fallido, observacion de review negativa, puerta explicita de
-  `replan_or_close` y razon de cierre/bloqueo ya quedan persistidos. Existe
-  prueba integrada offline de `ContinueAppDirectorV0` para el camino
+  fallido, blocker de evidencia de test faltante, observacion de review
+  negativa, puerta explicita de `replan_or_close` y razon de cierre/bloqueo ya
+  quedan persistidos. Existe prueba integrada offline de `ContinueAppDirectorV0`
+  para el camino
   `review_deliveries -> run_required_tests` con runner por puerto ->
   `replan_or_close -> close`. Falta materializar replan automatico para blockers
   posteriores y completar replay de todo el ciclo.
@@ -206,10 +209,10 @@ implementacion, test focal y evidencia en la matriz.
   Sigue pendiente extender la misma garantia a review, tests y replan con clave
   estable por `run_ref`, `task_ref`, `wave_ref` o `cohort_ref`.
 
-El orden recomendado ahora es: runner/adaptador real de tests por puerto,
-despues replan automatico para casos negativos y por ultimo replay/idempotencia
-completa del ciclo. Si una composicion no aporta fuente real de cierre o
-validacion, la casilla queda pendiente para esa composicion.
+El orden recomendado ahora es: replan automatico para casos negativos restantes,
+smoke Codex real con runner opt-in y por ultimo replay/idempotencia completa del
+ciclo. Si una composicion no aporta fuente real de cierre o validacion, la
+casilla queda pendiente para esa composicion.
 
 ## Corte OperationalDirectorPlanStateV0
 
@@ -250,8 +253,9 @@ activo, avanzar a `review_deliveries` cuando el wait queda consumido y mover
 `review_deliveries` a `run_required_tests` o `replan_or_close` cuando la cadena
 causal de review aceptada pertenece al scope activo.
 
-Pendiente verificable para este corte: materializacion durable de tests, replan
-y cierre, y pruebas offline de replay sin duplicar efectos.
+Pendiente verificable para este corte: replan generico de blockers restantes,
+smoke Codex real con runner opt-in y pruebas offline de replay sin duplicar
+efectos en todo el ciclo.
 
 ## Criterios de cierre operativo
 

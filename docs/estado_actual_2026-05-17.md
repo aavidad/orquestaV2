@@ -336,12 +336,16 @@ implementacion y prueba integrada para cada frente:
 - [x] Tests durables por evidencia: en modo `programming`,
   `run_required_tests` consume `RequiredTestEvidenceV0` causal antes de cierre,
   avanza con evidencias `passed`, bloquea con `required-tests-failed` y no acepta
-  refs de otra review. Pendiente separado: runner/adaptador por puerto que
-  ejecute o valide y cree esas evidencias. En `domain_work`, usar artefactos y
-  validadores de dominio sin inventar tests de programacion.
-- [ ] Replan negativo: si falta entrega, review aceptada, evidencia de tests,
-  outbox cero o cierre de tasks, emitir rework/replan causal con intento y refs;
-  no cerrar por resumen ni por quietud aparente.
+  refs de otra review. El runner/adaptador por puerto ya existe como opt-in; si
+  falta evidencia y no hay runner efectivo, el `PlanState` bloquea con
+  `required-tests-evidence-missing` y puede reentrar cuando aparezca evidencia
+  causal. En `domain_work`, usar artefactos y validadores de dominio sin inventar
+  tests de programacion.
+- [~] Replan negativo: review negativa, tests fallidos de un task y reentrada
+  tardia a followups ya materializados estan cubiertos. Sigue pendiente emitir
+  rework/replan causal generico para otros blockers como outbox pendiente,
+  cierre insuficiente o scopes complejos; no cerrar por resumen ni por quietud
+  aparente.
 - [x] Plan state inicial: persistir estado vivo del plan con step activo
   `wait_subagents`, ola/cohorte activa, tasks, agentes, pendientes y `wait_ref`.
 - [x] Plan state reentrada inicial: `ContinueAppDirectorV0` lee
@@ -350,9 +354,10 @@ implementacion y prueba integrada para cada frente:
 - [x] Plan state wait consumido: pasar de `wait_subagents` a
   `review_deliveries` cuando los agentes pendientes entregaron.
 - [~] Plan state restante: review negativa observada, intentos de replan,
-  reentrada tardia a followups causales ya materializados, razon de
-  cierre/bloqueo y tests durables ya quedan persistidos. Falta materializar
-  replan automatico de blockers y probar replay/idempotencia completa.
+  reentrada tardia a followups causales ya materializados, bloqueo por evidencia
+  de test faltante, razon de cierre/bloqueo y tests durables ya quedan
+  persistidos. Falta materializar replan automatico de blockers y probar
+  replay/idempotencia completa.
 - [ ] Evento idempotente: todo avance de review, test, replan y cierre debe
   pasar por comando/evento idempotente con clave estable por refs causales; el
   replay no debe duplicar efectos.
@@ -366,11 +371,11 @@ verificable para esa composicion.
 
 1. Mantener la frontera conceptual: core neutral primero, composiciones despues.
 2. Cerrar el siguiente tramo causal generico del Director Operativo:
-   runner/adaptador real de tests, replan automatico para blockers negativos y
-   replay/idempotencia usando los providers existentes, `DirectorTaskStore` y el
-   cierre desde `ContinueAppDirectorV0` cuando el loop quede quiescent. Si falta
-   fuente real `OperationalClosureSource` en una composicion, documentarlo como
-   pendiente verificable.
+   replan automatico para blockers negativos, smoke Codex real con runner opt-in
+   y replay/idempotencia usando los providers existentes, `DirectorTaskStore` y
+   el cierre desde `ContinueAppDirectorV0` cuando el loop quede quiescent. Si
+   falta fuente real `OperationalClosureSource` en una composicion, documentarlo
+   como pendiente verificable.
 3. Consolidar `orquesta-domain-work` y los contratos de artefactos como entrada
    comun para OPES, programacion y futuros dominios.
 4. Seguir vaciando policy de `cmd` y adaptadores concretos hacia
