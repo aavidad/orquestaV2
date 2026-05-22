@@ -16,8 +16,19 @@ func maybeCloseOperationalDirectorV0(
 	loop orquestacionnucleoapp.ProgressiveLoopResultV0,
 	loopRequest orquestacionnucleoapp.ProgressiveLoopRequestV0,
 ) (orquestacionnucleoapp.ProgressiveLoopResultV0, []orquestacionnucleoapp.ErrorV0, error) {
-	if loop.Status != orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 ||
-		loop.PendingOutboxCount > 0 {
+	if loop.Status != orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 {
+		return loop, nil, nil
+	}
+	if loop.PendingOutboxCount > 0 {
+		if err := operationalDirectorPlanStateBlockedAtReplanOrCloseV0(
+			ctx,
+			request,
+			ports,
+			"operational-closure-outbox-pending",
+			nil,
+		); err != nil {
+			return loop, nil, err
+		}
 		return loop, nil, nil
 	}
 	if ports.OperationalClosureSource == nil {

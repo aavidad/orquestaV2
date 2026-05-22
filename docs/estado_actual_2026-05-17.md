@@ -208,8 +208,10 @@ Lo pendiente no debe confundirse con lo hecho:
   `wait_subagents` en una reentrada posterior cuando los followups causales ya
   estan materializados; el cierre
   operacional ya marca el state como `closed` o `blocked` con
-  `closure_reason`; el runner/adaptador de tests por puerto existe y tiene
-  replay focal sin reejecucion externa; el cierre bloqueado por
+  `closure_reason`, y si `replan_or_close/running` queda quiescent con outbox
+  pendiente bloquea `operational-closure-outbox-pending` sin invocar la fuente
+  de cierre; el runner/adaptador de tests por puerto existe y tiene replay focal
+  sin reejecucion externa; el cierre bloqueado por
   `required_test_evidence_refs` ya puede reabrir `wait_subagents` cuando aparece
   un followup causal reflejado; siguen pendientes smoke Codex real con runner,
   replan automatico para blockers no cubiertos y replay/idempotencia completa;
@@ -346,9 +348,10 @@ implementacion y prueba integrada para cada frente:
   tardia a followups ya materializados estan cubiertos. Tambien queda cubierta
   la reentrada de cierre bloqueado por `required_test_evidence_refs` cuando
   aparece despues un followup causal reflejado. Sigue pendiente emitir
-  rework/replan causal generico para otros blockers como outbox pendiente,
-  cierre insuficiente no cubierto por evidencias de test o scopes complejos; no
-  cerrar por resumen ni por quietud aparente.
+  rework/replan causal generico para otros blockers como cierre insuficiente no
+  cubierto por evidencias de test o scopes complejos; outbox pendiente ya
+  bloquea el cierre con causa durable sin llamar la fuente. No cerrar por
+  resumen ni por quietud aparente.
 - [x] Plan state inicial: persistir estado vivo del plan con step activo
   `wait_subagents`, ola/cohorte activa, tasks, agentes, pendientes y `wait_ref`.
 - [x] Plan state reentrada inicial: `ContinueAppDirectorV0` lee
@@ -359,9 +362,9 @@ implementacion y prueba integrada para cada frente:
 - [~] Plan state restante: review negativa observada, intentos de replan,
   reentrada tardia a followups causales ya materializados, bloqueo por evidencia
   de test faltante, razon de cierre/bloqueo, reentrada de cierre bloqueado por
-  falta de evidencia requerida y tests durables ya quedan persistidos. Falta
-  materializar replan automatico de otros blockers y probar replay/idempotencia
-  completa.
+  falta de evidencia requerida, bloqueo por outbox pendiente y tests durables ya
+  quedan persistidos. Falta materializar replan automatico de otros blockers y
+  probar replay/idempotencia completa.
 - [ ] Evento idempotente: todo avance de review, test, replan y cierre debe
   pasar por comando/evento idempotente con clave estable por refs causales; el
   replay no debe duplicar efectos.

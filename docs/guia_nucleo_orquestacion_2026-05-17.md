@@ -114,6 +114,11 @@ Estado real del primer corte:
 - La composicion de `app-director-service` ya inyecta `DirectorTaskStore` en el
   provider de review/replan, por lo que un rework `split_task` puede persistir
   nuevas `WorkflowTaskV0`.
+- Ese camino de `split_task` ya valida el primer corte de recursion gobernada:
+  si un followup declara `parent_task_ref`, el nucleo lee el parent desde
+  `WorkflowTaskStore`, exige parent reflejado, `delegation_depth=parent+1`,
+  `wave_ref`/`cohort_ref` consistentes y fanout dentro de `max_child_agents`
+  antes de guardar microtareas nuevas.
 - `OperationalDirectorClosureV0` existe en `orquesta-orchestration-core` como
   cerrador generico offline: exige entrega registrada, review aceptada y
   evidencia durable de tests requeridos, valida la cadena causal por eventos y
@@ -223,6 +228,9 @@ smoke real opt-in. No se importa desde core, director, domain-work ni expander.
   del scope no queda registrado.
 - `app-director-service` pasa `DirectorTaskStore` al provider de review/replan,
   asi que el camino de `split_task` puede guardar microtareas de rework.
+- `review/rework/replan split_task` usa esa misma metadata para rechazar
+  followups recursivos con parent/depth/fanout/ola/cohorte imposibles antes de
+  materializarlos; sigue sin meter Codex, OPES, runtime ni presupuesto proveedor.
 - `OperationalDirectorClosureV0` puede cerrar causalmente un run con review
   aceptada y tests requeridos evidenciados. `ContinueAppDirectorV0` lo conecta
   al final del loop quiescent cuando recibe un `OperationalClosureSource`; el

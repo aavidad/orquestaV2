@@ -1219,6 +1219,71 @@ func TestMaybeCloseOperationalDirectorV0BloqueaPlanStateSinTaskStoreEnReplanOrCl
 	}
 }
 
+func TestMaybeCloseOperationalDirectorV0BloqueaPlanStateConOutboxPendienteEnReplanOrClose(t *testing.T) {
+	runRef := "run-service-operational-closure-plan-state-outbox-pending"
+	planRef := "plan-ref-service-operational-closure-plan-state-outbox-pending"
+	run := serviceContinueClosureRunForTestV0(runRef, orquestacoreworkflow.OrchestrationPhaseRevisionV0)
+	run.Tasks = []string{"task-ref-service-operational-closure-001"}
+	run.Deliveries = []string{"delivery-ref-service-operational-closure-001"}
+	run.AcceptedReviews = []string{"accepted-review-ref-service-operational-closure-001"}
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(
+		serviceOperationalClosurePlanStateReadyForCloseV0(runRef, planRef),
+	)
+	source := &serviceOperationalClosureSourceForTestV0{
+		Request: orquestacionnucleoapp.OperationalDirectorClosureRequestV0{
+			TaskID:            "task-ref-service-operational-closure-001",
+			DeliveryRef:       "delivery-ref-service-operational-closure-001",
+			AcceptedReviewRef: "accepted-review-ref-service-operational-closure-001",
+			ValidationRef:     "validation-ref-service-operational-closure-plan-state-outbox-pending",
+			ClosureRef:        "closure-ref-service-operational-closure-plan-state-outbox-pending",
+		},
+	}
+
+	loop, issues, err := maybeCloseOperationalDirectorV0(
+		context.Background(),
+		ContinueAppDirectorRequestV0{
+			RunRef:                     runRef,
+			OccurredAt:                 "2026-05-22T19:00:00Z",
+			OperationalDirectorPlanRef: planRef,
+		},
+		StartAppDirectorPortsV0{
+			RunStore:                   orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+			OperationalClosureSource:   source,
+			OperationalPlanStateStore:  planStateStore,
+			OperationalPlanStateWriter: planStateStore,
+		},
+		orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status:             orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+			PendingOutboxCount: 2,
+			Run:                run,
+		},
+		orquestacionnucleoapp.ProgressiveLoopRequestV0{},
+	)
+	if err != nil || len(issues) != 0 {
+		t.Fatalf("maybeCloseOperationalDirectorV0 err=%v issues=%+v", err, issues)
+	}
+	if source.Called {
+		t.Fatalf("closure source no debe invocarse con outbox pendiente")
+	}
+	if loop.Run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		t.Fatalf("run no debe cerrar con outbox pendiente: %+v", loop.Run)
+	}
+	state, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), runRef, planRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	step := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-replan-or-close")
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
+		state.ClosureReason != "operational-closure-outbox-pending" ||
+		serviceCountStringV0(state.BlockerRefs, "operational-closure-outbox-pending") != 1 ||
+		serviceCountStringV0(state.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-closure-blocked-v0") != 1 ||
+		step.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 ||
+		step.Reason != "operational-closure-outbox-pending" ||
+		serviceCountStringV0(step.BlockerRefs, "operational-closure-outbox-pending") != 1 {
+		t.Fatalf("plan state no bloqueado por outbox pendiente: state=%+v step=%+v", state, step)
+	}
+}
+
 func TestMaybeCloseOperationalDirectorV0NoCierraConPlanStatePostWaitActivo(t *testing.T) {
 	for _, stepKind := range []orquestadirectoroperativo.OperationalDirectorStepKindV0{
 		orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0,

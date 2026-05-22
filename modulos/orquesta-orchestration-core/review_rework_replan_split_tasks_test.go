@@ -6,6 +6,7 @@ import (
 
 	orquestacorereplanner "orquesta/modulos/orquesta-core-replanner"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirector "orquesta/modulos/orquesta-director"
 )
 
 func TestReviewReworkReplanCandidateProviderV0ProgressiveLoopSplitCreatesSchedulableTasks(t *testing.T) {
@@ -79,6 +80,76 @@ func TestReviewReworkReplanCandidateProviderV0ProgressiveLoopSplitCreatesSchedul
 	})
 }
 
+func TestReviewReworkReplanSplitTaskV0ValidatesRecursiveParentLimits(t *testing.T) {
+	runRef := "run-nucleo-review-rework-recursive-split-001"
+
+	t.Run("rechaza_depth_imposible", func(t *testing.T) {
+		parent := reviewReworkRecursiveSplitParentForTestV0(runRef)
+		child := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-child-depth", "app/rework_child_depth.go")
+		child.DelegationDepth = parent.DelegationDepth + 2
+
+		_, _, err := reviewReworkRecursiveSplitCandidatesForTestV0(t, parent, child)
+		assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "split_task.delegation_depth")
+	})
+
+	t.Run("rechaza_fanout_imposible", func(t *testing.T) {
+		parent := reviewReworkRecursiveSplitParentForTestV0(runRef)
+		parent.MaxChildAgents = 1
+		parent.ChildTaskRefs = nil
+		childA := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-child-a", "app/rework_child_a.go")
+		childB := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-child-b", "app/rework_child_b.go")
+
+		_, store, err := reviewReworkRecursiveSplitCandidatesForTestV0(t, parent, childA, childB)
+		assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "split_task.max_child_agents")
+		if _, loadErr := store.LoadWorkflowTasksV0(context.Background(), runRef, []string{childA.TaskID}); loadErr == nil {
+			t.Fatalf("split_task invalida no debe guardarse: %s", childA.TaskID)
+		}
+	})
+
+	t.Run("acepta_parent_child_valido", func(t *testing.T) {
+		parent := reviewReworkRecursiveSplitParentForTestV0(runRef)
+		child := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-child-valid", "app/rework_child_valid.go")
+		parent.ChildTaskRefs = []string{child.TaskID}
+
+		candidates, store, err := reviewReworkRecursiveSplitCandidatesForTestV0(t, parent, child)
+		if err != nil {
+			t.Fatalf("split_task recursiva valida: %v", err)
+		}
+		if len(candidates) != 1 || candidates[0].Payload.Task.TaskID != child.TaskID {
+			t.Fatalf("candidates=%+v", candidates)
+		}
+		stored, err := store.LoadWorkflowTasksV0(context.Background(), runRef, []string{child.TaskID})
+		if err != nil {
+			t.Fatalf("child no guardado: %v", err)
+		}
+		got := stored[0]
+		if got.ParentTaskRef != parent.TaskID ||
+			got.DelegationDepth != parent.DelegationDepth+1 ||
+			got.WaveRef != parent.WaveRef ||
+			got.CohortRef != parent.CohortRef {
+			t.Fatalf("linaje recursivo no conservado: got=%+v parent=%+v", got, parent)
+		}
+	})
+
+	t.Run("acepta_task_ajena_del_run_sin_exigirla_en_store", func(t *testing.T) {
+		parent := reviewReworkRecursiveSplitParentForTestV0(runRef)
+		child := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-child-legacy-run", "app/rework_child_legacy.go")
+
+		candidates, _, err := reviewReworkRecursiveSplitCandidatesWithRunTasksForTestV0(
+			t,
+			parent,
+			[]string{parent.TaskID, "task-ref-legacy-ajena-solo-evento"},
+			child,
+		)
+		if err != nil {
+			t.Fatalf("split_task recursiva no debe exigir task ajena en store: %v", err)
+		}
+		if len(candidates) != 1 || candidates[0].Payload.Task.TaskID != child.TaskID {
+			t.Fatalf("candidates=%+v", candidates)
+		}
+	})
+}
+
 type reviewReworkSplitPlanSourceV0 struct {
 	Tasks []orquestacoreworkflow.WorkflowTaskV0
 }
@@ -131,6 +202,73 @@ func reviewReworkSplitWorkflowTaskV0(
 			{ContractRef: "contract:function:rework-split:v0", FunctionName: "NewWorkflowTaskV0"},
 		},
 	}
+}
+
+func reviewReworkRecursiveSplitParentForTestV0(
+	runRef string,
+) orquestacoreworkflow.WorkflowTaskV0 {
+	parent := reviewReworkSplitWorkflowTaskV0(runRef, "task-ref-recursive-parent", "app/rework_parent.go")
+	parent.WaveRef = "wave-ref-recursive-001"
+	parent.CohortRef = "cohort-ref-recursive-001"
+	parent.DelegationDepth = 1
+	parent.MaxChildAgents = 2
+	return parent
+}
+
+func reviewReworkRecursiveSplitChildForTestV0(
+	parent orquestacoreworkflow.WorkflowTaskV0,
+	taskRef string,
+	writeSet string,
+) orquestacoreworkflow.WorkflowTaskV0 {
+	child := reviewReworkSplitWorkflowTaskV0(parent.RunID, taskRef, writeSet)
+	child.ParentTaskRef = parent.TaskID
+	child.WaveRef = parent.WaveRef
+	child.CohortRef = parent.CohortRef
+	child.DelegationDepth = parent.DelegationDepth + 1
+	return child
+}
+
+func reviewReworkRecursiveSplitCandidatesForTestV0(
+	t *testing.T,
+	parent orquestacoreworkflow.WorkflowTaskV0,
+	tasks ...orquestacoreworkflow.WorkflowTaskV0,
+) ([]orquestadirector.ReplanMicrotaskCandidateV0, *InMemoryWorkflowTaskStoreV0, error) {
+	t.Helper()
+	return reviewReworkRecursiveSplitCandidatesWithRunTasksForTestV0(
+		t,
+		parent,
+		[]string{parent.TaskID},
+		tasks...,
+	)
+}
+
+func reviewReworkRecursiveSplitCandidatesWithRunTasksForTestV0(
+	t *testing.T,
+	parent orquestacoreworkflow.WorkflowTaskV0,
+	runTaskRefs []string,
+	tasks ...orquestacoreworkflow.WorkflowTaskV0,
+) ([]orquestadirector.ReplanMicrotaskCandidateV0, *InMemoryWorkflowTaskStoreV0, error) {
+	t.Helper()
+	store := NewInMemoryWorkflowTaskStoreV0(parent)
+	provider := ReviewReworkReplanCandidateProviderV0{
+		TaskWriter:  store,
+		RequestedBy: "orquesta-nucleo-test",
+	}
+	candidates, err := provider.reviewReworkMicrotaskCandidatesV0(
+		context.Background(),
+		SchedulerCandidateRequestV0{
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				RunID:        parent.RunID,
+				CurrentPhase: orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+				Tasks:        runTaskRefs,
+			},
+			OccurredAt:    "2026-05-10T10:30:00Z",
+			CorrelationID: "corr-review-rework-recursive-split-001",
+		},
+		ReviewReworkReplanPlanV0{SplitTasks: tasks},
+		orquestacoreworkflow.ReplanDecisionActionSplitTaskV0,
+	)
+	return candidates, store, err
 }
 
 func assertReviewReworkSplitRunV0(t *testing.T, run orquestacoreworkflow.OrchestrationRunV0, taskA string, taskB string) {

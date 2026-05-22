@@ -186,9 +186,11 @@ implementacion, test focal y evidencia en la matriz.
   cualquier `PlanState` activo. Si hay estado vivo, solo se evalua cierre cuando
   el step activo es `replan_or_close` en `running`; un step anterior o
   `replan_or_close` pendiente no invoca `OperationalClosureSource`. Si en ese
-  punto faltan `OperationalClosureSource` o `DirectorTaskStore`, el `PlanState`
-  se bloquea con causa durable. Siguen pendientes otros blockers como replan
-  causal generico.
+  punto el loop esta `quiescent` pero aun hay outbox pendiente, tampoco invoca
+  `OperationalClosureSource` y bloquea el `PlanState` con
+  `operational-closure-outbox-pending`. Si faltan `OperationalClosureSource` o
+  `DirectorTaskStore`, el `PlanState` se bloquea con causa durable. Siguen
+  pendientes otros blockers como replan causal generico.
 - [x] Plan state vivo inicial: contrato, stores y persistencia del tramo
   `launch_subagents -> wait_subagents`, con ola/cohorte activa, step activo,
   task refs, agent refs, pending agent refs y `wait_ref`.
@@ -200,8 +202,9 @@ implementacion, test focal y evidencia en la matriz.
   `review_deliveries`.
 - [~] Plan state vivo restante: `run_required_tests` durable, blocker de test
   fallido, blocker de evidencia de test faltante, observacion de review
-  negativa, puerta explicita de `replan_or_close` y razon de cierre/bloqueo ya
-  quedan persistidos. La reentrada de un cierre bloqueado por
+  negativa, bloqueo por outbox pendiente antes de cierre, puerta explicita de
+  `replan_or_close` y razon de cierre/bloqueo ya quedan persistidos. La
+  reentrada de un cierre bloqueado por
   `required_test_evidence_refs` hacia `wait_subagents` con followup tardio causal
   tambien queda cubierta. Existe prueba integrada offline de
   `ContinueAppDirectorV0` para el camino
@@ -240,8 +243,9 @@ Invariantes iniciales del corte:
 - scope por `wave_ref`, `cohort_ref` o `parent_task_ref`, nunca por todo el run;
 - transiciones causales e idempotentes con refs de task, delivery, review,
   evidencia y outbox;
-- blockers explicitos cuando falte entrega, review, test requerido, outbox cero,
-  contexto o cierre de tasks;
+- blockers explicitos cuando falte entrega, review, test requerido, contexto,
+  outbox cero o cierre de tasks; el outbox pendiente en
+  `replan_or_close/running` bloquea antes de consultar la fuente de cierre;
 - frontera neutral: sin Codex, OPES, DB concreta, rutas locales, proveedor ni
   runtime real;
 - cierre solo si el scope esta `quiescent`, outbox cero, sin tasks abiertas y
@@ -289,11 +293,14 @@ pruebas claras. No deben describirse como hechas antes de cerrar la evidencia.
 2. `replan_or_close` causal:
    ya actua como puerta explicita para cierre cuando el `PlanState` esta activo:
    solo `replan_or_close` en `running` permite invocar la fuente de cierre, y la
-   ausencia de source o task store bloquea con causa durable. Si el cierre queda
-   bloqueado por `required_test_evidence_refs` y ya hay quality gate/replan con
-   followup reflejado, `ContinueAppDirectorV0` reabre la espera acotada. Sigue
-   pendiente emitir rework/replan generico cuando falten otras piezas
-   reparables, con causa, intento y refs de task, delivery y review.
+   ausencia de source o task store bloquea con causa durable. Si el loop queda
+   `quiescent` con `PendingOutboxCount > 0`, bloquea
+   `operational-closure-outbox-pending` y no llama a
+   `OperationalClosureSource`. Si el cierre queda bloqueado por
+   `required_test_evidence_refs` y ya hay quality gate/replan con followup
+   reflejado, `ContinueAppDirectorV0` reabre la espera acotada. Sigue pendiente
+   emitir rework/replan generico cuando falten otras piezas reparables, con
+   causa, intento y refs de task, delivery y review.
 3. Estado vivo del plan:
    el tramo inicial ya persiste step activo, ola/cohorte, tasks, agentes y
    `wait_ref`; avanza a `review_deliveries` cuando el wait queda consumido y a
@@ -327,7 +334,8 @@ demuestren:
 - entregas/ACKs de agentes fuera de `WaitAgentRefs` o de otra ola no afectan el
   cierre;
 - no hay cierre si el scope no esta `quiescent`, si el outbox no esta a cero o
-  si quedan tasks abiertas;
+  si quedan tasks abiertas; con outbox pendiente no debe invocarse la fuente de
+  cierre y debe quedar blocker durable del `PlanState`;
 - un run `programming` no cierra sin evidencias durables de tests requeridos;
 - refs cruzadas de task/delivery/review aceptada no cierran;
 - un run `domain_work` cierra por artefactos y validadores de dominio, no por

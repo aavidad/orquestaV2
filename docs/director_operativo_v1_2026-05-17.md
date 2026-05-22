@@ -315,6 +315,14 @@ rechazarla si supera profundidad/fanout, duplica trabajo existente, no declara
 criterio de review, toca refs/write-set no permitidos o intenta mover decision
 de producto/runtime/modelo al nucleo.
 
+En el flujo offline `review/rework/replan` con `split_task`, el nucleo ya aplica
+la primera guarda recursiva antes de aceptar followups: si una task trae
+`parent_task_ref`, carga el parent desde `WorkflowTaskStore`, exige que ese
+parent siga reflejado en `run.Tasks`, que `delegation_depth` sea `parent+1`, que
+`wave_ref`/`cohort_ref` no cambien y que el fanout declarado en el parent mas
+el propuesto no supere `max_child_agents`. Esto no ejecuta runtime ni decide
+presupuesto de proveedor; esa frontera sigue en la composicion/adaptador.
+
 Aplicacion por dominio:
 
 - Programacion: los hijos operan sobre tareas de cambio con write-set,
@@ -376,7 +384,9 @@ cierre queden como estados durables reentrables.
 4. Delegacion recursiva gobernada:
    si el plan lo permite, un agente puede proponer subagentes para subtareas
    grandes. El director valida profundidad, fanout, presupuesto, parent/child
-   refs y criterio de cierre antes de lanzarlos.
+   refs y criterio de cierre antes de lanzarlos. El corte offline actual ya
+   valida `split_task` recursivo contra la metadata persistida en
+   `WorkflowTaskStore` antes de guardar nuevas microtareas.
 5. Espera explicita:
    si no hay candidato accionable, el director registra por que espera:
    cohorte en progreso, agente en progreso, falta contexto, timeout pendiente,
