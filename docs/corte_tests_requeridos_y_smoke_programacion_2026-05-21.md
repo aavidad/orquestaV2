@@ -192,3 +192,9 @@ Limitacion confirmada:
   `agents_in_flight=0` y no hay checkpoint pendiente, shutdown queda `ready`
   aunque existan refs de stop no confirmadas; con agentes vivos sigue
   `waiting_drain`.
+- Corte posterior 2026-05-22: `cmd/orquesta-server` ya permite bajar la
+  capacidad de razonamiento usada por el dispatcher de capacidad sin tocar el
+  nucleo. `ORQUESTA_CODEX_REASONING_EFFORT=medium` alimenta tambien
+  `Capacity.ReasoningEffort`; `ORQUESTA_CAPACITY_REASONING_EFFORT` y
+  `ORQUESTA_CAPACITY_TIER` permiten sobrescribir esa politica desde la
+  composicion.

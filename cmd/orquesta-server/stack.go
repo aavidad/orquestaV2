@@ -124,15 +124,8 @@ func buildStackFromEnvV0(
 			MaxTicks:      1,
 			MaxExecutions: intEnvOrDefaultV0("ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK", defaultCodexServerMaxExecutionsV0),
 		},
-		Codex: codexRuntimeConfigV0(serverConfig, processRuntime),
-		Capacity: orquestaappcodexstack.CapacityConfigV0{
-			Tier:            orquestacoreworkflow.OrchestrationCapacityXHighV0,
-			ReasoningEffort: orquestacoreworkflow.OrchestrationCapacityXHighV0,
-			OccurredAt:      time.Now().UTC().Format(time.RFC3339),
-			RequestedBy:     "orquesta-server",
-			Summary:         "Capacidad inicial del servidor residente.",
-			EvidenceRefs:    []string{"evidence-ref-orquesta-server"},
-		},
+		Codex:    codexRuntimeConfigV0(serverConfig, processRuntime),
+		Capacity: codexStackCapacityConfigFromEnvV0(),
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence: orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 		},
@@ -143,6 +136,46 @@ func buildStackFromEnvV0(
 			Ledger:  domainDeliveryLedgerFromEnvV0(serverConfig),
 		},
 	})
+}
+
+func codexStackCapacityConfigFromEnvV0() orquestaappcodexstack.CapacityConfigV0 {
+	tier := capacityRecommendationEnvOrDefaultV0(
+		"ORQUESTA_CAPACITY_TIER",
+		orquestacoreworkflow.OrchestrationCapacityXHighV0,
+	)
+	reasoningEffort := capacityRecommendationEnvOrDefaultV0(
+		"ORQUESTA_CAPACITY_REASONING_EFFORT",
+		capacityRecommendationEnvOrDefaultV0(
+			"ORQUESTA_CODEX_REASONING_EFFORT",
+			orquestacoreworkflow.OrchestrationCapacityXHighV0,
+		),
+	)
+	return orquestaappcodexstack.CapacityConfigV0{
+		Tier:            tier,
+		ReasoningEffort: reasoningEffort,
+		OccurredAt:      time.Now().UTC().Format(time.RFC3339),
+		RequestedBy:     "orquesta-server",
+		Summary:         "Capacidad inicial del servidor residente.",
+		EvidenceRefs:    []string{"evidence-ref-orquesta-server"},
+	}
+}
+
+func capacityRecommendationEnvOrDefaultV0(
+	key string,
+	fallback orquestacoreworkflow.OrchestrationCapacityRecommendationV0,
+) orquestacoreworkflow.OrchestrationCapacityRecommendationV0 {
+	switch value := strings.TrimSpace(os.Getenv(key)); value {
+	case string(orquestacoreworkflow.OrchestrationCapacityLowV0):
+		return orquestacoreworkflow.OrchestrationCapacityLowV0
+	case string(orquestacoreworkflow.OrchestrationCapacityMediumV0):
+		return orquestacoreworkflow.OrchestrationCapacityMediumV0
+	case string(orquestacoreworkflow.OrchestrationCapacityHighV0):
+		return orquestacoreworkflow.OrchestrationCapacityHighV0
+	case string(orquestacoreworkflow.OrchestrationCapacityXHighV0):
+		return orquestacoreworkflow.OrchestrationCapacityXHighV0
+	default:
+		return fallback
+	}
 }
 
 func domainDeliveryLedgerFromEnvV0(

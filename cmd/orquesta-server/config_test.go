@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorrunner "orquesta/modulos/orquesta-director-runner"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -178,6 +179,38 @@ func TestCodexRuntimeConfigV0PermiteSobrescribirReasoningEffort(t *testing.T) {
 
 	if config.ReasoningEffort != "high" {
 		t.Fatalf("reasoning_effort=%q want high", config.ReasoningEffort)
+	}
+}
+
+func TestCodexStackCapacityConfigFromEnvV0UsaReasoningCodexMedium(t *testing.T) {
+	t.Setenv("ORQUESTA_CAPACITY_REASONING_EFFORT", "")
+	t.Setenv("ORQUESTA_CODEX_REASONING_EFFORT", "medium")
+
+	config := codexStackCapacityConfigFromEnvV0()
+
+	if config.ReasoningEffort != orquestacoreworkflow.OrchestrationCapacityMediumV0 {
+		t.Fatalf("reasoning_effort=%q want medium", config.ReasoningEffort)
+	}
+	if config.Tier != orquestacoreworkflow.OrchestrationCapacityXHighV0 {
+		t.Fatalf("tier=%q want xhigh", config.Tier)
+	}
+	if config.OccurredAt == "" || config.RequestedBy != "orquesta-server" {
+		t.Fatalf("capacity config incompleta: %+v", config)
+	}
+}
+
+func TestCodexStackCapacityConfigFromEnvV0PermiteSobrescribirCapacidad(t *testing.T) {
+	t.Setenv("ORQUESTA_CAPACITY_TIER", "high")
+	t.Setenv("ORQUESTA_CAPACITY_REASONING_EFFORT", "low")
+	t.Setenv("ORQUESTA_CODEX_REASONING_EFFORT", "medium")
+
+	config := codexStackCapacityConfigFromEnvV0()
+
+	if config.Tier != orquestacoreworkflow.OrchestrationCapacityHighV0 {
+		t.Fatalf("tier=%q want high", config.Tier)
+	}
+	if config.ReasoningEffort != orquestacoreworkflow.OrchestrationCapacityLowV0 {
+		t.Fatalf("reasoning_effort=%q want low", config.ReasoningEffort)
 	}
 }
 
