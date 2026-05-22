@@ -56,6 +56,50 @@ func TestMaybeCloseOperationalDirectorV0CierraComposicionExternaNeutralPorRefsOp
 	}
 }
 
+func TestMaybeCloseOperationalDirectorV0NoCierraComposicionExternaFakeConDetallesInternos(t *testing.T) {
+	fixture := newServiceExternalFakeClosureFixtureForTestV0(t, "internal-details")
+	fixture.ArtifactRef = "postgres://opes.internal/jobs/123"
+	fixture.Source.ArtifactRef = fixture.ArtifactRef
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(fixture.Run)
+	eventSink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+
+	_, issues, err := maybeCloseOperationalDirectorV0(
+		context.Background(),
+		serviceContinueClosureRequestForTestV0(fixture.RunRef),
+		StartAppDirectorPortsV0{
+			RunStore:                 runStore,
+			EventSink:                eventSink,
+			EventReader:              serviceOperationalClosureEventReaderForTestV0{Events: fixture.Events},
+			DirectorTaskStore:        orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(fixture.Task),
+			OperationalClosureSource: fixture.Source,
+		},
+		orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+			Run:    fixture.Run,
+		},
+		orquestacionnucleoapp.ProgressiveLoopRequestV0{
+			WaitAgentRefs:    []string{fixture.AgentRef},
+			WaitScopeApplied: true,
+		},
+	)
+	if err == nil || len(issues) != 0 || !fixture.Source.Called {
+		t.Fatalf("detalle interno debe bloquear source externo: err=%v issues=%+v called=%v", err, issues, fixture.Source.Called)
+	}
+	run, loadErr := runStore.LoadRunV0(context.Background(), fixture.RunRef)
+	if loadErr != nil {
+		t.Fatalf("LoadRunV0: %v", loadErr)
+	}
+	if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		len(run.ClosedTasks) != 0 ||
+		len(run.Validations) != 0 ||
+		len(run.Closures) != 0 ||
+		serviceCountEventsByTypeV0(eventSink.EventsV0(), orquestacoreworkflow.OrchestrationEventTaskClosedV0) != 0 ||
+		serviceCountEventsByTypeV0(eventSink.EventsV0(), orquestacoreworkflow.OrchestrationEventFinalValidationRegisteredV0) != 0 ||
+		serviceCountEventsByTypeV0(eventSink.EventsV0(), orquestacoreworkflow.OrchestrationEventRunClosedV0) != 0 {
+		t.Fatalf("detalle interno cerro o emitio eventos de cierre: run=%+v events=%+v", run, eventSink.EventsV0())
+	}
+}
+
 func TestAppDirectorServiceOperationalClosureExternalFakeV0NoImportaProductAdapters(t *testing.T) {
 	for _, file := range productionGoFilesForServiceTestV0(t) {
 		src, err := os.ReadFile(file)
@@ -186,6 +230,19 @@ func (source *serviceExternalFakeClosureSourceForTestV0) validateV0(
 	if len(source.Task.RequiredTests) != 0 || len(request.RequiredTestEvidenceRefs) != 0 {
 		return fmt.Errorf("composicion externa fake no debe requerir tests de programacion")
 	}
+	if err := serviceExternalFakeRejectConnectorDetailsForTestV0(
+		append(append(append(append([]string{
+			source.EntityRef,
+			source.ArtifactRef,
+			source.Task.TaskID,
+			request.Run.RunID,
+		}, request.Run.Tasks...),
+			request.Run.Deliveries...),
+			request.Run.AcceptedReviews...),
+			request.WaitAgentRefs...),
+	); err != nil {
+		return err
+	}
 	for _, check := range []struct {
 		values []string
 		want   string
@@ -214,4 +271,30 @@ func serviceExternalFakeProductAdapterImportForTestV0(path string) bool {
 		}
 	}
 	return false
+}
+
+func serviceExternalFakeRejectConnectorDetailsForTestV0(refs []string) error {
+	for _, ref := range refs {
+		trimmed := strings.TrimSpace(strings.ToLower(ref))
+		for _, fragment := range []string{
+			"://",
+			"/",
+			"\\",
+			"postgres",
+			"sqlite",
+			"mysql",
+			"database",
+			"dsn",
+			"opes",
+			"codex",
+			"oauth",
+			"token",
+			"secret",
+		} {
+			if strings.Contains(trimmed, fragment) {
+				return fmt.Errorf("ref externa fake expone detalle interno de conector: %q", ref)
+			}
+		}
+	}
+	return nil
 }

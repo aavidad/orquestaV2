@@ -142,7 +142,10 @@ task y la reentrada posterior solo espera el followup reflejado. Si la decision
 causal ya existe pero el followup aun no esta reflejado en el run, la reentrada
 explicita conserva el bloqueo estable sin devolver `active_step` ni duplicar
 intentos; cuando el followup aparece, reabre la espera acotada. Si aparecen
-varias decisiones candidatas en el mismo scope, no elige una al azar.
+varias decisiones candidatas en el mismo scope, no elige una al azar. El emisor
+de replan de cierre tambien detecta la pareja deterministica ya reflejada en el
+run y no vuelve a emitir comandos aunque el replay no tenga `CommandEffects`
+frescos.
 
 ## Review negativa en PlanState
 
@@ -203,8 +206,10 @@ implementacion, test focal y evidencia en la matriz.
   insuficiente causal (`closure_ref`/`validation_ref` con task, delivery y review
   aceptada) ya emite quality gate + replan retry y reabre solo el followup
   reflejado, tambien cuando el `replan_or_close` cubre una ola multitarea pero
-  el fallo identifica una unica task causal. Siguen pendientes blockers
-  posteriores sin decision causal como nuevos efectos idempotentes de replan.
+  el fallo identifica una unica task causal. La emision de esa pareja es
+  idempotente si el run ya refleja los refs deterministas de gate/replan. Siguen
+  pendientes blockers posteriores sin decision causal como nuevos efectos
+  idempotentes de replan.
 - [~] `replan_or_close` como puerta de cierre: el cierre ya no se dispara por
   cualquier `PlanState` activo. Si hay estado vivo, solo se evalua cierre cuando
   el step activo es `replan_or_close` en `running`; un step anterior o
@@ -245,7 +250,10 @@ implementacion, test focal y evidencia en la matriz.
   `state-file` cubre tambien el camino integrado review -> runner ->
   `replan_or_close` -> close con replay de cierre y replay directo por
   `ContinueAppDirectorV0` con plan cerrado. Sigue pendiente extender la misma
-  garantia a todos los blockers de replan.
+  garantia a todos los blockers de replan. El replan automatico por cierre
+  insuficiente ya corta la reemision cuando el run refleja los refs
+  deterministas de `QualityGateRecorded` y `ReplanDecisionRecorded`, aun sin
+  `CommandEffects` frescos.
 
 El orden recomendado ahora es: replan automatico para casos negativos restantes,
 smoke Codex real con runner opt-in y por ultimo replay/idempotencia completa del

@@ -127,3 +127,58 @@ func TestMaybeCloseOperationalDirectorV0ReplanCausalSiFaltaValidationRefConRevie
 		t.Fatalf("state=%+v step=%+v", state, step)
 	}
 }
+
+func TestOperationalDirectorPlanEmitClosureIssueReplanDecisionV0NoDuplicaSiRunYaReflejaDecision(t *testing.T) {
+	runRef := "run-service-operational-closure-replan-reflected"
+	taskRef := "task-ref-service-operational-closure-001"
+	match := operationalDirectorPlanAcceptedReviewMatchV0{
+		TaskRef:           taskRef,
+		DeliveryRef:       "delivery-ref-service-operational-closure-reflected",
+		ReviewRequestID:   "review-request-ref-service-operational-closure-reflected",
+		ReviewResultRef:   "review-result-ref-service-operational-closure-reflected",
+		AcceptedReviewRef: "accepted-review-ref-service-operational-closure-reflected",
+	}
+	issueRefs := []string{"validation_ref", "operational_closure_insufficient"}
+	request := ContinueAppDirectorRequestV0{
+		RunRef:        runRef,
+		OccurredAt:    "2026-05-22T22:05:00Z",
+		CorrelationID: "corr-service-operational-closure-replan-reflected",
+		RequestedBy:   "test",
+	}
+	refs := operationalDirectorClosureIssueAutoReplanRefsV0(request, match, issueRefs)
+	run := serviceContinueClosureRunForTestV0(runRef, orquestacoreworkflow.OrchestrationPhaseProgramacionV0)
+	run.QualityGates = []string{
+		refs.GateRef + "#decision:" + string(orquestacoreworkflow.QualityGateDecisionBlockedV0) + "#subject:" + taskRef,
+	}
+	run.ReplanDecisions = []string{
+		refs.ReplanRef + "#source:" + refs.GateRef +
+			"#task:" + taskRef +
+			"#action:" + string(orquestacoreworkflow.ReplanDecisionActionRetryTaskV0) +
+			"#followups:" + refs.CapacityRef + "+" + refs.AgentRef,
+	}
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(run)
+	eventSink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+
+	replanRefs, err := operationalDirectorPlanEmitClosureIssueReplanDecisionV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{
+			RunStore:  runStore,
+			EventSink: eventSink,
+		},
+		run,
+		match,
+		issueRefs,
+	)
+	if err != nil {
+		t.Fatalf("operationalDirectorPlanEmitClosureIssueReplanDecisionV0: %v", err)
+	}
+	if len(eventSink.EventsV0()) != 0 {
+		t.Fatalf("emitio eventos duplicados: %+v", eventSink.EventsV0())
+	}
+	for _, ref := range []string{refs.GateRef, refs.ReplanRef, refs.CapacityRef, refs.AgentRef} {
+		if !serviceStringInSetV0(replanRefs, ref) {
+			t.Fatalf("replanRefs=%+v sin %s", replanRefs, ref)
+		}
+	}
+}

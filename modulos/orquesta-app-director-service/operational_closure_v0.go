@@ -341,6 +341,9 @@ func operationalDirectorPlanEmitClosureIssueReplanDecisionV0(
 	if strings.TrimSpace(storedRun.RunID) != strings.TrimSpace(run.RunID) {
 		return nil, nil
 	}
+	if operationalDirectorClosureIssueReplanReflectedV0(storedRun, refs, match) {
+		return compactServiceRefsV0([]string{refs.GateRef, refs.ReplanRef, refs.CapacityRef, refs.AgentRef}), nil
+	}
 	storedRun, ready, err := operationalDirectorPlanEnsureProgrammingPhaseForRequiredTestsReplanV0(ctx, request, ports, storedRun, refs)
 	if err != nil || !ready || !operationalDirectorRunProgrammingPhaseActiveV0(storedRun) {
 		return nil, err
@@ -400,6 +403,29 @@ func operationalDirectorPlanEmitClosureIssueReplanDecisionV0(
 		return nil, err
 	}
 	return compactServiceRefsV0([]string{refs.GateRef, refs.ReplanRef, refs.CapacityRef, refs.AgentRef}), nil
+}
+
+func operationalDirectorClosureIssueReplanReflectedV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	refs operationalDirectorRequiredTestsAutoReplanRefSetV0,
+	match operationalDirectorPlanAcceptedReviewMatchV0,
+) bool {
+	taskRef := strings.TrimSpace(match.TaskRef)
+	gateRef := strings.TrimSpace(refs.GateRef)
+	replanRef := strings.TrimSpace(refs.ReplanRef)
+	if taskRef == "" || gateRef == "" || replanRef == "" {
+		return false
+	}
+	expectedGate := gateRef +
+		"#decision:" + string(orquestacoreworkflow.QualityGateDecisionBlockedV0) +
+		"#subject:" + taskRef
+	expectedReplan := replanRef +
+		"#source:" + gateRef +
+		"#task:" + taskRef +
+		"#action:" + string(orquestacoreworkflow.ReplanDecisionActionRetryTaskV0) +
+		"#followups:" + strings.TrimSpace(refs.CapacityRef) + "+" + strings.TrimSpace(refs.AgentRef)
+	return startAppDirectorStringInSetV0(run.QualityGates, expectedGate) &&
+		startAppDirectorStringInSetV0(run.ReplanDecisions, expectedReplan)
 }
 
 func operationalDirectorClosureIssueGateSummaryV0(issueRefs []string) string {
