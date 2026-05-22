@@ -10,6 +10,9 @@ Incluye:
   `GroupAutoprogrammingTasksByAreaV0`;
 - `AutoprogrammingReviewGateInputV0` y
   `EvaluateAutoprogrammingReviewGateV0`;
+- `BuildAutoprogrammingProgrammableWorkV0` para transformar solicitudes
+  validadas en `WorkProfileV0`/`WorkflowTaskV0` por grupo sin solapar
+  `write_set`;
 - errores publicos tipados para issues de contrato.
 
 Fuera de alcance:

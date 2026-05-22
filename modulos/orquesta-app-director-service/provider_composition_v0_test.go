@@ -133,6 +133,58 @@ func TestComposeStartAppDirectorProviderV0IncludesQualityGateReplanProvider(t *t
 	}
 }
 
+func TestComposeStartAppDirectorProviderV0PassesWorkflowTaskProfileResolver(t *testing.T) {
+	runRef := "run-ref-service-profile-resolver-001"
+	task := serviceWorkflowProfileResolverTaskV0(runRef)
+	resolver := &recordingWorkflowTaskProfileResolverForTestV0{
+		resolution: orquestacionnucleoapp.WorkflowTaskProfileResolutionV0{
+			ProfileKind:                orquestacoreworkflow.WorkProfileRequiredTestsV0,
+			Role:                       "pruebas-inyectadas",
+			ReasonCode:                 "profile-resolver-test",
+			CapacitySummary:            "Capacidad inyectada por composicion.",
+			AgentSummary:               "Agente inyectado por composicion.",
+			MinimumRecommendedCapacity: orquestacoreworkflow.OrchestrationCapacityHighV0,
+			EvidenceRefs:               []string{"evidence-ref-profile-resolver-001"},
+		},
+	}
+	provider := composeStartAppDirectorProviderV0(
+		orquestacionnucleoapp.StaticCandidateProviderV0{},
+		StartAppDirectorPortsV0{
+			DirectorTaskStore:           orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(task),
+			WorkflowTaskProfileResolver: resolver,
+		},
+		"director-service-test",
+	)
+
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), orquestacionnucleoapp.SchedulerCandidateRequestV0{
+		Run: orquestacoreworkflow.OrchestrationRunV0{
+			RunID:        runRef,
+			CurrentPhase: orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+			Tasks:        []string{task.TaskID},
+		},
+		OccurredAt:    "2026-05-22T10:11:00Z",
+		CorrelationID: "corr-service-profile-resolver-001",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if !resolver.called || resolver.lastTaskRef != task.TaskID {
+		t.Fatalf("profile resolver no invocado: called=%v task=%s", resolver.called, resolver.lastTaskRef)
+	}
+	if len(candidates.WorkCandidates) != 1 {
+		t.Fatalf("work candidates=%+v", candidates.WorkCandidates)
+	}
+	candidate := candidates.WorkCandidates[0]
+	if candidate.AgentCandidate == nil || candidate.AgentCandidate.Payload.Role != "pruebas-inyectadas" {
+		t.Fatalf("agent profile no aplicado: %+v", candidate.AgentCandidate)
+	}
+	if candidate.CapacityCandidate == nil ||
+		candidate.CapacityCandidate.Payload.ReasonCode != "profile-resolver-test" ||
+		candidate.CapacityCandidate.Payload.MinimumRecommendedCapacity != orquestacoreworkflow.OrchestrationCapacityHighV0 {
+		t.Fatalf("capacity profile no aplicado: %+v", candidate.CapacityCandidate)
+	}
+}
+
 func TestContinueAppDirectorV0ProcessesReviewGateSource(t *testing.T) {
 	runRef := "run-ref-service-review-gate-continue-001"
 	run := orquestacoreworkflow.OrchestrationRunV0{
@@ -261,6 +313,38 @@ func serviceReviewOriginalTaskV0(runRef string) orquestacoreworkflow.WorkflowTas
 			"Entrega inicial trazable.",
 		},
 	}
+}
+
+func serviceWorkflowProfileResolverTaskV0(runRef string) orquestacoreworkflow.WorkflowTaskV0 {
+	return orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion:   orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:          "task-ref-service-profile-resolver-001",
+		RunID:           runRef,
+		PhaseID:         orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Title:           "Microtarea con perfil inyectado",
+		Summary:         "Validar que la composicion puede elegir el perfil.",
+		WriteSet:        []string{"app/profile_resolver.go"},
+		WorkProfileKind: orquestacoreworkflow.WorkProfileImplementationV0,
+		AcceptanceCriteria: []string{
+			"El candidato usa el perfil resuelto por la composicion.",
+		},
+		RequiredTests: []string{"go test ./modulos/orquesta-app-director-service -count=1"},
+	}
+}
+
+type recordingWorkflowTaskProfileResolverForTestV0 struct {
+	called      bool
+	lastTaskRef string
+	resolution  orquestacionnucleoapp.WorkflowTaskProfileResolutionV0
+}
+
+func (resolver *recordingWorkflowTaskProfileResolverForTestV0) ResolveWorkflowTaskProfileV0(
+	_ context.Context,
+	request orquestacionnucleoapp.WorkflowTaskProfileRequestV0,
+) (orquestacionnucleoapp.WorkflowTaskProfileResolutionV0, error) {
+	resolver.called = true
+	resolver.lastTaskRef = request.Task.TaskID
+	return resolver.resolution, nil
 }
 
 type recordingReviewGateSourceV0 struct {

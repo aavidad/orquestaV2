@@ -62,6 +62,7 @@ type StartAppDirectorPortsV0 struct {
 	AssessmentReplanSource      orquestacionnucleoapp.AgentAssessmentReplanPlanProviderPortV0
 	DirectorDecisionSource      orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0
 	DirectorTaskStore           AppDirectorWorkflowTaskStorePortV0
+	WorkflowTaskProfileResolver orquestacionnucleoapp.WorkflowTaskProfileResolverPortV0
 	WorkflowTaskDefaultCapacity orquestacoreworkflow.OrchestrationCapacityRecommendationV0
 	WaitStateWriter             orquestacionnucleoapp.WorkflowTaskWaitStateWriterPortV0
 	OperationalPlanStateWriter  orquestacionnucleoapp.OperationalDirectorPlanStateWriterPortV0

@@ -13,6 +13,9 @@ Cobertura actual:
 - rechaza alcance demasiado amplio;
 - rechaza `write_set` vacio o inseguro;
 - agrupa tareas por area normalizada;
+- transforma solicitudes validas en `WorkProfileV0`/`WorkflowTaskV0` con refs
+  opacas y pruebas requeridas preservadas;
+- particiona `write_set` por area y rechaza rutas no asignables o solapadas;
 - review gate acepta ACK completado con tests verdes;
 - review gate rechaza ACK ausente, tests fallidos, tests ausentes, ficheros
   grandes y ficheros fuera del `write_set`;

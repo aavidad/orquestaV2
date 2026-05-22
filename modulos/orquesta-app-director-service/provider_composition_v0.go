@@ -60,6 +60,7 @@ func composeStartAppDirectorProviderV0(
 		provider = orquestacionnucleoapp.WorkflowTaskCandidateProviderV0{
 			Base:            provider,
 			TaskStore:       ports.DirectorTaskStore,
+			ProfileResolver: ports.WorkflowTaskProfileResolver,
 			RequestedBy:     requestedBy,
 			DefaultCapacity: ports.WorkflowTaskDefaultCapacity,
 		}

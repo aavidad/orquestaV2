@@ -36,3 +36,14 @@ Entrada pura para decidir si una entrega de codigo puede aceptarse:
 
 El resultado devuelve `accepted` e issues publicos. Un adaptador externo decide
 como convertirlo en observaciones de review, rework o aceptacion.
+
+## BuildAutoprogrammingProgrammableWorkV0
+
+Funcion pura que valida `AutoprogrammingRequestV0` y construye trabajo
+programable compatible con el nucleo:
+
+- devuelve `WorkProfileV0` y `WorkflowTaskV0` por grupo;
+- conserva `write_set`, `required_tests`, `worktree_ref` y `branch_ref`;
+- usa refs opacas como `ContextRefs`, sin leer repositorios ni ejecutar nada;
+- para varios grupos, particiona `write_set` por area normalizada y rechaza
+  rutas ambiguas, sin area o solapadas.
