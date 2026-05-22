@@ -277,6 +277,16 @@ actual.
   `orquesta-core-replanner`, reabre `programacion` mediante `OpenPhase` explicito
   y permite continuar `RequestCapacity -> CapacityDecided -> RequestAgent` sin
   intervencion manual.
+- Deuda de frontera 2026-05-23: `orquesta-orchestration-core` aun importa
+  `modulos/orquesta-director` para construir los DTOs que expone el scheduler:
+  `ReplanFollowupsInputV0`, `PostLeaseActionInputV0` y
+  `AgentProgressSupervisionInputV0`. No hay sustitucion local segura solo con
+  `orquesta-core-workflow`/`orquesta-core-replanner`, porque
+  `orquesta-director-scheduler` tipa sus candidates con esos DTOs y tambien
+  invoca sus builders. Para cerrar la frontera sin refactor grande en este
+  modulo, el siguiente corte debe mover esos DTOs/builders a un contrato neutral
+  o puerto compartido y actualizar scheduler/director juntos; hasta entonces no
+  endurecer `architecture_boundaries_test.go` contra `orquesta-director`.
 - Split de retrabajo de revision: un plan `split_task` tras
   `changes_requested` puede autorizar nuevas microtareas con `CreateMicrotask`,
   materializarlas en `WorkflowTaskStorePortV0` por puerto y dejar que

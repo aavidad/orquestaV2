@@ -2,7 +2,7 @@
 
 Modulo de composicion/director de OrquestaV2.
 
-Su responsabilidad es coordinar contratos publicos entre mini-proyectos sin conocer sus internals. En v0 arranca como flujo puro para convertir una `AppSpecV0` validada y un `BacklogInicialPropuestoV0` en un registro de proyecto aceptado y un comando/evento inicial de workflow durable.
+Su responsabilidad es coordinar contratos publicos entre mini-proyectos sin conocer sus internals. En v0 arranca como flujo puro para convertir un `RegistrarAppSpecV0` validado y un `RegistrarBacklogInicialV0` compatible en un registro de proyecto aceptado y un comando/evento inicial de workflow durable.
 
 ## Limites
 
@@ -15,9 +15,10 @@ Su responsabilidad es coordinar contratos publicos entre mini-proyectos sin cono
 
 ## Contratos consumidos
 
-- `SolicitarNuevaApp v0`, propiedad de `orquesta-factory`.
 - `RegistrarProyectoDesdeAppSpec v0`, propiedad de `orquesta-core`.
 - `StartRunFromAppSpecV0` / `OrchestrationCommandV0`, propiedad de `orquesta-core-workflow` hasta promocion global.
+
+La adaptacion desde salidas de `orquesta-factory` queda fuera de este modulo.
 
 ## Salida esperada v0
 

@@ -2,10 +2,8 @@ package orquestadirector
 
 import (
 	"testing"
-	"time"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestafactory "orquesta/modulos/orquesta-factory"
 )
 
 func TestSmokeOrquestaAppSimpleV0ArrancaRunYAbreDescubrimiento(t *testing.T) {
@@ -58,30 +56,14 @@ func TestSmokeOrquestaAppSimpleV0ArrancaRunYAbreDescubrimiento(t *testing.T) {
 
 func smokeAppSimpleCommandV0(t *testing.T) BootstrapProyectoDesdeAppSpecCommandV0 {
 	t.Helper()
-	req := orquestafactory.AppSpecRequestV0{
-		SchemaVersion: orquestafactory.AppSpecRequestSchemaV0,
-		RequestID:     "req-smoke-app-simple-001",
-		Source:        "orquesta-cli",
-		Locale:        "es-ES",
-		Nombre:        "Lista simple de tareas",
-		Objetivo:      "Gestionar tareas personales con titulo y estado.",
-		TipoApp:       "web",
-	}
-	spec, issues := orquestafactory.SolicitarNuevaAppV0(req, time.Date(2026, 5, 4, 13, 0, 0, 0, time.UTC))
-	if len(issues) > 0 {
-		t.Fatalf("SolicitarNuevaAppV0: %+v", issues)
-	}
-	backlog, issues := orquestafactory.GenerarBacklogInicialPropuestoV0(spec)
-	if len(issues) > 0 {
-		t.Fatalf("GenerarBacklogInicialPropuestoV0: %+v", issues)
-	}
+	specID := "appspec-lista-simple-001"
 	return BootstrapProyectoDesdeAppSpecCommandV0{
 		IdempotencyKey: "idem-smoke-app-simple-001",
-		AppSpec:        spec,
-		Backlog:        backlog,
+		AppSpec:        neutralRegistrarAppSpecV0(specID, "req-smoke-app-simple-001", "Lista simple de tareas", "2026-05-04T13:00:00Z"),
+		Backlog:        neutralRegistrarBacklogV0(specID, "lista-simple"),
 		RequestedBy:    "director",
 		OccurredAt:     "2026-05-04T13:05:00Z",
-		RequestID:      req.RequestID,
+		RequestID:      "req-smoke-app-simple-001",
 		CorrelationID:  "corr-smoke-app-simple-001",
 	}
 }

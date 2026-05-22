@@ -5,6 +5,16 @@ Cada tarea debe ser pequena y cerrada.
 ## Backlog inicial
 
 ```text
+ID: DIR-023
+Objetivo: Separar `orquesta-director` de `orquesta-factory` en el bootstrap inicial.
+Write-set: bootstrap_appspec_v0.go, bootstrap_appspec_v0_test.go, bootstrap_appspec_smoke_v0_test.go, README.md, docs/contratos.md, docs/pruebas.md, docs/decisiones.md, docs/tareas.md
+Contrato: BootstrapProyectoDesdeAppSpec v0
+Validacion: 2026-05-23, ok; go test -count=1 ./modulos/orquesta-director.
+Bloqueos: el adaptador desde salidas de `orquesta-factory` a DTOs de core queda para otro modulo.
+Estado: completada ejecutable
+```
+
+```text
 ID: DIR-022
 Objetivo: Permitir `CreateMicrotask` como followup explicito de `split_task` en rework de revision.
 Write-set: replan_followups_*_v0.go, replan_followups_microtasks_v0_test.go, docs locales.

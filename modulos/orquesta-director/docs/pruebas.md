@@ -17,9 +17,9 @@ Riesgos: no aplica comandos ni persiste detalle completo de tarea; esa cobertura
 Caso: DIR-P001 bootstrap desde AppSpec valida
 Tipo: unit
 Comando: go test -count=1 ./modulos/orquesta-director
-Evidencia esperada: AppSpecV0 + BacklogInicialPropuestoV0 validos producen registro aceptado compacto, StartRun y RunStarted sin DB/runtime.
-Ultima ejecucion: 2026-05-04, ok, go test -count=1 ./modulos/orquesta-director ./modulos/orquesta-core ./modulos/orquesta-core-workflow ./modulos/orquesta-factory
-Riesgos: acoplar director a internals de factory/core/workflow.
+Evidencia esperada: RegistrarAppSpecV0 + RegistrarBacklogInicialV0 validos producen registro aceptado compacto, StartRun y RunStarted sin DB/runtime/factory.
+Ultima ejecucion: 2026-05-23, ok, go test -count=1 ./modulos/orquesta-director
+Riesgos: acoplar director a internals de core/workflow; la adaptacion desde factory vive fuera.
 ```
 
 ```text
@@ -27,7 +27,7 @@ Caso: DIR-P002 bootstrap rechaza idempotency_key vacia
 Tipo: unit
 Comando: go test -count=1 ./modulos/orquesta-director
 Evidencia esperada: error publico `director_bootstrap_invalido` o propagado sin panics ni efectos externos.
-Ultima ejecucion: 2026-05-04, ok, go test -count=1 ./modulos/orquesta-director ./modulos/orquesta-core ./modulos/orquesta-core-workflow ./modulos/orquesta-factory
+Ultima ejecucion: 2026-05-23, ok, go test -count=1 ./modulos/orquesta-director
 Riesgos: crear runs duplicados o no deterministas.
 ```
 
@@ -36,7 +36,7 @@ Caso: DIR-P003 salida compacta sin detalles prohibidos
 Tipo: unit
 Comando: go test -count=1 ./modulos/orquesta-director
 Evidencia esperada: JSON del resultado no contiene DB, SQL, runtime, provider, OAuth, HOME, token ni secretos.
-Ultima ejecucion: 2026-05-04, ok, go test -count=1 ./modulos/orquesta-director ./modulos/orquesta-core ./modulos/orquesta-core-workflow ./modulos/orquesta-factory
+Ultima ejecucion: 2026-05-23, ok, go test -count=1 ./modulos/orquesta-director
 Riesgos: filtrar AppSpec/backlog completos hacia workflow o outbox.
 ```
 

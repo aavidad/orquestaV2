@@ -5,10 +5,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
+	orquestacore "orquesta/modulos/orquesta-core"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestafactory "orquesta/modulos/orquesta-factory"
 )
 
 func TestBootstrapProyectoDesdeAppSpecV0GeneraRegistroYRunStarted(t *testing.T) {
@@ -107,31 +106,100 @@ func TestBootstrapProyectoDesdeAppSpecV0RefsDeterministasDesdeCore(t *testing.T)
 
 func validBootstrapCommandV0(t *testing.T) BootstrapProyectoDesdeAppSpecCommandV0 {
 	t.Helper()
-	req := orquestafactory.AppSpecRequestV0{
-		SchemaVersion: orquestafactory.AppSpecRequestSchemaV0,
-		RequestID:     "req-dir-001",
-		Source:        "orquesta-web",
-		Locale:        "es-ES",
-		Nombre:        "Panel de reservas",
-		Objetivo:      "Gestionar solicitudes de reserva.",
-		TipoApp:       "web",
-	}
-	spec, issues := orquestafactory.SolicitarNuevaAppV0(req, time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC))
-	if len(issues) > 0 {
-		t.Fatalf("build app spec: %+v", issues)
-	}
-	backlog, issues := orquestafactory.GenerarBacklogInicialPropuestoV0(spec)
-	if len(issues) > 0 {
-		t.Fatalf("build backlog: %+v", issues)
-	}
+	specID := "appspec-panel-reservas-001"
 	return BootstrapProyectoDesdeAppSpecCommandV0{
 		IdempotencyKey: "idem-dir-001",
-		AppSpec:        spec,
-		Backlog:        backlog,
+		AppSpec:        neutralRegistrarAppSpecV0(specID, "req-dir-001", "Panel de reservas", "2026-05-04T12:00:00Z"),
+		Backlog:        neutralRegistrarBacklogV0(specID, "reservas"),
 		RequestedBy:    "director",
 		OccurredAt:     "2026-05-04T12:10:00Z",
-		RequestID:      req.RequestID,
+		RequestID:      "req-dir-001",
 		CorrelationID:  "corr-dir-001",
+	}
+}
+
+func neutralRegistrarAppSpecV0(specID string, requestID string, name string, createdAt string) orquestacore.RegistrarAppSpecV0 {
+	return orquestacore.RegistrarAppSpecV0{
+		SchemaVersion: orquestacore.RegistrarAppSpecSchemaV0,
+		SpecID:        specID,
+		RequestID:     requestID,
+		CreatedAt:     createdAt,
+		App: orquestacore.RegistrarAppInfoV0{
+			Nombre: name,
+		},
+		Validation: orquestacore.RegistrarValidationSummaryV0{
+			Estado: "valida",
+		},
+	}
+}
+
+func neutralRegistrarBacklogV0(specID string, prefix string) orquestacore.RegistrarBacklogInicialV0 {
+	return orquestacore.RegistrarBacklogInicialV0{
+		SchemaVersion: orquestacore.RegistrarBacklogInicialSchemaV0,
+		SpecID:        specID,
+		Fases: []orquestacore.RegistrarFaseInicialV0{
+			{ID: "descubrimiento", Nombre: "Descubrimiento", Objetivo: "Alcance inicial claro.", Orden: 1},
+			{ID: "diseno", Nombre: "Diseno", Objetivo: "Flujos y datos definidos.", Orden: 2},
+			{ID: "planificacion", Nombre: "Planificacion", Objetivo: "Microtareas preparadas.", Orden: 3},
+			{ID: "programacion", Nombre: "Programacion", Objetivo: "Implementacion verificable.", Orden: 4},
+			{ID: "cierre", Nombre: "Cierre", Objetivo: "Validacion y entrega cerradas.", Orden: 5},
+		},
+		Microtareas: []orquestacore.RegistrarMicrotareaV0{
+			{
+				ID:               prefix + "-task-001",
+				Fase:             "descubrimiento",
+				ModuloSugerido:   "docs",
+				Objetivo:         "Definir alcance funcional inicial.",
+				WriteSetPrevisto: []string{"docs/alcance.md"},
+				Contrato:         "FunctionContractV0",
+				Validacion:       "Alcance revisado.",
+			},
+			{
+				ID:               prefix + "-task-002",
+				Fase:             "diseno",
+				ModuloSugerido:   "app",
+				Objetivo:         "Disenar flujo principal.",
+				WriteSetPrevisto: []string{"app/flujo.md"},
+				Contrato:         "FunctionContractV0",
+				Validacion:       "Flujo principal revisado.",
+			},
+			{
+				ID:               prefix + "-task-003",
+				Fase:             "planificacion",
+				ModuloSugerido:   "app",
+				Objetivo:         "Preparar microtareas ejecutables.",
+				WriteSetPrevisto: []string{"app/tasks.md"},
+				Contrato:         "FunctionContractV0",
+				Validacion:       "Microtareas verificables.",
+			},
+			{
+				ID:               prefix + "-task-004",
+				Fase:             "programacion",
+				ModuloSugerido:   "app",
+				Objetivo:         "Implementar comportamiento principal.",
+				WriteSetPrevisto: []string{"app/main.go"},
+				Contrato:         "FunctionContractV0",
+				Validacion:       "Pruebas locales verdes.",
+			},
+			{
+				ID:               prefix + "-task-005",
+				Fase:             "cierre",
+				ModuloSugerido:   "docs",
+				Objetivo:         "Cerrar evidencia de entrega.",
+				WriteSetPrevisto: []string{"docs/cierre.md"},
+				Contrato:         "FunctionContractV0",
+				Validacion:       "Evidencia registrada.",
+			},
+		},
+		ContratosRequeridos: []string{
+			"descubrimiento.contract.v0",
+			"diseno.contract.v0",
+			"planificacion.contract.v0",
+			"programacion.contract.v0",
+			"cierre.contract.v0",
+		},
+		Riesgos:           []string{"Dependencias externas pendientes de adaptar."},
+		PreguntasAbiertas: []string{"Confirmar prioridad de entrega."},
 	}
 }
 

@@ -217,6 +217,40 @@ func TestNeutralOrchestrationPackagesDoNotDependOnProductAdapters(t *testing.T) 
 	}
 }
 
+func TestNeutralOrchestrationPackagesDoNotDependOnFactoryOrHTTP(t *testing.T) {
+	for _, pkg := range []string{
+		"orquesta/modulos/orquesta-app-change",
+		"orquesta/modulos/orquesta-app-change-director-source",
+		"orquesta/modulos/orquesta-core",
+		"orquesta/modulos/orquesta-core-concurrency",
+		"orquesta/modulos/orquesta-core-leases",
+		"orquesta/modulos/orquesta-core-replanner",
+		"orquesta/modulos/orquesta-core-workflow",
+		"orquesta/modulos/orquesta-director",
+		"orquesta/modulos/orquesta-director-operativo",
+		"orquesta/modulos/orquesta-document-plan-expander",
+		"orquesta/modulos/orquesta-domain-work",
+		"orquesta/modulos/orquesta-domain-work-memory",
+		"orquesta/modulos/orquesta-external-work-run",
+		"orquesta/modulos/orquesta-orchestration-core",
+		"orquesta/modulos/orquesta-run-control",
+		"orquesta/modulos/orquesta-run-queue",
+		"orquesta/modulos/orquesta-runtime",
+	} {
+		deps := packageDepsForBoundaryTest(t, pkg)
+		for _, forbidden := range []string{
+			"orquesta/modulos/orquesta-factory",
+			"net/http",
+		} {
+			for _, dep := range deps {
+				if dep == forbidden {
+					t.Fatalf("%s depends on forbidden neutral-boundary dependency %s", pkg, dep)
+				}
+			}
+		}
+	}
+}
+
 func TestNeutralCoreDoesNotDependTransitivelyOnAdapters(t *testing.T) {
 	deps := packageDepsForBoundaryTest(t, "orquesta/modulos/orquesta-core")
 	for _, forbidden := range []string{

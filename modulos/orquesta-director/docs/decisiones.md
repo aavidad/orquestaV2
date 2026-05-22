@@ -5,6 +5,16 @@ Las decisiones de este archivo solo afectan a `orquesta-director`. Si afectan a 
 ## Decisiones iniciales
 
 ```text
+Fecha: 2026-05-23
+Decision: `BootstrapProyectoDesdeAppSpecV0` deja de importar `orquesta-factory` y recibe DTOs publicos neutrales de `orquesta-core`.
+Motivo: el director debe componer el registro y el workflow sin depender del generador de AppSpec/backlog; la adaptacion desde factory corresponde a otro modulo/adaptador.
+Alternativas: mantener tipos factory en el command; crear DTOs locales duplicados; mover la conversion a orchestration-core. Mantener factory preservaba el acoplamiento; duplicar DTOs locales no aportaba valor frente al contrato publico de core; tocar orchestration-core queda fuera del write-set.
+Impacto: los tests usan fixtures neutrales `RegistrarAppSpecV0`/`RegistrarBacklogInicialV0`; el director sigue puro, sin persistence, runtime ni factory.
+Contratos afectados: BootstrapProyectoDesdeAppSpec v0.
+Estado: aceptada_local
+```
+
+```text
 Fecha: 2026-05-10
 Decision: `BuildReplanFollowupsV0` materializa `split_task` de `review_rework` con candidates `CreateMicrotask` explicitos.
 Motivo: el retrabajo de una revision puede requerir dividir la tarea y autorizar microtareas nuevas antes de volver a programacion.

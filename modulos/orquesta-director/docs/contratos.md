@@ -26,8 +26,8 @@ Version: v0
 Propietario: orquesta-director
 Consumidores: web/MCP/CLI futuros mediante adaptadores finos
 Entrada:
-  - AppSpecV0 validada
-  - BacklogInicialPropuestoV0 compatible
+  - RegistrarAppSpecV0 validada
+  - RegistrarBacklogInicialV0 compatible
   - idempotency_key
   - requested_by
   - occurred_at
@@ -38,7 +38,8 @@ Salida:
   - OrchestrationCommandV0 StartRun
   - OrchestrationCommandResultV0 con RunStarted
 Invariantes:
-  - Usa solo contratos publicos de factory, core y core-workflow.
+  - Usa solo contratos publicos de core y core-workflow.
+  - No importa orquesta-factory; cualquier adaptador desde factory vive fuera del director.
   - No persiste, no publica eventos reales y no arranca runtime.
   - El workflow recibe refs opacas, no AppSpec completa ni backlog completo.
   - El resultado debe ser determinista para la misma idempotency_key y entrada.

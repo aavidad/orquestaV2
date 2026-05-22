@@ -7,19 +7,18 @@ import (
 
 	orquestacore "orquesta/modulos/orquesta-core"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestafactory "orquesta/modulos/orquesta-factory"
 )
 
 const ErrDirectorBootstrapInvalidoV0 = "director_bootstrap_invalido"
 
 type BootstrapProyectoDesdeAppSpecCommandV0 struct {
-	IdempotencyKey string                                    `json:"idempotency_key"`
-	AppSpec        orquestafactory.AppSpecV0                 `json:"app_spec"`
-	Backlog        orquestafactory.BacklogInicialPropuestoV0 `json:"backlog"`
-	RequestedBy    string                                    `json:"requested_by,omitempty"`
-	OccurredAt     string                                    `json:"occurred_at"`
-	RequestID      string                                    `json:"request_id,omitempty"`
-	CorrelationID  string                                    `json:"correlation_id,omitempty"`
+	IdempotencyKey string                                 `json:"idempotency_key"`
+	AppSpec        orquestacore.RegistrarAppSpecV0        `json:"app_spec"`
+	Backlog        orquestacore.RegistrarBacklogInicialV0 `json:"backlog"`
+	RequestedBy    string                                 `json:"requested_by,omitempty"`
+	OccurredAt     string                                 `json:"occurred_at"`
+	RequestID      string                                 `json:"request_id,omitempty"`
+	CorrelationID  string                                 `json:"correlation_id,omitempty"`
 }
 
 type BootstrapProyectoDesdeAppSpecResultV0 struct {
@@ -110,9 +109,9 @@ func coreRegisterCommandV0(
 ) orquestacore.RegistrarProyectoDesdeAppSpecCommandV0 {
 	return orquestacore.RegistrarProyectoDesdeAppSpecCommandV0{
 		IdempotencyKey: cmd.IdempotencyKey,
-		AppSpec:        coreRegistrarAppSpecFromFactoryV0(cmd.AppSpec),
+		AppSpec:        cloneRegistrarAppSpecV0(cmd.AppSpec),
 		AppSpecVersion: orquestacore.RegistrarProyectoDesdeAppSpecVersionV0,
-		Backlog:        coreRegistrarBacklogFromFactoryV0(cmd.Backlog),
+		Backlog:        cloneRegistrarBacklogV0(cmd.Backlog),
 		BacklogVersion: orquestacore.RegistrarProyectoDesdeAppSpecVersionV0,
 		Origen:         "orquesta-director",
 		CorrelationID:  cmd.CorrelationID,
@@ -121,7 +120,7 @@ func coreRegisterCommandV0(
 	}
 }
 
-func coreRegistrarAppSpecFromFactoryV0(spec orquestafactory.AppSpecV0) orquestacore.RegistrarAppSpecV0 {
+func cloneRegistrarAppSpecV0(spec orquestacore.RegistrarAppSpecV0) orquestacore.RegistrarAppSpecV0 {
 	return orquestacore.RegistrarAppSpecV0{
 		SchemaVersion: spec.SchemaVersion,
 		SpecID:        spec.SpecID,
@@ -136,19 +135,19 @@ func coreRegistrarAppSpecFromFactoryV0(spec orquestafactory.AppSpecV0) orquestac
 	}
 }
 
-func coreRegistrarBacklogFromFactoryV0(backlog orquestafactory.BacklogInicialPropuestoV0) orquestacore.RegistrarBacklogInicialV0 {
+func cloneRegistrarBacklogV0(backlog orquestacore.RegistrarBacklogInicialV0) orquestacore.RegistrarBacklogInicialV0 {
 	return orquestacore.RegistrarBacklogInicialV0{
 		SchemaVersion:       backlog.SchemaVersion,
 		SpecID:              backlog.SpecID,
-		Fases:               coreRegistrarFasesFromFactoryV0(backlog.Fases),
-		Microtareas:         coreRegistrarMicrotareasFromFactoryV0(backlog.Microtareas),
+		Fases:               cloneRegistrarFasesV0(backlog.Fases),
+		Microtareas:         cloneRegistrarMicrotareasV0(backlog.Microtareas),
 		ContratosRequeridos: append([]string(nil), backlog.ContratosRequeridos...),
 		Riesgos:             append([]string(nil), backlog.Riesgos...),
 		PreguntasAbiertas:   append([]string(nil), backlog.PreguntasAbiertas...),
 	}
 }
 
-func coreRegistrarFasesFromFactoryV0(fases []orquestafactory.FaseInicialV0) []orquestacore.RegistrarFaseInicialV0 {
+func cloneRegistrarFasesV0(fases []orquestacore.RegistrarFaseInicialV0) []orquestacore.RegistrarFaseInicialV0 {
 	result := make([]orquestacore.RegistrarFaseInicialV0, 0, len(fases))
 	for _, fase := range fases {
 		result = append(result, orquestacore.RegistrarFaseInicialV0{
@@ -161,7 +160,7 @@ func coreRegistrarFasesFromFactoryV0(fases []orquestafactory.FaseInicialV0) []or
 	return result
 }
 
-func coreRegistrarMicrotareasFromFactoryV0(tasks []orquestafactory.MicrotareaPropuestaV0) []orquestacore.RegistrarMicrotareaV0 {
+func cloneRegistrarMicrotareasV0(tasks []orquestacore.RegistrarMicrotareaV0) []orquestacore.RegistrarMicrotareaV0 {
 	result := make([]orquestacore.RegistrarMicrotareaV0, 0, len(tasks))
 	for _, task := range tasks {
 		result = append(result, orquestacore.RegistrarMicrotareaV0{

@@ -400,9 +400,12 @@ derivados/cierre. El handoff de ese tramo es
 La prueba raiz `TestNeutralOrchestrationPackagesDoNotImportProductAdapters`
 bloquea imports concretos en paquetes neutrales:
 
+- core;
 - core workflow;
 - domain-work;
 - orchestration-core;
+- director;
+- director-operativo;
 - external-work-run;
 - document-plan-expander;
 - domain-work-memory;
@@ -413,6 +416,16 @@ bloquea imports concretos en paquetes neutrales:
 porque son adaptadores externos, pero quedan prohibidos como imports desde
 paquetes neutrales. La prueba raiz tambien bloquea `database/sql` y drivers
 conocidos (`pgx`, `lib/pq`, MySQL y SQLite) en esas capas.
+
+Desde el corte del 2026-05-23,
+`TestNeutralOrchestrationPackagesDoNotDependOnFactoryOrHTTP` bloquea tambien
+dependencia transitiva de los paquetes neutrales ya limpios hacia
+`orquesta/modulos/orquesta-factory` y `net/http`. El hueco conocido queda fuera
+de esa prueba para no crear rojo: `orquesta-app-director-intake`,
+`orquesta-app-director-service`, `orquesta-app-planner` y `orquesta-app-runner`
+siguen importando `orquesta-factory`, que a su vez importa `net/http`. Cuando
+ese acoplamiento se retire o se mueva a un adaptador/composicion, esos paquetes
+deben anadirse a la prueba transitiva.
 
 Si falla, no la relajes para hacer pasar el cambio. Primero decide si la pieza
 esta en la capa correcta. Si hace falta un adaptador, crea o usa un modulo
