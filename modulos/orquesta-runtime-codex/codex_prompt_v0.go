@@ -2,6 +2,7 @@ package orquestaruntimecodex
 
 import (
 	"encoding/json"
+	pathpkg "path"
 	"path/filepath"
 	"strings"
 
@@ -80,7 +81,8 @@ func BuildCodexAgentPromptWithControlFilesV0(
 		b.WriteString("Es obligatorio solo si objetivo o criterios de cierre lo piden.\n")
 		b.WriteString("Si escribes decision_path, completa antes los ficheros pedidos del write-set, despues escribe ACK y termina; no sigas pensando ni ampliando alcance.\n")
 	}
-	b.WriteString("En el ACK, files debe listar todos los paths de producto tocados; si alguno queda fuera del write-set estrecho, notes debe explicar por que era necesario.\n")
+	b.WriteString("En el ACK, files debe listar rutas reales de archivos de producto tocados, no globs, directorios ni el write-set completo; ejemplo cmd/server/main.go, no cmd/server/**.\n")
+	b.WriteString("Si algun archivo queda fuera del write-set estrecho, notes debe explicar por que era necesario.\n")
 	b.WriteString("En el ACK, tests debe listar solo pruebas pasadas; cada test obligatorio pasado debe aparecer exactamente como aparece en el paquete.\n")
 	b.WriteString("Si una prueba obligatoria falla, el ACK debe usar status failed y no declarar esa prueba en tests como pasada.\n")
 	b.WriteString("No incluyas HOME real, tokens, secretos, prompts, completions ni transcripts completos.\n")
@@ -97,7 +99,7 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString("\",\"task_ref\":\"")
 	b.WriteString(packet.Task.TaskRef)
 	b.WriteString("\",\"status\":\"completed\",\"files\":")
-	b.WriteString(promptJSONStringArrayV0(packet.Task.WriteSet))
+	b.WriteString(promptJSONStringArrayV0(promptACKFilesV0(packet)))
 	b.WriteString(",\"tests\":")
 	b.WriteString(promptJSONStringArrayV0(packet.Task.RequiredTests))
 	b.WriteString(",\"notes\":")
@@ -163,6 +165,38 @@ func promptACKNotesV0(packet orquestaruntime.AgentStartPacketV0) []string {
 		return nil
 	}
 	return []string{"contexto_truncado_resuelto: <motivo>"}
+}
+
+func promptACKFilesV0(packet orquestaruntime.AgentStartPacketV0) []string {
+	values := compactPromptValuesV0(packet.Task.WriteSet)
+	files := make([]string, 0, len(values))
+	for _, value := range values {
+		if promptACKFileLooksConcreteV0(value) {
+			files = append(files, value)
+		}
+	}
+	if len(files) == 0 {
+		return []string{"<path-real-tocado>"}
+	}
+	return files
+}
+
+func promptACKFileLooksConcreteV0(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "." || strings.ContainsAny(value, "*?[") ||
+		strings.HasSuffix(value, "/") {
+		return false
+	}
+	base := pathpkg.Base(value)
+	if strings.Contains(base, ".") {
+		return true
+	}
+	switch strings.ToLower(base) {
+	case "makefile", "readme", "license":
+		return true
+	default:
+		return false
+	}
 }
 
 func writePromptListSectionV0(b *strings.Builder, title string, values []string) {

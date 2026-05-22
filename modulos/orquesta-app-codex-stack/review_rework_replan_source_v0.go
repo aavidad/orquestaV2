@@ -234,7 +234,7 @@ func reviewReworkReplanEvidenceRefsV0(
 	if fallback {
 		refs = append(refs, "evidence-ref-review-rework-task-fallback")
 	}
-	return compactStringsV0(append(refs, request.EvidenceRefs...))
+	return compactStringsV0(append(refs, reviewReworkReplanNeutralEvidenceRefsV0(request.EvidenceRefs)...))
 }
 
 func reviewReworkReplanSafeRefV0(value string) string {
@@ -245,4 +245,67 @@ func reviewReworkReplanSafeRefV0(value string) string {
 		return "sin-ref"
 	}
 	return value
+}
+
+func reviewReworkReplanNeutralEvidenceRefsV0(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range compactStringsV0(values) {
+		if reviewReworkReplanEvidenceRefIsNeutralV0(value) {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func reviewReworkReplanEvidenceRefIsNeutralV0(value string) bool {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	if lower == "" {
+		return false
+	}
+	for _, token := range reviewReworkReplanForbiddenEvidenceTokensV0() {
+		if reviewReworkReplanHasEvidenceTokenV0(lower, token) {
+			return false
+		}
+	}
+	return true
+}
+
+func reviewReworkReplanForbiddenEvidenceTokensV0() []string {
+	return []string{
+		"db", "database", "sql", "dsn",
+		"runtime", "provider", "proveedor", "model", "modelo",
+		"home", "oauth", "codex", "claude", "ollama", "vllm",
+		"adapter", "adaptador", "filesystem", "git", "docker", "tmux",
+		"secret", "secreto", "token", "password", "credential", "credencial", "api_key",
+	}
+}
+
+func reviewReworkReplanHasEvidenceTokenV0(value string, token string) bool {
+	token = strings.ToLower(strings.TrimSpace(token))
+	if token == "" {
+		return false
+	}
+	start := 0
+	for {
+		index := strings.Index(value[start:], token)
+		if index < 0 {
+			return false
+		}
+		absolute := start + index
+		if reviewReworkReplanTokenBoundaryV0(value, absolute, absolute+len(token)) {
+			return true
+		}
+		start = absolute + len(token)
+	}
+}
+
+func reviewReworkReplanTokenBoundaryV0(value string, start int, end int) bool {
+	return (start == 0 || !reviewReworkReplanTokenCharV0(value[start-1])) &&
+		(end >= len(value) || !reviewReworkReplanTokenCharV0(value[end]))
+}
+
+func reviewReworkReplanTokenCharV0(value byte) bool {
+	return (value >= 'a' && value <= 'z') ||
+		(value >= '0' && value <= '9') ||
+		value == '_'
 }

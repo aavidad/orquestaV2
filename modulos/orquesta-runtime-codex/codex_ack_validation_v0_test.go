@@ -142,6 +142,20 @@ func TestCodexAgentAckReceiptV0AceptaWriteSetConGlobstarRecursivo(t *testing.T) 
 	}
 }
 
+func TestCodexAgentAckReceiptV0RechazaFilesConGlobAunqueWriteSetUseGlob(t *testing.T) {
+	spec := codexSpecForTestV0()
+	spec.AgentPacket.Task.WriteSet = []string{
+		"go.mod",
+		"cmd/server/**",
+		"internal/**",
+	}
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["go.mod","cmd/server/**","internal/**"],"tests":["go test ./..."],"notes":["done"]}`
+
+	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	requireCodexIssueV0(t, issues, CodexConnectorAckArtifactV0)
+}
+
 func TestCodexAgentAckReceiptV0AceptaWriteSetRaiz(t *testing.T) {
 	spec := codexSpecForTestV0()
 	spec.AgentPacket.Task.WriteSet = []string{"."}

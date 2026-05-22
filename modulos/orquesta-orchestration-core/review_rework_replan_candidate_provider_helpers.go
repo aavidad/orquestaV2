@@ -77,7 +77,7 @@ func reviewReworkReplanInputV0(
 		RequestedAction: plan.RequestedAction,
 		ReasonRef:       plan.ReasonRef,
 		Summary:         plan.Summary,
-		EvidenceRefs:    compactStringsV0(append(request.EvidenceRefs, plan.EvidenceRefs...)),
+		EvidenceRefs:    compactStringsV0(plan.EvidenceRefs),
 		ReviewResult:    plan.ReviewResult,
 	}
 }

@@ -70,6 +70,9 @@ Cobertura Go actual:
   flujo vertical completo: entrega registrada, revision con evidencia real,
   `changes_requested`, `RequestRework`, `retry_task`, decision de capacidad y
   arranque de un nuevo agente sin intervencion manual del test.
+- `TestReviewReworkReplanSourceV0FiltraEvidenciaAmbientalCodex` valida que el
+  adaptador Codex no envia refs ambientales del runtime al replan neutral del
+  nucleo; solo conserva evidencia causal apta para workflow.
 - El stack cablea `OperationalPlanStateWriter` y `OperationalPlanStateStore`
   hacia `ContinueAppDirectorV0`; la prueba focal del state vive en
   `orquesta-app-director-service` y `TestOperationalPlanStateStoreV0UsaStoreExplicitoOWriterLegible`

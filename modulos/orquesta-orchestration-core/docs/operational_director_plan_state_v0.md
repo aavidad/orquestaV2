@@ -81,6 +81,8 @@ apuntar a esas refs, no convertirse en un segundo log paralelo.
 10. Observacion negativa de `review_deliveries` cuando el historial causal trae
     `ReworkRequested` y `ReplanDecisionRecorded`. El state guarda refs de
     rework/replan, marca el step como `changes_requested` e incrementa attempts.
+    El provider de replan solo propaga evidencia causal del plan/review, no
+    evidencia ambiental del runtime o del supervisor de la composicion.
 11. Cierre/bloqueo posterior desde `app-director-service`: si el cierre
     operacional tiene exito, el state queda `closed`; si el cerrador devuelve
     issues o el source no puede construir request, queda `blocked` con

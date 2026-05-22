@@ -191,7 +191,7 @@ func (v *codexAckValidatorV0) validateCompletedEvidence(
 
 func codexAckHasInvalidPathV0(values []string) bool {
 	for _, value := range values {
-		if _, ok := normalizeCodexAckPathV0(value); !ok {
+		if _, ok := normalizeCodexAckFilePathV0(value); !ok {
 			return true
 		}
 	}
@@ -201,7 +201,7 @@ func codexAckHasInvalidPathV0(values []string) bool {
 func normalizeCodexAckPathsV0(values []string) []string {
 	paths := make([]string, 0, len(values))
 	for _, value := range values {
-		path, ok := normalizeCodexAckPathV0(value)
+		path, ok := normalizeCodexAckFilePathV0(value)
 		if ok {
 			paths = append(paths, path)
 		}
@@ -222,6 +222,14 @@ func normalizeCodexAckWriteSetPathsV0(values []string) []string {
 		}
 	}
 	return paths
+}
+
+func normalizeCodexAckFilePathV0(value string) (string, bool) {
+	path, ok := normalizeCodexAckPathV0(value)
+	if !ok || strings.ContainsAny(path, "*?[") {
+		return "", false
+	}
+	return path, true
 }
 
 func normalizeCodexAckPathV0(value string) (string, bool) {

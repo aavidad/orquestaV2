@@ -71,6 +71,36 @@ func TestReviewReworkReplanSourceV0FallbackPrimeraTareaSoloSinReceipt(t *testing
 	}
 }
 
+func TestReviewReworkReplanSourceV0FiltraEvidenciaAmbientalCodex(t *testing.T) {
+	source := ReviewReworkReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			reviewReworkDescriptorForTestV0("delivery-ref-target", "task-ref-target"),
+		),
+	}
+	request := reviewReworkPlanRequestForTestV0(false)
+	request.EvidenceRefs = []string{
+		"evidence-ref-neutral-review-rework",
+		"evidence-ref-codex-supervisor-stack-drain",
+		"evidence-ref-runtime-drain",
+	}
+
+	plans, err := source.BuildReviewReworkReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildReviewReworkReplanPlansV0: %v", err)
+	}
+	if len(plans) != 1 {
+		t.Fatalf("plans=%d %+v", len(plans), plans)
+	}
+	evidence := plans[0].EvidenceRefs
+	if reviewReworkPlanHasEvidenceForTestV0(evidence, "evidence-ref-codex-supervisor-stack-drain") ||
+		reviewReworkPlanHasEvidenceForTestV0(evidence, "evidence-ref-runtime-drain") {
+		t.Fatalf("evidence_refs filtran detalles de runtime: %v", evidence)
+	}
+	if !reviewReworkPlanHasEvidenceForTestV0(evidence, "evidence-ref-neutral-review-rework") {
+		t.Fatalf("evidence_refs perdio evidencia neutral: %v", evidence)
+	}
+}
+
 func TestReviewReworkReplanSourceV0MantienePlanTrasReplanHastaAgente(t *testing.T) {
 	store := orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
 		reviewReworkDescriptorForTestV0("delivery-ref-target", "task-ref-target"),

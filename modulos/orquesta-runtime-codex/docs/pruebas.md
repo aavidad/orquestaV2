@@ -14,8 +14,9 @@ Cobertura:
 - bloquea si faltan command path, project workdir o runtime workdir;
 - materializa packet, prompt y wrapper;
 - el prompt exige `$caveman` o `compact` si esta disponible y salida minima;
-- la plantilla de ACK generada incluye los `files` del write-set y los
-  `tests` obligatorios esperados, no arrays vacios;
+- la plantilla de ACK generada incluye rutas concretas de archivos para
+  `files`, no globs/directorios del write-set, y los `tests` obligatorios
+  esperados, no arrays vacios;
 - el prompt advierte que el ACK externo al proyecto debe escribirse desde el
   directorio runtime por shell y que la linea visible no sustituye el JSON;
 - con sandbox `workspace-write`, el wrapper autoriza `runtime_work_dir` con
@@ -39,6 +40,7 @@ Cobertura:
 - rechaza ACK corrupto o incompleto con error publico;
 - rechaza ACK `completed` sin artifacts del write-set o con artifacts fuera de write-set;
 - acepta ACK con artifacts concretos que encajan en write-set con glob cerrado;
+- rechaza ACK `completed` que copia globs del write-set en `files`;
 - advierte en el prompt cuando hay contexto requerido truncado;
 - rechaza ACK `completed` con contexto requerido truncado si no justifica
   `contexto_truncado_resuelto`;

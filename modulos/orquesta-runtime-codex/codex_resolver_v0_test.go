@@ -136,6 +136,7 @@ func TestCodexExecResolverV0PromptUsaControlFilesDelRuntime(t *testing.T) {
 		"ACK status completed aunque git no aplique",
 		"No imprimas diffs ni pegues artefactos completos",
 		"Si escribes decision_path, completa antes los ficheros pedidos del write-set",
+		"files debe listar rutas reales de archivos de producto tocados",
 		"Write-set permitido:",
 		"README.md",
 		"Tests obligatorios:",
@@ -146,6 +147,30 @@ func TestCodexExecResolverV0PromptUsaControlFilesDelRuntime(t *testing.T) {
 		if !strings.Contains(string(prompt), want) {
 			t.Fatalf("prompt no contiene ruta de control %q:\n%s", want, string(prompt))
 		}
+	}
+}
+
+func TestCodexExecResolverV0PromptNoSugiereGlobsComoFilesDelACK(t *testing.T) {
+	packet := codexPacketForTestV0()
+	packet.Task.WriteSet = []string{"go.mod", "cmd/server/**", "internal/**", "README.md", "web"}
+
+	prompt := BuildCodexAgentPromptV0(packet, nil)
+	ackBlock := prompt
+	if before, after, ok := strings.Cut(prompt, "ACK esperado:"); ok {
+		ackBlock = after
+		if block, _, ok := strings.Cut(ackBlock, "Titulo:"); ok {
+			ackBlock = block
+		} else {
+			ackBlock = before + after
+		}
+	}
+
+	if strings.Contains(ackBlock, "cmd/server/**") || strings.Contains(ackBlock, "internal/**") ||
+		strings.Contains(ackBlock, `"web"`) {
+		t.Fatalf("ACK esperado no debe sugerir globs/directorios como files:\n%s", ackBlock)
+	}
+	if !strings.Contains(ackBlock, `"files":["go.mod","README.md"]`) {
+		t.Fatalf("ACK esperado debe sugerir solo ficheros concretos:\n%s", ackBlock)
 	}
 }
 

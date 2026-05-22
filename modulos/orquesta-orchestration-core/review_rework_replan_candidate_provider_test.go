@@ -47,6 +47,41 @@ func TestReviewReworkReplanCandidateProviderV0BuildsRetryPlanFromRework(t *testi
 	}
 }
 
+func TestReviewReworkReplanCandidateProviderV0NoPropagaEvidenciaAmbientalDelRuntime(t *testing.T) {
+	runRef := "run-nucleo-review-rework-replan-evidence-001"
+	run := mustReviewReworkReadyRunV0(t, runRef, orquestacoreworkflow.ReviewResultStatusChangesRequestedV0)
+	provider := ReviewReworkReplanCandidateProviderV0{
+		PlanSource: staticReviewReworkReplanPlanSourceV0{Plans: []ReviewReworkReplanPlanV0{
+			reviewReworkRetryPlanV0(runRef),
+		}},
+		RequestedBy: "orquesta-nucleo-test",
+	}
+
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:           run,
+		OccurredAt:    "2026-05-10T10:00:00Z",
+		CorrelationID: "corr-review-rework-replan-evidence-001",
+		EvidenceRefs: []string{
+			"evidence-ref-codex-supervisor-stack-drain",
+			"evidence-ref-runtime-drain",
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0 con evidencia ambiental: %v", err)
+	}
+	if len(candidates.ReplanFollowupCandidates) != 1 {
+		t.Fatalf("replan candidates=%d", len(candidates.ReplanFollowupCandidates))
+	}
+	evidence := candidates.ReplanFollowupCandidates[0].ReplanFollowupsInput.DecisionPayload.EvidenceRefs
+	if reviewReworkRunContainsRefV0(evidence, "evidence-ref-codex-supervisor-stack-drain") ||
+		reviewReworkRunContainsRefV0(evidence, "evidence-ref-runtime-drain") {
+		t.Fatalf("evidence_refs filtran detalles de runtime: %v", evidence)
+	}
+	if !reviewReworkRunContainsRefV0(evidence, "evidence-ref-review-rework-plan-001") {
+		t.Fatalf("evidence_refs perdio evidencia causal del plan: %v", evidence)
+	}
+}
+
 func TestReviewReworkReplanCandidateProviderV0ProgressiveLoopRoutesChangesRequestedToNewAgent(t *testing.T) {
 	runRef := "run-nucleo-review-rework-loop-001"
 	run := mustReviewGateReadyRunV0(t, runRef)
