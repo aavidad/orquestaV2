@@ -16,6 +16,7 @@ func StartAppDirectorV0(
 		ctx = context.Background()
 	}
 	request = normalizeStartAppDirectorRequestV0(request)
+	request = startAppDirectorRequestWithOperationalPlanRunRefV0(request)
 	if err := validateStartAppDirectorRequestV0(request); err != nil {
 		return StartAppDirectorResultV0{}, err
 	}
@@ -40,6 +41,10 @@ func StartAppDirectorV0(
 		return StartAppDirectorResultV0{}, err
 	}
 	if err := persistPreparedDirectorIntakeV0(ctx, ports, prepared); err != nil {
+		return StartAppDirectorResultV0{}, err
+	}
+	request, err = startAppDirectorWithOperationalDirectorPlanV0(ctx, request, ports, prepared)
+	if err != nil {
 		return StartAppDirectorResultV0{}, err
 	}
 	loop, err := runPreparedDirectorAutonomyLoopV0(ctx, request, ports, prepared)

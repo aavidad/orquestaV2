@@ -113,9 +113,9 @@ agentes vivos. Cubierto por
 Objetivo: conectar el Director Operativo V1 con el camino productivo de
 `StartAppDirectorV0`/`ContinueAppDirectorV0`.
 
-Estado: hecho para `ContinueAppDirectorV0` y para decisiones del director en
-`StartAppDirectorV0`; el arranque directo con un `OperationalDirectorPlanV0`
-completo sigue fuera de este corte.
+Estado: hecho para `ContinueAppDirectorV0`, para decisiones del director en
+`StartAppDirectorV0` y para arranque directo con `OperationalDirectorPlanV0`
+inicial siempre que la composicion aporte contratos funcionales explicitos.
 
 Alcance hecho:
 
@@ -134,11 +134,14 @@ go test -count=1 ./modulos/orquesta-app-director-service -run TestContinueAppDir
 Actualizacion: `StartAppDirectorV0` crea `OperationalDirectorPlanStateV0`
 reentrable cuando el director aplica decisiones que generan `WorkflowTaskV0`
 operativas, con `operational_director_plan_ref` explicito o ref por defecto.
-Eso cubre el arranque normal desde director vivo. No acepta todavia un
-`OperationalDirectorPlanV0` completo en la request inicial: ese camino necesita
-fase de programacion/planificacion y contratos funcionales publicados
-causalmente antes de `CreateMicrotask`; debe entrar como tarea separada si se
-quiere un modo "plan directo" sin director previo.
+Tambien acepta un `OperationalDirectorPlanV0` completo en la request inicial:
+antes de materializar abre causalmente votacion/decision, acepta la decision,
+abre programacion por defecto, publica los contratos funcionales recibidos y
+reusa el materializador existente. Validacion adicional:
+
+```sh
+go test -count=1 ./modulos/orquesta-app-director-service -run TestStartAppDirectorV0OperationalDirectorPlanMaterializaYEsperaScope
+```
 
 ## APP-DIR-SVC-013
 

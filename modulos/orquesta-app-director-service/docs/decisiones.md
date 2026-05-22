@@ -1,6 +1,22 @@
 # Decisiones: orquesta-app-director-service
 
 ```text
+Fecha: 2026-05-22
+Decision: Permitir plan operativo inicial en StartAppDirectorV0 solo con
+contratos funcionales explicitos.
+Motivo: el modo normal sigue siendo que el director piense y emita decisiones,
+pero algunas composiciones ya tienen un OperationalDirectorPlanV0 listo antes
+de crear el run. Para no relajar causalidad, Start publica voto, decision, fase
+de programacion y contratos funcionales antes de llamar al materializador.
+Impacto: StartAppDirectorV0 puede tomar run_ref del plan, crear el run,
+materializar launch_subagents, guardar PlanState/WaitState por puertos y entrar
+al loop con scope de ola/cohorte. Si no hay contrato funcional explicito, se
+rechaza antes de persistir. El servicio sigue sin conocer Codex, OPES, runtime
+real ni producto.
+Estado: aceptada. Sustituye el bloqueo general de plan inicial del 2026-05-17.
+```
+
+```text
 Fecha: 2026-05-17
 Decision: Materializar el primer tramo del Director Operativo desde
 ContinueAppDirectorV0, no desde StartAppDirectorV0.
@@ -14,7 +30,9 @@ materializador, deriva wait por ola/cohorte, registra `WorkflowTaskWaitStateV0`
 si hay writer y reentra al loop progresivo con refs acotadas. El siguiente
 corte llevo la salida positiva de ese wait a review/tests/cierre offline; queda
 smoke real de servidor con runner opt-in.
-Estado: aceptada.
+Estado: historica. El 2026-05-22 se mantiene como regla para el bootstrap
+normal, pero se abre modo plan directo con contratos funcionales explicitos y
+bootstrap causal previo.
 ```
 
 ```text

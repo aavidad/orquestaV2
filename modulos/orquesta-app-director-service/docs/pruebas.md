@@ -25,6 +25,10 @@ Cobertura esperada:
 - `ContinueAppDirectorV0` materializa un `OperationalDirectorPlanV0` listo,
   guarda la task, lanza la microtarea y registra `WorkflowTaskWaitStateV0` para
   la ola materializada;
+- `StartAppDirectorV0` puede recibir un `OperationalDirectorPlanV0` inicial,
+  tomar `run_ref` del plan si falta en la request, publicar voto/decision/fase
+  y contratos funcionales, materializar la ola, lanzar el agente de tarea y
+  registrar `WorkflowTaskWaitStateV0` sin pasar por Codex/OPES ni runtime real;
 - `ContinueAppDirectorV0` puede reentrar desde `OperationalDirectorPlanStateV0`
   con `operational_director_plan_ref`, sin volver al scope global del run;
 - el plan state avanza de `wait_subagents` a `review_deliveries` cuando los

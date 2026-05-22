@@ -8,10 +8,12 @@ Entrada: `StartAppDirectorRequestV0`.
 - refs opcionales: `run_ref`, `project_ref`, `correlation_id`, `requested_by`;
 - espera opcional: `wait_agent_refs` explicitas o filtros
   `wait_cohort_ref`, `wait_wave_ref`, `wait_parent_task_ref`;
-- plan operativo: `StartAppDirectorV0` no acepta un
-  `operational_director_plan` completo porque el run recien creado aun no tiene
-  contratos de funcion publicados; la materializacion automatica del plan se usa
-  en `ContinueAppDirectorV0` sobre un run ya preparado;
+- plan operativo directo opcional: si llega `operational_director_plan`,
+  `StartAppDirectorV0` exige `operational_director_function_contract_refs`,
+  publica causalmente voto, decision, fase y contratos, materializa
+  `launch_subagents`, deriva wait de ola/cohorte y persiste `PlanState` si la
+  composicion inyecta los stores; si `run_ref` viene solo dentro del plan, el
+  arranque lo usa como run del intake;
 - `occurred_at`: instante operacional del arranque.
 
 Puertos requeridos:
@@ -71,8 +73,9 @@ Invariantes:
   `WorkflowTaskWaitStateV0` con causa y pendientes.
 - si hay `OperationalPlanStateWriter`, el servicio registra el plan state
   inicial con step activo `wait_subagents`, ola/cohorte, task refs, agent refs,
-  pending agent refs y `wait_ref` cuando ese tramo viene de `ContinueAppDirectorV0`
-  o de decisiones ya materializadas del director.
+  pending agent refs y `wait_ref` cuando ese tramo viene de
+  `ContinueAppDirectorV0`, de `StartAppDirectorV0` con plan directo o de
+  decisiones ya materializadas del director.
 
 ## `ContinueAppDirectorV0`
 
@@ -144,5 +147,7 @@ Regla del primer corte operativo: si `ContinueAppDirectorV0` recibe un plan
 `ready`, usa `OperationalDirectorPlanMaterializerV0`, guarda las
 `WorkflowTaskV0`, emite `CreateMicrotask`, deriva la primera ola/cohorte como
 wait acotado, persiste `OperationalDirectorPlanStateV0` si la composicion
-inyecta writer, y entra al loop progresivo con esas refs. `StartAppDirectorV0`
-mantiene el bootstrap normal y no crea microtareas de producto por si mismo.
+inyecta writer, y entra al loop progresivo con esas refs.
+`StartAppDirectorV0` mantiene el bootstrap normal cuando no recibe plan
+operativo, pero el modo plan directo ya puede hacer el mismo tramo inicial
+desde un run recien creado sin meter runtime ni producto dentro del servicio.

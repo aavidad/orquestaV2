@@ -26,7 +26,7 @@ func startAppDirectorResultV0(
 	loop orquestacionnucleoapp.ProgressiveLoopResultV0,
 ) StartAppDirectorResultV0 {
 	status := StartAppDirectorStatusPendingV0
-	if directorStartedV0(loop, prepared.DirectorTask.AgentRequestID) {
+	if startAppDirectorLoopStartedV0(request, loop, prepared.DirectorTask.AgentRequestID) {
 		status = StartAppDirectorStatusStartedV0
 	}
 	return StartAppDirectorResultV0{
@@ -46,7 +46,8 @@ func startAppDirectorResultV0(
 	}
 }
 
-func directorStartedV0(
+func startAppDirectorLoopStartedV0(
+	request StartAppDirectorRequestV0,
 	loop orquestacionnucleoapp.ProgressiveLoopResultV0,
 	agentRequestID string,
 ) bool {
@@ -55,5 +56,6 @@ func directorStartedV0(
 			return true
 		}
 	}
-	return false
+	return continueHasOperationalDirectorPlanV0(request.OperationalDirectorPlan) &&
+		len(loop.Run.StartedAgents) > 0
 }

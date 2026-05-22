@@ -12,7 +12,17 @@ func validateStartAppDirectorRequestV0(
 		return AppDirectorServiceIssueV0{Field: "app_spec_request.request_id"}
 	}
 	if continueHasOperationalDirectorPlanV0(request.OperationalDirectorPlan) {
-		return AppDirectorServiceIssueV0{Field: "operational_director_plan"}
+		if strings.TrimSpace(request.OperationalDirectorPlan.RunRef) != "" &&
+			strings.TrimSpace(request.RunRef) != "" &&
+			strings.TrimSpace(request.OperationalDirectorPlan.RunRef) != strings.TrimSpace(request.RunRef) {
+			return AppDirectorServiceIssueV0{Field: "operational_director_plan.run_ref"}
+		}
+		if len(startAppDirectorOperationalFunctionContractRefsV0(request)) == 0 {
+			return AppDirectorServiceIssueV0{Field: "operational_director_function_contract_refs"}
+		}
+		if !startAppDirectorOperationalTargetPhaseAllowedV0(startAppDirectorOperationalTargetPhaseIDV0(request)) {
+			return AppDirectorServiceIssueV0{Field: "operational_director_target_phase_id"}
+		}
 	}
 	return nil
 }
