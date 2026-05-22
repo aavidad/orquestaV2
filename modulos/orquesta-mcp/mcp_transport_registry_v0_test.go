@@ -37,6 +37,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		MCPPrepararOrquestacionAppToolNameV0,
 		MCPEjecutarOrquestacionAppToolNameV0,
 		MCPAutoprogrammingValidateRequestToolNameV0,
+		MCPAutoprogrammingPrepareRunToolNameV0,
 		MCPBootstrapToolNameV0,
 		MCPCoreWorkflowCommandToolNameV0,
 		MCPRunControlToolNameV0,
@@ -55,7 +56,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		}
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, transport.resources, 5000)
-	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 8000)
+	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 8500)
 }
 
 func TestMCPTransportV0SirveResourceYToolConFakeEnMemoria(t *testing.T) {
@@ -167,6 +168,25 @@ func TestMCPTransportV0EjecutarOrquestacionQuedaOptInSinPuerto(t *testing.T) {
 	}
 	if result.ErrorCode != MCPTransportToolUnboundV0 {
 		t.Fatalf("ejecutar orquestacion debe ser opt-in: %+v", result)
+	}
+	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 300)
+}
+
+func TestMCPTransportV0AutoprogrammingPrepareRunQuedaOptInSinPuerto(t *testing.T) {
+	transport := newFakeMCPTransportV0()
+	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{}); err != nil {
+		t.Fatalf("register transport: %v", err)
+	}
+	output, err := transport.CallToolV0(context.Background(), MCPAutoprogrammingPrepareRunToolNameV0, MCPAutoprogrammingPrepareRunToolInputV0{})
+	if err != nil {
+		t.Fatalf("call autoprogramming prepare run unbound: %v", err)
+	}
+	var result MCPTransportToolErrorV0
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode unbound: %v", err)
+	}
+	if result.Tool != MCPAutoprogrammingPrepareRunToolNameV0 || result.ErrorCode != MCPTransportToolUnboundV0 {
+		t.Fatalf("autoprogramming prepare run debe ser opt-in: %+v", result)
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 300)
 }

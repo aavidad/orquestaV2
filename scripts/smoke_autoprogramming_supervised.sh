@@ -301,6 +301,28 @@ post_json_optional() {
   esac
 }
 
+post_json_required() {
+  local path="$1"
+  local payload="$2"
+  local output="$3"
+  local status
+  status="$(
+    curl -sS -m "$request_timeout" -o "$output" -w "%{http_code}" \
+      -X POST "$base_url$path" \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json" \
+      --data-binary "@$payload" || true
+  )"
+  echo "POST $path -> HTTP $status"
+  case "$status" in
+    2*) return 0 ;;
+    *)
+      cat "$output" >&2 || true
+      return 1
+      ;;
+  esac
+}
+
 verify_validation_accepted() {
   local response="$1"
   python3 - "$response" <<'PY'
@@ -312,6 +334,48 @@ with open(sys.argv[1], encoding="utf-8") as fh:
 if data.get("estado") != "ok" or data.get("accepted") is not True:
     raise SystemExit(f"validacion inesperada: {data}")
 print("validate_request_ok=true")
+PY
+}
+
+write_prepare_run_payload() {
+  local output="$1"
+  local source_payload="$2"
+  python3 - "$output" "$source_payload" "$smoke_id" <<'PY'
+import json
+import sys
+
+output, source_payload, smoke_id = sys.argv[1:4]
+with open(source_payload, encoding="utf-8") as fh:
+    payload = json.load(fh)
+payload["occurred_at"] = "2026-05-22T12:00:00Z"
+payload["requested_by"] = "orquesta-autoprogramming-supervised-smoke"
+payload["max_bursts"] = 2
+payload["max_steps_per_burst"] = 2
+payload["max_dispatches_per_wait"] = 2
+payload["max_commands"] = 4
+payload["max_outbox_per_cycle"] = 4
+payload["request_id"] = f"req-autoprogramming-prepare-run-{smoke_id}"
+payload["correlation_id"] = f"corr-autoprogramming-prepare-run-{smoke_id}"
+with open(output, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, ensure_ascii=True, indent=2)
+    fh.write("\n")
+PY
+}
+
+verify_prepare_run_accepted() {
+  local response="$1"
+  python3 - "$response" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    data = json.load(fh)
+if data.get("estado") != "ok" or data.get("accepted") is not True:
+    raise SystemExit(f"prepare-run inesperado: {data}")
+if not data.get("run_ref") or not data.get("wait_agent_refs") or not data.get("continue"):
+    raise SystemExit(f"prepare-run sin refs causales: {data}")
+print("prepare_run_ok=true")
+print("prepare_run_ref=" + data["run_ref"])
 PY
 }
 
@@ -430,8 +494,12 @@ main() {
   cd "$repo_root"
 
   local autoprogramming_payload="$payload_dir/autoprogramming_validate_request.json"
+  local prepare_payload="$payload_dir/autoprogramming_prepare_run.json"
   local programmable_summary="$result_dir/programmable_work_summary.json"
   local validation_response="$result_dir/autoprogramming_validate_response.json"
+  local prepare_response="$result_dir/autoprogramming_prepare_run_response.json"
+  local prepare_supervisor_payload="$payload_dir/prepare_run_supervisor.json"
+  local prepare_supervisor_response="$result_dir/prepare_run_supervisor_response.json"
   local external_payload="$payload_dir/external_work_run.json"
   local external_response="$result_dir/external_work_run_response.json"
   local supervisor_payload="$payload_dir/supervisor.json"
@@ -450,6 +518,24 @@ main() {
   if post_json_optional "/api/v0/autoprogramming/validate-request" "$autoprogramming_payload" "$validation_response"; then
     verify_validation_accepted "$validation_response"
   fi
+
+  write_prepare_run_payload "$prepare_payload" "$autoprogramming_payload"
+  post_json_required "/api/v0/autoprogramming/prepare-run" "$prepare_payload" "$prepare_response"
+  verify_prepare_run_accepted "$prepare_response"
+  prepare_run_ref="$(extract_run_ref "$prepare_response")"
+  write_supervisor_payload "$prepare_supervisor_payload" "$prepare_run_ref"
+  post_json_required "/api/v0/runs/supervise" "$prepare_supervisor_payload" "$prepare_supervisor_response"
+  python3 - "$prepare_supervisor_response" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    data = json.load(fh)
+if data.get("estado") != "ok":
+    raise SystemExit(f"supervisor prepare-run inesperado: {data}")
+print("prepare_run_supervisor_estado=" + str(data.get("estado", "")))
+print("prepare_run_supervisor_stop_reason=" + str(data.get("stop_reason", "")))
+PY
 
   write_external_work_payload "$external_payload" "$programmable_summary"
   if post_json_optional "/api/v0/external-work/run" "$external_payload" "$external_response"; then
@@ -473,6 +559,9 @@ PY
     fi
   fi
 
+  run_go_test_if_present ./modulos/orquesta-app-codex-stack \
+    'TestPrepareAutoprogrammingRunV0PersisteWorkflowTasksYRunContinuable|TestCodexStackAutoprogrammingExecutorV0UsaPuertosDelStackYDevuelveContinue|TestCodexStackAutoprogrammingPrepareRunAPIV0' \
+    "stack_autoprogramming_bridge"
   run_go_test_if_present ./modulos/orquesta-app-codex-stack \
     'TestCodexStackV0ExternalWorkRunAceptaContratoAmplioV0|TestCodexStackRunSupervisorAPIV0ConsumeDecisionFileYArrancaProgramacion' \
     "stack_fake_external_work_supervisor"

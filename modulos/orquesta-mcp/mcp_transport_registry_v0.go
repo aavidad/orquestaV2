@@ -49,22 +49,23 @@ type MCPTransportToolEnvelopeV0 struct {
 }
 
 type MCPTransportBindingsV0 struct {
-	NuevaApp             MCPTransportNuevaAppExecutorV0
-	ArrancarDirector     MCPTransportArrancarDirectorAppExecutorV0
-	RequestAppChange     MCPTransportRequestAppChangeExecutorV0
-	EjecutarOrquestacion MCPTransportEjecutarOrquestacionAppExecutorV0
-	DirectorDecision     MCPTransportDirectorAgentDecisionExecutorV0
-	DirectorStats        MCPTransportDirectorStatsExecutorV0
-	RunControl           MCPTransportRunControlExecutorV0
-	RunQueuePriority     MCPTransportRunQueuePriorityExecutorV0
-	RunSupervisor        MCPTransportRunSupervisorExecutorV0
-	ServerShutdown       MCPTransportServerShutdownExecutorV0
-	DomainWork           MCPDomainWorkExecutorPortV0
-	ExternalWorkRun      MCPTransportExternalWorkRunExecutorV0
-	OperatorStatus       operator.OperatorMCPStatusPortV0
-	OperatorBurst        operator.OperatorMCPBurstPortV0
-	OperatorOutbox       operator.OperatorMCPOutboxPortV0
-	OperatorQuery        operator.OperatorMCPDirectedQueryPortV0
+	NuevaApp                  MCPTransportNuevaAppExecutorV0
+	ArrancarDirector          MCPTransportArrancarDirectorAppExecutorV0
+	RequestAppChange          MCPTransportRequestAppChangeExecutorV0
+	EjecutarOrquestacion      MCPTransportEjecutarOrquestacionAppExecutorV0
+	DirectorDecision          MCPTransportDirectorAgentDecisionExecutorV0
+	DirectorStats             MCPTransportDirectorStatsExecutorV0
+	RunControl                MCPTransportRunControlExecutorV0
+	RunQueuePriority          MCPTransportRunQueuePriorityExecutorV0
+	RunSupervisor             MCPTransportRunSupervisorExecutorV0
+	AutoprogrammingPrepareRun MCPTransportAutoprogrammingPrepareRunExecutorV0
+	ServerShutdown            MCPTransportServerShutdownExecutorV0
+	DomainWork                MCPDomainWorkExecutorPortV0
+	ExternalWorkRun           MCPTransportExternalWorkRunExecutorV0
+	OperatorStatus            operator.OperatorMCPStatusPortV0
+	OperatorBurst             operator.OperatorMCPBurstPortV0
+	OperatorOutbox            operator.OperatorMCPOutboxPortV0
+	OperatorQuery             operator.OperatorMCPDirectedQueryPortV0
 }
 
 type MCPTransportNuevaAppExecutorV0 interface {
@@ -118,6 +119,13 @@ type MCPTransportRunSupervisorExecutorV0 interface {
 		context.Context,
 		MCPRunSupervisorToolInputV0,
 	) (MCPRunSupervisorToolResultV0, error)
+}
+
+type MCPTransportAutoprogrammingPrepareRunExecutorV0 interface {
+	Execute(
+		context.Context,
+		MCPAutoprogrammingPrepareRunToolInputV0,
+	) (MCPAutoprogrammingPrepareRunToolResultV0, error)
 }
 
 type MCPTransportServerShutdownExecutorV0 interface {
@@ -183,6 +191,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 	preparar := MCPPrepararOrquestacionAppDescriptorV0()
 	ejecutar := MCPEjecutarOrquestacionAppDescriptorV0()
 	autoprogramming := MCPAutoprogrammingValidateRequestDescriptorV0()
+	autoprogrammingPrepareRun := MCPAutoprogrammingPrepareRunDescriptorV0()
 	bootstrap := MCPBootstrapToolDescriptorV0Value()
 	workflow := MCPCoreWorkflowCommandToolDescriptorV0Value()
 	runControl := MCPRunControlDescriptorV0()
@@ -200,6 +209,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 		mcpTransportToolEnvelopeV0(preparar.Name, preparar.Version, preparar.ResourceURI, preparar.InputSchema, preparar.Output, mcpPrepararOrquestacionAppTransportHandlerV0),
 		mcpTransportToolEnvelopeV0(ejecutar.Name, ejecutar.Version, ejecutar.ResourceURI, ejecutar.InputSchema, ejecutar.Output, mcpEjecutarOrquestacionAppTransportHandlerV0(bindings.EjecutarOrquestacion)),
 		mcpTransportToolEnvelopeV0(autoprogramming.Name, autoprogramming.Version, autoprogramming.ResourceURI, autoprogramming.InputSchema, autoprogramming.Output, mcpAutoprogrammingValidateRequestTransportHandlerV0(MCPAutoprogrammingValidateRequestToolExecutorV0{})),
+		mcpTransportToolEnvelopeV0(autoprogrammingPrepareRun.Name, autoprogrammingPrepareRun.Version, autoprogrammingPrepareRun.ResourceURI, autoprogrammingPrepareRun.InputSchema, autoprogrammingPrepareRun.Output, mcpAutoprogrammingPrepareRunTransportHandlerV0(bindings.AutoprogrammingPrepareRun)),
 		mcpTransportToolEnvelopeV0(bootstrap.Name, bootstrap.Version, bootstrap.ResourceURI, bootstrap.InputSchema, bootstrap.Output, mcpBootstrapTransportHandlerV0),
 		mcpTransportToolEnvelopeV0(workflow.Name, workflow.Version, workflow.ResourceURI, workflow.InputSchema, workflow.Output, mcpCoreWorkflowTransportHandlerV0),
 		mcpTransportToolEnvelopeV0(runControl.Name, runControl.Version, runControl.ResourceURI, runControl.InputSchema, runControl.Output, mcpRunControlTransportHandlerV0(bindings.RunControl)),

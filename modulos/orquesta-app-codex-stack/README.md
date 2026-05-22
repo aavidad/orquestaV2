@@ -33,7 +33,9 @@ Principios:
 
 Estado actual: composition Go opt-in con test fake, smoke real desactivado por
 defecto y supervisor Codex unitario para `launch -> sigue -> done` sobre el ciclo
-normal de agentes.
+normal de agentes. La entrada `POST /api/v0/autoprogramming/prepare-run` prepara
+runs de autoprogramacion por stores del stack y devuelve `run_ref` +
+`wait_agent_refs`; la supervision posterior debe invocarse con ese `run_ref`.
 
 El supervisor Codex vive en `codex_supervisor_v0.go`. Expone
 `CodexSupervisorAgentLifecyclePortV0`: el adaptador real debe avanzar

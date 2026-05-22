@@ -36,6 +36,7 @@ Campos:
 - `RunSupervisor`;
 - `ServerShutdown`;
 - `AutoprogrammingValidateRequest`.
+- `AutoprogrammingPrepareRun`.
 - `DomainWork`.
 - `ExternalWorkRun`.
 
@@ -54,6 +55,7 @@ Campos:
 - `RouteRunQueuePriorityV0`: `/api/v0/runs/queue/priority`;
 - `RouteRunSupervisorV0`: `/api/v0/runs/supervise`;
 - `RouteAutoprogrammingValidateRequestV0`: `/api/v0/autoprogramming/validate-request`;
+- `RouteAutoprogrammingPrepareRunV0`: `/api/v0/autoprogramming/prepare-run`;
 - `RouteServerShutdownV0`: `/api/v0/server/shutdown`.
 - `RouteDomainWorkV0`: `/api/v0/domain-work`.
 - `RouteExternalWorkRunV0`: `/api/v0/external-work/run`.
@@ -75,6 +77,10 @@ gateway no conoce pausa, parada, checkpoint, procesos ni runtime.
 acotada de supervision sobre una run o sobre la cola inyectada. El gateway solo
 monta el handler; no conoce Codex, OPES, scheduler, runtime, DB ni reglas de
 dominio.
+
+`RouteAutoprogrammingPrepareRunV0` apunta al contrato REST/MCP que prepara una
+run de autoprogramacion continuable por executor inyectado. El gateway no crea
+runs ni arranca agentes; solo monta el handler.
 
 `RouteDomainWorkV0` apunta al contrato REST/MCP de trabajo de dominio externo.
 El gateway solo registra el handler inyectado; no conoce OPES, contratos de

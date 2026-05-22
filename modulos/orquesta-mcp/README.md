@@ -14,8 +14,13 @@ MCP es adaptador inbound. No es el cerebro del sistema.
 
 Estado vigente:
 
+- `orquesta.autoprogramming.prepare_run.v0` prepara un run continuable desde
+  una request de autoprogramacion por executor inyectado. No arranca agentes por
+  si mismo; la composicion debe supervisar despues con `run_ref` explicito.
 - `orquesta.domain_work.v0` es el tool generico para que una IA cree trabajos de
   dominio y entregue artefactos sin conocer OPES, DB ni runtime.
+- `/api/v0/autoprogramming/prepare-run` es el bridge HTTP local del executor de
+  preparacion cuando una composicion lo inyecta.
 - `/api/v0/domain-work` es el bridge HTTP local del mismo executor.
 - OPES se conecta hoy inyectando su cliente REST como adaptador de dominio; si se
   usa MCPO o servidor MCP real, debe envolver estos tools como transporte opt-in,

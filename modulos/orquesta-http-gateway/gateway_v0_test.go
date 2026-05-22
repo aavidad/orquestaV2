@@ -111,6 +111,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			},
 		},
 		{
+			name:  "autoprogramming prepare run",
+			route: RouteAutoprogrammingPrepareRunV0,
+			handlers: RouteHandlersV0{
+				AutoprogrammingPrepareRun: markerHandler("autoprogramming-prepare-run"),
+			},
+		},
+		{
 			name:  "domain work",
 			route: RouteDomainWorkV0,
 			handlers: RouteHandlersV0{

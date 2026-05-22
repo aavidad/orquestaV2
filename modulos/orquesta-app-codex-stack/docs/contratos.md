@@ -115,14 +115,22 @@ de supervisor/drain/replan/outbox. Si hace falta otro Codex, debe salir por
 Superficie publica de app:
 
 ```text
+POST /api/v0/autoprogramming/prepare-run
+  input: autoprogramming_request, occurred_at?, requested_by?, limites?
+  output: estado, accepted, run_ref, workflow_task_refs, wait_agent_refs, continue
+
 POST /api/v0/runs/supervise
   input: run_ref?, queue_ref?, max_ticks?, continue_message?, limites?
   output: estado, run_ref, stop_reason, ticks, last, history?, evidence_refs
 ```
 
-La ruta es neutral de runs. El gateway y `orquesta-mcp` no conocen Codex. Este
-stack inyecta `CodexStackRunSupervisorExecutorV0`, que adapta ese contrato al
-supervisor Codex del borde.
+`prepare-run` es una entrada opt-in de esta composicion: adapta el contrato MCP
+`orquesta.autoprogramming.prepare_run.v0` a `PrepareAutoprogrammingRunV0`, guarda
+`WorkflowTaskV0`/run por los stores del stack y devuelve un `continue` acotado.
+No arranca agentes por si misma. La ruta de supervision es neutral de runs. El
+gateway y `orquesta-mcp` no conocen Codex; este stack inyecta
+`CodexStackAutoprogrammingPrepareRunExecutorV0` y
+`CodexStackRunSupervisorExecutorV0`.
 
 Cuando `RunGlobalTickV0` drena una run y el loop del nucleo devuelve la run
 cerrada, el stack informa `queue_status=closed` al coordinador. La cola global

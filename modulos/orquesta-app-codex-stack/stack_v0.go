@@ -78,7 +78,12 @@ func buildStackHTTPHandlerV0(
 			Reader: config.Stores.RunQueue,
 			Writer: config.Stores.RunQueue,
 		},
-		RunSupervisor:  NewCodexStackRunSupervisorExecutorV0(stack),
+		RunSupervisor: NewCodexStackRunSupervisorExecutorV0(stack),
+		AutoprogrammingPrepareRun: NewCodexStackAutoprogrammingPrepareRunExecutorV0(
+			stack,
+			config.Capacity.OccurredAt,
+			config.Capacity.RequestedBy,
+		),
 		ServerShutdown: serverShutdownExecutorV0(config, stack),
 		DomainWork:     config.DomainWork,
 		ExternalWorkRun: externalWorkRunExecutorV0(

@@ -22,9 +22,13 @@ Rutas v0:
 - `/api/v0/apps/{app_ref}/changes`
 - `/api/v0/director/stats`
 - `/api/v0/autoprogramming/validate-request`
+- `/api/v0/autoprogramming/prepare-run`
 - `/api/v0/runs/control`
 - `/api/v0/runs/queue/priority`
+- `/api/v0/runs/supervise`
 - `/api/v0/server/shutdown`
+- `/api/v0/domain-work`
+- `/api/v0/external-work/run`
 
 Fuera de alcance:
 

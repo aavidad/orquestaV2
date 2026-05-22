@@ -6,7 +6,10 @@ ejecutar Codex real ni tocar OPES:
 ```text
 request valida
   -> BuildAutoprogrammingProgrammableWorkV0
+  -> PrepareAutoprogrammingRunV0 / CodexStackAutoprogrammingExecutorV0 con stack fake
   -> ruta REST de validacion si existe
+  -> POST /api/v0/autoprogramming/prepare-run
+  -> POST /api/v0/runs/supervise con run_ref explicito y Codex fake
   -> external-work/run + supervisor si la composicion lo expone
   -> pruebas focales de stack fake y cierre offline segun disponibilidad
 ```
@@ -38,10 +41,19 @@ SMOKE_ID=manual-001
 - Un programa temporal fuera del repo importa `orquesta-autoprogramming` y
   ejecuta `BuildAutoprogrammingProgrammableWorkV0` sobre una request valida,
   verificando que produce grupos, perfiles y `WorkflowTaskV0`.
+- Si los tests existen, ejecuta la entrada real no-HTTP del stack:
+  `PrepareAutoprogrammingRunV0` y `CodexStackAutoprogrammingExecutorV0`. Esa
+  cobertura valida que la request se transforma en run continuable,
+  `WorkflowTaskV0` persistidas, `WaitAgentRefs` y `ContinueAppDirectorRequestV0`
+  usando runtime fake.
 - Compila y arranca `cmd/orquesta-server` con `state_dir`, `runtime_dir`,
   `project_dir`, `CODEX_HOME` y comando Codex fake temporales.
 - Llama a `POST /api/v0/autoprogramming/validate-request` si la ruta esta
   expuesta y exige `accepted=true`.
+- Llama a `POST /api/v0/autoprogramming/prepare-run`, exige `run_ref`,
+  `wait_agent_refs` y `continue`, y despues llama a
+  `POST /api/v0/runs/supervise` con ese `run_ref` y limites bajos usando
+  comando Codex fake.
 - Intenta `POST /api/v0/external-work/run` con un trabajo
   `autoprogramming_programmable_work`; si falta la ruta o el executor, lo marca
   como `skip` y no falla.
@@ -58,12 +70,30 @@ La salida debe incluir:
 
 - `programmable_work_ok`;
 - `validate_request_ok=true` si la ruta REST esta disponible;
+- `prepare_run_ok=true`;
+- `prepare_run_supervisor_estado=ok`;
 - `codex_real_executed=false`;
 - `opes_touched=false`.
 
 Los mensajes `skip:` son aceptables cuando una ruta o prueba focal todavia no
 existe en la composicion actual. No deben ocultar fallos de contrato puro,
 payload invalido, servidor que no arranca o tests focales existentes que fallen.
+
+## Entrada real actual
+
+La entrada real esta disponible por composicion Go y por ruta publica opt-in del
+stack Codex:
+
+- `modulos/orquesta-app-codex-stack/PrepareAutoprogrammingRunV0`;
+- `modulos/orquesta-app-codex-stack/CodexStackAutoprogrammingExecutorV0`.
+- `POST /api/v0/autoprogramming/prepare-run`, expuesta por
+  `orquesta.autoprogramming.prepare_run.v0` y cableada en
+  `orquesta-app-codex-stack`.
+
+El smoke la cubre con tests focales y por servidor temporal. La supervision
+posterior no es global: usa siempre el `run_ref` devuelto por `prepare-run`.
+`/api/v0/external-work/run` queda como fallback opcional de compatibilidad para
+otros trabajos externos; no es el launcher de autoprogramacion.
 
 ## Alcance
 

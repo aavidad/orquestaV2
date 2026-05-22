@@ -39,6 +39,7 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 		RunSupervisor:                  apiHandlers.RunSupervisor,
 		ServerShutdown:                 apiHandlers.ServerShutdown,
 		AutoprogrammingValidateRequest: apiHandlers.AutoprogrammingValidateRequest,
+		AutoprogrammingPrepareRun:      apiHandlers.AutoprogrammingPrepareRun,
 		DomainWork:                     apiHandlers.DomainWork,
 		ExternalWorkRun:                apiHandlers.ExternalWorkRun,
 	}
@@ -55,6 +56,7 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 		RunSupervisor:                  orquestamcp.NewMCPRunSupervisorHTTPHandlerV0(config.RunSupervisor),
 		ServerShutdown:                 orquestamcp.NewMCPServerShutdownHTTPHandlerV0(config.ServerShutdown),
 		AutoprogrammingValidateRequest: orquestamcp.NewMCPAutoprogrammingValidateRequestHTTPHandlerV0(),
+		AutoprogrammingPrepareRun:      orquestamcp.NewMCPAutoprogrammingPrepareRunHTTPHandlerV0(config.AutoprogrammingPrepareRun),
 		DomainWork:                     orquestamcp.NewMCPDomainWorkHTTPHandlerV0(config.DomainWork),
 		ExternalWorkRun:                orquestamcp.NewMCPExternalWorkRunHTTPHandlerV0(config.ExternalWorkRun),
 	}

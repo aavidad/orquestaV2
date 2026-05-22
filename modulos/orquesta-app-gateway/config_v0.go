@@ -12,17 +12,18 @@ import (
 const InternalBaseURLV0 = "http://orquesta.internal"
 
 type ConfigV0 struct {
-	Clock            orquestafactory.AppSpecHTTPClockV0
-	ArrancarDirector orquestamcp.MCPTransportArrancarDirectorAppExecutorV0
-	RequestAppChange orquestamcp.MCPTransportRequestAppChangeExecutorV0
-	DirectorLimits   orquestaweb.WebArrancarDirectorAppLimitsV0
-	DirectorStats    orquestamcp.MCPTransportDirectorStatsExecutorV0
-	RunControl       orquestamcp.MCPTransportRunControlExecutorV0
-	RunQueuePriority orquestamcp.MCPTransportRunQueuePriorityExecutorV0
-	RunSupervisor    orquestamcp.MCPTransportRunSupervisorExecutorV0
-	ServerShutdown   orquestamcp.MCPTransportServerShutdownExecutorV0
-	DomainWork       orquestamcp.MCPDomainWorkExecutorPortV0
-	ExternalWorkRun  orquestamcp.MCPTransportExternalWorkRunExecutorV0
-	HTTPClient       *http.Client
-	Timeout          time.Duration
+	Clock                     orquestafactory.AppSpecHTTPClockV0
+	ArrancarDirector          orquestamcp.MCPTransportArrancarDirectorAppExecutorV0
+	RequestAppChange          orquestamcp.MCPTransportRequestAppChangeExecutorV0
+	DirectorLimits            orquestaweb.WebArrancarDirectorAppLimitsV0
+	DirectorStats             orquestamcp.MCPTransportDirectorStatsExecutorV0
+	RunControl                orquestamcp.MCPTransportRunControlExecutorV0
+	RunQueuePriority          orquestamcp.MCPTransportRunQueuePriorityExecutorV0
+	RunSupervisor             orquestamcp.MCPTransportRunSupervisorExecutorV0
+	AutoprogrammingPrepareRun orquestamcp.MCPTransportAutoprogrammingPrepareRunExecutorV0
+	ServerShutdown            orquestamcp.MCPTransportServerShutdownExecutorV0
+	DomainWork                orquestamcp.MCPDomainWorkExecutorPortV0
+	ExternalWorkRun           orquestamcp.MCPTransportExternalWorkRunExecutorV0
+	HTTPClient                *http.Client
+	Timeout                   time.Duration
 }

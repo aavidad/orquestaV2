@@ -1,0 +1,173 @@
+package orquestaappcodexstack
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+)
+
+func TestCodexStackAutoprogrammingExecutorV0UsaPuertosDelStackYDevuelveContinue(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	executor := NewCodexStackAutoprogrammingExecutorV0(&stack)
+
+	result, err := executor.Execute(context.Background(), AutoprogrammingBridgeRequestV0{
+		Request:       autoprogrammingBridgeRequestForTestV0(),
+		OccurredAt:    "2026-05-22T11:00:00Z",
+		CorrelationID: "corr-autoprogramming-stack-executor-001",
+		RequestedBy:   "orquesta-stack-executor-test",
+		MaxBursts:     3,
+		MaxCommands:   5,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !result.Accepted || len(result.Tasks) != 1 || len(result.WaitAgentRefs) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	if result.Continue.RunRef != result.Run.RunID ||
+		result.Continue.CorrelationID != "corr-autoprogramming-stack-executor-001" ||
+		result.Continue.WaitAgentRefs[0] != result.WaitAgentRefs[0] {
+		t.Fatalf("continue=%+v wait=%v", result.Continue, result.WaitAgentRefs)
+	}
+	run, err := stack.Ports.RunStore.LoadRunV0(context.Background(), result.Run.RunID)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 ||
+		run.Tasks[0] != result.Tasks[0].TaskID {
+		t.Fatalf("run=%+v tasks=%+v", run, result.Tasks)
+	}
+	storedTasks, err := stack.Ports.DirectorTaskStore.LoadWorkflowTasksV0(
+		context.Background(),
+		result.Run.RunID,
+		result.Run.Tasks,
+	)
+	if err != nil {
+		t.Fatalf("LoadWorkflowTasksV0: %v", err)
+	}
+	if len(storedTasks) != 1 || storedTasks[0].TaskID != result.Tasks[0].TaskID {
+		t.Fatalf("stored_tasks=%+v result_tasks=%+v", storedTasks, result.Tasks)
+	}
+}
+
+func TestCodexStackAutoprogrammingExecutorV0RequiereStack(t *testing.T) {
+	result, err := NewCodexStackAutoprogrammingExecutorV0(nil).Execute(
+		context.Background(),
+		AutoprogrammingBridgeRequestV0{Request: autoprogrammingBridgeRequestForTestV0()},
+	)
+	if err == nil {
+		t.Fatalf("err nil result=%+v", result)
+	}
+}
+
+func TestPrepareAutoprogrammingRunFromStackV0PropagaValidacionDePuertos(t *testing.T) {
+	_, err := PrepareAutoprogrammingRunFromStackV0(
+		context.Background(),
+		StackV0{Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			RunStore: orquestacionnucleoapp.NewInMemoryRunStoreV0(),
+		}},
+		AutoprogrammingBridgeRequestV0{Request: autoprogrammingBridgeRequestForTestV0()},
+	)
+	if err == nil {
+		t.Fatalf("err nil")
+	}
+}
+
+func TestCodexStackAutoprogrammingPrepareRunAPIV0PreparaRunYSupervisorArranca(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-api-001",
+		CorrelationID:          "corr-autoprogramming-api-001",
+		OccurredAt:             "2026-05-22T11:15:00Z",
+		RequestedBy:            "orquesta-stack-api-test",
+		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
+		MaxBursts:              3,
+		MaxStepsPerBurst:       3,
+		MaxDispatchesPerWait:   3,
+		MaxCommands:            5,
+		MaxOutboxPerCycle:      5,
+	})
+	if !prepared.Accepted ||
+		prepared.RunRef == "" ||
+		len(prepared.WorkflowTaskRefs) != 1 ||
+		len(prepared.WaitAgentRefs) != 1 ||
+		prepared.Continue == nil ||
+		prepared.Continue.RunRef != prepared.RunRef {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+
+	supervisor := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:            "request-autoprogramming-supervisor-001",
+		CorrelationID:        "corr-autoprogramming-api-001",
+		RunRef:               prepared.RunRef,
+		MaxTicks:             1,
+		MaxRunsPerTick:       1,
+		MaxExecutions:        1,
+		MaxBursts:            3,
+		MaxStepsPerBurst:     3,
+		MaxDispatchesPerWait: 3,
+		MaxCommands:          5,
+		MaxOutboxPerCycle:    5,
+		AllowRepeatedRuns:    true,
+	})
+	if supervisor.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
+		supervisor.RunRef != prepared.RunRef ||
+		runtime.launchCountV0() != 1 {
+		t.Fatalf("supervisor=%+v launches=%d", supervisor, runtime.launchCountV0())
+	}
+	run, err := stack.Ports.RunStore.LoadRunV0(context.Background(), prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if !autoprogrammingBridgeStringInSetForTestV0(run.StartedAgents, prepared.WaitAgentRefs[0]) {
+		t.Fatalf("started_agents=%v wait=%v", run.StartedAgents, prepared.WaitAgentRefs)
+	}
+}
+
+func TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveErroresPublicos(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+
+	result := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID: "request-autoprogramming-api-invalid-001",
+	})
+
+	if result.Estado != orquestamcp.MCPAutoprogrammingPrepareRunEstadoErrorV0 ||
+		result.Accepted ||
+		len(result.Errores) == 0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func postAutoprogrammingPrepareRunStackV0(
+	t *testing.T,
+	stack StackV0,
+	input orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0,
+) orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0 {
+	t.Helper()
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(input); err != nil {
+		t.Fatalf("encode prepare run: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/autoprogramming/prepare-run", body)
+	req.Header.Set("Content-Type", "application/json")
+	stack.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK && rec.Code != http.StatusBadRequest {
+		t.Fatalf("prepare status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode prepare run: %v", err)
+	}
+	return result
+}
