@@ -181,6 +181,50 @@ func TestCoordinateRunsTickRotaRunsEjecutadosConMismaPrioridadV0(t *testing.T) {
 	assertRunRefsV0(t, executionRefsV0(second.Executions), []string{"run-b"})
 }
 
+func TestCoordinateRunsTickPropagaEstadoTerminalALaColaV0(t *testing.T) {
+	now := time.Date(2026, 5, 22, 10, 0, 0, 0, time.UTC)
+	queue := &fakeQueueStoreV0{candidates: []orquestarunqueue.RunSchedulingCandidateV0{
+		candidateWithUpdatedAtV0("run-closed", "app", 9, now.Add(-time.Hour)),
+	}}
+	drainer := &fakeDrainerV0{
+		results: map[string]RunDrainResultV0{
+			"run-closed": {
+				RunRef:      "run-closed",
+				AppRef:      "app",
+				Outcome:     "run_terminal",
+				QueueStatus: orquestarunqueue.RunStatusClosedV0,
+			},
+		},
+	}
+	deps := RunCoordinatorDepsV0{
+		QueueReader:   queue,
+		QueueUpdater:  queue,
+		ControlReader: &fakeControlReaderV0{states: map[string]orquestaruncontrol.RunControlStateV0{}, missing: map[string]bool{}},
+		Drainer:       drainer,
+	}
+	command := tickCommandV0(1)
+	command.OccurredAt = now
+	command.RankingPolicy = orquestarunqueue.DefaultRunQueueRankingPolicyV0(now)
+
+	first, err := CoordinateRunsTickV0(context.Background(), deps, command)
+	if err != nil {
+		t.Fatalf("first tick: %v", err)
+	}
+	second, err := CoordinateRunsTickV0(context.Background(), deps, command)
+	if err != nil {
+		t.Fatalf("second tick: %v", err)
+	}
+
+	if len(first.Executions) != 1 ||
+		first.Executions[0].QueueStatus != orquestarunqueue.RunStatusClosedV0 ||
+		queue.candidates[0].Status != orquestarunqueue.RunStatusClosedV0 {
+		t.Fatalf("first=%+v queue=%+v", first, queue.candidates)
+	}
+	if len(second.Executions) != 0 {
+		t.Fatalf("second=%+v", second)
+	}
+}
+
 func TestCoordinateRunsTickSkipsExcludedRunsV0(t *testing.T) {
 	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
 		candidateV0("run-a", "app", 9),
@@ -293,6 +337,9 @@ func (fake *fakeQueueStoreV0) SetRunPriorityV0(
 		if fake.candidates[index].RunRef != command.RunRef {
 			continue
 		}
+		if command.Status != "" {
+			fake.candidates[index].Status = command.Status
+		}
 		fake.candidates[index].UpdatedAt = command.UpdatedAt
 		fake.candidates[index].PriorityScore = command.PriorityScore
 		fake.candidates[index].EvidenceRefs = append([]string(nil), command.EvidenceRefs...)
@@ -322,6 +369,7 @@ func (fake *fakeControlReaderV0) ReadRunControlStateV0(
 
 type fakeDrainerV0 struct {
 	requests []RunDrainRequestV0
+	results  map[string]RunDrainResultV0
 }
 
 func (fake *fakeDrainerV0) DrainRunV0(
@@ -332,6 +380,9 @@ func (fake *fakeDrainerV0) DrainRunV0(
 		return RunDrainResultV0{}, errors.New("missing run ref")
 	}
 	fake.requests = append(fake.requests, request)
+	if result, ok := fake.results[request.RunRef]; ok {
+		return result, nil
+	}
 	return RunDrainResultV0{RunRef: request.RunRef, AppRef: request.AppRef, Outcome: "drained"}, nil
 }
 

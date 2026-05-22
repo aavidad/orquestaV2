@@ -21,6 +21,11 @@ Salida: decisiones `director_agent_decision.v0` ya validadas:
 Si el cambio no tiene `allowed_write_set` o `acceptance_criteria`, la fuente no
 inventa microtareas: deja la consulta pendiente para el director.
 
+Si `AppChangeRequestV0.metadata_refs` trae refs opacas compactas, la fuente las
+proyecta como `create_microtask.task.context_refs`. La fuente no interpreta esas
+refs ni introduce campos concretos de composicion; solo las transporta hasta la
+tarea durable para que la composicion que las conoce pueda resolverlas.
+
 La fuente no diferencia si el `AppChangeRecordV0` procede de una solicitud
 directa o de `AppChangeIntentEventV0`: solo exige store, pregunta de director
 pendiente en el run, write-set y criterios.

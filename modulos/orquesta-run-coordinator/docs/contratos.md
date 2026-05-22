@@ -26,7 +26,8 @@ Puertos:
 
 Salidas:
 
-- `Executions`: runs drenadas, con rank, outcome y evidencias.
+- `Executions`: runs drenadas, con rank, outcome, `queue_status` opcional y
+  evidencias.
 - `Skips`: runs bloqueadas por control, con rank, razon y estado.
 - `Ranked`: resumen compacto de candidatos rankeados.
 
@@ -34,3 +35,7 @@ Salidas:
 Si no hay `RunControlReaderPortV0`, el tick tambien considera la run ejecutable;
 el control durable queda como puerto opcional para composiciones que aun no lo
 inyecten. `QueueReader` y `RunDrainerPortV0` son obligatorios.
+
+Si el `RunDrainerPortV0` devuelve `QueueStatus`, el coordinador lo propaga al
+`QueueUpdater` en la rotacion posterior a la ejecucion. El coordinador no decide
+ese estado: solo lo transporta desde la composicion hacia el puerto de cola.

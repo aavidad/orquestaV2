@@ -1,5 +1,16 @@
 # Decisiones
 
+## Metadata refs del cambio como context refs
+
+Decision: `AppChangeRequestV0.metadata_refs` se proyecta en
+`create_microtask.task.context_refs`.
+
+Motivo: las composiciones externas pueden necesitar transportar refs opacas de
+contexto hasta la tarea creada sin convertirlas en campos del core.
+
+Impacto: la fuente solo copia refs compactas. No interpreta detalles de
+composicion, runtime, proveedor ni estado local.
+
 ## Cambio en programacion mantiene la fase actual
 
 Decision: Si el run ya esta en `programacion` y existe una decision base, la

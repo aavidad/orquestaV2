@@ -46,6 +46,7 @@ type WorkflowTaskV0 struct {
 	AcceptanceCriteria   []string                        `json:"acceptance_criteria"`
 	RequiredTests        []string                        `json:"required_tests,omitempty"`
 	DependsOn            []string                        `json:"depends_on,omitempty"`
+	ContextRefs          []string                        `json:"context_refs,omitempty"`
 	ParentTaskRef        string                          `json:"parent_task_ref,omitempty"`
 	CohortRef            string                          `json:"cohort_ref,omitempty"`
 	WaveRef              string                          `json:"wave_ref,omitempty"`

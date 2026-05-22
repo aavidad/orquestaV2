@@ -10,9 +10,11 @@ import (
 	"testing"
 	"time"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
 
 func TestCodexStackV0ArrancarDirectorRegistraRunEnColaGlobalV0(t *testing.T) {
@@ -71,6 +73,34 @@ func TestCodexStackV0RunGlobalTickRespetaPausaV0(t *testing.T) {
 	}
 	if len(result.Skips) != 1 || result.Skips[0].RunRef != paused.RunRef {
 		t.Fatalf("skips=%+v", result.Skips)
+	}
+}
+
+func TestCodexStackV0RunGlobalTickMarcaRunCerradaComoTerminalEnColaV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	director := postDirectorAPIV0(t, stack)
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	run.Status = orquestacoreworkflow.OrchestrationRunStatusClosedV0
+	if err := stack.Stores.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+
+	result, err := stack.RunGlobalTickV0(context.Background(), globalTickCommandForTestV0())
+	if err != nil {
+		t.Fatalf("RunGlobalTickV0: %v", err)
+	}
+	if len(result.Executions) != 1 ||
+		result.Executions[0].RunRef != director.RunRef ||
+		result.Executions[0].QueueStatus != orquestarunqueue.RunStatusClosedV0 {
+		t.Fatalf("result=%+v", result)
+	}
+
+	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   "rank",
+		QueueRef: DefaultRunQueueRefV0,
+	})
+	if len(ranking.Ranked) != 0 {
+		t.Fatalf("ranking=%+v", ranking)
 	}
 }
 

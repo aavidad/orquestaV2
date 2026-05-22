@@ -21,6 +21,8 @@ Leer un estado de control inexistente devuelve
 
 Las operaciones de cola no rankean ni reservan runs. `SetRunPriorityV0` crea un
 candidato minimo con estado `ready` si no existia, como `orquesta-run-memory`.
+Si el comando trae `status`, lo persiste; esto permite que una composicion marque
+una run cerrada en el core como terminal tambien en la cola durable.
 `ListRunSchedulingCandidatesV0` devuelve solo candidatos ejecutables de
 scheduling; filtra estados terminales/no ejecutables antes de aplicar `limit`
 para que la cola historica no bloquee trabajo nuevo.

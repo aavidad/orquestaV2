@@ -29,6 +29,7 @@ Campos:
   - write_set
   - acceptance_criteria
   - function_contract_refs
+  - context_refs
 Invariantes:
   - DTO puro sin runtime, DB, proveedor, HOME, agentes concretos ni adaptadores.
   - Representa una unidad de trabajo acotada; el tamano lo decide el director por politica, no el core.
@@ -37,6 +38,7 @@ Invariantes:
   - `task_id`, `run_id`, `phase_id` y `title` son obligatorios.
   - `write_set` y `acceptance_criteria` son listas compactas no vacias.
   - `function_contract_refs` contiene referencias opacas; el DTO base acepta `contract_ref` o `function_name` para compatibilidad local.
+  - `context_refs` contiene refs opacas compactas opcionales de la composicion o app externa; no son campos de producto ni conceptos de programacion.
   - Rechaza detalles de DB, SQL, runtime, provider/proveedor, HOME, OAuth, Docker, tmux y secretos.
 Errores:
   - workflow_task_invalida

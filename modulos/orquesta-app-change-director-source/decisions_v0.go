@@ -121,6 +121,7 @@ func appChangeMicrotaskDecisionV0(
 			WriteSet:           appChangeTaskWriteSetV0(request),
 			AcceptanceCriteria: appChangeTaskCriteriaV0(request),
 			RequiredTests:      appChangeTaskRequiredTestsV0(request),
+			ContextRefs:        appChangeTaskContextRefsV0(request),
 			FunctionContractRefs: []orquestadirectoragent.DirectorAgentFunctionContractRefV0{{
 				ContractRef:  refs.ContractRef,
 				FunctionName: appChangeFunctionNamesV0(request)[0],
@@ -128,6 +129,12 @@ func appChangeMicrotaskDecisionV0(
 		},
 	}
 	return decision
+}
+
+func appChangeTaskContextRefsV0(
+	request orquestaappchange.AppChangeRequestV0,
+) []string {
+	return compactAppChangeSourceRefsV0(request.MetadataRefs)
 }
 
 func appChangeBasisDecisionRefV0(

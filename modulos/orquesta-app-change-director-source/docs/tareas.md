@@ -1,5 +1,17 @@
 # Tareas
 
+## ACDS-005
+
+Objetivo: proyectar `AppChangeRequestV0.metadata_refs` como `context_refs`
+opacas en la microtarea del director.
+
+Estado: hecho.
+
+Validacion:
+
+- `TestAppChangeDirectorDecisionSourceV0ProyectaMetadataRefsComoContextRefs`;
+- `go test -count=1 ./modulos/orquesta-app-change-director-source`.
+
 ## ACDS-001
 
 Objetivo: generar decisiones del director desde `AppChangeRecordV0` concreto.

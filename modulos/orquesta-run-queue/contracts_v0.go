@@ -37,6 +37,7 @@ type RunQueuePriorityCommandV0 struct {
 	RunRef         string    `json:"run_ref"`
 	QueueRef       string    `json:"queue_ref,omitempty"`
 	AppRef         string    `json:"app_ref,omitempty"`
+	Status         string    `json:"status,omitempty"`
 	PriorityScore  int       `json:"priority_score"`
 	UpdatedAt      time.Time `json:"updated_at,omitempty"`
 	RequestedBy    string    `json:"requested_by,omitempty"`

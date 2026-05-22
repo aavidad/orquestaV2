@@ -220,6 +220,7 @@ func normalizeDirectorAgentMicrotaskV0(task DirectorAgentMicrotaskV0) DirectorAg
 		AcceptanceCriteria:   compactDirectorAgentStringsV0(task.AcceptanceCriteria),
 		RequiredTests:        compactDirectorAgentStringsV0(task.RequiredTests),
 		DependsOn:            compactDirectorAgentStringsV0(task.DependsOn),
+		ContextRefs:          compactDirectorAgentStringsV0(task.ContextRefs),
 		ParentTaskRef:        strings.TrimSpace(task.ParentTaskRef),
 		CohortRef:            strings.TrimSpace(task.CohortRef),
 		WaveRef:              strings.TrimSpace(task.WaveRef),
@@ -337,4 +338,11 @@ func directorAgentRefCompactV0(value string) bool {
 		return false
 	}
 	return true
+}
+
+func directorAgentContextRefCompactV0(value string) bool {
+	if strings.TrimSpace(value) == "" || len(value) > maxDirectorAgentStringV0 {
+		return false
+	}
+	return !strings.ContainsAny(value, " /\\\t\n\r")
 }

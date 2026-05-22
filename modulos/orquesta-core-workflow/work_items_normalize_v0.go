@@ -15,6 +15,7 @@ func NormalizeWorkflowTaskV0(task WorkflowTaskV0) WorkflowTaskV0 {
 		AcceptanceCriteria:   normalizeWorkflowTaskStringsV0(task.AcceptanceCriteria),
 		RequiredTests:        normalizeWorkflowTaskStringsV0(task.RequiredTests),
 		DependsOn:            normalizeWorkflowTaskStringsV0(task.DependsOn),
+		ContextRefs:          normalizeWorkflowTaskContextRefsV0(task.ContextRefs),
 		ParentTaskRef:        strings.TrimSpace(task.ParentTaskRef),
 		CohortRef:            strings.TrimSpace(task.CohortRef),
 		WaveRef:              strings.TrimSpace(task.WaveRef),
@@ -35,6 +36,26 @@ func normalizeWorkflowFunctionContractRefsV0(refs []WorkflowFunctionContractRefV
 			ContractRef:  strings.TrimSpace(ref.ContractRef),
 			FunctionName: strings.TrimSpace(ref.FunctionName),
 		})
+	}
+	return normalized
+}
+
+func normalizeWorkflowTaskContextRefsV0(values []string) []string {
+	if values == nil {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		normalized = append(normalized, trimmed)
 	}
 	return normalized
 }

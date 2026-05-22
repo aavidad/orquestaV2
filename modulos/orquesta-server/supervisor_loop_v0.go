@@ -28,7 +28,7 @@ func (runtime *RuntimeV0) runSupervisorTickV0(ctx context.Context) {
 	}
 	command := runtime.config.SupervisorCommand
 	if command.MaxTicks <= 0 {
-		command.MaxTicks = 1
+		command.MaxTicks = DefaultSupervisorMaxTicksV0
 	}
 	result, err := runtime.supervisor.RunGlobalSupervisorV0(ctx, command)
 	if err != nil {

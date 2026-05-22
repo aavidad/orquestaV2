@@ -59,7 +59,7 @@ func CoordinateRunsTickV0(
 		if drainErr != nil {
 			return RunCoordinatorTickResultV0{}, drainErr
 		}
-		if err := rotateExecutedRunV0(ctx, deps.QueueUpdater, candidate, command); err != nil {
+		if err := rotateExecutedRunV0(ctx, deps.QueueUpdater, candidate, command, executed); err != nil {
 			return RunCoordinatorTickResultV0{}, err
 		}
 		result.Executions = append(result.Executions, executionSummaryV0(candidate, executed))
@@ -113,6 +113,7 @@ func rotateExecutedRunV0(
 	updater orquestarunqueue.RunQueuePriorityWriterPortV0,
 	candidate orquestarunqueue.RankedRunCandidateV0,
 	command RunCoordinatorTickCommandV0,
+	result RunDrainResultV0,
 ) error {
 	if updater == nil || command.OccurredAt.IsZero() {
 		return nil
@@ -123,6 +124,7 @@ func rotateExecutedRunV0(
 		RunRef:        candidate.RunRef,
 		QueueRef:      command.QueueRef,
 		AppRef:        candidate.AppRef,
+		Status:        strings.TrimSpace(result.QueueStatus),
 		PriorityScore: candidate.PriorityScore,
 		UpdatedAt:     command.OccurredAt,
 		RequestedBy:   "orquesta-run-coordinator",
@@ -191,6 +193,7 @@ func executionSummaryV0(
 		AppRef:       candidate.AppRef,
 		Rank:         candidate.Rank,
 		Outcome:      result.Outcome,
+		QueueStatus:  strings.TrimSpace(result.QueueStatus),
 		EvidenceRefs: append([]string(nil), result.EvidenceRefs...),
 	}
 }

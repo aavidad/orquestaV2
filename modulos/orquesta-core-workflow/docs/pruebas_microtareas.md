@@ -4,7 +4,7 @@
 Caso: workflow_task_v0_contrato_compacto
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-core-workflow
-Evidencia esperada: `WorkflowTaskV0` valido normaliza refs compactas, conserva `write_set`, criterios y `function_contract_refs` opacas, acepta `function_name` sin `contract_ref` en el DTO base y valida la fase contra el catalogo v0.
+Evidencia esperada: `WorkflowTaskV0` valido normaliza refs compactas, conserva `write_set`, criterios, `context_refs` y `function_contract_refs` opacas, acepta `function_name` sin `contract_ref` en el DTO base y valida la fase contra el catalogo v0.
 Ultima ejecucion: 2026-05-04, ok, go test -count=1 ./modulos/orquesta-core-workflow
 Riesgos: La integracion durable con eventos/comandos queda para otro corte autorizado.
 ```

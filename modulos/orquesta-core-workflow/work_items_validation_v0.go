@@ -62,6 +62,9 @@ func validateWorkflowTaskCollectionsV0(task WorkflowTaskV0) error {
 	if err := validateWorkflowTaskDependsOnV0(task); err != nil {
 		return err
 	}
+	if err := validateWorkflowTaskContextRefsV0(task.ContextRefs); err != nil {
+		return err
+	}
 	if err := validateWorkflowTaskLineageV0(task); err != nil {
 		return err
 	}
@@ -107,6 +110,26 @@ func validateWorkflowTaskDependsOnV0(task WorkflowTaskV0) error {
 		seen[dep] = true
 	}
 	return nil
+}
+
+func validateWorkflowTaskContextRefsV0(refs []string) error {
+	if len(refs) > maxWorkflowTaskCollectionV0 {
+		return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "context_refs")
+	}
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" || !workflowTaskContextRefIsCompactV0(ref) {
+			return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "context_refs")
+		}
+	}
+	return nil
+}
+
+func workflowTaskContextRefIsCompactV0(value string) bool {
+	if len(value) > maxWorkflowTaskStringV0 {
+		return false
+	}
+	return !strings.ContainsAny(value, " /\\\t\r\n")
 }
 
 func validateWorkflowTaskLineageV0(task WorkflowTaskV0) error {
@@ -255,6 +278,7 @@ func workflowTaskTextFieldsV0(task WorkflowTaskV0) map[string][]string {
 		"summary":                []string{task.Summary},
 		"acceptance_criteria":    task.AcceptanceCriteria,
 		"depends_on":             task.DependsOn,
+		"context_refs":           task.ContextRefs,
 		"parent_task_ref":        []string{task.ParentTaskRef},
 		"cohort_ref":             []string{task.CohortRef},
 		"wave_ref":               []string{task.WaveRef},

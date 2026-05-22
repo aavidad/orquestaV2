@@ -93,6 +93,36 @@ func TestAppChangeDirectorDecisionSourceV0ConservaRequiredTestsExplicitos(t *tes
 	}
 }
 
+func TestAppChangeDirectorDecisionSourceV0ProyectaMetadataRefsComoContextRefs(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.MetadataRefs = []string{
+		" context-ref-app-change-scope-001 ",
+		"context-ref-app-change-policy-001",
+		"context-ref-app-change-scope-001",
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	task := decisions[6].CreateMicrotask.Task
+	if len(task.ContextRefs) != 2 ||
+		task.ContextRefs[0] != "context-ref-app-change-scope-001" ||
+		task.ContextRefs[1] != "context-ref-app-change-policy-001" {
+		t.Fatalf("context_refs=%+v", task.ContextRefs)
+	}
+	if _, err := orquestacoreworkflow.NewWorkflowTaskV0(workflowTaskFromDirectorTaskForTestV0(task)); err != nil {
+		t.Fatalf("workflow task invalida con context_refs: %v task=%+v", err, task)
+	}
+}
+
 func TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno(t *testing.T) {
 	record := appChangeRecordForSourceTestV0()
 	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
@@ -574,6 +604,7 @@ func workflowTaskFromDirectorTaskForTestV0(
 		AcceptanceCriteria:   task.AcceptanceCriteria,
 		RequiredTests:        task.RequiredTests,
 		DependsOn:            task.DependsOn,
+		ContextRefs:          task.ContextRefs,
 		FunctionContractRefs: refs,
 	}
 }

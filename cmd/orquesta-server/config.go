@@ -31,8 +31,10 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		SupervisorCommand: orquestarunsupervisor.RunSupervisorCommandV0{
 			QueueRef:          "global",
 			MaxRunsPerTick:    intEnvOrDefaultV0("ORQUESTA_SERVER_MAX_RUNS_PER_TICK", 2),
+			MaxTicks:          intEnvOrDefaultV0("ORQUESTA_SERVER_SUPERVISOR_MAX_TICKS", orquestaserver.DefaultSupervisorMaxTicksV0),
 			MaxExecutions:     intEnvOrDefaultV0("ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK", 2),
 			StopOnNoExecution: true,
+			AllowRepeatedRuns: boolEnvOrDefaultV0("ORQUESTA_SERVER_ALLOW_REPEATED_RUNS", false),
 			DrainLimits: orquestaruncoordinator.RunDrainLimitsV0{
 				MaxBursts:            intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_BURSTS", 4),
 				MaxStepsPerBurst:     intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_STEPS", 6),

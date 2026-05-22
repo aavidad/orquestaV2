@@ -15,6 +15,16 @@ Estado:
 ## Backlog inicial
 
 ```text
+ID: NCW-077
+Objetivo: Transportar `context_refs` opacas en `WorkflowTaskV0` para que composiciones externas conserven refs de contexto sin campos de producto en el core.
+Write-set: work_items_*.go, tests y docs locales.
+Contrato: WorkflowTaskV0, CreateMicrotask.
+Validacion: 2026-05-22, tests focales de `context_refs` en orquesta-core-workflow.
+Bloqueos: El core no interpreta esas refs ni introduce campos especificos de composicion.
+Estado: completada local
+```
+
+```text
 ID: NCW-070
 Objetivo: Documentar que `WorkflowTaskV0` es una unidad de trabajo de granularidad adaptativa y que `CreateMicrotask` no obliga a partir siempre al minimo.
 Write-set: docs/contratos_microtareas.md, docs/decisiones.md, docs/tareas.md, docs globales.

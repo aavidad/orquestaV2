@@ -13,6 +13,7 @@ Cobertura local:
 - acepta `publish_function_contract` compacto;
 - acepta `create_microtask` con contrato funcional explicito;
 - acepta `create_microtask` con linaje recursivo neutral y refs compactas;
+- acepta `create_microtask` con `context_refs` opacas compactas;
 - acepta `work_profile_kind` opcional en microtareas y unidades de equipo;
 - acepta `ask_director` y `ask_user` compactos;
 - acepta `request_capacity` y `request_agent` compactos;
@@ -25,6 +26,7 @@ Cobertura local:
 - rechaza microtareas sin contrato funcional.
 - rechaza microtareas de programacion sin `required_tests`.
 - rechaza linaje recursivo incoherente en microtareas.
+- rechaza `context_refs` no compactas o con detalles prohibidos.
 - rechaza plan/equipo con detalle operativo o asignaciones inexistentes.
 - rechaza cierre con fase incoherente o evidencias con rutas.
 - rechaza `close_task` sin evidencias o fuera de `revision`.

@@ -21,6 +21,7 @@ func (v *directorAgentDecisionValidatorV0) validateCreateMicrotask(decision Dire
 		v.requireOptionalTextList("create_microtask.task.required_tests", task.RequiredTests)
 	}
 	v.requireOptionalRefs("create_microtask.task.depends_on", task.DependsOn)
+	v.requireOptionalContextRefs("create_microtask.task.context_refs", task.ContextRefs)
 	v.requireOptionalRef("create_microtask.task.parent_task_ref", task.ParentTaskRef)
 	v.requireOptionalRef("create_microtask.task.cohort_ref", task.CohortRef)
 	v.requireOptionalRef("create_microtask.task.wave_ref", task.WaveRef)

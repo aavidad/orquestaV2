@@ -8,6 +8,7 @@ func NormalizeRunQueuePriorityCommandV0(
 	command.RunRef = strings.TrimSpace(command.RunRef)
 	command.QueueRef = strings.TrimSpace(command.QueueRef)
 	command.AppRef = strings.TrimSpace(command.AppRef)
+	command.Status = strings.TrimSpace(command.Status)
 	command.RequestedBy = strings.TrimSpace(command.RequestedBy)
 	command.Reason = strings.TrimSpace(command.Reason)
 	command.IdempotencyKey = strings.TrimSpace(command.IdempotencyKey)

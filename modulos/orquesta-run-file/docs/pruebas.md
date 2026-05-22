@@ -12,6 +12,8 @@ Cobertura v0:
 - run-control persiste estado terminal y conserva checkpoint al recrear
   instancia.
 - run-queue persiste candidatos y prioridades al recrear instancia.
+- run-queue persiste estados terminales escritos por `SetRunPriorityV0` y los
+  filtra al recrear instancia.
 - app-change persiste, lista por `run_ref` y reemplaza por `(run_ref,
   change_ref)` al recrear instancia.
 - los snapshots contienen `schema_version` y `records`.

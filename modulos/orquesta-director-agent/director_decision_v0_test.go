@@ -53,6 +53,18 @@ func TestValidateDirectorAgentDecisionV0AceptaMicrotareaConLinajeRecursivo(t *te
 	}
 }
 
+func TestValidateDirectorAgentDecisionV0AceptaMicrotareaConContextRefs(t *testing.T) {
+	decision := validDirectorAgentCreateMicrotaskDecisionV0()
+	decision.CreateMicrotask.Task.ContextRefs = []string{
+		"context-ref-scope-001",
+		"context-ref-policy-001",
+	}
+
+	if issues := ValidateDirectorAgentDecisionV0(decision); len(issues) != 0 {
+		t.Fatalf("issues inesperados: %+v", issues)
+	}
+}
+
 func TestValidateDirectorAgentDecisionV0AceptaChildRefsHastaLimiteRecursivo(t *testing.T) {
 	decision := validDirectorAgentCreateMicrotaskDecisionV0()
 	decision.CreateMicrotask.Task.MaxChildAgents = maxDirectorAgentRecursionLimitV0
@@ -146,6 +158,22 @@ func TestValidateDirectorAgentDecisionV0RechazaDependenciaNoCompacta(t *testing.
 		ValidateDirectorAgentDecisionV0(decision),
 		"director_agent_ref_invalida",
 	)
+}
+
+func TestValidateDirectorAgentDecisionV0RechazaContextRefsNoCompactas(t *testing.T) {
+	for _, refs := range [][]string{
+		{"context ref invalid"},
+		{"external/context-ref-001"},
+		{"token-ref-context-001"},
+	} {
+		decision := validDirectorAgentCreateMicrotaskDecisionV0()
+		decision.CreateMicrotask.Task.ContextRefs = refs
+
+		requireDirectorAgentIssueV0(t,
+			ValidateDirectorAgentDecisionV0(decision),
+			"director_agent_ref_invalida",
+		)
+	}
 }
 
 func TestValidateDirectorAgentDecisionV0RechazaLinajeRecursivoInvalido(t *testing.T) {

@@ -5,8 +5,10 @@ import (
 	"strings"
 	"time"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
 
 func (stack StackV0) RunGlobalTickV0(
@@ -63,6 +65,7 @@ func (drainer stackRunDrainerV0) DrainRunV0(
 		RunRef:       strings.TrimSpace(request.RunRef),
 		AppRef:       strings.TrimSpace(request.AppRef),
 		Outcome:      stackDrainOutcomeV0(result),
+		QueueStatus:  stackDrainQueueStatusV0(result),
 		EvidenceRefs: stackDrainEvidenceRefsV0(result),
 	}, nil
 }
@@ -128,6 +131,15 @@ func stackDrainEvidenceRefsV0(
 		refs = append(refs, wait.EvidenceRefs...)
 	}
 	return compactCodexStackStringsV0(refs)
+}
+
+func stackDrainQueueStatusV0(
+	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
+) string {
+	if result.Final.Run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		return orquestarunqueue.RunStatusClosedV0
+	}
+	return ""
 }
 
 func formatStackCoordinatorTimeV0(value time.Time) string {

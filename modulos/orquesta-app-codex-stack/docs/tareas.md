@@ -487,6 +487,8 @@ Trabajo aplicado:
   ejecuciones maximas por tick;
 - comandos de prioridad con `queue_ref` y `updated_at`;
 - presupuesto conservador por tick para evitar que una run bloquee a las demas.
+- propagacion de `queue_status=closed` cuando el loop del nucleo ya devuelve la
+  run cerrada, para que la cola no repita trabajos terminales historicos.
 
 Validacion:
 
@@ -500,6 +502,8 @@ Reglas cerradas:
   scheduler interno de cada run;
 - la cola global queda alimentada desde el arranque real de app, no solo por
   llamadas manuales a `set_priority`.
+- una run cerrada por el nucleo se marca terminal en cola por puerto y no se
+  re-rankea en ticks posteriores.
 
 ## APP-CODEX-STACK-018
 

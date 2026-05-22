@@ -23,6 +23,10 @@ func TestApplyDirectorAgentDecisionV0PlanificaMicrotareaDesdeCadenaDirector(t *t
 	microtaskRequest.Decision.CreateMicrotask.Task.ParentTaskRef = "task-ref-parent-001"
 	microtaskRequest.Decision.CreateMicrotask.Task.CohortRef = "cohort-ref-recursive-001"
 	microtaskRequest.Decision.CreateMicrotask.Task.WaveRef = "wave-ref-recursive-001"
+	microtaskRequest.Decision.CreateMicrotask.Task.ContextRefs = []string{
+		"context-ref-scope-001",
+		"context-ref-policy-001",
+	}
 	microtaskRequest.Decision.CreateMicrotask.Task.DelegationDepth = 2
 	microtaskRequest.Decision.CreateMicrotask.Task.MaxChildAgents = 4
 	microtaskRequest.Decision.CreateMicrotask.Task.ChildTaskRefs = []string{
@@ -73,6 +77,9 @@ func TestApplyDirectorAgentDecisionV0PlanificaMicrotareaDesdeCadenaDirector(t *t
 	if tasks[0].ParentTaskRef != "task-ref-parent-001" ||
 		tasks[0].CohortRef != "cohort-ref-recursive-001" ||
 		tasks[0].WaveRef != "wave-ref-recursive-001" ||
+		len(tasks[0].ContextRefs) != 2 ||
+		tasks[0].ContextRefs[0] != "context-ref-scope-001" ||
+		tasks[0].ContextRefs[1] != "context-ref-policy-001" ||
 		tasks[0].DelegationDepth != 2 ||
 		tasks[0].MaxChildAgents != 4 ||
 		len(tasks[0].ChildTaskRefs) != 2 ||

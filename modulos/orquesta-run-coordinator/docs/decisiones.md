@@ -37,3 +37,9 @@ de la run que acaba de drenar. Esto evita que varios runs antiguos con la misma
 prioridad monopolicen todos los ticks del servidor. La prioridad numerica se
 mantiene intacta: el usuario o el orquestador siguen pudiendo favorecer una app
 con mas puntos, pero entre runs equivalentes se reparte turno.
+
+Si el drainer informa `QueueStatus`, esa misma rotacion lo persiste en la cola.
+La motivacion es evitar que una run ya cerrada por el nucleo siga apareciendo
+como `ready` solo porque el candidato de cola era historico. El coordinador no
+infere cierre por su cuenta: la composicion que conoce el resultado del drain
+declara el estado terminal.

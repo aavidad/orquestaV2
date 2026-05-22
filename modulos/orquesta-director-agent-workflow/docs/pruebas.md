@@ -14,6 +14,7 @@ Cobertura:
 - traduce `create_microtask` a `CreateMicrotask`;
 - traduce el linaje recursivo neutral de `create_microtask` a
   `WorkflowTaskV0`;
+- traduce `context_refs` opacas de `create_microtask` a `WorkflowTaskV0`;
 - traduce `ask_director` y `ask_user` a `AskDirector`, conservando `target_group=user` en `ask_user`;
 - traduce `request_capacity` a `RequestCapacity`;
 - traduce `request_agent` a `RequestAgent`;
@@ -26,7 +27,7 @@ Cobertura:
 - encadena director desde brainstorming hasta planificacion y microtarea sin comandos manuales intermedios;
 - aplica contrato y microtarea sobre un run en planificacion con decision aceptada;
 - guarda la microtarea completa en `TaskStore`, incluido su linaje operativo,
-  para que el scheduler pueda programarla despues;
+  y sus `context_refs`, para que el scheduler pueda programarla despues;
 - rechaza `create_microtask` sin `TaskStore`;
 - rechaza `propose_autonomous_plan_team` como comando workflow hasta que exista comando publico del core;
 - rechaza decisiones invalidas;

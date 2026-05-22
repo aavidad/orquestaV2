@@ -1,5 +1,18 @@
 # Tareas locales
 
+## DAW-007
+
+Objetivo: preservar `context_refs` opacas desde `create_microtask` hasta
+`WorkflowTaskV0` y `TaskStore`.
+
+Estado: hecho.
+
+Validacion:
+
+- `TestBuildDirectorAgentWorkflowCommandV0TraduceMicrotarea`;
+- `TestApplyDirectorAgentDecisionV0PlanificaMicrotareaDesdeCadenaDirector`;
+- `go test -count=1 ./modulos/orquesta-director-agent-workflow`.
+
 ## DAW-001
 
 Objetivo: traducir decisiones compactas del director a comandos publicos del

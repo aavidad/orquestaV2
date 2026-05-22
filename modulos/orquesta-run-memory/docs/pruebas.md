@@ -13,7 +13,8 @@ Cobertura v0:
 - `CancelRunV0` registra `forced` y estado `cancel_requested`.
 - `CompleteRunControlV0` marca `stopped/canceled` y rechaza estados no
   terminales.
-- `SetRunPriorityV0` actualiza candidatos en memoria.
+- `SetRunPriorityV0` actualiza candidatos en memoria y puede marcar un
+  candidato como terminal para que no reaparezca en scheduling.
 - `ListRunSchedulingCandidatesV0` devuelve snapshots filtrables.
 - Ranking delegado a `orquesta-run-queue` conserva prioridad antes de aging.
 - La arquitectura de produccion no usa E/S, red, procesos ni persistencia.

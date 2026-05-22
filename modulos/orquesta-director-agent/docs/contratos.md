@@ -48,6 +48,9 @@ Invariantes:
   `parent_task_ref`, `cohort_ref`, `wave_ref`, `delegation_depth`,
   `max_child_agents` y `child_task_refs`; son refs opacas compactas y limites
   de gobierno, no permisos para abrir runtime libre ni datos de proveedor.
+- `create_microtask` puede declarar `context_refs` opacas compactas para
+  transportar contexto externo hasta la tarea sin que el contrato conozca
+  conceptos de producto.
 - `create_microtask` y `propose_autonomous_plan_team.work_units` pueden declarar
   `work_profile_kind` neutral para que el scheduler resuelva rol/capacidad sin
   parsear texto ni conocer Codex, OPES u otros conectores.

@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	DefaultAddrV0         = "127.0.0.1:8787"
-	DefaultStateFileV0    = "orquesta_server_state_v0.json"
-	DefaultTickIntervalV0 = 5 * time.Second
+	DefaultAddrV0               = "127.0.0.1:8787"
+	DefaultStateFileV0          = "orquesta_server_state_v0.json"
+	DefaultTickIntervalV0       = 5 * time.Second
+	DefaultSupervisorMaxTicksV0 = 1
 )
 
 type ConfigV0 struct {
@@ -40,7 +41,9 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	if config.TickInterval <= 0 {
 		config.TickInterval = DefaultTickIntervalV0
 	}
-	config.SupervisorCommand.MaxTicks = 1
+	if config.SupervisorCommand.MaxTicks <= 0 {
+		config.SupervisorCommand.MaxTicks = DefaultSupervisorMaxTicksV0
+	}
 	return config
 }
 

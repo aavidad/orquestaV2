@@ -266,6 +266,18 @@ func (v *directorAgentDecisionValidatorV0) requireOptionalWorkRefs(field string,
 	}
 }
 
+func (v *directorAgentDecisionValidatorV0) requireOptionalContextRefs(field string, values []string) {
+	if len(values) > maxDirectorAgentEvidenceRefsV0 {
+		v.add("director_agent_evidence_invalida", field)
+		return
+	}
+	for _, value := range values {
+		if !directorAgentContextRefCompactV0(value) || directorAgentHasForbiddenDetailV0(value) {
+			v.add("director_agent_ref_invalida", field)
+		}
+	}
+}
+
 func (v *directorAgentDecisionValidatorV0) requireTextList(field string, values []string) {
 	if len(values) == 0 || len(values) > maxDirectorAgentEvidenceRefsV0 {
 		v.add("director_agent_lista_invalida", field)

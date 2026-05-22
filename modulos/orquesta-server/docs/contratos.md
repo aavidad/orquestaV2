@@ -16,6 +16,10 @@ Salida:
 - statefile JSON `orquesta_server_state.v0`
 
 Configuracion externa relacionada:
+- `ORQUESTA_SERVER_SUPERVISOR_MAX_TICKS`: numero maximo de ticks internos por
+  pulso del supervisor residente. Por defecto se conserva acotado a `1`.
+- `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS=true`: permite que un mismo pulso del
+  supervisor repita run si la politica de la composicion lo necesita.
 - `ORQUESTA_OPES_BASE_URL`: si existe, el comando servidor crea un conector
   REST OPES y lo inyecta como executor `domain_work` en el stack de aplicacion.
   Si falta, `domain_work` queda apagado por opt-in.
@@ -39,6 +43,8 @@ Invariantes:
 - no arranca agentes directamente;
 - no guarda secretos ni rutas de credenciales en errores;
 - cada pulso del supervisor es acotado.
+- el runtime residente respeta el `MaxTicks` configurado; no lo pisa
+  silenciosamente salvo que llegue vacio o invalido.
 - OPES y el backend file de `domain_work` se cablean desde `cmd/orquesta-server`,
   no desde el runtime residente.
 - el autodiagnostico de arranque entra por puerto: el modulo residente solo

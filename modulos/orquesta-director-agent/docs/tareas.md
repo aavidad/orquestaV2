@@ -1,5 +1,22 @@
 # Tareas locales
 
+## DAG-008 - Refs de contexto opacas en microtareas
+
+Estado: hecho.
+
+Write-set:
+
+- `director_decision_types_v0.go`;
+- `director_decision_helpers_v0.go`;
+- `director_decision_validation_*.go`;
+- tests y docs locales.
+
+Cierre:
+
+- `create_microtask.task.context_refs` transporta refs opacas compactas;
+- no introduce campos de producto ni composicion;
+- rechaza refs no compactas o con detalles prohibidos.
+
 ## DAG-001 - Contrato de decision del director externo
 
 Estado: hecho.

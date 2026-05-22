@@ -130,6 +130,9 @@ func applyRunFilePriorityCommandV0(
 	if strings.TrimSpace(candidate.Status) == "" {
 		candidate.Status = "ready"
 	}
+	if command.Status != "" {
+		candidate.Status = command.Status
+	}
 	if command.AppRef != "" {
 		candidate.AppRef = command.AppRef
 	}

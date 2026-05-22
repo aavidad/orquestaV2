@@ -48,6 +48,23 @@ func TestServerConfigFromEnvV0DaMargenRealALosAgentesPorDefecto(t *testing.T) {
 	}
 }
 
+func TestServerConfigFromEnvV0ExponeSupervisorDesatendidoV0(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
+	t.Setenv("ORQUESTA_SERVER_SUPERVISOR_MAX_TICKS", "6")
+	t.Setenv("ORQUESTA_SERVER_ALLOW_REPEATED_RUNS", "true")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.SupervisorCommand.MaxTicks != 6 {
+		t.Fatalf("max_ticks=%d want=6", config.SupervisorCommand.MaxTicks)
+	}
+	if !config.SupervisorCommand.AllowRepeatedRuns {
+		t.Fatalf("allow_repeated_runs=%v want=true", config.SupervisorCommand.AllowRepeatedRuns)
+	}
+}
+
 func TestServerConfigFromEnvV0AislaEstadoYDejaRuntimeEscribiblePorDefecto(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)

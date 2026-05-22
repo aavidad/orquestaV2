@@ -278,6 +278,7 @@ func directorAgentWorkflowTaskV0(
 		AcceptanceCriteria:   directorAgentWorkflowTaskAcceptanceCriteriaV0(task),
 		RequiredTests:        task.RequiredTests,
 		DependsOn:            task.DependsOn,
+		ContextRefs:          task.ContextRefs,
 		ParentTaskRef:        task.ParentTaskRef,
 		CohortRef:            task.CohortRef,
 		WaveRef:              task.WaveRef,

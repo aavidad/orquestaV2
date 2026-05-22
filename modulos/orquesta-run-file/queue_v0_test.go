@@ -134,3 +134,44 @@ func TestRunFileStoreListSchedulingCandidatesFiltraTerminalesAntesDeLimitV0(t *t
 		t.Fatalf("listed=%+v", listed)
 	}
 }
+
+func TestRunFileStorePriorityWriterPuedePersistirEstadoTerminalV0(t *testing.T) {
+	dir := t.TempDir()
+	store := mustNewRunFileStoreV0(t, dir)
+	ctx := context.Background()
+	now := time.Date(2026, 5, 22, 9, 0, 0, 0, time.UTC)
+
+	if _, err := store.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        "run-terminal",
+		QueueRef:      "global",
+		AppRef:        "app-terminal",
+		PriorityScore: 50,
+		UpdatedAt:     now,
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0 ready: %v", err)
+	}
+	updated, err := store.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        "run-terminal",
+		QueueRef:      "global",
+		AppRef:        "app-terminal",
+		Status:        orquestarunqueue.RunStatusClosedV0,
+		PriorityScore: 50,
+		UpdatedAt:     now.Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("SetRunPriorityV0 closed: %v", err)
+	}
+	if updated.Status != orquestarunqueue.RunStatusClosedV0 {
+		t.Fatalf("updated=%+v", updated)
+	}
+	reopened := mustNewRunFileStoreV0(t, dir)
+	listed, err := reopened.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{
+		QueueRef: "global",
+	})
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(listed) != 0 {
+		t.Fatalf("listed=%+v", listed)
+	}
+}

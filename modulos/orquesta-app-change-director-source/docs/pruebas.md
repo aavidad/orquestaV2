@@ -14,6 +14,9 @@ Casos focales:
 - `TestAppChangeDirectorDecisionSourceV0GeneraCadenaCompleta`: cambio aceptado
   pasa a respuesta, decision, contrato, microtarea con write-set permitido,
   criterios, `work_profile_kind=implementation` y vuelta a programacion.
+- `TestAppChangeDirectorDecisionSourceV0ProyectaMetadataRefsComoContextRefs`:
+  `metadata_refs` compactas del cambio llegan a `create_microtask.task.context_refs`
+  y validan como `WorkflowTaskV0`.
 - `TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno`: un
   `external_work` publica contrato `ApplyExternalDomainWorkV0` y microtarea
   documental con `work_profile_kind=domain_work` y paquete de dominio

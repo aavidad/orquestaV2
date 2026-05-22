@@ -7,6 +7,7 @@ func TestNormalizeRunQueuePriorityCommandV0CompactaRefs(t *testing.T) {
 		RunRef:       " run-ref-001 ",
 		QueueRef:     " global ",
 		AppRef:       " app-ref-001 ",
+		Status:       " closed ",
 		RequestedBy:  " director ",
 		EvidenceRefs: []string{" evidence-1 ", "evidence-1", ""},
 	})
@@ -14,6 +15,7 @@ func TestNormalizeRunQueuePriorityCommandV0CompactaRefs(t *testing.T) {
 	if got.RunRef != "run-ref-001" ||
 		got.QueueRef != "global" ||
 		got.AppRef != "app-ref-001" ||
+		got.Status != "closed" ||
 		got.RequestedBy != "director" ||
 		len(got.EvidenceRefs) != 1 {
 		t.Fatalf("command=%+v", got)

@@ -28,21 +28,55 @@ func TestRuntimeV0SupervisorPersisteTicksV0(t *testing.T) {
 	if supervisor.calls != 1 {
 		t.Fatalf("calls=%d", supervisor.calls)
 	}
+	if supervisor.lastCommand.MaxTicks != DefaultSupervisorMaxTicksV0 {
+		t.Fatalf("max_ticks=%d want=%d", supervisor.lastCommand.MaxTicks, DefaultSupervisorMaxTicksV0)
+	}
 	if store.last.SupervisorTicks != 1 ||
 		store.last.LastSupervisorStop != orquestarunsupervisor.RunSupervisorStopNoExecutionV0 {
 		t.Fatalf("state=%+v", store.last)
 	}
 }
 
+func TestRuntimeV0SupervisorRespetaComandoConfiguradoV0(t *testing.T) {
+	store := &memoryStateStoreV0{}
+	supervisor := &fakeSupervisorV0{}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:     t.TempDir(),
+		TickInterval: time.Hour,
+		SupervisorCommand: orquestarunsupervisor.RunSupervisorCommandV0{
+			MaxTicks:          5,
+			MaxExecutions:     3,
+			AllowRepeatedRuns: true,
+		},
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: store,
+		Clock:      fixedClockV0{now: time.Date(2026, 5, 12, 10, 0, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.runSupervisorTickV0(context.Background())
+
+	if supervisor.lastCommand.MaxTicks != 5 ||
+		supervisor.lastCommand.MaxExecutions != 3 ||
+		!supervisor.lastCommand.AllowRepeatedRuns {
+		t.Fatalf("command=%+v", supervisor.lastCommand)
+	}
+}
+
 type fakeSupervisorV0 struct {
-	calls int
+	calls       int
+	lastCommand orquestarunsupervisor.RunSupervisorCommandV0
 }
 
 func (fake *fakeSupervisorV0) RunGlobalSupervisorV0(
-	context.Context,
-	orquestarunsupervisor.RunSupervisorCommandV0,
+	_ context.Context,
+	command orquestarunsupervisor.RunSupervisorCommandV0,
 ) (orquestarunsupervisor.RunSupervisorResultV0, error) {
 	fake.calls++
+	fake.lastCommand = command
 	return orquestarunsupervisor.RunSupervisorResultV0{
 		StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
 	}, nil

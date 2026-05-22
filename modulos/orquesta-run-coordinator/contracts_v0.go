@@ -62,6 +62,7 @@ type RunDrainResultV0 struct {
 	RunRef       string   `json:"run_ref"`
 	AppRef       string   `json:"app_ref,omitempty"`
 	Outcome      string   `json:"outcome,omitempty"`
+	QueueStatus  string   `json:"queue_status,omitempty"`
 	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }
 
@@ -70,6 +71,7 @@ type RunExecutionSummaryV0 struct {
 	AppRef       string   `json:"app_ref,omitempty"`
 	Rank         int      `json:"rank"`
 	Outcome      string   `json:"outcome,omitempty"`
+	QueueStatus  string   `json:"queue_status,omitempty"`
 	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }
 

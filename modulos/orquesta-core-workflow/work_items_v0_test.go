@@ -69,6 +69,43 @@ func TestWorkflowTaskV0AcceptsNeutralLineageMetadata(t *testing.T) {
 	}
 }
 
+func TestWorkflowTaskV0AcceptsContextRefs(t *testing.T) {
+	task := validWorkflowTaskV0()
+	task.ContextRefs = []string{
+		" context-ref-scope-001 ",
+		"context-ref-policy-001",
+		"context-ref-scope-001",
+	}
+
+	got, err := NewWorkflowTaskV0(task)
+	if err != nil {
+		t.Fatalf("NewWorkflowTaskV0 context refs: %v", err)
+	}
+	want := []string{"context-ref-scope-001", "context-ref-policy-001"}
+	if !reflect.DeepEqual(got.ContextRefs, want) {
+		t.Fatalf("context_refs=%+v want %+v", got.ContextRefs, want)
+	}
+}
+
+func TestValidateWorkflowTaskV0RejectsInvalidContextRefs(t *testing.T) {
+	for name, mutate := range map[string]func(*WorkflowTaskV0){
+		"with_space": func(task *WorkflowTaskV0) {
+			task.ContextRefs = []string{"context ref invalid"}
+		},
+		"with_path_separator": func(task *WorkflowTaskV0) {
+			task.ContextRefs = []string{"external/context-ref-001"}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			task := validWorkflowTaskV0()
+			mutate(&task)
+
+			err := ValidateWorkflowTaskV0(NormalizeWorkflowTaskV0(task))
+			assertWorkflowTaskErrorV0(t, err, ErrWorkflowTaskInvalidaV0, "context_refs")
+		})
+	}
+}
+
 func TestValidateWorkflowTaskV0RejectsInvalidLineageMetadata(t *testing.T) {
 	cases := map[string]struct {
 		mutate func(*WorkflowTaskV0)
@@ -210,6 +247,7 @@ func TestValidateWorkflowTaskV0RejectsForbiddenDetails(t *testing.T) {
 		"tmux":      func(task *WorkflowTaskV0) { task.Summary = "sesion tmux" },
 		"secret":    func(task *WorkflowTaskV0) { task.TaskID = "task-secret" },
 		"token":     func(task *WorkflowTaskV0) { task.RunID = "run-token" },
+		"context":   func(task *WorkflowTaskV0) { task.ContextRefs = []string{"token-ref-001"} },
 		"password":  func(task *WorkflowTaskV0) { task.AcceptanceCriteria = []string{"sin password"} },
 	}
 

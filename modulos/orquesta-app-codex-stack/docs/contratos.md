@@ -124,6 +124,11 @@ La ruta es neutral de runs. El gateway y `orquesta-mcp` no conocen Codex. Este
 stack inyecta `CodexStackRunSupervisorExecutorV0`, que adapta ese contrato al
 supervisor Codex del borde.
 
+Cuando `RunGlobalTickV0` drena una run y el loop del nucleo devuelve la run
+cerrada, el stack informa `queue_status=closed` al coordinador. La cola global
+persiste ese estado mediante su puerto y deja de rankear esa run en ticks
+posteriores.
+
 ## Bridge de entregas a dominio externo
 
 Contrato opt-in:

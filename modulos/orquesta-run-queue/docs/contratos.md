@@ -20,7 +20,13 @@ SetRunPriorityV0(context.Context, RunQueuePriorityCommandV0) (RunSchedulingCandi
 ```
 
 `RunQueuePriorityCommandV0` exige `run_ref` y transporta `priority_score`,
-`app_ref`, `requested_by`, `reason`, `idempotency_key` y `evidence_refs`.
+`app_ref`, `status`, `requested_by`, `reason`, `idempotency_key` y
+`evidence_refs`.
+
+`status` es opcional: si llega vacio, el writer conserva el estado del candidato
+o usa el default del adaptador. Si una composicion lo informa como estado
+terminal, el adaptador debe persistirlo para que el ranking no vuelva a exponer
+esa run como ejecutable.
 
 ## RunSchedulingCandidateV0
 
