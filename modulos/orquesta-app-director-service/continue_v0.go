@@ -171,6 +171,10 @@ func continueOperationalDirectorPlanStatePostLoopV0(
 		}
 		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
 	}
+	loop, err = operationalDirectorPlanStateActiveWaitLoopV0(ctx, request, ports, loop)
+	if err != nil {
+		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
+	}
 	_, _, activeReview, err := operationalDirectorActiveReviewDeliveriesStepV0(ctx, request, ports)
 	if err != nil || !activeReview {
 		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
@@ -229,6 +233,36 @@ func operationalDirectorPlanStatePostLoopScopeV0(
 	}
 	loop.Run = scopedRun
 	loop.Status = orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0
+	return loop, nil
+}
+
+func operationalDirectorPlanStateActiveWaitLoopV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	loop orquestacionnucleoapp.ProgressiveLoopResultV0,
+) (orquestacionnucleoapp.ProgressiveLoopResultV0, error) {
+	if continueOperationalDirectorPlanRefV0(request) == "" || ports.OperationalPlanStateStore == nil {
+		return loop, nil
+	}
+	waitAgentRefs, err := operationalDirectorPlanStateActiveWaitAgentRefsV0(ctx, request, ports)
+	if err != nil || len(waitAgentRefs) == 0 {
+		return loop, err
+	}
+	scopedRun := loop.Run
+	if ports.RunStore != nil {
+		latestRun, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+		if err != nil {
+			return loop, err
+		}
+		scopedRun = latestRun
+	}
+	loop.Run = scopedRun
+	if (loop.Status == orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 ||
+		loop.Status == orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0) &&
+		appDirectorRunHasPendingAgentRefsV0(scopedRun, waitAgentRefs) {
+		loop.Status = orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0
+	}
 	return loop, nil
 }
 
