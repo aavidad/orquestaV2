@@ -57,10 +57,41 @@ func reviewReworkSplitTaskV0(
 	if strings.TrimSpace(normalized.RunID) != strings.TrimSpace(request.Run.RunID) {
 		return orquestacoreworkflow.WorkflowTaskV0{}, errorV0(ErrNucleoOrquestacionInvalidoV0, "split_task.run_id", "run_id no coincide")
 	}
-	if normalized.PhaseID != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 {
+	if !reviewReworkSplitTaskPhaseAllowedV0(request.Run, normalized.PhaseID) {
 		return orquestacoreworkflow.WorkflowTaskV0{}, errorV0(ErrNucleoOrquestacionInvalidoV0, "split_task.phase_id", "phase_id no soportado")
 	}
 	return normalized, nil
+}
+
+func reviewReworkSplitTaskPhaseAllowedV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	phase orquestacoreworkflow.OrchestrationPhaseIDV0,
+) bool {
+	phase = orquestacoreworkflow.OrchestrationPhaseIDV0(strings.TrimSpace(string(phase)))
+	if err := orquestacoreworkflow.ValidateOrchestrationPhaseIDV0(phase); err != nil {
+		return false
+	}
+	current := orquestacoreworkflow.OrchestrationPhaseIDV0(strings.TrimSpace(string(run.CurrentPhase)))
+	if phase == current {
+		return true
+	}
+	if current != orquestacoreworkflow.OrchestrationPhaseRevisionV0 {
+		return false
+	}
+	return reviewReworkSplitTaskReworkPhaseV0(phase)
+}
+
+func reviewReworkSplitTaskReworkPhaseV0(
+	phase orquestacoreworkflow.OrchestrationPhaseIDV0,
+) bool {
+	switch phase {
+	case orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		orquestacoreworkflow.OrchestrationPhaseDocumentacionV0,
+		orquestacoreworkflow.OrchestrationPhaseIntegracionV0:
+		return true
+	default:
+		return false
+	}
 }
 
 func reviewReworkValidateRecursiveSplitTasksV0(

@@ -103,6 +103,45 @@ func TestBuildOperationalDirectorPlanV0DomainReadyUsesSameOperationalLoop(t *tes
 	}
 }
 
+func TestBuildOperationalDirectorPlanV0DomainReadyShardsWriteSetByMaxParallelAgents(t *testing.T) {
+	result := BuildOperationalDirectorPlanV0(validDomainWorkRequestV0(func(request *OperationalDirectorRequestV0) {
+		request.MaxParallelAgents = 3
+		request.WriteSet = []string{
+			"external/domain-work/job-001/topic-01",
+			"external/domain-work/job-001/topic-02",
+			"external/domain-work/job-001/topic-03",
+			"external/domain-work/job-001/topic-04",
+			"external/domain-work/job-001/topic-05",
+		}
+	}))
+
+	if !result.Accepted || !result.ReadyToLaunch || result.Blocked {
+		t.Fatalf("result=%+v", result)
+	}
+	launchSteps := planStepsByKindV0(result.Plan, OperationalDirectorStepLaunchSubagentsV0)
+	if len(launchSteps) != 3 {
+		t.Fatalf("launch steps=%+v", launchSteps)
+	}
+	assertStringSetEqualsV0(t, launchSteps[0].WriteSet,
+		"external/domain-work/job-001/topic-01",
+		"external/domain-work/job-001/topic-04",
+	)
+	assertStringSetEqualsV0(t, launchSteps[1].WriteSet,
+		"external/domain-work/job-001/topic-02",
+		"external/domain-work/job-001/topic-05",
+	)
+	assertStringSetEqualsV0(t, launchSteps[2].WriteSet,
+		"external/domain-work/job-001/topic-03",
+	)
+	for _, step := range launchSteps {
+		if step.WorkProfileKind != "domain_work" ||
+			!stringInSetV0(step.DomainRefs, "domain-job-ref-001") ||
+			!containsFragmentInSetV0(step.AcceptanceCriteria, "write-set asignado es ownership inicial") {
+			t.Fatalf("launch step=%+v", step)
+		}
+	}
+}
+
 func TestBuildOperationalDirectorPlanV0DomainReadyRejectsMissingWriteSet(t *testing.T) {
 	result := BuildOperationalDirectorPlanV0(validDomainWorkRequestV0(func(request *OperationalDirectorRequestV0) {
 		request.WriteSet = nil
@@ -238,6 +277,19 @@ func planStepByKindV0(
 	return OperationalDirectorStepV0{}
 }
 
+func planStepsByKindV0(
+	plan OperationalDirectorPlanV0,
+	kind OperationalDirectorStepKindV0,
+) []OperationalDirectorStepV0 {
+	var steps []OperationalDirectorStepV0
+	for _, step := range plan.Steps {
+		if step.Kind == kind {
+			steps = append(steps, step)
+		}
+	}
+	return steps
+}
+
 func planStepKindCountV0(
 	plan OperationalDirectorPlanV0,
 	kind OperationalDirectorStepKindV0,
@@ -281,4 +333,16 @@ func assertIssueV0(
 		}
 	}
 	t.Fatalf("issue %q not found in %+v", code, issues)
+}
+
+func assertStringSetEqualsV0(t *testing.T, got []string, want ...string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("got=%+v want=%+v", got, want)
+	}
+	for _, value := range want {
+		if !stringInSetV0(got, value) {
+			t.Fatalf("got=%+v want=%+v", got, want)
+		}
+	}
 }

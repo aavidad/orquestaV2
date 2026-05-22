@@ -58,6 +58,40 @@ func TestBuildOperationalDirectorWaveWorkV0DomainNeedsContextDoesNotExposeLaunch
 	}
 }
 
+func TestBuildOperationalDirectorWaveWorkV0DomainLaunchItemsKeepShardedWriteSet(t *testing.T) {
+	result := BuildOperationalDirectorPlanV0(validDomainWorkRequestV0(func(request *OperationalDirectorRequestV0) {
+		request.MaxParallelAgents = 3
+		request.WriteSet = []string{
+			"external/domain-work/job-001/block-a",
+			"external/domain-work/job-001/block-b",
+			"external/domain-work/job-001/block-c",
+			"external/domain-work/job-001/block-d",
+		}
+	}))
+	work := BuildOperationalDirectorWaveWorkV0(result.Plan)
+
+	if len(work.Issues) > 0 {
+		t.Fatalf("issues=%+v", work.Issues)
+	}
+	launchWave := waveByItemKindV0(work, OperationalDirectorStepLaunchSubagentsV0)
+	if len(launchWave.Items) != 3 {
+		t.Fatalf("launch wave=%+v", launchWave)
+	}
+	assertStringSetEqualsV0(t, launchWave.Items[0].WriteSet,
+		"external/domain-work/job-001/block-a",
+		"external/domain-work/job-001/block-d",
+	)
+	assertStringSetEqualsV0(t, launchWave.Items[1].WriteSet, "external/domain-work/job-001/block-b")
+	assertStringSetEqualsV0(t, launchWave.Items[2].WriteSet, "external/domain-work/job-001/block-c")
+	for _, item := range launchWave.Items {
+		if item.WorkProfileKind != "domain_work" ||
+			!stringInSetV0(item.DomainRefs, "domain-job-ref-001") ||
+			!containsFragmentInSetV0(item.AcceptanceCriteria, "write-set asignado es ownership inicial") {
+			t.Fatalf("launch item=%+v", item)
+		}
+	}
+}
+
 func TestBuildOperationalDirectorWaveWorkV0GroupsIndependentItemsInSameWave(t *testing.T) {
 	result := BuildOperationalDirectorPlanV0(validDomainWorkRequestV0(nil))
 	plan := result.Plan

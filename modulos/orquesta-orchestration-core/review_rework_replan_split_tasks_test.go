@@ -150,6 +150,48 @@ func TestReviewReworkReplanSplitTaskV0ValidatesRecursiveParentLimits(t *testing.
 	})
 }
 
+func TestReviewReworkReplanSplitTaskV0AcceptsNeutralCurrentRunPhase(t *testing.T) {
+	runRef := "run-nucleo-review-rework-split-doc-001"
+	task := reviewReworkSplitWorkflowTaskV0(runRef, "task-ref-review-split-doc", "docs/tema.md")
+	task.PhaseID = orquestacoreworkflow.OrchestrationPhaseDocumentacionV0
+	task.WorkProfileKind = orquestacoreworkflow.WorkProfileDomainWorkV0
+
+	got, err := reviewReworkSplitTaskV0(
+		SchedulerCandidateRequestV0{
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				RunID:        runRef,
+				CurrentPhase: orquestacoreworkflow.OrchestrationPhaseDocumentacionV0,
+			},
+		},
+		task,
+	)
+	if err != nil {
+		t.Fatalf("split_task documentacion/domain_work valida: %v", err)
+	}
+	if got.PhaseID != orquestacoreworkflow.OrchestrationPhaseDocumentacionV0 ||
+		got.WorkProfileKind != orquestacoreworkflow.WorkProfileDomainWorkV0 {
+		t.Fatalf("task neutral no conservada: %+v", got)
+	}
+}
+
+func TestReviewReworkReplanSplitTaskV0RejectsPhaseOutsideCurrentRun(t *testing.T) {
+	runRef := "run-nucleo-review-rework-split-phase-guard-001"
+	task := reviewReworkSplitWorkflowTaskV0(runRef, "task-ref-review-split-doc-forbidden", "docs/tema.md")
+	task.PhaseID = orquestacoreworkflow.OrchestrationPhaseDocumentacionV0
+	task.WorkProfileKind = orquestacoreworkflow.WorkProfileDomainWorkV0
+
+	_, err := reviewReworkSplitTaskV0(
+		SchedulerCandidateRequestV0{
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				RunID:        runRef,
+				CurrentPhase: orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+			},
+		},
+		task,
+	)
+	assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "split_task.phase_id")
+}
+
 type reviewReworkSplitPlanSourceV0 struct {
 	Tasks []orquestacoreworkflow.WorkflowTaskV0
 }

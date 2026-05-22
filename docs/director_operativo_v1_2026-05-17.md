@@ -334,7 +334,9 @@ la primera guarda recursiva antes de aceptar followups: si una task trae
 `parent_task_ref`, carga el parent desde `WorkflowTaskStore`, exige que ese
 parent siga reflejado en `run.Tasks`, que `delegation_depth` sea `parent+1`, que
 `wave_ref`/`cohort_ref` no cambien y que el fanout declarado en el parent mas
-el propuesto no supere `max_child_agents`. Esto no ejecuta runtime ni decide
+el propuesto no supere `max_child_agents`. El `split_task` ya no fuerza
+`programacion`: admite la fase actual neutral del run y, cuando el rework sale de
+`revision`, solo fases de trabajo soportadas. Esto no ejecuta runtime ni decide
 presupuesto de proveedor; esa frontera sigue en la composicion/adaptador.
 
 Aplicacion por dominio:

@@ -8,9 +8,10 @@ Entrada: `StartAppDirectorRequestV0`.
 - refs opcionales: `run_ref`, `project_ref`, `correlation_id`, `requested_by`;
 - espera opcional: `wait_agent_refs` explicitas o filtros
   `wait_cohort_ref`, `wait_wave_ref`, `wait_parent_task_ref`;
-- plan operativo opcional: refs de contratos de funcion, fase objetivo y limite
-  de items; en el primer corte la materializacion automatica del plan se usa en
-  `ContinueAppDirectorV0`;
+- plan operativo: `StartAppDirectorV0` no acepta un
+  `operational_director_plan` completo porque el run recien creado aun no tiene
+  contratos de funcion publicados; la materializacion automatica del plan se usa
+  en `ContinueAppDirectorV0` sobre un run ya preparado;
 - `occurred_at`: instante operacional del arranque.
 
 Puertos requeridos:
@@ -70,7 +71,8 @@ Invariantes:
   `WorkflowTaskWaitStateV0` con causa y pendientes.
 - si hay `OperationalPlanStateWriter`, el servicio registra el plan state
   inicial con step activo `wait_subagents`, ola/cohorte, task refs, agent refs,
-  pending agent refs y `wait_ref`.
+  pending agent refs y `wait_ref` cuando ese tramo viene de `ContinueAppDirectorV0`
+  o de decisiones ya materializadas del director.
 
 ## `ContinueAppDirectorV0`
 

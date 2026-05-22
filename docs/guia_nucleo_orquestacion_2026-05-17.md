@@ -240,7 +240,10 @@ smoke real opt-in. No se importa desde core, director, domain-work ni expander.
   asi que el camino de `split_task` puede guardar microtareas de rework.
 - `review/rework/replan split_task` usa esa misma metadata para rechazar
   followups recursivos con parent/depth/fanout/ola/cohorte imposibles antes de
-  materializarlos; sigue sin meter Codex, OPES, runtime ni presupuesto proveedor.
+  materializarlos; ademas ya no queda fijado a `programacion`: acepta la fase
+  actual neutral del run y, desde `revision`, solo fases de trabajo soportadas
+  como `programacion`, `documentacion` o `integracion`. Sigue sin meter Codex,
+  OPES, runtime ni presupuesto proveedor.
 - `OperationalDirectorClosureV0` puede cerrar causalmente un run con review
   aceptada y tests requeridos evidenciados. `ContinueAppDirectorV0` lo conecta
   al final del loop quiescent cuando recibe un `OperationalClosureSource`; el

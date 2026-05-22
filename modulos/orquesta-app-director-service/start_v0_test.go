@@ -123,6 +123,16 @@ func TestStartAppDirectorV0ReturnsFactoryValidationIssues(t *testing.T) {
 	}
 }
 
+func TestStartAppDirectorV0RejectsOperationalDirectorPlanInicial(t *testing.T) {
+	request := validStartAppDirectorRequestForTestV0()
+	request.OperationalDirectorPlan = serviceOperationalDirectorPlanForContinueTestV0(t, request.RunRef)
+
+	_, err := StartAppDirectorV0(context.Background(), request, StartAppDirectorPortsV0{})
+	if err == nil || err.Error() != "app_director_service_invalido: operational_director_plan" {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestStartAppDirectorV0RequiresInjectedPorts(t *testing.T) {
 	_, err := StartAppDirectorV0(
 		context.Background(),

@@ -11,6 +11,9 @@ func validateStartAppDirectorRequestV0(
 	if strings.TrimSpace(request.AppSpecRequest.RequestID) == "" {
 		return AppDirectorServiceIssueV0{Field: "app_spec_request.request_id"}
 	}
+	if continueHasOperationalDirectorPlanV0(request.OperationalDirectorPlan) {
+		return AppDirectorServiceIssueV0{Field: "operational_director_plan"}
+	}
 	return nil
 }
 
