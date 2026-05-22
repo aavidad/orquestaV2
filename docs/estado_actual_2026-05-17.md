@@ -216,8 +216,11 @@ Lo pendiente no debe confundirse con lo hecho:
   de cierre; el runner/adaptador de tests por puerto existe y tiene replay focal
   sin reejecucion externa; el cierre bloqueado por
   `required_test_evidence_refs` ya puede reabrir `wait_subagents` cuando aparece
-  un followup causal reflejado; siguen pendientes smoke Codex real con runner,
-  replan automatico para blockers no cubiertos y replay/idempotencia completa;
+  un followup causal reflejado, y el cierre insuficiente causal con
+  `closure_ref`/`validation_ref` ya emite quality gate + replan retry y reabre
+  solo el followup causal reflejado; siguen pendientes smoke Codex real con
+  runner, replan automatico para blockers no cubiertos y replay/idempotencia
+  completa;
 - si una composicion real distinta del stack Codex todavia no inyecta una fuente
   `OperationalClosureSource`, el cierre queda pendiente de wiring real en esa
   composicion;
@@ -228,8 +231,9 @@ Lo pendiente no debe confundirse con lo hecho:
   avanzan o bloquean por evidencia causal; la observacion negativa de review y
   el cierre/bloqueo posterior del PlanState estan cubiertos offline; el cierre
   de ola multitarea ya progresa por reentradas sin bloquear por
-  `run.open_tasks`; faltan smoke real Codex con runner, replan automatico de
-  blockers y replay/idempotencia completa;
+  `run.open_tasks`; cierre insuficiente causal ya tiene replan retry acotado;
+  faltan smoke real Codex con runner, replan automatico de blockers restantes y
+  replay/idempotencia completa;
 - la recursion Codex real sigue pendiente: ya existe contrato unitario para
   `launch -> sigue -> done`, pero falta el adaptador real que conecte `sigue` con
   el ciclo normal de agentes y el ciclo productivo de hijos de hijos con
@@ -350,11 +354,11 @@ implementacion y prueba integrada para cada frente:
 - [~] Replan negativo: review negativa, tests fallidos de un task y reentrada
   tardia a followups ya materializados estan cubiertos. Tambien queda cubierta
   la reentrada de cierre bloqueado por `required_test_evidence_refs` cuando
-  aparece despues un followup causal reflejado. Sigue pendiente emitir
-  rework/replan causal generico para otros blockers como cierre insuficiente no
-  cubierto por evidencias de test o scopes complejos; outbox pendiente ya
-  bloquea el cierre con causa durable sin llamar la fuente. No cerrar por
-  resumen ni por quietud aparente.
+  aparece despues un followup causal reflejado, y cierre insuficiente causal ya
+  produce replan retry con refs de task/delivery/review aceptada. Sigue pendiente
+  emitir rework/replan causal generico para blockers de scopes complejos u otros
+  casos sin decision causal; outbox pendiente ya bloquea el cierre con causa
+  durable sin llamar la fuente. No cerrar por resumen ni por quietud aparente.
 - [x] Plan state inicial: persistir estado vivo del plan con step activo
   `wait_subagents`, ola/cohorte activa, tasks, agentes, pendientes y `wait_ref`.
 - [x] Plan state reentrada inicial: `ContinueAppDirectorV0` lee
@@ -367,9 +371,9 @@ implementacion y prueba integrada para cada frente:
 - [~] Plan state restante: review negativa observada, intentos de replan,
   reentrada tardia a followups causales ya materializados, bloqueo por evidencia
   de test faltante, razon de cierre/bloqueo, reentrada de cierre bloqueado por
-  falta de evidencia requerida, bloqueo por outbox pendiente y tests durables ya
-  quedan persistidos. Falta materializar replan automatico de otros blockers y
-  probar replay/idempotencia completa.
+  falta de evidencia requerida, replan de cierre insuficiente causal, bloqueo
+  por outbox pendiente y tests durables ya quedan persistidos. Falta materializar
+  replan automatico de otros blockers y probar replay/idempotencia completa.
 - [ ] Evento idempotente: todo avance de review, test, replan y cierre debe
   pasar por comando/evento idempotente con clave estable por refs causales; el
   replay no debe duplicar efectos.

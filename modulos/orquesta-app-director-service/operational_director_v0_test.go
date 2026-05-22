@@ -457,6 +457,59 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeReviewATestsRequer
 	}
 }
 
+func TestUpdateOperationalDirectorPlanStateAfterLoopV0ReviewAceptadaReplayNoDuplicaPlanState(t *testing.T) {
+	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(fixture.State)
+	ports := StartAppDirectorPortsV0{
+		EventReader:                serviceOperationalClosureEventReaderForTestV0{Events: fixture.Events},
+		OperationalPlanStateStore:  planStateStore,
+		OperationalPlanStateWriter: planStateStore,
+	}
+	loop := orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run:    fixture.Run,
+	}
+	for _, occurredAt := range []string{"2026-05-17T14:20:00Z", "2026-05-17T14:20:01Z"} {
+		if err := updateOperationalDirectorPlanStateAfterLoopV0(context.Background(), ContinueAppDirectorRequestV0{
+			RunRef:                     fixture.RunRef,
+			OccurredAt:                 occurredAt,
+			OperationalDirectorPlanRef: fixture.PlanRef,
+		}, ports, loop); err != nil {
+			t.Fatalf("updateOperationalDirectorPlanStateAfterLoopV0 %s: %v", occurredAt, err)
+		}
+	}
+	state, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), fixture.RunRef, fixture.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	reviewStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-review-deliveries")
+	testsStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-run-required-tests")
+	if state.ActiveStepID != "step-run-required-tests" ||
+		reviewStep.Status != orquestadirectoroperativo.OperationalDirectorStepAcceptedV0 ||
+		testsStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+		t.Fatalf("state=%+v reviewStep=%+v testsStep=%+v", state, reviewStep, testsStep)
+	}
+	for label, values := range map[string][]string{
+		"delivery":        reviewStep.DeliveryRefs,
+		"review_result":   reviewStep.ReviewResultRefs,
+		"accepted_review": reviewStep.AcceptedReviewRefs,
+	} {
+		want := map[string]string{
+			"delivery":        fixture.DeliveryRef,
+			"review_result":   fixture.ReviewResultRef,
+			"accepted_review": fixture.AcceptedReviewRef,
+		}[label]
+		if serviceCountStringV0(values, want) != 1 {
+			t.Fatalf("%s refs=%+v want una vez %s", label, values, want)
+		}
+	}
+	if serviceCountStringV0(state.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-review-accepted-v0") != 1 ||
+		serviceCountStringV0(testsStep.BlockerRefs, "required-tests-pending") != 1 ||
+		serviceCountStringV0(testsStep.TaskRefs, fixture.TaskRef) != 1 {
+		t.Fatalf("state=%+v testsStep=%+v", state, testsStep)
+	}
+}
+
 func TestUpdateOperationalDirectorPlanStateAfterLoopV0ReviewNegativaRegistraReworkReplan(t *testing.T) {
 	for _, status := range []orquestacoreworkflow.ReviewResultStatusV0{
 		orquestacoreworkflow.ReviewResultStatusChangesRequestedV0,

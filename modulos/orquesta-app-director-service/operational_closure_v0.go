@@ -160,7 +160,7 @@ func operationalDirectorPlanStateReplanClosureIssuesV0(
 	closureRequest orquestacionnucleoapp.OperationalDirectorClosureRequestV0,
 	issues []orquestacionnucleoapp.ErrorV0,
 ) ([]string, error) {
-	issueRefs := operationalDirectorClosureRequiredTestIssueRefsV0(issues)
+	issueRefs := operationalDirectorClosureReplannableIssueRefsV0(issues)
 	if len(issueRefs) == 0 || ports.RunStore == nil || ports.EventSink == nil {
 		return nil, nil
 	}
@@ -181,6 +181,13 @@ func operationalDirectorPlanStateReplanClosureIssuesV0(
 		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
 		return nil, nil
 	}
+	if strings.TrimSpace(run.RunID) == "" {
+		loadedRun, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+		if err != nil {
+			return nil, err
+		}
+		run = loadedRun
+	}
 	taskRefs := compactServiceRefsV0(activeStep.TaskRefs)
 	if len(taskRefs) != 1 || strings.TrimSpace(closureRequest.TaskID) != taskRefs[0] {
 		return nil, nil
@@ -191,26 +198,47 @@ func operationalDirectorPlanStateReplanClosureIssuesV0(
 	}
 	if gate, ok := operationalDirectorPlanRequiredTestsQualityGateV0(run, trace, activeStep, match.TaskRef, issueRefs); ok {
 		if replan, ok := operationalDirectorPlanReplanForQualityGateV0(run, trace, gate.GateRef, match.TaskRef); ok {
-			return compactServiceRefsV0([]string{gate.GateRef, replan.ReplanRef}), nil
+			return compactServiceRefsV0(append([]string{gate.GateRef, replan.ReplanRef}, issueRefs...)), nil
 		}
 	}
-	return operationalDirectorPlanEmitClosureIssueReplanDecisionV0(ctx, request, ports, run, match, issueRefs)
+	replanRefs, err := operationalDirectorPlanEmitClosureIssueReplanDecisionV0(ctx, request, ports, run, match, issueRefs)
+	return compactServiceRefsV0(append(replanRefs, issueRefs...)), err
 }
 
-func operationalDirectorClosureRequiredTestIssueRefsV0(
+func operationalDirectorClosureReplannableIssueRefsV0(
 	issues []orquestacionnucleoapp.ErrorV0,
 ) []string {
 	refs := make([]string, 0, len(issues)*2)
+	closureInsufficient := false
 	for _, issue := range issues {
-		if strings.TrimSpace(issue.Field) != "required_test_evidence_refs" {
+		field := strings.TrimSpace(issue.Field)
+		if !operationalDirectorClosureIssueReplannableV0(field) {
 			continue
 		}
-		refs = append(refs, issue.Field)
+		refs = append(refs, field)
 		if code := strings.TrimSpace(issue.Code); code != "" {
 			refs = append(refs, code)
 		}
+		if field != "required_test_evidence_refs" {
+			closureInsufficient = true
+		}
+	}
+	if closureInsufficient {
+		refs = append(refs, "operational_closure_insufficient")
 	}
 	return compactServiceRefsV0(refs)
+}
+
+func operationalDirectorClosureIssueReplannableV0(field string) bool {
+	switch strings.TrimSpace(field) {
+	case "required_test_evidence_refs",
+		"operational_closure_insufficient",
+		"validation_ref",
+		"closure_ref":
+		return true
+	default:
+		return false
+	}
 }
 
 func operationalDirectorClosureIssueAcceptedReviewMatchV0(
@@ -323,7 +351,7 @@ func operationalDirectorPlanEmitClosureIssueReplanDecisionV0(
 		SubjectRef:   match.TaskRef,
 		Decision:     orquestacoreworkflow.QualityGateDecisionBlockedV0,
 		IssueRefs:    append([]string(nil), issueRefs...),
-		Summary:      "Cierre operativo bloqueado por tests requeridos sin evidencia causal.",
+		Summary:      operationalDirectorClosureIssueGateSummaryV0(issueRefs),
 		EvidenceRefs: operationalDirectorRequiredTestsAutoReplanEvidenceRefsV0(match, issueRefs),
 	}
 	gateCommand, err := orquestacoreworkflow.NewRecordQualityGateCommandV0(
@@ -350,7 +378,7 @@ func operationalDirectorPlanEmitClosureIssueReplanDecisionV0(
 		SourceRef:      refs.GateRef,
 		AcceptedAction: orquestacoreworkflow.ReplanDecisionActionRetryTaskV0,
 		FollowupRefs:   []string{refs.CapacityRef, refs.AgentRef},
-		Summary:        "Reintentar tarea tras cierre bloqueado por tests requeridos.",
+		Summary:        operationalDirectorClosureIssueReplanSummaryV0(issueRefs),
 		EvidenceRefs:   compactServiceRefsV0(append([]string{refs.GateRef}, issueRefs...)),
 	}
 	replanCommand, err := orquestacoreworkflow.NewRecordReplanDecisionCommandV0(
@@ -371,6 +399,20 @@ func operationalDirectorPlanEmitClosureIssueReplanDecisionV0(
 		return nil, err
 	}
 	return compactServiceRefsV0([]string{refs.GateRef, refs.ReplanRef, refs.CapacityRef, refs.AgentRef}), nil
+}
+
+func operationalDirectorClosureIssueGateSummaryV0(issueRefs []string) string {
+	if startAppDirectorStringInSetV0(issueRefs, "operational_closure_insufficient") {
+		return "Cierre operativo bloqueado por evidencia de cierre insuficiente."
+	}
+	return "Cierre operativo bloqueado por tests requeridos sin evidencia causal."
+}
+
+func operationalDirectorClosureIssueReplanSummaryV0(issueRefs []string) string {
+	if startAppDirectorStringInSetV0(issueRefs, "operational_closure_insufficient") {
+		return "Reintentar tarea tras cierre operativo insuficiente."
+	}
+	return "Reintentar tarea tras cierre bloqueado por tests requeridos."
 }
 
 func operationalDirectorClosureIssueAutoReplanRefsV0(

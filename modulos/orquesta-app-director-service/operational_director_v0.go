@@ -1360,7 +1360,7 @@ func continueOperationalDirectorPlanStateAfterBlockedClosureIssuesReplanV0(
 		activeStep.Reason != "operational-closure-issues" {
 		return state, false, nil
 	}
-	issueRefs := operationalDirectorClosureRequiredTestBlockerRefsV0(append(state.BlockerRefs, activeStep.BlockerRefs...))
+	issueRefs := operationalDirectorClosureReplannableBlockerRefsV0(append(state.BlockerRefs, activeStep.BlockerRefs...))
 	if len(issueRefs) == 0 {
 		return state, false, nil
 	}
@@ -1418,14 +1418,15 @@ func continueOperationalDirectorPlanStateAfterBlockedClosureIssuesReplanV0(
 	return state, false, nil
 }
 
-func operationalDirectorClosureRequiredTestBlockerRefsV0(refs []string) []string {
-	required := make([]string, 0, 1)
+func operationalDirectorClosureReplannableBlockerRefsV0(refs []string) []string {
+	replannable := make([]string, 0, len(refs))
 	for _, ref := range refs {
-		if strings.TrimSpace(ref) == "required_test_evidence_refs" {
-			required = append(required, ref)
+		ref = strings.TrimSpace(ref)
+		if operationalDirectorClosureIssueReplannableV0(ref) {
+			replannable = append(replannable, ref)
 		}
 	}
-	return compactServiceRefsV0(required)
+	return compactServiceRefsV0(replannable)
 }
 
 func operationalDirectorPlanReplanFollowupAgentRefsV0(
