@@ -26,7 +26,9 @@ func TestWorkflowTaskFromWorkProfileV0RefactorRequiresTestsAndPreservesLineage(t
 	profile.CohortRef = "cohort-ref-profile-001"
 	profile.WaveRef = "wave-ref-profile-001"
 	profile.DelegationDepth = 2
+	profile.MaxDelegationDepth = 4
 	profile.MaxChildAgents = 4
+	profile.MaxSubagentsPerAgent = 4
 	profile.MaxRecursiveAgents = 16
 	profile.ChildTaskRefs = []string{"task-ref-child-001"}
 
@@ -39,7 +41,9 @@ func TestWorkflowTaskFromWorkProfileV0RefactorRequiresTestsAndPreservesLineage(t
 		task.CohortRef != "cohort-ref-profile-001" ||
 		task.WaveRef != "wave-ref-profile-001" ||
 		task.DelegationDepth != 2 ||
+		task.MaxDelegationDepth != 4 ||
 		task.MaxChildAgents != 4 ||
+		task.MaxSubagentsPerAgent != 4 ||
 		task.MaxRecursiveAgents != 16 ||
 		len(task.ChildTaskRefs) != 1 ||
 		task.ChildTaskRefs[0] != "task-ref-child-001" {

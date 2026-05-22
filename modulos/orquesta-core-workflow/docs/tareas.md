@@ -16,7 +16,7 @@ Estado:
 
 ```text
 ID: NCW-078
-Objetivo: Transportar `max_recursive_agents` como presupuesto global neutral del arbol de `WorkflowTaskV0`.
+Objetivo: Transportar limites recursivos neutrales del arbol de `WorkflowTaskV0`: profundidad maxima, fanout global por agente y presupuesto global.
 Write-set: work_items_*.go, work_profile_*.go, docs locales y tests de linaje.
 Contrato: WorkflowTaskV0, WorkProfileV0, WorkflowTaskFromWorkProfileV0.
 Validacion: 2026-05-23, tests focales de linaje en orquesta-core-workflow.

@@ -30,7 +30,8 @@ Campos:
   - acceptance_criteria
   - function_contract_refs
   - context_refs
-  - parent_task_ref, cohort_ref, wave_ref, delegation_depth, max_child_agents,
+  - parent_task_ref, cohort_ref, wave_ref, delegation_depth,
+    max_delegation_depth, max_child_agents, max_subagents_per_agent,
     max_recursive_agents, child_task_refs
 Invariantes:
   - DTO puro sin runtime, DB, proveedor, HOME, agentes concretos ni adaptadores.
@@ -41,7 +42,9 @@ Invariantes:
   - `write_set` y `acceptance_criteria` son listas compactas no vacias.
   - `function_contract_refs` contiene referencias opacas; el DTO base acepta `contract_ref` o `function_name` para compatibilidad local.
   - `context_refs` contiene refs opacas compactas opcionales de la composicion o app externa; no son campos de producto ni conceptos de programacion.
-  - `max_recursive_agents` es presupuesto global opcional del arbol de tareas; `0` conserva compatibilidad sin limite estructurado.
+  - `max_delegation_depth`, `max_subagents_per_agent` y `max_recursive_agents`
+    son presupuestos opcionales del arbol de tareas; `0` conserva
+    compatibilidad sin limite estructurado.
   - Rechaza detalles de DB, SQL, runtime, provider/proveedor, HOME, OAuth, Docker, tmux y secretos.
 Errores:
   - workflow_task_invalida
@@ -77,7 +80,9 @@ Campos:
   - cohort_ref
   - wave_ref
   - delegation_depth
+  - max_delegation_depth
   - max_child_agents
+  - max_subagents_per_agent
   - max_recursive_agents
   - child_task_refs
   - function_contract_refs
@@ -94,7 +99,9 @@ Invariantes:
   - Reutiliza `WorkflowTaskV0`: `WorkflowTaskFromWorkProfileV0` valida el perfil y produce una tarea durable compacta con `work_profile_kind`.
   - `profile_kind` decide fase y criterios base por politica neutral; los conectores aportan refs, reglas y validadores.
   - `implementation`, `refactor` y `required_tests` exigen `required_tests` antes de poder materializarse.
-  - Conserva linaje neutral de delegacion: parent task, cohorte, ola, profundidad, fanout, presupuesto global recursivo e hijos.
+  - Conserva linaje neutral de delegacion: parent task, cohorte, ola,
+    profundidad, limite de profundidad, fanout local/global, presupuesto global
+    recursivo e hijos.
   - Exige `function_contract_refs` para no crear tareas sin contrato invocable.
 Errores:
   - work_profile_invalido

@@ -137,8 +137,14 @@ func validateWorkflowTaskLineageV0(task WorkflowTaskV0) error {
 	if task.DelegationDepth < 0 || task.DelegationDepth > maxWorkflowTaskCollectionV0 {
 		return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "delegation_depth")
 	}
+	if task.MaxDelegationDepth < 0 || task.MaxDelegationDepth > maxWorkflowTaskCollectionV0 {
+		return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "max_delegation_depth")
+	}
 	if task.MaxChildAgents < 0 || task.MaxChildAgents > maxWorkflowTaskCollectionV0 {
 		return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "max_child_agents")
+	}
+	if task.MaxSubagentsPerAgent < 0 || task.MaxSubagentsPerAgent > maxWorkflowTaskCollectionV0 {
+		return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "max_subagents_per_agent")
 	}
 	if task.MaxRecursiveAgents < 0 || task.MaxRecursiveAgents > maxWorkflowTaskRecursiveAgentsV0 {
 		return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "max_recursive_agents")

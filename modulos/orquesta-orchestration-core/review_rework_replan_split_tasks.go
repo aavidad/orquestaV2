@@ -147,21 +147,24 @@ func reviewReworkValidateRecursiveSplitTasksV0(
 		}
 		fanoutByParentRef[parentRef] = append(fanoutByParentRef[parentRef], reviewReworkSplitTaskRefsV0(persistedChildren)...)
 	}
-	for _, task := range tasks {
-		parentRef := strings.TrimSpace(task.ParentTaskRef)
+	for i := range tasks {
+		parentRef := strings.TrimSpace(tasks[i].ParentTaskRef)
 		if parentRef == "" {
 			continue
 		}
 		parent := parentsByRef[parentRef]
-		if err := reviewReworkValidateRecursiveSplitChildTaskV0(parent, task); err != nil {
+		reviewReworkInheritRecursiveLimitsV0(&tasks[i], parent)
+		if err := reviewReworkValidateRecursiveSplitChildTaskV0(parent, tasks[i]); err != nil {
 			return err
 		}
-		fanoutByParentRef[parentRef] = append(fanoutByParentRef[parentRef], task.TaskID)
+		fanoutByParentRef[parentRef] = append(fanoutByParentRef[parentRef], tasks[i].TaskID)
 	}
 	for _, parentRef := range parentRefs {
 		parent := parentsByRef[parentRef]
-		if len(compactStringsV0(fanoutByParentRef[parentRef])) > parent.MaxChildAgents {
-			return errorV0(ErrNucleoOrquestacionInvalidoV0, "split_task.max_child_agents", "fanout supera max_child_agents")
+		fanout := len(compactStringsV0(fanoutByParentRef[parentRef]))
+		limit, field := reviewReworkEffectiveFanoutLimitV0(parent)
+		if fanout > limit {
+			return errorV0(ErrNucleoOrquestacionInvalidoV0, field, "fanout supera limite recursivo")
 		}
 	}
 	if err := reviewReworkValidateRecursiveTreeBudgetsV0(ctx, request, store, treeStore, parentsByRef, tasks); err != nil {
@@ -174,6 +177,9 @@ func reviewReworkValidateRecursiveSplitChildTaskV0(
 	parent orquestacoreworkflow.WorkflowTaskV0,
 	task orquestacoreworkflow.WorkflowTaskV0,
 ) error {
+	if parent.MaxDelegationDepth > 0 && task.DelegationDepth > parent.MaxDelegationDepth {
+		return errorV0(ErrNucleoOrquestacionInvalidoV0, "split_task.max_delegation_depth", "delegation_depth supera max_delegation_depth")
+	}
 	if task.DelegationDepth != parent.DelegationDepth+1 {
 		return errorV0(ErrNucleoOrquestacionInvalidoV0, "split_task.delegation_depth", "delegation_depth no sigue al parent")
 	}
@@ -187,6 +193,38 @@ func reviewReworkValidateRecursiveSplitChildTaskV0(
 		return errorV0(ErrNucleoOrquestacionInvalidoV0, "split_task.child_task_refs", "hijo no declarado por parent")
 	}
 	return nil
+}
+
+func reviewReworkInheritRecursiveLimitsV0(
+	task *orquestacoreworkflow.WorkflowTaskV0,
+	parent orquestacoreworkflow.WorkflowTaskV0,
+) {
+	if parent.MaxDelegationDepth > 0 &&
+		(task.MaxDelegationDepth == 0 || task.MaxDelegationDepth > parent.MaxDelegationDepth) {
+		task.MaxDelegationDepth = parent.MaxDelegationDepth
+	}
+	if parent.MaxSubagentsPerAgent > 0 &&
+		(task.MaxSubagentsPerAgent == 0 || task.MaxSubagentsPerAgent > parent.MaxSubagentsPerAgent) {
+		task.MaxSubagentsPerAgent = parent.MaxSubagentsPerAgent
+	}
+	if parent.MaxSubagentsPerAgent > 0 && task.MaxChildAgents > parent.MaxSubagentsPerAgent {
+		task.MaxChildAgents = parent.MaxSubagentsPerAgent
+	}
+	if parent.MaxRecursiveAgents > 0 &&
+		(task.MaxRecursiveAgents == 0 || task.MaxRecursiveAgents > parent.MaxRecursiveAgents) {
+		task.MaxRecursiveAgents = parent.MaxRecursiveAgents
+	}
+}
+
+func reviewReworkEffectiveFanoutLimitV0(
+	parent orquestacoreworkflow.WorkflowTaskV0,
+) (int, string) {
+	limit := parent.MaxChildAgents
+	field := "split_task.max_child_agents"
+	if parent.MaxSubagentsPerAgent > 0 && parent.MaxSubagentsPerAgent < limit {
+		return parent.MaxSubagentsPerAgent, "split_task.max_subagents_per_agent"
+	}
+	return limit, field
 }
 
 func reviewReworkRecursiveSplitParentRefsV0(

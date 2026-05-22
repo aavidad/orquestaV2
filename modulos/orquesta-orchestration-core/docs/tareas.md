@@ -259,3 +259,19 @@ Validacion:
 ```sh
 go test -count=1 ./modulos/orquesta-orchestration-core -run 'TestReviewReworkReplanSplitTaskV0ValidatesRecursiveParentLimits|TestOperationalDirectorPlanMaterializerV0PreservaRefsOperativasTipadas'
 ```
+
+## ORCH-CORE-DIR-011: limites recursivos heredados en split_task
+
+Estado: hecho offline.
+
+`split_task` hereda y corrige `max_delegation_depth`,
+`max_subagents_per_agent` y `max_recursive_agents` desde el parent antes de
+guardar followups. Si el hijo propone limites mas amplios, el director los baja
+al limite heredado; si la profundidad ya supera `max_delegation_depth`, bloquea
+antes de `SaveWorkflowTaskV0`.
+
+Validacion:
+
+```sh
+go test -count=1 ./modulos/orquesta-orchestration-core -run 'TestReviewReworkReplanSplitTaskV0ValidatesRecursiveParentLimits|TestOperationalDirectorPlanMaterializerV0PreservaRefsOperativasTipadas'
+```

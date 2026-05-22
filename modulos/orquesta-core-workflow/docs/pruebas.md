@@ -16,10 +16,10 @@ Detalle quality gates: `docs/pruebas_quality_gates.md`.
 ## Pruebas previstas
 
 ```text
-Caso: workflow_task_max_recursive_agents_neutral
+Caso: workflow_task_recursive_limits_neutral
 Tipo: unit | contract | regression
 Comando: go test -count=1 ./modulos/orquesta-core-workflow -run 'TestWorkflowTaskV0AcceptsNeutralLineageMetadata|TestValidateWorkflowTaskV0RejectsInvalidLineageMetadata|TestWorkflowTaskFromWorkProfileV0RefactorRequiresTestsAndPreservesLineage'
-Evidencia esperada: `WorkflowTaskV0` y `WorkProfileV0` conservan `max_recursive_agents`, rechazan valores fuera de rango y no introducen runtime/proveedor/adaptadores.
+Evidencia esperada: `WorkflowTaskV0` y `WorkProfileV0` conservan `max_delegation_depth`, `max_subagents_per_agent` y `max_recursive_agents`, rechazan valores fuera de rango y no introducen runtime/proveedor/adaptadores.
 Ultima ejecucion: 2026-05-23, ok, tests focales de linaje.
 Riesgos: El conteo del arbol ocurre fuera del core-workflow usando `WorkflowTaskStore`; aqui solo se preserva el contrato neutral.
 ```

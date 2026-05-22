@@ -52,7 +52,9 @@ func TestWorkflowTaskV0AcceptsNeutralLineageMetadata(t *testing.T) {
 	task.CohortRef = " cohort-wave-001 "
 	task.WaveRef = " wave-001 "
 	task.DelegationDepth = 2
+	task.MaxDelegationDepth = 4
 	task.MaxChildAgents = 3
+	task.MaxSubagentsPerAgent = 3
 	task.MaxRecursiveAgents = 12
 	task.ChildTaskRefs = []string{" task-child-001 ", "task-child-002"}
 
@@ -64,7 +66,9 @@ func TestWorkflowTaskV0AcceptsNeutralLineageMetadata(t *testing.T) {
 		got.CohortRef != "cohort-wave-001" ||
 		got.WaveRef != "wave-001" ||
 		got.DelegationDepth != 2 ||
+		got.MaxDelegationDepth != 4 ||
 		got.MaxChildAgents != 3 ||
+		got.MaxSubagentsPerAgent != 3 ||
 		got.MaxRecursiveAgents != 12 ||
 		!reflect.DeepEqual(got.ChildTaskRefs, []string{"task-child-001", "task-child-002"}) {
 		t.Fatalf("lineage metadata not normalized: %+v", got)
@@ -128,6 +132,14 @@ func TestValidateWorkflowTaskV0RejectsInvalidLineageMetadata(t *testing.T) {
 		"too_many_child_agents": {
 			mutate: func(task *WorkflowTaskV0) { task.MaxChildAgents = maxWorkflowTaskCollectionV0 + 1 },
 			field:  "max_child_agents",
+		},
+		"too_many_delegation_depth_limit": {
+			mutate: func(task *WorkflowTaskV0) { task.MaxDelegationDepth = maxWorkflowTaskCollectionV0 + 1 },
+			field:  "max_delegation_depth",
+		},
+		"too_many_subagents_per_agent": {
+			mutate: func(task *WorkflowTaskV0) { task.MaxSubagentsPerAgent = maxWorkflowTaskCollectionV0 + 1 },
+			field:  "max_subagents_per_agent",
 		},
 		"too_many_recursive_agents": {
 			mutate: func(task *WorkflowTaskV0) { task.MaxRecursiveAgents = maxWorkflowTaskRecursiveAgentsV0 + 1 },

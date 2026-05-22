@@ -92,6 +92,15 @@ func TestReviewReworkReplanSplitTaskV0ValidatesRecursiveParentLimits(t *testing.
 		assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "split_task.delegation_depth")
 	})
 
+	t.Run("rechaza_depth_que_supera_max_delegation_depth", func(t *testing.T) {
+		parent := reviewReworkRecursiveSplitParentForTestV0(runRef)
+		parent.MaxDelegationDepth = parent.DelegationDepth
+		child := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-child-max-depth", "app/rework_child_max_depth.go")
+
+		_, _, err := reviewReworkRecursiveSplitCandidatesForTestV0(t, parent, child)
+		assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "split_task.max_delegation_depth")
+	})
+
 	t.Run("rechaza_fanout_imposible", func(t *testing.T) {
 		parent := reviewReworkRecursiveSplitParentForTestV0(runRef)
 		parent.MaxChildAgents = 1
@@ -104,6 +113,36 @@ func TestReviewReworkReplanSplitTaskV0ValidatesRecursiveParentLimits(t *testing.
 		if _, loadErr := store.LoadWorkflowTasksV0(context.Background(), runRef, []string{childA.TaskID}); loadErr == nil {
 			t.Fatalf("split_task invalida no debe guardarse: %s", childA.TaskID)
 		}
+	})
+
+	t.Run("corrige_max_child_agents_que_supera_max_subagents_per_agent", func(t *testing.T) {
+		parent := reviewReworkRecursiveSplitParentForTestV0(runRef)
+		parent.MaxSubagentsPerAgent = 1
+		child := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-child-global-fanout", "app/rework_child_global_fanout.go")
+		child.MaxChildAgents = 2
+
+		_, store, err := reviewReworkRecursiveSplitCandidatesForTestV0(t, parent, child)
+		if err != nil {
+			t.Fatalf("split_task debe corregir limite laxo: %v", err)
+		}
+		stored, err := store.LoadWorkflowTasksV0(context.Background(), runRef, []string{child.TaskID})
+		if err != nil {
+			t.Fatalf("child no guardado: %v", err)
+		}
+		if stored[0].MaxChildAgents != 1 || stored[0].MaxSubagentsPerAgent != 1 {
+			t.Fatalf("limite laxo no corregido: %+v", stored[0])
+		}
+	})
+
+	t.Run("rechaza_fanout_real_que_supera_max_subagents_per_agent", func(t *testing.T) {
+		parent := reviewReworkRecursiveSplitParentForTestV0(runRef)
+		parent.MaxChildAgents = 3
+		parent.MaxSubagentsPerAgent = 1
+		childA := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-child-global-fanout-a", "app/rework_child_global_fanout_a.go")
+		childB := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-child-global-fanout-b", "app/rework_child_global_fanout_b.go")
+
+		_, _, err := reviewReworkRecursiveSplitCandidatesForTestV0(t, parent, childA, childB)
+		assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "split_task.max_subagents_per_agent")
 	})
 
 	t.Run("acepta_parent_child_valido", func(t *testing.T) {
@@ -155,6 +194,7 @@ func TestReviewReworkReplanSplitTaskV0ValidatesRecursiveParentLimits(t *testing.
 	t.Run("acepta_fanout_con_hijos_persistidos_dentro_limite", func(t *testing.T) {
 		parent := reviewReworkRecursiveSplitParentForTestV0(runRef)
 		parent.MaxChildAgents = 3
+		parent.MaxSubagentsPerAgent = 3
 		parent.ChildTaskRefs = nil
 		persisted := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-persisted-ok", "app/rework_persisted_ok.go")
 		childA := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-child-ok-a", "app/rework_child_ok_a.go")
@@ -179,6 +219,7 @@ func TestReviewReworkReplanSplitTaskV0ValidatesRecursiveParentLimits(t *testing.
 	t.Run("rechaza_presupuesto_global_con_hijos_persistidos_y_candidatos", func(t *testing.T) {
 		parent := reviewReworkRecursiveSplitParentForTestV0(runRef)
 		parent.MaxChildAgents = 3
+		parent.MaxSubagentsPerAgent = 3
 		parent.MaxRecursiveAgents = 2
 		parent.ChildTaskRefs = nil
 		persisted := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-budget-persisted", "app/rework_budget_persisted.go")
@@ -200,10 +241,15 @@ func TestReviewReworkReplanSplitTaskV0ValidatesRecursiveParentLimits(t *testing.
 	t.Run("acepta_presupuesto_global_y_lo_propaga_al_hijo", func(t *testing.T) {
 		parent := reviewReworkRecursiveSplitParentForTestV0(runRef)
 		parent.MaxChildAgents = 3
+		parent.MaxDelegationDepth = 3
+		parent.MaxSubagentsPerAgent = 3
 		parent.MaxRecursiveAgents = 3
 		parent.ChildTaskRefs = nil
 		persisted := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-budget-ok-persisted", "app/rework_budget_ok_persisted.go")
 		candidate := reviewReworkRecursiveSplitChildForTestV0(parent, "task-ref-recursive-budget-ok-candidate", "app/rework_budget_ok_candidate.go")
+		candidate.MaxDelegationDepth = 9
+		candidate.MaxSubagentsPerAgent = 9
+		candidate.MaxRecursiveAgents = 9
 
 		candidates, store, err := reviewReworkRecursiveSplitCandidatesWithStoredTasksForTestV0(
 			t,
@@ -225,11 +271,16 @@ func TestReviewReworkReplanSplitTaskV0ValidatesRecursiveParentLimits(t *testing.
 		if stored[0].MaxRecursiveAgents != parent.MaxRecursiveAgents {
 			t.Fatalf("max_recursive_agents no propagado: %+v", stored[0])
 		}
+		if stored[0].MaxDelegationDepth != parent.MaxDelegationDepth ||
+			stored[0].MaxSubagentsPerAgent != parent.MaxSubagentsPerAgent {
+			t.Fatalf("limites recursivos no corregidos: %+v", stored[0])
+		}
 	})
 
 	t.Run("rechaza_presupuesto_global_definido_en_ancestro", func(t *testing.T) {
 		root := reviewReworkRecursiveSplitParentForTestV0(runRef)
 		root.MaxChildAgents = 3
+		root.MaxSubagentsPerAgent = 3
 		root.MaxRecursiveAgents = 2
 		root.ChildTaskRefs = nil
 		parent := reviewReworkRecursiveSplitChildForTestV0(root, "task-ref-recursive-budget-parent", "app/rework_budget_parent.go")
@@ -250,6 +301,7 @@ func TestReviewReworkReplanSplitTaskV0ValidatesRecursiveParentLimits(t *testing.
 	t.Run("usa_presupuesto_mas_estricto_del_ancestro", func(t *testing.T) {
 		root := reviewReworkRecursiveSplitParentForTestV0(runRef)
 		root.MaxChildAgents = 3
+		root.MaxSubagentsPerAgent = 3
 		root.MaxRecursiveAgents = 2
 		root.ChildTaskRefs = nil
 		parent := reviewReworkRecursiveSplitChildForTestV0(root, "task-ref-recursive-budget-parent-high", "app/rework_budget_parent_high.go")
@@ -389,7 +441,9 @@ func reviewReworkRecursiveSplitParentForTestV0(
 	parent.WaveRef = "wave-ref-recursive-001"
 	parent.CohortRef = "cohort-ref-recursive-001"
 	parent.DelegationDepth = 1
+	parent.MaxDelegationDepth = 3
 	parent.MaxChildAgents = 2
+	parent.MaxSubagentsPerAgent = 2
 	return parent
 }
 

@@ -52,7 +52,9 @@ type WorkflowTaskV0 struct {
 	CohortRef            string                          `json:"cohort_ref,omitempty"`
 	WaveRef              string                          `json:"wave_ref,omitempty"`
 	DelegationDepth      int                             `json:"delegation_depth,omitempty"`
+	MaxDelegationDepth   int                             `json:"max_delegation_depth,omitempty"`
 	MaxChildAgents       int                             `json:"max_child_agents,omitempty"`
+	MaxSubagentsPerAgent int                             `json:"max_subagents_per_agent,omitempty"`
 	MaxRecursiveAgents   int                             `json:"max_recursive_agents,omitempty"`
 	ChildTaskRefs        []string                        `json:"child_task_refs,omitempty"`
 	FunctionContractRefs []WorkflowFunctionContractRefV0 `json:"function_contract_refs,omitempty"`
