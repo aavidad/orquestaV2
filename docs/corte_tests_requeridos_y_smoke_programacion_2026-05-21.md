@@ -198,3 +198,46 @@ Limitacion confirmada:
   `Capacity.ReasoningEffort`; `ORQUESTA_CAPACITY_REASONING_EFFORT` y
   `ORQUESTA_CAPACITY_TIER` permiten sobrescribir esa politica desde la
   composicion.
+
+## Reintento de smoke 2026-05-22 tras continuidad review
+
+Cambio probado offline antes del reintento:
+
+- `ContinueAppDirectorV0` abre `revision` con `OpenPhase` idempotente cuando el
+  `PlanState` entra o reentra en `review_deliveries` y el run sigue en
+  `programacion`.
+- Si el loop acaba de consumir `wait_subagents`, el servicio ejecuta un pase
+  acotado adicional para aplicar review gate sobre entregas ya disponibles.
+- Prueba focal:
+  `go test -count=1 ./modulos/orquesta-app-director-service -run TestContinueAppDirectorV0AvanzaDeWaitAReviewAbriendoRevision`.
+- Suite completa local pasada: `go test -count=1 ./...`.
+
+Smoke real intentado con director Codex real, `reasoning_effort=medium`,
+`sandbox=danger-full-access`, `approval_policy=never` y
+`ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED=1`.
+
+Directorio temporal purgado antes de ejecutar:
+
+```text
+/tmp/orquesta-real-review-autofollow-20260522
+```
+
+Resultado:
+
+- Servidor temporal levantado en `http://127.0.0.1:35081`.
+- `POST /api/v0/apps/director` devolvio 200 y creo
+  `run-spec-inventario-review-autofollow-req-inventario-review-autofollow-18db032d`.
+- Codex no llego a entregar ACK del director por limite de cuota antes de crear
+  microtareas: el stderr del agente contiene `You've hit your usage limit` y
+  pide reintentar a las 14:33.
+- Stats al parar: fase `brainstorming_arquitectura`, `agents_started=1`,
+  `agents_in_flight=0`, `tasks_total=0`, `tasks_closed=0`,
+  `required_test_evidence=0`.
+- Shutdown ordenado por `/api/v0/server/shutdown` devolvio 200 con
+  `status=ready`, `shutdown_ready=true`, `agents_in_flight=0` y
+  `checkpoints_pending=0`.
+
+Este reintento no valida ni invalida el tramo nuevo con runtime real: quedo
+bloqueado por cuota antes de que existiera una entrega a revisar. La evidencia
+util del cambio queda en pruebas offline; el smoke real completo debe repetirse
+cuando haya cuota.
