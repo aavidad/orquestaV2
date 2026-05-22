@@ -29,6 +29,9 @@ Cobertura esperada:
   con `operational_director_plan_ref`, sin volver al scope global del run;
 - el plan state avanza de `wait_subagents` a `review_deliveries` cuando los
   agentes pendientes entregaron y el loop queda `quiescent`;
+- si ese avance deja el run en `programacion`, `ContinueAppDirectorV0` abre
+  `revision` por comando workflow y ejecuta un pase acotado de review sobre el
+  mismo scope;
 - el plan state avanza de `review_deliveries` a `run_required_tests` o
   `replan_or_close` solo si la cadena causal de eventos del scope activo queda
   aceptada; una delivery de otra ola no avanza el state y outbox pendiente
@@ -91,6 +94,7 @@ Evidencia 2026-05-09:
 - `TestContinueRequestWithOperationalDirectorPlanStateV0ReentraRunRequiredTestsConScope`;
 - `TestContinueRequestWithOperationalDirectorPlanStateV0RespetaWaitExplicito`;
 - `TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaAReviewTrasWaitConsumido`;
+- `TestContinueAppDirectorV0AvanzaDeWaitAReviewAbriendoRevision`;
 - `TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeReviewATestsRequeridos`;
 - `TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeTestsAReplanConEvidenciaPassed`;
 - `TestUpdateOperationalDirectorPlanStateAfterLoopV0ReviewNegativaRegistraReworkReplan`;

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -325,6 +326,103 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 	return next, nil
 }
 
+func ensureOperationalDirectorReviewPhaseV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+) (bool, error) {
+	state, activeStep, ok, err := operationalDirectorActiveReviewDeliveriesStepV0(ctx, request, ports)
+	if err != nil || !ok {
+		return false, err
+	}
+	if ports.RunStore == nil || ports.EventSink == nil {
+		return false, nil
+	}
+	run, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return false, err
+	}
+	if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		operationalDirectorRunPhaseActiveV0(run, orquestacoreworkflow.OrchestrationPhaseRevisionV0) {
+		return false, nil
+	}
+	if !operationalDirectorRunContainsPhaseV0(run, orquestacoreworkflow.OrchestrationPhaseRevisionV0) {
+		return false, AppDirectorServiceIssueV0{Field: "run.phases.revision"}
+	}
+	suffix := operationalDirectorReviewPhaseCommandSuffixV0(request, state, activeStep)
+	command, err := orquestacoreworkflow.NewOpenPhaseCommandV0(
+		orquestacoreworkflow.OrchestrationCommandMetaV0{
+			CommandID:      "cmd-open-review-" + suffix,
+			RunID:          request.RunRef,
+			IdempotencyKey: "idem-open-review-" + suffix,
+			CorrelationID:  request.CorrelationID,
+			RequestedBy:    request.RequestedBy,
+			OccurredAt:     request.OccurredAt,
+		},
+		orquestacoreworkflow.OpenPhaseCommandPayloadV0{
+			PhaseID: string(orquestacoreworkflow.OrchestrationPhaseRevisionV0),
+			Reason:  "operational-director-review-deliveries",
+		},
+	)
+	if err != nil {
+		return false, err
+	}
+	if _, err := orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, ports.RunStore, ports.EventSink, command); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func operationalDirectorActiveReviewDeliveriesStepV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+) (
+	orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+	bool,
+	error,
+) {
+	planRef := continueOperationalDirectorPlanRefV0(request)
+	if planRef == "" || ports.OperationalPlanStateStore == nil {
+		return orquestacionnucleoapp.OperationalDirectorPlanStateV0{},
+			orquestacionnucleoapp.OperationalDirectorPlanStepStateV0{},
+			false,
+			nil
+	}
+	state, err := ports.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, request.RunRef, planRef)
+	if err != nil {
+		return orquestacionnucleoapp.OperationalDirectorPlanStateV0{},
+			orquestacionnucleoapp.OperationalDirectorPlanStepStateV0{},
+			false,
+			err
+	}
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok ||
+		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 ||
+		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+		return state, activeStep, false, nil
+	}
+	return state, activeStep, true, nil
+}
+
+func operationalDirectorReviewPhaseCommandSuffixV0(
+	request ContinueAppDirectorRequestV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+) string {
+	return appDirectorSafeRefPartV0(strings.Join(compactServiceRefsV0([]string{
+		request.RunRef,
+		state.PlanRef,
+		activeStep.StepID,
+		activeStep.WaveRef,
+		activeStep.CohortRef,
+		activeStep.ParentTaskRef,
+		"replan-attempt-" + strconv.Itoa(state.ReplanAttempts),
+	}), "-"))
+}
+
 func continueOperationalDirectorPlanStateCanProgressBlockedRequiredTestsReplanV0(
 	ctx context.Context,
 	request ContinueAppDirectorRequestV0,
@@ -541,24 +639,34 @@ func updateOperationalDirectorPlanStateAfterLoopV0(
 	ports StartAppDirectorPortsV0,
 	loop orquestacionnucleoapp.ProgressiveLoopResultV0,
 ) error {
+	_, err := applyOperationalDirectorPlanStateAfterLoopV0(ctx, request, ports, loop)
+	return err
+}
+
+func applyOperationalDirectorPlanStateAfterLoopV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	loop orquestacionnucleoapp.ProgressiveLoopResultV0,
+) (bool, error) {
 	if ports.OperationalPlanStateStore == nil ||
 		ports.OperationalPlanStateWriter == nil ||
 		loop.Status != orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 {
-		return nil
+		return false, nil
 	}
 	planRef := continueOperationalDirectorPlanRefV0(request)
 	if planRef == "" {
-		return nil
+		return false, nil
 	}
 	state, err := ports.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, request.RunRef, planRef)
 	if err != nil {
-		return err
+		return false, err
 	}
 	next := state
 	changed := false
 	afterWait, waitChanged, err := operationalDirectorPlanStateAfterWaitConsumedV0(request, next, loop.Run)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if waitChanged {
 		next = afterWait
@@ -566,7 +674,7 @@ func updateOperationalDirectorPlanStateAfterLoopV0(
 	}
 	afterReview, reviewChanged, err := operationalDirectorPlanStateAfterReviewAcceptedV0(ctx, request, ports, next, loop)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if reviewChanged {
 		next = afterReview
@@ -574,7 +682,7 @@ func updateOperationalDirectorPlanStateAfterLoopV0(
 	}
 	afterReviewReplan, reviewReplanChanged, err := operationalDirectorPlanStateAfterReviewReworkReplanV0(ctx, request, ports, next, loop)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if reviewReplanChanged {
 		next = afterReviewReplan
@@ -582,16 +690,16 @@ func updateOperationalDirectorPlanStateAfterLoopV0(
 	}
 	afterTests, testsChanged, err := operationalDirectorPlanStateAfterRequiredTestsV0(ctx, request, ports, next, loop)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if testsChanged {
 		next = afterTests
 		changed = true
 	}
 	if !changed {
-		return nil
+		return false, nil
 	}
-	return ports.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, next)
+	return true, ports.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, next)
 }
 
 func operationalDirectorPlanStateAfterWaitConsumedV0(
@@ -1499,11 +1607,18 @@ func operationalDirectorRequiredTestsAutoReplanEvidenceRefsV0(
 }
 
 func operationalDirectorRunProgrammingPhaseActiveV0(run orquestacoreworkflow.OrchestrationRunV0) bool {
-	if strings.TrimSpace(string(run.CurrentPhase)) != string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0) {
+	return operationalDirectorRunPhaseActiveV0(run, orquestacoreworkflow.OrchestrationPhaseProgramacionV0)
+}
+
+func operationalDirectorRunPhaseActiveV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	phaseID orquestacoreworkflow.OrchestrationPhaseIDV0,
+) bool {
+	if strings.TrimSpace(string(run.CurrentPhase)) != string(phaseID) {
 		return false
 	}
 	for _, phase := range run.Phases {
-		if strings.TrimSpace(string(phase.ID)) == string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0) &&
+		if strings.TrimSpace(string(phase.ID)) == string(phaseID) &&
 			phase.Status == orquestacoreworkflow.OrchestrationPhaseStatusActiveV0 {
 			return true
 		}

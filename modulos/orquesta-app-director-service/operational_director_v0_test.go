@@ -288,6 +288,91 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaAReviewTrasWaitConsu
 	}
 }
 
+func TestContinueAppDirectorV0AvanzaDeWaitAReviewAbriendoRevision(t *testing.T) {
+	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
+	run := serviceContinueClosureRunForTestV0(fixture.RunRef, orquestacoreworkflow.OrchestrationPhaseProgramacionV0)
+	run.ProjectRef = fixture.Run.ProjectRef
+	run.AppSpecRef = fixture.Run.AppSpecRef
+	run.Tasks = []string{fixture.TaskRef}
+	run.Agents = []string{fixture.AgentRef}
+	run.StartedAgents = []string{fixture.AgentRef}
+	run.DeliveredAgents = []string{fixture.AgentRef}
+	run.DeliveredTasks = []string{fixture.TaskRef}
+	run.Deliveries = []string{fixture.DeliveryRef}
+	run.LastEventID = "event-ref-delivery-review-autofollow-001"
+	run.LastSequence = 1
+	state := fixture.State
+	state.ActiveStepID = "step-wait-subagents"
+	state.PendingAgentRefs = []string{fixture.AgentRef}
+	for index := range state.Steps {
+		step := &state.Steps[index]
+		switch step.StepID {
+		case "step-wait-subagents":
+			step.Status = orquestadirectoroperativo.OperationalDirectorStepRunningV0
+			step.PendingAgentRefs = []string{fixture.AgentRef}
+			step.Reason = "wait-subagents-running"
+		case "step-review-deliveries":
+			step.Status = orquestadirectoroperativo.OperationalDirectorStepPendingV0
+			step.DeliveryRefs = nil
+			step.ReviewResultRefs = nil
+			step.AcceptedReviewRefs = nil
+			step.Reason = ""
+		}
+	}
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(run)
+	eventSink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	if err := eventSink.AppendRunEventsV0(context.Background(), fixture.RunRef, []orquestacoreworkflow.OrchestrationEventV0{fixture.Events[0]}); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	outboxLedger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(state)
+	reviewSource := &acceptedServiceReviewGateSourceV0{Fixture: fixture}
+
+	result, err := ContinueAppDirectorV0(context.Background(), ContinueAppDirectorRequestV0{
+		RunRef:                     fixture.RunRef,
+		OccurredAt:                 "2026-05-22T13:00:00Z",
+		CorrelationID:              "corr-service-wait-review-open-revision-001",
+		OperationalDirectorPlanRef: fixture.PlanRef,
+		MaxBursts:                  6,
+		MaxStepsPerBurst:           6,
+		MaxDispatchesPerWait:       2,
+		MaxCommands:                20,
+		MaxOutboxPerCycle:          8,
+	}, StartAppDirectorPortsV0{
+		RunStore:                   runStore,
+		EventSink:                  eventSink,
+		EventReader:                eventSink,
+		OutboxLedger:               outboxLedger,
+		DirectorTaskStore:          orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(serviceOperationalDirectorWorkflowTaskForFixtureV0(fixture)),
+		ReviewGateSource:           reviewSource,
+		OperationalPlanStateStore:  planStateStore,
+		OperationalPlanStateWriter: planStateStore,
+		Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+			serviceCapacityDispatcherForTestV0(runStore, eventSink, outboxLedger),
+		},
+	})
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0: %v", err)
+	}
+	if !reviewSource.Called ||
+		result.Run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseRevisionV0 ||
+		!serviceStringInSetV0(result.Run.Reviews, fixture.ReviewRequestID) ||
+		!strings.Contains(strings.Join(result.Run.ReviewResults, " "), fixture.ReviewResultRef) ||
+		!serviceStringInSetV0(result.Run.AcceptedReviews, fixture.AcceptedReviewRef) {
+		t.Fatalf("review no aplicada: called=%v run=%+v", reviewSource.Called, result.Run)
+	}
+	state, err = planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), fixture.RunRef, fixture.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	reviewStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-review-deliveries")
+	if state.ActiveStepID != "step-run-required-tests" ||
+		reviewStep.Status != orquestadirectoroperativo.OperationalDirectorStepAcceptedV0 ||
+		!serviceStringInSetV0(reviewStep.AcceptedReviewRefs, fixture.AcceptedReviewRef) {
+		t.Fatalf("state=%+v reviewStep=%+v", state, reviewStep)
+	}
+}
+
 func TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeReviewATestsRequeridos(t *testing.T) {
 	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
 	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(fixture.State)
@@ -2577,6 +2662,31 @@ func (source *serviceOperationalDirectorClosureSourceFromRequestForTestV0) Build
 		RequiredTestEvidenceRefs: append([]string(nil), request.RequiredTestEvidenceRefs...),
 		EvidenceRefs:             compactServiceRefsV0(append(request.EvidenceRefs, "evidence-ref-service-review-runner-close-001")),
 	}, true, nil
+}
+
+type acceptedServiceReviewGateSourceV0 struct {
+	Fixture serviceOperationalDirectorPlanStateReviewFixtureV0
+	Called  bool
+}
+
+func (source *acceptedServiceReviewGateSourceV0) BuildReviewGateObservationsV0(
+	_ context.Context,
+	_ orquestacionnucleoapp.ReviewGateObservationRequestV0,
+) ([]orquestacionnucleoapp.ReviewGateObservationV0, error) {
+	source.Called = true
+	return []orquestacionnucleoapp.ReviewGateObservationV0{{
+		ReviewRequestID:   source.Fixture.ReviewRequestID,
+		ReviewResultRef:   source.Fixture.ReviewResultRef,
+		AcceptedReviewRef: source.Fixture.AcceptedReviewRef,
+		DeliveryRef:       source.Fixture.DeliveryRef,
+		PhaseID:           string(orquestacoreworkflow.OrchestrationPhaseRevisionV0),
+		Status:            orquestacoreworkflow.ReviewResultStatusAcceptedV0,
+		Summary:           "Review aceptada por fuente inyectada.",
+		EvidenceRefs: []string{
+			"evidence-ref-service-review-gate-accepted",
+			source.Fixture.RequiredTestEvidenceRef,
+		},
+	}}, nil
 }
 
 func serviceOperationalDirectorReplanSplitTaskForTestV0(

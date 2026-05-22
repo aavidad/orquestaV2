@@ -158,6 +158,10 @@ Estado: parcial avanzado. Cerrado offline el camino positivo
 `wait -> review_deliveries -> run_required_tests -> replan_or_close -> close`
 para microtareas nacidas de decisiones del director y el consumo durable de
 `run_required_tests` desde `RequiredTestEvidenceV0`.
+Aniadido pase operativo de continuidad: cuando `wait_subagents` queda consumido
+y el state pasa a `review_deliveries`, `ContinueAppDirectorV0` abre `revision`
+si el run seguia en `programacion` y relanza un pase acotado del loop para
+aplicar review gate sin llamada manual adicional.
 Aniadido primer runner por puerto: si el `PlanState` entra en
 `run_required_tests` sin evidencias causales ya guardadas, el servicio invoca
 `RequiredTestRunnerPortV0`, persiste evidencias durables y reevalua el avance.
@@ -182,4 +186,10 @@ Validacion actual del tramo de tests requeridos:
 
 ```sh
 go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service -run 'TestRequiredTest(Runner|Evidence)|TestInMemoryRequiredTestEvidence|TestUpdateOperationalDirectorPlanStateAfterLoopV0(AvanzaDeTestsAReplanConEvidenciaPassed|EjecutaRunnerDeTestsRequeridos|BloqueaTestsConEvidenciaFailed|NoAvanzaTestsConEvidenciaDeOtraReview)'
+```
+
+Validacion de continuidad wait -> review:
+
+```sh
+go test -count=1 ./modulos/orquesta-app-director-service -run TestContinueAppDirectorV0AvanzaDeWaitAReviewAbriendoRevision
 ```
