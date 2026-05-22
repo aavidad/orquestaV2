@@ -297,6 +297,9 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 	if err != nil {
 		return ContinueAppDirectorRequestV0{}, err
 	}
+	if state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 {
+		return request, nil
+	}
 	reopened := false
 	state, reopenedRequiredTests, err := continueOperationalDirectorPlanStateAfterBlockedRequiredTestsReplanV0(ctx, request, ports, state)
 	if err != nil {

@@ -124,6 +124,41 @@ func TestContinueAppDirectorV0StateFileReplayReviewRunnerReplanOrCloseCloseNoDup
 	if len(eventsAfterReplay) != len(eventsAfterFirst) {
 		t.Fatalf("replay duplico eventos: first=%d replay=%d events=%+v", len(eventsAfterFirst), len(eventsAfterReplay), eventsAfterReplay)
 	}
+
+	directReplayExecutor := &fakeServiceRequiredTestCommandExecutorV0{
+		results: map[string]orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{
+			fixture.RequiredTest: {
+				Status:       orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0,
+				EvidenceRefs: []string{"artifact-ref-service-required-test-output-statefile-direct-replay-should-not-run"},
+			},
+		},
+	}
+	directReplayClosureSource := &serviceOperationalDirectorClosureSourceFromRequestForTestV0{Fixture: fixture}
+	request.OccurredAt = "2026-05-22T23:10:02Z"
+	request.CorrelationID = "corr-service-full-statefile-replay-direct-continue"
+	directReplay, err := ContinueAppDirectorV0(
+		ctx,
+		request,
+		serviceFullReplayStateFilePortsForTestV0(recovered, directReplayExecutor, directReplayClosureSource),
+	)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0 direct replay: %v", err)
+	}
+	if directReplay.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		directReplay.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 {
+		t.Fatalf("direct replay no-op invalido: %+v", directReplay)
+	}
+	if len(directReplayExecutor.commands) != 0 {
+		t.Fatalf("runner direct replay no debe ejecutar: commands=%+v", directReplayExecutor.commands)
+	}
+	if directReplayClosureSource.Called {
+		t.Fatalf("closure source direct replay no debe llamarse: request=%+v", directReplayClosureSource.LastRequest)
+	}
+	serviceAssertFullReplayClosureCountsV0(t, recovered, fixture.RunRef, fixture.PlanRef, 1, 1, 1, 1)
+	eventsAfterDirectReplay := serviceFullReplayEventsForTestV0(t, recovered, fixture.RunRef)
+	if len(eventsAfterDirectReplay) != len(eventsAfterFirst) {
+		t.Fatalf("direct replay duplico eventos: first=%d direct=%d events=%+v", len(eventsAfterFirst), len(eventsAfterDirectReplay), eventsAfterDirectReplay)
+	}
 }
 
 func serviceFullReplayStateFileStoreForTestV0(t *testing.T, rootDir string) *orquestastatefile.StoreV0 {

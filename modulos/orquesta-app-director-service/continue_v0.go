@@ -69,6 +69,9 @@ func ContinueAppDirectorV0(
 	if err := validateContinueAppDirectorRequestV0(request, ports); err != nil {
 		return ContinueAppDirectorResultV0{}, err
 	}
+	if result, closed, err := closedOperationalDirectorPlanStateContinueResultV0(ctx, request, ports); err != nil || closed {
+		return result, err
+	}
 	materialized, err := materializeContinueOperationalDirectorPlanV0(ctx, request, ports)
 	if err != nil {
 		return ContinueAppDirectorResultV0{}, err
@@ -106,6 +109,39 @@ func ContinueAppDirectorV0(
 		return ContinueAppDirectorResultV0{}, err
 	}
 	return continueAppDirectorResultV0(request, loop, closureIssues), nil
+}
+
+func closedOperationalDirectorPlanStateContinueResultV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+) (ContinueAppDirectorResultV0, bool, error) {
+	planRef := strings.TrimSpace(request.OperationalDirectorPlanRef)
+	if planRef == "" || ports.OperationalPlanStateStore == nil {
+		return ContinueAppDirectorResultV0{}, false, nil
+	}
+	state, err := ports.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, request.RunRef, planRef)
+	if err != nil {
+		if operationalDirectorPlanStateMissingV0(err) {
+			return ContinueAppDirectorResultV0{}, false, nil
+		}
+		return ContinueAppDirectorResultV0{}, true, err
+	}
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 {
+		return ContinueAppDirectorResultV0{}, false, nil
+	}
+	run, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return ContinueAppDirectorResultV0{}, true, err
+	}
+	return continueAppDirectorResultV0(
+		request,
+		orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+			Run:    run,
+		},
+		nil,
+	), true, nil
 }
 
 func continueOperationalDirectorPlanStatePostLoopV0(

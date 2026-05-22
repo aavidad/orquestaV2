@@ -232,13 +232,14 @@ implementacion, test focal y evidencia en la matriz.
   `replan_or_close -> close`. El replay con `state-file` recuperado ya cubre ese
   cierre sin duplicar `TaskClosed`, validacion, `RunClosed` ni evidencia. El
   replay directo por `ContinueAppDirectorV0` sobre un `PlanState` ya cerrado
-  sigue documentado como frontera pendiente.
+  queda como no-op idempotente: no reentra por `active_step`, no ejecuta runner,
+  no llama fuente de cierre y no duplica eventos.
 - [~] Evento/comando idempotente: el replay de cierre exitoso y bloqueo de
   cierre ya tiene prueba focal y no duplica refs del `PlanState` ni `RunClosed`.
   `state-file` cubre tambien el camino integrado review -> runner ->
-  `replan_or_close` -> close con replay de cierre. Sigue pendiente extender la
-  misma garantia al replay directo de `ContinueAppDirectorV0` con plan cerrado y
-  a todos los blockers de replan.
+  `replan_or_close` -> close con replay de cierre y replay directo por
+  `ContinueAppDirectorV0` con plan cerrado. Sigue pendiente extender la misma
+  garantia a todos los blockers de replan.
 
 El orden recomendado ahora es: replan automatico para casos negativos restantes,
 smoke Codex real con runner opt-in y por ultimo replay/idempotencia completa del
