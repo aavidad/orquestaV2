@@ -15,16 +15,21 @@ import (
 )
 
 const childModeEnvV0 = "ORQUESTA_REQUIRED_TEST_RUNTIME_CHILD"
+const childInvocationMarkerEnvV0 = "ORQUESTA_REQUIRED_TEST_RUNTIME_MARK_INVOCATION"
+const childInvocationMarkerFileV0 = "required-test-invocations.log"
 
 func TestMain(m *testing.M) {
 	switch os.Getenv(childModeEnvV0) {
 	case "pass":
+		recordRequiredTestChildInvocationV0()
 		fmt.Fprintln(os.Stdout, "required test passed")
 		os.Exit(0)
 	case "fail":
+		recordRequiredTestChildInvocationV0()
 		fmt.Fprintln(os.Stderr, "required test failed")
 		os.Exit(7)
 	case "wait":
+		recordRequiredTestChildInvocationV0()
 		requiredTestChildWaitV0()
 	}
 	os.Exit(m.Run())
@@ -179,6 +184,40 @@ func TestRequiredTestRunnerV0ConLocalCommandExecutorEjecutaGoTestReal(t *testing
 	}
 }
 
+func TestRequiredTestRunnerV0ConStoreReaderNoReejecutaExternoEnReplay(t *testing.T) {
+	outputDir := t.TempDir()
+	executor := localCommandExecutorForTestV0(t, outputDir, "pass")
+	executor.Env = append(executor.Env, childInvocationMarkerEnvV0+"=1")
+	store := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	runner := orquestacionnucleoapp.RequiredTestRunnerV0{
+		Executor:       executor,
+		EvidenceWriter: store,
+	}
+	request := requiredTestExecutionRequestForRuntimeTestV0()
+	request.TestCommands = []string{"orquesta-test-bin"}
+
+	first, err := runner.RunRequiredTestsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("RunRequiredTestsV0 first: %v", err)
+	}
+	second, err := runner.RunRequiredTestsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("RunRequiredTestsV0 second: %v", err)
+	}
+	if strings.Join(first.EvidenceRefs, "\n") != strings.Join(second.EvidenceRefs, "\n") ||
+		len(second.Issues) != 0 {
+		t.Fatalf("first=%+v second=%+v", first, second)
+	}
+	markerPath := filepath.Join(executor.ProjectWorkDir, childInvocationMarkerFileV0)
+	data, err := os.ReadFile(markerPath)
+	if err != nil {
+		t.Fatalf("leer marker de invocacion: %v", err)
+	}
+	if got := strings.Count(string(data), "run\n"); got != 1 {
+		t.Fatalf("invocaciones externas=%d, want 1; marker=%q", got, string(data))
+	}
+}
+
 func localCommandExecutorForTestV0(t *testing.T, outputDir string, childMode string) LocalCommandExecutorV0 {
 	t.Helper()
 	if !filepath.IsAbs(os.Args[0]) {
@@ -277,6 +316,22 @@ func requiredTestOutputRefForTestV0(t *testing.T, refs []string) string {
 	}
 	t.Fatalf("sin ref de salida en evidence_refs=%v", refs)
 	return ""
+}
+
+func recordRequiredTestChildInvocationV0() {
+	if os.Getenv(childInvocationMarkerEnvV0) == "" {
+		return
+	}
+	file, err := os.OpenFile(childInvocationMarkerFileV0, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "required test marker failed: %v\n", err)
+		os.Exit(98)
+	}
+	defer file.Close()
+	if _, err := file.WriteString("run\n"); err != nil {
+		fmt.Fprintf(os.Stderr, "required test marker failed: %v\n", err)
+		os.Exit(98)
+	}
 }
 
 func requiredTestChildWaitV0() {

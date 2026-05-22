@@ -104,7 +104,8 @@ idempotente; guardar la misma ref con payload distinto es conflicto.
 Desde el corte del 2026-05-22, `RequiredTestRunnerV0` lee primero la evidencia
 deterministica si el writer tambien expone reader, o si se inyecta
 `EvidenceReader`: un replay con la misma cadena causal no reejecuta el comando
-externo ni reescribe una evidencia distinta.
+externo ni reescribe una evidencia distinta. El runtime local tiene prueba
+focal con comando real que marca una sola invocacion externa.
 
 `orquesta-state-file` ya persiste estas evidencias y
 `orquesta-app-codex-stack` puede encontrarlas desde `RequiredTestEvidenceRefs`
@@ -118,7 +119,9 @@ aceptadas se pasan al cierre. Si falta evidencia causal y no hay runner
 efectivo, el plan queda bloqueado con `required-tests-evidence-missing` y se
 registra un `QualityGateRecorded(blocked)` idempotente para auditoria, pero no
 se crea `ReplanDecisionRecorded` automatico: puede ser latencia o falta de
-ingesta, no necesariamente trabajo defectuoso. El runner por puerto y el
+ingesta, no necesariamente trabajo defectuoso. El replay con `state-file` no
+duplica ese gate y reentra a `replan_or_close` cuando aparece evidencia `passed`
+causal posterior. El runner por puerto y el
 ejecutor local opt-in ya existen; sigue pendiente el smoke servidor/director con
 Codex real y ampliar replan generico para blockers no cubiertos.
 
@@ -226,12 +229,16 @@ implementacion, test focal y evidencia en la matriz.
   tambien queda cubierta. Existe prueba integrada offline de
   `ContinueAppDirectorV0` para el camino
   `review_deliveries -> run_required_tests` con runner por puerto ->
-  `replan_or_close -> close`. Falta materializar replan automatico para blockers
-  posteriores y completar replay de todo el ciclo.
+  `replan_or_close -> close`. El replay con `state-file` recuperado ya cubre ese
+  cierre sin duplicar `TaskClosed`, validacion, `RunClosed` ni evidencia. El
+  replay directo por `ContinueAppDirectorV0` sobre un `PlanState` ya cerrado
+  sigue documentado como frontera pendiente.
 - [~] Evento/comando idempotente: el replay de cierre exitoso y bloqueo de
   cierre ya tiene prueba focal y no duplica refs del `PlanState` ni `RunClosed`.
-  Sigue pendiente extender la misma garantia a review, tests y replan con clave
-  estable por `run_ref`, `task_ref`, `wave_ref` o `cohort_ref`.
+  `state-file` cubre tambien el camino integrado review -> runner ->
+  `replan_or_close` -> close con replay de cierre. Sigue pendiente extender la
+  misma garantia al replay directo de `ContinueAppDirectorV0` con plan cerrado y
+  a todos los blockers de replan.
 
 El orden recomendado ahora es: replan automatico para casos negativos restantes,
 smoke Codex real con runner opt-in y por ultimo replay/idempotencia completa del
