@@ -114,9 +114,13 @@ construye cierre cuando existe cadena causal completa: delivery -> review
 requested -> review result accepted -> accepted review. El `PlanState` ya
 consume `RequiredTestEvidenceV0` en `run_required_tests`: `passed` causal avanza
 a `replan_or_close`, `failed` bloquea con `required-tests-failed` y las refs
-aceptadas se pasan al cierre. El runner por puerto y el ejecutor local opt-in ya
-existen; sigue pendiente el smoke servidor/director con Codex real y ampliar
-replan generico para blockers no cubiertos.
+aceptadas se pasan al cierre. Si falta evidencia causal y no hay runner
+efectivo, el plan queda bloqueado con `required-tests-evidence-missing` y se
+registra un `QualityGateRecorded(blocked)` idempotente para auditoria, pero no
+se crea `ReplanDecisionRecorded` automatico: puede ser latencia o falta de
+ingesta, no necesariamente trabajo defectuoso. El runner por puerto y el
+ejecutor local opt-in ya existen; sigue pendiente el smoke servidor/director con
+Codex real y ampliar replan generico para blockers no cubiertos.
 
 Desde el corte del 2026-05-22, `ContinueAppDirectorV0` no bloquea el
 `PlanState` si el cierre de una task devuelve solo `run.open_tasks`: conserva el
@@ -173,7 +177,8 @@ implementacion, test focal y evidencia en la matriz.
   El corte posterior del 2026-05-22 consume tambien replan causal parcial en
   scopes multitarea cuando ya existe decision completa por task fallida. El
   corte del 2026-05-22 bloquea tambien `required-tests-evidence-missing` cuando
-  no hay evidencia causal ni runner efectivo, y reentra a `replan_or_close` si
+  no hay evidencia causal ni runner efectivo, registra un quality gate
+  bloqueante idempotente sin replan automatico, y reentra a `replan_or_close` si
   la evidencia `passed` aparece despues. Siguen pendientes smokes reales.
 - [~] Replan negativo: cerrada la observacion durable de review negativa. El
   `PlanState` guarda refs/attempt para `ReworkRequested` y

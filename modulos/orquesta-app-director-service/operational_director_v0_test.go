@@ -1236,6 +1236,104 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0BloqueaTestsSinEvidenciaNi
 	}
 }
 
+func TestUpdateOperationalDirectorPlanStateAfterLoopV0RequiredTestsEvidenceMissingEmiteQualityGateIdempotente(t *testing.T) {
+	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
+	fixture.Run.CurrentPhase = orquestacoreworkflow.OrchestrationPhaseRevisionV0
+	fixture.Run.Phases = []orquestacoreworkflow.OrchestrationPhaseV0{
+		{
+			ID:                  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+			Status:              orquestacoreworkflow.OrchestrationPhaseStatusPendingV0,
+			RecommendedCapacity: orquestacoreworkflow.OrchestrationCapacityHighV0,
+		},
+		{
+			ID:                  orquestacoreworkflow.OrchestrationPhaseRevisionV0,
+			Status:              orquestacoreworkflow.OrchestrationPhaseStatusActiveV0,
+			RecommendedCapacity: orquestacoreworkflow.OrchestrationCapacityHighV0,
+		},
+	}
+	fixture.Run.LastSequence = 4
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(fixture.Run)
+	eventSink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(fixture.State)
+	request := ContinueAppDirectorRequestV0{
+		RunRef:                     fixture.RunRef,
+		OccurredAt:                 "2026-05-22T20:30:00Z",
+		CorrelationID:              "corr-app-director-required-tests-missing-gate",
+		OperationalDirectorPlanRef: fixture.PlanRef,
+	}
+	ports := StartAppDirectorPortsV0{
+		RunStore:                   runStore,
+		EventSink:                  eventSink,
+		EventReader:                serviceOperationalClosureEventReaderForTestV0{Events: fixture.Events},
+		OperationalPlanStateStore:  planStateStore,
+		OperationalPlanStateWriter: planStateStore,
+		RequiredTestEvidenceStore:  orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0(),
+	}
+	loop := orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run:    fixture.Run,
+	}
+
+	if err := updateOperationalDirectorPlanStateAfterLoopV0(context.Background(), request, ports, loop); err != nil {
+		t.Fatalf("updateOperationalDirectorPlanStateAfterLoopV0 first: %v", err)
+	}
+	request.OccurredAt = "2026-05-22T20:30:01Z"
+	if err := updateOperationalDirectorPlanStateAfterLoopV0(context.Background(), request, ports, loop); err != nil {
+		t.Fatalf("updateOperationalDirectorPlanStateAfterLoopV0 replay: %v", err)
+	}
+
+	state, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), fixture.RunRef, fixture.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	testsStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-run-required-tests")
+	replanStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-replan-or-close")
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
+		state.ActiveStepID != "step-run-required-tests" ||
+		state.ReplanAttempts != 0 ||
+		testsStep.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 ||
+		testsStep.Reason != "required-tests-evidence-missing" ||
+		!serviceStringInSetV0(testsStep.BlockerRefs, "required-tests-evidence-missing") ||
+		len(testsStep.ReplanDecisionRefs) != 0 ||
+		replanStep.Status != orquestadirectoroperativo.OperationalDirectorStepPendingV0 {
+		t.Fatalf("state=%+v testsStep=%+v replanStep=%+v", state, testsStep, replanStep)
+	}
+
+	events := eventSink.EventsV0()
+	var gateEvents, replanEvents int
+	var gatePayload orquestacoreworkflow.QualityGateRecordedPayloadV0
+	for _, event := range events {
+		switch event.EventType {
+		case orquestacoreworkflow.OrchestrationEventQualityGateRecordedV0:
+			gateEvents++
+			if err := json.Unmarshal(event.Payload, &gatePayload); err != nil {
+				t.Fatalf("quality gate payload: %v", err)
+			}
+		case orquestacoreworkflow.OrchestrationEventReplanDecisionRecordedV0:
+			replanEvents++
+		}
+	}
+	if gateEvents != 1 || replanEvents != 0 {
+		t.Fatalf("gateEvents=%d replanEvents=%d events=%+v", gateEvents, replanEvents, events)
+	}
+	if gatePayload.Decision != orquestacoreworkflow.QualityGateDecisionBlockedV0 ||
+		gatePayload.SubjectRef != fixture.TaskRef ||
+		!serviceStringInSetV0(gatePayload.IssueRefs, "required-tests-evidence-missing") ||
+		!serviceStringInSetV0(gatePayload.EvidenceRefs, fixture.DeliveryRef) ||
+		!serviceStringInSetV0(gatePayload.EvidenceRefs, fixture.AcceptedReviewRef) {
+		t.Fatalf("gatePayload=%+v", gatePayload)
+	}
+	run, err := runStore.LoadRunV0(context.Background(), fixture.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(run.QualityGates) != 1 ||
+		len(run.ReplanDecisions) != 0 ||
+		run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 {
+		t.Fatalf("run=%+v gate=%+v", run, gatePayload)
+	}
+}
+
 func TestContinueAppDirectorV0CierraCicloReviewRunnerYReplanOrClose(t *testing.T) {
 	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
 	fixture.Events[2] = serviceOperationalDirectorPlanStateEventForTestV0(t, fixture.RunRef, 3, orquestacoreworkflow.OrchestrationEventReviewResultRecordedV0, orquestacoreworkflow.ReviewResultV0{

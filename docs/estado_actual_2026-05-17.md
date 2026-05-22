@@ -169,9 +169,11 @@ El primer corte ya no esta solo en documentos:
   El guardado es idempotente solo si el payload coincide; la misma ref con
   payload distinto es conflicto. El `PlanState` ya consume esas evidencias en
   `run_required_tests`: con `passed` causal avanza a `replan_or_close`, con
-  `failed` bloquea como `required-tests-failed`, y pasa las refs al cierre. Esto
-  no equivale todavia a un runner shell: la ejecucion/generacion de esas
-  evidencias sigue siendo un tramo pendiente de composicion opt-in.
+  `failed` bloquea como `required-tests-failed`, y si falta evidencia causal sin
+  runner efectivo registra `QualityGateRecorded(blocked)` idempotente por
+  `required-tests-evidence-missing` sin crear replan automatico. Las refs
+  aceptadas se pasan al cierre. Esto no equivale a exigir replan ante latencia
+  o infra: la correccion puede ser aportar evidencia causal posterior.
 - `orquesta-app-codex-stack` ya cablea `OperationalClosureSource` para el caso
   Director Operativo: lee `WorkflowTaskStore` y `LoadRunEventsV0`, respeta el
   scope `WaitAgentRefs`, exige cadena delivery/review requested/review result

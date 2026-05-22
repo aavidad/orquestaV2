@@ -1758,6 +1758,17 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 		}
 	}
 	if !testStatus.Complete {
+		if err := operationalDirectorPlanRecordRequiredTestsEvidenceMissingQualityGateV0(
+			ctx,
+			request,
+			ports,
+			loop.Run,
+			activeStep,
+			matches,
+			requiredTests,
+		); err != nil {
+			return state, false, err
+		}
 		return operationalDirectorPlanStateWithRequiredTestsEvidenceMissingV0(request, state, activeStep)
 	}
 	return operationalDirectorPlanStateWithRequiredTestsPassedV0(request, state, activeStep, testStatus.PassedRefs)
@@ -1897,6 +1908,67 @@ func operationalDirectorPlanStateAfterRequiredTestsReplanV0(
 			},
 		},
 	)
+}
+
+func operationalDirectorPlanRecordRequiredTestsEvidenceMissingQualityGateV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+	matches []operationalDirectorPlanAcceptedReviewMatchV0,
+	requiredTests []string,
+) error {
+	if ports.RunStore == nil || ports.EventSink == nil ||
+		!operationalDirectorPlanRequiredTestsReplanScopeSupportedV0(activeStep, matches) {
+		return nil
+	}
+	requiredTests = compactServiceRefsV0(requiredTests)
+	if len(requiredTests) == 0 {
+		return nil
+	}
+	match := matches[0]
+	if strings.TrimSpace(match.TaskRef) == "" || strings.TrimSpace(match.TaskRef) != strings.TrimSpace(activeStep.TaskRefs[0]) {
+		return nil
+	}
+	refs := operationalDirectorRequiredTestsEvidenceMissingGateRefsV0(request, match, requiredTests)
+	storedRun, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(storedRun.RunID) != strings.TrimSpace(run.RunID) {
+		return nil
+	}
+	storedRun, ready, err := operationalDirectorPlanEnsureProgrammingPhaseForRequiredTestsReplanV0(ctx, request, ports, storedRun, refs)
+	if err != nil || !ready || !operationalDirectorRunProgrammingPhaseActiveV0(storedRun) {
+		return err
+	}
+	payload := orquestacoreworkflow.RecordQualityGateCommandPayloadV0{
+		RunRef:       request.RunRef,
+		GateRef:      refs.GateRef,
+		PhaseID:      string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		SubjectRef:   match.TaskRef,
+		Decision:     orquestacoreworkflow.QualityGateDecisionBlockedV0,
+		IssueRefs:    []string{"required-tests-evidence-missing"},
+		Summary:      "Tests requeridos sin evidencia durable.",
+		EvidenceRefs: operationalDirectorRequiredTestsAutoReplanEvidenceRefsV0(match, []string{"required-tests-evidence-missing"}),
+	}
+	command, err := orquestacoreworkflow.NewRecordQualityGateCommandV0(
+		orquestacoreworkflow.OrchestrationCommandMetaV0{
+			CommandID:      "cmd-" + refs.GateRef,
+			RunID:          request.RunRef,
+			IdempotencyKey: "idem-" + refs.GateRef,
+			CorrelationID:  request.CorrelationID,
+			RequestedBy:    request.RequestedBy,
+			OccurredAt:     request.OccurredAt,
+		},
+		payload,
+	)
+	if err != nil {
+		return err
+	}
+	_, err = orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, ports.RunStore, ports.EventSink, command)
+	return err
 }
 
 type operationalDirectorPlanQualityGateReplanTransitionV0 struct {
@@ -2238,6 +2310,32 @@ func operationalDirectorRequiredTestsAutoReplanRefsV0(
 		ReplanRef:   "replan-ref-app-director-required-tests-failed-" + base,
 		CapacityRef: "capacity-ref-app-director-required-tests-retry-" + base,
 		AgentRef:    "agent-ref-app-director-required-tests-retry-" + base,
+	}
+}
+
+func operationalDirectorRequiredTestsEvidenceMissingGateRefsV0(
+	request ContinueAppDirectorRequestV0,
+	match operationalDirectorPlanAcceptedReviewMatchV0,
+	requiredTests []string,
+) operationalDirectorRequiredTestsAutoReplanRefSetV0 {
+	stem := compactRecoveryRefV0(strings.TrimSpace(match.TaskRef))
+	if len(stem) > 72 {
+		stem = strings.Trim(stem[:72], "-")
+	}
+	digest := operationalDirectorRequiredTestsAutoReplanDigestV0(
+		request.RunRef,
+		match.TaskRef,
+		match.DeliveryRef,
+		match.ReviewRequestID,
+		match.ReviewResultRef,
+		match.AcceptedReviewRef,
+		strings.Join(sortedServiceRefsV0(requiredTests), "|"),
+		"required-tests-evidence-missing",
+	)
+	base := stem + "-" + digest
+	return operationalDirectorRequiredTestsAutoReplanRefSetV0{
+		GateRef:   "quality-gate-ref-app-director-required-tests-evidence-missing-" + base,
+		ReplanRef: "replan-ref-app-director-required-tests-evidence-missing-" + base,
 	}
 }
 
