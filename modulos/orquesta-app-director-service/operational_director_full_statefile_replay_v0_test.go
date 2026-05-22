@@ -403,6 +403,68 @@ func TestContinueAppDirectorV0StateFileReplayRequiredTestsFailedReplanNoDuplica(
 	serviceAssertFullReplayRequiredTestsReplanCountsV0(t, recoveredAgain, fixture.RunRef, fixture.PlanRef, 1, 1, 1, 0)
 }
 
+func TestContinueAppDirectorV0StateFileReplayReviewChangesRequestedReworkReplanNoDuplica(t *testing.T) {
+	ctx := context.Background()
+	fixture := serviceOperationalDirectorPlanStateReviewReworkReplanFixtureForTestV0(
+		t,
+		orquestacoreworkflow.ReviewResultStatusChangesRequestedV0,
+	)
+	rootDir := t.TempDir()
+	store := serviceFullReplayStateFileStoreForTestV0(t, rootDir)
+	if err := store.SaveRunV0(ctx, fixture.Run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if err := store.AppendRunEventsV0(ctx, fixture.RunRef, fixture.Events); err != nil {
+		t.Fatalf("AppendRunEventsV0 seed: %v", err)
+	}
+	if err := store.SaveOperationalDirectorPlanStateV0(ctx, fixture.State); err != nil {
+		t.Fatalf("SaveOperationalDirectorPlanStateV0: %v", err)
+	}
+
+	request := ContinueAppDirectorRequestV0{
+		RunRef:                     fixture.RunRef,
+		OccurredAt:                 "2026-05-23T00:20:00Z",
+		CorrelationID:              "corr-service-review-negative-statefile-replay-first",
+		RequestedBy:                "orquesta-app-director-service-test",
+		OperationalDirectorPlanRef: fixture.PlanRef,
+	}
+	if err := updateOperationalDirectorPlanStateAfterLoopV0(ctx, request, serviceFullReplayStateFileRequiredTestsReplanPortsForTestV0(store), orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run:    fixture.Run,
+	}); err != nil {
+		t.Fatalf("updateOperationalDirectorPlanStateAfterLoopV0 first: %v", err)
+	}
+	serviceAssertFullReplayReviewReworkReplanCountsV0(t, store, fixture, 1, 1, 1)
+
+	recovered := serviceFullReplayStateFileStoreForTestV0(t, rootDir)
+	recoveredRun, err := recovered.LoadRunV0(ctx, fixture.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 recovered: %v", err)
+	}
+	request.OccurredAt = "2026-05-23T00:20:01Z"
+	request.CorrelationID = "corr-service-review-negative-statefile-replay-second"
+	if err := updateOperationalDirectorPlanStateAfterLoopV0(ctx, request, serviceFullReplayStateFileRequiredTestsReplanPortsForTestV0(recovered), orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run:    recoveredRun,
+	}); err != nil {
+		t.Fatalf("updateOperationalDirectorPlanStateAfterLoopV0 replay: %v", err)
+	}
+	serviceAssertFullReplayReviewReworkReplanCountsV0(t, recovered, fixture, 1, 1, 1)
+
+	recoveredAgain := serviceFullReplayStateFileStoreForTestV0(t, rootDir)
+	request.OccurredAt = "2026-05-23T00:20:02Z"
+	request.CorrelationID = "corr-service-review-negative-statefile-replay-third"
+	_, err = continueRequestWithOperationalDirectorPlanStateV0(ctx, request, serviceFullReplayStateFileRequiredTestsReplanPortsForTestV0(recoveredAgain))
+	if err == nil {
+		t.Fatalf("err nil")
+	}
+	issue, ok := err.(AppDirectorServiceIssueV0)
+	if !ok || issue.Field != "operational_director_plan_state.active_step" {
+		t.Fatalf("err=%T %#v", err, err)
+	}
+	serviceAssertFullReplayReviewReworkReplanCountsV0(t, recoveredAgain, fixture, 1, 1, 1)
+}
+
 func serviceFullReplayStateFileStoreForTestV0(t *testing.T, rootDir string) *orquestastatefile.StoreV0 {
 	t.Helper()
 	store, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{RootDir: rootDir})
@@ -561,6 +623,68 @@ func serviceAssertFullReplayRequiredTestsReplanCountsV0(
 		testsStep.Reason != "required-tests-failed" ||
 		len(testsStep.RequiredTestEvidenceRefs) != 1 {
 		t.Fatalf("state replan replay invalido: state=%+v testsStep=%+v", state, testsStep)
+	}
+}
+
+func serviceAssertFullReplayReviewReworkReplanCountsV0(
+	t *testing.T,
+	store *orquestastatefile.StoreV0,
+	fixture serviceOperationalDirectorPlanStateReviewFixtureV0,
+	wantRework int,
+	wantReplan int,
+	wantReplanAttempts int,
+) {
+	t.Helper()
+	events := serviceFullReplayEventsForTestV0(t, store, fixture.RunRef)
+	if got := serviceCountEventsByTypeV0(events, orquestacoreworkflow.OrchestrationEventReworkRequestedV0); got != wantRework {
+		t.Fatalf("ReworkRequested got=%d want=%d events=%+v", got, wantRework, events)
+	}
+	if got := serviceCountEventsByTypeV0(events, orquestacoreworkflow.OrchestrationEventReplanDecisionRecordedV0); got != wantReplan {
+		t.Fatalf("ReplanDecisionRecorded got=%d want=%d events=%+v", got, wantReplan, events)
+	}
+	run, err := store.LoadRunV0(context.Background(), fixture.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(run.ReworkRequests) != wantRework ||
+		len(run.ReplanDecisions) != wantReplan {
+		t.Fatalf("run rework/replan counts invalidos: %+v", run)
+	}
+	if wantRework > 0 && serviceCountStringV0(run.ReworkRequests, run.ReworkRequests[0]) != 1 {
+		t.Fatalf("run rework refs invalidas: %+v", run.ReworkRequests)
+	}
+	if wantReplan > 0 && serviceCountStringV0(run.ReplanDecisions, run.ReplanDecisions[0]) != 1 {
+		t.Fatalf("run replan refs invalidas: %+v", run.ReplanDecisions)
+	}
+	state, err := store.LoadOperationalDirectorPlanStateV0(context.Background(), fixture.RunRef, fixture.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	reviewStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-review-deliveries")
+	if state.ActiveStepID != "step-review-deliveries" ||
+		state.ActiveWaveRef != fixture.WaveRef ||
+		state.ActiveCohortRef != fixture.CohortRef ||
+		state.ActiveParentTaskRef != fixture.ParentTaskRef ||
+		len(state.PendingAgentRefs) != 0 ||
+		state.ReplanAttempts != wantReplanAttempts ||
+		serviceCountStringV0(state.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-review-rework-replan-v0") != 1 {
+		t.Fatalf("state=%+v", state)
+	}
+	if reviewStep.Status != orquestadirectoroperativo.OperationalDirectorStepChangesRequestedV0 ||
+		reviewStep.Reason != "review-rework-replan-recorded" ||
+		len(reviewStep.TaskRefs) != 1 ||
+		reviewStep.TaskRefs[0] != fixture.TaskRef ||
+		len(reviewStep.AgentRefs) != 1 ||
+		reviewStep.AgentRefs[0] != fixture.AgentRef ||
+		len(reviewStep.PendingAgentRefs) != 0 ||
+		len(reviewStep.ReworkRequestRefs) != wantRework ||
+		reviewStep.ReworkRequestRefs[0] != fixture.ReworkRequestRef ||
+		len(reviewStep.ReplanDecisionRefs) != wantReplan ||
+		reviewStep.ReplanDecisionRefs[0] != fixture.ReplanDecisionRef ||
+		serviceCountStringV0(reviewStep.ReworkRequestRefs, fixture.ReworkRequestRef) != 1 ||
+		serviceCountStringV0(reviewStep.ReplanDecisionRefs, fixture.ReplanDecisionRef) != 1 ||
+		len(reviewStep.AcceptedReviewRefs) != 0 {
+		t.Fatalf("reviewStep=%+v", reviewStep)
 	}
 }
 

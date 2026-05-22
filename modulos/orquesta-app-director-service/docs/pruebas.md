@@ -56,6 +56,9 @@ Cobertura esperada:
 - el plan state observa review negativa cuando hay `ReworkRequested` y
   `ReplanDecisionRecorded` causales, marcando `changes_requested`, refs de
   rework/replan y `replan_attempts`;
+- el replay `state-file` no duplica refs ni eventos cuando el wait ya expiro,
+  cuando review negativa ya registro `ReworkRequested`/`ReplanDecisionRecorded`
+  o cuando el cierre estaba bloqueado por prerequisitos y luego se reintenta;
 - el cierre operativo no se invoca si hay plan state activo en
   `review_deliveries` o `run_required_tests`;
 - tras cierre operativo exitoso, el plan state queda `closed`; si hay issues de
@@ -69,7 +72,9 @@ Cobertura esperada:
   `RequiredTestRunner` inyectado y cerrar task/run sin esperar agentes ajenos al
   scope;
 - errores de validacion de factory sin transporte;
-- sin imports legacy ni DB hardcodeada.
+- sin imports legacy, DB hardcodeada ni adaptadores concretos de producto,
+  runtime real, state-file/run-file, MCP, web u OPES en codigo productivo del
+  servicio.
 
 Evidencia 2026-05-09:
 
@@ -119,6 +124,9 @@ Evidencia 2026-05-09:
 - `TestMaybeCloseOperationalDirectorV0CierraPlanStateTrasCierreOperativoExitoso`;
 - `TestMaybeCloseOperationalDirectorV0BloqueaPlanStateConIssuesDeCierre`;
 - `TestMaybeCloseOperationalDirectorV0BloqueaPlanStateSiSourceNoConstruyeRequest`;
+- `TestContinueAppDirectorV0WaitExpiredStateFileRestartNoDuplicaEvidenceRefs`;
+- `TestContinueAppDirectorV0StateFileReplayReviewChangesRequestedReworkReplanNoDuplica`;
+- `TestContinueRequestWithOperationalDirectorPlanStateV0StateFileRestartReintentaPrereqSinDuplicar`;
 - `TestContinueAppDirectorV0DecisionPlanStateEjecutaRunnerYCierra`;
 - cobertura indirecta desde `orquesta-app-codex-stack`:
   `TestDrainRunV0ConsumeDecisionFileTardioYArrancaProgramacion`;

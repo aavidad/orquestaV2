@@ -11,6 +11,80 @@ import (
 	orquestastatefile "orquesta/modulos/orquesta-state-file"
 )
 
+func TestContinueAppDirectorV0WaitExpiredStateFileRestartNoDuplicaEvidenceRefs(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-app-director-operational-wait-expired-statefile-001"
+	contractRef := "contract:function:operational-director:v0"
+	run := serviceRunForWaitRefsTestV0(runRef)
+	run.FunctionContracts = []string{contractRef}
+	plan := serviceOperationalDirectorPlanForContinueTestV0(t, runRef)
+	rootDir := t.TempDir()
+	store := serviceRequiredTestsStateFileStoreForTestV0(t, rootDir)
+	if err := store.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	waiter := &serviceContinueWaiterForTestV0{Continue: true}
+
+	result, err := ContinueAppDirectorV0(ctx, ContinueAppDirectorRequestV0{
+		RunRef:                  runRef,
+		OccurredAt:              "2026-05-22T22:10:00Z",
+		CorrelationID:           "corr-app-director-operational-wait-expired-statefile-first",
+		MaxBursts:               4,
+		MaxStepsPerBurst:        4,
+		MaxDispatchesPerWait:    4,
+		MaxCommands:             20,
+		MaxOutboxPerCycle:       8,
+		MaxExternalWaits:        2,
+		OperationalDirectorPlan: plan,
+		OperationalDirectorFunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+			ContractRef:  contractRef,
+			FunctionName: "OperationalDirectorCut",
+		}},
+	}, serviceWaitExpiredStateFilePortsForTestV0(store, ledger, waiter))
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0 first: %v", err)
+	}
+	if result.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
+		waiter.Calls != 2 {
+		t.Fatalf("result=%+v waiter_calls=%d", result, waiter.Calls)
+	}
+	state, waitStep, waitState := serviceAssertWaitExpiredStateFileBlockedV0(t, store, runRef, plan.PlanRef, 3)
+	waitRef := waitStep.WaitRefs[0]
+	if serviceCountStringV0(state.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-wait-expired-v0") != 1 ||
+		serviceCountStringV0(waitStep.EvidenceRefs, "evidence-ref-app-director-wait-subagents-expired-v0") != 1 ||
+		serviceCountStringV0(waitState.EvidenceRefs, "evidence-ref-app-director-wait-state-expired-v0") != 1 {
+		t.Fatalf("state=%+v waitStep=%+v waitState=%+v", state, waitStep, waitState)
+	}
+
+	recovered := serviceRequiredTestsStateFileStoreForTestV0(t, rootDir)
+	replayLedger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	replayWaiter := &serviceContinueWaiterForTestV0{Continue: true}
+	_, err = ContinueAppDirectorV0(ctx, ContinueAppDirectorRequestV0{
+		RunRef:                     runRef,
+		OccurredAt:                 "2026-05-22T22:10:01Z",
+		CorrelationID:              "corr-app-director-operational-wait-expired-statefile-restart",
+		MaxExternalWaits:           2,
+		OperationalDirectorPlanRef: plan.PlanRef,
+	}, serviceWaitExpiredStateFilePortsForTestV0(recovered, replayLedger, replayWaiter))
+	if err == nil {
+		t.Fatalf("ContinueAppDirectorV0 replay err nil")
+	}
+	issue, ok := err.(AppDirectorServiceIssueV0)
+	if !ok || issue.Field != "operational_director_plan_state.active_step" {
+		t.Fatalf("err=%T %#v", err, err)
+	}
+	replayedState, replayedWaitStep, replayedWaitState := serviceAssertWaitExpiredStateFileBlockedV0(t, recovered, runRef, plan.PlanRef, 3)
+	if replayWaiter.Calls != 0 ||
+		len(replayedWaitStep.WaitRefs) != 1 ||
+		replayedWaitStep.WaitRefs[0] != waitRef ||
+		serviceCountStringV0(replayedState.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-wait-expired-v0") != 1 ||
+		serviceCountStringV0(replayedWaitStep.EvidenceRefs, "evidence-ref-app-director-wait-subagents-expired-v0") != 1 ||
+		serviceCountStringV0(replayedWaitState.EvidenceRefs, "evidence-ref-app-director-wait-state-expired-v0") != 1 {
+		t.Fatalf("replayWaiter=%d state=%+v waitStep=%+v waitState=%+v", replayWaiter.Calls, replayedState, replayedWaitStep, replayedWaitState)
+	}
+}
+
 func TestRequiredTestsEvidenceMissingStateFileRestartNoDuplicaGateYReentraConEvidencePassed(t *testing.T) {
 	ctx := context.Background()
 	fixture := serviceOperationalDirectorPlanStateReviewFixtureForTestV0(t, true)
@@ -117,6 +191,97 @@ func serviceRequiredTestsStateFileStoreForTestV0(t *testing.T, rootDir string) *
 		t.Fatalf("NewStoreV0: %v", err)
 	}
 	return store
+}
+
+func serviceWaitExpiredStateFilePortsForTestV0(
+	store *orquestastatefile.StoreV0,
+	ledger *orquestacionnucleoapp.InMemoryOutboxLedgerV0,
+	waiter *serviceContinueWaiterForTestV0,
+) StartAppDirectorPortsV0 {
+	return StartAppDirectorPortsV0{
+		RunStore:                   store,
+		EventSink:                  store,
+		EventReader:                store,
+		OutboxLedger:               ledger,
+		DirectorTaskStore:          store,
+		WaitStateStore:             store,
+		WaitStateWriter:            store,
+		OperationalPlanStateStore:  store,
+		OperationalPlanStateWriter: store,
+		ExternalWaiter:             waiter,
+		Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+			{
+				TargetPort: orquestacoreworkflow.OutboxTargetCapacityV0,
+				Reader:     ledger,
+				Claimer:    ledger,
+				Executor: orquestacionnucleoapp.CapacityDecisionExecutorV0{
+					RunStore:        store,
+					EventSink:       store,
+					Tier:            orquestacoreworkflow.OrchestrationCapacityHighV0,
+					ReasoningEffort: orquestacoreworkflow.OrchestrationCapacityHighV0,
+					OccurredAt:      "2026-05-22T22:10:00Z",
+					CorrelationID:   "corr-app-director-service-statefile-capacity-001",
+					RequestedBy:     "orquesta-app-director-service-test",
+				},
+				Acker: ledger,
+			},
+			{
+				TargetPort: orquestacoreworkflow.OutboxTargetAgentLauncherV0,
+				Reader:     ledger,
+				Claimer:    ledger,
+				Executor: orquestacionnucleoapp.AgentLauncherExecutorV0{
+					RunStore:      store,
+					EventSink:     store,
+					Launcher:      orquestacionnucleoapp.NewFakeLifecycleAgentLauncherV0(),
+					OccurredAt:    "2026-05-22T22:10:00Z",
+					CorrelationID: "corr-app-director-service-statefile-agent-001",
+					RequestedBy:   "orquesta-app-director-service-test",
+				},
+				Acker: ledger,
+			},
+		},
+	}
+}
+
+func serviceAssertWaitExpiredStateFileBlockedV0(
+	t *testing.T,
+	store *orquestastatefile.StoreV0,
+	runRef string,
+	planRef string,
+	wantAttempt int,
+) (
+	orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+	orquestacionnucleoapp.WorkflowTaskWaitStateV0,
+) {
+	t.Helper()
+	state, err := store.LoadOperationalDirectorPlanStateV0(context.Background(), runRef, planRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	waitStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-wait-subagents")
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
+		state.ActiveStepID != "step-wait-subagents" ||
+		!serviceStringInSetV0(state.BlockerRefs, "external-wait-exhausted") ||
+		state.ClosureReason != "external-wait-exhausted" ||
+		waitStep.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 ||
+		waitStep.Reason != "external-wait-exhausted" ||
+		!serviceStringInSetV0(waitStep.BlockerRefs, "external-wait-exhausted") ||
+		len(state.PendingAgentRefs) != 0 ||
+		len(waitStep.PendingAgentRefs) != 0 ||
+		len(waitStep.WaitRefs) != 1 {
+		t.Fatalf("state=%+v waitStep=%+v", state, waitStep)
+	}
+	waitState, err := store.LoadWorkflowTaskWaitStateV0(context.Background(), runRef, waitStep.WaitRefs[0])
+	if err != nil {
+		t.Fatalf("LoadWorkflowTaskWaitStateV0: %v", err)
+	}
+	if waitState.Status != orquestacionnucleoapp.WorkflowTaskWaitStateStatusExpiredV0 ||
+		waitState.Attempt != wantAttempt ||
+		len(waitState.PendingAgentRefs) != 0 {
+		t.Fatalf("waitState=%+v", waitState)
+	}
+	return state, waitStep, waitState
 }
 
 func serviceRequiredTestsStateFilePortsV0(store *orquestastatefile.StoreV0) StartAppDirectorPortsV0 {

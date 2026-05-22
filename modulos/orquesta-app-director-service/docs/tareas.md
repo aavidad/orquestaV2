@@ -18,11 +18,14 @@ Validacion: `TestStartAppDirectorV0ReturnsFactoryValidationIssues`.
 
 ## APP-DIR-SVC-003
 
-Objetivo: impedir dependencias legacy o persistencia hardcodeada.
+Objetivo: impedir dependencias legacy, persistencia hardcodeada o adaptadores
+concretos dentro del servicio.
 
 Estado: hecho.
 
 Validacion: `TestAppDirectorServiceArchitectureV0NoImportaLegacyNiDBHardcodeada`.
+La guarda cubre imports directos de codigo productivo hacia DB, `cmd`,
+state-file/run-file, runtime concreto, Codex, OPES, MCP, web/http y `os/exec`.
 
 ## APP-DIR-SVC-004
 
@@ -182,8 +185,11 @@ El cierre operativo ya marca el state como `closed` o `blocked` con
 `modulos/orquesta-runtime-required-test` y wiring desde `cmd/orquesta-server`.
 El replan automatico por test fallido de una unica task causal ya queda cubierto
 offline, tambien tras reinicio `state-file`, sin duplicar quality gate, replan
-ni apertura de fase. Sigue pendiente reproducir el ciclo con proveedor real en
-ola/cohorte amplia o recursion.
+ni apertura de fase. El reinicio `state-file` cubre tambien wait expirado,
+review negativa `changes_requested` con rework/replan ya registrado, y bloqueo
+de prerequisitos de cierre hasta reentrada/cierre sin duplicar evidencias ni
+eventos. Sigue pendiente reproducir el ciclo con proveedor real en ola/cohorte
+amplia o recursion.
 
 Alcance esperado:
 
@@ -204,4 +210,10 @@ Validacion de continuidad wait -> review:
 
 ```sh
 go test -count=1 ./modulos/orquesta-app-director-service -run TestContinueAppDirectorV0AvanzaDeWaitAReviewAbriendoRevision
+```
+
+Validacion de replays durables adicionales:
+
+```sh
+go test -count=1 ./modulos/orquesta-app-director-service -run 'TestContinueAppDirectorV0WaitExpiredStateFileRestartNoDuplicaEvidenceRefs|TestContinueAppDirectorV0StateFileReplayReviewChangesRequestedReworkReplanNoDuplica|TestContinueRequestWithOperationalDirectorPlanStateV0StateFileRestartReintentaPrereqSinDuplicar'
 ```
