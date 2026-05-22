@@ -30,9 +30,16 @@ type codexDirectorWaveSummaryV0 struct {
 }
 
 type codexDirectorChildWaveSummaryV0 struct {
-	ParentAgentRef string                   `json:"parent_agent_ref"`
-	ParentIndex    int                      `json:"parent_index"`
-	Launch         codexWaveLaunchSummaryV0 `json:"launch"`
+	ParentAgentRef            string                            `json:"parent_agent_ref"`
+	ParentWaveRef             string                            `json:"parent_wave_ref,omitempty"`
+	ParentIndex               int                               `json:"parent_index"`
+	DelegationDepth           int                               `json:"delegation_depth"`
+	MaxDelegationDepth        int                               `json:"max_delegation_depth"`
+	MaxSubagentsPerAgent      int                               `json:"max_subagents_per_agent"`
+	SubtreeAgentBudget        int                               `json:"subtree_agent_budget"`
+	ReviewRequiredBeforeClose bool                              `json:"review_required_before_close"`
+	Launch                    codexWaveLaunchSummaryV0          `json:"launch"`
+	ChildLaunches             []codexDirectorChildWaveSummaryV0 `json:"child_launches,omitempty"`
 }
 
 type codexDirectorWaveConfigV0 struct {
@@ -98,6 +105,9 @@ func codexLaunchDirectorWaveCommandV0(args []string, stdout io.Writer, stderr io
 func codexDirectorChildLaunchHasErrorsV0(childLaunches []codexDirectorChildWaveSummaryV0) bool {
 	for _, child := range childLaunches {
 		if len(child.Launch.Errors) > 0 {
+			return true
+		}
+		if codexDirectorChildLaunchHasErrorsV0(child.ChildLaunches) {
 			return true
 		}
 	}
@@ -295,10 +305,24 @@ func runCodexLaunchDirectorChildWavesV0(
 	if !plan.RecursiveDelegation || plan.MaxSubagentsPerAgent <= 0 {
 		return nil, nil
 	}
+	return runCodexLaunchDirectorChildWavesAtDepthV0(ctx, config, plan, work, parentLaunch, 1)
+}
+
+func runCodexLaunchDirectorChildWavesAtDepthV0(
+	ctx context.Context,
+	config codexDirectorWaveConfigV0,
+	plan orquestadirectoroperativo.OperationalDirectorPlanV0,
+	work orquestadirectoroperativo.OperationalDirectorWaveWorkV0,
+	parentLaunch codexWaveLaunchSummaryV0,
+	depth int,
+) ([]codexDirectorChildWaveSummaryV0, error) {
+	if depth <= 0 || depth > plan.MaxDelegationDepth {
+		return nil, nil
+	}
 	out := make([]codexDirectorChildWaveSummaryV0, 0, len(parentLaunch.Agents))
 	for index, parent := range parentLaunch.Agents {
 		parentIndex := index + 1
-		childWaveRef := fmt.Sprintf("%s-parent-%02d-children", config.Wave.WaveRef, parentIndex)
+		childWaveRef := fmt.Sprintf("%s-depth-%02d-parent-%02d-children", parentLaunch.WaveRef, depth, parentIndex)
 		childConfig := config.Wave
 		childConfig.WaveRef = childWaveRef
 		childConfig.Agents = plan.MaxSubagentsPerAgent
@@ -313,18 +337,41 @@ func runCodexLaunchDirectorChildWavesV0(
 			parentIndex,
 			len(parentLaunch.Agents),
 			childConfig.Agents,
+			depth,
 		)
 		launch, err := runCodexLaunchWaveV0(ctx, childConfig)
 		if err != nil {
 			return out, err
 		}
+		childLaunches, err := runCodexLaunchDirectorChildWavesAtDepthV0(ctx, config, plan, work, launch, depth+1)
+		if err != nil {
+			return out, err
+		}
 		out = append(out, codexDirectorChildWaveSummaryV0{
-			ParentAgentRef: parent.AgentRef,
-			ParentIndex:    parentIndex,
-			Launch:         launch,
+			ParentAgentRef:            parent.AgentRef,
+			ParentWaveRef:             parentLaunch.WaveRef,
+			ParentIndex:               parentIndex,
+			DelegationDepth:           depth,
+			MaxDelegationDepth:        plan.MaxDelegationDepth,
+			MaxSubagentsPerAgent:      plan.MaxSubagentsPerAgent,
+			SubtreeAgentBudget:        codexDirectorSubtreeAgentBudgetV0(launch, childLaunches),
+			ReviewRequiredBeforeClose: true,
+			Launch:                    launch,
+			ChildLaunches:             childLaunches,
 		})
 	}
 	return out, nil
+}
+
+func codexDirectorSubtreeAgentBudgetV0(
+	launch codexWaveLaunchSummaryV0,
+	childLaunches []codexDirectorChildWaveSummaryV0,
+) int {
+	total := len(launch.Agents)
+	for _, child := range childLaunches {
+		total += child.SubtreeAgentBudget
+	}
+	return total
 }
 
 func codexDirectorAgentPromptsV0(
@@ -405,6 +452,7 @@ func codexDirectorChildAgentPromptsV0(
 	parentIndex int,
 	parentTotal int,
 	childTotal int,
+	depth int,
 ) []string {
 	prompts := make([]string, 0, childTotal)
 	launchItem := codexDirectorLaunchItemV0(work)
@@ -419,6 +467,7 @@ func codexDirectorChildAgentPromptsV0(
 			parentTotal,
 			childIndex,
 			childTotal,
+			depth,
 		))
 	}
 	return prompts
@@ -434,6 +483,7 @@ func codexDirectorChildAgentPromptV0(
 	parentTotal int,
 	childIndex int,
 	childTotal int,
+	depth int,
 ) string {
 	var b strings.Builder
 	assigned := codexDirectorShardV0(plan.WriteSet, parentIndex, parentTotal)
@@ -444,6 +494,9 @@ func codexDirectorChildAgentPromptV0(
 	b.WriteString("- parent_agent_ref: " + parentAgentRef + "\n")
 	b.WriteString("- parent_agent_index: " + strconv.Itoa(parentIndex) + " de " + strconv.Itoa(parentTotal) + "\n")
 	b.WriteString("- child_agent_index: " + strconv.Itoa(childIndex) + " de " + strconv.Itoa(childTotal) + "\n")
+	b.WriteString("- delegation_depth: " + strconv.Itoa(depth) + "\n")
+	b.WriteString("- max_delegation_depth: " + strconv.Itoa(plan.MaxDelegationDepth) + "\n")
+	b.WriteString("- max_subagents_per_agent: " + strconv.Itoa(plan.MaxSubagentsPerAgent) + "\n")
 	b.WriteString("- launch_item_ref: " + launchItem.ItemID + "\n\n")
 	b.WriteString("Objetivo:\n")
 	b.WriteString(plan.Objective + "\n\n")
@@ -470,6 +523,7 @@ func codexDirectorChildAgentPromptV0(
 	b.WriteString("- No borres nada sin revisar uso actual y dejar evidencia en tu resumen.\n")
 	b.WriteString("- Si trabajas sobre un tema o artefacto existente, estudia primero que falla y modifica solo lo necesario; rehacerlo entero es una excepcion justificada cuando sea mas sencillo o seguro que corregirlo.\n")
 	b.WriteString("- No lances mas subagentes desde este hijo: la ola hija ya fue materializada por Orquesta.\n")
+	b.WriteString("- No declares cierre de tu subarbol: el Director debe revisar entregas, tests y evidencias causales antes de cerrar.\n")
 	b.WriteString("- No uses generadores para redactar contenido doctrinal final ni para inflar palabras con plantillas repetidas; los scripts solo pueden validar o ensamblar artefactos.\n")
 	b.WriteString("- Al terminar, resume artefactos producidos, pruebas ejecutadas y huecos pendientes.\n")
 	return b.String()

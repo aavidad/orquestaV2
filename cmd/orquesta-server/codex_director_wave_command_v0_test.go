@@ -325,6 +325,92 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaHijosYContext
 	}
 }
 
+func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaNietosConLimitesYReview(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	runtimeDir := filepath.Join(root, "runtime", "recursive-grandchildren")
+	fakeCodex := filepath.Join(root, "codex-fake")
+
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatalf("crear project dir: %v", err)
+	}
+	if err := os.WriteFile(fakeCodex, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatalf("crear codex falso: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := codexLaunchDirectorWaveCommandV0([]string{
+		"--dry-run",
+		"--agents", "1",
+		"--allow-recursive-delegation",
+		"--max-delegation-depth", "2",
+		"--max-subagents-per-agent", "2",
+		"--wave-ref", "recursive-grandchildren",
+		"--project-dir", projectDir,
+		"--runtime-dir", runtimeDir,
+		"--command", fakeCodex,
+		"--objective", "Probar recursion Codex offline con padre, hijos y nietos.",
+		"--write-set", "cmd/orquesta-server/codex_director_wave_command_v0.go,cmd/orquesta-server/codex_director_wave_command_v0_test.go",
+		"--required-tests", "go test -count=1 ./cmd/orquesta-server",
+		"--branch-ref", "branch-recursive-grandchildren",
+		"--worktree-ref", "worktree-recursive-grandchildren",
+	}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+
+	var summary codexDirectorWaveSummaryV0
+	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
+		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
+	}
+	if !summary.Plan.RecursiveDelegation ||
+		summary.Plan.MaxDelegationDepth != 2 ||
+		summary.Plan.MaxSubagentsPerAgent != 2 ||
+		len(summary.Launch.Agents) != 1 ||
+		len(summary.ChildLaunches) != 1 {
+		t.Fatalf("summary recursivo inesperado: %+v", summary)
+	}
+
+	child := summary.ChildLaunches[0]
+	if child.ParentAgentRef != summary.Launch.Agents[0].AgentRef ||
+		child.ParentWaveRef != summary.Launch.WaveRef ||
+		child.DelegationDepth != 1 ||
+		child.MaxDelegationDepth != 2 ||
+		child.MaxSubagentsPerAgent != 2 ||
+		child.SubtreeAgentBudget != 6 ||
+		!child.ReviewRequiredBeforeClose ||
+		len(child.Launch.Agents) != 2 ||
+		len(child.ChildLaunches) != 2 {
+		t.Fatalf("child summary inesperado: %+v", child)
+	}
+
+	grandchild := child.ChildLaunches[0]
+	if grandchild.ParentAgentRef != child.Launch.Agents[0].AgentRef ||
+		grandchild.ParentWaveRef != child.Launch.WaveRef ||
+		grandchild.DelegationDepth != 2 ||
+		grandchild.SubtreeAgentBudget != 2 ||
+		!grandchild.ReviewRequiredBeforeClose ||
+		len(grandchild.Launch.Agents) != 2 ||
+		len(grandchild.ChildLaunches) != 0 {
+		t.Fatalf("grandchild summary inesperado: %+v", grandchild)
+	}
+
+	grandchildPrompt := mustReadFileStringV0(t, grandchild.Launch.Agents[0].PromptPath)
+	for _, want := range []string{
+		"parent_agent_ref: " + child.Launch.Agents[0].AgentRef,
+		"delegation_depth: 2",
+		"max_delegation_depth: 2",
+		"max_subagents_per_agent: 2",
+		"No lances mas subagentes desde este hijo",
+		"No declares cierre de tu subarbol: el Director debe revisar entregas, tests y evidencias causales antes de cerrar.",
+	} {
+		if !strings.Contains(grandchildPrompt, want) {
+			t.Fatalf("prompt nieto no contiene %q:\n%s", want, grandchildPrompt)
+		}
+	}
+}
+
 func TestCodexLaunchDirectorWaveCommandV0NoInyectaDominioPorProjectRef(t *testing.T) {
 	root := t.TempDir()
 	projectDir := filepath.Join(root, "project")

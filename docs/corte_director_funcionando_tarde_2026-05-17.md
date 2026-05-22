@@ -52,9 +52,16 @@ actual, pero no debe definir el nucleo.
 
 ## Lo que no funciona todavia
 
-- El materializador no convierte todavia la salida de `wait_subagents` en
-  `review_deliveries` por ola, `run_required_tests` durables,
-  `replan_or_close`/`close` ni actualizaciones posteriores del plan state.
+- El materializador sigue siendo deliberadamente estrecho: solo convierte
+  `launch_subagents` listos en `WorkflowTaskV0` y `CreateMicrotask`. Las
+  transiciones posteriores ya no pertenecen a ese materializador sino al
+  `PlanState`/`ContinueAppDirectorV0`.
+- El ciclo offline posterior a `wait_subagents` ya cubre review causal por
+  scope, `run_required_tests` con `RequiredTestEvidenceV0`, runner por puerto,
+  puerta `replan_or_close`, cierre causal, cierre por reentradas de ola
+  multitarea y varios blockers con reentrada. Lo que falta no es P1 ni el
+  tramo feliz offline, sino smoke Codex real con runner, replan generico de
+  blockers restantes y replay/idempotencia completa del replan.
 - `ContinueAppDirectorV0` depende aun del caller para limites como
   `MaxExternalWaits`; no asumir que mantiene vivo un wait largo si se llama con
   defaults vacios.
@@ -154,28 +161,26 @@ go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-runtim
 
 ## Siguiente cambio: cierre generico causal offline
 
-Materializar review/rework/replan como cierre generico offline:
+Continuar cierre generico causal offline sin reabrir P1:
 
-- `review_deliveries`: usar entregas observadas y review gate por puertos, pero
-  agrupadas por `wave_ref`/`cohort_ref`; no cerrar una ola por una entrega suelta
-  de otro scope.
-- `run_required_tests`: solo para `programming`, como evidencia durable antes de
-  cierre; registrar comando/evento/artefacto de resultado, no solo texto en
-  summary.
-- `replan_or_close`/`close`: cerrar solo con review aceptada, evidencias y tests
-  requeridos; si no, emitir rework/replan causal.
-- estado del plan: el tramo inicial ya persiste step activo, ola/cohorte,
-  tasks, agentes, pendientes y `wait_ref`; falta actualizar blockers,
-  evidencias, intentos de replan y razon de cierre. El
-  `OperationalDirectorPlanV0` inicial no basta como plan vivo completo.
+- `review_deliveries`: ya avanza por cadena causal del scope y no por entregas
+  ajenas.
+- `run_required_tests`: ya consume evidencia durable, ejecuta runner por puerto
+  cuando esta inyectado y bloquea si falta evidencia causal sin runner efectivo.
+- `replan_or_close`/`close`: ya gobierna cierre con review aceptada, evidencias,
+  outbox cero y source/task store disponibles; tambien bloquea/reintenta por
+  prerequisitos y por cierre insuficiente causal en casos cubiertos.
+- estado del plan: ya persiste refs de review, tests, blockers y cierre/bloqueo
+  en los tramos cubiertos. Falta completar replan generico de blockers no
+  cubiertos y replay/idempotencia completa de ese replan.
 
 Este corte debe apoyarse en los comandos ya existentes de core-workflow:
 `RecordReviewResult`, `AcceptReview`, `RequestRework`, `RecordReplanDecision` y
 `CloseTask`.
 
-Hasta que exista codigo y test claro, cada subpieza queda como pendiente
-verificable: `review_deliveries` por ola, `run_required_tests` durables,
-`replan_or_close`/`close` causal y actualizaciones posteriores del plan state.
+Hasta que exista codigo y test claro, cada blocker restante queda como pendiente
+verificable. La matriz vigente separa los tramos cerrados offline de los smokes
+reales pendientes.
 
 ## Siguiente cambio P2
 

@@ -1143,6 +1143,49 @@ func TestMaybeCloseOperationalDirectorV0ReplanCausalSiCierreInsuficienteConRevie
 	if got := serviceCountEventsByTypeV0(eventSink.EventsV0(), orquestacoreworkflow.OrchestrationEventReplanDecisionRecordedV0); got != 1 {
 		t.Fatalf("ReplanDecisionRecorded=%d events=%+v", got, eventSink.EventsV0())
 	}
+	if got := serviceCountEventsByTypeV0(eventSink.EventsV0(), orquestacoreworkflow.OrchestrationEventRunClosedV0); got != 0 {
+		t.Fatalf("RunClosed=%d events=%+v", got, eventSink.EventsV0())
+	}
+	_, replayIssues, err := maybeCloseOperationalDirectorV0(
+		context.Background(),
+		ContinueAppDirectorRequestV0{
+			RunRef:                     runRef,
+			OccurredAt:                 "2026-05-22T19:10:01Z",
+			CorrelationID:              "corr-service-operational-closure-insufficient-replan",
+			RequestedBy:                "test",
+			OperationalDirectorPlanRef: planRef,
+		},
+		StartAppDirectorPortsV0{
+			RunStore:                   runStore,
+			EventSink:                  eventSink,
+			EventReader:                serviceOperationalClosureEventReaderForTestV0{Events: append(closureEvents, eventSink.EventsV0()...)},
+			DirectorTaskStore:          orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(serviceOperationalClosureTaskForTestV0(runRef)),
+			RequiredTestEvidenceStore:  orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0(serviceOperationalClosureRequiredTestEvidenceForTestV0(runRef)),
+			OperationalClosureSource:   source,
+			OperationalPlanStateStore:  planStateStore,
+			OperationalPlanStateWriter: planStateStore,
+		},
+		orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+			Run:    run,
+		},
+		orquestacionnucleoapp.ProgressiveLoopRequestV0{},
+	)
+	if err != nil {
+		t.Fatalf("maybeCloseOperationalDirectorV0 replay: %v", err)
+	}
+	if len(replayIssues) != 0 {
+		t.Fatalf("replayIssues=%+v", replayIssues)
+	}
+	if got := serviceCountEventsByTypeV0(eventSink.EventsV0(), orquestacoreworkflow.OrchestrationEventQualityGateRecordedV0); got != 1 {
+		t.Fatalf("QualityGateRecorded replay=%d events=%+v", got, eventSink.EventsV0())
+	}
+	if got := serviceCountEventsByTypeV0(eventSink.EventsV0(), orquestacoreworkflow.OrchestrationEventReplanDecisionRecordedV0); got != 1 {
+		t.Fatalf("ReplanDecisionRecorded replay=%d events=%+v", got, eventSink.EventsV0())
+	}
+	if got := serviceCountEventsByTypeV0(eventSink.EventsV0(), orquestacoreworkflow.OrchestrationEventRunClosedV0); got != 0 {
+		t.Fatalf("RunClosed replay=%d events=%+v", got, eventSink.EventsV0())
+	}
 	blockedState, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), runRef, planRef)
 	if err != nil {
 		t.Fatalf("LoadOperationalDirectorPlanStateV0 blocked: %v", err)
@@ -1165,7 +1208,7 @@ func TestMaybeCloseOperationalDirectorV0ReplanCausalSiCierreInsuficienteConRevie
 	updatedRun.Agents = append(updatedRun.Agents, followupAgentRef)
 	reentered, err := continueRequestWithOperationalDirectorPlanStateV0(context.Background(), ContinueAppDirectorRequestV0{
 		RunRef:                     runRef,
-		OccurredAt:                 "2026-05-22T19:10:01Z",
+		OccurredAt:                 "2026-05-22T19:10:02Z",
 		CorrelationID:              "corr-service-operational-closure-insufficient-replan",
 		OperationalDirectorPlanRef: planRef,
 	}, StartAppDirectorPortsV0{

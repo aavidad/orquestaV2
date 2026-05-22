@@ -325,10 +325,12 @@ por estado durable o por una fuente inyectada y verificable:
 Estas piezas siguen pendientes o parciales hasta que existan implementacion y
 pruebas claras. No deben describirse como hechas antes de cerrar la evidencia.
 
-1. Runner/adaptador de tests:
-   en modo `programming`, generar `RequiredTestEvidenceV0` causal por
-   comando/evento/artefacto de resultado. El consumo durable ya existe; un
-   summary textual no basta.
+1. Smoke Codex real con runner:
+   el runner por puerto, el executor local opt-in, el consumo de
+   `RequiredTestEvidenceV0`, el replay sin reejecucion externa y el smoke
+   `state-file` sin Codex vivo ya tienen evidencia focal. Sigue pendiente un
+   smoke servidor/director con agente Codex real que entregue, sea revisado y
+   use el runner antes del cierre.
 2. `replan_or_close` causal:
    ya actua como puerta explicita para cierre cuando el `PlanState` esta activo:
    solo `replan_or_close` en `running` permite invocar la fuente de cierre, y la
@@ -361,46 +363,41 @@ pruebas claras. No deben describirse como hechas antes de cerrar la evidencia.
   `replan_attempts`; faltan replan automatico para otros blockers y replay
   completo del resto del ciclo.
 4. Reentrada offline:
-   wait y review inicial ya reconstruyen scope desde plan state; las
-   transiciones posteriores deben reconstruirse desde run, task store, wait
-   state, eventos y plan state, no desde agentes vivos globales ni stats.
+   wait, review, tests, cierre exitoso, cierre bloqueado por prerequisitos y
+   varios replans causales ya reconstruyen scope desde run, task store, wait
+   state, eventos y plan state, no desde agentes vivos globales ni stats. Falta
+   extender la misma garantia al replan generico de blockers restantes.
 5. `OperationalClosureSource` por composicion:
    el stack Codex ya tiene fuente para Director Operativo. Otras composiciones
    deben aportar su fuente por puerto. Si la fuente no existe o devuelve estado
    insuficiente, el cierre debe bloquearse o replanificarse con causa.
 
-## Criterio de done del corte
+## Criterio de done del tramo restante
 
-El corte se considera cerrado solo cuando haya tests offline deterministas que
-demuestren:
+El tramo offline ya tiene tests deterministas para review positiva por scope,
+tests durables, puerta de cierre, cierre causal, replay focal y varios blockers.
+El tramo restante se considera cerrado solo cuando haya tests que demuestren:
 
-- una ola no cierra hasta que todas sus entregas esperadas tengan review
-  aceptada o rework causal;
-- entregas/ACKs de agentes fuera de `WaitAgentRefs` o de otra ola no afectan el
-  cierre;
-- no hay cierre si el scope no esta `quiescent`, si el outbox no esta a cero o
-  si quedan tasks abiertas; con outbox pendiente no debe invocarse la fuente de
-  cierre y debe quedar blocker durable del `PlanState`;
-- un run `programming` no cierra sin evidencias durables de tests requeridos;
-- refs cruzadas de task/delivery/review aceptada no cierran;
-- un run `domain_work` cierra por artefactos y validadores de dominio, no por
-  tests de programacion inventados;
-- una entrega invalida produce `RequestRework` o `RecordReplanDecision` con refs
-  causales;
-- `CloseTask`/cierre de ola/run solo aparece despues de review, evidencias y
-  validaciones;
-- el estado vivo del plan conserva transiciones posteriores al wait inicial.
+- blockers reparables no cubiertos producen `RequestRework` o
+  `RecordReplanDecision` con refs causales estables;
+- el replay de esos replans no duplica gates, replan decisions, followups,
+  waits ni eventos de cierre;
+- un smoke Codex real con runner opt-in demuestra entrega de agente vivo,
+  review, evidencia durable de test y cierre;
+- recursion Codex real queda cubierta aparte con parent/child refs, limites,
+  presupuesto y review causal.
 
-Nombres sugeridos de pruebas, si no existen aun:
+Tests existentes que respaldan el tramo cerrado estan en la matriz:
+`DIRECTOR-GENERIC-CLOSURE-OFFLINE`,
+`DIRECTOR-REQUIRED-TESTS-DURABLE-OFFLINE`,
+`DIRECTOR-REPLAN-CLOSE-OFFLINE` y `DIRECTOR-PLAN-STATE-OFFLINE`.
+Nombres sugeridos solo para huecos restantes, si no existen aun:
 
 ```sh
-TestOperationalDirectorGenericClosureV0NoCierraSinReviewDeOla
-TestOperationalDirectorGenericClosureV0IgnoraEntregaFueraDeOla
-TestOperationalDirectorGenericClosureV0ExigeQuiescentOutboxCeroYSinTasksAbiertas
-TestOperationalDirectorGenericClosureV0ExigeTestsDurablesEnProgramming
-TestOperationalDirectorGenericClosureV0CierraDomainWorkConArtefactoValidado
-TestOperationalDirectorGenericClosureV0ReplanConRefsCausales
-TestOperationalDirectorPlanStateV0SobreviveReentradaYActualizaTransiciones
+TestOperationalDirectorPlanStateV0ReplanGenericoBlockerConRefsCausales
+TestOperationalDirectorPlanStateV0ReplayNoDuplicaReplanGenerico
+TestCodexStackRealOperationalDirectorRequiredTestRunnerOptInV0
+TestCodexStackRealRecursiveDelegationOptInV0
 ```
 
 ## No hacer
