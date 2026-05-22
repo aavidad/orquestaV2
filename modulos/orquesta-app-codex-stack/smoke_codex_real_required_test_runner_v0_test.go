@@ -2,6 +2,8 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -128,6 +130,166 @@ func TestCodexStackRealRequiredTestRunnerOptInV0(t *testing.T) {
 	}
 }
 
+func TestCodexStackRealRequiredTestRunnerEndToEndOptInV0(t *testing.T) {
+	if strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_REAL_REQUIRED_TEST_RUNNER_E2E_SMOKE")) != "1" {
+		t.Skip("set ORQUESTA_CODEX_REAL_REQUIRED_TEST_RUNNER_E2E_SMOKE=1")
+	}
+	if strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_REAL_REQUIRED_TEST_RUNNER_CONFIRM")) != "1" ||
+		strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_REAL_REQUIRED_TEST_RUNNER_CODEX_EXECUTION_CONFIRMED")) != "1" {
+		t.Fatal("doble confirmacion requerida para ejecutar Codex real")
+	}
+	if strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BASE_URL")) != "" ||
+		strings.TrimSpace(os.Getenv("OPES_BASE_URL")) != "" {
+		t.Fatal("este smoke no debe cablear OPES")
+	}
+
+	cfg := codexStackRealSmokeConfigForTestV0(t)
+	if cfg.Timeout < 420*time.Second {
+		cfg.Timeout = 420 * time.Second
+	}
+	if strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_REASONING_EFFORT")) == "" {
+		cfg.ReasoningEffort = "medium"
+	}
+	if strings.TrimSpace(cfg.ReasoningEffort) == "xhigh" {
+		t.Fatal("este smoke acotado no usa xhigh")
+	}
+	cfg.MaxBatchReady = 1
+	cfg.MaxConcurrency = 1
+	writeCodexStackRequiredTestTinyGoModuleV0(t, cfg.ProjectWorkDir)
+	codexStackRealSmokeWriteProjectContextV0(t, cfg.ProjectWorkDir)
+	goCommand := codexStackRequiredTestGoCommandV0(t)
+	outputDir := codexStackRealSmokeEnsureDirV0(t, "ORQUESTA_REQUIRED_TEST_OUTPUT_DIR", codexStackRequiredTestOutputDirV0(t))
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
+	defer cancel()
+	processRuntime := orquestaruntime.NewProcessRuntimeConnectorV0()
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	stack := codexStackRealRequiredTestRunnerStackV0(t, cfg, processRuntime, evidenceStore, goCommand, outputDir)
+	defer codexStackRealSmokeStopAllProcessesV0(
+		t,
+		processRuntime,
+		stack.Stores.ProcessRegistry.(*orquestaagentprocessregistrymemory.InMemoryAgentProcessRegistryV0),
+		stack.Stores.ReceiptStore.(*orquestaruntimecodexdelivery.InMemoryCodexReceiptDescriptorStoreV0),
+	)
+
+	refs := (codexStackRequiredTestRefsV0{
+		RunRef:  "run-rt-runner-e2e-001",
+		PlanRef: "plan-rt-runner-e2e-001",
+		TaskRef: "task-rt-runner-e2e-001",
+	}).withDefaultsV0()
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, refs.pendingRunV0()); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	taskWriter, ok := stack.Stores.TaskStore.(orquestacionnucleoapp.WorkflowTaskWriterPortV0)
+	if !ok {
+		t.Fatalf("TaskStore no escribe WorkflowTaskV0: %T", stack.Stores.TaskStore)
+	}
+	if err := taskWriter.SaveWorkflowTaskV0(ctx, refs.workflowTaskV0()); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+
+	started, err := orquestaappdirectorservice.ContinueAppDirectorV0(ctx, orquestaappdirectorservice.ContinueAppDirectorRequestV0{
+		RunRef:               refs.RunRef,
+		OccurredAt:           "2026-05-22T17:20:00Z",
+		CorrelationID:        "corr-rt-runner-e2e-start",
+		WaitAgentRefs:        []string{refs.AgentRef},
+		MaxBursts:            2,
+		MaxStepsPerBurst:     4,
+		MaxDispatchesPerWait: 2,
+		MaxCommands:          8,
+		MaxOutboxPerCycle:    4,
+		MaxExternalWaits:     1,
+	}, stack.Ports)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0 start: %v %s\n%s", err, codexStackRequiredTestErrorDetailsV0(err), codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
+	}
+	if !codexStackStringInSetForTestV0(started.StartedAgents, refs.AgentRef) {
+		t.Fatalf("agente Codex no arrancado: started=%v wait=%s", started.StartedAgents, refs.AgentRef)
+	}
+
+	delivered := codexStackRequiredTestDrainUntilDeliveryV0(t, ctx, stack, refs.RunRef, refs.AgentRef, cfg.RuntimeWorkDir, cfg.Timeout)
+	deliveryRef := strings.TrimSpace(delivered.Spec.AgentPacket.DeliveryRefs.AckRef)
+	if deliveryRef == "" {
+		t.Fatalf("delivery ref vacia en descriptor=%+v", delivered)
+	}
+
+	openCodexStackPhaseForTestV0(
+		t,
+		stack,
+		refs.RunRef,
+		orquestacoreworkflow.OrchestrationPhaseRevisionV0,
+		"Smoke real required tests: revisar entrega Codex.",
+	)
+	causal := codexStackRequiredTestDrainUntilAcceptedReviewV0(t, ctx, stack, refs.RunRef, deliveryRef, cfg.RuntimeWorkDir, cfg.Timeout)
+	if err := stack.Stores.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, refs.planStateForCausalReviewV0(causal)); err != nil {
+		t.Fatalf("SaveOperationalDirectorPlanStateV0: %v", err)
+	}
+
+	result, err := orquestaappdirectorservice.ContinueAppDirectorV0(ctx, orquestaappdirectorservice.ContinueAppDirectorRequestV0{
+		RunRef:                     refs.RunRef,
+		OperationalDirectorPlanRef: refs.PlanRef,
+		OccurredAt:                 "2026-05-22T17:30:00Z",
+		CorrelationID:              "corr-rt-runner-e2e-close",
+		MaxBursts:                  1,
+		MaxStepsPerBurst:           1,
+		MaxDispatchesPerWait:       1,
+		MaxCommands:                8,
+		MaxOutboxPerCycle:          8,
+		MaxExternalWaits:           1,
+	}, stack.Ports)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0 close: %v\n%s", err, codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		t.Fatalf("run no cerrado: status=%s closed=%v validations=%v closures=%v", result.Run.Status, result.Run.ClosedTasks, result.Run.Validations, result.Run.Closures)
+	}
+	state, err := stack.Stores.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, refs.RunRef, refs.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	replanStep := codexStackRequiredTestPlanStepV0(t, state, "step-replan-or-close")
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 ||
+		len(replanStep.RequiredTestEvidenceRefs) != 1 {
+		t.Fatalf("plan state sin cierre/evidencia: state=%+v replan=%+v", state, replanStep)
+	}
+	evidence, err := evidenceStore.LoadRequiredTestEvidenceV0(ctx, refs.RunRef, replanStep.RequiredTestEvidenceRefs)
+	if err != nil {
+		t.Fatalf("LoadRequiredTestEvidenceV0: %v", err)
+	}
+	if len(evidence) != 1 ||
+		evidence[0].Status != orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 ||
+		evidence[0].TestCommand != "go test ./..." ||
+		evidence[0].DeliveryRef != deliveryRef ||
+		evidence[0].ReviewRequestID != causal.ReviewRequestRef ||
+		evidence[0].ReviewResultRef != causal.ReviewResultRef ||
+		evidence[0].AcceptedReviewRef != causal.AcceptedReviewRef {
+		t.Fatalf("evidence e2e invalida: %+v causal=%+v", evidence, causal)
+	}
+}
+
+func codexStackRequiredTestErrorDetailsV0(err error) string {
+	if err == nil {
+		return ""
+	}
+	var commandErr orquestacoreworkflow.OrchestrationCommandErrorV0
+	if errors.As(err, &commandErr) {
+		return "command_error_field=" + commandErr.Field
+	}
+	var eventErr orquestacoreworkflow.OrchestrationEventErrorV0
+	if errors.As(err, &eventErr) {
+		return "event_error_field=" + eventErr.Field
+	}
+	var workflowErr orquestacoreworkflow.WorkflowTaskErrorV0
+	if errors.As(err, &workflowErr) {
+		return "workflow_task_error_field=" + workflowErr.Field
+	}
+	var orchestrationErr orquestacionnucleoapp.ErrorV0
+	if errors.As(err, &orchestrationErr) {
+		return "orchestration_error_field=" + orchestrationErr.Field + " message=" + orchestrationErr.Message
+	}
+	return ""
+}
+
 type codexStackRequiredTestRefsV0 struct {
 	RunRef            string
 	PlanRef           string
@@ -140,20 +302,65 @@ type codexStackRequiredTestRefsV0 struct {
 }
 
 func (refs codexStackRequiredTestRefsV0) withDefaultsV0() codexStackRequiredTestRefsV0 {
-	if refs.RunRef != "" {
-		return refs
+	if strings.TrimSpace(refs.TaskRef) == "" {
+		refs.TaskRef = "task-rt-runner-001"
 	}
-	taskRef := "task-rt-runner-001"
+	taskRef := refs.TaskRef
+	if strings.TrimSpace(refs.RunRef) == "" {
+		refs.RunRef = "run-rt-runner-001"
+	}
+	if strings.TrimSpace(refs.PlanRef) == "" {
+		refs.PlanRef = "plan-rt-runner-001"
+	}
+	if strings.TrimSpace(refs.AgentRef) == "" {
+		refs.AgentRef = orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	}
+	if strings.TrimSpace(refs.DeliveryRef) == "" {
+		refs.DeliveryRef = "delivery-rt-runner-001"
+	}
+	if strings.TrimSpace(refs.ReviewRequestRef) == "" {
+		refs.ReviewRequestRef = "review-request-rt-runner-001"
+	}
+	if strings.TrimSpace(refs.ReviewResultRef) == "" {
+		refs.ReviewResultRef = "review-result-rt-runner-001"
+	}
+	if strings.TrimSpace(refs.AcceptedReviewRef) == "" {
+		refs.AcceptedReviewRef = "accepted-review-rt-runner-001"
+	}
 	return codexStackRequiredTestRefsV0{
-		RunRef:            "run-rt-runner-001",
-		PlanRef:           "plan-rt-runner-001",
-		TaskRef:           taskRef,
-		AgentRef:          orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef),
-		DeliveryRef:       "delivery-rt-runner-001",
-		ReviewRequestRef:  "review-request-rt-runner-001",
-		ReviewResultRef:   "review-result-rt-runner-001",
-		AcceptedReviewRef: "accepted-review-rt-runner-001",
+		RunRef:            refs.RunRef,
+		PlanRef:           refs.PlanRef,
+		TaskRef:           refs.TaskRef,
+		AgentRef:          refs.AgentRef,
+		DeliveryRef:       refs.DeliveryRef,
+		ReviewRequestRef:  refs.ReviewRequestRef,
+		ReviewResultRef:   refs.ReviewResultRef,
+		AcceptedReviewRef: refs.AcceptedReviewRef,
 	}
+}
+
+func (refs codexStackRequiredTestRefsV0) pendingRunV0() orquestacoreworkflow.OrchestrationRunV0 {
+	refs = refs.withDefaultsV0()
+	run := refs.runV0()
+	run.CurrentPhase = orquestacoreworkflow.OrchestrationPhaseProgramacionV0
+	for index := range run.Phases {
+		if run.Phases[index].ID == orquestacoreworkflow.OrchestrationPhaseProgramacionV0 {
+			run.Phases[index].Status = orquestacoreworkflow.OrchestrationPhaseStatusActiveV0
+			continue
+		}
+		run.Phases[index].Status = orquestacoreworkflow.OrchestrationPhaseStatusPendingV0
+	}
+	run.Agents = nil
+	run.StartedAgents = nil
+	run.DeliveredAgents = nil
+	run.Deliveries = nil
+	run.DeliveredTasks = nil
+	run.Reviews = nil
+	run.ReviewResults = nil
+	run.AcceptedReviews = nil
+	run.LastEventID = ""
+	run.LastSequence = 0
+	return run
 }
 
 func (refs codexStackRequiredTestRefsV0) runV0() orquestacoreworkflow.OrchestrationRunV0 {
@@ -321,6 +528,24 @@ func (refs codexStackRequiredTestRefsV0) planStateV0() orquestacionnucleoapp.Ope
 	}
 }
 
+type codexStackRequiredTestCausalReviewRefsV0 struct {
+	DeliveryRef       string
+	ReviewRequestRef  string
+	ReviewResultRef   string
+	AcceptedReviewRef string
+}
+
+func (refs codexStackRequiredTestRefsV0) planStateForCausalReviewV0(
+	causal codexStackRequiredTestCausalReviewRefsV0,
+) orquestacionnucleoapp.OperationalDirectorPlanStateV0 {
+	refs = refs.withDefaultsV0()
+	refs.DeliveryRef = causal.DeliveryRef
+	refs.ReviewRequestRef = causal.ReviewRequestRef
+	refs.ReviewResultRef = causal.ReviewResultRef
+	refs.AcceptedReviewRef = causal.AcceptedReviewRef
+	return refs.planStateV0()
+}
+
 func codexStackRealRequiredTestRunnerStackV0(
 	t *testing.T,
 	cfg codexStackRealSmokeConfigV0,
@@ -375,7 +600,8 @@ func codexStackRealRequiredTestRunnerStackV0(
 			ApprovalPolicy:  cfg.ApprovalPolicy,
 			ExtraArgs:       cfg.ExtraArgs,
 			PromptHints: []string{
-				"Smoke opt-in: validar cableado RequiredTestRunner sin lanzar Codex real.",
+				"Smoke opt-in: tarea pequena, comunicacion compacta, terminar con ACK valido.",
+				"Si el proyecto ya compila, evita ampliar alcance; deja evidencia breve.",
 			},
 			Runtime:        processRuntime,
 			ProcessStopper: processRuntime,
@@ -389,7 +615,7 @@ func codexStackRealRequiredTestRunnerStackV0(
 			ReasoningEffort: orquestacoreworkflow.OrchestrationCapacityMediumV0,
 			OccurredAt:      "2026-05-22T17:00:00Z",
 			RequestedBy:     "orquesta-app-stack-required-test-smoke",
-			Summary:         "Capacidad real opt-in para required tests sin lanzar Codex.",
+			Summary:         "Capacidad opt-in para tests requeridos con ejecucion controlada.",
 			EvidenceRefs:    []string{"evidence-ref-rt-runner"},
 		},
 		ReviewGate: ReviewGateConfigV0{
@@ -518,6 +744,158 @@ func codexStackRequiredTestOutputRefV0(refs []string) string {
 		}
 	}
 	return ""
+}
+
+func codexStackRequiredTestDrainUntilDeliveryV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	runRef string,
+	agentRef string,
+	runtimeWorkDir string,
+	timeout time.Duration,
+) orquestaruntimecodexdelivery.CodexReceiptDescriptorV0 {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var lastRun orquestacoreworkflow.OrchestrationRunV0
+	for cycle := 1; cycle <= 24 && time.Now().Before(deadline); cycle++ {
+		if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+			RunRef:               runRef,
+			CorrelationID:        "corr-rt-runner-e2e-delivery",
+			WaitAgentRefs:        []string{agentRef},
+			MaxBursts:            4,
+			MaxStepsPerBurst:     8,
+			MaxDispatchesPerWait: 4,
+			MaxCommands:          12,
+			MaxOutboxPerCycle:    6,
+			MaxExternalWaits:     1,
+		}); err != nil {
+			t.Fatalf("DrainRunV0 delivery ciclo=%d: %v\n%s", cycle, err, codexStackRealSmokeDiagnosticsV0(runtimeWorkDir))
+		}
+		run := mustLoadCodexStackRunForTestV0(t, stack, runRef)
+		lastRun = run
+		for _, descriptor := range codexStackRequiredTestReceiptDescriptorsV0(t, stack) {
+			if strings.TrimSpace(descriptor.AgentRef) != agentRef {
+				continue
+			}
+			ack, ok := codexStackRealSmokeCompletedAckV0(descriptor)
+			if ok && codexStackRealSmokeContainsProjectionPartV0(run.Deliveries, ack.AckRef) {
+				return descriptor
+			}
+		}
+		time.Sleep(2 * time.Second)
+	}
+	t.Fatalf("sin entrega Codex real: run=%+v descriptors=%v\n%s",
+		lastRun,
+		codexStackRequiredTestReceiptDescriptorsV0(t, stack),
+		codexStackRealSmokeDiagnosticsV0(runtimeWorkDir),
+	)
+	return orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{}
+}
+
+func codexStackRequiredTestDrainUntilAcceptedReviewV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	runRef string,
+	deliveryRef string,
+	runtimeWorkDir string,
+	timeout time.Duration,
+) codexStackRequiredTestCausalReviewRefsV0 {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for cycle := 1; cycle <= 12 && time.Now().Before(deadline); cycle++ {
+		if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+			RunRef:               runRef,
+			CorrelationID:        "corr-rt-runner-e2e-review",
+			MaxBursts:            4,
+			MaxStepsPerBurst:     8,
+			MaxDispatchesPerWait: 4,
+			MaxCommands:          12,
+			MaxOutboxPerCycle:    6,
+			MaxExternalWaits:     1,
+		}); err != nil {
+			t.Fatalf("DrainRunV0 review ciclo=%d: %v\n%s", cycle, err, codexStackRealSmokeDiagnosticsV0(runtimeWorkDir))
+		}
+		causal, ok := codexStackRequiredTestAcceptedReviewRefsV0(t, stack, runRef, deliveryRef)
+		if ok {
+			return causal
+		}
+		time.Sleep(time.Second)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, runRef)
+	t.Fatalf("sin review aceptada causal delivery=%s reviews=%v results=%v accepted=%v\n%s",
+		deliveryRef,
+		run.Reviews,
+		run.ReviewResults,
+		run.AcceptedReviews,
+		codexStackRealSmokeDiagnosticsV0(runtimeWorkDir),
+	)
+	return codexStackRequiredTestCausalReviewRefsV0{}
+}
+
+func codexStackRequiredTestAcceptedReviewRefsV0(
+	t *testing.T,
+	stack StackV0,
+	runRef string,
+	deliveryRef string,
+) (codexStackRequiredTestCausalReviewRefsV0, bool) {
+	t.Helper()
+	reader, ok := stack.Stores.EventSink.(orquestacionnucleoapp.RunEventReaderPortV0)
+	if !ok {
+		t.Fatalf("EventSink no lee eventos: %T", stack.Stores.EventSink)
+	}
+	events, err := reader.LoadRunEventsV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("LoadRunEventsV0: %v", err)
+	}
+	var causal codexStackRequiredTestCausalReviewRefsV0
+	causal.DeliveryRef = strings.TrimSpace(deliveryRef)
+	for _, event := range events {
+		switch event.EventType {
+		case orquestacoreworkflow.OrchestrationEventReviewRequestedV0:
+			var payload orquestacoreworkflow.ReviewRequestedPayloadV0
+			if json.Unmarshal(event.Payload, &payload) == nil &&
+				strings.TrimSpace(payload.DeliveryRef) == deliveryRef {
+				causal.ReviewRequestRef = strings.TrimSpace(payload.ReviewRequestID)
+			}
+		case orquestacoreworkflow.OrchestrationEventReviewResultRecordedV0:
+			var payload orquestacoreworkflow.ReviewResultV0
+			if json.Unmarshal(event.Payload, &payload) == nil &&
+				strings.TrimSpace(payload.DeliveryRef) == deliveryRef &&
+				payload.Status == orquestacoreworkflow.ReviewResultStatusAcceptedV0 {
+				causal.ReviewResultRef = strings.TrimSpace(payload.ReviewResultRef)
+				if causal.ReviewRequestRef == "" {
+					causal.ReviewRequestRef = strings.TrimSpace(payload.ReviewRequestID)
+				}
+			}
+		case orquestacoreworkflow.OrchestrationEventReviewAcceptedV0:
+			var payload orquestacoreworkflow.ReviewAcceptedPayloadV0
+			if json.Unmarshal(event.Payload, &payload) == nil &&
+				strings.TrimSpace(payload.DeliveryRef) == deliveryRef {
+				causal.AcceptedReviewRef = strings.TrimSpace(payload.AcceptedReviewRef)
+				if causal.ReviewRequestRef == "" {
+					causal.ReviewRequestRef = strings.TrimSpace(payload.ReviewRequestID)
+				}
+			}
+		}
+	}
+	return causal, causal.DeliveryRef != "" &&
+		causal.ReviewRequestRef != "" &&
+		causal.ReviewResultRef != "" &&
+		causal.AcceptedReviewRef != ""
+}
+
+func codexStackRequiredTestReceiptDescriptorsV0(
+	t *testing.T,
+	stack StackV0,
+) []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0 {
+	t.Helper()
+	store, ok := stack.Stores.ReceiptStore.(*orquestaruntimecodexdelivery.InMemoryCodexReceiptDescriptorStoreV0)
+	if !ok {
+		t.Fatalf("ReceiptStore inesperado: %T", stack.Stores.ReceiptStore)
+	}
+	return codexStackRealSmokeDescriptorsV0(t, store)
 }
 
 func codexStackRequiredTestRuntimeEntriesV0(t *testing.T, runtimeDir string) []string {

@@ -26,7 +26,15 @@ type codexDirectorWaveSummaryV0 struct {
 	WaveWork      orquestadirectoroperativo.OperationalDirectorWaveWorkV0 `json:"wave_work"`
 	Launch        codexWaveLaunchSummaryV0                                `json:"launch"`
 	ChildLaunches []codexDirectorChildWaveSummaryV0                       `json:"child_launches,omitempty"`
+	AgentBudget   codexDirectorAgentBudgetSummaryV0                       `json:"agent_budget"`
 	Issues        []orquestadirectoroperativo.OperationalDirectorIssueV0  `json:"issues,omitempty"`
+}
+
+type codexDirectorAgentBudgetSummaryV0 struct {
+	MaxAgents       int  `json:"max_agents,omitempty"`
+	PlannedAgents   int  `json:"planned_agents"`
+	Exceeded        bool `json:"exceeded,omitempty"`
+	RecursiveLaunch bool `json:"recursive_launch,omitempty"`
 }
 
 type codexDirectorChildWaveSummaryV0 struct {
@@ -57,6 +65,7 @@ type codexDirectorWaveConfigV0 struct {
 	AllowRecursiveDelegation bool
 	MaxDelegationDepth       int
 	MaxSubagentsPerAgent     int
+	RecursiveAgentBudget     int
 	StrictDirectorGuards     bool
 	DomainContextBlocks      []codexDirectorDomainContextBlockV0
 }
@@ -136,7 +145,7 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 	commandPath := flags.String("command", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_COMMAND")), "ruta al binario codex")
 	sourceCodeHome := flags.String("source-code-home", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_SOURCE_CODEX_HOME")), "CODEX_HOME fuente para copiar credenciales/config")
 	model := flags.String("model", firstNonEmptyEnvV0("ORQUESTA_CODEX_WAVE_MODEL", "ORQUESTA_CODEX_MODEL"), "modelo Codex opcional")
-	reasoningEffort := flags.String("reasoning-effort", envOrDefaultV0("ORQUESTA_CODEX_WAVE_REASONING_EFFORT", envOrDefaultV0("ORQUESTA_CODEX_REASONING_EFFORT", "xhigh")), "esfuerzo de razonamiento")
+	reasoningEffort := flags.String("reasoning-effort", envOrDefaultV0("ORQUESTA_CODEX_WAVE_REASONING_EFFORT", envOrDefaultV0("ORQUESTA_CODEX_REASONING_EFFORT", "medium")), "esfuerzo de razonamiento")
 	profile := flags.String("profile", firstNonEmptyEnvV0("ORQUESTA_CODEX_WAVE_PROFILE", "ORQUESTA_CODEX_PROFILE"), "perfil Codex opcional")
 	sandbox := flags.String("sandbox", envOrDefaultV0("ORQUESTA_CODEX_WAVE_SANDBOX", "danger-full-access"), "sandbox Codex")
 	approval := flags.String("approval-policy", envOrDefaultV0("ORQUESTA_CODEX_WAVE_APPROVAL_POLICY", "never"), "politica de aprobacion Codex")
@@ -147,6 +156,7 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 	allowRecursive := flags.Bool("allow-recursive-delegation", false, "permitir que el Director gobierne delegacion recursiva")
 	maxDepth := flags.Int("max-delegation-depth", 0, "profundidad maxima de delegacion")
 	maxChildren := flags.Int("max-subagents-per-agent", 0, "fanout maximo por agente")
+	recursiveAgentBudget := flags.Int("recursive-agent-budget", intEnvOrDefaultV0("ORQUESTA_CODEX_DIRECTOR_RECURSIVE_AGENT_BUDGET", 32), "presupuesto global maximo de agentes en arbol recursivo")
 	strictDirectorGuards := flags.Bool("strict-director-guards", false, "exigir branch/write-set/tests explicitos del Director")
 	flags.Var(&domainContextFiles, "domain-context-file", "archivo de contexto de dominio inyectado por un adaptador externo; puede repetirse")
 
@@ -179,6 +189,9 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 	}
 	if *agents <= 0 {
 		return codexDirectorWaveConfigV0{}, errors.New("agents_out_of_range")
+	}
+	if *recursiveAgentBudget < 0 {
+		return codexDirectorWaveConfigV0{}, errors.New("recursive_agent_budget_out_of_range")
 	}
 	branchValue := strings.TrimSpace(*branchRef)
 	writeSetValues := codexDirectorCSVV0(*writeSet)
@@ -235,6 +248,7 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 		AllowRecursiveDelegation: *allowRecursive,
 		MaxDelegationDepth:       *maxDepth,
 		MaxSubagentsPerAgent:     *maxChildren,
+		RecursiveAgentBudget:     *recursiveAgentBudget,
 		StrictDirectorGuards:     *strictDirectorGuards,
 		DomainContextBlocks:      domainContextBlocks,
 	}, nil
@@ -271,6 +285,16 @@ func runCodexLaunchDirectorWaveV0(
 	if !result.Accepted || !result.ReadyToLaunch || result.Blocked {
 		return summary, nil
 	}
+	budget := codexDirectorAgentBudgetV0(result.Plan, config.RecursiveAgentBudget)
+	summary.AgentBudget = budget
+	if budget.Exceeded {
+		summary.Issues = append(summary.Issues, orquestadirectoroperativo.OperationalDirectorIssueV0{
+			Code:    "recursive_agent_budget_exceeded",
+			Field:   "recursive_agent_budget",
+			Message: fmt.Sprintf("planned agents %d exceed budget %d", budget.PlannedAgents, budget.MaxAgents),
+		})
+		return summary, nil
+	}
 	work := orquestadirectoroperativo.BuildOperationalDirectorWaveWorkV0(result.Plan)
 	summary.WaveWork = work
 	if len(work.Issues) > 0 {
@@ -293,6 +317,30 @@ func runCodexLaunchDirectorWaveV0(
 	}
 	summary.ChildLaunches = childLaunches
 	return summary, nil
+}
+
+func codexDirectorAgentBudgetV0(
+	plan orquestadirectoroperativo.OperationalDirectorPlanV0,
+	maxAgents int,
+) codexDirectorAgentBudgetSummaryV0 {
+	planned := plan.MaxParallelAgents
+	if planned < 0 {
+		planned = 0
+	}
+	recursive := plan.RecursiveDelegation && plan.MaxDelegationDepth > 0 && plan.MaxSubagentsPerAgent > 0
+	if recursive {
+		currentDepthAgents := plan.MaxParallelAgents
+		for depth := 1; depth <= plan.MaxDelegationDepth; depth++ {
+			currentDepthAgents *= plan.MaxSubagentsPerAgent
+			planned += currentDepthAgents
+		}
+	}
+	return codexDirectorAgentBudgetSummaryV0{
+		MaxAgents:       maxAgents,
+		PlannedAgents:   planned,
+		Exceeded:        maxAgents > 0 && planned > maxAgents,
+		RecursiveLaunch: recursive,
+	}
 }
 
 func runCodexLaunchDirectorChildWavesV0(

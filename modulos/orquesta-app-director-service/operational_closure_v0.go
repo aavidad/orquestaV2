@@ -238,6 +238,26 @@ func operationalDirectorClosureIssueReplannableV0(field string) bool {
 		"closure_ref":
 		return true
 	default:
+		return operationalDirectorClosureIssueRepairableV0(field)
+	}
+}
+
+func operationalDirectorClosureIssueRepairableV0(field string) bool {
+	switch strings.ReplaceAll(strings.TrimSpace(field), "-", "_") {
+	case "artifact_ref",
+		"artifact_refs",
+		"domain_artifact_ref",
+		"domain_artifact_refs",
+		"external_artifact_ref",
+		"external_artifact_refs",
+		"validation_evidence_ref",
+		"validation_evidence_refs",
+		"closure_evidence_ref",
+		"closure_evidence_refs",
+		"domain_validation_ref",
+		"domain_validation_refs":
+		return true
+	default:
 		return false
 	}
 }

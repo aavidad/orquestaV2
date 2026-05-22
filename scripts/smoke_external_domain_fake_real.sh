@@ -147,8 +147,88 @@ write_fake_codex() {
   mkdir -p "$bin_dir"
   cat >"$bin_dir/codex-fake" <<'SH'
 #!/usr/bin/env sh
-echo "codex fake no debe ejecutarse en smoke external domain" >&2
-exit 42
+set -eu
+out=""
+project_dir=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output-last-message)
+      shift
+      out="${1:-}"
+      ;;
+    -C)
+      shift
+      project_dir="${1:-}"
+      ;;
+  esac
+  shift || break
+done
+if [ -z "$out" ]; then
+  echo "codex fake sin --output-last-message" >&2
+  exit 64
+fi
+runtime_dir="$(dirname "$out")"
+packet="$runtime_dir/agent_packet.json"
+ack="$runtime_dir/agent_ack.json"
+python3 - "$packet" "$ack" "${project_dir:-$(pwd)}" "$out" <<'PY'
+import json
+import os
+import pathlib
+import sys
+
+packet_path, ack_path, project_dir, last_message_path = sys.argv[1:5]
+with open(packet_path, encoding="utf-8") as fh:
+    packet = json.load(fh)
+
+task = packet.get("task") or {}
+delivery_refs = packet.get("delivery_refs") or {}
+write_set = [x for x in (task.get("write_set") or ["external/fake/entrega.md"]) if str(x).strip()]
+
+def delivery_file(target):
+    target = str(target).strip().strip("/")
+    if not target or target == ".":
+        return "external/fake/entrega.md"
+    if any(ch in target for ch in "*?["):
+        return "external/fake/entrega.md"
+    suffix = pathlib.PurePosixPath(target).suffix
+    if suffix:
+        return target
+    return target + "/entrega.md"
+
+files = []
+root = pathlib.Path(project_dir)
+for target in write_set:
+    rel = delivery_file(target)
+    path = root / pathlib.PurePosixPath(rel)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "artefacto fake neutral\n"
+        f"task_ref={task.get('task_ref','')}\n"
+        f"work_profile={task.get('work_profile_kind','')}\n",
+        encoding="utf-8",
+    )
+    files.append(rel)
+
+ack = {
+    "schema_version": "codex_agent_ack.v0",
+    "request_id": packet.get("request_id", ""),
+    "correlation_id": packet.get("correlation_id", ""),
+    "ack_ref": delivery_refs.get("ack_ref", ""),
+    "target_module": packet.get("target_module", ""),
+    "task_ref": task.get("task_ref", ""),
+    "status": "completed",
+    "files": files,
+    "tests": task.get("required_tests") or [],
+    "notes": ["codex fake: artefacto neutral generado sin Codex real"],
+}
+tmp = ack_path + ".tmp"
+with open(tmp, "w", encoding="utf-8") as fh:
+    json.dump(ack, fh, ensure_ascii=True, indent=2)
+    fh.write("\n")
+os.replace(tmp, ack_path)
+pathlib.Path(last_message_path).write_text("codex fake final: smoke no-OPES\n", encoding="utf-8")
+PY
+printf 'codex fake stdout: ack generado\n'
 SH
   chmod 700 "$bin_dir/codex-fake"
 }
@@ -233,22 +313,222 @@ with open(output, "w", encoding="utf-8") as fh:
 PY
 }
 
+write_external_work_payload() {
+  local output="$1"
+  local job_ref="$2"
+  python3 - "$output" "$smoke_id" "$job_ref" <<'PY'
+import json
+import sys
+
+output, smoke_id, job_ref = sys.argv[1:4]
+payload = {
+    "request_id": f"request-ref-external-domain-fake-run-{smoke_id}",
+    "correlation_id": f"corr-external-domain-fake-{smoke_id}",
+    "external_work_run_request": {
+        "schema_version": "external_work_run_request.v0",
+        "request_id": f"request-ref-external-domain-fake-run-{smoke_id}",
+        "correlation_id": f"corr-external-domain-fake-{smoke_id}",
+        "run_ref": f"run-external-domain-fake-{smoke_id}",
+        "project_ref": f"external-domain-fake-{smoke_id}",
+        "app_spec_ref": f"app-spec-external-domain-fake-{smoke_id}",
+        "queue_ref": "global",
+        "priority_score": 90,
+        "occurred_at": "2026-05-22T12:00:00Z",
+        "requested_by": "orquesta-smoke",
+        "app_change_request": {
+            "schema_version": "app_change_request.v0",
+            "request_id": f"request-ref-external-domain-fake-change-{smoke_id}",
+            "correlation_id": f"corr-external-domain-fake-{smoke_id}",
+            "run_ref": f"run-external-domain-fake-{smoke_id}",
+            "app_ref": f"external-domain-fake-{smoke_id}",
+            "change_ref": f"change-ref-external-domain-fake-{smoke_id}",
+            "actor_ref": "orquesta-smoke",
+            "locale": "es",
+            "user_intent": "Resolver trabajo externo neutral con refs opacas y devolver artefacto fake.",
+            "target_area": "domain_work",
+            "current_state_refs": [
+                f"domain-ref-fake-{smoke_id}",
+                job_ref,
+                f"scope-ref-fake-{smoke_id}"
+            ],
+            "acceptance_criteria": [
+                "artefacto externo generado",
+                "ACK causal registrado",
+                "review aceptada por evidencia de fichero",
+                "sin OPES ni DB compartida"
+            ],
+            "constraints": [
+                "usar solo refs opacas",
+                "runtime fake acotado",
+                "no llamar OPES"
+            ],
+            "external_work": {
+                "project_ref": f"external-domain-fake-{smoke_id}",
+                "job_ref": job_ref,
+                "interface_refs": ["external-domain-fake.v0", "domain-work.v0"],
+                "work_kind": "generation",
+                "work_refs": [f"work-ref-fake-{smoke_id}"],
+                "input_fields": [
+                    {"name": "title", "value": "Smoke externo fake"},
+                    {"name": "expected_artifact_type", "value": "external_summary"},
+                    {"name": "source_refs", "values": [f"source-ref-fake-{smoke_id}"]},
+                    {"name": "scope_ref", "value": f"scope-ref-fake-{smoke_id}"}
+                ]
+            }
+        }
+    }
+}
+with open(output, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, ensure_ascii=True, indent=2)
+    fh.write("\n")
+PY
+}
+
+write_supervisor_payload() {
+  local output="$1"
+  local run_ref="$2"
+  python3 - "$output" "$smoke_id" "$run_ref" <<'PY'
+import json
+import sys
+
+output, smoke_id, run_ref = sys.argv[1:4]
+payload = {
+    "request_id": f"request-ref-external-domain-fake-supervise-{smoke_id}",
+    "correlation_id": f"corr-external-domain-fake-{smoke_id}",
+    "run_ref": run_ref,
+    "queue_ref": "global",
+    "continue_message": "sigue",
+    "occurred_at": "2026-05-22T12:01:00Z",
+    "max_ticks": 1,
+    "max_runs_per_tick": 1,
+    "max_executions": 8,
+    "allow_repeated_runs": True,
+    "max_bursts": 16,
+    "max_steps_per_burst": 8,
+    "max_dispatches_per_wait": 8,
+    "max_commands": 32,
+    "max_outbox_per_cycle": 8,
+    "max_decision_cycles": 4,
+    "max_external_waits": 4
+}
+with open(output, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, ensure_ascii=True, indent=2)
+    fh.write("\n")
+PY
+}
+
+write_stats_payload() {
+  local output="$1"
+  local run_ref="$2"
+  local job_ref="$3"
+  python3 - "$output" "$smoke_id" "$run_ref" "$job_ref" <<'PY'
+import json
+import sys
+
+output, smoke_id, run_ref, job_ref = sys.argv[1:5]
+payload = {
+    "request_id": f"request-ref-external-domain-fake-stats-{smoke_id}",
+    "correlation_id": f"corr-external-domain-fake-{smoke_id}",
+    "run_ref": run_ref,
+    "external_job_ref": job_ref,
+    "include_process_refs": True,
+    "include_agent_progress": True
+}
+with open(output, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, ensure_ascii=True, indent=2)
+    fh.write("\n")
+PY
+}
+
 json_value() {
   local path="$1"
   local expr="$2"
   jq -r "$expr // empty" "$path"
 }
 
+post_json_required() {
+  local url="$1"
+  local payload_file="$2"
+  local output="$3"
+  local status
+  status="$(curl -sS -m "$request_timeout" \
+    -H 'Content-Type: application/json' \
+    -H "X-Correlation-ID: corr-external-domain-fake-$smoke_id" \
+    -X POST "$url" \
+    --data-binary "@$payload_file" \
+    -o "$output" \
+    -w '%{http_code}')"
+  if [[ "$status" != 2* ]]; then
+    echo "HTTP inesperado para $url: got=$status" >&2
+    cat "$output" >&2 || true
+    exit 1
+  fi
+}
+
+post_json_status() {
+  local url="$1"
+  local payload_file="$2"
+  local output="$3"
+  curl -sS -m "$request_timeout" \
+    -H 'Content-Type: application/json' \
+    -H "X-Correlation-ID: corr-external-domain-fake-$smoke_id" \
+    -X POST "$url" \
+    --data-binary "@$payload_file" \
+    -o "$output" \
+    -w '%{http_code}'
+}
+
+verify_external_cycle() {
+  local stats_response="$1"
+  python3 - "$stats_response" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    data = json.load(fh)
+if data.get("estado") != "ok":
+    raise SystemExit(f"stats no ok: {data}")
+stats = data.get("stats") or {}
+counts = stats.get("counts") or {}
+external_job = data.get("external_job") or {}
+needed = {
+    "tasks_total": 1,
+    "agents_started": 1,
+    "deliveries": 1,
+}
+for key, minimum in needed.items():
+    if int(counts.get(key) or 0) < minimum:
+        raise SystemExit(f"stats falta {key}>={minimum}: {json.dumps(data, ensure_ascii=True)}")
+if not external_job.get("task_ref") or not external_job.get("agent_ref") or not external_job.get("delivery_refs"):
+    raise SystemExit(f"external_job incompleto: {external_job}")
+closure = stats.get("closure") or {}
+print("external_cycle_delivery_refs=" + ",".join(external_job.get("delivery_refs") or []))
+print("external_cycle_review_results=" + str(counts.get("review_results", "")))
+print("external_cycle_closure_status=" + str(closure.get("status", "")))
+print("external_cycle_closed=" + str(closure.get("closed", False)).lower())
+if int(counts.get("reviews") or 0) == 0:
+    print("external_cycle_review_pending=true")
+PY
+}
+
 write_summary() {
   local job_ref="$1"
   local replay_ref="$2"
+  local run_ref="$3"
+  local stats_response="$4"
   local snapshot="$state_dir/domain-work-jobs/domain_work_jobs_v0.json"
+  local closure_status
+  closure_status="$(json_value "$stats_response" '.stats.closure.status')"
   cat >"$out_dir/summary.txt" <<EOF
 smoke=external-domain-fake
 server=$base_url
 job_ref=$job_ref
 replay_job_ref=$replay_ref
+external_run_ref=$run_ref
+stats_response=$stats_response
+closure_status=$closure_status
 snapshot=$snapshot
+codex_fake_executed=true
 codex_real_executed=false
 opes_touched=false
 output_dir=$out_dir
@@ -322,7 +602,61 @@ main() {
     exit 1
   fi
 
-  write_summary "$job_ref" "$replay_ref"
+  local external_payload="$out_dir/external_work_run_request.json"
+  local external_response="$out_dir/external_work_run_response.json"
+  write_external_work_payload "$external_payload" "$job_ref"
+  post_json_required "$base_url/api/v0/external-work/run" "$external_payload" "$external_response"
+  local external_estado external_run_ref
+  external_estado="$(json_value "$external_response" '.estado')"
+  external_run_ref="$(json_value "$external_response" '.run_ref')"
+  if [[ "$external_estado" != "ok" || "$external_run_ref" != "run-external-domain-fake-$smoke_id" ]]; then
+    echo "external-work/run invalido" >&2
+    cat "$external_response" >&2
+    exit 1
+  fi
+
+  local supervisor_payload="$out_dir/supervisor_request.json"
+  local supervisor_response="$out_dir/supervisor_response.json"
+  write_supervisor_payload "$supervisor_payload" "$external_run_ref"
+
+  local stats_payload="$out_dir/stats_request.json"
+  local stats_response="$out_dir/stats_response.json"
+  write_stats_payload "$stats_payload" "$external_run_ref" "$job_ref"
+  local supervisor_ok=0
+  for attempt in $(seq 1 12); do
+    local supervisor_status
+    supervisor_status="$(post_json_status "$base_url/api/v0/runs/supervise" "$supervisor_payload" "$supervisor_response")"
+    if [[ "$supervisor_status" == 2* && "$(json_value "$supervisor_response" '.estado')" == "ok" ]]; then
+      supervisor_ok=1
+    fi
+    post_json_required "$base_url/api/v0/director/stats" "$stats_payload" "$stats_response"
+    if verify_external_cycle "$stats_response"; then
+      break
+    fi
+    if [[ "$supervisor_status" != 2* && "$supervisor_ok" != "1" ]]; then
+      local deliveries
+      deliveries="$(json_value "$stats_response" '.stats.counts.deliveries')"
+      if [[ "${deliveries:-0}" -lt 1 ]]; then
+        echo "supervisor invalido intento=$attempt http=$supervisor_status" >&2
+        cat "$supervisor_response" >&2 || true
+        exit 1
+      fi
+    fi
+    sleep 0.5
+  done
+  verify_external_cycle "$stats_response"
+
+  local ack_count artifact_count
+  ack_count="$(find "$runtime_dir" -name agent_ack.json -type f | wc -l | tr -d ' ')"
+  artifact_count="$(find "$project_dir/external" -type f 2>/dev/null | wc -l | tr -d ' ')"
+  if [[ "$ack_count" -lt 1 || "$artifact_count" -lt 1 ]]; then
+    echo "codex-fake no produjo ACK/artefacto: ack_count=$ack_count artifact_count=$artifact_count" >&2
+    find "$runtime_dir" -maxdepth 4 -type f >&2 || true
+    find "$project_dir" -maxdepth 5 -type f >&2 || true
+    exit 1
+  fi
+
+  write_summary "$job_ref" "$replay_ref" "$external_run_ref" "$stats_response"
   cat "$out_dir/summary.txt"
 }
 

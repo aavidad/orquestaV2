@@ -265,6 +265,11 @@ Semantica:
   a fases posteriores;
 - cuando OPES deja de mostrar pendientes de una fase, el siguiente tick avanza
   a la siguiente;
+- la cobertura offline verifica la secuencia completa
+  `draft_content_block -> generate_visual_asset -> review_legal ->
+  review_pedagogical -> review_quality -> validate_topic -> assemble_topic`,
+  con ledger/idempotencia por fase y `assemble_topic` mapeado a
+  `assembled_topic`;
 - la secuencia vive en `cmd/orquesta-server`; el nucleo de orquestacion sigue
   sin conocer OPES.
 
@@ -324,6 +329,18 @@ Limitacion operativa actual: OPES no ofrece filtro por `program_id` en
 `GET /api/jobs`. Usar OPES temporal o una cola acotada para smokes; si hay jobs
 fallidos historicos del mismo tipo, revisarlos desde OPES antes de dar por
 cerrado el temario.
+
+Pruebas offline focales antes de tocar OPES real:
+
+```bash
+go test -count=1 ./modulos/orquesta-opes-bridge
+go test -count=1 ./cmd/orquesta-server -run 'TestOPESBridgeLoop|TestRunOPESDrainOnceV0'
+```
+
+Estas pruebas no ejecutan Codex ni llaman a OPES real. El smoke real de
+derivados sigue siendo opt-in, contra instancia temporal, y debe comprobar que
+OPES recibe artefactos validos y deduplica reintentos; en particular,
+`assemble_topic` debe entregar `artifact_type=assembled_topic`.
 
 ## Criterio editorial para Operario
 

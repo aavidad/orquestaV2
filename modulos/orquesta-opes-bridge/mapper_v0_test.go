@@ -220,6 +220,48 @@ func TestBuildExternalWorkRunRequestV0MapeaAssembleTopicComoAssembledTopic(t *te
 	}
 }
 
+func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t *testing.T) {
+	cases := []struct {
+		workKind     string
+		artifactType string
+		context      string
+	}{
+		{workKind: "draft_content_block", artifactType: "content_block", context: "large"},
+		{workKind: "generate_visual_asset", artifactType: "visual_asset", context: "standard"},
+		{workKind: "review_legal", artifactType: "block_revision", context: "large"},
+		{workKind: "review_pedagogical", artifactType: "block_revision", context: "large"},
+		{workKind: "review_quality", artifactType: "block_revision", context: "large"},
+		{workKind: "validate_topic", artifactType: "block_revision", context: "large"},
+		{workKind: "assemble_topic", artifactType: "assembled_topic", context: "large"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.workKind, func(t *testing.T) {
+			req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
+				ID:   "job-ref-" + strings.ReplaceAll(tc.workKind, "_", "-") + "-001",
+				Type: tc.workKind,
+				PayloadJSON: `{
+					"program_id":"program-ref-operadores-001",
+					"topic_id":"topic-ref-operadores-001",
+					"document_plan_artifact_id":"artifact-plan-operadores-001"
+				}`,
+			}, JobRunConfigV0{})
+
+			if !ok {
+				t.Fatalf("request no construida")
+			}
+			work := req.AppChangeRequest.ExternalWork
+			if work == nil ||
+				work.WorkKind != tc.workKind ||
+				!fieldValueForTestV0(work.InputFields, "expected_artifact_type", tc.artifactType) ||
+				!fieldValueForTestV0(work.InputFields, "context_budget_profile", tc.context) ||
+				!containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "devolver artifact_type="+tc.artifactType) ||
+				strings.Contains(req.AppChangeRequest.AllowedWriteSet[0], "work_delivery") {
+				t.Fatalf("req=%+v work=%+v", req, work)
+			}
+		})
+	}
+}
+
 func fieldValueForTestV0(fields []orquestadomainwork.DomainWorkFieldV0, name string, value string) bool {
 	for _, field := range fields {
 		if field.Name == name && field.Value == value {

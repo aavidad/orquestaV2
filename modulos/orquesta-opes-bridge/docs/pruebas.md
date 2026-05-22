@@ -20,6 +20,10 @@
   opciones y distractores plausibles, siempre por tema y reservado a afiliados.
 - Contrato multiformato de expansion: tema grande, tema mediano, resumen,
   esquema de repaso y plan de visuales.
+- Mapper de derivados OPES:
+  `draft_content_block -> content_block`,
+  `generate_visual_asset -> visual_asset`, revisiones y `validate_topic` a
+  `block_revision`, y `assemble_topic -> assembled_topic`.
 - Preservacion de payload JSON como `input_fields`.
 - Hidratacion de `topic_blocks` para `summarize_topic`.
 - Write-set unico para evitar entregas multiples innecesarias.

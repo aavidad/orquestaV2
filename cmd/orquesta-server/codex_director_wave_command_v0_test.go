@@ -367,6 +367,9 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaNietosConLimi
 	if !summary.Plan.RecursiveDelegation ||
 		summary.Plan.MaxDelegationDepth != 2 ||
 		summary.Plan.MaxSubagentsPerAgent != 2 ||
+		summary.AgentBudget.PlannedAgents != 7 ||
+		summary.AgentBudget.MaxAgents != 32 ||
+		summary.AgentBudget.Exceeded ||
 		len(summary.Launch.Agents) != 1 ||
 		len(summary.ChildLaunches) != 1 {
 		t.Fatalf("summary recursivo inesperado: %+v", summary)
@@ -408,6 +411,65 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaNietosConLimi
 		if !strings.Contains(grandchildPrompt, want) {
 			t.Fatalf("prompt nieto no contiene %q:\n%s", want, grandchildPrompt)
 		}
+	}
+	grandchildWrapper := mustReadFileStringV0(t, grandchild.Launch.Agents[0].WrapperPath)
+	if strings.Contains(grandchildWrapper, `model_reasoning_effort="xhigh"`) ||
+		!strings.Contains(grandchildWrapper, `model_reasoning_effort="high"`) {
+		t.Fatalf("wrapper nieto no debe usar xhigh por defecto:\n%s", grandchildWrapper)
+	}
+}
+
+func TestCodexLaunchDirectorWaveCommandV0RecursiveBudgetBloqueaAntesDeLanzar(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	runtimeDir := filepath.Join(root, "runtime", "recursive-budget-blocked")
+	fakeCodex := filepath.Join(root, "codex-fake")
+
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatalf("crear project dir: %v", err)
+	}
+	if err := os.WriteFile(fakeCodex, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatalf("crear codex falso: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := codexLaunchDirectorWaveCommandV0([]string{
+		"--dry-run",
+		"--agents", "2",
+		"--allow-recursive-delegation",
+		"--max-delegation-depth", "2",
+		"--max-subagents-per-agent", "3",
+		"--recursive-agent-budget", "8",
+		"--wave-ref", "recursive-budget-blocked",
+		"--project-dir", projectDir,
+		"--runtime-dir", runtimeDir,
+		"--command", fakeCodex,
+		"--objective", "Probar guarda de presupuesto recursivo.",
+		"--write-set", "cmd/orquesta-server/codex_director_wave_command_v0.go",
+		"--required-tests", "go test -count=1 ./cmd/orquesta-server",
+		"--branch-ref", "branch-recursive-budget-blocked",
+		"--worktree-ref", "worktree-recursive-budget-blocked",
+	}, &stdout, &stderr)
+	if exitCode != 1 {
+		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+
+	var summary codexDirectorWaveSummaryV0
+	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
+		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
+	}
+	if summary.AgentBudget.PlannedAgents != 26 ||
+		summary.AgentBudget.MaxAgents != 8 ||
+		!summary.AgentBudget.Exceeded ||
+		!codexDirectorHasIssueV0(summary.Issues, "recursive_agent_budget_exceeded") {
+		t.Fatalf("presupuesto inesperado: %+v", summary)
+	}
+	if len(summary.Launch.Agents) != 0 || len(summary.ChildLaunches) != 0 {
+		t.Fatalf("no debio materializar agentes tras exceder presupuesto: %+v", summary)
+	}
+	if _, err := os.Stat(filepath.Join(runtimeDir, "codex_wave_registry_v0.json")); !os.IsNotExist(err) {
+		t.Fatalf("no debe escribir registry tras bloqueo, err=%v", err)
 	}
 }
 

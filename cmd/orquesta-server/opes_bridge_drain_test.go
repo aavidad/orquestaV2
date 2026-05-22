@@ -418,6 +418,147 @@ func TestRunOPESDrainOnceV0EscaneaMasQueLimitYEnviaSiguientesNoEnviadosV0(t *tes
 	}
 }
 
+func TestRunOPESDrainOnceV0SecuenciaDerivadosOPESHastaAssembleTopicV0(t *testing.T) {
+	sequence := []string{
+		"draft_content_block",
+		"generate_visual_asset",
+		"review_legal",
+		"review_pedagogical",
+		"review_quality",
+		"validate_topic",
+		"assemble_topic",
+	}
+	expectedArtifactByType := map[string]string{
+		"draft_content_block":   "content_block",
+		"generate_visual_asset": "visual_asset",
+		"review_legal":          "block_revision",
+		"review_pedagogical":    "block_revision",
+		"review_quality":        "block_revision",
+		"validate_topic":        "block_revision",
+		"assemble_topic":        "assembled_topic",
+	}
+	activeStage := 0
+	queries := []string{}
+	submittedByType := map[string]int{}
+
+	opesServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		jobType := r.URL.Query().Get("job_type")
+		queries = append(queries, jobType)
+		if activeStage >= len(sequence) || jobType != sequence[activeStage] {
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":              "job-ref-" + strings.ReplaceAll(jobType, "_", "-") + "-001",
+			"type":            jobType,
+			"status":          "pending",
+			"execution_mode":  "external",
+			"payload_json":    opesDerivedPayloadForDrainTestV0(jobType),
+			"correlation_id":  "corr-ref-" + strings.ReplaceAll(jobType, "_", "-") + "-001",
+			"idempotency_key": "idem-ref-" + strings.ReplaceAll(jobType, "_", "-") + "-001",
+			"requested_by":    "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	type postedRun struct {
+		JobRef       string
+		WorkKind     string
+		ArtifactType string
+		WriteSet     string
+	}
+	posts := []postedRun{}
+	orquestaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v0/external-work/run" || r.Method != http.MethodPost {
+			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		var envelope struct {
+			ExternalWorkRunRequest orquestaexternalworkrun.StartExternalWorkRunRequestV0 `json:"external_work_run_request"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&envelope); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		work := envelope.ExternalWorkRunRequest.AppChangeRequest.ExternalWork
+		if work == nil {
+			t.Fatalf("external_work nil: %+v", envelope.ExternalWorkRunRequest)
+		}
+		artifactType := domainWorkFieldStringForDrainTestV0(work.InputFields, "expected_artifact_type")
+		posts = append(posts, postedRun{
+			JobRef:       work.JobRef,
+			WorkKind:     work.WorkKind,
+			ArtifactType: artifactType,
+			WriteSet:     envelope.ExternalWorkRunRequest.AppChangeRequest.AllowedWriteSet[0],
+		})
+		submittedByType[work.WorkKind]++
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"run_ref": "run-ref-" + work.JobRef,
+			"estado":  "accepted",
+		})
+	}))
+	defer orquestaServer.Close()
+
+	ledger, err := newFileExternalBridgeInputLedgerV0(
+		filepath.Join(t.TempDir(), "external-bridge-input-ledger.json"),
+	)
+	if err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	config := opesDrainConfigV0{
+		OPESBaseURL:     opesServer.URL,
+		OrquestaBaseURL: orquestaServer.URL,
+		Limit:           1,
+		JobTypeSequence: sequence,
+		HTTPTimeout:     time.Second,
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+		InputLedger: ledger,
+	}
+
+	for index, jobType := range sequence {
+		activeStage = index
+		first, err := runOPESDrainOnceV0(context.Background(), config)
+		if err != nil {
+			t.Fatalf("drain %s: %v", jobType, err)
+		}
+		second, err := runOPESDrainOnceV0(context.Background(), config)
+		if err != nil {
+			t.Fatalf("drain replay %s: %v", jobType, err)
+		}
+		if first.SelectedJobType != jobType ||
+			first.Submitted != 1 ||
+			second.SelectedJobType != jobType ||
+			second.Submitted != 0 ||
+			second.AlreadySubmitted != 1 ||
+			second.Results[0].Status != "already_submitted" {
+			t.Fatalf("jobType=%s first=%+v second=%+v", jobType, first, second)
+		}
+		if submittedByType[jobType] != 1 {
+			t.Fatalf("jobType=%s submissions=%d", jobType, submittedByType[jobType])
+		}
+	}
+
+	if len(posts) != len(sequence) {
+		t.Fatalf("posts=%+v", posts)
+	}
+	for index, post := range posts {
+		jobType := sequence[index]
+		if post.WorkKind != jobType ||
+			post.ArtifactType != expectedArtifactByType[jobType] ||
+			post.WriteSet != "external/opes/"+jobType+"/"+post.JobRef {
+			t.Fatalf("index=%d post=%+v expected=%s", index, post, expectedArtifactByType[jobType])
+		}
+	}
+	last := posts[len(posts)-1]
+	if last.WorkKind != "assemble_topic" || last.ArtifactType != "assembled_topic" {
+		t.Fatalf("assemble no entrego assembled_topic: posts=%+v queries=%v", posts, queries)
+	}
+}
+
 func domainWorkFieldValueForDrainTestV0(
 	fields []orquestadomainwork.DomainWorkFieldV0,
 	name string,
@@ -429,4 +570,29 @@ func domainWorkFieldValueForDrainTestV0(
 		}
 	}
 	return false
+}
+
+func domainWorkFieldStringForDrainTestV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	name string,
+) string {
+	for _, field := range fields {
+		if field.Name == name {
+			return field.Value
+		}
+	}
+	return ""
+}
+
+func opesDerivedPayloadForDrainTestV0(jobType string) string {
+	switch jobType {
+	case "draft_content_block":
+		return `{"program_id":"program-ref-operadores-001","topic_id":"topic-ref-operadores-001","section_ref":"section-ref-001","title":"Bloque operadores"}`
+	case "generate_visual_asset":
+		return `{"program_id":"program-ref-operadores-001","topic_id":"topic-ref-operadores-001","visual_ref":"visual-ref-001","objective":"Diagrama de precedencia"}`
+	case "assemble_topic":
+		return `{"program_id":"program-ref-operadores-001","topic_id":"topic-ref-operadores-001","document_plan_artifact_id":"artifact-plan-operadores-001","content_block_artifact_refs":["artifact-block-001"],"visual_asset_artifact_refs":["artifact-visual-001"],"review_artifact_refs":["artifact-review-001"],"validation_artifact_ref":"artifact-validation-001"}`
+	default:
+		return `{"program_id":"program-ref-operadores-001","topic_id":"topic-ref-operadores-001","document_plan_artifact_id":"artifact-plan-operadores-001","scope":"tema completo"}`
+	}
 }

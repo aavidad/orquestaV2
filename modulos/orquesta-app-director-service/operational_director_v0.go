@@ -1702,11 +1702,18 @@ func continueOperationalDirectorPlanStateCanProgressBlockedClosureIssuesReplanV0
 
 func operationalDirectorClosureReplannableBlockerRefsV0(refs []string) []string {
 	replannable := make([]string, 0, len(refs))
+	closureInsufficient := false
 	for _, ref := range refs {
 		ref = strings.TrimSpace(ref)
 		if operationalDirectorClosureIssueReplannableV0(ref) {
 			replannable = append(replannable, ref)
+			if ref != "required_test_evidence_refs" && ref != "operational_closure_insufficient" {
+				closureInsufficient = true
+			}
 		}
+	}
+	if closureInsufficient {
+		replannable = append(replannable, "operational_closure_insufficient")
 	}
 	return compactServiceRefsV0(replannable)
 }
