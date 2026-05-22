@@ -41,6 +41,12 @@ func TestMCPAutoprogrammingValidateRequestHTTPV0AcceptsSnakeCaseJSON(t *testing.
 		len(result.Groups) != 1 {
 		t.Fatalf("result=%+v", result)
 	}
+	if result.ProgrammableWork == nil ||
+		len(result.ProgrammableWork.WorkflowTaskRefs) != 1 ||
+		len(result.ProgrammableWork.Groups) != 1 ||
+		result.ProgrammableWork.Groups[0].WriteSet[0] != "modulos/orquesta-mcp/autoprogramming_validate_request_http_v0.go" {
+		t.Fatalf("programmable_work=%+v", result.ProgrammableWork)
+	}
 }
 
 func TestMCPAutoprogrammingValidateRequestHTTPV0ReturnsPublicErrors(t *testing.T) {
@@ -65,5 +71,8 @@ func TestMCPAutoprogrammingValidateRequestHTTPV0ReturnsPublicErrors(t *testing.T
 		result.Accepted ||
 		len(result.Errores) == 0 {
 		t.Fatalf("result=%+v", result)
+	}
+	if result.ProgrammableWork != nil {
+		t.Fatalf("programmable_work inesperado=%+v", result.ProgrammableWork)
 	}
 }

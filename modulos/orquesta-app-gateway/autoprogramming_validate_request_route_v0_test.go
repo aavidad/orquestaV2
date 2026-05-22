@@ -44,4 +44,7 @@ func TestAutoprogrammingValidateRequestAPIRouteV0(t *testing.T) {
 	if !result.Accepted || result.Estado != orquestamcp.MCPAutoprogrammingValidateRequestEstadoOKV0 {
 		t.Fatalf("result=%+v", result)
 	}
+	if result.ProgrammableWork == nil || len(result.ProgrammableWork.WorkflowTaskRefs) != 1 {
+		t.Fatalf("programmable_work=%+v", result.ProgrammableWork)
+	}
 }

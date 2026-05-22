@@ -43,6 +43,24 @@ func TestMCPAutoprogrammingValidateRequestExecutorV0AceptaSolicitudAislada(t *te
 		len(result.RequiredTests) != 1 {
 		t.Fatalf("proyeccion incompleta=%+v", result)
 	}
+	if result.ProgrammableWork == nil ||
+		result.ProgrammableWork.RequestRef != "request-ref-mcp-autoprogramming-001" ||
+		len(result.ProgrammableWork.WorkProfileRefs) != 1 ||
+		len(result.ProgrammableWork.WorkflowTaskRefs) != 1 ||
+		len(result.ProgrammableWork.Groups) != 1 {
+		t.Fatalf("programmable_work incompleto=%+v", result.ProgrammableWork)
+	}
+	group := result.ProgrammableWork.Groups[0]
+	if group.Area != "mcp" ||
+		group.WorkKind != "implementation" ||
+		group.PhaseID == "" ||
+		group.WorkProfileRef == "" ||
+		group.WorkflowTaskRef == "" ||
+		len(group.WriteSet) != 2 ||
+		len(group.RequiredTests) != 1 ||
+		len(group.ContextRefs) != 4 {
+		t.Fatalf("grupo programable incompleto=%+v", group)
+	}
 }
 
 func TestMCPAutoprogrammingValidateRequestExecutorV0DevuelveIssuesPublicos(t *testing.T) {
@@ -65,6 +83,50 @@ func TestMCPAutoprogrammingValidateRequestExecutorV0DevuelveIssuesPublicos(t *te
 	}
 	assertMCPAutoprogrammingIssueV0(t, result, "branch_ref_missing")
 	assertMCPAutoprogrammingIssueV0(t, result, "write_set_path_invalid")
+	if result.ProgrammableWork != nil {
+		t.Fatalf("programmable_work inesperado=%+v", result.ProgrammableWork)
+	}
+}
+
+func TestMCPAutoprogrammingValidateRequestExecutorV0DevuelveTrabajoProgramableParticionado(t *testing.T) {
+	request := validMCPAutoprogrammingRequestV0()
+	request.Tasks = []orquestaautoprogramming.AutoprogrammingTaskGroupCandidateV0{
+		{TaskRef: "task-ref-mcp-tool", Area: "Tool"},
+		{TaskRef: "task-ref-mcp-http", Area: "HTTP"},
+	}
+	request.WriteSet = []string{
+		"modulos/orquesta-mcp/autoprogramming_validate_request_tool_v0.go",
+		"modulos/orquesta-mcp/autoprogramming_validate_request_http_v0.go",
+	}
+
+	result, err := MCPAutoprogrammingValidateRequestToolExecutorV0{}.Execute(
+		context.Background(),
+		MCPAutoprogrammingValidateRequestToolInputV0{
+			RequestID:              "request-ref-mcp-autoprogramming-partition-001",
+			AutoprogrammingRequest: request,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !result.Accepted || result.ProgrammableWork == nil {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(result.ProgrammableWork.Groups) != 2 ||
+		len(result.ProgrammableWork.WorkProfileRefs) != 2 ||
+		len(result.ProgrammableWork.WorkflowTaskRefs) != 2 {
+		t.Fatalf("programmable_work=%+v", result.ProgrammableWork)
+	}
+	gotByArea := map[string][]string{}
+	for _, group := range result.ProgrammableWork.Groups {
+		gotByArea[group.Area] = group.WriteSet
+	}
+	assertStringsMCPAutoprogrammingV0(t, gotByArea["tool"], []string{
+		"modulos/orquesta-mcp/autoprogramming_validate_request_tool_v0.go",
+	})
+	assertStringsMCPAutoprogrammingV0(t, gotByArea["http"], []string{
+		"modulos/orquesta-mcp/autoprogramming_validate_request_http_v0.go",
+	})
 }
 
 func TestMCPAutoprogrammingValidateRequestTransportV0RegistradoEInvocable(t *testing.T) {
@@ -91,7 +153,10 @@ func TestMCPAutoprogrammingValidateRequestTransportV0RegistradoEInvocable(t *tes
 	if result.Estado != MCPAutoprogrammingValidateRequestEstadoOKV0 || !result.Accepted {
 		t.Fatalf("result=%+v", result)
 	}
-	assertTransportPayloadSaneadoMCPTestV0(t, output, 1400)
+	if result.ProgrammableWork == nil || len(result.ProgrammableWork.WorkflowTaskRefs) != 1 {
+		t.Fatalf("programmable_work=%+v", result.ProgrammableWork)
+	}
+	assertTransportPayloadSaneadoMCPTestV0(t, output, 2400)
 }
 
 func validMCPAutoprogrammingRequestV0() orquestaautoprogramming.AutoprogrammingRequestV0 {
@@ -126,4 +191,16 @@ func assertMCPAutoprogrammingIssueV0(
 		}
 	}
 	t.Fatalf("issue %q no encontrado: %+v", code, result.Errores)
+}
+
+func assertStringsMCPAutoprogrammingV0(t *testing.T, got []string, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("got=%v want=%v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("got=%v want=%v", got, want)
+		}
+	}
 }

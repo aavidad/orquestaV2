@@ -31,14 +31,37 @@ type MCPAutoprogrammingValidateRequestToolInputV0 struct {
 }
 
 type MCPAutoprogrammingValidateRequestToolResultV0 struct {
-	Estado        string                                               `json:"estado"`
-	RequestID     string                                               `json:"request_id,omitempty"`
-	CorrelationID string                                               `json:"correlation_id,omitempty"`
-	Accepted      bool                                                 `json:"accepted"`
-	Groups        []orquestaautoprogramming.AutoprogrammingTaskGroupV0 `json:"groups,omitempty"`
-	WriteSet      []string                                             `json:"write_set,omitempty"`
-	RequiredTests []string                                             `json:"required_tests,omitempty"`
-	Errores       []MCPValidationIssueV0                               `json:"errores_publicos,omitempty"`
+	Estado           string                                               `json:"estado"`
+	RequestID        string                                               `json:"request_id,omitempty"`
+	CorrelationID    string                                               `json:"correlation_id,omitempty"`
+	Accepted         bool                                                 `json:"accepted"`
+	Groups           []orquestaautoprogramming.AutoprogrammingTaskGroupV0 `json:"groups,omitempty"`
+	WriteSet         []string                                             `json:"write_set,omitempty"`
+	RequiredTests    []string                                             `json:"required_tests,omitempty"`
+	ProgrammableWork *MCPAutoprogrammingProgrammableWorkV0                `json:"programmable_work,omitempty"`
+	Errores          []MCPValidationIssueV0                               `json:"errores_publicos,omitempty"`
+}
+
+type MCPAutoprogrammingProgrammableWorkV0 struct {
+	RequestRef       string                                      `json:"request_ref"`
+	ProjectRef       string                                      `json:"project_ref"`
+	WorktreeRef      string                                      `json:"worktree_ref"`
+	BranchRef        string                                      `json:"branch_ref"`
+	WorkProfileRefs  []string                                    `json:"work_profile_refs,omitempty"`
+	WorkflowTaskRefs []string                                    `json:"workflow_task_refs,omitempty"`
+	Groups           []MCPAutoprogrammingProgrammableWorkGroupV0 `json:"groups,omitempty"`
+}
+
+type MCPAutoprogrammingProgrammableWorkGroupV0 struct {
+	Area            string   `json:"area"`
+	SourceTaskRefs  []string `json:"source_task_refs,omitempty"`
+	WorkProfileRef  string   `json:"work_profile_ref"`
+	WorkflowTaskRef string   `json:"workflow_task_ref"`
+	WorkKind        string   `json:"work_kind"`
+	PhaseID         string   `json:"phase_id"`
+	WriteSet        []string `json:"write_set,omitempty"`
+	RequiredTests   []string `json:"required_tests,omitempty"`
+	ContextRefs     []string `json:"context_refs,omitempty"`
 }
 
 type MCPAutoprogrammingValidateRequestToolExecutorV0 struct{}
@@ -48,11 +71,11 @@ func MCPAutoprogrammingValidateRequestDescriptorV0() MCPAutoprogrammingValidateR
 		Name:        MCPAutoprogrammingValidateRequestToolNameV0,
 		Version:     MCPAutoprogrammingValidateRequestToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,autoprogramming_request:AutoprogrammingRequestV0}",
-		Output:      "ok:{accepted,groups,write_set,required_tests}|error:{accepted:false,errores_publicos}",
+		Output:      "ok:{accepted,groups,write_set,required_tests,programmable_work? compacto}|error:{accepted:false,errores_publicos}",
 		ResourceURI: MCPAutoprogrammingValidateRequestResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
-			"delega la validacion en orquesta-autoprogramming",
+			"delega validacion y trabajo programable en orquesta-autoprogramming",
 			"no ejecuta agentes pruebas VCS comandos ni filesystem",
 			"no elige DB runtime ni implementacion de cambio",
 		},
@@ -67,8 +90,9 @@ func (executor MCPAutoprogrammingValidateRequestToolExecutorV0) Execute(
 		ctx = context.Background()
 	}
 	request := autoprogrammingRequestFromMCPV0(input)
-	result := orquestaautoprogramming.ValidateAutoprogrammingRequestV0(request)
-	return newMCPAutoprogrammingValidateRequestResultV0(input, request, result), nil
+	validation := orquestaautoprogramming.ValidateAutoprogrammingRequestV0(request)
+	work := orquestaautoprogramming.BuildAutoprogrammingProgrammableWorkV0(request)
+	return newMCPAutoprogrammingValidateRequestResultV0(input, request, validation, work), nil
 }
 
 func autoprogrammingRequestFromMCPV0(
@@ -85,21 +109,65 @@ func newMCPAutoprogrammingValidateRequestResultV0(
 	input MCPAutoprogrammingValidateRequestToolInputV0,
 	request orquestaautoprogramming.AutoprogrammingRequestV0,
 	validation orquestaautoprogramming.AutoprogrammingRequestValidationResultV0,
+	work orquestaautoprogramming.AutoprogrammingProgrammableWorkResultV0,
 ) MCPAutoprogrammingValidateRequestToolResultV0 {
 	estado := MCPAutoprogrammingValidateRequestEstadoOKV0
-	if !validation.Accepted {
+	accepted := validation.Accepted && work.Accepted
+	issues := validation.Issues
+	if validation.Accepted && !work.Accepted {
+		issues = work.Issues
+	}
+	if !accepted {
 		estado = MCPAutoprogrammingValidateRequestEstadoErrorV0
 	}
-	return MCPAutoprogrammingValidateRequestToolResultV0{
+	result := MCPAutoprogrammingValidateRequestToolResultV0{
 		Estado:        estado,
 		RequestID:     strings.TrimSpace(request.RequestRef),
 		CorrelationID: firstNonEmptyMCPV0(input.CorrelationID, input.RequestID, request.RequestRef),
-		Accepted:      validation.Accepted,
+		Accepted:      accepted,
 		Groups:        append([]orquestaautoprogramming.AutoprogrammingTaskGroupV0(nil), validation.Groups...),
 		WriteSet:      compactStringsMCPV0(validation.WriteSet),
 		RequiredTests: compactStringsMCPV0(validation.RequiredTests),
-		Errores:       autoprogrammingRequestIssuesMCPV0(validation.Issues),
+		Errores:       autoprogrammingRequestIssuesMCPV0(issues),
 	}
+	if work.Accepted {
+		result.ProgrammableWork = newMCPAutoprogrammingProgrammableWorkV0(work.Work)
+	}
+	return result
+}
+
+func newMCPAutoprogrammingProgrammableWorkV0(
+	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
+) *MCPAutoprogrammingProgrammableWorkV0 {
+	out := MCPAutoprogrammingProgrammableWorkV0{
+		RequestRef:  strings.TrimSpace(work.RequestRef),
+		ProjectRef:  strings.TrimSpace(work.ProjectRef),
+		WorktreeRef: strings.TrimSpace(work.WorktreeRef),
+		BranchRef:   strings.TrimSpace(work.BranchRef),
+	}
+	for _, profile := range work.Profiles {
+		out.WorkProfileRefs = append(out.WorkProfileRefs, strings.TrimSpace(profile.ProfileRef))
+	}
+	for _, task := range work.Tasks {
+		out.WorkflowTaskRefs = append(out.WorkflowTaskRefs, strings.TrimSpace(task.TaskID))
+	}
+	out.WorkProfileRefs = compactStringsMCPV0(out.WorkProfileRefs)
+	out.WorkflowTaskRefs = compactStringsMCPV0(out.WorkflowTaskRefs)
+	out.Groups = make([]MCPAutoprogrammingProgrammableWorkGroupV0, 0, len(work.Groups))
+	for _, group := range work.Groups {
+		out.Groups = append(out.Groups, MCPAutoprogrammingProgrammableWorkGroupV0{
+			Area:            strings.TrimSpace(group.Area),
+			SourceTaskRefs:  compactStringsMCPV0(group.TaskRefs),
+			WorkProfileRef:  strings.TrimSpace(group.Profile.ProfileRef),
+			WorkflowTaskRef: strings.TrimSpace(group.Task.TaskID),
+			WorkKind:        strings.TrimSpace(string(group.Task.WorkProfileKind)),
+			PhaseID:         strings.TrimSpace(string(group.Task.PhaseID)),
+			WriteSet:        compactStringsMCPV0(group.Task.WriteSet),
+			RequiredTests:   compactStringsMCPV0(group.Task.RequiredTests),
+			ContextRefs:     compactStringsMCPV0(group.Task.ContextRefs),
+		})
+	}
+	return &out
 }
 
 func autoprogrammingRequestIssuesMCPV0(
