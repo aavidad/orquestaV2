@@ -40,6 +40,105 @@ func TestCodexStackOperationalWaveFakeRuntimeV0(t *testing.T) {
 	}
 }
 
+func TestCodexStackRecursiveTreeFakeRuntimeV0(t *testing.T) {
+	ctx := context.Background()
+	cfg := codexStackRequiredTestLocalConfigV0(t)
+	cfg.MaxBatchReady = 2
+	cfg.MaxConcurrency = 2
+	writeCodexStackRequiredTestTinyGoModuleV0(t, cfg.ProjectWorkDir)
+	goCommand := codexStackRequiredTestGoCommandV0(t)
+	outputDir := filepath.Join(t.TempDir(), "required-test-output")
+
+	runtime := &codexStackRequiredTestPendingRuntimeV0{}
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	stack := codexStackRealRequiredTestRunnerStackV0(t, cfg, runtime, evidenceStore, goCommand, outputDir)
+	stack.Ports.ProgressSource = nil
+	fixture := newCodexStackRecursiveTreeFixtureV0()
+	codexStackRecursiveTreeSeedV0(t, ctx, stack, fixture)
+
+	parent := fixture.taskV0("task-recursive-parent")
+	childA := fixture.taskV0("task-recursive-child-a")
+	childB := fixture.taskV0("task-recursive-child-b")
+	grandA := []string{
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0("task-recursive-grand-a1"),
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0("task-recursive-grand-a2"),
+	}
+	grandB := []string{
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0("task-recursive-grand-b1"),
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0("task-recursive-grand-b2"),
+	}
+	rootAgent := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(parent.TaskID)
+	childAgents := []string{
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(childA.TaskID),
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(childB.TaskID),
+	}
+
+	codexStackRecursiveTreeContinueLaunchV0(t, ctx, stack, runtime, fixture.RunRef, appDirectorWaitFilterForRecursiveTreeV0{
+		WaveRef:   parent.WaveRef,
+		CohortRef: parent.CohortRef,
+	}, []string{rootAgent})
+	codexStackRecursiveTreeAckAndDrainV0(t, ctx, stack, fixture.RunRef, rootAgent, cfg)
+
+	codexStackRecursiveTreeAssertWaitSnapshotV0(t, ctx, stack, fixture.RunRef, parent.TaskID, "", childAgents, childAgents)
+	codexStackRecursiveTreeContinueLaunchV0(t, ctx, stack, runtime, fixture.RunRef, appDirectorWaitFilterForRecursiveTreeV0{
+		ParentTaskRef: parent.TaskID,
+	}, childAgents)
+	codexStackRecursiveTreeAckAndDrainV0(t, ctx, stack, fixture.RunRef, childAgents[0], cfg)
+
+	codexStackRecursiveTreeAssertWaitSnapshotV0(t, ctx, stack, fixture.RunRef, childA.TaskID, childA.WaveRef, grandA, grandA)
+	codexStackRecursiveTreeContinueLaunchV0(t, ctx, stack, runtime, fixture.RunRef, appDirectorWaitFilterForRecursiveTreeV0{
+		ParentTaskRef: childA.TaskID,
+		WaveRef:       childA.WaveRef,
+	}, grandA)
+	for _, agentRef := range grandA {
+		codexStackRecursiveTreeAckAndDrainV0(t, ctx, stack, fixture.RunRef, agentRef, cfg)
+	}
+
+	codexStackRecursiveTreeAckAndDrainV0(t, ctx, stack, fixture.RunRef, childAgents[1], cfg)
+	codexStackRecursiveTreeAssertWaitSnapshotV0(t, ctx, stack, fixture.RunRef, childB.TaskID, childB.WaveRef, grandB, grandB)
+	codexStackRecursiveTreeContinueLaunchV0(t, ctx, stack, runtime, fixture.RunRef, appDirectorWaitFilterForRecursiveTreeV0{
+		ParentTaskRef: childB.TaskID,
+		WaveRef:       childB.WaveRef,
+	}, grandB)
+	for _, agentRef := range grandB {
+		codexStackRecursiveTreeAckAndDrainV0(t, ctx, stack, fixture.RunRef, agentRef, cfg)
+	}
+
+	allAgents := codexStackRecursiveTreeAgentRefsV0(fixture)
+	codexStackRecursiveTreeAssertDeliveredV0(t, stack, fixture.RunRef, allAgents)
+	stack.Ports.DeliverySource = nil
+	openCodexStackPhaseForTestV0(t, stack, fixture.RunRef, orquestacoreworkflow.OrchestrationPhaseRevisionV0, "Smoke arbol recursivo: revisar entregas.")
+	causals := codexStackOperationalWaveSeedAcceptedReviewsV0(
+		t,
+		ctx,
+		stack,
+		fixture.RunRef,
+		allAgents,
+		codexStackRecursiveTreeDeliveryByAgentV0(t, stack, fixture.RunRef, allAgents),
+	)
+	if err := stack.Stores.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, codexStackRecursiveTreePlanStateV0(fixture, causals)); err != nil {
+		t.Fatalf("SaveOperationalDirectorPlanStateV0: %v %s", err, codexStackRequiredTestErrorDetailsV0(err))
+	}
+	stack.Ports.ReviewGateSource = nil
+	stack.Ports.ReviewReworkReplanSource = nil
+	stack.Ports.AssessmentReplanSource = nil
+
+	run, state := codexStackRecursiveTreeCloseV0(t, ctx, stack, fixture, cfg)
+	if run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 {
+		t.Fatalf("arbol no cerro: run_status=%s state=%+v run=%+v", run.Status, state, run)
+	}
+	if len(run.ClosedTasks) != len(fixture.Tasks) {
+		t.Fatalf("closed_tasks=%v want=%d", run.ClosedTasks, len(fixture.Tasks))
+	}
+	replanStep := codexStackRequiredTestPlanStepV0(t, state, "step-replan-or-close")
+	evidence, err := evidenceStore.LoadRequiredTestEvidenceV0(ctx, fixture.RunRef, replanStep.RequiredTestEvidenceRefs)
+	if err != nil {
+		t.Fatalf("LoadRequiredTestEvidenceV0: %v", err)
+	}
+	codexStackRecursiveTreeAssertEvidenceV0(t, fixture, causals, evidence)
+}
+
 func TestCodexStackRealOperationalWaveOptInV0(t *testing.T) {
 	if strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_REAL_OPERATIONAL_WAVE_SMOKE")) != "1" {
 		t.Skip("set ORQUESTA_CODEX_REAL_OPERATIONAL_WAVE_SMOKE=1")
@@ -653,6 +752,393 @@ func codexStackOperationalWaveAgentRefsV0(fixture codexStackOperationalWaveFixtu
 	out := make([]string, 0, len(fixture.Refs))
 	for _, refs := range fixture.Refs {
 		out = append(out, refs.AgentRef)
+	}
+	return out
+}
+
+type codexStackRecursiveTreeFixtureV0 struct {
+	RunRef  string
+	PlanRef string
+	Tasks   []orquestacoreworkflow.WorkflowTaskV0
+}
+
+type appDirectorWaitFilterForRecursiveTreeV0 struct {
+	CohortRef     string
+	WaveRef       string
+	ParentTaskRef string
+}
+
+func newCodexStackRecursiveTreeFixtureV0() codexStackRecursiveTreeFixtureV0 {
+	runRef := "run-stack-recursive-tree-fake-001"
+	parent := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-parent", "", "wave-recursive-root", "cohort-recursive-root", 0, 2)
+	childA := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-child-a", parent.TaskID, "wave-recursive-child-a", "cohort-recursive-children", 1, 2)
+	childB := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-child-b", parent.TaskID, "wave-recursive-child-b", "cohort-recursive-children", 1, 2)
+	grandA1 := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-grand-a1", childA.TaskID, "wave-recursive-child-a", "cohort-recursive-grandchildren-a", 2, 0)
+	grandA2 := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-grand-a2", childA.TaskID, "wave-recursive-child-a", "cohort-recursive-grandchildren-a", 2, 0)
+	grandB1 := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-grand-b1", childB.TaskID, "wave-recursive-child-b", "cohort-recursive-grandchildren-b", 2, 0)
+	grandB2 := stackOperationalClosureRecursiveTaskForTestV0(runRef, "task-recursive-grand-b2", childB.TaskID, "wave-recursive-child-b", "cohort-recursive-grandchildren-b", 2, 0)
+	parent.ChildTaskRefs = []string{childA.TaskID, childB.TaskID}
+	childA.ChildTaskRefs = []string{grandA1.TaskID, grandA2.TaskID}
+	childB.ChildTaskRefs = []string{grandB1.TaskID, grandB2.TaskID}
+	childA.DependsOn = []string{parent.TaskID}
+	childB.DependsOn = []string{parent.TaskID}
+	grandA1.DependsOn = []string{childA.TaskID}
+	grandA2.DependsOn = []string{childA.TaskID}
+	grandB1.DependsOn = []string{childB.TaskID}
+	grandB2.DependsOn = []string{childB.TaskID}
+	tasks := []orquestacoreworkflow.WorkflowTaskV0{parent, childA, childB, grandA1, grandA2, grandB1, grandB2}
+	return codexStackRecursiveTreeFixtureV0{
+		RunRef:  runRef,
+		PlanRef: "plan-stack-recursive-tree-fake-001",
+		Tasks:   tasks,
+	}
+}
+
+func (fixture codexStackRecursiveTreeFixtureV0) taskV0(
+	taskRef string,
+) orquestacoreworkflow.WorkflowTaskV0 {
+	for _, task := range fixture.Tasks {
+		if task.TaskID == taskRef {
+			return task
+		}
+	}
+	return orquestacoreworkflow.WorkflowTaskV0{}
+}
+
+func codexStackRecursiveTreeSeedV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	fixture codexStackRecursiveTreeFixtureV0,
+) {
+	t.Helper()
+	stackOperationalClosureAssertRecursiveLimitsForTestV0(t, fixture.Tasks, 2)
+	run := (codexStackRequiredTestRefsV0{
+		RunRef:  fixture.RunRef,
+		PlanRef: fixture.PlanRef,
+		TaskRef: fixture.Tasks[0].TaskID,
+	}).withDefaultsV0().pendingRunV0()
+	run.Tasks = codexStackRecursiveTreeTaskRefsV0(fixture)
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	taskWriter, ok := stack.Stores.TaskStore.(orquestacionnucleoapp.WorkflowTaskWriterPortV0)
+	if !ok {
+		t.Fatalf("TaskStore no escribe WorkflowTaskV0: %T", stack.Stores.TaskStore)
+	}
+	for _, task := range fixture.Tasks {
+		if err := taskWriter.SaveWorkflowTaskV0(ctx, task); err != nil {
+			t.Fatalf("SaveWorkflowTaskV0 %s: %v", task.TaskID, err)
+		}
+	}
+}
+
+func codexStackRecursiveTreeContinueLaunchV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	runtime *codexStackRequiredTestPendingRuntimeV0,
+	runRef string,
+	filter appDirectorWaitFilterForRecursiveTreeV0,
+	expectedAgentRefs []string,
+) {
+	t.Helper()
+	before := runtime.launchCountV0()
+	result, err := orquestaappdirectorservice.ContinueAppDirectorV0(ctx, orquestaappdirectorservice.ContinueAppDirectorRequestV0{
+		RunRef:               runRef,
+		OccurredAt:           "2026-05-22T20:00:00Z",
+		CorrelationID:        "corr-recursive-tree-launch-" + strings.ReplaceAll(strings.Join(compactStringsV0(expectedAgentRefs), "-"), "agent-ref-", ""),
+		WaitWaveRef:          filter.WaveRef,
+		WaitCohortRef:        filter.CohortRef,
+		WaitParentTaskRef:    filter.ParentTaskRef,
+		MaxBursts:            6,
+		MaxStepsPerBurst:     8,
+		MaxDispatchesPerWait: 4,
+		MaxCommands:          24,
+		MaxOutboxPerCycle:    12,
+		MaxExternalWaits:     1,
+	}, stack.Ports)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0 launch filter=%+v: %v %s", filter, err, codexStackRequiredTestErrorDetailsV0(err))
+	}
+	if got := runtime.launchCountV0() - before; got != len(expectedAgentRefs) {
+		t.Fatalf("launches nuevos=%d want=%d filter=%+v started=%v run=%+v", got, len(expectedAgentRefs), filter, result.StartedAgents, result.Run)
+	}
+	for _, agentRef := range expectedAgentRefs {
+		if !codexStackStringInSetForTestV0(result.StartedAgents, agentRef) {
+			t.Fatalf("agent no arrancado: agent=%s filter=%+v started=%v", agentRef, filter, result.StartedAgents)
+		}
+	}
+	codexStackOperationalWaveDescriptorsForAgentsV0(t, stack, expectedAgentRefs)
+}
+
+func codexStackRecursiveTreeAckAndDrainV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	runRef string,
+	agentRef string,
+	cfg codexStackRealSmokeConfigV0,
+) string {
+	t.Helper()
+	descriptor := codexStackRequiredTestDescriptorForAgentV0(t, stack, agentRef)
+	if err := writeCodexStackAckForDescriptorV0(t, descriptor); err != nil {
+		t.Fatalf("write ack agent=%s: %v", agentRef, err)
+	}
+	request := DrainRunRequestV0{
+		RunRef:        runRef,
+		OccurredAt:    "2026-05-22T20:05:00Z",
+		CorrelationID: "corr-recursive-tree-delivery-" + agentRef,
+		WaitAgentRefs: []string{agentRef},
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, runRef)
+	observations, err := stack.drainAvailableObservationsV0(ctx, request, run)
+	if err != nil {
+		t.Fatalf("drainAvailableObservationsV0 agent=%s: %v\n%s", agentRef, err, codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
+	}
+	observations = drainObservationsForWaitAgentRefsV0(observations, []string{agentRef})
+	if len(observations) != 1 {
+		t.Fatalf("observations=%+v agent=%s\n%s", observations, agentRef, codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
+	}
+	run, err = stack.applyDrainObservationsV0(ctx, request, observations)
+	if err != nil {
+		t.Fatalf("applyDrainObservationsV0 agent=%s: %v\n%s", agentRef, err, codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
+	}
+	deliveryRef := strings.TrimSpace(observations[0].DeliveryRef)
+	if deliveryRef == "" ||
+		!codexStackStringInSetForTestV0(run.DeliveredAgents, agentRef) ||
+		!codexStackRealSmokeContainsProjectionPartV0(run.Deliveries, deliveryRef) {
+		t.Fatalf("delivery no registrada: agent=%s delivery=%s run=%+v", agentRef, deliveryRef, run)
+	}
+	return deliveryRef
+}
+
+func codexStackRecursiveTreeAssertWaitSnapshotV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	runRef string,
+	parentTaskRef string,
+	waveRef string,
+	wantAgentRefs []string,
+	wantPendingAgentRefs []string,
+) {
+	t.Helper()
+	run := mustLoadCodexStackRunForTestV0(t, stack, runRef)
+	snapshot, err := orquestacionnucleoapp.BuildWorkflowTaskWaitSnapshotV0(ctx, stack.Stores.TaskStore, run, orquestacionnucleoapp.WorkflowTaskWaitFilterV0{
+		ParentTaskRef: parentTaskRef,
+		WaveRef:       waveRef,
+	})
+	if err != nil {
+		t.Fatalf("BuildWorkflowTaskWaitSnapshotV0 parent=%s wave=%s: %v", parentTaskRef, waveRef, err)
+	}
+	stackOperationalClosureAssertRefsForTestV0(t, "agent refs "+parentTaskRef, snapshot.AgentRefs, wantAgentRefs)
+	stackOperationalClosureAssertRefsForTestV0(t, "pending agent refs "+parentTaskRef, snapshot.PendingAgentRefs, wantPendingAgentRefs)
+}
+
+func codexStackRecursiveTreeAssertDeliveredV0(
+	t *testing.T,
+	stack StackV0,
+	runRef string,
+	agentRefs []string,
+) {
+	t.Helper()
+	run := mustLoadCodexStackRunForTestV0(t, stack, runRef)
+	for _, agentRef := range agentRefs {
+		if !codexStackStringInSetForTestV0(run.DeliveredAgents, agentRef) {
+			t.Fatalf("agent no entregado: agent=%s delivered=%v run=%+v", agentRef, run.DeliveredAgents, run)
+		}
+	}
+}
+
+func codexStackRecursiveTreeDeliveryByAgentV0(
+	t *testing.T,
+	stack StackV0,
+	runRef string,
+	agentRefs []string,
+) map[string]string {
+	t.Helper()
+	run := mustLoadCodexStackRunForTestV0(t, stack, runRef)
+	out := map[string]string{}
+	for _, descriptor := range codexStackOperationalWaveDescriptorsForAgentsV0(t, stack, agentRefs) {
+		ack, ok := codexStackRealSmokeCompletedAckV0(descriptor)
+		if ok && codexStackRealSmokeContainsProjectionPartV0(run.Deliveries, ack.AckRef) {
+			out[descriptor.AgentRef] = ack.AckRef
+		}
+	}
+	if len(out) != len(agentRefs) {
+		t.Fatalf("deliveries por agente incompletas: got=%v want=%v run=%+v", out, agentRefs, run)
+	}
+	return out
+}
+
+func codexStackRecursiveTreePlanStateV0(
+	fixture codexStackRecursiveTreeFixtureV0,
+	causals map[string]codexStackRequiredTestCausalReviewRefsV0,
+) orquestacionnucleoapp.OperationalDirectorPlanStateV0 {
+	agentRefs := codexStackRecursiveTreeAgentRefsV0(fixture)
+	taskRefs := codexStackRecursiveTreeTaskRefsV0(fixture)
+	deliveryRefs := make([]string, 0, len(agentRefs))
+	reviewResultRefs := make([]string, 0, len(agentRefs))
+	acceptedReviewRefs := make([]string, 0, len(agentRefs))
+	for _, agentRef := range agentRefs {
+		causal := causals[agentRef]
+		deliveryRefs = append(deliveryRefs, causal.DeliveryRef)
+		reviewResultRefs = append(reviewResultRefs, causal.ReviewResultRef)
+		acceptedReviewRefs = append(acceptedReviewRefs, causal.AcceptedReviewRef)
+	}
+	return orquestacionnucleoapp.OperationalDirectorPlanStateV0{
+		SchemaVersion:    orquestacionnucleoapp.OperationalDirectorPlanStateSchemaVersionV0,
+		StateRef:         "state-" + fixture.PlanRef,
+		PlanRef:          fixture.PlanRef,
+		RequestRef:       "request-" + fixture.PlanRef,
+		RunRef:           fixture.RunRef,
+		ProjectRef:       "project-recursive-tree-001",
+		Mode:             orquestadirectoroperativo.OperationalDirectorModeProgrammingV0,
+		Status:           orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0,
+		ActiveStepID:     "step-run-required-tests",
+		ActiveWaveRef:    "wave-recursive-tree",
+		ActiveCohortRef:  "cohort-recursive-tree",
+		RequiredTestRefs: []string{"go test ./..."},
+		ObservedAt:       "2026-05-22T20:10:00Z",
+		Steps: []orquestacionnucleoapp.OperationalDirectorPlanStepStateV0{
+			{
+				StepID:    "step-launch-subagents",
+				Kind:      orquestadirectoroperativo.OperationalDirectorStepLaunchSubagentsV0,
+				Status:    orquestadirectoroperativo.OperationalDirectorStepAcceptedV0,
+				WaveRef:   "wave-recursive-tree",
+				CohortRef: "cohort-recursive-tree",
+				TaskRefs:  taskRefs,
+				AgentRefs: agentRefs,
+			},
+			{
+				StepID:    "step-wait-subagents",
+				Kind:      orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0,
+				Status:    orquestadirectoroperativo.OperationalDirectorStepAcceptedV0,
+				WaveRef:   "wave-recursive-tree",
+				CohortRef: "cohort-recursive-tree",
+				TaskRefs:  taskRefs,
+				AgentRefs: agentRefs,
+			},
+			{
+				StepID:             "step-review-deliveries",
+				Kind:               orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0,
+				Status:             orquestadirectoroperativo.OperationalDirectorStepAcceptedV0,
+				WaveRef:            "wave-recursive-tree",
+				CohortRef:          "cohort-recursive-tree",
+				TaskRefs:           taskRefs,
+				AgentRefs:          agentRefs,
+				DeliveryRefs:       deliveryRefs,
+				ReviewResultRefs:   reviewResultRefs,
+				AcceptedReviewRefs: acceptedReviewRefs,
+			},
+			{
+				StepID:           "step-run-required-tests",
+				Kind:             orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0,
+				Status:           orquestadirectoroperativo.OperationalDirectorStepRunningV0,
+				WaveRef:          "wave-recursive-tree",
+				CohortRef:        "cohort-recursive-tree",
+				TaskRefs:         taskRefs,
+				AgentRefs:        agentRefs,
+				DeliveryRefs:     deliveryRefs,
+				ReviewResultRefs: reviewResultRefs,
+			},
+			{
+				StepID:    "step-replan-or-close",
+				Kind:      orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0,
+				Status:    orquestadirectoroperativo.OperationalDirectorStepPendingV0,
+				WaveRef:   "wave-recursive-tree",
+				CohortRef: "cohort-recursive-tree",
+			},
+		},
+	}
+}
+
+func codexStackRecursiveTreeCloseV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	fixture codexStackRecursiveTreeFixtureV0,
+	cfg codexStackRealSmokeConfigV0,
+) (orquestacoreworkflow.OrchestrationRunV0, orquestacionnucleoapp.OperationalDirectorPlanStateV0) {
+	t.Helper()
+	var run orquestacoreworkflow.OrchestrationRunV0
+	var state orquestacionnucleoapp.OperationalDirectorPlanStateV0
+	for cycle := 1; cycle <= 20; cycle++ {
+		result, err := orquestaappdirectorservice.ContinueAppDirectorV0(ctx, orquestaappdirectorservice.ContinueAppDirectorRequestV0{
+			RunRef:                     fixture.RunRef,
+			OperationalDirectorPlanRef: fixture.PlanRef,
+			OccurredAt:                 fmt.Sprintf("2026-05-22T20:%02d:00Z", 10+cycle),
+			CorrelationID:              fmt.Sprintf("corr-recursive-tree-close-%03d", cycle),
+			MaxBursts:                  3,
+			MaxStepsPerBurst:           6,
+			MaxDispatchesPerWait:       2,
+			MaxCommands:                32,
+			MaxOutboxPerCycle:          16,
+			MaxExternalWaits:           1,
+		}, stack.Ports)
+		if err != nil {
+			t.Fatalf("ContinueAppDirectorV0 close ciclo=%d: %v %s\n%s", cycle, err, codexStackRequiredTestErrorDetailsV0(err), codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
+		}
+		run = result.Run
+		var loadErr error
+		state, loadErr = stack.Stores.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, fixture.RunRef, fixture.PlanRef)
+		if loadErr != nil {
+			t.Fatalf("LoadOperationalDirectorPlanStateV0 close ciclo=%d: %v", cycle, loadErr)
+		}
+		if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 &&
+			state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 {
+			return run, state
+		}
+	}
+	return run, state
+}
+
+func codexStackRecursiveTreeAssertEvidenceV0(
+	t *testing.T,
+	fixture codexStackRecursiveTreeFixtureV0,
+	causals map[string]codexStackRequiredTestCausalReviewRefsV0,
+	evidence []orquestacionnucleoapp.RequiredTestEvidenceV0,
+) {
+	t.Helper()
+	byTask := map[string]orquestacionnucleoapp.RequiredTestEvidenceV0{}
+	for _, item := range evidence {
+		if item.Status == orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 {
+			byTask[item.TaskRef] = item
+		}
+	}
+	for _, task := range fixture.Tasks {
+		item, ok := byTask[task.TaskID]
+		if !ok {
+			t.Fatalf("sin evidencia passed task=%s evidence=%+v", task.TaskID, evidence)
+		}
+		causal := causals[orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID)]
+		if item.TestCommand != "go test ./..." ||
+			item.DeliveryRef != causal.DeliveryRef ||
+			item.ReviewRequestID != causal.ReviewRequestRef ||
+			item.ReviewResultRef != causal.ReviewResultRef ||
+			item.AcceptedReviewRef != causal.AcceptedReviewRef {
+			t.Fatalf("evidencia no causal task=%s evidence=%+v causal=%+v", task.TaskID, item, causal)
+		}
+	}
+}
+
+func codexStackRecursiveTreeTaskRefsV0(
+	fixture codexStackRecursiveTreeFixtureV0,
+) []string {
+	out := make([]string, 0, len(fixture.Tasks))
+	for _, task := range fixture.Tasks {
+		out = append(out, task.TaskID)
+	}
+	return out
+}
+
+func codexStackRecursiveTreeAgentRefsV0(
+	fixture codexStackRecursiveTreeFixtureV0,
+) []string {
+	out := make([]string, 0, len(fixture.Tasks))
+	for _, task := range fixture.Tasks {
+		out = append(out, orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID))
 	}
 	return out
 }
