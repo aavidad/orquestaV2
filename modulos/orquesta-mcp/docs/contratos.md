@@ -1152,3 +1152,48 @@ Pruebas de contrato:
   - Executor devuelve issues publicos para branch/write-set invalidos.
   - Registro MCP publica el tool y permite invocarlo sin puertos productivos.
 ```
+
+```text
+Nombre: mcp.tool.orquesta.autoprogramming.prepare_run.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: cliente IA MCP, bridge HTTP local y composiciones opt-in
+Campos:
+  descriptor:
+    name: orquesta.autoprogramming.prepare_run.v0
+    resource_uri: orquesta://contracts/autoprogramming-prepare-run/v0
+  rest:
+    method: POST
+    path: /api/v0/autoprogramming/prepare-run
+  input:
+    request_id, correlation_id: refs externas opcionales
+    autoprogramming_request: AutoprogrammingRequestV0 validado por el executor
+      inyectado
+    max_bursts, max_steps_per_burst, max_dispatches_per_wait, max_commands,
+      max_outbox_per_cycle: limites operativos opcionales
+  output_ok:
+    estado: ok
+    accepted: true
+    run_ref, project_ref, worktree_ref, branch_ref, phase_id
+    workflow_task_refs, wait_agent_refs
+    continue: request compacta para supervision posterior con `run_ref`
+      explicito
+  output_error:
+    estado: error
+    accepted: false
+    errores_publicos: issues compactos
+Invariantes:
+  - Adaptador inbound fino.
+  - Prepara un run continuable por executor inyectado.
+  - No arranca agentes por si mismo ni supervisa despues del prepare.
+  - No conoce Codex, OPES, DB, filesystem, runtime productivo ni proveedor.
+  - El registro MCP es opt-in: sin executor devuelve
+    `mcp_transport_tool_unbound`.
+Pruebas de contrato:
+  - Descriptor compacto y saneado.
+  - Registro MCP publica el tool.
+  - Transporte bound invoca executor fake y devuelve resultado `ok`.
+  - Transporte sin executor devuelve `mcp_transport_tool_unbound`.
+  - HTTP `POST /api/v0/autoprogramming/prepare-run` delega en executor fake.
+```

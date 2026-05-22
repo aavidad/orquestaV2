@@ -85,7 +85,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0PreparaRunYSupervisorArranca(t 
 	runtime := newFakeCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
 
-	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+	prepareInput := orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-api-001",
 		CorrelationID:          "corr-autoprogramming-api-001",
 		OccurredAt:             "2026-05-22T11:15:00Z",
@@ -96,7 +96,8 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0PreparaRunYSupervisorArranca(t 
 		MaxDispatchesPerWait:   3,
 		MaxCommands:            5,
 		MaxOutboxPerCycle:      5,
-	})
+	}
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, prepareInput)
 	if !prepared.Accepted ||
 		prepared.RunRef == "" ||
 		len(prepared.WorkflowTaskRefs) != 1 ||
@@ -131,6 +132,18 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0PreparaRunYSupervisorArranca(t 
 	}
 	if !autoprogrammingBridgeStringInSetForTestV0(run.StartedAgents, prepared.WaitAgentRefs[0]) {
 		t.Fatalf("started_agents=%v wait=%v", run.StartedAgents, prepared.WaitAgentRefs)
+	}
+
+	repeated := postAutoprogrammingPrepareRunStackV0(t, stack, prepareInput)
+	run, err = stack.Ports.RunStore.LoadRunV0(context.Background(), prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 repeated: %v", err)
+	}
+	if repeated.RunRef != prepared.RunRef ||
+		repeated.WaitAgentRefs[0] != prepared.WaitAgentRefs[0] ||
+		runtime.launchCountV0() != 1 ||
+		!autoprogrammingBridgeStringInSetForTestV0(run.StartedAgents, prepared.WaitAgentRefs[0]) {
+		t.Fatalf("repeated=%+v run=%+v launches=%d", repeated, run, runtime.launchCountV0())
 	}
 }
 

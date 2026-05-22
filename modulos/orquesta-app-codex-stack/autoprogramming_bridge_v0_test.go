@@ -120,6 +120,64 @@ func TestPrepareAutoprogrammingRunV0NoPersisteRequestInvalida(t *testing.T) {
 	}
 }
 
+func TestPrepareAutoprogrammingRunV0EsIdempotenteYNoSobrescribeRunViva(t *testing.T) {
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	eventSink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
+	ports := orquestaappdirectorservice.StartAppDirectorPortsV0{
+		RunStore:          runStore,
+		EventSink:         eventSink,
+		OutboxLedger:      ledger,
+		DirectorTaskStore: taskStore,
+		Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+			autoprogrammingBridgeCapacityDispatcherForTestV0(runStore, eventSink, ledger),
+			autoprogrammingBridgeAgentDispatcherForTestV0(runStore, eventSink, ledger),
+		},
+	}
+	request := AutoprogrammingBridgeRequestV0{
+		Request:       autoprogrammingBridgeRequestForTestV0(),
+		OccurredAt:    "2026-05-22T10:10:00Z",
+		CorrelationID: "corr-autoprogramming-idempotent-001",
+		RequestedBy:   "orquesta-test",
+		MaxBursts:     4,
+		MaxCommands:   8,
+	}
+
+	first, err := PrepareAutoprogrammingRunV0(context.Background(), request, ports)
+	if err != nil {
+		t.Fatalf("PrepareAutoprogrammingRunV0 first: %v", err)
+	}
+	continued, err := orquestaappdirectorservice.ContinueAppDirectorV0(
+		context.Background(),
+		first.Continue,
+		ports,
+	)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0: %v", err)
+	}
+	if !autoprogrammingBridgeStringInSetForTestV0(continued.StartedAgents, first.WaitAgentRefs[0]) {
+		t.Fatalf("continued=%+v wait_agent=%s", continued, first.WaitAgentRefs[0])
+	}
+
+	second, err := PrepareAutoprogrammingRunV0(context.Background(), request, ports)
+	if err != nil {
+		t.Fatalf("PrepareAutoprogrammingRunV0 second: %v", err)
+	}
+	run, err := runStore.LoadRunV0(context.Background(), first.Run.RunID)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if !autoprogrammingBridgeStringInSetForTestV0(run.StartedAgents, first.WaitAgentRefs[0]) {
+		t.Fatalf("prepare-run repetido sobrescribio started_agents: run=%+v", run)
+	}
+	if second.Run.RunID != first.Run.RunID ||
+		second.Continue.RunRef != first.Run.RunID ||
+		second.WaitAgentRefs[0] != first.WaitAgentRefs[0] {
+		t.Fatalf("second=%+v first=%+v", second, first)
+	}
+}
+
 func autoprogrammingBridgeRequestForTestV0() orquestaautoprogramming.AutoprogrammingRequestV0 {
 	return orquestaautoprogramming.AutoprogrammingRequestV0{
 		RequestRef:       "run-autoprogramming-bridge-001",

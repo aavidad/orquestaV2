@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"reflect"
 	"strings"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
@@ -64,6 +65,13 @@ func PrepareAutoprogrammingRunV0(
 	if issues := orquestacoreworkflow.ValidateOrchestrationRunV0(run); len(issues) > 0 {
 		return AutoprogrammingBridgeResultV0{}, fmt.Errorf("autoprogramming run invalido: %s", issues[0].Error())
 	}
+	existing, err := ports.RunStore.LoadRunV0(ctx, run.RunID)
+	if err != nil && !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
+		return AutoprogrammingBridgeResultV0{}, err
+	}
+	if err == nil {
+		return autoprogrammingBridgeExistingRunResultV0(ctx, request, result, existing, run, ports)
+	}
 	for _, task := range work.Work.Tasks {
 		if err := ports.DirectorTaskStore.SaveWorkflowTaskV0(ctx, task); err != nil {
 			return AutoprogrammingBridgeResultV0{}, err
@@ -77,6 +85,74 @@ func PrepareAutoprogrammingRunV0(
 	result.WaitAgentRefs = autoprogrammingBridgeWaitAgentRefsV0(work.Work.Tasks)
 	result.Continue = autoprogrammingBridgeContinueRequestV0(request, result)
 	return result, nil
+}
+
+func autoprogrammingBridgeExistingRunResultV0(
+	ctx context.Context,
+	request AutoprogrammingBridgeRequestV0,
+	result AutoprogrammingBridgeResultV0,
+	existing orquestacoreworkflow.OrchestrationRunV0,
+	expected orquestacoreworkflow.OrchestrationRunV0,
+	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
+) (AutoprogrammingBridgeResultV0, error) {
+	if err := autoprogrammingBridgeValidateExistingRunV0(existing, expected); err != nil {
+		return AutoprogrammingBridgeResultV0{}, err
+	}
+	expectedTaskRefs := compactStringsV0(expected.Tasks)
+	storedTasks, err := ports.DirectorTaskStore.LoadWorkflowTasksV0(ctx, expected.RunID, expectedTaskRefs)
+	if err != nil {
+		return AutoprogrammingBridgeResultV0{}, err
+	}
+	if err := autoprogrammingBridgeValidateStoredTasksV0(storedTasks, result.Work.Tasks); err != nil {
+		return AutoprogrammingBridgeResultV0{}, err
+	}
+	result.Run = existing
+	result.Tasks = append([]orquestacoreworkflow.WorkflowTaskV0(nil), storedTasks...)
+	result.WaitAgentRefs = autoprogrammingBridgeWaitAgentRefsV0(result.Work.Tasks)
+	result.Continue = autoprogrammingBridgeContinueRequestV0(request, result)
+	return result, nil
+}
+
+func autoprogrammingBridgeValidateExistingRunV0(
+	existing orquestacoreworkflow.OrchestrationRunV0,
+	expected orquestacoreworkflow.OrchestrationRunV0,
+) error {
+	if strings.TrimSpace(existing.RunID) != strings.TrimSpace(expected.RunID) ||
+		strings.TrimSpace(existing.ProjectRef) != strings.TrimSpace(expected.ProjectRef) ||
+		strings.TrimSpace(existing.AppSpecRef) != strings.TrimSpace(expected.AppSpecRef) {
+		return fmt.Errorf("autoprogramming run existente incompatible: %s", expected.RunID)
+	}
+	for _, taskRef := range compactStringsV0(expected.Tasks) {
+		if !stringInSetV0(existing.Tasks, taskRef) {
+			return fmt.Errorf("autoprogramming run existente sin task esperada: %s", taskRef)
+		}
+	}
+	for _, contractRef := range compactStringsV0(expected.FunctionContracts) {
+		if !stringInSetV0(existing.FunctionContracts, contractRef) {
+			return fmt.Errorf("autoprogramming run existente sin contrato esperado: %s", contractRef)
+		}
+	}
+	return nil
+}
+
+func autoprogrammingBridgeValidateStoredTasksV0(
+	stored []orquestacoreworkflow.WorkflowTaskV0,
+	expected []orquestacoreworkflow.WorkflowTaskV0,
+) error {
+	expectedByRef := map[string]orquestacoreworkflow.WorkflowTaskV0{}
+	for _, task := range expected {
+		expectedByRef[strings.TrimSpace(task.TaskID)] = task
+	}
+	for _, task := range stored {
+		expectedTask, ok := expectedByRef[strings.TrimSpace(task.TaskID)]
+		if !ok || !reflect.DeepEqual(task, expectedTask) {
+			return fmt.Errorf("autoprogramming workflow task existente incompatible: %s", task.TaskID)
+		}
+	}
+	if len(stored) != len(expectedByRef) {
+		return fmt.Errorf("autoprogramming workflow tasks existentes incompletas")
+	}
+	return nil
 }
 
 func normalizeAutoprogrammingBridgeRequestV0(

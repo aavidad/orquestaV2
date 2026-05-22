@@ -384,6 +384,17 @@ compactas para no acoplar MCP a politica de producto.
 Estado: hecho
 ```
 
+```text
+ID: MCP-035
+Objetivo: Exponer `orquesta.autoprogramming.prepare_run.v0` como contrato MCP/REST opt-in para preparar una run de autoprogramacion continuable sin arrancar agentes.
+Write-set: autoprogramming_prepare_run_*_v0.go, mcp_transport_registry_v0.go, docs/*
+Simbolo foco: orquesta.autoprogramming.prepare_run.v0
+Contrato: executor inyectado prepara run y devuelve `run_ref`, `workflow_task_refs`, `wait_agent_refs` y `continue` compacto; la supervision posterior usa `run_ref` explicito.
+Validacion: gofmt; go test -count=1 ./modulos/orquesta-mcp; git diff --check -- modulos/orquesta-mcp.
+Bloqueos: No implementa servidor MCP real ni conoce `PrepareAutoprogrammingRunV0`; la composicion consumidora inyecta el executor concreto.
+Estado: hecho
+```
+
 ## Consultas
 
 ```text

@@ -10,6 +10,7 @@ request valida
   -> ruta REST de validacion si existe
   -> POST /api/v0/autoprogramming/prepare-run
   -> POST /api/v0/runs/supervise con run_ref explicito y Codex fake
+  -> POST /api/v0/autoprogramming/prepare-run con el mismo payload para replay
   -> external-work/run + supervisor si la composicion lo expone
   -> pruebas focales de stack fake y cierre offline segun disponibilidad
 ```
@@ -54,6 +55,10 @@ SMOKE_ID=manual-001
   `wait_agent_refs` y `continue`, y despues llama a
   `POST /api/v0/runs/supervise` con ese `run_ref` y limites bajos usando
   comando Codex fake.
+- Vuelve a llamar a `POST /api/v0/autoprogramming/prepare-run` con el mismo
+  payload despues de `/api/v0/runs/supervise`; exige respuesta aceptada,
+  `run_ref` estable, `wait_agent_refs` no vacio y `continue`, para cubrir
+  idempotencia cuando el patch del stack este disponible.
 - Intenta `POST /api/v0/external-work/run` con un trabajo
   `autoprogramming_programmable_work`; si falta la ruta o el executor, lo marca
   como `skip` y no falla.
@@ -72,6 +77,7 @@ La salida debe incluir:
 - `validate_request_ok=true` si la ruta REST esta disponible;
 - `prepare_run_ok=true`;
 - `prepare_run_supervisor_estado=ok`;
+- `prepare_run_replay_ok=true`;
 - `codex_real_executed=false`;
 - `opes_touched=false`.
 
@@ -92,6 +98,8 @@ stack Codex:
 
 El smoke la cubre con tests focales y por servidor temporal. La supervision
 posterior no es global: usa siempre el `run_ref` devuelto por `prepare-run`.
+Tras supervisar, repite `prepare-run` con el mismo payload y exige que el replay
+idempotente conserve el `run_ref` y siga devolviendo refs causales.
 `/api/v0/external-work/run` queda como fallback opcional de compatibilidad para
 otros trabajos externos; no es el launcher de autoprogramacion.
 

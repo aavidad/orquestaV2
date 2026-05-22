@@ -418,3 +418,18 @@ Contratos afectados: mcp.tool.orquesta.director.stats.v0;
 rest.bridge.orquesta.director.stats.v0.
 Estado: aceptada localmente.
 ```
+
+```text
+Fecha: 2026-05-22
+Decision: `orquesta.autoprogramming.prepare_run.v0` queda como tool MCP/REST
+opt-in separado de `external-work.run`.
+Motivo: autoprogramacion necesita preparar una run continuable y devolver refs
+causales antes de supervisar; mezclarlo con trabajos externos neutrales
+acoplaria el contrato generico a una composicion concreta.
+Impacto: MCP solo define DTO, descriptor, HTTP handler y puerto inyectado. La
+composicion Codex implementa el executor real y la supervision posterior debe
+usar `run_ref` explicito.
+Contratos afectados: mcp.tool.orquesta.autoprogramming.prepare_run.v0;
+rest.bridge.orquesta.autoprogramming.prepare_run.v0.
+Estado: aceptada localmente.
+```

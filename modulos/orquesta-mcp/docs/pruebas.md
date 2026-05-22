@@ -426,3 +426,18 @@ go test -count=1 ./modulos/orquesta-mcp \
 Evidencia esperada: si `run_ref` no carga pero `external_job_ref` es valido,
 `orquesta.director.stats.v0` resuelve la run canonica por puerto externo y
 devuelve `estado=ok`, `run_ref` canonico y `external_job`.
+
+## Prueba prepare-run autoprogramming 2026-05-22
+
+Comando:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp \
+  -run 'TestMCPAutoprogrammingPrepareRun|TestMCPTransportV0AutoprogrammingPrepareRun'
+```
+
+Evidencia esperada: el registro MCP publica
+`orquesta.autoprogramming.prepare_run.v0` como tool opt-in; sin executor
+devuelve `mcp_transport_tool_unbound`, con executor inyectado invoca el puerto
+fake, y el bridge HTTP `POST /api/v0/autoprogramming/prepare-run` delega sin
+conocer Codex, OPES, runtime, DB ni filesystem productivo.

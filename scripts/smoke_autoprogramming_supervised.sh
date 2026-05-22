@@ -379,6 +379,28 @@ print("prepare_run_ref=" + data["run_ref"])
 PY
 }
 
+verify_prepare_run_replay_accepted() {
+  local first_response="$1"
+  local replay_response="$2"
+  python3 - "$first_response" "$replay_response" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    first = json.load(fh)
+with open(sys.argv[2], encoding="utf-8") as fh:
+    replay = json.load(fh)
+if replay.get("estado") != "ok" or replay.get("accepted") is not True:
+    raise SystemExit(f"prepare-run replay inesperado: {replay}")
+if not replay.get("run_ref") or not replay.get("wait_agent_refs") or not replay.get("continue"):
+    raise SystemExit(f"prepare-run replay sin refs causales: {replay}")
+if replay.get("run_ref") != first.get("run_ref"):
+    raise SystemExit(f"prepare-run replay cambio run_ref: first={first.get('run_ref')} replay={replay.get('run_ref')}")
+print("prepare_run_replay_ok=true")
+print("prepare_run_replay_ref=" + replay["run_ref"])
+PY
+}
+
 write_external_work_payload() {
   local output="$1"
   local programmable_summary="$2"
@@ -498,6 +520,7 @@ main() {
   local programmable_summary="$result_dir/programmable_work_summary.json"
   local validation_response="$result_dir/autoprogramming_validate_response.json"
   local prepare_response="$result_dir/autoprogramming_prepare_run_response.json"
+  local prepare_replay_response="$result_dir/autoprogramming_prepare_run_replay_response.json"
   local prepare_supervisor_payload="$payload_dir/prepare_run_supervisor.json"
   local prepare_supervisor_response="$result_dir/prepare_run_supervisor_response.json"
   local external_payload="$payload_dir/external_work_run.json"
@@ -536,6 +559,9 @@ if data.get("estado") != "ok":
 print("prepare_run_supervisor_estado=" + str(data.get("estado", "")))
 print("prepare_run_supervisor_stop_reason=" + str(data.get("stop_reason", "")))
 PY
+
+  post_json_required "/api/v0/autoprogramming/prepare-run" "$prepare_payload" "$prepare_replay_response"
+  verify_prepare_run_replay_accepted "$prepare_response" "$prepare_replay_response"
 
   write_external_work_payload "$external_payload" "$programmable_summary"
   if post_json_optional "/api/v0/external-work/run" "$external_payload" "$external_response"; then
