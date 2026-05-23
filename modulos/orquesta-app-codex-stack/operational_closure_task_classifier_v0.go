@@ -8,6 +8,11 @@ import (
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
+const (
+	codexStackAutoprogrammingAppSpecPrefixV0 = "app-spec-ref-autoprogramming-"
+	codexStackAutoprogrammingTaskPrefixV0    = "task-autoprogramming-"
+)
+
 func RunHasOpenOperationalDirectorTasksV0(
 	ctx context.Context,
 	taskStore orquestacionnucleoapp.WorkflowTaskStorePortV0,
@@ -32,6 +37,33 @@ func RunHasOpenOperationalDirectorTasksV0(
 	return false, nil
 }
 
+func RunHasOpenAutoprogrammingTasksV0(
+	ctx context.Context,
+	taskStore orquestacionnucleoapp.WorkflowTaskStorePortV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) (bool, error) {
+	openRefs := codexStackOperationalClosureOpenTaskRefsV0(run)
+	if len(openRefs) == 0 {
+		return false, nil
+	}
+	if codexStackRunLooksAutoprogrammingV0(run, openRefs) {
+		return true, nil
+	}
+	if taskStore == nil {
+		return false, nil
+	}
+	tasks, err := taskStore.LoadWorkflowTasksV0(ctx, run.RunID, openRefs)
+	if err != nil {
+		return false, err
+	}
+	for _, task := range tasks {
+		if codexStackWorkflowTaskLooksAutoprogrammingV0(task) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func codexStackOperationalClosureOpenTaskRefsV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) []string {
@@ -50,6 +82,41 @@ func codexStackWorkflowTaskLooksOperationalDirectorV0(
 ) bool {
 	for _, value := range codexStackWorkflowTaskOperationalSignalsV0(task) {
 		if codexStackOperationalDirectorSignalV0(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexStackRunLooksAutoprogrammingV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	openTaskRefs []string,
+) bool {
+	if strings.HasPrefix(strings.TrimSpace(run.AppSpecRef), codexStackAutoprogrammingAppSpecPrefixV0) {
+		return true
+	}
+	for _, ref := range openTaskRefs {
+		if strings.HasPrefix(strings.TrimSpace(ref), codexStackAutoprogrammingTaskPrefixV0) {
+			return true
+		}
+	}
+	for _, ref := range run.FunctionContracts {
+		if codexStackAutoprogrammingSignalV0(ref) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexStackWorkflowTaskLooksAutoprogrammingV0(
+	task orquestacoreworkflow.WorkflowTaskV0,
+) bool {
+	if strings.HasPrefix(strings.TrimSpace(task.TaskID), codexStackAutoprogrammingTaskPrefixV0) {
+		return true
+	}
+	for _, ref := range task.FunctionContractRefs {
+		if codexStackAutoprogrammingSignalV0(ref.ContractRef) ||
+			codexStackAutoprogrammingSignalV0(ref.FunctionName) {
 			return true
 		}
 	}
@@ -82,6 +149,11 @@ func codexStackOperationalDirectorSignalV0(value string) bool {
 		}
 	}
 	return false
+}
+
+func codexStackAutoprogrammingSignalV0(value string) bool {
+	normalized := codexStackClosureSignalKeyV0(value)
+	return strings.Contains(normalized, "autoprogramming")
 }
 
 func codexStackClosureSignalKeyV0(value string) string {

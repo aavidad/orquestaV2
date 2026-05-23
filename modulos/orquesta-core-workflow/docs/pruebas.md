@@ -16,6 +16,15 @@ Detalle quality gates: `docs/pruebas_quality_gates.md`.
 ## Pruebas previstas
 
 ```text
+Caso: railes_observados_matriz_externa
+Tipo: contract | regression | black-box
+Comando: ./scripts/test_rails_fast.sh
+Evidencia esperada: Los falsos positivos observados de railes se acumulan en `docs/rail_errors_observados_2026-05-23.md` y pasan por API publica del core antes de recompilar servidor; cubre `RecordConcurrencyGate`, `ConcurrencyGateRecorded`, proyecciones de gate y `command_effects` con refs opacas.
+Ultima ejecucion: 2026-05-23, ok, `./scripts/test_rails_fast.sh`.
+Riesgos: No reemplaza pruebas de integracion ni sanitizado real; evita iteraciones lentas ante falsos positivos de rails.
+```
+
+```text
 Caso: workflow_task_recursive_limits_neutral
 Tipo: unit | contract | regression
 Comando: go test -count=1 ./modulos/orquesta-core-workflow -run 'TestWorkflowTaskV0AcceptsNeutralLineageMetadata|TestValidateWorkflowTaskV0RejectsInvalidLineageMetadata|TestWorkflowTaskFromWorkProfileV0RefactorRequiresTestsAndPreservesLineage'
@@ -200,9 +209,10 @@ Riesgos: No confirma proceso productivo ni proveedor real; la senal entra por ad
 Caso: record_concurrency_gate_sin_scheduler
 Tipo: contract | replay | idempotency
 Comando: go test -count=1 ./modulos/orquesta-core-workflow
-Evidencia esperada: `RecordConcurrencyGate` produce solo `ConcurrencyGateRecorded`, outbox vacio, proyecta `concurrency_gates` compacto, es idempotente por `gate_ref`, valida consistencia de allow/block/ask_director y rechaza conflictos o detalles prohibidos.
+Evidencia esperada: `RecordConcurrencyGate` produce solo `ConcurrencyGateRecorded`, outbox vacio, proyecta `concurrency_gates` compacto, es idempotente por `gate_ref`, valida consistencia de allow/block/ask_director, rechaza conflictos estructurales y no filtra refs opacas por palabras.
 Ultima ejecucion: 2026-05-06, ok, go test -count=1 ./modulos/orquesta-core-workflow.
-Actualizacion 2026-05-23: la validacion permite refs opacas de adaptador/ejecucion (`codex`, `runtime`, `git`, `provider`, `model`, `adapter`, `filesystem`, `token budget`) y mantiene `detalle_prohibido` para secretos/credenciales; la apertura queda pendiente de revision futura en `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`.
+Actualizacion 2026-05-23: la validacion permite refs opacas de adaptador/ejecucion (`codex`, `runtime`, `git`, `provider`, `model`, `adapter`, `filesystem`, `token budget`) y la apertura queda pendiente de revision futura en `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`.
+Actualizacion 2026-05-23 tarde: se retira el filtro global por palabras de `RecordConcurrencyGate`, `ConcurrencyGateRecorded`, `concurrency_gates` y `command_effects`; el caso focal `TestRecordConcurrencyGateCommandV0PermiteDetalleOpacoSinFiltroPorPalabras` cubre falsos positivos como `secrets_policy` y refs `completion`, aplica el evento y valida el run resultante. La guarda sensible queda como automejora futura por campo/clasificador.
 Riesgos: El workflow no calcula conflictos ni impide por si solo `RequestAgent`; el director debe llamar al gate antes de lanzar agentes.
 ```
 

@@ -128,7 +128,6 @@ func validateRunRefsV0(run OrchestrationRunV0) []OrchestrationValidationIssueV0 
 		"confirmed_stopped_agents":    run.ConfirmedStoppedAgents,
 		"agent_assessments":           run.AgentAssessments,
 		"agent_lease_expirations":     run.AgentLeaseExpirations,
-		"concurrency_gates":           run.ConcurrencyGates,
 		"quality_gates":               run.QualityGates,
 		"phase_artifacts":             run.PhaseArtifacts,
 		"deliveries":                  run.Deliveries,
@@ -146,7 +145,6 @@ func validateRunRefsV0(run OrchestrationRunV0) []OrchestrationValidationIssueV0 
 		"director_answers":            run.DirectorAnswers,
 		"director_answered_questions": run.DirectorAnsweredQuestions,
 		"blockers":                    run.Blockers,
-		"command_effects":             run.CommandEffects,
 	}
 	for field, values := range refs {
 		if refsContainForbiddenDetailsV0(values) {

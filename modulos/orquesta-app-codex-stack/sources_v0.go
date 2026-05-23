@@ -109,6 +109,9 @@ func directorDecisionSourceV0(config ConfigV0) orquestadirectoragentworkflow.Dir
 			orquestaappchangedirectorsource.AppChangeDirectorDecisionSourceV0{
 				Store: config.Stores.AppChangeStore,
 			},
+			AutoprogrammingDirectorDecisionSourceV0{
+				TaskStore: config.Stores.TaskStore,
+			},
 		},
 	}
 }

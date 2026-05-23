@@ -50,6 +50,31 @@ func TestAutoprogrammingResidentModeV0TomaRunPreparadaDeColaV0(t *testing.T) {
 	}
 }
 
+func TestAutoprogrammingResidentModeV0SigueBacklogTrasEjecucionDoneV0(t *testing.T) {
+	snapshot := autoprogrammingResidentBacklogSnapshotV0(CodexSupervisorRuntimeSnapshotV0{
+		Status: CodexSupervisorRuntimeDoneV0,
+		EvidenceRefs: []string{
+			"evidence-ref-codex-supervisor-stack-global",
+			"max_executions",
+			"quiescent",
+		},
+	})
+	if snapshot.Status != CodexSupervisorRuntimeRunningV0 ||
+		!codexStackStringInSetForTestV0(snapshot.EvidenceRefs, autoprogrammingResidentBacklogContinuesEvidenceV0) {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+	drained := autoprogrammingResidentBacklogSnapshotV0(CodexSupervisorRuntimeSnapshotV0{
+		Status: CodexSupervisorRuntimeDoneV0,
+		EvidenceRefs: []string{
+			"evidence-ref-codex-supervisor-stack-global",
+			"no_execution",
+		},
+	})
+	if drained.Status != CodexSupervisorRuntimeDoneV0 {
+		t.Fatalf("drained=%+v", drained)
+	}
+}
+
 func TestAutoprogrammingResidentModeV0BloqueoCreaReparacionDurableV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{

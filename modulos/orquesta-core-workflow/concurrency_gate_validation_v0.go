@@ -2,24 +2,7 @@ package orquestacoreworkflow
 
 import (
 	"encoding/json"
-	"strings"
 )
-
-var forbiddenConcurrencyGateFragmentsV0 = []string{
-	"secret",
-	"secreto",
-	"password",
-	"credential",
-	"credencial",
-	"api_key",
-	"api-key",
-	"access_token",
-	"access-token",
-	"refresh_token",
-	"refresh-token",
-	"client_secret",
-	"client-secret",
-}
 
 func validateRecordConcurrencyGatePayloadDataV0(payload RecordConcurrencyGateCommandPayloadV0) error {
 	if err := requireCommandPayloadFieldsV0(map[string]string{
@@ -69,12 +52,6 @@ func validateConcurrencyGateCommonV0(payload RecordConcurrencyGateCommandPayload
 	}
 	if concurrencyGateHasLongStringV0(concurrencyGateTextFieldsV0(payload)) {
 		return concurrencyGatePayloadErrorV0(command, "payload")
-	}
-	if concurrencyGateHasForbiddenDetailsV0(concurrencyGateTextFieldsV0(payload)) {
-		if command {
-			return commandErrorV0(ErrDetalleProhibidoV0, "payload")
-		}
-		return eventErrorV0(ErrDetalleProhibidoV0, "payload")
 	}
 	return nil
 }
@@ -136,18 +113,6 @@ func concurrencyGateHasLongStringV0(values []string) bool {
 	for _, value := range values {
 		if len(value) > maxConcurrencyGateStringV0 {
 			return true
-		}
-	}
-	return false
-}
-
-func concurrencyGateHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenConcurrencyGateFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
 		}
 	}
 	return false

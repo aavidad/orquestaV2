@@ -12,6 +12,18 @@ import (
 
 const operationalDirectorDecisionTaskSourceMarkerV0 = "operational_director.task_source"
 
+func EnsureOperationalDirectorPlanStateFromWorkflowTasksV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+) (ContinueAppDirectorRequestV0, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	request = normalizeContinueAppDirectorRequestV0(request)
+	return ensureContinueOperationalDirectorPlanStateFromWorkflowTasksV0(ctx, request, ports)
+}
+
 func startRequestWithOperationalDirectorPlanStateV0(
 	ctx context.Context,
 	request StartAppDirectorRequestV0,
@@ -181,8 +193,10 @@ func directorDecisionOperationalTasksV0(
 func workflowTaskHasOperationalDirectorDecisionMarkerV0(
 	task orquestacoreworkflow.WorkflowTaskV0,
 ) bool {
-	for _, criterion := range task.AcceptanceCriteria {
-		if strings.Contains(strings.TrimSpace(criterion), operationalDirectorDecisionTaskSourceMarkerV0) {
+	signals := append([]string(nil), task.AcceptanceCriteria...)
+	signals = append(signals, task.ContextRefs...)
+	for _, value := range signals {
+		if strings.Contains(strings.TrimSpace(value), operationalDirectorDecisionTaskSourceMarkerV0) {
 			return true
 		}
 	}

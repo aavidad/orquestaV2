@@ -11,6 +11,7 @@ import (
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirectoroperativo "orquesta/modulos/orquesta-director-operativo"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -58,11 +59,14 @@ func TestPrepareAutoprogrammingRunV0PersisteWorkflowTasksYRunContinuable(t *test
 	eventSink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
 	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
 	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
+	planStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
 	ports := orquestaappdirectorservice.StartAppDirectorPortsV0{
-		RunStore:          runStore,
-		EventSink:         eventSink,
-		OutboxLedger:      ledger,
-		DirectorTaskStore: taskStore,
+		RunStore:                   runStore,
+		EventSink:                  eventSink,
+		OutboxLedger:               ledger,
+		DirectorTaskStore:          taskStore,
+		OperationalPlanStateStore:  planStore,
+		OperationalPlanStateWriter: planStore,
 		Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
 			autoprogrammingBridgeCapacityDispatcherForTestV0(runStore, eventSink, ledger),
 			autoprogrammingBridgeAgentDispatcherForTestV0(runStore, eventSink, ledger),
@@ -92,6 +96,9 @@ func TestPrepareAutoprogrammingRunV0PersisteWorkflowTasksYRunContinuable(t *test
 		storedTasks[0].RunID != bridged.Run.RunID ||
 		storedTasks[0].RequiredTests[0] != "go test -count=1 ./modulos/orquesta-app-codex-stack -run TestPrepareAutoprogrammingRunV0" {
 		t.Fatalf("stored_tasks=%+v bridged=%+v", storedTasks, bridged.Tasks)
+	}
+	if !autoprogrammingBridgeStringInSetForTestV0(storedTasks[0].ContextRefs, autoprogrammingBridgeOperationalTaskSourceRefV0) {
+		t.Fatalf("context_refs=%v", storedTasks[0].ContextRefs)
 	}
 	run, err := runStore.LoadRunV0(context.Background(), bridged.Run.RunID)
 	if err != nil {
@@ -136,6 +143,17 @@ func TestPrepareAutoprogrammingRunV0PersisteWorkflowTasksYRunContinuable(t *test
 	if continued.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
 		!autoprogrammingBridgeStringInSetForTestV0(continued.StartedAgents, bridged.WaitAgentRefs[0]) {
 		t.Fatalf("continued=%+v wait_agent=%s", continued, bridged.WaitAgentRefs[0])
+	}
+	planRef := "operational-director-plan-director-decisions-" + bridged.Run.RunID
+	planState, err := planStore.LoadOperationalDirectorPlanStateV0(context.Background(), bridged.Run.RunID, planRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	waitStep := codexStackPlanStateStepForTestV0(t, planState, "step-wait-subagents")
+	if planState.ActiveStepID != "step-wait-subagents" ||
+		waitStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		!autoprogrammingBridgeStringInSetForTestV0(planState.RequiredTestRefs, storedTasks[0].RequiredTests[0]) {
+		t.Fatalf("plan_state=%+v wait_step=%+v", planState, waitStep)
 	}
 }
 
@@ -284,4 +302,19 @@ func autoprogrammingBridgeStringInSetForTestV0(values []string, want string) boo
 		}
 	}
 	return false
+}
+
+func codexStackPlanStateStepForTestV0(
+	t *testing.T,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	stepID string,
+) orquestacionnucleoapp.OperationalDirectorPlanStepStateV0 {
+	t.Helper()
+	for _, step := range state.Steps {
+		if step.StepID == stepID {
+			return step
+		}
+	}
+	t.Fatalf("step %s no existe en %+v", stepID, state)
+	return orquestacionnucleoapp.OperationalDirectorPlanStepStateV0{}
 }

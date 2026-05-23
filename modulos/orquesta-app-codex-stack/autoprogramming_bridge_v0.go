@@ -16,6 +16,8 @@ import (
 
 const AutoprogrammingBridgeResultSchemaVersionV0 = "autoprogramming_bridge_result.v0"
 
+const autoprogrammingBridgeOperationalTaskSourceRefV0 = "operational_director.task_source:autoprogramming"
+
 type AutoprogrammingBridgeRequestV0 struct {
 	Request              orquestaautoprogramming.AutoprogrammingRequestV0 `json:"request"`
 	OccurredAt           string                                           `json:"occurred_at,omitempty"`
@@ -52,6 +54,9 @@ func PrepareAutoprogrammingRunV0(
 		return AutoprogrammingBridgeResultV0{}, err
 	}
 	work := orquestaautoprogramming.BuildAutoprogrammingProgrammableWorkV0(request.Request)
+	if work.Accepted {
+		work.Work.Tasks = autoprogrammingBridgeOperationalTasksV0(work.Work.Tasks)
+	}
 	result := AutoprogrammingBridgeResultV0{
 		SchemaVersion: AutoprogrammingBridgeResultSchemaVersionV0,
 		Accepted:      work.Accepted,
@@ -83,7 +88,11 @@ func PrepareAutoprogrammingRunV0(
 	result.Run = run
 	result.Tasks = append([]orquestacoreworkflow.WorkflowTaskV0(nil), work.Work.Tasks...)
 	result.WaitAgentRefs = autoprogrammingBridgeWaitAgentRefsV0(work.Work.Tasks)
-	result.Continue = autoprogrammingBridgeContinueRequestV0(request, result)
+	continueRequest, err := autoprogrammingBridgeContinueRequestWithPlanStateV0(ctx, request, result, ports)
+	if err != nil {
+		return AutoprogrammingBridgeResultV0{}, err
+	}
+	result.Continue = continueRequest
 	return result, nil
 }
 
@@ -109,7 +118,11 @@ func autoprogrammingBridgeExistingRunResultV0(
 	result.Run = existing
 	result.Tasks = append([]orquestacoreworkflow.WorkflowTaskV0(nil), storedTasks...)
 	result.WaitAgentRefs = autoprogrammingBridgeWaitAgentRefsV0(result.Work.Tasks)
-	result.Continue = autoprogrammingBridgeContinueRequestV0(request, result)
+	continueRequest, err := autoprogrammingBridgeContinueRequestWithPlanStateV0(ctx, request, result, ports)
+	if err != nil {
+		return AutoprogrammingBridgeResultV0{}, err
+	}
+	result.Continue = continueRequest
 	return result, nil
 }
 
@@ -170,6 +183,17 @@ func normalizeAutoprogrammingBridgeRequestV0(
 	return request
 }
 
+func autoprogrammingBridgeOperationalTasksV0(
+	tasks []orquestacoreworkflow.WorkflowTaskV0,
+) []orquestacoreworkflow.WorkflowTaskV0 {
+	out := make([]orquestacoreworkflow.WorkflowTaskV0, 0, len(tasks))
+	for _, task := range tasks {
+		task.ContextRefs = compactStringsV0(append(task.ContextRefs, autoprogrammingBridgeOperationalTaskSourceRefV0))
+		out = append(out, task)
+	}
+	return out
+}
+
 func validateAutoprogrammingBridgePortsV0(
 	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
 ) error {
@@ -227,6 +251,36 @@ func autoprogrammingBridgeContinueRequestV0(
 		MaxCommands:          request.MaxCommands,
 		MaxOutboxPerCycle:    request.MaxOutboxPerCycle,
 	}
+}
+
+func autoprogrammingBridgeContinueRequestWithPlanStateV0(
+	ctx context.Context,
+	request AutoprogrammingBridgeRequestV0,
+	result AutoprogrammingBridgeResultV0,
+	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
+) (orquestaappdirectorservice.ContinueAppDirectorRequestV0, error) {
+	continueRequest := autoprogrammingBridgeContinueRequestV0(request, result)
+	stateRequest, err := orquestaappdirectorservice.EnsureOperationalDirectorPlanStateFromWorkflowTasksV0(
+		ctx,
+		orquestaappdirectorservice.ContinueAppDirectorRequestV0{
+			RunRef:            result.Run.RunID,
+			OccurredAt:        request.OccurredAt,
+			CorrelationID:     request.CorrelationID,
+			RequestedBy:       request.RequestedBy,
+			MaxBursts:         request.MaxBursts,
+			MaxStepsPerBurst:  request.MaxStepsPerBurst,
+			MaxCommands:       request.MaxCommands,
+			MaxOutboxPerCycle: request.MaxOutboxPerCycle,
+		},
+		ports,
+	)
+	if err != nil {
+		return orquestaappdirectorservice.ContinueAppDirectorRequestV0{}, err
+	}
+	if strings.TrimSpace(stateRequest.OperationalDirectorPlanRef) != "" {
+		continueRequest.OperationalDirectorPlanRef = stateRequest.OperationalDirectorPlanRef
+	}
+	return continueRequest, nil
 }
 
 func autoprogrammingBridgeWaitAgentRefsV0(

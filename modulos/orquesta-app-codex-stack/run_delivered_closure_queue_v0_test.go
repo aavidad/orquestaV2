@@ -36,6 +36,30 @@ func TestStackDrainQueueStatusMantieneEntregadoOperativoParaCierreFormalV0(t *te
 	}
 }
 
+func TestStackDrainQueueStatusMantieneAutoprogrammingActivoParaRevisionYCierreV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-stack-delivered-autoprogramming-001"
+	taskRef := "task-autoprogramming-stack-delivered-001"
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	task := stackDeliveredAutoprogrammingTaskForTestV0(runRef, taskRef)
+	stack := StackV0{Stores: StoresV0{
+		TaskStore: orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(task),
+	}}
+	run := stackDeliveredRunForQueueTestV0(runRef, taskRef, agentRef)
+	run.AppSpecRef = "app-spec-ref-autoprogramming-queue-001"
+	run.FunctionContracts = []string{"function:BuildAutoprogrammingProgrammableWorkV0"}
+	result := orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+		Final: orquestacionnucleoapp.ProgressiveLoopResultV0{Run: run},
+	}
+	status, err := stack.stackDrainQueueStatusForCoordinatorV0(ctx, result)
+	if err != nil {
+		t.Fatalf("stackDrainQueueStatusForCoordinatorV0: %v", err)
+	}
+	if status != "" {
+		t.Fatalf("queue_status=%q, want activo para revision/cierre autoprogramming", status)
+	}
+}
+
 func TestStackDrainQueueStatusConservaDeliveredLegacySinTaskStoreV0(t *testing.T) {
 	runRef := "run-stack-delivered-legacy-001"
 	taskRef := "task-ref-stack-delivered-legacy-001"
@@ -68,6 +92,28 @@ func stackDeliveredRunForQueueTestV0(
 		DeliveredAgents: []string{agentRef},
 		Deliveries:      []string{"delivery-ref-" + taskRef},
 		DeliveredTasks:  []string{taskRef},
+	}
+}
+
+func stackDeliveredAutoprogrammingTaskForTestV0(
+	runRef string,
+	taskRef string,
+) orquestacoreworkflow.WorkflowTaskV0 {
+	return orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion:   orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:          taskRef,
+		RunID:           runRef,
+		PhaseID:         orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		WorkProfileKind: orquestacoreworkflow.WorkProfileImplementationV0,
+		Title:           "Autoprogramacion entregada",
+		WriteSet:        []string{"modulos/orquesta-app-codex-stack"},
+		AcceptanceCriteria: []string{
+			"autoprogramacion revisada con evidencias causales",
+		},
+		RequiredTests: []string{"go test -count=1 ./modulos/orquesta-app-codex-stack"},
+		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+			FunctionName: "BuildAutoprogrammingProgrammableWorkV0",
+		}},
 	}
 }
 

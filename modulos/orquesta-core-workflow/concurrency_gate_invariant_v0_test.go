@@ -69,12 +69,23 @@ func TestApplyConcurrencyGateRecordedEventV0RejectsConflictingGateRef(t *testing
 	assertConcurrencyGateEventErrorV0(t, err, ErrSecuenciaInvalidaV0, "payload.gate_ref")
 }
 
-func TestRecordConcurrencyGateCommandV0RejectsForbiddenDetails(t *testing.T) {
-	payload := validConcurrencyGatePayloadV0("gate-ref-forbidden", ConcurrencyGateDecisionAllowRequestAgentV0)
-	payload.EvidenceRefs = []string{"oauth-client-secret"}
+func TestRecordConcurrencyGateCommandV0PermiteDetalleOpacoSinFiltroPorPalabras(t *testing.T) {
+	run := mustHandlerProgramacionRunV0(t)
+	payload := validConcurrencyGatePayloadV0("gate-ref-open-details-completion-loop", ConcurrencyGateDecisionAllowRequestAgentV0)
+	payload.Summary = "concurrency_gate allow secrets_policy references_only and credential adapter docs."
+	payload.EvidenceRefs = []string{
+		"evidence-ref-secrets-policy-references-only",
+		"evidence-ref-oauth-client-secret-policy-doc",
+	}
 
-	_, err := NewRecordConcurrencyGateCommandV0(validCommandMetaV0("cmd-concurrency-forbidden", "idem-concurrency-forbidden"), payload)
-	assertConcurrencyGateCommandErrorV0(t, err, ErrDetalleProhibidoV0, "payload")
+	command, err := NewRecordConcurrencyGateCommandV0(validCommandMetaV0("cmd-concurrency-open-details", "idem-concurrency-open-details"), payload)
+	if err != nil {
+		t.Fatalf("command constructor: %v", err)
+	}
+	applied := mustApplySingleCommandEventV0(t, run, command)
+	if issues := ValidateOrchestrationRunV0(applied); len(issues) != 0 {
+		t.Fatalf("run issues=%+v", issues)
+	}
 }
 
 func TestRecordConcurrencyGateCommandV0AllowsOpaqueAdapterAndExecutionRefs(t *testing.T) {

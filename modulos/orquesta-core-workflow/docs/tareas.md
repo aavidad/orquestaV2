@@ -15,6 +15,26 @@ Estado:
 ## Backlog inicial
 
 ```text
+ID: NCW-080
+Objetivo: Crear matriz externa y rapida de railes observados para acumular casos reales antes de recompilar servidor.
+Write-set: rail_external_v0_test.go, scripts/test_rails_fast.sh, docs/rail_errors_observados_2026-05-23.md, docs locales/globales.
+Contrato: pruebas black-box del core-workflow por API publica.
+Validacion: 2026-05-23, `./scripts/test_rails_fast.sh`.
+Bloqueos: La matriz no sustituye suite completa final; sirve para iterar rapido sobre rails y evitar recompilar todo con cada falso positivo.
+Estado: completada local
+```
+
+```text
+ID: NCW-079
+Objetivo: Abrir `RecordConcurrencyGate`, `ConcurrencyGateRecorded`, `concurrency_gates` y `command_effects` para no rechazar refs opacas por palabras globales; dejar la guarda sensible para automejora futura por campo/clasificador.
+Write-set: concurrency_gate_validation_v0.go, events_validation_v0.go, run_state_validation_v0.go, concurrency_gate_invariant_v0_test.go, docs locales y docs globales de autoprogramacion.
+Contrato: RecordConcurrencyGate, ConcurrencyGateRecorded.
+Validacion: 2026-05-23, tests focales de concurrency gate en orquesta-core-workflow.
+Bloqueos: El core conserva validacion estructural, refs, tamano e invariantes de decision; no intenta detectar secretos por palabras en este gate.
+Estado: completada local
+```
+
+```text
 ID: NCW-078
 Objetivo: Transportar limites recursivos neutrales del arbol de `WorkflowTaskV0`: profundidad maxima, fanout global por agente y presupuesto global.
 Write-set: work_items_*.go, work_profile_*.go, docs locales y tests de linaje.

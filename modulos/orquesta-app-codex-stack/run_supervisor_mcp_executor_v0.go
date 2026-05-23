@@ -41,9 +41,13 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 		DrainRequest:      codexStackRunSupervisorDrainRequestV0(input),
 		SupervisorCommand: codexStackRunSupervisorCommandV0(input),
 	}
+	agentLifecycle := CodexSupervisorAgentLifecyclePortV0(lifecycle)
+	if input.ResidentMode && strings.TrimSpace(input.RunRef) == "" {
+		agentLifecycle = autoprogrammingResidentLifecycleV0{inner: lifecycle}
+	}
 	result, err := SuperviseCodexV0(
 		ctx,
-		CodexSupervisorDepsV0{AgentLifecycle: lifecycle},
+		CodexSupervisorDepsV0{AgentLifecycle: agentLifecycle},
 		CodexSupervisorCommandV0{
 			MaxTicks:        input.MaxTicks,
 			ContinueMessage: input.ContinueMessage,
