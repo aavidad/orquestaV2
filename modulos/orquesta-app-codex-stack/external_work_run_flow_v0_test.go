@@ -100,6 +100,62 @@ func TestCodexStackV0ExternalWorkRunAceptaContratoAmplioV0(t *testing.T) {
 	}
 }
 
+func TestCodexStackV0ExternalWorkRunSaneaPreguntaDirectorSinPerderContextoV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	body := bytes.NewBuffer(nil)
+	err := json.NewEncoder(body).Encode(orquestamcp.MCPExternalWorkRunToolInputV0{
+		RequestID:     "req-external-work-safe-director-001",
+		CorrelationID: "corr-external-work-safe-director-001",
+		AppChangeRequest: orquestaappchange.AppChangeRequestV0{
+			ChangeRef:  "self-review-rework-001",
+			AppRef:     "orquesta",
+			UserIntent: "Corregir flujo Codex sin exponer HOME token runtime ni provider en outbox.",
+			AcceptanceCriteria: []string{
+				"El conector Codex queda probado sin filtrar token ni HOME.",
+				"El adapter conserva hexagonalidad.",
+			},
+			AllowedWriteSet: []string{"modulos/orquesta-app-codex-stack"},
+			RequiredTests:   []string{"go test -count=1 ./modulos/orquesta-app-codex-stack"},
+			MetadataRefs:    []string{"rules-token-economy-high"},
+			ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+				ProjectRef: "orquesta",
+				JobRef:     "job-safe-director-001",
+				WorkKind:   "self_programming",
+				WorkRefs:   []string{"runtime-codex-review"},
+				InputFields: []orquestadomainwork.DomainWorkFieldV0{{
+					Name:  "context_profile",
+					Value: "large",
+				}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/external-work/run", body)
+	req.Header.Set("Content-Type", "application/json")
+	stack.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("external work run status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPExternalWorkRunToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode external work run: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPExternalWorkRunEstadoOKV0 {
+		t.Fatalf("result=%+v", result)
+	}
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), result.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(run.DirectorQuestions) != 1 {
+		t.Fatalf("director_questions=%v", run.DirectorQuestions)
+	}
+}
+
 func TestCodexStackV0ExternalWorkRunSupervisorConsumeDeliverySinExpirarWaitV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	planStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
