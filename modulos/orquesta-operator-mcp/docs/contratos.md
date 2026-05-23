@@ -39,6 +39,8 @@ Invariantes:
 - El tool no lee estado productivo por si mismo.
 - El tool no requiere conocer modulos internos ni nombres de tipos Go.
 - El resultado debe ser compacto, sin dumps ni datos sensibles.
+- Alias razonables de conector como `state`, `estado` o `health` se normalizan
+  en adaptadores; refs sensibles o con rutas se rechazan.
 
 ## OperatorSupervisedBurstV0
 
@@ -63,6 +65,8 @@ Invariantes:
 - El tool invoca un conector; no ejecuta scheduler, outbox, runtime ni supervisor real.
 - `max_steps` debe ser positivo y acotado.
 - No hay sleeps, polling, daemons ni reintentos por tiempo.
+- Alias razonables como `supervised_burst` o `burst_supervisado` se normalizan
+  en adaptadores externos o simulados.
 
 ## OperatorPendingOutboxV0
 
@@ -88,6 +92,8 @@ Invariantes:
 - El tool lista por conector; no lee colas, tablas, ficheros ni procesos.
 - El resultado es compacto y no contiene payloads completos.
 - Si no hay conector operativo, debe devolver error publico, no ejecutar otro flujo.
+- Alias publicos como `question`, `consulta`, `pending_outbox` o
+  `outbox_pending` se normalizan sin exponer nombres internos.
 
 ## OperatorDirectedQueryV0
 
@@ -112,6 +118,7 @@ Invariantes:
 - Las consultas cruzan modulos por conectores y refs opacas.
 - No se incluyen prompts completos, credenciales, HOME, rutas ni transcripts.
 - Si falta contexto, la respuesta publica pide `CONSULTA AL DIRECTOR`.
+- Texto con marcadores sensibles se rechaza con error publico compacto.
 
 ## Adaptador MCP puro en orquesta-mcp
 
@@ -133,6 +140,8 @@ Invariantes:
 
 - El adaptador vive en `orquesta-mcp` y consume solo puertos publicos `OperatorMCP*PortV0`.
 - Si falta puerto, devuelve error publico `operator_mcp_port_unavailable`.
+- Si el conector rechaza una ref declarada, devuelve
+  `operator_mcp_connector_unavailable` sin caer a internals.
 - No ejecuta scheduler, DB, outbox, runtime, filesystem, red, HOME ni servidor MCP real.
 - El transporte MCP real queda como conector opt-in posterior.
 - Hermes, OpenClaw u otro operador real debe implementarse fuera como adaptador

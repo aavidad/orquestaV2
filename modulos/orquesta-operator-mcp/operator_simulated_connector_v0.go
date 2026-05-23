@@ -1,7 +1,6 @@
 package orquestaoperatormcp
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -92,7 +91,7 @@ func (connector OperatorMCPSimulatedConnectorV0) RaiseOperatorDirectedQueryV0(
 func (connector OperatorMCPSimulatedConnectorV0) requireConnectorRefV0(kind string, ref string) error {
 	expected := connectorRefForKindV0(connector.config, kind)
 	if normalizeOperatorConnectorRefAliasV0(ref) != normalizeOperatorConnectorRefAliasV0(expected) {
-		return fmt.Errorf("operator_mcp_connector_unavailable")
+		return NewOperatorMCPPublicErrorV0(ErrOperatorMCPConnectorUnavailableV0)
 	}
 	return nil
 }
@@ -143,10 +142,20 @@ func connectorRefForKindV0(config OperatorMCPSimulatedConnectorConfigV0, kind st
 }
 
 func normalizeOperatorConnectorRefAliasV0(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	value = strings.ReplaceAll(value, "_", "-")
-	value = strings.ReplaceAll(value, "state", "status")
+	value = normalizeOperatorTokenV0(value)
+	value = strings.TrimPrefix(value, "operator-")
+	value = strings.TrimPrefix(value, "mcp-")
 	value = strings.ReplaceAll(value, "estado", "status")
+	value = strings.ReplaceAll(value, "state", "status")
+	value = strings.ReplaceAll(value, "health", "status")
+	value = strings.ReplaceAll(value, "supervised-burst", "burst")
+	value = strings.ReplaceAll(value, "supervision-burst", "burst")
+	value = strings.ReplaceAll(value, "burst-supervisado", "burst")
+	value = strings.ReplaceAll(value, "pending-outbox", "outbox")
+	value = strings.ReplaceAll(value, "outbox-pending", "outbox")
+	value = strings.ReplaceAll(value, "directed-query", "query")
+	value = strings.ReplaceAll(value, "consulta-dirigida", "query")
 	value = strings.ReplaceAll(value, "consulta", "query")
+	value = strings.ReplaceAll(value, "question", "query")
 	return value
 }

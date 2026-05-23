@@ -20,6 +20,8 @@ type AutoprogrammingRequestV0 struct {
 	Tasks            []AutoprogrammingTaskGroupCandidateV0 `json:"tasks"`
 	WriteSet         []string                              `json:"write_set"`
 	RequiredTests    []string                              `json:"required_tests"`
+	AreaAliases      []AutoprogrammingAreaAliasV0          `json:"area_aliases,omitempty"`
+	LiveWorks        []AutoprogrammingLiveWorkV0           `json:"live_works,omitempty"`
 
 	MaxTaskRefs        int `json:"max_task_refs,omitempty"`
 	MaxAreas           int `json:"max_areas,omitempty"`
@@ -52,6 +54,7 @@ func ValidateAutoprogrammingRequestV0(
 
 	writeSet := compactStringsV0(request.WriteSet)
 	issues = append(issues, autoprogrammingRequestWriteSetIssuesV0(request, writeSet)...)
+	issues = append(issues, autoprogrammingRequestLiveWorkIssuesV0(request.LiveWorks)...)
 
 	requiredTests := compactStringsV0(request.RequiredTests)
 	if len(requiredTests) == 0 {

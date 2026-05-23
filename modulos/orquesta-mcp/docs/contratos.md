@@ -483,10 +483,13 @@ Errores:
   - operator_mcp_section_invalid
   - operator_mcp_port_unavailable
   - operator_mcp_port_error
+  - operator_mcp_connector_unavailable
 Pruebas de contrato:
   - Resource lista capabilities y tools.
   - Tools validan envelopes antes de llamar al puerto.
   - Tools delegan solo con puerto fake inyectado.
+  - Transporte propaga errores publicos del conector agregado y sirve estado,
+    outbox y consulta dirigida con alias razonables.
   - Payloads compactos sin internals ni terminos prohibidos.
 ```
 

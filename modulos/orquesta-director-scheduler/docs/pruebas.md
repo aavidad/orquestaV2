@@ -1,6 +1,17 @@
 # Pruebas locales: orquesta-director-scheduler
 
 ```text
+Caso: scheduler_tick_live_work_sequence_policy
+Tipo: unit
+Comando: go test -count=1 ./modulos/orquesta-director-scheduler -run 'TestBuildDirectorSchedulerTickV0(WaitsForRepairableLiveWorkOverlap|QueuesCandidateAfterLiveDependency|CreatesReviewTaskForLiveOverlap|CreatesStudyTaskWhenLiveOverlapNeedsContext|LiveOverlapDoesNotBlockIndependentWork)'
+Evidencia esperada: solape reparable con trabajo vivo produce decision
+`wait_live_work`; dependencia de claim vivo produce `queue_after_live_work`;
+politica explicita crea microtarea de revision o estudio; trabajo independiente
+mantiene `execute_now` y emite gate+RequestAgent.
+Estado: completada en SCH-015
+```
+
+```text
 Caso: scheduler_tick_progress_no_ack_interrupted_capacity_causal
 Tipo: unit
 Comando: go test -count=1 ./modulos/orquesta-director-scheduler -run 'TestBuildDirectorSchedulerTickV0(InterruptedWithoutAckStopsBeforeWork|CapacityLimitedStopPrecedesReplanFollowup|CapacityLimitedReemitsStopBeforeReplan|StoppedProgressYieldsToReplanAfterStopReflected|StoppedProgressDoesNotRepeatAfterStopReflected)'

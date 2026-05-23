@@ -46,6 +46,18 @@ const (
 	OperationalDirectorStepClosedV0           OperationalDirectorStepStatusV0 = "closed"
 )
 
+type OperationalDirectorRepairActionV0 string
+
+const (
+	OperationalDirectorRepairNoActionV0          OperationalDirectorRepairActionV0 = "no_action"
+	OperationalDirectorRepairNormalizeV0         OperationalDirectorRepairActionV0 = "normalize"
+	OperationalDirectorRepairRequestCorrectionV0 OperationalDirectorRepairActionV0 = "request_correction"
+	OperationalDirectorRepairDelegateReviewV0    OperationalDirectorRepairActionV0 = "delegate_review"
+	OperationalDirectorRepairSequenceFollowupV0  OperationalDirectorRepairActionV0 = "sequence_followup"
+	OperationalDirectorRepairPostponeV0          OperationalDirectorRepairActionV0 = "postpone"
+	OperationalDirectorRepairHardRejectV0        OperationalDirectorRepairActionV0 = "hard_reject"
+)
+
 const (
 	DefaultOperationalDirectorMaxLoopsV0             = 6
 	DefaultOperationalDirectorMaxParallelAgentsV0    = 3
@@ -89,24 +101,25 @@ type OperationalDirectorPlanResultV0 struct {
 }
 
 type OperationalDirectorPlanV0 struct {
-	PlanRef              string                          `json:"plan_ref"`
-	RequestRef           string                          `json:"request_ref"`
-	RunRef               string                          `json:"run_ref"`
-	ProjectRef           string                          `json:"project_ref"`
-	Mode                 OperationalDirectorModeV0       `json:"mode"`
-	Status               OperationalDirectorPlanStatusV0 `json:"status"`
-	Objective            string                          `json:"objective"`
-	LoopBudget           int                             `json:"loop_budget"`
-	MaxParallelAgents    int                             `json:"max_parallel_agents"`
-	RecursiveDelegation  bool                            `json:"recursive_delegation,omitempty"`
-	MaxDelegationDepth   int                             `json:"max_delegation_depth,omitempty"`
-	MaxSubagentsPerAgent int                             `json:"max_subagents_per_agent,omitempty"`
-	MaxRecursiveAgents   int                             `json:"max_recursive_agents,omitempty"`
-	WriteSet             []string                        `json:"write_set,omitempty"`
-	RequiredTests        []string                        `json:"required_tests,omitempty"`
-	DomainRefs           []string                        `json:"domain_refs,omitempty"`
-	MissingContext       []string                        `json:"missing_context,omitempty"`
-	Steps                []OperationalDirectorStepV0     `json:"steps"`
+	PlanRef              string                            `json:"plan_ref"`
+	RequestRef           string                            `json:"request_ref"`
+	RunRef               string                            `json:"run_ref"`
+	ProjectRef           string                            `json:"project_ref"`
+	Mode                 OperationalDirectorModeV0         `json:"mode"`
+	Status               OperationalDirectorPlanStatusV0   `json:"status"`
+	Objective            string                            `json:"objective"`
+	LoopBudget           int                               `json:"loop_budget"`
+	MaxParallelAgents    int                               `json:"max_parallel_agents"`
+	RecursiveDelegation  bool                              `json:"recursive_delegation,omitempty"`
+	MaxDelegationDepth   int                               `json:"max_delegation_depth,omitempty"`
+	MaxSubagentsPerAgent int                               `json:"max_subagents_per_agent,omitempty"`
+	MaxRecursiveAgents   int                               `json:"max_recursive_agents,omitempty"`
+	WriteSet             []string                          `json:"write_set,omitempty"`
+	RequiredTests        []string                          `json:"required_tests,omitempty"`
+	DomainRefs           []string                          `json:"domain_refs,omitempty"`
+	MissingContext       []string                          `json:"missing_context,omitempty"`
+	RepairPolicy         OperationalDirectorRepairPolicyV0 `json:"repair_policy,omitempty"`
+	Steps                []OperationalDirectorStepV0       `json:"steps"`
 }
 
 type OperationalDirectorStepV0 struct {
@@ -131,6 +144,39 @@ type OperationalDirectorIssueV0 struct {
 	Code    string `json:"code"`
 	Field   string `json:"field,omitempty"`
 	Message string `json:"message,omitempty"`
+}
+
+type OperationalDirectorRepairPolicyV0 struct {
+	PreferRepair       bool                                `json:"prefer_repair"`
+	RepairActions      []OperationalDirectorRepairActionV0 `json:"repair_actions,omitempty"`
+	HardRejectTriggers []string                            `json:"hard_reject_triggers,omitempty"`
+}
+
+type OperationalDirectorRepairRequestV0 struct {
+	OutputRef                  string   `json:"output_ref,omitempty"`
+	TaskRef                    string   `json:"task_ref,omitempty"`
+	Cause                      string   `json:"cause,omitempty"`
+	Reasonable                 bool     `json:"reasonable,omitempty"`
+	Ambiguous                  bool     `json:"ambiguous,omitempty"`
+	NeedsCorrection            bool     `json:"needs_correction,omitempty"`
+	NeedsReview                bool     `json:"needs_review,omitempty"`
+	NeedsSequencedStep         bool     `json:"needs_sequenced_step,omitempty"`
+	NormalizableAliases        []string `json:"normalizable_aliases,omitempty"`
+	MissingContext             []string `json:"missing_context,omitempty"`
+	MissingEvidence            []string `json:"missing_evidence,omitempty"`
+	SafetyRisk                 bool     `json:"safety_risk,omitempty"`
+	CausalityBroken            bool     `json:"causality_broken,omitempty"`
+	ImpossibleRefs             bool     `json:"impossible_refs,omitempty"`
+	UnauthorizedExternalEffect bool     `json:"unauthorized_external_effect,omitempty"`
+}
+
+type OperationalDirectorRepairDecisionV0 struct {
+	Action           OperationalDirectorRepairActionV0 `json:"action"`
+	StepStatus       OperationalDirectorStepStatusV0   `json:"step_status,omitempty"`
+	PreserveOutput   bool                              `json:"preserve_output"`
+	RequiresFollowup bool                              `json:"requires_followup,omitempty"`
+	Cause            string                            `json:"cause,omitempty"`
+	Issues           []OperationalDirectorIssueV0      `json:"issues,omitempty"`
 }
 
 type OperationalDirectorAgentBudgetV0 struct {

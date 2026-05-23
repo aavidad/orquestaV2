@@ -28,6 +28,17 @@ const (
 	SchedulerWaitingCandidateMissingV0        SchedulerWaitingReasonV0 = "candidate_missing"
 	SchedulerWaitingDirectorQuestionPendingV0 SchedulerWaitingReasonV0 = "director_question_pending"
 	SchedulerWaitingQualityGateFollowupV0     SchedulerWaitingReasonV0 = "quality_gate_followup_required"
+	SchedulerWaitingLiveWorkOverlapV0         SchedulerWaitingReasonV0 = "live_work_overlap"
+)
+
+type SchedulerWorkSequenceActionV0 string
+
+const (
+	SchedulerWorkSequenceActionExecuteNowV0         SchedulerWorkSequenceActionV0 = "execute_now"
+	SchedulerWorkSequenceActionWaitLiveWorkV0       SchedulerWorkSequenceActionV0 = "wait_live_work"
+	SchedulerWorkSequenceActionQueueAfterLiveWorkV0 SchedulerWorkSequenceActionV0 = "queue_after_live_work"
+	SchedulerWorkSequenceActionCreateReviewTaskV0   SchedulerWorkSequenceActionV0 = "create_review_task"
+	SchedulerWorkSequenceActionCreateStudyTaskV0    SchedulerWorkSequenceActionV0 = "create_study_task"
 )
 
 type DirectorSchedulerTickInputV0 struct {
@@ -78,9 +89,22 @@ type SchedulableWorkCandidateV0 struct {
 	Claims            []orquestacoreconcurrency.WorksetClaimV0        `json:"claims"`
 	CapacityCandidate *SchedulerCapacityCommandCandidateV0            `json:"capacity_candidate,omitempty"`
 	AgentCandidate    *SchedulerAgentCommandCandidateV0               `json:"agent_candidate,omitempty"`
+	LiveWorkPolicy    *SchedulerLiveWorkSequencePolicyV0              `json:"live_work_policy,omitempty"`
 	GateCommandMeta   orquestacoreworkflow.OrchestrationCommandMetaV0 `json:"gate_command_meta"`
 	GateEvidenceRefs  []string                                        `json:"gate_evidence_refs,omitempty"`
 	EvidenceRefs      []string                                        `json:"evidence_refs,omitempty"`
+}
+
+type SchedulerLiveWorkSequencePolicyV0 struct {
+	OnOverlap           SchedulerWorkSequenceActionV0        `json:"on_overlap,omitempty"`
+	ReviewTaskCandidate *SchedulerCreateMicrotaskCandidateV0 `json:"review_task_candidate,omitempty"`
+	StudyTaskCandidate  *SchedulerCreateMicrotaskCandidateV0 `json:"study_task_candidate,omitempty"`
+	EvidenceRefs        []string                             `json:"evidence_refs,omitempty"`
+}
+
+type SchedulerCreateMicrotaskCandidateV0 struct {
+	CommandMeta orquestacoreworkflow.OrchestrationCommandMetaV0      `json:"command_meta"`
+	Payload     orquestacoreworkflow.CreateMicrotaskCommandPayloadV0 `json:"payload"`
 }
 
 type SchedulerCapacityCommandCandidateV0 struct {
@@ -156,14 +180,26 @@ type SchedulableReplanFollowupCandidateV0 struct {
 }
 
 type DirectorSchedulerTickPlanV0 struct {
-	TickRef        string                                        `json:"tick_ref"`
-	RunRef         string                                        `json:"run_ref"`
-	Status         DirectorSchedulerTickStatusV0                 `json:"status"`
-	Commands       []orquestacoreworkflow.OrchestrationCommandV0 `json:"commands,omitempty"`
-	WaitingReasons []SchedulerWaitingReasonV0                    `json:"waiting_reasons,omitempty"`
-	BlockedRefs    []string                                      `json:"blocked_refs,omitempty"`
-	Summary        string                                        `json:"summary"`
-	EvidenceRefs   []string                                      `json:"evidence_refs,omitempty"`
+	TickRef               string                                        `json:"tick_ref"`
+	RunRef                string                                        `json:"run_ref"`
+	Status                DirectorSchedulerTickStatusV0                 `json:"status"`
+	Commands              []orquestacoreworkflow.OrchestrationCommandV0 `json:"commands,omitempty"`
+	WaitingReasons        []SchedulerWaitingReasonV0                    `json:"waiting_reasons,omitempty"`
+	BlockedRefs           []string                                      `json:"blocked_refs,omitempty"`
+	WorkSequenceDecisions []SchedulerWorkSequenceDecisionV0             `json:"work_sequence_decisions,omitempty"`
+	Summary               string                                        `json:"summary"`
+	EvidenceRefs          []string                                      `json:"evidence_refs,omitempty"`
+}
+
+type SchedulerWorkSequenceDecisionV0 struct {
+	CandidateRef     string                        `json:"candidate_ref"`
+	Action           SchedulerWorkSequenceActionV0 `json:"action"`
+	SubjectClaimRefs []string                      `json:"subject_claim_refs,omitempty"`
+	LiveClaimRefs    []string                      `json:"live_claim_refs,omitempty"`
+	LiveAgentRefs    []string                      `json:"live_agent_refs,omitempty"`
+	ConflictRefs     []string                      `json:"conflict_refs,omitempty"`
+	Summary          string                        `json:"summary"`
+	EvidenceRefs     []string                      `json:"evidence_refs,omitempty"`
 }
 
 type DirectorSchedulerTickErrorV0 struct {

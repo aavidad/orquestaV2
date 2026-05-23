@@ -1,6 +1,25 @@
 # Tareas locales: orquesta-director-scheduler
 
 ```text
+ID: SCH-015
+Objetivo: Secuenciar antes que competir con trabajo vivo.
+Causa raiz: ante solapes reparables con agentes arrancados, el scheduler solo
+tenia gate block/espera generica o competia si el caller no separaba la ola.
+Tipo: contrato_scheduler
+Contrato afectado: BuildDirectorSchedulerTick v0 + SchedulableWorkCandidateV0
+Test rojo minimo: un solape con claim vivo produce `wait_live_work` sin
+RequestAgent; una dependencia viva produce `queue_after_live_work`; una politica
+explicita crea tarea de revision o estudio acotado; un candidate independiente
+sigue ejecutandose en el mismo tick.
+Write-set: scheduler_tick_live_work_*_v0.go, scheduler_tick_*_v0.go, tests,
+docs locales
+Validacion: go test -count=1 ./modulos/orquesta-director-scheduler
+Riesgo de acoplamiento: bajo; no toca adaptadores ni lee ACK, DB, runtime,
+proveedor, modelo, HOME u OAuth.
+Estado: completada
+```
+
+```text
 ID: SCH-014
 Objetivo: No bloquear replan causal con progress candidates ya parados.
 Causa raiz: tras una recuperacion no_ack/interrupted/capacity_limited, un

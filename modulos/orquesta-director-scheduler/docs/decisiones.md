@@ -1,6 +1,28 @@
 # Decisiones locales: orquesta-director-scheduler
 
 ```text
+Fecha: 2026-05-23
+Decision: Los solapes reparables con trabajo vivo se secuencian en el scheduler
+antes de evaluar RequestAgent.
+Motivo: la autoprogramacion no debe pedir decision manual en cada solape ni
+competir por el mismo alcance mientras hay un agente arrancado sobre claims
+compatibles. El scheduler ya recibe `work_claims` y lifecycle compacto; puede
+distinguir ejecutar ahora, esperar, colar despues, revisar o estudiar sin leer
+runtime ni adaptadores.
+Alternativas:
+  - Bloquear todo por gate: descartado porque frena candidates independientes.
+  - Lanzar y confiar en el runtime: descartado porque compite por write-set vivo.
+  - Preguntar siempre al director: descartado porque reintroduce operacion
+    manual y no aporta contexto nuevo.
+Impacto: `work_sequence_decisions` declara la accion por candidate. Un solape
+con agente vivo queda en `wait_live_work` por defecto; una dependencia sobre
+claim vivo queda en `queue_after_live_work`; candidates explicitos pueden crear
+microtareas de revision o estudio acotado. Trabajo independiente conserva
+`execute_now`.
+Estado: aceptada
+```
+
+```text
 Fecha: 2026-05-12
 Decision: Un progress candidate ya parado puede ceder el tick a replan explicito.
 Motivo: tras no_ack, interrupcion o capacity_limited, el tick debe conservar el

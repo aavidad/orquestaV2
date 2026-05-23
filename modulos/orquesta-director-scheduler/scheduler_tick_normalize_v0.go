@@ -80,6 +80,7 @@ func normalizeSchedulableWorkCandidateV0(candidate SchedulableWorkCandidateV0) S
 		Claims:            normalizeSchedulerWorkClaimsV0(candidate.Claims),
 		CapacityCandidate: normalizeSchedulerCapacityCandidateV0(candidate.CapacityCandidate),
 		AgentCandidate:    normalizeSchedulerAgentCandidateV0(candidate.AgentCandidate),
+		LiveWorkPolicy:    normalizeSchedulerLiveWorkPolicyV0(candidate.LiveWorkPolicy),
 		GateCommandMeta:   normalizeSchedulerCommandMetaV0(candidate.GateCommandMeta),
 		GateEvidenceRefs:  compactSchedulerStringsV0(candidate.GateEvidenceRefs),
 		EvidenceRefs:      compactSchedulerStringsV0(candidate.EvidenceRefs),

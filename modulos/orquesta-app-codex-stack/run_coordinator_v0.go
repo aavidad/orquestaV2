@@ -8,7 +8,6 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
-	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
 
 func (stack StackV0) RunGlobalTickV0(
@@ -61,11 +60,15 @@ func (drainer stackRunDrainerV0) DrainRunV0(
 	if err != nil {
 		return orquestaruncoordinator.RunDrainResultV0{}, err
 	}
+	queueStatus, err := drainer.stack.stackDrainQueueStatusForCoordinatorV0(ctx, result)
+	if err != nil {
+		return orquestaruncoordinator.RunDrainResultV0{}, err
+	}
 	return orquestaruncoordinator.RunDrainResultV0{
 		RunRef:       strings.TrimSpace(request.RunRef),
 		AppRef:       strings.TrimSpace(request.AppRef),
 		Outcome:      stackDrainOutcomeV0(result),
-		QueueStatus:  stackDrainQueueStatusV0(result),
+		QueueStatus:  queueStatus,
 		EvidenceRefs: stackDrainEvidenceRefsV0(result),
 	}, nil
 }
@@ -131,20 +134,6 @@ func stackDrainEvidenceRefsV0(
 		refs = append(refs, wait.EvidenceRefs...)
 	}
 	return compactCodexStackStringsV0(refs)
-}
-
-func stackDrainQueueStatusV0(
-	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
-) string {
-	run := result.Final.Run
-	if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
-		return orquestarunqueue.RunStatusClosedV0
-	}
-	if stackDrainRunHasAllTasksDeliveredOrClosedV0(run) &&
-		!drainRunHasPendingExternalAgentsV0(run, nil) {
-		return orquestarunqueue.RunStatusDeliveredV0
-	}
-	return ""
 }
 
 func stackDrainRunHasAllTasksDeliveredOrClosedV0(

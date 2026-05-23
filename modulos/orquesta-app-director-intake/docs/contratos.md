@@ -68,3 +68,30 @@ Invariantes:
 - las preguntas son contrato de entrada, no UI localizada;
 - al completar los datos reutiliza `SolicitarNuevaAppV0` y
   `PrepareAppDirectorIntakeV0`.
+
+## `BuildHumanDirectorReviewablePlanV0`
+
+Entrada: `HumanDirectorWorkIntakeRequestV0`.
+
+- `request_ref`, `project_ref`, `worktree_ref` y `branch_ref` son refs opacas;
+- `request` transporta objetivo humano, contexto, criterios, tests y reglas;
+- `limits` fija limites operativos sin elegir proveedor ni runtime;
+- `hints` permite areas, write-set tentativo, refs opacas, reparaciones seguras
+  y motivos de revision.
+
+Salida: `HumanDirectorReviewablePlanResultV0`.
+
+- `plan` queda `ready_for_review` cuando las refs obligatorias son validas;
+- `steps` distingue `execute_now`, `study_before`, `postpone_overlap` y
+  `request_review`;
+- los solapes no invalidan toda la entrada: el plan crea estudio previo y
+  pospone el alcance solapado;
+- el write-set amplio o ausente produce fase de estudio antes de preparar
+  trabajo de codigo.
+
+Invariantes:
+
+- no crea `WorkflowTaskV0`, no ejecuta agentes y no prepara trabajo de codigo;
+- no importa adaptadores, runtime, proveedor, HOME, DB, web ni MCP;
+- normaliza alias y globs seguros, pero pide revision ante rutas absolutas,
+  `..`, HOME o variables.

@@ -17,8 +17,12 @@ func hasOpaqueRefLeakV0(ref string) bool {
 	if strings.ContainsAny(ref, "/\\@$") || strings.Contains(ref, "..") {
 		return true
 	}
+	return hasOperatorSensitiveMarkerV0(lower)
+}
+
+func hasOperatorSensitiveMarkerV0(text string) bool {
 	for _, marker := range operatorForbiddenRefMarkersV0() {
-		if strings.Contains(lower, marker) {
+		if strings.Contains(text, marker) {
 			return true
 		}
 	}

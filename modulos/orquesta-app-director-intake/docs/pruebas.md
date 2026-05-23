@@ -27,6 +27,11 @@ Cobertura esperada:
 - el wizard de intake pide el siguiente campo con pregunta de director compacta;
 - un borrador completo crea `AppSpecV0` mediante factory y prepara el run del
   director;
+- una peticion humana amplia produce plan revisable del director antes de
+  preparar trabajo de codigo;
+- el plan distingue ejecutar ahora, estudiar antes, posponer solapes y pedir
+  revision;
+- refs `worktree_ref` y `branch_ref` se conservan como opacas;
 - no hay imports legacy ni bases hardcodeadas.
 
 Evidencia 2026-05-09:
@@ -51,3 +56,12 @@ Evidencia 2026-05-23:
 - `TestPrepareAppDirectorInputV0UsesNeutralSpecWithoutFactory`;
 - `TestAppDirectorInputSpecFromFactoryV0PreservesDirectorContext`;
 - `TestPrepareAppDirectorIntakeV0LegacyFactoryMatchesNeutralInput`.
+
+Evidencia 2026-05-23, intake humano:
+
+- `TestBuildHumanDirectorReviewablePlanV0ExecuteNowConRefsOpacas`;
+- `TestBuildHumanDirectorReviewablePlanV0EstudiaAntesSiWriteSetAmplio`;
+- `TestBuildHumanDirectorReviewablePlanV0NoRechazaTodoPorSolape`;
+- `TestBuildHumanDirectorReviewablePlanV0PideRevisionSinObjetivo`;
+- `TestBuildHumanDirectorReviewablePlanV0NormalizaAliasesYGlobsSeguros`;
+- `TestBuildHumanDirectorReviewablePlanV0PideRevisionPorWriteSetInseguro`.

@@ -9,10 +9,14 @@ Incluye:
 - agrupacion compacta de tareas por area con
   `GroupAutoprogrammingTasksByAreaV0`;
 - `AutoprogrammingReviewGateInputV0` y
-  `EvaluateAutoprogrammingReviewGateV0`;
+  `EvaluateAutoprogrammingReviewGateV0`, con decision explicita de aceptar,
+  conservar salida aprovechable y pedir follow-up;
 - `BuildAutoprogrammingProgrammableWorkV0` para transformar solicitudes
   validadas en `WorkProfileV0`/`WorkflowTaskV0` por grupo sin solapar
-  `write_set`;
+  `write_set` salvo solapes seguros secuenciados;
+- politica pura de particionado que normaliza aliases de area, declara
+  reparaciones de rutas ambiguas y pospone tareas cuando hay trabajos vivos
+  sobre el mismo `write_set`;
 - errores publicos tipados para issues de contrato.
 
 Fuera de alcance:

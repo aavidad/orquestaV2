@@ -21,6 +21,7 @@ Comandos:
   autoprogramacion supervisar --server-url URL --run-ref RUN_REF --max-ticks 1 --json
   autoprogramacion cola listar --server-url URL --limit 20 --json
   autoprogramacion run ver --server-url URL --run-ref RUN_REF --json
+  autoprogramacion run controlar --server-url URL --run-ref RUN_REF --action pause --json
   doctor contratos --server-url URL --scope proyecto --json
   contratos funcion listar --server-url URL --module MODULO --json
   contratos funcion ver --server-url URL --ref FUNCTION_CONTRACT_REF --json
@@ -41,6 +42,7 @@ Commands:
   autoprogramacion supervisar --server-url URL --run-ref RUN_REF --max-ticks 1 --json
   autoprogramacion cola listar --server-url URL --limit 20 --json
   autoprogramacion run ver --server-url URL --run-ref RUN_REF --json
+  autoprogramacion run controlar --server-url URL --run-ref RUN_REF --action pause --json
   doctor contratos --server-url URL --scope proyecto --json
   contratos funcion listar --server-url URL --module MODULE --json
   contratos funcion ver --server-url URL --ref FUNCTION_CONTRACT_REF --json
@@ -90,6 +92,8 @@ func dispatchOrquestaCLIV0(ctx context.Context, args []string, runner OrquestaCL
 		return runCLIAutoprogrammingQueueV0(ctx, args[3:])
 	case hasCLIPathV0(args, "autoprogramacion", "run", "ver"):
 		return runCLIAutoprogrammingRunV0(ctx, args[3:])
+	case hasCLIPathV0(args, "autoprogramacion", "run", "controlar"):
+		return runCLIAutoprogrammingRunControlV0(ctx, args[3:])
 	case hasCLIPathV0(args, "doctor", "contratos"):
 		return runCLIDoctorContratosV0(ctx, args[2:])
 	case hasCLIPathV0(args, "contratos", "funcion", "listar"):

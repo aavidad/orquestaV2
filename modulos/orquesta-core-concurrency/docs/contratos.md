@@ -84,7 +84,11 @@ Campos:
   - run_ref
   - ready_claim_refs
   - blocked_claim_refs
+  - hard_blocked_claim_refs opcional
   - conflict_refs
+  - repairable_conflict_refs opcional
+  - sequence_claim_refs opcional
+  - evidence_refs opcional
   - summary
 Invariantes:
   - No crea goroutines, locks, procesos ni scheduler real.
@@ -92,6 +96,11 @@ Invariantes:
   - `ready_claim_refs` contiene claims sin dependencias pendientes y sin conflictos declarados.
   - `blocked_claim_refs` combina bloqueos por dependencia y claims implicados en conflictos.
   - `conflict_refs` referencia conflictos detectados por read/write-set declarado.
+  - Un conflicto seguro de write/read-set no es fallo de claim: queda tambien
+    en `repairable_conflict_refs` y `sequence_claim_refs` para que el Director
+    pueda serializar o replanificar con evidencia compacta.
+  - Alcances inseguros o invalidos siguen en `hard_blocked_claim_refs` y no se
+    convierten en conflictos reparables.
 ```
 
 ## Contrato candidato: ConcurrencyGateEvaluationV0

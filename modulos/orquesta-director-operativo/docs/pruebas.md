@@ -21,6 +21,9 @@ Cobertura actual:
 - presupuestos se acotan y write-set se deduplica.
 - proyeccion a olas conserva contrato operativo y no expone launch cuando falta
   contexto.
+- politica general de reparacion conserva salidas aprovechables y decide
+  normalizar, pedir correccion, delegar revision, secuenciar o posponer antes de
+  rechazar.
 - pasos e items conservan `work_profile_kind`; el materializador lo proyecta a
   `WorkflowTaskV0`.
 - la proyeccion rechaza planes mutados fuera del builder con parent/child refs

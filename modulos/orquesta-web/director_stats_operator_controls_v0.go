@@ -44,6 +44,7 @@ func directorStatsSafeActionsV0(
 	if vm.Counts.AgentsInFlight > 0 || len(vm.Agents) > 0 {
 		out = append(out, directorStatsSafeActionV0("supervise", runRef, "agents_in_flight"))
 	}
+	out = append(out, directorStatsRunControlActionsV0(vm, runRef)...)
 	if vm.Closure.Blocked {
 		out = append(out, directorStatsSafeActionV0("review", runRef, strings.Join(vm.Closure.BlockedBy, ",")))
 	}
@@ -54,12 +55,43 @@ func directorStatsSafeActionsV0(
 	return out
 }
 
+func directorStatsRunControlActionsV0(
+	vm WebDirectorStatsViewModelV0,
+	runRef string,
+) []WebDirectorStatsSafeActionV0 {
+	switch strings.ToLower(trimDirectorStatsV0(vm.RunStatus)) {
+	case "running", "in_progress", "active":
+		return []WebDirectorStatsSafeActionV0{
+			directorStatsRunControlActionV0(WebRunControlActionPauseV0, runRef, "operator_pause"),
+			directorStatsRunControlActionV0(WebRunControlActionStopV0, runRef, "operator_stop"),
+		}
+	case "paused":
+		return []WebDirectorStatsSafeActionV0{
+			directorStatsRunControlActionV0(WebRunControlActionResumeV0, runRef, "operator_resume"),
+			directorStatsRunControlActionV0(WebRunControlActionStopV0, runRef, "operator_stop"),
+		}
+	default:
+		return nil
+	}
+}
+
 func directorStatsSafeActionV0(action string, runRef string, reason string) WebDirectorStatsSafeActionV0 {
 	return WebDirectorStatsSafeActionV0{
 		Action:       trimDirectorStatsV0(action),
 		RunRef:       trimDirectorStatsV0(runRef),
 		Method:       "POST",
 		Endpoint:     "/api/v0/autoprogramming/supervise",
+		Reason:       trimDirectorStatsV0(reason),
+		RequiresPost: true,
+	}
+}
+
+func directorStatsRunControlActionV0(action string, runRef string, reason string) WebDirectorStatsSafeActionV0 {
+	return WebDirectorStatsSafeActionV0{
+		Action:       trimDirectorStatsV0(action),
+		RunRef:       trimDirectorStatsV0(runRef),
+		Method:       "POST",
+		Endpoint:     WebRunControlPageEndpointV0,
 		Reason:       trimDirectorStatsV0(reason),
 		RequiresPost: true,
 	}

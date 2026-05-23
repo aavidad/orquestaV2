@@ -15,6 +15,8 @@ Campos obligatorios:
   explicito y no tenga que inferir semantica desde `task_ref`;
 - `write_set` relativo y compacto;
 - `required_tests`.
+- opcionalmente `area_aliases` para normalizar nombres seguros de area y
+  `live_works` para declarar trabajos vivos con refs opacas y `write_set`.
 
 Limites por defecto:
 
@@ -40,6 +42,24 @@ Entrada pura para decidir si una entrega de codigo puede aceptarse:
 El resultado devuelve `accepted` e issues publicos. Un adaptador externo decide
 como convertirlo en observaciones de review, rework o aceptacion.
 
+El resultado tambien expone:
+
+- `preserve_output`: la salida puede conservarse como evidencia reutilizable;
+- `requires_followup`: la entrega no se acepta, pero debe abrir revision o
+  tarea posterior dirigida;
+- `recommended_action`: `accept`, `request_followup_review`, `block_closure` o
+  `request_changes`.
+
+Si una entrega tiene ACK completado, tests obligatorios verdes y solo toca
+ficheros fuera del `write_set`, el gate devuelve `accepted=false`,
+`preserve_output=true`, `requires_followup=true` y
+`recommended_action=request_followup_review`. Asi un arreglo fuera de alcance no
+se acepta en silencio ni se descarta sin reparacion reusable.
+
+ACK ausente, ACK no completado, tests obligatorios ausentes o tests fallidos
+siguen bloqueando cierre con issues compactos y
+`recommended_action=block_closure`.
+
 ## BuildAutoprogrammingProgrammableWorkV0
 
 Funcion pura que valida `AutoprogrammingRequestV0` y construye trabajo
@@ -51,4 +71,9 @@ programable compatible con el nucleo:
   por tarea dentro de `WorkflowTaskV0`/`WorkProfileV0`;
 - usa refs opacas como `ContextRefs`, sin leer repositorios ni ejecutar nada;
 - para varios grupos, particiona `write_set` por area normalizada y rechaza
-  rutas ambiguas, sin area o solapadas.
+  rutas sin area;
+- si una ruta coincide con varias areas compatibles, devuelve
+  `partition.repairs` y secuencia las tareas con `depends_on`;
+- si un trabajo vivo activo solapa el `write_set`, mantiene la tarea generada
+  pero la marca como `postponed` mediante `depends_on` al ref vivo;
+- corta refs vivos imposibles y rutas inseguras en `live_works.write_set`.

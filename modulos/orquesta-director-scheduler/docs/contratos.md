@@ -107,6 +107,35 @@ Invariantes:
   - No contiene AppSpec, backlog, payloads completos, paths, provider, HOME ni runtime.
 ```
 
+## Politica de secuencia ante trabajo vivo
+
+```text
+Tipo: politica pura del scheduler
+Estado: candidato implementado
+Entrada:
+  - work_claims compartidos del tick
+  - started_agents/failed_agents/stopped_agents del snapshot
+  - work_candidates con `live_work_policy` opcional
+Salida:
+  - `work_sequence_decisions` por candidate evaluado
+  - action: `execute_now`, `wait_live_work`, `queue_after_live_work`,
+    `create_review_task` o `create_study_task`
+  - comandos `CreateMicrotask` solo si el candidate aporta explicitamente la
+    microtarea de revision o estudio
+Invariantes:
+  - Un claim con `agent_request_id` arrancado y no failed/stopped se considera
+    trabajo vivo.
+  - Si un candidate solapa por read/write-set con trabajo vivo, no emite
+    `RequestAgent` para competir por el mismo alcance.
+  - Si el candidate depende de un claim vivo, propone `queue_after_live_work`.
+  - Sin politica explicita, un solape reparable propone `wait_live_work`.
+  - Con politica explicita, puede crear tarea de revision o estudio acotado
+    desde `CreateMicrotask` candidates ya dados.
+  - Los candidates independientes siguen evaluandose y pueden producir comandos
+    en el mismo tick.
+  - No lee runtime, ACKs, filesystem, DB, proveedor, modelo, HOME ni OAuth.
+```
+
 ## `SchedulableReviewGateCandidateV0`
 
 ```text

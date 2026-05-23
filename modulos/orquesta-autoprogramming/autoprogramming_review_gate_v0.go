@@ -41,8 +41,11 @@ type AutoprogrammingReviewGateFileV0 struct {
 }
 
 type AutoprogrammingReviewGateResultV0 struct {
-	Accepted bool
-	Issues   []AutoprogrammingReviewGateIssueV0
+	Accepted          bool                                         `json:"accepted"`
+	PreserveOutput    bool                                         `json:"preserve_output"`
+	RequiresFollowup  bool                                         `json:"requires_followup"`
+	RecommendedAction AutoprogrammingReviewGateRecommendedActionV0 `json:"recommended_action"`
+	Issues            []AutoprogrammingReviewGateIssueV0           `json:"issues,omitempty"`
 }
 
 type AutoprogrammingReviewGateIssueV0 struct {
@@ -76,10 +79,7 @@ func EvaluateAutoprogrammingReviewGateV0(
 	issues = append(issues, autoprogrammingReviewGateFileIssuesV0(input.Files, autoprogrammingReviewGateMaxLinesV0(input))...)
 	issues = append(issues, autoprogrammingReviewGateWriteSetIssuesV0(input)...)
 
-	return AutoprogrammingReviewGateResultV0{
-		Accepted: len(issues) == 0,
-		Issues:   issues,
-	}
+	return autoprogrammingReviewGateResultV0(issues)
 }
 
 func autoprogrammingReviewGateACKV0(

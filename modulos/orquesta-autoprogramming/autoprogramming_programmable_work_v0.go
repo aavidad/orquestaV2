@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
-	"unicode"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 )
@@ -21,6 +20,7 @@ type AutoprogrammingProgrammableWorkV0 struct {
 	ProjectRef  string                                `json:"project_ref"`
 	WorktreeRef string                                `json:"worktree_ref"`
 	BranchRef   string                                `json:"branch_ref"`
+	Partition   AutoprogrammingPartitionPlanV0        `json:"partition,omitempty"`
 	Groups      []AutoprogrammingProgrammableGroupV0  `json:"groups"`
 	Profiles    []orquestacoreworkflow.WorkProfileV0  `json:"profiles"`
 	Tasks       []orquestacoreworkflow.WorkflowTaskV0 `json:"tasks"`
@@ -31,6 +31,8 @@ type AutoprogrammingProgrammableGroupV0 struct {
 	TaskRefs      []string                            `json:"task_refs"`
 	WriteSet      []string                            `json:"write_set"`
 	RequiredTests []string                            `json:"required_tests"`
+	DependsOn     []string                            `json:"depends_on,omitempty"`
+	BlockedBy     []string                            `json:"blocked_by,omitempty"`
 	Profile       orquestacoreworkflow.WorkProfileV0  `json:"profile"`
 	Task          orquestacoreworkflow.WorkflowTaskV0 `json:"task"`
 }
@@ -47,7 +49,8 @@ func BuildAutoprogrammingProgrammableWorkV0(
 		}
 	}
 
-	writeSetByArea, partitionIssues := autoprogrammingPartitionWriteSetByAreaV0(
+	partition, partitionIssues := autoprogrammingPartitionWriteSetByAreaV0(
+		request,
 		validation.WriteSet,
 		validation.Groups,
 	)
@@ -60,11 +63,13 @@ func BuildAutoprogrammingProgrammableWorkV0(
 	}
 
 	work := autoprogrammingProgrammableWorkSkeletonV0(request)
+	work.Partition = partition
 	for i, group := range validation.Groups {
 		profile, task, issue := autoprogrammingWorkflowTaskForGroupV0(
 			request,
 			group,
-			writeSetByArea[group.Area],
+			partition.WriteSetByArea[group.Area],
+			partition.DependsOnByArea[group.Area],
 			validation.RequiredTests,
 			i,
 		)
@@ -80,6 +85,8 @@ func BuildAutoprogrammingProgrammableWorkV0(
 			TaskRefs:      append([]string(nil), group.TaskRefs...),
 			WriteSet:      append([]string(nil), task.WriteSet...),
 			RequiredTests: append([]string(nil), task.RequiredTests...),
+			DependsOn:     append([]string(nil), task.DependsOn...),
+			BlockedBy:     append([]string(nil), partition.BlockedByArea[group.Area]...),
 			Profile:       profile,
 			Task:          task,
 		}
@@ -109,6 +116,7 @@ func autoprogrammingWorkflowTaskForGroupV0(
 	request AutoprogrammingRequestV0,
 	group AutoprogrammingTaskGroupV0,
 	writeSet []string,
+	dependsOn []string,
 	requiredTests []string,
 	groupIndex int,
 ) (orquestacoreworkflow.WorkProfileV0, orquestacoreworkflow.WorkflowTaskV0, AutoprogrammingRequestIssueV0) {
@@ -129,6 +137,7 @@ func autoprogrammingWorkflowTaskForGroupV0(
 			{FunctionName: "ValidateAutoprogrammingRequestV0"},
 			{FunctionName: "BuildAutoprogrammingProgrammableWorkV0"},
 		},
+		DependsOn: dependsOn,
 	})
 	if err != nil {
 		return orquestacoreworkflow.WorkProfileV0{}, orquestacoreworkflow.WorkflowTaskV0{},
@@ -147,109 +156,6 @@ func autoprogrammingWorkflowTaskForGroupV0(
 			autoprogrammingRequestIssueV0("workflow_task_invalid", "workflow_task", err.Error())
 	}
 	return profile, task, AutoprogrammingRequestIssueV0{}
-}
-
-func autoprogrammingPartitionWriteSetByAreaV0(
-	writeSet []string,
-	groups []AutoprogrammingTaskGroupV0,
-) (map[string][]string, []AutoprogrammingRequestIssueV0) {
-	out := map[string][]string{}
-	if len(groups) == 1 {
-		out[groups[0].Area] = append([]string(nil), writeSet...)
-		return out, nil
-	}
-
-	var issues []AutoprogrammingRequestIssueV0
-	seenPath := map[string]struct{}{}
-	for _, path := range writeSet {
-		matches := autoprogrammingWriteSetMatchingAreasV0(path, groups)
-		switch len(matches) {
-		case 0:
-			issues = append(issues, autoprogrammingRequestIssueV0(
-				"write_set_unassigned",
-				"write_set",
-				"ruta sin area unica: "+path,
-			))
-		case 1:
-			if _, ok := seenPath[path]; ok {
-				continue
-			}
-			seenPath[path] = struct{}{}
-			out[matches[0]] = append(out[matches[0]], path)
-		default:
-			issues = append(issues, autoprogrammingRequestIssueV0(
-				"write_set_overlap",
-				"write_set",
-				"ruta coincide con varias areas: "+path,
-			))
-		}
-	}
-	for _, group := range groups {
-		if len(out[group.Area]) == 0 {
-			issues = append(issues, autoprogrammingRequestIssueV0(
-				"write_set_group_empty",
-				"write_set",
-				"area sin write-set: "+group.Area,
-			))
-		}
-	}
-	if len(issues) > 0 {
-		return nil, issues
-	}
-	return out, nil
-}
-
-func autoprogrammingWriteSetMatchingAreasV0(
-	path string,
-	groups []AutoprogrammingTaskGroupV0,
-) []string {
-	normalizedPath := normalizeAutoprogrammingPathForMatchV0(path)
-	pathTokens := autoprogrammingNormalizedPathTokensV0(normalizedPath)
-	var matches []string
-	for _, group := range groups {
-		area := normalizeAutoprogrammingPathForMatchV0(group.Area)
-		if autoprogrammingPathTokensContainAreaV0(pathTokens, autoprogrammingNormalizedPathTokensV0(area)) {
-			matches = append(matches, group.Area)
-		}
-	}
-	return matches
-}
-
-func autoprogrammingNormalizedPathTokensV0(value string) []string {
-	return compactStringsV0(strings.Split(value, "-"))
-}
-
-func autoprogrammingPathTokensContainAreaV0(
-	pathTokens []string,
-	areaTokens []string,
-) bool {
-	if len(pathTokens) == 0 || len(areaTokens) == 0 || len(areaTokens) > len(pathTokens) {
-		return false
-	}
-	for start := 0; start <= len(pathTokens)-len(areaTokens); start++ {
-		matched := true
-		for offset := range areaTokens {
-			if pathTokens[start+offset] != areaTokens[offset] {
-				matched = false
-				break
-			}
-		}
-		if matched {
-			return true
-		}
-	}
-	return false
-}
-
-func normalizeAutoprogrammingPathForMatchV0(value string) string {
-	return strings.Trim(strings.Map(func(r rune) rune {
-		switch {
-		case unicode.IsLetter(r) || unicode.IsDigit(r):
-			return unicode.ToLower(r)
-		default:
-			return '-'
-		}
-	}, value), "-")
 }
 
 func autoprogrammingProgrammableTaskRefV0(requestRef string, groupIndex int) string {

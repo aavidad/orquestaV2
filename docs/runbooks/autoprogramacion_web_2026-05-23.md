@@ -71,6 +71,9 @@ Criterios de aceptacion manual:
   propietaria.
 - `run-control` y `run-queue` delegan mutaciones al contrato REST/MCP y no leen
   estado interno desde web.
+- `/director-stats` expone acciones seguras de operador con POST explicito:
+  supervision por `/api/v0/autoprogramming/supervise` y pausa/reanudacion/parada
+  por `/run-control`.
 - El contrato externo de dominio queda en adaptadores/composicion; la app
   propietaria conserva datos, reglas, validadores y ensamblado.
 

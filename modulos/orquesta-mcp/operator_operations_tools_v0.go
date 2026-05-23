@@ -26,11 +26,11 @@ func ExecuteMCPOperatorStatusToolV0(
 		return operatorValidationErrorMCPV0(operator.OperatorMCPStatusToolNameV0, issues)
 	}
 	if port == nil {
-		return operatorPortErrorMCPV0(operator.OperatorMCPStatusToolNameV0, "operator_mcp_port_unavailable")
+		return operatorPortErrorMCPV0(operator.OperatorMCPStatusToolNameV0, operator.ErrOperatorMCPPortUnavailableV0)
 	}
 	output, err := port.QueryOperatorStatusV0(input)
 	if err != nil {
-		return operatorPortErrorMCPV0(operator.OperatorMCPStatusToolNameV0, "operator_mcp_port_error")
+		return operatorPortErrorMCPV0(operator.OperatorMCPStatusToolNameV0, operatorMCPErrorCodeV0(err))
 	}
 	return MCPOperatorToolResultV0{Estado: MCPOperatorToolEstadoOKV0, Tool: operator.OperatorMCPStatusToolNameV0, Status: &output}
 }
@@ -43,11 +43,11 @@ func ExecuteMCPOperatorBurstToolV0(
 		return operatorValidationErrorMCPV0(operator.OperatorMCPBurstToolNameV0, issues)
 	}
 	if port == nil {
-		return operatorPortErrorMCPV0(operator.OperatorMCPBurstToolNameV0, "operator_mcp_port_unavailable")
+		return operatorPortErrorMCPV0(operator.OperatorMCPBurstToolNameV0, operator.ErrOperatorMCPPortUnavailableV0)
 	}
 	output, err := port.RequestOperatorSupervisedBurstV0(input)
 	if err != nil {
-		return operatorPortErrorMCPV0(operator.OperatorMCPBurstToolNameV0, "operator_mcp_port_error")
+		return operatorPortErrorMCPV0(operator.OperatorMCPBurstToolNameV0, operatorMCPErrorCodeV0(err))
 	}
 	return MCPOperatorToolResultV0{Estado: MCPOperatorToolEstadoOKV0, Tool: operator.OperatorMCPBurstToolNameV0, Burst: &output}
 }
@@ -60,11 +60,11 @@ func ExecuteMCPOperatorOutboxToolV0(
 		return operatorValidationErrorMCPV0(operator.OperatorMCPOutboxToolNameV0, issues)
 	}
 	if port == nil {
-		return operatorPortErrorMCPV0(operator.OperatorMCPOutboxToolNameV0, "operator_mcp_port_unavailable")
+		return operatorPortErrorMCPV0(operator.OperatorMCPOutboxToolNameV0, operator.ErrOperatorMCPPortUnavailableV0)
 	}
 	output, err := port.ListOperatorPendingOutboxV0(input)
 	if err != nil {
-		return operatorPortErrorMCPV0(operator.OperatorMCPOutboxToolNameV0, "operator_mcp_port_error")
+		return operatorPortErrorMCPV0(operator.OperatorMCPOutboxToolNameV0, operatorMCPErrorCodeV0(err))
 	}
 	return MCPOperatorToolResultV0{Estado: MCPOperatorToolEstadoOKV0, Tool: operator.OperatorMCPOutboxToolNameV0, Outbox: &output}
 }
@@ -77,11 +77,11 @@ func ExecuteMCPOperatorDirectedQueryToolV0(
 		return operatorValidationErrorMCPV0(operator.OperatorMCPDirectedQueryToolV0, issues)
 	}
 	if port == nil {
-		return operatorPortErrorMCPV0(operator.OperatorMCPDirectedQueryToolV0, "operator_mcp_port_unavailable")
+		return operatorPortErrorMCPV0(operator.OperatorMCPDirectedQueryToolV0, operator.ErrOperatorMCPPortUnavailableV0)
 	}
 	output, err := port.RaiseOperatorDirectedQueryV0(input)
 	if err != nil {
-		return operatorPortErrorMCPV0(operator.OperatorMCPDirectedQueryToolV0, "operator_mcp_port_error")
+		return operatorPortErrorMCPV0(operator.OperatorMCPDirectedQueryToolV0, operatorMCPErrorCodeV0(err))
 	}
 	return MCPOperatorToolResultV0{Estado: MCPOperatorToolEstadoOKV0, Tool: operator.OperatorMCPDirectedQueryToolV0, DirectedQuery: &output}
 }
@@ -92,4 +92,11 @@ func operatorValidationErrorMCPV0(tool string, issues []operator.OperatorMCPIssu
 
 func operatorPortErrorMCPV0(tool string, code string) MCPOperatorToolResultV0 {
 	return MCPOperatorToolResultV0{Estado: MCPOperatorToolEstadoErrorV0, Tool: tool, ErrorCode: code}
+}
+
+func operatorMCPErrorCodeV0(err error) string {
+	if code, ok := operator.PublicOperatorMCPErrorCodeV0(err); ok {
+		return code
+	}
+	return operator.ErrOperatorMCPPortErrorV0
 }

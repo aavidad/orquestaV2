@@ -7,6 +7,7 @@ type WebDirectorStatsViewModelV0 struct {
 	Locale          string                          `json:"locale,omitempty"`
 	RunRef          string                          `json:"run_ref,omitempty"`
 	Estado          string                          `json:"estado"`
+	RunStatus       string                          `json:"run_status,omitempty"`
 	FaseActual      string                          `json:"fase_actual,omitempty"`
 	Textos          WebDirectorStatsTextsV0         `json:"textos"`
 	Counts          WebDirectorStatsCountsV0        `json:"counts"`
@@ -137,6 +138,7 @@ func NewWebDirectorStatsPanelV0(
 		return vm
 	}
 	vm.RunRef = firstDirectorStatsNonEmptyV0(vm.RunRef, stats.RunRef)
+	vm.RunStatus = trimDirectorStatsV0(stats.Status)
 	vm.FaseActual = trimDirectorStatsV0(stats.CurrentPhase)
 	vm.Counts = directorStatsCountsV0(*stats)
 	vm.Progress = directorStatsProgressV0(stats.Progress)

@@ -17,6 +17,13 @@ Write-set del corte:
 
 - `app spec solicitar`
 - `app spec bootstrap`
+- `servidor estado`
+- `autoprogramacion preparar`
+- `autoprogramacion estado ver`
+- `autoprogramacion supervisar`
+- `autoprogramacion cola listar`
+- `autoprogramacion run ver`
+- `autoprogramacion run controlar`
 - `doctor contratos`
 - `contratos funcion listar`
 - `contratos funcion ver`
@@ -30,6 +37,13 @@ La CLI consume solo rutas publicas versionadas:
 
 - `POST /api/v0/apps/spec`
 - `POST /api/v0/director/bootstrap/appspec`
+- `GET /api/v0/server/status`
+- `POST /api/v0/autoprogramming/prepare-run`
+- `POST /api/v0/autoprogramming/status`
+- `POST /api/v0/autoprogramming/supervise`
+- `POST /api/v0/runs/queue/priority`
+- `POST /api/v0/director/stats`
+- `POST /api/v0/runs/control`
 - `POST /api/v0/operational-status/query`
 - `POST /api/v0/core/function-contracts/list`
 - `POST /api/v0/core/function-contracts/view`
@@ -47,6 +61,8 @@ refs equivalentes declaradas por contratos propietarios.
   contrato.
 - Las reglas de dominio permanecen en `orquesta-factory`, `orquesta-director`,
   `orquesta-observability`, `orquesta-core` y `orquesta-governance`.
+- `autoprogramacion run controlar` delega `pause|resume|stop|cancel` en
+  `orquesta.runs.control.v0`; no lee RunControl, runtime ni stores locales.
 - `registrar FunctionContractV0` conserva el bloqueo publico
   `registrar_function_contract_bloqueado`.
 

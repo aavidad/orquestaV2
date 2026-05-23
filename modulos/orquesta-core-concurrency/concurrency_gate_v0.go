@@ -16,16 +16,20 @@ const (
 )
 
 type ConcurrencyGateEvaluationV0 struct {
-	SchemaVersion    string                    `json:"schema_version"`
-	GateRef          string                    `json:"gate_ref"`
-	RunRef           string                    `json:"run_ref,omitempty"`
-	PlanRef          string                    `json:"plan_ref"`
-	SubjectClaimRefs []string                  `json:"subject_claim_refs"`
-	ReadyClaimRefs   []string                  `json:"ready_claim_refs,omitempty"`
-	BlockedClaimRefs []string                  `json:"blocked_claim_refs,omitempty"`
-	ConflictRefs     []string                  `json:"conflict_refs,omitempty"`
-	Decision         ConcurrencyGateDecisionV0 `json:"decision"`
-	Summary          string                    `json:"summary"`
+	SchemaVersion          string                    `json:"schema_version"`
+	GateRef                string                    `json:"gate_ref"`
+	RunRef                 string                    `json:"run_ref,omitempty"`
+	PlanRef                string                    `json:"plan_ref"`
+	SubjectClaimRefs       []string                  `json:"subject_claim_refs"`
+	ReadyClaimRefs         []string                  `json:"ready_claim_refs,omitempty"`
+	BlockedClaimRefs       []string                  `json:"blocked_claim_refs,omitempty"`
+	HardBlockedClaimRefs   []string                  `json:"hard_blocked_claim_refs,omitempty"`
+	ConflictRefs           []string                  `json:"conflict_refs,omitempty"`
+	RepairableConflictRefs []string                  `json:"repairable_conflict_refs,omitempty"`
+	SequenceClaimRefs      []string                  `json:"sequence_claim_refs,omitempty"`
+	EvidenceRefs           []string                  `json:"evidence_refs,omitempty"`
+	Decision               ConcurrencyGateDecisionV0 `json:"decision"`
+	Summary                string                    `json:"summary"`
 }
 
 func EvaluateConcurrencyGateV0(claims []WorksetClaimV0, subjectClaimRefs []string) ConcurrencyGateEvaluationV0 {
@@ -34,16 +38,20 @@ func EvaluateConcurrencyGateV0(claims []WorksetClaimV0, subjectClaimRefs []strin
 	decision := concurrencyGateDecisionV0(plan, subjects)
 
 	return ConcurrencyGateEvaluationV0{
-		SchemaVersion:    ConcurrencyGateSchemaVersionV0,
-		GateRef:          concurrencyGateRefV0(plan.PlanRef, subjects),
-		RunRef:           plan.RunRef,
-		PlanRef:          plan.PlanRef,
-		SubjectClaimRefs: subjects,
-		ReadyClaimRefs:   plan.ReadyClaimRefs,
-		BlockedClaimRefs: plan.BlockedClaimRefs,
-		ConflictRefs:     plan.ConflictRefs,
-		Decision:         decision,
-		Summary:          concurrencyGateSummaryV0(decision, subjects, plan),
+		SchemaVersion:          ConcurrencyGateSchemaVersionV0,
+		GateRef:                concurrencyGateRefV0(plan.PlanRef, subjects),
+		RunRef:                 plan.RunRef,
+		PlanRef:                plan.PlanRef,
+		SubjectClaimRefs:       subjects,
+		ReadyClaimRefs:         plan.ReadyClaimRefs,
+		BlockedClaimRefs:       plan.BlockedClaimRefs,
+		HardBlockedClaimRefs:   plan.HardBlockedClaimRefs,
+		ConflictRefs:           plan.ConflictRefs,
+		RepairableConflictRefs: plan.RepairableConflictRefs,
+		SequenceClaimRefs:      plan.SequenceClaimRefs,
+		EvidenceRefs:           plan.EvidenceRefs,
+		Decision:               decision,
+		Summary:                concurrencyGateSummaryV0(decision, subjects, plan),
 	}
 }
 
@@ -78,7 +86,9 @@ func concurrencyGateSummaryV0(decision ConcurrencyGateDecisionV0, subjects []str
 		" subjects=" + strconv.Itoa(len(subjects)) +
 		" ready=" + strconv.Itoa(len(plan.ReadyClaimRefs)) +
 		" blocked=" + strconv.Itoa(len(plan.BlockedClaimRefs)) +
-		" conflicts=" + strconv.Itoa(len(plan.ConflictRefs))
+		" conflicts=" + strconv.Itoa(len(plan.ConflictRefs)) +
+		" repairable_conflicts=" + strconv.Itoa(len(plan.RepairableConflictRefs)) +
+		" hard_blocked=" + strconv.Itoa(len(plan.HardBlockedClaimRefs))
 }
 
 func stringSetV0(values []string) map[string]bool {

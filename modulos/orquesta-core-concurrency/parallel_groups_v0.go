@@ -8,12 +8,16 @@ import (
 )
 
 type ParallelGroupPlanV0 struct {
-	PlanRef          string   `json:"plan_ref"`
-	RunRef           string   `json:"run_ref,omitempty"`
-	ReadyClaimRefs   []string `json:"ready_claim_refs,omitempty"`
-	BlockedClaimRefs []string `json:"blocked_claim_refs,omitempty"`
-	ConflictRefs     []string `json:"conflict_refs,omitempty"`
-	Summary          string   `json:"summary"`
+	PlanRef                string   `json:"plan_ref"`
+	RunRef                 string   `json:"run_ref,omitempty"`
+	ReadyClaimRefs         []string `json:"ready_claim_refs,omitempty"`
+	BlockedClaimRefs       []string `json:"blocked_claim_refs,omitempty"`
+	HardBlockedClaimRefs   []string `json:"hard_blocked_claim_refs,omitempty"`
+	ConflictRefs           []string `json:"conflict_refs,omitempty"`
+	RepairableConflictRefs []string `json:"repairable_conflict_refs,omitempty"`
+	SequenceClaimRefs      []string `json:"sequence_claim_refs,omitempty"`
+	EvidenceRefs           []string `json:"evidence_refs,omitempty"`
+	Summary                string   `json:"summary"`
 }
 
 func EvaluateParallelGroupsV0(claims []WorksetClaimV0) ParallelGroupPlanV0 {
@@ -22,6 +26,7 @@ func EvaluateParallelGroupsV0(claims []WorksetClaimV0) ParallelGroupPlanV0 {
 	conflicts := DetectWorksetConflictsV0(normalized)
 
 	conflictRefs := parallelGroupConflictRefsV0(conflicts)
+	repairableConflictRefs := parallelGroupRepairableConflictRefsV0(conflicts)
 	invalidClaimRefs := parallelGroupInvalidClaimRefsV0(claims)
 	conflictClaimRefs := parallelGroupConflictClaimRefsV0(conflicts)
 	blockedCandidates := append([]string{}, dependencies.BlockedClaimRefs...)
@@ -30,14 +35,19 @@ func EvaluateParallelGroupsV0(claims []WorksetClaimV0) ParallelGroupPlanV0 {
 	blocked := sortedUniqueStringsV0(blockedCandidates)
 	ready := parallelGroupReadyClaimRefsV0(dependencies.ReadyClaimRefs, blocked)
 	runRef := parallelGroupRunRefV0(normalized)
+	evidenceRefs := parallelGroupEvidenceRefsV0(conflicts, dependencies.Issues, claims)
 
 	return ParallelGroupPlanV0{
-		PlanRef:          parallelGroupPlanRefV0(runRef, normalized),
-		RunRef:           runRef,
-		ReadyClaimRefs:   ready,
-		BlockedClaimRefs: blocked,
-		ConflictRefs:     conflictRefs,
-		Summary:          parallelGroupSummaryV0(ready, blocked, conflictRefs, dependencies.Issues),
+		PlanRef:                parallelGroupPlanRefV0(runRef, normalized),
+		RunRef:                 runRef,
+		ReadyClaimRefs:         ready,
+		BlockedClaimRefs:       blocked,
+		HardBlockedClaimRefs:   invalidClaimRefs,
+		ConflictRefs:           conflictRefs,
+		RepairableConflictRefs: repairableConflictRefs,
+		SequenceClaimRefs:      parallelGroupSequenceClaimRefsV0(conflicts),
+		EvidenceRefs:           evidenceRefs,
+		Summary:                parallelGroupSummaryV0(ready, blocked, conflictRefs, repairableConflictRefs, invalidClaimRefs, dependencies.Issues),
 	}
 }
 
@@ -75,10 +85,30 @@ func parallelGroupConflictRefsV0(conflicts []WorksetConflictV0) []string {
 	return sortedUniqueStringsV0(refs)
 }
 
+func parallelGroupRepairableConflictRefsV0(conflicts []WorksetConflictV0) []string {
+	refs := make([]string, 0, len(conflicts))
+	for _, conflict := range conflicts {
+		if conflict.RecommendedAction != WorksetConflictRecommendedActionRejectClaimV0 {
+			refs = append(refs, conflict.ConflictRef)
+		}
+	}
+	return sortedUniqueStringsV0(refs)
+}
+
 func parallelGroupConflictClaimRefsV0(conflicts []WorksetConflictV0) []string {
 	refs := make([]string, 0)
 	for _, conflict := range conflicts {
 		refs = append(refs, conflict.ClaimRefs...)
+	}
+	return sortedUniqueStringsV0(refs)
+}
+
+func parallelGroupSequenceClaimRefsV0(conflicts []WorksetConflictV0) []string {
+	refs := make([]string, 0)
+	for _, conflict := range conflicts {
+		if conflict.RecommendedAction == WorksetConflictRecommendedActionSerializeV0 {
+			refs = append(refs, conflict.ClaimRefs...)
+		}
 	}
 	return sortedUniqueStringsV0(refs)
 }
@@ -111,9 +141,28 @@ func shortConcurrencyDigestV0(value string) string {
 	return hex.EncodeToString(sum[:])[:24]
 }
 
-func parallelGroupSummaryV0(ready []string, blocked []string, conflicts []string, issues []WorksetDependencyIssueV0) string {
+func parallelGroupEvidenceRefsV0(conflicts []WorksetConflictV0, issues []WorksetDependencyIssueV0, claims []WorksetClaimV0) []string {
+	refs := make([]string, 0)
+	for _, conflict := range conflicts {
+		refs = append(refs, conflict.EvidenceRefs...)
+	}
+	for _, issue := range issues {
+		refs = append(refs, issue.EvidenceRefs...)
+	}
+	for _, claim := range claims {
+		_, claimIssues := NormalizeWorksetClaimV0(claim)
+		if len(claimIssues) > 0 {
+			refs = append(refs, claim.EvidenceRefs...)
+		}
+	}
+	return normalizeOpaqueRefsV0(refs)
+}
+
+func parallelGroupSummaryV0(ready []string, blocked []string, conflicts []string, repairable []string, hardBlocked []string, issues []WorksetDependencyIssueV0) string {
 	return "parallel_group_plan ready=" + strconv.Itoa(len(ready)) +
 		" blocked=" + strconv.Itoa(len(blocked)) +
 		" conflicts=" + strconv.Itoa(len(conflicts)) +
+		" repairable_conflicts=" + strconv.Itoa(len(repairable)) +
+		" hard_blocked=" + strconv.Itoa(len(hardBlocked)) +
 		" dependency_issues=" + strconv.Itoa(len(issues))
 }

@@ -146,7 +146,7 @@ func TestBuildAutoprogrammingProgrammableWorkV0RejectsUnpartitionableWriteSet(t 
 	}, "write_set_unassigned")
 }
 
-func TestBuildAutoprogrammingProgrammableWorkV0RejectsWriteSetOverlap(t *testing.T) {
+func TestBuildAutoprogrammingProgrammableWorkV0SequencesRepairableWriteSetOverlap(t *testing.T) {
 	result := BuildAutoprogrammingProgrammableWorkV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
 		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{
 			{TaskRef: "task-ref-api", Area: "API"},
@@ -155,12 +155,16 @@ func TestBuildAutoprogrammingProgrammableWorkV0RejectsWriteSetOverlap(t *testing
 		request.WriteSet = []string{"modulos/orquesta-autoprogramming/api_client_handler.go"}
 	}))
 
-	if result.Accepted {
-		t.Fatalf("accepted=true")
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
 	}
-	assertAutoprogrammingRequestIssueV0(t, AutoprogrammingRequestValidationResultV0{
-		Issues: result.Issues,
-	}, "write_set_overlap")
+	if len(result.Work.Partition.Repairs) != 1 ||
+		result.Work.Partition.Repairs[0].Code != "write_set_overlap_sequenced" {
+		t.Fatalf("repairs=%+v", result.Work.Partition.Repairs)
+	}
+	if len(result.Work.Groups) != 2 || len(result.Work.Groups[1].Task.DependsOn) != 1 {
+		t.Fatalf("groups=%+v", result.Work.Groups)
+	}
 }
 
 func TestBuildAutoprogrammingProgrammableWorkV0NoConfundeAreaComoSubcadena(t *testing.T) {

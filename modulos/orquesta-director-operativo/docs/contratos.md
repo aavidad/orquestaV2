@@ -29,6 +29,13 @@ implementacion, trabajo de dominio, pruebas requeridas o revision. Ese dato no
 elige proveedor; solo permite que el scheduler resuelva rol/capacidad por
 contrato.
 
+El plan transporta una politica general de reparacion: conservar trabajo
+aprovechable y decidir `normalize`, `request_correction`, `delegate_review`,
+`sequence_followup` o `postpone` antes de rechazar. El rechazo fuerte queda
+reservado para seguridad, causalidad rota, refs imposibles o efectos externos no
+autorizados. Esta regla es neutral para todo Orquesta y no depende de Codex,
+OPES ni otro conector de producto.
+
 La version actual conserva el contrato de cohorte en dos niveles: las olas del
 plan (`OperationalDirectorWaveWorkV0`) y la metadata neutral que el
 materializador proyecta a `WorkflowTaskV0` (`wave_ref`, `cohort_ref`,
@@ -72,6 +79,15 @@ La proyeccion:
 
 Si las dependencias del plan no son resolubles, devuelve issues y no inventa una
 ola ejecutable.
+
+## Politica de reparacion
+
+`DecideOperationalDirectorRepairPolicyV0` clasifica salidas razonables o
+ambiguas sin ejecutar runtime: normaliza alias/refs derivables, pide correccion
+dirigida cuando falta evidencia, delega revision si la ambiguedad requiere otro
+juicio, secuencia un paso posterior o pospone hasta tener contexto suficiente.
+Solo devuelve `hard_reject` ante seguridad, causalidad rota, refs imposibles o
+efecto externo no autorizado.
 
 ## Delegacion Recursiva Gobernada
 

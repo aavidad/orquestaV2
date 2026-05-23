@@ -31,7 +31,13 @@ func TestEvaluateParallelGroupsV0CombinaDependenciasYConflictos(t *testing.T) {
 	if !reflect.DeepEqual(plan.ConflictRefs, []string{"conflict:write_write:claim:a+claim:b:docs"}) {
 		t.Fatalf("conflict_refs=%v", plan.ConflictRefs)
 	}
-	if plan.Summary != "parallel_group_plan ready=1 blocked=3 conflicts=1 dependency_issues=0" {
+	if !reflect.DeepEqual(plan.RepairableConflictRefs, []string{"conflict:write_write:claim:a+claim:b:docs"}) {
+		t.Fatalf("repairable_conflict_refs=%v", plan.RepairableConflictRefs)
+	}
+	if !reflect.DeepEqual(plan.SequenceClaimRefs, []string{"claim:a", "claim:b"}) {
+		t.Fatalf("sequence_claim_refs=%v", plan.SequenceClaimRefs)
+	}
+	if plan.Summary != "parallel_group_plan ready=1 blocked=3 conflicts=1 repairable_conflicts=1 hard_blocked=0 dependency_issues=0" {
 		t.Fatalf("summary=%q", plan.Summary)
 	}
 }
@@ -98,6 +104,39 @@ func TestEvaluateParallelGroupsV0NoDeclaraReadyClaimsConWriteSetInvalido(t *test
 	}
 	if len(plan.ConflictRefs) != 0 {
 		t.Fatalf("conflict_refs=%v", plan.ConflictRefs)
+	}
+	if !reflect.DeepEqual(plan.HardBlockedClaimRefs, []string{
+		"claim:db",
+		"claim:home",
+		"claim:modelo",
+		"claim:oauth",
+		"claim:provider",
+		"claim:runtime",
+		"claim:secretos",
+	}) {
+		t.Fatalf("hard_blocked=%v", plan.HardBlockedClaimRefs)
+	}
+	if len(plan.RepairableConflictRefs) != 0 || len(plan.SequenceClaimRefs) != 0 {
+		t.Fatalf("repairable=%v sequence=%v", plan.RepairableConflictRefs, plan.SequenceClaimRefs)
+	}
+}
+
+func TestEvaluateParallelGroupsV0ConservaEvidenciaCompactaParaConflictoReparable(t *testing.T) {
+	first := parallelGroupClaimV0("claim:a", nil, []string{"docs/tareas.md"})
+	first.EvidenceRefs = []string{" evidence:claim-a ", "evidence:shared"}
+	second := parallelGroupClaimV0("claim:b", nil, []string{"docs"})
+	second.EvidenceRefs = []string{"evidence:claim-b", "evidence:shared"}
+
+	plan := EvaluateParallelGroupsV0([]WorksetClaimV0{first, second})
+
+	if !reflect.DeepEqual(plan.RepairableConflictRefs, []string{"conflict:write_write:claim:a+claim:b:docs"}) {
+		t.Fatalf("repairable=%v", plan.RepairableConflictRefs)
+	}
+	if !reflect.DeepEqual(plan.SequenceClaimRefs, []string{"claim:a", "claim:b"}) {
+		t.Fatalf("sequence=%v", plan.SequenceClaimRefs)
+	}
+	if !reflect.DeepEqual(plan.EvidenceRefs, []string{"evidence:claim-a", "evidence:claim-b", "evidence:shared"}) {
+		t.Fatalf("evidence=%v", plan.EvidenceRefs)
 	}
 }
 

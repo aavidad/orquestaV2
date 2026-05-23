@@ -27,3 +27,18 @@ hablen de `write_set` y `required_tests`.
 
 Motivo: la ejecucion real pertenece a conectores. Asi evitamos hardcodear DB,
 runtime, VCS, proveedor, HOME o modelos.
+
+## 2026-05-23: entrega util fuera de alcance crea follow-up
+
+Decision: el review gate distingue rechazo bloqueante de entrega aprovechable
+fuera del `write_set`.
+
+Motivo: si un agente sale del alcance para desbloquear una prueba, Orquesta no
+debe aceptarlo como normal ni tirar la evidencia. El contrato marca
+`preserve_output=true`, `requires_followup=true` y
+`recommended_action=request_followup_review` solo cuando ACK y tests requeridos
+estan verdes y el problema es el alcance.
+
+Consecuencia: ACK ausente o tests fallidos siguen bloqueando cierre con
+`recommended_action=block_closure`; el follow-up queda como reparacion dirigida
+para revision o tarea posterior.

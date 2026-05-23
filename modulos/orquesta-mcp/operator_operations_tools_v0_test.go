@@ -2,6 +2,7 @@ package orquestamcp
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -71,6 +72,20 @@ func TestExecuteMCPOperatorOutboxToolV0ListaPendientesPorPuerto(t *testing.T) {
 	assertOperatorPayloadSaneadoMCPTestV0(t, result)
 }
 
+func TestExecuteMCPOperatorToolV0PreservaErrorPublicoDeConector(t *testing.T) {
+	result := ExecuteMCPOperatorBurstToolV0(fakeOperatorErrorPortMCPTestV0{}, validOperatorBurstInputMCPTestV0())
+	if result.Estado != MCPOperatorToolEstadoErrorV0 ||
+		result.ErrorCode != operator.ErrOperatorMCPConnectorUnavailableV0 {
+		t.Fatalf("error publico esperado: %+v", result)
+	}
+
+	result = ExecuteMCPOperatorBurstToolV0(fakeOperatorGenericErrorPortMCPTestV0{}, validOperatorBurstInputMCPTestV0())
+	if result.Estado != MCPOperatorToolEstadoErrorV0 ||
+		result.ErrorCode != operator.ErrOperatorMCPPortErrorV0 {
+		t.Fatalf("error generico esperado: %+v", result)
+	}
+}
+
 type fakeOperatorBurstPortMCPTestV0 struct{ called int }
 
 func (f *fakeOperatorBurstPortMCPTestV0) RequestOperatorSupervisedBurstV0(
@@ -78,6 +93,23 @@ func (f *fakeOperatorBurstPortMCPTestV0) RequestOperatorSupervisedBurstV0(
 ) (operator.OperatorMCPBurstResultV0, error) {
 	f.called++
 	return operator.OperatorMCPBurstResultV0{BurstRef: "burst-ref-1", ExecutedSteps: 2, TraceRefs: []string{"trace-ref-1"}}, nil
+}
+
+type fakeOperatorErrorPortMCPTestV0 struct{}
+
+func (fakeOperatorErrorPortMCPTestV0) RequestOperatorSupervisedBurstV0(
+	operator.OperatorSupervisedBurstRequestV0,
+) (operator.OperatorMCPBurstResultV0, error) {
+	return operator.OperatorMCPBurstResultV0{},
+		operator.NewOperatorMCPPublicErrorV0(operator.ErrOperatorMCPConnectorUnavailableV0)
+}
+
+type fakeOperatorGenericErrorPortMCPTestV0 struct{}
+
+func (fakeOperatorGenericErrorPortMCPTestV0) RequestOperatorSupervisedBurstV0(
+	operator.OperatorSupervisedBurstRequestV0,
+) (operator.OperatorMCPBurstResultV0, error) {
+	return operator.OperatorMCPBurstResultV0{}, errors.New("local adapter failed")
 }
 
 type fakeOperatorOutboxPortMCPTestV0 struct{}

@@ -7,6 +7,7 @@ type schedulerTickCollectorV0 struct {
 	commands                  []orquestacoreworkflow.OrchestrationCommandV0
 	waitingReasons            []SchedulerWaitingReasonV0
 	blockedRefs               []string
+	workSequenceDecisions     []SchedulerWorkSequenceDecisionV0
 	needsDirector             bool
 	blocked                   bool
 	hasReadyCommands          bool
@@ -86,18 +87,18 @@ func (collector *schedulerTickCollectorV0) planV0() DirectorSchedulerTickPlanV0 
 	waiting := compactSchedulerWaitingReasonsV0(collector.waitingReasons)
 	blockedRefs := compactSchedulerStringsV0(collector.blockedRefs)
 	if len(collector.commands) > 0 {
-		return collector.commandsPlanV0(blockedRefs)
+		return collector.withSequenceDecisionsV0(collector.commandsPlanV0(blockedRefs))
 	}
 	if collector.blocked {
-		return schedulerBlockedPlanV0(collector.input, blockedRefs, nil)
+		return collector.withSequenceDecisionsV0(schedulerBlockedPlanV0(collector.input, blockedRefs, nil))
 	}
 	if collector.needsDirector {
-		return schedulerNeedsDirectorReasonsPlanV0(collector.input, waiting)
+		return collector.withSequenceDecisionsV0(schedulerNeedsDirectorReasonsPlanV0(collector.input, waiting))
 	}
 	if len(waiting) > 0 {
-		return schedulerWaitingReasonsPlanV0(collector.input, waiting)
+		return collector.withSequenceDecisionsV0(schedulerWaitingReasonsPlanV0(collector.input, waiting))
 	}
-	return schedulerQuiescentPlanV0(collector.input)
+	return collector.withSequenceDecisionsV0(schedulerQuiescentPlanV0(collector.input))
 }
 
 func (collector *schedulerTickCollectorV0) commandsPlanV0(blockedRefs []string) DirectorSchedulerTickPlanV0 {
@@ -146,4 +147,17 @@ func (collector *schedulerTickCollectorV0) addNeedsDirectorV0(reason SchedulerWa
 func (collector *schedulerTickCollectorV0) addBlockedRefsV0(refs []string) {
 	collector.blocked = true
 	collector.blockedRefs = append(collector.blockedRefs, refs...)
+}
+
+func (collector *schedulerTickCollectorV0) addWorkSequenceDecisionV0(
+	decision SchedulerWorkSequenceDecisionV0,
+) {
+	collector.workSequenceDecisions = append(collector.workSequenceDecisions, decision)
+}
+
+func (collector *schedulerTickCollectorV0) withSequenceDecisionsV0(
+	plan DirectorSchedulerTickPlanV0,
+) DirectorSchedulerTickPlanV0 {
+	plan.WorkSequenceDecisions = compactSchedulerWorkSequenceDecisionsV0(collector.workSequenceDecisions)
+	return plan
 }

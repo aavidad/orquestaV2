@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
@@ -122,6 +123,14 @@ func (check serverStartupCheckV0) startupQueueStatusFromRunStoreV0(
 	}
 	if startupRunHasAllTasksDeliveredOrClosedV0(run) &&
 		orquestacionnucleoapp.BuildDirectorRunStatsV0(run).Counts.AgentsInFlight == 0 {
+		hold, err := orquestaappcodexstack.RunHasOpenOperationalDirectorTasksV0(
+			ctx,
+			check.Stack.Stores.TaskStore,
+			run,
+		)
+		if err != nil || hold {
+			return "", false, err
+		}
 		return orquestarunqueue.RunStatusDeliveredV0, true, nil
 	}
 	return "", false, nil

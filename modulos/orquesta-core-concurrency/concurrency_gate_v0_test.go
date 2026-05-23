@@ -26,12 +26,12 @@ func TestEvaluateConcurrencyGateV0PermiteSoloClaimReady(t *testing.T) {
 	if !reflect.DeepEqual(evaluation.BlockedClaimRefs, []string{"claim:blocked"}) {
 		t.Fatalf("blocked=%v", evaluation.BlockedClaimRefs)
 	}
-	if evaluation.Summary != "concurrency_gate decision=allow_request_agent subjects=1 ready=1 blocked=1 conflicts=0" {
+	if evaluation.Summary != "concurrency_gate decision=allow_request_agent subjects=1 ready=1 blocked=1 conflicts=0 repairable_conflicts=0 hard_blocked=0" {
 		t.Fatalf("summary=%q", evaluation.Summary)
 	}
 }
 
-func TestEvaluateConcurrencyGateV0BloqueaClaimEnConflicto(t *testing.T) {
+func TestEvaluateConcurrencyGateV0BloqueaClaimEnConflictoReparableConSecuencia(t *testing.T) {
 	evaluation := EvaluateConcurrencyGateV0([]WorksetClaimV0{
 		parallelGroupClaimV0("claim:a", nil, []string{"docs/tareas.md"}),
 		parallelGroupClaimV0("claim:b", nil, []string{"docs"}),
@@ -49,6 +49,29 @@ func TestEvaluateConcurrencyGateV0BloqueaClaimEnConflicto(t *testing.T) {
 	}
 	if !reflect.DeepEqual(evaluation.ConflictRefs, []string{"conflict:write_write:claim:a+claim:b:docs"}) {
 		t.Fatalf("conflicts=%v", evaluation.ConflictRefs)
+	}
+	if !reflect.DeepEqual(evaluation.RepairableConflictRefs, []string{"conflict:write_write:claim:a+claim:b:docs"}) {
+		t.Fatalf("repairable=%v", evaluation.RepairableConflictRefs)
+	}
+	if !reflect.DeepEqual(evaluation.SequenceClaimRefs, []string{"claim:a", "claim:b"}) {
+		t.Fatalf("sequence=%v", evaluation.SequenceClaimRefs)
+	}
+}
+
+func TestEvaluateConcurrencyGateV0BloqueaDuroScopeInseguroSinRepararlo(t *testing.T) {
+	evaluation := EvaluateConcurrencyGateV0([]WorksetClaimV0{
+		parallelGroupRawClaimV0("claim:unsafe", nil, []string{"runtime/process"}),
+		parallelGroupClaimV0("claim:safe", nil, []string{"modulos/safe/a.go"}),
+	}, []string{"claim:unsafe"})
+
+	if evaluation.Decision != ConcurrencyGateDecisionBlockRequestAgentV0 {
+		t.Fatalf("decision=%q", evaluation.Decision)
+	}
+	if !reflect.DeepEqual(evaluation.HardBlockedClaimRefs, []string{"claim:unsafe"}) {
+		t.Fatalf("hard_blocked=%v", evaluation.HardBlockedClaimRefs)
+	}
+	if len(evaluation.RepairableConflictRefs) != 0 || len(evaluation.SequenceClaimRefs) != 0 {
+		t.Fatalf("repairable=%v sequence=%v", evaluation.RepairableConflictRefs, evaluation.SequenceClaimRefs)
 	}
 }
 

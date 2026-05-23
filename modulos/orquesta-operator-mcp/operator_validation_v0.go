@@ -59,6 +59,8 @@ func ValidateOperatorDirectedQueryV0(input OperatorDirectedQueryV0) []OperatorMC
 	issues = appendOpaqueRefIssueV0(issues, "query_connector_ref", input.QueryConnectorRef)
 	if strings.TrimSpace(input.Question) == "" || len([]rune(input.Question)) > OperatorMCPMaxQuestionRunesV0 {
 		issues = append(issues, OperatorMCPIssueV0{Code: ErrOperatorMCPQuestionInvalidV0, Field: "question"})
+	} else if hasOperatorSensitiveMarkerV0(strings.ToLower(input.Question)) {
+		issues = append(issues, OperatorMCPIssueV0{Code: ErrOperatorMCPQuestionInvalidV0, Field: "question"})
 	}
 	for _, ref := range input.EvidenceRefs {
 		issues = appendOpaqueRefIssueV0(issues, "evidence_refs", ref)

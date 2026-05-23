@@ -41,6 +41,14 @@ Estado: pasa en CCY-005
 ```
 
 ```text
+Caso: conflict_reparable_no_destructivo
+Tipo: unit | contract
+Comando: go test -count=1 ./modulos/orquesta-core-concurrency
+Evidencia esperada: un solape seguro de write/read-set bloquea el lanzamiento paralelo pero queda como `repairable_conflict_refs` + `sequence_claim_refs`, conservando evidence_refs compactas; un scope inseguro queda como `hard_blocked_claim_refs` y no se marca reparable.
+Estado: pasa en tarea task-ref-global-policy-claims-001
+```
+
+```text
 Caso: concurrency_gate_evaluator_puro
 Tipo: unit | contract
 Comando: go test -count=1 ./modulos/orquesta-core-concurrency

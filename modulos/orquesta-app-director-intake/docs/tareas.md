@@ -76,3 +76,21 @@ Validacion:
 - `TestPrepareAppDirectorInputV0UsesNeutralSpecWithoutFactory`;
 - `TestAppDirectorInputSpecFromFactoryV0PreservesDirectorContext`;
 - `TestPrepareAppDirectorIntakeV0LegacyFactoryMatchesNeutralInput`.
+
+## APP-DIR-009
+
+Objetivo: convertir una peticion humana amplia en plan revisable del director
+antes de preparar trabajo de codigo.
+
+Estado: hecho; `BuildHumanDirectorReviewablePlanV0` crea un contrato neutral
+con refs opacas, objetivo, reglas, limites y pistas opcionales. La salida
+distingue ejecutar ahora, estudiar antes, posponer por solape y pedir revision.
+
+Validacion:
+
+- `TestBuildHumanDirectorReviewablePlanV0ExecuteNowConRefsOpacas`;
+- `TestBuildHumanDirectorReviewablePlanV0EstudiaAntesSiWriteSetAmplio`;
+- `TestBuildHumanDirectorReviewablePlanV0NoRechazaTodoPorSolape`;
+- `TestBuildHumanDirectorReviewablePlanV0PideRevisionSinObjetivo`;
+- `TestBuildHumanDirectorReviewablePlanV0NormalizaAliasesYGlobsSeguros`;
+- `TestBuildHumanDirectorReviewablePlanV0PideRevisionPorWriteSetInseguro`.

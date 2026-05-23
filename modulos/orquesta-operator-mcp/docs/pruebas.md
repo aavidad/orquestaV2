@@ -11,6 +11,8 @@
 - `OPMCP-CT-007`: `TransportPortV0` fake recibe el registro opt-in y un tool operativo se sirve solo mediante puerto fake.
 - `OPMCP-CT-008`: conector simulado cubre estado, burst, outbox y consulta dirigida con normalizacion de alias segura.
 - `OPMCP-CT-009`: transporte sin conector devuelve `operator_mcp_port_unavailable` y con conector agregado simulado delega correctamente.
+- `OPMCP-CT-010`: transporte propaga errores publicos del conector y cubre
+  estado, outbox y consulta dirigida mediante conector agregado simulado.
 
 ## Comando
 

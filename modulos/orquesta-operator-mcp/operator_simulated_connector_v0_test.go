@@ -13,7 +13,7 @@ func TestOperatorMCPSimulatedConnectorV0CubreEstadoBurstOutboxYConsulta(t *testi
 	status, err := connector.QueryOperatorStatusV0(OperatorStatusQueryV0{
 		RequestRef:         "req-1",
 		SubjectRef:         "run-1",
-		StatusConnectorRef: "state-connector-ref-simulated",
+		StatusConnectorRef: "operator-state-connector-ref-simulated",
 		IncludeSections:    []string{"estado", "bloqueos"},
 	})
 	if err != nil || status.Status != "simulated" || len(status.Sections) != 2 {
@@ -22,7 +22,7 @@ func TestOperatorMCPSimulatedConnectorV0CubreEstadoBurstOutboxYConsulta(t *testi
 	burst, err := connector.RequestOperatorSupervisedBurstV0(OperatorSupervisedBurstRequestV0{
 		RequestRef:        "req-1",
 		RunRef:            "run-1",
-		BurstConnectorRef: "burst-connector-ref-simulated",
+		BurstConnectorRef: "supervised-burst-connector-ref-simulated",
 		SupervisionRef:    "supervision-1",
 		MaxSteps:          4,
 	})
@@ -32,7 +32,7 @@ func TestOperatorMCPSimulatedConnectorV0CubreEstadoBurstOutboxYConsulta(t *testi
 	outbox, err := connector.ListOperatorPendingOutboxV0(OperatorPendingOutboxQueryV0{
 		RequestRef:         "req-1",
 		SubjectRef:         "run-1",
-		OutboxConnectorRef: "outbox-connector-ref-simulated",
+		OutboxConnectorRef: "pending-outbox-connector-ref-simulated",
 		Limit:              1,
 		IncludeKinds:       []string{"launch_runtime_agent"},
 	})
@@ -42,7 +42,7 @@ func TestOperatorMCPSimulatedConnectorV0CubreEstadoBurstOutboxYConsulta(t *testi
 	query, err := connector.RaiseOperatorDirectedQueryV0(OperatorDirectedQueryV0{
 		QueryRef:          "query-1",
 		TargetRef:         "director-1",
-		QueryConnectorRef: "consulta-connector-ref-simulated",
+		QueryConnectorRef: "directed-query-connector-ref-simulated",
 		Question:          "Que falta?",
 	})
 	if err != nil || !query.Accepted || query.AnswerRef == "" {
@@ -57,7 +57,7 @@ func TestOperatorMCPSimulatedConnectorV0RechazaConectorNoDeclarado(t *testing.T)
 		SubjectRef:         "run-1",
 		StatusConnectorRef: "status-connector-ref-externo",
 	})
-	if err == nil {
-		t.Fatalf("esperaba error por conector no declarado")
+	if code, ok := PublicOperatorMCPErrorCodeV0(err); !ok || code != ErrOperatorMCPConnectorUnavailableV0 {
+		t.Fatalf("esperaba error publico por conector no declarado: code=%s ok=%v err=%v", code, ok, err)
 	}
 }

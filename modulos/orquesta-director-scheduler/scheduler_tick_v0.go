@@ -71,7 +71,7 @@ func BuildDirectorSchedulerTickV0(input DirectorSchedulerTickInputV0) (DirectorS
 		return schedulerQuiescentPlanV0(normalized), nil
 	}
 	for _, candidate := range normalized.WorkCandidates {
-		if err := collector.collectCandidateV0(candidate); err != nil {
+		if err := collector.collectWorkCandidateWithLivePolicyV0(candidate); err != nil {
 			return DirectorSchedulerTickPlanV0{}, err
 		}
 	}

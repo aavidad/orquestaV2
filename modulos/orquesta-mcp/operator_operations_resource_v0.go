@@ -52,8 +52,9 @@ func NewMCPOperatorOperationsResourceV0() MCPOperatorOperationsResourceV0 {
 			operator.ErrOperatorMCPLimitInvalidV0,
 			operator.ErrOperatorMCPQuestionInvalidV0,
 			operator.ErrOperatorMCPSectionInvalidV0,
-			"operator_mcp_port_unavailable",
-			"operator_mcp_port_error",
+			operator.ErrOperatorMCPPortUnavailableV0,
+			operator.ErrOperatorMCPPortErrorV0,
+			operator.ErrOperatorMCPConnectorUnavailableV0,
 		},
 		Guardrails: []string{
 			"adaptador_fino_por_puerto_inyectado",

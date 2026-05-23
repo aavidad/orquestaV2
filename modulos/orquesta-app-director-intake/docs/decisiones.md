@@ -89,6 +89,21 @@ Estado: aceptada localmente.
 ```
 
 ```text
+Fecha: 2026-05-23
+Decision: La entrada humana amplia se transforma primero en plan revisable del
+director.
+Motivo: el formulario no debe exigir write-set perfecto ni rechazar toda la
+peticion cuando hay solapes reparables. El director necesita una frontera
+neutral para estudiar, dividir, posponer y pedir revision antes de preparar
+trabajo de codigo.
+Impacto: `BuildHumanDirectorReviewablePlanV0` conserva refs opacas, objetivo,
+reglas, limites y pistas; distingue `execute_now`, `study_before`,
+`postpone_overlap` y `request_review`; y no crea trabajo programable ni conoce
+adaptadores concretos.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-05-22
 Decision: El summary del director transporta contexto funcional compacto de
 `AppSpecV0`.

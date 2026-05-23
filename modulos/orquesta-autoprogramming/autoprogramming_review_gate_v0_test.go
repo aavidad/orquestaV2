@@ -24,6 +24,12 @@ func TestEvaluateAutoprogrammingReviewGateV0(t *testing.T) {
 		if !result.Accepted {
 			t.Fatalf("accepted=false issues=%+v", result.Issues)
 		}
+		if !result.PreserveOutput || result.RequiresFollowup {
+			t.Fatalf("preserve_output=%v requires_followup=%v", result.PreserveOutput, result.RequiresFollowup)
+		}
+		if result.RecommendedAction != AutoprogrammingReviewGateActionAcceptV0 {
+			t.Fatalf("recommended_action=%q", result.RecommendedAction)
+		}
 		if len(result.Issues) != 0 {
 			t.Fatalf("issues=%+v", result.Issues)
 		}
@@ -37,6 +43,7 @@ func TestEvaluateAutoprogrammingReviewGateV0(t *testing.T) {
 		if result.Accepted {
 			t.Fatalf("accepted=true")
 		}
+		assertAutoprogrammingReviewGateBlockingV0(t, result)
 		assertAutoprogrammingReviewGateIssueV0(t, result, "ack_missing")
 	})
 
@@ -48,6 +55,7 @@ func TestEvaluateAutoprogrammingReviewGateV0(t *testing.T) {
 		if result.Accepted {
 			t.Fatalf("accepted=true")
 		}
+		assertAutoprogrammingReviewGateBlockingV0(t, result)
 		assertAutoprogrammingReviewGateIssueV0(t, result, "required_test_failed")
 		assertAutoprogrammingReviewGateIssueV0(t, result, "test_failed")
 	})
@@ -60,6 +68,7 @@ func TestEvaluateAutoprogrammingReviewGateV0(t *testing.T) {
 		if result.Accepted {
 			t.Fatalf("accepted=true")
 		}
+		assertAutoprogrammingReviewGateBlockingV0(t, result)
 		assertAutoprogrammingReviewGateIssueV0(t, result, "required_test_missing")
 	})
 
@@ -71,6 +80,12 @@ func TestEvaluateAutoprogrammingReviewGateV0(t *testing.T) {
 		if result.Accepted {
 			t.Fatalf("accepted=true")
 		}
+		if result.PreserveOutput || result.RequiresFollowup {
+			t.Fatalf("preserve_output=%v requires_followup=%v", result.PreserveOutput, result.RequiresFollowup)
+		}
+		if result.RecommendedAction != AutoprogrammingReviewGateActionRequestChangesV0 {
+			t.Fatalf("recommended_action=%q", result.RecommendedAction)
+		}
 		assertAutoprogrammingReviewGateIssueV0(t, result, "file_too_large")
 	})
 
@@ -81,6 +96,12 @@ func TestEvaluateAutoprogrammingReviewGateV0(t *testing.T) {
 
 		if result.Accepted {
 			t.Fatalf("accepted=true")
+		}
+		if !result.PreserveOutput || !result.RequiresFollowup {
+			t.Fatalf("preserve_output=%v requires_followup=%v", result.PreserveOutput, result.RequiresFollowup)
+		}
+		if result.RecommendedAction != AutoprogrammingReviewGateActionRequestFollowupReviewV0 {
+			t.Fatalf("recommended_action=%q", result.RecommendedAction)
 		}
 		assertAutoprogrammingReviewGateIssueV0(t, result, "file_outside_write_set")
 	})
@@ -122,4 +143,17 @@ func assertAutoprogrammingReviewGateIssueV0(
 		}
 	}
 	t.Fatalf("issue %q no encontrado: %+v", code, result.Issues)
+}
+
+func assertAutoprogrammingReviewGateBlockingV0(
+	t *testing.T,
+	result AutoprogrammingReviewGateResultV0,
+) {
+	t.Helper()
+	if result.PreserveOutput || result.RequiresFollowup {
+		t.Fatalf("preserve_output=%v requires_followup=%v", result.PreserveOutput, result.RequiresFollowup)
+	}
+	if result.RecommendedAction != AutoprogrammingReviewGateActionBlockClosureV0 {
+		t.Fatalf("recommended_action=%q", result.RecommendedAction)
+	}
 }

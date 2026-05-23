@@ -24,6 +24,7 @@ func TestWebDirectorStatsPanelV0ProyectaRunCountsProgresoYErrores(t *testing.T) 
 		panel.Locale != "es-ES" ||
 		panel.Estado != WebDirectorStatsInboundEstadoOKV0 ||
 		panel.RunRef != "run-ref-web-stats-001" ||
+		panel.RunStatus != "running" ||
 		panel.Resumen.PercentComplete != 50 ||
 		panel.Resumen.ProgressingAgents != 1 ||
 		panel.Resumen.UsageTotalTokens != 1500 {
@@ -150,7 +151,9 @@ func TestWebDirectorStatsPanelV0ProyectaCierreBloqueadoYAccionesSeguras(t *testi
 		t.Fatalf("closure=%+v actions=%+v panel=%+v", panel.Closure, panel.SafeActions, panel)
 	}
 	if !directorStatsHasSafeActionV0(panel.SafeActions, "review") ||
-		!directorStatsHasSafeActionV0(panel.SafeActions, "supervise") {
+		!directorStatsHasSafeActionV0(panel.SafeActions, "supervise") ||
+		!directorStatsHasSafeActionV0(panel.SafeActions, "pause") ||
+		!directorStatsHasSafeActionV0(panel.SafeActions, "stop") {
 		t.Fatalf("actions=%+v", panel.SafeActions)
 	}
 }

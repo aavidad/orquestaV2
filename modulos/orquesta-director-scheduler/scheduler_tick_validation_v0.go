@@ -116,6 +116,9 @@ func validateSchedulerCandidatesV0(input DirectorSchedulerTickInputV0) error {
 		if err := validateSchedulerCandidateRunRefsV0(input.RunRef, candidate); err != nil {
 			return err
 		}
+		if err := validateSchedulerLiveWorkPolicyV0(input.RunRef, candidate.LiveWorkPolicy); err != nil {
+			return err
+		}
 	}
 	return nil
 }

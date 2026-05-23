@@ -88,6 +88,16 @@ func TestValidateOperatorDirectedQueryRejectsSensitiveRefsV0(t *testing.T) {
 	if !hasIssueCodeV0(issues, ErrOperatorMCPOpaqueRefV0) {
 		t.Fatalf("expected sensitive ref issue, got %#v", issues)
 	}
+
+	issues = ValidateOperatorDirectedQueryV0(OperatorDirectedQueryV0{
+		QueryRef:          "query-1",
+		TargetRef:         "director-1",
+		QueryConnectorRef: "query-connector-1",
+		Question:          "revisa token de operador",
+	})
+	if !hasIssueCodeV0(issues, ErrOperatorMCPQuestionInvalidV0) {
+		t.Fatalf("expected sensitive question issue, got %#v", issues)
+	}
 }
 
 func TestValidateOperatorPendingOutboxV0(t *testing.T) {

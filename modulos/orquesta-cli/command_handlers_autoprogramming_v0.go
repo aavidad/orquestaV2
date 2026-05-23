@@ -137,6 +137,43 @@ func runCLIAutoprogrammingRunV0(ctx context.Context, args []string) (CliOutputEn
 	return env, exitCodeForEnvelopeV0(env)
 }
 
+func runCLIAutoprogrammingRunControlV0(ctx context.Context, args []string) (CliOutputEnvelopeV0, int) {
+	fs, common := newCLIFlagSetV0(CliDefaultCommandAutoprogRunControlV0)
+	action := fs.String("action", "", "pause|resume|stop|cancel")
+	runRef := fs.String("run-ref", "", "ref opaca del run")
+	appRef := fs.String("app-ref", "", "ref opaca de app")
+	externalJobRef := fs.String("external-job-ref", "", "ref opaca de job externo")
+	requestedBy := fs.String("requested-by", "operator", "actor solicitante")
+	reason := fs.String("reason", "", "motivo publico")
+	forced := fs.Bool("forced", false, "forzar si contrato lo permite")
+	evidenceRefs := fs.String("evidence-refs", "", "refs de evidencia CSV")
+	if err := fs.Parse(args); err != nil {
+		return cliParseErrorEnvelopeV0(CliDefaultCommandAutoprogRunControlV0, err)
+	}
+	if fs.NArg() != 0 {
+		return cliUnexpectedArgsEnvelopeV0(CliDefaultCommandAutoprogRunControlV0, common)
+	}
+	inv := invocationFromCLIFlagsV0(CliDefaultCommandAutoprogRunControlV0, common)
+	input := orquestamcp.MCPRunControlToolInputV0{
+		Action:         strings.TrimSpace(*action),
+		RunRef:         strings.TrimSpace(*runRef),
+		AppRef:         strings.TrimSpace(*appRef),
+		ExternalJobRef: strings.TrimSpace(*externalJobRef),
+		RequestedBy:    strings.TrimSpace(*requestedBy),
+		Reason:         strings.TrimSpace(*reason),
+		Forced:         *forced,
+		IdempotencyKey: strings.TrimSpace(common.IdempotencyKey),
+		EvidenceRefs:   splitCSVFlagV0(*evidenceRefs),
+	}
+	client, err := NewAutoprogrammingCliClientV0(common.ServerURL, common.Timeout)
+	if err != nil {
+		env := autoprogClientErrorEnvelopeV0(inv, err, runnerNowV0(OrquestaCLIRunnerV0{}))
+		return env, exitCodeForEnvelopeV0(env)
+	}
+	env := client.ControlarRun(ctx, inv, input)
+	return env, exitCodeForEnvelopeV0(env)
+}
+
 func runCLIAutoprogrammingSuperviseV0(ctx context.Context, args []string) (CliOutputEnvelopeV0, int) {
 	fs, common := newCLIFlagSetV0(CliDefaultCommandAutoprogSuperviseV0)
 	runRef := fs.String("run-ref", "", "ref opaca del run")
