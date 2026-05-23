@@ -1,15 +1,57 @@
 package orquestaappcodexstack
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
+
+func TestCodexStackSelfImprovementAPIV0AutoPrepareRunEncola(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	body := bytes.NewBuffer(nil)
+	err := json.NewEncoder(body).Encode(orquestamcp.MCPAutoprogrammingSelfImprovementToolInputV0{
+		RequestID:      "request-ref-self-improvement-stack-001",
+		AutoPrepareRun: true,
+		Proposal: orquestaautoprogramming.AutoprogrammingSelfImprovementProposalV0{
+			ProjectRef:        "project-ref-autoprogramming-bridge-001",
+			WorktreeRef:       "worktree-ref-autoprogramming-bridge-001",
+			WorktreeIsolated:  true,
+			BranchRef:         "branch-ref-autoprogramming-bridge-001",
+			ObservedBy:        "director",
+			FailureSummary:    "Mejora reutilizable detectada por el stack.",
+			SuggestedArea:     "app-codex-stack",
+			SuggestedWriteSet: []string{"modulos/orquesta-app-codex-stack/autoprogramming_bridge_v0.go"},
+			RequiredTests:     []string{"go test -count=1 ./modulos/orquesta-app-codex-stack -run TestPrepareAutoprogrammingRunV0"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/autoprogramming/self-improvement", body)
+	req.Header.Set("Content-Type", "application/json")
+	stack.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPAutoprogrammingSelfImprovementToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.PreparedRun == nil || !result.PreparedRun.Accepted || result.PreparedRun.RunRef == "" {
+		t.Fatalf("result=%+v", result)
+	}
+}
 
 func TestPrepareAutoprogrammingRunV0PersisteWorkflowTasksYRunContinuable(t *testing.T) {
 	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()

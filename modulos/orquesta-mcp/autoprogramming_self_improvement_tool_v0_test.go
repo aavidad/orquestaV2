@@ -49,6 +49,51 @@ func TestMCPAutoprogrammingSelfImprovementExecutorV0DevuelvePrepareRunBajaPriori
 	}
 }
 
+func TestMCPAutoprogrammingSelfImprovementExecutorV0AutoPrepareRunOptIn(t *testing.T) {
+	executor := NewMCPAutoprogrammingSelfImprovementToolExecutorV0(
+		recordingSelfImprovementPrepareRunExecutorV0{},
+	)
+	result, err := executor.Execute(
+		context.Background(),
+		MCPAutoprogrammingSelfImprovementToolInputV0{
+			RequestID:      "request-ref-self-improvement-auto-001",
+			AutoPrepareRun: true,
+			Proposal:       validMCPSelfImprovementProposalV0(),
+		},
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPAutoprogrammingSelfImprovementEstadoOKV0 ||
+		result.PreparedRun == nil ||
+		!result.PreparedRun.Accepted ||
+		result.PreparedRun.RunRef == "" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPAutoprogrammingSelfImprovementExecutorV0AutoPrepareRunSinPuertoReparable(t *testing.T) {
+	result, err := MCPAutoprogrammingSelfImprovementToolExecutorV0{}.Execute(
+		context.Background(),
+		MCPAutoprogrammingSelfImprovementToolInputV0{
+			RequestID:      "request-ref-self-improvement-auto-missing-001",
+			AutoPrepareRun: true,
+			Proposal:       validMCPSelfImprovementProposalV0(),
+		},
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPAutoprogrammingSelfImprovementEstadoOKV0 ||
+		!result.Accepted ||
+		result.PrepareRun == nil ||
+		result.PreparedRun != nil ||
+		len(result.Errores) == 0 ||
+		!stringsSliceContainsMCPHumanWorkV0(result.NextActions, "repair_configure_autoprogramming_prepare_run_executor") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPAutoprogrammingSelfImprovementExecutorV0ConservaEvidenciaSiFaltanRefs(t *testing.T) {
 	proposal := validMCPSelfImprovementProposalV0()
 	proposal.WorktreeRef = " "
@@ -75,6 +120,24 @@ func TestMCPAutoprogrammingSelfImprovementExecutorV0ConservaEvidenciaSiFaltanRef
 	if !stringsSliceContainsMCPHumanWorkV0(result.NextActions, "preserve_failure_evidence") {
 		t.Fatalf("next_actions=%v", result.NextActions)
 	}
+}
+
+type recordingSelfImprovementPrepareRunExecutorV0 struct{}
+
+func (recordingSelfImprovementPrepareRunExecutorV0) Execute(
+	_ context.Context,
+	input MCPAutoprogrammingPrepareRunToolInputV0,
+) (MCPAutoprogrammingPrepareRunToolResultV0, error) {
+	return MCPAutoprogrammingPrepareRunToolResultV0{
+		Estado:        MCPAutoprogrammingPrepareRunEstadoOKV0,
+		RequestID:     input.RequestID,
+		CorrelationID: input.CorrelationID,
+		Accepted:      true,
+		RunRef:        "run-ref-" + input.AutoprogrammingRequest.RequestRef,
+		ProjectRef:    input.AutoprogrammingRequest.ProjectRef,
+		WorktreeRef:   input.AutoprogrammingRequest.WorktreeRef,
+		BranchRef:     input.AutoprogrammingRequest.BranchRef,
+	}, nil
 }
 
 func TestMCPAutoprogrammingSelfImprovementTransportV0RegistradoEInvocable(t *testing.T) {

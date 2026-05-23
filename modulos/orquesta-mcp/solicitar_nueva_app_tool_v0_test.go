@@ -160,10 +160,7 @@ func TestMCPNuevaAppToolExecutorV0ReturnsOKResultFromFactoryHTTPPort(t *testing.
 	handler := orquestafactoryhttp.NewAppSpecHTTPHandlerV0(func() time.Time {
 		return time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
 	})
-	server := httptest.NewServer(handler)
-	defer server.Close()
-
-	executor, err := NewMCPNuevaAppToolExecutorV0(server.URL, time.Second)
+	executor, err := newLocalMCPNuevaAppToolExecutorV0(handler)
 	if err != nil {
 		t.Fatalf("new executor: %v", err)
 	}
@@ -195,10 +192,7 @@ func TestMCPNuevaAppToolExecutorV0ReturnsOKResultFromFactoryHTTPPort(t *testing.
 
 func TestMCPNuevaAppToolExecutorV0ReturnsPublicErrorResultFromFactoryHTTPPort(t *testing.T) {
 	handler := orquestafactoryhttp.NewAppSpecHTTPHandlerV0(func() time.Time { return time.Now().UTC() })
-	server := httptest.NewServer(handler)
-	defer server.Close()
-
-	executor, err := NewMCPNuevaAppToolExecutorV0(server.URL, time.Second)
+	executor, err := newLocalMCPNuevaAppToolExecutorV0(handler)
 	if err != nil {
 		t.Fatalf("new executor: %v", err)
 	}
@@ -226,13 +220,10 @@ func TestMCPNuevaAppToolExecutorV0ReturnsPublicErrorResultFromFactoryHTTPPort(t 
 }
 
 func TestMCPNuevaAppToolExecutorV0ReturnsTransportErrorOnNon2XX(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	executor, err := newLocalMCPNuevaAppToolExecutorV0(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(`{"debug":"privado"}`))
 	}))
-	defer server.Close()
-
-	executor, err := NewMCPNuevaAppToolExecutorV0(server.URL, time.Second)
 	if err != nil {
 		t.Fatalf("new executor: %v", err)
 	}
@@ -250,6 +241,25 @@ func TestMCPNuevaAppToolExecutorV0ReturnsTransportErrorOnNon2XX(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "status 500") {
 		t.Fatalf("error 500 esperado: %v", err)
 	}
+}
+
+func newLocalMCPNuevaAppToolExecutorV0(handler http.Handler) (*MCPNuevaAppToolExecutorV0, error) {
+	executor, err := NewMCPNuevaAppToolExecutorV0("http://operator-mcp-test.local", time.Second)
+	if err != nil {
+		return nil, err
+	}
+	executor.HTTPClient = &http.Client{Transport: localMCPNuevaAppRoundTripperV0{handler: handler}}
+	return executor, nil
+}
+
+type localMCPNuevaAppRoundTripperV0 struct {
+	handler http.Handler
+}
+
+func (transport localMCPNuevaAppRoundTripperV0) RoundTrip(req *http.Request) (*http.Response, error) {
+	rec := httptest.NewRecorder()
+	transport.handler.ServeHTTP(rec, req)
+	return rec.Result(), nil
 }
 
 func validMCPAppSpecV0() orquestafactory.AppSpecV0 {

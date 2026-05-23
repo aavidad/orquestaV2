@@ -22,10 +22,15 @@ Tools MCP relevantes ya publicados por `RegisterMCPTransportV0`:
   `wait_agent_refs` y request `continue`.
 - `orquesta.autoprogramming.self_improvement.propose.v0`: transforma un fallo
   observado por director/agente en `AutoprogrammingRequestV0` de segundo plano,
-  con `priority_score` bajo y `prepare_run` listo para el paso siguiente.
+  con `priority_score` bajo y `prepare_run` listo para el paso siguiente. Si
+  `auto_prepare_run=true` y hay executor inyectado, tambien devuelve
+  `prepared_run`; si falta el puerto conserva la propuesta y publica accion de
+  reparacion.
 - `orquesta.director.human_work.review_plan.v0`: convierte una orden humana
   amplia en plan revisable y, si procede, en request de prepare-run sin saltarse
-  el review.
+  el review. Si `raise_operator_question=true`, eleva una consulta dirigida por
+  puerto MCP de operador; Hermes/OpenClaw entran solo como conectores MCP
+  externos, no como coupling de core.
 - `orquesta.runs.supervisor.v0`: supervisa una run concreta o una cola
   inyectada con limites acotados.
 - `orquesta.director.stats.v0`: consulta stats compactas y contexto de decision
@@ -73,9 +78,11 @@ Criterios de aceptacion manual:
 - `RegisterMCPTransportV0` registra resources compactos y los tools listados.
 - `prepare_run`, supervisor, stats, shutdown, `domain_work` y
   `external_work/run` quedan opt-in por puerto o executor inyectado.
-- `self_improvement` no encola por si mismo: propone trabajo secundario con
-  evidencia y deja la ejecucion a `prepare_run` + cola, manteniendo prioridad
-  baja para no bloquear el trabajo principal.
+- `self_improvement` solo prepara run en cola cuando `auto_prepare_run` y el
+  executor de prepare-run estan inyectados; sin puerto devuelve reparacion
+  publica sin perder la propuesta.
+- `human_work.review_plan` conserva el plan si falta el conector de consulta
+  dirigida y devuelve `operator_mcp_port_unavailable` como reparacion publica.
 - Las respuestas usan refs opacas, errores publicos y payloads compactos.
 - No hay imports de OPES, Codex runtime concreto, DB, HOME, OAuth, credenciales,
   proveedor ni modelo dentro de `orquesta-mcp` ni `orquesta-operator-mcp`.
@@ -87,5 +94,6 @@ Criterios de aceptacion manual:
 Validado con la bateria focal obligatoria del paquete:
 
 - `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp`
+- `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack`
 - `validar criterios de aceptacion del cambio`
 - `validar contrato externo de dominio`

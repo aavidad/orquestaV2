@@ -25,9 +25,10 @@ type MCPAutoprogrammingSelfImprovementToolDescriptorV0 struct {
 }
 
 type MCPAutoprogrammingSelfImprovementToolInputV0 struct {
-	RequestID     string                                                           `json:"request_id,omitempty"`
-	CorrelationID string                                                           `json:"correlation_id,omitempty"`
-	Proposal      orquestaautoprogramming.AutoprogrammingSelfImprovementProposalV0 `json:"proposal"`
+	RequestID      string                                                           `json:"request_id,omitempty"`
+	CorrelationID  string                                                           `json:"correlation_id,omitempty"`
+	AutoPrepareRun bool                                                             `json:"auto_prepare_run,omitempty"`
+	Proposal       orquestaautoprogramming.AutoprogrammingSelfImprovementProposalV0 `json:"proposal"`
 }
 
 type MCPAutoprogrammingSelfImprovementToolResultV0 struct {
@@ -39,22 +40,31 @@ type MCPAutoprogrammingSelfImprovementToolResultV0 struct {
 	PriorityScore          int                                               `json:"priority_score"`
 	AutoprogrammingRequest *orquestaautoprogramming.AutoprogrammingRequestV0 `json:"autoprogramming_request,omitempty"`
 	PrepareRun             *MCPAutoprogrammingPrepareRunToolInputV0          `json:"prepare_run,omitempty"`
+	PreparedRun            *MCPAutoprogrammingPrepareRunToolResultV0         `json:"prepared_run,omitempty"`
 	NextActions            []string                                          `json:"next_actions,omitempty"`
 	Errores                []MCPValidationIssueV0                            `json:"errores_publicos,omitempty"`
 }
 
-type MCPAutoprogrammingSelfImprovementToolExecutorV0 struct{}
+type MCPAutoprogrammingSelfImprovementToolExecutorV0 struct {
+	PrepareRun MCPTransportAutoprogrammingPrepareRunExecutorV0
+}
+
+func NewMCPAutoprogrammingSelfImprovementToolExecutorV0(
+	prepareRun MCPTransportAutoprogrammingPrepareRunExecutorV0,
+) MCPAutoprogrammingSelfImprovementToolExecutorV0 {
+	return MCPAutoprogrammingSelfImprovementToolExecutorV0{PrepareRun: prepareRun}
+}
 
 func MCPAutoprogrammingSelfImprovementDescriptorV0() MCPAutoprogrammingSelfImprovementToolDescriptorV0 {
 	return MCPAutoprogrammingSelfImprovementToolDescriptorV0{
 		Name:        MCPAutoprogrammingSelfImprovementToolNameV0,
 		Version:     MCPAutoprogrammingSelfImprovementToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,proposal:AutoprogrammingSelfImprovementProposalV0}",
-		Output:      "ok:{autoprogramming_request,priority_score,prepare_run,next_actions}|error:{errores_publicos,next_actions}",
+		InputSchema: "envelope:{request_id?,correlation_id?,auto_prepare_run?,proposal:AutoprogrammingSelfImprovementProposalV0}",
+		Output:      "ok:{autoprogramming_request,priority_score,prepare_run,prepared_run?,next_actions}|error:{errores_publicos,next_actions}",
 		ResourceURI: MCPAutoprogrammingSelfImprovementResourceURIV0,
 		Invariantes: []string{
 			"convierte fallos observados en automejora secundaria",
-			"no ejecuta agentes ni encola por si mismo; prepare-run queda como siguiente paso",
+			"solo prepara run si auto_prepare_run y executor inyectado existen",
 			"prioridad baja por defecto para no bloquear trabajo principal",
 			"hexagonal: solo refs opacas, evidencia y write-set propio",
 		},
@@ -94,7 +104,49 @@ func (executor MCPAutoprogrammingSelfImprovementToolExecutorV0) Execute(
 		AutoprogrammingRequest: result.Request,
 		PriorityScore:          result.PriorityScore,
 	}
+	executor.maybePrepareSelfImprovementRunV0(ctx, input, &out)
 	return out, nil
+}
+
+func (executor MCPAutoprogrammingSelfImprovementToolExecutorV0) maybePrepareSelfImprovementRunV0(
+	ctx context.Context,
+	input MCPAutoprogrammingSelfImprovementToolInputV0,
+	out *MCPAutoprogrammingSelfImprovementToolResultV0,
+) {
+	if !input.AutoPrepareRun || out == nil || out.PrepareRun == nil {
+		return
+	}
+	if executor.PrepareRun == nil {
+		out.NextActions = compactStringsMCPV0(append(out.NextActions,
+			"repair_configure_autoprogramming_prepare_run_executor",
+			"post_/api/v0/autoprogramming/prepare-run_with_prepare_run",
+		))
+		out.Errores = append(out.Errores, MCPValidationIssueV0{
+			Code:    "autoprogramming_prepare_run_port_unavailable",
+			Field:   "auto_prepare_run",
+			Message: "prepare-run executor no configurado",
+		})
+		return
+	}
+	prepared, err := executor.PrepareRun.Execute(ctx, *out.PrepareRun)
+	if err != nil {
+		prepared = NewMCPAutoprogrammingPrepareRunErrorResultV0(
+			*out.PrepareRun,
+			"autoprogramming_prepare_run_error",
+			"auto_prepare_run",
+			err.Error(),
+		)
+	}
+	out.PreparedRun = &prepared
+	if prepared.Estado == MCPAutoprogrammingPrepareRunEstadoErrorV0 {
+		out.NextActions = compactStringsMCPV0(append(out.NextActions,
+			"repair_autoprogramming_prepare_run_result",
+		))
+		return
+	}
+	out.NextActions = compactStringsMCPV0(append(out.NextActions,
+		"supervise_prepared_run_by_run_ref",
+	))
 }
 
 func selfImprovementIssuesMCPV0(

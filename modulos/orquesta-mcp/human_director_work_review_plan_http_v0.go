@@ -4,13 +4,21 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	operator "orquesta/modulos/orquesta-operator-mcp"
 )
 
 const MCPHumanDirectorWorkReviewPlanHTTPPathV0 = "/api/v0/director/human-work/review-plan"
 
 func NewMCPHumanDirectorWorkReviewPlanHTTPHandlerV0() http.Handler {
+	return NewMCPHumanDirectorWorkReviewPlanHTTPHandlerWithOperatorQueryV0(nil)
+}
+
+func NewMCPHumanDirectorWorkReviewPlanHTTPHandlerWithOperatorQueryV0(
+	operatorQuery operator.OperatorMCPDirectedQueryPortV0,
+) http.Handler {
 	return mcpHumanDirectorWorkReviewPlanHTTPHandlerV0{
-		executor: MCPHumanDirectorWorkReviewPlanToolExecutorV0{},
+		executor: MCPHumanDirectorWorkReviewPlanToolExecutorV0{OperatorQuery: operatorQuery},
 	}
 }
 

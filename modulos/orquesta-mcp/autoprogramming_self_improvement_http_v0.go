@@ -9,8 +9,14 @@ import (
 const MCPAutoprogrammingSelfImprovementHTTPPathV0 = "/api/v0/autoprogramming/self-improvement"
 
 func NewMCPAutoprogrammingSelfImprovementHTTPHandlerV0() http.Handler {
+	return NewMCPAutoprogrammingSelfImprovementHTTPHandlerWithPrepareRunV0(nil)
+}
+
+func NewMCPAutoprogrammingSelfImprovementHTTPHandlerWithPrepareRunV0(
+	prepareRun MCPTransportAutoprogrammingPrepareRunExecutorV0,
+) http.Handler {
 	return mcpAutoprogrammingSelfImprovementHTTPHandlerV0{
-		executor: MCPAutoprogrammingSelfImprovementToolExecutorV0{},
+		executor: NewMCPAutoprogrammingSelfImprovementToolExecutorV0(prepareRun),
 	}
 }
 

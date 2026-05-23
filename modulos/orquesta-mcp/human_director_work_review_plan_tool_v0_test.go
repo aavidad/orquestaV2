@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	orquestaappdirectorintake "orquesta/modulos/orquesta-app-director-intake"
+	operator "orquesta/modulos/orquesta-operator-mcp"
 )
 
 func TestMCPHumanDirectorWorkReviewPlanDescriptorV0EsAdaptadorFino(t *testing.T) {
@@ -85,6 +86,53 @@ func TestMCPHumanDirectorWorkReviewPlanExecutorV0PidePuenteHumanoSinTirarTrabajo
 	}
 }
 
+func TestMCPHumanDirectorWorkReviewPlanExecutorV0ElevaPreguntaOperadorOptIn(t *testing.T) {
+	executor := MCPHumanDirectorWorkReviewPlanToolExecutorV0{OperatorQuery: recordingHumanDirectorOperatorQueryV0{}}
+	result, err := executor.Execute(
+		context.Background(),
+		MCPHumanDirectorWorkReviewPlanToolInputV0{
+			RequestID:             "request-ref-human-director-query-001",
+			WorktreeIsolated:      true,
+			RaiseOperatorQuestion: true,
+			OperatorQuery:         validHumanDirectorOperatorQueryV0(),
+			WorkIntake:            validMCPHumanDirectorWorkIntakeV0(),
+		},
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPHumanDirectorWorkReviewPlanEstadoOKV0 ||
+		!result.Accepted ||
+		result.Plan.RequestRef == "" ||
+		result.OperatorQuestion == nil ||
+		!result.OperatorQuestion.Accepted {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPHumanDirectorWorkReviewPlanExecutorV0PreguntaOperadorSinPuertoEsRepair(t *testing.T) {
+	result, err := MCPHumanDirectorWorkReviewPlanToolExecutorV0{}.Execute(
+		context.Background(),
+		MCPHumanDirectorWorkReviewPlanToolInputV0{
+			RequestID:             "request-ref-human-director-query-missing-001",
+			RaiseOperatorQuestion: true,
+			OperatorQuery:         validHumanDirectorOperatorQueryV0(),
+			WorkIntake:            validMCPHumanDirectorWorkIntakeV0(),
+		},
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPHumanDirectorWorkReviewPlanEstadoOKV0 ||
+		!result.Accepted ||
+		result.Plan.RequestRef == "" ||
+		result.OperatorQuestion != nil ||
+		len(result.Errores) == 0 ||
+		!stringsSliceContainsMCPHumanWorkV0(result.NextActions, "repair_configure_operator_directed_query_port") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPHumanDirectorWorkReviewPlanTransportV0RegistradoEInvocable(t *testing.T) {
 	transport := newFakeMCPTransportV0()
 	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{}); err != nil {
@@ -113,6 +161,27 @@ func TestMCPHumanDirectorWorkReviewPlanTransportV0RegistradoEInvocable(t *testin
 		t.Fatalf("result=%+v", result)
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, output, 3200)
+}
+
+type recordingHumanDirectorOperatorQueryV0 struct{}
+
+func (recordingHumanDirectorOperatorQueryV0) RaiseOperatorDirectedQueryV0(
+	input operator.OperatorDirectedQueryV0,
+) (operator.OperatorMCPDirectedQueryResultV0, error) {
+	return operator.OperatorMCPDirectedQueryResultV0{
+		Accepted:   true,
+		AnswerRef:  "answer-ref-" + input.QueryRef,
+		NextAction: "await_external_operator_answer",
+		TraceRefs:  []string{"trace-ref-" + input.TargetRef},
+	}, nil
+}
+
+func validHumanDirectorOperatorQueryV0() operator.OperatorDirectedQueryV0 {
+	return operator.OperatorDirectedQueryV0{
+		QueryConnectorRef: "query-connector-ref-human-director",
+		Question:          "Puede aprobar este plan o indicar ajuste acotado?",
+		EvidenceRefs:      []string{"evidence-ref-human-director-query-001"},
+	}
 }
 
 func TestMCPHumanDirectorWorkReviewPlanHTTPHandlerV0(t *testing.T) {

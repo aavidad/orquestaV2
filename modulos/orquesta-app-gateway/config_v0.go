@@ -6,6 +6,7 @@ import (
 
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	operator "orquesta/modulos/orquesta-operator-mcp"
 	orquestaweb "orquesta/modulos/orquesta-web"
 )
 
@@ -21,6 +22,7 @@ type ConfigV0 struct {
 	RunQueuePriority          orquestamcp.MCPTransportRunQueuePriorityExecutorV0
 	RunSupervisor             orquestamcp.MCPTransportRunSupervisorExecutorV0
 	AutoprogrammingPrepareRun orquestamcp.MCPTransportAutoprogrammingPrepareRunExecutorV0
+	OperatorQuery             operator.OperatorMCPDirectedQueryPortV0
 	ServerShutdown            orquestamcp.MCPTransportServerShutdownExecutorV0
 	DomainWork                orquestamcp.MCPDomainWorkExecutorPortV0
 	ExternalWorkRun           orquestamcp.MCPTransportExternalWorkRunExecutorV0

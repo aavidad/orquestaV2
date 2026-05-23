@@ -6,6 +6,7 @@ import (
 
 	orquestaappdirectorintake "orquesta/modulos/orquesta-app-director-intake"
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
+	operator "orquesta/modulos/orquesta-operator-mcp"
 )
 
 const (
@@ -26,10 +27,12 @@ type MCPHumanDirectorWorkReviewPlanToolDescriptorV0 struct {
 }
 
 type MCPHumanDirectorWorkReviewPlanToolInputV0 struct {
-	RequestID        string                                                     `json:"request_id,omitempty"`
-	CorrelationID    string                                                     `json:"correlation_id,omitempty"`
-	WorkIntake       orquestaappdirectorintake.HumanDirectorWorkIntakeRequestV0 `json:"work_intake"`
-	WorktreeIsolated bool                                                       `json:"worktree_isolated,omitempty"`
+	RequestID             string                                                     `json:"request_id,omitempty"`
+	CorrelationID         string                                                     `json:"correlation_id,omitempty"`
+	WorkIntake            orquestaappdirectorintake.HumanDirectorWorkIntakeRequestV0 `json:"work_intake"`
+	WorktreeIsolated      bool                                                       `json:"worktree_isolated,omitempty"`
+	RaiseOperatorQuestion bool                                                       `json:"raise_operator_question,omitempty"`
+	OperatorQuery         operator.OperatorDirectedQueryV0                           `json:"operator_query,omitempty"`
 }
 
 type MCPHumanDirectorWorkReviewPlanToolResultV0 struct {
@@ -39,23 +42,27 @@ type MCPHumanDirectorWorkReviewPlanToolResultV0 struct {
 	Accepted               bool                                                    `json:"accepted"`
 	Plan                   orquestaappdirectorintake.HumanDirectorReviewablePlanV0 `json:"plan,omitempty"`
 	AutoprogrammingRequest *orquestaautoprogramming.AutoprogrammingRequestV0       `json:"autoprogramming_request,omitempty"`
+	OperatorQuestion       *operator.OperatorMCPDirectedQueryResultV0              `json:"operator_question,omitempty"`
 	NextActions            []string                                                `json:"next_actions,omitempty"`
 	Errores                []MCPValidationIssueV0                                  `json:"errores_publicos,omitempty"`
 }
 
-type MCPHumanDirectorWorkReviewPlanToolExecutorV0 struct{}
+type MCPHumanDirectorWorkReviewPlanToolExecutorV0 struct {
+	OperatorQuery operator.OperatorMCPDirectedQueryPortV0
+}
 
 func MCPHumanDirectorWorkReviewPlanDescriptorV0() MCPHumanDirectorWorkReviewPlanToolDescriptorV0 {
 	return MCPHumanDirectorWorkReviewPlanToolDescriptorV0{
 		Name:        MCPHumanDirectorWorkReviewPlanToolNameV0,
 		Version:     MCPHumanDirectorWorkReviewPlanToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,worktree_isolated?,work_intake:HumanDirectorWorkIntakeRequestV0}",
-		Output:      "ok:{plan,next_actions,autoprogramming_request?}|error:{errores_publicos,plan?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,worktree_isolated?,raise_operator_question?,operator_query?,work_intake}",
+		Output:      "ok:{plan,next_actions,autoprogramming_request?,operator_question?}|error:{errores_publicos,plan?}",
 		ResourceURI: MCPHumanDirectorWorkReviewPlanResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino para orden humana amplia",
 			"construye plan revisable; no arranca agentes ni ejecuta runtime",
 			"proyecta prepare-run solo cuando hay execute_now y worktree aislada declarada",
+			"solo eleva pregunta humana si se solicita y existe puerto operador inyectado",
 			"refs opacas; sin adaptadores concretos en el contrato",
 		},
 	}
@@ -79,7 +86,7 @@ func (executor MCPHumanDirectorWorkReviewPlanToolExecutorV0) Execute(
 		}, nil
 	}
 	autoprogrammingRequest, next := humanDirectorAutoprogrammingRequestMCPV0(input, result.Plan)
-	return MCPHumanDirectorWorkReviewPlanToolResultV0{
+	out := MCPHumanDirectorWorkReviewPlanToolResultV0{
 		Estado:                 MCPHumanDirectorWorkReviewPlanEstadoOKV0,
 		RequestID:              strings.TrimSpace(result.Plan.RequestRef),
 		CorrelationID:          firstNonEmptyMCPV0(input.CorrelationID, request.CorrelationID, input.RequestID, request.RequestRef),
@@ -87,7 +94,39 @@ func (executor MCPHumanDirectorWorkReviewPlanToolExecutorV0) Execute(
 		Plan:                   result.Plan,
 		AutoprogrammingRequest: autoprogrammingRequest,
 		NextActions:            compactStringsMCPV0(next),
-	}, nil
+	}
+	executor.maybeRaiseHumanDirectorOperatorQuestionV0(input, &out)
+	return out, nil
+}
+
+func (executor MCPHumanDirectorWorkReviewPlanToolExecutorV0) maybeRaiseHumanDirectorOperatorQuestionV0(
+	input MCPHumanDirectorWorkReviewPlanToolInputV0,
+	out *MCPHumanDirectorWorkReviewPlanToolResultV0,
+) {
+	if !input.RaiseOperatorQuestion || out == nil {
+		return
+	}
+	query := humanDirectorOperatorQueryMCPV0(input, out.Plan)
+	if executor.OperatorQuery == nil {
+		out.NextActions = compactStringsMCPV0(append(out.NextActions,
+			"repair_configure_operator_directed_query_port",
+			"use_orquesta.operator.directed_query.v0_for_human_bridge_if_needed",
+		))
+		out.Errores = append(out.Errores, MCPValidationIssueV0{
+			Code:    operator.ErrOperatorMCPPortUnavailableV0,
+			Field:   "operator_query",
+			Message: "operator directed query port no configurado",
+		})
+		return
+	}
+	result := ExecuteMCPOperatorDirectedQueryToolV0(executor.OperatorQuery, query)
+	if result.Estado == MCPOperatorToolEstadoOKV0 && result.DirectedQuery != nil {
+		out.OperatorQuestion = result.DirectedQuery
+		out.NextActions = compactStringsMCPV0(append(out.NextActions, "await_operator_answer_ref"))
+		return
+	}
+	out.NextActions = compactStringsMCPV0(append(out.NextActions, "repair_operator_directed_query_request"))
+	out.Errores = append(out.Errores, operatorIssuesAsMCPV0(result)...)
 }
 
 func humanDirectorWorkIntakeFromMCPV0(
@@ -119,6 +158,37 @@ func humanDirectorPlanIssuesMCPV0(
 	}
 	if out == nil {
 		return []MCPValidationIssueV0{}
+	}
+	return out
+}
+
+func humanDirectorOperatorQueryMCPV0(
+	input MCPHumanDirectorWorkReviewPlanToolInputV0,
+	plan orquestaappdirectorintake.HumanDirectorReviewablePlanV0,
+) operator.OperatorDirectedQueryV0 {
+	query := input.OperatorQuery
+	query.QueryRef = firstNonEmptyMCPV0(query.QueryRef, "query-ref-"+plan.RequestRef)
+	query.TargetRef = firstNonEmptyMCPV0(query.TargetRef, plan.ProjectRef, plan.RequestRef)
+	query.Question = firstNonEmptyMCPV0(query.Question, "Revisar plan humano "+plan.RequestRef+" y responder con decision operativa.")
+	query.EvidenceRefs = compactStringsMCPV0(append(query.EvidenceRefs, plan.ContextRefs...))
+	return query
+}
+
+func operatorIssuesAsMCPV0(result MCPOperatorToolResultV0) []MCPValidationIssueV0 {
+	if len(result.Issues) == 0 && strings.TrimSpace(result.ErrorCode) != "" {
+		return []MCPValidationIssueV0{{
+			Code:    strings.TrimSpace(result.ErrorCode),
+			Field:   "operator_query",
+			Message: strings.TrimSpace(result.ErrorCode),
+		}}
+	}
+	out := make([]MCPValidationIssueV0, 0, len(result.Issues))
+	for _, issue := range result.Issues {
+		out = append(out, MCPValidationIssueV0{
+			Code:    strings.TrimSpace(issue.Code),
+			Field:   strings.TrimSpace(issue.Field),
+			Message: strings.TrimSpace(issue.Code),
+		})
 	}
 	return out
 }
