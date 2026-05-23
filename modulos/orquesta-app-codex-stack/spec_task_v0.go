@@ -74,6 +74,7 @@ func programmingObjectiveV0(
 		strings.TrimSpace(task.Summary),
 		programmingProfileObjectiveLineV0(task, unit),
 		"Usa el write-set como alcance primario; si debes tocar otros ficheros del repo para cumplir el objetivo o arreglar pruebas, hazlo y dejalo justificado en el ACK.",
+		agentDelegationObjectiveLineV0(task.MaxChildAgents),
 		"Si la app es Go completa, debe quedar como modulo autonomo con go.mod, entrypoint bajo cmd/server o equivalente documentado, imports de modulo y sin imports relativos ../.",
 		"Ejecuta pruebas focales razonables y registra el resultado en el ACK.",
 	}
@@ -84,6 +85,17 @@ func programmingObjectiveV0(
 		lines = append(lines, context)
 	}
 	return strings.Join(lines, "\n")
+}
+
+func agentDelegationObjectiveLineV0(maxChildAgents int) string {
+	limit := maxChildAgents
+	if limit <= 0 || limit > 6 {
+		limit = 6
+	}
+	return fmt.Sprintf(
+		"Delegacion operativa: si necesitas ayuda y el runtime lo permite, activa subagentes para paralelizar analisis, implementacion, pruebas o revision; limite %d subagentes, conservando refs/parentesco, write-set, presupuesto y evidencia en el ACK.",
+		limit,
+	)
 }
 
 func programmingProfileObjectiveLineV0(
@@ -154,6 +166,7 @@ func directorObjectiveV0(
 		"Modo de ejecucion: " + mode + ".",
 		"Resumen de Orquesta: " + strings.TrimSpace(payload.Summary),
 		"Reglas: hexagonal, i18n si aplica, persistencia solo por puerto/conector, funciones pequenas, sin archivos gigantes.",
+		agentDelegationObjectiveLineV0(0),
 		"Go app completa: modulo autonomo con go.mod, entrypoint cmd/server, imports de modulo y `go test ./...` para cierre.",
 		"Separa brainstorming, documentacion, programacion, pruebas, seguridad y revision final.",
 		"Cumple los minimos del tipo de peticion; solo puedes recortar alcance si execution_mode=debug y debes listar lo omitido.",

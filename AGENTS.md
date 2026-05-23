@@ -159,6 +159,10 @@ Documentos de entrada obligatorios para cambios transversales:
   controladores enormes ni mezclar wiring, dominio, validacion y UI en la misma
   pieza. Si una implementacion crece, separa helpers/puertos/adaptadores/tests
   siguiendo el patron local antes de seguir añadiendo codigo.
+- Delegacion operativa: si un agente necesita ayuda y el runtime/composicion lo
+  permite, debe activar subagentes para paralelizar analisis, implementacion,
+  pruebas o revision. Limite por defecto: hasta 6 subagentes por agente, siempre
+  conservando refs/parentesco, write-set, presupuesto y evidencia en el ACK.
 - Economia de tokens: al lanzar agentes o subagentes, pide comunicacion compacta
   y tecnicas de ahorro como `caveman` si estan disponibles. Para exploracion y
   pruebas usa razonamiento `medium` por defecto; no uses `xhigh` salvo orden
