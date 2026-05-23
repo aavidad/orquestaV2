@@ -31,6 +31,8 @@ func (connector GitAppVCSConnectorV0) ExecuteAppVCSV0(
 	switch request.Action {
 	case AppVCSActionPrepareRepoV0:
 		return connector.prepareRepoV0(ctx, request)
+	case AppVCSActionReviewRepoV0:
+		return connector.reviewRepoV0(ctx, request)
 	case AppVCSActionCommitV0:
 		return connector.commitRepoV0(ctx, request)
 	case AppVCSActionPushV0:
@@ -54,6 +56,28 @@ func (connector GitAppVCSConnectorV0) prepareRepoV0(
 		return newAppVCSResultV0(request, AppVCSStatusFailedV0, nil), issues
 	}
 	result := newAppVCSResultV0(request, AppVCSStatusCompletedV0, paths)
+	result.CommitRef = strings.TrimSpace(head)
+	result.CommitShortRef = shortCommitRefV0(result.CommitRef)
+	return result, nil
+}
+
+func (connector GitAppVCSConnectorV0) reviewRepoV0(
+	ctx context.Context,
+	request AppVCSRequestV0,
+) (AppVCSResultV0, []AppVCSIssueV0) {
+	head, issue := connector.gitOutputV0(ctx, request.ProjectWorkDir, "rev-parse", "HEAD")
+	if issue != nil {
+		return newAppVCSResultV0(request, AppVCSStatusFailedV0, nil), []AppVCSIssueV0{*issue}
+	}
+	paths, issues := connector.changedPathsV0(ctx, request.ProjectWorkDir)
+	if len(issues) > 0 {
+		return newAppVCSResultV0(request, AppVCSStatusFailedV0, nil), issues
+	}
+	status := AppVCSStatusCompletedV0
+	if len(paths) == 0 {
+		status = AppVCSStatusCleanV0
+	}
+	result := newAppVCSResultV0(request, status, paths)
 	result.CommitRef = strings.TrimSpace(head)
 	result.CommitShortRef = shortCommitRefV0(result.CommitRef)
 	return result, nil

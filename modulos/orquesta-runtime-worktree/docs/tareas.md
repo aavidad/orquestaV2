@@ -50,3 +50,27 @@ Bloqueos:
 - No convertir `branch_ref` en nombre Git concreto.
 
 Estado: cerrada localmente el 2026-05-23.
+
+## RTWT-003 - Revision Git read-only para AppVCS
+
+Objetivo: ampliar AppVCS con `review_repo` para inspeccionar una app/repo Git
+temporal desde el conector externo.
+
+Write-set:
+
+- `app_vcs_types_v0.go`
+- `app_vcs_validate_v0.go`
+- `app_vcs_git_v0.go`
+- `app_vcs_v0_test.go`
+- `docs/*.md`
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-runtime-worktree`
+
+Bloqueos:
+
+- No hacer commit ni push.
+- No devolver rutas absolutas ni convertir `branch_ref` en rama Git.
+
+Estado: cerrada localmente el 2026-05-23.

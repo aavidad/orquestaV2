@@ -1114,6 +1114,8 @@ Payload minimo recomendado para mejorar este repo:
 Reglas minimas:
 
 - `project_ref`, `worktree_ref` y `branch_ref` son referencias opacas.
+- AppVCS acepta `review_repo` como accion read-only por MCP y por
+  `POST /api/v0/apps/vcs`; el conector real se inyecta desde composicion.
 - `worktree_isolated=true` es obligatorio.
 - `tasks` se agrupa por area y queda limitado por defecto a 3 tareas y 2 areas.
 - Cada tarea puede transportar objetivo, contexto, context refs, criterios,

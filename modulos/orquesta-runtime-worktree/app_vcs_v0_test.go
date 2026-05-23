@@ -73,6 +73,36 @@ func TestGitAppVCSConnectorV0PreparaRepoSinPathLocal(t *testing.T) {
 	}
 }
 
+func TestGitAppVCSConnectorV0ReviewRepoLimpioSinPathLocal(t *testing.T) {
+	repo := initAppVCSTestRepoV0(t)
+	result, issues := (GitAppVCSConnectorV0{}).ExecuteAppVCSV0(context.Background(), AppVCSRequestV0{
+		Action:         AppVCSActionReviewRepoV0,
+		AppRef:         "app-ref-vcs-review",
+		RepoRef:        "repo-ref-vcs-review",
+		WorktreeRef:    "worktree-ref-orquesta-autoprog-git-review-20260523",
+		BranchRef:      "branch-ref-orquesta-autoprog-git-review-20260523",
+		ProjectWorkDir: repo,
+	})
+	if len(issues) > 0 || result.Status != AppVCSStatusCleanV0 || result.CommitRef == "" {
+		t.Fatalf("result=%+v issues=%+v", result, issues)
+	}
+	if len(result.ChangedPaths) != 0 ||
+		result.WorktreeRef != "worktree-ref-orquesta-autoprog-git-review-20260523" ||
+		result.BranchRef != "branch-ref-orquesta-autoprog-git-review-20260523" {
+		t.Fatalf("refs/changed inesperados: %+v", result)
+	}
+	raw, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(raw), repo) {
+		t.Fatalf("resultado publico filtra path absoluto: %s", raw)
+	}
+	if strings.TrimSpace(runAppVCSGitV0(t, repo, "status", "--porcelain")) != "" {
+		t.Fatalf("review_repo no debe modificar repo")
+	}
+}
+
 func initAppVCSTestRepoV0(t *testing.T) string {
 	t.Helper()
 	repo := t.TempDir()

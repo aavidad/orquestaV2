@@ -43,3 +43,15 @@ Invariantes:
 - La recuperacion tras reinicio debe reabrir o rematerializar el baseline por
   `baseline_ref` y las refs opacas guardadas; no debe reconstruir una rama desde
   nombres Git ni desde paths locales.
+
+## AppVCS `review_repo`
+
+Revision Git read-only para una app externa desde AppVCS.
+
+Invariantes:
+
+- reutiliza `GitAppVCSConnectorV0`, pero no ejecuta `add`, `commit` ni `push`;
+- devuelve `commit_ref`, `commit_short_ref`, `changed_paths` relativos y status
+  `clean` cuando el repo no tiene cambios;
+- conserva `worktree_ref` y `branch_ref` como refs opacas;
+- no devuelve `project_work_dir`, ramas Git concretas ni rutas absolutas.

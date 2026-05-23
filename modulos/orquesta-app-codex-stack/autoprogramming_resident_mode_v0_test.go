@@ -1,9 +1,14 @@
 package orquestaappcodexstack
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
 
@@ -47,6 +52,58 @@ func TestAutoprogrammingResidentModeV0TomaRunPreparadaDeColaV0(t *testing.T) {
 		runtime.launchCountV0() != 1 ||
 		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-autoprogramming-resident-backlog-queue") {
 		t.Fatalf("result=%+v prepared=%+v launches=%d", result, prepared, runtime.launchCountV0())
+	}
+}
+
+func TestAutoprogrammingResidentModeV0TomaAutomejoraAutoPreparadaCuandoEstaParadoV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(orquestamcp.MCPAutoprogrammingSelfImprovementToolInputV0{
+		RequestID:      "request-autoprogramming-resident-self-improvement-queue-001",
+		CorrelationID:  "corr-autoprogramming-resident-self-improvement-queue-001",
+		AutoPrepareRun: true,
+		Proposal: orquestaautoprogramming.AutoprogrammingSelfImprovementProposalV0{
+			ProjectRef:        "project-ref-autoprogramming-resident-self-improvement",
+			WorktreeRef:       "worktree-ref-autoprogramming-resident-self-improvement",
+			WorktreeIsolated:  true,
+			BranchRef:         "branch-ref-autoprogramming-resident-self-improvement",
+			ObservedBy:        "orquesta-autoprogramming-resident",
+			FailureSummary:    "Mejora reutilizable detectada mientras el residente esta sin trabajo principal.",
+			SuggestedArea:     "app-codex-stack",
+			SuggestedWriteSet: []string{"modulos/orquesta-app-codex-stack/autoprogramming_resident_mode_v0.go"},
+			RequiredTests:     []string{"go test -count=1 ./modulos/orquesta-app-codex-stack -run TestAutoprogrammingResidentModeV0"},
+		},
+	}); err != nil {
+		t.Fatalf("encode self-improvement: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/autoprogramming/self-improvement", body)
+	req.Header.Set("Content-Type", "application/json")
+	stack.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("self-improvement status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var self orquestamcp.MCPAutoprogrammingSelfImprovementToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&self); err != nil {
+		t.Fatalf("decode self-improvement: %v", err)
+	}
+	if self.PreparedRun == nil || !self.PreparedRun.Accepted || self.PreparedRun.RunRef == "" {
+		t.Fatalf("self-improvement result=%+v", self)
+	}
+
+	result := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:      "request-autoprogramming-resident-idle-picks-self-improvement-001",
+		CorrelationID:  "corr-autoprogramming-resident-self-improvement-queue-001",
+		ResidentMode:   true,
+		MaxTicks:       1,
+		MaxRunsPerTick: 1,
+	})
+	if result.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
+		result.RunRef != self.PreparedRun.RunRef ||
+		runtime.launchCountV0() != 1 ||
+		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-autoprogramming-resident-backlog-queue") {
+		t.Fatalf("result=%+v self=%+v launches=%d", result, self, runtime.launchCountV0())
 	}
 }
 

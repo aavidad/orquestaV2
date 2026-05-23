@@ -11,6 +11,7 @@ const (
 	MCPAppVCSResourceURIV0           = "orquesta://contracts/app-vcs/v0"
 	MCPAppVCSHTTPPathV0              = "/api/v0/apps/vcs"
 	MCPAppVCSActionPrepareRepoV0     = "prepare_repo"
+	MCPAppVCSActionReviewRepoV0      = "review_repo"
 	MCPAppVCSActionCommitV0          = "commit"
 	MCPAppVCSActionPushV0            = "push"
 	MCPAppVCSEstadoOKV0              = "ok"
@@ -71,7 +72,7 @@ func MCPAppVCSDescriptorV0() MCPAppVCSToolDescriptorV0 {
 	return MCPAppVCSToolDescriptorV0{
 		Name:        MCPAppVCSToolNameV0,
 		Version:     MCPAppVCSToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,action:prepare_repo|commit|push,app_ref,repo_ref,worktree_ref?,branch_ref?,commit_message?,commit_paths?,allow_push?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,action:prepare_repo|review_repo|commit|push,app_ref,repo_ref,worktree_ref?,branch_ref?,commit_message?,commit_paths?,allow_push?}",
 		Output:      "ok:{status,commit_ref?,changed_paths?,push_pending?,retryable?,evidence_refs?}|error:{errores_publicos}",
 		ResourceURI: MCPAppVCSResourceURIV0,
 		Invariantes: []string{
@@ -106,7 +107,7 @@ func ValidateMCPAppVCSInputV0(input MCPAppVCSToolInputV0) []MCPValidationIssueV0
 		issues = append(issues, newMCPAppVCSIssueV0(MCPAppVCSRequiredRefMissingV0, "repo_ref"))
 	}
 	switch input.Action {
-	case MCPAppVCSActionPrepareRepoV0:
+	case MCPAppVCSActionPrepareRepoV0, MCPAppVCSActionReviewRepoV0:
 	case MCPAppVCSActionCommitV0:
 		if input.CommitMessage == "" {
 			issues = append(issues, newMCPAppVCSIssueV0(MCPAppVCSCommitMessageRequiredV0, "commit_message"))

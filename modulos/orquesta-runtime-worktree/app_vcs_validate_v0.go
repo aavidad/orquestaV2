@@ -21,7 +21,7 @@ func normalizeAppVCSRequestV0(request AppVCSRequestV0) AppVCSRequestV0 {
 func validateAppVCSRequestV0(request AppVCSRequestV0) []AppVCSIssueV0 {
 	var issues []AppVCSIssueV0
 	switch request.Action {
-	case AppVCSActionPrepareRepoV0, AppVCSActionCommitV0, AppVCSActionPushV0:
+	case AppVCSActionPrepareRepoV0, AppVCSActionReviewRepoV0, AppVCSActionCommitV0, AppVCSActionPushV0:
 	default:
 		issues = append(issues, appVCSIssueV0(AppVCSIssueInvalidRequestV0, "action"))
 	}

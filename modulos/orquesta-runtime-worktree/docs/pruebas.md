@@ -14,4 +14,6 @@ Cobertura:
 - rechaza project workdir invalido y write-set inseguro;
 - prepara worktree aislada preservando `branch_ref` opaco y sin filtrar paths
   absolutos;
-- rechaza `branch_ref` con forma de ruta y preparacion no aislada.
+- rechaza `branch_ref` con forma de ruta y preparacion no aislada;
+- revisa un repo Git limpio con `review_repo` sin modificarlo y sin filtrar
+  rutas absolutas.

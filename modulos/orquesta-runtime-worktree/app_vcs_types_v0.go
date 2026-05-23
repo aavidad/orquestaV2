@@ -6,6 +6,7 @@ type AppVCSActionV0 string
 
 const (
 	AppVCSActionPrepareRepoV0 AppVCSActionV0 = "prepare_repo"
+	AppVCSActionReviewRepoV0  AppVCSActionV0 = "review_repo"
 	AppVCSActionCommitV0      AppVCSActionV0 = "commit"
 	AppVCSActionPushV0        AppVCSActionV0 = "push"
 )

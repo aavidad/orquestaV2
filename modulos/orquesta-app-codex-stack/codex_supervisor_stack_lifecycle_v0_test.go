@@ -457,3 +457,49 @@ func TestCodexSupervisorRuntimeStateFromLoopV0MapeaEstadosDelNucleoV0(t *testing
 		})
 	}
 }
+
+func TestCodexSupervisorSnapshotFromDrainV0NoCierraAutomejoraActivaConEntregaAbiertaV0(t *testing.T) {
+	ctx := context.Background()
+	taskRef := "task-autoprogramming-open-delivered-001"
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion:      orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:             taskRef,
+		RunID:              "run-ref-autoprogramming-open-delivered-001",
+		PhaseID:            orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Title:              "Automejora abierta",
+		WriteSet:           []string{"modulos/orquesta-app-codex-stack/codex_supervisor_stack_lifecycle_v0.go"},
+		AcceptanceCriteria: []string{"no cerrar run activa con entrega pendiente de cierre"},
+		RequiredTests:      []string{"go test -count=1 ./modulos/orquesta-app-codex-stack -run TestCodexSupervisorSnapshot"},
+	})
+	lifecycle := CodexSupervisorStackLifecycleV0{
+		Stack: StackV0{
+			Stores: StoresV0{TaskStore: taskStore},
+		},
+	}
+	loop := orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run: orquestacoreworkflow.OrchestrationRunV0{
+			RunID:          "run-ref-autoprogramming-open-delivered-001",
+			AppSpecRef:     "app-spec-ref-autoprogramming-open-delivered-001",
+			Status:         orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+			Tasks:          []string{taskRef},
+			DeliveredTasks: []string{taskRef},
+		},
+	}
+
+	snapshot := lifecycle.codexSupervisorSnapshotFromDrainV0(ctx, loop.Run.RunID, "", orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+		Status: loop.Status,
+		Final:  loop,
+	})
+	if snapshot.Status != CodexSupervisorRuntimeRunningV0 {
+		t.Fatalf("snapshot=%+v want status=%s", snapshot, CodexSupervisorRuntimeRunningV0)
+	}
+	loop.Run.ClosedTasks = []string{taskRef}
+	snapshot = lifecycle.codexSupervisorSnapshotFromDrainV0(ctx, loop.Run.RunID, "", orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+		Status: loop.Status,
+		Final:  loop,
+	})
+	if snapshot.Status != CodexSupervisorRuntimeDoneV0 {
+		t.Fatalf("snapshot=%+v want status=%s", snapshot, CodexSupervisorRuntimeDoneV0)
+	}
+}

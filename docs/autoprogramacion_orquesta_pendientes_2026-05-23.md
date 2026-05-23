@@ -149,6 +149,49 @@ de automejora de baja prioridad cuando haya ejecuciones reales suficientes.
   Resultado: servidor temporal, Codex fake, un agente arrancado por supervisor
   residente, replay idempotente OK, `external-work/run` OK,
   `codex_real_executed=false`, `opes_touched=false`.
+- El residente recoge automejoras ya auto-preparadas desde la cola global
+  cuando no recibe `run_ref`: `self_improvement` con `auto_prepare_run=true`
+  crea una run de baja prioridad y el supervisor residente la arranca como
+  backlog normal. Prueba:
+  `TestAutoprogrammingResidentModeV0TomaAutomejoraAutoPreparadaCuandoEstaParadoV0`.
+- Un drain acotado por `WaitAgentRefs` ya no declara `quiescent` al llegar la
+  ultima entrega del scope: reentra al Director para permitir review, replan o
+  cierre. Prueba:
+  `TestDrainRunV0ConACKCompletoReentraDirectorConWaitAgentRefsV0`.
+- El supervisor del stack no marca como `done` una run activa con tareas abiertas
+  aunque el loop quede `quiescent`; conserva el ciclo vivo para que el residente
+  siga revisando/cerrando. Prueba:
+  `TestCodexSupervisorSnapshotFromDrainV0NoCierraAutomejoraActivaConEntregaAbiertaV0`.
+
+## Ciclo de automejora residente
+
+Regla vigente:
+
+```text
+cola normal sin trabajo ejecutable o con huecos detectados
+  -> revisar backlog/automejora
+  -> preparar run aislada de baja prioridad
+  -> ejecutar agentes y subagentes por Orquesta
+  -> revisar entrega y pruebas requeridas
+  -> si esta cerrada y no pisa trabajos vivos, promocionar por conector VCS
+  -> limpiar/archivar staging temporal
+  -> volver a revisar
+```
+
+La cola operativa actual es `RunQueue` global. Las automejoras entran por
+`orquesta.autoprogramming.self_improvement.propose.v0` con
+`auto_prepare_run=true`, que las convierte en `prepare_run` y las encola con
+prioridad baja. El residente debe tratar esa cola como trabajo autonomo normal
+cuando esta parado.
+
+Frontera pendiente de codigo: el staging temporal completo debe implementarse
+fuera del nucleo, en puertos/adaptadores. El contrato puro puede vivir en
+`orquesta-autoprogramming`; Git/worktree/promocion/cleanup pertenecen a
+`orquesta-runtime-worktree` y la composicion `orquesta-app-codex-stack`; el
+servidor solo cablea rutas/env opt-in. El core no conoce rutas temporales,
+shell, Git ni proveedor. La promocion solo puede ocurrir con evidencia durable
+de tests y sin tareas vivas solapadas en write-set; si hay solape, se deja la
+promocion como tarea posterior en cola, no se pisa el trabajo a medias.
 
 ## T01 server-autonomy
 

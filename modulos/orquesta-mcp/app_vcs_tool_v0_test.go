@@ -10,6 +10,7 @@ func TestMCPAppVCSDescriptorV0EsAdaptadorFino(t *testing.T) {
 	descriptor := MCPAppVCSDescriptorV0()
 	if descriptor.Name != MCPAppVCSToolNameV0 ||
 		descriptor.ResourceURI != MCPAppVCSResourceURIV0 ||
+		!containsMCPTestStringV0(descriptor.InputSchema, MCPAppVCSActionReviewRepoV0) ||
 		!containsMCPTestStringV0(descriptor.InputSchema, MCPAppVCSActionCommitV0) ||
 		!containsMCPTestStringV0(descriptor.InputSchema, MCPAppVCSActionPushV0) {
 		t.Fatalf("descriptor inesperado: %+v", descriptor)
@@ -49,6 +50,28 @@ func TestMCPAppVCSExecutorV0DelegaEnConectorInyectado(t *testing.T) {
 	if fake.input.AppRef != "app-ref-vcs-001" ||
 		result.Estado != MCPAppVCSEstadoOKV0 ||
 		result.CommitRef != "commit-ref-vcs-001" {
+		t.Fatalf("fake=%+v result=%+v", fake.input, result)
+	}
+}
+
+func TestMCPAppVCSExecutorV0AceptaReviewRepo(t *testing.T) {
+	fake := &fakeMCPAppVCSExecutorV0{}
+	result, err := NewMCPAppVCSToolExecutorV0(fake).Execute(context.Background(), MCPAppVCSToolInputV0{
+		RequestID:     "request-ref-vcs-review-001",
+		CorrelationID: "corr-vcs-review-001",
+		Action:        MCPAppVCSActionReviewRepoV0,
+		AppRef:        "app-ref-vcs-review-001",
+		RepoRef:       "repo-ref-vcs-review-001",
+		WorktreeRef:   "worktree-ref-orquesta-autoprog-git-review-20260523",
+		BranchRef:     "branch-ref-orquesta-autoprog-git-review-20260523",
+	})
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.Estado != MCPAppVCSEstadoOKV0 ||
+		fake.input.Action != MCPAppVCSActionReviewRepoV0 ||
+		result.WorktreeRef != "worktree-ref-orquesta-autoprog-git-review-20260523" ||
+		result.BranchRef != "branch-ref-orquesta-autoprog-git-review-20260523" {
 		t.Fatalf("fake=%+v result=%+v", fake.input, result)
 	}
 }

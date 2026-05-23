@@ -84,7 +84,11 @@ func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorSnapshotFromDrai
 			lifecycle.codexSupervisorOperationalBlockedEvidenceRefsV0(ctx, runRef, planRef, result)...,
 		)...,
 	))
-	status := codexSupervisorRuntimeStateFromLoopV0(result.Final.Status, result.Final.Run.Status)
+	status := codexSupervisorRuntimeStateFromDrainLoopV0(result.Final)
+	if status == CodexSupervisorRuntimeDoneV0 &&
+		lifecycle.codexSupervisorDrainHasOpenAutoprogrammingWorkV0(ctx, result.Final.Run) {
+		status = CodexSupervisorRuntimeRunningV0
+	}
 	if codexSupervisorEvidenceRefsContainPartV0(evidenceRefs, "operational-director-plan-state:blocked") {
 		status = CodexSupervisorRuntimeStoppedV0
 	}
@@ -232,6 +236,35 @@ func codexSupervisorRuntimeStateFromOutcomeV0(
 		orquestacionnucleoapp.ProgressiveLoopStatusV0(strings.TrimSpace(outcome)),
 		"",
 	)
+}
+
+func codexSupervisorRuntimeStateFromDrainLoopV0(
+	loop orquestacionnucleoapp.ProgressiveLoopResultV0,
+) CodexSupervisorRuntimeStateV0 {
+	return codexSupervisorRuntimeStateFromLoopV0(loop.Status, loop.Run.Status)
+}
+
+func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorDrainHasOpenAutoprogrammingWorkV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		!codexSupervisorRunHasOpenDeliveredTasksV0(run) {
+		return false
+	}
+	hold, err := RunHasOpenAutoprogrammingTasksV0(ctx, lifecycle.Stack.Stores.TaskStore, run)
+	return err == nil && hold
+}
+
+func codexSupervisorRunHasOpenDeliveredTasksV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	for _, taskRef := range compactStringsV0(run.DeliveredTasks) {
+		if !codexStackStringInSetV0(run.ClosedTasks, taskRef) {
+			return true
+		}
+	}
+	return false
 }
 
 func codexSupervisorRuntimeStateFromLoopV0(

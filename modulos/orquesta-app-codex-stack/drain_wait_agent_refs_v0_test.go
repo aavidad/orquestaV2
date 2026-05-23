@@ -62,7 +62,7 @@ func TestDrainRunV0WaitAgentRefsNoIngiereACKFueraDeScope(t *testing.T) {
 	}
 }
 
-func TestDrainRunV0ConACKParcialNoReentraDirectorHastaCerrarWaitAgentRefs(t *testing.T) {
+func TestDrainRunV0ConACKCompletoReentraDirectorConWaitAgentRefsV0(t *testing.T) {
 	runtime := &noAckCodexStackRuntimeV0{
 		fakeCodexStackRuntimeV0: newFakeCodexStackRuntimeV0(),
 	}
@@ -75,8 +75,10 @@ func TestDrainRunV0ConACKParcialNoReentraDirectorHastaCerrarWaitAgentRefs(t *tes
 		t.Fatalf("descriptors=%d want>=2", len(descriptors))
 	}
 	first := descriptors[0]
-	second := descriptors[1]
-	waitRefs := []string{first.AgentRef, second.AgentRef}
+	waitRefs := make([]string, 0, len(descriptors))
+	for _, descriptor := range descriptors {
+		waitRefs = append(waitRefs, descriptor.AgentRef)
+	}
 	source := &countingCodexStackDirectorDecisionSourceV0{}
 	stack.Ports.DirectorDecisionSource = source
 	if err := writeCodexStackAckForDescriptorV0(t, first); err != nil {
@@ -103,8 +105,10 @@ func TestDrainRunV0ConACKParcialNoReentraDirectorHastaCerrarWaitAgentRefs(t *tes
 		source.Calls != 0 {
 		t.Fatalf("drain parcial reentro/cambio run: drain=%+v calls=%d", drain, source.Calls)
 	}
-	if err := writeCodexStackAckForDescriptorV0(t, second); err != nil {
-		t.Fatalf("write second ack: %v", err)
+	for _, descriptor := range descriptors[1:] {
+		if err := writeCodexStackAckForDescriptorV0(t, descriptor); err != nil {
+			t.Fatalf("write remaining ack %s: %v", descriptor.AgentRef, err)
+		}
 	}
 	finalDrain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
 		RunRef:               director.RunRef,
@@ -124,18 +128,18 @@ func TestDrainRunV0ConACKParcialNoReentraDirectorHastaCerrarWaitAgentRefs(t *tes
 	if finalDrain.Final.Run.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 {
 		t.Fatalf("drain final scoped cambio estado del run: drain=%+v", finalDrain)
 	}
-	if source.Calls != 0 {
-		t.Fatalf("drain final scoped reentro: drain=%+v calls=%d", finalDrain, source.Calls)
+	if finalDrain.Status == orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 {
+		t.Fatalf("drain final scoped quedo quiescent sin reentrar: drain=%+v calls=%d", finalDrain, source.Calls)
 	}
 	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
-	firstObservation := drainObservationFromDescriptorForTestV0(first)
-	secondObservation := drainObservationFromDescriptorForTestV0(second)
-	if !drainObservationAlreadyRegisteredV0(run, firstObservation) ||
-		!drainObservationAlreadyRegisteredV0(run, secondObservation) {
-		t.Fatalf("observaciones finales invalidas: artifacts=%v deliveries=%v wait=%v", run.PhaseArtifacts, run.Deliveries, waitRefs)
+	for _, descriptor := range descriptors {
+		observation := drainObservationFromDescriptorForTestV0(descriptor)
+		if !drainObservationAlreadyRegisteredV0(run, observation) {
+			t.Fatalf("observacion final no registrada: artifacts=%v deliveries=%v wait=%v observation=%+v", run.PhaseArtifacts, run.Deliveries, waitRefs, observation)
+		}
 	}
-	if len(run.Reviews) != 0 || len(run.AcceptedReviews) != 0 || len(run.ClosedTasks) != 0 {
-		t.Fatalf("drain scoped no debe revisar/cerrar en el mismo intento: run=%+v", run)
+	if len(run.PhaseArtifacts) < len(waitRefs) {
+		t.Fatalf("observaciones finales invalidas: artifacts=%v deliveries=%v wait=%v", run.PhaseArtifacts, run.Deliveries, waitRefs)
 	}
 }
 

@@ -36,3 +36,30 @@ func TestMCPAppVCSHTTPHandlerV0PostDelegaYPropagaCorrelacion(t *testing.T) {
 		t.Fatalf("input no delegado=%+v", executor.input)
 	}
 }
+
+func TestMCPAppVCSHTTPHandlerV0AceptaReviewRepo(t *testing.T) {
+	executor := &fakeMCPAppVCSExecutorV0{}
+	body, err := json.Marshal(MCPAppVCSToolInputV0{
+		RequestID:     "request-ref-app-vcs-http-review",
+		CorrelationID: "corr-app-vcs-http-review",
+		Action:        MCPAppVCSActionReviewRepoV0,
+		AppRef:        "app-ref-vcs-http-review",
+		RepoRef:       "repo-ref-vcs-http-review",
+		WorktreeRef:   "worktree-ref-orquesta-autoprog-git-review-20260523",
+		BranchRef:     "branch-ref-orquesta-autoprog-git-review-20260523",
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	request := httptest.NewRequest(http.MethodPost, MCPAppVCSHTTPPathV0, bytes.NewReader(body))
+	response := httptest.NewRecorder()
+
+	NewMCPAppVCSHTTPHandlerV0(executor).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if executor.input.Action != MCPAppVCSActionReviewRepoV0 {
+		t.Fatalf("input no delegado=%+v", executor.input)
+	}
+}

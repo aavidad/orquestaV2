@@ -60,14 +60,6 @@ func (stack StackV0) drainRunAttemptControlV0(
 				),
 			}, nil
 		}
-		if len(compactStringsV0(request.WaitAgentRefs)) > 0 {
-			return drainRunAttemptControlV0{
-				Loop: drainProgressiveResultV0(
-					orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
-					run,
-				),
-			}, nil
-		}
 		return stack.continueDrainRunControlAfterExternalV0(ctx, request)
 	}
 	if drainRunHasPendingExternalAgentsV0(run, request.WaitAgentRefs) {
