@@ -166,15 +166,8 @@ Implementado:
 
 Pendiente:
 
-- ejecutar la misma garantia con Codex real en ola/cohorte amplia. Ya existe
-  harness fake y test opt-in real (`CODEX-WAVE-REAL`), pero falta evidencia de
-  ejecucion con proveedor;
 - conectar review/rework/replan del Director Operativo con casos reales amplios
   de `domain_work`/OPES hasta cierre de derivados;
-- cerrar recursion Codex end-to-end con proveedor real: hijos y nietos con
-  parent/child refs, presupuesto global, profundidad/fanout, ACK/artefactos y
-  review antes de consumir decisiones. Offline/fake-runtime ya existe arbol
-  1->2->4 y supervisor fake que avanza el arbol sin llamadas manuales por nivel;
 - conectar el expander neutral `DomainDocumentPlanV0 -> DomainWorkJobRequestV0[]`
   con el ciclo real de OPES derivados/cierre. Ya existe conector durable
   file-based de referencia para `DomainWorkJobCreatorPortV0`, pero el cierre
@@ -262,10 +255,9 @@ status es `failed` o la cadena causal no empata, el cierre se bloquea.
 El paso operativo `run_required_tests` ya puede consumir evidencia causal,
 generarla mediante runner inyectado por puerto, guardar `RequiredTestEvidenceV0`,
 bloquear por fallo/falta de evidencia, reentrar cuando aparece evidencia
-posterior y replanificar un fallo causal acotado. Lo pendiente verificable es
-repetir esa garantia con Codex real de ola/cohorte amplia, recursion real y OPES
-temporal real; no basta con que exista un harness opt-in sin ejecucion real
-documentada.
+posterior y replanificar un fallo causal acotado. Esa garantia ya tiene
+ejecucion documentada con Codex real de ola/cohorte amplia y recursion real. Lo
+pendiente verificable es OPES temporal real de derivados/cierre.
 
 ## Espera por cohortes y oleadas
 
@@ -518,6 +510,11 @@ Las pruebas reales deben seguir la matriz vigente y ser opt-in:
   correccion y cierra con evidencia;
 - smoke de reinicio/continuidad: el plan vivo y la cola sobreviven a reinicio de
   daemon con estado temporal;
+- smoke Codex real de ola/cohorte amplia: cerrado por `CODEX-WAVE-REAL`, con
+  varios agentes vivos, `WaitAgentRefs`, review causal, runner y cierre;
+- smoke Codex real recursivo: cerrado por `CODEX-RECURSION-REAL`, con arbol
+  1->2->4, parent/child refs, profundidad/fanout, presupuesto, review causal,
+  runner y cierre;
 - smoke OPES `plan_tema`: OPES envia trabajo neutral, Orquesta entrega
   `document_plan`, OPES valida y crea derivados sin duplicar artefactos;
 - smoke OPES temario completo futuro: director principal crea plan de temario,

@@ -54,7 +54,8 @@ Codex real amplio/recursivo y dominios reales por conectores.
 
 ## DIR-OP-005: recursion gobernada real
 
-Estado: pendiente real; cerrado offline/fake-runtime fuera del modulo puro.
+Estado: cerrado en composicion Codex real opt-in; cerrado offline/fake-runtime
+fuera del modulo puro.
 
 Objetivo: demostrar con runtime real que un agente padre puede proponer hijos y
 que Orquesta conserva control: limites de profundidad/fanout, presupuesto,
@@ -63,5 +64,5 @@ parent/child refs, wait por subarbol y review causal.
 Estado actual: fake-runtime ya cubre arbol 1->2->4 con parent/child refs,
 presupuesto global, profundidad/fanout, waits acotados, review causal y cierre
 del arbol; el supervisor fake del stack avanza ese arbol sin llamadas manuales
-por nivel. No anunciar como terminado real hasta tener smoke Codex opt-in con
-proveedor vivo.
+por nivel. `CODEX-RECURSION-REAL` ejecuto el mismo recorrido con proveedor vivo,
+ACK/entregas reales y cierre causal del arbol.

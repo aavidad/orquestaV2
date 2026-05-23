@@ -300,10 +300,9 @@ smoke real opt-in. No se importa desde core, director, domain-work ni expander.
   wiring por puerto.
 - `WaitAgentRefs` cubre refs de agente y ya puede derivarse desde
   `cohort_ref`/`wave_ref` de tasks en el servicio del director. Tambien acota
-  ingesta de ACK/deliveries en el stack Codex. Hay harness fake y test opt-in
-  real para ola/cohorte amplia (`CODEX-WAVE-REAL`); falta ejecutarlo con Codex
-  real y dejar evidencia operativa.
-- La recursion Codex sigue pendiente como prueba real completa; el linaje
+  ingesta de ACK/deliveries en el stack Codex. La ola/cohorte amplia
+  (`CODEX-WAVE-REAL`) ya quedo ejecutada con Codex real y evidencia operativa.
+- La recursion Codex ya quedo cerrada como prueba real completa; el linaje
   neutral ya llega a `WorkflowTaskV0` y al paquete de arranque del agente, pero
   no se debe asumir que el stack productivo ya gobierna hijos de hijos.
 - `modulos/orquesta-document-plan-expander` materializa de forma neutral
@@ -378,9 +377,9 @@ cohorte/ola, el mismo scope gobierna pending, wait e ingesta de observaciones:
 
 Esto cierra el scope de ingesta, no los smokes reales amplios. El ciclo
 funcional de ola esta probado offline/fake-runtime con review, tests durables,
-`replan_or_close`, `close` y plan state; queda pendiente reproducirlo con Codex
-real de ola/cohorte amplia, recursion real y OPES temporal real de
-derivados/cierre. El handoff de ese tramo es
+`replan_or_close`, `close` y plan state; tambien quedo reproducido con Codex
+real de ola/cohorte amplia y recursion real. Queda pendiente OPES temporal real
+de derivados/cierre. El handoff de ese tramo es
 `corte_cierre_generico_director_operativo_2026-05-17.md`.
 
 ## Como trabajar sin romper el nucleo

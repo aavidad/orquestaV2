@@ -125,9 +125,9 @@ se crea `ReplanDecisionRecorded` automatico: puede ser latencia o falta de
 ingesta, no necesariamente trabajo defectuoso. El replay con `state-file` no
 duplica ese gate y reentra a `replan_or_close` cuando aparece evidencia `passed`
 causal posterior. El runner por puerto, el ejecutor local opt-in, el smoke Codex
-real acotado `CODEX-REQTEST-REAL-E2E` y el smoke no-OPES temporal
-`EXT-NO-OPES` ya tienen evidencia. Siguen pendientes ola/cohorte Codex real
-amplia, recursion real y OPES temporal real de derivados/cierre.
+real acotado `CODEX-REQTEST-REAL-E2E`, el smoke no-OPES temporal
+`EXT-NO-OPES`, `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` ya tienen
+evidencia. Sigue pendiente OPES temporal real de derivados/cierre.
 
 Desde el corte del 2026-05-22, `ContinueAppDirectorV0` no bloquea el
 `PlanState` si el cierre de una task devuelve solo `run.open_tasks`: conserva el
@@ -192,9 +192,9 @@ implementacion, test focal y evidencia en la matriz.
   corte del 2026-05-22 bloquea tambien `required-tests-evidence-missing` cuando
   no hay evidencia causal ni runner efectivo, registra un quality gate
   bloqueante idempotente sin replan automatico, y reentra a `replan_or_close` si
-  la evidencia `passed` aparece despues. El smoke real acotado con runner esta
-  cerrado; siguen pendientes smokes reales de ola/cohorte amplia y recursion
-  real.
+  la evidencia `passed` aparece despues. El smoke real acotado con runner, la
+  ola/cohorte Codex real amplia y la recursion Codex real quedan cerrados con
+  proveedor; sigue pendiente OPES temporal real de derivados/cierre.
 - [x] Replan negativo: cerrada la observacion durable de review negativa. El
   `PlanState` guarda refs/attempt para `ReworkRequested` y
   `ReplanDecisionRecorded`. El corte del 2026-05-21 ya convierte followups
@@ -259,13 +259,12 @@ implementacion, test focal y evidencia en la matriz.
   deterministas de `QualityGateRecorded` y `ReplanDecisionRecorded`, aun sin
   `CommandEffects` frescos.
 
-El orden recomendado ahora es: ejecutar `CODEX-WAVE-REAL` con Codex real de
-ola/cohorte amplia, despues recursion real y OPES temporal real de
-derivados/cierre. El harness fake de ola/cohorte ya existe, pero no cierra el
-modo real con proveedor. El smoke Codex real acotado con runner ya quedo cerrado
-por `CODEX-REQTEST-REAL-E2E`; el no-OPES temporal con runtime fake ya quedo
-cerrado por `EXT-NO-OPES`. Ninguno cubre recursion real ni derivados OPES
-reales.
+El orden recomendado ahora es cerrar OPES temporal real de derivados/cierre. El
+smoke Codex real acotado con runner ya quedo cerrado por
+`CODEX-REQTEST-REAL-E2E`; el no-OPES temporal con runtime fake ya quedo cerrado
+por `EXT-NO-OPES`; `CODEX-WAVE-REAL` cubre ola/cohorte amplia con varios
+agentes Codex vivos y `CODEX-RECURSION-REAL` cubre el arbol recursivo 1->2->4
+con proveedor real.
 
 ## Corte OperationalDirectorPlanStateV0
 
@@ -307,11 +306,11 @@ activo, avanzar a `review_deliveries` cuando el wait queda consumido y mover
 `review_deliveries` a `run_required_tests` o `replan_or_close` cuando la cadena
 causal de review aceptada pertenece al scope activo.
 
-Pendiente verificable despues de este corte: smoke Codex real de ola/cohorte
-amplia, recursion real y OPES temporal real de derivados/cierre. El runner real
-acotado con un agente Codex vivo ya tiene evidencia en
-`CODEX-REQTEST-REAL-E2E`; el cierre no-OPES temporal esta cubierto por
-`EXT-NO-OPES`.
+Pendiente verificable despues de este corte: OPES temporal real de
+derivados/cierre. El runner real acotado con un agente Codex vivo ya tiene
+evidencia en `CODEX-REQTEST-REAL-E2E`; el cierre no-OPES temporal esta cubierto
+por `EXT-NO-OPES`; la ola/cohorte Codex real y la recursion Codex real estan
+cubiertas por `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL`.
 
 ## Criterios de cierre operativo
 
@@ -331,16 +330,16 @@ por estado durable o por una fuente inyectada y verificable:
 
 ## Pendiente verificable
 
-Estas piezas ya tienen cierre offline/fake-runtime donde se indica. Lo que sigue
-pendiente es llevar la misma garantia a Codex real amplio/recursion y a OPES
-temporal real de derivados/cierre.
+Estas piezas ya tienen cierre offline/fake-runtime donde se indica. La misma
+garantia ya se llevo a Codex real amplio/recursion; lo que sigue pendiente es
+OPES temporal real de derivados/cierre.
 
 1. Cobertura Codex real con runner:
    el runner por puerto, el executor local opt-in, el consumo de
    `RequiredTestEvidenceV0`, el replay sin reejecucion externa, el smoke
-   `state-file` sin Codex vivo y el smoke Codex real acotado
-   `CODEX-REQTEST-REAL-E2E` ya tienen evidencia. Sigue pendiente llevar esa
-   cobertura a ola/cohorte amplia y recursion real con varios agentes vivos,
+   `state-file` sin Codex vivo, el smoke Codex real acotado
+   `CODEX-REQTEST-REAL-E2E`, `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` ya
+   tienen evidencia con proveedor. La recursion real cubre varios agentes vivos,
    parent/child refs, review causal y cierre del arbol.
 2. `replan_or_close` causal:
    ya actua como puerta explicita para cierre cuando el `PlanState` esta activo:
@@ -390,10 +389,6 @@ y cierre por refs opacas.
 
 Los huecos restantes no se consideran cerrados hasta tener evidencia propia:
 
-- ejecucion real de `CODEX-WAVE-REAL` con varios agentes vivos, mismo ciclo de
-  review/tests/cierre y scope formal de Director Operativo;
-- recursion Codex real con parent/child refs, limites, presupuesto, entregas
-  vivas, review causal y cierre del arbol;
 - OPES temporal real de derivados/cierre hasta `assemble_topic`, con refs
   causales suficientes y sin asumir cierre desde dry-run o automatizacion
   offline;
@@ -421,8 +416,8 @@ TestCodexStackRealOperationalDirectorWaveCohortOptInV0
 - No convertir un smoke Codex en prueba de cierre generico.
 - No tocar OPES productivo ni drenar colas amplias para este corte.
 - No cablear DB real ni `orquesta-domain-work-sql` al Director.
-- No anunciar recursion Codex completa hasta tener parent/child refs, limites,
-  presupuesto y review causal con evidencia real.
+- No anunciar recursion Codex completa si se regresa sin parent/child refs,
+  limites, presupuesto y review causal con evidencia real.
 
 ## Orden recomendado
 
@@ -432,7 +427,8 @@ TestCodexStackRealOperationalDirectorWaveCohortOptInV0
    `DIRECTOR-REQUIRED-TESTS-DURABLE-OFFLINE`,
    `DIRECTOR-REPLAN-CLOSE-OFFLINE` y
    `DIRECTOR-PLAN-STATE-OFFLINE`.
-3. Ejecutar `CODEX-WAVE-REAL` con Codex real de ola/cohorte amplia; el caso
-   acotado de runner ya esta cerrado por `CODEX-REQTEST-REAL-E2E`.
-4. Solo despues, conectar OPES/conectores reales con guardas opt-in y filtro por
+3. `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` ya quedaron ejecutados con Codex
+   real; mantenerlos opt-in y repetirlos solo ante regresion o cambios de
+   frontera.
+4. Conectar OPES/conectores reales con guardas opt-in y filtro por
    job type.

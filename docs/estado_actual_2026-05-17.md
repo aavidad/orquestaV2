@@ -210,8 +210,8 @@ El primer corte ya no esta solo en documentos:
   `TestCodexStackOperationalWaveFakeRuntimeV0` cierra una ola de tres tasks con
   runtime fake, `WaitAgentRefs`, review causal, runner de tests y cierre; el
   modo real opt-in `TestCodexStackRealOperationalWaveOptInV0` queda documentado
-  como `CODEX-WAVE-REAL`, pero no debe marcarse cerrado hasta ejecutarlo con
-  proveedor y guardar evidencia.
+  como `CODEX-WAVE-REAL` y ya se ejecuto con proveedor, guardando evidencia de
+  varios agentes Codex vivos, review causal, runner y cierre.
 
 Lo pendiente no debe confundirse con lo hecho:
 
@@ -237,9 +237,9 @@ Lo pendiente no debe confundirse con lo hecho:
   runner ya quedo cerrado por `CODEX-REQTEST-REAL-E2E` con un agente vivo,
   review causal, `RequiredTestEvidenceV0` y cierre de plan/run; el smoke
   no-OPES temporal `EXT-NO-OPES` ya cerro app HTTP/file externa con submitter
-  real opt-in, `codex-fake`, review, tests requeridos y plan cerrado; siguen
-  pendientes la ejecucion real de `CODEX-WAVE-REAL`, recursion real y OPES
-  temporal real de derivados/cierre;
+  real opt-in, `codex-fake`, review, tests requeridos y plan cerrado;
+  `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` ya cerraron Codex real amplio y
+  recursivo; sigue pendiente OPES temporal real de derivados/cierre;
 - si una composicion real distinta del stack Codex todavia no inyecta una fuente
   `OperationalClosureSource`, el cierre queda pendiente de wiring real en esa
   composicion;
@@ -251,16 +251,16 @@ Lo pendiente no debe confundirse con lo hecho:
   el cierre/bloqueo posterior del PlanState estan cubiertos offline; el cierre
   de ola multitarea ya progresa por reentradas sin bloquear por
   `run.open_tasks`; cierre insuficiente causal ya tiene replan retry acotado,
-  incluso con una unica task fallida dentro de ola multitarea; hay harness fake
-  y smoke opt-in para ola/cohorte amplia, pero falta ejecutar el modo Codex real;
-  tambien falta recursion real. El caso Codex real acotado con runner esta
-  cerrado por `CODEX-REQTEST-REAL-E2E`, y el caso no-OPES temporal con runtime
-  fake esta cerrado por `EXT-NO-OPES`;
-- la recursion Codex real sigue pendiente: ya existe contrato unitario
-  `launch -> sigue -> done`, adaptador de stack para supervisor/drain y prueba
-  fake que empuja un arbol recursivo sin llamadas manuales por nivel; falta
-  repetirlo con proveedor Codex real, ACK/entregas vivas, hijos/nietos con
-  parent/child refs, presupuesto global, profundidad/fanout y review causal;
+  incluso con una unica task fallida dentro de ola multitarea; la ola/cohorte
+  amplia Codex real esta cerrada por `CODEX-WAVE-REAL` y la recursion real por
+  `CODEX-RECURSION-REAL`. El caso Codex real acotado con runner esta cerrado
+  por `CODEX-REQTEST-REAL-E2E`, y el caso no-OPES temporal con runtime fake esta
+  cerrado por `EXT-NO-OPES`;
+- la recursion Codex real ya tiene contrato unitario `launch -> sigue -> done`,
+  adaptador de stack para supervisor/drain, prueba fake que empuja un arbol
+  recursivo sin llamadas manuales por nivel y smoke real con proveedor Codex,
+  ACK/entregas vivas, hijos/nietos con parent/child refs, presupuesto global,
+  profundidad/fanout y review causal;
 - OPES tiene evidencia de `plan_tema` y `plan_temario`; el bridge ya automatiza
   derivados por fases con `JOB_TYPE_SEQUENCE`, pero los derivados de review,
   validacion y ensamblado aun necesitan smoke real completo con guardas;
@@ -343,9 +343,9 @@ Leer con cuidado:
   declaradas, persistirse como `WorkflowTaskWaitStateV0` y acotar la ingesta de
   ACK/deliveries en el stack Codex. El ciclo durable offline ya cubre wait
   consumido, wait expirado, review positiva/negativa, tests requeridos,
-  replan/cierre y varios replays; lo que falta es repetir la garantia con Codex
-  real en ola/cohorte amplia y recursion. Para ola/cohorte amplia existe harness
-  fake y test opt-in real, pero sigue pendiente la ejecucion con proveedor.
+  replan/cierre y varios replays; esa garantia ya se repitio con Codex real en
+  ola/cohorte amplia y recursion. Para nuevas regresiones, los smokes reales
+  quedan opt-in y no deben mezclarse con OPES.
   Esperar todos los procesos vivos del run vuelve a introducir cuelgues falsos.
 - El cierre operativo desde `ContinueAppDirectorV0` depende de que el loop haya
   quedado quiescent y de una `OperationalClosureSource` real. Sin esa fuente, no
@@ -421,11 +421,11 @@ verificable para esa composicion.
 ## Siguiente ruta
 
 1. Mantener la frontera conceptual: core neutral primero, composiciones despues.
-2. Cerrar los frentes reales aun abiertos: ejecutar `CODEX-WAVE-REAL` con Codex
-   real de ola/cohorte amplia, recursion real con parent/child refs y OPES
-   temporal real de derivados/cierre. El smoke Codex real acotado con runner ya
-   esta cerrado en `CODEX-REQTEST-REAL-E2E`, y el no-OPES temporal con runtime
-   fake en `EXT-NO-OPES`; no cubren cierre de arbol recursivo ni derivados OPES
+2. Cerrar el frente real abierto de OPES temporal real de derivados/cierre. El
+   smoke Codex real acotado con runner ya esta cerrado en
+   `CODEX-REQTEST-REAL-E2E`, el no-OPES temporal con runtime fake en
+   `EXT-NO-OPES`, la ola/cohorte amplia en `CODEX-WAVE-REAL` y el arbol
+   recursivo en `CODEX-RECURSION-REAL`; no cubren derivados OPES
    reales.
 3. Consolidar `orquesta-domain-work` y los contratos de artefactos como entrada
    comun para OPES, programacion y futuros dominios.

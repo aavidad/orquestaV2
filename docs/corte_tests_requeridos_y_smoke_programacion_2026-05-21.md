@@ -196,9 +196,9 @@ Limitacion confirmada:
 - Corte posterior 2026-05-22: ese camino quedo validado en un caso real acotado
   por `CODEX-REQTEST-REAL-E2E`: un agente Codex vivo entrega, pasa por review
   causal aceptada, ejecuta `RequiredTestRunner`, persiste
-  `RequiredTestEvidenceV0` y cierra plan/run con estado persistido. Sigue
-  pendiente repetirlo para ola/cohorte amplia, recursion real y replan negativo
-  con agente real.
+  `RequiredTestEvidenceV0` y cierra plan/run con estado persistido. La misma
+  garantia ya quedo repetida para ola/cohorte amplia y recursion real; sigue
+  pendiente replan negativo con agente real.
 - Corte posterior 2026-05-22: el bloqueo de shutdown ordenado con run activa
   pero sin agentes vivos queda corregido en `orquesta-server-shutdown`. Si
   `agents_in_flight=0` y no hay checkpoint pendiente, shutdown queda `ready`

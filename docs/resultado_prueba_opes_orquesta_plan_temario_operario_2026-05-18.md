@@ -76,7 +76,7 @@ No se ejecutaron esos derivados en esta prueba. El alcance cerrado es
 - La run Orquesta quedo activa en fase `revision`; el objetivo OPES quedo
   cerrado porque el artefacto se entrego y OPES completo el job.
 - MCP/MCPO no se probo ni se requiere para este camino REST.
-- La recursion real padre-hijo-nieto del Director Operativo sigue pendiente:
-  hay contrato y materializacion parcial, pero falta el ciclo productivo donde
-  una propuesta de hijo cree nuevas tasks hijas/nietas durables gobernadas por
-  presupuesto, profundidad, fanout y review causal.
+- Nota posterior 2026-05-23: la recursion real padre-hijo-nieto del Director
+  Operativo ya quedo cubierta por `CODEX-RECURSION-REAL` en la composicion
+  Codex. Este documento sigue siendo historico de OPES y no cubre derivados ni
+  cierre OPES real.

@@ -64,16 +64,15 @@ actual, pero no debe definir el nucleo.
   scope, `run_required_tests` con `RequiredTestEvidenceV0`, runner por puerto,
   puerta `replan_or_close`, cierre causal, cierre por reentradas de ola
   multitarea, blockers cubiertos con reentrada y replay/idempotencia durable.
-  Lo que falta no es P1 ni el tramo feliz offline, sino ejecutar
-  `CODEX-WAVE-REAL`, recursion Codex real y OPES temporal real de
-  derivados/cierre; un blocker nuevo debe entrar como caso nuevo con prueba
-  propia.
+  Lo que falta no es P1 ni el tramo feliz offline ni Codex real amplio/recursivo,
+  sino OPES temporal real de derivados/cierre; un blocker nuevo debe entrar como
+  caso nuevo con prueba propia.
 - `ContinueAppDirectorV0` depende aun del caller para limites como
   `MaxExternalWaits`; no asumir que mantiene vivo un wait largo si se llama con
   defaults vacios.
 - El scope de ingesta de ACK/deliveries ya esta cerrado para Codex. La ola
   funcional esta cerrada offline/fake para review agrupada, pruebas requeridas y
-  cierre/replan durable; falta repetir esa garantia con agentes Codex reales en
+  cierre/replan durable, y ya se repitio con agentes Codex reales en
   ola/cohorte amplia.
 - `orquesta-app-runner` es el flujo historico de app-plan. No participa en
   `wait_cohort_ref`, `wait_wave_ref`, `wait_parent_task_ref`,
@@ -86,11 +85,11 @@ actual, pero no debe definir el nucleo.
   traducir nombres de refs ni usar app-plan como sustituto de
   `wait_cohort_ref`, `wait_wave_ref` o `wait_parent_task_ref`.
 - La recursion Codex real con hijos/nietos, presupuesto global, fanout,
-  profundidad y review causal sigue pendiente. Ya hay arbol fake 1->2->4,
-  materializacion CLI fuerte y supervisor fake recursivo sin llamadas manuales
-  por nivel; ademas el cierre operativo no genera cierre para una task padre si
-  sus `child_task_refs` faltan en el store o siguen abiertos. Eso no completa la
-  recursion real, pero acota el pendiente al modo proveedor vivo.
+  profundidad y review causal quedo cerrada por `CODEX-RECURSION-REAL`. Ya hay
+  arbol fake 1->2->4, materializacion CLI fuerte, supervisor fake recursivo sin
+  llamadas manuales por nivel y smoke real con proveedor vivo; ademas el cierre
+  operativo no genera cierre para una task padre si sus `child_task_refs` faltan
+  en el store o siguen abiertos.
 - No hay runtime real distinto de Codex probado end-to-end.
 
 ## Ruta para tener Orquesta usable hoy
@@ -217,7 +216,8 @@ Recursion gobernada:
 - No esperar "todos los agentes vivos".
 - No consumir decision de agente hijo sin ACK/artefacto causal.
 - No presentar una cohorte Codex como ciclo funcional completo solo porque la
-  ingesta ya este acotada por `WaitAgentRefs`; el ciclo offline existe, pero
-  siguen faltando smokes reales de ola/cohorte amplia y recursion.
+  ingesta ya este acotada por `WaitAgentRefs`; exigir tambien la evidencia real
+  de `CODEX-WAVE-REAL`/`CODEX-RECURSION-REAL` o repetir esos smokes ante
+  regresion.
 - No cablear `orquesta-domain-work-sql` ni DB real al Director.
 - No mover conocimiento de OPES dentro de `orquesta-director-operativo`.

@@ -750,5 +750,4 @@ Reglas cerradas:
 
 - no lanza Codex real por defecto;
 - no toca OPES ni core;
-- no declara cerrados recursion real, ola/cohorte amplia, cierre con app externa
-  real no-OPES ni OPES real.
+- no declara cerrado OPES real.

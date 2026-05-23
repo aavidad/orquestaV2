@@ -123,8 +123,8 @@ Cobertura Go actual:
   defecto y valida con un agente Codex real acotado el ciclo del Director
   Operativo: task con `RequiredTests`, `WaitAgentRefs`, ACK/entrega, review
   causal aceptada, runner local de tests, `RequiredTestEvidenceV0` durable y
-  cierre de plan/run. Cerrado por `CODEX-REQTEST-REAL-E2E`; no sustituye
-  recursion real, ola/cohorte amplia ni OPES temporal real de derivados/cierre.
+  cierre de plan/run. Cerrado por `CODEX-REQTEST-REAL-E2E`; no sustituye OPES
+  temporal real de derivados/cierre.
   El cierre no-OPES temporal con app HTTP/file, submitter real opt-in,
   `codex-fake`, review, required-tests y plan cerrado queda cubierto por
   `EXT-NO-OPES`.
@@ -140,20 +140,19 @@ Cobertura Go actual:
 - `TestCodexStackRealRecursiveTreeOptInV0` queda desactivado por defecto y
   reutiliza el mismo recorrido con procesos Codex reales, sin OPES y con doble
   confirmacion; espera ACK/entregas reales por nivel antes de abrir hijos o
-  nietos, y despues exige review causal, runner y cierre del arbol.
+  nietos, y despues exige review causal, runner y cierre del arbol. Cerrado el
+  2026-05-23 por `CODEX-RECURSION-REAL` con `high`, permisos amplios y
+  `scripts/smoke_codex_real_recursive_tree.sh` en 341.05s.
 
 Estado de huecos restantes:
 
-- Los smokes multiagente reales historicos prueban paralelismo del stack Codex,
-  decisiones del director y ACK/artefactos reales, pero son anteriores al cierre
-  causal completo del Director Operativo con `PlanState` y
-  `RequiredTestEvidenceV0`; no cierran la ola/cohorte amplia formal pendiente.
+- `CODEX-WAVE-REAL` cierra la ola/cohorte amplia formal con varios agentes
+  Codex vivos, `PlanState`, review causal, `RequiredTestEvidenceV0` y cierre.
 - `CODEX-REQTEST-REAL-E2E` cierra solo el caso acotado de un agente Codex vivo
   con runner y cierre causal.
-- `CODEX-RECURSION-REAL` ya tiene fake-runtime end-to-end, split_task generado
-  offline y wrapper real opt-in (`scripts/smoke_codex_real_recursive_tree.sh`);
-  queda pendiente ejecutar ese modo con proveedor/cuota para marcarlo cerrado
-  operativo.
+- `CODEX-RECURSION-REAL` cierra el arbol 1->2->4 con proveedor real,
+  fake-runtime end-to-end, split_task generado offline y wrapper real opt-in
+  (`scripts/smoke_codex_real_recursive_tree.sh`).
 - `EXT-NO-OPES` cierra la ruta temporal no-OPES con `codex-fake`, no una
   politica productiva de tests de dominio ni un proveedor Codex real.
 - OPES `plan_temario` real quedo cerrado para `document_plan` y creacion de
@@ -263,11 +262,8 @@ Evidencia validada:
 - `ContinueAppDirectorV0` cierra plan/run por fuente de cierre del stack Codex;
 - no toca OPES ni core.
 
-Pendiente no cubierto por este smoke:
+Pendiente no cubierto por estos smokes:
 
-- recursion real con parent/child refs, fanout/profundidad/presupuesto y review
-  causal;
-- ola/cohorte amplia con varios agentes Codex vivos;
 - OPES temporal real de derivados/cierre.
 
 Prueba real de cambio a mitad de ejecucion:
