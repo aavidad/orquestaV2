@@ -79,6 +79,7 @@ func buildStackHTTPHandlerV0(
 			Writer: config.Stores.RunQueue,
 		},
 		RunSupervisor: NewCodexStackRunSupervisorExecutorV0(stack),
+		AppVCS:        NewCodexStackAppVCSExecutorV0(config.Codex.ProjectWorkDir),
 		AutoprogrammingPrepareRun: NewCodexStackAutoprogrammingPrepareRunExecutorV0(
 			stack,
 			config.Capacity.OccurredAt,

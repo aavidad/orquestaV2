@@ -20,6 +20,7 @@ type MCPTransportBindingsV0 struct {
 	ServerShutdown            MCPTransportServerShutdownExecutorV0
 	DomainWork                MCPDomainWorkExecutorPortV0
 	ExternalWorkRun           MCPTransportExternalWorkRunExecutorV0
+	AppVCS                    MCPAppVCSExecutorPortV0
 	OperatorConnector         operator.OperatorMCPConnectorV0
 	OperatorStatus            operator.OperatorMCPStatusPortV0
 	OperatorBurst             operator.OperatorMCPBurstPortV0

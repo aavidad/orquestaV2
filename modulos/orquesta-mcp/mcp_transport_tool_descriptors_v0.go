@@ -22,6 +22,7 @@ type mcpTransportToolDescriptorsV0 struct {
 	serverShutdown           MCPServerShutdownToolDescriptorV0
 	domainWork               MCPDomainWorkToolDescriptorV0
 	externalWorkRun          MCPExternalWorkRunToolDescriptorV0
+	appVCS                   MCPAppVCSToolDescriptorV0
 }
 
 func newMCPTransportToolDescriptorsV0() mcpTransportToolDescriptorsV0 {
@@ -47,5 +48,6 @@ func newMCPTransportToolDescriptorsV0() mcpTransportToolDescriptorsV0 {
 		serverShutdown:           MCPServerShutdownDescriptorV0(),
 		domainWork:               MCPDomainWorkDescriptorV0(),
 		externalWorkRun:          MCPExternalWorkRunDescriptorV0(),
+		appVCS:                   MCPAppVCSDescriptorV0(),
 	}
 }

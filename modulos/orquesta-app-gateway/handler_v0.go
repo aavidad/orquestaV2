@@ -10,7 +10,14 @@ import (
 )
 
 func NewHTTPHandlerV0(config ConfigV0) http.Handler {
-	return orquestahttpgateway.NewAppGatewayMuxV0(NewRouteHandlersV0(config))
+	handler := orquestahttpgateway.NewAppGatewayMuxV0(NewRouteHandlersV0(config))
+	if config.AppVCS == nil {
+		return handler
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/", handler)
+	mux.Handle(orquestamcp.MCPAppVCSHTTPPathV0, orquestamcp.NewMCPAppVCSHTTPHandlerV0(config.AppVCS))
+	return mux
 }
 
 func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {

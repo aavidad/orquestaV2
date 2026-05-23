@@ -26,6 +26,7 @@ type ConfigV0 struct {
 	ServerShutdown            orquestamcp.MCPTransportServerShutdownExecutorV0
 	DomainWork                orquestamcp.MCPDomainWorkExecutorPortV0
 	ExternalWorkRun           orquestamcp.MCPTransportExternalWorkRunExecutorV0
+	AppVCS                    orquestamcp.MCPAppVCSExecutorPortV0
 	HTTPClient                *http.Client
 	Timeout                   time.Duration
 }
