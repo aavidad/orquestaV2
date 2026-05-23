@@ -34,6 +34,7 @@ const (
 	CliDefaultCommandSolicitarAppV0   = "app spec solicitar"
 	CliDefaultCommandOperationalV0    = "doctor contratos"
 	CliDefaultCommandGovernanceV0     = "gobernanza catalogo listar"
+	CliDefaultCommandGovernanceViewV0 = "gobernanza catalogo ver"
 	CliDefaultRequestIDPrefixV0       = "req-cli-"
 	CliDefaultErrorMessageNamespaceV0 = "orquesta_cli.errores."
 )

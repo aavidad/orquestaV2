@@ -130,6 +130,83 @@ func TestReviewReworkReplanSourceV0MantienePlanTrasReplanHastaAgente(t *testing.
 	}
 }
 
+func TestReviewReworkReplanSourceV0UsaAgentRefCortoYEstableParaReworkReal(t *testing.T) {
+	longDeliveryRef := "ack-ref-app-stack-" + strings.Repeat("delivery-ref-real-review-rework-", 8)
+	longTaskRef := "task-ref-app-change-" + strings.Repeat("review-rework-task-", 6)
+	descriptor := reviewReworkDescriptorForTestV0(longDeliveryRef, longTaskRef)
+	source := ReviewReworkReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(descriptor),
+	}
+	request := reviewReworkPlanRequestForTestV0(false)
+	request.Run.Tasks = []string{longTaskRef}
+	request.Run.ReworkRequests = []string{
+		"rework-request-ref-" + strings.Repeat("review-result-real-damaged-delivery-", 6) +
+			"#review_result:review-result-ref-long#review_request:review-request-ref-long#delivery:" +
+			longDeliveryRef,
+	}
+	request.Run.ReviewResults = []string{
+		"review-result-ref-long#review_result:changes_requested" +
+			"#review_request:review-request-ref-long#delivery:" + longDeliveryRef,
+	}
+
+	plans, err := source.BuildReviewReworkReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildReviewReworkReplanPlansV0: %v", err)
+	}
+	if len(plans) != 1 {
+		t.Fatalf("plans=%+v", plans)
+	}
+	if plans[0].TaskRef != longTaskRef {
+		t.Fatalf("task_ref=%q", plans[0].TaskRef)
+	}
+	if len(plans[0].AgentRequestID) > 80 {
+		t.Fatalf("agent_request_id demasiado largo: %s", plans[0].AgentRequestID)
+	}
+	if !strings.HasPrefix(plans[0].AgentRequestID, "agent-ref-task-ref-app-change-") {
+		t.Fatalf("agent_request_id no conserva tarea: %s", plans[0].AgentRequestID)
+	}
+
+	request.Run.Agents = []string{plans[0].AgentRequestID}
+	again, err := source.BuildReviewReworkReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildReviewReworkReplanPlansV0 replay: %v", err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("replay no debe duplicar agente de rework: %+v", again)
+	}
+}
+
+func TestReviewReworkReplanSourceV0CortaBucleTrasRetriesAmpliosPorTarea(t *testing.T) {
+	taskRef := "task-ref-target"
+	source := ReviewReworkReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			reviewReworkDescriptorForTestV0("delivery-ref-target", taskRef),
+		),
+	}
+	request := reviewReworkPlanRequestForTestV0(false)
+	request.Run.StartedAgents = make([]string, 0, reviewReworkReplanMaxRetryAgentsPerTaskV0)
+	for idx := 0; idx < reviewReworkReplanMaxRetryAgentsPerTaskV0; idx++ {
+		rework := reviewReworkProjectionV0{
+			ReworkRequestRef: "rework-request-ref-target-" + string(rune('a'+idx)),
+			ReviewResultRef:  "review-result-ref-target-" + string(rune('a'+idx)),
+			ReviewRequestID:  "review-request-ref-target-" + string(rune('a'+idx)),
+			DeliveryRef:      "delivery-ref-target-" + string(rune('a'+idx)),
+		}
+		request.Run.StartedAgents = append(
+			request.Run.StartedAgents,
+			"agent-ref-"+reviewReworkReplanAgentSuffixV0(rework, taskRef),
+		)
+	}
+
+	plans, err := source.BuildReviewReworkReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildReviewReworkReplanPlansV0: %v", err)
+	}
+	if len(plans) != 0 {
+		t.Fatalf("no debe encadenar rework indefinido tras limite amplio: %+v", plans)
+	}
+}
+
 func TestReviewReworkReplanSourceV0DescribeWriteSetFaltanteParaElAgente(t *testing.T) {
 	projectDir := t.TempDir()
 	writeStackReviewGateFileForTestV0(t, projectDir, "internal/api/handler.go", "package api\n")

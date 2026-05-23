@@ -77,7 +77,8 @@ func TestCodexStackV0ReviewChangesRequestedReplanificaYArrancaAgente(t *testing.
 		!codexStackRefsContainPartV0(run.ReworkRequests, deliveryRef) ||
 		!codexStackRefsContainPartV0(run.ReplanDecisions, "#action:retry_task") ||
 		!codexStackRefsContainPartV0(run.CapacityDecisions, "#capacity_decision:") ||
-		!codexStackRefsContainPartV0(run.StartedAgents, "agent-ref-rework-request-ref-") {
+		!codexStackRefsContainPartV0(run.StartedAgents, "agent-ref-task-ref-stack-agenda-001-") ||
+		codexStackRefsContainPartV0(run.StartedAgents, "agent-ref-rework-request-ref-") {
 		t.Fatalf("run sin retrabajo completo delivery=%s drain=%s phase=%s reviews=%v results=%v reworks=%v replan=%v capacity=%v started=%v",
 			deliveryRef,
 			drain.Status,
