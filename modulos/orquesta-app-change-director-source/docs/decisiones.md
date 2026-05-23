@@ -202,3 +202,18 @@ dominio.
 Impacto: cambios internos usan `implementation`; cualquier `external_work` usa
 `domain_work`. La fuente no decide proveedor/modelo/runtime ni interpreta
 internals de OPES u otra app.
+
+## Saneado antes de bloquear autoplaneado
+
+Decision: La fuente sanea criterios operativos antes de decidir si un cambio
+aceptado puede convertirse en microtarea automatica.
+
+Motivo: palabras como `token economy`, `Codex`, `modelo` o `provider` pueden
+aparecer en reglas operativas de usuario sin que deban cortar todo el trabajo.
+El comportamiento correcto es normalizarlas a conceptos neutrales y dejar al
+director/agente trabajar con refs opacas y contratos.
+
+Impacto: se mantiene la frontera hexagonal porque la microtarea no transporta
+proveedor, runtime ni secretos concretos. Tambien se evita el falso quiescent:
+un cambio con write-set y criterios verificables no queda parado solo por una
+palabra saneable.

@@ -37,6 +37,10 @@ Casos focales:
   `generate_visual_asset` crea unidad de trabajo externa con criterios de SVG
   seguro, accesibilidad, caption, alt text, ausencia de placeholders y entrega
   `visual_asset`.
+- `TestAppChangeDirectorDecisionSourceV0SaneaCriteriosOperativosSinBloquearAutoPlan`:
+  reproduce reglas operativas de autoprogramacion con `token economy`, runtime
+  de agente, capacidad y adaptador; la fuente las normaliza y crea microtarea
+  en vez de dejar la pregunta pendiente.
 - `TestAppChangeDirectorDecisionSourceV0CompactaCriteriosExternosAlLimiteDelDirector`:
   reproduce un job OPES con criterios generados y de usuario que antes excedian
   el limite compacto del DTO del director.

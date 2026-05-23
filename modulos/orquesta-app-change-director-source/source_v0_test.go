@@ -299,6 +299,38 @@ func TestAppChangeDirectorDecisionSourceV0SaneaGuardasInternasEnExpansion(t *tes
 	}
 }
 
+func TestAppChangeDirectorDecisionSourceV0SaneaCriteriosOperativosSinBloquearAutoPlan(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.AllowedWriteSet = []string{"modulos/orquesta-director-agent"}
+	record.Request.AcceptanceCriteria = []string{
+		"Reglas de hexagonal, i18n, archivos manejables y token economy llegan a agentes desde codigo.",
+		"No fijar Codex, modelo ni provider en nucleo.",
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	if len(decisions) == 0 {
+		t.Fatalf("decisions vacias")
+	}
+	task := decisions[6].CreateMicrotask.Task
+	if !stringInSetV0(task.AcceptanceCriteria, "Reglas de hexagonal, i18n, archivos manejables y economia de contexto llegan a agentes desde codigo.") ||
+		containsFragmentInSetForTestV0(task.AcceptanceCriteria, "token") ||
+		containsFragmentInSetForTestV0(task.AcceptanceCriteria, "Codex") ||
+		containsFragmentInSetForTestV0(task.AcceptanceCriteria, "modelo") ||
+		containsFragmentInSetForTestV0(task.AcceptanceCriteria, "provider") {
+		t.Fatalf("criteria=%+v", task.AcceptanceCriteria)
+	}
+}
+
 func TestAppChangeDirectorDecisionSourceV0CompactaCriteriosExternosAlLimiteDelDirector(t *testing.T) {
 	record := appChangeRecordForSourceTestV0()
 	record.Request.AllowedWriteSet = nil

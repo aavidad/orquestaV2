@@ -152,6 +152,7 @@ func sanitizeAppChangeTaskCriteriaV0(criteria []string) []string {
 }
 
 func sanitizeAppChangeTaskCriterionV0(value string) string {
+	value = sanitizeAppChangeOperationalTermsV0(value)
 	replacer := strings.NewReplacer(
 		"base de datos", "almacen interno",
 		"Base de datos", "Almacen interno",
@@ -163,12 +164,30 @@ func sanitizeAppChangeTaskCriterionV0(value string) string {
 		"db", "almacen interno",
 		"SQL", "consulta interna",
 		"sql", "consulta interna",
+		"prompt", "instrucciones",
+		"Prompt", "Instrucciones",
+		"transcript", "registro externo",
+		"Transcript", "Registro externo",
 		"runtime", "ejecucion interna",
 		"Runtime", "Ejecucion interna",
 		"provider", "adaptador",
 		"Provider", "Adaptador",
 		"proveedor", "adaptador",
 		"Proveedor", "Adaptador",
+		"model", "capacidad",
+		"Model", "Capacidad",
+		"modelo", "capacidad",
+		"Modelo", "Capacidad",
+		"Codex", "agente externo",
+		"codex", "agente externo",
+		"Claude", "agente externo",
+		"claude", "agente externo",
+		"Gemini", "agente externo",
+		"gemini", "agente externo",
+		"Ollama", "agente externo",
+		"ollama", "agente externo",
+		"vLLM", "agente externo",
+		"vllm", "agente externo",
 		"HOME", "directorio interno",
 		"home", "directorio interno",
 		"OAuth", "identidad externa",
@@ -190,6 +209,18 @@ func sanitizeAppChangeTaskCriterionV0(value string) string {
 		"Credencial", "Dato sensible",
 		"api_key", "clave externa",
 		"API_KEY", "clave externa",
+	)
+	return replacer.Replace(value)
+}
+
+func sanitizeAppChangeOperationalTermsV0(value string) string {
+	replacer := strings.NewReplacer(
+		"token economy", "economia de contexto",
+		"Token economy", "Economia de contexto",
+		"TOKEN ECONOMY", "ECONOMIA DE CONTEXTO",
+		"economia de tokens", "economia de contexto",
+		"Economia de tokens", "Economia de contexto",
+		"ECONOMIA DE TOKENS", "ECONOMIA DE CONTEXTO",
 	)
 	return replacer.Replace(value)
 }
