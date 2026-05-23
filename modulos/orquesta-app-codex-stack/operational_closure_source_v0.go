@@ -44,7 +44,7 @@ func (source codexStackOperationalClosureSourceV0) BuildOperationalDirectorClosu
 ) (orquestacionnucleoapp.OperationalDirectorClosureRequestV0, bool, error) {
 	if source.TaskStore == nil || source.EventReader == nil ||
 		strings.TrimSpace(request.Run.RunID) == "" ||
-		request.Run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		request.Run.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 ||
 		len(request.Run.Tasks) == 0 {
 		return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{}, false, nil
 	}

@@ -53,9 +53,6 @@ func (stack StackV0) drainRunAttemptControlV0(
 			return drainRunAttemptControlV0{}, err
 		}
 		if drainRunHasPendingExternalAgentsV0(run, request.WaitAgentRefs) {
-			if control, progressed, err := stack.continuePendingExternalDirectorV0(ctx, request, run); err != nil || progressed {
-				return control, err
-			}
 			return drainRunAttemptControlV0{
 				Loop: drainProgressiveResultV0(
 					orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
@@ -63,9 +60,25 @@ func (stack StackV0) drainRunAttemptControlV0(
 				),
 			}, nil
 		}
+		if len(compactStringsV0(request.WaitAgentRefs)) > 0 {
+			return drainRunAttemptControlV0{
+				Loop: drainProgressiveResultV0(
+					orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+					run,
+				),
+			}, nil
+		}
 		return stack.continueDrainRunControlAfterExternalV0(ctx, request)
 	}
 	if drainRunHasPendingExternalAgentsV0(run, request.WaitAgentRefs) {
+		if len(compactStringsV0(request.WaitAgentRefs)) > 0 {
+			return drainRunAttemptControlV0{
+				Loop: drainProgressiveResultV0(
+					orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+					run,
+				),
+			}, nil
+		}
 		if control, progressed, err := stack.continuePendingExternalDirectorV0(ctx, request, run); err != nil || progressed {
 			return control, err
 		}

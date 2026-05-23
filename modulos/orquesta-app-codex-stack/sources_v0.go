@@ -118,6 +118,7 @@ func directorDecisionFileSourceV0(config ConfigV0) orquestadirectoragentfilesour
 		DescriptorProvider: orquestaruntimecodexdelivery.CodexReceiptDirectorDecisionFileDescriptorProviderV0{
 			Store: config.Stores.ReceiptStore,
 		},
-		Reader: orquestadirectoragentfilesource.OSDirectorAgentDecisionFileReaderV0{},
+		Reader:             orquestadirectoragentfilesource.OSDirectorAgentDecisionFileReaderV0{},
+		IgnoreInvalidFiles: true,
 	}
 }

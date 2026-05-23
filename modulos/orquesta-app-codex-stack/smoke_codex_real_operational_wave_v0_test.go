@@ -549,7 +549,23 @@ func codexStackOperationalWaveRunToCloseV0(
 			MaxExternalWaits:           1,
 		}, stack.Ports)
 		if err != nil {
-			t.Fatalf("ContinueAppDirectorV0 close ciclo=%d: %v %s\n%s", cycle, err, codexStackRequiredTestErrorDetailsV0(err), codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
+			currentRun := mustLoadCodexStackRunForTestV0(t, stack, fixture.RunRef)
+			currentState := codexStackOperationalWaveLoadPlanStateV0(t, ctx, stack, fixture)
+			t.Fatalf(
+				"ContinueAppDirectorV0 close ciclo=%d: %v %s run_status=%s current_phase=%s closed_tasks=%v validations=%v closures=%v active_step=%s state_status=%s state_reason=%s\n%s",
+				cycle,
+				err,
+				codexStackRequiredTestErrorDetailsV0(err),
+				currentRun.Status,
+				currentRun.CurrentPhase,
+				currentRun.ClosedTasks,
+				currentRun.Validations,
+				currentRun.Closures,
+				currentState.ActiveStepID,
+				currentState.Status,
+				currentState.ClosureReason,
+				codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir),
+			)
 		}
 		run = result.Run
 		state = codexStackOperationalWaveLoadPlanStateV0(t, ctx, stack, fixture)

@@ -44,6 +44,7 @@ type DirectorAgentDecisionFileSourceV0 struct {
 	DescriptorProvider DirectorAgentDecisionFileDescriptorProviderPortV0
 	Reader             DirectorAgentDecisionFileReaderPortV0
 	MaxBytes           int
+	IgnoreInvalidFiles bool
 }
 
 type DirectorAgentDecisionFileEnvelopeV0 struct {

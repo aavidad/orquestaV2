@@ -55,6 +55,18 @@ func maybeCloseOperationalDirectorV0(
 		}
 		return loop, nil, nil
 	}
+	if loop.Run.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 {
+		if err := operationalDirectorPlanStateBlockedAtReplanOrCloseV0(
+			ctx,
+			request,
+			ports,
+			"operational-closure-run-not-active",
+			nil,
+		); err != nil {
+			return loop, nil, err
+		}
+		return loop, nil, nil
+	}
 	blocked, err := operationalDirectorPlanStateBlocksClosureV0(ctx, request, ports)
 	if err != nil || blocked {
 		return loop, nil, err

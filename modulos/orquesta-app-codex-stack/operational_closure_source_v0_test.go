@@ -76,6 +76,28 @@ func TestOperationalClosureSourceV0ConstruyeRequestCausalDentroDeScope(t *testin
 	}
 }
 
+func TestOperationalClosureSourceV0NoCierraRunNoActivo(t *testing.T) {
+	runRef := "run-stack-operational-closure-source-blocked"
+	task := stackOperationalClosureTaskForTestV0(runRef, "task-stack-operational-closure-blocked", nil)
+	run := stackOperationalClosureRunForTestV0(runRef, task.TaskID)
+	run.Status = orquestacoreworkflow.OrchestrationRunStatusBlockedV0
+	source := codexStackOperationalClosureSourceV0{
+		TaskStore:   orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(task),
+		EventReader: orquestacionnucleoapp.NewInMemoryEventSinkV0(),
+	}
+
+	_, ok, err := source.BuildOperationalDirectorClosureRequestV0(
+		context.Background(),
+		orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{Run: run},
+	)
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0: %v", err)
+	}
+	if ok {
+		t.Fatalf("source no debe producir cierre con run bloqueado")
+	}
+}
+
 func TestOperationalClosureSourceV0CierraConEvidenceRefsMixtosEnReviewResult(t *testing.T) {
 	runRef := "run-stack-operational-closure-source-mixed-evidence-001"
 	task := stackOperationalClosureTaskForTestV0(runRef, "task-stack-operational-closure-mixed-evidence", []string{"go test ./..."})

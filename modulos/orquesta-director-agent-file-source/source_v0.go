@@ -2,6 +2,7 @@ package orquestadirectoragentfilesource
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
@@ -59,11 +60,27 @@ func (source DirectorAgentDecisionFileSourceV0) decisionsFromDescriptorsV0(
 		}
 		decisions, err := source.decisionsFromDescriptorV0(ctx, descriptor)
 		if err != nil {
+			if source.IgnoreInvalidFiles && directorAgentDecisionFileSourceInvalidFileV0(err) {
+				continue
+			}
 			return nil, err
 		}
 		out = append(out, filterDirectorAgentDecisionFileRunV0(runRef, decisions)...)
 	}
 	return out, nil
+}
+
+func directorAgentDecisionFileSourceInvalidFileV0(err error) bool {
+	var issue DirectorAgentFileSourceIssueV0
+	if !errors.As(err, &issue) {
+		return false
+	}
+	switch strings.TrimSpace(issue.Field) {
+	case "schema_version", "file", "file_size", "decisions", "decision":
+		return true
+	default:
+		return strings.HasPrefix(strings.TrimSpace(issue.Field), "decision.")
+	}
 }
 
 func (source DirectorAgentDecisionFileSourceV0) decisionsFromDescriptorV0(

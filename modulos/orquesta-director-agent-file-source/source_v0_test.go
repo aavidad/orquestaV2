@@ -423,6 +423,45 @@ func TestDirectorAgentDecisionFileSourceV0RejectsInvalidDecision(t *testing.T) {
 	}
 }
 
+func TestDirectorAgentDecisionFileSourceV0IgnoraDescriptorInvalidoSiOptIn(t *testing.T) {
+	valid := mustDecisionFileJSONForTestV0(t, []orquestadirectoragent.DirectorAgentDecisionV0{
+		validOpenVoteDecisionForTestV0("run-ref-001"),
+	})
+	source := DirectorAgentDecisionFileSourceV0{
+		DescriptorProvider: decisionFileDescriptorProviderForTestV0{
+			Descriptors: []DirectorAgentDecisionFileDescriptorV0{
+				{
+					RunID: "run-ref-001",
+					Path:  "codex-freeform.json",
+				},
+				{
+					RunID: "run-ref-001",
+					Path:  "valid.json",
+				},
+			},
+		},
+		Reader: memoryDecisionFileReaderForTestV0{
+			Files: map[string][]byte{
+				"codex-freeform.json": []byte(`{"schema_version":"codex_director_decisions.v0","decisions":[{"id":"freeform"}]}`),
+				"valid.json":          valid,
+			},
+		},
+		IgnoreInvalidFiles: true,
+	}
+
+	decisions, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		decisionSourceRequestForTestV0("run-ref-001"),
+	)
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	if len(decisions) != 1 ||
+		decisions[0].CommandType != orquestadirectoragent.DirectorAgentCommandOpenPhaseV0 {
+		t.Fatalf("decisions=%+v", decisions)
+	}
+}
+
 func TestOSDirectorAgentDecisionFileReaderV0RejectsOversizedFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "decision.json")
 	if err := os.WriteFile(path, []byte(`{"schema_version":"x"}`), 0o600); err != nil {

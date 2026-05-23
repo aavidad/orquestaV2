@@ -249,6 +249,10 @@ func operationalDirectorPlanStateActiveWaitLoopV0(
 	if err != nil || len(waitAgentRefs) == 0 {
 		return loop, err
 	}
+	state, err := ports.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, request.RunRef, continueOperationalDirectorPlanRefV0(request))
+	if err != nil {
+		return loop, err
+	}
 	scopedRun := loop.Run
 	if ports.RunStore != nil {
 		latestRun, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
@@ -262,8 +266,99 @@ func operationalDirectorPlanStateActiveWaitLoopV0(
 		loop.Status == orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0) &&
 		appDirectorRunHasPendingAgentRefsV0(scopedRun, waitAgentRefs) {
 		loop.Status = orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0
+		if err := persistOperationalDirectorPlanActiveWaitStateV0(ctx, request, ports, state); err != nil {
+			return loop, err
+		}
 	}
 	return loop, nil
+}
+
+func persistOperationalDirectorPlanActiveWaitStateV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) error {
+	if ports.WaitStateWriter == nil || ports.RunStore == nil {
+		return nil
+	}
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok ||
+		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 ||
+		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+		return nil
+	}
+	run, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return err
+	}
+	filter := appDirectorWaitFilterV0{
+		CohortRef:     firstServiceRefV0(activeStep.CohortRef, state.ActiveCohortRef),
+		WaveRef:       firstServiceRefV0(activeStep.WaveRef, state.ActiveWaveRef),
+		ParentTaskRef: firstServiceRefV0(activeStep.ParentTaskRef, state.ActiveParentTaskRef),
+	}
+	explicitAgentRefs := compactServiceRefsV0(append(
+		append(append([]string(nil), activeStep.AgentRefs...), activeStep.PendingAgentRefs...),
+		state.PendingAgentRefs...,
+	))
+	snapshot := orquestacionnucleoapp.WorkflowTaskWaitSnapshotV0{}
+	if !appDirectorWaitFilterEmptyV0(filter) && ports.DirectorTaskStore != nil {
+		snapshot, err = orquestacionnucleoapp.BuildWorkflowTaskWaitSnapshotV0(
+			ctx,
+			ports.DirectorTaskStore,
+			run,
+			orquestacionnucleoapp.WorkflowTaskWaitFilterV0{
+				CohortRef:     filter.CohortRef,
+				WaveRef:       filter.WaveRef,
+				ParentTaskRef: filter.ParentTaskRef,
+			},
+		)
+		if err != nil {
+			return err
+		}
+	}
+	snapshot.AgentRefs = compactServiceRefsV0(append(snapshot.AgentRefs, explicitAgentRefs...))
+	snapshot.PendingAgentRefs = compactServiceRefsV0(append(
+		snapshot.PendingAgentRefs,
+		appDirectorExplicitPendingAgentRefsV0(run, explicitAgentRefs)...,
+	))
+	if len(snapshot.AgentRefs) == 0 && appDirectorWaitFilterEmptyV0(filter) {
+		return nil
+	}
+	waitRef := firstServiceRefV0(activeStep.WaitRefs...)
+	stateToSave, err := appDirectorWorkflowTaskWaitStateV0(
+		request.RunRef,
+		filter,
+		snapshot,
+		appDirectorWaitStateMetaV0{
+			OccurredAt:       request.OccurredAt,
+			CorrelationID:    request.CorrelationID,
+			EvidenceRefs:     []string{"evidence-ref-app-director-active-wait-state-v0"},
+			MaxExternalWaits: request.MaxExternalWaits,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	if waitRef != "" {
+		stateToSave.WaitRef = waitRef
+		stateToSave, err = orquestacionnucleoapp.NewWorkflowTaskWaitStateV0(stateToSave)
+		if err != nil {
+			return err
+		}
+	}
+	if ports.WaitStateStore != nil {
+		existing, err := ports.WaitStateStore.LoadWorkflowTaskWaitStateV0(ctx, request.RunRef, stateToSave.WaitRef)
+		if err != nil {
+			if !appDirectorWorkflowTaskWaitStateNotFoundV0(err) {
+				return err
+			}
+		} else if existing.Status != orquestacionnucleoapp.WorkflowTaskWaitStateStatusWaitingV0 {
+			return nil
+		}
+	}
+	return ports.WaitStateWriter.SaveWorkflowTaskWaitStateV0(ctx, stateToSave)
 }
 
 func operationalDirectorPlanStateActiveWaitAgentRefsV0(
@@ -324,6 +419,16 @@ func appDirectorRunHasPendingAgentRefsV0(
 		return true
 	}
 	return false
+}
+
+func firstServiceRefV0(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 type existingDirectorAutonomyLoopResultV0 struct {

@@ -26,3 +26,10 @@ Salida:
 
 Errores:
 - `director_agent_file_source_invalido: <field>`.
+
+Modo tolerante opt-in:
+- `IgnoreInvalidFiles=true` ignora artefactos de decision con contenido invalido
+  o esquema no soportado y continua con los demas descriptores validos.
+- No debe usarse como default del modulo: sirve para composiciones externas
+  donde un agente de trabajo puede dejar ficheros auxiliares no contractuales
+  junto al ACK sin que eso bloquee el run completo.

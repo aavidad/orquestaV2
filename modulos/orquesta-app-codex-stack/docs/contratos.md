@@ -101,6 +101,9 @@ Manejo real de agentes en Orquesta:
 - `CodexReceiptRecordingSpecResolverV0` deja descriptor ACK por agente;
 - `CodexDeliveryObservationSourceV0` observa `agent_ack.json` y devuelve
   `AgentDeliveryObservationV0`;
+- los `director_decisions.json` libres que pueda dejar un agente de trabajo se
+  leen en modo tolerante: si no cumplen el contrato
+  `director_agent_decisions_file.v0`, se ignoran y no bloquean el run completo;
 - `DrainRunV0` aplica ACKs, reentra `ContinueAppDirectorV0` y despacha nuevas
   decisiones;
 - progreso parado/lento entra por `ProgressSupervisionCandidateProviderV0` y el

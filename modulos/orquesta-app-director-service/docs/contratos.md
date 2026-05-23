@@ -142,6 +142,12 @@ futuras, sin lanzar esos followups directamente; el scheduler los convierte en
 `RequestCapacity`/`RequestAgent` mediante candidates genericos. Si esos
 followups ya estan materializados, el state reabre `wait_subagents` con refs
 acotadas. Scopes multitarea o ambiguos siguen bloqueados de forma conservadora.
+Si el step activo es `replan_or_close` y el loop queda `quiescent`, el cierre
+operativo solo ejecuta comandos de cierre si el run sigue `active`. Si llega un
+run no activo, el servicio no llama a la fuente de cierre ni intenta
+`CloseTask`/`RegisterFinalValidation`/`CloseRun`; bloquea el plan con
+`closure_reason=operational-closure-run-not-active` para que el adaptador
+resuelva el bloqueo causal antes de cerrar.
 
 Regla del primer corte operativo: si `ContinueAppDirectorV0` recibe un plan
 `ready`, usa `OperationalDirectorPlanMaterializerV0`, guarda las
