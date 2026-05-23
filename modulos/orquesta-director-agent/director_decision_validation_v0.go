@@ -288,6 +288,29 @@ func (v *directorAgentDecisionValidatorV0) requireTextList(field string, values 
 	}
 }
 
+func (v *directorAgentDecisionValidatorV0) requireOperationalTextList(field string, values []string) {
+	if len(values) == 0 || len(values) > maxDirectorAgentTextListV0 {
+		v.add("director_agent_lista_invalida", field)
+		return
+	}
+	for _, value := range values {
+		v.requireOperationalText(field, value)
+	}
+}
+
+func (v *directorAgentDecisionValidatorV0) requireOptionalOperationalTextList(field string, values []string) {
+	if len(values) == 0 {
+		return
+	}
+	v.requireOperationalTextList(field, values)
+}
+
+func (v *directorAgentDecisionValidatorV0) requireOperationalText(field string, value string) {
+	if value == "" || len(value) > maxDirectorAgentStringV0 {
+		v.add("director_agent_texto_invalido", field)
+	}
+}
+
 func (v *directorAgentDecisionValidatorV0) validateFunctionRefs(
 	field string,
 	refs []DirectorAgentFunctionContractRefV0,

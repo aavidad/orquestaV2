@@ -13,12 +13,12 @@ func (v *directorAgentDecisionValidatorV0) validateCreateMicrotask(decision Dire
 	v.requireOptionalRef("create_microtask.task.work_profile_kind", task.WorkProfileKind)
 	v.requireText("create_microtask.task.title", task.Title)
 	v.requireText("create_microtask.task.summary", task.Summary)
-	v.requireTextList("create_microtask.task.write_set", task.WriteSet)
+	v.requireOperationalTextList("create_microtask.task.write_set", task.WriteSet)
 	v.requireTextList("create_microtask.task.acceptance_criteria", task.AcceptanceCriteria)
 	if task.PhaseID == "programacion" {
-		v.requireTextList("create_microtask.task.required_tests", task.RequiredTests)
+		v.requireOperationalTextList("create_microtask.task.required_tests", task.RequiredTests)
 	} else {
-		v.requireOptionalTextList("create_microtask.task.required_tests", task.RequiredTests)
+		v.requireOptionalOperationalTextList("create_microtask.task.required_tests", task.RequiredTests)
 	}
 	v.requireOptionalRefs("create_microtask.task.depends_on", task.DependsOn)
 	v.requireOptionalContextRefs("create_microtask.task.context_refs", task.ContextRefs)

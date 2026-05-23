@@ -52,6 +52,21 @@ func TestValidateDirectorAgentDecisionV0AceptaMicrotareaConWriteSetAmplio(t *tes
 	}
 }
 
+func TestValidateDirectorAgentDecisionV0AceptaWriteSetYTestsDeConector(t *testing.T) {
+	decision := validDirectorAgentCreateMicrotaskDecisionV0()
+	decision.CreateMicrotask.Task.WriteSet = []string{
+		"modulos/orquesta-runtime-codex-delivery",
+		"modulos/orquesta-app-codex-stack",
+	}
+	decision.CreateMicrotask.Task.RequiredTests = []string{
+		"go test -count=1 ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack",
+	}
+
+	if issues := ValidateDirectorAgentDecisionV0(decision); len(issues) != 0 {
+		t.Fatalf("issues inesperados: %+v", issues)
+	}
+}
+
 func TestValidateDirectorAgentDecisionV0AceptaMicrotareaDuranteProgramacion(t *testing.T) {
 	decision := validDirectorAgentCreateMicrotaskDecisionV0()
 	decision.PhaseID = decision.CreateMicrotask.Task.PhaseID
