@@ -5,15 +5,7 @@ import (
 	"strings"
 )
 
-var forbiddenWorkflowTaskWriteSetFragmentsV0 = []string{
-	"secret",
-	"secreto",
-	"token",
-	"password",
-	"credential",
-	"credencial",
-	"api_key",
-}
+var forbiddenWorkflowTaskWriteSetFragmentsV0 = forbiddenWorkflowTaskSensitiveFragmentsV0
 
 func ValidateWorkflowTaskV0(task WorkflowTaskV0) error {
 	if err := validateWorkflowTaskRequiredFieldsV0(task); err != nil {

@@ -45,7 +45,7 @@ Invariantes:
   - `max_delegation_depth`, `max_subagents_per_agent` y `max_recursive_agents`
     son presupuestos opcionales del arbol de tareas; `0` conserva
     compatibilidad sin limite estructurado.
-  - Rechaza detalles de DB, SQL, runtime, provider/proveedor, HOME, OAuth, Docker, tmux y secretos.
+  - Rechaza secretos y credenciales. Permite refs/texto opacos de adaptador o ejecucion para que el director normalice/repare sin cortar por palabras; esta apertura queda pendiente de revision futura en `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`.
 Errores:
   - workflow_task_invalida
   - fase_no_soportada

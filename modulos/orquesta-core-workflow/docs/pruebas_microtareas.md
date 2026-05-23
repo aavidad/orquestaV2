@@ -13,7 +13,7 @@ Riesgos: La integracion durable con eventos/comandos queda para otro corte autor
 Caso: workflow_task_v0_rechaza_detalles_prohibidos
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-core-workflow
-Evidencia esperada: Fase desconocida, `write_set` vacio, criterio vacio y detalles DB/SQL/runtime/proveedor/HOME/OAuth/Docker/tmux/secret/token/password se rechazan con errores publicos; la serializacion valida no contiene adaptadores ni secretos.
+Evidencia esperada: Fase desconocida, `write_set` vacio y criterio vacio se rechazan con errores publicos. Secretos y credenciales se rechazan; refs/texto opacos de adaptador o ejecucion se permiten para no cortar el ciclo por palabras reparables. La apertura queda pendiente de revision futura.
 Ultima ejecucion: 2026-05-04, ok, go test -count=1 ./modulos/orquesta-core-workflow
 Riesgos: La lista negativa debe ampliarse cuando aparezcan nuevos conectores o terminos de infraestructura.
 ```

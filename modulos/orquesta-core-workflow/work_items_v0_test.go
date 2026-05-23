@@ -224,7 +224,7 @@ func TestValidateWorkflowTaskV0RejectsUnsafeWriteSetPaths(t *testing.T) {
 		"env_ref":          {path: "$HOME/config.go", code: ErrWorkflowTaskInvalidaV0},
 		"tilde_ref":        {path: "~/repo/file.go", code: ErrWorkflowTaskInvalidaV0},
 		"secret":           {path: "config/secret.env", code: ErrDetalleProhibidoV0},
-		"token":            {path: "runtime/token.txt", code: ErrDetalleProhibidoV0},
+		"access_token":     {path: "runtime/access-token.txt", code: ErrDetalleProhibidoV0},
 	}
 
 	for name, tc := range cases {
@@ -256,17 +256,10 @@ func TestValidateWorkflowTaskV0RejectsEmptyRequiredTest(t *testing.T) {
 
 func TestValidateWorkflowTaskV0RejectsForbiddenDetails(t *testing.T) {
 	cases := map[string]func(*WorkflowTaskV0){
-		"db":        func(task *WorkflowTaskV0) { task.Summary = "depende de db real" },
-		"runtime":   func(task *WorkflowTaskV0) { task.Summary = "depende del runtime real" },
-		"proveedor": func(task *WorkflowTaskV0) { task.Title = "configurar proveedor remoto" },
-		"HOME":      func(task *WorkflowTaskV0) { task.AcceptanceCriteria = []string{"no leer $HOME"} },
-		"oauth":     func(task *WorkflowTaskV0) { task.FunctionContractRefs[0].ContractRef = "oauth:client" },
-		"docker":    func(task *WorkflowTaskV0) { task.Summary = "usar Docker local" },
-		"tmux":      func(task *WorkflowTaskV0) { task.Summary = "sesion tmux" },
-		"secret":    func(task *WorkflowTaskV0) { task.TaskID = "task-secret" },
-		"token":     func(task *WorkflowTaskV0) { task.RunID = "run-token" },
-		"context":   func(task *WorkflowTaskV0) { task.ContextRefs = []string{"token-ref-001"} },
-		"password":  func(task *WorkflowTaskV0) { task.AcceptanceCriteria = []string{"sin password"} },
+		"secret":        func(task *WorkflowTaskV0) { task.TaskID = "task-secret" },
+		"access_token":  func(task *WorkflowTaskV0) { task.ContextRefs = []string{"access-token-ref-001"} },
+		"client_secret": func(task *WorkflowTaskV0) { task.FunctionContractRefs[0].ContractRef = "oauth-client-secret" },
+		"password":      func(task *WorkflowTaskV0) { task.AcceptanceCriteria = []string{"sin password"} },
 	}
 
 	for name, mutate := range cases {
@@ -280,7 +273,19 @@ func TestValidateWorkflowTaskV0RejectsForbiddenDetails(t *testing.T) {
 	}
 }
 
-func TestWorkflowTaskV0SerializationHasNoAdaptersOrSecrets(t *testing.T) {
+func TestValidateWorkflowTaskV0AllowsOpaqueOperationalDetails(t *testing.T) {
+	task := validWorkflowTaskV0()
+	task.Summary = "coordinar runtime provider db sql oauth docker tmux y token budget por refs opacas."
+	task.AcceptanceCriteria = append(task.AcceptanceCriteria, "normalizar adapter refs sin cortar por palabras operativas.")
+	task.ContextRefs = []string{"runtime-ref-001", "provider-ref-001", "token-budget-ref-001"}
+	task.FunctionContractRefs[0].ContractRef = "adapter:runtime:v0"
+
+	if _, err := NewWorkflowTaskV0(task); err != nil {
+		t.Fatalf("NewWorkflowTaskV0 opaque operational details: %v", err)
+	}
+}
+
+func TestWorkflowTaskV0SerializationHasNoSecrets(t *testing.T) {
 	task := mustWorkflowTaskV0(t, validWorkflowTaskV0())
 
 	data, err := json.Marshal(task)
@@ -289,15 +294,12 @@ func TestWorkflowTaskV0SerializationHasNoAdaptersOrSecrets(t *testing.T) {
 	}
 	serialized := strings.ToLower(string(data))
 	for _, forbidden := range []string{
-		"db", "sql", "runtime", "provider", "proveedor", "home",
-		"oauth", "docker", "tmux", "secret", "token", "password",
+		"secret", "password", "credential", "api_key", "access_token",
+		"refresh_token", "client_secret",
 	} {
 		if containsForbiddenFragmentV0(serialized, forbidden) {
 			t.Fatalf("serialized task contains forbidden detail %q: %s", forbidden, serialized)
 		}
-	}
-	if strings.Contains(serialized, "adapter") || strings.Contains(serialized, "adaptador") {
-		t.Fatalf("serialized task contains adapter detail: %s", serialized)
 	}
 }
 

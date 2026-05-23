@@ -14,26 +14,23 @@ const (
 	maxWorkflowTaskRecursiveAgentsV0 = 4096
 )
 
-var forbiddenWorkflowTaskFragmentsV0 = []string{
-	"db",
-	"database",
-	"sql",
-	"dsn",
-	"runtime",
-	"provider",
-	"proveedor",
-	"home",
-	"oauth",
-	"docker",
-	"tmux",
+var forbiddenWorkflowTaskSensitiveFragmentsV0 = []string{
 	"secret",
 	"secreto",
-	"token",
 	"password",
 	"credential",
 	"credencial",
 	"api_key",
+	"api-key",
+	"access_token",
+	"access-token",
+	"refresh_token",
+	"refresh-token",
+	"client_secret",
+	"client-secret",
 }
+
+var forbiddenWorkflowTaskFragmentsV0 = forbiddenWorkflowTaskSensitiveFragmentsV0
 
 type WorkflowTaskV0 struct {
 	SchemaVersion        string                          `json:"schema_version"`

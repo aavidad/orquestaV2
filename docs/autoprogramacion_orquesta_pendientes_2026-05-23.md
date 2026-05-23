@@ -47,6 +47,25 @@ causalidad, refs imposibles, datos sensibles o efectos externos no autorizados.
 Esta revision debe entrar como tarea de automejora de baja prioridad y puede
 ejecutarse en momentos de poca carga del servidor residente.
 
+### R02 workflow-task-detalle-prohibido
+
+Fecha: 2026-05-23.
+
+Motivo: `WorkflowTaskV0` bloqueaba instrucciones y refs operativas por palabras
+como `runtime`, `provider`, `db`, `sql`, `oauth`, `docker`, `tmux` o `token`
+aunque fueran contexto opaco o presupuesto, impidiendo crear tareas reales para
+autoprogramacion.
+
+Apertura aplicada: `WorkflowTaskV0` permite refs/texto opacos de adaptador,
+ejecucion o pruebas y mantiene corte fuerte para secretos o credenciales
+(`secret`, `password`, `credential`, `api_key`, tokens concretos y variantes
+equivalentes). La validacion estructural de refs, phase, write-set, criterios,
+linaje, payload compacto y causalidad se conserva.
+
+Pendiente de revision futura: estudiar validacion por campo y clasificacion de
+refs sensibles en vez de bloqueo por palabras globales. Debe entrar como tarea
+de automejora de baja prioridad cuando haya ejecuciones reales suficientes.
+
 ## T01 server-autonomy
 
 Objetivo: reforzar el servidor residente para autoprogramacion desatendida.

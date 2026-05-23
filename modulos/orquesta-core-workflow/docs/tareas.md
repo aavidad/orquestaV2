@@ -471,6 +471,7 @@ Objetivo: Definir DTOs puros y validadores para work items/microtareas del workf
 Write-set: modulos/orquesta-core-workflow/work_items_v0.go, modulos/orquesta-core-workflow/work_items_v0_test.go, docs/contratos.md, docs/tareas.md, docs/pruebas.md, docs/decisiones.md
 Contrato: WorkflowTaskV0, WorkflowFunctionContractRefV0
 Validacion: 2026-05-04, ok, go test -count=1 ./modulos/orquesta-core-workflow; caso valido, fase desconocida, write_set vacio, criterio vacio, detalles prohibidos y serializacion sin adaptadores/secretos.
+Actualizacion: 2026-05-23, `WorkflowTaskV0` conserva validacion estructural y corte de secretos/credenciales, pero permite refs/texto opacos de adaptador o ejecucion; apertura pendiente de revision futura.
 Bloqueos: La integracion con comandos/eventos `CreateMicrotask` queda fuera para no mezclar el DTO puro con otra transicion durable en el mismo corte.
 Estado: completada local
 ```

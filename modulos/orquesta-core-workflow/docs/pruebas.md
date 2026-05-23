@@ -20,6 +20,7 @@ Caso: workflow_task_recursive_limits_neutral
 Tipo: unit | contract | regression
 Comando: go test -count=1 ./modulos/orquesta-core-workflow -run 'TestWorkflowTaskV0AcceptsNeutralLineageMetadata|TestValidateWorkflowTaskV0RejectsInvalidLineageMetadata|TestWorkflowTaskFromWorkProfileV0RefactorRequiresTestsAndPreservesLineage'
 Evidencia esperada: `WorkflowTaskV0` y `WorkProfileV0` conservan `max_delegation_depth`, `max_subagents_per_agent` y `max_recursive_agents`, rechazan valores fuera de rango y no introducen runtime/proveedor/adaptadores.
+Actualizacion 2026-05-23: `WorkflowTaskV0` permite refs/texto opacos de adaptador o ejecucion y mantiene rechazo de secretos/credenciales; apertura pendiente de revision futura.
 Ultima ejecucion: 2026-05-23, ok, tests focales de linaje.
 Riesgos: El conteo del arbol ocurre fuera del core-workflow usando `WorkflowTaskStore`; aqui solo se preserva el contrato neutral.
 ```
