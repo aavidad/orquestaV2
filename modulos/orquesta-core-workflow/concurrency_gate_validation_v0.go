@@ -5,7 +5,21 @@ import (
 	"strings"
 )
 
-var forbiddenConcurrencyGateFragmentsV0 = forbiddenReviewReworkFragmentsV0
+var forbiddenConcurrencyGateFragmentsV0 = []string{
+	"secret",
+	"secreto",
+	"password",
+	"credential",
+	"credencial",
+	"api_key",
+	"api-key",
+	"access_token",
+	"access-token",
+	"refresh_token",
+	"refresh-token",
+	"client_secret",
+	"client-secret",
+}
 
 func validateRecordConcurrencyGatePayloadDataV0(payload RecordConcurrencyGateCommandPayloadV0) error {
 	if err := requireCommandPayloadFieldsV0(map[string]string{

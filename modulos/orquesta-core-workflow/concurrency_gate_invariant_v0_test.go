@@ -71,10 +71,24 @@ func TestApplyConcurrencyGateRecordedEventV0RejectsConflictingGateRef(t *testing
 
 func TestRecordConcurrencyGateCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validConcurrencyGatePayloadV0("gate-ref-forbidden", ConcurrencyGateDecisionAllowRequestAgentV0)
-	payload.EvidenceRefs = []string{"runtime-detail"}
+	payload.EvidenceRefs = []string{"oauth-client-secret"}
 
 	_, err := NewRecordConcurrencyGateCommandV0(validCommandMetaV0("cmd-concurrency-forbidden", "idem-concurrency-forbidden"), payload)
 	assertConcurrencyGateCommandErrorV0(t, err, ErrDetalleProhibidoV0, "payload")
+}
+
+func TestRecordConcurrencyGateCommandV0AllowsOpaqueAdapterAndExecutionRefs(t *testing.T) {
+	payload := validConcurrencyGatePayloadV0("gate-ref-adapter-refs", ConcurrencyGateDecisionAllowRequestAgentV0)
+	payload.Summary = "concurrency_gate allow codex runtime git checks with token budget noted."
+	payload.EvidenceRefs = []string{
+		"evidence-ref-codex-stack-runtime-git-diff",
+		"evidence-ref-provider-model-adapter-filesystem",
+	}
+
+	_, err := NewRecordConcurrencyGateCommandV0(validCommandMetaV0("cmd-concurrency-adapter-refs", "idem-concurrency-adapter-refs"), payload)
+	if err != nil {
+		t.Fatalf("command constructor: %v", err)
+	}
 }
 
 func TestValidateRunV0RejectsInvalidConcurrencyGateProjection(t *testing.T) {

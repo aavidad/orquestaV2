@@ -16,8 +16,36 @@ documento antes de editar.
   normalizar/corregir en director/adaptador antes que tirar todo el trabajo.
 - Dar manga ancha a trabajos largos: no cortar por timeouts estrechos; detectar
   bucles por falta real de progreso.
+- Si se abre un rail para desbloquear ejecucion real, documentarlo aqui como
+  apertura intencional y pendiente de revision futura. Por defecto se abre para
+  que Orquesta funcione; despues se estrecha con evidencia, no por suposicion.
+- Las aperturas de rail son deuda viva de automejora: el director puede
+  convertirlas en tareas de fondo cuando detecte poca carga, ejecutarlas con
+  agentes y cerrarlas solo con pruebas reales.
 - Comunicacion compacta: usar `$caveman full` si esta disponible, o equivalente.
 - ACK valido solo con archivos reales tocados y pruebas ejecutadas.
+
+## Aperturas de rail pendientes de revision futura
+
+### R01 concurrency-gate-detalle-prohibido
+
+Fecha: 2026-05-23.
+
+Motivo: `RecordConcurrencyGate` estaba reutilizando la lista estricta de
+reviews y bloqueaba metadata operativa razonable (`codex`, `runtime`, `git`,
+`provider`, `model`, `adapter`, `filesystem`). Ese bloqueo impedia que el
+director arrancara agentes en autoprogramacion residente.
+
+Apertura aplicada: el gate permite refs opacas de adaptador/ejecucion/pruebas y
+mantiene corte fuerte para secretos o credenciales (`secret`, `password`,
+`credential`, `api_key`, tokens concretos y variantes equivalentes).
+
+Pendiente de revision futura: cuando haya mas ejecuciones reales, estudiar si
+conviene estrechar por campos concretos en vez de por palabras globales. La
+revision debe conservar tolerancia a refs opacas y cortar solo seguridad,
+causalidad, refs imposibles, datos sensibles o efectos externos no autorizados.
+Esta revision debe entrar como tarea de automejora de baja prioridad y puede
+ejecutarse en momentos de poca carga del servidor residente.
 
 ## T01 server-autonomy
 

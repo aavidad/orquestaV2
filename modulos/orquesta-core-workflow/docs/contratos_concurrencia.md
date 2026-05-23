@@ -34,7 +34,7 @@ Invariantes:
   - La identidad fuerte se registra por `gate_ref` en `CommandEffects`.
   - Un retry exacto ya reflejado es no-op solo si coinciden command_id, idempotency_key y payload normalizado.
   - La misma ref con decision/plan distinta, command_id distinto o idempotency_key distinta se rechaza.
-  - Payload compacto, sin DB, HOME, OAuth, proveedor, modelo, runtime, Git productivo ni secretos.
+  - Payload compacto, con refs opacas de adaptador/ejecucion permitidas y corte fuerte solo para secretos o credenciales. Esta apertura queda pendiente de revision futura en `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`.
 Errores:
   - payload_invalido
   - detalle_prohibido
@@ -67,6 +67,6 @@ Invariantes:
   - Registra/verifica `CommandEffects` por `gate_ref`; replay rechaza la misma ref con otro event_id, causation_id, idempotency_key o payload normalizado.
   - No lanza agentes, no bloquea el run completo y no genera outbox.
   - El director decide comandos posteriores: RequestAgent, AskDirector o replan.
-  - No contiene runtime, proveedor, modelo, HOME, OAuth, cuenta, adaptador, rutas reales, comandos ni secreto.
+  - No contiene secretos ni credenciales. Puede transportar refs opacas de adaptador, ejecucion o pruebas para que el director pueda normalizar/reparar sin cortar el ciclo. Esta apertura queda pendiente de revision futura.
 Estado: implementado local en NCW-047; identidad fuerte extendida en NCW-063.
 ```

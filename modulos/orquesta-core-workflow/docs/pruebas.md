@@ -201,6 +201,7 @@ Tipo: contract | replay | idempotency
 Comando: go test -count=1 ./modulos/orquesta-core-workflow
 Evidencia esperada: `RecordConcurrencyGate` produce solo `ConcurrencyGateRecorded`, outbox vacio, proyecta `concurrency_gates` compacto, es idempotente por `gate_ref`, valida consistencia de allow/block/ask_director y rechaza conflictos o detalles prohibidos.
 Ultima ejecucion: 2026-05-06, ok, go test -count=1 ./modulos/orquesta-core-workflow.
+Actualizacion 2026-05-23: la validacion permite refs opacas de adaptador/ejecucion (`codex`, `runtime`, `git`, `provider`, `model`, `adapter`, `filesystem`, `token budget`) y mantiene `detalle_prohibido` para secretos/credenciales; la apertura queda pendiente de revision futura en `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`.
 Riesgos: El workflow no calcula conflictos ni impide por si solo `RequestAgent`; el director debe llamar al gate antes de lanzar agentes.
 ```
 

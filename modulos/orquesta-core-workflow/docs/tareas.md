@@ -260,6 +260,7 @@ Objetivo: Implementar `RecordConcurrencyGate -> ConcurrencyGateRecorded` como ga
 Write-set: concurrency_gate*_v0.go, concurrency_gate*_v0_test.go, commands_v0.go, commands_validation_v0.go, events_v0.go, events_validation_v0.go, handler_v0.go, reducer_v0.go, run_state_v0.go, run_state_validation_v0.go, reducer_clone_v0.go, docs locales.
 Contrato: RecordConcurrencyGate, ConcurrencyGateRecorded, OrchestrationRunV0.ConcurrencyGates.
 Validacion: 2026-05-06, ok, go test -count=1 ./modulos/orquesta-core-workflow.
+Actualizacion: 2026-05-23, el gate conserva causalidad e idempotencia pero deja de reutilizar la lista estricta de reviews; permite refs opacas de adaptador/ejecucion, solo corta secretos/credenciales y queda como apertura pendiente de revision futura.
 Bloqueos: No evalua scopes dentro del workflow, no crea scheduler, no lanza agentes y no bloquea todo el run; director/runtime materializan despues.
 Estado: completada
 ```
