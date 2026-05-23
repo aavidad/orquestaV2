@@ -3,6 +3,7 @@ package orquestadirectortickinput
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -97,6 +98,62 @@ func TestBuildDirectorSchedulerTickInputV0FiltraProgressCandidatesDeOtroRun(t *t
 	if len(input.ProgressSupervisionCandidates) != 1 ||
 		input.ProgressSupervisionCandidates[0].CandidateRef != "progress-candidate-local" {
 		t.Fatalf("progress candidates=%+v", input.ProgressSupervisionCandidates)
+	}
+}
+
+func TestBuildDirectorSchedulerTickInputV0CompactaAssessmentProyectadoLargo(t *testing.T) {
+	run := tickInputProgramacionRunV0(t)
+	payload := orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+		AssessmentRef:  "assessment-ref-progress-scheduler-compact-001",
+		PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		AgentRequestID: "agent-ref-" + strings.Repeat("assessment-agent-", 20),
+		TaskRef:        "workflow-task-" + strings.Repeat("programacion-", 12),
+		DeliveryRef:    "ack-ref-" + strings.Repeat("assessment-delivery-", 20),
+		Verdict:        orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+		Action:         orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+		Severity:       orquestacoreworkflow.AgentAssessmentSeverityHighV0,
+	}
+	projection := orquestacoreworkflow.AgentAssessmentProjectionRefV0(payload)
+	if len(projection) <= maxTickInputStringV0 {
+		t.Fatalf("fixture no reproduce projection larga: len=%d", len(projection))
+	}
+	run.AgentAssessments = []string{projection}
+
+	input, err := BuildDirectorSchedulerTickInputV0(DirectorTickInputBuildRequestV0{
+		TickRef:    "tick-ref-assessment-compact-001",
+		OccurredAt: "2026-05-06T12:00:00Z",
+		Run:        run,
+	})
+	if err != nil {
+		t.Fatalf("build tick input: %v", err)
+	}
+	if !reflect.DeepEqual(input.Snapshot.AgentAssessments, []string{payload.AssessmentRef}) {
+		t.Fatalf("agent_assessments=%v, want [%s]", input.Snapshot.AgentAssessments, payload.AssessmentRef)
+	}
+}
+
+func TestBuildDirectorSchedulerTickInputV0AceptaRefsArtefactoSinCortar(t *testing.T) {
+	run := tickInputProgramacionRunV0(t)
+
+	input, err := BuildDirectorSchedulerTickInputV0(DirectorTickInputBuildRequestV0{
+		TickRef:           "tick-ref-artifact-refs-open-001",
+		OccurredAt:        "2026-05-06T12:00:00Z",
+		Run:               run,
+		PendingOutboxRefs: []string{"README.md"},
+		EvidenceRefs: []string{
+			"README.md",
+			"docs/arquitectura.md",
+			"artifact-ref-" + strings.Repeat("x", 900),
+		},
+	})
+	if err != nil {
+		t.Fatalf("build tick input: %v", err)
+	}
+	if !reflect.DeepEqual(input.Snapshot.PendingOutboxRefs, []string{"README.md"}) {
+		t.Fatalf("pending_outbox_refs=%v", input.Snapshot.PendingOutboxRefs)
+	}
+	if len(input.EvidenceRefs) != 3 {
+		t.Fatalf("evidence_refs=%v", input.EvidenceRefs)
 	}
 }
 

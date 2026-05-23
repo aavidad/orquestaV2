@@ -71,6 +71,42 @@ func TestCodexReviewGateObservationSourceV0AceptaWriteSetRaiz(t *testing.T) {
 	}
 }
 
+func TestCodexReviewGateObservationSourceV0AceptaWriteSetGlobstar(t *testing.T) {
+	spec := codexDeliverySpecForTestV0()
+	spec.AgentPacket.Task.WriteSet = []string{
+		"go.mod",
+		"internal/domain/**",
+		"web/admin/**",
+		"docs/**",
+	}
+	ack := codexDeliveryAckForTestV0(spec)
+	ack.Files = orquestaruntimecodex.EvidenceListV0{
+		"go.mod",
+		"internal/domain/appointment.go",
+		"web/admin/app.js",
+		"docs/pendientes.md",
+	}
+	path := writeCodexDeliveryAckForTestV0(t, spec, ack)
+	store := &staticCodexReceiptStoreV0{
+		Descriptors: []CodexReceiptDescriptorV0{{
+			DescriptorRef: "receipt-ref-globstar-001",
+			RunID:         "run-ref-001",
+			AgentRef:      spec.RequestID,
+			Spec:          spec,
+			AckPath:       path,
+		}},
+	}
+
+	observations, err := (CodexReviewGateObservationSourceV0{Store: store}).
+		BuildReviewGateObservationsV0(context.Background(), codexReviewGateRequestForTestV0(spec, nil))
+	if err != nil {
+		t.Fatalf("BuildReviewGateObservationsV0: %v", err)
+	}
+	if len(observations) != 1 || observations[0].Status != orquestacoreworkflow.ReviewResultStatusAcceptedV0 {
+		t.Fatalf("observations=%+v", observations)
+	}
+}
+
 func TestCodexReviewGateObservationSourceV0ListaDescriptorYaEntregado(t *testing.T) {
 	spec := codexDeliverySpecForTestV0()
 	ack := codexDeliveryAckForTestV0(spec)

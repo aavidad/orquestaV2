@@ -8,9 +8,8 @@ import (
 )
 
 const (
-	maxSchedulerTickPayloadBytesV0 = 16384
-	maxSchedulerTickRefsV0         = 40
-	maxSchedulerTickStringV0       = 600
+	maxSchedulerTickPayloadBytesV0 = 262144
+	maxSchedulerTickRefsV0         = 1024
 )
 
 var forbiddenSchedulerFragmentsV0 = []string{
@@ -76,35 +75,8 @@ func validateSchedulerRequiredV0(input DirectorSchedulerTickInputV0) error {
 }
 
 func validateSchedulerRefsV0(input DirectorSchedulerTickInputV0) error {
-	refGroups := [][]string{
-		input.EvidenceRefs,
-		input.Snapshot.Tasks,
-		input.Snapshot.CapacityRequests,
-		input.Snapshot.CapacityDecisions,
-		input.Snapshot.ConcurrencyGates,
-		input.Snapshot.Agents,
-		input.Snapshot.StartedAgents,
-		input.Snapshot.FailedAgents,
-		input.Snapshot.StoppedAgents,
-		input.Snapshot.PhaseArtifacts,
-		input.Snapshot.Deliveries,
-		input.Snapshot.Reviews,
-		input.Snapshot.ReviewResults,
-		input.Snapshot.AcceptedReviews,
-		input.Snapshot.ReworkRequests,
-		input.Snapshot.AgentAssessments,
-		input.Snapshot.DirectorQuestions,
-		input.Snapshot.DirectorAnsweredQuestions,
-		input.Snapshot.ExpiredLeaseRefs,
-		input.Snapshot.ReplanRefs,
-		input.Snapshot.BlockingQualityGateRefs,
-		input.Snapshot.PendingOutboxRefs,
-	}
-	for _, refs := range refGroups {
-		if len(refs) > maxSchedulerTickRefsV0 || schedulerRefsInvalidV0(refs) {
-			return schedulerTickErrorV0("refs")
-		}
-	}
+	// El scheduler no debe cortar por paths/evidencias opacas de agentes. Las
+	// relaciones causales se validan en los candidatos que emiten comandos.
 	return nil
 }
 
@@ -210,11 +182,7 @@ func validateSchedulerCandidateEvidenceRefsV0(candidate SchedulableWorkCandidate
 }
 
 func schedulerRefsInvalidV0(refs []string) bool {
-	for _, ref := range refs {
-		if strings.TrimSpace(ref) == "" || len(ref) > maxSchedulerTickStringV0 {
-			return true
-		}
-	}
+	// Modo permisivo por defecto: refs ambiguas siguen al director/rework.
 	return false
 }
 

@@ -81,7 +81,7 @@ func buildRunSchedulingSnapshotV0(
 		ReviewResults:             compactTickInputRefsV0(run.ReviewResults),
 		AcceptedReviews:           compactTickInputRefsV0(run.AcceptedReviews),
 		ReworkRequests:            compactTickInputRefsV0(run.ReworkRequests),
-		AgentAssessments:          compactTickInputRefsV0(run.AgentAssessments),
+		AgentAssessments:          schedulerAgentAssessmentRefsV0(run.AgentAssessments),
 		DirectorQuestions:         compactTickInputRefsV0(run.DirectorQuestions),
 		DirectorAnsweredQuestions: compactTickInputRefsV0(run.DirectorAnsweredQuestions),
 		ExpiredLeaseRefs:          schedulerExpiredLeaseRefsV0(run.AgentLeaseExpirations),

@@ -244,6 +244,12 @@ func codexReviewGatePathAllowedByWriteSetV0(path string, writeSet []string) bool
 		if allowed == "." || path == allowed || strings.HasPrefix(path, allowed+"/") {
 			return true
 		}
+		if codexReviewGateHasGlobV0(allowed) {
+			re, err := codexReviewGateGlobRegexpV0(allowed)
+			if err == nil && re.MatchString(path) {
+				return true
+			}
+		}
 	}
 	return false
 }

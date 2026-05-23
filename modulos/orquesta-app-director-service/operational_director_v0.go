@@ -1119,6 +1119,9 @@ func managedProgressiveLoopExternalWaitExhaustedV0(
 	request ContinueAppDirectorRequestV0,
 	managedLoop orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
 ) bool {
+	if request.MaxExternalWaits <= 0 {
+		return false
+	}
 	if managedLoop.Status != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
 		managedLoop.Final.Status != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 {
 		return false

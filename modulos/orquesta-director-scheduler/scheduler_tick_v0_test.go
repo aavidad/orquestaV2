@@ -3,6 +3,8 @@ package orquestadirectorscheduler
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
+	"strings"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -141,6 +143,36 @@ func TestBuildDirectorSchedulerTickV0AcceptsOpaqueRefsWithAppTokens(t *testing.T
 	plan := mustSchedulerTickPlanV0(t, input)
 
 	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+}
+
+func TestBuildDirectorSchedulerTickV0AceptaSetentaAgentesCompactos(t *testing.T) {
+	input := validSchedulerTickInputV0()
+	input.WorkCandidates = nil
+	for i := 0; i < 70; i++ {
+		ref := "agent-ref-scheduler-parallel-" + strconv.Itoa(i)
+		input.Snapshot.Agents = append(input.Snapshot.Agents, ref)
+		input.Snapshot.StartedAgents = append(input.Snapshot.StartedAgents, ref)
+	}
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusWaitingV0, 0)
+	assertSchedulerWaitingV0(t, plan, SchedulerWaitingAgentDeliveryPendingV0)
+}
+
+func TestBuildDirectorSchedulerTickV0AceptaRefsDeArtefactosSinCortar(t *testing.T) {
+	input := validSchedulerTickInputV0()
+	input.EvidenceRefs = []string{
+		"README.md",
+		"docs/arquitectura.md",
+		"artifact-ref-" + strings.Repeat("x", 900),
+	}
+	input.Snapshot.PendingOutboxRefs = []string{"README.md"}
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusWaitingV0, 0)
+	assertSchedulerWaitingV0(t, plan, SchedulerWaitingOutboxPendingV0)
 }
 
 func TestBuildDirectorSchedulerTickV0RejectsForbiddenPayloadDetails(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	maxTickInputRefsV0   = 40
+	maxTickInputRefsV0   = 1024
 	maxTickInputStringV0 = 600
 )
 
@@ -34,15 +34,8 @@ func validateDirectorTickInputBuildRequestV0(input DirectorTickInputBuildRequest
 }
 
 func refsInvalidTickInputV0(refs []string) bool {
-	if len(refs) > maxTickInputRefsV0 {
-		return true
-	}
-	for _, ref := range refs {
-		trimmed := strings.TrimSpace(ref)
-		if trimmed == "" || len(trimmed) > maxTickInputStringV0 {
-			return true
-		}
-	}
+	// El tick-input transporta refs/evidencias opacas. No corta por forma:
+	// normaliza y deja que el director corrija lo ambiguo.
 	return false
 }
 

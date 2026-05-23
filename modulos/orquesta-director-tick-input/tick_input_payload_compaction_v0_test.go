@@ -10,7 +10,7 @@ import (
 
 func TestBuildDirectorSchedulerTickInputV0CompactaFronteraDeTrabajoSobredimensionada(t *testing.T) {
 	run := tickInputProgramacionRunV0(t)
-	candidates := tickInputLargeWorkCandidatesV0(run.RunID, 8)
+	candidates := tickInputLargeWorkCandidatesV0(run.RunID, 256)
 	request := DirectorTickInputBuildRequestV0{
 		TickRef:        "tick-ref-large-frontier-001",
 		OccurredAt:     "2026-05-06T12:30:00Z",
@@ -29,7 +29,7 @@ func TestBuildDirectorSchedulerTickInputV0CompactaFronteraDeTrabajoSobredimensio
 		EvidenceRefs:   request.EvidenceRefs,
 	}
 	if err := orquestadirectorscheduler.ValidateDirectorSchedulerTickInputV0(raw); err == nil {
-		t.Fatal("fixture debe superar payload antes de compactar")
+		t.Fatal("fixture debe superar payload realmente enorme antes de compactar")
 	}
 
 	input, err := BuildDirectorSchedulerTickInputV0(request)

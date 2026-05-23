@@ -36,6 +36,22 @@ func schedulerReplanRefsV0(refs []string) []string {
 	return projectionPrefixRefsV0(refs, replanProjectionSeparatorV0)
 }
 
+func schedulerAgentAssessmentRefsV0(refs []string) []string {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		assessmentRef, _, ok := strings.Cut(strings.TrimSpace(ref), "#")
+		if ok {
+			out = append(out, boundedProjectionRefV0(assessmentRef))
+			continue
+		}
+		out = append(out, boundedProjectionRefV0(ref))
+	}
+	return compactTickInputRefsV0(out)
+}
+
 func schedulerBlockingQualityGateRefsV0(refs []string) []string {
 	if len(refs) == 0 {
 		return nil
