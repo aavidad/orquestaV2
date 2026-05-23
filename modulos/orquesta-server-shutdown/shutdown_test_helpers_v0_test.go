@@ -181,6 +181,7 @@ func shutdownEventsForTestV0(events *[]string) []string {
 
 type fakeShutdownSupervisorV0 struct {
 	calls int
+	err   error
 }
 
 func (fake *fakeShutdownSupervisorV0) RunGlobalSupervisorV0(
@@ -188,6 +189,9 @@ func (fake *fakeShutdownSupervisorV0) RunGlobalSupervisorV0(
 	orquestarunsupervisor.RunSupervisorCommandV0,
 ) (orquestarunsupervisor.RunSupervisorResultV0, error) {
 	fake.calls++
+	if fake.err != nil {
+		return orquestarunsupervisor.RunSupervisorResultV0{}, fake.err
+	}
 	return orquestarunsupervisor.RunSupervisorResultV0{
 		StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
 	}, nil

@@ -21,6 +21,19 @@ Estado: aceptada local
 ```
 
 ```text
+Fecha: 2026-05-23
+Decision: Antes de ejecutar supervisor, shutdown refresca stats y solo drena si
+hay agentes en vuelo o si no hay lector de stats.
+Motivo: una run preparada/parada sin agentes vivos puede tener plan/director en
+estado no ejecutable para supervision, pero ya no hay nada que drenar. Propagar
+ese error convertia `/api/v0/server/shutdown` en 500 aunque `agents_in_flight=0`.
+Impacto: con `StatsReader` disponible y `AgentsInFlight=0`, shutdown pide stop,
+marca ready y no entra al supervisor. Con agentes vivos conserva `waiting_drain`
+y ejecuta supervisor. Sin `StatsReader` mantiene compatibilidad legacy y drena.
+Estado: aceptada local
+```
+
+```text
 Fecha: 2026-05-13
 Decision: El deadline de checkpoint es parte del contrato de shutdown, no un sleep interno.
 Motivo: Orquesta debe poder esperar checkpoint cuando hay trabajo real, pero tambien debe cortar un bloqueo si el operador/director declara vencida la ventana cooperativa. Meter sleeps o timeouts ocultos recrearia el bug de procesos colgados sin trazabilidad.

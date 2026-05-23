@@ -12,6 +12,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
 
 func TestCodexStackAutoprogrammingExecutorV0UsaPuertosDelStackYDevuelveContinue(t *testing.T) {
@@ -209,6 +210,47 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0EncolaYSupervisorGlobalArranca(
 	}
 }
 
+func TestCodexStackServerShutdownV0CierraRunPreparadaSinEntrarAlDirector(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-shutdown-001",
+		CorrelationID:          "corr-autoprogramming-shutdown-001",
+		OccurredAt:             "2026-05-23T12:00:00Z",
+		RequestedBy:            "orquesta-stack-api-test",
+		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
+		MaxBursts:              3,
+		MaxStepsPerBurst:       3,
+		MaxDispatchesPerWait:   3,
+		MaxCommands:            5,
+		MaxOutboxPerCycle:      5,
+	})
+	if !prepared.Accepted || prepared.RunRef == "" {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+
+	shutdown := postServerShutdownStackV0(t, stack, orquestamcp.MCPServerShutdownToolInputV0{
+		RequestID:      "request-server-shutdown-prepared-001",
+		CorrelationID:  "corr-autoprogramming-shutdown-001",
+		Forced:         true,
+		MaxTicks:       1,
+		MaxRunsPerTick: 1,
+		MaxExecutions:  1,
+		RequestedBy:    "orquesta-stack-api-test",
+		Reason:         "shutdown de run preparada sin agentes vivos",
+	})
+	if shutdown.Estado != orquestamcp.MCPServerShutdownEstadoOKV0 ||
+		!shutdown.ShutdownReady ||
+		shutdown.Status != orquestaservershutdown.ServerShutdownStatusReadyV0 ||
+		shutdown.RunsRequested != 1 ||
+		shutdown.RunsStopped != 1 ||
+		shutdown.AgentsInFlight != 0 ||
+		runtime.launchCountV0() != 0 {
+		t.Fatalf("shutdown=%+v launches=%d", shutdown, runtime.launchCountV0())
+	}
+}
+
 func TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveErroresPublicos(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 
@@ -243,6 +285,30 @@ func postAutoprogrammingPrepareRunStackV0(
 	var result orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode prepare run: %v", err)
+	}
+	return result
+}
+
+func postServerShutdownStackV0(
+	t *testing.T,
+	stack StackV0,
+	input orquestamcp.MCPServerShutdownToolInputV0,
+) orquestamcp.MCPServerShutdownToolResultV0 {
+	t.Helper()
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(input); err != nil {
+		t.Fatalf("encode shutdown: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/server/shutdown", body)
+	req.Header.Set("Content-Type", "application/json")
+	stack.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("shutdown status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPServerShutdownToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode shutdown: %v", err)
 	}
 	return result
 }

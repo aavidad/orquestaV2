@@ -50,7 +50,11 @@ func ShutdownServerV0(
 		result.ShutdownReady = true
 		return result, nil
 	}
-	if shouldRunShutdownSupervisorV0(targets) && deps.Supervisor != nil {
+	result.Runs, err = refreshShutdownRunsV0(ctx, deps, command, result.Runs)
+	if err != nil {
+		return ServerShutdownResultV0{}, err
+	}
+	if shouldRunShutdownSupervisorV0(result.Runs, deps.StatsReader != nil) && deps.Supervisor != nil {
 		supervisor, err := deps.Supervisor.RunGlobalSupervisorV0(
 			ctx,
 			supervisorCommandV0(command),
@@ -229,9 +233,15 @@ func shutdownStopRequestedV0(status orquestaruncontrol.RunControlStatusV0) bool 
 	}
 }
 
-func shouldRunShutdownSupervisorV0(runs []ServerShutdownRunResultV0) bool {
+func shouldRunShutdownSupervisorV0(
+	runs []ServerShutdownRunResultV0,
+	statsAvailable bool,
+) bool {
 	for _, run := range runs {
-		if !run.CheckpointRequired && !run.Terminal {
+		if run.CheckpointRequired || run.Terminal {
+			continue
+		}
+		if !statsAvailable || run.AgentsInFlight > 0 {
 			return true
 		}
 	}

@@ -2,6 +2,7 @@ package orquestaservershutdown
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -32,7 +33,7 @@ func TestShutdownServerV0SolicitaStopDrenaYQuedaReady(t *testing.T) {
 		result.Status != ServerShutdownStatusReadyV0 ||
 		result.RunsRequested != 2 ||
 		result.RunsStopped != 2 ||
-		deps.supervisor.calls != 1 {
+		deps.supervisor.calls != 0 {
 		t.Fatalf("result=%+v supervisor=%+v", result, deps.supervisor)
 	}
 	if got := deps.control.stopped; !reflect.DeepEqual(got, []string{"run-a", "run-b"}) {
@@ -63,7 +64,33 @@ func TestShutdownServerV0ReadyConRunActivoSinAgentesEnVuelo(t *testing.T) {
 		result.Status != ServerShutdownStatusReadyV0 ||
 		result.RunsStopped != 1 ||
 		result.AgentsInFlight != 0 ||
-		deps.supervisor.calls != 1 {
+		deps.supervisor.calls != 0 {
+		t.Fatalf("result=%+v supervisor=%+v", result, deps.supervisor)
+	}
+}
+
+func TestShutdownServerV0NoPropagaSupervisorSiNoHayAgentesEnVuelo(t *testing.T) {
+	deps := newServerShutdownDepsForTestV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		{RunRef: "run-no-live-agents-supervisor-invalid", AppRef: "app-a", Status: "ready"},
+	})
+	deps.stats.stats["run-no-live-agents-supervisor-invalid"] = RunShutdownStatsV0{
+		RunRef:         "run-no-live-agents-supervisor-invalid",
+		AgentsInFlight: 0,
+	}
+	deps.supervisor.err = errors.New("app_director_service_invalido: operational_director_plan_state.active_step")
+
+	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
+		Forced:      true,
+		RequestedBy: "operator",
+		Reason:      "apagado con ciclo director invalido pero sin agentes vivos",
+	})
+	if err != nil {
+		t.Fatalf("ShutdownServerV0: %v", err)
+	}
+	if !result.ShutdownReady ||
+		result.Status != ServerShutdownStatusReadyV0 ||
+		result.AgentsInFlight != 0 ||
+		deps.supervisor.calls != 0 {
 		t.Fatalf("result=%+v supervisor=%+v", result, deps.supervisor)
 	}
 }
@@ -145,7 +172,7 @@ func TestShutdownServerV0PreparaCheckpointAntesDeStopNoForzado(t *testing.T) {
 	if !result.ShutdownReady ||
 		result.Status != ServerShutdownStatusReadyV0 ||
 		result.CheckpointsPending != 0 ||
-		deps.supervisor.calls != 1 {
+		deps.supervisor.calls != 0 {
 		t.Fatalf("result=%+v supervisor=%+v", result, deps.supervisor)
 	}
 	if !deps.control.states["run-graceful"].CheckpointRecorded ||
@@ -206,7 +233,7 @@ func TestShutdownServerV0FuerzaStopSiDeadlineCheckpointExpirado(t *testing.T) {
 		!result.Runs[0].ForcedAfterCheckpointDeadline ||
 		!result.Runs[0].CheckpointDeadlineExpired ||
 		!deps.control.states["run-deadline"].Forced ||
-		deps.supervisor.calls != 1 {
+		deps.supervisor.calls != 0 {
 		t.Fatalf("result=%+v control=%+v supervisor=%+v", result, deps.control, deps.supervisor)
 	}
 	if !reflect.DeepEqual(shutdownEventsForTestV0(deps.events), []string{

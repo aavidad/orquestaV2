@@ -6,6 +6,7 @@
 - `TestShutdownServerV0NoPideStopSiCheckpointNoEstaListo`
 - `TestShutdownServerV0FuerzaStopSiDeadlineCheckpointExpirado`
 - `TestShutdownServerV0ReadyConRunActivoSinAgentesEnVuelo`
+- `TestShutdownServerV0NoPropagaSupervisorSiNoHayAgentesEnVuelo`
 - `TestShutdownServerV0EsperaDrainConAgentesEnVuelo`
 - `TestShutdownServerV0SinRunsQuedaReady`
 
@@ -23,5 +24,6 @@ evidencia para diagnostico posterior.
 
 Si el run sigue activo pero stats informa `agents_in_flight=0`, shutdown queda
 `ready` aunque existan refs de stop no confirmadas; esas confirmaciones no deben
-bloquear cuando ya no hay agentes vivos. Con `agents_in_flight>0` sigue
-devolviendo `waiting_drain`.
+bloquear cuando ya no hay agentes vivos. En ese caso tampoco debe propagar un
+error del supervisor/director, porque no hay proceso que drenar. Con
+`agents_in_flight>0` sigue devolviendo `waiting_drain` y ejecuta supervisor.
