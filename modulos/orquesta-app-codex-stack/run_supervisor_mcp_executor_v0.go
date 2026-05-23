@@ -65,7 +65,9 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 		codexStackRunSupervisorSnapshotMCPV0(result.Last),
 		codexStackRunSupervisorHistoryMCPV0(result.History),
 	)
-	return addAutoprogrammingResidentEvidenceV0(input, output), nil
+	output = addAutoprogrammingResidentEvidenceV0(input, output)
+	output = maybePrepareAutoprogrammingResidentSelfRepairV0(ctx, input, *executor.Stack, result, output)
+	return output, nil
 }
 
 func codexStackRunSupervisorDrainRequestV0(

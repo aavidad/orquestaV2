@@ -65,6 +65,8 @@ type MCPRunSupervisorToolResultV0 struct {
 	Last          MCPRunSupervisorSnapshotV0 `json:"last,omitempty"`
 	History       []MCPRunSupervisorTickV0   `json:"history,omitempty"`
 	EvidenceRefs  []string                   `json:"evidence_refs,omitempty"`
+	RepairRunRefs []string                   `json:"repair_run_refs,omitempty"`
+	NextActions   []string                   `json:"next_actions,omitempty"`
 	Errores       []MCPValidationIssueV0     `json:"errores_publicos,omitempty"`
 }
 
