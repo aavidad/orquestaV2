@@ -22,6 +22,10 @@ documento antes de editar.
 - Las aperturas de rail son deuda viva de automejora: el director puede
   convertirlas en tareas de fondo cuando detecte poca carga, ejecutarlas con
   agentes y cerrarlas solo con pruebas reales.
+- Las instrucciones largas se compactan antes de `WorkflowTaskV0`; el detalle
+  amplio debe viajar por `context_refs`/docs/artefactos, no como payload durable
+  gigante. Si el core rechaza una forma reparable, el issue debe conservar el
+  subcampo causal para que el director cree followup o normalizacion.
 - Comunicacion compacta: usar `$caveman full` si esta disponible, o equivalente.
 - ACK valido solo con archivos reales tocados y pruebas ejecutadas.
 

@@ -15,6 +15,8 @@ Cobertura actual:
 - agrupa tareas por area normalizada;
 - preserva contratos explicitos por tarea: objetivo, contexto, context refs,
   criterios, tests y reglas compactas;
+- compacta textos largos de tareas antes de `WorkflowTaskV0` y mantiene el
+  payload durable por debajo del limite del core;
 - transforma solicitudes validas en `WorkProfileV0`/`WorkflowTaskV0` con refs
   opacas y pruebas requeridas preservadas;
 - particiona `write_set` por area, normaliza aliases y rechaza rutas no

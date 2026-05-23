@@ -1,6 +1,7 @@
 package orquestaautoprogramming
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -92,6 +93,54 @@ func TestBuildAutoprogrammingProgrammableWorkV0TransportaContratoExplicitoDeTare
 		"go test -count=1 ./modulos/orquesta-autoprogramming -run TestBuildAutoprogramming",
 	) {
 		t.Fatalf("required_tests=%v", task.RequiredTests)
+	}
+}
+
+func TestBuildAutoprogrammingProgrammableWorkV0CompactaTextoLargoParaWorkflowTask(t *testing.T) {
+	longObjective := strings.Repeat("iterar pensar tareas agentes pruebas revision cierre ", 20)
+	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{{
+			TaskRef:   "task-ref-texto-largo-001",
+			Area:      "Autoprogramming",
+			Title:     strings.Repeat("Ciclo residente ", 20),
+			Objective: longObjective,
+			Context: []string{
+				strings.Repeat("contexto operativo con runtime provider db sql oauth docker tmux token budget ", 10),
+				strings.Repeat("hexagonal puro y refs opacas sin producto dentro del nucleo ", 10),
+			},
+			ContextRefs: []string{"doc-ref:autoprogramacion-pendientes"},
+			AcceptanceCriteria: []string{
+				strings.Repeat("criterio de cierre con pruebas reales evidencia durable y cola residente ", 10),
+				strings.Repeat("criterio de reparacion con followups y self repair sin tirar todo ", 10),
+			},
+			CompactRules: []string{
+				strings.Repeat("regla compacta caveman y reutilizar codigo existente ", 10),
+			},
+		}}
+		request.WriteSet = []string{"modulos/orquesta-autoprogramming/autoprogramming_task_contract_v0.go"}
+		request.RequiredTests = []string{"go test -count=1 ./modulos/orquesta-autoprogramming"}
+	})
+
+	result := BuildAutoprogrammingProgrammableWorkV0(request)
+
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
+	}
+	task := result.Work.Tasks[0]
+	if len([]rune(task.Title)) > 160 || len([]rune(task.Summary)) > 600 {
+		t.Fatalf("task text no compactado title=%d summary=%d task=%+v", len([]rune(task.Title)), len([]rune(task.Summary)), task)
+	}
+	for _, criterion := range task.AcceptanceCriteria {
+		if len([]rune(criterion)) > 600 {
+			t.Fatalf("criterion demasiado largo len=%d value=%q", len([]rune(criterion)), criterion)
+		}
+	}
+	payload, err := json.Marshal(task)
+	if err != nil {
+		t.Fatalf("marshal task: %v", err)
+	}
+	if len(payload) > 4096 {
+		t.Fatalf("payload demasiado grande: %d %s", len(payload), payload)
 	}
 }
 

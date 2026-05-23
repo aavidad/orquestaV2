@@ -13,7 +13,8 @@ Incluye:
   conservar salida aprovechable y pedir follow-up;
 - `BuildAutoprogrammingProgrammableWorkV0` para transformar solicitudes
   validadas en `WorkProfileV0`/`WorkflowTaskV0` por grupo sin solapar
-  `write_set` salvo solapes seguros secuenciados;
+  `write_set` salvo solapes seguros secuenciados, compactando textos largos
+  antes del DTO durable para mantener tareas manejables;
 - politica pura de particionado que normaliza aliases de area, declara
   reparaciones de rutas ambiguas y pospone tareas cuando hay trabajos vivos
   sobre el mismo `write_set`;

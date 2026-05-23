@@ -69,6 +69,9 @@ programable compatible con el nucleo:
 - conserva `write_set`, `required_tests`, `worktree_ref` y `branch_ref`;
 - conserva objetivo, contexto, criterios, tests y reglas compactas declaradas
   por tarea dentro de `WorkflowTaskV0`/`WorkProfileV0`;
+- compacta `title`, `summary`, objetivo y criterios antes de crear
+  `WorkflowTaskV0`; el contexto largo debe viajar por refs opacas, no como
+  payload durable masivo;
 - usa refs opacas como `ContextRefs`, sin leer repositorios ni ejecutar nada;
 - para varios grupos, particiona `write_set` por area normalizada y rechaza
   rutas sin area;
@@ -77,6 +80,8 @@ programable compatible con el nucleo:
 - si un trabajo vivo activo solapa el `write_set`, mantiene la tarea generada
   pero la marca como `postponed` mediante `depends_on` al ref vivo;
 - corta refs vivos imposibles y rutas inseguras en `live_works.write_set`.
+- si el core rechaza un `WorkProfileV0`/`WorkflowTaskV0`, conserva el subcampo
+  causal en el issue publico para que el director pueda reparar la forma.
 
 ## BuildAutoprogrammingSelfImprovementRequestV0
 

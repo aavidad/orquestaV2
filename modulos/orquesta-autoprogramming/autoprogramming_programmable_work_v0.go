@@ -3,6 +3,7 @@ package orquestaautoprogramming
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -141,21 +142,45 @@ func autoprogrammingWorkflowTaskForGroupV0(
 	})
 	if err != nil {
 		return orquestacoreworkflow.WorkProfileV0{}, orquestacoreworkflow.WorkflowTaskV0{},
-			autoprogrammingRequestIssueV0("work_profile_invalid", "work_profile", err.Error())
+			autoprogrammingWorkProfileIssueV0(err)
 	}
 
 	task, err := orquestacoreworkflow.WorkflowTaskFromWorkProfileV0(profile)
 	if err != nil {
 		return orquestacoreworkflow.WorkProfileV0{}, orquestacoreworkflow.WorkflowTaskV0{},
-			autoprogrammingRequestIssueV0("workflow_task_invalid", "workflow_task", err.Error())
+			autoprogrammingWorkflowTaskIssueV0(err)
 	}
 	task.ContextRefs = autoprogrammingContextRefsForGroupV0(request, group)
 	task, err = orquestacoreworkflow.NewWorkflowTaskV0(task)
 	if err != nil {
 		return orquestacoreworkflow.WorkProfileV0{}, orquestacoreworkflow.WorkflowTaskV0{},
-			autoprogrammingRequestIssueV0("workflow_task_invalid", "workflow_task", err.Error())
+			autoprogrammingWorkflowTaskIssueV0(err)
 	}
 	return profile, task, AutoprogrammingRequestIssueV0{}
+}
+
+func autoprogrammingWorkProfileIssueV0(err error) AutoprogrammingRequestIssueV0 {
+	var publicErr orquestacoreworkflow.WorkProfileErrorV0
+	if errors.As(err, &publicErr) {
+		return autoprogrammingRequestIssueV0(
+			"work_profile_invalid",
+			"work_profile."+strings.TrimSpace(publicErr.Field),
+			publicErr.Code,
+		)
+	}
+	return autoprogrammingRequestIssueV0("work_profile_invalid", "work_profile", err.Error())
+}
+
+func autoprogrammingWorkflowTaskIssueV0(err error) AutoprogrammingRequestIssueV0 {
+	var publicErr orquestacoreworkflow.WorkflowTaskErrorV0
+	if errors.As(err, &publicErr) {
+		return autoprogrammingRequestIssueV0(
+			"workflow_task_invalid",
+			"workflow_task."+strings.TrimSpace(publicErr.Field),
+			publicErr.Code,
+		)
+	}
+	return autoprogrammingRequestIssueV0("workflow_task_invalid", "workflow_task", err.Error())
 }
 
 func autoprogrammingProgrammableTaskRefV0(requestRef string, groupIndex int) string {

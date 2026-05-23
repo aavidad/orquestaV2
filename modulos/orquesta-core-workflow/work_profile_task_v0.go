@@ -1,5 +1,7 @@
 package orquestacoreworkflow
 
+import "errors"
+
 func WorkflowTaskFromWorkProfileV0(profile WorkProfileV0) (WorkflowTaskV0, error) {
 	profile = NormalizeWorkProfileV0(profile)
 	if err := validateWorkProfileFieldsV0(profile); err != nil {
@@ -38,9 +40,17 @@ func workflowTaskFromWorkProfileUncheckedV0(profile WorkProfileV0) (WorkflowTask
 	}
 	normalized, err := NewWorkflowTaskV0(task)
 	if err != nil {
-		return WorkflowTaskV0{}, workProfileTaskErrorV0("workflow_task")
+		return WorkflowTaskV0{}, workProfileTaskFromWorkflowTaskErrorV0(err)
 	}
 	return normalized, nil
+}
+
+func workProfileTaskFromWorkflowTaskErrorV0(err error) WorkProfileErrorV0 {
+	var publicErr WorkflowTaskErrorV0
+	if errors.As(err, &publicErr) && publicErr.Field != "" {
+		return workProfileTaskErrorV0("workflow_task." + publicErr.Field)
+	}
+	return workProfileTaskErrorV0("workflow_task")
 }
 
 func workProfileTaskSummaryV0(profile WorkProfileV0) string {

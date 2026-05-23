@@ -9,6 +9,8 @@
 - La automejora secundaria ya queda modelada como contrato puro:
   `BuildAutoprogrammingSelfImprovementRequestV0` produce una request de baja
   prioridad para que el adaptador la prepare/encole despues.
+- `BuildAutoprogrammingProgrammableWorkV0` compacta textos largos antes de
+  `WorkflowTaskV0` y devuelve issues con subcampo causal para reparacion.
 
 ## Backlog
 

@@ -74,7 +74,7 @@ func TestValidateWorkProfileV0RejectsUnsafeScopeRefsThroughWorkflowTask(t *testi
 	profile.ScopeRefs = []string{"../secrets"}
 
 	err := ValidateWorkProfileV0(profile)
-	assertWorkProfileErrorV0(t, err, ErrWorkProfileTaskInvalidaV0, "workflow_task")
+	assertWorkProfileErrorV0(t, err, ErrWorkProfileTaskInvalidaV0, "workflow_task.write_set")
 }
 
 func TestValidateWorkflowTaskV0RejectsUnknownWorkProfileKind(t *testing.T) {
