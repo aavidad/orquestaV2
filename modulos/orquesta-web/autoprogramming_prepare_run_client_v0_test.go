@@ -1,0 +1,147 @@
+package orquestaweb
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
+	orquestamcp "orquesta/modulos/orquesta-mcp"
+)
+
+func TestRESTAutoprogrammingPrepareRunClientV0PreservaWorktreeAisladaYRamaOpaca(t *testing.T) {
+	var got orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != WebAutoprogrammingPrepareRunInboundEndpointV0 {
+			t.Fatalf("request inesperada: %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get(AppChangeCorrelationV0) != "corr-autoprog-web-001" {
+			t.Fatalf("correlation header=%q", r.Header.Get(AppChangeCorrelationV0))
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0{
+			Estado:           orquestamcp.MCPAutoprogrammingPrepareRunEstadoOKV0,
+			Accepted:         true,
+			RunRef:           "run-autoprog-web-001",
+			ProjectRef:       "project-ref-orquesta",
+			WorktreeRef:      "worktree-ref-opaque-001",
+			BranchRef:        "branch-ref-opaque-001",
+			PhaseID:          "programacion",
+			WorkflowTaskRefs: []string{"workflow-task-ref-001"},
+			WaitAgentRefs:    []string{"agent-ref-001"},
+			Continue: &orquestamcp.MCPAutoprogrammingContinueRequestV0{
+				RunRef:        "run-autoprog-web-001",
+				CorrelationID: "corr-autoprog-web-001",
+				WaitAgentRefs: []string{"agent-ref-001"},
+				MaxBursts:     2,
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewRESTAutoprogrammingPrepareRunClientV0(server.URL, time.Second)
+	vm, err := client.PrepararAutoprogrammingRun(context.Background(), validWebAutoprogrammingPrepareRunCommandV0())
+	if err != nil {
+		t.Fatalf("PrepararAutoprogrammingRun error: %v", err)
+	}
+	if got.RequestID != "request-ref-autoprog-web-001" ||
+		got.CorrelationID != "corr-autoprog-web-001" ||
+		got.AutoprogrammingRequest.RequestRef != "source-task-ref-001" {
+		t.Fatalf("input refs=%+v", got)
+	}
+	request := got.AutoprogrammingRequest
+	if !request.WorktreeIsolated ||
+		request.WorktreeRef != "worktree-ref-opaque-001" ||
+		request.BranchRef != "branch-ref-opaque-001" {
+		t.Fatalf("worktree/branch no preservados: %+v", request)
+	}
+	if len(request.Tasks) != 1 ||
+		request.Tasks[0].TaskRef != "task-ref-web-autoprog-001" ||
+		request.Tasks[0].Area != "modulos/orquesta-web" {
+		t.Fatalf("tasks=%+v", request.Tasks)
+	}
+	if len(request.WriteSet) != 1 || request.WriteSet[0] != "modulos/orquesta-web" {
+		t.Fatalf("write_set=%+v", request.WriteSet)
+	}
+	if len(request.RequiredTests) != 1 || request.RequiredTests[0] != "go test -count=1 ./modulos/orquesta-web" {
+		t.Fatalf("required_tests=%+v", request.RequiredTests)
+	}
+	if vm.Estado != WebAutoprogrammingPrepareRunEstadoOKV0 ||
+		!vm.Accepted ||
+		vm.WorktreeRef != "worktree-ref-opaque-001" ||
+		vm.BranchRef != "branch-ref-opaque-001" ||
+		vm.Continue == nil ||
+		len(vm.Continue.WaitAgentRefs) != 1 {
+		t.Fatalf("viewmodel=%+v", vm)
+	}
+}
+
+func TestRESTAutoprogrammingPrepareRunClientV0RenderizaErrorPublicoHTTP(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0{
+			Estado:   orquestamcp.MCPAutoprogrammingPrepareRunEstadoErrorV0,
+			Accepted: false,
+			Errores: []orquestamcp.MCPValidationIssueV0{{
+				Code:    "autoprogramming_prepare_run_no_configurado",
+				Field:   "executor",
+				Message: "autoprogramming_prepare_run_no_configurado",
+			}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewRESTAutoprogrammingPrepareRunClientV0(server.URL, time.Second)
+	vm, err := client.PrepararAutoprogrammingRun(context.Background(), validWebAutoprogrammingPrepareRunCommandV0())
+	if err != nil {
+		t.Fatalf("error no esperado: %v", err)
+	}
+	if vm.Estado != WebAutoprogrammingPrepareRunEstadoErrorV0 ||
+		len(vm.ErroresPublicos) != 1 ||
+		vm.ErroresPublicos[0].Code != "autoprogramming_prepare_run_no_configurado" {
+		t.Fatalf("viewmodel=%+v", vm)
+	}
+}
+
+func TestRESTAutoprogrammingPrepareRunClientV0RespuestaInvalida(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"estado": ""})
+	}))
+	defer server.Close()
+
+	client := NewRESTAutoprogrammingPrepareRunClientV0(server.URL, time.Second)
+	_, err := client.PrepararAutoprogrammingRun(context.Background(), validWebAutoprogrammingPrepareRunCommandV0())
+	if !IsWebAutoprogrammingPrepareRunClientErrorCodeV0(
+		err,
+		WebAutoprogrammingPrepareRunErrRespuestaInvalidaV0,
+	) {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func validWebAutoprogrammingPrepareRunCommandV0() WebAutoprogrammingPrepareRunCommandV0 {
+	return WebAutoprogrammingPrepareRunCommandV0{
+		RequestID:     "request-ref-autoprog-web-001",
+		CorrelationID: "corr-autoprog-web-001",
+		Locale:        "es-ES",
+		RequestedBy:   "operator-ref-web",
+		RequestRef:    "source-task-ref-001",
+		ProjectRef:    "project-ref-orquesta",
+		WorktreeRef:   "worktree-ref-opaque-001",
+		BranchRef:     "branch-ref-opaque-001",
+		Tasks: []orquestaautoprogramming.AutoprogrammingTaskGroupCandidateV0{{
+			TaskRef: "task-ref-web-autoprog-001",
+			Area:    "modulos/orquesta-web",
+		}},
+		WriteSet:             []string{"modulos/orquesta-web"},
+		RequiredTests:        []string{"go test -count=1 ./modulos/orquesta-web"},
+		MaxBursts:            2,
+		MaxStepsPerBurst:     3,
+		MaxDispatchesPerWait: 1,
+	}
+}

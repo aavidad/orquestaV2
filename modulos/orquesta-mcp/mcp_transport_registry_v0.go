@@ -128,6 +128,13 @@ type MCPTransportAutoprogrammingPrepareRunExecutorV0 interface {
 	) (MCPAutoprogrammingPrepareRunToolResultV0, error)
 }
 
+type MCPTransportAutoprogrammingStatusExecutorV0 interface {
+	Execute(
+		context.Context,
+		MCPAutoprogrammingStatusToolInputV0,
+	) (MCPAutoprogrammingStatusToolResultV0, error)
+}
+
 type MCPTransportServerShutdownExecutorV0 interface {
 	Execute(
 		context.Context,
@@ -179,49 +186,6 @@ func MCPTransportResourcesV0() []MCPTransportResourceEnvelopeV0 {
 		mcpTransportResourceEnvelopeV0(bootstrap.Name, bootstrap.Version, bootstrap.URI, bootstrap.ContentType, bootstrap.SummaryKey, func() any { return NewMCPBootstrapResourceV0() }),
 		mcpTransportResourceEnvelopeV0(workflow.Name, workflow.Version, workflow.URI, workflow.ContentType, workflow.SummaryKey, func() any { return NewMCPCoreWorkflowContractsResourceV0() }),
 		mcpTransportResourceEnvelopeV0(operatorOps.Name, operatorOps.Version, operatorOps.URI, operatorOps.ContentType, operatorOps.SummaryKey, func() any { return NewMCPOperatorOperationsResourceV0() }),
-	}
-}
-
-func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnvelopeV0 {
-	nueva := MCPNuevaAppDescriptorV0()
-	director := MCPArrancarDirectorAppDescriptorV0()
-	change := MCPRequestAppChangeDescriptorV0()
-	decision := MCPDirectorAgentDecisionDescriptorV0()
-	stats := MCPDirectorStatsDescriptorV0()
-	preparar := MCPPrepararOrquestacionAppDescriptorV0()
-	ejecutar := MCPEjecutarOrquestacionAppDescriptorV0()
-	autoprogramming := MCPAutoprogrammingValidateRequestDescriptorV0()
-	autoprogrammingPrepareRun := MCPAutoprogrammingPrepareRunDescriptorV0()
-	bootstrap := MCPBootstrapToolDescriptorV0Value()
-	workflow := MCPCoreWorkflowCommandToolDescriptorV0Value()
-	runControl := MCPRunControlDescriptorV0()
-	runQueue := MCPRunQueuePriorityDescriptorV0()
-	runSupervisor := MCPRunSupervisorDescriptorV0()
-	serverShutdown := MCPServerShutdownDescriptorV0()
-	domainWork := MCPDomainWorkDescriptorV0()
-	externalWorkRun := MCPExternalWorkRunDescriptorV0()
-	return []MCPTransportToolEnvelopeV0{
-		mcpTransportToolEnvelopeV0(nueva.Name, nueva.Version, nueva.ResourceURI, nueva.InputSchema, nueva.Output, mcpNuevaAppTransportHandlerV0(bindings.NuevaApp)),
-		mcpTransportToolEnvelopeV0(director.Name, director.Version, director.ResourceURI, director.InputSchema, director.Output, mcpArrancarDirectorAppTransportHandlerV0(bindings.ArrancarDirector)),
-		mcpTransportToolEnvelopeV0(change.Name, change.Version, change.ResourceURI, change.InputSchema, change.Output, mcpRequestAppChangeTransportHandlerV0(bindings.RequestAppChange)),
-		mcpTransportToolEnvelopeV0(decision.Name, decision.Version, decision.ResourceURI, decision.InputSchema, decision.Output, mcpDirectorAgentDecisionTransportHandlerV0(bindings.DirectorDecision)),
-		mcpTransportToolEnvelopeV0(stats.Name, stats.Version, stats.ResourceURI, stats.InputSchema, stats.Output, mcpDirectorStatsTransportHandlerV0(bindings.DirectorStats)),
-		mcpTransportToolEnvelopeV0(preparar.Name, preparar.Version, preparar.ResourceURI, preparar.InputSchema, preparar.Output, mcpPrepararOrquestacionAppTransportHandlerV0),
-		mcpTransportToolEnvelopeV0(ejecutar.Name, ejecutar.Version, ejecutar.ResourceURI, ejecutar.InputSchema, ejecutar.Output, mcpEjecutarOrquestacionAppTransportHandlerV0(bindings.EjecutarOrquestacion)),
-		mcpTransportToolEnvelopeV0(autoprogramming.Name, autoprogramming.Version, autoprogramming.ResourceURI, autoprogramming.InputSchema, autoprogramming.Output, mcpAutoprogrammingValidateRequestTransportHandlerV0(MCPAutoprogrammingValidateRequestToolExecutorV0{})),
-		mcpTransportToolEnvelopeV0(autoprogrammingPrepareRun.Name, autoprogrammingPrepareRun.Version, autoprogrammingPrepareRun.ResourceURI, autoprogrammingPrepareRun.InputSchema, autoprogrammingPrepareRun.Output, mcpAutoprogrammingPrepareRunTransportHandlerV0(bindings.AutoprogrammingPrepareRun)),
-		mcpTransportToolEnvelopeV0(bootstrap.Name, bootstrap.Version, bootstrap.ResourceURI, bootstrap.InputSchema, bootstrap.Output, mcpBootstrapTransportHandlerV0),
-		mcpTransportToolEnvelopeV0(workflow.Name, workflow.Version, workflow.ResourceURI, workflow.InputSchema, workflow.Output, mcpCoreWorkflowTransportHandlerV0),
-		mcpTransportToolEnvelopeV0(runControl.Name, runControl.Version, runControl.ResourceURI, runControl.InputSchema, runControl.Output, mcpRunControlTransportHandlerV0(bindings.RunControl)),
-		mcpTransportToolEnvelopeV0(runQueue.Name, runQueue.Version, runQueue.ResourceURI, runQueue.InputSchema, runQueue.Output, mcpRunQueuePriorityTransportHandlerV0(bindings.RunQueuePriority)),
-		mcpTransportToolEnvelopeV0(runSupervisor.Name, runSupervisor.Version, runSupervisor.ResourceURI, runSupervisor.InputSchema, runSupervisor.Output, mcpRunSupervisorTransportHandlerV0(bindings.RunSupervisor)),
-		mcpTransportToolEnvelopeV0(serverShutdown.Name, serverShutdown.Version, serverShutdown.ResourceURI, serverShutdown.InputSchema, serverShutdown.Output, mcpServerShutdownTransportHandlerV0(bindings.ServerShutdown)),
-		mcpTransportToolEnvelopeV0(domainWork.Name, domainWork.Version, domainWork.ResourceURI, domainWork.InputSchema, domainWork.Output, mcpDomainWorkTransportHandlerV0(bindings.DomainWork)),
-		mcpTransportToolEnvelopeV0(externalWorkRun.Name, externalWorkRun.Version, externalWorkRun.ResourceURI, externalWorkRun.InputSchema, externalWorkRun.Output, mcpExternalWorkRunTransportHandlerV0(bindings.ExternalWorkRun)),
-		mcpOperatorTransportToolV0(operator.OperatorMCPStatusToolNameV0, bindings.OperatorStatus),
-		mcpOperatorTransportToolV0(operator.OperatorMCPBurstToolNameV0, bindings.OperatorBurst),
-		mcpOperatorTransportToolV0(operator.OperatorMCPOutboxToolNameV0, bindings.OperatorOutbox),
-		mcpOperatorTransportToolV0(operator.OperatorMCPDirectedQueryToolV0, bindings.OperatorQuery),
 	}
 }
 

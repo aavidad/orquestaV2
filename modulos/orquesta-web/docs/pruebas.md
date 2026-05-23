@@ -181,6 +181,20 @@ del workflow.
 ```
 
 ```text
+Caso: WEB-CT-023 cliente REST autoprogramming prepare-run
+Tipo: contract
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `RESTAutoprogrammingPrepareRunClientV0` envia
+`POST /api/v0/autoprogramming/prepare-run`, correlation header,
+`worktree_isolated=true`, `worktree_ref`, `branch_ref`, write-set y tests
+obligatorios; la respuesta proyecta run, workflow tasks, agentes de espera,
+continue y errores publicos sin leer runtime/stores.
+Ultima ejecucion: 2026-05-23; pasa.
+Riesgos: El executor real de prepare-run se inyecta fuera de web; este corte
+solo cubre cliente, DTO y viewmodel.
+```
+
+```text
 Caso: WEB-ARCH-001 guard contra DB/runtime/fabricar-app en flujo nueva app
 Tipo: smoke
 Comando: `go test -count=1 ./modulos/orquesta-web`

@@ -136,6 +136,17 @@ Bloqueos: ninguno local; si el director publica otra ruta/version, el cambio que
 Estado: completada ejecutable
 ```
 
+```text
+ID: CLI-012
+Objetivo: Exponer comandos CLI finos para autoprogramacion supervisada sin entrar al nucleo ni al runtime local.
+Write-set: server_status_client_v0.go, autoprogramming_client_v0.go, command_handlers_autoprogramming_v0.go, command_runner_v0.go, tests locales, docs locales
+Simbolo foco: ServerStatusCliClientV0, AutoprogrammingCliClientV0
+Contrato: /api/v0/server/status, /api/v0/autoprogramming/prepare-run, /api/v0/runs/queue/priority, /api/v0/director/stats
+Validacion: gofmt; go test -count=1 ./cmd/orquesta-cli ./modulos/orquesta-cli. Tests con httptest verifican estado servidor por GET, cola por API, run stats por API y prepare-run preservando worktree aislada y branch_ref opaca.
+Bloqueos: ninguno local; diagnostico mas rico depende de nuevos puertos publicos del servidor.
+Estado: completada ejecutable
+```
+
 ## CONSULTA AL DIRECTOR registrada
 
 - CLI-004: resuelta para cliente CLI read-only con rutas REST candidatas; `registrar` sigue bloqueado.

@@ -303,6 +303,31 @@ Estado:
   - Local al modulo; no promovido a contrato compartido.
 ```
 
+```text
+Nombre: AutoprogrammingCliClientV0
+Tipo: puerto_salida
+Version: v0
+Propietario: orquesta-cli
+Consumidores: comandos `servidor estado`, `autoprogramacion preparar|cola listar|run ver`
+Campos:
+  - `servidor estado`: GET `/api/v0/server/status`.
+  - `preparar`: POST `/api/v0/autoprogramming/prepare-run` con `MCPAutoprogrammingPrepareRunToolInputV0`.
+  - `cola listar`: POST `/api/v0/runs/queue/priority` con action `rank`.
+  - `run ver`: POST `/api/v0/director/stats` con `run_ref` opaco.
+Invariantes:
+  - Cliente fino server-first; no lee stores, runtime, worktrees, DB ni filesystem interno.
+  - `branch_ref`, `worktree_ref` y `run_ref` se tratan como refs opacas y no se recomputan en CLI.
+  - La CLI no arranca agentes ni supervisor por si misma; solo consume endpoints publicos.
+Errores:
+  - error_transporte
+  - respuesta_invalida
+  - opcion_invalida
+Pruebas de contrato:
+  - httptest valida rutas, headers, rechazo de respuestas invalidas y preservacion de refs opacas en prepare-run.
+Estado:
+  - Completado ejecutable como adaptador secundario.
+```
+
 ## Inventario V1 resumido
 
 | Familia V1 | Evidencia V1 observada | Flags V1 reutilizables | Categoria V2 | Contrato V2 requerido | Motivo |

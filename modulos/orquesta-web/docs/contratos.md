@@ -178,6 +178,38 @@ Pruebas de contrato:
 - Gateway app monta `/run-control` encima de `/api/v0/runs/control`.
 ```
 
+```text
+Nombre: WebAutoprogrammingPrepareRunV0
+Tipo: puerto_salida + dto
+Version: v0
+Propietario: orquesta-web
+Consumidores: operador humano / cliente web de autoprogramacion
+Contrato externo consumido: `orquesta.autoprogramming.prepare_run.v0`
+Campos:
+- command: request_id, correlation_id, request_ref, project_ref, worktree_ref,
+  branch_ref, tasks, write_set, required_tests y limites de continuacion.
+- view_model: estado, accepted, run_ref, project_ref, worktree_ref,
+  branch_ref, phase_id, workflow_task_refs, wait_agent_refs, continue y
+  errores_publicos.
+Invariantes:
+- La web llama al bridge REST `/api/v0/autoprogramming/prepare-run`; no lee
+  stores, runtime, procesos, Git, DB ni filesystem.
+- `worktree_isolated=true` se fija en el envelope enviado al contrato externo;
+  `worktree_ref` y `branch_ref` se transportan como refs opacas y no se
+  interpretan como rutas, nombres Git ni comandos.
+- La preparacion solo deja una run continuable; la supervision posterior usa
+  `run_ref` y `wait_agent_refs` devueltos.
+Errores:
+- autoprogramming_prepare_run_error_transporte
+- autoprogramming_prepare_run_respuesta_invalida
+- errores publicos de `orquesta.autoprogramming.prepare_run.v0`
+Pruebas de contrato:
+- Cliente REST serializa la peticion preservando worktree aislada, rama opaca,
+  write-set y tests obligatorios.
+- Respuestas `error` del bridge HTTP se proyectan como errores publicos
+  renderizables.
+```
+
 ## Contratos consumidos
 
 ```text

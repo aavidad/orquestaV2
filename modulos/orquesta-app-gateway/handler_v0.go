@@ -40,12 +40,18 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 		ServerShutdown:                 apiHandlers.ServerShutdown,
 		AutoprogrammingValidateRequest: apiHandlers.AutoprogrammingValidateRequest,
 		AutoprogrammingPrepareRun:      apiHandlers.AutoprogrammingPrepareRun,
+		AutoprogrammingStatus:          apiHandlers.AutoprogrammingStatus,
+		AutoprogrammingSupervise:       apiHandlers.AutoprogrammingSupervise,
 		DomainWork:                     apiHandlers.DomainWork,
 		ExternalWorkRun:                apiHandlers.ExternalWorkRun,
 	}
 }
 
 func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
+	autoprogrammingStatus := orquestamcp.MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: config.RunQueuePriority,
+		Stats: config.DirectorStats,
+	}
 	return orquestahttpgateway.RouteHandlersV0{
 		AppSpec:                        orquestafactoryhttp.NewAppSpecHTTPHandlerV0(config.Clock),
 		AppDirector:                    orquestamcp.NewMCPArrancarDirectorAppHTTPHandlerV0(config.ArrancarDirector),
@@ -57,6 +63,8 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 		ServerShutdown:                 orquestamcp.NewMCPServerShutdownHTTPHandlerV0(config.ServerShutdown),
 		AutoprogrammingValidateRequest: orquestamcp.NewMCPAutoprogrammingValidateRequestHTTPHandlerV0(),
 		AutoprogrammingPrepareRun:      orquestamcp.NewMCPAutoprogrammingPrepareRunHTTPHandlerV0(config.AutoprogrammingPrepareRun),
+		AutoprogrammingStatus:          orquestamcp.NewMCPAutoprogrammingStatusHTTPHandlerV0(autoprogrammingStatus),
+		AutoprogrammingSupervise:       orquestamcp.NewMCPAutoprogrammingSuperviseHTTPHandlerV0(config.RunSupervisor),
 		DomainWork:                     orquestamcp.NewMCPDomainWorkHTTPHandlerV0(config.DomainWork),
 		ExternalWorkRun:                orquestamcp.NewMCPExternalWorkRunHTTPHandlerV0(config.ExternalWorkRun),
 	}

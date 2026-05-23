@@ -275,3 +275,18 @@ Validacion:
 ```sh
 go test -count=1 ./modulos/orquesta-orchestration-core -run 'TestReviewReworkReplanSplitTaskV0ValidatesRecursiveParentLimits|TestOperationalDirectorPlanMaterializerV0PreservaRefsOperativasTipadas'
 ```
+
+## ORCH-CORE-DIR-012: replay verificable de metadata viva
+
+Estado: hecho para la frontera offline.
+
+`CheckOperationalDirectorReplayStateV0` verifica reentrada del Director usando
+stores vivos: `OperationalDirectorPlanStateV0`, `WorkflowTaskStore` y
+`WorkflowTaskWaitStateV0`. Si falta metadata rica de task o wait, devuelve
+issues y no intenta reconstruirla desde eventos compactos del run.
+
+Validacion:
+
+```sh
+go test -count=1 ./modulos/orquesta-state-file ./modulos/orquesta-orchestration-core -run 'Test.*ReplayState'
+```

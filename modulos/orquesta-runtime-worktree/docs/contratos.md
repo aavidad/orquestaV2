@@ -24,3 +24,19 @@ Invariantes:
 - No conoce Codex, Claude, Gemini, DB, HOME, OAuth ni modelos.
 - El adaptador que consuma el resultado decide si registra entrega, pide
   revision o corta agente.
+
+## PrepareIsolatedWorktreeV0
+
+Prepara evidencia neutral de una worktree aislada para autoprogramacion.
+
+Invariantes:
+
+- `project_work_dir` es entrada del conector filesystem y no se devuelve en el
+  resultado publico.
+- `project_ref`, `worktree_ref`, `branch_ref`, `isolation_ref` y `baseline_ref`
+  son refs opacas; `branch_ref` no puede ser ruta ni URL.
+- `isolated=true` es obligatorio; si falta, el conector rechaza la preparacion.
+- El resultado conserva `worktree_ref` y `branch_ref` sin convertirlos en nombres
+  Git, rutas, proveedor ni HOME.
+- La evidencia publica contiene snapshot con paths relativos e ignora prefijos
+  de control inyectados.

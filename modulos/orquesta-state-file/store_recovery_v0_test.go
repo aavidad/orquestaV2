@@ -89,6 +89,72 @@ func TestStoreV0RecuperaEstadoTrasRecrearInstancia(t *testing.T) {
 	assertRecoveredAgentProcessV0(t, recovered, record)
 }
 
+func TestStoreV0VerificaReplayStateDirectorTrasRecrearInstancia(t *testing.T) {
+	ctx := context.Background()
+	rootDir := t.TempDir()
+	store := mustStoreV0(t, rootDir)
+	run := validRunV0()
+	task := mustWorkflowTaskV0(t, run.RunID)
+	task.WaveRef = "wave-state-file-replay-001"
+	task.CohortRef = "cohort-state-file-replay-001"
+	task.ChildTaskRefs = nil
+	waitState := stateFileWorkflowTaskWaitStateV0()
+	waitState.RunRef = run.RunID
+	waitState.WaitRef = "wait-ref-state-file-replay-001"
+	waitState.WaveRef = task.WaveRef
+	waitState.CohortRef = task.CohortRef
+	waitState.TaskRefs = []string{task.TaskID}
+	planState := stateFileOperationalDirectorPlanStateV0()
+	planState.RunRef = run.RunID
+	planState.ProjectRef = run.ProjectRef
+	planState.PlanRef = "plan-ref-state-file-replay-001"
+	planState.StateRef = "plan-state-ref-state-file-replay-001"
+	planState.ActiveStepID = "step-wait-subagents"
+	planState.ActiveWaveRef = task.WaveRef
+	planState.ActiveCohortRef = task.CohortRef
+	planState.PendingAgentRefs = waitState.PendingAgentRefs
+	planState.Steps[0].WaveRef = task.WaveRef
+	planState.Steps[0].CohortRef = task.CohortRef
+	planState.Steps[0].TaskRefs = []string{task.TaskID}
+	planState.Steps[0].AgentRefs = waitState.AgentRefs
+	planState.Steps[1].WaveRef = task.WaveRef
+	planState.Steps[1].CohortRef = task.CohortRef
+	planState.Steps[1].TaskRefs = []string{task.TaskID}
+	planState.Steps[1].WaitRefs = []string{waitState.WaitRef}
+	planState.Steps[1].AgentRefs = waitState.AgentRefs
+	planState.Steps[1].PendingAgentRefs = waitState.PendingAgentRefs
+	run.Tasks = []string{task.TaskID}
+
+	if err := store.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("save run: %v", err)
+	}
+	if err := store.SaveWorkflowTaskV0(ctx, task); err != nil {
+		t.Fatalf("save task: %v", err)
+	}
+	if err := store.SaveWorkflowTaskWaitStateV0(ctx, waitState); err != nil {
+		t.Fatalf("save wait state: %v", err)
+	}
+	if err := store.SaveOperationalDirectorPlanStateV0(ctx, planState); err != nil {
+		t.Fatalf("save plan state: %v", err)
+	}
+
+	recovered := mustStoreV0(t, rootDir)
+	result, err := orquestacionnucleoapp.CheckOperationalDirectorReplayStateV0(ctx,
+		orquestacionnucleoapp.OperationalDirectorReplayStateCheckRequestV0{
+			Run:            run,
+			PlanRef:        planState.PlanRef,
+			PlanStateStore: recovered,
+			TaskStore:      recovered,
+			WaitStateStore: recovered,
+		})
+	if err != nil {
+		t.Fatalf("CheckOperationalDirectorReplayStateV0: %v", err)
+	}
+	if !result.Restored || len(result.Issues) != 0 || len(result.Tasks) != 1 || len(result.WaitStates) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestStoreV0RechazaConflictosDurables(t *testing.T) {
 	ctx := context.Background()
 	store := mustStoreV0(t, t.TempDir())

@@ -118,6 +118,20 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			},
 		},
 		{
+			name:  "autoprogramming status",
+			route: RouteAutoprogrammingStatusV0,
+			handlers: RouteHandlersV0{
+				AutoprogrammingStatus: markerHandler("autoprogramming-status"),
+			},
+		},
+		{
+			name:  "autoprogramming supervise",
+			route: RouteAutoprogrammingSuperviseV0,
+			handlers: RouteHandlersV0{
+				AutoprogrammingSupervise: markerHandler("autoprogramming-supervise"),
+			},
+		},
+		{
 			name:  "domain work",
 			route: RouteDomainWorkV0,
 			handlers: RouteHandlersV0{

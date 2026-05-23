@@ -286,6 +286,19 @@ campos saneados, no por acceso directo a stores/runtime desde web.
 Estado: completada como DTO/proyeccion preparada.
 ```
 
+```text
+ID: WEB-023
+Objetivo: Preparar cliente fino web para autoprogramacion acotada con worktree
+aislada y rama opaca preservada.
+Write-set: autoprogramming_prepare_run_*_v0.go, tests y docs locales.
+Simbolo foco: WebAutoprogrammingPrepareRunV0
+Contrato: Consume `orquesta.autoprogramming.prepare_run.v0` por REST interno.
+Validacion: `go test -count=1 ./modulos/orquesta-web`.
+Bloqueos: La web no arranca agentes ni supervisa la run; eso queda en
+composicion/MCP con executor inyectado y puertos de runtime.
+Estado: completada.
+```
+
 ## CONSULTA AL DIRECTOR
 
 ```text

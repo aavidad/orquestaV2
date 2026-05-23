@@ -1197,3 +1197,53 @@ Pruebas de contrato:
   - Transporte sin executor devuelve `mcp_transport_tool_unbound`.
   - HTTP `POST /api/v0/autoprogramming/prepare-run` delega en executor fake.
 ```
+
+```text
+Nombre: mcp.tool.orquesta.autoprogramming.status.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: cliente IA MCP, bridge HTTP local y composiciones opt-in
+Campos:
+  descriptor:
+    name: orquesta.autoprogramming.status.v0
+    resource_uri: orquesta://contracts/autoprogramming-status/v0
+  rest:
+    method: POST
+    path: /api/v0/autoprogramming/status
+  input:
+    request_id, correlation_id, run_ref?, external_job_ref?, queue_ref?,
+    app_refs?, queue_limit?, telemetry_flags?
+  output_ok:
+    estado: ok
+    queue?: resultado compacto de orquesta.run_queue.priority.v0
+    run?: resultado compacto de orquesta.director.stats.v0
+    diagnostics?: diagnostico publico de puertos/errores
+Invariantes:
+  - Adaptador inbound fino.
+  - Delega cola en `run_queue.priority` y run en `director.stats`.
+  - No conoce stores, runtime, Codex, DB, filesystem ni proveedor.
+```
+
+```text
+Nombre: mcp.tool.orquesta.autoprogramming.supervise.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: cliente IA MCP, bridge HTTP local y composiciones opt-in
+Campos:
+  descriptor:
+    name: orquesta.autoprogramming.supervise.v0
+    resource_uri: orquesta://contracts/autoprogramming-supervise/v0
+  rest:
+    method: POST
+    path: /api/v0/autoprogramming/supervise
+  input:
+    request_id, correlation_id, run_ref?, queue_ref?, max_ticks?, limits?
+  output_ok:
+    mismo resultado compacto de `orquesta.runs.supervisor.v0`
+Invariantes:
+  - Adaptador inbound fino.
+  - Delega la supervision puntual en `runs.supervisor` inyectado.
+  - No conoce scheduler, runtime, Codex, DB, filesystem ni proveedor.
+```

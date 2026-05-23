@@ -1,0 +1,130 @@
+package orquestacli
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
+	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+)
+
+func TestAutoprogrammingCliClientV0PrepararRunPreservaWorktreeYRamaOpaca(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != AutoprogrammingPrepareRunCliEndpointV0 {
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+		var input orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		req := input.AutoprogrammingRequest
+		if !req.WorktreeIsolated || req.WorktreeRef != "worktree-ref-opaque-001" ||
+			req.BranchRef != "branch-ref-opaque-001" {
+			t.Fatalf("scope no preservado: %+v", req)
+		}
+		_ = json.NewEncoder(w).Encode(orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0{
+			Estado:           orquestamcp.MCPAutoprogrammingPrepareRunEstadoOKV0,
+			Accepted:         true,
+			RunRef:           "run-ref-autoprog-001",
+			ProjectRef:       req.ProjectRef,
+			WorktreeRef:      req.WorktreeRef,
+			BranchRef:        req.BranchRef,
+			WorkflowTaskRefs: []string{"workflow-task-ref-001"},
+			WaitAgentRefs:    []string{"agent-ref-001"},
+		})
+	}))
+	defer server.Close()
+
+	client := mustNewAutoprogrammingCliClientV0(t, server.URL)
+	env := client.PrepararRun(context.Background(), autoprogInvocationV0(server.URL), orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		AutoprogrammingRequest: orquestaautoprogramming.AutoprogrammingRequestV0{
+			RequestRef:       "request-ref-autoprog-001",
+			ProjectRef:       "project-ref-orquesta",
+			WorktreeRef:      "worktree-ref-opaque-001",
+			WorktreeIsolated: true,
+			BranchRef:        "branch-ref-opaque-001",
+			Tasks: []orquestaautoprogramming.AutoprogrammingTaskGroupCandidateV0{{
+				TaskRef: "task-ref-001",
+				Area:    "cli",
+			}},
+			WriteSet:      []string{"modulos/orquesta-cli"},
+			RequiredTests: []string{"go test -count=1 ./modulos/orquesta-cli"},
+		},
+	})
+
+	if !env.OK || env.Contract != CliContractAutoprogrammingV0 {
+		t.Fatalf("env=%+v", env)
+	}
+}
+
+func TestAutoprogrammingCliClientV0ConsultaColaYRunPorAPI(t *testing.T) {
+	seen := map[string]bool{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen[r.URL.Path] = true
+		switch r.URL.Path {
+		case AutoprogrammingRunQueueCliEndpointV0:
+			var input orquestamcp.MCPRunQueuePriorityToolInputV0
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Fatalf("decode queue: %v", err)
+			}
+			if input.Action != orquestamcp.MCPRunQueuePriorityActionRankV0 || input.Limit != 3 {
+				t.Fatalf("queue input=%+v", input)
+			}
+			_ = json.NewEncoder(w).Encode(orquestamcp.MCPRunQueuePriorityToolResultV0{
+				Estado: orquestamcp.MCPRunQueuePriorityEstadoOKV0,
+				Count:  1,
+				Ranked: []orquestamcp.MCPRunQueueRankedCandidateCompactV0{{RunRef: "run-ref-queue-001"}},
+			})
+		case AutoprogrammingRunStatsCliEndpointV0:
+			var input orquestamcp.MCPDirectorStatsToolInputV0
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Fatalf("decode stats: %v", err)
+			}
+			if input.RunRef != "run-ref-queue-001" || !input.IncludeProcessRefs {
+				t.Fatalf("stats input=%+v", input)
+			}
+			_ = json.NewEncoder(w).Encode(orquestamcp.MCPDirectorStatsToolResultV0{
+				Estado: orquestamcp.MCPDirectorStatsEstadoOKV0,
+				RunRef: input.RunRef,
+				Stats:  &orquestacionnucleoapp.DirectorRunStatsV0{RunRef: input.RunRef},
+			})
+		default:
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := mustNewAutoprogrammingCliClientV0(t, server.URL)
+	queueEnv := client.ConsultarCola(context.Background(), autoprogInvocationV0(server.URL), orquestamcp.MCPRunQueuePriorityToolInputV0{Limit: 3})
+	runEnv := client.ConsultarRun(context.Background(), autoprogInvocationV0(server.URL), orquestamcp.MCPDirectorStatsToolInputV0{
+		RunRef:             "run-ref-queue-001",
+		IncludeProcessRefs: true,
+	})
+
+	if !queueEnv.OK || !runEnv.OK || !seen[AutoprogrammingRunQueueCliEndpointV0] || !seen[AutoprogrammingRunStatsCliEndpointV0] {
+		t.Fatalf("queue=%+v run=%+v seen=%+v", queueEnv, runEnv, seen)
+	}
+}
+
+func mustNewAutoprogrammingCliClientV0(t *testing.T, serverURL string) *AutoprogrammingCliClientV0 {
+	t.Helper()
+	client, err := NewAutoprogrammingCliClientV0(serverURL, time.Second)
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	return client
+}
+
+func autoprogInvocationV0(serverURL string) CliInvocationContextV0 {
+	return CliInvocationContextV0{
+		RequestID:     "req-autoprog-cli-001",
+		CorrelationID: "corr-autoprog-cli-001",
+		ServerURL:     serverURL,
+		Timeout:       time.Second,
+	}
+}

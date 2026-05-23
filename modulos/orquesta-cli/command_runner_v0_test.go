@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
 func TestRunOrquestaCLIV0HelpEspanolSinRed(t *testing.T) {
@@ -150,6 +153,61 @@ func TestRunOrquestaCLIV0GovernanceCatalogoVerReadOnly(t *testing.T) {
 	}, nil)
 
 	if code != 0 || !env.OK || env.Contract != CliContractGovernanceCatalogV0 {
+		t.Fatalf("env/code inesperados: code=%d env=%+v", code, env)
+	}
+}
+
+func TestRunOrquestaCLIV0ServidorEstadoUsaAPI(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != ServerStatusCliEndpointV0 {
+			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(orquestaserver.StateV0{
+			SchemaVersion: orquestaserver.StateSchemaVersionV0,
+			Status:        "running",
+		})
+	}))
+	defer server.Close()
+
+	env, code := runCLIAndDecodeEnvelopeV0(t, []string{
+		"servidor", "estado",
+		"--server-url", server.URL,
+		"--json",
+	}, nil)
+
+	if code != 0 || !env.OK || env.Contract != CliContractServerStatusV0 {
+		t.Fatalf("env/code inesperados: code=%d env=%+v", code, env)
+	}
+}
+
+func TestRunOrquestaCLIV0AutoprogramacionColaListarUsaAPI(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != AutoprogrammingRunQueueCliEndpointV0 {
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+		var input orquestamcp.MCPRunQueuePriorityToolInputV0
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if input.Action != orquestamcp.MCPRunQueuePriorityActionRankV0 || input.Limit != 5 {
+			t.Fatalf("input inesperado: %+v", input)
+		}
+		_ = json.NewEncoder(w).Encode(orquestamcp.MCPRunQueuePriorityToolResultV0{
+			Estado: orquestamcp.MCPRunQueuePriorityEstadoOKV0,
+			Count:  1,
+			Ranked: []orquestamcp.MCPRunQueueRankedCandidateCompactV0{{RunRef: "run-ref-cli-queue-001"}},
+		})
+	}))
+	defer server.Close()
+
+	env, code := runCLIAndDecodeEnvelopeV0(t, []string{
+		"autoprogramacion", "cola", "listar",
+		"--server-url", server.URL,
+		"--limit", "5",
+		"--json",
+	}, nil)
+
+	if code != 0 || !env.OK || env.Contract != CliContractAutoprogrammingV0 {
 		t.Fatalf("env/code inesperados: code=%d env=%+v", code, env)
 	}
 }

@@ -13,6 +13,11 @@ import (
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
+const (
+	defaultServerSupervisorMaxExternalWaitsV0 = 1
+	maxServerSupervisorMaxExternalWaitsV0     = 1
+)
+
 func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 	projectDir, err := projectDirFromEnvV0()
 	if err != nil {
@@ -42,11 +47,25 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 				MaxCommands:          intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_COMMANDS", 20),
 				MaxOutboxPerCycle:    intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_OUTBOX", 4),
 				MaxDecisionCycles:    intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_DECISIONS", 1),
-				MaxExternalWaits:     intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS", 120),
+				MaxExternalWaits:     serverSupervisorMaxExternalWaitsV0(),
 			},
 		},
 	}
 	return orquestaserver.NormalizeConfigV0(config), orquestaserver.ValidateConfigV0(config)
+}
+
+func serverSupervisorMaxExternalWaitsV0() int {
+	value := intEnvOrDefaultV0(
+		"ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS",
+		defaultServerSupervisorMaxExternalWaitsV0,
+	)
+	if value <= 0 {
+		return defaultServerSupervisorMaxExternalWaitsV0
+	}
+	if value > maxServerSupervisorMaxExternalWaitsV0 {
+		return maxServerSupervisorMaxExternalWaitsV0
+	}
+	return value
 }
 
 func defaultControlDirV0(projectDir string) string {

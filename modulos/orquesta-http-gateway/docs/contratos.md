@@ -56,6 +56,8 @@ Campos:
 - `RouteRunSupervisorV0`: `/api/v0/runs/supervise`;
 - `RouteAutoprogrammingValidateRequestV0`: `/api/v0/autoprogramming/validate-request`;
 - `RouteAutoprogrammingPrepareRunV0`: `/api/v0/autoprogramming/prepare-run`;
+- `RouteAutoprogrammingStatusV0`: `/api/v0/autoprogramming/status`;
+- `RouteAutoprogrammingSuperviseV0`: `/api/v0/autoprogramming/supervise`;
 - `RouteServerShutdownV0`: `/api/v0/server/shutdown`.
 - `RouteDomainWorkV0`: `/api/v0/domain-work`.
 - `RouteExternalWorkRunV0`: `/api/v0/external-work/run`.
@@ -81,6 +83,10 @@ dominio.
 `RouteAutoprogrammingPrepareRunV0` apunta al contrato REST/MCP que prepara una
 run de autoprogramacion continuable por executor inyectado. El gateway no crea
 runs ni arranca agentes; solo monta el handler.
+
+`RouteAutoprogrammingStatusV0` y `RouteAutoprogrammingSuperviseV0` apuntan a
+contratos REST/MCP finos para estado/diagnostico y supervision puntual de
+autoprogramacion. El gateway solo registra handlers inyectados.
 
 `RouteDomainWorkV0` apunta al contrato REST/MCP de trabajo de dominio externo.
 El gateway solo registra el handler inyectado; no conoce OPES, contratos de

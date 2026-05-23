@@ -18,5 +18,8 @@ Casos relevantes:
   misma ref con payload distinto;
 - conservar `required_test_evidence_refs` dentro del plan state para que el
   cierre posterior pueda consumir evidencias ya aceptadas;
+- verificar tras recrear instancia que `OperationalDirectorPlanStateV0`,
+  `WorkflowTaskStore` y `WorkflowTaskWaitStateV0` siguen disponibles como
+  metadata viva, sin reconstruccion desde eventos compactos;
 - rechazar documentos de plan state con refs internas inconsistentes;
 - rechazar documentos corruptos o estados que no validen el contrato del nucleo.

@@ -21,6 +21,9 @@ Estado vigente:
   dominio y entregue artefactos sin conocer OPES, DB ni runtime.
 - `/api/v0/autoprogramming/prepare-run` es el bridge HTTP local del executor de
   preparacion cuando una composicion lo inyecta.
+- `/api/v0/autoprogramming/status` y `/api/v0/autoprogramming/supervise`
+  exponen gestion fina de autoprogramacion sobre puertos inyectados de cola,
+  stats y supervisor. No ejecutan runtime ni leen estado concreto por si mismos.
 - `/api/v0/domain-work` es el bridge HTTP local del mismo executor.
 - OPES se conecta hoy inyectando su cliente REST como adaptador de dominio; si se
   usa MCPO o servidor MCP real, debe envolver estos tools como transporte opt-in,

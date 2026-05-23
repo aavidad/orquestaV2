@@ -23,6 +23,8 @@ Rutas v0:
 - `/api/v0/director/stats`
 - `/api/v0/autoprogramming/validate-request`
 - `/api/v0/autoprogramming/prepare-run`
+- `/api/v0/autoprogramming/status`
+- `/api/v0/autoprogramming/supervise`
 - `/api/v0/runs/control`
 - `/api/v0/runs/queue/priority`
 - `/api/v0/runs/supervise`

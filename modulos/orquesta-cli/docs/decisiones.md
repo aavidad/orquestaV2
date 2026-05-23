@@ -150,6 +150,16 @@ Contratos afectados: BootstrapProyectoDesdeAppSpec v0, CliOutputEnvelopeV0
 Estado: aceptada_local
 ```
 
+```text
+Fecha: 2026-05-23
+Decision: La CLI de autoprogramacion consume solo endpoints HTTP publicos del servidor.
+Motivo: T06 exige cliente fino para estado, cola y runs sin entrar al nucleo ni al runtime.
+Alternativas: leer stores/run-state locales; reutilizar comandos internos de `cmd/orquesta-server`; arrancar agentes desde CLI.
+Impacto: `servidor estado`, `autoprogramacion preparar`, `autoprogramacion cola listar` y `autoprogramacion run ver` quedan como adaptadores REST, con refs opacas preservadas.
+Contratos afectados: ServerStatus v0, Autoprogramming prepare-run v0, RunQueuePriority v0, DirectorStats v0
+Estado: aceptada_local
+```
+
 ## Plantilla
 
 ```text

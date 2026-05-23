@@ -18,6 +18,8 @@ const (
 	RouteServerShutdownV0                 = "/api/v0/server/shutdown"
 	RouteAutoprogrammingValidateRequestV0 = "/api/v0/autoprogramming/validate-request"
 	RouteAutoprogrammingPrepareRunV0      = "/api/v0/autoprogramming/prepare-run"
+	RouteAutoprogrammingStatusV0          = "/api/v0/autoprogramming/status"
+	RouteAutoprogrammingSuperviseV0       = "/api/v0/autoprogramming/supervise"
 	RouteDomainWorkV0                     = "/api/v0/domain-work"
 	RouteExternalWorkRunV0                = "/api/v0/external-work/run"
 )
@@ -38,6 +40,8 @@ type RouteHandlersV0 struct {
 	ServerShutdown                 http.Handler
 	AutoprogrammingValidateRequest http.Handler
 	AutoprogrammingPrepareRun      http.Handler
+	AutoprogrammingStatus          http.Handler
+	AutoprogrammingSupervise       http.Handler
 	DomainWork                     http.Handler
 	ExternalWorkRun                http.Handler
 }
@@ -60,6 +64,8 @@ func NewAppGatewayMuxV0(handlers RouteHandlersV0) http.Handler {
 	handleIfPresent(mux, RouteServerShutdownV0, handlers.ServerShutdown)
 	handleIfPresent(mux, RouteAutoprogrammingValidateRequestV0, handlers.AutoprogrammingValidateRequest)
 	handleIfPresent(mux, RouteAutoprogrammingPrepareRunV0, handlers.AutoprogrammingPrepareRun)
+	handleIfPresent(mux, RouteAutoprogrammingStatusV0, handlers.AutoprogrammingStatus)
+	handleIfPresent(mux, RouteAutoprogrammingSuperviseV0, handlers.AutoprogrammingSupervise)
 	handleIfPresent(mux, RouteDomainWorkV0, handlers.DomainWork)
 	handleIfPresent(mux, RouteExternalWorkRunV0, handlers.ExternalWorkRun)
 

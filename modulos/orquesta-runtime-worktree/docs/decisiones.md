@@ -13,3 +13,16 @@ Impacto: se crea un conector de snapshot/diff por filesystem inyectable desde
 adaptadores de runtime.
 Estado: aceptada.
 ```
+
+```text
+Fecha: 2026-05-23
+Decision: La worktree aislada de autoprogramacion se valida por contrato neutral
+y preserva `branch_ref` como ref opaca.
+Motivo: el runtime puede necesitar una worktree aislada antes de lanzar agentes,
+pero este conector no debe decidir Git, nombres de rama, proveedor, HOME ni
+merge.
+Impacto: `PrepareIsolatedWorktreeV0` exige `isolated=true`, refs opacas y
+snapshot relativo; no devuelve `project_work_dir` ni convierte `branch_ref` en
+ruta o nombre Git.
+Estado: aceptada.
+```

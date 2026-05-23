@@ -32,8 +32,13 @@ func (runtime *RuntimeV0) runSupervisorTickV0(ctx context.Context) {
 	}
 	result, err := runtime.supervisor.RunGlobalSupervisorV0(ctx, command)
 	if err != nil {
-		runtime.persistStateV0(ctx, runtime.tracker.MarkErrorV0(err.Error(), runtime.clock.Now()))
+		runtime.persistStateV0(ctx, runtime.tracker.MarkSupervisorErrorV0(
+			command,
+			result,
+			err.Error(),
+			runtime.clock.Now(),
+		))
 		return
 	}
-	runtime.persistStateV0(ctx, runtime.tracker.MarkSupervisorV0(result, runtime.clock.Now()))
+	runtime.persistStateV0(ctx, runtime.tracker.MarkSupervisorV0(command, result, runtime.clock.Now()))
 }

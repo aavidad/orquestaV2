@@ -55,7 +55,10 @@ func (resolver CodexLaunchSpecResolverV0) programmingTaskV0(
 		RequiredTests: append([]string(nil),
 			task.RequiredTests...,
 		),
-		DoneCriteria: append([]string{"agent_ack.json escrito con status completed."}, task.AcceptanceCriteria...),
+		DoneCriteria: append(
+			append([]string{"agent_ack.json escrito con status completed."}, task.AcceptanceCriteria...),
+			autoprogrammingScopeDoneCriteriaV0(task)...,
+		),
 	}, nil
 }
 
@@ -73,6 +76,9 @@ func programmingObjectiveV0(
 		"Usa el write-set como alcance primario; si debes tocar otros ficheros del repo para cumplir el objetivo o arreglar pruebas, hazlo y dejalo justificado en el ACK.",
 		"Si la app es Go completa, debe quedar como modulo autonomo con go.mod, entrypoint bajo cmd/server o equivalente documentado, imports de modulo y sin imports relativos ../.",
 		"Ejecuta pruebas focales razonables y registra el resultado en el ACK.",
+	}
+	if scopeLine := autoprogrammingScopeObjectiveLineV0(task); scopeLine != "" {
+		lines = append(lines, scopeLine)
 	}
 	if context := programmingReworkContextV0(payload); context != "" {
 		lines = append(lines, context)

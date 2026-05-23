@@ -343,6 +343,23 @@ AppSpecRequestV0.
 Estado: aceptada localmente.
 ```
 
+```text
+Fecha: 2026-05-23
+Decision: La web prepara autoprogramacion solo como cliente fino de
+`orquesta.autoprogramming.prepare_run.v0`.
+Motivo: El operador necesita arrancar un flujo acotado preservando refs opacas
+de worktree/rama, pero la web no debe conocer Git, runtime, stores ni proveedor.
+Alternativas: llamar a runtime desde web; validar Git/worktree localmente;
+esperar al panel completo.
+Impacto: `RESTAutoprogrammingPrepareRunClientV0` envia
+`worktree_isolated=true`, `worktree_ref` y `branch_ref` al bridge REST y solo
+proyecta `run_ref`, refs de workflow, agentes de espera, `continue` y errores
+publicos.
+Contratos afectados: `WebAutoprogrammingPrepareRunV0`,
+`orquesta.autoprogramming.prepare_run.v0`.
+Estado: aceptada localmente.
+```
+
 Reutilizable como referencia, no como copia directa:
 
 - `cmd/proyectos_web.go`: estructura de secciones del wizard: briefing, arquitectura, interfaces, datos, plataformas, sistemas operativos, compliance, entrega/calidad.

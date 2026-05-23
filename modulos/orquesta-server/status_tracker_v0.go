@@ -90,15 +90,45 @@ func (tracker *StatusTrackerV0) MarkStartupBlockedV0(
 }
 
 func (tracker *StatusTrackerV0) MarkSupervisorV0(
+	command orquestarunsupervisor.RunSupervisorCommandV0,
 	result orquestarunsupervisor.RunSupervisorResultV0,
 	now time.Time,
 ) StateV0 {
 	return tracker.updateV0(func(state *StateV0) {
 		state.LastHeartbeatAt = formatTimeV0(now)
 		state.LastSupervisorAt = formatTimeV0(now)
+		state.LastSupervisorStatus = "ok"
 		state.LastSupervisorStop = strings.TrimSpace(result.StopReason)
+		state.LastSupervisorError = ""
+		state.LastSupervisorQueueRef = strings.TrimSpace(command.QueueRef)
+		state.LastSupervisorResultTicks = len(result.Ticks)
+		state.LastSupervisorExecutions = result.TotalExecutions
+		state.LastSupervisorSkips = result.TotalSkips
 		state.SupervisorTicks++
 		state.LastError = ""
+	})
+}
+
+func (tracker *StatusTrackerV0) MarkSupervisorErrorV0(
+	command orquestarunsupervisor.RunSupervisorCommandV0,
+	result orquestarunsupervisor.RunSupervisorResultV0,
+	message string,
+	now time.Time,
+) StateV0 {
+	message = strings.TrimSpace(message)
+	return tracker.updateV0(func(state *StateV0) {
+		state.LastHeartbeatAt = formatTimeV0(now)
+		state.LastSupervisorAt = formatTimeV0(now)
+		state.LastSupervisorStatus = "error"
+		state.LastSupervisorStop = strings.TrimSpace(result.StopReason)
+		state.LastSupervisorError = message
+		state.LastSupervisorQueueRef = strings.TrimSpace(command.QueueRef)
+		state.LastSupervisorResultTicks = len(result.Ticks)
+		state.LastSupervisorExecutions = result.TotalExecutions
+		state.LastSupervisorSkips = result.TotalSkips
+		state.SupervisorTicks++
+		state.SupervisorErrorTicks++
+		state.LastError = message
 	})
 }
 

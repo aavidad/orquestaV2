@@ -260,6 +260,24 @@ Riesgos: exponer stack traces del director o aceptar una respuesta no compacta.
 ```
 
 ```text
+Caso: CLI-P025 autoprogramacion cliente fino
+Tipo: contract
+Comando: orquesta-cli servidor estado --json; orquesta-cli autoprogramacion cola listar --json; orquesta-cli autoprogramacion run ver --run-ref RUN_REF --json
+Evidencia esperada: la CLI consume solo HTTP/API publica, propaga X-Correlation-ID y no lee stores, runtime, worktrees ni filesystem interno.
+Ultima ejecucion: 2026-05-23, go test -count=1 ./cmd/orquesta-cli ./modulos/orquesta-cli; TestRunOrquestaCLIV0ServidorEstadoUsaAPI y TestRunOrquestaCLIV0AutoprogramacionColaListarUsaAPI.
+Riesgos: convertir CLI en control plane local o recomponer estado de cola/run fuera del servidor.
+```
+
+```text
+Caso: CLI-P026 prepare-run autoprogramacion preserva refs opacas
+Tipo: contract
+Comando: orquesta-cli autoprogramacion preparar --input request.json --json
+Evidencia esperada: el cliente envia el envelope MCP/HTTP sin reescribir branch_ref ni worktree_ref, exige la respuesta publica del servidor y falla por transporte si no hay API.
+Ultima ejecucion: 2026-05-23, go test -count=1 ./cmd/orquesta-cli ./modulos/orquesta-cli; TestAutoprogrammingCliClientV0PrepararRunPreservaWorktreeYRamaOpaca.
+Riesgos: normalizar refs opacas en CLI o lanzar agentes directamente desde el cliente.
+```
+
+```text
 Caso: CLI-P025 FunctionContract read-only listar/ver
 Tipo: contract
 Comando: orquesta-cli contratos funcion listar --json; orquesta-cli contratos funcion ver --json

@@ -105,6 +105,27 @@ Esta prueba valida:
 - el artefacto termina en `DomainWork.submit_artifact`;
 - el paquete de agente y el wrapper Codex materializado usan `xhigh`.
 
+## Autoprogramacion acotada
+
+Cuando este smoke se use como tarea de autoprogramacion de Orquesta, el alcance
+de edicion debe quedar limitado a los adaptadores OPES y sus runbooks/scripts:
+
+- `scripts`
+- `docs/runbooks`
+- `modulos/orquesta-opes-bridge`
+- `modulos/orquesta-opes-connector`
+
+La rama y el worktree de esa tarea se tratan como refs opacas de Orquesta. Los
+adaptadores OPES no deben interpretar ni reescribir esas refs: solo conservan
+`job_ref`, `correlation_id`, `idempotency_key`, `run_ref`, `task_ref` y
+`delivery_ref` cuando cruzan la frontera por contratos publicos.
+
+Validacion focal para ese corte acotado:
+
+```bash
+go test -count=1 ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector
+```
+
 ## Preparar OPES Postgres con Operario
 
 Usar Postgres tambien para pruebas acotadas. SQLite queda solo como historico o

@@ -2,8 +2,10 @@ package orquestaruntimeworktree
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -79,6 +81,60 @@ func TestVerifyWorktreeWriteSetV0RechazaRequestInsegura(t *testing.T) {
 	}
 }
 
+func TestPrepareIsolatedWorktreeV0ConservaBranchRefOpaca(t *testing.T) {
+	root := t.TempDir()
+	writeWorktreeFileForTestV0(t, root, "go.mod", "module app\n")
+	writeWorktreeFileForTestV0(t, root, ".control/agent_ack.json", "pending")
+
+	result, issues := PrepareIsolatedWorktreeV0(context.Background(), WorktreeIsolationRequestV0{
+		IsolationRef:   "worktree-isolation-ref-001",
+		ProjectRef:     "project-ref-autoprogramming-001",
+		WorktreeRef:    "worktree-ref-autoprogramming-001",
+		BranchRef:      "branch-ref-autoprogramming-001",
+		ProjectWorkDir: root,
+		Isolated:       true,
+		BaselineRef:    "worktree-baseline-ref-001",
+		IgnorePrefixes: []string{".control"},
+	})
+	if len(issues) > 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if result.SchemaVersion != WorktreeIsolationSchemaVersionV0 ||
+		result.Mode != WorktreeIsolationModeIsolatedV0 ||
+		result.BranchRef != "branch-ref-autoprogramming-001" ||
+		result.WorktreeRef != "worktree-ref-autoprogramming-001" ||
+		result.BaselineRef != "worktree-baseline-ref-001" {
+		t.Fatalf("result inesperado: %+v", result)
+	}
+	if len(result.Snapshot.Files) != 1 || result.Snapshot.Files[0].Path != "go.mod" {
+		t.Fatalf("snapshot no acotado: %+v", result.Snapshot.Files)
+	}
+	raw, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(raw), root) {
+		t.Fatalf("resultado publico filtra path absoluto: %s", string(raw))
+	}
+}
+
+func TestPrepareIsolatedWorktreeV0RechazaRamaNoOpacaONoAislada(t *testing.T) {
+	root := t.TempDir()
+	_, issues := PrepareIsolatedWorktreeV0(context.Background(), WorktreeIsolationRequestV0{
+		IsolationRef:   "worktree-isolation-ref-001",
+		ProjectRef:     "project-ref-autoprogramming-001",
+		WorktreeRef:    "worktree-ref-autoprogramming-001",
+		BranchRef:      "feature/app",
+		ProjectWorkDir: root,
+		Isolated:       false,
+	})
+	if len(issues) == 0 {
+		t.Fatalf("expected issues")
+	}
+	requireWorktreeIssueFieldV0(t, issues, "branch_ref")
+	requireWorktreeIssueFieldV0(t, issues, "isolated")
+}
+
 func captureWorktreeSnapshotForTestV0(
 	t *testing.T,
 	root string,
@@ -110,4 +166,14 @@ func writeWorktreeFileForTestV0(
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write %s: %v", rel, err)
 	}
+}
+
+func requireWorktreeIssueFieldV0(t *testing.T, issues []WorktreeIssueV0, field string) {
+	t.Helper()
+	for _, issue := range issues {
+		if issue.Field == field {
+			return
+		}
+	}
+	t.Fatalf("no issue for field %q in %+v", field, issues)
 }

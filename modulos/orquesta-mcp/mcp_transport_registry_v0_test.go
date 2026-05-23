@@ -38,6 +38,8 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		MCPEjecutarOrquestacionAppToolNameV0,
 		MCPAutoprogrammingValidateRequestToolNameV0,
 		MCPAutoprogrammingPrepareRunToolNameV0,
+		MCPAutoprogrammingStatusToolNameV0,
+		MCPAutoprogrammingSuperviseToolNameV0,
 		MCPBootstrapToolNameV0,
 		MCPCoreWorkflowCommandToolNameV0,
 		MCPRunControlToolNameV0,
@@ -56,7 +58,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		}
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, transport.resources, 5000)
-	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 8500)
+	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 9500)
 }
 
 func TestMCPTransportV0SirveResourceYToolConFakeEnMemoria(t *testing.T) {
