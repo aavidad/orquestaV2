@@ -65,6 +65,9 @@ Reglas:
   equivalente superior, el plan debe marcar `creacion_directa_nivel`;
 - `allowed_write_set` se limita a `external/opes/<work_kind>/<job_id>` para que
   cada job tenga una entrega unica y varios agentes del mismo tipo no se pisen;
+- si OPES aporta `worktree_ref` o `branch_ref` en `external_refs`, el bridge los
+  conserva como refs opacas en `input_fields`/`work_refs` y rechaza valores con
+  forma de ruta; no los interpreta como paths, nombres Git ni write-set;
 - los artefactos esperados se expresan como input fields, no como decisiones de
   OPES.
 

@@ -136,10 +136,31 @@ func stackDrainEvidenceRefsV0(
 func stackDrainQueueStatusV0(
 	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
 ) string {
-	if result.Final.Run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+	run := result.Final.Run
+	if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
 		return orquestarunqueue.RunStatusClosedV0
 	}
+	if stackDrainRunHasAllTasksDeliveredOrClosedV0(run) &&
+		!drainRunHasPendingExternalAgentsV0(run, nil) {
+		return orquestarunqueue.RunStatusDeliveredV0
+	}
 	return ""
+}
+
+func stackDrainRunHasAllTasksDeliveredOrClosedV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	tasks := compactCodexStackStringsV0(run.Tasks)
+	if len(tasks) == 0 {
+		return false
+	}
+	for _, taskRef := range tasks {
+		if !codexStackStringInSetV0(run.DeliveredTasks, taskRef) &&
+			!codexStackStringInSetV0(run.ClosedTasks, taskRef) {
+			return false
+		}
+	}
+	return true
 }
 
 func formatStackCoordinatorTimeV0(value time.Time) string {

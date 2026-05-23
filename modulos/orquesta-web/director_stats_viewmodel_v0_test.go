@@ -132,6 +132,38 @@ func TestWebDirectorStatsPanelV0ProyectaCheckpointPendienteSiLlegaPorContrato(t 
 	}
 }
 
+func TestWebDirectorStatsPanelV0ProyectaCierreBloqueadoYAccionesSeguras(t *testing.T) {
+	result := directorStatsResultForWebTestV0()
+	result.Stats.Closure = WebDirectorClosureStatsContractV0{
+		Status:      "blocked",
+		Blocked:     true,
+		BlockedBy:   []string{" revision_final "},
+		BlockerRefs: []string{" blocker-ref-web-stats-001 "},
+	}
+
+	panel := NewWebDirectorStatsPanelV0("es", result)
+
+	if !panel.Closure.Blocked ||
+		len(panel.Closure.BlockedBy) != 1 ||
+		panel.Closure.BlockedBy[0] != "revision_final" ||
+		len(panel.SafeActions) < 2 {
+		t.Fatalf("closure=%+v actions=%+v panel=%+v", panel.Closure, panel.SafeActions, panel)
+	}
+	if !directorStatsHasSafeActionV0(panel.SafeActions, "review") ||
+		!directorStatsHasSafeActionV0(panel.SafeActions, "supervise") {
+		t.Fatalf("actions=%+v", panel.SafeActions)
+	}
+}
+
+func directorStatsHasSafeActionV0(actions []WebDirectorStatsSafeActionV0, want string) bool {
+	for _, action := range actions {
+		if action.Action == want && action.Method == "POST" && action.RequiresPost {
+			return true
+		}
+	}
+	return false
+}
+
 func directorStatsResultForWebTestV0() WebDirectorStatsInboundResultV0 {
 	return WebDirectorStatsInboundResultV0{
 		Estado:        WebDirectorStatsInboundEstadoOKV0,

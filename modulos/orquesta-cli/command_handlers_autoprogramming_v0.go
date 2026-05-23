@@ -74,6 +74,37 @@ func runCLIAutoprogrammingQueueV0(ctx context.Context, args []string) (CliOutput
 	return env, exitCodeForEnvelopeV0(env)
 }
 
+func runCLIAutoprogrammingStatusV0(ctx context.Context, args []string) (CliOutputEnvelopeV0, int) {
+	fs, common := newCLIFlagSetV0(CliDefaultCommandAutoprogStatusV0)
+	runRef := fs.String("run-ref", "", "ref opaca del run")
+	queueRef := fs.String("queue-ref", "", "ref opaca de cola")
+	appRefs := fs.String("app-refs", "", "refs de app CSV")
+	limit := fs.Int("limit", 20, "limite")
+	if err := fs.Parse(args); err != nil {
+		return cliParseErrorEnvelopeV0(CliDefaultCommandAutoprogStatusV0, err)
+	}
+	if fs.NArg() != 0 {
+		return cliUnexpectedArgsEnvelopeV0(CliDefaultCommandAutoprogStatusV0, common)
+	}
+	inv := invocationFromCLIFlagsV0(CliDefaultCommandAutoprogStatusV0, common)
+	input := orquestamcp.MCPAutoprogrammingStatusToolInputV0{
+		RunRef:               strings.TrimSpace(*runRef),
+		QueueRef:             strings.TrimSpace(*queueRef),
+		AppRefs:              splitCSVFlagV0(*appRefs),
+		QueueLimit:           *limit,
+		IncludeProcessRefs:   true,
+		IncludeAgentProgress: true,
+		IncludeAgentUsage:    true,
+	}
+	client, err := NewAutoprogrammingCliClientV0(common.ServerURL, common.Timeout)
+	if err != nil {
+		env := autoprogClientErrorEnvelopeV0(inv, err, runnerNowV0(OrquestaCLIRunnerV0{}))
+		return env, exitCodeForEnvelopeV0(env)
+	}
+	env := client.ConsultarEstado(ctx, inv, input)
+	return env, exitCodeForEnvelopeV0(env)
+}
+
 func runCLIAutoprogrammingRunV0(ctx context.Context, args []string) (CliOutputEnvelopeV0, int) {
 	fs, common := newCLIFlagSetV0(CliDefaultCommandAutoprogRunV0)
 	runRef := fs.String("run-ref", "", "ref opaca del run")
@@ -103,5 +134,31 @@ func runCLIAutoprogrammingRunV0(ctx context.Context, args []string) (CliOutputEn
 		return env, exitCodeForEnvelopeV0(env)
 	}
 	env := client.ConsultarRun(ctx, inv, input)
+	return env, exitCodeForEnvelopeV0(env)
+}
+
+func runCLIAutoprogrammingSuperviseV0(ctx context.Context, args []string) (CliOutputEnvelopeV0, int) {
+	fs, common := newCLIFlagSetV0(CliDefaultCommandAutoprogSuperviseV0)
+	runRef := fs.String("run-ref", "", "ref opaca del run")
+	queueRef := fs.String("queue-ref", "", "ref opaca de cola")
+	maxTicks := fs.Int("max-ticks", 1, "ticks maximos")
+	if err := fs.Parse(args); err != nil {
+		return cliParseErrorEnvelopeV0(CliDefaultCommandAutoprogSuperviseV0, err)
+	}
+	if fs.NArg() != 0 {
+		return cliUnexpectedArgsEnvelopeV0(CliDefaultCommandAutoprogSuperviseV0, common)
+	}
+	inv := invocationFromCLIFlagsV0(CliDefaultCommandAutoprogSuperviseV0, common)
+	input := orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef:   strings.TrimSpace(*runRef),
+		QueueRef: strings.TrimSpace(*queueRef),
+		MaxTicks: *maxTicks,
+	}
+	client, err := NewAutoprogrammingCliClientV0(common.ServerURL, common.Timeout)
+	if err != nil {
+		env := autoprogClientErrorEnvelopeV0(inv, err, runnerNowV0(OrquestaCLIRunnerV0{}))
+		return env, exitCodeForEnvelopeV0(env)
+	}
+	env := client.Supervisar(ctx, inv, input)
 	return env, exitCodeForEnvelopeV0(env)
 }

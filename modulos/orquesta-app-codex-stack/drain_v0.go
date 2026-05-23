@@ -337,6 +337,7 @@ func drainRunHasPendingExternalAgentRefsV0(
 	delivered := compactStringsV0(run.DeliveredAgents)
 	failed := compactStringsV0(run.FailedAgents)
 	lost := compactStringsV0(run.LostAgents)
+	stopped := compactStringsV0(run.StoppedAgents)
 	confirmedStopped := compactStringsV0(run.ConfirmedStoppedAgents)
 	for _, agentRef := range compactStringsV0(agentRefs) {
 		if !codexStackStringInSetV0(started, agentRef) {
@@ -345,6 +346,7 @@ func drainRunHasPendingExternalAgentRefsV0(
 		if codexStackStringInSetV0(delivered, agentRef) ||
 			codexStackStringInSetV0(failed, agentRef) ||
 			codexStackStringInSetV0(lost, agentRef) ||
+			codexStackStringInSetV0(stopped, agentRef) ||
 			codexStackStringInSetV0(confirmedStopped, agentRef) {
 			continue
 		}

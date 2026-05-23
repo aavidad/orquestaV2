@@ -1,0 +1,221 @@
+package orquestamcp
+
+import "strings"
+
+type MCPAutoprogrammingOperatorV0 struct {
+	QueueLive        bool                                  `json:"queue_live"`
+	ActiveRuns       []MCPAutoprogrammingActiveRunV0       `json:"active_runs,omitempty"`
+	ClosureBlockers  []MCPAutoprogrammingClosureBlockerV0  `json:"closure_blockers,omitempty"`
+	AgentsInFlight   []MCPAutoprogrammingAgentInFlightV0   `json:"agents_in_flight,omitempty"`
+	SupervisorErrors []MCPAutoprogrammingSupervisorErrorV0 `json:"supervisor_errors,omitempty"`
+	SafeActions      []MCPAutoprogrammingSafeActionV0      `json:"safe_actions,omitempty"`
+}
+
+type MCPAutoprogrammingActiveRunV0 struct {
+	RunRef        string `json:"run_ref"`
+	AppRef        string `json:"app_ref,omitempty"`
+	Status        string `json:"status,omitempty"`
+	PriorityScore int    `json:"priority_score,omitempty"`
+}
+
+type MCPAutoprogrammingClosureBlockerV0 struct {
+	Reason     string   `json:"reason,omitempty"`
+	BlockerRef string   `json:"blocker_ref,omitempty"`
+	RunRef     string   `json:"run_ref,omitempty"`
+	Evidence   []string `json:"evidence_refs,omitempty"`
+}
+
+type MCPAutoprogrammingAgentInFlightV0 struct {
+	AgentRef       string `json:"agent_ref"`
+	RunRef         string `json:"run_ref,omitempty"`
+	Status         string `json:"status,omitempty"`
+	NeedsAttention bool   `json:"needs_attention,omitempty"`
+	CanStop        bool   `json:"can_stop,omitempty"`
+}
+
+type MCPAutoprogrammingSupervisorErrorV0 struct {
+	Code    string `json:"code"`
+	Scope   string `json:"scope,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type MCPAutoprogrammingSafeActionV0 struct {
+	Action       string `json:"action"`
+	Scope        string `json:"scope,omitempty"`
+	RunRef       string `json:"run_ref,omitempty"`
+	Method       string `json:"method"`
+	Endpoint     string `json:"endpoint"`
+	Reason       string `json:"reason,omitempty"`
+	RequiresPost bool   `json:"requires_post"`
+}
+
+func newMCPAutoprogrammingOperatorV0(
+	queue *MCPRunQueuePriorityToolResultV0,
+	run *MCPDirectorStatsToolResultV0,
+	diagnostics []MCPAutoprogrammingDiagnosticV0,
+) *MCPAutoprogrammingOperatorV0 {
+	operator := &MCPAutoprogrammingOperatorV0{
+		ActiveRuns:      mcpAutoprogrammingActiveRunsV0(queue),
+		ClosureBlockers: mcpAutoprogrammingClosureBlockersV0(run),
+		AgentsInFlight:  mcpAutoprogrammingAgentsInFlightV0(run),
+		SupervisorErrors: mcpAutoprogrammingSupervisorErrorsV0(
+			diagnostics,
+		),
+	}
+	operator.QueueLive = queue != nil && queue.Estado == MCPRunQueuePriorityEstadoOKV0
+	operator.SafeActions = mcpAutoprogrammingSafeActionsV0(operator, run)
+	return operator
+}
+
+func mcpAutoprogrammingActiveRunsV0(
+	queue *MCPRunQueuePriorityToolResultV0,
+) []MCPAutoprogrammingActiveRunV0 {
+	if queue == nil {
+		return nil
+	}
+	out := make([]MCPAutoprogrammingActiveRunV0, 0, len(queue.Ranked))
+	for _, item := range queue.Ranked {
+		if mcpAutoprogrammingTerminalRunV0(item.Status) {
+			continue
+		}
+		out = append(out, MCPAutoprogrammingActiveRunV0{
+			RunRef:        strings.TrimSpace(item.RunRef),
+			AppRef:        strings.TrimSpace(item.AppRef),
+			Status:        strings.TrimSpace(item.Status),
+			PriorityScore: item.PriorityScore,
+		})
+	}
+	return out
+}
+
+func mcpAutoprogrammingClosureBlockersV0(
+	run *MCPDirectorStatsToolResultV0,
+) []MCPAutoprogrammingClosureBlockerV0 {
+	if run == nil || run.Stats == nil || !run.Stats.Closure.Blocked {
+		return nil
+	}
+	reasons := compactStringsMCPV0(run.Stats.Closure.BlockedBy)
+	refs := compactStringsMCPV0(run.Stats.Closure.BlockerRefs)
+	total := maxMCPAutoprogrammingV0(len(reasons), len(refs))
+	out := make([]MCPAutoprogrammingClosureBlockerV0, 0, total)
+	for i := 0; i < total; i++ {
+		out = append(out, MCPAutoprogrammingClosureBlockerV0{
+			Reason:     mcpAutoprogrammingAtV0(reasons, i),
+			BlockerRef: mcpAutoprogrammingAtV0(refs, i),
+			RunRef:     strings.TrimSpace(run.RunRef),
+			Evidence:   refs,
+		})
+	}
+	return out
+}
+
+func mcpAutoprogrammingAgentsInFlightV0(
+	run *MCPDirectorStatsToolResultV0,
+) []MCPAutoprogrammingAgentInFlightV0 {
+	if run == nil || run.Stats == nil {
+		return nil
+	}
+	out := []MCPAutoprogrammingAgentInFlightV0{}
+	for _, agent := range run.Stats.Agents {
+		if !agent.InFlight {
+			continue
+		}
+		out = append(out, MCPAutoprogrammingAgentInFlightV0{
+			AgentRef:       strings.TrimSpace(agent.AgentRequestID),
+			RunRef:         strings.TrimSpace(run.RunRef),
+			Status:         strings.TrimSpace(agent.Status),
+			NeedsAttention: agent.NeedsAttention,
+			CanStop:        agent.CanStop,
+		})
+	}
+	return out
+}
+
+func mcpAutoprogrammingSupervisorErrorsV0(
+	diagnostics []MCPAutoprogrammingDiagnosticV0,
+) []MCPAutoprogrammingSupervisorErrorV0 {
+	out := []MCPAutoprogrammingSupervisorErrorV0{}
+	for _, item := range diagnostics {
+		code := strings.TrimSpace(item.Code)
+		if !strings.HasSuffix(code, "_error") && !strings.Contains(code, "supervisor") {
+			continue
+		}
+		out = append(out, MCPAutoprogrammingSupervisorErrorV0{
+			Code:    code,
+			Scope:   strings.TrimSpace(item.Scope),
+			Message: strings.TrimSpace(item.Message),
+		})
+	}
+	return out
+}
+
+func mcpAutoprogrammingSafeActionsV0(
+	operator *MCPAutoprogrammingOperatorV0,
+	run *MCPDirectorStatsToolResultV0,
+) []MCPAutoprogrammingSafeActionV0 {
+	out := []MCPAutoprogrammingSafeActionV0{}
+	if operator == nil {
+		return out
+	}
+	if operator.QueueLive || len(operator.ActiveRuns) > 0 {
+		out = append(out, mcpAutoprogrammingSafeActionV0("supervise", "queue", ""))
+	}
+	runRef := ""
+	if run != nil {
+		runRef = strings.TrimSpace(run.RunRef)
+	}
+	if runRef != "" {
+		out = append(out, mcpAutoprogrammingSafeActionV0("supervise", "run", runRef))
+	}
+	if len(operator.ClosureBlockers) > 0 {
+		out = append(out, mcpAutoprogrammingSafeActionV0("review", "closure", runRef))
+	}
+	if len(operator.SupervisorErrors) > 0 || mcpAutoprogrammingNeedsRetryV0(operator) {
+		out = append(out, mcpAutoprogrammingSafeActionV0("retry", "supervisor", runRef))
+	}
+	return out
+}
+
+func mcpAutoprogrammingSafeActionV0(action string, scope string, runRef string) MCPAutoprogrammingSafeActionV0 {
+	return MCPAutoprogrammingSafeActionV0{
+		Action:       strings.TrimSpace(action),
+		Scope:        strings.TrimSpace(scope),
+		RunRef:       strings.TrimSpace(runRef),
+		Method:       "POST",
+		Endpoint:     MCPAutoprogrammingSuperviseHTTPPathV0,
+		Reason:       strings.TrimSpace(scope),
+		RequiresPost: true,
+	}
+}
+
+func mcpAutoprogrammingTerminalRunV0(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "completed", "closed", "cancelled", "canceled", "failed", "stopped":
+		return true
+	default:
+		return false
+	}
+}
+
+func mcpAutoprogrammingNeedsRetryV0(operator *MCPAutoprogrammingOperatorV0) bool {
+	for _, agent := range operator.AgentsInFlight {
+		if agent.NeedsAttention {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpAutoprogrammingAtV0(values []string, index int) string {
+	if index >= 0 && index < len(values) {
+		return strings.TrimSpace(values[index])
+	}
+	return ""
+}
+
+func maxMCPAutoprogrammingV0(a int, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}

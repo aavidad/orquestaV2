@@ -129,10 +129,82 @@ func TestRuntimeV0SupervisorRegistraErrorYPermiteSiguienteTickV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0SupervisorAsyncNoBloqueaTickResidenteV0(t *testing.T) {
+	store := &memoryStateStoreV0{}
+	supervisor := newBlockingSupervisorV0()
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:     t.TempDir(),
+		TickInterval: time.Hour,
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: store,
+		Clock:      fixedClockV0{now: time.Date(2026, 5, 23, 10, 0, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	if !runtime.runSupervisorTickAsyncV0(context.Background()) {
+		t.Fatalf("first async tick not started")
+	}
+	<-supervisor.started
+	if runtime.runSupervisorTickAsyncV0(context.Background()) {
+		t.Fatalf("second async tick overlapped while first in flight")
+	}
+	supervisor.release()
+	supervisor.waitDone(t)
+	if !runtime.runSupervisorTickAsyncV0(context.Background()) {
+		t.Fatalf("async tick did not restart after first completed")
+	}
+	supervisor.release()
+	supervisor.waitDone(t)
+}
+
 type fakeSupervisorV0 struct {
 	calls       int
 	lastCommand orquestarunsupervisor.RunSupervisorCommandV0
 	results     []fakeSupervisorResultV0
+}
+
+type blockingSupervisorV0 struct {
+	started   chan struct{}
+	releaseCh chan struct{}
+	done      chan struct{}
+	calls     int
+}
+
+func newBlockingSupervisorV0() *blockingSupervisorV0 {
+	return &blockingSupervisorV0{
+		started:   make(chan struct{}, 2),
+		releaseCh: make(chan struct{}, 2),
+		done:      make(chan struct{}, 2),
+	}
+}
+
+func (fake *blockingSupervisorV0) RunGlobalSupervisorV0(
+	context.Context,
+	orquestarunsupervisor.RunSupervisorCommandV0,
+) (orquestarunsupervisor.RunSupervisorResultV0, error) {
+	fake.calls++
+	fake.started <- struct{}{}
+	<-fake.releaseCh
+	fake.done <- struct{}{}
+	return orquestarunsupervisor.RunSupervisorResultV0{
+		StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
+	}, nil
+}
+
+func (fake *blockingSupervisorV0) release() {
+	fake.releaseCh <- struct{}{}
+}
+
+func (fake *blockingSupervisorV0) waitDone(t *testing.T) {
+	t.Helper()
+	select {
+	case <-fake.done:
+	case <-time.After(time.Second):
+		t.Fatalf("blocking supervisor did not finish")
+	}
 }
 
 type fakeSupervisorResultV0 struct {

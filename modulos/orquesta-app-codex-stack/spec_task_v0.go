@@ -166,7 +166,6 @@ func directorObjectiveV0(
 		"Modo de ejecucion: " + mode + ".",
 		"Resumen de Orquesta: " + strings.TrimSpace(payload.Summary),
 		"Reglas: hexagonal, i18n si aplica, persistencia solo por puerto/conector, funciones pequenas, sin archivos gigantes.",
-		agentDelegationObjectiveLineV0(0),
 		"Go app completa: modulo autonomo con go.mod, entrypoint cmd/server, imports de modulo y `go test ./...` para cierre.",
 		"Separa brainstorming, documentacion, programacion, pruebas, seguridad y revision final.",
 		"Cumple los minimos del tipo de peticion; solo puedes recortar alcance si execution_mode=debug y debes listar lo omitido.",

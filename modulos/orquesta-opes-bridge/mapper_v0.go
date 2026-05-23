@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
-	"unicode"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -60,6 +59,11 @@ func BuildExternalWorkRunRequestWithContextV0(
 	fields = withOPESHTMLTopicTemplateFieldV0(fields)
 	fields = appendFieldIfMissingV0(fields, "job_id", job.ID)
 	fields = appendFieldIfMissingV0(fields, "job_type", job.Type)
+	var opaqueOK bool
+	fields, opaqueOK = appendOpaqueExecutionRefFieldsV0(fields, job.ExternalRefs)
+	if !opaqueOK {
+		return orquestaexternalworkrun.StartExternalWorkRunRequestV0{}, false
+	}
 	fields = appendFieldIfMissingV0(fields, "expected_artifact_type", expectedArtifactTypeV0(job.Type))
 	fields = appendFieldIfMissingV0(fields, "context_budget_profile", contextProfileForJobTypeV0(job.Type))
 	fields = appendExpansionDocumentContractFieldsV0(fields, job.Type)
@@ -245,140 +249,14 @@ func workRefsForPayloadV0(
 		}
 		refs = append(refs, compactOPESBridgeRefV0("opes-"+name+"-"+value))
 	}
+	for _, name := range opaqueExecutionRefFieldNamesV0() {
+		if value := fieldValueV0(fields, name); value != "" {
+			refs = append(refs, value)
+		}
+	}
 	return compactStringsV0(refs)
 }
 
 func currentStateRefsForJobV0(safeJob string, workRefs []string) []string {
 	return compactStringsV0(append([]string{"opes-job-" + safeJob}, workRefs...))
-}
-
-func expectedArtifactTypeV0(jobType string) string {
-	switch strings.TrimSpace(jobType) {
-	case "draft_content_block", "generate_block", "generate_program_topic_draft":
-		return "content_block"
-	case "generate_visual_asset":
-		return "visual_asset"
-	case "review_legal", "review_pedagogical", "review_quality", "validate_topic":
-		return "block_revision"
-	case "research_sources", "download_source", "verify_sources":
-		return "source"
-	case "split_syllabus_topic":
-		return "topic_structure"
-	case "draft_topic_outline", "create_exam_outline":
-		return "topic_outline"
-	case "summarize_block", "summarize_chapter", "summarize_topic":
-		return "topic_summary"
-	case "expand_topic_from_summary":
-		return "topic_expansion_package"
-	case "plan_documento", "plan_tema", "plan_temario":
-		return orquestadomainwork.DomainDocumentPlanArtifactTypeV0
-	case "assemble_topic":
-		return "assembled_topic"
-	default:
-		return "work_delivery"
-	}
-}
-
-func contextProfileForJobTypeV0(jobType string) string {
-	switch strings.TrimSpace(jobType) {
-	case "summarize_topic",
-		"expand_topic_from_summary",
-		"plan_documento",
-		"plan_tema",
-		"plan_temario",
-		"draft_content_block",
-		"review_legal",
-		"review_pedagogical",
-		"review_quality",
-		"validate_topic",
-		"assemble_topic":
-		return "large"
-	default:
-		return "standard"
-	}
-}
-
-func userIntentForJobV0(jobType string) string {
-	return "Resolver job OPES " + strings.TrimSpace(jobType) +
-		" y devolver artefacto " + expectedArtifactTypeV0(jobType) +
-		" por el contrato publico OPES."
-}
-
-func acceptanceCriteriaForJobV0(jobType string) []string {
-	criteria := []string{
-		"devolver artifact_type=" + expectedArtifactTypeV0(jobType),
-		"payload_json valido y trazable",
-		"sin placeholders",
-		"sin leer internals de OPES",
-		"entrega en fichero unico bajo allowed_write_set",
-	}
-	if strings.TrimSpace(jobType) == "expand_topic_from_summary" {
-		criteria = append(criteria, expansionAcceptanceCriteriaV0()...)
-	}
-	if isDocumentPlanJobTypeV0(jobType) {
-		criteria = append(criteria, documentPlanAcceptanceCriteriaV0()...)
-	}
-	return criteria
-}
-
-func constraintsForJobV0() []string {
-	return []string{
-		"no inventar contenido",
-		"no leer DB ni ficheros internos de OPES",
-		"usar solo el paquete de dominio recibido",
-		"si falta contexto obligatorio declarar bloqueo",
-	}
-}
-
-func opesJobWriteSetV0(workKind string, safeJob string) string {
-	return "external/opes/" + strings.TrimSpace(workKind) + "/" + strings.TrimSpace(safeJob)
-}
-
-func compactOPESBridgeRefV0(value string) string {
-	value = strings.TrimSpace(value)
-	var b strings.Builder
-	lastDash := false
-	for _, r := range value {
-		switch {
-		case unicode.IsLetter(r), unicode.IsDigit(r), r == '_', r == '.', r == '-':
-			b.WriteRune(r)
-			lastDash = false
-		default:
-			if !lastDash {
-				b.WriteByte('-')
-				lastDash = true
-			}
-		}
-	}
-	out := strings.Trim(b.String(), "-")
-	if out == "" {
-		return "opes"
-	}
-	return out
-}
-
-func compactStringsV0(values []string) []string {
-	seen := map[string]bool{}
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" || seen[value] {
-			continue
-		}
-		seen[value] = true
-		out = append(out, value)
-	}
-	if out == nil {
-		return []string{}
-	}
-	return out
-}
-
-func firstNonEmptyV0(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }

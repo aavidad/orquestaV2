@@ -130,8 +130,10 @@ POST /api/v0/runs/supervise
 `prepare-run` es una entrada opt-in de esta composicion: adapta el contrato MCP
 `orquesta.autoprogramming.prepare_run.v0` a `PrepareAutoprogrammingRunV0`, guarda
 `WorkflowTaskV0`/run por los stores del stack y devuelve un `continue` acotado.
-No arranca agentes por si misma. La ruta de supervision es neutral de runs. El
-gateway y `orquesta-mcp` no conocen Codex; este stack inyecta
+No arranca agentes por si misma. Las tareas explicitas preservan objetivo,
+contexto, criterios, tests y reglas compactas hasta el paquete del agente sin
+convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git. La ruta de
+supervision es neutral de runs. El gateway y `orquesta-mcp` no conocen Codex; este stack inyecta
 `CodexStackAutoprogrammingPrepareRunExecutorV0` y
 `CodexStackRunSupervisorExecutorV0`.
 

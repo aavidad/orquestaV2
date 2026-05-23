@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,14 +19,15 @@ import (
 const codexDirectorWaveSummarySchemaVersionV0 = "orquesta_codex_director_wave_launch.v0"
 
 type codexDirectorWaveSummaryV0 struct {
-	SchemaVersion string                                                     `json:"schema_version"`
-	Request       orquestadirectoroperativo.OperationalDirectorRequestV0     `json:"request"`
-	Plan          orquestadirectoroperativo.OperationalDirectorPlanV0        `json:"plan"`
-	WaveWork      orquestadirectoroperativo.OperationalDirectorWaveWorkV0    `json:"wave_work"`
-	Launch        codexWaveLaunchSummaryV0                                   `json:"launch"`
-	ChildLaunches []codexDirectorChildWaveSummaryV0                          `json:"child_launches,omitempty"`
-	AgentBudget   orquestadirectoroperativo.OperationalDirectorAgentBudgetV0 `json:"agent_budget"`
-	Issues        []orquestadirectoroperativo.OperationalDirectorIssueV0     `json:"issues,omitempty"`
+	SchemaVersion     string                                                     `json:"schema_version"`
+	Request           orquestadirectoroperativo.OperationalDirectorRequestV0     `json:"request"`
+	WorktreeIsolation codexDirectorWorktreeIsolationSummaryV0                    `json:"worktree_isolation,omitempty"`
+	Plan              orquestadirectoroperativo.OperationalDirectorPlanV0        `json:"plan"`
+	WaveWork          orquestadirectoroperativo.OperationalDirectorWaveWorkV0    `json:"wave_work"`
+	Launch            codexWaveLaunchSummaryV0                                   `json:"launch"`
+	ChildLaunches     []codexDirectorChildWaveSummaryV0                          `json:"child_launches,omitempty"`
+	AgentBudget       orquestadirectoroperativo.OperationalDirectorAgentBudgetV0 `json:"agent_budget"`
+	Issues            []orquestadirectoroperativo.OperationalDirectorIssueV0     `json:"issues,omitempty"`
 }
 
 type codexDirectorChildWaveSummaryV0 struct {
@@ -199,7 +199,7 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 	}
 	if !*strictDirectorGuards {
 		if branchValue == "" {
-			branchValue = codexDirectorCurrentBranchRefV0(projectWorkDir)
+			branchValue = codexDirectorDefaultBranchRefV0(ref)
 		}
 		if len(writeSetValues) == 0 {
 			writeSetValues = []string{"."}
@@ -275,6 +275,12 @@ func runCodexLaunchDirectorWaveV0(
 		Request:       request,
 		Plan:          result.Plan,
 		Issues:        append([]orquestadirectoroperativo.OperationalDirectorIssueV0(nil), result.Issues...),
+	}
+	isolation, isolationIssues := codexDirectorPrepareWorktreeIsolationV0(ctx, config)
+	summary.WorktreeIsolation = isolation
+	if len(isolationIssues) > 0 {
+		summary.Issues = append(summary.Issues, isolationIssues...)
+		return summary, nil
 	}
 	if !result.Accepted || !result.ReadyToLaunch || result.Blocked {
 		return summary, nil
@@ -715,16 +721,6 @@ func codexDirectorDefaultRefV0(value string, prefix string, waveRef string) stri
 		waveRef = time.Now().UTC().Format("20060102T150405Z")
 	}
 	return prefix + "-" + waveRef
-}
-
-func codexDirectorCurrentBranchRefV0(projectWorkDir string) string {
-	out, err := exec.Command("git", "-C", projectWorkDir, "branch", "--show-current").Output()
-	if err == nil {
-		if branch := strings.TrimSpace(string(out)); branch != "" {
-			return branch
-		}
-	}
-	return "local-branch"
 }
 
 func codexDirectorCSVV0(value string) []string {

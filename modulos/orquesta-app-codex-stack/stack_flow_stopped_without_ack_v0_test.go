@@ -94,6 +94,19 @@ func TestDrainRunHasPendingExternalAgentsV0StopRequestedSinConfirmarSiguePendien
 	}
 }
 
+func TestDrainRunHasPendingExternalAgentsV0WaitRefsNoReesperaStopSolicitado(t *testing.T) {
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		StartedAgents: []string{"agent-ref-stack-stop-scoped-001"},
+		StoppedAgents: []string{"agent-ref-stack-stop-scoped-001"},
+	}
+	if drainRunHasPendingExternalAgentsV0(run, []string{"agent-ref-stack-stop-scoped-001"}) {
+		t.Fatalf("WaitAgentRefs acotado no debe reesperar stop solicitado: %+v", run)
+	}
+	if !drainRunHasPendingExternalAgentsV0(run, nil) {
+		t.Fatalf("scope legacy de run completo conserva stop solicitado como pendiente: %+v", run)
+	}
+}
+
 func TestDrainRunHasPendingExternalAgentsV0FiltraCohorteObjetivo(t *testing.T) {
 	run := orquestacoreworkflow.OrchestrationRunV0{
 		StartedAgents:   []string{"agent-old", "agent-new"},

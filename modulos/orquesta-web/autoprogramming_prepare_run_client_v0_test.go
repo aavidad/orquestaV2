@@ -62,7 +62,10 @@ func TestRESTAutoprogrammingPrepareRunClientV0PreservaWorktreeAisladaYRamaOpaca(
 	}
 	if len(request.Tasks) != 1 ||
 		request.Tasks[0].TaskRef != "task-ref-web-autoprog-001" ||
-		request.Tasks[0].Area != "modulos/orquesta-web" {
+		request.Tasks[0].Area != "modulos/orquesta-web" ||
+		request.Tasks[0].Objective != "Preservar contrato explicito web." ||
+		len(request.Tasks[0].AcceptanceCriteria) != 1 ||
+		request.Tasks[0].AcceptanceCriteria[0] != "criterio web visible" {
 		t.Fatalf("tasks=%+v", request.Tasks)
 	}
 	if len(request.WriteSet) != 1 || request.WriteSet[0] != "modulos/orquesta-web" {
@@ -135,8 +138,14 @@ func validWebAutoprogrammingPrepareRunCommandV0() WebAutoprogrammingPrepareRunCo
 		WorktreeRef:   "worktree-ref-opaque-001",
 		BranchRef:     "branch-ref-opaque-001",
 		Tasks: []orquestaautoprogramming.AutoprogrammingTaskGroupCandidateV0{{
-			TaskRef: "task-ref-web-autoprog-001",
-			Area:    "modulos/orquesta-web",
+			TaskRef:            "task-ref-web-autoprog-001",
+			Area:               "modulos/orquesta-web",
+			Objective:          "Preservar contrato explicito web.",
+			Context:            []string{"contexto compacto web"},
+			ContextRefs:        []string{"doc-ref:web-autoprog"},
+			AcceptanceCriteria: []string{"criterio web visible"},
+			RequiredTests:      []string{"go test -count=1 ./modulos/orquesta-web -run TestRESTAutoprogramming"},
+			CompactRules:       []string{"no convertir branch_ref en rama git"},
 		}},
 		WriteSet:             []string{"modulos/orquesta-web"},
 		RequiredTests:        []string{"go test -count=1 ./modulos/orquesta-web"},

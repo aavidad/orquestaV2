@@ -188,8 +188,15 @@ func compactAutoprogrammingTasksV0(
 		}
 		seen[key] = struct{}{}
 		out = append(out, orquestaautoprogramming.AutoprogrammingTaskGroupCandidateV0{
-			TaskRef: taskRef,
-			Area:    area,
+			TaskRef:            taskRef,
+			Area:               area,
+			Title:              trimV0(value.Title),
+			Objective:          trimV0(value.Objective),
+			Context:            compactStringsV0(value.Context),
+			ContextRefs:        compactStringsV0(value.ContextRefs),
+			AcceptanceCriteria: compactStringsV0(value.AcceptanceCriteria),
+			RequiredTests:      compactStringsV0(value.RequiredTests),
+			CompactRules:       compactStringsV0(value.CompactRules),
 		})
 	}
 	return out

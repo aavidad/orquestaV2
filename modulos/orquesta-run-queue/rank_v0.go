@@ -39,7 +39,7 @@ func RankRunCandidatesV0(candidates []RunSchedulingCandidateV0, policy RunQueueR
 
 func IsExecutableRunStatusV0(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case RunStatusPausedV0, RunStatusCanceledV0, RunStatusStoppedV0, RunStatusClosedV0:
+	case RunStatusPausedV0, RunStatusDeliveredV0, RunStatusCanceledV0, RunStatusStoppedV0, RunStatusClosedV0:
 		return false
 	default:
 		return true

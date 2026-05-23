@@ -59,8 +59,11 @@ type MCPAutoprogrammingProgrammableWorkGroupV0 struct {
 	WorkflowTaskRef string   `json:"workflow_task_ref"`
 	WorkKind        string   `json:"work_kind"`
 	PhaseID         string   `json:"phase_id"`
+	Title           string   `json:"title,omitempty"`
+	Summary         string   `json:"summary,omitempty"`
 	WriteSet        []string `json:"write_set,omitempty"`
 	RequiredTests   []string `json:"required_tests,omitempty"`
+	Criteria        []string `json:"acceptance_criteria,omitempty"`
 	ContextRefs     []string `json:"context_refs,omitempty"`
 }
 
@@ -162,8 +165,11 @@ func newMCPAutoprogrammingProgrammableWorkV0(
 			WorkflowTaskRef: strings.TrimSpace(group.Task.TaskID),
 			WorkKind:        strings.TrimSpace(string(group.Task.WorkProfileKind)),
 			PhaseID:         strings.TrimSpace(string(group.Task.PhaseID)),
+			Title:           strings.TrimSpace(group.Task.Title),
+			Summary:         strings.TrimSpace(group.Task.Summary),
 			WriteSet:        compactStringsMCPV0(group.Task.WriteSet),
 			RequiredTests:   compactStringsMCPV0(group.Task.RequiredTests),
+			Criteria:        compactStringsMCPV0(group.Task.AcceptanceCriteria),
 			ContextRefs:     compactStringsMCPV0(group.Task.ContextRefs),
 		})
 	}

@@ -12,7 +12,9 @@ type WebDirectorStatsViewModelV0 struct {
 	Counts          WebDirectorStatsCountsV0        `json:"counts"`
 	Progress        WebDirectorStatsProgressV0      `json:"progress"`
 	Resumen         WebDirectorStatsSummaryV0       `json:"resumen"`
+	Closure         WebDirectorStatsClosureV0       `json:"closure"`
 	Checkpoint      WebDirectorStatsCheckpointV0    `json:"checkpoint"`
+	SafeActions     []WebDirectorStatsSafeActionV0  `json:"safe_actions,omitempty"`
 	Agents          []WebDirectorStatsAgentV0       `json:"agents,omitempty"`
 	Agentes         []WebDirectorStatsAgentV0       `json:"agentes,omitempty"`
 	Tasks           []WebDirectorStatsTaskV0        `json:"tasks,omitempty"`
@@ -139,11 +141,13 @@ func NewWebDirectorStatsPanelV0(
 	vm.Counts = directorStatsCountsV0(*stats)
 	vm.Progress = directorStatsProgressV0(stats.Progress)
 	vm.Resumen = directorStatsSummaryV0(stats.Progress, stats.UsageSummary)
+	vm.Closure = directorStatsClosureV0(stats.Closure)
 	vm.Checkpoint = directorStatsCheckpointV0(*stats)
 	vm.Agents = directorStatsAgentsV0(stats.Agents)
 	vm.Agentes = vm.Agents
 	vm.Tasks = directorStatsTasksV0(stats.Progress.Tasks)
 	vm.Tareas = vm.Tasks
+	vm.SafeActions = directorStatsSafeActionsV0(vm)
 	vm.ErroresPublicos = directorStatsIssuesV0(result.Errores, stats.Progress.Issues)
 	if vm.Estado == WebDirectorStatsInboundEstadoOKV0 {
 		vm.Estado = directorStatsAttentionStateV0(vm)

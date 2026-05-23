@@ -175,15 +175,66 @@ func TestCodexLaunchDirectorWaveCommandV0ModoMinimoRellenaRails(t *testing.T) {
 		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
 	}
 	if len(summary.Issues) > 0 ||
-		summary.Request.BranchRef == "" ||
+		summary.Request.BranchRef != "branch-director-wave-minimal" ||
 		len(summary.Plan.WriteSet) != 1 ||
 		summary.Plan.WriteSet[0] != "." ||
 		len(summary.Plan.RequiredTests) != 1 ||
 		summary.Plan.RequiredTests[0] != "operator-validation-required" {
 		t.Fatalf("summary minimo inesperado: %+v", summary)
 	}
+	rawIsolation, err := json.Marshal(summary.WorktreeIsolation)
+	if err != nil {
+		t.Fatalf("marshal isolation: %v", err)
+	}
+	if summary.WorktreeIsolation.WorktreeRef != "worktree-director-wave-minimal" ||
+		summary.WorktreeIsolation.BranchRef != "branch-director-wave-minimal" ||
+		summary.WorktreeIsolation.Mode != "isolated" ||
+		strings.Contains(string(rawIsolation), projectDir) {
+		t.Fatalf("aislamiento de worktree no preserva refs opacas o filtra path: %+v", summary.WorktreeIsolation)
+	}
 	if !summary.Launch.DryRun || len(summary.Launch.Agents) != 2 {
 		t.Fatalf("launch minimo inesperado: %+v", summary.Launch)
+	}
+}
+
+func TestCodexLaunchDirectorWaveCommandV0RechazaBranchRefComoRuta(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	runtimeDir := filepath.Join(root, "runtime", "director-wave-branch-path")
+	fakeCodex := filepath.Join(root, "codex-fake")
+
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatalf("crear project dir: %v", err)
+	}
+	if err := os.WriteFile(fakeCodex, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatalf("crear codex falso: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := codexLaunchDirectorWaveCommandV0([]string{
+		"--dry-run",
+		"--agents", "1",
+		"--wave-ref", "director-wave-branch-path",
+		"--project-dir", projectDir,
+		"--runtime-dir", runtimeDir,
+		"--command", fakeCodex,
+		"--objective", "Validar rama opaca.",
+		"--write-set", "cmd/orquesta-server/codex_director_wave_command_v0.go",
+		"--required-tests", "go test -count=1 ./cmd/orquesta-server",
+		"--branch-ref", "feature/autoprog",
+		"--worktree-ref", "worktree-director-wave-branch-path",
+	}, &stdout, &stderr)
+	if exitCode != 1 {
+		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	var summary codexDirectorWaveSummaryV0
+	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
+		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
+	}
+	if !codexDirectorHasIssueFieldV0(summary.Issues, "branch_ref") ||
+		len(summary.Launch.Agents) != 0 {
+		t.Fatalf("branch_ref no fue bloqueada antes de lanzar: %+v", summary)
 	}
 }
 
@@ -835,6 +886,18 @@ func codexDirectorHasIssueV0(
 ) bool {
 	for _, issue := range issues {
 		if issue.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func codexDirectorHasIssueFieldV0(
+	issues []orquestadirectoroperativo.OperationalDirectorIssueV0,
+	field string,
+) bool {
+	for _, issue := range issues {
+		if issue.Field == field {
 			return true
 		}
 	}

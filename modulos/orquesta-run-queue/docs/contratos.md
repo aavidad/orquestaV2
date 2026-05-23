@@ -51,7 +51,7 @@ Funcion pura:
 
 Reglas:
 
-1. filtra `paused`, `canceled`, `stopped` y `closed`;
+1. filtra `paused`, `delivered`, `canceled`, `stopped` y `closed`;
 2. ordena por `priority_score` descendente;
 3. desempata por `aging_boost` descendente;
 4. desempata por `updated_at` ascendente con orden estable.

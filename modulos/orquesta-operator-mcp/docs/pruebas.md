@@ -9,6 +9,8 @@
 - `OPMCP-CT-005`: outbox pendiente exige refs opacas y `limit` valido.
 - `OPMCP-CT-006`: `orquesta-mcp` publica resource/tools operativas y delega solo por puertos inyectados.
 - `OPMCP-CT-007`: `TransportPortV0` fake recibe el registro opt-in y un tool operativo se sirve solo mediante puerto fake.
+- `OPMCP-CT-008`: conector simulado cubre estado, burst, outbox y consulta dirigida con normalizacion de alias segura.
+- `OPMCP-CT-009`: transporte sin conector devuelve `operator_mcp_port_unavailable` y con conector agregado simulado delega correctamente.
 
 ## Comando
 
@@ -16,4 +18,4 @@
 go test -count=1 ./modulos/orquesta-operator-mcp ./modulos/orquesta-mcp
 ```
 
-Ultima ejecucion: 2026-05-07, ok.
+Ultima ejecucion: 2026-05-23, ok.

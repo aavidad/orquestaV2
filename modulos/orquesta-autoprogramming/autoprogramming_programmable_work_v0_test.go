@@ -2,6 +2,7 @@ package orquestaautoprogramming
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -34,6 +35,64 @@ func TestBuildAutoprogrammingProgrammableWorkV0BuildsWorkflowTaskForSingleGroup(
 	}
 	assertAutoprogrammingContextRefV0(t, task.ContextRefs, "worktree_ref:"+request.WorktreeRef)
 	assertAutoprogrammingContextRefV0(t, task.ContextRefs, "branch_ref:"+request.BranchRef)
+	assertAutoprogrammingContextRefV0(t, task.ContextRefs, "source_task_ref:task-ref-autoprogramming-a")
+	assertAutoprogrammingContextRefV0(t, task.ContextRefs, "source_task_ref:task-ref-autoprogramming-b")
+}
+
+func TestBuildAutoprogrammingProgrammableWorkV0TransportaContratoExplicitoDeTarea(t *testing.T) {
+	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{{
+			TaskRef:            "task-ref-explicita-001",
+			Area:               "Autoprogramming",
+			Title:              "Cambio acotado 01",
+			Objective:          "Transportar objetivo y contexto sin inferir por task_ref.",
+			Context:            []string{"Paquete de agente ya trae criterios y reglas compactas."},
+			ContextRefs:        []string{"doc-ref:autoprog-t03"},
+			AcceptanceCriteria: []string{"objetivo, contexto y criterios llegan al worker"},
+			RequiredTests:      []string{"go test -count=1 ./modulos/orquesta-autoprogramming -run TestBuildAutoprogramming"},
+			CompactRules:       []string{"tratar worktree_ref y branch_ref como refs opacas"},
+		}}
+		request.WriteSet = []string{
+			"modulos/orquesta-autoprogramming/autoprogramming_programmable_work_v0.go",
+		}
+	})
+
+	result := BuildAutoprogrammingProgrammableWorkV0(request)
+
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
+	}
+	task := result.Work.Tasks[0]
+	if task.Title != "Cambio acotado 01" ||
+		!stringsContainForAutoprogrammingTestV0(task.Summary, "Transportar objetivo") ||
+		!stringsContainForAutoprogrammingTestV0(task.Summary, "Autoprogramacion acotada") {
+		t.Fatalf("task summary/title=%+v", task)
+	}
+	for _, want := range []string{
+		"Objetivo task-ref-explicita-001: Transportar objetivo",
+		"Contexto task-ref-explicita-001: Paquete de agente",
+		"Regla compacta task-ref-explicita-001: tratar worktree_ref",
+	} {
+		if !stringsContainForAutoprogrammingTestV0(task.Summary+"\n"+result.Work.Profiles[0].Objective, want) {
+			t.Fatalf("objective no contiene %q: %+v", want, result.Work.Profiles[0])
+		}
+	}
+	for _, want := range []string{
+		"Criterio task-ref-explicita-001: objetivo, contexto y criterios llegan al worker",
+		"Regla compacta task-ref-explicita-001: tratar worktree_ref",
+	} {
+		if !stringsSliceContainsSubstringForAutoprogrammingTestV0(task.AcceptanceCriteria, want) {
+			t.Fatalf("criteria no contiene %q: %v", want, task.AcceptanceCriteria)
+		}
+	}
+	assertAutoprogrammingContextRefV0(t, task.ContextRefs, "source_task_ref:task-ref-explicita-001")
+	assertAutoprogrammingContextRefV0(t, task.ContextRefs, "doc-ref:autoprog-t03")
+	if !stringsSliceContainsForAutoprogrammingTestV0(
+		task.RequiredTests,
+		"go test -count=1 ./modulos/orquesta-autoprogramming -run TestBuildAutoprogramming",
+	) {
+		t.Fatalf("required_tests=%v", task.RequiredTests)
+	}
 }
 
 func TestBuildAutoprogrammingProgrammableWorkV0PartitionsWriteSetByGroupArea(t *testing.T) {
@@ -162,4 +221,26 @@ func assertNoWriteSetOverlapV0(
 			seen[path] = task.TaskID
 		}
 	}
+}
+
+func stringsContainForAutoprogrammingTestV0(value string, want string) bool {
+	return strings.Contains(value, want)
+}
+
+func stringsSliceContainsForAutoprogrammingTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func stringsSliceContainsSubstringForAutoprogrammingTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if strings.Contains(value, want) {
+			return true
+		}
+	}
+	return false
 }

@@ -8,7 +8,23 @@
 - [x] Anadir listado compacto de outbox pendiente por conector opaco.
 - [x] Conectar con `orquesta-mcp` como adaptador puro por puertos inyectados.
 - [x] Publicar frontera de registro para servidor/transporte MCP real opt-in.
+- [x] Anadir puerto agregado `OperatorMCPConnectorV0`, modo sin conector y
+  conector simulado offline.
 - [ ] Implementar adaptador externo de servidor/transporte MCP real.
+
+## OPMCP-007 - Conector operador hexagonal
+
+Estado: completada local.
+
+Contrato: `OperatorMCPConnectorV0` agrega estado, burst supervisado, outbox y
+consulta dirigida. `orquesta-mcp` acepta el conector agregado como fallback de
+los cuatro tools, sin conocer internals ni productos externos.
+
+Validacion: 2026-05-23, ok, `go test -count=1 ./modulos/orquesta-operator-mcp ./modulos/orquesta-mcp`.
+
+Bloqueos: Hermes y OpenClaw quedan como adaptadores externos opt-in; no hay
+red productiva, DB, outbox real, runtime, HOME, OAuth, proveedor ni modelo en
+este modulo.
 
 ## OPMCP-006 - Frontera de transporte MCP opt-in
 

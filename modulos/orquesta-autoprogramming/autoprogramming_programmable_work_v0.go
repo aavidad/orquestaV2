@@ -119,11 +119,11 @@ func autoprogrammingWorkflowTaskForGroupV0(
 		ProfileKind:        orquestacoreworkflow.WorkProfileImplementationV0,
 		TaskRef:            taskRef,
 		RunRef:             strings.TrimSpace(request.RequestRef),
-		Title:              fmt.Sprintf("Cambio acotado %02d", groupIndex+1),
-		Objective:          "Resolver refs de tarea asignadas dentro del write-set validado.",
-		Summary:            "Autoprogramacion acotada con worktree aislada y rama opaca preservada.",
+		Title:              autoprogrammingTitleForGroupV0(group, groupIndex),
+		Objective:          autoprogrammingObjectiveForGroupV0(group),
+		Summary:            autoprogrammingSummaryForGroupV0(group),
 		ScopeRefs:          append([]string(nil), writeSet...),
-		RequiredTests:      append([]string(nil), requiredTests...),
+		RequiredTests:      autoprogrammingRequiredTestsForGroupV0(requiredTests, group),
 		AcceptanceCriteria: autoprogrammingAcceptanceCriteriaForGroupV0(group),
 		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{
 			{FunctionName: "ValidateAutoprogrammingRequestV0"},
@@ -140,7 +140,7 @@ func autoprogrammingWorkflowTaskForGroupV0(
 		return orquestacoreworkflow.WorkProfileV0{}, orquestacoreworkflow.WorkflowTaskV0{},
 			autoprogrammingRequestIssueV0("workflow_task_invalid", "workflow_task", err.Error())
 	}
-	task.ContextRefs = autoprogrammingProgrammableContextRefsV0(request)
+	task.ContextRefs = autoprogrammingContextRefsForGroupV0(request, group)
 	task, err = orquestacoreworkflow.NewWorkflowTaskV0(task)
 	if err != nil {
 		return orquestacoreworkflow.WorkProfileV0{}, orquestacoreworkflow.WorkflowTaskV0{},
@@ -265,15 +265,5 @@ func autoprogrammingProgrammableContextRefsV0(
 		"project_ref:" + strings.TrimSpace(request.ProjectRef),
 		"worktree_ref:" + strings.TrimSpace(request.WorktreeRef),
 		"branch_ref:" + strings.TrimSpace(request.BranchRef),
-	}
-}
-
-func autoprogrammingAcceptanceCriteriaForGroupV0(
-	group AutoprogrammingTaskGroupV0,
-) []string {
-	return []string{
-		"Cambios limitados al write-set asignado al grupo.",
-		"ACK declara pruebas requeridas ejecutadas y resultado.",
-		"Refs de tarea origen preservadas: " + strings.Join(group.TaskRefs, ","),
 	}
 }

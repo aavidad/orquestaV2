@@ -8,7 +8,7 @@ go test -count=1 ./modulos/orquesta-run-queue
 
 Cobertura v0:
 
-- filtrado de `paused`, `canceled`, `stopped` y `closed`;
+- filtrado de `paused`, `delivered`, `canceled`, `stopped` y `closed`;
 - prioridad antes de aging;
 - aging como desempate entre misma prioridad;
 - `updated_at` ascendente con estabilidad en empates exactos;

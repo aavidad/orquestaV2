@@ -48,11 +48,21 @@ type WebDirectorRunStatsContractV0 struct {
 	CurrentPhase               string                             `json:"current_phase,omitempty"`
 	Counts                     map[string]int                     `json:"counts"`
 	Progress                   WebDirectorProgressStatsContractV0 `json:"progress"`
+	Closure                    WebDirectorClosureStatsContractV0  `json:"closure"`
 	UsageSummary               *WebDirectorRunUsageSummaryV0      `json:"usage_summary,omitempty"`
 	Agents                     []WebDirectorAgentStatsContractV0  `json:"agents,omitempty"`
 	CheckpointAgentsPending    int                                `json:"checkpoint_agents_pending,omitempty"`
 	PendingCheckpointAgentRefs []string                           `json:"pending_checkpoint_agent_refs,omitempty"`
 	CheckpointEvidenceRefs     []string                           `json:"checkpoint_evidence_refs,omitempty"`
+}
+
+type WebDirectorClosureStatsContractV0 struct {
+	Status      string   `json:"status"`
+	Blocked     bool     `json:"blocked"`
+	Ready       bool     `json:"ready"`
+	Closed      bool     `json:"closed"`
+	BlockedBy   []string `json:"blocked_by,omitempty"`
+	BlockerRefs []string `json:"blocker_refs,omitempty"`
 }
 
 type WebDirectorProgressStatsContractV0 struct {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestMCPAutoprogrammingStatusDescriptorV0EsAdaptadorFino(t *testing.T) {
@@ -36,8 +38,16 @@ func TestMCPAutoprogrammingStatusExecutorV0DelegaEnColaYRun(t *testing.T) {
 	if result.Estado != MCPAutoprogrammingStatusEstadoOKV0 ||
 		result.Queue == nil ||
 		result.Run == nil ||
+		result.Operator == nil ||
 		result.RunRef != "run-ref-autop-status-001" {
 		t.Fatalf("result=%+v", result)
+	}
+	if !result.Operator.QueueLive ||
+		len(result.Operator.ActiveRuns) != 1 ||
+		len(result.Operator.AgentsInFlight) != 1 ||
+		len(result.Operator.ClosureBlockers) != 1 ||
+		len(result.Operator.SafeActions) < 2 {
+		t.Fatalf("operator=%+v", result.Operator)
 	}
 	if queue.input.Action != MCPRunQueuePriorityActionRankV0 ||
 		queue.input.Limit != 3 ||
@@ -108,6 +118,7 @@ func (fake *fakeMCPAutoprogrammingQueueStatusV0) Execute(
 			Rank:          1,
 			RunRef:        "run-ref-autop-status-001",
 			AppRef:        "app-ref-autop-status-001",
+			Status:        "running",
 			PriorityScore: 50,
 		}},
 		Errores: []MCPValidationIssueV0{},
@@ -127,6 +138,20 @@ func (fake *fakeMCPAutoprogrammingRunStatusV0) Execute(
 		Estado:        MCPDirectorStatsEstadoOKV0,
 		CorrelationID: input.CorrelationID,
 		RunRef:        input.RunRef,
-		Errores:       []MCPValidationIssueV0{},
+		Stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: input.RunRef,
+			Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
+				Status:      orquestacionnucleoapp.DirectorClosureStatusBlockedV0,
+				Blocked:     true,
+				BlockedBy:   []string{"revision_final"},
+				BlockerRefs: []string{"blocker-ref-autop-status-001"},
+			},
+			Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{
+				AgentRequestID: "agent-ref-autop-status-001",
+				Status:         orquestacionnucleoapp.DirectorAgentStatusRunningV0,
+				InFlight:       true,
+			}},
+		},
+		Errores: []MCPValidationIssueV0{},
 	}, nil
 }

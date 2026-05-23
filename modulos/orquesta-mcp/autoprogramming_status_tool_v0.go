@@ -45,6 +45,7 @@ type MCPAutoprogrammingStatusToolResultV0 struct {
 	QueueRef      string                           `json:"queue_ref,omitempty"`
 	Queue         *MCPRunQueuePriorityToolResultV0 `json:"queue,omitempty"`
 	Run           *MCPDirectorStatsToolResultV0    `json:"run,omitempty"`
+	Operator      *MCPAutoprogrammingOperatorV0    `json:"operator,omitempty"`
 	Diagnostics   []MCPAutoprogrammingDiagnosticV0 `json:"diagnostics,omitempty"`
 	Errores       []MCPValidationIssueV0           `json:"errores_publicos,omitempty"`
 }
@@ -66,7 +67,7 @@ func MCPAutoprogrammingStatusDescriptorV0() MCPAutoprogrammingStatusToolDescript
 		Name:        MCPAutoprogrammingStatusToolNameV0,
 		Version:     MCPAutoprogrammingStatusToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,external_job_ref?,queue_ref?,app_refs?,queue_limit?,telemetry_flags?}",
-		Output:      "ok:{queue?,run?,diagnostics?}|error:{errores_publicos,diagnostics?}",
+		Output:      "ok:{queue?,run?,operator?,diagnostics?}|error:{errores_publicos,diagnostics?}",
 		ResourceURI: MCPAutoprogrammingStatusResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -122,6 +123,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 			Message: "estado de autoprogramacion no disponible",
 		}}
 	}
+	result.Operator = newMCPAutoprogrammingOperatorV0(result.Queue, result.Run, result.Diagnostics)
 	return result, nil
 }
 

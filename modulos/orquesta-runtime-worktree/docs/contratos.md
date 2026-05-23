@@ -40,3 +40,6 @@ Invariantes:
   Git, rutas, proveedor ni HOME.
 - La evidencia publica contiene snapshot con paths relativos e ignora prefijos
   de control inyectados.
+- La recuperacion tras reinicio debe reabrir o rematerializar el baseline por
+  `baseline_ref` y las refs opacas guardadas; no debe reconstruir una rama desde
+  nombres Git ni desde paths locales.

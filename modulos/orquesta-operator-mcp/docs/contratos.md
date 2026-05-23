@@ -124,6 +124,10 @@ Implementacion publicada:
 - `ExecuteMCPOperatorBurstToolV0`.
 - `ExecuteMCPOperatorOutboxToolV0`.
 - `ExecuteMCPOperatorDirectedQueryToolV0`.
+- `OperatorMCPConnectorV0` como puerto agregado opcional para estado, burst,
+  outbox y consulta dirigida.
+- `NewOperatorMCPSimulatedConnectorV0` como conector offline para pruebas y
+  demos sin runtime real.
 
 Invariantes:
 
@@ -131,6 +135,8 @@ Invariantes:
 - Si falta puerto, devuelve error publico `operator_mcp_port_unavailable`.
 - No ejecuta scheduler, DB, outbox, runtime, filesystem, red, HOME ni servidor MCP real.
 - El transporte MCP real queda como conector opt-in posterior.
+- Hermes, OpenClaw u otro operador real debe implementarse fuera como adaptador
+  externo sobre `OperatorMCPConnectorV0`; este modulo no importa esos productos.
 
 ## Transporte MCP opt-in v0
 
@@ -141,6 +147,8 @@ Contrato consumidor:
 - `orquesta-mcp` registra `orquesta.operator.operations.v0` y sus tools en `TransportPortV0`.
 - El transporte real debe vivir fuera de `orquesta-operator-mcp` y `orquesta-mcp` como adaptador opt-in.
 - Los handlers operativos reciben solo DTOs publicos y llaman a `OperatorMCP*PortV0` inyectados.
+- Si se inyecta `OperatorMCPConnectorV0`, `orquesta-mcp` lo usa como fallback
+  para los cuatro tools cuando no hay puerto especifico por tool.
 
 Invariantes:
 

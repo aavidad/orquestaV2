@@ -13,6 +13,8 @@ Cobertura actual:
 - rechaza alcance demasiado amplio;
 - rechaza `write_set` vacio o inseguro;
 - agrupa tareas por area normalizada;
+- preserva contratos explicitos por tarea: objetivo, contexto, context refs,
+  criterios, tests y reglas compactas;
 - transforma solicitudes validas en `WorkProfileV0`/`WorkflowTaskV0` con refs
   opacas y pruebas requeridas preservadas;
 - particiona `write_set` por area y rechaza rutas no asignables o solapadas;

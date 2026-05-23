@@ -12,6 +12,7 @@ import (
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
@@ -101,6 +102,28 @@ func TestCodexStackV0RunGlobalTickMarcaRunCerradaComoTerminalEnColaV0(t *testing
 	})
 	if len(ranking.Ranked) != 0 {
 		t.Fatalf("ranking=%+v", ranking)
+	}
+}
+
+func TestCodexStackV0DrainQueueStatusMarcaRunEntregadaComoTerminalEnColaV0(t *testing.T) {
+	taskRef := "task-ref-stack-delivered-queue-001"
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	deliveryRef := "delivery-ref-stack-delivered-queue-001"
+	result := orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+		Final: orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				CurrentPhase:    orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+				Tasks:           []string{taskRef},
+				Agents:          []string{agentRef},
+				StartedAgents:   []string{agentRef},
+				DeliveredAgents: []string{agentRef},
+				Deliveries:      []string{deliveryRef},
+				DeliveredTasks:  []string{taskRef},
+			},
+		},
+	}
+	if got := stackDrainQueueStatusV0(result); got != orquestarunqueue.RunStatusDeliveredV0 {
+		t.Fatalf("queue_status=%q want %q", got, orquestarunqueue.RunStatusDeliveredV0)
 	}
 }
 

@@ -111,6 +111,66 @@ func TestAutoprogrammingCliClientV0ConsultaColaYRunPorAPI(t *testing.T) {
 	}
 }
 
+func TestAutoprogrammingCliClientV0ConsultaEstadoYSupervisaPorAPI(t *testing.T) {
+	seen := map[string]bool{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen[r.URL.Path] = true
+		switch r.URL.Path {
+		case AutoprogrammingStatusCliEndpointV0:
+			var input orquestamcp.MCPAutoprogrammingStatusToolInputV0
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Fatalf("decode status: %v", err)
+			}
+			if input.RunRef != "run-ref-status-001" || !input.IncludeAgentProgress {
+				t.Fatalf("status input=%+v", input)
+			}
+			_ = json.NewEncoder(w).Encode(orquestamcp.MCPAutoprogrammingStatusToolResultV0{
+				Estado: orquestamcp.MCPAutoprogrammingStatusEstadoOKV0,
+				RunRef: input.RunRef,
+				Operator: &orquestamcp.MCPAutoprogrammingOperatorV0{
+					QueueLive: true,
+					SafeActions: []orquestamcp.MCPAutoprogrammingSafeActionV0{{
+						Action: "supervise",
+						RunRef: input.RunRef,
+					}},
+				},
+			})
+		case AutoprogrammingSuperviseCliEndpointV0:
+			var input orquestamcp.MCPRunSupervisorToolInputV0
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Fatalf("decode supervise: %v", err)
+			}
+			if input.RunRef != "run-ref-status-001" || input.MaxTicks != 1 {
+				t.Fatalf("supervise input=%+v", input)
+			}
+			_ = json.NewEncoder(w).Encode(orquestamcp.MCPRunSupervisorToolResultV0{
+				Estado: orquestamcp.MCPRunSupervisorEstadoOKV0,
+				RunRef: input.RunRef,
+				Ticks:  1,
+			})
+		default:
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := mustNewAutoprogrammingCliClientV0(t, server.URL)
+	statusEnv := client.ConsultarEstado(context.Background(), autoprogInvocationV0(server.URL), orquestamcp.MCPAutoprogrammingStatusToolInputV0{
+		RunRef:               "run-ref-status-001",
+		IncludeAgentProgress: true,
+	})
+	superviseEnv := client.Supervisar(context.Background(), autoprogInvocationV0(server.URL), orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef:   "run-ref-status-001",
+		MaxTicks: 1,
+	})
+
+	if !statusEnv.OK || !superviseEnv.OK ||
+		!seen[AutoprogrammingStatusCliEndpointV0] ||
+		!seen[AutoprogrammingSuperviseCliEndpointV0] {
+		t.Fatalf("status=%+v supervise=%+v seen=%+v", statusEnv, superviseEnv, seen)
+	}
+}
+
 func mustNewAutoprogrammingCliClientV0(t *testing.T, serverURL string) *AutoprogrammingCliClientV0 {
 	t.Helper()
 	client, err := NewAutoprogrammingCliClientV0(serverURL, time.Second)

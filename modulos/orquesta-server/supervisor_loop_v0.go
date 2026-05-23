@@ -2,6 +2,7 @@ package orquestaserver
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 )
 
@@ -9,7 +10,7 @@ func (runtime *RuntimeV0) runSupervisorLoopV0(ctx context.Context) {
 	if runtime.supervisor == nil {
 		return
 	}
-	runtime.runSupervisorTickV0(ctx)
+	runtime.runSupervisorTickAsyncV0(ctx)
 	ticker := time.NewTicker(runtime.config.TickInterval)
 	defer ticker.Stop()
 	for {
@@ -17,9 +18,20 @@ func (runtime *RuntimeV0) runSupervisorLoopV0(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			runtime.runSupervisorTickV0(ctx)
+			runtime.runSupervisorTickAsyncV0(ctx)
 		}
 	}
+}
+
+func (runtime *RuntimeV0) runSupervisorTickAsyncV0(ctx context.Context) bool {
+	if !atomic.CompareAndSwapInt32(&runtime.supervisorTickActive, 0, 1) {
+		return false
+	}
+	go func() {
+		defer atomic.StoreInt32(&runtime.supervisorTickActive, 0)
+		runtime.runSupervisorTickV0(ctx)
+	}()
+	return true
 }
 
 func (runtime *RuntimeV0) runSupervisorTickV0(ctx context.Context) {

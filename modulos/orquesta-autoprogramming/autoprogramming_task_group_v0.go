@@ -6,13 +6,21 @@ import (
 )
 
 type AutoprogrammingTaskGroupCandidateV0 struct {
-	TaskRef string `json:"task_ref"`
-	Area    string `json:"area"`
+	TaskRef            string   `json:"task_ref"`
+	Area               string   `json:"area"`
+	Title              string   `json:"title,omitempty"`
+	Objective          string   `json:"objective,omitempty"`
+	Context            []string `json:"context,omitempty"`
+	ContextRefs        []string `json:"context_refs,omitempty"`
+	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
+	RequiredTests      []string `json:"required_tests,omitempty"`
+	CompactRules       []string `json:"compact_rules,omitempty"`
 }
 
 type AutoprogrammingTaskGroupV0 struct {
-	Area     string   `json:"area"`
-	TaskRefs []string `json:"task_refs"`
+	Area     string                                `json:"area"`
+	TaskRefs []string                              `json:"task_refs"`
+	Tasks    []AutoprogrammingTaskGroupCandidateV0 `json:"tasks,omitempty"`
 }
 
 func GroupAutoprogrammingTasksByAreaV0(
@@ -47,6 +55,7 @@ func GroupAutoprogrammingTasksByAreaV0(
 			continue
 		}
 		seenTaskRefs[taskRef] = struct{}{}
+		normalizedTask := normalizeAutoprogrammingTaskCandidateV0(task, taskRef, area)
 
 		groupIndex, ok := groupIndexByArea[area]
 		if !ok {
@@ -55,9 +64,28 @@ func GroupAutoprogrammingTasksByAreaV0(
 			groups = append(groups, AutoprogrammingTaskGroupV0{Area: area})
 		}
 		groups[groupIndex].TaskRefs = append(groups[groupIndex].TaskRefs, taskRef)
+		groups[groupIndex].Tasks = append(groups[groupIndex].Tasks, normalizedTask)
 	}
 
 	return groups, nil
+}
+
+func normalizeAutoprogrammingTaskCandidateV0(
+	task AutoprogrammingTaskGroupCandidateV0,
+	taskRef string,
+	area string,
+) AutoprogrammingTaskGroupCandidateV0 {
+	return AutoprogrammingTaskGroupCandidateV0{
+		TaskRef:            taskRef,
+		Area:               area,
+		Title:              strings.TrimSpace(task.Title),
+		Objective:          strings.TrimSpace(task.Objective),
+		Context:            compactStringsV0(task.Context),
+		ContextRefs:        compactStringsV0(task.ContextRefs),
+		AcceptanceCriteria: compactStringsV0(task.AcceptanceCriteria),
+		RequiredTests:      compactStringsV0(task.RequiredTests),
+		CompactRules:       compactStringsV0(task.CompactRules),
+	}
 }
 
 func normalizeAutoprogrammingTaskAreaV0(area string) string {

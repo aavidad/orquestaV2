@@ -1113,6 +1113,9 @@ Reglas minimas:
 - `project_ref`, `worktree_ref` y `branch_ref` son referencias opacas.
 - `worktree_isolated=true` es obligatorio.
 - `tasks` se agrupa por area y queda limitado por defecto a 3 tareas y 2 areas.
+- Cada tarea puede transportar objetivo, contexto, context refs, criterios,
+  tests y reglas compactas; MCP los pasa al contrato puro sin interpretarlos
+  desde `task_ref`.
 - `write_set` debe ser relativo, pequeno y sin `..`; por defecto maximo 5 entradas.
 - `required_tests` es obligatorio; la ejecucion real pertenece a un adaptador externo.
 
@@ -1136,6 +1139,8 @@ Campos:
     estado: ok
     accepted: true
     groups, write_set, required_tests: proyecciones compactas validadas
+    programmable_work.groups: title, summary, criteria, required_tests y
+      context_refs compactos generados para cada grupo
   output_error:
     estado: error
     accepted: false

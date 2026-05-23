@@ -9,7 +9,10 @@ Campos obligatorios:
 
 - `request_ref`, `project_ref`, `worktree_ref`, `branch_ref`;
 - `worktree_isolated=true`;
-- `tasks` con `task_ref` y `area`;
+- `tasks` con `task_ref` y `area`; opcionalmente cada tarea puede aportar
+  `title`, `objective`, `context`, `context_refs`, `acceptance_criteria`,
+  `required_tests` y `compact_rules` para que el worker reciba un contrato
+  explicito y no tenga que inferir semantica desde `task_ref`;
 - `write_set` relativo y compacto;
 - `required_tests`.
 
@@ -44,6 +47,8 @@ programable compatible con el nucleo:
 
 - devuelve `WorkProfileV0` y `WorkflowTaskV0` por grupo;
 - conserva `write_set`, `required_tests`, `worktree_ref` y `branch_ref`;
+- conserva objetivo, contexto, criterios, tests y reglas compactas declaradas
+  por tarea dentro de `WorkflowTaskV0`/`WorkProfileV0`;
 - usa refs opacas como `ContextRefs`, sin leer repositorios ni ejecutar nada;
 - para varios grupos, particiona `write_set` por area normalizada y rechaza
   rutas ambiguas, sin area o solapadas.

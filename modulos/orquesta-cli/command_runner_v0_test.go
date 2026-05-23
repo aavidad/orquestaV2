@@ -212,6 +212,49 @@ func TestRunOrquestaCLIV0AutoprogramacionColaListarUsaAPI(t *testing.T) {
 	}
 }
 
+func TestRunOrquestaCLIV0AutoprogramacionEstadoYSupervisarUsanAPI(t *testing.T) {
+	seen := map[string]bool{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen[r.URL.Path] = true
+		switch r.URL.Path {
+		case AutoprogrammingStatusCliEndpointV0:
+			_ = json.NewEncoder(w).Encode(orquestamcp.MCPAutoprogrammingStatusToolResultV0{
+				Estado: orquestamcp.MCPAutoprogrammingStatusEstadoOKV0,
+				RunRef: "run-ref-cli-status-001",
+			})
+		case AutoprogrammingSuperviseCliEndpointV0:
+			_ = json.NewEncoder(w).Encode(orquestamcp.MCPRunSupervisorToolResultV0{
+				Estado: orquestamcp.MCPRunSupervisorEstadoOKV0,
+				RunRef: "run-ref-cli-status-001",
+				Ticks:  1,
+			})
+		default:
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	statusEnv, statusCode := runCLIAndDecodeEnvelopeV0(t, []string{
+		"autoprogramacion", "estado", "ver",
+		"--server-url", server.URL,
+		"--run-ref", "run-ref-cli-status-001",
+		"--json",
+	}, nil)
+	superviseEnv, superviseCode := runCLIAndDecodeEnvelopeV0(t, []string{
+		"autoprogramacion", "supervisar",
+		"--server-url", server.URL,
+		"--run-ref", "run-ref-cli-status-001",
+		"--max-ticks", "1",
+		"--json",
+	}, nil)
+
+	if statusCode != 0 || superviseCode != 0 || !statusEnv.OK || !superviseEnv.OK ||
+		!seen[AutoprogrammingStatusCliEndpointV0] ||
+		!seen[AutoprogrammingSuperviseCliEndpointV0] {
+		t.Fatalf("status=%+v/%d supervise=%+v/%d seen=%+v", statusEnv, statusCode, superviseEnv, superviseCode, seen)
+	}
+}
+
 func runCLIAndDecodeEnvelopeV0(t *testing.T, args []string, stdin []byte) (CliOutputEnvelopeV0, int) {
 	t.Helper()
 	var stdout bytes.Buffer

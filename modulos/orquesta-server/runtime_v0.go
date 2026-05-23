@@ -16,13 +16,14 @@ type RuntimeDepsV0 struct {
 }
 
 type RuntimeV0 struct {
-	config       ConfigV0
-	appHandler   http.Handler
-	supervisor   SupervisorPortV0
-	stateStore   StateStorePortV0
-	startupCheck StartupCheckPortV0
-	clock        ClockPortV0
-	tracker      *StatusTrackerV0
+	config               ConfigV0
+	appHandler           http.Handler
+	supervisor           SupervisorPortV0
+	supervisorTickActive int32
+	stateStore           StateStorePortV0
+	startupCheck         StartupCheckPortV0
+	clock                ClockPortV0
+	tracker              *StatusTrackerV0
 }
 
 func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {

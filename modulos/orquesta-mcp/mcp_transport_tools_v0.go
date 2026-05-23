@@ -24,11 +24,39 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 		mcpTransportToolEnvelopeV0(descriptors.serverShutdown.Name, descriptors.serverShutdown.Version, descriptors.serverShutdown.ResourceURI, descriptors.serverShutdown.InputSchema, descriptors.serverShutdown.Output, mcpServerShutdownTransportHandlerV0(bindings.ServerShutdown)),
 		mcpTransportToolEnvelopeV0(descriptors.domainWork.Name, descriptors.domainWork.Version, descriptors.domainWork.ResourceURI, descriptors.domainWork.InputSchema, descriptors.domainWork.Output, mcpDomainWorkTransportHandlerV0(bindings.DomainWork)),
 		mcpTransportToolEnvelopeV0(descriptors.externalWorkRun.Name, descriptors.externalWorkRun.Version, descriptors.externalWorkRun.ResourceURI, descriptors.externalWorkRun.InputSchema, descriptors.externalWorkRun.Output, mcpExternalWorkRunTransportHandlerV0(bindings.ExternalWorkRun)),
-		mcpOperatorTransportToolV0(operator.OperatorMCPStatusToolNameV0, bindings.OperatorStatus),
-		mcpOperatorTransportToolV0(operator.OperatorMCPBurstToolNameV0, bindings.OperatorBurst),
-		mcpOperatorTransportToolV0(operator.OperatorMCPOutboxToolNameV0, bindings.OperatorOutbox),
-		mcpOperatorTransportToolV0(operator.OperatorMCPDirectedQueryToolV0, bindings.OperatorQuery),
+		mcpOperatorTransportToolV0(operator.OperatorMCPStatusToolNameV0, mcpOperatorStatusBindingV0(bindings)),
+		mcpOperatorTransportToolV0(operator.OperatorMCPBurstToolNameV0, mcpOperatorBurstBindingV0(bindings)),
+		mcpOperatorTransportToolV0(operator.OperatorMCPOutboxToolNameV0, mcpOperatorOutboxBindingV0(bindings)),
+		mcpOperatorTransportToolV0(operator.OperatorMCPDirectedQueryToolV0, mcpOperatorQueryBindingV0(bindings)),
 	}
+}
+
+func mcpOperatorStatusBindingV0(bindings MCPTransportBindingsV0) operator.OperatorMCPStatusPortV0 {
+	if bindings.OperatorStatus != nil {
+		return bindings.OperatorStatus
+	}
+	return bindings.OperatorConnector
+}
+
+func mcpOperatorBurstBindingV0(bindings MCPTransportBindingsV0) operator.OperatorMCPBurstPortV0 {
+	if bindings.OperatorBurst != nil {
+		return bindings.OperatorBurst
+	}
+	return bindings.OperatorConnector
+}
+
+func mcpOperatorOutboxBindingV0(bindings MCPTransportBindingsV0) operator.OperatorMCPOutboxPortV0 {
+	if bindings.OperatorOutbox != nil {
+		return bindings.OperatorOutbox
+	}
+	return bindings.OperatorConnector
+}
+
+func mcpOperatorQueryBindingV0(bindings MCPTransportBindingsV0) operator.OperatorMCPDirectedQueryPortV0 {
+	if bindings.OperatorQuery != nil {
+		return bindings.OperatorQuery
+	}
+	return bindings.OperatorConnector
 }
 
 func autoprogrammingStatusExecutorFromBindingsV0(

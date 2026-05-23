@@ -17,12 +17,46 @@ func TestGroupAutoprogrammingTasksByAreaV0GroupsByNormalizedArea(t *testing.T) {
 		t.Fatalf("GroupAutoprogrammingTasksByAreaV0: %v", err)
 	}
 
-	want := []AutoprogrammingTaskGroupV0{
+	gotRefs := []AutoprogrammingTaskGroupV0{
+		{Area: groups[0].Area, TaskRefs: groups[0].TaskRefs},
+		{Area: groups[1].Area, TaskRefs: groups[1].TaskRefs},
+	}
+	wantRefs := []AutoprogrammingTaskGroupV0{
 		{Area: "task-groups", TaskRefs: []string{"task-ref-a", "task-ref-b"}},
 		{Area: "review-gate", TaskRefs: []string{"task-ref-c"}},
 	}
-	if !reflect.DeepEqual(groups, want) {
-		t.Fatalf("groups=%+v want %+v", groups, want)
+	if !reflect.DeepEqual(gotRefs, wantRefs) ||
+		len(groups[0].Tasks) != 2 ||
+		groups[0].Tasks[0].TaskRef != "task-ref-a" ||
+		groups[0].Tasks[0].Area != "task-groups" {
+		t.Fatalf("groups=%+v want %+v", groups, wantRefs)
+	}
+}
+
+func TestGroupAutoprogrammingTasksByAreaV0PreservaContratoExplicito(t *testing.T) {
+	groups, err := GroupAutoprogrammingTasksByAreaV0([]AutoprogrammingTaskGroupCandidateV0{{
+		TaskRef:            " task-ref-a ",
+		Area:               " App Stack ",
+		Title:              " Cambio acotado ",
+		Objective:          " Implementar contrato explicito. ",
+		Context:            []string{" contexto durable ", ""},
+		ContextRefs:        []string{"doc-ref:autoprog-t03"},
+		AcceptanceCriteria: []string{" criterio verificable "},
+		RequiredTests:      []string{" go test ./modulos/orquesta-autoprogramming "},
+		CompactRules:       []string{" conservar refs opacas "},
+	}})
+	if err != nil {
+		t.Fatalf("GroupAutoprogrammingTasksByAreaV0: %v", err)
+	}
+	task := groups[0].Tasks[0]
+	if task.Title != "Cambio acotado" ||
+		task.Objective != "Implementar contrato explicito." ||
+		task.Context[0] != "contexto durable" ||
+		task.ContextRefs[0] != "doc-ref:autoprog-t03" ||
+		task.AcceptanceCriteria[0] != "criterio verificable" ||
+		task.RequiredTests[0] != "go test ./modulos/orquesta-autoprogramming" ||
+		task.CompactRules[0] != "conservar refs opacas" {
+		t.Fatalf("task=%+v", task)
 	}
 }
 

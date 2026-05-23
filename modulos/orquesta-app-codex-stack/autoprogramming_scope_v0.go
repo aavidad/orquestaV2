@@ -17,11 +17,15 @@ func autoprogrammingScopeObjectiveLineV0(task orquestacoreworkflow.WorkflowTaskV
 }
 
 func autoprogrammingScopeDoneCriteriaV0(task orquestacoreworkflow.WorkflowTaskV0) []string {
-	if autoprogrammingScopeObjectiveLineV0(task) == "" {
+	worktreeRef := workflowTaskContextRefValueV0(task.ContextRefs, "worktree_ref:")
+	branchRef := workflowTaskContextRefValueV0(task.ContextRefs, "branch_ref:")
+	if worktreeRef == "" || branchRef == "" {
 		return nil
 	}
 	return []string{
 		"Worktree aislada y branch_ref opaco preservados en la entrega.",
+		"Conserva worktree_ref=" + worktreeRef + " y branch_ref=" + branchRef +
+			" como refs opacas; no las conviertas en rutas ni nombres Git.",
 	}
 }
 

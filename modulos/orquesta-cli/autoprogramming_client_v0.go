@@ -12,6 +12,8 @@ import (
 
 const (
 	AutoprogrammingPrepareRunCliEndpointV0 = "/api/v0/autoprogramming/prepare-run"
+	AutoprogrammingStatusCliEndpointV0     = "/api/v0/autoprogramming/status"
+	AutoprogrammingSuperviseCliEndpointV0  = "/api/v0/autoprogramming/supervise"
 	AutoprogrammingRunQueueCliEndpointV0   = "/api/v0/runs/queue/priority"
 	AutoprogrammingRunStatsCliEndpointV0   = "/api/v0/director/stats"
 )
@@ -57,6 +59,16 @@ func (client *AutoprogrammingCliClientV0) ConsultarCola(
 	return client.postV0(ctx, inv, CliDefaultCommandAutoprogQueueV0, AutoprogrammingRunQueueCliEndpointV0, input, decodeAutoprogQueueV0)
 }
 
+func (client *AutoprogrammingCliClientV0) ConsultarEstado(
+	ctx context.Context,
+	inv CliInvocationContextV0,
+	input orquestamcp.MCPAutoprogrammingStatusToolInputV0,
+) CliOutputEnvelopeV0 {
+	input.RequestID = firstNonEmptyCliStringV0(input.RequestID, inv.RequestID)
+	input.CorrelationID = firstNonEmptyCliStringV0(input.CorrelationID, inv.CorrelationID)
+	return client.postV0(ctx, inv, CliDefaultCommandAutoprogStatusV0, AutoprogrammingStatusCliEndpointV0, input, decodeAutoprogStatusV0)
+}
+
 func (client *AutoprogrammingCliClientV0) ConsultarRun(
 	ctx context.Context,
 	inv CliInvocationContextV0,
@@ -65,6 +77,16 @@ func (client *AutoprogrammingCliClientV0) ConsultarRun(
 	input.RequestID = firstNonEmptyCliStringV0(input.RequestID, inv.RequestID)
 	input.CorrelationID = firstNonEmptyCliStringV0(input.CorrelationID, inv.CorrelationID)
 	return client.postV0(ctx, inv, CliDefaultCommandAutoprogRunV0, AutoprogrammingRunStatsCliEndpointV0, input, decodeAutoprogRunStatsV0)
+}
+
+func (client *AutoprogrammingCliClientV0) Supervisar(
+	ctx context.Context,
+	inv CliInvocationContextV0,
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+) CliOutputEnvelopeV0 {
+	input.RequestID = firstNonEmptyCliStringV0(input.RequestID, inv.RequestID)
+	input.CorrelationID = firstNonEmptyCliStringV0(input.CorrelationID, inv.CorrelationID)
+	return client.postV0(ctx, inv, CliDefaultCommandAutoprogSuperviseV0, AutoprogrammingSuperviseCliEndpointV0, input, decodeAutoprogSuperviseV0)
 }
 
 func (client *AutoprogrammingCliClientV0) postV0(
@@ -120,8 +142,18 @@ func decodeAutoprogQueueV0(resp *http.Response, inv CliInvocationContextV0, star
 	return decodeAutoprogToolResponseV0(resp, inv, start, &result, result.Estado, result.Errores)
 }
 
+func decodeAutoprogStatusV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
+	var result orquestamcp.MCPAutoprogrammingStatusToolResultV0
+	return decodeAutoprogToolResponseV0(resp, inv, start, &result, result.Estado, result.Errores)
+}
+
 func decodeAutoprogRunStatsV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
 	var result orquestamcp.MCPDirectorStatsToolResultV0
+	return decodeAutoprogToolResponseV0(resp, inv, start, &result, result.Estado, result.Errores)
+}
+
+func decodeAutoprogSuperviseV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
+	var result orquestamcp.MCPRunSupervisorToolResultV0
 	return decodeAutoprogToolResponseV0(resp, inv, start, &result, result.Estado, result.Errores)
 }
 

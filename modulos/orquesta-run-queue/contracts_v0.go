@@ -8,10 +8,11 @@ import (
 const (
 	RunQueueSchemaVersionV0 = "run_queue.v0"
 
-	RunStatusPausedV0   = "paused"
-	RunStatusCanceledV0 = "canceled"
-	RunStatusStoppedV0  = "stopped"
-	RunStatusClosedV0   = "closed"
+	RunStatusPausedV0    = "paused"
+	RunStatusDeliveredV0 = "delivered"
+	RunStatusCanceledV0  = "canceled"
+	RunStatusStoppedV0   = "stopped"
+	RunStatusClosedV0    = "closed"
 )
 
 type RunQueueReaderPortV0 interface {

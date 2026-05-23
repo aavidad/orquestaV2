@@ -16,6 +16,13 @@ type OperatorMCPDirectedQueryPortV0 interface {
 	RaiseOperatorDirectedQueryV0(OperatorDirectedQueryV0) (OperatorMCPDirectedQueryResultV0, error)
 }
 
+type OperatorMCPConnectorV0 interface {
+	OperatorMCPStatusPortV0
+	OperatorMCPBurstPortV0
+	OperatorMCPOutboxPortV0
+	OperatorMCPDirectedQueryPortV0
+}
+
 type OperatorMCPStatusResultV0 struct {
 	Status       string   `json:"status"`
 	Summary      string   `json:"summary,omitempty"`

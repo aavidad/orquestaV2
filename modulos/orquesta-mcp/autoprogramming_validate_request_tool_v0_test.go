@@ -3,6 +3,7 @@ package orquestamcp
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
@@ -58,8 +59,44 @@ func TestMCPAutoprogrammingValidateRequestExecutorV0AceptaSolicitudAislada(t *te
 		group.WorkflowTaskRef == "" ||
 		len(group.WriteSet) != 2 ||
 		len(group.RequiredTests) != 1 ||
-		len(group.ContextRefs) != 4 {
+		len(group.Criteria) == 0 ||
+		len(group.ContextRefs) != 6 {
 		t.Fatalf("grupo programable incompleto=%+v", group)
+	}
+}
+
+func TestMCPAutoprogrammingValidateRequestExecutorV0ProyectaContratoExplicito(t *testing.T) {
+	request := validMCPAutoprogrammingRequestV0()
+	request.Tasks = []orquestaautoprogramming.AutoprogrammingTaskGroupCandidateV0{{
+		TaskRef:            "task-ref-mcp-explicita",
+		Area:               "MCP",
+		Title:              "Cambio MCP acotado",
+		Objective:          "Conservar criterios explicitos por tarea.",
+		Context:            []string{"contexto compacto del director"},
+		ContextRefs:        []string{"doc-ref:autoprog-explicita"},
+		AcceptanceCriteria: []string{"criterio visible en MCP"},
+		RequiredTests:      []string{"go test -count=1 ./modulos/orquesta-mcp -run TestMCPAutoprogramming"},
+		CompactRules:       []string{"no inferir semantica desde task_ref"},
+	}}
+
+	result, err := MCPAutoprogrammingValidateRequestToolExecutorV0{}.Execute(
+		context.Background(),
+		MCPAutoprogrammingValidateRequestToolInputV0{
+			RequestID:              "request-ref-mcp-autoprogramming-explicit-001",
+			AutoprogrammingRequest: request,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	group := result.ProgrammableWork.Groups[0]
+	if group.Title != "Cambio MCP acotado" ||
+		!strings.Contains(group.Summary, "Conservar criterios explicitos") ||
+		!stringsSliceContainsMCPAutoprogrammingV0(group.ContextRefs, "doc-ref:autoprog-explicita") ||
+		!stringsSliceContainsMCPAutoprogrammingV0(group.RequiredTests, "go test -count=1 ./modulos/orquesta-mcp -run TestMCPAutoprogramming") ||
+		!stringsSliceContainsSubstringMCPAutoprogrammingV0(group.Criteria, "criterio visible en MCP") ||
+		!stringsSliceContainsSubstringMCPAutoprogrammingV0(group.Criteria, "no inferir semantica") {
+		t.Fatalf("group=%+v", group)
 	}
 }
 
@@ -203,4 +240,22 @@ func assertStringsMCPAutoprogrammingV0(t *testing.T, got []string, want []string
 			t.Fatalf("got=%v want=%v", got, want)
 		}
 	}
+}
+
+func stringsSliceContainsMCPAutoprogrammingV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func stringsSliceContainsSubstringMCPAutoprogrammingV0(values []string, want string) bool {
+	for _, value := range values {
+		if strings.Contains(value, want) {
+			return true
+		}
+	}
+	return false
 }

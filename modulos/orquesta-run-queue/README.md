@@ -17,7 +17,8 @@ Fuera de alcance:
 
 Orden de ranking v0:
 
-1. filtra runs con `status` `paused`, `canceled`, `stopped` o `closed`;
+1. filtra runs con `status` `paused`, `delivered`, `canceled`, `stopped` o
+   `closed`;
 2. ordena por `priority_score` descendente;
 3. desempata por `aging_boost` descendente si aplica;
 4. desempata por `updated_at` ascendente con orden estable en empates exactos.

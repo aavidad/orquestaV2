@@ -10,6 +10,7 @@ func TestRankRunCandidatesFiltersNonExecutableStatusesV0(t *testing.T) {
 	now := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
 	candidates := []RunSchedulingCandidateV0{
 		candidateV0("paused-run", "app-1", " paused ", 50, now),
+		candidateV0("delivered-run", "app-1", " DELIVERED ", 50, now),
 		candidateV0("canceled-run", "app-1", "CANCELED", 50, now),
 		candidateV0("stopped-run", "app-1", RunStatusStoppedV0, 50, now),
 		candidateV0("closed-run", "app-1", RunStatusClosedV0, 50, now),
