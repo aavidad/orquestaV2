@@ -176,16 +176,17 @@ func codexStackAutoprogrammingPrepareRunResultMCPV0(
 		Errores:          []orquestamcp.MCPValidationIssueV0{},
 	}
 	out.Continue = &orquestamcp.MCPAutoprogrammingContinueRequestV0{
-		RunRef:               strings.TrimSpace(result.Continue.RunRef),
-		OccurredAt:           strings.TrimSpace(result.Continue.OccurredAt),
-		CorrelationID:        strings.TrimSpace(result.Continue.CorrelationID),
-		RequestedBy:          strings.TrimSpace(result.Continue.RequestedBy),
-		MaxBursts:            result.Continue.MaxBursts,
-		MaxStepsPerBurst:     result.Continue.MaxStepsPerBurst,
-		MaxDispatchesPerWait: result.Continue.MaxDispatchesPerWait,
-		WaitAgentRefs:        compactStringsV0(result.Continue.WaitAgentRefs),
-		MaxCommands:          result.Continue.MaxCommands,
-		MaxOutboxPerCycle:    result.Continue.MaxOutboxPerCycle,
+		RunRef:                     strings.TrimSpace(result.Continue.RunRef),
+		OperationalDirectorPlanRef: strings.TrimSpace(result.Continue.OperationalDirectorPlanRef),
+		OccurredAt:                 strings.TrimSpace(result.Continue.OccurredAt),
+		CorrelationID:              strings.TrimSpace(result.Continue.CorrelationID),
+		RequestedBy:                strings.TrimSpace(result.Continue.RequestedBy),
+		MaxBursts:                  result.Continue.MaxBursts,
+		MaxStepsPerBurst:           result.Continue.MaxStepsPerBurst,
+		MaxDispatchesPerWait:       result.Continue.MaxDispatchesPerWait,
+		WaitAgentRefs:              compactStringsV0(result.Continue.WaitAgentRefs),
+		MaxCommands:                result.Continue.MaxCommands,
+		MaxOutboxPerCycle:          result.Continue.MaxOutboxPerCycle,
 	}
 	return out
 }

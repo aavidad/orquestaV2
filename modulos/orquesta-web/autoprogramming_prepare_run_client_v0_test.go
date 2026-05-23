@@ -35,10 +35,11 @@ func TestRESTAutoprogrammingPrepareRunClientV0PreservaWorktreeAisladaYRamaOpaca(
 			WorkflowTaskRefs: []string{"workflow-task-ref-001"},
 			WaitAgentRefs:    []string{"agent-ref-001"},
 			Continue: &orquestamcp.MCPAutoprogrammingContinueRequestV0{
-				RunRef:        "run-autoprog-web-001",
-				CorrelationID: "corr-autoprog-web-001",
-				WaitAgentRefs: []string{"agent-ref-001"},
-				MaxBursts:     2,
+				RunRef:                     "run-autoprog-web-001",
+				OperationalDirectorPlanRef: "operational-director-plan-web-001",
+				CorrelationID:              "corr-autoprog-web-001",
+				WaitAgentRefs:              []string{"agent-ref-001"},
+				MaxBursts:                  2,
 			},
 		})
 	}))
@@ -79,6 +80,7 @@ func TestRESTAutoprogrammingPrepareRunClientV0PreservaWorktreeAisladaYRamaOpaca(
 		vm.WorktreeRef != "worktree-ref-opaque-001" ||
 		vm.BranchRef != "branch-ref-opaque-001" ||
 		vm.Continue == nil ||
+		vm.Continue.OperationalDirectorPlanRef != "operational-director-plan-web-001" ||
 		len(vm.Continue.WaitAgentRefs) != 1 {
 		t.Fatalf("viewmodel=%+v", vm)
 	}

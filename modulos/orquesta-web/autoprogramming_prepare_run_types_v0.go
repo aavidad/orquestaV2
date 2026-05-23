@@ -55,16 +55,17 @@ type WebAutoprogrammingPrepareRunViewModelV0 struct {
 }
 
 type WebAutoprogrammingContinueRequestV0 struct {
-	RunRef               string   `json:"run_ref"`
-	OccurredAt           string   `json:"occurred_at,omitempty"`
-	CorrelationID        string   `json:"correlation_id,omitempty"`
-	RequestedBy          string   `json:"requested_by,omitempty"`
-	MaxBursts            int      `json:"max_bursts,omitempty"`
-	MaxStepsPerBurst     int      `json:"max_steps_per_burst,omitempty"`
-	MaxDispatchesPerWait int      `json:"max_dispatches_per_wait,omitempty"`
-	WaitAgentRefs        []string `json:"wait_agent_refs,omitempty"`
-	MaxCommands          int      `json:"max_commands,omitempty"`
-	MaxOutboxPerCycle    int      `json:"max_outbox_per_cycle,omitempty"`
+	RunRef                     string   `json:"run_ref"`
+	OperationalDirectorPlanRef string   `json:"operational_director_plan_ref,omitempty"`
+	OccurredAt                 string   `json:"occurred_at,omitempty"`
+	CorrelationID              string   `json:"correlation_id,omitempty"`
+	RequestedBy                string   `json:"requested_by,omitempty"`
+	MaxBursts                  int      `json:"max_bursts,omitempty"`
+	MaxStepsPerBurst           int      `json:"max_steps_per_burst,omitempty"`
+	MaxDispatchesPerWait       int      `json:"max_dispatches_per_wait,omitempty"`
+	WaitAgentRefs              []string `json:"wait_agent_refs,omitempty"`
+	MaxCommands                int      `json:"max_commands,omitempty"`
+	MaxOutboxPerCycle          int      `json:"max_outbox_per_cycle,omitempty"`
 }
 
 type WebAutoprogrammingPrepareRunPublicIssueV0 struct {
@@ -108,16 +109,17 @@ func webAutoprogrammingContinueRequestV0(
 	value orquestamcp.MCPAutoprogrammingContinueRequestV0,
 ) *WebAutoprogrammingContinueRequestV0 {
 	return &WebAutoprogrammingContinueRequestV0{
-		RunRef:               trimV0(value.RunRef),
-		OccurredAt:           trimV0(value.OccurredAt),
-		CorrelationID:        trimV0(value.CorrelationID),
-		RequestedBy:          trimV0(value.RequestedBy),
-		MaxBursts:            value.MaxBursts,
-		MaxStepsPerBurst:     value.MaxStepsPerBurst,
-		MaxDispatchesPerWait: value.MaxDispatchesPerWait,
-		WaitAgentRefs:        compactStringsV0(value.WaitAgentRefs),
-		MaxCommands:          value.MaxCommands,
-		MaxOutboxPerCycle:    value.MaxOutboxPerCycle,
+		RunRef:                     trimV0(value.RunRef),
+		OperationalDirectorPlanRef: trimV0(value.OperationalDirectorPlanRef),
+		OccurredAt:                 trimV0(value.OccurredAt),
+		CorrelationID:              trimV0(value.CorrelationID),
+		RequestedBy:                trimV0(value.RequestedBy),
+		MaxBursts:                  value.MaxBursts,
+		MaxStepsPerBurst:           value.MaxStepsPerBurst,
+		MaxDispatchesPerWait:       value.MaxDispatchesPerWait,
+		WaitAgentRefs:              compactStringsV0(value.WaitAgentRefs),
+		MaxCommands:                value.MaxCommands,
+		MaxOutboxPerCycle:          value.MaxOutboxPerCycle,
 	}
 }
 

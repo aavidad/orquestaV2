@@ -27,6 +27,13 @@ documento antes de editar.
   el rail para que Orquesta funcione, registrar la apertura aqui y dejar su
   cierre fino como automejora futura. No tirar trabajos completos por fallos
   reparables de interpretacion.
+- Mensaje para automejora futura: la prioridad actual es que Orquesta complete
+  trabajos reales aunque haya que abrir validaciones de forma. Cualquier rail
+  abierto debe quedar documentado como deuda, con caso reproducible y test
+  externo/focal. Cuando el sistema este estable o con poca carga, el director
+  puede crear tareas de automejora para cerrar esas aperturas una a una, siempre
+  verificando que no rompe ejecuciones reales. No reintroducir cortes estrictos
+  por suposicion.
 - Los cortes fuertes se reservan para seguridad real demostrada, causalidad
   rota, refs imposibles, datos sensibles efectivos o efectos externos no
   autorizados; no para listas de palabras o equivalencias que el director pueda
@@ -35,6 +42,11 @@ documento antes de editar.
   `docs/rail_errors_observados_2026-05-23.md`. Antes de recompilar servidor o
   probar Orquesta completa, ejecutar la matriz rapida `./scripts/test_rails_fast.sh`
   y anadir ahi cada nuevo caso observado para pasar todos de golpe.
+- Las regresiones de autoprogramacion/cierre se prueban con
+  `./scripts/test_autoprogramming_fast.sh`: ejecuta en paralelo los focos de
+  cierre, plan-state, prepare-run, cola y web/MCP. La bateria combinada
+  `./scripts/test_orquesta_fast_parallel.sh` ejecuta en paralelo rails,
+  autoprogramacion y frontera hexagonal.
 - Mejora futura de seguridad: antes de enviar contexto a agentes premium o
   remotos, una IA local o sanitizador local inyectado por puerto debe poder
   revisar y limpiar datos sensibles, claves, tokens, secretos, rutas privadas y
@@ -107,15 +119,28 @@ de automejora de baja prioridad cuando haya ejecuciones reales suficientes.
   Codex ni producto en el nucleo.
 - El bridge de autoprogramacion devuelve `operational_director_plan_ref` en el
   `Continue` cuando hay store/writer inyectados; asi el ciclo puede reentrar por
-  wait, review, tests requeridos, replan/cierre.
+  wait, review, tests requeridos, replan/cierre. El campo es opcional en
+  MCP/web para conservar compatibilidad con composiciones legacy sin plan-store.
 - La cola no marca una run autoprogramming entregada como terminal si quedan
   tareas abiertas pendientes de revision/cierre formal.
 - La decision source de composicion abre `revision` cuando todas las entregas
   autoprogramming estan listas y no hay agentes externos pendientes.
+- El clasificador de cierre operativo del stack reconoce el marker de
+  autoprogramacion en `ContextRefs`, no solo en criterios o contratos. Se evita
+  un rail de forma donde el plan-state si aceptaba la senal pero el cierre la
+  ignoraba.
+- Prueba nueva de ciclo completo: `prepare_run` MCP con plan-state, supervisor,
+  Codex fake, entrega real en proyecto temporal, review aceptada, `go test ./...`
+  real via `RequiredTestRunner`, evidencia durable y cierre de run/plan-state.
 - Verificado con:
+  `./scripts/test_autoprogramming_fast.sh`,
+  `./scripts/test_orquesta_fast_parallel.sh`,
   `go test -count=1 ./modulos/orquesta-app-codex-stack`,
+  `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-web`,
   `go test -count=1 ./modulos/orquesta-app-director-service` y focales
   `TestAutoprogrammingDirectorDecisionSourceV0`,
+  `TestCodexStackAutoprogrammingPrepareRunAPIV0CierraConPlanStateYTestsRealesV0`,
+  `TestOperationalClosureTaskClassifierV0AceptaMarkerEnContextRefsV0`,
   `TestStackDrainQueueStatus...`,
   `TestPrepareAutoprogrammingRunV0Persiste...`,
   `TestAutoprogrammingResidentModeV0`.

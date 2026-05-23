@@ -127,6 +127,7 @@ func codexStackWorkflowTaskOperationalSignalsV0(
 	task orquestacoreworkflow.WorkflowTaskV0,
 ) []string {
 	signals := append([]string(nil), task.AcceptanceCriteria...)
+	signals = append(signals, task.ContextRefs...)
 	signals = append(signals, task.CohortRef, task.WaveRef, task.ParentTaskRef)
 	for _, ref := range task.FunctionContractRefs {
 		signals = append(signals, ref.ContractRef, ref.FunctionName)

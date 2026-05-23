@@ -17,10 +17,15 @@ stack Codex.
   `operational_director.task_source:autoprogramming` como `context_ref` opaca.
   Si la composicion inyecta `OperationalPlanStateStore/Writer`, el bridge
   siembra un `OperationalDirectorPlanState` reentrable y devuelve
-  `operational_director_plan_ref` en el `Continue`.
+  `operational_director_plan_ref` en el `Continue`. Ese campo se expone por
+  MCP/web como opcional: una composicion legacy sin plan-store no debe fallar por
+  no devolverlo, solo queda limitada para cierre autonomo completo.
 - Una run de autoprogramacion entregada no sale de cola como `delivered` si
   quedan tareas abiertas pendientes de revision/tests/cierre; la decision source
   de composicion puede abrir `revision` cuando todas las entregas estan listas.
+- El cierre operativo del stack reconoce tareas marcadas en `context_refs`,
+  ademas de criterios/contratos/refs de linaje. Esto evita exigir que todos los
+  adaptadores coloquen la misma senal en el mismo campo textual.
 
 ## Limites
 
@@ -35,9 +40,13 @@ stack Codex.
 
 - `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestAutoprogrammingResidentModeV0'`
 - `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'Test(AutoprogrammingDirectorDecisionSourceV0|StackDrainQueueStatus|PrepareAutoprogrammingRunV0Persiste|AutoprogrammingResidentModeV0)'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run '^(TestOperationalClosureTaskClassifierV0AceptaMarkerEnContextRefsV0|TestCodexStackAutoprogrammingPrepareRunAPIV0CierraConPlanStateYTestsRealesV0)$'`
+- `./scripts/test_autoprogramming_fast.sh`
+- `./scripts/test_orquesta_fast_parallel.sh`
 - `go test -count=1 ./modulos/orquesta-app-director-service -run 'TestEnsureContinueOperationalDirectorPlanStateFromWorkflowTasksV0AceptaMarkerEnContextRefsV0|TestStartAppDirectorV0DecisionCreateMicrotaskRequiredTestsCreaPlanStateReentrable'`
 - `go test -count=1 ./modulos/orquesta-app-codex-stack`
 - `go test -count=1 ./modulos/orquesta-app-director-service`
+- `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-web`
 - `ORQUESTA_AUTOPROGRAMMING_SUPERVISED_SMOKE_CONFIRM=1 SMOKE_ID=post-planstate-20260523 ORQUESTA_KEEP_SMOKE_DIR=0 ./scripts/smoke_autoprogramming_supervised.sh`
   paso con servidor temporal, Codex fake, `resident_supervisor_agents_started=1`,
   replay idempotente OK, `external-work/run` OK, `codex_real_executed=false` y
