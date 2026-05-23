@@ -156,6 +156,88 @@ func TestCodexStackV0ExternalWorkRunSaneaPreguntaDirectorSinPerderContextoV0(t *
 	}
 }
 
+func TestCodexStackV0ExternalWorkRunSelfProgrammingSupervisaSinBloqueoGoBootstrapV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	body := bytes.NewBuffer(nil)
+	err := json.NewEncoder(body).Encode(orquestamcp.MCPExternalWorkRunToolInputV0{
+		RequestID:     "req-self-programming-policy-001",
+		CorrelationID: "corr-self-programming-policy-001",
+		AppChangeRequest: orquestaappchange.AppChangeRequestV0{
+			ChangeRef:  "self-programming-web-001",
+			AppRef:     "orquesta",
+			UserIntent: "Completar web de Orquesta reutilizando modulos existentes.",
+			AcceptanceCriteria: []string{
+				"UI operativa sin logica de orquestacion en web.",
+				"Archivos manejables y tests focales.",
+			},
+			AllowedWriteSet: []string{
+				"modulos/orquesta-web",
+				"docs/runbooks/autoprogramacion_web_2026-05-23.md",
+			},
+			RequiredTests: []string{"go test -count=1 ./modulos/orquesta-web"},
+			MetadataRefs: []string{
+				"rules-hexagonal-pure",
+				"rules-i18n",
+				"rules-manageable-files",
+			},
+			ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+				ProjectRef: "orquesta",
+				JobRef:     "job-self-programming-web-001",
+				WorkKind:   "self_programming",
+				WorkRefs:   []string{"web-cockpit"},
+				InputFields: []orquestadomainwork.DomainWorkFieldV0{{
+					Name:  "context_profile",
+					Value: "large",
+				}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/external-work/run", body)
+	req.Header.Set("Content-Type", "application/json")
+	stack.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("external work run status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPExternalWorkRunToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode external work run: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPExternalWorkRunEstadoOKV0 {
+		t.Fatalf("result=%+v", result)
+	}
+
+	drain, err := stack.DrainRunV0(context.Background(), DrainRunRequestV0{
+		RunRef:               result.RunRef,
+		CorrelationID:        "corr-self-programming-policy-drain-001",
+		OccurredAt:           "2026-05-23T08:00:00Z",
+		MaxBursts:            16,
+		MaxStepsPerBurst:     8,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          32,
+		MaxOutboxPerCycle:    8,
+		MaxDecisionCycles:    4,
+		MaxExternalWaits:     0,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0: %v drain=%+v", err, drain)
+	}
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), result.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if stringInSetV0(run.Blockers, "app-director-decision-director-decision-source-error-director-decision-source") {
+		t.Fatalf("run bloqueado por source_error: %+v", run)
+	}
+	if len(run.Tasks) != 1 || len(run.StartedAgents) != 1 || runtime.launchCountV0() != 1 {
+		t.Fatalf("run no lanzo agente: tasks=%v started=%v launches=%d blockers=%v", run.Tasks, run.StartedAgents, runtime.launchCountV0(), run.Blockers)
+	}
+}
+
 func TestCodexStackV0ExternalWorkRunSupervisorConsumeDeliverySinExpirarWaitV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	planStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()

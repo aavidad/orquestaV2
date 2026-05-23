@@ -25,22 +25,52 @@ func validateCompositeDirectorDecisionBatchV0(
 	); err != nil {
 		return err
 	}
-	if len(tasks) == 0 || !compositeLooksLikeGoAppPlanV0(tasks) {
+	initialTasks := compositeInitialProgrammingMicrotasksV0(tasks)
+	if len(initialTasks) == 0 || !compositeLooksLikeGoAppPlanV0(initialTasks) {
 		return nil
 	}
-	if !compositeTasksRequireGoTestAllV0(tasks) {
+	if !compositeTasksRequireGoTestAllV0(initialTasks) {
 		return fmt.Errorf("director_decisions invalidas: app Go sin required_tests go test ./...")
 	}
-	if !compositeTasksCoverWriteSetV0(tasks, "go.mod") {
+	if !compositeTasksCoverWriteSetV0(initialTasks, "go.mod") {
 		return fmt.Errorf("director_decisions invalidas: app Go sin tarea para go.mod")
 	}
-	if !compositeTasksCoverCmdEntrypointV0(tasks) {
+	if !compositeTasksCoverCmdEntrypointV0(initialTasks) {
 		return fmt.Errorf("director_decisions invalidas: app Go sin tarea para cmd/server")
 	}
-	if !compositeTasksDependOnBootstrapV0(tasks) {
+	if !compositeTasksDependOnBootstrapV0(initialTasks) {
 		return fmt.Errorf("director_decisions invalidas: app Go sin depends_on hacia bootstrap")
 	}
 	return nil
+}
+
+func compositeInitialProgrammingMicrotasksV0(
+	tasks []orquestadirectoragent.DirectorAgentMicrotaskV0,
+) []orquestadirectoragent.DirectorAgentMicrotaskV0 {
+	out := make([]orquestadirectoragent.DirectorAgentMicrotaskV0, 0, len(tasks))
+	for _, task := range tasks {
+		if compositeTaskComesFromAppChangeV0(task) {
+			continue
+		}
+		out = append(out, task)
+	}
+	return out
+}
+
+func compositeTaskComesFromAppChangeV0(
+	task orquestadirectoragent.DirectorAgentMicrotaskV0,
+) bool {
+	if strings.HasPrefix(strings.TrimSpace(task.TaskID), "task-ref-app-change-") {
+		return true
+	}
+	for _, ref := range task.FunctionContractRefs {
+		if strings.TrimSpace(ref.FunctionName) == "ApplyAppChangeV0" ||
+			strings.TrimSpace(ref.FunctionName) == "ApplyExternalDomainWorkV0" ||
+			strings.Contains(strings.TrimSpace(ref.ContractRef), ":app-change:") {
+			return true
+		}
+	}
+	return false
 }
 
 func validateCompositeDirectorDecisionRefsV0(

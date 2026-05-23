@@ -663,6 +663,21 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-05-23
+Decision: La guarda de bootstrap Go no se aplica a microtareas procedentes de
+`app-change` o `external-work`.
+Motivo: la autoprogramacion de Orquesta entra por `/external-work/run` como
+cambio incremental sobre modulos existentes. Exigir `go.mod`, `cmd/server` y
+`go test ./...` a cada microtarea de cambio confundia un test focal de modulo
+con una app Go nueva completa y bloqueaba el director antes de lanzar agentes.
+Impacto: `compositeDirectorDecisionSourceV0` sigue validando refs causales y
+planes Go iniciales; para contratos `ApplyAppChangeV0` y
+`ApplyExternalDomainWorkV0` conserva las pruebas declaradas del cambio y deja
+que el review/rework corrija problemas reales.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-11
 Decision: Una smoke multiagente verde no basta para aceptar una app Go completa.
 Motivo: la prueba real multiagente lanzo director y agentes reales en paralelo,

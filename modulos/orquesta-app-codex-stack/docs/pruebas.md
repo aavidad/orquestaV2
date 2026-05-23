@@ -835,6 +835,21 @@ Evidencia:
 - encola la run con `app_ref=opes`;
 - no arranca agentes ni director inicial antes del tick global.
 
+Validacion autoprogramacion incremental 2026-05-23:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack \
+  -run TestCodexStackV0ExternalWorkRunSelfProgrammingSupervisaSinBloqueoGoBootstrapV0
+```
+
+Evidencia:
+
+- un `external-work/run` con `work_kind=self_programming`, write-set de modulo
+  existente y test focal de modulo no se trata como bootstrap de app Go nueva;
+- `DrainRunV0` consume la decision de `app-change`, crea la microtarea y lanza
+  un agente fake;
+- no aparece el blocker `director_decision_source`.
+
 Evidencia:
 
 - `BuildStackV0` cablea `/api/v0/server/shutdown` con
