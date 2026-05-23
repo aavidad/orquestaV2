@@ -34,6 +34,7 @@ type MCPAutoprogrammingPrepareRunToolInputV0 struct {
 	MaxDispatchesPerWait   int                                              `json:"max_dispatches_per_wait,omitempty"`
 	MaxCommands            int                                              `json:"max_commands,omitempty"`
 	MaxOutboxPerCycle      int                                              `json:"max_outbox_per_cycle,omitempty"`
+	PriorityScore          int                                              `json:"priority_score,omitempty"`
 }
 
 type MCPAutoprogrammingContinueRequestV0 struct {
@@ -69,7 +70,7 @@ func MCPAutoprogrammingPrepareRunDescriptorV0() MCPAutoprogrammingPrepareRunTool
 	return MCPAutoprogrammingPrepareRunToolDescriptorV0{
 		Name:        MCPAutoprogrammingPrepareRunToolNameV0,
 		Version:     MCPAutoprogrammingPrepareRunToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,autoprogramming_request,limits?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,autoprogramming_request,limits?,priority_score?}",
 		Output:      "ok:{run_ref,workflow_task_refs,wait_agent_refs,continue}|error:{errores_publicos}",
 		ResourceURI: MCPAutoprogrammingPrepareRunResourceURIV0,
 		Invariantes: []string{

@@ -183,3 +183,35 @@ func mcpCoreWorkflowTransportHandlerV0(_ context.Context, raw json.RawMessage) (
 	}
 	return json.Marshal(ExecuteMCPCoreWorkflowCommandToolV0(input))
 }
+
+func mcpHumanDirectorWorkReviewPlanTransportHandlerV0(
+	executor MCPHumanDirectorWorkReviewPlanToolExecutorV0,
+) MCPTransportToolHandlerV0 {
+	return func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
+		var input MCPHumanDirectorWorkReviewPlanToolInputV0
+		if err := json.Unmarshal(raw, &input); err != nil {
+			return nil, err
+		}
+		result, err := executor.Execute(ctx, input)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(result)
+	}
+}
+
+func mcpAutoprogrammingSelfImprovementTransportHandlerV0(
+	executor MCPAutoprogrammingSelfImprovementToolExecutorV0,
+) MCPTransportToolHandlerV0 {
+	return func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
+		var input MCPAutoprogrammingSelfImprovementToolInputV0
+		if err := json.Unmarshal(raw, &input); err != nil {
+			return nil, err
+		}
+		result, err := executor.Execute(ctx, input)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(result)
+	}
+}

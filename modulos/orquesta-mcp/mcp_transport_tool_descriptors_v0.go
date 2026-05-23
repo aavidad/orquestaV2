@@ -9,6 +9,8 @@ type mcpTransportToolDescriptorsV0 struct {
 	preparar                 MCPPrepararOrquestacionAppToolDescriptorV0
 	ejecutar                 MCPEjecutarOrquestacionAppToolDescriptorV0
 	autoprogramming          MCPAutoprogrammingValidateRequestToolDescriptorV0
+	humanDirectorWork        MCPHumanDirectorWorkReviewPlanToolDescriptorV0
+	selfImprovement          MCPAutoprogrammingSelfImprovementToolDescriptorV0
 	autoprogrammingPrepare   MCPAutoprogrammingPrepareRunToolDescriptorV0
 	autoprogrammingStatus    MCPAutoprogrammingStatusToolDescriptorV0
 	autoprogrammingSupervise MCPAutoprogrammingSuperviseToolDescriptorV0
@@ -32,6 +34,8 @@ func newMCPTransportToolDescriptorsV0() mcpTransportToolDescriptorsV0 {
 		preparar:                 MCPPrepararOrquestacionAppDescriptorV0(),
 		ejecutar:                 MCPEjecutarOrquestacionAppDescriptorV0(),
 		autoprogramming:          MCPAutoprogrammingValidateRequestDescriptorV0(),
+		humanDirectorWork:        MCPHumanDirectorWorkReviewPlanDescriptorV0(),
+		selfImprovement:          MCPAutoprogrammingSelfImprovementDescriptorV0(),
 		autoprogrammingPrepare:   MCPAutoprogrammingPrepareRunDescriptorV0(),
 		autoprogrammingStatus:    MCPAutoprogrammingStatusDescriptorV0(),
 		autoprogrammingSupervise: MCPAutoprogrammingSuperviseDescriptorV0(),

@@ -16,7 +16,9 @@ const (
 	RouteRunQueuePriorityV0               = "/api/v0/runs/queue/priority"
 	RouteRunSupervisorV0                  = "/api/v0/runs/supervise"
 	RouteServerShutdownV0                 = "/api/v0/server/shutdown"
+	RouteHumanDirectorWorkReviewPlanV0    = "/api/v0/director/human-work/review-plan"
 	RouteAutoprogrammingValidateRequestV0 = "/api/v0/autoprogramming/validate-request"
+	RouteAutoprogrammingSelfImprovementV0 = "/api/v0/autoprogramming/self-improvement"
 	RouteAutoprogrammingPrepareRunV0      = "/api/v0/autoprogramming/prepare-run"
 	RouteAutoprogrammingStatusV0          = "/api/v0/autoprogramming/status"
 	RouteAutoprogrammingSuperviseV0       = "/api/v0/autoprogramming/supervise"
@@ -38,7 +40,9 @@ type RouteHandlersV0 struct {
 	RunQueuePriority               http.Handler
 	RunSupervisor                  http.Handler
 	ServerShutdown                 http.Handler
+	HumanDirectorWorkReviewPlan    http.Handler
 	AutoprogrammingValidateRequest http.Handler
+	AutoprogrammingSelfImprovement http.Handler
 	AutoprogrammingPrepareRun      http.Handler
 	AutoprogrammingStatus          http.Handler
 	AutoprogrammingSupervise       http.Handler
@@ -62,7 +66,9 @@ func NewAppGatewayMuxV0(handlers RouteHandlersV0) http.Handler {
 	handleIfPresent(mux, RouteRunQueuePriorityV0, handlers.RunQueuePriority)
 	handleIfPresent(mux, RouteRunSupervisorV0, handlers.RunSupervisor)
 	handleIfPresent(mux, RouteServerShutdownV0, handlers.ServerShutdown)
+	handleIfPresent(mux, RouteHumanDirectorWorkReviewPlanV0, handlers.HumanDirectorWorkReviewPlan)
 	handleIfPresent(mux, RouteAutoprogrammingValidateRequestV0, handlers.AutoprogrammingValidateRequest)
+	handleIfPresent(mux, RouteAutoprogrammingSelfImprovementV0, handlers.AutoprogrammingSelfImprovement)
 	handleIfPresent(mux, RouteAutoprogrammingPrepareRunV0, handlers.AutoprogrammingPrepareRun)
 	handleIfPresent(mux, RouteAutoprogrammingStatusV0, handlers.AutoprogrammingStatus)
 	handleIfPresent(mux, RouteAutoprogrammingSuperviseV0, handlers.AutoprogrammingSupervise)

@@ -208,6 +208,27 @@ func TestCodexRuntimeConfigV0ElevaReasoningEffortBajoAHigh(t *testing.T) {
 	}
 }
 
+func TestCodexRuntimeConfigV0InyectaToolbeltOperativoDelServidor(t *testing.T) {
+	config := codexRuntimeConfigV0(orquestaserver.ConfigV0{
+		Addr:           "127.0.0.1:18787",
+		ProjectWorkDir: t.TempDir(),
+		RuntimeWorkDir: t.TempDir(),
+	}, nil)
+
+	joined := strings.Join(config.PromptHints, "\n")
+	for _, want := range []string{
+		"http://127.0.0.1:18787",
+		"/api/v0/autoprogramming/supervise",
+		"orquesta.operator.operations.v0",
+		"codigo reutilizable",
+		"no metas HTTP, MCP, Codex, OPES",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("prompt hints no contienen %q: %s", want, joined)
+		}
+	}
+}
+
 func TestCodexStackCapacityConfigFromEnvV0ElevaReasoningCodexMediumAHigh(t *testing.T) {
 	t.Setenv("ORQUESTA_CAPACITY_REASONING_EFFORT", "")
 	t.Setenv("ORQUESTA_CODEX_REASONING_EFFORT", "medium")

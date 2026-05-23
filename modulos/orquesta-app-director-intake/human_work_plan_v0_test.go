@@ -66,6 +66,24 @@ func TestBuildHumanDirectorReviewablePlanV0PideRevisionSinObjetivo(t *testing.T)
 	assertHumanDirectorPlanHasActionV0(t, result.Plan, HumanDirectorPlanActionRequestReviewV0)
 }
 
+func TestBuildHumanDirectorReviewablePlanV0NoInvalidaRefsOperativasPendientes(t *testing.T) {
+	request := validHumanDirectorWorkIntakeRequestForTestV0()
+	request.WorktreeRef = " "
+	request.BranchRef = " "
+
+	result := BuildHumanDirectorReviewablePlanV0(request)
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
+	}
+	assertHumanDirectorPlanHasActionV0(t, result.Plan, HumanDirectorPlanActionRequestReviewV0)
+	assertHumanDirectorPlanHasActionV0(t, result.Plan, HumanDirectorPlanActionStudyBeforeV0)
+	for _, ref := range result.Plan.ContextRefs {
+		if ref == "worktree_ref:" || ref == "branch_ref:" {
+			t.Fatalf("ref operativa vacia filtrada incorrectamente: %v", result.Plan.ContextRefs)
+		}
+	}
+}
+
 func TestBuildHumanDirectorReviewablePlanV0NormalizaAliasesYGlobsSeguros(t *testing.T) {
 	request := validHumanDirectorWorkIntakeRequestForTestV0()
 	request.Hints.Areas = []string{"web_application", "api_rest"}

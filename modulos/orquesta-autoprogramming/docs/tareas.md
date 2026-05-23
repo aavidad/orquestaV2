@@ -6,6 +6,9 @@
   programacion del nucleo generico.
 - MCP usa este modulo como preflight.
 - `orquesta-runtime-codex-delivery` usa este modulo para evaluar ACKs de codigo.
+- La automejora secundaria ya queda modelada como contrato puro:
+  `BuildAutoprogrammingSelfImprovementRequestV0` produce una request de baja
+  prioridad para que el adaptador la prepare/encole despues.
 
 ## Backlog
 

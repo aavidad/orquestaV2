@@ -94,6 +94,9 @@ func needsHumanDirectorStudyBeforeV0(
 	request HumanDirectorWorkIntakeRequestV0,
 	writeSet []string,
 ) bool {
+	if request.WorktreeRef == "" || request.BranchRef == "" {
+		return true
+	}
 	if len(writeSet) == 0 {
 		return true
 	}

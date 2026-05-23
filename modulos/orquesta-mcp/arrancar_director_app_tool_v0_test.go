@@ -168,6 +168,37 @@ func TestMCPArrancarDirectorAppHTTPHandlerV0SirveBridgeREST(t *testing.T) {
 	}
 }
 
+func TestMCPArrancarDirectorAppHTTPHandlerV0ExecutorErrorExponeCampoPublico(t *testing.T) {
+	executor := &fakeMCPArrancarDirectorAppHTTPExecutorV0{
+		err: orquestaappdirectorservice.AppDirectorServiceIssueV0{Field: "ports.run_store"},
+	}
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(validMCPDirectorAppInputForTestV0()); err != nil {
+		t.Fatalf("encode input: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, MCPArrancarDirectorAppHTTPPathV0, body)
+
+	NewMCPArrancarDirectorAppHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPArrancarDirectorAppToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.Estado != MCPArrancarDirectorAppEstadoErrorV0 || len(result.Errores) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	issue := result.Errores[0]
+	if issue.Code != "arrancar_director_http_error" ||
+		issue.Field != "ports.run_store" ||
+		!strings.Contains(issue.Message, "ports.run_store") {
+		t.Fatalf("issue=%+v", issue)
+	}
+}
+
 func validMCPDirectorAppInputForTestV0() MCPArrancarDirectorAppToolInputV0 {
 	observability := true
 	return MCPArrancarDirectorAppToolInputV0{
@@ -192,6 +223,18 @@ func validMCPDirectorAppInputForTestV0() MCPArrancarDirectorAppToolInputV0 {
 			},
 		},
 	}
+}
+
+type fakeMCPArrancarDirectorAppHTTPExecutorV0 struct {
+	result MCPArrancarDirectorAppToolResultV0
+	err    error
+}
+
+func (executor *fakeMCPArrancarDirectorAppHTTPExecutorV0) Execute(
+	_ context.Context,
+	_ MCPArrancarDirectorAppToolInputV0,
+) (MCPArrancarDirectorAppToolResultV0, error) {
+	return executor.result, executor.err
 }
 
 func mcpDirectorCapacityDispatcherForTestV0(

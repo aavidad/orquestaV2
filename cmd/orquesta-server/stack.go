@@ -238,6 +238,7 @@ func codexRuntimeConfigV0(
 			os.Getenv("ORQUESTA_CODEX_DIRECTOR_APPROVAL_POLICY"),
 		),
 		ExtraArgs:      strings.Fields(os.Getenv("ORQUESTA_CODEX_EXTRA_ARGS")),
+		PromptHints:    codexServerPromptHintsV0(serverConfig),
 		Runtime:        processRuntime,
 		ProcessStopper: processRuntime,
 		SnapshotSource: processRuntime,

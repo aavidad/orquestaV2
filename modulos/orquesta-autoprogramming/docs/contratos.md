@@ -77,3 +77,25 @@ programable compatible con el nucleo:
 - si un trabajo vivo activo solapa el `write_set`, mantiene la tarea generada
   pero la marca como `postponed` mediante `depends_on` al ref vivo;
 - corta refs vivos imposibles y rutas inseguras en `live_works.write_set`.
+
+## BuildAutoprogrammingSelfImprovementRequestV0
+
+Entrada pura para que un director o agente convierta un fallo observado en una
+automejora programable de segundo plano.
+
+- exige `project_ref`, resumen del fallo, worktree/rama opacas, worktree
+  aislada, `suggested_write_set` propio y tests requeridos;
+- devuelve `AutoprogrammingRequestV0` validada y `priority_score=10` por
+  defecto, salvo prioridad explicita;
+- conserva `source_run_ref`, `source_task_ref`, `context_refs` y
+  `evidence_refs` como contexto opaco;
+- si faltan refs o tests, no descarta la evidencia: devuelve acciones para
+  completar worktree aislada, estudiar write-set o definir pruebas antes de
+  preparar run.
+
+Invariantes:
+
+- no ejecuta agentes, no encola, no lee repositorios y no toca disco;
+- no bloquea el trabajo principal que produjo la observacion;
+- la preparacion real queda en el adaptador que ya usa
+  `orquesta.autoprogramming.prepare_run.v0`.

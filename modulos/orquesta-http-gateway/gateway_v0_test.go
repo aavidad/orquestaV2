@@ -104,10 +104,24 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			},
 		},
 		{
+			name:  "human director work review plan",
+			route: RouteHumanDirectorWorkReviewPlanV0,
+			handlers: RouteHandlersV0{
+				HumanDirectorWorkReviewPlan: markerHandler("human-director-work-review-plan"),
+			},
+		},
+		{
 			name:  "autoprogramming validate request",
 			route: RouteAutoprogrammingValidateRequestV0,
 			handlers: RouteHandlersV0{
 				AutoprogrammingValidateRequest: markerHandler("autoprogramming-validate-request"),
+			},
+		},
+		{
+			name:  "autoprogramming self improvement",
+			route: RouteAutoprogrammingSelfImprovementV0,
+			handlers: RouteHandlersV0{
+				AutoprogrammingSelfImprovement: markerHandler("autoprogramming-self-improvement"),
 			},
 		},
 		{

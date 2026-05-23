@@ -38,6 +38,17 @@ func BuildHumanDirectorReviewablePlanV0(
 			"objetivo ausente",
 		))
 	}
+	for _, missingRef := range missingHumanDirectorExecutionRefsV0(request) {
+		plan.Steps = append(plan.Steps, humanDirectorPlanStepV0(
+			request,
+			HumanDirectorPlanActionRequestReviewV0,
+			"Completar ref operativa",
+			"El director puede revisar la peticion, pero necesita completar refs opacas antes de preparar ejecucion.",
+			nil,
+			nil,
+			missingRef+" ausente",
+		))
+	}
 
 	if len(overlapped) > 0 {
 		study := humanDirectorPlanStepV0(
@@ -150,8 +161,6 @@ func validateHumanDirectorWorkIntakeRequestV0(
 		{"schema_version", request.SchemaVersion},
 		{"request_ref", request.RequestRef},
 		{"project_ref", request.ProjectRef},
-		{"worktree_ref", request.WorktreeRef},
-		{"branch_ref", request.BranchRef},
 	} {
 		if item.value == "" {
 			issues = append(issues, humanDirectorPlanIssueV0("required", item.field, "campo obligatorio"))
@@ -169,8 +178,12 @@ func humanDirectorReviewablePlanSkeletonV0(
 	refs := []string{
 		"request_ref:" + request.RequestRef,
 		"project_ref:" + request.ProjectRef,
-		"worktree_ref:" + request.WorktreeRef,
-		"branch_ref:" + request.BranchRef,
+	}
+	if request.WorktreeRef != "" {
+		refs = append(refs, "worktree_ref:"+request.WorktreeRef)
+	}
+	if request.BranchRef != "" {
+		refs = append(refs, "branch_ref:"+request.BranchRef)
 	}
 	refs = append(refs, request.ContextRefs...)
 	refs = append(refs, request.Hints.OpaqueRefs...)
@@ -191,6 +204,19 @@ func humanDirectorReviewablePlanSkeletonV0(
 			"evidence-ref-" + safeDirectorIntakeRefPartV0(request.RequestRef),
 		},
 	}
+}
+
+func missingHumanDirectorExecutionRefsV0(
+	request HumanDirectorWorkIntakeRequestV0,
+) []string {
+	var missing []string
+	if request.WorktreeRef == "" {
+		missing = append(missing, "worktree_ref")
+	}
+	if request.BranchRef == "" {
+		missing = append(missing, "branch_ref")
+	}
+	return missing
 }
 
 func humanDirectorPlanStepV0(

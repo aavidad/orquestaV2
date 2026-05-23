@@ -96,7 +96,7 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) enqueuePreparedRun
 		RunRef:        runRef,
 		QueueRef:      executor.Queue.QueueRef,
 		AppRef:        autoprogrammingQueueAppRefV0(result),
-		PriorityScore: executor.Queue.DefaultPriorityScore,
+		PriorityScore: autoprogrammingPrepareRunPriorityScoreV0(input.PriorityScore, executor.Queue.DefaultPriorityScore),
 		UpdatedAt:     stackNowV0(executor.Clock),
 		RequestedBy: firstNonEmptyAutoprogrammingStackV0(
 			input.RequestedBy,
@@ -109,6 +109,13 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) enqueuePreparedRun
 		EvidenceRefs:   []string{"evidence-ref-autoprogramming-prepare-run-enqueued"},
 	})
 	return err
+}
+
+func autoprogrammingPrepareRunPriorityScoreV0(requested int, fallback int) int {
+	if requested > 0 {
+		return requested
+	}
+	return fallback
 }
 
 func autoprogrammingQueueAppRefV0(

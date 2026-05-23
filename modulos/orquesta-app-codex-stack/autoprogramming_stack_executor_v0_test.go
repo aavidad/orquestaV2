@@ -210,6 +210,31 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0EncolaYSupervisorGlobalArranca(
 	}
 }
 
+func TestCodexStackAutoprogrammingPrepareRunAPIV0RespetaPrioridadSolicitada(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-low-priority-001",
+		CorrelationID:          "corr-autoprogramming-low-priority-001",
+		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
+		PriorityScore:          10,
+	})
+	if !prepared.Accepted || prepared.RunRef == "" {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+
+	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   orquestamcp.MCPRunQueuePriorityActionRankV0,
+		QueueRef: DefaultRunQueueRefV0,
+		Limit:    1,
+	})
+	if len(ranking.Ranked) != 1 ||
+		ranking.Ranked[0].RunRef != prepared.RunRef ||
+		ranking.Ranked[0].PriorityScore != 10 {
+		t.Fatalf("ranking=%+v prepared=%+v", ranking, prepared)
+	}
+}
+
 func TestCodexStackServerShutdownV0CierraRunPreparadaSinEntrarAlDirector(t *testing.T) {
 	runtime := newFakeCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)

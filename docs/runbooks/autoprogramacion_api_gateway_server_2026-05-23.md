@@ -18,7 +18,9 @@ Write-set del corte:
 Rutas REST estables expuestas por el gateway:
 
 - `POST /api/v0/autoprogramming/validate-request`
+- `POST /api/v0/autoprogramming/self-improvement`
 - `POST /api/v0/autoprogramming/prepare-run`
+- `POST /api/v0/director/human-work/review-plan`
 - `POST /api/v0/apps/director`
 - `POST /api/v0/apps/{app_ref}/changes`
 - `POST /api/v0/director/stats`

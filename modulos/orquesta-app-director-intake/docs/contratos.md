@@ -73,7 +73,9 @@ Invariantes:
 
 Entrada: `HumanDirectorWorkIntakeRequestV0`.
 
-- `request_ref`, `project_ref`, `worktree_ref` y `branch_ref` son refs opacas;
+- `request_ref` y `project_ref` son refs obligatorias; `worktree_ref` y
+  `branch_ref` son refs opacas de ejecucion y, si faltan, no invalidan todo el
+  plan: generan `request_review`/`study_before` antes de preparar codigo;
 - `request` transporta objetivo humano, contexto, criterios, tests y reglas;
 - `limits` fija limites operativos sin elegir proveedor ni runtime;
 - `hints` permite areas, write-set tentativo, refs opacas, reparaciones seguras

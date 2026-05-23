@@ -17,6 +17,10 @@ Estado vigente:
 - `orquesta.autoprogramming.prepare_run.v0` prepara un run continuable desde
   una request de autoprogramacion por executor inyectado. No arranca agentes por
   si mismo; la composicion debe supervisar despues con `run_ref` explicito.
+- `orquesta.autoprogramming.self_improvement.propose.v0` convierte fallos
+  observados en requests de automejora de segundo plano con prioridad baja.
+- `orquesta.director.human_work.review_plan.v0` convierte ordenes humanas
+  amplias en planes revisables y, si procede, en una request para prepare-run.
 - `orquesta.domain_work.v0` es el tool generico para que una IA cree trabajos de
   dominio y entregue artefactos sin conocer OPES, DB ni runtime.
 - `/api/v0/autoprogramming/prepare-run` es el bridge HTTP local del executor de

@@ -17,6 +17,9 @@ Incluye:
 - politica pura de particionado que normaliza aliases de area, declara
   reparaciones de rutas ambiguas y pospone tareas cuando hay trabajos vivos
   sobre el mismo `write_set`;
+- `BuildAutoprogrammingSelfImprovementRequestV0` para convertir fallos
+  observados por director/agentes en automejoras secundarias de baja prioridad,
+  con evidencia, write-set propio y sin bloquear el trabajo principal;
 - errores publicos tipados para issues de contrato.
 
 Fuera de alcance:
