@@ -39,6 +39,7 @@ type MCPRunSupervisorToolInputV0 struct {
 	MaxOutboxPerCycle    int  `json:"max_outbox_per_cycle,omitempty"`
 	MaxDecisionCycles    int  `json:"max_decision_cycles,omitempty"`
 	MaxExternalWaits     int  `json:"max_external_waits,omitempty"`
+	ResidentMode         bool `json:"resident_mode,omitempty"`
 }
 
 type MCPRunSupervisorSnapshotV0 struct {

@@ -34,6 +34,7 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 			"stack requerido",
 		), nil
 	}
+	input = normalizeAutoprogrammingResidentInputV0(input, *executor.Stack)
 	lifecycle := CodexSupervisorStackLifecycleV0{
 		Stack:             *executor.Stack,
 		RunRef:            strings.TrimSpace(input.RunRef),
@@ -56,14 +57,15 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 			"run_supervisor_execute_error",
 		), err
 	}
-	return orquestamcp.NewMCPRunSupervisorOKResultV0(
+	output := orquestamcp.NewMCPRunSupervisorOKResultV0(
 		input,
 		result.Last.SessionRef,
 		string(result.StopReason),
 		result.Ticks,
 		codexStackRunSupervisorSnapshotMCPV0(result.Last),
 		codexStackRunSupervisorHistoryMCPV0(result.History),
-	), nil
+	)
+	return addAutoprogrammingResidentEvidenceV0(input, output), nil
 }
 
 func codexStackRunSupervisorDrainRequestV0(

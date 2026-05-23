@@ -19,7 +19,7 @@ func MCPAutoprogrammingSuperviseDescriptorV0() MCPAutoprogrammingSuperviseToolDe
 	return MCPAutoprogrammingSuperviseToolDescriptorV0{
 		Name:        MCPAutoprogrammingSuperviseToolNameV0,
 		Version:     MCPAutoprogrammingSuperviseToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,queue_ref?,max_ticks?,limits?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,queue_ref?,resident_mode?,max_ticks?,limits?}",
 		Output:      "ok:{run_ref,stop_reason,ticks,last,history?,evidence_refs?}|error:{errores_publicos}",
 		ResourceURI: MCPAutoprogrammingSuperviseResourceURIV0,
 		Invariantes: []string{
@@ -27,6 +27,7 @@ func MCPAutoprogrammingSuperviseDescriptorV0() MCPAutoprogrammingSuperviseToolDe
 			"supervision puntual via runs.supervisor inyectado",
 			"run_ref acota una run de autoprogramacion si se proporciona",
 			"sin run_ref delega la decision de cola al executor inyectado",
+			"resident_mode permite al executor seguir backlog durable hasta cierre o bloqueo",
 			"no conoce Codex runtime DB filesystem ni proveedor concreto",
 		},
 	}
