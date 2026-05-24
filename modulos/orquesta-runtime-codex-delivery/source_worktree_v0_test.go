@@ -135,7 +135,7 @@ func TestCodexDeliveryObservationSourceV0RechazaAckFileInexistente(t *testing.T)
 	}
 }
 
-func TestCodexDeliveryObservationSourceV0RechazaCambioRealFueraDeWriteSet(t *testing.T) {
+func TestCodexDeliveryObservationSourceV0ConservaCambioRealFueraDeWriteSetComoRailBlando(t *testing.T) {
 	spec := codexDeliverySpecForTestV0()
 	projectDir := t.TempDir()
 	writeCodexDeliveryProjectFileForTestV0(t, projectDir, "README.md", "v1")
@@ -154,6 +154,43 @@ func TestCodexDeliveryObservationSourceV0RechazaCambioRealFueraDeWriteSet(t *tes
 		}},
 	}
 
+	observations, err := (CodexDeliveryObservationSourceV0{
+		Store: store,
+		WorktreeVerifier: CodexReceiptWorktreeVerifierV0{
+			SnapshotStore: snapshotStore,
+		},
+	}).BuildAgentDeliveryObservationsV0(context.Background(), codexDeliveryRequestForTestV0(spec, nil))
+	if err != nil {
+		t.Fatalf("BuildAgentDeliveryObservationsV0: %v", err)
+	}
+	if len(observations) != 1 || observations[0].DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef {
+		t.Fatalf("observations=%+v", observations)
+	}
+	if !stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:file_outside_write_set") {
+		t.Fatalf("rail blando fuera de write-set no conservado: %+v", observations[0].EvidenceRefs)
+	}
+}
+
+func TestCodexDeliveryObservationSourceV0MantieneBorradoRealComoBloqueo(t *testing.T) {
+	spec := codexDeliverySpecForTestV0()
+	projectDir := t.TempDir()
+	writeCodexDeliveryProjectFileForTestV0(t, projectDir, "README.md", "v1")
+	baseline := captureCodexDeliveryWorktreeBaselineForTestV0(t, projectDir)
+	snapshotStore := orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0(baseline)
+	ackPath := writeCodexDeliveryAckForTestV0(t, spec, codexDeliveryAckForTestV0(spec))
+	if err := os.Remove(filepath.Join(projectDir, "README.md")); err != nil {
+		t.Fatalf("remove README.md: %v", err)
+	}
+	store := &staticCodexReceiptStoreV0{
+		Descriptors: []CodexReceiptDescriptorV0{{
+			DescriptorRef:       "receipt-ref-removed-001",
+			Spec:                spec,
+			AckPath:             ackPath,
+			ProjectWorkDir:      projectDir,
+			WorktreeBaselineRef: baseline.SnapshotRef,
+		}},
+	}
+
 	_, err := (CodexDeliveryObservationSourceV0{
 		Store: store,
 		WorktreeVerifier: CodexReceiptWorktreeVerifierV0{
@@ -161,12 +198,12 @@ func TestCodexDeliveryObservationSourceV0RechazaCambioRealFueraDeWriteSet(t *tes
 		},
 	}).BuildAgentDeliveryObservationsV0(context.Background(), codexDeliveryRequestForTestV0(spec, nil))
 	if err == nil {
-		t.Fatalf("esperaba rechazo por cambio fuera de write-set")
+		t.Fatalf("esperaba bloqueo por borrado real")
 	}
 	if strings.Contains(err.Error(), projectDir) || strings.Contains(err.Error(), ackPath) {
 		t.Fatalf("error filtra path operacional: %v", err)
 	}
-	if !strings.Contains(err.Error(), string(orquestaruntimeworktree.WorktreeIssueOutsideWriteSetV0)) {
+	if !strings.Contains(err.Error(), string(orquestaruntimeworktree.WorktreeIssueRemovedPathV0)) {
 		t.Fatalf("error inesperado: %v", err)
 	}
 }

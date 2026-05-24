@@ -1,6 +1,20 @@
 # Decisiones: orquesta-runtime-codex-delivery
 
 ```text
+Fecha: 2026-05-24
+Decision: El verificador de worktree conserva entregas con cambios fuera del
+write-set como rail blando.
+Motivo: `outside_write_set` producia falsos positivos terminales en entregas
+utiles. La revision debe recibir la evidencia y decidir follow-up, no tirar el
+ACK ni relanzar otro padre.
+Impacto: `CodexReceiptWorktreeVerifierV0` sigue leyendo snapshot real cuando se
+inyecta, pero proyecta `gate-issue:file_outside_write_set` como evidencia de
+delivery. Borrados, request invalida, baseline ausente y errores de filesystem
+siguen bloqueando sin filtrar rutas locales.
+Estado: aceptada; matiza la decision del 2026-05-10 para rails blandos.
+```
+
+```text
 Fecha: 2026-05-15
 Decision: `stalled` corto es telemetria, no decision automatica.
 Motivo: en pruebas reales con agentes `xhigh`, algunos procesos pasan varios

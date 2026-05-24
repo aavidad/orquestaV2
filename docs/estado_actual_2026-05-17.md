@@ -4,6 +4,22 @@ Este documento es la foto vigente para orientar trabajo nuevo. Los documentos
 anteriores siguen siendo contexto historico o tecnico, pero no todos describen
 la frontera actual del proyecto.
 
+## Orden de autoridad documental
+
+1. `AGENTS.md` y este documento fijan la foto vigente del repo y la frontera del
+   nucleo.
+2. `docs/guia_nucleo_orquestacion_2026-05-17.md`,
+   `docs/corte_cierre_generico_director_operativo_2026-05-17.md` y
+   `docs/matriz_pruebas_reales_y_smoke_2026-05-17.md` fijan handoff operativo,
+   pruebas y estado de smokes.
+3. `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md` es backlog
+   ejecutable. Debe respetar los cierres ya documentados en la matriz y abrir
+   tareas nuevas solo por huecos o regresiones verificables.
+4. Docs locales de modulo acotan trabajo del modulo, pero si contradicen esta
+   foto deben marcarse como historicos/stale o sincronizarse.
+5. Docs historicos sirven como contexto y no como fuente canonica sin enlace a
+   una fuente vigente.
+
 ## Estado vigente
 
 Orquesta ya no debe leerse como una app cerrada de programacion. La direccion
@@ -28,6 +44,9 @@ Esto implica:
   `orquesta.domain_work.v0`, tools de director/supervisor y resources compactos;
   el bridge HTTP local existe como adaptador fino, y un servidor MCP/MCPO real
   productivo sigue siendo adaptador opt-in, no logica de core;
+- desde el 2026-05-24, `orquesta.project.roadmap.v0` y
+  `orquesta.contracts.shared.v0` incluyen freshness y refs vivas al backlog para
+  no presentar estados `pendiente_*` historicos como backlog actual;
 - programacion, OPES y otros dominios son consumidores/composiciones;
 - los conectores traducen contratos de dominio a trabajo orquestable y devuelven
   artefactos al dominio propietario;
@@ -283,6 +302,9 @@ Lo pendiente no debe confundirse con lo hecho:
   plan state completo como ciclo causal offline generico.
 - `matriz_pruebas_reales_y_smoke_2026-05-17.md`: matriz viva de smokes reales,
   guardas opt-in y pruebas focales.
+- `autoprogramacion_orquesta_pendientes_2026-05-23.md`: backlog ejecutable de
+  automejora; queda subordinado a esta foto y a la matriz para no relanzar casos
+  ya cerrados con evidencia.
 - `corte_opes_como_consumidor_orquesta_2026-05-18.md`: corte vigente de OPES
   como consumidor generico de Orquesta, con `plan_temario -> document_plan`,
   policy editorial OPES y ruta REST/MCP generica aclarada.
@@ -363,8 +385,9 @@ Leer con cuidado:
 ## Siguiente incremento
 
 El cierre causal offline generico ya tiene evidencia para los caminos listados
-abajo. No debe ampliarse a OPES temporal real, ola/cohorte Codex real o recursion
-real sin implementacion y prueba integrada para ese frente:
+abajo. `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` ya cubren Codex real amplio y
+recursivo en la matriz; el frente no cubierto por este bloque sigue siendo OPES
+temporal real de derivados/cierre o cualquier regresion nueva con prueba propia:
 
 - [x] Review por ola/cohorte: `review_deliveries` usa el scope activo y cadena
   causal de task/delivery/review aceptada. No avanza una ola por entregas de

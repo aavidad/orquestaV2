@@ -20,6 +20,14 @@ Orquesta piensa y coordina. Las apps externas aportan dominio.
   convierte reglas de producto, DSN, filesystem, OAuth, proveedor ni runtime en
   dependencia del nucleo.
 
+## Autoridad documental
+
+Para resolver contradicciones, usar este orden: `AGENTS.md` y
+`docs/estado_actual_2026-05-17.md` para foto vigente; esta guia, el corte de
+cierre generico y la matriz para handoff operativo y evidencias; backlog de
+autoprogramacion para trabajo ejecutable; docs locales solo dentro de su modulo;
+docs historicos solo como contexto enlazado a una fuente vigente.
+
 ## Mapa de piezas
 
 | Pieza | Responsabilidad | Estado frente al nucleo |
@@ -164,9 +172,9 @@ Estado real del primer corte:
   `review_deliveries` por ola, `run_required_tests` con
   `RequiredTestEvidenceV0`, runner por puerto, review negativa observada,
   replan causal de tests/cierre, `replan_or_close`, `close`, blockers durables y
-  replay/idempotencia del ciclo probado. Esto no convierte en cerrados los
-  smokes reales de ola/cohorte Codex amplia, recursion Codex real ni OPES
-  temporal real de derivados/cierre.
+  replay/idempotencia del ciclo probado. `CODEX-WAVE-REAL` y
+  `CODEX-RECURSION-REAL` ya aportan evidencia real opt-in para Codex; sigue
+  pendiente OPES temporal real de derivados/cierre.
 
 Checklist antes de extenderlo:
 
@@ -375,7 +383,7 @@ cohorte/ola, el mismo scope gobierna pending, wait e ingesta de observaciones:
   `TestDrainRunV0WaitAgentRefsNoIngiereACKFueraDeScope` y
   `TestDomainWork*WaitAgentRefs`.
 
-Esto cierra el scope de ingesta, no los smokes reales amplios. El ciclo
+Esto cierra el scope de ingesta y separa la evidencia por frente. El ciclo
 funcional de ola esta probado offline/fake-runtime con review, tests durables,
 `replan_or_close`, `close` y plan state; tambien quedo reproducido con Codex
 real de ola/cohorte amplia y recursion real. Queda pendiente OPES temporal real

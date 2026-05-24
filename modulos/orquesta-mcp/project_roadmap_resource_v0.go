@@ -20,6 +20,7 @@ type MCPProjectRoadmapResourceV0 struct {
 	Version       string                        `json:"version"`
 	SummaryKey    string                        `json:"summary_key"`
 	Scope         string                        `json:"scope"`
+	Freshness     MCPResourceFreshnessV0        `json:"freshness"`
 	CanonicalRefs []string                      `json:"canonical_refs"`
 	Roadmap       []MCPProjectRoadmapItemV0     `json:"roadmap"`
 	Decisions     []MCPProjectDecisionCompactV0 `json:"decisiones"`
@@ -38,6 +39,8 @@ type MCPProjectRoadmapItemV0 struct {
 	Dependencies  []string `json:"dependencies,omitempty"`
 	Guardrails    []string `json:"guardrails"`
 	CanonicalRefs []string `json:"canonical_refs"`
+	BacklogRefs   []string `json:"backlog_refs,omitempty"`
+	Verification  []string `json:"verification,omitempty"`
 }
 
 type MCPProjectDecisionCompactV0 struct {
@@ -79,17 +82,20 @@ func NewMCPProjectRoadmapResourceV0() MCPProjectRoadmapResourceV0 {
 		URI:        MCPProjectRoadmapResourceURIV0,
 		Version:    MCPProjectRoadmapResourceVersionV0,
 		SummaryKey: "mcp.project.roadmap.summary.v0",
-		Scope:      "orquesta-core",
+		Scope:      "orquesta-nucleo-reutilizable",
+		Freshness:  mcpResourceFreshnessV0(mcpBacklogT25RefsV0(), mcpMCPResourceVerificationV0()),
 		CanonicalRefs: []string{
-			"../CONTRATOS.md",
-			"orquesta-core/docs/contratos.md",
+			"docs/estado_actual_2026-05-17.md",
+			"docs/guia_nucleo_orquestacion_2026-05-17.md",
+			"modulos/orquesta-core-workflow/docs/contratos.md",
+			"modulos/orquesta-orchestration-core/docs/contratos.md",
 		},
 		Roadmap:   roadmap,
 		Decisions: compactDecisions,
 		Guardrails: []string{
-			"roadmap_estatico_sin_lectura_runtime",
+			"roadmap_estatico_con_freshness_y_refs_vivas",
 			"sin_db_cli_runtime_filesystem_productivo",
-			"detalle_canonico_en_orquesta_core_y_contratos_globales",
+			"detalle_canonico_en_docs_vigentes_y_modulos_propietarios",
 			"mcp_es_adaptador_de_lectura_compacta",
 		},
 	}

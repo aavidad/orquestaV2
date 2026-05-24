@@ -19,6 +19,13 @@ type CodexReceiptWorktreeVerifierPortV0 interface {
 	) error
 }
 
+type CodexReceiptWorktreeEvidenceVerifierPortV0 interface {
+	VerifyCodexReceiptWorktreeEvidenceRefsV0(
+		context.Context,
+		CodexReceiptWorktreeVerificationRequestV0,
+	) ([]string, error)
+}
+
 type CodexReceiptWorktreeVerificationRequestV0 struct {
 	DescriptorRef       string
 	RunID               string
@@ -45,50 +52,59 @@ type CodexReceiptWorktreeVerifierV0 struct {
 func (source CodexDeliveryObservationSourceV0) verifyDescriptorWorktreeV0(
 	ctx context.Context,
 	descriptor CodexReceiptDescriptorV0,
-) error {
+) ([]string, error) {
 	if source.WorktreeVerifier == nil {
-		return nil
+		return nil, nil
 	}
 	ack, issues := orquestaruntimecodex.ReadAndValidateCodexAgentAckFileV0(
 		strings.TrimSpace(descriptor.AckPath),
 		descriptor.Spec,
 	)
 	if len(issues) > 0 {
-		return fmt.Errorf("codex_worktree_verification: ack_invalid")
+		return nil, fmt.Errorf("codex_worktree_verification: ack_invalid")
 	}
-	return source.WorktreeVerifier.VerifyCodexReceiptWorktreeV0(
-		ctx,
-		CodexReceiptWorktreeVerificationRequestV0{
-			DescriptorRef:       descriptor.DescriptorRef,
-			RunID:               descriptor.RunID,
-			AgentRef:            descriptor.AgentRef,
-			ProjectWorkDir:      descriptor.ProjectWorkDir,
-			WorktreeBaselineRef: descriptor.WorktreeBaselineRef,
-			Spec:                descriptor.Spec,
-			AckFiles:            append([]string(nil), ack.Files...),
-		},
-	)
+	request := CodexReceiptWorktreeVerificationRequestV0{
+		DescriptorRef:       descriptor.DescriptorRef,
+		RunID:               descriptor.RunID,
+		AgentRef:            descriptor.AgentRef,
+		ProjectWorkDir:      descriptor.ProjectWorkDir,
+		WorktreeBaselineRef: descriptor.WorktreeBaselineRef,
+		Spec:                descriptor.Spec,
+		AckFiles:            append([]string(nil), ack.Files...),
+	}
+	if verifier, ok := source.WorktreeVerifier.(CodexReceiptWorktreeEvidenceVerifierPortV0); ok {
+		return verifier.VerifyCodexReceiptWorktreeEvidenceRefsV0(ctx, request)
+	}
+	return nil, source.WorktreeVerifier.VerifyCodexReceiptWorktreeV0(ctx, request)
 }
 
 func (verifier CodexReceiptWorktreeVerifierV0) VerifyCodexReceiptWorktreeV0(
 	ctx context.Context,
 	request CodexReceiptWorktreeVerificationRequestV0,
 ) error {
+	_, err := verifier.VerifyCodexReceiptWorktreeEvidenceRefsV0(ctx, request)
+	return err
+}
+
+func (verifier CodexReceiptWorktreeVerifierV0) VerifyCodexReceiptWorktreeEvidenceRefsV0(
+	ctx context.Context,
+	request CodexReceiptWorktreeVerificationRequestV0,
+) ([]string, error) {
 	if verifier.modeV0() == CodexReceiptWorktreeAckFilesV0 {
-		return verifyCodexReceiptAckFilesV0(request)
+		return nil, verifyCodexReceiptAckFilesV0(request)
 	}
 	if verifier.SnapshotStore == nil {
-		return fmt.Errorf("codex_worktree_verification: snapshot_store_required")
+		return nil, fmt.Errorf("codex_worktree_verification: snapshot_store_required")
 	}
 	if strings.TrimSpace(request.ProjectWorkDir) == "" ||
 		strings.TrimSpace(request.WorktreeBaselineRef) == "" {
-		return fmt.Errorf("codex_worktree_verification: baseline_required")
+		return nil, fmt.Errorf("codex_worktree_verification: baseline_required")
 	}
 	baseline, err := verifier.SnapshotStore.LoadWorktreeSnapshotV0(ctx, request.WorktreeBaselineRef)
 	if err != nil {
-		return fmt.Errorf("codex_worktree_verification: baseline_not_found")
+		return nil, fmt.Errorf("codex_worktree_verification: baseline_not_found")
 	}
-	_, issues := orquestaruntimeworktree.VerifyWorktreeWriteSetV0(
+	result, issues := orquestaruntimeworktree.VerifyWorktreeWriteSetV0(
 		ctx,
 		orquestaruntimeworktree.WorktreeVerifyRequestV0{
 			Baseline:       baseline,
@@ -98,9 +114,15 @@ func (verifier CodexReceiptWorktreeVerifierV0) VerifyCodexReceiptWorktreeV0(
 		},
 	)
 	if len(issues) > 0 {
-		return fmt.Errorf("codex_worktree_verification: %s", issues[0].Code)
+		if codexReceiptWorktreeIssuesOnlyOutsideWriteSetV0(issues) {
+			return compactCodexDeliveryRefsV0(append(
+				result.EvidenceRefs,
+				"gate-issue:file_outside_write_set",
+			)), nil
+		}
+		return nil, fmt.Errorf("codex_worktree_verification: %s", issues[0].Code)
 	}
-	return nil
+	return compactCodexDeliveryRefsV0(result.EvidenceRefs), nil
 }
 
 func (verifier CodexReceiptWorktreeVerifierV0) modeV0() CodexReceiptWorktreeVerificationModeV0 {
@@ -159,4 +181,18 @@ func codexReceiptPathAllowedByWriteSetV0(path string, writeSet []string) bool {
 		}
 	}
 	return false
+}
+
+func codexReceiptWorktreeIssuesOnlyOutsideWriteSetV0(
+	issues []orquestaruntimeworktree.WorktreeIssueV0,
+) bool {
+	if len(issues) == 0 {
+		return false
+	}
+	for _, issue := range issues {
+		if issue.Code != orquestaruntimeworktree.WorktreeIssueOutsideWriteSetV0 {
+			return false
+		}
+	}
+	return true
 }

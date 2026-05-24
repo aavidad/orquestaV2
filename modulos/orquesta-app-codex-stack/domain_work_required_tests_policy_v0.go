@@ -39,7 +39,7 @@ func (source compositeDirectorDecisionSourceV0) normalizeDomainWorkRequiredTests
 		}
 		task := &out[i].CreateMicrotask.Task
 		plan, ok := plans[strings.TrimSpace(task.TaskID)]
-		if !ok || !codexStackDirectorTaskIsDomainWorkV0(*task) {
+		if !ok || len(plan.RequiredTests) == 0 || !codexStackDirectorTaskIsDomainWorkV0(*task) {
 			continue
 		}
 		task.RequiredTests = domainWorkRequiredTestRefsFromPlanV0(plan)

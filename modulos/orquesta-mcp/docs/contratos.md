@@ -594,7 +594,8 @@ Campos:
   resource:
     uri: orquesta://contracts/shared/v0
     version: v0
-    canonical_source: ../CONTRATOS.md
+    freshness: estado, fecha, refs de autoridad, refs de backlog y verificacion
+    canonical_source: docs/estado_actual_2026-05-17.md
     contracts: lista compacta de contratos compartidos v0
   contract:
     contract: nombre publico con version
@@ -608,12 +609,15 @@ Campos:
     errores_publicos: codigos publicos del contrato
     guardrails: claves compactas de invariantes
     progress_key: message key de estado/siguiente paso
+    backlog_refs: secciones vivas de backlog si el estado procede de automejora
+    verification: prueba focal o runbook que valida la proyeccion
 Invariantes:
   - Implementacion pura sin servidor MCP real, transporte, DB, CLI, runtime ni filesystem productivo.
-  - El detalle extenso queda en el modulo propietario y en `modulos/CONTRATOS.md`.
+  - El detalle extenso queda en el modulo propietario y en documentos vigentes de estado/nucleo.
   - No incluye secretos, transcripts, dumps de fixtures, endpoints REST ni detalles de sink/tablas/driver.
   - Usa message keys para resumen y progreso en vez de texto largo localizado.
-  - Cubre `SolicitarNuevaApp`, `PersistenceRepository`, `RuntimeLaunchRequest`, `OrquestaEvent`, `GovernanceCatalog`, `DeploymentPlan` y `GenerarI18nDocsIniciales` v0.
+  - No duplica estados `pendiente_*`: enlaza backlog vivo y freshness cuando un frente sigue abierto.
+  - Cubre `SolicitarNuevaApp`, `PersistenceRepository`, `RuntimeLaunchRequest`, `OrquestaEvent`, `GovernanceCatalog`, `OperationalStatusQuery`, `DeploymentPlan` y `GenerarI18nDocsIniciales` v0.
 Errores:
   - contrato_no_encontrado, representado por lookup puro sin resultado.
 Pruebas de contrato:
@@ -639,8 +643,9 @@ Campos:
   resource:
     uri: orquesta://project/roadmap/v0
     version: v0
-    scope: orquesta-core
-    canonical_refs: referencias compactas a `../CONTRATOS.md` y `orquesta-core/docs/contratos.md`
+    scope: orquesta-nucleo-reutilizable
+    freshness: estado, fecha, refs de autoridad, refs de backlog y verificacion
+    canonical_refs: referencias compactas a estado vigente, guia del nucleo y docs locales de modulos propietarios
     roadmap: lista compacta de hitos de nucleo
     decisiones: lista compacta de decisiones de nucleo
     guardrails: claves compactas de restricciones de adaptador
@@ -656,6 +661,8 @@ Campos:
     dependencies: dependencias contractuales, si aplica
     guardrails: restricciones compactas
     canonical_refs: refs documentales compactas, sin dumps
+    backlog_refs: secciones vivas de backlog si el hito sigue abierto o fue sincronizado por automejora
+    verification: prueba focal o runbook que valida el hito
   decision:
     id: identificador estable local
     estado: estado compacto
@@ -668,11 +675,12 @@ Campos:
     canonical_refs: refs documentales compactas, sin dumps
 Invariantes:
   - Implementacion pura sin servidor MCP real, transporte, DB, CLI, runtime ni filesystem productivo.
-  - No lee `../CONTRATOS.md` ni docs de core en runtime; el resource es una proyeccion estatica versionada.
+  - No lee docs de autoridad ni backlog en runtime; el resource es una proyeccion estatica versionada con freshness.
   - Permite a una IA leer roadmap/decisiones de nucleo sin cargar docs globales completos.
-  - El detalle canonico permanece en `orquesta-core/docs/contratos.md` y `../CONTRATOS.md`.
+  - El detalle canonico permanece en docs vigentes y modulos propietarios.
   - No incluye secretos, transcripts, dumps de fixtures, endpoints REST, sinks operativos, DSN ni tablas.
-  - Cubre registro desde AppSpec, FunctionContract, ProyectoPlanBorrador, persistence/events, runtime/capacity, governance/deploy.
+  - No duplica estados `pendiente_*`: marca compatibilidad historica o enlaza backlog vivo con owner y verificacion.
+  - Cubre compatibilidad AppSpec, WorkflowTask/WorkProfile, persistence/events, runtime/capacity y DomainWork para consumidores.
 Errores:
   - roadmap_item_no_encontrado, representado por lookup puro sin resultado.
   - decision_no_encontrada, representado por lookup puro sin resultado.

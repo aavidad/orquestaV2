@@ -15,6 +15,8 @@ type mcpSharedContractSourceV0 struct {
 	PublicErrors  []string
 	Guardrails    []string
 	ProgressKey   string
+	BacklogRefs   []string
+	Verification  []string
 }
 
 func toMCPSharedContractCompactV0(source mcpSharedContractSourceV0) MCPSharedContractCompactV0 {
@@ -32,6 +34,8 @@ func toMCPSharedContractCompactV0(source mcpSharedContractSourceV0) MCPSharedCon
 		PublicErrors:  compactStringsMCPV0(source.PublicErrors),
 		Guardrails:    compactStringsMCPV0(source.Guardrails),
 		ProgressKey:   strings.TrimSpace(source.ProgressKey),
+		BacklogRefs:   compactStringsMCPV0(source.BacklogRefs),
+		Verification:  compactStringsMCPV0(source.Verification),
 	}
 }
 

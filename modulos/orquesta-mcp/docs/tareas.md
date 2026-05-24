@@ -16,6 +16,17 @@ Estado:
 ```
 
 ```text
+ID: MCP-036
+Objetivo: Sincronizar resources de roadmap/contratos compartidos con foto vigente y backlog vivo.
+Write-set: project_roadmap_*_v0.go, shared_contracts_*_v0.go, resource_freshness_v0.go, docs locales.
+Simbolo foco: orquesta.project.roadmap.v0; orquesta.contracts.shared.v0
+Contrato: mcp.resource.orquesta.project.roadmap.v0.puro; mcp.resource.orquesta.contracts.shared.v0.puro
+Validacion: go test -count=1 ./modulos/orquesta-mcp.
+Bloqueos: No lee docs/backlog en runtime; freshness es una proyeccion estatica versionada con refs vivas.
+Estado: completada
+```
+
+```text
 ID: MCP-034
 Objetivo: Exponer herramienta MCP fina para trabajo de dominio externo.
 Write-set: domain_work_*_v0.go, domain_work_*_v0_test.go, docs locales.

@@ -90,6 +90,7 @@ func BuildExternalWorkRunRequestWithContextV0(
 			WorkKind:      job.Type,
 			WorkRefs:      workRefs,
 			InputFields:   fields,
+			RequiredTests: opesRequiredTestsForJobV0(job.Type, job.ID, workRefs),
 		},
 	}
 	return orquestaexternalworkrun.StartExternalWorkRunRequestV0{

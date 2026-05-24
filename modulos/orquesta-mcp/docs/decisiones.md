@@ -359,6 +359,16 @@ Estado: aceptada localmente
 ```
 
 ```text
+Fecha: 2026-05-24
+Decision: MCP-036 publica freshness, refs de autoridad y refs de backlog T25 en `orquesta.project.roadmap.v0` y `orquesta.contracts.shared.v0`.
+Motivo: MCP es superficie preferente para IA; estados `pendiente_*` de una foto anterior podian relanzar trabajo cerrado u ocultar backlog vivo.
+Alternativas: Leer docs/backlog en runtime; dejar los descriptores estaticos sin fuente; versionar un resource nuevo.
+Impacto: El resource sigue siendo puro y estatico, pero cada hito/contrato declara verificacion y refs vivas. Lo historico se marca como compatibilidad y lo abierto enlaza backlog/doc local.
+Contratos afectados: mcp.resource.orquesta.project.roadmap.v0.puro; mcp.resource.orquesta.contracts.shared.v0.puro.
+Estado: aceptada localmente
+```
+
+```text
 Fecha: 2026-05-04
 Decision: MCP-011 expone `BootstrapProyectoDesdeAppSpec v0` como resource contractual compacto y tool puro local.
 Motivo: La IA necesita coordinar el bootstrap desde AppSpec sin duplicar el flujo ni activar persistencia/runtime; el propietario del caso de uso es `orquesta-director`.

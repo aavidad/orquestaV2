@@ -59,9 +59,10 @@ Tras los cortes del 2026-05-17, el estado real es:
   rama negativa review/replan, el replan por tests fallidos, `replan_or_close`,
   `close`, replay/idempotencia del ciclo probado y estado vivo posterior ya
   tienen evidencia offline/fake-runtime. `CODEX-REQTEST-REAL-E2E` cierra un caso
-  Codex real acotado con un agente, y `EXT-NO-OPES` cierra una app externa
-  temporal con `codex-fake`; no cubren ola/cohorte Codex amplia, recursion Codex
-  real ni OPES temporal real de derivados/cierre, que siguen pendientes.
+  Codex real acotado con un agente, `EXT-NO-OPES` cierra una app externa
+  temporal con `codex-fake`, `CODEX-WAVE-REAL` cierra ola/cohorte Codex amplia y
+  `CODEX-RECURSION-REAL` cierra recursion Codex real; sigue pendiente OPES
+  temporal real de derivados/cierre.
 - El nuevo handoff de cierre es
   `docs/corte_cierre_generico_director_operativo_2026-05-17.md`: P1
   `WaitAgentRefs` no se reabre salvo regresion; el foco es cierre causal
@@ -80,18 +81,33 @@ Tras los cortes del 2026-05-17, el estado real es:
   solo el plan y la creacion de derivados pendientes; sigue pendiente smoke real
   completo de derivados/cierre OPES hasta `assemble_topic`, sin tocar OPES
   productivo ni drenar colas amplias.
-- La recursion Codex productiva completa sigue pendiente. Offline/fake-runtime
-  ya existe una prueba de arbol 1 -> 2 -> 4 con parent/child refs, presupuesto
-  global, profundidad/fanout, waits acotados y bloqueo de cierre hasta cerrar
-  hijos/nietos; falta repetirlo con Codex real, entregas vivas, review causal y
-  cierre del arbol. Para ola/cohorte amplia ya hay harness fake y test opt-in
-  real (`CODEX-WAVE-REAL`), pero la ejecucion real con proveedor sigue pendiente
-  hasta que quede evidencia operativa.
+- La recursion Codex real ya tiene evidencia opt-in: arbol 1 -> 2 -> 4 con
+  parent/child refs, presupuesto global, profundidad/fanout, waits acotados,
+  entregas vivas, review causal y cierre del arbol por
+  `CODEX-RECURSION-REAL`. `CODEX-WAVE-REAL` cubre tambien ola/cohorte amplia con
+  proveedor real. Esto no convierte a Codex en nucleo ni cierra nuevos blockers
+  futuros; esos casos deben documentarse con evidencia propia.
 - La metadata completa de `WorkflowTaskV0` vive en `WorkflowTaskStore`. Un
   replay solo desde eventos compactos reconstruye refs de tareas, no
   `wave_ref`, `cohort_ref`, parent/child refs, criterios completos ni el estado
   vivo de espera; cualquier recuperacion debe restaurar o rematerializar ese
   store y el `WorkflowTaskWaitStateV0`.
+
+Orden de autoridad documental:
+
+1. `AGENTS.md` y `docs/estado_actual_2026-05-17.md` fijan la foto vigente y la
+   frontera conceptual.
+2. Los cortes y la matriz vigentes (`docs/guia_nucleo_orquestacion_2026-05-17.md`,
+   `docs/corte_cierre_generico_director_operativo_2026-05-17.md` y
+   `docs/matriz_pruebas_reales_y_smoke_2026-05-17.md`) fijan estado operativo,
+   evidencias y smokes.
+3. `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md` es backlog
+   ejecutable. No debe relanzar un frente que la foto vigente y la matriz ya
+   declaran cerrado salvo regresion demostrada.
+4. `AGENTS.md` y docs locales de modulo gobiernan solo su alcance y quedan
+   subordinados a las fuentes anteriores si estan stale.
+5. Documentos historicos o stale sirven como contexto; antes de usarlos como
+   evidencia o plan, enlazalos a una fuente vigente.
 
 Documentos de entrada obligatorios para cambios transversales:
 
@@ -196,9 +212,9 @@ Documentos de entrada obligatorios para cambios transversales:
    `RequiredTestEvidenceV0` causal desde el state y entrega esas refs al cierre.
    Si hay `RequiredTestRunner` inyectado, genera evidencia por puerto sin que el
    nucleo conozca shell/runtime concreto. El siguiente foco esta en
-   `docs/corte_cierre_generico_director_operativo_2026-05-17.md`: smokes reales
-   de Codex con ola/cohorte amplia, recursion real y OPES temporal real de
-   derivados/cierre, sin reabrir WaitAgentRefs ni meter producto en el nucleo.
+   `docs/corte_cierre_generico_director_operativo_2026-05-17.md`: OPES temporal
+   real de derivados/cierre, sin reabrir `WaitAgentRefs`, `CODEX-WAVE-REAL` ni
+   `CODEX-RECURSION-REAL` salvo regresion demostrada.
 
 ## Verificacion minima
 

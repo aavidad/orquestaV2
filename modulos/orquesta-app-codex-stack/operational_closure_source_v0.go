@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -13,6 +14,8 @@ type codexStackOperationalClosureSourceV0 struct {
 	TaskStore                 orquestacionnucleoapp.WorkflowTaskStorePortV0
 	EventReader               orquestacionnucleoapp.RunEventReaderPortV0
 	RequiredTestEvidenceStore orquestacionnucleoapp.RequiredTestEvidenceReaderPortV0
+	AppChangeStore            orquestaappchange.AppChangeRecordSourcePortV0
+	DomainSubmissionLedger    DomainWorkArtifactSubmissionRecordReaderPortV0
 }
 
 var _ orquestaappdirectorservice.AppDirectorOperationalClosureSourcePortV0 = codexStackOperationalClosureSourceV0{}
@@ -28,6 +31,8 @@ func operationalClosureSourceV0(
 		TaskStore:                 config.Stores.TaskStore,
 		EventReader:               reader,
 		RequiredTestEvidenceStore: requiredTestEvidenceStoreV0(config),
+		AppChangeStore:            config.Stores.AppChangeStore,
+		DomainSubmissionLedger:    domainWorkSubmissionRecordReaderV0(config.DomainDelivery.Ledger),
 	}
 }
 
@@ -55,7 +60,11 @@ func (source codexStackOperationalClosureSourceV0) BuildOperationalDirectorClosu
 		return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{}, false, err
 	}
 	trace := codexStackOperationalClosureTraceFromEventsV0(events)
-	for _, task := range codexStackOperationalClosureCandidateTasksV0(request, tasks) {
+	candidates, err := source.codexStackOperationalClosureCandidateTasksV0(ctx, request, tasks)
+	if err != nil {
+		return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{}, false, err
+	}
+	for _, task := range candidates {
 		closureRequest, ok, err := source.codexStackOperationalClosureRequestForTaskV0(ctx, request, trace, task)
 		if err != nil {
 			return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{}, false, err
@@ -74,18 +83,23 @@ type codexStackOperationalClosureTraceV0 struct {
 	AcceptedReviews map[string]orquestacoreworkflow.ReviewAcceptedPayloadV0
 }
 
-func codexStackOperationalClosureCandidateTasksV0(
+func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureCandidateTasksV0(
+	ctx context.Context,
 	request orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0,
 	tasks []orquestacoreworkflow.WorkflowTaskV0,
-) []orquestacoreworkflow.WorkflowTaskV0 {
+) ([]orquestacoreworkflow.WorkflowTaskV0, error) {
 	scopeAgents := codexStackOperationalClosureSetV0(request.WaitAgentRefs)
 	if request.WaitScopeApplied && len(scopeAgents) == 0 {
-		return nil
+		return nil, nil
 	}
 	open := make([]orquestacoreworkflow.WorkflowTaskV0, 0, len(tasks))
 	closed := make([]orquestacoreworkflow.WorkflowTaskV0, 0, len(tasks))
 	for _, task := range tasks {
-		if !codexStackOperationalClosureTaskIsOperationalDirectorV0(task) {
+		closable, err := source.codexStackOperationalClosureTaskIsClosableV0(ctx, request, task)
+		if err != nil {
+			return nil, err
+		}
+		if !closable {
 			continue
 		}
 		if !codexStackOperationalClosureChildrenClosedV0(request, task, tasks) {
@@ -101,9 +115,20 @@ func codexStackOperationalClosureCandidateTasksV0(
 		open = append(open, task)
 	}
 	if len(open) > 0 {
-		return open
+		return open, nil
 	}
-	return closed
+	return closed, nil
+}
+
+func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureTaskIsClosableV0(
+	ctx context.Context,
+	request orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+) (bool, error) {
+	if codexStackOperationalClosureTaskIsOperationalDirectorV0(task) {
+		return true, nil
+	}
+	return source.codexStackOperationalClosureTaskIsOPESDomainWorkV0(ctx, request.Run.RunID, task)
 }
 
 func codexStackOperationalClosureTaskIsOperationalDirectorV0(
@@ -158,7 +183,20 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureR
 				continue
 			}
 		}
+		domainRefs, requiredDomainReceipt, ok, err := source.codexStackOperationalClosureDomainWorkEvidenceRefsForDeliveryV0(
+			ctx,
+			request,
+			task,
+			delivery.DeliveryRef,
+		)
+		if err != nil {
+			return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{}, false, err
+		}
+		if requiredDomainReceipt && !ok {
+			continue
+		}
 		evidenceRefs := codexStackOperationalClosureEvidenceRefsV0(request, delivery, reviewRequest, accepted, result)
+		evidenceRefs = codexStackOperationalClosureCompactRefsV0(append(evidenceRefs, domainRefs...))
 		return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{
 			RunRef:                   request.Run.RunID,
 			TaskID:                   task.TaskID,

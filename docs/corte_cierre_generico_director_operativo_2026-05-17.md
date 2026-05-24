@@ -12,6 +12,12 @@ El corte ya tiene un tramo offline integrado en core + `app-director-service` +
 Si una pieza de codigo no esta integrada o no tiene prueba clara, se documenta
 como pendiente verificable, no como hecho.
 
+Autoridad documental: este corte gobierna el cierre causal del Director
+Operativo; la matriz gobierna el estado de smokes. Si el backlog o un doc local
+contradice `CODEX-WAVE-REAL` o `CODEX-RECURSION-REAL`, prevalece la evidencia de
+la matriz salvo regresion demostrada. El frente real abierto sigue siendo OPES
+temporal real de derivados/cierre.
+
 ## Punto de partida cerrado
 
 P0 del Director Operativo queda cerrado para el primer tramo durable:

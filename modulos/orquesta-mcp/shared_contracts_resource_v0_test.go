@@ -52,6 +52,10 @@ func TestNewMCPSharedContractsResourceV0CompactoYSinDumps(t *testing.T) {
 	if resource.URI != MCPSharedContractsResourceURIV0 || resource.Version != "v0" {
 		t.Fatalf("resource identidad: %+v", resource)
 	}
+	if resource.Freshness.Status != MCPResourceFreshnessStatusV0 ||
+		!containsSharedContractsTestStringV0(resource.Freshness.BacklogRefs, "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md#T25-mcp-roadmap-backlog-state-sync") {
+		t.Fatalf("freshness incompleta: %+v", resource.Freshness)
+	}
 	if len(resource.Contracts) != 8 {
 		t.Fatalf("contracts=%d", len(resource.Contracts))
 	}
@@ -67,6 +71,12 @@ func TestNewMCPSharedContractsResourceV0CompactoYSinDumps(t *testing.T) {
 		}
 		if strings.Contains(contract.SummaryKey, " ") || strings.Contains(contract.ProgressKey, " ") {
 			t.Fatalf("keys deben ser message keys, no texto visible: %+v", contract)
+		}
+		if strings.Contains(contract.ProgressKey, "pendiente_") {
+			t.Fatalf("contrato no debe duplicar pendiente_* hardcodeado: %+v", contract)
+		}
+		if len(contract.BacklogRefs) == 0 || len(contract.Verification) == 0 {
+			t.Fatalf("contrato sin freshness por item: %+v", contract)
 		}
 	}
 
@@ -147,6 +157,8 @@ func TestToMCPSharedContractCompactV0NormalizaListas(t *testing.T) {
 		Guardrails:   []string{" guard ", "guard", ""},
 		Input:        " input ",
 		Output:       " output ",
+		BacklogRefs:  []string{" backlog-ref ", "backlog-ref"},
+		Verification: []string{" go test ", "go test"},
 	})
 
 	if got.Contract != "DemoContract v0" || got.ResourceURI != "orquesta://contracts/demo-contract/v0" {
@@ -164,4 +176,19 @@ func TestToMCPSharedContractCompactV0NormalizaListas(t *testing.T) {
 	if len(got.Guardrails) != 1 || got.Guardrails[0] != "guard" {
 		t.Fatalf("guardrails: %+v", got.Guardrails)
 	}
+	if len(got.BacklogRefs) != 1 || got.BacklogRefs[0] != "backlog-ref" {
+		t.Fatalf("backlog refs: %+v", got.BacklogRefs)
+	}
+	if len(got.Verification) != 1 || got.Verification[0] != "go test" {
+		t.Fatalf("verification: %+v", got.Verification)
+	}
+}
+
+func containsSharedContractsTestStringV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

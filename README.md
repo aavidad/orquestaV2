@@ -15,6 +15,15 @@ con Codex y OPES son composiciones consumidoras, no la definicion del nucleo.
 - `docs/matriz_pruebas_reales_y_smoke_2026-05-17.md`: matriz de pruebas reales,
   opt-in y offline.
 
+## Autoridad documental
+
+La foto vigente vive en `AGENTS.md` y `docs/estado_actual_2026-05-17.md`. La
+matriz de smokes decide que casos estan cerrados con evidencia; el backlog de
+autoprogramacion enumera trabajo ejecutable y no debe relanzar
+`CODEX-WAVE-REAL` ni `CODEX-RECURSION-REAL` salvo regresion demostrada. Los
+documentos historicos deben citar una fuente vigente antes de usarse para
+planificar.
+
 ## Validacion rapida
 
 ```bash

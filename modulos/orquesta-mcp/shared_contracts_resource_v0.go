@@ -21,6 +21,7 @@ type MCPSharedContractsResourceV0 struct {
 	URI             string                       `json:"uri"`
 	Version         string                       `json:"version"`
 	SummaryKey      string                       `json:"summary_key"`
+	Freshness       MCPResourceFreshnessV0       `json:"freshness"`
 	CanonicalSource string                       `json:"canonical_source"`
 	Contracts       []MCPSharedContractCompactV0 `json:"contracts"`
 	Guardrails      []string                     `json:"guardrails"`
@@ -39,6 +40,8 @@ type MCPSharedContractCompactV0 struct {
 	PublicErrors  []string `json:"errores_publicos,omitempty"`
 	Guardrails    []string `json:"guardrails"`
 	ProgressKey   string   `json:"progress_key"`
+	BacklogRefs   []string `json:"backlog_refs,omitempty"`
+	Verification  []string `json:"verification,omitempty"`
 }
 
 func MCPSharedContractsDescriptorV0() MCPContractResourceDescriptorV0 {
@@ -78,7 +81,8 @@ func NewMCPSharedContractsResourceV0() MCPSharedContractsResourceV0 {
 		URI:             MCPSharedContractsResourceURIV0,
 		Version:         MCPSharedContractsResourceVersionV0,
 		SummaryKey:      "mcp.resources.contracts.shared.summary.v0",
-		CanonicalSource: "../CONTRATOS.md",
+		Freshness:       mcpResourceFreshnessV0(mcpBacklogT25RefsV0(), mcpMCPResourceVerificationV0()),
+		CanonicalSource: "docs/estado_actual_2026-05-17.md",
 		Contracts:       contracts,
 		Guardrails: []string{
 			"mcp.guardrail.adaptador_fino",

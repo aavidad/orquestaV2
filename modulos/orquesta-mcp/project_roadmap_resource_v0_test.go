@@ -32,8 +32,14 @@ func TestMCPProjectRoadmapDescriptorV0Compacto(t *testing.T) {
 
 func TestNewMCPProjectRoadmapResourceV0CompactoYUtilParaNucleo(t *testing.T) {
 	resource := NewMCPProjectRoadmapResourceV0()
-	if resource.URI != MCPProjectRoadmapResourceURIV0 || resource.Version != "v0" || resource.Scope != "orquesta-core" {
+	if resource.URI != MCPProjectRoadmapResourceURIV0 ||
+		resource.Version != "v0" ||
+		resource.Scope != "orquesta-nucleo-reutilizable" {
 		t.Fatalf("resource identidad: %+v", resource)
+	}
+	if resource.Freshness.Status != MCPResourceFreshnessStatusV0 ||
+		!containsProjectRoadmapTestStringV0(resource.Freshness.BacklogRefs, "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md#T25-mcp-roadmap-backlog-state-sync") {
+		t.Fatalf("freshness incompleta: %+v", resource.Freshness)
 	}
 	if len(resource.Roadmap) != 5 {
 		t.Fatalf("roadmap=%d", len(resource.Roadmap))
@@ -55,17 +61,27 @@ func TestNewMCPProjectRoadmapResourceV0CompactoYUtilParaNucleo(t *testing.T) {
 		if len(item.Contracts) == 0 || len(item.Guardrails) == 0 || len(item.CanonicalRefs) == 0 {
 			t.Fatalf("roadmap sin contratos/guardrails/refs: %+v", item)
 		}
+		if strings.Contains(item.Status, "pendiente_") || strings.Contains(item.ProgressKey, "pendiente_") {
+			t.Fatalf("roadmap no debe duplicar pendiente_* sin fuente viva: %+v", item)
+		}
+		if len(item.BacklogRefs) == 0 || len(item.Verification) == 0 {
+			t.Fatalf("roadmap sin freshness por item: %+v", item)
+		}
 	}
 
-	if byID["CORE-ROADMAP-001"].Status != "compartido_v0" {
+	if byID["CORE-ROADMAP-001"].Status != "historico_compatibilidad_appspec_v0" {
 		t.Fatalf("registro proyecto: %+v", byID["CORE-ROADMAP-001"])
 	}
-	if byID["CORE-ROADMAP-002"].Status != "pendiente_schema_harness" ||
+	if byID["CORE-ROADMAP-002"].Status != "vigente_workflow_task_store" ||
 		!containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-002"].Contracts, "FunctionContract v0") {
 		t.Fatalf("microtareas/function contract: %+v", byID["CORE-ROADMAP-002"])
 	}
 	if !containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-004"].Contracts, "RuntimeLaunchRequest v0") {
 		t.Fatalf("runtime/capacidad: %+v", byID["CORE-ROADMAP-004"])
+	}
+	if byID["CORE-ROADMAP-005"].Status != "abierto_opes_derivados_cierre" ||
+		!containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-005"].BacklogRefs, "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md#T18-opes-operational-closure-source") {
+		t.Fatalf("domain work consumidores: %+v", byID["CORE-ROADMAP-005"])
 	}
 
 	decisionsByID := map[string]MCPProjectDecisionCompactV0{}
@@ -117,7 +133,7 @@ func TestMCPProjectRoadmapLookupV0NormalizaEntradas(t *testing.T) {
 	itemCases := map[string]string{
 		" RuntimeLaunchRequest v0 ": "CORE-ROADMAP-004",
 		"runtime_launch_request":    "CORE-ROADMAP-004",
-		"gobernanza_y_deploy":       "CORE-ROADMAP-005",
+		"domain_work_consumidores":  "CORE-ROADMAP-005",
 		"CORE_ROADMAP_002":          "CORE-ROADMAP-002",
 	}
 
@@ -174,6 +190,8 @@ func TestMCPProjectRoadmapMappersV0NormalizanListas(t *testing.T) {
 			" ../CONTRATOS.md ",
 			"../CONTRATOS.md",
 		},
+		BacklogRefs:  []string{" backlog-ref ", "backlog-ref"},
+		Verification: []string{" go test ", "go test"},
 	})
 
 	if item.ID != "CORE-ROADMAP-X" || item.Status != "pendiente" || item.Area != "area" || item.Owner != "owner" {
@@ -190,6 +208,12 @@ func TestMCPProjectRoadmapMappersV0NormalizanListas(t *testing.T) {
 	}
 	if len(item.CanonicalRefs) != 1 || item.CanonicalRefs[0] != "../CONTRATOS.md" {
 		t.Fatalf("canonical refs dedupe: %+v", item.CanonicalRefs)
+	}
+	if len(item.BacklogRefs) != 1 || item.BacklogRefs[0] != "backlog-ref" {
+		t.Fatalf("backlog refs dedupe: %+v", item.BacklogRefs)
+	}
+	if len(item.Verification) != 1 || item.Verification[0] != "go test" {
+		t.Fatalf("verification dedupe: %+v", item.Verification)
 	}
 
 	decision := toMCPProjectDecisionCompactV0(mcpProjectDecisionSourceV0{

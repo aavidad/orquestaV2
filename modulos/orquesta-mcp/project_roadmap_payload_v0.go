@@ -14,6 +14,8 @@ type mcpProjectRoadmapItemSourceV0 struct {
 	Dependencies  []string
 	Guardrails    []string
 	CanonicalRefs []string
+	BacklogRefs   []string
+	Verification  []string
 }
 
 type mcpProjectDecisionSourceV0 struct {
@@ -41,6 +43,8 @@ func toMCPProjectRoadmapItemV0(source mcpProjectRoadmapItemSourceV0) MCPProjectR
 		Dependencies:  compactStringsMCPV0(source.Dependencies),
 		Guardrails:    compactStringsMCPV0(source.Guardrails),
 		CanonicalRefs: compactStringsMCPV0(source.CanonicalRefs),
+		BacklogRefs:   compactStringsMCPV0(source.BacklogRefs),
+		Verification:  compactStringsMCPV0(source.Verification),
 	}
 }
 

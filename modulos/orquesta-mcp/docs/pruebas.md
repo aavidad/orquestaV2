@@ -269,16 +269,16 @@ Caso: MCP-CT-009 descriptor y resource compacto de contratos compartidos
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp
 Evidencia esperada: Descriptor `orquesta.contracts.shared.v0`, catalogo + 8 descriptors de contrato, summary/progress por message keys y URIs `orquesta://contracts/.../v0`.
-Ultima ejecucion: 2026-05-04; pasa.
-Riesgos: El resource no lee `../../CONTRATOS.md` en runtime; si el contrato global cambia, hay que versionar o actualizar el mapper puro.
+Ultima ejecucion: 2026-05-24; pasa con freshness y refs de backlog T25.
+Riesgos: El resource no lee docs canonicos en runtime; si un modulo propietario cambia contrato, hay que versionar o actualizar el mapper puro.
 ```
 
 ```text
 Caso: MCP-CT-010 saneamiento de resource y lookup de contratos compartidos
 Tipo: unit
 Comando: go test -count=1 ./modulos/orquesta-mcp
-Evidencia esperada: Resource sin dumps de fixtures, endpoints REST, sink receipt, completions, OAuth, DSN ni tablas; lookup normalizado por nombre, slug y URI; mapper trim/dedupe.
-Ultima ejecucion: 2026-05-04; pasa.
+Evidencia esperada: Resource sin dumps de fixtures, endpoints REST, sink receipt, completions, OAuth, DSN ni tablas; lookup normalizado por nombre, slug y URI; mapper trim/dedupe; no duplica `pendiente_*` sin backlog vivo.
+Ultima ejecucion: 2026-05-24; pasa.
 Riesgos: Las proyecciones de progreso son keys compactas locales, no estado real de servidor MCP ni observability.
 ```
 
@@ -286,8 +286,8 @@ Riesgos: Las proyecciones de progreso son keys compactas locales, no estado real
 Caso: MCP-CT-011 descriptor y resource puro de roadmap de nucleo
 Tipo: contract
 Comando: go test -count=1 .
-Evidencia esperada: Descriptor `orquesta.project.roadmap.v0`, resource `orquesta://project/roadmap/v0`, scope `orquesta-core`, 5 hitos de roadmap y 5 decisiones compactas con keys estables.
-Ultima ejecucion: 2026-05-04; pasa.
+Evidencia esperada: Descriptor `orquesta.project.roadmap.v0`, resource `orquesta://project/roadmap/v0`, scope `orquesta-nucleo-reutilizable`, 5 hitos de roadmap, 5 decisiones compactas y freshness/backlog refs con keys estables.
+Ultima ejecucion: 2026-05-24; pasa.
 Riesgos: El resource no lee docs globales ni docs de core en runtime; si el roadmap canonico cambia, hay que actualizar o versionar esta proyeccion.
 ```
 
@@ -295,9 +295,9 @@ Riesgos: El resource no lee docs globales ni docs de core en runtime; si el road
 Caso: MCP-CT-012 lookup y saneamiento de roadmap de nucleo
 Tipo: unit
 Comando: go test -count=1 .
-Evidencia esperada: Resource sin dumps de fixtures, endpoints REST, sink receipt, completions, OAuth, DSN ni rutas HOME; lookup normalizado por ID, area, contrato y key; mappers trim/dedupe.
-Ultima ejecucion: 2026-05-04; pasa.
-Riesgos: Las decisiones son compactas para IA y no sustituyen el detalle canonico de `orquesta-core/docs/contratos.md` ni `../CONTRATOS.md`.
+Evidencia esperada: Resource sin dumps de fixtures, endpoints REST, sink receipt, completions, OAuth, DSN ni rutas HOME; lookup normalizado por ID, area, contrato y key; mappers trim/dedupe; hitos abiertos tienen owner, backlog refs y verificacion.
+Ultima ejecucion: 2026-05-24; pasa.
+Riesgos: Las decisiones son compactas para IA y no sustituyen el detalle canonico de docs vigentes y modulos propietarios.
 ```
 
 ```text

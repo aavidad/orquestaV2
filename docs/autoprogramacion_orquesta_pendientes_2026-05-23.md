@@ -771,7 +771,7 @@ Huecos concretos nuevos o reencuadrados:
 Objetivo: implementar el rail completo de staging/promocion de automejora
 residente fuera del nucleo, con refs opacas y control de solapes.
 
-Estado: pendiente.
+Estado: completada 2026-05-24.
 
 Alcance:
 
@@ -799,7 +799,13 @@ Criterios:
 Objetivo: convertir la validacion fake de tests de dominio no-OPES en politica
 productiva por puerto para apps externas genericas.
 
-Estado: pendiente.
+Estado: completada localmente el 2026-05-24 para el planner residente de
+automejora. Evidencia focal:
+`go test -count=1 ./cmd/orquesta-server -run TestIdleSelfImprovementBacklogPlannerV0`.
+Evidencia requerida:
+`go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
+Runbook:
+`docs/runbooks/autoprogramacion_backlog_state_sync_2026-05-24.md`.
 
 Alcance:
 
@@ -1256,6 +1262,15 @@ Criterios:
   relacion clara con una seccion Txx o doc local.
 - Tests: `go test -count=1 ./modulos/orquesta-mcp`.
 
+Evidencia de cierre:
+
+- `orquesta.project.roadmap.v0` y `orquesta.contracts.shared.v0` publican
+  `freshness` con refs a foto vigente, backlog T25 y verificacion focal.
+- Los `progress_key` y estados ya no duplican `pendiente_*` de la foto antigua;
+  lo historico queda como compatibilidad y lo abierto enlaza backlog/doc local.
+- OPES temporal de derivados/cierre queda visible como frente abierto separado
+  con owner, guardas y runbook; no reabre Codex wave/recursion ni WaitAgentRefs.
+
 ## T26 domain-work-quality-policy-port
 
 Objetivo: mover las reglas de calidad de artefactos `domain_work` a una politica
@@ -1322,7 +1337,7 @@ Objetivo: sincronizar las fuentes canonicas que consumen agentes y operadores
 para que el estado vigente no contradiga el backlog ni relance trabajo real ya
 cerrado.
 
-Estado: pendiente.
+Estado: completada el 2026-05-24.
 
 Alcance:
 
@@ -1348,6 +1363,16 @@ Criterios:
   evidencia de planificacion.
 - Tests: `git diff --check` y prueba documental focal que busque contradicciones
   conocidas de `CODEX-WAVE-REAL`, `CODEX-RECURSION-REAL` y OPES pendiente.
+
+Evidencia de cierre:
+
+- `AGENTS.md`, `README.md`, la foto vigente, la guia, el corte de cierre y la
+  matriz declaran un orden de autoridad documental.
+- `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` quedan cerrados por evidencia
+  opt-in de la matriz; no son backlog abierto salvo regresion demostrada.
+- OPES temporal real de derivados/cierre queda como frente abierto separado.
+- Los documentos historicos quedan subordinados a fuentes vigentes antes de
+  usarse como evidencia de planificacion.
 
 ## T28 restart-live-agent-reconciliation
 
@@ -1578,7 +1603,7 @@ Huecos concretos nuevos o reencuadrados:
 Objetivo: usar ACK estructurado y correlado como fuente de verdad para decidir
 que una request de backlog/automejora ya esta completada.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-24.
 
 Alcance:
 
@@ -1601,6 +1626,17 @@ Criterios:
   planner debe tratar el ACK como ambiguo y preferir tarea de revision
   documental acotada antes que asumir completado.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-app-codex-stack`.
+
+Cierre aplicado 2026-05-24:
+
+- `orquesta-runtime-codex` expone validacion estricta de ACK completado:
+  no hidrata refs ausentes ni normaliza correlacion para cierre terminal.
+- El planner de backlog de `cmd/orquesta-server` solo salta una seccion cuando
+  `agent_ack.json` tiene `agent_packet.json` vecino, correlaciona con
+  request/agent runtime, valida schema, refs, target module, task ref, tests
+  requeridos y queda sin issues del validador Codex.
+- ACK ausente de packet, minimo, corrupto o ambiguo conserva la seccion visible
+  y anade evidencia compacta `evidence-ref-autoprogramming-backlog-ack-ambiguous`.
 
 ## T34 director-wave-strict-guards-default
 
@@ -9796,3 +9832,126 @@ Criterios:
   sustituye ledger de claim/submit ni smoke real OPES completo; aporta readback
   causal para recovery/cierre.
 - Tests: `go test -count=1 ./modulos/orquesta-opes-connector ./modulos/orquesta-opes-bridge ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
+
+## T207 rotacion-sesiones-handoff-experimental
+
+Objetivo: mejora futura experimental para estudiar si conviene rotar sesiones
+largas de director/agentes mediante handoff durable y relanzamiento con reglas
+frescas, sin cortar trabajos ni perder contexto util.
+
+Estado: pendiente futura.
+
+Alcance:
+
+- `modulos/orquesta-director-runner`
+- `modulos/orquesta-director-agent-workflow`
+- `modulos/orquesta-runtime`
+- `modulos/orquesta-runtime-codex`
+- `modulos/orquesta-orchestration-core`
+- `cmd/orquesta-server`
+- `docs/runbooks`
+
+Dependencias:
+
+- t01
+- t02
+- t04
+- t11
+- t17
+- t33
+
+Entrada:
+
+- estado vivo del run, task, wave/cohort refs, agentes pendientes y evidencias
+  causales persistidas.
+- reglas vigentes del proyecto, write-set, pruebas requeridas y decisiones ya
+  tomadas por el director/agente saliente.
+- presupuesto observado de tiempo, tokens/contexto aproximado, numero de
+  acciones, compactaciones y senales de deriva o bloqueo.
+
+Salida:
+
+- handoff estructurado versionado con objetivo original, avance real, archivos
+  tocados, pendientes, riesgos, pruebas obligatorias y siguiente accion.
+- nueva sesion de director/agente arrancada con reglas frescas y contexto
+  acotado desde el handoff, manteniendo refs causales y sin duplicar trabajo.
+- metrica comparativa que permita decidir si la rotacion mejora calidad,
+  continuidad y coste frente a dejar sesiones largas.
+
+Criterios:
+
+- No implementar como rail estricto inicial ni cortar procesos vivos sin handoff
+  aceptado; debe entrar primero como experimento opt-in y de baja prioridad.
+- Definir `session_epoch` o equivalente fuera del nucleo puro si depende de
+  proveedor/runtime; el nucleo solo debe ver refs opacas, estados y eventos.
+- El cierre de una sesion saliente debe ser ordenado: ACK/handoff durable,
+  pruebas/evidencias si existen, estado de pendientes y razon de rotacion.
+- Si el handoff no contiene datos suficientes, el director debe pedir completar
+  handoff o continuar la sesion actual; no relanzar a ciegas.
+- Coordinar con automejora, recursion Codex y waits por refs: la rotacion no
+  puede convertir la espera en "todos los agentes vivos" ni perder parent/child
+  refs.
+- Tests: `go test -count=1 ./modulos/orquesta-director-runner ./modulos/orquesta-director-agent-workflow ./modulos/orquesta-runtime ./modulos/orquesta-runtime-codex ./modulos/orquesta-orchestration-core ./cmd/orquesta-server`.
+
+## T208 autoprogramming-guardian-breakglass
+
+Objetivo: implementar un guardian externo minimo para que la autoprogramacion no
+dependa de una Orquesta ya rota cuando una version candidata no compila, no
+arranca o deja de responder.
+
+Estado: base implementada 2026-05-24; pendiente integrar en el ciclo residente
+de promocion/restart.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-autoprogramming`
+- `modulos/orquesta-runtime-worktree`
+- `modulos/orquesta-runtime-codex`
+- `modulos/orquesta-server`
+- `docs/runbooks`
+
+Dependencias:
+
+- t13-autoprogramming-staging-promotion
+
+Entrada:
+
+- binario `last_good`, binario candidato, worktree candidato, commit/ref
+  candidato, logs de build/test/arranque y estado de servidor.
+- comando de build, pruebas requeridas, healthcheck HTTP/local y ruta de estado
+  temporal del candidato.
+- diff o refs de cambios de la automejora que han dejado la version candidata
+  en fallo.
+
+Salida:
+
+- resultado de promocion o rollback con evidencia durable: `candidate_failed`,
+  `last_good_restored`, `repair_agent_started`, `candidate_promoted`.
+- tarea de reparacion encolada con logs, diff, tests fallidos, write-set y
+  criterio de cierre verificable.
+- agente reparador externo opt-in lanzado con permisos amplios y contexto
+  acotado solo cuando Orquesta no puede repararse desde dentro.
+
+Criterios:
+
+- No reemplazar el binario vivo si el candidato no compila, no pasa tests
+  requeridos o no responde a healthcheck en estado temporal.
+- Mantener siempre `last_good` y manifest de promocion atomico; si falla el
+  candidato, restaurar/seguir con `last_good` sin necesitar que el director vivo
+  funcione.
+- El guardian externo no decide producto ni reordena backlog: solo observa
+  salud, conserva evidencias, restaura ultimo bueno y lanza una reparacion
+  acotada cuando el bootstrap esta roto.
+- El agente reparador externo debe cerrarse al terminar, entregar ACK/handoff y
+  no pisar agentes vivos ni borrar worktrees/evidencias.
+- Si Orquesta esta sana, la reparacion debe entrar por la cola normal; el
+  guardian solo es break-glass para build/startup/healthcheck rotos.
+- Base cubierta por `cmd/orquesta-guardian`: build candidato, tests requeridos,
+  healthcheck temporal, `last_good`, manifest, restore, repair packet,
+  `repair-command` opt-in, `--repair-codex` con `codex-launch-wave --agents 1`
+  y `shutdown-server` cooperativo con escalado forzado tras timeout o `--now`.
+- Pendiente: sustituir el instalador manual del residente por este guardian en
+  el ciclo de automejora.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming ./modulos/orquesta-runtime-worktree ./modulos/orquesta-runtime-codex ./modulos/orquesta-server`.

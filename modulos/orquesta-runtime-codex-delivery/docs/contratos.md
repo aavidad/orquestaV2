@@ -97,8 +97,10 @@ Invariantes:
   `task_id`, `agent_ref`, `summary` y `evidence_refs` compactas.
 - `artifact_ref` usa el ACK validado como ref estable para fases que no son
   `programacion`; `delivery_ref` se mantiene para entregas de programacion.
-- Si se inyecta `CodexReceiptWorktreeVerifierPortV0`, no devuelve observacion
-  hasta verificar que el diff real del proyecto respeta el write-set.
+- Si se inyecta `CodexReceiptWorktreeVerifierPortV0`, verifica el diff real del
+  proyecto: cambios fuera del write-set se proyectan como rail blando y no
+  tiran la entrega; borrados, requests invalidas o errores de filesystem siguen
+  bloqueando.
 - No filtra paths, logs, transcripts, provider, modelo, HOME, OAuth ni DB.
 
 ## CodexReceiptWorktreeVerifierV0
@@ -112,8 +114,10 @@ Invariantes:
 - El verificador compara filesystem real contra `spec.agent_packet.task.write_set`.
 - Los prefijos de control, por ejemplo runtime aislado dentro del proyecto, se
   inyectan como `ignore_prefixes`.
-- Si hay cambios fuera de write-set, devuelve error compacto y no filtra
-  `project_work_dir`, `ack_path` ni rutas absolutas al nucleo.
+- Si hay cambios fuera de write-set, devuelve evidencia compacta
+  `gate-issue:file_outside_write_set` sin filtrar `project_work_dir`,
+  `ack_path` ni rutas absolutas al nucleo. Borrados y requests invalidas siguen
+  devolviendo error compacto.
 - No usa Git, DB, HOME, OAuth, provider ni modelo.
 
 ## CodexProgressObservationSourceV0

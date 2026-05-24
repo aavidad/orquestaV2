@@ -8,9 +8,11 @@ import (
 	"strings"
 	"time"
 
+	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestadomainworkfile "orquesta/modulos/orquesta-domain-work-file"
 	orquestadomainworkhttp "orquesta/modulos/orquesta-domain-work-http"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestaopesbridge "orquesta/modulos/orquesta-opes-bridge"
 	orquestaopesconnector "orquesta/modulos/orquesta-opes-connector"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
@@ -74,4 +76,13 @@ func domainWorkExecutorFromEnvV0(
 func domainWorkDeliveryEnabledFromEnvV0() bool {
 	return firstNonEmptyEnvV0("ORQUESTA_OPES_BASE_URL", "OPES_BASE_URL") != "" ||
 		strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL")) != ""
+}
+
+func domainWorkRequiredTestConfigFromEnvV0() orquestaappcodexstack.DomainWorkRequiredTestConfigV0 {
+	if firstNonEmptyEnvV0("ORQUESTA_OPES_BASE_URL", "OPES_BASE_URL") == "" {
+		return orquestaappcodexstack.DomainWorkRequiredTestConfigV0{}
+	}
+	return orquestaappcodexstack.DomainWorkRequiredTestConfigV0{
+		Policy: orquestaopesbridge.OPESRequiredTestPolicyV0{},
+	}
 }

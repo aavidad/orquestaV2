@@ -127,6 +127,7 @@ func buildStackFromEnvV0(
 			FileEvidence: orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 		},
 		RequiredTests:            requiredTestRunner,
+		DomainTests:              domainWorkRequiredTestConfigFromEnvV0(),
 		AutoprogrammingPromotion: autoprogrammingPromotionConfigFromEnvV0(serverConfig),
 		DomainWork:               domainWorkExecutor,
 		DomainDelivery: orquestaappcodexstack.DomainWorkDeliveryBridgeConfigV0{

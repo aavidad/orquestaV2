@@ -56,7 +56,8 @@ Adaptadores locales:
 - `CodexReceiptWorktreeBaselineRecorderV0`: captura baseline del proyecto antes
   del launch mediante `orquesta-runtime-worktree`, si el operador inyecta store.
 - `CodexReceiptWorktreeVerifierV0`: antes de aceptar un ACK como entrega,
-  compara el diff real contra el write-set y rechaza cambios fuera de contrato.
+  compara el diff real contra el write-set; cambios fuera de contrato quedan
+  como rail blando, y borrados/requests invalidas siguen bloqueando.
 - `CodexProgressObservationSourceV0`: observa agentes arrancados que aun no han
   escrito ACK. Usa `AgentProcessRegistryPortV0` para resolver identidad
   `process_ref + session_ref` y `CodexProgressStateStorePortV0` para evitar

@@ -448,12 +448,13 @@ en `/tmp/opes-salidas/derivatives-rest-<smoke_id>/` antes de repetir o subir el
 limite. El fake offline cubre tambien `run-until-assemble` y comprueba que
 `assemble_topic` se mapea a `assembled_topic` sin meter OPES en el nucleo.
 
-Estado de cierre OPES real: este runbook solo deja comandos acotados para
-materializar derivados y observar el avance por jobs/artefactos. El cierre
-operativo completo de una composicion OPES real sigue pendiente hasta tener OPES
-temporal vivo, cuota/modelo confirmados y evidencia de que cada derivado fue
-aceptado por OPES con refs causales suficientes; no se declara cerrado desde
-pruebas offline ni desde un dry-run.
+Estado de cierre OPES real: la composicion Orquesta ya declara tests de dominio
+por job OPES, genera evidencia durable desde el ledger de `submit_artifact` y
+la fuente de cierre del stack solo cierra tareas OPES con review aceptada,
+`RequiredTestEvidenceV0` passed y receipt OPES aceptado. El smoke real completo
+de derivados sigue exigiendo OPES temporal vivo, cuota/modelo confirmados y
+evidencia de que cada derivado fue aceptado por OPES con refs causales
+suficientes; no se declara cerrado desde dry-run.
 
 Bloqueo verificable T12 si no hay entorno temporal: ejecutar primero el smoke
 fake aislado y despues repetir el comando `run-until-assemble` anterior cuando

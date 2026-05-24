@@ -198,7 +198,8 @@ func (source CodexDeliveryObservationSourceV0) observationFromDescriptorV0(
 			issue.Field,
 		)
 	}
-	if err := source.verifyDescriptorWorktreeV0(ctx, descriptor); err != nil {
+	worktreeEvidenceRefs, err := source.verifyDescriptorWorktreeV0(ctx, descriptor)
+	if err != nil {
 		return orquestacionnucleoapp.AgentDeliveryObservationV0{}, false, err
 	}
 	return orquestacionnucleoapp.AgentDeliveryObservationV0{
@@ -209,7 +210,7 @@ func (source CodexDeliveryObservationSourceV0) observationFromDescriptorV0(
 		TaskID:       codexObservation.TaskID,
 		AgentRef:     codexObservation.AgentRef,
 		Summary:      codexObservation.Summary,
-		EvidenceRefs: compactCodexDeliveryRefsV0(codexObservation.EvidenceRefs),
+		EvidenceRefs: compactCodexDeliveryRefsV0(append(codexObservation.EvidenceRefs, worktreeEvidenceRefs...)),
 	}, true, nil
 }
 

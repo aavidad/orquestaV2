@@ -29,7 +29,9 @@ func mcpSharedContractSourcesV0() []mcpSharedContractSourceV0 {
 				"no_arranca_runtime",
 				"validacion_delegada_en_factory",
 			},
-			ProgressKey: "mcp.contracts.progress.descriptor_tool_puro_implementado.v0",
+			ProgressKey:  "mcp.contracts.progress.descriptor_tool_puro_implementado.v0",
+			BacklogRefs:  mcpBacklogT25RefsV0(),
+			Verification: mcpMCPResourceVerificationV0(),
 		},
 		{
 			Name:       "PersistenceRepository",
@@ -58,7 +60,9 @@ func mcpSharedContractSourcesV0() []mcpSharedContractSourceV0 {
 				"idempotencia_obligatoria",
 				"no_reglas_negocio_en_persistencia",
 			},
-			ProgressKey: "mcp.contracts.progress.harness_adapter_contracts_pendiente.v0",
+			ProgressKey:  "mcp.contracts.progress.contrato_v0_compartido_adaptadores_opt_in.v0",
+			BacklogRefs:  mcpBacklogT25RefsV0(),
+			Verification: mcpMCPResourceVerificationV0(),
 		},
 		{
 			Name:       "RuntimeLaunchRequest",
@@ -100,7 +104,9 @@ func mcpSharedContractSourcesV0() []mcpSharedContractSourceV0 {
 				"sin_secretos_rutas_home_prompts_transcripts",
 				"errores_por_message_key_i18n",
 			},
-			ProgressKey: "mcp.contracts.progress.harness_core_capacity_pendiente.v0",
+			ProgressKey:  "mcp.contracts.progress.contrato_v0_validado_runtime_opt_in.v0",
+			BacklogRefs:  mcpBacklogT25RefsV0(),
+			Verification: mcpMCPResourceVerificationV0(),
 		},
 		{
 			Name:       "OrquestaEvent",
@@ -133,7 +139,9 @@ func mcpSharedContractSourcesV0() []mcpSharedContractSourceV0 {
 				"sin_sink_operativo_transcripts",
 				"mcp_lee_proyecciones_no_sink",
 			},
-			ProgressKey: "mcp.contracts.progress.proyecciones_compactas_pendientes.v0",
+			ProgressKey:  "mcp.contracts.progress.proyecciones_compactas_por_puerto.v0",
+			BacklogRefs:  mcpBacklogT25RefsV0(),
+			Verification: mcpMCPResourceVerificationV0(),
 		},
 		{
 			Name:       "GovernanceCatalog",
@@ -165,7 +173,9 @@ func mcpSharedContractSourcesV0() []mcpSharedContractSourceV0 {
 				"controles_secretos_estructurados",
 				"governance_no_ejecuta",
 			},
-			ProgressKey: "mcp.contracts.progress.harness_consulta_compacto_pendiente.v0",
+			ProgressKey:  "mcp.contracts.progress.consulta_compacta_read_only_vigente.v0",
+			BacklogRefs:  mcpBacklogT25RefsV0(),
+			Verification: mcpMCPResourceVerificationV0(),
 		},
 		{
 			Name:       "OperationalStatusQuery",
@@ -197,7 +207,9 @@ func mcpSharedContractSourcesV0() []mcpSharedContractSourceV0 {
 				"referencias_opacas",
 				"recuperacion_activa_fuera_de_contrato",
 			},
-			ProgressKey: "mcp.contracts.progress.schema_fixtures_harness_pendiente.v0",
+			ProgressKey:  "mcp.contracts.progress.resource_operational_status_vigente.v0",
+			BacklogRefs:  mcpBacklogT25RefsV0(),
+			Verification: mcpMCPResourceVerificationV0(),
 		},
 		{
 			Name:       "DeploymentPlan",
@@ -230,7 +242,9 @@ func mcpSharedContractSourcesV0() []mcpSharedContractSourceV0 {
 				"sin_secretos_home_db_runtime_modelo",
 				"adaptador_real_requiere_smoke",
 			},
-			ProgressKey: "mcp.contracts.progress.schemas_fixtures_validador_pendiente.v0",
+			ProgressKey:  "mcp.contracts.progress.schema_harness_deploy_vigente.v0",
+			BacklogRefs:  mcpBacklogT25RefsV0(),
+			Verification: mcpMCPResourceVerificationV0(),
 		},
 		{
 			Name:       "GenerarI18nDocsIniciales",
@@ -270,7 +284,9 @@ func mcpSharedContractSourcesV0() []mcpSharedContractSourceV0 {
 				"plan_serializable_no_filesystem",
 				"sin_llm_persistencia_apps_tareas_backlog",
 			},
-			ProgressKey: "mcp.contracts.progress.schemas_fixtures_publicados_harness_relacional_pendiente.v0",
+			ProgressKey:  "mcp.contracts.progress.builder_harness_relacional_vigente.v0",
+			BacklogRefs:  mcpBacklogT25RefsV0(),
+			Verification: mcpMCPResourceVerificationV0(),
 		},
 	}
 }
