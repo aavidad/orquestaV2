@@ -4,7 +4,7 @@ import operator "orquesta/modulos/orquesta-operator-mcp"
 
 func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnvelopeV0 {
 	descriptors := newMCPTransportToolDescriptorsV0()
-	return []MCPTransportToolEnvelopeV0{
+	tools := []MCPTransportToolEnvelopeV0{
 		mcpTransportToolEnvelopeV0(descriptors.nueva.Name, descriptors.nueva.Version, descriptors.nueva.ResourceURI, descriptors.nueva.InputSchema, descriptors.nueva.Output, mcpNuevaAppTransportHandlerV0(bindings.NuevaApp)),
 		mcpTransportToolEnvelopeV0(descriptors.director.Name, descriptors.director.Version, descriptors.director.ResourceURI, descriptors.director.InputSchema, descriptors.director.Output, mcpArrancarDirectorAppTransportHandlerV0(bindings.ArrancarDirector)),
 		mcpTransportToolEnvelopeV0(descriptors.change.Name, descriptors.change.Version, descriptors.change.ResourceURI, descriptors.change.InputSchema, descriptors.change.Output, mcpRequestAppChangeTransportHandlerV0(bindings.RequestAppChange)),
@@ -32,6 +32,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 		mcpOperatorTransportToolV0(operator.OperatorMCPOutboxToolNameV0, mcpOperatorOutboxBindingV0(bindings)),
 		mcpOperatorTransportToolV0(operator.OperatorMCPDirectedQueryToolV0, mcpOperatorQueryBindingV0(bindings)),
 	}
+	return append(tools, mcpOperatorFriendlyTransportToolsV0(bindings)...)
 }
 
 func mcpOperatorStatusBindingV0(bindings MCPTransportBindingsV0) operator.OperatorMCPStatusPortV0 {

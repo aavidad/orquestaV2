@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,6 +46,45 @@ func TestBuildStackFromEnvV0UsaConectoresDurablesFileBased(t *testing.T) {
 	}
 
 	assertServerStackDurableStoresV0(t, stack)
+}
+
+func TestBuildServerAppHandlerV0MontaMCPNativoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	runtimeDir := filepath.Join(t.TempDir(), "runtime")
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)
+	t.Setenv("ORQUESTA_SERVER_STATE_DIR", stateDir)
+	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", runtimeDir)
+	t.Setenv("ORQUESTA_CODEX_COMMAND", filepath.Join(projectDir, "codex-bin"))
+	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
+	t.Setenv("OPES_BASE_URL", "")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	stack, err := buildStackFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("buildStackFromEnvV0: %v", err)
+	}
+	handler, err := buildServerAppHandlerV0(stack)
+	if err != nil {
+		t.Fatalf("buildServerAppHandlerV0: %v", err)
+	}
+	body := bytes.NewBufferString(`{"jsonrpc":"2.0","id":"mcp-test","method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}`)
+	req := httptest.NewRequest(http.MethodPost, mcpRealHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var response mcpJSONRPCResponseV0
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if response.Error != nil {
+		t.Fatalf("rpc error=%+v", response.Error)
+	}
 }
 
 func TestBuildStackFromEnvV0CableaDomainWorkFileOptIn(t *testing.T) {
@@ -256,6 +299,9 @@ func TestRequiredTestRunnerFromEnvV0GoCommandInyectaEntornoGoAcotado(t *testing.
 	}
 	if _, ok := env["HOME"]; ok {
 		t.Fatalf("HOME no debe heredarse: env=%v", env)
+	}
+	if _, ok := env["ORQUESTA_CODEX_HOME"]; ok {
+		t.Fatalf("ORQUESTA_CODEX_HOME no debe inyectarse: env=%v", env)
 	}
 }
 

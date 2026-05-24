@@ -13,6 +13,7 @@ import (
 
 type StackV0 struct {
 	Handler                  http.Handler
+	MCPTransportBindings     orquestamcp.MCPTransportBindingsV0
 	Ports                    orquestaappdirectorservice.StartAppDirectorPortsV0
 	Stores                   StoresV0
 	RunQueue                 RunQueueConfigV0
@@ -43,16 +44,17 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		DomainWork:               config.DomainWork,
 		DomainDelivery:           config.DomainDelivery,
 	}
-	stack.Handler = buildStackHTTPHandlerV0(config, ports, queueConfig, &stack)
+	stack.MCPTransportBindings = buildStackMCPTransportBindingsV0(config, ports, queueConfig, &stack)
+	stack.Handler = buildStackHTTPHandlerV0(config, stack.MCPTransportBindings)
 	return stack, nil
 }
 
-func buildStackHTTPHandlerV0(
+func buildStackMCPTransportBindingsV0(
 	config ConfigV0,
 	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
 	queueConfig RunQueueConfigV0,
 	stack *StackV0,
-) http.Handler {
+) orquestamcp.MCPTransportBindingsV0 {
 	arrancar := NewQueuedArrancarDirectorExecutorV0(QueuedArrancarDirectorConfigV0{
 		Inner:  orquestamcp.NewMCPArrancarDirectorAppToolExecutorV0(startOnlyPortsV0(ports)),
 		Writer: config.Stores.RunQueue,
@@ -61,8 +63,7 @@ func buildStackHTTPHandlerV0(
 		Source: "orquesta-app-codex-stack",
 		Reason: "run creado desde director app",
 	})
-	handler := orquestaappgateway.NewHTTPHandlerV0(orquestaappgateway.ConfigV0{
-		Clock:            config.Clock,
+	return orquestamcp.MCPTransportBindingsV0{
 		ArrancarDirector: arrancar,
 		RequestAppChange: orquestamcp.NewMCPRequestAppChangeToolExecutorV0(appChangePortsV0(config)),
 		DirectorStats: orquestamcp.MCPDirectorStatsToolExecutorV0{
@@ -96,6 +97,30 @@ func buildStackHTTPHandlerV0(
 			config,
 			queueConfig,
 		),
+	}
+}
+
+func buildStackHTTPHandlerV0(
+	config ConfigV0,
+	bindings orquestamcp.MCPTransportBindingsV0,
+) http.Handler {
+	handler := orquestaappgateway.NewHTTPHandlerV0(orquestaappgateway.ConfigV0{
+		Clock:                     config.Clock,
+		ArrancarDirector:          bindings.ArrancarDirector,
+		RequestAppChange:          bindings.RequestAppChange,
+		DirectorStats:             bindings.DirectorStats,
+		RunControl:                bindings.RunControl,
+		RunQueuePriority:          bindings.RunQueuePriority,
+		RunSupervisor:             bindings.RunSupervisor,
+		AppVCS:                    bindings.AppVCS,
+		AutoprogrammingPrepareRun: bindings.AutoprogrammingPrepareRun,
+		ServerShutdown:            bindings.ServerShutdown,
+		DomainWork:                bindings.DomainWork,
+		ExternalWorkRun:           bindings.ExternalWorkRun,
+		OpsAgentRuntimeDetail: NewCodexStackAgentRuntimeDetailHTTPHandlerV0(CodexStackAgentRuntimeDetailConfigV0{
+			ReceiptStore:   config.Stores.ReceiptStore,
+			RuntimeWorkDir: config.Codex.RuntimeWorkDir,
+		}),
 		Timeout:        config.Timeout,
 		DirectorLimits: config.DirectorLimits,
 	})

@@ -54,13 +54,18 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		operator.OperatorMCPBurstToolNameV0,
 		operator.OperatorMCPOutboxToolNameV0,
 		operator.OperatorMCPDirectedQueryToolV0,
+		MCPOperatorFriendlyStatusToolNameV0,
+		MCPOperatorFriendlyTasksToolNameV0,
+		MCPOperatorFriendlyProjectsToolNameV0,
+		MCPOperatorFriendlyAgentsToolNameV0,
+		MCPOperatorFriendlyCommandToolNameV0,
 	} {
 		if _, ok := transport.tools[name]; !ok {
 			t.Fatalf("tool no registrado: %s", name)
 		}
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, transport.resources, 5000)
-	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 11200)
+	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 18000)
 }
 
 func TestMCPTransportV0SirveResourceYToolConFakeEnMemoria(t *testing.T) {
@@ -98,6 +103,44 @@ func TestMCPTransportV0SirveResourceYToolConFakeEnMemoria(t *testing.T) {
 		t.Fatalf("resultado status inesperado: %+v", result)
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 1000)
+}
+
+func TestMCPTransportV0ExponeHerramientasOperadorSinRefsInternas(t *testing.T) {
+	queue := &fakeMCPAutoprogrammingQueueStatusV0{}
+	stats := &fakeMCPAutoprogrammingRunStatusV0{}
+	transport := newFakeMCPTransportV0()
+	err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{
+		RunQueuePriority: queue,
+		DirectorStats:    stats,
+	})
+	if err != nil {
+		t.Fatalf("register transport: %v", err)
+	}
+
+	output, err := transport.CallToolV0(context.Background(), MCPOperatorFriendlyStatusToolNameV0, MCPOperatorFriendlyQueryV0{
+		IncludeAgents: true,
+	})
+	if err != nil {
+		t.Fatalf("call friendly status: %v", err)
+	}
+	var result MCPOperatorFriendlyStatusResultV0
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != "ok" ||
+		result.Counts.Tasks != 1 ||
+		result.Counts.Projects != 1 ||
+		result.Counts.Agents != 1 ||
+		len(result.Tasks) != 1 ||
+		len(result.Projects) != 1 {
+		t.Fatalf("friendly status=%+v", result)
+	}
+	if queue.input.Action != MCPRunQueuePriorityActionRankV0 {
+		t.Fatalf("queue input=%+v", queue.input)
+	}
+	if stats.input.RunRef != "run-ref-autop-status-001" {
+		t.Fatalf("stats input=%+v", stats.input)
+	}
 }
 
 func TestMCPTransportV0NuevaAppQuedaOptInSinPuerto(t *testing.T) {

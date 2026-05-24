@@ -14,6 +14,7 @@ import (
 	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
+	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 	orquestaweb "orquesta/modulos/orquesta-web"
 )
 
@@ -126,6 +127,43 @@ func TestBuildStackV0CableaRequiredTestRunnerV0(t *testing.T) {
 	stack := mustBuildCodexStackWithDomainWorkAndRequiredTestsForTestV0(t, newFakeCodexStackRuntimeV0(), nil, runner)
 	if stack.Ports.RequiredTestRunner == nil {
 		t.Fatalf("RequiredTestRunner no cableado")
+	}
+}
+
+func TestBuildStackV0ExponeBindingsMCPNativosV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	if stack.MCPTransportBindings.ArrancarDirector == nil ||
+		stack.MCPTransportBindings.DirectorStats == nil ||
+		stack.MCPTransportBindings.RunQueuePriority == nil ||
+		stack.MCPTransportBindings.RunSupervisor == nil ||
+		stack.MCPTransportBindings.AutoprogrammingPrepareRun == nil ||
+		stack.MCPTransportBindings.ServerShutdown == nil {
+		t.Fatalf("bindings MCP incompletos: %+v", stack.MCPTransportBindings)
+	}
+}
+
+func TestBuildStackV0CableaVerificadorWorktreeSiHaySnapshotStoreV0(t *testing.T) {
+	store := orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0()
+	config := ConfigV0{
+		Stores: StoresV0{
+			ReceiptStore: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(),
+		},
+		Codex: CodexRuntimeConfigV0{
+			ProjectWorkDir: t.TempDir(),
+			RuntimeWorkDir: filepath.Join(t.TempDir(), "runtime"),
+		},
+		ReviewGate: ReviewGateConfigV0{
+			LineBudgetSnapshotStore: store,
+		},
+	}
+
+	resolver := recordingSpecResolverV0(config)
+	if resolver.WorktreeBaselineRecorder == nil {
+		t.Fatalf("baseline recorder no cableado")
+	}
+	source, ok := deliverySourceV0(config).(orquestaruntimecodexdelivery.CodexDeliveryObservationSourceV0)
+	if !ok || source.WorktreeVerifier == nil {
+		t.Fatalf("delivery source sin verificador worktree: %T %+v", source, source)
 	}
 }
 

@@ -64,6 +64,47 @@ func TestMCPRealTransportV0ExponeJSONRPCListasCompactas(t *testing.T) {
 	if len(tools.Tools) == 0 {
 		t.Fatalf("tools vacio")
 	}
+	if tools.Tools[0].InputSchema["type"] != "object" {
+		t.Fatalf("inputSchema no compatible MCP: %+v", tools.Tools[0].InputSchema)
+	}
+	statusTool := mcpToolByNameTestV0(tools.Tools, "orquesta.status.v0")
+	if statusTool == nil ||
+		!strings.Contains(statusTool.Description, "No internal refs required") {
+		t.Fatalf("status tool no autodescriptivo: %+v", statusTool)
+	}
+	operatorTool := mcpToolByNameTestV0(tools.Tools, "orquesta.operator.status.query.v0")
+	if operatorTool == nil {
+		t.Fatalf("operator status no registrado")
+	}
+	required, _ := operatorTool.InputSchema["required"].([]any)
+	if len(required) == 0 {
+		t.Fatalf("operator status sin required schema: %+v", operatorTool.InputSchema)
+	}
+}
+
+func TestMCPRealTransportV0HandshakeCompatibleClienteMCP(t *testing.T) {
+	handler, err := newMCPRealHTTPHandlerV0(orquestamcp.MCPTransportBindingsV0{})
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	server := newLocalHTTPServerForTestV0(t, handler)
+	defer server.Close()
+
+	var init mcpInitializeResultV0
+	callMCPJSONRPCTestV0(t, server.URL+mcpRealHTTPPathV0, "initialize", map[string]any{
+		"protocolVersion": "2025-03-26",
+		"capabilities":    map[string]any{},
+		"clientInfo": map[string]any{
+			"name":    "hermes-probe",
+			"version": "0",
+		},
+	}, &init)
+	if init.ProtocolVersion == "" || init.ServerInfo.Name != "orquesta-mcp" {
+		t.Fatalf("initialize inesperado: %+v", init)
+	}
+
+	var pong map[string]any
+	callMCPJSONRPCTestV0(t, server.URL+mcpRealHTTPPathV0, "ping", map[string]any{}, &pong)
 }
 
 func callMCPJSONRPCTestV0(t *testing.T, endpoint string, method string, params any, output any) {
@@ -95,4 +136,13 @@ func callMCPJSONRPCTestV0(t *testing.T, endpoint string, method string, params a
 	if err := json.Unmarshal(rpc.Result, output); err != nil {
 		t.Fatalf("decode result: %v", err)
 	}
+}
+
+func mcpToolByNameTestV0(tools []mcpToolDescriptorV0, name string) *mcpToolDescriptorV0 {
+	for idx := range tools {
+		if tools[idx].Name == name {
+			return &tools[idx]
+		}
+	}
+	return nil
 }

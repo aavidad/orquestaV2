@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	orquestarunfile "orquesta/modulos/orquesta-run-file"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
+	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 	orquestaserver "orquesta/modulos/orquesta-server"
 	orquestastatefile "orquesta/modulos/orquesta-state-file"
 	orquestastatefileoutbox "orquesta/modulos/orquesta-state-file/outbox"
@@ -40,15 +42,30 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 	if err != nil {
 		return nil, err
 	}
+	appHandler, err := buildServerAppHandlerV0(stack)
+	if err != nil {
+		return nil, err
+	}
 	supervisor := serverStackSupervisorV0{
 		stack:          &stack,
 		projectWorkDir: serverConfig.ProjectWorkDir,
 	}
 	return orquestaserver.NewRuntimeV0(serverConfig, orquestaserver.RuntimeDepsV0{
-		AppHandler:   stack.Handler,
+		AppHandler:   appHandler,
 		Supervisor:   supervisor,
 		StartupCheck: startupCheckFromEnvV0(stack, serverConfig),
 	})
+}
+
+func buildServerAppHandlerV0(stack orquestaappcodexstack.StackV0) (http.Handler, error) {
+	mcpHandler, err := newMCPRealHTTPHandlerV0(stack.MCPTransportBindings)
+	if err != nil {
+		return nil, err
+	}
+	mux := http.NewServeMux()
+	mux.Handle(mcpRealHTTPPathV0, mcpHandler)
+	mux.Handle("/", stack.Handler)
+	return mux, nil
 }
 
 func buildStackFromEnvV0(
@@ -89,6 +106,7 @@ func buildStackFromEnvV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	worktreeSnapshotStore := orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0()
 	return orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
 		Timeout:        30 * time.Second,
@@ -121,10 +139,16 @@ func buildStackFromEnvV0(
 			MaxTicks:      1,
 			MaxExecutions: intEnvOrDefaultV0("ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK", defaultCodexServerMaxExecutionsV0),
 		},
-		Codex:    codexRuntimeConfigV0(serverConfig, processRuntime),
+		Codex: codexRuntimeConfigV0(
+			serverConfig,
+			processRuntime,
+			codexUsageMetricsFromEnvV0(receiptStore),
+		),
 		Capacity: codexStackCapacityConfigFromEnvV0(),
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
-			FileEvidence: orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
+			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
+			StrictGoLineBudget:      boolEnvOrDefaultV0("ORQUESTA_REVIEW_GATE_STRICT_GO_LINE_BUDGET", false),
+			LineBudgetSnapshotStore: worktreeSnapshotStore,
 		},
 		RequiredTests:            requiredTestRunner,
 		DomainTests:              domainWorkRequiredTestConfigFromEnvV0(),
@@ -212,7 +236,12 @@ func directorLimitsV0() orquestaweb.WebArrancarDirectorAppLimitsV0 {
 func codexRuntimeConfigV0(
 	serverConfig orquestaserver.ConfigV0,
 	processRuntime *orquestaruntime.ProcessRuntimeConnectorV0,
+	usageMetrics ...orquestaappcodexstack.CodexStackAgentUsageMetricsProviderPortV0,
 ) orquestaappcodexstack.CodexRuntimeConfigV0 {
+	var usageSource orquestaappcodexstack.CodexStackAgentUsageMetricsProviderPortV0
+	if len(usageMetrics) > 0 {
+		usageSource = usageMetrics[0]
+	}
 	return orquestaappcodexstack.CodexRuntimeConfigV0{
 		CommandPath:    codexCommandPathV0(),
 		ProjectWorkDir: serverConfig.ProjectWorkDir,
@@ -225,23 +254,22 @@ func codexRuntimeConfigV0(
 			"ORQUESTA_CODEX_REASONING_EFFORT",
 			string(orquestacoreworkflow.OrchestrationCapacityXHighV0),
 		)),
-		Profile:        strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_PROFILE")),
-		Sandbox:        codexWorkspaceWriteSandboxV0(envOrDefaultV0("ORQUESTA_CODEX_SANDBOX", "danger-full-access")),
-		ApprovalPolicy: envOrDefaultV0("ORQUESTA_CODEX_APPROVAL_POLICY", "never"),
-		DirectorSandbox: codexOptionalWorkspaceWriteSandboxV0(
-			os.Getenv("ORQUESTA_CODEX_DIRECTOR_SANDBOX"),
-		),
+		Profile:         strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_PROFILE")),
+		Sandbox:         codexSandboxFromEnvV0("ORQUESTA_CODEX_SANDBOX", "danger-full-access"),
+		ApprovalPolicy:  envOrDefaultV0("ORQUESTA_CODEX_APPROVAL_POLICY", "never"),
+		DirectorSandbox: codexOptionalSandboxFromEnvV0("ORQUESTA_CODEX_DIRECTOR_SANDBOX"),
 		DirectorApprovalPolicy: strings.TrimSpace(
 			os.Getenv("ORQUESTA_CODEX_DIRECTOR_APPROVAL_POLICY"),
 		),
-		ExtraArgs:      strings.Fields(os.Getenv("ORQUESTA_CODEX_EXTRA_ARGS")),
-		PromptHints:    codexServerPromptHintsV0(serverConfig),
-		Runtime:        processRuntime,
-		ProcessStopper: processRuntime,
-		SnapshotSource: processRuntime,
-		MaxBatchReady:  intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_BATCH_READY", defaultCodexMaxBatchReadyV0),
-		MaxConcurrency: intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_CONCURRENCY", defaultCodexMaxConcurrencyV0),
-		WaitInterval:   time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_WAIT_INTERVAL_MS", defaultCodexWaitIntervalMSV0)) * time.Millisecond,
+		InteractiveApprovalOptIn: boolEnvOrDefaultV0("ORQUESTA_CODEX_ALLOW_INTERACTIVE_APPROVAL", false),
+		ExtraArgs:                strings.Fields(os.Getenv("ORQUESTA_CODEX_EXTRA_ARGS")),
+		PromptHints:              codexServerPromptHintsV0(serverConfig),
+		Runtime:                  processRuntime,
+		ProcessStopper:           processRuntime,
+		SnapshotSource:           processRuntime,
+		MaxBatchReady:            intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_BATCH_READY", defaultCodexMaxBatchReadyV0),
+		MaxConcurrency:           intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_CONCURRENCY", defaultCodexMaxConcurrencyV0),
+		WaitInterval:             time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_WAIT_INTERVAL_MS", defaultCodexWaitIntervalMSV0)) * time.Millisecond,
 		ProgressPolicy: orquestaruntime.AgentProgressHeartbeatPolicyV0{
 			StalledAfterNoProgressTicks: intEnvOrDefaultV0("ORQUESTA_CODEX_STALLED_TICKS", defaultCodexStalledTicksV0),
 			LoopAfterRepeatedActions:    intEnvOrDefaultV0("ORQUESTA_CODEX_LOOP_TICKS", defaultCodexLoopTicksV0),
@@ -250,23 +278,6 @@ func codexRuntimeConfigV0(
 			MaxExpected:     time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_EXPECTED_SECONDS", defaultCodexMaxExpectedSecondsV0)) * time.Second,
 			NoActivityLimit: time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_NO_ACTIVITY_SECONDS", defaultCodexNoActivitySecondsV0)) * time.Second,
 		},
+		UsageMetrics: usageSource,
 	}
-}
-
-func codexWorkspaceWriteSandboxV0(value string) string {
-	switch strings.TrimSpace(value) {
-	case "danger-full-access":
-		return "danger-full-access"
-	case "workspace-write":
-		return "workspace-write"
-	default:
-		return "danger-full-access"
-	}
-}
-
-func codexOptionalWorkspaceWriteSandboxV0(value string) string {
-	if strings.TrimSpace(value) == "" {
-		return ""
-	}
-	return codexWorkspaceWriteSandboxV0(value)
 }
